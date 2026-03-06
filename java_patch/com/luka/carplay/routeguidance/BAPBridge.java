@@ -28,7 +28,7 @@ public class BAPBridge {
 
     private static final String TAG = "BAPBridge";
     /* RGType sent to cluster: 0=RGI (BAP ManeuverDescriptor icons for HUD).
-     * VC FPK ignores rgType (no dp item) — stays in LVDS map via INTERN_Active_NavFPK_Content. */
+     * VC FPK ignores rgType (no dp item) - stays in LVDS map via INTERN_Active_NavFPK_Content. */
     private static final int ACTIVE_RGTYPE = 0;
     private static final boolean BAP_TRACE_ENABLED = true;
 
@@ -330,7 +330,7 @@ public class BAPBridge {
 
     /**
      * Get ClusterService via Navigation singleton and install native BAP gate.
-     * Non-fatal — if this fails, native RG stream won't be blocked.
+     * Non-fatal - if this fails, native RG stream won't be blocked.
      */
     private void initClusterAccess() {
         try {
@@ -425,11 +425,11 @@ public class BAPBridge {
             forceClusterRouteInfoState(true);
 
             /*
-             * Guidance start — don't send InfoStates(6) so VC stays in LVDS map.
+             * Guidance start - don't send InfoStates(6) so VC stays in LVDS map.
              * BAP text widgets (distance, turn-to, street) overlay on the map.
              * ManeuverDescriptor + ManeuverState sent for HUD rendering.
              *
-             * 1. RGStatus(1) — FctID 17 → triggers startSync(0) for {17,39,23,18,49}
+             * 1. RGStatus(1) - FctID 17 → triggers startSync(0) for {17,39,23,18,49}
              * 2. Complete sync(0) window: rgType(39), descriptor(23), distance(18), exitView(49)
              */
             traceBap("updateRGStatus", "1");
@@ -463,7 +463,7 @@ public class BAPBridge {
 
             /*
              * Guidance stop:
-             * 1. RGStatus(0) — triggers sync(0) for {17,39,23,18,49}
+             * 1. RGStatus(0) - triggers sync(0) for {17,39,23,18,49}
              * 2. Complete sync(0) window: descriptor(23), distance(18), exitView(49)
              * 3. Non-sync FctIDs last
              */
@@ -597,7 +597,7 @@ public class BAPBridge {
             }
 
             /*
-             * 2. ExitView (FctID 49) — must change on every descriptor send so
+             * 2. ExitView (FctID 49) - must change on every descriptor send so
              *    AppConnectorNavi's sendStatusIfChanged actually sends it,
              *    completing the FSG sync(1) window for {23,18,49}.
              */
@@ -662,7 +662,7 @@ public class BAPBridge {
                 }
             }
 
-            /* 4. Street text (FctID 19 — CurrentPositionInfo) */
+            /* 4. Street text (FctID 19 - CurrentPositionInfo) */
             if ((dirty & (RouteGuidance.State.DIRTY_CURRENT_ROAD |
                           RouteGuidance.State.DIRTY_MANEUVER_TEXT |
                           RouteGuidance.State.DIRTY_MANEUVER_LIST |
@@ -698,7 +698,7 @@ public class BAPBridge {
             }
 
             /*
-             * 5. Maneuver state (FctID 24) — for HUD
+             * 5. Maneuver state (FctID 24) - for HUD
              */
             if ((dirty & (RouteGuidance.State.DIRTY_MANEUVER_STATE |
                           RouteGuidance.State.DIRTY_MANEUVER_ICON |
@@ -759,7 +759,7 @@ public class BAPBridge {
                 sendDistanceToDestinationRaw(s.distDestM, false);
             }
 
-            /* 8. Time to destination (FctID 22) — via AppConnectorNavi */
+            /* 8. Time to destination (FctID 22) - via AppConnectorNavi */
             if ((dirty & (RouteGuidance.State.DIRTY_TIME_REMAINING |
                           RouteGuidance.State.DIRTY_ETA)) != 0) {
                 long eta = s.etaSeconds;
@@ -788,7 +788,7 @@ public class BAPBridge {
                 appConnectorNavi.updateTimeToDestination(timeInfoType, timeFormat, timeVal);
             }
 
-            /* 9. Destination info (FctID 46) — via AppConnectorNavi */
+            /* 9. Destination info (FctID 46) - via AppConnectorNavi */
             if ((dirty & RouteGuidance.State.DIRTY_DESTINATION) != 0) {
                 String dest = (s.destination != null) ? s.destination : "";
                 dest = limitUtf8(dest, 50);
@@ -863,7 +863,7 @@ public class BAPBridge {
             return;
         }
 
-        /* Build array of CombiBAPNaviManeuverDescriptor — send all valid
+        /* Build array of CombiBAPNaviManeuverDescriptor - send all valid
          * maneuvers in order.  START_ROUTE already maps to FOLLOW_STREET,
          * so no skip needed; keeping pos=0 ensures BAP descriptor index
          * stays aligned with distance[0]. */
@@ -1216,7 +1216,7 @@ public class BAPBridge {
             mappedMain = ManeuverMapper.CHANGE_LANE;
         }
 
-        /* Direction is used as-is — ManeuverMapper.applyDsiNavBapDirectionOverride()
+        /* Direction is used as-is - ManeuverMapper.applyDsiNavBapDirectionOverride()
          * already handles per-type coarsening.  No second coarsening layer needed. */
         int mappedDir = dir;
 

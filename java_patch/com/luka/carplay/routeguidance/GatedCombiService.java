@@ -1,5 +1,5 @@
 /*
- * GatedCombiService — Wrapper around CombiBAPServiceNavi that gates
+ * GatedCombiService - Wrapper around CombiBAPServiceNavi that gates
  * native route-guidance updates during CarPlay route guidance.
  *
  * When blockRouteGuidance=true, native route-guidance related calls from

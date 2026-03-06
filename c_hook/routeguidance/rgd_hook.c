@@ -157,7 +157,7 @@ static int rgd_min_current_index(void) {
 	    /* Mirror MHI3 isRouteGuidanceManeuverIndexGreater semantics (simplified):
 	     * - if no route update exists => reject
 	     * - if current list is null (ManeuverList TLV not present) => accept
-	     * - if current list is empty => accept (was: reject — but transient
+	     * - if current list is empty => accept (was: reject - but transient
 	     *   state=0 clears the list before 0x5202 data arrives for the new
 	     *   route; rejecting here permanently loses that data since iOS never
 	     *   resends 0x5202 for already-sent indices)
@@ -186,7 +186,7 @@ static bool rgd_is_active_index(uint16_t iap_idx) {
 }
 
 static int rgd_slot_for_iap_index(uint16_t idx, bool create) {
-    /* Find existing mapping — touch seq (LRU refresh) so actively
+    /* Find existing mapping - touch seq (LRU refresh) so actively
      * used slots don't become eviction victims. */
     for (int s = 0; s < MANEUVER_CACHE_SIZE; s++) {
         if (g_rgd.slot_to_iap_idx[s] == idx) {
@@ -878,15 +878,9 @@ hook_result_t rgd_stop_updates(void) {
     return res;
 }
 
-/* Raw packet dump before parsing (debug) */
-#ifndef RGD_TRACE_RAW
-#define RGD_TRACE_RAW 1
-#endif
+/* Raw packet full log before parsing (debug) */
 #ifndef RGD_TRACE_RAW_FULL
-#define RGD_TRACE_RAW_FULL 1
-#endif
-#ifndef RGD_TRACE_RAW_DUMP_FILES
-#define RGD_TRACE_RAW_DUMP_FILES 0
+#define RGD_TRACE_RAW_FULL 0
 #endif
 
 static void rgd_log_raw_packet(const char* label, const uint8_t* data, size_t len) {
@@ -908,27 +902,13 @@ static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) 
     rgd_lazy_init();  /* Ensure PPS is open */
 
     if (frame->msgid == IAP2_MSG_ROUTE_GUIDANCE_UPDATE) {
-        static unsigned int rgd_5201_seq = 0;
         if (!g_rgd.got_520x) {
             g_rgd.got_520x = true;
             rgd_update_session_active();
             LOG_INFO(LOG_MODULE, "*** FIRST RouteGuidance message received! msgid=0x%04X ***", frame->msgid);
         }
-#if RGD_TRACE_RAW_DUMP_FILES
-        {
-            char path[64];
-            (void)snprintf(path, sizeof(path), "/tmp/rgd_5201_%06u.bin", rgd_5201_seq++);
-            (void)log_dump_file(path, ctx->raw_buf, frame->frame_len);
-        }
-#else
-        (void)rgd_5201_seq;
-#endif
-#if RGD_TRACE_RAW
 #if RGD_TRACE_RAW_FULL
         rgd_log_raw_packet("RGD 0x5201 raw", ctx->raw_buf, frame->frame_len);
-#else
-        LOG_HEXDUMP(LOG_MODULE, "RGD 0x5201 raw", ctx->raw_buf, frame->frame_len);
-#endif
 #endif
 
         rgd_update_t upd;
@@ -960,27 +940,13 @@ static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) 
         write_pps_update_partial(&upd);
     }
     else if (frame->msgid == IAP2_MSG_ROUTE_GUIDANCE_MANEUVER) {
-        static unsigned int rgd_5202_seq = 0;
         if (!g_rgd.got_520x) {
             g_rgd.got_520x = true;
             rgd_update_session_active();
             LOG_INFO(LOG_MODULE, "*** FIRST RouteGuidance message received! msgid=0x%04X ***", frame->msgid);
         }
-#if RGD_TRACE_RAW_DUMP_FILES
-        {
-            char path[64];
-            (void)snprintf(path, sizeof(path), "/tmp/rgd_5202_%06u.bin", rgd_5202_seq++);
-            (void)log_dump_file(path, ctx->raw_buf, frame->frame_len);
-        }
-#else
-        (void)rgd_5202_seq;
-#endif
-#if RGD_TRACE_RAW
 #if RGD_TRACE_RAW_FULL
         rgd_log_raw_packet("RGD 0x5202 raw", ctx->raw_buf, frame->frame_len);
-#else
-        LOG_HEXDUMP(LOG_MODULE, "RGD 0x5202 raw", ctx->raw_buf, frame->frame_len);
-#endif
 #endif
 
         rgd_maneuver_t man;
@@ -991,27 +957,13 @@ static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) 
         write_pps_maneuver_partial(&man);
     }
     else if (frame->msgid == IAP2_MSG_ROUTE_GUIDANCE_LANE) {
-        static unsigned int rgd_5204_seq = 0;
         if (!g_rgd.got_520x) {
             g_rgd.got_520x = true;
             rgd_update_session_active();
             LOG_INFO(LOG_MODULE, "*** FIRST RouteGuidance message received! msgid=0x%04X ***", frame->msgid);
         }
-#if RGD_TRACE_RAW_DUMP_FILES
-        {
-            char path[64];
-            (void)snprintf(path, sizeof(path), "/tmp/rgd_5204_%06u.bin", rgd_5204_seq++);
-            (void)log_dump_file(path, ctx->raw_buf, frame->frame_len);
-        }
-#else
-        (void)rgd_5204_seq;
-#endif
-#if RGD_TRACE_RAW
 #if RGD_TRACE_RAW_FULL
         rgd_log_raw_packet("RGD 0x5204 raw", ctx->raw_buf, frame->frame_len);
-#else
-        LOG_HEXDUMP(LOG_MODULE, "RGD 0x5204 raw", ctx->raw_buf, frame->frame_len);
-#endif
 #endif
 
         rgd_lane_guidance_t lane;

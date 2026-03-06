@@ -483,7 +483,7 @@ void rgd_parse_maneuver(const uint8_t* buf, size_t len, rgd_maneuver_t* out) {
                 break;
 
             case MAN_TLV_JUNCTION_ANGLES:
-                /* iAP2 sends one angle per repeated TLV — don't reset count
+                /* iAP2 sends one angle per repeated TLV - don't reset count
                  * (memset at function entry already initializes to 0) */
                 for (int i = 0; i + 1 < val_len && out->junction_angle_count < MAX_MANEUVER_LIST; i += 2) {
                     out->junction_angles[out->junction_angle_count++] = (int16_t)read_be16(val + i);

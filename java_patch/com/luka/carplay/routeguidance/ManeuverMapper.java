@@ -389,7 +389,7 @@ public class ManeuverMapper {
             || (maneuverType >= MT_ROUNDABOUT_EXIT_1 && maneuverType <= MT_ROUNDABOUT_EXIT_19)) {
             return dir;
         }
-        /* Skip override for ramp/keep/slight — these need fine direction on MHI2 VC.
+        /* Skip override for ramp/keep/slight - these need fine direction on MHI2 VC.
          * EXIT_RIGHT/EXIT_LEFT mainElement already encodes the ramp semantics;
          * coarsening SLIGHT→full 90-degree defeats the point of the distinct icon. */
         if (maneuverType == MT_OFF_RAMP

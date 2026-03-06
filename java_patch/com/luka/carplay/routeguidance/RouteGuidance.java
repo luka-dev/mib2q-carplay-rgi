@@ -512,7 +512,7 @@ public class RouteGuidance implements PPS.Listener {
                      * changes, so if we clear Java state, PPS won't re-send unchanged values,
                      * and we lose the data permanently until a new 0x5202 arrives.
                      *
-                     * maneuver_count=0 can be transient — iOS briefly clears the count before
+                     * maneuver_count=0 can be transient - iOS briefly clears the count before
                      * re-populating (observed at route start).  By preserving slot data we avoid
                      * the race where maneuver_list advances to slots whose data was cleared.
                      *

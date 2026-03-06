@@ -444,7 +444,7 @@ static int ensure_dir(const char* dir) {
  *
  * Ping-pongs between coverart_0.png and coverart_1.png.
  * COVERART_FILE ("coverart.png") is a symlink that always points
- * to a fully-written file — readers never see a partial write.
+ * to a fully-written file - readers never see a partial write.
  *
  *   1. Write data to coverart_<new_slot>.png
  *   2. Create temp symlink coverart.png.tmp → coverart_<new_slot>.png
@@ -504,7 +504,7 @@ static int write_png_file(const uint8_t* data, size_t len) {
         return -1;
     }
 
-    /* 4. Remove old slot file (ignore errors — may not exist on first run) */
+    /* 4. Remove old slot file (ignore errors - may not exist on first run) */
     unlink(old_path);
 
     g_coverart.slot = new_slot;

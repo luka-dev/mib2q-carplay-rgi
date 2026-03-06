@@ -288,7 +288,7 @@ public class PPS {
                 if (listener != null) {
                     Data parsed = (mode == TEXT) ? parse(buf, len) : null;
                     if (parsed != null && parsed.bool("_more", false)) {
-                        /* Intermediate chunk — accumulate and wait for final */
+                        /* Intermediate chunk - accumulate and wait for final */
                         if (pendingChunk == null) {
                             pendingChunk = new Data();
                         }

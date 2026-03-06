@@ -81,7 +81,7 @@ static void log_pps_binary_snapshot(const pps_handle_t* h, const uint8_t* data, 
               hex);
 }
 
-/* Chunk continuation marker — Java PPS reader accumulates until this is absent */
+/* Chunk continuation marker - Java PPS reader accumulates until this is absent */
 static const char PPS_MORE_MARKER[] = "_more:b:true\n";
 #define PPS_MORE_MARKER_LEN (sizeof(PPS_MORE_MARKER) - 1)
 
@@ -93,7 +93,7 @@ static const char PPS_MORE_MARKER[] = "_more:b:true\n";
 static void pps_flush_chunk_locked(pps_handle_t* h) {
     if (h->fd < 0 || h->buf_len == 0) return;
 
-    /* Append _more marker — space is guaranteed by pps_append_locked reserving
+    /* Append _more marker - space is guaranteed by pps_append_locked reserving
      * PPS_MORE_MARKER_LEN bytes in its overflow threshold. */
     memcpy(h->buffer + h->buf_len, PPS_MORE_MARKER, PPS_MORE_MARKER_LEN);
     h->buf_len += PPS_MORE_MARKER_LEN;
@@ -142,7 +142,7 @@ static bool pps_append_locked(pps_handle_t* h, const char* data, size_t len) {
     }
 
     if (h->in_batch) {
-        /* Buffer full — flush current chunk and retry */
+        /* Buffer full - flush current chunk and retry */
         LOG_WARN(LOG_MODULE, "PPS buffer full (%zu + %zu >= %zu), flushing chunk",
                  h->buf_len, len, limit);
         pps_flush_chunk_locked(h);
