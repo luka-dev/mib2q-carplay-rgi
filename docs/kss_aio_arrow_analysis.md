@@ -247,10 +247,10 @@ All 6 bytes share signal group 29 -> KssIpc -> EB GUIDE.
 
 ## Class 49 Messages (Queue 241)
 
-| Msg ID | Decimal | Purpose |
-|--------|---------|---------|
-| 0x375 | 885 | Maneuver distance (uint16 pair) |
-| 0x374 | 884 | Maneuver distance (variant) |
+| Msg ID | Decimal | Purpose                         |
+|--------|---------|---------------------------------|
+| 0x375  | 885     | Maneuver distance (uint16 pair) |
+| 0x374  | 884     | Maneuver distance (variant)     |
 
 ## Global Data References
 
