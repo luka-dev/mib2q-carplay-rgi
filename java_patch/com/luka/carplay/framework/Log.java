@@ -26,7 +26,7 @@ public class Log {
     private static int minLevel = LEVEL_DEBUG;
     private static boolean enabled = true;
     private static boolean includeTimestamp = true;
-    private static boolean alsoStdout = true;
+
 
     /* Prevent instantiation */
     private Log() {}
@@ -63,12 +63,6 @@ public class Log {
         includeTimestamp = include;
     }
 
-    /**
-     * Also write to stdout.
-     */
-    public static void setAlsoStdout(boolean stdout) {
-        alsoStdout = stdout;
-    }
 
     /* ============================================================
      * Logging Methods
@@ -141,11 +135,6 @@ public class Log {
         sb.append(msg);
 
         String line = sb.toString();
-
-        /* Stdout */
-        if (alsoStdout) {
-            System.out.println(line);
-        }
 
         /* File */
         if (logPath != null) {
