@@ -291,8 +291,24 @@ hook_result_t pps_write_header(pps_handle_t* h) {
 hook_result_t pps_write_string(pps_handle_t* h, const char* key, const char* value) {
     if (!h || !key) return HOOK_ERR_PARAM;
 
+    const char* src = value ? value : "";
+
+    /* Sanitize: strip control characters to prevent PPS corruption.
+     * QNX PPS uses newline as record delimiter — embedded \n \r \t etc.
+     * in iAP2 strings corrupt the entire PPS object. */
+    char sanitized[MAX_PPS_LINE];
+    size_t si = 0;
+    size_t i;
+    for (i = 0; src[i] != '\0' && si < sizeof(sanitized) - 1; i++) {
+        unsigned char c = (unsigned char)src[i];
+        if (c >= 0x20) {
+            sanitized[si++] = (char)c;
+        }
+    }
+    sanitized[si] = '\0';
+
     char line[MAX_PPS_LINE];
-    int n = snprintf(line, sizeof(line), "%s:s:%s\n", key, value ? value : "");
+    int n = snprintf(line, sizeof(line), "%s:s:%s\n", key, sanitized);
 
     pthread_mutex_lock(&h->lock);
     pps_append_locked(h, line, (size_t)n);
