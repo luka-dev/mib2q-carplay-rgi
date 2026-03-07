@@ -119,6 +119,28 @@ BAP sends maneuver/distance/text -> BAP dp items -> EB GUIDE renders HUD icons +
 
 Note: `SV_NavFPK_Compass_MobileDevice` also has AIO_Arrow dp items (driven by native KOMO/DSI in stock navigation). In the CarPlay path these are not used -- all maneuver data goes through BAP ManeuverDescriptor to HUD, and BAP text overlays to VC.
 
+### KSS Firmware Blocks InfoStates=6
+
+Even though the HU sends InfoStates=6 via MOST 0x515, the KSS AUTOSAR firmware
+**rejects value 6** before it reaches EB GUIDE. The validator `sub_108F42C` at
+`0x108F42C` enforces bit-dependency rules:
+
+```c
+return a1 <= 0xF && (a1 & 5) != 4 && (a1 & 0xA) != 8;
+//                   ^^^^^^^^^^^^^^
+//                   6 & 5 = 4 → FAIL
+```
+
+Value 6 (`0b0110`) has bit 2 set without bit 0, violating the rule. The
+`BAP_NavSD_InfoStates_States` dp item is never written to 6, so the VC never
+enters `SV_NavFPK_Compass_MobileDevice`.
+
+The VC/FPK firmware cannot be persistently patched (secure AUTOSAR environment,
+RAM-only UDS patches lost on reboot). This makes the MobileDevice/AIO arrow
+approach not viable.
+
+See `docs/kss_aio_arrow_analysis.md` for the full reverse engineering analysis.
+
 ## Firmware Paths
 - gssipc-kbd: `extract_stage3/KI_FPK_AU491/.../bin/app/gssipc-kbd`
 - fds (EB GUIDE): `extract_stage3/KI_FPK_AU491/.../bin/app/fds`

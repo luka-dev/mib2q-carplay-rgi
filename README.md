@@ -31,10 +31,9 @@ Sent via the same BAP path. VC renders these as text bars over the native map ar
 
 ### Route Guidance - VC Maneuver Graphics
 
-The VC can render maneuver graphics (KDK intersection maps, turn arrows) in the MOST video stream via PresentationController.
+Not possible. The VC's `SV_NavFPK_Compass_MobileDevice` view (which renders AIO arrow maneuver icons) requires InfoStates=6, but the VC's KSS AUTOSAR firmware **rejects value 6** at the MOST message validator before it reaches EB GUIDE. The firmware cannot be persistently patched (secure AUTOSAR, RAM-only UDS patches lost on reboot). See `docs/kss_aio_arrow_analysis.md` for the full reverse engineering analysis.
 
-- [ ] Maneuver graphics in MOST video stream
-- [ ] Prevent VC from hiding native map during active route guidance
+BAP ManeuverDescriptor (FctID 23) drives the **HUD** maneuver icons — that path works and is not affected.
 
 ### Media
 
@@ -251,51 +250,15 @@ P.S. If you do instant reboot of Head Unit after file changes, it's possible tha
 
 The iAP2-to-BAP maneuver mapping covers all 54 CarPlay maneuver types, but has only been tested on a limited set of real-world routes. Edge cases like complex interchanges and multi-lane roundabouts need more road testing. If you see a wrong or missing icon on the HUD, a log from `/tmp/carplay_hook.log` of the exact moment + explanation of what's wrong would help. Note: the log resets on each device reboot, so grab it before restarting.
 
-### Maneuver icons on VC display
+### VC maneuver graphics via AIO arrows - not possible
 
-BAP ManeuverDescriptor (FctID 23) successfully drives the **HUD** -- it shows turn arrows, roundabout icons, etc. However, the **VC's own display** does not render maneuver icons from BAP.
+The VC's MobileDevice view (`SV_NavFPK_Compass_MobileDevice`) renders AIO arrow maneuver icons and is the only VC view that shows graphical turn-by-turn from smartphone navigation. However, activating this view requires InfoStates=6, which is **rejected by the VC's KSS AUTOSAR firmware** (`sub_108F42C` at `0x108F42C`: bit-dependency rule `(value & 5) != 4` blocks value 6).
 
-**Why**: The HUD and the VC use different data paths for maneuver icons:
-- **HUD**: Reads BAP ManeuverDescriptor directly from MOST Class 46 messages. This is why our BAP sends work for HUD.
-- **VC display**: When in `SV_NavFPK_Compass_MobileDevice` mode (smartphone navigation), the VC renders maneuver arrows from `AIO_Arrow0-3_Direction` dp items. These dp items are written by the **KOMO/DSI path** on the HU side (native `KOMOService` -> DSI -> VC), not by BAP. Since we don't push KOMO data, these dp items are never populated, so the VC shows text overlays (distance, street name) but no maneuver icons.
+The entire HU-side pipeline works — KOMO data reaches PresentationController, MOST 0x2289 arrow bytes are sent, and AIO_Arrow dp items are populated on the VC. But the view that renders them can never be activated.
 
-**Possible approaches**:
-- Write `AIO_Arrow` dp items directly from the HU side (need to find how KOMO/DSI maps ManeuverDescriptor to AIO arrow direction codes)
-- Use the MOST video stream approach (see next section) to render graphical maneuvers instead of AIO arrows
-- Reverse-engineer the `gssipc-kbd` BAP-to-dp mapping table to see if there's an unmapped BAP FctID that could drive VC icons
+The VC firmware cannot be persistently patched (secure AUTOSAR environment, RAM-only UDS patches lost on every reboot). See `docs/kss_aio_arrow_analysis.md` for the full KSS reverse engineering analysis.
 
-See `docs/vc_fpk_state_machine.md` for full VC state machine details and AIO arrow enum values.
-
-### VC maneuver graphics in MOST video stream (alternative to AIO arrows)
-
-Instead of AIO arrow icons, the VC can display rich graphical maneuvers (KDK intersection maps, turn arrows drawn at junctions) via MOST video. The HU-side `PresentationController` (native C++ library in `PNavApp`) renders these graphics and `videoencoderservice` encodes them as H.264 MPEG-TS over MOST isochronous channel to the VC.
-
-This approach would replace the VC's widget-based compass/arrow view with a rendered map area showing graphical turn-by-turn, similar to what the VC shows during native navigation.
-
-**The rendering side works**: `RouteInfoElement[]` pushed via Java `KOMOService.setRouteInfo()` reaches `PresentationController` through the DSI layer. `KVS_FPK` and `KVS_Most` use the same rendering pipeline internally -- both create the same render targets and process `RouteInfoElement` data identically.
-
-**The video encoding side does not work**: `videoencoderservice` (always running, started via `dsistartup.json`) never begins capturing frames because it waits for a `setUpdateRate()` call from the native display manager, which is triggered by `ChoiceModel(1,168)` hints:
-
-| Hint | Meaning                | Set by                             | Used by                                         |
-|------|------------------------|------------------------------------|-------------------------------------------------|
-| 1    | MOST reduced bandwidth | `setKOMODataRate(1)`               | `CombiMapController.updateFrameRate()` -> 1fps  |
-| 2    | MOST full bandwidth    | `setKOMODataRate(2)`               | `CombiMapController.updateFrameRate()` -> 10fps |
-| 4    | KDK available          | `ClusterKDKHandler.refreshHints()` | KDK positioning only                            |
-| 8    | Small stage            | `ClusterKDKHandler.refreshHints()` | KDK positioning only                            |
-| 16   | KDK visible            | `ClusterKDKHandler.refreshHints()` | KDK positioning only                            |
-
-The FPK code path only sets hints 4/8/16 (KDK handler). Hints 1/2 are guarded by `isClusterMapMOST()` in `setKOMODataRate()` and never fire for FPK. Even after patching that guard, the encoder didn't start because `CombiMapController.processModelUpdateEvent()` for FPK calls `handleKDK()` + `switchToTargetContext()` but **skips `updateFrameRate()`** -- only the MOST variant calls it. Without `updateFrameRate()`, no `setUpdateRate()` reaches the native display manager, so `videoencoderservice` never captures.
-
-**Possible approaches**:
-- Native C hook in `videoencoderservice` or `CombiMapController` to force `setUpdateRate(1, 10)` when FPK KOMO is active
-- Direct DSI/ASI call to `IVideoEncoding.setUpdateRate` from Java (bypassing `CombiMapController`)
-- Patch `CombiMapController` class to call `updateFrameRate()` for FPK variant
-
-See `docs/hu_maneuver_rendering_pipeline.md` for the full rendering and encoding architecture.
-
-### Prevent VC from hiding native map during CarPlay route guidance
-
-When CarPlay route guidance is active, the VC sometimes switches away from the map view. Need to understand what triggers this and how to keep the map visible.
+P.S. Still looking into alternative ways
 
 ## Thanks and References
 
