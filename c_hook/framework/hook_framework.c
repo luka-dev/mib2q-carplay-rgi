@@ -72,6 +72,7 @@ static bool is_known_52xx_msg(uint16_t msgid) {
         case IAP2_MSG_ROUTE_GUIDANCE_UPDATE:
         case IAP2_MSG_ROUTE_GUIDANCE_MANEUVER:
         case IAP2_MSG_ROUTE_GUIDANCE_STOP:
+        case IAP2_MSG_ROUTE_GUIDANCE_LANE:
             return true;
         default:
             return false;

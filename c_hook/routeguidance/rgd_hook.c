@@ -996,8 +996,6 @@ static size_t rgd_identify_patcher(hook_context_t* ctx, uint8_t* buf, size_t len
     size_t existing_off = iap2_find_tlv_offset(buf + 6, len - 6, IDENT_TLV_ROUTE_GUIDANCE_COMPONENT, &existing_len);
     bool existing_found = (existing_len > 0);
 
-    log_dump_file_once("/tmp/rgd_identify.bin", buf, len);
-
     if (existing_found) {
         existing_off += 6;
         uint16_t comp_id = rgd_extract_component_id(buf + existing_off, existing_len);
@@ -1046,7 +1044,6 @@ static size_t rgd_identify_patcher(hook_context_t* ctx, uint8_t* buf, size_t len
     ctx->identify_patched = true;
 
     LOG_INFO(LOG_MODULE, "Identify patched: %zu -> %zu bytes", len, new_len);
-    (void)log_dump_file_once("/tmp/rgd_identify_patched.bin", buf, new_len);
     return new_len;
 }
 
