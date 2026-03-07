@@ -23,6 +23,30 @@ static void hex_encode_preview(const uint8_t* data, int len, char* out, size_t o
     out[off] = '\0';
 }
 
+/* Replace newlines (\r\n or \n) with " / " separator in-place.
+ * iOS packs multi-part location info (street + bus stop, etc.) into a single
+ * string separated by newlines.  " / " keeps it readable on the HUD. */
+static void replace_newlines(char* s, size_t buf_sz) {
+    if (!s || buf_sz == 0) return;
+    const char sep[] = " / ";
+    const size_t sep_len = 3;
+    char tmp[256];
+    size_t si = 0;
+    for (size_t i = 0; s[i] != '\0' && si < sizeof(tmp) - sep_len - 1; i++) {
+        if (s[i] == '\r' && s[i + 1] == '\n') {
+            memcpy(tmp + si, sep, sep_len); si += sep_len; i++; /* skip \r\n */
+        } else if (s[i] == '\n' || s[i] == '\r') {
+            memcpy(tmp + si, sep, sep_len); si += sep_len;
+        } else {
+            tmp[si++] = s[i];
+        }
+    }
+    tmp[si] = '\0';
+    size_t copy = si < buf_sz - 1 ? si : buf_sz - 1;
+    memcpy(s, tmp, copy);
+    s[copy] = '\0';
+}
+
 static void copy_printable_string_preview(const uint8_t* data, int len, char* out, size_t out_sz) {
     if (!out || out_sz == 0) return;
     out[0] = '\0';
@@ -243,6 +267,7 @@ void rgd_parse_update(const uint8_t* buf, size_t len, rgd_update_t* out) {
                     int n = val_len < 255 ? val_len : 255;
                     if (n > 0) memcpy(out->current_road, val, (size_t)n);
                     out->current_road[n] = '\0';
+                    replace_newlines(out->current_road, sizeof(out->current_road));
                     out->present |= RGD_UPD_CURRENT_ROAD;
                 }
                 break;
@@ -252,6 +277,7 @@ void rgd_parse_update(const uint8_t* buf, size_t len, rgd_update_t* out) {
                     int n = val_len < 255 ? val_len : 255;
                     if (n > 0) memcpy(out->destination, val, (size_t)n);
                     out->destination[n] = '\0';
+                    replace_newlines(out->destination, sizeof(out->destination));
                     out->present |= RGD_UPD_DESTINATION;
                 }
                 break;
@@ -364,6 +390,7 @@ void rgd_parse_update(const uint8_t* buf, size_t len, rgd_update_t* out) {
                     int n = val_len < 63 ? val_len : 63;
                     if (n > 0) memcpy(out->source_name, val, (size_t)n);
                     out->source_name[n] = '\0';
+                    replace_newlines(out->source_name, sizeof(out->source_name));
                     out->present |= RGD_UPD_SOURCE_NAME;
                 }
                 break;
@@ -425,6 +452,7 @@ void rgd_parse_maneuver(const uint8_t* buf, size_t len, rgd_maneuver_t* out) {
                     int n = val_len < 255 ? val_len : 255;
                     if (n > 0) memcpy(out->description, val, (size_t)n);
                     out->description[n] = '\0';
+                    replace_newlines(out->description, sizeof(out->description));
                     out->present |= RGD_MAN_DESCRIPTION;
                 }
                 break;
@@ -441,6 +469,7 @@ void rgd_parse_maneuver(const uint8_t* buf, size_t len, rgd_maneuver_t* out) {
                     int n = val_len < 255 ? val_len : 255;
                     if (n > 0) memcpy(out->after_road_name, val, (size_t)n);
                     out->after_road_name[n] = '\0';
+                    replace_newlines(out->after_road_name, sizeof(out->after_road_name));
                     out->present |= RGD_MAN_AFTER_ROAD;
                 }
                 break;
