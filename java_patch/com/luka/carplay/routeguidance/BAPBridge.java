@@ -1,9 +1,11 @@
 /*
  * CarPlay Route Guidance - BAP Bridge
  *
- * Translates route guidance state to BAP protocol calls via AppConnectorNavi.
- * BAP-only: ManeuverDescriptor, distance, street, lane guidance, ETA → VC/HUD.
+ * Translates route guidance state to BAP protocol calls via AppConnectorNavi,
+ * and pushes KOMO data to PresentationController for LVDS video rendering.
  *
+ * BAP path: ManeuverDescriptor, distance, street, lane guidance, ETA → VC/HUD text overlays.
+ * KOMO path: RouteInfoElement → KOMOService → PresentationController → video encoder → MOST → VC LVDS map.
  *
  */
 package com.luka.carplay.routeguidance;
@@ -22,14 +24,20 @@ import de.audi.atip.metrics.Distance;
 import de.audi.tghu.navi.app.Navigation;
 import de.audi.tghu.navi.app.cluster.BAPDistanceFormatter;
 import de.audi.tghu.navi.app.cluster.ClusterService;
+import de.audi.tghu.navi.app.cluster.KOMOService;
 import de.audi.tghu.navi.app.command.DSIResponseContainer;
+import org.dsi.ifc.komoview.ManeuverElement;
+import org.dsi.ifc.komoview.RouteInfoElement;
 
 public class BAPBridge {
 
     private static final String TAG = "BAPBridge";
     /* RGType sent to cluster: 0=RGI (BAP ManeuverDescriptor icons for HUD).
-     * VC FPK ignores rgType (no dp item) - stays in LVDS map via INTERN_Active_NavFPK_Content. */
-    private static final int ACTIVE_RGTYPE = 0;
+     * FPK has rgType=4 hardcoded in CombiBAPListener — our BAP rgType=0 is for the
+     * AppConnectorNavi FSG sync flow, not for view mode selection. */
+    private static final int ACTIVE_RGTYPE = 4;  /* MAP mode for FPK — VC shows LVDS video area */
+    /* KOMO data rate: 2=full bandwidth (hint 2 on ChoiceModel(1,168)) */
+    private static final int KOMO_DATA_RATE_FULL = 2;
     private static final boolean BAP_TRACE_ENABLED = true;
 
     /* ExitView variants (BAP spec FctID 49) */
@@ -88,6 +96,8 @@ public class BAPBridge {
     private GatedCombiService gatedService;
 
     private ClusterService csRef;
+    private KOMOService komoService;
+    private boolean komoStarted = false;
 
     private static final class SilentLogChannel extends LogChannel {
         public void log(int level, String pattern,
@@ -345,6 +355,12 @@ public class BAPBridge {
                 return;
             }
             this.csRef = cs;
+            this.komoService = cs.getKomoService();
+            if (this.komoService != null) {
+                Log.i(TAG, "KOMO service acquired");
+            } else {
+                Log.w(TAG, "KOMO service is null (non-fatal, LVDS video won't work)");
+            }
 
             /* Install native route-guidance gate on CombiBAPListener.combiservice. */
             try {
@@ -425,9 +441,8 @@ public class BAPBridge {
             forceClusterRouteInfoState(true);
 
             /*
-             * Guidance start - don't send InfoStates(6) so VC stays in LVDS map.
-             * BAP text widgets (distance, turn-to, street) overlay on the map.
-             * ManeuverDescriptor + ManeuverState sent for HUD rendering.
+             * Guidance start — BAP text overlays for HUD + VC text,
+             * KOMO pipeline for LVDS video maneuver rendering.
              *
              * 1. RGStatus(1) - FctID 17 → triggers startSync(0) for {17,39,23,18,49}
              * 2. Complete sync(0) window: rgType(39), descriptor(23), distance(18), exitView(49)
@@ -446,7 +461,10 @@ public class BAPBridge {
             traceBap("updateCurrentPositionInfo", "\"\"");
             appConnectorNavi.updateCurrentPositionInfo("");                           /* FctID 19 */
 
-            Log.i(TAG, "Started (rgType=" + ACTIVE_RGTYPE + ")");
+            /* KOMO: start video encoder and LVDS rendering pipeline */
+            startKOMO();
+
+            Log.i(TAG, "Started (rgType=" + ACTIVE_RGTYPE + ", komo=" + komoStarted + ")");
 
         } catch (Exception e) {
             Log.e(TAG, "onStart error", e);
@@ -487,6 +505,9 @@ public class BAPBridge {
             appConnectorNavi.updateTimeToDestination(0, 0, -1);                      /* FctID 22 */
             traceBap("updateLaneGuidance", "[],false");
             appConnectorNavi.updateLaneGuidance(false, new CombiBAPNaviLaneGuidanceData[0]); /* FctID 24 */
+
+            /* KOMO: stop video encoder and clear maneuver data */
+            stopKOMO();
 
             /* Unblock native route-guidance BAP stream. */
             if (gatedService != null) gatedService.blockRouteGuidance = false;
@@ -797,6 +818,16 @@ public class BAPBridge {
                 CombiBAPDestinationInfo destInfo = new CombiBAPDestinationInfo(naviDest);
                 traceBap("updateDestinationInfo", "\"" + dest + "\"");
                 appConnectorNavi.updateDestinationInfo(destInfo);
+            }
+
+            /* 10. KOMO: push maneuver data to PresentationController for LVDS video */
+            int komoMask = RouteGuidance.State.DIRTY_MANEUVER_ICON
+                | RouteGuidance.State.DIRTY_MANEUVER_LIST
+                | RouteGuidance.State.DIRTY_MANEUVER_COUNT
+                | RouteGuidance.State.DIRTY_MANEUVER_TEXT
+                | RouteGuidance.State.DIRTY_DIST_MAN;
+            if ((dirty & komoMask) != 0) {
+                updateKOMO(s);
             }
 
             Log.d(TAG, "Update: dist=" + distM + "m maneuvers=" + Math.min(s.maneuverCount, MAX_BAP_MANEUVERS));
@@ -1226,6 +1257,164 @@ public class BAPBridge {
         if (sideStreets == null) sideStreets = new byte[0];
         int mappedZ = (zLevel == 1 || zLevel == 2) ? zLevel : 0;
         return new CombiBAPNaviManeuverDescriptor(mappedMain, mappedDir, mappedZ, sideStreets);
+    }
+
+    /* ============================================================
+     * KOMO / LVDS Video Pipeline
+     * ============================================================ */
+
+    /**
+     * Start KOMO pipeline: enable view, start video encoder, activate RG.
+     * This triggers the chain:
+     *   setKOMODataRate(2) → ChoiceModel(1,168) hint 2
+     *     → CombiMapController.updateFrameRate() → DisplayManager.setUpdateRate()
+     *     → videoencoderservice starts capturing
+     *     → reports gfxAvailable=true
+     *     → ViewModeSM activates MAP view (FPK hardcoded rgType=4)
+     *     → BAP rgType=4 → VC sets INTERN_Active_NavFPK_Content=1
+     *   komoService.setRouteInfo() → PresentationController renders
+     *     → video → MOST → VC detects LVDS_Available=1
+     *     → SV_LVDS_NavMap_FPK activates
+     */
+    private void startKOMO() {
+        if (komoService == null || csRef == null) {
+            Log.w(TAG, "KOMO: cannot start (komoService=" + (komoService != null) + " csRef=" + (csRef != null) + ")");
+            return;
+        }
+        try {
+            komoService.enableKomoView(true);
+            komoService.notifyVisibility(true);
+            csRef.setKDKVisibility(true);
+            /* Set rgActive on KDK handler only (for hint 4 logic), NOT on
+             * CombiBAPListener (would send duplicate BAP RGStatus/rgType). */
+            csRef.updateKDKRgActive(true);
+            csRef.setKOMODataRate(KOMO_DATA_RATE_FULL);
+            csRef.setClusterUpdateRate(10);
+
+            komoStarted = true;
+            Log.i(TAG, "KOMO: started (hints=0x" + Integer.toHexString(csRef.getKOMOHintsRaw()) + ")");
+        } catch (Exception e) {
+            Log.w(TAG, "KOMO start failed (non-fatal): " + e.getMessage());
+        }
+    }
+
+    /**
+     * Stop KOMO pipeline: stop video encoder, clear maneuver data, disable view.
+     */
+    private void stopKOMO() {
+        if (!komoStarted) return;
+        try {
+            if (csRef != null) {
+                csRef.setClusterUpdateRate(0);
+                csRef.setKOMODataRate(0);
+                csRef.setKDKVisibility(false);
+                csRef.updateKDKRgActive(false);
+                csRef.updateNextManeuver(new RouteInfoElement());
+            }
+            if (komoService != null) {
+                komoService.notifyVisibility(false);
+                komoService.enableKomoView(false);
+            }
+            komoStarted = false;
+            Log.i(TAG, "KOMO: stopped");
+        } catch (Exception e) {
+            Log.w(TAG, "KOMO stop failed (non-fatal): " + e.getMessage());
+        }
+    }
+
+    /**
+     * Push current maneuver data to PresentationController via KOMOService.
+     * Builds a RouteInfoElement with ManeuverElement from the same mapper
+     * values used for BAP (element=mainCategory, direction=bapDirection).
+     */
+    private void updateKOMO(RouteGuidance.State s) {
+        if (!komoStarted || csRef == null) return;
+
+        try {
+            int[] idxs = getManeuverIndexList(s);
+            if (idxs == null || idxs.length == 0 || s.maneuverCount == 0) {
+                csRef.updateNextManeuver(new RouteInfoElement());
+                return;
+            }
+
+            int maxIdx = (s.mType != null) ? s.mType.length : 0;
+            /* Pick the first directional maneuver (skip FOLLOW_STREET).
+             * Native FPK sends "nextManeuver" = the upcoming turn, not the
+             * current "go straight" instruction.  Fall back to FOLLOW_STREET
+             * if it's the only valid maneuver. */
+            int firstIdx = -1;
+            int followIdx = -1;
+            for (int i = 0; i < idxs.length; i++) {
+                int idx = idxs[i];
+                if (idx >= 0 && idx < maxIdx && ManeuverMapper.isValidType(s.mType[idx])) {
+                    int[] probe = ManeuverMapper.map(
+                        s.mType[idx], s.mTurnAngle[idx],
+                        s.mJunctionType[idx], s.mDrivingSide[idx]);
+                    if (probe[0] == ManeuverMapper.FOLLOW_STREET) {
+                        if (followIdx < 0) followIdx = idx;
+                    } else {
+                        firstIdx = idx;
+                        break;
+                    }
+                }
+            }
+            if (firstIdx < 0) firstIdx = followIdx;
+
+            if (firstIdx < 0) {
+                csRef.updateNextManeuver(new RouteInfoElement());
+                return;
+            }
+
+            int[] mapped = ManeuverMapper.map(
+                s.mType[firstIdx],
+                s.mTurnAngle[firstIdx],
+                s.mJunctionType[firstIdx],
+                s.mDrivingSide[firstIdx]
+            );
+
+            ManeuverElement me = new ManeuverElement(
+                mapped[0],
+                (short) mapped[1],
+                0
+            );
+
+            RouteInfoElement rie = new RouteInfoElement();
+            rie.routeInfoElementType = 3;
+            rie.maneuverDescriptor = new ManeuverElement[]{ me };
+            rie.turnToStreet = getKomoTurnToStreet(s, firstIdx);
+            rie.exitNumber = getKomoExitNumber(s, firstIdx);
+            rie.exitIconId = 0;
+
+            csRef.updateNextManeuver(rie);
+            Log.d(TAG, "KOMO: pushed element=" + mapped[0] + " dir=" + mapped[1]);
+
+        } catch (Exception e) {
+            Log.w(TAG, "KOMO update failed: " + e.getMessage());
+        }
+    }
+
+    private static String getKomoTurnToStreet(RouteGuidance.State s, int idx) {
+        if (s.mExitInfo != null && idx < s.mExitInfo.length
+            && s.mExitInfo[idx] != null && s.mExitInfo[idx].length() > 0) {
+            return keepLastColonPart(s.mExitInfo[idx]);
+        }
+        if (s.mAfterRoad != null && idx < s.mAfterRoad.length
+            && s.mAfterRoad[idx] != null && s.mAfterRoad[idx].length() > 0) {
+            return keepLastColonPart(s.mAfterRoad[idx]);
+        }
+        if (s.mName != null && idx < s.mName.length
+            && s.mName[idx] != null && s.mName[idx].length() > 0) {
+            return s.mName[idx];
+        }
+        return null;
+    }
+
+    private static String getKomoExitNumber(RouteGuidance.State s, int idx) {
+        if (s.mExitInfo != null && idx < s.mExitInfo.length
+            && s.mExitInfo[idx] != null && s.mExitInfo[idx].length() > 0) {
+            return s.mExitInfo[idx];
+        }
+        return null;
     }
 
     /* ============================================================

@@ -677,7 +677,8 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
     }
 
     public void setKOMODataRate(int i) {
-        if (Util.isClusterMapMOST(this.env.getFramework())) {
+        if (Util.isClusterMapMOST(this.env.getFramework())
+                || Util.isClusterMapFPK(this.env.getFramework())) {
             this.setKOMODataRate(i, true);
         }
     }
@@ -1081,6 +1082,26 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
                 + " naviOnPhone=" + fPhone.getBoolean(this.combiBAPListener);
         } catch (Exception e) {
             return "diagnostics unavailable";
+        }
+    }
+
+    public void updateKDKRgActive(boolean active) {
+        this.clusterKDKHandler.updateRgActive(active);
+    }
+
+    public void setValidRGTypeReceived(boolean valid) {
+        this.combiBAPListener.validRGTypeReceived(valid);
+    }
+
+    public int getKOMOHintsRaw() {
+        return this.env.getChoiceModel(1, 168).getHints();
+    }
+
+    public void setClusterUpdateRate(int rate) {
+        try {
+            ((de.audi.atip.hmi.HMIService) this.env.getHMIService()).getDisplayManager().setUpdateRate(1, rate);
+        } catch (Exception e) {
+            /* non-fatal */
         }
     }
 
