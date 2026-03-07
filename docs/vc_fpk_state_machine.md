@@ -75,12 +75,87 @@ rgType=2 matters on HU Java side (CombiBAPListener internal state) but VC doesn'
 ## When Each View Is Shown
 
 ### SV_LVDS_NavMap_FPK (0xb1) - LVDS Map Stream over MOST
+
+**Transition requirements:**
 - `INTERN_Active_NavFPK_Content` = 1 (Map)
 - `LVDS_Available` = 1
-- HU renders nav map internally, sends video over MOST isochronous channel
-- VC enters BackgroundDelayHack first (wait for LVDS sync) -> then renders video overlay
-- BAP text data (distance, street name) overlaid as widgets
-- Triggered by: user pressing map in left menu (`APP_Nav_LeftMenu_Map_pressed`) or HU BAP MapPresentation
+- Enters `SV_LVDS_NavMap_FPK_BackgroundDelayHack` (0xb0) first, waits for LVDS sync via
+  `CODING_Timer_tdLVDSLock`, then transitions to `SV_LVDS_NavMap_FPK` (0xb1)
+- Triggered by: `APP_Nav_LeftMenu_Map_pressed` event or HU BAP MapPresentation
+
+**Video stream — hardware pipeline (not dp items):**
+```
+HU: PresentationController renders map/KDK → GPU framebuffer
+  → videoencoderservice captures via IPTE (Inline Processing and Transfer Engine)
+  → Qualcomm H.264 HW encoder → MPEG-TS packetizer
+  → MLB (Media Logical Block) ISO TX → MOST isochronous channel
+  → VC MOST receiver → HW video decoder → display layer
+```
+
+The LVDS video is a hardware video pipeline. `LVDS_Available` (0x20002d7) is set by the
+VC's graphics subsystem when it detects valid video sync from the MOST decoder. The video
+layer is rendered BEHIND EB GUIDE widget overlays.
+
+**Video/KDK positioning dp items:**
+
+| dp Item                               | ID           | Purpose                           |
+|---------------------------------------|--------------|-----------------------------------|
+| `SV_LVDS_FPK_NavMap_Image_x/y`        | 0x400007c/7d | Video frame position              |
+| `SV_LVDS_FPK_NavMap_Image_imageFiles` | 0x60000c1    | Fallback/background images        |
+| `SV_LVDS_FPK_NavMap_Overlay_color`    | 0x400007e    | Tint overlay color                |
+| `SV_LVDS_FPK_NavMap_Slider_x/y`       | 0x400007f/80 | Slider widget position            |
+| `SV_LVDS_FPK_NavMap_overlay_txtPaths` | 0x60000c2    | Overlay text paths                |
+| `LVDS_KDK_visible`                    | 0x20002df    | KDK intersection overlay visible  |
+| `LVDS_KDK_opacity`                    | 0x20002dc    | KDK overlay opacity (fade in/out) |
+| `LVDS_KDK_position_x/y`               | 0x20002dd/de | KDK overlay position              |
+| `LVDS_KDK_follow`                     | 0x20002db    | KDK follow mode                   |
+| `LVDS_KDK_DM_opacity`                 | 0x20002d8    | Display manager KDK opacity       |
+| `LVDS_KDK_DM_position_x/y`            | 0x20002d9/da | Display manager KDK position      |
+| `CODING_Timer_tdLVDSLock`             | 0x20000e6    | LVDS lock delay timer             |
+| `MMI_Current_LVDS_Skin`               | 0x20002e6    | LVDS skin variant                 |
+
+**BAP text overlays rendered ON TOP of video:**
+
+| dp Item                                                | ID        | BAP FctID | Content            |
+|--------------------------------------------------------|-----------|-----------|--------------------|
+| `BAP_NavSD_DistanceToNextManeuver_Distance`            | 0x2000067 | 18        | Distance text      |
+| `BAP_NavSD_DistanceToNextManeuver_BargraphOn`          | 0x2000066 | 18        | Bargraph active    |
+| `BAP_NavSD_DistanceToNextManeuver_Unit`                | 0x2000068 | 18        | Distance unit      |
+| `BAP_NavSD_DistanceToNextManeuver_ValidityInformation` | 0x2000069 | 18        | Validity           |
+| `BAP_NavSD_TurnToInfo_TurnToInfo_text`                 | 0x1000018 | 23        | Turn-to street     |
+| `BAP_NavSD_TurnToInfo_TurnToInfo_available`            | 0x1000017 | 23        | Turn-to visible    |
+| `BAP_NavSD_TurnToInfo_SignPost_text`                   | 0x1000016 | 23        | Signpost text      |
+| `BAP_NavSD_TurnToInfo_SignPost_available`              | 0x1000015 | 23        | Signpost visible   |
+| `BAP_NavSD_CurrentPositionInfo_PositionInfo_text`      | 0x1000013 | 19        | Current road       |
+| `BAP_NavSD_CurrentPositionInfo_PositionInfo_available` | 0x1000012 | 19        | Road visible       |
+| `BAP_NavSD_DistanceToDestination_Distance`             | 0x4000001 | 21        | Dist to dest       |
+| `BAP_NavSD_DistanceToDestination_Unit`                 | 0x4000002 | 21        | Unit               |
+| `BAP_NavSD_RG_Status_RG_Status`                        | 0x2000070 | 17        | RG active          |
+| `NavFPK_DTD_ArrivalTime`                               | 0x400003b | 22        | ETA                |
+| `NavFPK_DTD_Distance`                                  | 0x400003d | 21        | Formatted distance |
+| `BAP_NavSD_Seperator_text`                             | 0x1000014 | -         | Separator          |
+
+**Map overlay widgets (on-screen map UI elements):**
+
+| dp Item                                         | ID        | Content             |
+|-------------------------------------------------|-----------|---------------------|
+| `Nav_Map_Scale_String`                          | 0x4000056 | Scale bar text      |
+| `Nav_Map_Scale_Unit`                            | 0x4000057 | Scale unit          |
+| `Nav_Map_Scale_visible`                         | 0x4000058 | Scale bar visible   |
+| `Nav_Map_Altitude_String`                       | 0x4000053 | Altitude text       |
+| `Nav_Map_Altitude_Unit`                         | 0x4000054 | Altitude unit       |
+| `Nav_Map_Streetname`                            | 0x4000059 | Street name on map  |
+| `Nav_Map_TurnToInfo_available`                  | 0x400005a | Turn-to bar visible |
+| `Nav_Map_signPost`                              | 0x400005b | Signpost text       |
+| `Nav_Map_signPost_available`                    | 0x400005c | Signpost visible    |
+| `BAP_NavSD_MapColorAndType_Colour`              | 0x400001c | Day/night/auto      |
+| `BAP_NavSD_MapScale_AutoZoom`                   | 0x400001d | Auto zoom state     |
+| `BAP_NavSD_MapViewAndOrientation_ActiveMapView` | 0x400001e | 2D/3D/overview      |
+
+**LVDS events:**
+- `APP_LVDS_Capturing_Enable` (0xb7) / `APP_LVDS_Capturing_Disable` (0xb6)
+- `INTERN_LVDS_Nav_Update` (0x162)
+- `ENGINEERING_LVDS_DebugLabel_Text/Visible` — debug overlay
 
 ### SV_NavFPK_Compass (0xb4) - Native Compass with RG Overlays
 - `INTERN_Active_NavFPK_Content` = 0 (None)
