@@ -1168,8 +1168,11 @@ public class BAPBridge {
         int[] codes = new int[angles.length - start];
         int n = 0;
         for (int i = start; i < angles.length; i++) {
-            int code = mapRawLaneValueToDirectionCode(angles[i], true, primaryDir) & 0xFF;
+            int code = mapRawLaneValueToDirectionCode(angles[i]) & 0xFF;
             if (code == 0xFF) continue;
+            /* Skip angles that map to the same BAP direction as the primary —
+             * they're not additional directions, just the same lane. */
+            if (code == primaryDir) continue;
 
             boolean dup = false;
             for (int j = 0; j < n; j++) {
