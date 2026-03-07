@@ -730,7 +730,13 @@ static void handle_stream_data(int fd, const uint8_t* buf, size_t len) {
             pthread_mutex_unlock(&stream_mutex);
             return;
         }
-        st->raw_buf = realloc(st->raw_buf, new_cap);
+        uint8_t* tmp = realloc(st->raw_buf, new_cap);
+        if (!tmp) {
+            st->raw_len = 0;
+            pthread_mutex_unlock(&stream_mutex);
+            return;
+        }
+        st->raw_buf = tmp;
         st->raw_cap = new_cap;
     }
     memcpy(st->raw_buf + st->raw_len, buf, len);
@@ -794,7 +800,9 @@ static void handle_stream_data(int fd, const uint8_t* buf, size_t len) {
                 if (st->jpeg_len + payload_len > st->jpeg_cap) {
                     size_t new_cap = st->jpeg_cap ? st->jpeg_cap * 2 : 65536;
                     while (new_cap < st->jpeg_len + payload_len) new_cap *= 2;
-                    st->jpeg_buf = realloc(st->jpeg_buf, new_cap);
+                    uint8_t* tmp = realloc(st->jpeg_buf, new_cap);
+                    if (!tmp) break;
+                    st->jpeg_buf = tmp;
                     st->jpeg_cap = new_cap;
                 }
                 memcpy(st->jpeg_buf + st->jpeg_len, payload_ptr, payload_len);
@@ -840,9 +848,12 @@ static void handle_stream_data(int fd, const uint8_t* buf, size_t len) {
             }
         }
 
-        /* Safety: clear if too large */
+        /* Safety: free if too large */
         if (st->jpeg_len > 10 * 1024 * 1024) {
+            free(st->jpeg_buf);
+            st->jpeg_buf = NULL;
             st->jpeg_len = 0;
+            st->jpeg_cap = 0;
             st->target_session = -1;
         }
     }
@@ -908,12 +919,10 @@ static void coverart_init(void) {
 
 __attribute__((destructor))
 static void coverart_fini(void) {
-    /* Free stream buffers */
+    /* Free all stream buffers (active or not) */
     for (int i = 0; i < MAX_STREAMS; i++) {
-        if (streams[i].active) {
-            free(streams[i].raw_buf);
-            free(streams[i].jpeg_buf);
-        }
+        free(streams[i].raw_buf);
+        free(streams[i].jpeg_buf);
     }
 
     LOG_INFO(LOG_MODULE, "Cleanup: read=%d recv=%d images=%d",

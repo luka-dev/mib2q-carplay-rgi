@@ -806,15 +806,7 @@ void rgd_clear_state(const char* reason) {
         pps_end(g_rgd.pps);
     }
 
-    {
-        hook_context_t* ctx = hook_framework_get_context();
-        if (ctx) {
-            ctx->identify_accepted = false;
-            ctx->auth_done = false;
-            ctx->rgd_component_valid = false;
-            rgd_update_session_active();
-        }
-    }
+    rgd_update_session_active();
 
     LOG_INFO(LOG_MODULE, "State cleared: %s", reason ? reason : "unknown");
 }
