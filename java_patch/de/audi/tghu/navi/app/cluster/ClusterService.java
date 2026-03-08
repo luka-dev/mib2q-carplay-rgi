@@ -1097,12 +1097,102 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         return this.env.getChoiceModel(1, 168).getHints();
     }
 
+    /** Compact diagnostic string for ClusterViewMode state (video pipeline debugging). */
+    public String getClusterViewModeDiag() {
+        try {
+            java.lang.reflect.Field fGfx = ClusterViewMode.class.getDeclaredField("gfxAvailable");
+            fGfx.setAccessible(true);
+            java.lang.reflect.Field fEnabled = ClusterViewMode.class.getDeclaredField("komoViewEnabled");
+            fEnabled.setAccessible(true);
+            java.lang.reflect.Field fVisible = ClusterViewMode.class.getDeclaredField("komoViewVisible");
+            fVisible.setAccessible(true);
+            java.lang.reflect.Field fRate = ClusterViewMode.class.getDeclaredField("dataRate");
+            fRate.setAccessible(true);
+            java.lang.reflect.Field fMapReady = ClusterViewMode.class.getDeclaredField("mapReady");
+            fMapReady.setAccessible(true);
+            return "gfx=" + fGfx.getBoolean(this.clusterViewMode)
+                + " en=" + fEnabled.getBoolean(this.clusterViewMode)
+                + " vis=" + fVisible.getBoolean(this.clusterViewMode)
+                + " rate=" + fRate.getInt(this.clusterViewMode)
+                + " mapRdy=" + fMapReady.getBoolean(this.clusterViewMode);
+        } catch (Exception e) {
+            return "diag-err";
+        }
+    }
+
     public void setClusterUpdateRate(int rate) {
         try {
             ((de.audi.atip.hmi.HMIService) this.env.getHMIService()).getDisplayManager().setUpdateRate(1, rate);
         } catch (Exception e) {
             /* non-fatal */
         }
+    }
+
+    /**
+     * Activate the cluster video pipeline directly on the DisplayManager.
+     * CombiMapController (HMI widget) normally does this in response to
+     * ChoiceModel(1,168) hints, but the widget may not be connected during
+     * CarPlay. We bypass it and call DisplayManager directly:
+     *   1. switchContext(72, 1) — set a valid base map context
+     *   2. setKDKVisible(20, 1) — add KDK displayable (triggers addKDKToContext → context 151)
+     *   3. setUpdateRate(1, 10) — tell video encoder to start capturing
+     */
+    public String activateClusterVideoPipeline() {
+        try {
+            de.audi.atip.hmi.view.IDisplayManager dm =
+                ((de.audi.atip.hmi.HMIService) this.env.getHMIService()).getDisplayManager();
+            int ctxBefore = dm.getCurrentContextID(1);
+            /* 1. Set base map context so getCurrentContextID(1) != -1 */
+            dm.switchContext(72, 1, null);
+            int ctxAfter1 = dm.getCurrentContextID(1);
+            /* 2. Set KDK displayable visible — for FPK (SysConst 541==2),
+             *    addKDKToContext maps 72 → 74 (context with displayable 20).
+             *    This triggers native display manager to process displayable 20. */
+            int kdk = -1;
+            if (dm instanceof de.audi.tghu.fwhmi.IDisplayManagerKombiControl) {
+                ((de.audi.tghu.fwhmi.IDisplayManagerKombiControl) dm).setKDKVisible(20, 1);
+                kdk = ((de.audi.tghu.fwhmi.IDisplayManagerKombiControl) dm).getVisibleKDK(1);
+            }
+            int ctxAfter2 = dm.getCurrentContextID(1);
+            /* 3. Set update rate directly — normally done by CombiMapController
+             *    via updateFrameRate() but that only fires for non-FPK. */
+            dm.setUpdateRate(1, 10);
+            return "ctx=" + ctxBefore + "→" + ctxAfter1 + "→" + ctxAfter2
+                + " kdk=" + kdk + " dmType=" + dm.getClass().getSimpleName();
+        } catch (Exception e) {
+            return "FAILED: " + e.getMessage();
+        }
+    }
+
+    public void deactivateClusterVideoPipeline() {
+        try {
+            de.audi.atip.hmi.view.IDisplayManager dm =
+                ((de.audi.atip.hmi.HMIService) this.env.getHMIService()).getDisplayManager();
+            dm.setUpdateRate(1, 0);
+            if (dm instanceof de.audi.tghu.fwhmi.IDisplayManagerKombiControl) {
+                ((de.audi.tghu.fwhmi.IDisplayManagerKombiControl) dm).setKDKVisible(-1, 1);
+            }
+        } catch (Exception e) {
+            /* non-fatal */
+        }
+    }
+
+    /**
+     * Update followInfoRIE trip data fields so PresentationController sees
+     * changed data on each setRouteInfo() call and re-renders the arrow.
+     * Also clears "isNativeLittleEndian" sentinels from the tiny widget.
+     */
+    public void updateFollowInfoData(String distance, String eta, String turnTo) {
+        if (this.followInfoRIE != null) {
+            this.followInfoRIE.distanceToElement = (distance != null) ? distance : "";
+            this.followInfoRIE.estimatedTimeToElement = (eta != null) ? eta : "";
+            this.followInfoRIE.turnToStreet = turnTo;
+            if (this.followInfoRIE.trafficInfo != null) {
+                this.followInfoRIE.trafficInfo.trafficOffset = "";
+                this.followInfoRIE.trafficInfo.trafficOffsetAffix = "";
+            }
+        }
+        this.env.getLabelModel(71).setText((turnTo != null) ? turnTo : "");
     }
 
     public KOMOCaller getKomoCaller() {

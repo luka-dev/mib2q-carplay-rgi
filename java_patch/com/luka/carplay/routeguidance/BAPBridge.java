@@ -1282,17 +1282,38 @@ public class BAPBridge {
             return;
         }
         try {
+            /* 1. Enable KOMO view on PresentationController */
             komoService.enableKomoView(true);
             komoService.notifyVisibility(true);
+
+            /* 2. Tell PresentationController to use KDK render mode.
+             * For FPK, refreshViewMode() is a NO-OP so refreshRgMode() never
+             * fires — setRgSelect() is never called. We must call it explicitly.
+             * rgSelect: 0=RGI, 1=KDK, 2=COMPASS, 3=MAP */
+            komoService.setRgSelect(1);
+
+            /* 2b. Activate cluster video pipeline directly on DisplayManager.
+             * Bypasses CombiMapController (HMI widget that may not be connected
+             * during CarPlay). Sets context 72 → KDK visible (displayable 20)
+             * → context 151 → native display manager → setActiveDisplayable
+             * on video encoder → encoder starts capturing. */
+            String pipelineResult = csRef.activateClusterVideoPipeline();
+            Log.i(TAG, "KOMO: pipeline " + pipelineResult);
+
+            /* 3. Set KDK visibility + rgActive for hint logic */
             csRef.setKDKVisibility(true);
-            /* Set rgActive on KDK handler only (for hint 4 logic), NOT on
-             * CombiBAPListener (would send duplicate BAP RGStatus/rgType). */
             csRef.updateKDKRgActive(true);
+
+            /* 5. Start video encoder: both chains needed */
             csRef.setKOMODataRate(KOMO_DATA_RATE_FULL);
             csRef.setClusterUpdateRate(10);
 
+            /* 6. Clear sentinel strings from followInfoRIE */
+            csRef.updateFollowInfoData("", "", "");
+
             komoStarted = true;
-            Log.i(TAG, "KOMO: started (hints=0x" + Integer.toHexString(csRef.getKOMOHintsRaw()) + ")");
+            Log.i(TAG, "KOMO: started (hints=0x" + Integer.toHexString(csRef.getKOMOHintsRaw())
+                + " " + csRef.getClusterViewModeDiag() + ")");
         } catch (Exception e) {
             Log.w(TAG, "KOMO start failed (non-fatal): " + e.getMessage());
         }
@@ -1305,6 +1326,7 @@ public class BAPBridge {
         if (!komoStarted) return;
         try {
             if (csRef != null) {
+                csRef.deactivateClusterVideoPipeline();
                 csRef.setClusterUpdateRate(0);
                 csRef.setKOMODataRate(0);
                 csRef.setKDKVisibility(false);
@@ -1312,6 +1334,7 @@ public class BAPBridge {
                 csRef.updateNextManeuver(new RouteInfoElement());
             }
             if (komoService != null) {
+                komoService.setRgSelect(2);  /* restore COMPASS render mode */
                 komoService.notifyVisibility(false);
                 komoService.enableKomoView(false);
             }
@@ -1378,15 +1401,23 @@ public class BAPBridge {
                 0
             );
 
+            String turnTo = getKomoTurnToStreet(s, firstIdx);
+
             RouteInfoElement rie = new RouteInfoElement();
             rie.routeInfoElementType = 3;
             rie.maneuverDescriptor = new ManeuverElement[]{ me };
-            rie.turnToStreet = getKomoTurnToStreet(s, firstIdx);
+            rie.turnToStreet = turnTo;
             rie.exitNumber = getKomoExitNumber(s, firstIdx);
             rie.exitIconId = 0;
 
+            /* Update followInfoRIE trip data so PresentationController sees
+             * changed data and re-renders.  Without this, the DSI layer skips
+             * the send because followInfoRIE never changes. */
+            csRef.updateFollowInfoData(formatKomoDistance(s), formatKomoEta(s), turnTo);
+
             csRef.updateNextManeuver(rie);
-            Log.d(TAG, "KOMO: pushed element=" + mapped[0] + " dir=" + mapped[1]);
+            Log.d(TAG, "KOMO: pushed element=" + mapped[0] + " dir=" + mapped[1]
+                + " hints=0x" + Integer.toHexString(csRef.getKOMOHintsRaw()));
 
         } catch (Exception e) {
             Log.w(TAG, "KOMO update failed: " + e.getMessage());
@@ -1415,6 +1446,35 @@ public class BAPBridge {
             return s.mExitInfo[idx];
         }
         return null;
+    }
+
+    /** Format distance-to-destination as a string for followInfoRIE. */
+    private String formatKomoDistance(RouteGuidance.State s) {
+        if (s.distDestM <= 0) return "";
+        FormattedDistance fd = formatDistanceToTurn(s.distDestM);
+        if (fd.value <= 0) return "";
+        String u;
+        switch (fd.unit) {
+            case 1: u = " m"; break;
+            case 2: u = " km"; break;
+            case 3: u = " mi"; break;
+            case 4: u = " ft"; break;
+            default: u = ""; break;
+        }
+        return fd.value + u;
+    }
+
+    /** Format ETA as HH:MM string for followInfoRIE. */
+    private String formatKomoEta(RouteGuidance.State s) {
+        if (s.etaSeconds <= 0) return "";
+        long etaSec = s.etaSeconds;
+        long tzAdj = getTimezoneAdjustSeconds(etaSec);
+        etaSec += tzAdj;
+        int h = (int) ((etaSec / 3600) % 24);
+        if (h < 0) h += 24;
+        int m = (int) ((etaSec % 3600) / 60);
+        if (m < 0) m += 60;
+        return (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m;
     }
 
     /* ============================================================
