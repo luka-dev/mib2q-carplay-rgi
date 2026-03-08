@@ -174,6 +174,25 @@ static int rgd_min_current_index(void) {
 	}
 
 /*
+ * Helper: check if any cached maneuver links to this lane guidance index.
+ * Used to accept 0x5204 lane updates for indices referenced by active maneuvers,
+ * even if the lane index itself is below the current maneuver-list minimum.
+ */
+static bool rgd_is_linked_lane_index(uint16_t lane_idx) {
+    for (int s = 0; s < MANEUVER_CACHE_SIZE; s++) {
+        if (g_rgd.slot_to_iap_idx[s] == 0xFFFF) continue;
+        rgd_maneuver_t* m = &g_rgd.slot_cache[s];
+        if ((m->present & RGD_MAN_LINKED_LANE_INDEX) &&
+            m->linked_lane_guidance_index == lane_idx) return true;
+        /* Also match if the maneuver's own iAP2 index equals the lane index
+         * (common pattern: iOS uses same index space for both) */
+        if (g_rgd.slot_to_iap_idx[s] == lane_idx &&
+            (m->present & RGD_MAN_LANE_GUIDANCE)) return true;
+    }
+    return false;
+}
+
+/*
  * Helper: check if an iAP2 index is in the active ManeuverList.
  * Slots for active maneuvers must never be evicted.
  */
@@ -606,7 +625,7 @@ static void write_pps_lane_guidance_partial(const rgd_lane_guidance_t* lane) {
     if (lane->present & RGD_LANE_INFORMATIONS) {
         if (iap_idx == 0xFFFF) {
             LOG_DEBUG(LOG_MODULE, "0x5204 lane data without index and no active maneuver list");
-        } else if (!rgd_can_process_maneuver_index(iap_idx)) {
+        } else if (!rgd_can_process_maneuver_index(iap_idx) && !rgd_is_linked_lane_index(iap_idx)) {
             LOG_DEBUG(LOG_MODULE, "0x5204 lane idx=%u rejected by maneuver-index gating", iap_idx);
         } else {
             slot = rgd_slot_for_iap_index(iap_idx, true);
