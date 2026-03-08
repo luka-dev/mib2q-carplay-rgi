@@ -1,0 +1,8 @@
+.idea
+.claude
+/java_patch/out
+/java_test/out
+carplay_hook.jar
+libcarplay_hook.so
+mu1316_lsd.jar
+**/.DS_Store
