@@ -35,7 +35,7 @@ public class BAPBridge {
     /* RGType sent to cluster: 0=RGI (BAP ManeuverDescriptor icons for HUD).
      * FPK has rgType=4 hardcoded in CombiBAPListener — our BAP rgType=0 is for the
      * AppConnectorNavi FSG sync flow, not for view mode selection. */
-    private static final int ACTIVE_RGTYPE = 4;  /* MAP mode for FPK — VC shows LVDS video area */
+    private static final int ACTIVE_RGTYPE = 0;  /* RGI — BAP icons. KOMO/LVDS attempted in parallel but not required. */
     /* KOMO data rate: 2=full bandwidth (hint 2 on ChoiceModel(1,168)) */
     private static final int KOMO_DATA_RATE_FULL = 2;
     private static final boolean BAP_TRACE_ENABLED = true;
@@ -459,15 +459,20 @@ public class BAPBridge {
 
             /* Non-sync FctIDs */
             traceBap("updateCurrentPositionInfo", "\"\"");
-            appConnectorNavi.updateCurrentPositionInfo("");                           /* FctID 19 */
+            try {
+                appConnectorNavi.updateCurrentPositionInfo("");                       /* FctID 19 */
+            } catch (Throwable t) {
+                Log.w(TAG, "BAP FctID 19 failed during start: "
+                    + t.getClass().getName() + ": " + t.getMessage());
+            }
 
             /* KOMO: start video encoder and LVDS rendering pipeline */
             startKOMO();
 
             Log.i(TAG, "Started (rgType=" + ACTIVE_RGTYPE + ", komo=" + komoStarted + ")");
 
-        } catch (Exception e) {
-            Log.e(TAG, "onStart error", e);
+        } catch (Throwable e) {
+            Log.e(TAG, "onStart error: " + e.getClass().getName() + ": " + e.getMessage());
         }
     }
 
@@ -797,12 +802,14 @@ public class BAPBridge {
                     timeVal = -1;
                 }
 
+                /* JVM default TZ is UTC on MHI2. AppConnectorNavi uses
+                 * GregorianCalendar(Date(epoch*1000)) which would show UTC.
+                 * Convert UTC epoch to local epoch so calendar shows local time.
+                 * Uses fw.convertUTCTimeToLocalTime() — DST-aware, always correct. */
                 if (timeVal >= 0) {
-                    long tzAdjustSec = getTimezoneAdjustSeconds(timeVal);
-                    if (tzAdjustSec != 0) {
-                        Log.d(TAG, "ETA tz adjust: " + tzAdjustSec + "s (raw=" + timeVal + ")");
-                        timeVal = timeVal + tzAdjustSec;
-                    }
+                    long utcMs = timeVal * 1000L;
+                    long localMs = convertUtcToLocalMs(utcMs);
+                    timeVal = localMs / 1000L;
                 }
 
                 traceBap("updateTimeToDestination", timeInfoType + "," + timeFormat + "," + timeVal);
@@ -1293,20 +1300,40 @@ public class BAPBridge {
             komoService.setRgSelect(1);
 
             /* 2b. Activate cluster video pipeline directly on DisplayManager.
-             * Bypasses CombiMapController (HMI widget that may not be connected
-             * during CarPlay). Sets context 72 → KDK visible (displayable 20)
-             * → context 151 → native display manager → setActiveDisplayable
-             * on video encoder → encoder starts capturing. */
-            String pipelineResult = csRef.activateClusterVideoPipeline();
-            Log.i(TAG, "KOMO: pipeline " + pipelineResult);
+             * Forces context switch (0 → 72) so native DM's preContextSwitchHook
+             * fires and calls setActiveDisplayable(4, 33) on videoencoderservice.
+             * Then starts encoding at 10fps via setUpdateRate(1, 10).
+             * Isolated try-catch with Throwable: IDisplayManagerKombiControl
+             * may throw NoClassDefFoundError if the class isn't in classpath. */
+            try {
+                String pipelineResult = csRef.activateClusterVideoPipeline();
+                Log.i(TAG, "KOMO: pipeline " + pipelineResult);
+            } catch (Throwable t) {
+                Log.w(TAG, "KOMO: pipeline failed: " + t.getClass().getName() + ": " + t.getMessage());
+            }
 
-            /* 3. Set KDK visibility + rgActive for hint logic */
-            csRef.setKDKVisibility(true);
+            /* 3. Set rgActive for hint logic (KDK visibility not needed —
+             * we use context 72 / displayable 33 (map), not KDK displayable 20) */
             csRef.updateKDKRgActive(true);
 
-            /* 5. Start video encoder: both chains needed */
+            /* 5. KOMO data rate for hint propagation (video encoding already
+             * started in activateClusterVideoPipeline via setUpdateRate) */
             csRef.setKOMODataRate(KOMO_DATA_RATE_FULL);
-            csRef.setClusterUpdateRate(10);
+
+            /* Diagnostic: verify DSI proxy wiring and DisplayManager init state */
+            try {
+                de.audi.tghu.navi.app.cluster.KOMOCaller kc = csRef.getKomoCaller();
+                if (kc != null) {
+                    String caller = kc.toString().replace('\n', '|');
+                    Log.i(TAG, "KOMO: caller " + limitUtf8(caller, 220));
+                } else {
+                    Log.w(TAG, "KOMO: caller n/a");
+                }
+            } catch (Throwable t) {
+                Log.w(TAG, "KOMO: caller diag failed: " + t.getClass().getName() + ": " + t.getMessage());
+            }
+            Log.i(TAG, "KOMO: fw " + limitUtf8(csRef.getFrameworkDiag(), 220));
+            Log.i(TAG, "KOMO: dm " + limitUtf8(csRef.getDisplayManagerDiag(), 220));
 
             /* 6. Clear sentinel strings from followInfoRIE */
             csRef.updateFollowInfoData("", "", "");
@@ -1314,8 +1341,8 @@ public class BAPBridge {
             komoStarted = true;
             Log.i(TAG, "KOMO: started (hints=0x" + Integer.toHexString(csRef.getKOMOHintsRaw())
                 + " " + csRef.getClusterViewModeDiag() + ")");
-        } catch (Exception e) {
-            Log.w(TAG, "KOMO start failed (non-fatal): " + e.getMessage());
+        } catch (Throwable e) {
+            Log.w(TAG, "KOMO start failed: " + e.getClass().getName() + ": " + e.getMessage());
         }
     }
 
@@ -1326,10 +1353,8 @@ public class BAPBridge {
         if (!komoStarted) return;
         try {
             if (csRef != null) {
-                csRef.deactivateClusterVideoPipeline();
-                csRef.setClusterUpdateRate(0);
                 csRef.setKOMODataRate(0);
-                csRef.setKDKVisibility(false);
+                csRef.deactivateClusterVideoPipeline();
                 csRef.updateKDKRgActive(false);
                 csRef.updateNextManeuver(new RouteInfoElement());
             }
@@ -1340,8 +1365,8 @@ public class BAPBridge {
             }
             komoStarted = false;
             Log.i(TAG, "KOMO: stopped");
-        } catch (Exception e) {
-            Log.w(TAG, "KOMO stop failed (non-fatal): " + e.getMessage());
+        } catch (Throwable e) {
+            Log.w(TAG, "KOMO stop failed: " + e.getClass().getName() + ": " + e.getMessage());
         }
     }
 
@@ -1419,8 +1444,8 @@ public class BAPBridge {
             Log.d(TAG, "KOMO: pushed element=" + mapped[0] + " dir=" + mapped[1]
                 + " hints=0x" + Integer.toHexString(csRef.getKOMOHintsRaw()));
 
-        } catch (Exception e) {
-            Log.w(TAG, "KOMO update failed: " + e.getMessage());
+        } catch (Throwable e) {
+            Log.w(TAG, "KOMO update failed: " + e.getClass().getName() + ": " + e.getMessage());
         }
     }
 
@@ -1451,7 +1476,7 @@ public class BAPBridge {
     /** Format distance-to-destination as a string for followInfoRIE. */
     private String formatKomoDistance(RouteGuidance.State s) {
         if (s.distDestM <= 0) return "";
-        FormattedDistance fd = formatDistanceToTurn(s.distDestM);
+        FormattedDistance fd = formatDistanceToDestination(s.distDestM);
         if (fd.value <= 0) return "";
         String u;
         switch (fd.unit) {
@@ -1467,9 +1492,8 @@ public class BAPBridge {
     /** Format ETA as HH:MM string for followInfoRIE. */
     private String formatKomoEta(RouteGuidance.State s) {
         if (s.etaSeconds <= 0) return "";
-        long etaSec = s.etaSeconds;
-        long tzAdj = getTimezoneAdjustSeconds(etaSec);
-        etaSec += tzAdj;
+        long localMs = convertUtcToLocalMs(s.etaSeconds * 1000L);
+        long etaSec = localMs / 1000L;
         int h = (int) ((etaSec / 3600) % 24);
         if (h < 0) h += 24;
         int m = (int) ((etaSec % 3600) / 60);
@@ -1505,21 +1529,30 @@ public class BAPBridge {
         return 0;
     }
 
-    private static long getTimezoneAdjustSeconds(long etaEpochSec) {
+    /**
+     * Returns local timezone offset in seconds for a given UTC epoch.
+     *
+     * JVM default TZ on MHI2 is UTC, so TimeZone.getDefault() is useless.
+     * Instead: get HU raw offset (no DST) via fw, find a matching Java TZ
+     * with DST support, and use its getOffset() for DST-aware result.
+     * Fallback: HU raw offset (correct except during DST transitions).
+     */
+    /**
+     * Convert UTC epoch millis to local epoch millis using HU's DST-aware offset.
+     * Uses IFrameworkAccess.convertUTCTimeToLocalTime() which internally adds
+     * utcOffsetMilliseconds (timezone + DST from UTCOffset DSI callback).
+     * Always correct regardless of region or DST status.
+     */
+    private static long convertUtcToLocalMs(long utcMs) {
         try {
             IFrameworkAccess fw = CarPlayHook.getFrameworkAccess();
-            if (fw == null) return 0;
-
-            long huOffsetMs = fw.getCurrentTimezoneOffsetMilliseconds();
-            long javaOffsetMs = java.util.TimeZone.getDefault().getOffset(etaEpochSec * 1000L);
-
-            long deltaMs = huOffsetMs - javaOffsetMs;
-            if (deltaMs == 0) return 0;
-
-            return deltaMs / 1000L;
-        } catch (Exception e) {
-            return 0;
+            if (fw != null) {
+                return fw.convertUTCTimeToLocalTime(utcMs);
+            }
+        } catch (Throwable t) {
+            /* ignore */
         }
+        return utcMs;
     }
 
     /**

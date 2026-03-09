@@ -1,5 +1,6 @@
 package de.audi.tghu.navi.app.cluster;
 
+import de.audi.atip.base.IFrameworkAccess;
 import de.audi.atip.hmi.intercommunication.NaviMoKoKDKConstants;
 import de.audi.atip.hmi.model.ModelGroup;
 import de.audi.atip.hmi.modelaccess.ChoiceModelApp;
@@ -1120,47 +1121,173 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         }
     }
 
-    public void setClusterUpdateRate(int rate) {
+    private Field findFieldInHierarchy(Class clazz, String name) {
+        Class c = clazz;
+        while (c != null) {
+            try {
+                Field f = c.getDeclaredField(name);
+                f.setAccessible(true);
+                return f;
+            } catch (NoSuchFieldException e) {
+                c = c.getSuperclass();
+            } catch (Throwable t) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private String getDisplayManagerInitState(Object dm) {
+        if (dm == null) return "init=n/a dsi=n/a";
         try {
-            ((de.audi.atip.hmi.HMIService) this.env.getHMIService()).getDisplayManager().setUpdateRate(1, rate);
-        } catch (Exception e) {
-            /* non-fatal */
+            Field fInit = this.findFieldInHierarchy(dm.getClass(), "initialized");
+            Field fDsi = this.findFieldInHierarchy(dm.getClass(), "dsiDispMgmt");
+            String init = "n/a";
+            String dsi = "n/a";
+            if (fInit != null) {
+                init = String.valueOf(fInit.get(dm));
+            }
+            if (fDsi != null) {
+                dsi = String.valueOf(fDsi.get(dm) != null);
+            }
+            return "init=" + init + " dsi=" + dsi;
+        } catch (Throwable t) {
+            return "init-diag-err:" + t.getClass().getName();
+        }
+    }
+
+    public String getDisplayManagerDiag() {
+        try {
+            de.audi.atip.hmi.view.IDisplayManager dm =
+                ((de.audi.atip.hmi.HMIService) this.env.getHMIService()).getDisplayManager();
+            int ctx = -1;
+            try {
+                ctx = dm.getCurrentContextID(1);
+            } catch (Throwable t) {
+                /* ignore */
+            }
+            return "dmType=" + dm.getClass().getName()
+                + " ctx1=" + ctx
+                + " " + this.getDisplayManagerInitState(dm);
+        } catch (Throwable t) {
+            return "dmDiagFailed:" + t.getClass().getName() + ": " + t.getMessage();
+        }
+    }
+
+    public String getFrameworkDiag() {
+        try {
+            IFrameworkAccess fw = this.env.getFramework();
+            return "kombiType=" + fw.getKombiType()
+                + " sys541=" + fw.getSysConst(541)
+                + " sys4383=" + fw.getSysConst(4383)
+                + " sys4388=" + fw.getSysConst(4388)
+                + " mapFPK=" + Util.isClusterMapFPK(fw)
+                + " mapMOST=" + Util.isClusterMapMOST(fw)
+                + " setRouteInfoDSI=" + Util.isSetRouteInfoDSIAvailable(fw);
+        } catch (Throwable t) {
+            return "fwDiagFailed:" + t.getClass().getName() + ": " + t.getMessage();
+        }
+    }
+
+    public String setClusterUpdateRateDiag(int rate) {
+        try {
+            de.audi.atip.hmi.view.IDisplayManager dm =
+                ((de.audi.atip.hmi.HMIService) this.env.getHMIService()).getDisplayManager();
+            int ctx = -1;
+            try {
+                ctx = dm.getCurrentContextID(1);
+            } catch (Throwable t) {
+                /* ignore */
+            }
+            String base = "rate=" + rate
+                + " ctx1=" + ctx
+                + " dmType=" + dm.getClass().getName()
+                + " " + this.getDisplayManagerInitState(dm);
+            dm.setUpdateRate(1, rate);
+            return "OK " + base;
+        } catch (Throwable t) {
+            return "FAILED: " + t.getClass().getName() + ": " + t.getMessage();
+        }
+    }
+
+    public void setClusterUpdateRate(int rate) {
+        this.setClusterUpdateRateDiag(rate);
+    }
+
+    private String trySetVisibleKDKReflective(de.audi.atip.hmi.view.IDisplayManager dm, int displayable, int terminal) {
+        try {
+            java.lang.reflect.Method setMethod = dm.getClass()
+                .getMethod("setKDKVisible", new Class[]{Integer.TYPE, Integer.TYPE});
+            setMethod.invoke(dm, new Object[]{new Integer(displayable), new Integer(terminal)});
+            try {
+                java.lang.reflect.Method getMethod = dm.getClass().getMethod("getVisibleKDK", new Class[]{Integer.TYPE});
+                Object result = getMethod.invoke(dm, new Object[]{new Integer(terminal)});
+                if (result instanceof Integer) {
+                    return String.valueOf(((Integer) result).intValue());
+                }
+            } catch (Throwable t) {
+                return "set-only";
+            }
+            return String.valueOf(displayable);
+        } catch (NoSuchMethodException e) {
+            return "no-kdk-api";
+        } catch (Throwable t) {
+            return "kdk-err:" + t.getClass().getName();
         }
     }
 
     /**
      * Activate the cluster video pipeline directly on the DisplayManager.
-     * CombiMapController (HMI widget) normally does this in response to
-     * ChoiceModel(1,168) hints, but the widget may not be connected during
-     * CarPlay. We bypass it and call DisplayManager directly:
-     *   1. switchContext(72, 1) — set a valid base map context
-     *   2. setKDKVisible(20, 1) — add KDK displayable (triggers addKDKToContext → context 151)
-     *   3. setUpdateRate(1, 10) — tell video encoder to start capturing
+     *
+     * Native display manager calls setActiveDisplayable on videoencoderservice
+     * ONLY from CContextManager::preContextSwitchHook during a REAL context
+     * switch. Java DisplayManager.switchContext() skips the DSI call when the
+     * requested context equals confirmedActiveContext — so if context 72 is
+     * already active, setActiveDisplayable never fires and videoencoderservice
+     * captures displayable 0 (nothing).
+     *
+     * Fix: switch to a dummy context first, then back to 72 so the native DM
+     * sees a real change and calls setActiveDisplayable(4, 33) where 33 is
+     * context 72's first displayable (the base navigation map).
+     *
+     * Do NOT call setKDKVisible — context 74's first displayable is 20 (KDK
+     * intersection map) which has no rendered content without native RG.
      */
     public String activateClusterVideoPipeline() {
         try {
             de.audi.atip.hmi.view.IDisplayManager dm =
                 ((de.audi.atip.hmi.HMIService) this.env.getHMIService()).getDisplayManager();
             int ctxBefore = dm.getCurrentContextID(1);
-            /* 1. Set base map context so getCurrentContextID(1) != -1 */
+
+            /* 1. Force context away so next switchContext is a real change.
+             *    Context 0 = default/empty — safe to switch to briefly. */
+            dm.switchContext(0, 1, null);
+            int ctxAfterReset = dm.getCurrentContextID(1);
+
+            /* 2. Wait for native DM to confirm the context switch via DSI.
+             *    DisplayManager.switchContext() blocks up to 200ms internally,
+             *    but add a short extra sleep for safety. */
+            try { Thread.sleep(300); } catch (InterruptedException ie) { /* ignore */ }
+
+            /* 3. Switch to FPK base map context 72. This triggers
+             *    preContextSwitchHook → setActiveDisplayable(4, 33) in the
+             *    native display manager → videoencoderservice will IPTE-capture
+             *    displayable 33 (the navigation map framebuffer). */
             dm.switchContext(72, 1, null);
-            int ctxAfter1 = dm.getCurrentContextID(1);
-            /* 2. Set KDK displayable visible — for FPK (SysConst 541==2),
-             *    addKDKToContext maps 72 → 74 (context with displayable 20).
-             *    This triggers native display manager to process displayable 20. */
-            int kdk = -1;
-            if (dm instanceof de.audi.tghu.fwhmi.IDisplayManagerKombiControl) {
-                ((de.audi.tghu.fwhmi.IDisplayManagerKombiControl) dm).setKDKVisible(20, 1);
-                kdk = ((de.audi.tghu.fwhmi.IDisplayManagerKombiControl) dm).getVisibleKDK(1);
-            }
-            int ctxAfter2 = dm.getCurrentContextID(1);
-            /* 3. Set update rate directly — normally done by CombiMapController
-             *    via updateFrameRate() but that only fires for non-FPK. */
+            int ctxAfterMap = dm.getCurrentContextID(1);
+
+            try { Thread.sleep(300); } catch (InterruptedException ie) { /* ignore */ }
+
+            /* 4. Start video encoding at 10fps. Native DM forwards this as
+             *    CASIMostEncoder::setUpdateRate → ASI → videoencoderservice
+             *    adjustTimer(remoteDisplayId=0, fps=10). */
             dm.setUpdateRate(1, 10);
-            return "ctx=" + ctxBefore + "→" + ctxAfter1 + "→" + ctxAfter2
-                + " kdk=" + kdk + " dmType=" + dm.getClass().getSimpleName();
-        } catch (Exception e) {
-            return "FAILED: " + e.getMessage();
+
+            return "ctx=" + ctxBefore + "→" + ctxAfterReset + "→" + ctxAfterMap
+                + " dmType=" + dm.getClass().getName()
+                + " " + this.getDisplayManagerInitState(dm);
+        } catch (Throwable t) {
+            return "FAILED: " + t.getClass().getName() + ": " + t.getMessage();
         }
     }
 
@@ -1169,10 +1296,7 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
             de.audi.atip.hmi.view.IDisplayManager dm =
                 ((de.audi.atip.hmi.HMIService) this.env.getHMIService()).getDisplayManager();
             dm.setUpdateRate(1, 0);
-            if (dm instanceof de.audi.tghu.fwhmi.IDisplayManagerKombiControl) {
-                ((de.audi.tghu.fwhmi.IDisplayManagerKombiControl) dm).setKDKVisible(-1, 1);
-            }
-        } catch (Exception e) {
+        } catch (Throwable t) {
             /* non-fatal */
         }
     }
