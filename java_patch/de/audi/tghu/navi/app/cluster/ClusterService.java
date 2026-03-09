@@ -1246,12 +1246,17 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
      * already active, setActiveDisplayable never fires and videoencoderservice
      * captures displayable 0 (nothing).
      *
-     * Fix: switch to a dummy context first, then back to 72 so the native DM
-     * sees a real change and calls setActiveDisplayable(4, 33) where 33 is
-     * context 72's first displayable (the base navigation map).
+     * Fix: Two issues must be resolved:
+     * 1. Boot default maps context 72 → 74 (KDK variant). Context 74's first
+     *    displayable is 20 (KDK intersection, no content without native RG).
+     *    Call setKDKVisible(-1, terminal) to CLEAR the mapping so context 72
+     *    stays as 72 with first displayable 33 (base navigation map).
+     * 2. switchContext is a no-op when confirmedActiveContext == requested.
+     *    Force a context change by switching to 0 first, then back to 72.
      *
-     * Do NOT call setKDKVisible — context 74's first displayable is 20 (KDK
-     * intersection map) which has no rendered content without native RG.
+     * After clearing: switchContext(72) → preContextSwitchHook →
+     *   setActiveDisplayable(4, 33) → videoencoderservice IPTE-captures the
+     *   base navigation map framebuffer.
      */
     public String activateClusterVideoPipeline() {
         try {
@@ -1259,31 +1264,32 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
                 ((de.audi.atip.hmi.HMIService) this.env.getHMIService()).getDisplayManager();
             int ctxBefore = dm.getCurrentContextID(1);
 
-            /* 1. Force context away so next switchContext is a real change.
-             *    Context 0 = default/empty — safe to switch to briefly. */
+            /* 1. Clear KDK mapping: revert context 74 → 72.
+             *    setKDKVisible(-1, terminal) removes KDK displayable overlay
+             *    from the context, so switchContext(72) stays as 72. */
+            String kdkClear = this.trySetVisibleKDKReflective(dm, -1, 1);
+            try { Thread.sleep(200); } catch (InterruptedException ie) { /* ignore */ }
+
+            /* 2. Force context away so next switchContext is a real change. */
             dm.switchContext(0, 1, null);
             int ctxAfterReset = dm.getCurrentContextID(1);
 
-            /* 2. Wait for native DM to confirm the context switch via DSI.
-             *    DisplayManager.switchContext() blocks up to 200ms internally,
-             *    but add a short extra sleep for safety. */
+            /* 3. Wait for native DM to confirm the context switch via DSI. */
             try { Thread.sleep(300); } catch (InterruptedException ie) { /* ignore */ }
 
-            /* 3. Switch to FPK base map context 72. This triggers
-             *    preContextSwitchHook → setActiveDisplayable(4, 33) in the
-             *    native display manager → videoencoderservice will IPTE-capture
-             *    displayable 33 (the navigation map framebuffer). */
+            /* 4. Switch to FPK base map context 72. Without KDK mapping,
+             *    this stays as 72 → preContextSwitchHook fires →
+             *    setActiveDisplayable(4, 33) → encoder captures base map. */
             dm.switchContext(72, 1, null);
             int ctxAfterMap = dm.getCurrentContextID(1);
 
             try { Thread.sleep(300); } catch (InterruptedException ie) { /* ignore */ }
 
-            /* 4. Start video encoding at 10fps. Native DM forwards this as
-             *    CASIMostEncoder::setUpdateRate → ASI → videoencoderservice
-             *    adjustTimer(remoteDisplayId=0, fps=10). */
+            /* 5. Start video encoding at 10fps. */
             dm.setUpdateRate(1, 10);
 
             return "ctx=" + ctxBefore + "→" + ctxAfterReset + "→" + ctxAfterMap
+                + " kdk=" + kdkClear
                 + " dmType=" + dm.getClass().getName()
                 + " " + this.getDisplayManagerInitState(dm);
         } catch (Throwable t) {
