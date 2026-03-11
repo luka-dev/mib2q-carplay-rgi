@@ -83,9 +83,6 @@ PATCHES = [
      "Redirect fps read 3 (LDR R1,[R5,#0x68]->[R5,#0x54])"),
 ]
 
-LIB_PATH_ON_HU = "/apps/PresentationController/lib/libPresentationController.so"
-
-
 def find_signature(data, signature, patched_signature):
     """Find unique signature in data. Returns offset or -1.
     Checks both original and patched forms (for already-patched detection)."""
@@ -189,15 +186,6 @@ def main():
     action = "Reverted" if args.revert else "Patched"
     out_name = args.output.split('/')[-1]
     print(f"\n{action} file written to: {args.output}")
-
-    print(f"""
-Deployment:
-  scp {args.output} root@<HU>:/tmp/
-  ssh root@<HU>
-  mount -o remount,rw /apps
-  cp {LIB_PATH_ON_HU} {LIB_PATH_ON_HU}.bak
-  cp /tmp/{out_name} {LIB_PATH_ON_HU}
-  reboot""")
 
 
 if __name__ == '__main__':
