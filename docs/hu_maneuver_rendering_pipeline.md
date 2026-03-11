@@ -134,44 +134,67 @@ dumb_persistence_reader -O 412 -L 1 28442848 100
 
 ## Firmware Paths (MU1316)
 
-| Component | Path |
-|-----------|------|
-| Navigation app | `advanced/MU1316-appimg/navigation/` |
-| PresentationController | `advanced/MU1316-appimg/navigation/libPresentationController.so` |
-| RenderSystem | `advanced/MU1316-appimg/navigation/libRenderSystem.so` |
-| LuaMap/Overlay | `advanced/MU1316-appimg/navigation/libLuaMap.so`, `libLuaMapOverlay.so` |
-| GraphicsOutput | `advanced/MU1316-appimg/navigation/libLuaGraphicsOutput.so` |
-| KOMO view style | `advanced/MU1316-appimg/navigation/resources/app/au/nar/pcconfig/komoviewstyle.conf` |
-| KDK intersection maps | `advanced/MU1316-appimg/navigation/resources/app/au/nar/intersectionmap/KDK*.kdx` |
-| Exit view assets | `advanced/MU1316-appimg/navigation/resources/app/au/nar/exitview/` |
-| Map preferences | `advanced/MU1316-appimg/navigation/mapprefs.xml` |
-| Video encoder service | `advanced/MU1316-appimg/eso/bin/apps/videoencoderservice` |
-| Video over MOST | `advanced/MU1316-appimg/eso/bin/apps/videoovermost` |
-| Video config | `advanced/MU1316-system/etc/eso/production/videoovermost.json` |
-| Display config | `advanced/MU1316-system/etc/system/config/display/graphics_eifs_MMXF.conf` |
-| Cluster coding scripts | `advanced/MU1316-appimg/eso/hmi/engdefs/scripts/clusterCoding*.sh` |
-| EB GUIDE (gemib) | `advanced/MU1316-appimg/gemib/` |
-| MOST channel config | videoovermost.json: channel_id 65558 (CL_HDTV=4), isoRX1 |
+| Component              | Path                                                                                 |
+|------------------------|--------------------------------------------------------------------------------------|
+| Navigation app         | `advanced/MU1316-appimg/navigation/`                                                 |
+| PresentationController | `advanced/MU1316-appimg/navigation/libPresentationController.so`                     |
+| RenderSystem           | `advanced/MU1316-appimg/navigation/libRenderSystem.so`                               |
+| LuaMap/Overlay         | `advanced/MU1316-appimg/navigation/libLuaMap.so`, `libLuaMapOverlay.so`              |
+| GraphicsOutput         | `advanced/MU1316-appimg/navigation/libLuaGraphicsOutput.so`                          |
+| KOMO view style        | `advanced/MU1316-appimg/navigation/resources/app/au/nar/pcconfig/komoviewstyle.conf` |
+| KDK intersection maps  | `advanced/MU1316-appimg/navigation/resources/app/au/nar/intersectionmap/KDK*.kdx`    |
+| Exit view assets       | `advanced/MU1316-appimg/navigation/resources/app/au/nar/exitview/`                   |
+| Map preferences        | `advanced/MU1316-appimg/navigation/mapprefs.xml`                                     |
+| Video encoder service  | `advanced/MU1316-appimg/eso/bin/apps/videoencoderservice`                            |
+| Video over MOST        | `advanced/MU1316-appimg/eso/bin/apps/videoovermost`                                  |
+| Video config           | `advanced/MU1316-system/etc/eso/production/videoovermost.json`                       |
+| Display config         | `advanced/MU1316-system/etc/system/config/display/graphics_eifs_MMXF.conf`           |
+| Cluster coding scripts | `advanced/MU1316-appimg/eso/hmi/engdefs/scripts/clusterCoding*.sh`                   |
+| EB GUIDE (gemib)       | `advanced/MU1316-appimg/gemib/`                                                      |
+| MOST channel config    | videoovermost.json: channel_id 65558 (CL_HDTV=4), isoRX1                             |
 
 ## Implications for CarPlay
 
 Maneuvers in the LVDS video stream come **entirely from native PresentationController**. CarPlay data does NOT flow through this pipeline.
 
-| Scenario | What VC Shows |
-|----------|---------------|
-| Native nav active | Rich KDK/exit/map with maneuver graphics in video + BAP text overlays |
-| CarPlay nav active (current) | BAP text overlays only (distance, turn-to, street via BAPBridge) + HUD maneuver icons. No graphical maneuvers in video stream |
-| CarPlay + AltScreen (future) | CarPlay renders its own cluster map via stream type 111 |
+| Scenario                     | What VC Shows                                                                                                                                                                                |
+|------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Native nav active            | Rich KDK/exit/map with maneuver graphics in video + BAP text overlays                                                                                                                        |
+| CarPlay nav active (current) | BAP text overlays (distance, turn-to, street via BAPBridge) + HUD maneuver icons. KOMO video path under test — RouteInfoElements reach PresentationController, blocked by gfxAvailable=false |
+| CarPlay + AltScreen (future) | CarPlay renders its own cluster map via stream type 111                                                                                                                                      |
 
-### KOMO/PresentationController Approach (attempted, abandoned Mar 2026)
+### KOMO/PresentationController Approach (IMPLEMENTED, Mar 2026)
 
-We attempted to inject RouteInfoElements via `KOMOService.setRouteInfo()` -> DSI -> PresentationController to get maneuver graphics in the MOST video stream. The rendering pipeline itself works (KVS_FPK and KVS_Most are functionally identical), but the **video encoder never starts** because:
+Full pipeline: Java (CarPlay) → DSI → PresentationController → video encoder → MOST → VC.
 
-- FPK path only sets ChoiceModel(1,168) hints 4/8/16 (KDK handler positioning)
-- Hints 1/2 (MOST bandwidth) are needed to trigger `videoencoderservice` via `CombiMapController.updateFrameRate()`
-- `setKOMODataRate()` was guarded by `isClusterMapMOST()` -- never fires for FPK
-- Even after patching the guard, `gfxAvailable` remained false and `kdkVisible` dropped intermittently
+**Java side (complete, no changes needed):**
+- `BAPBridge.java` — full KOMO lifecycle: startKOMO/updateKOMO/stopKOMO
+- `ClusterService.java` — video pipeline activation, frame rate control, KOMO follow info
+- `forceGfxAvailable(true)` via 3-strategy reflection (updateGfxState / setGFXAvailable / field)
+- `activateClusterVideoPipeline()` — context switch 74→0→72 + dm.setUpdateRate(1,10)
+- `setKOMODataRate(2)` — ChoiceModel hints → frame rate control
 
-All KOMO code was stripped from the Java patches. See `vc_fpk_state_machine.md` for the VC side of this.
+**Native side (3 binary patches in libPresentationController.so):**
+See `docs/widget_video_architecture.md` for full patch details.
 
-BAP overlays (distance, turn-to, street name) work independently of the video stream -- they're rendered by VC's EB GUIDE widgets on top of whatever video is showing.
+| Patch | Address                      | Description                                               |
+|-------|------------------------------|-----------------------------------------------------------|
+| 1     | 0x60BE48                     | NOP StopDSIs — keep DSI interfaces alive                  |
+| 2     | 0x61C11C                     | Force StartDrawing — bypass activeMode check              |
+| 3     | 0x5C75A0, 0x5C75E4, 0x5C783C | Redirect fps reads 0x68→0x54 — Java-controlled frame rate |
+
+Patch script: `tools/patch_libpresentationcontroller.py`
+
+**gfxAvailable fix:**
+- Root cause: `DSIKOMOGfxStreamSink` has NO native provider → `updateGfxState(1,1)` never called
+- Fix: `BAPBridge.forceGfxAvailable(true)` forces via reflection in startKOMO()
+- See `docs/gfx_available_root_cause.md` for full analysis
+
+**Missing DSI services on MU1316:**
+| Service | Provider | Status |
+|---------|----------|--------|
+| DSIKOMOView | libPresentationController.so | **Available** — receives RouteInfoElement[] |
+| DSIKOMONavInfo | NONE | No native provider |
+| DSIKOMOGfxStreamSink | NONE | No native provider — forced via reflection |
+
+See also: `docs/vc_fpk_state_machine.md` for VC side, `docs/gfx_available_root_cause.md` for gfxAvailable analysis.

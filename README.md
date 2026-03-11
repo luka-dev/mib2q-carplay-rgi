@@ -29,9 +29,19 @@ Sent via the same BAP path. VC renders these as text bars over the native map ar
 - [x] ETA / remaining travel time - timezone-adjusted to HU local time (FctID 22)
 - [x] Destination name (FctID 46)
 
-### Route Guidance - VC Maneuver Graphics
+### Route Guidance - VC LVDS Video (KOMO Widget)
 
-Not possible. The VC's `SV_NavFPK_Compass_MobileDevice` view (which renders AIO arrow maneuver icons) requires InfoStates=6, but the VC's KSS AUTOSAR firmware **rejects value 6** at the MOST message validator before it reaches EB GUIDE. The firmware cannot be persistently patched (secure AUTOSAR, RAM-only UDS patches lost on reboot). See `docs/kss_aio_arrow_analysis.md` for the full reverse engineering analysis.
+Maneuver graphics rendered by the HU's `libPresentationController.so` into the MOST LVDS video stream, displayed on the VC cluster map area. Requires 3 binary patches to the native library (see below).
+
+- [x] Turn arrow / maneuver icon in cluster widget area
+- [x] Java-controlled frame rate via `setKOMODataRate()` (0 = stop, 2 = render)
+- [x] Turn-to street name in widget
+- [x] Distance and ETA in widget follow-info area
+- [x] Full start/stop lifecycle (KOMO view enable, video pipeline activation, gfxAvailable forcing)
+
+### Route Guidance - VC AIO Arrows (NOT possible)
+
+The VC's `SV_NavFPK_Compass_MobileDevice` view (which renders AIO arrow maneuver icons) requires InfoStates=6, but the VC's KSS AUTOSAR firmware **rejects value 6** at the MOST message validator (`sub_108F42C`: bit-dependency rule `(value & 5) != 4` blocks value 6) before it reaches EB GUIDE. The firmware cannot be persistently patched (secure AUTOSAR, RAM-only UDS patches lost on reboot). See `docs/kss_aio_arrow_analysis.md` for the full reverse engineering analysis.
 
 BAP ManeuverDescriptor (FctID 23) drives the **HUD** maneuver icons — that path works and is not affected.
 
@@ -45,12 +55,13 @@ BAP ManeuverDescriptor (FctID 23) drives the **HUD** maneuver icons — that pat
 
 ## Patch Components
 
-| Component                    | Type                | Purpose                                                                | Output                 |
-|------------------------------|---------------------|------------------------------------------------------------------------|------------------------|
-| `c_hook/`                    | C (ARM32 QNX)       | iAP2 hooks, route guidance and cover art bridge, PPS publishing        | `libcarplay_hook.so`   |
-| `java_patch/`                | Java patch JAR      | Route guidance rendering logic, BAP bridge, cover art forwarding hooks | `carplay_hook.jar`     |
-| `dio_manager.json`           | System config patch | Enables iAP2 route guidance message exchange with iOS                  | patched JSON on device |
-| `smartphone_integrator.json` | System config patch | Loads `libcarplay_hook.so` via `LD_PRELOAD` in dio_manager process     | patched JSON on device |
+| Component                    | Type                | Purpose                                                                | Output                              |
+|------------------------------|---------------------|------------------------------------------------------------------------|--------------------------------------|
+| `c_hook/`                    | C (ARM32 QNX)       | iAP2 hooks, route guidance and cover art bridge, PPS publishing        | `libcarplay_hook.so`                 |
+| `java_patch/`                | Java patch JAR      | Route guidance rendering logic, BAP bridge, cover art forwarding hooks | `carplay_hook.jar`                   |
+| `tools/`                     | Python patch script | Binary patches for libPresentationController.so (KOMO widget video)    | `libPresentationController.so`       |
+| `dio_manager.json`           | System config patch | Enables iAP2 route guidance message exchange with iOS                  | patched JSON on device               |
+| `smartphone_integrator.json` | System config patch | Loads `libcarplay_hook.so` via `LD_PRELOAD` in dio_manager process     | patched JSON on device               |
 
 ## Build c_hook
 You will need QNX SDP 6.5. I did it by spinning up a QNX VM and using the cross-compilation toolchain over SSH.
@@ -233,6 +244,47 @@ Copy JAR to device:
 ```
 
 
+### Step 5: Patch `libPresentationController.so` (for KOMO widget video)
+
+This enables PresentationController to render maneuver graphics into the LVDS video
+stream when driven by Java (CarPlay) instead of native navigation. Without this patch,
+all Java DSI calls to PresentationController are silently dropped.
+
+Generate patched binary from stock:
+
+```bash
+python3 tools/patch_libpresentationcontroller.py libPresentationController.so.stock libPresentationController.so
+```
+
+To verify bytes without patching:
+
+```bash
+python3 tools/patch_libpresentationcontroller.py --verify-only libPresentationController.so.stock
+```
+
+Copy to device:
+
+```text
+/apps/PresentationController/lib/libPresentationController.so
+```
+
+Back up original first:
+
+```bash
+mount -o remount,rw /apps
+cp /apps/PresentationController/lib/libPresentationController.so /apps/PresentationController/lib/libPresentationController.so.bak
+```
+
+Three patches applied (ARM32, file offset = VA):
+
+| Patch | Address | Change | Purpose |
+|-------|---------|--------|---------|
+| 1 | `0x60BE48` | NOP `StopDSIs` (MOV R0,#0; BX LR) | Keep DSI interfaces alive after native guidance stops |
+| 2 | `0x61C11C` | BNE → B (unconditional) | Force `StartDrawing` mode check to pass |
+| 3 | `0x5C75A0`, `0x5C75E4`, `0x5C783C` | LDR offset 0x68 → 0x54 | Java-controlled frame rate via `setKOMODataRate()` |
+
+See `docs/widget_video_architecture.md` for full technical details.
+
 ## Quick Deployment Checklist
 
 1. Build `libcarplay_hook.so` with `bash ./compile_c.sh`
@@ -240,7 +292,8 @@ Copy JAR to device:
 3. Set `LD_PRELOAD` in `smartphone_integrator.json`
 4. Patch `dio_manager.json` with the `0x5200/01/02/03/04` IDs above
 5. Build `carplay_hook.jar` with `./build_java.sh`, copy it to `/mnt/app/eso/hmi/lsd/jars/`
-6. Reboot infotainment process/system 
+6. Patch `libPresentationController.so` with `tools/patch_libpresentationcontroller.py`, copy to `/apps/PresentationController/lib/`
+7. Reboot infotainment process/system 
 
 P.S. If you do instant reboot of Head Unit after file changes, it's possible that changes will not yet be saved to disk. Give it 30+ seconds before rebooting.
 
@@ -250,7 +303,7 @@ P.S. If you do instant reboot of Head Unit after file changes, it's possible tha
 
 The iAP2-to-BAP maneuver mapping covers all 54 CarPlay maneuver types, but has only been tested on a limited set of real-world routes. Edge cases like complex interchanges and multi-lane roundabouts need more road testing. If you see a wrong or missing icon on the HUD, a log from `/tmp/carplay_hook.log` of the exact moment + explanation of what's wrong would help. Note: the log resets on each device reboot, so grab it before restarting.
 
-### VC maneuver graphics via AIO arrows - not possible
+### VC AIO arrows - not possible (workaround: LVDS video)
 
 The VC's MobileDevice view (`SV_NavFPK_Compass_MobileDevice`) renders AIO arrow maneuver icons and is the only VC view that shows graphical turn-by-turn from smartphone navigation. However, activating this view requires InfoStates=6, which is **rejected by the VC's KSS AUTOSAR firmware** (`sub_108F42C` at `0x108F42C`: bit-dependency rule `(value & 5) != 4` blocks value 6).
 
@@ -258,7 +311,7 @@ The entire HU-side pipeline works — KOMO data reaches PresentationController, 
 
 The VC firmware cannot be persistently patched (secure AUTOSAR environment, RAM-only UDS patches lost on every reboot). See `docs/kss_aio_arrow_analysis.md` for the full KSS reverse engineering analysis.
 
-P.S. Still looking into alternative ways
+**Workaround**: Instead of AIO arrows, maneuver graphics are rendered by PresentationController into the LVDS video stream (KOMO widget path). This requires patching `libPresentationController.so` on the HU side (see Step 5 above). The VC displays this via `SV_LVDS_NavMap_FPK` (LVDS map view), which does NOT require InfoStates=6.
 
 ## Thanks and References
 
