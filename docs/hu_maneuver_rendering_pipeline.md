@@ -160,41 +160,41 @@ Maneuvers in the LVDS video stream come **entirely from native PresentationContr
 | Scenario                     | What VC Shows                                                                                                                                                                                |
 |------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Native nav active            | Rich KDK/exit/map with maneuver graphics in video + BAP text overlays                                                                                                                        |
-| CarPlay nav active (current) | BAP text overlays (distance, turn-to, street via BAPBridge) + HUD maneuver icons. KOMO video path under test — RouteInfoElements reach PresentationController, blocked by gfxAvailable=false |
+| CarPlay nav active (current) | BAP text overlays (distance, turn-to, street via BAPBridge) + HUD maneuver icons. KOMO video path under test -- RouteInfoElements reach PresentationController, blocked by gfxAvailable=false |
 | CarPlay + AltScreen (future) | CarPlay renders its own cluster map via stream type 111                                                                                                                                      |
 
 ### KOMO/PresentationController Approach (IMPLEMENTED, Mar 2026)
 
-Full pipeline: Java (CarPlay) → DSI → PresentationController → video encoder → MOST → VC.
+Full pipeline: Java (CarPlay) -> DSI -> PresentationController -> video encoder -> MOST -> VC.
 
 **Java side (complete, no changes needed):**
-- `BAPBridge.java` — full KOMO lifecycle: startKOMO/updateKOMO/stopKOMO
-- `ClusterService.java` — video pipeline activation, frame rate control, KOMO follow info
+- `BAPBridge.java` -- full KOMO lifecycle: startKOMO/updateKOMO/stopKOMO
+- `ClusterService.java` -- video pipeline activation, frame rate control, KOMO follow info
 - `forceGfxAvailable(true)` via 3-strategy reflection (updateGfxState / setGFXAvailable / field)
-- `activateClusterVideoPipeline()` — context switch 74→0→72 + dm.setUpdateRate(1,10)
-- `setKOMODataRate(2)` — ChoiceModel hints → frame rate control
+- `activateClusterVideoPipeline()` -- context switch 74->0->72 + dm.setUpdateRate(1,10)
+- `setKOMODataRate(2)` -- ChoiceModel hints -> frame rate control
 
 **Native side (3 binary patches in libPresentationController.so):**
 See `docs/widget_video_architecture.md` for full patch details.
 
 | Patch | Address                      | Description                                               |
 |-------|------------------------------|-----------------------------------------------------------|
-| 1     | 0x60BE48                     | NOP StopDSIs — keep DSI interfaces alive                  |
-| 2     | 0x61C11C                     | Force StartDrawing — bypass activeMode check              |
-| 3     | 0x5C75A0, 0x5C75E4, 0x5C783C | Redirect fps reads 0x68→0x54 — Java-controlled frame rate |
+| 1     | 0x60BE48                     | NOP StopDSIs -- keep DSI interfaces alive                  |
+| 2     | 0x61C11C                     | Force StartDrawing -- bypass activeMode check              |
+| 3     | 0x5C75A0, 0x5C75E4, 0x5C783C | Redirect fps reads 0x68->0x54 -- Java-controlled frame rate |
 
 Patch script: `tools/patch_libpresentationcontroller.py`
 
 **gfxAvailable fix:**
-- Root cause: `DSIKOMOGfxStreamSink` has NO native provider → `updateGfxState(1,1)` never called
+- Root cause: `DSIKOMOGfxStreamSink` has NO native provider -> `updateGfxState(1,1)` never called
 - Fix: `BAPBridge.forceGfxAvailable(true)` forces via reflection in startKOMO()
 - See `docs/gfx_available_root_cause.md` for full analysis
 
 **Missing DSI services on MU1316:**
 | Service | Provider | Status |
 |---------|----------|--------|
-| DSIKOMOView | libPresentationController.so | **Available** — receives RouteInfoElement[] |
+| DSIKOMOView | libPresentationController.so | **Available** -- receives RouteInfoElement[] |
 | DSIKOMONavInfo | NONE | No native provider |
-| DSIKOMOGfxStreamSink | NONE | No native provider — forced via reflection |
+| DSIKOMOGfxStreamSink | NONE | No native provider -- forced via reflection |
 
 See also: `docs/vc_fpk_state_machine.md` for VC side, `docs/gfx_available_root_cause.md` for gfxAvailable analysis.

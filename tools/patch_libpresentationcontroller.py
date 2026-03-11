@@ -15,6 +15,7 @@ Finds patch targets by byte signature search (firmware-version independent).
 """
 
 import argparse
+import hashlib
 import sys
 
 # Patch definitions using signature-based search.
@@ -82,6 +83,9 @@ PATCHES = [
      bytes([0x54, 0x10, 0x95, 0xE5]),
      "Redirect fps read 3 (LDR R1,[R5,#0x68]->[R5,#0x54])"),
 ]
+
+# Known stock binary hash (MU1316)
+KNOWN_STOCK_SHA256 = "754ffab273dacc4cbb9c980775c2fe3c2561ff23e2999ca3ddd56586567ae7de"
 
 def find_signature(data, signature, patched_signature):
     """Find unique signature in data. Returns offset or -1.
@@ -162,8 +166,14 @@ def main():
     with open(args.input, 'rb') as f:
         data = bytearray(f.read())
 
+    file_hash = hashlib.sha256(data).hexdigest()
     mode_str = 'VERIFY' if args.verify_only else 'REVERT' if args.revert else 'PATCH'
     print(f"File: {args.input} ({len(data)} bytes)")
+    print(f"SHA256: {file_hash}")
+    if file_hash == KNOWN_STOCK_SHA256:
+        print(f"Hash: MU1316 stock (exact match)")
+    else:
+        print(f"WARNING: Unknown binary — not MU1316 stock. Patches may not apply correctly.")
     print(f"Mode: {mode_str}")
     print()
 

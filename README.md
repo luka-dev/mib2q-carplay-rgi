@@ -43,7 +43,7 @@ Maneuver graphics rendered by the HU's `libPresentationController.so` into the M
 
 The VC's `SV_NavFPK_Compass_MobileDevice` view (which renders AIO arrow maneuver icons) requires InfoStates=6, but the VC's KSS AUTOSAR firmware **rejects value 6** at the MOST message validator (`sub_108F42C`: bit-dependency rule `(value & 5) != 4` blocks value 6) before it reaches EB GUIDE. The firmware cannot be persistently patched (secure AUTOSAR, RAM-only UDS patches lost on reboot). See `docs/kss_aio_arrow_analysis.md` for the full reverse engineering analysis.
 
-BAP ManeuverDescriptor (FctID 23) drives the **HUD** maneuver icons — that path works and is not affected.
+BAP ManeuverDescriptor (FctID 23) drives the **HUD** maneuver icons -- that path works and is not affected.
 
 ### Media
 
@@ -276,11 +276,11 @@ cp /mnt/app/navigation/libPresentationController.so /mnt/app/navigation/libPrese
 
 Three patches applied (ARM32, file offset = VA):
 
-| Patch | Address | Change | Purpose |
-|-------|---------|--------|---------|
-| 1 | `0x60BE48` | NOP `StopDSIs` (MOV R0,#0; BX LR) | Keep DSI interfaces alive after native guidance stops |
-| 2 | `0x61C11C` | BNE → B (unconditional) | Force `StartDrawing` mode check to pass |
-| 3 | `0x5C75A0`, `0x5C75E4`, `0x5C783C` | LDR offset 0x68 → 0x54 | Java-controlled frame rate via `setKOMODataRate()` |
+| Patch | Address                            | Change                            | Purpose                                               |
+|-------|------------------------------------|-----------------------------------|-------------------------------------------------------|
+| 1     | `0x60BE48`                         | NOP `StopDSIs` (MOV R0,#0; BX LR) | Keep DSI interfaces alive after native guidance stops |
+| 2     | `0x61C11C`                         | BNE -> B (unconditional)           | Force `StartDrawing` mode check to pass               |
+| 3     | `0x5C75A0`, `0x5C75E4`, `0x5C783C` | LDR offset 0x68 -> 0x54            | Java-controlled frame rate via `setKOMODataRate()`    |
 
 See `docs/widget_video_architecture.md` for full technical details.
 
@@ -306,7 +306,7 @@ The iAP2-to-BAP maneuver mapping covers all 54 CarPlay maneuver types, but has o
 
 The VC's MobileDevice view (`SV_NavFPK_Compass_MobileDevice`) renders AIO arrow maneuver icons and is the only VC view that shows graphical turn-by-turn from smartphone navigation. However, activating this view requires InfoStates=6, which is **rejected by the VC's KSS AUTOSAR firmware** (`sub_108F42C` at `0x108F42C`: bit-dependency rule `(value & 5) != 4` blocks value 6).
 
-The entire HU-side pipeline works — KOMO data reaches PresentationController, MOST 0x2289 arrow bytes are sent, and AIO_Arrow dp items are populated on the VC. But the view that renders them can never be activated.
+The entire HU-side pipeline works -- KOMO data reaches PresentationController, MOST 0x2289 arrow bytes are sent, and AIO_Arrow dp items are populated on the VC. But the view that renders them can never be activated.
 
 The VC firmware cannot be persistently patched (secure AUTOSAR environment, RAM-only UDS patches lost on every reboot). See `docs/kss_aio_arrow_analysis.md` for the full KSS reverse engineering analysis.
 
