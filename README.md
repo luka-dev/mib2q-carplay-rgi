@@ -55,13 +55,13 @@ BAP ManeuverDescriptor (FctID 23) drives the **HUD** maneuver icons -- that path
 
 ## Patch Components
 
-| Component                    | Type                | Purpose                                                                | Output                              |
-|------------------------------|---------------------|------------------------------------------------------------------------|--------------------------------------|
-| `c_hook/`                    | C (ARM32 QNX)       | iAP2 hooks, route guidance and cover art bridge, PPS publishing        | `libcarplay_hook.so`                 |
-| `java_patch/`                | Java patch JAR      | Route guidance rendering logic, BAP bridge, cover art forwarding hooks | `carplay_hook.jar`                   |
-| `tools/`                     | Python patch script | Binary patches for libPresentationController.so (KOMO widget video)    | `libPresentationController.so`       |
-| `dio_manager.json`           | System config patch | Enables iAP2 route guidance message exchange with iOS                  | patched JSON on device               |
-| `smartphone_integrator.json` | System config patch | Loads `libcarplay_hook.so` via `LD_PRELOAD` in dio_manager process     | patched JSON on device               |
+| Component                            | Type                | Purpose                                                                | Output                         |
+|--------------------------------------|---------------------|------------------------------------------------------------------------|--------------------------------|
+| `c_hook/`                            | C (ARM32 QNX)       | iAP2 hooks, route guidance and cover art bridge, PPS publishing        | `libcarplay_hook.so`           |
+| `java_patch/`                        | Java patch JAR      | Route guidance rendering logic, BAP bridge, cover art forwarding hooks | `carplay_hook.jar`             |
+| `patch_libpresentationcontroller.py` | Python patch script | Binary patches for libPresentationController.so (KOMO widget video)    | `libPresentationController.so` |
+| `dio_manager.json`                   | System config patch | Enables iAP2 route guidance message exchange with iOS                  | Manual edit JSON on device     |
+| `smartphone_integrator.json`         | System config patch | Loads `libcarplay_hook.so` via `LD_PRELOAD` in dio_manager process     | Manual edit JSON on device     |
 
 ## Build c_hook
 You will need QNX SDP 6.5. I did it by spinning up a QNX VM and using the cross-compilation toolchain over SSH.
@@ -253,13 +253,13 @@ all Java DSI calls to PresentationController are silently dropped.
 Generate patched binary from stock:
 
 ```bash
-python3 tools/patch_libpresentationcontroller.py libPresentationController.so.stock libPresentationController.so
+python3 patch_libpresentationcontroller.py libPresentationController.so.stock libPresentationController.so
 ```
 
 To verify bytes without patching:
 
 ```bash
-python3 tools/patch_libpresentationcontroller.py --verify-only libPresentationController.so.stock
+python3 patch_libpresentationcontroller.py --verify-only libPresentationController.so.stock
 ```
 
 Copy to device:
@@ -279,8 +279,8 @@ Three patches applied (ARM32, file offset = VA):
 | Patch | Address                            | Change                            | Purpose                                               |
 |-------|------------------------------------|-----------------------------------|-------------------------------------------------------|
 | 1     | `0x60BE48`                         | NOP `StopDSIs` (MOV R0,#0; BX LR) | Keep DSI interfaces alive after native guidance stops |
-| 2     | `0x61C11C`                         | BNE -> B (unconditional)           | Force `StartDrawing` mode check to pass               |
-| 3     | `0x5C75A0`, `0x5C75E4`, `0x5C783C` | LDR offset 0x68 -> 0x54            | Java-controlled frame rate via `setKOMODataRate()`    |
+| 2     | `0x61C11C`                         | BNE -> B (unconditional)          | Force `StartDrawing` mode check to pass               |
+| 3     | `0x5C75A0`, `0x5C75E4`, `0x5C783C` | LDR offset 0x68 -> 0x54           | Java-controlled frame rate via `setKOMODataRate()`    |
 
 See `docs/widget_video_architecture.md` for full technical details.
 
@@ -291,7 +291,7 @@ See `docs/widget_video_architecture.md` for full technical details.
 3. Set `LD_PRELOAD` in `smartphone_integrator.json`
 4. Patch `dio_manager.json` with the `0x5200/01/02/03/04` IDs above
 5. Build `carplay_hook.jar` with `./build_java.sh`, copy it to `/mnt/app/eso/hmi/lsd/jars/`
-6. Patch `libPresentationController.so` with `tools/patch_libpresentationcontroller.py`, copy to `/mnt/app/navigation/`
+6. Patch `libPresentationController.so` with `patch_libpresentationcontroller.py`, copy to `/mnt/app/navigation/`
 7. Reboot infotainment process/system 
 
 P.S. If you do instant reboot of Head Unit after file changes, it's possible that changes will not yet be saved to disk. Give it 30+ seconds before rebooting.

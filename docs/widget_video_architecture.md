@@ -231,7 +231,7 @@ Our BAPBridge bypasses this by calling `CombiBAPServiceNavi` directly.
 Persistent binary patch on HU filesystem. Three patches remove native-side blockers
 so Java (CarPlay) can drive the widget renderer.
 
-**Patch script**: `tools/patch_libpresentationcontroller.py`
+**Patch script**: `patch_libpresentationcontroller.py`
 **Binary**: `/apps/PresentationController/lib/libPresentationController.so`
 
 ### Patch 1: NOP StopDSIs (0x60BE48)

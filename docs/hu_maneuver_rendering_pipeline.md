@@ -183,7 +183,7 @@ See `docs/widget_video_architecture.md` for full patch details.
 | 2     | 0x61C11C                     | Force StartDrawing -- bypass activeMode check              |
 | 3     | 0x5C75A0, 0x5C75E4, 0x5C783C | Redirect fps reads 0x68->0x54 -- Java-controlled frame rate |
 
-Patch script: `tools/patch_libpresentationcontroller.py`
+Patch script: `patch_libpresentationcontroller.py`
 
 **gfxAvailable fix:**
 - Root cause: `DSIKOMOGfxStreamSink` has NO native provider -> `updateGfxState(1,1)` never called
