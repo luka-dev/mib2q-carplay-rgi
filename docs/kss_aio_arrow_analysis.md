@@ -49,7 +49,7 @@ KSS handles Class 46. They do NOT overlap for navigation data.
 | `KssIpc_SendCmd`                          | 0x1062ABA | Sends commands to EB GUIDE via IPC              |
 | `sub_108EB66`                             | 0x108EB66 | **Arrow direction handler (msg 0x2289)**        |
 | `sub_108EC68`                             | 0x108EC68 | **InfoStates handler (msg 0x515)**              |
-| `sub_108F42C`                             | 0x108F42C | **InfoStates value validator — BLOCKS value 6** |
+| `sub_108F42C`                             | 0x108F42C | **InfoStates value validator -- BLOCKS value 6** |
 
 ## Queue System
 
@@ -110,7 +110,7 @@ BOOL validate_infostates(unsigned int a1) {
 The validation enforces bit-dependency rules (bit 2 requires bit 0, bit 3 requires bit 1). Value 6 = `0b0110` has bit 2 set without bit 0, which violates this rule.
 
 ```asm
-; sub_108F42C — Thumb2 ARM
+; sub_108F42C -- Thumb2 ARM
 108f42c  CMP   R0, #0xF       ; reject > 15
 108f42e  BHI   -> return 0
 108f430  AND.W R2, R0, #5     ; check bit 2 requires bit 0
@@ -143,7 +143,7 @@ The validation enforces bit-dependency rules (bit 2 requires bit 0, bit 3 requir
 
 ### Consequence
 
-InfoStates=6 is blocked before it reaches signal group 29. The `BAP_NavSD_InfoStates_States` dp item is never set to 6, so the VC never transitions to `SV_NavFPK_Compass_MobileDevice`, and AIO arrows are never rendered — even though the AIO_Arrow dp items ARE populated via MOST 0x2289.
+InfoStates=6 is blocked before it reaches signal group 29. The `BAP_NavSD_InfoStates_States` dp item is never set to 6, so the VC never transitions to `SV_NavFPK_Compass_MobileDevice`, and AIO arrows are never rendered -- even though the AIO_Arrow dp items ARE populated via MOST 0x2289.
 
 ### Why This Cannot Be Fixed
 
@@ -217,7 +217,7 @@ EB GUIDE's compiled model (`fds`). Since PresentationController generates
 2. Calls `sub_108EC68` (InfoStates handler)
 3. `sub_108EC68` calls `sub_108F42C` to validate the value
 4. If valid: stores at `off_108EF40[5]`, triggers signal group 29
-5. Signal group 29 → KssIpc → EB GUIDE → `BAP_NavSD_InfoStates_States` dp item
+5. Signal group 29 -> KssIpc -> EB GUIDE -> `BAP_NavSD_InfoStates_States` dp item
 
 Step 3 rejects value 6, so steps 4-5 never execute for MobileDevice mode.
 

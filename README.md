@@ -1,7 +1,9 @@
-# MHI2(Q) CarPlay Hook + Patch
+# MHI2 CarPlay Route Guidance
 
-CarPlay patch set for Audi MHI2(Q) infotainment.
+CarPlay patch set for Audi MHI2 infotainment.
 (Based on MHI2Q MU1316 firmware, but may need rebuild for different versions.)
+
+**Disclaimer:** Use at your own risk. These patches modify firmware binaries and system configurations on your infotainment unit. Always back up all original files before making any changes. The authors are not responsible for any damage, bricked devices, or warranty issues resulting from use of these patches.
 
 ## Features
 
@@ -29,11 +31,21 @@ Sent via the same BAP path. VC renders these as text bars over the native map ar
 - [x] ETA / remaining travel time - timezone-adjusted to HU local time (FctID 22)
 - [x] Destination name (FctID 46)
 
-### Route Guidance - VC Maneuver Graphics
+### Route Guidance - VC LVDS Video (KOMO Widget)
 
-Not possible. The VC's `SV_NavFPK_Compass_MobileDevice` view (which renders AIO arrow maneuver icons) requires InfoStates=6, but the VC's KSS AUTOSAR firmware **rejects value 6** at the MOST message validator before it reaches EB GUIDE. The firmware cannot be persistently patched (secure AUTOSAR, RAM-only UDS patches lost on reboot). See `docs/kss_aio_arrow_analysis.md` for the full reverse engineering analysis.
+Maneuver graphics rendered by the HU's `libPresentationController.so` into the MOST LVDS video stream, displayed on the VC cluster map area. Requires 3 binary patches to the native library (see below).
 
-BAP ManeuverDescriptor (FctID 23) drives the **HUD** maneuver icons — that path works and is not affected.
+- [x] Turn arrow / maneuver icon in cluster widget area
+- [x] Java-controlled frame rate via `setKOMODataRate()` (0 = stop, 2 = render)
+- [x] Turn-to street name in widget
+- [x] Distance and ETA in widget follow-info area
+- [x] Full start/stop lifecycle (KOMO view enable, video pipeline activation, gfxAvailable forcing)
+
+### Route Guidance - VC AIO Arrows (NOT possible)
+
+The VC's `SV_NavFPK_Compass_MobileDevice` view (which renders AIO arrow maneuver icons) requires InfoStates=6, but the VC's KSS AUTOSAR firmware **rejects value 6** at the MOST message validator (`sub_108F42C`: bit-dependency rule `(value & 5) != 4` blocks value 6) before it reaches EB GUIDE. The firmware cannot be persistently patched (secure AUTOSAR, RAM-only UDS patches lost on reboot). See `docs/kss_aio_arrow_analysis.md` for the full reverse engineering analysis.
+
+BAP ManeuverDescriptor (FctID 23) drives the **HUD** maneuver icons -- that path works and is not affected.
 
 ### Media
 
@@ -45,14 +57,18 @@ BAP ManeuverDescriptor (FctID 23) drives the **HUD** maneuver icons — that pat
 
 ## Patch Components
 
-| Component                    | Type                | Purpose                                                                | Output                 |
-|------------------------------|---------------------|------------------------------------------------------------------------|------------------------|
-| `c_hook/`                    | C (ARM32 QNX)       | iAP2 hooks, route guidance and cover art bridge, PPS publishing        | `libcarplay_hook.so`   |
-| `java_patch/`                | Java patch JAR      | Route guidance rendering logic, BAP bridge, cover art forwarding hooks | `carplay_hook.jar`     |
-| `dio_manager.json`           | System config patch | Enables iAP2 route guidance message exchange with iOS                  | patched JSON on device |
-| `smartphone_integrator.json` | System config patch | Loads `libcarplay_hook.so` via `LD_PRELOAD` in dio_manager process     | patched JSON on device |
+| Component                            | Type                | Purpose                                                                | Output                         |
+|--------------------------------------|---------------------|------------------------------------------------------------------------|--------------------------------|
+| `c_hook/`                            | C (ARM32 QNX)       | iAP2 hooks, route guidance and cover art bridge, PPS publishing        | `libcarplay_hook.so`           |
+| `java_patch/`                        | Java patch JAR      | Route guidance rendering logic, BAP bridge, cover art forwarding hooks | `carplay_hook.jar`             |
+| `patch_libpresentationcontroller.py` | Python patch script | Binary patches for libPresentationController.so (KOMO widget video)    | `libPresentationController.so` |
+| `dio_manager.json`                   | System config patch | Enables iAP2 route guidance message exchange with iOS                  | Manual edit JSON on device     |
+| `smartphone_integrator.json`         | System config patch | Loads `libcarplay_hook.so` via `LD_PRELOAD` in dio_manager process     | Manual edit JSON on device     |
 
-## Build c_hook
+## Build
+
+### Build `libcarplay_hook.so`
+
 You will need QNX SDP 6.5. I did it by spinning up a QNX VM and using the cross-compilation toolchain over SSH.
 Link to QNX VM image: https://archive.org/details/qnxsdp-65.7z
 (do not forget to set up SSH on VM and set the IP in `compile_c.sh`)
@@ -96,7 +112,76 @@ Invalid combination:
 LOG=0 LOG_RGD_PACKET_RAW=1 ./compile_c.sh
 ```
 
-## Deployment Steps
+### Build `carplay_hook.jar`
+
+Requires `lsd.jar/lsd.jxe`.
+
+Why it is needed:
+
+- `build_java.sh` compiles patch classes against original Head Unit classes.
+- Those classes are inside the OEM `lsd.jxe`, so we need it converted back to `lsd.jar`.
+
+How to get your own `lsd.jar`:
+
+- Get your original `lsd.jxe` from your firmware dump `/mnt/app/eso/hmi/lsd/lsd.jxe`
+- Use `jxe2jar` (`../jxe2jar`) to convert it.
+- Tool: https://github.com/luka-dev/jxe2jar
+
+Build JAR (jxe2jar includes bundled JVMs for Windows/Linux/macOS that target Java 1.2).
+Check paths to `lsd.jar` in `build_java.sh` (default: `jxe2jar/out/lsd.jar`).
+
+```bash
+./build_java.sh
+```
+
+Output artifact:
+
+```text
+./carplay_hook.jar
+```
+
+### Build `libPresentationController.so`
+
+Patches the stock `libPresentationController.so` for KOMO widget video rendering.
+This enables PresentationController to render maneuver graphics into the LVDS video
+stream when driven by Java (CarPlay) instead of native navigation. Without this patch,
+all Java DSI calls to PresentationController are silently dropped.
+
+Get the stock binary from your firmware dump:
+
+```text
+/mnt/app/navigation/libPresentationController.so
+```
+
+Generate patched binary:
+
+```bash
+python3 patch_libpresentationcontroller.py libPresentationController.so.stock libPresentationController.so
+```
+
+To verify bytes without patching:
+
+```bash
+python3 patch_libpresentationcontroller.py --verify-only libPresentationController.so.stock
+```
+
+Output artifact:
+
+```text
+./libPresentationController.so
+```
+
+Three patches applied (ARM32, file offset = VA):
+
+| Patch | Address                            | Change                            | Purpose                                               |
+|-------|------------------------------------|-----------------------------------|-------------------------------------------------------|
+| 1     | `0x60BE48`                         | NOP `StopDSIs` (MOV R0,#0; BX LR) | Keep DSI interfaces alive after native guidance stops |
+| 2     | `0x61C11C`                         | BNE -> B (unconditional)          | Force `StartDrawing` mode check to pass               |
+| 3     | `0x5C75A0`, `0x5C75E4`, `0x5C783C` | LDR offset 0x68 -> 0x54           | Java-controlled frame rate via `setKOMODataRate()`    |
+
+See `docs/widget_video_architecture.md` for full technical details.
+
+## Deployment
 
 ### Step 1: Deploy `libcarplay_hook.so`
 
@@ -198,33 +283,7 @@ After (added `0x5200`, `0x5203`, `0x5201`, `0x5202`, `0x5204`):
 ]
 ```
 
-### Step 4: Build `carplay_hook.jar`
-
-Requires `lsd.jar`.
-
-Why it is needed:
-
-- `build_java.sh` compiles patch classes against original Head Unit classes.
-- Those classes are inside the OEM `lsd.jxe`, so we need it converted back to `lsd.jar`.
-
-How to get your own `lsd.jar`:
-
-- Get your original `lsd.jxe` from your firmware dump `/mnt/app/eso/hmi/lsd/lsd.jxe`
-- Use `jxe2jar` (`../jxe2jar`) to convert it.
-- Tool: https://github.com/luka-dev/jxe2jar
-
-Build JAR (jxe2jar includes bundled JVMs for Windows/Linux/macOS that target Java 1.2).
-Check paths to `lsd.jar` in `build_java.sh` (default: `jxe2jar/out/lsd.jar`).
-
-```bash
-./build_java.sh
-```
-
-Output artifact:
-
-```text
-./carplay_hook.jar
-```
+### Step 4: Deploy `carplay_hook.jar`
 
 Copy JAR to device:
 
@@ -232,33 +291,37 @@ Copy JAR to device:
 /mnt/app/eso/hmi/lsd/jars/carplay_hook.jar
 ```
 
+### Step 5: Deploy `libPresentationController.so`
+
+Copy patched binary to device:
+
+```text
+/mnt/app/navigation/libPresentationController.so
+```
+
+### Step 6: Reboot
+
+Reboot the infotainment system.
+
+P.S. If you do instant reboot of Head Unit after file changes, it's possible that changes will not yet be saved to disk. Give it 30+ seconds before rebooting.
 
 ## Quick Deployment Checklist
 
-1. Build `libcarplay_hook.so` with `bash ./compile_c.sh`
-2. Copy `libcarplay_hook.so` to `/mnt/app/root/hooks/`
-3. Set `LD_PRELOAD` in `smartphone_integrator.json`
-4. Patch `dio_manager.json` with the `0x5200/01/02/03/04` IDs above
-5. Build `carplay_hook.jar` with `./build_java.sh`, copy it to `/mnt/app/eso/hmi/lsd/jars/`
-6. Reboot infotainment process/system 
-
-P.S. If you do instant reboot of Head Unit after file changes, it's possible that changes will not yet be saved to disk. Give it 30+ seconds before rebooting.
+1. Build `libcarplay_hook.so` with `./compile_c.sh`
+2. Build `carplay_hook.jar` with `./build_java.sh`
+3. Build `libPresentationController.so` with `python3 patch_libpresentationcontroller.py`
+4. Copy `libcarplay_hook.so` to `/mnt/app/root/hooks/`
+5. Set `LD_PRELOAD` in `smartphone_integrator.json`
+6. Patch `dio_manager.json` with the `0x5200/01/02/03/04` IDs
+7. Copy `carplay_hook.jar` to `/mnt/app/eso/hmi/lsd/jars/`
+8. Copy `libPresentationController.so` to `/mnt/app/navigation/`
+9. Reboot (wait 30+ seconds after file changes)
 
 ## Help Wanted
 
 ### Maneuver icon testing
 
 The iAP2-to-BAP maneuver mapping covers all 54 CarPlay maneuver types, but has only been tested on a limited set of real-world routes. Edge cases like complex interchanges and multi-lane roundabouts need more road testing. If you see a wrong or missing icon on the HUD, a log from `/tmp/carplay_hook.log` of the exact moment + explanation of what's wrong would help. Note: the log resets on each device reboot, so grab it before restarting.
-
-### VC maneuver graphics via AIO arrows - not possible
-
-The VC's MobileDevice view (`SV_NavFPK_Compass_MobileDevice`) renders AIO arrow maneuver icons and is the only VC view that shows graphical turn-by-turn from smartphone navigation. However, activating this view requires InfoStates=6, which is **rejected by the VC's KSS AUTOSAR firmware** (`sub_108F42C` at `0x108F42C`: bit-dependency rule `(value & 5) != 4` blocks value 6).
-
-The entire HU-side pipeline works — KOMO data reaches PresentationController, MOST 0x2289 arrow bytes are sent, and AIO_Arrow dp items are populated on the VC. But the view that renders them can never be activated.
-
-The VC firmware cannot be persistently patched (secure AUTOSAR environment, RAM-only UDS patches lost on every reboot). See `docs/kss_aio_arrow_analysis.md` for the full KSS reverse engineering analysis.
-
-P.S. Still looking into alternative ways
 
 ## Thanks and References
 

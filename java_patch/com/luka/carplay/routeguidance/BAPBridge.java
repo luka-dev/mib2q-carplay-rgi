@@ -1,9 +1,11 @@
 /*
  * CarPlay Route Guidance - BAP Bridge
  *
- * Translates route guidance state to BAP protocol calls via AppConnectorNavi.
- * BAP-only: ManeuverDescriptor, distance, street, lane guidance, ETA → VC/HUD.
+ * Translates route guidance state to BAP protocol calls via AppConnectorNavi,
+ * and pushes KOMO data to PresentationController for LVDS video rendering.
  *
+ * BAP path: ManeuverDescriptor, distance, street, lane guidance, ETA → VC/HUD text overlays.
+ * KOMO path: RouteInfoElement → KOMOService → PresentationController → video encoder → MOST → VC LVDS map.
  *
  */
 package com.luka.carplay.routeguidance;
@@ -22,14 +24,22 @@ import de.audi.atip.metrics.Distance;
 import de.audi.tghu.navi.app.Navigation;
 import de.audi.tghu.navi.app.cluster.BAPDistanceFormatter;
 import de.audi.tghu.navi.app.cluster.ClusterService;
+import de.audi.tghu.navi.app.cluster.KOMOService;
 import de.audi.tghu.navi.app.command.DSIResponseContainer;
+import org.dsi.ifc.komoview.ManeuverElement;
+import org.dsi.ifc.komoview.RouteInfoElement;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 
 public class BAPBridge {
 
     private static final String TAG = "BAPBridge";
     /* RGType sent to cluster: 0=RGI (BAP ManeuverDescriptor icons for HUD).
-     * VC FPK ignores rgType (no dp item) - stays in LVDS map via INTERN_Active_NavFPK_Content. */
-    private static final int ACTIVE_RGTYPE = 0;
+     * FPK has rgType=4 hardcoded in CombiBAPListener — our BAP rgType=0 is for the
+     * AppConnectorNavi FSG sync flow, not for view mode selection. */
+    private static final int ACTIVE_RGTYPE = 0;  /* RGI — BAP icons. KOMO/LVDS attempted in parallel but not required. */
+    /* KOMO data rate: 2=full bandwidth (hint 2 on ChoiceModel(1,168)) */
+    private static final int KOMO_DATA_RATE_FULL = 2;
     private static final boolean BAP_TRACE_ENABLED = true;
 
     /* ExitView variants (BAP spec FctID 49) */
@@ -88,6 +98,8 @@ public class BAPBridge {
     private GatedCombiService gatedService;
 
     private ClusterService csRef;
+    private KOMOService komoService;
+    private boolean komoStarted = false;
 
     private static final class SilentLogChannel extends LogChannel {
         public void log(int level, String pattern,
@@ -345,6 +357,12 @@ public class BAPBridge {
                 return;
             }
             this.csRef = cs;
+            this.komoService = cs.getKomoService();
+            if (this.komoService != null) {
+                Log.i(TAG, "KOMO service acquired");
+            } else {
+                Log.w(TAG, "KOMO service is null (non-fatal, LVDS video won't work)");
+            }
 
             /* Install native route-guidance gate on CombiBAPListener.combiservice. */
             try {
@@ -425,9 +443,8 @@ public class BAPBridge {
             forceClusterRouteInfoState(true);
 
             /*
-             * Guidance start - don't send InfoStates(6) so VC stays in LVDS map.
-             * BAP text widgets (distance, turn-to, street) overlay on the map.
-             * ManeuverDescriptor + ManeuverState sent for HUD rendering.
+             * Guidance start — BAP text overlays for HUD + VC text,
+             * KOMO pipeline for LVDS video maneuver rendering.
              *
              * 1. RGStatus(1) - FctID 17 → triggers startSync(0) for {17,39,23,18,49}
              * 2. Complete sync(0) window: rgType(39), descriptor(23), distance(18), exitView(49)
@@ -444,12 +461,20 @@ public class BAPBridge {
 
             /* Non-sync FctIDs */
             traceBap("updateCurrentPositionInfo", "\"\"");
-            appConnectorNavi.updateCurrentPositionInfo("");                           /* FctID 19 */
+            try {
+                appConnectorNavi.updateCurrentPositionInfo("");                       /* FctID 19 */
+            } catch (Throwable t) {
+                Log.w(TAG, "BAP FctID 19 failed during start: "
+                    + t.getClass().getName() + ": " + t.getMessage());
+            }
 
-            Log.i(TAG, "Started (rgType=" + ACTIVE_RGTYPE + ")");
+            /* KOMO: start video encoder and LVDS rendering pipeline */
+            startKOMO();
 
-        } catch (Exception e) {
-            Log.e(TAG, "onStart error", e);
+            Log.i(TAG, "Started (rgType=" + ACTIVE_RGTYPE + ", komo=" + komoStarted + ")");
+
+        } catch (Throwable e) {
+            Log.e(TAG, "onStart error: " + e.getClass().getName() + ": " + e.getMessage());
         }
     }
 
@@ -487,6 +512,9 @@ public class BAPBridge {
             appConnectorNavi.updateTimeToDestination(0, 0, -1);                      /* FctID 22 */
             traceBap("updateLaneGuidance", "[],false");
             appConnectorNavi.updateLaneGuidance(false, new CombiBAPNaviLaneGuidanceData[0]); /* FctID 24 */
+
+            /* KOMO: stop video encoder and clear maneuver data */
+            stopKOMO();
 
             /* Unblock native route-guidance BAP stream. */
             if (gatedService != null) gatedService.blockRouteGuidance = false;
@@ -776,12 +804,14 @@ public class BAPBridge {
                     timeVal = -1;
                 }
 
+                /* JVM default TZ is UTC on MHI2. AppConnectorNavi uses
+                 * GregorianCalendar(Date(epoch*1000)) which would show UTC.
+                 * Convert UTC epoch to local epoch so calendar shows local time.
+                 * Uses fw.convertUTCTimeToLocalTime() — DST-aware, always correct. */
                 if (timeVal >= 0) {
-                    long tzAdjustSec = getTimezoneAdjustSeconds(timeVal);
-                    if (tzAdjustSec != 0) {
-                        Log.d(TAG, "ETA tz adjust: " + tzAdjustSec + "s (raw=" + timeVal + ")");
-                        timeVal = timeVal + tzAdjustSec;
-                    }
+                    long utcMs = timeVal * 1000L;
+                    long localMs = convertUtcToLocalMs(utcMs);
+                    timeVal = localMs / 1000L;
                 }
 
                 traceBap("updateTimeToDestination", timeInfoType + "," + timeFormat + "," + timeVal);
@@ -797,6 +827,16 @@ public class BAPBridge {
                 CombiBAPDestinationInfo destInfo = new CombiBAPDestinationInfo(naviDest);
                 traceBap("updateDestinationInfo", "\"" + dest + "\"");
                 appConnectorNavi.updateDestinationInfo(destInfo);
+            }
+
+            /* 10. KOMO: push maneuver data to PresentationController for LVDS video */
+            int komoMask = RouteGuidance.State.DIRTY_MANEUVER_ICON
+                | RouteGuidance.State.DIRTY_MANEUVER_LIST
+                | RouteGuidance.State.DIRTY_MANEUVER_COUNT
+                | RouteGuidance.State.DIRTY_MANEUVER_TEXT
+                | RouteGuidance.State.DIRTY_DIST_MAN;
+            if ((dirty & komoMask) != 0) {
+                updateKOMO(s);
             }
 
             Log.d(TAG, "Update: dist=" + distM + "m maneuvers=" + Math.min(s.maneuverCount, MAX_BAP_MANEUVERS));
@@ -1229,6 +1269,324 @@ public class BAPBridge {
     }
 
     /* ============================================================
+     * KOMO / LVDS Video Pipeline
+     * ============================================================ */
+
+    /**
+     * Start KOMO pipeline: enable view, start video encoder, activate RG.
+     * This triggers the chain:
+     *   setKOMODataRate(2) → ChoiceModel(1,168) hint 2
+     *     → CombiMapController.updateFrameRate() → DisplayManager.setUpdateRate()
+     *     → videoencoderservice starts capturing
+     *   forceGfxAvailable(true) — DSIKOMOGfxStreamSink has no provider on MU1316
+     *     → ClusterViewMode.gfxAvailable=true
+     *     → ViewModeSM activates MAP view (FPK hardcoded rgType=4)
+     *     → BAP rgType=4 → VC sets INTERN_Active_NavFPK_Content=1
+     *   komoService.setRouteInfo() → PresentationController renders
+     *     → video → MOST → VC detects LVDS_Available=1
+     *     → SV_LVDS_NavMap_FPK activates
+     */
+    private void startKOMO() {
+        if (komoService == null || csRef == null) {
+            Log.w(TAG, "KOMO: cannot start (komoService=" + (komoService != null) + " csRef=" + (csRef != null) + ")");
+            return;
+        }
+        try {
+            /* 1. Enable KOMO view on PresentationController */
+            komoService.enableKomoView(true);
+            komoService.notifyVisibility(true);
+
+            /* 2. Tell PresentationController to use KDK render mode.
+             * For FPK, refreshViewMode() is a NO-OP so refreshRgMode() never
+             * fires — setRgSelect() is never called. We must call it explicitly.
+             * rgSelect: 0=RGI, 1=KDK, 2=COMPASS, 3=MAP */
+            komoService.setRgSelect(1);
+
+            /* 2b. Activate cluster video pipeline directly on DisplayManager.
+             * Forces context switch (0 → 72) so native DM's preContextSwitchHook
+             * fires and calls setActiveDisplayable(4, 33) on videoencoderservice.
+             * Then starts encoding at 10fps via setUpdateRate(1, 10).
+             * Isolated try-catch with Throwable: IDisplayManagerKombiControl
+             * may throw NoClassDefFoundError if the class isn't in classpath. */
+            try {
+                String pipelineResult = csRef.activateClusterVideoPipeline();
+                Log.i(TAG, "KOMO: pipeline " + pipelineResult);
+            } catch (Throwable t) {
+                Log.w(TAG, "KOMO: pipeline failed: " + t.getClass().getName() + ": " + t.getMessage());
+            }
+
+            /* 3. Set rgActive for hint logic (KDK visibility not needed —
+             * we use context 72 / displayable 33 (map), not KDK displayable 20) */
+            csRef.updateKDKRgActive(true);
+
+            /* 5. KOMO data rate for hint propagation (video encoding already
+             * started in activateClusterVideoPipeline via setUpdateRate) */
+            csRef.setKOMODataRate(KOMO_DATA_RATE_FULL);
+
+            /* 6. Force gfxAvailable=true — DSIKOMOGfxStreamSink has no native
+             * provider on MU1316, so the callback chain never fires naturally.
+             * Use updateGfxState(1,1) as primary (mimics DSI notification),
+             * with direct ClusterViewMode field set as backup. */
+            forceGfxAvailable(true);
+
+            /* Diagnostic: verify DSI proxy wiring and DisplayManager init state */
+            try {
+                de.audi.tghu.navi.app.cluster.KOMOCaller kc = csRef.getKomoCaller();
+                if (kc != null) {
+                    String caller = kc.toString().replace('\n', '|');
+                    Log.i(TAG, "KOMO: caller " + limitUtf8(caller, 220));
+                } else {
+                    Log.w(TAG, "KOMO: caller n/a");
+                }
+            } catch (Throwable t) {
+                Log.w(TAG, "KOMO: caller diag failed: " + t.getClass().getName() + ": " + t.getMessage());
+            }
+            Log.i(TAG, "KOMO: fw " + limitUtf8(csRef.getFrameworkDiag(), 220));
+            Log.i(TAG, "KOMO: dm " + limitUtf8(csRef.getDisplayManagerDiag(), 220));
+
+            /* 6. Clear sentinel strings from followInfoRIE */
+            csRef.updateFollowInfoData("", "", "");
+
+            komoStarted = true;
+            Log.i(TAG, "KOMO: started (hints=0x" + Integer.toHexString(csRef.getKOMOHintsRaw())
+                + " " + csRef.getClusterViewModeDiag() + ")");
+        } catch (Throwable e) {
+            Log.w(TAG, "KOMO start failed: " + e.getClass().getName() + ": " + e.getMessage());
+        }
+    }
+
+    /**
+     * Stop KOMO pipeline: stop video encoder, clear maneuver data, disable view.
+     */
+    private void stopKOMO() {
+        if (!komoStarted) return;
+        try {
+            if (csRef != null) {
+                csRef.setKOMODataRate(0);
+                csRef.deactivateClusterVideoPipeline();
+                csRef.updateKDKRgActive(false);
+                csRef.updateNextManeuver(new RouteInfoElement());
+            }
+            if (komoService != null) {
+                komoService.setRgSelect(2);  /* restore COMPASS render mode */
+                komoService.notifyVisibility(false);
+                komoService.enableKomoView(false);
+            }
+            forceGfxAvailable(false);
+            komoStarted = false;
+            Log.i(TAG, "KOMO: stopped");
+        } catch (Throwable e) {
+            Log.w(TAG, "KOMO stop failed: " + e.getClass().getName() + ": " + e.getMessage());
+        }
+    }
+
+    /**
+     * Force gfxAvailable on ClusterViewMode.
+     * DSIKOMOGfxStreamSink has no native provider on MU1316 so the callback
+     * chain (videoencoderservice → DSI → KOMOService.updateGfxState → ClusterViewMode)
+     * never fires. We simulate it directly.
+     *
+     * Strategy 1: komoService.updateGfxState(1, 1) — mimics DSI notification
+     * Strategy 2: ClusterViewMode.setGFXAvailable(true) — direct method call
+     * Strategy 3: ClusterViewMode.gfxAvailable field reflection — last resort
+     */
+    private void forceGfxAvailable(boolean available) {
+        int gfxVal = available ? 1 : 0;
+
+        /* Strategy 1: updateGfxState on KOMOService */
+        try {
+            if (komoService != null) {
+                Method m = komoService.getClass().getMethod(
+                    "updateGfxState", new Class[]{int.class, int.class});
+                m.invoke(komoService, new Object[]{new Integer(gfxVal), new Integer(1)});
+                Log.i(TAG, "KOMO: gfxAvailable=" + available + " via updateGfxState");
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "KOMO: updateGfxState failed: " + t.getMessage());
+        }
+
+        /* Strategy 2+3: direct ClusterViewMode access as backup */
+        try {
+            if (csRef != null) {
+                /* Get ClusterViewMode from ClusterService */
+                Object cvm = null;
+                try {
+                    Field fCvm = csRef.getClass().getDeclaredField("clusterViewMode");
+                    fCvm.setAccessible(true);
+                    cvm = fCvm.get(csRef);
+                } catch (Throwable t) {
+                    /* Try superclass if field is inherited */
+                    Class sup = csRef.getClass().getSuperclass();
+                    while (sup != null && cvm == null) {
+                        try {
+                            Field fCvm = sup.getDeclaredField("clusterViewMode");
+                            fCvm.setAccessible(true);
+                            cvm = fCvm.get(csRef);
+                        } catch (NoSuchFieldException nsf) {
+                            sup = sup.getSuperclass();
+                        }
+                    }
+                }
+
+                if (cvm != null) {
+                    /* Strategy 2: setGFXAvailable method */
+                    try {
+                        Method setGfx = cvm.getClass().getMethod(
+                            "setGFXAvailable", new Class[]{boolean.class});
+                        setGfx.invoke(cvm, new Object[]{available ? Boolean.TRUE : Boolean.FALSE});
+                        Log.i(TAG, "KOMO: gfxAvailable=" + available + " via setGFXAvailable");
+                    } catch (Throwable t) {
+                        /* Strategy 3: direct field */
+                        try {
+                            Field fGfx = cvm.getClass().getDeclaredField("gfxAvailable");
+                            fGfx.setAccessible(true);
+                            fGfx.setBoolean(cvm, available);
+                            Log.i(TAG, "KOMO: gfxAvailable=" + available + " via field reflection");
+                        } catch (Throwable t2) {
+                            Log.w(TAG, "KOMO: gfxAvailable field failed: " + t2.getMessage());
+                        }
+                    }
+                } else {
+                    Log.w(TAG, "KOMO: ClusterViewMode not found on ClusterService");
+                }
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "KOMO: gfxAvailable backup failed: " + t.getMessage());
+        }
+    }
+
+    /**
+     * Push current maneuver data to PresentationController via KOMOService.
+     * Builds a RouteInfoElement with ManeuverElement from the same mapper
+     * values used for BAP (element=mainCategory, direction=bapDirection).
+     */
+    private void updateKOMO(RouteGuidance.State s) {
+        if (!komoStarted || csRef == null) return;
+
+        try {
+            int[] idxs = getManeuverIndexList(s);
+            if (idxs == null || idxs.length == 0 || s.maneuverCount == 0) {
+                csRef.updateNextManeuver(new RouteInfoElement());
+                return;
+            }
+
+            int maxIdx = (s.mType != null) ? s.mType.length : 0;
+            /* Pick the first directional maneuver (skip FOLLOW_STREET).
+             * Native FPK sends "nextManeuver" = the upcoming turn, not the
+             * current "go straight" instruction.  Fall back to FOLLOW_STREET
+             * if it's the only valid maneuver. */
+            int firstIdx = -1;
+            int followIdx = -1;
+            for (int i = 0; i < idxs.length; i++) {
+                int idx = idxs[i];
+                if (idx >= 0 && idx < maxIdx && ManeuverMapper.isValidType(s.mType[idx])) {
+                    int[] probe = ManeuverMapper.map(
+                        s.mType[idx], s.mTurnAngle[idx],
+                        s.mJunctionType[idx], s.mDrivingSide[idx]);
+                    if (probe[0] == ManeuverMapper.FOLLOW_STREET) {
+                        if (followIdx < 0) followIdx = idx;
+                    } else {
+                        firstIdx = idx;
+                        break;
+                    }
+                }
+            }
+            if (firstIdx < 0) firstIdx = followIdx;
+
+            if (firstIdx < 0) {
+                csRef.updateNextManeuver(new RouteInfoElement());
+                return;
+            }
+
+            int[] mapped = ManeuverMapper.map(
+                s.mType[firstIdx],
+                s.mTurnAngle[firstIdx],
+                s.mJunctionType[firstIdx],
+                s.mDrivingSide[firstIdx]
+            );
+
+            ManeuverElement me = new ManeuverElement(
+                mapped[0],
+                (short) mapped[1],
+                0
+            );
+
+            String turnTo = getKomoTurnToStreet(s, firstIdx);
+
+            RouteInfoElement rie = new RouteInfoElement();
+            rie.routeInfoElementType = 3;
+            rie.maneuverDescriptor = new ManeuverElement[]{ me };
+            rie.turnToStreet = turnTo;
+            rie.exitNumber = getKomoExitNumber(s, firstIdx);
+            rie.exitIconId = 0;
+
+            /* Update followInfoRIE trip data so PresentationController sees
+             * changed data and re-renders.  Without this, the DSI layer skips
+             * the send because followInfoRIE never changes. */
+            csRef.updateFollowInfoData(formatKomoDistance(s), formatKomoEta(s), turnTo);
+
+            csRef.updateNextManeuver(rie);
+            Log.d(TAG, "KOMO: pushed element=" + mapped[0] + " dir=" + mapped[1]
+                + " hints=0x" + Integer.toHexString(csRef.getKOMOHintsRaw()));
+
+        } catch (Throwable e) {
+            Log.w(TAG, "KOMO update failed: " + e.getClass().getName() + ": " + e.getMessage());
+        }
+    }
+
+    private static String getKomoTurnToStreet(RouteGuidance.State s, int idx) {
+        if (s.mExitInfo != null && idx < s.mExitInfo.length
+            && s.mExitInfo[idx] != null && s.mExitInfo[idx].length() > 0) {
+            return keepLastColonPart(s.mExitInfo[idx]);
+        }
+        if (s.mAfterRoad != null && idx < s.mAfterRoad.length
+            && s.mAfterRoad[idx] != null && s.mAfterRoad[idx].length() > 0) {
+            return keepLastColonPart(s.mAfterRoad[idx]);
+        }
+        if (s.mName != null && idx < s.mName.length
+            && s.mName[idx] != null && s.mName[idx].length() > 0) {
+            return s.mName[idx];
+        }
+        return null;
+    }
+
+    private static String getKomoExitNumber(RouteGuidance.State s, int idx) {
+        if (s.mExitInfo != null && idx < s.mExitInfo.length
+            && s.mExitInfo[idx] != null && s.mExitInfo[idx].length() > 0) {
+            return s.mExitInfo[idx];
+        }
+        return null;
+    }
+
+    /** Format distance-to-destination as a string for followInfoRIE. */
+    private String formatKomoDistance(RouteGuidance.State s) {
+        if (s.distDestM <= 0) return "";
+        FormattedDistance fd = formatDistanceToDestination(s.distDestM);
+        if (fd.value <= 0) return "";
+        String u;
+        switch (fd.unit) {
+            case 1: u = " m"; break;
+            case 2: u = " km"; break;
+            case 3: u = " mi"; break;
+            case 4: u = " ft"; break;
+            default: u = ""; break;
+        }
+        return fd.value + u;
+    }
+
+    /** Format ETA as HH:MM string for followInfoRIE. */
+    private String formatKomoEta(RouteGuidance.State s) {
+        if (s.etaSeconds <= 0) return "";
+        long localMs = convertUtcToLocalMs(s.etaSeconds * 1000L);
+        long etaSec = localMs / 1000L;
+        int h = (int) ((etaSec / 3600) % 24);
+        if (h < 0) h += 24;
+        int m = (int) ((etaSec % 3600) / 60);
+        if (m < 0) m += 60;
+        return (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m;
+    }
+
+    /* ============================================================
      * Utilities
      * ============================================================ */
 
@@ -1256,21 +1614,30 @@ public class BAPBridge {
         return 0;
     }
 
-    private static long getTimezoneAdjustSeconds(long etaEpochSec) {
+    /**
+     * Returns local timezone offset in seconds for a given UTC epoch.
+     *
+     * JVM default TZ on MHI2 is UTC, so TimeZone.getDefault() is useless.
+     * Instead: get HU raw offset (no DST) via fw, find a matching Java TZ
+     * with DST support, and use its getOffset() for DST-aware result.
+     * Fallback: HU raw offset (correct except during DST transitions).
+     */
+    /**
+     * Convert UTC epoch millis to local epoch millis using HU's DST-aware offset.
+     * Uses IFrameworkAccess.convertUTCTimeToLocalTime() which internally adds
+     * utcOffsetMilliseconds (timezone + DST from UTCOffset DSI callback).
+     * Always correct regardless of region or DST status.
+     */
+    private static long convertUtcToLocalMs(long utcMs) {
         try {
             IFrameworkAccess fw = CarPlayHook.getFrameworkAccess();
-            if (fw == null) return 0;
-
-            long huOffsetMs = fw.getCurrentTimezoneOffsetMilliseconds();
-            long javaOffsetMs = java.util.TimeZone.getDefault().getOffset(etaEpochSec * 1000L);
-
-            long deltaMs = huOffsetMs - javaOffsetMs;
-            if (deltaMs == 0) return 0;
-
-            return deltaMs / 1000L;
-        } catch (Exception e) {
-            return 0;
+            if (fw != null) {
+                return fw.convertUTCTimeToLocalTime(utcMs);
+            }
+        } catch (Throwable t) {
+            /* ignore */
         }
+        return utcMs;
     }
 
     /**

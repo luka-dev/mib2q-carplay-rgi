@@ -371,7 +371,6 @@ public class ManeuverMapper {
          * We don't have "Action"/"Turn" enums in CarPlay iAP2, so we apply the
          * same practical effect by gating on maneuverType categories.
          *
-         * TODO to test without it
          */
         direction = applyDsiNavBapDirectionOverride(maneuverType, direction);
 

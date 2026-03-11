@@ -322,6 +322,10 @@ public class RouteGuidance implements PPS.Listener {
             }
             if (state.sourceSupportsRg == 0) wantActive = false;
 
+            /* route_state=0 (NO_ROUTE_SET) is authoritative — no route means
+             * nothing to show, regardless of stale visible_in_app from C hook. */
+            if (state.routeState == ROUTE_STATE_NO_ROUTE_SET) wantActive = false;
+
             if (wantActive && !rgActive) {
                 Log.i(TAG, "RG activate: route_state=" + state.routeState
                     + " maneuver_count=" + state.maneuverCount

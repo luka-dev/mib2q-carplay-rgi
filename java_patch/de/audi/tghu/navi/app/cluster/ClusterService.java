@@ -1,5 +1,6 @@
 package de.audi.tghu.navi.app.cluster;
 
+import de.audi.atip.base.IFrameworkAccess;
 import de.audi.atip.hmi.intercommunication.NaviMoKoKDKConstants;
 import de.audi.atip.hmi.model.ModelGroup;
 import de.audi.atip.hmi.modelaccess.ChoiceModelApp;
@@ -64,7 +65,7 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
     protected ModelGroup travelParametersGroup;
     private ModelGroup nextManeuverGroup;
     private boolean showBargraph = false;
-    private String turnToStreet = "isNativeLittleEndian";
+    private String turnToStreet = "";
     private boolean turnToStreetValid = false;
     protected KOMOService komoService = null;
     protected final CombiBAPListener combiBAPListener;
@@ -138,16 +139,16 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         this.clusterInputListener = this.createClusterInputListener(navigationEnv);
         this.mapScaleHandler = new MapScaleHandler();
         this.mapScaleTimer = new MapScaleTimer(navigationEnv, this, this.mapScaleHandler);
-        navigationEnv.getLabelModel(62).setText("isNativeLittleEndian");
+        navigationEnv.getLabelModel(62).setText("");
         this.initializeModels();
     }
 
     private void initializeModels() {
         this.logChannel.log(10000000, "ClusterService#initializeModels() ");
-        this.env.getLabelModel(71).setText("isNativeLittleEndian");
+        this.env.getLabelModel(71).setText("");
         this.env.getChoiceModel(69).setValue(0);
         this.turnToStreetValid = false;
-        this.turnToStreet = "isNativeLittleEndian";
+        this.turnToStreet = "";
         this.env.getMetricsModel(66).setStatus(3);
         this.env.getMetricsModel(66).setMetric(this.etaDateMetric);
         this.env.getMetricsModel(63).setStatus(3);
@@ -245,8 +246,8 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         String string3 = string;
         if (Util.isEmpty(string)) {
             this.logChannel.log(10000000, "ClusterService#updateCurrentStreet() - invalid currentStreet: %1", string);
-            string2 = "isNativeLittleEndian";
-            string1 = "isNativeLittleEndian";
+            string2 = "";
+            string1 = "";
             string3 = "---";
         }
 
@@ -274,10 +275,10 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         ChoiceModelApp choiceModelApp = this.env.getChoiceModel(69);
         if (this.turnToStreetValid && this.showBargraph) {
             choiceModelApp.setValue(1);
-            this.komoService.setTurnToStreet(this.turnToStreet, "isNativeLittleEndian");
+            this.komoService.setTurnToStreet(this.turnToStreet, "");
         } else {
             choiceModelApp.setValue(0);
-            this.komoService.setTurnToStreet("isNativeLittleEndian", "isNativeLittleEndian");
+            this.komoService.setTurnToStreet("", "");
         }
     }
 
@@ -381,7 +382,7 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
 
     private void clearRouteInfoElement(RouteInfoElement routeInfoElement) {
         if (routeInfoElement != null) {
-            routeInfoElement.distanceToElement = "isNativeLittleEndian";
+            routeInfoElement.distanceToElement = "";
             routeInfoElement.estimatedTimeToElement = "--:--";
             routeInfoElement.routeInfoElementType = 0;
             routeInfoElement.elementIconIDs = null;
@@ -477,7 +478,7 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
             this.logChannel
                 .log(10000000, "ClusterService#updateDistanceToDestination() - invalid distanceToDestination! ");
             Util.setModelStatus(metricsModelApp, 3);
-            string = "isNativeLittleEndian";
+            string = "";
             bl1 = false;
         }
 
@@ -531,7 +532,7 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         this.clusterViewMode.refreshRGState();
         if (!bl) {
             this.initializeModels();
-            this.updateTurnToStreet("isNativeLittleEndian", false);
+            this.updateTurnToStreet("", false);
             this.clearRouteInfoElement(this.followInfoRIE);
             this.clearRouteInfoElement(this.nextManeuverElement);
             this.updateDestinationInfo(null, 0, 0);
@@ -677,7 +678,8 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
     }
 
     public void setKOMODataRate(int i) {
-        if (Util.isClusterMapMOST(this.env.getFramework())) {
+        if (Util.isClusterMapMOST(this.env.getFramework())
+                || Util.isClusterMapFPK(this.env.getFramework())) {
             this.setKOMODataRate(i, true);
         }
     }
@@ -768,7 +770,7 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
                     navLocation, this.env
                 );
                 String string = locationFormattingResponse.getFirstLineAsText();
-                return string != null ? string : "isNativeLittleEndian";
+                return string != null ? string : "";
             } catch (Exception exception) {
                 this.env
                     .getLogChannel()
@@ -777,10 +779,10 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
                         "Util#getString4BAPFromNavLocation - got an exception from AddressFormatter#formatTwoLines: %1",
                         (Throwable)exception
                     );
-                return "isNativeLittleEndian";
+                return "";
             }
         } else {
-            return "isNativeLittleEndian";
+            return "";
         }
     }
 
@@ -896,7 +898,7 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
                     rcciEvent.delay, 2, this.env
                 );
             } else {
-                this.followInfoRIE.trafficInfo.trafficOffset = "isNativeLittleEndian";
+                this.followInfoRIE.trafficInfo.trafficOffset = "";
                 this.followInfoRIE.estimatedTimeToElement = "--:--";
             }
 
@@ -904,8 +906,8 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         } else {
             this.komoService
                 .setTrafficOffset(KOMOService.convertTimeFormatToKOMO(DateMetric.timeFormat), u, t, s, false);
-            this.followInfoRIE.trafficInfo.trafficOffset = "isNativeLittleEndian";
-            this.followInfoRIE.trafficInfo.trafficOffsetAffix = "isNativeLittleEndian";
+            this.followInfoRIE.trafficInfo.trafficOffset = "";
+            this.followInfoRIE.trafficInfo.trafficOffsetAffix = "";
         }
 
         this.updateKOMOFollowInfo();
@@ -1082,6 +1084,245 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         } catch (Exception e) {
             return "diagnostics unavailable";
         }
+    }
+
+    public void updateKDKRgActive(boolean active) {
+        this.clusterKDKHandler.updateRgActive(active);
+    }
+
+    public void setValidRGTypeReceived(boolean valid) {
+        this.combiBAPListener.validRGTypeReceived(valid);
+    }
+
+    public int getKOMOHintsRaw() {
+        return this.env.getChoiceModel(1, 168).getHints();
+    }
+
+    /** Compact diagnostic string for ClusterViewMode state (video pipeline debugging). */
+    public String getClusterViewModeDiag() {
+        try {
+            java.lang.reflect.Field fGfx = ClusterViewMode.class.getDeclaredField("gfxAvailable");
+            fGfx.setAccessible(true);
+            java.lang.reflect.Field fEnabled = ClusterViewMode.class.getDeclaredField("komoViewEnabled");
+            fEnabled.setAccessible(true);
+            java.lang.reflect.Field fVisible = ClusterViewMode.class.getDeclaredField("komoViewVisible");
+            fVisible.setAccessible(true);
+            java.lang.reflect.Field fRate = ClusterViewMode.class.getDeclaredField("dataRate");
+            fRate.setAccessible(true);
+            java.lang.reflect.Field fMapReady = ClusterViewMode.class.getDeclaredField("mapReady");
+            fMapReady.setAccessible(true);
+            return "gfx=" + fGfx.getBoolean(this.clusterViewMode)
+                + " en=" + fEnabled.getBoolean(this.clusterViewMode)
+                + " vis=" + fVisible.getBoolean(this.clusterViewMode)
+                + " rate=" + fRate.getInt(this.clusterViewMode)
+                + " mapRdy=" + fMapReady.getBoolean(this.clusterViewMode);
+        } catch (Exception e) {
+            return "diag-err";
+        }
+    }
+
+    private Field findFieldInHierarchy(Class clazz, String name) {
+        Class c = clazz;
+        while (c != null) {
+            try {
+                Field f = c.getDeclaredField(name);
+                f.setAccessible(true);
+                return f;
+            } catch (NoSuchFieldException e) {
+                c = c.getSuperclass();
+            } catch (Throwable t) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private String getDisplayManagerInitState(Object dm) {
+        if (dm == null) return "init=n/a dsi=n/a";
+        try {
+            Field fInit = this.findFieldInHierarchy(dm.getClass(), "initialized");
+            Field fDsi = this.findFieldInHierarchy(dm.getClass(), "dsiDispMgmt");
+            String init = "n/a";
+            String dsi = "n/a";
+            if (fInit != null) {
+                init = String.valueOf(fInit.get(dm));
+            }
+            if (fDsi != null) {
+                dsi = String.valueOf(fDsi.get(dm) != null);
+            }
+            return "init=" + init + " dsi=" + dsi;
+        } catch (Throwable t) {
+            return "init-diag-err:" + t.getClass().getName();
+        }
+    }
+
+    public String getDisplayManagerDiag() {
+        try {
+            de.audi.atip.hmi.view.IDisplayManager dm =
+                ((de.audi.atip.hmi.HMIService) this.env.getHMIService()).getDisplayManager();
+            int ctx = -1;
+            try {
+                ctx = dm.getCurrentContextID(1);
+            } catch (Throwable t) {
+                /* ignore */
+            }
+            return "dmType=" + dm.getClass().getName()
+                + " ctx1=" + ctx
+                + " " + this.getDisplayManagerInitState(dm);
+        } catch (Throwable t) {
+            return "dmDiagFailed:" + t.getClass().getName() + ": " + t.getMessage();
+        }
+    }
+
+    public String getFrameworkDiag() {
+        try {
+            IFrameworkAccess fw = this.env.getFramework();
+            return "kombiType=" + fw.getKombiType()
+                + " sys541=" + fw.getSysConst(541)
+                + " sys4383=" + fw.getSysConst(4383)
+                + " sys4388=" + fw.getSysConst(4388)
+                + " mapFPK=" + Util.isClusterMapFPK(fw)
+                + " mapMOST=" + Util.isClusterMapMOST(fw)
+                + " setRouteInfoDSI=" + Util.isSetRouteInfoDSIAvailable(fw);
+        } catch (Throwable t) {
+            return "fwDiagFailed:" + t.getClass().getName() + ": " + t.getMessage();
+        }
+    }
+
+    public String setClusterUpdateRateDiag(int rate) {
+        try {
+            de.audi.atip.hmi.view.IDisplayManager dm =
+                ((de.audi.atip.hmi.HMIService) this.env.getHMIService()).getDisplayManager();
+            int ctx = -1;
+            try {
+                ctx = dm.getCurrentContextID(1);
+            } catch (Throwable t) {
+                /* ignore */
+            }
+            String base = "rate=" + rate
+                + " ctx1=" + ctx
+                + " dmType=" + dm.getClass().getName()
+                + " " + this.getDisplayManagerInitState(dm);
+            dm.setUpdateRate(1, rate);
+            return "OK " + base;
+        } catch (Throwable t) {
+            return "FAILED: " + t.getClass().getName() + ": " + t.getMessage();
+        }
+    }
+
+    public void setClusterUpdateRate(int rate) {
+        this.setClusterUpdateRateDiag(rate);
+    }
+
+    private String trySetVisibleKDKReflective(de.audi.atip.hmi.view.IDisplayManager dm, int displayable, int terminal) {
+        try {
+            java.lang.reflect.Method setMethod = dm.getClass()
+                .getMethod("setKDKVisible", new Class[]{Integer.TYPE, Integer.TYPE});
+            setMethod.invoke(dm, new Object[]{new Integer(displayable), new Integer(terminal)});
+            try {
+                java.lang.reflect.Method getMethod = dm.getClass().getMethod("getVisibleKDK", new Class[]{Integer.TYPE});
+                Object result = getMethod.invoke(dm, new Object[]{new Integer(terminal)});
+                if (result instanceof Integer) {
+                    return String.valueOf(((Integer) result).intValue());
+                }
+            } catch (Throwable t) {
+                return "set-only";
+            }
+            return String.valueOf(displayable);
+        } catch (NoSuchMethodException e) {
+            return "no-kdk-api";
+        } catch (Throwable t) {
+            return "kdk-err:" + t.getClass().getName();
+        }
+    }
+
+    /**
+     * Activate the cluster video pipeline directly on the DisplayManager.
+     *
+     * Native display manager calls setActiveDisplayable on videoencoderservice
+     * ONLY from CContextManager::preContextSwitchHook during a REAL context
+     * switch. Java DisplayManager.switchContext() skips the DSI call when the
+     * requested context equals confirmedActiveContext — so if context 72 is
+     * already active, setActiveDisplayable never fires and videoencoderservice
+     * captures displayable 0 (nothing).
+     *
+     * Fix: Two issues must be resolved:
+     * 1. Boot default maps context 72 → 74 (KDK variant). Context 74's first
+     *    displayable is 20 (KDK intersection, no content without native RG).
+     *    Call setKDKVisible(-1, terminal) to CLEAR the mapping so context 72
+     *    stays as 72 with first displayable 33 (base navigation map).
+     * 2. switchContext is a no-op when confirmedActiveContext == requested.
+     *    Force a context change by switching to 0 first, then back to 72.
+     *
+     * After clearing: switchContext(72) → preContextSwitchHook →
+     *   setActiveDisplayable(4, 33) → videoencoderservice IPTE-captures the
+     *   base navigation map framebuffer.
+     */
+    public String activateClusterVideoPipeline() {
+        try {
+            de.audi.atip.hmi.view.IDisplayManager dm =
+                ((de.audi.atip.hmi.HMIService) this.env.getHMIService()).getDisplayManager();
+            int ctxBefore = dm.getCurrentContextID(1);
+
+            /* 1. Clear KDK mapping: revert context 74 → 72.
+             *    setKDKVisible(-1, terminal) removes KDK displayable overlay
+             *    from the context, so switchContext(72) stays as 72. */
+            String kdkClear = this.trySetVisibleKDKReflective(dm, -1, 1);
+            try { Thread.sleep(200); } catch (InterruptedException ie) { /* ignore */ }
+
+            /* 2. Force context away so next switchContext is a real change. */
+            dm.switchContext(0, 1, null);
+            int ctxAfterReset = dm.getCurrentContextID(1);
+
+            /* 3. Wait for native DM to confirm the context switch via DSI. */
+            try { Thread.sleep(300); } catch (InterruptedException ie) { /* ignore */ }
+
+            /* 4. Switch to FPK base map context 72. Without KDK mapping,
+             *    this stays as 72 → preContextSwitchHook fires →
+             *    setActiveDisplayable(4, 33) → encoder captures base map. */
+            dm.switchContext(72, 1, null);
+            int ctxAfterMap = dm.getCurrentContextID(1);
+
+            try { Thread.sleep(300); } catch (InterruptedException ie) { /* ignore */ }
+
+            /* 5. Start video encoding at 10fps. */
+            dm.setUpdateRate(1, 10);
+
+            return "ctx=" + ctxBefore + "→" + ctxAfterReset + "→" + ctxAfterMap
+                + " kdk=" + kdkClear
+                + " dmType=" + dm.getClass().getName()
+                + " " + this.getDisplayManagerInitState(dm);
+        } catch (Throwable t) {
+            return "FAILED: " + t.getClass().getName() + ": " + t.getMessage();
+        }
+    }
+
+    public void deactivateClusterVideoPipeline() {
+        try {
+            de.audi.atip.hmi.view.IDisplayManager dm =
+                ((de.audi.atip.hmi.HMIService) this.env.getHMIService()).getDisplayManager();
+            dm.setUpdateRate(1, 0);
+        } catch (Throwable t) {
+            /* non-fatal */
+        }
+    }
+
+    /**
+     * Update followInfoRIE trip data fields so PresentationController sees
+     * changed data on each setRouteInfo() call and re-renders the arrow.
+     * Also clears empty-string defaults from the widget.
+     */
+    public void updateFollowInfoData(String distance, String eta, String turnTo) {
+        if (this.followInfoRIE != null) {
+            this.followInfoRIE.distanceToElement = (distance != null) ? distance : "";
+            this.followInfoRIE.estimatedTimeToElement = (eta != null) ? eta : "";
+            this.followInfoRIE.turnToStreet = turnTo;
+            if (this.followInfoRIE.trafficInfo != null) {
+                this.followInfoRIE.trafficInfo.trafficOffset = "";
+                this.followInfoRIE.trafficInfo.trafficOffsetAffix = "";
+            }
+        }
+        this.env.getLabelModel(71).setText((turnTo != null) ? turnTo : "");
     }
 
     public KOMOCaller getKomoCaller() {
