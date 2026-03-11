@@ -28,6 +28,8 @@ import de.audi.tghu.navi.app.cluster.KOMOService;
 import de.audi.tghu.navi.app.command.DSIResponseContainer;
 import org.dsi.ifc.komoview.ManeuverElement;
 import org.dsi.ifc.komoview.RouteInfoElement;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 
 public class BAPBridge {
 
@@ -1276,7 +1278,8 @@ public class BAPBridge {
      *   setKOMODataRate(2) → ChoiceModel(1,168) hint 2
      *     → CombiMapController.updateFrameRate() → DisplayManager.setUpdateRate()
      *     → videoencoderservice starts capturing
-     *     → reports gfxAvailable=true
+     *   forceGfxAvailable(true) — DSIKOMOGfxStreamSink has no provider on MU1316
+     *     → ClusterViewMode.gfxAvailable=true
      *     → ViewModeSM activates MAP view (FPK hardcoded rgType=4)
      *     → BAP rgType=4 → VC sets INTERN_Active_NavFPK_Content=1
      *   komoService.setRouteInfo() → PresentationController renders
@@ -1319,6 +1322,12 @@ public class BAPBridge {
             /* 5. KOMO data rate for hint propagation (video encoding already
              * started in activateClusterVideoPipeline via setUpdateRate) */
             csRef.setKOMODataRate(KOMO_DATA_RATE_FULL);
+
+            /* 6. Force gfxAvailable=true — DSIKOMOGfxStreamSink has no native
+             * provider on MU1316, so the callback chain never fires naturally.
+             * Use updateGfxState(1,1) as primary (mimics DSI notification),
+             * with direct ClusterViewMode field set as backup. */
+            forceGfxAvailable(true);
 
             /* Diagnostic: verify DSI proxy wiring and DisplayManager init state */
             try {
@@ -1363,10 +1372,86 @@ public class BAPBridge {
                 komoService.notifyVisibility(false);
                 komoService.enableKomoView(false);
             }
+            forceGfxAvailable(false);
             komoStarted = false;
             Log.i(TAG, "KOMO: stopped");
         } catch (Throwable e) {
             Log.w(TAG, "KOMO stop failed: " + e.getClass().getName() + ": " + e.getMessage());
+        }
+    }
+
+    /**
+     * Force gfxAvailable on ClusterViewMode.
+     * DSIKOMOGfxStreamSink has no native provider on MU1316 so the callback
+     * chain (videoencoderservice → DSI → KOMOService.updateGfxState → ClusterViewMode)
+     * never fires. We simulate it directly.
+     *
+     * Strategy 1: komoService.updateGfxState(1, 1) — mimics DSI notification
+     * Strategy 2: ClusterViewMode.setGFXAvailable(true) — direct method call
+     * Strategy 3: ClusterViewMode.gfxAvailable field reflection — last resort
+     */
+    private void forceGfxAvailable(boolean available) {
+        int gfxVal = available ? 1 : 0;
+
+        /* Strategy 1: updateGfxState on KOMOService */
+        try {
+            if (komoService != null) {
+                Method m = komoService.getClass().getMethod(
+                    "updateGfxState", new Class[]{int.class, int.class});
+                m.invoke(komoService, new Object[]{new Integer(gfxVal), new Integer(1)});
+                Log.i(TAG, "KOMO: gfxAvailable=" + available + " via updateGfxState");
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "KOMO: updateGfxState failed: " + t.getMessage());
+        }
+
+        /* Strategy 2+3: direct ClusterViewMode access as backup */
+        try {
+            if (csRef != null) {
+                /* Get ClusterViewMode from ClusterService */
+                Object cvm = null;
+                try {
+                    Field fCvm = csRef.getClass().getDeclaredField("clusterViewMode");
+                    fCvm.setAccessible(true);
+                    cvm = fCvm.get(csRef);
+                } catch (Throwable t) {
+                    /* Try superclass if field is inherited */
+                    Class sup = csRef.getClass().getSuperclass();
+                    while (sup != null && cvm == null) {
+                        try {
+                            Field fCvm = sup.getDeclaredField("clusterViewMode");
+                            fCvm.setAccessible(true);
+                            cvm = fCvm.get(csRef);
+                        } catch (NoSuchFieldException nsf) {
+                            sup = sup.getSuperclass();
+                        }
+                    }
+                }
+
+                if (cvm != null) {
+                    /* Strategy 2: setGFXAvailable method */
+                    try {
+                        Method setGfx = cvm.getClass().getMethod(
+                            "setGFXAvailable", new Class[]{boolean.class});
+                        setGfx.invoke(cvm, new Object[]{available ? Boolean.TRUE : Boolean.FALSE});
+                        Log.i(TAG, "KOMO: gfxAvailable=" + available + " via setGFXAvailable");
+                    } catch (Throwable t) {
+                        /* Strategy 3: direct field */
+                        try {
+                            Field fGfx = cvm.getClass().getDeclaredField("gfxAvailable");
+                            fGfx.setAccessible(true);
+                            fGfx.setBoolean(cvm, available);
+                            Log.i(TAG, "KOMO: gfxAvailable=" + available + " via field reflection");
+                        } catch (Throwable t2) {
+                            Log.w(TAG, "KOMO: gfxAvailable field failed: " + t2.getMessage());
+                        }
+                    }
+                } else {
+                    Log.w(TAG, "KOMO: ClusterViewMode not found on ClusterService");
+                }
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "KOMO: gfxAvailable backup failed: " + t.getMessage());
         }
     }
 

@@ -65,7 +65,7 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
     protected ModelGroup travelParametersGroup;
     private ModelGroup nextManeuverGroup;
     private boolean showBargraph = false;
-    private String turnToStreet = "isNativeLittleEndian";
+    private String turnToStreet = "";
     private boolean turnToStreetValid = false;
     protected KOMOService komoService = null;
     protected final CombiBAPListener combiBAPListener;
@@ -139,16 +139,16 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         this.clusterInputListener = this.createClusterInputListener(navigationEnv);
         this.mapScaleHandler = new MapScaleHandler();
         this.mapScaleTimer = new MapScaleTimer(navigationEnv, this, this.mapScaleHandler);
-        navigationEnv.getLabelModel(62).setText("isNativeLittleEndian");
+        navigationEnv.getLabelModel(62).setText("");
         this.initializeModels();
     }
 
     private void initializeModels() {
         this.logChannel.log(10000000, "ClusterService#initializeModels() ");
-        this.env.getLabelModel(71).setText("isNativeLittleEndian");
+        this.env.getLabelModel(71).setText("");
         this.env.getChoiceModel(69).setValue(0);
         this.turnToStreetValid = false;
-        this.turnToStreet = "isNativeLittleEndian";
+        this.turnToStreet = "";
         this.env.getMetricsModel(66).setStatus(3);
         this.env.getMetricsModel(66).setMetric(this.etaDateMetric);
         this.env.getMetricsModel(63).setStatus(3);
@@ -246,8 +246,8 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         String string3 = string;
         if (Util.isEmpty(string)) {
             this.logChannel.log(10000000, "ClusterService#updateCurrentStreet() - invalid currentStreet: %1", string);
-            string2 = "isNativeLittleEndian";
-            string1 = "isNativeLittleEndian";
+            string2 = "";
+            string1 = "";
             string3 = "---";
         }
 
@@ -275,10 +275,10 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         ChoiceModelApp choiceModelApp = this.env.getChoiceModel(69);
         if (this.turnToStreetValid && this.showBargraph) {
             choiceModelApp.setValue(1);
-            this.komoService.setTurnToStreet(this.turnToStreet, "isNativeLittleEndian");
+            this.komoService.setTurnToStreet(this.turnToStreet, "");
         } else {
             choiceModelApp.setValue(0);
-            this.komoService.setTurnToStreet("isNativeLittleEndian", "isNativeLittleEndian");
+            this.komoService.setTurnToStreet("", "");
         }
     }
 
@@ -382,7 +382,7 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
 
     private void clearRouteInfoElement(RouteInfoElement routeInfoElement) {
         if (routeInfoElement != null) {
-            routeInfoElement.distanceToElement = "isNativeLittleEndian";
+            routeInfoElement.distanceToElement = "";
             routeInfoElement.estimatedTimeToElement = "--:--";
             routeInfoElement.routeInfoElementType = 0;
             routeInfoElement.elementIconIDs = null;
@@ -478,7 +478,7 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
             this.logChannel
                 .log(10000000, "ClusterService#updateDistanceToDestination() - invalid distanceToDestination! ");
             Util.setModelStatus(metricsModelApp, 3);
-            string = "isNativeLittleEndian";
+            string = "";
             bl1 = false;
         }
 
@@ -532,7 +532,7 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         this.clusterViewMode.refreshRGState();
         if (!bl) {
             this.initializeModels();
-            this.updateTurnToStreet("isNativeLittleEndian", false);
+            this.updateTurnToStreet("", false);
             this.clearRouteInfoElement(this.followInfoRIE);
             this.clearRouteInfoElement(this.nextManeuverElement);
             this.updateDestinationInfo(null, 0, 0);
@@ -770,7 +770,7 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
                     navLocation, this.env
                 );
                 String string = locationFormattingResponse.getFirstLineAsText();
-                return string != null ? string : "isNativeLittleEndian";
+                return string != null ? string : "";
             } catch (Exception exception) {
                 this.env
                     .getLogChannel()
@@ -779,10 +779,10 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
                         "Util#getString4BAPFromNavLocation - got an exception from AddressFormatter#formatTwoLines: %1",
                         (Throwable)exception
                     );
-                return "isNativeLittleEndian";
+                return "";
             }
         } else {
-            return "isNativeLittleEndian";
+            return "";
         }
     }
 
@@ -898,7 +898,7 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
                     rcciEvent.delay, 2, this.env
                 );
             } else {
-                this.followInfoRIE.trafficInfo.trafficOffset = "isNativeLittleEndian";
+                this.followInfoRIE.trafficInfo.trafficOffset = "";
                 this.followInfoRIE.estimatedTimeToElement = "--:--";
             }
 
@@ -906,8 +906,8 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         } else {
             this.komoService
                 .setTrafficOffset(KOMOService.convertTimeFormatToKOMO(DateMetric.timeFormat), u, t, s, false);
-            this.followInfoRIE.trafficInfo.trafficOffset = "isNativeLittleEndian";
-            this.followInfoRIE.trafficInfo.trafficOffsetAffix = "isNativeLittleEndian";
+            this.followInfoRIE.trafficInfo.trafficOffset = "";
+            this.followInfoRIE.trafficInfo.trafficOffsetAffix = "";
         }
 
         this.updateKOMOFollowInfo();
@@ -1310,7 +1310,7 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
     /**
      * Update followInfoRIE trip data fields so PresentationController sees
      * changed data on each setRouteInfo() call and re-renders the arrow.
-     * Also clears "isNativeLittleEndian" sentinels from the tiny widget.
+     * Also clears empty-string defaults from the widget.
      */
     public void updateFollowInfoData(String distance, String eta, String turnTo) {
         if (this.followInfoRIE != null) {
