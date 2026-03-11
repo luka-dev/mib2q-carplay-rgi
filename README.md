@@ -265,14 +265,13 @@ python3 tools/patch_libpresentationcontroller.py --verify-only libPresentationCo
 Copy to device:
 
 ```text
-/apps/PresentationController/lib/libPresentationController.so
+/mnt/app/navigation/libPresentationController.so
 ```
 
 Back up original first:
 
 ```bash
-mount -o remount,rw /apps
-cp /apps/PresentationController/lib/libPresentationController.so /apps/PresentationController/lib/libPresentationController.so.bak
+cp /mnt/app/navigation/libPresentationController.so /mnt/app/navigation/libPresentationController.so.bak
 ```
 
 Three patches applied (ARM32, file offset = VA):
@@ -292,7 +291,7 @@ See `docs/widget_video_architecture.md` for full technical details.
 3. Set `LD_PRELOAD` in `smartphone_integrator.json`
 4. Patch `dio_manager.json` with the `0x5200/01/02/03/04` IDs above
 5. Build `carplay_hook.jar` with `./build_java.sh`, copy it to `/mnt/app/eso/hmi/lsd/jars/`
-6. Patch `libPresentationController.so` with `tools/patch_libpresentationcontroller.py`, copy to `/apps/PresentationController/lib/`
+6. Patch `libPresentationController.so` with `tools/patch_libpresentationcontroller.py`, copy to `/mnt/app/navigation/`
 7. Reboot infotainment process/system 
 
 P.S. If you do instant reboot of Head Unit after file changes, it's possible that changes will not yet be saved to disk. Give it 30+ seconds before rebooting.
