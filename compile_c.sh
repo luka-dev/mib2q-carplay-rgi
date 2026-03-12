@@ -31,7 +31,7 @@ echo "=== CarPlay Hook Build ==="
 echo "Hook dir: $HOOK_DIR"
 
 EXTRA_CFLAGS="-D__QNX__"
-EXTRA_LIBS="-lz"  # QNX: dlsym is in libc
+EXTRA_LIBS="-lz -lsocket"  # QNX: dlsym is in libc, socket for renderer control
 
 # Build options (supported):
 #   LOG=1|0                 (default: 1)
