@@ -170,45 +170,51 @@ static void draw_exit(int go_right) {
 }
 
 /*
- * Roundabout icon with exit at given angle.
- * exit_angle_deg: iOS convention (0=straight ahead, +90=right, -90=left, ±180=u-turn).
+ * Universal roundabout icon.
+ * exit_angle_deg: iOS convention (0=straight, +90=right, -90=left, ±180=u-turn).
  * driving_side: 0=RHT (CCW travel), 1=LHT (CW travel).
+ * junction_angles: array of ALL junction element angles (iOS degrees), may include exit.
+ * junction_angle_count: number of entries in junction_angles.
+ *
+ * When junction_angles is provided, grey stubs are drawn at real exit positions.
+ * When empty, only entry + active exit are shown (no other stubs).
  */
-static void draw_roundabout(float exit_angle_deg, int driving_side) {
+static void draw_roundabout(float exit_angle_deg, int driving_side,
+                            const int *junction_angles, int junction_angle_count) {
     float cx = 0.0f, cy = 0.08f;
     float ring_r = 0.28f;
     float ring_t = 0.10f;   /* ring thickness */
 
-    /* angles in math convention (0=right, π/2=up) */
-    float entry_rad = (float)(-M_PI * 0.5);
+    /* iOS degrees → math radians: math_rad = (90 - ios_deg) * π/180 */
+    float entry_rad = (float)(-M_PI * 0.5);   /* entry always at bottom */
     float exit_rad  = (90.0f - exit_angle_deg) * (float)M_PI / 180.0f;
 
-    float ext = 0.28f;
-    float ex_tip_x = cx + (ring_r + ext) * cosf(exit_rad);
-    float ex_tip_y = cy + (ring_r + ext) * sinf(exit_rad);
+    float ext = 0.28f;    /* active exit stub length beyond ring */
+    float stub = 0.20f;   /* side stub length beyond ring */
 
     float entry_top = cy - ring_r;
     float ex0_x = cx + ring_r * cosf(exit_rad);
     float ex0_y = cy + ring_r * sinf(exit_rad);
+    float ex_tip_x = cx + (ring_r + ext) * cosf(exit_rad);
+    float ex_tip_y = cy + (ring_r + ext) * sinf(exit_rad);
 
-    /* side street stub length */
-    float stub = 0.20f;
+    /* Convert junction angles to math radians.
+     * No filtering — grey stubs at same angle as active exit or entry
+     * are hidden under the blue (L3) and entry road respectively. */
+    float side_rads[MAX_JUNCTION_ANGLES];
+    int n_sides = 0;
+    int i;
+    for (i = 0; i < junction_angle_count && i < MAX_JUNCTION_ANGLES; i++) {
+        side_rads[n_sides++] = (90.0f - (float)junction_angles[i]) * (float)M_PI / 180.0f;
+    }
 
-    /* standard exit angles in math convention: right(0), top(π/2), left(π) */
-    float side_rads[] = { 0.0f, (float)(M_PI * 0.5), (float)M_PI };
-    int n_sides = 3;
-    int si;
-
-    /* L1: white side markings — entry + exit + side stubs + ring (flat) */
+    /* L1: white outlines — entry + exit + side stubs + ring (flat) */
     render_set_raised(0);
     render_rect(-ring_t * 0.5f - OL_W, SHAFT_BOT,
                 ring_t + OL_W * 2, entry_top - SHAFT_BOT, WHITE);
     render_thick_line(ex0_x, ex0_y, ex_tip_x, ex_tip_y, ring_t + OL_W * 2, WHITE);
-    for (si = 0; si < n_sides; si++) {
-        float sr = side_rads[si];
-        /* skip if too close to active exit (within 25°) */
-        float diff = fabsf(fmodf(sr - exit_rad + 3.0f * (float)M_PI, 2.0f * (float)M_PI) - (float)M_PI);
-        if (diff < 0.44f) continue;  /* ~25° */
+    for (i = 0; i < n_sides; i++) {
+        float sr = side_rads[i];
         float sx0 = cx + ring_r * cosf(sr);
         float sy0 = cy + ring_r * sinf(sr);
         float sx1 = cx + (ring_r + stub) * cosf(sr);
@@ -217,14 +223,12 @@ static void draw_roundabout(float exit_angle_deg, int driving_side) {
     }
     render_circle(cx, cy, ring_r, ring_t + OL_W * 2, 48, WHITE);
 
-    /* L2: gray fill — entry + exit + side stubs + ring */
+    /* L2: grey fill — entry + exit + side stubs + ring (flat) */
     render_rect(-ring_t * 0.5f, SHAFT_BOT, ring_t,
                 entry_top - SHAFT_BOT, SIDE);
     render_thick_line(ex0_x, ex0_y, ex_tip_x, ex_tip_y, ring_t, SIDE);
-    for (si = 0; si < n_sides; si++) {
-        float sr = side_rads[si];
-        float diff = fabsf(fmodf(sr - exit_rad + 3.0f * (float)M_PI, 2.0f * (float)M_PI) - (float)M_PI);
-        if (diff < 0.44f) continue;
+    for (i = 0; i < n_sides; i++) {
+        float sr = side_rads[i];
         float sx0 = cx + ring_r * cosf(sr);
         float sy0 = cy + ring_r * sinf(sr);
         float sx1 = cx + (ring_r + stub) * cosf(sr);
@@ -233,7 +237,7 @@ static void draw_roundabout(float exit_angle_deg, int driving_side) {
     }
     render_circle(cx, cy, ring_r, ring_t, 48, SIDE);
 
-    /* L3: blue — entry street + exit street + arc + caps + arrowhead (raised) */
+    /* L3: blue — entry + exit + arc + caps + arrowhead (raised) */
     render_set_raised(1);
     render_rect(-ring_t * 0.5f, SHAFT_BOT, ring_t,
                 entry_top - SHAFT_BOT, ACTIVE);
@@ -441,27 +445,23 @@ void maneuver_draw(const maneuver_state_t *s) {
     if (t == MT_CHANGE_HIGHWAY_RIGHT) { draw_lane_change(0); return; }
 
     if (t == MT_U_TURN_AT_ROUNDABOUT) {
-        draw_roundabout(180.0f, ds);
+        draw_roundabout(180.0f, ds, s->junction_angles, s->junction_angle_count);
         return;
     }
 
     if (t == MT_ENTER_ROUNDABOUT) {
-        /* Generic entry — show first exit (right for RHT, left for LHT) */
-        draw_roundabout(ds == 0 ? 90.0f : -90.0f, ds);
+        draw_roundabout((float)s->exit_angle, ds,
+                        s->junction_angles, s->junction_angle_count);
         return;
     }
 
     /* ---- Junction type gate (replicates ManeuverMapper logic) ---- */
 
     if (s->junction_type == 1) {
-        /* Roundabout context */
-        if (t == MT_EXIT_ROUNDABOUT) {
-            float ea = (s->exit_angle != 0) ? (float)s->exit_angle : 90.0f;
-            draw_roundabout(ea, ds);
-            return;
-        }
-        if (t >= MT_ROUNDABOUT_EXIT_1 && t <= MT_ROUNDABOUT_EXIT_19) {
-            draw_roundabout((float)s->exit_angle, ds);
+        /* Roundabout context — all types use universal draw */
+        if (t == MT_EXIT_ROUNDABOUT || (t >= MT_ROUNDABOUT_EXIT_1 && t <= MT_ROUNDABOUT_EXIT_19)) {
+            draw_roundabout((float)s->exit_angle, ds,
+                            s->junction_angles, s->junction_angle_count);
             return;
         }
         /* Other types with junction_type=1 → no icon (same as ManeuverMapper) */
@@ -528,7 +528,8 @@ void maneuver_draw(const maneuver_state_t *s) {
 
         /* Roundabout exits without junction_type=1 (fallback) */
         case MT_EXIT_ROUNDABOUT:
-            draw_roundabout((s->exit_angle != 0) ? (float)s->exit_angle : 90.0f, ds);
+            draw_roundabout((float)s->exit_angle, ds,
+                            s->junction_angles, s->junction_angle_count);
             break;
 
         default:

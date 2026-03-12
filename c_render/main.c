@@ -24,10 +24,12 @@
  * ================================================================ */
 
 static maneuver_state_t g_state = {
-    .maneuver_type = MT_NOT_SET,
-    .exit_angle    = 0,
-    .junction_type = 0,
-    .driving_side  = 0,
+    .maneuver_type      = MT_NOT_SET,
+    .exit_angle         = 0,
+    .junction_type      = 0,
+    .driving_side       = 0,
+    .junction_angles    = {0},
+    .junction_angle_count = 0,
 };
 
 /* Test order: meaningful subset showing all icon variants */
@@ -87,29 +89,92 @@ static int junction_for_test(int type) {
     return 0;
 }
 
+/* Set realistic junction angles for roundabout test types.
+ * junction_angles = all roads at junction (iOS degrees), including exit road. */
+static void junction_angles_for_test(int type, maneuver_state_t *s) {
+    s->junction_angle_count = 0;
+    switch (type) {
+        case MT_ENTER_ROUNDABOUT:
+            /* 4-exit roundabout */
+            s->junction_angles[0] = 90;   /* right */
+            s->junction_angles[1] = 0;    /* straight */
+            s->junction_angles[2] = -90;  /* left */
+            s->junction_angle_count = 3;
+            break;
+        case MT_EXIT_ROUNDABOUT:
+            /* 4-exit roundabout, taking right exit */
+            s->junction_angles[0] = 90;
+            s->junction_angles[1] = 0;
+            s->junction_angles[2] = -90;
+            s->junction_angles[3] = -150;
+            s->junction_angle_count = 4;
+            break;
+        case MT_ROUNDABOUT_EXIT_1:
+            /* 3-exit roundabout, take 1st exit (right) */
+            s->junction_angles[0] = 90;
+            s->junction_angles[1] = 0;
+            s->junction_angles[2] = -90;
+            s->junction_angle_count = 3;
+            break;
+        case MT_ROUNDABOUT_EXIT_3:
+            /* 5-exit roundabout, take 3rd exit (straight) */
+            s->junction_angles[0] = 90;
+            s->junction_angles[1] = 45;
+            s->junction_angles[2] = 0;
+            s->junction_angles[3] = -45;
+            s->junction_angles[4] = -90;
+            s->junction_angle_count = 5;
+            break;
+        case MT_ROUNDABOUT_EXIT_6:
+            /* 7-exit roundabout, take 6th exit (left) */
+            s->junction_angles[0] = 120;
+            s->junction_angles[1] = 80;
+            s->junction_angles[2] = 40;
+            s->junction_angles[3] = 0;
+            s->junction_angles[4] = -40;
+            s->junction_angles[5] = -90;
+            s->junction_angles[6] = -140;
+            s->junction_angle_count = 7;
+            break;
+        case MT_U_TURN_AT_ROUNDABOUT:
+            /* 4-exit roundabout, u-turn */
+            s->junction_angles[0] = 90;
+            s->junction_angles[1] = 0;
+            s->junction_angles[2] = -90;
+            s->junction_angles[3] = 180;
+            s->junction_angle_count = 4;
+            break;
+        default:
+            break;
+    }
+}
+
 static void update_test_state(void) {
     int t = g_test_types[g_test_idx];
     g_state.maneuver_type = t;
     g_state.exit_angle = exit_angle_for_test(t);
     g_state.junction_type = junction_for_test(t);
+    junction_angles_for_test(t, &g_state);
 }
 
 static void handle_test_keys(void) {
     if (platform_key_tap(CR_KEY_RIGHT)) {
         g_test_idx = (g_test_idx + 1) % TEST_COUNT;
         update_test_state();
-        fprintf(stderr, "c_render: [%d/%d] %s (exit_angle=%d jt=%d ds=%d)\n",
+        fprintf(stderr, "c_render: [%d/%d] %s (exit_angle=%d jt=%d ds=%d junc=%d)\n",
                 g_test_idx + 1, TEST_COUNT,
                 maneuver_type_name(g_state.maneuver_type),
-                g_state.exit_angle, g_state.junction_type, g_state.driving_side);
+                g_state.exit_angle, g_state.junction_type, g_state.driving_side,
+                g_state.junction_angle_count);
     }
     if (platform_key_tap(CR_KEY_LEFT)) {
         g_test_idx = (g_test_idx - 1 + TEST_COUNT) % TEST_COUNT;
         update_test_state();
-        fprintf(stderr, "c_render: [%d/%d] %s (exit_angle=%d jt=%d ds=%d)\n",
+        fprintf(stderr, "c_render: [%d/%d] %s (exit_angle=%d jt=%d ds=%d junc=%d)\n",
                 g_test_idx + 1, TEST_COUNT,
                 maneuver_type_name(g_state.maneuver_type),
-                g_state.exit_angle, g_state.junction_type, g_state.driving_side);
+                g_state.exit_angle, g_state.junction_type, g_state.driving_side,
+                g_state.junction_angle_count);
     }
     if (platform_key_tap(CR_KEY_UP)) {
         g_state.exit_angle += 30;

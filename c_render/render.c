@@ -103,8 +103,9 @@ static void mat4_lookAt(float *m,
     float tuy = sz * fx - sx * fz;
     float tuz = sx * fy - sy * fx;
 
+    /* Horizontal flip: negate side vector only (keep up unchanged). */
     mat4_zero(m);
-    m[0]  = sx;   m[4]  = sy;   m[8]  = sz;    m[12] = -(sx*ex + sy*ey + sz*ez);
+    m[0]  = -sx;  m[4]  = -sy;  m[8]  = -sz;   m[12] = (sx*ex + sy*ey + sz*ez);
     m[1]  = tux;  m[5]  = tuy;  m[9]  = tuz;   m[13] = -(tux*ex + tuy*ey + tuz*ez);
     m[2]  = -fx;  m[6]  = -fy;  m[10] = -fz;   m[14] =  (fx*ex + fy*ey + fz*ez);
     m[3]  = 0;    m[7]  = 0;    m[11] = 0;     m[15] = 1.0f;

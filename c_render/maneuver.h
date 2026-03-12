@@ -67,12 +67,16 @@
 
 #define MT_COUNT                        54
 
+#define MAX_JUNCTION_ANGLES 20
+
 /* Maneuver state (from PPS / UDP) */
 typedef struct {
     int maneuver_type;   /* MT_* constant (0-53, 255=not set) */
     int exit_angle;      /* signed degrees for roundabout exits */
     int junction_type;   /* 0=intersection, 1=roundabout */
     int driving_side;    /* 0=RHT, 1=LHT */
+    int junction_angles[MAX_JUNCTION_ANGLES]; /* iOS JunctionElementAngle degrees */
+    int junction_angle_count;                 /* number of valid entries */
 } maneuver_state_t;
 
 /* Draw the maneuver icon for the given state. */
