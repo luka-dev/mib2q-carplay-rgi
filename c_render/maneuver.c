@@ -58,6 +58,34 @@
 #define JOINT_SEG  12
 #define WHITE  1.0f, 1.0f, 1.0f, 1.0f
 
+/* Roundabout */
+#define RAB_RING_R   0.28f   /* roundabout ring radius */
+#define RAB_RING_SEG 48      /* ring/arc segments */
+
+/* U-turn */
+#define UTURN_GAP    0.18f   /* half-distance between entry/exit shafts */
+#define UTURN_TOP    0.30f   /* top of U arc */
+#define UTURN_ARROW  (-0.10f) /* arrowhead Y on exit side */
+#define UTURN_SEG    16      /* arc segments */
+
+/* Highway exit branch angle (degrees) */
+#define EXIT_ANGLE_DEG  30.0f
+
+/* Lane change / merge lateral offsets */
+#define LANE_SHIFT   0.35f   /* lane change lateral offset */
+#define MERGE_OFFSET 0.38f   /* merge ramp lateral offset */
+#define BEND_LO     (-0.15f) /* lower S-bend point */
+#define BEND_HI      0.15f   /* upper S-bend point */
+
+/* Flag / arrived */
+#define FLAG_POLE_T  OL_W             /* flag pole thickness */
+#define FLAG_W       0.22f            /* flag width */
+#define FLAG_H       0.16f            /* flag height */
+#define FLAG_BASE_R  0.05f            /* flag base disc radius */
+#define DOME_R       0.12f            /* arrived dome cap radius */
+#define ARRIVE_RING_R 0.11f           /* arrived center ring radius */
+#define ARRIVE_RING_T 0.04f           /* arrived ring thickness */
+
 /* ================================================================
  * Fading road helper — non-overlapping concentric bands
  *
@@ -146,33 +174,44 @@ static void draw_turn(float angle_deg) {
     float fade_x = (ROAD_LEN + FADE_LEN) * sinf(angle_rad);
     float fade_y = jy + (ROAD_LEN + FADE_LEN) * cosf(angle_rad);
 
-    /* Opposite side street: mirror the turn direction */
-    float opp_sign = (angle_deg > 0) ? -1.0f : 1.0f;
-    float opp_rad = opp_sign * 90.0f * (float)M_PI / 180.0f;
-    float opp_sx = ROAD_LEN * sinf(opp_rad);
-    float opp_sy = jy + ROAD_LEN * cosf(opp_rad);
-    float opp_fx = (ROAD_LEN + FADE_LEN) * sinf(opp_rad);
-    float opp_fy = jy + (ROAD_LEN + FADE_LEN) * cosf(opp_rad);
+    /* Side streets: always both left and right at ±90° */
+    float side_r_x =  ROAD_LEN;
+    float side_r_fx = ROAD_LEN + FADE_LEN;
+    float side_l_x = -ROAD_LEN;
+    float side_l_fx = -(ROAD_LEN + FADE_LEN);
+
+    /* Skip turn arm stub+fade if it overlaps a fixed stub.
+     * Fixed directions: forward (0°), right (+90°), left (-90°). */
+    float abs_angle = fabsf(angle_deg);
+    int turn_has_own_stub = 1;
+    if (abs_angle < 5.0f || fabsf(abs_angle - 90.0f) < 5.0f || fabsf(abs_angle - 180.0f) < 5.0f)
+        turn_has_own_stub = 0;
 
     /* Fades (flat) */
     render_set_raised(0);
     draw_fading_road(0, SIDE_TOP, 0, SIDE_TOP + FADE_LEN, FADE_MODE_SIDE, 1.0f);
     draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - FADE_LEN, FADE_MODE_ACTIVE, 1.0f);
-    draw_fading_road(stub_x, stub_y, fade_x, fade_y, FADE_MODE_SIDE, 1.0f);
-    draw_fading_road(opp_sx, opp_sy, opp_fx, opp_fy, FADE_MODE_SIDE, 1.0f);
+    if (turn_has_own_stub)
+        draw_fading_road(stub_x, stub_y, fade_x, fade_y, FADE_MODE_SIDE, 1.0f);
+    draw_fading_road(side_r_x, jy, side_r_fx, jy, FADE_MODE_SIDE, 1.0f);
+    draw_fading_road(side_l_x, jy, side_l_fx, jy, FADE_MODE_SIDE, 1.0f);
 
     /* L1: white outline (flat) */
     render_thick_line(0, jy, 0, SIDE_TOP, OL_T, WHITE);
     render_thick_line(0, SHAFT_BOT, 0, jy, OL_T, WHITE);
-    render_thick_line(0, jy, stub_x, stub_y, OL_T, WHITE);
-    render_thick_line(0, jy, opp_sx, opp_sy, OL_T, WHITE);
+    if (turn_has_own_stub)
+        render_thick_line(0, jy, stub_x, stub_y, OL_T, WHITE);
+    render_thick_line(0, jy, side_r_x, jy, OL_T, WHITE);
+    render_thick_line(0, jy, side_l_x, jy, OL_T, WHITE);
     render_disc(0, jy, OL_T * 0.5f, JOINT_SEG, WHITE);
 
     /* L2: grey on all roads (flat) */
     render_thick_line(0, jy, 0, SIDE_TOP, SIDE_T, SIDE);
     render_thick_line(0, SHAFT_BOT, 0, jy, SIDE_T, SIDE);
-    render_thick_line(0, jy, stub_x, stub_y, SIDE_T, SIDE);
-    render_thick_line(0, jy, opp_sx, opp_sy, SIDE_T, SIDE);
+    if (turn_has_own_stub)
+        render_thick_line(0, jy, stub_x, stub_y, SIDE_T, SIDE);
+    render_thick_line(0, jy, side_r_x, jy, SIDE_T, SIDE);
+    render_thick_line(0, jy, side_l_x, jy, SIDE_T, SIDE);
     render_disc(0, jy, SIDE_T * 0.5f, JOINT_SEG, SIDE);
 
     /* L3: blue entry + turn (raised) */
@@ -190,18 +229,10 @@ static void draw_turn(float angle_deg) {
  * go_left=0: mirror.
  */
 static void draw_uturn(int go_left) {
-    float sign = go_left ? -1.0f : 1.0f;
-    float gap = 0.18f;
-    float enter_x =  sign * gap;  /* negate: enter on opposite side */
-    float exit_x  = -sign * gap;
-    float top_y   =  0.30f;
-    float arrow_y = -0.10f;
-
-    enter_x = -enter_x; /* enter is on the right for go_left */
-    exit_x  = -exit_x;
-    /* Correction: for go_left (RHT), enter on right (+gap), exit on left (-gap) */
-    enter_x = go_left ?  gap : -gap;
-    exit_x  = go_left ? -gap :  gap;
+    float enter_x = go_left ?  UTURN_GAP : -UTURN_GAP;
+    float exit_x  = go_left ? -UTURN_GAP :  UTURN_GAP;
+    float top_y   = UTURN_TOP;
+    float arrow_y = UTURN_ARROW;
 
     /* Fades (flat) */
     render_set_raised(0);
@@ -210,12 +241,12 @@ static void draw_uturn(int go_left) {
 
     /* L1: white outline (flat) */
     render_thick_line(enter_x, SHAFT_BOT, enter_x, top_y, OL_T, WHITE);
-    render_arc(0, top_y, gap, OL_T, 0, (float)M_PI, 16, WHITE);
+    render_arc(0, top_y, UTURN_GAP, OL_T, 0, (float)M_PI, UTURN_SEG, WHITE);
     render_thick_line(exit_x, top_y, exit_x, SHAFT_BOT, OL_T, WHITE);
 
     /* L2: grey under active (flat) */
     render_thick_line(enter_x, SHAFT_BOT, enter_x, top_y, SIDE_T, SIDE);
-    render_arc(0, top_y, gap, SIDE_T, 0, (float)M_PI, 16, SIDE);
+    render_arc(0, top_y, UTURN_GAP, SIDE_T, 0, (float)M_PI, UTURN_SEG, SIDE);
     render_thick_line(exit_x, top_y, exit_x, SHAFT_BOT, SIDE_T, SIDE);
     render_disc(exit_x, top_y, SIDE_T * 0.5f, JOINT_SEG, SIDE);
     render_disc(enter_x, top_y, SIDE_T * 0.5f, JOINT_SEG, SIDE);
@@ -223,7 +254,7 @@ static void draw_uturn(int go_left) {
     /* L3: blue fill (raised) */
     render_set_raised(1);
     render_thick_line(enter_x, SHAFT_BOT, enter_x, top_y, SHAFT_T, ACTIVE);
-    render_arc(0, top_y, gap, SHAFT_T, 0, (float)M_PI, 16, ACTIVE);
+    render_arc(0, top_y, UTURN_GAP, SHAFT_T, 0, (float)M_PI, UTURN_SEG, ACTIVE);
     render_thick_line(exit_x, top_y, exit_x, arrow_y, SHAFT_T, ACTIVE);
     render_disc(exit_x, top_y, JOINT_R, JOINT_SEG, ACTIVE);
     render_disc(enter_x, top_y, JOINT_R, JOINT_SEG, ACTIVE);
@@ -239,7 +270,7 @@ static void draw_uturn(int go_left) {
 static void draw_exit(int go_right) {
     float sign = go_right ? 1.0f : -1.0f;
     float fork_y = 0.0f;
-    float branch_angle = sign * 30.0f * (float)M_PI / 180.0f;
+    float branch_angle = sign * EXIT_ANGLE_DEG * (float)M_PI / 180.0f;
     float end_x = BLUE_LEN * sinf(branch_angle);
     float end_y = fork_y + BLUE_LEN * cosf(branch_angle);
     /* white+grey stub */
@@ -286,8 +317,8 @@ static void draw_exit(int go_right) {
  */
 static void draw_roundabout(float exit_angle_deg, int driving_side,
                             const int *junction_angles, int junction_angle_count) {
-    float cx = 0.0f, cy = 0.08f;
-    float ring_r = 0.28f;
+    float cx = 0.0f, cy = 0.0f;
+    float ring_r = RAB_RING_R;
     float ring_ol = OL_T;    /* ring outline thickness */
     float ring_sd = SIDE_T;  /* ring grey thickness */
     float ring_ac = SHAFT_T; /* ring active thickness */
@@ -324,9 +355,9 @@ static void draw_roundabout(float exit_angle_deg, int driving_side,
     }
     float exit_rad = (90.0f - snapped_exit_deg) * (float)M_PI / 180.0f;
 
-    float ext = 0.30f;    /* active exit stub length beyond ring */
-    float stub = 0.30f;   /* side stub solid length beyond ring */
-    float stub_fade = 0.30f;  /* extra fade distance beyond stub — matches FADE_LEN */
+    float ext = BLUE_LEN - ring_r;    /* blue exit stub beyond ring */
+    float stub = ROAD_LEN - ring_r;  /* white+grey stub beyond ring */
+    float stub_fade = FADE_LEN;      /* fade beyond stub */
 
     float entry_top = cy - ring_r;
     float ex0_x = cx + ring_r * cosf(exit_rad);
@@ -424,7 +455,7 @@ static void draw_roundabout(float exit_angle_deg, int driving_side,
         render_thick_line(sx0, sy0, sx1, sy1, ring_ol, WHITE);
         drawn_rads[n_drawn++] = sr;
     }
-    render_circle(cx, cy, ring_r, ring_ol, 48, WHITE);
+    render_circle(cx, cy, ring_r, ring_ol, RAB_RING_SEG, WHITE);
 
     /* L2: grey fill — entry + exit + side stubs + ring (flat) */
     n_drawn = 0;
@@ -455,7 +486,7 @@ static void draw_roundabout(float exit_angle_deg, int driving_side,
         render_thick_line(sx0, sy0, sx1, sy1, ring_sd, SIDE);
         drawn_rads[n_drawn++] = sr;
     }
-    render_circle(cx, cy, ring_r, ring_sd, 48, SIDE);
+    render_circle(cx, cy, ring_r, ring_sd, RAB_RING_SEG, SIDE);
 
     /* L3: blue — entry + exit + arc + caps + arrowhead (raised) */
     render_set_raised(1);
@@ -473,7 +504,7 @@ static void draw_roundabout(float exit_angle_deg, int driving_side,
         arc_e = entry_rad;
         while (arc_e <= arc_s) arc_e += 2.0f * (float)M_PI;
     }
-    render_arc(cx, cy, ring_r, ring_ac, arc_s, arc_e, 48, ACTIVE);
+    render_arc(cx, cy, ring_r, ring_ac, arc_s, arc_e, RAB_RING_SEG, ACTIVE);
 
     /* Discs at arc/stub junctions to fill gaps */
     render_disc(cx + ring_r * cosf(arc_s), cy + ring_r * sinf(arc_s),
@@ -490,19 +521,16 @@ static void draw_roundabout(float exit_angle_deg, int driving_side,
  */
 static void draw_flag(float bx, float by, float pole_h) {
     render_set_raised(0);
-    float pole_t = 0.025f;
-    float flag_w = 0.22f;
-    float flag_h = 0.16f;
     float fx = bx;
     float fy = by + pole_h;          /* flag top-left */
-    float cw = flag_w / 3.0f;
-    float ch = flag_h / 2.0f;
+    float cw = FLAG_W / 3.0f;
+    float ch = FLAG_H / 2.0f;
 
     /* pole (gray) */
-    render_thick_line(bx, by, bx, fy, pole_t, SIDE);
+    render_thick_line(bx, by, bx, fy, FLAG_POLE_T, SIDE);
 
     /* base disc */
-    render_disc(bx, by, 0.05f, 12, ACTIVE);
+    render_disc(bx, by, FLAG_BASE_R, JOINT_SEG, ACTIVE);
 
     /* 3×2 checkerboard */
     int row, col;
@@ -527,12 +555,12 @@ static void draw_flag(float bx, float by, float pole_h) {
  */
 static void draw_arrived(int dir) {
     float road_top = 0.10f;
-    float dome_r = 0.12f;
+    float dome_r = DOME_R;
 
     if (dir == 0) {
         /* --- Center / offroad --- */
         float ring_y = road_top + HEAD_SZ + 0.12f;
-        float ring_r = 0.11f;
+        float ring_r = ARRIVE_RING_R;
 
         /* Entry fade (flat) */
         render_set_raised(0);
@@ -540,7 +568,7 @@ static void draw_arrived(int dir) {
 
         /* L1: white outline (flat) */
         render_thick_line(0, SHAFT_BOT, 0, road_top, OL_T, WHITE);
-        render_circle(0, ring_y, ring_r, 0.04f + OL_W * 2, 24, WHITE);
+        render_circle(0, ring_y, ring_r, ARRIVE_RING_T + OL_W * 2, 24, WHITE);
 
         /* L2: grey under active (flat) */
         render_thick_line(0, SHAFT_BOT, 0, road_top, SIDE_T, SIDE);
@@ -549,7 +577,7 @@ static void draw_arrived(int dir) {
         render_set_raised(1);
         render_thick_line(0, SHAFT_BOT, 0, road_top, SHAFT_T, ACTIVE);
         render_arrowhead(0, road_top, (float)(M_PI * 0.5), HEAD_SZ, ACTIVE);
-        render_circle(0, ring_y, ring_r, 0.04f, 24, ACTIVE);
+        render_circle(0, ring_y, ring_r, ARRIVE_RING_T, 24, ACTIVE);
 
         /* flag */
         draw_flag(0, ring_y, 0.42f);
@@ -586,9 +614,9 @@ static void draw_arrived(int dir) {
  */
 static void draw_lane_change(int go_left) {
     float sign = go_left ? -1.0f : 1.0f;
-    float shift = sign * 0.35f;
-    float bend_lo = -0.15f;   /* lower bend point */
-    float bend_hi =  0.15f;   /* upper bend point */
+    float shift = sign * LANE_SHIFT;
+    float bend_lo = BEND_LO;
+    float bend_hi = BEND_HI;
 
     /* Fades (flat) */
     render_set_raised(0);
@@ -628,9 +656,9 @@ static void draw_lane_change(int go_left) {
  */
 static void draw_merge(int go_right) {
     float sign = go_right ? 1.0f : -1.0f;
-    float start_x = sign * -0.38f;
+    float start_x = sign * -MERGE_OFFSET;
     float bend_lo = -0.10f;
-    float bend_hi =  0.15f;
+    float bend_hi = BEND_HI;
 
     /* Fades (flat) */
     render_set_raised(0);
@@ -665,127 +693,37 @@ static void draw_merge(int go_right) {
 }
 
 /* ================================================================
- * Main dispatch — maps iOS ManeuverType to icon
+ * Main dispatch
  * ================================================================ */
 
 void maneuver_draw(const maneuver_state_t *s) {
-    int t = s->maneuver_type;
-    int ds = s->driving_side;
-
-    /* Not set → draw nothing */
-    if (t == MT_NOT_SET || t < 0) return;
-
-    /* ---- Global types (apply regardless of junction_type) ---- */
-
-    if (t == MT_NO_TURN || t == MT_FOLLOW_ROAD || t == MT_STRAIGHT_AHEAD ||
-        t == MT_START_ROUTE || t == MT_ENTER_FERRY || t == MT_EXIT_FERRY ||
-        t == MT_CHANGE_FERRY || t == MT_CHANGE_HIGHWAY) {
-        draw_straight();
-        return;
-    }
-
-    if (t == MT_ARRIVE_END_OF_NAVIGATION || t == MT_ARRIVE_AT_DESTINATION ||
-        t == MT_ARRIVE_END_OF_DIRECTIONS) {
-        draw_arrived(0);
-        return;
-    }
-    if (t == MT_ARRIVE_DESTINATION_LEFT) { draw_arrived(-1); return; }
-    if (t == MT_ARRIVE_DESTINATION_RIGHT) { draw_arrived(1); return; }
-
-    if (t == MT_CHANGE_HIGHWAY_LEFT)  { draw_lane_change(1); return; }
-    if (t == MT_CHANGE_HIGHWAY_RIGHT) { draw_lane_change(0); return; }
-
-    if (t == MT_U_TURN_AT_ROUNDABOUT) {
-        draw_roundabout(180.0f, ds, s->junction_angles, s->junction_angle_count);
-        return;
-    }
-
-    if (t == MT_ENTER_ROUNDABOUT) {
-        draw_roundabout((float)s->exit_angle, ds,
-                        s->junction_angles, s->junction_angle_count);
-        return;
-    }
-
-    /* ---- Junction type gate (replicates ManeuverMapper logic) ---- */
-
-    if (s->junction_type == 1) {
-        /* Roundabout context — all types use universal draw */
-        if (t == MT_EXIT_ROUNDABOUT || (t >= MT_ROUNDABOUT_EXIT_1 && t <= MT_ROUNDABOUT_EXIT_19)) {
-            draw_roundabout((float)s->exit_angle, ds,
-                            s->junction_angles, s->junction_angle_count);
-            return;
-        }
-        /* Other types with junction_type=1 → no icon (same as ManeuverMapper) */
-        return;
-    }
-
-    if (s->junction_type != 0) {
-        /* Unknown junction type → no icon */
-        return;
-    }
-
-    /* ---- Normal intersection (junction_type=0) ---- */
-
-    switch (t) {
-        case MT_LEFT_TURN:
-        case MT_LEFT_TURN_AT_END:
-            draw_turn(-90.0f);
-            break;
-
-        case MT_RIGHT_TURN:
-        case MT_RIGHT_TURN_AT_END:
-            draw_turn(90.0f);
-            break;
-
-        case MT_SLIGHT_LEFT_TURN:
-        case MT_KEEP_LEFT:
-            draw_turn(-30.0f);
-            break;
-
-        case MT_SLIGHT_RIGHT_TURN:
-        case MT_KEEP_RIGHT:
-            draw_turn(30.0f);
-            break;
-
-        case MT_SHARP_LEFT_TURN:
-            draw_turn(-135.0f);
-            break;
-
-        case MT_SHARP_RIGHT_TURN:
-            draw_turn(135.0f);
-            break;
-
-        case MT_U_TURN:
-        case MT_START_ROUTE_WITH_U_TURN:
-        case MT_U_TURN_WHEN_POSSIBLE:
-            draw_uturn(ds != 1);  /* RHT → go left, LHT → go right */
-            break;
-
-        case MT_OFF_RAMP:
-            draw_exit(ds != 1);   /* RHT → exit right, LHT → exit left */
-            break;
-
-        case MT_HIGHWAY_OFF_RAMP_RIGHT:
-            draw_exit(1);
-            break;
-
-        case MT_HIGHWAY_OFF_RAMP_LEFT:
-            draw_exit(0);
-            break;
-
-        case MT_ON_RAMP:
-            draw_merge(ds != 1);
-            break;
-
-        /* Roundabout exits without junction_type=1 (fallback) */
-        case MT_EXIT_ROUNDABOUT:
-            draw_roundabout((float)s->exit_angle, ds,
-                            s->junction_angles, s->junction_angle_count);
-            break;
-
-        default:
-            /* Unknown maneuver → straight arrow as safe fallback */
+    switch (s->icon) {
+        case ICON_STRAIGHT:
             draw_straight();
+            break;
+        case ICON_TURN:
+            draw_turn((float)s->exit_angle);
+            break;
+        case ICON_UTURN:
+            draw_uturn(s->driving_side != 1);
+            break;
+        case ICON_EXIT:
+            draw_exit(s->direction > 0);
+            break;
+        case ICON_MERGE:
+            draw_merge(s->direction > 0);
+            break;
+        case ICON_LANE_CHANGE:
+            draw_lane_change(s->direction < 0);
+            break;
+        case ICON_ROUNDABOUT:
+            draw_roundabout((float)s->exit_angle, s->driving_side,
+                            s->junction_angles, s->junction_angle_count);
+            break;
+        case ICON_ARRIVED:
+            draw_arrived(s->direction);
+            break;
+        default:
             break;
     }
 }
@@ -794,50 +732,17 @@ void maneuver_draw(const maneuver_state_t *s) {
  * Debug names
  * ================================================================ */
 
-const char *maneuver_type_name(int type) {
-    switch (type) {
-        case MT_NOT_SET:                    return "NOT_SET";
-        case MT_NO_TURN:                    return "NO_TURN";
-        case MT_LEFT_TURN:                  return "LEFT_TURN";
-        case MT_RIGHT_TURN:                 return "RIGHT_TURN";
-        case MT_STRAIGHT_AHEAD:             return "STRAIGHT";
-        case MT_U_TURN:                     return "U_TURN";
-        case MT_FOLLOW_ROAD:                return "FOLLOW_ROAD";
-        case MT_ENTER_ROUNDABOUT:           return "ENTER_RAB";
-        case MT_EXIT_ROUNDABOUT:            return "EXIT_RAB";
-        case MT_OFF_RAMP:                   return "OFF_RAMP";
-        case MT_ON_RAMP:                    return "ON_RAMP";
-        case MT_ARRIVE_END_OF_NAVIGATION:   return "ARRIVE_END";
-        case MT_START_ROUTE:                return "START_ROUTE";
-        case MT_ARRIVE_AT_DESTINATION:      return "ARRIVED";
-        case MT_KEEP_LEFT:                  return "KEEP_LEFT";
-        case MT_KEEP_RIGHT:                 return "KEEP_RIGHT";
-        case MT_ENTER_FERRY:                return "ENTER_FERRY";
-        case MT_EXIT_FERRY:                 return "EXIT_FERRY";
-        case MT_CHANGE_FERRY:               return "CHANGE_FERRY";
-        case MT_START_ROUTE_WITH_U_TURN:    return "START_UTURN";
-        case MT_U_TURN_AT_ROUNDABOUT:       return "UTURN_RAB";
-        case MT_LEFT_TURN_AT_END:           return "LEFT_END";
-        case MT_RIGHT_TURN_AT_END:          return "RIGHT_END";
-        case MT_HIGHWAY_OFF_RAMP_LEFT:      return "HWY_EXIT_L";
-        case MT_HIGHWAY_OFF_RAMP_RIGHT:     return "HWY_EXIT_R";
-        case MT_ARRIVE_DESTINATION_LEFT:    return "ARRIVE_L";
-        case MT_ARRIVE_DESTINATION_RIGHT:   return "ARRIVE_R";
-        case MT_U_TURN_WHEN_POSSIBLE:       return "UTURN_POSS";
-        case MT_ARRIVE_END_OF_DIRECTIONS:   return "ARRIVE_DIRS";
-        case MT_SHARP_LEFT_TURN:            return "SHARP_LEFT";
-        case MT_SHARP_RIGHT_TURN:           return "SHARP_RIGHT";
-        case MT_SLIGHT_LEFT_TURN:           return "SLIGHT_LEFT";
-        case MT_SLIGHT_RIGHT_TURN:          return "SLIGHT_RIGHT";
-        case MT_CHANGE_HIGHWAY:             return "CHG_HWY";
-        case MT_CHANGE_HIGHWAY_LEFT:        return "CHG_HWY_L";
-        case MT_CHANGE_HIGHWAY_RIGHT:       return "CHG_HWY_R";
-        default:
-            if (type >= MT_ROUNDABOUT_EXIT_1 && type <= MT_ROUNDABOUT_EXIT_19) {
-                static char buf[16];
-                snprintf(buf, sizeof(buf), "RAB_EXIT_%d", type - MT_ROUNDABOUT_EXIT_1 + 1);
-                return buf;
-            }
-            return "UNKNOWN";
+const char *maneuver_icon_name(int icon) {
+    switch (icon) {
+        case ICON_NONE:        return "NONE";
+        case ICON_STRAIGHT:    return "STRAIGHT";
+        case ICON_TURN:        return "TURN";
+        case ICON_UTURN:       return "UTURN";
+        case ICON_EXIT:        return "EXIT";
+        case ICON_MERGE:       return "MERGE";
+        case ICON_LANE_CHANGE: return "LANE_CHG";
+        case ICON_ROUNDABOUT:  return "ROUNDABOUT";
+        case ICON_ARRIVED:     return "ARRIVED";
+        default:               return "UNKNOWN";
     }
 }

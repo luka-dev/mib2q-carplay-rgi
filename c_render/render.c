@@ -362,7 +362,7 @@ void render_begin_frame(void) {
         mat4_zero(view);
         view[0]  =  1.0f;           /* x_eye = x_world */
         view[9]  =  1.0f;           /* y_eye = z_world */
-        view[13] = -0.08f;          /* recenter y — align with roundabout cy */
+        view[13] =  0.0f;           /* recenter y — all geometry centered at 0 */
         view[6]  =  1.0f;           /* z_eye = y_world (height→depth) */
         view[14] = -5.0f;           /* push into view volume */
         view[15] =  1.0f;
