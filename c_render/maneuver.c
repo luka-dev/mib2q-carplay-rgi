@@ -184,16 +184,45 @@ static void draw_roundabout(float exit_angle_deg, int driving_side) {
     float ex0_x = cx + ring_r * cosf(exit_rad);
     float ex0_y = cy + ring_r * sinf(exit_rad);
 
-    /* L1: white side markings — streets + ring */
+    /* side street stub length */
+    float stub = 0.20f;
+
+    /* standard exit angles in math convention: right(0), top(π/2), left(π) */
+    float side_rads[] = { 0.0f, (float)(M_PI * 0.5), (float)M_PI };
+    int n_sides = 3;
+    int si;
+
+    /* L1: white side markings — entry + exit + side stubs + ring */
     render_rect(-ring_t * 0.5f - OL_W, SHAFT_BOT,
                 ring_t + OL_W * 2, entry_top - SHAFT_BOT, WHITE);
     render_thick_line(ex0_x, ex0_y, ex_tip_x, ex_tip_y, ring_t + OL_W * 2, WHITE);
+    for (si = 0; si < n_sides; si++) {
+        float sr = side_rads[si];
+        /* skip if too close to active exit (within 25°) */
+        float diff = fabsf(fmodf(sr - exit_rad + 3.0f * (float)M_PI, 2.0f * (float)M_PI) - (float)M_PI);
+        if (diff < 0.44f) continue;  /* ~25° */
+        float sx0 = cx + ring_r * cosf(sr);
+        float sy0 = cy + ring_r * sinf(sr);
+        float sx1 = cx + (ring_r + stub) * cosf(sr);
+        float sy1 = cy + (ring_r + stub) * sinf(sr);
+        render_thick_line(sx0, sy0, sx1, sy1, ring_t + OL_W * 2, WHITE);
+    }
     render_circle(cx, cy, ring_r, ring_t + OL_W * 2, 48, WHITE);
 
-    /* L2: gray fill — streets + ring */
+    /* L2: gray fill — entry + exit + side stubs + ring */
     render_rect(-ring_t * 0.5f, SHAFT_BOT, ring_t,
                 entry_top - SHAFT_BOT, SIDE);
     render_thick_line(ex0_x, ex0_y, ex_tip_x, ex_tip_y, ring_t, SIDE);
+    for (si = 0; si < n_sides; si++) {
+        float sr = side_rads[si];
+        float diff = fabsf(fmodf(sr - exit_rad + 3.0f * (float)M_PI, 2.0f * (float)M_PI) - (float)M_PI);
+        if (diff < 0.44f) continue;
+        float sx0 = cx + ring_r * cosf(sr);
+        float sy0 = cy + ring_r * sinf(sr);
+        float sx1 = cx + (ring_r + stub) * cosf(sr);
+        float sy1 = cy + (ring_r + stub) * sinf(sr);
+        render_thick_line(sx0, sy0, sx1, sy1, ring_t, SIDE);
+    }
     render_circle(cx, cy, ring_r, ring_t, 48, SIDE);
 
     /* L3: blue — entry street + exit street + arc + caps + arrowhead */
@@ -344,10 +373,12 @@ static void draw_merge(int go_right) {
     float sign = go_right ? 1.0f : -1.0f;
     float start_x = sign * -0.25f;
 
-    /* L1: white side markings (no discs) */
+    /* L1: white side markings + joint discs at bends */
     render_thick_line(0, SHAFT_BOT, 0, SIDE_TOP, SHAFT_T + OL_W * 2, WHITE);
     render_thick_line(start_x, SHAFT_BOT, start_x, -0.10f, SHAFT_T + OL_W * 2, WHITE);
     render_thick_line(start_x, -0.10f, 0, 0.15f, SHAFT_T + OL_W * 2, WHITE);
+    render_disc(start_x, -0.10f, JOINT_R + OL_W, JOINT_SEG, WHITE);
+    render_disc(0, 0.15f, JOINT_R + OL_W, JOINT_SEG, WHITE);
     render_thick_line(0, 0.15f, 0, SHAFT_TOP, SHAFT_T + OL_W * 2, WHITE);
 
     /* L2: gray main highway */
