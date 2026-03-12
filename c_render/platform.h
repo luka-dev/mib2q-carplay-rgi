@@ -34,7 +34,8 @@ void platform_get_framebuffer_size(int *width, int *height);
 #define CR_KEY_UP     2
 #define CR_KEY_DOWN   3
 #define CR_KEY_P      4
-#define CR_KEY_MAX    5
+#define CR_KEY_SPACE  5
+#define CR_KEY_MAX    6
 
 /* Returns 1 if key was tapped since last poll, clears the tap state. */
 int platform_key_tap(int key);

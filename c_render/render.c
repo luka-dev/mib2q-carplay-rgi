@@ -32,10 +32,10 @@
 /* Camera — perspective mode */
 #define CAM_EYE_X    0.0f
 #define CAM_EYE_Y    1.0f
-#define CAM_EYE_Z   -1.5f
+#define CAM_EYE_Z   -1.9f
 #define CAM_CTR_X    0.0f
 #define CAM_CTR_Y    0.04f
-#define CAM_CTR_Z    0.15f
+#define CAM_CTR_Z    0.05f
 #define CAM_FOV_DEG  45.0f
 
 /* Light direction (world space, normalized in shader) */
@@ -362,7 +362,7 @@ void render_begin_frame(void) {
         mat4_zero(view);
         view[0]  =  1.0f;           /* x_eye = x_world */
         view[9]  =  1.0f;           /* y_eye = z_world */
-        view[13] =  0.1f;           /* recenter y */
+        view[13] = -0.08f;          /* recenter y — align with roundabout cy */
         view[6]  =  1.0f;           /* z_eye = y_world (height→depth) */
         view[14] = -5.0f;           /* push into view volume */
         view[15] =  1.0f;

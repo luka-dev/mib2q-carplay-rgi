@@ -21,7 +21,7 @@
 #define AC_R 0.353f   /* #5AAAE6 */
 #define AC_G 0.667f
 #define AC_B 0.902f
-#define AC_A 1.0f
+#define AC_A 0.0f   /* TEMP: disabled blue for testing */
 
 #define SD_R 0.392f   /* #646464 */
 #define SD_G 0.392f
@@ -41,7 +41,7 @@
 #define SIDE_T     (SHAFT_T + OL_W * 2)  /* grey = active + border */
 #define OL_T       (SIDE_T  + OL_W * 2)  /* outline = grey + border */
 #define HEAD_SZ    (SHAFT_T * 1.3f)   /* arrowhead height = 1.3× shaft */
-#define SHAFT_BOT -0.65f    /* shaft start y (solid) */
+#define SHAFT_BOT -0.50f    /* shaft start y (solid) — matches roundabout stub length */
 #define SHAFT_FADE  0.30f   /* fade distance below SHAFT_BOT */
 #define SHAFT_TOP  0.40f    /* straight arrow shaft end y */
 #define SIDE_TOP   0.65f    /* side road solid end y */
@@ -84,9 +84,9 @@ static void draw_fading_road(float x0, float y0, float x1, float y1,
         float t1 = (float)(i + 1) / FADE_SEGS;
         float sx = x0 + dx * t0, sy = y0 + dy * t0;
         float ex = x0 + dx * t1, ey = y0 + dy * t1;
-        /* Sine ease-out + gamma 2.2 correction for perceptually even fade */
-        float linear = sinf((1.0f - t0) * (float)M_PI * 0.5f);
-        float alpha = a_start * powf(linear, 1.0f / 2.2f);
+        /* Smoothstep fade: smooth start AND smooth end (no sharp cut) */
+        float u = 1.0f - t0;  /* 1→0 */
+        float alpha = a_start * u * u * (3.0f - 2.0f * u);
         if (alpha < 0.01f) break;
 
         /* White outline border — two thin strips at outer edges */
@@ -107,13 +107,14 @@ static void draw_fading_road(float x0, float y0, float x1, float y1,
  * ================================================================ */
 
 static void draw_straight(void) {
-    /* Entry fade (flat) */
+    /* Fades (flat) */
     render_set_raised(0);
     draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - SHAFT_FADE, FADE_MODE_ACTIVE, 1.0f);
+    draw_fading_road(0, SIDE_TOP, 0, SIDE_TOP + SIDE_FADE, FADE_MODE_SIDE, 1.0f);
     /* L1: white outline (flat) */
-    render_thick_line(0, SHAFT_BOT, 0, SHAFT_TOP, OL_T, WHITE);
+    render_thick_line(0, SHAFT_BOT, 0, SIDE_TOP, OL_T, WHITE);
     /* L2: grey under active (flat) */
-    render_thick_line(0, SHAFT_BOT, 0, SHAFT_TOP, SIDE_T, SIDE);
+    render_thick_line(0, SHAFT_BOT, 0, SIDE_TOP, SIDE_T, SIDE);
     /* L3: blue road + arrowhead (raised) */
     render_set_raised(1);
     render_thick_line(0, SHAFT_BOT, 0, SHAFT_TOP, SHAFT_T, ACTIVE);
@@ -298,15 +299,18 @@ static void draw_roundabout(float exit_angle_deg, int driving_side,
     }
     float exit_rad = (90.0f - snapped_exit_deg) * (float)M_PI / 180.0f;
 
-    float ext = 0.34f;    /* active exit stub length beyond ring */
+    float ext = 0.30f;    /* active exit stub length beyond ring */
     float stub = 0.30f;   /* side stub solid length beyond ring */
-    float stub_fade = 0.20f;  /* extra fade distance beyond stub */
+    float stub_fade = 0.30f;  /* extra fade distance beyond stub — matches SHAFT_FADE */
 
     float entry_top = cy - ring_r;
     float ex0_x = cx + ring_r * cosf(exit_rad);
     float ex0_y = cy + ring_r * sinf(exit_rad);
     float ex_tip_x = cx + (ring_r + ext) * cosf(exit_rad);
     float ex_tip_y = cy + (ring_r + ext) * sinf(exit_rad);
+    /* white+grey exit extends to stub distance (same as side stubs) */
+    float ex_ol_x = cx + (ring_r + stub) * cosf(exit_rad);
+    float ex_ol_y = cy + (ring_r + stub) * sinf(exit_rad);
 
     /* Convert junction angles to math radians.
      * Skip the snapped exit angle — that position is the active exit. */
@@ -318,43 +322,113 @@ static void draw_roundabout(float exit_angle_deg, int driving_side,
         side_rads[n_sides++] = (90.0f - (float)junction_angles[i]) * (float)M_PI / 180.0f;
     }
 
+    /* Track drawn stub angles to avoid double-drawing overlaps.
+     * Entry is always drawn; exit + sides check against drawn list. */
+    float drawn_rads[MAX_JUNCTION_ANGLES + 2];
+    int n_drawn = 0;
+    drawn_rads[n_drawn++] = entry_rad;  /* entry always drawn */
+
+    /* Check if a stub angle overlaps any already-drawn angle (within ~5°) */
+    #define ANGLE_EPS 0.09f  /* ~5 degrees in radians */
+    #define stub_already_drawn(rad) _stub_drawn(rad, drawn_rads, n_drawn)
+    /* Inline helper — can't use real function due to C89 array arg */
+
     /* Fades (flat) */
     render_set_raised(0);
-    draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - SHAFT_FADE, FADE_MODE_ACTIVE, 1.0f);
+    draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - SHAFT_FADE, FADE_MODE_SIDE, 1.0f);
+
+    /* Exit fade (skip if overlaps entry) */
+    {
+        int exit_dup = 0;
+        float ed = fabsf(exit_rad - entry_rad);
+        if (ed > (float)M_PI) ed = 2.0f * (float)M_PI - ed;
+        if (ed < ANGLE_EPS) exit_dup = 1;
+        if (!exit_dup) {
+            float ef_x0 = cx + (ring_r + stub) * cosf(exit_rad);
+            float ef_y0 = cy + (ring_r + stub) * sinf(exit_rad);
+            float ef_x1 = cx + (ring_r + stub + stub_fade) * cosf(exit_rad);
+            float ef_y1 = cy + (ring_r + stub + stub_fade) * sinf(exit_rad);
+            draw_fading_road(ef_x0, ef_y0, ef_x1, ef_y1, FADE_MODE_SIDE, 1.0f);
+            drawn_rads[n_drawn++] = exit_rad;
+        }
+    }
+
     for (i = 0; i < n_sides; i++) {
         float sr = side_rads[i];
+        int dup = 0, j;
+        for (j = 0; j < n_drawn; j++) {
+            float d = fabsf(sr - drawn_rads[j]);
+            if (d > (float)M_PI) d = 2.0f * (float)M_PI - d;
+            if (d < ANGLE_EPS) { dup = 1; break; }
+        }
+        if (dup) continue;
         float sx1 = cx + (ring_r + stub) * cosf(sr);
         float sy1 = cy + (ring_r + stub) * sinf(sr);
         float sx2 = cx + (ring_r + stub + stub_fade) * cosf(sr);
         float sy2 = cy + (ring_r + stub + stub_fade) * sinf(sr);
         draw_fading_road(sx1, sy1, sx2, sy2, FADE_MODE_SIDE, 1.0f);
+        drawn_rads[n_drawn++] = sr;
     }
 
     /* L1: white outlines — entry + exit + side stubs + ring (flat) */
+    n_drawn = 0;
+    drawn_rads[n_drawn++] = entry_rad;
     render_rect(-ring_ol * 0.5f, SHAFT_BOT,
                 ring_ol, entry_top - SHAFT_BOT, WHITE);
-    render_thick_line(ex0_x, ex0_y, ex_tip_x, ex_tip_y, ring_ol, WHITE);
+    {
+        float ed = fabsf(exit_rad - entry_rad);
+        if (ed > (float)M_PI) ed = 2.0f * (float)M_PI - ed;
+        if (ed >= ANGLE_EPS) {
+            render_thick_line(ex0_x, ex0_y, ex_ol_x, ex_ol_y, ring_ol, WHITE);
+            drawn_rads[n_drawn++] = exit_rad;
+        }
+    }
     for (i = 0; i < n_sides; i++) {
         float sr = side_rads[i];
+        int dup = 0, j;
+        for (j = 0; j < n_drawn; j++) {
+            float d = fabsf(sr - drawn_rads[j]);
+            if (d > (float)M_PI) d = 2.0f * (float)M_PI - d;
+            if (d < ANGLE_EPS) { dup = 1; break; }
+        }
+        if (dup) continue;
         float sx0 = cx + ring_r * cosf(sr);
         float sy0 = cy + ring_r * sinf(sr);
         float sx1 = cx + (ring_r + stub) * cosf(sr);
         float sy1 = cy + (ring_r + stub) * sinf(sr);
         render_thick_line(sx0, sy0, sx1, sy1, ring_ol, WHITE);
+        drawn_rads[n_drawn++] = sr;
     }
     render_circle(cx, cy, ring_r, ring_ol, 48, WHITE);
 
     /* L2: grey fill — entry + exit + side stubs + ring (flat) */
+    n_drawn = 0;
+    drawn_rads[n_drawn++] = entry_rad;
     render_rect(-ring_sd * 0.5f, SHAFT_BOT, ring_sd,
                 entry_top - SHAFT_BOT, SIDE);
-    render_thick_line(ex0_x, ex0_y, ex_tip_x, ex_tip_y, ring_sd, SIDE);
+    {
+        float ed = fabsf(exit_rad - entry_rad);
+        if (ed > (float)M_PI) ed = 2.0f * (float)M_PI - ed;
+        if (ed >= ANGLE_EPS) {
+            render_thick_line(ex0_x, ex0_y, ex_ol_x, ex_ol_y, ring_sd, SIDE);
+            drawn_rads[n_drawn++] = exit_rad;
+        }
+    }
     for (i = 0; i < n_sides; i++) {
         float sr = side_rads[i];
+        int dup = 0, j;
+        for (j = 0; j < n_drawn; j++) {
+            float d = fabsf(sr - drawn_rads[j]);
+            if (d > (float)M_PI) d = 2.0f * (float)M_PI - d;
+            if (d < ANGLE_EPS) { dup = 1; break; }
+        }
+        if (dup) continue;
         float sx0 = cx + ring_r * cosf(sr);
         float sy0 = cy + ring_r * sinf(sr);
         float sx1 = cx + (ring_r + stub) * cosf(sr);
         float sy1 = cy + (ring_r + stub) * sinf(sr);
         render_thick_line(sx0, sy0, sx1, sy1, ring_sd, SIDE);
+        drawn_rads[n_drawn++] = sr;
     }
     render_circle(cx, cy, ring_r, ring_sd, 48, SIDE);
 

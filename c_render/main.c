@@ -195,6 +195,36 @@ static void handle_test_keys(void) {
 }
 
 /* ================================================================
+ * Screenshot — save framebuffer as PNG via stb or PPM fallback
+ * ================================================================ */
+
+static int g_snap_counter = 0;
+
+static void save_screenshot(int fb_w, int fb_h, const char *name) {
+    unsigned char *pixels = (unsigned char *)malloc(fb_w * fb_h * 4);
+    if (!pixels) return;
+    glReadPixels(0, 0, fb_w, fb_h, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+
+    char path[256];
+    snprintf(path, sizeof(path), "snap_%03d_%s.ppm", g_snap_counter++, name);
+
+    FILE *f = fopen(path, "wb");
+    if (!f) { free(pixels); return; }
+    fprintf(f, "P6\n%d %d\n255\n", fb_w, fb_h);
+    /* PPM is top-to-bottom, GL is bottom-to-top — flip rows */
+    int y, x;
+    for (y = fb_h - 1; y >= 0; y--) {
+        for (x = 0; x < fb_w; x++) {
+            unsigned char *p = pixels + (y * fb_w + x) * 4;
+            fwrite(p, 1, 3, f);  /* RGB only, skip A */
+        }
+    }
+    fclose(f);
+    free(pixels);
+    fprintf(stderr, "c_render: saved %s\n", path);
+}
+
+/* ================================================================
  * Main
  * ================================================================ */
 
@@ -240,6 +270,10 @@ int main(int argc, char **argv) {
         render_begin_frame();
         maneuver_draw(&g_state);
         render_end_frame();
+
+        if (platform_key_tap(CR_KEY_SPACE))
+            save_screenshot(fb_w, fb_h, maneuver_type_name(g_state.maneuver_type));
+
         platform_swap();
     }
 
