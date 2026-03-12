@@ -57,11 +57,12 @@
  * ================================================================ */
 
 static void draw_straight(void) {
-    /* L1: white side markings */
+    /* L1: white side markings (flat) */
+    render_set_raised(0);
     render_thick_line(0, SHAFT_BOT, 0, SHAFT_TOP, SHAFT_T + OL_W * 2, WHITE);
-    /* L2: gray fill */
+    /* L2+L3: blue road + arrowhead (raised) */
+    render_set_raised(1);
     render_thick_line(0, SHAFT_BOT, 0, SHAFT_TOP, SHAFT_T, ACTIVE);
-    /* L3: arrowhead */
     render_arrowhead(0, SHAFT_TOP, (float)(M_PI * 0.5), HEAD_SZ, ACTIVE);
 }
 
@@ -84,15 +85,17 @@ static void draw_turn(float angle_deg) {
     float end_x = TURN_LEN * sinf(angle_rad);
     float end_y = turn_y + TURN_LEN * cosf(angle_rad);
 
-    /* L1: white side markings (no discs at ends) */
+    /* L1: white side markings (flat) */
+    render_set_raised(0);
     render_thick_line(0, turn_y, 0, SIDE_TOP, SHAFT_T + OL_W * 2, WHITE);
     render_thick_line(0, SHAFT_BOT, 0, turn_y, SHAFT_T + OL_W * 2, WHITE);
     render_thick_line(0, turn_y, end_x, end_y, SHAFT_T + OL_W * 2, WHITE);
 
-    /* L2: gray side road */
+    /* L2: gray side road (flat) */
     render_thick_line(0, turn_y, 0, SIDE_TOP, SHAFT_T, SIDE);
 
-    /* L3: blue entry + turn */
+    /* L3: blue entry + turn (raised) */
+    render_set_raised(1);
     render_thick_line(0, SHAFT_BOT, 0, turn_y, SHAFT_T, ACTIVE);
     render_thick_line(0, turn_y, end_x, end_y, SHAFT_T, ACTIVE);
     render_disc(0, turn_y, JOINT_R, JOINT_SEG, ACTIVE);
@@ -119,19 +122,21 @@ static void draw_uturn(int go_left) {
     enter_x = go_left ?  gap : -gap;
     exit_x  = go_left ? -gap :  gap;
 
-    /* L1: white side markings (no discs) */
+    /* L1: white side markings (flat) */
+    render_set_raised(0);
     render_thick_line(enter_x, SHAFT_BOT, enter_x, top_y, SHAFT_T + OL_W * 2, WHITE);
     render_arc(0, top_y, gap, SHAFT_T + OL_W * 2, 0, (float)M_PI, 16, WHITE);
     render_thick_line(exit_x, top_y, exit_x, arrow_y, SHAFT_T + OL_W * 2, WHITE);
 
-    /* L2: blue fill */
+    /* L2: blue fill (raised) */
+    render_set_raised(1);
     render_thick_line(enter_x, SHAFT_BOT, enter_x, top_y, SHAFT_T, ACTIVE);
     render_arc(0, top_y, gap, SHAFT_T, 0, (float)M_PI, 16, ACTIVE);
     render_thick_line(exit_x, top_y, exit_x, arrow_y, SHAFT_T, ACTIVE);
     render_disc(exit_x, top_y, JOINT_R, JOINT_SEG, ACTIVE);
     render_disc(enter_x, top_y, JOINT_R, JOINT_SEG, ACTIVE);
 
-    /* L3: arrowhead */
+    /* L3: arrowhead (raised) */
     render_arrowhead(exit_x, arrow_y, (float)(-M_PI * 0.5), HEAD_SZ, ACTIVE);
 }
 
@@ -147,14 +152,16 @@ static void draw_exit(int go_right) {
     float end_x = branch_len * sinf(branch_angle);
     float end_y = fork_y + branch_len * cosf(branch_angle);
 
-    /* L1: white side markings (no discs at ends) */
+    /* L1: white side markings (flat) */
+    render_set_raised(0);
     render_thick_line(0, SHAFT_BOT, 0, SIDE_TOP, SHAFT_T + OL_W * 2, WHITE);
     render_thick_line(0, fork_y, end_x, end_y, SHAFT_T + OL_W * 2, WHITE);
 
-    /* L2: gray main road */
+    /* L2: gray main road (flat) */
     render_thick_line(0, SHAFT_BOT, 0, SIDE_TOP, SHAFT_T, SIDE);
 
-    /* L3: blue entry + exit branch */
+    /* L3: blue entry + exit branch (raised) */
+    render_set_raised(1);
     render_thick_line(0, SHAFT_BOT, 0, fork_y, SHAFT_T, ACTIVE);
     render_thick_line(0, fork_y, end_x, end_y, SHAFT_T, ACTIVE);
     render_disc(0, fork_y, JOINT_R, JOINT_SEG, ACTIVE);
@@ -192,7 +199,8 @@ static void draw_roundabout(float exit_angle_deg, int driving_side) {
     int n_sides = 3;
     int si;
 
-    /* L1: white side markings — entry + exit + side stubs + ring */
+    /* L1: white side markings — entry + exit + side stubs + ring (flat) */
+    render_set_raised(0);
     render_rect(-ring_t * 0.5f - OL_W, SHAFT_BOT,
                 ring_t + OL_W * 2, entry_top - SHAFT_BOT, WHITE);
     render_thick_line(ex0_x, ex0_y, ex_tip_x, ex_tip_y, ring_t + OL_W * 2, WHITE);
@@ -225,7 +233,8 @@ static void draw_roundabout(float exit_angle_deg, int driving_side) {
     }
     render_circle(cx, cy, ring_r, ring_t, 48, SIDE);
 
-    /* L3: blue — entry street + exit street + arc + caps + arrowhead */
+    /* L3: blue — entry street + exit street + arc + caps + arrowhead (raised) */
+    render_set_raised(1);
     render_rect(-ring_t * 0.5f, SHAFT_BOT, ring_t,
                 entry_top - SHAFT_BOT, ACTIVE);
     render_thick_line(ex0_x, ex0_y, ex_tip_x, ex_tip_y, ring_t, ACTIVE);
@@ -262,6 +271,7 @@ static void draw_roundabout(float exit_angle_deg, int driving_side) {
  * bx,by = base of pole.  pole_h = pole height.  flag goes to the right.
  */
 static void draw_flag(float bx, float by, float pole_h) {
+    render_set_raised(0);
     float pole_t = 0.025f;
     float flag_w = 0.22f;
     float flag_h = 0.16f;
@@ -306,33 +316,35 @@ static void draw_arrived(int dir) {
         float ring_y = road_top + HEAD_SZ + 0.12f;
         float ring_r = 0.11f;
 
-        /* L1: white side markings */
+        /* L1: white side markings (flat) */
+        render_set_raised(0);
         render_thick_line(0, SHAFT_BOT, 0, road_top, SHAFT_T + OL_W * 2, WHITE);
         render_circle(0, ring_y, ring_r, 0.04f + OL_W * 2, 24, WHITE);
 
-        /* L2+L3: blue road + arrowhead */
+        /* L2+L3: blue road + arrowhead (raised) */
+        render_set_raised(1);
         render_thick_line(0, SHAFT_BOT, 0, road_top, SHAFT_T, ACTIVE);
         render_arrowhead(0, road_top, (float)(M_PI * 0.5), HEAD_SZ, ACTIVE);
-
-        /* ring */
         render_circle(0, ring_y, ring_r, 0.04f, 24, ACTIVE);
 
-        /* flag — pole base at center of ring */
+        /* flag */
         draw_flag(0, ring_y, 0.42f);
     } else {
         /* --- Left / Right: road + dome cap + flag to side --- */
         float sign = (dir < 0) ? -1.0f : 1.0f;
         float flag_x = sign * 0.30f;
 
-        /* L1: white side markings */
+        /* L1: white side markings (flat) */
+        render_set_raised(0);
         render_thick_line(0, SHAFT_BOT, 0, road_top, SHAFT_T + OL_W * 2, WHITE);
         render_disc(0, road_top, dome_r + OL_W, 24, WHITE);
 
-        /* L2+L3: blue road + dome cap */
+        /* L2+L3: blue road + dome cap (raised) */
+        render_set_raised(1);
         render_thick_line(0, SHAFT_BOT, 0, road_top, SHAFT_T, ACTIVE);
         render_disc(0, road_top, dome_r, 24, ACTIVE);
 
-        /* flag to the side */
+        /* flag */
         draw_flag(flag_x, road_top - 0.06f, 0.50f);
     }
 }
@@ -345,7 +357,8 @@ static void draw_lane_change(int go_left) {
     float sign = go_left ? -1.0f : 1.0f;
     float shift = sign * 0.22f;
 
-    /* L1: white side markings + joint discs at bends */
+    /* L1: white side markings + joint discs (flat) */
+    render_set_raised(0);
     render_thick_line(0, SHAFT_BOT, 0, 0.50f, SHAFT_T + OL_W * 2, WHITE);
     render_thick_line(0, SHAFT_BOT, 0, -0.15f, SHAFT_T + OL_W * 2, WHITE);
     render_thick_line(0, -0.15f, shift, 0.15f, SHAFT_T + OL_W * 2, WHITE);
@@ -353,10 +366,11 @@ static void draw_lane_change(int go_left) {
     render_disc(shift, 0.15f, JOINT_R + OL_W, JOINT_SEG, WHITE);
     render_thick_line(shift, 0.15f, shift, 0.35f, SHAFT_T + OL_W * 2, WHITE);
 
-    /* L2: gray side road */
+    /* L2: gray side road (flat) */
     render_thick_line(0, SHAFT_BOT, 0, 0.50f, SHAFT_T, SIDE);
 
-    /* L3: blue active route */
+    /* L3: blue active route (raised) */
+    render_set_raised(1);
     render_thick_line(0, SHAFT_BOT, 0, -0.15f, SHAFT_T, ACTIVE);
     render_thick_line(0, -0.15f, shift, 0.15f, SHAFT_T, ACTIVE);
     render_disc(0, -0.15f, JOINT_R, JOINT_SEG, ACTIVE);
@@ -373,7 +387,8 @@ static void draw_merge(int go_right) {
     float sign = go_right ? 1.0f : -1.0f;
     float start_x = sign * -0.25f;
 
-    /* L1: white side markings + joint discs at bends */
+    /* L1: white side markings + joint discs (flat) */
+    render_set_raised(0);
     render_thick_line(0, SHAFT_BOT, 0, SIDE_TOP, SHAFT_T + OL_W * 2, WHITE);
     render_thick_line(start_x, SHAFT_BOT, start_x, -0.10f, SHAFT_T + OL_W * 2, WHITE);
     render_thick_line(start_x, -0.10f, 0, 0.15f, SHAFT_T + OL_W * 2, WHITE);
@@ -381,10 +396,11 @@ static void draw_merge(int go_right) {
     render_disc(0, 0.15f, JOINT_R + OL_W, JOINT_SEG, WHITE);
     render_thick_line(0, 0.15f, 0, SHAFT_TOP, SHAFT_T + OL_W * 2, WHITE);
 
-    /* L2: gray main highway */
+    /* L2: gray main highway (flat) */
     render_thick_line(0, SHAFT_BOT, 0, SIDE_TOP, SHAFT_T, SIDE);
 
-    /* L3: blue active route */
+    /* L3: blue active route (raised) */
+    render_set_raised(1);
     render_thick_line(start_x, SHAFT_BOT, start_x, -0.10f, SHAFT_T, ACTIVE);
     render_thick_line(start_x, -0.10f, 0, 0.15f, SHAFT_T, ACTIVE);
     render_disc(start_x, -0.10f, JOINT_R, JOINT_SEG, ACTIVE);

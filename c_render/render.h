@@ -56,4 +56,7 @@ void render_circle(float cx, float cy, float radius, float thickness, int segmen
 /* Toggle perspective on/off. enabled=0 → flat (no perspective). */
 void render_set_perspective(int enabled);
 
+/* Toggle 3D extrusion. raised=1 → extruded, raised=0 → flat on ground. */
+void render_set_raised(int raised);
+
 #endif /* CR_RENDER_H */
