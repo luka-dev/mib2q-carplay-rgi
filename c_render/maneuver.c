@@ -91,8 +91,6 @@ static void draw_turn(float angle_deg) {
 
     /* L2: gray side road */
     render_thick_line(0, turn_y, 0, SIDE_TOP, SHAFT_T, SIDE);
-    render_disc(0, SIDE_TOP, JOINT_R, JOINT_SEG, SIDE);
-    render_disc(0, turn_y, JOINT_R, JOINT_SEG, SIDE);
 
     /* L3: blue entry + turn */
     render_thick_line(0, SHAFT_BOT, 0, turn_y, SHAFT_T, ACTIVE);
@@ -155,7 +153,6 @@ static void draw_exit(int go_right) {
 
     /* L2: gray main road */
     render_thick_line(0, SHAFT_BOT, 0, SIDE_TOP, SHAFT_T, SIDE);
-    render_disc(0, SIDE_TOP, JOINT_R, JOINT_SEG, SIDE);
 
     /* L3: blue entry + exit branch */
     render_thick_line(0, SHAFT_BOT, 0, fork_y, SHAFT_T, ACTIVE);
@@ -232,30 +229,82 @@ static void draw_roundabout(float exit_angle_deg, int driving_side) {
 }
 
 /*
- * Destination arrived icon (pin marker).
- * dir: 0=center, -1=left, 1=right.
+ * Checkered flag on a pole.
+ * bx,by = base of pole.  pole_h = pole height.  flag goes to the right.
+ */
+static void draw_flag(float bx, float by, float pole_h) {
+    float pole_t = 0.025f;
+    float flag_w = 0.22f;
+    float flag_h = 0.16f;
+    float fx = bx;
+    float fy = by + pole_h;          /* flag top-left */
+    float cw = flag_w / 3.0f;
+    float ch = flag_h / 2.0f;
+
+    /* pole (gray) */
+    render_thick_line(bx, by, bx, fy, pole_t, SIDE);
+
+    /* base disc */
+    render_disc(bx, by, 0.05f, 12, ACTIVE);
+
+    /* 3×2 checkerboard */
+    int row, col;
+    for (row = 0; row < 2; row++) {
+        for (col = 0; col < 3; col++) {
+            float rx = fx + col * cw;
+            float ry = fy - row * ch;   /* draw downward from top */
+            if ((row + col) % 2 == 0)
+                render_rect(rx, ry - ch, cw, ch, ACTIVE);
+            else
+                render_rect(rx, ry - ch, cw, ch, 0.12f, 0.14f, 0.18f, 1.0f);
+        }
+    }
+}
+
+/*
+ * Destination arrived icon.
+ * dir: 0=center (offroad), -1=left, 1=right.
+ *
+ * Left/Right: blue road + dome cap + checkered flag on pole offset to side.
+ * Center:     blue arrow + arrowhead + hollow ring + checkered flag on pole.
  */
 static void draw_arrived(int dir) {
-    float px = 0.0f;
+    float road_top = 0.10f;
+    float dome_r = 0.12f;
 
-    /* pin body: teardrop = circle + triangle */
-    render_disc(px, 0.18f, 0.22f, 24, ACTIVE);
-    render_triangle(px - 0.16f, 0.08f, px + 0.16f, 0.08f, px, -0.22f, ACTIVE);
+    if (dir == 0) {
+        /* --- Center / offroad --- */
+        float ring_y = road_top + HEAD_SZ + 0.12f;
+        float ring_r = 0.11f;
 
-    /* inner dot (white) */
-    render_disc(px, 0.18f, 0.10f, 16, 1.0f, 1.0f, 1.0f, 0.95f);
-
-    /* direction arrow for left/right arrival */
-    if (dir != 0) {
-        float sign = (dir > 0) ? 1.0f : -1.0f;
-        float ax = sign * 0.38f;
-        float ay = -0.10f;
-        float head_a = (dir > 0) ? 0.0f : (float)M_PI;
         /* L1: white side markings */
-        render_thick_line(px, ay, ax, ay, SHAFT_T * 0.7f + OL_W * 2, WHITE);
-        /* L2+L3: blue fill (no gray needed — all active) */
-        render_thick_line(px, ay, ax, ay, SHAFT_T * 0.7f, ACTIVE);
-        render_arrowhead(ax, ay, head_a, HEAD_SZ * 0.7f, ACTIVE);
+        render_thick_line(0, SHAFT_BOT, 0, road_top, SHAFT_T + OL_W * 2, WHITE);
+        render_circle(0, ring_y, ring_r, 0.04f + OL_W * 2, 24, WHITE);
+
+        /* L2+L3: blue road + arrowhead */
+        render_thick_line(0, SHAFT_BOT, 0, road_top, SHAFT_T, ACTIVE);
+        render_arrowhead(0, road_top, (float)(M_PI * 0.5), HEAD_SZ, ACTIVE);
+
+        /* ring */
+        render_circle(0, ring_y, ring_r, 0.04f, 24, ACTIVE);
+
+        /* flag — pole base at center of ring */
+        draw_flag(0, ring_y, 0.42f);
+    } else {
+        /* --- Left / Right: road + dome cap + flag to side --- */
+        float sign = (dir < 0) ? -1.0f : 1.0f;
+        float flag_x = sign * 0.30f;
+
+        /* L1: white side markings */
+        render_thick_line(0, SHAFT_BOT, 0, road_top, SHAFT_T + OL_W * 2, WHITE);
+        render_disc(0, road_top, dome_r + OL_W, 24, WHITE);
+
+        /* L2+L3: blue road + dome cap */
+        render_thick_line(0, SHAFT_BOT, 0, road_top, SHAFT_T, ACTIVE);
+        render_disc(0, road_top, dome_r, 24, ACTIVE);
+
+        /* flag to the side */
+        draw_flag(flag_x, road_top - 0.06f, 0.50f);
     }
 }
 
@@ -267,15 +316,16 @@ static void draw_lane_change(int go_left) {
     float sign = go_left ? -1.0f : 1.0f;
     float shift = sign * 0.22f;
 
-    /* L1: white side markings (no discs) */
+    /* L1: white side markings + joint discs at bends */
     render_thick_line(0, SHAFT_BOT, 0, 0.50f, SHAFT_T + OL_W * 2, WHITE);
     render_thick_line(0, SHAFT_BOT, 0, -0.15f, SHAFT_T + OL_W * 2, WHITE);
     render_thick_line(0, -0.15f, shift, 0.15f, SHAFT_T + OL_W * 2, WHITE);
+    render_disc(0, -0.15f, JOINT_R + OL_W, JOINT_SEG, WHITE);
+    render_disc(shift, 0.15f, JOINT_R + OL_W, JOINT_SEG, WHITE);
     render_thick_line(shift, 0.15f, shift, 0.35f, SHAFT_T + OL_W * 2, WHITE);
 
     /* L2: gray side road */
     render_thick_line(0, SHAFT_BOT, 0, 0.50f, SHAFT_T, SIDE);
-    render_disc(0, 0.50f, JOINT_R, JOINT_SEG, SIDE);
 
     /* L3: blue active route */
     render_thick_line(0, SHAFT_BOT, 0, -0.15f, SHAFT_T, ACTIVE);
@@ -302,7 +352,6 @@ static void draw_merge(int go_right) {
 
     /* L2: gray main highway */
     render_thick_line(0, SHAFT_BOT, 0, SIDE_TOP, SHAFT_T, SIDE);
-    render_disc(0, SIDE_TOP, JOINT_R, JOINT_SEG, SIDE);
 
     /* L3: blue active route */
     render_thick_line(start_x, SHAFT_BOT, start_x, -0.10f, SHAFT_T, ACTIVE);

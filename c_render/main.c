@@ -121,6 +121,12 @@ static void handle_test_keys(void) {
         fprintf(stderr, "c_render: driving_side=%d (%s)\n",
                 g_state.driving_side, g_state.driving_side ? "LHT" : "RHT");
     }
+    if (platform_key_tap(CR_KEY_P)) {
+        static int persp = 1;
+        persp = !persp;
+        render_set_perspective(persp);
+        fprintf(stderr, "c_render: perspective=%s\n", persp ? "ON" : "OFF");
+    }
 }
 
 /* ================================================================
@@ -150,7 +156,7 @@ int main(int argc, char **argv) {
 
     /* Start with first test maneuver */
     update_test_state();
-    fprintf(stderr, "c_render: [1/%d] %s  (arrow keys: L/R=type, Up=angle, Down=drive side)\n",
+    fprintf(stderr, "c_render: [1/%d] %s  (L/R=type, Up=angle, Down=side, P=perspective)\n",
             TEST_COUNT, maneuver_type_name(g_state.maneuver_type));
 
     while (!platform_should_close()) {

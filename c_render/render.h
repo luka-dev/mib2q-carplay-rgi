@@ -53,4 +53,7 @@ void render_arc(float cx, float cy, float radius, float thickness,
 void render_circle(float cx, float cy, float radius, float thickness, int segments,
                    float r, float g, float b, float a);
 
+/* Toggle perspective on/off. enabled=0 → flat (no perspective). */
+void render_set_perspective(int enabled);
+
 #endif /* CR_RENDER_H */

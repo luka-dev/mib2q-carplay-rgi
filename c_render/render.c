@@ -23,27 +23,30 @@ static GLint  g_uni_color = -1;
 static GLint  g_uni_img_size = -1;
 static GLint  g_uni_vp = -1;
 static GLint  g_uni_depth = -1;
-static GLint  g_uni_ref_y = -1;
+static GLint  g_uni_persp = -1;
 
 /* Perspective parameters (pixel space) */
 #define PERSP_VP_X    142.0
 #define PERSP_VP_Y    -118.0
-#define PERSP_DEPTH   370.0
-#define PERSP_REF_Y   252.0
+#define PERSP_DEPTH   370.0     /* = ref_y - vp_y = 252-(-118) */
 #define PERSP_IMG_W   284.0
 #define PERSP_IMG_H   276.0
+
+static int g_perspective = 1;  /* 1=on, 0=flat */
 
 static const char *k_vert_src =
     "attribute vec2 a_pos;\n"
     "uniform vec2 u_img_size;\n"
     "uniform vec2 u_vp;\n"
     "uniform float u_depth;\n"
-    "uniform float u_ref_y;\n"
+    "uniform float u_persp;\n"
     "void main() {\n"
-    "  float y_off = -0.25;\n"
+    "  float y_off = u_persp > 0.5 ? -0.35 : 0.0;\n"
     "  float px_x = (a_pos.x + 1.0) * 0.5 * u_img_size.x;\n"
     "  float px_y = (1.0 - (a_pos.y + y_off)) * 0.5 * u_img_size.y;\n"
-    "  float s = u_depth / (u_depth + (u_ref_y - px_y));\n"
+    "  float s = u_persp > 0.5\n"
+    "          ? (px_y - u_vp.y) / u_depth\n"
+    "          : 1.0;\n"
     "  float px_x2 = u_vp.x + (px_x - u_vp.x) * s;\n"
     "  float px_y2 = u_vp.y + (px_y - u_vp.y) * s;\n"
     "  float ndc_x = px_x2 / u_img_size.x * 2.0 - 1.0;\n"
@@ -103,7 +106,7 @@ static int build_program(void) {
     g_uni_img_size = glGetUniformLocation(g_program, "u_img_size");
     g_uni_vp     = glGetUniformLocation(g_program, "u_vp");
     g_uni_depth  = glGetUniformLocation(g_program, "u_depth");
-    g_uni_ref_y  = glGetUniformLocation(g_program, "u_ref_y");
+    g_uni_persp  = glGetUniformLocation(g_program, "u_persp");
 
     glDeleteShader(vs);
     glDeleteShader(fs);
@@ -140,7 +143,7 @@ void render_begin_frame(void) {
     glUniform2f(g_uni_img_size, (float)PERSP_IMG_W, (float)PERSP_IMG_H);
     glUniform2f(g_uni_vp, (float)PERSP_VP_X, (float)PERSP_VP_Y);
     glUniform1f(g_uni_depth, (float)PERSP_DEPTH);
-    glUniform1f(g_uni_ref_y, (float)PERSP_REF_Y);
+    glUniform1f(g_uni_persp, g_perspective ? 1.0f : 0.0f);
 }
 
 void render_rect(float x, float y, float w, float h,
@@ -170,6 +173,10 @@ void render_triangle(float x0, float y0, float x1, float y1, float x2, float y2,
 
 void render_end_frame(void) {
     /* No-op — swap is done by platform layer */
+}
+
+void render_set_perspective(int enabled) {
+    g_perspective = enabled;
 }
 
 void render_shutdown(void) {
