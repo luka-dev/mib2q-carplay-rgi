@@ -122,6 +122,9 @@ static GLint  g_uni_color  = -1;
 static GLint  g_uni_mvp    = -1;
 static GLint  g_uni_light  = -1;
 static GLint  g_uni_zbias  = -1;
+static GLint  g_uni_eye    = -1;
+static GLint  g_uni_mat    = -1;
+static GLint  g_uni_grain  = -1;
 
 static int g_perspective = 1;
 static int g_raised = 1;
@@ -132,21 +135,64 @@ static const char *k_vert_src =
     "attribute vec3 a_pos;\n"
     "attribute vec3 a_normal;\n"
     "uniform mat4 u_mvp;\n"
-    "uniform vec3 u_light_dir;\n"
     "uniform float u_z_bias;\n"
-    "varying float v_shade;\n"
+    "varying vec3 v_normal;\n"
+    "varying vec3 v_world_pos;\n"
     "void main() {\n"
     "  gl_Position = u_mvp * vec4(a_pos, 1.0);\n"
     "  gl_Position.z -= u_z_bias;\n"
-    "  float ndotl = max(dot(normalize(a_normal), u_light_dir), 0.0);\n"
-    "  v_shade = 0.45 + 0.55 * ndotl;\n"
+    "  v_normal = a_normal;\n"
+    "  v_world_pos = a_pos;\n"
     "}\n";
 
 static const char *k_frag_src_body =
     "uniform vec4 u_color;\n"
-    "varying float v_shade;\n"
+    "uniform vec3 u_light_dir;\n"
+    "uniform vec3 u_eye;\n"
+    "uniform vec4 u_material;\n"
+    "uniform vec2 u_grain;\n"
+    "varying vec3 v_normal;\n"
+    "varying vec3 v_world_pos;\n"
+    "float hash21(vec2 p) {\n"
+    "  p = fract(p * vec2(233.34, 851.73));\n"
+    "  p += dot(p, p + 23.45);\n"
+    "  return fract(p.x * p.y);\n"
+    "}\n"
+    "float vnoise(vec2 p) {\n"
+    "  vec2 i = floor(p);\n"
+    "  vec2 f = fract(p);\n"
+    "  f = f * f * (3.0 - 2.0 * f);\n"
+    "  float a = hash21(i);\n"
+    "  float b = hash21(i + vec2(1.0, 0.0));\n"
+    "  float c = hash21(i + vec2(0.0, 1.0));\n"
+    "  float d = hash21(i + vec2(1.0, 1.0));\n"
+    "  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);\n"
+    "}\n"
     "void main() {\n"
-    "  gl_FragColor = vec4(u_color.rgb * v_shade, u_color.a);\n"
+    "  vec3 N = normalize(v_normal);\n"
+    "  vec3 L = u_light_dir;\n"
+    "  vec3 V = normalize(u_eye - v_world_pos);\n"
+    "  float grain = 0.0;\n"
+    "  if (u_grain.x > 0.0) {\n"
+    "    vec2 uv = v_world_pos.xz * u_grain.y;\n"
+    "    float n1 = vnoise(uv);\n"
+    "    float n2 = vnoise(uv * 3.7 + 17.0);\n"
+    "    grain = (n1 * 0.6 + n2 * 0.4) - 0.5;\n"
+    "    float bump = grain * u_grain.x * 0.3;\n"
+    "    N = normalize(N + vec3(bump, 0.0, bump));\n"
+    "  }\n"
+    "  float NdotL = max(dot(N, L), 0.0);\n"
+    "  float diffuse = 0.42 + 0.58 * NdotL;\n"
+    "  vec3 H = normalize(L + V);\n"
+    "  float NdotH = max(dot(N, H), 0.0);\n"
+    "  float spec = u_material.x * pow(NdotH, u_material.y);\n"
+    "  float rim = 1.0 - max(dot(N, V), 0.0);\n"
+    "  rim = u_material.z * pow(rim, u_material.w);\n"
+    "  vec3 color = u_color.rgb * diffuse + vec3(spec) + u_color.rgb * rim;\n"
+    "  if (u_grain.x > 0.0) {\n"
+    "    color += color * grain * u_grain.x * 0.15;\n"
+    "  }\n"
+    "  gl_FragColor = vec4(color, u_color.a);\n"
     "}\n";
 
 /* ================================================================
@@ -183,6 +229,21 @@ static void vb_flush(float r, float g, float b, float a) {
     glUniform1f(g_uni_zbias, g_z_bias);
     g_z_bias += Z_BIAS_STEP;
 
+    /* Auto-detect material from color */
+    if (r > 0.95f && g > 0.95f && b > 0.95f) {
+        /* White outline — flat, fine grain */
+        glUniform4f(g_uni_mat, 0.0f, 1.0f, 0.0f, 1.0f);
+        glUniform2f(g_uni_grain, 0.35f, 80.0f);
+    } else if (b > 0.8f && r < 0.5f) {
+        /* Active blue — glossy, no grain */
+        glUniform4f(g_uni_mat, 0.45f, 32.0f, 0.25f, 2.5f);
+        glUniform2f(g_uni_grain, 0.0f, 0.0f);
+    } else {
+        /* Grey (default) — matte, asphalt grain */
+        glUniform4f(g_uni_mat, 0.08f, 8.0f, 0.10f, 3.0f);
+        glUniform2f(g_uni_grain, 0.5f, 60.0f);
+    }
+
     glVertexAttribPointer(g_attr_pos,  3, GL_FLOAT, GL_FALSE, 24, g_vbuf);
     glVertexAttribPointer(g_attr_norm, 3, GL_FLOAT, GL_FALSE, 24, g_vbuf + 3);
     glEnableVertexAttribArray(g_attr_pos);
@@ -211,7 +272,7 @@ static GLuint compile_shader(GLenum type, const char *src) {
 }
 
 static int build_program(void) {
-    char frag_src[1024];
+    char frag_src[4096];
     snprintf(frag_src, sizeof(frag_src), "%s%s%s",
              SHADER_HEADER, SHADER_PRECISION, k_frag_src_body);
 
@@ -239,6 +300,9 @@ static int build_program(void) {
     g_uni_mvp   = glGetUniformLocation(g_program, "u_mvp");
     g_uni_light = glGetUniformLocation(g_program, "u_light_dir");
     g_uni_zbias = glGetUniformLocation(g_program, "u_z_bias");
+    g_uni_eye   = glGetUniformLocation(g_program, "u_eye");
+    g_uni_mat   = glGetUniformLocation(g_program, "u_material");
+    g_uni_grain = glGetUniformLocation(g_program, "u_grain");
 
     glDeleteShader(vs);
     glDeleteShader(fs);
@@ -259,6 +323,9 @@ int render_init(int fb_width, int fb_height) {
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
     glDisable(GL_DITHER);
+#ifdef GL_MULTISAMPLE
+    glEnable(GL_MULTISAMPLE);   /* 4x MSAA — requested in platform init */
+#endif
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
@@ -308,6 +375,13 @@ void render_begin_frame(void) {
     float lx = LIGHT_X, ly = LIGHT_Y, lz = LIGHT_Z;
     float ll = sqrtf(lx*lx + ly*ly + lz*lz);
     glUniform3f(g_uni_light, lx/ll, ly/ll, lz/ll);
+
+    /* Camera eye position for specular/rim */
+    if (g_perspective) {
+        glUniform3f(g_uni_eye, CAM_EYE_X, CAM_EYE_Y, CAM_EYE_Z);
+    } else {
+        glUniform3f(g_uni_eye, 0.0f, 5.0f, 0.0f);
+    }
 
     g_z_bias = 0.0f;
 }

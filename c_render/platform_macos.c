@@ -50,6 +50,7 @@ int platform_init(int width, int height) {
     /* Request OpenGL 2.1 — compatible with GLES2 shader subset */
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
+    glfwWindowHint(GLFW_SAMPLES, 4);   /* 4x MSAA */
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
     glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_TRUE);
     glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
