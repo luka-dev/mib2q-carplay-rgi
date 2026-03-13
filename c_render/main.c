@@ -204,6 +204,7 @@ static void handle_test_keys(void) {
         print_state();
         g_dirty = 1;
         render_invalidate_masks();
+        maneuver_start_anim();
     }
     if (platform_key_tap(CR_KEY_LEFT)) {
         g_test_idx = (g_test_idx - 1 + TEST_COUNT) % TEST_COUNT;
@@ -211,6 +212,7 @@ static void handle_test_keys(void) {
         print_state();
         g_dirty = 1;
         render_invalidate_masks();
+        maneuver_start_anim();
     }
     if (platform_key_tap(CR_KEY_UP)) {
         g_state.exit_angle += 30;
@@ -218,6 +220,7 @@ static void handle_test_keys(void) {
         fprintf(stderr, "c_render: exit_angle=%d\n", g_state.exit_angle);
         g_dirty = 1;
         render_invalidate_masks();
+        maneuver_start_anim();
     }
     if (platform_key_tap(CR_KEY_DOWN)) {
         g_state.driving_side = !g_state.driving_side;
@@ -225,6 +228,7 @@ static void handle_test_keys(void) {
                 g_state.driving_side, g_state.driving_side ? "LHT" : "RHT");
         g_dirty = 1;
         render_invalidate_masks();
+        maneuver_start_anim();
     }
     if (platform_key_tap(CR_KEY_P)) {
         static int persp = 1;
@@ -242,6 +246,26 @@ static void handle_test_keys(void) {
                 g_sides_presets[g_sides_idx].count);
         g_dirty = 1;
         render_invalidate_masks();
+        maneuver_start_anim();
+    }
+    if (platform_key_tap(CR_KEY_A)) {
+        maneuver_start_anim();
+        fprintf(stderr, "c_render: animation replay\n");
+        g_dirty = 1;
+    }
+    if (platform_key_tap(CR_KEY_LBRACKET)) {
+        float t = maneuver_get_route_t() - 0.05f;
+        if (t < 0.0f) t = 0.0f;
+        maneuver_set_route_t(t);
+        fprintf(stderr, "c_render: route_t=%.2f\n", t);
+        g_dirty = 1;
+    }
+    if (platform_key_tap(CR_KEY_RBRACKET)) {
+        float t = maneuver_get_route_t() + 0.05f;
+        if (t > 1.0f) t = 1.0f;
+        maneuver_set_route_t(t);
+        fprintf(stderr, "c_render: route_t=%.2f\n", t);
+        g_dirty = 1;
     }
 }
 
@@ -302,7 +326,7 @@ int main(int argc, char **argv) {
 
     /* Start with first test maneuver */
     update_test_state();
-    fprintf(stderr, "c_render: [1/%d] %s  (L/R=type, Up=angle, Down=side, P=persp, S=sides)\n",
+    fprintf(stderr, "c_render: [1/%d] %s  (L/R=type, Up=angle, Down=side, P=persp, S=sides, A=anim, [/]=step)\n",
             TEST_COUNT, test_label());
 
     int dirty = 1;  /* first frame always renders */
@@ -326,7 +350,7 @@ int main(int argc, char **argv) {
 
         /* Check if any key changed state or animation in progress */
         int want_screenshot = platform_key_tap(CR_KEY_SPACE);
-        if (g_dirty || render_is_animating() || want_screenshot)
+        if (g_dirty || render_is_animating() || maneuver_is_animating() || want_screenshot)
             dirty = 1;
         g_dirty = 0;
 
@@ -340,7 +364,7 @@ int main(int argc, char **argv) {
 
             platform_swap();
 
-            dirty = render_is_animating();  /* keep rendering while animating */
+            dirty = render_is_animating() || maneuver_is_animating();
         }
 
         /* Frame pacing — sleep remainder of frame budget */

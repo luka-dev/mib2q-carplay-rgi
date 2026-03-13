@@ -115,6 +115,31 @@
 static route_path_t g_route_path;
 static route_mesh_t g_route_mesh;
 
+/* Route animation state */
+static float g_route_t = 1.0f;       /* current animation parameter 0..1 */
+static int   g_route_animating = 0;  /* 1 while animation running */
+#define ROUTE_ANIM_SPEED 0.025f       /* per-frame step (~40 frames) */
+
+void maneuver_start_anim(void) {
+    g_route_t = 0.0f;
+    g_route_animating = 1;
+}
+
+int maneuver_is_animating(void) {
+    return g_route_animating;
+}
+
+void maneuver_set_route_t(float t) {
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
+    g_route_t = t;
+    g_route_animating = 0;
+}
+
+float maneuver_get_route_t(void) {
+    return g_route_t;
+}
+
 /* Flag checkerboard dark square color (~#1E2430) */
 #define CHECK_R 0.12f
 #define CHECK_G 0.14f
@@ -278,7 +303,7 @@ static void draw_straight(const int *side_angles, int side_count) {
     rpath_add_line(&g_route_path, 0, SHAFT_BOT, 0, SHAFT_TOP);
     rpath_densify(&g_route_path);
     rpath_set_arrow(&g_route_path, 0, SHAFT_TOP, (float)(M_PI * 0.5));
-    rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, 1.0f);
+    rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_route_t);
 
     render_composite();
     rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
@@ -382,7 +407,7 @@ static void draw_turn(float angle_deg, const int *side_angles, int side_count) {
         rpath_densify(&g_route_path);
         float head_angle = (float)(M_PI * 0.5) - angle_rad;
         rpath_set_arrow(&g_route_path, end_x, end_y, head_angle);
-        rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, 1.0f);
+        rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_route_t);
     }
 
     render_composite();
@@ -442,7 +467,7 @@ static void draw_uturn(int go_left) {
     rpath_add_line(&g_route_path, exit_x, top_y, exit_x, arrow_y);
     rpath_densify(&g_route_path);
     rpath_set_arrow(&g_route_path, exit_x, arrow_y, (float)(-M_PI * 0.5));
-    rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, 1.0f);
+    rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_route_t);
 
     render_composite();
     rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
@@ -630,7 +655,7 @@ static void draw_roundabout(float exit_angle_deg, int driving_side,
         rpath_add_line(&g_route_path, ex0_x, ex0_y, ex_tip_x, ex_tip_y);
         rpath_densify(&g_route_path);
         rpath_set_arrow(&g_route_path, ex_tip_x, ex_tip_y, exit_rad);
-        rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, 1.0f);
+        rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_route_t);
     }
 
     render_composite();
@@ -727,7 +752,7 @@ static void draw_arrived(int dir) {
         rpath_add_line(&g_route_path, 0, SHAFT_BOT, 0, road_top);
         rpath_densify(&g_route_path);
         rpath_set_arrow(&g_route_path, 0, road_top, (float)(M_PI * 0.5));
-        rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, 1.0f);
+        rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_route_t);
 
         render_composite();
         rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
@@ -758,7 +783,7 @@ static void draw_arrived(int dir) {
         rpath_add_line(&g_route_path, 0, SHAFT_BOT, 0, road_top);
         rpath_densify(&g_route_path);
         rpath_set_arrow(&g_route_path, 0, road_top, (float)(M_PI * 0.5));
-        rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, 1.0f);
+        rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_route_t);
 
         render_composite();
         rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
@@ -811,7 +836,7 @@ static void draw_lane_change(int go_left) {
         build_line_path(&g_route_path, pts_x, pts_y, 4);
         rpath_densify(&g_route_path);
         rpath_set_arrow(&g_route_path, shift, BLUE_LEN, (float)(M_PI * 0.5));
-        rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, 1.0f);
+        rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_route_t);
     }
 
     render_composite();
@@ -861,7 +886,7 @@ static void draw_merge(int go_right) {
         build_line_path(&g_route_path, pts_x, pts_y, 4);
         rpath_densify(&g_route_path);
         rpath_set_arrow(&g_route_path, 0, BLUE_LEN, (float)(M_PI * 0.5));
-        rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, 1.0f);
+        rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_route_t);
     }
 
     render_composite();
@@ -873,9 +898,22 @@ static void draw_merge(int go_right) {
  * ================================================================ */
 
 void maneuver_draw(const maneuver_state_t *s) {
-    /* If masks are cached and still valid, just re-composite + redraw cached mesh
-     * (handles perspective animation without re-rendering masks) */
+    /* Advance animation if running */
+    if (g_route_animating) {
+        g_route_t += ROUTE_ANIM_SPEED;
+        if (g_route_t >= 1.0f) {
+            g_route_t = 1.0f;
+            g_route_animating = 0;
+        }
+    }
+
+    /* If masks are cached and still valid, just re-composite + rebuild mesh at current t
+     * (handles perspective animation and route animation without re-rendering masks) */
     if (!render_masks_dirty()) {
+        if (g_route_animating || g_route_t < 1.0f) {
+            /* Rebuild mesh at current t (path segments still cached in g_route_path) */
+            rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_route_t);
+        }
         render_composite();
         rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
         return;

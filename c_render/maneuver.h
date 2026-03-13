@@ -38,6 +38,12 @@ typedef struct {
 /* Draw the maneuver icon for the given state. */
 void maneuver_draw(const maneuver_state_t *state);
 
+/* Route path animation control. */
+void maneuver_start_anim(void);       /* reset t=0, start auto-animation */
+int  maneuver_is_animating(void);     /* 1 while auto-animation running */
+void maneuver_set_route_t(float t);   /* set t manually (stops auto-anim) */
+float maneuver_get_route_t(void);     /* get current t value */
+
 /* Get human-readable name for an icon type (for debug overlay). */
 const char *maneuver_icon_name(int icon);
 
