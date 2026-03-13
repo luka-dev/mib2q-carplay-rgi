@@ -31,15 +31,8 @@ Sent via the same BAP path. VC renders these as text bars over the native map ar
 - [x] ETA / remaining travel time - timezone-adjusted to HU local time (FctID 22)
 - [x] Destination name (FctID 46)
 
-### Route Guidance - VC LVDS Video (KOMO Widget)
-
-Maneuver graphics rendered by the HU's `libPresentationController.so` into the MOST LVDS video stream, displayed on the VC cluster map area. Requires 3 binary patches to the native library (see below).
-
-- [x] Turn arrow / maneuver icon in cluster widget area
-- [x] Java-controlled frame rate via `setKOMODataRate()` (0 = stop, 2 = render)
-- [x] Turn-to street name in widget
-- [x] Distance and ETA in widget follow-info area
-- [x] Full start/stop lifecycle (KOMO view enable, video pipeline activation, gfxAvailable forcing)
+### Route Guidance - VC LVDS Video (Own Renderer for Widget)
+In progress
 
 ### Route Guidance - VC AIO Arrows (NOT possible)
 
@@ -139,47 +132,6 @@ Output artifact:
 ```text
 ./carplay_hook.jar
 ```
-
-### Build `libPresentationController.so`
-
-Patches the stock `libPresentationController.so` for KOMO widget video rendering.
-This enables PresentationController to render maneuver graphics into the LVDS video
-stream when driven by Java (CarPlay) instead of native navigation. Without this patch,
-all Java DSI calls to PresentationController are silently dropped.
-
-Get the stock binary from your firmware dump:
-
-```text
-/mnt/app/navigation/libPresentationController.so
-```
-
-Generate patched binary:
-
-```bash
-python3 patch_libpresentationcontroller.py libPresentationController.so.stock libPresentationController.so
-```
-
-To verify bytes without patching:
-
-```bash
-python3 patch_libpresentationcontroller.py --verify-only libPresentationController.so.stock
-```
-
-Output artifact:
-
-```text
-./libPresentationController.so
-```
-
-Three patches applied (ARM32, file offset = VA):
-
-| Patch | Address                            | Change                            | Purpose                                               |
-|-------|------------------------------------|-----------------------------------|-------------------------------------------------------|
-| 1     | `0x60BE48`                         | NOP `StopDSIs` (MOV R0,#0; BX LR) | Keep DSI interfaces alive after native guidance stops |
-| 2     | `0x61C11C`                         | BNE -> B (unconditional)          | Force `StartDrawing` mode check to pass               |
-| 3     | `0x5C75A0`, `0x5C75E4`, `0x5C783C` | LDR offset 0x68 -> 0x54           | Java-controlled frame rate via `setKOMODataRate()`    |
-
-See `docs/widget_video_architecture.md` for full technical details.
 
 ## Deployment
 
@@ -314,7 +266,6 @@ P.S. If you do instant reboot of Head Unit after file changes, it's possible tha
 5. Set `LD_PRELOAD` in `smartphone_integrator.json`
 6. Patch `dio_manager.json` with the `0x5200/01/02/03/04` IDs
 7. Copy `carplay_hook.jar` to `/mnt/app/eso/hmi/lsd/jars/`
-8. Copy `libPresentationController.so` to `/mnt/app/navigation/`
 9. Reboot (wait 30+ seconds after file changes)
 
 ## Help Wanted
