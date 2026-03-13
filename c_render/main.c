@@ -203,24 +203,28 @@ static void handle_test_keys(void) {
         update_test_state();
         print_state();
         g_dirty = 1;
+        render_invalidate_masks();
     }
     if (platform_key_tap(CR_KEY_LEFT)) {
         g_test_idx = (g_test_idx - 1 + TEST_COUNT) % TEST_COUNT;
         update_test_state();
         print_state();
         g_dirty = 1;
+        render_invalidate_masks();
     }
     if (platform_key_tap(CR_KEY_UP)) {
         g_state.exit_angle += 30;
         if (g_state.exit_angle > 180) g_state.exit_angle = -150;
         fprintf(stderr, "c_render: exit_angle=%d\n", g_state.exit_angle);
         g_dirty = 1;
+        render_invalidate_masks();
     }
     if (platform_key_tap(CR_KEY_DOWN)) {
         g_state.driving_side = !g_state.driving_side;
         fprintf(stderr, "c_render: driving_side=%d (%s)\n",
                 g_state.driving_side, g_state.driving_side ? "LHT" : "RHT");
         g_dirty = 1;
+        render_invalidate_masks();
     }
     if (platform_key_tap(CR_KEY_P)) {
         static int persp = 1;
@@ -228,6 +232,7 @@ static void handle_test_keys(void) {
         render_set_perspective(persp);
         fprintf(stderr, "c_render: perspective=%s\n", persp ? "ON" : "OFF");
         g_dirty = 1;
+        /* No render_invalidate_masks() — perspective change reuses cached masks */
     }
     if (platform_key_tap(CR_KEY_S)) {
         g_sides_idx = (g_sides_idx + 1) % SIDES_COUNT;
@@ -236,6 +241,7 @@ static void handle_test_keys(void) {
                 g_sides_presets[g_sides_idx].name,
                 g_sides_presets[g_sides_idx].count);
         g_dirty = 1;
+        render_invalidate_masks();
     }
 }
 

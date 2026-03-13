@@ -62,11 +62,51 @@ int render_is_animating(void);
 /* Toggle 3D extrusion. raised=1 → extruded, raised=0 → flat on ground. */
 void render_set_raised(int raised);
 
-/* Begin flat stub pass — renders to offscreen FBO, blending disabled.
- * All geometry drawn between begin/end goes to FBO with overwrite mode. */
-void render_begin_stubs(void);
+/* ================================================================
+ * Multi-layer mask rendering API
+ *
+ * 3 mask FBOs rendered in flat 2D (no lighting, no perspective):
+ *   OUTLINE — white border lines
+ *   FILL    — grey road fill
+ *   ROUTE   — blue active route
+ *
+ * Compositing applies subtraction, materials, and perspective.
+ * ================================================================ */
 
-/* End stub pass — blits FBO to screen with alpha blending, restores state. */
+/* Mask rendering passes */
+void render_begin_outline_mask(void);   /* bind FBO_OUTLINE, ortho 2D, flat white */
+void render_end_outline_mask(void);
+
+void render_begin_fill_mask(void);      /* bind FBO_FILL, ortho 2D, flat grey */
+void render_end_fill_mask(void);
+
+void render_begin_route_mask(void);     /* bind FBO_ROUTE, ortho 2D, flat blue */
+void render_end_route_mask(void);
+
+/* Composite masks → screen with subtraction, materials, perspective */
+void render_composite(void);
+
+/* Mark masks as needing re-render (call on maneuver state change) */
+void render_invalidate_masks(void);
+
+/* Returns 1 if masks need re-rendering */
+int render_masks_dirty(void);
+
+/* Legacy stub pass API — redirects to outline mask internally */
+void render_begin_stubs(void);
 void render_end_stubs(void);
+
+/* ================================================================
+ * Vertex buffer — exposed for route_path.c mesh drawing
+ * ================================================================ */
+
+void vb_reset(void);
+void vb_v(float x, float y, float z, float nx, float ny, float nz);
+void vb_quad(float x0, float y0, float z0,
+             float x1, float y1, float z1,
+             float x2, float y2, float z2,
+             float x3, float y3, float z3,
+             float nx, float ny, float nz);
+void vb_flush(float r, float g, float b, float a);
 
 #endif /* CR_RENDER_H */

@@ -1,6 +1,6 @@
 UNAME := $(shell uname)
 
-COMMON_SRC = main.c render.c maneuver.c
+COMMON_SRC = main.c render.c maneuver.c route_path.c
 TARGET = c_render
 
 ifeq ($(UNAME), Darwin)
