@@ -176,6 +176,15 @@ static void draw_fading_road(float x0, float y0, float x1, float y1,
     }
 }
 
+/* Build a route path from a polyline of waypoints (straight line segments). */
+static void build_line_path(route_path_t *p,
+                             const float *xs, const float *ys, int n) {
+    int i;
+    rpath_clear(p);
+    for (i = 0; i < n - 1; i++)
+        rpath_add_line(p, xs[i], ys[i], xs[i+1], ys[i+1]);
+}
+
 /* ================================================================
  * Icon drawing functions — 3 mask passes each
  * ================================================================ */
@@ -365,14 +374,16 @@ static void draw_turn(float angle_deg, const int *side_angles, int side_count) {
                    active_has_own_stub, stub_x, stub_y, fade_x, fade_y);
     render_end_fill_mask();
 
-    /* Build route path */
-    rpath_clear(&g_route_path);
-    rpath_add_line(&g_route_path, 0, SHAFT_BOT, 0, 0);
-    rpath_add_line(&g_route_path, 0, 0, end_x, end_y);
-    rpath_densify(&g_route_path);
-    float head_angle = (float)(M_PI * 0.5) - angle_rad;
-    rpath_set_arrow(&g_route_path, end_x, end_y, head_angle);
-    rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, 1.0f);
+    /* Build route path with fillet at corner */
+    {
+        float pts_x[] = {0, 0, end_x};
+        float pts_y[] = {SHAFT_BOT, 0, end_y};
+        build_line_path(&g_route_path, pts_x, pts_y, 3);
+        rpath_densify(&g_route_path);
+        float head_angle = (float)(M_PI * 0.5) - angle_rad;
+        rpath_set_arrow(&g_route_path, end_x, end_y, head_angle);
+        rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, 1.0f);
+    }
 
     render_composite();
     rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
@@ -607,12 +618,15 @@ static void draw_roundabout(float exit_angle_deg, int driving_side,
             while (arc_e >= arc_s) arc_e -= 2.0f * (float)M_PI;
         }
 
+        float entry_pt_x = cx + ring_r * cosf(entry_rad);
+        float entry_pt_y = cy + ring_r * sinf(entry_rad);
+
         rpath_clear(&g_route_path);
-        /* Entry shaft: bottom to ring entry point */
-        rpath_add_line(&g_route_path, 0, SHAFT_BOT, 0, entry_top);
+        /* Entry shaft → ring entry point */
+        rpath_add_line(&g_route_path, 0, SHAFT_BOT, entry_pt_x, entry_pt_y);
         /* Ring arc */
         rpath_add_arc(&g_route_path, cx, cy, ring_r, arc_s, arc_e);
-        /* Exit stub: ring exit point to arrow tip */
+        /* Exit stub */
         rpath_add_line(&g_route_path, ex0_x, ex0_y, ex_tip_x, ex_tip_y);
         rpath_densify(&g_route_path);
         rpath_set_arrow(&g_route_path, ex_tip_x, ex_tip_y, exit_rad);
@@ -790,14 +804,15 @@ static void draw_lane_change(int go_left) {
     render_thick_line(shift, bend_hi, shift, SIDE_TOP, SIDE_T, SIDE);
     render_end_fill_mask();
 
-    /* Build route path */
-    rpath_clear(&g_route_path);
-    rpath_add_line(&g_route_path, 0, SHAFT_BOT, 0, bend_lo);
-    rpath_add_line(&g_route_path, 0, bend_lo, shift, bend_hi);
-    rpath_add_line(&g_route_path, shift, bend_hi, shift, BLUE_LEN);
-    rpath_densify(&g_route_path);
-    rpath_set_arrow(&g_route_path, shift, BLUE_LEN, (float)(M_PI * 0.5));
-    rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, 1.0f);
+    /* Build route path with fillets at S-bend corners */
+    {
+        float pts_x[] = {0, 0, shift, shift};
+        float pts_y[] = {SHAFT_BOT, bend_lo, bend_hi, BLUE_LEN};
+        build_line_path(&g_route_path, pts_x, pts_y, 4);
+        rpath_densify(&g_route_path);
+        rpath_set_arrow(&g_route_path, shift, BLUE_LEN, (float)(M_PI * 0.5));
+        rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, 1.0f);
+    }
 
     render_composite();
     rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
@@ -839,14 +854,15 @@ static void draw_merge(int go_right) {
     render_thick_line(0, bend_hi, 0, SHAFT_TOP, SIDE_T, SIDE);
     render_end_fill_mask();
 
-    /* Build route path */
-    rpath_clear(&g_route_path);
-    rpath_add_line(&g_route_path, start_x, SHAFT_BOT, start_x, bend_lo);
-    rpath_add_line(&g_route_path, start_x, bend_lo, 0, bend_hi);
-    rpath_add_line(&g_route_path, 0, bend_hi, 0, BLUE_LEN);
-    rpath_densify(&g_route_path);
-    rpath_set_arrow(&g_route_path, 0, BLUE_LEN, (float)(M_PI * 0.5));
-    rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, 1.0f);
+    /* Build route path with fillets at S-bend corners */
+    {
+        float pts_x[] = {start_x, start_x, 0, 0};
+        float pts_y[] = {SHAFT_BOT, bend_lo, bend_hi, BLUE_LEN};
+        build_line_path(&g_route_path, pts_x, pts_y, 4);
+        rpath_densify(&g_route_path);
+        rpath_set_arrow(&g_route_path, 0, BLUE_LEN, (float)(M_PI * 0.5));
+        rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, 1.0f);
+    }
 
     render_composite();
     rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
