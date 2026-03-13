@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <libgen.h>
 
 #include "platform.h"
 
@@ -327,6 +328,21 @@ int main(int argc, char **argv) {
         fprintf(stderr, "c_render: render init failed\n");
         platform_shutdown();
         return 1;
+    }
+
+    /* Try multiple paths for flag atlas */
+    if (render_load_flag_atlas("resources/flag_atlas.rgba", 128, 128, 14) != 0)
+    if (render_load_flag_atlas("flag_atlas.rgba", 128, 128, 14) != 0) {
+        char tmp[512];
+        strncpy(tmp, argv[0], sizeof(tmp) - 1);
+        tmp[sizeof(tmp) - 1] = '\0';
+        char *dir = dirname(tmp);
+        char atlas_path[512];
+        snprintf(atlas_path, sizeof(atlas_path), "%s/resources/flag_atlas.rgba", dir);
+        if (render_load_flag_atlas(atlas_path, 128, 128, 14) != 0) {
+            snprintf(atlas_path, sizeof(atlas_path), "%s/flag_atlas.rgba", dir);
+            render_load_flag_atlas(atlas_path, 128, 128, 14);
+        }
     }
 
     /* Start with first test maneuver */

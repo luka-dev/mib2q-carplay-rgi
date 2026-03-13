@@ -90,22 +90,15 @@
 #define BEND_HI      0.15f   /* upper S-bend point */
 #define MERGE_BEND_LO (-0.10f) /* merge lower S-bend point */
 
-/* Flag / arrived */
-#define FLAG_POLE_T  OL_W             /* flag pole thickness */
-#define FLAG_W       0.22f            /* flag width */
-#define FLAG_H       0.16f            /* flag height */
-#define FLAG_BASE_R  0.05f            /* flag base disc radius */
-#define DOME_R       0.12f            /* arrived dome cap radius */
-#define ARRIVE_RING_R 0.11f           /* arrived center ring radius */
-#define ARRIVE_RING_T 0.04f           /* arrived ring thickness */
-#define ARRIVE_ROAD_TOP   0.10f       /* arrived road end Y */
-#define ARRIVE_RING_GAP   0.12f       /* gap between arrowhead and ring center */
-#define ARRIVE_FLAG_H_CTR 0.42f       /* flag pole height — center arrived */
-#define ARRIVE_FLAG_H_SIDE 0.50f      /* flag pole height — side arrived */
-#define ARRIVE_FLAG_X     0.30f       /* flag X offset from road — side arrived */
-#define ARRIVE_FLAG_Y_OFF 0.06f       /* flag Y offset below road_top — side arrived */
+/* Arrived */
+#define ARRIVE_ROAD_TOP   0.15f       /* arrived road/disc end Y */
 #define ARRIVE_SEG        24          /* circle/disc segment count for arrived */
 #define SNAP_SENTINEL     999.0f      /* large value for angle snap comparison */
+
+/* Destination flag sprite */
+#define ARRIVE_FLAG_Y     ARRIVE_ROAD_TOP  /* flag at road endpoint (arrival dot) */
+#define ARRIVE_FLAG_SZ    0.18f       /* half-extent of flag sprite */
+#define FLAG_ANIM_SPEED   0.35f       /* frames per render frame */
 
 /* Route extrusion heights (must match render.c) */
 #define ROUTE_BASE_Y  0.03f   /* same as RAISE_BASE in render.c */
@@ -123,6 +116,8 @@ static float g_route_end_frac  = 1.0f; /* fraction of extended path at original 
 static float g_t_tail = 0.0f;          /* computed tail fraction for extrusion */
 static float g_t_head = 1.0f;          /* computed head fraction for extrusion */
 static int   g_route_debug = 0;        /* debug overlay toggle */
+static float g_flag_frame = 0.0f;     /* destination flag animation frame */
+static int   g_flag_active = 0;      /* 1 when showing arrived icon (flag animating) */
 #define ROUTE_ANIM_SPEED 0.025f         /* per-frame step (~40 frames) */
 #define ROUTE_EXTEND     1.2f           /* extension length beyond viewport */
 
@@ -132,7 +127,7 @@ void maneuver_start_anim(void) {
 }
 
 int maneuver_is_animating(void) {
-    return g_route_animating;
+    return g_route_animating || g_flag_active;
 }
 
 void maneuver_set_slide(float t) {
@@ -238,11 +233,6 @@ static void compute_slide_params(void) {
     g_t_tail = g_t_head - slug_frac;
     if (g_t_tail < 0.0f) g_t_tail = 0.0f;
 }
-
-/* Flag checkerboard dark square color (~#1E2430) */
-#define CHECK_R 0.12f
-#define CHECK_G 0.14f
-#define CHECK_B 0.18f
 
 /* ================================================================
  * Fading road helper
@@ -397,12 +387,13 @@ static void draw_straight(const int *side_angles, int side_count) {
     draw_straight_fill(side_angles, side_count);
     render_end_fill_mask();
 
-    /* Build route path */
+    /* Build route path — blue line same length as arrived */
+    float straight_end = ARRIVE_ROAD_TOP - HEAD_SZ;
     rpath_clear(&g_route_path);
-    rpath_add_line(&g_route_path, 0, SHAFT_BOT, 0, SHAFT_TOP);
+    rpath_add_line(&g_route_path, 0, SHAFT_BOT, 0, straight_end);
     rpath_extend(&g_route_path);
     rpath_densify(&g_route_path);
-    rpath_set_arrow(&g_route_path, 0, SHAFT_TOP, (float)(M_PI * 0.5));
+    rpath_set_arrow(&g_route_path, 0, straight_end, (float)(M_PI * 0.5));
     compute_slide_params();
     rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
 
@@ -770,138 +761,46 @@ static void draw_roundabout(float exit_angle_deg, int driving_side,
 }
 
 /* ----------------------------------------------------------------
- * draw_flag — flag on a pole (used by arrived)
- * ---------------------------------------------------------------- */
-
-static void draw_flag_outline(float bx, float by, float pole_h) {
-    float fy = by + pole_h;
-    float cw = FLAG_W / 3.0f;
-    float ch = FLAG_H / 2.0f;
-    /* pole outline */
-    render_thick_line(bx, by, bx, fy, FLAG_POLE_T + OL_W * 2, WHITE);
-    /* flag outline — a rect around the whole flag */
-    render_rect(bx - OL_W, fy - FLAG_H - OL_W, FLAG_W + OL_W * 2, FLAG_H + OL_W * 2, WHITE);
-    (void)cw; (void)ch;
-}
-
-static void draw_flag_fill(float bx, float by, float pole_h) {
-    float fy = by + pole_h;
-    float cw = FLAG_W / 3.0f;
-    float ch = FLAG_H / 2.0f;
-    /* pole */
-    render_thick_line(bx, by, bx, fy, FLAG_POLE_T, SIDE);
-    /* base disc */
-    render_disc(bx, by, FLAG_BASE_R, JOINT_SEG, SIDE);
-    /* 3×2 checkerboard */
-    int row, col;
-    for (row = 0; row < 2; row++) {
-        for (col = 0; col < 3; col++) {
-            float rx = bx + col * cw;
-            float ry = fy - row * ch;
-            if ((row + col) % 2 == 0)
-                render_rect(rx, ry - ch, cw, ch, SIDE);
-            else
-                render_rect(rx, ry - ch, cw, ch, CHECK_R, CHECK_G, CHECK_B, 1.0f);
-        }
-    }
-}
-
-static void draw_flag_route(float bx, float by, float pole_h) {
-    float fy = by + pole_h;
-    float cw = FLAG_W / 3.0f;
-    float ch = FLAG_H / 2.0f;
-    /* base disc */
-    render_disc(bx, by, FLAG_BASE_R, JOINT_SEG, ACTIVE);
-    /* 3×2 checkerboard */
-    int row, col;
-    for (row = 0; row < 2; row++) {
-        for (col = 0; col < 3; col++) {
-            float rx = bx + col * cw;
-            float ry = fy - row * ch;
-            if ((row + col) % 2 == 0)
-                render_rect(rx, ry - ch, cw, ch, ACTIVE);
-            else
-                render_rect(rx, ry - ch, cw, ch, CHECK_R, CHECK_G, CHECK_B, 1.0f);
-        }
-    }
-}
-
-/* ----------------------------------------------------------------
  * draw_arrived — outline/fill/route passes
  * ---------------------------------------------------------------- */
 
 static void draw_arrived(int dir) {
     float road_top = ARRIVE_ROAD_TOP;
-    float dome_r = DOME_R;
+    (void)dir;
 
     render_set_raised(0);
 
-    if (dir == 0) {
-        /* --- Center / offroad --- */
-        float ring_y = road_top + HEAD_SZ + ARRIVE_RING_GAP;
-        float ring_r = ARRIVE_RING_R;
+    /* === OUTLINE MASK === */
+    render_begin_outline_mask();
+    draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - FADE_LEN, 1.0f, FADE_OUTLINE);
+    render_thick_line(0, SHAFT_BOT, 0, road_top, OL_T, WHITE);
+    render_disc(0, road_top, OL_T * 0.5f, ARRIVE_SEG, WHITE);
+    render_end_outline_mask();
 
-        render_begin_outline_mask();
-        draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - FADE_LEN, 1.0f, FADE_OUTLINE);
-        render_thick_line(0, SHAFT_BOT, 0, road_top, OL_T, WHITE);
-        render_circle(0, ring_y, ring_r, ARRIVE_RING_T + OL_W * 2, ARRIVE_SEG, WHITE);
-        draw_flag_outline(0, ring_y, ARRIVE_FLAG_H_CTR);
-        render_end_outline_mask();
+    /* === FILL MASK === */
+    render_begin_fill_mask();
+    draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - FADE_LEN, 1.0f, FADE_GREY);
+    render_thick_line(0, SHAFT_BOT, 0, road_top, SIDE_T, SIDE);
+    render_disc(0, road_top, SIDE_T * 0.5f, ARRIVE_SEG, SIDE);
+    render_end_fill_mask();
 
-        render_begin_fill_mask();
-        draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - FADE_LEN, 1.0f, FADE_GREY);
-        render_thick_line(0, SHAFT_BOT, 0, road_top, SIDE_T, SIDE);
-        draw_flag_fill(0, ring_y, ARRIVE_FLAG_H_CTR);
-        render_end_fill_mask();
+    /* === ROUTE PATH === */
+    /* Pull route back so arrow TIP lands at flag base (arrow extends HEAD_SZ beyond endpoint) */
+    float route_end = road_top - HEAD_SZ;
+    rpath_clear(&g_route_path);
+    rpath_add_line(&g_route_path, 0, SHAFT_BOT, 0, route_end);
+    rpath_extend(&g_route_path);
+    rpath_densify(&g_route_path);
+    rpath_set_arrow(&g_route_path, 0, route_end, (float)(M_PI * 0.5));
+    compute_slide_params();
+    rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
 
-        /* Route path */
-        rpath_clear(&g_route_path);
-        rpath_add_line(&g_route_path, 0, SHAFT_BOT, 0, road_top);
-        rpath_extend(&g_route_path);
-        rpath_densify(&g_route_path);
-        rpath_set_arrow(&g_route_path, 0, road_top, (float)(M_PI * 0.5));
-        compute_slide_params();
-        rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
+    render_composite();
 
-        render_composite();
-        rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
-        /* Arrived extras: ring + flag drawn as regular 3D primitives */
-        render_circle(0, ring_y, ring_r, ARRIVE_RING_T, ARRIVE_SEG, ACTIVE);
-        draw_flag_route(0, ring_y, ARRIVE_FLAG_H_CTR);
-    } else {
-        /* --- Left / Right --- */
-        float sign = (dir < 0) ? -1.0f : 1.0f;
-        float flag_x = sign * ARRIVE_FLAG_X;
+    /* Animated destination flag — drawn before route so blue line overlays it */
+    render_sprite_flag(0, ARRIVE_FLAG_Y, ARRIVE_FLAG_SZ, (int)g_flag_frame);
 
-        render_begin_outline_mask();
-        draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - FADE_LEN, 1.0f, FADE_OUTLINE);
-        render_thick_line(0, SHAFT_BOT, 0, road_top, OL_T, WHITE);
-        render_disc(0, road_top, dome_r + OL_W, ARRIVE_SEG, WHITE);
-        draw_flag_outline(flag_x, road_top - ARRIVE_FLAG_Y_OFF, ARRIVE_FLAG_H_SIDE);
-        render_end_outline_mask();
-
-        render_begin_fill_mask();
-        draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - FADE_LEN, 1.0f, FADE_GREY);
-        render_thick_line(0, SHAFT_BOT, 0, road_top, SIDE_T, SIDE);
-        render_disc(0, road_top, dome_r + OL_W * 0.5f, ARRIVE_SEG, SIDE);
-        draw_flag_fill(flag_x, road_top - ARRIVE_FLAG_Y_OFF, ARRIVE_FLAG_H_SIDE);
-        render_end_fill_mask();
-
-        /* Route path */
-        rpath_clear(&g_route_path);
-        rpath_add_line(&g_route_path, 0, SHAFT_BOT, 0, road_top);
-        rpath_extend(&g_route_path);
-        rpath_densify(&g_route_path);
-        rpath_set_arrow(&g_route_path, 0, road_top, (float)(M_PI * 0.5));
-        compute_slide_params();
-        rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
-
-        render_composite();
-        rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
-        /* Arrived extras: dome + flag drawn as regular 3D primitives */
-        render_disc(0, road_top, dome_r, ARRIVE_SEG, ACTIVE);
-        draw_flag_route(flag_x, road_top - ARRIVE_FLAG_Y_OFF, ARRIVE_FLAG_H_SIDE);
-    }
+    rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
 }
 
 /* ----------------------------------------------------------------
@@ -1013,6 +912,16 @@ static void draw_merge(int go_right) {
  * ================================================================ */
 
 void maneuver_draw(const maneuver_state_t *s) {
+    /* Track whether flag animation is active */
+    g_flag_active = (s->icon == ICON_ARRIVED);
+
+    /* Advance flag animation (always running for arrived) */
+    if (g_flag_active) {
+        g_flag_frame += FLAG_ANIM_SPEED;
+        if (g_flag_frame >= 14.0f)
+            g_flag_frame = fmodf(g_flag_frame, 14.0f);
+    }
+
     /* Advance animation if running */
     if (g_route_animating) {
         g_route_slide += ROUTE_ANIM_SPEED;
@@ -1031,6 +940,8 @@ void maneuver_draw(const maneuver_state_t *s) {
             rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
         }
         render_composite();
+        if (s->icon == ICON_ARRIVED)
+            render_sprite_flag(0, ARRIVE_FLAG_Y, ARRIVE_FLAG_SZ, (int)g_flag_frame);
         rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
         if (g_route_debug)
             rpath_draw_debug(&g_route_path, g_t_tail, g_t_head);
@@ -1042,8 +953,7 @@ void maneuver_draw(const maneuver_state_t *s) {
             draw_straight(s->junction_angles, s->junction_angle_count);
             break;
         case ICON_TURN:
-            draw_turn((float)s->exit_angle,
-                      s->junction_angles, s->junction_angle_count);
+            draw_turn((float)s->exit_angle, s->junction_angles, s->junction_angle_count);
             break;
         case ICON_UTURN:
             draw_uturn(s->driving_side != 1);
@@ -1055,8 +965,7 @@ void maneuver_draw(const maneuver_state_t *s) {
             draw_lane_change(s->direction < 0);
             break;
         case ICON_ROUNDABOUT:
-            draw_roundabout((float)s->exit_angle, s->driving_side,
-                            s->junction_angles, s->junction_angle_count);
+            draw_roundabout((float)s->exit_angle, s->driving_side, s->junction_angles, s->junction_angle_count);
             break;
         case ICON_ARRIVED:
             draw_arrived(s->direction);

@@ -97,6 +97,18 @@ void render_begin_stubs(void);
 void render_end_stubs(void);
 
 /* ================================================================
+ * Flag sprite API
+ * ================================================================ */
+
+/* Load flag atlas texture. Call after render_init(). Returns 0 on success. */
+int render_load_flag_atlas(const char *path, int frame_w, int frame_h, int frame_count);
+
+/* Draw flag sprite at maneuver-space position (x, y).
+ * size = half-extent in maneuver space.
+ * frame = animation frame index (0..frame_count-1). */
+void render_sprite_flag(float x, float y, float size, int frame);
+
+/* ================================================================
  * Vertex buffer — exposed for route_path.c mesh drawing
  * ================================================================ */
 

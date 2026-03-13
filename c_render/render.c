@@ -231,6 +231,12 @@ static const char *k_frag_src_body =
     "    gl_FragColor = texture2D(u_tex, uv);\n"
     "    return;\n"
     "  }\n"
+    /* tex_mode 4: sprite blit — UVs piggybacked on normal attribute */
+    "  if (u_tex_mode > 3.5 && u_tex_mode < 4.5) {\n"
+    "    vec2 uv = v_normal.xy;\n"
+    "    gl_FragColor = texture2D(u_tex, uv);\n"
+    "    return;\n"
+    "  }\n"
     /* tex_mode 3: flat mask — flat color, no lighting */
     "  if (u_tex_mode > 2.5 && u_tex_mode < 3.5) {\n"
     "    gl_FragColor = u_color;\n"
@@ -646,8 +652,144 @@ int render_masks_dirty(void) {
     return g_masks_dirty;
 }
 
+/* ================================================================
+ * Flag sprite atlas
+ * ================================================================ */
+
+static GLuint g_flag_tex = 0;
+static int g_flag_frame_w = 0, g_flag_frame_h = 0, g_flag_frame_count = 0;
+
+int render_load_flag_atlas(const char *path, int frame_w, int frame_h, int frame_count) {
+    int atlas_w = frame_w * frame_count;
+    int atlas_h = frame_h;
+    int total_bytes = atlas_w * atlas_h * 4;
+
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        fprintf(stderr, "render: flag atlas open failed: %s\n", path);
+        return -1;
+    }
+
+    unsigned char *data = (unsigned char *)malloc(total_bytes);
+    if (!data) { fclose(f); return -1; }
+
+    int read = (int)fread(data, 1, total_bytes, f);
+    fclose(f);
+    if (read != total_bytes) {
+        fprintf(stderr, "render: flag atlas short read %d/%d\n", read, total_bytes);
+        free(data);
+        return -1;
+    }
+
+    glGenTextures(1, &g_flag_tex);
+    glBindTexture(GL_TEXTURE_2D, g_flag_tex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, atlas_w, atlas_h, 0,
+                 GL_RGBA, GL_UNSIGNED_BYTE, data);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    free(data);
+    g_flag_frame_w = frame_w;
+    g_flag_frame_h = frame_h;
+    g_flag_frame_count = frame_count;
+
+    GLenum err = glGetError();
+    fprintf(stderr, "render: flag atlas loaded %dx%d (%d frames) tex=%u gl_err=0x%x\n",
+            atlas_w, atlas_h, frame_count, g_flag_tex, err);
+    return 0;
+}
+
+void render_sprite_flag(float x, float y, float size, int frame) {
+    /* Vertical billboard quad anchored at pole base.
+     * Pole base in sprite UV: u=0.22, v=0.88 (from top).
+     * Quad = full sprite (size*2 x size*2), offset so pole base = (x, 0, y). */
+    float sprite_w = size * 2.0f;
+    float sprite_h = size * 2.0f;
+    float pole_u = 0.22f;     /* pole base X fraction in sprite */
+    float pole_v_top = 0.88f; /* pole base Y fraction from top */
+
+    float fx0 = x - pole_u * sprite_w;
+    float fx1 = fx0 + sprite_w;
+    float z = y;              /* maneuver y → world z (depth) */
+
+    /* 3D (perspective): vertical — rises in world Y at fixed z.
+     * 2D (ortho):       horizontal — lies flat, extends in +z at ground level.
+     * g_persp_t: 1.0 = perspective (vertical), 0.0 = ortho (horizontal).
+     * Apply same quintic ease-in-out (smootherstep) as camera. */
+    float t = g_persp_t;
+    t = t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f);
+    float flat_h = 0.07f;     /* small height above ground in 2D mode */
+
+    /* Bottom edge: stays at pole base position, lerp y only */
+    float by_3d = -(1.0f - pole_v_top) * sprite_h;
+    float by_2d = flat_h;
+    float bot_y = by_3d * t + by_2d * (1.0f - t);
+    float bot_z = z;
+
+    /* Top edge: in 3D rises up in Y, in 2D extends back in Z */
+    float ty_3d = by_3d + sprite_h;
+    float ty_2d = flat_h;
+    float top_y = ty_3d * t + ty_2d * (1.0f - t);
+    float tz_3d = z;
+    float tz_2d = z + sprite_h;
+    float top_z = tz_3d * t + tz_2d * (1.0f - t);
+
+    glDisable(GL_DEPTH_TEST);
+    glUniformMatrix4fv(g_uni_mvp, 1, GL_FALSE, g_mvp_current);
+
+    if (g_flag_tex && g_flag_frame_count > 0) {
+        if (frame < 0) frame = 0;
+        if (frame >= g_flag_frame_count) frame = g_flag_frame_count - 1;
+
+        float u0 = (float)frame / (float)g_flag_frame_count;
+        float u1 = (float)(frame + 1) / (float)g_flag_frame_count;
+
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, g_flag_tex);
+        glUniform1i(g_uni_tex, 0);
+        glUniform1f(g_uni_tex_mode, 4.0f);
+
+        vb_reset();
+        vb_v(fx0, bot_y, bot_z,  u0, 1.0f, 0);
+        vb_v(fx1, bot_y, bot_z,  u1, 1.0f, 0);
+        vb_v(fx1, top_y, top_z,  u1, 0.0f, 0);
+        vb_v(fx0, bot_y, bot_z,  u0, 1.0f, 0);
+        vb_v(fx1, top_y, top_z,  u1, 0.0f, 0);
+        vb_v(fx0, top_y, top_z,  u0, 0.0f, 0);
+
+        glUniform4f(g_uni_color, 1.0f, 1.0f, 1.0f, 1.0f);
+        glUniform1f(g_uni_zbias, 0.0f);
+        glVertexAttribPointer(g_attr_pos,  3, GL_FLOAT, GL_FALSE, 24, g_vbuf);
+        glVertexAttribPointer(g_attr_norm, 3, GL_FLOAT, GL_FALSE, 24, g_vbuf + 3);
+        glEnableVertexAttribArray(g_attr_pos);
+        glEnableVertexAttribArray(g_attr_norm);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+    } else {
+        /* Fallback: magenta quad when atlas not loaded */
+        glUniform1f(g_uni_tex_mode, 0.0f);
+        vb_reset();
+        vb_v(fx0, bot_y, bot_z,  0,0,1);
+        vb_v(fx1, bot_y, bot_z,  0,0,1);
+        vb_v(fx1, top_y, top_z,  0,0,1);
+        vb_v(fx0, bot_y, bot_z,  0,0,1);
+        vb_v(fx1, top_y, top_z,  0,0,1);
+        vb_v(fx0, top_y, top_z,  0,0,1);
+        vb_flush(1.0f, 0.0f, 1.0f, 1.0f);
+    }
+
+    glEnable(GL_DEPTH_TEST);
+    glUniform1f(g_uni_tex_mode, 0.0f);
+}
+
 void render_shutdown(void) {
     fbos_shutdown();
+    if (g_flag_tex) {
+        glDeleteTextures(1, &g_flag_tex);
+        g_flag_tex = 0;
+    }
     if (g_program) {
         glDeleteProgram(g_program);
         g_program = 0;
