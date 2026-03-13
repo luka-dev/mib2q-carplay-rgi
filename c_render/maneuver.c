@@ -115,13 +115,19 @@
 static route_path_t g_route_path;
 static route_mesh_t g_route_mesh;
 
-/* Route animation state */
-static float g_route_t = 1.0f;       /* current animation parameter 0..1 */
-static int   g_route_animating = 0;  /* 1 while animation running */
-#define ROUTE_ANIM_SPEED 0.025f       /* per-frame step (~40 frames) */
+/* Route animation state — sliding window */
+static float g_route_slide = 1.0f;     /* slide parameter 0..1 (0=hidden, 1=in position) */
+static int   g_route_animating = 0;    /* 1 while animation running */
+static float g_route_pre_frac  = 0.0f; /* fraction of extended path before original start */
+static float g_route_end_frac  = 1.0f; /* fraction of extended path at original end */
+static float g_t_tail = 0.0f;          /* computed tail fraction for extrusion */
+static float g_t_head = 1.0f;          /* computed head fraction for extrusion */
+static int   g_route_debug = 0;        /* debug overlay toggle */
+#define ROUTE_ANIM_SPEED 0.025f         /* per-frame step (~40 frames) */
+#define ROUTE_EXTEND     1.2f           /* extension length beyond viewport */
 
 void maneuver_start_anim(void) {
-    g_route_t = 0.0f;
+    g_route_slide = 0.0f;
     g_route_animating = 1;
 }
 
@@ -129,15 +135,108 @@ int maneuver_is_animating(void) {
     return g_route_animating;
 }
 
-void maneuver_set_route_t(float t) {
+void maneuver_set_slide(float t) {
     if (t < 0.0f) t = 0.0f;
     if (t > 1.0f) t = 1.0f;
-    g_route_t = t;
+    g_route_slide = t;
     g_route_animating = 0;
 }
 
-float maneuver_get_route_t(void) {
-    return g_route_t;
+float maneuver_get_slide(void) {
+    return g_route_slide;
+}
+
+void maneuver_toggle_debug(void) {
+    g_route_debug = !g_route_debug;
+}
+
+int maneuver_is_debug(void) {
+    return g_route_debug;
+}
+
+/* Get start point and direction of a path segment */
+static void seg_start_dir(const route_seg_t *s,
+                           float *x, float *y, float *dx, float *dy) {
+    if (s->type == RSEG_LINE) {
+        *x = s->x0; *y = s->y0;
+        float ddx = s->x1 - s->x0, ddy = s->y1 - s->y0;
+        float len = sqrtf(ddx * ddx + ddy * ddy);
+        if (len < 1e-6f) { *dx = 0; *dy = 1; }
+        else { *dx = ddx / len; *dy = ddy / len; }
+    } else {
+        *x = s->cx + s->radius * cosf(s->start_rad);
+        *y = s->cy + s->radius * sinf(s->start_rad);
+        float sign = (s->end_rad - s->start_rad >= 0) ? 1.0f : -1.0f;
+        *dx = -sign * sinf(s->start_rad);
+        *dy =  sign * cosf(s->start_rad);
+    }
+}
+
+/* Get end point and direction of a path segment */
+static void seg_end_dir(const route_seg_t *s,
+                         float *x, float *y, float *dx, float *dy) {
+    if (s->type == RSEG_LINE) {
+        *x = s->x1; *y = s->y1;
+        float ddx = s->x1 - s->x0, ddy = s->y1 - s->y0;
+        float len = sqrtf(ddx * ddx + ddy * ddy);
+        if (len < 1e-6f) { *dx = 0; *dy = 1; }
+        else { *dx = ddx / len; *dy = ddy / len; }
+    } else {
+        *x = s->cx + s->radius * cosf(s->end_rad);
+        *y = s->cy + s->radius * sinf(s->end_rad);
+        float sign = (s->end_rad - s->start_rad >= 0) ? 1.0f : -1.0f;
+        *dx = -sign * sinf(s->end_rad);
+        *dy =  sign * cosf(s->end_rad);
+    }
+}
+
+/* Extend path with pre/post segments for sliding animation */
+static void rpath_extend(route_path_t *p) {
+    if (p->seg_count < 1 || p->seg_count + 2 > RPATH_MAX_SEGS) return;
+
+    float sx, sy, sdx, sdy;
+    seg_start_dir(&p->segs[0], &sx, &sy, &sdx, &sdy);
+
+    float ex, ey, edx, edy;
+    seg_end_dir(&p->segs[p->seg_count - 1], &ex, &ey, &edx, &edy);
+
+    /* Shift segments up by 1 to make room for pre-segment */
+    int i;
+    for (i = p->seg_count - 1; i >= 0; i--)
+        p->segs[i + 1] = p->segs[i];
+
+    /* Pre-segment: extend backwards from first point */
+    p->segs[0].type = RSEG_LINE;
+    p->segs[0].x0 = sx - sdx * ROUTE_EXTEND;
+    p->segs[0].y0 = sy - sdy * ROUTE_EXTEND;
+    p->segs[0].x1 = sx;
+    p->segs[0].y1 = sy;
+    p->seg_count++;
+
+    /* Post-segment: extend forward from last point */
+    p->segs[p->seg_count].type = RSEG_LINE;
+    p->segs[p->seg_count].x0 = ex;
+    p->segs[p->seg_count].y0 = ey;
+    p->segs[p->seg_count].x1 = ex + edx * ROUTE_EXTEND;
+    p->segs[p->seg_count].y1 = ey + edy * ROUTE_EXTEND;
+    p->seg_count++;
+}
+
+/* Compute slide window fractions and t_tail/t_head from g_route_slide */
+static void compute_slide_params(void) {
+    if (g_route_path.total_length < 1e-6f) {
+        g_route_pre_frac = 0.0f;
+        g_route_end_frac = 1.0f;
+        g_t_tail = 0.0f;
+        g_t_head = g_route_slide;
+        return;
+    }
+    g_route_pre_frac = ROUTE_EXTEND / g_route_path.total_length;
+    g_route_end_frac = (g_route_path.total_length - ROUTE_EXTEND) / g_route_path.total_length;
+    float slug_frac = g_route_end_frac - g_route_pre_frac;
+    g_t_head = g_route_pre_frac + g_route_slide * slug_frac;
+    g_t_tail = g_t_head - slug_frac;
+    if (g_t_tail < 0.0f) g_t_tail = 0.0f;
 }
 
 /* Flag checkerboard dark square color (~#1E2430) */
@@ -301,9 +400,11 @@ static void draw_straight(const int *side_angles, int side_count) {
     /* Build route path */
     rpath_clear(&g_route_path);
     rpath_add_line(&g_route_path, 0, SHAFT_BOT, 0, SHAFT_TOP);
+    rpath_extend(&g_route_path);
     rpath_densify(&g_route_path);
     rpath_set_arrow(&g_route_path, 0, SHAFT_TOP, (float)(M_PI * 0.5));
-    rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_route_t);
+    compute_slide_params();
+    rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
 
     render_composite();
     rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
@@ -404,10 +505,12 @@ static void draw_turn(float angle_deg, const int *side_angles, int side_count) {
         float pts_x[] = {0, 0, end_x};
         float pts_y[] = {SHAFT_BOT, 0, end_y};
         build_line_path(&g_route_path, pts_x, pts_y, 3);
+        rpath_extend(&g_route_path);
         rpath_densify(&g_route_path);
         float head_angle = (float)(M_PI * 0.5) - angle_rad;
         rpath_set_arrow(&g_route_path, end_x, end_y, head_angle);
-        rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_route_t);
+        compute_slide_params();
+        rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
     }
 
     render_composite();
@@ -465,9 +568,11 @@ static void draw_uturn(int go_left) {
         rpath_add_arc(&g_route_path, 0, top_y, UTURN_GAP, (float)M_PI, 2.0f * (float)M_PI);
     }
     rpath_add_line(&g_route_path, exit_x, top_y, exit_x, arrow_y);
+    rpath_extend(&g_route_path);
     rpath_densify(&g_route_path);
     rpath_set_arrow(&g_route_path, exit_x, arrow_y, (float)(-M_PI * 0.5));
-    rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_route_t);
+    compute_slide_params();
+    rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
 
     render_composite();
     rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
@@ -653,9 +758,11 @@ static void draw_roundabout(float exit_angle_deg, int driving_side,
         rpath_add_arc(&g_route_path, cx, cy, ring_r, arc_s, arc_e);
         /* Exit stub */
         rpath_add_line(&g_route_path, ex0_x, ex0_y, ex_tip_x, ex_tip_y);
+        rpath_extend(&g_route_path);
         rpath_densify(&g_route_path);
         rpath_set_arrow(&g_route_path, ex_tip_x, ex_tip_y, exit_rad);
-        rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_route_t);
+        compute_slide_params();
+        rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
     }
 
     render_composite();
@@ -750,9 +857,11 @@ static void draw_arrived(int dir) {
         /* Route path */
         rpath_clear(&g_route_path);
         rpath_add_line(&g_route_path, 0, SHAFT_BOT, 0, road_top);
+        rpath_extend(&g_route_path);
         rpath_densify(&g_route_path);
         rpath_set_arrow(&g_route_path, 0, road_top, (float)(M_PI * 0.5));
-        rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_route_t);
+        compute_slide_params();
+        rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
 
         render_composite();
         rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
@@ -781,9 +890,11 @@ static void draw_arrived(int dir) {
         /* Route path */
         rpath_clear(&g_route_path);
         rpath_add_line(&g_route_path, 0, SHAFT_BOT, 0, road_top);
+        rpath_extend(&g_route_path);
         rpath_densify(&g_route_path);
         rpath_set_arrow(&g_route_path, 0, road_top, (float)(M_PI * 0.5));
-        rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_route_t);
+        compute_slide_params();
+        rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
 
         render_composite();
         rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
@@ -834,9 +945,11 @@ static void draw_lane_change(int go_left) {
         float pts_x[] = {0, 0, shift, shift};
         float pts_y[] = {SHAFT_BOT, bend_lo, bend_hi, BLUE_LEN};
         build_line_path(&g_route_path, pts_x, pts_y, 4);
+        rpath_extend(&g_route_path);
         rpath_densify(&g_route_path);
         rpath_set_arrow(&g_route_path, shift, BLUE_LEN, (float)(M_PI * 0.5));
-        rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_route_t);
+        compute_slide_params();
+        rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
     }
 
     render_composite();
@@ -884,9 +997,11 @@ static void draw_merge(int go_right) {
         float pts_x[] = {start_x, start_x, 0, 0};
         float pts_y[] = {SHAFT_BOT, bend_lo, bend_hi, BLUE_LEN};
         build_line_path(&g_route_path, pts_x, pts_y, 4);
+        rpath_extend(&g_route_path);
         rpath_densify(&g_route_path);
         rpath_set_arrow(&g_route_path, 0, BLUE_LEN, (float)(M_PI * 0.5));
-        rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_route_t);
+        compute_slide_params();
+        rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
     }
 
     render_composite();
@@ -900,22 +1015,25 @@ static void draw_merge(int go_right) {
 void maneuver_draw(const maneuver_state_t *s) {
     /* Advance animation if running */
     if (g_route_animating) {
-        g_route_t += ROUTE_ANIM_SPEED;
-        if (g_route_t >= 1.0f) {
-            g_route_t = 1.0f;
+        g_route_slide += ROUTE_ANIM_SPEED;
+        if (g_route_slide >= 1.0f) {
+            g_route_slide = 1.0f;
             g_route_animating = 0;
         }
     }
 
-    /* If masks are cached and still valid, just re-composite + rebuild mesh at current t
+    /* If masks are cached and still valid, just re-composite + rebuild mesh at current slide
      * (handles perspective animation and route animation without re-rendering masks) */
     if (!render_masks_dirty()) {
-        if (g_route_animating || g_route_t < 1.0f) {
-            /* Rebuild mesh at current t (path segments still cached in g_route_path) */
-            rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_route_t);
+        compute_slide_params();
+        if (g_route_animating || g_route_slide < 1.0f) {
+            /* Rebuild mesh at current slide (path segments still cached in g_route_path) */
+            rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
         }
         render_composite();
         rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
+        if (g_route_debug)
+            rpath_draw_debug(&g_route_path, g_t_tail, g_t_head);
         return;
     }
 
@@ -947,6 +1065,9 @@ void maneuver_draw(const maneuver_state_t *s) {
             break;
     }
     /* Each draw_* calls render_composite() which clears the dirty flag */
+
+    if (g_route_debug)
+        rpath_draw_debug(&g_route_path, g_t_tail, g_t_head);
 }
 
 /* ================================================================

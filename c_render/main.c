@@ -254,17 +254,22 @@ static void handle_test_keys(void) {
         g_dirty = 1;
     }
     if (platform_key_tap(CR_KEY_LBRACKET)) {
-        float t = maneuver_get_route_t() - 0.05f;
+        float t = maneuver_get_slide() - 0.05f;
         if (t < 0.0f) t = 0.0f;
-        maneuver_set_route_t(t);
-        fprintf(stderr, "c_render: route_t=%.2f\n", t);
+        maneuver_set_slide(t);
+        fprintf(stderr, "c_render: slide=%.2f\n", t);
         g_dirty = 1;
     }
     if (platform_key_tap(CR_KEY_RBRACKET)) {
-        float t = maneuver_get_route_t() + 0.05f;
+        float t = maneuver_get_slide() + 0.05f;
         if (t > 1.0f) t = 1.0f;
-        maneuver_set_route_t(t);
-        fprintf(stderr, "c_render: route_t=%.2f\n", t);
+        maneuver_set_slide(t);
+        fprintf(stderr, "c_render: slide=%.2f\n", t);
+        g_dirty = 1;
+    }
+    if (platform_key_tap(CR_KEY_D)) {
+        maneuver_toggle_debug();
+        fprintf(stderr, "c_render: debug=%s\n", maneuver_is_debug() ? "ON" : "OFF");
         g_dirty = 1;
     }
 }
@@ -326,7 +331,7 @@ int main(int argc, char **argv) {
 
     /* Start with first test maneuver */
     update_test_state();
-    fprintf(stderr, "c_render: [1/%d] %s  (L/R=type, Up=angle, Down=side, P=persp, S=sides, A=anim, [/]=step)\n",
+    fprintf(stderr, "c_render: [1/%d] %s  (L/R=type, Up=angle, Down=side, P=persp, S=sides, A=anim, [/]=slide, D=debug)\n",
             TEST_COUNT, test_label());
 
     int dirty = 1;  /* first frame always renders */

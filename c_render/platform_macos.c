@@ -47,6 +47,8 @@ static void key_callback(GLFWwindow *window, int key, int scancode, int action, 
         g_key_taps[CR_KEY_LBRACKET] = 1;
     else if (key == GLFW_KEY_RIGHT_BRACKET)
         g_key_taps[CR_KEY_RBRACKET] = 1;
+    else if (key == GLFW_KEY_D)
+        g_key_taps[CR_KEY_D] = 1;
 }
 
 int platform_init(int width, int height) {

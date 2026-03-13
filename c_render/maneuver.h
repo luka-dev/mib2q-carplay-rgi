@@ -39,10 +39,14 @@ typedef struct {
 void maneuver_draw(const maneuver_state_t *state);
 
 /* Route path animation control. */
-void maneuver_start_anim(void);       /* reset t=0, start auto-animation */
+void maneuver_start_anim(void);       /* reset slide=0, start auto-animation */
 int  maneuver_is_animating(void);     /* 1 while auto-animation running */
-void maneuver_set_route_t(float t);   /* set t manually (stops auto-anim) */
-float maneuver_get_route_t(void);     /* get current t value */
+void maneuver_set_slide(float t);     /* set slide manually (stops auto-anim) */
+float maneuver_get_slide(void);       /* get current slide value */
+
+/* Debug overlay toggle. */
+void maneuver_toggle_debug(void);     /* toggle path debug overlay */
+int  maneuver_is_debug(void);         /* 1 if debug overlay active */
 
 /* Get human-readable name for an icon type (for debug overlay). */
 const char *maneuver_icon_name(int icon);
