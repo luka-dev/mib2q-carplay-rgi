@@ -60,18 +60,21 @@
 
 /* Joint helpers */
 #define JOINT_R    (SHAFT_T * 0.5f)
-#define JOINT_SEG  12
+#define JOINT_SEG  32
 #define WHITE  1.0f, 1.0f, 1.0f, 1.0f
 
 /* Roundabout */
 #define RAB_RING_R   0.28f   /* roundabout ring radius */
-#define RAB_RING_SEG 48      /* ring/arc segments */
+#define RAB_RING_SEG 64      /* ring/arc segments */
 
 /* U-turn */
 #define UTURN_GAP    0.18f   /* half-distance between entry/exit shafts */
 #define UTURN_TOP    0.30f   /* top of U arc */
 #define UTURN_ARROW  (-0.10f) /* arrowhead Y on exit side */
 #define UTURN_SEG    16      /* arc segments */
+
+/* Fade-to-solid overlap (eliminates 1px seam at boundary) */
+#define FADE_OVERLAP 0.01f
 
 /* Angle thresholds */
 #define ANGLE_DEDUP     5.0f    /* degrees: angles closer than this are "same direction" */
@@ -238,11 +241,10 @@ static void draw_straight(const int *side_angles, int side_count) {
 
     render_end_stubs();
 
-    /* Blue active (direct to screen, raised) — half length for follow-street */
+    /* Blue active (direct to screen, raised) */
     render_set_raised(1);
-    float blue_top = BLUE_LEN * 0.5f;
-    render_thick_line(0, SHAFT_BOT, 0, blue_top, SHAFT_T, ACTIVE);
-    render_arrowhead(0, blue_top, (float)(M_PI * 0.5), HEAD_SZ, ACTIVE);
+    render_thick_line(0, SHAFT_BOT, 0, SHAFT_TOP, SHAFT_T, ACTIVE);
+    render_arrowhead(0, SHAFT_TOP, (float)(M_PI * 0.5), HEAD_SZ, ACTIVE);
 }
 
 /*

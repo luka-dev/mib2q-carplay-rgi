@@ -25,8 +25,8 @@
  * 3D Configuration
  * ================================================================ */
 
-#define EXTRUDE_H    0.065f    /* active extrusion height */
-#define RAISE_BASE   0.015f   /* active floats this much above grey */
+#define EXTRUDE_H    0.03f     /* active extrusion height */
+#define RAISE_BASE   0.03f    /* active floats this much above grey */
 #define Z_BIAS_STEP  0.00001f  /* depth bias per draw (layer ordering) */
 
 /* Camera — perspective mode (mutable for tuning) */
@@ -597,9 +597,8 @@ void render_end_stubs(void) {
  * h = EXTRUDE_H when raised, ~0 when flat.
  * ================================================================ */
 
-#define FLAT_H 0.002f  /* near-zero height for flat elements */
 static float cur_base(void) { return g_raised ? RAISE_BASE : 0.0f; }
-static float cur_top(void)  { return g_raised ? RAISE_BASE + EXTRUDE_H : FLAT_H; }
+static float cur_top(void)  { return g_raised ? RAISE_BASE + EXTRUDE_H : 0.0f; }
 
 void render_thick_line(float x0, float y0, float x1, float y1, float thickness,
                        float r, float g, float b, float a) {
