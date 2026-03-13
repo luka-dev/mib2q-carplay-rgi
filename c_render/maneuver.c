@@ -13,6 +13,7 @@
 
 #include <stdio.h>
 #include <math.h>
+#include <string.h>
 #include "render.h"
 #include "maneuver.h"
 #include "route_path.h"
@@ -119,8 +120,8 @@ static float g_t_head = 1.0f;          /* computed head fraction for extrusion *
 static int   g_route_debug = 0;        /* debug overlay toggle */
 static float g_flag_frame = 0.0f;     /* destination flag animation frame */
 static int   g_flag_active = 0;      /* 1 when showing arrived icon (flag animating) */
-#define ROUTE_ANIM_SPEED 0.025f         /* per-frame step (~40 frames) */
-#define ROUTE_PUSH_SPEED 0.04f          /* push-out speed (faster than slide-in) */
+#define ROUTE_ANIM_NDC   0.025f         /* slide-in visual speed (NDC units/frame) */
+#define ROUTE_PUSH_NDC   0.04f          /* push-out visual speed (NDC units/frame) */
 #define ROUTE_EXTEND     1.2f           /* extension length beyond viewport */
 
 void maneuver_start_anim(void) {
@@ -198,6 +199,7 @@ static void seg_end_dir(const route_seg_t *s,
         *dy =  sign * cosf(s->end_rad);
     }
 }
+
 
 /* Extend path with pre/post segments for sliding animation */
 static void rpath_extend(route_path_t *p) {
@@ -308,13 +310,112 @@ static void draw_fading_road(float x0, float y0, float x1, float y1,
     }
 }
 
-/* Build a route path from a polyline of waypoints (straight line segments). */
-static void build_line_path(route_path_t *p,
-                             const float *xs, const float *ys, int n) {
+/* Build a route path with arc fillets at interior vertices.
+ * At each interior point where two segments meet, replace the sharp corner
+ * with a circular arc tangent to both adjacent segments.
+ * fillet_r = desired fillet radius (clamped to half min adjacent segment). */
+static void build_filleted_path(route_path_t *p,
+                                 const float *xs, const float *ys, int n,
+                                 float fillet_r) {
     int i;
     rpath_clear(p);
-    for (i = 0; i < n - 1; i++)
-        rpath_add_line(p, xs[i], ys[i], xs[i+1], ys[i+1]);
+    if (n < 2) return;
+    if (n == 2) { rpath_add_line(p, xs[0], ys[0], xs[1], ys[1]); return; }
+
+    /* For each interior vertex i (1..n-2), compute fillet arcs. */
+    /* We emit: line(prev_end → T1), arc(T1 → T2), then next segment starts at T2. */
+
+    /* Track where the current segment starts (after previous fillet trimmed it) */
+    float cur_sx = xs[0], cur_sy = ys[0];
+
+    for (i = 1; i < n - 1; i++) {
+        /* Incoming direction: from xs[i-1],ys[i-1] → xs[i],ys[i] */
+        float in_dx = xs[i] - xs[i-1], in_dy = ys[i] - ys[i-1];
+        float in_len = sqrtf(in_dx * in_dx + in_dy * in_dy);
+        /* Outgoing direction: from xs[i],ys[i] → xs[i+1],ys[i+1] */
+        float out_dx = xs[i+1] - xs[i], out_dy = ys[i+1] - ys[i];
+        float out_len = sqrtf(out_dx * out_dx + out_dy * out_dy);
+
+        if (in_len < 1e-6f || out_len < 1e-6f) {
+            /* Degenerate segment — just emit line to vertex */
+            rpath_add_line(p, cur_sx, cur_sy, xs[i], ys[i]);
+            cur_sx = xs[i]; cur_sy = ys[i];
+            continue;
+        }
+
+        /* Unit vectors */
+        float in_ux = in_dx / in_len, in_uy = in_dy / in_len;
+        float out_ux = out_dx / out_len, out_uy = out_dy / out_len;
+
+        /* Cross product (determines turn direction) and dot product */
+        float cross = in_ux * out_uy - in_uy * out_ux;
+        float dot = in_ux * out_ux + in_uy * out_uy;
+
+        /* Deflection angle (0 = straight, π = U-turn) */
+        float alpha = acosf(dot < -1.0f ? -1.0f : (dot > 1.0f ? 1.0f : dot));
+
+        /* Skip fillet for near-straight (<5°) or near-reversal (>175°) */
+        if (alpha < 0.09f || alpha > (float)M_PI * 0.97f) {
+            rpath_add_line(p, cur_sx, cur_sy, xs[i], ys[i]);
+            cur_sx = xs[i]; cur_sy = ys[i];
+            continue;
+        }
+
+        /* Vertex half-angle = (π - alpha)/2.
+         * Tangent distance from vertex to tangent point = R / tan(vertex_half). */
+        float vertex_half = ((float)M_PI - alpha) * 0.5f;
+        float tan_vh = tanf(vertex_half);
+        if (tan_vh < 1e-6f) { tan_vh = 1e-6f; }
+        float t_dist = fillet_r / tan_vh;
+
+        /* Clamp to half of each adjacent segment's available length */
+        float max_in = in_len * 0.45f;
+        float max_out = out_len * 0.45f;
+        float max_t = max_in < max_out ? max_in : max_out;
+        if (t_dist > max_t) {
+            t_dist = max_t;
+        }
+        float actual_r = t_dist * tan_vh;
+
+        /* Tangent points */
+        float t1x = xs[i] - in_ux * t_dist, t1y = ys[i] - in_uy * t_dist;
+        float t2x = xs[i] + out_ux * t_dist, t2y = ys[i] + out_uy * t_dist;
+
+        /* Arc center: perpendicular to incoming at T1, towards the turn */
+        /* cross > 0 → left turn, cross < 0 → right turn */
+        float perp_x, perp_y;
+        if (cross > 0) {
+            perp_x = -in_uy; perp_y = in_ux;   /* left perpendicular */
+        } else {
+            perp_x = in_uy; perp_y = -in_ux;    /* right perpendicular */
+        }
+        float cx = t1x + perp_x * actual_r;
+        float cy = t1y + perp_y * actual_r;
+
+        /* Arc angles (math convention: atan2) */
+        float start_ang = atan2f(t1y - cy, t1x - cx);
+        float end_ang = atan2f(t2y - cy, t2x - cx);
+
+        /* Ensure correct winding: right turn = CW (decreasing angle),
+         * left turn = CCW (increasing angle) */
+        if (cross > 0) {
+            /* Left turn → CCW → end > start */
+            while (end_ang < start_ang) end_ang += 2.0f * (float)M_PI;
+        } else {
+            /* Right turn → CW → end < start */
+            while (end_ang > start_ang) end_ang -= 2.0f * (float)M_PI;
+        }
+
+        /* Emit: line to T1, arc T1→T2 */
+        rpath_add_line(p, cur_sx, cur_sy, t1x, t1y);
+        rpath_add_arc(p, cx, cy, actual_r, start_ang, end_ang);
+
+        /* Next segment starts at T2 */
+        cur_sx = t2x; cur_sy = t2y;
+    }
+
+    /* Final segment: cur → last point */
+    rpath_add_line(p, cur_sx, cur_sy, xs[n-1], ys[n-1]);
 }
 
 /* ================================================================
@@ -513,7 +614,7 @@ static void draw_turn(float angle_deg, const int *side_angles, int side_count) {
     {
         float pts_x[] = {0, 0, end_x};
         float pts_y[] = {SHAFT_BOT, 0, end_y};
-        build_line_path(&g_route_path, pts_x, pts_y, 3);
+        build_filleted_path(&g_route_path, pts_x, pts_y, 3, JOINT_R);
         rpath_extend(&g_route_path);
         rpath_densify(&g_route_path);
         float head_angle = (float)(M_PI * 0.5) - angle_rad;
@@ -577,6 +678,7 @@ static void draw_uturn(int go_left) {
         rpath_add_arc(&g_route_path, 0, top_y, UTURN_GAP, (float)M_PI, 2.0f * (float)M_PI);
     }
     rpath_add_line(&g_route_path, exit_x, top_y, exit_x, arrow_y);
+
     rpath_extend(&g_route_path);
     rpath_densify(&g_route_path);
     rpath_set_arrow(&g_route_path, exit_x, arrow_y, (float)(-M_PI * 0.5));
@@ -767,6 +869,7 @@ static void draw_roundabout(float exit_angle_deg, int driving_side,
         rpath_add_arc(&g_route_path, cx, cy, ring_r, arc_s, arc_e);
         /* Exit stub */
         rpath_add_line(&g_route_path, ex0_x, ex0_y, ex_tip_x, ex_tip_y);
+    
         rpath_extend(&g_route_path);
         rpath_densify(&g_route_path);
         rpath_set_arrow(&g_route_path, ex_tip_x, ex_tip_y, exit_rad);
@@ -861,7 +964,7 @@ static void draw_lane_change(int go_left) {
     {
         float pts_x[] = {0, 0, shift, shift};
         float pts_y[] = {SHAFT_BOT, bend_lo, bend_hi, BLUE_LEN};
-        build_line_path(&g_route_path, pts_x, pts_y, 4);
+        build_filleted_path(&g_route_path, pts_x, pts_y, 4, JOINT_R);
         rpath_extend(&g_route_path);
         rpath_densify(&g_route_path);
         rpath_set_arrow(&g_route_path, shift, BLUE_LEN, (float)(M_PI * 0.5));
@@ -913,7 +1016,7 @@ static void draw_merge(int go_right) {
     {
         float pts_x[] = {start_x, start_x, 0, 0};
         float pts_y[] = {SHAFT_BOT, bend_lo, bend_hi, BLUE_LEN};
-        build_line_path(&g_route_path, pts_x, pts_y, 4);
+        build_filleted_path(&g_route_path, pts_x, pts_y, 4, JOINT_R);
         rpath_extend(&g_route_path);
         rpath_densify(&g_route_path);
         rpath_set_arrow(&g_route_path, 0, BLUE_LEN, (float)(M_PI * 0.5));
@@ -940,9 +1043,14 @@ void maneuver_draw(const maneuver_state_t *s) {
             g_flag_frame = fmodf(g_flag_frame, 14.0f);
     }
 
+    /* Compute length-normalized slide delta so visual speed is constant
+     * regardless of path length. original_len = path without extensions. */
+    float orig_len = g_route_path.total_length - 2.0f * ROUTE_EXTEND;
+    if (orig_len < 0.1f) orig_len = 0.1f;
+
     /* Advance push-out animation (slide 1→2) */
     if (g_route_pushing) {
-        g_route_slide += ROUTE_PUSH_SPEED;
+        g_route_slide += ROUTE_PUSH_NDC / orig_len;
         if (g_route_slide >= 2.0f) {
             g_route_slide = 2.0f;
             g_route_pushing = 0;
@@ -951,7 +1059,7 @@ void maneuver_draw(const maneuver_state_t *s) {
 
     /* Advance slide-in animation (slide 0→1) */
     if (g_route_animating) {
-        g_route_slide += ROUTE_ANIM_SPEED;
+        g_route_slide += ROUTE_ANIM_NDC / orig_len;
         if (g_route_slide >= 1.0f) {
             g_route_slide = 1.0f;
             g_route_animating = 0;
