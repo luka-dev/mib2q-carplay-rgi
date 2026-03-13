@@ -197,23 +197,39 @@ static void print_state(void) {
 }
 
 static int g_dirty = 1;  /* set when state changes — triggers re-render */
+static int g_pending_idx = -1;  /* pending test index during push-out transition */
+
+/* Complete the push-out → switch state → start slide-in */
+static void finish_push_transition(void) {
+    if (g_pending_idx < 0) return;
+    g_test_idx = g_pending_idx;
+    g_pending_idx = -1;
+    update_test_state();
+    print_state();
+    render_invalidate_masks();
+    maneuver_start_anim();
+    g_dirty = 1;
+}
 
 static void handle_test_keys(void) {
+    /* L/R: push-out current path, then switch to new maneuver */
     if (platform_key_tap(CR_KEY_RIGHT)) {
-        g_test_idx = (g_test_idx + 1) % TEST_COUNT;
-        update_test_state();
-        print_state();
-        g_dirty = 1;
-        render_invalidate_masks();
-        maneuver_start_anim();
+        if (!maneuver_is_pushing()) {
+            g_pending_idx = (g_test_idx + 1) % TEST_COUNT;
+            maneuver_start_push();
+            fprintf(stderr, "c_render: push → [%d/%d] %s\n",
+                    g_pending_idx + 1, TEST_COUNT, g_tests[g_pending_idx].label);
+            g_dirty = 1;
+        }
     }
     if (platform_key_tap(CR_KEY_LEFT)) {
-        g_test_idx = (g_test_idx - 1 + TEST_COUNT) % TEST_COUNT;
-        update_test_state();
-        print_state();
-        g_dirty = 1;
-        render_invalidate_masks();
-        maneuver_start_anim();
+        if (!maneuver_is_pushing()) {
+            g_pending_idx = (g_test_idx - 1 + TEST_COUNT) % TEST_COUNT;
+            maneuver_start_push();
+            fprintf(stderr, "c_render: push → [%d/%d] %s\n",
+                    g_pending_idx + 1, TEST_COUNT, g_tests[g_pending_idx].label);
+            g_dirty = 1;
+        }
     }
     if (platform_key_tap(CR_KEY_UP)) {
         g_state.exit_angle += 30;
@@ -263,7 +279,7 @@ static void handle_test_keys(void) {
     }
     if (platform_key_tap(CR_KEY_RBRACKET)) {
         float t = maneuver_get_slide() + 0.05f;
-        if (t > 1.0f) t = 1.0f;
+        if (t > 2.0f) t = 2.0f;
         maneuver_set_slide(t);
         fprintf(stderr, "c_render: slide=%.2f\n", t);
         g_dirty = 1;
@@ -272,6 +288,11 @@ static void handle_test_keys(void) {
         maneuver_toggle_debug();
         fprintf(stderr, "c_render: debug=%s\n", maneuver_is_debug() ? "ON" : "OFF");
         g_dirty = 1;
+    }
+
+    /* Check if push-out finished — switch to new maneuver */
+    if (g_pending_idx >= 0 && !maneuver_is_pushing()) {
+        finish_push_transition();
     }
 }
 

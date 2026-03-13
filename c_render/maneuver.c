@@ -109,8 +109,9 @@ static route_path_t g_route_path;
 static route_mesh_t g_route_mesh;
 
 /* Route animation state — sliding window */
-static float g_route_slide = 1.0f;     /* slide parameter 0..1 (0=hidden, 1=in position) */
-static int   g_route_animating = 0;    /* 1 while animation running */
+static float g_route_slide = 1.0f;     /* slide parameter 0..2 (0=hidden, 1=in position, 2=pushed out) */
+static int   g_route_animating = 0;    /* 1 while slide-in animation running */
+static int   g_route_pushing = 0;      /* 1 while push-out animation running */
 static float g_route_pre_frac  = 0.0f; /* fraction of extended path before original start */
 static float g_route_end_frac  = 1.0f; /* fraction of extended path at original end */
 static float g_t_tail = 0.0f;          /* computed tail fraction for extrusion */
@@ -119,26 +120,39 @@ static int   g_route_debug = 0;        /* debug overlay toggle */
 static float g_flag_frame = 0.0f;     /* destination flag animation frame */
 static int   g_flag_active = 0;      /* 1 when showing arrived icon (flag animating) */
 #define ROUTE_ANIM_SPEED 0.025f         /* per-frame step (~40 frames) */
+#define ROUTE_PUSH_SPEED 0.04f          /* push-out speed (faster than slide-in) */
 #define ROUTE_EXTEND     1.2f           /* extension length beyond viewport */
 
 void maneuver_start_anim(void) {
     g_route_slide = 0.0f;
     g_route_animating = 1;
+    g_route_pushing = 0;
 }
 
 int maneuver_is_animating(void) {
-    return g_route_animating || g_flag_active;
+    return g_route_animating || g_route_pushing || g_flag_active;
 }
 
 void maneuver_set_slide(float t) {
     if (t < 0.0f) t = 0.0f;
-    if (t > 1.0f) t = 1.0f;
+    if (t > 2.0f) t = 2.0f;
     g_route_slide = t;
     g_route_animating = 0;
+    g_route_pushing = 0;
 }
 
 float maneuver_get_slide(void) {
     return g_route_slide;
+}
+
+void maneuver_start_push(void) {
+    g_route_slide = 1.0f;
+    g_route_pushing = 1;
+    g_route_animating = 0;
+}
+
+int maneuver_is_pushing(void) {
+    return g_route_pushing;
 }
 
 void maneuver_toggle_debug(void) {
@@ -217,13 +231,14 @@ static void rpath_extend(route_path_t *p) {
     p->seg_count++;
 }
 
-/* Compute slide window fractions and t_tail/t_head from g_route_slide */
+/* Compute slide window fractions and t_tail/t_head from g_route_slide.
+ * slide 0..1 = slide-in (normal), slide 1..2 = push-out through exit. */
 static void compute_slide_params(void) {
     if (g_route_path.total_length < 1e-6f) {
         g_route_pre_frac = 0.0f;
         g_route_end_frac = 1.0f;
         g_t_tail = 0.0f;
-        g_t_head = g_route_slide;
+        g_t_head = (g_route_slide < 1.0f) ? g_route_slide : 1.0f;
         return;
     }
     g_route_pre_frac = ROUTE_EXTEND / g_route_path.total_length;
@@ -232,6 +247,9 @@ static void compute_slide_params(void) {
     g_t_head = g_route_pre_frac + g_route_slide * slug_frac;
     g_t_tail = g_t_head - slug_frac;
     if (g_t_tail < 0.0f) g_t_tail = 0.0f;
+    /* Clamp to valid range — push-out moves both head and tail forward */
+    if (g_t_head > 1.0f) g_t_head = 1.0f;
+    if (g_t_tail > 1.0f) g_t_tail = 1.0f;
 }
 
 /* ================================================================
@@ -922,7 +940,16 @@ void maneuver_draw(const maneuver_state_t *s) {
             g_flag_frame = fmodf(g_flag_frame, 14.0f);
     }
 
-    /* Advance animation if running */
+    /* Advance push-out animation (slide 1→2) */
+    if (g_route_pushing) {
+        g_route_slide += ROUTE_PUSH_SPEED;
+        if (g_route_slide >= 2.0f) {
+            g_route_slide = 2.0f;
+            g_route_pushing = 0;
+        }
+    }
+
+    /* Advance slide-in animation (slide 0→1) */
     if (g_route_animating) {
         g_route_slide += ROUTE_ANIM_SPEED;
         if (g_route_slide >= 1.0f) {
@@ -935,7 +962,7 @@ void maneuver_draw(const maneuver_state_t *s) {
      * (handles perspective animation and route animation without re-rendering masks) */
     if (!render_masks_dirty()) {
         compute_slide_params();
-        if (g_route_animating || g_route_slide < 1.0f) {
+        if (g_route_animating || g_route_pushing || g_route_slide != 1.0f) {
             /* Rebuild mesh at current slide (path segments still cached in g_route_path) */
             rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
         }

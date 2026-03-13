@@ -44,6 +44,12 @@ int  maneuver_is_animating(void);     /* 1 while auto-animation running */
 void maneuver_set_slide(float t);     /* set slide manually (stops auto-anim) */
 float maneuver_get_slide(void);       /* get current slide value */
 
+/* Push-out transition: slide the blue path forward through the exit.
+ * On completion, maneuver_is_pushing() returns 0 — caller should then
+ * switch to new maneuver state and call maneuver_start_anim(). */
+void maneuver_start_push(void);       /* begin push-out (slide 1→2) */
+int  maneuver_is_pushing(void);       /* 1 while push-out running */
+
 /* Debug overlay toggle. */
 void maneuver_toggle_debug(void);     /* toggle path debug overlay */
 int  maneuver_is_debug(void);         /* 1 if debug overlay active */
