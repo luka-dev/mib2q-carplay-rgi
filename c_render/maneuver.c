@@ -201,6 +201,147 @@ static void seg_end_dir(const route_seg_t *s,
 }
 
 
+/* Insert fillet arcs at segment junctions where tangent directions don't match.
+ * Trims line segments linearly, arc segments by angular offset (stays on curve).
+ * Must be called before rpath_extend/rpath_densify. */
+static void rpath_fillet_junctions(route_path_t *p, float fillet_r) {
+    if (p->seg_count < 2) return;
+
+    route_seg_t new_segs[RPATH_MAX_SEGS];
+    int new_count = 0;
+    new_segs[new_count++] = p->segs[0];
+
+    int i;
+    for (i = 1; i < p->seg_count; i++) {
+        if (new_count >= RPATH_MAX_SEGS - 2) {
+            new_segs[new_count++] = p->segs[i];
+            continue;
+        }
+
+        /* Junction: exit of prev, entry of next */
+        float ex, ey, edx, edy;
+        seg_end_dir(&new_segs[new_count - 1], &ex, &ey, &edx, &edy);
+        float sx, sy, sdx, sdy;
+        seg_start_dir(&p->segs[i], &sx, &sy, &sdx, &sdy);
+
+        float dot = edx * sdx + edy * sdy;
+        float alpha = acosf(dot < -1.0f ? -1.0f : (dot > 1.0f ? 1.0f : dot));
+
+        if (alpha < 0.09f || alpha > (float)M_PI * 0.97f) {
+            new_segs[new_count++] = p->segs[i];
+            continue;
+        }
+
+        float vertex_half = ((float)M_PI - alpha) * 0.5f;
+        float tan_vh = tanf(vertex_half);
+        if (tan_vh < 1e-6f) tan_vh = 1e-6f;
+        float t_dist = fillet_r / tan_vh;
+
+        /* Segment arc-lengths for clamping */
+        route_seg_t *prev = &new_segs[new_count - 1];
+        route_seg_t *cur = &p->segs[i];
+        float prev_len = (prev->type == RSEG_LINE)
+            ? sqrtf((prev->x1-prev->x0)*(prev->x1-prev->x0)+(prev->y1-prev->y0)*(prev->y1-prev->y0))
+            : fabsf(prev->end_rad - prev->start_rad) * prev->radius;
+        float cur_len = (cur->type == RSEG_LINE)
+            ? sqrtf((cur->x1-cur->x0)*(cur->x1-cur->x0)+(cur->y1-cur->y0)*(cur->y1-cur->y0))
+            : fabsf(cur->end_rad - cur->start_rad) * cur->radius;
+        float max_t = 0.45f * (prev_len < cur_len ? prev_len : cur_len);
+        if (t_dist > max_t) t_dist = max_t;
+        float actual_r = t_dist * tan_vh;
+
+        /* --- Trim prev segment, get T1 and tangent at T1 --- */
+        float t1x, t1y, t1dx, t1dy;
+        if (prev->type == RSEG_LINE) {
+            t1x = prev->x1 - edx * t_dist;
+            t1y = prev->y1 - edy * t_dist;
+            t1dx = edx; t1dy = edy;
+            prev->x1 = t1x; prev->y1 = t1y;
+        } else {
+            float sweep = prev->end_rad - prev->start_rad;
+            float da = t_dist / prev->radius;
+            /* Trim end: move end_rad back towards start */
+            float new_end = (sweep > 0) ? prev->end_rad - da : prev->end_rad + da;
+            prev->end_rad = new_end;
+            t1x = prev->cx + prev->radius * cosf(new_end);
+            t1y = prev->cy + prev->radius * sinf(new_end);
+            float s = (sweep > 0) ? 1.0f : -1.0f;
+            t1dx = -s * sinf(new_end);
+            t1dy =  s * cosf(new_end);
+        }
+
+        /* --- Trim next segment, get T2 and tangent at T2 --- */
+        float t2x, t2y, t2dx, t2dy;
+        route_seg_t trimmed = *cur;
+        if (trimmed.type == RSEG_LINE) {
+            t2x = trimmed.x0 + sdx * t_dist;
+            t2y = trimmed.y0 + sdy * t_dist;
+            t2dx = sdx; t2dy = sdy;
+            trimmed.x0 = t2x; trimmed.y0 = t2y;
+        } else {
+            float sweep = trimmed.end_rad - trimmed.start_rad;
+            float da = t_dist / trimmed.radius;
+            /* Trim start: move start_rad forward towards end */
+            float new_start = (sweep > 0) ? trimmed.start_rad + da : trimmed.start_rad - da;
+            trimmed.start_rad = new_start;
+            t2x = trimmed.cx + trimmed.radius * cosf(new_start);
+            t2y = trimmed.cy + trimmed.radius * sinf(new_start);
+            float s = (sweep > 0) ? 1.0f : -1.0f;
+            t2dx = -s * sinf(new_start);
+            t2dy =  s * cosf(new_start);
+        }
+
+        /* --- Compute fillet arc from actual on-curve T1/T2 and tangents --- */
+        float cross2 = t1dx * t2dy - t1dy * t2dx;
+
+        /* Perpendicular to T1 tangent, towards inside of turn */
+        float perp_x, perp_y;
+        if (cross2 > 0) {
+            perp_x = -t1dy; perp_y = t1dx;
+        } else {
+            perp_x = t1dy; perp_y = -t1dx;
+        }
+
+        /* Solve for radius so circle through T1 also passes through T2.
+         * center = T1 + perp * r.  Need |center - T2| = r.
+         * => r = -(dx²+dy²) / (2*(dx*perp_x + dy*perp_y))
+         * where dx = t1x-t2x, dy = t1y-t2y */
+        {
+            float dx = t1x - t2x, dy = t1y - t2y;
+            float d_perp = dx * perp_x + dy * perp_y;
+            if (fabsf(d_perp) > 1e-6f) {
+                actual_r = -(dx * dx + dy * dy) / (2.0f * d_perp);
+                if (actual_r < 0.0f) { perp_x = -perp_x; perp_y = -perp_y; actual_r = -actual_r; }
+            }
+        }
+        float fcx = t1x + perp_x * actual_r;
+        float fcy = t1y + perp_y * actual_r;
+
+        float sa = atan2f(t1y - fcy, t1x - fcx);
+        float ea = atan2f(t2y - fcy, t2x - fcx);
+
+        if (cross2 > 0) {
+            while (ea < sa) ea += 2.0f * (float)M_PI;
+        } else {
+            while (ea > sa) ea -= 2.0f * (float)M_PI;
+        }
+
+        /* Insert fillet arc segment */
+        route_seg_t *f = &new_segs[new_count++];
+        f->type = RSEG_ARC;
+        f->cx = fcx; f->cy = fcy;
+        f->radius = actual_r;
+        f->start_rad = sa;
+        f->end_rad = ea;
+        f->x0 = f->x1 = 0; f->y0 = f->y1 = 0;
+
+        new_segs[new_count++] = trimmed;
+    }
+
+    memcpy(p->segs, new_segs, new_count * sizeof(route_seg_t));
+    p->seg_count = new_count;
+}
+
 /* Extend path with pre/post segments for sliding animation */
 static void rpath_extend(route_path_t *p) {
     if (p->seg_count < 1 || p->seg_count + 2 > RPATH_MAX_SEGS) return;
@@ -678,7 +819,7 @@ static void draw_uturn(int go_left) {
         rpath_add_arc(&g_route_path, 0, top_y, UTURN_GAP, (float)M_PI, 2.0f * (float)M_PI);
     }
     rpath_add_line(&g_route_path, exit_x, top_y, exit_x, arrow_y);
-
+    rpath_fillet_junctions(&g_route_path, JOINT_R);
     rpath_extend(&g_route_path);
     rpath_densify(&g_route_path);
     rpath_set_arrow(&g_route_path, exit_x, arrow_y, (float)(-M_PI * 0.5));
@@ -869,7 +1010,7 @@ static void draw_roundabout(float exit_angle_deg, int driving_side,
         rpath_add_arc(&g_route_path, cx, cy, ring_r, arc_s, arc_e);
         /* Exit stub */
         rpath_add_line(&g_route_path, ex0_x, ex0_y, ex_tip_x, ex_tip_y);
-    
+        rpath_fillet_junctions(&g_route_path, JOINT_R);
         rpath_extend(&g_route_path);
         rpath_densify(&g_route_path);
         rpath_set_arrow(&g_route_path, ex_tip_x, ex_tip_y, exit_rad);
