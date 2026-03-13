@@ -237,18 +237,6 @@ static void handle_test_keys(void) {
                 g_sides_presets[g_sides_idx].count);
         g_dirty = 1;
     }
-    /* Camera tuning: Z/X=eyeZ, C/V=eyeY, B/N=ctrZ, F/G=fov */
-    if (platform_key_tap(CR_KEY_Z)) { render_cam_adjust(0, -0.2f); g_dirty = 1; }
-    if (platform_key_tap(CR_KEY_X)) { render_cam_adjust(0,  0.2f); g_dirty = 1; }
-    if (platform_key_tap(CR_KEY_C)) { render_cam_adjust(1,  0.1f); g_dirty = 1; }
-    if (platform_key_tap(CR_KEY_V)) { render_cam_adjust(1, -0.1f); g_dirty = 1; }
-    if (platform_key_tap(CR_KEY_B)) { render_cam_adjust(2, -0.05f); g_dirty = 1; }
-    if (platform_key_tap(CR_KEY_N)) { render_cam_adjust(2,  0.05f); g_dirty = 1; }
-    if (platform_key_tap(CR_KEY_F)) { render_cam_adjust(3, -1.0f); g_dirty = 1; }
-    if (platform_key_tap(CR_KEY_G)) { render_cam_adjust(3,  1.0f); g_dirty = 1; }
-    /* H/J = center Y up/down */
-    if (platform_key_tap(CR_KEY_H)) { render_cam_adjust(4,  0.02f); g_dirty = 1; }
-    if (platform_key_tap(CR_KEY_J)) { render_cam_adjust(4, -0.02f); g_dirty = 1; }
 }
 
 /* ================================================================

@@ -29,19 +29,14 @@
 #define RAISE_BASE   0.03f    /* active floats this much above grey */
 #define Z_BIAS_STEP  0.00001f  /* depth bias per draw (layer ordering) */
 
-/* Camera — perspective mode (mutable for tuning) */
-static float g_cam_eye_y =  0.95f;
-static float g_cam_eye_z = -1.40f;
-static float g_cam_ctr_y = -0.50f;
-static float g_cam_ctr_z =  0.25f;
-static float g_cam_fov   = 40.0f;
+/* Camera — perspective mode */
 #define CAM_EYE_X    0.0f
-#define CAM_EYE_Y    g_cam_eye_y
-#define CAM_EYE_Z    g_cam_eye_z
+#define CAM_EYE_Y    0.95f
+#define CAM_EYE_Z   -1.40f
 #define CAM_CTR_X    0.0f
-#define CAM_CTR_Y    g_cam_ctr_y
-#define CAM_CTR_Z    g_cam_ctr_z
-#define CAM_FOV_DEG  g_cam_fov
+#define CAM_CTR_Y   -0.50f
+#define CAM_CTR_Z    0.25f
+#define CAM_FOV_DEG  40.0f
 
 /* Light direction (world space, normalized in shader) */
 #define LIGHT_X  0.1f
@@ -512,17 +507,6 @@ void render_set_perspective(int enabled) {
     g_perspective = enabled;
 }
 
-void render_cam_adjust(int param, float delta) {
-    switch (param) {
-        case 0: g_cam_eye_z += delta; break;  /* Z/X: eye depth */
-        case 1: g_cam_eye_y += delta; break;  /* C/V: eye height */
-        case 2: g_cam_ctr_z += delta; break;  /* B/N: look-at Z */
-        case 3: g_cam_fov   += delta; break;  /* F/G: FOV */
-        case 4: g_cam_ctr_y += delta; break;  /* H/J: look-at Y */
-    }
-    fprintf(stderr, "c_render: cam eye=(0, %.2f, %.2f) ctr=(0, %.2f, %.2f) fov=%.1f\n",
-            g_cam_eye_y, g_cam_eye_z, g_cam_ctr_y, g_cam_ctr_z, g_cam_fov);
-}
 
 int render_is_animating(void) {
     return (g_persp_t != (float)g_perspective);

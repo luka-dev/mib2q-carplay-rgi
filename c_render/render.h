@@ -59,9 +59,6 @@ void render_set_perspective(int enabled);
 /* Returns 1 if a transition animation is in progress. */
 int render_is_animating(void);
 
-/* Adjust camera parameter: 0=eyeZ, 1=eyeY, 2=ctrZ, 3=fov */
-void render_cam_adjust(int param, float delta);
-
 /* Toggle 3D extrusion. raised=1 → extruded, raised=0 → flat on ground. */
 void render_set_raised(int raised);
 

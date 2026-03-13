@@ -41,26 +41,6 @@ static void key_callback(GLFWwindow *window, int key, int scancode, int action, 
         g_key_taps[CR_KEY_SPACE] = 1;
     else if (key == GLFW_KEY_S)
         g_key_taps[CR_KEY_S] = 1;
-    else if (key == GLFW_KEY_Z)
-        g_key_taps[CR_KEY_Z] = 1;
-    else if (key == GLFW_KEY_X)
-        g_key_taps[CR_KEY_X] = 1;
-    else if (key == GLFW_KEY_C)
-        g_key_taps[CR_KEY_C] = 1;
-    else if (key == GLFW_KEY_V)
-        g_key_taps[CR_KEY_V] = 1;
-    else if (key == GLFW_KEY_B)
-        g_key_taps[CR_KEY_B] = 1;
-    else if (key == GLFW_KEY_N)
-        g_key_taps[CR_KEY_N] = 1;
-    else if (key == GLFW_KEY_F)
-        g_key_taps[CR_KEY_F] = 1;
-    else if (key == GLFW_KEY_G)
-        g_key_taps[CR_KEY_G] = 1;
-    else if (key == GLFW_KEY_H)
-        g_key_taps[CR_KEY_H] = 1;
-    else if (key == GLFW_KEY_J)
-        g_key_taps[CR_KEY_J] = 1;
 }
 
 int platform_init(int width, int height) {

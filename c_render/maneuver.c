@@ -73,9 +73,6 @@
 #define UTURN_ARROW  (-0.10f) /* arrowhead Y on exit side */
 #define UTURN_SEG    16      /* arc segments */
 
-/* Fade-to-solid overlap (eliminates 1px seam at boundary) */
-#define FADE_OVERLAP 0.01f
-
 /* Angle thresholds */
 #define ANGLE_DEDUP     5.0f    /* degrees: angles closer than this are "same direction" */
 #define ANGLE_DEDUP_RAD 0.09f   /* radians: same threshold (~5°) for roundabout internals */
@@ -89,6 +86,7 @@
 #define MERGE_OFFSET 0.38f   /* merge ramp lateral offset */
 #define BEND_LO     (-0.15f) /* lower S-bend point */
 #define BEND_HI      0.15f   /* upper S-bend point */
+#define MERGE_BEND_LO (-0.10f) /* merge lower S-bend point */
 
 /* Flag / arrived */
 #define FLAG_POLE_T  OL_W             /* flag pole thickness */
@@ -98,6 +96,14 @@
 #define DOME_R       0.12f            /* arrived dome cap radius */
 #define ARRIVE_RING_R 0.11f           /* arrived center ring radius */
 #define ARRIVE_RING_T 0.04f           /* arrived ring thickness */
+#define ARRIVE_ROAD_TOP   0.10f       /* arrived road end Y */
+#define ARRIVE_RING_GAP   0.12f       /* gap between arrowhead and ring center */
+#define ARRIVE_FLAG_H_CTR 0.42f       /* flag pole height — center arrived */
+#define ARRIVE_FLAG_H_SIDE 0.50f      /* flag pole height — side arrived */
+#define ARRIVE_FLAG_X     0.30f       /* flag X offset from road — side arrived */
+#define ARRIVE_FLAG_Y_OFF 0.06f       /* flag Y offset below road_top — side arrived */
+#define ARRIVE_SEG        24          /* circle/disc segment count for arrived */
+#define SNAP_SENTINEL     999.0f      /* large value for angle snap comparison */
 
 /* Flag checkerboard dark square color (~#1E2430) */
 #define CHECK_R 0.12f
@@ -396,7 +402,7 @@ static void draw_roundabout(float exit_angle_deg, int driving_side,
     int snapped_idx = -1;
     if (junction_angle_count > 0) {
         int best = 0;
-        float best_diff = 999.0f;
+        float best_diff = SNAP_SENTINEL;
         int i_s;
         for (i_s = 0; i_s < junction_angle_count && i_s < MAX_JUNCTION_ANGLES; i_s++) {
             float diff = fabsf((float)junction_angles[i_s] - exit_angle_deg);
@@ -598,12 +604,12 @@ static void draw_flag(float bx, float by, float pole_h) {
  * dir: 0=center (offroad), -1=left, 1=right.
  */
 static void draw_arrived(int dir) {
-    float road_top = 0.10f;
+    float road_top = ARRIVE_ROAD_TOP;
     float dome_r = DOME_R;
 
     if (dir == 0) {
         /* --- Center / offroad --- */
-        float ring_y = road_top + HEAD_SZ + 0.12f;
+        float ring_y = road_top + HEAD_SZ + ARRIVE_RING_GAP;
         float ring_r = ARRIVE_RING_R;
 
         /* Entry fade (flat) */
@@ -612,7 +618,7 @@ static void draw_arrived(int dir) {
 
         /* L1: white outline (flat) */
         render_thick_line(0, SHAFT_BOT, 0, road_top, OL_T, WHITE);
-        render_circle(0, ring_y, ring_r, ARRIVE_RING_T + OL_W * 2, 24, WHITE);
+        render_circle(0, ring_y, ring_r, ARRIVE_RING_T + OL_W * 2, ARRIVE_SEG, WHITE);
 
         /* L2: grey under active (flat) */
         render_thick_line(0, SHAFT_BOT, 0, road_top, SIDE_T, SIDE);
@@ -621,14 +627,14 @@ static void draw_arrived(int dir) {
         render_set_raised(1);
         render_thick_line(0, SHAFT_BOT, 0, road_top, SHAFT_T, ACTIVE);
         render_arrowhead(0, road_top, (float)(M_PI * 0.5), HEAD_SZ, ACTIVE);
-        render_circle(0, ring_y, ring_r, ARRIVE_RING_T, 24, ACTIVE);
+        render_circle(0, ring_y, ring_r, ARRIVE_RING_T, ARRIVE_SEG, ACTIVE);
 
         /* flag */
-        draw_flag(0, ring_y, 0.42f);
+        draw_flag(0, ring_y, ARRIVE_FLAG_H_CTR);
     } else {
         /* --- Left / Right: road + dome cap + flag to side --- */
         float sign = (dir < 0) ? -1.0f : 1.0f;
-        float flag_x = sign * 0.30f;
+        float flag_x = sign * ARRIVE_FLAG_X;
 
         /* Entry fade (flat) */
         render_set_raised(0);
@@ -636,19 +642,19 @@ static void draw_arrived(int dir) {
 
         /* L1: white outline (flat) */
         render_thick_line(0, SHAFT_BOT, 0, road_top, OL_T, WHITE);
-        render_disc(0, road_top, dome_r + OL_W, 24, WHITE);
+        render_disc(0, road_top, dome_r + OL_W, ARRIVE_SEG, WHITE);
 
         /* L2: grey under active (flat) */
         render_thick_line(0, SHAFT_BOT, 0, road_top, SIDE_T, SIDE);
-        render_disc(0, road_top, dome_r + OL_W * 0.5f, 24, SIDE);
+        render_disc(0, road_top, dome_r + OL_W * 0.5f, ARRIVE_SEG, SIDE);
 
         /* L3: blue road + dome cap (raised) */
         render_set_raised(1);
         render_thick_line(0, SHAFT_BOT, 0, road_top, SHAFT_T, ACTIVE);
-        render_disc(0, road_top, dome_r, 24, ACTIVE);
+        render_disc(0, road_top, dome_r, ARRIVE_SEG, ACTIVE);
 
         /* flag */
-        draw_flag(flag_x, road_top - 0.06f, 0.50f);
+        draw_flag(flag_x, road_top - ARRIVE_FLAG_Y_OFF, ARRIVE_FLAG_H_SIDE);
     }
 }
 
@@ -701,7 +707,7 @@ static void draw_lane_change(int go_left) {
 static void draw_merge(int go_right) {
     float sign = go_right ? 1.0f : -1.0f;
     float start_x = sign * -MERGE_OFFSET;
-    float bend_lo = -0.10f;
+    float bend_lo = MERGE_BEND_LO;
     float bend_hi = BEND_HI;
 
     /* Fades (flat) */
