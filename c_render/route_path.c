@@ -206,19 +206,21 @@ static void emit_round_join(route_mesh_t *m,
     }
 
     /* Spoke walls — close the straight edges of the fan (anchor → first/last arc point).
-     * Without these, sharp corners (>90°) show a visible gap in the side wall. */
+     * Without these, sharp corners (>90°) show a visible gap in the side wall.
+     * Normal is chosen perpendicular to spoke, pointing AWAY from fan interior
+     * (determined by dotting candidate normal with the fan midpoint direction). */
     {
-        float dx, dz, len, wn_x, wn_z;
+        float mid_ang = ang_a + diff * 0.5f;
+        float fan_dx = cosf(mid_ang), fan_dz = sinf(mid_ang);
+        float dx, dz, len, na_x, na_z, wn_x, wn_z;
 
-        /* First spoke: anchor → first outer point (faces toward prev segment) */
+        /* First spoke: anchor → first outer point */
         dx = first_ox - anchor_x; dz = first_oz - anchor_z;
         len = sqrtf(dx * dx + dz * dz);
         if (len > 1e-6f) {
-            /* Normal perpendicular to spoke, pointing away from fan interior.
-             * Fan interior is on the side of positive diff rotation, so the
-             * outward normal is on the opposite side. */
-            wn_x = -dz / len; wn_z = dx / len;
-            if (diff < 0.0f) { wn_x = -wn_x; wn_z = -wn_z; }
+            na_x = -dz / len; na_z = dx / len;
+            if (na_x * fan_dx + na_z * fan_dz > 0.0f) { na_x = -na_x; na_z = -na_z; }
+            wn_x = na_x; wn_z = na_z;
             mesh_quad(m,
                       anchor_x,  base_y, anchor_z,
                       first_ox,  base_y, first_oz,
@@ -227,12 +229,13 @@ static void emit_round_join(route_mesh_t *m,
                       wn_x, 0, wn_z);
         }
 
-        /* Last spoke: last outer point → anchor (faces toward next segment) */
+        /* Last spoke: last outer point → anchor */
         dx = anchor_x - last_ox; dz = anchor_z - last_oz;
         len = sqrtf(dx * dx + dz * dz);
         if (len > 1e-6f) {
-            wn_x = -dz / len; wn_z = dx / len;
-            if (diff < 0.0f) { wn_x = -wn_x; wn_z = -wn_z; }
+            na_x = -dz / len; na_z = dx / len;
+            if (na_x * fan_dx + na_z * fan_dz > 0.0f) { na_x = -na_x; na_z = -na_z; }
+            wn_x = na_x; wn_z = na_z;
             mesh_quad(m,
                       last_ox,   base_y, last_oz,
                       anchor_x,  base_y, anchor_z,
