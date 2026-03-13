@@ -35,7 +35,16 @@ void platform_get_framebuffer_size(int *width, int *height);
 #define CR_KEY_DOWN   3
 #define CR_KEY_P      4
 #define CR_KEY_SPACE  5
-#define CR_KEY_MAX    6
+#define CR_KEY_S      6
+#define CR_KEY_Z      7   /* camera: eye Z closer/further */
+#define CR_KEY_X      8
+#define CR_KEY_C      9   /* camera: eye Y up/down */
+#define CR_KEY_V     10
+#define CR_KEY_B     11   /* camera: center Z forward/back */
+#define CR_KEY_N     12
+#define CR_KEY_F     13   /* camera: FOV wider/tighter */
+#define CR_KEY_G     14
+#define CR_KEY_MAX   15
 
 /* Returns 1 if key was tapped since last poll, clears the tap state. */
 int platform_key_tap(int key);

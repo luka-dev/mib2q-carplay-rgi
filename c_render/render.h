@@ -56,7 +56,20 @@ void render_circle(float cx, float cy, float radius, float thickness, int segmen
 /* Toggle perspective on/off. enabled=0 → flat (no perspective). */
 void render_set_perspective(int enabled);
 
+/* Returns 1 if a transition animation is in progress. */
+int render_is_animating(void);
+
+/* Adjust camera parameter: 0=eyeZ, 1=eyeY, 2=ctrZ, 3=fov */
+void render_cam_adjust(int param, float delta);
+
 /* Toggle 3D extrusion. raised=1 → extruded, raised=0 → flat on ground. */
 void render_set_raised(int raised);
+
+/* Begin flat stub pass — renders to offscreen FBO, blending disabled.
+ * All geometry drawn between begin/end goes to FBO with overwrite mode. */
+void render_begin_stubs(void);
+
+/* End stub pass — blits FBO to screen with alpha blending, restores state. */
+void render_end_stubs(void);
 
 #endif /* CR_RENDER_H */

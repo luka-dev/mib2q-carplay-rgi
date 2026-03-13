@@ -36,4 +36,34 @@
 #define SHADER_PRECISION "precision mediump float;\n"
 #endif
 
+/*
+ * FBO compatibility — core in GLES2, available via GL_EXT_framebuffer_object
+ * on macOS OpenGL 2.1.
+ */
+#ifdef PLATFORM_MACOS
+#ifndef GL_FRAMEBUFFER
+#define GL_FRAMEBUFFER              GL_FRAMEBUFFER_EXT
+#define GL_COLOR_ATTACHMENT0        GL_COLOR_ATTACHMENT0_EXT
+#define GL_DEPTH_ATTACHMENT         GL_DEPTH_ATTACHMENT_EXT
+#define GL_FRAMEBUFFER_COMPLETE     GL_FRAMEBUFFER_COMPLETE_EXT
+#define GL_RENDERBUFFER             GL_RENDERBUFFER_EXT
+#define glGenFramebuffers           glGenFramebuffersEXT
+#define glDeleteFramebuffers        glDeleteFramebuffersEXT
+#define glBindFramebuffer           glBindFramebufferEXT
+#define glFramebufferTexture2D      glFramebufferTexture2DEXT
+#define glCheckFramebufferStatus    glCheckFramebufferStatusEXT
+#define glGenRenderbuffers          glGenRenderbuffersEXT
+#define glDeleteRenderbuffers       glDeleteRenderbuffersEXT
+#define glBindRenderbuffer          glBindRenderbufferEXT
+#define glRenderbufferStorage       glRenderbufferStorageEXT
+#define glFramebufferRenderbuffer   glFramebufferRenderbufferEXT
+#endif
+#ifndef GL_FRAMEBUFFER_BINDING
+#define GL_FRAMEBUFFER_BINDING      GL_FRAMEBUFFER_BINDING_EXT
+#endif
+#define GL_DEPTH_FBO GL_DEPTH_COMPONENT
+#else
+#define GL_DEPTH_FBO GL_DEPTH_COMPONENT16
+#endif
+
 #endif /* CR_GL_COMPAT_H */

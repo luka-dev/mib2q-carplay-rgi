@@ -39,6 +39,24 @@ static void key_callback(GLFWwindow *window, int key, int scancode, int action, 
         g_key_taps[CR_KEY_P] = 1;
     else if (key == GLFW_KEY_SPACE)
         g_key_taps[CR_KEY_SPACE] = 1;
+    else if (key == GLFW_KEY_S)
+        g_key_taps[CR_KEY_S] = 1;
+    else if (key == GLFW_KEY_Z)
+        g_key_taps[CR_KEY_Z] = 1;
+    else if (key == GLFW_KEY_X)
+        g_key_taps[CR_KEY_X] = 1;
+    else if (key == GLFW_KEY_C)
+        g_key_taps[CR_KEY_C] = 1;
+    else if (key == GLFW_KEY_V)
+        g_key_taps[CR_KEY_V] = 1;
+    else if (key == GLFW_KEY_B)
+        g_key_taps[CR_KEY_B] = 1;
+    else if (key == GLFW_KEY_N)
+        g_key_taps[CR_KEY_N] = 1;
+    else if (key == GLFW_KEY_F)
+        g_key_taps[CR_KEY_F] = 1;
+    else if (key == GLFW_KEY_G)
+        g_key_taps[CR_KEY_G] = 1;
 }
 
 int platform_init(int width, int height) {
@@ -66,7 +84,7 @@ int platform_init(int width, int height) {
 
     glfwSetKeyCallback(g_window, key_callback);
     glfwMakeContextCurrent(g_window);
-    glfwSwapInterval(1); /* vsync for dev; QNX uses 0 */
+    glfwSwapInterval(0); /* no vsync — frame pacing done in main loop */
 
     fprintf(stderr, "platform_macos: GL %s\n", glGetString(GL_VERSION));
     return 0;

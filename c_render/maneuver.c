@@ -3,6 +3,11 @@
  *
  * Active color: #5AAAE6  (arrow you follow)
  * Side color:   #646464  (roads you don't take)
+ *
+ * Flat stubs (outlines, grey, fades) render to offscreen FBO with blending
+ * disabled — overlapping grey overwrites instead of accumulating alpha.
+ * FBO is then blitted to screen with alpha blending.
+ * Blue active arm draws directly to screen on top.
  */
 
 #include <stdio.h>
@@ -21,7 +26,7 @@
 #define AC_R 0.353f   /* #5AAAE6 */
 #define AC_G 0.667f
 #define AC_B 0.902f
-#define AC_A 0.0f   /* TEMP: disabled blue for testing */
+#define AC_A 1.0f
 
 #define SD_R 0.392f   /* #646464 */
 #define SD_G 0.392f
@@ -68,6 +73,11 @@
 #define UTURN_ARROW  (-0.10f) /* arrowhead Y on exit side */
 #define UTURN_SEG    16      /* arc segments */
 
+/* Angle thresholds */
+#define ANGLE_DEDUP     5.0f    /* degrees: angles closer than this are "same direction" */
+#define ANGLE_DEDUP_RAD 0.09f   /* radians: same threshold (~5°) for roundabout internals */
+#define ANGLE_SELF      1.0f    /* degrees: skip self when comparing angle lists */
+
 /* Highway exit branch angle (degrees) */
 #define EXIT_ANGLE_DEG  30.0f
 
@@ -86,31 +96,39 @@
 #define ARRIVE_RING_R 0.11f           /* arrived center ring radius */
 #define ARRIVE_RING_T 0.04f           /* arrived ring thickness */
 
+/* Flag checkerboard dark square color (~#1E2430) */
+#define CHECK_R 0.12f
+#define CHECK_G 0.14f
+#define CHECK_B 0.18f
+
 /* ================================================================
- * Fading road helper — non-overlapping concentric bands
+ * Fading road helper
  *
  * Draws a fading extension from (x0,y0)→(x1,y1) in N segments with
- * alpha going from a_start→0.  Layers are drawn as separate bands
- * so semi-transparent layers don't blend into each other.
+ * alpha going from a_start→0 via smoothstep.
  *
- * mode 0 = side street:  white border + grey fill  (no blue)
- * mode 1 = active road:  white border + grey border + blue center
+ * Split into outline-only and grey-only passes so all outlines
+ * are drawn before any grey — prevents a second fade's outline
+ * from showing through the first fade's grey in overlap zones.
  * ================================================================ */
 
-#define FADE_SEGS  24
-#define FADE_MODE_SIDE   0
-#define FADE_MODE_ACTIVE 1
+#define FADE_SEGS    64
+#define FADE_OUTLINE 0
+#define FADE_GREY    1
+#define FADE_BOTH    2  /* outline then grey — for non-FBO cases with no overlap */
 
 static void draw_fading_road(float x0, float y0, float x1, float y1,
-                              int mode, float a_start) {
-    (void)mode;
+                              float a_start, int mode) {
+    if (mode == FADE_BOTH) {
+        draw_fading_road(x0, y0, x1, y1, a_start, FADE_OUTLINE);
+        draw_fading_road(x0, y0, x1, y1, a_start, FADE_GREY);
+        return;
+    }
+
     float dx = x1 - x0, dy = y1 - y0;
     float len = sqrtf(dx * dx + dy * dy);
     if (len < 1e-6f) return;
-    /* perpendicular unit vector */
     float px = -dy / len, py = dx / len;
-
-    /* band offset (center of each OL_W-wide white border strip) */
     float ol_off = (SIDE_T + OL_W) * 0.5f;
 
     int i;
@@ -119,21 +137,23 @@ static void draw_fading_road(float x0, float y0, float x1, float y1,
         float t1 = (float)(i + 1) / FADE_SEGS;
         float sx = x0 + dx * t0, sy = y0 + dy * t0;
         float ex = x0 + dx * t1, ey = y0 + dy * t1;
-        /* Smoothstep fade: smooth start AND smooth end (no sharp cut) */
-        float u = 1.0f - t0;  /* 1→0 */
+        float u = 1.0f - t0;
         float alpha = a_start * u * u * (3.0f - 2.0f * u);
         if (alpha < 0.01f) break;
 
-        /* White outline border — two thin strips at outer edges */
-        render_thick_line(sx + px * ol_off, sy + py * ol_off,
-                          ex + px * ol_off, ey + py * ol_off,
-                          OL_W, 1.0f, 1.0f, 1.0f, alpha);
-        render_thick_line(sx - px * ol_off, sy - py * ol_off,
-                          ex - px * ol_off, ey - py * ol_off,
-                          OL_W, 1.0f, 1.0f, 1.0f, alpha);
-
-        /* Grey center fill (full SIDE_T width) */
-        render_thick_line(sx, sy, ex, ey, SIDE_T, SD_R, SD_G, SD_B, alpha);
+        if (mode == FADE_OUTLINE) {
+            /* White outline strips — both sides */
+            render_thick_line(sx + px * ol_off, sy + py * ol_off,
+                              ex + px * ol_off, ey + py * ol_off,
+                              OL_W, 1.0f, 1.0f, 1.0f, alpha);
+            render_thick_line(sx - px * ol_off, sy - py * ol_off,
+                              ex - px * ol_off, ey - py * ol_off,
+                              OL_W, 1.0f, 1.0f, 1.0f, alpha);
+        } else {
+            /* Grey center fill — full width */
+            render_thick_line(sx, sy, ex, ey,
+                              SIDE_T, SD_R, SD_G, SD_B, alpha);
+        }
     }
 }
 
@@ -141,84 +161,171 @@ static void draw_fading_road(float x0, float y0, float x1, float y1,
  * Icon drawing functions
  * ================================================================ */
 
-static void draw_straight(void) {
-    /* Fades (flat) */
+/* Angular distance between two angles in degrees (0..180). */
+static float angle_dist(float a, float b) {
+    float d = fabsf(a - b);
+    if (d > 180.0f) d = 360.0f - d;
+    return d;
+}
+
+/* Helper: check if angle (degrees) overlaps forward (0°) or entry (180°). */
+static int angle_near_fixed(float deg, float eps) {
+    float ad = fabsf(deg);
+    return (ad < eps || fabsf(ad - 180.0f) < eps);
+}
+
+/* Helper: check if angle overlaps forward, entry, or any angle in a list. */
+static int angle_near_any(float deg, const int *angles, int count, float eps) {
+    if (angle_near_fixed(deg, eps)) return 1;
+    int i;
+    for (i = 0; i < count; i++) {
+        if (angle_dist(deg, (float)angles[i]) < eps) return 1;
+    }
+    return 0;
+}
+
+/*
+ * Straight road with optional side streets from junction_angles.
+ */
+static void draw_straight(const int *side_angles, int side_count) {
+    int i;
+
+    /* Flat pass to FBO (no blend — overlapping grey overwrites) */
+    render_begin_stubs();
     render_set_raised(0);
-    draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - FADE_LEN, FADE_MODE_ACTIVE, 1.0f);
-    draw_fading_road(0, SIDE_TOP, 0, SIDE_TOP + FADE_LEN, FADE_MODE_SIDE, 1.0f);
-    /* L1: white outline (flat) */
+
+    /* === All outlines first (fade + solid) === */
+    draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - FADE_LEN, 1.0f, FADE_OUTLINE);
+    draw_fading_road(0, SIDE_TOP, 0, SIDE_TOP + FADE_LEN, 1.0f, FADE_OUTLINE);
+    for (i = 0; i < side_count && i < MAX_JUNCTION_ANGLES; i++) {
+        if (angle_near_fixed((float)side_angles[i], ANGLE_DEDUP)) continue;
+        float rad = (float)side_angles[i] * (float)M_PI / 180.0f;
+        float sx = ROAD_LEN * sinf(rad), sy = ROAD_LEN * cosf(rad);
+        float fx = (ROAD_LEN + FADE_LEN) * sinf(rad);
+        float fy = (ROAD_LEN + FADE_LEN) * cosf(rad);
+        draw_fading_road(sx, sy, fx, fy, 1.0f, FADE_OUTLINE);
+    }
     render_thick_line(0, SHAFT_BOT, 0, SIDE_TOP, OL_T, WHITE);
-    /* L2: grey under active (flat) */
+    for (i = 0; i < side_count && i < MAX_JUNCTION_ANGLES; i++) {
+        if (angle_near_fixed((float)side_angles[i], ANGLE_DEDUP)) continue;
+        float rad = (float)side_angles[i] * (float)M_PI / 180.0f;
+        float sx = ROAD_LEN * sinf(rad), sy = ROAD_LEN * cosf(rad);
+        render_thick_line(0, 0, sx, sy, OL_T, WHITE);
+    }
+    if (side_count > 0)
+        render_disc(0, 0, OL_T * 0.5f, JOINT_SEG, WHITE);
+
+    /* === All grey second (fade + solid) — overwrites outline interiors === */
+    draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - FADE_LEN, 1.0f, FADE_GREY);
+    draw_fading_road(0, SIDE_TOP, 0, SIDE_TOP + FADE_LEN, 1.0f, FADE_GREY);
+    for (i = 0; i < side_count && i < MAX_JUNCTION_ANGLES; i++) {
+        if (angle_near_fixed((float)side_angles[i], ANGLE_DEDUP)) continue;
+        float rad = (float)side_angles[i] * (float)M_PI / 180.0f;
+        float sx = ROAD_LEN * sinf(rad), sy = ROAD_LEN * cosf(rad);
+        float fx = (ROAD_LEN + FADE_LEN) * sinf(rad);
+        float fy = (ROAD_LEN + FADE_LEN) * cosf(rad);
+        draw_fading_road(sx, sy, fx, fy, 1.0f, FADE_GREY);
+    }
     render_thick_line(0, SHAFT_BOT, 0, SIDE_TOP, SIDE_T, SIDE);
-    /* L3: blue road + arrowhead (raised) */
+    for (i = 0; i < side_count && i < MAX_JUNCTION_ANGLES; i++) {
+        if (angle_near_fixed((float)side_angles[i], ANGLE_DEDUP)) continue;
+        float rad = (float)side_angles[i] * (float)M_PI / 180.0f;
+        float sx = ROAD_LEN * sinf(rad), sy = ROAD_LEN * cosf(rad);
+        render_thick_line(0, 0, sx, sy, SIDE_T, SIDE);
+    }
+    if (side_count > 0)
+        render_disc(0, 0, SIDE_T * 0.5f, JOINT_SEG, SIDE);
+
+    render_end_stubs();
+
+    /* Blue active (direct to screen, raised) */
     render_set_raised(1);
     render_thick_line(0, SHAFT_BOT, 0, SHAFT_TOP, SHAFT_T, ACTIVE);
     render_arrowhead(0, SHAFT_TOP, (float)(M_PI * 0.5), HEAD_SZ, ACTIVE);
 }
 
 /*
- * Generic turn icon.  angle_deg measured from straight-ahead (up):
+ * Generic turn/fork icon.
+ * angle_deg: active exit direction from straight-ahead (up):
  *   +30 = slight right, +90 = right, +135 = sharp right
  *   -30 = slight left,  -90 = left,  -135 = sharp left
+ * side_angles: array of side street angles (same convention), may be empty.
+ * side_count: number of side streets.
  */
-static void draw_turn(float angle_deg) {
+static void draw_turn(float angle_deg, const int *side_angles, int side_count) {
     float angle_rad = angle_deg * (float)M_PI / 180.0f;
-    float jy = 0.0f;   /* junction center — unified for all turns */
+    int i;
 
-    /* Blue turn arm tip */
     float end_x = BLUE_LEN * sinf(angle_rad);
-    float end_y = jy + BLUE_LEN * cosf(angle_rad);
-    /* White+grey stub extends to ROAD_LEN, then fades */
+    float end_y = BLUE_LEN * cosf(angle_rad);
     float stub_x = ROAD_LEN * sinf(angle_rad);
-    float stub_y = jy + ROAD_LEN * cosf(angle_rad);
+    float stub_y = ROAD_LEN * cosf(angle_rad);
     float fade_x = (ROAD_LEN + FADE_LEN) * sinf(angle_rad);
-    float fade_y = jy + (ROAD_LEN + FADE_LEN) * cosf(angle_rad);
+    float fade_y = (ROAD_LEN + FADE_LEN) * cosf(angle_rad);
 
-    /* Side streets: always both left and right at ±90° */
-    float side_r_x =  ROAD_LEN;
-    float side_r_fx = ROAD_LEN + FADE_LEN;
-    float side_l_x = -ROAD_LEN;
-    float side_l_fx = -(ROAD_LEN + FADE_LEN);
+    int active_has_own_stub = !angle_near_any(angle_deg, side_angles, side_count, ANGLE_DEDUP);
 
-    /* Skip turn arm stub+fade if it overlaps a fixed stub.
-     * Fixed directions: forward (0°), right (+90°), left (-90°). */
-    float abs_angle = fabsf(angle_deg);
-    int turn_has_own_stub = 1;
-    if (abs_angle < 5.0f || fabsf(abs_angle - 90.0f) < 5.0f || fabsf(abs_angle - 180.0f) < 5.0f)
-        turn_has_own_stub = 0;
-
-    /* Fades (flat) */
+    /* Flat pass to FBO (no blend) */
+    render_begin_stubs();
     render_set_raised(0);
-    draw_fading_road(0, SIDE_TOP, 0, SIDE_TOP + FADE_LEN, FADE_MODE_SIDE, 1.0f);
-    draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - FADE_LEN, FADE_MODE_ACTIVE, 1.0f);
-    if (turn_has_own_stub)
-        draw_fading_road(stub_x, stub_y, fade_x, fade_y, FADE_MODE_SIDE, 1.0f);
-    draw_fading_road(side_r_x, jy, side_r_fx, jy, FADE_MODE_SIDE, 1.0f);
-    draw_fading_road(side_l_x, jy, side_l_fx, jy, FADE_MODE_SIDE, 1.0f);
 
-    /* L1: white outline (flat) */
-    render_thick_line(0, jy, 0, SIDE_TOP, OL_T, WHITE);
-    render_thick_line(0, SHAFT_BOT, 0, jy, OL_T, WHITE);
-    if (turn_has_own_stub)
-        render_thick_line(0, jy, stub_x, stub_y, OL_T, WHITE);
-    render_thick_line(0, jy, side_r_x, jy, OL_T, WHITE);
-    render_thick_line(0, jy, side_l_x, jy, OL_T, WHITE);
-    render_disc(0, jy, OL_T * 0.5f, JOINT_SEG, WHITE);
+    /* === All outlines first (fade + solid) === */
+    draw_fading_road(0, SIDE_TOP, 0, SIDE_TOP + FADE_LEN, 1.0f, FADE_OUTLINE);
+    draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - FADE_LEN, 1.0f, FADE_OUTLINE);
+    if (active_has_own_stub)
+        draw_fading_road(stub_x, stub_y, fade_x, fade_y, 1.0f, FADE_OUTLINE);
+    for (i = 0; i < side_count && i < MAX_JUNCTION_ANGLES; i++) {
+        if (angle_near_fixed((float)side_angles[i], ANGLE_DEDUP)) continue;
+        float rad = (float)side_angles[i] * (float)M_PI / 180.0f;
+        float sx = ROAD_LEN * sinf(rad), sy = ROAD_LEN * cosf(rad);
+        float fx = (ROAD_LEN + FADE_LEN) * sinf(rad);
+        float fy = (ROAD_LEN + FADE_LEN) * cosf(rad);
+        draw_fading_road(sx, sy, fx, fy, 1.0f, FADE_OUTLINE);
+    }
+    render_thick_line(0, 0, 0, SIDE_TOP, OL_T, WHITE);
+    render_thick_line(0, SHAFT_BOT, 0, 0, OL_T, WHITE);
+    if (active_has_own_stub)
+        render_thick_line(0, 0, stub_x, stub_y, OL_T, WHITE);
+    for (i = 0; i < side_count && i < MAX_JUNCTION_ANGLES; i++) {
+        if (angle_near_fixed((float)side_angles[i], ANGLE_DEDUP)) continue;
+        float rad = (float)side_angles[i] * (float)M_PI / 180.0f;
+        float sx = ROAD_LEN * sinf(rad), sy = ROAD_LEN * cosf(rad);
+        render_thick_line(0, 0, sx, sy, OL_T, WHITE);
+    }
+    render_disc(0, 0, OL_T * 0.5f, JOINT_SEG, WHITE);
 
-    /* L2: grey on all roads (flat) */
-    render_thick_line(0, jy, 0, SIDE_TOP, SIDE_T, SIDE);
-    render_thick_line(0, SHAFT_BOT, 0, jy, SIDE_T, SIDE);
-    if (turn_has_own_stub)
-        render_thick_line(0, jy, stub_x, stub_y, SIDE_T, SIDE);
-    render_thick_line(0, jy, side_r_x, jy, SIDE_T, SIDE);
-    render_thick_line(0, jy, side_l_x, jy, SIDE_T, SIDE);
-    render_disc(0, jy, SIDE_T * 0.5f, JOINT_SEG, SIDE);
+    /* === All grey second (fade + solid) — overwrites outline interiors === */
+    draw_fading_road(0, SIDE_TOP, 0, SIDE_TOP + FADE_LEN, 1.0f, FADE_GREY);
+    draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - FADE_LEN, 1.0f, FADE_GREY);
+    if (active_has_own_stub)
+        draw_fading_road(stub_x, stub_y, fade_x, fade_y, 1.0f, FADE_GREY);
+    for (i = 0; i < side_count && i < MAX_JUNCTION_ANGLES; i++) {
+        if (angle_near_fixed((float)side_angles[i], ANGLE_DEDUP)) continue;
+        float rad = (float)side_angles[i] * (float)M_PI / 180.0f;
+        float sx = ROAD_LEN * sinf(rad), sy = ROAD_LEN * cosf(rad);
+        float fx = (ROAD_LEN + FADE_LEN) * sinf(rad);
+        float fy = (ROAD_LEN + FADE_LEN) * cosf(rad);
+        draw_fading_road(sx, sy, fx, fy, 1.0f, FADE_GREY);
+    }
+    render_thick_line(0, 0, 0, SIDE_TOP, SIDE_T, SIDE);
+    render_thick_line(0, SHAFT_BOT, 0, 0, SIDE_T, SIDE);
+    if (active_has_own_stub)
+        render_thick_line(0, 0, stub_x, stub_y, SIDE_T, SIDE);
+    for (i = 0; i < side_count && i < MAX_JUNCTION_ANGLES; i++) {
+        if (angle_near_fixed((float)side_angles[i], ANGLE_DEDUP)) continue;
+        float rad = (float)side_angles[i] * (float)M_PI / 180.0f;
+        float sx = ROAD_LEN * sinf(rad), sy = ROAD_LEN * cosf(rad);
+        render_thick_line(0, 0, sx, sy, SIDE_T, SIDE);
+    }
+    render_disc(0, 0, SIDE_T * 0.5f, JOINT_SEG, SIDE);
 
-    /* L3: blue entry + turn (raised) */
+    render_end_stubs();
+
+    /* Blue entry + turn (raised, direct to screen) */
     render_set_raised(1);
-    render_thick_line(0, SHAFT_BOT, 0, jy, SHAFT_T, ACTIVE);
-    render_thick_line(0, jy, end_x, end_y, SHAFT_T, ACTIVE);
-    render_disc(0, jy, JOINT_R, JOINT_SEG, ACTIVE);
+    render_thick_line(0, SHAFT_BOT, 0, 0, SHAFT_T, ACTIVE);
+    render_thick_line(0, 0, end_x, end_y, SHAFT_T, ACTIVE);
+    render_disc(0, 0, JOINT_R, JOINT_SEG, ACTIVE);
     float head_angle = (float)(M_PI * 0.5) - angle_rad;
     render_arrowhead(end_x, end_y, head_angle, HEAD_SZ, ACTIVE);
 }
@@ -236,8 +343,8 @@ static void draw_uturn(int go_left) {
 
     /* Fades (flat) */
     render_set_raised(0);
-    draw_fading_road(enter_x, SHAFT_BOT, enter_x, SHAFT_BOT - FADE_LEN, FADE_MODE_ACTIVE, 1.0f);
-    draw_fading_road(exit_x, SHAFT_BOT, exit_x, SHAFT_BOT - FADE_LEN, FADE_MODE_SIDE, 1.0f);
+    draw_fading_road(enter_x, SHAFT_BOT, enter_x, SHAFT_BOT - FADE_LEN, 1.0f, FADE_BOTH);
+    draw_fading_road(exit_x, SHAFT_BOT, exit_x, SHAFT_BOT - FADE_LEN, 1.0f, FADE_BOTH);
 
     /* L1: white outline (flat) */
     render_thick_line(enter_x, SHAFT_BOT, enter_x, top_y, OL_T, WHITE);
@@ -264,56 +371,11 @@ static void draw_uturn(int go_left) {
 }
 
 /*
- * Highway exit icon.
- * go_right=1: exit branches to the right, main road (gray) continues straight.
- */
-static void draw_exit(int go_right) {
-    float sign = go_right ? 1.0f : -1.0f;
-    float fork_y = 0.0f;
-    float branch_angle = sign * EXIT_ANGLE_DEG * (float)M_PI / 180.0f;
-    float end_x = BLUE_LEN * sinf(branch_angle);
-    float end_y = fork_y + BLUE_LEN * cosf(branch_angle);
-    /* white+grey stub */
-    float bstub_x = ROAD_LEN * sinf(branch_angle);
-    float bstub_y = fork_y + ROAD_LEN * cosf(branch_angle);
-    /* fade beyond stub */
-    float bfade_x = (ROAD_LEN + FADE_LEN) * sinf(branch_angle);
-    float bfade_y = fork_y + (ROAD_LEN + FADE_LEN) * cosf(branch_angle);
-
-    /* Fades (flat) */
-    render_set_raised(0);
-    draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - FADE_LEN, FADE_MODE_ACTIVE, 1.0f);
-    draw_fading_road(0, SIDE_TOP, 0, SIDE_TOP + FADE_LEN, FADE_MODE_SIDE, 1.0f);
-    draw_fading_road(bstub_x, bstub_y, bfade_x, bfade_y, FADE_MODE_SIDE, 1.0f);
-
-    /* L1: white outline (flat) */
-    render_thick_line(0, SHAFT_BOT, 0, SIDE_TOP, OL_T, WHITE);
-    render_thick_line(0, fork_y, bstub_x, bstub_y, OL_T, WHITE);
-    render_disc(0, fork_y, OL_T * 0.5f, JOINT_SEG, WHITE);
-
-    /* L2: grey on all roads (flat) */
-    render_thick_line(0, SHAFT_BOT, 0, SIDE_TOP, SIDE_T, SIDE);
-    render_thick_line(0, fork_y, bstub_x, bstub_y, SIDE_T, SIDE);
-    render_disc(0, fork_y, SIDE_T * 0.5f, JOINT_SEG, SIDE);
-
-    /* L3: blue entry + exit branch (raised) */
-    render_set_raised(1);
-    render_thick_line(0, SHAFT_BOT, 0, fork_y, SHAFT_T, ACTIVE);
-    render_thick_line(0, fork_y, end_x, end_y, SHAFT_T, ACTIVE);
-    render_disc(0, fork_y, JOINT_R, JOINT_SEG, ACTIVE);
-    float head_angle = (float)(M_PI * 0.5) - branch_angle;
-    render_arrowhead(end_x, end_y, head_angle, HEAD_SZ, ACTIVE);
-}
-
-/*
  * Universal roundabout icon.
  * exit_angle_deg: iOS convention (0=straight, +90=right, -90=left, ±180=u-turn).
  * driving_side: 0=RHT (CCW travel), 1=LHT (CW travel).
  * junction_angles: array of ALL junction element angles (iOS degrees), may include exit.
  * junction_angle_count: number of entries in junction_angles.
- *
- * When junction_angles is provided, grey stubs are drawn at real exit positions.
- * When empty, only entry + active exit are shown (no other stubs).
  */
 static void draw_roundabout(float exit_angle_deg, int driving_side,
                             const int *junction_angles, int junction_angle_count) {
@@ -323,17 +385,13 @@ static void draw_roundabout(float exit_angle_deg, int driving_side,
     float ring_sd = SIDE_T;  /* ring grey thickness */
     float ring_ac = SHAFT_T; /* ring active thickness */
 
-    /* iOS degrees → math radians: math_rad = (90 - ios_deg) * π/180 */
     float entry_rad = (float)(-M_PI * 0.5);   /* entry always at bottom */
 
-    /* Snap exit_angle to nearest junction angle OR entry (the actual exit road).
-     * iOS exit_angle is a rough direction; the real exit is a junction_angle.
-     * Entry is at -180 iOS degrees (bottom of roundabout). */
+    /* Snap exit_angle to nearest junction angle OR entry */
     float entry_deg = -180.0f;
     float snapped_exit_deg = exit_angle_deg;
-    int snapped_idx = -1;   /* -1 = entry, 0..N-1 = junction angle index */
+    int snapped_idx = -1;
     if (junction_angle_count > 0) {
-        /* Check junction angles */
         int best = 0;
         float best_diff = 999.0f;
         int i_s;
@@ -342,12 +400,11 @@ static void draw_roundabout(float exit_angle_deg, int driving_side,
             if (diff > 180.0f) diff = 360.0f - diff;
             if (diff < best_diff) { best_diff = diff; best = i_s; }
         }
-        /* Check entry angle too */
         float entry_diff = fabsf(entry_deg - exit_angle_deg);
         if (entry_diff > 180.0f) entry_diff = 360.0f - entry_diff;
         if (entry_diff < best_diff) {
             snapped_exit_deg = entry_deg;
-            snapped_idx = -2;   /* snapped to entry */
+            snapped_idx = -2;
         } else {
             snapped_exit_deg = (float)junction_angles[best];
             snapped_idx = best;
@@ -364,129 +421,116 @@ static void draw_roundabout(float exit_angle_deg, int driving_side,
     float ex0_y = cy + ring_r * sinf(exit_rad);
     float ex_tip_x = cx + (ring_r + ext) * cosf(exit_rad);
     float ex_tip_y = cy + (ring_r + ext) * sinf(exit_rad);
-    /* white+grey exit extends to stub distance (same as side stubs) */
     float ex_ol_x = cx + (ring_r + stub) * cosf(exit_rad);
     float ex_ol_y = cy + (ring_r + stub) * sinf(exit_rad);
 
-    /* Convert junction angles to math radians.
-     * Skip the snapped exit angle — that position is the active exit. */
+    /* Convert junction angles to math radians, skip active exit */
     float side_rads[MAX_JUNCTION_ANGLES];
     int n_sides = 0;
     int i;
     for (i = 0; i < junction_angle_count && i < MAX_JUNCTION_ANGLES; i++) {
-        if (i == snapped_idx) continue;   /* skip active exit */
+        if (i == snapped_idx) continue;
         side_rads[n_sides++] = (90.0f - (float)junction_angles[i]) * (float)M_PI / 180.0f;
     }
 
-    /* Track drawn stub angles to avoid double-drawing overlaps.
-     * Entry is always drawn; exit + sides check against drawn list. */
+    /* Track drawn stub angles to avoid double-drawing overlaps */
     float drawn_rads[MAX_JUNCTION_ANGLES + 2];
     int n_drawn = 0;
-    drawn_rads[n_drawn++] = entry_rad;  /* entry always drawn */
+    drawn_rads[n_drawn++] = entry_rad;
 
-    /* Check if a stub angle overlaps any already-drawn angle (within ~5°) */
-    #define ANGLE_EPS 0.09f  /* ~5 degrees in radians */
-    #define stub_already_drawn(rad) _stub_drawn(rad, drawn_rads, n_drawn)
-    /* Inline helper — can't use real function due to C89 array arg */
-
-    /* Fades (flat) */
+    /* Flat pass to FBO (no blend) */
+    render_begin_stubs();
     render_set_raised(0);
-    draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - FADE_LEN, FADE_MODE_SIDE, 1.0f);
 
-    /* Exit fade (skip if overlaps entry) */
+    /* Precompute which fade stubs to draw (dedup once) */
+    int exit_dup = 0;
     {
-        int exit_dup = 0;
         float ed = fabsf(exit_rad - entry_rad);
         if (ed > (float)M_PI) ed = 2.0f * (float)M_PI - ed;
-        if (ed < ANGLE_EPS) exit_dup = 1;
-        if (!exit_dup) {
-            float ef_x0 = cx + (ring_r + stub) * cosf(exit_rad);
-            float ef_y0 = cy + (ring_r + stub) * sinf(exit_rad);
-            float ef_x1 = cx + (ring_r + stub + stub_fade) * cosf(exit_rad);
-            float ef_y1 = cy + (ring_r + stub + stub_fade) * sinf(exit_rad);
-            draw_fading_road(ef_x0, ef_y0, ef_x1, ef_y1, FADE_MODE_SIDE, 1.0f);
-            drawn_rads[n_drawn++] = exit_rad;
-        }
+        if (ed < ANGLE_DEDUP_RAD) exit_dup = 1;
     }
+    if (!exit_dup) drawn_rads[n_drawn++] = exit_rad;
 
+    int side_skip[MAX_JUNCTION_ANGLES];
     for (i = 0; i < n_sides; i++) {
         float sr = side_rads[i];
         int dup = 0, j;
         for (j = 0; j < n_drawn; j++) {
             float d = fabsf(sr - drawn_rads[j]);
             if (d > (float)M_PI) d = 2.0f * (float)M_PI - d;
-            if (d < ANGLE_EPS) { dup = 1; break; }
+            if (d < ANGLE_DEDUP_RAD) { dup = 1; break; }
         }
-        if (dup) continue;
+        side_skip[i] = dup;
+        if (!dup) drawn_rads[n_drawn++] = sr;
+    }
+
+    /* === All outlines first (fade + solid) === */
+    draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - FADE_LEN, 1.0f, FADE_OUTLINE);
+    if (!exit_dup) {
+        float ef_x0 = cx + (ring_r + stub) * cosf(exit_rad);
+        float ef_y0 = cy + (ring_r + stub) * sinf(exit_rad);
+        float ef_x1 = cx + (ring_r + stub + stub_fade) * cosf(exit_rad);
+        float ef_y1 = cy + (ring_r + stub + stub_fade) * sinf(exit_rad);
+        draw_fading_road(ef_x0, ef_y0, ef_x1, ef_y1, 1.0f, FADE_OUTLINE);
+    }
+    for (i = 0; i < n_sides; i++) {
+        if (side_skip[i]) continue;
+        float sr = side_rads[i];
         float sx1 = cx + (ring_r + stub) * cosf(sr);
         float sy1 = cy + (ring_r + stub) * sinf(sr);
         float sx2 = cx + (ring_r + stub + stub_fade) * cosf(sr);
         float sy2 = cy + (ring_r + stub + stub_fade) * sinf(sr);
-        draw_fading_road(sx1, sy1, sx2, sy2, FADE_MODE_SIDE, 1.0f);
-        drawn_rads[n_drawn++] = sr;
+        draw_fading_road(sx1, sy1, sx2, sy2, 1.0f, FADE_OUTLINE);
     }
-
-    /* L1: white outlines — entry + exit + side stubs + ring (flat) */
-    n_drawn = 0;
-    drawn_rads[n_drawn++] = entry_rad;
     render_rect(-ring_ol * 0.5f, SHAFT_BOT,
                 ring_ol, entry_top - SHAFT_BOT, WHITE);
-    {
-        float ed = fabsf(exit_rad - entry_rad);
-        if (ed > (float)M_PI) ed = 2.0f * (float)M_PI - ed;
-        if (ed >= ANGLE_EPS) {
-            render_thick_line(ex0_x, ex0_y, ex_ol_x, ex_ol_y, ring_ol, WHITE);
-            drawn_rads[n_drawn++] = exit_rad;
-        }
-    }
+    if (!exit_dup)
+        render_thick_line(ex0_x, ex0_y, ex_ol_x, ex_ol_y, ring_ol, WHITE);
     for (i = 0; i < n_sides; i++) {
+        if (side_skip[i]) continue;
         float sr = side_rads[i];
-        int dup = 0, j;
-        for (j = 0; j < n_drawn; j++) {
-            float d = fabsf(sr - drawn_rads[j]);
-            if (d > (float)M_PI) d = 2.0f * (float)M_PI - d;
-            if (d < ANGLE_EPS) { dup = 1; break; }
-        }
-        if (dup) continue;
         float sx0 = cx + ring_r * cosf(sr);
         float sy0 = cy + ring_r * sinf(sr);
         float sx1 = cx + (ring_r + stub) * cosf(sr);
         float sy1 = cy + (ring_r + stub) * sinf(sr);
         render_thick_line(sx0, sy0, sx1, sy1, ring_ol, WHITE);
-        drawn_rads[n_drawn++] = sr;
     }
     render_circle(cx, cy, ring_r, ring_ol, RAB_RING_SEG, WHITE);
 
-    /* L2: grey fill — entry + exit + side stubs + ring (flat) */
-    n_drawn = 0;
-    drawn_rads[n_drawn++] = entry_rad;
-    render_rect(-ring_sd * 0.5f, SHAFT_BOT, ring_sd,
-                entry_top - SHAFT_BOT, SIDE);
-    {
-        float ed = fabsf(exit_rad - entry_rad);
-        if (ed > (float)M_PI) ed = 2.0f * (float)M_PI - ed;
-        if (ed >= ANGLE_EPS) {
-            render_thick_line(ex0_x, ex0_y, ex_ol_x, ex_ol_y, ring_sd, SIDE);
-            drawn_rads[n_drawn++] = exit_rad;
-        }
+    /* === All grey second (fade + solid) — overwrites outline interiors === */
+    draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - FADE_LEN, 1.0f, FADE_GREY);
+    if (!exit_dup) {
+        float ef_x0 = cx + (ring_r + stub) * cosf(exit_rad);
+        float ef_y0 = cy + (ring_r + stub) * sinf(exit_rad);
+        float ef_x1 = cx + (ring_r + stub + stub_fade) * cosf(exit_rad);
+        float ef_y1 = cy + (ring_r + stub + stub_fade) * sinf(exit_rad);
+        draw_fading_road(ef_x0, ef_y0, ef_x1, ef_y1, 1.0f, FADE_GREY);
     }
     for (i = 0; i < n_sides; i++) {
+        if (side_skip[i]) continue;
         float sr = side_rads[i];
-        int dup = 0, j;
-        for (j = 0; j < n_drawn; j++) {
-            float d = fabsf(sr - drawn_rads[j]);
-            if (d > (float)M_PI) d = 2.0f * (float)M_PI - d;
-            if (d < ANGLE_EPS) { dup = 1; break; }
-        }
-        if (dup) continue;
+        float sx1 = cx + (ring_r + stub) * cosf(sr);
+        float sy1 = cy + (ring_r + stub) * sinf(sr);
+        float sx2 = cx + (ring_r + stub + stub_fade) * cosf(sr);
+        float sy2 = cy + (ring_r + stub + stub_fade) * sinf(sr);
+        draw_fading_road(sx1, sy1, sx2, sy2, 1.0f, FADE_GREY);
+    }
+    render_rect(-ring_sd * 0.5f, SHAFT_BOT, ring_sd,
+                entry_top - SHAFT_BOT, SIDE);
+    if (!exit_dup)
+        render_thick_line(ex0_x, ex0_y, ex_ol_x, ex_ol_y, ring_sd, SIDE);
+    for (i = 0; i < n_sides; i++) {
+        if (side_skip[i]) continue;
+        float sr = side_rads[i];
         float sx0 = cx + ring_r * cosf(sr);
         float sy0 = cy + ring_r * sinf(sr);
         float sx1 = cx + (ring_r + stub) * cosf(sr);
         float sy1 = cy + (ring_r + stub) * sinf(sr);
         render_thick_line(sx0, sy0, sx1, sy1, ring_sd, SIDE);
-        drawn_rads[n_drawn++] = sr;
     }
     render_circle(cx, cy, ring_r, ring_sd, RAB_RING_SEG, SIDE);
+
+    render_end_stubs();
 
     /* L3: blue — entry + exit + arc + caps + arrowhead (raised) */
     render_set_raised(1);
@@ -541,7 +585,7 @@ static void draw_flag(float bx, float by, float pole_h) {
             if ((row + col) % 2 == 0)
                 render_rect(rx, ry - ch, cw, ch, ACTIVE);
             else
-                render_rect(rx, ry - ch, cw, ch, 0.12f, 0.14f, 0.18f, 1.0f);
+                render_rect(rx, ry - ch, cw, ch, CHECK_R, CHECK_G, CHECK_B, 1.0f);
         }
     }
 }
@@ -549,9 +593,6 @@ static void draw_flag(float bx, float by, float pole_h) {
 /*
  * Destination arrived icon.
  * dir: 0=center (offroad), -1=left, 1=right.
- *
- * Left/Right: blue road + dome cap + checkered flag on pole offset to side.
- * Center:     blue arrow + arrowhead + hollow ring + checkered flag on pole.
  */
 static void draw_arrived(int dir) {
     float road_top = 0.10f;
@@ -564,7 +605,7 @@ static void draw_arrived(int dir) {
 
         /* Entry fade (flat) */
         render_set_raised(0);
-        draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - FADE_LEN, FADE_MODE_ACTIVE, 1.0f);
+        draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - FADE_LEN, 1.0f, FADE_BOTH);
 
         /* L1: white outline (flat) */
         render_thick_line(0, SHAFT_BOT, 0, road_top, OL_T, WHITE);
@@ -588,7 +629,7 @@ static void draw_arrived(int dir) {
 
         /* Entry fade (flat) */
         render_set_raised(0);
-        draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - FADE_LEN, FADE_MODE_ACTIVE, 1.0f);
+        draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - FADE_LEN, 1.0f, FADE_BOTH);
 
         /* L1: white outline (flat) */
         render_thick_line(0, SHAFT_BOT, 0, road_top, OL_T, WHITE);
@@ -620,9 +661,9 @@ static void draw_lane_change(int go_left) {
 
     /* Fades (flat) */
     render_set_raised(0);
-    draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - FADE_LEN, FADE_MODE_ACTIVE, 1.0f);
-    draw_fading_road(0, SIDE_TOP, 0, SIDE_TOP + FADE_LEN, FADE_MODE_SIDE, 1.0f);
-    draw_fading_road(shift, SIDE_TOP, shift, SIDE_TOP + FADE_LEN, FADE_MODE_SIDE, 1.0f);
+    draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - FADE_LEN, 1.0f, FADE_BOTH);
+    draw_fading_road(0, SIDE_TOP, 0, SIDE_TOP + FADE_LEN, 1.0f, FADE_BOTH);
+    draw_fading_road(shift, SIDE_TOP, shift, SIDE_TOP + FADE_LEN, 1.0f, FADE_BOTH);
 
     /* L1: white outline + joint discs (flat) */
     render_thick_line(0, SHAFT_BOT, 0, SIDE_TOP, OL_T, WHITE);
@@ -662,9 +703,9 @@ static void draw_merge(int go_right) {
 
     /* Fades (flat) */
     render_set_raised(0);
-    draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - FADE_LEN, FADE_MODE_SIDE, 1.0f);
-    draw_fading_road(0, SIDE_TOP, 0, SIDE_TOP + FADE_LEN, FADE_MODE_SIDE, 1.0f);
-    draw_fading_road(start_x, SHAFT_BOT, start_x, SHAFT_BOT - FADE_LEN, FADE_MODE_ACTIVE, 1.0f);
+    draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - FADE_LEN, 1.0f, FADE_BOTH);
+    draw_fading_road(0, SIDE_TOP, 0, SIDE_TOP + FADE_LEN, 1.0f, FADE_BOTH);
+    draw_fading_road(start_x, SHAFT_BOT, start_x, SHAFT_BOT - FADE_LEN, 1.0f, FADE_BOTH);
 
     /* L1: white side markings + joint discs (flat) */
     render_thick_line(0, SHAFT_BOT, 0, SIDE_TOP, OL_T, WHITE);
@@ -699,16 +740,14 @@ static void draw_merge(int go_right) {
 void maneuver_draw(const maneuver_state_t *s) {
     switch (s->icon) {
         case ICON_STRAIGHT:
-            draw_straight();
+            draw_straight(s->junction_angles, s->junction_angle_count);
             break;
         case ICON_TURN:
-            draw_turn((float)s->exit_angle);
+            draw_turn((float)s->exit_angle,
+                      s->junction_angles, s->junction_angle_count);
             break;
         case ICON_UTURN:
             draw_uturn(s->driving_side != 1);
-            break;
-        case ICON_EXIT:
-            draw_exit(s->direction > 0);
             break;
         case ICON_MERGE:
             draw_merge(s->direction > 0);
@@ -738,7 +777,6 @@ const char *maneuver_icon_name(int icon) {
         case ICON_STRAIGHT:    return "STRAIGHT";
         case ICON_TURN:        return "TURN";
         case ICON_UTURN:       return "UTURN";
-        case ICON_EXIT:        return "EXIT";
         case ICON_MERGE:       return "MERGE";
         case ICON_LANE_CHANGE: return "LANE_CHG";
         case ICON_ROUNDABOUT:  return "ROUNDABOUT";

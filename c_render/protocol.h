@@ -32,8 +32,8 @@
 #define CR_DISPLAYABLE_ID   200
 #define CR_CONTEXT_ID       90
 #define CR_DISPLAY_ID       0
-#define CR_DEFAULT_WIDTH    284
-#define CR_DEFAULT_HEIGHT   276
+#define CR_DEFAULT_WIDTH    640
+#define CR_DEFAULT_HEIGHT   400
 #define CR_TARGET_FPS       10
 
 /*

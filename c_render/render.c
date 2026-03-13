@@ -29,14 +29,18 @@
 #define RAISE_BASE   0.015f   /* active floats this much above grey */
 #define Z_BIAS_STEP  0.00001f  /* depth bias per draw (layer ordering) */
 
-/* Camera — perspective mode */
+/* Camera — perspective mode (mutable for tuning) */
+static float g_cam_eye_y =  2.0f;
+static float g_cam_eye_z = -4.5f;
+static float g_cam_ctr_z =  0.20f;
+static float g_cam_fov   = 19.0f;
 #define CAM_EYE_X    0.0f
-#define CAM_EYE_Y    1.0f
-#define CAM_EYE_Z   -1.9f
+#define CAM_EYE_Y    g_cam_eye_y
+#define CAM_EYE_Z    g_cam_eye_z
 #define CAM_CTR_X    0.0f
-#define CAM_CTR_Y    0.04f
-#define CAM_CTR_Z    0.05f
-#define CAM_FOV_DEG  45.0f
+#define CAM_CTR_Y    0.00f
+#define CAM_CTR_Z    g_cam_ctr_z
+#define CAM_FOV_DEG  g_cam_fov
 
 /* Light direction (world space, normalized in shader) */
 #define LIGHT_X  0.1f
@@ -125,22 +129,36 @@ static GLint  g_uni_zbias  = -1;
 static GLint  g_uni_eye    = -1;
 static GLint  g_uni_mat    = -1;
 static GLint  g_uni_grain  = -1;
+static GLint  g_uni_tex_mode = -1;
+static GLint  g_uni_tex      = -1;
 
-static int g_perspective = 1;
+static int   g_perspective = 1;   /* target: 0=ortho, 1=perspective */
+static float g_persp_t = 1.0f;   /* animated blend: 0.0=ortho, 1.0=perspective */
+#define PERSP_ANIM_SPEED 0.033f   /* per-frame step (~1s at 30fps) */
 static int g_raised = 1;
-static int g_fb_w = 284, g_fb_h = 276;
+static int g_fb_w = 640, g_fb_h = 400;
 static float g_z_bias = 0.0f;
+
+/* FBO for flat stub pass (overwrite mode — no alpha accumulation) */
+static GLuint g_fbo = 0, g_fbo_tex = 0, g_fbo_depth = 0;
+static int g_fbo_w = 0, g_fbo_h = 0;
+static GLint g_default_fbo = 0;  /* saved at init — may not be 0 on macOS */
 
 static const char *k_vert_src =
     "attribute vec3 a_pos;\n"
     "attribute vec3 a_normal;\n"
     "uniform mat4 u_mvp;\n"
     "uniform float u_z_bias;\n"
+    "uniform float u_tex_mode;\n"
     "varying vec3 v_normal;\n"
     "varying vec3 v_world_pos;\n"
     "void main() {\n"
-    "  gl_Position = u_mvp * vec4(a_pos, 1.0);\n"
-    "  gl_Position.z -= u_z_bias;\n"
+    "  if (u_tex_mode > 0.5) {\n"
+    "    gl_Position = vec4(a_pos.xy, 0.0, 1.0);\n"
+    "  } else {\n"
+    "    gl_Position = u_mvp * vec4(a_pos, 1.0);\n"
+    "    gl_Position.z -= u_z_bias;\n"
+    "  }\n"
     "  v_normal = a_normal;\n"
     "  v_world_pos = a_pos;\n"
     "}\n";
@@ -151,6 +169,8 @@ static const char *k_frag_src_body =
     "uniform vec3 u_eye;\n"
     "uniform vec4 u_material;\n"
     "uniform vec2 u_grain;\n"
+    "uniform float u_tex_mode;\n"
+    "uniform sampler2D u_tex;\n"
     "varying vec3 v_normal;\n"
     "varying vec3 v_world_pos;\n"
     "float hash21(vec2 p) {\n"
@@ -169,6 +189,11 @@ static const char *k_frag_src_body =
     "  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);\n"
     "}\n"
     "void main() {\n"
+    "  if (u_tex_mode > 0.5) {\n"
+    "    vec2 uv = v_world_pos.xy * 0.5 + 0.5;\n"
+    "    gl_FragColor = texture2D(u_tex, uv);\n"
+    "    return;\n"
+    "  }\n"
     "  vec3 N = normalize(v_normal);\n"
     "  vec3 L = u_light_dir;\n"
     "  vec3 V = normalize(u_eye - v_world_pos);\n"
@@ -303,10 +328,62 @@ static int build_program(void) {
     g_uni_eye   = glGetUniformLocation(g_program, "u_eye");
     g_uni_mat   = glGetUniformLocation(g_program, "u_material");
     g_uni_grain = glGetUniformLocation(g_program, "u_grain");
+    g_uni_tex_mode = glGetUniformLocation(g_program, "u_tex_mode");
+    g_uni_tex      = glGetUniformLocation(g_program, "u_tex");
 
     glDeleteShader(vs);
     glDeleteShader(fs);
     return 0;
+}
+
+/* ================================================================
+ * FBO management
+ * ================================================================ */
+
+static void fbo_init(int w, int h) {
+    g_fbo_w = w; g_fbo_h = h;
+
+    glGenTextures(1, &g_fbo_tex);
+    glBindTexture(GL_TEXTURE_2D, g_fbo_tex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0,
+                 GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    glGenRenderbuffers(1, &g_fbo_depth);
+    glBindRenderbuffer(GL_RENDERBUFFER, g_fbo_depth);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_FBO, w, h);
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+
+    glGenFramebuffers(1, &g_fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, g_fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                           GL_TEXTURE_2D, g_fbo_tex, 0);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+                              GL_RENDERBUFFER, g_fbo_depth);
+
+    GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (status != GL_FRAMEBUFFER_COMPLETE)
+        fprintf(stderr, "render: FBO incomplete (0x%x)\n", status);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    fprintf(stderr, "render: FBO init %dx%d\n", w, h);
+}
+
+static void fbo_shutdown(void) {
+    if (g_fbo) { glDeleteFramebuffers(1, &g_fbo); g_fbo = 0; }
+    if (g_fbo_tex) { glDeleteTextures(1, &g_fbo_tex); g_fbo_tex = 0; }
+    if (g_fbo_depth) { glDeleteRenderbuffers(1, &g_fbo_depth); g_fbo_depth = 0; }
+    g_fbo_w = g_fbo_h = 0;
+}
+
+static void fbo_resize(int w, int h) {
+    if (w == g_fbo_w && h == g_fbo_h) return;
+    fbo_shutdown();
+    fbo_init(w, h);
 }
 
 /* ================================================================
@@ -329,7 +406,19 @@ int render_init(int fb_width, int fb_height) {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    fprintf(stderr, "render: init 3D %dx%d\n", fb_width, fb_height);
+    /* Save default framebuffer — may not be 0 on macOS with MSAA */
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &g_default_fbo);
+    fbo_init(fb_width, fb_height);
+
+    /* Init tex_mode off; keep FBO texture bound on unit 0 so sampler is valid */
+    glUseProgram(g_program);
+    glUniform1f(g_uni_tex_mode, 0.0f);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, g_fbo_tex);
+    glUniform1i(g_uni_tex, 0);
+
+    fprintf(stderr, "render: init 3D %dx%d (default fbo=%d)\n",
+            fb_width, fb_height, (int)g_default_fbo);
     return 0;
 }
 
@@ -337,38 +426,69 @@ void render_set_viewport(int fb_width, int fb_height) {
     g_fb_w = fb_width;
     g_fb_h = fb_height;
     glViewport(0, 0, fb_width, fb_height);
+    fbo_resize(fb_width, fb_height);
 }
 
 void render_begin_frame(void) {
-    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glClearColor(0.15f, 0.0f, 0.15f, 1.0f);  /* TEMP: dark magenta */
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glUseProgram(g_program);
+    glUniform1f(g_uni_tex_mode, 0.0f);
 
-    float proj[16], view[16], mvp[16];
+    /* Animate g_persp_t toward target with ease-in-out */
+    {
+        float target = (float)g_perspective;
+        float diff = target - g_persp_t;
+        if (fabsf(diff) < 0.001f) {
+            g_persp_t = target;
+        } else {
+            g_persp_t += (diff > 0 ? 1.0f : -1.0f) * PERSP_ANIM_SPEED;
+            if ((diff > 0 && g_persp_t > target) ||
+                (diff < 0 && g_persp_t < target))
+                g_persp_t = target;
+        }
+    }
+
+    /* Quintic ease-in-out (smootherstep): zero velocity AND acceleration
+     * at endpoints — gives a heavy, deliberate premium feel. */
+    float t = g_persp_t;
+    float ts = t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f);
+
     float aspect = (float)g_fb_w / (float)g_fb_h;
 
-    if (g_perspective) {
+    /* Compute both MVPs and lerp */
+    float mvp_persp[16], mvp_ortho[16], mvp[16];
+
+    {
+        float proj[16], view[16];
         float fov_rad = CAM_FOV_DEG * (float)M_PI / 180.0f;
         mat4_perspective(proj, fov_rad, aspect, 0.1f, 20.0f);
         mat4_lookAt(view,
                     CAM_EYE_X, CAM_EYE_Y, CAM_EYE_Z,
                     CAM_CTR_X, CAM_CTR_Y, CAM_CTR_Z,
                     0.0f, 1.0f, 0.0f);
-    } else {
-        /* Top-down orthographic — matches original 2D layout */
+        mat4_mul(mvp_persp, proj, view);
+    }
+    {
+        float proj[16], view[16];
         float hw = 1.05f, hh = hw / aspect;
         mat4_ortho(proj, -hw, hw, -hh, hh, 0.1f, 20.0f);
-        /* Custom view: x→x, z_world→screen_y, y_world→depth */
         mat4_zero(view);
-        view[0]  =  1.0f;           /* x_eye = x_world */
-        view[9]  =  1.0f;           /* y_eye = z_world */
-        view[13] =  0.0f;           /* recenter y — all geometry centered at 0 */
-        view[6]  =  1.0f;           /* z_eye = y_world (height→depth) */
-        view[14] = -5.0f;           /* push into view volume */
+        view[0]  =  1.0f;
+        view[9]  =  1.0f;
+        view[13] =  0.0f;
+        view[6]  =  1.0f;
+        view[14] = -5.0f;
         view[15] =  1.0f;
+        mat4_mul(mvp_ortho, proj, view);
     }
 
-    mat4_mul(mvp, proj, view);
+    {
+        int i;
+        for (i = 0; i < 16; i++)
+            mvp[i] = mvp_ortho[i] + ts * (mvp_persp[i] - mvp_ortho[i]);
+    }
+
     glUniformMatrix4fv(g_uni_mvp, 1, GL_FALSE, mvp);
 
     /* Normalized light direction */
@@ -376,12 +496,11 @@ void render_begin_frame(void) {
     float ll = sqrtf(lx*lx + ly*ly + lz*lz);
     glUniform3f(g_uni_light, lx/ll, ly/ll, lz/ll);
 
-    /* Camera eye position for specular/rim */
-    if (g_perspective) {
-        glUniform3f(g_uni_eye, CAM_EYE_X, CAM_EYE_Y, CAM_EYE_Z);
-    } else {
-        glUniform3f(g_uni_eye, 0.0f, 5.0f, 0.0f);
-    }
+    /* Camera eye position for specular/rim — lerp between modes */
+    glUniform3f(g_uni_eye,
+                CAM_EYE_X * ts + 0.0f * (1.0f - ts),
+                CAM_EYE_Y * ts + 5.0f * (1.0f - ts),
+                CAM_EYE_Z * ts + 0.0f * (1.0f - ts));
 
     g_z_bias = 0.0f;
 }
@@ -392,15 +511,80 @@ void render_set_perspective(int enabled) {
     g_perspective = enabled;
 }
 
+void render_cam_adjust(int param, float delta) {
+    switch (param) {
+        case 0: g_cam_eye_z += delta; break;  /* Z/X: eye depth */
+        case 1: g_cam_eye_y += delta; break;  /* C/V: eye height */
+        case 2: g_cam_ctr_z += delta; break;  /* B/N: look-at Z */
+        case 3: g_cam_fov   += delta; break;  /* F/G: FOV */
+    }
+    fprintf(stderr, "c_render: cam eye=(0, %.2f, %.2f) ctr=(0, 0, %.2f) fov=%.1f\n",
+            g_cam_eye_y, g_cam_eye_z, g_cam_ctr_z, g_cam_fov);
+}
+
+int render_is_animating(void) {
+    return (g_persp_t != (float)g_perspective);
+}
+
 void render_set_raised(int raised) {
     g_raised = raised;
 }
 
 void render_shutdown(void) {
+    fbo_shutdown();
     if (g_program) {
         glDeleteProgram(g_program);
         g_program = 0;
     }
+}
+
+/* ================================================================
+ * FBO stub pass — render_begin_stubs / render_end_stubs
+ * ================================================================ */
+
+void render_begin_stubs(void) {
+    glBindFramebuffer(GL_FRAMEBUFFER, g_fbo);
+    glViewport(0, 0, g_fbo_w, g_fbo_h);
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glDisable(GL_BLEND);
+}
+
+void render_end_stubs(void) {
+    /* Back to default framebuffer */
+    glBindFramebuffer(GL_FRAMEBUFFER, g_default_fbo);
+    glViewport(0, 0, g_fb_w, g_fb_h);
+
+    /* Blit FBO texture to screen using tex_mode in 3D shader */
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    /* Activate texture sampling mode */
+    glUniform1f(g_uni_tex_mode, 1.0f);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, g_fbo_tex);
+    glUniform1i(g_uni_tex, 0);
+
+    /* Fullscreen quad via vb_v — clip-space coords passed through by tex_mode */
+    vb_reset();
+    vb_v(-1,-1,0, 0,0,0);  vb_v( 1,-1,0, 0,0,0);  vb_v( 1, 1,0, 0,0,0);
+    vb_v(-1,-1,0, 0,0,0);  vb_v( 1, 1,0, 0,0,0);  vb_v(-1, 1,0, 0,0,0);
+
+    /* Draw directly — bypass vb_flush material/zbias logic */
+    glUniform4f(g_uni_color, 1.0f, 1.0f, 1.0f, 1.0f);
+    glUniform1f(g_uni_zbias, 0.0f);
+    glVertexAttribPointer(g_attr_pos,  3, GL_FLOAT, GL_FALSE, 24, g_vbuf);
+    glVertexAttribPointer(g_attr_norm, 3, GL_FLOAT, GL_FALSE, 24, g_vbuf + 3);
+    glEnableVertexAttribArray(g_attr_pos);
+    glEnableVertexAttribArray(g_attr_norm);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+
+    /* Restore state — keep FBO texture bound on unit 0 to avoid GL warning */
+    glUniform1f(g_uni_tex_mode, 0.0f);
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
 }
 
 /* ================================================================
