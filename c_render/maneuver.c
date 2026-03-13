@@ -238,10 +238,11 @@ static void draw_straight(const int *side_angles, int side_count) {
 
     render_end_stubs();
 
-    /* Blue active (direct to screen, raised) */
+    /* Blue active (direct to screen, raised) — half length for follow-street */
     render_set_raised(1);
-    render_thick_line(0, SHAFT_BOT, 0, SHAFT_TOP, SHAFT_T, ACTIVE);
-    render_arrowhead(0, SHAFT_TOP, (float)(M_PI * 0.5), HEAD_SZ, ACTIVE);
+    float blue_top = BLUE_LEN * 0.5f;
+    render_thick_line(0, SHAFT_BOT, 0, blue_top, SHAFT_T, ACTIVE);
+    render_arrowhead(0, blue_top, (float)(M_PI * 0.5), HEAD_SZ, ACTIVE);
 }
 
 /*
