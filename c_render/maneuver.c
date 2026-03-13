@@ -111,8 +111,9 @@ static route_mesh_t g_route_mesh;
 
 /* Route animation state — sliding window */
 static float g_route_slide = 1.0f;     /* slide parameter 0..2 (0=hidden, 1=in position, 2=pushed out) */
-static int   g_route_animating = 0;    /* 1 while slide-in animation running */
-static int   g_route_pushing = 0;      /* 1 while push-out animation running */
+static int   g_route_animating = 0;    /* 1 while any slide animation running */
+static float g_anim_start = 0.0f;     /* slide value at animation start */
+static float g_anim_target = 1.0f;    /* slide target (1.0 = arrive, 2.0 = push out) */
 static float g_route_pre_frac  = 0.0f; /* fraction of extended path before original start */
 static float g_route_end_frac  = 1.0f; /* fraction of extended path at original end */
 static float g_t_tail = 0.0f;          /* computed tail fraction for extrusion */
@@ -120,18 +121,21 @@ static float g_t_head = 1.0f;          /* computed head fraction for extrusion *
 static int   g_route_debug = 0;        /* debug overlay toggle */
 static float g_flag_frame = 0.0f;     /* destination flag animation frame */
 static int   g_flag_active = 0;      /* 1 when showing arrived icon (flag animating) */
-#define ROUTE_ANIM_NDC   0.025f         /* slide-in visual speed (NDC units/frame) */
-#define ROUTE_PUSH_NDC   0.04f          /* push-out visual speed (NDC units/frame) */
+#define ROUTE_SPEED_PEAK 0.045f         /* peak animation speed (NDC/frame on straight) */
+#define ROUTE_SPEED_MIN  0.010f         /* minimum speed on sharpest turns */
 #define ROUTE_EXTEND     1.2f           /* extension length beyond viewport */
+#define CURV_WINDOW      3              /* points each side for curvature sampling */
+#define CURV_SLOWDOWN    8.0f           /* curvature sensitivity (higher = more slowdown) */
 
 void maneuver_start_anim(void) {
     g_route_slide = 0.0f;
+    g_anim_start = 0.0f;
+    g_anim_target = 1.0f;
     g_route_animating = 1;
-    g_route_pushing = 0;
 }
 
 int maneuver_is_animating(void) {
-    return g_route_animating || g_route_pushing || g_flag_active;
+    return g_route_animating || g_flag_active;
 }
 
 void maneuver_set_slide(float t) {
@@ -139,7 +143,6 @@ void maneuver_set_slide(float t) {
     if (t > 2.0f) t = 2.0f;
     g_route_slide = t;
     g_route_animating = 0;
-    g_route_pushing = 0;
 }
 
 float maneuver_get_slide(void) {
@@ -147,13 +150,14 @@ float maneuver_get_slide(void) {
 }
 
 void maneuver_start_push(void) {
-    g_route_slide = 1.0f;
-    g_route_pushing = 1;
-    g_route_animating = 0;
+    /* Seamless: keep current slide, just retarget to 2.0 */
+    g_anim_start = g_route_slide;
+    g_anim_target = 2.0f;
+    g_route_animating = 1;
 }
 
 int maneuver_is_pushing(void) {
-    return g_route_pushing;
+    return g_route_animating && g_anim_target > 1.5f;
 }
 
 void maneuver_toggle_debug(void) {
@@ -372,6 +376,49 @@ static void rpath_extend(route_path_t *p) {
     p->segs[p->seg_count].x1 = ex + edx * ROUTE_EXTEND;
     p->segs[p->seg_count].y1 = ey + edy * ROUTE_EXTEND;
     p->seg_count++;
+}
+
+/* Derivative of smoothstep — gives speed multiplier at position t.
+ * Peak (1.5) at t=0.5, zero at t=0 and t=1. */
+static float ease_inout_speed(float t) {
+    if (t <= 0.0f || t >= 1.0f) return 0.0f;
+    return 6.0f * t * (1.0f - t);
+}
+
+/* Compute curvature factor at fraction t along the densified path.
+ * Returns 0..1: 1.0 = straight, 0.0 = sharpest turn.
+ * Measures direction change over a small window of points. */
+static float path_curvature_factor(const route_path_t *p, float t) {
+    if (p->pt_count < 3 || p->total_length < 1e-6f) return 1.0f;
+
+    /* Find the point index at fraction t */
+    float target_dist = t * p->total_length;
+    int idx = 1;
+    while (idx < p->pt_count - 1 && p->dist[idx] < target_dist) idx++;
+
+    /* Sample direction change over a window around idx */
+    int lo = idx - CURV_WINDOW;
+    int hi = idx + CURV_WINDOW;
+    if (lo < 0) lo = 0;
+    if (hi >= p->pt_count) hi = p->pt_count - 1;
+    if (hi - lo < 2) return 1.0f;
+
+    /* Direction at lo and hi */
+    float d0x = p->px[lo + 1] - p->px[lo], d0y = p->py[lo + 1] - p->py[lo];
+    float d1x = p->px[hi] - p->px[hi - 1], d1y = p->py[hi] - p->py[hi - 1];
+    float len0 = sqrtf(d0x * d0x + d0y * d0y);
+    float len1 = sqrtf(d1x * d1x + d1y * d1y);
+    if (len0 < 1e-6f || len1 < 1e-6f) return 1.0f;
+
+    float dot = (d0x * d1x + d0y * d1y) / (len0 * len1);
+    if (dot > 1.0f) dot = 1.0f;
+    if (dot < -1.0f) dot = -1.0f;
+
+    /* angle = 0 for straight, PI for reversal */
+    float angle = acosf(dot);
+    /* Speed factor: 1/(1 + CURV_SLOWDOWN * curvature) */
+    float factor = 1.0f / (1.0f + CURV_SLOWDOWN * angle);
+    return factor;
 }
 
 /* Compute slide window fractions and t_tail/t_head from g_route_slide.
@@ -1184,25 +1231,27 @@ void maneuver_draw(const maneuver_state_t *s) {
             g_flag_frame = fmodf(g_flag_frame, 14.0f);
     }
 
-    /* Compute length-normalized slide delta so visual speed is constant
-     * regardless of path length. original_len = path without extensions. */
+    /* Compute length-normalized slide delta.
+     * Speed = peak * ease(slide_progress) * curvature_factor(head_position).
+     * Ease gives smooth acceleration/deceleration at start/end.
+     * Curvature factor slows down on sharp turns. */
     float orig_len = g_route_path.total_length - 2.0f * ROUTE_EXTEND;
     if (orig_len < 0.1f) orig_len = 0.1f;
 
-    /* Advance push-out animation (slide 1→2) */
-    if (g_route_pushing) {
-        g_route_slide += ROUTE_PUSH_NDC / orig_len;
-        if (g_route_slide >= 2.0f) {
-            g_route_slide = 2.0f;
-            g_route_pushing = 0;
-        }
-    }
-
-    /* Advance slide-in animation (slide 0→1) */
+    /* Unified animation: slide from g_anim_start → g_anim_target.
+     * Progress normalized to [0,1] within that range.
+     * Ease in/out + curvature slowdown on turns. */
     if (g_route_animating) {
-        g_route_slide += ROUTE_ANIM_NDC / orig_len;
-        if (g_route_slide >= 1.0f) {
-            g_route_slide = 1.0f;
+        float range = g_anim_target - g_anim_start;
+        if (range < 0.01f) range = 0.01f;
+        float progress = (g_route_slide - g_anim_start) / range;
+        float e_speed = ease_inout_speed(progress);
+        if (e_speed < 0.15f) e_speed = 0.15f;
+        float curv = path_curvature_factor(&g_route_path, g_t_head);
+        float speed = ROUTE_SPEED_MIN + (ROUTE_SPEED_PEAK - ROUTE_SPEED_MIN) * e_speed * curv;
+        g_route_slide += speed / orig_len;
+        if (g_route_slide >= g_anim_target) {
+            g_route_slide = g_anim_target;
             g_route_animating = 0;
         }
     }
@@ -1211,7 +1260,7 @@ void maneuver_draw(const maneuver_state_t *s) {
      * (handles perspective animation and route animation without re-rendering masks) */
     if (!render_masks_dirty()) {
         compute_slide_params();
-        if (g_route_animating || g_route_pushing || g_route_slide != 1.0f) {
+        if (g_route_animating || g_route_slide != 1.0f) {
             /* Rebuild mesh at current slide (path segments still cached in g_route_path) */
             rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
         }
