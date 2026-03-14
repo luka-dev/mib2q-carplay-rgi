@@ -70,6 +70,9 @@ void render_set_camera_pan(float x, float y);
 /* Set camera rotation around the maneuver plane. 0 keeps the default view. */
 void render_set_camera_rotation(float angle_rad);
 
+/* Rotate the directional light basis around the maneuver plane. */
+void render_set_light_rotation(float angle_rad);
+
 /* Recompute camera-dependent matrices/uniforms for the current frame. */
 void render_sync_camera(void);
 

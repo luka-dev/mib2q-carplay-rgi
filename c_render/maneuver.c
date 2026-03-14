@@ -142,6 +142,10 @@ static float g_cam_settle_start_y = 0.0f;
 static float g_cam_settle_start_rot = 0.0f;
 static float g_cam_settle_t = 0.0f;
 static int   g_cam_settle_active = 0;
+static float g_light_settle_start_rot = 0.0f;
+static float g_light_settle_t = 0.0f;
+static int   g_light_settle_active = 0;
+static float g_last_combined_rot = 0.0f;
 static int   g_camera_prepared_this_frame = 0;
 #define ROUTE_SPEED_PEAK 0.045f         /* peak animation speed (NDC/frame on straight) */
 #define ROUTE_SPEED_MIN  0.010f         /* minimum speed on sharpest turns */
@@ -150,6 +154,7 @@ static int   g_camera_prepared_this_frame = 0;
 #define CURV_SLOWDOWN    8.0f           /* curvature sensitivity (higher = more slowdown) */
 #define CAMERA_SETTLE_SPEED 0.12f
 #define CAMERA_SETTLE_MAX_ROT 0.45f
+#define LIGHT_SETTLE_SPEED (1.0f / 30.0f)
 
 static void clear_combined_transition(void) {
     g_slug_override = -1.0f;
@@ -164,6 +169,7 @@ static void clear_combined_transition(void) {
     g_next_cam_intro_end_dist = 0.0f;
     g_next_cam_follow_dist = 0.0f;
     g_next_cam_release_end_dist = 0.0f;
+    g_last_combined_rot = 0.0f;
 }
 
 static void clear_camera_settle(void) {
@@ -172,6 +178,13 @@ static void clear_camera_settle(void) {
     g_cam_settle_start_rot = 0.0f;
     g_cam_settle_t = 0.0f;
     g_cam_settle_active = 0;
+}
+
+static void clear_light_settle(void) {
+    g_light_settle_start_rot = 0.0f;
+    g_light_settle_t = 0.0f;
+    g_light_settle_active = 0;
+    render_set_light_rotation(0.0f);
 }
 
 static void rpath_sample(const route_path_t *p, float t, float *out_x, float *out_y);
@@ -183,11 +196,12 @@ void maneuver_start_anim(void) {
     g_route_animating = 1;
     clear_combined_transition();
     clear_camera_settle();
+    clear_light_settle();
     g_camera_prepared_this_frame = 0;
 }
 
 int maneuver_is_animating(void) {
-    return g_route_animating || g_flag_active || g_cam_settle_active;
+    return g_route_animating || g_flag_active || g_cam_settle_active || g_light_settle_active;
 }
 
 void maneuver_set_slide(float t) {
@@ -197,6 +211,7 @@ void maneuver_set_slide(float t) {
     g_route_animating = 0;
     clear_combined_transition();
     clear_camera_settle();
+    clear_light_settle();
     g_camera_prepared_this_frame = 0;
 }
 
@@ -211,6 +226,7 @@ void maneuver_start_push(void) {
     g_route_animating = 1;
     clear_combined_transition();
     clear_camera_settle();
+    clear_light_settle();
     g_camera_prepared_this_frame = 0;
 }
 
@@ -545,6 +561,28 @@ static float smoothstep01(float t) {
     return t * t * (3.0f - 2.0f * t);
 }
 
+static float light_settle_curve(float t) {
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
+
+    if (t < 0.62f) {
+        float u = t / 0.62f;
+        return 0.80f * u * u * u;
+    }
+
+    if (t < 0.84f) {
+        float u = (t - 0.62f) / 0.22f;
+        float e = 1.0f - powf(1.0f - u, 3.0f);
+        return 0.80f + (1.25f - 0.80f) * e;
+    }
+
+    {
+        float u = (t - 0.84f) / 0.16f;
+        float e = u * u * (3.0f - 2.0f * u);
+        return 1.25f + (1.0f - 1.25f) * e;
+    }
+}
+
 static void apply_camera_pose(float pan_x, float pan_y, float rot) {
     g_cam_pan_x = pan_x;
     g_cam_pan_y = pan_y;
@@ -556,6 +594,22 @@ static void apply_camera_pose(float pan_x, float pan_y, float rot) {
 
 static void set_default_camera(void) {
     apply_camera_pose(0.0f, 0.0f, 0.0f);
+}
+
+static void update_light_settle(void) {
+    float blend;
+
+    if (!g_light_settle_active) {
+        render_set_light_rotation(0.0f);
+        return;
+    }
+
+    blend = light_settle_curve(g_light_settle_t);
+    render_set_light_rotation(lerp_angle(g_light_settle_start_rot, 0.0f, blend));
+
+    g_light_settle_t += LIGHT_SETTLE_SPEED;
+    if (g_light_settle_t >= 1.0f)
+        clear_light_settle();
 }
 
 static void update_camera_settle(void) {
@@ -646,6 +700,10 @@ void maneuver_prepare_frame(const maneuver_state_t *s, const maneuver_state_t *n
             update_camera_settle();
         else
             set_default_camera();
+        if (g_light_settle_active)
+            update_light_settle();
+        else
+            render_set_light_rotation(0.0f);
         g_camera_prepared_this_frame = 1;
     }
 }
@@ -1947,6 +2005,7 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
         float next_road_len = next_path.total_length;
         rpath_extend(&next_path);
         compute_combined_transform(s, next_state, &tx, &ty, &cos_r, &sin_r, &rot);
+        g_last_combined_rot = rot;
 
         rpath_xform_append(&g_route_path, &next_path, tx, ty, cos_r, sin_r, rot);
         float ax = cos_r * next_path.arrow_x - sin_r * next_path.arrow_y + tx;
@@ -2009,6 +2068,7 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
 
 void maneuver_commit_pushed_state(const maneuver_state_t *state) {
     float settle_rot;
+    float light_rot;
 
     (void)state;
     g_route_slide = 1.0f;
@@ -2023,6 +2083,10 @@ void maneuver_commit_pushed_state(const maneuver_state_t *state) {
     g_cam_settle_start_rot = settle_rot;
     g_cam_settle_t = 0.0f;
     g_cam_settle_active = 1;
+    light_rot = wrap_angle(g_last_combined_rot);
+    g_light_settle_start_rot = light_rot;
+    g_light_settle_t = 0.0f;
+    g_light_settle_active = (fabsf(light_rot) > 1e-4f);
     clear_combined_transition();
 }
 

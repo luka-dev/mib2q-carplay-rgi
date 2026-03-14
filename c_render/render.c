@@ -183,6 +183,7 @@ static int g_mask_append = 0;  /* 1 = don't clear FBO on begin_mask (additive) *
 static float g_cam_pan_x = 0.0f;
 static float g_cam_pan_z = 0.0f;  /* z in 3D = y in maneuver 2D */
 static float g_cam_rot = 0.0f;
+static float g_light_rot = 0.0f;
 static render_material_t g_active_material = RENDER_MAT_GENERIC_SOLID;
 
 /* Stored MVPs for composite pass */
@@ -732,9 +733,13 @@ static void sync_camera_uniforms(void) {
     glUniformMatrix4fv(g_uni_mvp, 1, GL_FALSE, g_mvp_current);
 
     /* World-stable showroom lighting tuned to stay readable during camera motion. */
-    float lx = k_lighting_state.key_dir[0];
+    float light_cos = cosf(g_light_rot);
+    float light_sin = sinf(g_light_rot);
+    float base_lx = k_lighting_state.key_dir[0];
+    float base_lz = k_lighting_state.key_dir[2];
+    float lx = light_cos * base_lx + light_sin * base_lz;
     float ly = k_lighting_state.key_dir[1];
-    float lz = k_lighting_state.key_dir[2];
+    float lz = -light_sin * base_lx + light_cos * base_lz;
     float ll = sqrtf(lx*lx + ly*ly + lz*lz);
     glUniform3f(g_uni_light, lx/ll, ly/ll, lz/ll);
     glUniform3f(g_uni_light_key_color,
@@ -805,6 +810,10 @@ void render_set_camera_pan(float x, float y) {
 
 void render_set_camera_rotation(float angle_rad) {
     g_cam_rot = angle_rad;
+}
+
+void render_set_light_rotation(float angle_rad) {
+    g_light_rot = angle_rad;
 }
 
 void render_set_material(render_material_t material) {
