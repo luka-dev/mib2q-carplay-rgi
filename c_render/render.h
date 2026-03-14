@@ -8,6 +8,14 @@
 
 #include <stdint.h>
 
+typedef enum {
+    RENDER_MAT_GENERIC_SOLID = 0,
+    RENDER_MAT_ROAD_ASPHALT,
+    RENDER_MAT_ROAD_BORDER_PAINT,
+    RENDER_MAT_ROUTE_ACTIVE,
+    RENDER_MAT_COUNT
+} render_material_t;
+
 /* Initialize GL state (shaders, default textures).
  * Call after platform_init(). Returns 0 on success. */
 int render_init(int fb_width, int fb_height);
@@ -61,6 +69,9 @@ void render_set_camera_pan(float x, float y);
 
 /* Set camera rotation around the maneuver plane. 0 keeps the default view. */
 void render_set_camera_rotation(float angle_rad);
+
+/* Select the shading preset used by subsequent 3D geometry draws. */
+void render_set_material(render_material_t material);
 
 /* Returns 1 if a transition animation is in progress. */
 int render_is_animating(void);

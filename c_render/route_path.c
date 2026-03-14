@@ -675,6 +675,8 @@ void rpath_draw(const route_mesh_t *m,
                 float r, float g, float b, float a) {
     if (!m->valid || m->vert_count == 0) return;
 
+    render_set_material(RENDER_MAT_ROUTE_ACTIVE);
+
     /* Draw in batches that fit the render.c vertex buffer (MAX_VERTS=1200) */
     int drawn = 0;
     while (drawn < m->vert_count) {

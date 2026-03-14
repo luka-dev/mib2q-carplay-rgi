@@ -50,13 +50,24 @@
 #define CAM_CTR_Z    0.25f
 #define CAM_FOV_DEG  40.0f
 
-/* Light direction (world space, normalized in shader) */
-#define LIGHT_X  0.1f
-#define LIGHT_Y  0.9f
-#define LIGHT_Z -0.4f
-
 /* Composite ground plane extents (world space) */
 #define ROUTE_Y   0.04f   /* raised height for route layer */
+
+typedef struct {
+    float base_color[4];
+    float surface[4];  /* ambient floor, diffuse strength, spec strength, spec power */
+    float fx[4];       /* fresnel strength, fresnel power, clearcoat strength, clearcoat power */
+    float grain[2];    /* grain strength, grain scale */
+} material_preset_t;
+
+typedef struct {
+    float key_dir[3];
+    float key_color[3];
+    float fill_color[3];
+    float sky_color[3];
+    float ground_color[3];
+    float spec_color[3];
+} lighting_state_t;
 
 /* ================================================================
  * 4×4 matrix math (column-major, OpenGL convention)
@@ -142,9 +153,15 @@ static GLint  g_attr_norm  = -1;
 static GLint  g_uni_color  = -1;
 static GLint  g_uni_mvp    = -1;
 static GLint  g_uni_light  = -1;
+static GLint  g_uni_light_key_color = -1;
+static GLint  g_uni_light_fill_color = -1;
+static GLint  g_uni_light_sky_color = -1;
+static GLint  g_uni_light_ground_color = -1;
+static GLint  g_uni_light_spec_color = -1;
 static GLint  g_uni_zbias  = -1;
 static GLint  g_uni_eye    = -1;
-static GLint  g_uni_mat    = -1;
+static GLint  g_uni_mat_surface = -1;
+static GLint  g_uni_mat_fx = -1;
 static GLint  g_uni_grain  = -1;
 static GLint  g_uni_tex_mode = -1;
 static GLint  g_uni_tex      = -1;
@@ -166,6 +183,7 @@ static int g_mask_append = 0;  /* 1 = don't clear FBO on begin_mask (additive) *
 static float g_cam_pan_x = 0.0f;
 static float g_cam_pan_z = 0.0f;  /* z in 3D = y in maneuver 2D */
 static float g_cam_rot = 0.0f;
+static render_material_t g_active_material = RENDER_MAT_GENERIC_SOLID;
 
 /* Stored MVPs for composite pass */
 static float g_mvp_current[16];    /* perspective-blended MVP (for 3D composite) */
@@ -184,6 +202,42 @@ static int g_fbo_w = 0, g_fbo_h = 0;
 static GLint g_default_fbo = 0;  /* saved at init — may not be 0 on macOS */
 static float g_mask_half_w = 1.6f;
 static float g_mask_half_h = 1.0f;
+
+static const material_preset_t k_material_presets[RENDER_MAT_COUNT] = {
+    [RENDER_MAT_GENERIC_SOLID] = {
+        { 1.0f, 1.0f, 1.0f, 1.0f },
+        { 0.20f, 0.56f, 0.06f, 10.0f },
+        { 0.02f, 3.5f, 0.0f, 1.0f },
+        { 0.0f, 0.0f }
+    },
+    [RENDER_MAT_ROAD_ASPHALT] = {
+        { 0.24f, 0.26f, 0.29f, 1.0f },
+        { 0.22f, 0.46f, 0.10f, 9.0f },
+        { 0.03f, 4.5f, 0.0f, 1.0f },
+        { 0.55f, 68.0f }
+    },
+    [RENDER_MAT_ROAD_BORDER_PAINT] = {
+        { 0.83f, 0.84f, 0.86f, 1.0f },
+        { 0.28f, 0.40f, 0.14f, 18.0f },
+        { 0.04f, 4.0f, 0.02f, 42.0f },
+        { 0.08f, 92.0f }
+    },
+    [RENDER_MAT_ROUTE_ACTIVE] = {
+        { 0.10f, 0.49f, 0.84f, 1.0f },
+        { 0.12f, 0.68f, 0.24f, 26.0f },
+        { 0.10f, 5.2f, 0.12f, 72.0f },
+        { 0.02f, 96.0f }
+    }
+};
+
+static const lighting_state_t k_lighting_state = {
+    { 0.18f, 0.97f, -0.14f },
+    { 0.78f, 0.74f, 0.68f },
+    { 0.06f, 0.09f, 0.12f },
+    { 0.08f, 0.11f, 0.17f },
+    { 0.08f, 0.06f, 0.04f },
+    { 0.78f, 0.76f, 0.74f }
+};
 
 static const char *k_vert_src =
     "attribute vec3 a_pos;\n"
@@ -207,8 +261,14 @@ static const char *k_vert_src =
 static const char *k_frag_src_body =
     "uniform vec4 u_color;\n"
     "uniform vec3 u_light_dir;\n"
+    "uniform vec3 u_light_key_color;\n"
+    "uniform vec3 u_light_fill_color;\n"
+    "uniform vec3 u_light_sky_color;\n"
+    "uniform vec3 u_light_ground_color;\n"
+    "uniform vec3 u_light_spec_color;\n"
     "uniform vec3 u_eye;\n"
-    "uniform vec4 u_material;\n"
+    "uniform vec4 u_mat_surface;\n"
+    "uniform vec4 u_mat_fx;\n"
     "uniform vec2 u_grain;\n"
     "uniform float u_tex_mode;\n"
     "uniform sampler2D u_tex;\n"
@@ -230,6 +290,48 @@ static const char *k_frag_src_body =
     "  float c = hash21(i + vec2(0.0, 1.0));\n"
     "  float d = hash21(i + vec2(1.0, 1.0));\n"
     "  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);\n"
+    "}\n"
+    "vec3 tone_map(vec3 x) {\n"
+    "  x *= 0.82;\n"
+    "  x = max(x - 0.004, 0.0);\n"
+    "  return clamp((x * (6.2 * x + 0.5)) / (x * (6.2 * x + 1.7) + 0.06), 0.0, 1.0);\n"
+    "}\n"
+    "vec4 shade_surface(vec4 base, float alpha) {\n"
+    "  vec3 N = normalize(v_normal);\n"
+    "  vec3 L = normalize(u_light_dir);\n"
+    "  vec3 fill_dir = normalize(vec3(-L.x * 0.55, 0.45, -L.z * 0.55));\n"
+    "  vec3 V = normalize(u_eye - v_world_pos);\n"
+    "  float grain = 0.0;\n"
+    "  if (u_grain.x > 0.0) {\n"
+    "    vec2 guv = v_world_pos.xz * u_grain.y;\n"
+    "    float n1 = vnoise(guv);\n"
+    "    float n2 = vnoise(guv * 3.7 + 17.0);\n"
+    "    grain = (n1 * 0.6 + n2 * 0.4) - 0.5;\n"
+    "    float bump = grain * u_grain.x * 0.24;\n"
+    "    N = normalize(N + vec3(bump, 0.0, bump));\n"
+    "  }\n"
+    "  float key_n = max(dot(N, L), 0.0);\n"
+    "  float fill_n = max(dot(N, fill_dir), 0.0);\n"
+    "  float hemi_t = clamp(N.y * 0.5 + 0.5, 0.0, 1.0);\n"
+    "  vec3 hemi = mix(u_light_ground_color, u_light_sky_color, hemi_t);\n"
+    "  vec3 diffuse_light = hemi;\n"
+    "  diffuse_light += u_light_key_color * (0.45 * u_mat_surface.x + u_mat_surface.y * key_n);\n"
+    "  diffuse_light += u_light_fill_color * fill_n * (0.08 + 0.18 * u_mat_surface.y);\n"
+    "  vec3 H = normalize(L + V);\n"
+    "  float ndotv = max(dot(N, V), 0.0);\n"
+    "  float fres = pow(1.0 - ndotv, u_mat_fx.y);\n"
+    "  float spec_lobe = pow(max(dot(N, H), 0.0), u_mat_surface.w);\n"
+    "  float coat_lobe = pow(max(dot(N, H), 0.0), u_mat_fx.w);\n"
+    "  float spec = u_mat_surface.z * spec_lobe * (0.18 + 0.42 * fres);\n"
+    "  float clearcoat = u_mat_fx.z * coat_lobe * (0.18 + 0.52 * key_n);\n"
+    "  vec3 color = base.rgb * diffuse_light;\n"
+    "  color += u_light_spec_color * (spec + clearcoat);\n"
+    "  color += base.rgb * (u_mat_fx.x * fres);\n"
+    "  if (u_grain.x > 0.0) {\n"
+    "    color += color * grain * u_grain.x * 0.10;\n"
+    "  }\n"
+    "  color = tone_map(color);\n"
+    "  return vec4(color, alpha * base.a);\n"
     "}\n"
     "void main() {\n"
     /* tex_mode 1: fullscreen blit — passthrough texture sample */
@@ -256,57 +358,11 @@ static const char *k_frag_src_body =
     "                    v_world_pos.z * u_mask_scale.y + 0.5);\n"
     "    vec4 mask = texture2D(u_tex, uv);\n"
     "    if (mask.a < 0.01) discard;\n"
-    "    vec3 N = normalize(v_normal);\n"
-    "    vec3 L = u_light_dir;\n"
-    "    vec3 V = normalize(u_eye - v_world_pos);\n"
-    "    float grain = 0.0;\n"
-    "    if (u_grain.x > 0.0) {\n"
-    "      vec2 guv = v_world_pos.xz * u_grain.y;\n"
-    "      float n1 = vnoise(guv);\n"
-    "      float n2 = vnoise(guv * 3.7 + 17.0);\n"
-    "      grain = (n1 * 0.6 + n2 * 0.4) - 0.5;\n"
-    "      float bump = grain * u_grain.x * 0.3;\n"
-    "      N = normalize(N + vec3(bump, 0.0, bump));\n"
-    "    }\n"
-    "    float NdotL = max(dot(N, L), 0.0);\n"
-    "    float diffuse = 0.42 + 0.58 * NdotL;\n"
-    "    vec3 H = normalize(L + V);\n"
-    "    float NdotH = max(dot(N, H), 0.0);\n"
-    "    float spec = u_material.x * pow(NdotH, u_material.y);\n"
-    "    float rim = 1.0 - max(dot(N, V), 0.0);\n"
-    "    rim = u_material.z * pow(rim, u_material.w);\n"
-    "    vec3 color = u_color.rgb * diffuse + vec3(spec) + u_color.rgb * rim;\n"
-    "    if (u_grain.x > 0.0) {\n"
-    "      color += color * grain * u_grain.x * 0.15;\n"
-    "    }\n"
-    "    gl_FragColor = vec4(color, mask.a);\n"
+    "    gl_FragColor = shade_surface(u_color, mask.a);\n"
     "    return;\n"
     "  }\n"
     /* tex_mode 0: normal 3D geometry with lighting */
-    "  vec3 N = normalize(v_normal);\n"
-    "  vec3 L = u_light_dir;\n"
-    "  vec3 V = normalize(u_eye - v_world_pos);\n"
-    "  float grain = 0.0;\n"
-    "  if (u_grain.x > 0.0) {\n"
-    "    vec2 uv = v_world_pos.xz * u_grain.y;\n"
-    "    float n1 = vnoise(uv);\n"
-    "    float n2 = vnoise(uv * 3.7 + 17.0);\n"
-    "    grain = (n1 * 0.6 + n2 * 0.4) - 0.5;\n"
-    "    float bump = grain * u_grain.x * 0.3;\n"
-    "    N = normalize(N + vec3(bump, 0.0, bump));\n"
-    "  }\n"
-    "  float NdotL = max(dot(N, L), 0.0);\n"
-    "  float diffuse = 0.42 + 0.58 * NdotL;\n"
-    "  vec3 H = normalize(L + V);\n"
-    "  float NdotH = max(dot(N, H), 0.0);\n"
-    "  float spec = u_material.x * pow(NdotH, u_material.y);\n"
-    "  float rim = 1.0 - max(dot(N, V), 0.0);\n"
-    "  rim = u_material.z * pow(rim, u_material.w);\n"
-    "  vec3 color = u_color.rgb * diffuse + vec3(spec) + u_color.rgb * rim;\n"
-    "  if (u_grain.x > 0.0) {\n"
-    "    color += color * grain * u_grain.x * 0.15;\n"
-    "  }\n"
-    "  gl_FragColor = vec4(color, u_color.a);\n"
+    "  gl_FragColor = shade_surface(u_color, 1.0);\n"
     "}\n";
 
 /* ================================================================
@@ -337,26 +393,32 @@ void vb_quad(float x0, float y0, float z0,
     vb_v(x0,y0,z0, nx,ny,nz);  vb_v(x2,y2,z2, nx,ny,nz);  vb_v(x3,y3,z3, nx,ny,nz);
 }
 
-void vb_flush(float r, float g, float b, float a) {
-    if (g_vcount == 0) return;
+static const material_preset_t *material_preset(render_material_t material) {
+    if (material < 0 || material >= RENDER_MAT_COUNT)
+        return &k_material_presets[RENDER_MAT_GENERIC_SOLID];
+    return &k_material_presets[material];
+}
+
+static void apply_material(const material_preset_t *preset,
+                           float r, float g, float b, float a) {
     glUniform4f(g_uni_color, r, g, b, a);
+    glUniform4f(g_uni_mat_surface,
+                preset->surface[0], preset->surface[1],
+                preset->surface[2], preset->surface[3]);
+    glUniform4f(g_uni_mat_fx,
+                preset->fx[0], preset->fx[1],
+                preset->fx[2], preset->fx[3]);
+    glUniform2f(g_uni_grain, preset->grain[0], preset->grain[1]);
+}
+
+void vb_flush(float r, float g, float b, float a) {
+    const material_preset_t *preset;
+
+    if (g_vcount == 0) return;
+    preset = material_preset(g_active_material);
+    apply_material(preset, r, g, b, a);
     glUniform1f(g_uni_zbias, g_z_bias);
     g_z_bias += Z_BIAS_STEP;
-
-    /* Auto-detect material from color */
-    if (r > 0.95f && g > 0.95f && b > 0.95f) {
-        /* White outline — flat, fine grain */
-        glUniform4f(g_uni_mat, 0.0f, 1.0f, 0.0f, 1.0f);
-        glUniform2f(g_uni_grain, 0.35f, 80.0f);
-    } else if (b > 0.8f && r < 0.5f) {
-        /* Active blue — glossy, no grain */
-        glUniform4f(g_uni_mat, 0.45f, 32.0f, 0.25f, 2.5f);
-        glUniform2f(g_uni_grain, 0.0f, 0.0f);
-    } else {
-        /* Grey (default) — matte, asphalt grain */
-        glUniform4f(g_uni_mat, 0.08f, 8.0f, 0.10f, 3.0f);
-        glUniform2f(g_uni_grain, 0.5f, 60.0f);
-    }
 
     glVertexAttribPointer(g_attr_pos,  3, GL_FLOAT, GL_FALSE, 24, g_vbuf);
     glVertexAttribPointer(g_attr_norm, 3, GL_FLOAT, GL_FALSE, 24, g_vbuf + 3);
@@ -386,7 +448,7 @@ static GLuint compile_shader(GLenum type, const char *src) {
 }
 
 static int build_program(void) {
-    char frag_src[8192];
+    char frag_src[16384];
     snprintf(frag_src, sizeof(frag_src), "%s%s%s",
              SHADER_HEADER, SHADER_PRECISION, k_frag_src_body);
 
@@ -413,9 +475,15 @@ static int build_program(void) {
     g_uni_color = glGetUniformLocation(g_program, "u_color");
     g_uni_mvp   = glGetUniformLocation(g_program, "u_mvp");
     g_uni_light = glGetUniformLocation(g_program, "u_light_dir");
+    g_uni_light_key_color = glGetUniformLocation(g_program, "u_light_key_color");
+    g_uni_light_fill_color = glGetUniformLocation(g_program, "u_light_fill_color");
+    g_uni_light_sky_color = glGetUniformLocation(g_program, "u_light_sky_color");
+    g_uni_light_ground_color = glGetUniformLocation(g_program, "u_light_ground_color");
+    g_uni_light_spec_color = glGetUniformLocation(g_program, "u_light_spec_color");
     g_uni_zbias = glGetUniformLocation(g_program, "u_z_bias");
     g_uni_eye   = glGetUniformLocation(g_program, "u_eye");
-    g_uni_mat   = glGetUniformLocation(g_program, "u_material");
+    g_uni_mat_surface = glGetUniformLocation(g_program, "u_mat_surface");
+    g_uni_mat_fx = glGetUniformLocation(g_program, "u_mat_fx");
     g_uni_grain = glGetUniformLocation(g_program, "u_grain");
     g_uni_tex_mode = glGetUniformLocation(g_program, "u_tex_mode");
     g_uni_tex      = glGetUniformLocation(g_program, "u_tex");
@@ -668,10 +736,32 @@ void render_begin_frame(void) {
 
     glUniformMatrix4fv(g_uni_mvp, 1, GL_FALSE, g_mvp_current);
 
-    /* Normalized light direction */
-    float lx = LIGHT_X, ly = LIGHT_Y, lz = LIGHT_Z;
+    /* World-stable showroom lighting tuned to stay readable during camera motion. */
+    float lx = k_lighting_state.key_dir[0];
+    float ly = k_lighting_state.key_dir[1];
+    float lz = k_lighting_state.key_dir[2];
     float ll = sqrtf(lx*lx + ly*ly + lz*lz);
     glUniform3f(g_uni_light, lx/ll, ly/ll, lz/ll);
+    glUniform3f(g_uni_light_key_color,
+                k_lighting_state.key_color[0],
+                k_lighting_state.key_color[1],
+                k_lighting_state.key_color[2]);
+    glUniform3f(g_uni_light_fill_color,
+                k_lighting_state.fill_color[0],
+                k_lighting_state.fill_color[1],
+                k_lighting_state.fill_color[2]);
+    glUniform3f(g_uni_light_sky_color,
+                k_lighting_state.sky_color[0],
+                k_lighting_state.sky_color[1],
+                k_lighting_state.sky_color[2]);
+    glUniform3f(g_uni_light_ground_color,
+                k_lighting_state.ground_color[0],
+                k_lighting_state.ground_color[1],
+                k_lighting_state.ground_color[2]);
+    glUniform3f(g_uni_light_spec_color,
+                k_lighting_state.spec_color[0],
+                k_lighting_state.spec_color[1],
+                k_lighting_state.spec_color[2]);
 
     /* Camera eye position for specular/rim — lerp between modes */
     glUniform3f(g_uni_eye,
@@ -707,6 +797,10 @@ void render_set_camera_pan(float x, float y) {
 
 void render_set_camera_rotation(float angle_rad) {
     g_cam_rot = angle_rad;
+}
+
+void render_set_material(render_material_t material) {
+    g_active_material = material;
 }
 
 void render_invalidate_masks(void) {
@@ -842,6 +936,7 @@ void render_sprite_flag(float x, float y, float size, int frame) {
         vb_v(fx0, bot_y, bot_z,  0,0,1);
         vb_v(fx1, top_y, top_z,  0,0,1);
         vb_v(fx0, top_y, top_z,  0,0,1);
+        render_set_material(RENDER_MAT_GENERIC_SOLID);
         vb_flush(1.0f, 0.0f, 1.0f, 1.0f);
     }
 
@@ -979,19 +1074,18 @@ static void blit_fbo_fullscreen(int fbo_idx) {
  * The quad goes through MVP (perspective), shader does lighting (tex_mode=2).
  * y_height: world Y of the quad (0 for ground, ROUTE_Y for route). */
 static void composite_layer(int fbo_tex_idx, float y_height,
-                             float cr, float cg, float cb, float ca,
-                             float mat_spec, float mat_shininess,
-                             float mat_rim, float mat_rim_pow,
-                             float grain_str, float grain_scale) {
+                             render_material_t material) {
+    const material_preset_t *preset = material_preset(material);
+
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, g_fbo_texs[fbo_tex_idx]);
     glUniform1i(g_uni_tex, 0);
     glUniform1f(g_uni_tex_mode, 2.0f);
     glUniform2f(g_uni_resolution, (float)g_fb_w, (float)g_fb_h);
 
-    glUniform4f(g_uni_color, cr, cg, cb, ca);
-    glUniform4f(g_uni_mat, mat_spec, mat_shininess, mat_rim, mat_rim_pow);
-    glUniform2f(g_uni_grain, grain_str, grain_scale);
+    apply_material(preset,
+                   preset->base_color[0], preset->base_color[1],
+                   preset->base_color[2], preset->base_color[3]);
     glUniform1f(g_uni_zbias, g_z_bias);
     g_z_bias += Z_BIAS_STEP;
 
@@ -1043,16 +1137,10 @@ void render_composite(void) {
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     /* Layer 1: Fill (grey asphalt) — ground level */
-    composite_layer(FBO_FILL, 0.0f,
-                    0.392f, 0.392f, 0.392f, 1.0f,   /* grey color */
-                    0.08f, 8.0f, 0.10f, 3.0f,        /* matte material */
-                    0.5f, 60.0f);                     /* asphalt grain */
+    composite_layer(FBO_FILL, 0.0f, RENDER_MAT_ROAD_ASPHALT);
 
     /* Layer 2: Outline border (white, after subtraction) */
-    composite_layer(FBO_COMPOSITE, 0.001f,
-                    1.0f, 1.0f, 1.0f, 1.0f,          /* white color */
-                    0.0f, 1.0f, 0.0f, 1.0f,          /* flat material */
-                    0.35f, 80.0f);                    /* fine grain */
+    composite_layer(FBO_COMPOSITE, 0.001f, RENDER_MAT_ROAD_BORDER_PAINT);
 
     /* Route layer removed — now rendered as direct 3D mesh after composite */
 
@@ -1100,6 +1188,7 @@ void render_thick_line(float x0, float y0, float x1, float y1, float thickness,
     vb_quad(bx,tp,bz, cx,tp,cz, cx,bt,cz, bx,bt,bz,  -snx,0,-snz);           /* right side */
     vb_quad(ax,tp,az, ax,bt,az, bx,bt,bz, bx,tp,bz,   -fdx,0,-fdz);          /* near cap */
     vb_quad(ex,tp,ez, cx,tp,cz, cx,bt,cz, ex,bt,ez,    fdx,0,fdz);            /* far cap */
+    render_set_material(RENDER_MAT_GENERIC_SOLID);
     vb_flush(r, g, b, a);
 }
 
@@ -1129,6 +1218,7 @@ void render_triangle(float x0, float y0, float x1, float y1, float x2, float y2,
         vb_quad(ex[i][0],tp,ex[i][1], ex[i][2],tp,ex[i][3],
                 ex[i][2],bt,ex[i][3], ex[i][0],bt,ex[i][1],  enx,0,enz);
     }
+    render_set_material(RENDER_MAT_GENERIC_SOLID);
     vb_flush(r, g, b, a);
 }
 
@@ -1181,6 +1271,7 @@ void render_disc(float cx, float cy, float radius, int segments,
         vb_v(px0,tp,pz0, anx,0,anz);  vb_v(px1,bt,pz1, anx,0,anz);  vb_v(px0,bt,pz0, anx,0,anz);
     }
 
+    render_set_material(RENDER_MAT_GENERIC_SOLID);
     vb_flush(r, g, b, a);
 }
 
@@ -1222,6 +1313,7 @@ void render_arc(float cx, float cy, float radius, float thickness,
         vb_quad(ix1,tp,iz1, ix1,bt,iz1, ix0,bt,iz0, ix0,tp,iz0,  -onx,0,-onz);
     }
 
+    render_set_material(RENDER_MAT_GENERIC_SOLID);
     vb_flush(r, g, b, a);
 }
 
@@ -1242,6 +1334,7 @@ void render_rect(float x, float y, float w, float h_rect,
     vb_quad(x1,tp,z1, x1,bt,z1, x0,bt,z1, x0,tp,z1,    0,0,1);        /* far */
     vb_quad(x0,tp,z1, x0,bt,z1, x0,bt,z0, x0,tp,z0,   -1,0,0);        /* left */
     vb_quad(x1,tp,z0, x1,bt,z0, x1,bt,z1, x1,tp,z1,    1,0,0);        /* right */
+    render_set_material(RENDER_MAT_GENERIC_SOLID);
     vb_flush(r, g, b, a);
 }
 
