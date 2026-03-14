@@ -12,6 +12,8 @@
 #ifndef CR_MANEUVER_H
 #define CR_MANEUVER_H
 
+#include "route_path.h"
+
 /* Renderer icon types */
 #define ICON_NONE        0   /* no icon / not set */
 #define ICON_STRAIGHT    1   /* straight ahead; junction_angles = side streets */
@@ -35,8 +37,22 @@ typedef struct {
     int junction_angle_count;                 /* number of valid entries */
 } maneuver_state_t;
 
-/* Draw the maneuver icon for the given state. */
-void maneuver_draw(const maneuver_state_t *state);
+/* Exit point of a maneuver path (for chaining). */
+typedef struct {
+    float x, y;       /* exit point in local maneuver coords */
+    float heading;     /* exit heading in radians (math convention) */
+} maneuver_exit_t;
+
+/* Get the exit point and heading for a maneuver (pure computation). */
+maneuver_exit_t maneuver_get_exit(const maneuver_state_t *state);
+
+/* Build route path segments for a maneuver (no extend/densify/extrude).
+ * Used for path chaining during transitions. */
+void maneuver_build_route(const maneuver_state_t *state, route_path_t *path);
+
+/* Draw the maneuver icon for the given state.
+ * next_state: if non-NULL and pushing, builds combined path for seamless transition. */
+void maneuver_draw(const maneuver_state_t *state, const maneuver_state_t *next_state);
 
 /* Route path animation control. */
 void maneuver_start_anim(void);       /* reset slide=0, start auto-animation */

@@ -119,6 +119,7 @@ static float g_route_end_frac  = 1.0f; /* fraction of extended path at original 
 static float g_t_tail = 0.0f;          /* computed tail fraction for extrusion */
 static float g_t_head = 1.0f;          /* computed head fraction for extrusion */
 static int   g_route_debug = 0;        /* debug overlay toggle */
+static float g_slug_override = -1.0f; /* >0: override slug length for combined path */
 static float g_flag_frame = 0.0f;     /* destination flag animation frame */
 static int   g_flag_active = 0;      /* 1 when showing arrived icon (flag animating) */
 #define ROUTE_SPEED_PEAK 0.045f         /* peak animation speed (NDC/frame on straight) */
@@ -132,6 +133,7 @@ void maneuver_start_anim(void) {
     g_anim_start = 0.0f;
     g_anim_target = 1.0f;
     g_route_animating = 1;
+    g_slug_override = -1.0f;  /* single maneuver — auto slug */
 }
 
 int maneuver_is_animating(void) {
@@ -423,6 +425,24 @@ static float path_curvature_factor(const route_path_t *p, float t) {
 
 /* Compute slide window fractions and t_tail/t_head from g_route_slide.
  * slide 0..1 = slide-in (normal), slide 1..2 = push-out through exit. */
+/* Sample position on densified path at fraction t (0..1). */
+static void rpath_sample(const route_path_t *p, float t, float *out_x, float *out_y) {
+    if (p->pt_count < 2) { *out_x = 0; *out_y = 0; return; }
+    float target = t * p->total_length;
+    int i;
+    for (i = 1; i < p->pt_count; i++) {
+        if (p->dist[i] >= target) {
+            float seg_len = p->dist[i] - p->dist[i-1];
+            float frac = (seg_len > 1e-6f) ? (target - p->dist[i-1]) / seg_len : 0.0f;
+            *out_x = p->px[i-1] + frac * (p->px[i] - p->px[i-1]);
+            *out_y = p->py[i-1] + frac * (p->py[i] - p->py[i-1]);
+            return;
+        }
+    }
+    *out_x = p->px[p->pt_count - 1];
+    *out_y = p->py[p->pt_count - 1];
+}
+
 static void compute_slide_params(void) {
     if (g_route_path.total_length < 1e-6f) {
         g_route_pre_frac = 0.0f;
@@ -433,7 +453,16 @@ static void compute_slide_params(void) {
     }
     g_route_pre_frac = ROUTE_EXTEND / g_route_path.total_length;
     g_route_end_frac = (g_route_path.total_length - ROUTE_EXTEND) / g_route_path.total_length;
-    float slug_frac = g_route_end_frac - g_route_pre_frac;
+
+    /* slug_frac = fraction of path that the arrow covers.
+     * For single maneuver: entire road = end_frac - pre_frac.
+     * For combined path: one maneuver's worth (stored in g_slug_override). */
+    float slug_frac;
+    if (g_slug_override > 0.0f)
+        slug_frac = g_slug_override / g_route_path.total_length;
+    else
+        slug_frac = g_route_end_frac - g_route_pre_frac;
+
     g_t_head = g_route_pre_frac + g_route_slide * slug_frac;
     g_t_tail = g_t_head - slug_frac;
     if (g_t_tail < 0.0f) g_t_tail = 0.0f;
@@ -604,6 +633,190 @@ static void build_filleted_path(route_path_t *p,
 
     /* Final segment: cur → last point */
     rpath_add_line(p, cur_sx, cur_sy, xs[n-1], ys[n-1]);
+}
+
+/* ================================================================
+ * Route path building (standalone, no mask rendering)
+ * ================================================================ */
+
+/* Build route path for a single maneuver — raw segments only.
+ * No rpath_extend, no rpath_densify, no rpath_extrude.
+ * Sets arrow position. Used by draw_* functions and for path chaining. */
+void maneuver_build_route(const maneuver_state_t *state, route_path_t *path) {
+    switch (state->icon) {
+    case ICON_STRAIGHT: {
+        float straight_end = ARRIVE_ROAD_TOP - HEAD_SZ;
+        rpath_clear(path);
+        rpath_add_line(path, 0, SHAFT_BOT, 0, straight_end);
+        rpath_set_arrow(path, 0, straight_end, (float)(M_PI * 0.5));
+        break;
+    }
+    case ICON_TURN: {
+        float angle_rad = (float)state->exit_angle * (float)M_PI / 180.0f;
+        float end_x = BLUE_LEN * sinf(angle_rad);
+        float end_y = BLUE_LEN * cosf(angle_rad);
+        float pts_x[] = {0, 0, end_x};
+        float pts_y[] = {SHAFT_BOT, 0, end_y};
+        build_filleted_path(path, pts_x, pts_y, 3, JOINT_R);
+        float head_angle = (float)(M_PI * 0.5) - angle_rad;
+        rpath_set_arrow(path, end_x, end_y, head_angle);
+        break;
+    }
+    case ICON_UTURN: {
+        int go_left = (state->driving_side == 0) ? 1 : 0;
+        if (state->direction != 0) go_left = (state->direction < 0) ? 1 : 0;
+        float enter_x = go_left ?  UTURN_GAP : -UTURN_GAP;
+        float exit_x  = go_left ? -UTURN_GAP :  UTURN_GAP;
+        float top_y   = UTURN_TOP;
+        rpath_clear(path);
+        rpath_add_line(path, enter_x, SHAFT_BOT, enter_x, top_y);
+        if (go_left) {
+            rpath_add_arc(path, 0, top_y, UTURN_GAP, 0, (float)M_PI);
+        } else {
+            rpath_add_arc(path, 0, top_y, UTURN_GAP, (float)M_PI, 2.0f * (float)M_PI);
+        }
+        rpath_add_line(path, exit_x, top_y, exit_x, UTURN_ARROW);
+        rpath_fillet_junctions(path, JOINT_R);
+        rpath_set_arrow(path, exit_x, UTURN_ARROW, (float)(-M_PI * 0.5));
+        break;
+    }
+    case ICON_ROUNDABOUT: {
+        float cx = 0.0f, cy = 0.0f;
+        float ring_r = RAB_RING_R;
+        float entry_rad = (float)(-M_PI * 0.5);
+        /* Snap exit angle */
+        float snapped_exit_deg = (float)state->exit_angle;
+        if (state->junction_angle_count > 0) {
+            int best = 0; float best_diff = SNAP_SENTINEL; int j;
+            for (j = 0; j < state->junction_angle_count && j < MAX_JUNCTION_ANGLES; j++) {
+                float diff = fabsf((float)state->junction_angles[j] - (float)state->exit_angle);
+                if (diff > 180.0f) diff = 360.0f - diff;
+                if (diff < best_diff) { best_diff = diff; best = j; }
+            }
+            float entry_diff = fabsf(-180.0f - (float)state->exit_angle);
+            if (entry_diff > 180.0f) entry_diff = 360.0f - entry_diff;
+            if (entry_diff < best_diff)
+                snapped_exit_deg = -180.0f;
+            else
+                snapped_exit_deg = (float)state->junction_angles[best];
+        }
+        float exit_rad = (90.0f - snapped_exit_deg) * (float)M_PI / 180.0f;
+        float ext = BLUE_LEN - ring_r;
+        float entry_pt_x = cx + ring_r * cosf(entry_rad);
+        float entry_pt_y = cy + ring_r * sinf(entry_rad);
+        float ex0_x = cx + ring_r * cosf(exit_rad);
+        float ex0_y = cy + ring_r * sinf(exit_rad);
+        float ex_tip_x = cx + (ring_r + ext) * cosf(exit_rad);
+        float ex_tip_y = cy + (ring_r + ext) * sinf(exit_rad);
+        float arc_s = entry_rad, arc_e = exit_rad;
+        if (state->driving_side == 0) {
+            while (arc_e <= arc_s) arc_e += 2.0f * (float)M_PI;
+        } else {
+            while (arc_e >= arc_s) arc_e -= 2.0f * (float)M_PI;
+        }
+        rpath_clear(path);
+        rpath_add_line(path, 0, SHAFT_BOT, entry_pt_x, entry_pt_y);
+        rpath_add_arc(path, cx, cy, ring_r, arc_s, arc_e);
+        rpath_add_line(path, ex0_x, ex0_y, ex_tip_x, ex_tip_y);
+        rpath_fillet_junctions(path, JOINT_R);
+        rpath_set_arrow(path, ex_tip_x, ex_tip_y, exit_rad);
+        break;
+    }
+    case ICON_MERGE: {
+        int go_right = (state->direction > 0) ? 1 : 0;
+        float sign = go_right ? 1.0f : -1.0f;
+        float start_x = sign * -MERGE_OFFSET;
+        float pts_x[] = {start_x, start_x, 0, 0};
+        float pts_y[] = {SHAFT_BOT, MERGE_BEND_LO, BEND_HI, BLUE_LEN};
+        build_filleted_path(path, pts_x, pts_y, 4, JOINT_R);
+        rpath_set_arrow(path, 0, BLUE_LEN, (float)(M_PI * 0.5));
+        break;
+    }
+    case ICON_LANE_CHANGE: {
+        int go_left = (state->direction < 0) ? 1 : 0;
+        float sign = go_left ? -1.0f : 1.0f;
+        float shift = sign * LANE_SHIFT;
+        float pts_x[] = {0, 0, shift, shift};
+        float pts_y[] = {SHAFT_BOT, BEND_LO, BEND_HI, BLUE_LEN};
+        build_filleted_path(path, pts_x, pts_y, 4, JOINT_R);
+        rpath_set_arrow(path, shift, BLUE_LEN, (float)(M_PI * 0.5));
+        break;
+    }
+    case ICON_ARRIVED:
+    default: {
+        float route_end = ARRIVE_ROAD_TOP - HEAD_SZ;
+        rpath_clear(path);
+        rpath_add_line(path, 0, SHAFT_BOT, 0, route_end);
+        rpath_set_arrow(path, 0, route_end, (float)(M_PI * 0.5));
+        break;
+    }
+    }
+}
+
+/* Get exit point and heading for a maneuver (for chaining). */
+maneuver_exit_t maneuver_get_exit(const maneuver_state_t *state) {
+    maneuver_exit_t ex = {0, 0, (float)(M_PI * 0.5)};
+    switch (state->icon) {
+    case ICON_STRAIGHT: {
+        ex.x = 0; ex.y = ARRIVE_ROAD_TOP - HEAD_SZ;
+        ex.heading = (float)(M_PI * 0.5);
+        break;
+    }
+    case ICON_TURN: {
+        float a = (float)state->exit_angle * (float)M_PI / 180.0f;
+        ex.x = BLUE_LEN * sinf(a);
+        ex.y = BLUE_LEN * cosf(a);
+        ex.heading = (float)(M_PI * 0.5) - a;
+        break;
+    }
+    case ICON_UTURN: {
+        int go_left = (state->driving_side == 0) ? 1 : 0;
+        if (state->direction != 0) go_left = (state->direction < 0) ? 1 : 0;
+        ex.x = go_left ? -UTURN_GAP : UTURN_GAP;
+        ex.y = UTURN_ARROW;
+        ex.heading = (float)(-M_PI * 0.5);
+        break;
+    }
+    case ICON_ROUNDABOUT: {
+        float ring_r = RAB_RING_R;
+        float snapped_exit_deg = (float)state->exit_angle;
+        if (state->junction_angle_count > 0) {
+            int best = 0; float best_diff = SNAP_SENTINEL; int j;
+            for (j = 0; j < state->junction_angle_count && j < MAX_JUNCTION_ANGLES; j++) {
+                float diff = fabsf((float)state->junction_angles[j] - (float)state->exit_angle);
+                if (diff > 180.0f) diff = 360.0f - diff;
+                if (diff < best_diff) { best_diff = diff; best = j; }
+            }
+            float entry_diff = fabsf(-180.0f - (float)state->exit_angle);
+            if (entry_diff > 180.0f) entry_diff = 360.0f - entry_diff;
+            if (entry_diff < best_diff) snapped_exit_deg = -180.0f;
+            else snapped_exit_deg = (float)state->junction_angles[best];
+        }
+        float exit_rad = (90.0f - snapped_exit_deg) * (float)M_PI / 180.0f;
+        float ext = BLUE_LEN - ring_r;
+        ex.x = (ring_r + ext) * cosf(exit_rad);
+        ex.y = (ring_r + ext) * sinf(exit_rad);
+        ex.heading = exit_rad;
+        break;
+    }
+    case ICON_MERGE:
+        ex.x = 0; ex.y = BLUE_LEN;
+        ex.heading = (float)(M_PI * 0.5);
+        break;
+    case ICON_LANE_CHANGE: {
+        int go_left = (state->direction < 0) ? 1 : 0;
+        float sign = go_left ? -1.0f : 1.0f;
+        ex.x = sign * LANE_SHIFT;
+        ex.y = BLUE_LEN;
+        ex.heading = (float)(M_PI * 0.5);
+        break;
+    }
+    default: /* ARRIVED — terminal, no meaningful exit */
+        ex.x = 0; ex.y = ARRIVE_ROAD_TOP - HEAD_SZ;
+        ex.heading = (float)(M_PI * 0.5);
+        break;
+    }
+    return ex;
 }
 
 /* ================================================================
@@ -1220,7 +1433,7 @@ static void draw_merge(int go_right) {
  * Main dispatch
  * ================================================================ */
 
-void maneuver_draw(const maneuver_state_t *s) {
+void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state) {
     /* Track whether flag animation is active */
     g_flag_active = (s->icon == ICON_ARRIVED);
 
@@ -1231,11 +1444,19 @@ void maneuver_draw(const maneuver_state_t *s) {
             g_flag_frame = fmodf(g_flag_frame, 14.0f);
     }
 
+    /* Combined path: when pushing with a known next maneuver, build joined route
+     * after the draw_* pass so arrow slides continuously between maneuvers. */
+    int combined = (next_state != NULL && maneuver_is_pushing());
+
+    /* Camera follows arrow on combined path, stays centered otherwise */
+    if (!combined)
+        render_set_camera_pan(0.0f, 0.0f);
+
     /* Compute length-normalized slide delta.
-     * Speed = peak * ease(slide_progress) * curvature_factor(head_position).
-     * Ease gives smooth acceleration/deceleration at start/end.
-     * Curvature factor slows down on sharp turns. */
-    float orig_len = g_route_path.total_length - 2.0f * ROUTE_EXTEND;
+     * Speed uses the slug length (one maneuver's road) for consistent animation pace,
+     * even when the path is a combined two-maneuver path. */
+    float orig_len = (g_slug_override > 0.0f) ? g_slug_override
+                   : (g_route_path.total_length - 2.0f * ROUTE_EXTEND);
     if (orig_len < 0.1f) orig_len = 0.1f;
 
     /* Unified animation: slide from g_anim_start → g_anim_target.
@@ -1260,6 +1481,13 @@ void maneuver_draw(const maneuver_state_t *s) {
      * (handles perspective animation and route animation without re-rendering masks) */
     if (!render_masks_dirty()) {
         compute_slide_params();
+        /* Update camera pan for combined path */
+        if (combined) {
+            float mid_t = (g_t_head + g_t_tail) * 0.5f;
+            float cx, cy;
+            rpath_sample(&g_route_path, mid_t, &cx, &cy);
+            render_set_camera_pan(cx, cy);
+        }
         if (g_route_animating || g_route_slide != 1.0f) {
             /* Rebuild mesh at current slide (path segments still cached in g_route_path) */
             rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
@@ -1273,32 +1501,117 @@ void maneuver_draw(const maneuver_state_t *s) {
         return;
     }
 
-    switch (s->icon) {
-        case ICON_STRAIGHT:
-            draw_straight(s->junction_angles, s->junction_angle_count);
-            break;
-        case ICON_TURN:
-            draw_turn((float)s->exit_angle, s->junction_angles, s->junction_angle_count);
-            break;
-        case ICON_UTURN:
-            draw_uturn(s->driving_side != 1);
-            break;
-        case ICON_MERGE:
-            draw_merge(s->direction > 0);
-            break;
-        case ICON_LANE_CHANGE:
-            draw_lane_change(s->direction < 0);
-            break;
-        case ICON_ROUNDABOUT:
-            draw_roundabout((float)s->exit_angle, s->driving_side, s->junction_angles, s->junction_angle_count);
-            break;
-        case ICON_ARRIVED:
-            draw_arrived(s->direction);
-            break;
-        default:
-            break;
+    /* Dispatch mask + route rendering for a state */
+    #define DISPATCH_DRAW(st) do { \
+        switch ((st)->icon) { \
+            case ICON_STRAIGHT: draw_straight((st)->junction_angles, (st)->junction_angle_count); break; \
+            case ICON_TURN: draw_turn((float)(st)->exit_angle, (st)->junction_angles, (st)->junction_angle_count); break; \
+            case ICON_UTURN: draw_uturn((st)->driving_side != 1); break; \
+            case ICON_MERGE: draw_merge((st)->direction > 0); break; \
+            case ICON_LANE_CHANGE: draw_lane_change((st)->direction < 0); break; \
+            case ICON_ROUNDABOUT: draw_roundabout((float)(st)->exit_angle, (st)->driving_side, (st)->junction_angles, (st)->junction_angle_count); break; \
+            case ICON_ARRIVED: draw_arrived((st)->direction); break; \
+            default: break; \
+        } \
+    } while(0)
+
+    /* Render current maneuver masks + composite */
+    DISPATCH_DRAW(s);
+
+    /* For combined transition: also render next maneuver's masks (appended),
+     * then re-composite with both, and draw combined route. */
+    if (combined) {
+        /* Compute same transform as route path joining — align next maneuver's
+         * pre-extension start with current's post-extension end */
+        maneuver_exit_t ex_info = maneuver_get_exit(s);
+        float rot = ex_info.heading - (float)(M_PI * 0.5);
+        float cos_r = cosf(rot), sin_r = sinf(rot);
+        float next_start_x = 0;
+        float next_start_y = SHAFT_BOT - ROUTE_EXTEND;
+        float cur_end_x = ex_info.x + cosf(ex_info.heading) * ROUTE_EXTEND;
+        float cur_end_y = ex_info.y + sinf(ex_info.heading) * ROUTE_EXTEND;
+        float ns_rx = cos_r * next_start_x - sin_r * next_start_y;
+        float ns_ry = sin_r * next_start_x + cos_r * next_start_y;
+        float tx = cur_end_x - ns_rx;
+        float ty = cur_end_y - ns_ry;
+
+        render_set_mask_append(1);
+        render_push_mask_transform(tx, ty, cos_r, sin_r);
+        DISPATCH_DRAW(next_state);
+        render_pop_mask_transform();
+        render_set_mask_append(0);
+
+        /* Re-composite with both maneuvers' masks */
+        render_composite();
     }
-    /* Each draw_* calls render_composite() which clears the dirty flag */
+
+    #undef DISPATCH_DRAW
+
+    /* When combined, rebuild joined route path and draw it */
+    if (combined) {
+        /* Rebuild combined path (draw_* overwrote g_route_path).
+         * Each maneuver gets its own extend segments so the arrow
+         * slides through off-screen extensions at the junction. */
+        route_path_t next_path;
+        maneuver_build_route(s, &g_route_path);
+
+        /* Measure first maneuver's road length BEFORE extending —
+         * this is the slug (visible arrow) length, same as single-path uses. */
+        rpath_densify(&g_route_path);
+        g_slug_override = g_route_path.total_length;
+
+        rpath_extend(&g_route_path);
+
+        maneuver_build_route(next_state, &next_path);
+        rpath_extend(&next_path);
+
+        /* Transform next extended path so its pre-extension entry
+         * aligns with current maneuver's post-extension exit */
+        maneuver_exit_t ex_info = maneuver_get_exit(s);
+        float rot = ex_info.heading - (float)(M_PI * 0.5);
+        float cos_r = cosf(rot), sin_r = sinf(rot);
+        /* Next path (extended) starts at its first segment start.
+         * That's ROUTE_EXTEND behind (0, SHAFT_BOT) along entry direction.
+         * Entry direction is (0,1) = up, so pre-extension start = (0, SHAFT_BOT - ROUTE_EXTEND).
+         * Current path (extended) ends at its last segment end:
+         * ROUTE_EXTEND beyond exit point along exit direction. */
+        float next_start_x = 0;
+        float next_start_y = SHAFT_BOT - ROUTE_EXTEND;
+        /* Current path post-extension end: exit + ROUTE_EXTEND along exit heading */
+        float cur_end_x = ex_info.x + cosf(ex_info.heading) * ROUTE_EXTEND;
+        float cur_end_y = ex_info.y + sinf(ex_info.heading) * ROUTE_EXTEND;
+        /* Transform: rotate next_start by rot, then translate so it lands on cur_end */
+        float ns_rx = cos_r * next_start_x - sin_r * next_start_y;
+        float ns_ry = sin_r * next_start_x + cos_r * next_start_y;
+        float tx = cur_end_x - ns_rx;
+        float ty = cur_end_y - ns_ry;
+
+        rpath_xform_append(&g_route_path, &next_path, tx, ty, cos_r, sin_r, rot);
+        float ax = cos_r * next_path.arrow_x - sin_r * next_path.arrow_y + tx;
+        float ay = sin_r * next_path.arrow_x + cos_r * next_path.arrow_y + ty;
+        rpath_set_arrow(&g_route_path, ax, ay, next_path.arrow_angle + rot);
+        rpath_densify(&g_route_path);
+
+        /* Adjust animation target so arrow traverses the full combined path.
+         * Single path: target=2.0 covers 2 slugs (enter + push out).
+         * Combined: need enough slugs to reach the end of path 2's post-extension.
+         * target = 1 + (total_road / slug) where total_road = total - 2*extend. */
+        if (g_slug_override > 0.01f) {
+            float total_road = g_route_path.total_length - 2.0f * ROUTE_EXTEND;
+            g_anim_target = 1.0f + total_road / g_slug_override;
+        }
+
+        compute_slide_params();
+        /* Camera follows arrow midpoint on combined path */
+        {
+            float mid_t = (g_t_head + g_t_tail) * 0.5f;
+            float cx, cy;
+            rpath_sample(&g_route_path, mid_t, &cx, &cy);
+            render_set_camera_pan(cx, cy);
+        }
+        rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
+        rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
+    }
 
     if (g_route_debug)
         rpath_draw_debug(&g_route_path, g_t_tail, g_t_head);

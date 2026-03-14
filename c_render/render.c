@@ -161,6 +161,11 @@ static float g_z_bias = 0.0f;
 
 /* Mask cache dirty flag */
 static int g_masks_dirty = 1;
+static int g_mask_append = 0;  /* 1 = don't clear FBO on begin_mask (additive) */
+
+/* Camera pan offset (maneuver space) — shifts entire scene to follow arrow */
+static float g_cam_pan_x = 0.0f;
+static float g_cam_pan_z = 0.0f;  /* z in 3D = y in maneuver 2D */
 
 /* Stored MVPs for composite pass */
 static float g_mvp_current[16];    /* perspective-blended MVP (for 3D composite) */
@@ -483,6 +488,11 @@ static void fbo_bind(int idx) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
+static void fbo_bind_noclear(int idx) {
+    glBindFramebuffer(GL_FRAMEBUFFER, g_fbos[idx]);
+    glViewport(0, 0, g_fbo_w, g_fbo_h);
+}
+
 /* Restore default framebuffer */
 static void fbo_unbind(void) {
     glBindFramebuffer(GL_FRAMEBUFFER, g_default_fbo);
@@ -568,8 +578,8 @@ void render_begin_frame(void) {
         float fov_rad = CAM_FOV_DEG * (float)M_PI / 180.0f;
         mat4_perspective(proj, fov_rad, aspect, 0.1f, 20.0f);
         mat4_lookAt(view,
-                    CAM_EYE_X, CAM_EYE_Y, CAM_EYE_Z,
-                    CAM_CTR_X, CAM_CTR_Y, CAM_CTR_Z,
+                    CAM_EYE_X + g_cam_pan_x, CAM_EYE_Y, CAM_EYE_Z + g_cam_pan_z,
+                    CAM_CTR_X + g_cam_pan_x, CAM_CTR_Y, CAM_CTR_Z + g_cam_pan_z,
                     0.0f, 1.0f, 0.0f);
         mat4_mul(mvp_persp, proj, view);
     }
@@ -580,7 +590,8 @@ void render_begin_frame(void) {
         mat4_zero(view);
         view[0]  =  1.0f;
         view[9]  =  1.0f;
-        view[13] =  0.0f;
+        view[12] = -g_cam_pan_x;
+        view[13] = -g_cam_pan_z;
         view[6]  =  1.0f;
         view[14] = -5.0f;
         view[15] =  1.0f;
@@ -642,6 +653,15 @@ int render_is_animating(void) {
 
 void render_set_raised(int raised) {
     g_raised = raised;
+}
+
+void render_set_mask_append(int append) {
+    g_mask_append = append;
+}
+
+void render_set_camera_pan(float x, float y) {
+    g_cam_pan_x = x;
+    g_cam_pan_z = y;  /* maneuver y → 3D z */
 }
 
 void render_invalidate_masks(void) {
@@ -804,7 +824,10 @@ void render_shutdown(void) {
  * ================================================================ */
 
 static void begin_mask(int fbo_idx) {
-    fbo_bind(fbo_idx);
+    if (g_mask_append)
+        fbo_bind_noclear(fbo_idx);
+    else
+        fbo_bind(fbo_idx);
     glDisable(GL_BLEND);
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
@@ -821,6 +844,51 @@ static void end_mask(void) {
     glUniform1f(g_uni_tex_mode, 0.0f);
     glUniformMatrix4fv(g_uni_mvp, 1, GL_FALSE, g_mvp_current);
 }
+
+/* Apply a 2D rigid transform to the mask MVP (for rendering a second maneuver).
+ * Modifies g_mvp_ortho_2d so that begin_mask picks up the transform.
+ * Maneuver (x,y) → rotated by (cos_r,sin_r) then translated by (tx,ty).
+ * In 3D: maneuver x→world x, maneuver y→world z. */
+static float g_mvp_ortho_2d_saved[16];
+
+void render_push_mask_transform(float tx, float ty, float cos_r, float sin_r) {
+    /* Save original */
+    memcpy(g_mvp_ortho_2d_saved, g_mvp_ortho_2d, sizeof(g_mvp_ortho_2d));
+
+    /* Build 4x4 model matrix: rotate in xz-plane + translate */
+    float model[16];
+    mat4_zero(model);
+    model[0]  =  cos_r;   /* x' = cos*x - sin*z */
+    model[8]  = -sin_r;
+    model[2]  =  sin_r;   /* z' = sin*x + cos*z */
+    model[10] =  cos_r;
+    model[5]  =  1.0f;    /* y unchanged */
+    model[12] =  tx;      /* translate x */
+    model[14] =  ty;      /* translate z (maneuver y) */
+    model[15] =  1.0f;
+    /* New ortho MVP = saved * model */
+    float mvp[16];
+    mat4_mul(mvp, g_mvp_ortho_2d_saved, model);
+    memcpy(g_mvp_ortho_2d, mvp, sizeof(g_mvp_ortho_2d));
+}
+
+void render_pop_mask_transform(void) {
+    memcpy(g_mvp_ortho_2d, g_mvp_ortho_2d_saved, sizeof(g_mvp_ortho_2d));
+}
+
+/* Resume mask — bind without clearing (append to existing mask content) */
+static void resume_mask(int fbo_idx) {
+    fbo_bind_noclear(fbo_idx);
+    glDisable(GL_BLEND);
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glUniform1f(g_uni_tex_mode, 3.0f);
+    glUniformMatrix4fv(g_uni_mvp, 1, GL_FALSE, g_mvp_ortho_2d);
+    g_z_bias = 0.0f;
+}
+
+void render_resume_outline_mask(void) { resume_mask(FBO_OUTLINE); }
+void render_resume_fill_mask(void)    { resume_mask(FBO_FILL); }
 
 void render_begin_outline_mask(void) { begin_mask(FBO_OUTLINE); }
 void render_end_outline_mask(void)   { end_mask(); }

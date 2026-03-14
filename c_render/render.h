@@ -56,6 +56,9 @@ void render_circle(float cx, float cy, float radius, float thickness, int segmen
 /* Toggle perspective on/off. enabled=0 → flat (no perspective). */
 void render_set_perspective(int enabled);
 
+/* Set camera pan offset in maneuver space (shifts entire scene). */
+void render_set_camera_pan(float x, float y);
+
 /* Returns 1 if a transition animation is in progress. */
 int render_is_animating(void);
 
@@ -80,6 +83,10 @@ void render_end_outline_mask(void);
 void render_begin_fill_mask(void);      /* bind FBO_FILL, ortho 2D, flat grey */
 void render_end_fill_mask(void);
 
+/* Resume masks — bind without clearing (append content to existing mask) */
+void render_resume_outline_mask(void);
+void render_resume_fill_mask(void);
+
 void render_begin_route_mask(void);     /* bind FBO_ROUTE, ortho 2D, flat blue */
 void render_end_route_mask(void);
 
@@ -88,6 +95,13 @@ void render_composite(void);
 
 /* Mark masks as needing re-render (call on maneuver state change) */
 void render_invalidate_masks(void);
+
+/* Apply/remove a 2D rigid transform for mask rendering (second maneuver). */
+void render_push_mask_transform(float tx, float ty, float cos_r, float sin_r);
+void render_pop_mask_transform(void);
+
+/* Mask append mode: 1 = begin_mask doesn't clear FBO (draw on top). */
+void render_set_mask_append(int append);
 
 /* Returns 1 if masks need re-rendering */
 int render_masks_dirty(void);

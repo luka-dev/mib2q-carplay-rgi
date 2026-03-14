@@ -198,16 +198,41 @@ static void print_state(void) {
 
 static int g_dirty = 1;  /* set when state changes — triggers re-render */
 static int g_pending_idx = -1;  /* pending test index during push-out transition */
+static maneuver_state_t g_next_state;  /* next maneuver state during push transition */
+static int g_next_valid = 0;          /* 1 when g_next_state is populated */
 
-/* Complete the push-out → switch state → start slide-in */
+/* Build a maneuver_state_t from a test index (for next-state during push). */
+static void build_state_from_test(int idx, maneuver_state_t *out) {
+    const test_entry_t *e = &g_tests[idx];
+    memset(out, 0, sizeof(*out));
+    out->icon = e->icon;
+    out->exit_angle = e->exit_angle;
+    out->direction = e->direction;
+    if (e->rab_preset > 0) {
+        set_rab_preset(e->rab_preset, out);
+    } else if (e->icon == ICON_TURN || e->icon == ICON_STRAIGHT) {
+        /* Apply current sides preset */
+        const sides_preset_t *p = &g_sides_presets[g_sides_idx];
+        int i;
+        out->junction_angle_count = p->count;
+        for (i = 0; i < p->count; i++)
+            out->junction_angles[i] = p->angles[i];
+    }
+}
+
+/* Complete the push-out → switch state, arrow already in position */
 static void finish_push_transition(void) {
     if (g_pending_idx < 0) return;
     g_test_idx = g_pending_idx;
     g_pending_idx = -1;
+    g_next_valid = 0;
     update_test_state();
     print_state();
     render_invalidate_masks();
-    maneuver_start_anim();
+    /* Arrow already slid into position on the next maneuver via combined path.
+     * Just set slide=1.0 (in position) — no replay animation. */
+    maneuver_set_slide(1.0f);
+    render_set_camera_pan(0.0f, 0.0f);
     g_dirty = 1;
 }
 
@@ -216,7 +241,10 @@ static void handle_test_keys(void) {
     if (platform_key_tap(CR_KEY_RIGHT)) {
         if (!maneuver_is_pushing()) {
             g_pending_idx = (g_test_idx + 1) % TEST_COUNT;
+            build_state_from_test(g_pending_idx, &g_next_state);
+            g_next_valid = 1;
             maneuver_start_push();
+            render_invalidate_masks();  /* trigger combined path rebuild */
             fprintf(stderr, "c_render: push → [%d/%d] %s\n",
                     g_pending_idx + 1, TEST_COUNT, g_tests[g_pending_idx].label);
             g_dirty = 1;
@@ -225,7 +253,10 @@ static void handle_test_keys(void) {
     if (platform_key_tap(CR_KEY_LEFT)) {
         if (!maneuver_is_pushing()) {
             g_pending_idx = (g_test_idx - 1 + TEST_COUNT) % TEST_COUNT;
+            build_state_from_test(g_pending_idx, &g_next_state);
+            g_next_valid = 1;
             maneuver_start_push();
+            render_invalidate_masks();  /* trigger combined path rebuild */
             fprintf(stderr, "c_render: push → [%d/%d] %s\n",
                     g_pending_idx + 1, TEST_COUNT, g_tests[g_pending_idx].label);
             g_dirty = 1;
@@ -398,7 +429,7 @@ int main(int argc, char **argv) {
 
         if (dirty) {
             render_begin_frame();
-            maneuver_draw(&g_state);
+            maneuver_draw(&g_state, g_next_valid ? &g_next_state : NULL);
             render_end_frame();
 
             if (want_screenshot)
