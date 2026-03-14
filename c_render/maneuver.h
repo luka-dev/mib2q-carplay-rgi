@@ -65,6 +65,7 @@ float maneuver_get_slide(void);       /* get current slide value */
  * switch to new maneuver state and call maneuver_start_anim(). */
 void maneuver_start_push(void);       /* begin push-out (slide 1→2) */
 int  maneuver_is_pushing(void);       /* 1 while push-out running */
+void maneuver_commit_pushed_state(const maneuver_state_t *state);
 
 /* Debug overlay toggle. */
 void maneuver_toggle_debug(void);     /* toggle path debug overlay */

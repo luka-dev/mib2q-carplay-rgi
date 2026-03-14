@@ -208,6 +208,7 @@ static void build_state_from_test(int idx, maneuver_state_t *out) {
     out->icon = e->icon;
     out->exit_angle = e->exit_angle;
     out->direction = e->direction;
+    out->driving_side = g_state.driving_side;
     if (e->rab_preset > 0) {
         set_rab_preset(e->rab_preset, out);
     } else if (e->icon == ICON_TURN || e->icon == ICON_STRAIGHT) {
@@ -228,11 +229,8 @@ static void finish_push_transition(void) {
     g_next_valid = 0;
     update_test_state();
     print_state();
+    maneuver_commit_pushed_state(&g_state);
     render_invalidate_masks();
-    /* Arrow already slid into position on the next maneuver via combined path.
-     * Just set slide=1.0 (in position) — no replay animation. */
-    maneuver_set_slide(1.0f);
-    render_set_camera_pan(0.0f, 0.0f);
     g_dirty = 1;
 }
 
