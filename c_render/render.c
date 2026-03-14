@@ -27,6 +27,7 @@
 
 #include "gl_compat.h"
 #include "render.h"
+#include "maneuver.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -55,8 +56,6 @@
 #define LIGHT_Z -0.4f
 
 /* Composite ground plane extents (world space) */
-#define GROUND_X  1.2f
-#define GROUND_Z  1.2f
 #define ROUTE_Y   0.04f   /* raised height for route layer */
 
 /* ================================================================
@@ -166,6 +165,7 @@ static int g_mask_append = 0;  /* 1 = don't clear FBO on begin_mask (additive) *
 /* Camera pan offset (maneuver space) — shifts entire scene to follow arrow */
 static float g_cam_pan_x = 0.0f;
 static float g_cam_pan_z = 0.0f;  /* z in 3D = y in maneuver 2D */
+static float g_cam_rot = 0.0f;
 
 /* Stored MVPs for composite pass */
 static float g_mvp_current[16];    /* perspective-blended MVP (for 3D composite) */
@@ -182,6 +182,8 @@ static GLuint g_fbo_texs[FBO_COUNT];
 static GLuint g_fbo_depths[FBO_COUNT];
 static int g_fbo_w = 0, g_fbo_h = 0;
 static GLint g_default_fbo = 0;  /* saved at init — may not be 0 on macOS */
+static float g_mask_half_w = 1.6f;
+static float g_mask_half_h = 1.0f;
 
 static const char *k_vert_src =
     "attribute vec3 a_pos;\n"
@@ -431,7 +433,13 @@ static int build_program(void) {
 
 static void fbos_init(int w, int h) {
     int i;
-    g_fbo_w = w; g_fbo_h = h;
+    int alloc_w = (int)ceilf((float)w * g_mask_half_h);
+    int alloc_h = (int)ceilf((float)h * g_mask_half_h);
+
+    if (alloc_w < w) alloc_w = w;
+    if (alloc_h < h) alloc_h = h;
+    g_fbo_w = alloc_w;
+    g_fbo_h = alloc_h;
 
     glGenTextures(FBO_COUNT, g_fbo_texs);
     glGenRenderbuffers(FBO_COUNT, g_fbo_depths);
@@ -439,7 +447,7 @@ static void fbos_init(int w, int h) {
 
     for (i = 0; i < FBO_COUNT; i++) {
         glBindTexture(GL_TEXTURE_2D, g_fbo_texs[i]);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0,
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, g_fbo_w, g_fbo_h, 0,
                      GL_RGBA, GL_UNSIGNED_BYTE, NULL);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -447,7 +455,7 @@ static void fbos_init(int w, int h) {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
         glBindRenderbuffer(GL_RENDERBUFFER, g_fbo_depths[i]);
-        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_FBO, w, h);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_FBO, g_fbo_w, g_fbo_h);
 
         glBindFramebuffer(GL_FRAMEBUFFER, g_fbos[i]);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
@@ -463,7 +471,8 @@ static void fbos_init(int w, int h) {
     glBindTexture(GL_TEXTURE_2D, 0);
     glBindRenderbuffer(GL_RENDERBUFFER, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    fprintf(stderr, "render: %d FBOs init %dx%d\n", FBO_COUNT, w, h);
+    fprintf(stderr, "render: %d FBOs init %dx%d (mask half extents %.2f x %.2f)\n",
+            FBO_COUNT, g_fbo_w, g_fbo_h, g_mask_half_w, g_mask_half_h);
 }
 
 static void fbos_shutdown(void) {
@@ -474,7 +483,12 @@ static void fbos_shutdown(void) {
 }
 
 static void fbos_resize(int w, int h) {
-    if (w == g_fbo_w && h == g_fbo_h) return;
+    int alloc_w = (int)ceilf((float)w * g_mask_half_h);
+    int alloc_h = (int)ceilf((float)h * g_mask_half_h);
+
+    if (alloc_w < w) alloc_w = w;
+    if (alloc_h < h) alloc_h = h;
+    if (alloc_w == g_fbo_w && alloc_h == g_fbo_h) return;
     fbos_shutdown();
     fbos_init(w, h);
     g_masks_dirty = 1;
@@ -499,6 +513,21 @@ static void fbo_unbind(void) {
     glViewport(0, 0, g_fb_w, g_fb_h);
 }
 
+static void update_mask_config(int fb_width, int fb_height) {
+    float required_x = 0.0f;
+    float required_y = 0.0f;
+    float aspect = (float)fb_width / (float)fb_height;
+
+    maneuver_get_transition_mask_bounds(&required_x, &required_y);
+
+    g_mask_half_h = 1.0f;
+    if (required_y > g_mask_half_h)
+        g_mask_half_h = required_y;
+    if (required_x / aspect > g_mask_half_h)
+        g_mask_half_h = required_x / aspect;
+    g_mask_half_w = g_mask_half_h * aspect;
+}
+
 /* ================================================================
  * Public API
  * ================================================================ */
@@ -508,6 +537,7 @@ int render_init(int fb_width, int fb_height) {
 
     g_fb_w = fb_width;
     g_fb_h = fb_height;
+    update_mask_config(fb_width, fb_height);
 
     glViewport(0, 0, fb_width, fb_height);
     glEnable(GL_DEPTH_TEST);
@@ -539,6 +569,7 @@ int render_init(int fb_width, int fb_height) {
 void render_set_viewport(int fb_width, int fb_height) {
     g_fb_w = fb_width;
     g_fb_h = fb_height;
+    update_mask_config(fb_width, fb_height);
     glViewport(0, 0, fb_width, fb_height);
     glUniform2f(g_uni_resolution, (float)fb_width, (float)fb_height);
     fbos_resize(fb_width, fb_height);
@@ -569,6 +600,12 @@ void render_begin_frame(void) {
     float ts = t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f);
 
     float aspect = (float)g_fb_w / (float)g_fb_h;
+    float cam_cos = cosf(g_cam_rot);
+    float cam_sin = sinf(g_cam_rot);
+    float eye_x = g_cam_pan_x + cam_cos * CAM_EYE_X - cam_sin * CAM_EYE_Z;
+    float eye_z = g_cam_pan_z + cam_sin * CAM_EYE_X + cam_cos * CAM_EYE_Z;
+    float ctr_x = g_cam_pan_x + cam_cos * CAM_CTR_X - cam_sin * CAM_CTR_Z;
+    float ctr_z = g_cam_pan_z + cam_sin * CAM_CTR_X + cam_cos * CAM_CTR_Z;
 
     /* Compute both MVPs and lerp */
     float mvp_persp[16], mvp_ortho[16];
@@ -578,8 +615,8 @@ void render_begin_frame(void) {
         float fov_rad = CAM_FOV_DEG * (float)M_PI / 180.0f;
         mat4_perspective(proj, fov_rad, aspect, 0.1f, 20.0f);
         mat4_lookAt(view,
-                    CAM_EYE_X + g_cam_pan_x, CAM_EYE_Y, CAM_EYE_Z + g_cam_pan_z,
-                    CAM_CTR_X + g_cam_pan_x, CAM_CTR_Y, CAM_CTR_Z + g_cam_pan_z,
+                    eye_x, CAM_EYE_Y, eye_z,
+                    ctr_x, CAM_CTR_Y, ctr_z,
                     0.0f, 1.0f, 0.0f);
         mat4_mul(mvp_persp, proj, view);
     }
@@ -588,10 +625,14 @@ void render_begin_frame(void) {
         float hh = 1.0f, hw = hh * aspect;
         mat4_ortho(proj, -hw, hw, -hh, hh, 0.1f, 20.0f);
         mat4_zero(view);
-        view[0]  =  1.0f;
-        view[9]  =  1.0f;
-        view[12] = -g_cam_pan_x;
-        view[13] = -g_cam_pan_z;
+        /* Ortho view uses the inverse camera yaw so top-down motion matches
+         * the perspective camera heading instead of orbiting sideways. */
+        view[0]  =  cam_cos;
+        view[1]  = -cam_sin;
+        view[8]  =  cam_sin;
+        view[9]  =  cam_cos;
+        view[12] = -cam_cos * g_cam_pan_x - cam_sin * g_cam_pan_z;
+        view[13] =  cam_sin * g_cam_pan_x - cam_cos * g_cam_pan_z;
         view[6]  =  1.0f;
         view[14] = -5.0f;
         view[15] =  1.0f;
@@ -609,8 +650,8 @@ void render_begin_frame(void) {
      * Same top-down view as ortho mode but with no perspective blend. */
     {
         float proj[16], view[16];
-        float hh = 1.0f, hw = hh * aspect;
-        mat4_ortho(proj, -hw, hw, -hh, hh, 0.1f, 20.0f);
+        mat4_ortho(proj, -g_mask_half_w, g_mask_half_w,
+                   -g_mask_half_h, g_mask_half_h, 0.1f, 20.0f);
         mat4_zero(view);
         view[0]  =  1.0f;   /* x → x */
         view[9]  =  1.0f;   /* z → y_screen */
@@ -622,7 +663,7 @@ void render_begin_frame(void) {
 
         /* mask_scale: maps world (x,z) → mask UV (0..1).
          * UV = world_coord * scale + 0.5 */
-        glUniform2f(g_uni_mask_scale, 0.5f / hw, 0.5f / hh);
+        glUniform2f(g_uni_mask_scale, 0.5f / g_mask_half_w, 0.5f / g_mask_half_h);
     }
 
     glUniformMatrix4fv(g_uni_mvp, 1, GL_FALSE, g_mvp_current);
@@ -634,9 +675,9 @@ void render_begin_frame(void) {
 
     /* Camera eye position for specular/rim — lerp between modes */
     glUniform3f(g_uni_eye,
-                CAM_EYE_X * ts + 0.0f * (1.0f - ts),
+                eye_x * ts + 0.0f * (1.0f - ts),
                 CAM_EYE_Y * ts + 5.0f * (1.0f - ts),
-                CAM_EYE_Z * ts + 0.0f * (1.0f - ts));
+                eye_z * ts + 0.0f * (1.0f - ts));
 
     g_z_bias = 0.0f;
 }
@@ -662,6 +703,10 @@ void render_set_mask_append(int append) {
 void render_set_camera_pan(float x, float y) {
     g_cam_pan_x = x;
     g_cam_pan_z = y;  /* maneuver y → 3D z */
+}
+
+void render_set_camera_rotation(float angle_rad) {
+    g_cam_rot = angle_rad;
 }
 
 void render_invalidate_masks(void) {
@@ -953,7 +998,7 @@ static void composite_layer(int fbo_tex_idx, float y_height,
     glUniformMatrix4fv(g_uni_mvp, 1, GL_FALSE, g_mvp_current);
 
     /* 6 verts = 2 triangles covering the render area */
-    float gx = GROUND_X, gz = GROUND_Z;
+    float gx = g_mask_half_w, gz = g_mask_half_h;
     float y = y_height;
 
     vb_reset();

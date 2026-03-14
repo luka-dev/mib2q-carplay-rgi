@@ -123,12 +123,17 @@ static float g_slug_override = -1.0f; /* >0: speed normalization length for comb
 static float g_flag_frame = 0.0f;     /* destination flag animation frame */
 static int   g_flag_active = 0;      /* 1 when showing arrived icon (flag animating) */
 static int   g_masks_only_mode = 0;   /* append masks without composite/route draw */
-static int   g_hold_camera_pan = 0;   /* preserve handoff pan for committed next state */
 static int   g_combined_window_active = 0;
 static float g_combined_start_tail_dist = 0.0f;
 static float g_combined_start_head_dist = 0.0f;
 static float g_combined_end_tail_dist = 0.0f;
 static float g_combined_end_head_dist = 0.0f;
+static float g_next_cam_pan_x = 0.0f;
+static float g_next_cam_pan_y = 0.0f;
+static float g_next_cam_rot = 0.0f;
+static float g_next_cam_intro_end_dist = 0.0f;
+static float g_next_cam_follow_dist = 0.0f;
+static float g_next_cam_release_end_dist = 0.0f;
 #define ROUTE_SPEED_PEAK 0.045f         /* peak animation speed (NDC/frame on straight) */
 #define ROUTE_SPEED_MIN  0.010f         /* minimum speed on sharpest turns */
 #define ROUTE_EXTEND     1.2f           /* extension length beyond viewport */
@@ -142,6 +147,12 @@ static void clear_combined_transition(void) {
     g_combined_start_head_dist = 0.0f;
     g_combined_end_tail_dist = 0.0f;
     g_combined_end_head_dist = 0.0f;
+    g_next_cam_pan_x = 0.0f;
+    g_next_cam_pan_y = 0.0f;
+    g_next_cam_rot = 0.0f;
+    g_next_cam_intro_end_dist = 0.0f;
+    g_next_cam_follow_dist = 0.0f;
+    g_next_cam_release_end_dist = 0.0f;
 }
 
 static void rpath_sample(const route_path_t *p, float t, float *out_x, float *out_y);
@@ -151,7 +162,6 @@ void maneuver_start_anim(void) {
     g_anim_start = 0.0f;
     g_anim_target = 1.0f;
     g_route_animating = 1;
-    g_hold_camera_pan = 0;
     clear_combined_transition();
 }
 
@@ -164,7 +174,6 @@ void maneuver_set_slide(float t) {
     if (t > 2.0f) t = 2.0f;
     g_route_slide = t;
     g_route_animating = 0;
-    g_hold_camera_pan = 0;
     clear_combined_transition();
 }
 
@@ -177,7 +186,6 @@ void maneuver_start_push(void) {
     g_anim_start = g_route_slide;
     g_anim_target = 2.0f;
     g_route_animating = 1;
-    g_hold_camera_pan = 0;
     clear_combined_transition();
 }
 
@@ -464,6 +472,114 @@ static void rpath_sample(const route_path_t *p, float t, float *out_x, float *ou
     }
     *out_x = p->px[p->pt_count - 1];
     *out_y = p->py[p->pt_count - 1];
+}
+
+static float rpath_sample_heading(const route_path_t *p, float t) {
+    float target;
+    int i;
+
+    if (p->pt_count < 2)
+        return (float)(M_PI * 0.5);
+
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
+    target = t * p->total_length;
+
+    for (i = 1; i < p->pt_count; i++) {
+        if (p->dist[i] >= target) {
+            float dx = p->px[i] - p->px[i - 1];
+            float dy = p->py[i] - p->py[i - 1];
+            if (dx * dx + dy * dy > 1e-8f)
+                return atan2f(dy, dx);
+        }
+    }
+
+    {
+        float dx = p->px[p->pt_count - 1] - p->px[p->pt_count - 2];
+        float dy = p->py[p->pt_count - 1] - p->py[p->pt_count - 2];
+        if (dx * dx + dy * dy > 1e-8f)
+            return atan2f(dy, dx);
+    }
+
+    return (float)(M_PI * 0.5);
+}
+
+static float wrap_angle(float a) {
+    while (a > (float)M_PI) a -= 2.0f * (float)M_PI;
+    while (a < -(float)M_PI) a += 2.0f * (float)M_PI;
+    return a;
+}
+
+static float lerp_angle(float a, float b, float t) {
+    return a + wrap_angle(b - a) * t;
+}
+
+static float smoothstep01(float t) {
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
+    return t * t * (3.0f - 2.0f * t);
+}
+
+static void set_default_camera(void) {
+    render_set_camera_pan(0.0f, 0.0f);
+    render_set_camera_rotation(0.0f);
+}
+
+static void update_combined_camera(void) {
+    float total = g_route_path.total_length;
+    float head_dist;
+    float intro_dist;
+    float follow_t;
+    float follow_x, follow_y;
+    float follow_rot;
+
+    if (total < 1e-6f) {
+        set_default_camera();
+        return;
+    }
+
+    head_dist = g_t_head * total;
+    intro_dist = g_next_cam_intro_end_dist;
+    follow_t = (g_next_cam_follow_dist > 0.0f) ? (g_next_cam_follow_dist / total) : 0.0f;
+    if (follow_t < 0.0f) follow_t = 0.0f;
+    if (follow_t > 1.0f) follow_t = 1.0f;
+
+    if (head_dist <= intro_dist) {
+        float denom = intro_dist - g_combined_start_head_dist;
+        float blend = (denom > 1e-4f) ? (head_dist - g_combined_start_head_dist) / denom : 1.0f;
+
+        rpath_sample(&g_route_path, g_t_head, &follow_x, &follow_y);
+        follow_rot = rpath_sample_heading(&g_route_path, g_t_head) - (float)(M_PI * 0.5);
+        blend = smoothstep01(blend);
+        render_set_camera_pan(follow_x * blend, follow_y * blend);
+        render_set_camera_rotation(lerp_angle(0.0f, follow_rot, blend));
+        return;
+    }
+
+    if (head_dist <= g_next_cam_follow_dist) {
+        rpath_sample(&g_route_path, g_t_head, &follow_x, &follow_y);
+        follow_rot = rpath_sample_heading(&g_route_path, g_t_head) - (float)(M_PI * 0.5);
+        render_set_camera_pan(follow_x, follow_y);
+        render_set_camera_rotation(follow_rot);
+        return;
+    }
+
+    rpath_sample(&g_route_path, follow_t, &follow_x, &follow_y);
+    follow_rot = rpath_sample_heading(&g_route_path, follow_t) - (float)(M_PI * 0.5);
+
+    {
+        float denom = g_next_cam_release_end_dist - g_next_cam_follow_dist;
+        float blend = (denom > 1e-4f) ? (head_dist - g_next_cam_follow_dist) / denom : 1.0f;
+        float cam_x, cam_y, cam_rot;
+
+        blend = smoothstep01(blend);
+        cam_x = follow_x + (g_next_cam_pan_x - follow_x) * blend;
+        cam_y = follow_y + (g_next_cam_pan_y - follow_y) * blend;
+        cam_rot = lerp_angle(follow_rot, g_next_cam_rot, blend);
+
+        render_set_camera_pan(cam_x, cam_y);
+        render_set_camera_rotation(cam_rot);
+    }
 }
 
 static void compute_slide_params(void) {
@@ -861,6 +977,150 @@ maneuver_exit_t maneuver_get_exit(const maneuver_state_t *state) {
         break;
     }
     return ex;
+}
+
+static maneuver_exit_t route_path_get_start_pose(const route_path_t *path) {
+    maneuver_exit_t st = {0, SHAFT_BOT, (float)(M_PI * 0.5)};
+    if (path->seg_count > 0) {
+        float sx, sy, sdx, sdy;
+        seg_start_dir(&path->segs[0], &sx, &sy, &sdx, &sdy);
+        st.x = sx;
+        st.y = sy;
+        st.heading = atan2f(sdy, sdx);
+    }
+    return st;
+}
+
+static maneuver_exit_t route_path_get_end_pose(const route_path_t *path) {
+    maneuver_exit_t ex = {0, ARRIVE_ROAD_TOP - HEAD_SZ, (float)(M_PI * 0.5)};
+    if (path->seg_count > 0) {
+        float exx, exy, edx, edy;
+        seg_end_dir(&path->segs[path->seg_count - 1], &exx, &exy, &edx, &edy);
+        ex.x = exx;
+        ex.y = exy;
+        ex.heading = atan2f(edy, edx);
+    }
+    return ex;
+}
+
+static void compute_combined_transform(const maneuver_state_t *cur_state,
+                                       const maneuver_state_t *next_state,
+                                       float *out_tx, float *out_ty,
+                                       float *out_cos_r, float *out_sin_r,
+                                       float *out_rot);
+
+static void bounds_include_pt(float x, float y, float *max_abs_x, float *max_abs_y) {
+    float ax = fabsf(x);
+    float ay = fabsf(y);
+
+    if (ax > *max_abs_x) *max_abs_x = ax;
+    if (ay > *max_abs_y) *max_abs_y = ay;
+}
+
+static void bounds_include_box(float tx, float ty, float cos_r, float sin_r,
+                               float half_w, float half_h,
+                               float *max_abs_x, float *max_abs_y) {
+    static const float k_corners[4][2] = {
+        { -1.0f, -1.0f }, { 1.0f, -1.0f }, { 1.0f, 1.0f }, { -1.0f, 1.0f }
+    };
+    int i;
+
+    for (i = 0; i < 4; i++) {
+        float lx = k_corners[i][0] * half_w;
+        float ly = k_corners[i][1] * half_h;
+        float x = cos_r * lx - sin_r * ly + tx;
+        float y = sin_r * lx + cos_r * ly + ty;
+        bounds_include_pt(x, y, max_abs_x, max_abs_y);
+    }
+}
+
+void maneuver_get_transition_mask_bounds(float *out_abs_x, float *out_abs_y) {
+    const float local_half_w = ROAD_LEN + FADE_LEN + OL_T * 0.5f;
+    const float local_half_h = ROAD_LEN + FADE_LEN + OL_T * 0.5f;
+    const float safety = 1.05f;
+    const maneuver_state_t samples[] = {
+        { .icon = ICON_STRAIGHT },
+        { .icon = ICON_TURN, .exit_angle = 30 },
+        { .icon = ICON_TURN, .exit_angle = 90 },
+        { .icon = ICON_TURN, .exit_angle = 135 },
+        { .icon = ICON_TURN, .exit_angle = -30 },
+        { .icon = ICON_TURN, .exit_angle = -90 },
+        { .icon = ICON_TURN, .exit_angle = -135 },
+        { .icon = ICON_UTURN, .driving_side = 0 },
+        { .icon = ICON_UTURN, .driving_side = 1 },
+        { .icon = ICON_MERGE, .direction = -1 },
+        { .icon = ICON_MERGE, .direction = 1 },
+        { .icon = ICON_LANE_CHANGE, .direction = -1 },
+        { .icon = ICON_LANE_CHANGE, .direction = 1 },
+        { .icon = ICON_ROUNDABOUT, .exit_angle = 90, .driving_side = 0 },
+        { .icon = ICON_ROUNDABOUT, .exit_angle = 0, .driving_side = 0 },
+        { .icon = ICON_ROUNDABOUT, .exit_angle = -90, .driving_side = 0 },
+        { .icon = ICON_ROUNDABOUT, .exit_angle = 180, .driving_side = 0 },
+        { .icon = ICON_ROUNDABOUT, .exit_angle = 90, .driving_side = 1 },
+        { .icon = ICON_ROUNDABOUT, .exit_angle = 0, .driving_side = 1 },
+        { .icon = ICON_ROUNDABOUT, .exit_angle = -90, .driving_side = 1 },
+        { .icon = ICON_ROUNDABOUT, .exit_angle = 180, .driving_side = 1 },
+        { .icon = ICON_ARRIVED },
+    };
+    float max_abs_x = local_half_w;
+    float max_abs_y = local_half_h;
+    int i, j;
+
+    for (i = 0; i < (int)(sizeof(samples) / sizeof(samples[0])); i++) {
+        for (j = 0; j < (int)(sizeof(samples) / sizeof(samples[0])); j++) {
+            float tx, ty, cos_r, sin_r, rot;
+
+            compute_combined_transform(&samples[i], &samples[j], &tx, &ty, &cos_r, &sin_r, &rot);
+            bounds_include_box(0.0f, 0.0f, 1.0f, 0.0f,
+                               local_half_w, local_half_h,
+                               &max_abs_x, &max_abs_y);
+            bounds_include_box(tx, ty, cos_r, sin_r,
+                               local_half_w, local_half_h,
+                               &max_abs_x, &max_abs_y);
+        }
+    }
+
+    if (out_abs_x != NULL) *out_abs_x = max_abs_x * safety;
+    if (out_abs_y != NULL) *out_abs_y = max_abs_y * safety;
+}
+
+static void compute_combined_transform(const maneuver_state_t *cur_state,
+                                       const maneuver_state_t *next_state,
+                                       float *out_tx, float *out_ty,
+                                       float *out_cos_r, float *out_sin_r,
+                                       float *out_rot) {
+    route_path_t cur_path, next_path;
+    maneuver_exit_t cur_end, next_start;
+    float rot, cos_r, sin_r;
+    float ns_rx, ns_ry;
+
+    maneuver_build_route(cur_state, &cur_path);
+    rpath_extend(&cur_path);
+    maneuver_build_route(next_state, &next_path);
+    rpath_extend(&next_path);
+
+    cur_end = route_path_get_end_pose(&cur_path);
+    next_start = route_path_get_start_pose(&next_path);
+    rot = cur_end.heading - next_start.heading;
+    cos_r = cosf(rot);
+    sin_r = sinf(rot);
+    ns_rx = cos_r * next_start.x - sin_r * next_start.y;
+    ns_ry = sin_r * next_start.x + cos_r * next_start.y;
+
+    *out_tx = cur_end.x - ns_rx;
+    *out_ty = cur_end.y - ns_ry;
+    *out_cos_r = cos_r;
+    *out_sin_r = sin_r;
+    *out_rot = rot;
+}
+
+static void compute_combined_mask_transform(const maneuver_state_t *cur_state,
+                                            const maneuver_state_t *next_state,
+                                            float *out_tx, float *out_ty,
+                                            float *out_cos_r, float *out_sin_r,
+                                            float *out_rot) {
+    compute_combined_transform(cur_state, next_state,
+                               out_tx, out_ty, out_cos_r, out_sin_r, out_rot);
 }
 
 /* ================================================================
@@ -1508,9 +1768,8 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
     if (!combined)
         g_combined_window_active = 0;
 
-    /* Camera follows arrow on combined path, stays centered otherwise */
-    if (!combined && !g_hold_camera_pan)
-        render_set_camera_pan(0.0f, 0.0f);
+    if (!combined)
+        set_default_camera();
 
     /* Compute length-normalized slide delta.
      * Speed uses the slug length (one maneuver's road) for consistent animation pace,
@@ -1541,13 +1800,8 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
      * (handles perspective animation and route animation without re-rendering masks) */
     if (!render_masks_dirty()) {
         compute_slide_params();
-        /* Update camera pan for combined path */
-        if (combined) {
-            float mid_t = (g_t_head + g_t_tail) * 0.5f;
-            float cx, cy;
-            rpath_sample(&g_route_path, mid_t, &cx, &cy);
-            render_set_camera_pan(cx, cy);
-        }
+        if (combined)
+            update_combined_camera();
         if (g_route_animating || g_route_slide != 1.0f) {
             /* Rebuild mesh at current slide (path segments still cached in g_route_path) */
             rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
@@ -1581,19 +1835,10 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
     /* For combined transition: also render next maneuver's masks (appended),
      * then re-composite with both, and draw combined route. */
     if (combined) {
-        /* Compute same transform as route path joining — align next maneuver's
-         * pre-extension start with current's post-extension end */
-        maneuver_exit_t ex_info = maneuver_get_exit(s);
-        float rot = ex_info.heading - (float)(M_PI * 0.5);
-        float cos_r = cosf(rot), sin_r = sinf(rot);
-        float next_start_x = 0;
-        float next_start_y = SHAFT_BOT - ROUTE_EXTEND;
-        float cur_end_x = ex_info.x + cosf(ex_info.heading) * ROUTE_EXTEND;
-        float cur_end_y = ex_info.y + sinf(ex_info.heading) * ROUTE_EXTEND;
-        float ns_rx = cos_r * next_start_x - sin_r * next_start_y;
-        float ns_ry = sin_r * next_start_x + cos_r * next_start_y;
-        float tx = cur_end_x - ns_rx;
-        float ty = cur_end_y - ns_ry;
+        float rot, cos_r, sin_r;
+        float tx, ty;
+
+        compute_combined_mask_transform(s, next_state, &tx, &ty, &cos_r, &sin_r, &rot);
 
         render_set_mask_append(1);
         g_masks_only_mode = 1;
@@ -1612,43 +1857,24 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
     /* When combined, rebuild joined route path and draw it */
     if (combined) {
         /* Rebuild combined path (draw_* overwrote g_route_path).
-         * Each maneuver gets its own extend segments so the arrow
-         * slides through off-screen extensions at the junction. */
+         * Each maneuver keeps its own pre/post extension so the handoff has
+         * spacing, and the FBO uses the same transform. */
         route_path_t next_path;
+        float rot, cos_r, sin_r;
+        float tx, ty;
         maneuver_build_route(s, &g_route_path);
 
         /* Measure first maneuver's road length BEFORE extending —
          * use it for speed normalization during the combined handoff. */
         rpath_densify(&g_route_path);
         g_slug_override = g_route_path.total_length;
-
         rpath_extend(&g_route_path);
 
         maneuver_build_route(next_state, &next_path);
         rpath_densify(&next_path);
         float next_road_len = next_path.total_length;
         rpath_extend(&next_path);
-
-        /* Transform next extended path so its pre-extension entry
-         * aligns with current maneuver's post-extension exit */
-        maneuver_exit_t ex_info = maneuver_get_exit(s);
-        float rot = ex_info.heading - (float)(M_PI * 0.5);
-        float cos_r = cosf(rot), sin_r = sinf(rot);
-        /* Next path (extended) starts at its first segment start.
-         * That's ROUTE_EXTEND behind (0, SHAFT_BOT) along entry direction.
-         * Entry direction is (0,1) = up, so pre-extension start = (0, SHAFT_BOT - ROUTE_EXTEND).
-         * Current path (extended) ends at its last segment end:
-         * ROUTE_EXTEND beyond exit point along exit direction. */
-        float next_start_x = 0;
-        float next_start_y = SHAFT_BOT - ROUTE_EXTEND;
-        /* Current path post-extension end: exit + ROUTE_EXTEND along exit heading */
-        float cur_end_x = ex_info.x + cosf(ex_info.heading) * ROUTE_EXTEND;
-        float cur_end_y = ex_info.y + sinf(ex_info.heading) * ROUTE_EXTEND;
-        /* Transform: rotate next_start by rot, then translate so it lands on cur_end */
-        float ns_rx = cos_r * next_start_x - sin_r * next_start_y;
-        float ns_ry = sin_r * next_start_x + cos_r * next_start_y;
-        float tx = cur_end_x - ns_rx;
-        float ty = cur_end_y - ns_ry;
+        compute_combined_transform(s, next_state, &tx, &ty, &cos_r, &sin_r, &rot);
 
         rpath_xform_append(&g_route_path, &next_path, tx, ty, cos_r, sin_r, rot);
         float ax = cos_r * next_path.arrow_x - sin_r * next_path.arrow_y + tx;
@@ -1678,6 +1904,16 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
             g_combined_start_head_dist = start_head;
             g_combined_end_tail_dist = end_tail;
             g_combined_end_head_dist = end_head;
+            g_next_cam_pan_x = tx;
+            g_next_cam_pan_y = ty;
+            g_next_cam_rot = rot;
+            g_next_cam_follow_dist = current_total + ROUTE_EXTEND;
+            g_next_cam_intro_end_dist = start_head + 0.30f * g_slug_override;
+            if (g_next_cam_intro_end_dist < start_head)
+                g_next_cam_intro_end_dist = start_head;
+            if (g_next_cam_intro_end_dist > g_next_cam_follow_dist)
+                g_next_cam_intro_end_dist = g_next_cam_follow_dist;
+            g_next_cam_release_end_dist = end_head;
 
             start_mid = 0.5f * (start_tail + start_head);
             end_mid = 0.5f * (end_tail + end_head);
@@ -1689,13 +1925,7 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
         }
 
         compute_slide_params();
-        /* Camera follows arrow midpoint on combined path */
-        {
-            float mid_t = (g_t_head + g_t_tail) * 0.5f;
-            float cx, cy;
-            rpath_sample(&g_route_path, mid_t, &cx, &cy);
-            render_set_camera_pan(cx, cy);
-        }
+        update_combined_camera();
         rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
         rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
     }
@@ -1705,26 +1935,13 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
 }
 
 void maneuver_commit_pushed_state(const maneuver_state_t *state) {
+    (void)state;
     g_route_slide = 1.0f;
     g_anim_start = 1.0f;
     g_anim_target = 1.0f;
     g_route_animating = 0;
     clear_combined_transition();
-
-    if (state != NULL) {
-        route_path_t path;
-        float pan_x = 0.0f, pan_y = 0.0f;
-
-        maneuver_build_route(state, &path);
-        rpath_extend(&path);
-        rpath_densify(&path);
-        rpath_sample(&path, 0.5f, &pan_x, &pan_y);
-        render_set_camera_pan(pan_x, pan_y);
-        g_hold_camera_pan = 1;
-    } else {
-        render_set_camera_pan(0.0f, 0.0f);
-        g_hold_camera_pan = 0;
-    }
+    set_default_camera();
 }
 
 /* ================================================================

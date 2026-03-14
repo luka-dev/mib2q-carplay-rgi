@@ -59,6 +59,9 @@ void render_set_perspective(int enabled);
 /* Set camera pan offset in maneuver space (shifts entire scene). */
 void render_set_camera_pan(float x, float y);
 
+/* Set camera rotation around the maneuver plane. 0 keeps the default view. */
+void render_set_camera_rotation(float angle_rad);
+
 /* Returns 1 if a transition animation is in progress. */
 int render_is_animating(void);
 

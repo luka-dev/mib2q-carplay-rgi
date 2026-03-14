@@ -50,6 +50,9 @@ maneuver_exit_t maneuver_get_exit(const maneuver_state_t *state);
  * Used for path chaining during transitions. */
 void maneuver_build_route(const maneuver_state_t *state, route_path_t *path);
 
+/* Conservative world-space bounds needed to render any two-maneuver transition masks. */
+void maneuver_get_transition_mask_bounds(float *out_abs_x, float *out_abs_y);
+
 /* Draw the maneuver icon for the given state.
  * next_state: if non-NULL and pushing, builds combined path for seamless transition. */
 void maneuver_draw(const maneuver_state_t *state, const maneuver_state_t *next_state);
