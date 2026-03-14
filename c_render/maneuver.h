@@ -55,6 +55,7 @@ void maneuver_get_transition_mask_bounds(float *out_abs_x, float *out_abs_y);
 
 /* Draw the maneuver icon for the given state.
  * next_state: if non-NULL and pushing, builds combined path for seamless transition. */
+void maneuver_prepare_frame(const maneuver_state_t *state, const maneuver_state_t *next_state);
 void maneuver_draw(const maneuver_state_t *state, const maneuver_state_t *next_state);
 
 /* Route path animation control. */

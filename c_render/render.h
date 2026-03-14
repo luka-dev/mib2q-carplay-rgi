@@ -70,6 +70,9 @@ void render_set_camera_pan(float x, float y);
 /* Set camera rotation around the maneuver plane. 0 keeps the default view. */
 void render_set_camera_rotation(float angle_rad);
 
+/* Recompute camera-dependent matrices/uniforms for the current frame. */
+void render_sync_camera(void);
+
 /* Select the shading preset used by subsequent 3D geometry draws. */
 void render_set_material(render_material_t material);
 

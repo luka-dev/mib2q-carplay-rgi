@@ -426,6 +426,7 @@ int main(int argc, char **argv) {
         g_dirty = 0;
 
         if (dirty) {
+            maneuver_prepare_frame(&g_state, g_next_valid ? &g_next_state : NULL);
             render_begin_frame();
             maneuver_draw(&g_state, g_next_valid ? &g_next_state : NULL);
             render_end_frame();

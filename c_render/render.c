@@ -643,12 +643,7 @@ void render_set_viewport(int fb_width, int fb_height) {
     fbos_resize(fb_width, fb_height);
 }
 
-void render_begin_frame(void) {
-    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glUseProgram(g_program);
-    glUniform1f(g_uni_tex_mode, 0.0f);
-
+static void sync_camera_uniforms(void) {
     /* Animate g_persp_t toward target with ease-in-out */
     {
         float target = (float)g_perspective;
@@ -770,6 +765,19 @@ void render_begin_frame(void) {
                 eye_z * ts + 0.0f * (1.0f - ts));
 
     g_z_bias = 0.0f;
+}
+
+void render_begin_frame(void) {
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glUseProgram(g_program);
+    glUniform1f(g_uni_tex_mode, 0.0f);
+    sync_camera_uniforms();
+}
+
+void render_sync_camera(void) {
+    glUseProgram(g_program);
+    sync_camera_uniforms();
 }
 
 void render_end_frame(void) { /* no-op */ }

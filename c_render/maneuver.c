@@ -134,11 +134,22 @@ static float g_next_cam_rot = 0.0f;
 static float g_next_cam_intro_end_dist = 0.0f;
 static float g_next_cam_follow_dist = 0.0f;
 static float g_next_cam_release_end_dist = 0.0f;
+static float g_cam_pan_x = 0.0f;
+static float g_cam_pan_y = 0.0f;
+static float g_cam_rot = 0.0f;
+static float g_cam_settle_start_x = 0.0f;
+static float g_cam_settle_start_y = 0.0f;
+static float g_cam_settle_start_rot = 0.0f;
+static float g_cam_settle_t = 0.0f;
+static int   g_cam_settle_active = 0;
+static int   g_camera_prepared_this_frame = 0;
 #define ROUTE_SPEED_PEAK 0.045f         /* peak animation speed (NDC/frame on straight) */
 #define ROUTE_SPEED_MIN  0.010f         /* minimum speed on sharpest turns */
 #define ROUTE_EXTEND     1.2f           /* extension length beyond viewport */
 #define CURV_WINDOW      3              /* points each side for curvature sampling */
 #define CURV_SLOWDOWN    8.0f           /* curvature sensitivity (higher = more slowdown) */
+#define CAMERA_SETTLE_SPEED 0.12f
+#define CAMERA_SETTLE_MAX_ROT 0.45f
 
 static void clear_combined_transition(void) {
     g_slug_override = -1.0f;
@@ -155,6 +166,14 @@ static void clear_combined_transition(void) {
     g_next_cam_release_end_dist = 0.0f;
 }
 
+static void clear_camera_settle(void) {
+    g_cam_settle_start_x = 0.0f;
+    g_cam_settle_start_y = 0.0f;
+    g_cam_settle_start_rot = 0.0f;
+    g_cam_settle_t = 0.0f;
+    g_cam_settle_active = 0;
+}
+
 static void rpath_sample(const route_path_t *p, float t, float *out_x, float *out_y);
 
 void maneuver_start_anim(void) {
@@ -163,10 +182,12 @@ void maneuver_start_anim(void) {
     g_anim_target = 1.0f;
     g_route_animating = 1;
     clear_combined_transition();
+    clear_camera_settle();
+    g_camera_prepared_this_frame = 0;
 }
 
 int maneuver_is_animating(void) {
-    return g_route_animating || g_flag_active;
+    return g_route_animating || g_flag_active || g_cam_settle_active;
 }
 
 void maneuver_set_slide(float t) {
@@ -175,6 +196,8 @@ void maneuver_set_slide(float t) {
     g_route_slide = t;
     g_route_animating = 0;
     clear_combined_transition();
+    clear_camera_settle();
+    g_camera_prepared_this_frame = 0;
 }
 
 float maneuver_get_slide(void) {
@@ -187,6 +210,8 @@ void maneuver_start_push(void) {
     g_anim_target = 2.0f;
     g_route_animating = 1;
     clear_combined_transition();
+    clear_camera_settle();
+    g_camera_prepared_this_frame = 0;
 }
 
 int maneuver_is_pushing(void) {
@@ -520,9 +545,37 @@ static float smoothstep01(float t) {
     return t * t * (3.0f - 2.0f * t);
 }
 
+static void apply_camera_pose(float pan_x, float pan_y, float rot) {
+    g_cam_pan_x = pan_x;
+    g_cam_pan_y = pan_y;
+    g_cam_rot = rot;
+    render_set_camera_pan(pan_x, pan_y);
+    render_set_camera_rotation(rot);
+    render_sync_camera();
+}
+
 static void set_default_camera(void) {
-    render_set_camera_pan(0.0f, 0.0f);
-    render_set_camera_rotation(0.0f);
+    apply_camera_pose(0.0f, 0.0f, 0.0f);
+}
+
+static void update_camera_settle(void) {
+    float blend;
+
+    if (!g_cam_settle_active) {
+        set_default_camera();
+        return;
+    }
+
+    blend = smoothstep01(g_cam_settle_t);
+    apply_camera_pose(g_cam_settle_start_x * (1.0f - blend),
+                      g_cam_settle_start_y * (1.0f - blend),
+                      lerp_angle(g_cam_settle_start_rot, 0.0f, blend));
+
+    g_cam_settle_t += CAMERA_SETTLE_SPEED;
+    if (g_cam_settle_t >= 1.0f) {
+        clear_camera_settle();
+        set_default_camera();
+    }
 }
 
 static void update_combined_camera(void) {
@@ -551,16 +604,15 @@ static void update_combined_camera(void) {
         rpath_sample(&g_route_path, g_t_head, &follow_x, &follow_y);
         follow_rot = rpath_sample_heading(&g_route_path, g_t_head) - (float)(M_PI * 0.5);
         blend = smoothstep01(blend);
-        render_set_camera_pan(follow_x * blend, follow_y * blend);
-        render_set_camera_rotation(lerp_angle(0.0f, follow_rot, blend));
+        apply_camera_pose(follow_x * blend, follow_y * blend,
+                          lerp_angle(0.0f, follow_rot, blend));
         return;
     }
 
     if (head_dist <= g_next_cam_follow_dist) {
         rpath_sample(&g_route_path, g_t_head, &follow_x, &follow_y);
         follow_rot = rpath_sample_heading(&g_route_path, g_t_head) - (float)(M_PI * 0.5);
-        render_set_camera_pan(follow_x, follow_y);
-        render_set_camera_rotation(follow_rot);
+        apply_camera_pose(follow_x, follow_y, follow_rot);
         return;
     }
 
@@ -577,8 +629,24 @@ static void update_combined_camera(void) {
         cam_y = follow_y + (g_next_cam_pan_y - follow_y) * blend;
         cam_rot = lerp_angle(follow_rot, g_next_cam_rot, blend);
 
-        render_set_camera_pan(cam_x, cam_y);
-        render_set_camera_rotation(cam_rot);
+        apply_camera_pose(cam_x, cam_y, cam_rot);
+    }
+}
+
+void maneuver_prepare_frame(const maneuver_state_t *s, const maneuver_state_t *next_state) {
+    int combined = (next_state != NULL && maneuver_is_pushing());
+
+    g_camera_prepared_this_frame = 0;
+
+    if (s == NULL)
+        return;
+
+    if (!combined) {
+        if (g_cam_settle_active)
+            update_camera_settle();
+        else
+            set_default_camera();
+        g_camera_prepared_this_frame = 1;
     }
 }
 
@@ -1768,8 +1836,15 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
     if (!combined)
         g_combined_window_active = 0;
 
-    if (!combined)
-        set_default_camera();
+    if (!combined) {
+        if (!g_camera_prepared_this_frame) {
+            if (g_cam_settle_active)
+                update_camera_settle();
+            else
+                set_default_camera();
+        }
+    }
+    g_camera_prepared_this_frame = 0;
 
     /* Compute length-normalized slide delta.
      * Speed uses the slug length (one maneuver's road) for consistent animation pace,
@@ -1847,9 +1922,6 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
         render_pop_mask_transform();
         render_set_mask_append(0);
         g_masks_only_mode = 0;
-
-        /* Re-composite with both maneuvers' masks */
-        render_composite();
     }
 
     #undef DISPATCH_DRAW
@@ -1926,6 +1998,7 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
 
         compute_slide_params();
         update_combined_camera();
+        render_composite();
         rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
         rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
     }
@@ -1935,13 +2008,22 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
 }
 
 void maneuver_commit_pushed_state(const maneuver_state_t *state) {
+    float settle_rot;
+
     (void)state;
     g_route_slide = 1.0f;
     g_anim_start = 1.0f;
     g_anim_target = 1.0f;
     g_route_animating = 0;
+    g_cam_settle_start_x = 0.0f;
+    g_cam_settle_start_y = 0.0f;
+    settle_rot = wrap_angle(g_cam_rot - g_next_cam_rot);
+    if (settle_rot > CAMERA_SETTLE_MAX_ROT) settle_rot = CAMERA_SETTLE_MAX_ROT;
+    if (settle_rot < -CAMERA_SETTLE_MAX_ROT) settle_rot = -CAMERA_SETTLE_MAX_ROT;
+    g_cam_settle_start_rot = settle_rot;
+    g_cam_settle_t = 0.0f;
+    g_cam_settle_active = 1;
     clear_combined_transition();
-    set_default_camera();
 }
 
 /* ================================================================
