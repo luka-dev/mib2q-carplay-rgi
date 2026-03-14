@@ -561,6 +561,15 @@ static float smoothstep01(float t) {
     return t * t * (3.0f - 2.0f * t);
 }
 
+static float release_blend01(float t) {
+    float u;
+
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
+    u = 1.0f - t;
+    return 1.0f - u * u * u;
+}
+
 static float light_settle_curve(float t) {
     if (t < 0.0f) t = 0.0f;
     if (t > 1.0f) t = 1.0f;
@@ -678,7 +687,7 @@ static void update_combined_camera(void) {
         float blend = (denom > 1e-4f) ? (head_dist - g_next_cam_follow_dist) / denom : 1.0f;
         float cam_x, cam_y, cam_rot;
 
-        blend = smoothstep01(blend);
+        blend = release_blend01(blend);
         cam_x = follow_x + (g_next_cam_pan_x - follow_x) * blend;
         cam_y = follow_y + (g_next_cam_pan_y - follow_y) * blend;
         cam_rot = lerp_angle(follow_rot, g_next_cam_rot, blend);
