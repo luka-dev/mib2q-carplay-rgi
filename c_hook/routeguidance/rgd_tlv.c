@@ -608,6 +608,9 @@ void rgd_parse_lane_guidance(const uint8_t* buf, size_t len, rgd_lane_guidance_t
 
             case LANE_MSG_TLV_LANE_INFORMATIONS:
                 out->present |= RGD_LANE_INFORMATIONS;
+                if (val_len > 0) {
+                    LOG_HEXDUMP(LOG_MODULE, "0x5204 LaneInformations raw", val, (size_t)val_len);
+                }
                 if (val_len > 0 && out->lane_count < MAX_LANE_GUIDANCE) {
                     rgd_lane_t parsed[MAX_LANE_GUIDANCE];
                     uint8_t free_slots = (uint8_t)(MAX_LANE_GUIDANCE - out->lane_count);

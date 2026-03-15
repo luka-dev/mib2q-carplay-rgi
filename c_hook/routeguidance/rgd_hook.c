@@ -1059,6 +1059,18 @@ static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) 
 
         LOG_INFO(LOG_MODULE, "Lane guidance: idx=%u lanes=%u desc=\"%s\"",
                  lane.lane_guidance_index, lane.lane_count, lane.lane_guidance_description);
+        for (int li = 0; li < lane.lane_count && li < MAX_LANE_GUIDANCE; li++) {
+            const rgd_lane_t* l = &lane.lanes[li];
+            char abuf[128];
+            int ao = 0;
+            for (int ai = 0; ai < l->angle_count && ai < MAX_LANE_ANGLES; ai++)
+                ao += snprintf(abuf + ao, sizeof(abuf) - (size_t)ao, "%s%d",
+                               ai > 0 ? "," : "", (int)l->angles[ai]);
+            if (l->angle_count == 0) abuf[0] = '\0';
+            LOG_INFO(LOG_MODULE, "  lane[%d] pos=%u dir=%d status=%u angles(%u)=[%s]",
+                     li, l->position, (int)l->direction, l->status,
+                     l->angle_count, abuf);
+        }
         write_pps_lane_guidance_partial(&lane);
     }
 
