@@ -53,8 +53,8 @@ typedef struct {
 #define CR_MAN_JUNC_ANGLE(p,i)  ((int16_t)(((p)[6 + (i)*2] << 8) | (p)[7 + (i)*2]))
 
 /* Display configuration */
-#define CR_DISPLAYABLE_ID   200
-#define CR_CONTEXT_ID       90
+#define CR_DISPLAYABLE_ID   199
+#define CR_CONTEXT_ID       99
 #define CR_DISPLAY_ID       0
 #define CR_DEFAULT_WIDTH    640
 #define CR_DEFAULT_HEIGHT   400

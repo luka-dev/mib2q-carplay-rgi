@@ -357,7 +357,7 @@ public class ManeuverMapper {
                 break;
 
             default:
-                /* MHI3 sub_2B9C90: unknown junctionType gate → NO_INFO(1) */
+                /* MHI3 sub_2B9C90: unknown junctionType gate -> NO_INFO(1) */
                 mainElement = NO_INFO;
                 direction = DIR_STRAIGHT;
                 break;
@@ -390,7 +390,7 @@ public class ManeuverMapper {
         }
         /* Skip override for ramp/keep/slight - these need fine direction on MHI2 VC.
          * EXIT_RIGHT/EXIT_LEFT mainElement already encodes the ramp semantics;
-         * coarsening SLIGHT→full 90-degree defeats the point of the distinct icon. */
+         * coarsening SLIGHT->full 90-degree defeats the point of the distinct icon. */
         if (maneuverType == MT_OFF_RAMP
             || maneuverType == MT_ON_RAMP
             || maneuverType == MT_HIGHWAY_OFF_RAMP_LEFT
