@@ -167,6 +167,9 @@ static GLint  g_uni_tex_mode = -1;
 static GLint  g_uni_tex      = -1;
 static GLint  g_uni_resolution = -1;
 static GLint  g_uni_mask_scale = -1;  /* vec2: 1/(2*hw), 1/(2*hh) for mask UV */
+static GLint  g_uni_point_light_pos = -1;
+static GLint  g_uni_point_light_color = -1;
+static GLint  g_uni_blur_dir = -1;
 
 static int   g_perspective = 1;   /* target: 0=ortho, 1=perspective */
 static float g_persp_t = 1.0f;   /* animated blend: 0.0=ortho, 1.0=perspective */
@@ -203,6 +206,14 @@ static int g_fbo_w = 0, g_fbo_h = 0;
 static GLint g_default_fbo = 0;  /* saved at init — may not be 0 on macOS */
 static float g_mask_half_w = 1.6f;
 static float g_mask_half_h = 1.0f;
+static int g_target_fbo_idx = -1;  /* -1 = default, else index into g_fbos */
+
+/* Scene FBO — full screen resolution (bloom source) */
+static GLuint g_scene_fbo = 0, g_scene_tex = 0, g_scene_depth = 0;
+
+/* Bloom FBOs — quarter resolution, ping-pong */
+static GLuint g_bloom_fbos[2] = {0, 0}, g_bloom_texs[2] = {0, 0};
+static int g_bloom_w = 0, g_bloom_h = 0;
 
 static const material_preset_t k_material_presets[RENDER_MAT_COUNT] = {
     [RENDER_MAT_GENERIC_SOLID] = {
@@ -275,6 +286,9 @@ static const char *k_frag_src_body =
     "uniform sampler2D u_tex;\n"
     "uniform vec2 u_resolution;\n"
     "uniform vec2 u_mask_scale;\n"
+    "uniform vec3 u_point_light_pos;\n"
+    "uniform vec3 u_point_light_color;\n"
+    "uniform vec2 u_blur_dir;\n"
     "varying vec3 v_normal;\n"
     "varying vec3 v_world_pos;\n"
     "float hash21(vec2 p) {\n"
@@ -301,6 +315,7 @@ static const char *k_frag_src_body =
     "  vec3 L = normalize(u_light_dir);\n"
     "  vec3 fill_dir = normalize(vec3(-L.x * 0.55, 0.45, -L.z * 0.55));\n"
     "  vec3 V = normalize(u_eye - v_world_pos);\n"
+    /* grain / bump */
     "  float grain = 0.0;\n"
     "  if (u_grain.x > 0.0) {\n"
     "    vec2 guv = v_world_pos.xz * u_grain.y;\n"
@@ -310,6 +325,7 @@ static const char *k_frag_src_body =
     "    float bump = grain * u_grain.x * 0.24;\n"
     "    N = normalize(N + vec3(bump, 0.0, bump));\n"
     "  }\n"
+    /* directional lights */
     "  float key_n = max(dot(N, L), 0.0);\n"
     "  float fill_n = max(dot(N, fill_dir), 0.0);\n"
     "  float hemi_t = clamp(N.y * 0.5 + 0.5, 0.0, 1.0);\n"
@@ -317,20 +333,48 @@ static const char *k_frag_src_body =
     "  vec3 diffuse_light = hemi;\n"
     "  diffuse_light += u_light_key_color * (0.45 * u_mat_surface.x + u_mat_surface.y * key_n);\n"
     "  diffuse_light += u_light_fill_color * fill_n * (0.08 + 0.18 * u_mat_surface.y);\n"
+    /* specular */
     "  vec3 H = normalize(L + V);\n"
     "  float ndotv = max(dot(N, V), 0.0);\n"
     "  float fres = pow(1.0 - ndotv, u_mat_fx.y);\n"
     "  float spec_lobe = pow(max(dot(N, H), 0.0), u_mat_surface.w);\n"
     "  float coat_lobe = pow(max(dot(N, H), 0.0), u_mat_fx.w);\n"
+    /* anisotropic modulation — stretch highlight along road (when grain active) */
+    "  if (u_grain.x > 0.0) {\n"
+    "    float crossH = H.x;\n"
+    "    spec_lobe *= (1.0 - 0.5 * crossH * crossH);\n"
+    "  }\n"
     "  float spec = u_mat_surface.z * spec_lobe * (0.10 + 0.30 * fres);\n"
     "  float clearcoat = u_mat_fx.z * coat_lobe * (0.10 + 0.34 * key_n);\n"
     "  vec3 spec_tint = mix(u_light_spec_color, base.rgb, 0.48);\n"
-    "  vec3 color = base.rgb * diffuse_light;\n"
+    /* car-paint color shift at grazing angles */
+    "  vec3 paint = base.rgb + base.rgb * vec3(0.12, 0.06, -0.04) * fres;\n"
+    /* diffuse color */
+    "  vec3 color = paint * diffuse_light;\n"
+    /* specular + clearcoat */
     "  color += spec_tint * (spec + clearcoat);\n"
-    "  color += base.rgb * (u_mat_fx.x * fres * 0.70);\n"
+    /* fresnel rim */
+    "  color += paint * (u_mat_fx.x * fres * 0.70);\n"
+    /* environment reflection (gradient with red taillight ambience below horizon) */
+    "  vec3 R = reflect(-V, N);\n"
+    "  float env_t = clamp(R.y * 0.5 + 0.5, 0.0, 1.0);\n"
+    "  vec3 env_lo = vec3(0.10, 0.035, 0.025);\n"   /* warm red below horizon — taillight reflections */
+    "  vec3 env_mid = vec3(0.14, 0.12, 0.15);\n"   /* horizon — neutral */
+    "  vec3 env_hi = vec3(0.09, 0.12, 0.22);\n"    /* sky — cool blue */
+    "  vec3 env_col = (env_t < 0.5)\n"
+    "    ? mix(env_lo, env_mid, env_t * 2.0)\n"
+    "    : mix(env_mid, env_hi, (env_t - 0.5) * 2.0);\n"
+    "  float env_fres = pow(1.0 - ndotv, 2.0);\n"
+    "  float env_str = u_mat_surface.z + u_mat_fx.z * 0.5 + 0.08;\n"
+    "  color += env_col * (0.40 + env_fres * 1.20) * env_str;\n"
+    /* edge AO — subtle darkening on side faces */
+    "  float edge_ao = mix(0.85, 1.0, smoothstep(-0.1, 0.25, N.y));\n"
+    "  color *= edge_ao;\n"
+    /* grain overlay */
     "  if (u_grain.x > 0.0) {\n"
     "    color += color * grain * u_grain.x * 0.10;\n"
     "  }\n"
+    /* tone map + saturation */
     "  color = tone_map(color);\n"
     "  {\n"
     "    float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));\n"
@@ -361,9 +405,48 @@ static const char *k_frag_src_body =
     "  if (u_tex_mode > 1.5 && u_tex_mode < 2.5) {\n"
     "    vec2 uv = vec2(v_world_pos.x * u_mask_scale.x + 0.5,\n"
     "                    v_world_pos.z * u_mask_scale.y + 0.5);\n"
+    "    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) discard;\n"
     "    vec4 mask = texture2D(u_tex, uv);\n"
     "    if (mask.a < 0.01) discard;\n"
     "    gl_FragColor = shade_surface(u_color, mask.a);\n"
+    "    return;\n"
+    "  }\n"
+    /* tex_mode 5: bloom bright-pass extraction */
+    "  if (u_tex_mode > 4.5 && u_tex_mode < 5.5) {\n"
+    "    vec2 uv = v_world_pos.xy * 0.5 + 0.5;\n"
+    "    vec4 col = texture2D(u_tex, uv);\n"
+    "    float luma = dot(col.rgb, vec3(0.2126, 0.7152, 0.0722));\n"
+    "    float contrib = smoothstep(0.22, 0.52, luma);\n"
+    "    gl_FragColor = vec4(col.rgb * contrib, 1.0);\n"
+    "    return;\n"
+    "  }\n"
+    /* tex_mode 6: separable gaussian blur (9-tap) */
+    "  if (u_tex_mode > 5.5 && u_tex_mode < 6.5) {\n"
+    "    vec2 uv = v_world_pos.xy * 0.5 + 0.5;\n"
+    "    vec2 texel = u_blur_dir / u_resolution;\n"
+    "    vec3 c = vec3(0.0);\n"
+    "    c += texture2D(u_tex, uv - 4.0 * texel).rgb * 0.0162;\n"
+    "    c += texture2D(u_tex, uv - 3.0 * texel).rgb * 0.0540;\n"
+    "    c += texture2D(u_tex, uv - 2.0 * texel).rgb * 0.1218;\n"
+    "    c += texture2D(u_tex, uv - 1.0 * texel).rgb * 0.1960;\n"
+    "    c += texture2D(u_tex, uv).rgb * 0.2240;\n"
+    "    c += texture2D(u_tex, uv + 1.0 * texel).rgb * 0.1960;\n"
+    "    c += texture2D(u_tex, uv + 2.0 * texel).rgb * 0.1218;\n"
+    "    c += texture2D(u_tex, uv + 3.0 * texel).rgb * 0.0540;\n"
+    "    c += texture2D(u_tex, uv + 4.0 * texel).rgb * 0.0162;\n"
+    "    gl_FragColor = vec4(c, 1.0);\n"
+    "    return;\n"
+    "  }\n"
+    /* tex_mode 9: route shadow (mask offset + darken) */
+    "  if (u_tex_mode > 8.5 && u_tex_mode < 9.5) {\n"
+    "    vec2 uv = vec2(v_world_pos.x * u_mask_scale.x + 0.5,\n"
+    "                    v_world_pos.z * u_mask_scale.y + 0.5);\n"
+    "    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) discard;\n"
+    "    vec2 shoff = vec2(u_light_dir.x, u_light_dir.z) * 0.02;\n"
+    "    vec4 rmask = texture2D(u_tex, uv - shoff);\n"
+    "    if (rmask.a < 0.01) discard;\n"
+    "    float sa = smoothstep(0.0, 0.4, rmask.a) * 0.38;\n"
+    "    gl_FragColor = vec4(0.0, 0.0, 0.0, sa);\n"
     "    return;\n"
     "  }\n"
     /* tex_mode 0: normal 3D geometry with lighting */
@@ -494,6 +577,9 @@ static int build_program(void) {
     g_uni_tex      = glGetUniformLocation(g_program, "u_tex");
     g_uni_resolution = glGetUniformLocation(g_program, "u_resolution");
     g_uni_mask_scale = glGetUniformLocation(g_program, "u_mask_scale");
+    g_uni_point_light_pos = glGetUniformLocation(g_program, "u_point_light_pos");
+    g_uni_point_light_color = glGetUniformLocation(g_program, "u_point_light_color");
+    g_uni_blur_dir = glGetUniformLocation(g_program, "u_blur_dir");
 
     glDeleteShader(vs);
     glDeleteShader(fs);
@@ -555,6 +641,63 @@ static void fbos_shutdown(void) {
     g_fbo_w = g_fbo_h = 0;
 }
 
+/* Scene + bloom FBO helpers */
+static void create_fbo_color_depth(GLuint *fbo, GLuint *tex, GLuint *depth,
+                                   int w, int h, GLenum filter) {
+    glGenTextures(1, tex);
+    glBindTexture(GL_TEXTURE_2D, *tex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    if (depth) {
+        glGenRenderbuffers(1, depth);
+        glBindRenderbuffer(GL_RENDERBUFFER, *depth);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_FBO, w, h);
+    }
+
+    glGenFramebuffers(1, fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, *fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, *tex, 0);
+    if (depth)
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, *depth);
+    GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (status != GL_FRAMEBUFFER_COMPLETE)
+        fprintf(stderr, "render: extra FBO incomplete (0x%x) %dx%d\n", status, w, h);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    if (depth) glBindRenderbuffer(GL_RENDERBUFFER, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+static void scene_bloom_init(int w, int h) {
+    /* Scene FBO — full resolution */
+    create_fbo_color_depth(&g_scene_fbo, &g_scene_tex, &g_scene_depth,
+                           w, h, GL_NEAREST);
+
+    /* Bloom FBOs — quarter resolution */
+    g_bloom_w = w / 4;  if (g_bloom_w < 1) g_bloom_w = 1;
+    g_bloom_h = h / 4;  if (g_bloom_h < 1) g_bloom_h = 1;
+    int i;
+    for (i = 0; i < 2; i++) {
+        GLuint fbo, tex;
+        create_fbo_color_depth(&fbo, &tex, NULL, g_bloom_w, g_bloom_h, GL_LINEAR);
+        g_bloom_fbos[i] = fbo;
+        g_bloom_texs[i] = tex;
+    }
+    fprintf(stderr, "render: scene FBO %dx%d, bloom %dx%d\n", w, h, g_bloom_w, g_bloom_h);
+}
+
+static void scene_bloom_shutdown(void) {
+    if (g_scene_fbo) { glDeleteFramebuffers(1, &g_scene_fbo); g_scene_fbo = 0; }
+    if (g_scene_tex) { glDeleteTextures(1, &g_scene_tex); g_scene_tex = 0; }
+    if (g_scene_depth) { glDeleteRenderbuffers(1, &g_scene_depth); g_scene_depth = 0; }
+    if (g_bloom_fbos[0]) { glDeleteFramebuffers(2, g_bloom_fbos); memset(g_bloom_fbos, 0, sizeof(g_bloom_fbos)); }
+    if (g_bloom_texs[0]) { glDeleteTextures(2, g_bloom_texs); memset(g_bloom_texs, 0, sizeof(g_bloom_texs)); }
+    g_bloom_w = g_bloom_h = 0;
+}
+
 static void fbos_resize(int w, int h) {
     int alloc_w = (int)ceilf((float)w * g_mask_half_h);
     int alloc_h = (int)ceilf((float)h * g_mask_half_h);
@@ -563,7 +706,9 @@ static void fbos_resize(int w, int h) {
     if (alloc_h < h) alloc_h = h;
     if (alloc_w == g_fbo_w && alloc_h == g_fbo_h) return;
     fbos_shutdown();
+    scene_bloom_shutdown();
     fbos_init(w, h);
+    scene_bloom_init(w, h);
     g_masks_dirty = 1;
 }
 
@@ -580,9 +725,13 @@ static void fbo_bind_noclear(int idx) {
     glViewport(0, 0, g_fbo_w, g_fbo_h);
 }
 
-/* Restore default framebuffer */
+/* Restore render target — scene FBO when bloom active, default otherwise */
 static void fbo_unbind(void) {
-    glBindFramebuffer(GL_FRAMEBUFFER, g_default_fbo);
+    if (g_scene_fbo && g_target_fbo_idx >= 0) {
+        glBindFramebuffer(GL_FRAMEBUFFER, g_scene_fbo);
+    } else {
+        glBindFramebuffer(GL_FRAMEBUFFER, g_default_fbo);
+    }
     glViewport(0, 0, g_fb_w, g_fb_h);
 }
 
@@ -625,6 +774,7 @@ int render_init(int fb_width, int fb_height) {
     /* Save default framebuffer — may not be 0 on macOS with MSAA */
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &g_default_fbo);
     fbos_init(fb_width, fb_height);
+    scene_bloom_init(fb_width, fb_height);
 
     /* Init tex_mode off */
     glUseProgram(g_program);
@@ -633,6 +783,10 @@ int render_init(int fb_width, int fb_height) {
     glBindTexture(GL_TEXTURE_2D, g_fbo_texs[0]);
     glUniform1i(g_uni_tex, 0);
     glUniform2f(g_uni_resolution, (float)fb_width, (float)fb_height);
+
+    /* Initial red taillight position (updated per-frame with light rotation) */
+    glUniform3f(g_uni_point_light_pos, 0.0f, 0.02f, -1.2f);
+    glUniform3f(g_uni_point_light_color, 0.42f, 0.05f, 0.02f);
 
     fprintf(stderr, "render: init multi-layer %dx%d (default fbo=%d)\n",
             fb_width, fb_height, (int)g_default_fbo);
@@ -772,6 +926,16 @@ static void sync_camera_uniforms(void) {
                 eye_x * ts + 0.0f * (1.0f - ts),
                 CAM_EYE_Y * ts + 5.0f * (1.0f - ts),
                 eye_z * ts + 0.0f * (1.0f - ts));
+
+    /* Rotate taillight anchor with combined camera + light rotation */
+    {
+        float tl_rot = g_cam_rot + g_light_rot;
+        float tl_cos = cosf(tl_rot), tl_sin = sinf(tl_rot);
+        float base_x = 0.0f, base_z = -1.2f;
+        float rot_x = tl_cos * base_x + tl_sin * base_z + g_cam_pan_x;
+        float rot_z = -tl_sin * base_x + tl_cos * base_z + g_cam_pan_z;
+        glUniform3f(g_uni_point_light_pos, rot_x, 0.02f, rot_z);
+    }
 
     g_z_bias = 0.0f;
 }
@@ -966,6 +1130,7 @@ void render_sprite_flag(float x, float y, float size, int frame) {
 }
 
 void render_shutdown(void) {
+    scene_bloom_shutdown();
     fbos_shutdown();
     if (g_flag_tex) {
         glDeleteTextures(1, &g_flag_tex);
@@ -1112,8 +1277,9 @@ static void composite_layer(int fbo_tex_idx, float y_height,
 
     glUniformMatrix4fv(g_uni_mvp, 1, GL_FALSE, g_mvp_current);
 
-    /* 6 verts = 2 triangles covering the render area */
-    float gx = g_mask_half_w, gz = g_mask_half_h;
+    /* 6 verts = 2 triangles — oversized so quad edges stay off-screen in perspective.
+     * Mask UV discard (alpha < 0.01) ensures only mask-covered area is visible. */
+    float gx = g_mask_half_w * 3.0f, gz = g_mask_half_h * 3.0f;
     float y = y_height;
 
     vb_reset();
@@ -1160,10 +1326,34 @@ void render_composite(void) {
     /* Layer 1: Fill (grey asphalt) — ground level */
     composite_layer(FBO_FILL, 0.0f, RENDER_MAT_ROAD_ASPHALT);
 
+    /* Layer 1.5: Route shadow on asphalt (offset route mask, dark) */
+    {
+        float gx = g_mask_half_w * 3.0f, gz = g_mask_half_h * 3.0f;
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, g_fbo_texs[FBO_ROUTE]);
+        glUniform1i(g_uni_tex, 0);
+        glUniform1f(g_uni_tex_mode, 9.0f);
+        glUniform4f(g_uni_color, 0.0f, 0.0f, 0.0f, 1.0f);
+        glUniform1f(g_uni_zbias, g_z_bias);
+        g_z_bias += Z_BIAS_STEP;
+        glUniformMatrix4fv(g_uni_mvp, 1, GL_FALSE, g_mvp_current);
+
+        vb_reset();
+        vb_v(-gx, 0.0005f, -gz, 0,1,0);
+        vb_v( gx, 0.0005f, -gz, 0,1,0);
+        vb_v( gx, 0.0005f,  gz, 0,1,0);
+        vb_v(-gx, 0.0005f, -gz, 0,1,0);
+        vb_v( gx, 0.0005f,  gz, 0,1,0);
+        vb_v(-gx, 0.0005f,  gz, 0,1,0);
+        glVertexAttribPointer(g_attr_pos, 3, GL_FLOAT, GL_FALSE, 24, g_vbuf);
+        glVertexAttribPointer(g_attr_norm, 3, GL_FLOAT, GL_FALSE, 24, g_vbuf + 3);
+        glEnableVertexAttribArray(g_attr_pos);
+        glEnableVertexAttribArray(g_attr_norm);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+    }
+
     /* Layer 2: Outline border (white, after subtraction) */
     composite_layer(FBO_COMPOSITE, 0.001f, RENDER_MAT_ROAD_BORDER_PAINT);
-
-    /* Route layer removed — now rendered as direct 3D mesh after composite */
 
     /* Restore tex_mode for any subsequent draws */
     glUniform1f(g_uni_tex_mode, 0.0f);

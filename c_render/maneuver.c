@@ -154,7 +154,7 @@ static int   g_camera_prepared_this_frame = 0;
 #define CURV_SLOWDOWN    8.0f           /* curvature sensitivity (higher = more slowdown) */
 #define CAMERA_SETTLE_SPEED 0.12f
 #define CAMERA_SETTLE_MAX_ROT 0.45f
-#define LIGHT_SETTLE_SPEED (1.0f / 30.0f)
+#define LIGHT_SETTLE_SPEED (1.0f / 50.0f)
 
 static void clear_combined_transition(void) {
     g_slug_override = -1.0f;
@@ -574,22 +574,11 @@ static float light_settle_curve(float t) {
     if (t < 0.0f) t = 0.0f;
     if (t > 1.0f) t = 1.0f;
 
-    if (t < 0.62f) {
-        float u = t / 0.62f;
-        return 0.80f * u * u * u;
-    }
-
-    if (t < 0.84f) {
-        float u = (t - 0.62f) / 0.22f;
-        float e = 1.0f - powf(1.0f - u, 3.0f);
-        return 0.80f + (1.25f - 0.80f) * e;
-    }
-
-    {
-        float u = (t - 0.84f) / 0.16f;
-        float e = u * u * (3.0f - 2.0f * u);
-        return 1.25f + (1.0f - 1.25f) * e;
-    }
+    /* Single smooth curve: critically damped spring feel.
+     * Starts near zero velocity, gently accelerates, small overshoot, settle. */
+    float u = t * t * (3.0f - 2.0f * t);  /* smoothstep base */
+    float overshoot = 4.2f * t * t * (1.0f - t) * (1.0f - t);  /* bell at ~0.5 */
+    return u + overshoot * 0.18f;
 }
 
 static void apply_camera_pose(float pan_x, float pan_y, float rot) {
