@@ -289,6 +289,7 @@ int main(int argc, char **argv) {
         int got_maneuver = 0;
         maneuver_state_t pending_maneuver;
         uint8_t pending_flags = 0;
+        uint8_t pending_perspective = 1;
         uint8_t pending_bargraph_level = 0;
         uint8_t pending_bargraph_mode = 0;
         int got_screenshot = 0;
@@ -299,6 +300,7 @@ int main(int argc, char **argv) {
             case CMD_MANEUVER: {
                 decode_maneuver(&cmd, &pending_maneuver);
                 pending_flags = cmd.flags;
+                pending_perspective = cmd.payload[43];
                 pending_bargraph_level = cmd.payload[44];
                 pending_bargraph_mode = cmd.payload[45];
                 got_maneuver = 1;
@@ -344,8 +346,10 @@ int main(int argc, char **argv) {
 
         /* Apply the latest maneuver (draining to latest) */
         if (got_maneuver) {
-            if (pending_flags & MAN_FLAG_RESET_PERSP) {
-                render_set_perspective(1);
+            if (pending_flags & MAN_FLAG_SET_PERSP) {
+                int persp = pending_perspective ? 1 : 0;
+                render_set_perspective(persp);
+                fprintf(stderr, "engine: maneuver perspective=%s\n", persp ? "3D" : "2D");
                 g_engine.dirty = 1;
             }
             if (pending_flags & MAN_FLAG_BARGRAPH) {

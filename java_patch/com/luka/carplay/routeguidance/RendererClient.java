@@ -19,12 +19,14 @@ public class RendererClient {
     private static final int PKT_SIZE = 48;
 
     /* Command IDs -- must match protocol.h */
-    private static final byte CMD_MANEUVER  = 0x01;
-    private static final byte CMD_BARGRAPH  = 0x06;
-    private static final byte CMD_SHUTDOWN  = 0x03;
+    private static final byte CMD_MANEUVER    = 0x01;
+    private static final byte CMD_SHUTDOWN    = 0x03;
+    private static final byte CMD_PERSPECTIVE = 0x04;
+    private static final byte CMD_BARGRAPH    = 0x06;
 
     /* CMD_MANEUVER flags */
-    private static final byte MAN_FLAG_BARGRAPH = 0x02;
+    private static final byte MAN_FLAG_SET_PERSP = 0x01;
+    private static final byte MAN_FLAG_BARGRAPH  = 0x02;
 
     private Socket sock;
     private OutputStream out;
@@ -66,7 +68,7 @@ public class RendererClient {
     }
 
     /**
-     * Send CMD_MANEUVER with full maneuver data + optional bargraph.
+     * Send CMD_MANEUVER — push a new maneuver with transition.
      *
      * @param icon           ICON_* constant (0-7)
      * @param direction      -1=left, 0=center, +1=right
@@ -75,13 +77,18 @@ public class RendererClient {
      * @param junctionAngles signed degree array (may be null)
      * @param bargraphLevel  0-16 (0=empty, 16=full)
      * @param bargraphMode   0=off, 1=on, 2=blink
+     * @param perspective    0=2D, 1=3D after transition (-1=don't change)
      */
     public void sendManeuver(int icon, int direction, int exitAngle,
                              int drivingSide, int[] junctionAngles,
-                             int bargraphLevel, int bargraphMode) {
+                             int bargraphLevel, int bargraphMode,
+                             int perspective) {
         byte[] pkt = new byte[PKT_SIZE];
         pkt[0] = CMD_MANEUVER;
-        pkt[1] = (bargraphMode > 0) ? MAN_FLAG_BARGRAPH : 0;
+        byte flags = 0;
+        if (bargraphMode > 0)  flags |= MAN_FLAG_BARGRAPH;
+        if (perspective >= 0)  flags |= MAN_FLAG_SET_PERSP;
+        pkt[1] = flags;
 
         /* payload[0]: icon */
         pkt[2] = (byte) (icon & 0xFF);
@@ -108,6 +115,10 @@ public class RendererClient {
             pkt[off + 1] = (byte) (a & 0xFF);
         }
 
+        /* perspective in payload[43] when flag set */
+        if (perspective >= 0) {
+            pkt[45] = (byte) (perspective & 0xFF);
+        }
         /* bargraph in payload[44..45] when flag set */
         if (bargraphMode > 0) {
             pkt[46] = (byte) (bargraphLevel & 0xFF);
@@ -129,6 +140,19 @@ public class RendererClient {
         pkt[2] = (byte) (level & 0xFF);   /* payload[0] = level */
         pkt[3] = (byte) (mode & 0xFF);    /* payload[1] = mode */
         sendPacket(pkt);
+    }
+
+    /**
+     * Send CMD_PERSPECTIVE to switch 3D/2D mode.
+     *
+     * @param enabled 0=flat 2D, 1=perspective 3D
+     */
+    public void sendPerspective(int enabled) {
+        byte[] pkt = new byte[PKT_SIZE];
+        pkt[0] = CMD_PERSPECTIVE;
+        pkt[2] = (byte) (enabled & 0xFF);   /* payload[0] = on/off */
+        sendPacket(pkt);
+        Log.i(TAG, "Sent CMD_PERSPECTIVE=" + enabled);
     }
 
     /**

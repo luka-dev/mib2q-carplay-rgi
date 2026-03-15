@@ -186,8 +186,9 @@ static void send_random_icon(int icon, uint8_t flags) {
         cmd.payload[7 + i * 2] = (uint8_t)(ja & 0xFF);
     }
 
-    if (flags & MAN_FLAG_RESET_PERSP)
-        g_perspective = 1;
+    if (flags & MAN_FLAG_SET_PERSP) {
+        cmd.payload[43] = (uint8_t)g_perspective;
+    }
 
     /* Random bargraph in every maneuver */
     cmd.flags |= MAN_FLAG_BARGRAPH;
@@ -277,7 +278,7 @@ static void key_callback(GLFWwindow *window, int key, int scancode, int action, 
         send_perspective(!g_perspective);
         break;
     case GLFW_KEY_T:
-        send_random_maneuver(MAN_FLAG_RESET_PERSP);
+        send_random_maneuver(MAN_FLAG_SET_PERSP);
         break;
     case GLFW_KEY_1:
         send_random_icon(ICON_APPROACH, 0);

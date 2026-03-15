@@ -584,6 +584,11 @@ public class BAPBridge {
                 Log.i(TAG, "Approach zone " + (nowApproach ? "ENTER" : "EXIT")
                     + " (dist=" + distM + "m, highway=" + isHighway
                     + ", prepThr=" + prepareThreshold + ", barDen=" + bargraphDenominatorM + ")");
+
+                /* Switch renderer to 2D (flat) on approach, back to 3D on exit */
+                if (rendererClient != null && customRendererStarted) {
+                    rendererClient.sendPerspective(nowApproach ? 0 : 1);
+                }
             }
 
             if (explicitClear || shouldClearManeuver) {
@@ -1393,8 +1398,13 @@ public class BAPBridge {
                 }
             }
 
+            /* Tell renderer what perspective the new maneuver should land in:
+             * approach zone = 2D (flat), outside = 3D */
+            int perspective = inApproachZone ? 0 : 1;
+
             rendererClient.sendManeuver(icon, direction, exitAngle,
-                drivingSide, junctionAngles, bargraphLevel, bargraphMode);
+                drivingSide, junctionAngles, bargraphLevel, bargraphMode,
+                perspective);
         } catch (Throwable e) {
             Log.w(TAG, "CR update failed: " + e.getClass().getName() + ": " + e.getMessage());
         }
