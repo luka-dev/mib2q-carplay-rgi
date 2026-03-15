@@ -166,6 +166,8 @@ static GLint  g_uni_tex_mode = -1;
 static GLint  g_uni_tex      = -1;
 static GLint  g_uni_resolution = -1;
 static GLint  g_uni_mask_scale = -1;  /* vec2: 1/(2*hw), 1/(2*hh) for mask UV */
+static GLint  g_uni_global_alpha = -1;
+static float  g_global_alpha = 1.0f;
 
 static int   g_perspective = 1;   /* target: 0=ortho, 1=perspective */
 static float g_persp_t = 1.0f;   /* animated blend: 0.0=ortho, 1.0=perspective */
@@ -278,6 +280,7 @@ static const char *k_frag_src_body =
     "uniform sampler2D u_tex;\n"
     "uniform vec2 u_resolution;\n"
     "uniform vec2 u_mask_scale;\n"
+    "uniform float u_global_alpha;\n"
     "varying vec3 v_normal;\n"
     "varying vec3 v_world_pos;\n"
     "vec3 tone_map(vec3 x) {\n"
@@ -353,6 +356,7 @@ static const char *k_frag_src_body =
     "  if (u_tex_mode > 3.5 && u_tex_mode < 4.5) {\n"
     "    vec2 uv = v_normal.xy;\n"
     "    gl_FragColor = texture2D(u_tex, uv);\n"
+    "    gl_FragColor.a *= u_global_alpha;\n"
     "    return;\n"
     "  }\n"
     /* tex_mode 3: flat mask — flat color, no lighting */
@@ -369,6 +373,7 @@ static const char *k_frag_src_body =
     "    vec4 mask = texture2D(u_tex, uv);\n"
     "    if (mask.a < 0.01) discard;\n"
     "    gl_FragColor = shade_surface(u_color, mask.a);\n"
+    "    gl_FragColor.a *= u_global_alpha;\n"
     "    return;\n"
     "  }\n"
     /* tex_mode 7: lit 3D blit with FBO color as base (painter's algorithm road FBO).
@@ -380,6 +385,7 @@ static const char *k_frag_src_body =
     "    vec4 mask = texture2D(u_tex, uv);\n"
     "    if (mask.a < 0.01) discard;\n"
     "    gl_FragColor = shade_surface(vec4(mask.rgb, 1.0), mask.a);\n"
+    "    gl_FragColor.a *= u_global_alpha;\n"
     "    return;\n"
     "  }\n"
     /* tex_mode 9: route shadow (mask offset + darken) */
@@ -391,11 +397,12 @@ static const char *k_frag_src_body =
     "    vec4 rmask = texture2D(u_tex, uv - shoff);\n"
     "    if (rmask.a < 0.01) discard;\n"
     "    float sa = smoothstep(0.0, 0.4, rmask.a) * 0.38;\n"
-    "    gl_FragColor = vec4(0.0, 0.0, 0.0, sa);\n"
+    "    gl_FragColor = vec4(0.0, 0.0, 0.0, sa * u_global_alpha);\n"
     "    return;\n"
     "  }\n"
     /* tex_mode 0: normal 3D geometry with lighting */
     "  gl_FragColor = shade_surface(u_color, 1.0);\n"
+    "  gl_FragColor.a *= u_global_alpha;\n"
     "}\n";
 
 /* ================================================================
@@ -522,6 +529,7 @@ static int build_program(void) {
     g_uni_tex      = glGetUniformLocation(g_program, "u_tex");
     g_uni_resolution = glGetUniformLocation(g_program, "u_resolution");
     g_uni_mask_scale = glGetUniformLocation(g_program, "u_mask_scale");
+    g_uni_global_alpha = glGetUniformLocation(g_program, "u_global_alpha");
 
     glDeleteShader(vs);
     glDeleteShader(fs);
@@ -809,7 +817,12 @@ void render_begin_frame(void) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glUseProgram(g_program);
     glUniform1f(g_uni_tex_mode, 0.0f);
+    glUniform1f(g_uni_global_alpha, g_global_alpha);
     sync_camera_uniforms();
+}
+
+void render_set_global_alpha(float alpha) {
+    g_global_alpha = alpha;
 }
 
 void render_sync_camera(void) {

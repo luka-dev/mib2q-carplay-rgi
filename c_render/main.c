@@ -54,6 +54,11 @@ typedef struct {
 
 static cr_engine_t g_engine;
 
+/* Fade-in on cold start */
+static float g_fade_alpha = 1.0f;
+static int   g_fade_active = 0;
+#define FADE_SPEED 0.04f  /* per-frame step (~0.8s at 30fps) */
+
 /* Decode CMD_MANEUVER payload into maneuver_state_t */
 static void decode_maneuver(const cr_cmd_t *cmd, maneuver_state_t *out) {
     const uint8_t *p = cmd->payload;
@@ -84,6 +89,9 @@ static void engine_apply_maneuver(const maneuver_state_t *state) {
         maneuver_start_anim();
         render_invalidate_masks();
         g_engine.dirty = 1;
+        g_fade_alpha = 0.0f;
+        g_fade_active = 1;
+        render_set_global_alpha(0.0f);
         fprintf(stderr, "engine: cold start icon=%d\n", state->icon);
         return;
     }
@@ -313,6 +321,17 @@ int main(int argc, char **argv) {
             dirty = 1;
         }
 
+        /* Fade-in animation */
+        if (g_fade_active) {
+            g_fade_alpha += FADE_SPEED;
+            if (g_fade_alpha >= 1.0f) {
+                g_fade_alpha = 1.0f;
+                g_fade_active = 0;
+            }
+            render_set_global_alpha(g_fade_alpha);
+            g_engine.dirty = 1;
+        }
+
         /* Render if needed */
         if (g_engine.dirty || render_is_animating() || maneuver_is_animating() || got_screenshot)
             dirty = 1;
@@ -330,7 +349,7 @@ int main(int argc, char **argv) {
 
             platform_swap();
 
-            dirty = render_is_animating() || maneuver_is_animating();
+            dirty = render_is_animating() || maneuver_is_animating() || g_fade_active;
         }
 
         /* Frame pacing */

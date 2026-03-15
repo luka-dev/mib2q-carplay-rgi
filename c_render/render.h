@@ -85,6 +85,9 @@ int render_is_animating(void);
 /* Toggle 3D extrusion. raised=1 → extruded, raised=0 → flat on ground. */
 void render_set_raised(int raised);
 
+/* Set global opacity (0.0=invisible, 1.0=fully opaque). For fade-in. */
+void render_set_global_alpha(float alpha);
+
 /* ================================================================
  * Single-FBO painter's algorithm mask rendering API
  *
