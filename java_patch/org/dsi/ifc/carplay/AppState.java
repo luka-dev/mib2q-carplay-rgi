@@ -1,5 +1,5 @@
 /*
- * AppState — patched to prevent nav focus transfer to CarPlay.
+ * AppState -- patched to prevent nav focus transfer to CarPlay.
  *
  * getAppStateID() and getOwner() always return 0, so the system
  * never detects CarPlay taking navigation ownership.
@@ -28,12 +28,12 @@ public class AppState {
         this.speechMode = speechMode;
     }
 
-    /** Always returns 0 — prevents nav focus transfer to CarPlay. */
+    /** Always returns 0 -- prevents nav focus transfer to CarPlay. */
     public int getAppStateID() {
         return 0;
     }
 
-    /** Always returns 0 — prevents nav ownership detection. */
+    /** Always returns 0 -- prevents nav ownership detection. */
     public int getOwner() {
         return 0;
     }

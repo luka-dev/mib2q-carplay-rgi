@@ -1242,21 +1242,26 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
      * Native display manager calls setActiveDisplayable on videoencoderservice
      * ONLY from CContextManager::preContextSwitchHook during a REAL context
      * switch. Java DisplayManager.switchContext() skips the DSI call when the
-     * requested context equals confirmedActiveContext — so if context 72 is
+     * requested context equals confirmedActiveContext -- so if context 72 is
      * already active, setActiveDisplayable never fires and videoencoderservice
      * captures displayable 0 (nothing).
      *
-     * Fix: Two issues must be resolved:
-     * 1. Boot default maps context 72 → 74 (KDK variant). Context 74's first
-     *    displayable is 20 (KDK intersection, no content without native RG).
-     *    Call setKDKVisible(-1, terminal) to CLEAR the mapping so context 72
-     *    stays as 72 with first displayable 33 (base navigation map).
-     * 2. switchContext is a no-op when confirmedActiveContext == requested.
-     *    Force a context change by switching to 0 first, then back to 72.
+     * Context 72: displayables {33} -- base map only.
+     * Context 74: displayables {20, 102, 101, 33} -- map + KDK widget.
+     *   First displayable = 20 (KDK composited view with map underneath).
      *
-     * After clearing: switchContext(72) → preContextSwitchHook →
-     *   setActiveDisplayable(4, 33) → videoencoderservice IPTE-captures the
-     *   base navigation map framebuffer.
+     * The KOMO GuidanceView renders into displayable 20 (KDK area).
+     * With PresentationController patches keeping the rendering pipeline alive
+     * (NOP StopDSIs + force StartDrawing + hardcode 10fps), displayable 20
+     * has content. We use context 74 so the encoder captures the composited
+     * map+widget output.
+     *
+     * Steps:
+     * 1. Ensure KDK mapping is set (context 72 -> 74).
+     * 2. Force context switch: 0 -> 72 (triggers preContextSwitchHook).
+     *    With KDK mapping active, context 72 becomes 74 internally ->
+     *    setActiveDisplayable(4, 20) -> encoder captures composited view.
+     * 3. Start video encoding at 10fps.
      */
     public String activateClusterVideoPipeline() {
         try {
@@ -1264,10 +1269,9 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
                 ((de.audi.atip.hmi.HMIService) this.env.getHMIService()).getDisplayManager();
             int ctxBefore = dm.getCurrentContextID(1);
 
-            /* 1. Clear KDK mapping: revert context 74 → 72.
-             *    setKDKVisible(-1, terminal) removes KDK displayable overlay
-             *    from the context, so switchContext(72) stays as 72. */
-            String kdkClear = this.trySetVisibleKDKReflective(dm, -1, 1);
+            /* 1. Set KDK mapping: context 72 -> 74 (includes displayable 20).
+             *    setKDKVisible(20, terminal) adds KDK displayable overlay. */
+            String kdkSet = this.trySetVisibleKDKReflective(dm, 20, 1);
             try { Thread.sleep(200); } catch (InterruptedException ie) { /* ignore */ }
 
             /* 2. Force context away so next switchContext is a real change. */
@@ -1277,9 +1281,10 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
             /* 3. Wait for native DM to confirm the context switch via DSI. */
             try { Thread.sleep(300); } catch (InterruptedException ie) { /* ignore */ }
 
-            /* 4. Switch to FPK base map context 72. Without KDK mapping,
-             *    this stays as 72 → preContextSwitchHook fires →
-             *    setActiveDisplayable(4, 33) → encoder captures base map. */
+            /* 4. Switch to FPK context 72. With KDK mapping active, this
+             *    becomes context 74 internally -> preContextSwitchHook ->
+             *    setActiveDisplayable(4, 20) -> encoder captures KDK composite
+             *    (map + widget). */
             dm.switchContext(72, 1, null);
             int ctxAfterMap = dm.getCurrentContextID(1);
 
@@ -1288,8 +1293,8 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
             /* 5. Start video encoding at 10fps. */
             dm.setUpdateRate(1, 10);
 
-            return "ctx=" + ctxBefore + "→" + ctxAfterReset + "→" + ctxAfterMap
-                + " kdk=" + kdkClear
+            return "ctx=" + ctxBefore + "->" + ctxAfterReset + "->" + ctxAfterMap
+                + " kdk=" + kdkSet
                 + " dmType=" + dm.getClass().getName()
                 + " " + this.getDisplayManagerInitState(dm);
         } catch (Throwable t) {
@@ -1323,6 +1328,75 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
             }
         }
         this.env.getLabelModel(71).setText((turnTo != null) ? turnTo : "");
+    }
+
+    /**
+     * Activate custom renderer video pipeline.
+     * Routes video encoder to displayable 199 (custom renderer) via context 99.
+     * No KDK mapping needed - the renderer creates its own displayable.
+     */
+    public String activateCustomRendererPipeline() {
+        try {
+            de.audi.atip.hmi.view.IDisplayManager dm =
+                ((de.audi.atip.hmi.HMIService) this.env.getHMIService()).getDisplayManager();
+            int ctxBefore = dm.getCurrentContextID(1);
+
+            /* Force context away first so the switch is a real change */
+            dm.switchContext(0, 1, null);
+            try { Thread.sleep(300); } catch (InterruptedException ie) { /* ignore */ }
+
+            /* Switch to context 99 (custom renderer displayable 199).
+             * preContextSwitchHook -> setActiveDisplayable(4, 199) ->
+             * video encoder captures displayable 199. */
+            dm.switchContext(99, 1, null);
+            int ctxAfter = dm.getCurrentContextID(1);
+            try { Thread.sleep(300); } catch (InterruptedException ie) { /* ignore */ }
+
+            /* Start video encoding at 10fps */
+            dm.setUpdateRate(1, 10);
+
+            return "renderer ctx=" + ctxBefore + "->" + ctxAfter;
+        } catch (Throwable t) {
+            return "FAILED: " + t.getClass().getName() + ": " + t.getMessage();
+        }
+    }
+
+    /**
+     * Deactivate custom renderer pipeline. Stop encoding and restore context.
+     */
+    public void deactivateCustomRendererPipeline() {
+        try {
+            de.audi.atip.hmi.view.IDisplayManager dm =
+                ((de.audi.atip.hmi.HMIService) this.env.getHMIService()).getDisplayManager();
+            dm.setUpdateRate(1, 0);
+            /* Restore to FPK map context */
+            dm.switchContext(72, 1, null);
+        } catch (Throwable t) {
+            /* non-fatal */
+        }
+    }
+
+    /**
+     * Send CMD_SHUTDOWN to c_render via TCP (48-byte packet, protocol.h).
+     * Fallback shutdown -- BAPBridge.stopCustomRenderer() handles primary
+     * shutdown via RendererClient. This is a backstop if Java didn't close cleanly.
+     */
+    public void shutdownRenderer() {
+        java.net.Socket sock = null;
+        try {
+            sock = new java.net.Socket("127.0.0.1", 19800);
+            sock.setTcpNoDelay(true);
+            byte[] pkt = new byte[48];
+            pkt[0] = 0x03; /* CMD_SHUTDOWN */
+            sock.getOutputStream().write(pkt);
+            sock.getOutputStream().flush();
+        } catch (Exception e) {
+            /* non-fatal -- renderer may already be stopped */
+        } finally {
+            if (sock != null) {
+                try { sock.close(); } catch (Exception e) { /* ignore */ }
+            }
+        }
     }
 
     public KOMOCaller getKomoCaller() {
