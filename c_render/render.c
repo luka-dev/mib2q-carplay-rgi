@@ -223,16 +223,16 @@ static const material_preset_t k_material_presets[RENDER_MAT_COUNT] = {
         { 0.0f, 0.0f }
     },
     [RENDER_MAT_ROAD_ASPHALT] = {
-        { 0.24f, 0.26f, 0.29f, 1.0f },
-        { 0.22f, 0.46f, 0.10f, 9.0f },
-        { 0.03f, 4.5f, 0.0f, 1.0f },
-        { 0.55f, 68.0f }
+        { 0.20f, 0.21f, 0.24f, 1.0f },       /* darker, slightly blue-tinted asphalt */
+        { 0.18f, 0.52f, 0.14f, 12.0f },       /* tighter spec, more diffuse response */
+        { 0.05f, 4.0f, 0.02f, 28.0f },        /* subtle clearcoat (wet look) */
+        { 0.40f, 72.0f }                       /* moderate grain, fine scale */
     },
     [RENDER_MAT_ROAD_BORDER_PAINT] = {
-        { 0.83f, 0.84f, 0.86f, 1.0f },
-        { 0.28f, 0.40f, 0.14f, 18.0f },
-        { 0.04f, 4.0f, 0.02f, 42.0f },
-        { 0.08f, 92.0f }
+        { 0.90f, 0.91f, 0.93f, 1.0f },        /* brighter white paint */
+        { 0.24f, 0.48f, 0.22f, 24.0f },       /* more specular, tighter lobe */
+        { 0.06f, 3.5f, 0.04f, 48.0f },        /* more clearcoat (glass beads) */
+        { 0.12f, 96.0f }                       /* stronger grain texture */
     },
     [RENDER_MAT_ROUTE_ACTIVE] = {
         { 0.07f, 0.46f, 0.92f, 1.0f },
@@ -291,21 +291,6 @@ static const char *k_frag_src_body =
     "uniform vec2 u_blur_dir;\n"
     "varying vec3 v_normal;\n"
     "varying vec3 v_world_pos;\n"
-    "float hash21(vec2 p) {\n"
-    "  p = fract(p * vec2(233.34, 851.73));\n"
-    "  p += dot(p, p + 23.45);\n"
-    "  return fract(p.x * p.y);\n"
-    "}\n"
-    "float vnoise(vec2 p) {\n"
-    "  vec2 i = floor(p);\n"
-    "  vec2 f = fract(p);\n"
-    "  f = f * f * (3.0 - 2.0 * f);\n"
-    "  float a = hash21(i);\n"
-    "  float b = hash21(i + vec2(1.0, 0.0));\n"
-    "  float c = hash21(i + vec2(0.0, 1.0));\n"
-    "  float d = hash21(i + vec2(1.0, 1.0));\n"
-    "  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);\n"
-    "}\n"
     "vec3 tone_map(vec3 x) {\n"
     "  x *= 1.10;\n"
     "  return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n"
@@ -315,16 +300,6 @@ static const char *k_frag_src_body =
     "  vec3 L = normalize(u_light_dir);\n"
     "  vec3 fill_dir = normalize(vec3(-L.x * 0.55, 0.45, -L.z * 0.55));\n"
     "  vec3 V = normalize(u_eye - v_world_pos);\n"
-    /* grain / bump */
-    "  float grain = 0.0;\n"
-    "  if (u_grain.x > 0.0) {\n"
-    "    vec2 guv = v_world_pos.xz * u_grain.y;\n"
-    "    float n1 = vnoise(guv);\n"
-    "    float n2 = vnoise(guv * 3.7 + 17.0);\n"
-    "    grain = (n1 * 0.6 + n2 * 0.4) - 0.5;\n"
-    "    float bump = grain * u_grain.x * 0.24;\n"
-    "    N = normalize(N + vec3(bump, 0.0, bump));\n"
-    "  }\n"
     /* directional lights */
     "  float key_n = max(dot(N, L), 0.0);\n"
     "  float fill_n = max(dot(N, fill_dir), 0.0);\n"
@@ -339,11 +314,6 @@ static const char *k_frag_src_body =
     "  float fres = pow(1.0 - ndotv, u_mat_fx.y);\n"
     "  float spec_lobe = pow(max(dot(N, H), 0.0), u_mat_surface.w);\n"
     "  float coat_lobe = pow(max(dot(N, H), 0.0), u_mat_fx.w);\n"
-    /* anisotropic modulation — stretch highlight along road (when grain active) */
-    "  if (u_grain.x > 0.0) {\n"
-    "    float crossH = H.x;\n"
-    "    spec_lobe *= (1.0 - 0.5 * crossH * crossH);\n"
-    "  }\n"
     "  float spec = u_mat_surface.z * spec_lobe * (0.10 + 0.30 * fres);\n"
     "  float clearcoat = u_mat_fx.z * coat_lobe * (0.10 + 0.34 * key_n);\n"
     "  vec3 spec_tint = mix(u_light_spec_color, base.rgb, 0.48);\n"
@@ -353,6 +323,11 @@ static const char *k_frag_src_body =
     "  vec3 color = paint * diffuse_light;\n"
     /* specular + clearcoat */
     "  color += spec_tint * (spec + clearcoat);\n"
+    /* retroreflective glass-bead effect for road paint (high grain_scale materials) */
+    "  if (u_grain.y > 80.0) {\n"
+    "    float retro = pow(max(dot(V, L), 0.0), 4.0) * 0.22;\n"
+    "    color += base.rgb * retro;\n"
+    "  }\n"
     /* fresnel rim */
     "  color += paint * (u_mat_fx.x * fres * 0.70);\n"
     /* environment reflection (gradient with red taillight ambience below horizon) */
@@ -370,10 +345,6 @@ static const char *k_frag_src_body =
     /* edge AO — subtle darkening on side faces */
     "  float edge_ao = mix(0.85, 1.0, smoothstep(-0.1, 0.25, N.y));\n"
     "  color *= edge_ao;\n"
-    /* grain overlay */
-    "  if (u_grain.x > 0.0) {\n"
-    "    color += color * grain * u_grain.x * 0.10;\n"
-    "  }\n"
     /* tone map + saturation */
     "  color = tone_map(color);\n"
     "  {\n"
