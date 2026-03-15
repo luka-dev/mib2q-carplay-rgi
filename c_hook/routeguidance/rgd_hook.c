@@ -14,12 +14,25 @@ DEFINE_LOG_MODULE(RGD);
  * Cluster renderer process management
  * ================================================================ */
 
-#define CR_BINARY_PATH  "/mnt/app/root/hooks/c_render"
+#define CR_BINARY_PATH  "/mnt/app/root/hooks/maneuver_render"
 
 static pid_t g_renderer_pid = -1;
 
+static void renderer_kill_previous(void) {
+    /* Kill any orphaned maneuver_render from a previous hook load.
+     * slay -f = force (SIGKILL), -Q = quiet (no error if not found). */
+    if (g_renderer_pid > 0) {
+        kill(g_renderer_pid, SIGKILL);
+        waitpid(g_renderer_pid, NULL, 0);
+        g_renderer_pid = -1;
+        LOG_INFO(LOG_MODULE, "renderer: killed tracked pid");
+    }
+    /* Also slay by name in case PID was lost (hook reload, crash, etc.) */
+    system("slay -f -Q maneuver_render 2>/dev/null");
+}
+
 static void renderer_start(void) {
-    if (g_renderer_pid > 0) return;  /* Already running */
+    renderer_kill_previous();
 
     pid_t pid = fork();
     if (pid < 0) {
@@ -29,14 +42,24 @@ static void renderer_start(void) {
 
     if (pid == 0) {
         /* Child process */
-        execl(CR_BINARY_PATH, "c_render", (char *)NULL);
-        /* If exec fails, try relative path */
-        execl("./c_render", "c_render", (char *)NULL);
+        execl(CR_BINARY_PATH, "maneuver_render", (char *)NULL);
+        /* If exec fails, try relative path (same folder as hook .so) */
+        execl("./maneuver_render", "maneuver_render", (char *)NULL);
         _exit(127);
     }
 
     g_renderer_pid = pid;
     LOG_INFO(LOG_MODULE, "renderer: started pid=%d", (int)pid);
+
+    /* Brief wait to detect immediate exec failure (child exits with 127). */
+    usleep(50000); /* 50ms */
+    int wst = 0;
+    pid_t ret = waitpid(pid, &wst, WNOHANG);
+    if (ret == pid) {
+        g_renderer_pid = -1;
+        LOG_ERROR(LOG_MODULE, "renderer: exec failed (exit %d), continuing without render",
+                  WIFEXITED(wst) ? WEXITSTATUS(wst) : -1);
+    }
 }
 
 static void renderer_stop(void) {

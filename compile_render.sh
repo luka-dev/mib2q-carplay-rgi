@@ -6,7 +6,7 @@ SSH_OPTS="-oHostKeyAlgorithms=+ssh-rsa -oPubkeyAcceptedAlgorithms=+ssh-rsa"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 RENDERER_DIR="${SCRIPT_DIR}/c_render"
-OUT="${RENDER_OUT:-${SCRIPT_DIR}/c_render_bin}"
+OUT="${RENDER_OUT:-${SCRIPT_DIR}/maneuver_render}"
 REMOTE_DIR="/tmp/c_render"
 
 RENDERER_SRCS="main.c render.c maneuver.c route_path.c server.c platform_qnx.c"
@@ -32,7 +32,7 @@ for f in $RENDERER_SRCS; do
         /usr/qnx650/host/qnx6/x86/usr/bin/ntoarmv7-gcc -c -O2 -std=gnu99 -Wall -D__QNX__ -DPLATFORM_QNX -I$REMOTE_DIR -o $REMOTE_DIR/$obj $REMOTE_DIR/$f && "
 done
 
-LINK_CMD="/usr/qnx650/host/qnx6/x86/usr/bin/ntoarmv7-gcc $OBJ_FILES -o $REMOTE_DIR/c_render -lEGL -lGLESv2 -lsocket -lm"
+LINK_CMD="/usr/qnx650/host/qnx6/x86/usr/bin/ntoarmv7-gcc $OBJ_FILES -o $REMOTE_DIR/maneuver_render -lEGL -lGLESv2 -lsocket -lm"
 
 sshpass -p "root" ssh $SSH_OPTS root@$QNX_VM \
     "export QNX_HOST=/usr/qnx650/host/qnx6/x86; \
@@ -40,10 +40,10 @@ sshpass -p "root" ssh $SSH_OPTS root@$QNX_VM \
      cd $REMOTE_DIR && \
      $COMPILE_CMD \
      $LINK_CMD && \
-     ls -lh $REMOTE_DIR/c_render"
+     ls -lh $REMOTE_DIR/maneuver_render"
 
 echo "Downloading compiled binary..."
-sshpass -p "root" scp $SSH_OPTS root@$QNX_VM:$REMOTE_DIR/c_render "$OUT"
+sshpass -p "root" scp $SSH_OPTS root@$QNX_VM:$REMOTE_DIR/maneuver_render "$OUT"
 
 echo ""
 echo "Compiled: $OUT"
