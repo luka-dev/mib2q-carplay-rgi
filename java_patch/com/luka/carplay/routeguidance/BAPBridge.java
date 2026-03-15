@@ -769,10 +769,12 @@ public class BAPBridge {
                 | RouteGuidance.State.DIRTY_DIST_MAN
                 | RouteGuidance.State.DIRTY_ROUTE_STATE;
             if ((dirty & laneRecomputeMask) != 0) {
+                /* Show lane guidance when iOS says so (laneGuidanceShowing=1)
+                 * OR when in approach zone. iOS toggles showing even far from
+                 * the maneuver for lane-assist display. */
                 boolean wantLaneGuidance = !explicitClear
                     && !shouldClearManeuver
-                    && nowApproach
-                    && (s.laneGuidanceShowing == 1);
+                    && (nowApproach || s.laneGuidanceShowing == 1);
                 if (wantLaneGuidance) {
                     sendLaneGuidance(s);
                 } else {
