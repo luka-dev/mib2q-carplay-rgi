@@ -224,20 +224,20 @@ static const material_preset_t k_material_presets[RENDER_MAT_COUNT] = {
         { 0.08f, 92.0f }
     },
     [RENDER_MAT_ROUTE_ACTIVE] = {
-        { 0.10f, 0.49f, 0.84f, 1.0f },
-        { 0.12f, 0.68f, 0.24f, 26.0f },
-        { 0.10f, 5.2f, 0.12f, 72.0f },
+        { 0.07f, 0.46f, 0.92f, 1.0f },
+        { 0.10f, 0.72f, 0.28f, 28.0f },
+        { 0.12f, 5.0f, 0.14f, 68.0f },
         { 0.02f, 96.0f }
     }
 };
 
 static const lighting_state_t k_lighting_state = {
     { 0.18f, 0.97f, -0.14f },
-    { 0.78f, 0.74f, 0.68f },
-    { 0.06f, 0.09f, 0.12f },
-    { 0.08f, 0.11f, 0.17f },
-    { 0.08f, 0.06f, 0.04f },
-    { 0.78f, 0.76f, 0.74f }
+    { 0.92f, 0.87f, 0.80f },
+    { 0.10f, 0.14f, 0.20f },
+    { 0.14f, 0.18f, 0.26f },
+    { 0.04f, 0.03f, 0.02f },
+    { 0.82f, 0.80f, 0.76f }
 };
 
 static const char *k_vert_src =
@@ -293,9 +293,8 @@ static const char *k_frag_src_body =
     "  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);\n"
     "}\n"
     "vec3 tone_map(vec3 x) {\n"
-    "  x *= 0.82;\n"
-    "  x = max(x - 0.004, 0.0);\n"
-    "  return clamp((x * (6.2 * x + 0.5)) / (x * (6.2 * x + 1.7) + 0.06), 0.0, 1.0);\n"
+    "  x *= 1.10;\n"
+    "  return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n"
     "}\n"
     "vec4 shade_surface(vec4 base, float alpha) {\n"
     "  vec3 N = normalize(v_normal);\n"
@@ -335,7 +334,7 @@ static const char *k_frag_src_body =
     "  color = tone_map(color);\n"
     "  {\n"
     "    float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));\n"
-    "    color = mix(vec3(luma), color, 1.08);\n"
+    "    color = mix(vec3(luma), color, 1.22);\n"
     "  }\n"
     "  return vec4(color, alpha * base.a);\n"
     "}\n"
