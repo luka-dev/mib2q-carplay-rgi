@@ -447,7 +447,7 @@ static int ensure_dir(const char* dir) {
  * to a fully-written file - readers never see a partial write.
  *
  *   1. Write data to coverart_<new_slot>.png
- *   2. Create temp symlink coverart.png.tmp → coverart_<new_slot>.png
+ *   2. Create temp symlink coverart.png.tmp -> coverart_<new_slot>.png
  *   3. rename() temp symlink over coverart.png  (atomic on POSIX)
  *   4. Unlink old coverart_<old_slot>.png
  */

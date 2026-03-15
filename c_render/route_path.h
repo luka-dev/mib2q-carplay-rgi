@@ -1,12 +1,12 @@
 /*
- * Route path — segment-based path definition + 3D mesh extrusion.
+ * Route path -- segment-based path definition + 3D mesh extrusion.
  *
  * Path = sequence of LINE and ARC segments in 2D (x, y).
  * Densified to polyline, then extruded into a 3D mesh
  * (top face + side walls + arrowhead prism).
  *
  * Coordinates are 2D maneuver space (same as mask rendering).
- * Extrusion maps 2D y → 3D z, adds 3D y for height.
+ * Extrusion maps 2D y -> 3D z, adds 3D y for height.
  */
 
 #ifndef CR_ROUTE_PATH_H
@@ -74,7 +74,7 @@ void rpath_xform_append(route_path_t *dst, const route_path_t *src,
                          float tx, float ty, float cos_r, float sin_r,
                          float rot_rad);
 
-/* Debug overlay — draws polyline with active window highlighted. */
+/* Debug overlay -- draws polyline with active window highlighted. */
 void rpath_draw_debug(const route_path_t *p, float t0, float t1);
 
 #endif /* CR_ROUTE_PATH_H */

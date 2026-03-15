@@ -23,7 +23,7 @@
 #endif
 
 /*
- * Shader source prefix — prepended to all shader sources.
+ * Shader source prefix -- prepended to all shader sources.
  * macOS OpenGL 2.1 compatibility profile accepts GLSL 1.20
  * which is close enough to GLES2 GLSL 1.00.
  * Main difference: no "precision" qualifiers in desktop GL.
@@ -37,7 +37,7 @@
 #endif
 
 /*
- * FBO compatibility — core in GLES2, available via GL_EXT_framebuffer_object
+ * FBO compatibility -- core in GLES2, available via GL_EXT_framebuffer_object
  * on macOS OpenGL 2.1.
  */
 #ifdef PLATFORM_MACOS

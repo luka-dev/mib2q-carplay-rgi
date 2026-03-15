@@ -294,7 +294,7 @@ hook_result_t pps_write_string(pps_handle_t* h, const char* key, const char* val
     const char* src = value ? value : "";
 
     /* Sanitize: strip control characters to prevent PPS corruption.
-     * QNX PPS uses newline as record delimiter — embedded \n \r \t etc.
+     * QNX PPS uses newline as record delimiter -- embedded \n \r \t etc.
      * in iAP2 strings corrupt the entire PPS object. */
     char sanitized[MAX_PPS_LINE];
     size_t si = 0;

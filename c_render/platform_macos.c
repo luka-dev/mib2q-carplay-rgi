@@ -1,5 +1,5 @@
 /*
- * macOS platform implementation — GLFW + OpenGL 2.1
+ * macOS platform implementation -- GLFW + OpenGL 2.1
  */
 
 #ifdef PLATFORM_MACOS
@@ -59,7 +59,7 @@ int platform_init(int width, int height) {
         return -1;
     }
 
-    /* Request OpenGL 2.1 — compatible with GLES2 shader subset */
+    /* Request OpenGL 2.1 -- compatible with GLES2 shader subset */
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
     glfwWindowHint(GLFW_SAMPLES, 4);   /* 4x MSAA */
@@ -76,7 +76,7 @@ int platform_init(int width, int height) {
 
     glfwSetKeyCallback(g_window, key_callback);
     glfwMakeContextCurrent(g_window);
-    glfwSwapInterval(0); /* no vsync — frame pacing done in main loop */
+    glfwSwapInterval(0); /* no vsync -- frame pacing done in main loop */
 
     fprintf(stderr, "platform_macos: GL %s\n", glGetString(GL_VERSION));
     return 0;

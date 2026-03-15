@@ -1,10 +1,10 @@
 /*
- * OpenGL rendering — single-FBO painter's algorithm architecture.
+ * OpenGL rendering -- single-FBO painter's algorithm architecture.
  *
  * 2 mask FBOs (flat 2D, no lighting):
- *   FBO_ROAD  — combined road: white outline drawn first, grey fill on top
- *               (painter's algorithm — fill overwrites interior, border remains)
- *   FBO_ROUTE — blue active route
+ *   FBO_ROAD  -- combined road: white outline drawn first, grey fill on top
+ *               (painter's algorithm -- fill overwrites interior, border remains)
+ *   FBO_ROUTE -- blue active route
  *
  * Compositing pipeline:
  *   1. Render 3D ground-plane quad textured with road FBO (tex_mode 7 reads FBO RGB)
@@ -12,8 +12,8 @@
  *   3. Route mesh (extruded 3D)
  *
  * All maneuver coordinates remain 2D (x, y). Internally mapped to 3D:
- *   2D x → 3D x (left-right)
- *   2D y → 3D z (depth: y=-0.55 near camera, y=0.55 far)
+ *   2D x -> 3D x (left-right)
+ *   2D y -> 3D z (depth: y=-0.55 near camera, y=0.55 far)
  *   3D y  = extrusion height (0=ground, H=top)
  *
  * Uses GLES2-compatible subset (shaders, no fixed-function).
@@ -40,7 +40,7 @@
 #define RAISE_BASE   0.03f    /* active floats this much above grey */
 #define Z_BIAS_STEP  0.00001f  /* depth bias per draw (layer ordering) */
 
-/* Camera — perspective mode */
+/* Camera -- perspective mode */
 #define CAM_EYE_X    0.0f
 #define CAM_EYE_Y    0.95f
 #define CAM_EYE_Z   -1.40f
@@ -137,7 +137,7 @@ static void mat4_lookAt(float *m,
 }
 
 /* ================================================================
- * Shader program — 3D with directional lighting
+ * Shader program -- 3D with directional lighting
  *
  * tex_mode values:
  *   0.0 = normal 3D geometry (MVP transform + lighting)
@@ -180,7 +180,7 @@ static float g_z_bias = 0.0f;
 static int g_masks_dirty = 1;
 static int g_mask_append = 0;  /* 1 = don't clear FBO on begin_mask (additive) */
 
-/* Camera pan offset (maneuver space) — shifts entire scene to follow arrow */
+/* Camera pan offset (maneuver space) -- shifts entire scene to follow arrow */
 static float g_cam_pan_x = 0.0f;
 static float g_cam_pan_z = 0.0f;  /* z in 3D = y in maneuver 2D */
 static float g_cam_rot = 0.0f;
@@ -204,7 +204,7 @@ static GLuint g_fbos[FBO_COUNT];
 static GLuint g_fbo_texs[FBO_COUNT];
 static GLuint g_fbo_depths[FBO_COUNT];
 static int g_fbo_w = 0, g_fbo_h = 0;
-static GLint g_default_fbo = 0;  /* saved at init — may not be 0 on macOS */
+static GLint g_default_fbo = 0;  /* saved at init -- may not be 0 on macOS */
 static float g_mask_half_w = 1.6f;
 static float g_mask_half_h = 1.0f;
 
@@ -325,16 +325,16 @@ static const char *k_frag_src_body =
     /* environment reflection (gradient with red taillight ambience below horizon) */
     "  vec3 R = reflect(-V, N);\n"
     "  float env_t = clamp(R.y * 0.5 + 0.5, 0.0, 1.0);\n"
-    "  vec3 env_lo = vec3(0.10, 0.035, 0.025);\n"   /* warm red below horizon — taillight reflections */
-    "  vec3 env_mid = vec3(0.14, 0.12, 0.15);\n"   /* horizon — neutral */
-    "  vec3 env_hi = vec3(0.09, 0.12, 0.22);\n"    /* sky — cool blue */
+    "  vec3 env_lo = vec3(0.10, 0.035, 0.025);\n"   /* warm red below horizon -- taillight reflections */
+    "  vec3 env_mid = vec3(0.14, 0.12, 0.15);\n"   /* horizon -- neutral */
+    "  vec3 env_hi = vec3(0.09, 0.12, 0.22);\n"    /* sky -- cool blue */
     "  vec3 env_col = (env_t < 0.5)\n"
     "    ? mix(env_lo, env_mid, env_t * 2.0)\n"
     "    : mix(env_mid, env_hi, (env_t - 0.5) * 2.0);\n"
     "  float env_fres = pow(1.0 - ndotv, 2.0);\n"
     "  float env_str = u_mat_surface.z + u_mat_fx.z * 0.5 + 0.08;\n"
     "  color += env_col * (0.40 + env_fres * 1.20) * env_str;\n"
-    /* edge AO — subtle darkening on side faces */
+    /* edge AO -- subtle darkening on side faces */
     "  float edge_ao = mix(0.85, 1.0, smoothstep(-0.1, 0.25, N.y));\n"
     "  color *= edge_ao;\n"
     /* tone map + saturation */
@@ -346,25 +346,25 @@ static const char *k_frag_src_body =
     "  return vec4(color, alpha * base.a);\n"
     "}\n"
     "void main() {\n"
-    /* tex_mode 1: fullscreen blit — passthrough texture sample */
+    /* tex_mode 1: fullscreen blit -- passthrough texture sample */
     "  if (u_tex_mode > 0.5 && u_tex_mode < 1.5) {\n"
     "    vec2 uv = v_world_pos.xy * 0.5 + 0.5;\n"
     "    gl_FragColor = texture2D(u_tex, uv);\n"
     "    return;\n"
     "  }\n"
-    /* tex_mode 4: sprite blit — UVs piggybacked on normal attribute */
+    /* tex_mode 4: sprite blit -- UVs piggybacked on normal attribute */
     "  if (u_tex_mode > 3.5 && u_tex_mode < 4.5) {\n"
     "    vec2 uv = v_normal.xy;\n"
     "    gl_FragColor = texture2D(u_tex, uv);\n"
     "    gl_FragColor.a *= u_global_alpha;\n"
     "    return;\n"
     "  }\n"
-    /* tex_mode 3: flat mask — flat color, no lighting */
+    /* tex_mode 3: flat mask -- flat color, no lighting */
     "  if (u_tex_mode > 2.5 && u_tex_mode < 3.5) {\n"
     "    gl_FragColor = u_color;\n"
     "    return;\n"
     "  }\n"
-    /* tex_mode 2: lit 3D blit — sample mask texture, apply lighting.
+    /* tex_mode 2: lit 3D blit -- sample mask texture, apply lighting.
      * UV from world position: maps (x,z) through ortho projection to mask texture coords. */
     "  if (u_tex_mode > 1.5 && u_tex_mode < 2.5) {\n"
     "    vec2 uv = vec2(v_world_pos.x * u_mask_scale.x + 0.5,\n"
@@ -406,7 +406,7 @@ static const char *k_frag_src_body =
     "}\n";
 
 /* ================================================================
- * Vertex buffer — interleaved pos(3) + normal(3), 6 floats/vert
+ * Vertex buffer -- interleaved pos(3) + normal(3), 6 floats/vert
  * ================================================================ */
 
 #define MAX_VERTS 1200
@@ -653,12 +653,12 @@ int render_init(int fb_width, int fb_height) {
     glDepthFunc(GL_LEQUAL);
     glDisable(GL_DITHER);
 #ifdef GL_MULTISAMPLE
-    glEnable(GL_MULTISAMPLE);   /* 4x MSAA — requested in platform init */
+    glEnable(GL_MULTISAMPLE);   /* 4x MSAA -- requested in platform init */
 #endif
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    /* Save default framebuffer — may not be 0 on macOS with MSAA */
+    /* Save default framebuffer -- may not be 0 on macOS with MSAA */
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &g_default_fbo);
     fbos_init(fb_width, fb_height);
 
@@ -757,15 +757,15 @@ static void sync_camera_uniforms(void) {
         mat4_ortho(proj, -g_mask_half_w, g_mask_half_w,
                    -g_mask_half_h, g_mask_half_h, 0.1f, 20.0f);
         mat4_zero(view);
-        view[0]  =  1.0f;   /* x → x */
-        view[9]  =  1.0f;   /* z → y_screen */
+        view[0]  =  1.0f;   /* x -> x */
+        view[9]  =  1.0f;   /* z -> y_screen */
         view[13] =  0.0f;
-        view[6]  =  1.0f;   /* y → z_depth */
+        view[6]  =  1.0f;   /* y -> z_depth */
         view[14] = -5.0f;   /* push into view */
         view[15] =  1.0f;
         mat4_mul(g_mvp_ortho_2d, proj, view);
 
-        /* mask_scale: maps world (x,z) → mask UV (0..1).
+        /* mask_scale: maps world (x,z) -> mask UV (0..1).
          * UV = world_coord * scale + 0.5 */
         glUniform2f(g_uni_mask_scale, 0.5f / g_mask_half_w, 0.5f / g_mask_half_h);
     }
@@ -803,7 +803,7 @@ static void sync_camera_uniforms(void) {
                 k_lighting_state.spec_color[1],
                 k_lighting_state.spec_color[2]);
 
-    /* Camera eye position for specular/rim — lerp between modes */
+    /* Camera eye position for specular/rim -- lerp between modes */
     glUniform3f(g_uni_eye,
                 eye_x * ts + 0.0f * (1.0f - ts),
                 CAM_EYE_Y * ts + 5.0f * (1.0f - ts),
@@ -905,7 +905,7 @@ void render_set_mask_append(int append) {
 
 void render_set_camera_pan(float x, float y) {
     g_cam_pan_x = x;
-    g_cam_pan_z = y;  /* maneuver y → 3D z */
+    g_cam_pan_z = y;  /* maneuver y -> 3D z */
 }
 
 void render_set_camera_rotation(float angle_rad) {
@@ -989,10 +989,10 @@ void render_sprite_flag(float x, float y, float size, int frame) {
 
     float fx0 = x - pole_u * sprite_w;
     float fx1 = fx0 + sprite_w;
-    float z = y;              /* maneuver y → world z (depth) */
+    float z = y;              /* maneuver y -> world z (depth) */
 
-    /* 3D (perspective): vertical — rises in world Y at fixed z.
-     * 2D (ortho):       horizontal — lies flat, extends in +z at ground level.
+    /* 3D (perspective): vertical -- rises in world Y at fixed z.
+     * 2D (ortho):       horizontal -- lies flat, extends in +z at ground level.
      * g_persp_t: 1.0 = perspective (vertical), 0.0 = ortho (horizontal).
      * Apply same quintic ease-in-out (smootherstep) as camera. */
     float t = g_persp_t;
@@ -1074,7 +1074,7 @@ void render_shutdown(void) {
 }
 
 /* ================================================================
- * Mask rendering — begin/end for each mask layer
+ * Mask rendering -- begin/end for each mask layer
  *
  * Sets up: FBO bound, flat 2D ortho MVP, tex_mode=3 (flat color),
  * no depth test, no blending, overwrite mode.
@@ -1104,8 +1104,8 @@ static void end_mask(void) {
 
 /* Apply a 2D rigid transform to the mask MVP (for rendering a second maneuver).
  * Modifies g_mvp_ortho_2d so that begin_mask picks up the transform.
- * Maneuver (x,y) → rotated by (cos_r,sin_r) then translated by (tx,ty).
- * In 3D: maneuver x→world x, maneuver y→world z. */
+ * Maneuver (x,y) -> rotated by (cos_r,sin_r) then translated by (tx,ty).
+ * In 3D: maneuver x->world x, maneuver y->world z. */
 static float g_mvp_ortho_2d_saved[16];
 
 void render_push_mask_transform(float tx, float ty, float cos_r, float sin_r) {
@@ -1133,7 +1133,7 @@ void render_pop_mask_transform(void) {
     memcpy(g_mvp_ortho_2d, g_mvp_ortho_2d_saved, sizeof(g_mvp_ortho_2d));
 }
 
-/* Resume mask — bind without clearing (append to existing mask content) */
+/* Resume mask -- bind without clearing (append to existing mask content) */
 static void resume_mask(int fbo_idx) {
     fbo_bind_noclear(fbo_idx);
     glDisable(GL_BLEND);
@@ -1159,11 +1159,11 @@ void render_begin_route_mask(void) { begin_mask(FBO_ROUTE); }
 void render_end_route_mask(void)   { end_mask(); }
 
 /* ================================================================
- * Composite pipeline — single-FBO painter's algorithm
+ * Composite pipeline -- single-FBO painter's algorithm
  *
  * FBO_ROAD contains white outline + grey fill (painter's algorithm).
  * tex_mode 7 reads FBO RGB as diffuse base color for lighting.
- * No subtraction needed — border/fill distinction is baked into FBO colors.
+ * No subtraction needed -- border/fill distinction is baked into FBO colors.
  * ================================================================ */
 
 /* Render a 3D ground-plane quad textured with a mask FBO.
@@ -1213,7 +1213,7 @@ void render_composite(void) {
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     /* Layer 1: Road (combined outline+fill via painter's algorithm).
-     * tex_mode 7 reads FBO RGB as base color — white border gets paint-like shading,
+     * tex_mode 7 reads FBO RGB as base color -- white border gets paint-like shading,
      * grey fill gets asphalt-like shading, all with one material preset. */
     composite_layer_ex(FBO_ROAD, 0.0f, RENDER_MAT_ROAD_ASPHALT, 7.0f);
 
@@ -1250,7 +1250,7 @@ void render_composite(void) {
 }
 
 /* ================================================================
- * 3D Primitives — extrude 2D shapes into boxes/prisms
+ * 3D Primitives -- extrude 2D shapes into boxes/prisms
  *
  * All functions take 2D coordinates (x, y_2d).
  * In mask mode (tex_mode=3): flat 2D, y_2d maps to 3D z, y=0.
@@ -1262,7 +1262,7 @@ static float cur_top(void)  { return g_raised ? RAISE_BASE + EXTRUDE_H : 0.0f; }
 
 void render_thick_line(float x0, float y0, float x1, float y1, float thickness,
                        float r, float g, float b, float a) {
-    float z0 = y0, z1 = y1;          /* 2D y → 3D z */
+    float z0 = y0, z1 = y1;          /* 2D y -> 3D z */
     float bt = cur_base(), tp = cur_top();
     float dx = x1 - x0, dz = z1 - z0;
     float len = sqrtf(dx*dx + dz*dz);
@@ -1340,12 +1340,12 @@ void render_disc(float cx, float cy, float radius, int segments,
     if (segments > 64) segments = 64;
 
     float bt = cur_base(), tp = cur_top();
-    float cz = cy;   /* 2D y → 3D z */
+    float cz = cy;   /* 2D y -> 3D z */
     int i;
 
     vb_reset();
 
-    /* Top face — individual triangles */
+    /* Top face -- individual triangles */
     for (i = 0; i < segments; i++) {
         float a0 = 2.0f * (float)M_PI * i / segments;
         float a1 = 2.0f * (float)M_PI * (i + 1) / segments;
@@ -1383,7 +1383,7 @@ void render_arc(float cx, float cy, float radius, float thickness,
     float ri = radius - thickness * 0.5f;
     float ro = radius + thickness * 0.5f;
     float bt = cur_base(), tp = cur_top();
-    float cz = cy;   /* 2D y → 3D z */
+    float cz = cy;   /* 2D y -> 3D z */
     int i;
 
     vb_reset();
@@ -1437,7 +1437,7 @@ void render_rect(float x, float y, float w, float h_rect,
     vb_flush(r, g, b, a);
 }
 
-/* Legacy stub pass API — kept for compatibility but now uses mask pipeline */
+/* Legacy stub pass API -- kept for compatibility but now uses mask pipeline */
 void render_begin_stubs(void) {
     begin_mask(FBO_OUTLINE);
 }

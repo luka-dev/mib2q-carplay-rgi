@@ -31,8 +31,8 @@
  * Engine state machine
  *
  * IDLE:       showing current maneuver, slide=1.0
- * PUSHING:    slide 1→2, current pushes out + next slides in
- * SLIDING_IN: commit next→current, slide 0→1
+ * PUSHING:    slide 1->2, current pushes out + next slides in
+ * SLIDING_IN: commit next->current, slide 0->1
  * ================================================================ */
 
 typedef enum {
@@ -67,7 +67,7 @@ static float g_bargraph_alpha = 0.0f;  /* fade in/out */
 static int   g_bargraph_blink_vis = 1;  /* blink phase: 1=show, 0=hide */
 static int   g_bargraph_blink_timer = 0;
 #define BARGRAPH_BLINK_FRAMES (int)(0.6f * TARGET_FPS)  /* 600ms */
-/* Deferred bargraph from maneuver payload — applied when transition settles */
+/* Deferred bargraph from maneuver payload -- applied when transition settles */
 static int   g_bargraph_deferred = 0;
 static int   g_bargraph_deferred_level = 0;
 static int   g_bargraph_deferred_mode = 0;
@@ -118,7 +118,7 @@ static void engine_apply_maneuver(const maneuver_state_t *state) {
         return;
     }
 
-    /* IDLE: store as next, start push — fade out bargraph, restore 3D */
+    /* IDLE: store as next, start push -- fade out bargraph, restore 3D */
     g_engine.next = *state;
     g_engine.has_next = 1;
     g_bargraph_on = 0;
@@ -135,7 +135,7 @@ static void engine_tick(void) {
     switch (g_engine.phase) {
     case ENGINE_PUSHING:
         if (!maneuver_is_pushing()) {
-            /* Push complete — commit next as current */
+            /* Push complete -- commit next as current */
             if (g_engine.has_next) {
                 g_engine.current = g_engine.next;
                 g_engine.has_next = 0;
@@ -145,7 +145,7 @@ static void engine_tick(void) {
             g_engine.dirty = 1;
 
             if (g_engine.has_pending) {
-                /* Promote pending → next, immediately start new push */
+                /* Promote pending -> next, immediately start new push */
                 g_engine.next = g_engine.pending;
                 g_engine.has_next = 1;
                 g_engine.has_pending = 0;
@@ -161,7 +161,7 @@ static void engine_tick(void) {
     case ENGINE_SLIDING_IN:
         if (!maneuver_is_animating()) {
             if (g_engine.has_pending) {
-                /* Promote pending → next, start push */
+                /* Promote pending -> next, start push */
                 g_engine.next = g_engine.pending;
                 g_engine.has_next = 1;
                 g_engine.has_pending = 0;
@@ -193,7 +193,7 @@ static void engine_tick(void) {
 }
 
 /* ================================================================
- * Screenshot — save framebuffer as PPM
+ * Screenshot -- save framebuffer as PPM
  * ================================================================ */
 
 static int g_snap_counter = 0;

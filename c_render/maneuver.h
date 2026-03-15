@@ -1,8 +1,8 @@
 /*
  * Maneuver icon rendering for CarPlay cluster widget.
  *
- * Collapsed icon types — one per unique visual icon.
- * iOS ManeuverType → ICON_* mapping done externally.
+ * Collapsed icon types -- one per unique visual icon.
+ * iOS ManeuverType -> ICON_* mapping done externally.
  *
  * junction_angles[] serves double duty:
  *   ICON_TURN / ICON_APPROACH: side street angles at the junction
@@ -65,9 +65,9 @@ void maneuver_set_slide(float t);     /* set slide manually (stops auto-anim) */
 float maneuver_get_slide(void);       /* get current slide value */
 
 /* Push-out transition: slide the blue path forward through the exit.
- * On completion, maneuver_is_pushing() returns 0 — caller should then
+ * On completion, maneuver_is_pushing() returns 0 -- caller should then
  * switch to new maneuver state and call maneuver_start_anim(). */
-void maneuver_start_push(void);       /* begin push-out (slide 1→2) */
+void maneuver_start_push(void);       /* begin push-out (slide 1->2) */
 int  maneuver_is_pushing(void);       /* 1 while push-out running */
 void maneuver_commit_pushed_state(const maneuver_state_t *state);
 

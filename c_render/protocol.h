@@ -14,7 +14,7 @@
 #define CR_PKT_SIZE         48
 
 /* Command IDs */
-#define CMD_MANEUVER     0x01    /* New maneuver — engine transitions automatically */
+#define CMD_MANEUVER     0x01    /* New maneuver -- engine transitions automatically */
 #define CMD_SCREENSHOT   0x02    /* Save framebuffer as PPM */
 #define CMD_SHUTDOWN     0x03    /* Graceful exit */
 #define CMD_PERSPECTIVE  0x04    /* Perspective: payload[0] = 0 (off) / 1 (on) */

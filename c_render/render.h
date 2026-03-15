@@ -1,5 +1,5 @@
 /*
- * OpenGL rendering — shared between macOS and QNX.
+ * OpenGL rendering -- shared between macOS and QNX.
  * Uses GLES2-compatible subset (shaders, no fixed-function).
  */
 
@@ -20,7 +20,7 @@ typedef enum {
  * Call after platform_init(). Returns 0 on success. */
 int render_init(int fb_width, int fb_height);
 
-/* Begin frame — clear screen. */
+/* Begin frame -- clear screen. */
 void render_begin_frame(void);
 
 /* Draw a colored rectangle in NDC coordinates. */
@@ -61,7 +61,7 @@ void render_arc(float cx, float cy, float radius, float thickness,
 void render_circle(float cx, float cy, float radius, float thickness, int segments,
                    float r, float g, float b, float a);
 
-/* Toggle perspective on/off. enabled=0 → flat (no perspective). */
+/* Toggle perspective on/off. enabled=0 -> flat (no perspective). */
 void render_set_perspective(int enabled);
 
 /* Set camera pan offset in maneuver space (shifts entire scene). */
@@ -82,7 +82,7 @@ void render_set_material(render_material_t material);
 /* Returns 1 if a transition animation is in progress. */
 int render_is_animating(void);
 
-/* Toggle 3D extrusion. raised=1 → extruded, raised=0 → flat on ground. */
+/* Toggle 3D extrusion. raised=1 -> extruded, raised=0 -> flat on ground. */
 void render_set_raised(int raised);
 
 /* Set global opacity (0.0=invisible, 1.0=fully opaque). For fade-in. */
@@ -96,8 +96,8 @@ void render_bargraph(int level, float alpha);
  * Single-FBO painter's algorithm mask rendering API
  *
  * 2 mask FBOs rendered in flat 2D (no lighting, no perspective):
- *   ROAD  — white outline first, grey fill on top (painter's algorithm)
- *   ROUTE — blue active route
+ *   ROAD  -- white outline first, grey fill on top (painter's algorithm)
+ *   ROUTE -- blue active route
  *
  * Compositing applies materials and perspective (no subtraction).
  * ================================================================ */
@@ -109,14 +109,14 @@ void render_end_outline_mask(void);
 void render_begin_fill_mask(void);      /* resume FBO_ROAD (no clear), ortho 2D */
 void render_end_fill_mask(void);
 
-/* Resume masks — bind without clearing (append content to existing mask) */
+/* Resume masks -- bind without clearing (append content to existing mask) */
 void render_resume_outline_mask(void);
 void render_resume_fill_mask(void);
 
 void render_begin_route_mask(void);     /* bind FBO_ROUTE, ortho 2D, flat blue */
 void render_end_route_mask(void);
 
-/* Composite masks → screen with subtraction, materials, perspective */
+/* Composite masks -> screen with subtraction, materials, perspective */
 void render_composite(void);
 
 /* Mark masks as needing re-render (call on maneuver state change) */
@@ -132,7 +132,7 @@ void render_set_mask_append(int append);
 /* Returns 1 if masks need re-rendering */
 int render_masks_dirty(void);
 
-/* Legacy stub pass API — redirects to outline mask internally */
+/* Legacy stub pass API -- redirects to outline mask internally */
 void render_begin_stubs(void);
 void render_end_stubs(void);
 
@@ -149,7 +149,7 @@ int render_load_flag_atlas(const char *path, int frame_w, int frame_h, int frame
 void render_sprite_flag(float x, float y, float size, int frame);
 
 /* ================================================================
- * Vertex buffer — exposed for route_path.c mesh drawing
+ * Vertex buffer -- exposed for route_path.c mesh drawing
  * ================================================================ */
 
 void vb_reset(void);

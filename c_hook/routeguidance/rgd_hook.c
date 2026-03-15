@@ -3,8 +3,83 @@
  */
 
 #include "rgd_hook.h"
+#include <sys/wait.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 DEFINE_LOG_MODULE(RGD);
+
+/* ================================================================
+ * Cluster renderer process management
+ * ================================================================ */
+
+#define CR_BINARY_PATH  "/mnt/app/root/hooks/c_render"
+
+static pid_t g_renderer_pid = -1;
+
+static void renderer_start(void) {
+    if (g_renderer_pid > 0) return;  /* Already running */
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        LOG_ERROR(LOG_MODULE, "renderer: fork failed: %s", strerror(errno));
+        return;
+    }
+
+    if (pid == 0) {
+        /* Child process */
+        execl(CR_BINARY_PATH, "c_render", (char *)NULL);
+        /* If exec fails, try relative path */
+        execl("./c_render", "c_render", (char *)NULL);
+        _exit(127);
+    }
+
+    g_renderer_pid = pid;
+    LOG_INFO(LOG_MODULE, "renderer: started pid=%d", (int)pid);
+}
+
+static void renderer_stop(void) {
+    if (g_renderer_pid <= 0) return;
+
+    /* Send TCP CMD_SHUTDOWN (48-byte packet, protocol.h) for graceful exit.
+     * Java's RendererClient handles primary shutdown; this is the C-side backstop. */
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock >= 0) {
+        struct sockaddr_in addr;
+        memset(&addr, 0, sizeof(addr));
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons(19800);
+        addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+        if (connect(sock, (struct sockaddr *)&addr, sizeof(addr)) == 0) {
+            uint8_t pkt[48];
+            memset(pkt, 0, sizeof(pkt));
+            pkt[0] = 0x03; /* CMD_SHUTDOWN */
+            send(sock, pkt, sizeof(pkt), 0);
+        }
+        close(sock);
+    }
+
+    /* Give it a moment to exit gracefully */
+    usleep(200000); /* 200ms */
+
+    /* Check if still running, force kill if needed */
+    int status;
+    pid_t ret = waitpid(g_renderer_pid, &status, WNOHANG);
+    if (ret == 0) {
+        /* Still running, send SIGTERM */
+        kill(g_renderer_pid, SIGTERM);
+        usleep(100000);
+        ret = waitpid(g_renderer_pid, &status, WNOHANG);
+        if (ret == 0) {
+            kill(g_renderer_pid, SIGKILL);
+            waitpid(g_renderer_pid, &status, 0);
+        }
+    }
+
+    LOG_INFO(LOG_MODULE, "renderer: stopped pid=%d", (int)g_renderer_pid);
+    g_renderer_pid = -1;
+}
 
 /* Module state */
 static struct {
@@ -175,7 +250,7 @@ static int rgd_min_current_index(void) {
 
 /*
  * Helper: check if a lane guidance index has a corresponding cached maneuver.
- * iOS uses the same index space for maneuvers and lane guidance — lane idx N
+ * iOS uses the same index space for maneuvers and lane guidance -- lane idx N
  * corresponds to maneuver idx N. Accept 0x5204 updates when the maneuver
  * exists in our slot cache, even if the index is below the current
  * ManeuverList minimum (which may be stale from a previous route).
@@ -801,6 +876,9 @@ static void write_pps_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* 
 }
 
 void rgd_clear_state(const char* reason) {
+    /* Stop cluster renderer on disconnect/shutdown */
+    renderer_stop();
+
     g_rgd.active = false;
     g_rgd.sent_5200 = false;
     g_rgd.sent_5203 = false;
@@ -941,6 +1019,10 @@ static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) 
             g_rgd.last_route_state = upd.route_state;
             if (upd.route_state == 0) {
                 rgd_update_cache_reset();
+            }
+            /* Start renderer when route guidance becomes active */
+            if (upd.route_state >= RGD_STATE_ROUTE_SET && g_renderer_pid <= 0) {
+                renderer_start();
             }
         }
         write_pps_update_partial(&upd);

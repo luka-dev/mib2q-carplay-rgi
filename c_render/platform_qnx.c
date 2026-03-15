@@ -1,5 +1,5 @@
 /*
- * QNX platform implementation — libdisplayinit.so + EGL + GLES2
+ * QNX platform implementation -- libdisplayinit.so + EGL + GLES2
  *
  * Creates a displayable on the HU display manager and sets up
  * EGL/GLES2 for rendering. Uses dmdt for context routing.

@@ -1,5 +1,5 @@
 /*
- * Route path — segment-based path + 3D mesh extrusion.
+ * Route path -- segment-based path + 3D mesh extrusion.
  *
  * Builds a polyline from LINE/ARC segments, then extrudes it as a
  * single continuous stroked mesh with a top face, side walls, and
@@ -10,7 +10,7 @@
  * finished with rounded sectors on both sides of the joint, so turns and
  * roundabout entry/exit corners stay consistently rounded.
  *
- * 2D (x, y) → 3D (x, height, z=y).
+ * 2D (x, y) -> 3D (x, height, z=y).
  */
 
 #include <math.h>
@@ -22,8 +22,8 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-#define ARC_STEP_DEG 3.0f   /* densify arcs at ~3° per point */
-#define JOIN_MIN_ANGLE 0.03f /* ~1.7° — skip join for tiny direction changes */
+#define ARC_STEP_DEG 3.0f   /* densify arcs at ~3deg per point */
+#define JOIN_MIN_ANGLE 0.03f /* ~1.7deg -- skip join for tiny direction changes */
 #define MITER_LIMIT 3.0f    /* max miter length / half-width ratio */
 
 /* ================================================================
@@ -92,7 +92,7 @@ void rpath_densify(route_path_t *p) {
             add_pt(p, s->x0, s->y0, 0);
             add_pt(p, s->x1, s->y1, 0);
         } else {
-            /* Arc — emit points at ARC_STEP_DEG intervals */
+            /* Arc -- emit points at ARC_STEP_DEG intervals */
             float sweep = s->end_rad - s->start_rad;
             float abs_sweep = fabsf(sweep);
             float step_rad = ARC_STEP_DEG * (float)M_PI / 180.0f;
@@ -121,7 +121,7 @@ void rpath_densify(route_path_t *p) {
 }
 
 /* ================================================================
- * Mesh extrusion — stroked strip with rounded hard corners
+ * Mesh extrusion -- stroked strip with rounded hard corners
  *
  * For each polyline segment: top face quad + 2 side wall quads.
  * Smooth arc samples resolve to shared offsets so dense curves stay
@@ -205,8 +205,8 @@ static void emit_round_join(route_mesh_t *m,
         }
     }
 
-    /* Spoke walls — close the straight edges of the fan (anchor → first/last arc point).
-     * Without these, sharp corners (>90°) show a visible gap in the side wall.
+    /* Spoke walls -- close the straight edges of the fan (anchor -> first/last arc point).
+     * Without these, sharp corners (>90deg) show a visible gap in the side wall.
      * Normal is chosen perpendicular to spoke, pointing AWAY from fan interior
      * (determined by dotting candidate normal with the fan midpoint direction). */
     {
@@ -214,7 +214,7 @@ static void emit_round_join(route_mesh_t *m,
         float fan_dx = cosf(mid_ang), fan_dz = sinf(mid_ang);
         float dx, dz, len, na_x, na_z, wn_x, wn_z;
 
-        /* First spoke: anchor → first outer point */
+        /* First spoke: anchor -> first outer point */
         dx = first_ox - anchor_x; dz = first_oz - anchor_z;
         len = sqrtf(dx * dx + dz * dz);
         if (len > 1e-6f) {
@@ -229,7 +229,7 @@ static void emit_round_join(route_mesh_t *m,
                       wn_x, 0, wn_z);
         }
 
-        /* Last spoke: last outer point → anchor */
+        /* Last spoke: last outer point -> anchor */
         dx = anchor_x - last_ox; dz = anchor_z - last_oz;
         len = sqrtf(dx * dx + dz * dz);
         if (len > 1e-6f) {
@@ -348,7 +348,7 @@ void rpath_extrude(const route_path_t *p, route_mesh_t *m,
         float len = sqrtf(dx*dx + dy*dy);
         if (len < 1e-6f) { dir_x[i] = 1; dir_y[i] = 0; }
         else { dir_x[i] = dx/len; dir_y[i] = dy/len; }
-        /* Left perpendicular (rotate direction 90° CCW) */
+        /* Left perpendicular (rotate direction 90deg CCW) */
         perp_x[i] = -dir_y[i] * hw;
         perp_y[i] =  dir_x[i] * hw;
     }
@@ -365,11 +365,11 @@ void rpath_extrude(const route_path_t *p, route_mesh_t *m,
     float lx[RPATH_MAX_PTS], ly[RPATH_MAX_PTS];
     float rx[RPATH_MAX_PTS], ry[RPATH_MAX_PTS];
 
-    /* First vertex — use segment 0's perpendicular */
+    /* First vertex -- use segment 0's perpendicular */
     lx[0] = epx[0] + perp_x[0]; ly[0] = epy[0] + perp_y[0];
     rx[0] = epx[0] - perp_x[0]; ry[0] = epy[0] - perp_y[0];
 
-    /* Last vertex — use last segment's perpendicular */
+    /* Last vertex -- use last segment's perpendicular */
     {
         int last_seg = n_pts - 2;
         lx[n_pts-1] = epx[n_pts-1] + perp_x[last_seg];
@@ -390,7 +390,7 @@ void rpath_extrude(const route_path_t *p, route_mesh_t *m,
         hard_corner[i] = (unsigned char)((!esmooth[i] && fabsf(cross) >= JOIN_MIN_ANGLE) ? 1 : 0);
 
         if (ml < 1e-6f || fabsf(cross) < JOIN_MIN_ANGLE) {
-            /* Nearly straight — use the previous segment's perpendicular. */
+            /* Nearly straight -- use the previous segment's perpendicular. */
             lx[i] = epx[i] + perp_x[seg_prev]; ly[i] = epy[i] + perp_y[seg_prev];
             rx[i] = epx[i] - perp_x[seg_prev]; ry[i] = epy[i] - perp_y[seg_prev];
         } else {
@@ -450,7 +450,7 @@ void rpath_extrude(const route_path_t *p, route_mesh_t *m,
             r1x = rx[i + 1]; r1y = ry[i + 1];
         }
 
-        /* Map 2D y → 3D z */
+        /* Map 2D y -> 3D z */
         float z_l0 = l0y, z_l1 = l1y, z_r0 = r0y, z_r1 = r1y;
 
         /* Side normal from this segment's perpendicular */
@@ -608,7 +608,7 @@ void rpath_extrude(const route_path_t *p, route_mesh_t *m,
 }
 
 /* ================================================================
- * Transform + append — for chaining maneuver route paths
+ * Transform + append -- for chaining maneuver route paths
  * ================================================================ */
 
 void rpath_xform_append(route_path_t *dst, const route_path_t *src,
@@ -636,7 +636,7 @@ void rpath_xform_append(route_path_t *dst, const route_path_t *src,
 }
 
 /* ================================================================
- * Debug overlay — polyline + active window highlight
+ * Debug overlay -- polyline + active window highlight
  * ================================================================ */
 
 void rpath_draw_debug(const route_path_t *p, float t0, float t1) {
@@ -668,7 +668,7 @@ void rpath_draw_debug(const route_path_t *p, float t0, float t1) {
 }
 
 /* ================================================================
- * Drawing — uses render.c vertex buffer + flush
+ * Drawing -- uses render.c vertex buffer + flush
  * ================================================================ */
 
 void rpath_draw(const route_mesh_t *m,
