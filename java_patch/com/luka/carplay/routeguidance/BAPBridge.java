@@ -968,9 +968,13 @@ public class BAPBridge {
                 continue;
             }
             byte[] laneSideStreets = mapLaneSideStreets(s, idx, i, laneDir);
+            byte gi = mapGuidanceInfo(s, idx, i);
+            Log.d(TAG, "  lane[" + i + "] pos=" + lanePos + " dir=0x"
+                + Integer.toHexString(laneDir & 0xFF) + " gi=" + gi
+                + " sideStreets=" + hexBytes(laneSideStreets));
             tmp[out++] = new CombiBAPNaviLaneGuidanceData(
                 lanePos, laneDir, laneSideStreets, (short) 0,
-                (byte) 0, (byte) 0, (byte) 0, mapGuidanceInfo(s, idx, i));
+                (byte) 0, (byte) 0, (byte) 0, gi);
         }
 
         if (out <= 0) {
@@ -1561,6 +1565,18 @@ public class BAPBridge {
             if ("JP".equals(c) || "CN".equals(c) || "KR".equals(c) || "TW".equals(c)) return EXITVIEW_ASIA;
         }
         return EXITVIEW_EU;
+    }
+
+    private static String hexBytes(byte[] b) {
+        if (b == null || b.length == 0) return "[]";
+        StringBuffer sb = new StringBuffer("[");
+        for (int i = 0; i < b.length; i++) {
+            if (i > 0) sb.append(",");
+            sb.append("0x");
+            sb.append(Integer.toHexString(b[i] & 0xFF));
+        }
+        sb.append("]");
+        return sb.toString();
     }
 
     private static String limitUtf8(String s, int maxBytes) {
