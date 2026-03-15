@@ -88,6 +88,10 @@ void render_set_raised(int raised);
 /* Set global opacity (0.0=invisible, 1.0=fully opaque). For fade-in. */
 void render_set_global_alpha(float alpha);
 
+/* Draw bargraph overlay (2D screen-space, call after 3D scene).
+ * level: 0-16 (0=empty, 16=full). */
+void render_bargraph(int level, float alpha);
+
 /* ================================================================
  * Single-FBO painter's algorithm mask rendering API
  *

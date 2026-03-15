@@ -19,6 +19,7 @@
 #define CMD_SHUTDOWN     0x03    /* Graceful exit */
 #define CMD_PERSPECTIVE  0x04    /* Perspective: payload[0] = 0 (off) / 1 (on) */
 #define CMD_DEBUG        0x05    /* Toggle debug overlay */
+#define CMD_BARGRAPH     0x06    /* Bargraph: payload[0]=level(0-16), payload[1]=on/off */
 
 /* 48-byte command packet */
 typedef struct {
@@ -35,9 +36,14 @@ typedef struct {
  *   [4]      u8   driving_side (0=RHT, 1=LHT)
  *   [5]      u8   junction_count (0..20)
  *   [6..45]  i16  junction_angles[] (big-endian, up to 20)
+ *
+ * Optional (when MAN_FLAG_BARGRAPH set):
+ *   [44]     u8   bargraph_level (0..16)
+ *   [45]     u8   bargraph_mode  (0=off, 1=on, 2=blink)
  */
 /* CMD_MANEUVER flags (in cr_cmd_t.flags) */
 #define MAN_FLAG_RESET_PERSP  0x01    /* Reset perspective to default (on) */
+#define MAN_FLAG_BARGRAPH     0x02    /* Bargraph data in payload[44..45] */
 
 #define CR_MAN_ICON(p)          ((p)[0])
 #define CR_MAN_DIRECTION(p)     ((int8_t)(p)[1])

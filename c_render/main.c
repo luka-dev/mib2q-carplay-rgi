@@ -59,6 +59,19 @@ static float g_fade_alpha = 1.0f;
 static int   g_fade_active = 0;
 #define FADE_SPEED 0.04f  /* per-frame step (~0.8s at 30fps) */
 
+/* Bargraph overlay */
+static int   g_bargraph_on = 0;     /* 0=off, 1=on, 2=blink */
+static int   g_bargraph_level = 0;  /* 0..16 */
+static float g_bargraph_alpha = 0.0f;  /* fade in/out */
+#define BARGRAPH_FADE_SPEED 0.06f      /* per-frame (~0.55s at 30fps) */
+static int   g_bargraph_blink_vis = 1;  /* blink phase: 1=show, 0=hide */
+static int   g_bargraph_blink_timer = 0;
+#define BARGRAPH_BLINK_FRAMES (int)(0.6f * TARGET_FPS)  /* 600ms */
+/* Deferred bargraph from maneuver payload — applied when transition settles */
+static int   g_bargraph_deferred = 0;
+static int   g_bargraph_deferred_level = 0;
+static int   g_bargraph_deferred_mode = 0;
+
 /* Decode CMD_MANEUVER payload into maneuver_state_t */
 static void decode_maneuver(const cr_cmd_t *cmd, maneuver_state_t *out) {
     const uint8_t *p = cmd->payload;
@@ -105,9 +118,11 @@ static void engine_apply_maneuver(const maneuver_state_t *state) {
         return;
     }
 
-    /* IDLE: store as next, start push */
+    /* IDLE: store as next, start push — fade out bargraph, restore 3D */
     g_engine.next = *state;
     g_engine.has_next = 1;
+    g_bargraph_on = 0;
+    render_set_perspective(1);
     maneuver_start_push();
     g_engine.phase = ENGINE_PUSHING;
     render_invalidate_masks();
@@ -158,6 +173,17 @@ static void engine_tick(void) {
                         g_engine.next.icon);
             } else {
                 g_engine.phase = ENGINE_IDLE;
+                /* Apply deferred bargraph when settled */
+                if (g_bargraph_deferred) {
+                    g_bargraph_level = g_bargraph_deferred_level;
+                    g_bargraph_on = g_bargraph_deferred_mode;
+                    if (g_bargraph_on == 2) {
+                        g_bargraph_blink_vis = 1;
+                        g_bargraph_blink_timer = 0;
+                    }
+                    g_bargraph_deferred = 0;
+                    g_engine.dirty = 1;
+                }
             }
         }
         break;
@@ -263,6 +289,8 @@ int main(int argc, char **argv) {
         int got_maneuver = 0;
         maneuver_state_t pending_maneuver;
         uint8_t pending_flags = 0;
+        uint8_t pending_bargraph_level = 0;
+        uint8_t pending_bargraph_mode = 0;
         int got_screenshot = 0;
         char screenshot_label[17];
 
@@ -271,6 +299,8 @@ int main(int argc, char **argv) {
             case CMD_MANEUVER: {
                 decode_maneuver(&cmd, &pending_maneuver);
                 pending_flags = cmd.flags;
+                pending_bargraph_level = cmd.payload[44];
+                pending_bargraph_mode = cmd.payload[45];
                 got_maneuver = 1;
                 break;
             }
@@ -292,6 +322,19 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "engine: debug=%s\n", maneuver_is_debug() ? "ON" : "OFF");
                 g_engine.dirty = 1;
                 break;
+            case CMD_BARGRAPH:
+                g_bargraph_level = cmd.payload[0];
+                if (g_bargraph_level > 16) g_bargraph_level = 16;
+                g_bargraph_on = cmd.payload[1];  /* 0=off, 1=on, 2=blink */
+                if (g_bargraph_on > 2) g_bargraph_on = 1;
+                if (g_bargraph_on == 2) {
+                    g_bargraph_blink_vis = 1;
+                    g_bargraph_blink_timer = 0;
+                }
+                g_engine.dirty = 1;
+                fprintf(stderr, "engine: bargraph level=%d on=%d\n",
+                        g_bargraph_level, g_bargraph_on);
+                break;
             case CMD_SHUTDOWN:
                 fprintf(stderr, "engine: shutdown command received\n");
                 running = 0;
@@ -304,6 +347,13 @@ int main(int argc, char **argv) {
             if (pending_flags & MAN_FLAG_RESET_PERSP) {
                 render_set_perspective(1);
                 g_engine.dirty = 1;
+            }
+            if (pending_flags & MAN_FLAG_BARGRAPH) {
+                g_bargraph_deferred = 1;
+                g_bargraph_deferred_level = pending_bargraph_level;
+                if (g_bargraph_deferred_level > 16) g_bargraph_deferred_level = 16;
+                g_bargraph_deferred_mode = pending_bargraph_mode;
+                if (g_bargraph_deferred_mode > 2) g_bargraph_deferred_mode = 1;
             }
             engine_apply_maneuver(&pending_maneuver);
         }
@@ -337,11 +387,42 @@ int main(int argc, char **argv) {
             dirty = 1;
         g_engine.dirty = 0;
 
+        /* Bargraph alpha fade */
+        {
+            float target = (g_bargraph_on > 0) ? 1.0f : 0.0f;
+            if (g_bargraph_alpha < target) {
+                g_bargraph_alpha += BARGRAPH_FADE_SPEED;
+                if (g_bargraph_alpha > target) g_bargraph_alpha = target;
+                dirty = 1;
+            } else if (g_bargraph_alpha > target) {
+                g_bargraph_alpha -= BARGRAPH_FADE_SPEED;
+                if (g_bargraph_alpha < target) g_bargraph_alpha = target;
+                dirty = 1;
+            }
+        }
+
+        /* Bargraph blink tick */
+        if (g_bargraph_on == 2) {
+            g_bargraph_blink_timer++;
+            if (g_bargraph_blink_timer >= BARGRAPH_BLINK_FRAMES) {
+                g_bargraph_blink_timer = 0;
+                g_bargraph_blink_vis = !g_bargraph_blink_vis;
+                dirty = 1;
+            }
+        }
+
         if (dirty) {
             maneuver_state_t *next_ptr = g_engine.has_next ? &g_engine.next : NULL;
             maneuver_prepare_frame(&g_engine.current, next_ptr);
             render_begin_frame();
             maneuver_draw(&g_engine.current, next_ptr);
+            if (g_bargraph_alpha > 0.0f) {
+                float ba = g_bargraph_alpha * g_fade_alpha;
+                int bl = g_bargraph_level;
+                if (g_bargraph_on == 2 && !g_bargraph_blink_vis)
+                    bl = 0;
+                render_bargraph(bl, ba);
+            }
             render_end_frame();
 
             if (got_screenshot)
@@ -349,7 +430,9 @@ int main(int argc, char **argv) {
 
             platform_swap();
 
-            dirty = render_is_animating() || maneuver_is_animating() || g_fade_active;
+            dirty = render_is_animating() || maneuver_is_animating() || g_fade_active
+                 || g_bargraph_on == 2
+                 || (g_bargraph_alpha > 0.0f && g_bargraph_alpha < 1.0f);
         }
 
         /* Frame pacing */

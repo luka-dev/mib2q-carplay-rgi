@@ -825,6 +825,61 @@ void render_set_global_alpha(float alpha) {
     g_global_alpha = alpha;
 }
 
+void render_bargraph(int level, float alpha) {
+    /* 16 bars, scaled to full screen height, right side with gap.
+     * Original proportions: 7px bar, 2px gap, 14px wide. Scale to fill height. */
+    const int   N_BARS = 16;
+    const float PX     = 2.0f / 640.0f;
+    const float PY     = 2.0f / 400.0f;
+    const float MARGIN = 10.0f;           /* px from edge */
+    /* Original: 16*7 + 15*2 = 142px tall. Scale factor to fill 400-2*margin = 380px */
+    const float SCALE  = (400.0f - 2.0f * MARGIN) / 142.0f;
+    const float BAR_W  = 14.0f * SCALE * PX;
+    const float BAR_H  =  7.0f * SCALE * PY;
+    const float GAP    =  2.0f * SCALE * PY;
+    const float BAR_X  = 1.0f - MARGIN * PX - BAR_W;  /* right side */
+    float total_h = N_BARS * BAR_H + (N_BARS - 1) * GAP;
+    float base_y  = -total_h * 0.5f;
+    float identity[16];
+    int i;
+
+    memset(identity, 0, sizeof(identity));
+    identity[0] = identity[5] = identity[10] = identity[15] = 1.0f;
+
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glUniform1f(g_uni_tex_mode, 3.0f);
+    glUniformMatrix4fv(g_uni_mvp, 1, GL_FALSE, identity);
+    glUniform1f(g_uni_zbias, 0.0f);
+
+    /* level 0 = 0 bars blue, level 16 = 16 bars blue.
+     * Bars drawn bottom (i=0) to top (i=15). Top bar in image = bottom bar on screen. */
+    for (i = 0; i < N_BARS; i++) {
+        float y = base_y + i * (BAR_H + GAP);
+        float r, g, b;
+        int bar_idx = N_BARS - 1 - i;  /* image top = bar 0, screen bottom = bar 0 */
+        if (bar_idx < level) { r = 90.0f/255.0f; g = 170.0f/255.0f; b = 230.0f/255.0f; }
+        else                 { r = 100.0f/255.0f; g = 100.0f/255.0f; b = 100.0f/255.0f; }
+        glUniform4f(g_uni_color, r, g, b, alpha);
+        vb_reset();
+        vb_v(BAR_X,         y,         0, 0,0,1);
+        vb_v(BAR_X + BAR_W, y,         0, 0,0,1);
+        vb_v(BAR_X + BAR_W, y + BAR_H, 0, 0,0,1);
+        vb_v(BAR_X,         y,         0, 0,0,1);
+        vb_v(BAR_X + BAR_W, y + BAR_H, 0, 0,0,1);
+        vb_v(BAR_X,         y + BAR_H, 0, 0,0,1);
+        glVertexAttribPointer(g_attr_pos,  3, GL_FLOAT, GL_FALSE, 24, g_vbuf);
+        glVertexAttribPointer(g_attr_norm, 3, GL_FLOAT, GL_FALSE, 24, g_vbuf + 3);
+        glEnableVertexAttribArray(g_attr_pos);
+        glEnableVertexAttribArray(g_attr_norm);
+        glDrawArrays(GL_TRIANGLES, 0, g_vcount);
+    }
+
+    glEnable(GL_DEPTH_TEST);
+    glUniform1f(g_uni_tex_mode, 0.0f);
+}
+
 void render_sync_camera(void) {
     glUseProgram(g_program);
     sync_camera_uniforms();
