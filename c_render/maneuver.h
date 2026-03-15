@@ -5,7 +5,7 @@
  * iOS ManeuverType → ICON_* mapping done externally.
  *
  * junction_angles[] serves double duty:
- *   ICON_TURN / ICON_STRAIGHT: side street angles at the junction
+ *   ICON_TURN / ICON_APPROACH: side street angles at the junction
  *   ICON_ROUNDABOUT: all road angles around the ring
  */
 
@@ -16,7 +16,7 @@
 
 /* Renderer icon types */
 #define ICON_NONE        0   /* no icon / not set */
-#define ICON_STRAIGHT    1   /* straight ahead; junction_angles = side streets */
+#define ICON_APPROACH    1   /* approach junction; junction_angles = side streets */
 #define ICON_TURN        2   /* exit_angle = turn degrees; junction_angles = side streets */
 #define ICON_UTURN       3   /* direction from driving_side */
 #define ICON_MERGE       4   /* on-ramp; direction: 1=right, -1=left */

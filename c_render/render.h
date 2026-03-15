@@ -86,21 +86,20 @@ int render_is_animating(void);
 void render_set_raised(int raised);
 
 /* ================================================================
- * Multi-layer mask rendering API
+ * Single-FBO painter's algorithm mask rendering API
  *
- * 3 mask FBOs rendered in flat 2D (no lighting, no perspective):
- *   OUTLINE — white border lines
- *   FILL    — grey road fill
- *   ROUTE   — blue active route
+ * 2 mask FBOs rendered in flat 2D (no lighting, no perspective):
+ *   ROAD  — white outline first, grey fill on top (painter's algorithm)
+ *   ROUTE — blue active route
  *
- * Compositing applies subtraction, materials, and perspective.
+ * Compositing applies materials and perspective (no subtraction).
  * ================================================================ */
 
 /* Mask rendering passes */
 void render_begin_outline_mask(void);   /* bind FBO_OUTLINE, ortho 2D, flat white */
 void render_end_outline_mask(void);
 
-void render_begin_fill_mask(void);      /* bind FBO_FILL, ortho 2D, flat grey */
+void render_begin_fill_mask(void);      /* resume FBO_ROAD (no clear), ortho 2D */
 void render_end_fill_mask(void);
 
 /* Resume masks — bind without clearing (append content to existing mask) */

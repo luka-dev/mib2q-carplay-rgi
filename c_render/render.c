@@ -1,16 +1,15 @@
 /*
- * OpenGL rendering — multi-layer mask-based architecture.
+ * OpenGL rendering — single-FBO painter's algorithm architecture.
  *
- * 3 mask FBOs (flat 2D, no lighting):
- *   FBO_OUTLINE — white road borders
- *   FBO_FILL    — grey road fill
- *   FBO_ROUTE   — blue active route
- *   FBO_COMPOSITE — scratch for subtraction result
+ * 2 mask FBOs (flat 2D, no lighting):
+ *   FBO_ROAD  — combined road: white outline drawn first, grey fill on top
+ *               (painter's algorithm — fill overwrites interior, border remains)
+ *   FBO_ROUTE — blue active route
  *
  * Compositing pipeline:
- *   1. Subtract fill from outline → border-only ring in FBO_COMPOSITE
- *   2. Render 3D ground-plane quads textured with each mask, with perspective + lighting
- *   3. Layer order: fill (ground) → outline border → route (raised)
+ *   1. Render 3D ground-plane quad textured with road FBO (tex_mode 7 reads FBO RGB)
+ *   2. Route shadow on asphalt
+ *   3. Route mesh (extruded 3D)
  *
  * All maneuver coordinates remain 2D (x, y). Internally mapped to 3D:
  *   2D x → 3D x (left-right)
@@ -167,9 +166,6 @@ static GLint  g_uni_tex_mode = -1;
 static GLint  g_uni_tex      = -1;
 static GLint  g_uni_resolution = -1;
 static GLint  g_uni_mask_scale = -1;  /* vec2: 1/(2*hw), 1/(2*hh) for mask UV */
-static GLint  g_uni_point_light_pos = -1;
-static GLint  g_uni_point_light_color = -1;
-static GLint  g_uni_blur_dir = -1;
 
 static int   g_perspective = 1;   /* target: 0=ortho, 1=perspective */
 static float g_persp_t = 1.0f;   /* animated blend: 0.0=ortho, 1.0=perspective */
@@ -197,7 +193,10 @@ static float g_mvp_ortho_2d[16];   /* pure orthographic for mask rendering */
  * Multi-FBO system
  * ================================================================ */
 
-enum { FBO_OUTLINE = 0, FBO_FILL = 1, FBO_ROUTE = 2, FBO_COMPOSITE = 3, FBO_COUNT = 4 };
+enum { FBO_ROAD = 0, FBO_ROUTE = 1, FBO_COUNT = 2 };
+/* Legacy aliases for API compatibility */
+#define FBO_OUTLINE FBO_ROAD
+#define FBO_FILL    FBO_ROAD
 
 static GLuint g_fbos[FBO_COUNT];
 static GLuint g_fbo_texs[FBO_COUNT];
@@ -206,14 +205,7 @@ static int g_fbo_w = 0, g_fbo_h = 0;
 static GLint g_default_fbo = 0;  /* saved at init — may not be 0 on macOS */
 static float g_mask_half_w = 1.6f;
 static float g_mask_half_h = 1.0f;
-static int g_target_fbo_idx = -1;  /* -1 = default, else index into g_fbos */
 
-/* Scene FBO — full screen resolution (bloom source) */
-static GLuint g_scene_fbo = 0, g_scene_tex = 0, g_scene_depth = 0;
-
-/* Bloom FBOs — quarter resolution, ping-pong */
-static GLuint g_bloom_fbos[2] = {0, 0}, g_bloom_texs[2] = {0, 0};
-static int g_bloom_w = 0, g_bloom_h = 0;
 
 static const material_preset_t k_material_presets[RENDER_MAT_COUNT] = {
     [RENDER_MAT_GENERIC_SOLID] = {
@@ -286,9 +278,6 @@ static const char *k_frag_src_body =
     "uniform sampler2D u_tex;\n"
     "uniform vec2 u_resolution;\n"
     "uniform vec2 u_mask_scale;\n"
-    "uniform vec3 u_point_light_pos;\n"
-    "uniform vec3 u_point_light_color;\n"
-    "uniform vec2 u_blur_dir;\n"
     "varying vec3 v_normal;\n"
     "varying vec3 v_world_pos;\n"
     "vec3 tone_map(vec3 x) {\n"
@@ -382,30 +371,15 @@ static const char *k_frag_src_body =
     "    gl_FragColor = shade_surface(u_color, mask.a);\n"
     "    return;\n"
     "  }\n"
-    /* tex_mode 5: bloom bright-pass extraction */
-    "  if (u_tex_mode > 4.5 && u_tex_mode < 5.5) {\n"
-    "    vec2 uv = v_world_pos.xy * 0.5 + 0.5;\n"
-    "    vec4 col = texture2D(u_tex, uv);\n"
-    "    float luma = dot(col.rgb, vec3(0.2126, 0.7152, 0.0722));\n"
-    "    float contrib = smoothstep(0.22, 0.52, luma);\n"
-    "    gl_FragColor = vec4(col.rgb * contrib, 1.0);\n"
-    "    return;\n"
-    "  }\n"
-    /* tex_mode 6: separable gaussian blur (9-tap) */
-    "  if (u_tex_mode > 5.5 && u_tex_mode < 6.5) {\n"
-    "    vec2 uv = v_world_pos.xy * 0.5 + 0.5;\n"
-    "    vec2 texel = u_blur_dir / u_resolution;\n"
-    "    vec3 c = vec3(0.0);\n"
-    "    c += texture2D(u_tex, uv - 4.0 * texel).rgb * 0.0162;\n"
-    "    c += texture2D(u_tex, uv - 3.0 * texel).rgb * 0.0540;\n"
-    "    c += texture2D(u_tex, uv - 2.0 * texel).rgb * 0.1218;\n"
-    "    c += texture2D(u_tex, uv - 1.0 * texel).rgb * 0.1960;\n"
-    "    c += texture2D(u_tex, uv).rgb * 0.2240;\n"
-    "    c += texture2D(u_tex, uv + 1.0 * texel).rgb * 0.1960;\n"
-    "    c += texture2D(u_tex, uv + 2.0 * texel).rgb * 0.1218;\n"
-    "    c += texture2D(u_tex, uv + 3.0 * texel).rgb * 0.0540;\n"
-    "    c += texture2D(u_tex, uv + 4.0 * texel).rgb * 0.0162;\n"
-    "    gl_FragColor = vec4(c, 1.0);\n"
+    /* tex_mode 7: lit 3D blit with FBO color as base (painter's algorithm road FBO).
+     * Reads FBO RGB as diffuse base color, alpha as opacity. */
+    "  if (u_tex_mode > 6.5 && u_tex_mode < 7.5) {\n"
+    "    vec2 uv = vec2(v_world_pos.x * u_mask_scale.x + 0.5,\n"
+    "                    v_world_pos.z * u_mask_scale.y + 0.5);\n"
+    "    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) discard;\n"
+    "    vec4 mask = texture2D(u_tex, uv);\n"
+    "    if (mask.a < 0.01) discard;\n"
+    "    gl_FragColor = shade_surface(vec4(mask.rgb, 1.0), mask.a);\n"
     "    return;\n"
     "  }\n"
     /* tex_mode 9: route shadow (mask offset + darken) */
@@ -548,9 +522,6 @@ static int build_program(void) {
     g_uni_tex      = glGetUniformLocation(g_program, "u_tex");
     g_uni_resolution = glGetUniformLocation(g_program, "u_resolution");
     g_uni_mask_scale = glGetUniformLocation(g_program, "u_mask_scale");
-    g_uni_point_light_pos = glGetUniformLocation(g_program, "u_point_light_pos");
-    g_uni_point_light_color = glGetUniformLocation(g_program, "u_point_light_color");
-    g_uni_blur_dir = glGetUniformLocation(g_program, "u_blur_dir");
 
     glDeleteShader(vs);
     glDeleteShader(fs);
@@ -612,62 +583,6 @@ static void fbos_shutdown(void) {
     g_fbo_w = g_fbo_h = 0;
 }
 
-/* Scene + bloom FBO helpers */
-static void create_fbo_color_depth(GLuint *fbo, GLuint *tex, GLuint *depth,
-                                   int w, int h, GLenum filter) {
-    glGenTextures(1, tex);
-    glBindTexture(GL_TEXTURE_2D, *tex);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-    if (depth) {
-        glGenRenderbuffers(1, depth);
-        glBindRenderbuffer(GL_RENDERBUFFER, *depth);
-        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_FBO, w, h);
-    }
-
-    glGenFramebuffers(1, fbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, *fbo);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, *tex, 0);
-    if (depth)
-        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, *depth);
-    GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-    if (status != GL_FRAMEBUFFER_COMPLETE)
-        fprintf(stderr, "render: extra FBO incomplete (0x%x) %dx%d\n", status, w, h);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    if (depth) glBindRenderbuffer(GL_RENDERBUFFER, 0);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-}
-
-static void scene_bloom_init(int w, int h) {
-    /* Scene FBO — full resolution */
-    create_fbo_color_depth(&g_scene_fbo, &g_scene_tex, &g_scene_depth,
-                           w, h, GL_NEAREST);
-
-    /* Bloom FBOs — quarter resolution */
-    g_bloom_w = w / 4;  if (g_bloom_w < 1) g_bloom_w = 1;
-    g_bloom_h = h / 4;  if (g_bloom_h < 1) g_bloom_h = 1;
-    int i;
-    for (i = 0; i < 2; i++) {
-        GLuint fbo, tex;
-        create_fbo_color_depth(&fbo, &tex, NULL, g_bloom_w, g_bloom_h, GL_LINEAR);
-        g_bloom_fbos[i] = fbo;
-        g_bloom_texs[i] = tex;
-    }
-    fprintf(stderr, "render: scene FBO %dx%d, bloom %dx%d\n", w, h, g_bloom_w, g_bloom_h);
-}
-
-static void scene_bloom_shutdown(void) {
-    if (g_scene_fbo) { glDeleteFramebuffers(1, &g_scene_fbo); g_scene_fbo = 0; }
-    if (g_scene_tex) { glDeleteTextures(1, &g_scene_tex); g_scene_tex = 0; }
-    if (g_scene_depth) { glDeleteRenderbuffers(1, &g_scene_depth); g_scene_depth = 0; }
-    if (g_bloom_fbos[0]) { glDeleteFramebuffers(2, g_bloom_fbos); memset(g_bloom_fbos, 0, sizeof(g_bloom_fbos)); }
-    if (g_bloom_texs[0]) { glDeleteTextures(2, g_bloom_texs); memset(g_bloom_texs, 0, sizeof(g_bloom_texs)); }
-    g_bloom_w = g_bloom_h = 0;
-}
 
 static void fbos_resize(int w, int h) {
     int alloc_w = (int)ceilf((float)w * g_mask_half_h);
@@ -677,9 +592,7 @@ static void fbos_resize(int w, int h) {
     if (alloc_h < h) alloc_h = h;
     if (alloc_w == g_fbo_w && alloc_h == g_fbo_h) return;
     fbos_shutdown();
-    scene_bloom_shutdown();
     fbos_init(w, h);
-    scene_bloom_init(w, h);
     g_masks_dirty = 1;
 }
 
@@ -696,13 +609,8 @@ static void fbo_bind_noclear(int idx) {
     glViewport(0, 0, g_fbo_w, g_fbo_h);
 }
 
-/* Restore render target — scene FBO when bloom active, default otherwise */
 static void fbo_unbind(void) {
-    if (g_scene_fbo && g_target_fbo_idx >= 0) {
-        glBindFramebuffer(GL_FRAMEBUFFER, g_scene_fbo);
-    } else {
-        glBindFramebuffer(GL_FRAMEBUFFER, g_default_fbo);
-    }
+    glBindFramebuffer(GL_FRAMEBUFFER, g_default_fbo);
     glViewport(0, 0, g_fb_w, g_fb_h);
 }
 
@@ -745,7 +653,6 @@ int render_init(int fb_width, int fb_height) {
     /* Save default framebuffer — may not be 0 on macOS with MSAA */
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &g_default_fbo);
     fbos_init(fb_width, fb_height);
-    scene_bloom_init(fb_width, fb_height);
 
     /* Init tex_mode off */
     glUseProgram(g_program);
@@ -754,10 +661,6 @@ int render_init(int fb_width, int fb_height) {
     glBindTexture(GL_TEXTURE_2D, g_fbo_texs[0]);
     glUniform1i(g_uni_tex, 0);
     glUniform2f(g_uni_resolution, (float)fb_width, (float)fb_height);
-
-    /* Initial red taillight position (updated per-frame with light rotation) */
-    glUniform3f(g_uni_point_light_pos, 0.0f, 0.02f, -1.2f);
-    glUniform3f(g_uni_point_light_color, 0.42f, 0.05f, 0.02f);
 
     fprintf(stderr, "render: init multi-layer %dx%d (default fbo=%d)\n",
             fb_width, fb_height, (int)g_default_fbo);
@@ -897,16 +800,6 @@ static void sync_camera_uniforms(void) {
                 eye_x * ts + 0.0f * (1.0f - ts),
                 CAM_EYE_Y * ts + 5.0f * (1.0f - ts),
                 eye_z * ts + 0.0f * (1.0f - ts));
-
-    /* Rotate taillight anchor with combined camera + light rotation */
-    {
-        float tl_rot = g_cam_rot + g_light_rot;
-        float tl_cos = cosf(tl_rot), tl_sin = sinf(tl_rot);
-        float base_x = 0.0f, base_z = -1.2f;
-        float rot_x = tl_cos * base_x + tl_sin * base_z + g_cam_pan_x;
-        float rot_z = -tl_sin * base_x + tl_cos * base_z + g_cam_pan_z;
-        glUniform3f(g_uni_point_light_pos, rot_x, 0.02f, rot_z);
-    }
 
     g_z_bias = 0.0f;
 }
@@ -1101,7 +994,6 @@ void render_sprite_flag(float x, float y, float size, int frame) {
 }
 
 void render_shutdown(void) {
-    scene_bloom_shutdown();
     fbos_shutdown();
     if (g_flag_tex) {
         glDeleteTextures(1, &g_flag_tex);
@@ -1184,60 +1076,39 @@ static void resume_mask(int fbo_idx) {
     g_z_bias = 0.0f;
 }
 
-void render_resume_outline_mask(void) { resume_mask(FBO_OUTLINE); }
-void render_resume_fill_mask(void)    { resume_mask(FBO_FILL); }
+void render_resume_outline_mask(void) { resume_mask(FBO_ROAD); }
+void render_resume_fill_mask(void)    { resume_mask(FBO_ROAD); }
 
-void render_begin_outline_mask(void) { begin_mask(FBO_OUTLINE); }
+void render_begin_outline_mask(void) { begin_mask(FBO_ROAD); }
 void render_end_outline_mask(void)   { end_mask(); }
 
-void render_begin_fill_mask(void) { begin_mask(FBO_FILL); }
+/* Fill mask now shares the same FBO as outline (painter's algorithm).
+ * begin_fill resumes (no clear) so fill draws on top of outline content. */
+void render_begin_fill_mask(void) { resume_mask(FBO_ROAD); }
 void render_end_fill_mask(void)   { end_mask(); }
 
 void render_begin_route_mask(void) { begin_mask(FBO_ROUTE); }
 void render_end_route_mask(void)   { end_mask(); }
 
 /* ================================================================
- * Composite pipeline
+ * Composite pipeline — single-FBO painter's algorithm
  *
- * Step 1: Subtract FBO_FILL alpha from FBO_OUTLINE → FBO_COMPOSITE
- *         (only the thin border ring remains)
- * Step 2: Render 3D ground-plane quads textured with each mask:
- *         - Fill → asphalt material
- *         - Outline border → outline material
- *         - Route → route material (raised)
+ * FBO_ROAD contains white outline + grey fill (painter's algorithm).
+ * tex_mode 7 reads FBO RGB as diffuse base color for lighting.
+ * No subtraction needed — border/fill distinction is baked into FBO colors.
  * ================================================================ */
 
-/* Blit a fullscreen quad with the given FBO texture (clip-space passthrough) */
-static void blit_fbo_fullscreen(int fbo_idx) {
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, g_fbo_texs[fbo_idx]);
-    glUniform1i(g_uni_tex, 0);
-    glUniform1f(g_uni_tex_mode, 1.0f);
-
-    vb_reset();
-    vb_v(-1,-1,0, 0,0,0);  vb_v( 1,-1,0, 0,0,0);  vb_v( 1, 1,0, 0,0,0);
-    vb_v(-1,-1,0, 0,0,0);  vb_v( 1, 1,0, 0,0,0);  vb_v(-1, 1,0, 0,0,0);
-
-    glUniform4f(g_uni_color, 1.0f, 1.0f, 1.0f, 1.0f);
-    glUniform1f(g_uni_zbias, 0.0f);
-    glVertexAttribPointer(g_attr_pos,  3, GL_FLOAT, GL_FALSE, 24, g_vbuf);
-    glVertexAttribPointer(g_attr_norm, 3, GL_FLOAT, GL_FALSE, 24, g_vbuf + 3);
-    glEnableVertexAttribArray(g_attr_pos);
-    glEnableVertexAttribArray(g_attr_norm);
-    glDrawArrays(GL_TRIANGLES, 0, 6);
-}
-
 /* Render a 3D ground-plane quad textured with a mask FBO.
- * The quad goes through MVP (perspective), shader does lighting (tex_mode=2).
+ * tex_mode: 2 = uniform color + mask alpha, 7 = FBO color as base.
  * y_height: world Y of the quad (0 for ground, ROUTE_Y for route). */
-static void composite_layer(int fbo_tex_idx, float y_height,
-                             render_material_t material) {
+static void composite_layer_ex(int fbo_tex_idx, float y_height,
+                                render_material_t material, float tex_mode_val) {
     const material_preset_t *preset = material_preset(material);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, g_fbo_texs[fbo_tex_idx]);
     glUniform1i(g_uni_tex, 0);
-    glUniform1f(g_uni_tex_mode, 2.0f);
+    glUniform1f(g_uni_tex_mode, tex_mode_val);
     glUniform2f(g_uni_resolution, (float)g_fb_w, (float)g_fb_h);
 
     apply_material(preset,
@@ -1248,8 +1119,6 @@ static void composite_layer(int fbo_tex_idx, float y_height,
 
     glUniformMatrix4fv(g_uni_mvp, 1, GL_FALSE, g_mvp_current);
 
-    /* 6 verts = 2 triangles — oversized so quad edges stay off-screen in perspective.
-     * Mask UV discard (alpha < 0.01) ensures only mask-covered area is visible. */
     float gx = g_mask_half_w * 3.0f, gz = g_mask_half_h * 3.0f;
     float y = y_height;
 
@@ -1269,35 +1138,18 @@ static void composite_layer(int fbo_tex_idx, float y_height,
 }
 
 void render_composite(void) {
-    /* Step 1: Subtract — render outline to composite, then erase where fill has alpha */
-    fbo_bind(FBO_COMPOSITE);
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-
-    /* First pass: copy outline to composite */
-    glDisable(GL_BLEND);
-    blit_fbo_fullscreen(FBO_OUTLINE);
-
-    /* Second pass: subtract fill alpha from composite.
-     * Blend: RGB unchanged (ZERO,ONE), Alpha: dest *= (1 - src_alpha) */
-    glEnable(GL_BLEND);
-    glBlendFuncSeparate(GL_ZERO, GL_ONE, GL_ZERO, GL_ONE_MINUS_SRC_ALPHA);
-    blit_fbo_fullscreen(FBO_FILL);
-
-    /* Restore default blend */
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    fbo_unbind();
-
-    /* Step 2: Composite layers to screen as 3D quads with materials + perspective */
+    /* Composite to screen as 3D quads with materials + perspective */
     glEnable(GL_DEPTH_TEST);
     glDepthMask(GL_TRUE);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    /* Layer 1: Fill (grey asphalt) — ground level */
-    composite_layer(FBO_FILL, 0.0f, RENDER_MAT_ROAD_ASPHALT);
+    /* Layer 1: Road (combined outline+fill via painter's algorithm).
+     * tex_mode 7 reads FBO RGB as base color — white border gets paint-like shading,
+     * grey fill gets asphalt-like shading, all with one material preset. */
+    composite_layer_ex(FBO_ROAD, 0.0f, RENDER_MAT_ROAD_ASPHALT, 7.0f);
 
-    /* Layer 1.5: Route shadow on asphalt (offset route mask, dark) */
+    /* Layer 2: Route shadow on road surface (offset route mask, dark) */
     {
         float gx = g_mask_half_w * 3.0f, gz = g_mask_half_h * 3.0f;
         glActiveTexture(GL_TEXTURE0);
@@ -1322,9 +1174,6 @@ void render_composite(void) {
         glEnableVertexAttribArray(g_attr_norm);
         glDrawArrays(GL_TRIANGLES, 0, 6);
     }
-
-    /* Layer 2: Outline border (white, after subtraction) */
-    composite_layer(FBO_COMPOSITE, 0.001f, RENDER_MAT_ROAD_BORDER_PAINT);
 
     /* Restore tex_mode for any subsequent draws */
     glUniform1f(g_uni_tex_mode, 0.0f);

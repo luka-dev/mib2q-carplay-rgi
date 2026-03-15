@@ -1,8 +1,8 @@
 /*
- * CarPlay Cluster Renderer - Control Protocol
+ * CarPlay Cluster Renderer - TCP Command Protocol
  *
- * UDP protocol for Java <-> c_render communication.
- * Java sends commands; renderer sends status.
+ * Fixed 48-byte packets over TCP :19800.
+ * External clients send commands; renderer acts autonomously.
  */
 
 #ifndef CR_PROTOCOL_H
@@ -10,23 +10,41 @@
 
 #include <stdint.h>
 
-#define CR_UDP_PORT         19800
-#define CR_UDP_ADDR         "127.0.0.1"
-#define CR_MAX_PKT          512
+#define CR_TCP_PORT         19800
+#define CR_PKT_SIZE         48
 
-/* Command IDs (Java -> renderer) */
-#define CR_CMD_SHUTDOWN     0x01    /* Graceful shutdown */
-#define CR_CMD_UPDATE       0x02    /* Maneuver data update (supplementary) */
+/* Command IDs */
+#define CMD_MANEUVER     0x01    /* New maneuver — engine transitions automatically */
+#define CMD_SCREENSHOT   0x02    /* Save framebuffer as PPM */
+#define CMD_SHUTDOWN     0x03    /* Graceful exit */
+#define CMD_PERSPECTIVE  0x04    /* Perspective: payload[0] = 0 (off) / 1 (on) */
+#define CMD_DEBUG        0x05    /* Toggle debug overlay */
 
-/* Status IDs (renderer -> Java, via PPS) */
-#define CR_STATUS_STARTING  0
-#define CR_STATUS_READY     1
-#define CR_STATUS_RUNNING   2
-#define CR_STATUS_STOPPED   3
+/* 48-byte command packet */
+typedef struct {
+    uint8_t  cmd;               /* CMD_* */
+    uint8_t  flags;             /* CMD_MANEUVER: bit flags (MAN_FLAG_*) */
+    uint8_t  payload[46];       /* command-specific data */
+} cr_cmd_t;
 
-/* Renderer PPS paths */
-#define CR_PPS_STATUS_PATH  "/ramdisk/pps/iap2/renderer"
-#define CR_PPS_RGD_PATH     "/ramdisk/pps/iap2/routeguidance"
+/*
+ * CMD_MANEUVER payload layout:
+ *   [0]      u8   icon (ICON_* constant)
+ *   [1]      i8   direction (-1, 0, +1)
+ *   [2..3]   i16  exit_angle (big-endian, signed degrees)
+ *   [4]      u8   driving_side (0=RHT, 1=LHT)
+ *   [5]      u8   junction_count (0..20)
+ *   [6..45]  i16  junction_angles[] (big-endian, up to 20)
+ */
+/* CMD_MANEUVER flags (in cr_cmd_t.flags) */
+#define MAN_FLAG_RESET_PERSP  0x01    /* Reset perspective to default (on) */
+
+#define CR_MAN_ICON(p)          ((p)[0])
+#define CR_MAN_DIRECTION(p)     ((int8_t)(p)[1])
+#define CR_MAN_EXIT_ANGLE(p)    ((int16_t)(((p)[2] << 8) | (p)[3]))
+#define CR_MAN_DRIVING_SIDE(p)  ((p)[4])
+#define CR_MAN_JUNC_COUNT(p)    ((p)[5])
+#define CR_MAN_JUNC_ANGLE(p,i)  ((int16_t)(((p)[6 + (i)*2] << 8) | (p)[7 + (i)*2]))
 
 /* Display configuration */
 #define CR_DISPLAYABLE_ID   200
@@ -35,16 +53,5 @@
 #define CR_DEFAULT_WIDTH    640
 #define CR_DEFAULT_HEIGHT   400
 #define CR_TARGET_FPS       10
-
-/*
- * CR_CMD_UPDATE packet layout (after cmd byte):
- *   u8  maneuver_type
- *   u8  distance_units
- *   u32 distance_to_maneuver  (big-endian)
- *   u8  turn_to_len
- *   char turn_to[turn_to_len] (UTF-8, no null)
- *   u8  dist_string_len
- *   char dist_string[dist_string_len]
- */
 
 #endif /* CR_PROTOCOL_H */
