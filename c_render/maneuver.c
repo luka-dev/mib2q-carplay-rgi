@@ -173,7 +173,6 @@ static void clear_combined_transition(void) {
 }
 
 static void clear_camera_settle(void) {
-    g_release_snapped = 0;
     g_cam_settle_start_x = 0.0f;
     g_cam_settle_start_y = 0.0f;
     g_cam_settle_start_rot = 0.0f;
