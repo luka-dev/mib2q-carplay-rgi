@@ -57,6 +57,10 @@ public class BAPBridge {
     private static final int BARGRAPH_BLINK_PERCENT = 20;
     private static final int ACTION_BLINK_INTERVAL_MS = 600;
 
+    /* Viewport modes (must match protocol.h) */
+    private static final int VIEWPORT_SIDESCREEN = 0;
+    private static final int VIEWPORT_POPUP = 1;
+
     private CombiBAPServiceNavi appConnectorNavi;
     private final BAPDistanceFormatter distanceFormatter =
         new BAPDistanceFormatter(new SilentLogChannel());
@@ -92,6 +96,8 @@ public class BAPBridge {
      */
     private int exitViewSendCount = 0;
     private GatedCombiService gatedService;
+
+    private int currentViewportMode = VIEWPORT_SIDESCREEN;
 
     private ClusterService csRef;
     private KOMOService komoService;
@@ -434,13 +440,16 @@ public class BAPBridge {
             /* Block native route-guidance BAP stream during CarPlay RG. */
             if (gatedService != null) gatedService.blockRouteGuidance = true;
 
-            /* Force cluster state flags (rgActive, rgiValid, viewMode) BEFORE
-             * sending any BAP data so AppConnectorNavi accepts our sends. */
+            /* Start renderer FIRST — takes over displayable 20 before we
+             * set rgActive/rgiValid, which would trigger native KDK rendering
+             * to the same displayable (race → native icon overwrites our arrow). */
+            startCustomRenderer();
+
+            /* Now safe to set cluster state flags — our renderer owns displayable 20 */
             forceClusterRouteInfoState(true);
 
             /*
-             * Guidance start -- BAP text overlays for HUD + VC text,
-             * KOMO pipeline for LVDS video maneuver rendering.
+             * Guidance start -- BAP text overlays for HUD + VC text.
              *
              * 1. RGStatus(1) - FctID 17 -> triggers startSync(0) for {17,39,23,18,49}
              * 2. Complete sync(0) window: rgType(39), descriptor(23), distance(18), exitView(49)
@@ -463,10 +472,6 @@ public class BAPBridge {
                 Log.w(TAG, "BAP FctID 19 failed during start: "
                     + t.getClass().getName() + ": " + t.getMessage());
             }
-
-            /* Custom renderer: start c_render video pipeline
-             * (renders directly to displayable 199 via EGL/GLES2) */
-            startCustomRenderer();
 
             Log.i(TAG, "Started (rgType=" + ACTIVE_RGTYPE
                 + ", cr=" + customRendererStarted + ")");
@@ -838,6 +843,21 @@ public class BAPBridge {
             /* 10. c_render: CMD_MANEUVER only when icon actually changes,
              * CMD_BARGRAPH for distance updates, CMD_PERSPECTIVE for approach zone */
             if (rendererClient != null && customRendererStarted) {
+                /* Detect viewport mode from ChoiceModel(1,168) hint bit 8.
+                 * BITFIELD_KDK_POSITION_IN_TUBE=8: set by native ClusterKDKHandlerImpl
+                 * based on isSmallStageActive(). Bit set = sidescreen, clear = popup. */
+                if (csRef != null) {
+                    try {
+                        int komoHints = csRef.getKOMOHintsRaw();
+                        int detectedMode = ((komoHints & 8) != 0)
+                            ? VIEWPORT_SIDESCREEN : VIEWPORT_POPUP;
+                        if (detectedMode != currentViewportMode) {
+                            setViewportMode(detectedMode);
+                        }
+                    } catch (Throwable t) {
+                        /* non-fatal — keep current mode */
+                    }
+                }
                 /* Approach zone enter/exit → perspective + initial bargraph */
                 if (approachChanged) {
                     rendererClient.sendPerspective(nowApproach ? 0 : 1);
@@ -854,14 +874,9 @@ public class BAPBridge {
                 int crIconMask = RouteGuidance.State.DIRTY_MANEUVER_ICON
                     | RouteGuidance.State.DIRTY_MANEUVER_LIST
                     | RouteGuidance.State.DIRTY_MANEUVER_COUNT;
-                /* Force reset dedup on list/count change — new route or maneuver sequence */
-                if ((dirty & (RouteGuidance.State.DIRTY_MANEUVER_LIST
-                            | RouteGuidance.State.DIRTY_MANEUVER_COUNT)) != 0) {
-                    lastCrIcon = -1;
-                    lastCrDirection = -99;
-                    lastCrExitAngle = -9999;
-                    lastCrDrivingSide = -1;
-                }
+                /* No dedup reset here — updateRendererIfChanged compares actual
+                 * icon/direction/angle values. Resetting on DIRTY_MANEUVER_LIST
+                 * caused false re-sends when maneuver count toggled 1↔2. */
                 if ((dirty & crIconMask) != 0) {
                     iconChanged = updateRendererIfChanged(s, bargraphDenominatorM);
                 }
@@ -1567,6 +1582,32 @@ public class BAPBridge {
         } catch (Throwable t) {
             Log.w(TAG, "KOMO: gfxAvailable backup failed: " + t.getMessage());
         }
+    }
+
+    /* ============================================================
+     * Viewport Mode (sidescreen vs popup)
+     * ============================================================ */
+
+    /**
+     * Set the VC viewport mode. Sends CMD_VIEWPORT to c_render so it
+     * can adjust rendering for the visible area.
+     *
+     * @param mode VIEWPORT_SIDESCREEN (0) or VIEWPORT_POPUP (1)
+     */
+    public void setViewportMode(int mode) {
+        if (mode == currentViewportMode) return;
+        currentViewportMode = mode;
+        if (rendererClient != null && customRendererStarted) {
+            rendererClient.sendViewport(mode);
+        }
+        Log.i(TAG, "Viewport mode -> " + (mode == VIEWPORT_POPUP ? "POPUP" : "SIDESCREEN"));
+    }
+
+    /**
+     * Get the current viewport mode.
+     */
+    public int getViewportMode() {
+        return currentViewportMode;
     }
 
     /* ============================================================

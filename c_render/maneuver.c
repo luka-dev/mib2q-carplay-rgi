@@ -1739,9 +1739,16 @@ static void draw_roundabout(float exit_angle_deg, int driving_side,
  * draw_arrived -- outline/fill/route passes
  * ---------------------------------------------------------------- */
 
+#define ARRIVE_DIR_OFFSET 0.12f  /* horizontal offset for left/right arrival */
+static float g_arrive_flag_dx = 0.0f;  /* cached for flag sprite positioning */
+static float g_combined_flag_x = 0.0f; /* flag position in combined path space */
+static float g_combined_flag_y = 0.0f;
+
 static void draw_arrived(int dir) {
     float road_top = ARRIVE_ROAD_TOP;
-    (void)dir;
+    /* Offset flag sprite left/right based on direction — road stays center */
+    float dx = (dir < 0) ? -ARRIVE_DIR_OFFSET : (dir > 0) ? ARRIVE_DIR_OFFSET : 0.0f;
+    g_arrive_flag_dx = dx;
 
     render_set_raised(0);
 
@@ -1757,7 +1764,6 @@ static void draw_arrived(int dir) {
     render_end_outline_mask();
 
     /* === ROUTE PATH === */
-    /* Pull route back so arrow TIP lands at flag base (arrow extends HEAD_SZ beyond endpoint) */
     float route_end = road_top - HEAD_SZ;
     rpath_clear(&g_route_path);
     rpath_add_line(&g_route_path, 0, SHAFT_BOT, 0, route_end);
@@ -1771,7 +1777,7 @@ static void draw_arrived(int dir) {
         render_composite();
 
         /* Animated destination flag -- drawn before route so blue line overlays it */
-        render_sprite_flag(0, ARRIVE_FLAG_Y, ARRIVE_FLAG_SZ, (int)g_flag_frame);
+        render_sprite_flag(g_arrive_flag_dx, ARRIVE_FLAG_Y, ARRIVE_FLAG_SZ, (int)g_flag_frame);
 
         rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
     }
@@ -1888,10 +1894,11 @@ static void draw_merge(int go_right) {
  * ================================================================ */
 
 void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state) {
-    /* Track whether flag animation is active */
-    g_flag_active = (s->icon == ICON_ARRIVED);
+    /* Track whether flag animation is active — also during push TO arrived */
+    g_flag_active = (s->icon == ICON_ARRIVED)
+                 || (next_state != NULL && next_state->icon == ICON_ARRIVED);
 
-    /* Advance flag animation (always running for arrived) */
+    /* Advance flag animation */
     if (g_flag_active) {
         g_flag_frame += FLAG_ANIM_SPEED;
         if (g_flag_frame >= 14.0f)
@@ -1951,7 +1958,10 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
         }
         render_composite();
         if (s->icon == ICON_ARRIVED)
-            render_sprite_flag(0, ARRIVE_FLAG_Y, ARRIVE_FLAG_SZ, (int)g_flag_frame);
+            render_sprite_flag(g_arrive_flag_dx, ARRIVE_FLAG_Y, ARRIVE_FLAG_SZ, (int)g_flag_frame);
+        if (combined && next_state != NULL && next_state->icon == ICON_ARRIVED) {
+            render_sprite_flag(g_combined_flag_x, g_combined_flag_y, ARRIVE_FLAG_SZ, (int)g_flag_frame);
+        }
         rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
         if (g_route_debug)
             rpath_draw_debug(&g_route_path, g_t_tail, g_t_head);
@@ -2021,6 +2031,12 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
         compute_combined_transform(s, next_state, &tx, &ty, &cos_r, &sin_r, &rot);
         g_last_combined_rot = rot;
 
+        /* Pre-compute flag position for ARRIVED in combined space */
+        if (next_state->icon == ICON_ARRIVED) {
+            g_combined_flag_x = cos_r * g_arrive_flag_dx - sin_r * ARRIVE_FLAG_Y + tx;
+            g_combined_flag_y = sin_r * g_arrive_flag_dx + cos_r * ARRIVE_FLAG_Y + ty;
+        }
+
         rpath_xform_append(&g_route_path, &next_path, tx, ty, cos_r, sin_r, rot);
         float ax = cos_r * next_path.arrow_x - sin_r * next_path.arrow_y + tx;
         float ay = sin_r * next_path.arrow_x + cos_r * next_path.arrow_y + ty;
@@ -2072,6 +2088,15 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
         compute_slide_params();
         update_combined_camera();
         render_composite();
+
+        /* Draw flag anchored to next maneuver's center (slides in with the maneuver) */
+        if (next_state->icon == ICON_ARRIVED) {
+            render_sprite_flag(g_combined_flag_x, g_combined_flag_y, ARRIVE_FLAG_SZ, (int)g_flag_frame);
+        }
+        if (s->icon == ICON_ARRIVED) {
+            render_sprite_flag(g_arrive_flag_dx, ARRIVE_FLAG_Y, ARRIVE_FLAG_SZ, (int)g_flag_frame);
+        }
+
         rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
         rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
     }

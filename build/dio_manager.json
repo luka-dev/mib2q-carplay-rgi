@@ -1,0 +1,380 @@
+#<genlastmodification>1519636403000</genlastmodification>
+#<composition>dio_manager</composition>
+{
+    ## 
+    ## ##########################################################################
+    ## APPLE DIO MANAGER CONFIGURATION FILE
+    ## ##########################################################################
+    "usb":{
+        ## USB related configuration
+        "ppsPath":"/ramdisk/pps/device",
+        "asi":{
+            "roleSwap":"role_swap"
+        },
+        ## 
+        ## Scripts for reseting (power down/up combination) the USB ports
+        ## @note This is required only for old media connector
+        "scripts":{
+            "enableUSBPower":"/etc/scripts/enable_usb_pwr_0.sh",
+            "disableUSBPower":"/etc/scripts/disable_usb_pwr_0.sh"
+        }
+    },
+    "mdnsd":{
+        ## 
+        ## Absolute path to the binary
+        "bin":"/mnt/app/armle/usr/sbin/mdnsd",
+        ## The path and the file which stores the all mdnsd children pids
+        "pidBasePath":"/var/run/mdnsd",
+        "pidAbsolutePath":"/var/run/mdnsd/mdnsd.pid",
+        ## ENV variables for Bonjour service
+        "env":{
+            "directLink":"MDNS_DIRECTLINK_IFACE=carplay0",
+            "probeCount":"mDNSPlatformDefaultProbeCountForTypeUnique=0",
+            "sock":""
+        }
+    },
+    "iap2":{
+        "device":"iap://ffs:///dev/otg-cinemo",
+        "auth":"i2c:///dev/i2c8:17?sclock=50000&txn=1",
+        "cinemoLib":"/armle/usr/lib/cinemo",
+        "cinemoLogFilePath":"/tmp/CinemoDioManager.log",
+        "connectionTimeoutMs":6000,
+        ## Possible values: none=0, file=1, pipe=2, stdout=3, stderr=4, callback=5, output_debug_string=6, syslog=7
+        "cinemoLogTarget":5,
+        ## Possible values: fatal=0, error=1, warn=2, info=3, debug=4, trace=5, verbose=6
+        "cinemoLogLevel":3,
+        "accessoryIdentification":{
+            "manufacturer":"HARMAN",
+            "firmwareVersion":"DEV_MMX2QC_AU_NAR_G22_061PROD",
+            "displayName":"AUDI MMI"
+        },
+        "power":{
+            "availableCurrent":1500
+        },
+        "LinkThreadPrio":"21",
+        "pps":{
+            "reader":{
+                "thread":{
+                    "priority":10,
+                    "name":"DIOPulseThread"
+                },
+                "path":"/ramdisk/pps/iap2"
+            },
+            "device":{
+                "ppsObjectName":"device",
+                "deviceAttributes":{
+                    "name":"DeviceName",
+                    "language":"DeviceLanguage"
+                }
+            },
+            "nowplaying":{
+                "ppsObjectName":"nowplaying",
+                "trackAttributes":{
+                    "title":"MediaItemTitle",
+                    "duration":"MediaItemPlaybackDurationInMilliseconds",
+                    "albumTitle":"MediaItemAlbumTitle",
+                    "artist":"MediaItemArtist",
+                    "genre":"MediaItemGenre",
+                    "composer":"MediaItemComposer"
+                },
+                "playbackAttributes":{
+                    "elapsedTime":"PlaybackElapsedTimeInMilliseconds",
+                    "status":"PlaybackStatus",
+                    "shuffleMode":"PlaybackShuffleMode",
+                    "repeatMode":"PlaybackRepeatMode",
+                    "appName":"PlaybackAppName"
+                },
+                "playbackStatus":{
+                    "stopped":"Stopped",
+                    "playing":"Playing",
+                    "paused":"Paused",
+                    "seekForward":"SeekForward",
+                    "seekBackward":"SeekBackward"
+                },
+                "shuffleMode":{
+                    "off":"Off",
+                    "songs":"Songs",
+                    "albums":"Albums"
+                },
+                "repeatMode":{
+                    "off":"Off",
+                    "one":"One",
+                    "all":"All"
+                }
+            },
+            "telephony":{
+                "ppsObjectName":"telephony",
+                "callStateAttributes":{
+                    "callID":"UniqueCallID",
+                    "phoneNumber":"CallStatePhoneNumber",
+                    "callerName":"CallStateCallerName",
+                    "status":"CallStateStatus",
+                    "direction":"CallStateDirection"
+                },
+                "phoneStateAttributes":{
+                    "signalStrength":"TelephonySignalStrength",
+                    "registrationStatus":"TelephonyRegistrationStatus",
+                    "airplaneModeStatus":"TelephonyAirplaneModeStatus",
+                    "mobileOperator":"MobileOperator"
+                },
+                "signalStrength":{
+                    "bars_0":"0 bars",
+                    "bars_1":"1 bars",
+                    "bars_2":"2 bars",
+                    "bars_3":"3 bars",
+                    "bars_4":"4 bars",
+                    "bars_5":"5 bars"
+                },
+                "registrationStatus":{
+                    "unknown":"Unknown",
+                    "notRegistered":"Not Registered",
+                    "denied":"Denied",
+                    "registeredHome":"Registered Home",
+                    "roaming":"Roaming",
+                    "eCallsOnly":"Emergency Calls Only"
+                },
+                "callState":{
+                    "disconnected":"Disconnected",
+                    "active":"Active",
+                    "holding":"Holding",
+                    "connecting":"Connecting"
+                },
+                "callDirection":{
+                    "incoming":"Incoming",
+                    "outgoing":"Outgoing",
+                    "unknown":"Unknown"
+                }
+            }
+        },
+        ## 
+        ## 0x5000/* StartNowPlayingUpdates */
+        ## , 0x5002/* StopNowPlayingUpdates */
+        ## , 0xAE00/* StartPowerUpdates */
+        ## , 0xAE02/* StopPowerUpdates */
+        ## , 0xAE03/* PowerSourceUpdate */
+        ## , 0x4154/* StartCallStateUpdates */
+        ## , 0x4156/* StopCallStateUpdates */
+        ## , 0x4157/* StartCommunicationsUpdates */
+        ## , 0x4159/* StopCommunicationsUpdates */
+        ## , 0xFFFB/* LocationInformation */
+        ## , 0x4C00/* StartMediaLibraryInformation */
+        ## , 0x4C02/* StopMediaLibraryInformation */
+        ## , 0x4C03/* StartMediaLibraryUpdates */
+        ## , 0x4C05/* StopMediaLibraryUpdates */
+        ## , 0x5200/* StartRouteGuidanceUpdates */
+        ## , 0x5203/* StopRouteGuidanceUpdates */
+        "MessagesSentByAccessory":["0x5000", "0x5002", "0xAE00", "0xAE02", "0xAE03", "0x4154", "0x4156", "0x4157", "0x4159", "0xFFFB", "0x4C00", "0x4C02", "0x4C03", "0x4C05", "0x5200", "0x5203"],
+        ## 
+        ## 0x4e09/* DeviceInformationUpdate */
+        ## 0x4e0a/* DeviceLanguageUpdate */
+        ## 0x4E0C/* DeviceUUIDUpdate*/
+        ## 0x5001/* NowPlayingUpdate */
+        ## 0xae01/* PowerUpdate */
+        ## 0x4155/* CallStateUpdate */
+        ## 0x4158/* CommunicationsUpdate */
+        ## 0xfffa/* StartLocationInformation */
+        ## 0xfffc/* StopLocationInformation */
+        ## 0x4c01/* MediaLibraryInformation */
+        ## 0x4c04/* MediaLibraryUpdate */
+        ## 0x5201/* RouteGuidanceUpdate */
+        ## 0x5202/* RouteGuidanceManeuverUpdate */
+        ## 0x5204/* RouteGuidanceLaneGuidanceInformation */
+        "MessagesReceivedFromDevice":["0x4E09", "0x4E0A", "0x4E0C", "0x5001", "0xAE01", "0x4155", "0x4158", "0xFFFA", "0xFFFC", "0x4C01", "0x4C04", "0x5201", "0x5202", "0x5204"],
+        ## 
+        ## GPGGA = 0x01
+        ## , GPRMC = 0x02
+        ## , GPGSV = 0x04
+        ## , PASCD = 0x08
+        ## , PAGCD = 0x10
+        ## , PAACD = 0x20
+        ## , GPHDT = 0x40
+        ## The NMEA value is the 16-bits bitmask of supported location information
+        "nmea":"0x0003",
+        ## 
+        ## #####################################################################################
+        ## # EAP support
+        ## #
+        ## # TODO: The AppMatch can eventually also to be specified - in case that App is not installed,
+        ## # what kind of action should be performed at the iPhone side in terms of alarming the
+        ## # user and the providing the installation button under General/Settings/"Accessory name"
+        ## # By default, it's set to 0 - no action will be performed
+        ## #####################################################################################
+        "exlap":{
+            "protocol":["com.audi.exlap", "com.audi.carplay.exlap", "com.volkswagen.exlap", "com.vwag.infotainment.carplay.exlap"],
+            ## 
+            ## The Action that should be performed in case that there is no 
+            ## iOS application at iPhone side that matches the OEM's specified protocol
+            ## string. There is predefined enum of values:
+            ## 0 - no action to perform
+            ## 1 - alert/popup dialog is optional: may, or may not be launched. The "Find App" button 
+            ## will be present at Settings/General/About/"App name"
+            ## 2 - No alert. The "Find App" button will be present at Settings/General/About/"App name"
+            ## 3 - No EAP protocol 
+            "matchAction":0
+        }
+    },
+    ## 
+    ## ###########################################################################
+    ## # EsoDataProvider configuration 
+    ## #
+    ## # @note This is different in compare with MIB2+, since the EsoPosProvider
+    ## # data structure is different
+    ## ###########################################################################
+    "nmea":{
+        "updatePeriod":1000,
+        "predDuration":0,
+        "predLength":0,
+        "deadReckoning":true,
+        "mapPositioning":false
+    },
+    ## 
+    ## ###########################################################################
+    ## # Manufacture's logo 
+    ## ###########################################################################
+    "oem":{
+        "iconPath":"/etc/eso/media/carplay_oemicon.png"
+    },
+    ##     
+    ## ###########################################################################
+    ## # HID interfaces to interact with the CarPlay context
+    ## #
+    ## # USB vendor and product IDs are provided by Harman/Delphi.
+    ## #
+    ## #                       Vendor                  Product
+    ## #
+    ## #    DELPHI             0x0E46                  0x4853
+    ## #    
+    ## #    HARMAN
+    ## #    Audi && BY         0x1A96                  0x2018
+    ## #    Porsche            0x1A96                  0x2019
+    ## #    VW && SE && SK     0x1A96                  0x201A
+    ## #
+    ## # The country code is set to "Germany"
+    ## #
+    ## ###########################################################################
+    "hid":{
+        "vendorId":"0x1A96",
+        "productId":"0x2018",
+        "countryCode":9,
+        ##  Dynamically configure the HID descriptors
+        "descriptor":{
+            ##  Knob 
+            "acHome":true,
+            "acBack":true,
+            ##  Telephony 
+            "hookSwitch":false,
+            "flash":true,
+            "drop":false,
+            ##  Remote Playback 
+            "play":true,
+            "pause":true,
+            "ff":true,
+            "rewind":true,
+            "next":true,
+            "previous":true
+        }
+    },
+    ## 
+    ## #############################################################################################
+    ## # Specified whether the limited UI should be set.
+    ## #
+    ## # The feature is by default disabled. Change the "enabled" flag to true, in order to
+    ## # enable it, and set the other fields as well.
+    ## # @note This will then override the Diagnostic information from RCC!
+    ## ##############################################################################################
+    "limitedUI":{
+        "enabled":false,
+        ## 
+        ## activationSwitch: [0,1]
+        ## 0: PARK_ENFORCED
+        ## 1: VELOCITY_THRESHOLD
+        "activationSwitch":0,
+        ## 
+        ## The updateMehtod is one of the sensor data update methods that could be used for making
+        ## decision whether to stream CarPlay in limited or full mode
+        ## 0 - ATTR_VEHICLESTANDSTILL
+        ## 1 - ATTR_TVVELOCITYTHRESHOLD
+        ## 2 - ATTR_MESSAGINGVELOCITYTHRESHOLD
+        ## 3 - ATTR_CARVELOCITYTHRESHOLD
+        ## 4 - ATTR_DESTINATIONINPUTVELOCITYTHRESHOLD
+        ## 5 - ATTR_BTBONDINGVELOCITYTHRESHOLD
+        "updateMethod":0,
+        ## 
+        ## Specified the UI elements that will be 
+        ## affected in limited UI.
+        ## @note Here, all elements are listed!
+        "uiElements":["softKeyboard", "softPhoneKeypad", "nonMusicLists", "musicLists", "japanMaps"]
+    },
+    ## 
+    ## #############################################################################################
+    ## # @ Specified the AirPlay real-time POSIX threads priorities, 
+    ## #   as global environments.
+    ## # @note: don't change this, unless there is a good reason for that
+    ## ##############################################################################################
+    "airplay":{
+        "screenRxThreadPrio":"SCREEN_RECEIVER_THREAD_PRIO=17",
+        "audioRxThreadPrio":"AUDIO_RECEIVER_THREAD_PRIO=18",
+        "timeSyncClientThreadPrio":"TIME_SYNC_CLIENT_THREAD_PRIO=19"
+    },
+    ## 
+    ## #############################################################################################
+    ## # Audio related setups
+    ## # Specified the AirPlay audio latency values in ms, as ENV.
+    ## # @note: don't change the name of the variables, only the values
+    ## # @ Audio dumping feature can be enabled/disabled in GEM
+    ## # For more, visit the
+    ## # https://intra.esolutions.de/wiki/doku.php?id=knowledge:apps:mib:media:smartphone
+    ## ##############################################################################################
+    "audio":{
+        "audioDumping":false,
+        "audioDumpingPath":"/fs/sda0",
+        "audioDumpingInitSize":20971520,
+        "audioTornDownNotify":false,
+        "audioLatency":{
+            "default":{
+                "inLatency":"ALL_IN_LATENCY=95",
+                "outLatency":"ALL_OUT_LATENCY=80"
+            },
+            "telephony":{
+                "inLatency":"TEL_IN_LATENCY=85",
+                "outLatency":"TEL_OUT_LATENCY=80"
+            },
+            "speech":{
+                "inLatency":"SPEECH_IN_LATENCY=85",
+                "outLatency":"SPEECH_OUT_LATENCY=80"
+            }
+        }
+    },
+    ## 
+    ## #############################################################################################
+    ## # @ Screen related setups
+    ## # @ Note: badFramesThreshold represents the number of contiguously corrupted screen frames before 
+    ## # the watchdog mechanism will be triggered. 
+    ## # If videoDumping is enabled, the entire Screen Session will be recorded to the 
+    ## # destination selected over GEM. 
+    ## # @see https://intra.esolutions.de/wiki/doku.php?id=knowledge:apps:mib:media:smartphone
+    ## # By default, it's disabled.
+    ## # 
+    ## # The captured frames will be dumped into file
+    ## #   1) The screen session is finalized.
+    ## #           This is memory consuming solution since the resource itself is limited.
+    ## #           The problem is in the fact that Apple sends only one I-Frame, so all subsequent
+    ## #           frames need to be stored in order to restore the screen session off-line - all frames
+    ## #           are required
+    ## #   2) The NVIDIA decoder is in erroneous state
+    ## #           Based on the number contiguously counted "bad" frames - actually, error indications
+    ## #           returned by the NvSSVideoDecode() API.
+    ## #   
+    ## #  nvSSOutputDevice 
+    ## #            - 0 : LVDS (default)
+    ## #            - 1 : HDMI
+    ## ##############################################################################################
+    "screen":{
+        "maxFPS":30,
+        "badFramesThreshold":10,
+        "videoDumping":false,
+        "videoDumpingPath":"/fs/sda0",
+        "videoDumpingInitSize":20971520,
+        "nvSSOutputDevice":"NVSS_VIDEO_OUTPUT_DEVICE=0"
+    }
+}

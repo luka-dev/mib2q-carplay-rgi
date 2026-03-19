@@ -64,6 +64,10 @@ void render_circle(float cx, float cy, float radius, float thickness, int segmen
 /* Toggle perspective on/off. enabled=0 -> flat (no perspective). */
 void render_set_perspective(int enabled);
 
+/* Set viewport mode: 0=sidescreen (full 328x180), 1=popup (210x153 crop). */
+void render_set_viewport_mode(int mode);
+int  render_get_viewport_mode(void);
+
 /* Set camera pan offset in maneuver space (shifts entire scene). */
 void render_set_camera_pan(float x, float y);
 

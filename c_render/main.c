@@ -347,6 +347,12 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "engine: bargraph level=%d on=%d\n",
                         g_bargraph_level, g_bargraph_on);
                 break;
+            case CMD_VIEWPORT: {
+                int mode = cmd.payload[0];
+                render_set_viewport_mode(mode);
+                g_engine.dirty = 1;
+                break;
+            }
             case CMD_SHUTDOWN:
                 fprintf(stderr, "engine: shutdown command received\n");
                 running = 0;

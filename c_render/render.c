@@ -174,6 +174,8 @@ static float g_persp_t = 1.0f;   /* animated blend: 0.0=ortho, 1.0=perspective *
 #define PERSP_ANIM_SPEED 0.033f   /* per-frame step (~1s at 30fps) */
 static int g_raised = 1;
 static int g_fb_w = 640, g_fb_h = 400;
+static int g_win_w = 640, g_win_h = 400;  /* actual window buffer size (pre-SSAA) */
+static int g_viewport_mode = 0;  /* 0=sidescreen (full), 1=popup (210x153 crop) */
 static float g_z_bias = 0.0f;
 
 /* Mask cache dirty flag */
@@ -689,7 +691,9 @@ int render_init(int fb_width, int fb_height) {
     glBindTexture(GL_TEXTURE_2D, 0);
     fprintf(stderr, "render: SSAA %dx%d -> %dx%d\n", g_ss_w, g_ss_h, fb_width, fb_height);
 
-    /* Override fb dimensions to 2x — entire pipeline uses these */
+    /* Save actual window size for final blit, then override to 2x for pipeline */
+    g_win_w = fb_width;
+    g_win_h = fb_height;
     g_fb_w = g_ss_w;
     g_fb_h = g_ss_h;
 
@@ -709,6 +713,8 @@ int render_init(int fb_width, int fb_height) {
 }
 
 void render_set_viewport(int fb_width, int fb_height) {
+    g_win_w = fb_width;
+    g_win_h = fb_height;
     g_ss_w = fb_width * SSAA_SCALE;
     g_ss_h = fb_height * SSAA_SCALE;
     g_fb_w = g_ss_w;
@@ -805,6 +811,22 @@ static void sync_camera_uniforms(void) {
         glUniform2f(g_uni_mask_scale, 0.5f / g_mask_half_w, 0.5f / g_mask_half_h);
     }
 
+    /* Popup viewport: zoom + shift projection to center content in the
+     * 210x153 visible crop at (59,27) within the 328x180 content area.
+     * Popup center in NDC: X=0 (centered), Y=-0.15 (shifted down from content center).
+     * Apply as a post-projection transform on g_mvp_current so both
+     * ortho and perspective get the same adjustment. */
+    if (g_viewport_mode == 1) {
+        float zoom = 1.30f;
+        float offset_y = 0.15f;  /* shift content up so maneuver centers in crop */
+        int c;
+        for (c = 0; c < 4; c++) {
+            g_mvp_current[c*4 + 0] *= zoom;  /* scale X in clip space */
+            g_mvp_current[c*4 + 1] = g_mvp_current[c*4 + 1] * zoom
+                                   + g_mvp_current[c*4 + 3] * offset_y;  /* scale Y + offset */
+        }
+    }
+
     glUniformMatrix4fv(g_uni_mvp, 1, GL_FALSE, g_mvp_current);
 
     /* World-stable showroom lighting tuned to stay readable during camera motion. */
@@ -875,9 +897,18 @@ void render_bargraph(int level, float alpha) {
     const float BAR_W  = 14.0f * SCALE * PX;
     const float BAR_H  =  7.0f * SCALE * PY;
     const float GAP    =  2.0f * SCALE * PY;
-    const float BAR_X  = 1.0f - MARGIN * PX - BAR_W;  /* right side */
+    const float BAR_X_FULL = 1.0f - MARGIN * PX - BAR_W;  /* sidescreen: right edge */
+    /* Popup: match native bargraph at x=247 in 328px → NDC = (247/164)-1 = 0.506 */
+    const float BAR_X_POPUP = 0.506f;
+    const float BAR_X = (g_viewport_mode == 1) ? BAR_X_POPUP : BAR_X_FULL;
     float total_h = N_BARS * BAR_H + (N_BARS - 1) * GAP;
     float base_y  = -total_h * 0.5f;
+    /* Popup: shift bargraph down to match native position (y=30 in 180px → NDC = (30/90)-1 = -0.67 top) */
+    if (g_viewport_mode == 1) {
+        /* Native bargraph spans y=30..153 in 180px content, center at y=91.5.
+         * NDC center = (91.5/90)-1 = 0.017.  Shift base_y so center matches. */
+        base_y = 0.017f - total_h * 0.5f;
+    }
     float identity[16];
     int i;
 
@@ -925,9 +956,9 @@ void render_sync_camera(void) {
 }
 
 void render_end_frame(void) {
-    /* Blit supersample FBO down to screen with GL_LINEAR filtering */
+    /* Blit supersample FBO down to actual window size with GL_LINEAR filtering */
     glBindFramebuffer(GL_FRAMEBUFFER, g_default_fbo);
-    glViewport(0, 0, g_fb_w, g_fb_h);
+    glViewport(0, 0, g_win_w, g_win_h);
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glDisable(GL_DEPTH_TEST);
@@ -953,6 +984,19 @@ void render_end_frame(void) {
 
 void render_set_perspective(int enabled) {
     g_perspective = enabled;
+}
+
+void render_set_viewport_mode(int mode) {
+    if (mode != g_viewport_mode) {
+        g_viewport_mode = mode;
+        g_masks_dirty = 1;
+        fprintf(stderr, "render: viewport mode=%s\n",
+                mode == 1 ? "POPUP" : "SIDESCREEN");
+    }
+}
+
+int render_get_viewport_mode(void) {
+    return g_viewport_mode;
 }
 
 int render_is_animating(void) {
