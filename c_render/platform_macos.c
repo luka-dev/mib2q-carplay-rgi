@@ -66,6 +66,7 @@ int platform_init(int width, int height) {
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
     glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_TRUE);
     glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
+    glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_FALSE);
 
     g_window = glfwCreateWindow(width, height, "c_render", NULL, NULL);
     if (!g_window) {

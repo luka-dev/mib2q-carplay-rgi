@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Aspect Ratio Measure</title>
+<style>
+body { margin: 0; background: #222; color: #fff; font-family: monospace; }
+canvas { cursor: crosshair; display: block; margin: 20px auto; }
+#info { text-align: center; padding: 10px; font-size: 14px; }
+#points { text-align: center; padding: 5px; font-size: 13px; }
+</style>
+</head>
+<body>
+<div id="info">Click 3 points: top-left corner, top-right corner, bottom-left corner of the widget frame</div>
+<div id="points"></div>
+<canvas id="c"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const info = document.getElementById('info');
+const pointsDiv = document.getElementById('points');
+const img = new Image();
+const pts = [];
+
+img.onload = function() {
+    canvas.width = img.width;
+    canvas.height = img.height;
+    draw();
+};
+
+function draw() {
+    ctx.drawImage(img, 0, 0);
+    pts.forEach((p, i) => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+        ctx.fillStyle = ['#f00','#0f0','#00f'][i];
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.font = '14px monospace';
+        ctx.fillText(['TL','TR','BL'][i], p.x + 10, p.y + 5);
+    });
+    if (pts.length >= 2) {
+        ctx.strokeStyle = '#f00';
+        ctx.setLineDash([4,4]);
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        ctx.lineTo(pts[1].x, pts[1].y);
+        ctx.stroke();
+        const w = Math.sqrt((pts[1].x-pts[0].x)**2 + (pts[1].y-pts[0].y)**2);
+        ctx.fillStyle = '#ff0';
+        ctx.fillText('W=' + w.toFixed(1) + 'px', (pts[0].x+pts[1].x)/2, pts[0].y - 10);
+    }
+    if (pts.length >= 3) {
+        ctx.strokeStyle = '#00f';
+        ctx.setLineDash([4,4]);
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        ctx.lineTo(pts[2].x, pts[2].y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        const w = Math.sqrt((pts[1].x-pts[0].x)**2 + (pts[1].y-pts[0].y)**2);
+        const h = Math.sqrt((pts[2].x-pts[0].x)**2 + (pts[2].y-pts[0].y)**2);
+        const ratio = w / h;
+        const msg = `Width=${w.toFixed(1)}px  Height=${h.toFixed(1)}px  Ratio=${ratio.toFixed(4)}  (${w.toFixed(0)}:${h.toFixed(0)})`;
+        info.innerHTML = '<b>' + msg + '</b><br>'
+            + 'Native 328:181 = ' + (328/181).toFixed(4) + '  |  328:180 = ' + (328/180).toFixed(4)
+            + '  |  210:153 = ' + (210/153).toFixed(4)
+            + '<br>If ratio matches 328:181 → widget is correct size, crop is camera issue'
+            + '<br>If ratio is wider → widget is being scaled/stretched horizontally';
+        ctx.fillStyle = '#ff0';
+        ctx.fillText('H=' + h.toFixed(1) + 'px', pts[0].x - 60, (pts[0].y+pts[2].y)/2);
+    }
+}
+
+canvas.addEventListener('click', function(e) {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    if (pts.length < 3) {
+        pts.push({x, y});
+        let labels = ['top-left','top-right','bottom-left'];
+        pointsDiv.innerHTML = pts.map((p,i) => labels[i]+': ('+p.x.toFixed(0)+','+p.y.toFixed(0)+')').join(' &nbsp;|&nbsp; ');
+        if (pts.length < 3) info.textContent = 'Click ' + ['top-left','top-right','bottom-left'][pts.length] + ' corner';
+    } else {
+        pts.length = 0;
+        pointsDiv.innerHTML = '';
+        info.textContent = 'Click 3 points: top-left, top-right, bottom-left';
+    }
+    draw();
+});
+
+// Load the photo - drop an image on the page or use file input
+info.innerHTML += '<br><input type="file" id="file" accept="image/*">';
+document.getElementById('file').addEventListener('change', function(e) {
+    const f = e.target.files[0];
+    if (f) {
+        img.src = URL.createObjectURL(f);
+        pts.length = 0;
+        pointsDiv.innerHTML = '';
+    }
+});
+</script>
+</body>
+</html>

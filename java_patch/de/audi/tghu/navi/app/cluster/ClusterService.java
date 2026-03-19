@@ -1336,26 +1336,18 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
      * No KDK mapping needed - the renderer creates its own displayable.
      */
     public String activateCustomRendererPipeline() {
+        /* Renderer draws into displayable 20 (MAP_ROUTE_GUIDANCE) which is
+         * already composited in context 74 with the native map (displayable 33).
+         * No context switch needed — cluster is already on context 74. */
         try {
             de.audi.atip.hmi.view.IDisplayManager dm =
                 ((de.audi.atip.hmi.HMIService) this.env.getHMIService()).getDisplayManager();
-            int ctxBefore = dm.getCurrentContextID(1);
-
-            /* Force context away first so the switch is a real change */
-            dm.switchContext(0, 1, null);
-            try { Thread.sleep(300); } catch (InterruptedException ie) { /* ignore */ }
-
-            /* Switch to context 99 (custom renderer displayable 199).
-             * preContextSwitchHook -> setActiveDisplayable(4, 199) ->
-             * video encoder captures displayable 199. */
-            dm.switchContext(99, 1, null);
-            int ctxAfter = dm.getCurrentContextID(1);
-            try { Thread.sleep(300); } catch (InterruptedException ie) { /* ignore */ }
-
-            /* Start video encoding at 10fps */
-            dm.setUpdateRate(1, 10);
-
-            return "renderer ctx=" + ctxBefore + "->" + ctxAfter;
+            int ctx = dm.getCurrentContextID(1);
+            /* Ensure cluster is on context 74 (with map + RG widget) */
+            if (ctx != 74) {
+                dm.switchContext(74, 1, null);
+            }
+            return "cluster ctx=" + ctx;
         } catch (Throwable t) {
             return "FAILED: " + t.getClass().getName() + ": " + t.getMessage();
         }
@@ -1365,15 +1357,8 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
      * Deactivate custom renderer pipeline. Stop encoding and restore context.
      */
     public void deactivateCustomRendererPipeline() {
-        try {
-            de.audi.atip.hmi.view.IDisplayManager dm =
-                ((de.audi.atip.hmi.HMIService) this.env.getHMIService()).getDisplayManager();
-            dm.setUpdateRate(1, 0);
-            /* Restore to FPK map context */
-            dm.switchContext(72, 1, null);
-        } catch (Throwable t) {
-            /* non-fatal */
-        }
+        /* Displayable 20 stays in context 74 — renderer just stops drawing.
+         * Native navi will resume rendering to displayable 20 on its own. */
     }
 
     /**

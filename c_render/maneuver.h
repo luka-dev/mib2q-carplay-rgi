@@ -25,7 +25,7 @@
 #define ICON_ARRIVED     7   /* direction: -1=left, 0=center, 1=right */
 #define ICON_COUNT       8
 
-#define MAX_JUNCTION_ANGLES 20
+#define MAX_JUNCTION_ANGLES 18  /* max 18: payload[6..41], keeps [42..45] for persp/bargraph */
 
 /* Maneuver state (from PPS / UDP) */
 typedef struct {
@@ -60,7 +60,8 @@ void maneuver_draw(const maneuver_state_t *state, const maneuver_state_t *next_s
 
 /* Route path animation control. */
 void maneuver_start_anim(void);       /* reset slide=0, start auto-animation */
-int  maneuver_is_animating(void);     /* 1 while auto-animation running */
+int  maneuver_is_animating(void);     /* 1 while transition animation running (for engine state) */
+int  maneuver_needs_redraw(void);    /* 1 while any animation needs continuous rendering */
 void maneuver_set_slide(float t);     /* set slide manually (stops auto-anim) */
 float maneuver_get_slide(void);       /* get current slide value */
 

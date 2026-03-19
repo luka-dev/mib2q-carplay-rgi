@@ -205,6 +205,13 @@ static GLuint g_fbo_texs[FBO_COUNT];
 static GLuint g_fbo_depths[FBO_COUNT];
 static int g_fbo_w = 0, g_fbo_h = 0;
 static GLint g_default_fbo = 0;  /* saved at init -- may not be 0 on macOS */
+
+/* 2x supersample FBO — render at double resolution, blit down with GL_LINEAR */
+#define SSAA_SCALE 2
+static GLuint g_ss_fbo = 0;
+static GLuint g_ss_tex = 0;
+static GLuint g_ss_depth = 0;
+static int g_ss_w = 0, g_ss_h = 0;
 static float g_mask_half_w = 1.6f;
 static float g_mask_half_h = 1.0f;
 
@@ -229,10 +236,10 @@ static const material_preset_t k_material_presets[RENDER_MAT_COUNT] = {
         { 0.12f, 96.0f }                       /* stronger grain texture */
     },
     [RENDER_MAT_ROUTE_ACTIVE] = {
-        { 0.07f, 0.46f, 0.92f, 1.0f },
-        { 0.10f, 0.72f, 0.28f, 28.0f },
-        { 0.12f, 5.0f, 0.14f, 68.0f },
-        { 0.02f, 96.0f }
+        { 0.35f, 0.67f, 0.90f, 1.0f },   /* soft blue, matches bargraph */
+        { 0.10f, 0.68f, 0.50f,  6.0f },   /* broad spec lobe (power 6 — visible at N·H=0.82) */
+        { 0.22f, 3.0f, 0.40f, 12.0f },    /* clearcoat candy gloss (power 12, wide enough for camera angle) */
+        { 0.0f, 0.0f }
     }
 };
 
@@ -283,10 +290,6 @@ static const char *k_frag_src_body =
     "uniform float u_global_alpha;\n"
     "varying vec3 v_normal;\n"
     "varying vec3 v_world_pos;\n"
-    "vec3 tone_map(vec3 x) {\n"
-    "  x *= 1.10;\n"
-    "  return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);\n"
-    "}\n"
     "vec4 shade_surface(vec4 base, float alpha) {\n"
     "  vec3 N = normalize(v_normal);\n"
     "  vec3 L = normalize(u_light_dir);\n"
@@ -338,7 +341,7 @@ static const char *k_frag_src_body =
     "  float edge_ao = mix(0.85, 1.0, smoothstep(-0.1, 0.25, N.y));\n"
     "  color *= edge_ao;\n"
     /* tone map + saturation */
-    "  color = tone_map(color);\n"
+    "  color = clamp(color, 0.0, 1.0);\n"
     "  {\n"
     "    float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));\n"
     "    color = mix(vec3(luma), color, 1.22);\n"
@@ -364,8 +367,7 @@ static const char *k_frag_src_body =
     "    gl_FragColor = u_color;\n"
     "    return;\n"
     "  }\n"
-    /* tex_mode 2: lit 3D blit -- sample mask texture, apply lighting.
-     * UV from world position: maps (x,z) through ortho projection to mask texture coords. */
+    /* tex_mode 2: lit 3D blit -- sample mask texture, apply lighting. */
     "  if (u_tex_mode > 1.5 && u_tex_mode < 2.5) {\n"
     "    vec2 uv = vec2(v_world_pos.x * u_mask_scale.x + 0.5,\n"
     "                    v_world_pos.z * u_mask_scale.y + 0.5);\n"
@@ -376,8 +378,7 @@ static const char *k_frag_src_body =
     "    gl_FragColor.a *= u_global_alpha;\n"
     "    return;\n"
     "  }\n"
-    /* tex_mode 7: lit 3D blit with FBO color as base (painter's algorithm road FBO).
-     * Reads FBO RGB as diffuse base color, alpha as opacity. */
+    /* tex_mode 7: lit 3D blit with FBO color as base (painter's algorithm road FBO). */
     "  if (u_tex_mode > 6.5 && u_tex_mode < 7.5) {\n"
     "    vec2 uv = vec2(v_world_pos.x * u_mask_scale.x + 0.5,\n"
     "                    v_world_pos.z * u_mask_scale.y + 0.5);\n"
@@ -488,11 +489,14 @@ static GLuint compile_shader(GLenum type, const char *src) {
 }
 
 static int build_program(void) {
+    char vert_src[4096];
+    snprintf(vert_src, sizeof(vert_src), "%s%s%s",
+             SHADER_HEADER, SHADER_PRECISION, k_vert_src);
     char frag_src[16384];
     snprintf(frag_src, sizeof(frag_src), "%s%s%s",
              SHADER_HEADER, SHADER_PRECISION, k_frag_src_body);
 
-    GLuint vs = compile_shader(GL_VERTEX_SHADER, k_vert_src);
+    GLuint vs = compile_shader(GL_VERTEX_SHADER, vert_src);
     GLuint fs = compile_shader(GL_FRAGMENT_SHADER, frag_src);
     if (!vs || !fs) return -1;
 
@@ -618,7 +622,7 @@ static void fbo_bind_noclear(int idx) {
 }
 
 static void fbo_unbind(void) {
-    glBindFramebuffer(GL_FRAMEBUFFER, g_default_fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, g_ss_fbo);
     glViewport(0, 0, g_fb_w, g_fb_h);
 }
 
@@ -660,7 +664,36 @@ int render_init(int fb_width, int fb_height) {
 
     /* Save default framebuffer -- may not be 0 on macOS with MSAA */
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &g_default_fbo);
-    fbos_init(fb_width, fb_height);
+
+    /* 2x supersample: create SS FBO, then override g_fb_w/g_fb_h to 2x
+     * so the entire pipeline renders at double resolution. */
+    g_ss_w = fb_width * SSAA_SCALE;
+    g_ss_h = fb_height * SSAA_SCALE;
+    glGenTextures(1, &g_ss_tex);
+    glBindTexture(GL_TEXTURE_2D, g_ss_tex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, g_ss_w, g_ss_h, 0,
+                 GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glGenRenderbuffers(1, &g_ss_depth);
+    glBindRenderbuffer(GL_RENDERBUFFER, g_ss_depth);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_FBO, g_ss_w, g_ss_h);
+    glGenFramebuffers(1, &g_ss_fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, g_ss_fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                           GL_TEXTURE_2D, g_ss_tex, 0);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+                              GL_RENDERBUFFER, g_ss_depth);
+    glBindFramebuffer(GL_FRAMEBUFFER, g_default_fbo);
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    fprintf(stderr, "render: SSAA %dx%d -> %dx%d\n", g_ss_w, g_ss_h, fb_width, fb_height);
+
+    /* Override fb dimensions to 2x — entire pipeline uses these */
+    g_fb_w = g_ss_w;
+    g_fb_h = g_ss_h;
+
+    fbos_init(g_fb_w, g_fb_h);
 
     /* Init tex_mode off */
     glUseProgram(g_program);
@@ -668,7 +701,7 @@ int render_init(int fb_width, int fb_height) {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, g_fbo_texs[0]);
     glUniform1i(g_uni_tex, 0);
-    glUniform2f(g_uni_resolution, (float)fb_width, (float)fb_height);
+    glUniform2f(g_uni_resolution, (float)g_ss_w, (float)g_ss_h);
 
     fprintf(stderr, "render: init multi-layer %dx%d (default fbo=%d)\n",
             fb_width, fb_height, (int)g_default_fbo);
@@ -676,11 +709,13 @@ int render_init(int fb_width, int fb_height) {
 }
 
 void render_set_viewport(int fb_width, int fb_height) {
-    g_fb_w = fb_width;
-    g_fb_h = fb_height;
-    update_mask_config(fb_width, fb_height);
-    glViewport(0, 0, fb_width, fb_height);
-    glUniform2f(g_uni_resolution, (float)fb_width, (float)fb_height);
+    g_ss_w = fb_width * SSAA_SCALE;
+    g_ss_h = fb_height * SSAA_SCALE;
+    g_fb_w = g_ss_w;
+    g_fb_h = g_ss_h;
+    update_mask_config(g_fb_w, g_fb_h);
+    glViewport(0, 0, g_fb_w, g_fb_h);
+    glUniform2f(g_uni_resolution, (float)g_fb_w, (float)g_fb_h);
     fbos_resize(fb_width, fb_height);
 }
 
@@ -813,6 +848,9 @@ static void sync_camera_uniforms(void) {
 }
 
 void render_begin_frame(void) {
+    /* Render into 2x supersample FBO */
+    glBindFramebuffer(GL_FRAMEBUFFER, g_ss_fbo);
+    glViewport(0, 0, g_ss_w, g_ss_h);
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glUseProgram(g_program);
@@ -854,11 +892,12 @@ void render_bargraph(int level, float alpha) {
     glUniform1f(g_uni_zbias, 0.0f);
 
     /* level 0 = 0 bars blue, level 16 = 16 bars blue.
-     * Bars drawn bottom (i=0) to top (i=15). Top bar in image = bottom bar on screen. */
+     * Bars drawn bottom (i=0) to top (i=15).
+     * Top bars blue, bottom bars grey — fills from top down. */
     for (i = 0; i < N_BARS; i++) {
         float y = base_y + i * (BAR_H + GAP);
         float r, g, b;
-        int bar_idx = N_BARS - 1 - i;  /* image top = bar 0, screen bottom = bar 0 */
+        int bar_idx = N_BARS - 1 - i;  /* top bar = idx 0 */
         if (bar_idx < level) { r = 90.0f/255.0f; g = 170.0f/255.0f; b = 230.0f/255.0f; }
         else                 { r = 100.0f/255.0f; g = 100.0f/255.0f; b = 100.0f/255.0f; }
         glUniform4f(g_uni_color, r, g, b, alpha);
@@ -885,7 +924,32 @@ void render_sync_camera(void) {
     sync_camera_uniforms();
 }
 
-void render_end_frame(void) { /* no-op */ }
+void render_end_frame(void) {
+    /* Blit supersample FBO down to screen with GL_LINEAR filtering */
+    glBindFramebuffer(GL_FRAMEBUFFER, g_default_fbo);
+    glViewport(0, 0, g_fb_w, g_fb_h);
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_BLEND);
+    glUseProgram(g_program);
+    glUniform1f(g_uni_tex_mode, 1.0f);  /* fullscreen blit passthrough */
+    glUniform1f(g_uni_global_alpha, 1.0f);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, g_ss_tex);
+    glUniform1i(g_uni_tex, 0);
+    vb_reset();
+    vb_v(-1, -1, 0, 0,0,1);
+    vb_v( 1, -1, 0, 0,0,1);
+    vb_v( 1,  1, 0, 0,0,1);
+    vb_v(-1, -1, 0, 0,0,1);
+    vb_v( 1,  1, 0, 0,0,1);
+    vb_v(-1,  1, 0, 0,0,1);
+    vb_flush(1, 1, 1, 1);
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glUniform1f(g_uni_tex_mode, 0.0f);
+}
 
 void render_set_perspective(int enabled) {
     g_perspective = enabled;
@@ -1287,7 +1351,6 @@ void render_thick_line(float x0, float y0, float x1, float y1, float thickness,
     vb_quad(bx,tp,bz, cx,tp,cz, cx,bt,cz, bx,bt,bz,  -snx,0,-snz);           /* right side */
     vb_quad(ax,tp,az, ax,bt,az, bx,bt,bz, bx,tp,bz,   -fdx,0,-fdz);          /* near cap */
     vb_quad(ex,tp,ez, cx,tp,cz, cx,bt,cz, ex,bt,ez,    fdx,0,fdz);            /* far cap */
-    render_set_material(RENDER_MAT_GENERIC_SOLID);
     vb_flush(r, g, b, a);
 }
 
@@ -1317,7 +1380,6 @@ void render_triangle(float x0, float y0, float x1, float y1, float x2, float y2,
         vb_quad(ex[i][0],tp,ex[i][1], ex[i][2],tp,ex[i][3],
                 ex[i][2],bt,ex[i][3], ex[i][0],bt,ex[i][1],  enx,0,enz);
     }
-    render_set_material(RENDER_MAT_GENERIC_SOLID);
     vb_flush(r, g, b, a);
 }
 
@@ -1370,7 +1432,6 @@ void render_disc(float cx, float cy, float radius, int segments,
         vb_v(px0,tp,pz0, anx,0,anz);  vb_v(px1,bt,pz1, anx,0,anz);  vb_v(px0,bt,pz0, anx,0,anz);
     }
 
-    render_set_material(RENDER_MAT_GENERIC_SOLID);
     vb_flush(r, g, b, a);
 }
 
@@ -1412,7 +1473,6 @@ void render_arc(float cx, float cy, float radius, float thickness,
         vb_quad(ix1,tp,iz1, ix1,bt,iz1, ix0,bt,iz0, ix0,tp,iz0,  -onx,0,-onz);
     }
 
-    render_set_material(RENDER_MAT_GENERIC_SOLID);
     vb_flush(r, g, b, a);
 }
 
@@ -1433,7 +1493,6 @@ void render_rect(float x, float y, float w, float h_rect,
     vb_quad(x1,tp,z1, x1,bt,z1, x0,bt,z1, x0,tp,z1,    0,0,1);        /* far */
     vb_quad(x0,tp,z1, x0,bt,z1, x0,bt,z0, x0,tp,z0,   -1,0,0);        /* left */
     vb_quad(x1,tp,z0, x1,bt,z0, x1,bt,z1, x1,tp,z1,    1,0,0);        /* right */
-    render_set_material(RENDER_MAT_GENERIC_SOLID);
     vb_flush(r, g, b, a);
 }
 

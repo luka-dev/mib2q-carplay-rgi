@@ -27,6 +27,7 @@
  * ================================================================ */
 
 static int g_sock = -1;
+static const char *g_target_host = "127.0.0.1";
 
 static int tcp_connect(void) {
     if (g_sock >= 0) return 0;
@@ -37,7 +38,7 @@ static int tcp_connect(void) {
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_addr.s_addr = inet_addr(g_target_host);
     addr.sin_port = htons(CR_TCP_PORT);
 
     if (connect(g_sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
@@ -46,7 +47,7 @@ static int tcp_connect(void) {
         return -1;
     }
 
-    fprintf(stderr, "harness: connected to 127.0.0.1:%d\n", CR_TCP_PORT);
+    fprintf(stderr, "harness: connected to %s:%d\n", g_target_host, CR_TCP_PORT);
     return 0;
 }
 
@@ -129,7 +130,7 @@ static void encode_maneuver(const preset_t *p, cr_cmd_t *cmd) {
     cmd->payload[4] = 0; /* driving_side RHT */
     cmd->payload[5] = (uint8_t)p->junction_angle_count;
 
-    for (i = 0; i < p->junction_angle_count && i < 20; i++) {
+    for (i = 0; i < p->junction_angle_count && i < 18; i++) {
         int16_t ja = (int16_t)p->junction_angles[i];
         cmd->payload[6 + i * 2] = (uint8_t)((ja >> 8) & 0xFF);
         cmd->payload[7 + i * 2] = (uint8_t)(ja & 0xFF);
@@ -178,7 +179,7 @@ static void send_random_icon(int icon, uint8_t flags) {
     } else {
         jcount = 0;
     }
-    if (jcount > 20) jcount = 20;
+    if (jcount > 18) jcount = 18;
     cmd.payload[5] = (uint8_t)jcount;
     for (i = 0; i < jcount; i++) {
         int16_t ja = (int16_t)((rand() % 361) - 180);
@@ -327,7 +328,7 @@ static void key_callback(GLFWwindow *window, int key, int scancode, int action, 
  * ================================================================ */
 
 int main(int argc, char **argv) {
-    (void)argc; (void)argv;
+    if (argc > 1) g_target_host = argv[1];
 
     if (!glfwInit()) {
         fprintf(stderr, "harness: glfwInit failed\n");
@@ -347,7 +348,7 @@ int main(int argc, char **argv) {
     glfwSetKeyCallback(window, key_callback);
 
     fprintf(stderr, "harness: ready (L/R=cycle, R=random, Space=snap, Q=quit)\n");
-    fprintf(stderr, "harness: connecting to 127.0.0.1:%d...\n", CR_TCP_PORT);
+    fprintf(stderr, "harness: target %s:%d\n", g_target_host, CR_TCP_PORT);
     tcp_connect();
 
     while (!glfwWindowShouldClose(window) && !g_should_close) {

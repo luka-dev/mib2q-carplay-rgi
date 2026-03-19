@@ -34,31 +34,34 @@ static void renderer_kill_previous(void) {
 static void renderer_start(void) {
     renderer_kill_previous();
 
-    pid_t pid = fork();
-    if (pid < 0) {
-        LOG_ERROR(LOG_MODULE, "renderer: fork failed: %s", strerror(errno));
+    /* Launch renderer with clean LD_LIBRARY_PATH — the iAP2 daemon adds
+     * /mnt/app/root/lib-target which may shadow system libEGL.so and cause
+     * SIGSEGV in eglGetDisplay.  Use only standard QNX/ESO library paths. */
+    int ret = system(
+        "LD_LIBRARY_PATH=/eso/lib:/lib:/lib/dll:/mnt/app/armle/lib:/mnt/app/armle/lib/dll "
+        CR_BINARY_PATH " >/tmp/maneuver_render.log 2>&1 &");
+    if (ret != 0) {
+        LOG_ERROR(LOG_MODULE, "renderer: system() failed ret=%d", ret);
         return;
     }
 
-    if (pid == 0) {
-        /* Child process */
-        execl(CR_BINARY_PATH, "maneuver_render", (char *)NULL);
-        /* If exec fails, try relative path (same folder as hook .so) */
-        execl("./maneuver_render", "maneuver_render", (char *)NULL);
-        _exit(127);
+    /* Give renderer time to start and write its PID */
+    usleep(500000); /* 500ms */
+
+    /* Find renderer PID by name */
+    FILE *fp = popen("pidin -F '%a %N' | grep maneuver_render | head -1", "r");
+    if (fp) {
+        char buf[128];
+        if (fgets(buf, sizeof(buf), fp)) {
+            g_renderer_pid = atoi(buf);
+        }
+        pclose(fp);
     }
 
-    g_renderer_pid = pid;
-    LOG_INFO(LOG_MODULE, "renderer: started pid=%d", (int)pid);
-
-    /* Brief wait to detect immediate exec failure (child exits with 127). */
-    usleep(50000); /* 50ms */
-    int wst = 0;
-    pid_t ret = waitpid(pid, &wst, WNOHANG);
-    if (ret == pid) {
-        g_renderer_pid = -1;
-        LOG_ERROR(LOG_MODULE, "renderer: exec failed (exit %d), continuing without render",
-                  WIFEXITED(wst) ? WEXITSTATUS(wst) : -1);
+    if (g_renderer_pid > 0) {
+        LOG_INFO(LOG_MODULE, "renderer: started pid=%d", (int)g_renderer_pid);
+    } else {
+        LOG_ERROR(LOG_MODULE, "renderer: launched but PID not found");
     }
 }
 
@@ -1043,10 +1046,8 @@ static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) 
             if (upd.route_state == 0) {
                 rgd_update_cache_reset();
             }
-            /* Start renderer when route guidance becomes active */
-            if (upd.route_state >= RGD_STATE_ROUTE_SET && g_renderer_pid <= 0) {
-                renderer_start();
-            }
+            /* Renderer is launched by Java (BAPBridge.startCustomRenderer)
+             * — Java's process tree has clean EGL access unlike iAP2 daemon. */
         }
         write_pps_update_partial(&upd);
     }

@@ -575,10 +575,10 @@ public class BAPBridge {
                 && (nowApproach != inApproachZone)
                 && showManeuver && hasManeuverList;
             if (approachChanged) {
-                dirty |= RouteGuidance.State.DIRTY_MANEUVER_ICON
-                       | RouteGuidance.State.DIRTY_DIST_MAN
+                dirty |= RouteGuidance.State.DIRTY_DIST_MAN
                        | RouteGuidance.State.DIRTY_LANE_GUIDANCE
-                       | RouteGuidance.State.DIRTY_MANEUVER_TEXT;
+                       | RouteGuidance.State.DIRTY_MANEUVER_TEXT
+                       | RouteGuidance.State.DIRTY_MANEUVER_ICON;  /* BAP needs icon refresh for approach/follow */
                 inApproachZone = nowApproach;
                 latchedTurnToText = "";
                 Log.i(TAG, "Approach zone " + (nowApproach ? "ENTER" : "EXIT")
@@ -835,13 +835,41 @@ public class BAPBridge {
                 appConnectorNavi.updateDestinationInfo(destInfo);
             }
 
-            /* 10. c_render: push maneuver data via TCP for LVDS video */
-            int crMask = RouteGuidance.State.DIRTY_MANEUVER_ICON
-                | RouteGuidance.State.DIRTY_MANEUVER_LIST
-                | RouteGuidance.State.DIRTY_MANEUVER_COUNT
-                | RouteGuidance.State.DIRTY_DIST_MAN;
-            if ((dirty & crMask) != 0) {
-                updateRenderer(s, bargraphDenominatorM);
+            /* 10. c_render: CMD_MANEUVER only when icon actually changes,
+             * CMD_BARGRAPH for distance updates, CMD_PERSPECTIVE for approach zone */
+            if (rendererClient != null && customRendererStarted) {
+                /* Approach zone enter/exit → perspective + initial bargraph */
+                if (approachChanged) {
+                    rendererClient.sendPerspective(nowApproach ? 0 : 1);
+                    /* Entering approach → send initial bargraph to activate it */
+                    if (nowApproach) {
+                        updateRendererBargraph(s, bargraphDenominatorM);
+                    } else {
+                        /* Exiting approach → turn off bargraph */
+                        rendererClient.sendBargraph(0, 0);
+                    }
+                }
+                /* Check if rendered maneuver actually changed */
+                boolean iconChanged = false;
+                int crIconMask = RouteGuidance.State.DIRTY_MANEUVER_ICON
+                    | RouteGuidance.State.DIRTY_MANEUVER_LIST
+                    | RouteGuidance.State.DIRTY_MANEUVER_COUNT;
+                /* Force reset dedup on list/count change — new route or maneuver sequence */
+                if ((dirty & (RouteGuidance.State.DIRTY_MANEUVER_LIST
+                            | RouteGuidance.State.DIRTY_MANEUVER_COUNT)) != 0) {
+                    lastCrIcon = -1;
+                    lastCrDirection = -99;
+                    lastCrExitAngle = -9999;
+                    lastCrDrivingSide = -1;
+                }
+                if ((dirty & crIconMask) != 0) {
+                    iconChanged = updateRendererIfChanged(s, bargraphDenominatorM);
+                }
+                /* Distance-only → CMD_BARGRAPH (no push), only in approach zone */
+                if (!iconChanged && !approachChanged && inApproachZone
+                        && (dirty & RouteGuidance.State.DIRTY_DIST_MAN) != 0) {
+                    updateRendererBargraph(s, bargraphDenominatorM);
+                }
             }
 
             Log.d(TAG, "Update: dist=" + distM + "m maneuvers=" + Math.min(s.maneuverCount, MAX_BAP_MANEUVERS));
@@ -1289,34 +1317,56 @@ public class BAPBridge {
 
     private boolean customRendererStarted = false;
 
+    /* Last maneuver state sent to renderer — only send CMD_MANEUVER when these change */
+    private int lastCrIcon = -1;
+    private int lastCrDirection = -99;
+    private int lastCrExitAngle = -9999;
+    private int lastCrDrivingSide = -1;
+
+    private static final String CR_LAUNCH_CMD =
+        "/mnt/app/root/hooks/maneuver_render >/tmp/maneuver_render.log 2>&1 &";
+    private static final String CR_KILL_CMD =
+        "slay -f -Q maneuver_render >/dev/null 2>&1";
+
     private void startCustomRenderer() {
         if (csRef == null) {
             Log.w(TAG, "CR: cannot start (csRef null)");
             return;
         }
         try {
-            /* 1. Force gfxAvailable so VC enters MAP mode.
-             * This triggers INTERN_Active_NavFPK_Content=1 -> VC expects LVDS. */
-            forceGfxAvailable(true);
+            /* Kill any previous instance */
+            try {
+                de.audi.atip.util.CommandLineExecuter.executeCommand(
+                    "/bin/sh", new String[] { "-c", CR_KILL_CMD });
+            } catch (Throwable t) { /* ignore */ }
 
-            /* 2. Activate video pipeline: context 99 -> displayable 199 -> encoder.
-             * c_render creates displayable 199 and context 99 via dmdt.
-             * We wait briefly for the renderer to initialize before switching. */
-            try { Thread.sleep(500); } catch (InterruptedException ie) { /* ignore */ }
+            /* Launch renderer from Java (not C hook) — Java's process tree
+             * has clean EGL access. Same approach as gpSP. */
+            Log.i(TAG, "CR: launching maneuver_render from Java");
+            de.audi.atip.util.CommandLineExecuter.executeCommand(
+                "/bin/sh", new String[] { "-c", CR_LAUNCH_CMD });
 
+            /* Wait for renderer to init EGL + TCP server */
+            try { Thread.sleep(2000); } catch (InterruptedException ie) { /* ignore */ }
+
+            /* Switch cluster display to renderer's context via DisplayManager */
             String result = csRef.activateCustomRendererPipeline();
             Log.i(TAG, "CR: pipeline " + result);
 
-            /* 3. BAP route info state for HUD icons */
+            /* BAP route info state for HUD icons */
             forceClusterRouteInfoState(true);
 
-            /* 4. TCP connection to c_render */
+            /* TCP connection to c_render */
             rendererClient = new RendererClient();
             if (!rendererClient.connect()) {
                 Log.w(TAG, "CR: TCP connect failed (will retry on send)");
             }
 
             customRendererStarted = true;
+            lastCrIcon = -1;
+            lastCrDirection = -99;
+            lastCrExitAngle = -9999;
+            lastCrDrivingSide = -1;
             Log.i(TAG, "CR: started");
         } catch (Throwable t) {
             Log.w(TAG, "CR start failed: " + t.getClass().getName() + ": " + t.getMessage());
@@ -1344,16 +1394,15 @@ public class BAPBridge {
     }
 
     /**
-     * Push current maneuver data to c_render via TCP CMD_MANEUVER packet.
-     * Picks the first directional maneuver (skipping FOLLOW_STREET),
-     * maps via RendererMapper, computes bargraph, sends to renderer.
+     * Push maneuver to c_render ONLY if the rendered icon actually changed.
+     * Returns true if CMD_MANEUVER was sent, false if suppressed (same icon).
      */
-    private void updateRenderer(RouteGuidance.State s, int bargraphDenominatorM) {
-        if (rendererClient == null || !customRendererStarted) return;
+    private boolean updateRendererIfChanged(RouteGuidance.State s, int bargraphDenominatorM) {
+        if (rendererClient == null || !customRendererStarted) return false;
 
         try {
             int[] idxs = getManeuverIndexList(s);
-            if (idxs == null || idxs.length == 0 || s.maneuverCount == 0) return;
+            if (idxs == null || idxs.length == 0 || s.maneuverCount == 0) return false;
 
             int maxIdx = (s.mType != null) ? s.mType.length : 0;
             /* Pick first directional maneuver (skip FOLLOW_STREET) */
@@ -1372,19 +1421,30 @@ public class BAPBridge {
                 }
             }
             if (firstIdx < 0) firstIdx = followIdx;
-            if (firstIdx < 0) return;
+            if (firstIdx < 0) return false;
 
             int mt = s.mType[firstIdx];
             int icon = RendererMapper.mapIcon(mt);
             int direction = RendererMapper.mapDirection(mt, s.mTurnAngle[firstIdx], s.mDrivingSide[firstIdx]);
             int exitAngle = RendererMapper.mapExitAngle(mt, s.mTurnAngle[firstIdx]);
             int drivingSide = s.mDrivingSide[firstIdx];
+
+            /* Skip if icon hasn't actually changed */
+            if (icon == lastCrIcon && direction == lastCrDirection
+                    && exitAngle == lastCrExitAngle && drivingSide == lastCrDrivingSide) {
+                return false;
+            }
+            lastCrIcon = icon;
+            lastCrDirection = direction;
+            lastCrExitAngle = exitAngle;
+            lastCrDrivingSide = drivingSide;
+
             int[] junctionAngles = (s.mJunctionAngles != null && firstIdx < s.mJunctionAngles.length)
                 ? s.mJunctionAngles[firstIdx] : null;
 
             /* Bargraph: 0-100 percentage -> 0-16 level */
             int bargraphLevel = 0;
-            int bargraphMode = 0;  /* 0=off, 1=on, 2=blink */
+            int bargraphMode = 0;
             int distM = s.distManeuverM;
             if (bargraphDenominatorM > 0 && distM > 0 && distM <= bargraphDenominatorM) {
                 int pct = (distM * 100) / bargraphDenominatorM;
@@ -1392,22 +1452,46 @@ public class BAPBridge {
                 if (pct > 100) pct = 100;
                 bargraphLevel = (pct * 16) / 100;
                 if (pct < BARGRAPH_BLINK_PERCENT) {
-                    bargraphMode = 2;  /* blink */
+                    bargraphMode = 2;
                 } else {
-                    bargraphMode = 1;  /* on */
+                    bargraphMode = 1;
                 }
             }
 
-            /* Tell renderer what perspective the new maneuver should land in:
-             * approach zone = 2D (flat), outside = 3D */
             int perspective = inApproachZone ? 0 : 1;
 
             rendererClient.sendManeuver(icon, direction, exitAngle,
                 drivingSide, junctionAngles, bargraphLevel, bargraphMode,
                 perspective);
+            return true;
         } catch (Throwable e) {
             Log.w(TAG, "CR update failed: " + e.getClass().getName() + ": " + e.getMessage());
+            return false;
         }
+    }
+
+    /**
+     * Send standalone CMD_BARGRAPH to c_render on distance-only updates.
+     * No push transition — just updates the bargraph level/mode in place.
+     */
+    private void updateRendererBargraph(RouteGuidance.State s, int bargraphDenominatorM) {
+        if (rendererClient == null || !customRendererStarted) return;
+
+        int bargraphLevel = 0;
+        int bargraphMode = 0;
+        int distM = s.distManeuverM;
+        if (bargraphDenominatorM > 0 && distM > 0 && distM <= bargraphDenominatorM) {
+            int pct = (distM * 100) / bargraphDenominatorM;
+            if (pct < 0) pct = 0;
+            if (pct > 100) pct = 100;
+            bargraphLevel = (pct * 16) / 100;
+            if (pct < BARGRAPH_BLINK_PERCENT) {
+                bargraphMode = 2;
+            } else {
+                bargraphMode = 1;
+            }
+        }
+        rendererClient.sendBargraph(bargraphLevel, bargraphMode);
     }
 
     /**

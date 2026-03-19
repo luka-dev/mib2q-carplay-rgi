@@ -141,6 +141,7 @@ static float g_cam_settle_start_y = 0.0f;
 static float g_cam_settle_start_rot = 0.0f;
 static float g_cam_settle_t = 0.0f;
 static int   g_cam_settle_active = 0;
+
 static float g_light_settle_start_rot = 0.0f;
 static float g_light_settle_t = 0.0f;
 static int   g_light_settle_active = 0;
@@ -172,6 +173,7 @@ static void clear_combined_transition(void) {
 }
 
 static void clear_camera_settle(void) {
+    g_release_snapped = 0;
     g_cam_settle_start_x = 0.0f;
     g_cam_settle_start_y = 0.0f;
     g_cam_settle_start_rot = 0.0f;
@@ -200,6 +202,13 @@ void maneuver_start_anim(void) {
 }
 
 int maneuver_is_animating(void) {
+    /* g_flag_active excluded — flag loops forever and must not block
+     * engine state transitions (SLIDING_IN → IDLE). It only drives
+     * continuous rendering via render dirty flag. */
+    return g_route_animating || g_cam_settle_active || g_light_settle_active;
+}
+
+int maneuver_needs_redraw(void) {
     return g_route_animating || g_flag_active || g_cam_settle_active || g_light_settle_active;
 }
 
@@ -617,7 +626,9 @@ static void update_camera_settle(void) {
         return;
     }
 
-    blend = smoothstep01(g_cam_settle_t);
+    /* Ease-out (quadratic): starts at full velocity, decelerates to stop.
+     * Avoids the velocity hiccup when transitioning from linear slide tracking. */
+    blend = 1.0f - (1.0f - g_cam_settle_t) * (1.0f - g_cam_settle_t);
     apply_camera_pose(g_cam_settle_start_x * (1.0f - blend),
                       g_cam_settle_start_y * (1.0f - blend),
                       lerp_angle(g_cam_settle_start_rot, 0.0f, blend));
@@ -647,6 +658,21 @@ static void update_combined_camera(void) {
     follow_t = (g_next_cam_follow_dist > 0.0f) ? (g_next_cam_follow_dist / total) : 0.0f;
     if (follow_t < 0.0f) follow_t = 0.0f;
     if (follow_t > 1.0f) follow_t = 1.0f;
+
+    if (head_dist <= intro_dist) {
+        float denom = intro_dist - g_combined_start_head_dist;
+        float blend = (denom > 1e-4f) ? (head_dist - g_combined_start_head_dist) / denom : 1.0f;
+
+        rpath_sample(&g_route_path, g_t_head, &follow_x, &follow_y);
+        follow_rot = rpath_sample_heading(&g_route_path, g_t_head) - (float)(M_PI * 0.5);
+        /* Ease-out quadratic: blend'(1) = 0 → C1 continuity at intro→follow.
+         * cam = arrowhead × blend, so blend'(1)=0 eliminates the
+         * arrowhead(t) × blend'(t) velocity term at the boundary. */
+        blend = 2.0f * blend - blend * blend;
+        apply_camera_pose(follow_x * blend, follow_y * blend,
+                          lerp_angle(0.0f, follow_rot, blend));
+        return;
+    }
 
     if (head_dist <= intro_dist) {
         float denom = intro_dist - g_combined_start_head_dist;

@@ -103,7 +103,7 @@ public class RendererClient {
         int jCount = 0;
         if (junctionAngles != null) {
             jCount = junctionAngles.length;
-            if (jCount > 20) jCount = 20;
+            if (jCount > 18) jCount = 18;  /* max 18: payload[6..41], keeps [42..45] for persp/bargraph */
         }
         pkt[7] = (byte) (jCount & 0xFF);
         /* payload[6..45]: junction_angles (big-endian i16 each) */
@@ -151,8 +151,9 @@ public class RendererClient {
         byte[] pkt = new byte[PKT_SIZE];
         pkt[0] = CMD_PERSPECTIVE;
         pkt[2] = (byte) (enabled & 0xFF);   /* payload[0] = on/off */
-        sendPacket(pkt);
-        Log.i(TAG, "Sent CMD_PERSPECTIVE=" + enabled);
+        if (sendPacket(pkt)) {
+            Log.i(TAG, "Sent CMD_PERSPECTIVE=" + enabled);
+        }
     }
 
     /**
@@ -166,17 +167,19 @@ public class RendererClient {
         Log.i(TAG, "Sent CMD_SHUTDOWN");
     }
 
-    private void sendPacket(byte[] pkt) {
+    private boolean sendPacket(byte[] pkt) {
         /* Auto-reconnect if not connected */
         if (!isConnected()) {
-            if (!connect()) return;
+            if (!connect()) return false;
         }
         try {
             out.write(pkt);
             out.flush();
+            return true;
         } catch (Exception e) {
             Log.w(TAG, "Send failed: " + e.getMessage());
             close();
+            return false;
         }
     }
 }

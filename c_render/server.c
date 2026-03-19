@@ -61,7 +61,7 @@ int cr_server_init(int port) {
         return -1;
     }
 
-    fprintf(stderr, "server: listening on 127.0.0.1:%d\n", port);
+    fprintf(stderr, "server: listening on 0.0.0.0:%d\n", port);
     return 0;
 }
 

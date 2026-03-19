@@ -34,8 +34,8 @@ typedef struct {
  *   [1]      i8   direction (-1, 0, +1)
  *   [2..3]   i16  exit_angle (big-endian, signed degrees)
  *   [4]      u8   driving_side (0=RHT, 1=LHT)
- *   [5]      u8   junction_count (0..20)
- *   [6..45]  i16  junction_angles[] (big-endian, up to 20)
+ *   [5]      u8   junction_count (0..18)
+ *   [6..41]  i16  junction_angles[] (big-endian, up to 18)
  *
  * Optional (when MAN_FLAG_SET_PERSP set):
  *   [43]     u8   perspective (0=flat 2D, 1=perspective 3D)
@@ -56,11 +56,11 @@ typedef struct {
 #define CR_MAN_JUNC_ANGLE(p,i)  ((int16_t)(((p)[6 + (i)*2] << 8) | (p)[7 + (i)*2]))
 
 /* Display configuration */
-#define CR_DISPLAYABLE_ID   199
-#define CR_CONTEXT_ID       99
-#define CR_DISPLAY_ID       0
-#define CR_DEFAULT_WIDTH    640
-#define CR_DEFAULT_HEIGHT   400
+#define CR_DISPLAYABLE_ID   20  /* DISPLAYABLE_MAP_ROUTE_GUIDANCE (328x181, native widget slot) */
+#define CR_CONTEXT_ID       74  /* Native context: RG(20) + images(101,102) + map(33) */
+#define CR_DISPLAY_ID       1   /* 0=main screen, 1=cluster (LVDS2) */
+#define CR_DEFAULT_WIDTH    328
+#define CR_DEFAULT_HEIGHT   240
 #define CR_TARGET_FPS       10
 
 #endif /* CR_PROTOCOL_H */

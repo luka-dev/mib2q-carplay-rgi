@@ -62,6 +62,8 @@ static int   g_fade_active = 0;
 /* Bargraph overlay */
 static int   g_bargraph_on = 0;     /* 0=off, 1=on, 2=blink */
 static int   g_bargraph_level = 0;  /* 0..16 */
+static int   g_persp_deferred = 0;       /* pending perspective change after push */
+static int   g_persp_deferred_value = 1; /* 0=2D, 1=3D */
 static float g_bargraph_alpha = 0.0f;  /* fade in/out */
 #define BARGRAPH_FADE_SPEED 0.06f      /* per-frame (~0.55s at 30fps) */
 static int   g_bargraph_blink_vis = 1;  /* blink phase: 1=show, 0=hide */
@@ -118,11 +120,10 @@ static void engine_apply_maneuver(const maneuver_state_t *state) {
         return;
     }
 
-    /* IDLE: store as next, start push -- fade out bargraph, restore 3D */
+    /* IDLE: store as next, start push -- fade out bargraph */
     g_engine.next = *state;
     g_engine.has_next = 1;
     g_bargraph_on = 0;
-    render_set_perspective(1);
     maneuver_start_push();
     g_engine.phase = ENGINE_PUSHING;
     render_invalidate_masks();
@@ -173,6 +174,14 @@ static void engine_tick(void) {
                         g_engine.next.icon);
             } else {
                 g_engine.phase = ENGINE_IDLE;
+                /* Apply deferred perspective when settled */
+                if (g_persp_deferred) {
+                    render_set_perspective(g_persp_deferred_value);
+                    fprintf(stderr, "engine: applied deferred perspective=%s\n",
+                            g_persp_deferred_value ? "3D" : "2D");
+                    g_persp_deferred = 0;
+                    g_engine.dirty = 1;
+                }
                 /* Apply deferred bargraph when settled */
                 if (g_bargraph_deferred) {
                     g_bargraph_level = g_bargraph_deferred_level;
@@ -230,8 +239,16 @@ int main(int argc, char **argv) {
 
     fprintf(stderr, "c_render: starting %dx%d\n", WINDOW_W, WINDOW_H);
 
+    /* Initialize TCP server FIRST so Java can connect while display inits.
+     * If server fails, nothing works — exit immediately. */
+    if (cr_server_init(CR_TCP_PORT) < 0) {
+        fprintf(stderr, "c_render: server init failed\n");
+        return 1;
+    }
+
     if (platform_init(WINDOW_W, WINDOW_H) < 0) {
         fprintf(stderr, "c_render: platform init failed\n");
+        cr_server_shutdown();
         return 1;
     }
 
@@ -242,6 +259,7 @@ int main(int argc, char **argv) {
     if (render_init(fb_w, fb_h) < 0) {
         fprintf(stderr, "c_render: render init failed\n");
         platform_shutdown();
+        cr_server_shutdown();
         return 1;
     }
 
@@ -258,14 +276,6 @@ int main(int argc, char **argv) {
             snprintf(atlas_path, sizeof(atlas_path), "%s/flag_atlas.rgba", dir);
             render_load_flag_atlas(atlas_path, 128, 128, 14);
         }
-    }
-
-    /* Initialize TCP server */
-    if (cr_server_init(CR_TCP_PORT) < 0) {
-        fprintf(stderr, "c_render: server init failed\n");
-        render_shutdown();
-        platform_shutdown();
-        return 1;
     }
 
     /* Engine starts with no current maneuver */
@@ -347,10 +357,10 @@ int main(int argc, char **argv) {
         /* Apply the latest maneuver (draining to latest) */
         if (got_maneuver) {
             if (pending_flags & MAN_FLAG_SET_PERSP) {
-                int persp = pending_perspective ? 1 : 0;
-                render_set_perspective(persp);
-                fprintf(stderr, "engine: maneuver perspective=%s\n", persp ? "3D" : "2D");
-                g_engine.dirty = 1;
+                g_persp_deferred = 1;
+                g_persp_deferred_value = pending_perspective ? 1 : 0;
+                fprintf(stderr, "engine: deferred perspective=%s\n",
+                        g_persp_deferred_value ? "3D" : "2D");
             }
             if (pending_flags & MAN_FLAG_BARGRAPH) {
                 g_bargraph_deferred = 1;
@@ -387,7 +397,7 @@ int main(int argc, char **argv) {
         }
 
         /* Render if needed */
-        if (g_engine.dirty || render_is_animating() || maneuver_is_animating() || got_screenshot)
+        if (g_engine.dirty || render_is_animating() || maneuver_needs_redraw() || got_screenshot)
             dirty = 1;
         g_engine.dirty = 0;
 
@@ -434,7 +444,7 @@ int main(int argc, char **argv) {
 
             platform_swap();
 
-            dirty = render_is_animating() || maneuver_is_animating() || g_fade_active
+            dirty = render_is_animating() || maneuver_needs_redraw() || g_fade_active
                  || g_bargraph_on == 2
                  || (g_bargraph_alpha > 0.0f && g_bargraph_alpha < 1.0f);
         }
