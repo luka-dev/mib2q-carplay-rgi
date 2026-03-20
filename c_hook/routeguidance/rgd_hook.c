@@ -31,39 +31,8 @@ static void renderer_kill_previous(void) {
     system("slay -f -Q maneuver_render 2>/dev/null");
 }
 
-static void renderer_start(void) {
-    renderer_kill_previous();
-
-    /* Launch renderer with clean LD_LIBRARY_PATH — the iAP2 daemon adds
-     * /mnt/app/root/lib-target which may shadow system libEGL.so and cause
-     * SIGSEGV in eglGetDisplay.  Use only standard QNX/ESO library paths. */
-    int ret = system(
-        "LD_LIBRARY_PATH=/eso/lib:/lib:/lib/dll:/mnt/app/armle/lib:/mnt/app/armle/lib/dll "
-        CR_BINARY_PATH " >/tmp/maneuver_render.log 2>&1 &");
-    if (ret != 0) {
-        LOG_ERROR(LOG_MODULE, "renderer: system() failed ret=%d", ret);
-        return;
-    }
-
-    /* Give renderer time to start and write its PID */
-    usleep(500000); /* 500ms */
-
-    /* Find renderer PID by name */
-    FILE *fp = popen("pidin -F '%a %N' | grep maneuver_render | head -1", "r");
-    if (fp) {
-        char buf[128];
-        if (fgets(buf, sizeof(buf), fp)) {
-            g_renderer_pid = atoi(buf);
-        }
-        pclose(fp);
-    }
-
-    if (g_renderer_pid > 0) {
-        LOG_INFO(LOG_MODULE, "renderer: started pid=%d", (int)g_renderer_pid);
-    } else {
-        LOG_ERROR(LOG_MODULE, "renderer: launched but PID not found");
-    }
-}
+/* renderer_start/renderer_stop removed — renderer is launched from Java
+ * (BAPBridge.startCustomRenderer) via CommandLineExecuter for clean EGL access. */
 
 static void renderer_stop(void) {
     if (g_renderer_pid <= 0) return;
