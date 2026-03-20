@@ -845,12 +845,14 @@ public class BAPBridge {
             if (rendererClient != null && customRendererStarted) {
                 /* Detect viewport mode from ChoiceModel(1,168) hint bit 8.
                  * BITFIELD_KDK_POSITION_IN_TUBE=8: set by native ClusterKDKHandlerImpl
-                 * based on isSmallStageActive(). Bit set = sidescreen, clear = popup. */
+                 * based on isSmallStageActive(). Bit 8 set = "in tube" (small stage)
+                 * = VC shows cropped 210x153 popup. Bit 8 clear = "in flap" (big stage)
+                 * = VC shows full 328x180 sidescreen. */
                 if (csRef != null) {
                     try {
                         int komoHints = csRef.getKOMOHintsRaw();
                         int detectedMode = ((komoHints & 8) != 0)
-                            ? VIEWPORT_SIDESCREEN : VIEWPORT_POPUP;
+                            ? VIEWPORT_POPUP : VIEWPORT_SIDESCREEN;
                         if (detectedMode != currentViewportMode) {
                             setViewportMode(detectedMode);
                         }
@@ -1376,6 +1378,10 @@ public class BAPBridge {
             if (!rendererClient.connect()) {
                 Log.w(TAG, "CR: TCP connect failed (will retry on send)");
             }
+
+            /* Set gfxAvailable so VC enters MAP mode for LVDS video.
+             * Must be after renderer owns displayable 20 (avoids native KDK race). */
+            forceGfxAvailable(true);
 
             customRendererStarted = true;
             lastCrIcon = -1;

@@ -1357,8 +1357,15 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
      * Deactivate custom renderer pipeline. Stop encoding and restore context.
      */
     public void deactivateCustomRendererPipeline() {
-        /* Displayable 20 stays in context 74 — renderer just stops drawing.
-         * Native navi will resume rendering to displayable 20 on its own. */
+        /* Renderer exit restores dmdt sc 1 74 (if g_display_routed was set).
+         * Ensure context 74 is active on the cluster display via Java DM. */
+        try {
+            de.audi.atip.hmi.view.IDisplayManager dm =
+                ((de.audi.atip.hmi.HMIService) this.env.getHMIService()).getDisplayManager();
+            dm.switchContext(74, 1, null);
+        } catch (Throwable t) {
+            /* non-fatal */
+        }
     }
 
     /**
