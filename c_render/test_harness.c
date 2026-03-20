@@ -296,6 +296,17 @@ static void key_callback(GLFWwindow *window, int key, int scancode, int action, 
     case GLFW_KEY_5:
         send_random_icon(ICON_ARRIVED, 0);
         break;
+    case GLFW_KEY_V: {
+        static int viewport = 0;
+        viewport = !viewport;
+        cr_cmd_t cmd;
+        memset(&cmd, 0, sizeof(cmd));
+        cmd.cmd = CMD_VIEWPORT;
+        cmd.payload[0] = viewport;
+        tcp_send(&cmd, sizeof(cmd));
+        fprintf(stderr, "harness: viewport=%s\n", viewport ? "POPUP" : "SIDESCREEN");
+        break;
+    }
     case GLFW_KEY_D:
         send_debug_toggle();
         break;
