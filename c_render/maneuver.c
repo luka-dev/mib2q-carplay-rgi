@@ -1897,6 +1897,10 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
     /* Track whether flag animation is active — also during push TO arrived */
     g_flag_active = (s->icon == ICON_ARRIVED)
                  || (next_state != NULL && next_state->icon == ICON_ARRIVED);
+    if (!g_flag_active) {
+        g_combined_flag_x = 0.0f;
+        g_combined_flag_y = 0.0f;
+    }
 
     /* Advance flag animation */
     if (g_flag_active) {
