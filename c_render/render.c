@@ -26,6 +26,7 @@
 
 #include "gl_compat.h"
 #include "render.h"
+#include "protocol.h"
 #include "maneuver.h"
 
 #ifndef M_PI
@@ -812,18 +813,19 @@ static void sync_camera_uniforms(void) {
     }
 
     /* Popup viewport: zoom + shift projection to center content in the
-     * 210x153 visible crop at (59,27) within the 328x180 content area.
-     * Popup center in NDC: X=0 (centered), Y=-0.15 (shifted down from content center).
-     * Apply as a post-projection transform on g_mvp_current so both
-     * ortho and perspective get the same adjustment. */
-    if (g_viewport_mode == 1) {
-        float zoom = 1.30f;
-        float offset_y = 0.15f;  /* shift content up so maneuver centers in crop */
+     * visible crop area. Computed from CR_POPUP_* constants in protocol.h. */
+    if (g_viewport_mode == CR_VIEWPORT_POPUP) {
+        const float content_w = (float)CR_DEFAULT_WIDTH;
+        const float content_h = (float)(CR_DEFAULT_HEIGHT - 1);
+        const float crop_cx = (CR_POPUP_X + CR_POPUP_W * 0.5f) / (content_w * 0.5f) - 1.0f;
+        const float crop_cy = 1.0f - (CR_POPUP_Y + CR_POPUP_H * 0.5f) / (content_h * 0.5f);
+        const float zoom = content_w / (float)CR_POPUP_W;
         int c;
         for (c = 0; c < 4; c++) {
-            g_mvp_current[c*4 + 0] *= zoom;  /* scale X in clip space */
+            g_mvp_current[c*4 + 0] = g_mvp_current[c*4 + 0] * zoom
+                                   - g_mvp_current[c*4 + 3] * crop_cx * zoom;
             g_mvp_current[c*4 + 1] = g_mvp_current[c*4 + 1] * zoom
-                                   + g_mvp_current[c*4 + 3] * offset_y;  /* scale Y + offset */
+                                   - g_mvp_current[c*4 + 3] * crop_cy * zoom;
         }
     }
 
@@ -898,16 +900,14 @@ void render_bargraph(int level, float alpha) {
     const float BAR_H  =  7.0f * SCALE * PY;
     const float GAP    =  2.0f * SCALE * PY;
     const float BAR_X_FULL = 1.0f - MARGIN * PX - BAR_W;  /* sidescreen: right edge */
-    /* Popup: match native bargraph at x=247 in 328px → NDC = (247/164)-1 = 0.506 */
-    const float BAR_X_POPUP = 0.506f;
-    const float BAR_X = (g_viewport_mode == 1) ? BAR_X_POPUP : BAR_X_FULL;
+    const float BAR_X_POPUP = ((float)(CR_POPUP_X + CR_POPUP_W) - MARGIN) / ((float)CR_DEFAULT_WIDTH * 0.5f) - 1.0f - BAR_W;
+    const float BAR_X = (g_viewport_mode == CR_VIEWPORT_POPUP) ? BAR_X_POPUP : BAR_X_FULL;
     float total_h = N_BARS * BAR_H + (N_BARS - 1) * GAP;
     float base_y  = -total_h * 0.5f;
-    /* Popup: shift bargraph down to match native position (y=30 in 180px → NDC = (30/90)-1 = -0.67 top) */
-    if (g_viewport_mode == 1) {
-        /* Native bargraph spans y=30..153 in 180px content, center at y=91.5.
-         * NDC center = (91.5/90)-1 = 0.017.  Shift base_y so center matches. */
-        base_y = 0.017f - total_h * 0.5f;
+    if (g_viewport_mode == CR_VIEWPORT_POPUP) {
+        float content_h = (float)(CR_DEFAULT_HEIGHT - 1);
+        float crop_cy_ndc = 1.0f - (CR_POPUP_Y + CR_POPUP_H * 0.5f) / (content_h * 0.5f);
+        base_y = crop_cy_ndc - total_h * 0.5f;
     }
     float identity[16];
     int i;
