@@ -50,4 +50,7 @@ clean:
 run: $(TARGET)
 	./$(TARGET)
 
-.PHONY: all clean run
+grid: CFLAGS += -DCR_DEBUG_GRID
+grid: clean all
+
+.PHONY: all clean run grid

@@ -296,6 +296,34 @@ static void key_callback(GLFWwindow *window, int key, int scancode, int action, 
     case GLFW_KEY_5:
         send_random_icon(ICON_ARRIVED, 0);
         break;
+    case GLFW_KEY_LEFT_BRACKET: {
+        cr_cmd_t cmd;
+        memset(&cmd, 0, sizeof(cmd));
+        cmd.cmd = CMD_DEBUG;
+        cmd.payload[0] = 3;  /* 3D offset up (content moves down) */
+        tcp_send(&cmd, sizeof(cmd));
+        fprintf(stderr, "harness: 3D offset +\n");
+        break;
+    }
+    case GLFW_KEY_RIGHT_BRACKET: {
+        cr_cmd_t cmd;
+        memset(&cmd, 0, sizeof(cmd));
+        cmd.cmd = CMD_DEBUG;
+        cmd.payload[0] = 4;  /* 3D offset down (content moves up) */
+        tcp_send(&cmd, sizeof(cmd));
+        fprintf(stderr, "harness: 3D offset -\n");
+        break;
+    }
+    case GLFW_KEY_G: {
+        /* Toggle grid on the renderer (send as CMD_DEBUG with payload[0]=2) */
+        cr_cmd_t cmd;
+        memset(&cmd, 0, sizeof(cmd));
+        cmd.cmd = CMD_DEBUG;
+        cmd.payload[0] = 2;  /* grid toggle */
+        tcp_send(&cmd, sizeof(cmd));
+        fprintf(stderr, "harness: grid toggle\n");
+        break;
+    }
     case GLFW_KEY_V: {
         static int viewport = 0;
         viewport = !viewport;

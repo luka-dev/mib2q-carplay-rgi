@@ -177,6 +177,7 @@ static int g_raised = 1;
 static int g_fb_w = 640, g_fb_h = 400;
 static int g_win_w = 640, g_win_h = 400;  /* actual window buffer size (pre-SSAA) */
 static int g_viewport_mode = 0;  /* 0=sidescreen (full), 1=popup (210x153 crop) */
+float g_3d_offset_adjust = -0.10f;  /* extra Y offset in 3D mode (tuned) */
 static float g_z_bias = 0.0f;
 
 /* Mask cache dirty flag */
@@ -210,7 +211,11 @@ static int g_fbo_w = 0, g_fbo_h = 0;
 static GLint g_default_fbo = 0;  /* saved at init -- may not be 0 on macOS */
 
 /* 2x supersample FBO — render at double resolution, blit down with GL_LINEAR */
+#ifdef PLATFORM_MACOS
+#define SSAA_SCALE 1  /* macOS Retina already provides 2x */
+#else
 #define SSAA_SCALE 2
+#endif
 static GLuint g_ss_fbo = 0;
 static GLuint g_ss_tex = 0;
 static GLuint g_ss_depth = 0;
@@ -812,20 +817,21 @@ static void sync_camera_uniforms(void) {
         glUniform2f(g_uni_mask_scale, 0.5f / g_mask_half_w, 0.5f / g_mask_half_h);
     }
 
-    /* Popup viewport: zoom + shift projection to center content in the
-     * visible crop area. Computed from CR_POPUP_* constants in protocol.h. */
-    if (g_viewport_mode == CR_VIEWPORT_POPUP) {
-        const float content_w = (float)CR_DEFAULT_WIDTH;
+    /* Shift projection to center maneuver in popup crop area.
+     * Full offset in 2D (flat view), reduced in 3D (perspective extends upward).
+     * ts = perspective blend: 0.0=ortho, 1.0=perspective. */
+    {
         const float content_h = (float)(CR_DEFAULT_HEIGHT - 1);
-        const float crop_cx = (CR_POPUP_X + CR_POPUP_W * 0.5f) / (content_w * 0.5f) - 1.0f;
-        const float crop_cy = 1.0f - (CR_POPUP_Y + CR_POPUP_H * 0.5f) / (content_h * 0.5f);
-        const float zoom = content_w / (float)CR_POPUP_W;
+        const float popup_cy = CR_POPUP_Y + CR_POPUP_H * 0.5f;     /* 103.5 */
+        const float content_cy = content_h * 0.5f;                   /* 90 */
+        const float full_offset = -(popup_cy - content_cy) / content_cy; /* -0.15 */
+        /* 2D: full offset (centers junction in popup crop).
+         * 3D: half offset (compromise — centers between junction and road top). */
+        /* 2D: full offset (-0.15). 3D: adjustable extra offset. */
+        const float offset_y = full_offset + ts * g_3d_offset_adjust;
         int c;
         for (c = 0; c < 4; c++) {
-            g_mvp_current[c*4 + 0] = g_mvp_current[c*4 + 0] * zoom
-                                   - g_mvp_current[c*4 + 3] * crop_cx * zoom;
-            g_mvp_current[c*4 + 1] = g_mvp_current[c*4 + 1] * zoom
-                                   - g_mvp_current[c*4 + 3] * crop_cy * zoom;
+            g_mvp_current[c*4 + 1] += g_mvp_current[c*4 + 3] * offset_y;
         }
     }
 
@@ -899,16 +905,10 @@ void render_bargraph(int level, float alpha) {
     const float BAR_W  = 14.0f * SCALE * PX;
     const float BAR_H  =  7.0f * SCALE * PY;
     const float GAP    =  2.0f * SCALE * PY;
-    const float BAR_X_FULL = 1.0f - MARGIN * PX - BAR_W;  /* sidescreen: right edge */
-    const float BAR_X_POPUP = ((float)(CR_POPUP_X + CR_POPUP_W) - MARGIN) / ((float)CR_DEFAULT_WIDTH * 0.5f) - 1.0f - BAR_W;
-    const float BAR_X = (g_viewport_mode == CR_VIEWPORT_POPUP) ? BAR_X_POPUP : BAR_X_FULL;
+    /* Bargraph at sidescreen right edge (cropped in popup — acceptable). */
+    const float BAR_X = 1.0f - MARGIN * PX - BAR_W;
     float total_h = N_BARS * BAR_H + (N_BARS - 1) * GAP;
     float base_y  = -total_h * 0.5f;
-    if (g_viewport_mode == CR_VIEWPORT_POPUP) {
-        float content_h = (float)(CR_DEFAULT_HEIGHT - 1);
-        float crop_cy_ndc = 1.0f - (CR_POPUP_Y + CR_POPUP_H * 0.5f) / (content_h * 0.5f);
-        base_y = crop_cy_ndc - total_h * 0.5f;
-    }
     float identity[16];
     int i;
 
@@ -944,6 +944,109 @@ void render_bargraph(int level, float alpha) {
         glEnableVertexAttribArray(g_attr_pos);
         glEnableVertexAttribArray(g_attr_norm);
         glDrawArrays(GL_TRIANGLES, 0, g_vcount);
+    }
+
+    glEnable(GL_DEPTH_TEST);
+    glUniform1f(g_uni_tex_mode, 0.0f);
+}
+
+/* Debug grid: draw colored checkerboard over the full 328x180 content area.
+ * Each cell is labeled by position so you can see which cells are visible
+ * in sidescreen vs popup modes on the VC.
+ * Enable with: ./c_render --grid   or   CR_DEBUG_GRID=1 ./maneuver_render */
+static int g_debug_grid = 0;
+
+void render_set_debug_grid(int on) { g_debug_grid = on; }
+
+void render_debug_grid(void) {
+    if (!g_debug_grid) return;
+
+    /* Grid: 8 columns x 6 rows = 48 cells covering 328x180 content */
+    const int COLS = 8, ROWS = 6;
+    const float cell_w = 2.0f / COLS;  /* NDC width per cell */
+    const float cell_h = 2.0f / ROWS;  /* NDC height per cell */
+    float identity[16];
+    int row, col;
+
+    memset(identity, 0, sizeof(identity));
+    identity[0] = identity[5] = identity[10] = identity[15] = 1.0f;
+
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glUniform1f(g_uni_tex_mode, 3.0f);
+    glUniformMatrix4fv(g_uni_mvp, 1, GL_FALSE, identity);
+    glUniform1f(g_uni_zbias, 0.0f);
+
+    for (row = 0; row < ROWS; row++) {
+        for (col = 0; col < COLS; col++) {
+            float x0 = -1.0f + col * cell_w;
+            float y0 = -1.0f + row * cell_h;
+            float x1 = x0 + cell_w;
+            float y1 = y0 + cell_h;
+            /* Inset slightly for grid lines */
+            float m = 0.005f;
+            float ix0 = x0 + m, iy0 = y0 + m, ix1 = x1 - m, iy1 = y1 - m;
+
+            /* Checkerboard color: cyan/green for sidescreen, magenta/yellow for popup */
+            float r, g, b;
+            int checker = (row + col) & 1;
+            if (g_viewport_mode == CR_VIEWPORT_POPUP) {
+                if (checker) { r = 0.7f; g = 0.0f; b = 0.7f; }  /* magenta */
+                else         { r = 0.7f; g = 0.7f; b = 0.0f; }  /* yellow */
+            } else {
+                if (checker) { r = 0.0f; g = 0.7f; b = 0.7f; }  /* cyan */
+                else         { r = 0.0f; g = 0.7f; b = 0.0f; }  /* green */
+            }
+            /* Dim border cells */
+            if (row == 0 || row == ROWS-1 || col == 0 || col == COLS-1) {
+                r *= 0.5f; g *= 0.5f; b *= 0.5f;
+            }
+            /* Center cross: bright white */
+            if (col == COLS/2-1 && row == ROWS/2-1) { r = 1; g = 1; b = 1; }
+            if (col == COLS/2   && row == ROWS/2  ) { r = 1; g = 1; b = 1; }
+
+            glUniform4f(g_uni_color, r, g, b, 0.6f);
+            vb_reset();
+            vb_v(ix0, iy0, 0, 0,0,1);
+            vb_v(ix1, iy0, 0, 0,0,1);
+            vb_v(ix1, iy1, 0, 0,0,1);
+            vb_v(ix0, iy0, 0, 0,0,1);
+            vb_v(ix1, iy1, 0, 0,0,1);
+            vb_v(ix0, iy1, 0, 0,0,1);
+            glVertexAttribPointer(g_attr_pos, 3, GL_FLOAT, GL_FALSE, 24, g_vbuf);
+            glVertexAttribPointer(g_attr_norm, 3, GL_FLOAT, GL_FALSE, 24, g_vbuf + 3);
+            glEnableVertexAttribArray(g_attr_pos);
+            glEnableVertexAttribArray(g_attr_norm);
+            glDrawArrays(GL_TRIANGLES, 0, g_vcount);
+        }
+    }
+
+    /* Draw popup crop outline (red border at CR_POPUP_* position) */
+    {
+        float content_w = (float)CR_DEFAULT_WIDTH;
+        float content_h = (float)(CR_DEFAULT_HEIGHT - 1);
+        float px0 = (float)CR_POPUP_X / (content_w * 0.5f) - 1.0f;
+        float py0 = 1.0f - (float)CR_POPUP_Y / (content_h * 0.5f);
+        float px1 = (float)(CR_POPUP_X + CR_POPUP_W) / (content_w * 0.5f) - 1.0f;
+        float py1 = 1.0f - (float)(CR_POPUP_Y + CR_POPUP_H) / (content_h * 0.5f);
+        float t = 0.01f;  /* line thickness */
+
+        glUniform4f(g_uni_color, 1.0f, 0.0f, 0.0f, 0.9f);
+        /* Top */
+        vb_reset();
+        vb_v(px0,py0,0, 0,0,1); vb_v(px1,py0,0, 0,0,1); vb_v(px1,py0-t,0, 0,0,1);
+        vb_v(px0,py0,0, 0,0,1); vb_v(px1,py0-t,0, 0,0,1); vb_v(px0,py0-t,0, 0,0,1);
+        /* Bottom */
+        vb_v(px0,py1+t,0, 0,0,1); vb_v(px1,py1+t,0, 0,0,1); vb_v(px1,py1,0, 0,0,1);
+        vb_v(px0,py1+t,0, 0,0,1); vb_v(px1,py1,0, 0,0,1); vb_v(px0,py1,0, 0,0,1);
+        /* Left */
+        vb_v(px0,py0,0, 0,0,1); vb_v(px0+t,py0,0, 0,0,1); vb_v(px0+t,py1,0, 0,0,1);
+        vb_v(px0,py0,0, 0,0,1); vb_v(px0+t,py1,0, 0,0,1); vb_v(px0,py1,0, 0,0,1);
+        /* Right */
+        vb_v(px1-t,py0,0, 0,0,1); vb_v(px1,py0,0, 0,0,1); vb_v(px1,py1,0, 0,0,1);
+        vb_v(px1-t,py0,0, 0,0,1); vb_v(px1,py1,0, 0,0,1); vb_v(px1-t,py1,0, 0,0,1);
+        vb_flush(1, 0, 0, 0.9f);
     }
 
     glEnable(GL_DEPTH_TEST);

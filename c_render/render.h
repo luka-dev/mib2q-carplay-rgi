@@ -68,6 +68,10 @@ void render_set_perspective(int enabled);
 void render_set_viewport_mode(int mode);
 int  render_get_viewport_mode(void);
 
+/* Debug grid: colored checkerboard + red popup crop outline. */
+void render_set_debug_grid(int on);
+void render_debug_grid(void);
+
 /* Set camera pan offset in maneuver space (shifts entire scene). */
 void render_set_camera_pan(float x, float y);
 

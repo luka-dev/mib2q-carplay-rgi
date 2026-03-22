@@ -278,6 +278,10 @@ int main(int argc, char **argv) {
         }
     }
 
+#ifdef CR_DEBUG_GRID
+    render_set_debug_grid(1);
+#endif
+
     /* Engine starts with no current maneuver */
     memset(&g_engine, 0, sizeof(g_engine));
     g_engine.phase = ENGINE_IDLE;
@@ -330,8 +334,25 @@ int main(int argc, char **argv) {
                 break;
             }
             case CMD_DEBUG:
-                maneuver_toggle_debug();
-                fprintf(stderr, "engine: debug=%s\n", maneuver_is_debug() ? "ON" : "OFF");
+                if (cmd.payload[0] == 2) {
+                    static int grid_on = 0;
+                    grid_on = !grid_on;
+                    render_set_debug_grid(grid_on);
+                    fprintf(stderr, "engine: grid=%s\n", grid_on ? "ON" : "OFF");
+                } else if (cmd.payload[0] == 3) {
+                    /* 3D offset adjust up */
+                    extern float g_3d_offset_adjust;
+                    g_3d_offset_adjust -= 0.02f;
+                    fprintf(stderr, "engine: 3d_offset=%.3f\n", g_3d_offset_adjust);
+                } else if (cmd.payload[0] == 4) {
+                    /* 3D offset adjust down */
+                    extern float g_3d_offset_adjust;
+                    g_3d_offset_adjust += 0.02f;
+                    fprintf(stderr, "engine: 3d_offset=%.3f\n", g_3d_offset_adjust);
+                } else {
+                    maneuver_toggle_debug();
+                    fprintf(stderr, "engine: debug=%s\n", maneuver_is_debug() ? "ON" : "OFF");
+                }
                 g_engine.dirty = 1;
                 break;
             case CMD_BARGRAPH:
@@ -403,7 +424,11 @@ int main(int argc, char **argv) {
         }
 
         /* Render if needed */
-        if (g_engine.dirty || render_is_animating() || maneuver_needs_redraw() || got_screenshot)
+        if (g_engine.dirty || render_is_animating() || maneuver_needs_redraw() || got_screenshot
+#ifdef CR_DEBUG_GRID
+            || 1  /* always render when grid is compiled in */
+#endif
+           )
             dirty = 1;
         g_engine.dirty = 0;
 
@@ -443,6 +468,7 @@ int main(int argc, char **argv) {
                     bl = 0;
                 render_bargraph(bl, ba);
             }
+            render_debug_grid();
             render_end_frame();
 
             if (got_screenshot)
@@ -454,6 +480,19 @@ int main(int argc, char **argv) {
                  || g_bargraph_on == 2
                  || (g_bargraph_alpha > 0.0f && g_bargraph_alpha < 1.0f);
         }
+
+        /* Watchdog: periodically re-declare context 74 to reclaim displayable 20
+         * if native navi boot took it over. Also detect dead EGL surface. */
+#ifdef PLATFORM_QNX
+        {
+            static int watchdog_frames = 0;
+            if (++watchdog_frames >= TARGET_FPS * 5) {  /* every 5 seconds */
+                watchdog_frames = 0;
+                /* Re-declare context composition (idempotent if already correct) */
+                system("/eso/bin/apps/dmdt dc 74 20 102 101 33 >/dev/null 2>&1");
+            }
+        }
+#endif
 
         /* Frame pacing */
         struct timespec t_end;
