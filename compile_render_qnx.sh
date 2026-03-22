@@ -22,6 +22,12 @@ tar --disable-copyfile --format=ustar -C "$RENDERER_DIR" -cf - \
 
 echo "Compiling on QNX VM..."
 
+EXTRA_CFLAGS=""
+if [ "$1" = "grid" ]; then
+    EXTRA_CFLAGS="-DCR_DEBUG_GRID"
+    echo "Building with DEBUG GRID"
+fi
+
 COMPILE_CMD=""
 OBJ_FILES=""
 
@@ -29,7 +35,7 @@ for f in $RENDERER_SRCS; do
     obj="${f%.c}.o"
     OBJ_FILES="$OBJ_FILES $REMOTE_DIR/$obj"
     COMPILE_CMD="$COMPILE_CMD \
-        /usr/qnx650/host/qnx6/x86/usr/bin/ntoarmv7-gcc -c -O2 -std=gnu99 -Wall -D__QNX__ -DPLATFORM_QNX -I$REMOTE_DIR -o $REMOTE_DIR/$obj $REMOTE_DIR/$f && "
+        /usr/qnx650/host/qnx6/x86/usr/bin/ntoarmv7-gcc -c -O2 -std=gnu99 -Wall -D__QNX__ -DPLATFORM_QNX $EXTRA_CFLAGS -I$REMOTE_DIR -o $REMOTE_DIR/$obj $REMOTE_DIR/$f && "
 done
 
 LINK_CMD="/usr/qnx650/host/qnx6/x86/usr/bin/ntoarmv7-gcc $OBJ_FILES -o $REMOTE_DIR/maneuver_render -lEGL -lGLESv2 -lsocket -lm"
