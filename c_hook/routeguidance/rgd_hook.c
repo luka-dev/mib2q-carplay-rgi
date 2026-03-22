@@ -1011,12 +1011,23 @@ static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) 
          */
         g_rgd.have_update = true;
         if (upd.present & RGD_UPD_ROUTE_STATE) {
+            uint8_t prev_state = g_rgd.last_route_state;
             g_rgd.last_route_state = upd.route_state;
             if (upd.route_state == 0) {
                 rgd_update_cache_reset();
+                /*
+                 * Debounce: suppress transient state=0 from reaching Java
+                 * when previously active.  iOS sends brief state=0 during
+                 * route setup and periodically mid-route (~every 30s).
+                 * Genuine route end comes via rgd_clear_state() (disconnect)
+                 * or source_supports_rg=0, both handled separately.
+                 * First state=0 at init (prev_state==0) still passes through.
+                 */
+                if (prev_state > 0) {
+                    LOG_INFO(LOG_MODULE, "Debounce: suppressing transient state=0 (was %u)", prev_state);
+                    upd.present &= ~RGD_UPD_ROUTE_STATE;
+                }
             }
-            /* Renderer is launched by Java (BAPBridge.startCustomRenderer)
-             * — Java's process tree has clean EGL access unlike iAP2 daemon. */
         }
         write_pps_update_partial(&upd);
     }
