@@ -1368,6 +1368,16 @@ static void draw_approach(const int *side_angles, int side_count) {
     }
 }
 
+/* Check if junction angles include a forward road (~0° ± 30°) */
+static int has_forward_road(const int *side_angles, int side_count) {
+    int i;
+    if (side_count == 0) return 0;  /* no junction data = T-junction */
+    for (i = 0; i < side_count; i++) {
+        if (side_angles[i] > -30 && side_angles[i] < 30) return 1;
+    }
+    return 0;
+}
+
 /* ----------------------------------------------------------------
  * draw_turn -- outline/fill/route passes
  * ---------------------------------------------------------------- */
@@ -1378,7 +1388,9 @@ static void draw_turn_outline(float angle_deg, float angle_rad,
                                float stub_x, float stub_y,
                                float fade_x, float fade_y) {
     int i;
-    draw_fading_road(0, SIDE_TOP, 0, SIDE_TOP + FADE_LEN, 1.0f, FADE_OUTLINE);
+    int fwd = has_forward_road(side_angles, side_count);
+    if (fwd)
+        draw_fading_road(0, SIDE_TOP, 0, SIDE_TOP + FADE_LEN, 1.0f, FADE_OUTLINE);
     draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - FADE_LEN, 1.0f, FADE_OUTLINE);
     if (active_has_own_stub)
         draw_fading_road(stub_x, stub_y, fade_x, fade_y, 1.0f, FADE_OUTLINE);
@@ -1390,7 +1402,8 @@ static void draw_turn_outline(float angle_deg, float angle_rad,
         float fy = (ROAD_LEN + FADE_LEN) * cosf(rad);
         draw_fading_road(sx, sy, fx, fy, 1.0f, FADE_OUTLINE);
     }
-    render_thick_line(0, 0, 0, SIDE_TOP, OL_T, WHITE);
+    if (fwd)
+        render_thick_line(0, 0, 0, SIDE_TOP, OL_T, WHITE);
     render_thick_line(0, SHAFT_BOT, 0, 0, OL_T, WHITE);
     if (active_has_own_stub)
         render_thick_line(0, 0, stub_x, stub_y, OL_T, WHITE);
@@ -1410,7 +1423,9 @@ static void draw_turn_fill(float angle_deg, float angle_rad,
                              float stub_x, float stub_y,
                              float fade_x, float fade_y) {
     int i;
-    draw_fading_road(0, SIDE_TOP, 0, SIDE_TOP + FADE_LEN, 1.0f, FADE_GREY);
+    int fwd = has_forward_road(side_angles, side_count);
+    if (fwd)
+        draw_fading_road(0, SIDE_TOP, 0, SIDE_TOP + FADE_LEN, 1.0f, FADE_GREY);
     draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - FADE_LEN, 1.0f, FADE_GREY);
     if (active_has_own_stub)
         draw_fading_road(stub_x, stub_y, fade_x, fade_y, 1.0f, FADE_GREY);
@@ -1422,7 +1437,8 @@ static void draw_turn_fill(float angle_deg, float angle_rad,
         float fy = (ROAD_LEN + FADE_LEN) * cosf(rad);
         draw_fading_road(sx, sy, fx, fy, 1.0f, FADE_GREY);
     }
-    render_thick_line(0, 0, 0, SIDE_TOP, SIDE_T, SIDE);
+    if (fwd)
+        render_thick_line(0, 0, 0, SIDE_TOP, SIDE_T, SIDE);
     render_thick_line(0, SHAFT_BOT, 0, 0, SIDE_T, SIDE);
     if (active_has_own_stub)
         render_thick_line(0, 0, stub_x, stub_y, SIDE_T, SIDE);

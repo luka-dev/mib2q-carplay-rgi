@@ -590,10 +590,10 @@ public class BAPBridge {
                     + " (dist=" + distM + "m, highway=" + isHighway
                     + ", prepThr=" + prepareThreshold + ", barDen=" + bargraphDenominatorM + ")");
 
-                /* Switch renderer to 2D (flat) on approach, back to 3D on exit */
-                if (rendererClient != null && customRendererStarted) {
+                /* 2D/3D perspective switch disabled — always 3D for now */
+                /* if (rendererClient != null && customRendererStarted) {
                     rendererClient.sendPerspective(nowApproach ? 0 : 1);
-                }
+                } */
             }
 
             if (explicitClear || shouldClearManeuver) {
