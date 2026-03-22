@@ -100,6 +100,12 @@ static const preset_t g_presets[] = {
     { ICON_ROUNDABOUT, -90,   0, "RAB_EXIT_6",   {120, 80, 40, 0, -40, -90, -140}, 7 },
     /* Roundabout -- 4-exit, u-turn */
     { ICON_ROUNDABOUT, 180,   0, "RAB_UTURN",    {90, 0, -90, 180}, 4 },
+    /* Roundabout -- from real CarPlay: exit_angle=-134, junctions=-36,100,14 */
+    { ICON_ROUNDABOUT, -134,  0, "RAB_REAL",     {-36, 100, 14}, 3 },
+    /* Roundabout -- U-turn (exit near entry, full loop) */
+    { ICON_ROUNDABOUT, -170,  0, "RAB_FULL_U",   {-90, 0, 90, -170}, 4 },
+    /* Roundabout -- 180° exit (same direction as entry = full loop back) */
+    { ICON_ROUNDABOUT, -180,  0, "RAB_180",      {-90, 0, 90, -180}, 4 },
     { ICON_ARRIVED,     0,    0, "ARRIVED",      {0}, 0 },
     { ICON_ARRIVED,     0,   -1, "ARRIVED_L",    {0}, 0 },
     { ICON_ARRIVED,     0,    1, "ARRIVED_R",    {0}, 0 },

@@ -995,11 +995,7 @@ void maneuver_build_route(const maneuver_state_t *state, route_path_t *path) {
                 if (diff > 180.0f) diff = 360.0f - diff;
                 if (diff < best_diff) { best_diff = diff; best = j; }
             }
-            float entry_diff = fabsf(-180.0f - (float)state->exit_angle);
-            if (entry_diff > 180.0f) entry_diff = 360.0f - entry_diff;
-            if (entry_diff < best_diff)
-                snapped_exit_deg = -180.0f;
-            else
+            if (best_diff < 30.0f)
                 snapped_exit_deg = (float)state->junction_angles[best];
         }
         float exit_rad = (90.0f - snapped_exit_deg) * (float)M_PI / 180.0f;
@@ -1091,10 +1087,8 @@ maneuver_exit_t maneuver_get_exit(const maneuver_state_t *state) {
                 if (diff > 180.0f) diff = 360.0f - diff;
                 if (diff < best_diff) { best_diff = diff; best = j; }
             }
-            float entry_diff = fabsf(-180.0f - (float)state->exit_angle);
-            if (entry_diff > 180.0f) entry_diff = 360.0f - entry_diff;
-            if (entry_diff < best_diff) snapped_exit_deg = -180.0f;
-            else snapped_exit_deg = (float)state->junction_angles[best];
+            if (best_diff < 30.0f)
+                snapped_exit_deg = (float)state->junction_angles[best];
         }
         float exit_rad = (90.0f - snapped_exit_deg) * (float)M_PI / 180.0f;
         float ext = BLUE_LEN - ring_r;
@@ -1576,14 +1570,9 @@ static void draw_roundabout(float exit_angle_deg, int driving_side,
             if (diff > 180.0f) diff = 360.0f - diff;
             if (diff < best_diff) { best_diff = diff; best = i_s; }
         }
-        float entry_diff = fabsf(entry_deg - exit_angle_deg);
-        if (entry_diff > 180.0f) entry_diff = 360.0f - entry_diff;
-        /* Only snap to entry if exit is VERY close (<15°). Otherwise snap
-         * to nearest junction, or keep raw angle if no junction is close. */
-        if (entry_diff < 15.0f && entry_diff < best_diff) {
-            snapped_exit_deg = entry_deg;
-            snapped_idx = -2;
-        } else if (best_diff < 30.0f) {
+        /* Only snap to a junction if close enough. Never snap to entry —
+         * the exit always gets its own road stub even if near the entry. */
+        if (best_diff < 30.0f) {
             snapped_exit_deg = (float)junction_angles[best];
             snapped_idx = best;
         }
