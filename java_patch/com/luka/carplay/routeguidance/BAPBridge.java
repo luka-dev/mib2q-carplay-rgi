@@ -1349,12 +1349,16 @@ public class BAPBridge {
         "slay -f -Q maneuver_render >/dev/null 2>&1";
 
     private void startCustomRenderer() {
+        if (customRendererStarted) {
+            Log.d(TAG, "CR: already started, skipping");
+            return;
+        }
         if (csRef == null) {
             Log.w(TAG, "CR: cannot start (csRef null)");
             return;
         }
         try {
-            /* Kill any previous instance */
+            /* Kill any previous instance (orphan from crash/reload) */
             try {
                 de.audi.atip.util.CommandLineExecuter.executeCommand(
                     "/bin/sh", new String[] { "-c", CR_KILL_CMD });
@@ -1406,6 +1410,11 @@ public class BAPBridge {
                 rendererClient.disconnect();
                 rendererClient = null;
             }
+            /* slay as backstop — ensures no orphan even if TCP shutdown missed */
+            try {
+                de.audi.atip.util.CommandLineExecuter.executeCommand(
+                    "/bin/sh", new String[] { "-c", CR_KILL_CMD });
+            } catch (Throwable t2) { /* ignore */ }
             if (csRef != null) {
                 csRef.deactivateCustomRendererPipeline();
             }
