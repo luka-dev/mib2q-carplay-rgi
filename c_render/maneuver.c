@@ -1728,7 +1728,11 @@ static void draw_arrived(int dir) {
     float road_top = ARRIVE_ROAD_TOP;
     /* Offset flag sprite left/right based on direction — road stays center */
     float dx = (dir < 0) ? -ARRIVE_DIR_OFFSET : (dir > 0) ? ARRIVE_DIR_OFFSET : 0.0f;
-    g_arrive_flag_dx = dx;
+    /* Only update current flag position from the primary draw pass.
+     * In masks_only_mode (next maneuver's mask pass), skip — otherwise
+     * the next maneuver's direction clobbers the current flag position. */
+    if (!g_masks_only_mode)
+        g_arrive_flag_dx = dx;
 
     render_set_raised(0);
 
@@ -2015,10 +2019,13 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
         compute_combined_transform(s, next_state, &tx, &ty, &cos_r, &sin_r, &rot);
         g_last_combined_rot = rot;
 
-        /* Pre-compute flag position for ARRIVED in combined space */
+        /* Pre-compute flag position for ARRIVED in combined space.
+         * Use next maneuver's direction, not current's g_arrive_flag_dx. */
         if (next_state->icon == ICON_ARRIVED) {
-            g_combined_flag_x = cos_r * g_arrive_flag_dx - sin_r * ARRIVE_FLAG_Y + tx;
-            g_combined_flag_y = sin_r * g_arrive_flag_dx + cos_r * ARRIVE_FLAG_Y + ty;
+            float next_dx = (next_state->direction < 0) ? -ARRIVE_DIR_OFFSET
+                          : (next_state->direction > 0) ?  ARRIVE_DIR_OFFSET : 0.0f;
+            g_combined_flag_x = cos_r * next_dx - sin_r * ARRIVE_FLAG_Y + tx;
+            g_combined_flag_y = sin_r * next_dx + cos_r * ARRIVE_FLAG_Y + ty;
         }
 
         rpath_xform_append(&g_route_path, &next_path, tx, ty, cos_r, sin_r, rot);
