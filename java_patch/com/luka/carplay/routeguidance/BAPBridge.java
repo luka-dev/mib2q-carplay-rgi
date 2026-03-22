@@ -843,31 +843,22 @@ public class BAPBridge {
             /* 10. c_render: CMD_MANEUVER only when icon actually changes,
              * CMD_BARGRAPH for distance updates, CMD_PERSPECTIVE for approach zone */
             if (rendererClient != null && customRendererStarted) {
-                /* Detect viewport mode from ChoiceModel(1,168) hint bit 8.
-                 * BITFIELD_KDK_POSITION_IN_TUBE=8: set by native ClusterKDKHandlerImpl
-                 * based on isSmallStageActive(). Bit 8 set = "in tube" (small stage)
-                 * = VC shows cropped 210x153 popup. Bit 8 clear = "in flap" (big stage)
-                 * = VC shows full 328x180 sidescreen. */
-                if (csRef != null) {
-                    try {
-                        int komoHints = csRef.getKOMOHintsRaw();
-                        int detectedMode = ((komoHints & 8) != 0)
-                            ? VIEWPORT_POPUP : VIEWPORT_SIDESCREEN;
-                        if (detectedMode != currentViewportMode) {
-                            setViewportMode(detectedMode);
-                        }
-                    } catch (Throwable t) {
-                        /* non-fatal — keep current mode */
-                    }
+                /* Watchdog: if renderer TCP connection dropped, re-launch.
+                 * Native navi boot can take over displayable 20, killing our renderer
+                 * or orphaning its window. Re-launching reclaims it. */
+                if (!rendererClient.isConnected()) {
+                    Log.w(TAG, "CR: watchdog — TCP lost, re-launching renderer");
+                    stopCustomRenderer();
+                    startCustomRenderer();
                 }
-                /* Approach zone enter/exit → perspective + initial bargraph */
+
+                /* Approach zone enter/exit → bargraph only (always 3D perspective) */
                 if (approachChanged) {
-                    rendererClient.sendPerspective(nowApproach ? 0 : 1);
-                    /* Entering approach → send initial bargraph to activate it */
+                    /* 2D/3D switch disabled — always 3D for now */
+                    /* rendererClient.sendPerspective(nowApproach ? 0 : 1); */
                     if (nowApproach) {
                         updateRendererBargraph(s, bargraphDenominatorM);
                     } else {
-                        /* Exiting approach → turn off bargraph */
                         rendererClient.sendBargraph(0, 0);
                     }
                 }
@@ -1426,22 +1417,17 @@ public class BAPBridge {
             if (idxs == null || idxs.length == 0 || s.maneuverCount == 0) return false;
 
             int maxIdx = (s.mType != null) ? s.mType.length : 0;
-            /* Pick first directional maneuver (skip FOLLOW_STREET) */
+            /* Always show the first valid maneuver in the list (pos=0) — matches HUD.
+             * HUD shows whatever BAP descriptor pos=0 is: FOLLOW_STREET when far,
+             * the actual turn when approach zone updates the list. */
             int firstIdx = -1;
-            int followIdx = -1;
             for (int i = 0; i < idxs.length; i++) {
                 int idx = idxs[i];
                 if (idx >= 0 && idx < maxIdx && ManeuverMapper.isValidType(s.mType[idx])) {
-                    int probe = RendererMapper.mapIcon(s.mType[idx]);
-                    if (probe == RendererMapper.ICON_APPROACH) {
-                        if (followIdx < 0) followIdx = idx;
-                    } else {
-                        firstIdx = idx;
-                        break;
-                    }
+                    firstIdx = idx;
+                    break;
                 }
             }
-            if (firstIdx < 0) firstIdx = followIdx;
             if (firstIdx < 0) return false;
 
             int mt = s.mType[firstIdx];
@@ -1479,7 +1465,7 @@ public class BAPBridge {
                 }
             }
 
-            int perspective = inApproachZone ? 0 : 1;
+            int perspective = 1;  /* always 3D — 2D/3D switch disabled for now */
 
             rendererClient.sendManeuver(icon, direction, exitAngle,
                 drivingSide, junctionAngles, bargraphLevel, bargraphMode,

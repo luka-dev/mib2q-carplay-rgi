@@ -147,10 +147,44 @@ public class RendererMapper {
      * For off-ramps without a real angle, use a default slight angle.
      * For roundabouts, the turnAngle from iOS is the exit angle.
      */
+    /** Sentinel value: iOS sends 1000 when turn angle is unknown. */
+    private static final int ANGLE_UNKNOWN = 1000;
+
+    /** Default angles for maneuver types when iOS doesn't provide one. */
+    private static int defaultAngle(int mt) {
+        switch (mt) {
+            case ManeuverMapper.MT_LEFT_TURN:
+            case ManeuverMapper.MT_LEFT_TURN_AT_END:
+                return -90;
+            case ManeuverMapper.MT_RIGHT_TURN:
+            case ManeuverMapper.MT_RIGHT_TURN_AT_END:
+                return 90;
+            case ManeuverMapper.MT_SLIGHT_LEFT_TURN:
+            case ManeuverMapper.MT_KEEP_LEFT:
+                return -45;
+            case ManeuverMapper.MT_SLIGHT_RIGHT_TURN:
+            case ManeuverMapper.MT_KEEP_RIGHT:
+                return 45;
+            case ManeuverMapper.MT_SHARP_LEFT_TURN:
+                return -135;
+            case ManeuverMapper.MT_SHARP_RIGHT_TURN:
+                return 135;
+            case ManeuverMapper.MT_U_TURN:
+            case ManeuverMapper.MT_START_ROUTE_WITH_U_TURN:
+            case ManeuverMapper.MT_U_TURN_WHEN_POSSIBLE:
+                return -180;
+            default:
+                return 0;
+        }
+    }
+
     public static int mapExitAngle(int mt, int turnAngle) {
+        /* iOS sentinel 1000 = no angle data — use default for the maneuver type */
+        if (turnAngle == ANGLE_UNKNOWN || turnAngle == -ANGLE_UNKNOWN) {
+            turnAngle = defaultAngle(mt);
+        }
         switch (mt) {
             case ManeuverMapper.MT_OFF_RAMP:
-                /* If iOS gave a real angle, use it; otherwise default slight */
                 return (turnAngle != 0) ? turnAngle : 30;
             case ManeuverMapper.MT_HIGHWAY_OFF_RAMP_LEFT:
                 return (turnAngle != 0) ? turnAngle : -30;
