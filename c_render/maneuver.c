@@ -1578,13 +1578,16 @@ static void draw_roundabout(float exit_angle_deg, int driving_side,
         }
         float entry_diff = fabsf(entry_deg - exit_angle_deg);
         if (entry_diff > 180.0f) entry_diff = 360.0f - entry_diff;
-        if (entry_diff < best_diff) {
+        /* Only snap to entry if exit is VERY close (<15°). Otherwise snap
+         * to nearest junction, or keep raw angle if no junction is close. */
+        if (entry_diff < 15.0f && entry_diff < best_diff) {
             snapped_exit_deg = entry_deg;
             snapped_idx = -2;
-        } else {
+        } else if (best_diff < 30.0f) {
             snapped_exit_deg = (float)junction_angles[best];
             snapped_idx = best;
         }
+        /* else: keep raw exit_angle_deg, snapped_idx stays -1 */
     }
     float exit_rad = (90.0f - snapped_exit_deg) * (float)M_PI / 180.0f;
 

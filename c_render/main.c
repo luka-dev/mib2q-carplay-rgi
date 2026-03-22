@@ -464,8 +464,8 @@ int main(int argc, char **argv) {
             if (g_bargraph_alpha > 0.0f) {
                 float ba = g_bargraph_alpha * g_fade_alpha;
                 int bl = g_bargraph_level;
-                if (g_bargraph_on == 2 && !g_bargraph_blink_vis)
-                    bl = 0;
+                if (g_bargraph_on == 2)
+                    bl = g_bargraph_blink_vis ? 16 : 0;  /* blink: full ↔ empty */
                 render_bargraph(bl, ba);
             }
             render_debug_grid();
