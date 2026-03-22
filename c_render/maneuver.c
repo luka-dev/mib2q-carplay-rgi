@@ -133,8 +133,6 @@ static float g_next_cam_rot = 0.0f;
 static float g_next_cam_intro_end_dist = 0.0f;
 static float g_next_cam_follow_dist = 0.0f;
 static float g_next_cam_release_end_dist = 0.0f;
-static float g_cam_pan_x = 0.0f;
-static float g_cam_pan_y = 0.0f;
 static float g_cam_rot = 0.0f;
 static float g_cam_settle_start_x = 0.0f;
 static float g_cam_settle_start_y = 0.0f;
@@ -201,10 +199,12 @@ void maneuver_start_anim(void) {
 }
 
 int maneuver_is_animating(void) {
-    /* g_flag_active excluded — flag loops forever and must not block
-     * engine state transitions (SLIDING_IN → IDLE). It only drives
-     * continuous rendering via render dirty flag. */
-    return g_route_animating || g_cam_settle_active || g_light_settle_active;
+    /* Only route slide + camera settle gate engine transitions.
+     * g_flag_active excluded — loops forever (ARRIVED flag animation).
+     * g_light_settle_active excluded — purely cosmetic lighting blend
+     * (~1.7s), must not delay queued icon promotion. Both still drive
+     * continuous rendering via maneuver_needs_redraw(). */
+    return g_route_animating || g_cam_settle_active;
 }
 
 int maneuver_needs_redraw(void) {
@@ -562,11 +562,7 @@ static float lerp_angle(float a, float b, float t) {
     return a + wrap_angle(b - a) * t;
 }
 
-static float smoothstep01(float t) {
-    if (t < 0.0f) t = 0.0f;
-    if (t > 1.0f) t = 1.0f;
-    return t * t * (3.0f - 2.0f * t);
-}
+
 
 static float release_blend01(float t) {
     float u;
@@ -589,8 +585,6 @@ static float light_settle_curve(float t) {
 }
 
 static void apply_camera_pose(float pan_x, float pan_y, float rot) {
-    g_cam_pan_x = pan_x;
-    g_cam_pan_y = pan_y;
     g_cam_rot = rot;
     render_set_camera_pan(pan_x, pan_y);
     render_set_camera_rotation(rot);
@@ -668,18 +662,6 @@ static void update_combined_camera(void) {
          * cam = arrowhead × blend, so blend'(1)=0 eliminates the
          * arrowhead(t) × blend'(t) velocity term at the boundary. */
         blend = 2.0f * blend - blend * blend;
-        apply_camera_pose(follow_x * blend, follow_y * blend,
-                          lerp_angle(0.0f, follow_rot, blend));
-        return;
-    }
-
-    if (head_dist <= intro_dist) {
-        float denom = intro_dist - g_combined_start_head_dist;
-        float blend = (denom > 1e-4f) ? (head_dist - g_combined_start_head_dist) / denom : 1.0f;
-
-        rpath_sample(&g_route_path, g_t_head, &follow_x, &follow_y);
-        follow_rot = rpath_sample_heading(&g_route_path, g_t_head) - (float)(M_PI * 0.5);
-        blend = smoothstep01(blend);
         apply_camera_pose(follow_x * blend, follow_y * blend,
                           lerp_angle(0.0f, follow_rot, blend));
         return;
@@ -938,6 +920,55 @@ static void build_filleted_path(route_path_t *p,
 }
 
 /* ================================================================
+ * Roundabout shared helpers
+ * ================================================================ */
+
+typedef struct {
+    float snapped_deg;  /* snapped exit angle in degrees */
+    float exit_rad;     /* math radians: (90 - snapped_deg) * PI / 180 */
+    int   snapped_idx;  /* index into junction_angles, or -1 if no snap */
+} rab_snap_t;
+
+static rab_snap_t snap_roundabout_exit(float exit_angle_deg,
+                                       const int *junction_angles,
+                                       int junction_angle_count) {
+    rab_snap_t r;
+    r.snapped_deg = exit_angle_deg;
+    r.snapped_idx = -1;
+    if (junction_angle_count > 0) {
+        int best = 0;
+        float best_diff = SNAP_SENTINEL;
+        int i;
+        for (i = 0; i < junction_angle_count && i < MAX_JUNCTION_ANGLES; i++) {
+            float diff = fabsf((float)junction_angles[i] - exit_angle_deg);
+            if (diff > 180.0f) diff = 360.0f - diff;
+            if (diff < best_diff) { best_diff = diff; best = i; }
+        }
+        if (best_diff < 30.0f) {
+            r.snapped_deg = (float)junction_angles[best];
+            r.snapped_idx = best;
+        }
+    }
+    r.exit_rad = (90.0f - r.snapped_deg) * (float)M_PI / 180.0f;
+    return r;
+}
+
+/* Compute arc start/end for roundabout traversal.
+ * driving_side=0 → RHT (CCW), driving_side=1 → LHT (CW). */
+static void roundabout_arc_range(float entry_rad, float exit_rad, int driving_side,
+                                 float *arc_s, float *arc_e) {
+    *arc_s = entry_rad;
+    *arc_e = exit_rad;
+    if (driving_side == 0) {
+        while (*arc_e <= *arc_s) *arc_e += 2.0f * (float)M_PI;
+        if (*arc_e - *arc_s < 0.01f) *arc_e += 2.0f * (float)M_PI;
+    } else {
+        while (*arc_e >= *arc_s) *arc_e -= 2.0f * (float)M_PI;
+        if (*arc_s - *arc_e < 0.01f) *arc_e -= 2.0f * (float)M_PI;
+    }
+}
+
+/* ================================================================
  * Route path building (standalone, no mask rendering)
  * ================================================================ */
 
@@ -983,43 +1014,25 @@ void maneuver_build_route(const maneuver_state_t *state, route_path_t *path) {
         break;
     }
     case ICON_ROUNDABOUT: {
-        float cx = 0.0f, cy = 0.0f;
         float ring_r = RAB_RING_R;
         float entry_rad = (float)(-M_PI * 0.5);
-        /* Snap exit angle */
-        float snapped_exit_deg = (float)state->exit_angle;
-        if (state->junction_angle_count > 0) {
-            int best = 0; float best_diff = SNAP_SENTINEL; int j;
-            for (j = 0; j < state->junction_angle_count && j < MAX_JUNCTION_ANGLES; j++) {
-                float diff = fabsf((float)state->junction_angles[j] - (float)state->exit_angle);
-                if (diff > 180.0f) diff = 360.0f - diff;
-                if (diff < best_diff) { best_diff = diff; best = j; }
-            }
-            if (best_diff < 30.0f)
-                snapped_exit_deg = (float)state->junction_angles[best];
-        }
-        float exit_rad = (90.0f - snapped_exit_deg) * (float)M_PI / 180.0f;
+        rab_snap_t snap = snap_roundabout_exit((float)state->exit_angle,
+            state->junction_angles, state->junction_angle_count);
         float ext = BLUE_LEN - ring_r;
-        float entry_pt_x = cx + ring_r * cosf(entry_rad);
-        float entry_pt_y = cy + ring_r * sinf(entry_rad);
-        float ex0_x = cx + ring_r * cosf(exit_rad);
-        float ex0_y = cy + ring_r * sinf(exit_rad);
-        float ex_tip_x = cx + (ring_r + ext) * cosf(exit_rad);
-        float ex_tip_y = cy + (ring_r + ext) * sinf(exit_rad);
-        float arc_s = entry_rad, arc_e = exit_rad;
-        if (state->driving_side == 0) {
-            while (arc_e <= arc_s) arc_e += 2.0f * (float)M_PI;
-            if (arc_e - arc_s < 0.01f) arc_e += 2.0f * (float)M_PI;
-        } else {
-            while (arc_e >= arc_s) arc_e -= 2.0f * (float)M_PI;
-            if (arc_s - arc_e < 0.01f) arc_e -= 2.0f * (float)M_PI;
-        }
+        float entry_pt_x = ring_r * cosf(entry_rad);
+        float entry_pt_y = ring_r * sinf(entry_rad);
+        float ex0_x = ring_r * cosf(snap.exit_rad);
+        float ex0_y = ring_r * sinf(snap.exit_rad);
+        float ex_tip_x = (ring_r + ext) * cosf(snap.exit_rad);
+        float ex_tip_y = (ring_r + ext) * sinf(snap.exit_rad);
+        float arc_s, arc_e;
+        roundabout_arc_range(entry_rad, snap.exit_rad, state->driving_side, &arc_s, &arc_e);
         rpath_clear(path);
         rpath_add_line(path, 0, SHAFT_BOT, entry_pt_x, entry_pt_y);
-        rpath_add_arc(path, cx, cy, ring_r, arc_s, arc_e);
+        rpath_add_arc(path, 0, 0, ring_r, arc_s, arc_e);
         rpath_add_line(path, ex0_x, ex0_y, ex_tip_x, ex_tip_y);
         rpath_fillet_junctions(path, JOINT_R);
-        rpath_set_arrow(path, ex_tip_x, ex_tip_y, exit_rad);
+        rpath_set_arrow(path, ex_tip_x, ex_tip_y, snap.exit_rad);
         break;
     }
     case ICON_MERGE: {
@@ -1079,22 +1092,12 @@ maneuver_exit_t maneuver_get_exit(const maneuver_state_t *state) {
     }
     case ICON_ROUNDABOUT: {
         float ring_r = RAB_RING_R;
-        float snapped_exit_deg = (float)state->exit_angle;
-        if (state->junction_angle_count > 0) {
-            int best = 0; float best_diff = SNAP_SENTINEL; int j;
-            for (j = 0; j < state->junction_angle_count && j < MAX_JUNCTION_ANGLES; j++) {
-                float diff = fabsf((float)state->junction_angles[j] - (float)state->exit_angle);
-                if (diff > 180.0f) diff = 360.0f - diff;
-                if (diff < best_diff) { best_diff = diff; best = j; }
-            }
-            if (best_diff < 30.0f)
-                snapped_exit_deg = (float)state->junction_angles[best];
-        }
-        float exit_rad = (90.0f - snapped_exit_deg) * (float)M_PI / 180.0f;
+        rab_snap_t snap = snap_roundabout_exit((float)state->exit_angle,
+            state->junction_angles, state->junction_angle_count);
         float ext = BLUE_LEN - ring_r;
-        ex.x = (ring_r + ext) * cosf(exit_rad);
-        ex.y = (ring_r + ext) * sinf(exit_rad);
-        ex.heading = exit_rad;
+        ex.x = (ring_r + ext) * cosf(snap.exit_rad);
+        ex.y = (ring_r + ext) * sinf(snap.exit_rad);
+        ex.heading = snap.exit_rad;
         break;
     }
     case ICON_MERGE:
@@ -1557,28 +1560,9 @@ static void draw_roundabout(float exit_angle_deg, int driving_side,
 
     float entry_rad = (float)(-M_PI * 0.5);
 
-    /* Snap exit_angle to nearest junction angle OR entry */
-    float entry_deg = -180.0f;
-    float snapped_exit_deg = exit_angle_deg;
-    int snapped_idx = -1;
-    if (junction_angle_count > 0) {
-        int best = 0;
-        float best_diff = SNAP_SENTINEL;
-        int i_s;
-        for (i_s = 0; i_s < junction_angle_count && i_s < MAX_JUNCTION_ANGLES; i_s++) {
-            float diff = fabsf((float)junction_angles[i_s] - exit_angle_deg);
-            if (diff > 180.0f) diff = 360.0f - diff;
-            if (diff < best_diff) { best_diff = diff; best = i_s; }
-        }
-        /* Only snap to a junction if close enough. Never snap to entry —
-         * the exit always gets its own road stub even if near the entry. */
-        if (best_diff < 30.0f) {
-            snapped_exit_deg = (float)junction_angles[best];
-            snapped_idx = best;
-        }
-        /* else: keep raw exit_angle_deg, snapped_idx stays -1 */
-    }
-    float exit_rad = (90.0f - snapped_exit_deg) * (float)M_PI / 180.0f;
+    rab_snap_t snap = snap_roundabout_exit(exit_angle_deg, junction_angles, junction_angle_count);
+    float exit_rad = snap.exit_rad;
+    int snapped_idx = snap.snapped_idx;
 
     float ext = BLUE_LEN - ring_r;
     float stub = ROAD_LEN - ring_r;
@@ -1705,19 +1689,7 @@ static void draw_roundabout(float exit_angle_deg, int driving_side,
     /* === ROUTE PATH (3D mesh) === */
     {
         float arc_s, arc_e;
-        if (driving_side == 0) {
-            /* RHT: CCW from entry to exit */
-            arc_s = entry_rad;
-            arc_e = exit_rad;
-            while (arc_e <= arc_s) arc_e += 2.0f * (float)M_PI;
-            if (arc_e - arc_s < 0.01f) arc_e += 2.0f * (float)M_PI;
-        } else {
-            /* LHT: CW from entry to exit */
-            arc_s = entry_rad;
-            arc_e = exit_rad;
-            while (arc_e >= arc_s) arc_e -= 2.0f * (float)M_PI;
-            if (arc_s - arc_e < 0.01f) arc_e -= 2.0f * (float)M_PI;
-        }
+        roundabout_arc_range(entry_rad, exit_rad, driving_side, &arc_s, &arc_e);
 
         float entry_pt_x = cx + ring_r * cosf(entry_rad);
         float entry_pt_y = cy + ring_r * sinf(entry_rad);

@@ -1334,11 +1334,14 @@ public class BAPBridge {
 
     private boolean customRendererStarted = false;
 
-    /* Last maneuver state sent to renderer — only send CMD_MANEUVER when these change */
+    /* Last maneuver state sent to renderer — only send CMD_MANEUVER when these change.
+     * lastCrVer tracks the slot version so a new maneuver with identical type/angle
+     * still triggers a push animation (e.g., consecutive left turns). */
     private int lastCrIcon = -1;
     private int lastCrDirection = -99;
     private int lastCrExitAngle = -9999;
     private int lastCrDrivingSide = -1;
+    private int lastCrVer = -1;
 
     private static final String CR_LAUNCH_CMD =
         "/mnt/app/root/hooks/maneuver_render >/tmp/maneuver_render.log 2>&1 &";
@@ -1388,6 +1391,7 @@ public class BAPBridge {
             lastCrDirection = -99;
             lastCrExitAngle = -9999;
             lastCrDrivingSide = -1;
+            lastCrVer = -1;
             Log.i(TAG, "CR: started");
         } catch (Throwable t) {
             Log.w(TAG, "CR start failed: " + t.getClass().getName() + ": " + t.getMessage());
@@ -1445,15 +1449,20 @@ public class BAPBridge {
             int exitAngle = RendererMapper.mapExitAngle(mt, s.mTurnAngle[firstIdx]);
             int drivingSide = s.mDrivingSide[firstIdx];
 
-            /* Skip if icon hasn't actually changed */
+            /* Skip if icon hasn't actually changed.
+             * Slot version (mVer) detects maneuver transitions even when
+             * type/angle are identical (e.g., consecutive left turns). */
+            int ver = s.mVer[firstIdx];
             if (icon == lastCrIcon && direction == lastCrDirection
-                    && exitAngle == lastCrExitAngle && drivingSide == lastCrDrivingSide) {
+                    && exitAngle == lastCrExitAngle && drivingSide == lastCrDrivingSide
+                    && ver == lastCrVer) {
                 return false;
             }
             lastCrIcon = icon;
             lastCrDirection = direction;
             lastCrExitAngle = exitAngle;
             lastCrDrivingSide = drivingSide;
+            lastCrVer = ver;
 
             int[] junctionAngles = (s.mJunctionAngles != null && firstIdx < s.mJunctionAngles.length)
                 ? s.mJunctionAngles[firstIdx] : null;
