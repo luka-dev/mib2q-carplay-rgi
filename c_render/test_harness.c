@@ -238,6 +238,7 @@ static void send_debug_toggle(void) {
     cr_cmd_t cmd;
     memset(&cmd, 0, sizeof(cmd));
     cmd.cmd = CMD_DEBUG;
+    cmd.payload[0] = 2;  /* grid toggle */
     tcp_send(&cmd, sizeof(cmd));
     fprintf(stderr, "harness: debug toggle\n");
 }

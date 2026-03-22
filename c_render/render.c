@@ -894,7 +894,7 @@ void render_set_global_alpha(float alpha) {
 }
 
 void render_bargraph(int level, float alpha) {
-    /* 16 bars, scaled to full screen height, right side with gap.
+    /* 16 bars, full height, shifted down by half a cell as top padding.
      * Original proportions: 7px bar, 2px gap, 14px wide. Scale to fill height. */
     const int   N_BARS = 16;
     const float PX     = 2.0f / 640.0f;
@@ -908,7 +908,8 @@ void render_bargraph(int level, float alpha) {
     /* Bargraph at sidescreen right edge (cropped in popup — acceptable). */
     const float BAR_X = 1.0f - MARGIN * PX - BAR_W;
     float total_h = N_BARS * BAR_H + (N_BARS - 1) * GAP;
-    float base_y  = -total_h * 0.5f;
+    float top_pad = (BAR_H + GAP) * 0.5f;  /* half a cell padding from top */
+    float base_y  = -total_h * 0.5f - top_pad;
     float identity[16];
     int i;
 
