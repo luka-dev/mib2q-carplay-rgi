@@ -485,49 +485,58 @@ public class BAPBridge {
         if (!initialized) return;
 
         try {
+            /* Lightweight stop — reset internal state only.
+             * No BAP teardown, no renderer kill. iOS sends transient route_state=0
+             * during maneuver transitions; full teardown causes HUD flicker + renderer
+             * black screen. BAP teardown happens in onShutdown() on real disconnect. */
             stopActionBlinkThread();
             inApproachZone = false;
             latchedTurnToText = "";
+            Log.d(TAG, "Stopped (lightweight, renderer + BAP kept alive)");
+        } catch (Exception e) {
+            Log.e(TAG, "onStop error", e);
+        }
+    }
 
+    /**
+     * Full shutdown — BAP teardown + renderer kill.
+     * Called on actual CarPlay disconnect or stop().
+     */
+    public void onShutdown() {
+        if (!initialized) return;
+
+        try {
             /*
-             * Guidance stop:
+             * Guidance stop — full BAP teardown:
              * 1. RGStatus(0) - triggers sync(0) for {17,39,23,18,49}
              * 2. Complete sync(0) window: descriptor(23), distance(18), exitView(49)
              * 3. Non-sync FctIDs last
              */
             traceBap("updateRGStatus", "0");
-            appConnectorNavi.updateRGStatus(0);                                      /* FctID 17 -> sync(0) */
+            appConnectorNavi.updateRGStatus(0);
             traceBap("updateActiveRGType", "0");
-            appConnectorNavi.updateActiveRGType(0);                                  /* FctID 39 */
-
-            /* Sync(0) FctIDs */
-            sendNoSymbol();                                                          /* FctID 23 */
-            sendDistanceToManeuverRaw(0, false, 0);                                  /* FctID 18 */
-            sendExitView();                                                          /* FctID 49 */
-
-            /* Non-sync FctIDs */
+            appConnectorNavi.updateActiveRGType(0);
+            sendNoSymbol();
+            sendDistanceToManeuverRaw(0, false, 0);
+            sendExitView();
             traceBap("updateManeuverState", "0");
-            appConnectorNavi.updateManeuverState(0);                                 /* FctID 24 */
+            appConnectorNavi.updateManeuverState(0);
             traceBap("updateCurrentPositionInfo", "\"\"");
-            appConnectorNavi.updateCurrentPositionInfo("");                           /* FctID 19 */
-            sendDistanceToDestinationRaw(0, false);                                  /* FctID 21 */
+            try { appConnectorNavi.updateCurrentPositionInfo(""); } catch (Throwable t) {}
+            sendDistanceToDestinationRaw(0, false);
             traceBap("updateTimeToDestination", "0,0,-1");
-            appConnectorNavi.updateTimeToDestination(0, 0, -1);                      /* FctID 22 */
+            appConnectorNavi.updateTimeToDestination(0, 0, -1);
             traceBap("updateLaneGuidance", "[],false");
-            appConnectorNavi.updateLaneGuidance(false, new CombiBAPNaviLaneGuidanceData[0]); /* FctID 24 */
+            appConnectorNavi.updateLaneGuidance(false, new CombiBAPNaviLaneGuidanceData[0]);
 
-            /* Custom renderer: stop c_render + video encoder */
             stopCustomRenderer();
-
-            /* Unblock native route-guidance BAP stream. */
             if (gatedService != null) gatedService.blockRouteGuidance = false;
-
-            /* Restore cluster state flags. */
             forceClusterRouteInfoState(false);
+            forceGfxAvailable(false);
 
-            Log.d(TAG, "Stopped");
+            Log.i(TAG, "Shutdown (full teardown)");
         } catch (Exception e) {
-            Log.e(TAG, "onStop error", e);
+            Log.e(TAG, "onShutdown error", e);
         }
     }
 

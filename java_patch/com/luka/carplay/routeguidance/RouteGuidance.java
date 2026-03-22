@@ -247,7 +247,10 @@ public class RouteGuidance implements PPS.Listener {
         hasRouteUpdate = false;
 
         if (pps != null) pps.stop();
-        if (bap != null) bap.onStop();
+        if (bap != null) {
+            bap.onStop();
+            bap.onShutdown();  /* full stop — kill renderer on actual stop() */
+        }
 
         Log.i(TAG, "Stopped");
     }
@@ -273,7 +276,7 @@ public class RouteGuidance implements PPS.Listener {
 
         /* Check for disconnect */
         if (state.disconnectReason != null) {
-            if (bap != null) bap.onStop();
+            if (bap != null) { bap.onStop(); bap.onShutdown(); }
             rgActive = false;
             hasRouteUpdate = false;
             state.reset();
@@ -338,7 +341,10 @@ public class RouteGuidance implements PPS.Listener {
                     + " maneuver_count=" + state.maneuverCount
                     + " visible_in_app=" + state.visibleInApp
                     + " source_supports_rg=" + state.sourceSupportsRg);
-                if (bap != null) bap.onStop();
+                /* With C hook debounce, transient route_state=0 never reaches
+                 * Java — any deactivation here is genuine (source_supports_rg=0,
+                 * visibleInApp=0, or real route end).  Full shutdown. */
+                if (bap != null) { bap.onStop(); bap.onShutdown(); }
                 rgActive = false;
             }
         }
