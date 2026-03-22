@@ -90,13 +90,20 @@
 #define BEND_HI      0.15f   /* upper S-bend point */
 #define MERGE_BEND_LO (-0.10f) /* merge lower S-bend point */
 
-/* Arrived */
-#define ARRIVE_ROAD_TOP   0.15f       /* arrived road/disc end Y */
-#define ARRIVE_SEG        24          /* circle/disc segment count for arrived */
+/* Arrived — concentric circle destination marker (matches stock HUD icon)
+ *    ___
+ *  (( . ))   outer = outline only (transparent inside)
+ *    |X|     inner = filled (road end cap)
+ *    |X|     road shaft
+ */
+#define ARRIVE_CENTER_Y   0.12f       /* shared center of both circles */
+#define ARRIVE_INNER_R    (OL_T * 0.75f)  /* inner circle: wider than road for visibility */
+#define ARRIVE_OUTER_R    0.28f       /* outer circle: outline ring only */
+#define ARRIVE_ROAD_TOP   ARRIVE_CENTER_Y  /* road extends into inner circle center */
+#define ARRIVE_SEG        24          /* circle segment count */
 #define SNAP_SENTINEL     999.0f      /* large value for angle snap comparison */
 
 /* Destination flag sprite */
-#define ARRIVE_FLAG_Y     ARRIVE_ROAD_TOP  /* flag at road endpoint (arrival dot) */
 #define ARRIVE_FLAG_SZ    0.18f       /* half-extent of flag sprite */
 #define FLAG_ANIM_SPEED   0.35f       /* frames per render frame */
 
@@ -1057,10 +1064,9 @@ void maneuver_build_route(const maneuver_state_t *state, route_path_t *path) {
     }
     case ICON_ARRIVED:
     default: {
-        float route_end = ARRIVE_ROAD_TOP - HEAD_SZ;
         rpath_clear(path);
-        rpath_add_line(path, 0, SHAFT_BOT, 0, route_end);
-        rpath_set_arrow(path, 0, route_end, (float)(M_PI * 0.5));
+        rpath_add_line(path, 0, SHAFT_BOT, 0, ARRIVE_CENTER_Y);
+        rpath_set_arrow(path, 0, ARRIVE_CENTER_Y, (float)(M_PI * 0.5));
         break;
     }
     }
@@ -1113,7 +1119,7 @@ maneuver_exit_t maneuver_get_exit(const maneuver_state_t *state) {
         break;
     }
     default: /* ARRIVED -- terminal, no meaningful exit */
-        ex.x = 0; ex.y = ARRIVE_ROAD_TOP - HEAD_SZ;
+        ex.x = 0; ex.y = ARRIVE_CENTER_Y;
         ex.heading = (float)(M_PI * 0.5);
         break;
     }
@@ -1719,49 +1725,58 @@ static void draw_roundabout(float exit_angle_deg, int driving_side,
  * draw_arrived -- outline/fill/route passes
  * ---------------------------------------------------------------- */
 
-#define ARRIVE_DIR_OFFSET 0.12f  /* horizontal offset for left/right arrival */
-static float g_arrive_flag_dx = 0.0f;  /* cached for flag sprite positioning */
+static float g_arrive_flag_dx = 0.0f;  /* cached flag X on outer circle */
+static float g_arrive_flag_dy = 0.0f;  /* cached flag Y on outer circle */
 static float g_combined_flag_x = 0.0f; /* flag position in combined path space */
 static float g_combined_flag_y = 0.0f;
 
 static void draw_arrived(int dir) {
-    float road_top = ARRIVE_ROAD_TOP;
-    /* Offset flag sprite left/right based on direction — road stays center */
-    float dx = (dir < 0) ? -ARRIVE_DIR_OFFSET : (dir > 0) ? ARRIVE_DIR_OFFSET : 0.0f;
-    /* Only update current flag position from the primary draw pass.
-     * In masks_only_mode (next maneuver's mask pass), skip — otherwise
-     * the next maneuver's direction clobbers the current flag position. */
-    if (!g_masks_only_mode)
-        g_arrive_flag_dx = dx;
+    /* Concentric circle destination marker (matches stock HUD icon):
+     * Inner circle = filled road end cap (grey fill, white outline)
+     * Outer circle = outline ring only (transparent inside)
+     * Flag snaps to outer circle edge: left=9h, center=12h, right=3h */
+    if (!g_masks_only_mode) {
+        if (dir < 0) {
+            g_arrive_flag_dx = -ARRIVE_OUTER_R;
+            g_arrive_flag_dy = ARRIVE_CENTER_Y;
+        } else if (dir > 0) {
+            g_arrive_flag_dx = ARRIVE_OUTER_R;
+            g_arrive_flag_dy = ARRIVE_CENTER_Y;
+        } else {
+            g_arrive_flag_dx = 0.0f;
+            g_arrive_flag_dy = ARRIVE_CENTER_Y + ARRIVE_OUTER_R;
+        }
+    }
 
     render_set_raised(0);
 
     render_begin_outline_mask();
-    /* Outline first -- full width white */
+    /* Outline pass — road shaft + outer ring + inner circle (white disc) */
     draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - FADE_LEN, 1.0f, FADE_OUTLINE);
-    render_thick_line(0, SHAFT_BOT, 0, road_top, OL_T, WHITE);
-    render_disc(0, road_top, OL_T * 0.5f, ARRIVE_SEG, WHITE);
-    /* Fill on top -- grey overwrites interior, leaving border */
+    render_thick_line(0, SHAFT_BOT, 0, ARRIVE_ROAD_TOP, OL_T, WHITE);
+    render_circle(0, ARRIVE_CENTER_Y, ARRIVE_OUTER_R, OL_W, ARRIVE_SEG, WHITE);
+    render_disc(0, ARRIVE_CENTER_Y, ARRIVE_INNER_R, ARRIVE_SEG, WHITE);
+    /* Fill pass — road grey + inner circle grey (leaves OL_W white border) */
     draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - FADE_LEN, 1.0f, FADE_GREY);
-    render_thick_line(0, SHAFT_BOT, 0, road_top, SIDE_T, SIDE);
-    render_disc(0, road_top, SIDE_T * 0.5f, ARRIVE_SEG, SIDE);
+    render_thick_line(0, SHAFT_BOT, 0, ARRIVE_ROAD_TOP, SIDE_T, SIDE);
+    render_disc(0, ARRIVE_ROAD_TOP, SIDE_T * 0.5f, ARRIVE_SEG, SIDE);
+    render_disc(0, ARRIVE_CENTER_Y, ARRIVE_INNER_R - OL_W, ARRIVE_SEG, SIDE);
     render_end_outline_mask();
 
-    /* === ROUTE PATH === */
-    float route_end = road_top - HEAD_SZ;
+    /* === ROUTE PATH — road ends at circle center, no arrowhead === */
     rpath_clear(&g_route_path);
-    rpath_add_line(&g_route_path, 0, SHAFT_BOT, 0, route_end);
+    rpath_add_line(&g_route_path, 0, SHAFT_BOT, 0, ARRIVE_CENTER_Y);
     rpath_extend(&g_route_path);
     rpath_densify(&g_route_path);
-    rpath_set_arrow(&g_route_path, 0, route_end, (float)(M_PI * 0.5));
+    rpath_set_arrow(&g_route_path, 0, ARRIVE_CENTER_Y, (float)(M_PI * 0.5));
     compute_slide_params();
     rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
 
     if (!g_masks_only_mode) {
         render_composite();
 
-        /* Animated destination flag -- drawn before route so blue line overlays it */
-        render_sprite_flag(g_arrive_flag_dx, ARRIVE_FLAG_Y, ARRIVE_FLAG_SZ, (int)g_flag_frame);
+        /* Animated destination flag — anchored above center */
+        render_sprite_flag(g_arrive_flag_dx, g_arrive_flag_dy, ARRIVE_FLAG_SZ, (int)g_flag_frame);
 
         rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
     }
@@ -1946,7 +1961,7 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
         }
         render_composite();
         if (s->icon == ICON_ARRIVED)
-            render_sprite_flag(g_arrive_flag_dx, ARRIVE_FLAG_Y, ARRIVE_FLAG_SZ, (int)g_flag_frame);
+            render_sprite_flag(g_arrive_flag_dx, g_arrive_flag_dy, ARRIVE_FLAG_SZ, (int)g_flag_frame);
         if (combined && next_state != NULL && next_state->icon == ICON_ARRIVED) {
             render_sprite_flag(g_combined_flag_x, g_combined_flag_y, ARRIVE_FLAG_SZ, (int)g_flag_frame);
         }
@@ -2020,12 +2035,21 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
         g_last_combined_rot = rot;
 
         /* Pre-compute flag position for ARRIVED in combined space.
-         * Use next maneuver's direction, not current's g_arrive_flag_dx. */
+         * Flag snaps to outer circle edge: left=9h, center=12h, right=3h */
         if (next_state->icon == ICON_ARRIVED) {
-            float next_dx = (next_state->direction < 0) ? -ARRIVE_DIR_OFFSET
-                          : (next_state->direction > 0) ?  ARRIVE_DIR_OFFSET : 0.0f;
-            g_combined_flag_x = cos_r * next_dx - sin_r * ARRIVE_FLAG_Y + tx;
-            g_combined_flag_y = sin_r * next_dx + cos_r * ARRIVE_FLAG_Y + ty;
+            float nfx, nfy;
+            if (next_state->direction < 0) {
+                nfx = -ARRIVE_OUTER_R;
+                nfy = ARRIVE_CENTER_Y;
+            } else if (next_state->direction > 0) {
+                nfx = ARRIVE_OUTER_R;
+                nfy = ARRIVE_CENTER_Y;
+            } else {
+                nfx = 0.0f;
+                nfy = ARRIVE_CENTER_Y + ARRIVE_OUTER_R;
+            }
+            g_combined_flag_x = cos_r * nfx - sin_r * nfy + tx;
+            g_combined_flag_y = sin_r * nfx + cos_r * nfy + ty;
         }
 
         rpath_xform_append(&g_route_path, &next_path, tx, ty, cos_r, sin_r, rot);
@@ -2085,7 +2109,7 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
             render_sprite_flag(g_combined_flag_x, g_combined_flag_y, ARRIVE_FLAG_SZ, (int)g_flag_frame);
         }
         if (s->icon == ICON_ARRIVED) {
-            render_sprite_flag(g_arrive_flag_dx, ARRIVE_FLAG_Y, ARRIVE_FLAG_SZ, (int)g_flag_frame);
+            render_sprite_flag(g_arrive_flag_dx, g_arrive_flag_dy, ARRIVE_FLAG_SZ, (int)g_flag_frame);
         }
 
         rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
