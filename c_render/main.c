@@ -120,7 +120,7 @@ static void engine_apply_maneuver(const maneuver_state_t *state) {
         return;
     }
 
-    /* IDLE: store as next, start push -- fade out bargraph */
+    /* IDLE: store as next, start push */
     g_engine.next = *state;
     g_engine.has_next = 1;
     g_bargraph_on = 0;
@@ -156,6 +156,8 @@ static void engine_tick(void) {
                         g_engine.next.icon);
             } else {
                 g_engine.phase = ENGINE_SLIDING_IN;
+                /* Crossfade during push already brought next roads to full alpha,
+                 * no post-push fade needed. */
             }
         }
         break;

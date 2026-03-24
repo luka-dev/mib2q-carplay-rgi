@@ -1013,6 +1013,11 @@ void render_begin_frame(void) {
 
 void render_set_global_alpha(float alpha) {
     g_global_alpha = alpha;
+    glUniform1f(g_uni_global_alpha, alpha);
+}
+
+float render_get_global_alpha(void) {
+    return g_global_alpha;
 }
 
 void render_bargraph(int level, float alpha) {

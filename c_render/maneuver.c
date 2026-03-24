@@ -157,7 +157,7 @@ static float g_last_combined_rot = 0.0f;
 static int   g_camera_prepared_this_frame = 0;
 #define ROUTE_SPEED_PEAK 0.045f         /* peak animation speed (NDC/frame on straight) */
 #define ROUTE_SPEED_MIN  0.010f         /* minimum speed on sharpest turns */
-#define ROUTE_EXTEND     1.2f           /* extension length beyond viewport */
+#define ROUTE_EXTEND     0.5f           /* extension length beyond viewport */
 #define CURV_WINDOW      3              /* points each side for curvature sampling */
 #define CURV_SLOWDOWN    8.0f           /* curvature sensitivity (higher = more slowdown) */
 #define CAMERA_SETTLE_SPEED 0.12f
@@ -486,19 +486,16 @@ static float ease_inout_speed(float t) {
 static float path_curvature_factor(const route_path_t *p, float t) {
     if (p->pt_count < 3 || p->total_length < 1e-6f) return 1.0f;
 
-    /* Find the point index at fraction t */
     float target_dist = t * p->total_length;
     int idx = 1;
     while (idx < p->pt_count - 1 && p->dist[idx] < target_dist) idx++;
 
-    /* Sample direction change over a window around idx */
     int lo = idx - CURV_WINDOW;
     int hi = idx + CURV_WINDOW;
     if (lo < 0) lo = 0;
     if (hi >= p->pt_count) hi = p->pt_count - 1;
     if (hi - lo < 2) return 1.0f;
 
-    /* Direction at lo and hi */
     float d0x = p->px[lo + 1] - p->px[lo], d0y = p->py[lo + 1] - p->py[lo];
     float d1x = p->px[hi] - p->px[hi - 1], d1y = p->py[hi] - p->py[hi - 1];
     float len0 = sqrtf(d0x * d0x + d0y * d0y);
@@ -509,9 +506,9 @@ static float path_curvature_factor(const route_path_t *p, float t) {
     if (dot > 1.0f) dot = 1.0f;
     if (dot < -1.0f) dot = -1.0f;
 
-    /* angle = 0 for straight, PI for reversal */
     float angle = acosf(dot);
-    /* Speed factor: 1/(1 + CURV_SLOWDOWN * curvature) */
+    /* Gentle arcs (roundabout ring) get mild slowdown, sharp junctions get full */
+    if (angle < 0.3f) return 0.7f;  /* mild slowdown on gentle arcs */
     float factor = 1.0f / (1.0f + CURV_SLOWDOWN * angle);
     return factor;
 }
@@ -1268,14 +1265,6 @@ static void compute_combined_transform(const maneuver_state_t *cur_state,
     *out_rot = rot;
 }
 
-static void compute_combined_mask_transform(const maneuver_state_t *cur_state,
-                                            const maneuver_state_t *next_state,
-                                            float *out_tx, float *out_ty,
-                                            float *out_cos_r, float *out_sin_r,
-                                            float *out_rot) {
-    compute_combined_transform(cur_state, next_state,
-                               out_tx, out_ty, out_cos_r, out_sin_r, out_rot);
-}
 
 /* ================================================================
  * Icon drawing functions -- 3 mask passes each
@@ -1785,10 +1774,7 @@ static void draw_arrived(int dir) {
 
     if (!g_masks_only_mode) {
         render_composite();
-
-        /* Animated destination flag — anchored to outer circle */
         render_sprite_flag(g_arrive_flag_dx, g_arrive_flag_dy, ARRIVE_FLAG_SZ, (int)g_flag_frame);
-
         rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
     }
 }
@@ -1924,6 +1910,8 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
     int combined = (next_state != NULL && maneuver_is_pushing());
     if (!combined)
         g_combined_window_active = 0;
+    else
+        render_invalidate_masks();  /* force re-render every frame for crossfade */
 
     if (!combined) {
         if (!g_camera_prepared_this_frame) {
@@ -1997,7 +1985,20 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
             /* Rebuild mesh at current slide (path segments still cached in g_route_path) */
             rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
         }
-        render_composite();
+        /* Composite with road fade during push */
+        if (combined) {
+            float push_range = g_anim_target - g_anim_start;
+            float pp = (push_range > 0.01f) ? (g_route_slide - g_anim_start) / push_range : 1.0f;
+            if (pp < 0.0f) pp = 0.0f;
+            if (pp > 1.0f) pp = 1.0f;
+            float road_alpha = 1.0f - pp;  /* fade out current roads during push */
+            float base_alpha = render_get_global_alpha();
+            render_set_global_alpha(base_alpha * road_alpha);
+            render_composite();
+            render_set_global_alpha(base_alpha);
+        } else {
+            render_composite();
+        }
         if (s->icon == ICON_ARRIVED)
             render_sprite_flag(g_arrive_flag_dx, g_arrive_flag_dy, ARRIVE_FLAG_SZ, (int)g_flag_frame);
         if (combined && next_state != NULL && next_state->icon == ICON_ARRIVED) {
@@ -2027,27 +2028,14 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
         } \
     } while(0)
 
-    /* Render current maneuver masks + composite */
-    DISPATCH_DRAW(s);
-
-    /* For combined transition: also render next maneuver's masks (appended),
-     * then re-composite with both, and draw combined route. */
+    /* Render current maneuver masks (+ composite if not combined) */
     if (combined) {
-        float rot, cos_r, sin_r;
-        float tx, ty;
-
-        compute_combined_mask_transform(s, next_state, &tx, &ty, &cos_r, &sin_r, &rot);
-
-        render_set_mask_append(1);
         g_masks_only_mode = 1;
-        render_push_mask_transform(tx, ty, cos_r, sin_r);
-        DISPATCH_DRAW(next_state);
-        render_pop_mask_transform();
-        render_set_mask_append(0);
+        DISPATCH_DRAW(s);
         g_masks_only_mode = 0;
+    } else {
+        DISPATCH_DRAW(s);
     }
-
-    #undef DISPATCH_DRAW
 
     /* When combined, rebuild joined route path and draw it */
     if (combined) {
@@ -2152,7 +2140,34 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
             g_route_path.bulb_radius = ARRIVE_INNER_R - OL_W;
         }
 
-        render_composite();
+        /* Crossfade: current roads fade out, next roads fade in simultaneously */
+        {
+            float push_range = g_anim_target - g_anim_start;
+            float pp = (push_range > 0.01f) ? (g_route_slide - g_anim_start) / push_range : 1.0f;
+            if (pp < 0.0f) pp = 0.0f;
+            if (pp > 1.0f) pp = 1.0f;
+            float base_alpha = render_get_global_alpha();
+
+            /* Pass 1: composite current maneuver roads (already in FBO) fading out */
+            render_set_global_alpha(base_alpha * (1.0f - pp));
+            render_composite();
+
+            /* Pass 2: draw next maneuver masks into FBO, composite fading in.
+             * Save combined route path — DISPATCH_DRAW overwrites g_route_path. */
+            route_path_t saved_path = g_route_path;
+            g_masks_only_mode = 1;
+            render_push_mask_transform(tx, ty, cos_r, sin_r);
+            DISPATCH_DRAW(next_state);
+            render_pop_mask_transform();
+            g_masks_only_mode = 0;
+            g_route_path = saved_path;
+            compute_slide_params();  /* restore g_t_tail/g_t_head for combined path */
+
+            render_set_global_alpha(base_alpha * pp);
+            render_composite();
+
+            render_set_global_alpha(base_alpha);
+        }
 
         /* Draw flag anchored to next maneuver's center (slides in with the maneuver) */
         if (next_state->icon == ICON_ARRIVED) {
@@ -2165,6 +2180,8 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
         rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
         rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
     }
+
+    #undef DISPATCH_DRAW
 
     if (g_route_debug)
         rpath_draw_debug(&g_route_path, g_t_tail, g_t_head);
