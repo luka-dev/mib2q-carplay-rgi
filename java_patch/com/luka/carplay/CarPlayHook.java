@@ -193,11 +193,15 @@ public class CarPlayHook {
                 if (routeGuidance != null && !routeGuidance.isRunning()) {
                     routeGuidance.start();
                 }
-            } else {
+            } else if (!carplay) {
+                /* Actual disconnect — full teardown */
                 if (routeGuidance != null && routeGuidance.isRunning()) {
                     routeGuidance.stop();
                 }
             }
+            /* active=false (reverse gear, camera view) or selected=false:
+             * keep renderer + BAP alive. PPS data stops flowing naturally
+             * while inactive, and resumes when active returns. */
 
         } catch (Exception e) {
             Log.e(TAG, "onDeviceStateUpdate error", e);

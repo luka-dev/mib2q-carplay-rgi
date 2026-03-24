@@ -1405,7 +1405,6 @@ public class BAPBridge {
     private void stopCustomRenderer() {
         if (!customRendererStarted) return;
         try {
-            /* Send CMD_SHUTDOWN via TCP for graceful renderer exit */
             if (rendererClient != null) {
                 rendererClient.disconnect();
                 rendererClient = null;
