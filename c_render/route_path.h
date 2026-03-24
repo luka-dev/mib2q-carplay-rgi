@@ -37,9 +37,11 @@ typedef struct {
     float dist[RPATH_MAX_PTS];  /* cumulative distance at each point */
     int pt_count;
     float total_length;
-    /* Arrowhead */
+    /* Tip style */
     float arrow_x, arrow_y;
     float arrow_angle;       /* radians */
+    float tip_blend;         /* 0.0 = arrow, 1.0 = bulb, intermediate = morph */
+    float bulb_radius;       /* target bulb radius when tip_blend > 0 */
 } route_path_t;
 
 #define RMESH_MAX_VERTS 4800

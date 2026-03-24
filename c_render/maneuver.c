@@ -127,6 +127,9 @@ static float g_t_head = 1.0f;          /* computed head fraction for extrusion *
 static int   g_route_debug = 0;        /* debug overlay toggle */
 static float g_slug_override = -1.0f; /* >0: speed normalization length for combined path */
 static float g_flag_frame = 0.0f;     /* destination flag animation frame */
+static float g_tip_morph_t = 1.0f;   /* 0→1 independent timer for arrow→bulb morph */
+static int   g_tip_morph_active = 0; /* 1 when morph animation is running */
+#define TIP_MORPH_SPEED  0.07f       /* per frame (~0.5s at 30fps) */
 static int   g_flag_active = 0;      /* 1 when showing arrived icon (flag animating) */
 static int   g_masks_only_mode = 0;   /* append masks without composite/route draw */
 static int   g_combined_window_active = 0;
@@ -203,6 +206,9 @@ void maneuver_start_anim(void) {
     clear_camera_settle();
     clear_light_settle();
     g_camera_prepared_this_frame = 0;
+    /* Reset tip morph — will be started when ARRIVED icon is detected */
+    g_tip_morph_t = 0.0f;
+    g_tip_morph_active = 0;
 }
 
 int maneuver_is_animating(void) {
@@ -215,7 +221,8 @@ int maneuver_is_animating(void) {
 }
 
 int maneuver_needs_redraw(void) {
-    return g_route_animating || g_flag_active || g_cam_settle_active || g_light_settle_active;
+    return g_route_animating || g_flag_active || g_cam_settle_active
+        || g_light_settle_active || (g_tip_morph_active && g_tip_morph_t < 1.0f);
 }
 
 void maneuver_set_slide(float t) {
@@ -1768,6 +1775,10 @@ static void draw_arrived(int dir) {
     rpath_add_line(&g_route_path, 0, SHAFT_BOT, 0, ARRIVE_CENTER_Y);
     rpath_extend(&g_route_path);
     rpath_densify(&g_route_path);
+    /* Morph arrow→bulb via independent timer (not tied to slide).
+     * Started by maneuver_start_anim / maneuver_commit_pushed_state. */
+    g_route_path.tip_blend = g_tip_morph_t;
+    g_route_path.bulb_radius = ARRIVE_INNER_R - OL_W;
     rpath_set_arrow(&g_route_path, 0, ARRIVE_CENTER_Y, (float)(M_PI * 0.5));
     compute_slide_params();
     rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
@@ -1775,7 +1786,7 @@ static void draw_arrived(int dir) {
     if (!g_masks_only_mode) {
         render_composite();
 
-        /* Animated destination flag — anchored above center */
+        /* Animated destination flag — anchored to outer circle */
         render_sprite_flag(g_arrive_flag_dx, g_arrive_flag_dy, ARRIVE_FLAG_SZ, (int)g_flag_frame);
 
         rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
@@ -1949,13 +1960,40 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
         }
     }
 
+    /* Advance tip morph timer (independent of slide).
+     * Starts when ARRIVED slide reaches 60%, or immediately after push commit. */
+    if (s != NULL && s->icon == ICON_ARRIVED && !g_tip_morph_active
+            && (g_route_slide >= 0.5f || g_anim_start >= 1.0f)) {
+        g_tip_morph_active = 1;
+    }
+    if (g_tip_morph_active && g_tip_morph_t < 1.0f) {
+        g_tip_morph_t += TIP_MORPH_SPEED;
+        if (g_tip_morph_t > 1.0f) g_tip_morph_t = 1.0f;
+    }
+
     /* If masks are cached and still valid, just re-composite + rebuild mesh at current slide
      * (handles perspective animation and route animation without re-rendering masks) */
     if (!render_masks_dirty()) {
         compute_slide_params();
         if (combined)
             update_combined_camera();
-        if (g_route_animating || g_route_slide != 1.0f) {
+        /* Update tip_blend on cached frames:
+         * - Pushing FROM ARRIVED: reverse morph bulb→arrow (1→0)
+         * - Settled ARRIVED: forward morph via g_tip_morph_t */
+        if (combined && s->icon == ICON_ARRIVED) {
+            float range = g_anim_target - g_anim_start;
+            float progress = (range > 0.01f) ? (g_route_slide - g_anim_start) / range : 1.0f;
+            if (progress < 0.0f) progress = 0.0f;
+            if (progress > 1.0f) progress = 1.0f;
+            /* Morph out in first 40% of push (synced with morph-in timing) */
+            float morph_out = (progress < 0.4f) ? (1.0f - progress / 0.4f) : 0.0f;
+            g_route_path.tip_blend = morph_out;
+            g_route_path.bulb_radius = ARRIVE_INNER_R - OL_W;
+        } else if (s->icon == ICON_ARRIVED) {
+            g_route_path.tip_blend = g_tip_morph_t;
+        }
+        if (g_route_animating || g_route_slide != 1.0f
+                || (g_tip_morph_active && g_tip_morph_t < 1.0f)) {
             /* Rebuild mesh at current slide (path segments still cached in g_route_path) */
             rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
         }
@@ -2102,6 +2140,18 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
 
         compute_slide_params();
         update_combined_camera();
+
+        /* Reverse morph bulb→arrow in first 40% of push (synced with morph-in) */
+        if (s->icon == ICON_ARRIVED) {
+            float range = g_anim_target - g_anim_start;
+            float progress = (range > 0.01f) ? (g_route_slide - g_anim_start) / range : 1.0f;
+            if (progress < 0.0f) progress = 0.0f;
+            if (progress > 1.0f) progress = 1.0f;
+            float morph_out = (progress < 0.4f) ? (1.0f - progress / 0.4f) : 0.0f;
+            g_route_path.tip_blend = morph_out;
+            g_route_path.bulb_radius = ARRIVE_INNER_R - OL_W;
+        }
+
         render_composite();
 
         /* Draw flag anchored to next maneuver's center (slides in with the maneuver) */
@@ -2131,6 +2181,9 @@ void maneuver_commit_pushed_state(const maneuver_state_t *state) {
     g_route_animating = 0;
     g_cam_settle_start_x = 0.0f;
     g_cam_settle_start_y = 0.0f;
+    /* Reset tip morph — ARRIVED will start it on next frame */
+    g_tip_morph_t = 0.0f;
+    g_tip_morph_active = 0;
     settle_rot = wrap_angle(g_cam_rot - g_next_cam_rot);
     if (settle_rot > CAMERA_SETTLE_MAX_ROT) settle_rot = CAMERA_SETTLE_MAX_ROT;
     if (settle_rot < -CAMERA_SETTLE_MAX_ROT) settle_rot = -CAMERA_SETTLE_MAX_ROT;

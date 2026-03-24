@@ -37,6 +37,8 @@ void rpath_clear(route_path_t *p) {
     p->arrow_x = 0.0f;
     p->arrow_y = 0.0f;
     p->arrow_angle = 0.0f;
+    p->tip_blend = 0.0f;
+    p->bulb_radius = 0.0f;
 }
 
 void rpath_add_line(route_path_t *p, float x0, float y0, float x1, float y1) {
@@ -533,75 +535,90 @@ void rpath_extrude(const route_path_t *p, route_mesh_t *m,
                   fnx, 0, fnz);
     }
 
-    /* Arrowhead prism */
+    /* Tip: blend between arrow prism (blend=0) and bulb disc (blend=1).
+     * Intermediate values morph smoothly: arrow shrinks while bulb grows. */
     {
+        float blend = p->tip_blend;
+        if (blend < 0.0f) blend = 0.0f;
+        if (blend > 1.0f) blend = 1.0f;
+
         float ax, az, a_dir;
         if (t1 >= 1.0f) {
-            /* Arrow at the actual end of extruded body (tracks post-extension
-             * during push-out instead of staying at original arrow position) */
             ax = epx[n_pts - 1];
             az = epy[n_pts - 1];
             a_dir = atan2f(dir_y[n_pts - 2], dir_x[n_pts - 2]);
         } else {
-            /* Place arrow at truncated endpoint, direction from last segment */
             ax = end_x;
             az = end_y;
             a_dir = atan2f(dir_y[n_pts - 2], dir_x[n_pts - 2]);
         }
 
-        float arrow_size = width * 1.3f;
+        /* Arrow prism (scales down with blend) */
+        if (blend < 1.0f) {
+            float s = 1.0f - blend;
+            float arrow_size = width * 1.3f * s;
+            float tip_x = ax + arrow_size * cosf(a_dir);
+            float tip_z = az + arrow_size * sinf(a_dir);
+            float perp_ax = -sinf(a_dir) * hw * 1.5f * s;
+            float perp_az =  cosf(a_dir) * hw * 1.5f * s;
+            float bl_x = ax + perp_ax, bl_z = az + perp_az;
+            float br_x = ax - perp_ax, br_z = az - perp_az;
 
-        /* Arrow tip = forward from arrow base */
-        float tip_x = ax + arrow_size * cosf(a_dir);
-        float tip_z = az + arrow_size * sinf(a_dir);
+            mesh_v(m, bl_x,  top_y, bl_z,  0, 1, 0);
+            mesh_v(m, br_x,  top_y, br_z,  0, 1, 0);
+            mesh_v(m, tip_x, top_y, tip_z, 0, 1, 0);
 
-        /* Arrow base corners = perpendicular to direction */
-        float perp_ax = -sinf(a_dir) * hw * 1.5f;
-        float perp_az =  cosf(a_dir) * hw * 1.5f;
+            float ln_x = tip_z - bl_z, ln_z = -(tip_x - bl_x);
+            float ln_len = sqrtf(ln_x * ln_x + ln_z * ln_z);
+            if (ln_len > 1e-6f) { ln_x /= ln_len; ln_z /= ln_len; }
+            mesh_v(m, bl_x,  base_y, bl_z,  ln_x, 0, ln_z);
+            mesh_v(m, tip_x, base_y, tip_z, ln_x, 0, ln_z);
+            mesh_v(m, tip_x, top_y,  tip_z, ln_x, 0, ln_z);
+            mesh_v(m, bl_x,  base_y, bl_z,  ln_x, 0, ln_z);
+            mesh_v(m, tip_x, top_y,  tip_z, ln_x, 0, ln_z);
+            mesh_v(m, bl_x,  top_y,  bl_z,  ln_x, 0, ln_z);
 
-        float bl_x = ax + perp_ax, bl_z = az + perp_az;
-        float br_x = ax - perp_ax, br_z = az - perp_az;
+            float rn_x = -(tip_z - br_z), rn_z = (tip_x - br_x);
+            float rn_len = sqrtf(rn_x * rn_x + rn_z * rn_z);
+            if (rn_len > 1e-6f) { rn_x /= rn_len; rn_z /= rn_len; }
+            mesh_v(m, br_x,  base_y, br_z,  rn_x, 0, rn_z);
+            mesh_v(m, br_x,  top_y,  br_z,  rn_x, 0, rn_z);
+            mesh_v(m, tip_x, top_y,  tip_z, rn_x, 0, rn_z);
+            mesh_v(m, br_x,  base_y, br_z,  rn_x, 0, rn_z);
+            mesh_v(m, tip_x, top_y,  tip_z, rn_x, 0, rn_z);
+            mesh_v(m, tip_x, base_y, tip_z, rn_x, 0, rn_z);
 
-        /* Top triangle */
-        mesh_v(m, bl_x,  top_y, bl_z,  0, 1, 0);
-        mesh_v(m, br_x,  top_y, br_z,  0, 1, 0);
-        mesh_v(m, tip_x, top_y, tip_z, 0, 1, 0);
+            float bn_x = -cosf(a_dir), bn_z = -sinf(a_dir);
+            mesh_quad(m, bl_x, base_y, bl_z, bl_x, top_y, bl_z,
+                      br_x, top_y, br_z, br_x, base_y, br_z, bn_x, 0, bn_z);
 
-        /* Left side wall */
-        float ln_x = tip_z - bl_z, ln_z = -(tip_x - bl_x);
-        float ln_len = sqrtf(ln_x * ln_x + ln_z * ln_z);
-        if (ln_len > 1e-6f) { ln_x /= ln_len; ln_z /= ln_len; }
-        mesh_v(m, bl_x,  base_y, bl_z,  ln_x, 0, ln_z);
-        mesh_v(m, tip_x, base_y, tip_z, ln_x, 0, ln_z);
-        mesh_v(m, tip_x, top_y,  tip_z, ln_x, 0, ln_z);
-        mesh_v(m, bl_x,  base_y, bl_z,  ln_x, 0, ln_z);
-        mesh_v(m, tip_x, top_y,  tip_z, ln_x, 0, ln_z);
-        mesh_v(m, bl_x,  top_y,  bl_z,  ln_x, 0, ln_z);
+            mesh_v(m, bl_x,  base_y, bl_z,  0, -1, 0);
+            mesh_v(m, tip_x, base_y, tip_z, 0, -1, 0);
+            mesh_v(m, br_x,  base_y, br_z,  0, -1, 0);
+        }
 
-        /* Right side wall */
-        float rn_x = -(tip_z - br_z), rn_z = (tip_x - br_x);
-        float rn_len = sqrtf(rn_x * rn_x + rn_z * rn_z);
-        if (rn_len > 1e-6f) { rn_x /= rn_len; rn_z /= rn_len; }
-        mesh_v(m, br_x,  base_y, br_z,  rn_x, 0, rn_z);
-        mesh_v(m, br_x,  top_y,  br_z,  rn_x, 0, rn_z);
-        mesh_v(m, tip_x, top_y,  tip_z, rn_x, 0, rn_z);
-        mesh_v(m, br_x,  base_y, br_z,  rn_x, 0, rn_z);
-        mesh_v(m, tip_x, top_y,  tip_z, rn_x, 0, rn_z);
-        mesh_v(m, tip_x, base_y, tip_z, rn_x, 0, rn_z);
-
-        /* Back face of arrowhead */
-        float bn_x = -cosf(a_dir), bn_z = -sinf(a_dir);
-        mesh_quad(m,
-                  bl_x, base_y, bl_z,
-                  bl_x, top_y,  bl_z,
-                  br_x, top_y,  br_z,
-                  br_x, base_y, br_z,
-                  bn_x, 0, bn_z);
-
-        /* Bottom triangle (underside of arrowhead) */
-        mesh_v(m, bl_x,  base_y, bl_z,  0, -1, 0);
-        mesh_v(m, tip_x, base_y, tip_z, 0, -1, 0);
-        mesh_v(m, br_x,  base_y, br_z,  0, -1, 0);
+        /* Bulb disc (scales up with blend) */
+        if (blend > 0.0f) {
+            float br = p->bulb_radius * blend;
+            int segs = 16, i_b;
+            for (i_b = 0; i_b < segs; i_b++) {
+                float a0 = (float)i_b / segs * 2.0f * (float)M_PI;
+                float a1 = (float)(i_b + 1) / segs * 2.0f * (float)M_PI;
+                float c0 = cosf(a0), s0 = sinf(a0);
+                float c1 = cosf(a1), s1 = sinf(a1);
+                /* Top face */
+                mesh_v(m, ax, top_y, az, 0, 1, 0);
+                mesh_v(m, ax + br * c0, top_y, az + br * s0, 0, 1, 0);
+                mesh_v(m, ax + br * c1, top_y, az + br * s1, 0, 1, 0);
+                /* Side wall */
+                mesh_v(m, ax + br * c0, base_y, az + br * s0, c0, 0, s0);
+                mesh_v(m, ax + br * c0, top_y,  az + br * s0, c0, 0, s0);
+                mesh_v(m, ax + br * c1, top_y,  az + br * s1, c1, 0, s1);
+                mesh_v(m, ax + br * c0, base_y, az + br * s0, c0, 0, s0);
+                mesh_v(m, ax + br * c1, top_y,  az + br * s1, c1, 0, s1);
+                mesh_v(m, ax + br * c1, base_y, az + br * s1, c1, 0, s1);
+            }
+        }
     }
 
     m->valid = 1;

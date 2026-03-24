@@ -62,11 +62,11 @@ int platform_init(int width, int height) {
     /* Request OpenGL 2.1 -- compatible with GLES2 shader subset */
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
-    glfwWindowHint(GLFW_SAMPLES, 4);   /* 4x MSAA */
+    glfwWindowHint(GLFW_SAMPLES, 0);   /* no MSAA — FXAA post-process instead */
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
     glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_TRUE);
     glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
-    glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_FALSE);
+    /* Retina default (TRUE) — gives 2x framebuffer, same as QNX SSAA 2x */
 
     g_window = glfwCreateWindow(width, height, "c_render", NULL, NULL);
     if (!g_window) {

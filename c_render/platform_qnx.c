@@ -151,15 +151,8 @@ int platform_init(int width, int height) {
     }
     fprintf(stderr, "platform_qnx: EGL %d.%d\n", major, minor);
 
-    /* Try with 4x MSAA first, fall back to no MSAA */
-    EGLint config_attrs_msaa[] = {
-        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
-        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
-        EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8, EGL_ALPHA_SIZE, 8,
-        EGL_SAMPLE_BUFFERS, 1, EGL_SAMPLES, 4,
-        EGL_NONE
-    };
-    EGLint config_attrs_plain[] = {
+    /* No MSAA — FXAA post-process handles edge smoothing instead */
+    EGLint config_attrs[] = {
         EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
         EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
         EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8, EGL_ALPHA_SIZE, 8,
@@ -168,16 +161,11 @@ int platform_init(int width, int height) {
 
     EGLConfig config;
     EGLint num_configs = 0;
-    fprintf(stderr, "platform_qnx: eglChooseConfig (MSAA)...\n");
-    if (!eglChooseConfig(g_egl_display, config_attrs_msaa, &config, 1, &num_configs) ||
+    fprintf(stderr, "platform_qnx: eglChooseConfig...\n");
+    if (!eglChooseConfig(g_egl_display, config_attrs, &config, 1, &num_configs) ||
         num_configs == 0) {
-        fprintf(stderr, "platform_qnx: MSAA config unavailable, trying plain...\n");
-        num_configs = 0;
-        if (!eglChooseConfig(g_egl_display, config_attrs_plain, &config, 1, &num_configs) ||
-            num_configs == 0) {
             fprintf(stderr, "platform_qnx: FAIL eglChooseConfig (err=0x%x)\n", eglGetError());
             return -1;
-        }
     }
     fprintf(stderr, "platform_qnx: got %d config(s)\n", num_configs);
 

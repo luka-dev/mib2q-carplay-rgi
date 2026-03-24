@@ -212,14 +212,23 @@ static GLint g_default_fbo = 0;  /* saved at init -- may not be 0 on macOS */
 
 /* 2x supersample FBO — render at double resolution, blit down with GL_LINEAR */
 #ifdef PLATFORM_MACOS
-#define SSAA_SCALE 1  /* macOS Retina already provides 2x */
+#define SSAA_SCALE 1  /* macOS Retina provides 2x framebuffer */
 #else
-#define SSAA_SCALE 2
+#define SSAA_SCALE 2  /* QNX: explicit 2x supersample */
 #endif
+#define FXAA_ENABLED 1 /* FXAA on both platforms */
 static GLuint g_ss_fbo = 0;
 static GLuint g_ss_tex = 0;
 static GLuint g_ss_depth = 0;
 static int g_ss_w = 0, g_ss_h = 0;
+
+/* FXAA post-process */
+static GLuint g_fxaa_fbo = 0;
+static GLuint g_fxaa_tex = 0;
+static GLuint g_fxaa_prog = 0;
+static GLint  g_fxaa_attr_pos = -1;
+static GLint  g_fxaa_uni_tex = -1;
+static GLint  g_fxaa_uni_rcp = -1;  /* 1/width, 1/height */
 static float g_mask_half_w = 1.6f;
 static float g_mask_half_h = 1.0f;
 
@@ -549,6 +558,98 @@ static int build_program(void) {
 }
 
 /* ================================================================
+ * FXAA post-process shader (GLES2-compatible, based on FXAA 3.11)
+ * ================================================================ */
+
+static const char *k_fxaa_vert =
+    "attribute vec2 a_pos;\n"
+    "varying vec2 v_uv;\n"
+    "void main() {\n"
+    "  v_uv = a_pos * 0.5 + 0.5;\n"
+    "  gl_Position = vec4(a_pos, 0.0, 1.0);\n"
+    "}\n";
+
+static const char *k_fxaa_frag =
+    "uniform sampler2D u_tex;\n"
+    "uniform vec2 u_rcp;\n"  /* 1/width, 1/height */
+    "varying vec2 v_uv;\n"
+    "\n"
+    "void main() {\n"
+    "  vec3 rgbM  = texture2D(u_tex, v_uv).rgb;\n"
+    "  vec3 rgbNW = texture2D(u_tex, v_uv + vec2(-1.0, -1.0) * u_rcp).rgb;\n"
+    "  vec3 rgbNE = texture2D(u_tex, v_uv + vec2( 1.0, -1.0) * u_rcp).rgb;\n"
+    "  vec3 rgbSW = texture2D(u_tex, v_uv + vec2(-1.0,  1.0) * u_rcp).rgb;\n"
+    "  vec3 rgbSE = texture2D(u_tex, v_uv + vec2( 1.0,  1.0) * u_rcp).rgb;\n"
+    "\n"
+    "  vec3 luma = vec3(0.299, 0.587, 0.114);\n"
+    "  float lumM  = dot(rgbM,  luma);\n"
+    "  float lumNW = dot(rgbNW, luma);\n"
+    "  float lumNE = dot(rgbNE, luma);\n"
+    "  float lumSW = dot(rgbSW, luma);\n"
+    "  float lumSE = dot(rgbSE, luma);\n"
+    "\n"
+    "  float lumMin = min(lumM, min(min(lumNW, lumNE), min(lumSW, lumSE)));\n"
+    "  float lumMax = max(lumM, max(max(lumNW, lumNE), max(lumSW, lumSE)));\n"
+    "  float lumRange = lumMax - lumMin;\n"
+    "\n"
+    "  if (lumRange < max(0.0312, lumMax * 0.125)) {\n"
+    "    gl_FragColor = texture2D(u_tex, v_uv);\n"
+    "    return;\n"
+    "  }\n"
+    "\n"
+    "  vec2 dir;\n"
+    "  dir.x = -((lumNW + lumNE) - (lumSW + lumSE));\n"
+    "  dir.y =  ((lumNW + lumSW) - (lumNE + lumSE));\n"
+    "  float dirReduce = max((lumNW + lumNE + lumSW + lumSE) * 0.03125, 0.0078125);\n"
+    "  float rcpDirMin = 1.0 / (min(abs(dir.x), abs(dir.y)) + dirReduce);\n"
+    "  dir = clamp(dir * rcpDirMin, vec2(-8.0), vec2(8.0)) * u_rcp;\n"
+    "\n"
+    "  vec3 rgbA = 0.5 * (\n"
+    "    texture2D(u_tex, v_uv + dir * (1.0/3.0 - 0.5)).rgb +\n"
+    "    texture2D(u_tex, v_uv + dir * (2.0/3.0 - 0.5)).rgb);\n"
+    "  vec3 rgbB = rgbA * 0.5 + 0.25 * (\n"
+    "    texture2D(u_tex, v_uv + dir * -0.5).rgb +\n"
+    "    texture2D(u_tex, v_uv + dir *  0.5).rgb);\n"
+    "  float lumB = dot(rgbB, luma);\n"
+    "\n"
+    "  float alphaM = texture2D(u_tex, v_uv).a;\n"
+    "  if (lumB < lumMin || lumB > lumMax)\n"
+    "    gl_FragColor = vec4(rgbA, alphaM);\n"
+    "  else\n"
+    "    gl_FragColor = vec4(rgbB, alphaM);\n"
+    "}\n";
+
+static int build_fxaa_program(void) {
+    char vert[2048], frag[4096];
+    snprintf(vert, sizeof(vert), "%s%s%s", SHADER_HEADER, SHADER_PRECISION, k_fxaa_vert);
+    snprintf(frag, sizeof(frag), "%s%s%s", SHADER_HEADER, SHADER_PRECISION, k_fxaa_frag);
+
+    GLuint vs = compile_shader(GL_VERTEX_SHADER, vert);
+    GLuint fs = compile_shader(GL_FRAGMENT_SHADER, frag);
+    if (!vs || !fs) { fprintf(stderr, "render: FXAA shader compile failed\n"); return -1; }
+
+    g_fxaa_prog = glCreateProgram();
+    glAttachShader(g_fxaa_prog, vs);
+    glAttachShader(g_fxaa_prog, fs);
+    glLinkProgram(g_fxaa_prog);
+    GLint ok = 0;
+    glGetProgramiv(g_fxaa_prog, GL_LINK_STATUS, &ok);
+    if (!ok) {
+        char log[512];
+        glGetProgramInfoLog(g_fxaa_prog, sizeof(log), NULL, log);
+        fprintf(stderr, "render: FXAA link error: %s\n", log);
+        return -1;
+    }
+    g_fxaa_attr_pos = glGetAttribLocation(g_fxaa_prog, "a_pos");
+    g_fxaa_uni_tex  = glGetUniformLocation(g_fxaa_prog, "u_tex");
+    g_fxaa_uni_rcp  = glGetUniformLocation(g_fxaa_prog, "u_rcp");
+    glDeleteShader(vs);
+    glDeleteShader(fs);
+    fprintf(stderr, "render: FXAA shader OK\n");
+    return 0;
+}
+
+/* ================================================================
  * Multi-FBO management
  * ================================================================ */
 
@@ -664,9 +765,7 @@ int render_init(int fb_width, int fb_height) {
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
     glDisable(GL_DITHER);
-#ifdef GL_MULTISAMPLE
-    glEnable(GL_MULTISAMPLE);   /* 4x MSAA -- requested in platform init */
-#endif
+    /* MSAA removed — replaced by FXAA post-process for better edge smoothing */
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
@@ -696,6 +795,29 @@ int render_init(int fb_width, int fb_height) {
     glBindRenderbuffer(GL_RENDERBUFFER, 0);
     glBindTexture(GL_TEXTURE_2D, 0);
     fprintf(stderr, "render: SSAA %dx%d -> %dx%d\n", g_ss_w, g_ss_h, fb_width, fb_height);
+
+    /* FXAA intermediate FBO (same resolution as SSAA) — QNX only */
+#if FXAA_ENABLED
+    glGenTextures(1, &g_fxaa_tex);
+    glBindTexture(GL_TEXTURE_2D, g_fxaa_tex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, g_ss_w, g_ss_h, 0,
+                 GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glGenFramebuffers(1, &g_fxaa_fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, g_fxaa_fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                           GL_TEXTURE_2D, g_fxaa_tex, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, g_default_fbo);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    if (build_fxaa_program() < 0) {
+        fprintf(stderr, "render: FXAA init failed, continuing without\n");
+    } else {
+        fprintf(stderr, "render: FXAA FBO %dx%d tex=%u fbo=%u attr=%d\n",
+                g_ss_w, g_ss_h, g_fxaa_tex, g_fxaa_fbo, g_fxaa_attr_pos);
+    }
+#endif
 
     /* Save actual window size for final blit, then override to 2x for pipeline */
     g_win_w = fb_width;
@@ -1060,7 +1182,30 @@ void render_sync_camera(void) {
 }
 
 void render_end_frame(void) {
-    /* Blit supersample FBO down to actual window size with GL_LINEAR filtering */
+    static const float quad[] = { -1,-1, 1,-1, 1,1, -1,-1, 1,1, -1,1 };
+
+    /* Pass 1: FXAA on SSAA FBO → FXAA FBO (same resolution, smoothed edges) */
+#if FXAA_ENABLED
+    if (g_fxaa_prog) {
+        glBindFramebuffer(GL_FRAMEBUFFER, g_fxaa_fbo);
+        glViewport(0, 0, g_ss_w, g_ss_h);
+        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_BLEND);
+        glUseProgram(g_fxaa_prog);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, g_ss_tex);
+        glUniform1i(g_fxaa_uni_tex, 0);
+        glUniform2f(g_fxaa_uni_rcp, 1.0f / g_ss_w, 1.0f / g_ss_h);
+        glVertexAttribPointer(g_fxaa_attr_pos, 2, GL_FLOAT, GL_FALSE, 0, quad);
+        glEnableVertexAttribArray(g_fxaa_attr_pos);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        glDisableVertexAttribArray(g_fxaa_attr_pos);
+    }
+#endif
+
+    /* Pass 2: Downsample (FXAA result on QNX / SSAA on macOS) → window */
     glBindFramebuffer(GL_FRAMEBUFFER, g_default_fbo);
     glViewport(0, 0, g_win_w, g_win_h);
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
@@ -1071,7 +1216,7 @@ void render_end_frame(void) {
     glUniform1f(g_uni_tex_mode, 1.0f);  /* fullscreen blit passthrough */
     glUniform1f(g_uni_global_alpha, 1.0f);
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, g_ss_tex);
+    glBindTexture(GL_TEXTURE_2D, (FXAA_ENABLED && g_fxaa_prog) ? g_fxaa_tex : g_ss_tex);
     glUniform1i(g_uni_tex, 0);
     vb_reset();
     vb_v(-1, -1, 0, 0,0,1);
