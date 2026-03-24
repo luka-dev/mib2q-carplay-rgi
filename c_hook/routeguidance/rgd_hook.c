@@ -99,8 +99,10 @@ static struct {
 	    bool current_list_present; /* true if 0x5201 included ManeuverList TLV (can be empty) */
 	    uint16_t current_list_count;
 	    uint16_t slot_to_iap_idx[MANEUVER_CACHE_SIZE]; /* 0xFFFF = empty */
-	    uint32_t slot_seq[MANEUVER_CACHE_SIZE];        /* allocation order for eviction */
+	    uint32_t slot_seq[MANEUVER_CACHE_SIZE];        /* LRU order for eviction */
+	    uint32_t slot_ver[MANEUVER_CACHE_SIZE];        /* assignment version (bumps only on reassignment) */
 	    uint32_t seq_counter;
+	    uint32_t ver_counter;
 	    /*
 	     * Per-slot maneuver data cache.
 	     * QNX PPS delta delivery can drop intermediate writes during rapid
@@ -124,7 +126,8 @@ static struct {
 	    .last_route_state = 0,
 	    .current_list_present = false,
 	    .current_list_count = 0,
-	    .seq_counter = 0
+	    .seq_counter = 0,
+	    .ver_counter = 0
 	};
 
 /* Forward declarations */
@@ -185,9 +188,11 @@ static void rgd_update_cache_merge(const rgd_update_t* upd) {
 		    g_rgd.current_list_present = false;
 		    g_rgd.current_list_count = 0;
 		    g_rgd.seq_counter = 0;
+		    g_rgd.ver_counter = 0;
 	    for (int i = 0; i < MANEUVER_CACHE_SIZE; i++) {
 	        g_rgd.slot_to_iap_idx[i] = 0xFFFF;
 	        g_rgd.slot_seq[i] = 0;
+	        g_rgd.slot_ver[i] = 0;
 	        g_rgd.slot_cache[i].present = 0;
 		    }
 		}
@@ -280,11 +285,12 @@ static int rgd_slot_for_iap_index(uint16_t idx, bool create) {
     }
     if (!create) return -1;
 
-    /* Find free slot */
+    /* Find free slot — new assignment bumps both LRU seq and version */
     for (int s = 0; s < MANEUVER_CACHE_SIZE; s++) {
         if (g_rgd.slot_to_iap_idx[s] == 0xFFFF) {
             g_rgd.slot_to_iap_idx[s] = idx;
             g_rgd.slot_seq[s] = ++g_rgd.seq_counter;
+            g_rgd.slot_ver[s] = ++g_rgd.ver_counter;
             return s;
         }
     }
@@ -315,6 +321,7 @@ static int rgd_slot_for_iap_index(uint16_t idx, bool create) {
     }
     g_rgd.slot_to_iap_idx[victim] = idx;
     g_rgd.slot_seq[victim] = ++g_rgd.seq_counter;
+    g_rgd.slot_ver[victim] = ++g_rgd.ver_counter;
     memset(&g_rgd.slot_cache[victim], 0, sizeof(g_rgd.slot_cache[victim]));
     return victim;
 }
@@ -442,11 +449,11 @@ static void write_slot_data_keys(unsigned idx, const rgd_maneuver_t* man) {
         snprintf(key, sizeof(key), "m%u_junction_angles", idx);
         pps_write_string(g_rgd.pps, key, buf);
     }
-    /* Slot version: bumps when a different iOS maneuver is assigned to this slot.
+    /* Slot version: bumps only when a different iOS maneuver is assigned to this slot.
      * Java uses this to detect maneuver transitions even when type/angles are identical.
-     * Cycles 1..65535 to bound PPS value; internal slot_seq stays monotonic for LRU. */
+     * Separate from slot_seq (LRU) which bumps on every data update. */
     snprintf(key, sizeof(key), "m%u_ver", idx);
-    pps_write_uint(g_rgd.pps, key, (g_rgd.slot_seq[idx] % 65535) + 1);
+    pps_write_uint(g_rgd.pps, key, (g_rgd.slot_ver[idx] % 65535) + 1);
     if (man->present & RGD_MAN_LANE_GUIDANCE_RAW) {
         snprintf(key, sizeof(key), "m%u_lane_guidance_len", idx);
         pps_write_int(g_rgd.pps, key, man->lane_guidance_raw_len);
