@@ -44,7 +44,7 @@ typedef struct {
     float bulb_radius;       /* target bulb radius when tip_blend > 0 */
 } route_path_t;
 
-#define RMESH_MAX_VERTS 4800
+#define RMESH_MAX_VERTS 7200
 
 typedef struct {
     float verts[RMESH_MAX_VERTS * 6];  /* pos(3) + normal(3) */
@@ -75,6 +75,11 @@ void rpath_draw(const route_mesh_t *m,
 void rpath_xform_append(route_path_t *dst, const route_path_t *src,
                          float tx, float ty, float cos_r, float sin_r,
                          float rot_rad);
+
+/* Height ramp restart: set the distance where the second maneuver starts
+ * on a combined path.  Each maneuver gets its own independent ramp.
+ * Pass -1 for standalone (single maneuver) paths. */
+void rpath_set_ramp_restart(float d);
 
 /* Debug overlay -- draws polyline with active window highlighted. */
 void rpath_draw_debug(const route_path_t *p, float t0, float t1);

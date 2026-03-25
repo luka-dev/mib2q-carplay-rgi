@@ -27,6 +27,25 @@
 #define JOIN_MIN_ANGLE 0.03f /* ~1.7deg -- skip join for tiny direction changes */
 #define MITER_LIMIT 3.0f    /* max miter length / half-width ratio */
 
+/* Height ramp:
+ * - Tail fade: first 0.35 units sink to ground (within pre-extension, invisible).
+ * - Entry to head: multiplicative ramp from 1x to 2x height.
+ *   Anchored to ROUTE_EXTEND (maneuver entry) so the ramp is identical on
+ *   standalone and combined paths — no visual jump at commit.
+ * - Pre-extension (0.35..0.50): flat at 1x nominal height. */
+#define HEIGHT_ENTRY_DIST  0.50f   /* maneuver entry = ROUTE_EXTEND from path start */
+#define HEIGHT_RAMP_DIST   1.5f    /* fixed distance over which ramp reaches max */
+#define HEIGHT_RAMP_SCALE  1.0f    /* extra multiplier at max: 1x→(1+SCALE)x = 2x */
+
+/* Ramp restart: distance on the combined path where the second maneuver
+ * begins.  Each maneuver gets its own independent ramp from its own entry.
+ * Set to -1 for standalone paths (single ramp). */
+static float g_ramp_restart = -1.0f;
+
+void rpath_set_ramp_restart(float d) {
+    g_ramp_restart = d;
+}
+
 /* ================================================================
  * Path building
  * ================================================================ */
@@ -347,6 +366,67 @@ void rpath_extrude(const route_path_t *p, route_mesh_t *m,
 
     if (n_pts < 2) return;
 
+    /* Per-vertex height ramp: progressive elevation from entry to head.
+     * No geometric fade at tail — tail alpha fade is handled by the caller. */
+    float e_dist[RPATH_MAX_PTS];   /* cumulative distance within window */
+    float e_base[RPATH_MAX_PTS];   /* per-vertex base_y */
+    float e_top[RPATH_MAX_PTS];    /* per-vertex top_y */
+    {
+        int j;
+        float window_len;
+        e_dist[0] = 0.0f;
+        for (j = 1; j < n_pts; j++) {
+            float dx = epx[j] - epx[j-1], dy = epy[j] - epy[j-1];
+            e_dist[j] = e_dist[j-1] + sqrtf(dx*dx + dy*dy);
+        }
+        window_len = e_dist[n_pts - 1];
+        if (window_len < 1e-6f) window_len = 1e-6f;
+        for (j = 0; j < n_pts; j++) {
+            float scale;
+            float d = e_dist[j];
+
+            if (g_ramp_restart > 0.0f && d >= g_ramp_restart) {
+                /* Second maneuver: ramp from its own entry */
+                float local_entry = g_ramp_restart + HEIGHT_ENTRY_DIST;
+                if (d < local_entry) {
+                    scale = 1.0f;
+                } else {
+                    float ramp_f = (d - local_entry) / HEIGHT_RAMP_DIST;
+                    if (ramp_f > 1.0f) ramp_f = 1.0f;
+                    scale = 1.0f + ramp_f * HEIGHT_RAMP_SCALE;
+                }
+            } else if (g_ramp_restart > 0.0f
+                       && d > g_ramp_restart - HEIGHT_ENTRY_DIST) {
+                /* Blend zone: smoothly drop from first ramp to 1.0.
+                 * Covers the post-extension of current maneuver. */
+                float first_scale;
+                float rf = (d - HEIGHT_ENTRY_DIST) / HEIGHT_RAMP_DIST;
+                if (rf > 1.0f) rf = 1.0f;
+                if (rf < 0.0f) rf = 0.0f;
+                first_scale = 1.0f + rf * HEIGHT_RAMP_SCALE;
+
+                float blend_start = g_ramp_restart - HEIGHT_ENTRY_DIST;
+                float blend_len = HEIGHT_ENTRY_DIST;  /* blend over 0.5 units */
+                float bt = (d - blend_start) / blend_len;
+                if (bt < 0.0f) bt = 0.0f;
+                if (bt > 1.0f) bt = 1.0f;
+                bt = bt * bt * (3.0f - 2.0f * bt);  /* smoothstep */
+                scale = first_scale * (1.0f - bt) + 1.0f * bt;
+            } else {
+                /* First maneuver: ramp from entry */
+                if (d < HEIGHT_ENTRY_DIST) {
+                    scale = 1.0f;
+                } else {
+                    float ramp_f = (d - HEIGHT_ENTRY_DIST) / HEIGHT_RAMP_DIST;
+                    if (ramp_f > 1.0f) ramp_f = 1.0f;
+                    scale = 1.0f + ramp_f * HEIGHT_RAMP_SCALE;
+                }
+            }
+            e_base[j] = base_y * scale;
+            e_top[j]  = top_y  * scale;
+        }
+    }
+
     /* Pre-compute per-segment direction and perpendicular */
     int i;
     float dir_x[RPATH_MAX_PTS], dir_y[RPATH_MAX_PTS];   /* unit direction */
@@ -464,32 +544,36 @@ void rpath_extrude(const route_path_t *p, route_mesh_t *m,
         /* Map 2D y -> 3D z */
         float z_l0 = l0y, z_l1 = l1y, z_r0 = r0y, z_r1 = r1y;
 
+        /* Per-vertex heights */
+        float by0 = e_base[i],   ty0 = e_top[i];
+        float by1 = e_base[i+1], ty1 = e_top[i+1];
+
         /* Side normal from this segment's perpendicular */
         float snx = perp_x[i] / hw, snz = perp_y[i] / hw;
 
         /* Top face */
-        mesh_quad(m,
-                  l0x, top_y, z_l0,
-                  r0x, top_y, z_r0,
-                  r1x, top_y, z_r1,
-                  l1x, top_y, z_l1,
-                  0, 1, 0);
+        mesh_v(m, l0x, ty0, z_l0, 0,1,0);
+        mesh_v(m, r0x, ty0, z_r0, 0,1,0);
+        mesh_v(m, r1x, ty1, z_r1, 0,1,0);
+        mesh_v(m, l0x, ty0, z_l0, 0,1,0);
+        mesh_v(m, r1x, ty1, z_r1, 0,1,0);
+        mesh_v(m, l1x, ty1, z_l1, 0,1,0);
 
         /* Left wall */
-        mesh_quad(m,
-                  l0x, base_y, z_l0,
-                  l1x, base_y, z_l1,
-                  l1x, top_y,  z_l1,
-                  l0x, top_y,  z_l0,
-                  snx, 0, snz);
+        mesh_v(m, l0x, by0, z_l0, snx,0,snz);
+        mesh_v(m, l1x, by1, z_l1, snx,0,snz);
+        mesh_v(m, l1x, ty1, z_l1, snx,0,snz);
+        mesh_v(m, l0x, by0, z_l0, snx,0,snz);
+        mesh_v(m, l1x, ty1, z_l1, snx,0,snz);
+        mesh_v(m, l0x, ty0, z_l0, snx,0,snz);
 
         /* Right wall */
-        mesh_quad(m,
-                  r0x, top_y,  z_r0,
-                  r1x, top_y,  z_r1,
-                  r1x, base_y, z_r1,
-                  r0x, base_y, z_r0,
-                  -snx, 0, -snz);
+        mesh_v(m, r0x, ty0, z_r0, -snx,0,-snz);
+        mesh_v(m, r1x, ty1, z_r1, -snx,0,-snz);
+        mesh_v(m, r1x, by1, z_r1, -snx,0,-snz);
+        mesh_v(m, r0x, ty0, z_r0, -snx,0,-snz);
+        mesh_v(m, r1x, by1, z_r1, -snx,0,-snz);
+        mesh_v(m, r0x, by0, z_r0, -snx,0,-snz);
     }
 
     /* Rounded outer join for hard corners only.
@@ -499,62 +583,62 @@ void rpath_extrude(const route_path_t *p, route_mesh_t *m,
         if (!hard_corner[i]) continue;
 
         if (corner_cross[i] > 0.0f) {
-            /* Left turn: outer = right side. Fan from prev right perp to next right perp.
-             * Anchor = inner miter point (left). */
             emit_round_join(m,
                             lx[i], ly[i],
                             epx[i], epy[i],
-                            base_y, top_y,
+                            e_base[i], e_top[i],
                             -perp_x[seg_prev], -perp_y[seg_prev],
                             -perp_x[seg_next], -perp_y[seg_next],
                             hw);
         } else {
-            /* Right turn: outer = left side. Fan from prev left perp to next left perp.
-             * Anchor = inner miter point (right). */
             emit_round_join(m,
                             rx[i], ry[i],
                             epx[i], epy[i],
-                            base_y, top_y,
+                            e_base[i], e_top[i],
                             perp_x[seg_prev], perp_y[seg_prev],
                             perp_x[seg_next], perp_y[seg_next],
                             hw);
         }
     }
 
-    /* Front cap (at path start) */
+    /* Front cap (at path start — tail) */
     {
         float fnx = -dir_x[0], fnz = -dir_y[0];
         mesh_quad(m,
-                  lx[0], base_y, ly[0],
-                  rx[0], base_y, ry[0],
-                  rx[0], top_y,  ry[0],
-                  lx[0], top_y,  ly[0],
+                  lx[0], e_base[0], ly[0],
+                  rx[0], e_base[0], ry[0],
+                  rx[0], e_top[0],  ry[0],
+                  lx[0], e_top[0],  ly[0],
                   fnx, 0, fnz);
     }
 
-    /* Back cap (at path end) */
+    /* Back cap (at path end — head) */
     {
         int li = n_pts - 1;
         float fnx = dir_x[n_pts - 2], fnz = dir_y[n_pts - 2];
         mesh_quad(m,
-                  rx[li], base_y, ry[li],
-                  lx[li], base_y, ly[li],
-                  lx[li], top_y,  ly[li],
-                  rx[li], top_y,  ry[li],
+                  rx[li], e_base[li], ry[li],
+                  lx[li], e_base[li], ly[li],
+                  lx[li], e_top[li],  ly[li],
+                  rx[li], e_top[li],  ry[li],
                   fnx, 0, fnz);
     }
 
     /* Tip: blend between arrow prism (blend=0) and bulb disc (blend=1).
-     * Intermediate values morph smoothly: arrow shrinks while bulb grows. */
+     * Uses head-vertex height for full elevation at the tip. */
     {
         float blend = p->tip_blend;
         if (blend < 0.0f) blend = 0.0f;
         if (blend > 1.0f) blend = 1.0f;
 
+        int li = n_pts - 1;
+        float tip_base = e_base[li];
+        float tip_top  = e_top[li];
+
         float ax, az, a_dir;
         if (t1 >= 1.0f) {
-            ax = epx[n_pts - 1];
-            az = epy[n_pts - 1];
+            ax = epx[li];
+            az = epy[li];
             a_dir = atan2f(dir_y[n_pts - 2], dir_x[n_pts - 2]);
         } else {
             ax = end_x;
@@ -573,42 +657,42 @@ void rpath_extrude(const route_path_t *p, route_mesh_t *m,
             float bl_x = ax + perp_ax, bl_z = az + perp_az;
             float br_x = ax - perp_ax, br_z = az - perp_az;
 
-            mesh_v(m, bl_x,  top_y, bl_z,  0, 1, 0);
-            mesh_v(m, br_x,  top_y, br_z,  0, 1, 0);
-            mesh_v(m, tip_x, top_y, tip_z, 0, 1, 0);
+            mesh_v(m, bl_x,  tip_top, bl_z,  0, 1, 0);
+            mesh_v(m, br_x,  tip_top, br_z,  0, 1, 0);
+            mesh_v(m, tip_x, tip_top, tip_z, 0, 1, 0);
 
             float ln_x = tip_z - bl_z, ln_z = -(tip_x - bl_x);
             float ln_len = sqrtf(ln_x * ln_x + ln_z * ln_z);
             if (ln_len > 1e-6f) { ln_x /= ln_len; ln_z /= ln_len; }
-            mesh_v(m, bl_x,  base_y, bl_z,  ln_x, 0, ln_z);
-            mesh_v(m, tip_x, base_y, tip_z, ln_x, 0, ln_z);
-            mesh_v(m, tip_x, top_y,  tip_z, ln_x, 0, ln_z);
-            mesh_v(m, bl_x,  base_y, bl_z,  ln_x, 0, ln_z);
-            mesh_v(m, tip_x, top_y,  tip_z, ln_x, 0, ln_z);
-            mesh_v(m, bl_x,  top_y,  bl_z,  ln_x, 0, ln_z);
+            mesh_v(m, bl_x,  tip_base, bl_z,  ln_x, 0, ln_z);
+            mesh_v(m, tip_x, tip_base, tip_z, ln_x, 0, ln_z);
+            mesh_v(m, tip_x, tip_top,  tip_z, ln_x, 0, ln_z);
+            mesh_v(m, bl_x,  tip_base, bl_z,  ln_x, 0, ln_z);
+            mesh_v(m, tip_x, tip_top,  tip_z, ln_x, 0, ln_z);
+            mesh_v(m, bl_x,  tip_top,  bl_z,  ln_x, 0, ln_z);
 
             float rn_x = -(tip_z - br_z), rn_z = (tip_x - br_x);
             float rn_len = sqrtf(rn_x * rn_x + rn_z * rn_z);
             if (rn_len > 1e-6f) { rn_x /= rn_len; rn_z /= rn_len; }
-            mesh_v(m, br_x,  base_y, br_z,  rn_x, 0, rn_z);
-            mesh_v(m, br_x,  top_y,  br_z,  rn_x, 0, rn_z);
-            mesh_v(m, tip_x, top_y,  tip_z, rn_x, 0, rn_z);
-            mesh_v(m, br_x,  base_y, br_z,  rn_x, 0, rn_z);
-            mesh_v(m, tip_x, top_y,  tip_z, rn_x, 0, rn_z);
-            mesh_v(m, tip_x, base_y, tip_z, rn_x, 0, rn_z);
+            mesh_v(m, br_x,  tip_base, br_z,  rn_x, 0, rn_z);
+            mesh_v(m, br_x,  tip_top,  br_z,  rn_x, 0, rn_z);
+            mesh_v(m, tip_x, tip_top,  tip_z, rn_x, 0, rn_z);
+            mesh_v(m, br_x,  tip_base, br_z,  rn_x, 0, rn_z);
+            mesh_v(m, tip_x, tip_top,  tip_z, rn_x, 0, rn_z);
+            mesh_v(m, tip_x, tip_base, tip_z, rn_x, 0, rn_z);
 
             float bn_x = -cosf(a_dir), bn_z = -sinf(a_dir);
-            mesh_quad(m, bl_x, base_y, bl_z, bl_x, top_y, bl_z,
-                      br_x, top_y, br_z, br_x, base_y, br_z, bn_x, 0, bn_z);
+            mesh_quad(m, bl_x, tip_base, bl_z, bl_x, tip_top, bl_z,
+                      br_x, tip_top, br_z, br_x, tip_base, br_z, bn_x, 0, bn_z);
 
-            mesh_v(m, bl_x,  base_y, bl_z,  0, -1, 0);
-            mesh_v(m, tip_x, base_y, tip_z, 0, -1, 0);
-            mesh_v(m, br_x,  base_y, br_z,  0, -1, 0);
+            mesh_v(m, bl_x,  tip_base, bl_z,  0, -1, 0);
+            mesh_v(m, tip_x, tip_base, tip_z, 0, -1, 0);
+            mesh_v(m, br_x,  tip_base, br_z,  0, -1, 0);
         }
 
         /* Bulb disc (scales up with blend) */
         if (blend > 0.0f) {
-            float br = p->bulb_radius * blend;
+            float bul_r = p->bulb_radius * blend;
             int segs = 16, i_b;
             for (i_b = 0; i_b < segs; i_b++) {
                 float a0 = (float)i_b / segs * 2.0f * (float)M_PI;
@@ -616,16 +700,16 @@ void rpath_extrude(const route_path_t *p, route_mesh_t *m,
                 float c0 = cosf(a0), s0 = sinf(a0);
                 float c1 = cosf(a1), s1 = sinf(a1);
                 /* Top face */
-                mesh_v(m, ax, top_y, az, 0, 1, 0);
-                mesh_v(m, ax + br * c0, top_y, az + br * s0, 0, 1, 0);
-                mesh_v(m, ax + br * c1, top_y, az + br * s1, 0, 1, 0);
+                mesh_v(m, ax, tip_top, az, 0, 1, 0);
+                mesh_v(m, ax + bul_r * c0, tip_top, az + bul_r * s0, 0, 1, 0);
+                mesh_v(m, ax + bul_r * c1, tip_top, az + bul_r * s1, 0, 1, 0);
                 /* Side wall */
-                mesh_v(m, ax + br * c0, base_y, az + br * s0, c0, 0, s0);
-                mesh_v(m, ax + br * c0, top_y,  az + br * s0, c0, 0, s0);
-                mesh_v(m, ax + br * c1, top_y,  az + br * s1, c1, 0, s1);
-                mesh_v(m, ax + br * c0, base_y, az + br * s0, c0, 0, s0);
-                mesh_v(m, ax + br * c1, top_y,  az + br * s1, c1, 0, s1);
-                mesh_v(m, ax + br * c1, base_y, az + br * s1, c1, 0, s1);
+                mesh_v(m, ax + bul_r * c0, tip_base, az + bul_r * s0, c0, 0, s0);
+                mesh_v(m, ax + bul_r * c0, tip_top,  az + bul_r * s0, c0, 0, s0);
+                mesh_v(m, ax + bul_r * c1, tip_top,  az + bul_r * s1, c1, 0, s1);
+                mesh_v(m, ax + bul_r * c0, tip_base, az + bul_r * s0, c0, 0, s0);
+                mesh_v(m, ax + bul_r * c1, tip_top,  az + bul_r * s1, c1, 0, s1);
+                mesh_v(m, ax + bul_r * c1, tip_base, az + bul_r * s1, c1, 0, s1);
             }
         }
     }

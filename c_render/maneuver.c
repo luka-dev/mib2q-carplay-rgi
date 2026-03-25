@@ -107,7 +107,7 @@
 #define ARRIVE_FLAG_SZ    0.18f       /* half-extent of flag sprite */
 #define FLAG_ANIM_SPEED   0.35f       /* frames per render frame */
 
-/* Route extrusion heights (must match render.c) */
+/* Route extrusion heights */
 #define ROUTE_BASE_Y  0.03f   /* same as RAISE_BASE in render.c */
 #define ROUTE_TOP_Y   0.06f   /* RAISE_BASE + EXTRUDE_H */
 
@@ -232,6 +232,8 @@ void maneuver_start_anim(void) {
     /* Reset tip morph — will be started when ARRIVED icon is detected */
     g_tip_morph_t = 0.0f;
     g_tip_morph_active = 0;
+    /* Standalone: no ramp restart */
+    rpath_set_ramp_restart(-1.0f);
 }
 
 int maneuver_is_animating(void) {
@@ -753,8 +755,11 @@ void maneuver_prepare_frame(const maneuver_state_t *s, const maneuver_state_t *n
             update_light_settle();
         else
             render_set_light_rotation(0.0f);
+        /* Standalone: no ramp restart */
+        rpath_set_ramp_restart(-1.0f);
         g_camera_prepared_this_frame = 1;
     }
+
 }
 
 static void compute_slide_params(void) {
@@ -784,7 +789,8 @@ static void compute_slide_params(void) {
         if (tail_dist > g_route_path.total_length) tail_dist = g_route_path.total_length;
         if (head_dist > g_route_path.total_length) head_dist = g_route_path.total_length;
 
-        g_t_tail = tail_dist / g_route_path.total_length;
+        (void)tail_dist;  /* tail always at 0 -- height ramp handles fade */
+        g_t_tail = 0.0f;
         g_t_head = head_dist / g_route_path.total_length;
         return;
     }
@@ -799,11 +805,22 @@ static void compute_slide_params(void) {
         slug_frac = g_route_end_frac - g_route_pre_frac;
 
     g_t_head = g_route_pre_frac + g_route_slide * slug_frac;
-    g_t_tail = g_t_head - slug_frac;
-    if (g_t_tail < 0.0f) g_t_tail = 0.0f;
-    /* Clamp to valid range -- push-out moves both head and tail forward */
+    /* Tail always starts at 0 -- the height ramp in rpath_extrude fades it
+     * smoothly to ground level so there's never a hard cut visible. */
+    g_t_tail = 0.0f;
+    /* Clamp to valid range -- push-out moves head forward */
     if (g_t_head > 1.0f) g_t_head = 1.0f;
-    if (g_t_tail > 1.0f) g_t_tail = 1.0f;
+}
+
+/* Extrude the full route into g_route_mesh. */
+static void route_extrude_body(void) {
+    rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T,
+                  ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
+}
+
+/* Draw the route mesh. */
+static void route_draw_with_fade(void) {
+    rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
 }
 
 /* ================================================================
@@ -1427,11 +1444,11 @@ static void draw_approach(const int *side_angles, int side_count) {
     rpath_densify(&g_route_path);
     rpath_set_arrow(&g_route_path, 0, straight_end, (float)(M_PI * 0.5));
     compute_slide_params();
-    rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
+    route_extrude_body();
 
     if (!g_masks_only_mode) {
         render_composite();
-        rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
+        route_draw_with_fade();
     }
 }
 
@@ -1548,12 +1565,12 @@ static void draw_turn(float angle_deg, const int *side_angles, int side_count) {
         float head_angle = (float)(M_PI * 0.5) - angle_rad;
         rpath_set_arrow(&g_route_path, end_x, end_y, head_angle);
         compute_slide_params();
-        rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
+        route_extrude_body();
     }
 
     if (!g_masks_only_mode) {
         render_composite();
-        rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
+        route_draw_with_fade();
     }
 }
 
@@ -1610,11 +1627,11 @@ static void draw_uturn(int go_left) {
     rpath_densify(&g_route_path);
     rpath_set_arrow(&g_route_path, exit_x, arrow_y, (float)(-M_PI * 0.5));
     compute_slide_params();
-    rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
+    route_extrude_body();
 
     if (!g_masks_only_mode) {
         render_composite();
-        rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
+        route_draw_with_fade();
     }
 }
 
@@ -1776,12 +1793,12 @@ static void draw_roundabout(float exit_angle_deg, int driving_side,
         rpath_densify(&g_route_path);
         rpath_set_arrow(&g_route_path, ex_tip_x, ex_tip_y, exit_rad);
         compute_slide_params();
-        rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
+        route_extrude_body();
     }
 
     if (!g_masks_only_mode) {
         render_composite();
-        rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
+        route_draw_with_fade();
     }
 }
 
@@ -1838,12 +1855,12 @@ static void draw_arrived(int dir) {
     g_route_path.bulb_radius = ARRIVE_INNER_R - OL_W;
     rpath_set_arrow(&g_route_path, 0, ARRIVE_CENTER_Y, (float)(M_PI * 0.5));
     compute_slide_params();
-    rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
+    route_extrude_body();
 
     if (!g_masks_only_mode) {
         render_composite();
         render_sprite_flag(g_arrive_flag_dx, g_arrive_flag_dy, ARRIVE_FLAG_SZ, (int)g_flag_frame);
-        rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
+        route_draw_with_fade();
     }
 }
 
@@ -1891,12 +1908,12 @@ static void draw_lane_change(int go_left) {
         rpath_densify(&g_route_path);
         rpath_set_arrow(&g_route_path, shift, BLUE_LEN, (float)(M_PI * 0.5));
         compute_slide_params();
-        rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
+        route_extrude_body();
     }
 
     if (!g_masks_only_mode) {
         render_composite();
-        rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
+        route_draw_with_fade();
     }
 }
 
@@ -1944,12 +1961,12 @@ static void draw_merge(int go_right) {
         rpath_densify(&g_route_path);
         rpath_set_arrow(&g_route_path, 0, BLUE_LEN, (float)(M_PI * 0.5));
         compute_slide_params();
-        rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
+        route_extrude_body();
     }
 
     if (!g_masks_only_mode) {
         render_composite();
-        rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
+        route_draw_with_fade();
     }
 }
 
@@ -2052,7 +2069,7 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
         if (g_route_animating || g_route_slide != 1.0f
                 || (g_tip_morph_active && g_tip_morph_t < 1.0f)) {
             /* Rebuild mesh at current slide (path segments still cached in g_route_path) */
-            rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
+            route_extrude_body();
         }
         /* Composite with road fade during push (spatial crossfade) */
         if (combined) {
@@ -2078,7 +2095,7 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
             }
             render_set_global_alpha(ba);
         }
-        rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
+        route_draw_with_fade();
         if (g_route_debug)
             rpath_draw_debug(&g_route_path, g_t_tail, g_t_head);
         return;
@@ -2152,6 +2169,9 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
             g_combined_flag_y = sin_r * nfx + cos_r * nfy + ty;
         }
 
+        /* Set ramp restart at boundary where next maneuver's path begins.
+         * Current extended path length = slug + 2*ROUTE_EXTEND. */
+        rpath_set_ramp_restart(g_slug_override + 2.0f * ROUTE_EXTEND);
         rpath_xform_append(&g_route_path, &next_path, tx, ty, cos_r, sin_r, rot);
         float ax = cos_r * next_path.arrow_x - sin_r * next_path.arrow_y + tx;
         float ay = sin_r * next_path.arrow_x + cos_r * next_path.arrow_y + ty;
@@ -2268,8 +2288,8 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
             render_set_global_alpha(ba);
         }
 
-        rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
-        rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
+        route_extrude_body();
+        route_draw_with_fade();
     }
 
     #undef DISPATCH_DRAW
@@ -2310,6 +2330,7 @@ void maneuver_commit_pushed_state(const maneuver_state_t *state) {
     g_light_settle_start_rot = light_rot;
     g_light_settle_t = 0.0f;
     g_light_settle_active = (fabsf(light_rot) > 1e-4f);
+
     clear_combined_transition();
 }
 
