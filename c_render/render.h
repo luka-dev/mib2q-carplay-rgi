@@ -128,6 +128,9 @@ void render_end_route_mask(void);
 /* Composite masks -> screen with subtraction, materials, perspective */
 void render_composite(void);
 
+/* Reset depth buffer + z-bias (call between independent composite passes). */
+void render_reset_depth(void);
+
 /* Mark masks as needing re-render (call on maneuver state change) */
 void render_invalidate_masks(void);
 

@@ -576,12 +576,11 @@ static float lerp_angle(float a, float b, float t) {
 
 
 static float release_blend01(float t) {
-    float u;
-
     if (t < 0.0f) t = 0.0f;
     if (t > 1.0f) t = 1.0f;
-    u = 1.0f - t;
-    return 1.0f - u * u * u;
+    /* Smoothstep: derivative=0 at both ends.
+     * Avoids velocity spike at FOLLOW→RELEASE boundary. */
+    return t * t * (3.0f - 2.0f * t);
 }
 
 static float light_settle_curve(float t) {
@@ -644,6 +643,9 @@ static void update_camera_settle(void) {
     }
 }
 
+static float g_release_cam_x = 0.0f, g_release_cam_y = 0.0f;
+static int   g_was_following = 0;
+
 static void update_combined_camera(void) {
     float total = g_route_path.total_length;
     float head_dist;
@@ -669,9 +671,6 @@ static void update_combined_camera(void) {
 
         rpath_sample(&g_route_path, g_t_head, &follow_x, &follow_y);
         follow_rot = rpath_sample_heading(&g_route_path, g_t_head) - (float)(M_PI * 0.5);
-        /* Ease-out quadratic: blend'(1) = 0 → C1 continuity at intro→follow.
-         * cam = arrowhead × blend, so blend'(1)=0 eliminates the
-         * arrowhead(t) × blend'(t) velocity term at the boundary. */
         blend = 2.0f * blend - blend * blend;
         apply_camera_pose(follow_x * blend, follow_y * blend,
                           lerp_angle(0.0f, follow_rot, blend));
@@ -681,24 +680,37 @@ static void update_combined_camera(void) {
     if (head_dist <= g_next_cam_follow_dist) {
         rpath_sample(&g_route_path, g_t_head, &follow_x, &follow_y);
         follow_rot = rpath_sample_heading(&g_route_path, g_t_head) - (float)(M_PI * 0.5);
+        g_was_following = 1;
+        cam_log("FOLLOW", head_dist, follow_x, follow_y, -1.0f);
         apply_camera_pose(follow_x, follow_y, follow_rot);
         return;
     }
 
-    rpath_sample(&g_route_path, follow_t, &follow_x, &follow_y);
+    /* Rotation: fixed anchor at follow_t (no spin on curved paths) */
     follow_rot = rpath_sample_heading(&g_route_path, follow_t) - (float)(M_PI * 0.5);
+
+    /* Position: spring damper from last FOLLOW pos toward target.
+     * Inherently velocity-continuous — no blend curve needed. */
+    if (g_was_following) {
+        g_release_cam_x = g_prev_cam_x;
+        g_release_cam_y = g_prev_cam_y;
+        g_was_following = 0;
+    }
 
     {
         float denom = g_next_cam_release_end_dist - g_next_cam_follow_dist;
         float blend = (denom > 1e-4f) ? (head_dist - g_next_cam_follow_dist) / denom : 1.0f;
-        float cam_x, cam_y, cam_rot;
+        float cam_rot;
+        float spring = 0.07f;
 
-        blend = release_blend01(blend);
-        cam_x = follow_x + (g_next_cam_pan_x - follow_x) * blend;
-        cam_y = follow_y + (g_next_cam_pan_y - follow_y) * blend;
-        cam_rot = lerp_angle(follow_rot, g_next_cam_rot, blend);
+        if (blend > 1.0f) blend = 1.0f;
 
-        apply_camera_pose(cam_x, cam_y, cam_rot);
+        g_release_cam_x += (g_next_cam_pan_x - g_release_cam_x) * spring;
+        g_release_cam_y += (g_next_cam_pan_y - g_release_cam_y) * spring;
+
+        cam_rot = lerp_angle(follow_rot, g_next_cam_rot, release_blend01(blend));
+        cam_log("RELEASE", head_dist, g_release_cam_x, g_release_cam_y, blend);
+        apply_camera_pose(g_release_cam_x, g_release_cam_y, cam_rot);
     }
 }
 
@@ -2152,6 +2164,9 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
             render_set_global_alpha(base_alpha * (1.0f - pp));
             render_composite();
 
+            /* Reset depth so second composite doesn't fight first */
+            render_reset_depth();
+
             /* Pass 2: draw next maneuver masks into FBO, composite fading in.
              * Save combined route path — DISPATCH_DRAW overwrites g_route_path. */
             route_path_t saved_path = g_route_path;
@@ -2196,8 +2211,16 @@ void maneuver_commit_pushed_state(const maneuver_state_t *state) {
     g_anim_start = 1.0f;
     g_anim_target = 1.0f;
     g_route_animating = 0;
-    g_cam_settle_start_x = 0.0f;
-    g_cam_settle_start_y = 0.0f;
+    /* Carry spring's remaining offset into settle (transformed to new local space).
+     * Without this, short-road maneuvers (ARRIVED) jump at commit. */
+    {
+        float dx = g_release_cam_x - g_next_cam_pan_x;
+        float dy = g_release_cam_y - g_next_cam_pan_y;
+        float cr = cosf(-g_next_cam_rot);
+        float sr = sinf(-g_next_cam_rot);
+        g_cam_settle_start_x = cr * dx - sr * dy;
+        g_cam_settle_start_y = sr * dx + cr * dy;
+    }
     /* Reset tip morph — ARRIVED will start it on next frame */
     g_tip_morph_t = 0.0f;
     g_tip_morph_active = 0;

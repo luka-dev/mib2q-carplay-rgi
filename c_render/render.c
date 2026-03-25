@@ -1611,6 +1611,11 @@ void render_composite(void) {
     g_masks_dirty = 0;
 }
 
+void render_reset_depth(void) {
+    glClear(GL_DEPTH_BUFFER_BIT);
+    g_z_bias = 0.0f;
+}
+
 /* ================================================================
  * 3D Primitives -- extrude 2D shapes into boxes/prisms
  *
