@@ -2185,6 +2185,8 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
             float next_zone_start = g_route_path.total_length - ROUTE_EXTEND
                                   - next_road_len
                                   - maneuver_entry_road_reach(next_state);
+            if (next_zone_start < cur_zone_end)
+                next_zone_start = cur_zone_end;
             g_xfade_mid_dist = 0.5f * (cur_zone_end + next_zone_start);
         }
 
@@ -2204,6 +2206,9 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
             if (start_tail < 0.0f) start_tail = 0.0f;
             if (start_tail > current_total) start_tail = current_total;
             if (end_tail < 0.0f) end_tail = 0.0f;
+            if (end_head < 0.0f) end_head = 0.0f;
+            if (end_head > g_route_path.total_length)
+                end_head = g_route_path.total_length;
 
             g_combined_window_active = 1;
             g_combined_start_tail_dist = start_tail;
