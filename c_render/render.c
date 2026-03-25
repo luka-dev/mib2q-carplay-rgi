@@ -176,7 +176,6 @@ static float g_persp_t = 1.0f;   /* animated blend: 0.0=ortho, 1.0=perspective *
 static int g_raised = 1;
 static int g_fb_w = 640, g_fb_h = 400;
 static int g_win_w = 640, g_win_h = 400;  /* actual window buffer size (pre-SSAA) */
-static int g_viewport_mode = 0;  /* 0=sidescreen (full), 1=popup (210x153 crop) */
 float g_3d_offset_adjust = -0.10f;  /* extra Y offset in 3D mode (tuned) */
 static float g_z_bias = 0.0f;
 
@@ -847,10 +846,32 @@ void render_set_viewport(int fb_width, int fb_height) {
     g_ss_h = fb_height * SSAA_SCALE;
     g_fb_w = g_ss_w;
     g_fb_h = g_ss_h;
+
+    /* Resize SSAA texture + depth to match new supersample resolution */
+    if (g_ss_tex) {
+        glBindTexture(GL_TEXTURE_2D, g_ss_tex);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, g_ss_w, g_ss_h, 0,
+                     GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+    if (g_ss_depth) {
+        glBindRenderbuffer(GL_RENDERBUFFER, g_ss_depth);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_FBO, g_ss_w, g_ss_h);
+        glBindRenderbuffer(GL_RENDERBUFFER, 0);
+    }
+#if FXAA_ENABLED
+    if (g_fxaa_tex) {
+        glBindTexture(GL_TEXTURE_2D, g_fxaa_tex);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, g_ss_w, g_ss_h, 0,
+                     GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+#endif
+
     update_mask_config(g_fb_w, g_fb_h);
     glViewport(0, 0, g_fb_w, g_fb_h);
     glUniform2f(g_uni_resolution, (float)g_fb_w, (float)g_fb_h);
-    fbos_resize(fb_width, fb_height);
+    fbos_resize(g_fb_w, g_fb_h);
 }
 
 static void sync_camera_uniforms(void) {
@@ -1116,16 +1137,11 @@ void render_debug_grid(void) {
             float m = 0.005f;
             float ix0 = x0 + m, iy0 = y0 + m, ix1 = x1 - m, iy1 = y1 - m;
 
-            /* Checkerboard color: cyan/green for sidescreen, magenta/yellow for popup */
+            /* Checkerboard color */
             float r, g, b;
             int checker = (row + col) & 1;
-            if (g_viewport_mode == CR_VIEWPORT_POPUP) {
-                if (checker) { r = 0.7f; g = 0.0f; b = 0.7f; }  /* magenta */
-                else         { r = 0.7f; g = 0.7f; b = 0.0f; }  /* yellow */
-            } else {
-                if (checker) { r = 0.0f; g = 0.7f; b = 0.7f; }  /* cyan */
-                else         { r = 0.0f; g = 0.7f; b = 0.0f; }  /* green */
-            }
+            if (checker) { r = 0.0f; g = 0.7f; b = 0.7f; }  /* cyan */
+            else         { r = 0.0f; g = 0.7f; b = 0.0f; }  /* green */
             /* Dim border cells */
             if (row == 0 || row == ROWS-1 || col == 0 || col == COLS-1) {
                 r *= 0.5f; g *= 0.5f; b *= 0.5f;
@@ -1240,21 +1256,8 @@ void render_set_perspective(int enabled) {
     g_perspective = enabled;
 }
 
-void render_set_viewport_mode(int mode) {
-    if (mode != g_viewport_mode) {
-        g_viewport_mode = mode;
-        g_masks_dirty = 1;
-        fprintf(stderr, "render: viewport mode=%s\n",
-                mode == 1 ? "POPUP" : "SIDESCREEN");
-    }
-}
-
-int render_get_viewport_mode(void) {
-    return g_viewport_mode;
-}
-
 int render_is_animating(void) {
-    return (g_persp_t != (float)g_perspective);
+    return (fabsf(g_persp_t - (float)g_perspective) > 0.001f);
 }
 
 void render_set_raised(int raised) {
@@ -1338,6 +1341,10 @@ int render_load_flag_atlas(const char *path, int frame_w, int frame_h, int frame
     fprintf(stderr, "render: flag atlas loaded %dx%d (%d frames) tex=%u gl_err=0x%x\n",
             atlas_w, atlas_h, frame_count, g_flag_tex, err);
     return 0;
+}
+
+int render_get_flag_frame_count(void) {
+    return g_flag_frame_count;
 }
 
 void render_sprite_flag(float x, float y, float size, int frame) {
@@ -1425,6 +1432,14 @@ void render_sprite_flag(float x, float y, float size, int frame) {
 
 void render_shutdown(void) {
     fbos_shutdown();
+    /* SSAA FBO */
+    if (g_ss_fbo) { glDeleteFramebuffers(1, &g_ss_fbo); g_ss_fbo = 0; }
+    if (g_ss_tex) { glDeleteTextures(1, &g_ss_tex); g_ss_tex = 0; }
+    if (g_ss_depth) { glDeleteRenderbuffers(1, &g_ss_depth); g_ss_depth = 0; }
+    /* FXAA FBO + program */
+    if (g_fxaa_fbo) { glDeleteFramebuffers(1, &g_fxaa_fbo); g_fxaa_fbo = 0; }
+    if (g_fxaa_tex) { glDeleteTextures(1, &g_fxaa_tex); g_fxaa_tex = 0; }
+    if (g_fxaa_prog) { glDeleteProgram(g_fxaa_prog); g_fxaa_prog = 0; }
     if (g_flag_tex) {
         glDeleteTextures(1, &g_flag_tex);
         g_flag_tex = 0;

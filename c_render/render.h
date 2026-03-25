@@ -64,10 +64,6 @@ void render_circle(float cx, float cy, float radius, float thickness, int segmen
 /* Toggle perspective on/off. enabled=0 -> flat (no perspective). */
 void render_set_perspective(int enabled);
 
-/* Set viewport mode: 0=sidescreen (full 328x180), 1=popup (210x153 crop). */
-void render_set_viewport_mode(int mode);
-int  render_get_viewport_mode(void);
-
 /* Debug grid: colored checkerboard + red popup crop outline. */
 void render_set_debug_grid(int on);
 void render_debug_grid(void);
@@ -154,6 +150,9 @@ void render_end_stubs(void);
 
 /* Load flag atlas texture. Call after render_init(). Returns 0 on success. */
 int render_load_flag_atlas(const char *path, int frame_w, int frame_h, int frame_count);
+
+/* Returns the number of frames in the loaded flag atlas (0 if none loaded). */
+int render_get_flag_frame_count(void);
 
 /* Draw flag sprite at maneuver-space position (x, y).
  * size = half-extent in maneuver space.

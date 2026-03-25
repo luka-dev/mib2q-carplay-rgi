@@ -237,8 +237,6 @@ static void save_screenshot(int fb_w, int fb_h, const char *label) {
  * ================================================================ */
 
 int main(int argc, char **argv) {
-    (void)argc;
-
     fprintf(stderr, "c_render: starting %dx%d\n", WINDOW_W, WINDOW_H);
 
     /* Initialize TCP server FIRST so Java can connect while display inits.
@@ -266,17 +264,20 @@ int main(int argc, char **argv) {
     }
 
     /* Try multiple paths for flag atlas */
-    if (render_load_flag_atlas("resources/flag_atlas.rgba", 128, 128, 14) != 0)
-    if (render_load_flag_atlas("flag_atlas.rgba", 128, 128, 14) != 0) {
-        char tmp[512];
-        strncpy(tmp, argv[0], sizeof(tmp) - 1);
-        tmp[sizeof(tmp) - 1] = '\0';
-        char *dir = dirname(tmp);
-        char atlas_path[512];
-        snprintf(atlas_path, sizeof(atlas_path), "%s/resources/flag_atlas.rgba", dir);
-        if (render_load_flag_atlas(atlas_path, 128, 128, 14) != 0) {
-            snprintf(atlas_path, sizeof(atlas_path), "%s/flag_atlas.rgba", dir);
-            render_load_flag_atlas(atlas_path, 128, 128, 14);
+    if (render_load_flag_atlas("resources/flag_atlas.rgba", 128, 128, 14) != 0) {
+        if (render_load_flag_atlas("flag_atlas.rgba", 128, 128, 14) != 0) {
+            if (argc > 0 && argv[0] != NULL) {
+                char tmp[512];
+                strncpy(tmp, argv[0], sizeof(tmp) - 1);
+                tmp[sizeof(tmp) - 1] = '\0';
+                char *dir = dirname(tmp);
+                char atlas_path[512];
+                snprintf(atlas_path, sizeof(atlas_path), "%s/resources/flag_atlas.rgba", dir);
+                if (render_load_flag_atlas(atlas_path, 128, 128, 14) != 0) {
+                    snprintf(atlas_path, sizeof(atlas_path), "%s/flag_atlas.rgba", dir);
+                    render_load_flag_atlas(atlas_path, 128, 128, 14);
+                }
+            }
         }
     }
 
@@ -370,12 +371,6 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "engine: bargraph level=%d on=%d\n",
                         g_bargraph_level, g_bargraph_on);
                 break;
-            case CMD_VIEWPORT: {
-                int mode = cmd.payload[0];
-                render_set_viewport_mode(mode);
-                g_engine.dirty = 1;
-                break;
-            }
             case CMD_SHUTDOWN:
                 fprintf(stderr, "engine: shutdown command received\n");
                 running = 0;

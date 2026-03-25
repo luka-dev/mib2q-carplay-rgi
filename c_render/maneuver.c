@@ -113,6 +113,7 @@
 
 /* Cached route mesh -- rebuilt only on maneuver state change */
 static route_path_t g_route_path;
+static route_path_t g_saved_path;  /* push crossfade: avoids 8KB stack copy */
 static route_mesh_t g_route_mesh;
 
 /* Route animation state -- sliding window */
@@ -143,7 +144,7 @@ static float g_next_cam_rot = 0.0f;
 static float g_next_cam_intro_end_dist = 0.0f;
 static float g_next_cam_follow_dist = 0.0f;
 static float g_next_cam_release_end_dist = 0.0f;
-static float g_cam_rot = 0.0f;
+static float g_man_cam_rot = 0.0f;
 static float g_cam_settle_start_x = 0.0f;
 static float g_cam_settle_start_y = 0.0f;
 static float g_cam_settle_start_rot = 0.0f;
@@ -595,7 +596,7 @@ static float light_settle_curve(float t) {
 }
 
 static void apply_camera_pose(float pan_x, float pan_y, float rot) {
-    g_cam_rot = rot;
+    g_man_cam_rot = rot;
     render_set_camera_pan(pan_x, pan_y);
     render_set_camera_rotation(rot);
     render_sync_camera();
@@ -1911,9 +1912,10 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
 
     /* Advance flag animation */
     if (g_flag_active) {
+        int fc = render_get_flag_frame_count();
         g_flag_frame += FLAG_ANIM_SPEED;
-        if (g_flag_frame >= 14.0f)
-            g_flag_frame = fmodf(g_flag_frame, 14.0f);
+        if (fc > 0 && g_flag_frame >= (float)fc)
+            g_flag_frame = fmodf(g_flag_frame, (float)fc);
     }
 
     /* Combined path: when pushing with a known next maneuver, build joined route
@@ -2167,13 +2169,13 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
 
             /* Pass 2: draw next maneuver masks into FBO, composite fading in.
              * Save combined route path — DISPATCH_DRAW overwrites g_route_path. */
-            route_path_t saved_path = g_route_path;
+            g_saved_path = g_route_path;
             g_masks_only_mode = 1;
             render_push_mask_transform(tx, ty, cos_r, sin_r);
             DISPATCH_DRAW(next_state);
             render_pop_mask_transform();
             g_masks_only_mode = 0;
-            g_route_path = saved_path;
+            g_route_path = g_saved_path;
             compute_slide_params();  /* restore g_t_tail/g_t_head for combined path */
 
             render_set_global_alpha(base_alpha * pp);
@@ -2232,7 +2234,7 @@ void maneuver_commit_pushed_state(const maneuver_state_t *state) {
     /* Reset tip morph — ARRIVED will start it on next frame */
     g_tip_morph_t = 0.0f;
     g_tip_morph_active = 0;
-    settle_rot = wrap_angle(g_cam_rot - g_next_cam_rot);
+    settle_rot = wrap_angle(g_man_cam_rot - g_next_cam_rot);
     if (settle_rot > CAMERA_SETTLE_MAX_ROT) settle_rot = CAMERA_SETTLE_MAX_ROT;
     if (settle_rot < -CAMERA_SETTLE_MAX_ROT) settle_rot = -CAMERA_SETTLE_MAX_ROT;
     g_cam_settle_start_rot = settle_rot;

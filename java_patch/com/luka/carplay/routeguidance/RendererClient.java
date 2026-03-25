@@ -23,7 +23,6 @@ public class RendererClient {
     private static final byte CMD_SHUTDOWN    = 0x03;
     private static final byte CMD_PERSPECTIVE = 0x04;
     private static final byte CMD_BARGRAPH    = 0x06;
-    private static final byte CMD_VIEWPORT   = 0x07;
 
     /* CMD_MANEUVER flags */
     private static final byte MAN_FLAG_SET_PERSP = 0x01;
@@ -154,20 +153,6 @@ public class RendererClient {
         pkt[2] = (byte) (enabled & 0xFF);   /* payload[0] = on/off */
         if (sendPacket(pkt)) {
             Log.i(TAG, "Sent CMD_PERSPECTIVE=" + enabled);
-        }
-    }
-
-    /**
-     * Send CMD_VIEWPORT to switch between sidescreen/popup mode.
-     *
-     * @param mode 0=sidescreen (full 328x180), 1=popup (210x153 crop)
-     */
-    public void sendViewport(int mode) {
-        byte[] pkt = new byte[PKT_SIZE];
-        pkt[0] = CMD_VIEWPORT;
-        pkt[2] = (byte) (mode & 0xFF);   /* payload[0] = mode */
-        if (sendPacket(pkt)) {
-            Log.i(TAG, "Sent CMD_VIEWPORT=" + mode);
         }
     }
 

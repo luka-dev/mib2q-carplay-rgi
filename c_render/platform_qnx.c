@@ -55,12 +55,19 @@ static void restore_display(void) {
 }
 
 static void signal_handler(int sig) {
-    /* Log signal before doing anything — helps debug crashes in EGL/display calls */
-    const char *name = (sig == SIGSEGV) ? "SIGSEGV" :
-                       (sig == SIGABRT) ? "SIGABRT" :
-                       (sig == SIGTERM) ? "SIGTERM" : "UNKNOWN";
-    fprintf(stderr, "platform_qnx: caught signal %d (%s)\n", sig, name);
-    restore_display();
+    /* Only use async-signal-safe functions (write, signal, raise).
+     * restore_display() deferred to atexit handler for clean exits;
+     * for crashes (SIGSEGV/SIGABRT), system() inside the handler was UB anyway. */
+    static const char msg_segv[] = "platform_qnx: caught SIGSEGV\n";
+    static const char msg_abrt[] = "platform_qnx: caught SIGABRT\n";
+    static const char msg_term[] = "platform_qnx: caught SIGTERM\n";
+    static const char msg_unk[]  = "platform_qnx: caught signal\n";
+
+    if (sig == SIGSEGV)      write(STDERR_FILENO, msg_segv, sizeof(msg_segv) - 1);
+    else if (sig == SIGABRT) write(STDERR_FILENO, msg_abrt, sizeof(msg_abrt) - 1);
+    else if (sig == SIGTERM) write(STDERR_FILENO, msg_term, sizeof(msg_term) - 1);
+    else                     write(STDERR_FILENO, msg_unk,  sizeof(msg_unk)  - 1);
+
     g_should_close = 1;
     signal(sig, SIG_DFL);
     raise(sig);

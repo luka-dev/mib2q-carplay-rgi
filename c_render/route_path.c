@@ -13,6 +13,7 @@
  * 2D (x, y) -> 3D (x, height, z=y).
  */
 
+#include <stdio.h>
 #include <math.h>
 #include <string.h>
 #include "route_path.h"
@@ -132,9 +133,17 @@ void rpath_densify(route_path_t *p) {
  * Then arrowhead prism at the end.
  * ================================================================ */
 
+static int g_mesh_overflow_warned = 0;
+
 static void mesh_v(route_mesh_t *m, float x, float y, float z,
                    float nx, float ny, float nz) {
-    if (m->vert_count >= RMESH_MAX_VERTS) return;
+    if (m->vert_count >= RMESH_MAX_VERTS) {
+        if (!g_mesh_overflow_warned) {
+            fprintf(stderr, "route_path: mesh vertex overflow (max %d)\n", RMESH_MAX_VERTS);
+            g_mesh_overflow_warned = 1;
+        }
+        return;
+    }
     int idx = m->vert_count * 6;
     m->verts[idx]   = x;  m->verts[idx+1] = y;  m->verts[idx+2] = z;
     m->verts[idx+3] = nx; m->verts[idx+4] = ny; m->verts[idx+5] = nz;

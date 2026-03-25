@@ -57,10 +57,6 @@ public class BAPBridge {
     private static final int BARGRAPH_BLINK_PERCENT = 20;
     private static final int ACTION_BLINK_INTERVAL_MS = 600;
 
-    /* Viewport modes (must match protocol.h) */
-    private static final int VIEWPORT_SIDESCREEN = 0;
-    private static final int VIEWPORT_POPUP = 1;
-
     private CombiBAPServiceNavi appConnectorNavi;
     private final BAPDistanceFormatter distanceFormatter =
         new BAPDistanceFormatter(new SilentLogChannel());
@@ -96,8 +92,6 @@ public class BAPBridge {
      */
     private int exitViewSendCount = 0;
     private GatedCombiService gatedService;
-
-    private int currentViewportMode = VIEWPORT_SIDESCREEN;
 
     private ClusterService csRef;
     private KOMOService komoService;
@@ -1396,6 +1390,7 @@ public class BAPBridge {
             lastCrExitAngle = -9999;
             lastCrDrivingSide = -1;
             lastCrVer = -1;
+
             Log.i(TAG, "CR: started");
         } catch (Throwable t) {
             Log.w(TAG, "CR start failed: " + t.getClass().getName() + ": " + t.getMessage());
@@ -1600,32 +1595,6 @@ public class BAPBridge {
         } catch (Throwable t) {
             Log.w(TAG, "KOMO: gfxAvailable backup failed: " + t.getMessage());
         }
-    }
-
-    /* ============================================================
-     * Viewport Mode (sidescreen vs popup)
-     * ============================================================ */
-
-    /**
-     * Set the VC viewport mode. Sends CMD_VIEWPORT to c_render so it
-     * can adjust rendering for the visible area.
-     *
-     * @param mode VIEWPORT_SIDESCREEN (0) or VIEWPORT_POPUP (1)
-     */
-    public void setViewportMode(int mode) {
-        if (mode == currentViewportMode) return;
-        currentViewportMode = mode;
-        if (rendererClient != null && customRendererStarted) {
-            rendererClient.sendViewport(mode);
-        }
-        Log.i(TAG, "Viewport mode -> " + (mode == VIEWPORT_POPUP ? "POPUP" : "SIDESCREEN"));
-    }
-
-    /**
-     * Get the current viewport mode.
-     */
-    public int getViewportMode() {
-        return currentViewportMode;
     }
 
     /* ============================================================

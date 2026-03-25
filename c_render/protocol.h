@@ -20,7 +20,6 @@
 #define CMD_PERSPECTIVE  0x04    /* Perspective: payload[0] = 0 (off) / 1 (on) */
 #define CMD_DEBUG        0x05    /* Toggle debug overlay */
 #define CMD_BARGRAPH     0x06    /* Bargraph: payload[0]=level(0-16), payload[1]=on/off */
-#define CMD_VIEWPORT     0x07    /* Viewport mode: payload[0] = 0 (sidescreen) / 1 (popup) */
 
 /* 48-byte command packet */
 typedef struct {
@@ -64,11 +63,7 @@ typedef struct {
 #define CR_DEFAULT_HEIGHT   181 /* 180px content + 1px ECC annotation row (native widget slot) */
 #define CR_TARGET_FPS       10
 
-/* Viewport modes (CMD_VIEWPORT) */
-#define CR_VIEWPORT_SIDESCREEN  0   /* Full 328x180 visible on VC */
-#define CR_VIEWPORT_POPUP       1   /* 210x153 crop at (59,27) visible on VC */
-
-/* Popup crop geometry within the 328x180 content area */
+/* Popup crop geometry within the 328x180 content area (for debug grid only) */
 #define CR_POPUP_X      59
 #define CR_POPUP_Y      27
 #define CR_POPUP_W      210
