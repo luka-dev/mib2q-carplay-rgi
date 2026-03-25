@@ -681,7 +681,6 @@ static void update_combined_camera(void) {
         rpath_sample(&g_route_path, g_t_head, &follow_x, &follow_y);
         follow_rot = rpath_sample_heading(&g_route_path, g_t_head) - (float)(M_PI * 0.5);
         g_was_following = 1;
-        cam_log("FOLLOW", head_dist, follow_x, follow_y, -1.0f);
         apply_camera_pose(follow_x, follow_y, follow_rot);
         return;
     }
@@ -709,7 +708,6 @@ static void update_combined_camera(void) {
         g_release_cam_y += (g_next_cam_pan_y - g_release_cam_y) * spring;
 
         cam_rot = lerp_angle(follow_rot, g_next_cam_rot, release_blend01(blend));
-        cam_log("RELEASE", head_dist, g_release_cam_x, g_release_cam_y, blend);
         apply_camera_pose(g_release_cam_x, g_release_cam_y, cam_rot);
     }
 }
