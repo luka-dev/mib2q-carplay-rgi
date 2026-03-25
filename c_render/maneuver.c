@@ -681,6 +681,8 @@ static void update_combined_camera(void) {
         rpath_sample(&g_route_path, g_t_head, &follow_x, &follow_y);
         follow_rot = rpath_sample_heading(&g_route_path, g_t_head) - (float)(M_PI * 0.5);
         g_was_following = 1;
+        g_release_cam_x = follow_x;
+        g_release_cam_y = follow_y;
         apply_camera_pose(follow_x, follow_y, follow_rot);
         return;
     }
@@ -691,8 +693,7 @@ static void update_combined_camera(void) {
     /* Position: spring damper from last FOLLOW pos toward target.
      * Inherently velocity-continuous — no blend curve needed. */
     if (g_was_following) {
-        g_release_cam_x = g_prev_cam_x;
-        g_release_cam_y = g_prev_cam_y;
+        /* g_release_cam already holds last FOLLOW position */
         g_was_following = 0;
     }
 
@@ -2011,9 +2012,8 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
         }
         if (s->icon == ICON_ARRIVED)
             render_sprite_flag(g_arrive_flag_dx, g_arrive_flag_dy, ARRIVE_FLAG_SZ, (int)g_flag_frame);
-        if (combined && next_state != NULL && next_state->icon == ICON_ARRIVED) {
+        if (combined && next_state != NULL && next_state->icon == ICON_ARRIVED)
             render_sprite_flag(g_combined_flag_x, g_combined_flag_y, ARRIVE_FLAG_SZ, (int)g_flag_frame);
-        }
         rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
         if (g_route_debug)
             rpath_draw_debug(&g_route_path, g_t_tail, g_t_head);
@@ -2071,7 +2071,7 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
         g_last_combined_rot = rot;
 
         /* Pre-compute flag position for ARRIVED in combined space.
-         * Flag snaps to outer circle edge: left=9h, center=12h, right=3h */
+         * Full rotation: flag stays anchored to the rotated circle. */
         if (next_state->icon == ICON_ARRIVED) {
             float nfx, nfy;
             if (next_state->direction < 0) {
@@ -2182,12 +2182,22 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
             render_set_global_alpha(base_alpha);
         }
 
-        /* Draw flag anchored to next maneuver's center (slides in with the maneuver) */
-        if (next_state->icon == ICON_ARRIVED) {
-            render_sprite_flag(g_combined_flag_x, g_combined_flag_y, ARRIVE_FLAG_SZ, (int)g_flag_frame);
-        }
-        if (s->icon == ICON_ARRIVED) {
-            render_sprite_flag(g_arrive_flag_dx, g_arrive_flag_dy, ARRIVE_FLAG_SZ, (int)g_flag_frame);
+        /* Crossfade flags: current fades out, next fades in (same as roads) */
+        {
+            float push_range = g_anim_target - g_anim_start;
+            float pp = (push_range > 0.01f) ? (g_route_slide - g_anim_start) / push_range : 1.0f;
+            if (pp < 0.0f) pp = 0.0f;
+            if (pp > 1.0f) pp = 1.0f;
+            float ba = render_get_global_alpha();
+            if (s->icon == ICON_ARRIVED) {
+                render_set_global_alpha(ba * (1.0f - pp));
+                render_sprite_flag(g_arrive_flag_dx, g_arrive_flag_dy, ARRIVE_FLAG_SZ, (int)g_flag_frame);
+            }
+            if (next_state->icon == ICON_ARRIVED) {
+                render_set_global_alpha(ba * pp);
+                render_sprite_flag(g_combined_flag_x, g_combined_flag_y, ARRIVE_FLAG_SZ, (int)g_flag_frame);
+            }
+            render_set_global_alpha(ba);
         }
 
         rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
