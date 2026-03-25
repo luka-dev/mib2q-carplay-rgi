@@ -31,16 +31,36 @@ Sent via the same BAP path. VC renders these as text bars over the native map ar
 - [x] ETA / remaining travel time - timezone-adjusted to HU local time (FctID 22)
 - [x] Destination name (FctID 46)
 
-### Route Guidance - VC LVDS Video (Own Renderer for Widget)
-In progress
+### Route Guidance - VC LVDS Video (Custom Renderer)
+
+Custom 3D renderer (`c_render/`) draws maneuver icons into the cluster's LVDS video pipeline. Renders into displayable 20 via EGL/GLES2, captured by the video encoder and sent over MOST to the VC.
+
+- [x] Procedural 3D maneuver icons (turns, roundabouts, U-turns, merges, lane changes, arrival)
+- [x] Side streets at junctions from iAP2 junction angles
+- [x] Animated route path with curvature-aware speed
+- [x] Smooth push transitions between consecutive maneuvers (crossfade + path chaining)
+- [x] Camera follow/settle during transitions
+- [x] Arrow-to-bulb tip morphing for arrival
+- [x] Animated destination flag sprite
+- [x] Distance bargraph overlay with blink mode
+- [x] Perspective/orthographic view with animated blend
+- [x] FXAA + 2x SSAA anti-aliasing
+- [x] Painter's algorithm road rendering (white outline + grey fill + blue active route)
+- [x] TCP command protocol (port 19800) - Java bridge sends maneuver updates, renderer handles all animation autonomously
 
 ### Route Guidance - VC AIO Arrows (NOT possible)
 
 The VC's `SV_NavFPK_Compass_MobileDevice` view (which renders AIO arrow maneuver icons) requires InfoStates=6, but the VC's KSS AUTOSAR firmware **rejects value 6** at the MOST message validator (`sub_108F42C`: bit-dependency rule `(value & 5) != 4` blocks value 6) before it reaches EB GUIDE. The firmware cannot be persistently patched (secure AUTOSAR, RAM-only UDS patches lost on reboot). See `docs/kss_aio_arrow_analysis.md` for the full reverse engineering analysis.
 
-BAP ManeuverDescriptor (FctID 23) drives the **HUD** maneuver icons -- that path works and is not affected.
+BAP ManeuverDescriptor (FctID 23) drives the **HUD** maneuver icons - that path works and is not affected.
 
 ### Media
+
+Stock MHI2 CarPlay (TerminalMode) forwards track title, artist, and album to the VC, but the stock `AppConnectorTerminalMode` never pushes cover art to the BAP picture manager. The VC always shows a blank/default album icon.
+
+**Cover art pipeline:**
+
+The C hook intercepts iAP2 transport packets (`read()`/`recv()` hooks), reassembles JPEG cover art from chunked transfers, decodes and resizes to 256x256 PNG using stb_image, and writes to `/var/app/icab/tmp/37/coverart.png`. A PPS notification (`/ramdisk/pps/iap2/coverart_notify`) signals Java. The Java `CoverArt` module watches PPS, and `TerminalModeBapCombi$EventListener` pushes the image through `AppConnectorTerminalMode` to the BAP picture manager with proper `ResourceLocator` and `responseCoverArt()` calls, mirroring the native `AppConnectorMedia` pattern. Late-arriving cover art (after track info was already sent) triggers a re-send with a modified picture ID to force the VC to refresh.
 
 - [x] Cover art forwarding to VC
 
@@ -50,126 +70,147 @@ BAP ManeuverDescriptor (FctID 23) drives the **HUD** maneuver icons -- that path
 
 ## Patch Components
 
-| Component                            | Type                | Purpose                                                                | Output                         |
-|--------------------------------------|---------------------|------------------------------------------------------------------------|--------------------------------|
-| `c_hook/`                            | C (ARM32 QNX)       | iAP2 hooks, route guidance and cover art bridge, PPS publishing        | `libcarplay_hook.so`           |
-| `java_patch/`                        | Java patch JAR      | Route guidance rendering logic, BAP bridge, cover art forwarding hooks | `carplay_hook.jar`             |
-| `patch_libpresentationcontroller.py` | Python patch script | Binary patches for libPresentationController.so (KOMO widget video)    | `libPresentationController.so` |
-| `dio_manager.json`                   | System config patch | Enables iAP2 route guidance message exchange with iOS                  | Manual edit JSON on device     |
-| `smartphone_integrator.json`         | System config patch | Loads `libcarplay_hook.so` via `LD_PRELOAD` in dio_manager process     | Manual edit JSON on device     |
+| Component                    | Type                  | Purpose                                                                | Output                |
+|------------------------------|-----------------------|------------------------------------------------------------------------|-----------------------|
+| `c_hook/`                    | C (ARM32 QNX)         | iAP2 hooks, route guidance and cover art bridge, PPS publishing        | `libcarplay_hook.so`  |
+| `c_render/`                  | C (ARM32 QNX / macOS) | Custom 3D maneuver renderer (EGL/GLES2), TCP command-driven            | `maneuver_render`     |
+| `java_patch/`                | Java patch JAR        | Route guidance rendering logic, BAP bridge, cover art forwarding hooks | `carplay_hook.jar`    |
+| `dio_manager.json`           | System config patch   | Enables iAP2 route guidance message exchange with iOS                  | Manual edit on device |
+| `smartphone_integrator.json` | System config patch   | Loads `libcarplay_hook.so` via `LD_PRELOAD` in dio_manager process     | Manual edit on device |
+
+## Prerequisites
+
+- **QNX SDP 6.5** - needed for cross-compiling C hook and renderer to ARM32 QNX. Easiest way is a QNX VM with the toolchain accessible over SSH.
+  QNX VM image: https://archive.org/details/qnxsdp-65.7z (or any other QNX SDP 6.5 VM image available online).
+  Set up SSH on the VM and configure the IP in the build scripts.
+
+- **GLFW 3** (macOS only) - needed for local renderer development/testing. Install via `brew install glfw`.
+
+- **lsd.jar** - original HU classes, needed to compile the Java patch against. Extract from your firmware dump:
+  1. Get `/mnt/app/eso/hmi/lsd/lsd.jxe` from your firmware
+  2. Convert with [jxe2jar](https://github.com/luka-dev/jxe2jar) (`../jxe2jar`)
+  3. Output lands in `jxe2jar/out/lsd.jar` (default path used by `build_java.sh`)
 
 ## Build
 
-### Build `libcarplay_hook.so`
+### `libcarplay_hook.so` (C hook)
 
-You will need QNX SDP 6.5. I did it by spinning up a QNX VM and using the cross-compilation toolchain over SSH.
-Link to QNX VM image: https://archive.org/details/qnxsdp-65.7z
-(do not forget to set up SSH on VM and set the IP in `compile_c.sh`)
+Cross-compiles on the QNX VM via SSH. Set `QNX_VM` IP in `compile_hook.sh`.
+
 ```bash
-./compile_c.sh
+./compile_hook.sh
 ```
 
-Expected output artifact:
-
-```text
-./libcarplay_hook.so
-```
-
-Notes:
-
-- `compile_c.sh` uploads sources to QNX VM
-- Cross-compiles with `/usr/qnx650/host/qnx6/x86/usr/bin/ntoarmv7-gcc`
-- Downloads the built `.so` back
+Output: `./libcarplay_hook.so`
 
 Build flags:
 
-- `LOG=1|0` (default: `1`)
-- `LOG_RGD_PACKET_RAW=1|0` (default: `0`, requires `LOG=1`)
-
-Examples:
-
-```bash
-# default build (logging enabled)
-./compile_c.sh
-
-# disable all logging in c_hook
-LOG=0 ./compile_c.sh
-
-# enable full raw RGD packet logging
-LOG=1 LOG_RGD_PACKET_RAW=1 ./compile_c.sh
-```
-
-Invalid combination:
+| Flag                 | Default | Description                                 |
+|----------------------|---------|---------------------------------------------|
+| `LOG`                | `1`     | Enable/disable all logging                  |
+| `LOG_RGD_PACKET_RAW` | `0`     | Full raw RGD packet dump (requires `LOG=1`) |
 
 ```bash
-LOG=0 LOG_RGD_PACKET_RAW=1 ./compile_c.sh
+# default (logging on)
+./compile_hook.sh
+
+# silent build
+LOG=0 ./compile_hook.sh
+
+# verbose packet logging
+LOG=1 LOG_RGD_PACKET_RAW=1 ./compile_hook.sh
 ```
 
-### Build `carplay_hook.jar`
+### `maneuver_render` (3D renderer)
 
-Requires `lsd.jar/lsd.jxe`.
+**For QNX (deployment):** Cross-compiles on the QNX VM via SSH. Set `QNX_VM` IP in `compile_render_qnx.sh`.
 
-Why it is needed:
+```bash
+./compile_render_qnx.sh
+```
 
-- `build_java.sh` compiles patch classes against original Head Unit classes.
-- Those classes are inside the OEM `lsd.jxe`, so we need it converted back to `lsd.jar`.
+Output: `./maneuver_render`
 
-How to get your own `lsd.jar`:
+To build with the debug grid overlay:
 
-- Get your original `lsd.jxe` from your firmware dump `/mnt/app/eso/hmi/lsd/lsd.jxe`
-- Use `jxe2jar` (`../jxe2jar`) to convert it.
-- Tool: https://github.com/luka-dev/jxe2jar
+```bash
+./compile_render_qnx.sh grid
+```
 
-Build JAR (jxe2jar includes bundled JVMs for Windows/Linux/macOS that target Java 1.2).
-Check paths to `lsd.jar` in `build_java.sh` (default: `jxe2jar/out/lsd.jar`).
+**For macOS (local development):** Builds natively with GLFW + OpenGL 2.1. Requires `brew install glfw`.
+
+```bash
+make -C c_render
+```
+
+Output: `c_render/c_render` (renderer) + `c_render/test_harness` (test client)
+
+The macOS build also compiles a test harness - see [Testing the Renderer](#testing-the-renderer) below.
+
+### `carplay_hook.jar` (Java patch)
+
+Requires `lsd.jar` (see [Prerequisites](#prerequisites)). Check paths in `build_java.sh`.
 
 ```bash
 ./build_java.sh
 ```
 
-Output artifact:
+Output: `./carplay_hook.jar`
 
-```text
-./carplay_hook.jar
+All classes are compiled with `-source 1.2 -target 1.2` for MU1316 JVM compatibility. The bundled JDK from jxe2jar is used automatically.
+
+## Testing the Renderer
+
+The macOS build includes a **test harness** (`c_render/test_harness`) that sends TCP commands to the renderer, letting you cycle through all maneuver types and verify animations without a real device.
+
+Run both in parallel:
+
+```bash
+cd c_render
+./c_render & ./test_harness
 ```
+
+The renderer window opens and the harness connects to `127.0.0.1:19800`.
+
+**Harness controls:**
+
+| Key          | Action                                                                               |
+|--------------|--------------------------------------------------------------------------------------|
+| Left / Right | Cycle through maneuver presets (turns, roundabouts, U-turns, merges, arrivals, etc.) |
+| R            | Send a random maneuver with random angle, junction streets, and bargraph             |
+| P            | Toggle perspective / orthographic view                                               |
+| D            | Toggle debug grid overlay                                                            |
+| Space        | Save screenshot (PPM)                                                                |
+| S            | Toggle sidescreen / popup viewport mode                                              |
+| Q / Esc      | Quit                                                                                 |
+
+The harness auto-cycles through a built-in preset list that covers all icon types with varying directions, exit angles, junction configurations, and bargraph levels. Each arrow key press sends a `CMD_MANEUVER` packet triggering a push transition.
 
 ## Deployment
 
-### Step 1: Deploy `libcarplay_hook.so`
+### Step 1: Create hooks directory
 
-Copy hook to device:
+The hooks directory does not exist by default. Create it on the device:
 
-```text
-/mnt/app/root/hooks/libcarplay_hook.so
+```bash
+mkdir -p /mnt/app/root/hooks
+chmod 755 /mnt/app/root/hooks
 ```
 
-Runtime log (default, resets on each reboot):
+### Step 2: Deploy `libcarplay_hook.so`
 
-```text
-/tmp/carplay_hook.log
+```bash
+cp libcarplay_hook.so /mnt/app/root/hooks/
+chmod 755 /mnt/app/root/hooks/libcarplay_hook.so
 ```
 
-### Step 2: Patch `smartphone_integrator.json`
+Runtime log (resets on each reboot): `/tmp/carplay_hook.log`
 
-File on device:
+### Step 3: Patch `smartphone_integrator.json`
 
-```text
-/mnt/system/etc/eso/production/smartphone_integrator.json
-```
+File: `/mnt/system/etc/eso/production/smartphone_integrator.json`
 
-Add/update `LD_PRELOAD` under:
-
-```text
-$.children.carplay.envs
-```
-
-Add this entry in `envs` (or replace existing `LD_PRELOAD=...` entry):
-
-```json
-"LD_PRELOAD=/mnt/app/root/hooks/libcarplay_hook.so"
-```
-
-Example:
+Add `LD_PRELOAD` under `$.children.carplay.envs`:
 
 ```json
 "carplay": {
@@ -182,28 +223,22 @@ Example:
 }
 ```
 
-### Step 3: Patch `dio_manager.json`
+### Step 4: Patch `dio_manager.json`
 
-File on device:
+File: `/mnt/system/etc/eso/production/dio_manager.json`
 
-```text
-/mnt/system/etc/eso/production/dio_manager.json
-```
+Add these iAP2 message IDs in the Identify registration:
 
-Add these iAP2 message IDs in Identify registration:
-
-`MessagesSentByAccessory` add (or verify already present):
-
+`MessagesSentByAccessory` - add:
 - `0x5200` = `StartRouteGuidanceUpdates`
 - `0x5203` = `StopRouteGuidanceUpdates`
 
-`MessagesReceivedFromDevice` add:
-
+`MessagesReceivedFromDevice` - add:
 - `0x5201` = `RouteGuidanceUpdate`
 - `0x5202` = `RouteGuidanceManeuverUpdate`
 - `0x5204` = `LaneGuidanceInformation`
 
-Why this matters: without these registrations, iOS does not send route guidance payloads.
+Without these registrations, iOS does not send route guidance payloads.
 
 Example (before):
 
@@ -219,7 +254,7 @@ Example (before):
 ]
 ```
 
-After (added `0x5200`, `0x5203`, `0x5201`, `0x5202`, `0x5204`):
+After:
 
 ```json
 "MessagesSentByAccessory": [
@@ -235,38 +270,41 @@ After (added `0x5200`, `0x5203`, `0x5201`, `0x5202`, `0x5204`):
 ]
 ```
 
-### Step 4: Deploy `carplay_hook.jar`
+### Step 5: Deploy `carplay_hook.jar`
 
-Copy JAR to device:
-
-```text
-/mnt/app/eso/hmi/lsd/jars/carplay_hook.jar
+```bash
+cp carplay_hook.jar /mnt/app/eso/hmi/lsd/jars/
 ```
 
-### Step 5: Deploy `libPresentationController.so`
+### Step 6: Deploy `maneuver_render` and flag atlas
 
-Copy patched binary to device:
-
-```text
-/mnt/app/navigation/libPresentationController.so
+```bash
+cp maneuver_render /mnt/app/root/hooks/
+cp c_render/flag_atlas.rgba /mnt/app/root/hooks/
+chmod 755 /mnt/app/root/hooks/maneuver_render
 ```
 
-### Step 6: Reboot
+The flag atlas (`flag_atlas.rgba`) must be placed next to the `maneuver_render` binary. The renderer looks for it relative to its own path.
 
-Reboot the infotainment system.
+Launched automatically by the Java bridge (`BAPBridge`) when CarPlay route guidance starts. Log: `/tmp/maneuver_render.log`.
 
-P.S. If you do instant reboot of Head Unit after file changes, it's possible that changes will not yet be saved to disk. Give it 30+ seconds before rebooting.
+### Step 7: Reboot
+
+Reboot the infotainment system. Give it 30+ seconds after file changes before rebooting - otherwise changes may not be flushed to disk.
 
 ## Quick Deployment Checklist
 
-1. Build `libcarplay_hook.so` with `./compile_c.sh`
-2. Build `carplay_hook.jar` with `./build_java.sh`
-3. Build `libPresentationController.so` with `python3 patch_libpresentationcontroller.py`
-4. Copy `libcarplay_hook.so` to `/mnt/app/root/hooks/`
-5. Set `LD_PRELOAD` in `smartphone_integrator.json`
-6. Patch `dio_manager.json` with the `0x5200/01/02/03/04` IDs
-7. Copy `carplay_hook.jar` to `/mnt/app/eso/hmi/lsd/jars/`
-9. Reboot (wait 30+ seconds after file changes)
+1. `./compile_hook.sh` - build `libcarplay_hook.so`
+2. `./compile_render_qnx.sh` - build `maneuver_render`
+3. `./build_java.sh` - build `carplay_hook.jar`
+4. `mkdir -p /mnt/app/root/hooks` on device
+5. Copy `libcarplay_hook.so` to `/mnt/app/root/hooks/`, `chmod 755`
+6. Copy `maneuver_render` to `/mnt/app/root/hooks/`, `chmod 755`
+7. Copy `flag_atlas.rgba` to `/mnt/app/root/hooks/`
+8. Copy `carplay_hook.jar` to `/mnt/app/eso/hmi/lsd/jars/`
+9. Set `LD_PRELOAD` in `smartphone_integrator.json`
+10. Add `0x5200/01/02/03/04` IDs in `dio_manager.json`
+11. Reboot (wait 30s after file changes)
 
 ## Help Wanted
 

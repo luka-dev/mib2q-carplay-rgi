@@ -88,9 +88,9 @@ class TerminalModeBapCombi$EventListener extends DefaultEventListener implements
             return;
         }
 
-        String title = normalizeField(rawTitle);
-        String artist = normalizeField(rawArtist);
-        String album = normalizeField(rawAlbum);
+        String title = rawTitle.trim();
+        String artist = rawArtist.trim();
+        String album = rawAlbum.trim();
 
         if (title.length() == 0 && artist.length() == 0 && album.length() == 0) {
             return;
@@ -178,32 +178,6 @@ class TerminalModeBapCombi$EventListener extends DefaultEventListener implements
     /* ============================================================
      * Utilities
      * ============================================================ */
-
-    private String normalizeField(String value) {
-        if (value == null) return "";
-        String s = value.trim();
-        if (s.length() == 0) return "";
-
-        /* Remove "Lossless" suffix */
-        String lower = s.toLowerCase();
-        int idx = lower.indexOf("lossless");
-        if (idx >= 0) {
-            s = s.substring(0, idx).trim();
-        }
-
-        /* Remove trailing non-alphanumeric */
-        int end = s.length();
-        while (end > 0) {
-            char c = s.charAt(end - 1);
-            if (Character.isLetterOrDigit(c)) break;
-            end--;
-        }
-        if (end != s.length()) {
-            s = s.substring(0, end).trim();
-        }
-
-        return s;
-    }
 
     private LogChannel getLogger() {
         try {
