@@ -144,6 +144,7 @@ static float g_next_cam_rot = 0.0f;
 static float g_next_cam_intro_end_dist = 0.0f;
 static float g_next_cam_follow_dist = 0.0f;
 static float g_next_cam_release_end_dist = 0.0f;
+static float g_xfade_mid_dist = 0.0f;  /* midpoint between maneuver zones on combined path */
 static float g_man_cam_rot = 0.0f;
 static float g_cam_settle_start_x = 0.0f;
 static float g_cam_settle_start_y = 0.0f;
@@ -159,6 +160,8 @@ static int   g_camera_prepared_this_frame = 0;
 #define ROUTE_SPEED_PEAK 0.045f         /* peak animation speed (NDC/frame on straight) */
 #define ROUTE_SPEED_MIN  0.010f         /* minimum speed on sharpest turns */
 #define ROUTE_EXTEND     0.5f           /* extension length beyond viewport */
+#define TRANSITION_PAD   0.15f          /* minimum clear road between maneuver road zones */
+#define XFADE_HALF       0.20f          /* spatial crossfade half-width in path distance */
 #define CURV_WINDOW      3              /* points each side for curvature sampling */
 #define CURV_SLOWDOWN    8.0f           /* curvature sensitivity (higher = more slowdown) */
 #define CAMERA_SETTLE_SPEED 0.12f
@@ -178,6 +181,7 @@ static void clear_combined_transition(void) {
     g_next_cam_intro_end_dist = 0.0f;
     g_next_cam_follow_dist = 0.0f;
     g_next_cam_release_end_dist = 0.0f;
+    g_xfade_mid_dist = 0.0f;
     g_last_combined_rot = 0.0f;
 }
 
@@ -197,6 +201,24 @@ static void clear_light_settle(void) {
 }
 
 static void rpath_sample(const route_path_t *p, float t, float *out_x, float *out_y);
+
+/* Spatial crossfade: 0.0 = fully current maneuver, 1.0 = fully next maneuver.
+ * Based on arrow head distance along combined path relative to the midpoint
+ * between maneuver road zones. Smoothstepped over ±XFADE_HALF. */
+static float spatial_xfade(void) {
+    float total, head_dist, rel, pp;
+    if (!g_combined_window_active || g_xfade_mid_dist <= 0.0f)
+        return 0.0f;
+    total = g_route_path.total_length;
+    if (total < 1e-6f) return 0.0f;
+    head_dist = g_t_head * total;
+    rel = (head_dist - g_xfade_mid_dist) / XFADE_HALF;
+    pp = (rel + 1.0f) * 0.5f;
+    if (pp < 0.0f) pp = 0.0f;
+    if (pp > 1.0f) pp = 1.0f;
+    pp = pp * pp * (3.0f - 2.0f * pp);   /* smoothstep */
+    return pp;
+}
 
 void maneuver_start_anim(void) {
     g_route_slide = 0.0f;
@@ -1247,15 +1269,29 @@ void maneuver_get_transition_mask_bounds(float *out_abs_x, float *out_abs_y) {
     if (out_abs_y != NULL) *out_abs_y = max_abs_y * safety;
 }
 
+/* Road reach past exit/before entry along the connecting heading.
+ * Exit: how far road mask extends past maneuver_get_exit() point.
+ * Entry: how far road mask extends below SHAFT_BOT. */
+static float maneuver_exit_road_reach(const maneuver_state_t *state) {
+    (void)state;
+    return (ROAD_LEN - BLUE_LEN) + FADE_LEN;  /* 0.05 + 0.30 = 0.35 */
+}
+
+static float maneuver_entry_road_reach(const maneuver_state_t *state) {
+    (void)state;
+    return FADE_LEN;  /* 0.30 */
+}
+
 static void compute_combined_transform(const maneuver_state_t *cur_state,
                                        const maneuver_state_t *next_state,
                                        float *out_tx, float *out_ty,
                                        float *out_cos_r, float *out_sin_r,
                                        float *out_rot) {
     route_path_t cur_path, next_path;
-    maneuver_exit_t cur_end, next_start;
+    maneuver_exit_t cur_end, next_start, cur_exit;
     float rot, cos_r, sin_r;
     float ns_rx, ns_ry;
+    float tx, ty;
 
     maneuver_build_route(cur_state, &cur_path);
     rpath_extend(&cur_path);
@@ -1270,8 +1306,28 @@ static void compute_combined_transform(const maneuver_state_t *cur_state,
     ns_rx = cos_r * next_start.x - sin_r * next_start.y;
     ns_ry = sin_r * next_start.x + cos_r * next_start.y;
 
-    *out_tx = cur_end.x - ns_rx;
-    *out_ty = cur_end.y - ns_ry;
+    tx = cur_end.x - ns_rx;
+    ty = cur_end.y - ns_ry;
+
+    /* Part A: enforce minimum separation between junction centers.
+     * Project center-to-center onto exit heading; if too small, push out. */
+    {
+        cur_exit = maneuver_get_exit(cur_state);
+        float hdx = cosf(cur_exit.heading);
+        float hdy = sinf(cur_exit.heading);
+        float proj = tx * hdx + ty * hdy;
+        float min_sep = maneuver_exit_road_reach(cur_state)
+                       + maneuver_entry_road_reach(next_state)
+                       + TRANSITION_PAD;
+        if (proj < min_sep) {
+            float deficit = min_sep - proj;
+            tx += deficit * hdx;
+            ty += deficit * hdy;
+        }
+    }
+
+    *out_tx = tx;
+    *out_ty = ty;
     *out_cos_r = cos_r;
     *out_sin_r = sin_r;
     *out_rot = rot;
@@ -1998,24 +2054,30 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
             /* Rebuild mesh at current slide (path segments still cached in g_route_path) */
             rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T, ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
         }
-        /* Composite with road fade during push */
+        /* Composite with road fade during push (spatial crossfade) */
         if (combined) {
-            float push_range = g_anim_target - g_anim_start;
-            float pp = (push_range > 0.01f) ? (g_route_slide - g_anim_start) / push_range : 1.0f;
-            if (pp < 0.0f) pp = 0.0f;
-            if (pp > 1.0f) pp = 1.0f;
-            float road_alpha = 1.0f - pp;  /* fade out current roads during push */
+            float pp = spatial_xfade();
             float base_alpha = render_get_global_alpha();
-            render_set_global_alpha(base_alpha * road_alpha);
+            render_set_global_alpha(base_alpha * (1.0f - pp));
             render_composite();
             render_set_global_alpha(base_alpha);
         } else {
             render_composite();
         }
-        if (s->icon == ICON_ARRIVED)
-            render_sprite_flag(g_arrive_flag_dx, g_arrive_flag_dy, ARRIVE_FLAG_SZ, (int)g_flag_frame);
-        if (combined && next_state != NULL && next_state->icon == ICON_ARRIVED)
-            render_sprite_flag(g_combined_flag_x, g_combined_flag_y, ARRIVE_FLAG_SZ, (int)g_flag_frame);
+        /* Crossfade flags on cached frames (spatial) */
+        if (s->icon == ICON_ARRIVED || (combined && next_state != NULL && next_state->icon == ICON_ARRIVED)) {
+            float pp = combined ? spatial_xfade() : 0.0f;
+            float ba = render_get_global_alpha();
+            if (s->icon == ICON_ARRIVED) {
+                render_set_global_alpha(ba * (1.0f - pp));
+                render_sprite_flag(g_arrive_flag_dx, g_arrive_flag_dy, ARRIVE_FLAG_SZ, (int)g_flag_frame);
+            }
+            if (combined && next_state != NULL && next_state->icon == ICON_ARRIVED) {
+                render_set_global_alpha(ba * pp);
+                render_sprite_flag(g_combined_flag_x, g_combined_flag_y, ARRIVE_FLAG_SZ, (int)g_flag_frame);
+            }
+            render_set_global_alpha(ba);
+        }
         rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
         if (g_route_debug)
             rpath_draw_debug(&g_route_path, g_t_tail, g_t_head);
@@ -2096,6 +2158,16 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
         rpath_set_arrow(&g_route_path, ax, ay, next_path.arrow_angle + rot);
         rpath_densify(&g_route_path);
 
+        /* Part B: spatial crossfade midpoint -- halfway between road zones */
+        {
+            float cur_zone_end = ROUTE_EXTEND + g_slug_override
+                               + maneuver_exit_road_reach(s);
+            float next_zone_start = g_route_path.total_length - ROUTE_EXTEND
+                                  - next_road_len
+                                  - maneuver_entry_road_reach(next_state);
+            g_xfade_mid_dist = 0.5f * (cur_zone_end + next_zone_start);
+        }
+
         /* Morph the visible blue body from the current maneuver window to the
          * committed next-maneuver window so the handoff lands on the exact
          * standalone next-state pose. */
@@ -2152,12 +2224,9 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
             g_route_path.bulb_radius = ARRIVE_INNER_R - OL_W;
         }
 
-        /* Crossfade: current roads fade out, next roads fade in simultaneously */
+        /* Crossfade: current roads fade out, next roads fade in (spatial) */
         {
-            float push_range = g_anim_target - g_anim_start;
-            float pp = (push_range > 0.01f) ? (g_route_slide - g_anim_start) / push_range : 1.0f;
-            if (pp < 0.0f) pp = 0.0f;
-            if (pp > 1.0f) pp = 1.0f;
+            float pp = spatial_xfade();
             float base_alpha = render_get_global_alpha();
 
             /* Pass 1: composite current maneuver roads (already in FBO) fading out */
@@ -2184,12 +2253,9 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
             render_set_global_alpha(base_alpha);
         }
 
-        /* Crossfade flags: current fades out, next fades in (same as roads) */
+        /* Crossfade flags: current fades out, next fades in (spatial) */
         {
-            float push_range = g_anim_target - g_anim_start;
-            float pp = (push_range > 0.01f) ? (g_route_slide - g_anim_start) / push_range : 1.0f;
-            if (pp < 0.0f) pp = 0.0f;
-            if (pp > 1.0f) pp = 1.0f;
+            float pp = spatial_xfade();
             float ba = render_get_global_alpha();
             if (s->icon == ICON_ARRIVED) {
                 render_set_global_alpha(ba * (1.0f - pp));
