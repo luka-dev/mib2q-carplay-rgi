@@ -284,9 +284,10 @@ static void emit_round_join(route_mesh_t *m,
     }
 }
 
-void rpath_extrude(const route_path_t *p, route_mesh_t *m,
-                   float width, float base_y, float top_y,
-                   float t0, float t1) {
+void rpath_extrude_partial(const route_path_t *p, route_mesh_t *m,
+                           float width, float base_y, float top_y,
+                           float t0, float t1,
+                           int cap_start, int cap_end, int tip_end) {
     m->vert_count = 0;
     m->valid = 0;
     if (p->pt_count < 2) return;
@@ -387,7 +388,7 @@ void rpath_extrude(const route_path_t *p, route_mesh_t *m,
         }
         for (j = 0; j < n_pts; j++) {
             float lift;
-            float d = e_dist[j];
+            float d = start_dist + e_dist[j];
 
             if (g_ramp_restart > 0.0f && d >= g_ramp_restart) {
                 /* Second maneuver: ramp from its own entry */
@@ -606,7 +607,7 @@ void rpath_extrude(const route_path_t *p, route_mesh_t *m,
     }
 
     /* Front cap (at path start — tail) */
-    {
+    if (cap_start) {
         float fnx = -dir_x[0], fnz = -dir_y[0];
         mesh_quad(m,
                   lx[0], e_base[0], ly[0],
@@ -617,7 +618,7 @@ void rpath_extrude(const route_path_t *p, route_mesh_t *m,
     }
 
     /* Back cap (at path end — head) */
-    {
+    if (cap_end) {
         int li = n_pts - 1;
         float fnx = dir_x[n_pts - 2], fnz = dir_y[n_pts - 2];
         mesh_quad(m,
@@ -630,7 +631,7 @@ void rpath_extrude(const route_path_t *p, route_mesh_t *m,
 
     /* Tip: blend between arrow prism (blend=0) and bulb disc (blend=1).
      * Uses head-vertex height for full elevation at the tip. */
-    {
+    if (tip_end) {
         float blend = p->tip_blend;
         if (blend < 0.0f) blend = 0.0f;
         if (blend > 1.0f) blend = 1.0f;
@@ -719,6 +720,13 @@ void rpath_extrude(const route_path_t *p, route_mesh_t *m,
     }
 
     m->valid = 1;
+}
+
+void rpath_extrude(const route_path_t *p, route_mesh_t *m,
+                   float width, float base_y, float top_y,
+                   float t0, float t1) {
+    rpath_extrude_partial(p, m, width, base_y, top_y,
+                          t0, t1, 1, 1, 1);
 }
 
 /* ================================================================

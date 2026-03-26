@@ -66,6 +66,10 @@ void rpath_set_arrow(route_path_t *p, float x, float y, float angle_rad);
 void rpath_extrude(const route_path_t *p, route_mesh_t *m,
                    float width, float base_y, float top_y,
                    float t0, float t1);
+void rpath_extrude_partial(const route_path_t *p, route_mesh_t *m,
+                           float width, float base_y, float top_y,
+                           float t0, float t1,
+                           int cap_start, int cap_end, int tip_end);
 void rpath_draw(const route_mesh_t *m,
                 float r, float g, float b, float a);
 

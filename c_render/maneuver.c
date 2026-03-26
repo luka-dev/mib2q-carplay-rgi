@@ -115,6 +115,7 @@
 static route_path_t g_route_path;
 static route_path_t g_saved_path;  /* push crossfade: avoids 8KB stack copy */
 static route_mesh_t g_route_mesh;
+static route_mesh_t g_route_tail_mesh;
 
 /* Route animation state -- sliding window */
 static float g_route_slide = 1.0f;     /* slide parameter 0..2 (0=hidden, 1=in position, 2=pushed out) */
@@ -160,6 +161,8 @@ static int   g_camera_prepared_this_frame = 0;
 #define ROUTE_SPEED_PEAK 0.045f         /* peak animation speed (NDC/frame on straight) */
 #define ROUTE_SPEED_MIN  0.010f         /* minimum speed on sharpest turns */
 #define ROUTE_EXTEND     0.5f           /* extension length beyond viewport */
+#define ROUTE_TAIL_FADE_DIST 0.35f      /* only the pre-extension section that is normally off-screen */
+#define ROUTE_TAIL_FADE_SLICES 24
 #define TRANSITION_PAD   0.15f          /* minimum clear road between maneuver road zones */
 #define XFADE_HALF       0.20f          /* spatial crossfade half-width in path distance */
 #define CURV_WINDOW      3              /* points each side for curvature sampling */
@@ -608,6 +611,12 @@ static float release_blend01(float t) {
     return t * t * (3.0f - 2.0f * t);
 }
 
+static float smooth01(float t) {
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
+    return t * t * (3.0f - 2.0f * t);
+}
+
 static float light_settle_curve(float t) {
     if (t < 0.0f) t = 0.0f;
     if (t > 1.0f) t = 1.0f;
@@ -845,7 +854,44 @@ static void route_extrude_body(void) {
 }
 
 /* Draw the route mesh. */
+static void route_draw_window(float t0, float t1, float alpha,
+                              int cap_start, int cap_end, int tip_end) {
+    if (alpha <= 0.001f || t1 - t0 <= 1e-5f)
+        return;
+
+    rpath_extrude_partial(&g_route_path, &g_route_tail_mesh, SHAFT_T,
+                          ROUTE_BASE_Y, ROUTE_TOP_Y, t0, t1,
+                          cap_start, cap_end, tip_end);
+    rpath_draw(&g_route_tail_mesh, AC_R, AC_G, AC_B, AC_A * alpha);
+}
+
 static void route_draw_with_fade(void) {
+    if (g_combined_window_active && g_route_path.total_length > 1e-6f) {
+        float fade_t = g_t_tail + (ROUTE_TAIL_FADE_DIST / g_route_path.total_length);
+        int i;
+
+        if (fade_t > g_t_head)
+            fade_t = g_t_head;
+
+        if (fade_t > g_t_tail + 1e-5f) {
+            for (i = 0; i < ROUTE_TAIL_FADE_SLICES; i++) {
+                float u0 = (float)i / (float)ROUTE_TAIL_FADE_SLICES;
+                float u1 = (float)(i + 1) / (float)ROUTE_TAIL_FADE_SLICES;
+                float seg_t0 = g_t_tail + (fade_t - g_t_tail) * u0;
+                float seg_t1 = g_t_tail + (fade_t - g_t_tail) * u1;
+                int final_tail_slice = (i == ROUTE_TAIL_FADE_SLICES - 1 && fade_t >= g_t_head - 1e-5f);
+
+                route_draw_window(seg_t0, seg_t1, smooth01(u1),
+                                  (i == 0), final_tail_slice, final_tail_slice);
+            }
+        }
+
+        if (fade_t < g_t_head - 1e-5f) {
+            route_draw_window(fade_t, g_t_head, 1.0f, 0, 1, 1);
+        }
+        return;
+    }
+
     rpath_draw(&g_route_mesh, AC_R, AC_G, AC_B, AC_A);
 }
 
