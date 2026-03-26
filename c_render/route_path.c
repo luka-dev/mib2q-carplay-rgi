@@ -374,21 +374,17 @@ void rpath_extrude(const route_path_t *p, route_mesh_t *m,
 
     if (n_pts < 2) return;
 
-    /* Per-vertex height ramp: progressive elevation from entry to head.
-     * No geometric fade at tail — tail alpha fade is handled by the caller. */
+    /* Per-vertex height ramp: progressive elevation from entry to head. */
     float e_dist[RPATH_MAX_PTS];   /* cumulative distance within window */
     float e_base[RPATH_MAX_PTS];   /* per-vertex base_y */
     float e_top[RPATH_MAX_PTS];    /* per-vertex top_y */
     {
         int j;
-        float window_len;
         e_dist[0] = 0.0f;
         for (j = 1; j < n_pts; j++) {
             float dx = epx[j] - epx[j-1], dy = epy[j] - epy[j-1];
             e_dist[j] = e_dist[j-1] + sqrtf(dx*dx + dy*dy);
         }
-        window_len = e_dist[n_pts - 1];
-        if (window_len < 1e-6f) window_len = 1e-6f;
         for (j = 0; j < n_pts; j++) {
             float lift;
             float d = e_dist[j];
@@ -801,7 +797,6 @@ void rpath_draw(const route_mesh_t *m,
         vb_reset();
         int batch = m->vert_count - drawn;
         if (batch > 1200) batch = 1200;
-        /* Ensure batch is multiple of 3 (triangles) */
         batch = (batch / 3) * 3;
         if (batch == 0) break;
 

@@ -816,7 +816,7 @@ static void compute_slide_params(void) {
         if (tail_dist > g_route_path.total_length) tail_dist = g_route_path.total_length;
         if (head_dist > g_route_path.total_length) head_dist = g_route_path.total_length;
 
-        (void)tail_dist;  /* tail always at 0 -- height ramp handles fade */
+        (void)tail_dist;
         g_t_tail = 0.0f;
         g_t_head = head_dist / g_route_path.total_length;
         return;
@@ -832,8 +832,7 @@ static void compute_slide_params(void) {
         slug_frac = g_route_end_frac - g_route_pre_frac;
 
     g_t_head = g_route_pre_frac + g_route_slide * slug_frac;
-    /* Tail always starts at 0 -- the height ramp in rpath_extrude fades it
-     * smoothly to ground level so there's never a hard cut visible. */
+    /* Tail stays at the path start; route visibility is driven by head only. */
     g_t_tail = 0.0f;
     /* Clamp to valid range -- push-out moves head forward */
     if (g_t_head > 1.0f) g_t_head = 1.0f;
