@@ -81,9 +81,9 @@ void rpath_xform_append(route_path_t *dst, const route_path_t *src,
  * Pass -1 for standalone (single maneuver) paths. */
 void rpath_set_ramp_restart(float d);
 
-/* Elevation: 0 = flat, 1.0 = 2x height at head (overpass effect).
- * Only needed when path self-overlaps (U-turns, 360 roundabouts). */
-void rpath_set_elevation(float scale);
+/* Elevation lift in world units added to both base and top at the head.
+ * Road thickness stays constant; the whole cross-section rises. 0 = flat. */
+void rpath_set_elevation(float lift);
 
 /* Debug overlay -- draws polyline with active window highlighted. */
 void rpath_draw_debug(const route_path_t *p, float t0, float t1);

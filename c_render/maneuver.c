@@ -739,21 +739,24 @@ static void update_combined_camera(void) {
 }
 
 /* Check if a maneuver needs elevation (path overlaps itself).
- * Roundabout exit_angle: 0=straight, ±90=side, ±180=U-turn through ring.
- * |angle|>120 means >270° arc sweep → exit stub near entry stub. */
+ * Returns lift in world units (0 = flat). Road thickness is 0.03,
+ * so 0.06 lift clears the road below with a gap.
+ * Roundabout: |exit_angle|>150 means exit stub near entry stub.
+ * Turn: |exit_angle|>150 means near-U-turn. */
+#define ELEV_LIFT 0.06f
 static float maneuver_elevation(const maneuver_state_t *s) {
     if (!s) return 0.0f;
     switch (s->icon) {
     case ICON_ROUNDABOUT: {
         int a = s->exit_angle;
         if (a < 0) a = -a;
-        if (a > 120) return 1.0f;
+        if (a > 150) return ELEV_LIFT;
         return 0.0f;
     }
     case ICON_TURN: {
         int a = s->exit_angle;
         if (a < 0) a = -a;
-        if (a > 150) return 1.0f;
+        if (a > 150) return ELEV_LIFT;
         return 0.0f;
     }
     default:

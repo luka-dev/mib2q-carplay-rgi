@@ -35,11 +35,12 @@
  * - Pre-extension (0.35..0.50): flat at 1x nominal height. */
 #define HEIGHT_ENTRY_DIST  0.50f   /* maneuver entry = ROUTE_EXTEND from path start */
 #define HEIGHT_RAMP_DIST   1.5f    /* fixed distance over which ramp reaches max */
-/* Runtime elevation scale: 0 = flat, 1.0 = 2x height at head. */
-static float g_ramp_scale = 0.0f;
+/* Runtime elevation lift: additive height at the head of the ramp.
+ * Both base and top rise equally, keeping road thickness constant. */
+static float g_ramp_lift = 0.0f;
 
-void rpath_set_elevation(float scale) {
-    g_ramp_scale = scale;
+void rpath_set_elevation(float lift) {
+    g_ramp_lift = lift;
 }
 
 /* Ramp restart: distance on the combined path where the second maneuver
@@ -387,48 +388,48 @@ void rpath_extrude(const route_path_t *p, route_mesh_t *m,
         window_len = e_dist[n_pts - 1];
         if (window_len < 1e-6f) window_len = 1e-6f;
         for (j = 0; j < n_pts; j++) {
-            float scale;
+            float lift;
             float d = e_dist[j];
 
             if (g_ramp_restart > 0.0f && d >= g_ramp_restart) {
                 /* Second maneuver: ramp from its own entry */
                 float local_entry = g_ramp_restart + HEIGHT_ENTRY_DIST;
                 if (d < local_entry) {
-                    scale = 1.0f;
+                    lift = 0.0f;
                 } else {
                     float ramp_f = (d - local_entry) / HEIGHT_RAMP_DIST;
                     if (ramp_f > 1.0f) ramp_f = 1.0f;
-                    scale = 1.0f + ramp_f * g_ramp_scale;
+                    lift = ramp_f * g_ramp_lift;
                 }
             } else if (g_ramp_restart > 0.0f
                        && d > g_ramp_restart - HEIGHT_ENTRY_DIST) {
-                /* Blend zone: smoothly drop from first ramp to 1.0.
+                /* Blend zone: smoothly drop from first ramp to zero.
                  * Covers the post-extension of current maneuver. */
-                float first_scale;
+                float first_lift;
                 float rf = (d - HEIGHT_ENTRY_DIST) / HEIGHT_RAMP_DIST;
                 if (rf > 1.0f) rf = 1.0f;
                 if (rf < 0.0f) rf = 0.0f;
-                first_scale = 1.0f + rf * g_ramp_scale;
+                first_lift = rf * g_ramp_lift;
 
                 float blend_start = g_ramp_restart - HEIGHT_ENTRY_DIST;
-                float blend_len = HEIGHT_ENTRY_DIST;  /* blend over 0.5 units */
+                float blend_len = HEIGHT_ENTRY_DIST;
                 float bt = (d - blend_start) / blend_len;
                 if (bt < 0.0f) bt = 0.0f;
                 if (bt > 1.0f) bt = 1.0f;
                 bt = bt * bt * (3.0f - 2.0f * bt);  /* smoothstep */
-                scale = first_scale * (1.0f - bt) + 1.0f * bt;
+                lift = first_lift * (1.0f - bt);
             } else {
                 /* First maneuver: ramp from entry */
                 if (d < HEIGHT_ENTRY_DIST) {
-                    scale = 1.0f;
+                    lift = 0.0f;
                 } else {
                     float ramp_f = (d - HEIGHT_ENTRY_DIST) / HEIGHT_RAMP_DIST;
                     if (ramp_f > 1.0f) ramp_f = 1.0f;
-                    scale = 1.0f + ramp_f * g_ramp_scale;
+                    lift = ramp_f * g_ramp_lift;
                 }
             }
-            e_base[j] = base_y * scale;
-            e_top[j]  = top_y  * scale;
+            e_base[j] = base_y + lift;
+            e_top[j]  = top_y  + lift;
         }
     }
 
@@ -657,8 +658,8 @@ void rpath_extrude(const route_path_t *p, route_mesh_t *m,
             float arrow_size = width * 1.3f * s;
             float tip_x = ax + arrow_size * cosf(a_dir);
             float tip_z = az + arrow_size * sinf(a_dir);
-            float perp_ax = -sinf(a_dir) * hw * 1.5f * s;
-            float perp_az =  cosf(a_dir) * hw * 1.5f * s;
+            float perp_ax = -sinf(a_dir) * hw * 1.536f * s;
+            float perp_az =  cosf(a_dir) * hw * 1.536f * s;
             float bl_x = ax + perp_ax, bl_z = az + perp_az;
             float br_x = ax - perp_ax, br_z = az - perp_az;
 
