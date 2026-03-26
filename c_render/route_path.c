@@ -35,12 +35,14 @@
  * - Pre-extension (0.35..0.50): flat at 1x nominal height. */
 #define HEIGHT_ENTRY_DIST  0.50f   /* maneuver entry = ROUTE_EXTEND from path start */
 #define HEIGHT_RAMP_DIST   1.5f    /* fixed distance over which ramp reaches max */
-/* Runtime elevation lift: additive height at the head of the ramp.
- * Both base and top rise equally, keeping road thickness constant. */
-static float g_ramp_lift = 0.0f;
+/* Per-maneuver elevation lifts (world units added to base+top).
+ * On combined paths, first/second can differ. Standalone: use first. */
+static float g_ramp_lift_current = 0.0f;
+static float g_ramp_lift_next = 0.0f;
 
-void rpath_set_elevation(float lift) {
-    g_ramp_lift = lift;
+void rpath_set_elevation(float first, float second) {
+    g_ramp_lift_current = first;
+    g_ramp_lift_next = second;
 }
 
 /* Ramp restart: distance on the combined path where the second maneuver
@@ -399,7 +401,7 @@ void rpath_extrude(const route_path_t *p, route_mesh_t *m,
                 } else {
                     float ramp_f = (d - local_entry) / HEIGHT_RAMP_DIST;
                     if (ramp_f > 1.0f) ramp_f = 1.0f;
-                    lift = ramp_f * g_ramp_lift;
+                    lift = ramp_f * g_ramp_lift_next;
                 }
             } else if (g_ramp_restart > 0.0f
                        && d > g_ramp_restart - HEIGHT_ENTRY_DIST) {
@@ -409,7 +411,7 @@ void rpath_extrude(const route_path_t *p, route_mesh_t *m,
                 float rf = (d - HEIGHT_ENTRY_DIST) / HEIGHT_RAMP_DIST;
                 if (rf > 1.0f) rf = 1.0f;
                 if (rf < 0.0f) rf = 0.0f;
-                first_lift = rf * g_ramp_lift;
+                first_lift = rf * g_ramp_lift_current;
 
                 float blend_start = g_ramp_restart - HEIGHT_ENTRY_DIST;
                 float blend_len = HEIGHT_ENTRY_DIST;
@@ -425,7 +427,7 @@ void rpath_extrude(const route_path_t *p, route_mesh_t *m,
                 } else {
                     float ramp_f = (d - HEIGHT_ENTRY_DIST) / HEIGHT_RAMP_DIST;
                     if (ramp_f > 1.0f) ramp_f = 1.0f;
-                    lift = ramp_f * g_ramp_lift;
+                    lift = ramp_f * g_ramp_lift_current;
                 }
             }
             e_base[j] = base_y + lift;

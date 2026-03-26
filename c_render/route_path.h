@@ -81,9 +81,10 @@ void rpath_xform_append(route_path_t *dst, const route_path_t *src,
  * Pass -1 for standalone (single maneuver) paths. */
 void rpath_set_ramp_restart(float d);
 
-/* Elevation lift in world units added to both base and top at the head.
- * Road thickness stays constant; the whole cross-section rises. 0 = flat. */
-void rpath_set_elevation(float lift);
+/* Per-maneuver elevation lift (world units added to base+top at head).
+ * Road thickness constant; whole cross-section rises. 0 = flat.
+ * On combined paths first/second can differ. Standalone: pass same for both. */
+void rpath_set_elevation(float first, float second);
 
 /* Debug overlay -- draws polyline with active window highlighted. */
 void rpath_draw_debug(const route_path_t *p, float t0, float t1);
