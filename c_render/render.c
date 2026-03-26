@@ -208,6 +208,7 @@ static GLuint g_fbo_texs[FBO_COUNT];
 static GLuint g_fbo_depths[FBO_COUNT];
 static int g_fbo_w = 0, g_fbo_h = 0;
 static GLint g_default_fbo = 0;  /* saved at init -- may not be 0 on macOS */
+static int g_route_mask_ready = 0;
 
 /* 2x supersample FBO — render at double resolution, blit down with GL_LINEAR */
 #ifdef PLATFORM_MACOS
@@ -687,11 +688,17 @@ static void fbos_init(int w, int h) {
         GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
         if (status != GL_FRAMEBUFFER_COMPLETE)
             fprintf(stderr, "render: FBO[%d] incomplete (0x%x)\n", i, status);
+
+        /* Make initial contents deterministic even if a given mask is never rendered. */
+        glViewport(0, 0, g_fbo_w, g_fbo_h);
+        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     }
 
     glBindTexture(GL_TEXTURE_2D, 0);
     glBindRenderbuffer(GL_RENDERBUFFER, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    g_route_mask_ready = 0;
     fprintf(stderr, "render: %d FBOs init %dx%d (mask half extents %.2f x %.2f)\n",
             FBO_COUNT, g_fbo_w, g_fbo_h, g_mask_half_w, g_mask_half_h);
 }
@@ -701,6 +708,7 @@ static void fbos_shutdown(void) {
     if (g_fbo_texs[0]) { glDeleteTextures(FBO_COUNT, g_fbo_texs); memset(g_fbo_texs, 0, sizeof(g_fbo_texs)); }
     if (g_fbo_depths[0]) { glDeleteRenderbuffers(FBO_COUNT, g_fbo_depths); memset(g_fbo_depths, 0, sizeof(g_fbo_depths)); }
     g_fbo_w = g_fbo_h = 0;
+    g_route_mask_ready = 0;
 }
 
 
@@ -1043,20 +1051,36 @@ float render_get_global_alpha(void) {
 
 void render_bargraph(int level, float alpha) {
     /* 16 bars, full height, shifted down by half a cell as top padding.
-     * Original proportions: 7px bar, 2px gap, 14px wide. Scale to fill height. */
+     * Original proportions: 7px bar, 2px gap, 14px wide. Scale against the
+     * active output size so the overlay stays pixel-correct on the widget. */
     const int   N_BARS = 16;
-    const float PX     = 2.0f / 640.0f;
-    const float PY     = 2.0f / 400.0f;
     const float MARGIN = 10.0f;           /* px from edge */
-    /* Original: 16*7 + 15*2 = 142px tall. Scale factor to fill 400-2*margin = 380px */
-    const float SCALE  = (400.0f - 2.0f * MARGIN) / 142.0f;
-    const float BAR_W  = 14.0f * SCALE * PX;
-    const float BAR_H  =  7.0f * SCALE * PY;
-    const float GAP    =  2.0f * SCALE * PY;
+    const float design_w = 14.0f;
+    const float design_h = 7.0f;
+    const float design_gap = 2.0f;
+    const float design_total_h = N_BARS * design_h + (N_BARS - 1) * design_gap;
+    float fb_w = (g_win_w > 0) ? (float)g_win_w : (float)CR_DEFAULT_WIDTH;
+    float fb_h = (g_win_h > 0) ? (float)g_win_h : (float)CR_DEFAULT_HEIGHT;
+    float px = 2.0f / fb_w;
+    float py = 2.0f / fb_h;
+    float available_h = fb_h - 2.0f * MARGIN;
+    float scale;
+    float bar_w;
+    float bar_h;
+    float gap;
+    float bar_x;
+
+    if (available_h < 1.0f)
+        available_h = 1.0f;
+    scale = available_h / design_total_h;
+    bar_w = design_w * scale * px;
+    bar_h = design_h * scale * py;
+    gap   = design_gap * scale * py;
     /* Bargraph at sidescreen right edge (cropped in popup — acceptable). */
-    const float BAR_X = 1.0f - MARGIN * PX - BAR_W;
-    float total_h = N_BARS * BAR_H + (N_BARS - 1) * GAP;
-    float top_pad = (BAR_H + GAP) * 0.5f;  /* half a cell padding from top */
+    bar_x = 1.0f - MARGIN * px - bar_w;
+
+    float total_h = N_BARS * bar_h + (N_BARS - 1) * gap;
+    float top_pad = (bar_h + gap) * 0.5f;  /* half a cell padding from top */
     float base_y  = -total_h * 0.5f - top_pad;
     float identity[16];
     int i;
@@ -1075,19 +1099,19 @@ void render_bargraph(int level, float alpha) {
      * Bars drawn bottom (i=0) to top (i=15).
      * Top bars blue, bottom bars grey — fills from top down. */
     for (i = 0; i < N_BARS; i++) {
-        float y = base_y + i * (BAR_H + GAP);
+        float y = base_y + i * (bar_h + gap);
         float r, g, b;
         int bar_idx = N_BARS - 1 - i;  /* top bar = idx 0 */
         if (bar_idx < level) { r = 90.0f/255.0f; g = 170.0f/255.0f; b = 230.0f/255.0f; }
         else                 { r = 100.0f/255.0f; g = 100.0f/255.0f; b = 100.0f/255.0f; }
         glUniform4f(g_uni_color, r, g, b, alpha);
         vb_reset();
-        vb_v(BAR_X,         y,         0, 0,0,1);
-        vb_v(BAR_X + BAR_W, y,         0, 0,0,1);
-        vb_v(BAR_X + BAR_W, y + BAR_H, 0, 0,0,1);
-        vb_v(BAR_X,         y,         0, 0,0,1);
-        vb_v(BAR_X + BAR_W, y + BAR_H, 0, 0,0,1);
-        vb_v(BAR_X,         y + BAR_H, 0, 0,0,1);
+        vb_v(bar_x,         y,         0, 0,0,1);
+        vb_v(bar_x + bar_w, y,         0, 0,0,1);
+        vb_v(bar_x + bar_w, y + bar_h, 0, 0,0,1);
+        vb_v(bar_x,         y,         0, 0,0,1);
+        vb_v(bar_x + bar_w, y + bar_h, 0, 0,0,1);
+        vb_v(bar_x,         y + bar_h, 0, 0,0,1);
         glVertexAttribPointer(g_attr_pos,  3, GL_FLOAT, GL_FALSE, 24, g_vbuf);
         glVertexAttribPointer(g_attr_norm, 3, GL_FLOAT, GL_FALSE, 24, g_vbuf + 3);
         glEnableVertexAttribArray(g_attr_pos);
@@ -1287,6 +1311,7 @@ void render_set_material(render_material_t material) {
 
 void render_invalidate_masks(void) {
     g_masks_dirty = 1;
+    g_route_mask_ready = 0;
 }
 
 int render_masks_dirty(void) {
@@ -1532,7 +1557,10 @@ void render_end_outline_mask(void)   { end_mask(); }
 void render_begin_fill_mask(void) { resume_mask(FBO_ROAD); }
 void render_end_fill_mask(void)   { end_mask(); }
 
-void render_begin_route_mask(void) { begin_mask(FBO_ROUTE); }
+void render_begin_route_mask(void) {
+    g_route_mask_ready = 1;
+    begin_mask(FBO_ROUTE);
+}
 void render_end_route_mask(void)   { end_mask(); }
 
 /* ================================================================
@@ -1594,8 +1622,10 @@ void render_composite(void) {
      * grey fill gets asphalt-like shading, all with one material preset. */
     composite_layer_ex(FBO_ROAD, 0.0f, RENDER_MAT_ROAD_ASPHALT, 7.0f);
 
-    /* Layer 2: Route shadow on road surface (offset route mask, dark) */
-    {
+    /* Layer 2: Route shadow on road surface. Only sample the route mask when it
+     * was actually rendered; otherwise skip the pass instead of reading an
+     * uninitialized texture. */
+    if (g_route_mask_ready) {
         float gx = g_mask_half_w * 3.0f, gz = g_mask_half_h * 3.0f;
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, g_fbo_texs[FBO_ROUTE]);

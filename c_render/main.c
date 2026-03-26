@@ -484,9 +484,18 @@ int main(int argc, char **argv) {
         {
             static int watchdog_frames = 0;
             if (++watchdog_frames >= TARGET_FPS * 5) {  /* every 5 seconds */
+                int display_id = CR_DISPLAY_ID;
+                int context_id = CR_CONTEXT_ID;
+                int displayable_id = CR_DISPLAYABLE_ID;
+                char cmd[128];
+
                 watchdog_frames = 0;
                 /* Re-declare context composition (idempotent if already correct) */
-                system("/eso/bin/apps/dmdt dc 74 20 102 101 33 >/dev/null 2>&1");
+                platform_get_routing_ids(&display_id, &context_id, &displayable_id);
+                snprintf(cmd, sizeof(cmd),
+                         "/eso/bin/apps/dmdt dc %d %d 102 101 33 >/dev/null 2>&1",
+                         context_id, displayable_id);
+                system(cmd);
             }
         }
 #endif

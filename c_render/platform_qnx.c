@@ -295,6 +295,12 @@ void platform_get_framebuffer_size(int *width, int *height) {
     *height = g_height;
 }
 
+void platform_get_routing_ids(int *display_id, int *context_id, int *displayable_id) {
+    if (display_id) *display_id = g_display_id;
+    if (context_id) *context_id = g_context_id;
+    if (displayable_id) *displayable_id = g_displayable_id;
+}
+
 int platform_key_tap(int key) {
     (void)key;
     return 0;

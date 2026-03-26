@@ -28,6 +28,10 @@ void platform_shutdown(void);
 /* Get actual framebuffer size (may differ from window size on HiDPI). */
 void platform_get_framebuffer_size(int *width, int *height);
 
+/* Get the active routing IDs used by the platform backend.
+ * On macOS this returns the protocol defaults. */
+void platform_get_routing_ids(int *display_id, int *context_id, int *displayable_id);
+
 /* Key codes for test navigation */
 #define CR_KEY_LEFT   0
 #define CR_KEY_RIGHT  1

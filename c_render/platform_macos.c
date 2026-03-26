@@ -11,6 +11,7 @@
 #include <GLFW/glfw3.h>
 
 #include "platform.h"
+#include "protocol.h"
 
 static GLFWwindow *g_window = NULL;
 
@@ -107,6 +108,12 @@ void platform_shutdown(void) {
 void platform_get_framebuffer_size(int *width, int *height) {
     if (g_window)
         glfwGetFramebufferSize(g_window, width, height);
+}
+
+void platform_get_routing_ids(int *display_id, int *context_id, int *displayable_id) {
+    if (display_id) *display_id = CR_DISPLAY_ID;
+    if (context_id) *context_id = CR_CONTEXT_ID;
+    if (displayable_id) *displayable_id = CR_DISPLAYABLE_ID;
 }
 
 int platform_key_tap(int key) {
