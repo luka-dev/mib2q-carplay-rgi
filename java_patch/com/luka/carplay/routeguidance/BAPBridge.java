@@ -1454,9 +1454,16 @@ public class BAPBridge {
 
             /* Skip if icon hasn't actually changed.
              * Slot version (mVer) detects maneuver transitions even when
-             * type/angle are identical (e.g., consecutive left turns). */
+             * type/angle are identical (e.g., consecutive left turns).
+             * Exception: ARRIVED — iOS re-sends while parking; ignore version
+             * to avoid re-triggering the animation. */
             int ver = s.mVer[firstIdx];
-            if (icon == lastCrIcon && direction == lastCrDirection
+            if (icon == RendererMapper.ICON_ARRIVED) {
+                if (icon == lastCrIcon && direction == lastCrDirection
+                        && exitAngle == lastCrExitAngle && drivingSide == lastCrDrivingSide) {
+                    return false;
+                }
+            } else if (icon == lastCrIcon && direction == lastCrDirection
                     && exitAngle == lastCrExitAngle && drivingSide == lastCrDrivingSide
                     && ver == lastCrVer) {
                 return false;
