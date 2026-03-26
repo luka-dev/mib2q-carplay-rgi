@@ -1372,7 +1372,7 @@ int render_get_flag_frame_count(void) {
     return g_flag_frame_count;
 }
 
-void render_sprite_flag(float x, float y, float size, int frame) {
+void render_sprite_flag_ex(float x, float y, float size, int frame, int flip_x) {
     /* Vertical billboard quad anchored at pole base.
      * Pole base in sprite UV: u=0.22, v=0.88 (from top).
      * Quad = full sprite (size*2 x size*2), offset so pole base = (x, 0, y). */
@@ -1380,8 +1380,9 @@ void render_sprite_flag(float x, float y, float size, int frame) {
     float sprite_h = size * 2.0f;
     float pole_u = 0.22f;     /* pole base X fraction in sprite */
     float pole_v_top = 0.88f; /* pole base Y fraction from top */
+    float anchor_u = flip_x ? (1.0f - pole_u) : pole_u;
 
-    float fx0 = x - pole_u * sprite_w;
+    float fx0 = x - anchor_u * sprite_w;
     float fx1 = fx0 + sprite_w;
     float z = y;              /* maneuver y -> world z (depth) */
 
@@ -1416,6 +1417,8 @@ void render_sprite_flag(float x, float y, float size, int frame) {
 
         float u0 = (float)frame / (float)g_flag_frame_count;
         float u1 = (float)(frame + 1) / (float)g_flag_frame_count;
+        float ul = flip_x ? u1 : u0;
+        float ur = flip_x ? u0 : u1;
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, g_flag_tex);
@@ -1423,12 +1426,12 @@ void render_sprite_flag(float x, float y, float size, int frame) {
         glUniform1f(g_uni_tex_mode, 4.0f);
 
         vb_reset();
-        vb_v(fx0, bot_y, bot_z,  u0, 1.0f, 0);
-        vb_v(fx1, bot_y, bot_z,  u1, 1.0f, 0);
-        vb_v(fx1, top_y, top_z,  u1, 0.0f, 0);
-        vb_v(fx0, bot_y, bot_z,  u0, 1.0f, 0);
-        vb_v(fx1, top_y, top_z,  u1, 0.0f, 0);
-        vb_v(fx0, top_y, top_z,  u0, 0.0f, 0);
+        vb_v(fx0, bot_y, bot_z,  ul, 1.0f, 0);
+        vb_v(fx1, bot_y, bot_z,  ur, 1.0f, 0);
+        vb_v(fx1, top_y, top_z,  ur, 0.0f, 0);
+        vb_v(fx0, bot_y, bot_z,  ul, 1.0f, 0);
+        vb_v(fx1, top_y, top_z,  ur, 0.0f, 0);
+        vb_v(fx0, top_y, top_z,  ul, 0.0f, 0);
 
         glUniform4f(g_uni_color, 1.0f, 1.0f, 1.0f, 1.0f);
         glUniform1f(g_uni_zbias, 0.0f);
@@ -1453,6 +1456,10 @@ void render_sprite_flag(float x, float y, float size, int frame) {
 
     glEnable(GL_DEPTH_TEST);
     glUniform1f(g_uni_tex_mode, 0.0f);
+}
+
+void render_sprite_flag(float x, float y, float size, int frame) {
+    render_sprite_flag_ex(x, y, size, frame, 0);
 }
 
 void render_shutdown(void) {

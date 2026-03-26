@@ -1882,6 +1882,7 @@ static float g_arrive_flag_dx = 0.0f;  /* cached flag X on outer circle */
 static float g_arrive_flag_dy = 0.0f;  /* cached flag Y on outer circle */
 static float g_combined_flag_x = 0.0f; /* flag position in combined path space */
 static float g_combined_flag_y = 0.0f;
+static int   g_combined_flag_flip_x = 0;
 
 static void draw_arrived(int dir) {
     /* Concentric circle destination marker (matches stock HUD icon):
@@ -2053,6 +2054,7 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
     if (!g_flag_active) {
         g_combined_flag_x = 0.0f;
         g_combined_flag_y = 0.0f;
+        g_combined_flag_flip_x = 0;
     }
 
     /* Advance flag animation */
@@ -2163,7 +2165,8 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
             }
             if (combined && next_state != NULL && next_state->icon == ICON_ARRIVED) {
                 render_set_global_alpha(ba * pp);
-                render_sprite_flag(g_combined_flag_x, g_combined_flag_y, ARRIVE_FLAG_SZ, (int)g_flag_frame);
+                render_sprite_flag_ex(g_combined_flag_x, g_combined_flag_y, ARRIVE_FLAG_SZ,
+                                      (int)g_flag_frame, g_combined_flag_flip_x);
             }
             render_set_global_alpha(ba);
         }
@@ -2239,6 +2242,13 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
             }
             g_combined_flag_x = cos_r * nfx - sin_r * nfy + tx;
             g_combined_flag_y = sin_r * nfx + cos_r * nfy + ty;
+            /* During combined handoff the ARRIVED marker can be rotated nearly
+             * 180 degrees. Mirror the sprite UVs when the local X axis points
+             * left in world space so the flag keeps the same visual handedness
+             * as standalone ARRIVED after commit. */
+            g_combined_flag_flip_x = (cos_r < 0.0f);
+        } else {
+            g_combined_flag_flip_x = 0;
         }
 
         /* Set ramp restart at boundary where next maneuver's path begins.
@@ -2362,7 +2372,8 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
             }
             if (next_state->icon == ICON_ARRIVED) {
                 render_set_global_alpha(ba * pp);
-                render_sprite_flag(g_combined_flag_x, g_combined_flag_y, ARRIVE_FLAG_SZ, (int)g_flag_frame);
+                render_sprite_flag_ex(g_combined_flag_x, g_combined_flag_y, ARRIVE_FLAG_SZ,
+                                      (int)g_flag_frame, g_combined_flag_flip_x);
             }
             render_set_global_alpha(ba);
         }

@@ -158,6 +158,7 @@ int render_get_flag_frame_count(void);
  * size = half-extent in maneuver space.
  * frame = animation frame index (0..frame_count-1). */
 void render_sprite_flag(float x, float y, float size, int frame);
+void render_sprite_flag_ex(float x, float y, float size, int frame, int flip_x);
 
 /* ================================================================
  * Vertex buffer -- exposed for route_path.c mesh drawing
