@@ -161,6 +161,8 @@ All classes are compiled with `-source 1.2 -target 1.2` for MU1316 JVM compatibi
 
 ## Testing the Renderer
 
+https://github.com/luka-dev/mib2q-carplay-rgi/raw/main/docs/test_manuver_render.mov
+
 The macOS build includes a **test harness** (`c_render/test_harness`) that sends TCP commands to the renderer, letting you cycle through all maneuver types and verify animations without a real device.
 
 Run both in parallel:
