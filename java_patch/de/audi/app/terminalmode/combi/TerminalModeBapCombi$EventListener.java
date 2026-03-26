@@ -32,6 +32,7 @@ class TerminalModeBapCombi$EventListener extends DefaultEventListener implements
     private volatile String currentArtist = "";
     private volatile String currentAlbum = "";
     private volatile boolean sentWithoutCover = false;
+    private volatile boolean pendingCoverRetry = false;
 
     private TerminalModeBapCombi$EventListener(TerminalModeBapCombi outer) {
         this.this$0 = outer;
@@ -120,6 +121,21 @@ class TerminalModeBapCombi$EventListener extends DefaultEventListener implements
         CombiBAPServiceTerminalMode bapService = getBapService();
         if (bapService == null) return;
 
+        /* Retry cover art send that failed during early startup (bapService was null) */
+        if (pendingCoverRetry) {
+            pendingCoverRetry = false;
+            CoverArt ca = CoverArt.getInstance();
+            if (currentTitle.length() > 0 || currentArtist.length() > 0 || currentAlbum.length() > 0) {
+                if (ca.hasCoverArt()) {
+                    Log.i(TAG, "Retrying cover art send");
+                    sendNowPlaying(currentTitle, currentArtist, currentAlbum, ca.getPath(), ca.getArtId());
+                } else {
+                    sendNowPlaying(currentTitle, currentArtist, currentAlbum, null, 0);
+                    sentWithoutCover = true;
+                }
+            }
+        }
+
         if (position.getTotalTimeOfTrack() == 0) {
             bapService.updatePlayPosition(
                 PlayPosition.builder()
@@ -144,7 +160,8 @@ class TerminalModeBapCombi$EventListener extends DefaultEventListener implements
     private void sendNowPlaying(String title, String artist, String album, String coverPath, int coverId) {
         CombiBAPServiceTerminalMode bapService = getBapService();
         if (bapService == null) {
-            Log.w(TAG, "No BAP service");
+            Log.w(TAG, "No BAP service - queuing retry");
+            pendingCoverRetry = true;
             return;
         }
 

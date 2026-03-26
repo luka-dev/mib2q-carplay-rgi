@@ -738,6 +738,29 @@ static void update_combined_camera(void) {
     }
 }
 
+/* Check if a maneuver needs elevation (path overlaps itself).
+ * Roundabout exit_angle: 0=straight, ±90=side, ±180=U-turn through ring.
+ * |angle|>120 means >270° arc sweep → exit stub near entry stub. */
+static float maneuver_elevation(const maneuver_state_t *s) {
+    if (!s) return 0.0f;
+    switch (s->icon) {
+    case ICON_ROUNDABOUT: {
+        int a = s->exit_angle;
+        if (a < 0) a = -a;
+        if (a > 120) return 1.0f;
+        return 0.0f;
+    }
+    case ICON_TURN: {
+        int a = s->exit_angle;
+        if (a < 0) a = -a;
+        if (a > 150) return 1.0f;
+        return 0.0f;
+    }
+    default:
+        return 0.0f;
+    }
+}
+
 void maneuver_prepare_frame(const maneuver_state_t *s, const maneuver_state_t *next_state) {
     int combined = (next_state != NULL && maneuver_is_pushing());
 
@@ -757,6 +780,7 @@ void maneuver_prepare_frame(const maneuver_state_t *s, const maneuver_state_t *n
             render_set_light_rotation(0.0f);
         /* Standalone: no ramp restart */
         rpath_set_ramp_restart(-1.0f);
+        rpath_set_elevation(maneuver_elevation(s));
         g_camera_prepared_this_frame = 1;
     }
 
@@ -2170,8 +2194,14 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
         }
 
         /* Set ramp restart at boundary where next maneuver's path begins.
-         * Current extended path length = slug + 2*ROUTE_EXTEND. */
+         * Current extended path length = slug + 2*ROUTE_EXTEND.
+         * Elevation = max of current and next (either may self-overlap). */
         rpath_set_ramp_restart(g_slug_override + 2.0f * ROUTE_EXTEND);
+        {
+            float ec = maneuver_elevation(s);
+            float en = maneuver_elevation(next_state);
+            rpath_set_elevation(ec > en ? ec : en);
+        }
         rpath_xform_append(&g_route_path, &next_path, tx, ty, cos_r, sin_r, rot);
         float ax = cos_r * next_path.arrow_x - sin_r * next_path.arrow_y + tx;
         float ay = sin_r * next_path.arrow_x + cos_r * next_path.arrow_y + ty;

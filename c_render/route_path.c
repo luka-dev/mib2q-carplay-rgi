@@ -35,7 +35,12 @@
  * - Pre-extension (0.35..0.50): flat at 1x nominal height. */
 #define HEIGHT_ENTRY_DIST  0.50f   /* maneuver entry = ROUTE_EXTEND from path start */
 #define HEIGHT_RAMP_DIST   1.5f    /* fixed distance over which ramp reaches max */
-#define HEIGHT_RAMP_SCALE  1.0f    /* extra multiplier at max: 1x→(1+SCALE)x = 2x */
+/* Runtime elevation scale: 0 = flat, 1.0 = 2x height at head. */
+static float g_ramp_scale = 0.0f;
+
+void rpath_set_elevation(float scale) {
+    g_ramp_scale = scale;
+}
 
 /* Ramp restart: distance on the combined path where the second maneuver
  * begins.  Each maneuver gets its own independent ramp from its own entry.
@@ -393,7 +398,7 @@ void rpath_extrude(const route_path_t *p, route_mesh_t *m,
                 } else {
                     float ramp_f = (d - local_entry) / HEIGHT_RAMP_DIST;
                     if (ramp_f > 1.0f) ramp_f = 1.0f;
-                    scale = 1.0f + ramp_f * HEIGHT_RAMP_SCALE;
+                    scale = 1.0f + ramp_f * g_ramp_scale;
                 }
             } else if (g_ramp_restart > 0.0f
                        && d > g_ramp_restart - HEIGHT_ENTRY_DIST) {
@@ -403,7 +408,7 @@ void rpath_extrude(const route_path_t *p, route_mesh_t *m,
                 float rf = (d - HEIGHT_ENTRY_DIST) / HEIGHT_RAMP_DIST;
                 if (rf > 1.0f) rf = 1.0f;
                 if (rf < 0.0f) rf = 0.0f;
-                first_scale = 1.0f + rf * HEIGHT_RAMP_SCALE;
+                first_scale = 1.0f + rf * g_ramp_scale;
 
                 float blend_start = g_ramp_restart - HEIGHT_ENTRY_DIST;
                 float blend_len = HEIGHT_ENTRY_DIST;  /* blend over 0.5 units */
@@ -419,7 +424,7 @@ void rpath_extrude(const route_path_t *p, route_mesh_t *m,
                 } else {
                     float ramp_f = (d - HEIGHT_ENTRY_DIST) / HEIGHT_RAMP_DIST;
                     if (ramp_f > 1.0f) ramp_f = 1.0f;
-                    scale = 1.0f + ramp_f * HEIGHT_RAMP_SCALE;
+                    scale = 1.0f + ramp_f * g_ramp_scale;
                 }
             }
             e_base[j] = base_y * scale;
