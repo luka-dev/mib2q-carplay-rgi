@@ -201,14 +201,11 @@ public class ManeuverMapper {
             direction = DIR_STRAIGHT;
             return new int[] { mainElement, direction };
         }
-        if (maneuverType == MT_START_ROUTE) {
-            mainElement = FOLLOW_STREET;
-            direction = DIR_STRAIGHT;
-            return new int[] { mainElement, direction };
-        }
-        if (maneuverType == MT_EXIT_FERRY || maneuverType == MT_CHANGE_HIGHWAY) {
-            mainElement = FOLLOW_STREET;
-            direction = DIR_STRAIGHT;
+        if (maneuverType == MT_START_ROUTE
+            || maneuverType == MT_EXIT_FERRY
+            || maneuverType == MT_CHANGE_HIGHWAY) {
+            mainElement = TURN;
+            direction = directionFromTurnAngle(turnAngle);
             return new int[] { mainElement, direction };
         }
         if (maneuverType == MT_U_TURN_AT_ROUNDABOUT) {
@@ -257,7 +254,7 @@ public class ManeuverMapper {
 
         switch (maneuverType) {
             case MT_STRAIGHT_AHEAD:
-                mainElement = FOLLOW_STREET;
+                mainElement = TURN;
                 direction = DIR_STRAIGHT;
                 break;
 
@@ -388,9 +385,10 @@ public class ManeuverMapper {
             || (maneuverType >= MT_ROUNDABOUT_EXIT_1 && maneuverType <= MT_ROUNDABOUT_EXIT_19)) {
             return dir;
         }
-        /* Skip override for ramp/keep/slight - these need fine direction on MHI2 VC.
+        /* Skip override for ramp/keep/slight/sharp - these need fine direction on MHI2 VC.
          * EXIT_RIGHT/EXIT_LEFT mainElement already encodes the ramp semantics;
-         * coarsening SLIGHT->full 90-degree defeats the point of the distinct icon. */
+         * coarsening SLIGHT->full 90-degree defeats the point of the distinct icon.
+         * SHARP_LEFT/RIGHT must also be preserved — MHI3 keeps them as-is. */
         if (maneuverType == MT_OFF_RAMP
             || maneuverType == MT_ON_RAMP
             || maneuverType == MT_HIGHWAY_OFF_RAMP_LEFT
@@ -398,7 +396,9 @@ public class ManeuverMapper {
             || maneuverType == MT_KEEP_LEFT
             || maneuverType == MT_KEEP_RIGHT
             || maneuverType == MT_SLIGHT_LEFT_TURN
-            || maneuverType == MT_SLIGHT_RIGHT_TURN) {
+            || maneuverType == MT_SLIGHT_RIGHT_TURN
+            || maneuverType == MT_SHARP_LEFT_TURN
+            || maneuverType == MT_SHARP_RIGHT_TURN) {
             return dir;
         }
 
@@ -435,6 +435,19 @@ public class ManeuverMapper {
             128, 112, 96, 80, 64, 48, 32, 16, 0, 240, 224, 208, 192, 176, 160, 144, 128
         };
         return DIR16[idx];
+    }
+
+    /**
+     * Derive direction from turnAngle for generic maneuver types
+     * (START_ROUTE, EXIT_FERRY, CHANGE_HIGHWAY).
+     * MHI3 sub_2B97D0 maps angle -> 8-direction, then the override
+     * coarsens to straight/left/right. We do the coarse mapping directly.
+     */
+    private static int directionFromTurnAngle(int turnAngle) {
+        if (turnAngle == 1000 || turnAngle == -1000) return DIR_STRAIGHT;
+        if (turnAngle == 0) return DIR_STRAIGHT;
+        if (turnAngle < 0) return DIR_LEFT;
+        return DIR_RIGHT;
     }
 
     private static int dirFromEndOfRoadAngleLeft(int exitAngle) {
