@@ -103,6 +103,7 @@ static struct {
 	    uint32_t slot_ver[MANEUVER_CACHE_SIZE];        /* assignment version (bumps only on reassignment) */
 	    uint32_t seq_counter;
 	    uint32_t ver_counter;
+	    uint16_t highest_list_index;  /* max iOS index ever seen in maneuver_list */
 	    /*
 	     * Per-slot maneuver data cache.
 	     * QNX PPS delta delivery can drop intermediate writes during rapid
@@ -127,7 +128,8 @@ static struct {
 	    .current_list_present = false,
 	    .current_list_count = 0,
 	    .seq_counter = 0,
-	    .ver_counter = 0
+	    .ver_counter = 0,
+	    .highest_list_index = 0
 	};
 
 /* Forward declarations */
@@ -189,6 +191,7 @@ static void rgd_update_cache_merge(const rgd_update_t* upd) {
 		    g_rgd.current_list_count = 0;
 		    g_rgd.seq_counter = 0;
 		    g_rgd.ver_counter = 0;
+		    g_rgd.highest_list_index = 0;
 	    for (int i = 0; i < MANEUVER_CACHE_SIZE; i++) {
 	        g_rgd.slot_to_iap_idx[i] = 0xFFFF;
 	        g_rgd.slot_seq[i] = 0;
@@ -826,6 +829,28 @@ static void write_pps_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* 
         for (uint16_t i = 0; i < current_upd->maneuver_list_count && g_rgd.current_list_count < MAX_MANEUVER_LIST; i++) {
             g_rgd.current_list[g_rgd.current_list_count++] = current_upd->maneuver_list[i];
         }
+
+        /* Reroute detection: iOS resets maneuver indices to 0 on reroute.
+         * If the new list's max index is below the highest we've ever seen,
+         * indices went backwards — flush slot cache to prevent stale data.
+         * Catches reroutes where iOS skips the transient state=0. */
+        if (g_rgd.current_list_count > 0) {
+            uint16_t new_max = g_rgd.current_list[0];
+            for (uint16_t i = 1; i < g_rgd.current_list_count; i++) {
+                if (g_rgd.current_list[i] > new_max) new_max = g_rgd.current_list[i];
+            }
+            if (g_rgd.highest_list_index > 0 && new_max < g_rgd.highest_list_index) {
+                LOG_INFO(LOG_MODULE, "Reroute detected: indices backwards (max %u < prev %u), flushing slots",
+                         (unsigned)new_max, (unsigned)g_rgd.highest_list_index);
+                for (int i = 0; i < MANEUVER_CACHE_SIZE; i++) {
+                    g_rgd.slot_to_iap_idx[i] = 0xFFFF;
+                    g_rgd.slot_cache[i].present = 0;
+                }
+                g_rgd.highest_list_index = 0;
+            }
+            if (new_max > g_rgd.highest_list_index)
+                g_rgd.highest_list_index = new_max;
+        }
     }
 
     if (g_rgd.current_list_present) {
@@ -1003,18 +1028,20 @@ static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) 
         LOG_INFO(LOG_MODULE, "Update: state=%u road=\"%s\" dest=\"%s\"",
                  upd.route_state, upd.current_road, upd.destination);
 
-        /* Track update presence and reset on hard reset.
+        /*
+         * Track update presence and handle route_state transitions.
          *
-         * Do NOT wipe slot_cache on route_state=0.  iOS sends rapid
-         * state=0 transitions during route setup, often AFTER the 0x5202
-         * maneuver data has arrived.  Wiping the cache here permanently
-         * loses that data because iOS never resends 0x5202 for
-         * already-sent indices.  The slot cache is only reset on actual
-         * disconnect (rgd_clear_state).
+         * MHI3 approach: gate slot cache clearing on route_state, not
+         * maneuver_count.  When route_state=0 (NO_ROUTE_SET) arrives,
+         * flush the entire slot cache — iOS resets maneuver indices to 0
+         * on reroute, so old slot mappings would return stale data.
          *
-         * We still reset the update_cache (route-level fields like
-         * distance, ETA, etc.) so that stale route-level values don't
-         * leak across state transitions.
+         * Transient maneuver_count=0 (iOS quirk where count briefly drops
+         * to 0 while state remains active) is harmless: state stays >0,
+         * so the slot cache is preserved.
+         *
+         * We still debounce state=0 from PPS (Java never sees the
+         * transient state=0), but the slot cache IS flushed.
          */
         g_rgd.have_update = true;
         if (upd.present & RGD_UPD_ROUTE_STATE) {
@@ -1022,16 +1049,21 @@ static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) 
             g_rgd.last_route_state = upd.route_state;
             if (upd.route_state == 0) {
                 rgd_update_cache_reset();
+                /* Flush slot cache: iOS resets maneuver indices on reroute.
+                 * Old slot data from the previous route must not be reused. */
+                if (prev_state > 0) {
+                    LOG_INFO(LOG_MODULE, "Route cleared (state %u->0): flushing slot cache", prev_state);
+                    rgd_maneuver_map_reset();
+                }
                 /*
-                 * Debounce: suppress transient state=0 from reaching Java
-                 * when previously active.  iOS sends brief state=0 during
-                 * route setup and periodically mid-route (~every 30s).
-                 * Genuine route end comes via rgd_clear_state() (disconnect)
-                 * or source_supports_rg=0, both handled separately.
+                 * Debounce: suppress transient state=0 from reaching Java.
+                 * iOS sends brief state=0 during route setup and periodically
+                 * mid-route.  Genuine route end comes via rgd_clear_state()
+                 * (disconnect) or source_supports_rg=0.
                  * First state=0 at init (prev_state==0) still passes through.
                  */
                 if (prev_state > 0) {
-                    LOG_INFO(LOG_MODULE, "Debounce: suppressing transient state=0 (was %u)", prev_state);
+                    LOG_INFO(LOG_MODULE, "Debounce: suppressing transient state=0 from PPS");
                     upd.present &= ~RGD_UPD_ROUTE_STATE;
                 }
             }
