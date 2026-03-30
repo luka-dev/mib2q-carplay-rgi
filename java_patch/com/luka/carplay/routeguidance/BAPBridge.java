@@ -81,6 +81,13 @@ public class BAPBridge {
     private int blinkDistM = -1;
     private int blinkBargraphDenominatorM = -1;
     private boolean blinkArmed = false;
+    /* Pending renderer bargraph state — written by blink thread or main cycle,
+     * pushed to c_render after each confirmed BAP FctID 18 emission.
+     * Packed into single volatile long for atomic read/write (no torn state). */
+    private volatile long pendingCrState = 0;  /* high 32 = mode, low 32 = level */
+    private static long packCrState(int level, int mode) { return ((long)mode << 32) | (level & 0xFFFFFFFFL); }
+    private static int unpackCrLevel(long s) { return (int)(s & 0xFFFFFFFFL); }
+    private static int unpackCrMode(long s) { return (int)(s >>> 32); }
 
     private int exitViewNum = 0;
     /*
@@ -205,6 +212,10 @@ public class BAPBridge {
         }
 
         try {
+            /* Set pending renderer state BEFORE BAP send.
+             * sendDistanceToManeuverRaw will push it to renderer
+             * after BAP confirms emission to DSI. */
+            pendingCrState = packCrState(bargraph > 0 ? 16 : 0, 1);
             sendDistanceToManeuverRaw(distM, true, bargraph);
         } catch (Exception e) {
             Log.e(TAG, "Action blink tick failed", e);
@@ -238,6 +249,14 @@ public class BAPBridge {
         traceBap("updateDistanceToNextManeuver",
             fd.value + "," + fd.unit + "," + bargraphOn + "," + bargraph);
         appConnectorNavi.updateDistanceToNextManeuver(fd.value, fd.unit, bargraphOn, bargraph);
+        /* BAP confirmed emitted → push pending renderer state.
+         * pendingCrState set atomically by caller before this call. */
+        if (rendererClient != null && customRendererStarted) {
+            try {
+                long s = pendingCrState;
+                rendererClient.sendBargraph(unpackCrLevel(s), unpackCrMode(s));
+            } catch (Throwable t) { /* BAP already sent; renderer will resync on next tick */ }
+        }
     }
 
     private void sendDistanceToDestinationRaw(int meters, boolean isStopOver) {
@@ -680,12 +699,17 @@ public class BAPBridge {
                         cachedBar = lastBar;
                     }
                     if (haveCached) {
+                        int lv = cachedBarOn ? (cachedBar * 16) / 100 : 0;
+                        if (lv > 16) lv = 16;
+                        pendingCrState = packCrState(lv, cachedBarOn ? 1 : 0);
                         sendDistanceToManeuverRaw(cachedDistM, cachedBarOn, cachedBar);
                     } else {
+                        pendingCrState = packCrState(0, 0);
                         sendDistanceToManeuverRaw(0, false, 0);
                     }
                 } else if (distM <= 0 || shouldClearManeuver) {
                     resetActionBlinkState();
+                    pendingCrState = packCrState(0, 0);
                     sendDistanceToManeuverRaw(0, false, 0);
                 } else {
                     boolean inAction = (bargraphDenominatorM > 0) && (distM <= bargraphDenominatorM);
@@ -698,14 +722,22 @@ public class BAPBridge {
                         if (bargraph > 100) bargraph = 100;
                         if (bargraph < BARGRAPH_BLINK_PERCENT) {
                             /*
-                             * Blink zone: the blink thread is the sole sender of FctID 18.
-                             * No forced send here to avoid jitter with periodic blink sends.
+                             * Blink zone: blink thread sets pendingCrState and sends FctID 18.
+                             * Don't send from here to avoid jitter with periodic blink sends.
+                             * Prime pending state so renderer shows current level until first tick.
                              */
+                            int blinkLv = (bargraph * 16) / 100;
+                            if (blinkLv > 16) blinkLv = 16;
+                            pendingCrState = packCrState(blinkLv, 1);
                         } else {
+                            int lv = (bargraph * 16) / 100;
+                            if (lv > 16) lv = 16;
+                            pendingCrState = packCrState(lv, 1);
                             sendDistanceToManeuverRaw(distM, bargraphOn, bargraph);
                         }
                     } else {
                         actionBlinkFull = true;
+                        pendingCrState = packCrState(0, 0);
                         sendDistanceToManeuverRaw(distM, bargraphOn, bargraph);
                     }
                 }
@@ -1487,7 +1519,9 @@ public class BAPBridge {
             int[] junctionAngles = (s.mJunctionAngles != null && firstIdx < s.mJunctionAngles.length)
                 ? s.mJunctionAngles[firstIdx] : null;
 
-            /* Bargraph: 0-100 percentage -> 0-16 level */
+            /* Bargraph: 0-100 percentage -> 0-16 level.
+             * In blink zone, send mode=1 with current level — blink thread
+             * will override with full/empty toggles synced to BAP emit. */
             int bargraphLevel = 0;
             int bargraphMode = 0;
             int distM = s.distManeuverM;
@@ -1496,11 +1530,7 @@ public class BAPBridge {
                 if (pct < 0) pct = 0;
                 if (pct > 100) pct = 100;
                 bargraphLevel = (pct * 16) / 100;
-                if (pct < BARGRAPH_BLINK_PERCENT) {
-                    bargraphMode = 2;
-                } else {
-                    bargraphMode = 1;
-                }
+                bargraphMode = 1;
             }
 
             int perspective = 1;  /* always 3D — 2D/3D switch disabled for now */
@@ -1531,10 +1561,12 @@ public class BAPBridge {
             if (pct > 100) pct = 100;
             bargraphLevel = (pct * 16) / 100;
             if (pct < BARGRAPH_BLINK_PERCENT) {
-                bargraphMode = 2;
-            } else {
-                bargraphMode = 1;
+                /* Blink zone: blink thread controls renderer via sendActionBlinkTick().
+                 * Don't send mode=2 here — it would start c_render's independent
+                 * blink timer which drifts from BAP. Just skip; blink thread syncs both. */
+                return;
             }
+            bargraphMode = 1;
         }
         rendererClient.sendBargraph(bargraphLevel, bargraphMode);
     }
