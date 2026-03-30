@@ -578,7 +578,17 @@ public class BAPBridge {
                 inApproachZone = false;
             }
             boolean hasUsableDistance = (distM > 0);
-            boolean nowApproach = hasUsableDistance ? (distM <= prepareThreshold) : inApproachZone;
+            /* ARRIVED maneuvers must always show real descriptor, not FOLLOW_STREET.
+             * distM==0 + new list resets inApproachZone → nowApproach would be false
+             * → sendFollowStreet() instead of the destination icon. Treat arrival
+             * types as always in approach zone (MHI3 always sends real descriptor). */
+            boolean isArrival = (type0 == ManeuverMapper.MT_ARRIVE_END_OF_NAVIGATION
+                || type0 == ManeuverMapper.MT_ARRIVE_AT_DESTINATION
+                || type0 == ManeuverMapper.MT_ARRIVE_END_OF_DIRECTIONS
+                || type0 == ManeuverMapper.MT_ARRIVE_DESTINATION_LEFT
+                || type0 == ManeuverMapper.MT_ARRIVE_DESTINATION_RIGHT);
+            boolean nowApproach = isArrival
+                || (hasUsableDistance ? (distM <= prepareThreshold) : inApproachZone);
             boolean approachChanged = hasUsableDistance
                 && (nowApproach != inApproachZone)
                 && showManeuver && hasManeuverList;
