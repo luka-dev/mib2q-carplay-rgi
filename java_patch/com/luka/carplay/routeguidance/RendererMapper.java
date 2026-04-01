@@ -17,7 +17,7 @@ public class RendererMapper {
     public static final int ICON_TURN        = 2;
     public static final int ICON_UTURN       = 3;
     public static final int ICON_MERGE       = 4;
-    public static final int ICON_LANE_CHANGE = 5;
+    public static final int ICON_EXIT        = 5;
     public static final int ICON_ROUNDABOUT  = 6;
     public static final int ICON_ARRIVED     = 7;
 
@@ -48,9 +48,6 @@ public class RendererMapper {
             case ManeuverMapper.MT_KEEP_RIGHT:
             case ManeuverMapper.MT_LEFT_TURN_AT_END:
             case ManeuverMapper.MT_RIGHT_TURN_AT_END:
-            case ManeuverMapper.MT_OFF_RAMP:
-            case ManeuverMapper.MT_HIGHWAY_OFF_RAMP_LEFT:
-            case ManeuverMapper.MT_HIGHWAY_OFF_RAMP_RIGHT:
                 return ICON_TURN;
 
             /* U-turn */
@@ -63,10 +60,13 @@ public class RendererMapper {
             case ManeuverMapper.MT_ON_RAMP:
                 return ICON_MERGE;
 
-            /* Highway lane change */
+            /* Off-ramp / highway exit */
+            case ManeuverMapper.MT_OFF_RAMP:
+            case ManeuverMapper.MT_HIGHWAY_OFF_RAMP_LEFT:
+            case ManeuverMapper.MT_HIGHWAY_OFF_RAMP_RIGHT:
             case ManeuverMapper.MT_CHANGE_HIGHWAY_LEFT:
             case ManeuverMapper.MT_CHANGE_HIGHWAY_RIGHT:
-                return ICON_LANE_CHANGE;
+                return ICON_EXIT;
 
             /* Roundabout */
             case ManeuverMapper.MT_ENTER_ROUNDABOUT:
@@ -109,7 +109,7 @@ public class RendererMapper {
     /**
      * Map iAP2 ManeuverType to c_render direction (-1=left, 0=center, +1=right).
      * For ICON_TURN the direction is implicit from exit_angle; this returns 0.
-     * For ICON_MERGE/LANE_CHANGE/ARRIVED, direction encodes left/right.
+     * For ICON_MERGE/EXIT/ARRIVED, direction encodes left/right.
      */
     public static int mapDirection(int mt, int turnAngle, int drivingSide) {
         switch (mt) {
@@ -117,7 +117,7 @@ public class RendererMapper {
             case ManeuverMapper.MT_ON_RAMP:
                 return (drivingSide == ManeuverMapper.DRIVING_SIDE_LEFT) ? -1 : 1;
 
-            /* Lane change */
+            /* Highway exit / lane change */
             case ManeuverMapper.MT_CHANGE_HIGHWAY_LEFT:
                 return -1;
             case ManeuverMapper.MT_CHANGE_HIGHWAY_RIGHT:
