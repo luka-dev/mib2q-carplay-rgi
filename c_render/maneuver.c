@@ -1179,9 +1179,8 @@ void maneuver_build_route(const maneuver_state_t *state, route_path_t *path) {
         rpath_set_arrow(path, 0, BLUE_LEN, (float)(M_PI * 0.5));
         break;
     }
-    case ICON_LANE_CHANGE: {
-        int go_left = (state->direction < 0) ? 1 : 0;
-        float sign = go_left ? -1.0f : 1.0f;
+    case ICON_EXIT: {
+        float sign = (state->direction < 0) ? -1.0f : 1.0f;
         float shift = sign * LANE_SHIFT;
         float pts_x[] = {0, 0, shift, shift};
         float pts_y[] = {SHAFT_BOT, BEND_LO, BEND_HI, BLUE_LEN};
@@ -1237,9 +1236,8 @@ maneuver_exit_t maneuver_get_exit(const maneuver_state_t *state) {
         ex.x = 0; ex.y = BLUE_LEN;
         ex.heading = (float)(M_PI * 0.5);
         break;
-    case ICON_LANE_CHANGE: {
-        int go_left = (state->direction < 0) ? 1 : 0;
-        float sign = go_left ? -1.0f : 1.0f;
+    case ICON_EXIT: {
+        float sign = (state->direction < 0) ? -1.0f : 1.0f;
         ex.x = sign * LANE_SHIFT;
         ex.y = BLUE_LEN;
         ex.heading = (float)(M_PI * 0.5);
@@ -1324,8 +1322,8 @@ void maneuver_get_transition_mask_bounds(float *out_abs_x, float *out_abs_y) {
         { .icon = ICON_UTURN, .driving_side = 1 },
         { .icon = ICON_MERGE, .direction = -1 },
         { .icon = ICON_MERGE, .direction = 1 },
-        { .icon = ICON_LANE_CHANGE, .direction = -1 },
-        { .icon = ICON_LANE_CHANGE, .direction = 1 },
+        { .icon = ICON_EXIT, .direction = -1 },
+        { .icon = ICON_EXIT, .direction = 1 },
         { .icon = ICON_ROUNDABOUT, .exit_angle = 90, .driving_side = 0 },
         { .icon = ICON_ROUNDABOUT, .exit_angle = 0, .driving_side = 0 },
         { .icon = ICON_ROUNDABOUT, .exit_angle = -90, .driving_side = 0 },
@@ -1938,10 +1936,10 @@ static void draw_arrived(int dir) {
 }
 
 /* ----------------------------------------------------------------
- * draw_lane_change -- outline/fill/route passes
+ * draw_exit -- outline/fill/route passes
  * ---------------------------------------------------------------- */
 
-static void draw_lane_change(int go_left) {
+static void draw_exit(int go_left) {
     float sign = go_left ? -1.0f : 1.0f;
     float shift = sign * LANE_SHIFT;
     float bend_lo = BEND_LO;
@@ -2187,7 +2185,7 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
                 draw_uturn(_go); \
             } break; \
             case ICON_MERGE: draw_merge((st)->direction > 0); break; \
-            case ICON_LANE_CHANGE: draw_lane_change((st)->direction < 0); break; \
+            case ICON_EXIT: draw_exit((st)->direction < 0); break; \
             case ICON_ROUNDABOUT: draw_roundabout((float)(st)->exit_angle, (st)->driving_side, (st)->junction_angles, (st)->junction_angle_count); break; \
             case ICON_ARRIVED: draw_arrived((st)->direction); break; \
             default: break; \
@@ -2435,7 +2433,7 @@ const char *maneuver_icon_name(int icon) {
         case ICON_TURN:        return "TURN";
         case ICON_UTURN:       return "UTURN";
         case ICON_MERGE:       return "MERGE";
-        case ICON_LANE_CHANGE: return "LANE_CHG";
+        case ICON_EXIT: return "EXIT";
         case ICON_ROUNDABOUT:  return "ROUNDABOUT";
         case ICON_ARRIVED:     return "ARRIVED";
         default:               return "UNKNOWN";

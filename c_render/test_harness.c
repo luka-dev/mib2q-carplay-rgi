@@ -88,8 +88,8 @@ static const preset_t g_presets[] = {
     { ICON_TURN,      -135,   0, "SHARP_LEFT",   {0}, 0 },
     { ICON_UTURN,       0,    0, "UTURN",        {0}, 0 },
     { ICON_MERGE,       0,    1, "MERGE_R",      {0}, 0 },
-    { ICON_LANE_CHANGE, 0,   -1, "LANE_CHG_L",  {0}, 0 },
-    { ICON_LANE_CHANGE, 0,    1, "LANE_CHG_R",   {0}, 0 },
+    { ICON_EXIT, 0,   -1, "LANE_CHG_L",  {0}, 0 },
+    { ICON_EXIT, 0,    1, "LANE_CHG_R",   {0}, 0 },
     /* Roundabout -- 4-exit, enter */
     { ICON_ROUNDABOUT,  90,   0, "RAB_ENTER",    {90, 0, -90}, 3 },
     /* Roundabout -- 4-exit, right exit */

@@ -20,7 +20,7 @@
 #define ICON_TURN        2   /* exit_angle = turn degrees; junction_angles = side streets */
 #define ICON_UTURN       3   /* direction from driving_side */
 #define ICON_MERGE       4   /* on-ramp; direction: 1=right, -1=left */
-#define ICON_LANE_CHANGE 5   /* highway lane change; direction: 1=right, -1=left */
+#define ICON_EXIT        5   /* off-ramp exit; direction: 1=right, -1=left */
 #define ICON_ROUNDABOUT  6   /* exit_angle + junction_angles */
 #define ICON_ARRIVED     7   /* direction: -1=left, 0=center, 1=right */
 #define ICON_COUNT       8
