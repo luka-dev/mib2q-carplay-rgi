@@ -793,15 +793,12 @@ public class BAPBridge {
              */
             int laneRecomputeMask = RouteGuidance.State.DIRTY_LANE_GUIDANCE
                 | RouteGuidance.State.DIRTY_MANEUVER_LIST
-                | RouteGuidance.State.DIRTY_MANEUVER_COUNT
-                | RouteGuidance.State.DIRTY_MANEUVER_ICON
-                | RouteGuidance.State.DIRTY_MANEUVER_STATE
-                | RouteGuidance.State.DIRTY_DIST_MAN
-                | RouteGuidance.State.DIRTY_ROUTE_STATE;
+                | RouteGuidance.State.DIRTY_MANEUVER_COUNT;
             if ((dirty & laneRecomputeMask) != 0) {
-                /* Show lane guidance when iOS says so (laneGuidanceShowing=1)
-                 * OR when in approach zone. iOS toggles showing even far from
-                 * the maneuver for lane-assist display. */
+                /* Only re-evaluate lanes when iOS sends new lane data or
+                 * the maneuver list changes.  MHI3 reprocesses atomically
+                 * per update — never from distance/state ticks.
+                 * DIRTY_DIST_MAN was causing stale lanes every ~1s tick. */
                 boolean wantLaneGuidance = !explicitClear
                     && !shouldClearManeuver
                     && (nowApproach || s.laneGuidanceShowing == 1);
@@ -1086,6 +1083,10 @@ public class BAPBridge {
     }
 
     private static int resolveLaneGuidanceManeuverIndex(RouteGuidance.State s) {
+        /* Only resolve lane data for the CURRENT maneuver (primary) or its
+         * directly linked lane slot.  MHI3 does a direct map lookup by
+         * maneuver index — never scans other maneuvers.  Scanning caused
+         * stale lane data from a previous maneuver to be picked up. */
         int primary = getFirstManeuverIndex(s);
         if (hasLaneGuidanceForManeuver(s, primary)) {
             return primary;
@@ -1096,58 +1097,10 @@ public class BAPBridge {
             return linked;
         }
 
-        int[] ordered = getManeuverIndexList(s);
-        int indexed = laneGuidanceIndexedSlot(s, ordered);
-        if (hasLaneGuidanceForManeuver(s, indexed)) {
-            return indexed;
-        }
-
-        if (ordered != null) {
-            for (int i = 0; i < ordered.length; i++) {
-                int idx = ordered[i];
-                if (hasLaneGuidanceForManeuver(s, idx)) {
-                    return idx;
-                }
-                int linkedIdx = linkedLaneSlotForManeuver(s, idx);
-                if (hasLaneGuidanceForManeuver(s, linkedIdx)) {
-                    return linkedIdx;
-                }
-            }
-        }
-
         return primary;
     }
 
-    private static int laneGuidanceIndexedSlot(RouteGuidance.State s, int[] ordered) {
-        int laneIdx = s.laneGuidanceIndex;
-        if (laneIdx < 0) return -1;
 
-        int max = (s.mLaneCount != null) ? s.mLaneCount.length : 0;
-        if (laneIdx < max && hasLaneGuidanceForManeuver(s, laneIdx)) {
-            return laneIdx;
-        }
-
-        if (ordered == null || s.mLinkedLaneGuidanceIndex == null) {
-            return -1;
-        }
-
-        for (int i = 0; i < ordered.length; i++) {
-            int idx = ordered[i];
-            if (idx < 0 || idx >= s.mLinkedLaneGuidanceIndex.length) continue;
-            if (s.mLinkedLaneGuidanceIndex[idx] != laneIdx) continue;
-
-            if (hasLaneGuidanceForManeuver(s, idx)) {
-                return idx;
-            }
-
-            int linked = linkedLaneSlotForManeuver(s, idx);
-            if (hasLaneGuidanceForManeuver(s, linked)) {
-                return linked;
-            }
-        }
-
-        return -1;
-    }
 
     private static int linkedLaneSlotForManeuver(RouteGuidance.State s, int manIdx) {
         if (manIdx < 0) return -1;
