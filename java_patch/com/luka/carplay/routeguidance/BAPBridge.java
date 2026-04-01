@@ -872,14 +872,15 @@ public class BAPBridge {
                     startCustomRenderer();
                 }
 
-                /* Approach zone enter/exit → bargraph only (always 3D perspective) */
+                /* Approach zone enter/exit -> bargraph + icon mode change */
                 if (approachChanged) {
-                    /* 2D/3D switch disabled — always 3D for now */
-                    /* rendererClient.sendPerspective(nowApproach ? 0 : 1); */
                     if (nowApproach) {
                         updateRendererBargraph(s, bargraphDenominatorM);
                     } else {
                         rendererClient.sendBargraph(0, 0);
+                        /* Exiting approach zone: show ICON_APPROACH (follow street)
+                         * to match BAP's sendFollowStreet(). */
+                        sendRendererFollowStreet();
                     }
                 }
                 /* Check if rendered maneuver actually changed */
@@ -887,11 +888,14 @@ public class BAPBridge {
                 int crIconMask = RouteGuidance.State.DIRTY_MANEUVER_ICON
                     | RouteGuidance.State.DIRTY_MANEUVER_LIST
                     | RouteGuidance.State.DIRTY_MANEUVER_COUNT;
-                /* No dedup reset here — updateRendererIfChanged compares actual
-                 * icon/direction/angle values. Resetting on DIRTY_MANEUVER_LIST
-                 * caused false re-sends when maneuver count toggled 1↔2. */
                 if ((dirty & crIconMask) != 0) {
-                    iconChanged = updateRendererIfChanged(s, bargraphDenominatorM);
+                    if (nowApproach) {
+                        iconChanged = updateRendererIfChanged(s, bargraphDenominatorM);
+                    } else if (showManeuver && hasManeuverList && !explicitClear && !shouldClearManeuver) {
+                        /* Outside approach zone: show follow street, mirroring BAP path */
+                        sendRendererFollowStreet();
+                        iconChanged = true;
+                    }
                 }
                 /* Distance-only → CMD_BARGRAPH (no push), only in approach zone */
                 if (!iconChanged && !approachChanged && inApproachZone
@@ -1517,6 +1521,26 @@ public class BAPBridge {
         } catch (Throwable e) {
             Log.w(TAG, "CR update failed: " + e.getClass().getName() + ": " + e.getMessage());
             return false;
+        }
+    }
+
+    /**
+     * Send ICON_APPROACH to c_render — mirrors BAP sendFollowStreet().
+     * Shown when maneuver exists but car is outside approach zone.
+     */
+    private void sendRendererFollowStreet() {
+        if (rendererClient == null || !customRendererStarted) return;
+        int icon = RendererMapper.ICON_APPROACH;
+        if (icon == lastCrIcon) return;  /* already showing follow street */
+        lastCrIcon = icon;
+        lastCrDirection = 0;
+        lastCrExitAngle = 0;
+        lastCrDrivingSide = 0;
+        lastCrVer = -1;
+        try {
+            rendererClient.sendManeuver(icon, 0, 0, 0, null, 0, 0, 1);
+        } catch (Throwable t) {
+            Log.w(TAG, "CR follow street failed: " + t.getMessage());
         }
     }
 
