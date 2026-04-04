@@ -795,13 +795,16 @@ public class BAPBridge {
                 | RouteGuidance.State.DIRTY_MANEUVER_LIST
                 | RouteGuidance.State.DIRTY_MANEUVER_COUNT;
             if ((dirty & laneRecomputeMask) != 0) {
-                /* Only re-evaluate lanes when iOS sends new lane data or
-                 * the maneuver list changes.  MHI3 reprocesses atomically
-                 * per update — never from distance/state ticks.
-                 * DIRTY_DIST_MAN was causing stale lanes every ~1s tick. */
+                /* Both conditions required:
+                 * - nowApproach: don't show lanes when far away (iOS sends
+                 *   lane data even 1800m out with laneGuidanceShowing=1)
+                 * - laneGuidanceShowing==1: iOS populates lane data on slots
+                 *   before it wants them displayed (e.g. START_ROUTE has lane
+                 *   data but showing=0). Respect iOS's display intent. */
                 boolean wantLaneGuidance = !explicitClear
                     && !shouldClearManeuver
-                    && (nowApproach || s.laneGuidanceShowing == 1);
+                    && nowApproach
+                    && s.laneGuidanceShowing == 1;
                 if (wantLaneGuidance) {
                     sendLaneGuidance(s);
                 } else {
