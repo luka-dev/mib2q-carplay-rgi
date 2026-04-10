@@ -1,5 +1,7 @@
 # KSS AIO_Arrow Reverse Engineering (AU491 FPK)
 
+**Status: NOT possible.** The VC's `SV_NavFPK_Compass_MobileDevice` view (which renders AIO arrow maneuver icons) requires InfoStates=6, but KSS firmware rejects value 6 at the MOST message validator before it reaches EB GUIDE. The firmware cannot be persistently patched (secure AUTOSAR, RAM-only UDS patches lost on reboot). BAP ManeuverDescriptor (FctID 23) drives the HUD maneuver icons — that path works and is not affected.
+
 Binary: KSS AUTOSAR firmware from VC (AU491 FPK cluster).
 
 ## Architecture: MOST -> KSS -> EB GUIDE -> dp Items

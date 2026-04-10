@@ -48,12 +48,6 @@ Custom 3D renderer (`c_render/`) draws maneuver icons into the cluster's LVDS vi
 - [x] Painter's algorithm road rendering (white outline + grey fill + blue active route)
 - [x] TCP command protocol (port 19800) - Java bridge sends maneuver updates, renderer handles all animation autonomously
 
-### Route Guidance - VC AIO Arrows (NOT possible)
-
-The VC's `SV_NavFPK_Compass_MobileDevice` view (which renders AIO arrow maneuver icons) requires InfoStates=6, but the VC's KSS AUTOSAR firmware **rejects value 6** at the MOST message validator (`sub_108F42C`: bit-dependency rule `(value & 5) != 4` blocks value 6) before it reaches EB GUIDE. The firmware cannot be persistently patched (secure AUTOSAR, RAM-only UDS patches lost on reboot). See `docs/kss_aio_arrow_analysis.md` for the full reverse engineering analysis.
-
-BAP ManeuverDescriptor (FctID 23) drives the **HUD** maneuver icons - that path works and is not affected.
-
 ### Media
 
 Stock MHI2 CarPlay (TerminalMode) forwards track title, artist, and album to the VC, but the stock `AppConnectorTerminalMode` never pushes cover art to the BAP picture manager. The VC always shows a blank/default album icon.
@@ -66,6 +60,7 @@ The C hook intercepts iAP2 transport packets (`read()`/`recv()` hooks), reassemb
 
 ### Planned
 
+- [ ] Lane guidance on maneuver renderer (CMD_LANE_GUIDANCE protocol, arrow glyphs with status colors + dashed separators, see `docs/plan_lane_guidance_renderer.md`)
 - [ ] CarPlay AltScreen on cluster display (stream type 111, MHI3 backport - still in research phase)
 
 ## Patch Components
