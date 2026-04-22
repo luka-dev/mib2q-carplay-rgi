@@ -1,8 +1,10 @@
 UNAME := $(shell uname)
 
+BUILD_DIR = ../build
+
 RENDERER_COMMON = main.c render.c maneuver.c route_path.c server.c
-TARGET = c_render
-HARNESS = test_harness
+TARGET = $(BUILD_DIR)/c_render
+HARNESS = $(BUILD_DIR)/test_harness
 
 ifeq ($(UNAME), Darwin)
   # macOS — GLFW + OpenGL 2.1
@@ -24,10 +26,7 @@ else
 endif
 
 RENDERER_SRC = $(RENDERER_COMMON) $(PLATFORM_SRC)
-RENDERER_OBJ = $(RENDERER_SRC:.c=.o)
-
 HARNESS_SRC = test_harness.c
-HARNESS_OBJ = $(HARNESS_SRC:.c=.o)
 
 ifeq ($(BUILD_HARNESS), 1)
 all: $(TARGET) $(HARNESS)
@@ -35,20 +34,20 @@ else
 all: $(TARGET)
 endif
 
-$(TARGET): $(RENDERER_OBJ)
-	$(CC) $(RENDERER_OBJ) -o $@ $(LDFLAGS)
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
 
-$(HARNESS): $(HARNESS_OBJ)
-	$(CC) $(HARNESS_OBJ) -o $@ $(HARNESS_LDFLAGS)
+$(TARGET): $(RENDERER_SRC) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(INCLUDES) $(RENDERER_SRC) -o $@ $(LDFLAGS)
 
-%.o: %.c
-	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+$(HARNESS): $(HARNESS_SRC) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(INCLUDES) $(HARNESS_SRC) -o $@ $(HARNESS_LDFLAGS)
 
 clean:
-	rm -f $(RENDERER_OBJ) $(HARNESS_OBJ) $(TARGET) $(HARNESS)
+	rm -f $(TARGET) $(HARNESS)
 
 run: $(TARGET)
-	./$(TARGET)
+	$(TARGET)
 
 grid: CFLAGS += -DCR_DEBUG_GRID
 grid: clean all

@@ -6,7 +6,9 @@ SSH_OPTS="-oHostKeyAlgorithms=+ssh-rsa -oPubkeyAcceptedAlgorithms=+ssh-rsa"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 HOOK_DIR="${SCRIPT_DIR}/c_hook"
-OUT="${HOOK_OUT:-${SCRIPT_DIR}/libcarplay_hook.so}"
+BUILD_DIR="${SCRIPT_DIR}/build"
+OUT="${HOOK_OUT:-${BUILD_DIR}/libcarplay_hook.so}"
+mkdir -p "$BUILD_DIR"
 
 # Source files
 FRAMEWORK_SRCS="
@@ -72,27 +74,19 @@ tar --disable-copyfile --format=ustar -C "$HOOK_DIR" -cf - framework routeguidan
 
 echo "Compiling on QNX VM..."
 
-# Build all source files into objects, then link
-ALL_SRCS="$FRAMEWORK_SRCS $RGD_SRCS $CVR_SRCS $MAIN_SRCS"
-COMPILE_CMD=""
-OBJ_FILES=""
-
-for f in $ALL_SRCS; do
-    obj="${f%.c}.o"
-    OBJ_FILES="$OBJ_FILES $REMOTE_DIR/$obj"
-    COMPILE_CMD="$COMPILE_CMD \
-        /usr/qnx650/host/qnx6/x86/usr/bin/ntoarmv7-gcc -c -fPIC -O2 -std=gnu99 $EXTRA_CFLAGS -I$REMOTE_DIR -o $REMOTE_DIR/$obj $REMOTE_DIR/$f && "
+# Single-shot compile + link (no intermediate .o files)
+ALL_SRCS=""
+for f in $FRAMEWORK_SRCS $RGD_SRCS $CVR_SRCS $MAIN_SRCS; do
+    ALL_SRCS="$ALL_SRCS $REMOTE_DIR/$f"
 done
 
-# Link command
-LINK_CMD="/usr/qnx650/host/qnx6/x86/usr/bin/ntoarmv7-gcc -shared -fPIC $OBJ_FILES -o $REMOTE_DIR/libcarplay_hook.so $EXTRA_LIBS"
+BUILD_CMD="/usr/qnx650/host/qnx6/x86/usr/bin/ntoarmv7-gcc -shared -fPIC -O2 -std=gnu99 $EXTRA_CFLAGS -I$REMOTE_DIR $ALL_SRCS -o $REMOTE_DIR/libcarplay_hook.so $EXTRA_LIBS"
 
 sshpass -p "root" ssh $SSH_OPTS root@$QNX_VM \
     "export QNX_HOST=/usr/qnx650/host/qnx6/x86; \
      export QNX_TARGET=/usr/qnx650/target/qnx6; \
      cd $REMOTE_DIR && \
-     $COMPILE_CMD \
-     $LINK_CMD && \
+     $BUILD_CMD && \
      ls -lh $REMOTE_DIR/libcarplay_hook.so"
 
 echo "Downloading compiled library..."

@@ -6,8 +6,10 @@ SSH_OPTS="-oHostKeyAlgorithms=+ssh-rsa -oPubkeyAcceptedAlgorithms=+ssh-rsa"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 RENDERER_DIR="${SCRIPT_DIR}/c_render"
-OUT="${RENDER_OUT:-${SCRIPT_DIR}/maneuver_render}"
+BUILD_DIR="${SCRIPT_DIR}/build"
+OUT="${RENDER_OUT:-${BUILD_DIR}/maneuver_render}"
 REMOTE_DIR="/tmp/c_render"
+mkdir -p "$BUILD_DIR"
 
 RENDERER_SRCS="main.c render.c maneuver.c route_path.c server.c platform_qnx.c"
 
@@ -28,24 +30,18 @@ if [ "$1" = "grid" ]; then
     echo "Building with DEBUG GRID"
 fi
 
-COMPILE_CMD=""
-OBJ_FILES=""
-
+SRC_PATHS=""
 for f in $RENDERER_SRCS; do
-    obj="${f%.c}.o"
-    OBJ_FILES="$OBJ_FILES $REMOTE_DIR/$obj"
-    COMPILE_CMD="$COMPILE_CMD \
-        /usr/qnx650/host/qnx6/x86/usr/bin/ntoarmv7-gcc -c -O2 -std=gnu99 -Wall -D__QNX__ -DPLATFORM_QNX $EXTRA_CFLAGS -I$REMOTE_DIR -o $REMOTE_DIR/$obj $REMOTE_DIR/$f && "
+    SRC_PATHS="$SRC_PATHS $REMOTE_DIR/$f"
 done
 
-LINK_CMD="/usr/qnx650/host/qnx6/x86/usr/bin/ntoarmv7-gcc $OBJ_FILES -o $REMOTE_DIR/maneuver_render -lEGL -lGLESv2 -lsocket -lm"
+BUILD_CMD="/usr/qnx650/host/qnx6/x86/usr/bin/ntoarmv7-gcc -O2 -std=gnu99 -Wall -D__QNX__ -DPLATFORM_QNX $EXTRA_CFLAGS -I$REMOTE_DIR $SRC_PATHS -o $REMOTE_DIR/maneuver_render -lEGL -lGLESv2 -lsocket -lm"
 
 sshpass -p "root" ssh $SSH_OPTS root@$QNX_VM \
     "export QNX_HOST=/usr/qnx650/host/qnx6/x86; \
      export QNX_TARGET=/usr/qnx650/target/qnx6; \
      cd $REMOTE_DIR && \
-     $COMPILE_CMD \
-     $LINK_CMD && \
+     $BUILD_CMD && \
      ls -lh $REMOTE_DIR/maneuver_render"
 
 echo "Downloading compiled binary..."

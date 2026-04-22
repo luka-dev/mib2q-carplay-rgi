@@ -20,8 +20,9 @@ OSGI_LIBS="$TOOLS_DIR/libs"
 OSGI_CP="$OSGI_LIBS/org.osgi.framework-1.10.0.jar:$OSGI_LIBS/org.osgi.util.tracker-1.5.4.jar"
 
 SRC_DIR="$SCRIPT_DIR/java_patch"
-OUTPUT_DIR="$SCRIPT_DIR/java_patch/out"
-OUTPUT_JAR="$SCRIPT_DIR/carplay_hook.jar"
+BUILD_DIR="$SCRIPT_DIR/build"
+OUTPUT_DIR="$BUILD_DIR/java/classes"
+OUTPUT_JAR="$BUILD_DIR/carplay_hook.jar"
 
 echo "=== CarPlay Hook Java Builder ==="
 
@@ -40,7 +41,7 @@ fi
 
 # Clean output
 rm -rf "$OUTPUT_DIR"
-mkdir -p "$OUTPUT_DIR"
+mkdir -p "$OUTPUT_DIR" "$BUILD_DIR"
 
 # Generate BUILD_ID (date + short git hash)
 BUILD_ID="$(date +%Y-%m-%d)-$(git -C "$SCRIPT_DIR" rev-parse --short HEAD 2>/dev/null || echo 'nogit')"
