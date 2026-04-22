@@ -54,7 +54,7 @@ public class CursorController implements CarplayBus.Listener {
 
     /* Tuning */
     private static final float GAIN = 2.0f;
-    private static final int   GRACE_MS = 5000;
+    private static final int   GRACE_MS = 3800;
     /* Observed from dmdt gs on MHI2Q (DISPLAYABLE_HMI / LVDS1 Main Display).
      * EVT_SCREEN_INFO from native overrides this as soon as the first OMX
      * frame is decoded. */
