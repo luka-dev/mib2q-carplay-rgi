@@ -345,19 +345,34 @@ public class CursorController implements CarplayBus.Listener {
      * nothing is active.
      */
     public synchronized void shutdown() {
-        /* 1. Drain the iOS-side gesture cleanly — touch-up carries the
-         *    last known position so iOS registers as gesture-end
-         *    (not cancel). */
+        /* 1a. Drain any 2-finger gesture cleanly — touch-up carries the
+         *     last known position so iOS registers as gesture-end
+         *     (not cancel). */
         endTwoFingerGestureIfActive();
+
+        /* 1b. Drain a knob-held single-finger touch.  When DDS_SELECT
+         *     is pressed while the cursor is up, the DSI patch has
+         *     already posted a touch-down at (cursorX, cursorY).  If
+         *     the session tears down while the knob is still held,
+         *     the user never triggers RELEASED and iOS is left with a
+         *     stuck single-finger gesture.  Emit the matching touch-up
+         *     here before we drop sink. */
+        if (knobArmed && sink != null) {
+            try { sink.postScreenTouch(0, cursorX, cursorY); }
+            catch (Throwable t) { /* best-effort */ }
+        }
+        knobArmed = false;
 
         /* 2. Kill the grace-timer thread so it can't fire on a
          *    stopped bus. */
         cancelGrace();
 
-        /* 3. Force-hide cursor while the bus is still alive.  Native
-         *    runs its 300 ms fade on its own frame timeline and flips
-         *    g_visible=false at the end regardless of whether further
-         *    OMX frames arrive. */
+        /* 3. Force-hide cursor while the bus is still alive.  Note:
+         *    the writer is asynchronous; CarPlayHook.onDeactivate must
+         *    call CarplayBus.flush() AFTER shutdown() returns,
+         *    otherwise the frame we just enqueued will be nuked by
+         *    stop() (it wipes sendQueue[] on close).  Native runs its
+         *    300 ms fade on its own OMX frame timeline. */
         if (visible) {
             visible = false;
             CursorClient.getInstance().hide();
@@ -369,7 +384,6 @@ public class CursorController implements CarplayBus.Listener {
          *    should reappear where it was aiming. */
         prevCount = 0;
         twoFingerMode = MODE_UNDECIDED;
-        knobArmed = false;
         lastTpX = 0; lastTpY = 0;
         spanChangeSum = 0;
         centerChangeSum = 0;

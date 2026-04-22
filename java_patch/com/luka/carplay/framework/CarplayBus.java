@@ -249,6 +249,40 @@ public class CarplayBus {
         Log.i(TAG, "CarplayBus stopped");
     }
 
+    /**
+     * Block up to {@code timeoutMs} until the outbound queue has drained.
+     *
+     * Necessary before a graceful stop() when the caller has just enqueued
+     * teardown frames (e.g. CMD_CURSOR_HIDE) — stop() nukes sendQueue[]
+     * inside closeConnectionLocked(), so any frame still sitting in the
+     * queue when stop() runs is lost.  A short post-drain sleep lets the
+     * writer's last socket.flush() settle the bytes into the kernel
+     * buffer; 20 ms is ample for localhost TCP.
+     *
+     * Returns silently on timeout or interrupt.  Callers should treat
+     * this as best-effort: pathological socket stalls cannot be
+     * recovered here.
+     */
+    public void flush(long timeoutMs) {
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (System.currentTimeMillis() < deadline) {
+            int pending;
+            synchronized (lock) { pending = sendCount; }
+            if (pending == 0) {
+                try { Thread.sleep(20); } catch (InterruptedException e) {}
+                return;
+            }
+            try { Thread.sleep(10); }
+            catch (InterruptedException e) { return; }
+        }
+        int leftover;
+        synchronized (lock) { leftover = sendCount; }
+        if (leftover > 0) {
+            Log.w(TAG, "flush: timeout after " + timeoutMs + "ms, "
+                     + leftover + " frame(s) still queued — will be discarded");
+        }
+    }
+
     public boolean isConnected() {
         synchronized (lock) {
             return sock != null && sock.isConnected() && !sock.isClosed();

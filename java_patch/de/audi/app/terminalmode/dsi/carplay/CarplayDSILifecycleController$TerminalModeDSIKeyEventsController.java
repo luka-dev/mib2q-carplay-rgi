@@ -288,17 +288,39 @@ class CarplayDSILifecycleController$TerminalModeDSIKeyEventsController
             return;
         }
 
-        /* Touchpad form: route through CursorController. */
+        /* Touchpad form: route through CursorController.
+         *
+         * CRITICAL: count ACTIVE fingers, not array length.  Stock Audi
+         * convention (see the touchscreen branch above, and stock
+         * `lastFingers` handling): getTouchState() == 1 means RELEASED
+         * — the entry still carries coords (so iOS can see where the
+         * finger lifted) but it is not an active finger.  Routing by
+         * array length would make a release event look like "user is
+         * still pressing", so the cursor never arms grace and any
+         * in-flight pan/pinch never sees its synthetic touch-up. */
         CursorController c = CursorController.getInstance();
         if (touchEventArray == null || touchEventArray.length == 0) {
             c.onTouchEnd();
-        } else if (touchEventArray.length == 1) {
-            c.onOneFinger(touchEventArray[0].getCurrentX(),
-                          touchEventArray[0].getCurrentY());
+            return;
+        }
+        int active = 0;
+        int a0 = -1, a1 = -1;
+        for (int i = 0; i < touchEventArray.length; i++) {
+            if (touchEventArray[i].getTouchState() != 1) {
+                if (active == 0) a0 = i;
+                else if (active == 1) a1 = i;
+                active++;
+            }
+        }
+        if (active == 0) {
+            c.onTouchEnd();
+        } else if (active == 1) {
+            c.onOneFinger(touchEventArray[a0].getCurrentX(),
+                          touchEventArray[a0].getCurrentY());
         } else {
             c.onTwoFingers(
-                touchEventArray[0].getCurrentX(), touchEventArray[0].getCurrentY(),
-                touchEventArray[1].getCurrentX(), touchEventArray[1].getCurrentY());
+                touchEventArray[a0].getCurrentX(), touchEventArray[a0].getCurrentY(),
+                touchEventArray[a1].getCurrentX(), touchEventArray[a1].getCurrentY());
         }
     }
 

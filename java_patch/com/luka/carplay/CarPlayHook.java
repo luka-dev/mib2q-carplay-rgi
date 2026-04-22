@@ -127,6 +127,16 @@ public class CarPlayHook {
             } catch (Throwable t) {
                 Log.e(TAG, "cursor shutdown error", t);
             }
+            /* Block up to 200 ms for the writer to actually put the
+             * shutdown frames on the wire.  CarplayBus.stop() wipes
+             * sendQueue[] inside closeConnectionLocked, so without
+             * this flush the final touch-up + CMD_CURSOR_HIDE would
+             * race the close and often lose. */
+            try {
+                CarplayBus.getInstance().flush(200);
+            } catch (Throwable t) {
+                Log.e(TAG, "bus flush error", t);
+            }
             /* Tear down bus last — after every module has had a chance
              * to unsubscribe above.  stop() is idempotent. */
             CarplayBus.getInstance().stop();
