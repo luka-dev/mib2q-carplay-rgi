@@ -118,6 +118,15 @@ public class CarPlayHook {
             listenerProxy = null;
             savedContext = null;
             retrying = false;
+            /* Drain cursor + any in-flight gesture BEFORE bus.stop() so
+             * the final touch-up + CMD_CURSOR_HIDE ride the still-live
+             * bus.  Wrapped in try/catch: a shutdown fault must not
+             * prevent bus teardown, otherwise sockets leak. */
+            try {
+                CursorController.getInstance().shutdown();
+            } catch (Throwable t) {
+                Log.e(TAG, "cursor shutdown error", t);
+            }
             /* Tear down bus last — after every module has had a chance
              * to unsubscribe above.  stop() is idempotent. */
             CarplayBus.getInstance().stop();
