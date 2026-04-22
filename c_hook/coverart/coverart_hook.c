@@ -7,6 +7,7 @@
 
 #include "../framework/common.h"
 #include "../framework/logging.h"
+#include "../framework/bus.h"
 
 /* stb_image for JPEG/PNG decoding */
 #define STB_IMAGE_IMPLEMENTATION
@@ -38,10 +39,6 @@ DEFINE_LOG_MODULE(COVERART);
 
 #ifndef COVERART_FILE
 #define COVERART_FILE COVERART_DIR "/coverart.png"
-#endif
-
-#ifndef COVERART_NOTIFY
-#define COVERART_NOTIFY "/ramdisk/pps/iap2/coverart_notify"
 #endif
 
 /* Size filter */
@@ -511,33 +508,17 @@ static int write_png_file(const uint8_t* data, size_t len) {
     return 0;
 }
 
-/* Write PPS notification for Java watcher */
+/* Publish cover-art-ready event on the TCP bus.
+ * Sticky so a late-connecting Java client still learns the current CRC.
+ * The on-disk PNG path (COVERART_FILE) is implicit and never changes. */
 static void write_coverart_notify(uint32_t crc) {
-    if (!real_write) {
-        real_write = (WriteFunc)dlsym(RTLD_NEXT, "write");
-    }
-
-    int fd = open(COVERART_NOTIFY, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    if (fd < 0) {
-        LOG_ERROR(LOG_MODULE, "Failed to open notify: %d", errno);
-        return;
-    }
-
-    char buf[64];
-    int n = snprintf(buf, sizeof(buf), "crc:n:%u\n", crc);
-    if (n > 0) {
-        LOG_DEBUG(LOG_MODULE, "PPS notify snapshot [%s] (%d bytes): %.*s",
-                  COVERART_NOTIFY, n, n, buf);
-    }
-
-    if (real_write) {
-        real_write(fd, buf, (size_t)n);
-    } else {
-        write(fd, buf, (size_t)n);
-    }
-    close(fd);
-
-    LOG_DEBUG(LOG_MODULE, "PPS notify: crc=%08x", crc);
+    bus_text_builder_t b;
+    uint8_t scratch[128];
+    bus_text_begin_with(&b, "coverart", scratch, sizeof(scratch));
+    bus_text_uint(&b, "crc",  (uint64_t)crc);
+    bus_text_str (&b, "path", COVERART_FILE);
+    bus_send_text(EVT_COVERART, BUS_FLAG_STICKY, &b);
+    LOG_DEBUG(LOG_MODULE, "bus EVT_COVERART crc=%08x", crc);
 }
 
 /* Dump raw JPEG for debugging */

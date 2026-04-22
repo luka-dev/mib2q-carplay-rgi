@@ -1,25 +1,25 @@
 /*
  * CarPlay Route Guidance Module
  *
- * Watches PPS file from C hook, parses route state, sends to BAP cluster.
+ * Subscribes to EVT_RGD_UPDATE on CarplayBus, parses route state,
+ * sends to BAP cluster.
  *
- * PPS format (from C hook):
+ * Payload is text in key:type:value format (legacy PPS wire format
+ * carried over into the bus for minimal consumer churn):
  *   @routeguidance
  *   route_state:n:<0-6>
  *   dist_maneuver_m:n:<meters>
  *   m0_type:n:<maneuver type>
  *   ...
- *
  */
 package com.luka.carplay.routeguidance;
 
+import com.luka.carplay.framework.CarplayBus;
 import com.luka.carplay.framework.Log;
-import com.luka.carplay.framework.PPS;
 
-public class RouteGuidance implements PPS.Listener {
+public class RouteGuidance implements CarplayBus.Listener {
 
     private static final String TAG = "RouteGuidance";
-    private static final String PPS_PATH = "/ramdisk/pps/iap2/routeguidance";
     private static final int MAX_MANEUVERS = 16;
     /*
      * RouteGuidanceState values verified from MHI3 dio_manager:
@@ -37,7 +37,6 @@ public class RouteGuidance implements PPS.Listener {
     private static final int ROUTE_STATE_ACCEPT_ALL_MANEUVER_IDX = ROUTE_STATE_REROUTING;
 
     /* State */
-    private PPS pps;
     private BAPBridge bap;
     private volatile boolean running;
     private boolean rgActive = false;
@@ -218,7 +217,6 @@ public class RouteGuidance implements PPS.Listener {
             return false;
         }
 
-        pps = new PPS(PPS_PATH, this);
         Log.i(TAG, "Initialized");
         return true;
     }
@@ -232,9 +230,11 @@ public class RouteGuidance implements PPS.Listener {
         rgActive = false;
         hasRouteUpdate = false;
 
-        if (pps != null) pps.start();
+        CarplayBus bus = CarplayBus.getInstance();
+        bus.on(CarplayBus.EVT_RGD_UPDATE, this);
+        bus.start();   /* idempotent */
 
-        Log.i(TAG, "Started");
+        Log.i(TAG, "Started (subscribed to EVT_RGD_UPDATE)");
     }
 
     /**
@@ -246,7 +246,7 @@ public class RouteGuidance implements PPS.Listener {
         rgActive = false;
         hasRouteUpdate = false;
 
-        if (pps != null) pps.stop();
+        CarplayBus.getInstance().off(CarplayBus.EVT_RGD_UPDATE);
         if (bap != null) {
             bap.onStop();
             bap.onShutdown();  /* full stop — kill renderer on actual stop() */
@@ -260,12 +260,14 @@ public class RouteGuidance implements PPS.Listener {
     }
 
     /* ============================================================
-     * PPS Listener
+     * CarplayBus Listener
      * ============================================================ */
 
-    public void onData(byte[] raw, int len, PPS.Data d) {
-        if (d == null) return;
+    public void onFrame(int type, int flags, byte[] payload, int len) {
         if (!running) return;
+        if (type != CarplayBus.EVT_RGD_UPDATE) return;
+        CarplayBus.Data d = CarplayBus.parseText(payload, len);
+        if (d == null) return;
 
         /* Parse into state (delta) */
         parse(d);
@@ -361,15 +363,11 @@ public class RouteGuidance implements PPS.Listener {
         }
     }
 
-    public void onError(String reason) {
-        Log.w(TAG, "PPS error: " + reason);
-    }
-
     /* ============================================================
      * Parsing
      * ============================================================ */
 
-    private void parse(PPS.Data d) {
+    private void parse(CarplayBus.Data d) {
         state.clearDirty();
 
         boolean isRouteUpdateDelta =

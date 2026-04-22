@@ -1,32 +1,31 @@
 /*
  * CarPlay Cover Art Module
  *
- * Watches PPS notification for cover art updates, pushes to BAP service.
+ * Subscribes to EVT_COVERART on CarplayBus, pushes to BAP service.
  * Used by TerminalModeBapCombi$EventListener.
  *
- * PPS notify: /ramdisk/pps/iap2/coverart_notify
- * PNG file:   /tmp/coverart.png
- *
+ * Bus: EVT_COVERART carries text payload "crc:n:<uint>\npath:s:<path>\n"
+ * PNG file:   /var/app/icab/tmp/37/coverart.png (path always the same,
+ *             comes through in payload for sanity).
  */
 package com.luka.carplay.coverart;
 
+import com.luka.carplay.framework.CarplayBus;
 import com.luka.carplay.framework.Log;
-import com.luka.carplay.framework.PPS;
 
-public class CoverArt implements PPS.Listener {
+public class CoverArt implements CarplayBus.Listener {
 
     private static final String TAG = "CoverArt";
-    private static final String PPS_NOTIFY = "/ramdisk/pps/iap2/coverart_notify";
     public static final String COVERART_PATH = "/var/app/icab/tmp/37/coverart.png";
 
     /* Singleton */
     private static CoverArt instance;
 
     /* State */
-    private PPS pps;
     private volatile boolean running;
     private volatile long lastCrc = 0;
     private volatile int artId = 0;
+    private volatile String currentPath = COVERART_PATH;
 
     /* Callback for new cover art */
     private Callback callback;
@@ -58,21 +57,17 @@ public class CoverArt implements PPS.Listener {
         running = true;
         callback = cb;
 
-        pps = new PPS(PPS_NOTIFY, PPS.TEXT, 1024, this);
-        pps.start();
+        CarplayBus bus = CarplayBus.getInstance();
+        bus.on(CarplayBus.EVT_COVERART, this);
+        bus.start();   /* idempotent */
 
-        Log.i(TAG, "Started");
+        Log.i(TAG, "Started (subscribed to EVT_COVERART)");
     }
 
     public void stop() {
         if (!running) return;
         running = false;
-
-        if (pps != null) {
-            pps.stop();
-            pps = null;
-        }
-
+        CarplayBus.getInstance().off(CarplayBus.EVT_COVERART);
         Log.i(TAG, "Stopped");
     }
 
@@ -89,7 +84,7 @@ public class CoverArt implements PPS.Listener {
     }
 
     public String getPath() {
-        return COVERART_PATH;
+        return currentPath;
     }
 
     public int getArtId() {
@@ -97,31 +92,30 @@ public class CoverArt implements PPS.Listener {
     }
 
     /* ============================================================
-     * PPS Listener
+     * CarplayBus Listener
      * ============================================================ */
 
-    public void onData(byte[] raw, int len, PPS.Data parsed) {
-        if (parsed == null) return;
+    public void onFrame(int type, int flags, byte[] payload, int len) {
+        if (type != CarplayBus.EVT_COVERART) return;
 
-        long crc = parsed.num64("crc", 0);
+        CarplayBus.Data d = CarplayBus.parseText(payload, len);
+        long crc = d.num64("crc", 0);
         if (crc == 0 || crc == lastCrc) return;
 
         lastCrc = crc;
         artId = (int) crc;  /* Use CRC as picture ID like reference implementation */
+        String path = d.str("path", COVERART_PATH);
+        if (path != null && path.length() > 0) currentPath = path;
 
-        Log.i(TAG, "New cover art: crc=" + Long.toHexString(crc) + " artId=" + artId);
+        Log.i(TAG, "New cover art: crc=" + Long.toHexString(crc) + " artId=" + artId
+                + " path=" + currentPath);
 
-        /* Notify callback */
         if (callback != null) {
             try {
-                callback.onNewCoverArt(COVERART_PATH, artId);
+                callback.onNewCoverArt(currentPath, artId);
             } catch (Exception e) {
                 Log.e(TAG, "Callback error", e);
             }
         }
-    }
-
-    public void onError(String reason) {
-        Log.w(TAG, "PPS error: " + reason);
     }
 }

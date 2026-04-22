@@ -13,7 +13,7 @@ mkdir -p "$BUILD_DIR"
 # Source files
 FRAMEWORK_SRCS="
     framework/logging.c
-    framework/pps_writer.c
+    framework/bus.c
     framework/iap2_protocol.c
     framework/hook_framework.c
 "
@@ -25,6 +25,10 @@ RGD_SRCS="
 
 CVR_SRCS="
     coverart/coverart_hook.c
+"
+
+CURSOR_SRCS="
+    cursor/cursor_hook.c
 "
 
 MAIN_SRCS="main.c"
@@ -69,14 +73,14 @@ fi
 REMOTE_DIR="/tmp/carplay_hook"
 
 echo "Uploading sources to QNX VM..."
-tar --disable-copyfile --format=ustar -C "$HOOK_DIR" -cf - framework routeguidance coverart main.c \
+tar --disable-copyfile --format=ustar -C "$HOOK_DIR" -cf - framework routeguidance coverart cursor main.c \
     | sshpass -p "root" ssh $SSH_OPTS root@$QNX_VM "rm -rf $REMOTE_DIR && mkdir -p $REMOTE_DIR && tar -xf - -C $REMOTE_DIR"
 
 echo "Compiling on QNX VM..."
 
 # Single-shot compile + link (no intermediate .o files)
 ALL_SRCS=""
-for f in $FRAMEWORK_SRCS $RGD_SRCS $CVR_SRCS $MAIN_SRCS; do
+for f in $FRAMEWORK_SRCS $RGD_SRCS $CVR_SRCS $CURSOR_SRCS $MAIN_SRCS; do
     ALL_SRCS="$ALL_SRCS $REMOTE_DIR/$f"
 done
 

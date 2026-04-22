@@ -7,7 +7,7 @@
 
 #include "common.h"
 #include "logging.h"
-#include "pps_writer.h"
+#include "bus.h"
 #include "iap2_protocol.h"
 
 typedef struct hook_module hook_module_t;

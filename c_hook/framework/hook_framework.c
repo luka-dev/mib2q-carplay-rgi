@@ -238,6 +238,10 @@ hook_result_t hook_framework_init(void) {
     g_fw.initialized = true;
     pthread_mutex_unlock(&g_fw.lock);
 
+    /* Start TCP bus listener.  Safe here — hook_framework_init is lazy
+     * (called on first hooked call), not during LD_PRELOAD constructor. */
+    bus_init();
+
     /* Don't log in constructor - open() may fail during LD_PRELOAD init */
     /* LOG_INFO will happen on first hooked function call */
 
@@ -253,6 +257,9 @@ void hook_framework_shutdown(void) {
     }
 
     notify_state(HOOK_EVENT_SHUTDOWN, NULL);
+
+    /* Stop TCP bus */
+    bus_shutdown();
 
     /* Free injection context */
     if (g_fw.ctx.inject.prefix_buf) {

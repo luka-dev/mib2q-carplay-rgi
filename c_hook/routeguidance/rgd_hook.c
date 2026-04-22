@@ -78,7 +78,6 @@ static void renderer_stop(void) {
 
 /* Module state */
 static struct {
-    pps_handle_t* pps;
     bool active;
     bool sent_5200;
     bool sent_5203;
@@ -116,7 +115,6 @@ static struct {
 	    /* Last merged 0x5201 snapshot (used to make PPS writes full-state). */
 	    rgd_update_t update_cache;
 		} g_rgd = {
-    .pps = NULL,
     .active = false,
     .sent_5200 = false,
     .sent_5203 = false,
@@ -142,7 +140,7 @@ static void write_pps_maneuver_partial(const rgd_maneuver_t* man);
 static void write_pps_lane_guidance_partial(const rgd_lane_guidance_t* lane);
 static void write_pps_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* extra_man,
                                           const rgd_update_t* current_upd);
-static void write_slot_data_keys(unsigned slot, const rgd_maneuver_t* man);
+static void write_slot_data_keys(bus_text_builder_t* b, unsigned slot, const rgd_maneuver_t* man);
 static void rgd_lazy_init(void);
 
 static void rgd_update_cache_reset(void) {
@@ -386,9 +384,10 @@ static hook_module_def_t rgd_module_def = {
     .user_data = NULL
 };
 
-/* PPS snapshot writer */
+/* Bus snapshot writer.  Accumulates all state into a single EVT_RGD_UPDATE
+ * text frame so Java sees it atomically. */
 static void write_pps_update_partial(const rgd_update_t* upd) {
-    if (!g_rgd.pps || !upd) return;
+    if (!upd) return;
     if (upd->present == 0) return;
     if ((upd->present & RGD_UPD_WRITE_MASK) == 0) return;
     rgd_update_cache_merge(upd);
@@ -396,52 +395,50 @@ static void write_pps_update_partial(const rgd_update_t* upd) {
 }
 
 /*
- * Write per-slot maneuver keys into an OPEN PPS transaction.
- * Caller must have called pps_begin()/pps_write_header() before and
- * pps_end() after.  This allows embedding slot data inside the
- * route-update PPS write so Java gets maneuver_list and slot data
- * in a single atomic delta.
+ * Append per-slot maneuver keys to the supplied text builder.
+ * Called from inside write_pps_snapshot_from_cache so maneuver_list
+ * and slot data ship in a single EVT_RGD_UPDATE frame, atomic to Java.
  */
-static void write_slot_data_keys(unsigned idx, const rgd_maneuver_t* man) {
+static void write_slot_data_keys(bus_text_builder_t* b, unsigned idx, const rgd_maneuver_t* man) {
     char key[64];
 
     if (man->present & RGD_MAN_TYPE) {
         snprintf(key, sizeof(key), "m%u_type", idx);
-        pps_write_int(g_rgd.pps, key, man->maneuver_type);
+        bus_text_int(b, key, man->maneuver_type);
     }
     if (man->present & RGD_MAN_EXIT_ANGLE) {
         snprintf(key, sizeof(key), "m%u_turn_angle", idx);
-        pps_write_int(g_rgd.pps, key, (int)man->exit_angle);
+        bus_text_int(b, key, (int)man->exit_angle);
         snprintf(key, sizeof(key), "m%u_exit_angle", idx);
-        pps_write_int(g_rgd.pps, key, (int)man->exit_angle);
+        bus_text_int(b, key, (int)man->exit_angle);
     }
     if (man->present & RGD_MAN_JUNCTION_TYPE) {
         snprintf(key, sizeof(key), "m%u_junction_type", idx);
-        pps_write_int(g_rgd.pps, key, man->junction_type);
+        bus_text_int(b, key, man->junction_type);
     }
     if (man->present & RGD_MAN_DRIVING_SIDE) {
         snprintf(key, sizeof(key), "m%u_driving_side", idx);
-        pps_write_int(g_rgd.pps, key, man->driving_side);
+        bus_text_int(b, key, man->driving_side);
     }
     if (man->present & RGD_MAN_DISTANCE_BETWEEN) {
         snprintf(key, sizeof(key), "m%u_distance", idx);
-        pps_write_uint(g_rgd.pps, key, man->distance_between);
+        bus_text_uint(b, key, man->distance_between);
     }
     if (man->present & RGD_MAN_DISTANCE_STRING) {
         snprintf(key, sizeof(key), "m%u_distance_str", idx);
-        pps_write_string(g_rgd.pps, key, man->distance_string);
+        bus_text_str(b, key, man->distance_string);
     }
     if (man->present & RGD_MAN_DISTANCE_UNITS) {
         snprintf(key, sizeof(key), "m%u_distance_units", idx);
-        pps_write_int(g_rgd.pps, key, man->distance_units);
+        bus_text_int(b, key, man->distance_units);
     }
     if (man->present & RGD_MAN_DESCRIPTION) {
         snprintf(key, sizeof(key), "m%u_name", idx);
-        pps_write_string(g_rgd.pps, key, man->description);
+        bus_text_str(b, key, man->description);
     }
     if (man->present & RGD_MAN_AFTER_ROAD) {
         snprintf(key, sizeof(key), "m%u_after_road", idx);
-        pps_write_string(g_rgd.pps, key, man->after_road_name);
+        bus_text_str(b, key, man->after_road_name);
     }
     if (man->present & RGD_MAN_JUNCTION_ANGLES) {
         char buf[128];
@@ -450,33 +447,33 @@ static void write_slot_data_keys(unsigned idx, const rgd_maneuver_t* man) {
             off += snprintf(buf + off, sizeof(buf) - off, "%s%d",
                             j > 0 ? "," : "", (int)man->junction_angles[j]);
         snprintf(key, sizeof(key), "m%u_junction_angles", idx);
-        pps_write_string(g_rgd.pps, key, buf);
+        bus_text_str(b, key, buf);
     }
     /* Slot version: bumps only when a different iOS maneuver is assigned to this slot.
      * Java uses this to detect maneuver transitions even when type/angles are identical.
      * Separate from slot_seq (LRU) which bumps on every data update. */
     snprintf(key, sizeof(key), "m%u_ver", idx);
-    pps_write_uint(g_rgd.pps, key, (g_rgd.slot_ver[idx] % 65535) + 1);
+    bus_text_uint(b, key, (g_rgd.slot_ver[idx] % 65535) + 1);
     if (man->present & RGD_MAN_LANE_GUIDANCE_RAW) {
         snprintf(key, sizeof(key), "m%u_lane_guidance_len", idx);
-        pps_write_int(g_rgd.pps, key, man->lane_guidance_raw_len);
+        bus_text_int(b, key, man->lane_guidance_raw_len);
         snprintf(key, sizeof(key), "m%u_lane_guidance_hex", idx);
-        pps_write_string(g_rgd.pps, key, man->lane_guidance_hex);
+        bus_text_str(b, key, man->lane_guidance_hex);
     }
     if (man->present & RGD_MAN_LINKED_LANE_INDEX) {
         snprintf(key, sizeof(key), "m%u_linked_lane_guidance_index", idx);
-        pps_write_int(g_rgd.pps, key, (int)man->linked_lane_guidance_index);
+        bus_text_int(b, key, (int)man->linked_lane_guidance_index);
         {
             int linked_slot = rgd_slot_for_iap_index(man->linked_lane_guidance_index, false);
             if (linked_slot >= 0) {
                 snprintf(key, sizeof(key), "m%u_linked_lane_guidance_slot", idx);
-                pps_write_int(g_rgd.pps, key, linked_slot);
+                bus_text_int(b, key, linked_slot);
             }
         }
     }
     if (man->present & RGD_MAN_LANE_GUIDANCE) {
         snprintf(key, sizeof(key), "m%u_lane_count", idx);
-        pps_write_int(g_rgd.pps, key, man->lane_count);
+        bus_text_int(b, key, man->lane_count);
 
         {
             char buf[128];
@@ -486,7 +483,7 @@ static void write_slot_data_keys(unsigned idx, const rgd_maneuver_t* man) {
                                  j > 0 ? "," : "", (unsigned)man->lanes[j].position);
             if (man->lane_count == 0) buf[0] = '\0';
             snprintf(key, sizeof(key), "m%u_lane_positions", idx);
-            pps_write_string(g_rgd.pps, key, buf);
+            bus_text_str(b, key, buf);
         }
 
         {
@@ -497,7 +494,7 @@ static void write_slot_data_keys(unsigned idx, const rgd_maneuver_t* man) {
                                  j > 0 ? "," : "", (int)man->lanes[j].direction);
             if (man->lane_count == 0) buf[0] = '\0';
             snprintf(key, sizeof(key), "m%u_lane_directions", idx);
-            pps_write_string(g_rgd.pps, key, buf);
+            bus_text_str(b, key, buf);
         }
 
         {
@@ -508,7 +505,7 @@ static void write_slot_data_keys(unsigned idx, const rgd_maneuver_t* man) {
                                  j > 0 ? "," : "", (unsigned)man->lanes[j].status);
             if (man->lane_count == 0) buf[0] = '\0';
             snprintf(key, sizeof(key), "m%u_lane_status", idx);
-            pps_write_string(g_rgd.pps, key, buf);
+            bus_text_str(b, key, buf);
         }
 
         {
@@ -519,7 +516,7 @@ static void write_slot_data_keys(unsigned idx, const rgd_maneuver_t* man) {
                                  j > 0 ? "|" : "", man->lanes[j].description);
             if (man->lane_count == 0) buf[0] = '\0';
             snprintf(key, sizeof(key), "m%u_lane_desc", idx);
-            pps_write_string(g_rgd.pps, key, buf);
+            bus_text_str(b, key, buf);
         }
 
         /*
@@ -543,32 +540,32 @@ static void write_slot_data_keys(unsigned idx, const rgd_maneuver_t* man) {
             }
             if (man->lane_count == 0) buf[0] = '\0';
             snprintf(key, sizeof(key), "m%u_lane_angles", idx);
-            pps_write_string(g_rgd.pps, key, buf);
+            bus_text_str(b, key, buf);
         }
     } else if (man->present & RGD_MAN_LANE_GUIDANCE_RAW) {
         /* Keep lane keys coherent when only raw linked-lane payload is available. */
         snprintf(key, sizeof(key), "m%u_lane_count", idx);
-        pps_write_int(g_rgd.pps, key, 0);
+        bus_text_int(b, key, 0);
         snprintf(key, sizeof(key), "m%u_lane_positions", idx);
-        pps_write_string(g_rgd.pps, key, "");
+        bus_text_str(b, key, "");
         snprintf(key, sizeof(key), "m%u_lane_directions", idx);
-        pps_write_string(g_rgd.pps, key, "");
+        bus_text_str(b, key, "");
         snprintf(key, sizeof(key), "m%u_lane_status", idx);
-        pps_write_string(g_rgd.pps, key, "");
+        bus_text_str(b, key, "");
         snprintf(key, sizeof(key), "m%u_lane_desc", idx);
-        pps_write_string(g_rgd.pps, key, "");
+        bus_text_str(b, key, "");
         snprintf(key, sizeof(key), "m%u_lane_angles", idx);
-        pps_write_string(g_rgd.pps, key, "");
+        bus_text_str(b, key, "");
     }
     if (man->present & RGD_MAN_EXIT_INFO_RAW) {
         snprintf(key, sizeof(key), "m%u_exit_info_len", idx);
-        pps_write_int(g_rgd.pps, key, man->exit_info_raw_len);
+        bus_text_int(b, key, man->exit_info_raw_len);
         snprintf(key, sizeof(key), "m%u_exit_info_hex", idx);
-        pps_write_string(g_rgd.pps, key, man->exit_info_hex);
+        bus_text_str(b, key, man->exit_info_hex);
     }
     if (man->present & RGD_MAN_EXIT_INFO_STR) {
         snprintf(key, sizeof(key), "m%u_exit_info", idx);
-        pps_write_string(g_rgd.pps, key, man->exit_info_str);
+        bus_text_str(b, key, man->exit_info_str);
     }
 }
 
@@ -633,7 +630,7 @@ static void rgd_backpropagate_linked_lanes(int source_slot) {
 }
 
 static void write_pps_maneuver_partial(const rgd_maneuver_t* man) {
-    if (!g_rgd.pps || !man) return;
+    if (!man) return;
     if (man->present == 0) return;
     if (!(man->present & RGD_MAN_INDEX)) return;
 
@@ -674,7 +671,7 @@ static void write_pps_maneuver_partial(const rgd_maneuver_t* man) {
 }
 
 static void write_pps_lane_guidance_partial(const rgd_lane_guidance_t* lane) {
-    if (!g_rgd.pps || !lane) return;
+    if (!lane) return;
     if ((lane->present & (RGD_LANE_GUIDANCE_INDEX | RGD_LANE_INFORMATIONS)) == 0) return;
 
     rgd_update_t upd;
@@ -748,55 +745,57 @@ static void write_pps_lane_guidance_partial(const rgd_lane_guidance_t* lane) {
 
 static void write_pps_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* extra_man,
                                           const rgd_update_t* current_upd) {
-    if (!g_rgd.pps) return;
-
     const rgd_update_t* upd = &g_rgd.update_cache;
     uint64_t present = upd->present & RGD_UPD_WRITE_MASK;
     bool have_extra_slot = (extra_man && extra_man->present != 0 &&
                             extra_slot >= 0 && extra_slot < MANEUVER_CACHE_SIZE);
     if (present == 0 && !have_extra_slot) return;
 
-    pps_begin(g_rgd.pps);
-    pps_write_header(g_rgd.pps);
+    bus_text_builder_t _b_storage;
+    bus_text_builder_t* b = &_b_storage;
+    if (bus_text_begin_heap(b, "routeguidance", BUS_TEXT_BUILDER_LARGE_CAP) != HOOK_OK) {
+        LOG_WARN(LOG_MODULE, "snapshot: text builder alloc failed");
+        return;
+    }
 
     if (present & RGD_UPD_ROUTE_STATE)
-        pps_write_int(g_rgd.pps, "route_state", upd->route_state);
+        bus_text_int(b, "route_state", upd->route_state);
     if (present & RGD_UPD_MANEUVER_STATE)
-        pps_write_int(g_rgd.pps, "maneuver_state", upd->maneuver_state);
+        bus_text_int(b, "maneuver_state", upd->maneuver_state);
     if (present & RGD_UPD_DISTANCE_REMAINING)
-        pps_write_uint(g_rgd.pps, "dist_dest_m", upd->distance_remaining);
+        bus_text_uint(b, "dist_dest_m", upd->distance_remaining);
     if (present & RGD_UPD_DIST_TO_MANEUVER)
-        pps_write_uint(g_rgd.pps, "dist_maneuver_m", upd->dist_to_maneuver);
+        bus_text_uint(b, "dist_maneuver_m", upd->dist_to_maneuver);
     if (present & RGD_UPD_ETA)
-        pps_write_uint(g_rgd.pps, "eta_seconds", upd->eta);
+        bus_text_uint(b, "eta_seconds", upd->eta);
     if (present & RGD_UPD_TIME_REMAINING)
-        pps_write_uint(g_rgd.pps, "time_remaining_seconds", upd->time_remaining);
+        bus_text_uint(b, "time_remaining_seconds", upd->time_remaining);
     if (present & RGD_UPD_CURRENT_ROAD)
-        pps_write_string(g_rgd.pps, "current_road", upd->current_road);
+        bus_text_str(b, "current_road", upd->current_road);
     if (present & RGD_UPD_DESTINATION)
-        pps_write_string(g_rgd.pps, "destination", upd->destination);
+        bus_text_str(b, "destination", upd->destination);
     if (present & RGD_UPD_DISTANCE_UNITS)
-        pps_write_int(g_rgd.pps, "dist_dest_units", upd->distance_units);
+        bus_text_int(b, "dist_dest_units", upd->distance_units);
     if (present & RGD_UPD_DIST_TO_MANEUVER_UNI)
-        pps_write_int(g_rgd.pps, "dist_maneuver_units", upd->dist_to_maneuver_units);
+        bus_text_int(b, "dist_maneuver_units", upd->dist_to_maneuver_units);
     if (present & RGD_UPD_DISTANCE_STRING)
-        pps_write_string(g_rgd.pps, "dist_dest_str", upd->distance_string);
+        bus_text_str(b, "dist_dest_str", upd->distance_string);
     if (present & RGD_UPD_DIST_TO_MANEUVER_STR)
-        pps_write_string(g_rgd.pps, "dist_maneuver_str", upd->dist_to_maneuver_string);
+        bus_text_str(b, "dist_maneuver_str", upd->dist_to_maneuver_string);
     if (present & RGD_UPD_LANE_INDEX)
-        pps_write_int(g_rgd.pps, "lane_guidance_index", upd->lane_guidance_index);
+        bus_text_int(b, "lane_guidance_index", upd->lane_guidance_index);
     if (present & RGD_UPD_LANE_TOTAL)
-        pps_write_int(g_rgd.pps, "lane_guidance_total", upd->lane_guidance_total);
+        bus_text_int(b, "lane_guidance_total", upd->lane_guidance_total);
     if (present & RGD_UPD_LANE_SHOWING)
-        pps_write_int(g_rgd.pps, "lane_guidance_showing", upd->lane_guidance_showing);
+        bus_text_int(b, "lane_guidance_showing", upd->lane_guidance_showing);
     if (present & RGD_UPD_SOURCE_NAME)
-        pps_write_string(g_rgd.pps, "source_name", upd->source_name);
+        bus_text_str(b, "source_name", upd->source_name);
     if (present & RGD_UPD_SOURCE_SUPPORTS_RG)
-        pps_write_int(g_rgd.pps, "source_supports_rg", upd->source_supports_route_guidance);
+        bus_text_int(b, "source_supports_rg", upd->source_supports_route_guidance);
     if (present & RGD_UPD_VISIBLE_IN_APP)
-        pps_write_int(g_rgd.pps, "visible_in_app", upd->visible_in_app);
+        bus_text_int(b, "visible_in_app", upd->visible_in_app);
     if (present & RGD_UPD_COMPONENT_IDS) {
-        pps_write_int(g_rgd.pps, "component_count", upd->component_count);
+        bus_text_int(b, "component_count", upd->component_count);
         if (upd->component_count > 0) {
             char list_buf[128];
             int loff = 0;
@@ -805,13 +804,13 @@ static void write_pps_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* 
                                  "%s%u", i > 0 ? "," : "", (unsigned)upd->component_ids[i]);
                 if (loff >= (int)sizeof(list_buf) - 4) break;
             }
-            pps_write_string(g_rgd.pps, "component_ids", list_buf);
+            bus_text_str(b, "component_ids", list_buf);
         } else {
-            pps_write_string(g_rgd.pps, "component_ids", "");
+            bus_text_str(b, "component_ids", "");
         }
     }
     if (present & RGD_UPD_MANEUVER_COUNT)
-        pps_write_int(g_rgd.pps, "maneuver_count", upd->maneuver_count);
+        bus_text_int(b, "maneuver_count", upd->maneuver_count);
 
     int listed_slots[MAX_MANEUVER_LIST];
     int listed_count = 0;
@@ -870,23 +869,23 @@ static void write_pps_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* 
                 if (loff >= (int)sizeof(list_buf) - 4) break;
             }
             if (outc > 0) {
-                pps_write_string(g_rgd.pps, "maneuver_list", list_buf);
+                bus_text_str(b, "maneuver_list", list_buf);
             } else {
                 /* All ManeuverList indices lack cached type data (evicted).
                  * Clear stale maneuver_list so Java doesn't keep showing
                  * the previous maneuver. */
-                pps_write_string(g_rgd.pps, "maneuver_list", "");
+                bus_text_str(b, "maneuver_list", "");
             }
         } else {
             /* Explicit empty list from source; propagate as a real clear. */
-            pps_write_string(g_rgd.pps, "maneuver_list", "");
+            bus_text_str(b, "maneuver_list", "");
         }
     }
 
     for (int i = 0; i < listed_count; i++) {
         int s = listed_slots[i];
         if (s >= 0 && s < MANEUVER_CACHE_SIZE && g_rgd.slot_cache[s].present != 0) {
-            write_slot_data_keys((unsigned)s, &g_rgd.slot_cache[s]);
+            write_slot_data_keys(b, (unsigned)s, &g_rgd.slot_cache[s]);
         }
     }
 
@@ -899,7 +898,7 @@ static void write_pps_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* 
      * 0x5201 adds the slot to maneuver_list.
      */
 
-    pps_end(g_rgd.pps);
+    bus_send_text(EVT_RGD_UPDATE, BUS_FLAG_STICKY, b);
 }
 
 void rgd_clear_state(const char* reason) {
@@ -916,13 +915,15 @@ void rgd_clear_state(const char* reason) {
     rgd_maneuver_map_reset();
     rgd_update_cache_reset();
 
-    if (g_rgd.pps) {
-        pps_begin(g_rgd.pps);
-        pps_write_header(g_rgd.pps);
-        pps_write_int(g_rgd.pps, "route_state", RGD_STATE_NOT_ACTIVE);
-        pps_write_int(g_rgd.pps, "maneuver_count", 0);
-        if (reason) pps_write_string(g_rgd.pps, "disconnect_reason", reason);
-        pps_end(g_rgd.pps);
+    {
+        bus_text_builder_t _b_storage;
+        bus_text_builder_t* b = &_b_storage;
+        uint8_t scratch[256];
+        bus_text_begin_with(b, "routeguidance", scratch, sizeof(scratch));
+        bus_text_int(b, "route_state", RGD_STATE_NOT_ACTIVE);
+        bus_text_int(b, "maneuver_count", 0);
+        if (reason) bus_text_str(b, "disconnect_reason", reason);
+        bus_send_text(EVT_RGD_UPDATE, BUS_FLAG_STICKY, b);
     }
 
     rgd_update_session_active();
@@ -1218,27 +1219,19 @@ void rgd_init(void) {
     }
 }
 
-/* Called lazily on first message */
+/* Called lazily on first message — now only used to mark initialization
+ * boundary and (re)publish the cleared snapshot over the bus. */
 static void rgd_lazy_init(void) {
-    if (g_rgd.pps) return;  /* Already initialized */
-
-    pps_config_t pps_cfg = PPS_CONFIG_DEFAULT;
-    pps_cfg.path = RGD_PPS_PATH;
-    pps_cfg.object_name = RGD_PPS_OBJECT;
-    pps_cfg.create_dirs = true;
-
-    g_rgd.pps = pps_open(&pps_cfg);
-    if (g_rgd.pps) rgd_clear_state("init");
+    static bool initialized = false;
+    if (initialized) return;
+    initialized = true;
+    rgd_clear_state("init");
     LOG_INFO(LOG_MODULE, "Route Guidance module initialized");
 }
 
 void rgd_shutdown(void) {
     rgd_stop_updates();
     rgd_clear_state("module_shutdown");
-    if (g_rgd.pps) {
-        pps_close(g_rgd.pps);
-        g_rgd.pps = NULL;
-    }
 }
 
 __attribute__((constructor))

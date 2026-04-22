@@ -15,10 +15,6 @@
 #include "../framework/hook_framework.h"
 #include "rgd_tlv.h"
 
-/* PPS path for route guidance output */
-#define RGD_PPS_PATH "/ramdisk/pps/iap2/routeguidance"
-#define RGD_PPS_OBJECT "routeguidance"
-
 /* Lane direction bitmask (BAP NavSD format) */
 #define LANE_DIR_LEFT           0x01
 #define LANE_DIR_SLIGHT_LEFT    0x02
