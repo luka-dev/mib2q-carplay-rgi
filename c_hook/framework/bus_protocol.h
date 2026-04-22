@@ -77,6 +77,9 @@
 #define EVT_COVERART            0x0010  /* text: crc:n:<u32> path:s:<path>   */
 #define EVT_RGD_UPDATE          0x0020  /* text: route_state + all fields    */
 #define EVT_DEVICE_STATE        0x0030  /* reserved                          */
+#define EVT_SCREEN_INFO         0x0040  /* text: width:n:<W>\nheight:n:<H>   */
+                                        /* sticky, published once per frame  */
+                                        /* size detected on OMX decode out   */
 
 /* ============================================================
  * Command types (Java -> Hook)
@@ -87,8 +90,13 @@
 #define CMD_SYNC_REQ            0x0100  /* request sticky-state snapshot     */
 #define CMD_PING                0x0101  /* echo test                         */
 
-#define CMD_CURSOR_POS          0x0200  /* binary: i32 x, i32 y (BE)         */
-#define CMD_CURSOR_HIDE         0x0201  /* no payload                        */
+#define CMD_CURSOR_POS          0x0200  /* binary, 12 bytes (BE):            */
+                                        /*   0..3  int32 x (screen px)       */
+                                        /*   4..7  int32 y (screen px)       */
+                                        /*   8     uint8 alpha (0..255)      */
+                                        /*   9..11 reserved = 0              */
+                                        /* len>=8 accepted (legacy, alpha=255)*/
+#define CMD_CURSOR_HIDE         0x0201  /* no payload — triggers native fade */
 
 /* ============================================================
  * Classification helpers (header range checks, optional)

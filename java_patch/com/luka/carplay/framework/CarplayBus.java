@@ -59,6 +59,7 @@ public class CarplayBus {
     public static final int EVT_COVERART    = 0x0010;
     public static final int EVT_RGD_UPDATE  = 0x0020;
     public static final int EVT_DEVICE_STATE= 0x0030;
+    public static final int EVT_SCREEN_INFO = 0x0040;   /* text: width:n:W\nheight:n:H */
 
     /* Command types (Java -> Hook) */
     public static final int CMD_SYNC_REQ    = 0x0100;
@@ -585,7 +586,7 @@ public class CarplayBus {
 
         int[] allTypes = {
             EVT_HELLO, EVT_SYNC_BEGIN, EVT_SYNC_END, EVT_PONG,
-            EVT_COVERART, EVT_RGD_UPDATE, EVT_DEVICE_STATE
+            EVT_COVERART, EVT_RGD_UPDATE, EVT_DEVICE_STATE, EVT_SCREEN_INFO
         };
         for (int i = 0; i < allTypes.length; i++) bus.on(allTypes[i], dump);
 
@@ -613,6 +614,7 @@ public class CarplayBus {
             case EVT_COVERART:     return "COVERART";
             case EVT_RGD_UPDATE:   return "RGD_UPDATE";
             case EVT_DEVICE_STATE: return "DEVICE_STATE";
+            case EVT_SCREEN_INFO:  return "SCREEN_INFO";
             case CMD_SYNC_REQ:     return "SYNC_REQ";
             case CMD_PING:         return "PING";
             case CMD_CURSOR_POS:   return "CURSOR_POS";

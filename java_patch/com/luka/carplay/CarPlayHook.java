@@ -11,6 +11,8 @@
  */
 package com.luka.carplay;
 
+import com.luka.carplay.cursor.CursorController;
+import com.luka.carplay.framework.CarplayBus;
 import com.luka.carplay.framework.Log;
 import com.luka.carplay.routeguidance.RouteGuidance;
 import de.audi.app.terminalmode.IContext;
@@ -52,6 +54,20 @@ public class CarPlayHook {
     public static void onActivate(Object context) {
         Log.i(TAG, "onActivate");
         Log.i(TAG, "Build: " + BUILD_ID);
+
+        /* Construct CursorController BEFORE bus.start() — its ctor
+         * subscribes to EVT_SCREEN_INFO, and native-side replays the
+         * sticky frame the moment it sees CMD_SYNC_REQ.  If we flipped
+         * the order the sticky payload would arrive at an empty
+         * listener set and be silently dropped, leaving the cursor
+         * stuck on its 1024x480 fallback resolution. */
+        CursorController.getInstance();
+
+        /* Kick the bus up front so every module (including cursor, which
+         * does not go through tryInit) has a live channel to the hook
+         * before the first CarPlay event fires. Idempotent. */
+        CarplayBus.getInstance().start();
+
         active = true;
         savedContext = context;
         frameworkAccess = extractFramework(context);
@@ -102,6 +118,9 @@ public class CarPlayHook {
             listenerProxy = null;
             savedContext = null;
             retrying = false;
+            /* Tear down bus last — after every module has had a chance
+             * to unsubscribe above.  stop() is idempotent. */
+            CarplayBus.getInstance().stop();
         }
     }
 
