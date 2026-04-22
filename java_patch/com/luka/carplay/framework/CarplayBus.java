@@ -365,8 +365,8 @@ public class CarplayBus {
             }
             backoffMs = 200;
 
-            /* Send sync request to receive sticky snapshot */
-            sendBare(CMD_SYNC_REQ, 0);
+            /* CMD_SYNC_REQ already enqueued atomically inside connect() —
+             * guaranteed to be the first frame on the wire. */
 
             /* Split I/O: reader blocks on in.read, writer drains queue.
              * Do both on this thread via ready checks: write if queue
@@ -483,11 +483,19 @@ public class CarplayBus {
             s.setKeepAlive(true);
             InputStream iin = s.getInputStream();
             OutputStream oout = s.getOutputStream();
+            /* Atomic: drop anything that piled up while disconnected,
+             * assign the new socket, and enqueue CMD_SYNC_REQ as the
+             * very first outbound frame — so no concurrent send() from
+             * CursorClient / other producer can slip ahead of it and
+             * deliver stale state to the freshly-connected hook.
+             * Java monitors are re-entrant, so sendBare() nested inside
+             * runs under the same lock hold. */
             synchronized (lock) {
-                closeConnectionLocked("reconnect");
+                closeConnectionLocked("reconnect");   /* flushes queue */
                 sock = s;
                 in = iin;
                 out = oout;
+                sendBare(CMD_SYNC_REQ, 0);            /* first frame guaranteed */
             }
             Log.i(TAG, "connected to " + HOST + ":" + PORT);
             return true;
