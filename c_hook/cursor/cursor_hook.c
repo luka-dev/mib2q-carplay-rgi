@@ -589,9 +589,24 @@ static void blit_cursor_nv12(uint8_t* buf, size_t buf_filled, size_t buf_alloc,
  * ============================================================ */
 int screen_create_window_group(screen_window_t win, const char* name) {
     ensure_resolved();
-    int rc = real_screen_create_window_group
-           ? real_screen_create_window_group(win, name)
-           : 0;
+    int rc;
+    if (real_screen_create_window_group) {
+        rc = real_screen_create_window_group(win, name);
+    } else {
+        /* RTLD_NEXT lookup failed — libscreen.so chain is broken
+         * or loaded late.  Returning 0 here would lie to the caller
+         * that the group was created; it would then proceed with an
+         * ungrouped window and silent compositor desync.  Log once
+         * and surface the failure. */
+        static bool warned = false;
+        if (!warned) {
+            warned = true;
+            LOG_ERROR(LOG_MODULE,
+                "screen_create_window_group: RTLD_NEXT unresolved — "
+                "returning -1 (window group NOT created)");
+        }
+        rc = -1;
+    }
     if (name && !g_carplay_window) {
         /* The CarPlay window group on MHI2 is
          * "dio_manager.airplay.qnx.screen_render" (observed). */
