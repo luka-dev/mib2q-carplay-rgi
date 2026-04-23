@@ -41,6 +41,12 @@ public class CarPlayHook {
     private static Object savedContext = null;
     private static DeviceStateHandler listenerProxy = null;
 
+    /* Live stock CombiBAPServiceNavi (actual AppConnectorNavi instance from
+     * lsd.jxe). Obtained via OSGi during init. Used for direct push of
+     * Map_Presentation_Status (hide flaps on VC) without relying on class
+     * replacement, which doesn't shadow lsd.jxe stock classes. */
+    private static volatile CombiBAPServiceNavi naviServiceRef = null;
+
     /* Modules (cover art handled by TerminalModeBapCombi$EventListener) */
     private static RouteGuidance routeGuidance = null;
 
@@ -95,6 +101,9 @@ public class CarPlayHook {
         active = false;
         carplayRunning = false;
         frameworkAccess = null;
+
+        /* Clear cached navi service ref (no longer valid once session ends) */
+        naviServiceRef = null;
 
         try {
             /* Stop modules */
@@ -153,6 +162,17 @@ public class CarPlayHook {
 
         if (naviService == null || deviceManager == null) {
             return false;
+        }
+
+        /* Cache CombiBAPServiceNavi ref for direct Map_Presentation_Status push.
+         * This is the same live stock instance BAPBridge casts and uses — by
+         * going through the OSGi-registered service we hit the real stock
+         * AppConnectorNavi regardless of class-replacement. */
+        if (naviService instanceof CombiBAPServiceNavi) {
+            naviServiceRef = (CombiBAPServiceNavi) naviService;
+            Log.i(TAG, "naviServiceRef cached: " + naviService.getClass().getName());
+        } else {
+            Log.w(TAG, "naviService is not CombiBAPServiceNavi: " + naviService.getClass().getName());
         }
 
         /* Initialize route guidance module */
@@ -225,11 +245,35 @@ public class CarPlayHook {
 
             Log.d(TAG, "Device: carplay=" + carplay + " active=" + activeState + " selected=" + selected);
 
+            boolean wasRunning = carplayRunning;
             carplayRunning = (carplay && activeState && selected);
 
             if (carplay && activeState && selected) {
                 if (routeGuidance != null && !routeGuidance.isRunning()) {
                     routeGuidance.start();
+                }
+                /* On transition false->true: push Map_Presentation_Status
+                 * with both flaps=false directly through the LIVE stock
+                 * CombiBAPServiceNavi — bypasses class-replacement which
+                 * doesn't shadow lsd.jxe stock classes. The stock
+                 * updateMapPresentation runs on the stock instance and
+                 * sends BAP FctID 54 to the cluster, hiding the flaps.
+                 *
+                 * largeMapView=false is safe default (normal layout); we
+                 * don't know the real last value but this one matches the
+                 * most common state during CarPlay (MMI not in Map tab). */
+                if (!wasRunning) {
+                    CombiBAPServiceNavi svc = naviServiceRef;
+                    if (svc != null) {
+                        try {
+                            Log.i(TAG, "CarPlay active -> push updateMapPresentation(false,false,false)");
+                            svc.updateMapPresentation(false, false, false);
+                        } catch (Throwable t) {
+                            Log.e(TAG, "updateMapPresentation push error", t);
+                        }
+                    } else {
+                        Log.w(TAG, "naviServiceRef is null, can't push hide-flaps");
+                    }
                 }
             } else if (!carplay) {
                 /* Actual disconnect — full teardown */

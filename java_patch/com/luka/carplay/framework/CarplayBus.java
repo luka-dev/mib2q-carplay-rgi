@@ -535,7 +535,8 @@ public class CarplayBus {
             Log.i(TAG, "connected to " + HOST + ":" + PORT);
             return true;
         } catch (IOException e) {
-            Log.d(TAG, "connect failed: " + e.getMessage());
+            /* Silent — native hook bus may not be up yet during warm-up;
+             * the reconnect loop retries every ~400 ms and drowns the log. */
             try { s.close(); } catch (Exception ex) {}
             return false;
         }

@@ -21,15 +21,24 @@
 
 #include "../framework/common.h"
 
-/* Opaque handle to a screen_window_t (we don't pull in <screen/screen.h>
- * here to keep the public API lightweight). */
+/* Opaque handles to screen_window_t / screen_context_t (we don't pull
+ * in <screen/screen.h> here to keep the public API lightweight). */
 typedef void* cursor_overlay_window_handle;
+typedef void* cursor_overlay_context_handle;
 
-/* Idempotent: only the first call with a non-null carplay_win and
- * positive (w, h) actually creates the window.  Returns 0 on success,
- * -1 if creation failed (one-shot — won't retry).  Safe to call on
- * every frame. */
+/* Idempotent: only the first call with a non-null carplay_win / ctx
+ * and positive (w, h) actually creates the window.  Returns 0 on
+ * success, -1 if creation failed (one-shot — won't retry).  Safe to
+ * call on every frame.
+ *
+ * `parent_ctx` must be the dio_manager's real screen_context_t (the
+ * one that already has displays attached and is driving the CarPlay
+ * video window).  We cannot use a freshly created SCREEN_APPLICATION_
+ * CONTEXT because on this QNX 6.5 build such contexts come up with
+ * DISPLAY_COUNT=0, and create_window_buffers then fails with ENOTTY
+ * in the display driver layer. */
 int  cursor_overlay_try_create(cursor_overlay_window_handle carplay_win,
+                               cursor_overlay_context_handle parent_ctx,
                                int w, int h);
 
 /* Initial test render: draws a red opaque square at top-left of the

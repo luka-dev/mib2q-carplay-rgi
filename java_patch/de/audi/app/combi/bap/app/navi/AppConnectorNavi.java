@@ -1,28 +1,31 @@
 /*
  * AppConnectorNavi
  *
- * PATCHED CLASS - replaces original in lsd.jxe
+ * PATCHED CLASS - attempts to replace original in lsd.jxe.
+ *
+ * NOTE: class-replacement via jar in /mnt/app/eso/hmi/lsd/jars/ may not
+ * actually shadow the stock class inside lsd.jxe (OSGi bundle / classloader
+ * isolation). If class-replacement WORKS, the gate below will intercept
+ * HMI's own updateMapPresentation calls during CarPlay. If it DOESN'T
+ * work, that's fine — CarPlayHook also pushes directly through the live
+ * stock CombiBAPServiceNavi which achieves the same goal without relying
+ * on class shadowing (see CarPlayHook.naviServiceRef / onDeviceStateUpdate).
+ *
+ * The gate here is belt-and-suspenders: no harm if active, no harm if not.
  *
  * Purpose:
- *   Intercept updateMapPresentation() to hide the map-tab flap menus
- *   (left/right) on the Virtual Cockpit while CarPlay is active.
+ *   Hide the map-tab flap menus (left/right) on the Virtual Cockpit while
+ *   CarPlay is active.
  *
- * Stock Audi behavior (unpatched):
- *   HMI opens/closes left flap -> updateMapPresentation(large, true/false, rightOpen)
- *   -> BAP FctID 54 Map_Presentation_Status -> cluster mirrors flap visually.
+ *   BAP FctID 54 Map_Presentation_Status mirrors MMI's flap state to VC.
+ *   Zeroing leftSideMenueOpen + rightSideMenueOpen tells cluster no flap
+ *   is open, hiding them visually.
  *
- * Patched behavior:
- *   - While CarPlay active (CarPlayHook.isCarplayRunning == true):
- *       force leftSideMenueOpen=false AND rightSideMenueOpen=false
- *       when sending FctID 54. Cluster shows clean map area.
- *   - When CarPlay inactive: pass-through unchanged (stock behavior).
- *   - No restore/republish on deactivate: cluster simply holds last
- *     sent state (flaps closed) until HMI's next natural state change
- *     pushes a new value. Sidebar is unblocked, just not immediately
- *     visible until user interacts.
+ * Patched behavior (if class-replacement works):
+ *   - While CarPlay active: force both flap bits to false.
+ *   - When inactive: pass-through unchanged.
  *
- * Only updateMapPresentation is modified. All other methods bit-identical
- * to decompiled MU1316 stock.
+ * All other methods bit-identical to decompiled MU1316 stock.
  */
 package de.audi.app.combi.bap.app.navi;
 

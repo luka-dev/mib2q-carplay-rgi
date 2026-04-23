@@ -20,6 +20,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <errno.h>
 
 DEFINE_LOG_MODULE(OVRLY);
 
@@ -33,6 +34,7 @@ DEFINE_LOG_MODULE(OVRLY);
  * decompile (cluster / cursor reverse sessions).  All values match the
  * QNX 6.5 screen.h we ship against on this HU. */
 #define PROP_ALPHA_MODE        1
+#define PROP_BUFFER_SIZE       6
 #define PROP_CLASS             7
 #define PROP_CONTEXT           12
 #define PROP_DISPLAY           14
@@ -69,10 +71,17 @@ typedef void* screen_buffer_t;
 
 /* libscreen entry points we need. */
 static struct {
+    int (*create_context)(screen_context_t*, int);
+    int (*destroy_context)(screen_context_t);
+    int (*get_context_pv)(screen_context_t, int, void**);
+    int (*get_context_iv)(screen_context_t, int, int*);
+    int (*get_display_pv)(void*, int, void**);
+    int (*get_display_iv)(void*, int, int*);
     int (*create_window)(screen_window_t*, screen_context_t);
     int (*destroy_window)(screen_window_t);
     int (*set_window_iv)(screen_window_t, int, const int*);
     int (*set_window_cv)(screen_window_t, int, int, const char*);
+    int (*set_window_pv)(screen_window_t, int, void**);
     int (*get_window_iv)(screen_window_t, int, int*);
     int (*get_window_pv)(screen_window_t, int, void**);
     int (*create_window_buffers)(screen_window_t, int);
@@ -84,12 +93,22 @@ static struct {
     bool resolved;
 } S;
 
+/* Context flag for screen_create_context(SCREEN_APPLICATION_CONTEXT). */
+#define SCREEN_APPLICATION_CONTEXT 0
+
 static void resolve_screen(void) {
     if (S.resolved) return;
+    S.create_context        = dlsym(RTLD_NEXT, "screen_create_context");
+    S.destroy_context       = dlsym(RTLD_NEXT, "screen_destroy_context");
+    S.get_context_pv        = dlsym(RTLD_NEXT, "screen_get_context_property_pv");
+    S.get_context_iv        = dlsym(RTLD_NEXT, "screen_get_context_property_iv");
+    S.get_display_pv        = dlsym(RTLD_NEXT, "screen_get_display_property_pv");
+    S.get_display_iv        = dlsym(RTLD_NEXT, "screen_get_display_property_iv");
     S.create_window         = dlsym(RTLD_NEXT, "screen_create_window");
     S.destroy_window        = dlsym(RTLD_NEXT, "screen_destroy_window");
     S.set_window_iv         = dlsym(RTLD_NEXT, "screen_set_window_property_iv");
     S.set_window_cv         = dlsym(RTLD_NEXT, "screen_set_window_property_cv");
+    S.set_window_pv         = dlsym(RTLD_NEXT, "screen_set_window_property_pv");
     S.get_window_iv         = dlsym(RTLD_NEXT, "screen_get_window_property_iv");
     S.get_window_pv         = dlsym(RTLD_NEXT, "screen_get_window_property_pv");
     S.create_window_buffers = dlsym(RTLD_NEXT, "screen_create_window_buffers");
@@ -100,9 +119,46 @@ static void resolve_screen(void) {
     S.flush_context         = dlsym(RTLD_NEXT, "screen_flush_context");
     S.resolved = true;
     LOG_INFO(LOG_MODULE,
-        "screen ABI resolved: create=%p set_iv=%p post=%p join=%p",
-        (void*)S.create_window, (void*)S.set_window_iv,
+        "screen ABI resolved: create_ctx=%p create_win=%p set_iv=%p post=%p join=%p",
+        (void*)S.create_context, (void*)S.create_window, (void*)S.set_window_iv,
         (void*)S.post_window, (void*)S.join_window_group);
+}
+
+/* PROP_DISPLAYS on context: 9 in QNX 6.5 screen.h. */
+#define PROP_DISPLAYS           9
+/* PROP_DISPLAY_COUNT on context: 38 in QNX 6.5 screen.h. */
+#define PROP_DISPLAY_COUNT      38
+
+/* Enumerate our context's displays and return the first one, or NULL.
+ * The CarPlay window (from the dio_manager host context) lands on the
+ * main LVDS display; our own context's display list is identical —
+ * io-winmgr-gles2 exposes the same displays to every connected
+ * context on this HU. */
+static void* overlay_pick_first_display(screen_context_t ctx) {
+    if (!S.get_context_iv || !S.get_context_pv) return NULL;
+    int display_count = 0;
+    int rc = S.get_context_iv(ctx, PROP_DISPLAY_COUNT, &display_count);
+    LOG_INFO(LOG_MODULE, "ctx DISPLAY_COUNT rc=%d count=%d", rc, display_count);
+    if (rc != 0 || display_count <= 0) return NULL;
+
+    /* Cap to 4 — no HU we support has more than a handful. */
+    if (display_count > 4) display_count = 4;
+    void* displays[4] = {0};
+    rc = S.get_context_pv(ctx, PROP_DISPLAYS, displays);
+    LOG_INFO(LOG_MODULE, "ctx DISPLAYS rc=%d d0=%p d1=%p",
+             rc, displays[0], displays[1]);
+    if (rc != 0) return NULL;
+
+    /* Log each display's size for operator insight. */
+    if (S.get_display_iv) {
+        for (int i = 0; i < display_count && displays[i]; i++) {
+            int sz[2] = {0, 0};
+            int srs = S.get_display_iv(displays[i], PROP_SIZE, sz);
+            LOG_INFO(LOG_MODULE, "  display[%d]=%p size=%dx%d rc=%d",
+                     i, displays[i], sz[0], sz[1], srs);
+        }
+    }
+    return displays[0];
 }
 
 /* =========================================================
@@ -116,7 +172,6 @@ static struct {
     pthread_mutex_t  lock;
     bool             create_attempted;
     bool             created;
-    screen_context_t parent_ctx;
     screen_window_t  win;
     screen_buffer_t  buf;             /* single-buffered for test */
     void*            ptr;             /* CPU view of buf */
@@ -126,46 +181,86 @@ static struct {
 
 /* --- Creation (single-shot) ----------------------------------------- */
 
-static int overlay_do_create(screen_window_t carplay_win, int w, int h) {
+static int overlay_do_create(screen_window_t carplay_win,
+                             screen_context_t parent_ctx,
+                             int w, int h) {
     if (!S.create_window || !S.set_window_iv) {
         LOG_ERROR(LOG_MODULE, "screen ABI not available");
         return -1;
     }
-    if (!carplay_win) {
-        LOG_ERROR(LOG_MODULE, "no CarPlay parent window tracked");
+    if (!carplay_win || !parent_ctx) {
+        LOG_ERROR(LOG_MODULE, "missing carplay_win=%p parent_ctx=%p",
+                  carplay_win, parent_ctx);
         return -1;
     }
 
-    /* Get the CarPlay window's screen_context_t so our overlay lands
-     * on the same compositor instance + display. */
-    screen_context_t ctx = NULL;
-    int rc = S.get_window_pv(carplay_win, PROP_CONTEXT, (void**)&ctx);
-    if (rc != 0 || !ctx) {
-        LOG_ERROR(LOG_MODULE, "get parent CONTEXT rc=%d ctx=%p", rc, ctx);
-        return -1;
-    }
+    /* Use dio_manager's existing context — the one libairplay allocates
+     * its CarPlay video window in.  Creating our own SCREEN_APPLICATION_
+     * CONTEXT came up with zero displays and ENOTTY at buffer-alloc. */
+    screen_context_t ctx = parent_ctx;
+    LOG_INFO(LOG_MODULE, "using parent ctx=%p", ctx);
 
     screen_window_t win = NULL;
-    rc = S.create_window(&win, ctx);
+    int rc = S.create_window(&win, ctx);
     if (rc != 0 || !win) {
         LOG_ERROR(LOG_MODULE, "screen_create_window rc=%d win=%p", rc, win);
         return -1;
     }
 
-    /* "graphics" class so compositor treats this as a normal RGBA
-     * window (not a YUV media surface). */
-    S.set_window_cv(win, PROP_CLASS, 8, "graphics");
-    S.set_window_cv(win, PROP_ID_STRING, 7, "overlay");
+    /* Set properties in the order create_window_buffers cares about,
+     * and log each rc so we can pinpoint which property the compositor
+     * rejects.  On QNX 6.5 io-winmgr, CLASS must be set before buffers
+     * are created; USAGE + FORMAT + (SIZE or BUFFER_SIZE) determine
+     * whether the allocator will grant the backing store.
+     *
+     * We intentionally skip CLASS: the default class accepts plain
+     * CPU-written RGBA surfaces with USAGE_NATIVE|USAGE_WRITE.  Setting
+     * CLASS="graphics" on this build rejects non-EGL usage. */
+    /* Log the parent context's displays for operator insight — when
+     * we use dio_manager's real ctx these should be populated. */
+    (void)overlay_pick_first_display(ctx);
 
-    int format    = FMT_RGBA8888;        S.set_window_iv(win, PROP_FORMAT,       &format);
-    int transp    = TRANS_SOURCE_OVER;   S.set_window_iv(win, PROP_TRANSPARENCY, &transp);
-    int usage     = USAGE_NATIVE | USAGE_WRITE;
-                                         S.set_window_iv(win, PROP_USAGE,        &usage);
-    int sz[2]     = { w, h };            S.set_window_iv(win, PROP_SIZE,         sz);
-    int pos[2]    = { 0, 0 };            S.set_window_iv(win, PROP_POSITION,     pos);
-    int zorder    = 100;                 S.set_window_iv(win, PROP_ZORDER,       &zorder);
-    int ga        = 255;                 S.set_window_iv(win, PROP_GLOBAL_ALPHA, &ga);
-    int visible   = 1;                   S.set_window_iv(win, PROP_VISIBLE,      &visible);
+    /* No CLASS set — defaults to the CPU-accessible raw buffer path
+     * on io-winmgr-gles2, which is exactly what an RGBA overlay wants.
+     * Setting CLASS="media" gave ENOTTY (HW overlay pipelines already
+     * taken by CarPlay); CLASS="graphics" gave EINVAL (requires EGL
+     * usage).  Default path uses GPU-composition, sampling our CPU
+     * buffer as a texture at compose time. */
+    int r;
+    int format    = FMT_RGBA8888;
+    r = S.set_window_iv(win, PROP_FORMAT, &format);
+    LOG_INFO(LOG_MODULE, "set FORMAT=%d rc=%d", format, r);
+
+    int usage     = USAGE_WRITE;
+    r = S.set_window_iv(win, PROP_USAGE, &usage);
+    LOG_INFO(LOG_MODULE, "set USAGE=0x%x rc=%d", usage, r);
+
+    int transp    = TRANS_SOURCE_OVER;
+    r = S.set_window_iv(win, PROP_TRANSPARENCY, &transp);
+    LOG_INFO(LOG_MODULE, "set TRANSPARENCY=%d rc=%d", transp, r);
+
+    int sz[2]     = { w, h };
+    r = S.set_window_iv(win, PROP_SIZE, sz);
+    LOG_INFO(LOG_MODULE, "set SIZE=%dx%d rc=%d", w, h, r);
+
+    int pos[2]    = { 0, 0 };
+    r = S.set_window_iv(win, PROP_POSITION, pos);
+    LOG_INFO(LOG_MODULE, "set POSITION=%d,%d rc=%d", pos[0], pos[1], r);
+
+    int zorder    = 100;
+    r = S.set_window_iv(win, PROP_ZORDER, &zorder);
+    LOG_INFO(LOG_MODULE, "set ZORDER=%d rc=%d", zorder, r);
+
+    int ga        = 255;
+    r = S.set_window_iv(win, PROP_GLOBAL_ALPHA, &ga);
+    LOG_INFO(LOG_MODULE, "set GLOBAL_ALPHA=%d rc=%d", ga, r);
+
+    int visible   = 1;
+    r = S.set_window_iv(win, PROP_VISIBLE, &visible);
+    LOG_INFO(LOG_MODULE, "set VISIBLE=%d rc=%d", visible, r);
+
+    r = S.set_window_cv(win, PROP_ID_STRING, 7, "overlay");
+    LOG_INFO(LOG_MODULE, "set ID_STRING rc=%d", r);
 
     /* Join CarPlay's window group — compositor sees us as a sibling
      * of the video window rather than a detached top-level. */
@@ -175,9 +270,12 @@ static int overlay_do_create(screen_window_t carplay_win, int w, int h) {
                  OVERLAY_WINDOW_GROUP, jrc);
     }
 
+    errno = 0;
     rc = S.create_window_buffers(win, OVERLAY_BUFFER_COUNT);
     if (rc != 0) {
-        LOG_ERROR(LOG_MODULE, "create_window_buffers rc=%d", rc);
+        int e = errno;
+        LOG_ERROR(LOG_MODULE, "create_window_buffers rc=%d errno=%d (%s)",
+                  rc, e, strerror(e));
         S.destroy_window(win);
         return -1;
     }
@@ -207,7 +305,6 @@ static int overlay_do_create(screen_window_t carplay_win, int w, int h) {
         return -1;
     }
 
-    O.parent_ctx = ctx;
     O.win        = win;
     O.buf        = bufs[0];
     O.ptr        = ptr;
@@ -222,6 +319,7 @@ static int overlay_do_create(screen_window_t carplay_win, int w, int h) {
 }
 
 int cursor_overlay_try_create(cursor_overlay_window_handle carplay_win,
+                              cursor_overlay_context_handle parent_ctx,
                               int w, int h) {
     resolve_screen();
     pthread_mutex_lock(&O.lock);
@@ -231,7 +329,8 @@ int cursor_overlay_try_create(cursor_overlay_window_handle carplay_win,
         return done;
     }
     O.create_attempted = true;
-    int rc = overlay_do_create((screen_window_t)carplay_win, w, h);
+    int rc = overlay_do_create((screen_window_t)carplay_win,
+                               (screen_context_t)parent_ctx, w, h);
     O.created = (rc == 0);
     bool just_created = O.created;
     pthread_mutex_unlock(&O.lock);
@@ -308,6 +407,8 @@ void cursor_overlay_destroy(void) {
         int rc = S.destroy_window(O.win);
         LOG_INFO(LOG_MODULE, "destroy_window rc=%d", rc);
     }
+    /* Don't destroy parent ctx — it's dio_manager's real one, still
+     * in use by CarPlay's video window. */
     O.win = NULL;
     O.buf = NULL;
     O.ptr = NULL;

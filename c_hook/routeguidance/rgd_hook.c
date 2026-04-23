@@ -932,8 +932,10 @@ void rgd_clear_state(const char* reason) {
 }
 
 hook_result_t rgd_request_updates(void) {
+    /* Silent short-circuit when the component isn't ready yet — the caller
+     * retries every second during CarPlay warm-up and the warning spam
+     * drowned the log. */
     if (!g_rgd.component_valid) {
-        LOG_WARN(LOG_MODULE, "Cannot request: component not valid");
         return HOOK_ERR_INIT;
     }
 

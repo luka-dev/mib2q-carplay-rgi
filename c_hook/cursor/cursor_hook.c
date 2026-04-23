@@ -33,6 +33,8 @@
 #include "cursor_overlay.h"
 
 #include <dlfcn.h>
+#include <sys/mman.h>
+#include <errno.h>
 
 DEFINE_LOG_MODULE(CURSOR);
 
@@ -40,8 +42,9 @@ DEFINE_LOG_MODULE(CURSOR);
  * OMX & Screen ABI -- minimal copies of the structs we touch
  * ============================================================ */
 
-/* screen_window_t is an opaque pointer in QNX Screen API. */
+/* screen_window_t / screen_context_t are opaque pointers in QNX Screen API. */
 typedef void* screen_window_t;
+typedef void* screen_context_t;
 
 /* Window properties we query (magic numbers from QNX Screen headers). */
 #define SCREEN_PROPERTY_SIZE  40
@@ -62,6 +65,7 @@ typedef struct {
 
 /* Resolved originals (populated lazily via dlsym). */
 static int  (*real_screen_create_window_group)(screen_window_t, const char*) = NULL;
+static int  (*real_screen_create_window)(screen_window_t*, screen_context_t) = NULL;
 static int  (*real_screen_get_window_property_iv)(screen_window_t, int, int*) = NULL;
 static void (*real_onFillBufferDoneCallback)(void*, void*, omx_buf_hdr_t*) = NULL;
 
@@ -69,6 +73,8 @@ static pthread_once_t g_resolved_once = PTHREAD_ONCE_INIT;
 static void resolve_originals(void) {
     real_screen_create_window_group =
         dlsym(RTLD_NEXT, "screen_create_window_group");
+    real_screen_create_window =
+        dlsym(RTLD_NEXT, "screen_create_window");
     real_screen_get_window_property_iv =
         dlsym(RTLD_NEXT, "screen_get_window_property_iv");
     real_onFillBufferDoneCallback = (void (*)(void*, void*, omx_buf_hdr_t*))dlsym(
@@ -100,11 +106,74 @@ static bool            g_fading = false;
 static uint64_t        g_fade_start_ms = 0;
 
 /* Dimension discovery state. */
-static screen_window_t g_carplay_window = NULL;
-static int             g_screen_w = 0;
-static int             g_screen_h = 0;
-static int             g_screen_published_w = 0;
-static int             g_screen_published_h = 0;
+static screen_window_t  g_carplay_window = NULL;
+static screen_context_t g_carplay_ctx    = NULL;
+static int              g_screen_w = 0;
+static int              g_screen_h = 0;
+static int              g_screen_published_w = 0;
+static int              g_screen_published_h = 0;
+
+
+/* Shadow buffer — an anonymous mmap'd region the size of the largest
+ * OMX output buffer we've seen.  We redirect buf->pBuffer to this
+ * shadow for the duration of real_onFillBufferDoneCallback so the
+ * cursor blit lands on a copy, not the decoder's reference frame.
+ *
+ * STATUS ON MU1316: live test hung the whole HU the moment the
+ * shadow-swap path first fired (user touched the touchpad → cursor
+ * became visible → first frame with vis=1 swapped pBuffer → system
+ * froze).  The OMX pBuffer on this platform is backed by a physical
+ * DMA/ION address that the renderer / compositor uses for direct
+ * scan-out; swapping to a MAP_ANONYMOUS virtual page means the
+ * hardware reads an unrelated physical page on the next DMA cycle,
+ * which wedges the entire scan-out engine.
+ *
+ * Default is therefore DISABLED.  Enable via CP_CURSOR_SHADOW=1 only
+ * if experimenting on a HU variant that uses CPU-only composition
+ * (no HW DMA on the video plane).  On MU1316 this is essentially a
+ * kill-switch for operator labs — keep it off in production. */
+static uint8_t* g_shadow     = NULL;
+static size_t   g_shadow_sz  = 0;
+static int      g_shadow_mode = -1;  /* -1 unknown, 0 disabled, 1 enabled */
+
+static int shadow_mode(void) {
+    if (g_shadow_mode < 0) {
+        const char* e = getenv("CP_CURSOR_SHADOW");
+        /* Opt-in: only enable when explicitly set to 1.  Default off
+         * because shadow-swap hangs the HU on MU1316 (DMA buffer). */
+        g_shadow_mode = (e && e[0] == '1') ? 1 : 0;
+        LOG_INFO(LOG_MODULE, "shadow-swap mode: %s",
+                 g_shadow_mode ? "ENABLED (C, dangerous)" : "DISABLED (in-place default)");
+    }
+    return g_shadow_mode;
+}
+
+/* Lazy alloc / grow.  Returns pointer to shadow sized to `need` bytes,
+ * or NULL on mmap failure (caller then falls back to in-place). */
+static uint8_t* shadow_ensure(size_t need) {
+    if (need == 0) return NULL;
+    if (g_shadow && g_shadow_sz >= need) return g_shadow;
+    if (g_shadow) {
+        munmap(g_shadow, g_shadow_sz);
+        g_shadow = NULL;
+        g_shadow_sz = 0;
+    }
+    /* Round up to a page so mmap is happy on any QNX config. */
+    size_t alloc = (need + 0xFFFu) & ~(size_t)0xFFF;
+    void* p = mmap(NULL, alloc,
+                   PROT_READ | PROT_WRITE,
+                   MAP_PRIVATE | MAP_ANON, -1, 0);
+    if (p == MAP_FAILED) {
+        LOG_ERROR(LOG_MODULE, "shadow mmap %zu bytes failed: %s",
+                  alloc, strerror(errno));
+        return NULL;
+    }
+    g_shadow    = (uint8_t*)p;
+    g_shadow_sz = alloc;
+    LOG_INFO(LOG_MODULE, "shadow allocated: %p size=%zu (need=%zu)",
+             p, alloc, need);
+    return g_shadow;
+}
 
 /* Sprite: 128×128, per-pixel {Y_target, alpha}, computed once at module
  * load into g_sprite via 4×4 supersampled anti-aliasing.
@@ -586,6 +655,37 @@ static void blit_cursor_nv12(uint8_t* buf, size_t buf_filled, size_t buf_alloc,
 }
 
 /* ============================================================
+ * LD_PRELOAD: screen_create_window — capture the first screen_context_t
+ * we see.  dio_manager creates all its windows against a single
+ * app-side context that has displays pre-assigned by io-winmgr, so
+ * the first ctx that flies by is the right one for our overlay.
+ * Without capturing this we'd have to create our own
+ * SCREEN_APPLICATION_CONTEXT, which comes up with DISPLAY_COUNT=0 on
+ * this QNX 6.5 build and then blocks screen_create_window_buffers
+ * with ENOTTY.
+ * ============================================================ */
+int screen_create_window(screen_window_t* pwin, screen_context_t ctx) {
+    ensure_resolved();
+    int rc;
+    if (real_screen_create_window) {
+        rc = real_screen_create_window(pwin, ctx);
+    } else {
+        static bool warned = false;
+        if (!warned) {
+            warned = true;
+            LOG_ERROR(LOG_MODULE,
+                "screen_create_window: RTLD_NEXT unresolved — returning -1");
+        }
+        rc = -1;
+    }
+    if (rc == 0 && ctx && !g_carplay_ctx) {
+        g_carplay_ctx = ctx;
+        LOG_INFO(LOG_MODULE, "captured screen_context_t=%p on first window", ctx);
+    }
+    return rc;
+}
+
+/* ============================================================
  * LD_PRELOAD: screen_create_window_group — find the CarPlay window
  * ============================================================ */
 int screen_create_window_group(screen_window_t win, const char* name) {
@@ -640,33 +740,16 @@ void _ZN3dio16COMXVideoDecoder24onFillBufferDoneCallbackEPvP20OMX_BUFFERHEADERTY
             }
         }
 
-        /* Bring up the overlay window once we have a CarPlay parent
-         * plus a usable screen size.  Idempotent — subsequent calls
-         * are O(lock + flag check) so cost in the per-frame hot path
-         * is negligible. */
-        if (g_carplay_window && g_screen_w > 0 && g_screen_h > 0) {
-            cursor_overlay_try_create(g_carplay_window, g_screen_w, g_screen_h);
-        }
-
-        /* Plain in-place blit.  Reference frame pollution leaves
-         * motion-compensation ghost trails on static CarPlay UI —
-         * accepted for now.  The proper fix is a compositor overlay
-         * surface (separate screen_window on top of the video), not
-         * touching the decoder buffer at all.  Two prior attempts
-         * were tried and failed:
-         *
-         *   1. Shadow-buffer + pBuffer swap: pBuffer is a DMA/ION
-         *      handle on QCOM OMX, not a CPU address; redirecting
-         *      it to a .bss shadow crashed the compositor/scan-out.
-         *   2. save/blit/render/restore inside the same callback:
-         *      after restore, the decoder reference was clean but
-         *      something in the post-render path destabilised the
-         *      system (crashed the whole HU).
-         *
-         * Leaving the ghost as a known issue until the overlay-
-         * surface approach is ready. */
+        /* In-place NV12 blit.  Moving the blit to screen_post_window
+         * (where the buffer is client-held) was tried and produced
+         * identical ghost behaviour — the HW decoder on MU1316 keeps
+         * output buffers in its reference set even while the client
+         * holds them, so any modification propagates through
+         * motion-compensation regardless of when we write.  Ghost is
+         * therefore architectural on this platform and the simplest
+         * path (blit here at fillBufferDone) is the canonical one. */
         if (g_screen_w > 0 && g_screen_h > 0) {
-            int vis, cx, cy, alpha;
+            int vis = 0, cx = 0, cy = 0, alpha = 0;
             pthread_mutex_lock(&g_cursor_lock);
             alpha = cursor_effective_alpha_locked();
             vis = (alpha > 0) ? 1 : 0;
@@ -675,7 +758,8 @@ void _ZN3dio16COMXVideoDecoder24onFillBufferDoneCallbackEPvP20OMX_BUFFERHEADERTY
 
             if (vis) {
                 blit_cursor_nv12(buf->pBuffer,
-                                 (size_t)buf->nFilledLen, (size_t)buf->nAllocLen,
+                                 (size_t)buf->nFilledLen,
+                                 (size_t)buf->nAllocLen,
                                  g_screen_w, g_screen_h, cx, cy, alpha);
             }
         }
