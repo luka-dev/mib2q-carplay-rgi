@@ -30,10 +30,16 @@
 #include "../framework/common.h"
 #include "../framework/logging.h"
 #include "../framework/bus.h"
+#include "cursor_overlay.h"
 
 #include <dlfcn.h>
 
 DEFINE_LOG_MODULE(CURSOR);
+
+/* Master toggle owned by cluster_hook.c (loaded from libcarplay_hook.conf).
+ * Lets one config knob take down the entire cursor feature without
+ * deploying a new .so / .jar. */
+extern bool cluster_cfg_cursor_enabled(void);
 
 /* ============================================================
  * OMX & Screen ABI -- minimal copies of the structs we touch
@@ -639,8 +645,32 @@ void _ZN3dio16COMXVideoDecoder24onFillBufferDoneCallbackEPvP20OMX_BUFFERHEADERTY
             }
         }
 
-        /* Blit if visible and we have a sane size guess. */
-        if (g_screen_w > 0 && g_screen_h > 0) {
+        /* Bring up the overlay window once we have a CarPlay parent
+         * plus a usable screen size.  Idempotent — subsequent calls
+         * are O(lock + flag check) so cost in the per-frame hot path
+         * is negligible. */
+        if (g_carplay_window && g_screen_w > 0 && g_screen_h > 0) {
+            cursor_overlay_try_create(g_carplay_window, g_screen_w, g_screen_h);
+        }
+
+        /* Plain in-place blit.  Reference frame pollution leaves
+         * motion-compensation ghost trails on static CarPlay UI —
+         * accepted for now.  The proper fix is a compositor overlay
+         * surface (separate screen_window on top of the video), not
+         * touching the decoder buffer at all.  Two prior attempts
+         * were tried and failed:
+         *
+         *   1. Shadow-buffer + pBuffer swap: pBuffer is a DMA/ION
+         *      handle on QCOM OMX, not a CPU address; redirecting
+         *      it to a .bss shadow crashed the compositor/scan-out.
+         *   2. save/blit/render/restore inside the same callback:
+         *      after restore, the decoder reference was clean but
+         *      something in the post-render path destabilised the
+         *      system (crashed the whole HU).
+         *
+         * Leaving the ghost as a known issue until the overlay-
+         * surface approach is ready. */
+        if (g_screen_w > 0 && g_screen_h > 0 && cluster_cfg_cursor_enabled()) {
             int vis, cx, cy, alpha;
             pthread_mutex_lock(&g_cursor_lock);
             alpha = cursor_effective_alpha_locked();
