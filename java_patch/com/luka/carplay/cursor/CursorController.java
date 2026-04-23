@@ -98,6 +98,10 @@ public class CursorController implements CarplayBus.Listener {
         void postPinch(int count, int x1, int y1, int x2, int y2);
     }
 
+    /* Cursor feature is always on — kept as a method for DSI patch call
+     * sites that were originally gated by a wire-driven toggle. */
+    public static boolean isFeatureEnabled() { return true; }
+
     /* ============================================================
      * Singleton
      * ============================================================ */

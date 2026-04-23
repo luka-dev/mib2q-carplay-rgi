@@ -36,11 +36,6 @@
 
 DEFINE_LOG_MODULE(CURSOR);
 
-/* Master toggle owned by cluster_hook.c (loaded from libcarplay_hook.conf).
- * Lets one config knob take down the entire cursor feature without
- * deploying a new .so / .jar. */
-extern bool cluster_cfg_cursor_enabled(void);
-
 /* ============================================================
  * OMX & Screen ABI -- minimal copies of the structs we touch
  * ============================================================ */
@@ -670,7 +665,7 @@ void _ZN3dio16COMXVideoDecoder24onFillBufferDoneCallbackEPvP20OMX_BUFFERHEADERTY
          *
          * Leaving the ghost as a known issue until the overlay-
          * surface approach is ready. */
-        if (g_screen_w > 0 && g_screen_h > 0 && cluster_cfg_cursor_enabled()) {
+        if (g_screen_w > 0 && g_screen_h > 0) {
             int vis, cx, cy, alpha;
             pthread_mutex_lock(&g_cursor_lock);
             alpha = cursor_effective_alpha_locked();

@@ -29,6 +29,7 @@ CVR_SRCS="
 
 CURSOR_SRCS="
     cursor/cursor_hook.c
+    cursor/cursor_overlay.c
 "
 
 MAIN_SRCS="main.c"

@@ -202,6 +202,9 @@ class CarplayDSILifecycleController$TerminalModeDSIKeyEventsController
                             new TouchEvent(x, y)
                         };
                         DSICarplaySafe bridge = dsi(outer);
+                        Log.i("DSI", "OUT screen_touch count=" + count
+                                + " xy=" + x + "," + y
+                                + " bridge=" + (bridge != null));
                         if (bridge != null) {
                             bridge.postTouchEvent(1 /*touchscreen id*/, count, ev);
                         }
@@ -224,6 +227,10 @@ class CarplayDSILifecycleController$TerminalModeDSIKeyEventsController
                             new TouchEvent(x2, y2)
                         };
                         DSICarplaySafe bridge = dsi(outer);
+                        Log.i("DSI", "OUT pinch count=" + count
+                                + " p1=" + x1 + "," + y1
+                                + " p2=" + x2 + "," + y2
+                                + " bridge=" + (bridge != null));
                         if (bridge != null) {
                             bridge.postTouchEvent(1 /*touchscreen id*/, count, ev);
                         }
@@ -243,13 +250,41 @@ class CarplayDSILifecycleController$TerminalModeDSIKeyEventsController
      * ============================================================ */
     public void updateTouchEvent(int id, int count, int n3,
                                  int x1, int y1, int n6, int n7) {
+        if (!CursorController.isFeatureEnabled()) {
+            /* Stock touchpad: forward to bridge as before our patch.
+             * postTouchEvent with id from caller, active count, and
+             * positions for both fingers in the count>=2 branch. */
+            DSICarplaySafe bridge = dsi(this.this$0);
+            if (bridge != null) {
+                if (count >= 2) {
+                    int[] p2 = this.calcSecondCorr(x1, y1, n6, n7);
+                    TouchEvent[] ev = new TouchEvent[] {
+                        new TouchEvent(x1, y1), new TouchEvent(p2[0], p2[1])
+                    };
+                    bridge.postTouchEvent(id, count, ev);
+                } else if (count == 1) {
+                    TouchEvent[] ev = new TouchEvent[] { new TouchEvent(x1, y1) };
+                    bridge.postTouchEvent(id, 1, ev);
+                } else {
+                    bridge.postTouchEvent(id, 0, new TouchEvent[0]);
+                }
+            }
+            return;
+        }
         CursorController c = CursorController.getInstance();
         if (count >= 2) {
             int[] p2 = this.calcSecondCorr(x1, y1, n6, n7);
+            Log.i("DSI", "IN  pad7 id=" + id + " count=" + count
+                    + " p1=" + x1 + "," + y1
+                    + " angDist=" + n6 + "," + n7
+                    + " p2=" + p2[0] + "," + p2[1]);
             c.onTwoFingers(x1, y1, p2[0], p2[1]);
         } else if (count == 1) {
+            Log.i("DSI", "IN  pad7 id=" + id + " count=1"
+                    + " p1=" + x1 + "," + y1);
             c.onOneFinger(x1, y1);
         } else {
+            Log.i("DSI", "IN  pad7 id=" + id + " count=0 (end)");
             c.onTouchEnd();
         }
         /* Do NOT call through to postTouchEvent — CursorController owns
@@ -265,6 +300,54 @@ class CarplayDSILifecycleController$TerminalModeDSIKeyEventsController
      * ============================================================ */
     public void updateTouchEvents(
             de.audi.app.terminalmode.keyevents.TouchEvent[] touchEventArray) {
+        if (!CursorController.isFeatureEnabled()) {
+            /* Stock-ish fallback for the array form.  If events carry a
+             * screen offset, subtract it (matches the stock code for
+             * touchscreens); otherwise pass coords as-is.  We emit ONE
+             * postTouchEvent matching the active-finger count. */
+            DSICarplaySafe bridge = dsi(this.this$0);
+            if (bridge == null) return;
+            int n = 0;
+            TouchEvent[] out;
+            if (touchEventArray == null || touchEventArray.length == 0) {
+                bridge.postTouchEvent(1, 0, new TouchEvent[0]);
+                return;
+            }
+            ITerminalModeConfiguration conf = cfg(this.this$0);
+            int offX = (conf != null && touchEventArray[0].isTouchScreen())
+                       ? conf.getScreenOffsetX() : 0;
+            int offY = (conf != null && touchEventArray[0].isTouchScreen())
+                       ? conf.getScreenOffsetY() : 0;
+            out = new TouchEvent[touchEventArray.length];
+            for (int i = 0; i < touchEventArray.length; i++) {
+                out[i] = new TouchEvent(
+                    touchEventArray[i].getCurrentX() - offX,
+                    touchEventArray[i].getCurrentY() - offY);
+                if (touchEventArray[i].getTouchState() != 1) n++;
+            }
+            bridge.postTouchEvent(1, n, out);
+            return;
+        }
+        /* Dump raw array contents for diagnostics.  getTouchState()==1
+         * means RELEASED per Audi convention; keep an eye on touches
+         * that arrive as (count=N, state=1) — they look active but
+         * should not drive motion. */
+        if (touchEventArray == null) {
+            Log.i("DSI", "IN  padArr null");
+        } else {
+            StringBuffer sb = new StringBuffer(64 + touchEventArray.length * 32);
+            sb.append("IN  padArr len=").append(touchEventArray.length);
+            if (touchEventArray.length > 0) {
+                sb.append(" isTouchScreen=").append(touchEventArray[0].isTouchScreen());
+            }
+            for (int i = 0; i < touchEventArray.length; i++) {
+                sb.append(" [").append(i).append("]")
+                  .append(" s=").append(touchEventArray[i].getTouchState())
+                  .append(" xy=").append(touchEventArray[i].getCurrentX())
+                  .append(",").append(touchEventArray[i].getCurrentY());
+            }
+            Log.i("DSI", sb.toString());
+        }
         if (touchEventArray != null && touchEventArray.length > 0
                 && touchEventArray[0].isTouchScreen()) {
             /* Stock touchscreen path (passthrough).  Minimal reimplementation
@@ -328,24 +411,33 @@ class CarplayDSILifecycleController$TerminalModeDSIKeyEventsController
      * updateKey — only DDS_SELECT with visible cursor is altered
      * ============================================================ */
     public void updateKey(Key key, KeyState keyState) {
-        /* Gate DDS_SELECT → synthetic tap when cursor is up. */
-        if (Key.DDS_SELECT.is(key)
+        /* Gate DDS_SELECT → synthetic tap when cursor is up.  Feature
+         * flag short-circuits back to stock knob behaviour (postButtonEvent)
+         * when disabled via libcarplay_hook.conf cursor_enabled=0. */
+        if (CursorController.isFeatureEnabled()
+                && Key.DDS_SELECT.is(key)
                 && CursorController.getInstance().isVisible()) {
             CursorController c = CursorController.getInstance();
             DSICarplaySafe bridge = dsi(this.this$0);
             if (keyState.is(KeyState.PRESSED)) {
                 c.armForKnobPress();
+                int cx = c.getX(), cy = c.getY();
+                Log.i("DSI", "click press at " + cx + "," + cy
+                        + " bridge=" + (bridge != null));
                 if (bridge != null) {
                     TouchEvent[] ev = new TouchEvent[] {
-                        new TouchEvent(c.getX(), c.getY())
+                        new TouchEvent(cx, cy)
                     };
                     bridge.postTouchEvent(1 /*touchscreen*/, 1, ev);
                 }
             } else if (keyState.is(KeyState.RELEASED)) {
+                int cx = c.getX(), cy = c.getY();
+                Log.i("DSI", "click release at " + cx + "," + cy
+                        + " bridge=" + (bridge != null));
                 if (bridge != null) {
                     /* Preserve coords on release — see TouchSink for rationale. */
                     TouchEvent[] ev = new TouchEvent[] {
-                        new TouchEvent(c.getX(), c.getY())
+                        new TouchEvent(cx, cy)
                     };
                     bridge.postTouchEvent(1 /*touchscreen*/, 0, ev);
                 }
