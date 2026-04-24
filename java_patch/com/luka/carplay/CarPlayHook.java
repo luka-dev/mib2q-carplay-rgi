@@ -14,8 +14,6 @@ package com.luka.carplay;
 import com.luka.carplay.cursor.CursorController;
 import com.luka.carplay.framework.CarplayBus;
 import com.luka.carplay.framework.Log;
-import com.luka.carplay.kombi.FilteringKombiProxy;
-import com.luka.carplay.kombi.KombiInjector;
 import com.luka.carplay.routeguidance.RouteGuidance;
 import de.audi.app.terminalmode.IContext;
 import de.audi.app.terminalmode.device.IActiveDeviceStateListener;
@@ -25,10 +23,6 @@ import de.audi.app.terminalmode.osgi.IServiceManager;
 import de.audi.atip.base.IFrameworkAccess;
 import de.audi.atip.interapp.combi.bap.navi.CombiBAPServiceNavi;
 import org.osgi.framework.ServiceReference;
-/* CombiBAPServiceNavi still imported — used by RouteGuidance to register
- * the route-guidance listener. KombiInjector swaps the live stock
- * DSIKombiSyncProxy with our FilteringKombiProxy so we can rewrite
- * mainContext (Phone→Map) and optionally filter flap bits. */
 
 public class CarPlayHook {
 
@@ -40,13 +34,18 @@ public class CarPlayHook {
     private static volatile boolean active = false;
     private static volatile boolean registered = false;
     private static volatile boolean retrying = false;
-    private static volatile boolean kombiRetrying = false;
     private static volatile boolean carplayRunning = false;
 
     private static volatile IFrameworkAccess frameworkAccess = null;
 
     private static Object savedContext = null;
     private static DeviceStateHandler listenerProxy = null;
+
+    /* Live stock CombiBAPServiceNavi (actual AppConnectorNavi instance from
+     * lsd.jxe). Obtained via OSGi during init. Used for direct push of
+     * Map_Presentation_Status (hide flaps on VC) without relying on class
+     * replacement, which doesn't shadow lsd.jxe stock classes. */
+    private static volatile CombiBAPServiceNavi naviServiceRef = null;
 
     /* Modules (cover art handled by TerminalModeBapCombi$EventListener) */
     private static RouteGuidance routeGuidance = null;
@@ -102,15 +101,8 @@ public class CarPlayHook {
         carplayRunning = false;
         frameworkAccess = null;
 
-        /* CarPlay just disconnected — isCarplayRunning() is now false so
-         * the filters no longer apply. Re-push the last cached
-         * DisplayStatus so the cluster reverts to natural state without
-         * waiting for HMI's next tick. */
-        try {
-            FilteringKombiProxy.forcePushLast("carplay-deactivate");
-        } catch (Throwable t) {
-            Log.e(TAG, "forcePushLast(deactivate) failed", t);
-        }
+        /* Clear cached navi service ref (no longer valid once session ends) */
+        naviServiceRef = null;
 
         try {
             /* Stop modules */
@@ -171,6 +163,17 @@ public class CarPlayHook {
             return false;
         }
 
+        /* Cache CombiBAPServiceNavi ref for direct Map_Presentation_Status push.
+         * This is the same live stock instance BAPBridge casts and uses — by
+         * going through the OSGi-registered service we hit the real stock
+         * AppConnectorNavi regardless of class-replacement. */
+        if (naviService instanceof CombiBAPServiceNavi) {
+            naviServiceRef = (CombiBAPServiceNavi) naviService;
+            Log.i(TAG, "naviServiceRef cached: " + naviService.getClass().getName());
+        } else {
+            Log.w(TAG, "naviService is not CombiBAPServiceNavi: " + naviService.getClass().getName());
+        }
+
         /* Initialize route guidance module */
         routeGuidance = new RouteGuidance();
         if (!routeGuidance.init(naviService)) {
@@ -181,15 +184,6 @@ public class CarPlayHook {
 
         /* Cover art is handled by TerminalModeBapCombi$EventListener */
 
-        /* Inject our DSIKombiSync proxy filter via reflection. Idempotent.
-         * If the OSGi service isn't registered yet (tryInit can fire before
-         * cluster sync infra is up), kick off a separate background retry
-         * — KombiInjector is independent of RouteGuidance/Listener and
-         * shouldn't gate full init on its own. */
-        if (!KombiInjector.install(context)) {
-            startKombiInstallRetry(context);
-        }
-
         /* Register device state listener */
         if (!registerListener(deviceManager)) {
             Log.e(TAG, "Listener registration failed");
@@ -198,59 +192,6 @@ public class CarPlayHook {
         }
 
         return true;
-    }
-
-    /**
-     * Best-effort background install of KombiInjector.  DSIKombiSync may
-     * register lazily — poll up to 30 times at 1s intervals.  Independent
-     * of the main retry thread (which gates RouteGuidance + Listener).
-     * Once installed, force-pushes the cached DisplayStatus so the
-     * Phone→Map filter (or flap filter) takes effect immediately rather
-     * than waiting for HMI's next setMMIDisplayStatus tick.
-     */
-    private static synchronized void startKombiInstallRetry(final Object context) {
-        if (kombiRetrying) return;
-        kombiRetrying = true;
-
-        Thread t = new Thread(new Runnable() {
-            public void run() {
-                try {
-                    int attempts = 0;
-                    while (active && attempts < 30) {
-                        sleep(1000);
-                        if (!active) break;
-                        attempts++;
-
-                        try {
-                            if (KombiInjector.install(context)) {
-                                Log.i(TAG, "KombiInjector installed on retry " + attempts);
-                                /* If CarPlay is already running by the time
-                                 * the wrapper goes live, push the last seen
-                                 * DisplayStatus through the freshly-installed
-                                 * filter so VC re-evaluates immediately. */
-                                if (carplayRunning) {
-                                    try {
-                                        FilteringKombiProxy.forcePushLast("late-install");
-                                    } catch (Throwable t2) {
-                                        Log.e(TAG, "late-install forcePush failed", t2);
-                                    }
-                                }
-                                return;
-                            }
-                        } catch (Throwable e) {
-                            Log.d(TAG, "Kombi retry error: " + e.getMessage());
-                        }
-                    }
-                    if (attempts >= 30) {
-                        Log.w(TAG, "KombiInjector retries exhausted; giving up for this session");
-                    }
-                } finally {
-                    kombiRetrying = false;
-                }
-            }
-        }, "CarPlayHook-KombiRetry");
-        t.setDaemon(true);
-        t.start();
     }
 
     private static synchronized void startRetryThread(final Object context) {
@@ -310,25 +251,27 @@ public class CarPlayHook {
                 if (routeGuidance != null && !routeGuidance.isRunning()) {
                     routeGuidance.start();
                 }
-                /* On transition false->true: CarPlay just became active.
-                 * Flap filtering is already effective for FUTURE
-                 * setMMIDisplayStatus calls, but if the Map tab was open
-                 * BEFORE CarPlay with flaps showing, the HMI won't emit a
-                 * fresh update by itself. Force a re-push of the last
-                 * cached DisplayStatus to hide flaps right now. */
+                /* On transition false->true: push Map_Presentation_Status
+                 * with both flaps=false directly through the LIVE stock
+                 * CombiBAPServiceNavi — bypasses class-replacement which
+                 * doesn't shadow lsd.jxe stock classes. The stock
+                 * updateMapPresentation runs on the stock instance and
+                 * sends BAP FctID 54 to the cluster, hiding the flaps.
+                 *
+                 * largeMapView=false is safe default (normal layout); we
+                 * don't know the real last value but this one matches the
+                 * most common state during CarPlay (MMI not in Map tab). */
                 if (!wasRunning) {
-                    /* If wrapper still not installed (DSI service was late
-                     * during tryInit), make one more attempt now — by this
-                     * point CarPlay is fully active so OSGi infra is up. */
-                    if (!KombiInjector.isInstalled() && savedContext != null) {
-                        if (KombiInjector.install(savedContext)) {
-                            Log.i(TAG, "KombiInjector installed on carplay-activate");
+                    CombiBAPServiceNavi svc = naviServiceRef;
+                    if (svc != null) {
+                        try {
+                            Log.i(TAG, "CarPlay active -> push updateMapPresentation(false,false,false)");
+                            svc.updateMapPresentation(false, false, false);
+                        } catch (Throwable t) {
+                            Log.e(TAG, "updateMapPresentation push error", t);
                         }
-                    }
-                    try {
-                        FilteringKombiProxy.forcePushLast("carplay-activate");
-                    } catch (Throwable t) {
-                        Log.e(TAG, "forcePushLast(activate) failed", t);
+                    } else {
+                        Log.w(TAG, "naviServiceRef is null, can't push hide-flaps");
                     }
                 }
             } else if (!carplay) {
