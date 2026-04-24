@@ -1,23 +1,24 @@
 /*
  * Patch: CarplayDSILifecycleController$TerminalModeDSIKeyEventsController
  *
- * Overlays the stock Audi touchpad/knob event handler to route through
- * com.luka.carplay.cursor.CursorController.  Other input paths
- * (joystick, softkeys, rotary, character) keep their stock behaviour.
+ * Overlays the stock Audi touchpad handler to route one-finger drag
+ * events into com.luka.carplay.cursor.CursorController (now a pure
+ * touchpad-to-DPAD converter — the on-screen cursor and two-finger
+ * PAN/PINCH code were both dropped, see the class docstring in
+ * CursorController for the post-mortem).
  *
  * Changes vs stock:
- *   - updateTouchEvent(int,int,int,int,int,int,int) no longer calls
- *     postTouchEvent directly; it hands the finger count + positions to
- *     CursorController.  The controller moves the on-screen cursor
- *     (one finger) or synthesises a screen-space swipe (two fingers) via
- *     a TouchSink callback we supply at construction.
- *   - updateTouchEvents(TouchEvent[]) same: routed through CursorController
- *     unless the event originates from a real touchscreen
- *     (isTouchScreen()==true), in which case we keep stock behaviour.
- *   - updateKey(DDS_SELECT): when the cursor is currently visible, the
- *     knob press/release is converted into a touch at cursor coords,
- *     suppressing the stock DDS_SELECT postButtonEvent.  All other keys
- *     and the cursor-not-visible DDS_SELECT case fall through unchanged.
+ *   - updateTouchEvents(TouchEvent[]) — touchpad single-finger events
+ *     go to CursorController, which emits DDS_LEFT/RIGHT/UP/DOWN
+ *     press+release pairs through a TouchSink we supply at ctor time.
+ *     Real-touchscreen events (isTouchScreen==true) keep the stock
+ *     postTouchEvent passthrough.  Multi-finger samples (never seen
+ *     live on this HU) reset the dpad accumulator defensively.
+ *   - updateTouchEvent(int,...,int) — the 7-arg form; not observed
+ *     firing on MU1316 but kept for API compatibility, routes to the
+ *     same single-finger path when count==1.
+ *   - updateKey: pure stock passthrough.  DDS_SELECT fires its normal
+ *     postButtonEvent, giving CarPlay's focus-confirm semantics.
  *
  * Why reflection on the outer class' private fields:
  *   The stock nested class reaches the outer's private dsiCarplaySafe /
@@ -184,55 +185,35 @@ class CarplayDSILifecycleController$TerminalModeDSIKeyEventsController
     }
 
     /* ============================================================
-     * Wire CursorController's TouchSink once — routes synthetic touch
-     * events back through the stock DSI bridge.
+     * Wire CursorController's TouchSink once — routes dpad button
+     * events through the stock DSI bridge's postButtonEvent.
      * ============================================================ */
     private void installCursorTouchSink() {
         final CarplayDSILifecycleController outer = this.this$0;
         CursorController.getInstance().setTouchSink(
             new CursorController.TouchSink() {
-                public void postScreenTouch(int count, int x, int y) {
-                    try {
-                        /* Always carry (x,y) — even on touch-up (count==0).
-                         * Stock code caches lastFingers for this same
-                         * reason: iOS needs the release to land at the
-                         * same coordinate as the press so it's interpreted
-                         * as a tap / gesture-end, not a cancel. */
-                        TouchEvent[] ev = new TouchEvent[] {
-                            new TouchEvent(x, y)
-                        };
-                        DSICarplaySafe bridge = dsi(outer);
-                        Log.i("DSI", "OUT screen_touch count=" + count
-                                + " xy=" + x + "," + y
-                                + " bridge=" + (bridge != null));
-                        if (bridge != null) {
-                            bridge.postTouchEvent(1 /*touchscreen id*/, count, ev);
-                        }
-                    } catch (Throwable t) {
-                        /* Never let a sink failure kill the cursor. */
+                /* DPAD: emit a short press+release pair on the stock
+                 * joystick-direction key ID.  CarPlay's iOS side treats
+                 * these identically to physical rotary/joystick clicks
+                 * — they move focus in the matching direction.
+                 *
+                 * Key ID mapping (from getKeyId() below):
+                 *   JS_WEST=5, JS_EAST=6, JS_NORTH=7, JS_SOUTH=8.
+                 * State: 0 = PRESSED, 1 = RELEASED (see getKeyState). */
+                public void postDpad(int keyCode) {
+                    int id;
+                    switch (keyCode) {
+                      case CursorController.KEY_DPAD_LEFT:  id = 5; break;
+                      case CursorController.KEY_DPAD_RIGHT: id = 6; break;
+                      case CursorController.KEY_DPAD_UP:    id = 7; break;
+                      case CursorController.KEY_DPAD_DOWN:  id = 8; break;
+                      default: return;
                     }
-                }
-
-                public void postPinch(int count, int x1, int y1, int x2, int y2) {
                     try {
-                        /* Two-finger touch for pinch gestures.  iOS
-                         * CarPlay consumes this only in Apple Maps; in
-                         * any other app iOS silently drops count>1.
-                         * The always-two-element array mirrors stock
-                         * lastFingers behaviour — release carries both
-                         * final positions so iOS interprets as
-                         * gesture-end, not cancel. */
-                        TouchEvent[] ev = new TouchEvent[] {
-                            new TouchEvent(x1, y1),
-                            new TouchEvent(x2, y2)
-                        };
                         DSICarplaySafe bridge = dsi(outer);
-                        Log.i("DSI", "OUT pinch count=" + count
-                                + " p1=" + x1 + "," + y1
-                                + " p2=" + x2 + "," + y2
-                                + " bridge=" + (bridge != null));
                         if (bridge != null) {
-                            bridge.postTouchEvent(1 /*touchscreen id*/, count, ev);
+                            bridge.postButtonEvent(id, 0);  /* press   */
+                            bridge.postButtonEvent(id, 1);  /* release */
                         }
                     } catch (Throwable t) { }
                 }
@@ -243,116 +224,40 @@ class CarplayDSILifecycleController$TerminalModeDSIKeyEventsController
      * updateTouchEvent — 7-arg stock form (touchpad)
      *
      * Stock signature: (id, count, ?, x1, y1, n6, n7)
-     *   id     — touchpad surface id (2 = MMI touchpad)
-     *   count  — finger count (0/1/2)
-     *   x1/y1  — primary finger absolute coords (touchpad surface space)
-     *   n6/n7  — second-finger angle+distance (decoded by calcSecondCorr)
+     *
+     * Never observed firing on MU1316 — the Audi driver here feeds
+     * touchpad events through updateTouchEvents(TouchEvent[]) instead.
+     * Kept for API compatibility: count==1 goes to the dpad controller,
+     * anything else (including the unused multi-finger form) resets
+     * pending touch state so a stray sample can't poison dpad accumulation.
      * ============================================================ */
     public void updateTouchEvent(int id, int count, int n3,
                                  int x1, int y1, int n6, int n7) {
-        if (!CursorController.isFeatureEnabled()) {
-            /* Stock touchpad: forward to bridge as before our patch.
-             * postTouchEvent with id from caller, active count, and
-             * positions for both fingers in the count>=2 branch. */
-            DSICarplaySafe bridge = dsi(this.this$0);
-            if (bridge != null) {
-                if (count >= 2) {
-                    int[] p2 = this.calcSecondCorr(x1, y1, n6, n7);
-                    TouchEvent[] ev = new TouchEvent[] {
-                        new TouchEvent(x1, y1), new TouchEvent(p2[0], p2[1])
-                    };
-                    bridge.postTouchEvent(id, count, ev);
-                } else if (count == 1) {
-                    TouchEvent[] ev = new TouchEvent[] { new TouchEvent(x1, y1) };
-                    bridge.postTouchEvent(id, 1, ev);
-                } else {
-                    bridge.postTouchEvent(id, 0, new TouchEvent[0]);
-                }
-            }
-            return;
-        }
         CursorController c = CursorController.getInstance();
-        if (count >= 2) {
-            int[] p2 = this.calcSecondCorr(x1, y1, n6, n7);
-            Log.i("DSI", "IN  pad7 id=" + id + " count=" + count
-                    + " p1=" + x1 + "," + y1
-                    + " angDist=" + n6 + "," + n7
-                    + " p2=" + p2[0] + "," + p2[1]);
-            c.onTwoFingers(x1, y1, p2[0], p2[1]);
-        } else if (count == 1) {
-            Log.i("DSI", "IN  pad7 id=" + id + " count=1"
-                    + " p1=" + x1 + "," + y1);
+        if (count == 1) {
             c.onOneFinger(x1, y1);
         } else {
-            Log.i("DSI", "IN  pad7 id=" + id + " count=0 (end)");
             c.onTouchEnd();
         }
-        /* Do NOT call through to postTouchEvent — CursorController owns
-         * the touchpad and synthesises its own screen-space events. */
     }
 
     /* ============================================================
-     * updateTouchEvents — array form
+     * updateTouchEvents — array form (MMI touchpad on MU1316)
      *
-     * If the events come from a real touchscreen (isTouchScreen==true —
-     * e.g. passenger display prototype), forward to stock-style handling.
-     * Otherwise redirect through CursorController.
+     * Events from a real touchscreen (isTouchScreen==true — e.g. a
+     * passenger-display prototype) pass through to the stock
+     * postTouchEvent path unchanged.  Touchpad events (the common
+     * case) route through CursorController as single-finger dpad —
+     * multi-finger was dropped after the log confirmed the MMI
+     * touchpad on this HU only reports len=1 samples.
      * ============================================================ */
     public void updateTouchEvents(
             de.audi.app.terminalmode.keyevents.TouchEvent[] touchEventArray) {
-        if (!CursorController.isFeatureEnabled()) {
-            /* Stock-ish fallback for the array form.  If events carry a
-             * screen offset, subtract it (matches the stock code for
-             * touchscreens); otherwise pass coords as-is.  We emit ONE
-             * postTouchEvent matching the active-finger count. */
-            DSICarplaySafe bridge = dsi(this.this$0);
-            if (bridge == null) return;
-            int n = 0;
-            TouchEvent[] out;
-            if (touchEventArray == null || touchEventArray.length == 0) {
-                bridge.postTouchEvent(1, 0, new TouchEvent[0]);
-                return;
-            }
-            ITerminalModeConfiguration conf = cfg(this.this$0);
-            int offX = (conf != null && touchEventArray[0].isTouchScreen())
-                       ? conf.getScreenOffsetX() : 0;
-            int offY = (conf != null && touchEventArray[0].isTouchScreen())
-                       ? conf.getScreenOffsetY() : 0;
-            out = new TouchEvent[touchEventArray.length];
-            for (int i = 0; i < touchEventArray.length; i++) {
-                out[i] = new TouchEvent(
-                    touchEventArray[i].getCurrentX() - offX,
-                    touchEventArray[i].getCurrentY() - offY);
-                if (touchEventArray[i].getTouchState() != 1) n++;
-            }
-            bridge.postTouchEvent(1, n, out);
-            return;
-        }
-        /* Dump raw array contents for diagnostics.  getTouchState()==1
-         * means RELEASED per Audi convention; keep an eye on touches
-         * that arrive as (count=N, state=1) — they look active but
-         * should not drive motion. */
-        if (touchEventArray == null) {
-            Log.i("DSI", "IN  padArr null");
-        } else {
-            StringBuffer sb = new StringBuffer(64 + touchEventArray.length * 32);
-            sb.append("IN  padArr len=").append(touchEventArray.length);
-            if (touchEventArray.length > 0) {
-                sb.append(" isTouchScreen=").append(touchEventArray[0].isTouchScreen());
-            }
-            for (int i = 0; i < touchEventArray.length; i++) {
-                sb.append(" [").append(i).append("]")
-                  .append(" s=").append(touchEventArray[i].getTouchState())
-                  .append(" xy=").append(touchEventArray[i].getCurrentX())
-                  .append(",").append(touchEventArray[i].getCurrentY());
-            }
-            Log.i("DSI", sb.toString());
-        }
         if (touchEventArray != null && touchEventArray.length > 0
                 && touchEventArray[0].isTouchScreen()) {
-            /* Stock touchscreen path (passthrough).  Minimal reimplementation
-             * — screen offset subtract, bulk post.  Kept intentionally simple;
-             * MHI2 MMI does not have a real touchscreen in practice. */
+            /* Stock touchscreen path (passthrough).  Screen offset
+             * subtract, bulk post.  MHI2 MMI does not have a real
+             * touchscreen in practice, kept defensive. */
             int n = 0;
             TouchEvent[] out = new TouchEvent[touchEventArray.length];
             ITerminalModeConfiguration conf = cfg(this.this$0);
@@ -373,80 +278,43 @@ class CarplayDSILifecycleController$TerminalModeDSIKeyEventsController
 
         /* Touchpad form: route through CursorController.
          *
-         * CRITICAL: count ACTIVE fingers, not array length.  Stock Audi
-         * convention (see the touchscreen branch above, and stock
-         * `lastFingers` handling): getTouchState() == 1 means RELEASED
-         * — the entry still carries coords (so iOS can see where the
-         * finger lifted) but it is not an active finger.  Routing by
-         * array length would make a release event look like "user is
-         * still pressing", so the cursor never arms grace and any
-         * in-flight pan/pinch never sees its synthetic touch-up. */
+         * CRITICAL: count ACTIVE fingers, not array length.  Stock
+         * Audi convention (see the touchscreen branch above, and
+         * stock `lastFingers` handling): getTouchState() == 1 means
+         * RELEASED — the entry still carries coords (so iOS can see
+         * where the finger lifted) but it is not an active finger.
+         * Routing by array length would treat a release event as "user
+         * is still pressing" and cause a stale dpad emission. */
         CursorController c = CursorController.getInstance();
         if (touchEventArray == null || touchEventArray.length == 0) {
             c.onTouchEnd();
             return;
         }
         int active = 0;
-        int a0 = -1, a1 = -1;
+        int a0 = -1;
         for (int i = 0; i < touchEventArray.length; i++) {
             if (touchEventArray[i].getTouchState() != 1) {
                 if (active == 0) a0 = i;
-                else if (active == 1) a1 = i;
                 active++;
             }
         }
-        if (active == 0) {
-            c.onTouchEnd();
-        } else if (active == 1) {
+        if (active == 1) {
             c.onOneFinger(touchEventArray[a0].getCurrentX(),
                           touchEventArray[a0].getCurrentY());
         } else {
-            c.onTwoFingers(
-                touchEventArray[a0].getCurrentX(), touchEventArray[a0].getCurrentY(),
-                touchEventArray[a1].getCurrentX(), touchEventArray[a1].getCurrentY());
+            /* 0 active → real release; 2+ active → never happens on
+             * this HU, but defensively reset rather than letting the
+             * stray sample poison the dpad accumulator. */
+            c.onTouchEnd();
         }
     }
 
     /* ============================================================
-     * updateKey — only DDS_SELECT with visible cursor is altered
+     * updateKey — pure stock passthrough.  No cursor, no overrides;
+     * DDS_SELECT fires the normal focus-confirm postButtonEvent that
+     * CarPlay's dpad navigation expects.
      * ============================================================ */
     public void updateKey(Key key, KeyState keyState) {
-        /* Gate DDS_SELECT → synthetic tap when cursor is up.  Feature
-         * flag short-circuits back to stock knob behaviour (postButtonEvent)
-         * when disabled via libcarplay_hook.conf cursor_enabled=0. */
-        if (CursorController.isFeatureEnabled()
-                && Key.DDS_SELECT.is(key)
-                && CursorController.getInstance().isVisible()) {
-            CursorController c = CursorController.getInstance();
-            DSICarplaySafe bridge = dsi(this.this$0);
-            if (keyState.is(KeyState.PRESSED)) {
-                c.armForKnobPress();
-                int cx = c.getX(), cy = c.getY();
-                Log.i("DSI", "click press at " + cx + "," + cy
-                        + " bridge=" + (bridge != null));
-                if (bridge != null) {
-                    TouchEvent[] ev = new TouchEvent[] {
-                        new TouchEvent(cx, cy)
-                    };
-                    bridge.postTouchEvent(1 /*touchscreen*/, 1, ev);
-                }
-            } else if (keyState.is(KeyState.RELEASED)) {
-                int cx = c.getX(), cy = c.getY();
-                Log.i("DSI", "click release at " + cx + "," + cy
-                        + " bridge=" + (bridge != null));
-                if (bridge != null) {
-                    /* Preserve coords on release — see TouchSink for rationale. */
-                    TouchEvent[] ev = new TouchEvent[] {
-                        new TouchEvent(cx, cy)
-                    };
-                    bridge.postTouchEvent(1 /*touchscreen*/, 0, ev);
-                }
-                c.afterKnobRelease();
-            }
-            return;
-        }
-
-        /* ---------- Verbatim stock body below ---------- */
         DSICarplaySafe bridge = dsi(this.this$0);
         if (TerminalModeUtils.isJoystickMiddleposition(key)) {
             Key last = getJs(this.this$0);
@@ -506,12 +374,4 @@ class CarplayDSILifecycleController$TerminalModeDSIKeyEventsController
         return 0;
     }
 
-    /* Kept even though we don't call it from the cursor paths —
-     * updateTouchEvent references it inline. */
-    private int[] calcSecondCorr(int n, int n2, int n3, int n4) {
-        if (n4 > 100) n4 -= 100;
-        int n5 = (int)((double)n + Math.acos(n4 / 100.0) * (double)n4);
-        int n6 = (int)((double)n2 + Math.asin(n4 / 100.0) * (double)n4);
-        return new int[] { n5, n6 };
-    }
 }

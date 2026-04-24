@@ -61,17 +61,16 @@ public class CarPlayHook {
         Log.i(TAG, "onActivate");
         Log.i(TAG, "Build: " + BUILD_ID);
 
-        /* Construct CursorController BEFORE bus.start() — its ctor
-         * subscribes to EVT_SCREEN_INFO, and native-side replays the
-         * sticky frame the moment it sees CMD_SYNC_REQ.  If we flipped
-         * the order the sticky payload would arrive at an empty
-         * listener set and be silently dropped, leaving the cursor
-         * stuck on its 1024x480 fallback resolution. */
+        /* Construct CursorController (touchpad-input controller; the
+         * name is legacy from when this drove an on-screen cursor).
+         * Trivial singleton init — no bus traffic — but we touch it
+         * here so the DSI patch's setTouchSink() lands on a live
+         * instance from the first event. */
         CursorController.getInstance();
 
-        /* Kick the bus up front so every module (including cursor, which
-         * does not go through tryInit) has a live channel to the hook
-         * before the first CarPlay event fires. Idempotent. */
+        /* Kick the bus up front so every module has a live channel
+         * to the hook before the first CarPlay event fires.
+         * Idempotent. */
         CarplayBus.getInstance().start();
 
         active = true;
@@ -127,14 +126,14 @@ public class CarPlayHook {
             listenerProxy = null;
             savedContext = null;
             retrying = false;
-            /* Drain cursor + any in-flight gesture BEFORE bus.stop() so
-             * the final touch-up + CMD_CURSOR_HIDE ride the still-live
-             * bus.  Wrapped in try/catch: a shutdown fault must not
-             * prevent bus teardown, otherwise sockets leak. */
+            /* Drain any in-flight 2-finger gesture so iOS sees a
+             * proper touch-up (not a cancel) — otherwise the next
+             * session starts with a stuck-finger state.  Wrapped in
+             * try/catch: shutdown must not prevent bus teardown. */
             try {
                 CursorController.getInstance().shutdown();
             } catch (Throwable t) {
-                Log.e(TAG, "cursor shutdown error", t);
+                Log.e(TAG, "input shutdown error", t);
             }
             /* Block up to 200 ms for the writer to actually put the
              * shutdown frames on the wire.  CarplayBus.stop() wipes
