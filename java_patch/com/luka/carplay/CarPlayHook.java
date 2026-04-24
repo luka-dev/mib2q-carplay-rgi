@@ -23,6 +23,11 @@ import de.audi.app.terminalmode.osgi.IServiceManager;
 import de.audi.atip.base.IFrameworkAccess;
 import de.audi.atip.interapp.combi.bap.navi.CombiBAPServiceNavi;
 import org.osgi.framework.ServiceReference;
+/* CombiBAPServiceNavi still imported — used by RouteGuidance to register
+ * the route-guidance listener.  Flap-hiding via BAP FctID 54
+ * (Map_Presentation_Status) did NOT work; that was the wrong wire.
+ * Real flap control lives on DSIKombiSync.setMMIDisplayStatus,
+ * patched via DSIKombiSyncProvider class-replacement. */
 
 public class CarPlayHook {
 
@@ -40,12 +45,6 @@ public class CarPlayHook {
 
     private static Object savedContext = null;
     private static DeviceStateHandler listenerProxy = null;
-
-    /* Live stock CombiBAPServiceNavi (actual AppConnectorNavi instance from
-     * lsd.jxe). Obtained via OSGi during init. Used for direct push of
-     * Map_Presentation_Status (hide flaps on VC) without relying on class
-     * replacement, which doesn't shadow lsd.jxe stock classes. */
-    private static volatile CombiBAPServiceNavi naviServiceRef = null;
 
     /* Modules (cover art handled by TerminalModeBapCombi$EventListener) */
     private static RouteGuidance routeGuidance = null;
@@ -101,8 +100,16 @@ public class CarPlayHook {
         carplayRunning = false;
         frameworkAccess = null;
 
-        /* Clear cached navi service ref (no longer valid once session ends) */
-        naviServiceRef = null;
+        /* CarPlay just disconnected — isCarplayRunning() is now false so
+         * the flap filter no longer applies. Re-push the last cached
+         * DisplayStatus so the cluster returns to natural flap
+         * state (visible/openable) without waiting for HMI's next tick. */
+        try {
+            de.esolutions.fw.dsi.kombisync2.DSIKombiSyncProvider
+                    .forcePushLast("carplay-deactivate");
+        } catch (Throwable t) {
+            Log.e(TAG, "forcePushLast(deactivate) failed", t);
+        }
 
         try {
             /* Stop modules */
@@ -161,17 +168,6 @@ public class CarPlayHook {
 
         if (naviService == null || deviceManager == null) {
             return false;
-        }
-
-        /* Cache CombiBAPServiceNavi ref for direct Map_Presentation_Status push.
-         * This is the same live stock instance BAPBridge casts and uses — by
-         * going through the OSGi-registered service we hit the real stock
-         * AppConnectorNavi regardless of class-replacement. */
-        if (naviService instanceof CombiBAPServiceNavi) {
-            naviServiceRef = (CombiBAPServiceNavi) naviService;
-            Log.i(TAG, "naviServiceRef cached: " + naviService.getClass().getName());
-        } else {
-            Log.w(TAG, "naviService is not CombiBAPServiceNavi: " + naviService.getClass().getName());
         }
 
         /* Initialize route guidance module */
@@ -251,27 +247,18 @@ public class CarPlayHook {
                 if (routeGuidance != null && !routeGuidance.isRunning()) {
                     routeGuidance.start();
                 }
-                /* On transition false->true: push Map_Presentation_Status
-                 * with both flaps=false directly through the LIVE stock
-                 * CombiBAPServiceNavi — bypasses class-replacement which
-                 * doesn't shadow lsd.jxe stock classes. The stock
-                 * updateMapPresentation runs on the stock instance and
-                 * sends BAP FctID 54 to the cluster, hiding the flaps.
-                 *
-                 * largeMapView=false is safe default (normal layout); we
-                 * don't know the real last value but this one matches the
-                 * most common state during CarPlay (MMI not in Map tab). */
+                /* On transition false->true: CarPlay just became active.
+                 * Flap filtering is already effective for FUTURE
+                 * setMMIDisplayStatus calls, but if the Map tab was open
+                 * BEFORE CarPlay with flaps showing, the HMI won't emit a
+                 * fresh update by itself. Force a re-push of the last
+                 * cached DisplayStatus to hide flaps right now. */
                 if (!wasRunning) {
-                    CombiBAPServiceNavi svc = naviServiceRef;
-                    if (svc != null) {
-                        try {
-                            Log.i(TAG, "CarPlay active -> push updateMapPresentation(false,false,false)");
-                            svc.updateMapPresentation(false, false, false);
-                        } catch (Throwable t) {
-                            Log.e(TAG, "updateMapPresentation push error", t);
-                        }
-                    } else {
-                        Log.w(TAG, "naviServiceRef is null, can't push hide-flaps");
+                    try {
+                        de.esolutions.fw.dsi.kombisync2.DSIKombiSyncProvider
+                                .forcePushLast("carplay-activate");
+                    } catch (Throwable t) {
+                        Log.e(TAG, "forcePushLast(activate) failed", t);
                     }
                 }
             } else if (!carplay) {
