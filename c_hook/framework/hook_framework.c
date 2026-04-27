@@ -135,7 +135,7 @@ static void store_injection_context(void* transport_self, const uint8_t* buf, si
                 cksum_sanity_checked = 1;
                 if (expected != computed) {
                     LOG_WARN(LOG_MODULE,
-                             "cksum mismatch: expected=0x%02x neg=0x%02x — iOS may have switched algo, injected frames will be rejected",
+                             "cksum mismatch: expected=0x%02x neg=0x%02x - iOS may have switched algo, injected frames will be rejected",
                              expected, computed);
                 }
             }
