@@ -9,14 +9,15 @@ DEFINE_LOG_MODULE(HOOK);
 #define MAX_MODULES 16
 #define MAX_PREFIX_LEN 64
 
-/* iAP2 link-layer checksum is hard-coded to negated 8-bit sum
- * (iap2_cksum_neg).  This is the only algorithm Apple's USB Host
- * iAP2 transport uses (verified across iOS 15..26 and the spec R12+). */
-
 struct hook_module {
     hook_module_def_t def;
     bool active;
 };
+
+/* Sanity-check guard: log once per session if the first observed stock
+ * frame's checksum doesn't match iap2_cksum_neg (would mean Apple
+ * shipped a non-NEG algo, theoretically possible on a future iOS). */
+static volatile int cksum_sanity_checked = 0;
 
 /* Framework state */
 static struct {
@@ -118,6 +119,27 @@ static void store_injection_context(void* transport_self, const uint8_t* buf, si
         }
     } else {
         inj->prefix_len = 0;
+    }
+
+    /* One-shot insurance log: verify the hard-coded iap2_cksum_neg algo
+     * matches what iOS actually puts on the wire.  If a future iOS ships
+     * a different algo, our injected frames will be rejected and the
+     * log line below is the only clue.  Cost: one cksum calc per session. */
+    if (!cksum_sanity_checked && frame_offset > 0) {
+        iap2_frame_t frame;
+        if (iap2_find_frame(buf, len, &frame)) {
+            size_t cksum_pos = frame.offset + frame.frame_len;
+            if (cksum_pos < len) {
+                uint8_t expected = buf[cksum_pos];
+                uint8_t computed = iap2_cksum_neg(buf + frame.offset, frame.frame_len);
+                cksum_sanity_checked = 1;
+                if (expected != computed) {
+                    LOG_WARN(LOG_MODULE,
+                             "cksum mismatch: expected=0x%02x neg=0x%02x — iOS may have switched algo, injected frames will be rejected",
+                             expected, computed);
+                }
+            }
+        }
     }
 
     inj->valid = (transport_self != NULL);

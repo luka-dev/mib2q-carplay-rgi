@@ -685,8 +685,9 @@ static pthread_mutex_t worker_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t worker_cond = PTHREAD_COND_INITIALIZER;
 static uint8_t* pending_data = NULL;     /* owned by queue */
 static size_t pending_len = 0;
-static int worker_started = 0;
+static volatile int worker_started = 0;
 static volatile int worker_shutdown = 0;
+static volatile int worker_busy = 0;     /* 1 while inside maybe_handle_image */
 
 static void* coverart_worker_main(void* arg) {
     (void)arg;
@@ -709,8 +710,10 @@ static void* coverart_worker_main(void* arg) {
         pthread_mutex_unlock(&worker_mutex);
 
         if (data) {
+            worker_busy = 1;
             (void)maybe_handle_image(data, len);
             free(data);
+            worker_busy = 0;
         }
     }
     return NULL;
@@ -996,8 +999,7 @@ static void coverart_init(void) {
 
 __attribute__((destructor))
 static void coverart_fini(void) {
-    /* Tell the worker to exit so it doesn't outlive the library
-     * (best-effort — if the worker is mid-decode it'll finish first). */
+    /* Tell the worker to exit so it doesn't outlive the library. */
     pthread_mutex_lock(&worker_mutex);
     worker_shutdown = 1;
     if (pending_data) {
@@ -1007,6 +1009,15 @@ static void coverart_fini(void) {
     }
     pthread_cond_signal(&worker_cond);
     pthread_mutex_unlock(&worker_mutex);
+
+    /* Best-effort wait if worker is mid-decode — up to 200 ms.  Avoids
+     * the rare SIGSEGV where dlclose pulls the library text out from
+     * under stbi_load_from_memory.  Detached worker means we can't
+     * pthread_join, so poll worker_busy with a short backoff. */
+    for (int i = 0; i < 20 && worker_busy; i++) {
+        struct timespec ts = { 0, 10L * 1000L * 1000L };  /* 10 ms */
+        nanosleep(&ts, NULL);
+    }
 
     /* Free all stream buffers (active or not) */
     for (int i = 0; i < MAX_STREAMS; i++) {
