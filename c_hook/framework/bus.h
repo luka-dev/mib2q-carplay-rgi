@@ -11,7 +11,7 @@
  *                 Never blocks on network I/O.  Safe from iAP2/OMX hook
  *                 threads.
  *   - bus_on()    registers a dispatcher callback for a given inbound
- *                 type.  Callback is invoked on the reader thread — must
+ *                 type.  Callback is invoked on the reader thread - must
  *                 return quickly or post to another queue.
  *
  * Payload helpers for text (PPS-style key:type:value) builder are

@@ -662,6 +662,97 @@ static int maybe_handle_image(const uint8_t* data, size_t size) {
     return 0;
 }
 
+/* ============================================================
+ * Async cover-art worker
+ *
+ * Decoding a 150 KB JPEG + resize + PNG encode + file write takes
+ * ~50-100 ms.  When this runs synchronously on the recv()/read() hook
+ * thread, every concurrent iAP2 packet on the same connection waits.
+ * During CarPlay handshake that's enough latency to cause iOS to retry
+ * frames (and sometimes give up on the first connect attempt).
+ *
+ * Strategy: detect a complete JPEG on the recv thread (cheap), copy
+ * the bytes into a 1-slot pending queue, signal a worker.  Recv thread
+ * returns immediately.  Worker runs save_artwork off-line.
+ *
+ * Coalescing: if a new image arrives while the previous is still being
+ * processed, we drop the older pending one — only the most recent
+ * artwork matters anyway (rapid track skips).
+ * ============================================================ */
+
+static pthread_t worker_thread;
+static pthread_mutex_t worker_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t worker_cond = PTHREAD_COND_INITIALIZER;
+static uint8_t* pending_data = NULL;     /* owned by queue */
+static size_t pending_len = 0;
+static int worker_started = 0;
+static volatile int worker_shutdown = 0;
+
+static void* coverart_worker_main(void* arg) {
+    (void)arg;
+    while (1) {
+        uint8_t* data;
+        size_t len;
+
+        pthread_mutex_lock(&worker_mutex);
+        while (!pending_data && !worker_shutdown) {
+            pthread_cond_wait(&worker_cond, &worker_mutex);
+        }
+        if (worker_shutdown && !pending_data) {
+            pthread_mutex_unlock(&worker_mutex);
+            break;
+        }
+        data = pending_data;
+        len = pending_len;
+        pending_data = NULL;
+        pending_len = 0;
+        pthread_mutex_unlock(&worker_mutex);
+
+        if (data) {
+            (void)maybe_handle_image(data, len);
+            free(data);
+        }
+    }
+    return NULL;
+}
+
+static void ensure_worker_started(void) {
+    pthread_mutex_lock(&worker_mutex);
+    if (!worker_started) {
+        if (pthread_create(&worker_thread, NULL, coverart_worker_main, NULL) == 0) {
+            pthread_detach(worker_thread);
+            worker_started = 1;
+            LOG_INFO(LOG_MODULE, "Async cover-art worker started");
+        } else {
+            LOG_ERROR(LOG_MODULE, "Failed to start cover-art worker (will fall back to sync decode)");
+        }
+    }
+    pthread_mutex_unlock(&worker_mutex);
+}
+
+/* Hand off image bytes to the worker.  Takes ownership of `data` —
+ * worker frees it.  If the worker isn't running, processes inline so
+ * we never lose an image. */
+static void enqueue_image_async(uint8_t* data, size_t len) {
+    if (!worker_started) {
+        /* Worker not running — fall back to inline processing so cover
+         * art still appears even in degraded mode. */
+        (void)maybe_handle_image(data, len);
+        free(data);
+        return;
+    }
+
+    pthread_mutex_lock(&worker_mutex);
+    if (pending_data) {
+        /* Coalesce — drop the older pending image, latest wins. */
+        free(pending_data);
+    }
+    pending_data = data;
+    pending_len = len;
+    pthread_cond_signal(&worker_cond);
+    pthread_mutex_unlock(&worker_mutex);
+}
+
 /* Get or create stream state for fd */
 static StreamState* get_stream(int fd) {
     StreamState* free_slot = NULL;
@@ -841,10 +932,11 @@ static void handle_stream_data(int fd, const uint8_t* buf, size_t len) {
 
     pthread_mutex_unlock(&stream_mutex);
 
-    /* Process outside lock */
+    /* Hand off to async worker so the recv()/read() thread doesn't
+     * stall on JPEG decode + PNG encode (~50-100 ms).  Worker takes
+     * ownership of process_buf and frees it after processing. */
     if (process_buf) {
-        maybe_handle_image(process_buf, process_len);
-        free(process_buf);
+        enqueue_image_async(process_buf, process_len);
     }
 }
 
@@ -895,11 +987,27 @@ ssize_t recv(int sockfd, void* buf, size_t len, int flags) {
 __attribute__((constructor))
 static void coverart_init(void) {
     memset(streams, 0, sizeof(streams));
+    /* Spin up the async decode worker eagerly — by the time the first
+     * complete JPEG arrives, the worker is ready to take it.  Avoids
+     * lazy-start overhead landing on the first cover-art event. */
+    ensure_worker_started();
     LOG_INFO(LOG_MODULE, "Cover art hook initialized (read/recv)");
 }
 
 __attribute__((destructor))
 static void coverart_fini(void) {
+    /* Tell the worker to exit so it doesn't outlive the library
+     * (best-effort — if the worker is mid-decode it'll finish first). */
+    pthread_mutex_lock(&worker_mutex);
+    worker_shutdown = 1;
+    if (pending_data) {
+        free(pending_data);
+        pending_data = NULL;
+        pending_len = 0;
+    }
+    pthread_cond_signal(&worker_cond);
+    pthread_mutex_unlock(&worker_mutex);
+
     /* Free all stream buffers (active or not) */
     for (int i = 0; i < MAX_STREAMS; i++) {
         free(streams[i].raw_buf);

@@ -22,7 +22,7 @@
  * Payload convention:
  *   - Default: text in QNX PPS style "key:type:value\n" repeated.
  *     Compatible with the existing PPS.java Data parser so migration of
- *     RouteGuidance consumers is mechanical.  No chunking needed — TCP
+ *     RouteGuidance consumers is mechanical.  No chunking needed - TCP
  *     delivers the whole frame atomically.
  *   - With BUS_FLAG_BINARY: type-specific packed struct.  Used by cursor
  *     and any future low-latency binary channel.
@@ -83,7 +83,7 @@
  *   0x0100 .. 0x01FF : meta / control
  *   0x0300 ..        : reserved for future categories
  * (0x0200 .. 0x02FF was the cursor namespace; removed when the
- *  on-screen cursor feature was dropped — ghost was architectural
+ *  on-screen cursor feature was dropped - ghost was architectural
  *  on MU1316, see project_cursor_ghost_architectural_block memory.)
  * ============================================================ */
 #define CMD_SYNC_REQ            0x0100  /* request sticky-state snapshot     */

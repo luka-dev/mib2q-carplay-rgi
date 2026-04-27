@@ -145,7 +145,7 @@ static hook_result_t frame_dup(frame_t* dst, const frame_t* src) {
 }
 
 /* ============================================================
- * Queue ops — must hold g_lock
+ * Queue ops - must hold g_lock
  * ============================================================ */
 static bool q_is_full(void) { return g_ring_count == SEND_QUEUE_CAPACITY; }
 static bool q_is_empty(void) { return g_ring_count == 0; }
@@ -285,7 +285,7 @@ bool bus_is_connected(void) {
 }
 
 /* ============================================================
- * bus_send — atomic enqueue + cache sticky
+ * bus_send - atomic enqueue + cache sticky
  * ============================================================ */
 hook_result_t bus_send(uint16_t type, uint8_t flags,
                        const uint8_t* payload, uint32_t len) {
@@ -395,7 +395,7 @@ hook_result_t bus_send(uint16_t type, uint8_t flags,
 }
 
 /* ============================================================
- * Dispatch inbound — holds handler-table read lock across the callback
+ * Dispatch inbound - holds handler-table read lock across the callback
  * so bus_off() (writer lock) will wait until no dispatch is in flight.
  * This lets callers free their ctx immediately after bus_off returns.
  * ============================================================ */
@@ -414,10 +414,10 @@ static void dispatch_inbound(uint16_t type, uint8_t flags,
 }
 
 /* ============================================================
- * Sync replay — send all sticky caches between SYNC_BEGIN/END.
+ * Sync replay - send all sticky caches between SYNC_BEGIN/END.
  *
  * Deep-copies sticky cache under the lock, then sends frames
- * without holding it — so concurrent bus_send() from iAP2 or OMX
+ * without holding it - so concurrent bus_send() from iAP2 or OMX
  * callbacks is not blocked by slow network I/O here.
  * ============================================================ */
 static void send_sync_snapshot(int fd) {
@@ -463,7 +463,7 @@ static void send_sync_snapshot(int fd) {
 }
 
 /* ============================================================
- * Reader thread — parses inbound frames from g_client_fd.
+ * Reader thread - parses inbound frames from g_client_fd.
  * Lives per-connection; exits when client closes.
  * ============================================================ */
 static void* reader_main(void* arg) {
@@ -527,7 +527,7 @@ static void* reader_main(void* arg) {
 }
 
 /* ============================================================
- * Writer thread — drains send queue to g_client_fd.
+ * Writer thread - drains send queue to g_client_fd.
  * ============================================================ */
 static void* writer_main(void* arg) {
     (void)arg;
@@ -565,7 +565,7 @@ static void* writer_main(void* arg) {
 }
 
 /* ============================================================
- * Listener thread — accept loop, one-client-at-a-time.
+ * Listener thread - accept loop, one-client-at-a-time.
  * ============================================================ */
 static void* listener_main(void* arg) {
     (void)arg;
@@ -840,7 +840,7 @@ void bus_text_fmt(bus_text_builder_t* b, const char* key, char type,
     if ((size_t)n >= sizeof(scratch)) n = (int)sizeof(scratch) - 1;
     scratch[n] = '\0';
     bt_kv_begin(b, key, type);
-    /* Same sanitization as bus_text_str — format may embed user strings. */
+    /* Same sanitization as bus_text_str - format may embed user strings. */
     bt_append_sanitized(b, scratch);
     bt_nl(b);
 }
