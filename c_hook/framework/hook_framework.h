@@ -43,13 +43,16 @@ typedef struct {
     void* user_data;
 } hook_module_def_t;
 
-/* Link-layer injection context */
+/* Link-layer injection context.
+ *
+ * iAP2 link-layer checksum is fixed at "negated 8-bit sum" by Apple's
+ * spec (R12+). We don't carry an algo selector - calculation always
+ * uses iap2_cksum_neg() directly. */
 typedef struct {
     uint8_t* prefix_buf;        /* Stored link header prefix */
     size_t prefix_len;          /* Prefix length */
     size_t original_total_len;  /* Original total frame length */
     void* transport_self;       /* NmeTransport* for injection */
-    iap2_cksum_algo_t cksum_algo; /* Detected checksum algorithm */
     bool valid;                 /* Context is valid for injection */
 } injection_ctx_t;
 

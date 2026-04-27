@@ -189,54 +189,15 @@ size_t iap2_build_tlv_str(uint8_t* out, size_t out_max, uint16_t tlv_id, const c
     return tlv_len;
 }
 
-uint8_t iap2_cksum_sum(const uint8_t* buf, size_t len) {
+/* iAP2 link-layer checksum: negated 8-bit sum.
+ * Apple's iAP2 USB Host transport (R12+) uses this exclusively. */
+uint8_t iap2_cksum_neg(const uint8_t* buf, size_t len) {
     uint8_t sum = 0;
     if (!buf) return 0;
     for (size_t i = 0; i < len; i++) {
         sum += buf[i];
     }
-    return sum;
-}
-
-uint8_t iap2_cksum_neg(const uint8_t* buf, size_t len) {
-    return (uint8_t)(0u - (unsigned)iap2_cksum_sum(buf, len));
-}
-
-uint8_t iap2_cksum_ones(const uint8_t* buf, size_t len) {
-    return (uint8_t)(~iap2_cksum_sum(buf, len));
-}
-
-uint8_t iap2_cksum_xor(const uint8_t* buf, size_t len) {
-    uint8_t x = 0;
-    if (!buf) return 0;
-    for (size_t i = 0; i < len; i++) {
-        x ^= buf[i];
-    }
-    return x;
-}
-
-uint8_t iap2_calc_cksum(const uint8_t* buf, size_t len, iap2_cksum_algo_t algo) {
-    switch (algo) {
-        case IAP2_CKSUM_SUM:  return iap2_cksum_sum(buf, len);
-        case IAP2_CKSUM_NEG:  return iap2_cksum_neg(buf, len);
-        case IAP2_CKSUM_ONES: return iap2_cksum_ones(buf, len);
-        case IAP2_CKSUM_XOR:  return iap2_cksum_xor(buf, len);
-        default:             return iap2_cksum_sum(buf, len);
-    }
-}
-
-iap2_cksum_algo_t iap2_detect_cksum_algo(const uint8_t* payload, size_t len, uint8_t expected) {
-    uint8_t sum = iap2_cksum_sum(payload, len);
-    uint8_t neg = (uint8_t)(0u - (unsigned)sum);
-    uint8_t ones = (uint8_t)(~sum);
-    uint8_t xored = iap2_cksum_xor(payload, len);
-
-    if (expected == sum)   return IAP2_CKSUM_SUM;
-    if (expected == neg)   return IAP2_CKSUM_NEG;
-    if (expected == ones)  return IAP2_CKSUM_ONES;
-    if (expected == xored) return IAP2_CKSUM_XOR;
-
-    return IAP2_CKSUM_UNKNOWN;
+    return (uint8_t)(0u - (unsigned)sum);
 }
 
 bool iap2_parse_link_header(const uint8_t* buf, size_t len, iap2_link_header_t* hdr) {

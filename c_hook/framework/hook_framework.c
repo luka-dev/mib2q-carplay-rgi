@@ -9,6 +9,10 @@ DEFINE_LOG_MODULE(HOOK);
 #define MAX_MODULES 16
 #define MAX_PREFIX_LEN 64
 
+/* iAP2 link-layer checksum is hard-coded to negated 8-bit sum
+ * (iap2_cksum_neg).  This is the only algorithm Apple's USB Host
+ * iAP2 transport uses (verified across iOS 15..26 and the spec R12+). */
+
 struct hook_module {
     hook_module_def_t def;
     bool active;
@@ -116,21 +120,6 @@ static void store_injection_context(void* transport_self, const uint8_t* buf, si
         inj->prefix_len = 0;
     }
 
-    /* Detect checksum algorithm from original frame */
-    if (inj->cksum_algo == IAP2_CKSUM_UNKNOWN && frame_offset > 0) {
-        iap2_frame_t frame;
-        if (iap2_find_frame(buf, len, &frame)) {
-            size_t cksum_pos = frame.offset + frame.frame_len;
-            if (cksum_pos < len) {
-                uint8_t expected = buf[cksum_pos];
-                inj->cksum_algo = iap2_detect_cksum_algo(buf + frame.offset, frame.frame_len, expected);
-                if (inj->cksum_algo != IAP2_CKSUM_UNKNOWN) {
-                    LOG_INFO(LOG_MODULE, "Detected checksum algo=%d", inj->cksum_algo);
-                }
-            }
-        }
-    }
-
     inj->valid = (transport_self != NULL);
     pthread_mutex_unlock(&g_fw.lock);
 }
@@ -233,12 +222,13 @@ hook_result_t hook_framework_init(void) {
 
     memset(&g_fw.ctx, 0, sizeof(g_fw.ctx));
     g_fw.ctx.rgd_component_id = 0x0010;
-    g_fw.ctx.inject.cksum_algo = IAP2_CKSUM_UNKNOWN;
+    /* No cksum algo init - every injected frame uses iap2_cksum_neg()
+     * directly (Apple iAP2 spec, R12+). */
 
     g_fw.initialized = true;
     pthread_mutex_unlock(&g_fw.lock);
 
-    /* Start TCP bus listener.  Safe here — hook_framework_init is lazy
+    /* Start TCP bus listener.  Safe here - hook_framework_init is lazy
      * (called on first hooked call), not during LD_PRELOAD constructor. */
     bus_init();
 
@@ -370,9 +360,9 @@ hook_result_t hook_inject_frame(const uint8_t* frame, size_t frame_len) {
         /* Copy frame */
         memcpy(out + inj->prefix_len, frame, frame_len);
 
-        /* Calculate and append checksum */
-        iap2_cksum_algo_t algo = (inj->cksum_algo != IAP2_CKSUM_UNKNOWN) ? inj->cksum_algo : IAP2_CKSUM_SUM;
-        out[inj->prefix_len + frame_len] = iap2_calc_cksum(frame, frame_len, algo);
+        /* Append iAP2 link-layer checksum (negated 8-bit sum, the only
+         * algo Apple's USB Host iAP2 uses). */
+        out[inj->prefix_len + frame_len] = iap2_cksum_neg(frame, frame_len);
 
         /* Patch length in prefix (link header) */
         iap2_patch_link_header(out, inj->prefix_len, total);

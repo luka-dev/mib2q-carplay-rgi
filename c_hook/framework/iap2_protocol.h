@@ -53,14 +53,9 @@
 #define IAP2_MSG_WIFI_CONFIG_INFO_ALT     0x56F3
 #define IAP2_MSG_TRANSPORT_NOTIFY_ALT     0x4E1D
 
-/* Payload checksum algorithms */
-typedef enum {
-    IAP2_CKSUM_UNKNOWN = 0,
-    IAP2_CKSUM_SUM = 1,         /* Simple sum of bytes */
-    IAP2_CKSUM_NEG = 2,         /* Negated sum */
-    IAP2_CKSUM_ONES = 3,        /* One's complement */
-    IAP2_CKSUM_XOR = 4          /* XOR of bytes */
-} iap2_cksum_algo_t;
+/* iAP2 link-layer checksum is fixed at "negated 8-bit sum" by Apple's
+ * spec (R12+ USB Host transport).  No algo enum - every payload uses
+ * iap2_cksum_neg() unconditionally. */
 
 /* iAP2 frame info */
 typedef struct {
@@ -135,17 +130,8 @@ size_t iap2_build_tlv_u8(uint8_t* out, size_t out_max, uint16_t tlv_id, uint8_t 
 /* Build TLV with string value (including null terminator) */
 size_t iap2_build_tlv_str(uint8_t* out, size_t out_max, uint16_t tlv_id, const char* str);
 
-/* Checksum functions */
-uint8_t iap2_cksum_sum(const uint8_t* buf, size_t len);
+/* iAP2 link-layer checksum: negated 8-bit sum of payload bytes. */
 uint8_t iap2_cksum_neg(const uint8_t* buf, size_t len);
-uint8_t iap2_cksum_ones(const uint8_t* buf, size_t len);
-uint8_t iap2_cksum_xor(const uint8_t* buf, size_t len);
-
-/* Calculate checksum using specified algorithm */
-uint8_t iap2_calc_cksum(const uint8_t* buf, size_t len, iap2_cksum_algo_t algo);
-
-/* Detect checksum algorithm from known data */
-iap2_cksum_algo_t iap2_detect_cksum_algo(const uint8_t* payload, size_t len, uint8_t expected);
 
 /* Link header helpers */
 typedef struct {
