@@ -479,17 +479,24 @@ int main(int argc, char **argv) {
         }
 
         /* Watchdog: periodically re-declare context 74 to reclaim displayable 20
-         * if native navi boot took it over. Also detect dead EGL surface. */
+         * if native navi boot took it over.  Time-based (not frame-based) so
+         * it still fires at 5s intervals when adaptive idle sleep slows the
+         * main loop below 30 FPS. */
 #ifdef PLATFORM_QNX
         {
-            static int watchdog_frames = 0;
-            if (++watchdog_frames >= TARGET_FPS * 5) {  /* every 5 seconds */
+            static struct timespec wd_last = {0, 0};
+            const long WD_INTERVAL_NS = 5L * 1000000000L;  /* 5 s */
+            struct timespec now;
+            clock_gettime(CLOCK_MONOTONIC, &now);
+            long since_ns = (now.tv_sec - wd_last.tv_sec) * 1000000000L
+                          + (now.tv_nsec - wd_last.tv_nsec);
+            if (wd_last.tv_sec == 0 || since_ns >= WD_INTERVAL_NS) {
                 int display_id = CR_DISPLAY_ID;
                 int context_id = CR_CONTEXT_ID;
                 int displayable_id = CR_DISPLAYABLE_ID;
                 char cmd[128];
 
-                watchdog_frames = 0;
+                wd_last = now;
                 /* Re-declare context composition (idempotent if already correct) */
                 platform_get_routing_ids(&display_id, &context_id, &displayable_id);
                 snprintf(cmd, sizeof(cmd),
@@ -500,14 +507,49 @@ int main(int argc, char **argv) {
         }
 #endif
 
+        /* Adaptive idle sleep — render-on-demand for the main loop.
+         *
+         * The render block above already only draws when `dirty` is set,
+         * so we don't waste GPU on unchanged frames.  But the loop itself
+         * still spins at 30 Hz polling TCP + platform events, which burns
+         * CPU when nothing is happening (CarPlay idle, no route).
+         *
+         * Strategy: count consecutive idle frames; once we've been idle
+         * for a second, drop the poll rate from 30 Hz -> 10 Hz; after 5 s
+         * idle, drop to 3 Hz.  Any activity (incoming commands, render
+         * still animating, dirty surface) resets the counter back to 0
+         * and we go back to full 30 Hz immediately.
+         *
+         * Watchdog still fires on its own 5 s clock above, independent
+         * of poll rate. */
+        static int idle_frames = 0;
+        int active = dirty || got_maneuver || got_screenshot
+                   || render_is_animating() || maneuver_needs_redraw()
+                   || g_fade_active || (g_bargraph_on == 2);
+        if (active) {
+            idle_frames = 0;
+        } else if (idle_frames < 10000) {
+            idle_frames++;
+        }
+
+        long target_frame_ns;
+        if (idle_frames < TARGET_FPS) {           /* < 1 s idle: 30 Hz */
+            target_frame_ns = FRAME_TIME_NS;
+        } else if (idle_frames < TARGET_FPS * 5) { /* 1-5 s idle: 10 Hz */
+            target_frame_ns = 100L * 1000000L;
+        } else {                                   /* > 5 s idle: 3 Hz */
+            target_frame_ns = 333L * 1000000L;
+        }
+
         /* Frame pacing */
         struct timespec t_end;
         clock_gettime(CLOCK_MONOTONIC, &t_end);
         long elapsed_ns = (t_end.tv_sec - t_start.tv_sec) * 1000000000L
                         + (t_end.tv_nsec - t_start.tv_nsec);
-        long sleep_ns = FRAME_TIME_NS - elapsed_ns;
+        long sleep_ns = target_frame_ns - elapsed_ns;
         if (sleep_ns > 0) {
-            struct timespec ts = {0, sleep_ns};
+            struct timespec ts = { sleep_ns / 1000000000L,
+                                   sleep_ns % 1000000000L };
             nanosleep(&ts, NULL);
         }
     }

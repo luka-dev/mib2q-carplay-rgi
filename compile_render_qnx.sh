@@ -35,7 +35,9 @@ for f in $RENDERER_SRCS; do
     SRC_PATHS="$SRC_PATHS $REMOTE_DIR/$f"
 done
 
-BUILD_CMD="/usr/qnx650/host/qnx6/x86/usr/bin/ntoarmv7-gcc -O2 -std=gnu99 -Wall -D__QNX__ -DPLATFORM_QNX $EXTRA_CFLAGS -I$REMOTE_DIR $SRC_PATHS -o $REMOTE_DIR/maneuver_render -lEGL -lGLESv2 -lsocket -lm"
+# Per-section gc — strips dead code, smaller ELF, faster startup.
+# (LTO not used: QNX 6.5 ships GCC 4.4.2 which predates -flto.)
+BUILD_CMD="/usr/qnx650/host/qnx6/x86/usr/bin/ntoarmv7-gcc -O2 -std=gnu99 -Wall -D__QNX__ -DPLATFORM_QNX -fdata-sections -ffunction-sections $EXTRA_CFLAGS -I$REMOTE_DIR $SRC_PATHS -o $REMOTE_DIR/maneuver_render -Wl,--gc-sections -lEGL -lGLESv2 -lsocket -lm"
 
 sshpass -p "root" ssh $SSH_OPTS root@$QNX_VM \
     "export QNX_HOST=/usr/qnx650/host/qnx6/x86; \

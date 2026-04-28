@@ -79,10 +79,10 @@ public class RendererClient {
      * @param bargraphMode   0=off, 1=on, 2=blink
      * @param perspective    0=2D, 1=3D after transition (-1=don't change)
      */
-    public void sendManeuver(int icon, int direction, int exitAngle,
-                             int drivingSide, int[] junctionAngles,
-                             int bargraphLevel, int bargraphMode,
-                             int perspective) {
+    public boolean sendManeuver(int icon, int direction, int exitAngle,
+                                int drivingSide, int[] junctionAngles,
+                                int bargraphLevel, int bargraphMode,
+                                int perspective) {
         byte[] pkt = new byte[PKT_SIZE];
         pkt[0] = CMD_MANEUVER;
         byte flags = 0;
@@ -125,7 +125,7 @@ public class RendererClient {
             pkt[47] = (byte) (bargraphMode & 0xFF);
         }
 
-        sendPacket(pkt);
+        return sendPacket(pkt);
     }
 
     /**
@@ -133,13 +133,14 @@ public class RendererClient {
      *
      * @param level 0-16
      * @param mode  0=off, 1=on, 2=blink
+     * @return true if sent successfully
      */
-    public void sendBargraph(int level, int mode) {
+    public boolean sendBargraph(int level, int mode) {
         byte[] pkt = new byte[PKT_SIZE];
         pkt[0] = CMD_BARGRAPH;
         pkt[2] = (byte) (level & 0xFF);   /* payload[0] = level */
         pkt[3] = (byte) (mode & 0xFF);    /* payload[1] = mode */
-        sendPacket(pkt);
+        return sendPacket(pkt);
     }
 
     /**

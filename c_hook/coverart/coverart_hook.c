@@ -93,11 +93,26 @@ typedef struct {
     size_t jpeg_cap;
     int target_session;
     int is_carplay_stream;
+    int probe_calls;       /* incremented each handle_stream_data while !is_carplay_stream */
     int active;
 } StreamState;
 
 static StreamState streams[MAX_STREAMS];
 static pthread_mutex_t stream_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+/* Per-fd "skip" flag — set to 1 once we're confident a fd never carries
+ * iAP2 (after FD_PROBE_LIMIT reads without a single FF 5A packet).
+ * Lock-free single-byte read in the recv()/read() hooks for early exit;
+ * dio_manager opens many fds for IPC / logs / audio — without this filter
+ * every read on every fd does a mutex lock + linear FF 5A scan.
+ *
+ * Cleared on close() so a reused fd starts a fresh probe. */
+#define FD_TABLE_SIZE     1024
+#define FD_PROBE_LIMIT    64
+static volatile uint8_t fd_skip[FD_TABLE_SIZE];
+
+typedef int (*CloseFunc)(int);
+static CloseFunc real_close = NULL;
 
 /* Module state */
 static struct {
@@ -780,6 +795,7 @@ static StreamState* get_stream(int fd) {
     free_slot->jpeg_cap = 0;
     free_slot->target_session = -1;
     free_slot->is_carplay_stream = 0;
+    free_slot->probe_calls = 0;
     free_slot->active = 1;
     return free_slot;
 }
@@ -933,6 +949,24 @@ static void handle_stream_data(int fd, const uint8_t* buf, size_t len) {
         }
     }
 
+    /* fd-filter: if this fd has been read N times without ever showing a
+     * valid FF 5A iAP2 packet, mark it skip so future recv()/read() on
+     * it bypass handle_stream_data entirely.  Confirmed iAP2 fds are
+     * never marked. */
+    if (!st->is_carplay_stream) {
+        st->probe_calls++;
+        if (st->probe_calls >= FD_PROBE_LIMIT
+                && fd >= 0 && fd < FD_TABLE_SIZE) {
+            fd_skip[fd] = 1;
+            /* Free buffers — fd is permanently skipped, no point keeping them. */
+            free(st->raw_buf);
+            st->raw_buf = NULL;
+            st->raw_len = 0;
+            st->raw_cap = 0;
+            st->active = 0;  /* release stream slot for actual iAP2 fd */
+        }
+    }
+
     pthread_mutex_unlock(&stream_mutex);
 
     /* Hand off to async worker so the recv()/read() thread doesn't
@@ -957,7 +991,11 @@ ssize_t read(int fd, void* buf, size_t count) {
 
     result = real_read(fd, buf, count);
 
-    if (result > 0 && buf) {
+    /* Fast skip path: fds we've confirmed don't carry iAP2 — bypass
+     * mutex + scan entirely.  Critical: dio_manager has many non-iAP2
+     * fds (logs, IPC) that would otherwise burn cycles every read. */
+    if (result > 0 && buf
+            && (fd < 0 || fd >= FD_TABLE_SIZE || !fd_skip[fd])) {
         g_coverart.read_count++;
         handle_stream_data(fd, (const uint8_t*)buf, (size_t)result);
     }
@@ -979,12 +1017,47 @@ ssize_t recv(int sockfd, void* buf, size_t len, int flags) {
 
     result = real_recv(sockfd, buf, len, flags);
 
-    if (result > 0 && buf) {
+    if (result > 0 && buf
+            && (sockfd < 0 || sockfd >= FD_TABLE_SIZE || !fd_skip[sockfd])) {
         g_coverart.recv_count++;
         handle_stream_data(sockfd, (const uint8_t*)buf, (size_t)result);
     }
 
     return result;
+}
+
+/* Hook: close() — clear fd_skip flag and free stream slot so a reused
+ * fd starts fresh probing.  Without this, a reused fd would stay
+ * permanently skipped and we'd miss iAP2 packets if iPhone reconnects
+ * onto the same fd number. */
+int close(int fd) {
+    if (!real_close) {
+        real_close = (CloseFunc)dlsym(RTLD_NEXT, "close");
+        if (!real_close) {
+            errno = EBADF;
+            return -1;
+        }
+    }
+
+    if (fd >= 0 && fd < FD_TABLE_SIZE) {
+        fd_skip[fd] = 0;
+        pthread_mutex_lock(&stream_mutex);
+        for (int i = 0; i < MAX_STREAMS; i++) {
+            if (streams[i].active && streams[i].fd == fd) {
+                free(streams[i].raw_buf);
+                free(streams[i].jpeg_buf);
+                streams[i].raw_buf = NULL;
+                streams[i].jpeg_buf = NULL;
+                streams[i].raw_len = streams[i].raw_cap = 0;
+                streams[i].jpeg_len = streams[i].jpeg_cap = 0;
+                streams[i].active = 0;
+                break;
+            }
+        }
+        pthread_mutex_unlock(&stream_mutex);
+    }
+
+    return real_close(fd);
 }
 
 __attribute__((constructor))

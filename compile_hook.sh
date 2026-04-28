@@ -80,7 +80,10 @@ for f in $FRAMEWORK_SRCS $RGD_SRCS $CVR_SRCS $MAIN_SRCS; do
     ALL_SRCS="$ALL_SRCS $REMOTE_DIR/$f"
 done
 
-BUILD_CMD="/usr/qnx650/host/qnx6/x86/usr/bin/ntoarmv7-gcc -shared -fPIC -O2 -std=gnu99 $EXTRA_CFLAGS -I$REMOTE_DIR $ALL_SRCS -o $REMOTE_DIR/libcarplay_hook.so $EXTRA_LIBS"
+# Per-section gc strips dead code/data inside the .so — cuts size and
+# removes never-called helpers from being kept alive.
+# (LTO not used: QNX 6.5 ships GCC 4.4.2 which predates -flto.)
+BUILD_CMD="/usr/qnx650/host/qnx6/x86/usr/bin/ntoarmv7-gcc -shared -fPIC -O2 -std=gnu99 -fdata-sections -ffunction-sections $EXTRA_CFLAGS -I$REMOTE_DIR $ALL_SRCS -o $REMOTE_DIR/libcarplay_hook.so -Wl,--gc-sections $EXTRA_LIBS"
 
 sshpass -p "root" ssh $SSH_OPTS root@$QNX_VM \
     "export QNX_HOST=/usr/qnx650/host/qnx6/x86; \

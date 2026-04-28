@@ -242,8 +242,11 @@ public class BAPBridge {
                 int crLevel = bargraphOn ? (bargraph * 16) / 100 : 0;
                 if (crLevel > 16) crLevel = 16;
                 int crMode = bargraphOn ? 1 : 0;
-                rendererClient.sendBargraph(crLevel, crMode);
-            } catch (Throwable t) { /* BAP already sent; renderer will resync on next tick */ }
+                noteRendererSendResult(rendererClient.sendBargraph(crLevel, crMode));
+            } catch (Throwable t) {
+                noteRendererSendResult(false);
+                /* BAP already sent; renderer will resync on next tick */
+            }
         }
     }
 
@@ -877,7 +880,7 @@ public class BAPBridge {
                     if (nowApproach) {
                         updateRendererBargraph(s, bargraphDenominatorM);
                     } else {
-                        rendererClient.sendBargraph(0, 0);
+                        noteRendererSendResult(rendererClient.sendBargraph(0, 0));
                         /* Exiting approach zone: show ICON_APPROACH (follow street)
                          * to match BAP's sendFollowStreet(). */
                         sendRendererFollowStreet();
@@ -1314,6 +1317,15 @@ public class BAPBridge {
     private int lastCrDrivingSide = -1;
     private int lastCrVer = -1;
 
+    /* Crash recovery: count consecutive renderer-side TCP send failures.
+     * If we hit the threshold while customRendererStarted=true, the renderer
+     * process is presumed crashed — kill any orphan, relaunch, reset our
+     * dedup state so the next iAP2 update from iOS triggers a fresh send. */
+    private int crConsecutiveSendFailures = 0;
+    private long crLastRespawnMs = 0;
+    private static final int CR_RESPAWN_FAIL_THRESHOLD = 3;
+    private static final long CR_RESPAWN_COOLDOWN_MS = 5000;
+
     private static final String CR_LAUNCH_CMD =
         "/mnt/app/root/hooks/maneuver_render >/tmp/maneuver_render.log 2>&1 &";
     private static final String CR_KILL_CMD =
@@ -1371,6 +1383,56 @@ public class BAPBridge {
             Log.i(TAG, "CR: started");
         } catch (Throwable t) {
             Log.w(TAG, "CR start failed: " + t.getClass().getName() + ": " + t.getMessage());
+        }
+    }
+
+    /**
+     * Track success/failure of a renderer send.  After
+     * CR_RESPAWN_FAIL_THRESHOLD consecutive failures while we believe
+     * the renderer is up, assume it crashed and respawn it.
+     */
+    private void noteRendererSendResult(boolean ok) {
+        if (ok) {
+            crConsecutiveSendFailures = 0;
+            return;
+        }
+        crConsecutiveSendFailures++;
+        if (!customRendererStarted) return;
+        if (crConsecutiveSendFailures < CR_RESPAWN_FAIL_THRESHOLD) return;
+
+        long now = System.currentTimeMillis();
+        if (now - crLastRespawnMs < CR_RESPAWN_COOLDOWN_MS) {
+            /* Cooldown — don't spam respawns if launch keeps failing. */
+            return;
+        }
+        crLastRespawnMs = now;
+        crConsecutiveSendFailures = 0;
+
+        Log.w(TAG, "CR: " + CR_RESPAWN_FAIL_THRESHOLD
+                + " consecutive send failures, respawning renderer");
+
+        /* Tear down our view of it, then re-run the start sequence
+         * (which kills any orphan + relaunches).  Reset dedup state so
+         * the very next iAP2 update will cause a fresh CMD_MANEUVER
+         * (no "same as last" suppression). */
+        try {
+            if (rendererClient != null) {
+                rendererClient.disconnect();
+                rendererClient = null;
+            }
+            customRendererStarted = false;
+
+            startCustomRenderer();
+
+            lastCrIcon = -1;
+            lastCrDirection = -99;
+            lastCrExitAngle = -9999;
+            lastCrDrivingSide = -1;
+            lastCrVer = -1;
+
+            Log.i(TAG, "CR: respawn complete (state will resync on next iAP2 update)");
+        } catch (Throwable t) {
+            Log.e(TAG, "CR respawn failed", t);
         }
     }
 
@@ -1470,12 +1532,14 @@ public class BAPBridge {
 
             int perspective = 1;  /* always 3D — 2D/3D switch disabled for now */
 
-            rendererClient.sendManeuver(icon, direction, exitAngle,
+            boolean ok = rendererClient.sendManeuver(icon, direction, exitAngle,
                 drivingSide, junctionAngles, bargraphLevel, bargraphMode,
                 perspective);
-            return true;
+            noteRendererSendResult(ok);
+            return ok;
         } catch (Throwable e) {
             Log.w(TAG, "CR update failed: " + e.getClass().getName() + ": " + e.getMessage());
+            noteRendererSendResult(false);
             return false;
         }
     }
@@ -1494,9 +1558,11 @@ public class BAPBridge {
         lastCrDrivingSide = 0;
         lastCrVer = -1;
         try {
-            rendererClient.sendManeuver(icon, 0, 0, 0, null, 0, 0, 1);
+            boolean ok = rendererClient.sendManeuver(icon, 0, 0, 0, null, 0, 0, 1);
+            noteRendererSendResult(ok);
         } catch (Throwable t) {
             Log.w(TAG, "CR follow street failed: " + t.getMessage());
+            noteRendererSendResult(false);
         }
     }
 
@@ -1523,7 +1589,7 @@ public class BAPBridge {
             }
             bargraphMode = 1;
         }
-        rendererClient.sendBargraph(bargraphLevel, bargraphMode);
+        noteRendererSendResult(rendererClient.sendBargraph(bargraphLevel, bargraphMode));
     }
 
     /**
