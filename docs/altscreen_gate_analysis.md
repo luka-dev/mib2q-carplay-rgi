@@ -1,4 +1,4 @@
-# AltScreen activation — full gate analysis (MU1316 vs MHI3 vs iOS 26)
+# AltScreen activation — full gate analysis (MHI2Q vs MHI3 vs iOS 26)
 
 ## TL;DR — closed 2026-04-23
 
@@ -25,7 +25,7 @@ This document captures everything found by static reverse on:
   ExternalAccessory.framework, carkitd)
 - MHI3 firmware (`_swup_carplay_aa/extracted_elf_opt/libairplay.so`,
   `libesoiap2.so`, `dio_manager`, `tbt_renderer`)
-- MU1316 firmware (`libairplay.so` in IDA, MU1316 appimg tree)
+- MHI2Q firmware (`libairplay.so` in IDA, MHI2Q appimg tree)
 
 No live logs — pure static analysis.
 
@@ -35,7 +35,7 @@ No live logs — pure static analysis.
 Phone                                                  Car
 ─────                                                  ───
 
-Bonjour TXT discovery                       ←──  srcvers=210.81 (MU1316)
+Bonjour TXT discovery                       ←──  srcvers=210.81 (MHI2Q)
                                                   srcvers=450.14.2 (MHI3)
 
 iAP2 Identification message (MsgID 0xEA00)  ←──  ParamID 20/21 with
@@ -116,7 +116,7 @@ for a specific `clusterAssetIdentifier`. Can remotely disable Ferrite
 features. Not triggered for cars that don't advertise a
 `clusterAssetIdentifier` (our case).
 
-### Gate 3 — `supportsThemeAssets` on CRVehicle (❌ BLOCKS MU1316)
+### Gate 3 — `supportsThemeAssets` on CRVehicle (❌ BLOCKS MHI2Q)
 
 **Location:** `CarKit.framework/CRVehicleAccessoryManager.mm:530`:
 
@@ -211,7 +211,7 @@ Initially misinterpreted as a blocker. Actually:
 - When received, `CRThemeAssetLibrarian receivedClusterAssetIdentifier:`
   **auto-sets `supportsThemeAssets = YES`** as a side-effect, bypassing
   Gate 3's iAP2 check.
-- **Critical:** Neither MHI3 nor MU1316 binaries contain the strings
+- **Critical:** Neither MHI3 nor MHI2Q binaries contain the strings
   `clusterAssetIdentifier`, `SDKVersion`, `themeAsset`, or
   `supportsThemeAssets`. MHI3 does not use this mechanism at all.
 - MHI3 passes Gate 3 via iAP2 subparam 17 instead.
@@ -219,7 +219,7 @@ Initially misinterpreted as a blocker. Actually:
 So: we do NOT need to fake Apple's clusterAssetIdentifier (which would
 require a licensed OEM/model ID). iAP2 subparam 17 is enough.
 
-### Gate 5 — `enabledFeatures` CFArray in SETUP response (❌ BLOCKS MU1316)
+### Gate 5 — `enabledFeatures` CFArray in SETUP response (❌ BLOCKS MHI2Q)
 
 **Location:** `AirPlaySender/Activate.mm:319+`:
 
@@ -268,16 +268,16 @@ AirPlayAltScreenDictCreate @ 0x5F860
 AirPlayInfoArrayAddScreen @ 0x5FEC0
 ```
 
-MU1316 libairplay 210.81 rodata: **0 matches** for any of those strings.
+MHI2Q libairplay 210.81 rodata: **0 matches** for any of those strings.
 210.81 predates Ferrite, does not implement this response format at all.
 
 **Pass strategy:** hook `AirPlayReceiverSessionSetup` after it returns
 the response CFDict, insert `@"enabledFeatures"` CFArray with our
 feature strings. Needs runtime CFString creation.
 
-### Gate 6 — Stream `type=111` handler (❌ BLOCKS MU1316)
+### Gate 6 — Stream `type=111` handler (❌ BLOCKS MHI2Q)
 
-MU1316 libairplay `AirPlayReceiverSessionSetup @ 0x272B8` stream-type
+MHI2Q libairplay `AirPlayReceiverSessionSetup @ 0x272B8` stream-type
 switch (iterating streams in SETUP body):
 
 ```c
@@ -295,7 +295,7 @@ even if iOS tries to open it.
 
 MHI3 has a handler for type=111 (AltScreen stream setup) emitting
 `&unk_9E928` (= `"streams"` key) into response dict with per-stream
-setup info. MU1316 doesn't.
+setup info. MHI2Q doesn't.
 
 **Pass strategy:** hook the SessionSetup stream loop; on type=111 create
 a fake AltScreen stream wrapper that routes
@@ -388,7 +388,7 @@ Subparam 17 as "void" marker → just header, 4 bytes total:
 Inserted as part of a larger ParamID 20 or 21 payload inside the
 IdentificationInformation message (MsgID 0xEA00).
 
-## MHI3 vs MU1316 iAP2 diff
+## MHI3 vs MHI2Q iAP2 diff
 
 ### File layout
 
@@ -400,14 +400,14 @@ MHI3:
 - Has `processWirelessCarPlayUpdate`, `wirelessCarPlayTransportComponents`
   log strings.
 
-MU1316:
+MHI2Q:
 - No separate `libesoiap2.so` shipped.
 - iAP2 logic is either embedded in dio_manager or present as a
   differently-named library (not yet located).
 - `CMessageParameterWirelessCarplayTransportComponent` — **0 matches**
-  in any MU1316 binary checked.
+  in any MHI2Q binary checked.
 
-### String diff (MHI3 - MU1316 iAP2-relevant)
+### String diff (MHI3 - MHI2Q iAP2-relevant)
 
 MHI3 unique:
 ```
@@ -424,10 +424,10 @@ wirelessCarPlayTransportComponents=%s
 | 0 | iOS `_deviceFeatures` bit 0 | iPhone 26.1 | ✅ passes | — |
 | 1 | iOS user preferences | iPhone settings | ✅ default | — |
 | 2 | Apple assetDisabler | Apple CDN config | ✅ irrelevant without ID | — |
-| 3 | iAP2 subparam 17 (themeAssets) | car `libesoiap2` equiv | ❌ MU1316 missing | Medium — hook in iAP2 builder |
+| 3 | iAP2 subparam 17 (themeAssets) | car `libesoiap2` equiv | ❌ MHI2Q missing | Medium — hook in iAP2 builder |
 | 4 | `clusterAssetIdentifier` | — | ✅ not required | — |
-| 5 | `enabledFeatures` in SETUP response | car `libairplay` | ❌ MU1316 missing | High — wrap SessionSetup, CF build |
-| 6 | stream `type=111` handler | car `libairplay` | ❌ MU1316 missing | Very high — fake stream + pipeline |
+| 5 | `enabledFeatures` in SETUP response | car `libairplay` | ❌ MHI2Q missing | High — wrap SessionSetup, CF build |
+| 6 | stream `type=111` handler | car `libairplay` | ❌ MHI2Q missing | Very high — fake stream + pipeline |
 
 Only passing Gate 3 is enough to see if iOS starts proposing
 `altScreen` in the wire SETUP — that's the first diagnostic step before
@@ -438,18 +438,18 @@ committing to Gates 5 and 6.
 - **sourceVersion** — iOS uses it purely as analytics telemetry
   (`CRCarKitServiceAgent.mm:2345` sets `SourceVersion` key in Sentry
   metrics). No comparison against minimum version anywhere.
-  MHI3 = `"450.14.2"`, MU1316 = `"210.81"` — patching doesn't help.
+  MHI3 = `"450.14.2"`, MHI2Q = `"210.81"` — patching doesn't help.
 - **clusterAssetIdentifier** — only used if car opts into themed
   cluster via `CARCarPlayServiceMessageStartSession` (wireless only).
   MHI3 never sends it. Not required.
 
 ## Actionable next steps (ordered)
 
-1. **Locate MU1316 iAP2 Identification composer.**
-   MU1316 has no `libesoiap2.so` — iAP2 logic may live in
+1. **Locate MHI2Q iAP2 Identification composer.**
+   MHI2Q has no `libesoiap2.so` — iAP2 logic may live in
    `dio_manager` or a differently-named library. Need to
    `strings | grep 'IdentMsgComposer\|CMessageParameter\|IdentificationInformation'`
-   across all `.so` / binary files in the MU1316 appimg.
+   across all `.so` / binary files in the MHI2Q appimg.
 
 2. **Hook the Identification builder to inject subparam 17 (void) into
    ParamID 20.** Two possible approaches:
@@ -511,7 +511,7 @@ deeper design constraint and should re-evaluate.
 - vtables: `off_A6468` (32B), `off_A6508` (4B void), `off_A64C8` (2B),
   `off_A64E8` (0B void), `off_A64A8` (1B)
 
-**MU1316 libairplay 210.81 (our hook target):**
+**MHI2Q libairplay 210.81 (our hook target):**
 - `AirPlayReceiverSessionSetup @ 0x272B8` — stream-type switch (rejects
   type=111)
 - `AirPlayReceiverSessionControl @ 0x28EE0` — only handles modesChanged,
@@ -521,15 +521,15 @@ deeper design constraint and should re-evaluate.
 - `AirPlayCopyServerInfo @ 0x22254` — /info response builder
 - sourceVersion rodata 0x9DF2C ("210.81"), bonjour srcvers 0x9E50C
 
-## 2026-04-23 update — MU1316 iAP2 stack architectural blocker
+## 2026-04-23 update — MHI2Q iAP2 stack architectural blocker
 
 Previous Gate 3 analysis identified "iAP2 subparam 17 emission" as the
-target fix. This update documents that the MU1316 iAP2 stack is
+target fix. This update documents that the MHI2Q iAP2 stack is
 fundamentally too old to emit it via any legitimate API.
 
-### MU1316 iAP2 architecture (reversed via dio_manager.i64 + libNmeSDK.so)
+### MHI2Q iAP2 architecture (reversed via dio_manager.i64 + libNmeSDK.so)
 
-- **No dedicated `libesoiap2.so`** on MU1316 (MHI3 has one).
+- **No dedicated `libesoiap2.so`** on MHI2Q (MHI3 has one).
 - iAP2 client/service classes (`dio::CIAP2Service`, `dio::CIAP2ServiceCinemo`,
   `dio::CIAP2ServiceCreator`, `dio::CIAP2ClientEventListener`, etc.) are
   statically linked into `dio_manager`.
@@ -576,7 +576,7 @@ feature-capability toggles.
    pre-baked component builders (USB/BT/Location/HID) none of which
    support the 2020+ TransportComponent schema.
 3. No drop-in Cinemo SDK upgrade — Cinemo's binaries are proprietary and
-   the version shipped with this MU1316 head unit predates the Ferrite
+   the version shipped with this MHI2Q head unit predates the Ferrite
    (CarPlay 4.0) era by years.
 
 ### Remaining (infeasible) attack surface

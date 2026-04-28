@@ -62,15 +62,15 @@ Conclusion:
 - produces a "filtered" signpost by removing occurrences of `street` from `signpost`
   (to avoid duplication)
 
-### Distance Formatting / Encoding (MHI3 vs MU1316 BAP Semantics)
+### Distance Formatting / Encoding (MHI3 vs MHI2Q BAP Semantics)
 
 Important distinction:
 
 - **MHI3 (`tbt_renderer` + `dio_manager` + `DSINavBap`)** receives iAP2 distances as **raw meters** plus **distance strings** and **unit strings**.
-- The **BAP value/unit encoding** used by the VC/HUD is a **CombiBAP convention** (not visible in MHI3 `lsd.jar`), and for MU1316 it is implemented by:
+- The **BAP value/unit encoding** used by the VC/HUD is a **CombiBAP convention** (not visible in MHI3 `lsd.jar`), and for MHI2Q it is implemented by:
   `de.audi.tghu.navi.app.cluster.BAPDistanceFormatter` (in `mu1316_lsd.jar`).
 
-Verified behavior (MU1316 `BAPDistanceFormatter`):
+Verified behavior (MHI2Q `BAPDistanceFormatter`):
 
 - If the raw meters input is `<= 0`, the distance is treated as invalid (handled by AppCombiBAP as `value=-1`).
 - Distance `value` sent over BAP is **tenths of the display unit**:

@@ -38,7 +38,7 @@ public void updateGfxState(int i, int j) {
 
 ## Root Cause: No Native Provider
 
-**DSIKOMOGfxStreamSink has NO native provider on MU1316.**
+**DSIKOMOGfxStreamSink has NO native provider on MHI2Q.**
 
 Evidence:
 - `libdsikomogfxstreamsinkproxy.so` exists in `/mnt/app/eso/lib/factories/` -- contains BOTH Stub (server) and Proxy (client) code
@@ -61,11 +61,11 @@ This is an open question. The KOMOProbe Phase 5 tests force gfxAvailable to bypa
 
 ## Other Missing DSI Services
 
-| DSI Service | Provider on MU1316 | Impact |
-|-------------|-------------------|--------|
-| DSIKOMOView | libPresentationController.so (ServiceProviderDSIKomoViewImpl) | **Available** -- RouteInfoElement[] data arrives |
-| DSIKOMONavInfo | NONE | Nav metadata (street, distance text) not delivered via DSI |
-| DSIKOMOGfxStreamSink | NONE | **gfxAvailable never set** |
+| DSI Service          | Provider on MU1316                                            | Impact                                                     |
+|----------------------|---------------------------------------------------------------|------------------------------------------------------------|
+| DSIKOMOView          | libPresentationController.so (ServiceProviderDSIKomoViewImpl) | **Available** -- RouteInfoElement[] data arrives           |
+| DSIKOMONavInfo       | NONE                                                          | Nav metadata (street, distance text) not delivered via DSI |
+| DSIKOMOGfxStreamSink | NONE                                                          | **gfxAvailable never set**                                 |
 
 ## Fix (IMPLEMENTED)
 

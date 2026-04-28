@@ -1,4 +1,4 @@
-# KOMO Widget Video Architecture -- MU1316 MHI2 FPK
+# KOMO Widget Video Architecture -- MHI2Q MHI2 FPK
 
 ## Overview
 
@@ -21,7 +21,7 @@ From `komoviewstyle.conf` (PresentationController config):
 |----------|------|------------|-------------|
 | 0 | KVS_Invalid | - | Invalid/unset |
 | 1 | KVS_RGI | 285x276 | Old MIB1-style widget |
-| 2 | KVS_RGI2 | 363x260 | Current widget (MU1316) |
+| 2 | KVS_RGI2 | 363x260 | Current widget (MHI2Q) |
 | 3 | KVS_FPK | 800x480 | Full FPK display |
 | 4 | KVS_Most | - | MOST video mode |
 | 5 | KVS_Debug_MoKoInMainDisplay | - | Debug mode |
@@ -189,7 +189,7 @@ The VC's EB GUIDE state machine has these FPK view states:
 
 ## Three DSI Interfaces for KOMO
 
-| DSI Interface | Native Provider | Status on MU1316 |
+| DSI Interface | Native Provider | Status on MHI2Q |
 |---------------|----------------|-------------------|
 | DSIKOMOView | libPresentationController.so | **Available** -- but GuidanceView doesn't render |
 | DSIKOMONavInfo | None | **Missing** -- no native provider |
