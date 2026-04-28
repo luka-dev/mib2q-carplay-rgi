@@ -94,7 +94,7 @@ public class BAPBridge {
 
     private ClusterService csRef;
     private KOMOService komoService;
-    private RendererClient rendererClient;
+    private RendererServer rendererClient;
 
     private static final class SilentLogChannel extends LogChannel {
         public void log(int level, String pattern,
@@ -534,6 +534,14 @@ public class BAPBridge {
             appConnectorNavi.updateLaneGuidance(false, new CombiBAPNaviLaneGuidanceData[0]);
 
             stopCustomRenderer();
+            /* CarPlay session ending — release the renderer listen socket
+             * (port :19800).  stopCustomRenderer keeps it bound for fast
+             * route restarts within a session; full session shutdown
+             * actually closes it. */
+            if (rendererClient != null) {
+                rendererClient.dispose();
+                rendererClient = null;
+            }
             if (gatedService != null) gatedService.blockRouteGuidance = false;
             forceClusterRouteInfoState(false);
             forceGfxAvailable(false);
@@ -866,14 +874,11 @@ public class BAPBridge {
             /* 10. c_render: CMD_MANEUVER only when icon actually changes,
              * CMD_BARGRAPH for distance updates, CMD_PERSPECTIVE for approach zone */
             if (rendererClient != null && customRendererStarted) {
-                /* Watchdog: if renderer TCP connection dropped, re-launch.
-                 * Native navi boot can take over displayable 20, killing our renderer
-                 * or orphaning its window. Re-launching reclaims it. */
-                if (!rendererClient.isConnected()) {
-                    Log.w(TAG, "CR: watchdog — TCP lost, re-launching renderer");
-                    stopCustomRenderer();
-                    startCustomRenderer();
-                }
+                /* (Old isConnected-based watchdog removed — the new
+                 * everConnected gate + 3-consecutive-fail respawn in
+                 * noteRendererSendResult handles all death cases without
+                 * false positives during the startup window when renderer
+                 * is still connecting.) */
 
                 /* Approach zone enter/exit -> bargraph + icon mode change */
                 if (approachChanged) {
@@ -1347,27 +1352,31 @@ public class BAPBridge {
                     "/bin/sh", new String[] { "-c", CR_KILL_CMD });
             } catch (Throwable t) { /* ignore */ }
 
+            /* Renderer server socket is always-on within a CarPlay session
+             * — first call binds + starts accept thread, subsequent
+             * calls are no-op (idempotent).  Listen socket persists
+             * across route stop/start so a fresh maneuver_render can
+             * connect immediately without re-bind delay. */
+            if (rendererClient == null) {
+                rendererClient = new RendererServer();
+            }
+            if (!rendererClient.connect()) {
+                Log.w(TAG, "CR: bind failed; renderer pipeline may not work");
+            }
+
             /* Launch renderer from Java (not C hook) — Java's process tree
              * has clean EGL access. Same approach as gpSP. */
             Log.i(TAG, "CR: launching maneuver_render from Java");
             de.audi.atip.util.CommandLineExecuter.executeCommand(
                 "/bin/sh", new String[] { "-c", CR_LAUNCH_CMD });
 
-            /* Wait for renderer to init EGL + TCP server */
-            try { Thread.sleep(2000); } catch (InterruptedException ie) { /* ignore */ }
-
-            /* Switch cluster display to renderer's context via DisplayManager */
+            /* Switch cluster display to renderer's context via DisplayManager.
+             * Doesn't depend on renderer being fully up (separate IPC path). */
             String result = csRef.activateCustomRendererPipeline();
             Log.i(TAG, "CR: pipeline " + result);
 
             /* BAP route info state for HUD icons */
             forceClusterRouteInfoState(true);
-
-            /* TCP connection to c_render */
-            rendererClient = new RendererClient();
-            if (!rendererClient.connect()) {
-                Log.w(TAG, "CR: TCP connect failed (will retry on send)");
-            }
 
             /* Set gfxAvailable so VC enters MAP mode for LVDS video.
              * Must be after renderer owns displayable 20 (avoids native KDK race). */
@@ -1398,6 +1407,14 @@ public class BAPBridge {
         }
         crConsecutiveSendFailures++;
         if (!customRendererStarted) return;
+
+        /* Don't count failures during the startup window — before the
+         * renderer process has connected for the first time, sock=null
+         * naturally fails sends.  Only after a successful connect are
+         * subsequent failures evidence that a working renderer has
+         * crashed and needs respawning. */
+        if (rendererClient == null || !rendererClient.everConnected()) return;
+
         if (crConsecutiveSendFailures < CR_RESPAWN_FAIL_THRESHOLD) return;
 
         long now = System.currentTimeMillis();
@@ -1414,11 +1431,16 @@ public class BAPBridge {
         /* Tear down our view of it, then re-run the start sequence
          * (which kills any orphan + relaunches).  Reset dedup state so
          * the very next iAP2 update will cause a fresh CMD_MANEUVER
-         * (no "same as last" suppression). */
+         * (no "same as last" suppression).
+         *
+         * Note: we close the dead client socket via disconnectClient()
+         * but KEEP the server listen socket — the new renderer process
+         * will connect to it instantly via the still-running accept
+         * thread. */
         try {
             if (rendererClient != null) {
-                rendererClient.disconnect();
-                rendererClient = null;
+                rendererClient.disconnectClient();
+                /* don't null — instance reused, server stays bound */
             }
             customRendererStarted = false;
 
@@ -1439,9 +1461,13 @@ public class BAPBridge {
     private void stopCustomRenderer() {
         if (!customRendererStarted) return;
         try {
+            /* Lightweight teardown: send CMD_SHUTDOWN, close client
+             * socket — but KEEP the server listen socket open for the
+             * next route in this session.  Renderer port :19800 is
+             * always-on once activated, so a fresh maneuver_render can
+             * connect immediately without re-bind delay. */
             if (rendererClient != null) {
-                rendererClient.disconnect();
-                rendererClient = null;
+                rendererClient.disconnectClient();
             }
             /* slay as backstop — ensures no orphan even if TCP shutdown missed */
             try {
@@ -1454,7 +1480,7 @@ public class BAPBridge {
             forceGfxAvailable(false);
             forceClusterRouteInfoState(false);
             customRendererStarted = false;
-            Log.i(TAG, "CR: stopped");
+            Log.i(TAG, "CR: stopped (server socket persists for next route)");
         } catch (Throwable t) {
             Log.w(TAG, "CR stop failed: " + t.getClass().getName() + ": " + t.getMessage());
         }

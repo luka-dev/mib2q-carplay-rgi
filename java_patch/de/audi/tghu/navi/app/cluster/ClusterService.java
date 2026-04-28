@@ -1371,7 +1371,7 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
     /**
      * Send CMD_SHUTDOWN to c_render via TCP (48-byte packet, protocol.h).
      * Fallback shutdown -- BAPBridge.stopCustomRenderer() handles primary
-     * shutdown via RendererClient. This is a backstop if Java didn't close cleanly.
+     * shutdown via RendererServer. This is a backstop if Java didn't close cleanly.
      */
     public void shutdownRenderer() {
         java.net.Socket sock = null;

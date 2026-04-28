@@ -31,6 +31,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.ServerSocket;
 import java.net.Socket;
 
 public class CarplayBus {
@@ -198,11 +199,20 @@ public class CarplayBus {
      * ============================================================ */
     private final Object lock = new Object();
     private volatile boolean running;
-    private Thread ioThread;
-    private Socket sock;
+    private Thread ioThread;             /* accept loop (one-at-a-time, force-replace) */
+    private ServerSocket serverSocket;   /* listens on PORT, accepts hook clients */
+    private Socket sock;                 /* current accepted client (one at a time) */
     private InputStream in;
     private OutputStream out;
     private int txSeq = 1;
+
+    /* Hook sends EVT_PONG unconditionally every 1 s as a heartbeat.
+     * We set a 5 s SO_TIMEOUT on the accepted socket; if no inbound
+     * traffic (any frame) within that window, readFully throws
+     * SocketTimeoutException, the reader exits, and ioLoop re-accepts.
+     * Catches force-killed dio_manager whose TCP state may linger
+     * past kernel cleanup. */
+    private static final int SOCKET_READ_TIMEOUT_MS = 5000;
 
     /* Listener table: direct-indexed by type.  Must cover the full
      * protocol range (see bus_protocol.h; currently through 0x02FF).
@@ -237,6 +247,10 @@ public class CarplayBus {
             if (!running) return;
             running = false;
             closeConnectionLocked("stopping");
+            /* Close listen socket so blocked accept() unblocks with IOException. */
+            if (serverSocket != null) {
+                try { serverSocket.close(); } catch (Exception e) {}
+            }
             lock.notifyAll();
         }
         if (ioThread != null) {
@@ -386,25 +400,29 @@ public class CarplayBus {
 
     /* ============================================================
      * I/O thread main
+     *
+     * Java is now the TCP SERVER (long-lived).  Hook = TCP CLIENT,
+     * spawned per phone connect.  This thread opens a listen socket
+     * once, then accepts one client at a time.  When the client
+     * disconnects, loops back to accept the next.
      * ============================================================ */
     private void ioLoop() {
-        int backoffMs = 200;
+        if (!openServerSocket()) {
+            Log.e(TAG, "ServerSocket bind failed; bus disabled");
+            return;
+        }
+
         while (running) {
-            if (!connect()) {
-                sleepMs(backoffMs);
-                backoffMs = Math.min(backoffMs * 2, 2000);
+            if (!acceptOne()) {
+                /* accept() failed (not because of shutdown) — back off briefly. */
+                sleepMs(500);
                 continue;
             }
-            backoffMs = 200;
 
-            /* CMD_SYNC_REQ already enqueued atomically inside connect() —
+            /* CMD_SYNC_REQ already enqueued atomically inside acceptOne() —
              * guaranteed to be the first frame on the wire. */
 
-            /* Split I/O: reader blocks on in.read, writer drains queue.
-             * Do both on this thread via ready checks: write if queue
-             * non-empty, otherwise block on read.  Because reads block
-             * on the socket but we may need to flush writes, use a
-             * helper reader thread for the lifetime of the connection. */
+            /* Split I/O: reader blocks on in.read, writer drains queue. */
             Thread readerThread = new Thread(new Runnable() {
                 public void run() { readerLoop(); }
             }, "CarplayBus-Read");
@@ -414,6 +432,26 @@ public class CarplayBus {
             writerLoop();
 
             try { readerThread.join(500); } catch (InterruptedException e) {}
+        }
+
+        try { if (serverSocket != null) serverSocket.close(); }
+        catch (Exception e) {}
+        serverSocket = null;
+    }
+
+    private boolean openServerSocket() {
+        try {
+            ServerSocket ss = new ServerSocket();
+            ss.setReuseAddress(true);
+            ss.bind(new InetSocketAddress(HOST, PORT));
+            synchronized (lock) {
+                serverSocket = ss;
+            }
+            Log.i(TAG, "listening on " + HOST + ":" + PORT);
+            return true;
+        } catch (IOException e) {
+            Log.e(TAG, "ServerSocket bind " + HOST + ":" + PORT + " failed: " + e.getMessage());
+            return false;
         }
     }
 
@@ -507,34 +545,48 @@ public class CarplayBus {
         }
     }
 
-    private boolean connect() {
-        Socket s = new Socket();
+    private boolean acceptOne() {
+        ServerSocket ss;
+        synchronized (lock) {
+            ss = serverSocket;
+            if (ss == null) return false;
+        }
         try {
-            s.connect(new InetSocketAddress(HOST, PORT), 1000);
+            Socket s = ss.accept();          /* BLOCKS until hook connects */
             s.setTcpNoDelay(true);
             s.setKeepAlive(true);
+            /* Read timeout = heartbeat-dead detection.  Hook posts
+             * EVT_PONG every 1 s; if no inbound for 5 s, readFully
+             * throws SocketTimeoutException and reader exits cleanly. */
+            s.setSoTimeout(SOCKET_READ_TIMEOUT_MS);
             InputStream iin = s.getInputStream();
             OutputStream oout = s.getOutputStream();
-            /* Atomic: drop anything that piled up while disconnected,
-             * assign the new socket, and enqueue CMD_SYNC_REQ as the
-             * very first outbound frame — so no concurrent send() from
-             * CursorClient / other producer can slip ahead of it and
-             * deliver stale state to the freshly-connected hook.
-             * Java monitors are re-entrant, so sendBare() nested inside
-             * runs under the same lock hold. */
+
+            /* One-client-at-a-time semantics: ioLoop is single-threaded
+             * (accept blocks until current connection dies), so by the
+             * time we accept here the previous connection has usually
+             * already been cleaned up by reader/writer cleanup paths.
+             *
+             * If there's still a stale `sock` field set at this point
+             * (race between writer-exit and our accept), we force-close
+             * it before installing the new one — treating as re-init.
+             * Either way we fire CMD_SYNC_REQ so hook resends sticky state. */
+            boolean staleSockPresent;
             synchronized (lock) {
-                closeConnectionLocked("reconnect");   /* flushes queue */
+                staleSockPresent = (sock != null);
+                if (staleSockPresent) {
+                    Log.w(TAG, "stale socket present at accept time - cleaning up before re-init");
+                }
+                closeConnectionLocked("re-accept");   /* flushes queue, closes old sock */
                 sock = s;
                 in = iin;
                 out = oout;
                 sendBare(CMD_SYNC_REQ, 0);            /* first frame guaranteed */
             }
-            Log.i(TAG, "connected to " + HOST + ":" + PORT);
+            Log.i(TAG, "hook connected from " + s.getInetAddress() + ":" + s.getPort());
             return true;
         } catch (IOException e) {
-            /* Silent — native hook bus may not be up yet during warm-up;
-             * the reconnect loop retries every ~400 ms and drowns the log. */
-            try { s.close(); } catch (Exception ex) {}
+            if (running) Log.w(TAG, "accept() failed: " + e.getMessage());
             return false;
         }
     }

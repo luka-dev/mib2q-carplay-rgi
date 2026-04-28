@@ -3,14 +3,22 @@
  *
  * See bus.h / bus_protocol.h for the public API and wire format.
  *
+ * Topology: hook is the TCP CLIENT, Java HMI is the long-lived TCP SERVER
+ * listening on 127.0.0.1:19810.  This matches our process lifetime
+ * hierarchy (Java alive from boot, dio_manager spawned per phone connect)
+ * and removes the retry-loop / sleep hacks that the inverse direction
+ * needed.
+ *
  * Threads:
- *   - listener thread: accept() loop; one client at a time.  When a new
- *     client connects, any previous client fd is closed.
- *   - writer thread  : drains send queue, writes frames to the current
+ *   - connector thread: connect() to Java with retry.  On success, sends
+ *     HELLO, spawns reader, then waits for reader to exit (Java disconnect
+ *     or error) and loops back to reconnect.
+ *   - writer thread   : drains send queue, writes frames to the current
  *     client fd with TCP_NODELAY.  On write error it drops the fd and
- *     waits for the next accept().
- *   - reader thread  : spawned per accepted connection; parses inbound
- *     frames and dispatches to registered handlers.
+ *     waits for the next connect.
+ *   - reader thread   : parses inbound frames and dispatches to registered
+ *     handlers.  Sets g_client_fd = -1 + signals g_cond on exit so the
+ *     connector wakes and retries.
  *
  * Shared state is protected by a single mutex.  The send queue is a
  * simple ring buffer of heap-allocated frames.
@@ -96,15 +104,20 @@ static pthread_rwlock_t g_htable_rw = PTHREAD_RWLOCK_INITIALIZER;
  * send() calls inside send_frame() so two producers (writer thread and
  * reader thread during sync replay) cannot interleave bytes. */
 static pthread_mutex_t  g_sock_write = PTHREAD_MUTEX_INITIALIZER;
-static pthread_t       g_listener_tid;
+static pthread_t       g_connector_tid;
 static pthread_t       g_writer_tid;
 static pthread_t       g_reader_tid;
-static bool            g_listener_up = false;
-static bool            g_writer_up = false;
-static bool            g_reader_up = false;
+static pthread_t       g_heartbeat_tid;
+/* Thread-state flags written from one thread (the thread itself on exit)
+ * and read from others without lock — must be volatile so reads aren't
+ * cached in registers. */
+static volatile bool   g_connector_up = false;
+static volatile bool   g_writer_up = false;
+static volatile bool   g_reader_up = false;
+static volatile bool   g_heartbeat_up = false;
 static volatile bool   g_shutdown = false;
 
-static int             g_listen_fd = -1;
+/* g_listen_fd removed - hook is now TCP client, no listening socket. */
 static int             g_client_fd = -1;    /* protected by g_lock */
 static uint32_t        g_tx_seq = 1;
 
@@ -565,21 +578,15 @@ static void* writer_main(void* arg) {
 }
 
 /* ============================================================
- * Listener thread - accept loop, one-client-at-a-time.
+ * Connector thread - connect() to Java server with retry +
+ * automatic reconnect on disconnect.
  * ============================================================ */
-static void* listener_main(void* arg) {
-    (void)arg;
-    LOG_INFO(LOG_MODULE, "listener thread started on %s:%d", BUS_TCP_HOST, BUS_TCP_PORT);
-
-    g_listen_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (g_listen_fd < 0) {
-        LOG_ERROR(LOG_MODULE, "socket() failed: %s", strerror(errno));
-        g_listener_up = false;
-        return NULL;
-    }
+static int try_connect_once(void) {
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) return -1;
 
     int one = 1;
-    setsockopt(g_listen_fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
 
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
@@ -587,48 +594,51 @@ static void* listener_main(void* arg) {
     addr.sin_port = htons(BUS_TCP_PORT);
     addr.sin_addr.s_addr = inet_addr(BUS_TCP_HOST);
 
-    if (bind(g_listen_fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
-        LOG_ERROR(LOG_MODULE, "bind() failed: %s", strerror(errno));
-        close(g_listen_fd);
-        g_listen_fd = -1;
-        g_listener_up = false;
-        return NULL;
+    if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        close(fd);
+        return -1;
     }
-    if (listen(g_listen_fd, 1) < 0) {
-        LOG_ERROR(LOG_MODULE, "listen() failed: %s", strerror(errno));
-        close(g_listen_fd);
-        g_listen_fd = -1;
-        g_listener_up = false;
-        return NULL;
-    }
+    return fd;
+}
 
+static void* connector_main(void* arg) {
+    (void)arg;
+    LOG_INFO(LOG_MODULE, "connector thread started -> %s:%d", BUS_TCP_HOST, BUS_TCP_PORT);
+
+    /* Outer loop: keep the link alive across Java HMI restarts. */
     while (!g_shutdown) {
-        struct sockaddr_in cli;
-        socklen_t clilen = sizeof(cli);
-        int fd = accept(g_listen_fd, (struct sockaddr*)&cli, &clilen);
-        if (fd < 0) {
-            if (errno == EINTR) continue;
-            if (g_shutdown) break;
-            LOG_WARN(LOG_MODULE, "accept() failed: %s", strerror(errno));
-            usleep(100 * 1000);
-            continue;
+        int fd = -1;
+        int backoff_ms = 100;
+
+        /* Connect attempt loop with exponential-ish backoff capped at 2 s.
+         * Java should already be listening (alive from boot) but on a
+         * fresh-flash boot race we may beat it by a few ms. */
+        while (!g_shutdown && fd < 0) {
+            fd = try_connect_once();
+            if (fd < 0) {
+                LOG_DEBUG(LOG_MODULE, "connect failed (%s), retrying in %d ms",
+                          strerror(errno), backoff_ms);
+                usleep(backoff_ms * 1000);
+                if (backoff_ms < 2000) backoff_ms *= 2;
+            }
+        }
+        if (g_shutdown) {
+            if (fd >= 0) close(fd);
+            break;
         }
 
-        setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
+        LOG_INFO(LOG_MODULE, "connected to Java server fd=%d", fd);
 
-        LOG_INFO(LOG_MODULE, "client connected fd=%d", fd);
-
-        /* Replace any previous connection. */
+        /* Replace any stale fd (shouldn't exist but defensive). */
         pthread_mutex_lock(&g_lock);
         if (g_client_fd >= 0) {
-            LOG_WARN(LOG_MODULE, "dropping previous client fd=%d", g_client_fd);
             close(g_client_fd);
         }
         g_client_fd = fd;
         pthread_cond_broadcast(&g_cond);
         pthread_mutex_unlock(&g_lock);
 
-        /* Send HELLO. */
+        /* Send HELLO so Java side knows we're up. */
         const char hello[] = "ver:n:1\nproto:s:carplay_bus\n";
         bus_send(EVT_HELLO, 0, (const uint8_t*)hello, sizeof(hello) - 1);
 
@@ -646,14 +656,51 @@ static void* listener_main(void* arg) {
         }
         g_reader_tid = t;
         pthread_detach(t);
+
+        /* Wait for reader to exit (Java disconnected or read error).
+         * Reader sets g_reader_up=false + broadcasts g_cond on exit. */
+        pthread_mutex_lock(&g_lock);
+        while (g_reader_up && !g_shutdown) {
+            pthread_cond_wait(&g_cond, &g_lock);
+        }
+        pthread_mutex_unlock(&g_lock);
+
+        if (!g_shutdown) {
+            LOG_INFO(LOG_MODULE, "reader exited; will reconnect");
+        }
     }
 
-    if (g_listen_fd >= 0) {
-        close(g_listen_fd);
-        g_listen_fd = -1;
+    g_connector_up = false;
+    LOG_INFO(LOG_MODULE, "connector thread exiting");
+    return NULL;
+}
+
+/* ============================================================
+ * Heartbeat thread - sends EVT_PONG every 1 s while connected.
+ *
+ * Java side has SO_TIMEOUT = 5 s on the accepted socket; if no
+ * inbound for 5 s the Java reader exits and the bus reconnects.
+ * That's how Java detects force-killed dio_manager whose TCP
+ * state may not get cleaned up promptly by the kernel.
+ * ============================================================ */
+static void* heartbeat_main(void* arg) {
+    (void)arg;
+    LOG_INFO(LOG_MODULE, "heartbeat thread started (1 s interval)");
+    while (!g_shutdown) {
+        usleep(1000 * 1000);   /* 1 second */
+        if (g_shutdown) break;
+        /* Only send when actually connected — otherwise queue grows
+         * unbounded while waiting for first connect. */
+        bool connected;
+        pthread_mutex_lock(&g_lock);
+        connected = (g_client_fd >= 0);
+        pthread_mutex_unlock(&g_lock);
+        if (connected) {
+            bus_send(EVT_PONG, 0, NULL, 0);   /* empty payload */
+        }
     }
-    g_listener_up = false;
-    LOG_INFO(LOG_MODULE, "listener thread exiting");
+    g_heartbeat_up = false;
+    LOG_INFO(LOG_MODULE, "heartbeat thread exiting");
     return NULL;
 }
 
@@ -661,7 +708,7 @@ static void* listener_main(void* arg) {
  * Lifecycle
  * ============================================================ */
 hook_result_t bus_init(void) {
-    if (g_listener_up || g_writer_up) return HOOK_ERR_BUSY;
+    if (g_connector_up || g_writer_up) return HOOK_ERR_BUSY;
 
     /* Do NOT memset g_types or g_ring here: modules may have called
      * bus_on() from their own __constructor before bus_init ran
@@ -671,13 +718,13 @@ hook_result_t bus_init(void) {
     g_tx_seq = 1;
     g_shutdown = false;
 
-    g_listener_up = true;
-    if (pthread_create(&g_listener_tid, NULL, listener_main, NULL) != 0) {
-        LOG_ERROR(LOG_MODULE, "listener pthread_create failed");
-        g_listener_up = false;
+    g_connector_up = true;
+    if (pthread_create(&g_connector_tid, NULL, connector_main, NULL) != 0) {
+        LOG_ERROR(LOG_MODULE, "connector pthread_create failed");
+        g_connector_up = false;
         return HOOK_ERR_INIT;
     }
-    pthread_detach(g_listener_tid);
+    pthread_detach(g_connector_tid);
 
     g_writer_up = true;
     if (pthread_create(&g_writer_tid, NULL, writer_main, NULL) != 0) {
@@ -687,6 +734,16 @@ hook_result_t bus_init(void) {
         return HOOK_ERR_INIT;
     }
     pthread_detach(g_writer_tid);
+
+    g_heartbeat_up = true;
+    if (pthread_create(&g_heartbeat_tid, NULL, heartbeat_main, NULL) != 0) {
+        LOG_ERROR(LOG_MODULE, "heartbeat pthread_create failed");
+        g_heartbeat_up = false;
+        /* Non-fatal: bus still works without heartbeat (Java falls back to
+         * natural-traffic timeout, but force-kill detection is degraded). */
+    } else {
+        pthread_detach(g_heartbeat_tid);
+    }
 
     LOG_INFO(LOG_MODULE, "bus initialised on %s:%d", BUS_TCP_HOST, BUS_TCP_PORT);
     return HOOK_OK;
@@ -700,11 +757,6 @@ void bus_shutdown(void) {
         shutdown(g_client_fd, SHUT_RDWR);
         close(g_client_fd);
         g_client_fd = -1;
-    }
-    if (g_listen_fd >= 0) {
-        shutdown(g_listen_fd, SHUT_RDWR);
-        close(g_listen_fd);
-        g_listen_fd = -1;
     }
     pthread_cond_broadcast(&g_cond);
     pthread_mutex_unlock(&g_lock);

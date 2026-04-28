@@ -13,13 +13,16 @@
 #define CR_TCP_PORT         19800
 #define CR_PKT_SIZE         48
 
-/* Command IDs */
+/* Command IDs (Java -> renderer, except where noted) */
 #define CMD_MANEUVER     0x01    /* New maneuver -- engine transitions automatically */
 #define CMD_SCREENSHOT   0x02    /* Save framebuffer as PPM */
 #define CMD_SHUTDOWN     0x03    /* Graceful exit */
 #define CMD_PERSPECTIVE  0x04    /* Perspective: payload[0] = 0 (off) / 1 (on) */
 #define CMD_DEBUG        0x05    /* Toggle debug overlay */
 #define CMD_BARGRAPH     0x06    /* Bargraph: payload[0]=level(0-16), payload[1]=on/off */
+
+/* Renderer -> Java events (high bit set to distinguish from commands) */
+#define EVT_HEARTBEAT    0x80    /* Renderer alive, sent every 1 s; empty payload */
 
 /* 48-byte command packet */
 typedef struct {

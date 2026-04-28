@@ -22,4 +22,8 @@ int cr_server_read_cmd(cr_cmd_t *out);
 /* Shutdown server and close all sockets. */
 void cr_server_shutdown(void);
 
+/* Send EVT_HEARTBEAT (one 48-byte packet) to Java if currently
+ * connected.  Caller throttles to ~1 Hz.  No-op if not connected. */
+void cr_server_send_heartbeat(void);
+
 #endif /* CR_SERVER_H */

@@ -524,7 +524,7 @@ below.
 
 | Component                    | Type                  | Purpose                                                                                          | Output                |
 |------------------------------|-----------------------|--------------------------------------------------------------------------------------------------|-----------------------|
-| `c_hook/`                    | C (ARM32 QNX)         | iAP2 hooks, route guidance + async cover-art bridge, TCP bus server (port 19810)                 | `libcarplay_hook.so`  |
+| `c_hook/`                    | C (ARM32 QNX)         | iAP2 hooks, route guidance + async cover-art bridge, TCP bus client (connects to Java :19810)    | `libcarplay_hook.so`  |
 | `c_render/`                  | C (ARM32 QNX / macOS) | Custom 3D maneuver renderer (EGL/GLES2), TCP command-driven                                      | `maneuver_render`     |
 | `java_patch/`                | Java patch JAR        | Route guidance rendering, BAP bridge, cover art forwarder, MMI touchpad / D-pad -> CarPlay input  | `carplay_hook.jar`    |
 | `dio_manager.json`           | System config patch   | Enables iAP2 route guidance message exchange with iOS                                            | Manual edit on device |
@@ -560,7 +560,8 @@ flowchart LR
                 rgd["RGD parser<br/>0x5200..0x5204<br/>+ 0x52xx unknown warn"]
                 cover["Cover-art bridge<br/>chunked JPEG reassembly"]
                 worker["Async decode worker<br/>stb_image -> 256x256 PNG<br/>(pthread, coalesced queue)"]
-                bus[("TCP bus server<br/>127.0.0.1:19810<br/><i>listener + writer + reader threads</i>")]
+                bus[("TCP bus client<br/>connects to Java :19810<br/><i>connector + writer + reader<br/>+ heartbeat threads</i>")]
+                hb["Heartbeat thread<br/>EVT_PONG every 1 s<br/>(liveness signal for Java)"]
                 cksum["iAP2 cksum<br/>(NEG, hard-coded)<br/>+ sanity log"]
             end
         end
@@ -574,12 +575,13 @@ flowchart LR
                 cursor["CursorController<br/>(touchpad Δx/Δy -> DPAD,<br/>speed-adaptive threshold)"]
                 dsihook["TerminalModeDSIKeyEvents<br/>Controller (class-replaced)"]
                 covjava["AppConnectorTerminalMode<br/>(class-replaced -<br/>cover art -> BAP picture mgr)"]
-                buscli["TCP bus client<br/>(reader + writer threads)"]
+                bussrv["TCP bus server<br/>listens on :19810<br/>SO_TIMEOUT 5 s = dead<br/>(accept + reader + writer threads)"]
+                rendsrv["RendererServer<br/>listens on :19800<br/>SO_TIMEOUT 5 s = dead<br/>(non-blocking accept thread)"]
                 tmevent["TerminalModeBapCombi$<br/>EventListener (class-replaced)"]
             end
         end
 
-        renderer["maneuver_render<br/>(separate ARM ELF process)<br/>EGL/GLES2 3D scene<br/>+ context-74 watchdog"]
+        renderer["maneuver_render<br/>(separate ARM ELF process)<br/>EGL/GLES2 3D scene<br/>+ context-74 watchdog<br/>+ EVT_HEARTBEAT every 1 s"]
 
         subgraph filesys["File system / tmpfs"]
             direction TB
@@ -611,14 +613,17 @@ flowchart LR
     cover --> worker
     rgd -->|"EVT_RGD_UPDATE"| bus
     worker -->|"EVT_COVERART"| bus
+    hb -->|"EVT_PONG (1 Hz)"| bus
     worker --> fs_cov
     hook -.->|"writes"| fs_log_hook
 
-    bus <-->|"TCP :19810"| buscli
-    buscli -->|"deliver events"| tmevent
+    bus -->|"connect TCP :19810"| bussrv
+    bussrv -->|"deliver events"| tmevent
     tmevent --> bapbridge
     tmevent --> covjava
-    bapbridge -->|"TCP :19800<br/>CMD_MANEUVER (48B)"| renderer
+    bapbridge -->|"TCP :19800<br/>CMD_MANEUVER (48B)"| rendsrv
+    rendsrv -->|"connect TCP :19800"| renderer
+    renderer -->|"EVT_HEARTBEAT (1 Hz)"| rendsrv
     bapbridge -->|"BAP LSG 50<br/>FctID 18, 19, 21..24, 46"| hud_widgets
     covjava -->|"BAP picture mgr<br/>responseCoverArt()"| hud_widgets
     fs_cov -.->|"read PNG"| covjava
@@ -656,8 +661,28 @@ on demand by the always-running `smartphone_integrator` process when
 a phone is detected on USB. That's why our `libcarplay_hook.so`
 constructor (`LD_PRELOAD`) only fires when the phone is plugged in,
 not at QNX boot. The HMI process (`lsd.jxe`) does start at boot, so
-`carplay_hook.jar` class-replacements load early - the bus client
-keeps retrying until `dio_manager` opens the bus.
+`carplay_hook.jar` class-replacements load early - the Java bus
+server `accept()`s as soon as the C hook connects.
+
+**Topology** (lifetime hierarchy):
+
+- Java HMI (long-lived, alive from boot) = TCP **server** on :19810
+  for the bus, opens :19800 for the renderer at session start.
+- C hook (short-lived, per phone connect) = TCP **client**, connects to
+  Java's :19810. Idempotent reconnect on Java HMI restart.
+- Renderer (short-lived, per route) = TCP **client**, connects to
+  Java's :19800. Idempotent reconnect on Java side restart.
+
+**Liveness detection** (heartbeat-based):
+
+- C hook sends `EVT_PONG` every 1 s; Java has `SO_TIMEOUT=5 s` on the
+  accepted socket. Five seconds of silence → reader exits → bus
+  re-accepts a fresh hook connection. Catches force-killed
+  `dio_manager` whose TCP state may linger.
+- Renderer sends `EVT_HEARTBEAT` (cmd=0x80) every 1 s; same 5 s
+  timeout pattern in `RendererServer`. Hung renderer detected
+  within 5 s, then 3 consecutive send failures (~1.8 s) trigger
+  `slay -f -Q` + respawn.
 
 ```mermaid
 %%{init: {'sequence': {'mirrorActors': false}}}%%
@@ -675,7 +700,7 @@ sequenceDiagram
     qnx->>si: spawn smartphone_integrator
     qnx->>lsd: spawn HMI app
     lsd->>jar: load class-replacements<br/>(CarPlayHook, BAPBridge,<br/>CursorController, DSI hook,<br/>AppConnectorTerminalMode)
-    jar->>jar: TCP bus client starts -<br/>retries connect to :19810<br/>(no server yet)
+    jar->>jar: open TCP bus server :19810<br/>accept() blocks waiting for hook
     si->>si: idle, watch for USB phone
 
     Note over qnx,ios: ... idle until iPhone plugged in ...
@@ -684,9 +709,9 @@ sequenceDiagram
     si->>dio: spawn dio_manager<br/>(env from smartphone_integrator.json,<br/>incl. LD_PRELOAD=libcarplay_hook.so)
     Note right of dio: LD_PRELOAD picks up<br/>libcarplay_hook.so before<br/>main() runs
     dio->>hook: __attribute__((constructor))<br/>fires
-    hook->>hook: spawn worker threads<br/>(async cover-art,<br/>bus listener/writer)
-    hook->>hook: open TCP :19810
-    jar->>hook: bus client connects<br/>(retry succeeds)
+    hook->>hook: spawn worker threads<br/>(async cover-art, writer)
+    hook->>jar: connect TCP :19810 (instant)
+    Note over hook,jar: Java accept() unblocks -<br/>bus link established
 
     Note over hook,ios: --- iAP2 handshake ---
     dio->>ios: iAP2 Identify start
@@ -699,8 +724,10 @@ sequenceDiagram
     Note over hook,jar: --- CarPlay session live ---
 
     hook->>jar: EVT_RGD_UPDATE / EVT_COVERART
-    jar->>rend: spawn on first maneuver<br/>(if not already running)
-    rend->>rend: open TCP :19800,<br/>load flag_atlas.rgba,<br/>create EGL context
+    jar->>jar: open TCP :19800 server<br/>(BAPBridge listens for renderer)
+    jar->>rend: spawn maneuver_render<br/>(on first maneuver)
+    rend->>rend: load flag_atlas.rgba,<br/>create EGL context
+    rend->>jar: connect TCP :19800 (instant)
     jar->>rend: CMD_MANEUVER packets
     jar->>jar: BAP traffic to VC starts
 
@@ -716,16 +743,19 @@ sequenceDiagram
 |--------|---------|------|
 | iAP2 main | dio_manager | runs Cinemo SDK, calls `read()`/`recv()` - our hooks intercept on this thread |
 | Cover-art worker | dio_manager | pthread - picks complete JPEGs off the 1-slot queue, decodes, writes PNG, emits `EVT_COVERART` |
-| Bus listener | dio_manager | accepts TCP clients on :19810 |
+| Bus connector | dio_manager | TCP client - `connect()` to Java :19810 with retry, reconnect on disconnect |
 | Bus writer | dio_manager | drains outbound event queue |
-| Bus reader (per client) | dio_manager | one per connected Java client |
+| Bus reader | dio_manager | parses inbound frames, dispatches to handlers, exits on EOF/error |
+| Bus heartbeat | dio_manager | sends `EVT_PONG` every 1 s while connected (Java liveness signal) |
 | HMI EDT | HMI process | UI loop - calls `setMMIDisplayStatus`, picture mgr, etc. |
+| `CarplayBus-IO` | HMI process | accept loop on :19810 (one-at-a-time, force-replace stale) |
+| `CarplayBus-Read` | HMI process | per-conn reader, `SO_TIMEOUT=5 s` triggers re-accept on hook silence |
 | `BAPActionBlink` | HMI process | daemon - 600 ms ticks for bargraph blink animation |
 | `CarPlayHook-Retry` | HMI process | retries `tryInit()` if OSGi services aren't ready yet |
-| Bus reader (Java) | HMI process | reads bus events, dispatches to `TerminalModeBapCombi$EventListener` |
-| Bus writer (Java) | HMI process | sends outbound bus messages (currently unused, reserved) |
-| Renderer main | maneuver_render | EGL/GLES2 draw loop, accepts `CMD_MANEUVER` on TCP :19800 |
-| Watchdog | maneuver_render | re-declares context 74 to reclaim displayable 200 from stock RG widget |
+| `RendererServer-Accept` | HMI process | accept loop on :19800, replaces socket on each new renderer connect |
+| `RendererServer-Read` | HMI process | per-conn reader for renderer heartbeats, `SO_TIMEOUT=5 s` |
+| Renderer main | maneuver_render | EGL/GLES2 draw loop, TCP client to Java :19800; sends `EVT_HEARTBEAT` every 1 s |
+| Renderer watchdog | maneuver_render | re-declares context 74 to reclaim displayable 200 from stock RG widget |
 
 ### File system layout
 
