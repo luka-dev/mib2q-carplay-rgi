@@ -507,21 +507,10 @@ int main(int argc, char **argv) {
         }
 #endif
 
-        /* Heartbeat — send EVT_HEARTBEAT to Java every 1 s.  Java's
-         * RendererClient socket has SO_TIMEOUT=5s; without these we'd
-         * be flagged dead during quiet periods (no maneuver updates). */
-        {
-            static struct timespec hb_last = {0, 0};
-            const long HB_INTERVAL_NS = 1L * 1000000000L;  /* 1 s */
-            struct timespec now;
-            clock_gettime(CLOCK_MONOTONIC, &now);
-            long since_ns = (now.tv_sec - hb_last.tv_sec) * 1000000000L
-                          + (now.tv_nsec - hb_last.tv_nsec);
-            if (hb_last.tv_sec == 0 || since_ns >= HB_INTERVAL_NS) {
-                hb_last = now;
-                cr_server_send_heartbeat();
-            }
-        }
+        /* Heartbeat is dispatched on a dedicated pthread inside server.c —
+         * the render loop must never touch send() syscalls.  Even a
+         * non-blocking loopback send can take a few ms on QNX 6.5, which
+         * shows up as 1 Hz frame jitter when done in the main loop. */
 
         /* Adaptive idle sleep — render-on-demand for the main loop.
          *
