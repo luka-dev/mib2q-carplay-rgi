@@ -535,6 +535,12 @@ public class CarplayBus {
         Listener l;
         synchronized (lock) { l = listeners[type]; }
         if (l == null) {
+            /* Framework-internal events (heartbeat / sync markers) are
+             * handled implicitly by the reader (any frame resets the
+             * SO_TIMEOUT) — they're not expected to have user listeners.
+             * Skip the log spam. */
+            if (type == EVT_PONG || type == EVT_HELLO
+                || type == EVT_SYNC_BEGIN || type == EVT_SYNC_END) return;
             Log.d(TAG, "no listener for type 0x" + Integer.toHexString(type));
             return;
         }
