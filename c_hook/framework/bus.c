@@ -38,7 +38,8 @@ DEFINE_LOG_MODULE(BUS);
 /* ============================================================
  * Configuration
  * ============================================================ */
-#define SEND_QUEUE_CAPACITY   256
+#define SEND_QUEUE_CAPACITY   256        /* must be a power of two */
+#define SEND_QUEUE_MASK       (SEND_QUEUE_CAPACITY - 1)
 /* Directly-indexed per-type table.  Must cover the full protocol
  * range we allocate types in (see bus_protocol.h: currently through
  * 0x02FF with headroom for 0x0300+ ranges).  Type values >=MAX_TYPES
@@ -77,12 +78,42 @@ typedef struct {
 static type_slot_t  g_types[MAX_TYPES];
 
 /* ============================================================
- * Send queue (fixed ring, heap-allocated frames)
- * ============================================================ */
-static frame_t     g_ring[SEND_QUEUE_CAPACITY];
-static int         g_ring_head = 0;      /* next read  */
-static int         g_ring_tail = 0;      /* next write */
-static int         g_ring_count = 0;
+ * Send queue — lock-free MPSC bounded ring (Vyukov algorithm).
+ *
+ * Multi-producer: any thread that calls bus_send() (iAP2 callbacks,
+ * OMX callbacks, RGD module, heartbeat thread, ...).  Producers
+ * compete on g_ring_tail via __sync_bool_compare_and_swap.
+ *
+ * Single-consumer: the writer thread is the only dequeuer.  Updates
+ * g_ring_head with plain non-atomic stores.
+ *
+ * Each slot's `seq` field synchronizes producer and consumer:
+ *   seq == pos        → empty, ready to produce at pos
+ *   seq == pos + 1    → filled, ready to consume
+ *   (after consume)   seq advanced by capacity so producer at
+ *                     pos+capacity sees seq==(pos+capacity), ready.
+ *
+ * Frame ownership transfers move-style:
+ *   - Producer mallocs payload, fills frame_t, calls ring_try_enqueue.
+ *     On HOOK_OK the slot owns f.payload; producer must NOT free.
+ *     On HOOK_ERR_BUSY the producer still owns f.payload.
+ *   - Consumer's ring_try_dequeue copies frame_t out by value; the
+ *     payload pointer transfers to the consumer's local copy and the
+ *     consumer is responsible for frame_dispose()'ing it.
+ *
+ * On overflow ALL policies (RELIABLE/LOSSY/DROP_OLD) currently return
+ * HOOK_ERR_BUSY.  Lossy semantics are still preserved for sticky-flagged
+ * types via the per-type sticky cache (updated on every bus_send), so
+ * snapshot replay always sees the latest value even if intermediate
+ * frames were dropped under load. */
+typedef struct {
+    volatile uint32_t seq;
+    frame_t           frame;
+} ring_slot_t;
+
+static ring_slot_t       g_ring[SEND_QUEUE_CAPACITY];
+static volatile uint32_t g_ring_tail = 0;       /* multi-producer, CAS */
+static          uint32_t g_ring_head = 0;       /* single-consumer, plain */
 
 /* ============================================================
  * Global state
@@ -158,37 +189,83 @@ static hook_result_t frame_dup(frame_t* dst, const frame_t* src) {
 }
 
 /* ============================================================
- * Queue ops - must hold g_lock
+ * Queue ops — lock-free MPSC ring (no mutex held).
  * ============================================================ */
-static bool q_is_full(void) { return g_ring_count == SEND_QUEUE_CAPACITY; }
-static bool q_is_empty(void) { return g_ring_count == 0; }
-
-static frame_t* q_find_type_nolock(uint16_t type) {
+static void ring_init(void) {
     int i;
-    int idx = g_ring_head;
-    for (i = 0; i < g_ring_count; i++) {
-        if (g_ring[idx].type == type) return &g_ring[idx];
-        idx = (idx + 1) % SEND_QUEUE_CAPACITY;
+    for (i = 0; i < SEND_QUEUE_CAPACITY; i++) {
+        g_ring[i].seq = (uint32_t)i;
+        g_ring[i].frame.payload = NULL;
     }
-    return NULL;
+    g_ring_tail = 0;
+    g_ring_head = 0;
 }
 
-static hook_result_t q_enqueue_nolock(const frame_t* f) {
-    if (q_is_full()) return HOOK_ERR_BUSY;
-    hook_result_t r = frame_dup(&g_ring[g_ring_tail], f);
-    if (r != HOOK_OK) return r;
-    g_ring_tail = (g_ring_tail + 1) % SEND_QUEUE_CAPACITY;
-    g_ring_count++;
+/* Try to enqueue a frame.  On HOOK_OK ownership of f->payload transfers
+ * to the slot (caller must not free).  On any error the caller still
+ * owns f->payload.  Lock-free: producers race via CAS on g_ring_tail. */
+static hook_result_t ring_try_enqueue(const frame_t* f) {
+    uint32_t pos;
+    ring_slot_t *s;
+
+    for (;;) {
+        pos = g_ring_tail;                    /* volatile load */
+        s   = &g_ring[pos & SEND_QUEUE_MASK];
+        uint32_t seq = s->seq;                /* volatile load */
+        int32_t  diff = (int32_t)(seq - pos);
+        if (diff == 0) {
+            if (__sync_bool_compare_and_swap(&g_ring_tail, pos, pos + 1))
+                break;                        /* claimed slot at `pos` */
+            /* CAS failed → another producer claimed; retry */
+        } else if (diff < 0) {
+            return HOOK_ERR_BUSY;             /* queue full */
+        }
+        /* diff > 0 → another producer claimed but hasn't published yet;
+         * spin briefly. */
+    }
+
+    /* We exclusively own slot `pos & MASK`.  Write the frame, then
+     * publish via seq update with a release fence. */
+    s->frame = *f;                            /* memcpy struct, payload ptr moves in */
+    __sync_synchronize();
+    s->seq = pos + 1;                         /* publish */
     return HOOK_OK;
 }
 
-static bool q_dequeue_nolock(frame_t* out) {
-    if (q_is_empty()) return false;
-    *out = g_ring[g_ring_head];              /* moves payload ownership */
-    g_ring[g_ring_head].payload = NULL;
-    g_ring_head = (g_ring_head + 1) % SEND_QUEUE_CAPACITY;
-    g_ring_count--;
+/* Try to dequeue.  Returns true if a frame was taken; *out then owns
+ * its payload (caller must frame_dispose).  Single-consumer; no CAS
+ * on the head side.
+ *
+ * Memory ordering: producer writes `s->frame`, then `__sync_synchronize`,
+ * then publishes `s->seq = pos + 1` (release).  Consumer reads `s->seq`
+ * first, sees publish, then **must execute an acquire barrier** before
+ * reading `s->frame`.  Without this, on weakly-ordered architectures
+ * (ARM/QNX) the consumer can observe the new seq value but stale frame
+ * fields, leading to garbage data or use-after-free of payload pointers. */
+static bool ring_try_dequeue(frame_t* out) {
+    uint32_t pos = g_ring_head;
+    ring_slot_t *s = &g_ring[pos & SEND_QUEUE_MASK];
+    uint32_t seq = s->seq;
+    int32_t  diff = (int32_t)(seq - (pos + 1));
+    if (diff < 0) return false;               /* empty / not yet published */
+
+    /* Acquire barrier: pair with producer's release fence before publish.
+     * Now safe to read `s->frame` knowing all producer writes are visible. */
+    __sync_synchronize();
+
+    *out = s->frame;                          /* take ownership of payload */
+    s->frame.payload = NULL;
+    __sync_synchronize();                     /* release: ensure copy-out
+                                                 completes before slot reuse */
+    s->seq = pos + SEND_QUEUE_MASK + 1;       /* mark slot reusable */
+    g_ring_head = pos + 1;
     return true;
+}
+
+/* Approximate emptiness check — used only for cond-wait predicates.
+ * Non-atomic snapshot; OK because spurious wakeups self-recover. */
+static bool ring_is_empty_approx(void) {
+    return g_ring_tail == g_ring_head;
 }
 
 /* ============================================================
@@ -298,7 +375,12 @@ bool bus_is_connected(void) {
 }
 
 /* ============================================================
- * bus_send - atomic enqueue + cache sticky
+ * bus_send — sticky cache update + lock-free ring enqueue.
+ *
+ * Sticky cache + tx_seq update happens under g_lock (rare-ish path,
+ * needs frame_dup heap allocation).  Ring enqueue is lock-free:
+ * producers compete only via CAS on g_ring_tail, no mutex contention
+ * between producer threads on the hot path.
  * ============================================================ */
 hook_result_t bus_send(uint16_t type, uint8_t flags,
                        const uint8_t* payload, uint32_t len) {
@@ -312,7 +394,7 @@ hook_result_t bus_send(uint16_t type, uint8_t flags,
     f.type = type;
     f.flags = flags;
     f.len = len;
-    f.seq = 0;       /* assigned below, only if the frame will actually be dispatched */
+    f.seq = 0;
     f.payload = NULL;
     if (len > 0) {
         f.payload = (uint8_t*)malloc(len);
@@ -320,17 +402,17 @@ hook_result_t bus_send(uint16_t type, uint8_t flags,
         memcpy(f.payload, payload, len);
     }
 
-    pthread_mutex_lock(&g_lock);
-    type_slot_t* s = slot_for(type);  /* guaranteed non-NULL by check above */
-
-    /* Tentatively allocate seq.  If the frame ends up neither cached
-     * nor queued (RELIABLE queue full, no sticky), we roll back to
-     * avoid gaps in the seq stream that would confuse debugging. */
-    uint32_t my_seq = g_tx_seq++;
-    f.seq = my_seq;
+    /* Sticky cache + seq under g_lock.  This is short and bounded,
+     * uncontended on the producer hot path (only sticky-flagged sends
+     * reach the cache copy). */
+    type_slot_t* s = slot_for(type);
     bool any_publish = false;
+    uint32_t my_seq;
 
-    /* Update sticky cache first so a snapshot-replay always sees latest. */
+    pthread_mutex_lock(&g_lock);
+    my_seq = g_tx_seq++;
+    f.seq = my_seq;
+
     if ((flags & BUS_FLAG_STICKY) || s->sticky) {
         if (s->has_last) frame_dispose(&s->last);
         if (frame_dup(&s->last, &f) == HOOK_OK) {
@@ -338,68 +420,34 @@ hook_result_t bus_send(uint16_t type, uint8_t flags,
             any_publish = true;
         }
     }
-
-    /* Enqueue with per-type policy on overflow.
-     *
-     * LOSSY: overwrite the payload of the existing same-type pending
-     * frame via dispose-then-replace-fields.  Held under g_lock, so
-     * writer thread can't observe a partial update; still cleaner
-     * than freeing a payload the writer might have dequeued. */
-    hook_result_t enq = HOOK_OK;
-    if (q_is_full()) {
-        switch (s->policy) {
-            case BUS_POLICY_LOSSY: {
-                frame_t* old = q_find_type_nolock(type);
-                if (old) {
-                    uint8_t* old_payload = old->payload;
-                    old->type    = f.type;
-                    old->flags   = f.flags;
-                    old->seq     = f.seq;
-                    old->len     = f.len;
-                    old->payload = f.payload;
-                    f.payload    = old_payload;   /* freed below */
-                } else {
-                    enq = HOOK_ERR_BUSY;
-                }
-                break;
-            }
-            case BUS_POLICY_DROP_OLD: {
-                frame_t head;
-                q_dequeue_nolock(&head);
-                frame_dispose(&head);
-                enq = q_enqueue_nolock(&f);
-                break;
-            }
-            case BUS_POLICY_RELIABLE:
-            default:
-                enq = HOOK_ERR_BUSY;
-                break;
-        }
-    } else {
-        enq = q_enqueue_nolock(&f);
-    }
-    if (enq == HOOK_OK) any_publish = true;
-
-    /* Rollback unused seq.  Safe because we hold g_lock and g_tx_seq is
-     * only mutated under it.  Only rolls back if no-one observed my_seq. */
-    if (!any_publish && g_tx_seq == my_seq + 1) {
-        g_tx_seq--;
-    }
-
-    pthread_cond_signal(&g_cond);
     pthread_mutex_unlock(&g_lock);
 
-    /*
-     * f.payload is the local working copy allocated at the top of this
-     * function.  Fates:
-     *   - LOSSY hijack: f.payload was moved into the ring slot, set NULL.
-     *   - enqueue succeeded: ring holds its own frame_dup copy, we still own f.payload.
-     *   - enqueue failed (RELIABLE full): we still own f.payload.
-     * In all cases where it's non-NULL, free it here.
-     */
-    if (f.payload) {
-        free(f.payload);
+    /* Lock-free ring enqueue.  On success ownership of f.payload moves
+     * to the slot; on failure we still own and must free. */
+    hook_result_t enq = ring_try_enqueue(&f);
+    if (enq == HOOK_OK) {
+        any_publish = true;
+        f.payload = NULL;                     /* moved into ring */
+
+        /* Wake the writer.  Briefly take g_lock just to signal cond;
+         * ring access stays lock-free.  cond_signal is safe here. */
+        pthread_mutex_lock(&g_lock);
+        pthread_cond_signal(&g_cond);
+        pthread_mutex_unlock(&g_lock);
     }
+
+    /* Rollback the unused seq if neither sticky cache nor ring took the
+     * frame.  Done under g_lock; only safe if nothing else observed
+     * my_seq (i.e., we're still the most recent allocator). */
+    if (!any_publish) {
+        pthread_mutex_lock(&g_lock);
+        if (g_tx_seq == my_seq + 1) g_tx_seq--;
+        pthread_mutex_unlock(&g_lock);
+    }
+
+    /* Free local payload if ring didn't take it.  When sticky cache
+     * took a copy via frame_dup, our local payload is still ours. */
+    if (f.payload) free(f.payload);
 
     if (enq != HOOK_OK) {
         LOG_WARN(LOG_MODULE, "send queue full, dropped type=0x%04x", type);
@@ -550,14 +598,23 @@ static void* writer_main(void* arg) {
         frame_t f;
         int fd;
 
+        /* Wait until something might be available.  We can't atomically
+         * check "ring has data AND fd connected" without g_lock, so we
+         * use cond_wait under g_lock with the approx ring-empty check.
+         * Spurious wakeups are fine — we always re-check ring_try_dequeue
+         * outside the lock. */
         pthread_mutex_lock(&g_lock);
-        while (!g_shutdown && (q_is_empty() || g_client_fd < 0)) {
+        while (!g_shutdown && (ring_is_empty_approx() || g_client_fd < 0)) {
             pthread_cond_wait(&g_cond, &g_lock);
         }
         if (g_shutdown) { pthread_mutex_unlock(&g_lock); break; }
-        if (!q_dequeue_nolock(&f)) { pthread_mutex_unlock(&g_lock); continue; }
         fd = g_client_fd;
         pthread_mutex_unlock(&g_lock);
+
+        /* Lock-free dequeue outside the mutex.  May return false if the
+         * ring became empty between the empty-check above and now (e.g.,
+         * spurious wakeup); that's fine — the loop just goes back to wait. */
+        if (!ring_try_dequeue(&f)) continue;
 
         if (fd >= 0 && send_frame(fd, &f) != 0) {
             LOG_WARN(LOG_MODULE, "send failed fd=%d type=0x%04x err=%s", fd, f.type, strerror(errno));
@@ -682,13 +739,29 @@ static void* connector_main(void* arg) {
  * inbound for 5 s the Java reader exits and the bus reconnects.
  * That's how Java detects force-killed dio_manager whose TCP
  * state may not get cleaned up promptly by the kernel.
+ *
+ * Also drives `bus_set_periodic_tick()` callback at 1 Hz — lets other
+ * modules (e.g., RGD debounce flush) piggyback without spawning their
+ * own timer threads.
  * ============================================================ */
+static volatile bus_tick_cb_t g_tick_cb = NULL;
+
+void bus_set_periodic_tick(bus_tick_cb_t cb) {
+    g_tick_cb = cb;
+}
+
 static void* heartbeat_main(void* arg) {
     (void)arg;
     LOG_INFO(LOG_MODULE, "heartbeat thread started (1 s interval)");
     while (!g_shutdown) {
         usleep(1000 * 1000);   /* 1 second */
         if (g_shutdown) break;
+
+        /* Fire registered periodic tick.  Callback runs on heartbeat
+         * thread; expected to be cheap (no blocking I/O). */
+        bus_tick_cb_t cb = g_tick_cb;
+        if (cb) cb();
+
         /* Only send when actually connected — otherwise queue grows
          * unbounded while waiting for first connect. */
         bool connected;
@@ -710,11 +783,11 @@ static void* heartbeat_main(void* arg) {
 hook_result_t bus_init(void) {
     if (g_connector_up || g_writer_up) return HOOK_ERR_BUSY;
 
-    /* Do NOT memset g_types or g_ring here: modules may have called
-     * bus_on() from their own __constructor before bus_init ran
-     * (constructor order is unspecified across object files).  BSS
-     * zero-init already guarantees clean initial state. */
-    g_ring_head = g_ring_tail = g_ring_count = 0;
+    /* Do NOT memset g_types here: modules may have called bus_on()
+     * from their own __constructor before bus_init ran (constructor
+     * order is unspecified across object files).  BSS zero-init
+     * already guarantees clean initial state. */
+    ring_init();
     g_tx_seq = 1;
     g_shutdown = false;
 
@@ -761,13 +834,16 @@ void bus_shutdown(void) {
     pthread_cond_broadcast(&g_cond);
     pthread_mutex_unlock(&g_lock);
 
-    /* Drain queue. */
-    pthread_mutex_lock(&g_lock);
-    while (!q_is_empty()) {
+    /* Drain queue (lock-free dequeue; we're past the point where
+     * other producers are still firing). */
+    {
         frame_t f;
-        q_dequeue_nolock(&f);
-        frame_dispose(&f);
+        while (ring_try_dequeue(&f)) {
+            frame_dispose(&f);
+        }
     }
+
+    pthread_mutex_lock(&g_lock);
     int i;
     for (i = 0; i < MAX_TYPES; i++) {
         if (g_types[i].has_last) frame_dispose(&g_types[i].last);

@@ -7,8 +7,42 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <time.h>
 
 DEFINE_LOG_MODULE(RGD);
+
+/* Debounce window for transient route_state=0 from iOS.
+ *
+ * iOS routinely sends state=0 for ~100-500ms during:
+ *   - rerouting (recalc after wrong turn / GPS jitter)
+ *   - maneuver-to-maneuver transitions
+ *   - brief CarPlay UI state churn
+ *
+ * Without filtering, every transient kills+respawns the renderer,
+ * costs ~150 ms of black displayable per cycle, and occasionally
+ * leaves a "ghost" renderer when iOS bounces state=3/0/3/0 and the
+ * last bounce ends on state=3 with no follow-up.
+ *
+ * 2.5 s catches all observed transients while still letting genuine
+ * "user canceled navigation" reach Java within reasonable latency.
+ * Real CarPlay disconnect goes through rgd_clear_state() and is not
+ * subject to this debounce. */
+#define ROUTE_STATE_ZERO_DEBOUNCE_MS  2500
+
+static uint64_t now_monotonic_ms(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000ULL + (uint64_t)(ts.tv_nsec / 1000000);
+}
+
+/* Protects the debounce fields in g_rgd against the heartbeat tick
+ * (rgd_periodic_tick, runs on bus heartbeat thread) racing with the
+ * iAP2 callback thread inside rgd_message_handler.  Critical sections
+ * are tiny (a few stores + a read of monotonic time). */
+static pthread_mutex_t g_rgd_debounce_lock = PTHREAD_MUTEX_INITIALIZER;
+
+/* Forward decl — implemented after rgd_update_t is in scope. */
+void rgd_periodic_tick(void);
 
 /* ================================================================
  * Cluster renderer process management
@@ -94,6 +128,13 @@ static struct {
      */
 	    bool have_update;
 	    uint8_t last_route_state;
+	    /* Monotonic timestamp (ms) when route_state first became 0.
+	     * 0 = not currently in a state-zero debounce window.  See
+	     * ROUTE_STATE_ZERO_DEBOUNCE_MS comment above. */
+	    uint64_t state_zero_started_ms;
+	    /* Last route_state actually emitted on the bus (after debounce).
+	     * Distinct from last_route_state which tracks raw iOS state. */
+	    uint8_t emitted_route_state;
 	    uint16_t current_list[MAX_MANEUVER_LIST];
 	    bool current_list_present; /* true if 0x5201 included ManeuverList TLV (can be empty) */
 	    uint16_t current_list_count;
@@ -123,6 +164,8 @@ static struct {
     .component_valid = false,
 	    .have_update = false,
 	    .last_route_state = 0,
+	    .state_zero_started_ms = 0,
+	    .emitted_route_state = 0,
 	    .current_list_present = false,
 	    .current_list_count = 0,
 	    .seq_counter = 0,
@@ -912,6 +955,14 @@ void rgd_clear_state(const char* reason) {
     g_rgd.component_valid = false;
     g_rgd.have_update = false;
     g_rgd.last_route_state = 0;
+    /* Disconnect bypasses time-based debounce — emit state=0 immediately
+     * regardless of debounce window, and reset bookkeeping for next session.
+     * Lock guards against concurrent rgd_periodic_tick() (heartbeat thread)
+     * reading these fields. */
+    pthread_mutex_lock(&g_rgd_debounce_lock);
+    g_rgd.state_zero_started_ms = 0;
+    g_rgd.emitted_route_state = 0;
+    pthread_mutex_unlock(&g_rgd_debounce_lock);
     rgd_maneuver_map_reset();
     rgd_update_cache_reset();
 
@@ -1043,33 +1094,60 @@ static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) 
          * to 0 while state remains active) is harmless: state stays >0,
          * so the slot cache is preserved.
          *
-         * We still debounce state=0 from PPS (Java never sees the
-         * transient state=0), but the slot cache IS flushed.
+         * Time-based debounce: state=0 is held back for up to
+         * ROUTE_STATE_ZERO_DEBOUNCE_MS.  If iOS bounces back to state>0
+         * within the window, the transient is dropped entirely (Java
+         * never sees deactivate→activate flap).  If state=0 persists past
+         * the window, it propagates as a real route end.
+         *
+         * Genuine CarPlay disconnect bypasses this via rgd_clear_state().
          */
         g_rgd.have_update = true;
         if (upd.present & RGD_UPD_ROUTE_STATE) {
+            pthread_mutex_lock(&g_rgd_debounce_lock);
             uint8_t prev_state = g_rgd.last_route_state;
             g_rgd.last_route_state = upd.route_state;
+
             if (upd.route_state == 0) {
                 rgd_update_cache_reset();
-                /* Flush slot cache: iOS resets maneuver indices on reroute.
-                 * Old slot data from the previous route must not be reused. */
+                /* Slot cache flush: iOS resets maneuver indices on reroute.
+                 * Always flush — flushing during a transient is harmless
+                 * because the next state>0 update will repopulate. */
                 if (prev_state > 0) {
                     LOG_INFO(LOG_MODULE, "Route cleared (state %u->0): flushing slot cache", prev_state);
                     rgd_maneuver_map_reset();
+                    g_rgd.state_zero_started_ms = now_monotonic_ms();
                 }
-                /*
-                 * Debounce: suppress transient state=0 from reaching Java.
-                 * iOS sends brief state=0 during route setup and periodically
-                 * mid-route.  Genuine route end comes via rgd_clear_state()
-                 * (disconnect) or source_supports_rg=0.
-                 * First state=0 at init (prev_state==0) still passes through.
-                 */
-                if (prev_state > 0) {
-                    LOG_INFO(LOG_MODULE, "Debounce: suppressing transient state=0 from PPS");
+
+                uint64_t elapsed_ms = (g_rgd.state_zero_started_ms != 0)
+                                    ? (now_monotonic_ms() - g_rgd.state_zero_started_ms)
+                                    : 0;
+
+                if (g_rgd.emitted_route_state == 0) {
+                    /* Already emitted state=0 (or never emitted anything yet) —
+                     * pass through.  Re-emitting state=0 is a no-op for Java. */
+                } else if (elapsed_ms < ROUTE_STATE_ZERO_DEBOUNCE_MS) {
+                    /* Within debounce window: hold back from Java.
+                     * Internal cache state (slot map, etc.) is still flushed. */
+                    LOG_DEBUG(LOG_MODULE, "Debounce: holding state=0 (%llu/%dms)",
+                              (unsigned long long)elapsed_ms,
+                              ROUTE_STATE_ZERO_DEBOUNCE_MS);
                     upd.present &= ~RGD_UPD_ROUTE_STATE;
+                } else {
+                    /* Sustained — release to Java as genuine route end. */
+                    LOG_INFO(LOG_MODULE, "Route end: state=0 sustained %llums, emitting",
+                             (unsigned long long)elapsed_ms);
+                    g_rgd.emitted_route_state = 0;
                 }
+            } else {
+                /* state > 0 */
+                if (g_rgd.state_zero_started_ms != 0) {
+                    LOG_INFO(LOG_MODULE, "Debounce: state recovered to %u, canceling", upd.route_state);
+                    g_rgd.state_zero_started_ms = 0;
+                }
+                g_rgd.emitted_route_state = upd.route_state;
             }
+            pthread_mutex_unlock(&g_rgd_debounce_lock);
         }
         write_pps_update_partial(&upd);
     }
@@ -1221,6 +1299,57 @@ void rgd_init(void) {
     }
 }
 
+/* Periodic tick (1 Hz from bus heartbeat thread).
+ *
+ * Flushes the state=0 debounce window when iOS goes silent after a
+ * single state=0 message.  Without this, the in-handler debounce check
+ * would only fire on the next incoming RGD packet — which may never
+ * come if iOS truly stopped (user canceled navigation, arrived, etc.),
+ * leaving the renderer alive indefinitely.
+ *
+ * Cross-thread safety: this runs on the bus heartbeat thread, while
+ * the iAP2 handler thread may concurrently be inside rgd_message_handler
+ * mutating g_rgd.update_cache via write_pps_update_partial().  We
+ * **deliberately do not** go through write_pps_update_partial() here —
+ * that path reads/writes g_rgd.update_cache without synchronisation.
+ * Instead emit a self-contained minimal bus frame (route_state=0,
+ * maneuver_count=0) directly, which is exactly what Java needs to see
+ * for "route ended".  bus_send_text() is itself thread-safe.
+ *
+ * Idempotent: re-emitting state=0 to a Java side that already saw it
+ * is a no-op (Java's RG handler short-circuits identical states). */
+void rgd_periodic_tick(void) {
+    pthread_mutex_lock(&g_rgd_debounce_lock);
+    if (g_rgd.state_zero_started_ms == 0 || g_rgd.emitted_route_state == 0) {
+        pthread_mutex_unlock(&g_rgd_debounce_lock);
+        return;
+    }
+    uint64_t elapsed = now_monotonic_ms() - g_rgd.state_zero_started_ms;
+    if (elapsed < ROUTE_STATE_ZERO_DEBOUNCE_MS) {
+        pthread_mutex_unlock(&g_rgd_debounce_lock);
+        return;
+    }
+
+    /* Window expired — claim the emission.  Mark fields before
+     * unlocking so a concurrent handler doesn't re-do the same work. */
+    g_rgd.emitted_route_state = 0;
+    g_rgd.state_zero_started_ms = 0;
+    pthread_mutex_unlock(&g_rgd_debounce_lock);
+
+    LOG_INFO(LOG_MODULE, "Debounce expired: emitting deferred state=0 to Java (elapsed=%llums)",
+             (unsigned long long)elapsed);
+
+    /* Direct minimal bus frame — bypass update_cache (not synchronized
+     * across threads).  bus_send_text is internally thread-safe. */
+    bus_text_builder_t _b_storage;
+    bus_text_builder_t* b = &_b_storage;
+    uint8_t scratch[128];
+    bus_text_begin_with(b, "routeguidance", scratch, sizeof(scratch));
+    bus_text_int(b, "route_state", 0);
+    bus_text_int(b, "maneuver_count", 0);
+    bus_send_text(EVT_RGD_UPDATE, BUS_FLAG_STICKY, b);
+}
+
 /* Called lazily on first message — now only used to mark initialization
  * boundary and (re)publish the cleared snapshot over the bus. */
 static void rgd_lazy_init(void) {
@@ -1228,10 +1357,17 @@ static void rgd_lazy_init(void) {
     if (initialized) return;
     initialized = true;
     rgd_clear_state("init");
+    /* Wire the bus heartbeat to drive our 1 Hz debounce flush.  No
+     * extra thread spawned — bus already has a heartbeat thread. */
+    bus_set_periodic_tick(rgd_periodic_tick);
     LOG_INFO(LOG_MODULE, "Route Guidance module initialized");
 }
 
 void rgd_shutdown(void) {
+    /* Defensive: deregister our 1 Hz tick before tearing down state.
+     * Avoids a heartbeat-thread callback racing with a half-disposed
+     * RGD module during process shutdown. */
+    bus_set_periodic_tick(NULL);
     rgd_stop_updates();
     rgd_clear_state("module_shutdown");
 }

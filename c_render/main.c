@@ -12,7 +12,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <errno.h>
 #include <libgen.h>
+#include <sched.h>
+#ifdef PLATFORM_QNX
+#include <sys/neutrino.h>     /* setprio() */
+#endif
 
 #include "platform.h"
 
@@ -239,6 +244,24 @@ static void save_screenshot(int fb_w, int fb_h, const char *label) {
 int main(int argc, char **argv) {
     fprintf(stderr, "c_render: starting %dx%d\n", WINDOW_W, WINDOW_H);
 
+#ifdef PLATFORM_QNX
+    /* Raise our scheduling priority to match native HMI graphics workers
+     * (typically 13-18 on QNX 6.5).  Default user priority 10 lets busy
+     * iAP2 / dio_manager / Java HMI threads preempt us for ~14-16 vsync
+     * cycles at a time, which manifests as 245 ms render stalls every
+     * ~530 ms.  At priority 15 we sit in the same league as the cluster
+     * compositor's own workers and are no longer starved.
+     *
+     * Failure (EPERM if not root) is non-fatal — we'll still run, just
+     * with stalls. */
+    if (setprio(0, 15) < 0) {
+        fprintf(stderr, "c_render: setprio(15) failed: %s — running at default\n",
+                strerror(errno));
+    } else {
+        fprintf(stderr, "c_render: priority raised to 15\n");
+    }
+#endif
+
     /* Initialize TCP server FIRST so Java can connect while display inits.
      * If server fails, nothing works — exit immediately. */
     if (cr_server_init(CR_TCP_PORT) < 0) {
@@ -294,12 +317,46 @@ int main(int argc, char **argv) {
     int dirty = 1;
     int running = 1;
 
+#ifdef CR_DIAG_FRAME_LOG
+    /* Per-second + per-frame render-loop instrumentation — only compiled
+     * in for diagnostic builds (`-DCR_DIAG_FRAME_LOG`).  Production never
+     * pays the fprintf cost, which on QNX 6.5 with /tmp on slow flash can
+     * add noticeable jitter at 60 lines/sec. */
+    static struct timespec stat_last = {0, 0};
+    static int stat_frames_rendered = 0;
+    static int stat_loop_iters = 0;
+    static long stat_render_total_us = 0;
+    static long stat_render_max_us = 0;
+    static int stat_cmds_received = 0;
+#endif
+
     while (running && !platform_should_close()) {
         struct timespec t_start;
         clock_gettime(CLOCK_MONOTONIC, &t_start);
+#ifdef CR_DIAG_FRAME_LOG
+        stat_loop_iters++;
+#endif
 
         platform_poll();
+#ifdef CR_DIAG_FRAME_LOG
+        struct timespec t_after_pp;
+        clock_gettime(CLOCK_MONOTONIC, &t_after_pp);
+#endif
+
         cr_server_poll();
+#ifdef CR_DIAG_FRAME_LOG
+        struct timespec t_after_sp;
+        clock_gettime(CLOCK_MONOTONIC, &t_after_sp);
+#endif
+
+        /* Java closed the bus socket → session is over, exit cleanly.
+         * Don't wait for slay; releasing displayable 20 promptly avoids
+         * orphaning our window on the cluster. */
+        if (cr_server_peer_closed()) {
+            fprintf(stderr, "engine: peer closed, exiting\n");
+            running = 0;
+            break;
+        }
 
         /* Drain all pending commands, keep only the last CMD_MANEUVER */
         cr_cmd_t cmd;
@@ -313,6 +370,9 @@ int main(int argc, char **argv) {
         char screenshot_label[17];
 
         while (cr_server_read_cmd(&cmd)) {
+#ifdef CR_DIAG_FRAME_LOG
+            stat_cmds_received++;
+#endif
             switch (cmd.cmd) {
             case CMD_MANEUVER: {
                 decode_maneuver(&cmd, &pending_maneuver);
@@ -454,8 +514,18 @@ int main(int argc, char **argv) {
         }
 
         if (dirty) {
+#ifdef CR_DIAG_FRAME_LOG
+            struct timespec rt_start;
+            clock_gettime(CLOCK_MONOTONIC, &rt_start);
+#endif
+
             maneuver_state_t *next_ptr = g_engine.has_next ? &g_engine.next : NULL;
             maneuver_prepare_frame(&g_engine.current, next_ptr);
+#ifdef CR_DIAG_FRAME_LOG
+            struct timespec t_after_prep;
+            clock_gettime(CLOCK_MONOTONIC, &t_after_prep);
+#endif
+
             render_begin_frame();
             maneuver_draw(&g_engine.current, next_ptr);
             if (g_bargraph_alpha > 0.0f) {
@@ -467,96 +537,155 @@ int main(int argc, char **argv) {
             }
             render_debug_grid();
             render_end_frame();
+#ifdef CR_DIAG_FRAME_LOG
+            struct timespec t_after_draw;
+            clock_gettime(CLOCK_MONOTONIC, &t_after_draw);
+#endif
 
             if (got_screenshot)
                 save_screenshot(fb_w, fb_h, screenshot_label);
 
             platform_swap();
 
+            /* Voluntarily yield to the compositor right after queuing a
+             * new buffer.  Without this, the kernel eventually forces us
+             * off-CPU when the buffer pool fills, but in long bursts
+             * (~14-16 vsync cycles).  A cooperative yield keeps the
+             * compositor's worker scheduled in time for the next frame
+             * — much smoother on QNX displayable composition. */
+            sched_yield();
+
+#ifdef CR_DIAG_FRAME_LOG
+            struct timespec rt_end;
+            clock_gettime(CLOCK_MONOTONIC, &rt_end);
+            long rt_us = (rt_end.tv_sec - rt_start.tv_sec) * 1000000L
+                       + (rt_end.tv_nsec - rt_start.tv_nsec) / 1000L;
+            long prep_us = (t_after_prep.tv_sec - rt_start.tv_sec) * 1000000L
+                         + (t_after_prep.tv_nsec - rt_start.tv_nsec) / 1000L;
+            long draw_us = (t_after_draw.tv_sec - t_after_prep.tv_sec) * 1000000L
+                         + (t_after_draw.tv_nsec - t_after_prep.tv_nsec) / 1000L;
+            long swap_us = (rt_end.tv_sec - t_after_draw.tv_sec) * 1000000L
+                         + (rt_end.tv_nsec - t_after_draw.tv_nsec) / 1000L;
+            stat_frames_rendered++;
+            stat_render_total_us += rt_us;
+            if (rt_us > stat_render_max_us) stat_render_max_us = rt_us;
+
+            static struct timespec last_frame_end = {0, 0};
+            long delta_us = 0;
+            if (last_frame_end.tv_sec > 0) {
+                delta_us = (rt_start.tv_sec - last_frame_end.tv_sec) * 1000000L
+                         + (rt_start.tv_nsec - last_frame_end.tv_nsec) / 1000L;
+            }
+            fprintf(stderr,
+                    "frame: gap=%ldus render=%ldus prep=%ldus draw=%ldus swap=%ldus icon=%d\n",
+                    delta_us, rt_us, prep_us, draw_us, swap_us,
+                    g_engine.has_current ? g_engine.current.icon : -1);
+            if (delta_us > 100000L) {
+                long pp_us = (t_after_pp.tv_sec - last_frame_end.tv_sec) * 1000000L
+                           + (t_after_pp.tv_nsec - last_frame_end.tv_nsec) / 1000L;
+                long sp_us = (t_after_sp.tv_sec - last_frame_end.tv_sec) * 1000000L
+                           + (t_after_sp.tv_nsec - last_frame_end.tv_nsec) / 1000L;
+                long top_us = (t_start.tv_sec - last_frame_end.tv_sec) * 1000000L
+                            + (t_start.tv_nsec - last_frame_end.tv_nsec) / 1000L;
+                fprintf(stderr,
+                        "STALL breakdown: post_swap_to_top=%ldus top_to_pp=%ldus pp_to_sp=%ldus sp_to_render=%ldus\n",
+                        top_us,
+                        pp_us - top_us,
+                        sp_us - pp_us,
+                        delta_us - sp_us);
+            }
+            last_frame_end = rt_end;
+#endif /* CR_DIAG_FRAME_LOG */
+
             dirty = render_is_animating() || maneuver_needs_redraw() || g_fade_active
                  || g_bargraph_on == 2
                  || (g_bargraph_alpha > 0.0f && g_bargraph_alpha < 1.0f);
         }
 
-        /* Watchdog: periodically re-declare context 74 to reclaim displayable 20
-         * if native navi boot took it over.  Time-based (not frame-based) so
-         * it still fires at 5s intervals when adaptive idle sleep slows the
-         * main loop below 30 FPS. */
-#ifdef PLATFORM_QNX
-        {
-            static struct timespec wd_last = {0, 0};
-            const long WD_INTERVAL_NS = 5L * 1000000000L;  /* 5 s */
-            struct timespec now;
-            clock_gettime(CLOCK_MONOTONIC, &now);
-            long since_ns = (now.tv_sec - wd_last.tv_sec) * 1000000000L
-                          + (now.tv_nsec - wd_last.tv_nsec);
-            if (wd_last.tv_sec == 0 || since_ns >= WD_INTERVAL_NS) {
-                int display_id = CR_DISPLAY_ID;
-                int context_id = CR_CONTEXT_ID;
-                int displayable_id = CR_DISPLAYABLE_ID;
-                char cmd[128];
+        /* DIAGNOSTIC: dmdt watchdog DISABLED to test if its fork+exec
+         * every 5 s + composition re-declare is causing the periodic
+         * compositor disturbance.  Re-enable for production if we
+         * actually need to reclaim displayable 20 from native navi. */
 
-                wd_last = now;
-                /* Re-declare context composition (idempotent if already correct) */
-                platform_get_routing_ids(&display_id, &context_id, &displayable_id);
-                snprintf(cmd, sizeof(cmd),
-                         "/eso/bin/apps/dmdt dc %d %d 102 101 33 >/dev/null 2>&1",
-                         context_id, displayable_id);
-                system(cmd);
+        /* Heartbeat — single-thread design: send EVT_HEARTBEAT to Java
+         * once per second, dispatched right here on the main loop tick.
+         * Java's RendererServer SO_TIMEOUT=5s; one beat per second
+         * keeps it happy with ample margin.
+         *
+         * NOTE: an earlier iteration moved this to a dedicated pthread
+         * (commit c1aa2fd) on the theory that send() over QNX 6.5
+         * loopback could occasionally take a few ms and disturb frame
+         * pacing.  Diagnostics on hardware showed the periodic ~245 ms
+         * stalls persisted even with the heartbeat thread fully
+         * disabled, so the thread wasn't actually buying us anything.
+         * Rolling it back restores single-thread renderer.  send() is
+         * non-blocking; if the kernel ever returns a multi-ms latency
+         * here, the next 1 s tick still has ample margin before Java's
+         * 5 s SO_TIMEOUT.  Worst case observed: ~5 ms per send. */
+        {
+            static struct timespec hb_last = {0, 0};
+            const long HB_INTERVAL_NS = 1L * 1000000000L;
+            long since = (t_start.tv_sec - hb_last.tv_sec) * 1000000000L
+                       + (t_start.tv_nsec - hb_last.tv_nsec);
+            if (hb_last.tv_sec == 0 || since >= HB_INTERVAL_NS) {
+                hb_last = t_start;
+                cr_server_send_heartbeat();
             }
         }
-#endif
 
-        /* Heartbeat is dispatched on a dedicated pthread inside server.c —
-         * the render loop must never touch send() syscalls.  Even a
-         * non-blocking loopback send can take a few ms on QNX 6.5, which
-         * shows up as 1 Hz frame jitter when done in the main loop. */
-
-        /* Adaptive idle sleep — render-on-demand for the main loop.
+#ifndef PLATFORM_QNX
+        /* Frame pacing — target 30 FPS via software nanosleep.
+         * macOS/dev path only: GLFW + swap interval 0 gives no vsync
+         * throttle, so we sleep here to keep test_harness sessions at
+         * a consistent 30 FPS for visual parity with hardware.
          *
-         * The render block above already only draws when `dirty` is set,
-         * so we don't waste GPU on unchanged frames.  But the loop itself
-         * still spins at 30 Hz polling TCP + platform events, which burns
-         * CPU when nothing is happening (CarPlay idle, no route).
-         *
-         * Strategy: count consecutive idle frames; once we've been idle
-         * for a second, drop the poll rate from 30 Hz -> 10 Hz; after 5 s
-         * idle, drop to 3 Hz.  Any activity (incoming commands, render
-         * still animating, dirty surface) resets the counter back to 0
-         * and we go back to full 30 Hz immediately.
-         *
-         * Watchdog still fires on its own 5 s clock above, independent
-         * of poll rate. */
-        static int idle_frames = 0;
-        int active = dirty || got_maneuver || got_screenshot
-                   || render_is_animating() || maneuver_needs_redraw()
-                   || g_fade_active || (g_bargraph_on == 2);
-        if (active) {
-            idle_frames = 0;
-        } else if (idle_frames < 10000) {
-            idle_frames++;
-        }
-
-        long target_frame_ns;
-        if (idle_frames < TARGET_FPS) {           /* < 1 s idle: 30 Hz */
-            target_frame_ns = FRAME_TIME_NS;
-        } else if (idle_frames < TARGET_FPS * 5) { /* 1-5 s idle: 10 Hz */
-            target_frame_ns = 100L * 1000000L;
-        } else {                                   /* > 5 s idle: 3 Hz */
-            target_frame_ns = 333L * 1000000L;
-        }
-
-        /* Frame pacing */
+         * On QNX this whole block is skipped: platform_qnx.c sets
+         * eglSwapInterval(2) so eglSwapBuffers() itself blocks until
+         * the second display vsync, giving an exact 30 FPS pace
+         * without any kernel timer rounding. */
         struct timespec t_end;
         clock_gettime(CLOCK_MONOTONIC, &t_end);
         long elapsed_ns = (t_end.tv_sec - t_start.tv_sec) * 1000000000L
                         + (t_end.tv_nsec - t_start.tv_nsec);
-        long sleep_ns = target_frame_ns - elapsed_ns;
+        long sleep_ns = FRAME_TIME_NS - elapsed_ns;
         if (sleep_ns > 0) {
             struct timespec ts = { sleep_ns / 1000000000L,
                                    sleep_ns % 1000000000L };
             nanosleep(&ts, NULL);
         }
+#else
+        (void)t_start;   /* unused on QNX — pacing is in eglSwapBuffers */
+#endif
+
+#ifdef CR_DIAG_FRAME_LOG
+        /* 1 Hz render-loop stats.  Steady state should report
+         * iters≈30 frames≈30 (ARRIVED flag keeps maneuver_needs_redraw
+         * true).  Anything else means the loop is being throttled. */
+        {
+            struct timespec stat_now;
+            clock_gettime(CLOCK_MONOTONIC, &stat_now);
+            if (stat_last.tv_sec == 0) stat_last = stat_now;
+            long el_ms = (stat_now.tv_sec - stat_last.tv_sec) * 1000L
+                       + (stat_now.tv_nsec - stat_last.tv_nsec) / 1000000L;
+            if (el_ms >= 1000) {
+                long avg_us = stat_frames_rendered > 0
+                            ? stat_render_total_us / stat_frames_rendered : 0;
+                int icon = g_engine.has_current ? g_engine.current.icon : -1;
+                fprintf(stderr,
+                        "stats: iters=%d frames=%d cmds=%d render_us=%ld/%ld(avg/max) icon=%d redraw=%d anim=%d\n",
+                        stat_loop_iters, stat_frames_rendered, stat_cmds_received,
+                        avg_us, stat_render_max_us, icon,
+                        maneuver_needs_redraw() ? 1 : 0,
+                        render_is_animating() ? 1 : 0);
+                stat_loop_iters = 0;
+                stat_frames_rendered = 0;
+                stat_cmds_received = 0;
+                stat_render_total_us = 0;
+                stat_render_max_us = 0;
+                stat_last = stat_now;
+            }
+        }
+#endif /* CR_DIAG_FRAME_LOG */
     }
 
     cr_server_shutdown();

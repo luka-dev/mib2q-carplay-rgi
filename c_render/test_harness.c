@@ -1,9 +1,20 @@
 /*
- * Test harness for c_render -- standalone GLFW binary (macOS only).
+ * Test harness for c_render — standalone GLFW binary (macOS only).
+ *
+ * Acts as the **TCP SERVER** on 127.0.0.1:CR_TCP_PORT.  After the
+ * 2026-04 topology flip the renderer is the TCP client, so the harness
+ * matches what Java BAPBridge does in production.
  *
  * Arrow keys cycle through maneuver presets.
  * R = random maneuver, Space = screenshot, Q/ESC = quit.
- * Sends CMD_MANEUVER packets over TCP to c_render.
+ *
+ * Workflow:
+ *   1. Run harness (binds + listens).
+ *   2. Run c_render (connects to 127.0.0.1:CR_TCP_PORT).
+ *   3. Press keys in the harness window — commands stream to renderer.
+ *
+ * Heartbeats from renderer are drained silently so the kernel TCP
+ * buffer doesn't fill.
  */
 
 #include <stdio.h>
@@ -23,43 +34,101 @@
 #include "maneuver.h"   /* ICON_* constants, MAX_JUNCTION_ANGLES */
 
 /* ================================================================
- * TCP client
+ * TCP server — accepts the renderer client, sends commands, drains
+ * any inbound heartbeat traffic.
  * ================================================================ */
 
-static int g_sock = -1;
-static const char *g_target_host = "127.0.0.1";
+static int g_listen_fd = -1;
+static int g_client_fd = -1;
 
-static int tcp_connect(void) {
-    if (g_sock >= 0) return 0;
+static void set_nonblocking(int fd) {
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags >= 0)
+        fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+}
 
-    g_sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (g_sock < 0) return -1;
+static int tcp_setup_server(void) {
+    g_listen_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (g_listen_fd < 0) {
+        fprintf(stderr, "harness: socket: %s\n", strerror(errno));
+        return -1;
+    }
+
+    int opt = 1;
+    setsockopt(g_listen_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    set_nonblocking(g_listen_fd);
 
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = inet_addr(g_target_host);
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     addr.sin_port = htons(CR_TCP_PORT);
 
-    if (connect(g_sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        close(g_sock);
-        g_sock = -1;
+    if (bind(g_listen_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+        fprintf(stderr, "harness: bind %d: %s\n", CR_TCP_PORT, strerror(errno));
+        close(g_listen_fd);
+        g_listen_fd = -1;
         return -1;
     }
 
-    fprintf(stderr, "harness: connected to %s:%d\n", g_target_host, CR_TCP_PORT);
+    if (listen(g_listen_fd, 1) < 0) {
+        fprintf(stderr, "harness: listen: %s\n", strerror(errno));
+        close(g_listen_fd);
+        g_listen_fd = -1;
+        return -1;
+    }
+
+    fprintf(stderr, "harness: listening on 127.0.0.1:%d\n", CR_TCP_PORT);
     return 0;
 }
 
-static int tcp_send(const void *data, int len) {
-    if (g_sock < 0) {
-        if (tcp_connect() < 0) return -1;
+/* Try to accept a renderer connection (non-blocking).  Drain any
+ * pending inbound bytes (heartbeats) on the existing client to prevent
+ * buffer fill.  Call once per main-loop tick. */
+static void tcp_pump(void) {
+    if (g_client_fd < 0 && g_listen_fd >= 0) {
+        int fd = accept(g_listen_fd, NULL, NULL);
+        if (fd >= 0) {
+            set_nonblocking(fd);
+            g_client_fd = fd;
+            fprintf(stderr, "harness: renderer connected (fd=%d)\n", fd);
+        }
     }
-    int n = (int)send(g_sock, data, len, 0);
+
+    if (g_client_fd >= 0) {
+        uint8_t scratch[256];
+        for (;;) {
+            int n = (int)recv(g_client_fd, scratch, sizeof(scratch), 0);
+            if (n > 0) {
+                /* drain heartbeats — content ignored */
+                continue;
+            }
+            if (n == 0) {
+                fprintf(stderr, "harness: renderer disconnected\n");
+                close(g_client_fd);
+                g_client_fd = -1;
+                break;
+            }
+            /* n < 0 */
+            if (errno == EAGAIN || errno == EWOULDBLOCK) break;
+            fprintf(stderr, "harness: recv error: %s\n", strerror(errno));
+            close(g_client_fd);
+            g_client_fd = -1;
+            break;
+        }
+    }
+}
+
+static int tcp_send(const void *data, int len) {
+    if (g_client_fd < 0) {
+        fprintf(stderr, "harness: no renderer connected — start it first\n");
+        return -1;
+    }
+    int n = (int)send(g_client_fd, data, len, 0);
     if (n < 0) {
         fprintf(stderr, "harness: send error: %s\n", strerror(errno));
-        close(g_sock);
-        g_sock = -1;
+        close(g_client_fd);
+        g_client_fd = -1;
         return -1;
     }
     return 0;
@@ -363,7 +432,7 @@ static void key_callback(GLFWwindow *window, int key, int scancode, int action, 
  * ================================================================ */
 
 int main(int argc, char **argv) {
-    if (argc > 1) g_target_host = argv[1];
+    (void)argc; (void)argv;
 
     if (!glfwInit()) {
         fprintf(stderr, "harness: glfwInit failed\n");
@@ -383,21 +452,24 @@ int main(int argc, char **argv) {
     glfwSetKeyCallback(window, key_callback);
 
     fprintf(stderr, "harness: ready (L/R=cycle, R=random, Space=snap, Q=quit)\n");
-    fprintf(stderr, "harness: target %s:%d\n", g_target_host, CR_TCP_PORT);
-    tcp_connect();
+
+    if (tcp_setup_server() < 0) {
+        glfwDestroyWindow(window);
+        glfwTerminate();
+        return 1;
+    }
+
+    fprintf(stderr, "harness: now run the renderer to connect\n");
 
     while (!glfwWindowShouldClose(window) && !g_should_close) {
-        glfwWaitEventsTimeout(0.1);
-
-        /* Auto-reconnect if disconnected */
-        if (g_sock < 0)
-            tcp_connect();
+        /* Pump TCP first: accept renderer, drain heartbeats. */
+        tcp_pump();
+        /* Short timeout so accept/drain stays responsive. */
+        glfwWaitEventsTimeout(0.05);
     }
 
-    if (g_sock >= 0) {
-        close(g_sock);
-        g_sock = -1;
-    }
+    if (g_client_fd >= 0) { close(g_client_fd); g_client_fd = -1; }
+    if (g_listen_fd >= 0) { close(g_listen_fd); g_listen_fd = -1; }
 
     glfwDestroyWindow(window);
     glfwTerminate();

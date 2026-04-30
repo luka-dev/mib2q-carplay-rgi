@@ -261,9 +261,19 @@ int platform_init(int width, int height) {
         return -1;
     }
 
-    eglSwapInterval(g_egl_display, 0);
+    /* swap interval = 2 → eglSwapBuffers() blocks until the *second*
+     * vsync after submission.  On the cluster's 60 Hz display this gives
+     * us a hardware-paced 30 FPS, identical to how the native HMI
+     * graphics workers (and CarPlay video pipeline) drive their own
+     * displayables.  No software nanosleep needed in the render loop —
+     * eglSwapBuffers itself paces.
+     *
+     * Was 0 (no vsync wait, software pacing via nanosleep).  That gave
+     * ~21-25 FPS effective on QNX 6.5 due to the kernel's 10 ms timer
+     * tick rounding `nanosleep(31 ms)` up to 40 ms. */
+    eglSwapInterval(g_egl_display, 2);
 
-    fprintf(stderr, "platform_qnx: OK %dx%d\n", width, height);
+    fprintf(stderr, "platform_qnx: OK %dx%d (swap interval=2 → 30 FPS vsync)\n", width, height);
     return 0;
 }
 

@@ -81,6 +81,19 @@ hook_result_t bus_send(uint16_t type, uint8_t flags,
                        const uint8_t* payload, uint32_t len);
 
 /* ============================================================
+ * Periodic tick — register a callback fired ~1 Hz from the bus
+ * heartbeat thread.  Avoids spawning extra worker threads in
+ * other modules just to drive a low-frequency timer (e.g., debounce
+ * windows that need to flush even with no incoming traffic).
+ *
+ * Single registered callback per process (last call wins).  Callback
+ * runs on the heartbeat thread; keep it short (microseconds).
+ * Pass NULL to disable.
+ * ============================================================ */
+typedef void (*bus_tick_cb_t)(void);
+void bus_set_periodic_tick(bus_tick_cb_t cb);
+
+/* ============================================================
  * Text payload builder (PPS-compatible key:type:value format)
  *
  *   bus_text_builder_t b;

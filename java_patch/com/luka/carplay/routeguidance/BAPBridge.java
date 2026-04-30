@@ -78,6 +78,13 @@ public class BAPBridge {
     private int lastBar = 0;
     private Thread actionBlinkThread;
     private boolean actionBlinkThreadRunning = false;
+    /* Monotonically increases on every start/stop.  Each spawned blink
+     * thread captures the value at start time; on every iteration it
+     * re-checks against the current counter and exits if a newer
+     * generation has been allocated.  This guarantees a stale thread
+     * (e.g., one we couldn't join in time) cannot survive into a new
+     * approach-zone cycle and double up the bargraph blink. */
+    private int actionBlinkGeneration = 0;
     private int blinkDistM = -1;
     private int blinkBargraphDenominatorM = -1;
     private boolean blinkArmed = false;
@@ -140,24 +147,32 @@ public class BAPBridge {
     }
 
     private void startActionBlinkThread() {
+        final int myGen;
         synchronized (this) {
             if (actionBlinkThreadRunning) return;
             actionBlinkThreadRunning = true;
+            myGen = ++actionBlinkGeneration;
             actionBlinkThread = new Thread(new Runnable() {
                 public void run() {
-                    actionBlinkLoop();
+                    actionBlinkLoop(myGen);
                 }
             }, "BAPActionBlink");
             actionBlinkThread.setDaemon(true);
             actionBlinkThread.start();
         }
-        Log.d(TAG, "Action blink timer started (" + ACTION_BLINK_INTERVAL_MS + "ms)");
+        Log.d(TAG, "Action blink timer started gen=" + myGen
+              + " (" + ACTION_BLINK_INTERVAL_MS + "ms)");
     }
 
     private void stopActionBlinkThread() {
         Thread t;
         synchronized (this) {
+            if (!actionBlinkThreadRunning) return;
             actionBlinkThreadRunning = false;
+            /* Bump generation immediately so any wakeup of the old thread
+             * (even after this method returns without successful join)
+             * sees a stale generation and exits cleanly. */
+            ++actionBlinkGeneration;
             t = actionBlinkThread;
             actionBlinkThread = null;
             resetActionBlinkState();
@@ -165,36 +180,59 @@ public class BAPBridge {
         if (t != null) {
             t.interrupt();
             try { t.join(500); } catch (InterruptedException e) { /* ignore */ }
-            if (t.isAlive()) Log.w(TAG, "Blink thread still alive after join(500)");
+            if (t.isAlive()) {
+                /* Thread didn't honor interrupt within 500 ms.  Generation
+                 * bump above guarantees it can't actually mutate state
+                 * after waking up, so this is a soft warning, not a leak
+                 * of behavior. */
+                Log.w(TAG, "Blink thread still alive after join(500); orphaned by generation bump");
+            }
         }
         Log.d(TAG, "Action blink timer stopped");
     }
 
-    private void actionBlinkLoop() {
+    private void actionBlinkLoop(int myGen) {
         while (true) {
             try {
                 Thread.sleep(ACTION_BLINK_INTERVAL_MS);
             } catch (InterruptedException e) {
-                /* stop check below */
+                /* loop continues; stop is signaled inside sendActionBlinkTick
+                 * via generation check */
             }
-            if (!isActionBlinkThreadRunning()) break;
-            sendActionBlinkTick();
+            /* Authoritative generation + state check happens atomically
+             * inside sendActionBlinkTick(myGen) under synchronized(this).
+             * No outer unsynchronized check — reading non-volatile fields
+             * here could see stale values and prematurely kill a live
+             * thread.  When stop is requested, sendActionBlinkTick will
+             * observe the new generation and return; we still return
+             * here because we want to exit the loop too. */
+            if (!sendActionBlinkTick(myGen)) {
+                return;
+            }
         }
     }
 
-    private void sendActionBlinkTick() {
-        /* Read blink state and send BAP+renderer inside the same sync block.
-         * resetActionBlinkState() is also synchronized(this), so the clear
-         * and the blink tick are mutually exclusive — no stale send after clear. */
+    /**
+     * Emit one blink tick for the calling thread's generation.  Returns
+     * true if the loop should continue, false if this thread is now an
+     * orphan (generation bumped) and should exit.
+     *
+     * Generation check + state read + send are all inside one
+     * synchronized(this) block, mutually exclusive with start/stop and
+     * resetActionBlinkState().  No way for an orphan thread to send a
+     * tick using a fresh generation's state.
+     */
+    private boolean sendActionBlinkTick(int myGen) {
         synchronized (this) {
+            if (myGen != actionBlinkGeneration) return false;
             if (!blinkArmed || blinkDistM <= 0 || blinkBargraphDenominatorM <= 0
-                    || blinkDistM > blinkBargraphDenominatorM) return;
+                    || blinkDistM > blinkBargraphDenominatorM) return true;
             int linBargraph = (blinkDistM * 100) / blinkBargraphDenominatorM;
             if (linBargraph < 0) linBargraph = 0;
             if (linBargraph > 100) linBargraph = 100;
             if (linBargraph >= BARGRAPH_BLINK_PERCENT) {
                 actionBlinkFull = true;
-                return;
+                return true;
             }
             int bargraph = actionBlinkFull ? 100 : 0;
             actionBlinkFull = !actionBlinkFull;
@@ -205,6 +243,7 @@ public class BAPBridge {
                 Log.e(TAG, "Action blink tick failed", e);
             }
         }
+        return true;
     }
 
     /**
@@ -431,7 +470,11 @@ public class BAPBridge {
                 lastBarOn = false;
                 lastBar = 0;
             }
-            startActionBlinkThread();
+            /* Action blink thread starts/stops with approach zone enter/exit
+             * (see update() near approachChanged) — not on session start.
+             * Outside approach zone the thread does nothing useful, and its
+             * 600 ms wakeups otherwise add scheduler pressure for the entire
+             * session even when the bargraph isn't pulsing. */
 
             /*
              * Lazy-init cluster hooks (native stream gate).
@@ -510,6 +553,11 @@ public class BAPBridge {
         if (!initialized) return;
 
         try {
+            /* Defensive: stop action blink (it's also stopped on approach
+             * zone exit, but onShutdown can be called from non-approach
+             * states too — e.g., disconnect mid-route). */
+            stopActionBlinkThread();
+
             /*
              * Guidance stop — full BAP teardown:
              * 1. RGStatus(0) - triggers sync(0) for {17,39,23,18,49}
@@ -620,6 +668,17 @@ public class BAPBridge {
                 Log.i(TAG, "Approach zone " + (nowApproach ? "ENTER" : "EXIT")
                     + " (dist=" + distM + "m, highway=" + isHighway
                     + ", prepThr=" + prepareThreshold + ", barDen=" + bargraphDenominatorM + ")");
+
+                /* Lazy-start action blink: only spin the 600 ms blink loop
+                 * while we're actually in the approach zone, where it drives
+                 * the BAP+renderer bargraph pulse in lockstep.  Outside the
+                 * zone the loop does nothing useful but its wakeups still
+                 * contend with the cluster compositor and TCP traffic. */
+                if (nowApproach) {
+                    startActionBlinkThread();
+                } else {
+                    stopActionBlinkThread();
+                }
 
                 /* 2D/3D perspective switch disabled — always 3D for now */
                 /* if (rendererClient != null && customRendererStarted) {
