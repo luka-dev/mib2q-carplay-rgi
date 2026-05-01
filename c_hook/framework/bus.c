@@ -205,24 +205,6 @@ static int write_all(int fd, const void* buf, size_t len) {
     return 0;
 }
 
-static int read_all(int fd, void* buf, size_t len) {
-    uint8_t* p = (uint8_t*)buf;
-    while (len > 0) {
-        ssize_t n = recv(fd, p, len, 0);
-        if (n < 0) {
-            if (errno == EINTR) continue;
-            return -1;
-        }
-        if (n == 0) {
-            errno = 0;
-            return -1;
-        }
-        p += n;
-        len -= (size_t)n;
-    }
-    return 0;
-}
-
 static int send_frame(int fd, const frame_t* f) {
     uint8_t hdr[BUS_HEADER_SIZE];
     write_be32(hdr + 0, BUS_MAGIC);
@@ -360,25 +342,6 @@ hook_result_t bus_send(uint16_t type, uint8_t flags,
         LOG_WARN(LOG_MODULE, "send queue full, dropped type=0x%04x", type);
     }
     return enq;
-}
-
-/* ============================================================
- * Dispatch inbound - holds handler-table read lock across the callback
- * so bus_off() (writer lock) will wait until no dispatch is in flight.
- * This lets callers free their ctx immediately after bus_off returns.
- * ============================================================ */
-static void dispatch_inbound(uint16_t type, uint8_t flags,
-                             const uint8_t* payload, uint32_t len) {
-    type_slot_t* s = slot_for(type);
-    if (!s) {
-        LOG_WARN(LOG_MODULE, "dispatch: type 0x%04x out of range, dropping", type);
-        return;
-    }
-    pthread_rwlock_rdlock(&g_htable_rw);
-    bus_handler_t h = s->handler;
-    void* c = s->handler_ctx;
-    if (h) h(type, flags, payload, len, c);
-    pthread_rwlock_unlock(&g_htable_rw);
 }
 
 /* ============================================================

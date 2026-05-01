@@ -3,31 +3,32 @@
  */
 
 #include "rgd_hook.h"
-#include <sys/wait.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
 #include <time.h>
 
 DEFINE_LOG_MODULE(RGD);
 
-/* Debounce window for transient route_state=0 from iOS.
+/*
+ * CarPlay route-guidance state=0 handling.
  *
- * iOS routinely sends state=0 for ~100-500ms during:
- *   - rerouting (recalc after wrong turn / GPS jitter)
- *   - maneuver-to-maneuver transitions
- *   - brief CarPlay UI state churn
+ * iOS Maps uses route_state=0 both for real route end and as a reset
+ * frame during reroute:
  *
- * Without filtering, every transient kills+respawns the renderer,
- * costs ~150 ms of black displayable per cycle, and occasionally
- * leaves a "ghost" renderer when iOS bounces state=3/0/3/0 and the
- * last bounce ends on state=3 with no follow-up.
+ *   REROUTING(5) -> NO_ROUTE_SET(0) -> new route/maneuver data -> active
  *
- * 2.5 s catches all observed transients while still letting genuine
- * "user canceled navigation" reach Java within reasonable latency.
- * Real CarPlay disconnect goes through rgd_clear_state() and is not
- * subject to this debounce. */
-#define ROUTE_STATE_ZERO_DEBOUNCE_MS  2500
+ * Native iAP2 can absorb that reset cheaply.  Our Java side owns BAP and
+ * renderer lifecycle, so forwarding the intermediate zero tears down the
+ * HUD/VC renderer and causes visible flicker.  Treat state=0 as pending
+ * until either:
+ *   - hard-clear evidence arrives (disconnect/source_supports_rg=0), or
+ *   - active-route evidence arrives (state>0, 0x5202, 0x5204, non-empty
+ *     maneuver data), or
+ *   - non-reroute iOS silence reaches the fallback deadline.
+ *
+ * Reroute resets intentionally have no timeout.  With poor connectivity,
+ * Maps can sit in REROUTING for a long time; timing that out as "route
+ * ended" would be worse than keeping the last stable cluster state.
+ */
+#define ROUTE_ZERO_NORMAL_GRACE_MS    800
 
 static uint64_t now_monotonic_ms(void) {
     struct timespec ts;
@@ -43,72 +44,6 @@ static pthread_mutex_t g_rgd_debounce_lock = PTHREAD_MUTEX_INITIALIZER;
 
 /* Forward decl — implemented after rgd_update_t is in scope. */
 void rgd_periodic_tick(void);
-
-/* ================================================================
- * Cluster renderer process management
- * ================================================================ */
-
-#define CR_BINARY_PATH  "/mnt/app/root/hooks/maneuver_render"
-
-static pid_t g_renderer_pid = -1;
-
-static void renderer_kill_previous(void) {
-    /* Kill any orphaned maneuver_render from a previous hook load.
-     * slay -f = force (SIGKILL), -Q = quiet (no error if not found). */
-    if (g_renderer_pid > 0) {
-        kill(g_renderer_pid, SIGKILL);
-        waitpid(g_renderer_pid, NULL, 0);
-        g_renderer_pid = -1;
-        LOG_INFO(LOG_MODULE, "renderer: killed tracked pid");
-    }
-    /* Also slay by name in case PID was lost (hook reload, crash, etc.) */
-    system("slay -f -Q maneuver_render 2>/dev/null");
-}
-
-/* renderer_start/renderer_stop removed — renderer is launched from Java
- * (BAPBridge.startCustomRenderer) via CommandLineExecuter for clean EGL access. */
-
-static void renderer_stop(void) {
-    if (g_renderer_pid <= 0) return;
-
-    /* Send TCP CMD_SHUTDOWN (48-byte packet, protocol.h) for graceful exit.
-     * Java's RendererClient handles primary shutdown; this is the C-side backstop. */
-    int sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (sock >= 0) {
-        struct sockaddr_in addr;
-        memset(&addr, 0, sizeof(addr));
-        addr.sin_family = AF_INET;
-        addr.sin_port = htons(19800);
-        addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-        if (connect(sock, (struct sockaddr *)&addr, sizeof(addr)) == 0) {
-            uint8_t pkt[48];
-            memset(pkt, 0, sizeof(pkt));
-            pkt[0] = 0x03; /* CMD_SHUTDOWN */
-            send(sock, pkt, sizeof(pkt), 0);
-        }
-        close(sock);
-    }
-
-    /* Give it a moment to exit gracefully */
-    usleep(200000); /* 200ms */
-
-    /* Check if still running, force kill if needed */
-    int status;
-    pid_t ret = waitpid(g_renderer_pid, &status, WNOHANG);
-    if (ret == 0) {
-        /* Still running, send SIGTERM */
-        kill(g_renderer_pid, SIGTERM);
-        usleep(100000);
-        ret = waitpid(g_renderer_pid, &status, WNOHANG);
-        if (ret == 0) {
-            kill(g_renderer_pid, SIGKILL);
-            waitpid(g_renderer_pid, &status, 0);
-        }
-    }
-
-    LOG_INFO(LOG_MODULE, "renderer: stopped pid=%d", (int)g_renderer_pid);
-    g_renderer_pid = -1;
-}
 
 /* Module state */
 static struct {
@@ -128,10 +63,11 @@ static struct {
      */
 	    bool have_update;
 	    uint8_t last_route_state;
-	    /* Monotonic timestamp (ms) when route_state first became 0.
-	     * 0 = not currently in a state-zero debounce window.  See
-	     * ROUTE_STATE_ZERO_DEBOUNCE_MS comment above. */
+	    /* Monotonic timestamp/deadline for a pending route_state=0.
+	     * 0 = no pending zero. */
 	    uint64_t state_zero_started_ms;
+	    uint64_t state_zero_deadline_ms;
+	    bool state_zero_from_reroute;
 	    /* Last route_state actually emitted on the bus (after debounce).
 	     * Distinct from last_route_state which tracks raw iOS state. */
 	    uint8_t emitted_route_state;
@@ -163,6 +99,8 @@ static struct {
 	    .have_update = false,
 	    .last_route_state = 0,
 	    .state_zero_started_ms = 0,
+	    .state_zero_deadline_ms = 0,
+	    .state_zero_from_reroute = false,
 	    .emitted_route_state = 0,
 	    .current_list_present = false,
 	    .current_list_count = 0,
@@ -186,6 +124,34 @@ static void rgd_lazy_init(void);
 
 static void rgd_update_cache_reset(void) {
     memset(&g_rgd.update_cache, 0, sizeof(g_rgd.update_cache));
+}
+
+static void rgd_cancel_pending_zero_locked(const char* why, uint8_t active_state) {
+    if (g_rgd.state_zero_started_ms == 0) return;
+    LOG_INFO(LOG_MODULE, "Route reset canceled by %s (state=%u, reroute=%d)",
+             why ? why : "active evidence", active_state,
+             g_rgd.state_zero_from_reroute ? 1 : 0);
+    g_rgd.state_zero_started_ms = 0;
+    g_rgd.state_zero_deadline_ms = 0;
+    g_rgd.state_zero_from_reroute = false;
+}
+
+static void rgd_cancel_pending_zero(const char* why) {
+    pthread_mutex_lock(&g_rgd_debounce_lock);
+    rgd_cancel_pending_zero_locked(why, g_rgd.last_route_state);
+    pthread_mutex_unlock(&g_rgd_debounce_lock);
+}
+
+static bool rgd_update_has_active_evidence(const rgd_update_t* upd) {
+    if (!upd) return false;
+    if ((upd->present & RGD_UPD_ROUTE_STATE) && upd->route_state > 0) return true;
+    if ((upd->present & RGD_UPD_MANEUVER_COUNT) && upd->maneuver_count > 0) return true;
+    if ((upd->present & RGD_UPD_MANEUVER_LIST) && upd->maneuver_list_count > 0) return true;
+    if ((upd->present & RGD_UPD_DIST_TO_MANEUVER) && upd->dist_to_maneuver > 0) return true;
+    if ((upd->present & RGD_UPD_DISTANCE_REMAINING) && upd->distance_remaining > 0) return true;
+    if ((upd->present & RGD_UPD_DESTINATION) && upd->destination[0] != '\0') return true;
+    if ((upd->present & RGD_UPD_CURRENT_ROAD) && upd->current_road[0] != '\0') return true;
+    return false;
 }
 
 static void rgd_update_cache_merge(const rgd_update_t* upd) {
@@ -963,9 +929,6 @@ static void write_bus_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* 
 }
 
 void rgd_clear_state(const char* reason) {
-    /* Stop cluster renderer on disconnect/shutdown */
-    renderer_stop();
-
     g_rgd.active = false;
     g_rgd.sent_5200 = false;
     g_rgd.sent_5203 = false;
@@ -979,6 +942,8 @@ void rgd_clear_state(const char* reason) {
      * reading these fields. */
     pthread_mutex_lock(&g_rgd_debounce_lock);
     g_rgd.state_zero_started_ms = 0;
+    g_rgd.state_zero_deadline_ms = 0;
+    g_rgd.state_zero_from_reroute = false;
     g_rgd.emitted_route_state = 0;
     pthread_mutex_unlock(&g_rgd_debounce_lock);
     rgd_maneuver_map_reset();
@@ -1061,11 +1026,12 @@ hook_result_t rgd_stop_updates(void) {
     return res;
 }
 
-/* Raw packet full log before parsing (debug) */
 #ifndef RGD_TRACE_RAW_FULL
 #define RGD_TRACE_RAW_FULL 0
 #endif
 
+#if RGD_TRACE_RAW_FULL
+/* Raw packet full log before parsing (debug) */
 static void rgd_log_raw_packet(const char* label, const uint8_t* data, size_t len) {
     if (!data || len == 0 || !label) return;
     LOG_DEBUG(LOG_MODULE, "%s len=%zu", label, len);
@@ -1079,6 +1045,7 @@ static void rgd_log_raw_packet(const char* label, const uint8_t* data, size_t le
         log_write(LOG_LEVEL_DEBUG, LOG_MODULE, "%s", line);
     }
 }
+#endif
 
 /* Message handler - incoming 0x5201/0x5202/0x5204 */
 static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) {
@@ -1103,71 +1070,76 @@ static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) 
         /*
          * Track update presence and handle route_state transitions.
          *
-         * MHI3 approach: gate slot cache clearing on route_state, not
-         * maneuver_count.  When route_state=0 (NO_ROUTE_SET) arrives,
-         * flush the entire slot cache — iOS resets maneuver indices to 0
-         * on reroute, so old slot mappings would return stale data.
-         *
-         * Transient maneuver_count=0 (iOS quirk where count briefly drops
-         * to 0 while state remains active) is harmless: state stays >0,
-         * so the slot cache is preserved.
-         *
-         * Time-based debounce: state=0 is held back for up to
-         * ROUTE_STATE_ZERO_DEBOUNCE_MS.  If iOS bounces back to state>0
-         * within the window, the transient is dropped entirely (Java
-         * never sees deactivate→activate flap).  If state=0 persists past
-         * the window, it propagates as a real route end.
-         *
-         * Genuine CarPlay disconnect bypasses this via rgd_clear_state().
+         * CarPlay-aware zero handling:
+         * - state=0 is a pending reset frame, not immediately a route end.
+         * - state=0 after REROUTING has no timeout; bad connectivity can
+         *   keep Maps in reroute for a long time.
+         * - any active route evidence cancels the pending zero.
+         * - hard clear still bypasses this path via rgd_clear_state() or
+         *   source_supports_rg=0.
          */
         g_rgd.have_update = true;
+        bool suppress_update = false;
+        bool hard_clear = (upd.present & RGD_UPD_SOURCE_SUPPORTS_RG)
+                       && upd.source_supports_route_guidance == 0;
+        bool active_evidence = rgd_update_has_active_evidence(&upd);
+
         if (upd.present & RGD_UPD_ROUTE_STATE) {
             pthread_mutex_lock(&g_rgd_debounce_lock);
             uint8_t prev_state = g_rgd.last_route_state;
             g_rgd.last_route_state = upd.route_state;
 
             if (upd.route_state == 0) {
-                rgd_update_cache_reset();
-                /* Slot cache flush: iOS resets maneuver indices on reroute.
-                 * Always flush — flushing during a transient is harmless
-                 * because the next state>0 update will repopulate. */
-                if (prev_state > 0) {
-                    LOG_INFO(LOG_MODULE, "Route cleared (state %u->0): flushing slot cache", prev_state);
+                if (hard_clear) {
+                    LOG_INFO(LOG_MODULE, "Route hard clear: source_supports_rg=0");
+                    rgd_update_cache_reset();
                     rgd_maneuver_map_reset();
-                    g_rgd.state_zero_started_ms = now_monotonic_ms();
-                }
-
-                uint64_t elapsed_ms = (g_rgd.state_zero_started_ms != 0)
-                                    ? (now_monotonic_ms() - g_rgd.state_zero_started_ms)
-                                    : 0;
-
-                if (g_rgd.emitted_route_state == 0) {
+                    rgd_cancel_pending_zero_locked("hard clear", 0);
+                    g_rgd.emitted_route_state = 0;
+                } else if (g_rgd.emitted_route_state == 0) {
                     /* Already emitted state=0 (or never emitted anything yet) —
                      * pass through.  Re-emitting state=0 is a no-op for Java. */
-                } else if (elapsed_ms < ROUTE_STATE_ZERO_DEBOUNCE_MS) {
-                    /* Within debounce window: hold back from Java.
-                     * Internal cache state (slot map, etc.) is still flushed. */
-                    LOG_DEBUG(LOG_MODULE, "Debounce: holding state=0 (%llu/%dms)",
-                              (unsigned long long)elapsed_ms,
-                              ROUTE_STATE_ZERO_DEBOUNCE_MS);
-                    upd.present &= ~RGD_UPD_ROUTE_STATE;
                 } else {
-                    /* Sustained — release to Java as genuine route end. */
-                    LOG_INFO(LOG_MODULE, "Route end: state=0 sustained %llums, emitting",
-                             (unsigned long long)elapsed_ms);
-                    g_rgd.emitted_route_state = 0;
+                    uint64_t now = now_monotonic_ms();
+                    bool from_reroute = (prev_state == RGD_STATE_REROUTING)
+                                     || (g_rgd.emitted_route_state == RGD_STATE_REROUTING);
+
+                    rgd_update_cache_reset();
+                    if (prev_state > 0) {
+                        LOG_INFO(LOG_MODULE,
+                                 "Route reset frame (state %u->0): flushing slot cache, holding Java update",
+                                 prev_state);
+                        rgd_maneuver_map_reset();
+                    }
+                    if (g_rgd.state_zero_started_ms == 0) {
+                        g_rgd.state_zero_started_ms = now;
+                        g_rgd.state_zero_from_reroute = from_reroute;
+                        g_rgd.state_zero_deadline_ms = from_reroute
+                            ? 0
+                            : (now + ROUTE_ZERO_NORMAL_GRACE_MS);
+                    }
+                    suppress_update = true;
                 }
             } else {
                 /* state > 0 */
                 if (g_rgd.state_zero_started_ms != 0) {
-                    LOG_INFO(LOG_MODULE, "Debounce: state recovered to %u, canceling", upd.route_state);
-                    g_rgd.state_zero_started_ms = 0;
+                    rgd_cancel_pending_zero_locked("route_state>0", upd.route_state);
                 }
                 g_rgd.emitted_route_state = upd.route_state;
             }
             pthread_mutex_unlock(&g_rgd_debounce_lock);
+        } else if (active_evidence) {
+            rgd_cancel_pending_zero("active 0x5201");
+        } else if (!hard_clear) {
+            pthread_mutex_lock(&g_rgd_debounce_lock);
+            if (g_rgd.state_zero_started_ms != 0) {
+                suppress_update = true;
+                LOG_DEBUG(LOG_MODULE, "Route reset pending: suppressing reset-only 0x5201");
+            }
+            pthread_mutex_unlock(&g_rgd_debounce_lock);
         }
-        write_bus_update_partial(&upd);
+        if (!suppress_update)
+            write_bus_update_partial(&upd);
     }
     else if (frame->msgid == IAP2_MSG_ROUTE_GUIDANCE_MANEUVER) {
         if (!g_rgd.got_520x) {
@@ -1184,6 +1156,7 @@ static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) 
 
         LOG_INFO(LOG_MODULE, "Maneuver: idx=%u type=%u desc=\"%s\"",
                  man.index, man.maneuver_type, man.description);
+        rgd_cancel_pending_zero("0x5202 maneuver");
         write_bus_maneuver_partial(&man);
     }
     else if (frame->msgid == IAP2_MSG_ROUTE_GUIDANCE_LANE) {
@@ -1201,6 +1174,7 @@ static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) 
 
         LOG_INFO(LOG_MODULE, "Lane guidance: idx=%u lanes=%u desc=\"%s\"",
                  lane.lane_guidance_index, lane.lane_count, lane.lane_guidance_description);
+        rgd_cancel_pending_zero("0x5204 lane");
         for (int li = 0; li < lane.lane_count && li < MAX_LANE_GUIDANCE; li++) {
             const rgd_lane_t* l = &lane.lanes[li];
             char abuf[128];
@@ -1317,15 +1291,14 @@ void rgd_init(void) {
     }
 }
 
-/* Periodic tick (1 Hz from bus heartbeat thread).
+/* Periodic tick (1 Hz from bus timer thread).
  *
- * Flushes the state=0 debounce window when iOS goes silent after a
- * single state=0 message.  Without this, the in-handler debounce check
- * would only fire on the next incoming RGD packet — which may never
- * come if iOS truly stopped (user canceled navigation, arrived, etc.),
- * leaving the renderer alive indefinitely.
+ * Flushes non-reroute pending state=0 when iOS goes silent after a
+ * single reset message.  Reroute reset frames deliberately do not time
+ * out: Maps can remain in REROUTING for a long time with poor network,
+ * and route teardown must then come from hard-clear/disconnect evidence.
  *
- * Cross-thread safety: this runs on the bus heartbeat thread, while
+ * Cross-thread safety: this runs on the bus timer thread, while
  * the iAP2 handler thread may concurrently be inside rgd_message_handler
  * mutating g_rgd.update_cache via write_bus_update_partial().  We
  * **deliberately do not** go through write_bus_update_partial() here —
@@ -1342,19 +1315,26 @@ void rgd_periodic_tick(void) {
         pthread_mutex_unlock(&g_rgd_debounce_lock);
         return;
     }
-    uint64_t elapsed = now_monotonic_ms() - g_rgd.state_zero_started_ms;
-    if (elapsed < ROUTE_STATE_ZERO_DEBOUNCE_MS) {
+    if (g_rgd.state_zero_from_reroute || g_rgd.state_zero_deadline_ms == 0) {
         pthread_mutex_unlock(&g_rgd_debounce_lock);
         return;
     }
+    uint64_t now = now_monotonic_ms();
+    if (now < g_rgd.state_zero_deadline_ms) {
+        pthread_mutex_unlock(&g_rgd_debounce_lock);
+        return;
+    }
+    uint64_t elapsed = now - g_rgd.state_zero_started_ms;
 
     /* Window expired — claim the emission.  Mark fields before
      * unlocking so a concurrent handler doesn't re-do the same work. */
     g_rgd.emitted_route_state = 0;
     g_rgd.state_zero_started_ms = 0;
+    g_rgd.state_zero_deadline_ms = 0;
+    g_rgd.state_zero_from_reroute = false;
     pthread_mutex_unlock(&g_rgd_debounce_lock);
 
-    LOG_INFO(LOG_MODULE, "Debounce expired: emitting deferred state=0 to Java (elapsed=%llums)",
+    LOG_INFO(LOG_MODULE, "Route reset timeout: emitting deferred state=0 to Java (elapsed=%llums)",
              (unsigned long long)elapsed);
 
     /* Direct minimal bus frame — bypass update_cache (not synchronized
@@ -1375,8 +1355,7 @@ static void rgd_lazy_init(void) {
     if (initialized) return;
     initialized = true;
     rgd_clear_state("init");
-    /* Wire the bus heartbeat to drive our 1 Hz debounce flush.  No
-     * extra thread spawned — bus already has a heartbeat thread. */
+    /* Wire the bus timer to drive our 1 Hz pending-zero flush. */
     bus_set_periodic_tick(rgd_periodic_tick);
     LOG_INFO(LOG_MODULE, "Route Guidance module initialized");
 }
