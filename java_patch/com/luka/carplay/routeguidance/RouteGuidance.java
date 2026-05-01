@@ -4,8 +4,8 @@
  * Subscribes to EVT_RGD_UPDATE on CarplayBus, parses route state,
  * sends to BAP cluster.
  *
- * Payload is text in key:type:value format (legacy PPS wire format
- * carried over into the bus for minimal consumer churn):
+ * Payload is text in key:type:value format carried over into the bus
+ * for minimal consumer churn:
  *   @routeguidance
  *   route_state:n:<0-6>
  *   dist_maneuver_m:n:<meters>
@@ -85,6 +85,7 @@ public class RouteGuidance implements CarplayBus.Listener {
         public int laneGuidanceShowing = -1;
         public int laneGuidanceTotal = -1;
         public int laneGuidanceIndex = -1;
+        public int laneGuidanceSlot = -1;
 
         /* Distance to destination */
         public int distDestM = -1;
@@ -132,7 +133,7 @@ public class RouteGuidance implements CarplayBus.Listener {
         public int[][] mLaneStatus = new int[MAX_MANEUVERS][];
         /*
          * Per-lane angle vectors from 0x5204 lane informations.
-         * Format in PPS: lane0 comma-list, lanes separated by '|'
+         * Format on the bus: lane0 comma-list, lanes separated by '|'
          * Example: "1000|40,20|"
          */
         public int[][][] mLaneAngles = new int[MAX_MANEUVERS][][];
@@ -158,6 +159,7 @@ public class RouteGuidance implements CarplayBus.Listener {
             laneGuidanceShowing = -1;
             laneGuidanceTotal = -1;
             laneGuidanceIndex = -1;
+            laneGuidanceSlot = -1;
             for (int i = 0; i < MAX_MANEUVERS; i++) {
                 mType[i] = -1;
                 mTurnAngle[i] = -1;
@@ -272,7 +274,7 @@ public class RouteGuidance implements CarplayBus.Listener {
         /* Parse into state (delta) */
         parse(d);
         if (state.dirtyMask == 0) {
-            Log.d(TAG, "PPS delta: none (keys=" + d.size() + ")");
+            Log.d(TAG, "Bus update: none (keys=" + d.size() + ")");
             return;
         }
 
@@ -289,7 +291,7 @@ public class RouteGuidance implements CarplayBus.Listener {
          * Start/stop gating:
          * - Prefer explicit active authority from visible_in_app (native-like TBT_Active semantics).
          * - Fall back to route/maneuver heuristics only when visible_in_app is unknown.
-         * - iOS can emit metadata-only PPS deltas (component_ids/current_road/etc) even when not navigating.
+         * - iOS can emit metadata-only bus updates (component_ids/current_road/etc) even when not navigating.
          *
          * Only change RG active state when we received an activation-relevant delta.
          */
@@ -397,7 +399,7 @@ public class RouteGuidance implements CarplayBus.Listener {
             }
         } else if (state.disconnectReason != null && d.size() > 0) {
             /* One-shot field: clear on any subsequent non-empty update */
-            Log.d(TAG, "Clearing disconnect_reason on new PPS update");
+            Log.d(TAG, "Clearing disconnect_reason on new bus update");
             state.disconnectReason = null;
             state.markDirty(State.DIRTY_DISCONNECT);
         }
@@ -505,7 +507,7 @@ public class RouteGuidance implements CarplayBus.Listener {
                 state.maneuverCount = v;
                 state.markDirty(State.DIRTY_MANEUVER_COUNT);
                 /*
-                 * Explicit clear: iOS (and PPS injection) can send maneuver_count=0 without
+                 * Explicit clear: iOS (and injected test frames) can send maneuver_count=0 without
                  * sending maneuver_list. Treat that as a real clear and drop cached order,
                  * otherwise BAPBridge may keep re-sending stale maneuver icons.
                  */
@@ -516,8 +518,8 @@ public class RouteGuidance implements CarplayBus.Listener {
                      * Don't clear per-slot data (mType, mTurnAngle, etc.) here.
                      *
                      * The slot data was written by the C hook from real 0x5202 ManeuverUpdate
-                     * messages and corresponds to valid maneuver info.  PPS deltas only report
-                     * changes, so if we clear Java state, PPS won't re-send unchanged values,
+                     * messages and corresponds to valid maneuver info.  Bus deltas only report
+                     * changes, so if we clear Java state, the bus won't re-send unchanged values,
                      * and we lose the data permanently until a new 0x5202 arrives.
                      *
                      * maneuver_count=0 can be transient - iOS briefly clears the count before
@@ -577,6 +579,13 @@ public class RouteGuidance implements CarplayBus.Listener {
             int v = d.num("lane_guidance_index", -1);
             if (v != state.laneGuidanceIndex) {
                 state.laneGuidanceIndex = v;
+                state.markDirty(State.DIRTY_LANE_GUIDANCE);
+            }
+        }
+        if (d.has("lane_guidance_slot")) {
+            int v = d.num("lane_guidance_slot", -1);
+            if (v != state.laneGuidanceSlot) {
+                state.laneGuidanceSlot = v;
                 state.markDirty(State.DIRTY_LANE_GUIDANCE);
             }
         }
@@ -792,7 +801,7 @@ public class RouteGuidance implements CarplayBus.Listener {
             }
         }
 
-        Log.d(TAG, "PPS delta: mask=0x" + Integer.toHexString(state.dirtyMask) +
+        Log.d(TAG, "Bus update: mask=0x" + Integer.toHexString(state.dirtyMask) +
               " keys=" + d.size() + " [" + dirtyToString(state) + "]" +
               " count=" + state.maneuverCount + " dist=" + state.distManeuverM + "m");
     }

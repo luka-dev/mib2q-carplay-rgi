@@ -11,14 +11,12 @@
  *
  * Threads:
  *   - connector thread: connect() to Java with retry.  On success, sends
- *     HELLO, spawns reader, then waits for reader to exit (Java disconnect
- *     or error) and loops back to reconnect.
+ *     HELLO + sticky snapshot and then waits for writer-side disconnect.
  *   - writer thread   : drains send queue, writes frames to the current
  *     client fd with TCP_NODELAY.  On write error it drops the fd and
  *     waits for the next connect.
- *   - reader thread   : parses inbound frames and dispatches to registered
- *     handlers.  Sets g_client_fd = -1 + signals g_cond on exit so the
- *     connector wakes and retries.
+ *   - timer thread    : optional 1 Hz local tick for lightweight module
+ *     debounce.  It does not send heartbeat traffic to Java.
  *
  * Shared state is protected by a single mutex.  The send queue is a
  * simple ring buffer of heap-allocated frames.
@@ -30,6 +28,7 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <signal.h>
 #include <sys/socket.h>
 #include <sys/select.h>
 
@@ -39,7 +38,6 @@ DEFINE_LOG_MODULE(BUS);
  * Configuration
  * ============================================================ */
 #define SEND_QUEUE_CAPACITY   256        /* must be a power of two */
-#define SEND_QUEUE_MASK       (SEND_QUEUE_CAPACITY - 1)
 /* Directly-indexed per-type table.  Must cover the full protocol
  * range we allocate types in (see bus_protocol.h: currently through
  * 0x02FF with headroom for 0x0300+ ranges).  Type values >=MAX_TYPES
@@ -78,42 +76,17 @@ typedef struct {
 static type_slot_t  g_types[MAX_TYPES];
 
 /* ============================================================
- * Send queue — lock-free MPSC bounded ring (Vyukov algorithm).
+ * Send queue (fixed ring, protected by g_lock)
  *
- * Multi-producer: any thread that calls bus_send() (iAP2 callbacks,
- * OMX callbacks, RGD module, heartbeat thread, ...).  Producers
- * compete on g_ring_tail via __sync_bool_compare_and_swap.
- *
- * Single-consumer: the writer thread is the only dequeuer.  Updates
- * g_ring_head with plain non-atomic stores.
- *
- * Each slot's `seq` field synchronizes producer and consumer:
- *   seq == pos        → empty, ready to produce at pos
- *   seq == pos + 1    → filled, ready to consume
- *   (after consume)   seq advanced by capacity so producer at
- *                     pos+capacity sees seq==(pos+capacity), ready.
- *
- * Frame ownership transfers move-style:
- *   - Producer mallocs payload, fills frame_t, calls ring_try_enqueue.
- *     On HOOK_OK the slot owns f.payload; producer must NOT free.
- *     On HOOK_ERR_BUSY the producer still owns f.payload.
- *   - Consumer's ring_try_dequeue copies frame_t out by value; the
- *     payload pointer transfers to the consumer's local copy and the
- *     consumer is responsible for frame_dispose()'ing it.
- *
- * On overflow ALL policies (RELIABLE/LOSSY/DROP_OLD) currently return
- * HOOK_ERR_BUSY.  Lossy semantics are still preserved for sticky-flagged
- * types via the per-type sticky cache (updated on every bus_send), so
- * snapshot replay always sees the latest value even if intermediate
- * frames were dropped under load. */
-typedef struct {
-    volatile uint32_t seq;
-    frame_t           frame;
-} ring_slot_t;
-
-static ring_slot_t       g_ring[SEND_QUEUE_CAPACITY];
-static volatile uint32_t g_ring_tail = 0;       /* multi-producer, CAS */
-static          uint32_t g_ring_head = 0;       /* single-consumer, plain */
+ * This intentionally uses the simple mutex-backed queue from the first
+ * TCP implementation.  The later lock-free MPSC queue is faster on paper
+ * but the MU1316/QNX logs show the hook disappearing at the first 1 Hz
+ * heartbeat publish, exactly when that queue is first exercised.
+ * ============================================================ */
+static frame_t     g_ring[SEND_QUEUE_CAPACITY];
+static int         g_ring_head = 0;      /* next read  */
+static int         g_ring_tail = 0;      /* next write */
+static int         g_ring_count = 0;
 
 /* ============================================================
  * Global state
@@ -137,15 +110,13 @@ static pthread_rwlock_t g_htable_rw = PTHREAD_RWLOCK_INITIALIZER;
 static pthread_mutex_t  g_sock_write = PTHREAD_MUTEX_INITIALIZER;
 static pthread_t       g_connector_tid;
 static pthread_t       g_writer_tid;
-static pthread_t       g_reader_tid;
-static pthread_t       g_heartbeat_tid;
+static pthread_t       g_timer_tid;
 /* Thread-state flags written from one thread (the thread itself on exit)
  * and read from others without lock — must be volatile so reads aren't
  * cached in registers. */
 static volatile bool   g_connector_up = false;
 static volatile bool   g_writer_up = false;
-static volatile bool   g_reader_up = false;
-static volatile bool   g_heartbeat_up = false;
+static volatile bool   g_timer_up = false;
 static volatile bool   g_shutdown = false;
 
 /* g_listen_fd removed - hook is now TCP client, no listening socket. */
@@ -189,83 +160,27 @@ static hook_result_t frame_dup(frame_t* dst, const frame_t* src) {
 }
 
 /* ============================================================
- * Queue ops — lock-free MPSC ring (no mutex held).
+ * Queue ops — must hold g_lock
  * ============================================================ */
-static void ring_init(void) {
-    int i;
-    for (i = 0; i < SEND_QUEUE_CAPACITY; i++) {
-        g_ring[i].seq = (uint32_t)i;
-        g_ring[i].frame.payload = NULL;
-    }
-    g_ring_tail = 0;
-    g_ring_head = 0;
-}
+static bool q_is_full(void) { return g_ring_count == SEND_QUEUE_CAPACITY; }
+static bool q_is_empty(void) { return g_ring_count == 0; }
 
-/* Try to enqueue a frame.  On HOOK_OK ownership of f->payload transfers
- * to the slot (caller must not free).  On any error the caller still
- * owns f->payload.  Lock-free: producers race via CAS on g_ring_tail. */
-static hook_result_t ring_try_enqueue(const frame_t* f) {
-    uint32_t pos;
-    ring_slot_t *s;
-
-    for (;;) {
-        pos = g_ring_tail;                    /* volatile load */
-        s   = &g_ring[pos & SEND_QUEUE_MASK];
-        uint32_t seq = s->seq;                /* volatile load */
-        int32_t  diff = (int32_t)(seq - pos);
-        if (diff == 0) {
-            if (__sync_bool_compare_and_swap(&g_ring_tail, pos, pos + 1))
-                break;                        /* claimed slot at `pos` */
-            /* CAS failed → another producer claimed; retry */
-        } else if (diff < 0) {
-            return HOOK_ERR_BUSY;             /* queue full */
-        }
-        /* diff > 0 → another producer claimed but hasn't published yet;
-         * spin briefly. */
-    }
-
-    /* We exclusively own slot `pos & MASK`.  Write the frame, then
-     * publish via seq update with a release fence. */
-    s->frame = *f;                            /* memcpy struct, payload ptr moves in */
-    __sync_synchronize();
-    s->seq = pos + 1;                         /* publish */
+static hook_result_t q_enqueue_nolock(const frame_t* f) {
+    if (q_is_full()) return HOOK_ERR_BUSY;
+    hook_result_t r = frame_dup(&g_ring[g_ring_tail], f);
+    if (r != HOOK_OK) return r;
+    g_ring_tail = (g_ring_tail + 1) % SEND_QUEUE_CAPACITY;
+    g_ring_count++;
     return HOOK_OK;
 }
 
-/* Try to dequeue.  Returns true if a frame was taken; *out then owns
- * its payload (caller must frame_dispose).  Single-consumer; no CAS
- * on the head side.
- *
- * Memory ordering: producer writes `s->frame`, then `__sync_synchronize`,
- * then publishes `s->seq = pos + 1` (release).  Consumer reads `s->seq`
- * first, sees publish, then **must execute an acquire barrier** before
- * reading `s->frame`.  Without this, on weakly-ordered architectures
- * (ARM/QNX) the consumer can observe the new seq value but stale frame
- * fields, leading to garbage data or use-after-free of payload pointers. */
-static bool ring_try_dequeue(frame_t* out) {
-    uint32_t pos = g_ring_head;
-    ring_slot_t *s = &g_ring[pos & SEND_QUEUE_MASK];
-    uint32_t seq = s->seq;
-    int32_t  diff = (int32_t)(seq - (pos + 1));
-    if (diff < 0) return false;               /* empty / not yet published */
-
-    /* Acquire barrier: pair with producer's release fence before publish.
-     * Now safe to read `s->frame` knowing all producer writes are visible. */
-    __sync_synchronize();
-
-    *out = s->frame;                          /* take ownership of payload */
-    s->frame.payload = NULL;
-    __sync_synchronize();                     /* release: ensure copy-out
-                                                 completes before slot reuse */
-    s->seq = pos + SEND_QUEUE_MASK + 1;       /* mark slot reusable */
-    g_ring_head = pos + 1;
+static bool q_dequeue_nolock(frame_t* out) {
+    if (q_is_empty()) return false;
+    *out = g_ring[g_ring_head];              /* moves payload ownership */
+    g_ring[g_ring_head].payload = NULL;
+    g_ring_head = (g_ring_head + 1) % SEND_QUEUE_CAPACITY;
+    g_ring_count--;
     return true;
-}
-
-/* Approximate emptiness check — used only for cond-wait predicates.
- * Non-atomic snapshot; OK because spurious wakeups self-recover. */
-static bool ring_is_empty_approx(void) {
-    return g_ring_tail == g_ring_head;
 }
 
 /* ============================================================
@@ -274,7 +189,11 @@ static bool ring_is_empty_approx(void) {
 static int write_all(int fd, const void* buf, size_t len) {
     const uint8_t* p = (const uint8_t*)buf;
     while (len > 0) {
+#ifdef MSG_NOSIGNAL
+        ssize_t n = send(fd, p, len, MSG_NOSIGNAL);
+#else
         ssize_t n = send(fd, p, len, 0);
+#endif
         if (n < 0) {
             if (errno == EINTR) continue;
             return -1;
@@ -294,7 +213,10 @@ static int read_all(int fd, void* buf, size_t len) {
             if (errno == EINTR) continue;
             return -1;
         }
-        if (n == 0) return -1;
+        if (n == 0) {
+            errno = 0;
+            return -1;
+        }
         p += n;
         len -= (size_t)n;
     }
@@ -314,9 +236,15 @@ static int send_frame(int fd, const frame_t* f) {
     pthread_mutex_lock(&g_sock_write);
     int rc = 0;
     if (write_all(fd, hdr, sizeof(hdr)) != 0) {
+        LOG_WARN(LOG_MODULE, "send header failed fd=%d type=0x%04x len=%u err=%s",
+                 fd, f->type, f->len, strerror(errno));
         rc = -1;
     } else if (f->len > 0 && f->payload) {
-        if (write_all(fd, f->payload, f->len) != 0) rc = -1;
+        if (write_all(fd, f->payload, f->len) != 0) {
+            LOG_WARN(LOG_MODULE, "send payload failed fd=%d type=0x%04x len=%u err=%s",
+                     fd, f->type, f->len, strerror(errno));
+            rc = -1;
+        }
     }
     pthread_mutex_unlock(&g_sock_write);
     return rc;
@@ -375,12 +303,11 @@ bool bus_is_connected(void) {
 }
 
 /* ============================================================
- * bus_send — sticky cache update + lock-free ring enqueue.
+ * bus_send — sticky cache update + mutex-backed ring enqueue.
  *
  * Sticky cache + tx_seq update happens under g_lock (rare-ish path,
- * needs frame_dup heap allocation).  Ring enqueue is lock-free:
- * producers compete only via CAS on g_ring_tail, no mutex contention
- * between producer threads on the hot path.
+ * needs frame_dup heap allocation).  The ring enqueue is under g_lock
+ * by design for MU1316/QNX reliability.
  * ============================================================ */
 hook_result_t bus_send(uint16_t type, uint8_t flags,
                        const uint8_t* payload, uint32_t len) {
@@ -406,7 +333,6 @@ hook_result_t bus_send(uint16_t type, uint8_t flags,
      * uncontended on the producer hot path (only sticky-flagged sends
      * reach the cache copy). */
     type_slot_t* s = slot_for(type);
-    bool any_publish = false;
     uint32_t my_seq;
 
     pthread_mutex_lock(&g_lock);
@@ -417,36 +343,17 @@ hook_result_t bus_send(uint16_t type, uint8_t flags,
         if (s->has_last) frame_dispose(&s->last);
         if (frame_dup(&s->last, &f) == HOOK_OK) {
             s->has_last = true;
-            any_publish = true;
         }
+    }
+
+    hook_result_t enq = q_enqueue_nolock(&f);
+    if (enq == HOOK_OK) {
+        pthread_cond_signal(&g_cond);
+    } else {
+        if (g_tx_seq == my_seq + 1) g_tx_seq--;
     }
     pthread_mutex_unlock(&g_lock);
 
-    /* Lock-free ring enqueue.  On success ownership of f.payload moves
-     * to the slot; on failure we still own and must free. */
-    hook_result_t enq = ring_try_enqueue(&f);
-    if (enq == HOOK_OK) {
-        any_publish = true;
-        f.payload = NULL;                     /* moved into ring */
-
-        /* Wake the writer.  Briefly take g_lock just to signal cond;
-         * ring access stays lock-free.  cond_signal is safe here. */
-        pthread_mutex_lock(&g_lock);
-        pthread_cond_signal(&g_cond);
-        pthread_mutex_unlock(&g_lock);
-    }
-
-    /* Rollback the unused seq if neither sticky cache nor ring took the
-     * frame.  Done under g_lock; only safe if nothing else observed
-     * my_seq (i.e., we're still the most recent allocator). */
-    if (!any_publish) {
-        pthread_mutex_lock(&g_lock);
-        if (g_tx_seq == my_seq + 1) g_tx_seq--;
-        pthread_mutex_unlock(&g_lock);
-    }
-
-    /* Free local payload if ring didn't take it.  When sticky cache
-     * took a copy via frame_dup, our local payload is still ours. */
     if (f.payload) free(f.payload);
 
     if (enq != HOOK_OK) {
@@ -512,79 +419,15 @@ static void send_sync_snapshot(int fd) {
     }
     pthread_mutex_unlock(&g_lock);
 
-    /* Send outside the lock.  Network failure here is non-fatal:
-     * reader_main will close the fd and exit on the next IOException. */
+    LOG_INFO(LOG_MODULE, "sending snapshot fd=%d count=%d", fd, snapshot_count);
     send_frame(fd, &begin);
     for (i = 0; i < snapshot_count; i++) {
         send_frame(fd, &snapshot[i]);
         frame_dispose(&snapshot[i]);
     }
     send_frame(fd, &end);
+    LOG_INFO(LOG_MODULE, "snapshot sent fd=%d", fd);
     free(snapshot);
-}
-
-/* ============================================================
- * Reader thread - parses inbound frames from g_client_fd.
- * Lives per-connection; exits when client closes.
- * ============================================================ */
-static void* reader_main(void* arg) {
-    int fd = (int)(intptr_t)arg;
-    LOG_INFO(LOG_MODULE, "reader thread started fd=%d", fd);
-
-    for (;;) {
-        uint8_t hdr[BUS_HEADER_SIZE];
-        if (read_all(fd, hdr, sizeof(hdr)) != 0) break;
-
-        uint32_t magic = read_be32(hdr + 0);
-        if (magic != BUS_MAGIC) {
-            LOG_WARN(LOG_MODULE, "bad magic 0x%08x, closing", magic);
-            break;
-        }
-        uint32_t seq = read_be32(hdr + 4);
-        uint16_t type = read_be16(hdr + 8);
-        uint8_t  flags = hdr[10];
-        uint32_t len = read_be32(hdr + 12);
-
-        if (len > BUS_MAX_PAYLOAD) {
-            LOG_WARN(LOG_MODULE, "oversize frame type=0x%04x len=%u", type, len);
-            break;
-        }
-
-        uint8_t* payload = NULL;
-        if (len > 0) {
-            payload = (uint8_t*)malloc(len);
-            if (!payload || read_all(fd, payload, len) != 0) {
-                free(payload);
-                break;
-            }
-        }
-
-        (void)seq;
-
-        /* Internal commands handled here; everything else is dispatched. */
-        if (type == CMD_SYNC_REQ) {
-            send_sync_snapshot(fd);
-        } else if (type == CMD_PING) {
-            /* Echo PING payload back as PONG for round-trip test. */
-            bus_send(EVT_PONG, 0, payload, len);
-        } else {
-            dispatch_inbound(type, flags, payload, len);
-        }
-
-        free(payload);
-    }
-
-    LOG_INFO(LOG_MODULE, "reader thread exiting fd=%d", fd);
-
-    pthread_mutex_lock(&g_lock);
-    if (g_client_fd == fd) {
-        close(g_client_fd);
-        g_client_fd = -1;
-    }
-    g_reader_up = false;
-    pthread_cond_broadcast(&g_cond);
-    pthread_mutex_unlock(&g_lock);
-    return NULL;
 }
 
 /* ============================================================
@@ -598,23 +441,14 @@ static void* writer_main(void* arg) {
         frame_t f;
         int fd;
 
-        /* Wait until something might be available.  We can't atomically
-         * check "ring has data AND fd connected" without g_lock, so we
-         * use cond_wait under g_lock with the approx ring-empty check.
-         * Spurious wakeups are fine — we always re-check ring_try_dequeue
-         * outside the lock. */
         pthread_mutex_lock(&g_lock);
-        while (!g_shutdown && (ring_is_empty_approx() || g_client_fd < 0)) {
+        while (!g_shutdown && (q_is_empty() || g_client_fd < 0)) {
             pthread_cond_wait(&g_cond, &g_lock);
         }
         if (g_shutdown) { pthread_mutex_unlock(&g_lock); break; }
+        if (!q_dequeue_nolock(&f)) { pthread_mutex_unlock(&g_lock); continue; }
         fd = g_client_fd;
         pthread_mutex_unlock(&g_lock);
-
-        /* Lock-free dequeue outside the mutex.  May return false if the
-         * ring became empty between the empty-check above and now (e.g.,
-         * spurious wakeup); that's fine — the loop just goes back to wait. */
-        if (!ring_try_dequeue(&f)) continue;
 
         if (fd >= 0 && send_frame(fd, &f) != 0) {
             LOG_WARN(LOG_MODULE, "send failed fd=%d type=0x%04x err=%s", fd, f.type, strerror(errno));
@@ -622,6 +456,7 @@ static void* writer_main(void* arg) {
             if (g_client_fd == fd) {
                 close(g_client_fd);
                 g_client_fd = -1;
+                pthread_cond_broadcast(&g_cond);
             }
             pthread_mutex_unlock(&g_lock);
         }
@@ -658,6 +493,48 @@ static int try_connect_once(void) {
     return fd;
 }
 
+static bool socket_peer_closed(int fd) {
+    fd_set rfds;
+    struct timeval tv;
+    FD_ZERO(&rfds);
+    FD_SET(fd, &rfds);
+    tv.tv_sec = 1;
+    tv.tv_usec = 0;
+
+    int rc = select(fd + 1, &rfds, NULL, NULL, &tv);
+    if (rc <= 0) return false;               /* timeout or EINTR: no verdict */
+    if (!FD_ISSET(fd, &rfds)) return false;
+
+    char b;
+    ssize_t n = recv(fd, &b, 1, MSG_PEEK);
+    if (n == 0) {
+        LOG_INFO(LOG_MODULE, "peer closed fd=%d", fd);
+        return true;
+    }
+    if (n < 0 && errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK) {
+        LOG_INFO(LOG_MODULE, "peer read probe failed fd=%d err=%s", fd, strerror(errno));
+        return true;
+    }
+    if (n > 0) {
+        /* Java should not send on the one-way bus.  Drain and ignore so
+         * an accidental byte doesn't make select() spin forever. */
+        (void)recv(fd, &b, 1, 0);
+        LOG_WARN(LOG_MODULE, "unexpected inbound byte on one-way bus fd=%d", fd);
+    }
+    return false;
+}
+
+static void close_current_fd_if_matches(int fd, const char* reason) {
+    pthread_mutex_lock(&g_lock);
+    if (g_client_fd == fd) {
+        LOG_INFO(LOG_MODULE, "closing fd=%d (%s)", fd, reason ? reason : "disconnect");
+        close(g_client_fd);
+        g_client_fd = -1;
+        pthread_cond_broadcast(&g_cond);
+    }
+    pthread_mutex_unlock(&g_lock);
+}
+
 static void* connector_main(void* arg) {
     (void)arg;
     LOG_INFO(LOG_MODULE, "connector thread started -> %s:%d", BUS_TCP_HOST, BUS_TCP_PORT);
@@ -686,6 +563,33 @@ static void* connector_main(void* arg) {
 
         LOG_INFO(LOG_MODULE, "connected to Java server fd=%d", fd);
 
+        /* Send HELLO directly before exposing the fd to the async writer.
+         * The previous path used bus_send(), which made the first bytes on
+         * a fresh socket depend on the ring queue + writer thread.  These
+         * logs showed the process disappearing before the reader marker, so
+         * keep the handshake synchronous and diagnosable. */
+        const char hello[] = "ver:n:1\nproto:s:carplay_bus\n";
+        frame_t hello_frame;
+        memset(&hello_frame, 0, sizeof(hello_frame));
+        hello_frame.type = EVT_HELLO;
+        hello_frame.flags = 0;
+        hello_frame.len = sizeof(hello) - 1;
+        hello_frame.payload = (uint8_t*)hello;
+
+        pthread_mutex_lock(&g_lock);
+        hello_frame.seq = g_tx_seq++;
+        pthread_mutex_unlock(&g_lock);
+
+        LOG_INFO(LOG_MODULE, "sending direct HELLO fd=%d seq=%u", fd, hello_frame.seq);
+        if (send_frame(fd, &hello_frame) != 0) {
+            LOG_WARN(LOG_MODULE, "direct HELLO failed fd=%d err=%s", fd, strerror(errno));
+            close(fd);
+            continue;
+        }
+        LOG_INFO(LOG_MODULE, "direct HELLO sent fd=%d", fd);
+
+        send_sync_snapshot(fd);
+
         /* Replace any stale fd (shouldn't exist but defensive). */
         pthread_mutex_lock(&g_lock);
         if (g_client_fd >= 0) {
@@ -695,35 +599,21 @@ static void* connector_main(void* arg) {
         pthread_cond_broadcast(&g_cond);
         pthread_mutex_unlock(&g_lock);
 
-        /* Send HELLO so Java side knows we're up. */
-        const char hello[] = "ver:n:1\nproto:s:carplay_bus\n";
-        bus_send(EVT_HELLO, 0, (const uint8_t*)hello, sizeof(hello) - 1);
-
-        /* Spawn reader. */
-        pthread_t t;
-        g_reader_up = true;
-        if (pthread_create(&t, NULL, reader_main, (void*)(intptr_t)fd) != 0) {
-            LOG_ERROR(LOG_MODULE, "reader pthread_create failed");
+        while (!g_shutdown) {
+            bool still_current;
             pthread_mutex_lock(&g_lock);
-            close(g_client_fd);
-            g_client_fd = -1;
+            still_current = (g_client_fd == fd);
             pthread_mutex_unlock(&g_lock);
-            g_reader_up = false;
-            continue;
-        }
-        g_reader_tid = t;
-        pthread_detach(t);
+            if (!still_current) break;
 
-        /* Wait for reader to exit (Java disconnected or read error).
-         * Reader sets g_reader_up=false + broadcasts g_cond on exit. */
-        pthread_mutex_lock(&g_lock);
-        while (g_reader_up && !g_shutdown) {
-            pthread_cond_wait(&g_cond, &g_lock);
+            if (socket_peer_closed(fd)) {
+                close_current_fd_if_matches(fd, "peer closed");
+                break;
+            }
         }
-        pthread_mutex_unlock(&g_lock);
 
         if (!g_shutdown) {
-            LOG_INFO(LOG_MODULE, "reader exited; will reconnect");
+            LOG_INFO(LOG_MODULE, "disconnect detected; will reconnect");
         }
     }
 
@@ -733,12 +623,7 @@ static void* connector_main(void* arg) {
 }
 
 /* ============================================================
- * Heartbeat thread - sends EVT_PONG every 1 s while connected.
- *
- * Java side has SO_TIMEOUT = 5 s on the accepted socket; if no
- * inbound for 5 s the Java reader exits and the bus reconnects.
- * That's how Java detects force-killed dio_manager whose TCP
- * state may not get cleaned up promptly by the kernel.
+ * Timer thread - runs optional local 1 Hz tick.
  *
  * Also drives `bus_set_periodic_tick()` callback at 1 Hz — lets other
  * modules (e.g., RGD debounce flush) piggyback without spawning their
@@ -750,44 +635,71 @@ void bus_set_periodic_tick(bus_tick_cb_t cb) {
     g_tick_cb = cb;
 }
 
-static void* heartbeat_main(void* arg) {
+static void* timer_main(void* arg) {
     (void)arg;
-    LOG_INFO(LOG_MODULE, "heartbeat thread started (1 s interval)");
+    LOG_INFO(LOG_MODULE, "timer thread started (1 s interval)");
     while (!g_shutdown) {
         usleep(1000 * 1000);   /* 1 second */
         if (g_shutdown) break;
 
-        /* Fire registered periodic tick.  Callback runs on heartbeat
+        /* Fire registered periodic tick.  Callback runs on timer
          * thread; expected to be cheap (no blocking I/O). */
         bus_tick_cb_t cb = g_tick_cb;
         if (cb) cb();
 
-        /* Only send when actually connected — otherwise queue grows
-         * unbounded while waiting for first connect. */
-        bool connected;
-        pthread_mutex_lock(&g_lock);
-        connected = (g_client_fd >= 0);
-        pthread_mutex_unlock(&g_lock);
-        if (connected) {
-            bus_send(EVT_PONG, 0, NULL, 0);   /* empty payload */
-        }
     }
-    g_heartbeat_up = false;
-    LOG_INFO(LOG_MODULE, "heartbeat thread exiting");
+    g_timer_up = false;
+    LOG_INFO(LOG_MODULE, "timer thread exiting");
     return NULL;
 }
 
 /* ============================================================
  * Lifecycle
  * ============================================================ */
+/* Crash diagnostic — log which signal killed the process before it dies.
+ * Whole-process termination during bus init shows as the connector's
+ * "connected to Java server" being the last log; this handler captures
+ * what signal arrived between then and any other outbound log. */
+static void bus_crash_handler(int sig) {
+    LOG_ERROR(LOG_MODULE, "FATAL: signal %d caught in dio_manager", sig);
+    /* Restore default disposition and re-raise so cores still drop. */
+    signal(sig, SIG_DFL);
+    raise(sig);
+}
+
 hook_result_t bus_init(void) {
-    if (g_connector_up || g_writer_up) return HOOK_ERR_BUSY;
+    if (g_connector_up || g_writer_up || g_timer_up) return HOOK_ERR_BUSY;
+
+    /* A peer reset during initial sync must not terminate dio_manager.
+     * write_all() also uses MSG_NOSIGNAL where the platform exposes it,
+     * but ignoring SIGPIPE covers QNX/libsocket variants too. */
+    signal(SIGPIPE, SIG_IGN);
+
+    /* Diagnostic: catch fatal signals so we know which one kills us.
+     * SIGKILL cannot be caught; everything else logs before re-raising.
+     * If process dies silently with none of these firing → SIGKILL from
+     * outside (procmgr / watchdog / supervisor). */
+    signal(SIGSEGV, bus_crash_handler);
+    signal(SIGBUS,  bus_crash_handler);
+    signal(SIGABRT, bus_crash_handler);
+    signal(SIGILL,  bus_crash_handler);
+    signal(SIGFPE,  bus_crash_handler);
+    signal(SIGTERM, bus_crash_handler);
+    signal(SIGINT,  bus_crash_handler);
+    signal(SIGHUP,  bus_crash_handler);
+    signal(SIGUSR1, bus_crash_handler);
+    signal(SIGUSR2, bus_crash_handler);
+    signal(SIGQUIT, bus_crash_handler);
 
     /* Do NOT memset g_types here: modules may have called bus_on()
      * from their own __constructor before bus_init ran (constructor
      * order is unspecified across object files).  BSS zero-init
      * already guarantees clean initial state. */
-    ring_init();
+    pthread_mutex_lock(&g_lock);
+    g_ring_head = 0;
+    g_ring_tail = 0;
+    g_ring_count = 0;
+    pthread_mutex_unlock(&g_lock);
     g_tx_seq = 1;
     g_shutdown = false;
 
@@ -808,14 +720,13 @@ hook_result_t bus_init(void) {
     }
     pthread_detach(g_writer_tid);
 
-    g_heartbeat_up = true;
-    if (pthread_create(&g_heartbeat_tid, NULL, heartbeat_main, NULL) != 0) {
-        LOG_ERROR(LOG_MODULE, "heartbeat pthread_create failed");
-        g_heartbeat_up = false;
-        /* Non-fatal: bus still works without heartbeat (Java falls back to
-         * natural-traffic timeout, but force-kill detection is degraded). */
+    g_timer_up = true;
+    if (pthread_create(&g_timer_tid, NULL, timer_main, NULL) != 0) {
+        LOG_ERROR(LOG_MODULE, "timer pthread_create failed");
+        g_timer_up = false;
+        /* Non-fatal: bus still works; only route debounce tick is degraded. */
     } else {
-        pthread_detach(g_heartbeat_tid);
+        pthread_detach(g_timer_tid);
     }
 
     LOG_INFO(LOG_MODULE, "bus initialised on %s:%d", BUS_TCP_HOST, BUS_TCP_PORT);
@@ -831,24 +742,17 @@ void bus_shutdown(void) {
         close(g_client_fd);
         g_client_fd = -1;
     }
-    pthread_cond_broadcast(&g_cond);
-    pthread_mutex_unlock(&g_lock);
-
-    /* Drain queue (lock-free dequeue; we're past the point where
-     * other producers are still firing). */
-    {
+    while (!q_is_empty()) {
         frame_t f;
-        while (ring_try_dequeue(&f)) {
-            frame_dispose(&f);
-        }
+        q_dequeue_nolock(&f);
+        frame_dispose(&f);
     }
-
-    pthread_mutex_lock(&g_lock);
     int i;
     for (i = 0; i < MAX_TYPES; i++) {
         if (g_types[i].has_last) frame_dispose(&g_types[i].last);
         g_types[i].has_last = false;
     }
+    pthread_cond_broadcast(&g_cond);
     pthread_mutex_unlock(&g_lock);
 
     LOG_INFO(LOG_MODULE, "bus shutdown complete");
@@ -898,7 +802,7 @@ static void bt_append(bus_text_builder_t* b, const char* s, size_t n) {
  * separated key:type:value records, so any \n or \r in the value would
  * end the record early and forge a new key on the parser side.  iOS can
  * hand us road names / descriptions with arbitrary characters, so we
- * replace any byte < 0x20 with a space, matching the old PPS writer.
+ * replace any byte < 0x20 with a space, matching the old text writer.
  * UTF-8 multibyte sequences and ordinary punctuation pass through. */
 static void bt_append_sanitized(bus_text_builder_t* b, const char* s) {
     if (!s) return;

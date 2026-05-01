@@ -1123,7 +1123,10 @@ public class BAPBridge {
             for (int i = 0; i < out; i++) arr[i] = tmp[i];
         }
 
-        traceBap("updateLaneGuidance", "real,count=" + out + ",slot=" + idx);
+        traceBap("updateLaneGuidance", "real,count=" + out
+            + ",slot=" + idx
+            + ",current=" + s.laneGuidanceIndex
+            + ",mapped=" + s.laneGuidanceSlot);
         appConnectorNavi.updateLaneGuidance(true, arr);
     }
 
@@ -1153,10 +1156,23 @@ public class BAPBridge {
     }
 
     private static int resolveLaneGuidanceManeuverIndex(RouteGuidance.State s) {
-        /* Only resolve lane data for the CURRENT maneuver (primary) or its
-         * directly linked lane slot.  MHI3 does a direct map lookup by
-         * maneuver index — never scans other maneuvers.  Scanning caused
-         * stale lane data from a previous maneuver to be picked up. */
+        /* iOS exposes the currently displayed lane guidance as a top-level
+         * currentLaneGuidanceIndex.  The C hook remaps that raw iOS index to
+         * lane_guidance_slot because Java only sees bounded cache slots. */
+        if (s.laneGuidanceSlot >= 0) {
+            return s.laneGuidanceSlot;
+        }
+
+        /* Compatibility with older hooks where raw iOS indexes still matched
+         * cache slots at route start.  Do not use this once indexes exceed the
+         * Java slot array. */
+        int current = s.laneGuidanceIndex;
+        int max = (s.mLaneCount != null) ? s.mLaneCount.length : 0;
+        if (current >= 0 && current < max) {
+            return current;
+        }
+
+        /* Fallback for route snapshots that predate lane_guidance_slot. */
         int primary = getFirstManeuverIndex(s);
         if (hasLaneGuidanceForManeuver(s, primary)) {
             return primary;
@@ -1418,6 +1434,11 @@ public class BAPBridge {
              * connect immediately without re-bind delay. */
             if (rendererClient == null) {
                 rendererClient = new RendererServer();
+                rendererClient.setDeathListener(new RendererServer.DeathListener() {
+                    public void onRendererDied(String reason) {
+                        handleRendererDied(reason);
+                    }
+                });
             }
             if (!rendererClient.connect()) {
                 Log.w(TAG, "CR: bind failed; renderer pipeline may not work");
@@ -1514,6 +1535,34 @@ public class BAPBridge {
             Log.i(TAG, "CR: respawn complete (state will resync on next iAP2 update)");
         } catch (Throwable t) {
             Log.e(TAG, "CR respawn failed", t);
+        }
+    }
+
+    private void handleRendererDied(String reason) {
+        Log.w(TAG, "CR: renderer died (" + reason + "), killing process");
+        try {
+            de.audi.atip.util.CommandLineExecuter.executeCommand(
+                "/bin/sh", new String[] { "-c", CR_KILL_CMD });
+        } catch (Throwable t) {
+            Log.w(TAG, "CR: kill after death failed: " + t.getMessage());
+        }
+
+        if (!customRendererStarted) return;
+        long now = System.currentTimeMillis();
+        if (now - crLastRespawnMs < CR_RESPAWN_COOLDOWN_MS) return;
+        crLastRespawnMs = now;
+
+        try {
+            customRendererStarted = false;
+            lastCrIcon = -1;
+            lastCrDirection = -99;
+            lastCrExitAngle = -9999;
+            lastCrDrivingSide = -1;
+            lastCrVer = -1;
+            startCustomRenderer();
+            Log.i(TAG, "CR: respawned after renderer death");
+        } catch (Throwable t) {
+            Log.e(TAG, "CR death respawn failed", t);
         }
     }
 

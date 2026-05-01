@@ -32,6 +32,10 @@ void platform_get_framebuffer_size(int *width, int *height);
  * On macOS this returns the protocol defaults. */
 void platform_get_routing_ids(int *display_id, int *context_id, int *displayable_id);
 
+/* Ensure the renderer context is active on the target display.
+ * QNX uses dmdt gs/sc; other platforms no-op. */
+void platform_ensure_focus(void);
+
 /* Key codes for test navigation */
 #define CR_KEY_LEFT   0
 #define CR_KEY_RIGHT  1

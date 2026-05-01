@@ -1,25 +1,10 @@
 /*
- * CarPlay Hook Bus - Java client
+ * CarPlay Hook Bus - Java server
  *
- * Full-duplex TCP bus to libcarplay_hook.so (hook = server on 127.0.0.1:19810).
- * Replaces PPS-file polling for every hook<->Java channel.  See bus_protocol.h
- * for wire format.
- *
- * Usage:
- *   CarplayBus.getInstance().start();
- *   CarplayBus.getInstance().on(EVT_COVERART, new CarplayBus.Listener() {
- *       public void onFrame(int type, int flags, byte[] payload, int len) {
- *           ...parse text or binary payload...
- *       }
- *   });
- *   CarplayBus.getInstance().sendText(CMD_CURSOR_POS, 0, payloadText);
- *
- * Threading:
- *   - single I/O thread handles socket connect, frame read, dispatch.
- *   - listener callbacks run on the I/O thread; keep them short or hand off
- *     to another executor.
- *   - send() is non-blocking: enqueues and wakes the I/O thread.  On reconnect
- *     the queue is flushed (hook will also replay sticky state after CMD_SYNC_REQ).
+ * One-way TCP event stream from libcarplay_hook.so to Java.
+ * Java is the long-lived server on 127.0.0.1:19810; the hook is the
+ * short-lived client inside dio_manager.  Touchpad input stays entirely
+ * in the Java/DSI path and does not use this socket.
  *
  * Java 1.2 compatible: no generics, no lambdas, no try-with-resources.
  */
@@ -28,7 +13,6 @@ package com.luka.carplay.framework;
 
 import java.io.DataInputStream;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
@@ -38,46 +22,32 @@ public class CarplayBus {
 
     private static final String TAG = "CarplayBus";
 
-    /* ============================================================
-     * Protocol constants - keep in sync with bus_protocol.h
-     * ============================================================ */
     public static final String HOST = "127.0.0.1";
     public static final int    PORT = 19810;
     public static final int    MAGIC = 0x43504842;
     public static final int    HEADER_SIZE = 16;
     public static final int    MAX_PAYLOAD = 128 * 1024;
 
-    /* Flags */
     public static final int FLAG_STICKY  = 0x01;
     public static final int FLAG_BINARY  = 0x02;
     public static final int FLAG_REPLAY  = 0x04;
 
-    /* Event types (Hook -> Java) */
     public static final int EVT_HELLO       = 0x0001;
     public static final int EVT_SYNC_BEGIN  = 0x0002;
     public static final int EVT_SYNC_END    = 0x0003;
-    public static final int EVT_PONG        = 0x0004;
+    public static final int EVT_PONG        = 0x0004;  /* legacy/debug only */
     public static final int EVT_COVERART    = 0x0010;
     public static final int EVT_RGD_UPDATE  = 0x0020;
     public static final int EVT_DEVICE_STATE= 0x0030;
 
-    /* Command types (Java -> Hook) */
+    /* Legacy constants kept so old debug callers still compile. */
     public static final int CMD_SYNC_REQ    = 0x0100;
     public static final int CMD_PING        = 0x0101;
 
-    /* ============================================================
-     * Listener callback
-     * ============================================================ */
     public interface Listener {
         void onFrame(int type, int flags, byte[] payload, int len);
     }
 
-    /* ============================================================
-     * Text payload parser (PPS-style key:type:value)
-     *
-     * Identical to the legacy PPS.Data class so consumers can drop in
-     * CarplayBus.parseText() wherever they previously used PPS.Data.
-     * ============================================================ */
     public static class Data {
         private static final int MAX = 512;
         private String[] keys = new String[MAX];
@@ -163,7 +133,6 @@ public class CarplayBus {
         public int size() { return count; }
     }
 
-    /** Parse a text payload (PPS-style key:type:value lines).  Discards @header lines. */
     public static Data parseText(byte[] buf, int len) {
         Data d = new Data();
         if (buf == null || len <= 0) return d;
@@ -187,48 +156,20 @@ public class CarplayBus {
         return d;
     }
 
-    /* ============================================================
-     * Singleton
-     * ============================================================ */
     private static final CarplayBus INSTANCE = new CarplayBus();
     public static CarplayBus getInstance() { return INSTANCE; }
     private CarplayBus() {}
 
-    /* ============================================================
-     * State
-     * ============================================================ */
     private final Object lock = new Object();
     private volatile boolean running;
-    private Thread ioThread;             /* accept loop (one-at-a-time, force-replace) */
-    private ServerSocket serverSocket;   /* listens on PORT, accepts hook clients */
-    private Socket sock;                 /* current accepted client (one at a time) */
+    private Thread ioThread;
+    private ServerSocket serverSocket;
+    private Socket sock;
     private InputStream in;
-    private OutputStream out;
-    private int txSeq = 1;
 
-    /* Hook sends EVT_PONG unconditionally every 1 s as a heartbeat.
-     * We set a 5 s SO_TIMEOUT on the accepted socket; if no inbound
-     * traffic (any frame) within that window, readFully throws
-     * SocketTimeoutException, the reader exits, and ioLoop re-accepts.
-     * Catches force-killed dio_manager whose TCP state may linger
-     * past kernel cleanup. */
-    private static final int SOCKET_READ_TIMEOUT_MS = 5000;
-
-    /* Listener table: direct-indexed by type.  Must cover the full
-     * protocol range (see bus_protocol.h; currently through 0x02FF).
-     * Out-of-range types are rejected by on()/dispatch to avoid silent
-     * collisions. */
     private static final int MAX_TYPES = 0x0400;
     private final Listener[] listeners = new Listener[MAX_TYPES];
 
-    /* Send queue (synchronized).  Frames are opaque byte arrays
-     * already header-prefixed by enqueueing thread. */
-    private byte[][] sendQueue = new byte[64][];
-    private int sendHead = 0, sendTail = 0, sendCount = 0;
-
-    /* ============================================================
-     * Public API
-     * ============================================================ */
     public void start() {
         synchronized (lock) {
             if (running) return;
@@ -247,7 +188,6 @@ public class CarplayBus {
             if (!running) return;
             running = false;
             closeConnectionLocked("stopping");
-            /* Close listen socket so blocked accept() unblocks with IOException. */
             if (serverSocket != null) {
                 try { serverSocket.close(); } catch (Exception e) {}
             }
@@ -260,38 +200,8 @@ public class CarplayBus {
         Log.i(TAG, "CarplayBus stopped");
     }
 
-    /**
-     * Block up to {@code timeoutMs} until the outbound queue has drained.
-     *
-     * Necessary before a graceful stop() when the caller has just enqueued
-     * teardown frames (e.g. CMD_CURSOR_HIDE) — stop() nukes sendQueue[]
-     * inside closeConnectionLocked(), so any frame still sitting in the
-     * queue when stop() runs is lost.  A short post-drain sleep lets the
-     * writer's last socket.flush() settle the bytes into the kernel
-     * buffer; 20 ms is ample for localhost TCP.
-     *
-     * Returns silently on timeout or interrupt.  Callers should treat
-     * this as best-effort: pathological socket stalls cannot be
-     * recovered here.
-     */
     public void flush(long timeoutMs) {
-        long deadline = System.currentTimeMillis() + timeoutMs;
-        while (System.currentTimeMillis() < deadline) {
-            int pending;
-            synchronized (lock) { pending = sendCount; }
-            if (pending == 0) {
-                try { Thread.sleep(20); } catch (InterruptedException e) {}
-                return;
-            }
-            try { Thread.sleep(10); }
-            catch (InterruptedException e) { return; }
-        }
-        int leftover;
-        synchronized (lock) { leftover = sendCount; }
-        if (leftover > 0) {
-            Log.w(TAG, "flush: timeout after " + timeoutMs + "ms, "
-                     + leftover + " frame(s) still queued — will be discarded");
-        }
+        /* One-way bus: Java has no outbound queue. */
     }
 
     public boolean isConnected() {
@@ -300,112 +210,31 @@ public class CarplayBus {
         }
     }
 
-    /** Register a listener for a given type. Overwrites previous. */
     public void on(int type, Listener listener) {
         if (type < 0 || type >= MAX_TYPES) {
             Log.w(TAG, "on: type 0x" + Integer.toHexString(type) + " out of range");
             return;
         }
-        synchronized (lock) {
-            listeners[type] = listener;
-        }
+        synchronized (lock) { listeners[type] = listener; }
     }
 
     public void off(int type) {
         if (type < 0 || type >= MAX_TYPES) return;
-        synchronized (lock) {
-            listeners[type] = null;
-        }
+        synchronized (lock) { listeners[type] = null; }
     }
 
-    /** Send a frame with binary payload. */
     public void send(int type, int flags, byte[] payload, int len) {
-        if (len < 0 || len > MAX_PAYLOAD) {
-            Log.w(TAG, "send: bad length " + len + " for type 0x" + Integer.toHexString(type));
-            return;
-        }
-        byte[] frame = new byte[HEADER_SIZE + len];
-        int seq;
-        synchronized (lock) {
-            seq = txSeq++;
-        }
-        putBE32(frame, 0, MAGIC);
-        putBE32(frame, 4, seq);
-        putBE16(frame, 8, type);
-        frame[10] = (byte)(flags & 0xFF);
-        frame[11] = 0;
-        putBE32(frame, 12, len);
-        if (len > 0 && payload != null) {
-            System.arraycopy(payload, 0, frame, HEADER_SIZE, len);
-        }
-        enqueueFrame(frame);
+        Log.w(TAG, "send ignored on one-way bus type=0x" + Integer.toHexString(type));
     }
 
-    /** Send a frame with UTF-8 text payload.  Always clears FLAG_BINARY. */
     public void sendText(int type, int flags, String text) {
-        byte[] body;
-        try {
-            body = (text == null ? "" : text).getBytes("UTF-8");
-        } catch (Exception e) {
-            body = new byte[0];
-        }
-        send(type, flags & ~FLAG_BINARY, body, body.length);
+        send(type, flags & ~FLAG_BINARY, null, 0);
     }
 
-    /** Convenience: send an empty frame of this type. */
     public void sendBare(int type, int flags) {
         send(type, flags, null, 0);
     }
 
-    /* ============================================================
-     * Frame enqueue (lossy overflow: drop oldest)
-     * ============================================================ */
-    private void enqueueFrame(byte[] frame) {
-        synchronized (lock) {
-            if (sendCount == sendQueue.length) {
-                /* grow up to 1024, then start dropping oldest */
-                if (sendQueue.length < 1024) {
-                    byte[][] bigger = new byte[sendQueue.length * 2][];
-                    int i;
-                    for (i = 0; i < sendCount; i++) {
-                        bigger[i] = sendQueue[(sendHead + i) % sendQueue.length];
-                    }
-                    sendQueue = bigger;
-                    sendHead = 0;
-                    sendTail = sendCount;
-                } else {
-                    /* drop oldest */
-                    sendHead = (sendHead + 1) % sendQueue.length;
-                    sendCount--;
-                    Log.w(TAG, "send queue overflow, dropped oldest");
-                }
-            }
-            sendQueue[sendTail] = frame;
-            sendTail = (sendTail + 1) % sendQueue.length;
-            sendCount++;
-            lock.notifyAll();
-        }
-    }
-
-    private byte[] dequeueFrame() {
-        synchronized (lock) {
-            if (sendCount == 0) return null;
-            byte[] frame = sendQueue[sendHead];
-            sendQueue[sendHead] = null;
-            sendHead = (sendHead + 1) % sendQueue.length;
-            sendCount--;
-            return frame;
-        }
-    }
-
-    /* ============================================================
-     * I/O thread main
-     *
-     * Java is now the TCP SERVER (long-lived).  Hook = TCP CLIENT,
-     * spawned per phone connect.  This thread opens a listen socket
-     * once, then accepts one client at a time.  When the client
-     * disconnects, loops back to accept the next.
-     * ============================================================ */
     private void ioLoop() {
         if (!openServerSocket()) {
             Log.e(TAG, "ServerSocket bind failed; bus disabled");
@@ -414,24 +243,10 @@ public class CarplayBus {
 
         while (running) {
             if (!acceptOne()) {
-                /* accept() failed (not because of shutdown) — back off briefly. */
                 sleepMs(500);
                 continue;
             }
-
-            /* CMD_SYNC_REQ already enqueued atomically inside acceptOne() —
-             * guaranteed to be the first frame on the wire. */
-
-            /* Split I/O: reader blocks on in.read, writer drains queue. */
-            Thread readerThread = new Thread(new Runnable() {
-                public void run() { readerLoop(); }
-            }, "CarplayBus-Read");
-            readerThread.setDaemon(true);
-            readerThread.start();
-
-            writerLoop();
-
-            try { readerThread.join(500); } catch (InterruptedException e) {}
+            readerLoop();
         }
 
         try { if (serverSocket != null) serverSocket.close(); }
@@ -444,13 +259,39 @@ public class CarplayBus {
             ServerSocket ss = new ServerSocket();
             ss.setReuseAddress(true);
             ss.bind(new InetSocketAddress(HOST, PORT));
-            synchronized (lock) {
-                serverSocket = ss;
-            }
+            synchronized (lock) { serverSocket = ss; }
             Log.i(TAG, "listening on " + HOST + ":" + PORT);
             return true;
         } catch (IOException e) {
             Log.e(TAG, "ServerSocket bind " + HOST + ":" + PORT + " failed: " + e.getMessage());
+            return false;
+        }
+    }
+
+    private boolean acceptOne() {
+        ServerSocket ss;
+        synchronized (lock) {
+            ss = serverSocket;
+            if (ss == null) return false;
+        }
+        try {
+            Socket s = ss.accept();
+            s.setTcpNoDelay(true);
+            s.setKeepAlive(true);
+            InputStream iin = s.getInputStream();
+
+            synchronized (lock) {
+                if (sock != null) {
+                    Log.w(TAG, "stale socket present at accept time - cleaning up before re-init");
+                }
+                closeConnectionLocked("re-accept");
+                sock = s;
+                in = iin;
+            }
+            Log.i(TAG, "hook connected from " + s.getInetAddress() + ":" + s.getPort());
+            return true;
+        } catch (IOException e) {
+            if (running) Log.w(TAG, "accept() failed: " + e.getMessage());
             return false;
         }
     }
@@ -463,6 +304,7 @@ public class CarplayBus {
             din = new DataInputStream(in);
             owned = sock;
         }
+
         byte[] hdr = new byte[HEADER_SIZE];
         while (running) {
             try {
@@ -484,49 +326,25 @@ public class CarplayBus {
                 if (len > 0) din.readFully(payload);
                 dispatch(type, flags, payload, len, seq);
             } catch (IOException e) {
-                if (running) Log.i(TAG, "reader IO closed: " + e.getMessage());
+                if (running) {
+                    String msg = e.getMessage();
+                    Log.i(TAG, "reader IO closed: "
+                            + e.getClass().getName()
+                            + (msg == null ? "" : ": " + msg));
+                }
                 break;
-            } catch (Exception e) {
-                Log.w(TAG, "reader error: " + e);
+            } catch (Throwable t) {
+                Log.w(TAG, "reader error: " + t);
                 break;
             }
         }
-        /* Close ONLY if the current socket is still ours.  Prevents
-         * a late-exiting reader from clobbering a fresh reconnect. */
+
         synchronized (lock) {
             if (sock == owned) closeConnectionLocked("reader exit");
             lock.notifyAll();
         }
     }
 
-    private void writerLoop() {
-        while (running) {
-            byte[] frame = null;
-            OutputStream o;
-            synchronized (lock) {
-                while (running && sendCount == 0 && sock != null && !sock.isClosed()) {
-                    try { lock.wait(100); } catch (InterruptedException e) {}
-                }
-                if (!running) return;
-                if (sock == null || sock.isClosed() || out == null) return;
-                frame = dequeueFrame();
-                o = out;  /* capture freshest reference under lock */
-            }
-            if (frame == null) continue;
-            try {
-                o.write(frame);
-                o.flush();
-            } catch (IOException e) {
-                Log.i(TAG, "writer IO closed: " + e.getMessage());
-                synchronized (lock) { closeConnectionLocked("writer exit"); }
-                return;
-            }
-        }
-    }
-
-    /* ============================================================
-     * Dispatch / connect helpers
-     * ============================================================ */
     private void dispatch(int type, int flags, byte[] payload, int len, int seq) {
         if (type < 0 || type >= MAX_TYPES) {
             Log.w(TAG, "dispatch: type 0x" + Integer.toHexString(type) + " out of range");
@@ -535,10 +353,6 @@ public class CarplayBus {
         Listener l;
         synchronized (lock) { l = listeners[type]; }
         if (l == null) {
-            /* Framework-internal events (heartbeat / sync markers) are
-             * handled implicitly by the reader (any frame resets the
-             * SO_TIMEOUT) — they're not expected to have user listeners.
-             * Skip the log spam. */
             if (type == EVT_PONG || type == EVT_HELLO
                 || type == EVT_SYNC_BEGIN || type == EVT_SYNC_END) return;
             Log.d(TAG, "no listener for type 0x" + Integer.toHexString(type));
@@ -551,85 +365,12 @@ public class CarplayBus {
         }
     }
 
-    private boolean acceptOne() {
-        ServerSocket ss;
-        synchronized (lock) {
-            ss = serverSocket;
-            if (ss == null) return false;
-        }
-        try {
-            Socket s = ss.accept();          /* BLOCKS until hook connects */
-            s.setTcpNoDelay(true);
-            s.setKeepAlive(true);
-            /* Read timeout = heartbeat-dead detection.  Hook posts
-             * EVT_PONG every 1 s; if no inbound for 5 s, readFully
-             * throws SocketTimeoutException and reader exits cleanly. */
-            s.setSoTimeout(SOCKET_READ_TIMEOUT_MS);
-            InputStream iin = s.getInputStream();
-            OutputStream oout = s.getOutputStream();
-
-            /* One-client-at-a-time semantics: ioLoop is single-threaded
-             * (accept blocks until current connection dies), so by the
-             * time we accept here the previous connection has usually
-             * already been cleaned up by reader/writer cleanup paths.
-             *
-             * If there's still a stale `sock` field set at this point
-             * (race between writer-exit and our accept), we force-close
-             * it before installing the new one — treating as re-init.
-             * Either way we fire CMD_SYNC_REQ so hook resends sticky state. */
-            boolean staleSockPresent;
-            synchronized (lock) {
-                staleSockPresent = (sock != null);
-                if (staleSockPresent) {
-                    Log.w(TAG, "stale socket present at accept time - cleaning up before re-init");
-                }
-                closeConnectionLocked("re-accept");   /* flushes queue, closes old sock */
-                sock = s;
-                in = iin;
-                out = oout;
-                sendBare(CMD_SYNC_REQ, 0);            /* first frame guaranteed */
-            }
-            Log.i(TAG, "hook connected from " + s.getInetAddress() + ":" + s.getPort());
-            return true;
-        } catch (IOException e) {
-            if (running) Log.w(TAG, "accept() failed: " + e.getMessage());
-            return false;
-        }
-    }
-
     private void closeConnectionLocked(String reason) {
         if (sock != null) {
             try { sock.close(); } catch (Exception e) {}
             sock = null;
         }
         in = null;
-        out = null;
-
-        /* Discard any outbound frames that accumulated on the old
-         * connection.  Cursor positions, acks, etc. are transient —
-         * replaying them against a freshly-connected hook would leak
-         * stale state.  CMD_SYNC_REQ is re-issued at the start of
-         * every new connection by ioLoop(), so nothing is lost that
-         * should survive a reconnect. */
-        for (int i = 0; i < sendQueue.length; i++) sendQueue[i] = null;
-        sendHead = 0;
-        sendTail = 0;
-        sendCount = 0;
-    }
-
-    /* ============================================================
-     * Byte helpers
-     * ============================================================ */
-    private static void putBE16(byte[] buf, int off, int v) {
-        buf[off]   = (byte)((v >> 8) & 0xFF);
-        buf[off+1] = (byte)(v & 0xFF);
-    }
-
-    private static void putBE32(byte[] buf, int off, int v) {
-        buf[off]   = (byte)((v >> 24) & 0xFF);
-        buf[off+1] = (byte)((v >> 16) & 0xFF);
-        buf[off+2] = (byte)((v >> 8) & 0xFF);
-        buf[off+3] = (byte)(v & 0xFF);
     }
 
     private static int getBE16(byte[] buf, int off) {
@@ -647,23 +388,12 @@ public class CarplayBus {
         try { Thread.sleep(ms); } catch (InterruptedException e) {}
     }
 
-    /* ============================================================
-     * Standalone echo test harness
-     *
-     *   java -cp carplay_hook.jar com.luka.carplay.framework.CarplayBus
-     *
-     * Connects to 127.0.0.1:19810, prints every inbound frame, sends a
-     * CMD_PING every 2 seconds.  Meant for quick round-trip validation
-     * of libcarplay_hook.so after deploy.
-     * ============================================================ */
     public static void main(String[] args) throws Exception {
         final CarplayBus bus = CarplayBus.getInstance();
-
         Listener dump = new Listener() {
             public void onFrame(int type, int flags, byte[] payload, int len) {
-                String kind = typeName(type);
                 System.out.println("RX type=0x" + Integer.toHexString(type)
-                        + " (" + kind + ") flags=" + flags + " len=" + len);
+                        + " (" + typeName(type) + ") flags=" + flags + " len=" + len);
                 if (len > 0 && (flags & FLAG_BINARY) == 0) {
                     try {
                         String s = new String(payload, 0, len, "UTF-8");
@@ -673,25 +403,15 @@ public class CarplayBus {
                 }
             }
         };
-
         int[] allTypes = {
             EVT_HELLO, EVT_SYNC_BEGIN, EVT_SYNC_END, EVT_PONG,
             EVT_COVERART, EVT_RGD_UPDATE, EVT_DEVICE_STATE
         };
         for (int i = 0; i < allTypes.length; i++) bus.on(allTypes[i], dump);
-
         bus.start();
-
-        int n = 0;
         while (true) {
             Thread.sleep(2000);
-            if (bus.isConnected()) {
-                String p = "ping#" + (n++) + "@" + System.currentTimeMillis();
-                bus.sendText(CMD_PING, 0, p);
-                System.out.println("TX " + p);
-            } else {
-                System.out.println("(not connected)");
-            }
+            System.out.println(bus.isConnected() ? "(connected)" : "(not connected)");
         }
     }
 

@@ -654,7 +654,7 @@ static int save_artwork(const uint8_t* data, size_t len) {
         LOG_INFO(LOG_MODULE, "Saved PNG #%d: %s (%zu bytes)",
                  g_coverart.images_found, COVERART_FILE, png_len);
 
-        /* Write PPS notification for Java watcher */
+        /* Write bus notification for Java watcher */
         write_coverart_notify(crc);
     } else {
         LOG_ERROR(LOG_MODULE, "Failed to write artwork");

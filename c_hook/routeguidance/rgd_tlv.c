@@ -403,7 +403,7 @@ void rgd_parse_update(const uint8_t* buf, size_t len, rgd_update_t* out) {
                 break;
 
             case 0x0015:
-                /* Optional non-native extension: ignore and do not publish to PPS. */
+                /* Optional non-native extension: ignore and do not publish to the bus. */
                 break;
             default:
                 LOG_WARN(LOG_MODULE, "Unknown RGD TLV (0x5201): id=0x%04X len=%u", tlv_id, tlv_len);

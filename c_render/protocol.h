@@ -64,7 +64,7 @@ typedef struct {
 #define CR_DISPLAY_ID       1   /* 0=main screen, 1=cluster (LVDS2) */
 #define CR_DEFAULT_WIDTH    328
 #define CR_DEFAULT_HEIGHT   181 /* 180px content + 1px ECC annotation row (native widget slot) */
-#define CR_TARGET_FPS       10
+#define CR_TARGET_FPS       30
 
 /* Popup crop geometry within the 328x180 content area (for debug grid only) */
 #define CR_POPUP_X      59

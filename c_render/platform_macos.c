@@ -116,6 +116,10 @@ void platform_get_routing_ids(int *display_id, int *context_id, int *displayable
     if (displayable_id) *displayable_id = CR_DISPLAYABLE_ID;
 }
 
+void platform_ensure_focus(void) {
+    /* macOS dev path: no dmdt/display-manager routing. */
+}
+
 int platform_key_tap(int key) {
     if (key < 0 || key >= CR_KEY_MAX) return 0;
     int v = g_key_taps[key];

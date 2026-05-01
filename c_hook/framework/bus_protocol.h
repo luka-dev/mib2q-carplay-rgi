@@ -20,8 +20,8 @@
  * Header is 16 bytes.  Maximum payload is 128 KB.
  *
  * Payload convention:
- *   - Default: text in QNX PPS style "key:type:value\n" repeated.
- *     Compatible with the existing PPS.java Data parser so migration of
+ *   - Default: text in "key:type:value\n" repeated format.
+ *     Compatible with the existing text Data parser so migration of
  *     RouteGuidance consumers is mechanical.  No chunking needed - TCP
  *     delivers the whole frame atomically.
  *   - With BUS_FLAG_BINARY: type-specific packed struct.  Used by cursor

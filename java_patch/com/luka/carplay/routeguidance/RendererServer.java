@@ -71,6 +71,15 @@ public class RendererServer {
      * sends are expected to fail" vs "had a working renderer that
      * just died, respawn is appropriate". */
     private volatile boolean everConnected;
+    private volatile DeathListener deathListener;
+
+    public interface DeathListener {
+        void onRendererDied(String reason);
+    }
+
+    public void setDeathListener(DeathListener listener) {
+        deathListener = listener;
+    }
 
     /**
      * Open the listen socket and start the background accept thread.
@@ -180,6 +189,8 @@ public class RendererServer {
             if (running) {
                 Log.i(TAG, "reader exit: " + e.getClass().getSimpleName()
                         + (e.getMessage() == null ? "" : " " + e.getMessage()));
+                notifyDeath(e.getClass().getSimpleName()
+                        + (e.getMessage() == null ? "" : " " + e.getMessage()));
             }
         } finally {
             synchronized (lock) {
@@ -187,6 +198,16 @@ public class RendererServer {
                     closeClientLocked();
                 }
             }
+        }
+    }
+
+    private void notifyDeath(String reason) {
+        DeathListener l = deathListener;
+        if (l == null) return;
+        try {
+            l.onRendererDied(reason);
+        } catch (Throwable t) {
+            Log.w(TAG, "death listener failed: " + t.getMessage());
         }
     }
 

@@ -197,7 +197,7 @@
  *   0 = right-hand traffic
  *   1 = left-hand traffic
  *
- * Note: this field is optional; if the TLV is missing, we don't publish the PPS key.
+ * Note: this field is optional; if the TLV is missing, we don't publish the bus key.
  */
 #define DRIVING_SIDE_RIGHT   0
 #define DRIVING_SIDE_LEFT    1
@@ -216,7 +216,7 @@
 /*
  * Exit info (MAN_TLV_EXIT_INFO) in MHI3 dio_manager is treated as a string and fed into util::UnicodeString8
  * without an explicit length (CRouteGuidanceUpdateProcessorImpl::getRouteGuidanceManeuverInformation, a1+240).
- * We keep the raw+hex preview for debugging, but also publish a decoded string key to PPS.
+ * We keep the raw+hex preview for debugging, but also publish a decoded string key to the bus.
  */
 #define RGD_EXIT_INFO_MAX   256
 
@@ -272,6 +272,7 @@ typedef struct {
     uint8_t source_supports_route_guidance;
     uint16_t maneuver_count;
     uint16_t lane_guidance_index;
+    int16_t lane_guidance_slot;  /* Bus-only remapped slot for lane_guidance_index */
     uint16_t lane_guidance_total;
     uint32_t distance_remaining;
     uint32_t dist_to_maneuver;
@@ -308,6 +309,7 @@ typedef struct {
 #define RGD_UPD_LANE_SHOWING         (1ULL << 18)
 #define RGD_UPD_SOURCE_NAME          (1ULL << 19)
 #define RGD_UPD_SOURCE_SUPPORTS_RG   (1ULL << 20)
+#define RGD_UPD_LANE_SLOT            (1ULL << 21)  /* Bus-only remapped lane slot */
 
 /* rgd_lane_guidance_t present bits */
 #define RGD_LANE_COMPONENT_IDS       (1ULL << 0)

@@ -54,6 +54,47 @@ static void restore_display(void) {
     }
 }
 
+static int read_dmdt_cluster_context(void) {
+    FILE *fp = popen("/eso/bin/apps/dmdt gs 2>/dev/null", "r");
+    if (!fp) return -1;
+
+    char line[256];
+    int display_index = -1;
+    int in_target_display = 0;
+    int ctx = -1;
+    while (fgets(line, sizeof(line), fp)) {
+        if (strstr(line, "display:")) {
+            display_index++;
+            in_target_display = strstr(line, "Cluster") != NULL
+                             || display_index == g_display_id;
+            continue;
+        }
+        if (in_target_display && strstr(line, "context id:")) {
+            char *p = strstr(line, "context id:");
+            if (p) ctx = atoi(p + 11);
+            break;
+        }
+    }
+    pclose(fp);
+    return ctx;
+}
+
+void platform_ensure_focus(void) {
+    int ctx = read_dmdt_cluster_context();
+    if (ctx == g_context_id) return;
+
+    if (ctx < 0) {
+        fprintf(stderr, "platform_qnx: dmdt focus unknown, leaving ctx=%d\n", g_context_id);
+        return;
+    }
+
+    char cmd[128];
+    fprintf(stderr, "platform_qnx: dmdt focus ctx=%d, forcing ctx=%d\n", ctx, g_context_id);
+    snprintf(cmd, sizeof(cmd), "/eso/bin/apps/dmdt sc %d %d", g_display_id, g_context_id);
+    system(cmd);
+    g_display_routed = 1;
+}
+
 static void signal_handler(int sig) {
     /* Only use async-signal-safe functions (write, signal, raise).
      * restore_display() deferred to atexit handler for clean exits;
@@ -237,6 +278,7 @@ int platform_init(int width, int height) {
         system(cmd);
         g_display_routed = 1;
     }
+    platform_ensure_focus();
 
     fprintf(stderr, "platform_qnx: eglCreateWindowSurface...\n");
     g_egl_surface = eglCreateWindowSurface(g_egl_display, config,

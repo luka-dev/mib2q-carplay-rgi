@@ -6,7 +6,7 @@
  * - Injects StartRouteGuidanceUpdates (0x5200) after auth
  * - Parses RouteGuidanceUpdate (0x5201), ManeuverUpdate (0x5202),
  *   and LaneGuidanceInformation (0x5204)
- * - Writes only fields present in each packet to PPS (stateless)
+ * - Writes only fields present in each packet to the bus (stateless)
  */
 
 #ifndef RGD_HOOK_H
@@ -37,7 +37,7 @@ hook_result_t rgd_request_updates(void);
 /* Force send 0x5203 stop */
 hook_result_t rgd_stop_updates(void);
 
-/* Clear cache and PPS */
+/* Clear cache and bus state */
 void rgd_clear_state(const char* reason);
 
 #endif /* RGD_HOOK_H */

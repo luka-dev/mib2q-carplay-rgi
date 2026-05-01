@@ -123,7 +123,7 @@ static struct {
      * iOS uses monotonically increasing maneuver indexes (can exceed small caches).
      * The MHI3 stack stores a bounded vector and drops oldest when capacity is exceeded.
      *
-     * We can't expose arbitrary-key maps through PPS easily, so we remap iOS maneuver indexes
+     * We can't expose arbitrary-key maps through the text bus easily, so we remap iOS maneuver indexes
      * to fixed slots [0..MANEUVER_CACHE_SIZE-1] and publish maneuver_list as slot order.
      */
 	    bool have_update;
@@ -146,14 +146,12 @@ static struct {
 	    uint16_t highest_list_index;  /* max iOS index ever seen in maneuver_list */
 	    /*
 	     * Per-slot maneuver data cache.
-	     * QNX PPS delta delivery can drop intermediate writes during rapid
-	     * 0x5202 bursts, causing Java to miss per-slot data.  Cache the
-	     * last 0x5202 data per slot and re-publish it inside the 0x5201
-	     * PPS write when maneuver_list is present.  This ensures Java
+	     * Cache the last 0x5202 data per slot and re-publish it inside the
+	     * 0x5201 bus snapshot when maneuver_list is present.  This ensures Java
 	     * gets slot data atomically with the maneuver_list.
 	     */
 	    rgd_maneuver_t slot_cache[MANEUVER_CACHE_SIZE];
-	    /* Last merged 0x5201 snapshot (used to make PPS writes full-state). */
+	    /* Last merged 0x5201 snapshot (used to make bus writes full-state). */
 	    rgd_update_t update_cache;
 		} g_rgd = {
     .active = false,
@@ -178,10 +176,10 @@ static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame);
 static size_t rgd_identify_patcher(hook_context_t* ctx, uint8_t* buf, size_t len, size_t max_len);
 static void rgd_state_handler(hook_context_t* ctx, int event, void* event_data);
 static void rgd_transport_handler(hook_context_t* ctx, uint16_t msgid);
-static void write_pps_update_partial(const rgd_update_t* upd);
-static void write_pps_maneuver_partial(const rgd_maneuver_t* man);
-static void write_pps_lane_guidance_partial(const rgd_lane_guidance_t* lane);
-static void write_pps_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* extra_man,
+static void write_bus_update_partial(const rgd_update_t* upd);
+static void write_bus_maneuver_partial(const rgd_maneuver_t* man);
+static void write_bus_lane_guidance_partial(const rgd_lane_guidance_t* lane);
+static void write_bus_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* extra_man,
                                           const rgd_update_t* current_upd);
 static void write_slot_data_keys(bus_text_builder_t* b, unsigned slot, const rgd_maneuver_t* man);
 static void rgd_lazy_init(void);
@@ -219,6 +217,7 @@ static void rgd_update_cache_merge(const rgd_update_t* upd) {
     }
     if (upd->present & RGD_UPD_VISIBLE_IN_APP) c->visible_in_app = upd->visible_in_app;
     if (upd->present & RGD_UPD_LANE_INDEX) c->lane_guidance_index = upd->lane_guidance_index;
+    if (upd->present & RGD_UPD_LANE_SLOT) c->lane_guidance_slot = upd->lane_guidance_slot;
     if (upd->present & RGD_UPD_LANE_TOTAL) c->lane_guidance_total = upd->lane_guidance_total;
     if (upd->present & RGD_UPD_LANE_SHOWING) c->lane_guidance_showing = upd->lane_guidance_showing;
     if (upd->present & RGD_UPD_SOURCE_NAME) memcpy(c->source_name, upd->source_name, sizeof(c->source_name));
@@ -254,6 +253,7 @@ static const uint64_t RGD_UPD_WRITE_MASK = RGD_UPD_ROUTE_STATE |
                                             RGD_UPD_DISTANCE_STRING |
                                             RGD_UPD_DIST_TO_MANEUVER_STR |
                                             RGD_UPD_LANE_INDEX |
+                                            RGD_UPD_LANE_SLOT |
                                             RGD_UPD_LANE_TOTAL |
                                             RGD_UPD_LANE_SHOWING |
                                             RGD_UPD_SOURCE_NAME |
@@ -429,17 +429,23 @@ static hook_module_def_t rgd_module_def = {
 
 /* Bus snapshot writer.  Accumulates all state into a single EVT_RGD_UPDATE
  * text frame so Java sees it atomically. */
-static void write_pps_update_partial(const rgd_update_t* upd) {
+static void write_bus_update_partial(const rgd_update_t* upd) {
     if (!upd) return;
     if (upd->present == 0) return;
     if ((upd->present & RGD_UPD_WRITE_MASK) == 0) return;
-    rgd_update_cache_merge(upd);
-    write_pps_snapshot_from_cache(-1, NULL, upd);
+    rgd_update_t enriched = *upd;
+    if (enriched.present & RGD_UPD_LANE_INDEX) {
+        int slot = rgd_slot_for_iap_index(enriched.lane_guidance_index, false);
+        enriched.present |= RGD_UPD_LANE_SLOT;
+        enriched.lane_guidance_slot = (slot >= 0) ? (int16_t)slot : (int16_t)-1;
+    }
+    rgd_update_cache_merge(&enriched);
+    write_bus_snapshot_from_cache(-1, NULL, &enriched);
 }
 
 /*
  * Append per-slot maneuver keys to the supplied text builder.
- * Called from inside write_pps_snapshot_from_cache so maneuver_list
+ * Called from inside write_bus_snapshot_from_cache so maneuver_list
  * and slot data ship in a single EVT_RGD_UPDATE frame, atomic to Java.
  */
 static void write_slot_data_keys(bus_text_builder_t* b, unsigned idx, const rgd_maneuver_t* man) {
@@ -672,7 +678,7 @@ static void rgd_backpropagate_linked_lanes(int source_slot) {
     }
 }
 
-static void write_pps_maneuver_partial(const rgd_maneuver_t* man) {
+static void write_bus_maneuver_partial(const rgd_maneuver_t* man) {
     if (!man) return;
     if (man->present == 0) return;
     if (!(man->present & RGD_MAN_INDEX)) return;
@@ -710,10 +716,10 @@ static void write_pps_maneuver_partial(const rgd_maneuver_t* man) {
         rgd_backpropagate_linked_lanes(slot);
     }
 
-    write_pps_snapshot_from_cache(slot, &g_rgd.slot_cache[slot], NULL);
+    write_bus_snapshot_from_cache(slot, &g_rgd.slot_cache[slot], NULL);
 }
 
-static void write_pps_lane_guidance_partial(const rgd_lane_guidance_t* lane) {
+static void write_bus_lane_guidance_partial(const rgd_lane_guidance_t* lane) {
     if (!lane) return;
     if ((lane->present & (RGD_LANE_GUIDANCE_INDEX | RGD_LANE_INFORMATIONS)) == 0) return;
 
@@ -773,6 +779,16 @@ static void write_pps_lane_guidance_partial(const rgd_lane_guidance_t* lane) {
         }
     }
 
+    if (iap_idx != 0xFFFF) {
+        int publish_slot = slot;
+        if (publish_slot < 0) {
+            publish_slot = rgd_slot_for_iap_index(iap_idx, false);
+        }
+        upd.present |= RGD_UPD_LANE_SLOT;
+        upd.lane_guidance_slot = (publish_slot >= 0) ? (int16_t)publish_slot : (int16_t)-1;
+        have_upd = true;
+    }
+
     if (!have_upd && !have_slot) return;
 
     if (have_upd) {
@@ -780,13 +796,13 @@ static void write_pps_lane_guidance_partial(const rgd_lane_guidance_t* lane) {
     }
 
     if (have_slot) {
-        write_pps_snapshot_from_cache(slot, &g_rgd.slot_cache[slot], have_upd ? &upd : NULL);
+        write_bus_snapshot_from_cache(slot, &g_rgd.slot_cache[slot], have_upd ? &upd : NULL);
     } else {
-        write_pps_snapshot_from_cache(-1, NULL, &upd);
+        write_bus_snapshot_from_cache(-1, NULL, &upd);
     }
 }
 
-static void write_pps_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* extra_man,
+static void write_bus_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* extra_man,
                                           const rgd_update_t* current_upd) {
     const rgd_update_t* upd = &g_rgd.update_cache;
     uint64_t present = upd->present & RGD_UPD_WRITE_MASK;
@@ -827,6 +843,8 @@ static void write_pps_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* 
         bus_text_str(b, "dist_maneuver_str", upd->dist_to_maneuver_string);
     if (present & RGD_UPD_LANE_INDEX)
         bus_text_int(b, "lane_guidance_index", upd->lane_guidance_index);
+    if (present & RGD_UPD_LANE_SLOT)
+        bus_text_int(b, "lane_guidance_slot", upd->lane_guidance_slot);
     if (present & RGD_UPD_LANE_TOTAL)
         bus_text_int(b, "lane_guidance_total", upd->lane_guidance_total);
     if (present & RGD_UPD_LANE_SHOWING)
@@ -936,7 +954,7 @@ static void write_pps_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* 
      * Extra slot (from 0x5202) that is already in the listed maneuver_list
      * was written above.  Do NOT write non-listed extra slots: Java only
      * consumes slots present in maneuver_list, and the extra data bloats
-     * the PPS payload (causing write() ENOSPC on small ramdisks).
+     * the bus payload.
      * The cached slot data will be included automatically when the next
      * 0x5201 adds the slot to maneuver_list.
      */
@@ -1064,7 +1082,7 @@ static void rgd_log_raw_packet(const char* label, const uint8_t* data, size_t le
 
 /* Message handler - incoming 0x5201/0x5202/0x5204 */
 static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) {
-    rgd_lazy_init();  /* Ensure PPS is open */
+    rgd_lazy_init();  /* Ensure bus/session state is ready */
 
     if (frame->msgid == IAP2_MSG_ROUTE_GUIDANCE_UPDATE) {
         if (!g_rgd.got_520x) {
@@ -1149,7 +1167,7 @@ static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) 
             }
             pthread_mutex_unlock(&g_rgd_debounce_lock);
         }
-        write_pps_update_partial(&upd);
+        write_bus_update_partial(&upd);
     }
     else if (frame->msgid == IAP2_MSG_ROUTE_GUIDANCE_MANEUVER) {
         if (!g_rgd.got_520x) {
@@ -1166,7 +1184,7 @@ static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) 
 
         LOG_INFO(LOG_MODULE, "Maneuver: idx=%u type=%u desc=\"%s\"",
                  man.index, man.maneuver_type, man.description);
-        write_pps_maneuver_partial(&man);
+        write_bus_maneuver_partial(&man);
     }
     else if (frame->msgid == IAP2_MSG_ROUTE_GUIDANCE_LANE) {
         if (!g_rgd.got_520x) {
@@ -1195,7 +1213,7 @@ static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) 
                      li, l->position, (int)l->direction, l->status,
                      l->angle_count, abuf);
         }
-        write_pps_lane_guidance_partial(&lane);
+        write_bus_lane_guidance_partial(&lane);
     }
 
     return false;
@@ -1309,8 +1327,8 @@ void rgd_init(void) {
  *
  * Cross-thread safety: this runs on the bus heartbeat thread, while
  * the iAP2 handler thread may concurrently be inside rgd_message_handler
- * mutating g_rgd.update_cache via write_pps_update_partial().  We
- * **deliberately do not** go through write_pps_update_partial() here —
+ * mutating g_rgd.update_cache via write_bus_update_partial().  We
+ * **deliberately do not** go through write_bus_update_partial() here —
  * that path reads/writes g_rgd.update_cache without synchronisation.
  * Instead emit a self-contained minimal bus frame (route_state=0,
  * maneuver_count=0) directly, which is exactly what Java needs to see

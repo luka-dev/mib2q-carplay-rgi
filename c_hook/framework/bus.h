@@ -14,9 +14,8 @@
  *                 type.  Callback is invoked on the reader thread - must
  *                 return quickly or post to another queue.
  *
- * Payload helpers for text (PPS-style key:type:value) builder are
- * provided so route guidance / cover art publishers can be migrated
- * with minimal diff.
+ * Payload helpers for the text key:type:value builder are provided so
+ * route guidance / cover art publishers can share a compact bus format.
  */
 
 #ifndef CARPLAY_BUS_H
@@ -94,7 +93,7 @@ typedef void (*bus_tick_cb_t)(void);
 void bus_set_periodic_tick(bus_tick_cb_t cb);
 
 /* ============================================================
- * Text payload builder (PPS-compatible key:type:value format)
+ * Text payload builder (key:type:value format)
  *
  *   bus_text_builder_t b;
  *   bus_text_begin(&b, "routeguidance");

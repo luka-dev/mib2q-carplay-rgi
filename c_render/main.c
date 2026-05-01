@@ -32,6 +32,23 @@
 #define WINDOW_W CR_DEFAULT_WIDTH
 #define WINDOW_H CR_DEFAULT_HEIGHT
 
+static int timespec_elapsed_at_least(const struct timespec *now,
+                                     const struct timespec *last,
+                                     long seconds,
+                                     long nanoseconds) {
+    long ds;
+    long dns;
+
+    if (last->tv_sec == 0) return 1;
+
+    ds = (long)(now->tv_sec - last->tv_sec);
+    if (ds > seconds) return 1;
+    if (ds < seconds) return 0;
+
+    dns = now->tv_nsec - last->tv_nsec;
+    return dns >= nanoseconds;
+}
+
 /* ================================================================
  * Engine state machine
  *
@@ -602,10 +619,18 @@ int main(int argc, char **argv) {
                  || (g_bargraph_alpha > 0.0f && g_bargraph_alpha < 1.0f);
         }
 
-        /* DIAGNOSTIC: dmdt watchdog DISABLED to test if its fork+exec
-         * every 5 s + composition re-declare is causing the periodic
-         * compositor disturbance.  Re-enable for production if we
-         * actually need to reclaim displayable 20 from native navi. */
+        /* dmdt focus watchdog: if native navi or another app steals the
+         * cluster display context, pull it back to the renderer context.
+         * Runs infrequently to avoid adding frame jitter. */
+        {
+            static struct timespec focus_last = {0, 0};
+            if (g_engine.phase == ENGINE_IDLE
+                    && !render_is_animating()
+                    && timespec_elapsed_at_least(&t_start, &focus_last, 5, 0)) {
+                focus_last = t_start;
+                platform_ensure_focus();
+            }
+        }
 
         /* Heartbeat — single-thread design: send EVT_HEARTBEAT to Java
          * once per second, dispatched right here on the main loop tick.
@@ -624,10 +649,7 @@ int main(int argc, char **argv) {
          * 5 s SO_TIMEOUT.  Worst case observed: ~5 ms per send. */
         {
             static struct timespec hb_last = {0, 0};
-            const long HB_INTERVAL_NS = 1L * 1000000000L;
-            long since = (t_start.tv_sec - hb_last.tv_sec) * 1000000000L
-                       + (t_start.tv_nsec - hb_last.tv_nsec);
-            if (hb_last.tv_sec == 0 || since >= HB_INTERVAL_NS) {
+            if (timespec_elapsed_at_least(&t_start, &hb_last, 1, 0)) {
                 hb_last = t_start;
                 cr_server_send_heartbeat();
             }

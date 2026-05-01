@@ -238,7 +238,7 @@ public class CarPlayHook {
                 }
             }
             /* active=false (reverse gear, camera view) or selected=false:
-             * keep renderer + BAP alive. PPS data stops flowing naturally
+             * keep renderer + BAP alive. Bus data stops flowing naturally
              * while inactive, and resumes when active returns. */
 
         } catch (Exception e) {

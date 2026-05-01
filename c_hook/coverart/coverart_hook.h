@@ -2,7 +2,7 @@
  * CarPlay Cover Art Hook Module
  *
  * Intercepts iAP2 NowPlayingUpdate (0x5001) messages, extracts artwork,
- * decodes JPEG/PNG, resizes to 256x256, and outputs as PNG to PPS.
+ * decodes JPEG/PNG, resizes to 256x256, and notifies Java over the bus.
  *
  * This header is included by main.c for clarity and build integration.
  */
