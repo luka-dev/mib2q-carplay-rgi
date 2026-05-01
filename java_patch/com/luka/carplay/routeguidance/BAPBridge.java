@@ -68,6 +68,11 @@ public class BAPBridge {
      * false when further away (showing FOLLOW_STREET).
      */
     private boolean inApproachZone = false;
+    /* Track the primary maneuver's slot identity so we know when iOS
+     * actually swapped the head of the list vs. just reordered/extended it.
+     * mVer changes when the C hook reassigns a slot to a new iAP2 index. */
+    private int lastFirstManeuverIdx = -1;
+    private int lastFirstManeuverVer = -1;
     private String latchedTurnToText = "";
     /* Call-for-action blink phase: true=100%, false=0% */
     private boolean actionBlinkFull = true;
@@ -462,6 +467,8 @@ public class BAPBridge {
 
         try {
             inApproachZone = false;
+            lastFirstManeuverIdx = -1;
+            lastFirstManeuverVer = -1;
             latchedTurnToText = "";
             resetActionBlinkState();
             synchronized (distanceToManeuverLock) {
@@ -538,6 +545,8 @@ public class BAPBridge {
              * black screen. BAP teardown happens in onShutdown() on real disconnect. */
             stopActionBlinkThread();
             inApproachZone = false;
+            lastFirstManeuverIdx = -1;
+            lastFirstManeuverVer = -1;
             latchedTurnToText = "";
             Log.d(TAG, "Stopped (lightweight, renderer + BAP kept alive)");
         } catch (Exception e) {
@@ -629,8 +638,23 @@ public class BAPBridge {
             int type0 = (firstIdx >= 0 && s.mType != null && firstIdx < s.mType.length) ? s.mType[firstIdx] : -1;
             boolean showManeuver = ManeuverMapper.isValidType(type0);
 
-            /* Highway-aware prepare thresholds (meters). */
-            boolean isHighway = (type0 >= 0) && ManeuverMapper.isHighwayManeuver(type0);
+            /* Highway-aware prepare thresholds (meters).
+             *
+             * iOS sends `step.distance` (= s.mDistance[idx]) — the length of
+             * the route segment between the previous maneuver and this one.
+             * Long step (>1.5 km) = highway/limited-access road; short step
+             * = city.  This catches `MT_KEEP_RIGHT` / `MT_LEFT_TURN` on
+             * highways which the type-based check would miss.
+             * Fallback: when step length unknown (route setup), fall back
+             * to the maneuver-type heuristic. */
+            int rawStepM = (firstIdx >= 0 && s.mDistance != null
+                    && firstIdx < s.mDistance.length) ? s.mDistance[firstIdx] : -1;
+            boolean isHighway;
+            if (rawStepM > 0) {
+                isHighway = rawStepM > 1500;
+            } else {
+                isHighway = (type0 >= 0) && ManeuverMapper.isHighwayManeuver(type0);
+            }
             int prepareThreshold  = isHighway ? HIGHWAY_PREPARE_THRESHOLD_M : CITY_PREPARE_THRESHOLD_M;
             int bargraphDenominatorM = getBargraphDenominatorM(s, firstIdx, prepareThreshold);
             updateActionBlinkContext(
@@ -639,9 +663,23 @@ public class BAPBridge {
 
             /*
              * Approach zone detection.
-             */
-            if ((dirty & RouteGuidance.State.DIRTY_MANEUVER_LIST) != 0) {
+             *
+             * Reset cached state only when the PRIMARY maneuver actually
+             * changes — not on every list update.  iOS sends DIRTY_MANEUVER_LIST
+             * for additions/reorders too; resetting in those cases caused a
+             * one-frame flicker to FOLLOW_STREET when distM was transiently
+             * unknown (slot reassign in the same delta).
+             *
+             * "Primary changed" = different slot index OR same slot but new
+             * mVer (LRU reassigned the slot to a different iAP2 index). */
+            int currentFirstVer = (firstIdx >= 0 && s.mVer != null
+                    && firstIdx < s.mVer.length) ? s.mVer[firstIdx] : -1;
+            boolean primaryChanged = (firstIdx != lastFirstManeuverIdx)
+                || (currentFirstVer != lastFirstManeuverVer);
+            if (primaryChanged) {
                 inApproachZone = false;
+                lastFirstManeuverIdx = firstIdx;
+                lastFirstManeuverVer = currentFirstVer;
             }
             boolean hasUsableDistance = (distM > 0);
             /* ARRIVED maneuvers must always show real descriptor, not FOLLOW_STREET.
@@ -865,15 +903,18 @@ public class BAPBridge {
                 | RouteGuidance.State.DIRTY_MANEUVER_LIST
                 | RouteGuidance.State.DIRTY_MANEUVER_COUNT;
             if ((dirty & laneRecomputeMask) != 0) {
-                /* Both conditions required:
-                 * - nowApproach: don't show lanes when far away (iOS sends
-                 *   lane data even 1800m out with laneGuidanceShowing=1)
-                 * - laneGuidanceShowing==1: iOS populates lane data on slots
-                 *   before it wants them displayed (e.g. START_ROUTE has lane
-                 *   data but showing=0). Respect iOS's display intent. */
+                /* Trust iOS's display intent — `laneGuidanceShowing` is the
+                 * authoritative signal.  iOS sets it to 1 only when its own
+                 * navigation manager (MNGuidanceManager._considerLaneGuidance)
+                 * has decided to show lanes for the user, based on the lane
+                 * event's startValidRouteCoordinate / endValidRouteCoordinate
+                 * range.  This naturally covers:
+                 *   - highway pre-positioning (shows 1-2 km early)
+                 *   - active lane choice (right at the maneuver)
+                 *   - hide on exit (showing→0 once past endValidRouteCoordinate)
+                 * No `nowApproach` gate — that would override iOS's range. */
                 boolean wantLaneGuidance = !explicitClear
                     && !shouldClearManeuver
-                    && nowApproach
                     && s.laneGuidanceShowing == 1;
                 if (wantLaneGuidance) {
                     sendLaneGuidance(s);
