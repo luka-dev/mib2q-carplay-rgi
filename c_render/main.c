@@ -15,6 +15,7 @@
 #include <errno.h>
 #include <libgen.h>
 #include <sched.h>
+#include <signal.h>
 #ifdef PLATFORM_QNX
 #include <sys/neutrino.h>     /* setprio() */
 #endif
@@ -259,6 +260,10 @@ static void save_screenshot(int fb_w, int fb_h, const char *label) {
  * ================================================================ */
 
 int main(int argc, char **argv) {
+#ifdef SIGPIPE
+    signal(SIGPIPE, SIG_IGN);
+#endif
+
     fprintf(stderr, "c_render: starting %dx%d\n", WINDOW_W, WINDOW_H);
 
 #ifdef PLATFORM_QNX
@@ -619,14 +624,16 @@ int main(int argc, char **argv) {
                  || (g_bargraph_alpha > 0.0f && g_bargraph_alpha < 1.0f);
         }
 
-        /* dmdt focus watchdog: if native navi or another app steals the
-         * cluster display context, pull it back to the renderer context.
-         * Runs infrequently to avoid adding frame jitter. */
+        /* dmdt focus watchdog: spawn one-shot detached thread to run
+         * the popen("dmdt gs") + optional sc on a worker.  The render
+         * loop never blocks on the ~150 ms popen cost.
+         * Trigger only when idle + not animating to avoid any chance of
+         * the detached thread perturbing a frame in flight. */
         {
             static struct timespec focus_last = {0, 0};
             if (g_engine.phase == ENGINE_IDLE
                     && !render_is_animating()
-                    && timespec_elapsed_at_least(&t_start, &focus_last, 5, 0)) {
+                    && timespec_elapsed_at_least(&t_start, &focus_last, 30, 0)) {
                 focus_last = t_start;
                 platform_ensure_focus();
             }

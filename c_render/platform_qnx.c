@@ -12,6 +12,7 @@
 #include <string.h>
 #include <signal.h>
 #include <dlfcn.h>
+#include <pthread.h>
 #include <unistd.h>
 
 #include <EGL/egl.h>
@@ -79,7 +80,11 @@ static int read_dmdt_cluster_context(void) {
     return ctx;
 }
 
-void platform_ensure_focus(void) {
+/* Sync version — runs `dmdt gs` (popen, ~100-200 ms on QNX) and reroutes
+ * if context drifted.  Called only from the watchdog thread; main render
+ * loop must NEVER call this directly because the popen fork+exec causes
+ * a visible micro-freeze (~150 ms) at each 5 s tick. */
+static void check_and_restore_focus(void) {
     int ctx = read_dmdt_cluster_context();
     if (ctx == g_context_id) return;
 
@@ -93,6 +98,37 @@ void platform_ensure_focus(void) {
     snprintf(cmd, sizeof(cmd), "/eso/bin/apps/dmdt sc %d %d", g_display_id, g_context_id);
     system(cmd);
     g_display_routed = 1;
+}
+
+/* One-shot focus check thread — spawned by main loop on demand.
+ * Detached, auto-exits when check_and_restore_focus() returns.
+ * Avoids both:
+ *  - Blocking the render loop with popen() (~150 ms freeze).
+ *  - Keeping a persistent watchdog thread alive between checks.
+ *
+ * `g_focus_check_inflight` prevents overlapping spawns if the previous
+ * check hasn't finished by the time main triggers another. */
+static volatile int g_focus_check_inflight = 0;
+
+static void *focus_check_once(void *arg) {
+    (void)arg;
+    check_and_restore_focus();
+    g_focus_check_inflight = 0;
+    return NULL;
+}
+
+void platform_ensure_focus(void) {
+    if (g_focus_check_inflight) return;
+    g_focus_check_inflight = 1;
+    pthread_t tid;
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    if (pthread_create(&tid, &attr, focus_check_once, NULL) != 0) {
+        fprintf(stderr, "platform_qnx: focus check pthread_create failed\n");
+        g_focus_check_inflight = 0;
+    }
+    pthread_attr_destroy(&attr);
 }
 
 static void signal_handler(int sig) {
@@ -272,13 +308,14 @@ int platform_init(int width, int height) {
     fprintf(stderr, "platform_qnx: %s\n", cmd);
     system(cmd);
 
-    if (read_env_int("CR_ROUTE_DISPLAY", 0)) {
-        snprintf(cmd, sizeof(cmd), "/eso/bin/apps/dmdt sc %d %d", g_display_id, g_context_id);
-        fprintf(stderr, "platform_qnx: %s\n", cmd);
-        system(cmd);
-        g_display_routed = 1;
-    }
-    platform_ensure_focus();
+    /* Force focus to our context unconditionally at startup.  We just
+     * spawned, we want the cluster — no point asking dmdt gs who has it.
+     * Skips the ~150 ms popen("dmdt gs") on init.  The 30 s watchdog
+     * handles the (rare) case where native navi steals focus later. */
+    snprintf(cmd, sizeof(cmd), "/eso/bin/apps/dmdt sc %d %d", g_display_id, g_context_id);
+    fprintf(stderr, "platform_qnx: %s (initial force)\n", cmd);
+    system(cmd);
+    g_display_routed = 1;
 
     fprintf(stderr, "platform_qnx: eglCreateWindowSurface...\n");
     g_egl_surface = eglCreateWindowSurface(g_egl_display, config,
@@ -335,7 +372,10 @@ void platform_shutdown(void) {
     /* Skip EGL teardown — destroying the surface can kill shared displayables
      * (e.g. displayable 20 = native route guidance widget).
      * In production the C hook sends SIGKILL, so this is only for clean exit.
-     * Just release the GL context, don't destroy surface/terminate. */
+     * Just release the GL context, don't destroy surface/terminate.
+     *
+     * In-flight focus check thread (if any) is detached and self-cleans;
+     * no need to wait for it. */
     if (g_egl_display != EGL_NO_DISPLAY) {
         eglMakeCurrent(g_egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
     }

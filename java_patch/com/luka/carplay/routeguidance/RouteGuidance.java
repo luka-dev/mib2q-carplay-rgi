@@ -446,6 +446,7 @@ public class RouteGuidance implements CarplayBus.Listener {
                     state.laneGuidanceShowing = -1;
                     state.laneGuidanceTotal = -1;
                     state.laneGuidanceIndex = -1;
+                    state.laneGuidanceSlot = -1;
                     state.markDirty(State.DIRTY_MANEUVER_ICON | State.DIRTY_MANEUVER_TEXT | State.DIRTY_LANE_GUIDANCE);
                 }
             }
@@ -480,6 +481,7 @@ public class RouteGuidance implements CarplayBus.Listener {
                 state.laneGuidanceShowing = -1;
                 state.laneGuidanceTotal = -1;
                 state.laneGuidanceIndex = -1;
+                state.laneGuidanceSlot = -1;
                 state.markDirty(State.DIRTY_MANEUVER_ICON | State.DIRTY_MANEUVER_TEXT | State.DIRTY_LANE_GUIDANCE);
                 /* Per-slot data (mType, mTurnAngle, etc.) is NOT cleared here.
                  * It is preserved so that when count>0 returns, BAPBridge can
