@@ -498,15 +498,15 @@ public class BAPBridge {
             /* Block native route-guidance BAP stream during CarPlay RG. */
             if (gatedService != null) gatedService.blockRouteGuidance = true;
 
-            /* Start renderer FIRST — registers our private displayable 199
-             * as the leading layer in cluster context 74 (native KOMO widget
-             * on displayable 20 keeps its own screen window untouched, just
-             * dropped from the active composition).  Doing this before we
-             * set rgActive/rgiValid avoids a one-frame KDK flicker. */
+            /* Start renderer FIRST — takes over native displayable 20
+             * (DISPLAYABLE_MAP_ROUTE_GUIDANCE, the KOMO RG widget slot) by
+             * registering our screen window with ID="20" in displaymanager's
+             * m_surfaceSources.  Doing this before we set rgActive/rgiValid
+             * avoids a one-frame KDK flicker. */
             startCustomRenderer();
 
-            /* Now safe to set cluster state flags — our private layer 199 owns
-             * the leading slot in context 74, encoder reads from it. */
+            /* Now safe to set cluster state flags — our window owns
+             * displayable 20, encoder reads it via setActiveDisplayable(4,20). */
             forceClusterRouteInfoState(true);
 
             /*
@@ -1487,9 +1487,8 @@ public class BAPBridge {
      * Custom Renderer Pipeline (c_render)
      *
      * Bypasses PresentationController entirely. Java spawns c_render, which
-     * creates a private displayable 199 (added as the leading layer of
-     * cluster context 74) via EGL/GLES2 — native KOMO widget on displayable
-     * 20 is left intact, just absent from the active composition.  Java
+     * registers a screen window with ID="20" via libdisplayinit, taking
+     * over the native KOMO RG widget's slot in cluster context 74.  Java
      * manages context 74/gfxAvailable and sends CMD_MANEUVER packets over TCP.
      * ============================================================== */
 
@@ -1614,9 +1613,9 @@ public class BAPBridge {
             forceClusterRouteInfoState(true);
 
             /* Set gfxAvailable so VC enters MAP mode for LVDS video.
-             * Must be after our private displayable 199 is the leading layer
-             * in context 74 (so the encoder reads our buffer, not whatever
-             * native composition lingered on the cluster before). */
+             * Must be after our window owns displayable 20 (so the encoder
+             * reads our buffer, not whatever native KDK composition lingered
+             * on the cluster before). */
             forceGfxAvailable(true);
 
             Log.i(TAG, "CR: started");
@@ -2098,7 +2097,6 @@ public class BAPBridge {
                 if (idx >= 0 && idx < maxIdx) return idx;
             }
         }
-        if (s.maneuverCount > 0) return 0;
         return -1;
     }
 
@@ -2109,13 +2107,13 @@ public class BAPBridge {
         if (s.maneuverOrder != null && s.maneuverOrder.length > 0) {
             return s.maneuverOrder;
         }
-        int count = s.maneuverCount;
-        int maxIdx = (s.mType != null) ? s.mType.length : 0;
-        if (count > maxIdx) count = maxIdx;
-        if (count <= 0) return null;
-        int[] out = new int[count];
-        for (int i = 0; i < count; i++) out[i] = i;
-        return out;
+        /*
+         * Do not synthesize [0..maneuver_count) when iOS has not published
+         * an explicit maneuver_list yet.  During reroute, count often arrives
+         * before the new slot payloads; falling back to numeric slot order can
+         * briefly expose stale pre-reroute slots to BAP and c_render.
+         */
+        return null;
     }
 
     private static int getBargraphDenominatorM(RouteGuidance.State s, int manIdx, int prepareThresholdM) {

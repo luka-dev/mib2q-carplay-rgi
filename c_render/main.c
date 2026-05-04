@@ -5,13 +5,13 @@
  * Receives maneuver commands, handles all animation/transitions internally.
  *
  * macOS: GLFW window for development.
- * QNX:   private displayable 199, added as the FIRST layer of cluster
- *        context 74 (in front of native KOMBI_MAP_VIEW=33 + cluster
- *        overlays 102/101).  setActiveDisplayable(4, 199) wires the MOST
- *        encoder to capture our window for the LVDS stream that lands on
- *        the VC's MAP tab.  Native KOMO widget on displayable 20 keeps
- *        its own screen window — it's just dropped from the active
- *        composition while we own the cluster.
+ * QNX:   take over native displayable 20 (DISPLAYABLE_MAP_ROUTE_GUIDANCE,
+ *        the slot KOMO RG widget normally uses) by registering our own
+ *        screen window with ID="20".  setActiveDisplayable(4, 20) (called
+ *        by stock cluster firmware in preContextSwitchHook) wires the MOST
+ *        encoder to capture our window for the LVDS stream landing on the
+ *        VC's MAP tab.  Native widget process keeps running but is no
+ *        longer the source for displayable 20 while we own the cluster.
  */
 
 #include <stdio.h>

@@ -62,20 +62,27 @@ typedef struct {
 
 /* Display configuration.
  *
- * CR_DISPLAYABLE_ID = 199 — private layer we add into cluster context 74.
- * It does NOT collide with the native KOMO RG widget on displayable 20:
- *   - 199 is unused by MU1316 firmware (not in displaymanager.json,
- *     not referenced anywhere in stock binaries).
- *   - Native widget keeps its own screen window with ID="20" registered
- *     in displaymanager's m_surfaceSources[20] — its lifecycle is intact.
- *   - We register a separate screen window with ID="199" and ask dmdt to
- *     put 199 first in context 74, displacing displayable 20 from the
- *     active composition.  setActiveDisplayable(4, 199) makes the cluster
- *     MOST encoder read OUR window for the LVDS video stream to VC.
- *   - On shutdown we restore context 74 to its original composition
- *     (20 + 102 + 101 + 33), so the native widget becomes visible again
- *     without any cleanup needed on the native process side. */
-#define CR_DISPLAYABLE_ID   199 /* private layer added to cluster context 74 */
+ * CR_DISPLAYABLE_ID = 20 — DISPLAYABLE_MAP_ROUTE_GUIDANCE, the native KOMO
+ * RG widget slot in cluster context 74.  We *take it over*:
+ *   - display_create_window(displayable_id=20) creates a screen window in
+ *     our process with SCREEN_PROPERTY_ID_STRING="20".  Display manager's
+ *     m_surfaceSources[20] gets re-bound to our window (the native widget's
+ *     screen window still exists in its own process, just no longer the
+ *     active source for displayable 20).
+ *   - dmdt dc 74 20 102 101 33 re-declares context 74 with the original
+ *     composition order, since display_create_window strips other
+ *     displayables from context 74 as a side effect.
+ *   - setActiveDisplayable(4, 20) (called by stock cluster firmware in
+ *     preContextSwitchHook) makes the MOST encoder read our window for
+ *     the LVDS video stream that lands on the VC's MAP tab.
+ *   - On shutdown EGL surface release destroys our window, dmdt's
+ *     m_surfaceSources[20] naturally falls back to the native widget,
+ *     and restore_display() forces the cluster back to context 74.
+ *
+ * In production native navigation is idle while CarPlay is active, so the
+ * native widget process never tries to re-bind displayable 20 back during
+ * our session — there is no live competition. */
+#define CR_DISPLAYABLE_ID   20  /* DISPLAYABLE_MAP_ROUTE_GUIDANCE (native widget slot) */
 #define CR_CONTEXT_ID       74  /* Cluster MAP context (LVDS encoder reads from here) */
 #define CR_DISPLAY_ID       1   /* 0=main (LVDS1), 1=cluster (LVDS2) */
 #define CR_DEFAULT_WIDTH    328

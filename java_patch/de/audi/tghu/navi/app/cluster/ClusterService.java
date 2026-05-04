@@ -1333,17 +1333,15 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
     /**
      * Activate custom renderer video pipeline.
      * Ensures the cluster is on context 74.  The renderer process has already
-     * registered its private displayable 199 as the leading layer of context 74
-     * (alongside native map 33 and overlays 102/101); we just need to make sure
-     * the cluster is actually on that context so the MOST encoder reads from
-     * our window.
+     * taken over native displayable 20 (DISPLAYABLE_MAP_ROUTE_GUIDANCE) by
+     * registering its own screen window with ID="20" in displaymanager's
+     * m_surfaceSources; we just need the cluster on context 74 so the MOST
+     * encoder's setActiveDisplayable(4, 20) hook reads from our window.
      */
     public String activateCustomRendererPipeline() {
-        /* Renderer draws into private displayable 199 — added to context 74
-         * as the leading layer.  Native KOMO RG widget on displayable 20 is
-         * deliberately excluded from the active composition.  Re-issue the
-         * context switch defensively because native navigation or another
-         * HMI process can leave the cluster on a different context. */
+        /* Renderer takes over native displayable 20 (KOMO RG widget slot).
+         * Re-issue the context switch defensively because native navigation
+         * or another HMI process can leave the cluster on a different context. */
         try {
             de.audi.atip.hmi.view.IDisplayManager dm =
                 ((de.audi.atip.hmi.HMIService) this.env.getHMIService()).getDisplayManager();
@@ -1375,7 +1373,8 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         /* Backstop for renderer teardown: the renderer normally restores
          * context 74 from its own atexit handler, but Java may have to slay
          * the process if TCP teardown races.  Re-declare the native context
-         * here as well so displayable 199 cannot remain in the active layout. */
+         * here so the cluster compositor doesn't keep our (now destroyed)
+         * screen window mapped to displayable 20. */
         try {
             de.audi.atip.util.CommandLineExecuter.executeCommand(
                 "/bin/sh", new String[] { "-c", "/eso/bin/apps/dmdt dc 74 20 102 101 33 >/dev/null 2>&1" });

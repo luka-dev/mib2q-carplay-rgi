@@ -142,9 +142,12 @@ static void force_display_context(const char *reason, int observed_ctx) {
 }
 
 /* Display restore — re-declare context 74 with its original native
- * composition (MAP_ROUTE_GUIDANCE 20 + images 102/101 + KOMBI_MAP_VIEW 33),
- * dropping our private layer 199 from the list.  Then switch cluster back
- * to context 74 so the compositor picks up the restored layout.
+ * composition (MAP_ROUTE_GUIDANCE 20 + images 102/101 + KOMBI_MAP_VIEW 33)
+ * and switch cluster back to it.  After our screen window with ID="20" is
+ * destroyed (EGL surface teardown on exit), displaymanager's
+ * m_surfaceSources[20] naturally falls back to the native widget's screen
+ * window, so the dmdt commands here just make sure the cluster compositor
+ * picks the right context immediately.
  *
  * Idempotent and signal-safe via system() — atexit hook calls this on
  * graceful exit.  Java also re-declares this native layout as a backstop
@@ -315,10 +318,9 @@ int platform_init(int width, int height) {
     g_width = width;
     g_height = height;
 
-    /* Displayable ID is hardcoded — it identifies *our* private layer
-     * in cluster context 74, not a native firmware slot.  No env override
-     * (would only invite mistakes; native displayable 20 must remain
-     * untouched). */
+    /* Displayable ID is hardcoded to 20 (DISPLAYABLE_MAP_ROUTE_GUIDANCE).
+     * No env override — accidentally pointing the renderer at a different
+     * id would silently leave us out of the cluster MOST encoder path. */
     g_displayable_id = CR_DISPLAYABLE_ID;
     g_context_id     = read_env_int("CR_CONTEXT_ID", CR_CONTEXT_ID);
     g_display_id     = read_env_int("CR_DISPLAY_ID", CR_DISPLAY_ID);
@@ -439,30 +441,25 @@ int platform_init(int width, int height) {
         }
     }
 
-    /* Declare context 74 with our private layer FIRST and the rest of the
-     * stock composition AFTER, but deliberately exclude native displayable
-     * 20 (KOMO RG widget): it must not co-exist with our overlay in the
-     * same context, otherwise the cluster compositor blends both layers
-     * on the cluster TFT.  Native widget's screen window keeps existing
-     * (we never touch its m_surfaceSources[20] entry); it's just absent
-     * from the active composition while we own the cluster.  restore_display()
-     * puts displayable 20 back at the front when we exit.
+    /* Re-declare context 74 with the full stock composition.
+     * display_create_window(displayable_id=20) registers our window and as
+     * a side effect strips other displayables from context 74 — so we put
+     * them back: 20 (now bound to our screen window) + 102 + 101 + 33
+     * (KOMBI_MAP_VIEW = native map background).
      *
-     * Order matters: setActiveDisplayable(4, first_in_context) reads from
-     * the FIRST displayable for the MOST encoder, so 199 must lead. */
+     * setActiveDisplayable(4, 20) (called by stock cluster firmware in
+     * preContextSwitchHook) makes the MOST encoder read displayable 20 —
+     * which is now our window. */
     char cmd[256];
     snprintf(cmd, sizeof(cmd), "/eso/bin/apps/dmdt dc %d %d 102 101 33",
              g_context_id, g_displayable_id);
     fprintf(stderr, "platform_qnx: %s\n", cmd);
     system(cmd);
 
-    /* Force focus to our context unconditionally at startup.  We just
-     * spawned, we want the cluster — no point asking dmdt gs who has it.
-     * Skips the ~150 ms popen("dmdt gs") on init.  The 30 s watchdog
-     * handles the (rare) case where native navi steals focus later. */
-    snprintf(cmd, sizeof(cmd), "/eso/bin/apps/dmdt sc %d %d", g_display_id, g_context_id);
-    fprintf(stderr, "platform_qnx: %s (initial force)\n", cmd);
-    system(cmd);
+    /* Do NOT switch focus here.  Java waits for EVT_FRAME_READY and then
+     * forces a real away->74 context transition so DisplayManager's
+     * preContextSwitchHook updates the MOST encoder after our first frame
+     * is already queued. */
     g_display_routed = 1;
 
     fprintf(stderr, "platform_qnx: eglCreateWindowSurface...\n");
@@ -518,8 +515,9 @@ int platform_should_close(void) {
 
 void platform_shutdown(void) {
     /* Skip full EGL/surface teardown on QNX.  Releasing the GL context and
-     * restoring context 74 is enough; Java slay/process exit reclaims our
-     * private displayable 199 window.
+     * restoring context 74 is enough — Java slay/process exit destroys our
+     * screen window (ID="20") and displaymanager's m_surfaceSources[20]
+     * naturally falls back to the native widget's screen window.
      *
      * In-flight focus check thread (if any) is detached and self-cleans;
      * no need to wait for it. */

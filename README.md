@@ -103,7 +103,7 @@ flowchart LR
         direction TB
         spawn["spawn maneuver_render<br/>(slay -f -Q on shutdown)"]
         rend["maneuver_render<br/>EGL/GLES2 3D scene"]
-        surf["displayable 199<br/>EGL surface<br/>(private layer in ctx 74)"]
+        surf["displayable 20<br/>EGL surface<br/>(MAP_ROUTE_GUIDANCE, taken over)"]
         enc["cluster video encoder<br/>(H.264)"]
         most["MOST video link"]
         spawn --> rend --> surf --> enc --> most
@@ -210,48 +210,40 @@ Sent via the same BAP path. VC renders these as text bars over the native map ar
 Custom 3D renderer (`c_render/`) draws maneuver icons into the cluster's
 **MOST video pipeline** (MOST150 isochronous channel - the same path
 the HU uses to ship its native map render to the VC's Map tab).
-Renders to QNX **displayable 199** (private layer added to cluster
-context 74) via EGL/GLES2; the frames are captured by the HU video
-encoder (H.264) and shipped over MOST to the VC, where the cluster's
-TVMRCapture pipeline decodes them into a texture composited by the
-Kanzi scene.
+Renders to QNX **displayable 20** (`DISPLAYABLE_MAP_ROUTE_GUIDANCE`, the
+native KOMO RG widget slot in cluster context 74) via EGL/GLES2; the
+frames are captured by the HU video encoder (H.264) and shipped over
+MOST to the VC, where the cluster's TVMRCapture pipeline decodes them
+into a texture composited by the Kanzi scene.
 
-> **Displayable 199 is our private layer; native displayable 20 is
-> left intact.** Verified by RE of `libdisplayinit.so`,
-> `libdm_modMain.so` (displaymanager service) and `libRenderSystem.so`
-> (used by native nav for its KOMO widget):
+> **Displayable 20 is the native KOMO RG widget's slot — we take it
+> over.** Verified by RE of `libdisplayinit.so`, `libdm_modMain.so`
+> (displaymanager service) and `libRenderSystem.so` (used by native
+> nav for its KOMO widget):
 >
-> - `display_create_window(199)` registers a fresh screen window with
->   `SCREEN_PROPERTY_ID_STRING="199"` in our process's screen context.
->   199 is unused by stock MU1316 firmware (not in
->   `displaymanager.json`, not referenced anywhere in stock binaries),
->   so there is no collision in displaymanager's
->   `m_surfaceSources[id]` map.
-> - Native KOMO RG widget keeps its own screen window registered on
->   ID="20" - we never touch it. Its lifecycle on the navigation-app
->   side runs untouched.
-> - We then run `dmdt dc 74 199 102 101 33` to re-declare cluster
->   context 74 with our private layer FIRST and the rest of the stock
->   composition AFTER, but **without** displayable 20 - the native
->   widget is dropped from the *active composition* while we own the
->   cluster. Order matters: `setActiveDisplayable(4, first_in_context)`
->   in stock cluster firmware reads from the leading displayable for
->   the MOST encoder, so 199 must lead.
-> - On renderer exit `restore_display()` runs `dmdt dc 74 20 102 101 33`
->   (original native composition) + `dmdt sc 1 74`, putting native
->   widget back at the front of the active composition. EGL surface
->   release destroys our window cleanly; displaymanager's
->   `m_surfaceSources[199]` entry drops out automatically.
+> - `display_create_window(displayable_id=20)` creates a screen window
+>   in our process with `SCREEN_PROPERTY_ID_STRING="20"`.  Display
+>   manager's `screen_manage_window` callback re-binds
+>   `m_surfaceSources[20]` to our window — the native widget's screen
+>   window still exists in its own process, but is no longer the
+>   active source for displayable 20 while we hold ID="20".
+> - `display_create_window` also strips other displayables from
+>   context 74 as a side effect, so we follow up with
+>   `dmdt dc 74 20 102 101 33` to re-declare the original composition
+>   (our 20 + cluster's 102/101 + native map 33).
+> - `setActiveDisplayable(4, 20)` (called by stock cluster firmware in
+>   `preContextSwitchHook` for the leading displayable in context 74)
+>   wires the MOST encoder to read displayable 20 — which is now our
+>   window.
+> - On renderer exit EGL surface release destroys our window;
+>   displaymanager's `m_surfaceSources[20]` naturally falls back to
+>   the native widget's screen window, and `restore_display()` runs
+>   `dmdt sc 1 74` so the cluster compositor picks the right context
+>   immediately.
 >
-> The "private layer" approach replaces the older "take over
-> displayable 20" strategy. The earlier prototype reused the native
-> slot and relied on the assumption that native nav was idle during
-> CarPlay, but native nav is actually launched at boot and stays
-> alive throughout the session, which made the implicit override of
-> `m_surfaceSources[20]` racier than necessary. The current model
-> keeps both source registrations in the displaymanager separate by
-> ID and only manipulates *which displayables are in the active
-> context*, which is a deterministic dmdt operation.
+> In production native navigation is idle while CarPlay is active, so
+> the native widget process never tries to re-bind displayable 20
+> back during our session — there is no live competition.
 
 A 30 s focus watchdog runs `dmdt gs` to detect if native navigation
 or another HMI process stole the cluster context, and re-routes via
@@ -312,7 +304,7 @@ flowchart LR
         ready["lifecycle events<br/>EVT_READY (0x81)<br/>EVT_FRAME_READY (0x82)<br/>EVT_HEARTBEAT (0x80)"]
     end
 
-    surf[("displayable 199<br/>(private layer added to ctx 74)<br/>EGL surface")]
+    surf[("displayable 20<br/>(MAP_ROUTE_GUIDANCE, taken over)<br/>EGL surface")]
     enc[/"cluster video encoder<br/>(H.264)"/]
     most([MOST video link])
     vc[("🚗 Virtual Cockpit")]
@@ -340,7 +332,7 @@ flowchart LR
     render --> surf
     surf --> enc --> most --> vc
     wd -. "periodic dmdt sc 1 74" .-> surf
-    native -. "absent from active ctx<br/>(dmdt dc 74 199 102 101 33)" .-> surf
+    native -. "m_surfaceSources[20] re-bound to our window<br/>(native widget loses active source slot)" .-> surf
 
     classDef stock fill:#fee,stroke:#900,stroke-dasharray: 5 5
     style hookbox fill:#fff4e6,stroke:#cc7700
@@ -644,7 +636,7 @@ flowchart LR
             end
         end
 
-        renderer["maneuver_render<br/>(separate ARM ELF process)<br/>EGL/GLES2 3D scene -> displayable 199<br/>(private layer, leads ctx 74 composition)<br/>+ dmdt focus watchdog (30s, 30s back-off)<br/>+ EVT_READY/EVT_FRAME_READY (sticky)<br/>+ EVT_HEARTBEAT every 1 s"]
+        renderer["maneuver_render<br/>(separate ARM ELF process)<br/>EGL/GLES2 3D scene -> displayable 20<br/>(takes over native MAP_ROUTE_GUIDANCE slot)<br/>+ dmdt focus watchdog (30s, 30s back-off)<br/>+ EVT_READY/EVT_FRAME_READY (sticky)<br/>+ EVT_HEARTBEAT every 1 s"]
 
         subgraph filesys["File system / tmpfs"]
             direction TB
@@ -696,7 +688,7 @@ flowchart LR
     cursor -->|"DSI postDpad<br/>KEY_DPAD_*"| iap2
     dpad_btn -.->|"DSI postButtonEvent<br/>(stock path)"| iap2
 
-    renderer -->|"displayable 199<br/>(EGL surface, private layer)"| most_encoder
+    renderer -->|"displayable 20<br/>(EGL surface, MAP_ROUTE_GUIDANCE)"| most_encoder
     most_encoder -->|"H.264 over MOST150"| most_rx
     renderer -.->|"writes"| fs_log_ren
 
@@ -789,7 +781,7 @@ sequenceDiagram
     hook->>jar: EVT_RGD_UPDATE / EVT_COVERART
     jar->>jar: open TCP :19800 server<br/>(BAPBridge listens for renderer)
     jar->>rend: spawn maneuver_render<br/>(on route start)
-    rend->>rend: load flag_atlas.rgba,<br/>create EGL context (displayable 199),<br/>dmdt dc 74 199 102 101 33
+    rend->>rend: load flag_atlas.rgba,<br/>create EGL context (displayable 20),<br/>dmdt dc 74 20 102 101 33
     rend->>jar: connect TCP :19800 (instant)
     rend->>jar: EVT_READY (0x81)
     Note over jar: waitForReady(2500ms) unblocks

@@ -1063,27 +1063,30 @@ static void write_bus_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* 
             g_rgd.current_list[g_rgd.current_list_count++] = current_upd->maneuver_list[i];
         }
 
-        /* Reroute detection: iOS resets maneuver indices to 0 on reroute.
-         * If the new list's max index is below the highest we've ever seen,
-         * indices went backwards — flush slot cache to prevent stale data.
-         * Catches reroutes where iOS skips the transient state=0. */
+        /*
+         * Track high-water mark for diagnostics only — do NOT flush slot_cache
+         * on backward index changes within an active route.
+         *
+         * iOS Maps internally caches what it has already published per maneuver
+         * index (CRAccNavController::sentManeuvers, see iOS 26.1 CarKitNavigation
+         * source).  That cache is wiped only by CRAccNavController::reset, which
+         * fires on disconnect or a real route teardown — both paths transit
+         * route_state through 0 and are already handled in rgd_message_handler's
+         * route_state branch (rgd_maneuver_map_reset on prev_state>0 -> 0).
+         *
+         * Inside an active route iOS legitimately shrinks the active ManeuverList
+         * (e.g. a future maneuver drops out as the current one is approached),
+         * which makes new_max < highest_list_index without any reroute taking
+         * place.  Flushing slot_cache here would orphan the slot data — iOS sees
+         * the indices as "already sent" and never re-publishes 0x5202, leaving
+         * Java to render FOLLOW_STREET until a true reset happens.  We saw this
+         * as a multi-second hang in the logs (false-positive "Reroute detected:
+         * indices backwards (max 5 < prev 6)").
+         */
         if (g_rgd.current_list_count > 0) {
             uint16_t new_max = g_rgd.current_list[0];
             for (uint16_t i = 1; i < g_rgd.current_list_count; i++) {
                 if (g_rgd.current_list[i] > new_max) new_max = g_rgd.current_list[i];
-            }
-            if (g_rgd.highest_list_index > 0 && new_max < g_rgd.highest_list_index) {
-                LOG_INFO(LOG_MODULE, "Reroute detected: indices backwards (max %u < prev %u), flushing slots",
-                         (unsigned)new_max, (unsigned)g_rgd.highest_list_index);
-                for (int i = 0; i < MANEUVER_CACHE_SIZE; i++) {
-                    g_rgd.slot_to_iap_idx[i] = 0xFFFF;
-                    g_rgd.slot_cache[i].present = 0;
-                    g_rgd.lane_slot_to_iap_idx[i] = 0xFFFF;
-                    g_rgd.lane_slot_seq[i] = 0;
-                    g_rgd.lane_cache[i].present = 0;
-                }
-                pruned_lane_slots = true;
-                g_rgd.highest_list_index = 0;
             }
             if (new_max > g_rgd.highest_list_index)
                 g_rgd.highest_list_index = new_max;
