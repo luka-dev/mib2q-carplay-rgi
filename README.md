@@ -101,9 +101,9 @@ flowchart LR
 
     subgraph render_path["Branch B - Render (MOST video)"]
         direction TB
-        spawn["spawn maneuver_render<br/>(slay -f -Q on stop)"]
+        spawn["spawn maneuver_render<br/>(slay -f -Q on shutdown)"]
         rend["maneuver_render<br/>EGL/GLES2 3D scene"]
-        surf["displayable 200<br/>EGL surface"]
+        surf["displayable 199<br/>EGL surface<br/>(private layer in ctx 74)"]
         enc["cluster video encoder<br/>(H.264)"]
         most["MOST video link"]
         spawn --> rend --> surf --> enc --> most
@@ -210,13 +210,74 @@ Sent via the same BAP path. VC renders these as text bars over the native map ar
 Custom 3D renderer (`c_render/`) draws maneuver icons into the cluster's
 **MOST video pipeline** (MOST150 isochronous channel - the same path
 the HU uses to ship its native map render to the VC's Map tab).
-Renders to QNX **displayable 200** via EGL/GLES2; the frames are
-captured by the HU video encoder (H.264) and shipped over MOST to the
-VC, where the cluster's TVMRCapture pipeline decodes them into a
-texture composited by the Kanzi scene. Stock displayable 20 (the
-native route-guidance widget that fights for the same screen region)
-is periodically re-claimed by re-declaring context 74 - without that
-watchdog the stock widget eventually wins back the screen.
+Renders to QNX **displayable 199** (private layer added to cluster
+context 74) via EGL/GLES2; the frames are captured by the HU video
+encoder (H.264) and shipped over MOST to the VC, where the cluster's
+TVMRCapture pipeline decodes them into a texture composited by the
+Kanzi scene.
+
+> **Displayable 199 is our private layer; native displayable 20 is
+> left intact.** Verified by RE of `libdisplayinit.so`,
+> `libdm_modMain.so` (displaymanager service) and `libRenderSystem.so`
+> (used by native nav for its KOMO widget):
+>
+> - `display_create_window(199)` registers a fresh screen window with
+>   `SCREEN_PROPERTY_ID_STRING="199"` in our process's screen context.
+>   199 is unused by stock MU1316 firmware (not in
+>   `displaymanager.json`, not referenced anywhere in stock binaries),
+>   so there is no collision in displaymanager's
+>   `m_surfaceSources[id]` map.
+> - Native KOMO RG widget keeps its own screen window registered on
+>   ID="20" - we never touch it. Its lifecycle on the navigation-app
+>   side runs untouched.
+> - We then run `dmdt dc 74 199 102 101 33` to re-declare cluster
+>   context 74 with our private layer FIRST and the rest of the stock
+>   composition AFTER, but **without** displayable 20 - the native
+>   widget is dropped from the *active composition* while we own the
+>   cluster. Order matters: `setActiveDisplayable(4, first_in_context)`
+>   in stock cluster firmware reads from the leading displayable for
+>   the MOST encoder, so 199 must lead.
+> - On renderer exit `restore_display()` runs `dmdt dc 74 20 102 101 33`
+>   (original native composition) + `dmdt sc 1 74`, putting native
+>   widget back at the front of the active composition. EGL surface
+>   release destroys our window cleanly; displaymanager's
+>   `m_surfaceSources[199]` entry drops out automatically.
+>
+> The "private layer" approach replaces the older "take over
+> displayable 20" strategy. The earlier prototype reused the native
+> slot and relied on the assumption that native nav was idle during
+> CarPlay, but native nav is actually launched at boot and stays
+> alive throughout the session, which made the implicit override of
+> `m_surfaceSources[20]` racier than necessary. The current model
+> keeps both source registrations in the displaymanager separate by
+> ID and only manipulates *which displayables are in the active
+> context*, which is a deterministic dmdt operation.
+
+A 30 s focus watchdog runs `dmdt gs` to detect if native navigation
+or another HMI process stole the cluster context, and re-routes via
+`dmdt sc 1 74` (with a 30 s back-off so a stuck context doesn't
+fork-bomb the system).
+
+**Renderer startup handshake** (added to the TCP protocol so Java
+doesn't expose the LVDS displayable to KOMO before a deterministic
+frame is queued):
+
+1. Renderer connects to Java's listen socket on `:19800`.
+2. After EGL + render init, sends `EVT_READY` (0x81).
+3. Java's `BAPBridge` blocks in `waitForReady(2500ms)` after launching
+   the renderer; unblocks on `EVT_READY`.
+4. Java sends a deterministic first frame (`sendRendererFollowStreet`).
+5. Renderer swaps the frame and sends `EVT_FRAME_READY` (0x82).
+6. Java's `waitForFrameReady(1200ms)` unblocks; only now does it call
+   `csRef.activateCustomRendererPipeline()` (cluster context switch)
+   and `forceGfxAvailable(true)` (KOMO publishes LVDS video).
+7. If `activateCustomRendererPipeline` returns `FAILED:` (cluster
+   stuck on another context after retry), the renderer is killed and
+   gfx stays disabled — no LVDS video is published in a broken state.
+
+`EVT_READY` and `EVT_FRAME_READY` are sticky: on TCP reconnect they
+replay immediately so a Java-side restart still gets the right state
+without a second renderer launch.
 
 > **Note on naming.** Earlier drafts of this README called this branch
 > "LVDS video". That was wrong for MHI2Q - LVDS exists on the
@@ -247,14 +308,15 @@ flowchart LR
         direction TB
         atlas["flag_atlas.rgba<br/>14 frames x 128x128"]
         render["EGL/GLES2 3D scene<br/>(road, arrow, flag)"]
-        wd["watchdog<br/>re-declare context 74<br/>(reclaims displayable 200)"]
+        wd["focus watchdog<br/>dmdt gs every 30s<br/>+ dmdt sc 1 74 if drifted<br/>(reclaims context 74)"]
+        ready["lifecycle events<br/>EVT_READY (0x81)<br/>EVT_FRAME_READY (0x82)<br/>EVT_HEARTBEAT (0x80)"]
     end
 
-    surf[("displayable 200<br/>EGL surface")]
+    surf[("displayable 199<br/>(private layer added to ctx 74)<br/>EGL surface")]
     enc[/"cluster video encoder<br/>(H.264)"/]
     most([MOST video link])
     vc[("🚗 Virtual Cockpit")]
-    stock["[!] displayable 20<br/>stock RG widget<br/>(fights for region)"]:::stock
+    native["native KOMO RG widget<br/>on displayable 20<br/>(left intact, dropped<br/>from active ctx 74<br/>composition only)"]:::stock
 
     iOS -->|"0x5200<br/>StartRouteGuidance"| recv
     iOS -->|"0x5201<br/>RouteGuidanceUpdate"| recv
@@ -268,16 +330,17 @@ flowchart LR
     bus -.->|"TCP :19810"| bus_cli
     bus_cli --> bridge
 
-    bridge -->|"on first maneuver:<br/>spawn /mnt/app/root/hooks/<br/>maneuver_render &"| rendbox
-    bridge -->|"on stop:<br/>slay -f -Q maneuver_render"| rendbox
+    bridge -->|"on route start:<br/>spawn /mnt/app/root/hooks/<br/>maneuver_render &"| rendbox
+    bridge -->|"on shutdown:<br/>slay -f -Q maneuver_render"| rendbox
     bridge -->|"TCP :19800<br/>CMD_MANEUVER (48-byte fixed)"| render
+    ready -->|"TCP :19800<br/>EVT_*"| bridge
     bridge -->|"BAP LSG 50<br/>FctID 18, 19, 21..24, 46"| vc
 
     atlas --> render
     render --> surf
     surf --> enc --> most --> vc
-    wd -. "periodic reclaim" .-> surf
-    stock -. "competes for screen region" .-> surf
+    wd -. "periodic dmdt sc 1 74" .-> surf
+    native -. "absent from active ctx<br/>(dmdt dc 74 199 102 101 33)" .-> surf
 
     classDef stock fill:#fee,stroke:#900,stroke-dasharray: 5 5
     style hookbox fill:#fff4e6,stroke:#cc7700
@@ -581,7 +644,7 @@ flowchart LR
             end
         end
 
-        renderer["maneuver_render<br/>(separate ARM ELF process)<br/>EGL/GLES2 3D scene<br/>+ context-74 watchdog<br/>+ EVT_HEARTBEAT every 1 s"]
+        renderer["maneuver_render<br/>(separate ARM ELF process)<br/>EGL/GLES2 3D scene -> displayable 199<br/>(private layer, leads ctx 74 composition)<br/>+ dmdt focus watchdog (30s, 30s back-off)<br/>+ EVT_READY/EVT_FRAME_READY (sticky)<br/>+ EVT_HEARTBEAT every 1 s"]
 
         subgraph filesys["File system / tmpfs"]
             direction TB
@@ -633,7 +696,7 @@ flowchart LR
     cursor -->|"DSI postDpad<br/>KEY_DPAD_*"| iap2
     dpad_btn -.->|"DSI postButtonEvent<br/>(stock path)"| iap2
 
-    renderer -->|"displayable 200<br/>(EGL surface)"| most_encoder
+    renderer -->|"displayable 199<br/>(EGL surface, private layer)"| most_encoder
     most_encoder -->|"H.264 over MOST150"| most_rx
     renderer -.->|"writes"| fs_log_ren
 
@@ -725,11 +788,19 @@ sequenceDiagram
 
     hook->>jar: EVT_RGD_UPDATE / EVT_COVERART
     jar->>jar: open TCP :19800 server<br/>(BAPBridge listens for renderer)
-    jar->>rend: spawn maneuver_render<br/>(on first maneuver)
-    rend->>rend: load flag_atlas.rgba,<br/>create EGL context
+    jar->>rend: spawn maneuver_render<br/>(on route start)
+    rend->>rend: load flag_atlas.rgba,<br/>create EGL context (displayable 199),<br/>dmdt dc 74 199 102 101 33
     rend->>jar: connect TCP :19800 (instant)
-    jar->>rend: CMD_MANEUVER packets
+    rend->>jar: EVT_READY (0x81)
+    Note over jar: waitForReady(2500ms) unblocks
+    jar->>rend: CMD_MANEUVER (FOLLOW_STREET first frame)
+    rend->>jar: EVT_FRAME_READY (0x82)
+    Note over jar: waitForFrameReady(1200ms) unblocks
+    jar->>jar: activateCustomRendererPipeline()<br/>switch ctx to 74 + retry
+    jar->>jar: forceClusterRouteInfoState(true)<br/>+ forceGfxAvailable(true)
+    jar->>rend: CMD_MANEUVER (real route data)
     jar->>jar: BAP traffic to VC starts
+    rend->>jar: EVT_HEARTBEAT (every 1 s)
 
     Note over si,ios: --- Disconnect ---
     ios->>si: USB unplug
@@ -753,9 +824,9 @@ sequenceDiagram
 | `BAPActionBlink` | HMI process | daemon - 600 ms ticks for bargraph blink animation |
 | `CarPlayHook-Retry` | HMI process | retries `tryInit()` if OSGi services aren't ready yet |
 | `RendererServer-Accept` | HMI process | accept loop on :19800, replaces socket on each new renderer connect |
-| `RendererServer-Read` | HMI process | per-conn reader for renderer heartbeats, `SO_TIMEOUT=5 s` |
-| Renderer main | maneuver_render | EGL/GLES2 draw loop, TCP client to Java :19800; sends `EVT_HEARTBEAT` every 1 s |
-| Renderer watchdog | maneuver_render | re-declares context 74 to reclaim displayable 200 from stock RG widget |
+| `RendererServer-Read` | HMI process | per-conn reader, parses `EVT_READY`/`EVT_FRAME_READY`/`EVT_HEARTBEAT`, `SO_TIMEOUT=5 s` triggers reconnect |
+| Renderer main | maneuver_render | EGL/GLES2 draw loop, TCP client to Java :19800; sends `EVT_READY` after init, `EVT_FRAME_READY` on first swap, `EVT_HEARTBEAT` every 1 s |
+| Renderer focus check | maneuver_render | one-shot detached pthread spawned every ~30 s by main loop; runs `dmdt gs` and re-routes via `dmdt sc 1 74` if context drifted (with 30 s back-off) |
 
 ### File system layout
 

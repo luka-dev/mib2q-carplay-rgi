@@ -141,11 +141,19 @@ static void force_display_context(const char *reason, int observed_ctx) {
     g_display_routed = 1;
 }
 
-/* Display restore — switch cluster back to native context 74
- * (MAP_ROUTE_GUIDANCE + KOMBI_MAP_VIEW). */
+/* Display restore — re-declare context 74 with its original native
+ * composition (MAP_ROUTE_GUIDANCE 20 + images 102/101 + KOMBI_MAP_VIEW 33),
+ * dropping our private layer 199 from the list.  Then switch cluster back
+ * to context 74 so the compositor picks up the restored layout.
+ *
+ * Idempotent and signal-safe via system() — atexit hook calls this on
+ * graceful exit.  Java also re-declares this native layout as a backstop
+ * before force-killing the renderer. */
 static void restore_display(void) {
     if (g_display_routed) {
         char cmd[128];
+        snprintf(cmd, sizeof(cmd), "/eso/bin/apps/dmdt dc 74 20 102 101 33");
+        system(cmd);
         snprintf(cmd, sizeof(cmd), "/eso/bin/apps/dmdt sc %d 74", g_display_id);
         system(cmd);
         g_display_routed = 0;
@@ -307,7 +315,11 @@ int platform_init(int width, int height) {
     g_width = width;
     g_height = height;
 
-    g_displayable_id = read_env_int("CR_DISPLAYABLE_ID", CR_DISPLAYABLE_ID);
+    /* Displayable ID is hardcoded — it identifies *our* private layer
+     * in cluster context 74, not a native firmware slot.  No env override
+     * (would only invite mistakes; native displayable 20 must remain
+     * untouched). */
+    g_displayable_id = CR_DISPLAYABLE_ID;
     g_context_id     = read_env_int("CR_CONTEXT_ID", CR_CONTEXT_ID);
     g_display_id     = read_env_int("CR_DISPLAY_ID", CR_DISPLAY_ID);
 
@@ -427,10 +439,17 @@ int platform_init(int width, int height) {
         }
     }
 
-    /* Re-declare context 74 with the full displayable list.
-     * display_create_window re-registers displayable 20 which strips
-     * other displayables from context 74.  Restore the original composition:
-     * 20 (our renderer) + 102 + 101 + 33 (KOMBI_MAP_VIEW = native map). */
+    /* Declare context 74 with our private layer FIRST and the rest of the
+     * stock composition AFTER, but deliberately exclude native displayable
+     * 20 (KOMO RG widget): it must not co-exist with our overlay in the
+     * same context, otherwise the cluster compositor blends both layers
+     * on the cluster TFT.  Native widget's screen window keeps existing
+     * (we never touch its m_surfaceSources[20] entry); it's just absent
+     * from the active composition while we own the cluster.  restore_display()
+     * puts displayable 20 back at the front when we exit.
+     *
+     * Order matters: setActiveDisplayable(4, first_in_context) reads from
+     * the FIRST displayable for the MOST encoder, so 199 must lead. */
     char cmd[256];
     snprintf(cmd, sizeof(cmd), "/eso/bin/apps/dmdt dc %d %d 102 101 33",
              g_context_id, g_displayable_id);
@@ -498,10 +517,9 @@ int platform_should_close(void) {
 }
 
 void platform_shutdown(void) {
-    /* Skip EGL teardown — destroying the surface can kill shared displayables
-     * (e.g. displayable 20 = native route guidance widget).
-     * In production the C hook sends SIGKILL, so this is only for clean exit.
-     * Just release the GL context, don't destroy surface/terminate.
+    /* Skip full EGL/surface teardown on QNX.  Releasing the GL context and
+     * restoring context 74 is enough; Java slay/process exit reclaims our
+     * private displayable 199 window.
      *
      * In-flight focus check thread (if any) is detached and self-cleans;
      * no need to wait for it. */

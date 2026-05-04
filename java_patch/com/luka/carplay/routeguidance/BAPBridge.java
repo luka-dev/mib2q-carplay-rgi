@@ -498,12 +498,15 @@ public class BAPBridge {
             /* Block native route-guidance BAP stream during CarPlay RG. */
             if (gatedService != null) gatedService.blockRouteGuidance = true;
 
-            /* Start renderer FIRST — takes over displayable 20 before we
-             * set rgActive/rgiValid, which would trigger native KDK rendering
-             * to the same displayable (race → native icon overwrites our arrow). */
+            /* Start renderer FIRST — registers our private displayable 199
+             * as the leading layer in cluster context 74 (native KOMO widget
+             * on displayable 20 keeps its own screen window untouched, just
+             * dropped from the active composition).  Doing this before we
+             * set rgActive/rgiValid avoids a one-frame KDK flicker. */
             startCustomRenderer();
 
-            /* Now safe to set cluster state flags — our renderer owns displayable 20 */
+            /* Now safe to set cluster state flags — our private layer 199 owns
+             * the leading slot in context 74, encoder reads from it. */
             forceClusterRouteInfoState(true);
 
             /*
@@ -1484,7 +1487,9 @@ public class BAPBridge {
      * Custom Renderer Pipeline (c_render)
      *
      * Bypasses PresentationController entirely. Java spawns c_render, which
-     * renders into displayable 20 (MAP_ROUTE_GUIDANCE) via EGL/GLES2. Java
+     * creates a private displayable 199 (added as the leading layer of
+     * cluster context 74) via EGL/GLES2 — native KOMO widget on displayable
+     * 20 is left intact, just absent from the active composition.  Java
      * manages context 74/gfxAvailable and sends CMD_MANEUVER packets over TCP.
      * ============================================================== */
 
@@ -1609,7 +1614,9 @@ public class BAPBridge {
             forceClusterRouteInfoState(true);
 
             /* Set gfxAvailable so VC enters MAP mode for LVDS video.
-             * Must be after renderer owns displayable 20 (avoids native KDK race). */
+             * Must be after our private displayable 199 is the leading layer
+             * in context 74 (so the encoder reads our buffer, not whatever
+             * native composition lingered on the cluster before). */
             forceGfxAvailable(true);
 
             Log.i(TAG, "CR: started");
@@ -1720,14 +1727,14 @@ public class BAPBridge {
             if (rendererClient != null) {
                 rendererClient.disconnectClient();
             }
+            if (csRef != null) {
+                csRef.deactivateCustomRendererPipeline();
+            }
             /* slay as backstop — ensures no orphan even if TCP shutdown missed */
             try {
                 de.audi.atip.util.CommandLineExecuter.executeCommand(
                     "/bin/sh", new String[] { "-c", CR_KILL_CMD });
             } catch (Throwable t2) { /* ignore */ }
-            if (csRef != null) {
-                csRef.deactivateCustomRendererPipeline();
-            }
             forceGfxAvailable(false);
             forceClusterRouteInfoState(false);
             customRendererStarted = false;

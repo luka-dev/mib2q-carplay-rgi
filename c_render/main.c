@@ -5,7 +5,13 @@
  * Receives maneuver commands, handles all animation/transitions internally.
  *
  * macOS: GLFW window for development.
- * QNX:   displayable 200 for LVDS video output.
+ * QNX:   private displayable 199, added as the FIRST layer of cluster
+ *        context 74 (in front of native KOMBI_MAP_VIEW=33 + cluster
+ *        overlays 102/101).  setActiveDisplayable(4, 199) wires the MOST
+ *        encoder to capture our window for the LVDS stream that lands on
+ *        the VC's MAP tab.  Native KOMO widget on displayable 20 keeps
+ *        its own screen window — it's just dropped from the active
+ *        composition while we own the cluster.
  */
 
 #include <stdio.h>

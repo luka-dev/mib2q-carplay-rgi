@@ -1332,14 +1332,18 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
 
     /**
      * Activate custom renderer video pipeline.
-     * Ensures the cluster is on context 74, where displayable 20 is composited
-     * with the native map displayable.
+     * Ensures the cluster is on context 74.  The renderer process has already
+     * registered its private displayable 199 as the leading layer of context 74
+     * (alongside native map 33 and overlays 102/101); we just need to make sure
+     * the cluster is actually on that context so the MOST encoder reads from
+     * our window.
      */
     public String activateCustomRendererPipeline() {
-        /* Renderer draws into displayable 20 (MAP_ROUTE_GUIDANCE) which is
-         * already composited in context 74 with the native map (displayable 33).
-         * Re-issue the context switch defensively because native navigation or
-         * renderer teardown can leave the cluster on another context. */
+        /* Renderer draws into private displayable 199 — added to context 74
+         * as the leading layer.  Native KOMO RG widget on displayable 20 is
+         * deliberately excluded from the active composition.  Re-issue the
+         * context switch defensively because native navigation or another
+         * HMI process can leave the cluster on a different context. */
         try {
             de.audi.atip.hmi.view.IDisplayManager dm =
                 ((de.audi.atip.hmi.HMIService) this.env.getHMIService()).getDisplayManager();
@@ -1368,8 +1372,17 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
      * Deactivate custom renderer pipeline. Stop encoding and restore context.
      */
     public void deactivateCustomRendererPipeline() {
-        /* Renderer exit restores dmdt sc 1 74 (if g_display_routed was set).
-         * Ensure context 74 is active on the cluster display via Java DM. */
+        /* Backstop for renderer teardown: the renderer normally restores
+         * context 74 from its own atexit handler, but Java may have to slay
+         * the process if TCP teardown races.  Re-declare the native context
+         * here as well so displayable 199 cannot remain in the active layout. */
+        try {
+            de.audi.atip.util.CommandLineExecuter.executeCommand(
+                "/bin/sh", new String[] { "-c", "/eso/bin/apps/dmdt dc 74 20 102 101 33 >/dev/null 2>&1" });
+        } catch (Throwable t) {
+            /* non-fatal */
+        }
+
         try {
             de.audi.atip.hmi.view.IDisplayManager dm =
                 ((de.audi.atip.hmi.HMIService) this.env.getHMIService()).getDisplayManager();

@@ -60,12 +60,26 @@ typedef struct {
 #define CR_MAN_JUNC_COUNT(p)    ((p)[5])
 #define CR_MAN_JUNC_ANGLE(p,i)  ((int16_t)(((p)[6 + (i)*2] << 8) | (p)[7 + (i)*2]))
 
-/* Display configuration */
-#define CR_DISPLAYABLE_ID   20  /* DISPLAYABLE_MAP_ROUTE_GUIDANCE (328x181, native widget slot) */
-#define CR_CONTEXT_ID       74  /* Native context: RG(20) + images(101,102) + map(33) */
-#define CR_DISPLAY_ID       1   /* 0=main screen, 1=cluster (LVDS2) */
+/* Display configuration.
+ *
+ * CR_DISPLAYABLE_ID = 199 — private layer we add into cluster context 74.
+ * It does NOT collide with the native KOMO RG widget on displayable 20:
+ *   - 199 is unused by MU1316 firmware (not in displaymanager.json,
+ *     not referenced anywhere in stock binaries).
+ *   - Native widget keeps its own screen window with ID="20" registered
+ *     in displaymanager's m_surfaceSources[20] — its lifecycle is intact.
+ *   - We register a separate screen window with ID="199" and ask dmdt to
+ *     put 199 first in context 74, displacing displayable 20 from the
+ *     active composition.  setActiveDisplayable(4, 199) makes the cluster
+ *     MOST encoder read OUR window for the LVDS video stream to VC.
+ *   - On shutdown we restore context 74 to its original composition
+ *     (20 + 102 + 101 + 33), so the native widget becomes visible again
+ *     without any cleanup needed on the native process side. */
+#define CR_DISPLAYABLE_ID   199 /* private layer added to cluster context 74 */
+#define CR_CONTEXT_ID       74  /* Cluster MAP context (LVDS encoder reads from here) */
+#define CR_DISPLAY_ID       1   /* 0=main (LVDS1), 1=cluster (LVDS2) */
 #define CR_DEFAULT_WIDTH    328
-#define CR_DEFAULT_HEIGHT   181 /* 180px content + 1px ECC annotation row (native widget slot) */
+#define CR_DEFAULT_HEIGHT   181 /* 180px content + 1px ECC annotation row */
 #define CR_TARGET_FPS       30
 
 /* Popup crop geometry within the 328x180 content area (for debug grid only) */
