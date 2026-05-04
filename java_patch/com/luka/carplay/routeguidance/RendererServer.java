@@ -229,14 +229,6 @@ public class RendererServer {
                 frameReady = true;
                 lock.notifyAll();
                 Log.i(TAG, "renderer frame ready");
-            } else if (event == EVT_HEARTBEAT) {
-                /* Backward compatibility for renderer builds before EVT_READY:
-                 * the first heartbeat is sent from the main loop after render init. */
-                if (!rendererReady) {
-                    rendererReady = true;
-                    lock.notifyAll();
-                    Log.i(TAG, "renderer ready via heartbeat");
-                }
             }
         }
     }

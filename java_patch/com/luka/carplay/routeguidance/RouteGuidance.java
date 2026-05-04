@@ -173,6 +173,15 @@ public class RouteGuidance implements CarplayBus.Listener {
             laneGuidanceTotal = -1;
             laneGuidanceIndex = -1;
             laneGuidanceSlot = -1;
+            clearAllManeuverSlots();
+            clearDirty();
+        }
+
+        /* Reset per-maneuver and per-lane-cache arrays to their initial
+         * empty values without touching dirty flags or top-level fields.
+         * Shared between full reset() and the source_supports_rg=0
+         * hard-clear path in parse(). */
+        public void clearAllManeuverSlots() {
             for (int i = 0; i < MAX_MANEUVERS; i++) {
                 mType[i] = -1;
                 mTurnAngle[i] = -1;
@@ -200,7 +209,6 @@ public class RouteGuidance implements CarplayBus.Listener {
                 lgLaneStatus[i] = null;
                 lgLaneAngles[i] = null;
             }
-            clearDirty();
         }
 
         public void clearDirty() {
@@ -441,33 +449,7 @@ public class RouteGuidance implements CarplayBus.Listener {
                     }
                     state.maneuverOrder = null;
                     state.markDirty(State.DIRTY_MANEUVER_LIST);
-                    for (int i = 0; i < MAX_MANEUVERS; i++) {
-                        state.mType[i] = -1;
-                        state.mTurnAngle[i] = -1;
-                        state.mZLevel[i] = -1;
-                        state.mJunctionType[i] = -1;
-                        state.mDrivingSide[i] = -1;
-                        state.mName[i] = null;
-                        state.mAfterRoad[i] = null;
-                        state.mExitAngle[i] = 1000;
-                        state.mJunctionAngles[i] = null;
-                        state.mVer[i] = -1;
-                        state.mDistance[i] = -1;
-                        state.mExitInfo[i] = null;
-                        state.mLinkedLaneGuidanceIndex[i] = -1;
-                        state.mLinkedLaneGuidanceSlot[i] = -1;
-                        state.mLanePositions[i] = null;
-                        state.mLaneCount[i] = -1;
-                        state.mLaneDirections[i] = null;
-                        state.mLaneStatus[i] = null;
-                        state.mLaneAngles[i] = null;
-                        state.lgIndex[i] = -1;
-                        state.lgLanePositions[i] = null;
-                        state.lgLaneCount[i] = -1;
-                        state.lgLaneDirections[i] = null;
-                        state.lgLaneStatus[i] = null;
-                        state.lgLaneAngles[i] = null;
-                    }
+                    state.clearAllManeuverSlots();
                     state.laneGuidanceShowing = -1;
                     state.laneGuidanceTotal = -1;
                     state.laneGuidanceIndex = -1;
