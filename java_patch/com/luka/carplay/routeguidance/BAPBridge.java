@@ -38,7 +38,11 @@ public class BAPBridge {
     private static final int ACTIVE_RGTYPE = 0;  /* RGI -- BAP icons. c_render handles LVDS video. */
     private static final boolean BAP_TRACE_ENABLED = true;
 
-    /* ExitView variants (BAP spec FctID 49) */
+    /* ExitView variants (BAP spec FctID 49).  EU/NAR are used by
+     * sendExitView() which toggles between them to defeat AppConnectorNavi's
+     * sendStatusIfChanged dedup; exitViewNum=0 makes the variant cosmetic.
+     * ROW/ASIA kept for protocol parity even though they're not currently
+     * selected -- if regional variant logic returns, the codes are here. */
     private static final int EXITVIEW_EU = 0;
     private static final int EXITVIEW_NAR = 1;
     private static final int EXITVIEW_ROW = 2;
@@ -717,11 +721,6 @@ public class BAPBridge {
                 } else {
                     stopActionBlinkThread();
                 }
-
-                /* 2D/3D perspective switch disabled — always 3D for now */
-                /* if (rendererClient != null && customRendererStarted) {
-                    rendererClient.sendPerspective(nowApproach ? 0 : 1);
-                } */
             }
 
             if (explicitClear || shouldClearManeuver) {
@@ -2011,32 +2010,6 @@ public class BAPBridge {
         int variant = (exitViewSendCount % 2 == 0) ? EXITVIEW_EU : EXITVIEW_NAR;
         traceBap("updateExitView", variant + "," + exitViewNum);
         appConnectorNavi.updateExitView(variant, exitViewNum);
-    }
-
-    private int getExitViewVariant() {
-        return defaultExitViewVariant();
-    }
-
-    private static int defaultExitViewVariant() {
-        String country = null;
-        try {
-            country = java.util.Locale.getDefault().getCountry();
-        } catch (Exception e) {
-            country = null;
-        }
-        if (country == null || country.length() == 0) {
-            try {
-                country = System.getProperty("user.country");
-            } catch (Exception e) {
-                country = null;
-            }
-        }
-        if (country != null) {
-            String c = country.toUpperCase();
-            if ("US".equals(c) || "CA".equals(c) || "MX".equals(c)) return EXITVIEW_NAR;
-            if ("JP".equals(c) || "CN".equals(c) || "KR".equals(c) || "TW".equals(c)) return EXITVIEW_ASIA;
-        }
-        return EXITVIEW_EU;
     }
 
     private static String hexBytes(byte[] b) {

@@ -1379,36 +1379,4 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         }
     }
 
-    /**
-     * Send CMD_SHUTDOWN to c_render via TCP (48-byte packet, protocol.h).
-     * Fallback shutdown -- BAPBridge.stopCustomRenderer() handles primary
-     * shutdown via RendererServer. This is a backstop if Java didn't close cleanly.
-     */
-    public void shutdownRenderer() {
-        java.net.Socket sock = null;
-        try {
-            sock = new java.net.Socket("127.0.0.1", 19800);
-            sock.setTcpNoDelay(true);
-            byte[] pkt = new byte[48];
-            pkt[0] = 0x03; /* CMD_SHUTDOWN */
-            sock.getOutputStream().write(pkt);
-            sock.getOutputStream().flush();
-        } catch (Exception e) {
-            /* non-fatal -- renderer may already be stopped */
-        } finally {
-            if (sock != null) {
-                try { sock.close(); } catch (Exception e) { /* ignore */ }
-            }
-        }
-    }
-
-    public KOMOCaller getKomoCaller() {
-        try {
-            Field f = KOMOService.class.getDeclaredField("komoCaller");
-            f.setAccessible(true);
-            return (KOMOCaller) f.get(this.komoService);
-        } catch (Exception e) {
-            return null;
-        }
-    }
 }

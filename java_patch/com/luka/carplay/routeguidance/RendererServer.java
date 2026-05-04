@@ -51,7 +51,9 @@ public class RendererServer {
     private static final byte EVT_READY       = (byte) 0x81;
     private static final byte EVT_FRAME_READY = (byte) 0x82;
 
-    /* Command IDs -- must match protocol.h */
+    /* Command IDs -- must match protocol.h.  CMD_PERSPECTIVE kept for
+     * protocol parity even though the standalone send method was removed
+     * (perspective now rides on CMD_MANEUVER via MAN_FLAG_SET_PERSP). */
     private static final byte CMD_MANEUVER    = 0x01;
     private static final byte CMD_SHUTDOWN    = 0x03;
     private static final byte CMD_PERSPECTIVE = 0x04;
@@ -302,15 +304,6 @@ public class RendererServer {
         }
     }
 
-    /**
-     * Backward-compat shim — old call sites used disconnect() which
-     * did full teardown.  Default to that behaviour, but new code
-     * should prefer disconnectClient() (per-route) or dispose() (final).
-     */
-    public void disconnect() {
-        dispose();
-    }
-
     private void closeClientLocked() {
         if (out != null) {
             try { out.close(); } catch (Exception e) {}
@@ -415,20 +408,6 @@ public class RendererServer {
         pkt[2] = (byte) (level & 0xFF);   /* payload[0] = level */
         pkt[3] = (byte) (mode & 0xFF);    /* payload[1] = mode */
         return sendPacket(pkt);
-    }
-
-    /**
-     * Send CMD_PERSPECTIVE to switch 3D/2D mode.
-     *
-     * @param enabled 0=flat 2D, 1=perspective 3D
-     */
-    public void sendPerspective(int enabled) {
-        byte[] pkt = new byte[PKT_SIZE];
-        pkt[0] = CMD_PERSPECTIVE;
-        pkt[2] = (byte) (enabled & 0xFF);   /* payload[0] = on/off */
-        if (sendPacket(pkt)) {
-            Log.i(TAG, "Sent CMD_PERSPECTIVE=" + enabled);
-        }
     }
 
     /**
