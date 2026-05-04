@@ -10,10 +10,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <signal.h>
 #include <dlfcn.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <time.h>
 
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
@@ -38,10 +40,105 @@ static volatile int g_should_close = 0;
 static int g_displayable_id;
 static int g_context_id;
 static int g_display_id;
+static uint64_t g_last_focus_force_ms = 0;
+
+#define DMDT_FOCUS_FORCE_BACKOFF_MS 30000ULL
+
+static uint64_t monotonic_ms(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000ULL + (uint64_t)(ts.tv_nsec / 1000000ULL);
+}
 
 static int read_env_int(const char *name, int def) {
     const char *v = getenv(name);
     return (v && v[0]) ? atoi(v) : def;
+}
+
+static int ascii_contains_ci(const char *haystack, const char *needle) {
+    size_t nlen;
+    if (!haystack || !needle) return 0;
+    nlen = strlen(needle);
+    if (nlen == 0) return 1;
+    for (; *haystack; haystack++) {
+        size_t i;
+        for (i = 0; i < nlen; i++) {
+            unsigned char a = (unsigned char)haystack[i];
+            unsigned char b = (unsigned char)needle[i];
+            if (!a) return 0;
+            if (tolower(a) != tolower(b)) break;
+        }
+        if (i == nlen) return 1;
+    }
+    return 0;
+}
+
+static int parse_first_int(const char *s, int *out) {
+    int sign = 1;
+    int value = 0;
+    int seen = 0;
+    if (!s || !out) return 0;
+    while (*s && !isdigit((unsigned char)*s) && *s != '-') s++;
+    if (*s == '-') {
+        sign = -1;
+        s++;
+    }
+    while (*s && isdigit((unsigned char)*s)) {
+        value = value * 10 + (*s - '0');
+        seen = 1;
+        s++;
+    }
+    if (!seen) return 0;
+    *out = value * sign;
+    return 1;
+}
+
+static int parse_context_line(const char *line, int *ctx) {
+    const char *p;
+    if (!ascii_contains_ci(line, "context")) return 0;
+
+    p = strchr(line, ':');
+    if (p && parse_first_int(p + 1, ctx)) return 1;
+
+    p = strchr(line, '=');
+    if (p && parse_first_int(p + 1, ctx)) return 1;
+
+    return parse_first_int(line, ctx);
+}
+
+static int line_value_contains_ci(const char *line, const char *key, const char *needle) {
+    const char *p;
+    if (!ascii_contains_ci(line, key)) return 0;
+    p = strchr(line, ':');
+    return ascii_contains_ci(p ? p + 1 : line, needle);
+}
+
+static void force_display_context(const char *reason, int observed_ctx) {
+    char cmd[128];
+    uint64_t now = monotonic_ms();
+    if (g_last_focus_force_ms != 0 &&
+        now - g_last_focus_force_ms < DMDT_FOCUS_FORCE_BACKOFF_MS) {
+        if (observed_ctx >= 0) {
+            fprintf(stderr, "platform_qnx: dmdt focus ctx=%d, suppressing force ctx=%d (%s)\n",
+                    observed_ctx, g_context_id, reason);
+        } else {
+            fprintf(stderr, "platform_qnx: dmdt focus unknown, suppressing force ctx=%d (%s)\n",
+                    g_context_id, reason);
+        }
+        return;
+    }
+    g_last_focus_force_ms = now;
+
+    if (observed_ctx >= 0) {
+        fprintf(stderr, "platform_qnx: dmdt focus ctx=%d, forcing ctx=%d (%s)\n",
+                observed_ctx, g_context_id, reason);
+    } else {
+        fprintf(stderr, "platform_qnx: dmdt focus unknown, forcing ctx=%d (%s)\n",
+                g_context_id, reason);
+    }
+    snprintf(cmd, sizeof(cmd), "/eso/bin/apps/dmdt sc %d %d", g_display_id, g_context_id);
+    system(cmd);
+    g_display_routed = 1;
 }
 
 /* Display restore — switch cluster back to native context 74
@@ -56,27 +153,63 @@ static void restore_display(void) {
 }
 
 static int read_dmdt_cluster_context(void) {
-    FILE *fp = popen("/eso/bin/apps/dmdt gs 2>/dev/null", "r");
+    FILE *fp = popen("/eso/bin/apps/dmdt gs 2>&1", "r");
     if (!fp) return -1;
 
     char line[256];
+    char sample[512];
     int display_index = -1;
     int in_target_display = 0;
+    int last_context = -1;
+    int context_count = 0;
+    int line_count = 0;
     int ctx = -1;
+    int status;
+    size_t sample_len = 0;
+
+    sample[0] = '\0';
     while (fgets(line, sizeof(line), fp)) {
-        if (strstr(line, "display:")) {
+        size_t line_len;
+        line_count++;
+        line_len = strlen(line);
+        if (sample_len + line_len + 1 < sizeof(sample)) {
+            memcpy(sample + sample_len, line, line_len);
+            sample_len += line_len;
+            sample[sample_len] = '\0';
+        }
+        if (ascii_contains_ci(line, "display:")) {
+            int display_id = -1;
             display_index++;
-            in_target_display = strstr(line, "Cluster") != NULL
-                             || display_index == g_display_id;
+            parse_first_int(line, &display_id);
+            in_target_display = ascii_contains_ci(line, "Cluster")
+                             || display_index == g_display_id
+                             || display_id == g_display_id;
             continue;
         }
-        if (in_target_display && strstr(line, "context id:")) {
-            char *p = strstr(line, "context id:");
-            if (p) ctx = atoi(p + 11);
-            break;
+        if (line_value_contains_ci(line, "terminal", "LVDS2")) {
+            in_target_display = in_target_display || g_display_id == 1;
+            continue;
+        }
+        if (line_value_contains_ci(line, "terminal", "LVDS1")) {
+            in_target_display = in_target_display || g_display_id == 0;
+            continue;
+        }
+        if (parse_context_line(line, &last_context)) {
+            context_count++;
+            if (in_target_display) {
+                ctx = last_context;
+                break;
+            }
         }
     }
-    pclose(fp);
+    status = pclose(fp);
+    if (ctx < 0 && context_count == 1) ctx = last_context;
+    if (ctx < 0) {
+        fprintf(stderr,
+                "platform_qnx: dmdt gs parse failed status=%d lines=%d displays=%d contexts=%d sample=%s\n",
+                status, line_count, display_index + 1, context_count,
+                sample[0] ? sample : "(empty)");
+    }
     return ctx;
 }
 
@@ -89,15 +222,11 @@ static void check_and_restore_focus(void) {
     if (ctx == g_context_id) return;
 
     if (ctx < 0) {
-        fprintf(stderr, "platform_qnx: dmdt focus unknown, leaving ctx=%d\n", g_context_id);
+        force_display_context("parse-failed", -1);
         return;
     }
 
-    char cmd[128];
-    fprintf(stderr, "platform_qnx: dmdt focus ctx=%d, forcing ctx=%d\n", ctx, g_context_id);
-    snprintf(cmd, sizeof(cmd), "/eso/bin/apps/dmdt sc %d %d", g_display_id, g_context_id);
-    system(cmd);
-    g_display_routed = 1;
+    force_display_context("mismatch", ctx);
 }
 
 /* One-shot focus check thread — spawned by main loop on demand.

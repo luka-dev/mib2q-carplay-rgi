@@ -47,7 +47,9 @@ public class RendererServer {
      * read throws SocketTimeoutException and we drop the dead client.
      * Catches force-killed renderer whose TCP state lingers. */
     private static final int SOCKET_READ_TIMEOUT_MS = 5000;
-    private static final byte EVT_HEARTBEAT = (byte) 0x80;
+    private static final byte EVT_HEARTBEAT   = (byte) 0x80;
+    private static final byte EVT_READY       = (byte) 0x81;
+    private static final byte EVT_FRAME_READY = (byte) 0x82;
 
     /* Command IDs -- must match protocol.h */
     private static final byte CMD_MANEUVER    = 0x01;
@@ -65,6 +67,8 @@ public class RendererServer {
     private OutputStream out;        /* protected by lock */
     private Thread acceptThread;
     private volatile boolean running;
+    private volatile boolean rendererReady;
+    private volatile boolean frameReady;
 
     /* True once we've successfully accepted at least one renderer
      * connection.  Lets the caller distinguish "still starting up,
@@ -140,6 +144,9 @@ public class RendererServer {
                     sock = s;
                     out = o;
                     everConnected = true;
+                    rendererReady = false;
+                    frameReady = false;
+                    lock.notifyAll();
                 }
                 Log.i(TAG, "renderer connected from " + s.getInetAddress() + ":" + s.getPort());
 
@@ -182,8 +189,7 @@ public class RendererServer {
                     if (n < 0) throw new IOException("EOF");
                     total += n;
                 }
-                /* heartbeats and any future events ignored — purpose of
-                 * this read is just to detect socket death. */
+                handleRendererEvent(owned, buf[0]);
             }
         } catch (IOException e) {
             if (running) {
@@ -208,6 +214,58 @@ public class RendererServer {
             l.onRendererDied(reason);
         } catch (Throwable t) {
             Log.w(TAG, "death listener failed: " + t.getMessage());
+        }
+    }
+
+    private void handleRendererEvent(Socket owned, byte event) {
+        synchronized (lock) {
+            if (sock != owned) return;
+            if (event == EVT_READY) {
+                rendererReady = true;
+                lock.notifyAll();
+                Log.i(TAG, "renderer ready");
+            } else if (event == EVT_FRAME_READY) {
+                rendererReady = true;
+                frameReady = true;
+                lock.notifyAll();
+                Log.i(TAG, "renderer frame ready");
+            } else if (event == EVT_HEARTBEAT) {
+                /* Backward compatibility for renderer builds before EVT_READY:
+                 * the first heartbeat is sent from the main loop after render init. */
+                if (!rendererReady) {
+                    rendererReady = true;
+                    lock.notifyAll();
+                    Log.i(TAG, "renderer ready via heartbeat");
+                }
+            }
+        }
+    }
+
+    public boolean waitForReady(long timeoutMs) {
+        return waitForState(timeoutMs, true);
+    }
+
+    public boolean waitForFrameReady(long timeoutMs) {
+        return waitForState(timeoutMs, false);
+    }
+
+    private boolean waitForState(long timeoutMs, boolean wantReady) {
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        synchronized (lock) {
+            while (running) {
+                if (wantReady && rendererReady) return true;
+                if (!wantReady && frameReady) return true;
+
+                long remain = deadline - System.currentTimeMillis();
+                if (remain <= 0) break;
+                try {
+                    lock.wait(remain);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+            return wantReady ? rendererReady : frameReady;
         }
     }
 
@@ -270,6 +328,9 @@ public class RendererServer {
             try { sock.close(); } catch (Exception e) {}
             sock = null;
         }
+        rendererReady = false;
+        frameReady = false;
+        lock.notifyAll();
     }
 
     public boolean isConnected() {

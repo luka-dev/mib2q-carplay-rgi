@@ -23,6 +23,8 @@
 
 /* Renderer -> Java events (high bit set to distinguish from commands) */
 #define EVT_HEARTBEAT    0x80    /* Renderer alive, sent every 1 s; empty payload */
+#define EVT_READY        0x81    /* EGL/render initialized; safe to send first command */
+#define EVT_FRAME_READY  0x82    /* At least one maneuver frame has been swapped */
 
 /* 48-byte command packet */
 typedef struct {

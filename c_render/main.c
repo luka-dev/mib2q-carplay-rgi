@@ -335,9 +335,11 @@ int main(int argc, char **argv) {
     g_engine.phase = ENGINE_IDLE;
 
     fprintf(stderr, "c_render: ready, waiting for commands on :%d\n", CR_TCP_PORT);
+    cr_server_mark_ready();
 
     int dirty = 1;
     int running = 1;
+    int announced_first_frame = 0;
 
 #ifdef CR_DIAG_FRAME_LOG
     /* Per-second + per-frame render-loop instrumentation — only compiled
@@ -568,6 +570,14 @@ int main(int argc, char **argv) {
                 save_screenshot(fb_w, fb_h, screenshot_label);
 
             platform_swap();
+            /* Frame-ready means the EGL surface has a defined maneuver frame
+             * queued to the compositor.  The cold-start fade may still continue
+             * visually after Java exposes the displayable. */
+            if (!announced_first_frame && g_engine.has_current) {
+                announced_first_frame = 1;
+                cr_server_mark_frame_ready();
+                fprintf(stderr, "engine: first frame ready\n");
+            }
 
             /* Voluntarily yield to the compositor right after queuing a
              * new buffer.  Without this, the kernel eventually forces us

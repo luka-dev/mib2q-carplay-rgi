@@ -138,6 +138,19 @@ public class RouteGuidance implements CarplayBus.Listener {
          */
         public int[][][] mLaneAngles = new int[MAX_MANEUVERS][][];
 
+        /*
+         * Lane-guidance cache keyed by iOS composedGuidanceEventIndex.
+         * These lg* arrays are separate from maneuver slots: CarPlay can send
+         * lane event 0 while maneuver slot 0 currently belongs to iOS
+         * maneuver 2 after reconnect/reroute.
+         */
+        public int[] lgIndex = new int[MAX_MANEUVERS];
+        public int[][] lgLanePositions = new int[MAX_MANEUVERS][];
+        public int[] lgLaneCount = new int[MAX_MANEUVERS];
+        public int[][] lgLaneDirections = new int[MAX_MANEUVERS][];
+        public int[][] lgLaneStatus = new int[MAX_MANEUVERS][];
+        public int[][][] lgLaneAngles = new int[MAX_MANEUVERS][][];
+
         public State() {
             reset();
         }
@@ -180,6 +193,12 @@ public class RouteGuidance implements CarplayBus.Listener {
                 mLaneDirections[i] = null;
                 mLaneStatus[i] = null;
                 mLaneAngles[i] = null;
+                lgIndex[i] = -1;
+                lgLanePositions[i] = null;
+                lgLaneCount[i] = -1;
+                lgLaneDirections[i] = null;
+                lgLaneStatus[i] = null;
+                lgLaneAngles[i] = null;
             }
             clearDirty();
         }
@@ -442,6 +461,12 @@ public class RouteGuidance implements CarplayBus.Listener {
                         state.mLaneDirections[i] = null;
                         state.mLaneStatus[i] = null;
                         state.mLaneAngles[i] = null;
+                        state.lgIndex[i] = -1;
+                        state.lgLanePositions[i] = null;
+                        state.lgLaneCount[i] = -1;
+                        state.lgLaneDirections[i] = null;
+                        state.lgLaneStatus[i] = null;
+                        state.lgLaneAngles[i] = null;
                     }
                     state.laneGuidanceShowing = -1;
                     state.laneGuidanceTotal = -1;
@@ -632,6 +657,54 @@ public class RouteGuidance implements CarplayBus.Listener {
             if (!strEq(state.destination, v)) {
                 state.destination = v;
                 state.markDirty(State.DIRTY_DESTINATION);
+            }
+        }
+
+        /* Parse lane-guidance cache lg0_, lg1_, ... */
+        for (int i = 0; i < MAX_MANEUVERS; i++) {
+            String p = "lg" + i + "_";
+
+            if (d.has(p + "index")) {
+                int v = d.num(p + "index", -1);
+                if (v != state.lgIndex[i]) {
+                    state.lgIndex[i] = v;
+                    state.markDirty(State.DIRTY_LANE_GUIDANCE);
+                }
+            }
+            if (d.has(p + "lane_count")) {
+                int v = d.num(p + "lane_count", -1);
+                if (v != state.lgLaneCount[i]) {
+                    state.lgLaneCount[i] = v;
+                    state.markDirty(State.DIRTY_LANE_GUIDANCE);
+                }
+            }
+            if (d.has(p + "lane_positions")) {
+                int[] v = d.intList(p + "lane_positions");
+                if (!intArrayEq(state.lgLanePositions[i], v)) {
+                    state.lgLanePositions[i] = v;
+                    state.markDirty(State.DIRTY_LANE_GUIDANCE);
+                }
+            }
+            if (d.has(p + "lane_directions")) {
+                int[] v = d.intList(p + "lane_directions");
+                if (!intArrayEq(state.lgLaneDirections[i], v)) {
+                    state.lgLaneDirections[i] = v;
+                    state.markDirty(State.DIRTY_LANE_GUIDANCE);
+                }
+            }
+            if (d.has(p + "lane_status")) {
+                int[] v = d.intList(p + "lane_status");
+                if (!intArrayEq(state.lgLaneStatus[i], v)) {
+                    state.lgLaneStatus[i] = v;
+                    state.markDirty(State.DIRTY_LANE_GUIDANCE);
+                }
+            }
+            if (d.has(p + "lane_angles")) {
+                int[][] v = parseLaneAnglesMatrix(d.str(p + "lane_angles", null));
+                if (!intMatrixEq(state.lgLaneAngles[i], v)) {
+                    state.lgLaneAngles[i] = v;
+                    state.markDirty(State.DIRTY_LANE_GUIDANCE);
+                }
             }
         }
 

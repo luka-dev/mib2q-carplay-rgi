@@ -36,6 +36,8 @@ static struct timeval g_last_retry = {0, 0};
 #define RECV_BUF_SIZE 512
 static uint8_t g_recv_buf[RECV_BUF_SIZE];
 static int g_recv_len = 0;
+static int g_ready_sent = 0;
+static int g_frame_ready_sent = 0;
 
 #define RETRY_INTERVAL_SEC 1   /* re-attempt connect every 1 s if Java not up yet */
 
@@ -52,6 +54,15 @@ static void set_nonblocking(int fd) {
     int flags = fcntl(fd, F_GETFL, 0);
     if (flags >= 0)
         fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+}
+
+static void send_event(uint8_t event_id) {
+    if (g_server_fd < 0) return;
+
+    uint8_t pkt[CR_PKT_SIZE];
+    memset(pkt, 0, sizeof(pkt));
+    pkt[0] = event_id;
+    (void)send(g_server_fd, pkt, CR_PKT_SIZE, 0);
 }
 
 static int try_connect(void) {
@@ -101,6 +112,8 @@ void cr_server_poll(void) {
             if (g_server_fd >= 0) {
                 fprintf(stderr, "server: connected to 127.0.0.1:%d\n", g_target_port);
                 g_recv_len = 0;
+                if (g_ready_sent) send_event(EVT_READY);
+                if (g_frame_ready_sent) send_event(EVT_FRAME_READY);
             }
         }
     }
@@ -143,12 +156,17 @@ int cr_server_read_cmd(cr_cmd_t *out) {
  * skip — main thread's cr_server_poll() will detect a dead socket via
  * recv error on the next iteration. */
 void cr_server_send_heartbeat(void) {
-    if (g_server_fd < 0) return;
+    send_event(EVT_HEARTBEAT);
+}
 
-    uint8_t pkt[CR_PKT_SIZE];
-    memset(pkt, 0, sizeof(pkt));
-    pkt[0] = EVT_HEARTBEAT;
-    (void)send(g_server_fd, pkt, CR_PKT_SIZE, 0);
+void cr_server_mark_ready(void) {
+    g_ready_sent = 1;
+    send_event(EVT_READY);
+}
+
+void cr_server_mark_frame_ready(void) {
+    g_frame_ready_sent = 1;
+    send_event(EVT_FRAME_READY);
 }
 
 void cr_server_shutdown(void) {

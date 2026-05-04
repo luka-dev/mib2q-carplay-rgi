@@ -1173,13 +1173,85 @@ public class BAPBridge {
 
     private static boolean hasLaneGuidanceForManeuver(RouteGuidance.State s, int manIdx) {
         if (manIdx < 0) return false;
+        if (hasLaneCacheForSlot(s, manIdx)) return true;
         if (s.mLaneDirections == null || manIdx >= s.mLaneDirections.length) return false;
         if (s.mLaneDirections[manIdx] == null) return false;
         return laneCountForManeuver(s, manIdx) > 0;
     }
 
+    private static boolean hasLaneCacheForSlot(RouteGuidance.State s, int slot) {
+        if (slot < 0) return false;
+        if (s.lgLaneDirections == null || slot >= s.lgLaneDirections.length) return false;
+        if (s.lgLaneDirections[slot] == null) return false;
+        return laneCacheCountForSlot(s, slot) > 0;
+    }
+
+    private static int laneCacheCountForSlot(RouteGuidance.State s, int slot) {
+        if (slot < 0) return 0;
+        int count = 0;
+        if (s.lgLaneCount != null && slot < s.lgLaneCount.length) {
+            count = s.lgLaneCount[slot];
+        }
+        if (count <= 0 && s.lgLaneDirections != null && slot < s.lgLaneDirections.length
+            && s.lgLaneDirections[slot] != null) {
+            count = s.lgLaneDirections[slot].length;
+        }
+        if (count <= 0 && s.lgLaneStatus != null && slot < s.lgLaneStatus.length
+            && s.lgLaneStatus[slot] != null) {
+            count = s.lgLaneStatus[slot].length;
+        }
+        return Math.max(count, 0);
+    }
+
+    private static int laneSlotForGuidanceIndex(RouteGuidance.State s, int guidanceIndex) {
+        if (guidanceIndex < 0 || s.lgIndex == null) return -1;
+        for (int i = 0; i < s.lgIndex.length; i++) {
+            if (s.lgIndex[i] == guidanceIndex && hasLaneCacheForSlot(s, i)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /* Slot ids are shared by the legacy m-cache fallback and the lg-cache
+     * arrays.  Keep both caches in the same bounded numeric slot range. */
+    private static int[] lanePositionsFor(RouteGuidance.State s, int slot) {
+        if (hasLaneCacheForSlot(s, slot) && s.lgLanePositions != null && slot < s.lgLanePositions.length)
+            return s.lgLanePositions[slot];
+        if (s.mLanePositions != null && slot >= 0 && slot < s.mLanePositions.length)
+            return s.mLanePositions[slot];
+        return null;
+    }
+
+    private static int[] laneDirectionsFor(RouteGuidance.State s, int slot) {
+        if (hasLaneCacheForSlot(s, slot) && s.lgLaneDirections != null && slot < s.lgLaneDirections.length)
+            return s.lgLaneDirections[slot];
+        if (s.mLaneDirections != null && slot >= 0 && slot < s.mLaneDirections.length)
+            return s.mLaneDirections[slot];
+        return null;
+    }
+
+    private static int[] laneStatusFor(RouteGuidance.State s, int slot) {
+        if (hasLaneCacheForSlot(s, slot) && s.lgLaneStatus != null && slot < s.lgLaneStatus.length)
+            return s.lgLaneStatus[slot];
+        if (s.mLaneStatus != null && slot >= 0 && slot < s.mLaneStatus.length)
+            return s.mLaneStatus[slot];
+        return null;
+    }
+
+    private static int[][] laneAnglesFor(RouteGuidance.State s, int slot) {
+        if (hasLaneCacheForSlot(s, slot) && s.lgLaneAngles != null && slot < s.lgLaneAngles.length)
+            return s.lgLaneAngles[slot];
+        if (s.mLaneAngles != null && slot >= 0 && slot < s.mLaneAngles.length)
+            return s.mLaneAngles[slot];
+        return null;
+    }
+
     private static int laneCountForManeuver(RouteGuidance.State s, int manIdx) {
         if (manIdx < 0) return 0;
+        if (hasLaneCacheForSlot(s, manIdx)) {
+            return laneCacheCountForSlot(s, manIdx);
+        }
         int count = 0;
         if (s.mLaneCount != null && manIdx < s.mLaneCount.length) {
             count = s.mLaneCount[manIdx];
@@ -1199,21 +1271,25 @@ public class BAPBridge {
     private static int resolveLaneGuidanceManeuverIndex(RouteGuidance.State s) {
         /* iOS exposes the currently displayed lane guidance as a top-level
          * currentLaneGuidanceIndex.  The C hook remaps that raw iOS index to
-         * lane_guidance_slot because Java only sees bounded cache slots. */
-        if (s.laneGuidanceSlot >= 0) {
+         * a bounded lane-guidance cache slot (lgN_*), not a maneuver slot. */
+        if (s.laneGuidanceSlot >= 0 && hasLaneCacheForSlot(s, s.laneGuidanceSlot)) {
             return s.laneGuidanceSlot;
         }
+
+        int byIndex = laneSlotForGuidanceIndex(s, s.laneGuidanceIndex);
+        if (byIndex >= 0) return byIndex;
 
         /* Compatibility with older hooks where raw iOS indexes still matched
          * cache slots at route start.  Do not use this once indexes exceed the
          * Java slot array. */
         int current = s.laneGuidanceIndex;
         int max = (s.mLaneCount != null) ? s.mLaneCount.length : 0;
-        if (current >= 0 && current < max) {
+        if (current >= 0 && current < max && hasLaneGuidanceForManeuver(s, current)) {
             return current;
         }
 
-        /* Fallback for route snapshots that predate lane_guidance_slot. */
+        /* Fallback for route snapshots that predate lane_guidance_slot:
+         * prefer primary's own lane data first, then its linked-lane slot. */
         int primary = getFirstManeuverIndex(s);
         if (hasLaneGuidanceForManeuver(s, primary)) {
             return primary;
@@ -1246,10 +1322,7 @@ public class BAPBridge {
     }
 
     private static short mapLanePosition(RouteGuidance.State s, int manIdx, int laneIdx) {
-        if (s.mLanePositions == null || manIdx < 0 || manIdx >= s.mLanePositions.length) {
-            return (short) laneIdx;
-        }
-        int[] pos = s.mLanePositions[manIdx];
+        int[] pos = lanePositionsFor(s, manIdx);
         if (pos == null || laneIdx < 0 || laneIdx >= pos.length) {
             return (short) laneIdx;
         }
@@ -1259,8 +1332,7 @@ public class BAPBridge {
     }
 
     private static boolean hasLaneAnglesForLane(RouteGuidance.State s, int manIdx, int laneIdx) {
-        if (s.mLaneAngles == null || manIdx < 0 || manIdx >= s.mLaneAngles.length) return false;
-        int[][] lanes = s.mLaneAngles[manIdx];
+        int[][] lanes = laneAnglesFor(s, manIdx);
         if (lanes == null || lanes.length == 0) return false;
         int sel = (laneIdx >= 0 && laneIdx < lanes.length) ? laneIdx : 0;
         int[] angles = lanes[sel];
@@ -1268,8 +1340,7 @@ public class BAPBridge {
     }
 
     private static boolean shouldEmitLane(RouteGuidance.State s, int manIdx, int laneIdx, short laneDir) {
-        if (s.mLaneDirections == null || manIdx < 0 || manIdx >= s.mLaneDirections.length) return true;
-        int[] dirs = s.mLaneDirections[manIdx];
+        int[] dirs = laneDirectionsFor(s, manIdx);
         if (dirs == null || laneIdx < 0 || laneIdx >= dirs.length) return true;
         int raw = dirs[laneIdx];
 
@@ -1309,22 +1380,19 @@ public class BAPBridge {
     private static short mapLaneDirectionFromSentinel(RouteGuidance.State s, int manIdx, int laneIdx) {
         if (manIdx < 0) return (short) 0xFF;
 
-        if (s.mLaneAngles != null && manIdx < s.mLaneAngles.length) {
-            int[][] laneAngles = s.mLaneAngles[manIdx];
-            if (laneAngles != null && laneAngles.length > 0) {
-                int sel = (laneIdx >= 0 && laneIdx < laneAngles.length) ? laneIdx : 0;
-                int[] angles = laneAngles[sel];
-                if (angles != null && angles.length > 0) {
-                    return (short)(mapRawLaneValueToDirectionCode(angles[0]) & 0xFF);
-                }
+        int[][] laneAngles = laneAnglesFor(s, manIdx);
+        if (laneAngles != null && laneAngles.length > 0) {
+            int sel = (laneIdx >= 0 && laneIdx < laneAngles.length) ? laneIdx : 0;
+            int[] angles = laneAngles[sel];
+            if (angles != null && angles.length > 0) {
+                return (short)(mapRawLaneValueToDirectionCode(angles[0]) & 0xFF);
             }
         }
         return (short) 0xFF;
     }
 
     private static short mapLaneDirection(RouteGuidance.State s, int manIdx, int laneIdx) {
-        if (s.mLaneDirections == null || manIdx < 0 || manIdx >= s.mLaneDirections.length) return (short)0xFF;
-        int[] dirs = s.mLaneDirections[manIdx];
+        int[] dirs = laneDirectionsFor(s, manIdx);
         if (dirs == null || laneIdx < 0 || laneIdx >= dirs.length) return (short)0xFF;
         int raw = dirs[laneIdx];
 
@@ -1337,19 +1405,16 @@ public class BAPBridge {
 
     private static byte[] mapLaneSideStreets(RouteGuidance.State s, int manIdx, int laneIdx, short laneDirection) {
         if (manIdx < 0) return new byte[0];
-        if (s.mLaneAngles == null || manIdx >= s.mLaneAngles.length) return new byte[0];
-        int[][] lanes = s.mLaneAngles[manIdx];
+        int[][] lanes = laneAnglesFor(s, manIdx);
         if (lanes == null || lanes.length == 0) return new byte[0];
         int sel = (laneIdx >= 0 && laneIdx < lanes.length) ? laneIdx : 0;
         int[] angles = lanes[sel];
         if (angles == null || angles.length == 0) return new byte[0];
 
         int start = 0;
-        if (s.mLaneDirections != null && manIdx < s.mLaneDirections.length) {
-            int[] dirs = s.mLaneDirections[manIdx];
-            if (dirs != null && laneIdx >= 0 && laneIdx < dirs.length && dirs[laneIdx] == 1000) {
-                start = 1;
-            }
+        int[] dirs = laneDirectionsFor(s, manIdx);
+        if (dirs != null && laneIdx >= 0 && laneIdx < dirs.length && dirs[laneIdx] == 1000) {
+            start = 1;
         }
         if (start >= angles.length) return new byte[0];
 
@@ -1390,8 +1455,7 @@ public class BAPBridge {
     }
 
     private static byte mapGuidanceInfo(RouteGuidance.State s, int manIdx, int laneIdx) {
-        if (s.mLaneStatus == null || manIdx < 0 || manIdx >= s.mLaneStatus.length) return 0;
-        int[] status = s.mLaneStatus[manIdx];
+        int[] status = laneStatusFor(s, manIdx);
         if (status == null || laneIdx < 0 || laneIdx >= status.length) return 0;
         int v = status[laneIdx];
         if (v < 0 || v > 2) return 0;
@@ -1420,11 +1484,9 @@ public class BAPBridge {
     /* ==============================================================
      * Custom Renderer Pipeline (c_render)
      *
-     * Bypasses PresentationController entirely. The c_hook spawns
-     * c_render which creates its own displayable (199) and renders
-     * maneuver graphics via EGL/GLES2. Java manages the video encoder
-     * pipeline (context switch, update rate), VC state (gfxAvailable),
-     * and sends CMD_MANEUVER packets over TCP to control what's drawn.
+     * Bypasses PresentationController entirely. Java spawns c_render, which
+     * renders into displayable 20 (MAP_ROUTE_GUIDANCE) via EGL/GLES2. Java
+     * manages context 74/gfxAvailable and sends CMD_MANEUVER packets over TCP.
      * ============================================================== */
 
     private boolean customRendererStarted = false;
@@ -1446,13 +1508,15 @@ public class BAPBridge {
     private long crLastRespawnMs = 0;
     private static final int CR_RESPAWN_FAIL_THRESHOLD = 3;
     private static final long CR_RESPAWN_COOLDOWN_MS = 5000;
+    private static final long CR_READY_TIMEOUT_MS = 2500;
+    private static final long CR_FRAME_READY_TIMEOUT_MS = 1200;
 
     private static final String CR_LAUNCH_CMD =
         "/mnt/app/root/hooks/maneuver_render >/tmp/maneuver_render.log 2>&1 &";
     private static final String CR_KILL_CMD =
         "slay -f -Q maneuver_render >/dev/null 2>&1";
 
-    private void startCustomRenderer() {
+    private synchronized void startCustomRenderer() {
         if (customRendererStarted) {
             Log.d(TAG, "CR: already started, skipping");
             return;
@@ -1482,7 +1546,8 @@ public class BAPBridge {
                 });
             }
             if (!rendererClient.connect()) {
-                Log.w(TAG, "CR: bind failed; renderer pipeline may not work");
+                Log.w(TAG, "CR: bind failed; renderer pipeline disabled");
+                return;
             }
 
             /* Launch renderer from Java (not C hook) — Java's process tree
@@ -1491,17 +1556,16 @@ public class BAPBridge {
             de.audi.atip.util.CommandLineExecuter.executeCommand(
                 "/bin/sh", new String[] { "-c", CR_LAUNCH_CMD });
 
-            /* Switch cluster display to renderer's context via DisplayManager.
-             * Doesn't depend on renderer being fully up (separate IPC path). */
-            String result = csRef.activateCustomRendererPipeline();
-            Log.i(TAG, "CR: pipeline " + result);
-
-            /* BAP route info state for HUD icons */
-            forceClusterRouteInfoState(true);
-
-            /* Set gfxAvailable so VC enters MAP mode for LVDS video.
-             * Must be after renderer owns displayable 20 (avoids native KDK race). */
-            forceGfxAvailable(true);
+            if (!rendererClient.waitForReady(CR_READY_TIMEOUT_MS)) {
+                Log.w(TAG, "CR: renderer not ready after " + CR_READY_TIMEOUT_MS
+                        + "ms; keeping gfx disabled");
+                try {
+                    de.audi.atip.util.CommandLineExecuter.executeCommand(
+                        "/bin/sh", new String[] { "-c", CR_KILL_CMD });
+                } catch (Throwable t) { /* ignore */ }
+                rendererClient.disconnectClient();
+                return;
+            }
 
             customRendererStarted = true;
             lastCrIcon = -1;
@@ -1509,6 +1573,45 @@ public class BAPBridge {
             lastCrExitAngle = -9999;
             lastCrDrivingSide = -1;
             lastCrVer = -1;
+
+            /* Paint a deterministic first frame before exposing the LVDS
+             * displayable to KOMO.  Without this, the cluster can briefly
+             * encode the renderer window while it is still blank/black. */
+            sendRendererFollowStreet();
+            if (!rendererClient.waitForFrameReady(CR_FRAME_READY_TIMEOUT_MS)) {
+                Log.w(TAG, "CR: renderer produced no first frame after "
+                        + CR_FRAME_READY_TIMEOUT_MS + "ms; keeping gfx disabled");
+                customRendererStarted = false;
+                try {
+                    de.audi.atip.util.CommandLineExecuter.executeCommand(
+                        "/bin/sh", new String[] { "-c", CR_KILL_CMD });
+                } catch (Throwable t) { /* ignore */ }
+                rendererClient.disconnectClient();
+                return;
+            }
+
+            /* Switch cluster display to renderer's context only after the
+             * renderer is connected, initialized, and has swapped a frame. */
+            String result = csRef.activateCustomRendererPipeline();
+            Log.i(TAG, "CR: pipeline " + result);
+            if (result == null || result.startsWith("FAILED")) {
+                Log.w(TAG, "CR: pipeline activation failed; keeping gfx disabled");
+                customRendererStarted = false;
+                try {
+                    de.audi.atip.util.CommandLineExecuter.executeCommand(
+                        "/bin/sh", new String[] { "-c", CR_KILL_CMD });
+                } catch (Throwable t) { /* ignore */ }
+                rendererClient.disconnectClient();
+                return;
+            }
+
+            /* BAP route info state for HUD icons.  onStart() also forces this,
+             * but renderer respawn can happen mid-route without onStart(). */
+            forceClusterRouteInfoState(true);
+
+            /* Set gfxAvailable so VC enters MAP mode for LVDS video.
+             * Must be after renderer owns displayable 20 (avoids native KDK race). */
+            forceGfxAvailable(true);
 
             Log.i(TAG, "CR: started");
         } catch (Throwable t) {
@@ -1607,7 +1710,7 @@ public class BAPBridge {
         }
     }
 
-    private void stopCustomRenderer() {
+    private synchronized void stopCustomRenderer() {
         if (!customRendererStarted) return;
         try {
             /* Lightweight teardown: send CMD_SHUTDOWN, close client

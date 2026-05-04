@@ -30,4 +30,10 @@ int cr_server_peer_closed(void);
  * for throttling to ~1 Hz (Java's SO_TIMEOUT is 5 s). */
 void cr_server_send_heartbeat(void);
 
+/* Announce lifecycle readiness to Java.  These are sticky: if the TCP
+ * reconnects after the renderer is already ready, the events are replayed
+ * immediately on the new socket. */
+void cr_server_mark_ready(void);
+void cr_server_mark_frame_ready(void);
+
 #endif /* CR_SERVER_H */

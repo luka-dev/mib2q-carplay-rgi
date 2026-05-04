@@ -1332,22 +1332,33 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
 
     /**
      * Activate custom renderer video pipeline.
-     * Routes video encoder to displayable 199 (custom renderer) via context 99.
-     * No KDK mapping needed - the renderer creates its own displayable.
+     * Ensures the cluster is on context 74, where displayable 20 is composited
+     * with the native map displayable.
      */
     public String activateCustomRendererPipeline() {
         /* Renderer draws into displayable 20 (MAP_ROUTE_GUIDANCE) which is
          * already composited in context 74 with the native map (displayable 33).
-         * No context switch needed — cluster is already on context 74. */
+         * Re-issue the context switch defensively because native navigation or
+         * renderer teardown can leave the cluster on another context. */
         try {
             de.audi.atip.hmi.view.IDisplayManager dm =
                 ((de.audi.atip.hmi.HMIService) this.env.getHMIService()).getDisplayManager();
-            int ctx = dm.getCurrentContextID(1);
+            int ctxBefore = dm.getCurrentContextID(1);
             /* Ensure cluster is on context 74 (with map + RG widget) */
-            if (ctx != 74) {
+            if (ctxBefore != 74) {
                 dm.switchContext(74, 1, null);
+                try { Thread.sleep(150); } catch (InterruptedException ie) { /* ignore */ }
             }
-            return "cluster ctx=" + ctx;
+            int ctxAfter = dm.getCurrentContextID(1);
+            if (ctxAfter != 74) {
+                dm.switchContext(74, 1, null);
+                try { Thread.sleep(150); } catch (InterruptedException ie) { /* ignore */ }
+                ctxAfter = dm.getCurrentContextID(1);
+            }
+            if (ctxAfter != 74) {
+                return "FAILED: cluster ctx=" + ctxBefore + "->" + ctxAfter + " not 74";
+            }
+            return "cluster ctx=" + ctxBefore + "->" + ctxAfter;
         } catch (Throwable t) {
             return "FAILED: " + t.getClass().getName() + ": " + t.getMessage();
         }

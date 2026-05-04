@@ -81,6 +81,15 @@ static struct {
 	    uint32_t ver_counter;
 	    uint16_t highest_list_index;  /* max iOS index ever seen in maneuver_list */
 	    /*
+	     * Lane guidance is keyed by iOS composedGuidanceEventIndex, not by
+	     * maneuver index.  Keep it in a separate bounded cache so a future
+	     * maneuver occupying slot 0 cannot mask lane-guidance index 0.
+	     */
+	    uint16_t lane_slot_to_iap_idx[MANEUVER_CACHE_SIZE]; /* 0xFFFF = empty */
+	    uint32_t lane_slot_seq[MANEUVER_CACHE_SIZE];
+	    uint32_t lane_seq_counter;
+	    rgd_lane_guidance_t lane_cache[MANEUVER_CACHE_SIZE];
+	    /*
 	     * Per-slot maneuver data cache.
 	     * Cache the last 0x5202 data per slot and re-publish it inside the
 	     * 0x5201 bus snapshot when maneuver_list is present.  This ensures Java
@@ -120,6 +129,8 @@ static void write_bus_lane_guidance_partial(const rgd_lane_guidance_t* lane);
 static void write_bus_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* extra_man,
                                           const rgd_update_t* current_upd);
 static void write_slot_data_keys(bus_text_builder_t* b, unsigned slot, const rgd_maneuver_t* man);
+static void write_lane_data_keys(bus_text_builder_t* b, unsigned slot, const rgd_lane_guidance_t* lane);
+static void write_lane_clear_keys(bus_text_builder_t* b, unsigned slot);
 static void rgd_lazy_init(void);
 
 static void rgd_update_cache_reset(void) {
@@ -197,12 +208,16 @@ static void rgd_update_cache_merge(const rgd_update_t* upd) {
 		    g_rgd.current_list_count = 0;
 		    g_rgd.seq_counter = 0;
 		    g_rgd.ver_counter = 0;
+		    g_rgd.lane_seq_counter = 0;
 		    g_rgd.highest_list_index = 0;
 	    for (int i = 0; i < MANEUVER_CACHE_SIZE; i++) {
 	        g_rgd.slot_to_iap_idx[i] = 0xFFFF;
 	        g_rgd.slot_seq[i] = 0;
 	        g_rgd.slot_ver[i] = 0;
 	        g_rgd.slot_cache[i].present = 0;
+	        g_rgd.lane_slot_to_iap_idx[i] = 0xFFFF;
+	        g_rgd.lane_slot_seq[i] = 0;
+	        g_rgd.lane_cache[i].present = 0;
 		    }
 		}
 
@@ -259,20 +274,6 @@ static int rgd_min_current_index(void) {
 	}
 
 /*
- * Helper: check if a lane guidance index has a corresponding cached maneuver.
- * iOS uses the same index space for maneuvers and lane guidance -- lane idx N
- * corresponds to maneuver idx N. Accept 0x5204 updates when the maneuver
- * exists in our slot cache, even if the index is below the current
- * ManeuverList minimum (which may be stale from a previous route).
- */
-static bool rgd_has_cached_maneuver(uint16_t idx) {
-    for (int s = 0; s < MANEUVER_CACHE_SIZE; s++) {
-        if (g_rgd.slot_to_iap_idx[s] == idx) return true;
-    }
-    return false;
-}
-
-/*
  * Helper: check if an iAP2 index is in the active ManeuverList.
  * Slots for active maneuvers must never be evicted.
  */
@@ -280,6 +281,33 @@ static bool rgd_is_active_index(uint16_t iap_idx) {
     if (!g_rgd.current_list_present) return false;
     for (uint16_t i = 0; i < g_rgd.current_list_count; i++) {
         if (g_rgd.current_list[i] == iap_idx) return true;
+    }
+    return false;
+}
+
+static int rgd_find_slot_for_iap_index_no_touch(uint16_t idx) {
+    for (int s = 0; s < MANEUVER_CACHE_SIZE; s++) {
+        if (g_rgd.slot_to_iap_idx[s] == idx) return s;
+    }
+    return -1;
+}
+
+static bool rgd_is_active_lane_index(uint16_t lane_idx) {
+    if ((g_rgd.update_cache.present & RGD_UPD_LANE_INDEX) &&
+        g_rgd.update_cache.lane_guidance_index == lane_idx) {
+        return true;
+    }
+
+    if (!g_rgd.current_list_present) return false;
+    for (uint16_t i = 0; i < g_rgd.current_list_count; i++) {
+        int slot;
+        if (g_rgd.current_list[i] == lane_idx) return true;
+        slot = rgd_find_slot_for_iap_index_no_touch(g_rgd.current_list[i]);
+        if (slot < 0) continue;
+        if ((g_rgd.slot_cache[slot].present & RGD_MAN_LINKED_LANE_INDEX) &&
+            g_rgd.slot_cache[slot].linked_lane_guidance_index == lane_idx) {
+            return true;
+        }
     }
     return false;
 }
@@ -333,6 +361,49 @@ static int rgd_slot_for_iap_index(uint16_t idx, bool create) {
     g_rgd.slot_seq[victim] = ++g_rgd.seq_counter;
     g_rgd.slot_ver[victim] = ++g_rgd.ver_counter;
     memset(&g_rgd.slot_cache[victim], 0, sizeof(g_rgd.slot_cache[victim]));
+    return victim;
+}
+
+static int rgd_lane_slot_for_iap_index(uint16_t idx, bool create) {
+    for (int s = 0; s < MANEUVER_CACHE_SIZE; s++) {
+        if (g_rgd.lane_slot_to_iap_idx[s] == idx) {
+            g_rgd.lane_slot_seq[s] = ++g_rgd.lane_seq_counter;
+            return s;
+        }
+    }
+    if (!create) return -1;
+
+    for (int s = 0; s < MANEUVER_CACHE_SIZE; s++) {
+        if (g_rgd.lane_slot_to_iap_idx[s] == 0xFFFF) {
+            g_rgd.lane_slot_to_iap_idx[s] = idx;
+            g_rgd.lane_slot_seq[s] = ++g_rgd.lane_seq_counter;
+            return s;
+        }
+    }
+
+    int victim = -1;
+    uint32_t best = UINT32_MAX;
+    for (int s = 0; s < MANEUVER_CACHE_SIZE; s++) {
+        if (rgd_is_active_lane_index(g_rgd.lane_slot_to_iap_idx[s])) continue;
+        if (g_rgd.lane_slot_seq[s] < best) {
+            best = g_rgd.lane_slot_seq[s];
+            victim = s;
+        }
+    }
+    if (victim < 0) {
+        victim = 0;
+        best = UINT32_MAX;
+        for (int s = 0; s < MANEUVER_CACHE_SIZE; s++) {
+            if (g_rgd.lane_slot_seq[s] < best) {
+                best = g_rgd.lane_slot_seq[s];
+                victim = s;
+            }
+        }
+    }
+
+    g_rgd.lane_slot_to_iap_idx[victim] = idx;
+    g_rgd.lane_slot_seq[victim] = ++g_rgd.lane_seq_counter;
+    memset(&g_rgd.lane_cache[victim], 0, sizeof(g_rgd.lane_cache[victim]));
     return victim;
 }
 
@@ -401,7 +472,7 @@ static void write_bus_update_partial(const rgd_update_t* upd) {
     if ((upd->present & RGD_UPD_WRITE_MASK) == 0) return;
     rgd_update_t enriched = *upd;
     if (enriched.present & RGD_UPD_LANE_INDEX) {
-        int slot = rgd_slot_for_iap_index(enriched.lane_guidance_index, false);
+        int slot = rgd_lane_slot_for_iap_index(enriched.lane_guidance_index, false);
         enriched.present |= RGD_UPD_LANE_SLOT;
         enriched.lane_guidance_slot = (slot >= 0) ? (int16_t)slot : (int16_t)-1;
     }
@@ -479,7 +550,7 @@ static void write_slot_data_keys(bus_text_builder_t* b, unsigned idx, const rgd_
         snprintf(key, sizeof(key), "m%u_linked_lane_guidance_index", idx);
         bus_text_int(b, key, (int)man->linked_lane_guidance_index);
         {
-            int linked_slot = rgd_slot_for_iap_index(man->linked_lane_guidance_index, false);
+            int linked_slot = rgd_lane_slot_for_iap_index(man->linked_lane_guidance_index, false);
             if (linked_slot >= 0) {
                 snprintf(key, sizeof(key), "m%u_linked_lane_guidance_slot", idx);
                 bus_text_int(b, key, linked_slot);
@@ -582,6 +653,135 @@ static void write_slot_data_keys(bus_text_builder_t* b, unsigned idx, const rgd_
         snprintf(key, sizeof(key), "m%u_exit_info", idx);
         bus_text_str(b, key, man->exit_info_str);
     }
+}
+
+static void write_lane_data_keys(bus_text_builder_t* b, unsigned idx, const rgd_lane_guidance_t* lane) {
+    char key[64];
+
+    if (!lane) return;
+    if (!(lane->present & RGD_LANE_GUIDANCE_INDEX)) return;
+    if (!(lane->present & RGD_LANE_INFORMATIONS)) return;
+
+    snprintf(key, sizeof(key), "lg%u_index", idx);
+    bus_text_int(b, key, lane->lane_guidance_index);
+
+    snprintf(key, sizeof(key), "lg%u_lane_count", idx);
+    bus_text_int(b, key, lane->lane_count);
+
+    {
+        char buf[128];
+        int boff = 0;
+        for (int j = 0; j < lane->lane_count && j < MAX_LANE_GUIDANCE; j++)
+            boff += snprintf(buf + boff, sizeof(buf) - (size_t)boff, "%s%u",
+                             j > 0 ? "," : "", (unsigned)lane->lanes[j].position);
+        if (lane->lane_count == 0) buf[0] = '\0';
+        snprintf(key, sizeof(key), "lg%u_lane_positions", idx);
+        bus_text_str(b, key, buf);
+    }
+
+    {
+        char buf[128];
+        int boff = 0;
+        for (int j = 0; j < lane->lane_count && j < MAX_LANE_GUIDANCE; j++)
+            boff += snprintf(buf + boff, sizeof(buf) - (size_t)boff, "%s%d",
+                             j > 0 ? "," : "", (int)lane->lanes[j].direction);
+        if (lane->lane_count == 0) buf[0] = '\0';
+        snprintf(key, sizeof(key), "lg%u_lane_directions", idx);
+        bus_text_str(b, key, buf);
+    }
+
+    {
+        char buf[128];
+        int boff = 0;
+        for (int j = 0; j < lane->lane_count && j < MAX_LANE_GUIDANCE; j++)
+            boff += snprintf(buf + boff, sizeof(buf) - (size_t)boff, "%s%u",
+                             j > 0 ? "," : "", (unsigned)lane->lanes[j].status);
+        if (lane->lane_count == 0) buf[0] = '\0';
+        snprintf(key, sizeof(key), "lg%u_lane_status", idx);
+        bus_text_str(b, key, buf);
+    }
+
+    {
+        char buf[600];
+        int boff = 0;
+        for (int j = 0; j < lane->lane_count && j < MAX_LANE_GUIDANCE; j++)
+            boff += snprintf(buf + boff, sizeof(buf) - (size_t)boff, "%s%s",
+                             j > 0 ? "|" : "", lane->lanes[j].description);
+        if (lane->lane_count == 0) buf[0] = '\0';
+        snprintf(key, sizeof(key), "lg%u_lane_desc", idx);
+        bus_text_str(b, key, buf);
+    }
+
+    {
+        char buf[1200];
+        int boff = 0;
+        for (int j = 0; j < lane->lane_count && j < MAX_LANE_GUIDANCE; j++) {
+            if (j > 0)
+                boff += snprintf(buf + boff, sizeof(buf) - (size_t)boff, "|");
+            for (int k = 0; k < lane->lanes[j].angle_count && k < MAX_LANE_ANGLES; k++) {
+                boff += snprintf(buf + boff, sizeof(buf) - (size_t)boff, "%s%d",
+                                 k > 0 ? "," : "", (int)lane->lanes[j].angles[k]);
+            }
+        }
+        if (lane->lane_count == 0) buf[0] = '\0';
+        snprintf(key, sizeof(key), "lg%u_lane_angles", idx);
+        bus_text_str(b, key, buf);
+    }
+}
+
+static void write_lane_clear_keys(bus_text_builder_t* b, unsigned idx) {
+    char key[64];
+
+    snprintf(key, sizeof(key), "lg%u_index", idx);
+    bus_text_int(b, key, -1);
+    snprintf(key, sizeof(key), "lg%u_lane_count", idx);
+    bus_text_int(b, key, -1);
+    snprintf(key, sizeof(key), "lg%u_lane_positions", idx);
+    bus_text_str(b, key, "");
+    snprintf(key, sizeof(key), "lg%u_lane_directions", idx);
+    bus_text_str(b, key, "");
+    snprintf(key, sizeof(key), "lg%u_lane_status", idx);
+    bus_text_str(b, key, "");
+    snprintf(key, sizeof(key), "lg%u_lane_desc", idx);
+    bus_text_str(b, key, "");
+    snprintf(key, sizeof(key), "lg%u_lane_angles", idx);
+    bus_text_str(b, key, "");
+}
+
+static bool rgd_lane_slot_has_data(int slot) {
+    if (slot < 0 || slot >= MANEUVER_CACHE_SIZE) return false;
+    return (g_rgd.lane_cache[slot].present & (RGD_LANE_GUIDANCE_INDEX | RGD_LANE_INFORMATIONS)) ==
+           (RGD_LANE_GUIDANCE_INDEX | RGD_LANE_INFORMATIONS);
+}
+
+static bool rgd_prune_stale_lane_cache(void) {
+    int min_idx;
+    bool pruned = false;
+
+    if (!g_rgd.current_list_present) return false;
+    if (g_rgd.current_list_count == 0) return false;
+    if (g_rgd.last_route_state == RGD_STATE_REROUTING) return false;
+
+    min_idx = rgd_min_current_index();
+    if (min_idx < 0) return false;
+
+    for (int i = 0; i < MANEUVER_CACHE_SIZE; i++) {
+        uint16_t lane_idx = g_rgd.lane_slot_to_iap_idx[i];
+        if (lane_idx == 0xFFFF) continue;
+        if ((int)lane_idx >= min_idx) continue;
+        if ((g_rgd.update_cache.present & RGD_UPD_LANE_INDEX) &&
+            g_rgd.update_cache.lane_guidance_index == lane_idx) {
+            continue;
+        }
+
+        LOG_DEBUG(LOG_MODULE, "Pruning stale lane guidance slot %d (idx %u < current min %d)",
+                  i, (unsigned)lane_idx, min_idx);
+        g_rgd.lane_slot_to_iap_idx[i] = 0xFFFF;
+        g_rgd.lane_slot_seq[i] = 0;
+        g_rgd.lane_cache[i].present = 0;
+        pruned = true;
+    }
+    return pruned;
 }
 
 /*
@@ -695,9 +895,6 @@ static void write_bus_lane_guidance_partial(const rgd_lane_guidance_t* lane) {
 
     uint16_t iap_idx = 0xFFFF;
     if (lane->present & RGD_LANE_GUIDANCE_INDEX) {
-        upd.present |= RGD_UPD_LANE_INDEX;
-        upd.lane_guidance_index = lane->lane_guidance_index;
-        have_upd = true;
         iap_idx = lane->lane_guidance_index;
     } else if (g_rgd.current_list_present && g_rgd.current_list_count > 0) {
         /*
@@ -712,47 +909,40 @@ static void write_bus_lane_guidance_partial(const rgd_lane_guidance_t* lane) {
     if (lane->present & RGD_LANE_INFORMATIONS) {
         if (iap_idx == 0xFFFF) {
             LOG_DEBUG(LOG_MODULE, "0x5204 lane data without index and no active maneuver list");
-        } else if (!rgd_can_process_maneuver_index(iap_idx) && !rgd_has_cached_maneuver(iap_idx)) {
-            LOG_DEBUG(LOG_MODULE, "0x5204 lane idx=%u rejected by maneuver-index gating", iap_idx);
         } else {
-            slot = rgd_slot_for_iap_index(iap_idx, true);
+            slot = rgd_lane_slot_for_iap_index(iap_idx, true);
             if (slot >= 0) {
-                rgd_maneuver_t* dst = &g_rgd.slot_cache[slot];
-                dst->index = iap_idx;
-                dst->present |= RGD_MAN_INDEX;
-                dst->lane_count = lane->lane_count;
-                memset(dst->lanes, 0, sizeof(dst->lanes));
-                if (lane->lane_count > 0) {
-                    memcpy(dst->lanes, lane->lanes, sizeof(dst->lanes));
-                }
+                rgd_lane_guidance_t* dst = &g_rgd.lane_cache[slot];
+                *dst = *lane;
+                dst->lane_guidance_index = iap_idx;
+                dst->present |= RGD_LANE_GUIDANCE_INDEX | RGD_LANE_INFORMATIONS;
 
-                if ((lane->present & RGD_LANE_GUIDANCE_DESC) && lane->lane_guidance_description[0] != '\0') {
+                if ((dst->present & RGD_LANE_GUIDANCE_DESC) && dst->lane_guidance_description[0] != '\0') {
                     for (int i = 0; i < dst->lane_count && i < MAX_LANE_GUIDANCE; i++) {
                         if (dst->lanes[i].description[0] == '\0') {
                             snprintf(dst->lanes[i].description, sizeof(dst->lanes[i].description), "%s",
-                                     lane->lane_guidance_description);
+                                     dst->lane_guidance_description);
                         }
                     }
                 }
 
-                dst->present |= RGD_MAN_LANE_GUIDANCE;
-                rgd_resolve_linked_lanes(slot);
-                if (dst->present & RGD_MAN_LANE_GUIDANCE) {
-                    rgd_backpropagate_linked_lanes(slot);
-                }
                 have_slot = true;
             }
         }
     }
 
     if (iap_idx != 0xFFFF) {
-        int publish_slot = slot;
-        if (publish_slot < 0) {
-            publish_slot = rgd_slot_for_iap_index(iap_idx, false);
+        int publish_slot = (slot >= 0) ? slot : rgd_lane_slot_for_iap_index(iap_idx, false);
+        /* Only the currently displayed lane guidance gets the top-level
+         * lane_guidance_slot pointer.  Future 0x5204 lane data is cached as
+         * lgN_* and becomes selected when a later 0x5201 advertises the same
+         * lane_guidance_index. */
+        if ((g_rgd.update_cache.present & RGD_UPD_LANE_INDEX) &&
+            g_rgd.update_cache.lane_guidance_index == iap_idx) {
+            upd.present |= RGD_UPD_LANE_SLOT;
+            upd.lane_guidance_slot = (publish_slot >= 0) ? (int16_t)publish_slot : (int16_t)-1;
+            have_upd = true;
         }
-        upd.present |= RGD_UPD_LANE_SLOT;
-        upd.lane_guidance_slot = (publish_slot >= 0) ? (int16_t)publish_slot : (int16_t)-1;
-        have_upd = true;
     }
 
     if (!have_upd && !have_slot) return;
@@ -774,7 +964,17 @@ static void write_bus_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* 
     uint64_t present = upd->present & RGD_UPD_WRITE_MASK;
     bool have_extra_slot = (extra_man && extra_man->present != 0 &&
                             extra_slot >= 0 && extra_slot < MANEUVER_CACHE_SIZE);
-    if (present == 0 && !have_extra_slot) return;
+    bool have_lane_cache = false;
+    bool pruned_lane_slots;
+
+    pruned_lane_slots = rgd_prune_stale_lane_cache();
+
+    for (int i = 0; i < MANEUVER_CACHE_SIZE; i++) {
+        if (rgd_lane_slot_has_data(i)) {
+            have_lane_cache = true;
+        }
+    }
+    if (present == 0 && !have_extra_slot && !have_lane_cache && !pruned_lane_slots) return;
 
     bus_text_builder_t _b_storage;
     bus_text_builder_t* b = &_b_storage;
@@ -809,8 +1009,15 @@ static void write_bus_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* 
         bus_text_str(b, "dist_maneuver_str", upd->dist_to_maneuver_string);
     if (present & RGD_UPD_LANE_INDEX)
         bus_text_int(b, "lane_guidance_index", upd->lane_guidance_index);
-    if (present & RGD_UPD_LANE_SLOT)
+    if (present & RGD_UPD_LANE_INDEX) {
+        /* Prefer lookup from the current lane_guidance_index.  RGD_UPD_LANE_SLOT
+         * is a bus-only helper and can be stale if cache pruning/remap happened
+         * after the update was merged. */
+        int lane_slot = rgd_lane_slot_for_iap_index(upd->lane_guidance_index, false);
+        bus_text_int(b, "lane_guidance_slot", lane_slot >= 0 ? lane_slot : -1);
+    } else if (present & RGD_UPD_LANE_SLOT) {
         bus_text_int(b, "lane_guidance_slot", upd->lane_guidance_slot);
+    }
     if (present & RGD_UPD_LANE_TOTAL)
         bus_text_int(b, "lane_guidance_total", upd->lane_guidance_total);
     if (present & RGD_UPD_LANE_SHOWING)
@@ -871,13 +1078,20 @@ static void write_bus_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* 
                 for (int i = 0; i < MANEUVER_CACHE_SIZE; i++) {
                     g_rgd.slot_to_iap_idx[i] = 0xFFFF;
                     g_rgd.slot_cache[i].present = 0;
+                    g_rgd.lane_slot_to_iap_idx[i] = 0xFFFF;
+                    g_rgd.lane_slot_seq[i] = 0;
+                    g_rgd.lane_cache[i].present = 0;
                 }
+                pruned_lane_slots = true;
                 g_rgd.highest_list_index = 0;
             }
             if (new_max > g_rgd.highest_list_index)
                 g_rgd.highest_list_index = new_max;
         }
     }
+
+    if (rgd_prune_stale_lane_cache())
+        pruned_lane_slots = true;
 
     if (g_rgd.current_list_present) {
         if (g_rgd.current_list_count > 0) {
@@ -913,6 +1127,14 @@ static void write_bus_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* 
         int s = listed_slots[i];
         if (s >= 0 && s < MANEUVER_CACHE_SIZE && g_rgd.slot_cache[s].present != 0) {
             write_slot_data_keys(b, (unsigned)s, &g_rgd.slot_cache[s]);
+        }
+    }
+
+    for (int i = 0; i < MANEUVER_CACHE_SIZE; i++) {
+        if (rgd_lane_slot_has_data(i)) {
+            write_lane_data_keys(b, (unsigned)i, &g_rgd.lane_cache[i]);
+        } else {
+            write_lane_clear_keys(b, (unsigned)i);
         }
     }
 
