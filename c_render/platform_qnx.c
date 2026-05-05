@@ -178,24 +178,21 @@ void platform_reclaim_displayable(void) {
     }
 }
 
-/* Release displayable 20 binding back to whoever else has a managed window
- * with ID_STRING="20" (i.e. native nav's KOMO RG widget in libRenderSystem).
+/* Explicitly destroy our screen window so displaymanager's
+ * m_surfaceSources[20] clears immediately — instead of waiting for kernel
+ * cleanup at process exit.
  *
- * Calls screen_destroy_window() on our window explicitly.  This fires a
- * destroy event that displaymanager picks up — it removes our entry from
- * m_surfaceSources[20] and (per stock displaymanager logic) re-scans
- * managed windows for any remaining ID="20", which finds the native
- * widget's screen window in nav app process and re-binds m_surfaceSources[20]
- * back to it.
- *
- * If displaymanager has no fallback re-scan, the worst case is
- * m_surfaceSources[20] just stays empty — cluster TFT shows native map
- * + overlays without the RG widget layer (acceptable degradation, equivalent
- * to "no active route" baseline state).
+ * After this call the slot is *empty*.  It does NOT auto-fall back to a
+ * native widget window: with stock libPresentationController, the native
+ * KOMO RG widget only calls display_create_window(20) when its
+ * GuidanceView state machine enters StartDrawing — which requires an
+ * active native route.  In idle (no native route, normal post-CarPlay
+ * state) AppStartATF holds no window for displayable 20, so the slot
+ * just stays empty.  This matches the cluster baseline state before
+ * we ever started: blank widget layer until a native route activates.
  *
  * Counterpart to platform_reclaim_displayable.  Caller (renderer atexit /
- * platform_shutdown) invokes this to hand the slot back cleanly instead of
- * relying on kernel-driven window destroy at process exit. */
+ * platform_shutdown) invokes this so the slot vacates promptly. */
 void platform_release_displayable(void) {
     if (!g_native_window || !g_screen_destroy_window) return;
     int rc = g_screen_destroy_window((void *)(uintptr_t)g_native_window);
@@ -209,11 +206,15 @@ void platform_release_displayable(void) {
 
 /* Display restore — re-declare context 74 with its original native
  * composition (MAP_ROUTE_GUIDANCE 20 + images 102/101 + KOMBI_MAP_VIEW 33)
- * and switch cluster back to it.  After our screen window with ID="20" is
- * destroyed (EGL surface teardown on exit), displaymanager's
- * m_surfaceSources[20] naturally falls back to the native widget's screen
- * window, so the dmdt commands here just make sure the cluster compositor
- * picks the right context immediately.
+ * and switch cluster back to it.
+ *
+ * After our screen window is destroyed, m_surfaceSources[20] is empty.
+ * The slot stays empty until native nav next enters StartDrawing (when a
+ * native route activates), at which point libPresentationController
+ * creates its own ID="20" window via display_create_window.  The dmdt
+ * commands here just keep the context layout consistent and force the
+ * cluster compositor to pick the original definition immediately —
+ * ready for a future native render to populate.
  *
  * Idempotent and signal-safe via system() — atexit hook calls this on
  * graceful exit.  Java also re-declares this native layout as a backstop
@@ -609,10 +610,12 @@ void platform_shutdown(void) {
      *      displayinit globals alive (full teardown of shared display
      *      resources can collide with native components).
      *   2. Explicitly destroy our screen_window via screen_destroy_window
-     *      — fires displaymanager event so m_surfaceSources[20] can
-     *      re-bind to the native widget's screen window (in nav app
-     *      process) cleanly, without waiting for kernel-driven cleanup
-     *      at process exit.  Counterpart to the periodic reclaim path.
+     *      so displaymanager's m_surfaceSources[20] vacates promptly.
+     *      With stock libPresentationController, native widget only
+     *      creates a window for displayable 20 when its state machine
+     *      enters StartDrawing (i.e. an active native route).  In idle
+     *      (typical post-CarPlay state) the slot just stays empty —
+     *      this matches the cluster baseline before we ever started.
      *   3. Restore context 74's stock composition via dmdt as a backstop.
      *
      * In-flight focus check thread (if any) is detached and self-cleans;

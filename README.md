@@ -218,15 +218,20 @@ into a texture composited by the Kanzi scene.
 
 > **Displayable 20 is the native KOMO RG widget's slot — we take it
 > over.** Verified by RE of `libdisplayinit.so`, `libdm_modMain.so`
-> (displaymanager service) and `libRenderSystem.so` (used by native
-> nav for its KOMO widget):
+> (displaymanager service), `libRenderSystem.so`, and stock
+> `libPresentationController.so` (which runs in `AppStartATF`):
 >
+> - With stock libPresentationController, the native KOMO widget only
+>   calls `display_create_window(20)` when its GuidanceView state
+>   machine enters `StartDrawing` — which requires an active **native**
+>   route.  In idle (CarPlay session, no native route) the native side
+>   holds **no window** for displayable 20, so `m_surfaceSources[20]`
+>   is empty before we start.
 > - `display_create_window(displayable_id=20)` creates a screen window
 >   in our process with `SCREEN_PROPERTY_ID_STRING="20"`.  Display
->   manager's `screen_manage_window` callback re-binds
->   `m_surfaceSources[20]` to our window — the native widget's screen
->   window still exists in its own process, but is no longer the
->   active source for displayable 20 while we hold ID="20".
+>   manager's `screen_manage_window` callback binds
+>   `m_surfaceSources[20]` to our window — there is no race because
+>   nothing else holds the slot.
 > - `display_create_window` also strips other displayables from
 >   context 74 as a side effect, so we follow up with
 >   `dmdt dc 74 20 102 101 33` to re-declare the original composition
@@ -235,15 +240,17 @@ into a texture composited by the Kanzi scene.
 >   `preContextSwitchHook` for the leading displayable in context 74)
 >   wires the MOST encoder to read displayable 20 — which is now our
 >   window.
-> - On renderer exit EGL surface release destroys our window;
->   displaymanager's `m_surfaceSources[20]` naturally falls back to
->   the native widget's screen window, and `restore_display()` runs
->   `dmdt sc 1 74` so the cluster compositor picks the right context
->   immediately.
+> - On renderer exit `screen_destroy_window` vacates
+>   `m_surfaceSources[20]`.  The slot stays empty until native nav
+>   activates a route — same as the cluster baseline before we
+>   started.  `restore_display()` runs `dmdt sc 1 74` to keep the
+>   context layout consistent.
 >
-> In production native navigation is idle while CarPlay is active, so
-> the native widget process never tries to re-bind displayable 20
-> back during our session — there is no live competition.
+> Edge case: if the user manually launches native maps mid-CarPlay,
+> libPresentationController would create its own ID="20" window and
+> displaymanager would last-writer-wins over us.  The 5 s reclaim
+> watchdog (`platform_reclaim_displayable`) re-binds the slot back to
+> us within seconds via `screen_manage_window`.
 
 A 30 s focus watchdog runs `dmdt gs` to detect if native navigation
 or another HMI process stole the cluster context, and re-routes via

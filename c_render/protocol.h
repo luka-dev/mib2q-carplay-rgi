@@ -66,22 +66,27 @@ typedef struct {
  * RG widget slot in cluster context 74.  We *take it over*:
  *   - display_create_window(displayable_id=20) creates a screen window in
  *     our process with SCREEN_PROPERTY_ID_STRING="20".  Display manager's
- *     m_surfaceSources[20] gets re-bound to our window (the native widget's
- *     screen window still exists in its own process, just no longer the
- *     active source for displayable 20).
+ *     m_surfaceSources[20] gets bound to our window.
+ *   - With stock libPresentationController, the native KOMO widget only
+ *     calls display_create_window(20) when its GuidanceView state machine
+ *     enters StartDrawing — which requires an active native route.  In
+ *     idle (CarPlay session, no native route) the native side holds no
+ *     window for displayable 20, so there is no race for the slot.
  *   - dmdt dc 74 20 102 101 33 re-declares context 74 with the original
  *     composition order, since display_create_window strips other
  *     displayables from context 74 as a side effect.
  *   - setActiveDisplayable(4, 20) (called by stock cluster firmware in
  *     preContextSwitchHook) makes the MOST encoder read our window for
  *     the LVDS video stream that lands on the VC's MAP tab.
- *   - On shutdown EGL surface release destroys our window, dmdt's
- *     m_surfaceSources[20] naturally falls back to the native widget,
- *     and restore_display() forces the cluster back to context 74.
+ *   - On shutdown screen_destroy_window vacates m_surfaceSources[20].
+ *     The slot stays empty until native nav next activates a route —
+ *     same as the cluster baseline before our session started.
  *
- * In production native navigation is idle while CarPlay is active, so the
- * native widget process never tries to re-bind displayable 20 back during
- * our session — there is no live competition. */
+ * Edge case: if the user manually launches native maps mid-CarPlay,
+ * libPresentationController would create its own ID="20" window and
+ * displaymanager would last-writer-wins over us.  The 5 s reclaim
+ * watchdog (platform_reclaim_displayable) re-binds the slot back to us
+ * within seconds. */
 #define CR_DISPLAYABLE_ID   20  /* DISPLAYABLE_MAP_ROUTE_GUIDANCE (native widget slot) */
 #define CR_CONTEXT_ID       74  /* Cluster MAP context (LVDS encoder reads from here) */
 #define CR_DISPLAY_ID       1   /* 0=main (LVDS1), 1=cluster (LVDS2) */
