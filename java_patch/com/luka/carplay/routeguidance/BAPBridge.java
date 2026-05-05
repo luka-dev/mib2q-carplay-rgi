@@ -1726,6 +1726,7 @@ public class BAPBridge {
             if (rendererClient != null) {
                 rendererClient.disconnectClient();
             }
+            try { Thread.sleep(500); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
             if (csRef != null) {
                 csRef.deactivateCustomRendererPipeline();
             }

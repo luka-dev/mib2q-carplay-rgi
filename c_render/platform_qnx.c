@@ -36,6 +36,26 @@ static int g_display_routed = 0;
 static int g_width = 0, g_height = 0;
 static volatile int g_should_close = 0;
 
+/* Native window handle from libdisplayinit's display_create_window — kept
+ * for periodic re-claim of displayable 20 binding (see platform_reclaim_displayable).
+ * Native nav (libRenderSystem in nav app process) can re-register its own
+ * screen window with ID="20" at any time, which would steal our binding in
+ * displaymanager's m_surfaceSources[20].  Periodic screen_manage_window on
+ * our handle wins back the binding within a few seconds. */
+static EGLNativeWindowType g_native_window = 0;
+typedef int (*screen_manage_window_fn)(void *, const char *);
+typedef int (*screen_destroy_window_fn)(void *);
+static screen_manage_window_fn g_screen_manage_window = NULL;
+static screen_destroy_window_fn g_screen_destroy_window = NULL;
+
+/* Canonical "managed window group" name used by libdisplayinit.so on this
+ * platform (verified by RE of screen_manage_window call in
+ * display_create_window_nbuffers).  All windows created via libdisplayinit
+ * belong to this group — so to re-claim our binding via screen_manage_window
+ * we MUST pass exactly this string.  Any other value would either detach
+ * the window from libdisplayinit's group or fail outright. */
+static const char LIBDISPLAYINIT_WINDOW_GROUP[] = "How are you gentlemen?";
+
 /* Overridable IDs (env: CR_DISPLAYABLE_ID, CR_CONTEXT_ID, CR_DISPLAY_ID) */
 static int g_displayable_id;
 static int g_context_id;
@@ -139,6 +159,52 @@ static void force_display_context(const char *reason, int observed_ctx) {
     snprintf(cmd, sizeof(cmd), "/eso/bin/apps/dmdt sc %d %d", g_display_id, g_context_id);
     system(cmd);
     g_display_routed = 1;
+}
+
+/* Re-claim displayable 20 binding by calling screen_manage_window on our
+ * window handle.  Defends against native nav (libRenderSystem in nav app
+ * process) re-registering its own screen window with ID="20" mid-session
+ * and stealing our binding in displaymanager's m_surfaceSources[20].
+ *
+ * Cost: one screen API call (~ms).  Idempotent — re-managing an already
+ * managed window is a no-op on the screen subsystem side, but updates
+ * displaymanager's last-writer pointer back to us. */
+void platform_reclaim_displayable(void) {
+    if (!g_native_window || !g_screen_manage_window) return;
+    int rc = g_screen_manage_window((void *)(uintptr_t)g_native_window,
+                                    LIBDISPLAYINIT_WINDOW_GROUP);
+    if (rc != 0) {
+        fprintf(stderr, "platform_qnx: screen_manage_window reclaim rc=%d\n", rc);
+    }
+}
+
+/* Release displayable 20 binding back to whoever else has a managed window
+ * with ID_STRING="20" (i.e. native nav's KOMO RG widget in libRenderSystem).
+ *
+ * Calls screen_destroy_window() on our window explicitly.  This fires a
+ * destroy event that displaymanager picks up — it removes our entry from
+ * m_surfaceSources[20] and (per stock displaymanager logic) re-scans
+ * managed windows for any remaining ID="20", which finds the native
+ * widget's screen window in nav app process and re-binds m_surfaceSources[20]
+ * back to it.
+ *
+ * If displaymanager has no fallback re-scan, the worst case is
+ * m_surfaceSources[20] just stays empty — cluster TFT shows native map
+ * + overlays without the RG widget layer (acceptable degradation, equivalent
+ * to "no active route" baseline state).
+ *
+ * Counterpart to platform_reclaim_displayable.  Caller (renderer atexit /
+ * platform_shutdown) invokes this to hand the slot back cleanly instead of
+ * relying on kernel-driven window destroy at process exit. */
+void platform_release_displayable(void) {
+    if (!g_native_window || !g_screen_destroy_window) return;
+    int rc = g_screen_destroy_window((void *)(uintptr_t)g_native_window);
+    if (rc != 0) {
+        fprintf(stderr, "platform_qnx: screen_destroy_window release rc=%d\n", rc);
+    } else {
+        fprintf(stderr, "platform_qnx: window destroyed — displayable 20 released\n");
+    }
+    g_native_window = 0;
 }
 
 /* Display restore — re-declare context 74 with its original native
@@ -286,6 +352,9 @@ static void signal_handler(int sig) {
     else                     write(STDERR_FILENO, msg_unk,  sizeof(msg_unk)  - 1);
 
     g_should_close = 1;
+    if (sig == SIGTERM) {
+        return;
+    }
     signal(sig, SIG_DFL);
     raise(sig);
 }
@@ -332,6 +401,7 @@ int platform_init(int width, int height) {
     signal(SIGSEGV, signal_handler);
     signal(SIGABRT, signal_handler);
     atexit(restore_display);
+    atexit(platform_release_displayable);
 
     /* Force line-buffered stderr so output isn't lost on crash */
     setvbuf(stderr, NULL, _IOLBF, 0);
@@ -419,24 +489,44 @@ int platform_init(int width, int height) {
         fprintf(stderr, "platform_qnx: window created ret=%d native=%p kd=%d\n",
                 ret, (void *)(uintptr_t)native_window, kd_window);
 
-        /* Enable alpha transparency so clear color (0,0,0,0) is transparent
-         * and the native map (displayable 33) shows through.
-         * QNX Screen constants: SCREEN_PROPERTY_TRANSPARENCY=17, SOURCE_OVER=2 */
+        /* Persist handle for periodic reclaim of displayable 20 binding. */
+        g_native_window = native_window;
+
+        /* Resolve libscreen.so once and KEEP it open: we need
+         * screen_manage_window for the periodic reclaim path, and
+         * screen_set_window_property_iv for the transparency setup below.
+         * Closing libscreen mid-session would lose g_screen_manage_window. */
         {
             void *libscr = dlopen("libscreen.so.1", RTLD_LAZY);
             if (!libscr) libscr = dlopen("libscreen.so", RTLD_LAZY);
             if (libscr) {
+                g_screen_manage_window =
+                    (screen_manage_window_fn)dlsym(libscr, "screen_manage_window");
+                if (!g_screen_manage_window) {
+                    fprintf(stderr, "platform_qnx: WARN: dlsym(screen_manage_window) failed — reclaim disabled\n");
+                }
+                g_screen_destroy_window =
+                    (screen_destroy_window_fn)dlsym(libscr, "screen_destroy_window");
+                if (!g_screen_destroy_window) {
+                    fprintf(stderr, "platform_qnx: WARN: dlsym(screen_destroy_window) failed — release disabled\n");
+                }
+
                 int (*set_prop_iv)(void*, int, const int*) =
                     (int (*)(void*, int, const int*))dlsym(libscr, "screen_set_window_property_iv");
                 if (set_prop_iv) {
-                    int val = 2;  /* SCREEN_TRANSPARENCY_SOURCE_OVER */
+                    /* SCREEN_PROPERTY_TRANSPARENCY=17, SOURCE_OVER=2 — clear color
+                     * (0,0,0,0) becomes transparent so native map (displayable 33)
+                     * composites underneath when both are in context 74. */
+                    int val = 2;
                     if (set_prop_iv((void*)(uintptr_t)native_window, 17, &val) == 0) {
                         fprintf(stderr, "platform_qnx: transparency=SOURCE_OVER\n");
                     } else {
                         fprintf(stderr, "platform_qnx: WARN: set transparency failed\n");
                     }
                 }
-                dlclose(libscr);
+                /* DO NOT dlclose(libscr) — g_screen_manage_window must stay live */
+            } else {
+                fprintf(stderr, "platform_qnx: WARN: libscreen.so dlopen failed — reclaim disabled\n");
             }
         }
     }
@@ -514,16 +604,27 @@ int platform_should_close(void) {
 }
 
 void platform_shutdown(void) {
-    /* Skip full EGL/surface teardown on QNX.  Releasing the GL context and
-     * restoring context 74 is enough — Java slay/process exit destroys our
-     * screen window (ID="20") and displaymanager's m_surfaceSources[20]
-     * naturally falls back to the native widget's screen window.
+    /* Clean shutdown sequence:
+     *   1. Release GL context and EGL surface while keeping EGLDisplay /
+     *      displayinit globals alive (full teardown of shared display
+     *      resources can collide with native components).
+     *   2. Explicitly destroy our screen_window via screen_destroy_window
+     *      — fires displaymanager event so m_surfaceSources[20] can
+     *      re-bind to the native widget's screen window (in nav app
+     *      process) cleanly, without waiting for kernel-driven cleanup
+     *      at process exit.  Counterpart to the periodic reclaim path.
+     *   3. Restore context 74's stock composition via dmdt as a backstop.
      *
      * In-flight focus check thread (if any) is detached and self-cleans;
      * no need to wait for it. */
     if (g_egl_display != EGL_NO_DISPLAY) {
         eglMakeCurrent(g_egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+        if (g_egl_surface != EGL_NO_SURFACE) {
+            eglDestroySurface(g_egl_display, g_egl_surface);
+            g_egl_surface = EGL_NO_SURFACE;
+        }
     }
+    platform_release_displayable();
     restore_display();
 }
 

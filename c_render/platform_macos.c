@@ -120,6 +120,14 @@ void platform_ensure_focus(void) {
     /* macOS dev path: no dmdt/display-manager routing. */
 }
 
+void platform_reclaim_displayable(void) {
+    /* macOS dev path: no displaymanager / screen_manage_window, no-op. */
+}
+
+void platform_release_displayable(void) {
+    /* macOS dev path: no displaymanager / screen_destroy_window, no-op. */
+}
+
 int platform_key_tap(int key) {
     if (key < 0 || key >= CR_KEY_MAX) return 0;
     int v = g_key_taps[key];

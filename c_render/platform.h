@@ -36,6 +36,21 @@ void platform_get_routing_ids(int *display_id, int *context_id, int *displayable
  * QNX uses dmdt gs/sc; other platforms no-op. */
 void platform_ensure_focus(void);
 
+/* Re-claim the displayable binding (QNX: screen_manage_window on our
+ * window handle).  Defends against another process — native nav's
+ * libRenderSystem — re-registering a window with the same ID and
+ * stealing our binding in displaymanager's m_surfaceSources.
+ * No-op on non-QNX platforms. */
+void platform_reclaim_displayable(void);
+
+/* Release the displayable binding back to the native owner (QNX:
+ * explicit screen_destroy_window on our window).  Counterpart to
+ * platform_reclaim_displayable — lets displaymanager re-bind
+ * m_surfaceSources to whatever managed window remains for that ID
+ * (typically the native KOMO RG widget's window).
+ * Called from platform_shutdown.  No-op on non-QNX platforms. */
+void platform_release_displayable(void);
+
 /* Key codes for test navigation */
 #define CR_KEY_LEFT   0
 #define CR_KEY_RIGHT  1

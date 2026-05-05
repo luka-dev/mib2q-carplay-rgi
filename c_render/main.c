@@ -655,6 +655,19 @@ int main(int argc, char **argv) {
             }
         }
 
+        /* Displayable reclaim watchdog: every 5 s call screen_manage_window
+         * on our window handle.  Defends against native nav (libRenderSystem
+         * in nav app process) re-registering its own screen window with
+         * ID="20" and stealing our binding in displaymanager's
+         * m_surfaceSources[20].  Cheap (one screen API call ~ms) and idempotent. */
+        {
+            static struct timespec reclaim_last = {0, 0};
+            if (timespec_elapsed_at_least(&t_start, &reclaim_last, 5, 0)) {
+                reclaim_last = t_start;
+                platform_reclaim_displayable();
+            }
+        }
+
         /* Heartbeat — single-thread design: send EVT_HEARTBEAT to Java
          * once per second, dispatched right here on the main loop tick.
          * Java's RendererServer SO_TIMEOUT=5s; one beat per second
