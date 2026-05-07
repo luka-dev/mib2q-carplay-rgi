@@ -16,6 +16,7 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <time.h>
+#include <errno.h>
 
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
@@ -32,29 +33,74 @@ typedef int  (*display_create_window_fn)(EGLDisplay, EGLConfig, int, int, int,
 static EGLDisplay g_egl_display = EGL_NO_DISPLAY;
 static EGLSurface g_egl_surface = EGL_NO_SURFACE;
 static EGLContext g_egl_context = EGL_NO_CONTEXT;
+static EGLConfig  g_egl_config  = 0;          /* saved for window recreate */
 static int g_display_routed = 0;
 static int g_width = 0, g_height = 0;
 static volatile int g_should_close = 0;
 
-/* Native window handle from libdisplayinit's display_create_window — kept
- * for periodic re-claim of displayable 20 binding (see platform_reclaim_displayable).
- * Native nav (libRenderSystem in nav app process) can re-register its own
- * screen window with ID="20" at any time, which would steal our binding in
- * displaymanager's m_surfaceSources[20].  Periodic screen_manage_window on
- * our handle wins back the binding within a few seconds. */
-static EGLNativeWindowType g_native_window = 0;
-typedef int (*screen_manage_window_fn)(void *, const char *);
-typedef int (*screen_destroy_window_fn)(void *);
-static screen_manage_window_fn g_screen_manage_window = NULL;
-static screen_destroy_window_fn g_screen_destroy_window = NULL;
+/* Saved at platform_init for reuse by platform_check_and_recover_window. */
+static void *g_displib = NULL;
+static display_create_window_fn g_dcw = NULL;
 
-/* Canonical "managed window group" name used by libdisplayinit.so on this
- * platform (verified by RE of screen_manage_window call in
- * display_create_window_nbuffers).  All windows created via libdisplayinit
- * belong to this group — so to re-claim our binding via screen_manage_window
- * we MUST pass exactly this string.  Any other value would either detach
- * the window from libdisplayinit's group or fail outright. */
-static const char LIBDISPLAYINIT_WINDOW_GROUP[] = "How are you gentlemen?";
+/*
+ * Native screen_window_t from libdisplayinit's display_create_window.
+ *
+ * NOTE on QNX Screen cross-process semantics (verified by RE of libscreen.so
+ * and libdm_modMain.so for MU1316):
+ *   - Each process holds a process-local malloc()'d struct (with a magic
+ *     header) representing its handle to the window.
+ *   - screen_destroy_window() called in displaymanager's context only frees
+ *     ITS local struct — it does NOT cascade-destroy ours, but for "remote"
+ *     windows it does send an RPC to the screen server (opcode 10) which
+ *     may eventually invalidate our struct.
+ *   - displaymanager's evtNewWindow handler, on collision (another window
+ *     registered with same ID="20"), calls screen_destroy_window on its
+ *     handle to our window AND removes us from m_surfaceSources[20].  Our
+ *     g_native_window struct may stay valid in our process even though the
+ *     encoder no longer reads from us — this is the "phantom" failure mode.
+ *
+ * Recovery strategy (platform_check_and_recover_window):
+ *   - Probe the window via screen_get_window_property_iv/cv every ~5 s.
+ *   - Detect destroyed (errno=ENOENT/EBADF/EINVAL) OR detached
+ *     (MANAGER_STRING no longer matches displaymanager's group).
+ *   - On loss: tear down EGL surface, call display_create_window again
+ *     to register a fresh ID="20" window with displaymanager, recreate
+ *     EGL surface.  Inflight fps backoff (100 ms) prevents flapping.
+ */
+static EGLNativeWindowType g_native_window = 0;
+typedef int (*screen_destroy_window_fn)(void *);
+typedef int (*screen_get_property_iv_fn)(void *, int, int *);
+typedef int (*screen_get_property_cv_fn)(void *, int, int, char *);
+typedef int (*screen_set_property_iv_fn)(void *, int, const int *);
+static screen_destroy_window_fn  g_screen_destroy_window      = NULL;
+static screen_get_property_iv_fn g_screen_get_window_property_iv = NULL;
+static screen_get_property_cv_fn g_screen_get_window_property_cv = NULL;
+static screen_set_property_iv_fn g_screen_set_window_property_iv = NULL;
+
+/* QNX Screen property IDs we use (verified by RE — these are stable
+ * across QNX 6.5 SDP releases). */
+#define SCR_PROP_VISIBLE         51
+#define SCR_PROP_TRANSPARENCY    17
+#define SCR_PROP_MANAGER_STRING 152
+#define SCR_TRANSP_SOURCE_OVER    2
+
+/* The exact MANAGER_STRING that libdm_modMain.so assigns to windows it
+ * has taken into m_surfaceSources (verified by RE — see
+ * CScreenHandler::handleScreenEvent case 2 SCREEN_PROPERTY_MANAGER_STRING).
+ * If our window's MANAGER_STRING ever differs, we have been disowned. */
+static const char DM_MANAGED_GROUP[] = "All your base are belong to us!";
+
+/* Recreate stats / backoff. */
+static int g_recreate_count = 0;
+static struct timespec g_last_recreate_ts = {0, 0};
+
+/* Set to 1 once platform_init has successfully created the initial window.
+ * The health check uses this to distinguish "renderer not yet up, ignore"
+ * from "we had a window and lost it, retry recreate even though
+ * g_native_window is currently 0".  Without this flag, a single failed
+ * recreate would wedge the renderer permanently (g_native_window stays 0
+ * → check early-exits → no further attempts). */
+static int g_window_expected = 0;
 
 /* Overridable IDs (env: CR_DISPLAYABLE_ID, CR_CONTEXT_ID, CR_DISPLAY_ID) */
 static int g_displayable_id;
@@ -161,20 +207,251 @@ static void force_display_context(const char *reason, int observed_ctx) {
     g_display_routed = 1;
 }
 
-/* Re-claim displayable 20 binding by calling screen_manage_window on our
- * window handle.  Defends against native nav (libRenderSystem in nav app
- * process) re-registering its own screen window with ID="20" mid-session
- * and stealing our binding in displaymanager's m_surfaceSources[20].
+/*
+ * Recreate just the screen_window + EGL surface (preserving the EGL
+ * display, EGL context, and libdisplayinit screen_context).  Called both
+ * from platform_init (initial window creation) and from
+ * platform_check_and_recover_window (after we lose displaymanager's
+ * m_surfaceSources[20] binding).
+ */
+static int create_window_and_egl_surface(void) {
+    if (!g_dcw || g_egl_display == EGL_NO_DISPLAY || g_egl_config == 0) {
+        fprintf(stderr, "platform_qnx: create_window: missing prerequisites\n");
+        return -1;
+    }
+
+    EGLNativeWindowType native_window = 0;
+    int kd_window = 0;
+    int ret = g_dcw(g_egl_display, g_egl_config,
+                    g_width, g_height, g_displayable_id,
+                    &native_window, &kd_window);
+    if (!native_window) {
+        fprintf(stderr, "platform_qnx: display_create_window FAILED ret=%d\n", ret);
+        return -1;
+    }
+    g_native_window = native_window;
+    fprintf(stderr, "platform_qnx: window created native=%p kd=%d\n",
+            (void *)(uintptr_t)native_window, kd_window);
+
+    /* Transparency: clear color (0,0,0,0) → transparent so the cluster
+     * compositor can blend us on top of native map (displayable 33). */
+    if (g_screen_set_window_property_iv) {
+        int val = SCR_TRANSP_SOURCE_OVER;
+        if (g_screen_set_window_property_iv((void *)(uintptr_t)native_window,
+                                            SCR_PROP_TRANSPARENCY, &val) != 0) {
+            fprintf(stderr, "platform_qnx: WARN: set transparency failed errno=%d\n",
+                    errno);
+        }
+    }
+
+    g_egl_surface = eglCreateWindowSurface(g_egl_display, g_egl_config,
+                                            native_window, NULL);
+    if (g_egl_surface == EGL_NO_SURFACE) {
+        fprintf(stderr, "platform_qnx: eglCreateWindowSurface FAILED err=0x%x\n",
+                eglGetError());
+        return -1;
+    }
+
+    if (g_egl_context != EGL_NO_CONTEXT) {
+        if (!eglMakeCurrent(g_egl_display, g_egl_surface, g_egl_surface,
+                            g_egl_context)) {
+            fprintf(stderr, "platform_qnx: eglMakeCurrent FAILED err=0x%x\n",
+                    eglGetError());
+            return -1;
+        }
+    }
+
+    /* Re-declare context 74 with the full stock composition.
+     * display_create_window(displayable_id=20) registers our window and as
+     * a side effect strips other displayables from context 74 — so we put
+     * them back: 20 (now bound to our screen window) + 102 + 101 + 33
+     * (KOMBI_MAP_VIEW = native map background).  Both initial init and
+     * the post-collision recreate path benefit: without this on recreate,
+     * context 74 would lose 102/101/33 and the cluster compositor would
+     * stop blending overlay icons / native map underneath us.
+     *
+     * setActiveDisplayable(4, 20) (called by stock cluster firmware in
+     * preContextSwitchHook) makes the MOST encoder read displayable 20 —
+     * which is now (again) our window. */
+    {
+        char cmd[128];
+        snprintf(cmd, sizeof(cmd), "/eso/bin/apps/dmdt dc %d %d 102 101 33",
+                 g_context_id, g_displayable_id);
+        fprintf(stderr, "platform_qnx: %s\n", cmd);
+        system(cmd);
+        g_display_routed = 1;
+    }
+
+    return 0;
+}
+
+/*
+ * Tear down current screen_window + EGL surface and rebuild from scratch.
+ * Used when we detect we have lost the displaymanager m_surfaceSources[20]
+ * binding (either window destroyed, or detached from displaymanager group).
  *
- * Cost: one screen API call (~ms).  Idempotent — re-managing an already
- * managed window is a no-op on the screen subsystem side, but updates
- * displaymanager's last-writer pointer back to us. */
-void platform_reclaim_displayable(void) {
-    if (!g_native_window || !g_screen_manage_window) return;
-    int rc = g_screen_manage_window((void *)(uintptr_t)g_native_window,
-                                    LIBDISPLAYINIT_WINDOW_GROUP);
-    if (rc != 0) {
-        fprintf(stderr, "platform_qnx: screen_manage_window reclaim rc=%d\n", rc);
+ * Backoff: max one recreate per 100 ms — prevents tight flapping in case
+ * native nav also re-creates aggressively (the loser of the collision
+ * forces displaymanager to call screen_destroy_window on the previous
+ * winner, so a tit-for-tat could otherwise burn CPU).
+ */
+static void platform_recreate_window(const char *reason) {
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    int64_t delta_ms = (int64_t)(now.tv_sec - g_last_recreate_ts.tv_sec) * 1000
+                     + (int64_t)(now.tv_nsec - g_last_recreate_ts.tv_nsec) / 1000000;
+    if (g_last_recreate_ts.tv_sec != 0 && delta_ms < 100) {
+        fprintf(stderr,
+                "platform_qnx: window recreate suppressed (last=%lld ms ago, reason=%s)\n",
+                (long long)delta_ms, reason ? reason : "?");
+        return;
+    }
+    g_last_recreate_ts = now;
+    g_recreate_count++;
+
+    fprintf(stderr, "platform_qnx: recreating window (reason=%s, count=%d)\n",
+            reason ? reason : "?", g_recreate_count);
+
+    /* 1. Detach EGL from current surface — must precede eglDestroySurface. */
+    if (g_egl_display != EGL_NO_DISPLAY) {
+        eglMakeCurrent(g_egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE,
+                       EGL_NO_CONTEXT);
+        if (g_egl_surface != EGL_NO_SURFACE) {
+            eglDestroySurface(g_egl_display, g_egl_surface);
+            g_egl_surface = EGL_NO_SURFACE;
+        }
+    }
+
+    /* 2. Best-effort destroy our local screen_window struct.  May fail if
+     * it was already invalidated by the screen server (errno=ENOENT). */
+    if (g_native_window && g_screen_destroy_window) {
+        int rc = g_screen_destroy_window((void *)(uintptr_t)g_native_window);
+        if (rc != 0) {
+            fprintf(stderr,
+                    "platform_qnx: recreate: screen_destroy_window rc=%d errno=%d (%s)\n",
+                    rc, errno, strerror(errno));
+        }
+    }
+    g_native_window = 0;
+
+    /* 3. Re-register with displaymanager: new screen_window with ID="20",
+     * new EGL surface bound to it. */
+    if (create_window_and_egl_surface() != 0) {
+        fprintf(stderr, "platform_qnx: recreate FAILED — renderer will continue "
+                        "with no surface; main loop will keep trying\n");
+        return;
+    }
+
+    fprintf(stderr, "platform_qnx: window recreated OK\n");
+}
+
+/*
+ * Hybrid health check (200 µs of work — cheap to call every 5 s):
+ *   1. screen_get_window_property_iv(SCR_PROP_VISIBLE) — if it errors
+ *      with ENOENT/EBADF/EINVAL, our local struct was invalidated.
+ *      (Less common in QNX 6.5 because screen_destroy_window in another
+ *      process only frees that process's local handle, but we cover it
+ *      anyway in case the screen-server RPC opcode 10 invalidates ours.)
+ *   2. screen_get_window_property_cv(SCR_PROP_MANAGER_STRING) — if our
+ *      window is no longer in displaymanager's "All your base ..." group,
+ *      we have been disowned (this is the COMMON failure mode: native nav
+ *      created its own ID="20" window, displaymanager swapped
+ *      m_surfaceSources[20] over to native).
+ *
+ * Probe 2 is gated on a "first sighting" handshake so we never act on a
+ * driver/firmware that doesn't populate MANAGER_STRING at all (would
+ * otherwise look like a permanent disown to us and cause infinite
+ * recreate loops).  We only treat manager_string mismatches as authoritative
+ * after observing the expected value at least once.
+ *
+ * On either signal: trigger platform_recreate_window().
+ */
+static int g_manager_string_seen = 0;  /* observed expected value at least once */
+
+void platform_check_and_recover_window(void) {
+    /* Renderer may not have finished init yet — nothing to recover. */
+    if (!g_window_expected) return;
+
+    /* Initial-init succeeded then a previous recreate failed (g_native_window
+     * cleared but never re-populated).  Retry recreate on this tick — backoff
+     * inside platform_recreate_window throttles the retry rate. */
+    if (!g_native_window) {
+        platform_recreate_window("retry after failed recreate");
+        return;
+    }
+
+    int needs_recreate = 0;
+    const char *reason = NULL;
+
+    /* Probe 1: window struct still valid in our context. */
+    if (g_screen_get_window_property_iv) {
+        int visible = -1;
+        errno = 0;
+        int rc = g_screen_get_window_property_iv(
+            (void *)(uintptr_t)g_native_window,
+            SCR_PROP_VISIBLE, &visible);
+        if (rc != 0) {
+            int err = errno;
+            fprintf(stderr,
+                    "platform_qnx: window probe property_iv rc=%d errno=%d (%s)\n",
+                    rc, err, strerror(err));
+            if (err == ENOENT || err == EBADF || err == EINVAL) {
+                needs_recreate = 1;
+                reason = "window struct invalidated";
+            }
+        }
+    }
+
+    /* Probe 2: still in displaymanager's group. */
+    if (!needs_recreate && g_screen_get_window_property_cv) {
+        char manager[64] = {0};
+        errno = 0;
+        int rc = g_screen_get_window_property_cv(
+            (void *)(uintptr_t)g_native_window,
+            SCR_PROP_MANAGER_STRING,
+            (int)(sizeof(manager) - 1), manager);
+        if (rc != 0) {
+            int err = errno;
+            fprintf(stderr,
+                    "platform_qnx: window probe manager_string rc=%d errno=%d (%s)\n",
+                    rc, err, strerror(err));
+            if (err == ENOENT || err == EBADF || err == EINVAL) {
+                needs_recreate = 1;
+                reason = "manager_string probe failed";
+            }
+        } else if (strcmp(manager, DM_MANAGED_GROUP) == 0) {
+            /* Expected value — record so future mismatches are authoritative. */
+            if (!g_manager_string_seen) {
+                fprintf(stderr,
+                        "platform_qnx: manager_string handshake OK ('%s')\n",
+                        manager);
+                g_manager_string_seen = 1;
+            }
+        } else if (g_manager_string_seen) {
+            /* Saw the expected value before, now it has changed → genuine
+             * disown.  Treat as authoritative loss signal. */
+            fprintf(stderr,
+                    "platform_qnx: window manager_string='%s' (expected '%s')\n",
+                    manager, DM_MANAGED_GROUP);
+            needs_recreate = 1;
+            reason = "manager_string changed";
+        } else {
+            /* Never saw expected value — driver may not populate this
+             * property.  Log once so we know to fall back on probe 1
+             * exclusively, but do not recreate based on probe 2 alone. */
+            static int warned = 0;
+            if (!warned) {
+                fprintf(stderr,
+                        "platform_qnx: WARN: manager_string='%s' from first probe "
+                        "(expected '%s') — disabling probe 2 disown detection\n",
+                        manager, DM_MANAGED_GROUP);
+                warned = 1;
+            }
+        }
+    }
+
+    if (needs_recreate) {
+        platform_recreate_window(reason);
     }
 }
 
@@ -191,8 +468,8 @@ void platform_reclaim_displayable(void) {
  * just stays empty.  This matches the cluster baseline state before
  * we ever started: blank widget layer until a native route activates.
  *
- * Counterpart to platform_reclaim_displayable.  Caller (renderer atexit /
- * platform_shutdown) invokes this so the slot vacates promptly. */
+ * Counterpart to platform_check_and_recover_window.  Caller (renderer
+ * atexit / platform_shutdown) invokes this so the slot vacates promptly. */
 void platform_release_displayable(void) {
     if (!g_native_window || !g_screen_destroy_window) return;
     int rc = g_screen_destroy_window((void *)(uintptr_t)g_native_window);
@@ -423,7 +700,7 @@ int platform_init(int width, int height) {
     /* Load libdisplayinit.so once, keep open for both display_init and
      * display_create_window.  display_init creates a screen_context that
      * display_create_window needs — dlclose between them destroys it. */
-    void *g_displib = open_displayinit();
+    g_displib = open_displayinit();
     if (!g_displib) return -1;
 
     display_init_fn di = (display_init_fn)dlsym(g_displib, "display_init");
@@ -434,6 +711,13 @@ int platform_init(int width, int height) {
     }
     fprintf(stderr, "platform_qnx: display_init...\n");
     di(0, 0);
+
+    g_dcw = (display_create_window_fn)dlsym(g_displib, "display_create_window");
+    if (!g_dcw) {
+        fprintf(stderr, "platform_qnx: FAIL dlsym display_create_window\n");
+        dlclose(g_displib);
+        return -1;
+    }
 
     fprintf(stderr, "platform_qnx: eglGetDisplay...\n");
     g_egl_display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
@@ -457,124 +741,67 @@ int platform_init(int width, int height) {
         EGL_NONE
     };
 
-    EGLConfig config;
     EGLint num_configs = 0;
     fprintf(stderr, "platform_qnx: eglChooseConfig...\n");
-    if (!eglChooseConfig(g_egl_display, config_attrs, &config, 1, &num_configs) ||
+    if (!eglChooseConfig(g_egl_display, config_attrs, &g_egl_config, 1, &num_configs) ||
         num_configs == 0) {
             fprintf(stderr, "platform_qnx: FAIL eglChooseConfig (err=0x%x)\n", eglGetError());
             return -1;
     }
     fprintf(stderr, "platform_qnx: got %d config(s)\n", num_configs);
 
-    EGLNativeWindowType native_window = 0;
-    int kd_window = 0;
-    fprintf(stderr, "platform_qnx: display_create_window(%dx%d, disp=%d)...\n",
-            width, height, g_displayable_id);
+    /* Resolve libscreen.so symbols once, keep open: we need them for the
+     * health-check / window-recreate path during the session.  Closing
+     * libscreen mid-session would invalidate the function pointers. */
     {
-        display_create_window_fn dcw = (display_create_window_fn)dlsym(g_displib, "display_create_window");
-        if (!dcw) {
-            fprintf(stderr, "platform_qnx: FAIL dlsym display_create_window\n");
-            dlclose(g_displib);
-            return -1;
-        }
-        int ret = dcw(g_egl_display, config,
-                       width, height, g_displayable_id,
-                       &native_window, &kd_window);
-        /* Keep g_displib open — screen_context lives inside it */
-        if (!native_window) {
-            fprintf(stderr, "platform_qnx: FAIL display_create_window ret=%d win=NULL\n", ret);
-            dlclose(g_displib);
-            return -1;
-        }
-        fprintf(stderr, "platform_qnx: window created ret=%d native=%p kd=%d\n",
-                ret, (void *)(uintptr_t)native_window, kd_window);
-
-        /* Persist handle for periodic reclaim of displayable 20 binding. */
-        g_native_window = native_window;
-
-        /* Resolve libscreen.so once and KEEP it open: we need
-         * screen_manage_window for the periodic reclaim path, and
-         * screen_set_window_property_iv for the transparency setup below.
-         * Closing libscreen mid-session would lose g_screen_manage_window. */
-        {
-            void *libscr = dlopen("libscreen.so.1", RTLD_LAZY);
-            if (!libscr) libscr = dlopen("libscreen.so", RTLD_LAZY);
-            if (libscr) {
-                g_screen_manage_window =
-                    (screen_manage_window_fn)dlsym(libscr, "screen_manage_window");
-                if (!g_screen_manage_window) {
-                    fprintf(stderr, "platform_qnx: WARN: dlsym(screen_manage_window) failed — reclaim disabled\n");
-                }
-                g_screen_destroy_window =
-                    (screen_destroy_window_fn)dlsym(libscr, "screen_destroy_window");
-                if (!g_screen_destroy_window) {
-                    fprintf(stderr, "platform_qnx: WARN: dlsym(screen_destroy_window) failed — release disabled\n");
-                }
-
-                int (*set_prop_iv)(void*, int, const int*) =
-                    (int (*)(void*, int, const int*))dlsym(libscr, "screen_set_window_property_iv");
-                if (set_prop_iv) {
-                    /* SCREEN_PROPERTY_TRANSPARENCY=17, SOURCE_OVER=2 — clear color
-                     * (0,0,0,0) becomes transparent so native map (displayable 33)
-                     * composites underneath when both are in context 74. */
-                    int val = 2;
-                    if (set_prop_iv((void*)(uintptr_t)native_window, 17, &val) == 0) {
-                        fprintf(stderr, "platform_qnx: transparency=SOURCE_OVER\n");
-                    } else {
-                        fprintf(stderr, "platform_qnx: WARN: set transparency failed\n");
-                    }
-                }
-                /* DO NOT dlclose(libscr) — g_screen_manage_window must stay live */
-            } else {
-                fprintf(stderr, "platform_qnx: WARN: libscreen.so dlopen failed — reclaim disabled\n");
-            }
+        void *libscr = dlopen("libscreen.so.1", RTLD_LAZY);
+        if (!libscr) libscr = dlopen("libscreen.so", RTLD_LAZY);
+        if (libscr) {
+            g_screen_destroy_window =
+                (screen_destroy_window_fn)dlsym(libscr, "screen_destroy_window");
+            g_screen_get_window_property_iv =
+                (screen_get_property_iv_fn)dlsym(libscr, "screen_get_window_property_iv");
+            g_screen_get_window_property_cv =
+                (screen_get_property_cv_fn)dlsym(libscr, "screen_get_window_property_cv");
+            g_screen_set_window_property_iv =
+                (screen_set_property_iv_fn)dlsym(libscr, "screen_set_window_property_iv");
+            if (!g_screen_destroy_window)
+                fprintf(stderr, "platform_qnx: WARN: dlsym(screen_destroy_window) failed\n");
+            if (!g_screen_get_window_property_iv)
+                fprintf(stderr, "platform_qnx: WARN: dlsym(screen_get_window_property_iv) failed\n");
+            if (!g_screen_get_window_property_cv)
+                fprintf(stderr, "platform_qnx: WARN: dlsym(screen_get_window_property_cv) failed\n");
+            if (!g_screen_set_window_property_iv)
+                fprintf(stderr, "platform_qnx: WARN: dlsym(screen_set_window_property_iv) failed\n");
+            /* DO NOT dlclose(libscr) — function pointers must stay live */
+        } else {
+            fprintf(stderr, "platform_qnx: WARN: libscreen.so dlopen failed — health-check disabled\n");
         }
     }
 
-    /* Re-declare context 74 with the full stock composition.
-     * display_create_window(displayable_id=20) registers our window and as
-     * a side effect strips other displayables from context 74 — so we put
-     * them back: 20 (now bound to our screen window) + 102 + 101 + 33
-     * (KOMBI_MAP_VIEW = native map background).
-     *
-     * setActiveDisplayable(4, 20) (called by stock cluster firmware in
-     * preContextSwitchHook) makes the MOST encoder read displayable 20 —
-     * which is now our window. */
-    char cmd[256];
-    snprintf(cmd, sizeof(cmd), "/eso/bin/apps/dmdt dc %d %d 102 101 33",
-             g_context_id, g_displayable_id);
-    fprintf(stderr, "platform_qnx: %s\n", cmd);
-    system(cmd);
-
-    /* Do NOT switch focus here.  Java waits for EVT_FRAME_READY and then
-     * forces a real away->74 context transition so DisplayManager's
-     * preContextSwitchHook updates the MOST encoder after our first frame
-     * is already queued. */
-    g_display_routed = 1;
-
-    fprintf(stderr, "platform_qnx: eglCreateWindowSurface...\n");
-    g_egl_surface = eglCreateWindowSurface(g_egl_display, config,
-                                            native_window, NULL);
-    if (g_egl_surface == EGL_NO_SURFACE) {
-        fprintf(stderr, "platform_qnx: FAIL eglCreateWindowSurface (err=0x%x)\n", eglGetError());
-        return -1;
-    }
-
+    /* Create the EGL context up-front (no surface needed for it).  This way
+     * create_window_and_egl_surface() can perform eglMakeCurrent itself,
+     * and the same helper is reusable from the recreate-on-loss path. */
     EGLint ctx_attrs[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
     eglBindAPI(EGL_OPENGL_ES_API);
     fprintf(stderr, "platform_qnx: eglCreateContext...\n");
-    g_egl_context = eglCreateContext(g_egl_display, config, EGL_NO_CONTEXT, ctx_attrs);
+    g_egl_context = eglCreateContext(g_egl_display, g_egl_config, EGL_NO_CONTEXT, ctx_attrs);
     if (g_egl_context == EGL_NO_CONTEXT) {
         fprintf(stderr, "platform_qnx: FAIL eglCreateContext (err=0x%x)\n", eglGetError());
         return -1;
     }
 
-    fprintf(stderr, "platform_qnx: eglMakeCurrent...\n");
-    if (!eglMakeCurrent(g_egl_display, g_egl_surface, g_egl_surface, g_egl_context)) {
-        fprintf(stderr, "platform_qnx: FAIL eglMakeCurrent (err=0x%x)\n", eglGetError());
+    fprintf(stderr, "platform_qnx: display_create_window(%dx%d, disp=%d)...\n",
+            width, height, g_displayable_id);
+    if (create_window_and_egl_surface() != 0) {
         return -1;
     }
+    g_window_expected = 1;
+
+    /* Do NOT switch focus here.  Java waits for EVT_FRAME_READY and then
+     * forces a real away->74 context transition so DisplayManager's
+     * preContextSwitchHook updates the MOST encoder after our first frame
+     * is already queued. */
 
     /* swap interval = 2 → eglSwapBuffers() blocks until the *second*
      * vsync after submission.  On the cluster's 60 Hz display this gives

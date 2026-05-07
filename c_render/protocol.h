@@ -84,9 +84,11 @@ typedef struct {
  *
  * Edge case: if the user manually launches native maps mid-CarPlay,
  * libPresentationController would create its own ID="20" window and
- * displaymanager would last-writer-wins over us.  The 5 s reclaim
- * watchdog (platform_reclaim_displayable) re-binds the slot back to us
- * within seconds. */
+ * displaymanager would last-writer-wins over us.  The 5 s health-check
+ * watchdog (platform_check_and_recover_window) detects the loss (either
+ * cross-process struct invalidation OR detachment from displaymanager's
+ * managed-window group) and re-creates our screen window + EGL surface
+ * to re-register at displayable=20. */
 #define CR_DISPLAYABLE_ID   20  /* DISPLAYABLE_MAP_ROUTE_GUIDANCE (native widget slot) */
 #define CR_CONTEXT_ID       74  /* Cluster MAP context (LVDS encoder reads from here) */
 #define CR_DISPLAY_ID       1   /* 0=main (LVDS1), 1=cluster (LVDS2) */

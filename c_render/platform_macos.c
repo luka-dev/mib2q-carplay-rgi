@@ -120,8 +120,8 @@ void platform_ensure_focus(void) {
     /* macOS dev path: no dmdt/display-manager routing. */
 }
 
-void platform_reclaim_displayable(void) {
-    /* macOS dev path: no displaymanager / screen_manage_window, no-op. */
+void platform_check_and_recover_window(void) {
+    /* macOS dev path: no displaymanager binding to lose, no-op. */
 }
 
 void platform_release_displayable(void) {

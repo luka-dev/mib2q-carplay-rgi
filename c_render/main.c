@@ -655,16 +655,26 @@ int main(int argc, char **argv) {
             }
         }
 
-        /* Displayable reclaim watchdog: every 5 s call screen_manage_window
-         * on our window handle.  Defends against native nav (libRenderSystem
-         * in nav app process) re-registering its own screen window with
-         * ID="20" and stealing our binding in displaymanager's
-         * m_surfaceSources[20].  Cheap (one screen API call ~ms) and idempotent. */
+        /* Window health-check + auto-recreate every 5 s.
+         *
+         * Two failure modes covered (see platform_qnx.c::platform_check_and_recover_window
+         * for full RE-derived rationale):
+         *   1. Our screen_window struct invalidated cross-process — the
+         *      probe screen_get_window_property_iv returns ENOENT/EBADF/EINVAL.
+         *   2. displaymanager moved our window out of its managed group
+         *      (m_surfaceSources[20] now points to a foreign window, e.g.
+         *      native nav's libRenderSystem) — our SCREEN_PROPERTY_MANAGER_STRING
+         *      no longer matches "All your base are belong to us!".
+         *
+         * On either signal, the helper tears down our EGL surface, calls
+         * display_create_window again to register a fresh ID="20" with
+         * displaymanager, and recreates the EGL surface.  100 ms backoff
+         * inside the helper prevents flapping. */
         {
-            static struct timespec reclaim_last = {0, 0};
-            if (timespec_elapsed_at_least(&t_start, &reclaim_last, 5, 0)) {
-                reclaim_last = t_start;
-                platform_reclaim_displayable();
+            static struct timespec health_last = {0, 0};
+            if (timespec_elapsed_at_least(&t_start, &health_last, 5, 0)) {
+                health_last = t_start;
+                platform_check_and_recover_window();
             }
         }
 
