@@ -20,7 +20,7 @@ import com.luka.carplay.framework.Log;
 public class RouteGuidance implements CarplayBus.Listener {
 
     private static final String TAG = "RouteGuidance";
-    private static final int MAX_MANEUVERS = 16;
+    private static final int MAX_MANEUVERS = 32;
     /*
      * RouteGuidanceState values verified from MHI3 dio_manager:
      * 0=NO_ROUTE_SET, 1=ROUTE_SET, 2=ARRIVED, 3=LOADING, 4=LOCATING, 5=REROUTING, 6=PROCEED_TO_ROUTE

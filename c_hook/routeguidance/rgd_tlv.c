@@ -402,8 +402,22 @@ void rgd_parse_update(const uint8_t* buf, size_t len, rgd_update_t* out) {
                 }
                 break;
 
-            case 0x0015:
-                /* Optional non-native extension: ignore and do not publish to the bus. */
+            case 0x0015: /* destinationTimeZoneOffsetMinutes (iOS 17+) */
+            case 0x0016: /* stopType (iOS 17+) */
+            case 0x0017: /* electricVehicleDestination (iOS 17+) */
+            case 0x0018: /* reserved/future iOS extension */
+            case 0x0019: /* reserved/future iOS extension */
+            case 0x001A: /* reserved/future iOS extension */
+                /*
+                 * Known but unconsumed TLVs.  iOS 17+ extends 0x5201 with
+                 * EV / multi-stop / timezone metadata that we do not need
+                 * for cluster RG.  Silently skip so logs stay clean.
+                 * Mapping verified against
+                 * CarPlay.framework/CarPlay/CPRouteGuidance.mm:
+                 * paramKey:0..26 with selectors
+                 * destinationTimeZoneOffsetMinutes(21), stopType(22),
+                 * electricVehicleDestination(23).
+                 */
                 break;
             default:
                 LOG_WARN(LOG_MODULE, "Unknown RGD TLV (0x5201): id=0x%04X len=%u", tlv_id, tlv_len);

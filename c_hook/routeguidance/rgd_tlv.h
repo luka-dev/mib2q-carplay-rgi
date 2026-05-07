@@ -210,8 +210,14 @@
 #define MAX_COMPONENT_LIST  8
 #define MAX_LANE_GUIDANCE   8
 #define MAX_LANE_ANGLES     16
-/* Must align with Java RouteGuidance.MAX_MANEUVERS. */
-#define MANEUVER_CACHE_SIZE 16
+/* Must align with Java RouteGuidance.MAX_MANEUVERS.
+ * Sized for routes with many active events.  iOS publishes the entire
+ * route (sendLaneGuidances batch-sends every cached event;
+ * sendManeuvers walks the full source) — long highway trips routinely
+ * cross 20+ events.  iOS's own CRAccNavInfoCache defaults to 1000
+ * entries; we keep a much smaller LRU here, with active-list eviction
+ * protection (rgd_is_active_index / rgd_is_active_lane_index). */
+#define MANEUVER_CACHE_SIZE 32
 #define RGD_HEX_PREVIEW_MAX 96
 /*
  * Exit info (MAN_TLV_EXIT_INFO) in MHI3 dio_manager is treated as a string and fed into util::UnicodeString8
