@@ -1188,6 +1188,28 @@ public class BAPBridge {
         return laneCacheCountForSlot(s, slot) > 0;
     }
 
+    /* Verify lg-cache slot's stored event id still matches the active idx.
+     * Needed because lg cache slots are LRU-allocated independently of
+     * maneuver slot numbers, so a slot can be remapped to a different
+     * event after eviction. */
+    private static boolean lgSlotMatches(RouteGuidance.State s, int slot, int idx) {
+        if (slot < 0 || s.lgIndex == null || slot >= s.lgIndex.length) return false;
+        return s.lgIndex[slot] == idx;
+    }
+
+    /* m-cache-only check (skips lg-cache).  Used in legacy fallback paths
+     * where we need m-cache data without aliasing into lg-cache that
+     * happens to occupy the same numeric slot. */
+    private static boolean hasMCacheLaneForSlot(RouteGuidance.State s, int slot) {
+        if (slot < 0) return false;
+        if (s.mLaneDirections == null || slot >= s.mLaneDirections.length) return false;
+        if (s.mLaneDirections[slot] == null) return false;
+        int count = -1;
+        if (s.mLaneCount != null && slot < s.mLaneCount.length) count = s.mLaneCount[slot];
+        if (count <= 0) count = s.mLaneDirections[slot].length;
+        return count > 0;
+    }
+
     private static int laneCacheCountForSlot(RouteGuidance.State s, int slot) {
         if (slot < 0) return 0;
         int count = 0;
@@ -1271,38 +1293,68 @@ public class BAPBridge {
     }
 
     private static int resolveLaneGuidanceManeuverIndex(RouteGuidance.State s) {
-        /* iOS exposes the currently displayed lane guidance as a top-level
-         * currentLaneGuidanceIndex.  The C hook remaps that raw iOS index to
-         * a bounded lane-guidance cache slot (lgN_*), not a maneuver slot. */
-        if (s.laneGuidanceSlot >= 0 && hasLaneCacheForSlot(s, s.laneGuidanceSlot)) {
+        /*
+         * iOS exposes the currently displayed lane guidance as a top-level
+         * currentLaneGuidanceIndex (0x5201 InfoType 16 — written by Maps.app
+         * in setCurrentLaneGuidanceIndex: from CarMetadataNavigationListener
+         * each location update).  0x5204's TLV1 is iOS's
+         * composedGuidanceEventIndex — an EVENT IDENTIFIER, sent for every
+         * cached event including future precache.  So the active is purely
+         * 0x5201, and we must look up the lg-cache slot whose stored event
+         * id matches the active.
+         *
+         * lg cache slot indices are NOT the same numeric space as maneuver
+         * slot indices: in C, rgd_lane_slot_for_iap_index() maintains an
+         * independent LRU.  After eviction, lg slot N may hold any cached
+         * event id, not necessarily event N — which means resolving by
+         * "primary maneuver slot" via lg-cache silently sends data for
+         * the wrong event.  Validate s.lgIndex[slot] == active before
+         * trusting any lg-cache slot.
+         */
+
+        int activeIdx = s.laneGuidanceIndex;
+        if (activeIdx < 0) return -1;
+
+        if (s.laneGuidanceSlot >= 0 && hasLaneCacheForSlot(s, s.laneGuidanceSlot)
+            && lgSlotMatches(s, s.laneGuidanceSlot, activeIdx)) {
             return s.laneGuidanceSlot;
         }
 
-        int byIndex = laneSlotForGuidanceIndex(s, s.laneGuidanceIndex);
+        int byIndex = laneSlotForGuidanceIndex(s, activeIdx);
         if (byIndex >= 0) return byIndex;
 
-        /* Compatibility with older hooks where raw iOS indexes still matched
-         * cache slots at route start.  Do not use this once indexes exceed the
-         * Java slot array. */
-        int current = s.laneGuidanceIndex;
-        int max = (s.mLaneCount != null) ? s.mLaneCount.length : 0;
-        if (current >= 0 && current < max && hasLaneGuidanceForManeuver(s, current)) {
-            return current;
-        }
-
-        /* Fallback for route snapshots that predate lane_guidance_slot:
-         * prefer primary's own lane data first, then its linked-lane slot. */
+        /*
+         * Linked-lane fallback: C publishes mN_linked_lane_guidance_slot
+         * pointing at a real lg-cache slot (not a maneuver slot), so it's
+         * safe to consult directly.  Only use it when its stored event id
+         * still matches the active (the linked field can outlive a cache
+         * remap of its target).
+         */
         int primary = getFirstManeuverIndex(s);
-        if (hasLaneGuidanceForManeuver(s, primary)) {
-            return primary;
-        }
-
         int linked = linkedLaneSlotForManeuver(s, primary);
-        if (hasLaneGuidanceForManeuver(s, linked)) {
+        if (linked >= 0 && hasLaneCacheForSlot(s, linked)
+            && lgSlotMatches(s, linked, activeIdx)) {
             return linked;
         }
 
-        return primary;
+        /*
+         * Legacy m-cache fallback for compatibility with pre-lg-split
+         * hooks (which wrote lane data into mN_lane_*).  Skip if the
+         * primary slot has any lg-cache data — that lg entry could be
+         * unrelated event data (post-eviction) and m-cache lookup with
+         * the same numeric slot would alias into it.
+         */
+        int max = (s.mLaneCount != null) ? s.mLaneCount.length : 0;
+        if (activeIdx < max && hasMCacheLaneForSlot(s, activeIdx)
+            && !hasLaneCacheForSlot(s, activeIdx)) {
+            return activeIdx;
+        }
+        if (primary >= 0 && hasMCacheLaneForSlot(s, primary)
+            && !hasLaneCacheForSlot(s, primary)) {
+            return primary;
+        }
+
+        return -1;
     }
 
 

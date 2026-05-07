@@ -933,10 +933,21 @@ static void write_bus_lane_guidance_partial(const rgd_lane_guidance_t* lane) {
 
     if (iap_idx != 0xFFFF) {
         int publish_slot = (slot >= 0) ? slot : rgd_lane_slot_for_iap_index(iap_idx, false);
-        /* Only the currently displayed lane guidance gets the top-level
-         * lane_guidance_slot pointer.  Future 0x5204 lane data is cached as
-         * lgN_* and becomes selected when a later 0x5201 advertises the same
-         * lane_guidance_index. */
+        /*
+         * 0x5204's TLV1 (LANE_GUIDANCE_INDEX) is iOS's
+         * composedGuidanceEventIndex — the identifier of WHICH lane event
+         * this packet describes, NOT a flag that this is the active one.
+         * iOS Maps.app's CarMetadataNavigationListener routinely batch-
+         * sends 0x5204 for every event in the route (including future
+         * precache) via CRAccNavController::sendLaneGuidances, while the
+         * active is set separately via setCurrentLaneGuidanceIndex: ->
+         * 0x5201 InfoType 16.  Advancing Java's active from 0x5204 alone
+         * would flip the displayed lanes to a future event prematurely.
+         *
+         * Only refresh lane_guidance_slot when this 0x5204's iap_idx
+         * already matches the cached active.  Otherwise keep the cache
+         * fresh (lgN_* keys), do not touch top-level slot/index.
+         */
         if ((g_rgd.update_cache.present & RGD_UPD_LANE_INDEX) &&
             g_rgd.update_cache.lane_guidance_index == iap_idx) {
             upd.present |= RGD_UPD_LANE_SLOT;
