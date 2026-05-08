@@ -395,6 +395,59 @@ public class BAPBridge {
     }
 
     /**
+     * Reach into the HMI Navigation singleton and command native nav
+     * (running in AppStartATF) to cancel its current route guidance.
+     * Necessary before we set blockRouteGuidance=true: once the gate is
+     * closed, native nav's own cancel BAP messages are also dropped, so
+     * the user can't dismiss it from the cluster.
+     *
+     * Path verified against decompiled MU1316 lsd.jar:
+     *   Navigation.getInstance().getRouteManager() -> IRouteManager
+     *   IRouteManager extends IStartGuidanceManager -> stopRouteGuidance()
+     *   RouteManager.stopRouteGuidance() builds and executes the
+     *   "stop route guidance" CommandList that walks every component down
+     *   (BAP RG state off, route data cleared, KOMO disabled, etc).
+     */
+    private void tryStopNativeNavigation() {
+        /* Always issue the cluster-side abort signal first — at minimum it
+         * resets cluster UI state even if RouteManager is unavailable. */
+        if (csRef != null) {
+            try {
+                csRef.setRouteGuidanceAborted();
+                Log.i(TAG, "Pre-gate: csRef.setRouteGuidanceAborted() ok");
+            } catch (Throwable t) {
+                Log.w(TAG, "Pre-gate: setRouteGuidanceAborted: " + t.getMessage());
+            }
+        }
+
+        try {
+            de.audi.tghu.navi.app.Navigation navi =
+                de.audi.tghu.navi.app.Navigation.getInstance();
+            if (navi == null) {
+                Log.w(TAG, "Pre-gate: Navigation.getInstance() == null — skip stopRouteGuidance");
+                return;
+            }
+            de.audi.tghu.navi.app.routeguidance.IRouteManager rm = navi.getRouteManager();
+            if (rm == null) {
+                Log.w(TAG, "Pre-gate: getRouteManager() == null — skip stopRouteGuidance");
+                return;
+            }
+            /* Skip work if no active route — stopRouteGuidance() is a heavy
+             * CommandList walk; harmless on idle but spammy in the log. */
+            org.dsi.ifc.navigation.Route route = rm.getRoute();
+            if (route == null) {
+                Log.i(TAG, "Pre-gate: native route already absent (RouteManager.getRoute() == null)");
+                return;
+            }
+            rm.stopRouteGuidance();
+            Log.i(TAG, "Pre-gate: invoked RouteManager.stopRouteGuidance() — native nav route cancel issued");
+        } catch (Throwable t) {
+            Log.w(TAG, "Pre-gate: stopRouteGuidance failed: "
+                    + t.getClass().getName() + ": " + t.getMessage());
+        }
+    }
+
+    /**
      * Get ClusterService via Navigation singleton and install native BAP gate.
      * Non-fatal - if this fails, native RG stream won't be blocked.
      */
@@ -497,27 +550,20 @@ public class BAPBridge {
 
             /*
              * Politely abort any in-flight native route-guidance session
-             * BEFORE we slam the BAP gate shut.  Without this, native nav's
-             * cancel/abort BAP messages would get swallowed by the gate
-             * (set true two lines below), leaving native nav stuck in
-             * "active route" state and triggering iOS Maps to keep flapping
-             * STOP_LOCATION → reconnect cycles when it sees external nav
-             * still busy on the cluster.
+             * BEFORE we slam the BAP gate shut.  Without this, native nav
+             * stays stuck on its old route, iOS Maps detects external nav
+             * still busy on the cluster, and we get the rapid STOP_LOCATION
+             * cycle that makes both navs unusable.
              *
-             * setRouteGuidanceAborted() goes through the stock cluster
-             * firmware (ClusterService.combiBAPListener) and propagates
-             * the abort upwards — native nav UI shows "route cancelled"
-             * and releases its hold on cluster RG state.  We then take
-             * over with a clean slate.
+             * setRouteGuidanceAborted() alone only updates cluster UI state
+             * — it does NOT command native nav (in AppStartATF) to abort.
+             * For that we need to reach into Navigation singleton and call
+             * a real cancelRoute / stopGuidance method, but the exact name
+             * differs between firmware variants and we don't have a header.
+             * Probe several canonical names via reflection — first one that
+             * exists wins.
              */
-            if (csRef != null) {
-                try {
-                    csRef.setRouteGuidanceAborted();
-                    Log.i(TAG, "Pre-gate: setRouteGuidanceAborted() to release native nav state");
-                } catch (Throwable t) {
-                    Log.w(TAG, "setRouteGuidanceAborted failed: " + t.getMessage());
-                }
-            }
+            tryStopNativeNavigation();
 
             /* Block native route-guidance BAP stream during CarPlay RG. */
             if (gatedService != null) gatedService.blockRouteGuidance = true;
@@ -631,7 +677,42 @@ public class BAPBridge {
                 rendererClient = null;
             }
             if (gatedService != null) gatedService.blockRouteGuidance = false;
-            forceClusterRouteInfoState(false);
+
+            /*
+             * Tear down our cluster RG-state override CONDITIONALLY.
+             *
+             * forceClusterRouteInfoState(false) sets
+             * dsiResponseContainer.rgActive=false.  Stock cluster firmware's
+             * RgStopGuidanceGeneralCommand.execute() short-circuits with
+             * commandFinished() when rgActive==false AND
+             * rgRouteCalculationState==0 — which means the user's
+             * "Cancel Map Guidance" button on the MMI map silently does
+             * nothing if we leave rgActive=false here while native nav
+             * still has an active internal route.
+             *
+             * Decision: only clear our override if native nav has NO route.
+             * If native nav has a route (persisted through our session),
+             * leave rgActive=true so its own Cancel command can run.  Native
+             * nav drives rgActive itself — it'll go back to false naturally
+             * when the user cancels or arrives.
+             */
+            boolean nativeHasRoute = false;
+            try {
+                de.audi.tghu.navi.app.Navigation navi =
+                    de.audi.tghu.navi.app.Navigation.getInstance();
+                if (navi != null) {
+                    de.audi.tghu.navi.app.routeguidance.IRouteManager rm = navi.getRouteManager();
+                    if (rm != null && rm.getRoute() != null) {
+                        nativeHasRoute = true;
+                    }
+                }
+            } catch (Throwable t) { /* assume false on error */ }
+
+            if (nativeHasRoute) {
+                Log.i(TAG, "Shutdown: native nav has active route — leaving rgActive=true so its Cancel still works");
+            } else {
+                forceClusterRouteInfoState(false);
+            }
             forceGfxAvailable(false);
 
             Log.i(TAG, "Shutdown (full teardown)");
