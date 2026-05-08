@@ -495,6 +495,30 @@ public class BAPBridge {
                 initClusterAccess();
             }
 
+            /*
+             * Politely abort any in-flight native route-guidance session
+             * BEFORE we slam the BAP gate shut.  Without this, native nav's
+             * cancel/abort BAP messages would get swallowed by the gate
+             * (set true two lines below), leaving native nav stuck in
+             * "active route" state and triggering iOS Maps to keep flapping
+             * STOP_LOCATION → reconnect cycles when it sees external nav
+             * still busy on the cluster.
+             *
+             * setRouteGuidanceAborted() goes through the stock cluster
+             * firmware (ClusterService.combiBAPListener) and propagates
+             * the abort upwards — native nav UI shows "route cancelled"
+             * and releases its hold on cluster RG state.  We then take
+             * over with a clean slate.
+             */
+            if (csRef != null) {
+                try {
+                    csRef.setRouteGuidanceAborted();
+                    Log.i(TAG, "Pre-gate: setRouteGuidanceAborted() to release native nav state");
+                } catch (Throwable t) {
+                    Log.w(TAG, "setRouteGuidanceAborted failed: " + t.getMessage());
+                }
+            }
+
             /* Block native route-guidance BAP stream during CarPlay RG. */
             if (gatedService != null) gatedService.blockRouteGuidance = true;
 

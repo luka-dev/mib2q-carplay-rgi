@@ -213,10 +213,25 @@ static void handle_state_messages(uint16_t msgid) {
             notify_state(HOOK_EVENT_AUTH_DONE, NULL);
             break;
         case IAP2_MSG_STOP_LOCATION:
-            if (g_fw.ctx.session_active) {
-                g_fw.ctx.session_active = false;
-                notify_state(HOOK_EVENT_DISCONNECT, NULL);
-            }
+            /*
+             * IAP2_MSG_STOP_LOCATION (0xFFFC) tells the accessory to stop
+             * dispatching location updates — it is NOT a session-end signal.
+             * iOS sends it for many transient reasons:
+             *   - Maps app suspends (CarPlay user opens Music etc).
+             *   - iOS detects external nav already active on the cluster
+             *     and decides to pause its own RG stream.
+             *   - Internal restart of the iOS location subsystem.
+             * Real session end / RG end is signalled via 0x5201
+             * route_state=0 + source_supports_rg=0 (already debounced
+             * downstream in rgd_hook).  Treating STOP_LOCATION as
+             * HOOK_EVENT_DISCONNECT caused tight cycle ping-pong
+             * (Java teardown → iOS sends new 0x5201 → Java reactivates →
+             * STOP_LOCATION fires again → ...), which made native nav
+             * BAP cancel commands get blocked during our active windows.
+             */
+            LOG_INFO(LOG_MODULE,
+                     "iAP2 STOP_LOCATION received (location stream paused — "
+                     "not a disconnect, ignoring)");
             break;
     }
 }
