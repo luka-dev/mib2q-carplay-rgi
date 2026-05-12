@@ -1339,19 +1339,55 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
      * encoder's setActiveDisplayable(4, 20) hook reads from our window.
      */
     public String activateCustomRendererPipeline() {
-        /* Renderer takes over native displayable 20 (KOMO RG widget slot).
-         * Re-issue the context switch defensively because native navigation
-         * or another HMI process can leave the cluster on a different context. */
+        /*
+         * Renderer takes over native displayable 20 (KOMO RG widget slot).
+         *
+         * IMPORTANT: ALWAYS force a real context-switch transition here,
+         * even when the cluster is already on 74.  Captured from a real
+         * engine-start with native nav already active:
+         *
+         *   1. Native nav had a route → cluster on context 74.
+         *   2. Our pre-gate cancels native route via
+         *      RouteManager.stopRouteGuidance() → native's KOMO window
+         *      for displayable 20 is destroyed.
+         *   3. We create our own window with ID="20".
+         *   4. We call switchContext(74, 1) — but cluster IS already on 74.
+         *   5. DSI short-circuits: confirmedActiveContext[term] == 74
+         *      → no DSI call → preContextSwitchHook never fires
+         *      → CASIMostEncoder::setActiveDisplayable(4, 20) never called
+         *      → encoder is still bound to native's destroyed displayable
+         *      → MOST stream is BLACK on the VC.
+         *
+         * Fix: explicitly bounce AWAY to context 72 (just KOMBI_MAP_VIEW,
+         * a benign nav-only context) with a settle delay, then switch BACK
+         * to 74.  This guarantees a real context transition runs through
+         * preContextSwitchHook → setActiveDisplayable → encoder picks up
+         * our fresh ID="20" window.
+         *
+         * See memory/lvds_video_pipeline.md "ROOT CAUSE: setActiveDisplayable
+         * Never Called" for the underlying VC pipeline analysis.
+         */
         try {
             de.audi.atip.hmi.view.IDisplayManager dm =
                 ((de.audi.atip.hmi.HMIService) this.env.getHMIService()).getDisplayManager();
             int ctxBefore = dm.getCurrentContextID(1);
-            /* Ensure cluster is on context 74 (with map + RG widget) */
-            if (ctxBefore != 74) {
-                dm.switchContext(74, 1, null);
-                try { Thread.sleep(150); } catch (InterruptedException ie) { /* ignore */ }
+
+            /* Step 1: bounce away to ctx 72 — forces a different context
+             * so the next switchContext(74) is treated as a real transition. */
+            if (ctxBefore == 74) {
+                dm.switchContext(72, 1, null);
+                try { Thread.sleep(180); } catch (InterruptedException ie) { /* ignore */ }
             }
+
+            /* Step 2: switch INTO 74 — this is the transition we want
+             * preContextSwitchHook to see so it pushes setActiveDisplayable
+             * (4, 20) into the encoder. */
+            dm.switchContext(74, 1, null);
+            try { Thread.sleep(180); } catch (InterruptedException ie) { /* ignore */ }
+
             int ctxAfter = dm.getCurrentContextID(1);
+
+            /* Defensive retry in case something else stole focus mid-bounce. */
             if (ctxAfter != 74) {
                 dm.switchContext(74, 1, null);
                 try { Thread.sleep(150); } catch (InterruptedException ie) { /* ignore */ }
@@ -1360,7 +1396,7 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
             if (ctxAfter != 74) {
                 return "FAILED: cluster ctx=" + ctxBefore + "->" + ctxAfter + " not 74";
             }
-            return "cluster ctx=" + ctxBefore + "->" + ctxAfter;
+            return "cluster ctx=" + ctxBefore + "->72->" + ctxAfter;
         } catch (Throwable t) {
             return "FAILED: " + t.getClass().getName() + ": " + t.getMessage();
         }
