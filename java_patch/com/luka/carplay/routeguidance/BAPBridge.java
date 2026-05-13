@@ -2035,16 +2035,46 @@ public class BAPBridge {
 
     /**
      * Force gfxAvailable on ClusterViewMode.
-     * DSIKOMOGfxStreamSink has no native provider on MU1316 so the callback
-     * chain (videoencoderservice -> DSI -> KOMOService.updateGfxState -> ClusterViewMode)
+     * DSIKOMOGfxStreamSink has no native provider on MU1316 (gated by
+     * Util.isClusterMapMOST() which requires SysConst 541==1; FPK cars
+     * have it ==2), so the callback chain
+     *   videoencoderservice -> DSI -> KOMOService.updateGfxState -> ClusterViewMode
      * never fires. We simulate it directly.
      *
      * Strategy 1: komoService.updateGfxState(1, 1) -- mimics DSI notification
      * Strategy 2: ClusterViewMode.setGFXAvailable(true) -- direct method call
      * Strategy 3: ClusterViewMode.gfxAvailable field reflection -- last resort
+     *
+     * KOMOService.dataRate is the rate that updateGfxState() passes to
+     * setKOMODataRate(); without a DSI provider firing updateDataRate(),
+     * dataRate is left at 0 -- so updateGfxState(1,1) would synthesise
+     * setKOMODataRate(0) and never raise the MOST pacing hint.  We pre-set
+     * dataRate=2 (full framerate) via reflection, then also explicitly
+     * call csRef.setKOMODataRate(2) as belt-and-suspenders in case the
+     * field write or vtable lookup fails.
      */
     private void forceGfxAvailable(boolean available) {
         int gfxVal = available ? 1 : 0;
+        int desiredRate = available ? 2 : 0;
+
+        /* Pre-step: write KOMOService.dataRate so updateGfxState picks it up. */
+        if (komoService != null) {
+            try {
+                Field fRate = null;
+                Class c = komoService.getClass();
+                while (c != null && fRate == null) {
+                    try { fRate = c.getDeclaredField("dataRate"); }
+                    catch (NoSuchFieldException nsf) { c = c.getSuperclass(); }
+                }
+                if (fRate != null) {
+                    fRate.setAccessible(true);
+                    fRate.setInt(komoService, desiredRate);
+                    Log.i(TAG, "KOMO: dataRate=" + desiredRate + " set via reflection");
+                }
+            } catch (Throwable t) {
+                Log.w(TAG, "KOMO: dataRate set failed: " + t.getMessage());
+            }
+        }
 
         /* Strategy 1: updateGfxState on KOMOService */
         try {
@@ -2056,6 +2086,19 @@ public class BAPBridge {
             }
         } catch (Throwable t) {
             Log.w(TAG, "KOMO: updateGfxState failed: " + t.getMessage());
+        }
+
+        /* Belt-and-suspenders: csRef.setKOMODataRate(2|0) hits the FPK-patched
+         * path on ClusterService directly even if Strategy 1 didn't take. */
+        if (csRef != null) {
+            try {
+                Method m = csRef.getClass().getMethod(
+                    "setKOMODataRate", new Class[]{int.class});
+                m.invoke(csRef, new Object[]{new Integer(desiredRate)});
+                Log.i(TAG, "KOMO: setKOMODataRate(" + desiredRate + ") explicit");
+            } catch (Throwable t) {
+                Log.w(TAG, "KOMO: setKOMODataRate(" + desiredRate + ") failed: " + t.getMessage());
+            }
         }
 
         /* Strategy 2+3: direct ClusterViewMode access as backup */

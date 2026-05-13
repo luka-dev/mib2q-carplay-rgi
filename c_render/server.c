@@ -72,18 +72,42 @@ static int try_connect(void) {
     int one = 1;
     setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
 
+    /* Non-blocking connect with a 300ms ceiling.  Without this a stale
+     * SYN to a port whose listener is dead-but-not-yet-RST could pin
+     * the render loop for the kernel TCP SYN timeout (multiple seconds
+     * on QNX 6.5).  We stay loopback-only so 300ms is generous. */
+    set_nonblocking(fd);
+
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     addr.sin_port = htons((uint16_t)g_target_port);
 
-    if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+    int rc = connect(fd, (struct sockaddr *)&addr, sizeof(addr));
+    if (rc < 0 && errno != EINPROGRESS && errno != EWOULDBLOCK) {
         close(fd);
         return -1;
     }
 
-    set_nonblocking(fd);
+    if (rc < 0) {
+        fd_set wfds;
+        FD_ZERO(&wfds);
+        FD_SET(fd, &wfds);
+        struct timeval tv = { .tv_sec = 0, .tv_usec = 300 * 1000 };
+        int sel = select(fd + 1, NULL, &wfds, NULL, &tv);
+        if (sel <= 0) {
+            close(fd);
+            return -1;
+        }
+        int soerr = 0;
+        socklen_t slen = sizeof(soerr);
+        if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &soerr, &slen) < 0 || soerr != 0) {
+            close(fd);
+            return -1;
+        }
+    }
+
     return fd;
 }
 

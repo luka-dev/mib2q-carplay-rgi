@@ -515,7 +515,11 @@ static int build_program(void) {
 
     GLuint vs = compile_shader(GL_VERTEX_SHADER, vert_src);
     GLuint fs = compile_shader(GL_FRAGMENT_SHADER, frag_src);
-    if (!vs || !fs) return -1;
+    if (!vs || !fs) {
+        if (vs) glDeleteShader(vs);
+        if (fs) glDeleteShader(fs);
+        return -1;
+    }
 
     g_program = glCreateProgram();
     glAttachShader(g_program, vs);
@@ -528,6 +532,12 @@ static int build_program(void) {
         char log[512];
         glGetProgramInfoLog(g_program, sizeof(log), NULL, log);
         fprintf(stderr, "render: link error: %s\n", log);
+        glDetachShader(g_program, vs);
+        glDetachShader(g_program, fs);
+        glDeleteShader(vs);
+        glDeleteShader(fs);
+        glDeleteProgram(g_program);
+        g_program = 0;
         return -1;
     }
 
@@ -626,7 +636,12 @@ static int build_fxaa_program(void) {
 
     GLuint vs = compile_shader(GL_VERTEX_SHADER, vert);
     GLuint fs = compile_shader(GL_FRAGMENT_SHADER, frag);
-    if (!vs || !fs) { fprintf(stderr, "render: FXAA shader compile failed\n"); return -1; }
+    if (!vs || !fs) {
+        fprintf(stderr, "render: FXAA shader compile failed\n");
+        if (vs) glDeleteShader(vs);
+        if (fs) glDeleteShader(fs);
+        return -1;
+    }
 
     g_fxaa_prog = glCreateProgram();
     glAttachShader(g_fxaa_prog, vs);
@@ -638,6 +653,12 @@ static int build_fxaa_program(void) {
         char log[512];
         glGetProgramInfoLog(g_fxaa_prog, sizeof(log), NULL, log);
         fprintf(stderr, "render: FXAA link error: %s\n", log);
+        glDetachShader(g_fxaa_prog, vs);
+        glDetachShader(g_fxaa_prog, fs);
+        glDeleteShader(vs);
+        glDeleteShader(fs);
+        glDeleteProgram(g_fxaa_prog);
+        g_fxaa_prog = 0;
         return -1;
     }
     g_fxaa_attr_pos = glGetAttribLocation(g_fxaa_prog, "a_pos");

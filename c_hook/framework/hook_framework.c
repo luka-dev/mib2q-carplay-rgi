@@ -383,7 +383,11 @@ hook_result_t hook_inject_frame(const uint8_t* frame, size_t frame_len) {
     hook_result_t result = HOOK_OK;
 
     if (inj->prefix_len > 0 && inj->prefix_buf) {
-        /* Build full frame: prefix + iAP2 frame + checksum */
+        /* Build full frame: prefix + iAP2 frame + checksum.
+         * NOTE: a previous version used `static __thread` 16K scratch to
+         * avoid malloc per inject.  gcc 4.4 on QNX 6.5 emits __thread as
+         * emulated TLS in LD_PRELOAD'd .so (__emutls_v.* + emutls_get_address)
+         * which crashes dio_manager.  Reverted to malloc. */
         size_t total = inj->prefix_len + frame_len + 1;
         uint8_t* out = (uint8_t*)malloc(total);
         if (!out) {

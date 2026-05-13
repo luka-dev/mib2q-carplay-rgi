@@ -38,12 +38,12 @@ DEFINE_LOG_MODULE(BUS);
  * Configuration
  * ============================================================ */
 #define SEND_QUEUE_CAPACITY   256        /* must be a power of two */
-/* Directly-indexed per-type table.  Must cover the full protocol
- * range we allocate types in (see bus_protocol.h: currently through
- * 0x02FF with headroom for 0x0300+ ranges).  Type values >=MAX_TYPES
- * are rejected by slot_for(), so any future range additions must
- * grow this constant. */
-#define MAX_TYPES             0x0400
+/* Directly-indexed per-type table.  Must cover all currently-assigned
+ * event types from bus_protocol.h (highest in use: EVT_DEVICE_STATE
+ * = 0x0030).  Sized at 0x40 for modest headroom; type values >=MAX_TYPES
+ * are rejected by slot_for(), so future range additions must grow this
+ * constant.  Each entry is ~36 bytes; oversize was 36 KB previously. */
+#define MAX_TYPES             0x0040
 
 /* ============================================================
  * Internal frame
@@ -442,6 +442,13 @@ static int try_connect_once(void) {
 
     int one = 1;
     setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
+
+    /* 500ms send timeout so a stalled renderer (TCP buffer full, blocked
+     * select() in server) cannot pin the iAP2 dispatch thread inside
+     * send().  send() returns -1/EWOULDBLOCK after the timeout; the
+     * writer thread drops the message and we close+reconnect. */
+    struct timeval tv = { .tv_sec = 0, .tv_usec = 500 * 1000 };
+    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
 
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));

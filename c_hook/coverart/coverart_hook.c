@@ -29,6 +29,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <stdarg.h>
 
 DEFINE_LOG_MODULE(COVERART);
 
@@ -95,23 +96,49 @@ typedef struct {
     int is_carplay_stream;
     int probe_calls;       /* incremented each handle_stream_data while !is_carplay_stream */
     int active;
+    pthread_mutex_t lock;  /* per-slot lock — protects buf manipulation without
+                            * blocking other slots' fds (one mutex per fd avoids
+                            * the music-freeze caused by serialising every iAP2
+                            * recv()/read() through a single stream_mutex while
+                            * doing potentially-large realloc/memmove). */
 } StreamState;
 
 static StreamState streams[MAX_STREAMS];
+/* stream_mutex now ONLY guards slot lookup/allocation in get_stream().
+ * Per-slot work (append, parse, realloc, memmove) runs under streams[i].lock
+ * after stream_mutex is released. */
 static pthread_mutex_t stream_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-/* Per-fd "skip" flag — set to 1 once we're confident a fd never carries
- * iAP2 (after FD_PROBE_LIMIT reads without a single FF 5A packet).
- * Lock-free single-byte read in the recv()/read() hooks for early exit;
- * dio_manager opens many fds for IPC / logs / audio — without this filter
- * every read on every fd does a mutex lock + linear FF 5A scan.
+/* Hard cap on jpeg accumulation per stream — defends against a malformed
+ * iAP2 stream that opens a session and never emits a JPEG EOI marker.
+ * Without this cap, jpeg_buf doubles unbounded (15 MB CarPlay covers exist;
+ * 32 MB is well above any legitimate single-image size). */
+#define COVERART_MAX_JPEG  (32u * 1024u * 1024u)
+
+/* Per-fd flags.
  *
- * Cleared on close() so a reused fd starts a fresh probe. */
+ * fd_iap2[fd] = 1 — known iAP2 transport fd (set by open() hook when the
+ * path matches `/dev/otg-cinemo`).  recv()/read() invoke handle_stream_data
+ * directly without any probing or mutex on the byte stream.
+ *
+ * fd_skip[fd] = 1 — known non-iAP2 fd (set after FD_PROBE_LIMIT reads
+ * without ever seeing FF 5A, OR set unconditionally on every non-iAP2 path
+ * we identify at open() time).  recv()/read() returns immediately.
+ *
+ * Both cleared on close() so a reused fd starts fresh.  Lock-free byte
+ * reads in the hot path — only the slow probe + decode loops take mutex. */
 #define FD_TABLE_SIZE     1024
 #define FD_PROBE_LIMIT    64
 static volatile uint8_t fd_skip[FD_TABLE_SIZE];
+static volatile uint8_t fd_iap2[FD_TABLE_SIZE];
 
+/* iAP2 USB endpoint path — dio_manager opens this via Cinemo's USB FFS
+ * plugin (see strings: "iap://ffs:///dev/otg-cinemo"). */
+#define IAP2_USB_PATH     "/dev/otg-cinemo"
+
+typedef int (*OpenFunc)(const char*, int, ...);
 typedef int (*CloseFunc)(int);
+static OpenFunc  real_open  = NULL;
 static CloseFunc real_close = NULL;
 
 /* Module state */
@@ -804,11 +831,26 @@ static StreamState* get_stream(int fd) {
 static void handle_stream_data(int fd, const uint8_t* buf, size_t len) {
     if (fd < 0 || fd >= 1024 || !buf || len == 0) return;
 
+    /* Slot lookup under global mutex (cheap — just walks a small array). */
     pthread_mutex_lock(&stream_mutex);
-
     StreamState* st = get_stream(fd);
-    if (!st) {
-        pthread_mutex_unlock(&stream_mutex);
+    pthread_mutex_unlock(&stream_mutex);
+    if (!st) return;
+
+    /* Everything below runs under per-slot lock so different fds don't
+     * serialise on each other.  Same-fd serialisation is what the kernel
+     * already gives us (each fd is read by one thread), so contention
+     * here is rare; but if it happens we still get correctness. */
+    pthread_mutex_lock(&st->lock);
+
+    /* Re-check ownership: between releasing stream_mutex and acquiring
+     * st->lock, a concurrent close() on the same fd could have grabbed
+     * the slot first, freed its buffers, and marked it inactive.  If
+     * we proceeded, we'd realloc into a slot that no longer belongs to
+     * this fd — the next get_stream() for a reused fd would wipe our
+     * pointers and leak the buffer.  Bail out instead. */
+    if (!st->active || st->fd != fd) {
+        pthread_mutex_unlock(&st->lock);
         return;
     }
 
@@ -818,13 +860,13 @@ static void handle_stream_data(int fd, const uint8_t* buf, size_t len) {
         while (new_cap < st->raw_len + len) new_cap *= 2;
         if (new_cap > STREAM_BUF_MAX) {
             st->raw_len = 0;
-            pthread_mutex_unlock(&stream_mutex);
+            pthread_mutex_unlock(&st->lock);
             return;
         }
         uint8_t* tmp = realloc(st->raw_buf, new_cap);
         if (!tmp) {
             st->raw_len = 0;
-            pthread_mutex_unlock(&stream_mutex);
+            pthread_mutex_unlock(&st->lock);
             return;
         }
         st->raw_buf = tmp;
@@ -889,8 +931,20 @@ static void handle_stream_data(int fd, const uint8_t* buf, size_t len) {
             /* Append if target session */
             if (st->target_session == (int)session_id) {
                 if (st->jpeg_len + payload_len > st->jpeg_cap) {
+                    size_t need = st->jpeg_len + payload_len;
+                    /* Hard cap: malformed stream w/o EOI marker would otherwise
+                     * double jpeg_cap forever.  Reset and skip this payload. */
+                    if (need > COVERART_MAX_JPEG) {
+                        free(st->jpeg_buf);
+                        st->jpeg_buf = NULL;
+                        st->jpeg_len = 0;
+                        st->jpeg_cap = 0;
+                        st->target_session = -1;
+                        break;
+                    }
                     size_t new_cap = st->jpeg_cap ? st->jpeg_cap * 2 : 65536;
-                    while (new_cap < st->jpeg_len + payload_len) new_cap *= 2;
+                    while (new_cap < need) new_cap *= 2;
+                    if (new_cap > COVERART_MAX_JPEG) new_cap = COVERART_MAX_JPEG;
                     uint8_t* tmp = realloc(st->jpeg_buf, new_cap);
                     if (!tmp) break;
                     st->jpeg_buf = tmp;
@@ -967,7 +1021,7 @@ static void handle_stream_data(int fd, const uint8_t* buf, size_t len) {
         }
     }
 
-    pthread_mutex_unlock(&stream_mutex);
+    pthread_mutex_unlock(&st->lock);
 
     /* Hand off to async worker so the recv()/read() thread doesn't
      * stall on JPEG decode + PNG encode (~50-100 ms).  Worker takes
@@ -975,6 +1029,27 @@ static void handle_stream_data(int fd, const uint8_t* buf, size_t len) {
     if (process_buf) {
         enqueue_image_async(process_buf, process_len);
     }
+}
+
+/* Fast filter shared by read() / recv() hooks.  Returns true when this fd
+ * should be fed to handle_stream_data().
+ *
+ * Three-tier fd classification:
+ *   1. fd_iap2[fd] == 1 → we KNOW this is the iAP2 USB endpoint
+ *      (identified at open() time by path match).  Process unconditionally.
+ *   2. fd_skip[fd] == 1 → KNOWN non-iAP2; bail out, zero overhead.
+ *   3. unknown (neither set) → run probe scan in handle_stream_data,
+ *      which will set fd_skip after FD_PROBE_LIMIT failed reads.
+ *
+ * In production on this HU only the Cinemo USB FFS endpoint
+ * (`/dev/otg-cinemo`) carries iAP2 frames, so tier 1 catches it on first
+ * read.  The probe fallback in tier 3 covers any future transport the
+ * compatible-path code might discover (e.g. a non-USB iAP2 socket). */
+static inline int fd_wants_iap2_processing(int fd) {
+    if (fd < 0 || fd >= FD_TABLE_SIZE) return 1;       /* out-of-range: probe */
+    if (fd_iap2[fd]) return 1;                          /* known iAP2 */
+    if (fd_skip[fd]) return 0;                          /* known non-iAP2 */
+    return 1;                                           /* unknown: probe */
 }
 
 /* Hook: read() */
@@ -991,11 +1066,7 @@ ssize_t read(int fd, void* buf, size_t count) {
 
     result = real_read(fd, buf, count);
 
-    /* Fast skip path: fds we've confirmed don't carry iAP2 — bypass
-     * mutex + scan entirely.  Critical: dio_manager has many non-iAP2
-     * fds (logs, IPC) that would otherwise burn cycles every read. */
-    if (result > 0 && buf
-            && (fd < 0 || fd >= FD_TABLE_SIZE || !fd_skip[fd])) {
+    if (result > 0 && buf && fd_wants_iap2_processing(fd)) {
         g_coverart.read_count++;
         handle_stream_data(fd, (const uint8_t*)buf, (size_t)result);
     }
@@ -1017,13 +1088,50 @@ ssize_t recv(int sockfd, void* buf, size_t len, int flags) {
 
     result = real_recv(sockfd, buf, len, flags);
 
-    if (result > 0 && buf
-            && (sockfd < 0 || sockfd >= FD_TABLE_SIZE || !fd_skip[sockfd])) {
+    if (result > 0 && buf && fd_wants_iap2_processing(sockfd)) {
         g_coverart.recv_count++;
         handle_stream_data(sockfd, (const uint8_t*)buf, (size_t)result);
     }
 
     return result;
+}
+
+/* Hook: open() — classify the new fd at creation time.  Path match on
+ * `/dev/otg-cinemo` marks it as iAP2 directly; any other path is marked
+ * as skip so recv()/read() hot path bypasses it without probing. */
+int open(const char* path, int flags, ...) {
+    if (!real_open) {
+        real_open = (OpenFunc)dlsym(RTLD_NEXT, "open");
+        if (!real_open) {
+            errno = ENOSYS;
+            return -1;
+        }
+    }
+    int fd;
+    if (flags & O_CREAT) {
+        /* Caller passed a mode_t — forward it.  va_arg promoted to int. */
+        va_list ap;
+        va_start(ap, flags);
+        int mode = va_arg(ap, int);
+        va_end(ap);
+        fd = real_open(path, flags, mode);
+    } else {
+        fd = real_open(path, flags);
+    }
+    if (fd >= 0 && fd < FD_TABLE_SIZE && path) {
+        if (strstr(path, IAP2_USB_PATH) != NULL) {
+            fd_iap2[fd] = 1;
+            fd_skip[fd] = 0;
+            LOG_INFO(LOG_MODULE, "open(): fd=%d is iAP2 (%s)", fd, path);
+        } else {
+            /* Everything that isn't the Cinemo USB endpoint cannot carry
+             * the iAP2 stream on this HU configuration.  Skip from the
+             * first read — no probe needed. */
+            fd_skip[fd] = 1;
+            fd_iap2[fd] = 0;
+        }
+    }
+    return fd;
 }
 
 /* Hook: close() — clear fd_skip flag and free stream slot so a reused
@@ -1041,20 +1149,30 @@ int close(int fd) {
 
     if (fd >= 0 && fd < FD_TABLE_SIZE) {
         fd_skip[fd] = 0;
+        fd_iap2[fd] = 0;
+        /* Find slot under global mutex, then free buffers under per-slot lock
+         * to avoid colliding with a handle_stream_data() on this fd. */
         pthread_mutex_lock(&stream_mutex);
+        StreamState* target = NULL;
         for (int i = 0; i < MAX_STREAMS; i++) {
             if (streams[i].active && streams[i].fd == fd) {
-                free(streams[i].raw_buf);
-                free(streams[i].jpeg_buf);
-                streams[i].raw_buf = NULL;
-                streams[i].jpeg_buf = NULL;
-                streams[i].raw_len = streams[i].raw_cap = 0;
-                streams[i].jpeg_len = streams[i].jpeg_cap = 0;
-                streams[i].active = 0;
+                target = &streams[i];
                 break;
             }
         }
         pthread_mutex_unlock(&stream_mutex);
+
+        if (target) {
+            pthread_mutex_lock(&target->lock);
+            free(target->raw_buf);
+            free(target->jpeg_buf);
+            target->raw_buf = NULL;
+            target->jpeg_buf = NULL;
+            target->raw_len = target->raw_cap = 0;
+            target->jpeg_len = target->jpeg_cap = 0;
+            target->active = 0;
+            pthread_mutex_unlock(&target->lock);
+        }
     }
 
     return real_close(fd);
@@ -1063,6 +1181,11 @@ int close(int fd) {
 __attribute__((constructor))
 static void coverart_init(void) {
     memset(streams, 0, sizeof(streams));
+    /* Initialize per-slot mutexes so handle_stream_data can lock-by-fd
+     * without serialising all iAP2 reads through one global mutex. */
+    for (int i = 0; i < MAX_STREAMS; i++) {
+        pthread_mutex_init(&streams[i].lock, NULL);
+    }
     /* Spin up the async decode worker eagerly — by the time the first
      * complete JPEG arrives, the worker is ready to take it.  Avoids
      * lazy-start overhead landing on the first cover-art event. */

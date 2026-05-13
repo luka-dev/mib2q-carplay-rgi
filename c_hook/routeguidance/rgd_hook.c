@@ -543,8 +543,10 @@ static void write_slot_data_keys(bus_text_builder_t* b, unsigned idx, const rgd_
     if (man->present & RGD_MAN_LANE_GUIDANCE_RAW) {
         snprintf(key, sizeof(key), "m%u_lane_guidance_len", idx);
         bus_text_int(b, key, man->lane_guidance_raw_len);
+#ifdef RGD_TRACE_RAW_FULL
         snprintf(key, sizeof(key), "m%u_lane_guidance_hex", idx);
         bus_text_str(b, key, man->lane_guidance_hex);
+#endif
     }
     if (man->present & RGD_MAN_LINKED_LANE_INDEX) {
         snprintf(key, sizeof(key), "m%u_linked_lane_guidance_index", idx);
@@ -646,8 +648,10 @@ static void write_slot_data_keys(bus_text_builder_t* b, unsigned idx, const rgd_
     if (man->present & RGD_MAN_EXIT_INFO_RAW) {
         snprintf(key, sizeof(key), "m%u_exit_info_len", idx);
         bus_text_int(b, key, man->exit_info_raw_len);
+#ifdef RGD_TRACE_RAW_FULL
         snprintf(key, sizeof(key), "m%u_exit_info_hex", idx);
         bus_text_str(b, key, man->exit_info_hex);
+#endif
     }
     if (man->present & RGD_MAN_EXIT_INFO_STR) {
         snprintf(key, sizeof(key), "m%u_exit_info", idx);
@@ -987,6 +991,11 @@ static void write_bus_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* 
     }
     if (present == 0 && !have_extra_slot && !have_lane_cache && !pruned_lane_slots) return;
 
+    /* NOTE on storage choice: a previous version used `static __thread`
+     * 64K scratch to avoid per-snapshot malloc/free.  This crashed
+     * dio_manager — gcc 4.4 on QNX 6.5 emits __thread as emulated TLS
+     * (__emutls_v.* + __emutls_get_address) which is buggy in
+     * LD_PRELOAD'd .so on this target.  Reverted to heap allocation. */
     bus_text_builder_t _b_storage;
     bus_text_builder_t* b = &_b_storage;
     if (bus_text_begin_heap(b, "routeguidance", BUS_TEXT_BUILDER_LARGE_CAP) != HOOK_OK) {
@@ -1113,7 +1122,11 @@ static void write_bus_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* 
             int loff = 0;
             int outc = 0;
             for (uint16_t i = 0; i < g_rgd.current_list_count; i++) {
-                int slot = rgd_slot_for_iap_index(g_rgd.current_list[i], true);
+                /* Snapshot writer: pure lookup, no LRU touch, no allocation.
+                 * Bumping seq here on every PPS write demoted real-time-used
+                 * slots to eviction victims; creating a slot from snapshot
+                 * (idx not yet seen via 0x5202) would publish an empty slot. */
+                int slot = rgd_find_slot_for_iap_index_no_touch(g_rgd.current_list[i]);
                 if (slot < 0) continue;
                 if (!(g_rgd.slot_cache[slot].present & RGD_MAN_TYPE)) continue;
                 if (listed_count < MAX_MANEUVER_LIST)

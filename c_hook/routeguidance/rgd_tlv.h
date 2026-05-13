@@ -343,10 +343,14 @@ typedef struct {
     rgd_lane_t lanes[MAX_LANE_GUIDANCE];
     uint8_t lane_count;
     uint16_t lane_guidance_raw_len;
+#ifdef RGD_TRACE_RAW_FULL
     char lane_guidance_hex[(RGD_HEX_PREVIEW_MAX * 3) + 1];
+#endif
     uint16_t linked_lane_guidance_index;
     uint16_t exit_info_raw_len;
+#ifdef RGD_TRACE_RAW_FULL
     char exit_info_hex[(RGD_HEX_PREVIEW_MAX * 3) + 1];
+#endif
     char exit_info_str[RGD_EXIT_INFO_MAX + 1];
     uint8_t valid;
 } rgd_maneuver_t;

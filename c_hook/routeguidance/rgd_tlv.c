@@ -542,9 +542,10 @@ void rgd_parse_maneuver(const uint8_t* buf, size_t len, rgd_maneuver_t* out) {
                 break;
 
             case MAN_TLV_LINKED_LANE_GUIDANCE:
-                /* Always capture raw hex for debugging */
                 out->lane_guidance_raw_len = (uint16_t)val_len;
+#ifdef RGD_TRACE_RAW_FULL
                 hex_encode_preview(val, val_len, out->lane_guidance_hex, sizeof(out->lane_guidance_hex));
+#endif
                 out->present |= RGD_MAN_LANE_GUIDANCE_RAW;
                 {
                     uint16_t linked_idx = 0xFFFF;
@@ -557,7 +558,9 @@ void rgd_parse_maneuver(const uint8_t* buf, size_t len, rgd_maneuver_t* out) {
 
             case MAN_TLV_EXIT_INFO:
                 out->exit_info_raw_len = (uint16_t)val_len;
+#ifdef RGD_TRACE_RAW_FULL
                 hex_encode_preview(val, val_len, out->exit_info_hex, sizeof(out->exit_info_hex));
+#endif
                 copy_printable_string_preview(val, val_len, out->exit_info_str, sizeof(out->exit_info_str));
                 out->present |= RGD_MAN_EXIT_INFO_RAW;
                 out->present |= RGD_MAN_EXIT_INFO_STR;

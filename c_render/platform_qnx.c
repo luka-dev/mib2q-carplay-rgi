@@ -94,6 +94,61 @@ static const char DM_MANAGED_GROUP[] = "All your base are belong to us!";
 static int g_recreate_count = 0;
 static struct timespec g_last_recreate_ts = {0, 0};
 
+/* Fire-and-forget system() — runs the command in a detached thread so the
+ * render loop never blocks on dmdt's ~50-150 ms latency.  Caller hands
+ * ownership of cmd_copy to the helper (heap-allocated, freed inside).
+ *
+ * g_system_async_inflight is bumped before spawning and decremented after
+ * system() returns; platform_shutdown waits on it so atexit's
+ * restore_display() cannot race a still-running detached dmdt and
+ * interleave dmdt commands in the wrong order.  Mutex-guarded — QNX 6.5
+ * ARMv7 gcc 4.4 doesn't ship libgcc atomics for the __sync_* builtins. */
+static int g_system_async_inflight = 0;
+static pthread_mutex_t g_system_async_lock = PTHREAD_MUTEX_INITIALIZER;
+static int system_async_inflight_count(void) {
+    pthread_mutex_lock(&g_system_async_lock);
+    int n = g_system_async_inflight;
+    pthread_mutex_unlock(&g_system_async_lock);
+    return n;
+}
+static void *system_async_worker(void *arg) {
+    char *cmd = (char *)arg;
+    if (cmd) {
+        (void)system(cmd);
+        free(cmd);
+    }
+    pthread_mutex_lock(&g_system_async_lock);
+    g_system_async_inflight--;
+    pthread_mutex_unlock(&g_system_async_lock);
+    return NULL;
+}
+static void system_async(const char *cmd) {
+    if (!cmd || !cmd[0]) return;
+    char *copy = strdup(cmd);
+    if (!copy) {
+        /* OOM → fall back to inline system().  Better to hiccup once
+         * than to silently drop the dmdt routing call. */
+        (void)system(cmd);
+        return;
+    }
+    pthread_mutex_lock(&g_system_async_lock);
+    g_system_async_inflight++;
+    pthread_mutex_unlock(&g_system_async_lock);
+    pthread_t tid;
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    int rc = pthread_create(&tid, &attr, system_async_worker, copy);
+    pthread_attr_destroy(&attr);
+    if (rc != 0) {
+        pthread_mutex_lock(&g_system_async_lock);
+        g_system_async_inflight--;
+        pthread_mutex_unlock(&g_system_async_lock);
+        free(copy);
+        (void)system(cmd);
+    }
+}
+
 /* Set to 1 once platform_init has successfully created the initial window.
  * The health check uses this to distinguish "renderer not yet up, ignore"
  * from "we had a window and lost it, retry recreate even though
@@ -277,8 +332,11 @@ static int create_window_and_egl_surface(void) {
         char cmd[128];
         snprintf(cmd, sizeof(cmd), "/eso/bin/apps/dmdt dc %d %d 102 101 33",
                  g_context_id, g_displayable_id);
-        fprintf(stderr, "platform_qnx: %s\n", cmd);
-        system(cmd);
+        fprintf(stderr, "platform_qnx: %s (async)\n", cmd);
+        /* Fire-and-forget — dmdt fork/exec takes 50-150 ms on QNX 6.5
+         * and called every window recreate; blocking here stalls the
+         * render loop and we miss vsyncs. */
+        system_async(cmd);
         g_display_routed = 1;
     }
 
@@ -820,7 +878,17 @@ int platform_init(int width, int height) {
 }
 
 void platform_swap(void) {
-    eglSwapBuffers(g_egl_display, g_egl_surface);
+    if (eglSwapBuffers(g_egl_display, g_egl_surface) == EGL_TRUE) {
+        return;
+    }
+    /* Swap failed.  Common causes when displaymanager yanks our window
+     * (native nav collision, KOMO context exit): EGL_BAD_SURFACE,
+     * EGL_BAD_NATIVE_WINDOW, EGL_CONTEXT_LOST.  Without an explicit
+     * recreate the renderer would spin on a dead surface forever,
+     * since swap drives the loop's frame pacing. */
+    EGLint err = eglGetError();
+    fprintf(stderr, "platform_qnx: eglSwapBuffers failed err=0x%x → recreate\n", err);
+    platform_recreate_window("swap-failed");
 }
 
 void platform_poll(void) {
@@ -833,25 +901,48 @@ int platform_should_close(void) {
 
 void platform_shutdown(void) {
     /* Clean shutdown sequence:
-     *   1. Release GL context and EGL surface while keeping EGLDisplay /
+     *   1. Wait briefly for any in-flight focus check thread.  Detached
+     *      thread reads g_display_id / g_context_id and execs dmdt — by
+     *      itself harmless once we exit, but it can also race with our
+     *      atexit-installed restore_display() (both call dmdt) and
+     *      interleave commands, leaving the cluster pointed at the
+     *      wrong context.  1 s ceiling: even with the slowest dmdt
+     *      latency we've measured (~200 ms), this is generous.
+     *   2. Release GL context and EGL surface while keeping EGLDisplay /
      *      displayinit globals alive (full teardown of shared display
      *      resources can collide with native components).
-     *   2. Explicitly destroy our screen_window via screen_destroy_window
+     *   3. Explicitly destroy our screen_window via screen_destroy_window
      *      so displaymanager's m_surfaceSources[20] vacates promptly.
-     *      With stock libPresentationController, native widget only
-     *      creates a window for displayable 20 when its state machine
-     *      enters StartDrawing (i.e. an active native route).  In idle
-     *      (typical post-CarPlay state) the slot just stays empty —
-     *      this matches the cluster baseline before we ever started.
-     *   3. Restore context 74's stock composition via dmdt as a backstop.
-     *
-     * In-flight focus check thread (if any) is detached and self-cleans;
-     * no need to wait for it. */
+     *   4. Restore context 74's stock composition via dmdt as a backstop. */
+    for (int i = 0; i < 100 && (g_focus_check_inflight || system_async_inflight_count() > 0); i++) {
+        struct timespec wait_ts = { .tv_sec = 0, .tv_nsec = 10 * 1000 * 1000 };
+        nanosleep(&wait_ts, NULL);
+    }
+    if (g_focus_check_inflight) {
+        fprintf(stderr, "platform_qnx: focus check still inflight at shutdown — proceeding anyway\n");
+    }
+    {
+        int still = system_async_inflight_count();
+        if (still > 0) {
+            fprintf(stderr, "platform_qnx: %d async dmdt(s) still inflight at shutdown — proceeding anyway\n",
+                    still);
+        }
+    }
+
     if (g_egl_display != EGL_NO_DISPLAY) {
         eglMakeCurrent(g_egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
         if (g_egl_surface != EGL_NO_SURFACE) {
             eglDestroySurface(g_egl_display, g_egl_surface);
             g_egl_surface = EGL_NO_SURFACE;
+        }
+        if (g_egl_context != EGL_NO_CONTEXT) {
+            /* Release the GL context so the driver frees its internal
+             * resources (shader cache, framebuffer attachments, command
+             * buffers).  Skip eglTerminate — EGLDisplay is shared with
+             * native cluster components and terminating it would tear
+             * down their surfaces too. */
+            eglDestroyContext(g_egl_display, g_egl_context);
+            g_egl_context = EGL_NO_CONTEXT;
         }
     }
     platform_release_displayable();
