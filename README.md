@@ -8,6 +8,9 @@ CarPlay patch set for Audi MHI2Q infotainment.
 ## Gallery
 
 <p align="center">
+  <img src="gallery/IMG_0082_39-45.gif" width="90%" />
+</p>
+<p align="center">
   <img src="gallery/IMG_0623.jpeg" width="45%" />
   <img src="gallery/IMG_6299.jpeg" width="45%" />
 </p>
@@ -15,8 +18,6 @@ CarPlay patch set for Audi MHI2Q infotainment.
   <img src="gallery/IMG_6302.jpeg" width="45%" />
   <img src="gallery/IMG_0599.jpeg" width="45%" />
 </p>
-
-▶ [Demo video (gallery/IMG_0082.mp4)](gallery/IMG_0082.mp4)
 
 ## Contents
 
