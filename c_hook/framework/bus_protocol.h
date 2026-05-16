@@ -4,7 +4,7 @@
  * Full-duplex TCP bus between libcarplay_hook.so (inside dio_manager) and the
  * Java side (lsd process, carplay_hook.jar).  Single persistent connection.
  *
- * Transport: TCP 127.0.0.1:19810 (hook = server, Java = client).
+ * Transport: TCP 127.0.0.1:19810 (hook = client, Java = server).
  *
  * Frame layout (big-endian wire order):
  *

@@ -460,7 +460,7 @@ sequenceDiagram
             worker--xworker: skip - already saved
         else new image
             worker->>worker: stb_image decode<br/>+ resize 256x256<br/>+ PNG encode
-            worker->>fs: write coverart.png<br/>(atomic rename)
+            worker->>fs: write coverart_&lt;slot&gt;.png<br/>then atomic symlink swap<br/>over coverart.png
             worker->>bus: EVT_COVERART<br/>crc:<u32> path:<str>
         end
     end
@@ -833,8 +833,7 @@ sequenceDiagram
 | Bus reader | dio_manager | parses inbound frames, dispatches to handlers, exits on EOF/error |
 | Bus heartbeat | dio_manager | sends `EVT_PONG` every 1 s while connected (Java liveness signal) |
 | HMI EDT | HMI process | UI loop - calls `setMMIDisplayStatus`, picture mgr, etc. |
-| `CarplayBus-IO` | HMI process | accept loop on :19810 (one-at-a-time, force-replace stale) |
-| `CarplayBus-Read` | HMI process | per-conn reader, `SO_TIMEOUT=5 s` triggers re-accept on hook silence |
+| `CarplayBus-IO` | HMI process | single thread - runs accept loop on :19810 (one-at-a-time, force-replace stale) then drives the per-conn reader; `SO_TIMEOUT=5 s` on the accepted socket triggers re-accept on hook silence |
 | `BAPActionBlink` | HMI process | daemon - 600 ms ticks for bargraph blink animation |
 | `CarPlayHook-Retry` | HMI process | retries `tryInit()` if OSGi services aren't ready yet |
 | `RendererServer-Accept` | HMI process | accept loop on :19800, replaces socket on each new renderer connect |

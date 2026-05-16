@@ -28,6 +28,14 @@ public class CarplayBus {
     public static final int    HEADER_SIZE = 16;
     public static final int    MAX_PAYLOAD = 128 * 1024;
 
+    /*
+     * SO_TIMEOUT on the accepted hook socket. The hook sends EVT_PONG every
+     * 1 s as a liveness signal; 5 s of silence means the hook is dead or
+     * dio_manager was force-killed with its TCP state lingering. The reader
+     * gets SocketTimeoutException, drops the connection, and re-accepts.
+     */
+    private static final int SOCKET_READ_TIMEOUT_MS = 5000;
+
     public static final int FLAG_STICKY  = 0x01;
     public static final int FLAG_BINARY  = 0x02;
     public static final int FLAG_REPLAY  = 0x04;
@@ -278,6 +286,7 @@ public class CarplayBus {
             Socket s = ss.accept();
             s.setTcpNoDelay(true);
             s.setKeepAlive(true);
+            s.setSoTimeout(SOCKET_READ_TIMEOUT_MS);
             InputStream iin = s.getInputStream();
 
             synchronized (lock) {
