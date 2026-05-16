@@ -461,8 +461,8 @@ sequenceDiagram
             worker--xworker: skip - already saved
         else new image
             worker->>worker: stb_image decode<br/>+ resize 256x256<br/>+ PNG encode
-            worker->>fs: write coverart_&lt;slot&gt;.png<br/>then atomic symlink swap<br/>over coverart.png
-            worker->>bus: EVT_COVERART<br/>crc:<u32> path:<str>
+            worker->>fs: write coverart_slot.png<br/>then atomic symlink swap<br/>over coverart.png
+            worker->>bus: EVT_COVERART<br/>crc:u32 path:string
         end
     end
     deactivate worker
