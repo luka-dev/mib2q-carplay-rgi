@@ -142,8 +142,9 @@ flowchart LR
 | HUD (BAP) | ~0 | small BAP frames | always while CarPlay nav running |
 | Render (MOST) | renderer process not spawned | EGL frame draws + H.264 encode | only while route is set |
 
-The renderer is spawned by `BAPBridge` on the first maneuver and
-killed on `0x5203 StopRouteGuidance`, so the MOST-video branch costs
+The renderer is spawned by `BAPBridge` when Java activates a CarPlay
+route-guidance session and stopped when that route guidance deactivates
+or the CarPlay session shuts down, so the MOST-video branch costs
 nothing when the user isn't actively navigating.
 
 #### HUD (BAP)
@@ -273,8 +274,8 @@ or another HMI process stole the cluster context, and re-routes via
 fork-bomb the system).
 
 **Renderer startup handshake** (added to the TCP protocol so Java
-doesn't expose the LVDS displayable to KOMO before a deterministic
-frame is queued):
+doesn't expose the MOST video path before a deterministic frame is
+queued):
 
 1. Renderer connects to Java's listen socket on `:19800`.
 2. After EGL + render init, sends `EVT_READY` (0x81).
@@ -284,10 +285,10 @@ frame is queued):
 5. Renderer swaps the frame and sends `EVT_FRAME_READY` (0x82).
 6. Java's `waitForFrameReady(1200ms)` unblocks; only now does it call
    `csRef.activateCustomRendererPipeline()` (cluster context switch)
-   and `forceGfxAvailable(true)` (KOMO publishes LVDS video).
+   and `forceGfxAvailable(true)` (KOMO publishes the MOST video stream).
 7. If `activateCustomRendererPipeline` returns `FAILED:` (cluster
    stuck on another context after retry), the renderer is killed and
-   gfx stays disabled — no LVDS video is published in a broken state.
+   gfx stays disabled - no MOST video is published in a broken state.
 
 `EVT_READY` and `EVT_FRAME_READY` are sticky: on TCP reconnect they
 replay immediately so a Java-side restart still gets the right state
@@ -637,7 +638,7 @@ flowchart LR
                 rgd["RGD parser<br/>0x5200..0x5204<br/>+ 0x52xx unknown warn"]
                 cover["Cover-art bridge<br/>chunked JPEG reassembly"]
                 worker["Async decode worker<br/>stb_image -> 256x256 PNG<br/>(pthread, coalesced queue)"]
-                bus[("TCP bus client<br/>connects to Java :19810<br/><i>connector + writer + reader<br/>+ heartbeat threads</i>")]
+                bus[("TCP bus client<br/>connects to Java :19810<br/><i>connector + writer<br/>+ 1 Hz timer threads</i>")]
                 hb["1 Hz timer thread<br/>drives rgd_periodic_tick<br/>(deferred route_state=0 flush)"]
                 cksum["iAP2 cksum<br/>(NEG, hard-coded)<br/>+ sanity log"]
             end
@@ -652,8 +653,8 @@ flowchart LR
                 cursor["CursorController<br/>(touchpad Δx/Δy -> DPAD,<br/>speed-adaptive threshold)"]
                 dsihook["TerminalModeDSIKeyEvents<br/>Controller (class-replaced)"]
                 covjava["AppConnectorTerminalMode<br/>(class-replaced -<br/>cover art -> BAP picture mgr)"]
-                bussrv["TCP bus server<br/>listens on :19810<br/>SO_TIMEOUT 5 s = dead<br/>(accept + reader + writer threads)"]
-                rendsrv["RendererServer<br/>listens on :19800<br/>SO_TIMEOUT 5 s = dead<br/>(non-blocking accept thread)"]
+                bussrv["TCP bus server<br/>listens on :19810<br/>(single CarplayBus-IO thread,<br/>TCP FIN/RST + keepalive)"]
+                rendsrv["RendererServer<br/>listens on :19800<br/>SO_TIMEOUT 5 s = dead<br/>(accept + per-conn reader threads)"]
                 tmevent["TerminalModeBapCombi$<br/>EventListener (class-replaced)"]
             end
         end
@@ -832,7 +833,6 @@ sequenceDiagram
 | Cover-art worker | dio_manager | pthread - picks complete JPEGs off the 1-slot queue, decodes, writes PNG, emits `EVT_COVERART` |
 | Bus connector | dio_manager | TCP client - `connect()` to Java :19810 with retry, reconnect on disconnect |
 | Bus writer | dio_manager | drains outbound event queue |
-| Bus reader | dio_manager | parses inbound frames, dispatches to handlers, exits on EOF/error |
 | Bus periodic timer | dio_manager | 1 Hz tick, drives `rgd_periodic_tick` (deferred route_state=0 emission); does NOT send any application-level heartbeat to Java |
 | HMI EDT | HMI process | UI loop - calls `setMMIDisplayStatus`, picture mgr, etc. |
 | `CarplayBus-IO` | HMI process | single thread - runs accept loop on :19810 (one-at-a-time, force-replace stale) then drives the per-conn reader; no SO_TIMEOUT, relies on TCP FIN/RST + `setKeepAlive(true)` to detect hook disconnect |
@@ -1045,7 +1045,7 @@ Cross-compiles on the QNX VM via SSH. Set `QNX_VM` IP in `compile_hook.sh`.
 ./compile_hook.sh
 ```
 
-Output: `./libcarplay_hook.so`
+Output: `build/libcarplay_hook.so`
 
 Build flags:
 
@@ -1073,7 +1073,7 @@ LOG=1 LOG_RGD_PACKET_RAW=1 ./compile_hook.sh
 ./compile_render_qnx.sh
 ```
 
-Output: `./maneuver_render`
+Output: `build/maneuver_render`
 
 To build with the debug grid overlay:
 
@@ -1087,7 +1087,7 @@ To build with the debug grid overlay:
 make -C c_render
 ```
 
-Output: `c_render/c_render` (renderer) + `c_render/test_harness` (test client)
+Output: `build/c_render` (renderer) + `build/test_harness` (test client)
 
 The macOS build also compiles a test harness - see [Testing the renderer locally](#testing-the-renderer-locally) below.
 
@@ -1099,7 +1099,7 @@ Requires `lsd.jar` (see [Prerequisites](#prerequisites)). Check paths in `build_
 ./build_java.sh
 ```
 
-Output: `./carplay_hook.jar`
+Output: `build/carplay_hook.jar`
 
 All classes are compiled with `-source 1.2 -target 1.2` for MHI2Q JVM compatibility. The bundled JDK from jxe2jar is used automatically.
 
@@ -1107,16 +1107,20 @@ All classes are compiled with `-source 1.2 -target 1.2` for MHI2Q JVM compatibil
 
 https://github.com/luka-dev/mib2q-carplay-rgi/raw/main/docs/test_manuver_render.mov
 
-The macOS build includes a **test harness** (`c_render/test_harness`) that sends TCP commands to the renderer, letting you cycle through all maneuver types and verify animations without a real device.
+The macOS build includes a **test harness** (`build/test_harness`) that sends TCP commands to the renderer, letting you cycle through all maneuver types and verify animations without a real device.
 
-Run both in parallel:
+Run both in parallel from the repo root. The harness is the TCP server;
+start it first, then start the renderer in another terminal:
 
 ```bash
-cd c_render
-./c_render & ./test_harness
+./build/test_harness
 ```
 
-The renderer window opens and the harness connects to `127.0.0.1:19800`.
+```bash
+./build/c_render
+```
+
+The renderer window opens and connects to the harness on `127.0.0.1:19800`.
 
 **Harness controls:**
 
@@ -1126,8 +1130,9 @@ The renderer window opens and the harness connects to `127.0.0.1:19800`.
 | R            | Send a random maneuver with random angle, junction streets, and bargraph             |
 | P            | Toggle perspective / orthographic view                                               |
 | D            | Toggle debug grid overlay                                                            |
+| B            | Toggle bargraph mode                                                                 |
+| Up / Down    | Increase / decrease bargraph level                                                   |
 | Space        | Save screenshot (PPM)                                                                |
-| S            | Toggle sidescreen / popup viewport mode                                              |
 | Q / Esc      | Quit                                                                                 |
 
 The harness auto-cycles through a built-in preset list that covers all icon types with varying directions, exit angles, junction configurations, and bargraph levels. Each arrow key press sends a `CMD_MANEUVER` packet triggering a push transition.
@@ -1142,10 +1147,10 @@ The harness auto-cycles through a built-in preset list that covers all icon type
 2. `./compile_render_qnx.sh` - build `maneuver_render`
 3. `./build_java.sh` - build `carplay_hook.jar`
 4. `mkdir -p /mnt/app/root/hooks` on device
-5. Copy `libcarplay_hook.so` to `/mnt/app/root/hooks/`, `chmod 755`
-6. Copy `maneuver_render` to `/mnt/app/root/hooks/`, `chmod 755`
+5. Copy `build/libcarplay_hook.so` to `/mnt/app/root/hooks/`, `chmod 755`
+6. Copy `build/maneuver_render` to `/mnt/app/root/hooks/`, `chmod 755`
 7. Copy `c_render/resources/flag_atlas.rgba` to `/mnt/app/root/hooks/`
-8. Copy `carplay_hook.jar` to `/mnt/app/eso/hmi/lsd/jars/`
+8. Copy `build/carplay_hook.jar` to `/mnt/app/eso/hmi/lsd/jars/`
 9. Set `LD_PRELOAD` in `smartphone_integrator.json`
 10. Add `0x5200/01/02/03/04` IDs in `dio_manager.json`
 11. Reboot (wait 30s after file changes)
@@ -1164,7 +1169,7 @@ chmod 755 /mnt/app/root/hooks
 #### Step 2: Deploy `libcarplay_hook.so`
 
 ```bash
-cp libcarplay_hook.so /mnt/app/root/hooks/
+cp build/libcarplay_hook.so /mnt/app/root/hooks/
 chmod 755 /mnt/app/root/hooks/libcarplay_hook.so
 ```
 
@@ -1248,13 +1253,13 @@ After:
 #### Step 5: Deploy `carplay_hook.jar`
 
 ```bash
-cp carplay_hook.jar /mnt/app/eso/hmi/lsd/jars/
+cp build/carplay_hook.jar /mnt/app/eso/hmi/lsd/jars/
 ```
 
 #### Step 6: Deploy `maneuver_render` and flag atlas
 
 ```bash
-cp maneuver_render /mnt/app/root/hooks/
+cp build/maneuver_render /mnt/app/root/hooks/
 cp c_render/resources/flag_atlas.rgba /mnt/app/root/hooks/
 chmod 755 /mnt/app/root/hooks/maneuver_render
 ```
