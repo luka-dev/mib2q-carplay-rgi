@@ -1,6 +1,6 @@
 # MHI2 CarPlay Route Guidance
 
-CarPlay patch set for Audi MHI2 infotainment.
+CarPlay patch set for Audi MHI2Q infotainment.
 (Based on MHI2Q firmware, but may need rebuild for different versions.)
 
 **Disclaimer:** Use at your own risk. These patches modify firmware binaries and system configurations on your infotainment unit. Always back up all original files before making any changes. The authors are not responsible for any damage, bricked devices, or warranty issues resulting from use of these patches.
