@@ -5,8 +5,22 @@ CarPlay patch set for Audi MHI2 infotainment.
 
 **Disclaimer:** Use at your own risk. These patches modify firmware binaries and system configurations on your infotainment unit. Always back up all original files before making any changes. The authors are not responsible for any damage, bricked devices, or warranty issues resulting from use of these patches.
 
+## Gallery
+
+<p align="center">
+  <img src="gallery/IMG_0623.jpeg" width="45%" />
+  <img src="gallery/IMG_6299.jpeg" width="45%" />
+</p>
+<p align="center">
+  <img src="gallery/IMG_6302.jpeg" width="45%" />
+  <img src="gallery/IMG_0599.jpeg" width="45%" />
+</p>
+
+▶ [Demo video (gallery/IMG_0082.mp4)](gallery/IMG_0082.mp4)
+
 ## Contents
 
+- [Gallery](#gallery)
 - [Features](#features)
   - [Route Guidance](#route-guidance)
     - [Pipeline overview](#pipeline-overview)
