@@ -638,7 +638,7 @@ flowchart LR
                 cover["Cover-art bridge<br/>chunked JPEG reassembly"]
                 worker["Async decode worker<br/>stb_image -> 256x256 PNG<br/>(pthread, coalesced queue)"]
                 bus[("TCP bus client<br/>connects to Java :19810<br/><i>connector + writer + reader<br/>+ heartbeat threads</i>")]
-                hb["Heartbeat thread<br/>EVT_PONG every 1 s<br/>(liveness signal for Java)"]
+                hb["1 Hz timer thread<br/>drives rgd_periodic_tick<br/>(deferred route_state=0 flush)"]
                 cksum["iAP2 cksum<br/>(NEG, hard-coded)<br/>+ sanity log"]
             end
         end
@@ -690,7 +690,7 @@ flowchart LR
     cover --> worker
     rgd -->|"EVT_RGD_UPDATE"| bus
     worker -->|"EVT_COVERART"| bus
-    hb -->|"EVT_PONG (1 Hz)"| bus
+    hb -.->|"local 1 Hz tick<br/>(no bus traffic)"| rgd
     worker --> fs_cov
     hook -.->|"writes"| fs_log_hook
 
@@ -750,16 +750,18 @@ server `accept()`s as soon as the C hook connects.
 - Renderer (short-lived, per route) = TCP **client**, connects to
   Java's :19800. Idempotent reconnect on Java side restart.
 
-**Liveness detection** (heartbeat-based):
+**Liveness detection**:
 
-- C hook sends `EVT_PONG` every 1 s; Java has `SO_TIMEOUT=5 s` on the
-  accepted socket. Five seconds of silence → reader exits → bus
-  re-accepts a fresh hook connection. Catches force-killed
-  `dio_manager` whose TCP state may linger.
-- Renderer sends `EVT_HEARTBEAT` (cmd=0x80) every 1 s; same 5 s
-  timeout pattern in `RendererServer`. Hung renderer detected
-  within 5 s, then 3 consecutive send failures (~1.8 s) trigger
-  `slay -f -Q` + respawn.
+- **Bus (C hook → Java)**: no application-level heartbeat. Java relies on
+  TCP FIN/RST + `setKeepAlive(true)` to learn the hook is gone, and the C
+  hook's `connector_main` reconnects on any send/disconnect error. A
+  zombie TCP session (no FIN/RST) would linger until OS keepalive fires;
+  in practice the bus is short-lived (per phone connect) and torn down
+  cleanly when `dio_manager` exits.
+- **Renderer (maneuver_render → Java)**: sends `EVT_HEARTBEAT` (cmd=0x80)
+  every 1 s; `RendererServer` accepted socket has `SO_TIMEOUT=5000 ms`.
+  Hung renderer detected within 5 s, then 3 consecutive send failures
+  (~1.8 s) trigger `slay -f -Q` + respawn.
 
 ```mermaid
 %%{init: {'sequence': {'mirrorActors': false}}}%%
@@ -831,9 +833,9 @@ sequenceDiagram
 | Bus connector | dio_manager | TCP client - `connect()` to Java :19810 with retry, reconnect on disconnect |
 | Bus writer | dio_manager | drains outbound event queue |
 | Bus reader | dio_manager | parses inbound frames, dispatches to handlers, exits on EOF/error |
-| Bus heartbeat | dio_manager | sends `EVT_PONG` every 1 s while connected (Java liveness signal) |
+| Bus periodic timer | dio_manager | 1 Hz tick, drives `rgd_periodic_tick` (deferred route_state=0 emission); does NOT send any application-level heartbeat to Java |
 | HMI EDT | HMI process | UI loop - calls `setMMIDisplayStatus`, picture mgr, etc. |
-| `CarplayBus-IO` | HMI process | single thread - runs accept loop on :19810 (one-at-a-time, force-replace stale) then drives the per-conn reader; `SO_TIMEOUT=5 s` on the accepted socket triggers re-accept on hook silence |
+| `CarplayBus-IO` | HMI process | single thread - runs accept loop on :19810 (one-at-a-time, force-replace stale) then drives the per-conn reader; no SO_TIMEOUT, relies on TCP FIN/RST + `setKeepAlive(true)` to detect hook disconnect |
 | `BAPActionBlink` | HMI process | daemon - 600 ms ticks for bargraph blink animation |
 | `CarPlayHook-Retry` | HMI process | retries `tryInit()` if OSGi services aren't ready yet |
 | `RendererServer-Accept` | HMI process | accept loop on :19800, replaces socket on each new renderer connect |
