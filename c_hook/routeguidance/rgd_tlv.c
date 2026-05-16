@@ -264,7 +264,7 @@ void rgd_parse_update(const uint8_t* buf, size_t len, rgd_update_t* out) {
 
             case RGD_TLV_CURRENT_ROAD_NAME:
                 if (val_len >= 0) {
-                    int n = val_len < 255 ? val_len : 255;
+                    int n = val_len < (int)(sizeof(out->current_road) - 1) ? val_len : (int)(sizeof(out->current_road) - 1);
                     if (n > 0) memcpy(out->current_road, val, (size_t)n);
                     out->current_road[n] = '\0';
                     replace_newlines(out->current_road, sizeof(out->current_road));
@@ -274,7 +274,7 @@ void rgd_parse_update(const uint8_t* buf, size_t len, rgd_update_t* out) {
 
             case RGD_TLV_DESTINATION_NAME:
                 if (val_len >= 0) {
-                    int n = val_len < 255 ? val_len : 255;
+                    int n = val_len < (int)(sizeof(out->destination) - 1) ? val_len : (int)(sizeof(out->destination) - 1);
                     if (n > 0) memcpy(out->destination, val, (size_t)n);
                     out->destination[n] = '\0';
                     replace_newlines(out->destination, sizeof(out->destination));
@@ -305,7 +305,7 @@ void rgd_parse_update(const uint8_t* buf, size_t len, rgd_update_t* out) {
 
             case RGD_TLV_DISTANCE_STRING:
                 if (val_len >= 0) {
-                    int n = val_len < 63 ? val_len : 63;
+                    int n = val_len < (int)(sizeof(out->distance_string) - 1) ? val_len : (int)(sizeof(out->distance_string) - 1);
                     if (n > 0) memcpy(out->distance_string, val, (size_t)n);
                     out->distance_string[n] = '\0';
                     out->present |= RGD_UPD_DISTANCE_STRING;
@@ -328,7 +328,7 @@ void rgd_parse_update(const uint8_t* buf, size_t len, rgd_update_t* out) {
 
             case RGD_TLV_DIST_TO_MANEUVER_STRING:
                 if (val_len >= 0) {
-                    int n = val_len < 63 ? val_len : 63;
+                    int n = val_len < (int)(sizeof(out->dist_to_maneuver_string) - 1) ? val_len : (int)(sizeof(out->dist_to_maneuver_string) - 1);
                     if (n > 0) memcpy(out->dist_to_maneuver_string, val, (size_t)n);
                     out->dist_to_maneuver_string[n] = '\0';
                     out->present |= RGD_UPD_DIST_TO_MANEUVER_STR;
@@ -387,7 +387,7 @@ void rgd_parse_update(const uint8_t* buf, size_t len, rgd_update_t* out) {
 
             case RGD_TLV_SOURCE_NAME:
                 if (val_len >= 0) {
-                    int n = val_len < 63 ? val_len : 63;
+                    int n = val_len < (int)(sizeof(out->source_name) - 1) ? val_len : (int)(sizeof(out->source_name) - 1);
                     if (n > 0) memcpy(out->source_name, val, (size_t)n);
                     out->source_name[n] = '\0';
                     replace_newlines(out->source_name, sizeof(out->source_name));
