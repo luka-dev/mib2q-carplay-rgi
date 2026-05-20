@@ -1,4 +1,4 @@
-# MHI2 CarPlay Route Guidance
+# MHI2Q CarPlay Route Guidance
 
 CarPlay patch set for Audi MHI2Q infotainment.
 (Based on MHI2Q firmware, but may need rebuild for different versions.)
