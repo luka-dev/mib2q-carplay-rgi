@@ -1178,8 +1178,21 @@ int close(int fd) {
     return real_close(fd);
 }
 
+/* Resolve the real libc entry points once, eagerly, at load time — so the
+ * read()/recv() hot path never calls dlsym and can never spuriously return -1
+ * from a resolve miss during the fragile CarPlay handshake. The per-call lazy
+ * resolve in read()/recv()/open()/close() stays only as a defensive fallback. */
+static void coverart_resolve_syms(void) {
+    if (!real_read)  real_read  = (ReadFunc)dlsym(RTLD_NEXT, "read");
+    if (!real_recv)  real_recv  = (RecvFunc)dlsym(RTLD_NEXT, "recv");
+    if (!real_write) real_write = (WriteFunc)dlsym(RTLD_NEXT, "write");
+    if (!real_open)  real_open  = (OpenFunc)dlsym(RTLD_NEXT, "open");
+    if (!real_close) real_close = (CloseFunc)dlsym(RTLD_NEXT, "close");
+}
+
 __attribute__((constructor))
 static void coverart_init(void) {
+    coverart_resolve_syms();
     memset(streams, 0, sizeof(streams));
     /* Initialize per-slot mutexes so handle_stream_data can lock-by-fd
      * without serialising all iAP2 reads through one global mutex. */

@@ -28,16 +28,13 @@ static struct {
     bool initialized;
     volatile bool in_send;  /* Prevent recursive injection */
 
-    /* Function pointers */
+    /* Function pointers (only the Cinemo NME seams we actually act on).
+     * write/writev/MsgSend/MsgSendv were interposed but did nothing except
+     * pass through — pure liability (a dlsym miss made them return -1 and fail
+     * a real write mid-handshake). Removed. */
     int (*real_decode)(void*, const uint8_t*, int);
     int (*real_encode)(const void*, void*);
-    ssize_t (*real_write)(int, const void*, size_t);
-    ssize_t (*real_writev)(int, const struct iovec*, int);
     int (*real_transport_send)(void*, const uint8_t*, unsigned int, unsigned int*);
-#ifdef __QNX__
-    int (*real_msgsend)(int, const void*, int, void*, int);
-    int (*real_msgsendv)(int, const iov_t*, int, const iov_t*, int);
-#endif
 } g_fw = {
     .initialized = false,
     .in_send = false
@@ -53,22 +50,12 @@ static void ensure_fw_lock_init(void) {
 }
 
 static void resolve_functions(void) {
-    if (!g_fw.real_write)
-        g_fw.real_write = (ssize_t(*)(int, const void*, size_t))dlsym(RTLD_NEXT, "write");
-    if (!g_fw.real_writev)
-        g_fw.real_writev = (ssize_t(*)(int, const struct iovec*, int))dlsym(RTLD_NEXT, "writev");
     if (!g_fw.real_decode)
         g_fw.real_decode = (int(*)(void*, const uint8_t*, int))dlsym(RTLD_NEXT, "_ZN14NmeIAP2Message6DecodeEPKhi");
     if (!g_fw.real_encode)
         g_fw.real_encode = (int(*)(const void*, void*))dlsym(RTLD_NEXT, "_ZNK14NmeIAP2Message6EncodeER8NmeArrayIhE");
     if (!g_fw.real_transport_send)
         g_fw.real_transport_send = (int(*)(void*, const uint8_t*, unsigned int, unsigned int*))dlsym(RTLD_NEXT, "_ZN12NmeTransport4SendEPKhjPj");
-#ifdef __QNX__
-    if (!g_fw.real_msgsend)
-        g_fw.real_msgsend = (int(*)(int, const void*, int, void*, int))dlsym(RTLD_NEXT, "MsgSend");
-    if (!g_fw.real_msgsendv)
-        g_fw.real_msgsendv = (int(*)(int, const iov_t*, int, const iov_t*, int))dlsym(RTLD_NEXT, "MsgSendv");
-#endif
 }
 
 static bool is_known_52xx_msg(uint16_t msgid) {
@@ -585,35 +572,9 @@ int _ZN12NmeTransport4SendEPKhjPj(void* self, const uint8_t* buf, unsigned int l
     return g_fw.real_transport_send(self, buf, len, sent);
 }
 
-ssize_t write(int fd, const void* buf, size_t count) {
-    if (!g_fw.initialized) hook_framework_init();
-    resolve_functions();
-    if (!g_fw.real_write) return -1;
-    return g_fw.real_write(fd, buf, count);
-}
-
-ssize_t writev(int fd, const struct iovec* iov, int iovcnt) {
-    if (!g_fw.initialized) hook_framework_init();
-    resolve_functions();
-    if (!g_fw.real_writev) return -1;
-    return g_fw.real_writev(fd, iov, iovcnt);
-}
-
-#ifdef __QNX__
-int MsgSend(int coid, const void* smsg, int sbytes, void* rmsg, int rbytes) {
-    if (!g_fw.initialized) hook_framework_init();
-    resolve_functions();
-    if (!g_fw.real_msgsend) return -1;
-    return g_fw.real_msgsend(coid, smsg, sbytes, rmsg, rbytes);
-}
-
-int MsgSendv(int coid, const iov_t* siov, int sparts, const iov_t* riov, int rparts) {
-    if (!g_fw.initialized) hook_framework_init();
-    resolve_functions();
-    if (!g_fw.real_msgsendv) return -1;
-    return g_fw.real_msgsendv(coid, siov, sparts, riov, rparts);
-}
-#endif
+/* write/writev/MsgSend/MsgSendv are intentionally NOT interposed anymore:
+ * they carried no hook logic, only added a dlsym-miss -> return -1 failure
+ * mode onto every process write. Left to libc directly. */
 
 __attribute__((constructor))
 static void hook_lib_init(void) {

@@ -414,36 +414,6 @@ static void rgd_update_session_active(void) {
     }
 }
 
-static uint8_t* rgd_resize_identify_buffer(hook_context_t* ctx, size_t len, size_t new_len, size_t* out_cap) {
-    if (!ctx || !ctx->_priv) return NULL;
-    void* out_array = ctx->_priv;
-    uint8_t* base = *(uint8_t**)((char*)out_array + 0);
-    unsigned int cap = *(unsigned int*)((char*)out_array + 8);
-
-    if (cap >= new_len) {
-        if (out_cap) *out_cap = cap;
-        return base;
-    }
-
-    size_t alloc = new_len + 64;
-    uint8_t* new_buf = (uint8_t*)realloc(base, alloc);
-    if (!new_buf) {
-        new_buf = (uint8_t*)malloc(alloc);
-        if (!new_buf) return NULL;
-        if (base && len > 0) {
-            memcpy(new_buf, base, len);
-        }
-        if (base) {
-            free(base);
-        }
-    }
-
-    *(uint8_t**)((char*)out_array + 0) = new_buf;
-    *(unsigned int*)((char*)out_array + 8) = (unsigned int)alloc;
-    if (out_cap) *out_cap = alloc;
-    return new_buf;
-}
-
 /* Message filter */
 static uint16_t rgd_msg_filter[] = {
     IAP2_MSG_ROUTE_GUIDANCE_UPDATE,
@@ -1480,14 +1450,18 @@ static size_t rgd_identify_patcher(hook_context_t* ctx, uint8_t* buf, size_t len
 
     size_t new_len = existing_found ? (len - existing_len + new_tlv_len) : (len + new_tlv_len);
     if (new_len > max_len) {
-        size_t new_cap = max_len;
-        uint8_t* new_buf = rgd_resize_identify_buffer(ctx, len, new_len, &new_cap);
-        if (!new_buf) {
-            LOG_WARN(LOG_MODULE, "Identify patch failed: no buffer space");
-            return len;
-        }
-        buf = new_buf;
-        max_len = new_cap;
+        /* `buf` is Cinemo's NmeArray<uchar> storage, allocated by Cinemo's own
+         * C++ allocator (new[]/pool). Calling realloc/free/malloc on it mismatches
+         * that allocator -> heap corruption; and NmeArray's destructor later
+         * delete[]s whatever pointer we leave at +0. That corruption is exactly
+         * what wedges dio_manager so CarPlay won't start until a full restart.
+         * So NEVER grow this buffer. If the RGD component TLV doesn't fit the
+         * array's spare capacity, skip the patch this session (RGD degraded)
+         * rather than corrupt the heap — CarPlay start stays reliable. */
+        LOG_WARN(LOG_MODULE,
+                 "Identify patch skipped: need %zu > cap %zu (won't realloc Cinemo buffer)",
+                 new_len, max_len);
+        return len;
     }
 
     if (existing_found) {
