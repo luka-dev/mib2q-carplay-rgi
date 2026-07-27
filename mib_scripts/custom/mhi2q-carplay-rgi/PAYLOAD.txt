@@ -1,0 +1,36 @@
+Place built artifacts in this folder. apps/mhi2q-carplay-rgi reads from here.
+
+Build (run from repo root - see ../../README.md "Build" section):
+
+  ./compile_hook.sh                 -> libcarplay_hook.so
+  ./compile_render_qnx.sh           -> maneuver_render
+  ./build_java.sh                   -> carplay_hook.jar
+
+Then copy here:
+
+  libcarplay_hook.so                C hook, LD_PRELOAD'd into dio_manager
+  maneuver_render                   3D renderer binary (ARM32 QNX)
+  flag_atlas.rgba                   from maneuver_render/resources/flag_atlas.rgba
+  carplay_hook.jar                  Java bridge for BAP / KOMO / cluster
+
+Copy targets on the unit (TARGETS table in apps/mhi2q-carplay-rgi):
+
+  /mnt/app/root/hooks/libcarplay_hook.so              (mode 755)
+  /mnt/app/root/hooks/maneuver_render                 (mode 755)
+  /mnt/app/root/hooks/flag_atlas.rgba                 (mode 644)
+  /mnt/app/eso/hmi/lsd/jars/carplay_hook.jar          (mode 644)
+
+JSON patches (applied in-place by the installer via sed, NOT copied
+from payload):
+
+  /mnt/system/etc/eso/production/smartphone_integrator.json
+    -> inject "LD_PRELOAD=/mnt/app/root/hooks/libcarplay_hook.so"
+       into $.children.carplay.envs
+
+  /mnt/system/etc/eso/production/dio_manager.json
+    -> MessagesSentByAccessory    += "0x5200", "0x5203"
+       MessagesReceivedFromDevice += "0x5201", "0x5202", "0x5204"
+
+Stock JSONs are backed up to .orig in $BUDIR before sed runs, and
+restored verbatim on uninstall. Edits are idempotent (grep -q guards
+prevent duplicate injection on re-install).

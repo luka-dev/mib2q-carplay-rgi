@@ -5,10 +5,10 @@ QNX_VM="192.168.64.16"
 SSH_OPTS="-oHostKeyAlgorithms=+ssh-rsa -oPubkeyAcceptedAlgorithms=+ssh-rsa"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-RENDERER_DIR="${SCRIPT_DIR}/c_render"
+RENDERER_DIR="${SCRIPT_DIR}/maneuver_render"
 BUILD_DIR="${SCRIPT_DIR}/build"
 OUT="${RENDER_OUT:-${BUILD_DIR}/maneuver_render}"
-REMOTE_DIR="/tmp/c_render"
+REMOTE_DIR="/tmp/maneuver_render"
 mkdir -p "$BUILD_DIR"
 
 RENDERER_SRCS="main.c render.c maneuver.c route_path.c server.c platform_qnx.c"

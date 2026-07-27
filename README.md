@@ -223,7 +223,7 @@ Sent via the same BAP path. VC renders these as text bars over the native map ar
 
 #### VC MOST video (custom renderer)
 
-Custom 3D renderer (`c_render/`) draws maneuver icons into the cluster's
+Custom 3D renderer (`maneuver_render/`) draws maneuver icons into the cluster's
 **MOST video pipeline** (MOST150 isochronous channel - the same path
 the HU uses to ship its native map render to the VC's Map tab).
 Renders to QNX **displayable 20** (`DISPLAYABLE_MAP_ROUTE_GUIDANCE`, the
@@ -602,8 +602,8 @@ below.
 
 | Component                    | Type                  | Purpose                                                                                          | Output                |
 |------------------------------|-----------------------|--------------------------------------------------------------------------------------------------|-----------------------|
-| `c_hook/`                    | C (ARM32 QNX)         | iAP2 hooks, route guidance + async cover-art bridge, TCP bus client (connects to Java :19810)    | `libcarplay_hook.so`  |
-| `c_render/`                  | C (ARM32 QNX / macOS) | Custom 3D maneuver renderer (EGL/GLES2), TCP command-driven                                      | `maneuver_render`     |
+| `hook/`                    | C (ARM32 QNX)         | iAP2 hooks, route guidance + async cover-art bridge, TCP bus client (connects to Java :19810)    | `libcarplay_hook.so`  |
+| `maneuver_render/`                  | C (ARM32 QNX / macOS) | Custom 3D maneuver renderer (EGL/GLES2), TCP command-driven                                      | `maneuver_render`     |
 | `java_patch/`                | Java patch JAR        | Route guidance rendering, BAP bridge, cover art forwarder, MMI touchpad / D-pad -> CarPlay input  | `carplay_hook.jar`    |
 | `dio_manager.json`           | System config patch   | Enables iAP2 route guidance message exchange with iOS                                            | Manual edit on device |
 | `smartphone_integrator.json` | System config patch   | Loads `libcarplay_hook.so` via `LD_PRELOAD` in dio_manager process                               | Manual edit on device |
@@ -992,7 +992,9 @@ flowchart TB
 > - **iOS 26.1** — `CoreAccessories.framework`, `CarKit.framework`,
 >   `AirPlayReceiver.framework`, `AirPlaySender.framework`, `carkitd`
 >
-> Full file/function map: [`docs/altscreen_gate_analysis.md`](docs/altscreen_gate_analysis.md).
+> Full file/function map: [`altscreen/gate_analysis.md`](altscreen/gate_analysis.md).
+> Engineering re-open (cluster video via reused libairplay primitives + `maneuver_render`):
+> [`altscreen/`](altscreen/) — start at [`altscreen/MASTER_KNOWLEDGE.md`](altscreen/MASTER_KNOWLEDGE.md).
 
 The diagram makes the **two independent failure points** visually
 explicit:
@@ -1084,10 +1086,10 @@ To build with the debug grid overlay:
 **For macOS (local development):** Builds natively with GLFW + OpenGL 2.1. Requires `brew install glfw`.
 
 ```bash
-make -C c_render
+make -C maneuver_render
 ```
 
-Output: `build/c_render` (renderer) + `build/test_harness` (test client)
+Output: `build/maneuver_render` (renderer) + `build/test_harness` (test client)
 
 The macOS build also compiles a test harness - see [Testing the renderer locally](#testing-the-renderer-locally) below.
 
@@ -1117,7 +1119,7 @@ start it first, then start the renderer in another terminal:
 ```
 
 ```bash
-./build/c_render
+./build/maneuver_render
 ```
 
 The renderer window opens and connects to the harness on `127.0.0.1:19800`.
@@ -1149,7 +1151,7 @@ The harness auto-cycles through a built-in preset list that covers all icon type
 4. `mkdir -p /mnt/app/root/hooks` on device
 5. Copy `build/libcarplay_hook.so` to `/mnt/app/root/hooks/`, `chmod 755`
 6. Copy `build/maneuver_render` to `/mnt/app/root/hooks/`, `chmod 755`
-7. Copy `c_render/resources/flag_atlas.rgba` to `/mnt/app/root/hooks/`
+7. Copy `maneuver_render/resources/flag_atlas.rgba` to `/mnt/app/root/hooks/`
 8. Copy `build/carplay_hook.jar` to `/mnt/app/eso/hmi/lsd/jars/`
 9. Set `LD_PRELOAD` in `smartphone_integrator.json`
 10. Add `0x5200/01/02/03/04` IDs in `dio_manager.json`
@@ -1211,7 +1213,7 @@ Add these iAP2 message IDs to the Cinemo SDK's Identify registration:
 SDK has the message-ID list compiled into its `MessagesSentByAccessory`
 / `MessagesReceivedFromDevice` arrays - the JSON edit registers the
 RGD message IDs so the SDK actually pumps them. The C hook
-(`rgd_identify_patcher` in `c_hook/routeguidance/rgd_hook.c`)
+(`rgd_identify_patcher` in `hook/routeguidance/rgd_hook.c`)
 separately patches the **EAGroupComponent declaration** in the
 outgoing Identify message at runtime - adds component `0x001E` so iOS
 recognises the accessory as a navigation component and starts sending
@@ -1260,11 +1262,11 @@ cp build/carplay_hook.jar /mnt/app/eso/hmi/lsd/jars/
 
 ```bash
 cp build/maneuver_render /mnt/app/root/hooks/
-cp c_render/resources/flag_atlas.rgba /mnt/app/root/hooks/
+cp maneuver_render/resources/flag_atlas.rgba /mnt/app/root/hooks/
 chmod 755 /mnt/app/root/hooks/maneuver_render
 ```
 
-The flag atlas (`flag_atlas.rgba`, source path `c_render/resources/flag_atlas.rgba`) must end up reachable from the renderer's working directory. The renderer searches in this order: `resources/flag_atlas.rgba`, `flag_atlas.rgba`, `<binary_dir>/resources/flag_atlas.rgba`, `<binary_dir>/flag_atlas.rgba`. Placing it next to the binary (as above) hits the second/fourth path.
+The flag atlas (`flag_atlas.rgba`, source path `maneuver_render/resources/flag_atlas.rgba`) must end up reachable from the renderer's working directory. The renderer searches in this order: `resources/flag_atlas.rgba`, `flag_atlas.rgba`, `<binary_dir>/resources/flag_atlas.rgba`, `<binary_dir>/flag_atlas.rgba`. Placing it next to the binary (as above) hits the second/fourth path.
 
 Launched automatically by the Java bridge (`BAPBridge`) when CarPlay route guidance starts. Log: `/tmp/maneuver_render.log`.
 

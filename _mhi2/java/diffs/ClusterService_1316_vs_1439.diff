@@ -1,0 +1,67 @@
+--- /tmp/MU1316k/java/de/audi/tghu/navi/app/cluster/ClusterService.java	2026-06-11 04:20:29
++++ /tmp/MU1439k/java/de/audi/tghu/navi/app/cluster/ClusterService.java	2026-06-11 04:20:29
+@@ -157,7 +157,6 @@
+     private boolean dataConnectivityAvailable = false;
+     private final MapScaleHandler mapScaleHandler;
+     private final MapScaleTimer mapScaleTimer;
+-    private boolean satMapProviderChanged = true;
+ 
+     public ClusterService(NavigationEnv navigationEnv, SpeechManager speechManager, OperationManager operationManager, AudioStateMachine audioStateMachine, MapManager mapManager, ICommandListFactory iCommandListFactory) {
+         this(navigationEnv, speechManager, operationManager, audioStateMachine, mapManager, iCommandListFactory, (IViewSizeManager)new NullViewSizeManager(navigationEnv.getClusterLogChannel()), (IViewSizeChangeHandler)new NullViewSizeChangeHandler());
+@@ -392,7 +391,7 @@
+ 
+     private void clearRouteInfoElement(RouteInfoElement routeInfoElement) {
+         if (routeInfoElement != null) {
+-            routeInfoElement.distanceToElement = "isNativeLittleEndian";
++            routeInfoElement.distanceToElement = Util.getInvalidDistance((String)"isNativeLittleEndian", (String)"isNativeLittleEndian");
+             routeInfoElement.estimatedTimeToElement = "--:--";
+             routeInfoElement.routeInfoElementType = 0;
+             routeInfoElement.elementIconIDs = null;
+@@ -478,7 +477,7 @@
+             this.distanceToDestination.setValue((float)n / 1000.0f);
+             metricsModelApp.setMetric((AbstractMetrics)this.distanceToDestination);
+             Util.setModelStatus((HMIModelApp)metricsModelApp, (int)1);
+-            string = Util.formatDistance((int)n, (int)1, (int)2, (String)EMPTY_STREET_LABEL);
++            string = Util.formatDistance((int)n, (int)1, (int)2, (String)EMPTY_STREET_LABEL, (String)EMPTY_STREET_LABEL);
+             BAPDistanceFormatter.BAPDistance bAPDistance = this.bapDistanceFormatter.formatDistanceToDestination(n, Distance.getSystemUnit() == 1);
+             l = bAPDistance.getValue();
+             n2 = this.convertBAP2KOMODistanceUnit(bAPDistance.getUnit());
+@@ -486,7 +485,7 @@
+         } else {
+             this.logChannel.log(10000000, "ClusterService#updateDistanceToDestination() - invalid distanceToDestination! ");
+             Util.setModelStatus((HMIModelApp)metricsModelApp, (int)3);
+-            string = "isNativeLittleEndian";
++            string = Util.getInvalidDistance((String)"isNativeLittleEndian", (String)"isNativeLittleEndian");
+             bl2 = false;
+         }
+         this.followInfoRIE.distanceToElement = string;
+@@ -540,7 +539,6 @@
+             this.updateTurnToStreet("isNativeLittleEndian", false);
+             this.clearRouteInfoElement(this.followInfoRIE);
+             this.clearRouteInfoElement(this.nextManeuverElement);
+-            this.updateDestinationInfo(null, 0, 0);
+         }
+         this.clusterKDKHandler.updateRgActive(bl);
+         this.combiBAPListener.setRgActive(bl);
+@@ -918,7 +916,7 @@
+         }
+         int n2 = this.env.getChoiceModel(162).getValue();
+         this.logChannel.log(10000000, "ClusterService#updateOnlineNavigationState() - mapRepresentation: %1, bufferProgress: %2, dataConnectivityAvailable: %3", (long)n, (long)n2, true);
+-        this.combiBAPListener.setOnlineNavigationState(n == 1 && !this.hasSatMapProviderChanged(), n2, true);
++        this.combiBAPListener.setOnlineNavigationState(n == 1, n2, true);
+     }
+ 
+     public void cleanup() {
+@@ -951,12 +949,4 @@
+             this.combiBAPListener.setHomeAddress(this.getBAPNaviDestFromLocation(navLocation));
+         }
+     }
+-
+-    public void setProviderChangeFlag(boolean bl) {
+-        this.satMapProviderChanged = bl;
+-    }
+-
+-    private boolean hasSatMapProviderChanged() {
+-        return this.satMapProviderChanged;
+-    }
+ }

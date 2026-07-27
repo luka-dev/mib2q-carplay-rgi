@@ -6,7 +6,7 @@ Prototype was built and tested (arrows render correctly at 328x181), then stripp
 
 ## Context
 
-The maneuver renderer (c_render) displays turn-by-turn navigation on the VC KOMO widget (328x181px). It currently shows maneuver icons, route arrows, and a bargraph -- but no lane guidance. Lane guidance data is available from iOS (via C hook -> PPS -> Java), and already sent to the BAP cluster display (HUD/VC text overlay). This plan adds lane guidance rendering to c_render so the KOMO video widget also shows lane indicators.
+The maneuver renderer (maneuver_render) displays turn-by-turn navigation on the VC KOMO widget (328x181px). It currently shows maneuver icons, route arrows, and a bargraph -- but no lane guidance. Lane guidance data is available from iOS (via C hook -> PPS -> Java), and already sent to the BAP cluster display (HUD/VC text overlay). This plan adds lane guidance rendering to maneuver_render so the KOMO video widget also shows lane indicators.
 
 ## Visual Reference
 
@@ -102,12 +102,12 @@ Apple is inconsistent: sometimes `angles[]` includes the highlight angle, someti
 
 | File | Change |
 |------|--------|
-| `c_render/protocol.h` | `CMD_LANE_GUIDANCE`, decode macros |
-| `c_render/maneuver.h` | `lane_info_t`, `lane_state_t` |
-| `c_render/main.c` | State vars, decode, command handler, fade, draw call |
-| `c_render/render.h` | `render_lane_guidance()` declaration |
-| `c_render/render.c` | `render_lane_guidance()` + glyph helpers |
-| `c_render/test_harness.c` | `L` key binding |
+| `maneuver_render/protocol.h` | `CMD_LANE_GUIDANCE`, decode macros |
+| `maneuver_render/maneuver.h` | `lane_info_t`, `lane_state_t` |
+| `maneuver_render/main.c` | State vars, decode, command handler, fade, draw call |
+| `maneuver_render/render.h` | `render_lane_guidance()` declaration |
+| `maneuver_render/render.c` | `render_lane_guidance()` + glyph helpers |
+| `maneuver_render/test_harness.c` | `L` key binding |
 | `java_patch/.../RendererClient.java` | `sendLaneGuidance()`, `quantizeAngle()` |
 | `java_patch/.../BAPBridge.java` | `sendRendererLaneGuidance()`, wire into dirty handler |
 

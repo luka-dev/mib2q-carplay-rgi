@@ -1,7 +1,7 @@
 /*
- * RendererMapper - Maps iAP2 ManeuverType to c_render ICON_* + direction/exitAngle.
+ * RendererMapper - Maps iAP2 ManeuverType to maneuver_render ICON_* + direction/exitAngle.
  *
- * ICON constants match c_render/maneuver.h exactly.
+ * ICON constants match maneuver_render/maneuver.h exactly.
  * Direction: -1=left, 0=center, +1=right (matches maneuver_state_t.direction).
  * Exit angle: signed degrees, positive=right, negative=left.
  *
@@ -11,7 +11,7 @@ package com.luka.carplay.routeguidance;
 
 public class RendererMapper {
 
-    /* ICON_* constants -- must match c_render/maneuver.h */
+    /* ICON_* constants -- must match maneuver_render/maneuver.h */
     public static final int ICON_NONE        = 0;
     public static final int ICON_APPROACH    = 1;
     public static final int ICON_TURN        = 2;
@@ -22,7 +22,7 @@ public class RendererMapper {
     public static final int ICON_ARRIVED     = 7;
 
     /**
-     * Map iAP2 ManeuverType to c_render ICON_* constant.
+     * Map iAP2 ManeuverType to maneuver_render ICON_* constant.
      */
     public static int mapIcon(int mt) {
         switch (mt) {
@@ -107,7 +107,7 @@ public class RendererMapper {
     }
 
     /**
-     * Map iAP2 ManeuverType to c_render direction (-1=left, 0=center, +1=right).
+     * Map iAP2 ManeuverType to maneuver_render direction (-1=left, 0=center, +1=right).
      * For ICON_TURN the direction is implicit from exit_angle; this returns 0.
      * For ICON_MERGE/EXIT/ARRIVED, direction encodes left/right.
      */
@@ -143,7 +143,7 @@ public class RendererMapper {
     }
 
     /**
-     * Get exit angle for c_render. For ICON_TURN this is the raw turnAngle.
+     * Get exit angle for maneuver_render. For ICON_TURN this is the raw turnAngle.
      * For off-ramps without a real angle, use a default slight angle.
      * For roundabouts, the turnAngle from iOS is the exit angle.
      */

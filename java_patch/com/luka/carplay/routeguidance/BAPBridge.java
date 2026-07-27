@@ -2,10 +2,10 @@
  * CarPlay Route Guidance - BAP Bridge
  *
  * Translates route guidance state to BAP protocol calls via AppConnectorNavi,
- * and drives c_render via TCP for LVDS video rendering.
+ * and drives maneuver_render via TCP for LVDS video rendering.
  *
  * BAP path: ManeuverDescriptor, distance, street, lane guidance, ETA -> VC/HUD text overlays.
- * c_render path: CMD_MANEUVER over TCP -> c_render EGL/GLES2 -> video encoder -> MOST -> VC LVDS.
+ * maneuver_render path: CMD_MANEUVER over TCP -> maneuver_render EGL/GLES2 -> video encoder -> MOST -> VC LVDS.
  *
  */
 package com.luka.carplay.routeguidance;
@@ -35,7 +35,7 @@ public class BAPBridge {
     /* RGType sent to cluster: 0=RGI (BAP ManeuverDescriptor icons for HUD).
      * FPK has rgType=4 hardcoded in CombiBAPListener -- our BAP rgType=0 is for the
      * AppConnectorNavi FSG sync flow, not for view mode selection. */
-    private static final int ACTIVE_RGTYPE = 0;  /* RGI -- BAP icons. c_render handles LVDS video. */
+    private static final int ACTIVE_RGTYPE = 0;  /* RGI -- BAP icons. maneuver_render handles LVDS video. */
     private static final boolean BAP_TRACE_ENABLED = true;
 
     /* ExitView variants (BAP spec FctID 49).  EU/NAR are used by
@@ -1078,7 +1078,7 @@ public class BAPBridge {
                 appConnectorNavi.updateDestinationInfo(destInfo);
             }
 
-            /* 10. c_render: CMD_MANEUVER only when icon actually changes,
+            /* 10. maneuver_render: CMD_MANEUVER only when icon actually changes,
              * CMD_BARGRAPH for distance updates, CMD_PERSPECTIVE for approach zone */
             if (rendererClient != null && customRendererStarted) {
                 /* (Old isConnected-based watchdog removed — the new
@@ -1641,9 +1641,9 @@ public class BAPBridge {
     }
 
     /* ==============================================================
-     * Custom Renderer Pipeline (c_render)
+     * Custom Renderer Pipeline (maneuver_render)
      *
-     * Bypasses PresentationController entirely. Java spawns c_render, which
+     * Bypasses PresentationController entirely. Java spawns maneuver_render, which
      * registers a screen window with ID="20" via libdisplayinit, taking
      * over the native KOMO RG widget's slot in cluster context 74.  Java
      * manages context 74/gfxAvailable and sends CMD_MANEUVER packets over TCP.
@@ -1902,7 +1902,7 @@ public class BAPBridge {
     }
 
     /**
-     * Push maneuver to c_render ONLY if the rendered icon actually changed.
+     * Push maneuver to maneuver_render ONLY if the rendered icon actually changed.
      * Returns true if CMD_MANEUVER was sent, false if suppressed (same icon).
      */
     private boolean updateRendererIfChanged(RouteGuidance.State s, int bargraphDenominatorM) {
@@ -1986,7 +1986,7 @@ public class BAPBridge {
     }
 
     /**
-     * Send ICON_APPROACH to c_render — mirrors BAP sendFollowStreet().
+     * Send ICON_APPROACH to maneuver_render — mirrors BAP sendFollowStreet().
      * Shown when maneuver exists but car is outside approach zone.
      */
     private void sendRendererFollowStreet() {
@@ -2008,7 +2008,7 @@ public class BAPBridge {
     }
 
     /**
-     * Send standalone CMD_BARGRAPH to c_render on distance-only updates.
+     * Send standalone CMD_BARGRAPH to maneuver_render on distance-only updates.
      * No push transition — just updates the bargraph level/mode in place.
      */
     private void updateRendererBargraph(RouteGuidance.State s, int bargraphDenominatorM) {
@@ -2024,7 +2024,7 @@ public class BAPBridge {
             bargraphLevel = (pct * 16) / 100;
             if (pct < BARGRAPH_BLINK_PERCENT) {
                 /* Blink zone: blink thread controls renderer via sendActionBlinkTick().
-                 * Don't send mode=2 here — it would start c_render's independent
+                 * Don't send mode=2 here — it would start maneuver_render's independent
                  * blink timer which drifts from BAP. Just skip; blink thread syncs both. */
                 return;
             }
@@ -2312,7 +2312,7 @@ public class BAPBridge {
          * Do not synthesize [0..maneuver_count) when iOS has not published
          * an explicit maneuver_list yet.  During reroute, count often arrives
          * before the new slot payloads; falling back to numeric slot order can
-         * briefly expose stale pre-reroute slots to BAP and c_render.
+         * briefly expose stale pre-reroute slots to BAP and maneuver_render.
          */
         return null;
     }

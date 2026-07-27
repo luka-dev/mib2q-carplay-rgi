@@ -1,7 +1,7 @@
 /*
- * RendererServer - non-blocking TCP server for the c_render process (port 19800).
+ * RendererServer - non-blocking TCP server for the maneuver_render process (port 19800).
  *
- * Topology: Java is the long-lived server, c_render is the short-lived
+ * Topology: Java is the long-lived server, maneuver_render is the short-lived
  * client.  We open the listen socket once and a dedicated background
  * thread accepts connections forever — caller (BAPBridge) never blocks.
  *
@@ -20,7 +20,7 @@
  * Class name kept for compatibility with all call sites in BAPBridge /
  * RouteGuidance.
  *
- * Sends 48-byte cr_cmd_t packets matching c_render/protocol.h.
+ * Sends 48-byte cr_cmd_t packets matching maneuver_render/protocol.h.
  * All methods are non-fatal (swallow exceptions, log only).
  *
  * Java 1.2 compatible (no generics, no autoboxing, no enhanced for).

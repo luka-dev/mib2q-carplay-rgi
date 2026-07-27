@@ -1,0 +1,142 @@
+mhi2q-carplay-rgi - SD card overlay for M.I.B. (More Incredible Bash)
+=====================================================================
+
+Adds a "MHI2Q CarPlay Route Guidance" submenu to the M.I.B. GEM menu
+with Check / Install / Uninstall actions for the patches described in
+this repo's README.md (Deploy section):
+
+  - Route Guidance: turn-by-turn HUD (BAP) + VC text overlays +
+    custom MOST-video maneuver renderer
+  - VC CoverArt fix: pushes CarPlay track artwork through BAP picture
+    manager so the VC stops showing a blank album icon
+
+Layout to copy onto the M.I.B. SD card root
+-------------------------------------------
+
+  apps/mhi2q-carplay-rgi                       -> sda0/apps/mhi2q-carplay-rgi
+  esd/scripts/mhi2q-carplay-rgi_check.sh       -> sda0/esd/scripts/
+  esd/scripts/mhi2q-carplay-rgi_install.sh     -> sda0/esd/scripts/
+  esd/scripts/mhi2q-carplay-rgi_uninstall.sh   -> sda0/esd/scripts/
+  custom/mhi2q-carplay-rgi/<payload>           -> sda0/custom/mhi2q-carplay-rgi/
+
+All scripts must have +x mode after copy.
+
+Steps
+-----
+
+1. Build payload artifacts per repo README.md "Build" section and place
+   them in custom/mhi2q-carplay-rgi/ per PAYLOAD.txt. JSON files are
+   NOT pre-built - the installer patches the live JSONs in-place.
+
+2. Copy all files to the M.I.B. SD card root (FAT32), preserving paths.
+
+3. Append esd/menu_snippet.esd to sda0/esd/Launcher-sda0.esd. The
+   submenu shows up automatically as a sub-screen of =>M.I.B.<=.
+
+4. Insert SD into slot SD1, enter GEM, navigate to ==>>m.i.b<<==
+   -> MHI2Q CarPlay Route Guidance.
+
+5. Run "Check" first - it prints FW verdict, SHA per file, JSON state.
+   Confirm SIJson/DIOJson are ORIGINAL (or already PATCHED if reusing
+   a prior install).
+
+6. Run "Install". If a previous install is already present (marker
+   file in $BUDIR), the script auto-uninstalls first, then deploys
+   fresh. Unit reboots automatically 10s after the action.
+
+FW check
+--------
+
+Install verifies:
+  - TRAINVERSION contains literal "MHI2Q"  (Qualcomm SoC variant)
+  - MU == 1316 (built target) - warns if different but does not abort
+
+If the MHI2Q check fails the install aborts before touching files.
+Old MHI2 (pre-Q) and MHIG (MIB1 High) are explicitly NOT supported.
+
+The literal-MHI2Q match is the same heuristic M.I.B. itself uses
+(see apps/backup, apps/delnavdb, apps/settrain in the M.I.B. tree).
+Real MHI2Q TRAINVERSION strings look like "MHI2Q_ER_AUG22_P5092".
+
+File-copy targets
+-----------------
+
+  CHook   libcarplay_hook.so          -> /mnt/app/root/hooks/                  (755)
+  Render  maneuver_render             -> /mnt/app/root/hooks/                  (755)
+  Atlas   flag_atlas.rgba             -> /mnt/app/root/hooks/                  (644)
+  Jar     carplay_hook.jar            -> /mnt/app/eso/hmi/lsd/jars/            (644)
+
+/mnt/app/root/hooks/ is created by the installer if absent (chmod 755).
+
+In-place JSON patches (sed-based, idempotent)
+---------------------------------------------
+
+The installer modifies these JSONs directly on the unit. Originals
+are backed up to .orig in $BUDIR before sed runs; restored verbatim
+on uninstall.
+
+  /mnt/system/etc/eso/production/smartphone_integrator.json
+    - guard:  grep -q "libcarplay_hook.so"  (skip if already patched)
+    - edit:   inject "LD_PRELOAD=/mnt/app/root/hooks/libcarplay_hook.so"
+              after the IPL_CONFIG_DIR_DIO_MANAGER line in carplay.envs
+
+  /mnt/system/etc/eso/production/dio_manager.json
+    - guard:  grep -q '"0x5200"' / grep -q '"0x5201"'
+    - edit 1: MessagesSentByAccessory[]
+              "0x4C05" -> "0x4C05", "0x5200", "0x5203"
+              (scoped via sed address range /MessagesSentByAccessory/,/]/)
+    - edit 2: MessagesReceivedFromDevice[]
+              "0x4C04" -> "0x4C04", "0x5201", "0x5202", "0x5204"
+
+Re-running install is safe - the grep guards prevent duplicate entries.
+
+Behavior
+--------
+
+Install:
+  - mounts /mnt/app and /mnt/system read-write
+  - if .installed marker present: run uninstall first (auto)
+  - mkdir -p /mnt/app/root/hooks
+  - file-copy targets: backup once to .orig, then cp + chmod
+  - JSON patches: backup once to .orig, then sed in-place (skip if guard hits)
+  - write .installed marker with revision + timestamp + TRAIN/MU
+  - reboot in 10s
+
+Uninstall:
+  - file targets:
+      backup exists -> restore .orig over destination
+      no backup, target in /hooks/ -> rm (was added by patch)
+      otherwise -> skip
+  - JSON targets:
+      backup exists -> cp .orig over JSON
+      no backup -> leave as is
+  - remove .installed marker
+  - reboot in 10s
+
+Check (read-only):
+  - print TRAIN/MU/FAZIT + .installed marker
+  - per file target: SHA1 (12 chars) dst / payload / backup,
+    tagged PATCHED / ORIGINAL / ?
+  - per JSON target: state PATCHED / ORIGINAL / PARTIAL / MISSING
+    plus bu-saved / no-bu
+
+Backup folder
+-------------
+
+$BACKUPFOLDER = sda0/backup/$MUVERSION-$TRAINVERSION-$FAZIT/mhi2q-carplay-rgi/
+
+The folder name encodes FW identifiers, so backups remain matched to
+the firmware they were taken from across FW updates.
+
+Notes
+-----
+
+- The two JSON edits are required - without smartphone_integrator the
+  C hook never gets LD_PRELOAD'd, and without dio_manager the Cinemo
+  SDK drops the iAP2 0x52xx route-guidance messages. See repo
+  README.md Deploy steps 3-4 for details.
+
+- KSS InfoStates6 / libpresentationcontroller / libairplay patches
+  (mentioned in CLAUDE.md) are NOT part of this installer - those
+  apply to a different code path (LVDS video + AltScreen attempts)
+  and are not in the current deployment flow per README.md.
