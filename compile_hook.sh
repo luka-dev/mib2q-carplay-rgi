@@ -1,104 +1,59 @@
 #!/bin/bash
+# Build the CarPlay LD_PRELOAD hook (libcarplay_hook.so) for QNX/ARMv7 in Docker.
+#
+# Replaces the old VM-SSH recipe (root@192.168.64.16 + stock ntoarmv7-gcc 4.4.2).
+# Now uses the self-contained image `qnx65-armv7-toolchain` (Tools/qnx-65-sdp-docker,
+# GCC 4.9.4).  No VM required.  The hook links only -lz -lsocket (both in the SDP),
+# so no BSP import stubs are needed.
+#
+#   ./compile_hook.sh                        # default (LOG=1)
+#   LOG=0 ./compile_hook.sh                  # logging disabled
+#   LOG_RGD_PACKET_RAW=1 ./compile_hook.sh   # full RGD raw packet logging (needs LOG=1)
+#   HOOK_OUT=/path/out.so ./compile_hook.sh  # override output path
+#
+# NOTE: this is GCC 4.9.4, not the stock QNX 4.4.2.  The hook uses no __thread
+# (verified) so the emutls trap does not apply; the build asserts emutls==0 below.
 set -e
 
-QNX_VM="192.168.64.16"
-SSH_OPTS="-oHostKeyAlgorithms=+ssh-rsa -oPubkeyAcceptedAlgorithms=+ssh-rsa"
-
+IMG=qnx65-armv7-toolchain
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-HOOK_DIR="${SCRIPT_DIR}/hook"
-BUILD_DIR="${SCRIPT_DIR}/build"
-OUT="${HOOK_OUT:-${BUILD_DIR}/libcarplay_hook.so}"
-mkdir -p "$BUILD_DIR"
+OUT="${HOOK_OUT:-${SCRIPT_DIR}/build/libcarplay_hook.so}"
+mkdir -p "$(dirname "$OUT")"
 
-# Source files
-FRAMEWORK_SRCS="
-    framework/logging.c
-    framework/bus.c
-    framework/iap2_protocol.c
-    framework/hook_framework.c
-"
-
-RGD_SRCS="
-    routeguidance/rgd_tlv.c
-    routeguidance/rgd_hook.c
-"
-
-CVR_SRCS="
-    coverart/coverart_hook.c
-"
-
-ALTSCREEN_SRCS="
-    altscreen/altscreen_av.c
-    altscreen/altscreen_hook.c
-"
-
-MAIN_SRCS="main.c"
-
-echo "=== CarPlay Hook Build ==="
-echo "Hook dir: $HOOK_DIR"
-
-EXTRA_CFLAGS="-D__QNX__"
-EXTRA_LIBS="-lz -lsocket"  # QNX: dlsym is in libc, socket for renderer control
-
-# Build options (supported):
-#   LOG=1|0                 (default: 1)
-#   LOG_RGD_PACKET_RAW=1|0  (default: 0, requires LOG=1)
 LOG="${LOG:-1}"
 LOG_RGD_PACKET_RAW="${LOG_RGD_PACKET_RAW:-0}"
+[[ "$LOG" == "0" || "$LOG" == "1" ]] || { echo "Invalid LOG=$LOG (0|1)"; exit 1; }
+[[ "$LOG_RGD_PACKET_RAW" == "0" || "$LOG_RGD_PACKET_RAW" == "1" ]] || { echo "Invalid LOG_RGD_PACKET_RAW"; exit 1; }
+[[ "$LOG_RGD_PACKET_RAW" == "1" && "$LOG" != "1" ]] && { echo "LOG_RGD_PACKET_RAW=1 requires LOG=1"; exit 1; }
 
-if [[ "$LOG" != "0" && "$LOG" != "1" ]]; then
-    echo "Invalid LOG value: $LOG (expected 0 or 1)"
+CFLAGS_EXTRA="-D__QNX__"
+[ "$LOG" == "0" ] && CFLAGS_EXTRA="$CFLAGS_EXTRA -DENABLE_LOGGING=0" && echo "Logging DISABLED"
+[ "$LOG_RGD_PACKET_RAW" == "1" ] && CFLAGS_EXTRA="$CFLAGS_EXTRA -DRGD_TRACE_RAW_FULL=1" && echo "RGD raw packet logging ENABLED"
+
+if ! docker image inspect "$IMG" >/dev/null 2>&1; then
+    echo "ERROR: docker image '$IMG' not found."
+    echo "Build it once:  docker build --platform=linux/amd64 -t $IMG $SCRIPT_DIR/../../Tools/qnx-65-sdp-docker"
     exit 1
 fi
 
-if [[ "$LOG_RGD_PACKET_RAW" != "0" && "$LOG_RGD_PACKET_RAW" != "1" ]]; then
-    echo "Invalid LOG_RGD_PACKET_RAW value: $LOG_RGD_PACKET_RAW (expected 0 or 1)"
-    exit 1
-fi
+echo "=== CarPlay Hook Build (Docker $IMG) ==="
 
-if [[ "$LOG" == "0" ]]; then
-    EXTRA_CFLAGS="${EXTRA_CFLAGS} -DENABLE_LOGGING=0"
-    echo "Logging DISABLED"
-fi
-
-if [[ "$LOG_RGD_PACKET_RAW" == "1" ]]; then
-    if [[ "$LOG" != "1" ]]; then
-        echo "LOG_RGD_PACKET_RAW=1 requires LOG=1"
-        exit 1
-    fi
-    EXTRA_CFLAGS="${EXTRA_CFLAGS} -DRGD_TRACE_RAW_FULL=1"
-    echo "RGD raw packet full logging ENABLED"
-fi
-
-# Modular framework compile
-REMOTE_DIR="/tmp/carplay_hook"
-
-echo "Uploading sources to QNX VM..."
-tar --disable-copyfile --format=ustar -C "$HOOK_DIR" -cf - framework routeguidance coverart altscreen main.c \
-    | sshpass -p "root" ssh $SSH_OPTS root@$QNX_VM "rm -rf $REMOTE_DIR && mkdir -p $REMOTE_DIR && tar -xf - -C $REMOTE_DIR"
-
-echo "Compiling on QNX VM..."
-
-# Single-shot compile + link (no intermediate .o files)
-ALL_SRCS=""
-for f in $FRAMEWORK_SRCS $RGD_SRCS $CVR_SRCS $ALTSCREEN_SRCS $MAIN_SRCS; do
-    ALL_SRCS="$ALL_SRCS $REMOTE_DIR/$f"
-done
-
-# Per-section gc strips dead code/data inside the .so — cuts size and
-# removes never-called helpers from being kept alive.
-# (LTO not used: QNX 6.5 ships GCC 4.4.2 which predates -flto.)
-BUILD_CMD="/usr/qnx650/host/qnx6/x86/usr/bin/ntoarmv7-gcc -shared -fPIC -O2 -std=gnu99 -fdata-sections -ffunction-sections $EXTRA_CFLAGS -I$REMOTE_DIR $ALL_SRCS -o $REMOTE_DIR/libcarplay_hook.so -Wl,--gc-sections $EXTRA_LIBS"
-
-sshpass -p "root" ssh $SSH_OPTS root@$QNX_VM \
-    "export QNX_HOST=/usr/qnx650/host/qnx6/x86; \
-     export QNX_TARGET=/usr/qnx650/target/qnx6; \
-     cd $REMOTE_DIR && \
-     $BUILD_CMD && \
-     ls -lh $REMOTE_DIR/libcarplay_hook.so"
-
-echo "Downloading compiled library..."
-sshpass -p "root" scp $SSH_OPTS root@$QNX_VM:$REMOTE_DIR/libcarplay_hook.so "$OUT"
+docker run --rm --platform=linux/amd64 -v "$SCRIPT_DIR":/src "$IMG" bash -c '
+  set -e
+  export PATH=/opt/qnx650/host/linux/x86/usr/bin:$PATH
+  export QNX_HOST=/opt/qnx650/host/linux/x86 QNX_TARGET=/opt/qnx650/target/qnx6
+  CC=arm-unknown-nto-qnx6.5.0eabi-gcc
+  cd /src/hook
+  SRCS="framework/logging.c framework/bus.c framework/iap2_protocol.c framework/hook_framework.c \
+        routeguidance/rgd_tlv.c routeguidance/rgd_hook.c coverart/coverart_hook.c \
+        altscreen/altscreen_av.c altscreen/altscreen_hook.c main.c"
+  $CC -shared -fPIC -O2 -std=gnu99 -fdata-sections -ffunction-sections '"$CFLAGS_EXTRA"' \
+      -I. $SRCS -o /src/build/libcarplay_hook.so -Wl,--gc-sections -lz -lsocket
+  # emutls trap: the hook must never carry thread-local emutls (QNX 6.5 crash).
+  n=$(arm-unknown-nto-qnx6.5.0eabi-nm /src/build/libcarplay_hook.so 2>/dev/null | grep -ci emutls)
+  [ "$n" = "0" ] || { echo "REJECTED: $n emutls symbols present"; exit 1; }
+  echo "  built build/libcarplay_hook.so (emutls=0)"
+'
 
 echo ""
 echo "Compiled: $OUT"
