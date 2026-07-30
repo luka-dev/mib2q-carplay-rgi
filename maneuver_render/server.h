@@ -25,6 +25,7 @@ void cr_server_shutdown(void);
 /* Returns 1 if the peer (Java) cleanly closed the connection — main
  * loop should exit when this is true. */
 int cr_server_peer_closed(void);
+void cr_server_clear_peer_closed(void);
 
 /* Send a single EVT_HEARTBEAT packet to Java.  Caller is responsible
  * for throttling to ~1 Hz (Java's SO_TIMEOUT is 5 s). */

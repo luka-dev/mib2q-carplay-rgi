@@ -50,6 +50,12 @@ int cr_server_peer_closed(void) {
     return g_peer_closed;
 }
 
+/* Reset the peer-closed latch after the always-on renderer has handled a disconnect
+ * (cleared its content) and wants to keep running + reconnect. */
+void cr_server_clear_peer_closed(void) {
+    g_peer_closed = 0;
+}
+
 static void set_nonblocking(int fd) {
     int flags = fcntl(fd, F_GETFL, 0);
     if (flags >= 0)
@@ -62,7 +68,14 @@ static void send_event(uint8_t event_id) {
     uint8_t pkt[CR_PKT_SIZE];
     memset(pkt, 0, sizeof(pkt));
     pkt[0] = event_id;
-    (void)send(g_server_fd, pkt, CR_PKT_SIZE, 0);
+    ssize_t k = send(g_server_fd, pkt, CR_PKT_SIZE, 0);
+    if (k != (ssize_t)CR_PKT_SIZE && !(k < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))) {
+        /* Hard error (peer reset) or short write → drop the dead fd now so
+         * cr_server_poll() reconnects promptly, instead of silently losing this
+         * and later events until a recv happens to notice.  (Single-threaded, no race.) */
+        close(g_server_fd);
+        g_server_fd = -1;
+    }
 }
 
 static int try_connect(void) {

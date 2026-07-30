@@ -20,6 +20,8 @@
 #define CMD_PERSPECTIVE  0x04    /* Perspective: payload[0] = 0 (off) / 1 (on) */
 #define CMD_DEBUG        0x05    /* Toggle debug overlay */
 #define CMD_BARGRAPH     0x06    /* Bargraph: payload[0]=level(0-16), payload[1]=on/off */
+#define CMD_CLEAR        0x07    /* Blank the popup (CarPlay/route off) — drop maneuver+bargraph,
+                                  * render fully transparent.  Keeps the link; renderer stays alive. */
 
 /* Renderer -> Java events (high bit set to distinguish from commands) */
 #define EVT_HEARTBEAT    0x80    /* Renderer alive, sent every 1 s; empty payload */
@@ -62,35 +64,24 @@ typedef struct {
 
 /* Display configuration.
  *
- * CR_DISPLAYABLE_ID = 20 — DISPLAYABLE_MAP_ROUTE_GUIDANCE, the native KOMO
- * RG widget slot in cluster context 74.  We *take it over*:
- *   - display_create_window(displayable_id=20) creates a screen window in
- *     our process with SCREEN_PROPERTY_ID_STRING="20".  Display manager's
- *     m_surfaceSources[20] gets bound to our window.
- *   - With stock libPresentationController, the native KOMO widget only
- *     calls display_create_window(20) when its GuidanceView state machine
- *     enters StartDrawing — which requires an active native route.  In
- *     idle (CarPlay session, no native route) the native side holds no
- *     window for displayable 20, so there is no race for the slot.
- *   - dmdt dc 74 20 102 101 33 re-declares context 74 with the original
- *     composition order, since display_create_window strips other
- *     displayables from context 74 as a side effect.
- *   - setActiveDisplayable(4, 20) (called by stock cluster firmware in
- *     preContextSwitchHook) makes the MOST encoder read our window for
- *     the LVDS video stream that lands on the VC's MAP tab.
- *   - On shutdown screen_destroy_window vacates m_surfaceSources[20].
- *     The slot stays empty until native nav next activates a route —
- *     same as the cluster baseline before our session started.
+ * CR_DISPLAYABLE_ID = 98 — OUR OWN displayable, NOT the stock route-guidance
+ * slot (20).  Picked from the free range 61-99 (above the semantic enum whose
+ * max is 60=HUD_MAP_VIEW, below the KDK ids 100-102, so still inside the DM's
+ * supported id range).  We open a managed screen window with ID_STRING="98" (via
+ * screen_manage_window into the DisplayManager group).  98 has no stock owner →
+ * no collision war with native nav (the old id-20 takeover / flapping is gone).
  *
- * Edge case: if the user manually launches native maps mid-CarPlay,
- * libPresentationController would create its own ID="20" window and
- * displaymanager would last-writer-wins over us.  The 5 s health-check
- * watchdog (platform_check_and_recover_window) detects the loss (either
- * cross-process struct invalidation OR detachment from displaymanager's
- * managed-window group) and re-creates our screen window + EGL surface
- * to re-register at displayable=20. */
-#define CR_DISPLAYABLE_ID   20  /* DISPLAYABLE_MAP_ROUTE_GUIDANCE (native widget slot) */
-#define CR_CONTEXT_ID       74  /* Cluster MAP context (LVDS encoder reads from here) */
+ * Context routing is NO LONGER done here.  The Java patch declares cluster
+ * contexts dc[80]={98,102,101} / dc[81]={98,102,101,33} in
+ * DisplayManagerMIB2High.defineContexts() and calls DisplayManager.switchContext()
+ * to point the cluster (LVDS2) at one, driving setActiveDisplayable(4, 98) → the
+ * MOST encoder reads our window.  This renderer only creates the managed window +
+ * draws; it runs NO dmdt.  (altscreen_render's CarPlay video uses id 99 / dc[82].)
+ *
+ * On shutdown screen_destroy_window vacates m_surfaceSources[98]; Java switches
+ * the cluster back to the stock context (dc[74]). */
+#define CR_DISPLAYABLE_ID   98  /* our own cluster displayable (managed window, ID_STRING="98") */
+#define CR_CONTEXT_ID       80  /* Java-declared cluster context {98,102,101} (informational) */
 #define CR_DISPLAY_ID       1   /* 0=main (LVDS1), 1=cluster (LVDS2) */
 #define CR_DEFAULT_WIDTH    328
 #define CR_DEFAULT_HEIGHT   181 /* 180px content + 1px ECC annotation row */

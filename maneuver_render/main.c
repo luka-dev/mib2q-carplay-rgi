@@ -161,6 +161,22 @@ static void engine_apply_maneuver(const maneuver_state_t *state) {
 }
 
 /* Advance engine state machine */
+/* Blank the popup: drop any maneuver + bargraph and fade to fully transparent.  Used on
+ * CMD_CLEAR and on peer disconnect, so the always-on renderer shows nothing when CarPlay /
+ * the route is off.  The next CMD_MANEUVER cold-starts + fades back in. */
+static void clear_maneuver(void) {
+    g_engine.has_current = 0;
+    g_engine.has_next    = 0;
+    g_engine.has_pending = 0;
+    g_engine.phase       = ENGINE_IDLE;
+    g_bargraph_on    = 0;
+    g_bargraph_level = 0;
+    g_fade_active    = 0;
+    g_fade_alpha     = 0.0f;
+    render_set_global_alpha(0.0f);
+    g_engine.dirty   = 1;
+}
+
 static void engine_tick(void) {
     switch (g_engine.phase) {
     case ENGINE_PUSHING:
@@ -379,13 +395,13 @@ int main(int argc, char **argv) {
         clock_gettime(CLOCK_MONOTONIC, &t_after_sp);
 #endif
 
-        /* Java closed the bus socket → session is over, exit cleanly.
-         * Don't wait for slay; releasing displayable 20 promptly avoids
-         * orphaning our window on the cluster. */
+        /* Java closed the bus socket (route/CarPlay off).  We are an always-on framework
+         * service — do NOT exit.  Blank the popup so no stale frame lingers, clear the
+         * peer-closed latch, and let cr_server_poll() reconnect when Java is back. */
         if (cr_server_peer_closed()) {
-            fprintf(stderr, "engine: peer closed, exiting\n");
-            running = 0;
-            break;
+            fprintf(stderr, "engine: peer closed — clearing, staying alive for reconnect\n");
+            clear_maneuver();
+            cr_server_clear_peer_closed();
         }
 
         /* Drain all pending commands, keep only the last CMD_MANEUVER */
@@ -460,6 +476,10 @@ int main(int argc, char **argv) {
                 g_engine.dirty = 1;
                 fprintf(stderr, "engine: bargraph level=%d on=%d\n",
                         g_bargraph_level, g_bargraph_on);
+                break;
+            case CMD_CLEAR:
+                clear_maneuver();
+                fprintf(stderr, "engine: clear (blank)\n");
                 break;
             case CMD_SHUTDOWN:
                 fprintf(stderr, "engine: shutdown command received\n");
@@ -543,7 +563,9 @@ int main(int argc, char **argv) {
             }
         }
 
+        int rendered_this_frame = 0;
         if (dirty) {
+            rendered_this_frame = 1;
 #ifdef CR_DIAG_FRAME_LOG
             struct timespec rt_start;
             clock_gettime(CLOCK_MONOTONIC, &rt_start);
@@ -701,28 +723,42 @@ int main(int argc, char **argv) {
             }
         }
 
-#ifndef PLATFORM_QNX
-        /* Frame pacing — target 30 FPS via software nanosleep.
-         * macOS/dev path only: GLFW + swap interval 0 gives no vsync
-         * throttle, so we sleep here to keep test_harness sessions at
-         * a consistent 30 FPS for visual parity with hardware.
-         *
-         * On QNX this whole block is skipped: platform_qnx.c sets
-         * eglSwapInterval(2) so eglSwapBuffers() itself blocks until
-         * the second display vsync, giving an exact 30 FPS pace
-         * without any kernel timer rounding. */
-        struct timespec t_end;
-        clock_gettime(CLOCK_MONOTONIC, &t_end);
-        long elapsed_ns = (t_end.tv_sec - t_start.tv_sec) * 1000000000L
-                        + (t_end.tv_nsec - t_start.tv_nsec);
-        long sleep_ns = FRAME_TIME_NS - elapsed_ns;
-        if (sleep_ns > 0) {
-            struct timespec ts = { sleep_ns / 1000000000L,
-                                   sleep_ns % 1000000000L };
+        /* Adaptive IDLE pacing (proven approach from the c_render history, commit e26cce5).
+         * ACTIVE 30 FPS pacing rides eglSwapBuffers (QNX: eglSwapInterval(2); macOS below) — NEVER
+         * nanosleep, because nanosleep on QNX 6.5 rounds up to the kernel timer tick and won't hold
+         * a precise 30 Hz.  But when the loop produced NO frame this iteration (idle: no route / no
+         * maneuver) there is no swap to pace it, so an always-on renderer would busy-spin 100% CPU.
+         * Throttle idle polling: 30 Hz for the first second, then 10 Hz (1–5 s), then 3 Hz (>5 s);
+         * any activity snaps back to 30 Hz.  Idle timing needs no precision → the QNX nanosleep
+         * granularity is harmless here. */
+        static int idle_frames = 0;
+        if (rendered_this_frame) {
+            idle_frames = 0;
+        } else {
+            if (idle_frames < 10000) idle_frames++;
+            long idle_ns = (idle_frames < TARGET_FPS)     ? FRAME_TIME_NS     /* <1 s: 30 Hz */
+                         : (idle_frames < TARGET_FPS * 5) ? 100L * 1000000L  /* 1–5 s: 10 Hz */
+                         :                                  333L * 1000000L; /* >5 s: 3 Hz  */
+            struct timespec ts = { idle_ns / 1000000000L, idle_ns % 1000000000L };
             nanosleep(&ts, NULL);
         }
+
+#ifndef PLATFORM_QNX
+        /* macOS/dev only: GLFW swap interval 0 gives no vsync throttle, so pace ACTIVE frames to
+         * 30 FPS here.  (On QNX the swap itself blocks on eglSwapInterval(2) — no timer rounding.) */
+        if (rendered_this_frame) {
+            struct timespec t_end;
+            clock_gettime(CLOCK_MONOTONIC, &t_end);
+            long elapsed_ns = (t_end.tv_sec - t_start.tv_sec) * 1000000000L
+                            + (t_end.tv_nsec - t_start.tv_nsec);
+            long sleep_ns = FRAME_TIME_NS - elapsed_ns;
+            if (sleep_ns > 0) {
+                struct timespec ts = { sleep_ns / 1000000000L, sleep_ns % 1000000000L };
+                nanosleep(&ts, NULL);
+            }
+        }
 #else
-        (void)t_start;   /* unused on QNX — pacing is in eglSwapBuffers */
+        (void)t_start;
 #endif
 
 #ifdef CR_DIAG_FRAME_LOG

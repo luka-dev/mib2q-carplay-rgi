@@ -18,10 +18,10 @@ ifeq ($(UNAME), Darwin)
 else
   # QNX ARM cross-compile
   CC = /usr/qnx650/host/qnx6/x86/usr/bin/ntoarmv7-gcc
-  PLATFORM_SRC = platform_qnx.c
+  PLATFORM_SRC = platform_qnx.c ../common/cluster_surface.c
   CFLAGS = -O2 -std=gnu99 -Wall -D__QNX__ -DPLATFORM_QNX
-  LDFLAGS = -lEGL -lGLESv2 -lsocket -lm
-  INCLUDES =
+  LDFLAGS = -lEGL -lGLESv2 -lscreen -lsocket -lm
+  INCLUDES = -I../common
   BUILD_HARNESS = 0
 endif
 
@@ -52,4 +52,12 @@ run: $(TARGET)
 grid: CFLAGS += -DCR_DEBUG_GRID
 grid: clean all
 
-.PHONY: all clean run grid
+# Offline C/type-check of the QNX platform + cluster_surface against stub
+# EGL/GLES2/screen headers (real EGL/screen are BSP-only).  Host compiler.
+hostcheck:
+	cc -fsyntax-only -std=gnu99 -Wall -D__QNX__ -DPLATFORM_QNX \
+	   -Ihostcheck -I../altscreen_render/hostcheck -I../common -I. platform_qnx.c
+	cc -fsyntax-only -std=gnu99 -Wall -D__QNX__ -DPLATFORM_QNX \
+	   -I../altscreen_render/hostcheck -I../common ../common/cluster_surface.c
+
+.PHONY: all clean run grid hostcheck
