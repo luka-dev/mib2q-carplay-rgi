@@ -604,7 +604,8 @@ below.
 |------------------------------|-----------------------|--------------------------------------------------------------------------------------------------|-----------------------|
 | `hook/`                    | C (ARM32 QNX)         | iAP2 hooks, route guidance + async cover-art bridge, TCP bus client (connects to Java :19810)    | `libcarplay_hook.so`  |
 | `maneuver_render/`                  | C (ARM32 QNX / macOS) | Custom 3D maneuver renderer (EGL/GLES2), TCP command-driven                                      | `maneuver_render`     |
-| `java_patch/`                | Java patch JAR        | Route guidance rendering, BAP bridge, cover art forwarder, MMI touchpad / D-pad -> CarPlay input  | `carplay_hook.jar`    |
+| `java_patch_new_{replace,tab}/` | Java patch JAR     | Route guidance rendering, BAP bridge, cover art forwarder, MMI touchpad / D-pad -> CarPlay input  | `carplay_hook.jar`    |
+| `altscreen_render/`          | C (ARM32 QNX)         | Cluster CarPlay-video sink: OMX AVC decode -> QNX Screen present (always-on service)             | `altscreen_render`    |
 | `dio_manager.json`           | System config patch   | Enables iAP2 route guidance message exchange with iOS                                            | Manual edit on device |
 | `smartphone_integrator.json` | System config patch   | Loads `libcarplay_hook.so` via `LD_PRELOAD` in dio_manager process                               | Manual edit on device |
 
@@ -1037,7 +1038,7 @@ will turn the red rects green on this generation of HU.**
 - **lsd.jar** - original HU classes, needed to compile the Java patch against. Extract from your firmware dump:
   1. Get `/mnt/app/eso/hmi/lsd/lsd.jxe` from your firmware
   2. Convert with [jxe2jar](https://github.com/luka-dev/jxe2jar) (`../jxe2jar`)
-  3. Output lands in `jxe2jar/out/lsd.jar` (default path used by `build_java.sh`)
+  3. jxe2jar produces `Tools/jxe2jar/out/MU1316-combined-final.jar` (the classpath `build_variant.sh` compiles against)
 
 ### `libcarplay_hook.so` (C hook)
 
@@ -1095,15 +1096,18 @@ The macOS build also compiles a test harness - see [Testing the renderer locally
 
 ### `carplay_hook.jar` (Java patch)
 
-Requires `lsd.jar` (see [Prerequisites](#prerequisites)). Check paths in `build_java.sh`.
+Requires `Tools/jxe2jar/out/MU1316-combined-final.jar` (the accurate full decompile). Two
+variants — build one and deploy it as `carplay_hook.jar`:
 
 ```bash
-./build_java.sh
+./build_variant.sh java_patch_new_replace carplay_hook_replace   # full stock-navi takeover
+./build_variant.sh java_patch_new_tab     carplay_hook_tab       # inject smartphone tab, juggle stock<->CP
 ```
 
-Output: `build/carplay_hook.jar`
+Output: `build/carplay_hook_{replace,tab}.jar` (deploy the chosen one as `carplay_hook.jar`).
 
-All classes are compiled with `-source 1.2 -target 1.2` for MHI2Q JVM compatibility. The bundled JDK from jxe2jar is used automatically.
+All classes compile with `-source 1.4 -target 1.4` (jclfoun11 = Foundation Profile 1.1 = J2SE 1.4,
+the MHI2Q lsd runtime). The bundled Zulu-8 JDK from jxe2jar is used automatically.
 
 ### Testing the renderer locally
 
@@ -1145,9 +1149,9 @@ The harness auto-cycles through a built-in preset list that covers all icon type
 
 ### Quick checklist
 
-1. `./compile_hook.sh` - build `libcarplay_hook.so`
-2. `./compile_render_qnx.sh` - build `maneuver_render`
-3. `./build_java.sh` - build `carplay_hook.jar`
+1. `./compile_hook.sh` - build `libcarplay_hook.so` (Docker `qnx65-armv7-toolchain`, no VM)
+2. `./compile_render_qnx.sh` - build `maneuver_render` + `altscreen_render` (Docker)
+3. `./build_variant.sh java_patch_new_tab carplay_hook_tab` - build the Java jar (deploy as `carplay_hook.jar`)
 4. `mkdir -p /mnt/app/root/hooks` on device
 5. Copy `build/libcarplay_hook.so` to `/mnt/app/root/hooks/`, `chmod 755`
 6. Copy `build/maneuver_render` to `/mnt/app/root/hooks/`, `chmod 755`
