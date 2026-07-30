@@ -36,6 +36,7 @@ int screen_destroy_context(screen_context_t ctx);
 int screen_create_window(screen_window_t *win, screen_context_t ctx);
 int screen_destroy_window(screen_window_t win);
 int screen_create_window_group(screen_window_t win, const char *name);
+int screen_manage_window(screen_window_t win, const char *id);
 int screen_create_window_buffers(screen_window_t win, int count);
 int screen_post_window(screen_window_t win, screen_buffer_t buf, int count, const int *dirty, int flags);
 
@@ -43,6 +44,8 @@ int screen_set_window_property_iv(screen_window_t win, int prop, const int *v);
 int screen_set_window_property_cv(screen_window_t win, int prop, int len, const char *v);
 int screen_set_window_property_pv(screen_window_t win, int prop, void **v);
 int screen_get_window_property_pv(screen_window_t win, int prop, void **v);
+int screen_get_window_property_iv(screen_window_t win, int prop, int *v);
+int screen_get_window_property_cv(screen_window_t win, int prop, int len, char *v);
 int screen_get_buffer_property_pv(screen_buffer_t buf, int prop, void **v);
 int screen_get_context_property_iv(screen_context_t ctx, int prop, int *v);
 int screen_get_context_property_pv(screen_context_t ctx, int prop, void **v);

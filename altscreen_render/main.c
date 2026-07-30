@@ -1,15 +1,16 @@
 /*
- * altscreen_render — receives the CarPlay cluster (111) H.264 stream from the
- * hook over TCP :19830 and feeds it to a video sink (file capture on Mac, OMX
- * decode + cluster present on QNX).
+ * altscreen_render — receives the CarPlay cluster (111) H.264 (Annex-B) stream
+ * from libairplay's alt forward (screenstream.c) over TCP :19831 and feeds it to a
+ * video sink (file capture on Mac, OMX decode + cluster present on QNX).
  *
- * Single-threaded blocking server: the hook is the only client and (re)connects
+ * Single-threaded blocking server: libairplay is the only client and (re)connects
  * once per CarPlay session.  On disconnect we notify the sink and accept again.
  * POSIX sockets — builds on macOS and QNX 6.5.
  */
 #include "protocol.h"
 #include "frame_io.h"
 #include "sink.h"
+#include "altctl.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,6 +19,7 @@
 #include <signal.h>
 #include <errno.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
@@ -47,6 +49,16 @@ static int listen_socket(void) {
 static void serve_client(int cfd) {
     int one = 1;
     setsockopt(cfd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
+    /* A stalled or half-open peer must never hang the sole server thread forever
+     * (it would freeze the service and never fire altctl_set_video(0)).
+     * KEEPALIVE reaps a genuinely dead TCP peer (crash / half-open).  RCVTIMEO is a
+     * generous 60s backstop for a peer that holds the connection but stops sending
+     * mid-frame → av_read_frame then returns an error and we drop + accept() again.
+     * 60s is longer than any realistic active-stream gap (H.264 refreshes periodically),
+     * so it won't false-drop a healthy stream. */
+    setsockopt(cfd, SOL_SOCKET, SO_KEEPALIVE, &one, sizeof(one));
+    struct timeval tv; tv.tv_sec = 60; tv.tv_usec = 0;
+    setsockopt(cfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
     uint8_t *buf = NULL;
     uint32_t cap = 0, len = 0;
@@ -73,6 +85,9 @@ int main(void) {
     if (lfd < 0) { av_sink_close(); return 1; }
     fprintf(stderr, "altscreen_render: listening on %s:%d\n", ALTAV_HOST, ALTAV_PORT);
 
+    /* Control channel to Java/lsd — reports video on/off so Java flips setVideoAvailable(). */
+    altctl_start();
+
     while (g_running) {
         int cfd = accept(lfd, NULL, NULL);
         if (cfd < 0) {
@@ -81,12 +96,15 @@ int main(void) {
             break;
         }
         fprintf(stderr, "altscreen_render: hook connected\n");
+        altctl_set_video(1);                     /* 111 video client connected → tell Java */
         serve_client(cfd);
         close(cfd);
         av_sink_session_end();
+        altctl_set_video(0);                     /* stream ended → tell Java (Java clears ctx 82/83) */
         fprintf(stderr, "altscreen_render: hook disconnected\n");
     }
 
+    altctl_stop();
     close(lfd);
     av_sink_close();
     return 0;

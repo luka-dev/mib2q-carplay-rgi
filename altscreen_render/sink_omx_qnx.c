@@ -28,10 +28,13 @@
 #include "OMX_Video.h"
 
 #include <screen/screen.h>
+#include "cluster_surface.h"
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#include <errno.h>
 
 #define kOMXDecoderName   "OMX.qcom.video.decoder.avc"
 #define kInPortIndex      0
@@ -56,9 +59,11 @@ typedef struct {
     int32_t                  width, height;
     int                      screenFmt;
 
-    screen_context_t         screenCtx;
-    screen_window_t          win;
-    int                      winReady;
+    cluster_surface_t       *cs;         /* owns screenCtx/win lifecycle */
+    screen_context_t         screenCtx;  /* = cluster_surface_context(cs) */
+    screen_window_t          win;        /* = cluster_surface_window(cs)  */
+    volatile int             winReady;   /* read lock-free on the OMX callback thread; also gates
+                                          * buffer resubmit across output-port reconfig (see _OnFillDone) */
 
     pthread_mutex_t          lock;
     pthread_cond_t           cond;
@@ -126,78 +131,81 @@ static void _PresentZeroCopy(ScreenSink *me, OMX_BUFFERHEADERTYPE *b) {
 static OMX_ERRORTYPE _OnFillDone(OMX_HANDLETYPE c, OMX_PTR app, OMX_BUFFERHEADERTYPE *b) {
     ScreenSink *const me = (ScreenSink *)app;
     _PresentZeroCopy(me, b);
-    if (me->running) OMX_FillThisBuffer(c, b);   /* recycle */
+    /* Recycle — but NOT during output-port reconfig.  _ReconfigOutputPort (feed thread) drops
+     * winReady=0 before OMX_CommandPortDisable + OMX_FreeBuffer; the disable makes the component
+     * hand every in-flight output buffer back here on the callback thread.  Resubmitting one via
+     * FillThisBuffer while the feed thread frees the same header = UAF / illegal-during-disable.
+     * winReady stays 0 for the whole disable→rebuild window (re-armed in _MakeWindow), so gating
+     * the resubmit on it is exactly the quiesce we need.  running alone is insufficient (stays 1). */
+    if (me->running && me->winReady) OMX_FillThisBuffer(c, b);
     return OMX_ErrorNone;
 }
 
 static OMX_CALLBACKTYPE kCallbacks = { _OnEvent, _OnEmptyDone, _OnFillDone };
 
 /* ---- helpers -------------------------------------------------------------- */
+/* OMX callbacks come from the component's own thread; if it wedges or dies we must
+ * NOT wait forever (would hang startup/reconfig/teardown of the whole service).
+ * Bound every CmdComplete/state wait; a timeout is a hard error → latch omxError. */
+#define kOmxWaitMs   10000L      /* generous — only fires on a genuine OMX hang */
+
+static void _AbsTimeoutMs(struct timespec *ts, long ms) {
+    clock_gettime(CLOCK_REALTIME, ts);
+    ts->tv_sec  += ms / 1000;
+    ts->tv_nsec += (ms % 1000) * 1000000L;
+    if (ts->tv_nsec >= 1000000000L) { ts->tv_sec++; ts->tv_nsec -= 1000000000L; }
+}
+
 static int _WaitState(ScreenSink *me, OMX_STATETYPE want) {
-    int err = 0;
+    struct timespec ts; int err = 0;
+    _AbsTimeoutMs(&ts, kOmxWaitMs);
     pthread_mutex_lock(&me->lock);
-    while (!(me->stateReached && me->state == want) && !me->omxError)
-        pthread_cond_wait(&me->cond, &me->lock);
+    while (!(me->stateReached && me->state == want) && !me->omxError) {
+        if (pthread_cond_timedwait(&me->cond, &me->lock, &ts) == ETIMEDOUT) {
+            fprintf(stderr, "altscreen_render[qnx]: _WaitState TIMEOUT (want=%d)\n", (int)want);
+            me->omxError = 1; break;
+        }
+    }
     if (me->omxError) err = -1;
     me->stateReached = 0;
     pthread_mutex_unlock(&me->lock);
     return err;
 }
 
-/* bind the present window to a display: main=internal[0], cluster=last (env override). */
-static void _SelectDisplay(ScreenSink *me) {
-    int n = 0, want;
-    screen_display_t *disp;
-    const char *env;
-    if (screen_get_context_property_iv(me->screenCtx, SCREEN_PROPERTY_DISPLAY_COUNT, &n) != 0 || n <= 0) return;
-    disp = (screen_display_t *)calloc((size_t)n, sizeof(*disp));
-    if (!disp) return;
-    if (screen_get_context_property_pv(me->screenCtx, SCREEN_PROPERTY_DISPLAYS, (void **)disp) == 0) {
-        env  = getenv("SS_CLUSTER_DISPLAY_INDEX");
-        want = env ? atoi(env) : (n - 1);          /* cluster = last enumerated display */
-        if (want < 0 || want >= n) want = 0;
-        screen_set_window_property_pv(me->win, SCREEN_PROPERTY_DISPLAY, (void **)&disp[want]);
-        fprintf(stderr, "altscreen_render[qnx]: bound to display %d/%d (cluster)\n", want, n);
-    }
-    free(disp);
-}
+/* Our cluster displayable id (managed window ID_STRING), distinct from
+ * maneuver's 98.  Free id from the 61-99 range.  The DM composites the active
+ * cluster context (dc[82]={99,102,101}) and the MOST encoder captures it → VC. */
+#define SS_DISPLAYABLE_ID  99
 
+/* Build the managed cluster window via the shared cluster_surface primitive —
+ * SAME path as maneuver_render, just opaque full-frame video params (NV12).
+ * screen_manage_window + ID_STRING + watchdog all live in cluster_surface. */
 static int _MakeWindow(ScreenSink *me, int nbufs) {
-    int fmt, usage = kScreenUsage_QcomVideo;
-    int visible = 1, alpha = 255, pos[2] = { 0, 0 }, size[2];
-    const char *grp = "dio_manager.airplay.qnx.screen_render.alt";
     const char *fmtEnv = getenv("SS_SCREEN_FORMAT");
-    char idstr[16];
-
-    fmt = me->screenFmt ? me->screenFmt : (fmtEnv ? (int)strtol(fmtEnv, NULL, 0) : kScreenFormat_QcomTiledNV12);
+    cluster_surface_cfg cfg;
+    int fmt = me->screenFmt ? me->screenFmt
+            : (fmtEnv ? (int)strtol(fmtEnv, NULL, 0) : kScreenFormat_QcomTiledNV12);
     me->screenFmt = fmt;
 
-    if (screen_create_context(&me->screenCtx, SCREEN_APPLICATION_CONTEXT) != 0) goto fail;
-    if (screen_create_window(&me->win, me->screenCtx) != 0) goto fail;
+    memset(&cfg, 0, sizeof(cfg));
+    cfg.id          = SS_DISPLAYABLE_ID;
+    cfg.width       = me->width;
+    cfg.height      = me->height;
+    cfg.format      = fmt;
+    cfg.usage       = kScreenUsage_QcomVideo;
+    cfg.nbuffers    = nbufs;
+    cfg.transparent = 0;               /* opaque full-frame video */
 
-    screen_create_window_group(me->win, grp);
-    snprintf(idstr, sizeof(idstr), "%d", 111);   /* cluster stream */
-    screen_set_window_property_cv(me->win, SCREEN_PROPERTY_ID_STRING, strlen(idstr), idstr);
-    screen_set_window_property_iv(me->win, SCREEN_PROPERTY_VISIBLE, &visible);
-    screen_set_window_property_iv(me->win, SCREEN_PROPERTY_POSITION, pos);
-    screen_set_window_property_iv(me->win, SCREEN_PROPERTY_GLOBAL_ALPHA, &alpha);
-    screen_set_window_property_iv(me->win, SCREEN_PROPERTY_FORMAT, &fmt);
-    screen_set_window_property_iv(me->win, SCREEN_PROPERTY_USAGE, &usage);
-    size[0] = me->width; size[1] = me->height;
-    screen_set_window_property_iv(me->win, SCREEN_PROPERTY_BUFFER_SIZE, size);
-    screen_set_window_property_iv(me->win, SCREEN_PROPERTY_SIZE, size);
-
-    _SelectDisplay(me);
-
-    if (screen_create_window_buffers(me->win, nbufs) != 0) goto fail;
-    me->winReady = 1;
+    me->cs = cluster_surface_create(&cfg);
+    if (!me->cs) {
+        fprintf(stderr, "altscreen_render[qnx]: cluster_surface_create failed\n");
+        me->winReady = 0;
+        return -1;
+    }
+    me->screenCtx = cluster_surface_context(me->cs);
+    me->win       = cluster_surface_window(me->cs);
+    me->winReady  = 1;
     return 0;
-fail:
-    if (me->win)       { screen_destroy_window(me->win);  me->win = NULL; }
-    if (me->screenCtx) { screen_destroy_context(me->screenCtx); me->screenCtx = NULL; }
-    me->winReady = 0;
-    fprintf(stderr, "altscreen_render[qnx]: window setup failed\n");
-    return -1;
 }
 
 static int _ConfigurePorts(ScreenSink *me) {
@@ -298,8 +306,8 @@ static void _Teardown(ScreenSink *me) {
         OMX_FreeHandle(me->decoder); me->decoder = NULL;
         OMX_Deinit();
     }
-    if (me->win)       { screen_destroy_window(me->win); me->win = NULL; }
-    if (me->screenCtx) { screen_destroy_context(me->screenCtx); me->screenCtx = NULL; }
+    if (me->cs) { cluster_surface_destroy(me->cs); me->cs = NULL; }
+    me->win = NULL; me->screenCtx = NULL;
     free(me->inBufs);        me->inBufs = NULL;        me->nInBufs = 0;
     free(me->outBufs);       me->outBufs = NULL;       me->nOutBufs = 0;
     free(me->outScreenBufs); me->outScreenBufs = NULL;
@@ -362,13 +370,27 @@ static void _FeedInput(ScreenSink *me, const uint8_t *data, uint32_t len, OMX_U3
     b->nOffset = 0; b->nFilledLen = len;
     b->nFlags = flags;
     b->nTimeStamp = 0;                            /* decoder-order mode → pts not needed */
-    OMX_EmptyThisBuffer(me->decoder, b);
+    if (OMX_EmptyThisBuffer(me->decoder, b) != OMX_ErrorNone) {
+        /* Component rejected the buffer → it will NOT call _OnEmptyDone for it.
+         * Return the index to the free ring so the pool isn't permanently drained
+         * (else _FeedInput eventually blocks forever waiting for a free buffer). */
+        pthread_mutex_lock(&me->lock);
+        me->freeIn[me->freeInTail % me->nInBufs] = idx; me->freeInTail++;
+        pthread_cond_broadcast(&me->cond);
+        pthread_mutex_unlock(&me->lock);
+    }
 }
 
 static int _WaitPortCmd(ScreenSink *me) {
-    int err = 0;
+    struct timespec ts; int err = 0;
+    _AbsTimeoutMs(&ts, kOmxWaitMs);
     pthread_mutex_lock(&me->lock);
-    while (!me->portCmdDone && !me->omxError) pthread_cond_wait(&me->cond, &me->lock);
+    while (!me->portCmdDone && !me->omxError) {
+        if (pthread_cond_timedwait(&me->cond, &me->lock, &ts) == ETIMEDOUT) {
+            fprintf(stderr, "altscreen_render[qnx]: _WaitPortCmd TIMEOUT\n");
+            me->omxError = 1; break;
+        }
+    }
     if (me->omxError) err = -1;
     me->portCmdDone = 0;
     pthread_mutex_unlock(&me->lock);
@@ -399,8 +421,8 @@ static int _ReconfigOutputPort(ScreenSink *me) {
     if (_WaitPortCmd(me)) return -1;
 
     /* 2. tear down the old window (frees its Screen buffers) + arrays */
-    if (me->win)       { screen_destroy_window(me->win); me->win = NULL; }
-    if (me->screenCtx) { screen_destroy_context(me->screenCtx); me->screenCtx = NULL; }
+    if (me->cs) { cluster_surface_destroy(me->cs); me->cs = NULL; }
+    me->win = NULL; me->screenCtx = NULL;
     free(me->outBufs);       me->outBufs = NULL;
     free(me->outScreenBufs); me->outScreenBufs = NULL;
     me->nOutBufs = 0;

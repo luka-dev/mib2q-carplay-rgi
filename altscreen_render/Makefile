@@ -7,7 +7,10 @@ TESTBIN   = $(BUILD_DIR)/altscreen_render_test
 # OpenMAX IL API headers (shims shared with the from-source libairplay build).
 OMX_INC = ../../libairplay-mhi2q/vendor/shims/OMX
 
-COMMON = main.c frame_io.c
+# Shared managed-window primitive (same one maneuver_render uses).
+COMMON_INC = ../common
+
+COMMON = main.c frame_io.c altctl.c
 
 ifeq ($(UNAME), Darwin)
   # macOS — file-capture sink (proves the wire; no OMX/GL deps).
@@ -21,8 +24,8 @@ else
   # OMX core + libscreen come from the MHI2Q BSP (unit/VM), NOT the generic SDP;
   # -lOmxCore is the expected OMX IL core name — CONFIRM on-unit if the link fails.
   CC   = /usr/qnx650/host/qnx6/x86/usr/bin/ntoarmv7-gcc
-  SINK = sink_omx_qnx.c
-  CFLAGS = -O2 -std=gnu99 -Wall -D__QNX__ -DPLATFORM_QNX -fdata-sections -ffunction-sections -I$(OMX_INC)
+  SINK = sink_omx_qnx.c $(COMMON_INC)/cluster_surface.c
+  CFLAGS = -O2 -std=gnu99 -Wall -D__QNX__ -DPLATFORM_QNX -fdata-sections -ffunction-sections -I$(OMX_INC) -I$(COMMON_INC)
   LDFLAGS = -Wl,--gc-sections -lscreen -lOmxCore -lsocket
   BUILD_TEST = 0
 endif
@@ -51,7 +54,9 @@ test: $(TESTBIN)
 # (the real screen/OMX libs are BSP-only).  Host compiler, syntax only.
 hostcheck:
 	$(CC) -fsyntax-only -std=gnu99 -Wall -D__QNX__ -DPLATFORM_QNX \
-	      -Ihostcheck -I$(OMX_INC) -I. sink_omx_qnx.c
+	      -Ihostcheck -I$(OMX_INC) -I$(COMMON_INC) -I. sink_omx_qnx.c
+	$(CC) -fsyntax-only -std=gnu99 -Wall -D__QNX__ -DPLATFORM_QNX \
+	      -Ihostcheck -I$(COMMON_INC) $(COMMON_INC)/cluster_surface.c
 
 clean:
 	rm -f $(TARGET) $(TESTBIN)
