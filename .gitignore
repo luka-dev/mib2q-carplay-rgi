@@ -9,6 +9,7 @@ mu1316_lsd.jar
 # object files from local/docker cross-builds
 *.o
 # exploded class output from build_variant.sh (intermediates)
+/build/carplay_hook/
 /build/carplay_hook_replace/
 /build/carplay_hook_tab/
 /build/java_new/

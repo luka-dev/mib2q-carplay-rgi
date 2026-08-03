@@ -61,8 +61,8 @@ docker run --rm --platform=linux/amd64 -v "$PATCHES_DIR":/src "$IMG" bash -c '
 
   echo "--- altscreen_render ---"
   cd /src/mhi2-carplay/altscreen_render
-  AS_SRCS="main.c frame_io.c altctl.c sink_omx_qnx.c ../common/cluster_surface.c"
-  gen_stub libscreen.so.1  "\bscreen_[a-z_]+" $AS_SRCS
+  AS_SRCS="main.c frame_io.c altctl.c sink_omx_qnx.c screen_readback_present.c ../common/cluster_surface.c"
+  gen_stub libscreen.so.1  "\bscreen_[a-z_]+"       $AS_SRCS
   $CC -O2 -std=gnu99 -Wall -D__QNX__ -DPLATFORM_QNX -fdata-sections -ffunction-sections \
       -I"$SHIMS" -I"$SHIMS/OMX" -I../common $AS_SRCS \
       -o /src/mhi2-carplay/build/altscreen_render \
@@ -74,7 +74,7 @@ docker run --rm --platform=linux/amd64 -v "$PATCHES_DIR":/src "$IMG" bash -c '
   for b in maneuver_render altscreen_render; do
     B=/src/mhi2-carplay/build/$b
     m=$(arm-unknown-nto-qnx6.5.0eabi-readelf -h "$B" | awk -F: "/Machine/{print \$2}" | tr -d " ")
-    e=$(arm-unknown-nto-qnx6.5.0eabi-nm "$B" 2>/dev/null | grep -ci emutls)
+    e=$(arm-unknown-nto-qnx6.5.0eabi-nm "$B" 2>/dev/null | grep -ci emutls || true)
     echo "  $b: machine=$m emutls=$e"
   done
 '

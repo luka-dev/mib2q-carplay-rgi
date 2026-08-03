@@ -25,8 +25,8 @@
 typedef struct {
     int id;          /* SCREEN_PROPERTY_ID_STRING value = displayable number (98/99) */
     int width, height;
-    int format;      /* SCREEN_FORMAT_* (RGBA8888=8 for GL, tiled-NV12 for video)    */
-    int usage;       /* SCREEN_USAGE_*  (OPENGL_ES2=0x20 for GL, QcomVideo for video)*/
+    int format;      /* SCREEN_FORMAT_* (cluster scanout renderers use RGBA8888=8) */
+    int usage;       /* SCREEN_USAGE_* (OPENGL_ES2 for RGBA EGL/GLES renderers)     */
     int nbuffers;
     int transparent; /* 1 = TRANSPARENCY_SOURCE_OVER overlay (maneuver); 0 = opaque  */
 } cluster_surface_cfg;

@@ -140,4 +140,9 @@ void hook_set_transport_recv_sink(hook_transport_recv_sink_t sink);
 typedef void (*hook_transport_recv_reset_t)(void);
 void hook_set_transport_recv_reset(hook_transport_recv_reset_t reset);
 
+/* True if the current process is dio_manager (reads /proc/self/cmdline).  Used to gate
+ * per-process resources (bus connector, cover-art worker) so the LD_PRELOAD-inheriting
+ * helper processes dio fork/execs load the hook inert instead of each spawning threads. */
+int hook_process_is_dio_manager(void);
+
 #endif /* CARPLAY_COMMON_H */

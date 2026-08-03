@@ -20,11 +20,11 @@ ifeq ($(UNAME), Darwin)
   LDFLAGS =
   BUILD_TEST = 1
 else
-  # QNX ARM cross-compile — OMX AVC decode → zero-copy QNX Screen present.
+  # QNX ARM cross-compile — OMX AVC decode -> Screen tiled-to-RGBA readback.
   # OMX core + libscreen come from the MHI2Q BSP (unit/VM), NOT the generic SDP;
   # -lOmxCore is the expected OMX IL core name — CONFIRM on-unit if the link fails.
   CC   = /usr/qnx650/host/qnx6/x86/usr/bin/ntoarmv7-gcc
-  SINK = sink_omx_qnx.c $(COMMON_INC)/cluster_surface.c
+  SINK = sink_omx_qnx.c screen_readback_present.c $(COMMON_INC)/cluster_surface.c
   CFLAGS = -O2 -std=gnu99 -Wall -D__QNX__ -DPLATFORM_QNX -fdata-sections -ffunction-sections -I$(OMX_INC) -I$(COMMON_INC)
   LDFLAGS = -Wl,--gc-sections -lscreen -lOmxCore -lsocket
   BUILD_TEST = 0
@@ -56,7 +56,10 @@ hostcheck:
 	$(CC) -fsyntax-only -std=gnu99 -Wall -D__QNX__ -DPLATFORM_QNX \
 	      -Ihostcheck -I$(OMX_INC) -I$(COMMON_INC) -I. sink_omx_qnx.c
 	$(CC) -fsyntax-only -std=gnu99 -Wall -D__QNX__ -DPLATFORM_QNX \
+	      -Ihostcheck -I$(COMMON_INC) -I. screen_readback_present.c
+	$(CC) -fsyntax-only -std=gnu99 -Wall -D__QNX__ -DPLATFORM_QNX \
 	      -Ihostcheck -I$(COMMON_INC) $(COMMON_INC)/cluster_surface.c
+	# The Docker QNX build remains the authoritative Screen/OMX ABI link check.
 
 clean:
 	rm -f $(TARGET) $(TESTBIN)

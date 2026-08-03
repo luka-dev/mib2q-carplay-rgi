@@ -1422,6 +1422,31 @@ static void rgd_transport_handler(hook_context_t* ctx, uint16_t msgid) {
     }
 }
 
+/* Grow the Cinemo NmeArray identify buffer so the RGD component TLV fits (ported from the working
+ * old impl).  The NmeArray struct at ctx->_priv is { uint8_t* base@+0; uint32 len@+4; uint32 cap@+8 }.
+ * The old impl ran this realloc in production without the "heap corruption" the current code feared,
+ * so on this platform the array's storage is malloc-compatible — grow instead of skipping (skipping
+ * left RGD disabled: the phone never learns the HU supports route guidance → no maneuvers). */
+static uint8_t* rgd_resize_identify_buffer(hook_context_t* ctx, size_t len, size_t new_len, size_t* out_cap) {
+    if (!ctx || !ctx->_priv) return NULL;
+    void* out_array = ctx->_priv;
+    uint8_t* base = *(uint8_t**)((char*)out_array + 0);
+    unsigned int cap = *(unsigned int*)((char*)out_array + 8);
+    if (cap >= new_len) { if (out_cap) *out_cap = cap; return base; }
+    size_t alloc = new_len + 64;
+    uint8_t* new_buf = (uint8_t*)realloc(base, alloc);
+    if (!new_buf) {
+        new_buf = (uint8_t*)malloc(alloc);
+        if (!new_buf) return NULL;
+        if (base && len > 0) memcpy(new_buf, base, len);
+        if (base) free(base);
+    }
+    *(uint8_t**)((char*)out_array + 0) = new_buf;
+    *(unsigned int*)((char*)out_array + 8) = (unsigned int)alloc;
+    if (out_cap) *out_cap = alloc;
+    return new_buf;
+}
+
 /* Identify patcher */
 static size_t rgd_identify_patcher(hook_context_t* ctx, uint8_t* buf, size_t len, size_t max_len) {
     rgd_lazy_init();  /* Ensure initialized */
@@ -1450,18 +1475,20 @@ static size_t rgd_identify_patcher(hook_context_t* ctx, uint8_t* buf, size_t len
 
     size_t new_len = existing_found ? (len - existing_len + new_tlv_len) : (len + new_tlv_len);
     if (new_len > max_len) {
-        /* `buf` is Cinemo's NmeArray<uchar> storage, allocated by Cinemo's own
-         * C++ allocator (new[]/pool). Calling realloc/free/malloc on it mismatches
-         * that allocator -> heap corruption; and NmeArray's destructor later
-         * delete[]s whatever pointer we leave at +0. That corruption is exactly
-         * what wedges dio_manager so CarPlay won't start until a full restart.
-         * So NEVER grow this buffer. If the RGD component TLV doesn't fit the
-         * array's spare capacity, skip the patch this session (RGD degraded)
-         * rather than corrupt the heap — CarPlay start stays reliable. */
-        LOG_WARN(LOG_MODULE,
-                 "Identify patch skipped: need %zu > cap %zu (won't realloc Cinemo buffer)",
-                 new_len, max_len);
-        return len;
+        /* Grow the NmeArray storage instead of skipping.  Skipping left RGD disabled: the phone
+         * never learns the HU supports route guidance -> count=0, no maneuvers ("RGI не идёт").
+         * The old prod impl reallocated this buffer without the feared heap corruption, so on this
+         * platform the array's storage is malloc-compatible.  Grow, then patch into the new buffer. */
+        size_t new_cap = 0;
+        uint8_t* grown = rgd_resize_identify_buffer(ctx, len, new_len, &new_cap);
+        if (!grown) {
+            LOG_WARN(LOG_MODULE, "Identify patch skipped: resize failed (need %zu > cap %zu)",
+                     new_len, max_len);
+            return len;
+        }
+        buf = grown;
+        max_len = new_cap;
+        LOG_INFO(LOG_MODULE, "Identify buffer grown to %zu (need %zu)", new_cap, new_len);
     }
 
     if (existing_found) {

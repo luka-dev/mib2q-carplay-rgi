@@ -975,6 +975,13 @@ static void coverart_resolve_syms(void) {
 
 __attribute__((constructor))
 static void coverart_init(void) {
+    /* Only dio_manager processes CarPlay transport → only it needs the cover-art tap +
+     * decode worker.  Helper processes that inherit LD_PRELOAD would otherwise each spawn
+     * their own worker thread (and could race on /var/app/icab/tmp/.../coverart.png).
+     * Gate exactly like bus_init so those helpers load the hook inert. */
+    if (!hook_process_is_dio_manager()) {
+        return;
+    }
     coverart_resolve_syms();
 
     /* The single reassembler stream fed by the NmeTransport::Recv seam.

@@ -1,0 +1,149 @@
+00:00:32.955 [INF] [HOOK] Registered module 'routeguidance'
+00:00:32.958 [INF] [COVERART] Async cover-art worker started
+00:00:32.959 [INF] [COVERART] Cover art hook initialized (NmeTransport::Recv seam)
+00:00:32.960 [INF] [altscreen] AltScreen injector loaded (advertise + altScreenURLs ACK gated by ALTSCREEN_HANDLE_ALT; url-open gated by ALTSCREEN_OPEN_URL; CMD_ALT_HID/ZONE/APPEARANCE/UICTX registered)
+00:00:33.072 [INF] [HOOK] Registered module 'routeguidance'
+00:00:33.084 [INF] [COVERART] Async cover-art worker started
+00:00:33.085 [INF] [COVERART] Cover art hook initialized (NmeTransport::Recv seam)
+00:00:33.086 [INF] [altscreen] AltScreen injector loaded (advertise + altScreenURLs ACK gated by ALTSCREEN_HANDLE_ALT; url-open gated by ALTSCREEN_OPEN_URL; CMD_ALT_HID/ZONE/APPEARANCE/UICTX registered)
+00:00:33.085 [INF] [HOOK] Registered module 'routeguidance'
+00:00:33.095 [INF] [COVERART] Async cover-art worker started
+00:00:33.096 [INF] [COVERART] Cover art hook initialized (NmeTransport::Recv seam)
+00:00:33.097 [INF] [altscreen] AltScreen injector loaded (advertise + altScreenURLs ACK gated by ALTSCREEN_HANDLE_ALT; url-open gated by ALTSCREEN_OPEN_URL; CMD_ALT_HID/ZONE/APPEARANCE/UICTX registered)
+00:00:35.351 [INF] [COVERART] Cleanup: recv_bytes seam, images=0
+00:00:35.352 [INF] [RGD] State cleared: module_shutdown
+00:00:35.352 [INF] [RGD] State cleared: shutdown
+00:00:35.353 [INF] [BUS] bus shutdown complete pid=2404478 owner=0
+00:00:35.353 [INF] [HOOK] === CarPlay Hook Stopped ===
+00:00:35.354 [INF] [COVERART] Cleanup: recv_bytes seam, images=0
+00:00:35.354 [INF] [RGD] State cleared: module_shutdown
+00:00:35.354 [INF] [RGD] State cleared: shutdown
+00:00:35.356 [INF] [BUS] bus shutdown complete pid=2404482 owner=0
+00:00:35.356 [INF] [HOOK] === CarPlay Hook Stopped ===
+00:00:35.425 [INF] [HOOK] Registered module 'routeguidance'
+00:00:35.446 [INF] [COVERART] Async cover-art worker started
+00:00:35.446 [INF] [COVERART] Async cover-art worker started
+00:00:35.446 [INF] [COVERART] Cover art hook initialized (NmeTransport::Recv seam)
+00:00:35.446 [INF] [COVERART] Cover art hook initialized (NmeTransport::Recv seam)
+00:00:35.446 [INF] [altscreen] AltScreen injector loaded (advertise + altScreenURLs ACK gated by ALTSCREEN_HANDLE_ALT; url-open gated by ALTSCREEN_OPEN_URL; CMD_ALT_HID/ZONE/APPEARANCE/UICTX registered)
+00:00:35.446 [INF] [altscreen] AltScreen injector loaded (advertise + altScreenURLs ACK gated by ALTSCREEN_HANDLE_ALT; url-open gated by ALTSCREEN_OPEN_URL; CMD_ALT_HID/ZONE/APPEARANCE/UICTX registered)
+00:00:37.410 [INF] [COVERART] Cleanup: recv_bytes seam, images=0
+00:00:37.411 [INF] [RGD] State cleared: module_shutdown
+00:00:37.411 [INF] [RGD] State cleared: shutdown
+00:00:37.411 [INF] [BUS] bus shutdown complete pid=2584699 owner=0
+00:00:37.411 [INF] [HOOK] === CarPlay Hook Stopped ===
+00:00:37.412 [INF] [COVERART] Cleanup: recv_bytes seam, images=0
+00:00:37.413 [INF] [RGD] State cleared: module_shutdown
+00:00:37.413 [INF] [RGD] State cleared: shutdown
+00:00:37.413 [INF] [BUS] bus shutdown complete pid=2584702 owner=0
+00:00:37.414 [INF] [HOOK] === CarPlay Hook Stopped ===
+00:00:37.513 [INF] [HOOK] Registered module 'routeguidance'
+00:00:37.517 [INF] [COVERART] Async cover-art worker started
+00:00:37.514 [INF] [HOOK] Registered module 'routeguidance'
+00:00:37.517 [INF] [COVERART] Cover art hook initialized (NmeTransport::Recv seam)
+00:00:37.518 [INF] [altscreen] AltScreen injector loaded (advertise + altScreenURLs ACK gated by ALTSCREEN_HANDLE_ALT; url-open gated by ALTSCREEN_OPEN_URL; CMD_ALT_HID/ZONE/APPEARANCE/UICTX registered)
+00:00:37.518 [INF] [COVERART] Async cover-art worker started
+00:00:37.518 [INF] [COVERART] Cover art hook initialized (NmeTransport::Recv seam)
+00:00:37.518 [INF] [altscreen] AltScreen injector loaded (advertise + altScreenURLs ACK gated by ALTSCREEN_HANDLE_ALT; url-open gated by ALTSCREEN_OPEN_URL; CMD_ALT_HID/ZONE/APPEARANCE/UICTX registered)
+00:00:39.368 [INF] [COVERART] Cleanup: recv_bytes seam, images=0
+00:00:39.368 [INF] [RGD] State cleared: module_shutdown
+00:00:39.368 [INF] [RGD] State cleared: shutdown
+00:00:39.369 [INF] [BUS] bus shutdown complete pid=2609278 owner=0
+00:00:39.369 [INF] [HOOK] === CarPlay Hook Stopped ===
+00:00:39.370 [INF] [COVERART] Cleanup: recv_bytes seam, images=0
+00:00:39.370 [INF] [RGD] State cleared: module_shutdown
+00:00:39.370 [INF] [RGD] State cleared: shutdown
+00:00:39.370 [INF] [BUS] bus shutdown complete pid=2609286 owner=0
+00:00:39.371 [INF] [HOOK] === CarPlay Hook Stopped ===
+00:00:40.068 [INF] [BUS] connector thread started pid=2392192 -> 127.0.0.1:19810
+00:00:40.072 [INF] [BUS] writer thread started
+00:00:40.072 [INF] [BUS] timer thread started (1 s interval)
+00:00:40.072 [INF] [BUS] bus initialised FORKSAFE owner-pid=2392192 on 127.0.0.1:19810
+00:00:40.072 [INF] [HOOK] Registered module 'routeguidance'
+00:00:40.073 [INF] [BUS] connected to Java server pid=2392192 fd=5
+00:00:40.076 [INF] [BUS] sending direct HELLO fd=5 seq=1
+00:00:40.077 [INF] [COVERART] Async cover-art worker started
+00:00:40.077 [INF] [COVERART] Cover art hook initialized (NmeTransport::Recv seam)
+00:00:40.078 [INF] [altscreen] AltScreen injector loaded (advertise + altScreenURLs ACK gated by ALTSCREEN_HANDLE_ALT; url-open gated by ALTSCREEN_OPEN_URL; CMD_ALT_HID/ZONE/APPEARANCE/UICTX registered)
+00:00:40.079 [INF] [BUS] direct HELLO sent fd=5
+00:00:40.081 [INF] [BUS] sending snapshot fd=5 count=0
+00:00:40.083 [INF] [BUS] snapshot sent fd=5
+00:00:41.271 [INF] [HOOK] NmeTransport::Recv ret=0 len=6 [FF 55 02 00]
+00:00:41.290 [INF] [COVERART] NmeTransport::Recv seam confirmed (FF 5A) — cover art live
+00:00:41.292 [INF] [RGD] State cleared: init
+00:00:41.292 [INF] [RGD] Route Guidance module initialized
+00:00:41.294 [INF] [RGD] Appending 0x001E component=0x0010
+00:00:41.296 [WRN] [RGD] Identify patch skipped: need 621 > cap 535 (won't realloc Cinemo buffer)
+00:00:41.306 [INF] [HOOK] Identify accepted (0x1D02)
+00:00:41.627 [INF] [HOOK] Auth complete (0xAA05)
+00:00:41.827 [INF] [HOOK] iAP2 STOP_LOCATION received (location stream paused — not a disconnect, ignoring)
+00:00:41.837 [DBG] [COVERART] Locked session 2 for JPEG
+00:00:41.847 [DBG] [COVERART] Complete JPEG: 111141 bytes
+00:00:41.847 [DBG] [COVERART] Found image: 111141 bytes
+00:00:41.880 [DBG] [COVERART] EXIF orientation: 1
+00:00:41.880 [INF] [COVERART] Decoded: 600x600, 3 ch, 111141 bytes, orient=1 flip=0
+00:00:41.951 [INF] [COVERART] Created directory: /var/app/icab/tmp/37
+00:00:41.977 [INF] [COVERART] Saved PNG #1: /var/app/icab/tmp/37/coverart.png (128327 bytes)
+00:00:41.978 [DBG] [COVERART] bus EVT_COVERART crc=bd124406
+00:00:42.763 [INF] [altscreen] array cb = kCFLArrayCallBacksCFLTypes (7813841c)
+00:00:42.766 [INF] [altscreen] cf_init ok=1 disp_ok=1 dictm=780cd9ac seti=780d6a88 copydisp=780aab88 keycb=781384c0 valcb=781384d8
+00:00:42.768 [INF] [altscreen] alt_resolve syms_ok=1
+00:00:42.797 [INF] [altscreen] injected extendedFeatures=[altScreen] into /info=715998
+00:00:47.858 [DBG] [COVERART] Locked session 2 for JPEG
+00:00:47.858 [DBG] [COVERART] Complete JPEG: 18307 bytes
+00:00:47.858 [DBG] [COVERART] Found image: 18307 bytes
+00:00:47.868 [DBG] [COVERART] EXIF orientation: 1
+00:00:47.869 [INF] [COVERART] Decoded: 600x600, 1 ch, 18307 bytes, orient=1 flip=0
+00:00:47.918 [INF] [COVERART] Saved PNG #2: /var/app/icab/tmp/37/coverart.png (5357 bytes)
+00:00:47.920 [DBG] [COVERART] bus EVT_COVERART crc=ce7ecfdb
+00:00:48.420 [DBG] [COVERART] Locked session 2 for JPEG
+00:00:48.437 [DBG] [COVERART] Complete JPEG: 136323 bytes
+00:00:48.438 [DBG] [COVERART] Found image: 136323 bytes
+00:00:48.483 [DBG] [COVERART] EXIF orientation: 1
+00:00:48.484 [INF] [COVERART] Decoded: 600x600, 3 ch, 136323 bytes, orient=1 flip=0
+00:00:48.568 [INF] [COVERART] Saved PNG #3: /var/app/icab/tmp/37/coverart.png (151546 bytes)
+00:00:48.571 [DBG] [COVERART] bus EVT_COVERART crc=363d6aac
+00:01:02.221 [INF] [HOOK] iAP2 STOP_LOCATION received (location stream paused — not a disconnect, ignoring)
+00:01:17.936 [DBG] [COVERART] Locked session 2 for JPEG
+00:01:17.936 [DBG] [COVERART] Complete JPEG: 18307 bytes
+00:01:17.938 [DBG] [COVERART] Found image: 18307 bytes
+00:01:17.946 [DBG] [COVERART] EXIF orientation: 1
+00:01:17.946 [INF] [COVERART] Decoded: 600x600, 1 ch, 18307 bytes, orient=1 flip=0
+00:01:17.978 [INF] [COVERART] Saved PNG #4: /var/app/icab/tmp/37/coverart.png (5357 bytes)
+00:01:17.978 [DBG] [COVERART] bus EVT_COVERART crc=ce7ecfdb
+00:01:18.497 [DBG] [COVERART] Locked session 2 for JPEG
+00:01:18.503 [DBG] [COVERART] Complete JPEG: 90147 bytes
+00:01:18.503 [DBG] [COVERART] Found image: 90147 bytes
+00:01:18.543 [DBG] [COVERART] EXIF orientation: 1
+00:01:18.544 [INF] [COVERART] Decoded: 600x600, 3 ch, 90147 bytes, orient=1 flip=0
+00:01:18.600 [INF] [COVERART] Saved PNG #5: /var/app/icab/tmp/37/coverart.png (76132 bytes)
+00:01:18.600 [DBG] [COVERART] bus EVT_COVERART crc=09984d26
+00:02:51.226 [INF] [HOOK] iAP2 STOP_LOCATION received (location stream paused — not a disconnect, ignoring)
+00:03:58.508 [DBG] [COVERART] Locked session 2 for JPEG
+00:03:58.509 [DBG] [COVERART] Complete JPEG: 18307 bytes
+00:03:58.509 [DBG] [COVERART] Found image: 18307 bytes
+00:03:58.523 [DBG] [COVERART] EXIF orientation: 1
+00:03:58.526 [INF] [COVERART] Decoded: 600x600, 1 ch, 18307 bytes, orient=1 flip=0
+00:03:58.570 [INF] [COVERART] Saved PNG #6: /var/app/icab/tmp/37/coverart.png (5357 bytes)
+00:03:58.571 [DBG] [COVERART] bus EVT_COVERART crc=ce7ecfdb
+00:03:59.930 [DBG] [COVERART] Locked session 2 for JPEG
+00:03:59.933 [DBG] [COVERART] Complete JPEG: 74502 bytes
+00:03:59.933 [DBG] [COVERART] Found image: 74502 bytes
+00:03:59.961 [DBG] [COVERART] EXIF orientation: 1
+00:03:59.962 [INF] [COVERART] Decoded: 600x600, 3 ch, 74502 bytes, orient=1 flip=0
+00:04:00.029 [INF] [COVERART] Saved PNG #7: /var/app/icab/tmp/37/coverart.png (126975 bytes)
+00:04:00.030 [DBG] [COVERART] bus EVT_COVERART crc=d781b5ae
+00:06:33.813 [DBG] [COVERART] Locked session 2 for JPEG
+00:06:33.814 [DBG] [COVERART] Complete JPEG: 18307 bytes
+00:06:33.815 [DBG] [COVERART] Found image: 18307 bytes
+00:06:33.832 [DBG] [COVERART] EXIF orientation: 1
+00:06:33.833 [INF] [COVERART] Decoded: 600x600, 1 ch, 18307 bytes, orient=1 flip=0
+00:06:33.860 [INF] [COVERART] Saved PNG #8: /var/app/icab/tmp/37/coverart.png (5357 bytes)
+00:06:33.860 [DBG] [COVERART] bus EVT_COVERART crc=ce7ecfdb
+00:06:34.372 [DBG] [COVERART] Locked session 2 for JPEG
+00:06:34.378 [DBG] [COVERART] Complete JPEG: 90214 bytes
+00:06:34.381 [DBG] [COVERART] Found image: 90214 bytes
+00:06:34.416 [DBG] [COVERART] EXIF orientation: 1
+00:06:34.418 [INF] [COVERART] Decoded: 600x600, 3 ch, 90214 bytes, orient=1 flip=0
+00:06:34.481 [INF] [COVERART] Saved PNG #9: /var/app/icab/tmp/37/coverart.png (134161 bytes)
+00:06:34.482 [DBG] [COVERART] bus EVT_COVERART crc=d3f8a192

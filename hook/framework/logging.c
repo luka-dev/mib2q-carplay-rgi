@@ -27,11 +27,20 @@ static struct {
     .dump_count = 0
 };
 
+/* The log lock is first touched concurrently by the bus connector/writer/timer
+ * threads and the cover-art worker — all spawned from library constructors.  A
+ * plain `if (!lock_initialized)` guard let two of them race into pthread_mutex_init
+ * on the same mutex (undefined behaviour → nondeterministic startup crash).
+ * pthread_once makes the init run exactly once regardless of which thread is first. */
+static pthread_once_t g_log_lock_once = PTHREAD_ONCE_INIT;
+
+static void log_lock_init_once(void) {
+    pthread_mutex_init(&g_log.lock, NULL);
+    g_log.lock_initialized = true;
+}
+
 static void ensure_lock_init(void) {
-    if (!g_log.lock_initialized) {
-        pthread_mutex_init(&g_log.lock, NULL);
-        g_log.lock_initialized = true;
-    }
+    pthread_once(&g_log_lock_once, log_lock_init_once);
 }
 
 /* Real write function pointer */

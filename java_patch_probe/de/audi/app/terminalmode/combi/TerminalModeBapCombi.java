@@ -98,7 +98,7 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
             /* ===== PROBE: CarPlay disconnect → retract the tab ===== */
             if (tmdevice.connectionState().is(TMDevice.ConnectionState.NOT_ATTACHED)) {
                 if (tmdevice.isCarplayDevice()) {
-                    try { com.luka.carplay.probe.SmartphoneTabProbe.onDisconnect(); }
+                    try { com.luka.carplay.probe.SmartphoneTabProbe.onDisconnect(this.this$0.context); }
                     catch (Throwable t) { }
                 }
             }

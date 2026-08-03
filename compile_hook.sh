@@ -50,7 +50,7 @@ docker run --rm --platform=linux/amd64 -v "$SCRIPT_DIR":/src "$IMG" bash -c '
   $CC -shared -fPIC -O2 -std=gnu99 -fdata-sections -ffunction-sections '"$CFLAGS_EXTRA"' \
       -I. $SRCS -o /src/build/libcarplay_hook.so -Wl,--gc-sections -lz -lsocket
   # emutls trap: the hook must never carry thread-local emutls (QNX 6.5 crash).
-  n=$(arm-unknown-nto-qnx6.5.0eabi-nm /src/build/libcarplay_hook.so 2>/dev/null | grep -ci emutls)
+  n=$(arm-unknown-nto-qnx6.5.0eabi-nm /src/build/libcarplay_hook.so 2>/dev/null | grep -ci emutls || true)
   [ "$n" = "0" ] || { echo "REJECTED: $n emutls symbols present"; exit 1; }
   echo "  built build/libcarplay_hook.so (emutls=0)"
 '

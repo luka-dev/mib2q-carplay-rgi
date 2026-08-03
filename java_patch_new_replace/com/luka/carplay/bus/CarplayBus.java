@@ -92,11 +92,15 @@ public final class CarplayBus {
             running = false;
             closeConnectionLocked("stop");
             if (serverSocket != null) { try { serverSocket.close(); } catch (IOException e) {} serverSocket = null; }
+            lock.notifyAll();                 /* wake the reader thread out of its wait() */
         }
-        Thread t;
-        synchronized (lock) { t = ioThread; ioThread = null; }
+        Thread t, r;
+        synchronized (lock) { t = ioThread; ioThread = null; r = readerThread; readerThread = null; }
         if (t != null) { try { t.join(1000); } catch (InterruptedException e) {} }
+        if (r != null) { try { r.join(1000); } catch (InterruptedException e) {} }
     }
+
+    private Thread readerThread;   /* dedicated reader — decoupled from accept (see ioLoop) */
 
     public boolean isConnected() {
         synchronized (lock) { return sock != null; }
@@ -251,16 +255,24 @@ public final class CarplayBus {
         return d;
     }
 
-    /* ---- io loop ---- */
+    /* ---- io loop ----
+     * ioThread does ACCEPT ONLY.  A dedicated reader thread (started here) owns readFully(), so a
+     * blocked read on a dead / half-open peer can NEVER stop us accepting the next (live) connection:
+     * the new connect preempts the stale one (acceptOne closes the old socket → the reader's readFully
+     * throws → it switches to the new socket).  This makes the bus un-wedgeable no matter how many
+     * hook instances connect and die — no reboot needed to recover a stuck connection. */
     private void ioLoop() {
         if (!openServerSocket()) {
             Log.e(TAG, "bind failed; bus disabled");
             synchronized (lock) { running = false; }   /* allow a later start() to retry the bind */
             return;
         }
+        Thread r = new Thread(new Runnable() { public void run() { readerLoop(); } }, "carplay-bus-reader");
+        r.setDaemon(true);
+        synchronized (lock) { readerThread = r; }
+        r.start();
         while (running) {
-            if (!acceptOne()) { if (running) sleep(200); continue; }
-            readerLoop();
+            if (!acceptOne()) { if (running) sleep(200); }
         }
     }
 
@@ -284,11 +296,18 @@ public final class CarplayBus {
         try {
             Socket s = ss.accept();
             s.setTcpNoDelay(true);
+            /* KEEPALIVE — the proven-working old impl set this and it regressed out (defence in depth;
+             * the preempt below is the primary un-wedge mechanism). */
+            s.setKeepAlive(true);
             InputStream iin = s.getInputStream();
             OutputStream oout = s.getOutputStream();
             synchronized (lock) {
-                if (sock != null) closeConnectionLocked("re-accept");
+                /* A NEW connection PREEMPTS the current one: closing the old socket makes the reader's
+                 * blocked readFully() throw → it drops the stale/dead peer and picks up this live one.
+                 * Multiple hook instances or a half-open peer can therefore never wedge the bus. */
+                if (sock != null) closeConnectionLocked("preempted by new connection");
                 sock = s; in = iin; out = oout;
+                lock.notifyAll();               /* wake the reader onto the new socket */
             }
             Log.i(TAG, "hook connected");
             return true;
@@ -298,36 +317,44 @@ public final class CarplayBus {
         }
     }
 
+    /* Own thread: read the CURRENT socket; on break/preempt, wait for acceptOne to install the next. */
     private void readerLoop() {
-        DataInputStream din;
-        Socket owned;
-        synchronized (lock) {
-            if (in == null || sock == null) return;
-            din = new DataInputStream(in);
-            owned = sock;
-        }
         byte[] hdr = new byte[HEADER_SIZE];
         while (running) {
-            try {
-                din.readFully(hdr);
-                if (getBE32(hdr, 0) != MAGIC) { Log.w(TAG, "bad magic"); break; }
-                int seq   = getBE32(hdr, 4);
-                int type  = getBE16(hdr, 8);
-                int flags = hdr[10] & 0xFF;
-                int len   = getBE32(hdr, 12);
-                if (len < 0 || len > MAX_PAYLOAD) { Log.w(TAG, "bad len " + len); break; }
-                byte[] payload = (len > 0) ? new byte[len] : new byte[0];
-                if (len > 0) din.readFully(payload);
-                dispatch(type, flags, payload, len);
-            } catch (IOException e) {
-                if (running) Log.i(TAG, "reader closed: " + e.getMessage());
-                break;
-            } catch (Throwable t) {
-                Log.w(TAG, "reader error: " + t);
-                break;
+            DataInputStream din;
+            Socket owned;
+            synchronized (lock) {
+                while (running && (in == null || sock == null)) {
+                    try { lock.wait(); } catch (InterruptedException e) { /* re-check predicate */ }
+                }
+                if (!running) return;
+                din = new DataInputStream(in);
+                owned = sock;
             }
+            while (running) {
+                try {
+                    din.readFully(hdr);
+                    if (getBE32(hdr, 0) != MAGIC) { Log.w(TAG, "bad magic"); break; }
+                    int seq   = getBE32(hdr, 4);
+                    int type  = getBE16(hdr, 8);
+                    int flags = hdr[10] & 0xFF;
+                    int len   = getBE32(hdr, 12);
+                    if (len < 0 || len > MAX_PAYLOAD) { Log.w(TAG, "bad len " + len); break; }
+                    byte[] payload = (len > 0) ? new byte[len] : new byte[0];
+                    if (len > 0) din.readFully(payload);
+                    dispatch(type, flags, payload, len);
+                } catch (IOException e) {
+                    if (running) Log.i(TAG, "reader closed: " + e.getMessage());
+                    break;
+                } catch (Throwable t) {
+                    Log.w(TAG, "reader error: " + t);
+                    break;
+                }
+            }
+            /* Only tear down if we still own the socket — if acceptOne preempted us, `sock` is already
+             * the new one and must stay open for the next iteration. */
+            synchronized (lock) { if (sock == owned) closeConnectionLocked("reader exit"); }
         }
-        synchronized (lock) { if (sock == owned) closeConnectionLocked("reader exit"); }
     }
 
     private void dispatch(int type, int flags, byte[] payload, int len) {

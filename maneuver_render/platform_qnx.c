@@ -53,6 +53,37 @@ static int read_env_int(const char *name, int def) {
 }
 
 /*
+ * Create the managed cluster window (id 98) via the shared cluster_surface primitive.
+ * cluster_surface_create() internally does screen_create_context() — which is exactly
+ * why this MUST run BEFORE eglGetDisplay: the Qualcomm (Adreno/GSL) libEGL requires a
+ * screen context to already exist in the process at eglGetDisplay time.  When
+ * maneuver_render ran as a JVM child it inherited the HMI's screen connection so this
+ * was masked; standalone / as a framework service there is none → eglGetDisplay SIGSEGVs.
+ * altscreen_render never hit this because it creates its cluster_surface first and uses
+ * no EGL.  Idempotent (g_cs guard) so create_window_and_egl_surface() can call it too.
+ * FORMAT=RGBA8888 (8) matches our EGL config; USAGE=OPENGL_ES2 (0x20) lets the GPU render
+ * into it; transparent=1 → the cluster compositor blends us over the KDK bg / stock map.
+ */
+static int ensure_cluster_window(void) {
+    if (g_cs) return 0;
+    cluster_surface_cfg cfg;
+    memset(&cfg, 0, sizeof(cfg));
+    cfg.id          = g_displayable_id;   /* 98 */
+    cfg.width       = g_width;
+    cfg.height      = g_height;
+    cfg.format      = 8;                  /* SCREEN_FORMAT_RGBA8888 */
+    cfg.usage       = 0x20;               /* SCREEN_USAGE_OPENGL_ES2 */
+    cfg.nbuffers    = 2;                  /* double-buffered (swap interval 2) */
+    cfg.transparent = 1;
+    g_cs = cluster_surface_create(&cfg);
+    if (!g_cs) {
+        fprintf(stderr, "platform_qnx: cluster_surface_create failed\n");
+        return -1;
+    }
+    return 0;
+}
+
+/*
  * Create the managed cluster window (once, via cluster_surface) + an EGL surface
  * bound to it.  Called from platform_init and (to rebind EGL) from the recreate
  * path after we lose displaymanager's m_surfaceSources[98] binding.
@@ -63,27 +94,7 @@ static int create_window_and_egl_surface(void) {
         return -1;
     }
 
-    /* Create the managed cluster window once (id 98) via the shared primitive.
-     * FORMAT=RGBA8888 (8) matches our EGL config; USAGE=OPENGL_ES2 (0x20) lets the
-     * GPU render into it — the exact values libdisplayinit's display_create_window
-     * used, now done raw + symmetric with altscreen_render.  transparent=1 → the
-     * cluster compositor blends us over the KDK bg / stock map. */
-    if (!g_cs) {
-        cluster_surface_cfg cfg;
-        memset(&cfg, 0, sizeof(cfg));
-        cfg.id          = g_displayable_id;   /* 98 */
-        cfg.width       = g_width;
-        cfg.height      = g_height;
-        cfg.format      = 8;                  /* SCREEN_FORMAT_RGBA8888 */
-        cfg.usage       = 0x20;               /* SCREEN_USAGE_OPENGL_ES2 */
-        cfg.nbuffers    = 2;                  /* double-buffered (swap interval 2) */
-        cfg.transparent = 1;
-        g_cs = cluster_surface_create(&cfg);
-        if (!g_cs) {
-            fprintf(stderr, "platform_qnx: cluster_surface_create failed\n");
-            return -1;
-        }
-    }
+    if (ensure_cluster_window() != 0) return -1;
 
     EGLNativeWindowType native_window = (EGLNativeWindowType)cluster_surface_window(g_cs);
     if (!native_window) {
@@ -243,9 +254,12 @@ int platform_init(int width, int height) {
                 getcwd(cwd, sizeof(cwd)) ? cwd : "(unknown)");
     }
 
-    /* No libdisplayinit: cluster_surface creates the managed window with raw
-     * screen_* calls (display_init only did screen_create_context + get_resolution,
-     * neither of which EGL needs — RE-verified). */
+    /* Create the managed cluster window (→ screen_create_context) BEFORE eglGetDisplay.
+     * The Qualcomm Adreno/GSL libEGL derefs a screen context that must already exist in
+     * the process; without it eglGetDisplay SIGSEGVs.  This was masked when the HMI JVM
+     * spawned us (inherited screen connection) but not standalone / as a framework service. */
+    fprintf(stderr, "platform_qnx: pre-EGL cluster window (screen_create_context)...\n");
+    if (ensure_cluster_window() != 0) return -1;
 
     fprintf(stderr, "platform_qnx: eglGetDisplay...\n");
     g_egl_display = eglGetDisplay(EGL_DEFAULT_DISPLAY);

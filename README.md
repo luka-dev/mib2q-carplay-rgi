@@ -116,7 +116,7 @@ flowchart LR
 
     subgraph render_path["Branch B - Render (MOST video)"]
         direction TB
-        spawn["spawn maneuver_render<br/>(slay -f -Q on shutdown)"]
+        spawn["CarPlay supervisor owns<br/>maneuver_render lifetime"]
         rend["maneuver_render<br/>EGL/GLES2 3D scene"]
         surf["displayable 20<br/>EGL surface<br/>(MAP_ROUTE_GUIDANCE, taken over)"]
         enc["cluster video encoder<br/>(H.264)"]
@@ -345,8 +345,7 @@ flowchart LR
     bus -.->|"TCP :19810"| bus_cli
     bus_cli --> bridge
 
-    bridge -->|"on route start:<br/>spawn /mnt/app/root/hooks/<br/>maneuver_render &"| rendbox
-    bridge -->|"on shutdown:<br/>slay -f -Q maneuver_render"| rendbox
+    bridge -->|"route state/data only;<br/>process already supervised"| rendbox
     bridge -->|"TCP :19800<br/>CMD_MANEUVER (48-byte fixed)"| render
     ready -->|"TCP :19800<br/>EVT_*"| bridge
     bridge -->|"BAP LSG 50<br/>FctID 18, 19, 21..24, 46"| vc
@@ -605,9 +604,9 @@ below.
 | `hook/`                    | C (ARM32 QNX)         | iAP2 hooks, route guidance + async cover-art bridge, TCP bus client (connects to Java :19810)    | `libcarplay_hook.so`  |
 | `maneuver_render/`                  | C (ARM32 QNX / macOS) | Custom 3D maneuver renderer (EGL/GLES2), TCP command-driven                                      | `maneuver_render`     |
 | `java_patch_new_{replace,tab}/` | Java patch JAR     | Route guidance rendering, BAP bridge, cover art forwarder, MMI touchpad / D-pad -> CarPlay input  | `carplay_hook.jar`    |
-| `altscreen_render/`          | C (ARM32 QNX)         | Cluster CarPlay-video sink: OMX AVC decode -> QNX Screen present (always-on service)             | `altscreen_render`    |
+| `altscreen_render/`          | C (ARM32 QNX)         | Cluster CarPlay-video sink: OMX AVC decode -> QNX Screen present (CarPlay-session supervised)    | `altscreen_render`    |
 | `dio_manager.json`           | System config patch   | Enables iAP2 route guidance message exchange with iOS                                            | Manual edit on device |
-| `smartphone_integrator.json` | System config patch   | Loads `libcarplay_hook.so` via `LD_PRELOAD` in dio_manager process                               | Manual edit on device |
+| `smartphone_integrator.json` | System config patch   | Launches the CarPlay supervisor; the script applies `LD_PRELOAD` only to `dio_manager`            | Manual edit on device |
 
 ### Component map
 
@@ -623,7 +622,7 @@ flowchart LR
 
     subgraph cfg["System config (manual edits)"]
         direction TB
-        cfg_int["smartphone_integrator.json<br/>(LD_PRELOAD declaration)"]
+        cfg_int["smartphone_integrator.json<br/>(CarPlay supervisor child)"]
         cfg_dio["dio_manager.json<br/>(0x5200..0x5204 registration)"]
     end
 
@@ -681,7 +680,7 @@ flowchart LR
         kanzi --> map_area
     end
 
-    cfg_int -.->|"declares LD_PRELOAD"| dio
+    cfg_int -.->|"starts supervisor;<br/>hook env only on dio"| dio
     cfg_dio -.->|"registers RGD msg IDs<br/>in Cinemo SDK"| dio
 
     iPhone <-->|"USB iAP2 (MOST150)"| iap2
@@ -746,11 +745,12 @@ server `accept()`s as soon as the C hook connects.
 **Topology** (lifetime hierarchy):
 
 - Java HMI (long-lived, alive from boot) = TCP **server** on :19810
-  for the bus, opens :19800 for the renderer at session start.
+  for the bus and :19800/:19832 for the renderers.
 - C hook (short-lived, per phone connect) = TCP **client**, connects to
   Java's :19810. Idempotent reconnect on Java HMI restart.
-- Renderer (short-lived, per route) = TCP **client**, connects to
-  Java's :19800. Idempotent reconnect on Java side restart.
+- Renderers (short-lived, per CarPlay child) are owned by `carplay_startup.sh`.
+  A missing process is restarted while `dio_manager` lives; both are stopped
+  when it exits.
 
 **Liveness detection**:
 
@@ -760,10 +760,9 @@ server `accept()`s as soon as the C hook connects.
   zombie TCP session (no FIN/RST) would linger until OS keepalive fires;
   in practice the bus is short-lived (per phone connect) and torn down
   cleanly when `dio_manager` exits.
-- **Renderer (maneuver_render → Java)**: sends `EVT_HEARTBEAT` (cmd=0x80)
-  every 1 s; `RendererServer` accepted socket has `SO_TIMEOUT=5000 ms`.
-  Hung renderer detected within 5 s, then 3 consecutive send failures
-  (~1.8 s) trigger `slay -f -Q` + respawn.
+- **Renderer processes**: `carplay_startup.sh` checks `/proc/<pid>/cmdline` every 2 s and
+  restarts a missing renderer only while its direct `dio_manager` child lives.
+  Protocol-level reconnect/heartbeat remains independent of process ownership.
 
 ```mermaid
 %%{init: {'sequence': {'mirrorActors': false}}}%%
@@ -787,7 +786,7 @@ sequenceDiagram
     Note over qnx,ios: ... idle until iPhone plugged in ...
 
     ios->>si: USB enumerate (Apple device detected)
-    si->>dio: spawn dio_manager<br/>(env from smartphone_integrator.json,<br/>incl. LD_PRELOAD=libcarplay_hook.so)
+    si->>dio: spawn carplay_startup.sh<br/>(no inherited LD_PRELOAD)<br/>supervisor starts dio_manager<br/>with private hook env
     Note right of dio: LD_PRELOAD picks up<br/>libcarplay_hook.so before<br/>main() runs
     dio->>hook: __attribute__((constructor))<br/>fires
     hook->>hook: spawn worker threads<br/>(async cover-art, writer)
@@ -805,8 +804,8 @@ sequenceDiagram
     Note over hook,jar: --- CarPlay session live ---
 
     hook->>jar: EVT_RGD_UPDATE / EVT_COVERART
-    jar->>jar: open TCP :19800 server<br/>(BAPBridge listens for renderer)
-    jar->>rend: spawn maneuver_render<br/>(on route start)
+    jar->>jar: TCP :19800 server already listening
+    si->>rend: carplay_startup.sh starts/retains renderer
     rend->>rend: load flag_atlas.rgba,<br/>create EGL context (displayable 20),<br/>dmdt dc 74 20 102 101 33
     rend->>jar: connect TCP :19800 (instant)
     rend->>jar: EVT_READY (0x81)
@@ -823,7 +822,7 @@ sequenceDiagram
     Note over si,ios: --- Disconnect ---
     ios->>si: USB unplug
     si->>dio: SIGTERM / cleanup
-    Note right of dio: dio_manager exits<br/>hook destructor fires<br/>renderer killed via slay
+    Note right of dio: dio_manager exits<br/>hook destructor fires<br/>supervisor SIGTERMs both renderers
 ```
 
 ### Threading model
@@ -852,7 +851,7 @@ sequenceDiagram
 | `/mnt/app/root/hooks/maneuver_render` | persistent | survives reboot | Renderer ARM ELF |
 | `/mnt/app/root/hooks/flag_atlas.rgba` | persistent | survives reboot | Renderer flag sprite atlas |
 | `/mnt/app/eso/hmi/lsd/jars/carplay_hook.jar` | persistent | survives reboot | Java patch JAR |
-| `/mnt/system/etc/eso/production/smartphone_integrator.json` | persistent | survives reboot | declares `LD_PRELOAD` |
+| `/mnt/system/etc/eso/production/smartphone_integrator.json` | persistent | survives reboot | selects `carplay_startup.sh`; contains no `LD_PRELOAD` |
 | `/mnt/system/etc/eso/production/dio_manager.json` | persistent | survives reboot | registers RGD msg IDs |
 | `/var/app/icab/tmp/37/coverart.png` | tmpfs | until reboot | current album art (regenerated each session) |
 | `/tmp/carplay_hook.log` | tmpfs | until reboot | C hook + Java event log |
@@ -1157,7 +1156,7 @@ The harness auto-cycles through a built-in preset list that covers all icon type
 6. Copy `build/maneuver_render` to `/mnt/app/root/hooks/`, `chmod 755`
 7. Copy `maneuver_render/resources/flag_atlas.rgba` to `/mnt/app/root/hooks/`
 8. Copy `build/carplay_hook.jar` to `/mnt/app/eso/hmi/lsd/jars/`
-9. Set `LD_PRELOAD` in `smartphone_integrator.json`
+9. Deploy the CarPlay supervisor scripts and replace `children.carplay` using `deploy/smartphone_integrator/carplay_child.json`
 10. Add `0x5200/01/02/03/04` IDs in `dio_manager.json`
 11. Reboot (wait 30s after file changes)
 
@@ -1185,18 +1184,26 @@ Runtime log (resets on each reboot): `/tmp/carplay_hook.log`
 
 File: `/mnt/system/etc/eso/production/smartphone_integrator.json`
 
-Add `LD_PRELOAD` under `$.children.carplay.envs`:
+Replace `$.children.carplay` with
+`deploy/smartphone_integrator/carplay_child.json`. Its `envs` intentionally contains
+no `LD_PRELOAD`; `carplay_startup.sh` applies the hook only to its direct
+`dio_manager` child:
 
 ```json
 "carplay": {
-  "exec": "dio_manager",
+  "exec": "carplay_startup.sh",
+  "path": "/mnt/app/root/hooks",
   "envs": [
     "LD_LIBRARY_PATH=/mnt/app/root/lib-target:/eso/lib:/mnt/app/usr/lib:/mnt/app/armle/lib:/mnt/app/armle/lib/dll:/mnt/app/armle/usr/lib",
-    "IPL_CONFIG_DIR_DIO_MANAGER=/etc/eso/production",
-    "LD_PRELOAD=/mnt/app/root/hooks/libcarplay_hook.so"
-  ]
+    "IPL_CONFIG_DIR_DIO_MANAGER=/etc/eso/production"
+  ],
+  "cleanupScript": "/mnt/app/root/hooks/carplay_cleanup.sh"
 }
 ```
+
+Copy `carplay_startup.sh`, `carplay_cleanup.sh`, and `carplay_processes.sh` from
+`deploy/smartphone_integrator/` to `/mnt/app/root/hooks/` and make them executable.
+Do not overwrite Audi's `/etc/scripts/carplay_cleanup.sh`; the custom cleanup calls it.
 
 #### Step 4: Patch `dio_manager.json`
 

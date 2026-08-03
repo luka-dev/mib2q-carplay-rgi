@@ -853,31 +853,13 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
             });
         }
 
-        private boolean altSelectHeld = false;
-
         public void updateKey(Key key, KeyState keystate) {
-            /* REPLACE mode: we own the cluster for the whole CarPlay session, so the knob
-             * press (DDS_SELECT) goes to the cluster as CMD_ALT_HID buttons bit0 whenever
-             * CarPlay is connected — not only when the smartphone tab has focus, keeping the
-             * select from reaching stock nav.  Pair press+release: once we captured a PRESS,
-             * the matching RELEASE also goes to the cluster even if CarPlay disconnected in
-             * between, so the button never sticks half-pressed across the two sinks. */
-            if (Key.DDS_SELECT.is(key)) {
-                boolean pressed = (this.getKeyState(keystate) == 0);
-                if (pressed) {
-                    if (com.luka.carplay.core.CarPlayApp.isActive()) {
-                        this.altSelectHeld = true;
-                        com.luka.carplay.bus.CarplayBus.getInstance().sendBinary(
-                            com.luka.carplay.bus.CarplayBus.CMD_ALT_HID, new byte[]{ (byte) 0, (byte) 0x01 });
-                        return;
-                    }
-                } else if (this.altSelectHeld) {          /* release matches a captured press */
-                    this.altSelectHeld = false;
-                    com.luka.carplay.bus.CarplayBus.getInstance().sendBinary(
-                        com.luka.carplay.bus.CarplayBus.CMD_ALT_HID, new byte[]{ (byte) 0, (byte) 0x00 });
-                    return;
-                }
-            }
+            /* Central-console knob press (DDS_SELECT = Dreh-Drück-Steller) must SELECT in the
+             * CarPlay Main UI — it falls through to postButtonEvent below.  An earlier build
+             * redirected DDS_SELECT to the cluster as CMD_ALT_HID and returned, swallowing the
+             * select → "knob press does nothing".  Cluster HID belongs to the STEERING-WHEEL
+             * keys (altScreen focus), NOT the central select — re-add there when altScreen input
+             * lands, keyed off the wheel key, not DDS_SELECT. */
             if (TerminalModeUtils.isJoystickMiddleposition(key)) {
                 if (null != this.this$0.lastJoystickkey) {
                     this.this$0
@@ -1009,15 +991,11 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
 
         public void updateRotary(int i) {
             this.this$0.logger.log(1000000, "[%1.updateRotary] %2", LOGCLASS, i);
-            /* REPLACE mode: redirect the MMI knob to the cluster (CMD_ALT_HID [i8 wheel]
-             * [u8 buttons]) for the whole CarPlay session, so scroll never reaches stock nav. */
-            if (com.luka.carplay.core.CarPlayApp.isActive()) {
-                int w = i;
-                if (w > 127) w = 127; else if (w < -128) w = -128;
-                com.luka.carplay.bus.CarplayBus.getInstance().sendBinary(
-                    com.luka.carplay.bus.CarplayBus.CMD_ALT_HID, new byte[]{ (byte) w, (byte) 0 });
-                return;
-            }
+            /* updateRotary = the CENTRAL console MMI knob → must drive the CarPlay Main UI
+             * (next/prev).  The cluster-altScreen redirect (CMD_ALT_HID) belongs to the STEERING
+             * WHEEL scroll, which arrives via updateKey (MFL keys), NOT here — it was wrongly
+             * placed on this seam and swallowed the central knob.  Re-add the wheel→cluster
+             * redirect on the MFL key path in the altScreen phase. */
             this.this$0.dsiCarplaySafe.postRotaryEvent(i);
         }
 

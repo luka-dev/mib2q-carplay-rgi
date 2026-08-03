@@ -25,7 +25,23 @@
 #include <arpa/inet.h>
 
 static volatile sig_atomic_t g_running = 1;
-static void on_signal(int sig) { (void)sig; g_running = 0; }
+static volatile sig_atomic_t g_listen_fd = -1;
+static volatile sig_atomic_t g_client_fd = -1;
+
+/* close() is async-signal-safe. Closing both sockets guarantees SIGTERM breaks
+ * an idle accept() and an active/partial frame read immediately, so the normal
+ * OMX/Screen teardown runs before the supervisor's SIGKILL backstop. */
+static void on_signal(int sig) {
+    int fd;
+    (void)sig;
+    g_running = 0;
+    fd = (int)g_client_fd;
+    g_client_fd = -1;
+    if (fd >= 0) close(fd);
+    fd = (int)g_listen_fd;
+    g_listen_fd = -1;
+    if (fd >= 0) close(fd);
+}
 
 static int listen_socket(void) {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -79,10 +95,17 @@ int main(void) {
     signal(SIGTERM, on_signal);
     signal(SIGPIPE, SIG_IGN);
 
+    /* Own log file: the CarPlay supervisor also redirects stderr here, but keeping
+     * this fallback makes direct diagnostic launches behave identically. freopen
+     * to a regular file makes stderr fully-buffered, so explicitly unbuffer it. */
+    freopen("/tmp/altscreen_render.log", "a", stderr);
+    setvbuf(stderr, NULL, _IONBF, 0);
+
     if (av_sink_open() != 0) return 1;
 
     int lfd = listen_socket();
     if (lfd < 0) { av_sink_close(); return 1; }
+    g_listen_fd = lfd;
     fprintf(stderr, "altscreen_render: listening on %s:%d\n", ALTAV_HOST, ALTAV_PORT);
 
     /* Control channel to Java/lsd — reports video on/off so Java flips setVideoAvailable(). */
@@ -95,17 +118,24 @@ int main(void) {
             perror("accept");
             break;
         }
+        g_client_fd = cfd;
         fprintf(stderr, "altscreen_render: hook connected\n");
         altctl_set_video(1);                     /* 111 video client connected → tell Java */
         serve_client(cfd);
-        close(cfd);
+        if ((int)g_client_fd == cfd) {
+            g_client_fd = -1;
+            close(cfd);
+        }
         av_sink_session_end();
         altctl_set_video(0);                     /* stream ended → tell Java (Java clears ctx 82/83) */
         fprintf(stderr, "altscreen_render: hook disconnected\n");
     }
 
     altctl_stop();
-    close(lfd);
+    if ((int)g_listen_fd == lfd) {
+        g_listen_fd = -1;
+        close(lfd);
+    }
     av_sink_close();
     return 0;
 }

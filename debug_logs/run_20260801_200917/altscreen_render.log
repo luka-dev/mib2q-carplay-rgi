@@ -1,0 +1,4 @@
+altscreen_render[qnx]: sink open (1440x542, OMX zero-copy)
+altscreen_render: listening on 127.0.0.1:19831
+altscreen_render: control link to lsd up (:19832)
+altscreen_render: -> VIDEO_OFF

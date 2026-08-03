@@ -4,10 +4,33 @@
 
 #include "hook_framework.h"
 
+#include <fcntl.h>
+#include <unistd.h>
+#include <string.h>
+
 DEFINE_LOG_MODULE(HOOK);
 
 #define MAX_MODULES 16
 #define MAX_PREFIX_LEN 64
+
+/* True only for the main dio_manager process.  dio_manager exec()s helper processes that
+ * inherit the LD_PRELOAD; each loads the hook and, on its first hooked call, would open its
+ * OWN connection to Java's single-accept bus (127.0.0.1:19810).  Those competing connects
+ * churn the server (Java keeps only the last) and steal it from dio_manager — where iAP2 +
+ * libairplay + the cover-art tap actually run — so RGI/cover-art frames from dio_manager's
+ * connection are silently dropped.  Gate the bus to dio_manager only.  Fail-open if /proc is
+ * unreadable (unchanged behaviour). */
+int hook_process_is_dio_manager(void) {
+    char buf[256];
+    int fd = open("/proc/self/cmdline", O_RDONLY);
+    int n;
+    if (fd < 0) return 1;
+    n = (int)read(fd, buf, sizeof(buf) - 1);
+    close(fd);
+    if (n <= 0) return 1;
+    buf[n] = 0;
+    return strstr(buf, "dio_manager") != NULL;
+}
 
 struct hook_module {
     hook_module_def_t def;
@@ -270,9 +293,12 @@ hook_result_t hook_framework_init(void) {
     g_fw.initialized = true;
     pthread_mutex_unlock(&g_fw.lock);
 
-    /* Start TCP bus listener.  Safe here - hook_framework_init is lazy
-     * (called on first hooked call), not during LD_PRELOAD constructor. */
-    bus_init();
+    /* Start TCP bus listener — ONLY in the main dio_manager process (helper processes that
+     * inherit the LD_PRELOAD must not open competing connections; see hook_process_is_dio_manager).
+     * Safe here - hook_framework_init is lazy (first hooked call), not the LD_PRELOAD constructor. */
+    if (hook_process_is_dio_manager()) {
+        bus_init();
+    }
 
     /* Don't log in constructor - open() may fail during LD_PRELOAD init */
     /* LOG_INFO will happen on first hooked function call */

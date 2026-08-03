@@ -81,6 +81,13 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
         }
 
         public void updateActiveDeviceState(TMDevice tmdevice) {
+            /* diagnostic: log every device state transition so we can see EXACTLY what a CarPlay
+             * disconnect produces (state + whether the detached device still reports carplay). */
+            try {
+                com.luka.carplay.framework.Log.i("TMDev",
+                    "updateActiveDeviceState state=" + tmdevice.connectionState()
+                    + " carplay=" + tmdevice.isCarplayDevice());
+            } catch (Throwable t) { /* never crash the stock flow */ }
             if (tmdevice.connectionState().is(TMDevice.ConnectionState.ACTIVATING)) {
                 this.this$0.bapService.updateActiveInfoState(9);
                 int i = this.getBapSourceType(tmdevice);
@@ -104,13 +111,19 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
                 }
             }
 
-            /* ===== CarPlay hook: device disconnected ===== */
-            if (tmdevice.connectionState().is(TMDevice.ConnectionState.NOT_ATTACHED)) {
-                if (tmdevice.isCarplayDevice()) {
-                    try {
-                        com.luka.carplay.core.CarPlayApp.onDeactivate();
-                    } catch (Throwable t) { /* never crash the stock flow */ }
-                }
+            /* ===== CarPlay hook: device disconnected =====
+             * The REAL disconnect state (from the TMDev diagnostic log) is INVALID with carplay=false —
+             * NOT NOT_ATTACHED — because a detached device loses its CarPlay identity.  Matching a specific
+             * ConnectionState name is therefore fragile; instead deactivate whenever the device is no longer
+             * a CarPlay device while we still think CarPlay is active.  All connect states (ATTACHED /
+             * ACTIVATING / ACTIVE) report carplay=true, so this only fires on a genuine drop.  onDeactivate()
+             * is idempotent (no-op unless active), so it is safe.  This also unsticks the cluster: without it
+             * clusterActive stayed true → CombiMapController kept blocking the stock map → "AltScreen stayed
+             * after disconnect" and "View won't return to stock". */
+            if (!tmdevice.isCarplayDevice() && com.luka.carplay.core.CarPlayApp.isActive()) {
+                try {
+                    com.luka.carplay.core.CarPlayApp.onDeactivate();
+                } catch (Throwable t) { /* never crash the stock flow */ }
             }
         }
 

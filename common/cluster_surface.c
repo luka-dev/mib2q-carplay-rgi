@@ -50,32 +50,50 @@ static int cs_open_window(cluster_surface_t *s) {
     }
 
     snprintf(idstr, sizeof(idstr), "%d", c->id);
-    screen_set_window_property_cv(s->win, SCREEN_PROPERTY_ID_STRING, strlen(idstr), idstr);
-    screen_set_window_property_iv(s->win, SCREEN_PROPERTY_VISIBLE, &visible);
-    screen_set_window_property_iv(s->win, SCREEN_PROPERTY_FORMAT, &c->format);
-    screen_set_window_property_iv(s->win, SCREEN_PROPERTY_USAGE, &c->usage);
+#define CS_REQUIRED(call, label) do {                                            \
+        errno = 0;                                                               \
+        if ((call) != 0) {                                                       \
+            fprintf(stderr, "cluster_surface: %s failed errno=%d\n", label, errno); \
+            goto fail_window;                                                    \
+        }                                                                        \
+    } while (0)
+    CS_REQUIRED(screen_set_window_property_cv(s->win, SCREEN_PROPERTY_ID_STRING,
+                                               strlen(idstr), idstr), "set ID_STRING");
+    CS_REQUIRED(screen_set_window_property_iv(s->win, SCREEN_PROPERTY_VISIBLE, &visible),
+                "set VISIBLE");
+    CS_REQUIRED(screen_set_window_property_iv(s->win, SCREEN_PROPERTY_FORMAT, &c->format),
+                "set FORMAT");
+    CS_REQUIRED(screen_set_window_property_iv(s->win, SCREEN_PROPERTY_USAGE, &c->usage),
+                "set USAGE");
     size[0] = c->width; size[1] = c->height;
-    screen_set_window_property_iv(s->win, SCREEN_PROPERTY_SIZE, size);
-    screen_set_window_property_iv(s->win, SCREEN_PROPERTY_BUFFER_SIZE, size);
+    CS_REQUIRED(screen_set_window_property_iv(s->win, SCREEN_PROPERTY_SIZE, size), "set SIZE");
+    CS_REQUIRED(screen_set_window_property_iv(s->win, SCREEN_PROPERTY_BUFFER_SIZE, size),
+                "set BUFFER_SIZE");
 
     if (c->transparent) {
         int t = SCREEN_TRANSPARENCY_SOURCE_OVER;
-        screen_set_window_property_iv(s->win, SCREEN_PROPERTY_TRANSPARENCY, &t);
+        CS_REQUIRED(screen_set_window_property_iv(s->win, SCREEN_PROPERTY_TRANSPARENCY, &t),
+                    "set TRANSPARENCY");
     }
 
     /* Managed-client handshake — DM adopts us into m_surfaceSources[id]. */
-    screen_manage_window(s->win, CS_MANAGE_GROUP);
+    CS_REQUIRED(screen_manage_window(s->win, CS_MANAGE_GROUP), "screen_manage_window");
 
     if (screen_create_window_buffers(s->win, c->nbuffers) != 0) {
         fprintf(stderr, "cluster_surface: create_window_buffers failed errno=%d\n", errno);
-        screen_destroy_window(s->win);
-        s->win = NULL;
-        return -1;
+        goto fail_window;
     }
 
     fprintf(stderr, "cluster_surface: window id=%d %dx%d fmt=%d usage=0x%x nbuf=%d managed\n",
             c->id, c->width, c->height, c->format, c->usage, c->nbuffers);
+#undef CS_REQUIRED
     return 0;
+
+fail_window:
+#undef CS_REQUIRED
+    screen_destroy_window(s->win);
+    s->win = NULL;
+    return -1;
 }
 
 cluster_surface_t *cluster_surface_create(const cluster_surface_cfg *cfg) {

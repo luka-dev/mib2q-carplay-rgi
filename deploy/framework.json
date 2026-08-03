@@ -822,14 +822,6 @@
 			"servicemgr":{"singleapp":true,"name":"awp"}
 		},
 		{
-			"name": "maneuver_render", "exec": "/mnt/app/root/hooks/maneuver_render", "node": "mmx", "id": 900,
-			"servicemgr": { "external": true }
-		},
-		{
-			"name": "altscreen_render", "exec": "/mnt/app/root/hooks/altscreen_render", "node": "mmx", "id": 901,
-			"servicemgr": { "external": true }
-		},
-		{
 			"name":"pnav","exec":null,"node":"mmx","id":356,
 			"transport":{
 				"comm":{

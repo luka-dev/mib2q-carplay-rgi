@@ -130,6 +130,12 @@ static bool            g_timer_created = false;
 
 /* g_listen_fd removed - hook is now TCP client, no listening socket. */
 static int             g_client_fd = -1;    /* protected by g_lock */
+/* PID that ran bus_init().  dio_manager fork()s helper processes: a fork INHERITS g_client_fd
+ * + the thread-state flags but NOT the threads.  When such a fork exits, its __destructor runs
+ * bus_shutdown() → shutdown(g_client_fd, SHUT_RDWR) which, unlike close(), tears down the SHARED
+ * socket and kills the REAL dio_manager's bus (→ RGI/cover-art churn we chased).  bus_shutdown()
+ * is a no-op unless getpid()==g_bus_owner_pid, so only the owning process ever tears the bus down. */
+static volatile int    g_bus_owner_pid = 0;
 /* Bumped every time g_client_fd is set to a NEW connection.  The writer captures
  * (fd,gen) under g_lock and, after an out-of-lock send, only closes g_client_fd
  * when BOTH still match — so it can never close (or be fooled by) a reconnect
@@ -203,11 +209,11 @@ static bool q_dequeue_nolock(frame_t* out) {
 static int write_all(int fd, const void* buf, size_t len) {
     const uint8_t* p = (const uint8_t*)buf;
     while (len > 0) {
-#ifdef MSG_NOSIGNAL
-        ssize_t n = send(fd, p, len, MSG_NOSIGNAL);
-#else
+        /* flags MUST be 0 on QNX 6.5: the io-pkt stack does NOT implement MSG_NOSIGNAL (the macro
+         * is defined in the headers but send() with it returns ENOSYS = "Function not implemented"),
+         * which silently killed the WHOLE bus (RGD + coverart never reached Java).  SIGPIPE is
+         * suppressed process-wide instead (SIG_IGN at bus init). */
         ssize_t n = send(fd, p, len, 0);
-#endif
         if (n < 0) {
             if (errno == EINTR) continue;
             return -1;
@@ -423,7 +429,7 @@ static void* writer_main(void* arg) {
 
     while (!g_shutdown) {
         frame_t f;
-        int fd, sfd;
+        int fd;
         uint32_t gen;
 
         pthread_mutex_lock(&g_lock);
@@ -432,18 +438,17 @@ static void* writer_main(void* arg) {
         }
         if (g_shutdown) { pthread_mutex_unlock(&g_lock); break; }
         if (!q_dequeue_nolock(&f)) { pthread_mutex_unlock(&g_lock); continue; }
-        /* Capture (fd,gen) and dup the fd under the lock.  Sending on the private
-         * dup means a concurrent reconnect that reuses this fd number cannot make
-         * us write onto the new connection: the dup still refers to the old socket
-         * (send just fails once the peer is gone). */
+        /* Send on the ORIGINAL socket fd — do NOT dup() it.  On QNX 6.5 io-pkt, send() on a
+         * dup'd socket fd returns ENOSYS ("Function not implemented"), which silently kills the
+         * whole bus (RGD + coverart never reach Java).  The reference impl sends on g_client_fd
+         * directly; the rare fd-reuse race after a reconnect is bounded by the (fd,gen) recheck
+         * before we close on failure. */
         fd  = g_client_fd;
         gen = g_client_gen;
-        sfd = (fd >= 0) ? dup(fd) : -1;
         pthread_mutex_unlock(&g_lock);
 
-        if (sfd >= 0) {
-            int rc = send_frame(sfd, &f);
-            close(sfd);
+        if (fd >= 0) {
+            int rc = send_frame(fd, &f);
             if (rc != 0) {
                 LOG_WARN(LOG_MODULE, "send failed fd=%d type=0x%04x err=%s", fd, f.type, strerror(errno));
                 pthread_mutex_lock(&g_lock);
@@ -568,7 +573,7 @@ static void close_current_fd_if_matches(int fd, const char* reason) {
 
 static void* connector_main(void* arg) {
     (void)arg;
-    LOG_INFO(LOG_MODULE, "connector thread started -> %s:%d", BUS_TCP_HOST, BUS_TCP_PORT);
+    LOG_INFO(LOG_MODULE, "connector thread started pid=%d -> %s:%d", (int)getpid(), BUS_TCP_HOST, BUS_TCP_PORT);
 
     /* Outer loop: keep the link alive across Java HMI restarts. */
     while (!g_shutdown) {
@@ -592,7 +597,7 @@ static void* connector_main(void* arg) {
             break;
         }
 
-        LOG_INFO(LOG_MODULE, "connected to Java server fd=%d", fd);
+        LOG_INFO(LOG_MODULE, "connected to Java server pid=%d fd=%d", (int)getpid(), fd);
 
         /* Send HELLO directly before exposing the fd to the async writer.
          * The previous path used bus_send(), which made the first bytes on
@@ -749,6 +754,7 @@ hook_result_t bus_init(void) {
     pthread_mutex_unlock(&g_lock);
     g_tx_seq = 1;
     g_shutdown = false;
+    g_bus_owner_pid = (int)getpid();     /* fork children must NOT tear this bus down (see bus_shutdown) */
 
     g_connector_up = true;
     if (pthread_create(&g_connector_tid, NULL, connector_main, NULL) != 0) {
@@ -783,11 +789,18 @@ hook_result_t bus_init(void) {
         g_timer_created = true;
     }
 
-    LOG_INFO(LOG_MODULE, "bus initialised on %s:%d", BUS_TCP_HOST, BUS_TCP_PORT);
+    LOG_INFO(LOG_MODULE, "bus initialised FORKSAFE owner-pid=%d on %s:%d", (int)getpid(), BUS_TCP_HOST, BUS_TCP_PORT);
     return HOOK_OK;
 }
 
 void bus_shutdown(void) {
+    /* Fork-safety: a dio_manager fork() inherits g_client_fd + the flags but not the threads.
+     * Its __destructor calls us on exit — and shutdown(g_client_fd) would kill the OWNER's shared
+     * socket.  Skip entirely unless we are the process that ran bus_init(). */
+    if (g_bus_owner_pid != 0 && (int)getpid() != g_bus_owner_pid) {
+        return;
+    }
+
     g_shutdown = true;
 
     /* 1. Wake every thread: close the socket (unblocks the connector's recv +
@@ -823,7 +836,7 @@ void bus_shutdown(void) {
     }
     pthread_mutex_unlock(&g_lock);
 
-    LOG_INFO(LOG_MODULE, "bus shutdown complete");
+    LOG_INFO(LOG_MODULE, "bus shutdown complete pid=%d owner=%d", (int)getpid(), g_bus_owner_pid);
 }
 
 /* ============================================================

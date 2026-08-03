@@ -1,0 +1,4 @@
+===== carplay_launch.sh run pid=2392192 ppid=925779 =====
+[wrapper] launching maneuver_render
+[wrapper] launching altscreen_render
+[wrapper] exec dio_manager (HANDLE_ALT=1, ADVERT_DISPLAYS off)

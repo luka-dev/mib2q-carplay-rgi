@@ -25,6 +25,12 @@ static int             g_port     = ALTAV_DEFAULT_PORT;
 static int             g_enabled  = 1;
 static int             g_fd       = -1;
 static pthread_mutex_t g_lock     = PTHREAD_MUTEX_INITIALIZER;
+/* Cached Annex-B SPS/PPS.  The renderer marks the FIRST message on each connection as
+ * OMX_BUFFERFLAG_CODECCONFIG, so on every (re)connect we must resend the config BEFORE any frame —
+ * otherwise a reconnect mid-stream sends a video frame first, the decoder takes it as config and
+ * reports OMX_ErrorFormatNotDetected → black.  (Set via altav_set_config on each avcC.) */
+static uint8_t         g_cfg[512];
+static uint32_t        g_cfg_len = 0;
 
 void altav_init(const char *host, int port)
 {
@@ -59,6 +65,16 @@ static void av_connect_locked(void)
     if (connect(fd, (struct sockaddr *)&sa, sizeof(sa)) == 0) {
         g_fd = fd;
         LOG_INFO(LOG_MODULE, "connected to %s:%d (fd=%d)", g_host, g_port, fd);
+        /* resend cached SPS/PPS first — the render's fresh decoder flags msg #1 as CODECCONFIG */
+        if (g_cfg_len) {
+            uint32_t be = htonl(g_cfg_len);
+            if (send(g_fd, &be, 4, MSG_NOSIGNAL) != 4 ||
+                send(g_fd, g_cfg, g_cfg_len, MSG_NOSIGNAL) != (ssize_t)g_cfg_len) {
+                close(g_fd); g_fd = -1;      /* config send failed → drop, next frame retries */
+            } else {
+                LOG_INFO(LOG_MODULE, "replayed SPS/PPS config (%u bytes) on new connection", g_cfg_len);
+            }
+        }
     } else {
         close(fd);
     }
@@ -83,6 +99,18 @@ void altav_forward_frame(const uint8_t *avcc_data, uint32_t len)
     if (!g_enabled || !avcc_data || len == 0) return;
     pthread_mutex_lock(&g_lock);
     av_send_locked(avcc_data, len);
+    pthread_mutex_unlock(&g_lock);
+}
+
+/* Cache the Annex-B SPS/PPS AND send it now.  Cached copy is replayed on every reconnect
+ * (av_connect_locked) so the render's decoder always gets config before frames. */
+void altav_set_config(const uint8_t *annexb_cfg, uint32_t len)
+{
+    if (!g_enabled || !annexb_cfg || len == 0 || len > sizeof(g_cfg)) return;
+    pthread_mutex_lock(&g_lock);
+    memcpy(g_cfg, annexb_cfg, len);
+    g_cfg_len = len;
+    av_send_locked(annexb_cfg, len);
     pthread_mutex_unlock(&g_lock);
 }
 
