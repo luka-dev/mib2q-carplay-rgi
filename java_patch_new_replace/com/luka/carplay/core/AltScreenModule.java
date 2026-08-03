@@ -40,15 +40,23 @@ public final class AltScreenModule implements Module {
     public static final int CTX_STOCK_CLUSTER = 74;
     private static final int CTX_BOUNCE       = 72;   /* kombi map — never ours; forces a real ctx change */
     private static final int BOUNCE_SLEEP_MS  = 180;  /* preContextSwitchHook settle (proven driver) */
-    private static final int CLUSTER_FPS      = 10;   /* full MOST encoder rate */
+    private static final int CLUSTER_FPS      = 30;   /* cluster encoder rate; MOST/encoder may cap below this */
 
     private static final Object LOCK = new Object();
     private IDisplayManager dm;                  /* current DisplayManager (guarded by LOCK); stable across sessions */
     private Thread worker;                        /* the ONE persistent switch worker (guarded by LOCK) */
 
-    /* true while the cluster is on OUR context — the roller injection reads this. */
+    /* true while the cluster is on OUR context (set AFTER the physical switch completes) — the roller
+     * injection reads this, because HID must wait until our content is actually shown. */
     private static volatile boolean clusterActive = false;
     public static boolean isClusterActive() { return clusterActive; }
+
+    /* true from start() (BEFORE any switch) until stop() — i.e. we intend to own the cluster this whole
+     * session.  The switchToTargetContext View-pin reads THIS, not clusterActive: pinning on the
+     * applied state leaves a ~180ms window during the first switch where a View press could steal
+     * terminal 1 to the stock map (worker then thinks it still owns ctx → stuck).  Intent-based pin
+     * closes that window from t0. */
+    public static boolean isConnected() { return connected; }
 
     /* desiredCtx = target published by start()/stop(); currentCtx = what the worker last applied.
      * Both guarded by LOCK; the single worker switches whenever they differ, converging to desiredCtx. */

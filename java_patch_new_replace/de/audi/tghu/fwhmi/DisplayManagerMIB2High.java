@@ -13,15 +13,40 @@ import com.luka.carplay.probe.ClusterProbe;
 
 public class DisplayManagerMIB2High extends DisplayManager implements IDisplayListener, IDisplayManagerKombiControl {
     private static final boolean SHOW_DM_INFO = Boolean.getBoolean("showDisplayManagerInfo");
+    /** Per-terminal id of the currently-visible KDK maneuver (DISPLAYABLE_KDK), or -1 if none. */
     int[] visibleKDKs = new int[8];
+
+    /* ---- terminals ---- */
+    private static final int MAIN_TERMINAL = 0;
+    private static final int CLUSTER_TERMINAL = 1;
+
+    /* ---- kombi variant ---- */
+    private static final int KOMBI_TYPE_G24 = 4;                 // getKombiType(): single big display (G24)
+    private static final int SYSCONST_KOMBI_VARIANT = 541;
+    private static final int KOMBI_KDK_VIA_DISPLAYABLES = 2;     // A5-class: KDK composed from displayables
+
+    /* ---- cluster display contexts ---- */
+    private static final int CTX_MAP         = 72;   // map only
+    private static final int CTX_KDK_NO_MAP  = 73;   // KDK + backings, no map
+    private static final int CTX_MAP_KDK     = 74;   // map + KDK + backings
+    private static final int CTX_BLANK       = 75;   // empty
+    private static final int CTX_MAP_ALT     = 76;   // alt map only
+    private static final int CTX_MAP_ALT_KDK = 77;   // alt map + KDK + backings
+    private static final int CTX_CARPLAY_NAV = 80;   // CarPlay: maneuver + backing + map
+    private static final int CTX_CARPLAY_MAP = 81;   // CarPlay: map only
+    private static final int FIRST_CARPLAY_CONTEXT = 80;   // every stock context id is < this
+
+    /* ---- context-table sizing / G24 KDK variants ---- */
+    private static final int DC_SIZE_A5  = 82;    // stock 0..78 + CarPlay 80/81
+    private static final int DC_SIZE_G24 = 158;   // stock + the +79 KDK-hoisted variants
+    private static final int G24_KDK_CTX_OFFSET = 79;
 
     public DisplayManagerMIB2High(IFrameworkAccess iframeworkaccess) {
         super(iframeworkaccess);
-        iframeworkaccess.getErrorMgr()
-            .registerDumpInfoProvider(new DisplayManagerMIB2High.DisplayManagerProvider(this));
+        iframeworkaccess.getErrorMgr().registerDumpInfoProvider(new DisplayManagerProvider());
 
-        for (int i = 0; i < this.visibleKDKs.length; i++) {
-            this.visibleKDKs[i] = -1;
+        for (int t = 0; t < this.visibleKDKs.length; t++) {
+            this.visibleKDKs[t] = DISPLAYABLE_NONE;
         }
     }
 
@@ -35,10 +60,10 @@ public class DisplayManagerMIB2High extends DisplayManager implements IDisplayLi
 
     protected void defineContexts() {
         if (ClusterProbe.on()) ClusterProbe.log("defineContexts: kombiType=" + this.framework.getKombiType());
-        if (this.framework.getKombiType() == 4) {
-            this.dc = new DisplayContext[158];
+        if (this.framework.getKombiType() == KOMBI_TYPE_G24) {
+            this.dc = new DisplayContext[DC_SIZE_G24];
         } else {
-            this.dc = new DisplayContext[82];   /* CarPlay cluster: ctx 80 (map+backing+maneuver) + ctx 81 (map only) */
+            this.dc = new DisplayContext[DC_SIZE_A5];   // stock contexts + CarPlay ctx 80/81
         }
 
         this.dc[0] = new DisplayContext(0, new int[]{16});
@@ -141,74 +166,56 @@ public class DisplayManagerMIB2High extends DisplayManager implements IDisplayLi
         this.dc[75] = new DisplayContext(75, new int[0]);
         this.dc[78] = new DisplayContext(78, new int[]{16, 59});
 
-        /* --- CarPlay cluster — TWO custom contexts, A5-class only (kombiType != 4) ---
-         *   z-order = array order: index 0 = TOP/front, last = BOTTOM/back.
-         *
-         *   dc[80] = {98, 101, 102, 99}  NAV active: maneuver(98) over the two KDK 987 backings
-         *                                (101 = 328x180 for sport/full, 102 = 210x153 for popup),
-         *                                over base(99)
-         *   dc[81] = {99}                NO nav: base only
-         *
-         *   98  = maneuver graphics overlay (maneuver_render; EGL/GPU; transparent when idle)
-         *   101 = stock KDK backing, 328x180 (Image) — used for the sport/full-buffer maneuver
-         *   102 = stock KDK backing, 210x153 (Image) — used for the popup (cropped) maneuver
-         *   99  = base layer (altscreen_render; empty when altScreen off)
-         *
-         *   NOTE (verified on-unit via dmdt gd): displayable 103 is NOT creatable (unregistered
-         *   DSI id), but 101/102 ARE already created Image displayables carrying the 987 panel —
-         *   so we use those.  Per-mode geometry (pos/crop/opacity of 98/101/102) is hardcoded in
-         *   com.luka.carplay.cluster.ClusterLayerController.apply() (called from CombiMapController.handleKDK).
-         *
-         * Switched by CombiMapController on maneuver appear/disappear (80 <-> 81). */
-        if (this.framework.getKombiType() != 4) {
-            this.dc[80] = new DisplayContext(80, new int[]{98, 101, 102, 99});
-            this.dc[81] = new DisplayContext(81, new int[]{99});
-        }
-        if (this.framework.getKombiType() == 4) {
+        /* --- CarPlay cluster: two custom contexts, A5-class only (not G24) ---
+         *   z-order = array order (index 0 = front):
+         *     dc[80] = {98, 101, 102, 99}  nav active: maneuver(98) over the two KDK 987 backings
+         *                                  (101 = 328x180 sport, 102 = 210x153 popup) over base(99)
+         *     dc[81] = {99}                no nav: base only
+         *   98 = maneuver overlay (maneuver_render, transparent when idle); 99 = base (altscreen_render).
+         *   Displayable 103 is NOT creatable (unregistered DSI id); 101/102 already exist as the 987
+         *   Image backings, so we reuse those.  Plane geometry lives in ClusterLayerController; the
+         *   80<->81 switch is driven by AltScreenModule. */
+        if (this.framework.getKombiType() != KOMBI_TYPE_G24) {
+            this.dc[CTX_CARPLAY_NAV] = new DisplayContext(CTX_CARPLAY_NAV, new int[]{98, 101, 102, 99});
+            this.dc[CTX_CARPLAY_MAP] = new DisplayContext(CTX_CARPLAY_MAP, new int[]{99});
+        } else {
             this.defineContextsForG24();
         }
     }
 
+    /** G24 has no separate KDK layer, so every stock context gets a "+79" twin with the KDK
+     *  maneuver (displayable 20) hoisted to the front. */
     private void defineContextsForG24() {
-        for (int i = 0; i < 79; i++) {
-            if (this.dc[i] != null) {
-                byte b0 = 20;
-                int[] aint = this.createG24ContextWithKDK(i, b0);
-                this.dc[i + 79] = new DisplayContext(i + 79, aint);
+        for (int ctx = 0; ctx < G24_KDK_CTX_OFFSET; ctx++) {
+            if (this.dc[ctx] != null) {
+                int[] withKdk = this.createG24ContextWithKDK(ctx, DISPLAYABLE_KDK);
+                this.dc[ctx + G24_KDK_CTX_OFFSET] = new DisplayContext(ctx + G24_KDK_CTX_OFFSET, withKdk);
             }
         }
     }
 
-    private int[] createG24ContextWithKDK(int i, int j) {
-        int k = -1;
-        int[] aint = this.dc[i].getDisplayableList();
+    /** Returns the displayable list of {@code ctx} with {@code kdk} moved to the front (index 0),
+     *  growing the array by one only if the context did not already contain it. */
+    private int[] createG24ContextWithKDK(int ctx, int kdk) {
+        int[] base = this.dc[ctx].getDisplayableList();
 
-        for (int i1 = 0; i1 < aint.length; i1++) {
-            int l = aint[i1];
-            if (l == j) {
-                k = i1;
+        boolean alreadyPresent = false;
+        for (int idx = 0; idx < base.length; idx++) {
+            if (base[idx] == kdk) {
+                alreadyPresent = true;
                 break;
             }
         }
 
-        int[] aint1;
-        if (k == -1) {
-            aint1 = new int[aint.length + 1];
-        } else {
-            aint1 = new int[aint.length];
-        }
-
-        aint1[0] = j;
-        int j1 = 1;
-
-        for (int k1 = 0; k1 < aint.length; k1++) {
-            if (aint[k1] != j) {
-                aint1[j1] = aint[k1];
-                j1++;
+        int[] result = new int[alreadyPresent ? base.length : base.length + 1];
+        result[0] = kdk;
+        int writeIdx = 1;
+        for (int idx = 0; idx < base.length; idx++) {
+            if (base[idx] != kdk) {
+                result[writeIdx++] = base[idx];
             }
         }
-
-        return aint1;
+        return result;
     }
 
     protected void configureDM() {
@@ -240,33 +247,35 @@ public class DisplayManagerMIB2High extends DisplayManager implements IDisplayLi
     public void activeContext(int i, int j) {
     }
 
-    public void setKDKVisible(int i, int j) {
-        this.log.log(1000000, "DisplayManager#setKDKVisible visibleKDK %1 terminal %2 ", i, j);
-        if (this.visibleKDKs[j] != i) {
-            this.visibleKDKs[j] = i;
-            int k = this.getCurrentContextID(j);
-            if (i == -1) {
-                this.removeKDKFromContext(j, k);
+    public void setKDKVisible(int kdk, int terminal) {
+        this.log.log(1000000, "DisplayManager#setKDKVisible visibleKDK %1 terminal %2 ", kdk, terminal);
+        if (this.visibleKDKs[terminal] != kdk) {
+            this.visibleKDKs[terminal] = kdk;
+            int currentCtx = this.getCurrentContextID(terminal);
+            if (kdk == DISPLAYABLE_NONE) {
+                this.removeKDKFromContext(terminal, currentCtx);
             } else {
-                this.switchContext(k, j, null);
+                this.switchContext(currentCtx, terminal, null);
             }
         }
     }
 
-    private void removeKDKFromContext(int i, int j) {
-        if (i == 0) {
-            if (j >= 79) {
-                this.switchContext(j % 79, 0, null);
+    /** KDK just became invisible: drop back to the no-KDK sibling of the current context. */
+    private void removeKDKFromContext(int terminal, int ctx) {
+        if (terminal == MAIN_TERMINAL) {
+            if (ctx >= G24_KDK_CTX_OFFSET) {
+                this.switchContext(ctx % G24_KDK_CTX_OFFSET, MAIN_TERMINAL, null);   // drop the +79 KDK twin
             }
-        } else if (i == 1 && this.framework.getSysConst(541) == 2) {
-            if (j == 74) {
-                this.switchContext(72, i, null);
-            } else if (j == 77) {
-                this.switchContext(76, i, null);
-            } else if (j == 73) {
-                this.switchContext(75, i, null);
+        } else if (terminal == CLUSTER_TERMINAL
+                && this.framework.getSysConst(SYSCONST_KOMBI_VARIANT) == KOMBI_KDK_VIA_DISPLAYABLES) {
+            if (ctx == CTX_MAP_KDK) {
+                this.switchContext(CTX_MAP, terminal, null);
+            } else if (ctx == CTX_MAP_ALT_KDK) {
+                this.switchContext(CTX_MAP_ALT, terminal, null);
+            } else if (ctx == CTX_KDK_NO_MAP) {
+                this.switchContext(CTX_BLANK, terminal, null);
             } else {
-                this.switchContext(j, i, null);
+                this.switchContext(ctx, terminal, null);
             }
         }
     }
@@ -279,139 +288,121 @@ public class DisplayManagerMIB2High extends DisplayManager implements IDisplayLi
         return this.visibleKDKs[i];
     }
 
-    public synchronized void switchContext(int i, int j, IDisplayListener idisplaylistener) {
-        int probeReq = i;
-        this.log.log(1000000, "DisplayManager#switchContext visibleKDK %1 terminal %2 ", this.visibleKDKs[j], j);
-        /* altScreen context (AltScreenModule CTX_CLUSTER = 80) is self-composed — it already
-         * carries our planes (98/99/102/101).  It must NOT go through the stock KDK-20 remap:
-         * addKDKToContext has no case for it and falls to default -> ctx 73, hijacking our
-         * altScreen switch to a stock context (audit #8).  Every stock context is < 80, so
-         * this guard is a no-op for all stock/RGI paths. */
-        if (this.visibleKDKs[j] == 20 && i < 80) {
-            i = this.addKDKToContext(i);
+    public synchronized void switchContext(int ctx, int terminal, IDisplayListener listener) {
+        int requestedCtx = ctx;
+        this.log.log(1000000, "DisplayManager#switchContext visibleKDK %1 terminal %2 ", this.visibleKDKs[terminal], terminal);
+        /* Stock KDK-20 remap: while a KDK maneuver is visible, a switch to a stock map context is
+         * redirected to its KDK-carrying twin (addKDKToContext).  Our CarPlay contexts (>= 80) are
+         * self-composed — they already carry planes 98/99/101/102 — and MUST skip the remap, else
+         * addKDKToContext's default case would hijack the switch to ctx 73.  Every stock context id
+         * is < 80, so this guard is a no-op for all stock/RGI paths. */
+        if (this.visibleKDKs[terminal] == DISPLAYABLE_KDK && ctx < FIRST_CARPLAY_CONTEXT) {
+            ctx = this.addKDKToContext(ctx);
         }
 
-        if (ClusterProbe.on()) ClusterProbe.onSwitchContext(probeReq, i, j, this.visibleKDKs[j], this.getDisplayables(i));
-        super.switchContext(i, j, idisplaylistener);
-        if (SHOW_DM_INFO && this.getCurrentContextID(j) > -1) {
-            this.postStatisticInfoContextGeneral(i, j);
-            this.postStatisticInfoContextOpacity(i, j);
+        if (ClusterProbe.on()) ClusterProbe.onSwitchContext(requestedCtx, ctx, terminal, this.visibleKDKs[terminal], this.getDisplayables(ctx));
+        super.switchContext(ctx, terminal, listener);
+        if (SHOW_DM_INFO && this.getCurrentContextID(terminal) > -1) {
+            this.postStatisticInfoContextGeneral(ctx, terminal);
+            this.postStatisticInfoContextOpacity(ctx, terminal);
         }
     }
 
-    private void postStatisticInfoContextGeneral(int i, int j) {
+    private void postStatisticInfoContextGeneral(int ctx, int terminal) {
         HMIService hmiservice = this.framework.getHMIService();
-        String[] astring = this.createContextInfo(i);
-        ScreenDebugInfoEvent screendebuginfoevent = new ScreenDebugInfoEvent(hmiservice.getRootWindow(0), astring, 19);
-        hmiservice.getEventDispatcher().postEvent(screendebuginfoevent);
+        String[] lines = this.createContextInfo(ctx);
+        ScreenDebugInfoEvent event = new ScreenDebugInfoEvent(hmiservice.getRootWindow(0), lines, 19);
+        hmiservice.getEventDispatcher().postEvent(event);
     }
 
-    private String[] createContextInfo(int i) {
-        int[] aint = this.getDisplayables(i);
-        String[] astring = new String[aint.length + 1];
-        astring[0] = new Buffer("DM: context = ").append(i).toString();
+    private String[] createContextInfo(int ctx) {
+        int[] displayables = this.getDisplayables(ctx);
+        String[] lines = new String[displayables.length + 1];
+        lines[0] = new Buffer("DM: context = ").append(ctx).toString();
 
-        for (int j = 0; j < aint.length; j++) {
-            astring[j + 1] = new Buffer("displayable: ").append(j).append(" = ").append(aint[j]).toString();
+        for (int idx = 0; idx < displayables.length; idx++) {
+            lines[idx + 1] = new Buffer("displayable: ").append(idx).append(" = ").append(displayables[idx]).toString();
         }
 
-        return astring;
+        return lines;
     }
 
-    private void postStatisticInfoContextOpacity(int i, int j) {
+    private void postStatisticInfoContextOpacity(int ctx, int terminal) {
         HMIService hmiservice = this.framework.getHMIService();
-        String[] astring = this.createOpacityInfo(i, j);
-        ScreenDebugInfoEvent screendebuginfoevent = new ScreenDebugInfoEvent(hmiservice.getRootWindow(0), astring, 20);
-        hmiservice.getEventDispatcher().postEvent(screendebuginfoevent);
+        String[] lines = this.createOpacityInfo(ctx, terminal);
+        ScreenDebugInfoEvent event = new ScreenDebugInfoEvent(hmiservice.getRootWindow(0), lines, 20);
+        hmiservice.getEventDispatcher().postEvent(event);
     }
 
-    private String[] createOpacityInfo(int i, int j) {
-        int[] aint = this.getDisplayables(i);
-        String[] astring = new String[aint.length + 1];
-        astring[0] = "DM: displayable opacity";
+    private String[] createOpacityInfo(int ctx, int terminal) {
+        int[] displayables = this.getDisplayables(ctx);
+        String[] lines = new String[displayables.length + 1];
+        lines[0] = "DM: displayable opacity";
 
-        for (int k = 0; k < aint.length; k++) {
-            astring[k + 1] = new Buffer().append(aint[k]).append(" = ").append(this.getOpacity(aint[k], j)).toString();
+        for (int idx = 0; idx < displayables.length; idx++) {
+            lines[idx + 1] = new Buffer().append(displayables[idx]).append(" = ").append(this.getOpacity(displayables[idx], terminal)).toString();
         }
 
-        return astring;
+        return lines;
     }
 
-    private int addKDKToContext(int i) {
-        if (this.framework.getKombiType() == 4) {
-            i += 79;
-        } else if (this.framework.getSysConst(541) == 2) {
-            switch (i) {
-                case 72:
-                    i = 74;
-                    break;
-                case 73:
-                default:
-                    i = 73;
-                    break;
-                case 74:
-                    i = 74;
-                    break;
-                case 75:
-                    i = 73;
-                    break;
-                case 76:
-                    i = 77;
-                    break;
-                case 77:
-                    i = 77;
+    /** Map a stock cluster context to the twin that also carries the KDK maneuver. */
+    private int addKDKToContext(int ctx) {
+        if (this.framework.getKombiType() == KOMBI_TYPE_G24) {
+            return ctx + G24_KDK_CTX_OFFSET;
+        }
+        if (this.framework.getSysConst(SYSCONST_KOMBI_VARIANT) == KOMBI_KDK_VIA_DISPLAYABLES) {
+            switch (ctx) {
+                case CTX_MAP:         ctx = CTX_MAP_KDK;     break;   // 72 -> 74
+                case CTX_MAP_KDK:     ctx = CTX_MAP_KDK;     break;   // 74 -> 74
+                case CTX_BLANK:       ctx = CTX_KDK_NO_MAP;  break;   // 75 -> 73
+                case CTX_MAP_ALT:     ctx = CTX_MAP_ALT_KDK; break;   // 76 -> 77
+                case CTX_MAP_ALT_KDK: ctx = CTX_MAP_ALT_KDK; break;   // 77 -> 77
+                case CTX_KDK_NO_MAP:                                  // 73 -> 73 (shares default)
+                default:              ctx = CTX_KDK_NO_MAP;  break;   // anything else -> 73
             }
-
-            this.log.log(1000000, "DisplayManager#addKDKToContext new context %1 ", i);
+            this.log.log(1000000, "DisplayManager#addKDKToContext new context %1 ", ctx);
         }
-
-        return i;
+        return ctx;
     }
 
-    public void setKDKOpacity(int i, int j) {
-        if (this.visibleKDKs[i] != -1) {
-            super.setOpacity(this.visibleKDKs[i], i, j);
+    public void setKDKOpacity(int terminal, int opacity) {
+        if (this.visibleKDKs[terminal] != DISPLAYABLE_NONE) {
+            super.setOpacity(this.visibleKDKs[terminal], terminal, opacity);
         }
     }
 
-    public void setOpacity(int i, int j, int k) {
-        super.setOpacity(i, j, k);
-        if (SHOW_DM_INFO && this.getCurrentContextID(j) > -1) {
-            this.postStatisticInfoContextOpacity(this.getCurrentContextID(j), j);
+    public void setOpacity(int displayable, int terminal, int opacity) {
+        super.setOpacity(displayable, terminal, opacity);
+        if (SHOW_DM_INFO && this.getCurrentContextID(terminal) > -1) {
+            this.postStatisticInfoContextOpacity(this.getCurrentContextID(terminal), terminal);
         }
     }
 
     private class DisplayManagerProvider implements DumpInfoProvider {
-        private final DisplayManagerMIB2High this$0;
-
-        private DisplayManagerProvider(DisplayManagerMIB2High displaymanagermib2high) {
-            this.this$0 = displaymanagermib2high;
-        }
-
         public String getName() {
             return "DisplayManager-Info";
         }
 
-        public void dump(PrintStream printstream, String s) {
-            this.dumpTerminalInfo(printstream, 0);
-            this.dumpTerminalInfo(printstream, 1);
+        public void dump(PrintStream out, String s) {
+            this.dumpTerminalInfo(out, MAIN_TERMINAL);
+            this.dumpTerminalInfo(out, CLUSTER_TERMINAL);
         }
 
-        private void dumpTerminalInfo(PrintStream printstream, int i) {
-            printstream.println("DM info for terminal: " + i);
-            if (this.this$0.getCurrentContextID(i) != -1) {
-                String[] astring = this.this$0.createContextInfo(this.this$0.getCurrentContextID(i));
-                String[] astring1 = this.this$0.createOpacityInfo(this.this$0.getCurrentContextID(i), i);
-
-                for (int j = 0; j < astring.length; j++) {
-                    printstream.println(astring[j]);
-                }
-
-                for (int k = 0; k < astring1.length; k++) {
-                    printstream.println(astring1[k]);
-                }
-            } else {
-                printstream.println("no context activated ");
+        private void dumpTerminalInfo(PrintStream out, int terminal) {
+            out.println("DM info for terminal: " + terminal);
+            int ctx = getCurrentContextID(terminal);
+            if (ctx == -1) {
+                out.println("no context activated ");
+                return;
+            }
+            String[] ctxLines = createContextInfo(ctx);
+            String[] opacityLines = createOpacityInfo(ctx, terminal);
+            for (int i = 0; i < ctxLines.length; i++) {
+                out.println(ctxLines[i]);
+            }
+            for (int i = 0; i < opacityLines.length; i++) {
+                out.println(opacityLines[i]);
             }
         }
     }
