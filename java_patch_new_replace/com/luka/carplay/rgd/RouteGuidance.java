@@ -274,6 +274,7 @@ public class RouteGuidance implements CarplayBus.Listener {
         running = false;
         rgActive = false;
         hasRouteUpdate = false;
+        com.luka.carplay.core.AltScreenModule.setNavActive(false);  /* clear layer gate on session end */
 
         CarplayBus.getInstance().off(CarplayBus.EVT_RGD_UPDATE);
         if (bap != null) {
@@ -315,6 +316,7 @@ public class RouteGuidance implements CarplayBus.Listener {
         if (state.disconnectReason != null) {
             if (bap != null) { bap.onStop(); bap.onShutdown(); }
             rgActive = false;
+            com.luka.carplay.core.AltScreenModule.setNavActive(false);  /* hide layers (ctx 81) */
             hasRouteUpdate = false;
             state.reset();
             return;
@@ -379,6 +381,10 @@ public class RouteGuidance implements CarplayBus.Listener {
                     + " source_supports_rg=" + state.sourceSupportsRg);
                 if (bap != null) bap.onStart();
                 rgActive = true;
+                /* Single source of truth for the CarPlay cluster layers: they become visible at the
+                 * exact moment we tell VC (via BAP) that navigation is active — not on the stock
+                 * KDK-visible hint.  AltScreenModule flips ctx 80/81 accordingly. */
+                com.luka.carplay.core.AltScreenModule.setNavActive(true);
             } else if (!wantActive && rgActive) {
                 Log.i(TAG, "RG deactivate: route_state=" + state.routeState
                     + " maneuver_count=" + state.maneuverCount
@@ -389,6 +395,8 @@ public class RouteGuidance implements CarplayBus.Listener {
                  * visibleInApp=0, or real route end).  Full shutdown. */
                 if (bap != null) { bap.onStop(); bap.onShutdown(); }
                 rgActive = false;
+                /* RGI off -> hide the CarPlay cluster layers (ctx 81 = map only). */
+                com.luka.carplay.core.AltScreenModule.setNavActive(false);
             }
         }
 

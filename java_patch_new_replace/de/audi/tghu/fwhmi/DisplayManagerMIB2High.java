@@ -9,6 +9,7 @@ import de.esolutions.fw.util.commons.error.DumpInfoProvider;
 import java.io.PrintStream;
 import org.dsi.ifc.displaymanagement.DisplayContext;
 import org.dsi.ifc.global.ResourceLocator;
+import com.luka.carplay.probe.ClusterProbe;
 
 public class DisplayManagerMIB2High extends DisplayManager implements IDisplayListener, IDisplayManagerKombiControl {
     private static final boolean SHOW_DM_INFO = Boolean.getBoolean("showDisplayManagerInfo");
@@ -33,10 +34,11 @@ public class DisplayManagerMIB2High extends DisplayManager implements IDisplayLi
     }
 
     protected void defineContexts() {
+        if (ClusterProbe.on()) ClusterProbe.log("defineContexts: kombiType=" + this.framework.getKombiType());
         if (this.framework.getKombiType() == 4) {
             this.dc = new DisplayContext[158];
         } else {
-            this.dc = new DisplayContext[84];   /* +4 for CarPlay cluster ctx 80,82,83 (altScreen) */
+            this.dc = new DisplayContext[82];   /* CarPlay cluster: ctx 80 (map+backing+maneuver) + ctx 81 (map only) */
         }
 
         this.dc[0] = new DisplayContext(0, new int[]{16});
@@ -139,33 +141,28 @@ public class DisplayManagerMIB2High extends DisplayManager implements IDisplayLi
         this.dc[75] = new DisplayContext(75, new int[0]);
         this.dc[78] = new DisplayContext(78, new int[]{16, 59});
 
-        /* --- CarPlay cluster (altScreen) custom contexts, A5-class only (kombiType != 4) ---
-         * Three contiguous slots at the end of the array (80-82).  Our renderers own their
-         * OWN displayables (98 = maneuver graphics overlay, 99 = CarPlay cluster video) via
-         * screen_manage_window — they are NOT the stock route-guidance slot (20), so there is
-         * no collision.  displayables[0] is the capture root (MOST encoder grabs the whole
-         * DM-composited context); 102/101 are the KDK bg images; 33 the stock kombi map.
-         * Mirrors stock ctx74 = {20,102,101,33} (ONE segmented MOST stream: 33 map FULLSCREEN + 20 KDK
-         * POPUP). The maneuver popup (98) always rides a FULLSCREEN background — never a black KDK bg —
-         * the background being the stock kombi map (33) or the CarPlay video (99):
-         *   dc[80] = {98,102,101,33}   maneuver KDK popup (98) over the stock kombi map (33) fullscreen
-         *   dc[82] = {98,102,101,99}   maneuver KDK popup (98) over the CarPlay video (99) fullscreen
-         *   dc[83] = {99,102,101}      CarPlay video (99) ONLY — on the tab, projecting but NOT navigating
-         *                              (no popup: 99 is the active/encoded plane [0], not 98)
-         *   [0] = active plane (encoded by the MOST encoder); last = fullscreen bg (like stock 33).
-         *   NOTE: geometry via DM.setPosition/setCropping (fullscreen bg, 98 popup rect); stock VC
-         *   hardcodes id 20=popup so our custom ids need explicit positions.
-         * Java switches the cluster (display 1 / LVDS2) to one via DisplayManager.switchContext(). */
+        /* --- CarPlay cluster — TWO custom contexts, A5-class only (kombiType != 4) ---
+         *   z-order = array order: index 0 = TOP/front, last = BOTTOM/back.
+         *
+         *   dc[80] = {98, 101, 102, 99}  NAV active: maneuver(98) over the two KDK 987 backings
+         *                                (101 = 328x180 for sport/full, 102 = 210x153 for popup),
+         *                                over base(99)
+         *   dc[81] = {99}                NO nav: base only
+         *
+         *   98  = maneuver graphics overlay (maneuver_render; EGL/GPU; transparent when idle)
+         *   101 = stock KDK backing, 328x180 (Image) — used for the sport/full-buffer maneuver
+         *   102 = stock KDK backing, 210x153 (Image) — used for the popup (cropped) maneuver
+         *   99  = base layer (altscreen_render; empty when altScreen off)
+         *
+         *   NOTE (verified on-unit via dmdt gd): displayable 103 is NOT creatable (unregistered
+         *   DSI id), but 101/102 ARE already created Image displayables carrying the 987 panel —
+         *   so we use those.  Per-mode geometry (pos/crop/opacity of 98/101/102) is hardcoded in
+         *   com.luka.carplay.cluster.ClusterLayerController.apply() (called from CombiMapController.handleKDK).
+         *
+         * Switched by CombiMapController on maneuver appear/disappear (80 <-> 81). */
         if (this.framework.getKombiType() != 4) {
-            this.dc[80] = new DisplayContext(80, new int[]{98,
-                    IDisplayManagerKombiControl.DISPLAYABLE_KDK_BACKGROUND_LARGE_STAGE,
-                    IDisplayManagerKombiControl.DISPLAYABLE_KDK_BACKGROUND_SMALL_STAGE, 33});
-            this.dc[82] = new DisplayContext(82, new int[]{98,
-                    IDisplayManagerKombiControl.DISPLAYABLE_KDK_BACKGROUND_LARGE_STAGE,
-                    IDisplayManagerKombiControl.DISPLAYABLE_KDK_BACKGROUND_SMALL_STAGE, 99});
-            this.dc[83] = new DisplayContext(83, new int[]{99,
-                    IDisplayManagerKombiControl.DISPLAYABLE_KDK_BACKGROUND_LARGE_STAGE,
-                    IDisplayManagerKombiControl.DISPLAYABLE_KDK_BACKGROUND_SMALL_STAGE});
+            this.dc[80] = new DisplayContext(80, new int[]{98, 101, 102, 99});
+            this.dc[81] = new DisplayContext(81, new int[]{99});
         }
         if (this.framework.getKombiType() == 4) {
             this.defineContextsForG24();
@@ -215,6 +212,10 @@ public class DisplayManagerMIB2High extends DisplayManager implements IDisplayLi
     }
 
     protected void configureDM() {
+        /* NOTE: our CarPlay cluster backing uses the stock Image displayables 101/102 — created
+         * right here (below) because our A5 FPK unit reports sysConst(541)==2 (proven: 101/102
+         * show in dmdt gd).  A fresh id 103 is NOT creatable (unregistered DSI id), so no
+         * createImageDisplayable here for it. */
         if (this.framework.getSysConst(541) == 2) {
             this.createImageDisplayable(
                 new ResourceLocator(
@@ -279,17 +280,18 @@ public class DisplayManagerMIB2High extends DisplayManager implements IDisplayLi
     }
 
     public synchronized void switchContext(int i, int j, IDisplayListener idisplaylistener) {
+        int probeReq = i;
         this.log.log(1000000, "DisplayManager#switchContext visibleKDK %1 terminal %2 ", this.visibleKDKs[j], j);
-        /* altScreen contexts (AltScreenModule: 80 CTX_MANEUVER / 82 CTX_MANEUVER_VIDEO /
-         * 83 CTX_VIDEO) are self-composed — they already carry our planes (98/99/102/101).
-         * They must NOT go through the stock KDK-20 remap: addKDKToContext has no case for
-         * them and falls to default -> ctx 73, hijacking our altScreen switch to a stock
-         * context (audit #8).  Every stock context is < 80, so this guard is a no-op for
-         * all stock/RGI paths. */
+        /* altScreen context (AltScreenModule CTX_CLUSTER = 80) is self-composed — it already
+         * carries our planes (98/99/102/101).  It must NOT go through the stock KDK-20 remap:
+         * addKDKToContext has no case for it and falls to default -> ctx 73, hijacking our
+         * altScreen switch to a stock context (audit #8).  Every stock context is < 80, so
+         * this guard is a no-op for all stock/RGI paths. */
         if (this.visibleKDKs[j] == 20 && i < 80) {
             i = this.addKDKToContext(i);
         }
 
+        if (ClusterProbe.on()) ClusterProbe.onSwitchContext(probeReq, i, j, this.visibleKDKs[j], this.getDisplayables(i));
         super.switchContext(i, j, idisplaylistener);
         if (SHOW_DM_INFO && this.getCurrentContextID(j) > -1) {
             this.postStatisticInfoContextGeneral(i, j);
