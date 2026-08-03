@@ -35,6 +35,7 @@ import de.audi.tghu.navi.app.map.routecalc.RcciEvent;
 import de.audi.tghu.navi.app.rp.TripHandler;
 import de.audi.tghu.navi.app.util.LocationFormatter;
 import de.audi.tghu.navi.app.util.Util;
+import com.luka.carplay.probe.ClusterProbe;
 import de.audi.tghu.navi.app.util.addressformatting.AddressFormatter;
 import de.audi.tghu.navi.app.util.addressformatting.LocationFormattingResponse;
 import de.esolutions.fw.util.commons.Buffer;
@@ -52,6 +53,21 @@ import org.dsi.ifc.tmc.TmcMessage;
 
 public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener {
     public static final String EMPTY_STREET_LABEL = "---";
+
+    /* HMI model ids driven on the cluster (env.getMetricsModel/getChoiceModel).  Only the ids whose
+     * meaning is unambiguous from usage are named; 62/69/71/162 are left as literals on purpose. */
+    private static final int MODEL_ARRIVAL_TIME        = 66;   // ETA date metric (travel params)
+    private static final int MODEL_DIST_TO_DESTINATION = 63;   // remaining distance metric
+    private static final int MODEL_DIST_TO_MANEUVER    = 64;   // distance-to-next-maneuver (FctID 18)
+    private static final int MODEL_BARGRAPH            = 65;   // approach bargraph choice (FctID 18)
+
+    /* MetricsModel status (Util.setModelStatus/setStatus): 1 = valid/shown, 3 = invalid/hidden. */
+    private static final int MODEL_STATUS_VALID   = 1;
+    private static final int MODEL_STATUS_INVALID = 3;
+
+    /* Cluster MOST/LVDS display contexts (switchDisplayContextKombi - NOT DisplayManager contexts). */
+    private static final int KOMBI_CTX_MAP      = 8;   // map available
+    private static final int KOMBI_CTX_KDK_ONLY = 9;   // KDK-only cluster
     protected LogChannel logChannel;
     protected final NavigationEnv env;
     private boolean rgiDataValid = false;
@@ -139,6 +155,10 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         this.mapScaleTimer = new MapScaleTimer(navigationenv, this, this.mapScaleHandler);
         navigationenv.getLabelModel(62).setText(Util.INVALID_DISTANCE_NULL_AT_KOMBI_WITHOUT_TEXT_FOR_UNIT);
         this.initializeModels();
+        if (ClusterProbe.on()) {
+            ClusterProbe.log("ClusterService constructed — arming cluster probe one-shot");
+            ClusterProbe.armOneShot(this.env.getFramework(), this.clusterInputListener);
+        }
     }
 
     private void initializeModels() {
@@ -147,22 +167,22 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         this.env.getChoiceModel(69).setValue(0);
         this.turnToStreetValid = false;
         this.turnToStreet = Util.INVALID_DISTANCE_NULL_AT_KOMBI_WITHOUT_TEXT_FOR_UNIT;
-        this.env.getMetricsModel(66).setStatus(3);
-        this.env.getMetricsModel(66).setMetric(this.etaDateMetric);
-        this.env.getMetricsModel(63).setStatus(3);
-        this.env.getMetricsModel(63).setMetric(this.distanceToDestination);
-        this.travelParametersGroup.add(this.env.getMetricsModel(66));
-        this.travelParametersGroup.add(this.env.getMetricsModel(63));
-        this.env.getMetricsModel(64).setStatus(3);
-        this.env.getMetricsModel(64).setMetric(this.distanceToManeuver);
-        this.env.getChoiceModel(65).setValue(-1);
+        this.env.getMetricsModel(MODEL_ARRIVAL_TIME).setStatus(MODEL_STATUS_INVALID);
+        this.env.getMetricsModel(MODEL_ARRIVAL_TIME).setMetric(this.etaDateMetric);
+        this.env.getMetricsModel(MODEL_DIST_TO_DESTINATION).setStatus(MODEL_STATUS_INVALID);
+        this.env.getMetricsModel(MODEL_DIST_TO_DESTINATION).setMetric(this.distanceToDestination);
+        this.travelParametersGroup.add(this.env.getMetricsModel(MODEL_ARRIVAL_TIME));
+        this.travelParametersGroup.add(this.env.getMetricsModel(MODEL_DIST_TO_DESTINATION));
+        this.env.getMetricsModel(MODEL_DIST_TO_MANEUVER).setStatus(MODEL_STATUS_INVALID);
+        this.env.getMetricsModel(MODEL_DIST_TO_MANEUVER).setMetric(this.distanceToManeuver);
+        this.env.getChoiceModel(MODEL_BARGRAPH).setValue(-1);
         this.showBargraph = false;
-        this.nextManeuverGroup.add(this.env.getMetricsModel(64));
-        this.nextManeuverGroup.add(this.env.getChoiceModel(65));
+        this.nextManeuverGroup.add(this.env.getMetricsModel(MODEL_DIST_TO_MANEUVER));
+        this.nextManeuverGroup.add(this.env.getChoiceModel(MODEL_BARGRAPH));
         if (Util.isClusterKDKOnly(this.env.getFramework())) {
-            this.switchDisplayContextKombi(9);
+            this.switchDisplayContextKombi(KOMBI_CTX_KDK_ONLY);
         } else if (Util.isClusterMapAvailable(this.env.getFramework())) {
-            this.switchDisplayContextKombi(8);
+            this.switchDisplayContextKombi(KOMBI_CTX_MAP);
         }
     }
 
@@ -344,7 +364,7 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
                 flag1 = false;
             }
 
-            MetricsModelApp metricsmodelapp = this.env.getMetricsModel(64);
+            MetricsModelApp metricsmodelapp = this.env.getMetricsModel(MODEL_DIST_TO_MANEUVER);
             if (flag && i > 0) {
                 this.distanceToManeuver.setValue(i / 1000.0F);
                 metricsmodelapp.setMetric(this.distanceToManeuver);
@@ -356,13 +376,13 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
              * bargraph was active).  Drop the !showBargraph term so the number stays valid
              * alongside the bargraph.  (Model 65 bargraph value is set independently below.) */
             if (flag && i > 0) {
-                Util.setModelStatus(metricsmodelapp, 1);
+                Util.setModelStatus(metricsmodelapp, MODEL_STATUS_VALID);
             } else {
-                Util.setModelStatus(metricsmodelapp, 3);
+                Util.setModelStatus(metricsmodelapp, MODEL_STATUS_INVALID);
             }
 
             int i1 = this.showBargraph ? j : -1;
-            this.env.getChoiceModel(65).setValue(i1);
+            this.env.getChoiceModel(MODEL_BARGRAPH).setValue(i1);
             this.refreshStreetMode();
             this.nextManeuverGroup.flush();
             this.refreshDistanceToNextManeuverMOST(k, l, flag1, flag);
@@ -432,16 +452,16 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
 
     protected void updateArrivalTime(boolean flag, long i, boolean flag1) {
         this.logChannel.log(100000000, "ClusterService#updateArrivalTime( %1, %2 )", flag, i);
-        MetricsModelApp metricsmodelapp = this.env.getMetricsModel(66);
+        MetricsModelApp metricsmodelapp = this.env.getMetricsModel(MODEL_ARRIVAL_TIME);
         String s;
         if (flag) {
             this.etaDateMetric.setDate(i);
             metricsmodelapp.setMetric(this.etaDateMetric);
-            Util.setModelStatus(metricsmodelapp, 1);
+            Util.setModelStatus(metricsmodelapp, MODEL_STATUS_VALID);
             s = Util.formatTime(i, 2, this.env);
         } else {
             this.logChannel.log(10000000, "ClusterService#updateArrivalTime() - invalid flag for ETA set! ");
-            Util.setModelStatus(metricsmodelapp, 3);
+            Util.setModelStatus(metricsmodelapp, MODEL_STATUS_INVALID);
             s = "--:--";
         }
 
@@ -454,14 +474,14 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
 
     protected void updateRemainingTravelTime(boolean flag, long i) {
         this.logChannel.log(100000000, "ClusterService#RemainingTravelTime( %1, %2 )", flag, i);
-        MetricsModelApp metricsmodelapp = this.env.getMetricsModel(66);
+        MetricsModelApp metricsmodelapp = this.env.getMetricsModel(MODEL_ARRIVAL_TIME);
         if (flag) {
             this.rttDateMetric.setDate(i);
             metricsmodelapp.setMetric(this.rttDateMetric);
-            Util.setModelStatus(metricsmodelapp, 1);
+            Util.setModelStatus(metricsmodelapp, MODEL_STATUS_VALID);
         } else {
             this.logChannel.log(10000000, "ClusterService#updateArrivalTime() - invalid flag for ETA set! ");
-            Util.setModelStatus(metricsmodelapp, 3);
+            Util.setModelStatus(metricsmodelapp, MODEL_STATUS_INVALID);
         }
 
         KOMOTime komotime = KOMOService.convertDurationToKOMO(i);
@@ -473,13 +493,13 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         this.logChannel.log(100000000, "ClusterService#updateDistanceToDestination( %1 )", i);
         long j = -1L;
         int k = -1;
-        MetricsModelApp metricsmodelapp = this.env.getMetricsModel(63);
+        MetricsModelApp metricsmodelapp = this.env.getMetricsModel(MODEL_DIST_TO_DESTINATION);
         String s;
         boolean flag1;
         if (i > 0) {
             this.distanceToDestination.setValue(i / 1000.0F);
             metricsmodelapp.setMetric(this.distanceToDestination);
-            Util.setModelStatus(metricsmodelapp, 1);
+            Util.setModelStatus(metricsmodelapp, MODEL_STATUS_VALID);
             s = Util.formatDistance(i, 1, 2, EMPTY_STREET_LABEL);
             BAPDistanceFormatter.BAPDistance bapdistanceformatter$bapdistance = this.bapDistanceFormatter
                 .formatDistanceToDestination(i, Distance.getSystemUnit() == 1);
@@ -489,7 +509,7 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         } else {
             this.logChannel
                 .log(10000000, "ClusterService#updateDistanceToDestination() - invalid distanceToDestination! ");
-            Util.setModelStatus(metricsmodelapp, 3);
+            Util.setModelStatus(metricsmodelapp, MODEL_STATUS_INVALID);
             s = Util.INVALID_DISTANCE_NULL_AT_KOMBI_WITHOUT_TEXT_FOR_UNIT;
             flag1 = false;
         }
@@ -652,7 +672,7 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
     public synchronized void updateKombiMapReady(boolean flag) {
         this.logChannel.log(1000000, "ClusterService#updateKombiMapReady( %1 )", flag);
         if (flag) {
-            this.switchDisplayContextKombi(8);
+            this.switchDisplayContextKombi(KOMBI_CTX_MAP);
             if (Util.isClusterMapAlwaysOn()) {
                 this.combiBAPListener.setMainMapVisibility(true);
             }
@@ -686,6 +706,7 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
     }
 
     public void switchDisplayContextKombi(int i) {
+        if (ClusterProbe.on()) ClusterProbe.onSwitchKombi(i);
         this.logChannel.log(1000000, "ClusterService#switchDisplayContextKombi( %1 )", i);
         this.mapInterface.switchDisplayContextKombi(i);
     }
@@ -1090,21 +1111,16 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         this.combiBAPListener.combiservice = svc;
     }
 
-    /* Cluster projection activate/deactivate.  The old impl forced
-     * switchContext(72)->(74) to steal displayable 20 on stock ctx 74 (the ROOT
-     * CAUSE that killed stock render).  The altScreen redesign instead switches the
-     * cluster to OUR context (dc[80] = {98,102,101}: our managed maneuver-graphics
-     * window over the KDK bg) via AltScreenModule -> HMI DisplayManager.switchContext.
-     * On deactivate we restore the stock cluster context (74). */
+    /* Cluster projection activate/deactivate.
+     * The cluster context is now driven purely by CarPlay connect/disconnect
+     * (AltScreenModule.start/stop → the single ctx 80), NOT by RGI: the maneuver popup
+     * shows/hides by maneuver_render drawing content vs CMD_CLEAR inside the held context.
+     * So RGI start/stop must NOT touch the cluster context here — these remain only as the
+     * BAPBridge lifecycle hooks (no-ops for context). */
     public String activateCustomRendererPipeline() {
-        /* RGI active — the maneuver KDK popup (ctx 80).  The cluster state machine shows the
-         * popup, and upgrades to ctx 82 only if the altScreen VIDEO stream is also available
-         * and the smartphone tab is focused (independent signal). */
-        com.luka.carplay.core.AltScreenModule.setRgiActive(true);
         return "RGI active (maneuver popup)";
     }
 
     public void deactivateCustomRendererPipeline() {
-        com.luka.carplay.core.AltScreenModule.setRgiActive(false);
     }
 }
