@@ -111,6 +111,19 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
                 }
             }
 
+            /* dio can bounce through INVALID and then return directly as ACTIVE,
+             * without a second ACTIVATING callback.  INVALID stops the modules;
+             * re-arm them from ACTIVE when CarPlay is again authoritative. */
+            if (tmdevice.connectionState().is(TMDevice.ConnectionState.ACTIVE)
+                    && tmdevice.isCarplayDevice()
+                    && !com.luka.carplay.core.CarPlayApp.isActive()) {
+                try {
+                    com.luka.carplay.framework.Log.i("TMDev",
+                        "ACTIVE after lifecycle bounce: reactivating CarPlay modules");
+                    com.luka.carplay.core.CarPlayApp.onActivate(this.this$0.context);
+                } catch (Throwable t) { /* never crash the stock flow */ }
+            }
+
             /* ===== CarPlay hook: device disconnected =====
              * The REAL disconnect state (from the TMDev diagnostic log) is INVALID with carplay=false —
              * NOT NOT_ATTACHED — because a detached device loses its CarPlay identity.  Matching a specific

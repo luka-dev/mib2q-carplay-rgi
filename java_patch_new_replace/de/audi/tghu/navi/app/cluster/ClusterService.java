@@ -194,7 +194,7 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         ICommandListFactory icommandlistfactory,
         IViewSizeManager iviewsizemanager
     ) {
-        return new CombiBAPListener(
+        return new AltScreenCombiBAPListener(
             this,
             this.logChannel,
             this.env,

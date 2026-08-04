@@ -28,17 +28,30 @@ stock script after stopping the renderers.
 Lifecycle semantics:
 
 - if either renderer already exists when CarPlay starts, it is not restarted;
-- while the direct `dio_manager` child is alive, only a missing renderer is restarted;
-- when `dio_manager` exits, the supervisor SIGTERMs both renderers, force-kills only
-  a one-second residual, and exits with the dio status;
+- renderer PIDs are kept under `/tmp`; one finite `pidin ar` snapshot seeds the
+  files when adopting an older running generation, then startup and the monitor
+  use constant-time `/proc/<pid>` checks instead of repeatedly scanning every
+  process while `dio_manager` initializes;
+- the wrapper `exec`s `dio_manager`, so smartphone_integrator tracks the exact dio
+  PID; a monitor shell restarts only a genuinely missing renderer while it lives;
+- an owner-generation file lets a fast replacement `dio_manager` inherit the
+  existing renderers without an old monitor tearing them down;
+- when no replacement generation appears, the old monitor SIGTERMs only the
+  renderer PID snapshot captured when its dio exited, then force-kills only those
+  same residual PIDs. It never re-scans and kills a new renderer;
 - external cleanup creates `/tmp/carplay_supervisor.stop` first, so the monitor cannot
   race by respawning a renderer, then performs the same renderer cleanup and finally
   invokes Audi's `/etc/scripts/carplay_cleanup.sh` for the stock mdnsd/PPS cleanup.
 
 Verify on the unit in `/tmp/carplay_wrapper.log`: `already running - leave untouched`
-or `starting ...`, followed by `dio_manager exited ... - stopping renderers` and the
-two `SIGTERM` lines. A `SIGKILL residual` line means that renderer did not complete
-its normal shutdown within one second and needs separate investigation.
+or `starting ...`, followed by either `superseded ... leave new renderers untouched`
+or `gone - stopping renderers`. A `SIGKILL residual` line must name one of the old
+snapshot PIDs; it must never name a renderer started by the replacement generation.
+
+CarPlay uses `restartDelay: 250`, matching `portResetTime: 250`. The stock 2,000 ms
+child delay was visible directly between valid USB enumeration and hook/dio startup;
+the PID-snapshot cleanup guarantees introduced here keep the shorter handoff from
+killing renderer processes belonging to a replacement generation.
 
 ## MU1316 QNX 6.5 compatibility audit
 
@@ -46,12 +59,11 @@ The supervisor deliberately uses only facilities present in the extracted P5087
 firmware:
 
 - `/bin/sh` is QNX PD KSH 5.2.14 (`VERSION=650-4423`) and supports the functions,
-  traps, command substitution, `${name%%pattern}`, background jobs, `$!`, and
-  `wait <pid>` used here;
+  traps, command substitution, background jobs, `read`, and `exec` used here;
 - `kill` is also a shell builtin and accepts QNX forms `-TERM` and `-KILL`;
-- QNX `tr` 6.5 is installed at `/mnt/app/armle/usr/bin/tr`; its own usage data
-  explicitly supports `\octal` with one to three octal digits, including the
-  `tr '\000' ' '` conversion used for `/proc/<pid>/cmdline`;
+- `pidin ar` supplies a finite process snapshot; no blocking `/proc/*/cmdline`
+  walk and no GNU process utilities are used. It is only the compatibility
+  fallback for adopting pre-existing renderers; normal checks use recorded PIDs;
 - `rm -f` and integer `sleep` are stock facilities; the original firmware uses
   `sleep` throughout `startup.sh` and `/etc/scripts`;
 - the shared process helper appends a safe subset of the stock MMX command search
@@ -59,4 +71,4 @@ firmware:
   `smartphone_integrator` preserving `PATH` and dio keeps its original resolution order.
 
 No GNU-only commands or options are used: there is no `pgrep`, `pkill`, `wait -n`,
-GNU `stat`, `readlink -f`, `timeout`, or fractional sleep.
+GNU `stat`, `readlink -f`, `timeout`, fractional sleep, or dependency on `tr`.

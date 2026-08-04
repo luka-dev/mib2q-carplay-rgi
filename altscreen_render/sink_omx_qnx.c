@@ -1,9 +1,8 @@
 /*
- * altscreen_render — QNX cluster sink: OMX AVC decode -> Screen readback -> RGBA present.
+ * altscreen_render — QNX cluster sink: OMX AVC decode -> EGLImage -> RGBA present.
  *
- * Faithful port of the PROVEN from-source pipeline
- * (Patches/libairplay-mhi2q/src/screenstream.c, see SCREENSTREAM_PARITY.md), with
- * the libairplay wrapper stripped:
+ * Standalone receiver output path, matched against stock libairplay 210 and
+ * verified directly by the MU1316 runtime logs, with no libairplay wrapper:
  *   - no CFRuntime/ulog/require_* — plain struct + fprintf + goto.
  *   - INPUT IS ALREADY ANNEX-B: the hook (altscreen_av.c) converts AVCC→Annex-B and
  *     forwards SPS/PPS first, then frames.  So NO avcC handling / H264 helpers here —
@@ -13,12 +12,14 @@
  *     default 1440x542).  The MU1316/APQ8064 decoder reaches Idle only with native
  *     Qualcomm 32m tiled output (OMX 0x7f000004 / Screen 0x1000c).  OMX remains
  *     bound to native Screen WINDOW buffers exactly like stock libairplay 210.
- *     After FillBufferDone, Screen reads the posted tiled staging window into a
- *     Screen-owned RGBA8888 plane-99 buffer and posts that linear buffer.
+ *     After FillBufferDone, EGL imports that exact Screen buffer as an external
+ *     image. Adreno de-tiles and converts YUV->RGB while drawing into the proven
+ *     RGBA8888 plane-99 EGL window.
  *
  * BUILD: needs the QNX Screen headers/lib + OMX (MHI2Q BSP) — links on the unit/VM,
- * NOT in the generic docker SDP.  A host syntax-check (make hostcheck) compiles this
- * against stub headers to catch C errors offline.  ON-UNIT UNVALIDATED.
+ * NOT in the generic docker SDP. A host syntax-check (make hostcheck) compiles this
+ * against stub headers to catch C errors offline. The native 32m decode and the
+ * EGL external-image draw have both run on-unit; exact-usage chroma is the next test.
  *
  * QNX 6.5 ARMv7 gcc: no __thread; globals + pthread.
  */
@@ -28,7 +29,7 @@
 #include "OMX_Component.h"
 #include "OMX_Video.h"
 
-#include "screen_readback_present.h"
+#include "screen_egl_present.h"
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -52,7 +53,8 @@ typedef struct {
     OMX_U32                 *freeIn;   OMX_U32 freeInHead, freeInTail;
 
     int32_t                  width, height;
-    screen_readback_present_t *present;   /* tiled Screen windows + RGBA readback */
+    screen_egl_present_t     *present;   /* tiled Screen windows + GPU RGBA output */
+    OMX_U32                  presentOutCount;
     volatile int             winReady;   /* read lock-free on the OMX callback thread */
 
     pthread_mutex_t          lock;
@@ -108,7 +110,7 @@ static OMX_ERRORTYPE _OnEmptyDone(OMX_HANDLETYPE c, OMX_PTR app, OMX_BUFFERHEADE
     for (i = 0; i < me->nInBufs; ++i)
         if (me->inBufs[i] == b) { me->freeIn[me->freeInTail % me->nInBufs] = i; me->freeInTail++; break; }
     me->inputReturned++;
-    if (me->inputReturned <= 3 || (me->inputReturned % 120) == 0)
+    if (me->inputReturned <= 3 || (me->inputReturned % 600) == 0)
         fprintf(stderr, "altscreen_render[qnx]: EmptyBufferDone #%lu header=%p matched=%s\n",
                 me->inputReturned, (void *)b, (i < me->nInBufs) ? "yes" : "NO");
     pthread_cond_broadcast(&me->cond);
@@ -116,21 +118,21 @@ static OMX_ERRORTYPE _OnEmptyDone(OMX_HANDLETYPE c, OMX_PTR app, OMX_BUFFERHEADE
     return OMX_ErrorNone;
 }
 
-/* The OMX output pointer belongs to a tiled Screen WINDOW buffer.  Screen's
- * blocking readback consumes that exact buffer before this callback recycles it. */
-static int _PresentReadback(ScreenSink *me, OMX_BUFFERHEADERTYPE *b) {
+/* The OMX output pointer belongs to a tiled Screen WINDOW buffer.  The GPU
+ * external-image draw consumes that exact buffer before this callback recycles it. */
+static int _PresentGpu(ScreenSink *me, OMX_BUFFERHEADERTYPE *b) {
     OMX_U32 i;
     if (!me->winReady || b->nFilledLen == 0) return -1;
     for (i = 0; i < me->nOutBufs; ++i) {
         if (me->outBufs[i] != b) continue;
-        if (screen_readback_present_frame(me->present, (unsigned int)i,
-                                          b->nFilledLen) == 0) {
+        if (screen_egl_present_frame(me->present, (unsigned int)i,
+                                     b->nFilledLen) == 0) {
             me->outputPosted++;
             return 0;
         }
         me->outputPostFailed++;
         fprintf(stderr,
-                "altscreen_render[qnx]: Screen readback present FAILED #%lu src=%u filled=%u\n",
+                "altscreen_render[qnx]: EGLImage GPU present FAILED #%lu src=%u filled=%u\n",
                 me->outputPostFailed, (unsigned)i, (unsigned)b->nFilledLen);
         return -1;
     }
@@ -144,13 +146,13 @@ static OMX_ERRORTYPE _OnFillDone(OMX_HANDLETYPE c, OMX_PTR app, OMX_BUFFERHEADER
     ScreenSink *const me = (ScreenSink *)app;
     OMX_ERRORTYPE err;
     me->outputFilled++;
-    if (me->outputFilled <= 3 || (me->outputFilled % 120) == 0)
+    if (me->outputFilled <= 3 || (me->outputFilled % 600) == 0)
         fprintf(stderr,
                 "altscreen_render[qnx]: FillBufferDone #%lu filled=%u offset=%u flags=0x%x winReady=%d\n",
                 me->outputFilled, (unsigned)b->nFilledLen, (unsigned)b->nOffset,
                 (unsigned)b->nFlags, me->winReady);
-    _PresentReadback(me, b);
-    /* The blocking readback above has finished consuming this exact Screen buffer;
+    _PresentGpu(me, b);
+    /* The GPU path finishes sampling this exact Screen buffer before returning;
      * only now may it return to the decoder.  winReady drops before teardown. */
     if (me->running && me->winReady) {
         err = OMX_FillThisBuffer(c, b);
@@ -195,21 +197,31 @@ static int _WaitState(ScreenSink *me, OMX_STATETYPE want) {
 static void _DestroyPresent(ScreenSink *me) {
     me->winReady = 0;
     if (me->present) {
-        screen_readback_present_destroy(me->present);
+        screen_egl_present_destroy(me->present);
         me->present = NULL;
     }
+    me->presentOutCount = 0;
 }
 
 static int _MakePresent(ScreenSink *me, OMX_U32 count) {
-    me->present = screen_readback_present_create(me->width, me->height, count);
+    if (me->present && me->presentOutCount == count) {
+        me->winReady = 1;
+        fprintf(stderr,
+                "altscreen_render[qnx]: reusing persistent EGL/Screen presenter across reconnect (%u buffers)\n",
+                (unsigned)count);
+        return 0;
+    }
+    if (me->present) _DestroyPresent(me);
+    me->present = screen_egl_present_create(me->width, me->height, count);
     if (!me->present) {
-        fprintf(stderr, "altscreen_render[qnx]: Screen readback path setup FAILED\n");
+        fprintf(stderr, "altscreen_render[qnx]: EGLImage GPU path setup FAILED\n");
         me->winReady = 0;
         return -1;
     }
+    me->presentOutCount = count;
     me->winReady = 1;
     fprintf(stderr,
-            "altscreen_render[qnx]: output path OMX=0x7f000004 tiled window -> screen_read_window -> RGBA8888 plane=99\n");
+            "altscreen_render[qnx]: output path OMX=0x7f000004 tiled Screen buffer -> external EGLImage -> RGBA8888 plane=99\n");
     return 0;
 }
 
@@ -240,7 +252,7 @@ static int _ConfigurePorts(ScreenSink *me) {
     if (OMX_GetParameter(me->decoder, OMX_IndexParamPortDefinition, &pd)) return -1;
     if ((OMX_U32)pd.format.video.eColorFormat != (OMX_U32)kQOMX_ColorFmt_32m) {
         fprintf(stderr,
-                "altscreen_render[qnx]: decoder rejected native 32m: requested=0x7f000004 readback=0x%x\n",
+                "altscreen_render[qnx]: decoder rejected native 32m: requested=0x7f000004 actual=0x%x\n",
                 (unsigned)pd.format.video.eColorFormat);
         return -1;
     }
@@ -312,8 +324,8 @@ static int _UseScreenBuffers(ScreenSink *me, OMX_U32 count) {
     me->nOutBufs = 0;
 
     for (i = 0; i < count; ++i) {
-        void *vaddr = screen_readback_present_source_pointer(me->present,
-                                                              (unsigned int)i);
+        void *vaddr = screen_egl_present_source_pointer(me->present,
+                                                         (unsigned int)i);
         if (!vaddr) goto fail;
         if (OMX_UseBuffer(me->decoder, &me->outBufs[i], kOutPortIndex, me, pd.nBufferSize, (OMX_U8 *)vaddr)) goto fail;
         ++me->nOutBufs;
@@ -323,9 +335,9 @@ fail:
     return -1;
 }
 
-static void _Teardown(ScreenSink *me) {
+static void _Teardown(ScreenSink *me, int destroyPresent) {
     OMX_U32 i;
-    if (!me->decoder && !me->present && !me->omxInitialized) return;
+    if (!me->decoder && (!destroyPresent || !me->present) && !me->omxInitialized) return;
     me->running = 0;
     me->winReady = 0;
     pthread_mutex_lock(&me->lock); pthread_cond_broadcast(&me->cond); pthread_mutex_unlock(&me->lock);
@@ -342,7 +354,7 @@ static void _Teardown(ScreenSink *me) {
         OMX_Deinit();
         me->omxInitialized = 0;
     }
-    _DestroyPresent(me);
+    if (destroyPresent) _DestroyPresent(me);
     free(me->inBufs);        me->inBufs = NULL;        me->nInBufs = 0;
     free(me->outBufs);       me->outBufs = NULL;       me->nOutBufs = 0;
     free(me->freeIn);        me->freeIn = NULL;
@@ -352,7 +364,7 @@ static void _Teardown(ScreenSink *me) {
     me->outputFilled = me->outputPosted = me->outputPostFailed = 0;
 }
 
-/* Bring up native 32m OMX output + post-decode Screen RGBA readback. */
+/* Bring up native 32m OMX output + post-decode EGL external-image conversion. */
 static int _StartDecoder(ScreenSink *me) {
     OMX_U32 i, outCount;
     if (OMX_Init()) goto fail;
@@ -388,12 +400,12 @@ static int _StartDecoder(ScreenSink *me) {
     }
 
     me->started = 1;
-    fprintf(stderr, "altscreen_render[qnx]: decoder started %dx%d, native-32m %u Screen window bufs -> RGBA readback\n",
+    fprintf(stderr, "altscreen_render[qnx]: decoder started %dx%d, native-32m %u Screen window bufs -> EGL GPU RGBA\n",
             me->width, me->height, (unsigned)me->nOutBufs);
     return 0;
 fail:
     fprintf(stderr, "altscreen_render[qnx]: decoder start FAILED\n");
-    _Teardown(me);
+    _Teardown(me, 0);
     return -1;
 }
 
@@ -423,7 +435,7 @@ static void _FeedInput(ScreenSink *me, const uint8_t *data, uint32_t len, OMX_U3
     err = OMX_EmptyThisBuffer(me->decoder, b);
     if (err == OMX_ErrorNone) {
         me->inputSubmitted++;
-        if (me->inputSubmitted <= 3 || (me->inputSubmitted % 120) == 0)
+        if (me->inputSubmitted <= 3 || (me->inputSubmitted % 600) == 0)
             fprintf(stderr,
                     "altscreen_render[qnx]: EmptyThisBuffer OK #%lu requested=%u submitted=%u flags=0x%x in=%u\n",
                     me->inputSubmitted, (unsigned)requestedLen, (unsigned)len,
@@ -451,7 +463,7 @@ int av_sink_open(void) {
     pthread_cond_init(&g_ss.cond, NULL);
     g_ss.width  = ew ? atoi(ew) : 1440;           /* = advertised cluster size = Audi Kombi panel */
     g_ss.height = eh ? atoi(eh) : 542;            /* qcdisplaycfg_MMX2.xml: "Audi 1440x542 Kombi panel" */
-    fprintf(stderr, "altscreen_render[qnx]: sink open (%dx%d, OMX 32m window -> Screen RGBA readback)\n",
+    fprintf(stderr, "altscreen_render[qnx]: sink open (%dx%d, OMX 32m Screen buffer -> EGL GPU RGBA)\n",
             g_ss.width, g_ss.height);
     return 0;
 }
@@ -478,13 +490,13 @@ void av_sink_frame(const uint8_t *annexb, uint32_t len) {
 }
 
 void av_sink_session_end(void) {
-    fprintf(stderr, "altscreen_render[qnx]: session end → teardown decoder\n");
-    _Teardown(&g_ss);
+    fprintf(stderr, "altscreen_render[qnx]: session end → teardown decoder; keep EGL/Screen presenter for reconnect\n");
+    _Teardown(&g_ss, 0);
     g_ss.startFails = 0;     /* fresh attempts on the next connection */
 }
 
 void av_sink_close(void) {
-    _Teardown(&g_ss);
+    _Teardown(&g_ss, 1);
     pthread_cond_destroy(&g_ss.cond);
     pthread_mutex_destroy(&g_ss.lock);
 }

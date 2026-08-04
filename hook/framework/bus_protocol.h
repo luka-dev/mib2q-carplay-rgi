@@ -95,12 +95,11 @@
                                         /* (buttons bit0 = press/select).  All */
                                         /* altScreen input is HID (no semantic */
                                         /* zoom cmd — the knob zooms in-context)*/
-#define CMD_ALT_ZONE            0x0111  /* binary [u8 viewAreaIndex]           */
-                                        /* [u16 LE durationMillis?] — switch   */
-                                        /* cluster to predeclared viewAreas[i] */
-                                        /* (0=full,1=split); dur optional=250  */
+#define CMD_ALT_ZONE            0x0111  /* binary [u8 mode][u16 LE durationMs] */
+                                        /* mode 0=fullscreen, 1=duo; hook maps */
+                                        /* each to primary+adjacent viewAreas  */
 #define CMD_ALT_ZONE_ACK        0x0112  /* hook→Java confirmation for a switch */
-                                        /* binary [u8 index][i32 LE status]    */
+                                        /* binary [u8 mode][i32 LE status]     */
                                         /* status 0 = phone applied it, else   */
                                         /* OSStatus/send error                 */
 /* More MHI3-ported session commands (Java→hook), all via AirPlayReceiverSessionSendCommand. */

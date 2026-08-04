@@ -20,10 +20,13 @@ DEFINE_LOG_MODULE(altscreen_av);
 #define MSG_NOSIGNAL 0
 #endif
 
+#define AV_SEND_STALL_LIMIT_MS 8000L
+
 static char            g_host[64] = ALTAV_DEFAULT_HOST;
 static int             g_port     = ALTAV_DEFAULT_PORT;
 static int             g_enabled  = 1;
 static int             g_fd       = -1;
+static int             g_need_config = 0;
 static pthread_mutex_t g_lock     = PTHREAD_MUTEX_INITIALIZER;
 /* Cached Annex-B SPS/PPS.  The renderer marks the FIRST message on each connection as
  * OMX_BUFFERFLAG_CODECCONFIG, so on every (re)connect we must resend the config BEFORE any frame —
@@ -52,11 +55,15 @@ static void av_connect_locked(void)
 {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) return;
-    /* Bounded send: a hung/slow decoder must never block the libairplay frame
-     * thread (which would also stall teardown).  On timeout send() returns short
-     * → av_send_locked drops the fd.  Localhost connect never blocks. */
-    struct timeval tv; tv.tv_sec = 0; tv.tv_usec = 100000;   /* 100 ms */
+    /* Bounded send: this is the hook-owned 111 receiver thread, not stock
+     * libairplay's main-screen thread.  The renderer starts OMX synchronously
+     * after reading the 33-byte config, so its next read can legitimately be
+     * delayed beyond one SO_SNDTIMEO interval.  av_send_all_locked() retries
+     * EAGAIN for a bounded total instead of tearing down a healthy stream. */
+    struct timeval tv; tv.tv_sec = 0; tv.tv_usec = 500000;   /* 500 ms */
+    int sndbuf = 512 * 1024;
     setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+    setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf));
     struct sockaddr_in sa;
     memset(&sa, 0, sizeof(sa));
     sa.sin_family = AF_INET;
@@ -64,41 +71,84 @@ static void av_connect_locked(void)
     inet_pton(AF_INET, g_host, &sa.sin_addr);
     if (connect(fd, (struct sockaddr *)&sa, sizeof(sa)) == 0) {
         g_fd = fd;
+        g_need_config = 1;
         LOG_INFO(LOG_MODULE, "connected to %s:%d (fd=%d)", g_host, g_port, fd);
         /* resend cached SPS/PPS first — the render's fresh decoder flags msg #1 as CODECCONFIG */
-        if (g_cfg_len) {
-            uint32_t be = htonl(g_cfg_len);
-            if (send(g_fd, &be, 4, MSG_NOSIGNAL) != 4 ||
-                send(g_fd, g_cfg, g_cfg_len, MSG_NOSIGNAL) != (ssize_t)g_cfg_len) {
-                close(g_fd); g_fd = -1;      /* config send failed → drop, next frame retries */
-            } else {
-                LOG_INFO(LOG_MODULE, "replayed SPS/PPS config (%u bytes) on new connection", g_cfg_len);
-            }
-        }
+        /* Config replay is performed by av_send_locked() below. */
     } else {
         close(fd);
     }
 }
 
-/* caller holds g_lock; sends [u32 BE len][buf]. drops fd on error. */
-static void av_send_locked(const uint8_t *buf, uint32_t len)
+/* TCP send() may legally return short even on loopback. Complete each protocol
+ * record while retaining the 500 ms socket timeout; transient back-pressure is
+ * retried for at most AV_SEND_STALL_LIMIT_MS before the connection is dropped. */
+static int av_send_all_locked(const void *data, uint32_t len)
 {
-    if (g_fd < 0) av_connect_locked();
-    if (g_fd < 0) return;
+    const uint8_t *p = (const uint8_t *)data;
+    uint32_t off = 0;
+    struct timeval started, now;
+    gettimeofday(&started, NULL);
+    while (off < len) {
+        ssize_t n = send(g_fd, p + off, len - off, MSG_NOSIGNAL);
+        if (n > 0) { off += (uint32_t)n; continue; }
+        if (n < 0 && errno == EINTR) continue;
+        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+            long elapsed_ms;
+            gettimeofday(&now, NULL);
+            elapsed_ms = (long)(now.tv_sec - started.tv_sec) * 1000L +
+                         (long)(now.tv_usec - started.tv_usec) / 1000L;
+            if (elapsed_ms < AV_SEND_STALL_LIMIT_MS) continue;
+        }
+        LOG_ERROR(LOG_MODULE,
+                  "send failed fd=%d off=%u/%u ret=%d errno=%d",
+                  g_fd, off, len, (int)n, errno);
+        return -1;
+    }
+    return 0;
+}
+
+/* caller holds g_lock; sends [u32 BE len][buf]. drops fd on error. */
+static int av_send_locked(const uint8_t *buf, uint32_t len)
+{
+    int opened = 0;
+    if (g_fd < 0) {
+        av_connect_locked();
+        if (g_fd >= 0) opened = 1;
+    }
+    if (g_fd < 0) return -1;
+
+    /* A fresh connection must begin with CODECCONFIG.  Send it here rather than
+     * from av_connect_locked so all writes use the same short-write-safe path. */
+    if (g_need_config && g_cfg_len) {
+        uint32_t cfg_be = htonl(g_cfg_len);
+        if (av_send_all_locked(&cfg_be, 4) != 0 ||
+            av_send_all_locked(g_cfg, g_cfg_len) != 0) {
+            close(g_fd); g_fd = -1; g_need_config = 0;
+            return -1;
+        }
+        g_need_config = 0;
+        LOG_INFO(LOG_MODULE, "replayed SPS/PPS config (%u bytes) on new connection", g_cfg_len);
+        /* altav_set_config() passes g_cfg itself.  It has just been sent as the
+         * mandatory first record, so do not duplicate it. */
+        if (buf == g_cfg && len == g_cfg_len) return opened;
+    }
     uint32_t be = htonl(len);
-    ssize_t r1 = send(g_fd, &be, 4, MSG_NOSIGNAL);
-    ssize_t r2 = (r1 == 4) ? send(g_fd, buf, len, MSG_NOSIGNAL) : -1;
-    if (r1 != 4 || r2 != (ssize_t)len) {
+    if (av_send_all_locked(&be, 4) != 0 ||
+        av_send_all_locked(buf, len) != 0) {
         close(g_fd);
         g_fd = -1;
+        g_need_config = 0;
+        return -1;
     }
+    return opened;
 }
 
 void altav_forward_frame(const uint8_t *avcc_data, uint32_t len)
 {
     if (!g_enabled || !avcc_data || len == 0) return;
     pthread_mutex_lock(&g_lock);
-    av_send_locked(avcc_data, len);
+    (void)av_send_locked(avcc_data, len);
     pthread_mutex_unlock(&g_lock);
 }
 
@@ -110,7 +160,7 @@ void altav_set_config(const uint8_t *annexb_cfg, uint32_t len)
     pthread_mutex_lock(&g_lock);
     memcpy(g_cfg, annexb_cfg, len);
     g_cfg_len = len;
-    av_send_locked(annexb_cfg, len);
+    (void)av_send_locked(g_cfg, g_cfg_len);
     pthread_mutex_unlock(&g_lock);
 }
 
@@ -142,21 +192,28 @@ static uint32_t avcc_to_annexb(const uint8_t *in, uint32_t inlen, uint8_t ls,
     return o;
 }
 
-void altav_forward_avcc_frame(const uint8_t *avcc, uint32_t len, uint8_t ls)
+int altav_forward_avcc_frame(const uint8_t *avcc, uint32_t len, uint8_t ls)
 {
-    if (!g_enabled || !avcc || len == 0) return;
+    int result = -1;
+    if (!g_enabled || !avcc || len == 0) return -1;
     uint32_t need = avcc_to_annexb(avcc, len, ls, NULL, 0);   /* pass 1: exact size */
-    if (!need) return;
+    if (!need) return -1;
     uint8_t *ab = (uint8_t *)malloc(need);
-    if (!ab) return;
+    if (!ab) return -1;
     uint32_t n = avcc_to_annexb(avcc, len, ls, ab, need);     /* pass 2: fill */
-    if (n) altav_forward_frame(ab, n);
+    if (n) {
+        pthread_mutex_lock(&g_lock);
+        result = av_send_locked(ab, n);
+        pthread_mutex_unlock(&g_lock);
+    }
     free(ab);
+    return result;
 }
 
 void altav_shutdown(void)
 {
     pthread_mutex_lock(&g_lock);
     if (g_fd >= 0) { close(g_fd); g_fd = -1; }
+    g_need_config = 0;
     pthread_mutex_unlock(&g_lock);
 }

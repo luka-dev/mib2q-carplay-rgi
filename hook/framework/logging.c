@@ -110,7 +110,6 @@ static void check_rotation(void) {
 
 hook_result_t log_init(const log_config_t* config) {
     ensure_lock_init();
-    ensure_lock_init();
     pthread_mutex_lock(&g_log.lock);
 
     if (g_log.initialized) {

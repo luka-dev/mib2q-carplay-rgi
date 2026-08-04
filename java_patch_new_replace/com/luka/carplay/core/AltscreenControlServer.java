@@ -5,9 +5,9 @@
  * CONTROL path: altscreen_render connects here (client) and sends 4-byte events reporting whether
  * the CarPlay 111 cluster video is flowing (0x81 VIDEO_ON / 0x82 VIDEO_OFF).
  *
- * These are now INFORMATIONAL ONLY (logged).  The cluster context is connect-driven (one held
- * ctx 80 from CarPlay connect to disconnect); the video plane (99) is content-driven inside
- * altscreen_render (black when no 111), so video on/off does not gate the context.
+ * VIDEO_ON is also a data-plane fallback for the cluster context.  TMDev can publish a transient
+ * INVALID while dio restarts and fail to publish a matching activation afterwards even though the
+ * new 111 stream is live.  In that case AltScreenModule must still expose displayable 99.
  *
  * Started always-on from CarPlayApp.startTransport() (boot) — altscreen_render is a framework
  * service that comes up before CarPlay, so the server must already be listening.  Java 1.4.
@@ -58,6 +58,7 @@ final class AltscreenControlServer {
                     try { serve(c); }
                     catch (Throwable t) { Log.d(TAG, "client dropped: " + t); }
                     finally { try { c.close(); } catch (Throwable t) { /* ignore */ } }
+                    AltScreenModule.setVideoAvailable(false);
                     Log.d(TAG, "altscreen_render disconnected (video off)");
                 }
             } catch (Throwable t) {
@@ -83,8 +84,10 @@ final class AltscreenControlServer {
             int evt = pkt[0] & 0xFF;
             if (evt == EVT_VIDEO_ON) {
                 Log.i(TAG, "VIDEO_ON");
+                AltScreenModule.setVideoAvailable(true);
             } else if (evt == EVT_VIDEO_OFF) {
                 Log.i(TAG, "VIDEO_OFF");
+                AltScreenModule.setVideoAvailable(false);
             }
         }
     }

@@ -38,7 +38,10 @@ void altav_set_config(const uint8_t *annexb_cfg, uint32_t len);
 
 /* Convert one AVCC frame (lengthSize-byte BE prefixes from the AirPlay screen
  * opcode-0 body) to Annex-B and forward it. */
-void altav_forward_avcc_frame(const uint8_t *avcc, uint32_t len, uint8_t length_size);
+/* Returns 1 when this frame had to open a fresh renderer connection, 0 on the
+ * existing connection, and -1 when it could not be delivered.  A reconnect
+ * means the renderer created a fresh AVC decoder and therefore needs a new IDR. */
+int altav_forward_avcc_frame(const uint8_t *avcc, uint32_t len, uint8_t length_size);
 
 void altav_shutdown(void);
 

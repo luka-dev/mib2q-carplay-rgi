@@ -50,8 +50,8 @@ public final class CarplayBus {
 
     /* commands Java -> hook (altScreen block, mirror bus_protocol.h) */
     public static final int CMD_ALT_HID        = 0x0110;   /* [i8 wheel][u8 buttons]        */
-    public static final int CMD_ALT_ZONE       = 0x0111;   /* [u8 idx][u16 le durMs?]       */
-    public static final int CMD_ALT_ZONE_ACK   = 0x0112;   /* hook->Java [u8 idx][i32 le st]*/
+    public static final int CMD_ALT_ZONE       = 0x0111;   /* [u8 mode 0=full/1=duo][u16 LE durationMs] */
+    public static final int CMD_ALT_ZONE_ACK   = 0x0112;   /* hook->Java [u8 mode][i32 LE status]       */
     public static final int CMD_ALT_APPEARANCE = 0x0114;   /* [u8 target][u8 mode][u8 set]  */
     public static final int CMD_ALT_UICTX      = 0x0115;   /* utf-8 url                     */
 

@@ -90,7 +90,7 @@ public class CombiMapController extends DisplayControllerEvo implements NaviMoKo
         if (dm != null && layout != null) {
             dm.setDisplayType(1, this.displayType);
             this.positionKdkBackgrounds(dm, layout);
-            this.positionMap(dm, layout, false);
+            this.onViewSizeChanged(); /* seed current fullscreen/duo state, not a hardcoded fullscreen */
         }
     }
 
@@ -130,6 +130,13 @@ public class CombiMapController extends DisplayControllerEvo implements NaviMoKo
         }
         HMIModel model = hmiService.getModel(ICoreNaviModelBank.NAV_VIEW_SIZE_CHOICE);
         boolean smallStage = (model instanceof ChoiceModelGUI) && ((ChoiceModelGUI) model).getValue() == 1;
+        /* The Audi View button is the authoritative fullscreen/duo transition.
+         * Publish it to the altScreen hook even while its RTSP session is not up;
+         * both Java and C cache the desired mode for fast reconnect. */
+        com.luka.carplay.core.AltScreenModule.setViewAreaMode(
+            smallStage
+                ? com.luka.carplay.core.AltScreenModule.VIEWAREA_DUO
+                : com.luka.carplay.core.AltScreenModule.VIEWAREA_FULLSCREEN);
         this.positionMap(dm, layout, smallStage);
     }
 

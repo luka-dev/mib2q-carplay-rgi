@@ -748,9 +748,10 @@ server `accept()`s as soon as the C hook connects.
   for the bus and :19800/:19832 for the renderers.
 - C hook (short-lived, per phone connect) = TCP **client**, connects to
   Java's :19810. Idempotent reconnect on Java HMI restart.
-- Renderers (short-lived, per CarPlay child) are owned by `carplay_startup.sh`.
-  A missing process is restarted while `dio_manager` lives; both are stopped
-  when it exits.
+- Renderers are owned by `carplay_startup.sh`. A missing process is restarted
+  while `dio_manager` lives; on a fast replacement generation the existing
+  processes are retained, while an un-replaced generation cleans up only its
+  captured old renderer PIDs.
 
 **Liveness detection**:
 
@@ -760,9 +761,11 @@ server `accept()`s as soon as the C hook connects.
   zombie TCP session (no FIN/RST) would linger until OS keepalive fires;
   in practice the bus is short-lived (per phone connect) and torn down
   cleanly when `dio_manager` exits.
-- **Renderer processes**: `carplay_startup.sh` checks `/proc/<pid>/cmdline` every 2 s and
-  restarts a missing renderer only while its direct `dio_manager` child lives.
-  Protocol-level reconnect/heartbeat remains independent of process ownership.
+- **Renderer processes**: `carplay_startup.sh` uses finite `pidin ar` snapshots
+  every 2 s and restarts a missing renderer only while its exact `dio_manager`
+  PID lives. `/tmp/carplay_supervisor.owner` prevents the old monitor from
+  tearing down renderers inherited by a fast replacement generation. Residual
+  SIGKILL is restricted to the immutable old PID snapshot.
 
 ```mermaid
 %%{init: {'sequence': {'mirrorActors': false}}}%%
@@ -822,7 +825,7 @@ sequenceDiagram
     Note over si,ios: --- Disconnect ---
     ios->>si: USB unplug
     si->>dio: SIGTERM / cleanup
-    Note right of dio: dio_manager exits<br/>hook destructor fires<br/>supervisor SIGTERMs both renderers
+    Note right of dio: dio_manager exits<br/>hook destructor fires<br/>supervisor preserves renderers for<br/>an immediate successor, otherwise<br/>stops only the old PID snapshot
 ```
 
 ### Threading model

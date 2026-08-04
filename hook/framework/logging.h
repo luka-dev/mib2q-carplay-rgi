@@ -52,7 +52,8 @@ typedef struct {
     .include_timestamp = true, \
     .include_level = true, \
     .include_module = true, \
-    .flush_immediate = true \
+    /* do_write() is unbuffered already; fsync per line only stalls QNX /dev/shmem */ \
+    .flush_immediate = false \
 }
 
 #if ENABLE_LOGGING

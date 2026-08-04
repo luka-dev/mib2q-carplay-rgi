@@ -313,6 +313,20 @@ int platform_init(int width, int height) {
     }
     g_window_expected = 1;
 
+    /* Keep the live BSP capability strings in the renderer log.  They are the
+     * authoritative answer for cross-process Screen/EGL buffer import support;
+     * SDK headers alone only describe APIs that may not be implemented by this
+     * APQ8064 image. */
+    fprintf(stderr, "platform_qnx: EGL vendor=%s version=%s extensions=%s\n",
+            eglQueryString(g_egl_display, EGL_VENDOR),
+            eglQueryString(g_egl_display, EGL_VERSION),
+            eglQueryString(g_egl_display, EGL_EXTENSIONS));
+    fprintf(stderr, "platform_qnx: GL vendor=%s renderer=%s version=%s extensions=%s\n",
+            (const char *)glGetString(GL_VENDOR),
+            (const char *)glGetString(GL_RENDERER),
+            (const char *)glGetString(GL_VERSION),
+            (const char *)glGetString(GL_EXTENSIONS));
+
     /* Do NOT switch focus here.  Java waits for EVT_FRAME_READY and then
      * forces a real away->74 context transition so DisplayManager's
      * preContextSwitchHook updates the MOST encoder after our first frame

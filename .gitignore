@@ -14,3 +14,5 @@ mu1316_lsd.jar
 /build/carplay_hook_tab/
 /build/java_new/
 /java_patch_probe/build/classes/
+# On-unit raw-frame captures are local diagnostics, not source artifacts.
+/debug_logs/live_altscreen_probe/

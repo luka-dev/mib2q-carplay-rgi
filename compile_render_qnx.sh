@@ -61,13 +61,16 @@ docker run --rm --platform=linux/amd64 -v "$PATCHES_DIR":/src "$IMG" bash -c '
 
   echo "--- altscreen_render ---"
   cd /src/mhi2-carplay/altscreen_render
-  AS_SRCS="main.c frame_io.c altctl.c sink_omx_qnx.c screen_readback_present.c ../common/cluster_surface.c"
+  AS_SRCS="main.c frame_io.c altctl.c sink_omx_qnx.c screen_egl_present.c ../common/cluster_surface.c"
   gen_stub libscreen.so.1  "\bscreen_[a-z_]+"       $AS_SRCS
+  gen_stub libEGL.so.1     "\begl[A-Z][A-Za-z0-9]+" $AS_SRCS
+  gen_stub libGLESv2.so.1  "\bgl[A-Z][A-Za-z0-9]+"  $AS_SRCS
   $CC -O2 -std=gnu99 -Wall -D__QNX__ -DPLATFORM_QNX -fdata-sections -ffunction-sections \
       -I"$SHIMS" -I"$SHIMS/OMX" -I../common $AS_SRCS \
       -o /src/mhi2-carplay/build/altscreen_render \
       -Wl,--gc-sections -Wl,--allow-shlib-undefined \
-      -L/tmp -L"$BSPLIBS" -l:libscreen.so.1 -l:libOmxCore.so -lsocket
+      -L/tmp -L"$BSPLIBS" -l:libscreen.so.1 -l:libOmxCore.so \
+      -l:libEGL.so.1 -l:libGLESv2.so.1 -lsocket
   echo "  built build/altscreen_render"
 
   echo "--- verify (ARM ELF, no emutls) ---"

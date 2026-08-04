@@ -18,6 +18,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <errno.h>
+#include <time.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <netinet/in.h>
@@ -27,6 +28,27 @@
 static volatile sig_atomic_t g_running = 1;
 static volatile sig_atomic_t g_listen_fd = -1;
 static volatile sig_atomic_t g_client_fd = -1;
+
+/* iOS offers type 111 just before stock 210 starts its type-110 decoder. Starting
+ * a second Qualcomm OMX/EGL pipeline at that exact point can contend for the
+ * APQ8064 video/GPU services. Keep the TCP contract live immediately, but let
+ * the stock main-screen decoder claim its resources first. 750 ms covers the
+ * measured 110 INITIALIZING->READY interval (~260 ms) with margin while staying
+ * well below the hook's 8-second bounded localhost back-pressure window. */
+static void main_screen_priority_grace(void) {
+    const char *s = getenv("ALTSCREEN_MAIN_GRACE_MS");
+    long ms = s ? strtol(s, NULL, 10) : 750;
+    struct timespec req, rem;
+    if (ms <= 0) return;
+    if (ms > 3000) ms = 3000;
+    fprintf(stderr,
+            "altscreen_render: main-screen priority grace %ld ms before alt OMX/EGL\n",
+            ms);
+    req.tv_sec = ms / 1000;
+    req.tv_nsec = (ms % 1000) * 1000000L;
+    while (g_running && nanosleep(&req, &rem) != 0 && errno == EINTR)
+        req = rem;
+}
 
 /* close() is async-signal-safe. Closing both sockets guarantees SIGTERM breaks
  * an idle accept() and an active/partial frame read immediately, so the normal
@@ -95,10 +117,23 @@ int main(void) {
     signal(SIGTERM, on_signal);
     signal(SIGPIPE, SIG_IGN);
 
-    /* Own log file: the CarPlay supervisor also redirects stderr here, but keeping
-     * this fallback makes direct diagnostic launches behave identically. freopen
-     * to a regular file makes stderr fully-buffered, so explicitly unbuffer it. */
-    freopen("/tmp/altscreen_render.log", "a", stderr);
+    /* Qualcomm's QNX EGL loader dereferences its graphics-module root during
+     * eglGetDisplay.  maneuver_render has always supplied this explicitly;
+     * altscreen_render did not need EGL before the native-buffer GPU path.
+     * Keep the renderer self-contained so a supervisor/environment change
+     * cannot turn a missing variable into an egl14.so SIGSEGV. */
+    if (!getenv("GRAPHICS_ROOT"))
+        putenv("GRAPHICS_ROOT=/proc/boot");
+    if (!getenv("IPL_CONFIG_DIR"))
+        putenv("IPL_CONFIG_DIR=/etc/eso/production");
+
+    /* Keep RAM-backed diagnostics bounded. The hook log already has size-based
+     * rotation; retain one previous renderer generation and truncate the current
+     * file on process start. rename() also preserves the supervisor-opened inode,
+     * while freopen gives this process a clean current log. */
+    unlink("/tmp/altscreen_render.log.1");
+    rename("/tmp/altscreen_render.log", "/tmp/altscreen_render.log.1");
+    freopen("/tmp/altscreen_render.log", "w", stderr);
     setvbuf(stderr, NULL, _IONBF, 0);
 
     if (av_sink_open() != 0) return 1;
@@ -121,6 +156,7 @@ int main(void) {
         g_client_fd = cfd;
         fprintf(stderr, "altscreen_render: hook connected\n");
         altctl_set_video(1);                     /* 111 video client connected → tell Java */
+        main_screen_priority_grace();
         serve_client(cfd);
         if ((int)g_client_fd == cfd) {
             g_client_fd = -1;

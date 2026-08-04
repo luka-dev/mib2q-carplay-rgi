@@ -1,168 +1,269 @@
-# altScreen black-screen fix: implementation verdict
+# altScreen black/green diagnosis — current on-unit verdict
 
 Date: 2026-08-03  
 Target: MU1316 / APQ8064, QNX 6.5 ARMv7  
-Deployment: stock `libairplay.so` 210.81 + LD_PRELOAD hook + external `altscreen_render`
+Deployment: stock `libairplay.so` 210.81 + `libcarplay_hook.so` + external
+`altscreen_render`
 
-## Verdict
+## Authority boundary
 
-The CarPlay protocol and receive path are complete. The supplied unit logs prove negotiation,
-type-111 SETUP, AirPlay screen framing, AES-CTR, avcC, IDR, Maps `showUI`, Annex-B forwarding,
-OMX input, and a full 1440x542 `FillBufferDone`. The remaining fault is format presentation:
-the Qualcomm decoder produces native 32m tiled NV12 (`OMX 0x7f000004`, Screen `0x1000c`),
-which plane 99 cannot scan out directly.
+`Patches/libairplay-mhi2q` is Luka's reconstruction and is not behavioral
+authority. Evidence below is limited to stock 210, extracted/live MU1316 graphics
+binaries, the shipping hook/renderer, and captured on-unit logs.
 
-The renderer has now been changed to preserve the allocator contract that reaches OMX Idle and
-to convert only **after** decode:
+## Current verdict
 
-```text
-OMX AVC decoder
-  -> Qualcomm 32m Screen WINDOW buffer
-  -> post offscreen tiled window
-  -> screen_flush_context(SCREEN_WAIT_IDLE)
-  -> screen_read_window into Screen-owned RGBA8888 buffer
-  -> post RGBA buffer on managed displayable 99
-  -> only then OMX_FillThisBuffer recycles the tiled source
+The complete type-111 path and the GPU presentation path now work on the physical
+cluster. The accepted run received/decrypted real Maps video, decoded complete
+1440x542 frames, imported Qualcomm 32m buffers into EGL, converted them to RGBA,
+and swapped more than 2,040 colour frames. Readable road labels were physically
+visible. This closes the former black/green renderer fault.
+
+Two smaller faults remained in that accepted run:
+
+1. the renderer also flipped the S texture coordinate, so the visible image was
+   mirrored horizontally;
+2. at frame 2,062, stock invoked a per-stream `AirPlayReceiverSessionTearDown`
+   with a non-NULL request. The old interpose stopped altScreen on *every*
+   teardown, including one for an unrelated stream. The main CarPlay session
+   remained alive while type 111 went black.
+
+Both are fixed in the current build. The hook and renderer were atomically
+replaced on HU storage and verified byte-for-byte, without killing or restarting
+any process. The running generation keeps its old mapped inode; the next natural
+`dio_manager` generation will load the fixes.
+
+That natural generation subsequently started with `dio_manager` PID `16179268`.
+Its type-111 stream passed 3,328 forwarded frames and 3,360 GPU RGBA swaps over
+more than 106 seconds, with no `VIDEO_OFF`, transport failure, OMX error, or
+process restart. This already disproves the former repeatable 30-second cutoff.
+
+## Renderer contract and accepted GPU path
+
+Stock 210 establishes the native output allocation contract:
+
+| Stock address | Behaviour |
+|---|---|
+| `0x8a164-0x8a18c` | Requests Qualcomm output colour `0x7f000004`. |
+| `0x8b350-0x8b39c` | Creates Screen WINDOW buffers before OMX enters Idle. |
+| `0x8b4cc` | Reads each buffer's `SCREEN_PROPERTY_POINTER`. |
+| `0x88fa8` | Passes those pointers to OMX output headers. |
+| `0x86db0` | Delivers the filled output buffer to the consumer. |
+| `0x8b660-0x8b694` | Maps the filled pointer back to its Screen buffer. |
+| `0x86614` | Recycles it with `FillThisBuffer`. |
+
+The MU1316 decoder confirms this: linear NV12 `0x27` cannot transition from
+Loaded to Idle, while native `0x7f000004` reaches Executing and returns complete
+frames. The renderer therefore keeps native 32m at
+`altscreen_render/sink_omx_qnx.c:43-46,217-247`.
+
+The live `eglsub-screen.so` has an explicit format-`0x1000c` import branch at
+`0x691c`, reads planar offsets at `0x6344`, and validates the UV offset at
+`0x6998`. `libEGL.so.1` exports `eglWaitNative@0x51a8`,
+`eglCreateImageKHR@0x5b3c`, and `eglSwapBuffers@0x5e48`.
+
+The accepted renderer recorded during the diagnostic run:
+
+- `source ABI fmt=0x1000c usage=0x487 size=1440x542 stride=1536
+  planar=0,835584,0` (Screen adds bits to requested usage `0x484`);
+- `SOURCE PROBE frame=120 ... UVavg=115 range=0..170`;
+- `RGBA PROBE frame=120 avg=44,70,106 range=0..255`;
+- more than 2,040 `GPU RGBA frames swapped`, with no OMX or presentation error.
+
+Those one-shot CPU readbacks/raw dumps proved that both native chroma and the
+RGBA result were real; they are no longer part of the production frame path.
+The allocation and pixmap alias are at
+`altscreen_render/screen_egl_present.c:177-303`; per-frame native wait,
+external-image refresh, shader draw, and RGBA swap are at
+`screen_egl_present.c:468-550`.
+
+## Transport stability — accepted
+
+The hook uses a 512 KiB send buffer, completes short writes, retries temporary
+`EAGAIN` in 500 ms intervals for up to eight seconds, and replays SPS/PPS on a
+genuine reconnect (`hook/altscreen/altscreen_av.c:53-144`). A fresh renderer also
+causes a new IDR request (`hook/altscreen/altscreen_hook.c:762-786`).
+
+The accepted run had no `send failed errno=11`, no renderer reconnect storm, and
+no repeated OMX startup. This fix is therefore closed.
+
+## Black-after-30-seconds root cause and fix
+
+The accepted type-111 stream started at `00:12:21.980` and ran continuously for
+2,062 frames. At `00:13:08.608`, the hook recorded:
+
+```
+AirPlayReceiverSessionTearDown session=810bc8 request=752e18 reason=0 ...
+alt recv ... stop=1 after 2062 frames
 ```
 
-This is implemented and QNX-built, but physical visibility is still an on-unit acceptance test.
-The code deliberately fails closed if this BSP lacks `screen_read_window`; it never falls back to
-the pixmap allocator that previously wedged OMX and destabilized `dio_manager`.
+The renderer then ended its session and emitted `VIDEO_OFF`. The full-session
+teardown did not occur until `00:14:30`; thus the first call was a per-stream
+teardown, not termination of CarPlay. A later natural launch reproduced the same
+early per-stream teardown.
 
-## Why this ownership is mandatory
+`alt_find_111` reads `request["streams"][].type` at
+`hook/altscreen/altscreen_hook.c:912-930`. The corrected teardown interpose at
+`altscreen_hook.c:1002-1056` stops and joins the hook receiver only when:
 
-Stock libairplay 210 provides the authoritative Qualcomm decoder contract:
+- `request == NULL` (full session); or
+- the non-NULL per-stream request contains `type:111`.
 
-| Stock address | Behavior |
-|---|---|
-| `0x8a164-0x8a18c` | Requests decoder output color `0x7f000004`. |
-| `0x8b350-0x8b39c` | Creates Screen **window** buffers before OMX enters Idle. |
-| `0x8b4cc` | Gets each window buffer's `SCREEN_PROPERTY_POINTER`. |
-| `0x88fa8` | Attaches those pointers to OMX output buffers. |
-| `0x86db0` | Delivers the filled output pointer to the renderer. |
-| `0x8b660-0x8b694` | Reverse-maps that pointer to its exact `screen_buffer_t` and posts it. |
-| `0x86614` | Calls `FillThisBuffer` only after the consumer is finished. |
+For another stream it still calls stock's real teardown, but preserves the 111
+slot/socket/thread. New proof logging is:
 
-The failed linear-NV12 experiment violated the component's native output requirement. The failed
-EGL pixmap experiment violated the Screen-window allocation contract by substituting independent
-pixmap storage. Both are removed.
+```
+... alt111=0 action=preserve-alt
+per-stream TEARDOWN has no 111 - preserving altScreen ...
+```
 
-`mh2p-cluster` independently establishes the safe post-decode pattern. At upstream commit
-`a37c917c1b1479e11684e158efc0e1be3c07faa7`, `gal_cluster.c:630-670` waits for decode,
-posts the native staging buffer, flushes with `SCREEN_WAIT_IDLE`, and calls
-`screen_read_window` into Screen-owned RGBA storage. Its comments at `gal_cluster.c:910-920`
-record that user-owned destinations did not work. Its NVIDIA NvMedia decoder is not reusable on
-Qualcomm, but the Screen ownership/readback sequence is.
+## Horizontal orientation fix
 
-The QNX Screen header confirms that `screen_read_window` may target a window buffer and requires
-`SCREEN_USAGE_NATIVE` at
-`Patches/libairplay-mhi2q/vendor/shims/screen/screen.h:10297-10328`.
+The first colour run made readable road labels visible and thereby proved the
+extra S flip was wrong. Coordinates at
+`altscreen_render/screen_egl_present.c:602-608` now preserve normal horizontal S
+order and flip only V for Screen's top-left origin.
 
-## Implemented renderer changes
+## Supervisor ownership
 
-### Native 32m decode allocation restored
+`deploy/smartphone_integrator/carplay_startup.sh` records the current `dio` PID.
+An older monitor stops renderers only if it still owns that generation; if a new
+PID superseded it, the old monitor leaves the new renderers alone. `dio_manager`
+remains the exact `exec` child tracked by smartphone_integrator.
 
-- `altscreen_render/sink_omx_qnx.c:216-247` requests and verifies
-  `kQOMX_ColorFmt_32m` only. Linear `0x27` is gone.
-- `sink_omx_qnx.c:259-280` reads back the component's actual size/count/stride definition.
-- `sink_omx_qnx.c:300-320` binds pointers obtained from the tiled Screen window to
-  `OMX_UseBuffer`.
-- `sink_omx_qnx.c:355-393` creates all native output buffers before waiting for Idle, then
-  primes them only after Executing.
+A fast unplug/replug exposed a second race in the old cleanup: it took a fresh
+process snapshot after its one-second SIGTERM wait, so its `SIGKILL residual`
+targeted the newly launched renderer. The wrapper log records old renderer PIDs
+`16244865/16269442`, followed by new PIDs `20762758/20803713`, and then the old
+cleanup killing the latter. The hook consequently got `EPIPE`; after reconnect,
+the new decoder had SPS/PPS but no new IDR and produced green output. Its native
+probe already showed the corruption before EGL: `UVavg=0 range=0..38`.
 
-### Post-decode tiled-to-RGBA conversion
+`deploy/smartphone_integrator/carplay_startup.sh` now snapshots renderer PIDs as
+soon as its dio exits, waits for a replacement owner, and preserves the snapshot
+when cleanup is required. `carplay_processes.sh` sends TERM and residual KILL only
+to that same immutable PID set. A newly launched renderer can no longer become a
+target of delayed old-generation cleanup.
 
-- `altscreen_render/screen_readback_present.c:145-199` creates an offscreen staging Screen
-  window in format `0x1000c`, usage `0x484`, with one buffer per OMX output header.
-- `screen_readback_present.c:202-247` creates a managed RGBA8888 plane-99 window with three
-  Screen-owned buffers and `READ|WRITE|NATIVE|OPENGL_ES2` usage.
-- `screen_readback_present.c:260-307` performs the blocking
-  tiled-post -> wait-idle -> readback -> RGBA-post sequence and logs the first converted-frame
-  checksum.
-- `sink_omx_qnx.c:119-160` maps `FillBufferDone` to the corresponding source buffer and does
-  not recycle it until readback returns.
-- `sink_omx_qnx.c:326-352` frees OMX headers before destroying their backing Screen window,
-  and balances `OMX_Init` even when startup fails.
+## IDR recovery after any renderer-link failure
 
-### Dead/dangerous renderer code removed
+Stock 210 `AirPlayReceiverSessionForceKeyFrame@0x28a5c` constructs only
+`{"type":"forceKeyFrame"}` and passes it to
+`AirPlayReceiverSessionSendCommand@0x28ac4`; it has no params/display selector.
+iOS 26.6 `carEndpoint_handleEventCreatingReply@0x2276d8414-0x2276d8730`
+handles that command. Its block at `0x227803620-0x227803650` selects a screen
+through `carEndpoint_getScreenStreamForDisplayUUID` when a display UUID was
+provided; otherwise `0x227803674-0x2278036ac` falls back to the primary screen
+subtype. Thus the old repeated NULL-parameter requests targeted stream 110, not
+cluster stream 111.
 
-- Deleted the independent tiled-pixmap/EGLImage module (`gpu_tiled_present.*`).
-- Deleted the standalone EGL calibration path (`testpattern_qnx.c`) from this renderer.
-- Removed all altScreen EGL/GLES linkage and stubs from `compile_render_qnx.sh:62-70`.
-- Removed the live output-port disable/free/rebuild state machine. Stock 210 ignores
-  `OMX_EventPortSettingsChanged`; current code logs and ignores it at
-  `sink_omx_qnx.c:89-93`, avoiding a `FillDone`/`FreeBuffer` race.
-- Retained the three-start limiter: repeated startup failure cannot indefinitely consume the
-  system OMX pool (`sink_omx_qnx.c:461-470`).
+The hook now sends the generic command
+`forceKeyFrame{params:{displayUUID:<cluster UUID>}}` through the already proven
+session command channel (`hook/altscreen/altscreen_hook.c:1361-1390`). The request
+uses no completion callback: recovery is acknowledged by observing a real H.264
+type-5 NAL, so stock 210 never retains a callback for a retry. Requests are limited
+to one immediately plus five retries at least two seconds apart
+(`altscreen_hook.c:698-708,710-851`).
+IDR detection scans every length-prefixed NAL in the AVCC access unit, rather than
+assuming the first NAL is the IDR (`altscreen_hook.c:679-696`).
 
-## Implemented hook cleanup
+After a localhost send failure, a `WAIT_IDR` gate drops all P-frames instead of
+feeding them to a fresh OMX decoder. Only an observed IDR opens the gate and is
+forwarded; the forward layer then reconnects and replays SPS/PPS before that IDR
+(`altscreen_hook.c:782-851`). Consequently a reconnect can temporarily remain
+black while waiting for iOS, but it cannot display green inter-prediction garbage.
 
-The hook remains self-contained; it does not create a stock ScreenStream for type 111.
+## Full-HU freeze investigation and reconnect hardening
 
-- `hook/altscreen/altscreen_hook.c:398-450` advertises only when every primitive needed by the
-  live 111 path resolves, preventing a partially satisfiable CarPlay contract.
-- `altscreen_hook.c:522-549` resolves only the live socket/AES/CF/control functions.
-- `altscreen_hook.c:611-805` is the sole receive implementation: own socket, 128-byte AirPlay
-  screen header, AES-CTR, avcC/AVCC handling, IDR request, Maps activation, forwarding.
-- `altscreen_hook.c:807-894` creates `{type:111,dataPort}` without a stock Screen object and
-  starts the acceptor before allowing SETUP success.
-- `altscreen_hook.c:920-983` merges `altScreen` into control-SETUP
-  `enabledFeatures`, handles 111, and propagates setup failure instead of returning a false
-  RTSP success.
-- `altscreen_hook.c:989-1025` stops and joins the receiver before stock tears down its session.
+The reported whole-system freeze ended in a complete HU reboot: the process table
+contained a fresh boot generation, all RAM-backed `/tmp/carplay_*` and renderer
+logs were gone, and `pidin info` showed about 881 MiB free of 2 GiB after boot.
+Therefore the final pre-reset line is unrecoverable. Current-boot `sloginfo` starts
+at `Jan 01 00:00:00` and contains normal watchdog kicks, not the prior reset cause.
+There is no persistent reset-reason file under the firmware's persist/core paths.
+This does not support a RAM-log exhaustion diagnosis.
 
-Removed from the production hook:
+Persistent core rotation does prove a separate, pre-existing EGL reliability
+problem. All four `/mnt/ota/system/core/altscreen_render{,.1,.2,.3}.core.gz`
+dumps are `SIGSEGV / MAPERR` in thread 1 at the same relocation inside Qualcomm
+`egl14.so`: e.g. PC `0x780c6428`, module base `0x780b0000`, hence `+0x16428`;
+the other ASLR generations end in the same `+0x16428`. These cores cannot be dated
+to the final reboot because the QNX clock resets, so they are evidence of EGL
+churn risk, not proof of the final trigger. Likewise the retained
+`postmortem_smmu_gfx3d.txt` predates the reboot and is not attributed to it.
 
-- the unreachable `CFBinaryPlistV0CreateWithData` interpose;
-- the obsolete `altScreenURLs` SetProperty/HTTP opener theory;
-- the internal `ScreenStreamProcessData` hybrid tap and thread router;
-- unused `AirPlayReceiverSessionScreen_{Create,Setup,SetSecurityInfo,Start,Process,Stop}` symbols,
-  fake time-sync callbacks, and idle stock Screen object.
+Three safeguards now remove the plausible amplification paths:
 
-`AirPlayReceiverSessionScreen_CopyDisplaysInfo` remains intentionally: it supplies the real stock
-main-display dictionary used alongside the synthesized cluster display
-(`altscreen_hook.c:59-62,112`).
+- the unbounded frame-count IDR loop is replaced by the six-request/two-second
+  limit above, with no async callback allocation;
+- a normal TCP disconnect tears down only OMX; the Screen buffers, pixmap aliases,
+  EGLImages, EGL context, and managed RGBA window persist and are reused on the next
+  connection (`altscreen_render/sink_omx_qnx.c:197-225,338-365,492-499`);
+- accepted-run-only `glReadPixels`, 3.1 MiB RGBA raw dump, and native-buffer dump
+  code were removed. The steady frame path now contains no file I/O
+  (`altscreen_render/screen_egl_present.c:468-550`).
 
-## Deployment correction
-
-The CarPlay child supervisor enables both required gates only on `dio_manager`:
-
-- `deploy/smartphone_integrator/carplay_startup.sh` starts `dio_manager` with
-  `LD_PRELOAD=libcarplay_hook.so`, `ALTSCREEN_HANDLE_ALT=1`, and
-  `ALTSCREEN_ADVERT_DISPLAYS=1`.
-- `children.carplay.envs` contains no `LD_PRELOAD`, so the wrapper and renderers
-  cannot inherit the hook (`deploy/smartphone_integrator/carplay_child.json`).
+Logging is also bounded and cheaper on the RAM-backed `/tmp` filesystem. The
+hook already rotated at 1 MiB with three retained files
+(`hook/framework/logging.h:47-56`, `logging.c:93-109`), so its maximum footprint
+was only about 4 MiB and cannot explain exhaustion of a 2 GiB system. The final
+guard disables the redundant `fsync()` after every direct `write()`
+(`logging.c:235-236`). `altscreen_render` now keeps only the current log and one
+previous process generation (`altscreen_render/main.c:108-116`), and steady
+OMX/GPU counters are emitted every 600 frames instead of every 120
+(`sink_omx_qnx.c:113,149,438`; `screen_egl_present.c:530`).
 
 ## Build verification
 
-Completed on 2026-08-03:
+- `make -C altscreen_render hostcheck` — pass (only vendor OMX warning);
+- `./compile_render_qnx.sh` — ARM EABI5, `emutls=0`;
+- `./compile_hook.sh` — ARM EABI5 shared object, `emutls=0`;
+- supervisor `/bin/sh -n` and `git diff --check` — pass.
 
-- `make -C altscreen_render hostcheck` — passes; only the vendor OMX header's existing
-  `OMX_SKIP64BIT` warning remains.
-- `./compile_hook.sh` — ARM QNX shared object, `emutls=0`.
-- `./compile_render_qnx.sh` — ARM QNX executable, `emutls=0`; no EGL/GLES dependency in
-  `altscreen_render` (maneuver renderer still uses its intentional EGL path).
-- `build/altscreen_render` SHA-256:
-  `6447b65d6f9bb858c86b32d3f20718013961e4247b5d852c59bbb3a2f5c319a9`.
-- `build/libcarplay_hook.so` SHA-256:
-  `be0db2f4b4ecde4ba7b89806dade4d6143b99a6491815340fb69bef951ab26c0`.
+| Artifact | POSIX cksum | SHA-256 |
+|---|---:|---|
+| `build/altscreen_render` | `3015096156 40707` | `6e9a22b7b6550dd0377f3db790e2fbe9a72d150c0d43869779378d5e3019a92b` |
+| `build/libcarplay_hook.so` | `3178983965 252307` | `7bef5907ae2d1b57f5b90d7e8302c8b354e6d98fa275877816bcfaacbf905405` |
 
-## On-unit acceptance
+## Remaining on-unit acceptance
 
-The first deployment should be judged from `/tmp/altscreen_render.log` in this order:
+The corrected files are already on disk. They were copied back and compared
+byte-for-byte; no process was launched or killed. On the next natural launch verify:
 
-1. `cluster_surface: window id=99 1440x542 fmt=8 ... managed`
-2. `staging manage rc=0 ... id=AA_ALTSCREEN_STAGING`
-3. `ready 1440x542, N tiled OMX window buffers -> 3 RGBA plane-99 buffers`
-4. `decoder started 1440x542, native-32m N Screen window bufs -> RGBA readback`
-5. `FillBufferDone ... filled=1277952`
-6. `READBACK PATH OK: Qcom 32m window -> screen_read_window -> RGBA8888 plane 99 ...`
+1. capture an actual non-111 teardown logging `action=preserve-alt` and continued
+   frames after that exact line (the current run already exceeded 106 seconds);
+2. confirm physically that road labels are now left-to-right;
+3. on a fast unplug/replug, confirm `reusing persistent EGL/Screen presenter across
+   reconnect` and no second `eglInitialize`/managed-window creation;
+4. if iOS withholds IDR, confirm exactly six targeted requests over at least ten
+   seconds followed by `WAIT_IDR request limit reached`, with dio/HU remaining live;
+5. confirm a true 111/full-session teardown logs `action=stop-alt` and joins cleanly.
 
-Step 6 plus a changing, nonzero hash proves Screen accepted the 32m source and filled RGBA;
-physical visibility then proves displayable 99 composition. If it fails, the log identifies the
-exact stage and `errno`. A missing symbol or `screen_read_window` failure is a presentation-only
-BSP limitation; it must not affect the hook, stream 111, decoder allocation, or `dio_manager`.
+## Main-screen startup priority
 
-If this BSP cannot read format `0x1000c`, the next safe fallback is an EGLImage **alias of these
-same decoder-accepted window buffers** using `screen_attach_pixmap_buffer`; never restore an
-independently allocated pixmap as OMX output.
+Two measured natural generations disprove a 20-second delay inside the hook:
+
+- hook initialization `00:26:31.276` to stock type-110 `READY`
+  `00:26:34.688`: about 3.41 seconds;
+- hook initialization `00:27:09.809` to stock type-110 `READY`
+  `00:27:12.726`: about 2.92 seconds.
+
+Within the second run, control SETUP was handled at `00:27:12.059`, type 111 was
+set up by `00:27:12.168` (six milliseconds inside `alt_setup`), and stock type 110
+entered INITIALIZING at `00:27:12.470`. Thus altScreen negotiation adds only a
+small phone-side step; it does not account for a 20-second stall.
+
+The supervisor did, however, run multiple complete `pidin ar` snapshots before
+`exec dio_manager` and from its monitor during dio initialization. Renderer PID
+files now reduce this to at most one adoption snapshot per boot/script upgrade;
+all recurring checks use `/proc/<pid>`
+(`deploy/smartphone_integrator/carplay_processes.sh:14-111`).
+
+The type-111 TCP socket remains available immediately, but `altscreen_render`
+waits 750 ms before creating the second Qualcomm OMX/EGL pipeline. This gives
+stock type 110 priority over the shared APQ8064 video/GPU services; the measured
+110 INITIALIZING-to-READY interval was only about 255-272 ms. The grace is
+configurable as `ALTSCREEN_MAIN_GRACE_MS=0..3000`
+(`altscreen_render/main.c:32-51,159`). New hook logging records real-stock and
+post-hook time separately as `STARTUP SETUP timing`, so a future slow generation
+can be attributed without guessing (`hook/altscreen/altscreen_hook.c:998-1081`).

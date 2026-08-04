@@ -17,6 +17,6 @@
   "cleanupScript": "/mnt/app/root/hooks/carplay_cleanup.sh",
   "retriesBeforeDowntime": 3,
   "downtime": 30000,
-  "restartDelay": 2000,
+  "restartDelay": 250,
   "portResetTime": 250
 }
