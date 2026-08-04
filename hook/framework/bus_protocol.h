@@ -90,11 +90,9 @@
 #define CMD_PING                0x0101  /* echo test                         */
 
 /* AltScreen commands — Java→hook (bidirectional bus).  BINARY payloads.       */
-#define CMD_ALT_HID             0x0110  /* binary [int8 wheel][u8 buttons] —   */
-                                        /* steering-wheel knob → altScreen HID */
-                                        /* (buttons bit0 = press/select).  All */
-                                        /* altScreen input is HID (no semantic */
-                                        /* zoom cmd — the knob zooms in-context)*/
+#define CMD_ALT_ZOOM            0x0110  /* binary [int8 signed MapScale step]  */
+                                        /* hook emits UUID-addressed           */
+                                        /* changeMapZoomLevel (0=in, 1=out)    */
 #define CMD_ALT_ZONE            0x0111  /* binary [u8 mode][u16 LE durationMs] */
                                         /* mode 0=fullscreen, 1=duo; hook maps */
                                         /* each to primary+adjacent viewAreas  */
@@ -103,8 +101,7 @@
                                         /* status 0 = phone applied it, else   */
                                         /* OSStatus/send error                 */
 /* More MHI3-ported session commands (Java→hook), all via AirPlayReceiverSessionSendCommand. */
-/* 0x0113 retired: was CMD_ALT_ZOOM (changeMapZoomLevel) — dropped, map zoom is  */
-/* handled by the HID knob in-context (CMD_ALT_HID), no semantic zoom command.   */
+/* 0x0113 remains reserved (zoom uses the deployed 0x0110 ABI). */
 #define CMD_ALT_APPEARANCE      0x0114  /* binary [u8 target][u8 mode][u8 set] */
                                         /* target 0=ui 1=map; day/night sync   */
 #define CMD_ALT_UICTX           0x0115  /* payload = UTF-8 url string — deep-  */

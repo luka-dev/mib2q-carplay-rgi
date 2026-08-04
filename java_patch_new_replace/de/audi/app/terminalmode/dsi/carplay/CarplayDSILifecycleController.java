@@ -856,10 +856,9 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
         public void updateKey(Key key, KeyState keystate) {
             /* Central-console knob press (DDS_SELECT = Dreh-Drück-Steller) must SELECT in the
              * CarPlay Main UI — it falls through to postButtonEvent below.  An earlier build
-             * redirected DDS_SELECT to the cluster as CMD_ALT_HID and returned, swallowing the
-             * select → "knob press does nothing".  Cluster HID belongs to the STEERING-WHEEL
-             * keys (altScreen focus), NOT the central select — re-add there when altScreen input
-             * lands, keyed off the wheel key, not DDS_SELECT. */
+             * redirected DDS_SELECT to a cluster virtual HID and returned, swallowing the
+             * select → "knob press does nothing". Cluster map zoom is driven separately by the
+             * steering-wheel MapScale callback, never by this central-console select. */
             if (TerminalModeUtils.isJoystickMiddleposition(key)) {
                 if (null != this.this$0.lastJoystickkey) {
                     this.this$0
@@ -992,10 +991,8 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
         public void updateRotary(int i) {
             this.this$0.logger.log(1000000, "[%1.updateRotary] %2", LOGCLASS, i);
             /* updateRotary = the CENTRAL console MMI knob → must drive the CarPlay Main UI
-             * (next/prev).  The cluster-altScreen redirect (CMD_ALT_HID) belongs to the STEERING
-             * WHEEL scroll, which arrives via updateKey (MFL keys), NOT here — it was wrongly
-             * placed on this seam and swallowed the central knob.  Re-add the wheel→cluster
-             * redirect on the MFL key path in the altScreen phase. */
+             * (next/prev). Cluster altScreen zoom comes from the steering-wheel MapScale BAP
+             * callback and is sent as changeMapZoomLevel; it must never use this seam. */
             this.this$0.dsiCarplaySafe.postRotaryEvent(i);
         }
 

@@ -30,6 +30,15 @@ DEFINE_LOG_MODULE(RGD);
  */
 #define ROUTE_ZERO_NORMAL_GRACE_MS    800
 
+/* A 0x5200 sent while the phone is still restoring a pre-existing Maps route
+ * can be accepted without producing the initial 0x5201/2/4 snapshot.  The old
+ * one-shot trigger then stayed latched forever.  Retry quickly through the HU /
+ * phone start race, then very slowly until the first real RGI message proves
+ * that the subscription is alive. */
+#define RGD_START_FAST_RETRY_MS       2000
+#define RGD_START_SLOW_RETRY_MS      30000
+#define RGD_START_FAST_ATTEMPTS          5
+
 static uint64_t now_monotonic_ms(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -41,6 +50,7 @@ static uint64_t now_monotonic_ms(void) {
  * iAP2 callback thread inside rgd_message_handler.  Critical sections
  * are tiny (a few stores + a read of monotonic time). */
 static pthread_mutex_t g_rgd_debounce_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t g_rgd_start_lock = PTHREAD_MUTEX_INITIALIZER;
 
 /* Forward decl — implemented after rgd_update_t is in scope. */
 void rgd_periodic_tick(void);
@@ -53,6 +63,8 @@ static struct {
     bool got_520x;
     uint16_t component_id;
     bool component_valid;
+    uint64_t last_5200_ms;
+    unsigned int start_5200_attempts;
 
     /* MHI3-like maneuver storage mapping:
      * iOS uses monotonically increasing maneuver indexes (can exceed small caches).
@@ -105,6 +117,8 @@ static struct {
     .got_520x = false,
     .component_id = 0x0010,
     .component_valid = false,
+    .last_5200_ms = 0,
+    .start_5200_attempts = 0,
 	    .have_update = false,
 	    .last_route_state = 0,
 	    .state_zero_started_ms = 0,
@@ -1149,10 +1163,14 @@ static void write_bus_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* 
 
 void rgd_clear_state(const char* reason) {
     g_rgd.active = false;
-    g_rgd.sent_5200 = false;
     g_rgd.sent_5203 = false;
+    pthread_mutex_lock(&g_rgd_start_lock);
+    g_rgd.sent_5200 = false;
     g_rgd.got_520x = false;
     g_rgd.component_valid = false;
+    g_rgd.last_5200_ms = 0;
+    g_rgd.start_5200_attempts = 0;
+    pthread_mutex_unlock(&g_rgd_start_lock);
     g_rgd.have_update = false;
     g_rgd.last_route_state = 0;
     /* Disconnect bypasses time-based debounce — emit state=0 immediately
@@ -1185,12 +1203,30 @@ void rgd_clear_state(const char* reason) {
 }
 
 hook_result_t rgd_request_updates(void) {
-    /* Silent short-circuit when the component isn't ready yet — the caller
-     * retries every second during CarPlay warm-up and the warning spam
-     * drowned the log. */
-    if (!g_rgd.component_valid) {
+    uint64_t now = now_monotonic_ms();
+    uint64_t retry_ms;
+    unsigned int attempt;
+
+    /* Serialize the transport callback and 1 Hz heartbeat.  Claim the retry
+     * timestamp before injection so both threads cannot emit the same 0x5200. */
+    pthread_mutex_lock(&g_rgd_start_lock);
+    if (!g_rgd.component_valid || !hook_is_ready()) {
+        pthread_mutex_unlock(&g_rgd_start_lock);
         return HOOK_ERR_INIT;
     }
+    if (g_rgd.got_520x) {
+        pthread_mutex_unlock(&g_rgd_start_lock);
+        return HOOK_OK;
+    }
+    retry_ms = (g_rgd.start_5200_attempts < RGD_START_FAST_ATTEMPTS)
+             ? RGD_START_FAST_RETRY_MS : RGD_START_SLOW_RETRY_MS;
+    if (g_rgd.last_5200_ms != 0 && now - g_rgd.last_5200_ms < retry_ms) {
+        pthread_mutex_unlock(&g_rgd_start_lock);
+        return HOOK_OK;
+    }
+    g_rgd.last_5200_ms = now;
+    attempt = ++g_rgd.start_5200_attempts;
+    pthread_mutex_unlock(&g_rgd_start_lock);
 
     /*
      * Mirror native libesoiap2 0x5200 shape:
@@ -1221,10 +1257,20 @@ hook_result_t rgd_request_updates(void) {
 
     hook_result_t res = hook_inject_message(IAP2_MSG_ROUTE_GUIDANCE_START, tlv, off);
     if (res == HOOK_OK) {
+        pthread_mutex_lock(&g_rgd_start_lock);
         g_rgd.sent_5200 = true;
+        pthread_mutex_unlock(&g_rgd_start_lock);
         g_rgd.active = true;
         rgd_update_session_active();
-        LOG_INFO(LOG_MODULE, "Sent 0x5200 (component=0x%04X, opts=source_name+source_supports_rg+exit_info)", g_rgd.component_id);
+        LOG_INFO(LOG_MODULE, "Sent 0x5200 attempt=%u (component=0x%04X, opts=source_name+source_supports_rg+exit_info)",
+                 attempt, g_rgd.component_id);
+    } else {
+        /* A transport failure was not a real attempt.  Make the next heartbeat
+         * retry immediately instead of waiting for the backoff interval. */
+        pthread_mutex_lock(&g_rgd_start_lock);
+        if (g_rgd.start_5200_attempts > 0) --g_rgd.start_5200_attempts;
+        g_rgd.last_5200_ms = 0;
+        pthread_mutex_unlock(&g_rgd_start_lock);
     }
     return res;
 }
@@ -1266,16 +1312,28 @@ static void rgd_log_raw_packet(const char* label, const uint8_t* data, size_t le
 }
 #endif
 
+static void rgd_mark_first_response(uint16_t msgid) {
+    bool first = false;
+    pthread_mutex_lock(&g_rgd_start_lock);
+    if (!g_rgd.got_520x) {
+        g_rgd.got_520x = true;
+        first = true;
+    }
+    pthread_mutex_unlock(&g_rgd_start_lock);
+    if (first) {
+        rgd_update_session_active();
+        LOG_INFO(LOG_MODULE,
+                 "*** FIRST RouteGuidance message received! msgid=0x%04X; 0x5200 retry stopped ***",
+                 msgid);
+    }
+}
+
 /* Message handler - incoming 0x5201/0x5202/0x5204 */
 static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) {
     rgd_lazy_init();  /* Ensure bus/session state is ready */
 
     if (frame->msgid == IAP2_MSG_ROUTE_GUIDANCE_UPDATE) {
-        if (!g_rgd.got_520x) {
-            g_rgd.got_520x = true;
-            rgd_update_session_active();
-            LOG_INFO(LOG_MODULE, "*** FIRST RouteGuidance message received! msgid=0x%04X ***", frame->msgid);
-        }
+        rgd_mark_first_response(frame->msgid);
 #if RGD_TRACE_RAW_FULL
         rgd_log_raw_packet("RGD 0x5201 raw", ctx->raw_buf, frame->frame_len);
 #endif
@@ -1361,11 +1419,7 @@ static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) 
             write_bus_update_partial(&upd);
     }
     else if (frame->msgid == IAP2_MSG_ROUTE_GUIDANCE_MANEUVER) {
-        if (!g_rgd.got_520x) {
-            g_rgd.got_520x = true;
-            rgd_update_session_active();
-            LOG_INFO(LOG_MODULE, "*** FIRST RouteGuidance message received! msgid=0x%04X ***", frame->msgid);
-        }
+        rgd_mark_first_response(frame->msgid);
 #if RGD_TRACE_RAW_FULL
         rgd_log_raw_packet("RGD 0x5202 raw", ctx->raw_buf, frame->frame_len);
 #endif
@@ -1379,11 +1433,7 @@ static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) 
         write_bus_maneuver_partial(&man);
     }
     else if (frame->msgid == IAP2_MSG_ROUTE_GUIDANCE_LANE) {
-        if (!g_rgd.got_520x) {
-            g_rgd.got_520x = true;
-            rgd_update_session_active();
-            LOG_INFO(LOG_MODULE, "*** FIRST RouteGuidance message received! msgid=0x%04X ***", frame->msgid);
-        }
+        rgd_mark_first_response(frame->msgid);
 #if RGD_TRACE_RAW_FULL
         rgd_log_raw_packet("RGD 0x5204 raw", ctx->raw_buf, frame->frame_len);
 #endif
@@ -1416,8 +1466,10 @@ static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) 
 static void rgd_transport_handler(hook_context_t* ctx, uint16_t msgid) {
     (void)ctx;
 
-    /* Inject 0x5200 when we see LocationInfo (0xFFFB) going out */
-    if (msgid == IAP2_MSG_LOCATION_INFO && !g_rgd.sent_5200 && hook_is_ready()) {
+    /* LocationInfo remains the earliest trigger. rgd_request_updates() now
+     * contains the retry/backoff gate, so later LocationInfo frames are also a
+     * safe recovery opportunity after a phone/HU warm-start race. */
+    if (msgid == IAP2_MSG_LOCATION_INFO && hook_is_ready()) {
         rgd_request_updates();
     }
 }
@@ -1463,11 +1515,13 @@ static size_t rgd_identify_patcher(hook_context_t* ctx, uint8_t* buf, size_t len
             g_rgd.component_id = comp_id;
             LOG_INFO(LOG_MODULE, "Found existing 0x001E component=0x%04X", comp_id);
         }
-        g_rgd.component_valid = true;
     } else {
-        g_rgd.component_valid = true;
         LOG_INFO(LOG_MODULE, "Appending 0x001E component=0x%04X", g_rgd.component_id);
     }
+
+    pthread_mutex_lock(&g_rgd_start_lock);
+    g_rgd.component_valid = true;
+    pthread_mutex_unlock(&g_rgd_start_lock);
 
     uint8_t new_tlv[256];
     size_t new_tlv_len = rgd_build_component_tlv(new_tlv, sizeof(new_tlv), g_rgd.component_id);
@@ -1515,7 +1569,6 @@ static size_t rgd_identify_patcher(hook_context_t* ctx, uint8_t* buf, size_t len
 
 /* State handler */
 static void rgd_state_handler(hook_context_t* ctx, int event, void* event_data) {
-    (void)ctx;
     (void)event_data;
 
     switch (event) {
@@ -1525,7 +1578,17 @@ static void rgd_state_handler(hook_context_t* ctx, int event, void* event_data) 
             rgd_clear_state(event == HOOK_EVENT_SHUTDOWN ? "shutdown" : "disconnect");
             break;
         case HOOK_EVENT_IDENTIFY_END:
-            if (!g_rgd.active && !g_rgd.got_520x) rgd_clear_state("identify_end");
+            /* IdentifyEnd means the phone accepted the component we just
+             * advertised.  The old code cleared component_valid if 0x5200 had
+             * not already won the startup race, making every later request
+             * impossible. Preserve it; the heartbeat will request/retry as soon
+             * as auth + injection context make hook_is_ready() true. */
+            if (!g_rgd.active) {
+                LOG_INFO(LOG_MODULE,
+                         "Identify ended before RGI became active; retaining component=0x%04X valid=%d ctx_valid=%d",
+                         g_rgd.component_id, g_rgd.component_valid ? 1 : 0,
+                         (ctx && ctx->rgd_component_valid) ? 1 : 0);
+            }
             break;
     }
 }
@@ -1560,6 +1623,11 @@ void rgd_init(void) {
  * Idempotent: re-emitting state=0 to a Java side that already saw it
  * is a no-op (Java's RG handler short-circuits identical states). */
 void rgd_periodic_tick(void) {
+    /* Recover an already-active phone navigation session when the first 0x5200
+     * raced Maps restoration and produced no initial snapshot.  This is a
+     * no-op after any 0x5201/2/4 and is rate-limited inside the request helper. */
+    rgd_request_updates();
+
     pthread_mutex_lock(&g_rgd_debounce_lock);
     if (g_rgd.state_zero_started_ms == 0 || g_rgd.emitted_route_state == 0) {
         pthread_mutex_unlock(&g_rgd_debounce_lock);

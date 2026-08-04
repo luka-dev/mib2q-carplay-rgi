@@ -28,6 +28,39 @@ public class GatedCombiService implements CombiBAPServiceNavi {
 
     GatedCombiService(CombiBAPServiceNavi r) { this.real = r; }
 
+    /**
+     * Enable/disable CarPlay's ownership of the cluster map.
+     *
+     * The virtual cockpit draws its own NavStatus bar over the LVDS/KDK map
+     * hole.  Merely suppressing route-guidance functions does not remove it:
+     * altitude (FctID 47), scale (45), compass (16), current-position (19),
+     * and turn-to/signpost (20) are independent BAP properties.  On the
+     * transition into takeover send each property's protocol-defined invalid
+     * value once, then keep the stock producer from painting it back.
+     *
+     * Do not clear MapVisibility/FctID 44 here.  The VC uses its LVDS-visible
+     * bit to open the KDK video hole, so clearing it would hide altScreen too.
+     */
+    public void setTakeover(boolean active) {
+        boolean changed = blockRouteGuidance != active;
+        blockRouteGuidance = active;
+        if (active && changed) clearNativeMapStatusBar();
+    }
+
+    private void clearNativeMapStatusBar() {
+        /* VC invalid gates, verified in hmi_app.elf:
+         *   Compass: angle > 360 and symbolic > 15 -> visible=0.
+         *   Altitude: altitude 0x7fff or unit > 1 -> empty/not available.
+         *   MapScale: scale 0xffff or unit 0xff -> scale visible=0.
+         * AppConnectorNavi normalises compass symbolic=0xff back to a valid
+         * direction, hence the deliberate out-of-range pair 361/16. */
+        try { real.updateCompassInfo(361, 16); } catch (Throwable t) { }
+        try { real.updateAltitude(0x7FFF, 2); } catch (Throwable t) { }
+        try { real.updateMapScale(15, false, 0xFFFF, 0xFF, false); } catch (Throwable t) { }
+        try { real.updateCurrentPositionInfo(""); } catch (Throwable t) { }
+        try { real.updateTurnToInfo("", ""); } catch (Throwable t) { }
+    }
+
     /* GATED ROUTE-GUIDANCE METHODS */
     public void updateRGStatus(int a) {
         if (!blockRouteGuidance) real.updateRGStatus(a);
@@ -64,8 +97,10 @@ public class GatedCombiService implements CombiBAPServiceNavi {
     /* All other methods: pure delegation */
     public void showInitializingScreen() { real.showInitializingScreen(); }
     public void hideInitializingScreen() { real.hideInitializingScreen(); }
-    public void updateCompassInfo(int a, int b) { real.updateCompassInfo(a, b); }
-    public void updateTurnToInfo(String a, String b) { real.updateTurnToInfo(a, b); }
+    public void updateCompassInfo(int a, int b) {
+        if (!blockRouteGuidance) real.updateCompassInfo(a, b); }
+    public void updateTurnToInfo(String a, String b) {
+        if (!blockRouteGuidance) real.updateTurnToInfo(a, b); }
     public void updateDistanceToDestination(int a, int b, boolean c) {
         real.updateDistanceToDestination(a, b, c); }
     public void updateTimeToDestination(int a, int b, long c) {
@@ -91,10 +126,11 @@ public class GatedCombiService implements CombiBAPServiceNavi {
     public void updateMapVisibility(boolean a, boolean b) { real.updateMapVisibility(a, b); }
     public void updateMapOrientation(int a) { real.updateMapOrientation(a); }
     public void updateMapScale(int a, boolean b, int c, int d, boolean e) {
-        real.updateMapScale(a, b, c, d, e); }
+        if (!blockRouteGuidance) real.updateMapScale(a, b, c, d, e); }
     public void updateDestinationInfo(CombiBAPDestinationInfo a) {
         real.updateDestinationInfo(a); }
-    public void updateAltitude(int a, int b) { real.updateAltitude(a, b); }
+    public void updateAltitude(int a, int b) {
+        if (!blockRouteGuidance) real.updateAltitude(a, b); }
     public void updateOnlineNavigationState(int a, int b, int c) {
         real.updateOnlineNavigationState(a, b, c); }
     public void updateSemidynamicRouteGuidance(CombiBAPSemiDynamicRouteInfo a) {

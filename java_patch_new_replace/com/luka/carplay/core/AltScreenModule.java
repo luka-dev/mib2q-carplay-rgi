@@ -51,7 +51,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
     private Thread worker;                        /* the ONE persistent switch worker (guarded by LOCK) */
 
     /* true while the cluster is on OUR context (set AFTER the physical switch completes) — the roller
-     * injection reads this, because HID must wait until our content is actually shown. */
+     * command waits until our content is actually shown. */
     private static volatile boolean clusterActive = false;
     public static boolean isClusterActive() { return clusterActive; }
 
@@ -61,8 +61,9 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
      * belongs to the centre-console MMI encoder and must continue controlling the
      * main CarPlay screen.
      *
-     * MapScale.steps is a signed BAP byte.  The virtual CarPlay knob uses the same
-     * signed relative-wheel byte, so no semantic zoom conversion is necessary.
+     * MapScale.steps is a signed BAP byte. The hook converts its sign into the
+     * UUID-addressed CarPlay changeMapZoomLevel command, so the cluster scene is
+     * targeted directly and the main CarPlay UI does not move.
      * Once our cluster context owns terminal 1 we always consume the event, even if
      * the bus is momentarily reconnecting; otherwise the hidden Audi map would zoom
      * underneath CarPlay and later reappear at an unexpected scale.
@@ -73,9 +74,9 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
         if (steps != 0) {
             if (steps > 127) steps = 127;
             else if (steps < -127) steps = -127;
-            byte[] payload = new byte[]{ (byte) steps, (byte) 0 };
-            boolean ok = CarplayBus.getInstance().sendBinary(CarplayBus.CMD_ALT_HID, payload);
-            Log.i(TAG, "MFL roller -> altScreen wheel=" + steps + " queued=" + ok);
+            byte[] payload = new byte[]{ (byte) steps };
+            boolean ok = CarplayBus.getInstance().sendBinary(CarplayBus.CMD_ALT_ZOOM, payload);
+            Log.i(TAG, "MFL roller -> altScreen zoom step=" + steps + " queued=" + ok);
         }
         return true;
     }
@@ -296,7 +297,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
                 }
                 d.switchContext(ctx, TERMINAL_CLUSTER, null);
                 d.setUpdateRate(TERMINAL_CLUSTER, CLUSTER_FPS);   /* (idempotent when already running) */
-                clusterActive = true;                             /* roller → CMD_ALT_HID */
+                clusterActive = true;                             /* roller → CMD_ALT_ZOOM */
             } else {
                 d.setUpdateRate(TERMINAL_CLUSTER, 0);             /* stop encoder before leaving */
                 d.switchContext(CTX_STOCK_CLUSTER, TERMINAL_CLUSTER, null);

@@ -545,7 +545,7 @@ public class BAPBridge {
             if (gatedService == null) initClusterAccess();
             tryStopNativeNavigation();
             if (gatedService != null) {
-                gatedService.blockRouteGuidance = true;
+                gatedService.setTakeover(true);
                 Log.i(TAG, "REPLACE: takeover engaged (stock nav cancelled, RG gate shut)");
                 return true;
             }
@@ -561,7 +561,7 @@ public class BAPBridge {
     public void disengageTakeover() {
         try {
             takeoverEngaged = false;
-            if (gatedService != null) gatedService.blockRouteGuidance = false;
+            if (gatedService != null) gatedService.setTakeover(false);
             Log.i(TAG, "REPLACE: takeover disengaged (stock RG gate reopened)");
         } catch (Throwable t) { /* ignore */ }
     }
@@ -617,7 +617,7 @@ public class BAPBridge {
             tryStopNativeNavigation();
 
             /* Block native route-guidance BAP stream during CarPlay RG. */
-            if (gatedService != null) gatedService.blockRouteGuidance = true;
+            if (gatedService != null) gatedService.setTakeover(true);
 
             /* Start renderer FIRST — takes over native displayable 20
              * (DISPLAYABLE_MAP_ROUTE_GUIDANCE, the KOMO RG widget slot) by
@@ -737,7 +737,7 @@ public class BAPBridge {
              * onShutdown fires when CarPlay navigation ENDS (not on disconnect), so without
              * this guard the gate would reopen mid-session and stock nav RG could reappear on
              * the cluster.  disengageTakeover() (on real disconnect) is the only reopen. */
-            if (gatedService != null && !takeoverEngaged) gatedService.blockRouteGuidance = false;
+            if (gatedService != null && !takeoverEngaged) gatedService.setTakeover(false);
 
             /*
              * Tear down our cluster RG-state override CONDITIONALLY.

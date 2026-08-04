@@ -53,11 +53,13 @@ typedef void *(*cf_str_t)(void *, const char *, unsigned);          /* CFStringC
 typedef void *(*cf_arrm_t)(void *, long, const void *);             /* CFArrayCreateMutable       */
 typedef int   (*cf_arrappc_t)(void *, const char *, int);          /* CFArrayAppendCString(arr,str,len=-1) */
 typedef void  (*cf_arrapp_t)(void *, const void *);                /* CFArrayAppendValue         */
-typedef int   (*cf_arrappi_t)(void *, int64_t);                    /* CFArrayAppendInt64         */
+typedef int   (*cf_arrappi64_t)(void *, int64_t);                   /* CFArrayAppendInt64         */
 typedef void  (*cf_rel_t)(void *);                                 /* CFRelease                  */
 typedef void  (*cf_dictset_t)(void *, const void *, const void *); /* CFDictionarySetValue       */
 typedef void *(*cf_dictm_t)(void *, long, const void *, const void *); /* CFDictionaryCreateMutable */
 typedef void  (*cf_dictseti_t)(void *, const void *, int64_t);     /* CFDictionarySetInt64       */
+typedef int64_t (*fn_cfdict_geti64_t)(void *, const void *, void *); /* CFDictionaryGetInt64      */
+typedef int64_t (*fn_cf_geti64_t)(void *, void *);                  /* CFGetInt64                 */
 /* AirPlayReceiverSessionScreen_CopyDisplaysInfo(screenSession, outErr) — 280 ref
  * ignores the session arg ((void)inSession) and builds the MAIN display dict via
  * ScreenCopyMain(); we pass NULL. */
@@ -67,11 +69,13 @@ static cf_str_t     cf_str;
 static cf_arrm_t    cf_arrm;
 static cf_arrappc_t cf_arrappc;
 static cf_arrapp_t  cf_arrapp;
-static cf_arrappi_t cf_arrappi;
+static cf_arrappi64_t cf_arrappi64;
 static cf_rel_t     cf_rel;
 static cf_dictset_t cf_dictset;
 static cf_dictm_t   cf_dictm;
 static cf_dictseti_t cf_dictseti;
+static fn_cfdict_geti64_t cf_geti64;
+static fn_cf_geti64_t cf_geti64_value;
 static fn_copydisp_t fn_copydisp;
 static const void  *arr_cb;          /* array callbacks constant (CFLite)            */
 static const void  *dict_keycb;      /* dictionary key callbacks constant            */
@@ -79,6 +83,9 @@ static const void  *dict_valcb;      /* dictionary value callbacks constant     
 static int          cf_ok = -1;      /* extendedFeatures (#1a) builders ready         */
 static int          disp_ok = -1;    /* displays (#1b) builders ready                 */
 static pthread_mutex_t cf_lock = PTHREAD_MUTEX_INITIALIZER;
+/* Seeded from stock /info's authoritative nightMode, then updated by the
+ * dio->libairplay AirPlayReceiverSessionSetNightMode boundary call. */
+static volatile int g_alt_night_mode;
 
 /* the CFLite array-callbacks constant has moved names across builds; try both */
 static const void *resolve_arr_cb(void)
@@ -108,22 +115,25 @@ static int cf_init(void)
         cf_arrm    = (cf_arrm_t)    dlsym(RTLD_DEFAULT, "CFArrayCreateMutable");
         cf_arrappc = (cf_arrappc_t) dlsym(RTLD_DEFAULT, "CFArrayAppendCString");
         cf_arrapp  = (cf_arrapp_t)  dlsym(RTLD_DEFAULT, "CFArrayAppendValue");
-        cf_arrappi = (cf_arrappi_t) dlsym(RTLD_DEFAULT, "CFArrayAppendInt64");
+        cf_arrappi64 = (cf_arrappi64_t)dlsym(RTLD_DEFAULT, "CFArrayAppendInt64");
         cf_rel     = (cf_rel_t)     dlsym(RTLD_DEFAULT, "CFRelease");
         cf_dictset = (cf_dictset_t) dlsym(RTLD_DEFAULT, "CFDictionarySetValue");
         cf_dictm   = (cf_dictm_t)   dlsym(RTLD_DEFAULT, "CFDictionaryCreateMutable");
         cf_dictseti= (cf_dictseti_t)dlsym(RTLD_DEFAULT, "CFDictionarySetInt64");
+        cf_geti64  = (fn_cfdict_geti64_t)dlsym(RTLD_DEFAULT, "CFDictionaryGetInt64");
+        cf_geti64_value = (fn_cf_geti64_t)dlsym(RTLD_DEFAULT, "CFGetInt64");
         fn_copydisp= (fn_copydisp_t)dlsym(RTLD_DEFAULT, "AirPlayReceiverSessionScreen_CopyDisplaysInfo");
         arr_cb     = resolve_arr_cb();
         dict_keycb = dlsym(RTLD_DEFAULT, "kCFLDictionaryKeyCallBacksCFLTypes");
         dict_valcb = dlsym(RTLD_DEFAULT, "kCFLDictionaryValueCallBacksCFLTypes");
-        /* #1a needs: a mutable array + a way to add "altScreen" + CFStringCreate (the
+        /* #1a needs: a mutable array + a way to add the implemented feature keys + CFStringCreate (the
          * /info key) + CFDictionarySetValue (add the key to the returned dict). */
-        cf_ok = (arr_cb && cf_arrm && (cf_arrappc || (cf_str && cf_arrapp)) && cf_str && cf_dictset) ? 1 : 0;
+        cf_ok = (arr_cb && cf_arrm && (cf_arrappc || (cf_str && cf_arrapp)) &&
+                 cf_str && cf_dictset && cf_geti64 && cf_geti64_value) ? 1 : 0;
         /* #1b (displays) additionally needs: mutable dict + SetInt64 + AppendValue (dicts
          * can't go via AppendCString) + both dict callbacks + the stock main-display
          * builder.  If any is missing we still advertise extendedFeatures (#1a). */
-        disp_ok = (cf_ok && cf_dictm && cf_dictseti && cf_arrapp && cf_arrappi && cf_dictset && cf_str &&
+        disp_ok = (cf_ok && cf_dictm && cf_dictseti && cf_arrapp && cf_dictset && cf_str &&
                    dict_keycb && dict_valcb && fn_copydisp) ? 1 : 0;
         LOG_INFO(LOG_MODULE, "cf_init ok=%d disp_ok=%d dictm=%p seti=%p copydisp=%p keycb=%p valcb=%p",
                  cf_ok, disp_ok, (void*)cf_dictm, (void*)cf_dictseti, (void*)fn_copydisp,
@@ -134,8 +144,9 @@ static int cf_init(void)
 }
 
 /* Build the /info extended-feature advert with libairplay's own CFLite;
- * caller CFReleases.  `viewAreas` is a real implemented capability here:
- * the hook declares the rectangles and ships updateViewArea itself. */
+ * caller CFReleases.  The hook implements both contracts: altScreen owns stream
+ * 111 and viewAreas supplies a non-empty display.viewAreas array plus the
+ * updateViewArea command path. */
 static void *build_extfeatures(void)
 {
     void *arr = cf_arrm(0, 2, arr_cb);
@@ -177,22 +188,6 @@ static void set_i64(void *d, const char *key, int64_t val)
     if (k && cf_rel) cf_rel(k);
 }
 
-static int set_i64_array1(void *d, const char *key, int64_t val)
-{
-    void *k = NULL, *a = NULL;
-    int err = -6728;
-    if (!d || !cf_arrm || !cf_arrappi || !arr_cb) return err;
-    k = cf_str(0, key, CFENC_UTF8);
-    a = cf_arrm(0, 1, arr_cb);
-    if (k && a && cf_arrappi(a, val) == 0) {
-        cf_dictset(d, k, a);
-        err = 0;
-    }
-    if (a && cf_rel) cf_rel(a);
-    if (k && cf_rel) cf_rel(k);
-    return err;
-}
-
 /* Audi Kombi (instrument-cluster) panel — from firmware qcdisplaycfg_MMX2.xml
  * "Audi 1440x542 Kombi panel" (uVisWidth 1440 / uVisHeight 542); LVDS2 = Cluster
  * Display (displaymanager.json id 4).  CarPlay encodes the 111 stream at the size
@@ -200,31 +195,33 @@ static int set_i64_array1(void *d, const char *key, int64_t val)
 #define CLUSTER_W       1440
 #define CLUSTER_H       542
 
-/* Geometry measured with the 16-column x 6-row on-unit checker grid.
- * Grid labels are inclusive: C2-N3 means x=[C,N+1), y=[2,3+1).
- * Integer division keeps the first/last edges exactly at 0/1440 and 0/542.
+/* Instrument-cluster calibration grid is 16 columns (A..P) by 6 rows on the
+ * 1440x542 panel: one column is exactly 90 px; the row boundaries are rounded
+ * to 0/90/181/271/361/452/542.
  *
- * Fullscreen safe shape (T): C2-N3 U E2-L4.
- * Duo safe shape (top-left diagonal approximated by the only shape the protocol
- * supports: one primary CGRect + one adjacent CGRect): C2-E2 U B3-E5.
+ * CarKit 26.6 represents CARScreenViewArea.visibleFrame and safeFrame as two
+ * separate CGRects.  The 1440x542 cluster stream is rejected during activation
+ * when either declared visibleFrame is reduced to our physical safe region, so
+ * both advertised view areas must retain the full encoded visibleFrame.  The
+ * physical non-rectangular masks cannot be represented exactly; keep critical
+ * UI in the nested safe frame:
  *
- * iOS 26.6 CARScreenInfo stores one currentViewArea plus one adjacentViewArea;
- * _adjacentViewAreaForPayload uses adjacentViewAreas.firstObject.  A true polygon
- * or triangular corner is therefore impossible; these two-rectangle unions are
- * the exact protocol limit. */
-#define GRID_COLS       16
-#define GRID_ROWS       6
-#define GRID_X(c)       ((CLUSTER_W * (c)) / GRID_COLS)
-#define GRID_Y(r)       ((CLUSTER_H * (r)) / GRID_ROWS)
-#define GRID_W(c0,c1)   (GRID_X(c1) - GRID_X(c0))
-#define GRID_H(r0,r1)   (GRID_Y(r1) - GRID_Y(r0))
+ *   fullscreen physical safe shape: C2..N3 + E2..L4 (a T shape)
+ *              rectangular safeArea: E2..L4 = (360,90) 720x271
+ *   duo physical safe shape: about half-B2 through E5, with a slanted left edge
+ *              rectangular safeArea: B2.5..E5 = (90,135) 360x317
+ *
+ * The background may render under a physical mask; route focus and critical UI
+ * stay inside these nested safe rectangles. */
+#define FULL_SAFE_X     360
+#define FULL_SAFE_Y      90
+#define FULL_SAFE_W     720
+#define FULL_SAFE_H     271
 
-enum {
-    VIEWAREA_FULL_TOP = 0,       /* C2-N3 */
-    VIEWAREA_FULL_CENTER = 1,    /* E2-L4 (adjacent to FULL_TOP) */
-    VIEWAREA_DUO_TOP = 2,        /* C2-E2 */
-    VIEWAREA_DUO_BODY = 3        /* B3-E5 (adjacent to DUO_TOP) */
-};
+#define DUO_SAFE_X       90
+#define DUO_SAFE_Y      135
+#define DUO_SAFE_W      360
+#define DUO_SAFE_H      317
 
 /* one rect dict, iOS keys: {originXPixels, originYPixels, widthPixels, heightPixels}
  * (CarKit CROrigin/CRSizeFromAirPlayDictionary). */
@@ -283,7 +280,7 @@ static void *build_stream_array(const char *uuid)
     return arr;
 }
 
-static void *build_cluster_dict(void)
+static void *build_cluster_dict(int night)
 {
     void *d = cf_dictm(0, 0, dict_keycb, dict_valcb);
     if (!d) return 0;
@@ -320,50 +317,51 @@ static void *build_cluster_dict(void)
         }
         if (k && cf_rel) cf_rel(k);
     }
-    /* Predeclare the four rectangles. Runtime mode selection activates two at a
-     * time using viewAreaIndex + adjacentViewAreas[0]; the video stream itself
-     * remains 1440x542 in both modes. Each rectangle has no further internal
-     * exclusion, so its nested safeArea equals its visible frame. */
+    /* [0] fullscreen, [1] duo. The encoded and visible frame stays 1440x542;
+     * the two entries carry different nested safe frames.  Match MHI3
+     * AirPlayScreenDictSetViewAreas by declaring the initial current/adjacent
+     * state alongside the array; these are display-level keys, not fields of
+     * the individual view-area dictionaries. */
     {
         void *k   = cf_str(0, "viewAreas", CFENC_UTF8);
-        void *arr = cf_arrm(0, 4, arr_cb);
+        void *arr = cf_arrm(0, 2, arr_cb);
         if (arr) {
-            void *fullTop = build_viewarea(
-                GRID_X(2), GRID_Y(1), GRID_W(2, 14), GRID_H(1, 3),
-                GRID_X(2), GRID_Y(1), GRID_W(2, 14), GRID_H(1, 3));
-            void *fullCenter = build_viewarea(
-                GRID_X(4), GRID_Y(1), GRID_W(4, 12), GRID_H(1, 4),
-                GRID_X(4), GRID_Y(1), GRID_W(4, 12), GRID_H(1, 4));
-            void *duoTop = build_viewarea(
-                GRID_X(2), GRID_Y(1), GRID_W(2, 5), GRID_H(1, 2),
-                GRID_X(2), GRID_Y(1), GRID_W(2, 5), GRID_H(1, 2));
-            void *duoBody = build_viewarea(
-                GRID_X(1), GRID_Y(2), GRID_W(1, 5), GRID_H(2, 5),
-                GRID_X(1), GRID_Y(2), GRID_W(1, 5), GRID_H(2, 5));
-            if (fullTop && fullCenter && duoTop && duoBody) {
-                cf_arrapp(arr, fullTop);
-                cf_arrapp(arr, fullCenter);
-                cf_arrapp(arr, duoTop);
-                cf_arrapp(arr, duoBody);
-                if (k) cf_dictset(d, k, arr);
-            } else {
-                LOG_ERROR(LOG_MODULE, "viewAreas allocation failed; refusing shifted/incomplete indexes");
-            }
-            if (fullTop && cf_rel) cf_rel(fullTop);
-            if (fullCenter && cf_rel) cf_rel(fullCenter);
-            if (duoTop && cf_rel) cf_rel(duoTop);
-            if (duoBody && cf_rel) cf_rel(duoBody);
+            void *full = build_viewarea(0, 0, CLUSTER_W, CLUSTER_H,
+                                        FULL_SAFE_X, FULL_SAFE_Y,
+                                        FULL_SAFE_W, FULL_SAFE_H);
+            void *split = build_viewarea(0, 0, CLUSTER_W, CLUSTER_H,
+                                         DUO_SAFE_X, DUO_SAFE_Y,
+                                         DUO_SAFE_W, DUO_SAFE_H);
+            if (full)  { cf_arrapp(arr, full);  if (cf_rel) cf_rel(full); }
+            if (split) { cf_arrapp(arr, split); if (cf_rel) cf_rel(split); }
+            if (k) cf_dictset(d, k, arr);
+            LOG_INFO(LOG_MODULE,
+                     "declared viewAreas: visible=(0,0 %dx%d); full safe=(%d,%d %dx%d); duo safe=(%d,%d %dx%d)",
+                     CLUSTER_W, CLUSTER_H,
+                     FULL_SAFE_X, FULL_SAFE_Y, FULL_SAFE_W, FULL_SAFE_H,
+                     DUO_SAFE_X, DUO_SAFE_Y, DUO_SAFE_W, DUO_SAFE_H);
             if (cf_rel) cf_rel(arr);
         }
         if (k && cf_rel) cf_rel(k);
     }
-    set_i64(d, "initialViewArea", VIEWAREA_FULL_TOP);
-    set_i64_array1(d, "adjacentViewAreas", VIEWAREA_FULL_CENTER);
+    set_i64(d, "initialViewArea", 0);
+    {
+        void *k = cf_str(0, "adjacentViewAreas", CFENC_UTF8);
+        void *a = cf_arrm(0, 0, arr_cb);
+        if (k && a) cf_dictset(d, k, a);
+        if (a && cf_rel) cf_rel(a);
+        if (k && cf_rel) cf_rel(k);
+    }
     /* Extra fields a real HU (MHI3 libairplay 450) sends in each display dict — our subset was
-     * incomplete, which the phone accepts to ADD the car but rejects at SESSION start (0s teardown). */
-    set_i64(d, "primaryInputDevice", 0);
+     * incomplete, which the phone accepts to ADD the car but rejects at SESSION start (0s teardown).
+     *
+     * Do NOT advertise a cluster primaryInputDevice here. The MHI3 alt-screen
+     * dictionary helper omits both features and primaryInputDevice, and the live
+     * virtual-knob experiment proved its HID reports control the main CarPlay UI,
+     * not the instrument-cluster scene. Cluster map zoom is the UUID-addressed
+     * changeMapZoomLevel session command below. */
     set_i64(d, "cornerMasks",        0);
-    set_i64(d, "nightMode",          0);
+    set_i64(d, "nightMode",          night ? 1 : 0);
     set_i64(d, "limitedUI",          0);
     {   /* limitedUIElements = [] */
         void *k = cf_str(0, "limitedUIElements", CFENC_UTF8);
@@ -386,7 +384,7 @@ static void *build_cluster_dict(void)
 /* stock CopyDisplaysInfo emits the OLD 210 schema (identifier key "uuid", NO initialVideoStreams);
  * iOS-26.1 CarKit needs "uid" + a present "initialVideoStreams" array or it rejects the display →
  * the phone teardown-loops the session.  Patch the stock main dict into the modern schema. */
-static void main_disp_modernize(void *mainDisp)
+static void main_disp_modernize(void *mainDisp, int night)
 {
     if (!mainDisp) return;
     /* CarKit reads the display identifier as "uid" (stock emits only the legacy "uuid").  The value
@@ -395,7 +393,7 @@ static void main_disp_modernize(void *mainDisp)
     /* complete the main dict like a real HU (MHI3 set) — see build_cluster_dict note */
     set_i64(mainDisp, "primaryInputDevice", 0);
     set_i64(mainDisp, "cornerMasks",        0);
-    set_i64(mainDisp, "nightMode",          0);
+    set_i64(mainDisp, "nightMode",          night ? 1 : 0);
     set_i64(mainDisp, "limitedUI",          0);
     {
         void *k = cf_str(0, "limitedUIElements", CFENC_UTF8);
@@ -411,12 +409,12 @@ static void main_disp_modernize(void *mainDisp)
     if (kivs && cf_rel) cf_rel(kivs);
 }
 
-static void *build_displays(void)
+static void *build_displays(int night)
 {
     int err = 0;
     void *mainDisp = fn_copydisp(0, &err);      /* arg ignored; builds via ScreenCopyMain */
-    main_disp_modernize(mainDisp);              /* uuid→uid + initialVideoStreams for CarKit */
-    void *cluster  = build_cluster_dict();
+    main_disp_modernize(mainDisp, night);       /* uuid→uid + initialVideoStreams for CarKit */
+    void *cluster  = build_cluster_dict(night);
     void *arr = cf_arrm(0, 2, arr_cb);
     if (!arr) {
         if (mainDisp && cf_rel) cf_rel(mainDisp);
@@ -470,9 +468,36 @@ void *AirPlayCopyServerInfo(void *session, void *qualifier, void *macAddr, void 
      * stock receiver cannot satisfy and can restart the whole CarPlay session. */
     if (info && cf_init() == 1 && env_on("ALTSCREEN_HANDLE_ALT") &&
         alt_resolve() == 1) {
+        /* MU1316 dio's serverCopyPropertyCallback returns its startInNightMode
+         * byte for the stock top-level /info key "nightMode" (dio 0x160484-
+         * 0x1604C4).  This is the one hook-only seam that also covers a phone
+         * connected while the HU is already in night mode: read it before
+         * replacing displays, cache it for first-IDR replay, and advertise the
+         * same value in both main and cluster panel dictionaries. */
+        int nightErr = 0;
+        int infoNight = 0;
+        void *nightKey = cf_str(0, "nightMode", CFENC_UTF8);
+        if (nightKey) {
+            int64_t value = cf_geti64(info, nightKey, &nightErr);
+            if (!nightErr) {
+                infoNight = value ? 1 : 0;
+                g_alt_night_mode = infoNight;
+                LOG_INFO(LOG_MODULE,
+                         "seeded cluster nightMode=%d from stock /info", infoNight);
+            } else {
+                infoNight = g_alt_night_mode ? 1 : 0;
+                LOG_WARN(LOG_MODULE,
+                         "stock /info nightMode unavailable err=%d; retaining cached=%d",
+                         nightErr, infoNight);
+            }
+            if (cf_rel) cf_rel(nightKey);
+        } else {
+            infoNight = g_alt_night_mode ? 1 : 0;
+        }
+
         /* #1a: extendedFeatures = ["altScreen", "viewAreas"] */
         void *k = cf_str(0, "extendedFeatures", CFENC_UTF8);
-        void *v = build_extfeatures();                        /* ["altScreen", "viewAreas"] */
+        void *v = build_extfeatures();
         if (k && v) {
             cf_dictset(info, k, v);                           /* add to the /info dict */
             LOG_INFO(LOG_MODULE, "injected extendedFeatures=[altScreen,viewAreas] into /info=%p", info);
@@ -486,7 +511,7 @@ void *AirPlayCopyServerInfo(void *session, void *qualifier, void *macAddr, void 
          * construct stream 111.  Keep the separate env gate for controlled rollback. */
         if (disp_ok == 1 && env_on("ALTSCREEN_ADVERT_DISPLAYS")) {
             void *dk = cf_str(0, "displays", CFENC_UTF8);
-            void *dv = build_displays();
+            void *dv = build_displays(infoNight);
             if (dk && dv) {
                 cf_dictset(info, dk, dv);
                 LOG_INFO(LOG_MODULE, "injected displays=[main,cluster] into /info=%p", info);
@@ -506,7 +531,7 @@ void *AirPlayCopyServerInfo(void *session, void *qualifier, void *macAddr, void 
              * stays off → the 2-display count is rejected ("car won't add").  Give the phone displayPanels
              * in our physical schema so hasGaugeClusterScreen is set. */
             void *pk = cf_str(0, "displayPanels", CFENC_UTF8);
-            void *pv = build_displays();
+            void *pv = build_displays(infoNight);
             if (pk && pv) {
                 cf_dictset(info, pk, pv);
                 LOG_INFO(LOG_MODULE, "injected displayPanels=[main,cluster] into /info=%p", info);
@@ -552,7 +577,7 @@ typedef void     (*fn_derive_aes_t)(const uint8_t *, int, uint64_t, uint8_t *, u
 typedef int      (*fn_srv_sockopen_t)(int, int, int, int, int *, int, int *);
 typedef void     (*fn_sock_setqos_t)(int, int);
 typedef int      (*fn_sock_accept_t)(int, int, int *, void *);
-typedef int64_t  (*fn_cfdict_geti64_t)(void *, const void *, void *); /* CFDictionaryGetInt64(dict,key,OSStatus*outErr) */
+typedef void *   (*fn_srv_copyprop_t)(void *, int, void *, void *, int *); /* AirPlayReceiverServerPlatformCopyProperty */
 typedef void *   (*fn_cfdict_getval_t)(void *, const void *);
 typedef long     (*fn_cfarr_count_t)(void *);
 typedef void *   (*fn_cfarr_getidx_t)(void *, long);
@@ -563,6 +588,7 @@ static fn_aes_ctr_final_t   aes_ctr_final;
 static fn_sess_sendcmd_t    sess_sendcmd;   /* session-level {type,params} command shipper (zone switch) */
 static void alt_kick_viewarea(void);        /* fwd: apply cached fullscreen/duo geometry when 111 is live */
 static void alt_kick_show_ui(void);         /* fwd: select Maps content for the cluster display */
+static int  alt_send_cluster_night_mode(int night, const char *reason); /* fwd: per-display day/night */
 static int  alt_request_cluster_idr(const char *reason); /* fwd: forceKeyFrame targeted by displayUUID */
 static fn_derive_aes_t      derive_aes;
 
@@ -573,7 +599,7 @@ static void *volatile g_alt_session;
 static fn_srv_sockopen_t    srv_sockopen;
 static fn_sock_setqos_t     sock_setqos;
 static fn_sock_accept_t     sock_accept;
-static fn_cfdict_geti64_t   cf_geti64;
+static fn_srv_copyprop_t    srv_copyprop;
 static fn_cfdict_getval_t   cf_getval;
 static fn_cfarr_count_t     cf_arrcount;
 static fn_cfarr_getidx_t    cf_arridx;
@@ -595,13 +621,13 @@ static int alt_resolve(void)
         srv_sockopen    = (fn_srv_sockopen_t)   dlsym(RTLD_DEFAULT, "ServerSocketOpen");
         sock_setqos     = (fn_sock_setqos_t)    dlsym(RTLD_DEFAULT, "SocketSetQoS");
         sock_accept     = (fn_sock_accept_t)    dlsym(RTLD_DEFAULT, "SocketAccept");
-        cf_geti64       = (fn_cfdict_geti64_t)  dlsym(RTLD_DEFAULT, "CFDictionaryGetInt64");
+        srv_copyprop    = (fn_srv_copyprop_t)   dlsym(RTLD_DEFAULT, "AirPlayReceiverServerPlatformCopyProperty");
         cf_getval       = (fn_cfdict_getval_t)  dlsym(RTLD_DEFAULT, "CFDictionaryGetValue");
         cf_arrcount     = (fn_cfarr_count_t)    dlsym(RTLD_DEFAULT, "CFArrayGetCount");
         cf_arridx       = (fn_cfarr_getidx_t)   dlsym(RTLD_DEFAULT, "CFArrayGetValueAtIndex");
         /* Only symbols used by the live self-contained 111 path are critical. */
         alt_syms_ok = (sess_sendcmd && derive_aes &&
-                       srv_sockopen && sock_accept &&
+                       srv_sockopen && sock_accept && srv_copyprop &&
                        aes_ctr_init && aes_ctr_update && aes_ctr_final &&
                        cf_geti64 && cf_getval && cf_arrcount && cf_arridx &&
                        cf_dictm && cf_dictset && cf_dictseti && cf_arrapp) ? 1 : 0;
@@ -609,6 +635,55 @@ static int alt_resolve(void)
     }
     pthread_mutex_unlock(&alt_lock);
     return alt_syms_ok;
+}
+
+/* `/info` may be generated before dio's CarPlay startService has copied
+ * ServiceConfiguration.startInNightMode into its service-state byte.  Query the
+ * same authoritative dio callback again once stream 111 is actually decoding:
+ * stock AirPlayReceiverServerPlatformCopyProperty dispatches key `nightMode`
+ * through server->copyPropertyCallback (stock 210 0x20048-0x2006C), and the
+ * MU1316 callback reads the now-live byte at dio 0x160484-0x1604C4.
+ *
+ * This is a direct hook->stock call, not an attempted interpose of an internal
+ * libairplay call, so it is unaffected by the LD_PRELOAD boundary limitation. */
+static int alt_refresh_night_mode(void *session, const char *reason)
+{
+    void *server;
+    void *key;
+    void *value;
+    int copyErr = 0;
+    int valueErr = 0;
+    int night;
+
+    if (!session || !srv_copyprop || !cf_geti64_value || !cf_str)
+        return -6740;
+    server = *(void **)((uint8_t *)session + OFF_SERVER);
+    if (!server) return -6735;
+
+    key = cf_str(0, "nightMode", CFENC_UTF8);
+    if (!key) return -6728;
+    value = srv_copyprop(server, 1, key, NULL, &copyErr);
+    if (cf_rel) cf_rel(key);
+    if (!value) {
+        LOG_WARN(LOG_MODULE,
+                 "alt: live nightMode refresh failed reason=%s copyErr=%d",
+                 reason ? reason : "?", copyErr);
+        return copyErr ? copyErr : -6714;
+    }
+
+    night = cf_geti64_value(value, &valueErr) ? 1 : 0;
+    if (cf_rel) cf_rel(value);
+    if (valueErr) {
+        LOG_WARN(LOG_MODULE,
+                 "alt: live nightMode conversion failed reason=%s valueErr=%d",
+                 reason ? reason : "?", valueErr);
+        return valueErr;
+    }
+    g_alt_night_mode = night;
+    LOG_INFO(LOG_MODULE,
+             "alt: refreshed live HU nightMode=%d reason=%s",
+             night, reason ? reason : "?");
+    return 0;
 }
 
 /* hook-side alt-screen state (stock has no altScreen slots) */
@@ -852,6 +927,11 @@ static void alt_recv_loop(altslot_t *slot, int fd)
                 /* A live video stream is only the canvas.  Select the Maps instrument-cluster
                  * UI explicitly, then tell the encoder which predeclared view area is visible. */
                 alt_kick_show_ui();
+                /* `/info` can precede dio startService and contain the old
+                 * day/night bit. Refresh from the live platform callback now,
+                 * before applying the per-display cluster command. */
+                alt_refresh_night_mode(slot->session, "first-IDR");
+                alt_send_cluster_night_mode(g_alt_night_mode, "first-IDR");
                 alt_kick_viewarea();
             }
             if (is_idr && renderer_wait_idr) {
@@ -1080,8 +1160,8 @@ int AirPlayReceiverSessionSetup(void *session, void *request, void **respOut, in
          * makes a stream per display iff (raw displays count>=2 && endpoint[+0x3E]); 110 vs 111 by UUID≠display0.
          * /info extendedFeatures is a SEPARATE message and does NOT set +0x3E.  Stock 210 writes no response
          * enabledFeatures → altScreen never negotiates → no 111.
-         *   - Seed from the receiver's EXISTING response enabledFeatures, add only capabilities implemented
-         *     by this hook: altScreen + viewAreas. Each string in
+         *   - Seed from the receiver's EXISTING response enabledFeatures and add only the two contracts this
+         *     hook implements: altScreen and viewAreas. Each string in
          *     that array flips a sibling endpoint flag (viewAreas+0x3D, altScreen+0x3E, uiContext+0x3F,
          *     enhancedSiri+0x39), so NEVER echo the phone's proposal — that could falsely enable features
          *     stock doesn't implement.
@@ -1111,7 +1191,7 @@ int AirPlayReceiverSessionSetup(void *session, void *request, void **respOut, in
                         s = cf_str(0, "viewAreas", CFENC_UTF8);
                         if (s) { cf_arrapp(neg, s); if (cf_rel) cf_rel(s); }
                     }
-                    cf_dictset(*respOut, kEnab, neg); /* existing + capabilities implemented by hook */
+                    cf_dictset(*respOut, kEnab, neg); /* existing + contracts implemented by this hook */
                     if (cf_rel) cf_rel(neg);
                     LOG_INFO(LOG_MODULE,
                              "control SETUP: response enabledFeatures merged (existing count=%ld) + altScreen + viewAreas",
@@ -1206,110 +1286,26 @@ int AirPlayReceiverSessionTearDown(void *session, void *request, int reason, int
     return real(session, request, reason, a4);
 }
 
-/* ════════════════════════════════════════════════════════════════════════════
- * knob (крутилка) input → altScreen — Java-driven, via the bidirectional bus.
- *
- * Java owns the wheel-knob + focus arbitration (cluster settings vs CarPlay).
- * On altScreen focus it sends CMD_ALT_HID {int8 wheel, u8 buttons}; we post it as a
- * HID report on a cluster-bound virtual HID device (bound to the SAME uuid we
- * advertised for the cluster display in /info, so iOS routes it to the cluster
- * scene).  All via stock libairplay exports.
- * ════════════════════════════════════════════════════════════════════════════ */
-
-/* Knob HID report descriptor — verbatim from Apple CarPlay SDK Examples/HIDKnob.c
- * (MultiAxisController: Button + AC Home + AC Back + 5 pad, X, Y, Wheel).
- * 4-byte report: [buttons][X][Y][Wheel]; Wheel is relative (rotation delta). */
-static const uint8_t kKnobDescriptor[] = {
-    0x05,0x01, 0x09,0x08, 0xA1,0x01,
-      0x05,0x09, 0x09,0x01, 0x15,0x00, 0x25,0x01, 0x75,0x01, 0x95,0x01, 0x81,0x02,
-      0x05,0x0c, 0x0a,0x23,0x02, 0x0a,0x24,0x02, 0x95,0x02, 0x81,0x02,
-      0x95,0x05, 0x81,0x01,
-      0x05,0x01, 0x09,0x01, 0xA1,0x00,
-        0x09,0x30, 0x09,0x31, 0x15,0x81, 0x25,0x7f, 0x75,0x08, 0x95,0x02, 0x81,0x02,
-      0xC0,
-      0x09,0x38, 0x15,0x81, 0x25,0x7f, 0x75,0x08, 0x95,0x01, 0x81,0x06,
-    0xC0
-};
-
-/* MUST match the cluster display uuid advertised in build_cluster_dict() (#1b) —
- * iOS binds a HID device to a display by this uuid. */
+/* MUST match the cluster display uuid advertised in build_cluster_dict() (#1b). */
 #define CLUSTER_DISPLAY_UUID "C1057E12-A0D1-4E20-B0C0-1057E12A0D10"
-
-typedef int   (*fn_hid_create_t)(void **, void *);           /* HIDDeviceCreateVirtual(&dev,props) */
-typedef int   (*fn_hid_post_t)(void *, const void *, size_t);/* HIDDevicePostReport(dev,ptr,len)   */
-typedef void *(*fn_cfdata_t)(void *, const uint8_t *, long); /* CFDataCreate(alloc,bytes,len)      */
-static fn_hid_create_t hid_create;
-static fn_hid_post_t   hid_post;
-static fn_cfdata_t     cf_data;
-static void           *g_knob_dev;
-static int             g_knob_ready = -1;
-static pthread_mutex_t knob_lock = PTHREAD_MUTEX_INITIALIZER;
-
-/* Lazily create the cluster knob HID device on first CMD_ALT_HID (Java only sends
- * it once altScreen has focus → the cluster display exists). */
-static int knob_ensure(void)
-{
-    if (g_knob_ready >= 0) return g_knob_ready;
-    pthread_mutex_lock(&knob_lock);
-    if (g_knob_ready < 0) {
-        if (cf_init() != 1) { g_knob_ready = 0; pthread_mutex_unlock(&knob_lock); return 0; }
-        if (!hid_create) hid_create = (fn_hid_create_t)dlsym(RTLD_DEFAULT, "HIDDeviceCreateVirtual");
-        if (!hid_post)   hid_post   = (fn_hid_post_t)  dlsym(RTLD_DEFAULT, "HIDDevicePostReport");
-        if (!cf_data)    cf_data    = (fn_cfdata_t)    dlsym(RTLD_DEFAULT, "CFDataCreate");
-        if (hid_create && hid_post && cf_data && cf_dictm && cf_str && cf_dictset) {
-            void *props = cf_dictm(0, 0, dict_keycb, dict_valcb);
-            if (props) {
-                void *kd = cf_str(0, "hidDescriptor", CFENC_UTF8);
-                void *vd = cf_data(0, kKnobDescriptor, (long)sizeof(kKnobDescriptor));
-                if (kd && vd) cf_dictset(props, kd, vd);
-                if (vd && cf_rel) cf_rel(vd);
-                if (kd && cf_rel) cf_rel(kd);
-                set_str(props, "displayUUID", CLUSTER_DISPLAY_UUID);
-                set_str(props, "name", "AltScreen Knob");
-                int rc = hid_create(&g_knob_dev, props);
-                if (cf_rel) cf_rel(props);
-                if (rc != 0 || !g_knob_dev) {
-                    LOG_ERROR(LOG_MODULE, "HIDDeviceCreateVirtual failed rc=%d", rc);
-                    g_knob_dev = NULL;
-                } else {
-                    LOG_INFO(LOG_MODULE, "cluster knob HID device created (uuid=%s)", CLUSTER_DISPLAY_UUID);
-                }
-            }
-        } else {
-            LOG_ERROR(LOG_MODULE, "knob HID syms unresolved (create=%p post=%p data=%p)",
-                      (void*)hid_create, (void*)hid_post, (void*)cf_data);
-        }
-        g_knob_ready = (g_knob_dev != NULL) ? 1 : 0;
-    }
-    pthread_mutex_unlock(&knob_lock);
-    return g_knob_ready;
-}
-
-/* bus handler for CMD_ALT_HID — binary [int8 wheel][u8 buttons]. */
-static void knob_on_cmd(uint16_t type, uint8_t flags, const uint8_t *payload, uint32_t len, void *ctx)
-{
-    (void)type; (void)flags; (void)ctx;
-    if (!payload || len < 2) return;
-    if (knob_ensure() != 1) return;
-    uint8_t buttons = payload[1] & 0x07;           /* bit0 press, bit1 home, bit2 back */
-    uint8_t report[4] = { buttons, 0, 0, payload[0] /* wheel */ };
-    hid_post(g_knob_dev, report, sizeof(report));
-}
 
 /* ════════════════════════════════════════════════════════════════════════════
  * working zone (fullscreen ↔ duo) live-switch — Java-driven via the bus.
  *
- * Four rectangles are PREDECLARED in /info. Each mode activates a primary plus
- * one adjacent rectangle: fullscreen=[0]+[1], duo=[2]+[3]. Switching is a plain
+ * Two full-frame view areas are PREDECLARED in /info, with different nested
+ * safeArea geometry: fullscreen=[0], duo=[1]. Switching is a plain
  * session command — NOT a stream reconfig: we ship {type:"updateViewArea",
- * params:{uuid,viewAreaIndex,adjacentViewAreas,animationDurationMillis}} via the
+ * params:{uuid,viewAreaIndex,animationDurationMillis,adjacentViewAreas}} via the
  * stock generic command shipper
  * AirPlayReceiverSessionSendCommand (POST /command, binary-plist body).  The
  * phone (CarKit _sessionUpdatesQueue_handleViewAreaChangeWithPayload) reads those
- * keys, bounds-checks indexes against the declared viewAreas, and animates the
- * safe-area change. iOS 26.6 consumes adjacentViewAreas.firstObject and stores a
- * single adjacentViewArea. Verified: stock 210 exports the shipper and it does
- * NOT whitelist command types.
+ * keys, bounds-checks the index against the declared viewAreas, and applies the
+ * change.  Match MHI3 AirPlayReceiverSessionViewAreaUpdate exactly by always
+ * carrying `adjacentViewAreas`: [] clears it in fullscreen, [0] tells CarKit
+ * that view-area 0 is adjacent while duo area 1 is current.  iOS stores this as
+ * CARScreenInfo.adjacentViewArea separately from currentViewArea, so omitting it
+ * is observably different from the native helper. Verified: stock 210 exports
+ * the generic shipper and it does NOT whitelist command types.
  *
  * CONFIRMATION: we pass a completion callback to SendCommand.  libairplay's
  * response handler (sub_28CF0) parses the phone's POST /command reply and calls
@@ -1359,34 +1355,29 @@ static int alt_send_locked(void *cmd, void *completion, void *ctx)
     return rc;
 }
 
-/* Build and ship one mode. Both modes use two rectangles; CARKit 26.6 accepts
- * only the first entry of adjacentViewAreas, which is exactly what we provide. */
+/* Build and ship one of the two known-good view-area indexes. */
 static int zone_send_mode(int mode, int dur, void *completion)
 {
-    int primary, adjacent, rc = -6728;
-    void *params = NULL, *cmd = NULL, *adj = NULL, *ak = NULL, *pk = NULL;
+    int index, rc = -6728;
+    void *params = NULL, *cmd = NULL, *adj = NULL, *pk = NULL, *ak = NULL;
 
-    if (mode == ALT_ZONE_DUO) {
-        primary = VIEWAREA_DUO_TOP;
-        adjacent = VIEWAREA_DUO_BODY;
-    } else {
-        mode = ALT_ZONE_FULLSCREEN;
-        primary = VIEWAREA_FULL_TOP;
-        adjacent = VIEWAREA_FULL_CENTER;
-    }
+    if (mode == ALT_ZONE_DUO) index = 1;
+    else { mode = ALT_ZONE_FULLSCREEN; index = 0; }
     if (cf_init() != 1 || !cf_dictm || !dict_keycb || !dict_valcb ||
-        !cf_dictset || !cf_str || !cf_dictseti || !cf_arrm || !cf_arrappi) {
-        LOG_ERROR(LOG_MODULE, "updateViewArea: CF/array-int symbols unresolved");
+        !cf_dictset || !cf_str || !cf_dictseti || !cf_arrm || !arr_cb ||
+        !cf_arrappi64) {
+        LOG_ERROR(LOG_MODULE, "updateViewArea: CF symbols unresolved");
         return -6735;
     }
 
     params = cf_dictm(0, 0, dict_keycb, dict_valcb);
     cmd = cf_dictm(0, 0, dict_keycb, dict_valcb);
-    adj = cf_arrm(0, 1, arr_cb);
-    if (params && cmd && adj && cf_arrappi(adj, adjacent) == 0) {
+    adj = cf_arrm(0, mode == ALT_ZONE_DUO ? 1 : 0, arr_cb);
+    if (params && cmd && adj) {
         set_str(params, "uuid", CLUSTER_DISPLAY_UUID);
-        set_i64(params, "viewAreaIndex", primary);
+        set_i64(params, "viewAreaIndex", index);
         set_i64(params, "animationDurationMillis", dur);
+        if (mode == ALT_ZONE_DUO) cf_arrappi64(adj, 0);
         ak = cf_str(0, "adjacentViewAreas", CFENC_UTF8);
         if (ak) cf_dictset(params, ak, adj);
         set_str(cmd, "type", "updateViewArea");
@@ -1394,12 +1385,12 @@ static int zone_send_mode(int mode, int dur, void *completion)
         if (pk) cf_dictset(cmd, pk, params);
         rc = alt_send_locked(cmd, completion, (void *)(intptr_t)mode);
         LOG_INFO(LOG_MODULE,
-                 "updateViewArea ship mode=%s primary=%d adjacent=%d dur=%dms rc=%d",
+                 "updateViewArea ship mode=%s index=%d adjacent=%s dur=%dms rc=%d",
                  mode == ALT_ZONE_DUO ? "duo" : "fullscreen",
-                 primary, adjacent, dur, rc);
+                 index, mode == ALT_ZONE_DUO ? "[0]" : "[]", dur, rc);
     }
-    if (pk && cf_rel) cf_rel(pk);
     if (ak && cf_rel) cf_rel(ak);
+    if (pk && cf_rel) cf_rel(pk);
     if (adj && cf_rel) cf_rel(adj);
     if (params && cf_rel) cf_rel(params);
     if (cmd && cf_rel) cf_rel(cmd);
@@ -1479,6 +1470,102 @@ static int alt_ship(const char *type, void *params)
     }
     if (cf_rel) cf_rel(params);
     return rc;
+}
+
+/* Stock 210's SetNightMode command has no display UUID, so CarKit applies it
+ * to the primary screen and to secondary screens which do NOT advertise a
+ * per-display nightMode.  Our cluster does advertise that key, therefore the
+ * same command must be repeated with its UUID.  CarKit accepts NSNumber here
+ * (it reads boolValue), so set_i64 produces the same boolean semantics without
+ * depending on CFLite's private boolean singleton symbols. */
+static int alt_send_cluster_night_mode(int night, const char *reason)
+{
+    void *p = alt_params_new(1);
+    int rc;
+    if (!p) return -6728;
+    set_i64(p, "nightMode", night ? 1 : 0);
+    rc = alt_ship("setNightMode", p);
+    LOG_INFO(LOG_MODULE,
+             "alt: cluster nightMode=%d uuid=%s reason=%s rc=%d",
+             night ? 1 : 0, CLUSTER_DISPLAY_UUID,
+             reason ? reason : "?", rc);
+    return rc;
+}
+
+/* This is a proven LD_PRELOAD boundary seam: MU1316 dio_manager imports and
+ * calls AirPlayReceiverSessionSetNightMode at 0x155898 with
+ * (session, requestedNightMode, NULL, NULL).  Preserve stock/main-screen
+ * behaviour and mirror the same state to the UUID-addressed cluster display.
+ * The initial value is already seeded from stock /info; any pre-session call is
+ * also retained and replayed at the first stream-111 IDR, after
+ * g_alt_session becomes valid. */
+typedef int (*fn_sess_set_night_t)(void *, int, void *, void *);
+int AirPlayReceiverSessionSetNightMode(void *session, int night,
+                                       void *completion, void *context)
+{
+    static fn_sess_set_night_t real;
+    int rc;
+    int clusterRc = -6735;
+
+    if (!real)
+        real = (fn_sess_set_night_t)dlsym(RTLD_NEXT,
+                                          "AirPlayReceiverSessionSetNightMode");
+    if (!real) {
+        LOG_ERROR(LOG_MODULE, "SetNightMode real==NULL");
+        return -6740;
+    }
+
+    g_alt_night_mode = night ? 1 : 0;
+    rc = real(session, night, completion, context);
+    if (env_on("ALTSCREEN_HANDLE_ALT"))
+        clusterRc = alt_send_cluster_night_mode(g_alt_night_mode, "dio-update");
+
+    LOG_INFO(LOG_MODULE,
+             "AirPlayReceiverSessionSetNightMode night=%d stock_rc=%d cluster_rc=%d",
+             g_alt_night_mode, rc, clusterRc);
+    return rc; /* a cluster-only failure must never break stock main CarPlay */
+}
+
+/* Steering-wheel MapScale -> cluster-only map zoom.
+ *
+ * Live testing proved that a virtual HID knob, even with displayUUID set to the
+ * cluster UUID, moves only the main CarPlay UI. iOS 26.6 has a separate semantic
+ * path for the instrument cluster: DashBoard matches params.uuid against the
+ * cluster display hardwareIdentifier, reads params.zoomDirection, and emits a
+ * CRSUIClusterZoomAction. Its wire values are 0=zoom in and nonzero=zoom out.
+ *
+ * Keep command id 0x0110 so the Java code already running on the HU continues to
+ * work without a Java restart. Old Java sends two bytes [step,0]; the second byte
+ * is deliberately ignored. A rare accumulated BAP delta (for example -2) is
+ * expanded into individual semantic actions, capped to avoid an abusive burst. */
+static void zoom_on_cmd(uint16_t type, uint8_t flags,
+                        const uint8_t *payload, uint32_t len, void *ctx)
+{
+    int step, count, direction, i, rc = 0;
+    (void)type; (void)flags; (void)ctx;
+    if (!payload || len < 1) return;
+
+    step = (int)(int8_t)payload[0];
+    if (step == 0) return;
+    count = step < 0 ? -step : step;
+    if (count > 8) count = 8;
+
+    /* Audi MapScale increases when zooming out. Keep an on-unit inversion knob
+     * in case a vehicle's steering-wheel BAP polarity is reversed. */
+    direction = step > 0 ? 1 : 0; /* iOS DashBoard: 0=in, 1=out */
+    if (env_on("ALTSCREEN_ZOOM_INVERT")) direction ^= 1;
+
+    for (i = 0; i < count; ++i) {
+        void *p = alt_params_new(1); /* params.uuid = cluster display UUID */
+        if (!p) { rc = -6728; break; }
+        set_i64(p, "zoomDirection", direction);
+        rc = alt_ship("changeMapZoomLevel", p);
+        if (rc != 0) break;
+    }
+    LOG_INFO(LOG_MODULE,
+             "cluster zoom step=%d direction=%s sent=%d/%d rc=%d uuid=%s",
+             step, direction ? "out" : "in", i, count, rc,
+             CLUSTER_DISPLAY_UUID);
 }
 
 /* Stock 210 AirPlayReceiverSessionForceKeyFrame sends only
@@ -1568,11 +1655,11 @@ static void uictx_on_cmd(uint16_t type, uint8_t flags, const uint8_t *payload, u
 
 void altscreen_init(void)
 {
-    bus_on(CMD_ALT_HID, knob_on_cmd, NULL);
+    bus_on(CMD_ALT_ZOOM, zoom_on_cmd, NULL);
     bus_on(CMD_ALT_ZONE, zone_on_cmd, NULL);
     bus_on(CMD_ALT_APPEARANCE, appearance_on_cmd, NULL);
     bus_on(CMD_ALT_UICTX, uictx_on_cmd, NULL);
-    LOG_INFO(LOG_MODULE, "AltScreen injector loaded (control negotiation + self-contained stream 111; CMD_ALT_HID/ZONE/APPEARANCE/UICTX registered)");
+    LOG_INFO(LOG_MODULE, "AltScreen injector loaded (control negotiation + self-contained stream 111; cluster ZOOM/ZONE/APPEARANCE/UICTX registered; NIGHT mirrored from stock /info + SetNightMode)");
 }
 void altscreen_shutdown(void) { altav_shutdown(); }
 

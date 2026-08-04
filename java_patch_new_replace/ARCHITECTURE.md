@@ -30,10 +30,10 @@ Cluster tab lives on the **kombisync** layer as top-level context **117** (SMART
    sets this** (verified: only the RX deserializer writes it) → we add the sender. VC also gates on
    coding 4237/4238.
 2. **Active switch** — watch `DSIKombiSync DisplayRequestResponse.mainContext`; `==117` ⇒ our tab is
-   active → feed altScreen MOST video + route roller→`CMD_ALT_HID` + hide the KDK maneuver render;
+   active → feed altScreen MOST video + route roller→`CMD_ALT_ZOOM` + hide the KDK maneuver render;
    `!=117` ⇒ stop video, show KDK render, roller to native menu. Force via `setMMIDisplayStatus`.
-- **Roller capture** — a `VirtualButtonListener` (template `TMVirtualButtonListener`): `increment/
-  decrement`→`CMD_ALT_HID [wheel]`, `keyPressed(select)`→`[buttons]`; only while tab active.
+- **Roller capture** — `AltScreenCombiBAPListener.setMapScale`: signed MapScale step →
+  `CMD_ALT_ZOOM` → `changeMapZoomLevel{uuid,zoomDirection}`; only while our cluster context is active.
 - **KDK render hide** — gate on active tab; do NOT touch BAP (projection rides `CombiBAPListener`).
 
 ## Build
@@ -80,13 +80,10 @@ Cluster tab lives on the **kombisync** layer as top-level context **117** (SMART
       DPAD ticks + `installCursorTouchSink` → `dsiCarplaySafe.postButtonEvent`.  Cleaned 25 decompiler
       artifacts (class$→`.class`, 7 AbstractDispatcherRunnable anon ctor/capture).  Build now **1.4/1.4**
       (jclfoun11 = Foundation 1.1 = J2SE 1.4).  Compiles (20 files, major 48).
-- [x] input roller — NOT a VirtualButtonModel registration after all: the MMI knob already routes
-      through the DSI controller (`TMVirtualButtonListener.increment/decrement → keyEventListener.updateRotary`;
-      knob press → `updateKey` DDS_SELECT).  So injected into the SAME patched
-      `CarplayDSILifecycleController$TerminalModeDSIKeyEventsController`: `updateRotary` → CMD_ALT_HID
-      [i8 wheel] and `updateKey`(DDS_SELECT) → CMD_ALT_HID [buttons bit0], gated on
-      `AltScreenModule.isClusterActive()` (set when the cluster is switched to dc[80/81/82]).  Else stock.
-      Compiles.
+- [x] input roller — the steering-wheel MapScale callback is intercepted by
+      `AltScreenCombiBAPListener`, not the center-console DSI rotary. While our cluster context is
+      active it sends `CMD_ALT_ZOOM`; the hook targets the cluster UUID with
+      `changeMapZoomLevel`. Center-console rotary/select remain on the main CarPlay UI. Compiles.
 
 ### altScreen cluster contexts — LOCKED (2026-07-27, RE-verified vs combined-final)
 `DisplayManagerMIB2High.defineContexts()` builds `DisplayContext[79]` (kombiType!=4); stock cluster family

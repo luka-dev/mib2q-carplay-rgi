@@ -81,13 +81,6 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
         }
 
         public void updateActiveDeviceState(TMDevice tmdevice) {
-            /* diagnostic: log every device state transition so we can see EXACTLY what a CarPlay
-             * disconnect produces (state + whether the detached device still reports carplay). */
-            try {
-                com.luka.carplay.framework.Log.i("TMDev",
-                    "updateActiveDeviceState state=" + tmdevice.connectionState()
-                    + " carplay=" + tmdevice.isCarplayDevice());
-            } catch (Throwable t) { /* never crash the stock flow */ }
             if (tmdevice.connectionState().is(TMDevice.ConnectionState.ACTIVATING)) {
                 this.this$0.bapService.updateActiveInfoState(9);
                 int i = this.getBapSourceType(tmdevice);

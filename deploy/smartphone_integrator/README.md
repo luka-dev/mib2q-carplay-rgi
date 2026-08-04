@@ -48,10 +48,11 @@ or `starting ...`, followed by either `superseded ... leave new renderers untouc
 or `gone - stopping renderers`. A `SIGKILL residual` line must name one of the old
 snapshot PIDs; it must never name a renderer started by the replacement generation.
 
-CarPlay uses `restartDelay: 250`, matching `portResetTime: 250`. The stock 2,000 ms
-child delay was visible directly between valid USB enumeration and hook/dio startup;
-the PID-snapshot cleanup guarantees introduced here keep the shorter handoff from
-killing renderer processes belonging to a replacement generation.
+CarPlay keeps the stock `restartDelay: 2000`; `portResetTime` remains 250 ms.
+The full settling delay is intentional: rapid OTG stop/start cycles can leave the
+iAP2 NCM accessory with only one of its two interfaces enabled. Renderer ownership
+is handled independently by the PID-snapshot cleanup and must not be used as a
+reason to shorten the USB/device-stack delay.
 
 ## MU1316 QNX 6.5 compatibility audit
 

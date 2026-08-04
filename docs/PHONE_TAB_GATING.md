@@ -1,176 +1,100 @@
-# Phone tab gating — show the cluster's telephone tab only when MMI telephony works
+# Phone tab gating — CarPlay hides the stock PHONE2 tab
 
-**Date:** 2026-08-01
-**Scope:** MHI2Q (MU1316) head unit, Audi Virtual Cockpit tab bar (the "tongue").
-**Status:** designed, not yet implemented. Both sides of the wire read from the images;
-nothing below has been measured on a car.
-Companion docs: `SMARTPHONE_CLUSTER_KNOWLEDGE.md`, `DSI_CARKOMBI_KOMBISYNC2_REFERENCE.md`.
+**Date:** 2026-08-04
 
----
+**Scope:** MHI2Q/MU1316 head unit and Audi Virtual Cockpit PHONE2 BAP domain.
 
-## 0. The problem
+**Status:** v1 did not hide the tab; v2 caused duplicate telephone icons and was rolled back. The gate is disabled pending a correct availability lever.
 
-The telephone segment of the cluster tab bar exists whenever the head unit declares the
-domain, whether or not a call can be placed. With CarPlay connected the cluster draws a
-crossed-out handset and raises a note:
+## Goal
 
-> CarPlay mode. Not possible to make calls via MMI. Connect iPhone using Bluetooth.
+While CarPlay owns the phone, hide the stock crossed-out telephone tab in the cluster. Restore it only after CarPlay disconnects and MMI HFP telephony is actually available again.
 
-The advice is wrong in the common case — the phone is usually *already* paired over
-Bluetooth — because CarPlay takes telephony regardless of what else is connected. The head
-unit says so itself: `DSITelephone` and `DSINAD` declare
-`RESULT_ERROR_VOICE_NOT_POSSIBLE_CARPLAY_ACTIVE = 17`, and `DSIBluetooth` declares
-`RESULT_ERROR_CARPLAY_ACTIVE = 22`. So the tab advertises a function that is unavailable,
-and the note tells the driver to do something already done.
+The implemented rule is:
 
-**Wanted:** the tab exists only when telephony through the MMI genuinely works.
-
----
-
-## 1. The rule
-
-```
-tabVisible = hfpActive && !projectionActive
-
-hfpActive        = the mobile-equipment topology holds a device with USAGE_HFP
-                   AND its profile is up
-                   (telMode == TELMODE_HFP, or telActivationState operational)
-
-projectionActive = swapStatus carries any of
-                       SWAPSTATUS_MIRRORLINK (1)
-                       SWAPSTATUS_CARPLAY    (2)
-                       SWAPSTATUS_GAL        (4)   // Android Auto
-                       SWAPSTATUS_CARLIFE    (8)
+```text
+tabVisible = (mobileConnectionType == HANDS_FREE_PROFILE) && !carPlayActive
 ```
 
-Spelled out rather than written as the mask `0x0F`: the four names say what is being
-excluded, and nobody has to look up which bit is Android Auto.
+`mobileConnectionType == 3` is the stock HFP state. The gate is fail-open before the first phone update, so a missing callback cannot permanently remove the telephone tab.
 
-`swapStatus` is preferred over a device's `connectionMethod` because it reports which
-projection currently *holds the slot*, not merely what is plugged in.
+## Failed implementation (retained here as an investigation record)
 
----
+The implementation has a source, a shared gate, and a BAP lever.
 
-## 2. Where it goes
+### 1. Two independent state sources
 
-Two seams, because two different things are being controlled.
+`BAPPropertyTelFSGSetup.updateAsync()` publishes the real stock `mobileConnectionType` enum to the gate. This source decides when HFP has recovered and the tab may return:
 
-### 2.1 Content — `AppConnectorPhone2` (primary seam)
+- `java_patch_new_replace/de/audi/app/phone/core/bap/telephone/BAPPropertyTelFSGSetup.java:203`
+- `PhoneTabGate.setMobileConnectionType(i)` at line 209.
 
-`de/audi/app/combi/bap/app/phone2/AppConnectorPhone2.java` is what feeds the cluster's
-telephone state over BAP. It implements `CombiBAPServicePhone2` and carries:
+`TerminalModeBapCombi.ActiveDeviceStateListener` supplies the early CarPlay lifecycle edge. A CarPlay device is already identifiable during ATTACHED/ACTIVATING, before the telephony bundle necessarily publishes its next FSG setup:
 
+- `java_patch_new_replace/de/audi/app/terminalmode/combi/TerminalModeBapCombi.java:83`
+- `PhoneTabGate.setProjectionActive(tmdevice.isCarplayDevice())` at line 96.
+
+Using both sources is intentional. The terminal-mode source hides promptly; the phone source prevents an early restore until HFP is really back.
+
+### 2. Shared gate and late-registration replay
+
+The removed `PhoneTabGate` stored the two inputs, computed visibility and invoked a PHONE2 resend callback.
+
+PHONE2 and terminal mode are initialized by different bundles. Therefore `registerResend()` at lines 67–74 immediately replays an already-hidden state when PHONE2 registers late. This fixes the first v1 race: CarPlay could hide the gate before the receiver existed, after which no BAP update followed.
+
+### 3. PHONE2 BAP availability lever
+
+The removed override of `InitializationManagerPhone2.updateHMIState()` sent PHONE2 LSG 41 (`0x29`) state `NOT_READY` (`0`) through `IDSIBAPController`.
+
+The zero is deliberately re-sent even if the cached HMI state is already zero. PHONE2 can be constructed while the controller still targets `NullDSIBAPService`; when the real DSI proxy becomes available, the later forced update must reach the actual BAP stack. This fixes the second v1 race.
+
+## Why v1 did not prove the mechanism
+
+The first deployed version had three diagnostic holes:
+
+1. A hidden transition before `InitializationManagerPhone2` registration was lost.
+2. A `NOT_READY` write could land in the null DSI service and then be skipped because the cached state was already zero.
+3. Errors were swallowed and the gate emitted no dedicated log lines, so an unchanged tab did not distinguish a missing source callback from an ineffective BAP lever.
+
+The old proposal to gate `AppConnectorPhone2.updatePhoneModuleState()` is not implemented and is not supported by the VC binary analysis. In `hmi_app.elf`, `App::getTabBarIconIndex` at `0x183378` does use `phoneAvailable` (`App+960`), but `App::setPhoneAvailable` at `0x18836C` receives a separate cached receiver-availability byte in the handler at `0x17F1B0`; it is not derived directly from `PhoneModuleState_Status` or from the FSG operation-state value.
+
+## On-unit verification
+
+The failed v2 JAR deployed on 2026-08-04 had SHA-256:
+
+```text
+3605c795dd374f71979078a3d2534db2f1dedceea8725fe8c728119e55ba2df2
 ```
-updatePhoneModuleState(moduleState, moduleSupportedServices, moduleActiveServices, simState)
-updateRegisterState(...)      updateSignalQuality(...)
-updateLockState(...)          updateMobileServiceSupport(boolean[])
-updateNetworkProvider(...)    updateAutomaticCallForwarding(...)
+
+Its on-unit log proved an additional source bug: the gate hid PHONE2 during boot on `mobileConnectionType=0`, before CarPlay attached:
+
+```text
+[PhoneGate] PHONE2 receiver registered hidden=false
+[PhoneGate] visible=false reason=mobileConnectionType=0 ...
+[PhoneGate] PHONE2 apply hidden=true ... lsg=41
 ```
 
-Each builds a `*_Status` struct and calls `sendPropertyStatus(<id>, status)` — property 23
-for the module state. **`updatePhoneModuleState` is the narrowest place to gate:** it is
-the call the cluster's `avail` / `connected` derive from.
+More importantly, forcing LSG 41 to `NOT_READY` did not clear the desired VC availability. The cluster showed two telephone icons simultaneously, consistent with switching/falling back between its separate Telephone and Telephone2 domains instead of hiding the shared telephone slot. Therefore this lever is rejected rather than merely changing the `mobileConnectionType=0` rule.
 
-Implement it exactly like the route-guidance gate already in this patch set —
-`com/luka/carplay/rgd/GatedCombiService.java` wraps `CombiBAPServiceNavi` and drops native
-calls while CarPlay owns route guidance. A `GatedPhoneService` wrapping
-`CombiBAPServicePhone2` follows the same shape: when the rule is false, report the module
-as unavailable instead of passing the real state through; otherwise delegate untouched.
+The cleaned rollback JAR staged on the HU has SHA-256:
 
-`CombiModulePhone2` exposes the pair to wrap (`getPhone2Service()`,
-`getPhone2ServiceListener()`), so the wrapper installs without fighting the architecture.
+```text
+84165b82523e6ec17c303a2ad3e1217522687cb65186d74a10d6dade3cbdef62
+```
 
-### 2.2 Existence — the function list
+It removes `PhoneTabGate` and both source calls. The now-redundant patch copies of `BAPPropertyTelFSGSetup` and `InitializationManagerPhone2` are also absent from the JAR, so the firmware's stock classes are used directly. PHONE2 is fully back to stock behavior. It takes effect after a normal HU reboot; Java must not be restarted manually.
 
-Whether the segment *occupies a slot* is decided a level up, where the domain
-`Cluster_TabBar_Tel_iconList0` (with `_iconList1`, `_text0`) is declared —
-`AbstractFunctionListPhone2` / `ServiceManagerPhone2` in the same package. Gating only the
-connector leaves an empty slot in the strip; gating only the list can race with in-flight
-state. **Do both, driven by the one condition.**
+The next investigation must locate the true publisher of `BAP_Telephone2_Available`/the VC receiver's availability byte, or patch the VC availability consumer. Changing the CarPlay/HFP source logic again cannot fix the rejected HMI-state lever.
 
-### 2.3 Source of the projection flag
+## Cluster-side evidence
 
-`de/audi/app/terminalmode/dsi/smartphoneintegration/SmartphoneIntegrationDSILifecycleController.java`
-already receives `updateSWaPStatus(int, int)` — today it only completes a startup
-requirement (`SWAPSTATUS_CARPLAY`). Route that value to the gate, or subscribe the gate
-directly to `DSISmartphoneIntegration` (`ATTR_SWAPSTATUS`).
+In the AU491 `hmi_app.elf`:
 
----
-
-## 3. What the cluster does with it
-
-The telephone domain is the one whose icon the **cluster** picks; every other domain takes
-an icon list plus an index from us. In `hmi_app.elf` (AU491 2018):
-
-| Address | Function |
+| Address | Function / result |
 | --- | --- |
 | `0x187EEC` | `App::processTabBar` |
-| `0x183378` | `App::getTabBarIconIndex` |
-| `0x180A48` | `setTabBarDataForUI` |
+| `0x183378` | `App::getTabBarIconIndex`; returns icon index 0 when `phoneAvailable == 0`, and crossed-handset index 6 when available but disconnected |
+| `0x18836C` | `App::setPhoneAvailable` |
+| `0x17F1B0` | PHONE2 operation-state handler that forwards a separately cached receiver-availability byte to `setPhoneAvailable` |
 
-`setTabBarDataForUI` writes five data points:
-
-| DPID | Meaning |
-| --- | --- |
-| `0x020003d0` | `DP_ID_TabBar_Tel_Icon_Index` |
-| `0x020003d1` | `DP_ID_TabBar_Tel_SignalQuality_visible` |
-| `0x020003d2` | `DP_ID_TabBar_Tel_Text_Index` |
-| `0x020003ce` | `DP_ID_TabBar_Tel_DynamicText` |
-| `0x020003cf` | `DP_ID_TabBar_Tel_DynamicText_AlternativeText` |
-
-`getTabBarIconIndex` decompiles into seven branches over `FSG:[avail, connected]`,
-`Phone:[OpState, TelState, RegState]`, unread SMS / e-mail / missed-call counts and lock
-state:
-
-| Index | Condition |
-| --- | --- |
-| **0** | `avail == 0` — returns immediately, **nothing is drawn** |
-| 6 | `avail == 1, connected == 0` — the crossed-out handset seen in CarPlay today |
-| 3 | `RegState == 3` (registration denied); also clears signal quality |
-| 2 | no service, or lock state outside {0, 7, 13, 14, 15}; clears signal quality |
-| 5 | as 2, with unread messages or missed calls |
-| 1 | normal operation |
-| 4 | normal operation, with unread messages or missed calls |
-
-Index 0 is the cluster's own "draw nothing", which is why the gate reports the module
-unavailable rather than trying to supply a blank icon. The tab bar cannot be gated from the
-cluster side: `AU491_TabBar.kzb` lives in the A02-compressed half of the image, which the
-repacker cannot write — of all scenes only the two Tubes packages are replaceable.
-
----
-
-## 4. Timing
-
-Drop immediately when the condition goes false; restore with roughly a second of delay when
-it goes true. The phone needs that long to re-establish HFP after a cable is pulled, and
-without the delay the tab blinks as CarPlay tears down and Bluetooth comes back.
-
----
-
-## 5. Limits, stated rather than discovered later
-
-**The note is a separate job.** It is not tied to the tab or the icon: its text lives in the
-cluster (four length variants, shortest is the one on screen) and the head unit sends only a
-popup identifier. Suppress it where it is raised, under the same condition — with no
-telephony and no tab, there is nothing left to advise about.
-
-**Embedded modem.** The rule keys on HFP alone, so a car with `USAGE_NAD` and eSIM telephony
-also loses the tab although calls remain possible. If unwanted, the left-hand side becomes
-`hfpActive || nadTelephonyAvailable`.
-
-**The older stack.** `de/audi/app/combi/bap/app/phone/` (`CombiModulePhone`,
-`AppConnectorPhone`) is the pre-Phone2 path; if a target build uses it, the gate must be
-duplicated there.
-
-**Do not gate diagnostics.** `de/mib/swdiagnosis/combi/CombiDiagnosisConnectorPhone2.java`
-calls the same `updatePhoneModuleState` from the diagnosis path; filtering it would break
-test mode.
-
----
-
-## 6. Provenance
-
-Head-unit side: decompiled MU1316 image at `Tools/jxe2jar/out/MU1316-combined-vf`.
-Cluster side: `hmi_app.elf` from the AU491 2018 package, decompiled at the addresses above;
-data-point names from the studio's signal catalogue. The same analysis, from the cluster's
-point of view, is in the VC studio repo as `RE/hmi_tabbar_phone_visibility.md`.
+Thus the visual target is still exact: force VC `phoneAvailable=0`. The reboot test determines whether PHONE2 LSG `NOT_READY` is sufficient to make the BAP receiver publish that value.
