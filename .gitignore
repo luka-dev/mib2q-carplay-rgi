@@ -1,18 +1,8 @@
-.idea
-.claude
-/java_patch/out
-/java_test/out
-carplay_hook.jar
-libcarplay_hook.so
-mu1316_lsd.jar
+.idea/
+.claude/
+.venv*/
 **/.DS_Store
-# object files from local/docker cross-builds
 *.o
-# exploded class output from build_variant.sh (intermediates)
-/build/carplay_hook/
-/build/carplay_hook_replace/
-/build/carplay_hook_tab/
-/build/java_new/
-/java_patch_probe/build/classes/
-# On-unit raw-frame captures are local diagnostics, not source artifacts.
-/debug_logs/live_altscreen_probe/
+/build/java/
+/build/libcarplay_hook.so
+/local_logs/

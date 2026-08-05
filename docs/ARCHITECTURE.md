@@ -1,0 +1,75 @@
+# Current architecture
+
+This document describes the shipping MHI2Q implementation. Historical plans and alternative
+libairplay experiments live under `research/` and `docs/archive/`.
+
+## Process topology
+
+```text
+smartphone_integrator
+  └─ carplay_startup.sh
+      ├─ maneuver_render       TCP 127.0.0.1:19800
+      ├─ altscreen_render      data :19831, status :19832
+      └─ dio_manager           stock libairplay 210.81 + LD_PRELOAD hook
+
+Java patch
+  └─ CarplayBus server         TCP 127.0.0.1:19810
+```
+
+`LD_PRELOAD` is applied only to `dio_manager`. The supervisor and renderers explicitly run without
+it. When `dio_manager` exits, the owner-generation monitor stops the exact renderer generation unless
+a replacement `dio_manager` has already taken ownership.
+
+## Native hook
+
+`hook/main.c` initializes the production framework bus, iAP2 helpers, route-guidance parser,
+cover-art path and altScreen receiver. The stream-111 H.264 path is self-contained in the hook and
+forwards Annex-B access units to `altscreen_render` on port 19831. Stock `libairplay.so` remains
+installed and loaded.
+
+## Java patch
+
+There is exactly one source tree: `java_patch/`. `CarPlayApp` keeps the transport alive and starts an
+ordered module chain:
+
+1. `AltScreenModule` owns the cluster display context and steering-wheel map zoom.
+2. `RgdModule` starts after the first module is ready, then publishes RGI/BAP maneuver state.
+
+Patched stock classes provide lifecycle seams, cluster contexts, cover-art integration and input
+interception. They are compiled against `MU1316-combined-final.jar` as Java 1.4 bytecode.
+
+## Cluster composition
+
+On the supported A5-style cluster, the Java patch adds two contexts:
+
+| Context | Displayables | Meaning |
+| --- | --- | --- |
+| 80 | `98, 101, 102, 99` | CarPlay map plus maneuver/backing layers |
+| 81 | `99` | Plain CarPlay map |
+
+Displayable 98 belongs to `maneuver_render`; displayable 99 belongs to `altscreen_render`. Context 81
+is selected as soon as the CarPlay cluster is owned. The switch to context 80 happens only after RGI
+presentation is confirmed; it returns to 81 when guidance/presentation ends. `AltScreenModule`
+serializes all context writes.
+
+## Local protocols
+
+| Port | Direction | Payload |
+| --- | --- | --- |
+| 19800 | Java → `maneuver_render` | fixed maneuver/bargraph commands |
+| 19810 | hook ↔ Java | sticky RGD events and `CMD_ALT_*` controls |
+| 19831 | hook → `altscreen_render` | framed Annex-B H.264 |
+| 19832 | `altscreen_render` → Java | video on/off status |
+
+## Build outputs
+
+The only supported artifacts are:
+
+```text
+build/carplay_hook.jar
+build/libcarplay_hook.so
+build/maneuver_render
+build/altscreen_render
+```
+
+Build them with the scripts in `scripts/`; variant and probe builds no longer exist.

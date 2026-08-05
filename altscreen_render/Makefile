@@ -4,8 +4,8 @@ BUILD_DIR = ../build
 TARGET    = $(BUILD_DIR)/altscreen_render
 TESTBIN   = $(BUILD_DIR)/altscreen_render_test
 
-# OpenMAX IL API headers (shims shared with the from-source libairplay build).
-OMX_INC = ../../libairplay-mhi2q/vendor/shims/OMX
+# OpenMAX IL API headers captured for the QNX 6.5 ABI.
+OMX_INC = ../toolchain/qnx65-abi/include/OMX
 
 # Shared managed-window primitive (same one maneuver_render uses).
 COMMON_INC = ../common

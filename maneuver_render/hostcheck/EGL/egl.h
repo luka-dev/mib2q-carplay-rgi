@@ -29,6 +29,9 @@ typedef unsigned int EGLBoolean;
 #define EGL_ALPHA_SIZE             0x3021
 #define EGL_CONTEXT_CLIENT_VERSION 0x3098
 #define EGL_OPENGL_ES_API          0x30A0
+#define EGL_VENDOR                 0x3053
+#define EGL_VERSION                0x3054
+#define EGL_EXTENSIONS             0x3055
 
 EGLDisplay eglGetDisplay(EGLNativeDisplayType);
 EGLBoolean eglInitialize(EGLDisplay, EGLint *, EGLint *);
@@ -42,5 +45,6 @@ EGLBoolean eglDestroySurface(EGLDisplay, EGLSurface);
 EGLBoolean eglDestroyContext(EGLDisplay, EGLContext);
 EGLint     eglGetError(void);
 EGLBoolean eglBindAPI(EGLint);
+const char *eglQueryString(EGLDisplay, EGLint);
 
 #endif

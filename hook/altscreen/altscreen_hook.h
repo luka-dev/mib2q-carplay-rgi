@@ -1,15 +1,11 @@
 /*
  * CarPlay AltScreen (instrument-cluster stream 111) — MHI2Q.
  *
- * dio-side `extendedFeatures = ["altScreen"]` injector. The VERIFIED activation gate
- * (iOS 26.1 sender decompile) is: car /info advertises extendedFeatures containing
- * "altScreen" -> phone fetches cluster URLs -> SETUP stream 111. This module supplies
- * that DECLARATION by interposing the libairplay export AirPlayReceiverServerSetProperty
- * (which dio calls at server bring-up) and injecting the extra property once. The 111
- * stream is received/decoded by our from-source libairplay (../../../libairplay-mhi2q);
- * physical cluster delivery is maneuver_render (libairplay screenstream SS_FWD_PORT_ALT).
+ * Shipping path: LD_PRELOAD over stock libairplay 210.81. This module advertises and
+ * negotiates altScreen, owns the type-111 TCP receiver, derives the stream AES key,
+ * decrypts AirPlay screen packets, converts AVCC to Annex-B, and forwards H.264 to
+ * altscreen_render on 127.0.0.1:19831. No from-source libairplay is loaded or required.
  *
- * Always-on: injects exactly once, at the first server SetProperty (bring-up).
  * QNX: NO __thread (gcc 4.4 emutls trap) — globals + pthread_mutex throughout.
  */
 #ifndef CARPLAY_ALTSCREEN_HOOK_H
