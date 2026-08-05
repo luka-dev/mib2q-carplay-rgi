@@ -1,8 +1,8 @@
 /*
  * RendererServer - non-blocking TCP server for the maneuver_render process (port 19800).
  *
- * Topology: Java is the long-lived server, maneuver_render is the short-lived
- * client.  We open the listen socket once and a dedicated background
+ * Topology: Java is the long-lived server; the framework-owned maneuver_render
+ * connects as a restartable client. We open the listen socket once and a dedicated background
  * thread accepts connections forever — caller (BAPBridge) never blocks.
  *
  * Lifecycle:
@@ -51,12 +51,8 @@ public class RendererServer {
     private static final byte EVT_READY       = (byte) 0x81;
     private static final byte EVT_FRAME_READY = (byte) 0x82;
 
-    /* Command IDs -- must match protocol.h.  CMD_PERSPECTIVE kept for
-     * protocol parity even though the standalone send method was removed
-     * (perspective now rides on CMD_MANEUVER via MAN_FLAG_SET_PERSP). */
+    /* Command IDs used by this always-on client protocol. */
     private static final byte CMD_MANEUVER    = 0x01;
-    private static final byte CMD_SHUTDOWN    = 0x03;
-    private static final byte CMD_PERSPECTIVE = 0x04;
     private static final byte CMD_BARGRAPH    = 0x06;
     private static final byte CMD_CLEAR       = 0x07;
 
@@ -65,6 +61,7 @@ public class RendererServer {
     private static final byte MAN_FLAG_BARGRAPH  = 0x02;
 
     private final Object lock = new Object();
+    private final Object writeLock = new Object();
     private ServerSocket server;
     private Socket sock;             /* protected by lock */
     private OutputStream out;        /* protected by lock */
@@ -78,14 +75,15 @@ public class RendererServer {
      * sends are expected to fail" vs "had a working renderer that
      * just died, respawn is appropriate". */
     private volatile boolean everConnected;
-    private volatile DeathListener deathListener;
+    private volatile StateListener stateListener;
 
-    public interface DeathListener {
-        void onRendererDied(String reason);
+    /** Edge notification only. The listener must not block the socket threads. */
+    public interface StateListener {
+        void onRendererStateChanged(String reason);
     }
 
-    public void setDeathListener(DeathListener listener) {
-        deathListener = listener;
+    public void setStateListener(StateListener listener) {
+        stateListener = listener;
     }
 
     /**
@@ -153,6 +151,7 @@ public class RendererServer {
                         lock.notifyAll();
                     }
                     Log.i(TAG, "renderer connected from " + s.getInetAddress() + ":" + s.getPort());
+                    notifyStateChanged("connected");
 
                     /* Spawn a per-connection reader.  It just drains inbound
                      * heartbeats (and discards their content) — the only
@@ -205,69 +204,51 @@ public class RendererServer {
             if (running) {
                 Log.i(TAG, "reader exit: " + e.getClass().getName()
                         + (e.getMessage() == null ? "" : " " + e.getMessage()));
-                notifyDeath(e.getClass().getName()
-                        + (e.getMessage() == null ? "" : " " + e.getMessage()));
             }
         } finally {
+            boolean lostCurrent = false;
             synchronized (lock) {
                 if (sock == owned) {
                     closeClientLocked();
+                    lostCurrent = true;
                 }
             }
+            /* A preempted old reader must never report the new socket dead. */
+            if (lostCurrent) notifyStateChanged("disconnected");
         }
     }
 
-    private void notifyDeath(String reason) {
-        DeathListener l = deathListener;
+    private void notifyStateChanged(String reason) {
+        StateListener l = stateListener;
         if (l == null) return;
         try {
-            l.onRendererDied(reason);
+            l.onRendererStateChanged(reason);
         } catch (Throwable t) {
-            Log.w(TAG, "death listener failed: " + t.getMessage());
+            Log.w(TAG, "state listener failed: " + t.getMessage());
         }
     }
 
     private void handleRendererEvent(Socket owned, byte event) {
+        boolean changed = false;
+        String reason = null;
         synchronized (lock) {
             if (sock != owned) return;
             if (event == EVT_READY) {
+                changed = !rendererReady;
                 rendererReady = true;
                 lock.notifyAll();
-                Log.i(TAG, "renderer ready");
+                reason = "ready";
             } else if (event == EVT_FRAME_READY) {
+                changed = !frameReady;
                 rendererReady = true;
                 frameReady = true;
                 lock.notifyAll();
-                Log.i(TAG, "renderer frame ready");
+                reason = "frame-ready";
             }
         }
-    }
-
-    public boolean waitForReady(long timeoutMs) {
-        return waitForState(timeoutMs, true);
-    }
-
-    public boolean waitForFrameReady(long timeoutMs) {
-        return waitForState(timeoutMs, false);
-    }
-
-    private boolean waitForState(long timeoutMs, boolean wantReady) {
-        long deadline = System.currentTimeMillis() + timeoutMs;
-        synchronized (lock) {
-            while (running) {
-                if (wantReady && rendererReady) return true;
-                if (!wantReady && frameReady) return true;
-
-                long remain = deadline - System.currentTimeMillis();
-                if (remain <= 0) break;
-                try {
-                    lock.wait(remain);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    break;
-                }
-            }
-            return wantReady ? rendererReady : frameReady;
+        if (changed) {
+            Log.i(TAG, "renderer " + reason);
+            notifyStateChanged(reason);
         }
     }
 
@@ -277,12 +258,15 @@ public class RendererServer {
      * peer close, blanks itself, and reconnects.  Call on route stop or link loss.
      */
     public void disconnectClient() {
+        boolean changed;
         synchronized (lock) {
+            changed = sock != null || rendererReady || frameReady;
             closeClientLocked();
             /* everConnected stays true — within this session we've already
              * had a working renderer; subsequent connect failures should
              * still trigger respawn correctly. */
         }
+        if (changed) notifyStateChanged("disconnect-request");
     }
 
     /**
@@ -308,6 +292,7 @@ public class RendererServer {
             try { acceptThread.join(500); } catch (InterruptedException e) {}
             acceptThread = null;
         }
+        notifyStateChanged("disposed");
     }
 
     private void closeClientLocked() {
@@ -327,6 +312,20 @@ public class RendererServer {
     public boolean isConnected() {
         synchronized (lock) {
             return sock != null && !sock.isClosed() && out != null;
+        }
+    }
+
+    /** True only after the current renderer peer sent EVT_READY. */
+    public boolean isReady() {
+        synchronized (lock) {
+            return sock != null && !sock.isClosed() && out != null && rendererReady;
+        }
+    }
+
+    /** True only for the currently connected renderer after it has acknowledged a real swap. */
+    public boolean isFrameReady() {
+        synchronized (lock) {
+            return sock != null && !sock.isClosed() && out != null && frameReady;
         }
     }
 
@@ -424,18 +423,6 @@ public class RendererServer {
     }
 
     /**
-     * Send CMD_SHUTDOWN for graceful renderer exit.  NOT used in the always-on model — the
-     * renderer is a framework service and must not be shut down; kept for completeness.
-     */
-    public void sendShutdown() {
-        if (!isConnected()) return;
-        byte[] pkt = new byte[PKT_SIZE];
-        pkt[0] = CMD_SHUTDOWN;
-        sendPacket(pkt);
-        Log.i(TAG, "Sent CMD_SHUTDOWN");
-    }
-
-    /**
      * Non-blocking send.  Returns false if no current connection or
      * write failed — BAPBridge uses the bool for crash-recovery counter
      * (3 consecutive false returns trigger a renderer respawn).
@@ -447,15 +434,24 @@ public class RendererServer {
             o = out;
         }
         try {
-            o.write(pkt);
-            o.flush();
+            /* Maneuver updates and the blink timer are different producers. Preserve the fixed
+             * 48-byte packet boundary even when both emit at the same time. */
+            synchronized (writeLock) {
+                o.write(pkt);
+                o.flush();
+            }
             return true;
         } catch (Exception e) {
             Log.w(TAG, "Send failed: " + e.getMessage());
+            boolean lostCurrent = false;
             synchronized (lock) {
-                /* Drop the dead socket; next renderer connect will replace it. */
-                closeClientLocked();
+                /* A send on a preempted stream must not close the replacement socket. */
+                if (out == o) {
+                    closeClientLocked();
+                    lostCurrent = true;
+                }
             }
+            if (lostCurrent) notifyStateChanged("send-failed");
             return false;
         }
     }

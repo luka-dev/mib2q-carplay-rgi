@@ -1,16 +1,14 @@
 /*
  * AltScreenModule — cluster (LVDS2 / terminal 1) CONTEXT MANAGER.
  *
- * ONE custom context: dc[80] = {98,102,101,99} — maneuver popup(98) over the CarPlay cluster
- * video(99), both over the KDK bg (101/102).  On CarPlay connect (start) the cluster switches to
- * it; on disconnect (stop) it restores the stock cluster (74).  That is the whole policy — the
- * context is binary (connected → ours, else stock).
+ * TWO custom contexts: dc[81] = {99} is the plain CarPlay cluster map and dc[80] adds the
+ * maneuver popup/backing planes {98,101,102}.  Every new CarPlay session starts in 81.  Context
+ * 80 is permitted only after RouteGuidance has published its current RGI state through BAP and
+ * maneuver_render has confirmed a rendered frame.  Disconnect restores stock context 74.
  *
- * All sub-state lives in the renderers, NOT here: both are always-on framework services
- * (servicemgr external), so windows 98/99 always exist.  maneuver_render(98) draws transparent
- * when not navigating (and is blanked via CMD_CLEAR on route/CarPlay stop); altscreen_render(99)
- * streams black when no 111 video.  So a single held context carries navigating / not-navigating /
- * video / no-video without any context churn — nothing here reacts to RGI or video presence.
+ * Both renderers remain always-on framework services (servicemgr external), so windows 98/99
+ * always exist.  The only context transition inside a connected session is 81 -> 80 after the
+ * RGI presentation confirmation, and 80 -> 81 when guidance/presentation goes away.
  *
  * The context table itself (dc[80]) is declared to the native compositor at init via
  * DisplayManager.declareContexts(dc); getMappedInternalContext is identity on MIB2High, so
@@ -27,6 +25,7 @@ import com.luka.carplay.bus.CarplayBus;
 import com.luka.carplay.framework.Log;
 
 import de.audi.atip.hmi.view.IDisplayManager;
+import de.audi.tghu.fwhmi.IDisplayManagerKombiControl;
 
 public final class AltScreenModule implements Module, CarplayBus.Listener {
 
@@ -36,12 +35,13 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
     /* The single CarPlay cluster context: dc[80] = {98 popup, 102/101 KDK bg, 99 CarPlay video}.
      * If on-unit displayable 99 fails to composite, flip this to a video-less sibling as a
      * calibration knob (e.g. a dc[] slot that carries {98,102,101,33} over the stock map). */
-    public static final int CTX_CLUSTER       = 80;   /* nav active: {98 maneuver, 103 backing, 99 map} */
+    public static final int CTX_CLUSTER       = 80;   /* nav active: {98 maneuver, 101/102 backing, 99 map} */
     public static final int CTX_CLUSTER_MAP   = 81;   /* no nav: {99 map} only (no backing box, no maneuver) */
     public static final int CTX_STOCK_CLUSTER = 74;
     private static final int CTX_BOUNCE       = 72;   /* kombi map — never ours; forces a real ctx change */
     private static final int BOUNCE_SLEEP_MS  = 180;  /* preContextSwitchHook settle (proven driver) */
     private static final int CLUSTER_FPS      = 30;   /* cluster encoder rate; MOST/encoder may cap below this */
+    private static final int KOMBI_TYPE_G24   = 4;
     public static final int VIEWAREA_FULLSCREEN = 0;
     public static final int VIEWAREA_DUO        = 1;
     private static final int VIEWAREA_ANIMATION_MS = 250;
@@ -50,9 +50,10 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
     private IDisplayManager dm;                  /* current DisplayManager (guarded by LOCK); stable across sessions */
     private Thread worker;                        /* the ONE persistent switch worker (guarded by LOCK) */
 
-    /* true while the cluster is on OUR context (set AFTER the physical switch completes) — the roller
-     * command waits until our content is actually shown. */
+    /* true while the cluster is on OUR context (set AFTER the physical switch completes). */
     private static volatile boolean clusterActive = false;
+    private static volatile boolean platformSupported = true;
+    private boolean enabled;
     public static boolean isClusterActive() { return clusterActive; }
 
     /**
@@ -64,12 +65,14 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
      * MapScale.steps is a signed BAP byte. The hook converts its sign into the
      * UUID-addressed CarPlay changeMapZoomLevel command, so the cluster scene is
      * targeted directly and the main CarPlay UI does not move.
-     * Once our cluster context owns terminal 1 we always consume the event, even if
-     * the bus is momentarily reconnecting; otherwise the hidden Audi map would zoom
-     * underneath CarPlay and later reappear at an unexpected scale.
+     * Consume from the ownership-intent edge, before the asynchronous DisplayManager
+     * switch completes.  Waiting for clusterActive leaves a SETUP/bounce window in
+     * which the request reaches the hidden Audi map and can restart its map-ready
+     * lifecycle.  Once CarPlay intends to own terminal 1 we always consume the event,
+     * even if the bus is momentarily reconnecting.
      */
     public static boolean consumeSteeringWheelScale(int steps) {
-        if (!clusterActive) return false;
+        if (!isConnected()) return false;
 
         if (steps != 0) {
             if (steps > 127) steps = 127;
@@ -83,7 +86,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
 
     /** Suppress a simultaneous native-map auto-zoom setting while CarPlay owns the cluster. */
     public static boolean consumeSteeringWheelScaleSetting(int setting) {
-        if (!clusterActive) return false;
+        if (!isConnected()) return false;
         Log.i(TAG, "MFL native map-scale setting suppressed=" + setting);
         return true;
     }
@@ -93,7 +96,13 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
      * applied state leaves a ~180ms window during the first switch where a View press could steal
      * terminal 1 to the stock map (worker then thinks it still owns ctx → stuck).  Intent-based pin
      * closes that window from t0. */
-    public static boolean isConnected() { return connected || videoAvailable; }
+    public static boolean isConnected() { return platformSupported && (connected || videoAvailable); }
+
+    static boolean isPlatformSupported(FrameworkRef fw) {
+        try { return fw != null && fw.framework() != null
+            && fw.framework().getKombiType() != KOMBI_TYPE_G24; }
+        catch (Throwable t) { return true; }  /* only an explicit G24 value disables the feature */
+    }
 
     /* desiredCtx = target published by start()/stop(); currentCtx = what the worker last applied.
      * Both guarded by LOCK; the single worker switches whenever they differ, converging to desiredCtx. */
@@ -103,13 +112,16 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
      *   !connected           -> 74 (stock)
      *   connected, no nav    -> 81 (map only)
      *   connected, nav       -> 80 (map + backing + maneuver) */
-    private static boolean connected = false;
+    private static volatile boolean connected = false;
     /* The renderer's VIDEO_ON event is the data-plane truth.  TMDev can briefly
      * publish INVALID during a dio bounce even though the re-established 111
      * stream is already decoding; without this fallback the module remains on
      * stock ctx 74 while displayable 99 renders invisibly. */
-    private static boolean videoAvailable = false;
-    private static boolean navActive = false;
+    private static volatile boolean videoAvailable = false;
+    private static volatile boolean navActive = false;
+    private static volatile boolean acceptVideoFallback = false;
+    private static int lifecycleGeneration;
+    private static final long VIDEO_FALLBACK_GRACE_MS = 1500L;
     /* Desired Audi View-button state. The C hook also caches this before the
      * RTSP altScreen session exists and applies it on the first decoded IDR. */
     private static int desiredViewAreaMode = VIEWAREA_FULLSCREEN;
@@ -153,16 +165,26 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
 
     /** Recompute desiredCtx from connected/navActive and wake the worker. Caller must NOT hold LOCK. */
     private static void republish() {
+        boolean ownCluster;
         synchronized (LOCK) {
-            boolean ownCluster = connected || videoAvailable;
+            ownCluster = connected || videoAvailable;
             desiredCtx = !ownCluster ? CTX_STOCK_CLUSTER : (navActive ? CTX_CLUSTER : CTX_CLUSTER_MAP);
             LOCK.notifyAll();
         }
+        /* NavStatus widgets belong to the same presentation lifetime as plane
+         * 99, not to RouteGuidance.  Keep the gate through short TMDev bounces
+         * whenever the decoder still proves that altScreen video is live. */
+        AltScreenNavStatusGate.setActive(ownCluster);
     }
 
     /** Data-plane fallback for transient/incorrect TMDev lifecycle events. */
     public static void setVideoAvailable(boolean available) {
         synchronized (LOCK) {
+            if (!platformSupported) return;
+            if (available && !connected && !acceptVideoFallback) {
+                Log.d(TAG, "ignoring stale VIDEO_ON outside session/grace");
+                return;
+            }
             if (videoAvailable == available) return;
             videoAvailable = available;
         }
@@ -170,14 +192,16 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
         republish();
     }
 
-    /** Authoritative nav-active state: driven by RouteGuidance.rgActive (the moment we tell VC via
-     *  BAP that navigation is active), NOT by the stock KDK-visible hint.  a maneuver present ->
-     *  ctx 80, gone -> ctx 81 (while connected). */
+    /** Presentation latch, not merely route intent.  RouteGuidance may set true only after the
+     *  current RGI delta has been published through BAP and maneuver_render has confirmed a frame.
+     *  The stock KDK-visible hint never drives this latch. */
     public static void setNavActive(boolean active) {
         synchronized (LOCK) {
             if (navActive == active) return;
             navActive = active;
         }
+        Log.i(TAG, "RGI presentation=" + active + " -> "
+            + (active ? "ctx 80 (map+maneuver)" : "ctx 81 (map only)"));
         republish();
     }
 
@@ -190,6 +214,14 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
 
     public boolean start(FrameworkRef fw) {
         if (fw == null || !fw.isReady() || fw.framework() == null) return false;
+        if (!isPlatformSupported(fw)) {
+            platformSupported = false;
+            enabled = false;
+            Log.w(TAG, "disabled: G24 cluster has no ctx 80/81 altScreen composition");
+            return true;
+        }
+        platformSupported = true;
+        enabled = true;
 
         IDisplayManager d = null;
         try {
@@ -200,16 +232,31 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
             Log.d(TAG, "getDisplayManager not ready: " + t);
         }
         if (d == null) return false;                 /* DM not up yet → retry */
+        if (d instanceof IDisplayManagerKombiControl) {
+            com.luka.carplay.cluster.ClusterLayerController.bind(
+                (IDisplayManagerKombiControl)d, TERMINAL_CLUSTER);
+        }
+        /* Do not expose plane 99 until the stock-thread gate has actually invalidated the native
+         * NavStatus widgets. CarPlayApp retries this start after the dispatcher applies the edge. */
+        if (!AltScreenNavStatusGate.setActive(true)) return false;
 
         CarplayBus bus = CarplayBus.getInstance();
         bus.on(CarplayBus.EVT_HELLO, this);
         bus.on(CarplayBus.CMD_ALT_ZONE_ACK, this);
         sendViewAreaMode("module-start");
 
+        /* Publish the new session target before a new worker can observe currentCtx=-1. */
         synchronized (LOCK) {
             /* A replaced DisplayManager invalidates the cached currentCtx — reset so the worker
              * re-applies the desired ctx to the new one.  (In practice the same object each session.) */
             if (dm != d) { dm = d; currentCtx = -1; }
+            connected = true;
+            navActive = false;
+            acceptVideoFallback = true;
+            lifecycleGeneration++;
+            desiredCtx = CTX_CLUSTER_MAP;
+        }
+        synchronized (LOCK) {
             /* Create the single persistent worker once; recreate only if it never started or died.
              * Assign the field ONLY after start() succeeds so a throw leaves worker==null for retry. */
             if (worker == null || !worker.isAlive()) {
@@ -218,26 +265,49 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
                 w.start();
                 worker = w;
             }
+            LOCK.notifyAll();
         }
-        Log.i(TAG, "ready (DisplayManager acquired)");
-        synchronized (LOCK) { connected = true; }    /* CarPlay connected → take the cluster */
-        republish();                                 /* -> ctx 81 (map) or 80 (map+maneuver) per navActive */
+        Log.i(TAG, "ready (DisplayManager acquired, session reset -> ctx 81)");
         return true;
     }
 
     public void stop() {
+        if (!enabled) return;
+        enabled = false;
         /* Disconnect: publish stock (74); the single persistent worker restores it.  We deliberately
          * do NOT kill the worker or null dm — the worker being the sole always-live DM writer is what
          * makes stale-worker races impossible (no per-session worker to outlive its session). */
-        synchronized (LOCK) { connected = false; }
+        final int generation;
+        synchronized (LOCK) {
+            connected = false;
+            navActive = false;
+            acceptVideoFallback = true;
+            generation = ++lifecycleGeneration;
+        }
         republish();
+        /* Bridge only short TMDev/dio bounces. A real disconnect must not leave a stale control
+         * socket pinning plane 99 forever. A re-activate increments the generation and cancels this. */
+        Thread grace = new Thread(new Runnable() {
+            public void run() {
+                try { Thread.sleep(VIDEO_FALLBACK_GRACE_MS); }
+                catch (InterruptedException e) { Thread.currentThread().interrupt(); return; }
+                boolean changed = false;
+                synchronized (LOCK) {
+                    if (generation == lifecycleGeneration && !connected) {
+                        acceptVideoFallback = false;
+                        if (videoAvailable) { videoAvailable = false; changed = true; }
+                    }
+                }
+                if (changed) {
+                    Log.i(TAG, "video fallback grace expired -> stock context");
+                    republish();
+                }
+            }
+        }, "carplay-video-grace");
+        grace.setDaemon(true);
+        grace.start();
         CarplayBus.getInstance().off(CarplayBus.EVT_HELLO);
         CarplayBus.getInstance().off(CarplayBus.CMD_ALT_ZONE_ACK);
-    }
-
-    /** Publish the desired context and wake the worker (the single serialized DM writer converges to it). */
-    private static void setDesired(int ctx) {
-        synchronized (LOCK) { desiredCtx = ctx; LOCK.notifyAll(); }
     }
 
     /* ============================================================
@@ -259,7 +329,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
 
     /** Perform ONE context switch (bounce + settle + select).  Only this thread ever writes the DM,
      *  so there is no cross-worker race; the loop re-runs if desiredCtx changed during the settle.
-     *  ponytail: a stop()/start() landing in the tiny window between the post-sleep recheck and the
+     *  Note: a stop()/start() landing in the tiny window between the post-sleep recheck and the
      *  switchContext write can still cause ONE transient physical write before the next loop restores
      *  the newly-desired ctx — it is self-healing.  Closing it fully needs LOCK held across a DSI IPC
      *  call → deadlock risk, not worth it for a cosmetic transient on connect/disconnect. */
@@ -277,7 +347,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
                  * both share plane 99 — a direct switchContext just recomposes the extra planes (98/101/
                  * 102), no re-point needed.  Skipping the bounce there removes the visible ~180ms flash
                  * through stock kombi-map (72) on every nav on/off.
-                 * ponytail: if the driver turns out to need the bounce even for 80<->81 (encoder judder),
+                 * If the driver turns out to need the bounce even for 80<->81 (encoder judder),
                  * widen this back to "always bounce". */
                 boolean encoderRunning = (from == CTX_CLUSTER || from == CTX_CLUSTER_MAP);
                 if (!encoderRunning) {
@@ -304,6 +374,9 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
                 clusterActive = false;
             }
             synchronized (LOCK) { if (dm == d) currentCtx = ctx; }
+            /* Context composition is now final: replay the last KDK popup/sport geometry so a
+             * navActive edge cannot leave planes 98/101/102 at their previous opacity. */
+            com.luka.carplay.cluster.ClusterLayerController.reapply();
             Log.i(TAG, "cluster -> ctx " + ctx + " (active=" + clusterActive + ")");
         } catch (Throwable t) {
             Log.w(TAG, "switch(" + ctx + ") failed: " + t);

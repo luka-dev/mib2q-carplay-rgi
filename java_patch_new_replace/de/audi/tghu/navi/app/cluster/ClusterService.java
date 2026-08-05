@@ -35,7 +35,6 @@ import de.audi.tghu.navi.app.map.routecalc.RcciEvent;
 import de.audi.tghu.navi.app.rp.TripHandler;
 import de.audi.tghu.navi.app.util.LocationFormatter;
 import de.audi.tghu.navi.app.util.Util;
-import com.luka.carplay.probe.ClusterProbe;
 import de.audi.tghu.navi.app.util.addressformatting.AddressFormatter;
 import de.audi.tghu.navi.app.util.addressformatting.LocationFormattingResponse;
 import de.esolutions.fw.util.commons.Buffer;
@@ -155,10 +154,6 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         this.mapScaleTimer = new MapScaleTimer(navigationenv, this, this.mapScaleHandler);
         navigationenv.getLabelModel(62).setText(Util.INVALID_DISTANCE_NULL_AT_KOMBI_WITHOUT_TEXT_FOR_UNIT);
         this.initializeModels();
-        if (ClusterProbe.on()) {
-            ClusterProbe.log("ClusterService constructed — arming cluster probe one-shot");
-            ClusterProbe.armOneShot(this.env.getFramework(), this.clusterInputListener);
-        }
     }
 
     private void initializeModels() {
@@ -375,7 +370,7 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
              * !showBargraph, making them mutually exclusive (distance vanished whenever the
              * bargraph was active).  Drop the !showBargraph term so the number stays valid
              * alongside the bargraph.  (Model 65 bargraph value is set independently below.) */
-            if (flag && i > 0) {
+            if (flag && i > 0 && (!this.showBargraph || com.luka.carplay.core.AltScreenModule.isConnected())) {
                 Util.setModelStatus(metricsmodelapp, MODEL_STATUS_VALID);
             } else {
                 Util.setModelStatus(metricsmodelapp, MODEL_STATUS_INVALID);
@@ -706,7 +701,6 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
     }
 
     public void switchDisplayContextKombi(int i) {
-        if (ClusterProbe.on()) ClusterProbe.onSwitchKombi(i);
         this.logChannel.log(1000000, "ClusterService#switchDisplayContextKombi( %1 )", i);
         this.mapInterface.switchDisplayContextKombi(i);
     }
@@ -1111,12 +1105,10 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         this.combiBAPListener.combiservice = svc;
     }
 
-    /* Cluster projection activate/deactivate.
-     * The cluster context is now driven purely by CarPlay connect/disconnect
-     * (AltScreenModule.start/stop → the single ctx 80), NOT by RGI: the maneuver popup
-     * shows/hides by maneuver_render drawing content vs CMD_CLEAR inside the held context.
-     * So RGI start/stop must NOT touch the cluster context here — these remain only as the
-     * BAPBridge lifecycle hooks (no-ops for context). */
+    /* Cluster projection activate/deactivate.  These remain BAPBridge readiness hooks; the actual
+     * DisplayManager switch is serialized by AltScreenModule.  A successful return here is only
+     * one part of the permission: RouteGuidance additionally waits for the BAP update and the
+     * renderer's FRAME_READY before it changes ctx 81 -> 80. */
     public String activateCustomRendererPipeline() {
         return "RGI active (maneuver popup)";
     }

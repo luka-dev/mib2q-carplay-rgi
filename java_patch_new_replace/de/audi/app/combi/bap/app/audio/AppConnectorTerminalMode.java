@@ -62,6 +62,7 @@ public class AppConnectorTerminalMode extends AbstractAppConnectorAudio implemen
     }
 
     private void pushCoverArt(CombiBAPCurrentStationInfo stationInfo) {
+        if (!com.luka.carplay.core.CarPlayApp.isActive()) return;
         if (!this.isAudioApplicationInFocus()) return;
         String url = stationInfo.getPictureURL();
         if (url == null || url.length() == 0) return;

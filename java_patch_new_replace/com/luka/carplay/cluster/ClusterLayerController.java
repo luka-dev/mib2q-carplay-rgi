@@ -21,6 +21,7 @@
  */
 package com.luka.carplay.cluster;
 
+import com.luka.carplay.framework.Log;
 import de.audi.tghu.fwhmi.IDisplayManagerKombiControl;
 
 public final class ClusterLayerController {
@@ -29,17 +30,90 @@ public final class ClusterLayerController {
     private static final int MANEUVER      = 98;    /* maneuver_render (Software) */
     private static final int BACKING_SPORT = 101;   /* 987 KDK backing, 328x180 */
     private static final int BACKING_POPUP = 102;   /* 987 KDK backing, 210x153 */
+    private static final Object LOCK = new Object();
+    private static IDisplayManagerKombiControl lastDm;
+    private static int lastTerminal;
+    private static boolean lastPopup;
+    private static boolean lastStockVisible;
+    private static int lastStockOpacity;
+    private static boolean haveLayout;
+    private static boolean errorLogged;
 
     private ClusterLayerController() {}
+
+    /** Cold-boot fallback before the first stock KDK model update. The first real update replaces
+     * the conservative popup geometry with the authoritative popup/in-tube layout. */
+    public static void bind(IDisplayManagerKombiControl dm, int terminal) {
+        synchronized (LOCK) {
+            if (lastDm != dm) {
+                lastPopup = true;
+                lastStockVisible = false;
+                lastStockOpacity = 0;
+            }
+            lastDm = dm;
+            lastTerminal = terminal;
+            haveLayout = true;
+        }
+    }
 
     /**
      * Apply the CarPlay cluster plane geometry for one KDK model update.
      * @param popup true = 210x153 popup zone (hint&8 == 0); false = full 328x181 sport (hint&8 != 0).
      * Reads the nav-active gate itself; never throws into the HMI thread.
      */
-    public static void apply(IDisplayManagerKombiControl dm, int terminal, boolean popup) {
+    public static void apply(IDisplayManagerKombiControl dm, int terminal, boolean popup,
+                             boolean stockVisible, int stockOpacity) {
+        synchronized (LOCK) {
+            lastDm = dm;
+            lastTerminal = terminal;
+            lastPopup = popup;
+            lastStockVisible = stockVisible;
+            lastStockOpacity = stockOpacity;
+            haveLayout = true;
+        }
+        applyNow(dm, terminal, popup, stockVisible, stockOpacity);
+    }
+
+    /** Re-apply the last stock KDK geometry after AltScreenModule changes ctx 80/81. */
+    public static void reapply() {
+        IDisplayManagerKombiControl dm;
+        int terminal;
+        boolean popup;
+        boolean stockVisible;
+        int stockOpacity;
+        synchronized (LOCK) {
+            if (!haveLayout || lastDm == null) return;
+            dm = lastDm;
+            terminal = lastTerminal;
+            popup = lastPopup;
+            stockVisible = lastStockVisible;
+            stockOpacity = lastStockOpacity;
+        }
+        applyNow(dm, terminal, popup, stockVisible, stockOpacity);
+    }
+
+    private static void applyNow(IDisplayManagerKombiControl dm, int terminal, boolean popup,
+                                 boolean stockVisible, int stockOpacity) {
+        boolean carplayOwnsCluster = com.luka.carplay.core.AltScreenModule.isConnected();
         boolean navActive = com.luka.carplay.core.AltScreenModule.isNavActive();
         try {
+            /* 101/102 are shared with the stock KDK renderer.  Restore the last stock model
+             * atomically when CarPlay releases terminal 1; otherwise a disconnect can leave
+             * Audi navigation's backing permanently transparent until an unrelated KDK delta. */
+            if (!carplayOwnsCluster) {
+                dm.setOpacity(MANEUVER, terminal, 0);
+                if (stockVisible) {
+                    dm.setOpacity(popup ? BACKING_POPUP : BACKING_SPORT,
+                                  terminal, stockOpacity);
+                    dm.setOpacity(popup ? BACKING_SPORT : BACKING_POPUP,
+                                  terminal, 0);
+                } else {
+                    dm.setOpacity(BACKING_SPORT, terminal, 0);
+                    dm.setOpacity(BACKING_POPUP, terminal, 0);
+                }
+                errorLogged = false;
+                return;
+            }
             if (!navActive) {
                 dm.setOpacity(MANEUVER, terminal, 0);
                 dm.setOpacity(BACKING_SPORT, terminal, 0);
@@ -61,8 +135,13 @@ public final class ClusterLayerController {
                 dm.setOpacity(BACKING_SPORT, terminal, 100);
                 dm.setOpacity(BACKING_POPUP, terminal, 0);
             }
+            errorLogged = false;
         } catch (Throwable t) {
-            /* never let cluster geometry throw into the HMI thread */
+            /* Never throw into HMI/DM threads, but keep the first failure diagnosable. */
+            if (!errorLogged) {
+                errorLogged = true;
+                Log.w("ClusterLayers", "apply failed: " + t);
+            }
         }
     }
 }

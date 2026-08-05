@@ -31,6 +31,8 @@ final class AltscreenControlServer {
     private static final Object LOCK = new Object();
     private static Thread   thread;
     private static volatile boolean run;
+    private static Socket client;
+    private static int clientGeneration;
 
     private AltscreenControlServer() {}
 
@@ -53,13 +55,19 @@ final class AltscreenControlServer {
                 ss.bind(new InetSocketAddress("127.0.0.1", PORT));
                 Log.i(TAG, "listening :" + PORT);
                 while (run) {
-                    Socket c = ss.accept();
-                    Log.i(TAG, "altscreen_render connected");
-                    try { serve(c); }
-                    catch (Throwable t) { Log.d(TAG, "client dropped: " + t); }
-                    finally { try { c.close(); } catch (Throwable t) { /* ignore */ } }
-                    AltScreenModule.setVideoAvailable(false);
-                    Log.d(TAG, "altscreen_render disconnected (video off)");
+                    final Socket c = ss.accept();
+                    final int generation;
+                    synchronized (LOCK) {
+                        if (client != null) try { client.close(); } catch (Throwable t) { }
+                        client = c;
+                        generation = ++clientGeneration;
+                    }
+                    Log.i(TAG, "altscreen_render connected generation=" + generation);
+                    Thread reader = new Thread(new Runnable() {
+                        public void run() { serveClient(c, generation); }
+                    }, "carplay-altctl-reader");
+                    reader.setDaemon(true);
+                    reader.start();
                 }
             } catch (Throwable t) {
                 Log.w(TAG, "server error: " + t);
@@ -70,24 +78,45 @@ final class AltscreenControlServer {
         }
     }
 
-    private static void serve(Socket c) throws Exception {
-        c.setTcpNoDelay(true);
-        InputStream in = c.getInputStream();
-        byte[] pkt = new byte[4];
-        while (run) {
-            int off = 0;
-            while (off < 4) {
-                int n = in.read(pkt, off, 4 - off);
-                if (n < 0) return;                       /* EOF → altscreen gone */
-                off += n;
+    private static void serveClient(Socket c, int generation) {
+        try {
+            c.setTcpNoDelay(true);
+            c.setKeepAlive(true);
+            InputStream in = c.getInputStream();
+            byte[] pkt = new byte[4];
+            while (run) {
+                int off = 0;
+                while (off < 4) {
+                    int n = in.read(pkt, off, 4 - off);
+                    if (n < 0) return;
+                    off += n;
+                }
+                synchronized (LOCK) {
+                    if (client != c || generation != clientGeneration) return;
+                }
+                int evt = pkt[0] & 0xFF;
+                if (evt == EVT_VIDEO_ON) {
+                    Log.i(TAG, "VIDEO_ON generation=" + generation);
+                    AltScreenModule.setVideoAvailable(true);
+                } else if (evt == EVT_VIDEO_OFF) {
+                    Log.i(TAG, "VIDEO_OFF generation=" + generation);
+                    AltScreenModule.setVideoAvailable(false);
+                }
             }
-            int evt = pkt[0] & 0xFF;
-            if (evt == EVT_VIDEO_ON) {
-                Log.i(TAG, "VIDEO_ON");
-                AltScreenModule.setVideoAvailable(true);
-            } else if (evt == EVT_VIDEO_OFF) {
-                Log.i(TAG, "VIDEO_OFF");
+        } catch (Throwable t) {
+            if (run) Log.d(TAG, "client dropped: " + t);
+        } finally {
+            boolean owned = false;
+            synchronized (LOCK) {
+                if (client == c && generation == clientGeneration) {
+                    client = null;
+                    owned = true;
+                }
+            }
+            try { c.close(); } catch (Throwable t) { }
+            if (owned) {
                 AltScreenModule.setVideoAvailable(false);
+                Log.i(TAG, "altscreen_render disconnected generation=" + generation);
             }
         }
     }

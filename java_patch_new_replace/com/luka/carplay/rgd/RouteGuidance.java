@@ -40,7 +40,19 @@ public class RouteGuidance implements CarplayBus.Listener {
     private BAPBridge bap;
     private volatile boolean running;
     private boolean rgActive = false;
+    /* Separate from rgActive: route intent/BAP ownership may already be active while ctx 81 is
+     * still held.  It flips only after BAP update + maneuver renderer FRAME_READY. */
+    private boolean presentationConfirmed = false;
     private boolean hasRouteUpdate = false;
+    private boolean routeWantsActive = false;
+
+    /* Renderer readiness is independent of iOS RGI deltas. A tiny dedicated worker advances
+     * the cached presentation state on READY/FRAME_READY/death and on a bounded retry tick. */
+    private final Object presentationLock = new Object();
+    private Thread presentationThread;
+    private boolean presentationWake;
+    private int presentationGeneration;
+    private static final long PRESENTATION_RETRY_MS = 500L;
 
     /* Parsed state (reused to avoid allocations) */
     private State state = new State();
@@ -229,6 +241,18 @@ public class RouteGuidance implements CarplayBus.Listener {
             if ((flag & MAN_DIR_TEXT) != 0) dirtyMask |= DIRTY_MANEUVER_TEXT;
         }
 
+        /** Re-publish the cached full snapshot after a late renderer connection/restart. */
+        public void markAllDirtyForReplay() {
+            dirtyMask |= DIRTY_ROUTE_STATE | DIRTY_MANEUVER_STATE | DIRTY_MANEUVER_COUNT
+                | DIRTY_MANEUVER_LIST | DIRTY_DIST_DEST | DIRTY_DIST_MAN | DIRTY_ETA
+                | DIRTY_TIME_REMAINING | DIRTY_CURRENT_ROAD | DIRTY_DESTINATION
+                | DIRTY_MANEUVER_ICON | DIRTY_MANEUVER_TEXT | DIRTY_VISIBLE_IN_APP
+                | DIRTY_SOURCE_SUPPORTS_RG | DIRTY_LANE_GUIDANCE;
+            for (int i = 0; i < MAX_MANEUVERS; i++) {
+                mDirty[i] |= MAN_DIR_ICON | MAN_DIR_TEXT;
+            }
+        }
+
     }
 
     /* ============================================================
@@ -245,6 +269,11 @@ public class RouteGuidance implements CarplayBus.Listener {
             bap = null;
             return false;
         }
+        bap.setPresentationListener(new BAPBridge.PresentationListener() {
+            public void onPresentationStateChanged(String reason) {
+                requestPresentationCheck(reason);
+            }
+        });
 
         Log.i(TAG, "Initialized");
         return true;
@@ -255,15 +284,39 @@ public class RouteGuidance implements CarplayBus.Listener {
      */
     public void start() {
         if (running) return;
-        running = true;
-        rgActive = false;
-        hasRouteUpdate = false;
+        synchronized (this) {
+            running = true;
+            rgActive = false;
+            presentationConfirmed = false;
+            hasRouteUpdate = false;
+            routeWantsActive = false;
+            state.reset();
+        }
+        final int generation;
+        synchronized (presentationLock) {
+            generation = ++presentationGeneration;
+            presentationWake = false;
+            presentationThread = new Thread(new Runnable() {
+                public void run() { presentationLoop(generation); }
+            }, "carplay-rgi-presentation");
+            presentationThread.setDaemon(true);
+            presentationThread.start();
+        }
+        com.luka.carplay.core.AltScreenModule.setNavActive(false);
 
         CarplayBus bus = CarplayBus.getInstance();
         bus.on(CarplayBus.EVT_RGD_UPDATE, this);
         bus.start();   /* idempotent */
 
-        Log.i(TAG, "Started (subscribed to EVT_RGD_UPDATE)");
+        /* Cold-boot catch-up: when the phone is already connected, the hook
+         * may have sent its automatic sticky snapshot before this listener
+         * existed and CarplayBus correctly dropped it.  Request the same
+         * snapshot again now that EVT_RGD_UPDATE has a consumer.  If the hook
+         * is not connected yet this send simply fails; its normal connect-time
+         * replay will arrive later, after the listener is already installed. */
+        boolean syncRequested = bus.send(CarplayBus.CMD_SYNC_REQ, 0, null, 0);
+
+        Log.i(TAG, "Started (subscribed to EVT_RGD_UPDATE, sync=" + syncRequested + ")");
     }
 
     /**
@@ -271,15 +324,30 @@ public class RouteGuidance implements CarplayBus.Listener {
      */
     public void stop() {
         if (!running) return;
-        running = false;
-        rgActive = false;
-        hasRouteUpdate = false;
-        com.luka.carplay.core.AltScreenModule.setNavActive(false);  /* clear layer gate on session end */
-
         CarplayBus.getInstance().off(CarplayBus.EVT_RGD_UPDATE);
-        if (bap != null) {
-            bap.onStop();
-            bap.onShutdown();  /* full stop — kill renderer on actual stop() */
+        Thread worker;
+        synchronized (presentationLock) {
+            running = false;
+            presentationGeneration++;
+            presentationWake = true;
+            presentationLock.notifyAll();
+            worker = presentationThread;
+            presentationThread = null;
+        }
+        synchronized (this) {
+            rgActive = false;
+            presentationConfirmed = false;
+            hasRouteUpdate = false;
+            routeWantsActive = false;
+            com.luka.carplay.core.AltScreenModule.setNavActive(false);
+            if (bap != null) {
+                bap.onStop();
+                bap.onShutdown();
+                bap.setPresentationListener(null);
+            }
+        }
+        if (worker != null && worker != Thread.currentThread()) {
+            try { worker.join(1000L); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
         }
 
         Log.i(TAG, "Stopped");
@@ -299,7 +367,7 @@ public class RouteGuidance implements CarplayBus.Listener {
      * CarplayBus Listener
      * ============================================================ */
 
-    public void onFrame(int type, int flags, byte[] payload, int len) {
+    public synchronized void onFrame(int type, int flags, byte[] payload, int len) {
         if (!running) return;
         if (type != CarplayBus.EVT_RGD_UPDATE) return;
         CarplayBus.Data d = CarplayBus.parseText(payload, len);
@@ -309,6 +377,7 @@ public class RouteGuidance implements CarplayBus.Listener {
         parse(d);
         if (state.dirtyMask == 0) {
             Log.d(TAG, "Bus update: none (keys=" + d.size() + ")");
+            if (rgActive && !presentationConfirmed) requestPresentationCheck("empty-rgi-delta");
             return;
         }
 
@@ -316,6 +385,8 @@ public class RouteGuidance implements CarplayBus.Listener {
         if (state.disconnectReason != null) {
             if (bap != null) { bap.onStop(); bap.onShutdown(); }
             rgActive = false;
+            presentationConfirmed = false;
+            routeWantsActive = false;
             com.luka.carplay.core.AltScreenModule.setNavActive(false);  /* hide layers (ctx 81) */
             hasRouteUpdate = false;
             state.reset();
@@ -367,6 +438,7 @@ public class RouteGuidance implements CarplayBus.Listener {
             /* route_state=0 (NO_ROUTE_SET) is authoritative -- no route means
              * nothing to show, regardless of stale visible_in_app from C hook. */
             if (state.routeState == ROUTE_STATE_NO_ROUTE_SET) wantActive = false;
+            routeWantsActive = wantActive;
 
             /* Re-check running: a frame captured by the bus dispatcher just before stop()
              * must not resurrect the bridge (bap.onStart re-shuts the gate + relaunches the
@@ -379,12 +451,16 @@ public class RouteGuidance implements CarplayBus.Listener {
                     + " maneuver_count=" + state.maneuverCount
                     + " visible_in_app=" + state.visibleInApp
                     + " source_supports_rg=" + state.sourceSupportsRg);
-                if (bap != null) bap.onStart();
-                rgActive = true;
-                /* Single source of truth for the CarPlay cluster layers: they become visible at the
-                 * exact moment we tell VC (via BAP) that navigation is active — not on the stock
-                 * KDK-visible hint.  AltScreenModule flips ctx 80/81 accordingly. */
-                com.luka.carplay.core.AltScreenModule.setNavActive(true);
+                /* Stage 1: own BAP and publish the BAP start sync, but deliberately keep ctx 81.
+                 * Renderer readiness remains non-blocking; the current update or presentation
+                 * worker may expose 80 only after the current peer reports FRAME_READY. */
+                presentationConfirmed = false;
+                com.luka.carplay.core.AltScreenModule.setNavActive(false);
+                rgActive = bap != null && bap.onStart();
+                if (!rgActive) {
+                    Log.w(TAG, "RG activation pending: BAP start did not complete; keeping ctx 81");
+                    requestPresentationCheck("bap-start-pending");
+                }
             } else if (!wantActive && rgActive) {
                 Log.i(TAG, "RG deactivate: route_state=" + state.routeState
                     + " maneuver_count=" + state.maneuverCount
@@ -395,6 +471,7 @@ public class RouteGuidance implements CarplayBus.Listener {
                  * visibleInApp=0, or real route end).  Full shutdown. */
                 if (bap != null) { bap.onStop(); bap.onShutdown(); }
                 rgActive = false;
+                presentationConfirmed = false;
                 /* RGI off -> hide the CarPlay cluster layers (ctx 81 = map only). */
                 com.luka.carplay.core.AltScreenModule.setNavActive(false);
             }
@@ -407,9 +484,90 @@ public class RouteGuidance implements CarplayBus.Listener {
 
         /* Send only while RG is active to avoid fighting native BAP when inactive */
         if (bap != null) {
-            bap.update(state);
+            boolean updatePublished = bap.update(state);
+            boolean rendererAndBapReady = bap.isPresentationReady();
+            /* First entry to ctx 80 requires THIS cached/current RGI update to have completed.
+             * After that, an unrelated recoverable BAP delta error must not flicker the context;
+             * renderer link loss still drops readiness immediately on the next update. */
+            boolean confirmed = rendererAndBapReady && (presentationConfirmed || updatePublished);
+            if (confirmed != presentationConfirmed) {
+                presentationConfirmed = confirmed;
+                if (confirmed) {
+                    Log.i(TAG, "RG presentation CONFIRMED: BAP snapshot published + popup frame ready");
+                } else {
+                    Log.w(TAG, "RG presentation lost: keeping route state, falling back to ctx 81");
+                }
+                com.luka.carplay.core.AltScreenModule.setNavActive(confirmed);
+            }
             state.clearDirty();
+            if (!confirmed) requestPresentationCheck("presentation-not-ready");
         }
+    }
+
+    private void requestPresentationCheck(String reason) {
+        synchronized (presentationLock) {
+            if (!running) return;
+            presentationWake = true;
+            presentationLock.notifyAll();
+        }
+        Log.d(TAG, "presentation wake: " + reason);
+    }
+
+    private void presentationLoop(int generation) {
+        while (true) {
+            synchronized (presentationLock) {
+                while (running && generation == presentationGeneration && !presentationWake) {
+                    try { presentationLock.wait(); }
+                    catch (InterruptedException e) { Thread.currentThread().interrupt(); return; }
+                }
+                if (!running || generation != presentationGeneration) return;
+                presentationWake = false;
+            }
+
+            boolean retry = driveCachedPresentation();
+            if (retry) {
+                synchronized (presentationLock) {
+                    if (!running || generation != presentationGeneration) return;
+                    if (!presentationWake) {
+                        try { presentationLock.wait(PRESENTATION_RETRY_MS); }
+                        catch (InterruptedException e) { Thread.currentThread().interrupt(); return; }
+                    }
+                    if (running && generation == presentationGeneration) presentationWake = true;
+                }
+            }
+        }
+    }
+
+    /** Serialized with onFrame/stop so cached State and BAP are never mutated concurrently. */
+    private synchronized boolean driveCachedPresentation() {
+        if (!running || bap == null || !routeWantsActive) return false;
+
+        if (!rgActive) {
+            rgActive = bap.onStart();
+            if (!rgActive) return true;
+        }
+
+        if (!bap.preparePresentation()) {
+            if (presentationConfirmed) {
+                presentationConfirmed = false;
+                com.luka.carplay.core.AltScreenModule.setNavActive(false);
+                Log.w(TAG, "RG presentation lost: renderer not ready");
+            }
+            return true;
+        }
+
+        /* The primer proved the current renderer can swap. Now replay the cached RGI snapshot so
+         * displayable 98 contains the real current maneuver before context 80 is exposed. */
+        state.markAllDirtyForReplay();
+        boolean published = bap.update(state);
+        state.clearDirty();
+        boolean confirmed = published && bap.isPresentationReady();
+        if (confirmed != presentationConfirmed) {
+            presentationConfirmed = confirmed;
+            com.luka.carplay.core.AltScreenModule.setNavActive(confirmed);
+            if (confirmed) Log.i(TAG, "RG presentation CONFIRMED from cached snapshot");
+        }
+        return !confirmed;
     }
 
     /* ============================================================

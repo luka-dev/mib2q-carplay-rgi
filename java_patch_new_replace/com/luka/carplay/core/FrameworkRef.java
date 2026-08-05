@@ -37,12 +37,36 @@ public final class FrameworkRef {
     public IDeviceManager deviceManager()    { return ctx != null ? ctx.getDeviceManager() : null; }
     public IHMIServiceApp hmiServiceApp()    { return fw != null ? fw.getHmiServiceApp() : null; }
 
-    /** OSGi service lookup by interface; null if none registered yet (caller retries). */
-    public Object getService(Class iface) {
+    /** Paired lookup handle: callers with a session lifecycle must release it. */
+    public ServiceHandle getServiceHandle(Class iface) {
         IServiceManager sm = serviceManager();
         if (sm == null || iface == null) return null;
         ServiceReference[] refs = sm.getServiceReferences(iface);
         if (refs == null || refs.length == 0) return null;
-        return sm.getService(refs[0]);
+        Object service = sm.getService(refs[0]);
+        return service != null ? new ServiceHandle(sm, refs[0], service) : null;
+    }
+
+    public static final class ServiceHandle {
+        private IServiceManager manager;
+        private ServiceReference reference;
+        private Object service;
+
+        private ServiceHandle(IServiceManager manager, ServiceReference reference, Object service) {
+            this.manager = manager;
+            this.reference = reference;
+            this.service = service;
+        }
+
+        public synchronized Object service() { return service; }
+
+        public synchronized void release() {
+            if (manager != null && reference != null) {
+                try { manager.releaseService(reference); } catch (Throwable t) { }
+            }
+            manager = null;
+            reference = null;
+            service = null;
+        }
     }
 }

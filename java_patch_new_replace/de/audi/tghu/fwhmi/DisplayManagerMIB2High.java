@@ -9,7 +9,6 @@ import de.esolutions.fw.util.commons.error.DumpInfoProvider;
 import java.io.PrintStream;
 import org.dsi.ifc.displaymanagement.DisplayContext;
 import org.dsi.ifc.global.ResourceLocator;
-import com.luka.carplay.probe.ClusterProbe;
 
 public class DisplayManagerMIB2High extends DisplayManager implements IDisplayListener, IDisplayManagerKombiControl {
     private static final boolean SHOW_DM_INFO = Boolean.getBoolean("showDisplayManagerInfo");
@@ -59,7 +58,6 @@ public class DisplayManagerMIB2High extends DisplayManager implements IDisplayLi
     }
 
     protected void defineContexts() {
-        if (ClusterProbe.on()) ClusterProbe.log("defineContexts: kombiType=" + this.framework.getKombiType());
         if (this.framework.getKombiType() == KOMBI_TYPE_G24) {
             this.dc = new DisplayContext[DC_SIZE_G24];
         } else {
@@ -289,7 +287,6 @@ public class DisplayManagerMIB2High extends DisplayManager implements IDisplayLi
     }
 
     public synchronized void switchContext(int ctx, int terminal, IDisplayListener listener) {
-        int requestedCtx = ctx;
         this.log.log(1000000, "DisplayManager#switchContext visibleKDK %1 terminal %2 ", this.visibleKDKs[terminal], terminal);
         /* Stock KDK-20 remap: while a KDK maneuver is visible, a switch to a stock map context is
          * redirected to its KDK-carrying twin (addKDKToContext).  Our CarPlay contexts (>= 80) are
@@ -300,7 +297,6 @@ public class DisplayManagerMIB2High extends DisplayManager implements IDisplayLi
             ctx = this.addKDKToContext(ctx);
         }
 
-        if (ClusterProbe.on()) ClusterProbe.onSwitchContext(requestedCtx, ctx, terminal, this.visibleKDKs[terminal], this.getDisplayables(ctx));
         super.switchContext(ctx, terminal, listener);
         if (SHOW_DM_INFO && this.getCurrentContextID(terminal) > -1) {
             this.postStatisticInfoContextGeneral(ctx, terminal);

@@ -36,7 +36,7 @@ public class BAPBridge {
      * FPK has rgType=4 hardcoded in CombiBAPListener -- our BAP rgType=0 is for the
      * AppConnectorNavi FSG sync flow, not for view mode selection. */
     private static final int ACTIVE_RGTYPE = 0;  /* RGI -- BAP icons. maneuver_render handles LVDS video. */
-    private static final boolean BAP_TRACE_ENABLED = true;
+    private static final boolean BAP_TRACE_ENABLED = false;
 
     /* ExitView variants (BAP spec FctID 49).  EU/NAR are used by
      * sendExitView() which toggles between them to defeat AppConnectorNavi's
@@ -66,6 +66,9 @@ public class BAPBridge {
         new BAPDistanceFormatter(new SilentLogChannel());
 
     private boolean initialized = false;
+    /* Set only after the complete synchronous BAP start sequence has returned successfully.
+     * RouteGuidance combines this with renderer FRAME_READY before exposing context 80. */
+    private volatile boolean bapSessionStarted = false;
 
     /*
      * Approach mode: true when distM <= prepareThreshold (showing real maneuver icon),
@@ -77,7 +80,6 @@ public class BAPBridge {
      * mVer changes when the C hook reassigns a slot to a new iAP2 index. */
     private int lastFirstManeuverIdx = -1;
     private int lastFirstManeuverVer = -1;
-    private String latchedTurnToText = "";
     /* Call-for-action blink phase: true=100%, false=0% */
     private boolean actionBlinkFull = true;
     private final Object distanceToManeuverLock = new Object();
@@ -106,7 +108,6 @@ public class BAPBridge {
      * Since exitViewNum=0 (no exit view), the variant is cosmetically irrelevant.
      */
     private int exitViewSendCount = 0;
-    private GatedCombiService gatedService;
     /* REPLACE: true from CarPlay connect (engageTakeover) to disconnect (disengageTakeover);
      * keeps onShutdown from reopening the RG gate when CarPlay nav merely ends mid-session. */
     private volatile boolean takeoverEngaged = false;
@@ -114,6 +115,23 @@ public class BAPBridge {
     private ClusterService csRef;
     private KOMOService komoService;
     private RendererServer rendererClient;
+    private volatile PresentationListener presentationListener;
+
+    /** Non-blocking edge used by RouteGuidance's presentation worker. */
+    public interface PresentationListener {
+        void onPresentationStateChanged(String reason);
+    }
+
+    public void setPresentationListener(PresentationListener listener) {
+        presentationListener = listener;
+    }
+
+    private void notifyPresentationStateChanged(String reason) {
+        PresentationListener l = presentationListener;
+        if (l == null) return;
+        try { l.onPresentationStateChanged(reason); }
+        catch (Throwable t) { Log.w(TAG, "presentation listener failed: " + t); }
+    }
 
     private static final class SilentLogChannel extends LogChannel {
         public void log(int level, String pattern,
@@ -474,24 +492,6 @@ public class BAPBridge {
                 Log.w(TAG, "KOMO service is null (non-fatal, LVDS video won't work)");
             }
 
-            /* Install native route-guidance gate on CombiBAPListener.combiservice.
-             * The gate lives on the long-lived ClusterService, so a reconnect must REUSE the
-             * existing GatedCombiService rather than wrap it again — otherwise each session
-             * stacks another delegating wrapper (unbounded chain). */
-            try {
-                CombiBAPServiceNavi cur = cs.getCombiBAPListenerCombiService();
-                if (cur instanceof GatedCombiService) {
-                    gatedService = (GatedCombiService) cur;
-                    Log.i(TAG, "Route-guidance gate reused (already installed)");
-                } else if (cur != null) {
-                    gatedService = new GatedCombiService(cur);
-                    cs.setCombiBAPListenerCombiService(gatedService);
-                    Log.i(TAG, "Route-guidance gate installed on CombiBAPListener");
-                }
-            } catch (Exception ex) {
-                Log.d(TAG, "Route-guidance gate install failed (non-fatal): " + ex.getMessage());
-            }
-
             Log.i(TAG, "ClusterAccess init OK");
         } catch (Exception e) {
             Log.w(TAG, "ClusterAccess setup failed (non-fatal): " + e.getMessage());
@@ -532,7 +532,7 @@ public class BAPBridge {
      *  stock route guidance and shut the native RG BAP gate for the whole session, so the
      *  cluster never shows the stock navigator's RG.  Our own maneuvers ride appConnectorNavi
      *  (raw OSGi, never gated), so they are unaffected.  Idempotent.
-     *  ponytail: if ClusterService isn't up yet the gate install no-ops here; onStart() re-tries
+     *  If ClusterService isn't up yet the gate install no-ops here; onStart() re-tries
      *  the lazy init when CarPlay nav begins — the connect-time CANCEL still fires via the
      *  Navigation singleton regardless. */
     /** @return true once the native RG gate is actually installed+shut; false if ClusterService
@@ -542,10 +542,9 @@ public class BAPBridge {
         if (!initialized) return false;
         try {
             takeoverEngaged = true;
-            if (gatedService == null) initClusterAccess();
+            if (csRef == null) initClusterAccess();
             tryStopNativeNavigation();
-            if (gatedService != null) {
-                gatedService.setTakeover(true);
+            if (com.luka.carplay.core.AltScreenNavStatusGate.setRouteGuidanceBlocked(true)) {
                 Log.i(TAG, "REPLACE: takeover engaged (stock nav cancelled, RG gate shut)");
                 return true;
             }
@@ -561,7 +560,7 @@ public class BAPBridge {
     public void disengageTakeover() {
         try {
             takeoverEngaged = false;
-            if (gatedService != null) gatedService.setTakeover(false);
+            com.luka.carplay.core.AltScreenNavStatusGate.setRouteGuidanceBlocked(false);
             Log.i(TAG, "REPLACE: takeover disengaged (stock RG gate reopened)");
         } catch (Throwable t) { /* ignore */ }
     }
@@ -570,14 +569,14 @@ public class BAPBridge {
      * Lifecycle
      * ============================================================ */
 
-    public void onStart() {
-        if (!initialized) return;
+    public boolean onStart() {
+        if (!initialized) return false;
 
         try {
+            bapSessionStarted = false;
             inApproachZone = false;
             lastFirstManeuverIdx = -1;
             lastFirstManeuverVer = -1;
-            latchedTurnToText = "";
             resetActionBlinkState();
             synchronized (distanceToManeuverLock) {
                 hasLastDistM = false;
@@ -595,7 +594,7 @@ public class BAPBridge {
              * Lazy-init cluster hooks (native stream gate).
              * Navigation singleton may not be available at init() time.
              */
-            if (gatedService == null) {
+            if (csRef == null) {
                 initClusterAccess();
             }
 
@@ -617,14 +616,14 @@ public class BAPBridge {
             tryStopNativeNavigation();
 
             /* Block native route-guidance BAP stream during CarPlay RG. */
-            if (gatedService != null) gatedService.setTakeover(true);
+            com.luka.carplay.core.AltScreenNavStatusGate.setRouteGuidanceBlocked(true);
 
             /* Start renderer FIRST — takes over native displayable 20
              * (DISPLAYABLE_MAP_ROUTE_GUIDANCE, the KOMO RG widget slot) by
              * registering our screen window with ID="20" in displaymanager's
              * m_surfaceSources.  Doing this before we set rgActive/rgiValid
              * avoids a one-frame KDK flicker. */
-            startCustomRenderer();
+            startCustomRenderer();                 /* non-blocking; readiness edges drive completion */
 
             /* Now safe to set cluster state flags — our window owns
              * displayable 20, encoder reads it via setActiveDisplayable(4,20). */
@@ -657,9 +656,13 @@ public class BAPBridge {
 
             Log.i(TAG, "Started (rgType=" + ACTIVE_RGTYPE
                 + ", cr=" + customRendererStarted + ")");
+            bapSessionStarted = true;
+            return true;
 
         } catch (Throwable e) {
+            bapSessionStarted = false;
             Log.e(TAG, "onStart error: " + e.getClass().getName() + ": " + e.getMessage());
+            return false;
         }
     }
 
@@ -667,6 +670,7 @@ public class BAPBridge {
         if (!initialized) return;
 
         try {
+            bapSessionStarted = false;
             /* Lightweight stop — reset internal state only.
              * No BAP teardown, no renderer kill. iOS sends transient route_state=0
              * during maneuver transitions; full teardown causes HUD flicker + renderer
@@ -675,7 +679,6 @@ public class BAPBridge {
             inApproachZone = false;
             lastFirstManeuverIdx = -1;
             lastFirstManeuverVer = -1;
-            latchedTurnToText = "";
             Log.d(TAG, "Stopped (lightweight, renderer + BAP kept alive)");
         } catch (Exception e) {
             Log.e(TAG, "onStop error", e);
@@ -683,13 +686,14 @@ public class BAPBridge {
     }
 
     /**
-     * Full shutdown — BAP teardown + renderer kill.
+     * Full shutdown — BAP teardown + renderer socket teardown.
      * Called on actual CarPlay disconnect or stop().
      */
     public void onShutdown() {
         if (!initialized) return;
 
         try {
+            bapSessionStarted = false;
             /* Defensive: stop action blink (it's also stopped on approach
              * zone exit, but onShutdown can be called from non-approach
              * states too — e.g., disconnect mid-route). */
@@ -730,14 +734,17 @@ public class BAPBridge {
              * route restarts within a session; full session shutdown
              * actually closes it. */
             if (rendererClient != null) {
+                rendererClient.setStateListener(null);
                 rendererClient.dispose();
                 rendererClient = null;
             }
+            rendererPrimed = false;
             /* REPLACE: keep the native RG gate SHUT for the whole connected session.
              * onShutdown fires when CarPlay navigation ENDS (not on disconnect), so without
              * this guard the gate would reopen mid-session and stock nav RG could reappear on
              * the cluster.  disengageTakeover() (on real disconnect) is the only reopen. */
-            if (gatedService != null && !takeoverEngaged) gatedService.setTakeover(false);
+            if (!takeoverEngaged)
+                com.luka.carplay.core.AltScreenNavStatusGate.setRouteGuidanceBlocked(false);
 
             /*
              * Tear down our cluster RG-state override CONDITIONALLY.
@@ -786,11 +793,11 @@ public class BAPBridge {
      * Update
      * ============================================================ */
 
-    public void update(RouteGuidance.State s) {
-        if (!initialized || s == null) return;
+    public boolean update(RouteGuidance.State s) {
+        if (!initialized || s == null) return false;
 
         int dirty = s.dirtyMask;
-        if (dirty == 0) return;
+        if (dirty == 0) return false;
         Log.d(TAG, "Update delta mask=0x" + Integer.toHexString(dirty));
 
         try {
@@ -875,7 +882,6 @@ public class BAPBridge {
                        | RouteGuidance.State.DIRTY_MANEUVER_TEXT
                        | RouteGuidance.State.DIRTY_MANEUVER_ICON;  /* BAP needs icon refresh for approach/follow */
                 inApproachZone = nowApproach;
-                latchedTurnToText = "";
                 Log.i(TAG, "Approach zone " + (nowApproach ? "ENTER" : "EXIT")
                     + " (dist=" + distM + "m, highway=" + isHighway
                     + ", prepThr=" + prepareThreshold + ", barDen=" + bargraphDenominatorM + ")");
@@ -890,10 +896,6 @@ public class BAPBridge {
                 } else {
                     stopActionBlinkThread();
                 }
-            }
-
-            if (explicitClear || shouldClearManeuver) {
-                latchedTurnToText = "";
             }
 
             /*
@@ -1000,44 +1002,8 @@ public class BAPBridge {
                 }
             }
 
-            /* 4. Street text (FctID 19 - CurrentPositionInfo) */
-            if ((dirty & (RouteGuidance.State.DIRTY_CURRENT_ROAD |
-                          RouteGuidance.State.DIRTY_MANEUVER_TEXT |
-                          RouteGuidance.State.DIRTY_MANEUVER_LIST |
-                          RouteGuidance.State.DIRTY_MANEUVER_ICON)) != 0) {
-                String road;
-                boolean turnTextMode = inApproachZone && !explicitClear && !shouldClearManeuver;
-                if (turnTextMode) {
-                    int idx = getFirstManeuverIndex(s);
-                    String candidate = "";
-                    if (idx >= 0) {
-                        if (s.mExitInfo != null && idx < s.mExitInfo.length
-                                && s.mExitInfo[idx] != null && s.mExitInfo[idx].length() > 0) {
-                            candidate = keepLastColonPart(s.mExitInfo[idx]);
-                        } else if (s.mAfterRoad != null && idx < s.mAfterRoad.length
-                                && s.mAfterRoad[idx] != null && s.mAfterRoad[idx].length() > 0) {
-                            candidate = keepLastColonPart(s.mAfterRoad[idx]);
-                        } else if (s.mName != null && idx < s.mName.length
-                                && s.mName[idx] != null && s.mName[idx].length() > 0) {
-                            candidate = s.mName[idx];
-                        }
-                    }
-                    if (candidate.length() > 0) {
-                        String arrow = directionArrow(s, idx);
-                        latchedTurnToText = arrow + " " + candidate;
-                    }
-                    road = latchedTurnToText;
-                } else {
-                    latchedTurnToText = "";
-                    road = (s.currentRoad != null) ? s.currentRoad : "";
-                }
-                road = limitUtf8(road, 96);
-                traceBap("updateCurrentPositionInfo", "\"" + road + "\"");
-                appConnectorNavi.updateCurrentPositionInfo(road);
-            }
-
             /*
-             * 5. Maneuver state (FctID 24) - for HUD
+             * 4. Maneuver state (FctID 24) - for HUD
              */
             if ((dirty & (RouteGuidance.State.DIRTY_MANEUVER_STATE |
                           RouteGuidance.State.DIRTY_MANEUVER_ICON |
@@ -1147,16 +1113,9 @@ public class BAPBridge {
 
             /* 10. maneuver_render: CMD_MANEUVER only when icon actually changes,
              * CMD_BARGRAPH for distance updates, CMD_PERSPECTIVE for approach zone */
-            /* Renderer is an always-on framework service; if the pipeline isn't up yet (renderer
-             * wasn't connected at onStart, or the link dropped), retry connect+activate here —
-             * throttled so we don't block the update thread every frame.  No spawn, no respawn. */
-            if (rendererClient != null && !customRendererStarted && csRef != null) {
-                long now = System.currentTimeMillis();
-                if (now - crLastStartAttemptMs >= CR_RETRY_INTERVAL_MS) {
-                    crLastStartAttemptMs = now;
-                    startCustomRenderer();
-                }
-            }
+            /* Non-blocking state advance.  READY/FRAME_READY also wakes RouteGuidance when no
+             * further iOS RGI delta arrives (the cold-boot case). */
+            if (!customRendererStarted && csRef != null) startCustomRenderer();
 
             if (rendererClient != null && customRendererStarted) {
                 /* Link-loss → noteRendererSendResult drops the view; the retry above reconnects. */
@@ -1194,10 +1153,29 @@ public class BAPBridge {
             }
 
             Log.d(TAG, "Update: dist=" + distM + "m maneuvers=" + Math.min(s.maneuverCount, MAX_BAP_MANEUVERS));
+            return true;
 
         } catch (Exception e) {
             Log.e(TAG, "update error", e);
+            return false;
         }
+    }
+
+    /**
+     * Authoritative permission for RouteGuidance to expose context 80:
+     *  - the BAP startup transaction completed without throwing;
+     *  - maneuver_render is the active custom renderer pipeline;
+     *  - the current TCP peer acknowledged at least one eglSwapBuffers frame.
+     */
+    public boolean isPresentationReady() {
+        RendererServer r = rendererClient;
+        return bapSessionStarted && customRendererStarted && r != null && r.isFrameReady();
+    }
+
+    /** Advance the renderer handshake without waiting. Called by the presentation worker. */
+    public boolean preparePresentation() {
+        startCustomRenderer();
+        return isPresentationReady();
     }
 
     /* ============================================================
@@ -1724,7 +1702,8 @@ public class BAPBridge {
      * CMD_MANEUVER packets.  See deploy/RENDERERS_AS_SERVICES.md.
      * ============================================================== */
 
-    private boolean customRendererStarted = false;
+    private volatile boolean customRendererStarted = false;
+    private boolean rendererPrimed = false;
 
     /* Last maneuver state sent to renderer — only send CMD_MANEUVER when these change.
      * lastCrVer tracks the slot version so a new maneuver with identical type/angle
@@ -1739,20 +1718,12 @@ public class BAPBridge {
      * always-on renderer drops (it was re-exec'd by the framework, or lsd's link reset), drop
      * our view + re-activate on the next update.  We do NOT kill or spawn the process. */
     private int crConsecutiveSendFailures = 0;
-    private long crLastStartAttemptMs = 0;
     private static final int CR_SEND_FAIL_THRESHOLD = 3;
-    private static final long CR_RETRY_INTERVAL_MS = 5000;
-    private static final long CR_READY_TIMEOUT_MS = 2500;
-    private static final long CR_FRAME_READY_TIMEOUT_MS = 1200;
 
-    private synchronized void startCustomRenderer() {
-        if (customRendererStarted) {
-            Log.d(TAG, "CR: already started, skipping");
-            return;
-        }
+    private synchronized boolean startCustomRenderer() {
         if (csRef == null) {
-            Log.w(TAG, "CR: cannot start (csRef null)");
-            return;
+            Log.d(TAG, "CR: cannot start (csRef null)");
+            return false;
         }
         try {
             /* Bind our TCP server (idempotent; listen socket persists across route stop/start
@@ -1760,35 +1731,44 @@ public class BAPBridge {
              * own reconnect loop — we never launch or kill the process. */
             if (rendererClient == null) {
                 rendererClient = new RendererServer();
+                rendererClient.setStateListener(new RendererServer.StateListener() {
+                    public void onRendererStateChanged(String reason) {
+                        notifyPresentationStateChanged("renderer-" + reason);
+                    }
+                });
             }
             if (!rendererClient.connect()) {
                 Log.w(TAG, "CR: bind failed; renderer pipeline disabled");
-                return;
+                return false;
             }
 
-            /* Wait for the always-on renderer to connect.  On timeout do NOT kill/respawn — it
-             * may still be reconnecting; the update-path retry re-attempts. */
-            if (!rendererClient.waitForReady(CR_READY_TIMEOUT_MS)) {
-                Log.w(TAG, "CR: renderer not connected yet; retry on next update");
-                return;
-            }
-
-            customRendererStarted = true;
-            lastCrIcon = -1;
-            lastCrDirection = -99;
-            lastCrExitAngle = -9999;
-            lastCrDrivingSide = -1;
-            lastCrVer = -1;
-
-            /* Paint a deterministic first frame before exposing the LVDS
-             * displayable to KOMO.  Without this, the cluster can briefly
-             * encode the renderer window while it is still blank/black. */
-            sendRendererFollowStreet();
-            if (!rendererClient.waitForFrameReady(CR_FRAME_READY_TIMEOUT_MS)) {
-                Log.w(TAG, "CR: no first frame yet; keeping gfx disabled (retry on next update)");
+            /* If the current peer vanished/reconnected, withdraw the old presentation before
+             * priming the replacement. All calls remain on RouteGuidance's worker/update path. */
+            if (customRendererStarted && !rendererClient.isFrameReady()) {
+                try { csRef.deactivateCustomRendererPipeline(); } catch (Throwable t) { }
+                forceGfxAvailable(false);
                 customRendererStarted = false;
-                return;
+                rendererPrimed = false;
+                notifyPresentationStateChanged("renderer-presentation-lost");
             }
+            if (customRendererStarted) return true;
+            if (!rendererClient.isReady()) return false;
+
+            /* Paint a deterministic frame, but do not expose displayable 98 until the peer
+             * acknowledges eglSwapBuffers with FRAME_READY. */
+            if (!rendererPrimed) {
+                lastCrIcon = -1;
+                lastCrDirection = -99;
+                lastCrExitAngle = -9999;
+                lastCrDrivingSide = -1;
+                lastCrVer = -1;
+                boolean sent = rendererClient.sendManeuver(
+                    RendererMapper.ICON_APPROACH, 0, 0, 0, null, 0, 0, 1);
+                noteRendererSendResult(sent);
+                rendererPrimed = sent;
+                if (!sent) return false;
+            }
+            if (!rendererClient.isFrameReady()) return false;
 
             /* Switch cluster display to renderer's context only after the
              * renderer is connected, initialized, and has swapped a frame. */
@@ -1797,7 +1777,7 @@ public class BAPBridge {
             if (result == null || result.startsWith("FAILED")) {
                 Log.w(TAG, "CR: pipeline activation failed; keeping gfx disabled");
                 customRendererStarted = false;
-                return;
+                return false;
             }
 
             /* BAP route info state for HUD icons.  onStart() also forces this,
@@ -1810,9 +1790,13 @@ public class BAPBridge {
              * on the cluster before). */
             forceGfxAvailable(true);
 
+            customRendererStarted = true;
             Log.i(TAG, "CR: started");
+            notifyPresentationStateChanged("renderer-presentation-ready");
+            return true;
         } catch (Throwable t) {
             Log.w(TAG, "CR start failed: " + t.getClass().getName() + ": " + t.getMessage());
+            return false;
         }
     }
 
@@ -1836,11 +1820,12 @@ public class BAPBridge {
                 + " send fails) — dropping view, will reconnect on next update");
         try { if (rendererClient != null) rendererClient.disconnectClient(); } catch (Throwable t) { /* ignore */ }
         customRendererStarted = false;
+        rendererPrimed = false;
         crConsecutiveSendFailures = 0;
+        notifyPresentationStateChanged("renderer-send-failures");
     }
 
     private synchronized void stopCustomRenderer() {
-        if (!customRendererStarted) return;
         try {
             /* Blank the popup (CMD_CLEAR) so no stale maneuver frame lingers, then deactivate the
              * cluster context + stop feeding.  Do NOT kill the renderer (always-on framework
@@ -1852,6 +1837,7 @@ public class BAPBridge {
             forceGfxAvailable(false);
             forceClusterRouteInfoState(false);
             customRendererStarted = false;
+            rendererPrimed = false;
             Log.i(TAG, "CR: stopped (renderer blanked; stays up; server socket persists)");
         } catch (Throwable t) {
             Log.w(TAG, "CR stop failed: " + t.getClass().getName() + ": " + t.getMessage());
@@ -2210,38 +2196,6 @@ public class BAPBridge {
             if (s.length() <= maxBytes) return s;
             return s.substring(0, maxBytes);
         }
-    }
-
-    /**
-     * Pick a directional Unicode arrow matching the maneuver's BAP direction.
-     * Uses the same ManeuverMapper output that drives FctID 23 icons.
-     */
-    private static String directionArrow(RouteGuidance.State s, int idx) {
-        if (idx < 0 || s.mType == null || idx >= s.mType.length) {
-            return "\u2191"; /* up arrow fallback */
-        }
-        int[] mapped = ManeuverMapper.map(
-            s.mType[idx], s.mTurnAngle[idx],
-            s.mJunctionType[idx], s.mDrivingSide[idx]);
-        int dir = mapped[1];
-        if (dir == ManeuverMapper.DIR_LEFT)         return "\u2190"; /* left */
-        if (dir == ManeuverMapper.DIR_SLIGHT_LEFT)  return "\u2196"; /* upper-left */
-        if (dir == ManeuverMapper.DIR_SHARP_LEFT)   return "\u2199"; /* lower-left */
-        if (dir == ManeuverMapper.DIR_RIGHT)        return "\u2192"; /* right */
-        if (dir == ManeuverMapper.DIR_SLIGHT_RIGHT) return "\u2197"; /* upper-right */
-        if (dir == ManeuverMapper.DIR_SHARP_RIGHT)  return "\u2198"; /* lower-right */
-        if (dir == ManeuverMapper.DIR_UTURN)        return "\u21B6"; /* uturn */
-        return "\u2191"; /* straight / up */
-    }
-
-    private static String keepLastColonPart(String v) {
-        if (v == null) return "";
-        int pos = v.lastIndexOf(':');
-        if (pos >= 0 && pos + 1 < v.length()) {
-            String tail = v.substring(pos + 1).trim();
-            if (tail.length() > 0) return tail;
-        }
-        return v;
     }
 
     private static int getFirstManeuverIndex(RouteGuidance.State s) {

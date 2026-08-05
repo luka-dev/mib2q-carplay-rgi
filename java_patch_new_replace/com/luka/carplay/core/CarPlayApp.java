@@ -29,10 +29,12 @@ public final class CarPlayApp {
     private static final Module[] MODULES = new Module[] { new AltScreenModule(), new RgdModule() };
 
     private static final Object lock = new Object();
+    private static final Object lifecycleLock = new Object();
     private static final boolean[] started = new boolean[MODULES.length];
     private static volatile boolean active = false;
     private static volatile FrameworkRef fwRef;
     private static Thread retryThread;
+    private static int retryGeneration;
 
     private CarPlayApp() {}
 
@@ -72,29 +74,33 @@ public final class CarPlayApp {
             Log.e(TAG, "context is not IContext: " + context);
             return;
         }
-        synchronized (lock) {
-            /* Re-activate safety: stop any modules still running from a prior activate
-             * before re-init, so a second ACTIVATING doesn't orphan the live BAP bridge. */
-            for (int i = 0; i < MODULES.length; i++) {
-                if (started[i]) {
-                    try { MODULES[i].stop(); } catch (Throwable t) { Log.w(TAG, MODULES[i].name() + " stop: " + t); }
-                }
-                started[i] = false;
+        synchronized (lifecycleLock) {
+            stopRetry();
+            synchronized (lock) { active = false; }
+            /* Stop every module, including one whose previous start returned false after partial
+             * setup. Never call external module teardown while holding the shared state lock. */
+            for (int i = MODULES.length - 1; i >= 0; i--) {
+                try { MODULES[i].stop(); } catch (Throwable t) { Log.w(TAG, MODULES[i].name() + " stop: " + t); }
             }
-            active = true;
-            fwRef = new FrameworkRef((IContext) context);
+            synchronized (lock) {
+                for (int i = 0; i < MODULES.length; i++) started[i] = false;
+                active = true;
+                fwRef = new FrameworkRef((IContext) context);
+            }
+            if (!startPass()) startRetry();
         }
-        if (!startPass()) startRetry();
     }
 
     public static void onDeactivate() {
         Log.i(TAG, "onDeactivate");
-        synchronized (lock) { active = false; }
-        stopRetry();
-        synchronized (lock) {
-            for (int i = 0; i < MODULES.length; i++) {
+        synchronized (lifecycleLock) {
+            synchronized (lock) { active = false; }
+            stopRetry();
+            for (int i = MODULES.length - 1; i >= 0; i--) {
                 try { MODULES[i].stop(); } catch (Throwable t) { Log.w(TAG, MODULES[i].name() + " stop: " + t); }
-                started[i] = false;
+            }
+            synchronized (lock) {
+                for (int i = 0; i < MODULES.length; i++) started[i] = false;
             }
         }
     }
@@ -115,8 +121,14 @@ public final class CarPlayApp {
                 try { ok = MODULES[i].start(fwRef); }
                 catch (Throwable t) { Log.w(TAG, MODULES[i].name() + " start threw: " + t); ok = false; }
                 started[i] = ok;
-                if (ok) Log.i(TAG, "started " + MODULES[i].name());
-                else    allUp = false;
+                if (ok) {
+                    Log.i(TAG, "started " + MODULES[i].name());
+                } else {
+                    /* MODULES is an ordered dependency chain: RGI must not consume/replay a
+                     * snapshot before altScreen has reset navActive and physically owns ctx 81. */
+                    allUp = false;
+                    break;
+                }
             }
             if (allUp) Log.i(TAG, "all modules started (" + MODULES.length + ")");
             return allUp;
@@ -125,13 +137,22 @@ public final class CarPlayApp {
 
     private static void startRetry() {
         stopRetry();
+        final int generation;
+        synchronized (lock) { generation = ++retryGeneration; }
         Thread t = new Thread(new Runnable() {
             public void run() {
-                for (int n = 0; active && n < 50; n++) {       /* ~10 s @ 200 ms */
-                    sleep(200);
+                for (int n = 0; n < 50; n++) {                 /* ~10 s @ 200 ms */
+                    if (!sleepInterruptibly(200)) return;
+                    synchronized (lock) {
+                        if (!active || generation != retryGeneration
+                                || retryThread != Thread.currentThread()) return;
+                    }
                     if (startPass()) return;
                 }
-                if (active) Log.w(TAG, "some modules never came up (services missing)");
+                synchronized (lock) {
+                    if (active && generation == retryGeneration)
+                        Log.w(TAG, "some modules never came up (services missing)");
+                }
             }
         }, "carplay-retry");
         t.setDaemon(true);
@@ -141,9 +162,12 @@ public final class CarPlayApp {
 
     private static void stopRetry() {
         Thread t;
-        synchronized (lock) { t = retryThread; retryThread = null; }
+        synchronized (lock) { retryGeneration++; t = retryThread; retryThread = null; }
         if (t != null) t.interrupt();
     }
 
-    private static void sleep(long ms) { try { Thread.sleep(ms); } catch (InterruptedException e) {} }
+    private static boolean sleepInterruptibly(long ms) {
+        try { Thread.sleep(ms); return true; }
+        catch (InterruptedException e) { Thread.currentThread().interrupt(); return false; }
+    }
 }

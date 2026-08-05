@@ -100,6 +100,9 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
         this.startDSI();
         this.dsiCarPlayListener.init();
         this.carPlayDsiController.init();
+        /* The same component object can be deinit/init'd; deinit clears the singleton sink. */
+        ((CarplayDSILifecycleController.TerminalModeDSIKeyEventsController)this.keyEventController)
+            .installCursorTouchSink();
     }
 
     public void deinit() {
@@ -479,6 +482,13 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
             boolean flag = false;
 
             for (int i = 0; i < aappstate.length; i++) {
+                /* Narrow navignore seam: suppress only incoming CarPlay NAVI ownership (ID 2).
+                 * Keep AppState itself stock so PHONE/SPEECH and outgoing DSI serialization retain
+                 * their original semantics. TMState ignores appStateId 0. */
+                if (aappstate[i] != null && aappstate[i].getAppStateID() == 2) {
+                    aiappstate[i] = new CarPlayAppState(0, 0, 0);
+                    continue;
+                }
                 if (aappstate[i].getAppStateID() == 1 && aappstate[i].getOwner() == 2) {
                     flag = true;
                 }
@@ -958,20 +968,26 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
         }
 
         public void updateTouchEvents(de.audi.app.terminalmode.keyevents.TouchEvent[] atouchevent) {
-            /* CarPlay input override: real touchscreen events (rare on this HU) pass
-             * through to the stock postTouchEvent path; MMI touchpad single-finger
+            /* CarPlay input override: real touchscreen events follow the stock conversion/sort
+             * path byte-for-byte; MMI touchpad single-finger
              * events route through CursorController as DPAD ticks (see its docstring).
              * Active-finger count uses getTouchState()!=1 (1 = RELEASED). */
             if (atouchevent != null && atouchevent.length > 0 && atouchevent[0].isTouchScreen()) {
-                int n = 0;
-                TouchEvent[] out = new TouchEvent[atouchevent.length];
+                int active = 0;
+                ArrayList out = new ArrayList(atouchevent.length);
                 for (int i = 0; i < atouchevent.length; i++) {
-                    out[i] = new TouchEvent(
-                        atouchevent[i].getCurrentX() - this.this$0.configuration.getScreenOffsetX(),
-                        atouchevent[i].getCurrentY() - this.this$0.configuration.getScreenOffsetY());
-                    if (atouchevent[i].getTouchState() != 1) n++;
+                    if (atouchevent[i].isTouchScreen()) {
+                        out.add(new TouchEvent(
+                            atouchevent[i].getCurrentX() - this.this$0.configuration.getScreenOffsetX(),
+                            atouchevent[i].getCurrentY() - this.this$0.configuration.getScreenOffsetY()));
+                    } else {
+                        out.add(new TouchEvent(atouchevent[i].getCurrentX(), atouchevent[i].getCurrentY()));
+                    }
+                    if (atouchevent[i].getTouchState() != 1) active++;
                 }
-                this.this$0.dsiCarplaySafe.postTouchEvent(1, n, out);
+                Collections.sort(out, new TouchXComparator());
+                this.this$0.dsiCarplaySafe.postTouchEvent(
+                    1, active, (TouchEvent[])out.toArray(new TouchEvent[out.size()]));
                 return;
             }
 
@@ -985,6 +1001,13 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
                 c.onOneFinger(atouchevent[a0].getCurrentX(), atouchevent[a0].getCurrentY());
             } else {
                 c.onTouchEnd();
+            }
+        }
+
+        /** Stock updateTouchEvents orders fingers left-to-right before DSI serialization. */
+        private final class TouchXComparator implements Comparator {
+            public int compare(Object a, Object b) {
+                return ((TouchEvent)a).getX() - ((TouchEvent)b).getX();
             }
         }
 

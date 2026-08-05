@@ -17,13 +17,19 @@ final class RgdModule implements Module {
 
     private static final String TAG = "RgdModule";
     private RouteGuidance rg;
+    private FrameworkRef.ServiceHandle naviHandle;
 
     public String name() { return "rgd"; }
 
     public boolean start(FrameworkRef fw) {
         if (fw == null || !fw.isReady()) return false;             /* framework not up → retry */
+        if (!AltScreenModule.isPlatformSupported(fw)) {
+            Log.w(TAG, "disabled with altScreen on unsupported G24 cluster");
+            return true;
+        }
 
-        Object navi = fw.getService(CombiBAPServiceNavi.class);    /* appears ~a beat after activate */
+        if (naviHandle == null) naviHandle = fw.getServiceHandle(CombiBAPServiceNavi.class);
+        Object navi = naviHandle != null ? naviHandle.service() : null;
         if (navi == null) {
             Log.d(TAG, "CombiBAPServiceNavi not up yet — retry");
             return false;
@@ -38,7 +44,6 @@ final class RgdModule implements Module {
                 Log.d(TAG, "RouteGuidance.init not ready — retry");
                 return false;
             }
-            r.start();                                            /* subscribe to EVT_RGD_UPDATE */
             rg = r;
         }
         /* REPLACE: don't report started until the RG gate is actually shut.  engageTakeover
@@ -48,10 +53,12 @@ final class RgdModule implements Module {
             Log.d(TAG, "takeover gate pending (ClusterService not up) — retry");
             return false;
         }
+        if (!rg.isRunning()) rg.start();                           /* subscribe only after gate is shut */
         return true;
     }
 
     public void stop() {
-        if (rg != null) { rg.disengageTakeover(); rg.stop(); rg = null; }
+        if (rg != null) { rg.stop(); rg.disengageTakeover(); rg = null; }
+        if (naviHandle != null) { naviHandle.release(); naviHandle = null; }
     }
 }

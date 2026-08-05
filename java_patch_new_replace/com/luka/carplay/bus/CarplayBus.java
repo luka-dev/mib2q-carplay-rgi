@@ -46,14 +46,12 @@ public final class CarplayBus {
     public static final int EVT_SYNC_END    = 0x0003;
     public static final int EVT_COVERART    = 0x0010;
     public static final int EVT_RGD_UPDATE  = 0x0020;
-    public static final int EVT_DEVICE_STATE= 0x0030;
 
-    /* commands Java -> hook (altScreen block, mirror bus_protocol.h) */
+    /* commands Java -> hook (mirror bus_protocol.h) */
+    public static final int CMD_SYNC_REQ       = 0x0100;   /* replay all sticky state       */
     public static final int CMD_ALT_ZOOM       = 0x0110;   /* [i8 signed MapScale step]     */
     public static final int CMD_ALT_ZONE       = 0x0111;   /* [u8 mode 0=full/1=duo][u16 LE durationMs] */
     public static final int CMD_ALT_ZONE_ACK   = 0x0112;   /* hook->Java [u8 mode][i32 LE status]       */
-    public static final int CMD_ALT_APPEARANCE = 0x0114;   /* [u8 target][u8 mode][u8 set]  */
-    public static final int CMD_ALT_UICTX      = 0x0115;   /* utf-8 url                     */
 
     public interface Listener {
         void onFrame(int type, int flags, byte[] payload, int len);
@@ -161,13 +159,15 @@ public final class CarplayBus {
 
     /* ---- text payload parser (hook -> Java "key:type:val\n" frames) ---- */
     public static class Data {
-        private static final int MAX = 512;
+        private static final int MAX = 1024;
         private String[] keys = new String[MAX];
         private String[] vals = new String[MAX];
         private int count = 0;
+        private boolean overflow;
 
         void put(String key, String value) {
             if (count < MAX) { keys[count] = key; vals[count] = value; count++; }
+            else overflow = true;
         }
 
         public String str(String key, String def) {
@@ -230,6 +230,7 @@ public final class CarplayBus {
             return false;
         }
         public int size() { return count; }
+        public boolean overflowed() { return overflow; }
     }
 
     public static Data parseText(byte[] buf, int len) {
@@ -252,6 +253,7 @@ public final class CarplayBus {
             String val = (c2 >= 0 && c2 + 1 <= line.length()) ? line.substring(c2 + 1) : "";
             d.put(key, val);
         }
+        if (d.overflowed()) Log.w(TAG, "text frame truncated at " + Data.MAX + " keys");
         return d;
     }
 

@@ -544,6 +544,18 @@ static int read_frame(int fd) {
         if (read_all(fd, payload, len) != 0) { free(payload); return -1; }
     }
 
+    /* Listener catch-up.  Java starts before dio_manager, but on a connected-
+     * phone cold boot the hook can finish its automatic sticky replay before
+     * RouteGuidance has registered EVT_RGD_UPDATE.  Java then sends this after
+     * listener registration.  Replay directly on the current socket; the
+     * socket-write lock keeps it frame-atomic with the async writer. */
+    if (type == CMD_SYNC_REQ) {
+        LOG_INFO(LOG_MODULE, "sync snapshot requested fd=%d", fd);
+        if (payload) free(payload);
+        send_sync_snapshot(fd);
+        return 0;
+    }
+
     /* Dispatch with the handler rwlock held ACROSS the callback so bus_off()
      * can guarantee no in-flight dispatch (bus.h contract).  Handlers must be
      * quick or hand off to another thread. */

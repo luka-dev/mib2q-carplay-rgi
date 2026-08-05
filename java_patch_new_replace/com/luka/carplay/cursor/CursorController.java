@@ -84,9 +84,6 @@ public class CursorController {
         void postDpad(int keyCode);
     }
 
-    /* Legacy accessor kept for any stale call sites; always on. */
-    public static boolean isFeatureEnabled() { return true; }
-
     /* ============================================================
      * Singleton
      * ============================================================ */
@@ -115,6 +112,7 @@ public class CursorController {
      * Wiring
      * ============================================================ */
     public synchronized void setTouchSink(TouchSink s) {
+        resetTouchState();
         this.sink = s;
         if (s != null) warnedDpad = false;
     }
@@ -213,28 +211,8 @@ public class CursorController {
         }
     }
 
-    /** Multi-finger is ignored — the MMI touchpad on this unit never
-     *  reports it (all live events have active-count == 1).  Kept as
-     *  a callable so the DSI patch's dispatch doesn't need a separate
-     *  branch; treats multi-finger arrival as a defensive "touch end"
-     *  to prevent a stray two-finger sample from arming a dpad emit. */
-    public synchronized void onTwoFingers(int x1, int y1, int x2, int y2) {
-        resetTouchState();
-    }
-
     public synchronized void onTouchEnd() {
         resetTouchState();
-    }
-
-    /**
-     * Called from CarPlayHook.onDeactivate BEFORE CarplayBus.stop().
-     * No bus traffic — just clears soft state and drops the sink.
-     */
-    public synchronized void shutdown() {
-        resetTouchState();
-        /* Drop sink — next session's DSI patch constructor installs
-         * a fresh one pointing at the new outer-class instance. */
-        sink = null;
     }
 
     /* ============================================================

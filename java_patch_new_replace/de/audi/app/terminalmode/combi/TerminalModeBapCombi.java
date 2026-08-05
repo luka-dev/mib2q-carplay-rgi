@@ -28,7 +28,7 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
     private final LogChannel lc;
     private final IServiceTracker serviceTracker;
     private final IServiceManager serviceManager;
-    private final IEventListener eventListener;
+    private final TerminalModeBapCombi.EventListener eventListener;
     private final TerminalModeBapCombi.CachingEventListener cachingEventListener;
     private volatile CombiBAPServiceTerminalMode bapService;
     private TerminalModeBapCombi.ActiveDeviceStateListener activeDeviceListener;
@@ -63,9 +63,15 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
         try {
             com.luka.carplay.core.CarPlayApp.startTransport(this.context);
         } catch (Throwable t) { /* never crash the stock component init */ }
+        try { com.luka.carplay.coverart.CoverArt.getInstance().start(this.eventListener); }
+        catch (Throwable t) { /* optional */ }
     }
 
     public void deinit() {
+        try { com.luka.carplay.core.CarPlayApp.onDeactivate(); }
+        catch (Throwable t) { /* optional lifecycle cleanup */ }
+        try { com.luka.carplay.coverart.CoverArt.getInstance().stop(this.eventListener); }
+        catch (Throwable t) { /* optional */ }
         this.serviceTracker.close();
         this.context.getEventBus().unregisterListener(this.eventListener);
         this.context.getEventBus().unregisterListener(this.cachingEventListener);
@@ -99,6 +105,8 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
                 /* ===== CarPlay hook: device activating ===== */
                 if (tmdevice.isCarplayDevice()) {
                     try {
+                        com.luka.carplay.coverart.CoverArt.getInstance().resetSession();
+                        this.this$0.eventListener.resetCoverMerge();
                         com.luka.carplay.core.CarPlayApp.onActivate(this.this$0.context);
                     } catch (Throwable t) { /* never crash the stock flow */ }
                 }
@@ -113,6 +121,8 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
                 try {
                     com.luka.carplay.framework.Log.i("TMDev",
                         "ACTIVE after lifecycle bounce: reactivating CarPlay modules");
+                    com.luka.carplay.coverart.CoverArt.getInstance().resetSession();
+                    this.this$0.eventListener.resetCoverMerge();
                     com.luka.carplay.core.CarPlayApp.onActivate(this.this$0.context);
                 } catch (Throwable t) { /* never crash the stock flow */ }
             }
@@ -129,6 +139,8 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
             if (!tmdevice.isCarplayDevice() && com.luka.carplay.core.CarPlayApp.isActive()) {
                 try {
                     com.luka.carplay.core.CarPlayApp.onDeactivate();
+                    com.luka.carplay.coverart.CoverArt.getInstance().resetSession();
+                    this.this$0.eventListener.resetCoverMerge();
                 } catch (Throwable t) { /* never crash the stock flow */ }
             }
         }
@@ -237,16 +249,24 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
         private String currentArtist = "";
         private String currentAlbum = "";
         private boolean sentWithoutCover = false;
+        private boolean metadataFromCarPlay = false;
 
         private EventListener(TerminalModeBapCombi terminalmodebapcombi) {
             this.this$0 = terminalmodebapcombi;
-            /* Subscribe to the cover-art bus (always-on since init) — merges the CarPlay
-             * artwork path into the stock now-playing BAP update. */
-            try { com.luka.carplay.coverart.CoverArt.getInstance().start(this); } catch (Throwable t) { /* ignore */ }
         }
 
-        /* CarPlay cover-art callback: artwork arrived (possibly after the track) → refresh. */
-        public void onNewCoverArt(String path, int artId) {
+        /* Bus callbacks run on CarplayBus's reader. Marshal the BAP mutation to TerminalMode's
+         * stock dispatcher and re-check the source after the handoff. */
+        public void onNewCoverArt(final String path, final int artId) {
+            try {
+                this.this$0.context.getDispatcher().execute(new Runnable() {
+                    public void run() { applyCoverArt(path, artId); }
+                });
+            } catch (Throwable t) { /* component is shutting down */ }
+        }
+
+        private synchronized void applyCoverArt(String path, int artId) {
+            if (!com.luka.carplay.core.CarPlayApp.isActive() || !metadataFromCarPlay) return;
             if (currentTitle.length() > 0 || currentArtist.length() > 0 || currentAlbum.length() > 0) {
                 int effId = artId;
                 if (sentWithoutCover) { effId = artId + 1; sentWithoutCover = false; }  /* new id forces VC refresh */
@@ -254,7 +274,7 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
             }
         }
 
-        public void updateNowPlayingData(TrackDataChangedEvent trackdatachangedevent) {
+        public synchronized void updateNowPlayingData(TrackDataChangedEvent trackdatachangedevent) {
             String title = trackdatachangedevent.getTitle();
             String artist = trackdatachangedevent.getArtist();
             String album = trackdatachangedevent.getAlbum();
@@ -262,10 +282,25 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
             if (artist == null) artist = "";
             if (album == null) album = "";
             currentTitle = title; currentArtist = artist; currentAlbum = album;
+            metadataFromCarPlay = com.luka.carplay.core.CarPlayApp.isActive();
 
             com.luka.carplay.coverart.CoverArt ca = com.luka.carplay.coverart.CoverArt.getInstance();
-            if (ca.hasCoverArt()) { sentWithoutCover = false; sendNowPlaying(title, artist, album, ca.getPath(), ca.getArtId()); }
-            else                  { sentWithoutCover = true;  sendNowPlaying(title, artist, album, null, 0); }
+            if (com.luka.carplay.core.CarPlayApp.isActive() && ca.hasCoverArt()) {
+                sentWithoutCover = false;
+                sendNowPlaying(title, artist, album, ca.getPath(), ca.getArtId());
+            } else {
+                sentWithoutCover = com.luka.carplay.core.CarPlayApp.isActive();
+                sendNowPlaying(title, artist, album, null, 0);
+            }
+        }
+
+        /** Never merge a new session's artwork with metadata cached for the previous CP/AA source. */
+        private synchronized void resetCoverMerge() {
+            currentTitle = "";
+            currentArtist = "";
+            currentAlbum = "";
+            sentWithoutCover = false;
+            metadataFromCarPlay = false;
         }
 
         /* Stock now-playing send + optional CarPlay cover-art picture. */

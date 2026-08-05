@@ -35,10 +35,10 @@ public class CoverArt implements CarplayBus.Listener {
 
     private CoverArt() {}
 
-    public void start(Callback cb) {
+    public synchronized void start(Callback cb) {
+        callback = cb;
         if (running) return;
         running = true;
-        callback = cb;
 
         CarplayBus bus = CarplayBus.getInstance();
         bus.on(CarplayBus.EVT_COVERART, this);
@@ -47,14 +47,27 @@ public class CoverArt implements CarplayBus.Listener {
         Log.i(TAG, "Started (subscribed to EVT_COVERART)");
     }
 
-    public void stop() {
+    public synchronized void stop(Callback owner) {
+        if (owner != null && callback != owner) return;
+        callback = null;
         if (!running) return;
         running = false;
         CarplayBus.getInstance().off(CarplayBus.EVT_COVERART);
+        lastCrc = 0;
+        artId = 0;
+        currentPath = COVERART_PATH;
         Log.i(TAG, "Stopped");
     }
 
     public boolean isRunning() { return running; }
+
+    /** Projection-session boundary: do not let an identical CRC or stale path from the previous
+     * phone/source suppress the first artwork event of the new CarPlay session. */
+    public synchronized void resetSession() {
+        lastCrc = 0;
+        artId = 0;
+        currentPath = COVERART_PATH;
+    }
 
     public boolean hasCoverArt() { return lastCrc != 0; }
     public String getPath() { return currentPath; }
@@ -65,19 +78,27 @@ public class CoverArt implements CarplayBus.Listener {
 
         CarplayBus.Data d = CarplayBus.parseText(payload, len);
         long crc = d.num64("crc", 0);
-        if (crc == 0 || crc == lastCrc) return;
-
-        lastCrc = crc;
-        artId = (int) crc;  /* CRC doubles as picture ID (matches reference impl) */
         String path = d.str("path", COVERART_PATH);
-        if (path != null && path.length() > 0) currentPath = path;
+        Callback cb;
+        int newArtId;
+        String newPath;
+        synchronized (this) {
+            if (!running || crc == 0 || crc == lastCrc) return;
+            if (path != null && path.length() > 0) currentPath = path;
+            artId = (int) crc;  /* CRC doubles as picture ID (matches reference impl) */
+            /* Publish last: hasCoverArt() seeing the new volatile CRC also sees matching path/id. */
+            lastCrc = crc;
+            cb = callback;
+            newArtId = artId;
+            newPath = currentPath;
+        }
 
-        Log.i(TAG, "New cover art: crc=" + Long.toHexString(crc) + " artId=" + artId
-                + " path=" + currentPath);
+        Log.i(TAG, "New cover art: crc=" + Long.toHexString(crc) + " artId=" + newArtId
+                + " path=" + newPath);
 
-        if (callback != null) {
+        if (cb != null) {
             try {
-                callback.onNewCoverArt(currentPath, artId);
+                cb.onNewCoverArt(newPath, newArtId);
             } catch (Exception e) {
                 Log.e(TAG, "Callback error", e);
             }

@@ -35,16 +35,33 @@ CLASSPATH="$STOCK_JAR:$OSGI_CP"
 rm -rf "$OUTPUT_DIR"; mkdir -p "$OUTPUT_DIR" "$BUILD_DIR"
 
 SOURCES_LIST=$(mktemp)
+GEN_SRC_DIR=""
+cleanup() {
+    rm -f "$SOURCES_LIST" "$SOURCES_LIST.tmp"
+    [ -z "$GEN_SRC_DIR" ] || rm -rf "$GEN_SRC_DIR"
+}
+trap cleanup EXIT HUP INT TERM
 find "$SRC_DIR" -name '*.java' -type f > "$SOURCES_LIST"
 echo "Compiling $(wc -l < "$SOURCES_LIST" | tr -d ' ') files (target 1.4)..."
 
+# Compile a generated CarPlayApp copy with a real, reproducible build identity. Never edit the
+# source tree: replace only the explicit source-list entry for this build.
+BUILD_ID_RAW=${CARPLAY_BUILD_ID:-$(git -C "$SCRIPT_DIR" describe --always --dirty 2>/dev/null || echo unknown)}
+BUILD_ID=$(printf '%s' "$BUILD_ID_RAW" | tr -cd 'A-Za-z0-9._-')
+GEN_SRC_DIR=$(mktemp -d)
+GEN_APP="$GEN_SRC_DIR/com/luka/carplay/core/CarPlayApp.java"
+mkdir -p "$(dirname "$GEN_APP")"
+sed "s/@BUILD_ID@/$BUILD_ID/g" "$SRC_DIR/com/luka/carplay/core/CarPlayApp.java" > "$GEN_APP"
+grep -v '/com/luka/carplay/core/CarPlayApp.java$' "$SOURCES_LIST" > "$SOURCES_LIST.tmp"
+mv "$SOURCES_LIST.tmp" "$SOURCES_LIST"
+printf '%s\n' "$GEN_APP" >> "$SOURCES_LIST"
+
 "$JAVAC" -source 1.4 -target 1.4 \
     -cp "$CLASSPATH" \
-    -sourcepath "$SRC_DIR" \
+    -sourcepath "$GEN_SRC_DIR:$SRC_DIR" \
     -d "$OUTPUT_DIR" \
     -Xlint:-options \
     @"$SOURCES_LIST"
-rm -f "$SOURCES_LIST"
-
 cd "$OUTPUT_DIR"; "$JAR" cf "$OUTPUT_JAR" .; cd "$SCRIPT_DIR"
 echo "Output: $OUTPUT_JAR"
+echo "Build ID: $BUILD_ID"
