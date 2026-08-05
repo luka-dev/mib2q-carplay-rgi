@@ -618,9 +618,14 @@ public class RouteGuidance implements CarplayBus.Listener {
                  * route guidance updates. For our VC/HUD bridge, treat support==0 as a hard clear
                  * to prevent stale icons/distances from lingering.
                  */
-                if (v == 0 && state.routeState != ROUTE_STATE_NO_ROUTE_SET) {
-                    state.routeState = ROUTE_STATE_NO_ROUTE_SET;
-                    state.markDirty(State.DIRTY_ROUTE_STATE);
+                if (v == 0) {
+                    /* support=0 is the authoritative hard-clear edge even if an earlier transient
+                     * route_state=0 already changed routeState.  Never let that transient suppress
+                     * clearing cached slots/lane data. */
+                    if (state.routeState != ROUTE_STATE_NO_ROUTE_SET) {
+                        state.routeState = ROUTE_STATE_NO_ROUTE_SET;
+                        state.markDirty(State.DIRTY_ROUTE_STATE);
+                    }
                     if (state.maneuverCount != 0) {
                         state.maneuverCount = 0;
                         state.markDirty(State.DIRTY_MANEUVER_COUNT);

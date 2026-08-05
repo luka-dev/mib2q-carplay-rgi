@@ -33,6 +33,10 @@ class AppConnectorTerminalMode$CoverArtProvider implements IPictureProvider {
         this.id2pictureURL.put(new Long(entryID), rl);
     }
 
+    public boolean hasPicture(long entryID) {
+        return this.id2pictureURL.containsKey(new Long(entryID));
+    }
+
     public void clearMapping() {
         this.id2pictureURL.clear();
     }

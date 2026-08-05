@@ -28,14 +28,14 @@ public final class AltScreenNavStatusGate {
 
     private AltScreenNavStatusGate() { }
 
-    /** All reads/writes of CombiBAPListener.combiservice happen on TerminalMode's dispatcher. */
+    /** All reads/writes of CombiBAPListener.combiservice must happen on NavigationJobs. */
     private static void scheduleInstallLocked() {
         if (installScheduled) return;
-        FrameworkRef fw = CarPlayApp.fw();
-        if (fw == null || fw.context() == null || fw.context().getDispatcher() == null) return;
+        Navigation navigation = Navigation.getInstance();
+        if (navigation == null || navigation.getDispatcher() == null) return;
         installScheduled = true;
         try {
-            fw.context().getDispatcher().execute(new Runnable() {
+            navigation.getDispatcher().execute(new Runnable() {
                 public void run() { installNow(); }
             });
         } catch (Throwable t) {
@@ -68,13 +68,60 @@ public final class AltScreenNavStatusGate {
                 Log.i(TAG, "native NavStatus gate installed/reused");
             }
 
+            boolean releasingTakeover = appliedActive && !desiredActive;
             gate.setAltScreenTakeover(desiredActive);
             gate.setRouteGuidanceBlocked(desiredRouteBlocked);
             appliedActive = desiredActive;
             appliedRouteBlocked = desiredRouteBlocked;
+            if (releasingTakeover) {
+                /* Deferred callbacks normally restore the last native request.  Recompute it as
+                 * well: if stock Navigation made no show/hide call during CarPlay, replay alone
+                 * would leave the app-ready=true override behind after disconnect. */
+                try { cs.refreshInitializingScreenAfterCarPlay(); }
+                catch (Throwable t) { Log.d(TAG, "native init-screen refresh failed: " + t); }
+            }
         } catch (Throwable t) {
             Log.d(TAG, "gate not ready: " + t);
         }
+    }
+
+    /** Called synchronously by ClusterService#setCombiBAPService on NavigationJobs, before the
+     * stock CombiBAPListener setter performs updateAll().  Installing here closes the old race in
+     * which updateAll painted native INITIALIZING/status values before the asynchronous wrapper
+     * appeared, and avoids cross-thread writes to CombiBAPListener.combiservice. */
+    public static synchronized CombiBAPServiceNavi prepareCombiBAPService(
+            ClusterService cs, CombiBAPServiceNavi incoming) {
+        if (incoming == null) {
+            if (cs == clusterService && gate != null) {
+                try { gate.setAltScreenTakeover(false); } catch (Throwable t) { }
+                try { gate.setRouteGuidanceBlocked(false); } catch (Throwable t) { }
+                clusterService = null;
+                gate = null;
+                appliedActive = false;
+                appliedRouteBlocked = false;
+            }
+            return null;
+        }
+
+        GatedCombiService next;
+        if (incoming instanceof GatedCombiService) {
+            next = (GatedCombiService) incoming;
+        } else {
+            next = new GatedCombiService(incoming);
+        }
+        if (gate != null && gate != next) {
+            try { gate.setAltScreenTakeover(false); } catch (Throwable t) { }
+            try { gate.setRouteGuidanceBlocked(false); } catch (Throwable t) { }
+        }
+        clusterService = cs;
+        gate = next;
+        gate.setAltScreenTakeover(desiredActive);
+        gate.setRouteGuidanceBlocked(desiredRouteBlocked);
+        appliedActive = desiredActive;
+        appliedRouteBlocked = desiredRouteBlocked;
+        installScheduled = false;
+        Log.i(TAG, "native NavStatus gate installed on Navigation service edge");
+        return gate;
     }
 
     /** Called only when connected||videoAvailable changes. */
@@ -94,5 +141,29 @@ public final class AltScreenNavStatusGate {
         desiredRouteBlocked = blocked;
         if (gate == null || changed || appliedRouteBlocked != blocked) scheduleInstallLocked();
         return gate != null && appliedRouteBlocked == blocked && !installScheduled;
+    }
+
+    /** Exact stock-service availability edge, after prepareCombiBAPService + stock updateAll.
+     * Also wakes CarPlayApp so RgdModule releases/reacquires its paired OSGi reference when the
+     * Navigation service is replaced without a phone reconnect. */
+    public static synchronized void onCombiBAPServiceChanged(ClusterService cs) {
+        CombiBAPServiceNavi current = null;
+        try { if (cs != null) current = cs.getCombiBAPListenerCombiService(); }
+        catch (Throwable t) { }
+
+        if (cs != clusterService || current != gate) {
+            appliedActive = false;
+            appliedRouteBlocked = false;
+        }
+        if (current == null) {
+            if (cs == clusterService) {
+                clusterService = null;
+                gate = null;
+            }
+            CarPlayApp.onNavigationServiceChanged();
+            return;
+        }
+        if (desiredActive || desiredRouteBlocked) scheduleInstallLocked();
+        CarPlayApp.onNavigationServiceChanged();
     }
 }

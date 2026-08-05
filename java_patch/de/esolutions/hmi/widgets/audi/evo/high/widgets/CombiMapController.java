@@ -164,9 +164,12 @@ public class CombiMapController extends DisplayControllerEvo implements NaviMoKo
         /* CarPlay overlay: 98 is ours; 101/102 are shared stock KDK backings. The controller
          * caches the stock values, overrides them only while CarPlay owns the cluster, and restores
          * them on release. popup == !inTube. */
-        com.luka.carplay.cluster.ClusterLayerController.apply(
-            dm, this.kombiTerminal, !inTube,
-            this.visibleKdk != NO_KDK, this.kdkOpacity);
+        if (this.kombiTerminal != 0
+                && this.framework.getSysConst(SYSCONST_KOMBI_VARIANT) == KOMBI_KDK_VIA_DISPLAYABLES) {
+            com.luka.carplay.cluster.ClusterLayerController.apply(
+                dm, this.kombiTerminal, !inTube,
+                this.visibleKdk != NO_KDK, this.kdkOpacity);
+        }
     }
 
     /** Latch the KDK visibility from the hints; returns the previous value. */

@@ -1,23 +1,48 @@
 # Аудит Java-патча против stock MU1316
 
-Дата аудита: 2026-08-04
+Дата исходного аудита: 2026-08-04
+Повторный полный аудит текущего дерева: 2026-08-05
 Проверенный вариант: `java_patch`
 Авторитетный stock: `../jxe2jar/out/MU1316-combined-vf` и `../jxe2jar/out/MU1316-combined-final.jar`
 
-## Итог после исправлений
+## Итог повторного аудита
 
-Все найденные P0/P1 и применимые P2-дефекты исправлены в текущем дереве. Patch JAR
-сохраняет stock public/protected ABI, собирается в bytecode Java 1.4 и больше не содержит
-ни `ClusterProbe`, ни глобальную replacement-копию `AppState`, ни неизменённый
-`ClusterViewMode`. Известного code-level blocker для cold boot RGI теперь нет; остаётся
-интеграционная проверка на HU с уже подключённым телефоном и активным маршрутом.
+Patch JAR сохраняет stock public/protected ABI, собирается в bytecode Java 1.4 и больше не
+содержит `ClusterProbe`, replacement-копию `AppState` или `ClusterViewMode`. Все восемь
+подтверждённых runtime-дефектов повторного аудита исправлены в дереве 2026-08-05. Два безопасно
+устранимых robustness-риска также закрыты. Остался один validation gap mapper'ов, для которого
+нет наблюдаемого дефекта или авторитетного stock Java-аналога; он не маскируется как исправление.
 
-Главное изменение state machine: `ctx 80` теперь не выбирается по одному лишь route intent.
+Полезное изменение state machine при этом сохранено: `ctx 80` теперь не выбирается по одному лишь route intent.
 Сначала полностью поднимается altScreen/stock-thread NavStatus gate и `ctx 81`, затем RGI
 получает sticky snapshot, публикует BAP, ждёт реальный `FRAME_READY` текущего
 `maneuver_render` peer и лишь после этого делает `setNavActive(true)`.
 
-### Закрытые дефекты
+### Исправления по находкам повторного аудита (2026-08-05)
+
+| Приоритет | Исходный дефект | Реализованное исправление |
+|---|---|---|---|
+| P1 | RGI имел конечное 10-секундное окно старта | Первые 10 s retry остаётся 200 ms, затем продолжается раз в 2 s до конца текущей CarPlay generation (`CarPlayApp.java:171-203`). Поздний Navigation service edge дополнительно будит controlled RGD rebind (`:112-140`). |
+| P1 | NavStatus/RG wrapper ставился с TerminalMode dispatcher | `ClusterService.setCombiBAPService()` теперь оборачивает service синхронно на `NavigationJobs` **до** stock `setCombiService()->updateAll()` (`ClusterService.java:234-246`); остальные изменения маршалятся через `Navigation.getDispatcher()` (`AltScreenNavStatusGate.java:31-44`). |
+| P1 | CarPlay перезаписывал stock Media cover-art provider type 0 | `CoverArtProviderMux` сохраняет уже зарегистрированный Media provider и направляет только source 21/CarPlay listRef в CarPlay cache (`CoverArtProviderMux.java:27-67`); при недоступной reflection seam остаётся direct push без повреждения stock provider. |
+| P1/P2 | Неуспешный bind renderer IPC течёт FD каждые 500 ms | Оба локальных `ServerSocket` закрываются в catch (`RendererServer.java:96-110`, `CarplayBus.java:281-293`), renderer bind log ограничен одной записью за 10 s (`RendererServer.java:122-135`). |
+| P2 | `source_supports_rg=0` не очищал slots при уже нулевом routeState | Authoritative transition в 0 всегда очищает count/order/all maneuver и lane caches; условным остался только route-state dirty bit (`RouteGuidance.java:611-640`). |
+| P2 | Shutdown якобы сохранял native `rgActive`, но уже успевал сбросить его | Наличие stock route определяется **до** renderer teardown; `stopCustomRenderer(clearRouteInfo)` не сбрасывает route-info при живом native route (`BAPBridge.java:751-793,1849-1861`). |
+| P2 | Частичный `BAPBridge.onStart()` не имел rollback | Catch теперь best-effort возвращает RGStatus/type/descriptor/distance/exit/maneuver, renderer, gfx и counters в retry-safe state (`BAPBridge.java:662-687`). |
+| P2 | `CombiBAPServiceNavi` оставался one-shot stale handle | Service edge coalesces controlled stop/reacquire/start RGD (`CarPlayApp.java:112-140`), lookup пропускает stale first reference (`FrameworkRef.java:40-52`), старый handle по-прежнему парно release-ится в `RgdModule.stop()`. |
+
+### Закрытые robustness-риски и оставшийся validation gap
+
+- `CarplayDSILifecycleController.updateTouchEvents()` теперь partition-ит каждый mixed batch по
+  `isTouchScreen()`: touchscreen entries идут в DSI input 1, touchpad — только в `CursorController`;
+  тип больше не выбирается по element 0 (`CarplayDSILifecycleController.java:970-1019`).
+- `ClusterLayerController.apply()` теперь вызывается только для cluster terminal и sysconst
+  `KOMBI_KDK_VIA_DISPLAYABLES`; terminal 0/G24 больше не получает обращения к 98/101/102
+  (`CombiMapController.java:164-173`).
+- `ManeuverMapper`, `RendererMapper` и `SideStreets` не имеют stock Java-аналога и host vector tests;
+  статический bounds-аудит ошибок не показал, но полное соответствие MHI3 требует regression vectors.
+
+### Ранее закрытые дефекты
 
 | Исходная проблема | Текущее исправление |
 |---|---|
@@ -35,9 +60,9 @@
 | Callback после `RouteGuidance.stop()` | Frame processing/teardown сериализованы, worker generation invalidated и joined (`RouteGuidance.java:325-351,370-505`) |
 | OSGi service reference leak | `FrameworkRef.ServiceHandle` делает парный `releaseService`; `RgdModule.stop()` освобождает handle |
 | Stale retry thread после fast reconnect | Retry generation + identity check; interrupt завершает worker (`CarPlayApp.java:138-171`) |
-| NavStatus wrapper ставился с неправильного thread | Установка и все gate edges маршалятся через stock dispatcher (`AltScreenNavStatusGate.java:31-96`) |
+| NavStatus wrapper ставился напрямую из bus/module thread | Wrapper ставится до stock `updateAll()` на Navigation service edge; поздние apply/release идут через `Navigation.getDispatcher()` |
 | Native status не восстанавливался | Wrapper кэширует compass/altitude/scale/text/destination fields и replay-ит последний snapshot при release (`GatedCombiService.java:61-125,140-222`) |
-| Cover art жил дольше component/source/session | Paired start/stop, dispatcher handoff, CarPlay-source flag и session reset CRC/metadata |
+| Cover art жил дольше component/source/session | Paired start/stop, dispatcher handoff, CarPlay-source flag и session reset CRC/metadata сохранены; type-0 теперь multiplexed со stock Media provider |
 | Parser молча резал 512 keys | Capacity 1024 + explicit overflow warning (`CarplayBus.java:160-257`) |
 | Touch sink терялся после component reinit | `init()` повторно ставит sink и сбрасывает gesture state; touchscreen сохраняет stock coordinate conversion/sort |
 | G24 получал чужой смысл ctx 80/81 | Feature явно disabled при `kombiType==4`; текущий MU1316/A5 остаётся поддержан |
@@ -45,7 +70,7 @@
 
 ## Текущий объём и validation
 
-- 27 Java-файлов, 10 808 строк: шесть необходимых полных замен stock-классов и 21 новый класс.
+- 28 Java-файлов, 11 081 строк: шесть необходимых полных замен stock-классов и 22 новых класса.
 - `./scripts/build_java.sh` — успешно, target 1.4.
 - `./scripts/build_hook.sh` — успешно, ARM QNX hook, `emutls=0`.
 - `unzip -t build/carplay_hook.jar` — ошибок нет.
@@ -53,7 +78,7 @@
 - `javap -protected` — ни одного пропавшего stock public/protected member в шести заменяемых outer classes.
 - `ClusterProbe`, patched `AppState` и patched `ClusterViewMode` отсутствуют в JAR.
 - `git diff --check` — ошибок нет.
-- JAR содержит 78 class files. Build ID намеренно генерируется из текущего Git commit и поэтому
+- JAR содержит 80 class files. Build ID намеренно генерируется из текущего Git commit и поэтому
   проверяется в unit log, а не фиксируется в этом документе вместе с быстро устаревающим SHA-256.
 
 ### Обязательная on-unit матрица

@@ -76,6 +76,8 @@ public class RendererServer {
      * just died, respawn is appropriate". */
     private volatile boolean everConnected;
     private volatile StateListener stateListener;
+    private long lastBindFailureLogMs;
+    private int suppressedBindFailures;
 
     /** Edge notification only. The listener must not block the socket threads. */
     public interface StateListener {
@@ -94,15 +96,17 @@ public class RendererServer {
     public boolean connect() {
         synchronized (lock) {
             if (server != null && !server.isClosed()) return true;
+            ServerSocket ss = null;
             try {
-                ServerSocket ss = new ServerSocket();
+                ss = new ServerSocket();
                 ss.setReuseAddress(true);
                 ss.bind(new InetSocketAddress(HOST, PORT));
                 server = ss;
                 running = true;
                 Log.i(TAG, "listening on " + HOST + ":" + PORT);
             } catch (IOException e) {
-                Log.w(TAG, "bind failed: " + e.getMessage());
+                if (ss != null) try { ss.close(); } catch (IOException closeError) { }
+                logBindFailure(e);
                 return false;
             }
 
@@ -113,6 +117,21 @@ public class RendererServer {
             acceptThread.start();
         }
         return true;
+    }
+
+    /** Presentation recovery may call connect every 500 ms while another owner has :19800.
+     * Close every failed socket above and emit at most one warning per 10 seconds. */
+    private void logBindFailure(IOException e) {
+        long now = System.currentTimeMillis();
+        if (lastBindFailureLogMs == 0 || now - lastBindFailureLogMs >= 10000L) {
+            String suffix = suppressedBindFailures > 0
+                ? " (" + suppressedBindFailures + " repeats suppressed)" : "";
+            Log.w(TAG, "bind failed: " + e.getMessage() + suffix);
+            lastBindFailureLogMs = now;
+            suppressedBindFailures = 0;
+        } else {
+            suppressedBindFailures++;
+        }
     }
 
     /**

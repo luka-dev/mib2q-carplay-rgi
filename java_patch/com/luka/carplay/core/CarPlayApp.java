@@ -7,8 +7,8 @@
  *
  * Starts the bus, then starts each registered Module.  A module may return false
  * from start() if a service it needs is not up yet; we retry the whole start pass
- * on a short-lived daemon thread until everything is up or we time out (the proven
- * old-hook pattern — CombiBAPServiceNavi etc. appear a beat after activate).
+ * on a daemon thread until everything is up or the CarPlay generation ends.  Navigation can
+ * appear much later than TerminalMode on a cold boot, so this must not have a fixed timeout.
  *
  * Java 1.2 (no generics/autoboxing).
  */
@@ -35,6 +35,8 @@ public final class CarPlayApp {
     private static volatile FrameworkRef fwRef;
     private static Thread retryThread;
     private static int retryGeneration;
+    private static int serviceChangeGeneration;
+    private static final int RGD_MODULE_INDEX = 1;
 
     private CarPlayApp() {}
 
@@ -76,7 +78,7 @@ public final class CarPlayApp {
         }
         synchronized (lifecycleLock) {
             stopRetry();
-            synchronized (lock) { active = false; }
+            synchronized (lock) { active = false; serviceChangeGeneration++; }
             /* Stop every module, including one whose previous start returned false after partial
              * setup. Never call external module teardown while holding the shared state lock. */
             for (int i = MODULES.length - 1; i >= 0; i--) {
@@ -94,7 +96,7 @@ public final class CarPlayApp {
     public static void onDeactivate() {
         Log.i(TAG, "onDeactivate");
         synchronized (lifecycleLock) {
-            synchronized (lock) { active = false; }
+            synchronized (lock) { active = false; serviceChangeGeneration++; }
             stopRetry();
             for (int i = MODULES.length - 1; i >= 0; i--) {
                 try { MODULES[i].stop(); } catch (Throwable t) { Log.w(TAG, MODULES[i].name() + " stop: " + t); }
@@ -106,6 +108,37 @@ public final class CarPlayApp {
     }
 
     public static FrameworkRef fw() { synchronized (lock) { return fwRef; } }
+
+    /** Navigation's OSGi service can disappear/reappear without a CarPlay reconnect.  The RGD
+     * module owns a paired ServiceReference, so rebuild only that module on the exact service
+     * edge instead of continuing to call a stale AppConnectorNavi instance.  ClusterService
+     * invokes this from NavigationJobs; the small worker keeps teardown/start outside that
+     * dispatcher and coalesces rapid remove+add pairs. */
+    public static void onNavigationServiceChanged() {
+        final int generation;
+        synchronized (lock) {
+            if (!active) return;
+            generation = ++serviceChangeGeneration;
+        }
+        Thread t = new Thread(new Runnable() {
+            public void run() {
+                if (!sleepInterruptibly(50)) return;
+                synchronized (lifecycleLock) {
+                    synchronized (lock) {
+                        if (!active || generation != serviceChangeGeneration) return;
+                    }
+                    stopRetry();
+                    try { MODULES[RGD_MODULE_INDEX].stop(); }
+                    catch (Throwable x) { Log.w(TAG, "rgd rebind stop: " + x); }
+                    synchronized (lock) { started[RGD_MODULE_INDEX] = false; }
+                    Log.i(TAG, "Navigation service changed - rebinding RGD");
+                    if (!startPass()) startRetry();
+                }
+            }
+        }, "carplay-rgd-rebind");
+        t.setDaemon(true);
+        t.start();
+    }
 
     /* start every not-yet-started module; return true when all are started. */
     private static boolean startPass() {
@@ -141,17 +174,27 @@ public final class CarPlayApp {
         synchronized (lock) { generation = ++retryGeneration; }
         Thread t = new Thread(new Runnable() {
             public void run() {
-                for (int n = 0; n < 50; n++) {                 /* ~10 s @ 200 ms */
-                    if (!sleepInterruptibly(200)) return;
-                    synchronized (lock) {
-                        if (!active || generation != retryGeneration
-                                || retryThread != Thread.currentThread()) return;
+                int n = 0;
+                try {
+                    while (true) {
+                        /* Fast convergence during normal startup, then a low-rate indefinite wait
+                         * for late Navigation/CombiBAP publication. */
+                        long delay = n < 50 ? 200L : 2000L;
+                        if (!sleepInterruptibly(delay)) return;
+                        synchronized (lifecycleLock) {
+                            synchronized (lock) {
+                                if (!active || generation != retryGeneration
+                                        || retryThread != Thread.currentThread()) return;
+                            }
+                            if (startPass()) return;
+                        }
+                        n++;
+                        if (n == 50) Log.w(TAG, "modules still pending after 10 s; continuing low-rate retry");
                     }
-                    if (startPass()) return;
-                }
-                synchronized (lock) {
-                    if (active && generation == retryGeneration)
-                        Log.w(TAG, "some modules never came up (services missing)");
+                } finally {
+                    synchronized (lock) {
+                        if (retryThread == Thread.currentThread()) retryThread = null;
+                    }
                 }
             }
         }, "carplay-retry");

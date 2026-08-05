@@ -28,6 +28,15 @@ properties, поэтому существующий route-guidance gate их н�
 compass/altitude/scale/text до освобождения altScreen. `BAPBridge` не владеет
 виджетами и только переключает отдельный route-guidance gate.
 
+Контекст 81 запускается сразу после появления `DisplayManager` и намеренно не
+ждёт stock `CombiBAPServiceNavi`: видеоплоскость 99 от него не зависит. На cold
+boot `ClusterService.setCombiBAPService()` сообщает точный OSGi availability edge
+в `AltScreenNavStatusGate`, и wrapper подключается позже без задержки altScreen.
+При disconnect gate сначала отдаёт накопленные stock values, затем
+`ClusterService.refreshInitializingScreenAfterCarPlay()` заново вычисляет
+штатный `INITIALIZING/NORMAL` по текущему состоянию Navigation. Глобальный
+`DSIResponseContainer.navstateOfOperation` CarPlay не подменяет.
+
 ## Порядок включения maneuver-контекста
 
 Новая CarPlay-сессия всегда начинает с `ctx 81 = {99}` — обычная

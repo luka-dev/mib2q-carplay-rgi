@@ -43,8 +43,13 @@ public final class FrameworkRef {
         if (sm == null || iface == null) return null;
         ServiceReference[] refs = sm.getServiceReferences(iface);
         if (refs == null || refs.length == 0) return null;
-        Object service = sm.getService(refs[0]);
-        return service != null ? new ServiceHandle(sm, refs[0], service) : null;
+        /* A remove/add race can leave a stale reference first in the array.  Walk all published
+         * references and pair the exact successful one with its later release. */
+        for (int i = 0; i < refs.length; i++) {
+            Object service = sm.getService(refs[i]);
+            if (service != null) return new ServiceHandle(sm, refs[i], service);
+        }
+        return null;
     }
 
     public static final class ServiceHandle {

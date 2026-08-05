@@ -279,13 +279,15 @@ public final class CarplayBus {
     }
 
     private boolean openServerSocket() {
+        ServerSocket ss = null;
         try {
-            ServerSocket ss = new ServerSocket();
+            ss = new ServerSocket();
             ss.setReuseAddress(true);
             ss.bind(new InetSocketAddress(InetAddress.getByName(HOST), PORT));
             synchronized (lock) { serverSocket = ss; }
             return true;
         } catch (IOException e) {
+            if (ss != null) try { ss.close(); } catch (IOException closeError) { }
             Log.e(TAG, "bind " + HOST + ":" + PORT + " failed: " + e.getMessage());
             return false;
         }

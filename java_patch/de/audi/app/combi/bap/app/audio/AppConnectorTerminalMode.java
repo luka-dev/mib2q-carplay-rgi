@@ -21,7 +21,13 @@ public class AppConnectorTerminalMode extends AbstractAppConnectorAudio implemen
     protected AppConnectorTerminalMode(CombiModuleAudio combimoduleaudio) {
         super(combimoduleaudio);
         this.pictureProvider = new AppConnectorTerminalMode$CoverArtProvider(this);
-        combimoduleaudio.getPictureManager().registerPictureProvider(0, this.pictureProvider);
+        /* AppConnectorMedia has already registered stock cover-art provider type 0.  Replacing
+         * that Map entry breaks later Media re-requests, so preserve it and route CarPlay IDs
+         * through a small mux instead.  Direct push below remains the fallback if a variant hides
+         * the provider map from reflection. */
+        if (!CoverArtProviderMux.install(combimoduleaudio.getPictureManager(), this.pictureProvider)) {
+            this.logChannel.log(100000, "[AppConnectorTerminalMode] cover-art mux unavailable; direct push only");
+        }
         combimoduleaudio.getPictureManager().setNotification(0);
     }
 

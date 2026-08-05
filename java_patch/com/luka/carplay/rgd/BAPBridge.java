@@ -661,9 +661,29 @@ public class BAPBridge {
 
         } catch (Throwable e) {
             bapSessionStarted = false;
+            rollbackFailedStart();
             Log.e(TAG, "onStart error: " + e.getClass().getName() + ": " + e.getMessage());
             return false;
         }
+    }
+
+    /** Undo every externally visible stage of a partially completed onStart().  CarPlayApp and
+     * RouteGuidance are allowed to retry, so leaving RGStatus=1, gfxAvailable, or a half-owned
+     * renderer here would make the retry non-idempotent.  The session-long native-RG gate remains
+     * shut; engageTakeover/disengageTakeover own that independently. */
+    private void rollbackFailedStart() {
+        try { appConnectorNavi.updateRGStatus(0); } catch (Throwable t) { }
+        try { appConnectorNavi.updateActiveRGType(0); } catch (Throwable t) { }
+        try { sendNoSymbol(); } catch (Throwable t) { }
+        try { sendDistanceToManeuverRaw(0, false, 0); } catch (Throwable t) { }
+        try { sendExitView(); } catch (Throwable t) { }
+        try { appConnectorNavi.updateManeuverState(0); } catch (Throwable t) { }
+        try { stopCustomRenderer(true); } catch (Throwable t) { }
+        forceGfxAvailable(false);
+        bapSessionStarted = false;
+        rendererPrimed = false;
+        crConsecutiveSendFailures = 0;
+        Log.w(TAG, "onStart rollback complete");
     }
 
     public void onStop() {
@@ -728,7 +748,10 @@ public class BAPBridge {
                 Log.w(TAG, "onShutdown: BAP teardown threw (continuing to cleanup): " + t);
             }
 
-            stopCustomRenderer();
+            /* Decide before stopping the custom renderer: stop used to clear rgActive
+             * unconditionally, making the nativeHasRoute=true branch below ineffective. */
+            boolean nativeHasRoute = nativeNavigationHasRoute();
+            stopCustomRenderer(!nativeHasRoute);
             /* CarPlay session ending — release the renderer listen socket
              * (port :19800).  stopCustomRenderer keeps it bound for fast
              * route restarts within a session; full session shutdown
@@ -764,28 +787,27 @@ public class BAPBridge {
              * nav drives rgActive itself — it'll go back to false naturally
              * when the user cancels or arrives.
              */
-            boolean nativeHasRoute = false;
-            try {
-                de.audi.tghu.navi.app.Navigation navi =
-                    de.audi.tghu.navi.app.Navigation.getInstance();
-                if (navi != null) {
-                    de.audi.tghu.navi.app.routeguidance.IRouteManager rm = navi.getRouteManager();
-                    if (rm != null && rm.getRoute() != null) {
-                        nativeHasRoute = true;
-                    }
-                }
-            } catch (Throwable t) { /* assume false on error */ }
-
             if (nativeHasRoute) {
                 Log.i(TAG, "Shutdown: native nav has active route — leaving rgActive=true so its Cancel still works");
-            } else {
-                forceClusterRouteInfoState(false);
             }
             forceGfxAvailable(false);
 
             Log.i(TAG, "Shutdown (full teardown)");
         } catch (Exception e) {
             Log.e(TAG, "onShutdown error", e);
+        }
+    }
+
+    private boolean nativeNavigationHasRoute() {
+        try {
+            de.audi.tghu.navi.app.Navigation navi =
+                de.audi.tghu.navi.app.Navigation.getInstance();
+            if (navi == null) return false;
+            de.audi.tghu.navi.app.routeguidance.IRouteManager rm = navi.getRouteManager();
+            return rm != null && rm.getRoute() != null;
+        } catch (Throwable t) {
+            Log.d(TAG, "native route-state query failed: " + t.getMessage());
+            return false;
         }
     }
 
@@ -1824,7 +1846,7 @@ public class BAPBridge {
         notifyPresentationStateChanged("renderer-send-failures");
     }
 
-    private synchronized void stopCustomRenderer() {
+    private synchronized void stopCustomRenderer(boolean clearRouteInfo) {
         try {
             /* Blank the popup (CMD_CLEAR) so no stale maneuver frame lingers, then deactivate the
              * cluster context + stop feeding.  Do NOT kill the renderer (always-on framework
@@ -1834,7 +1856,7 @@ public class BAPBridge {
                 csRef.deactivateCustomRendererPipeline();
             }
             forceGfxAvailable(false);
-            forceClusterRouteInfoState(false);
+            if (clearRouteInfo) forceClusterRouteInfoState(false);
             customRendererStarted = false;
             rendererPrimed = false;
             Log.i(TAG, "CR: stopped (renderer blanked; stays up; server socket persists)");

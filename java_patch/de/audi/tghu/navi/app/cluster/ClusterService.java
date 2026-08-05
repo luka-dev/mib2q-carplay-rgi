@@ -233,8 +233,17 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
 
     public void setCombiBAPService(CombiBAPServiceNavi combibapservicenavi) {
         this.logChannel.log(10000000, "ClusterService#setCombiBAPService()");
-        this.combiBAPListener.setCombiService(combibapservicenavi);
+        /* This setter runs on NavigationJobs.  Install the transparent CarPlay gate BEFORE the
+         * stock setter's immediate updateAll(), so native NavStatus never paints across the
+         * takeover edge and no other dispatcher writes CombiBAPListener.combiservice. */
+        CombiBAPServiceNavi effective = com.luka.carplay.core.AltScreenNavStatusGate
+            .prepareCombiBAPService(this, combibapservicenavi);
+        this.combiBAPListener.setCombiService(effective);
         this.combiBAPServiceNavi = combibapservicenavi;
+        /* CarPlay's map plane may already be live during a cold boot.  Notify the optional
+         * NavStatus wrapper on the exact OSGi service edge instead of making altScreen poll -- or
+         * worse, wait for stock Navigation before showing its own video. */
+        com.luka.carplay.core.AltScreenNavStatusGate.onCombiBAPServiceChanged(this);
     }
 
     public void setCombiService(CombiService combiservice) {
@@ -1101,8 +1110,16 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         return this.combiBAPListener.combiservice;
     }
 
+    /** NavigationJobs-only recovery seam used by AltScreenNavStatusGate. */
     public void setCombiBAPListenerCombiService(CombiBAPServiceNavi svc) {
         this.combiBAPListener.combiservice = svc;
+    }
+
+    /** Restore the authoritative stock INITIALIZING/NORMAL decision after CarPlay releases the
+     * cluster.  A deferred-call replay alone is insufficient when no map-ready edge occurred while
+     * the takeover was active. */
+    public synchronized void refreshInitializingScreenAfterCarPlay() {
+        this.combiBAPListener.forceShowInitScreen(this.initScreenNeededOnKombi());
     }
 
     /* Cluster projection activate/deactivate.  These remain BAPBridge readiness hooks; the actual
