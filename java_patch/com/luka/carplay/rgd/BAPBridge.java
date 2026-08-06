@@ -111,6 +111,13 @@ public class BAPBridge {
     /* REPLACE: true from CarPlay connect (engageTakeover) to disconnect (disengageTakeover);
      * keeps onShutdown from reopening the RG gate when CarPlay nav merely ends mid-session. */
     private volatile boolean takeoverEngaged = false;
+    private boolean nativeStopAttempted = false;
+    /* A route-absent result is definite for connect-time takeover, but a stock route may
+     * still be started later in the same CarPlay session.  Re-check that result once when
+     * CarPlay RGI itself activates; a successfully issued stop remains session-final. */
+    private boolean nativeStopWasRouteAbsent = false;
+    private boolean nativeAbortIssued = false;
+    private int nativeStopLogState = -1;
 
     private ClusterService csRef;
     private KOMOService komoService;
@@ -429,12 +436,22 @@ public class BAPBridge {
      *   "stop route guidance" CommandList that walks every component down
      *   (BAP RG state off, route data cleared, KOMO disabled, etc).
      */
-    private void tryStopNativeNavigation() {
+    private void logNativeStopEdge(int state, String message, boolean warning) {
+        if (nativeStopLogState == state) return;
+        nativeStopLogState = state;
+        if (warning) Log.w(TAG, message);
+        else Log.i(TAG, message);
+    }
+
+    /** @return true only after RouteManager supplied a definite result.  A null singleton,
+     *  null RouteManager or transient exception is PENDING and must be retried by startRetry. */
+    private boolean tryStopNativeNavigation() {
         /* Always issue the cluster-side abort signal first — at minimum it
          * resets cluster UI state even if RouteManager is unavailable. */
-        if (csRef != null) {
+        if (!nativeAbortIssued && csRef != null) {
             try {
                 csRef.setRouteGuidanceAborted();
+                nativeAbortIssued = true;
                 Log.i(TAG, "Pre-gate: csRef.setRouteGuidanceAborted() ok");
             } catch (Throwable t) {
                 Log.w(TAG, "Pre-gate: setRouteGuidanceAborted: " + t.getMessage());
@@ -445,26 +462,37 @@ public class BAPBridge {
             de.audi.tghu.navi.app.Navigation navi =
                 de.audi.tghu.navi.app.Navigation.getInstance();
             if (navi == null) {
-                Log.w(TAG, "Pre-gate: Navigation.getInstance() == null — skip stopRouteGuidance");
-                return;
+                nativeStopWasRouteAbsent = false;
+                logNativeStopEdge(1,
+                    "Pre-gate: PENDING — Navigation.getInstance() is null", true);
+                return false;
             }
             de.audi.tghu.navi.app.routeguidance.IRouteManager rm = navi.getRouteManager();
             if (rm == null) {
-                Log.w(TAG, "Pre-gate: getRouteManager() == null — skip stopRouteGuidance");
-                return;
+                nativeStopWasRouteAbsent = false;
+                logNativeStopEdge(2,
+                    "Pre-gate: PENDING — RouteManager is null", true);
+                return false;
             }
             /* Skip work if no active route — stopRouteGuidance() is a heavy
              * CommandList walk; harmless on idle but spammy in the log. */
             org.dsi.ifc.navigation.Route route = rm.getRoute();
             if (route == null) {
-                Log.i(TAG, "Pre-gate: native route already absent (RouteManager.getRoute() == null)");
-                return;
+                nativeStopWasRouteAbsent = true;
+                logNativeStopEdge(3,
+                    "Pre-gate: DONE — native route already absent", false);
+                return true;
             }
             rm.stopRouteGuidance();
-            Log.i(TAG, "Pre-gate: invoked RouteManager.stopRouteGuidance() — native nav route cancel issued");
+            nativeStopWasRouteAbsent = false;
+            logNativeStopEdge(4,
+                "Pre-gate: DONE — RouteManager.stopRouteGuidance() issued", false);
+            return true;
         } catch (Throwable t) {
-            Log.w(TAG, "Pre-gate: stopRouteGuidance failed: "
-                    + t.getClass().getName() + ": " + t.getMessage());
+            nativeStopWasRouteAbsent = false;
+            logNativeStopEdge(5, "Pre-gate: PENDING — stopRouteGuidance failed: "
+                    + t.getClass().getName() + ": " + t.getMessage(), true);
+            return false;
         }
     }
 
@@ -543,7 +571,10 @@ public class BAPBridge {
         try {
             takeoverEngaged = true;
             if (csRef == null) initClusterAccess();
-            tryStopNativeNavigation();
+            if (!nativeStopAttempted) {
+                nativeStopAttempted = tryStopNativeNavigation();
+            }
+            if (!nativeStopAttempted) return false;
             if (com.luka.carplay.core.AltScreenNavStatusGate.setRouteGuidanceBlocked(true)) {
                 Log.i(TAG, "REPLACE: takeover engaged (stock nav cancelled, RG gate shut)");
                 return true;
@@ -560,6 +591,10 @@ public class BAPBridge {
     public void disengageTakeover() {
         try {
             takeoverEngaged = false;
+            nativeStopAttempted = false;
+            nativeStopWasRouteAbsent = false;
+            nativeAbortIssued = false;
+            nativeStopLogState = -1;
             com.luka.carplay.core.AltScreenNavStatusGate.setRouteGuidanceBlocked(false);
             Log.i(TAG, "REPLACE: takeover disengaged (stock RG gate reopened)");
         } catch (Throwable t) { /* ignore */ }
@@ -613,7 +648,12 @@ public class BAPBridge {
              * Probe several canonical names via reflection — first one that
              * exists wins.
              */
-            tryStopNativeNavigation();
+            if (!nativeStopAttempted || nativeStopWasRouteAbsent) {
+                nativeStopAttempted = tryStopNativeNavigation();
+                if (!nativeStopAttempted) {
+                    return false;
+                }
+            }
 
             /* Block native route-guidance BAP stream during CarPlay RG. */
             com.luka.carplay.core.AltScreenNavStatusGate.setRouteGuidanceBlocked(true);
