@@ -168,6 +168,9 @@ int cluster_surface_recreate(cluster_surface_t *s) {
     s->last_recreate = now;
 
     if (s->win) { screen_destroy_window(s->win); s->win = NULL; }
+    /* Adoption is asynchronous for each new native window.  Do not compare its
+     * initially-empty manager string with the previous window's observed owner. */
+    s->manager_seen = 0;
     return cs_open_window(s);
 }
 

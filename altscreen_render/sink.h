@@ -19,6 +19,11 @@ int  av_sink_open(void);
 /* One Annex-B payload (start-code framed).  Called from the receive loop. */
 void av_sink_frame(const uint8_t *annexb, uint32_t len);
 
+/* True only after the current session has produced and successfully presented
+ * at least one decoded frame.  A TCP connection or decoder start is not visual
+ * readiness: Java uses this edge to leave the stock cluster context. */
+int  av_sink_video_ready(void);
+
 /* Called when the client disconnects (session end) — flush/reset decoder so the
  * next session starts clean.  The process keeps running to accept the next one. */
 void av_sink_session_end(void);

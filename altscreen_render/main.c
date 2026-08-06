@@ -84,18 +84,19 @@ static int listen_socket(void) {
 }
 
 /* Serve one connected client until it disconnects or a protocol error. */
-static void serve_client(int cfd) {
+static void serve_client(int cfd, int *video_signaled) {
     int one = 1;
     setsockopt(cfd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
     /* A stalled or half-open peer must never hang the sole server thread forever
      * (it would freeze the service and never fire altctl_set_video(0)).
      * KEEPALIVE reaps a genuinely dead TCP peer (crash / half-open).  RCVTIMEO is a
-     * generous 60s backstop for a peer that holds the connection but stops sending
+     * 5s backstop for a peer that holds the connection but stops sending
      * mid-frame → av_read_frame then returns an error and we drop + accept() again.
-     * 60s is longer than any realistic active-stream gap (H.264 refreshes periodically),
-     * so it won't false-drop a healthy stream. */
+     * A healthy 111 stream sends continuously (including a static map); keeping the
+     * old 60s timeout made a half-open pre-restart dio monopolise the only accept loop
+     * for a full minute and defeated fast phone reconnect. */
     setsockopt(cfd, SOL_SOCKET, SO_KEEPALIVE, &one, sizeof(one));
-    struct timeval tv; tv.tv_sec = 60; tv.tv_usec = 0;
+    struct timeval tv; tv.tv_sec = 5; tv.tv_usec = 0;
     setsockopt(cfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
     uint8_t *buf = NULL;
@@ -104,6 +105,19 @@ static void serve_client(int cfd) {
         int r = av_read_frame(cfd, &buf, &cap, &len);
         if (r == 0) {
             if (len > 0) av_sink_frame(buf, len);
+            if (av_sink_video_ready()) {
+                if (!*video_signaled) {
+                    *video_signaled = 1;
+                    altctl_set_video(1);
+                    fprintf(stderr,
+                            "altscreen_render: first decoded RGBA swap -> VIDEO_ON\n");
+                }
+            } else if (*video_signaled) {
+                *video_signaled = 0;
+                altctl_set_video(0);
+                fprintf(stderr,
+                        "altscreen_render: decoded presentation lost -> VIDEO_OFF\n");
+            }
             continue;
         }
         if (r == -2) fprintf(stderr, "altscreen_render: protocol error, dropping link\n");
@@ -147,6 +161,7 @@ int main(void) {
     altctl_start();
 
     while (g_running) {
+        int video_signaled = 0;
         int cfd = accept(lfd, NULL, NULL);
         if (cfd < 0) {
             if (errno == EINTR) continue;        /* signal → re-check g_running */
@@ -155,15 +170,15 @@ int main(void) {
         }
         g_client_fd = cfd;
         fprintf(stderr, "altscreen_render: hook connected\n");
-        altctl_set_video(1);                     /* 111 video client connected → tell Java */
+        altctl_set_video(0);                     /* remain on stock ctx until a real RGBA swap */
         main_screen_priority_grace();
-        serve_client(cfd);
+        serve_client(cfd, &video_signaled);
         if ((int)g_client_fd == cfd) {
             g_client_fd = -1;
             close(cfd);
         }
         av_sink_session_end();
-        altctl_set_video(0);                     /* stream ended → tell Java (Java clears ctx 82/83) */
+        altctl_set_video(0);                     /* stream ended → tell Java (Java clears ctx 80/81) */
         fprintf(stderr, "altscreen_render: hook disconnected\n");
     }
 

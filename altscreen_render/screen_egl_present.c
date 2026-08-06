@@ -64,6 +64,7 @@ struct screen_egl_present {
     screen_buffer_t *source_buffers;
     screen_pixmap_t *source_pixmaps;
     void **source_pointers;
+    unsigned int *source_capacities;
 
     EGLDisplay egl_display;
     EGLSurface egl_surface;
@@ -209,7 +210,9 @@ static int ep_create_source_buffers(screen_egl_present_t *p) {
                                                    sizeof(*p->source_buffers));
     p->source_pointers = (void **)calloc(p->source_count,
                                          sizeof(*p->source_pointers));
-    if (!p->source_buffers || !p->source_pointers) goto fail;
+    p->source_capacities = (unsigned int *)calloc(p->source_count,
+                                                   sizeof(*p->source_capacities));
+    if (!p->source_buffers || !p->source_pointers || !p->source_capacities) goto fail;
     if (screen_get_window_property_pv(p->source_window,
                                       SCREEN_PROPERTY_RENDER_BUFFERS,
                                       (void **)p->source_buffers) != 0) goto fail;
@@ -233,6 +236,23 @@ static int ep_create_source_buffers(screen_egl_present_t *p) {
             stride = 0;
         screen_get_buffer_property_iv(p->source_buffers[i],
                                       SCREEN_PROPERTY_PLANAR_OFFSETS, offsets);
+        /* Qualcomm 32m allocates luma/chroma scanlines in 32-row groups.
+         * Screen exposes no byte-size property on this BSP, but it does expose
+         * the exact stride and UV-plane offset.  Derive a conservative byte
+         * capacity and let the OMX binder reject any allocation smaller than
+         * the component's nBufferSize instead of risking an overrun. */
+        if (stride > 0) {
+            unsigned int chroma_rows = (unsigned int)((p->height + 1) / 2);
+            chroma_rows = (chroma_rows + 31u) & ~31u;
+            if (offsets[1] > 0)
+                p->source_capacities[i] = (unsigned int)offsets[1]
+                    + (unsigned int)stride * chroma_rows;
+            else {
+                unsigned int luma_rows = ((unsigned int)p->height + 31u) & ~31u;
+                p->source_capacities[i] = (unsigned int)stride
+                    * (luma_rows + chroma_rows);
+            }
+        }
         if (i == 0) {
             screen_get_buffer_property_iv(p->source_buffers[i],
                                           SCREEN_PROPERTY_FORMAT,
@@ -244,9 +264,10 @@ static int ep_create_source_buffers(screen_egl_present_t *p) {
                                           SCREEN_PROPERTY_BUFFER_SIZE,
                                           actual_size);
             fprintf(stderr,
-                    "altscreen_render[egl]: source ABI fmt=0x%x usage=0x%x size=%dx%d stride=%d planar=%d,%d,%d ptr=%p\n",
+                    "altscreen_render[egl]: source ABI fmt=0x%x usage=0x%x size=%dx%d stride=%d planar=%d,%d,%d capacity=%u ptr=%p\n",
                     actual_format, actual_usage, actual_size[0], actual_size[1],
                     stride, offsets[0], offsets[1], offsets[2],
+                    p->source_capacities[i],
                     p->source_pointers[i]);
         }
     }
@@ -465,6 +486,12 @@ void *screen_egl_present_source_pointer(screen_egl_present_t *p,
     return p->source_pointers[index];
 }
 
+unsigned int screen_egl_present_source_capacity(screen_egl_present_t *p,
+                                                 unsigned int index) {
+    if (!p || index >= p->source_count || !p->source_capacities) return 0;
+    return p->source_capacities[index];
+}
+
 int screen_egl_present_frame(screen_egl_present_t *p,
                              unsigned int source_index,
                              unsigned int filled_len) {
@@ -550,6 +577,68 @@ out:
     return ok;
 }
 
+int screen_egl_present_recover_output(screen_egl_present_t *p) {
+    EGLNativeWindowType native_window;
+    EGLSurface new_surface = EGL_NO_SURFACE;
+    int was_lost;
+    int ok = -1;
+
+    if (!p || !p->rgba_surface || p->egl_display == EGL_NO_DISPLAY ||
+        p->egl_context == EGL_NO_CONTEXT) return -1;
+
+    /* A callback that was already presenting finishes before this point.  The
+     * source buffers are deliberately outside this recovery operation. */
+    pthread_mutex_lock(&p->gl_lock);
+    was_lost = cluster_surface_lost(p->rgba_surface);
+    fprintf(stderr,
+            "altscreen_render[egl]: output recovery begin (plane99 lost=%d, source buffers preserved)\n",
+            was_lost);
+
+    eglMakeCurrent(p->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE,
+                   EGL_NO_CONTEXT);
+    if (p->egl_surface != EGL_NO_SURFACE) {
+        eglDestroySurface(p->egl_display, p->egl_surface);
+        p->egl_surface = EGL_NO_SURFACE;
+    }
+
+    if (cluster_surface_recreate(p->rgba_surface) != 0) {
+        fprintf(stderr,
+                "altscreen_render[egl]: output recovery FAILED recreating managed plane99\n");
+        goto out;
+    }
+    native_window =
+        (EGLNativeWindowType)cluster_surface_window(p->rgba_surface);
+    new_surface = eglCreateWindowSurface(p->egl_display, p->egl_config,
+                                          native_window, NULL);
+    if (new_surface == EGL_NO_SURFACE) {
+        fprintf(stderr,
+                "altscreen_render[egl]: output recovery FAILED creating EGLSurface err=0x%x\n",
+                (unsigned)eglGetError());
+        goto out;
+    }
+    p->egl_surface = new_surface;
+    if (!eglMakeCurrent(p->egl_display, p->egl_surface, p->egl_surface,
+                        p->egl_context)) {
+        fprintf(stderr,
+                "altscreen_render[egl]: output recovery FAILED binding EGLSurface err=0x%x\n",
+                (unsigned)eglGetError());
+        eglDestroySurface(p->egl_display, p->egl_surface);
+        p->egl_surface = EGL_NO_SURFACE;
+        goto out;
+    }
+    eglSwapInterval(p->egl_display, 1);
+    p->first_success_logged = 0;
+    fprintf(stderr,
+            "altscreen_render[egl]: output surface recreated; OMX/EGLImage source ABI unchanged\n");
+    ok = 0;
+
+out:
+    eglMakeCurrent(p->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE,
+                   EGL_NO_CONTEXT);
+    pthread_mutex_unlock(&p->gl_lock);
+    return ok;
+}
+
 void screen_egl_present_destroy(screen_egl_present_t *p) {
     unsigned int i;
     if (!p) return;
@@ -591,6 +680,7 @@ void screen_egl_present_destroy(screen_egl_present_t *p) {
     free(p->source_buffers);
     free(p->source_pixmaps);
     free(p->source_pointers);
+    free(p->source_capacities);
     free(p->images);
     free(p->textures);
     if (p->rgba_surface) cluster_surface_destroy(p->rgba_surface);
