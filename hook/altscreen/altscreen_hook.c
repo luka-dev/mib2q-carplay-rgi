@@ -607,6 +607,7 @@ static fn_cfarr_getidx_t    cf_arridx;
 static int alt_enabled = -1;    /* env ALTSCREEN_HANDLE_ALT */
 static int alt_syms_ok = -1;
 static pthread_mutex_t alt_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t alt_cond = PTHREAD_COND_INITIALIZER;
 
 static int alt_resolve(void)
 {
@@ -691,12 +692,22 @@ typedef struct {
     void       *session;     /* key */
     int         altSock;     /* listen socket */
     pthread_t   thread;
-    int         threadValid;
+    int         threadCreated; /* pthread is joinable until one owner reaps it */
+    int         threadExited;  /* receiver returned; safe for SETUP to reap */
+    int         threadReaping; /* exactly one SETUP/TEARDOWN owns pthread_join */
+    int         settingUp;
+    int         closing;
+    uint32_t    generation;
     int         inUse;
     uint8_t     key[16];     /* self-contained receiver: AES-CTR key ...  */
     uint8_t     iv[16];      /* ... + iv (derived in alt_setup)           */
     volatile int stop;       /* teardown sets =1 → recv poll-loop exits (unblocks join) */
 } altslot_t;
+typedef struct {
+    altslot_t *slot;
+    uint32_t generation;
+    int listenSock;
+} altthread_arg_t;
 #define ALT_MAX_SESSIONS 4
 static altslot_t alt_slots[ALT_MAX_SESSIONS];
 
@@ -720,6 +731,55 @@ static altslot_t *alt_slot_find(void *session)
     for (i = 0; i < ALT_MAX_SESSIONS; i++)
         if (alt_slots[i].inUse && alt_slots[i].session == session) return &alt_slots[i];
     return NULL;
+}
+
+/* Claim and join exactly one receiver generation.  For a replacement SETUP,
+ * only an already-exited thread is eligible.  TEARDOWN first requests stop and
+ * closes the listener, then joins outside alt_lock. */
+static int alt_reap_thread(altslot_t *slot, int requestStop)
+{
+    pthread_t thread;
+    uint32_t generation;
+    int listener = -1;
+
+    if (!slot) return 0;
+    pthread_mutex_lock(&alt_lock);
+    while (slot->threadReaping)
+        pthread_cond_wait(&alt_cond, &alt_lock);
+    if (!slot->threadCreated) {
+        if (requestStop) {
+            slot->stop = 1;
+            listener = slot->altSock;
+            slot->altSock = -1;
+        }
+        pthread_mutex_unlock(&alt_lock);
+        if (listener >= 0) close(listener);
+        return 0;
+    }
+    if (!requestStop && !slot->threadExited) {
+        pthread_mutex_unlock(&alt_lock);
+        return -1;
+    }
+    if (requestStop) slot->stop = 1;
+    listener = slot->altSock;
+    slot->altSock = -1;
+    slot->threadReaping = 1;
+    thread = slot->thread;
+    generation = slot->generation;
+    pthread_mutex_unlock(&alt_lock);
+
+    if (listener >= 0) close(listener);
+    pthread_join(thread, NULL);
+
+    pthread_mutex_lock(&alt_lock);
+    if (slot->generation == generation) {
+        slot->threadCreated = 0;
+        slot->threadExited = 0;
+    }
+    slot->threadReaping = 0;
+    pthread_cond_broadcast(&alt_cond);
+    pthread_mutex_unlock(&alt_lock);
+    return 0;
 }
 
 /* _AddResponseStream replica (stock sub_26EFC): append desc to resp["streams"] */
@@ -1001,15 +1061,27 @@ static void alt_recv_loop(altslot_t *slot, int fd)
 /* receiver thread — self-contained (own socket read; NO stock ScreenStream) */
 static void *alt_thread_main(void *arg)
 {
-    altslot_t *slot = (altslot_t *)arg;
+    altthread_arg_t *threadArg = (altthread_arg_t *)arg;
+    altslot_t *slot = threadArg->slot;
+    uint32_t generation = threadArg->generation;
+    int        listenSock = threadArg->listenSock;
     int        fd = -1;
     int        ls;
+    free(threadArg);
 
-    if (sock_accept(slot->altSock, 10, &fd, NULL) != 0 || fd < 0) goto done;
+    /* No arbitrary accept deadline: teardown closes altSock and reliably wakes
+     * SocketAccept.  A 10 s timeout left a joinable dead thread unreaped, so a
+     * delayed phone connect permanently poisoned every later 111 re-SETUP. */
+    if (sock_accept(listenSock, -1, &fd, NULL) != 0 || fd < 0) goto done;
     /* claim + close the listen socket (teardown may race to close it too — the
      * -1 sentinel under alt_lock ensures exactly one close). */
     pthread_mutex_lock(&alt_lock);
-    ls = slot->altSock; slot->altSock = -1;
+    if (slot->generation == generation && slot->altSock == listenSock) {
+        ls = slot->altSock;
+        slot->altSock = -1;
+    } else {
+        ls = -1;
+    }
     pthread_mutex_unlock(&alt_lock);
     if (ls >= 0) close(ls);
 
@@ -1019,7 +1091,14 @@ static void *alt_thread_main(void *arg)
 done:
     if (fd >= 0) close(fd);
     altav_shutdown();                                     /* disconnect renderer → it resets its decoder */
-    LOG_INFO(LOG_MODULE, "alt-screen receiver thread exit");
+    pthread_mutex_lock(&alt_lock);
+    if (slot->generation == generation && slot->threadCreated) {
+        slot->threadExited = 1;
+        pthread_cond_broadcast(&alt_cond);
+    }
+    pthread_mutex_unlock(&alt_lock);
+    LOG_INFO(LOG_MODULE, "alt-screen receiver thread exit generation=%u",
+             (unsigned)generation);
     return NULL;
 }
 
@@ -1029,19 +1108,34 @@ static int alt_setup(void *session, void *streamDesc, void *responseParams)
 {
     altslot_t *slot;
     void  *server;
-    int    err, family, port = 0, sock = -1;
+    int    err = -6719, family, port = 0, sock = -1, started = 0;
     int64_t connID;
     uint8_t key[16], iv[16];
-    void  *rdesc;
+    void  *rdesc = NULL;
+    altthread_arg_t *threadArg = NULL;
 
     pthread_mutex_lock(&alt_lock);
     slot = alt_slot_get(session);
-    if (slot && (slot->threadValid || slot->altSock >= 0)) {
+    if (slot && (slot->closing || slot->settingUp)) {
         pthread_mutex_unlock(&alt_lock);
         return -6719;   /* already set up */
     }
+    if (slot && slot->threadCreated && !slot->threadExited) {
+        pthread_mutex_unlock(&alt_lock);
+        return -6719;   /* live stream already set up */
+    }
+    if (slot) slot->settingUp = 1; /* reserve lifecycle across old-thread reap */
     pthread_mutex_unlock(&alt_lock);
     if (!slot) return -6728;
+    if (alt_reap_thread(slot, 0) != 0) goto fail;
+
+    pthread_mutex_lock(&alt_lock);
+    if (slot->closing || !slot->inUse || slot->session != session) {
+        pthread_mutex_unlock(&alt_lock);
+        goto fail;
+    }
+    slot->stop = 0;
+    pthread_mutex_unlock(&alt_lock);
     LOG_INFO(LOG_MODULE, "alt_setup: begin session=%p streamDesc=%p (OFF aes=%d fam=%d srv=%d)",
              session, streamDesc, OFF_AESKEY, OFF_FAMILY, OFF_SERVER);
 
@@ -1077,25 +1171,46 @@ static int alt_setup(void *session, void *streamDesc, void *responseParams)
     if (!rdesc) { err = -6728; goto fail; }
     set_i64(rdesc, "type", ALT_STREAM_TYPE);
     set_i64(rdesc, "dataPort", port);
+    /* Start the acceptor before publishing its descriptor into the response.
+     * This keeps failure transactional: a pthread failure cannot leave a dead
+     * type-111/dataPort entry in an otherwise-successful stock SETUP response. */
+    threadArg = (altthread_arg_t *)calloc(1, sizeof(*threadArg));
+    if (!threadArg) { err = -6728; goto fail; }
+    pthread_mutex_lock(&alt_lock);
+    if (slot->closing || !slot->settingUp) {
+        pthread_mutex_unlock(&alt_lock);
+        err = -6719;
+        goto fail;
+    }
+    slot->generation++;
+    if (slot->generation == 0) slot->generation = 1;
+    slot->altSock = sock;
+    slot->threadExited = 0;
+    threadArg->slot = slot;
+    threadArg->generation = slot->generation;
+    threadArg->listenSock = sock;
+    g_alt_session = session;      /* thread blocks on alt_lock before its first command */
+    if (pthread_create(&slot->thread, NULL, alt_thread_main, threadArg) == 0) {
+        slot->threadCreated = 1;
+        started = 1;
+        threadArg = NULL;              /* receiver owns it */
+        sock = -1;                    /* slot/thread owns the listener now */
+    } else {
+        slot->altSock = -1;
+        g_alt_session = NULL;
+    }
+    pthread_mutex_unlock(&alt_lock);
+    if (!started) { err = -6728; goto fail; }
     if (alt_add_response_stream(responseParams, rdesc) != 0) {
-        if (cf_rel) cf_rel(rdesc);
         err = -6728;
         goto fail;
     }
-    if (cf_rel) cf_rel(rdesc);
+    if (cf_rel) { cf_rel(rdesc); rdesc = NULL; }
 
-    /* Publish the socket and thread atomically with respect to teardown. */
     pthread_mutex_lock(&alt_lock);
-    slot->altSock = sock;
-    if (pthread_create(&slot->thread, NULL, alt_thread_main, slot) == 0) {
-        slot->threadValid = 1;
-        g_alt_session = session;      /* enable CMD_ALT_* targeting */
-    } else {
-        slot->altSock = -1;
-    }
-    int started = slot->threadValid;
+    slot->settingUp = 0;
+    pthread_cond_broadcast(&alt_cond);
     pthread_mutex_unlock(&alt_lock);
-    if (!started) { err = -6728; goto fail; }
 
     /* The acceptor is live before this function returns and the response is sent. */
     LOG_INFO(LOG_MODULE, "alt-screen set up on port %d connID=%llu",
@@ -1103,10 +1218,20 @@ static int alt_setup(void *session, void *streamDesc, void *responseParams)
     return 0;
 
 fail:
+    if (rdesc && cf_rel) cf_rel(rdesc);
+    if (threadArg) free(threadArg);
+    if (started) {
+        alt_reap_thread(slot, 1);
+    }
     if (sock >= 0) close(sock);
     pthread_mutex_lock(&alt_lock);
     if (g_alt_session == session) g_alt_session = NULL;   /* defensive (only set on success) */
-    memset(slot, 0, sizeof(*slot));                       /* never reached with a live thread */
+    slot->altSock = -1;
+    slot->stop = 0;
+    memset(slot->key, 0, sizeof(slot->key));
+    memset(slot->iv, 0, sizeof(slot->iv));
+    slot->settingUp = 0;
+    pthread_cond_broadcast(&alt_cond);
     pthread_mutex_unlock(&alt_lock);
     LOG_ERROR(LOG_MODULE, "alt-screen setup failed err=%d", err);
     return err;
@@ -1255,25 +1380,28 @@ int AirPlayReceiverSessionTearDown(void *session, void *request, int reason, int
     altslot_t *slot;
     pthread_mutex_lock(&alt_lock);
     slot = alt_slot_find(session);
+    if (slot && tearDownAlt) {
+        slot->closing = 1;
+        while (slot->settingUp)
+            pthread_cond_wait(&alt_cond, &alt_lock);
+    }
     pthread_mutex_unlock(&alt_lock);
     if (slot && tearDownAlt) {
-        if (slot->threadValid) {
-            /* Stop the self-contained receiver: set the stop flag (its poll loop
-             * exits within one 500ms tick), close the listen socket to break a
-             * pre-connect SocketAccept, then join before stock frees session. */
-            int ls;
-            slot->stop = 1;
-            pthread_mutex_lock(&alt_lock);
-            ls = slot->altSock; slot->altSock = -1;
-            pthread_mutex_unlock(&alt_lock);
-            if (ls >= 0) close(ls);
-            pthread_join(slot->thread, NULL);
-            slot->threadValid = 0;
-        }
-        if (slot->altSock >= 0) { close(slot->altSock); slot->altSock = -1; }
+        /* Stop the self-contained receiver: the reaper sets stop, closes the
+         * listener to wake pre-connect accept, and joins outside alt_lock.  An
+         * already-exited receiver follows the identical single-owner path. */
+        alt_reap_thread(slot, 1);
         pthread_mutex_lock(&alt_lock);
+        if (slot->altSock >= 0) {
+            int ls = slot->altSock;
+            slot->altSock = -1;
+            pthread_mutex_unlock(&alt_lock);
+            close(ls);
+            pthread_mutex_lock(&alt_lock);
+        }
         if (g_alt_session == session) g_alt_session = NULL;
         memset(slot, 0, sizeof(*slot));
+        pthread_cond_broadcast(&alt_cond);
         pthread_mutex_unlock(&alt_lock);
         LOG_INFO(LOG_MODULE, "altScreen torn down for session=%p", session);
     } else if (slot) {

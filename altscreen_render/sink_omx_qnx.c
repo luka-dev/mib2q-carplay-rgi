@@ -68,6 +68,7 @@ typedef struct {
     unsigned int             callbacksActive;
     int                      omxInitialized;
     int                      started;   /* decoder brought up on first frame */
+    int                      sessionEverStarted;
     int                      startFails; /* consecutive _StartDecoder failures; capped to protect OMX pool */
     unsigned long long       retryAfterMs;
     int                      fedConfig; /* first buffer (SPS/PPS) flagged CODECCONFIG */
@@ -514,6 +515,7 @@ static int _StartDecoder(ScreenSink *me) {
     }
 
     me->started = 1;
+    me->sessionEverStarted = 1;
     fprintf(stderr, "altscreen_render[qnx]: decoder started %dx%d, native-32m %u Screen window bufs -> EGL GPU RGBA\n",
             me->width, me->height, (unsigned)me->nOutBufs);
     return 0;
@@ -732,9 +734,24 @@ int av_sink_video_ready(void) {
 }
 
 void av_sink_session_end(void) {
+    int hadWorkingDecoder = g_ss.sessionEverStarted;
     fprintf(stderr, "altscreen_render[qnx]: session end → teardown decoder; keep EGL/Screen presenter for reconnect\n");
     _Teardown(&g_ss, 0);
     g_ss.configLen = 0;
+    g_ss.sessionEverStarted = 0;
+    if (hadWorkingDecoder) {
+        /* A decoder which reached Executing and produced this session is not an
+         * OMX-pool leak.  Give the next phone connection a fresh attempt budget.
+         * Sessions that never reached started retain the global 30 s guard. */
+        g_ss.startFails = 0;
+        g_ss.retryAfterMs = 0;
+        fprintf(stderr,
+                "altscreen_render[qnx]: working session ended cleanly; decoder attempt budget refreshed\n");
+    } else if (g_ss.startFails > 0) {
+        fprintf(stderr,
+                "altscreen_render[qnx]: session never started; preserving OMX cooldown fails=%d\n",
+                g_ss.startFails);
+    }
 }
 
 void av_sink_close(void) {

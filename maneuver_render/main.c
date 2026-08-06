@@ -401,6 +401,8 @@ int main(int argc, char **argv) {
         if (cr_server_peer_closed()) {
             fprintf(stderr, "engine: peer closed — clearing, staying alive for reconnect\n");
             clear_maneuver();
+            announced_first_frame = 0;
+            cr_server_clear_frame_ready();
             cr_server_clear_peer_closed();
         }
 
@@ -478,6 +480,8 @@ int main(int argc, char **argv) {
                         g_bargraph_level, g_bargraph_on);
                 break;
             case CMD_CLEAR:
+                /* CLEAR wins over an earlier MANEUVER drained in this same loop. */
+                got_maneuver = 0;
                 clear_maneuver();
                 announced_first_frame = 0;
                 cr_server_clear_frame_ready();
