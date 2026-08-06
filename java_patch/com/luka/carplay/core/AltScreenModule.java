@@ -40,6 +40,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
     public static final int CTX_STOCK_CLUSTER = 74;
     private static final int CTX_BOUNCE       = 72;   /* kombi map — never ours; forces a real ctx change */
     private static final int BOUNCE_SLEEP_MS  = 180;  /* preContextSwitchHook settle (proven driver) */
+    private static final long CONTEXT_RECONCILE_MS = 250L;
     private static final int CLUSTER_FPS      = 30;   /* cluster encoder rate; MOST/encoder may cap below this */
     private static final int KOMBI_TYPE_G24   = 4;
     public static final int VIEWAREA_FULLSCREEN = 0;
@@ -49,6 +50,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
     private static final Object LOCK = new Object();
     private IDisplayManager dm;                  /* current DisplayManager (guarded by LOCK); stable across sessions */
     private Thread worker;                        /* the ONE persistent switch worker (guarded by LOCK) */
+    private static volatile Thread contextWriterThread;
 
     /* true while the cluster is on OUR context (set AFTER the physical switch completes). */
     private static volatile boolean clusterActive = false;
@@ -97,6 +99,12 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
      * terminal 1 to the stock map (worker then thinks it still owns ctx → stuck).  Intent-based pin
      * closes that window from t0. */
     public static boolean isConnected() { return platformSupported && (connected || videoAvailable); }
+
+    /** DisplayManagerMIB2High uses this to distinguish our serialized 72/80/81/74
+     * writes from stock screen-controller requests while CarPlay owns terminal 1. */
+    public static boolean isClusterContextWriterThread() {
+        return Thread.currentThread() == contextWriterThread;
+    }
 
     static boolean isPlatformSupported(FrameworkRef fw) {
         try { return fw != null && fw.framework() != null
@@ -320,13 +328,47 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
      * ============================================================ */
 
     private void switchLoop() {
+        contextWriterThread = Thread.currentThread();
         while (true) {
-            int target; IDisplayManager d;
+            int target; IDisplayManager d; boolean reconcileOnly = false;
             synchronized (LOCK) {
-                while (dm == null || desiredCtx == currentCtx) {
-                    try { LOCK.wait(); } catch (InterruptedException e) { /* re-check predicate */ }
+                while (dm == null) {
+                    try { LOCK.wait(); } catch (InterruptedException e) { /* persistent worker */ }
+                }
+                if (desiredCtx == currentCtx) {
+                    try {
+                        if (desiredCtx == CTX_CLUSTER || desiredCtx == CTX_CLUSTER_MAP)
+                            LOCK.wait(CONTEXT_RECONCILE_MS);
+                        else
+                            LOCK.wait();
+                    } catch (InterruptedException e) { /* persistent worker */ }
+                    if (dm == null || desiredCtx != currentCtx) continue;
+                    if (desiredCtx != CTX_CLUSTER && desiredCtx != CTX_CLUSTER_MAP) continue;
+                    reconcileOnly = true;
                 }
                 target = desiredCtx; d = dm;
+            }
+            if (reconcileOnly) {
+                int actual;
+                try { actual = d.getCurrentContextID(TERMINAL_CLUSTER); }
+                catch (Throwable t) {
+                    Log.w(TAG, "context reconcile read failed: " + t);
+                    continue;
+                }
+                if (actual != target) {
+                    boolean retry = false;
+                    synchronized (LOCK) {
+                        if (dm == d && desiredCtx == target && currentCtx == target) {
+                            currentCtx = -1;
+                            retry = true;
+                            LOCK.notifyAll();
+                        }
+                    }
+                    if (retry)
+                        Log.w(TAG, "physical context drift actual=" + actual
+                            + " desired=" + target + " -> reconcile");
+                }
+                continue;
             }
             applySwitch(target, d);
         }

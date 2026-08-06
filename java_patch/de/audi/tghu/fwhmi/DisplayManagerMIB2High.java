@@ -39,6 +39,7 @@ public class DisplayManagerMIB2High extends DisplayManager implements IDisplayLi
     private static final int DC_SIZE_A5  = 82;    // stock 0..78 + CarPlay 80/81
     private static final int DC_SIZE_G24 = 158;   // stock + the +79 KDK-hoisted variants
     private static final int G24_KDK_CTX_OFFSET = 79;
+    private int lastBlockedCarPlayContext = -1;
 
     public DisplayManagerMIB2High(IFrameworkAccess iframeworkaccess) {
         super(iframeworkaccess);
@@ -288,6 +289,22 @@ public class DisplayManagerMIB2High extends DisplayManager implements IDisplayLi
 
     public synchronized void switchContext(int ctx, int terminal, IDisplayListener listener) {
         this.log.log(1000000, "DisplayManager#switchContext visibleKDK %1 terminal %2 ", this.visibleKDKs[terminal], terminal);
+        /* Every stock VC screen controller eventually funnels through this method, not only
+         * CombiMapController.  While CarPlay owns terminal 1, accept physical context writes only
+         * from AltScreenModule's one serialized worker.  The logical FwHMI main-context still
+         * changes normally and RouteGuidance uses it to choose ctx80 vs ctx81. */
+        if (terminal == CLUSTER_TERMINAL
+                && com.luka.carplay.core.AltScreenModule.isConnected()
+                && !com.luka.carplay.core.AltScreenModule.isClusterContextWriterThread()) {
+            if (lastBlockedCarPlayContext != ctx) {
+                lastBlockedCarPlayContext = ctx;
+                this.log.log(1000000,
+                    "DisplayManager#switchContext blocked stock context %1 while CarPlay owns terminal %2 ",
+                    ctx, terminal);
+            }
+            return;
+        }
+        lastBlockedCarPlayContext = -1;
         /* Stock KDK-20 remap: while a KDK maneuver is visible, a switch to a stock map context is
          * redirected to its KDK-carrying twin (addKDKToContext).  Our CarPlay contexts (>= 80) are
          * self-composed — they already carry planes 98/99/101/102 — and MUST skip the remap, else
