@@ -36,5 +36,11 @@ void cr_server_send_heartbeat(void);
  * immediately on the new socket. */
 void cr_server_mark_ready(void);
 void cr_server_mark_frame_ready(void);
+/* Forget pixel readiness after the peer/session disappears.  READY remains
+ * process-sticky, but FRAME_READY must be earned by a new successful swap. */
+void cr_server_clear_frame_ready(void);
+/* Acknowledge the CMD_CLEAR barrier.  Unlike READY/FRAME_READY this event is not
+ * sticky: a new TCP generation starts cleared by definition. */
+void cr_server_mark_frame_cleared(void);
 
 #endif /* CR_SERVER_H */

@@ -206,6 +206,13 @@ void cr_server_mark_frame_ready(void) {
     send_event(EVT_FRAME_READY);
 }
 
+void cr_server_clear_frame_ready(void) {
+    g_frame_ready_sent = 0;
+}
+
+void cr_server_mark_frame_cleared(void) {
+    send_event(EVT_FRAME_CLEARED);
+}
 void cr_server_shutdown(void) {
     if (g_server_fd >= 0) { close(g_server_fd); g_server_fd = -1; }
     g_recv_len = 0;

@@ -50,6 +50,7 @@ public class RendererServer {
     private static final byte EVT_HEARTBEAT   = (byte) 0x80;
     private static final byte EVT_READY       = (byte) 0x81;
     private static final byte EVT_FRAME_READY = (byte) 0x82;
+    private static final byte EVT_FRAME_CLEARED = (byte) 0x83;
 
     /* Command IDs used by this always-on client protocol. */
     private static final byte CMD_MANEUVER    = 0x01;
@@ -69,6 +70,10 @@ public class RendererServer {
     private volatile boolean running;
     private volatile boolean rendererReady;
     private volatile boolean frameReady;
+    /* True from enqueueing CMD_CLEAR until the renderer processes it and returns
+     * EVT_FRAME_CLEARED.  Any older FRAME_READY received in this interval belongs
+     * to pre-clear pixels and must not expose ctx80. */
+    private volatile boolean clearPending;
 
     /* True once we've successfully accepted at least one renderer
      * connection.  Lets the caller distinguish "still starting up,
@@ -167,6 +172,7 @@ public class RendererServer {
                         everConnected = true;
                         rendererReady = false;
                         frameReady = false;
+                        clearPending = false;
                         lock.notifyAll();
                     }
                     Log.i(TAG, "renderer connected from " + s.getInetAddress() + ":" + s.getPort());
@@ -258,11 +264,19 @@ public class RendererServer {
                 lock.notifyAll();
                 reason = "ready";
             } else if (event == EVT_FRAME_READY) {
-                changed = !frameReady;
                 rendererReady = true;
-                frameReady = true;
+                if (!clearPending) {
+                    changed = !frameReady;
+                    frameReady = true;
+                    lock.notifyAll();
+                    reason = "frame-ready";
+                }
+            } else if (event == EVT_FRAME_CLEARED) {
+                changed = clearPending || frameReady;
+                clearPending = false;
+                frameReady = false;
                 lock.notifyAll();
-                reason = "frame-ready";
+                reason = "frame-cleared";
             }
         }
         if (changed) {
@@ -279,7 +293,7 @@ public class RendererServer {
     public void disconnectClient() {
         boolean changed;
         synchronized (lock) {
-            changed = sock != null || rendererReady || frameReady;
+            changed = sock != null || rendererReady || frameReady || clearPending;
             closeClientLocked();
             /* everConnected stays true — within this session we've already
              * had a working renderer; subsequent connect failures should
@@ -325,6 +339,7 @@ public class RendererServer {
         }
         rendererReady = false;
         frameReady = false;
+        clearPending = false;
         lock.notifyAll();
     }
 
@@ -344,7 +359,8 @@ public class RendererServer {
     /** True only for the currently connected renderer after it has acknowledged a real swap. */
     public boolean isFrameReady() {
         synchronized (lock) {
-            return sock != null && !sock.isClosed() && out != null && frameReady;
+            return sock != null && !sock.isClosed() && out != null
+                && frameReady && !clearPending;
         }
     }
 
@@ -438,7 +454,7 @@ public class RendererServer {
     public boolean sendClear() {
         byte[] pkt = new byte[PKT_SIZE];
         pkt[0] = CMD_CLEAR;
-        return sendPacket(pkt);
+        return sendPacket(pkt, true);
     }
 
     /**
@@ -447,10 +463,19 @@ public class RendererServer {
      * (3 consecutive false returns trigger a renderer respawn).
      */
     private boolean sendPacket(byte[] pkt) {
+        return sendPacket(pkt, false);
+    }
+
+    private boolean sendPacket(byte[] pkt, boolean beginClear) {
         OutputStream o;
         synchronized (lock) {
             if (out == null) return false;
             o = out;
+            if (beginClear) {
+                frameReady = false;
+                clearPending = true;
+                lock.notifyAll();
+            }
         }
         try {
             /* Maneuver updates and the blink timer are different producers. Preserve the fixed

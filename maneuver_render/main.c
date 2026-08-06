@@ -479,6 +479,12 @@ int main(int argc, char **argv) {
                 break;
             case CMD_CLEAR:
                 clear_maneuver();
+                announced_first_frame = 0;
+                cr_server_clear_frame_ready();
+                /* This barrier is sent before any later command in the same TCP
+                 * drain can draw and earn a new FRAME_READY.  Java therefore can
+                 * reject an old in-flight FRAME_READY without a timing guess. */
+                cr_server_mark_frame_cleared();
                 fprintf(stderr, "engine: clear (blank)\n");
                 break;
             case CMD_SHUTDOWN:
