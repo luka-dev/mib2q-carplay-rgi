@@ -567,7 +567,7 @@ void *AirPlayCopyServerInfo(void *session, void *qualifier, void *macAddr, void 
 
 /* Exported stock function pointers (resolved lazily via RTLD_DEFAULT).
  * The convenience AirPlayReceiverSessionForceKeyFrame export is intentionally
- * not used: stock 210 omits params.displayUUID, so iOS targets stream 110. */
+ * not used: stock 210 omits params.uuid, so iOS targets stream 110. */
 /* stock AES-CTR exports (self-contained receiver decrypts opcode-0 bodies itself, no stock ScreenStream) */
 typedef int      (*fn_aes_ctr_init_t)(void *ctx, const uint8_t *key, const uint8_t *iv);        /* AES_CTR_Init  */
 typedef int      (*fn_aes_ctr_update_t)(void *ctx, const uint8_t *src, uint32_t len, uint8_t *dst); /* AES_CTR_Update */
@@ -589,7 +589,7 @@ static fn_sess_sendcmd_t    sess_sendcmd;   /* session-level {type,params} comma
 static void alt_kick_viewarea(void);        /* fwd: apply cached fullscreen/duo geometry when 111 is live */
 static void alt_kick_show_ui(void);         /* fwd: select Maps content for the cluster display */
 static int  alt_send_cluster_night_mode(int night, const char *reason); /* fwd: per-display day/night */
-static int  alt_request_cluster_idr(const char *reason); /* fwd: forceKeyFrame targeted by displayUUID */
+static int  alt_request_cluster_idr(const char *reason); /* fwd: forceKeyFrame targeted by params.uuid */
 static fn_derive_aes_t      derive_aes;
 
 /* main AirPlay session with a live altScreen — set on alt_setup success, cleared
@@ -1698,19 +1698,18 @@ static void zoom_on_cmd(uint16_t type, uint8_t flags,
 
 /* Stock 210 AirPlayReceiverSessionForceKeyFrame sends only
  * {type:"forceKeyFrame"}. iOS 26.6 then falls back to the primary screen stream.
- * Its command handler selects the requested screen through
- * params["displayUUID"], so build the generic command ourselves and target the
+ * Its command handler selects the requested screen through params["uuid"], so
+ * build the generic command ourselves and target the
  * cluster UUID explicitly. This request intentionally has no completion callback:
  * recovery is proven by observing an actual type-5 NAL, and retaining a callback
  * for every retry would grow stock 210's asynchronous response queue. */
 static int alt_request_cluster_idr(const char *reason)
 {
-    void *p = alt_params_new(0);
+    void *p = alt_params_new(1);
     void *cmd = NULL;
     void *pk = NULL;
     int rc = -6728;
     if (!p) return -6728;
-    set_str(p, "displayUUID", CLUSTER_DISPLAY_UUID);
     cmd = cf_dictm(0, 0, dict_keycb, dict_valcb);
     if (cmd) {
         set_str(cmd, "type", "forceKeyFrame");
@@ -1722,7 +1721,7 @@ static int alt_request_cluster_idr(const char *reason)
     if (cmd && cf_rel) cf_rel(cmd);
     if (cf_rel) cf_rel(p);
     LOG_INFO(LOG_MODULE,
-             "alt: cluster forceKeyFrame displayUUID=%s reason=%s rc=%d",
+             "alt: cluster forceKeyFrame uuid=%s reason=%s rc=%d",
              CLUSTER_DISPLAY_UUID, reason ? reason : "?", rc);
     return rc;
 }

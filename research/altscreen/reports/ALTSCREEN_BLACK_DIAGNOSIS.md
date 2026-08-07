@@ -158,8 +158,12 @@ subtype. Thus the old repeated NULL-parameter requests targeted stream 110, not
 cluster stream 111.
 
 The hook now sends the generic command
-`forceKeyFrame{params:{displayUUID:<cluster UUID>}}` through the already proven
-session command channel (`hook/altscreen/altscreen_hook.c:1361-1390`). The request
+`forceKeyFrame{params:{uuid:<cluster UUID>}}` through the already proven session
+command channel. Re-verification against the extracted iOS 26.6 AirPlaySender
+showed that `carEndpoint_handleEventCreatingReply@0x2276d86a4-0x2276d86bc`
+reads CFString `stru_28381B728`, whose backing string is
+`0x22790cc0b = "uuid"`; the separate `displayUUID` string at `0x22793039f` is
+not the dictionary key used by this handler. The request
 uses no completion callback: recovery is acknowledged by observing a real H.264
 type-5 NAL, so stock 210 never retains a callback for a retry. Requests are limited
 to one immediately plus five retries at least two seconds apart

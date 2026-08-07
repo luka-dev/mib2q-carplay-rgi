@@ -416,8 +416,19 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
                 d.setUpdateRate(TERMINAL_CLUSTER, CLUSTER_FPS);   /* (idempotent when already running) */
                 clusterActive = true;                             /* roller → CMD_ALT_ZOOM */
             } else {
-                d.setUpdateRate(TERMINAL_CLUSTER, 0);             /* stop encoder before leaving */
-                d.switchContext(CTX_STOCK_CLUSTER, TERMINAL_CLUSTER, null);
+                /* Preserve the stop-before-switch ordering, but never leave terminal 1
+                 * parked at 0 FPS. On this A5/MHI2Q the stock
+                 * KOMBI_KDK_VIA_DISPLAYABLES branch bypasses CombiMapController's
+                 * optional 10/1/0 updateFrameRate() path, so 10 is not an authoritative
+                 * restore value here. Return the terminal to the same full 30 Hz rate
+                 * used by the live cluster encoder; stock may change it later if it has
+                 * an applicable producer. */
+                d.setUpdateRate(TERMINAL_CLUSTER, 0);
+                try {
+                    d.switchContext(CTX_STOCK_CLUSTER, TERMINAL_CLUSTER, null);
+                } finally {
+                    d.setUpdateRate(TERMINAL_CLUSTER, CLUSTER_FPS);
+                }
                 clusterActive = false;
             }
             synchronized (LOCK) { if (dm == d) currentCtx = ctx; }

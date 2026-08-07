@@ -84,8 +84,10 @@ int platform_init(int width, int height) {
     return 0;
 }
 
-void platform_swap(void) {
-    if (g_window) glfwSwapBuffers(g_window);
+int platform_swap(void) {
+    if (!g_window) return 0;
+    glfwSwapBuffers(g_window);
+    return 1;
 }
 
 void platform_poll(void) {

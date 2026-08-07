@@ -607,11 +607,19 @@ int main(int argc, char **argv) {
             if (got_screenshot)
                 save_screenshot(fb_w, fb_h, screenshot_label);
 
-            platform_swap();
+            int swap_ok = platform_swap();
+            if (!swap_ok) {
+                /* platform_swap recreated the QNX surface.  Repaint it on the
+                 * next iteration even when the engine is otherwise idle.  Also
+                 * classify this iteration as idle so the generic pacing below
+                 * sleeps; a dead EGL surface does not provide vsync pacing. */
+                g_engine.dirty = 1;
+                rendered_this_frame = 0;
+            }
             /* Frame-ready means the EGL surface has a defined maneuver frame
              * queued to the compositor.  The cold-start fade may still continue
              * visually after Java exposes the displayable. */
-            if (!announced_first_frame && g_engine.has_current) {
+            if (swap_ok && !announced_first_frame && g_engine.has_current) {
                 announced_first_frame = 1;
                 cr_server_mark_frame_ready();
                 fprintf(stderr, "engine: first frame ready\n");

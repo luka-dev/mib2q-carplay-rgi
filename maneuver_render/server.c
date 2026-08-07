@@ -39,6 +39,14 @@ static int g_recv_len = 0;
 static int g_ready_sent = 0;
 static int g_frame_ready_sent = 0;
 
+/* Renderer->Java events are fixed-size packets, but the socket is deliberately
+ * non-blocking. Preserve their order across a transient EAGAIN so the
+ * FRAME_CLEARED barrier cannot disappear between an old and a new FRAME_READY. */
+#define EVENT_QUEUE_SIZE 16
+static uint8_t g_event_queue[EVENT_QUEUE_SIZE];
+static int g_event_head = 0;
+static int g_event_count = 0;
+
 #define RETRY_INTERVAL_SEC 1   /* re-attempt connect every 1 s if Java not up yet */
 
 /* Set when the peer closed the connection (recv returned 0).  Main loop
@@ -62,20 +70,56 @@ static void set_nonblocking(int fd) {
         fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
+static void clear_event_queue(void) {
+    g_event_head = 0;
+    g_event_count = 0;
+}
+
+static void drop_event_peer(const char *reason) {
+    if (reason) fprintf(stderr, "server: event channel reset: %s\n", reason);
+    if (g_server_fd >= 0) close(g_server_fd);
+    g_server_fd = -1;
+    g_recv_len = 0;
+    clear_event_queue();
+}
+
+static void flush_event_queue(void) {
+    while (g_server_fd >= 0 && g_event_count > 0) {
+        uint8_t pkt[CR_PKT_SIZE];
+        ssize_t k;
+        memset(pkt, 0, sizeof(pkt));
+        pkt[0] = g_event_queue[g_event_head];
+        k = send(g_server_fd, pkt, CR_PKT_SIZE, 0);
+        if (k == (ssize_t)CR_PKT_SIZE) {
+            g_event_head = (g_event_head + 1) % EVENT_QUEUE_SIZE;
+            g_event_count--;
+            continue;
+        }
+        if (k < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) return;
+
+        /* A short TCP write cannot be resumed as a fresh 48-byte protocol
+         * packet. Reset the connection: Java clears frameReady/clearPending on
+         * disconnect, then READY state is replayed on reconnect. */
+        drop_event_peer(k >= 0 ? "short event write" : strerror(errno));
+        return;
+    }
+}
+
 static void send_event(uint8_t event_id) {
+    int tail;
     if (g_server_fd < 0) return;
 
-    uint8_t pkt[CR_PKT_SIZE];
-    memset(pkt, 0, sizeof(pkt));
-    pkt[0] = event_id;
-    ssize_t k = send(g_server_fd, pkt, CR_PKT_SIZE, 0);
-    if (k != (ssize_t)CR_PKT_SIZE && !(k < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))) {
-        /* Hard error (peer reset) or short write → drop the dead fd now so
-         * cr_server_poll() reconnects promptly, instead of silently losing this
-         * and later events until a recv happens to notice.  (Single-threaded, no race.) */
-        close(g_server_fd);
-        g_server_fd = -1;
+    if (g_event_count >= EVENT_QUEUE_SIZE) {
+        /* Never discard a barrier while pretending the connection stayed
+         * valid. A reconnect gives Java a clean, explicitly-not-ready state. */
+        drop_event_peer("event queue full");
+        return;
     }
+
+    tail = (g_event_head + g_event_count) % EVENT_QUEUE_SIZE;
+    g_event_queue[tail] = event_id;
+    g_event_count++;
+    flush_event_queue();
 }
 
 static int try_connect(void) {
@@ -126,6 +170,7 @@ static int try_connect(void) {
 
 int cr_server_init(int port) {
     g_target_port = port;
+    clear_event_queue();
 
     /* First connect attempt — Java should already be listening. */
     g_server_fd = try_connect();
@@ -149,11 +194,16 @@ void cr_server_poll(void) {
             if (g_server_fd >= 0) {
                 fprintf(stderr, "server: connected to 127.0.0.1:%d\n", g_target_port);
                 g_recv_len = 0;
+                clear_event_queue();
                 if (g_ready_sent) send_event(EVT_READY);
                 if (g_frame_ready_sent) send_event(EVT_FRAME_READY);
             }
         }
     }
+
+    /* Retry ordered events that previously hit EAGAIN before processing the
+     * next command batch. */
+    flush_event_queue();
 
     /* Read available data from server */
     if (g_server_fd >= 0) {
@@ -167,12 +217,14 @@ void cr_server_poll(void) {
                 close(g_server_fd);
                 g_server_fd = -1;
                 g_recv_len = 0;
+                clear_event_queue();
                 g_peer_closed = 1;
             } else if (errno != EAGAIN && errno != EWOULDBLOCK) {
                 fprintf(stderr, "server: recv error: %s\n", strerror(errno));
                 close(g_server_fd);
                 g_server_fd = -1;
                 g_recv_len = 0;
+                clear_event_queue();
             }
         }
     }
@@ -216,5 +268,6 @@ void cr_server_mark_frame_cleared(void) {
 void cr_server_shutdown(void) {
     if (g_server_fd >= 0) { close(g_server_fd); g_server_fd = -1; }
     g_recv_len = 0;
+    clear_event_queue();
     fprintf(stderr, "server: shutdown\n");
 }

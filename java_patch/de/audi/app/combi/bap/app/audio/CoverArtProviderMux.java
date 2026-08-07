@@ -13,7 +13,6 @@ import java.util.Map;
 
 final class CoverArtProviderMux implements IPictureProvider {
     private static final int PICTURE_TYPE_COVER_ART = 0;
-    private static final int SOURCE_TYPE_CARPLAY = 21;
 
     private final IPictureProvider stockMedia;
     private final AppConnectorTerminalMode$CoverArtProvider carPlay;
@@ -60,7 +59,10 @@ final class CoverArtProviderMux implements IPictureProvider {
     }
 
     public void requestPicture(long entryID, int sourceType) {
-        if (sourceType == SOURCE_TYPE_CARPLAY || carPlay.hasPicture(entryID)) {
+        /* BAP source 21 is Bluetooth audio, not CarPlay (Apple Link is 37).
+         * Route by the entry-ID mapping we actually own; otherwise preserve the
+         * stock Media provider for every source, including Bluetooth. */
+        if (carPlay.hasPicture(entryID)) {
             carPlay.requestPicture(entryID, sourceType);
         } else {
             stockMedia.requestPicture(entryID, sourceType);

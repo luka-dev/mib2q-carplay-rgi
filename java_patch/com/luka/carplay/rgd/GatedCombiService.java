@@ -120,8 +120,10 @@ public class GatedCombiService implements CombiBAPServiceNavi {
         try {
             if (haveTimeDestination) real.updateTimeToDestination(timeDestA, timeDestB, timeDestC);
         } catch (Throwable t) { }
-        haveCompass = haveAltitude = haveMapScale = haveCurrentPosition = false;
-        haveTurnTo = haveDistanceDestination = haveTimeDestination = false;
+        /* These are last-value caches, not one-shot replay latches. Keep them
+         * across sessions: if stock Navigation is quiet during a later CarPlay
+         * takeover, disconnect still has exact values to restore instead of
+         * leaving our protocol-invalid clear values on the cluster. */
     }
 
     /* GATED ROUTE-GUIDANCE METHODS */

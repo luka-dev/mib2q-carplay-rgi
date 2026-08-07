@@ -142,30 +142,43 @@ public final class CarPlayApp {
 
     /* start every not-yet-started module; return true when all are started. */
     private static boolean startPass() {
+        FrameworkRef fw;
         synchronized (lock) {
             if (!active || fwRef == null || !fwRef.isReady()) {
                 Log.d(TAG, "startPass: framework not ready");
                 return false;
             }
-            boolean allUp = true;
-            for (int i = 0; i < MODULES.length; i++) {
-                if (started[i]) continue;
-                boolean ok;
-                try { ok = MODULES[i].start(fwRef); }
-                catch (Throwable t) { Log.w(TAG, MODULES[i].name() + " start threw: " + t); ok = false; }
-                started[i] = ok;
-                if (ok) {
-                    Log.i(TAG, "started " + MODULES[i].name());
-                } else {
-                    /* MODULES is an ordered dependency chain: RGI must not consume/replay a
-                     * snapshot before altScreen has reset navActive and physically owns ctx 81. */
-                    allUp = false;
-                    break;
-                }
-            }
-            if (allUp) Log.i(TAG, "all modules started (" + MODULES.length + ")");
-            return allUp;
+            fw = fwRef;
         }
+
+        /* Every caller holds lifecycleLock, which serializes module start/stop and
+         * keeps active/fwRef stable for this pass.  Never hold the smaller state
+         * lock across Module.start(): AltScreenModule/RgdModule enter the static
+         * AltScreenNavStatusGate monitor, while NavigationJobs enters that monitor
+         * before calling onNavigationServiceChanged() (which takes this lock).
+         * Holding both in the old order made cold boot an ABBA deadlock. */
+        boolean allUp = true;
+        for (int i = 0; i < MODULES.length; i++) {
+            synchronized (lock) {
+                if (started[i]) continue;
+            }
+            boolean ok;
+            try { ok = MODULES[i].start(fw); }
+            catch (Throwable t) { Log.w(TAG, MODULES[i].name() + " start threw: " + t); ok = false; }
+            synchronized (lock) {
+                started[i] = ok;
+            }
+            if (ok) {
+                Log.i(TAG, "started " + MODULES[i].name());
+            } else {
+                /* MODULES is an ordered dependency chain: RGI must not consume/replay a
+                 * snapshot before altScreen has reset navActive and physically owns ctx 81. */
+                allUp = false;
+                break;
+            }
+        }
+        if (allUp) Log.i(TAG, "all modules started (" + MODULES.length + ")");
+        return allUp;
     }
 
     private static void startRetry() {

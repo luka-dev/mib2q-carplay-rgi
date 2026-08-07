@@ -12,8 +12,8 @@
  * Returns 0 on success, -1 on failure. */
 int platform_init(int width, int height);
 
-/* Swap buffers (present frame). */
-void platform_swap(void);
+/* Swap buffers (present frame). Returns 1 only when the swap succeeded. */
+int platform_swap(void);
 
 /* Poll events (keyboard, window close, etc.).
  * Call once per frame. */

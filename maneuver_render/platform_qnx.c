@@ -348,9 +348,14 @@ int platform_init(int width, int height) {
     return 0;
 }
 
-void platform_swap(void) {
+int platform_swap(void) {
+    static unsigned failure_streak = 0;
     if (eglSwapBuffers(g_egl_display, g_egl_surface) == EGL_TRUE) {
-        return;
+        if (failure_streak > 0)
+            fprintf(stderr, "platform_qnx: eglSwapBuffers recovered after %u failures\n",
+                    failure_streak);
+        failure_streak = 0;
+        return 1;
     }
     /* Swap failed.  Common causes when displaymanager yanks our window
      * (native nav collision, KOMO context exit): EGL_BAD_SURFACE,
@@ -358,8 +363,12 @@ void platform_swap(void) {
      * recreate the renderer would spin on a dead surface forever,
      * since swap drives the loop's frame pacing. */
     EGLint err = eglGetError();
-    fprintf(stderr, "platform_qnx: eglSwapBuffers failed err=0x%x → recreate\n", err);
+    failure_streak++;
+    if (failure_streak == 1 || (failure_streak % 30u) == 0)
+        fprintf(stderr, "platform_qnx: eglSwapBuffers failed err=0x%x streak=%u → recreate\n",
+                err, failure_streak);
     platform_recreate_window("swap-failed");
+    return 0;
 }
 
 void platform_poll(void) {
