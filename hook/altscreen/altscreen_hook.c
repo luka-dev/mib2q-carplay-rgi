@@ -206,22 +206,25 @@ static void set_i64(void *d, const char *key, int64_t val)
  * physical non-rectangular masks cannot be represented exactly; keep critical
  * UI in the nested safe frame:
  *
- *   fullscreen physical safe shape: C2..N3 + E2..L4 (a T shape)
- *              rectangular safeArea: E2..L4 = (360,90) 720x271
- *   duo physical safe shape: about half-B2 through E5, with a slanted left edge
- *              rectangular safeArea: B2.5..E5 = (90,135) 360x317
+ *   fullscreen rectangular safeArea: D2 + half a cell through M4 - half
+ *              a cell = x 315..1125, y 90..361 = (315,90) 810x271
+ *   duo rectangular safeArea: B2 through E5 + 15% of F5
+ *              = x 90..464, y 90..452 = (90,90) 374x362
+ *
+ * Fractional grid coordinates are rounded to the nearest whole encoded pixel:
+ * the E/F boundary plus 15% of F is 450 + 13.5 = 463.5 -> 464.
  *
  * The background may render under a physical mask; route focus and critical UI
  * stay inside these nested safe rectangles. */
-#define FULL_SAFE_X     360
+#define FULL_SAFE_X     315
 #define FULL_SAFE_Y      90
-#define FULL_SAFE_W     720
+#define FULL_SAFE_W     810
 #define FULL_SAFE_H     271
 
 #define DUO_SAFE_X       90
-#define DUO_SAFE_Y      135
-#define DUO_SAFE_W      360
-#define DUO_SAFE_H      317
+#define DUO_SAFE_Y       90
+#define DUO_SAFE_W      374
+#define DUO_SAFE_H      362
 
 /* one rect dict, iOS keys: {originXPixels, originYPixels, widthPixels, heightPixels}
  * (CarKit CROrigin/CRSizeFromAirPlayDictionary). */
@@ -1745,7 +1748,8 @@ static void alt_kick_viewarea(void)
 static void alt_kick_show_ui(void)
 {
     const char *url = getenv("ALTSCREEN_CLUSTER_URL");
-    if (!url || !url[0]) url = "maps:/car/instrumentcluster/map";
+    if (!url || !url[0])
+        url = "maps:/car/instrumentcluster/map?maneuverLayout=rightAligned&showETA=yes";
 
     void *p = alt_params_new(1);                        /* uuid = cluster display */
     if (!p) return;
