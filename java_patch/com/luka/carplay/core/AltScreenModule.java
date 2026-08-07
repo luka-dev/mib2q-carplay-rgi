@@ -8,7 +8,8 @@
  *
  * The CarPlay supervisor keeps both renderers alive for the dio_manager generation, so windows
  * 98/99 exist throughout the session. The only connected-session transition is 81 -> 80 after
- * RGI presentation confirmation, and 80 -> 81 when guidance/presentation goes away.
+ * RGI presentation confirmation, and 80 -> 81 after a bounded KDK-removal hold when
+ * guidance/presentation goes away.
  *
  * The context table itself (dc[80]) is declared to the native compositor at init via
  * DisplayManager.declareContexts(dc); getMappedInternalContext is identity on MIB2High, so
@@ -40,6 +41,10 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
     public static final int CTX_STOCK_CLUSTER = 74;
     private static final int CTX_BOUNCE       = 72;   /* kombi map — never ours; forces a real ctx change */
     private static final int BOUNCE_SLEEP_MS  = 180;  /* preContextSwitchHook settle (proven driver) */
+    /* VC drives KDK removal through an asynchronous fade-out completion callback.  That callback is
+     * not exposed to the HU Java process, so keep ctx 80 composed for one bounded fallback interval
+     * before dropping the maneuver/backing planes.  Never sleep on the HMI/BAP caller thread. */
+    private static final long NAV_HIDE_HOLD_MS = 250L;
     private static final long CONTEXT_RECONCILE_MS = 250L;
     private static final int CLUSTER_FPS      = 30;   /* cluster encoder rate; MOST/encoder may cap below this */
     private static final int KOMBI_TYPE_G24   = 4;
@@ -127,6 +132,8 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
      * stock ctx 74 while displayable 99 renders invisibly. */
     private static volatile boolean videoAvailable = false;
     private static volatile boolean navActive = false;
+    private static boolean navHidePending;
+    private static int navHideGeneration;
     private static volatile boolean acceptVideoFallback = false;
     private static int lifecycleGeneration;
     private static final long VIDEO_FALLBACK_GRACE_MS = 1500L;
@@ -204,18 +211,62 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
      *  current RGI delta has been published through BAP and maneuver_render has confirmed a frame.
      *  The stock KDK-visible hint never drives this latch. */
     public static void setNavActive(boolean active) {
-        synchronized (LOCK) {
-            if (navActive == active) return;
-            navActive = active;
+        if (active) {
+            boolean changed;
+            synchronized (LOCK) {
+                /* A fresh/current presentation wins over an old delayed hide. */
+                navHideGeneration++;
+                navHidePending = false;
+                changed = !navActive;
+                navActive = true;
+            }
+            if (!changed) return;
+            Log.i(TAG, "RGI presentation=true -> ctx 80 (map+maneuver)");
+            republish();
+            return;
         }
-        Log.i(TAG, "RGI presentation=" + active + " -> "
-            + (active ? "ctx 80 (map+maneuver)" : "ctx 81 (map only)"));
-        republish();
+
+        final int generation;
+        synchronized (LOCK) {
+            if (!navActive || navHidePending) return;
+            navHidePending = true;
+            generation = ++navHideGeneration;
+        }
+        Log.i(TAG, "RGI presentation=false -> holding ctx 80 for " + NAV_HIDE_HOLD_MS + "ms");
+        Thread hide = new Thread(new Runnable() {
+            public void run() {
+                try { Thread.sleep(NAV_HIDE_HOLD_MS); }
+                catch (InterruptedException e) { Thread.currentThread().interrupt(); return; }
+
+                synchronized (LOCK) {
+                    if (!navHidePending || generation != navHideGeneration || !navActive) return;
+                    navHidePending = false;
+                    navActive = false;
+                }
+                Log.i(TAG, "RGI hide hold complete -> ctx 81 (map only)");
+                republish();
+            }
+        }, "carplay-rgi-hide-hold");
+        hide.setDaemon(true);
+        try {
+            hide.start();
+        } catch (Throwable t) {
+            boolean changed = false;
+            synchronized (LOCK) {
+                if (navHidePending && generation == navHideGeneration && navActive) {
+                    navHidePending = false;
+                    navActive = false;
+                    changed = true;
+                }
+            }
+            Log.w(TAG, "RGI hide worker start failed; hiding immediately: " + t);
+            if (changed) republish();
+        }
     }
 
-    /** The cluster-layer visibility gate read by CombiMapController — same truth as the BAP nav-active
-     *  message, so the CarPlay layers (98/101/102) show ONLY while our RGI is active, never on a stray
-     *  stock KDK-visible bit. */
+    /** The cluster-layer visibility gate read by CombiMapController.  It follows the confirmed BAP
+     *  presentation, except for the intentional 250 ms removal hold, and never follows a stray stock
+     *  KDK-visible bit. */
     public static boolean isNavActive() { return navActive; }
 
     public String name() { return "altscreen"; }
@@ -265,6 +316,8 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
             if (dm != d) { dm = d; currentCtx = -1; }
             connected = true;
             navActive = false;
+            navHidePending = false;
+            navHideGeneration++;
             acceptVideoFallback = true;
             lifecycleGeneration++;
             desiredCtx = CTX_CLUSTER_MAP;
@@ -294,6 +347,8 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
         synchronized (LOCK) {
             connected = false;
             navActive = false;
+            navHidePending = false;
+            navHideGeneration++;
             acceptVideoFallback = true;
             generation = ++lifecycleGeneration;
         }

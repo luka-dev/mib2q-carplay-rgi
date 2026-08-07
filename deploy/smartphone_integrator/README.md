@@ -21,6 +21,7 @@ Install these executable files under `/mnt/app/root/hooks`:
 - `libcarplay_hook.so`
 - `maneuver_render`
 - `altscreen_render`
+- `flag_atlas.rgba`
 
 Do not overwrite `/etc/scripts/carplay_cleanup.sh`: the custom cleanup calls that
 stock script after stopping the renderers.

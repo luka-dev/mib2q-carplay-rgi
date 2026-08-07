@@ -10,6 +10,7 @@ Runtime files installed together under `/mnt/app/root/hooks/`:
 libcarplay_hook.so
 maneuver_render
 altscreen_render
+flag_atlas.rgba
 carplay_startup.sh
 carplay_processes.sh
 carplay_cleanup.sh

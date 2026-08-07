@@ -113,9 +113,19 @@ public class RendererMapper {
      */
     public static int mapDirection(int mt, int turnAngle, int drivingSide) {
         switch (mt) {
-            /* Merge: direction from driving side */
+            /* Use the signed iAP2 exit angle when present. If it is absent,
+             * mirror the BAP mapping's traffic-side fallback. */
+            case ManeuverMapper.MT_U_TURN:
+            case ManeuverMapper.MT_START_ROUTE_WITH_U_TURN:
+            case ManeuverMapper.MT_U_TURN_WHEN_POSSIBLE:
+                if (hasDirectionalAngle(turnAngle)) {
+                    return (turnAngle < 0) ? -1 : 1;
+                }
+                return (drivingSide == ManeuverMapper.DRIVING_SIDE_LEFT) ? 1 : -1;
+
+            /* Generic ramps: signed iOS angle wins; traffic side is fallback. */
             case ManeuverMapper.MT_ON_RAMP:
-                return (drivingSide == ManeuverMapper.DRIVING_SIDE_LEFT) ? -1 : 1;
+                return rampDirection(turnAngle, drivingSide);
 
             /* Highway exit / lane change */
             case ManeuverMapper.MT_CHANGE_HIGHWAY_LEFT:
@@ -135,7 +145,7 @@ public class RendererMapper {
             case ManeuverMapper.MT_HIGHWAY_OFF_RAMP_RIGHT:
                 return 1;
             case ManeuverMapper.MT_OFF_RAMP:
-                return (drivingSide == ManeuverMapper.DRIVING_SIDE_LEFT) ? -1 : 1;
+                return rampDirection(turnAngle, drivingSide);
 
             default:
                 return 0;
@@ -147,8 +157,18 @@ public class RendererMapper {
      * For off-ramps without a real angle, use a default slight angle.
      * For roundabouts, the turnAngle from iOS is the exit angle.
      */
-    /** Sentinel value: iOS sends 1000 when turn angle is unknown. */
+    /** Pipeline sentinel: the hook supplies 1000 when iAP2 omits the exit angle. */
     private static final int ANGLE_UNKNOWN = 1000;
+
+    private static boolean hasDirectionalAngle(int turnAngle) {
+        return turnAngle != 0 && turnAngle != ANGLE_UNKNOWN
+            && turnAngle != -ANGLE_UNKNOWN;
+    }
+
+    private static int rampDirection(int turnAngle, int drivingSide) {
+        if (hasDirectionalAngle(turnAngle)) return (turnAngle < 0) ? -1 : 1;
+        return (drivingSide == ManeuverMapper.DRIVING_SIDE_LEFT) ? -1 : 1;
+    }
 
     /** Default angles for maneuver types when iOS doesn't provide one. */
     private static int defaultAngle(int mt) {
@@ -173,13 +193,16 @@ public class RendererMapper {
             case ManeuverMapper.MT_START_ROUTE_WITH_U_TURN:
             case ManeuverMapper.MT_U_TURN_WHEN_POSSIBLE:
                 return -180;
+            case ManeuverMapper.MT_U_TURN_AT_ROUNDABOUT:
+                /* The maneuver type itself supplies the missing geometry. */
+                return 180;
             default:
                 return 0;
         }
     }
 
     public static int mapExitAngle(int mt, int turnAngle) {
-        /* iOS sentinel 1000 = no angle data — use default for the maneuver type */
+        /* Pipeline sentinel 1000 = no angle data — use the maneuver default. */
         if (turnAngle == ANGLE_UNKNOWN || turnAngle == -ANGLE_UNKNOWN) {
             turnAngle = defaultAngle(mt);
         }

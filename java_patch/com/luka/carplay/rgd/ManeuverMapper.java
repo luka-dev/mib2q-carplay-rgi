@@ -295,19 +295,29 @@ public class ManeuverMapper {
             case MT_U_TURN:
             case MT_START_ROUTE_WITH_U_TURN:
             case MT_U_TURN_WHEN_POSSIBLE:
-                /* MHI3 uses a left/right variant depending on driving side. */
                 mainElement = UTURN;
-                if (drivingSide == DRIVING_SIDE_LEFT) direction = DIR_RIGHT;
-                else direction = DIR_LEFT;
+                /* JunctionElementExitAngle is signed: negative means left and
+                 * positive means right. Prefer that explicit direction for a
+                 * U-turn; when it is unavailable after transport normalization
+                 * (0/+/-1000), fall back to the traffic side so both RHT and
+                 * LHT regions remain correct. */
+                if (hasDirectionalTurnAngle(turnAngle)) {
+                    direction = (turnAngle < 0) ? DIR_LEFT : DIR_RIGHT;
+                } else {
+                    direction = (drivingSide == DRIVING_SIDE_LEFT)
+                        ? DIR_RIGHT : DIR_LEFT;
+                }
                 break;
 
             case MT_OFF_RAMP:
                 /*
                  * BAP EXIT_RIGHT/EXIT_LEFT renders a highway off-ramp icon.
                  * MHI3 used TURN+slight (coarsened to 90-degree), but on MHI2
-                 * VC the EXIT icon is much clearer for ramp maneuvers.
+                 * VC the EXIT icon is much clearer for ramp maneuvers.  iOS's
+                 * JunctionElementExitAngle is signed, so it is authoritative
+                 * when present; drivingSide is only the missing-angle fallback.
                  */
-                if (drivingSide == DRIVING_SIDE_LEFT) {
+                if (rampGoesLeft(turnAngle, drivingSide)) {
                     mainElement = EXIT_LEFT;
                     direction = DIR_SLIGHT_LEFT;
                 } else {
@@ -319,7 +329,7 @@ public class ManeuverMapper {
             case MT_ON_RAMP:
                 /* On-ramp: slight merge direction, not coarsened to 90-degree. */
                 mainElement = TURN;
-                if (drivingSide == DRIVING_SIDE_LEFT && ((turnAngle & 0xffffffffL) > 0xB3L)) {
+                if (rampGoesLeft(turnAngle, drivingSide)) {
                     direction = DIR_SLIGHT_LEFT;
                 } else {
                     direction = DIR_SLIGHT_RIGHT;
@@ -374,6 +384,15 @@ public class ManeuverMapper {
         return new int[] { mainElement, direction };
     }
 
+    private static boolean hasDirectionalTurnAngle(int turnAngle) {
+        return turnAngle != 0 && turnAngle != 1000 && turnAngle != -1000;
+    }
+
+    private static boolean rampGoesLeft(int turnAngle, int drivingSide) {
+        if (hasDirectionalTurnAngle(turnAngle)) return turnAngle < 0;
+        return drivingSide == DRIVING_SIDE_LEFT;
+    }
+
     private static int applyDsiNavBapDirectionOverride(int maneuverType, int dir) {
         /* Skip override for roundabout + uturn actions (DSINavBap action in {5..8}). */
         if (maneuverType == MT_ENTER_ROUNDABOUT
@@ -416,6 +435,12 @@ public class ManeuverMapper {
      * Table extracted from MHI3 tbt_renderer init (unk_530F68 + unk_531010).
      */
     public static int directionFromAngle16(int angle) {
+        /* rgd_tlv uses +/-1000 when JunctionElementExitAngle is absent.  Do not
+         * clamp that sentinel to +/-180: that fabricated a U-turn at an otherwise
+         * valid roundabout exit.  With no geometry, straight/generic is the only
+         * direction that does not invent a turn. */
+        if (angle == 1000 || angle == -1000) return DIR_STRAIGHT;
+
         /*
          * MHI3 tbt_renderer quantizes by picking the closest entry from the fixed
          * exit-angle bins [-180..180 step 22.5] (no wrap-around). Clamp here so

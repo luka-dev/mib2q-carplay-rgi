@@ -19,7 +19,6 @@
 #include <string.h>
 #include <time.h>
 #include <errno.h>
-#include <libgen.h>
 #include <sched.h>
 #include <signal.h>
 #ifdef PLATFORM_QNX
@@ -38,6 +37,8 @@
 
 #define WINDOW_W CR_DEFAULT_WIDTH
 #define WINDOW_H CR_DEFAULT_HEIGHT
+#define FLAG_ATLAS_LOCAL_PATH      "./flag_atlas.rgba"
+#define FLAG_ATLAS_PRODUCTION_PATH "/mnt/app/root/hooks/flag_atlas.rgba"
 
 static int timespec_elapsed_at_least(const struct timespec *now,
                                      const struct timespec *last,
@@ -74,7 +75,7 @@ typedef struct {
     maneuver_state_t current;
     maneuver_state_t next;
     maneuver_state_t pending;
-    int              has_current;   /* 0 on cold start */
+    int              has_current;   /* invariant: 1 after clear_maneuver() initializes FOLLOW_STREET */
     int              has_next;
     int              has_pending;   /* queued during PUSHING */
     engine_phase_t   phase;
@@ -83,10 +84,12 @@ typedef struct {
 
 static cr_engine_t g_engine;
 
-/* Fade-in on cold start */
+/* Presentation alpha.  CLEAR keeps a deterministic FOLLOW_STREET frame prepared
+ * underneath the compositor at alpha 0; the next real presentation fades it in. */
 static float g_fade_alpha = 1.0f;
 static int   g_fade_active = 0;
-#define FADE_SPEED 0.04f  /* per-frame step (~0.8s at 30fps) */
+#define FADE_SPEED 0.125f  /* per-frame step (~0.27s / 8 frames at 30fps) */
+static int   g_cleared = 1;
 
 /* Bargraph overlay */
 static int   g_bargraph_on = 0;     /* 0=off, 1=on, 2=blink */
@@ -123,23 +126,6 @@ static void decode_maneuver(const cr_cmd_t *cmd, maneuver_state_t *out) {
 
 /* Apply a new maneuver to the engine */
 static void engine_apply_maneuver(const maneuver_state_t *state) {
-    if (!g_engine.has_current) {
-        /* Cold start: set as current directly, trigger slide-in */
-        g_engine.current = *state;
-        g_engine.has_current = 1;
-        g_engine.has_next = 0;
-        g_engine.phase = ENGINE_SLIDING_IN;
-        maneuver_set_slide(0.0f);
-        maneuver_start_anim();
-        render_invalidate_masks();
-        g_engine.dirty = 1;
-        g_fade_alpha = 0.0f;
-        g_fade_active = 1;
-        render_set_global_alpha(0.0f);
-        fprintf(stderr, "engine: cold start icon=%d\n", state->icon);
-        return;
-    }
-
     if (g_engine.phase == ENGINE_PUSHING || g_engine.phase == ENGINE_SLIDING_IN) {
         /* Mid-transition: queue into pending slot, don't disturb current animation */
         g_engine.pending = *state;
@@ -161,19 +147,30 @@ static void engine_apply_maneuver(const maneuver_state_t *state) {
 }
 
 /* Advance engine state machine */
-/* Blank the popup: drop any maneuver + bargraph and fade to fully transparent.  Used on
- * CMD_CLEAR and on peer disconnect, so the always-on renderer shows nothing when CarPlay /
- * the route is off.  The next CMD_MANEUVER cold-starts + fades back in. */
+/* Blank the popup without leaving the renderer in an undefined/no-current state.
+ * FOLLOW_STREET is always prepared underneath at slide=1, but alpha=0 and the
+ * cleared latch prevent it from earning FRAME_READY.  The next CMD_MANEUVER
+ * fades the deterministic scene back in. */
 static void clear_maneuver(void) {
-    g_engine.has_current = 0;
+    memset(&g_engine.current, 0, sizeof(g_engine.current));
+    g_engine.current.icon = ICON_APPROACH;
+    g_engine.has_current = 1;
     g_engine.has_next    = 0;
     g_engine.has_pending = 0;
     g_engine.phase       = ENGINE_IDLE;
+    maneuver_set_slide(1.0f);
+    render_invalidate_masks();
     g_bargraph_on    = 0;
     g_bargraph_level = 0;
+    g_bargraph_alpha = 0.0f;
+    g_bargraph_deferred = 0;
+    g_bargraph_blink_vis = 1;
+    g_bargraph_blink_timer = 0;
+    g_persp_deferred = 0;
     g_fade_active    = 0;
     g_fade_alpha     = 0.0f;
     render_set_global_alpha(0.0f);
+    g_cleared        = 1;
     g_engine.dirty   = 1;
 }
 
@@ -282,6 +279,8 @@ static void save_screenshot(int fb_w, int fb_h, const char *label) {
  * ================================================================ */
 
 int main(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
 #ifdef SIGPIPE
     signal(SIGPIPE, SIG_IGN);
 #endif
@@ -330,31 +329,18 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    /* Try multiple paths for flag atlas */
-    if (render_load_flag_atlas("resources/flag_atlas.rgba", 128, 128, 14) != 0) {
-        if (render_load_flag_atlas("flag_atlas.rgba", 128, 128, 14) != 0) {
-            if (argc > 0 && argv[0] != NULL) {
-                char tmp[512];
-                strncpy(tmp, argv[0], sizeof(tmp) - 1);
-                tmp[sizeof(tmp) - 1] = '\0';
-                char *dir = dirname(tmp);
-                char atlas_path[512];
-                snprintf(atlas_path, sizeof(atlas_path), "%s/resources/flag_atlas.rgba", dir);
-                if (render_load_flag_atlas(atlas_path, 128, 128, 14) != 0) {
-                    snprintf(atlas_path, sizeof(atlas_path), "%s/flag_atlas.rgba", dir);
-                    render_load_flag_atlas(atlas_path, 128, 128, 14);
-                }
-            }
-        }
-    }
+    /* Runtime has one colocated asset.  Keep one relative development/deploy
+     * lookup and one explicit HU production fallback — no argv/CWD guessing. */
+    if (render_load_flag_atlas(FLAG_ATLAS_LOCAL_PATH, 128, 128, 14) != 0)
+        render_load_flag_atlas(FLAG_ATLAS_PRODUCTION_PATH, 128, 128, 14);
 
 #ifdef CR_DEBUG_GRID
     render_set_debug_grid(1);
 #endif
 
-    /* Engine starts with no current maneuver */
+    /* Engine always has a deterministic hidden FOLLOW_STREET frame. */
     memset(&g_engine, 0, sizeof(g_engine));
-    g_engine.phase = ENGINE_IDLE;
+    clear_maneuver();
 
     fprintf(stderr, "maneuver_render: ready, waiting for commands on :%d\n", CR_TCP_PORT);
     cr_server_mark_ready();
@@ -500,6 +486,13 @@ int main(int argc, char **argv) {
 
         /* Apply the latest maneuver (draining to latest) */
         if (got_maneuver) {
+            int reveal_from_clear = g_cleared;
+            if (g_cleared) {
+                g_cleared = 0;
+                g_fade_alpha = 0.0f;
+                g_fade_active = 1;
+                render_set_global_alpha(0.0f);
+            }
             if (pending_flags & MAN_FLAG_SET_PERSP) {
                 g_persp_deferred = 1;
                 g_persp_deferred_value = pending_perspective ? 1 : 0;
@@ -513,7 +506,23 @@ int main(int argc, char **argv) {
                 g_bargraph_deferred_mode = pending_bargraph_mode;
                 if (g_bargraph_deferred_mode > 2) g_bargraph_deferred_mode = 1;
             }
-            engine_apply_maneuver(&pending_maneuver);
+            if (reveal_from_clear) {
+                /* The hidden FOLLOW_STREET is only a deterministic backing
+                 * state.  Replace it directly: the global alpha is the sole
+                 * CLEAR->visible transition, with no duplicate route push. */
+                g_engine.current = pending_maneuver;
+                g_engine.has_current = 1;
+                g_engine.has_next = 0;
+                g_engine.has_pending = 0;
+                g_engine.phase = ENGINE_IDLE;
+                maneuver_set_slide(1.0f);
+                render_invalidate_masks();
+                g_engine.dirty = 1;
+                fprintf(stderr, "engine: reveal from clear icon=%d\n",
+                        pending_maneuver.icon);
+            } else {
+                engine_apply_maneuver(&pending_maneuver);
+            }
         }
 
         /* Tick engine state machine */
@@ -616,10 +625,10 @@ int main(int argc, char **argv) {
                 g_engine.dirty = 1;
                 rendered_this_frame = 0;
             }
-            /* Frame-ready means the EGL surface has a defined maneuver frame
-             * queued to the compositor.  The cold-start fade may still continue
-             * visually after Java exposes the displayable. */
-            if (swap_ok && !announced_first_frame && g_engine.has_current) {
+            /* A transparent post-CLEAR FOLLOW_STREET frame is deliberately not
+             * presentation-ready.  Only a later real command may re-arm Java's
+             * ctx80 gate. */
+            if (swap_ok && !announced_first_frame && g_engine.has_current && !g_cleared) {
                 announced_first_frame = 1;
                 cr_server_mark_frame_ready();
                 fprintf(stderr, "engine: first frame ready\n");
