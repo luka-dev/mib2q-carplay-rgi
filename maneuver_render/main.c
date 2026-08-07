@@ -518,6 +518,25 @@ int main(int argc, char **argv) {
                 maneuver_set_slide(1.0f);
                 render_invalidate_masks();
                 g_engine.dirty = 1;
+                /* This direct reveal deliberately bypasses ENGINE_SLIDING_IN,
+                 * whose settle edge normally consumes the deferred presentation
+                 * fields.  Apply them here so the first real frame after CLEAR
+                 * carries the requested perspective and bargraph as well. */
+                if (g_persp_deferred) {
+                    render_set_perspective(g_persp_deferred_value);
+                    fprintf(stderr, "engine: applied reveal perspective=%s\n",
+                            g_persp_deferred_value ? "3D" : "2D");
+                    g_persp_deferred = 0;
+                }
+                if (g_bargraph_deferred) {
+                    g_bargraph_level = g_bargraph_deferred_level;
+                    g_bargraph_on = g_bargraph_deferred_mode;
+                    if (g_bargraph_on == 2) {
+                        g_bargraph_blink_vis = 1;
+                        g_bargraph_blink_timer = 0;
+                    }
+                    g_bargraph_deferred = 0;
+                }
                 fprintf(stderr, "engine: reveal from clear icon=%d\n",
                         pending_maneuver.icon);
             } else {
