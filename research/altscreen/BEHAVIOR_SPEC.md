@@ -7,32 +7,28 @@ renderers must implement.  Keep this in sync; it kept getting lost._
 
 | render | id | what | where shown |
 |---|---|---|---|
-| **maneuver_render** | **98** | the **plane** inside the stock **KDK popup** — replaces the stock plane (id 20) with ours during CarPlay nav | KDK popup over ANY tab (music/radio/…), **EXCEPT** the altScreen tab |
-| **altscreen_render** | **99** | the **full CarPlay cluster video** | **only** on the altScreen tab |
+| **maneuver_render** | **98** | the CarPlay maneuver plane composed with the KDK backings during CarPlay nav | whenever CarPlay RGI is active |
+| **altscreen_render** | **99** | the **full CarPlay cluster video** | throughout the CarPlay cluster session |
 
 - The **KDK popup is ONE stock widget**.  The plane it displays is either the stock
-  nav-drawn plane (displayable **20**) or **our** plane (**98**).  We choose which by
-  switching the cluster context: stock KDK `dc[73]={20,102,101}` vs our KDK
-  `dc[80]={98,102,101}` — same popup, different plane source.
+  nav-drawn plane (displayable **20**) or **our** plane (**98**).  Our active composition
+  is `dc[80]={98,102,101,99}`: maneuver + KDK backings over stream 111.
 - **maneuver_render (98) = cluster visual (KDK plane).  BAP maneuvers = a SEPARATE
   output that goes to the PROJECTION (main HU CarPlay screen).**  Two independent
   sinks of the same route data.
 
 ## Behavior matrix
 
-Phone connect → **announce a new tab** (`DSIKombiSync setMenuState smartPhone=AVAILABLE`;
-disconnect → `NOT_EXISTING`).  MU1316 never sends this → we add the sender.
+VC tab focus is deliberately not observed and never participates in presentation state.
+Only CarPlay RGI activity selects the local composition; the Audi View button independently
+selects the iOS fullscreen/duo `viewArea`.
 
-| state | cluster (NOT on altScreen tab) | on the altScreen tab |
-|---|---|---|
-| **no CarPlay nav** | all stock, **do NOT trigger the maneuver widget** | our altScreen (video 99) |
-| **stock nav active + altScreen tab opened** | all stock (KDK popup = stock plane 20) | **stock KDK maneuver (20) + bg (102/101) + our stream (99)** |
-| **CarPlay nav started** | KDK popup plane = **our 98**; stock nav **fully cancelled** (cancel route guidance) + **block** stock attempts to (re)start RG until CarPlay nav ends/off | our altScreen (video 99) |
+| state | local context | BAP lower bar | iOS viewArea |
+|---|---|---|---|
+| **no CarPlay RGI** | `ctx81={99}` | inactive | last selected fullscreen/duo |
+| **CarPlay RGI active** | `ctx80={98,102,101,99}` | always `arrow + next direction` | fullscreen or duo from View button |
 
-## KDK popup rule
-The KDK popup always reflects the **current active nav** (stock plane 20 for stock nav,
-our plane 98 for CarPlay nav) — **EXCEPT** while viewing the altScreen tab, where the
-popup is **suppressed** (the full video 99 is already shown there).
+There is no MAP-tab special case and no dynamic FctID44 or NAVSD FunctionList manipulation.
 
 ## 🔴 CRITICAL — never cancel the BAP projection
 When we cancel stock route guidance (on CarPlay-nav start), we cancel ONLY the stock
@@ -43,36 +39,28 @@ the stock navigator; the not-to-touch part is our own BAP projection stream.)
 **BAP projection lifetime = navigation lifetime, NOT popup visibility.** Once CarPlay nav
 is detected (replace *or* new_tab) we cancel the *stock navigator's* RG and take full
 ownership of BAP.  The BAP projection then runs for the **entire** active-nav session.
-Hiding/suppressing the KDK popup maneuver (cluster plane 98/20 — e.g. altScreen-tab focus)
-does **NOT** stop BAP.  Popup visibility and BAP projection are **orthogonal** axes:
-`popup {shown|hidden}` × `BAP {active while nav active}`.  Only actual nav-end (CarPlay-nav
-off) stops our BAP sends — never "along with" a popup hide.
+Only actual nav-end stops our BAP sends. Fullscreen/duo changes never stop RGI.
 
 ## Context mapping (corrected)
 
 | context | displayables | when |
 |---|---|---|
 | stock KDK (existing) | `dc[73]={20,102,101}` | stock nav → KDK popup shows stock plane |
-| our KDK popup plane | `dc[80]={98,102,101}` | CarPlay nav, any tab ≠ altScreen |
-| altScreen video (CarPlay nav) | `{99,102,101}` | altScreen tab, CarPlay nav |
-| altScreen video + stock KDK | `{99,102,101,20}` | altScreen tab, stock nav active |
+| CarPlay video + maneuver | `dc[80]={98,102,101,99}` | confirmed CarPlay RGI |
+| CarPlay video only | `dc[81]={99}` | no confirmed CarPlay RGI |
 
-NOTE: earlier `dc[82]={98,102,101,99}` (our maneuver OVER video) is **WRONG** — on the
-altScreen tab the KDK popup (98) is suppressed; the tab shows video 99 (+ stock KDK 20 if
-stock nav).  `dc[80]={98,102,101}` (our KDK plane) is correct.
+The former third `dc[82]` is unnecessary. Context selection is driven only by the confirmed
+RGI presentation latch.
 
-## Implementation gap → plan
+## Implementation status
 
-1. **Availability sender** — on activate push `setMenuState(smartPhone=AVAILABLE)` via the
-   DSIKombiSync service (we already hold it in `KombiSyncController.addDSIService`); on
-   deactivate `NOT_EXISTING`.  (audit #2 gap.)
-2. **Context redesign** — align dc[80/81/82] to the real roles above (drop 98-over-99).
-3. **KDK popup plane control** — CarPlay nav active ⇒ switch cluster to our KDK `dc[80]`
-   (plane 98); on altScreen-tab focus (`KombiSyncController.isSmartphoneTabFocused()`) ⇒
-   switch to the video context (99) and **suppress** the KDK popup; else stock KDK.
-4. **Stock-nav cancel + RG block** — on CarPlay-nav start: cancel stock route guidance +
-   gate stock RG-start (until CarPlay nav ends).  Port the old patch's KDK-popup-create /
-   cancel path.  **Do not touch the BAP projection sends.**
-5. **State machine** — drive 2/3/4 from (CarPlay-nav-active, altScreen-tab-focused,
-   stock-nav-active).  Focus = KombiSyncController; CarPlay-nav-active = RouteGuidance
-   state; stock-nav-active = Navigation/RouteManager.
+1. `AltScreenModule` selects ctx80/81 only from confirmed RGI presentation.
+2. Fullscreen/duo only sends `updateViewArea`; it does not alter context or BAP ownership.
+3. `BAPBridge` keeps RGI/HUD active for the route lifetime and always publishes FctID19 as
+   `Unicode arrow + next direction/road`, with `↑` as the non-empty startup fallback.
+4. `GatedCombiService` blocks stock route-guidance writers, leaves initializing/compass/map
+   visibility stock, and hides only MapScale + altitude. Every steering-wheel MapScale SetGet
+   is still acknowledged with the hidden status; the last stock scale/altitude is restored on release.
+5. Both layouts request exactly `maps:/car/instrumentcluster/map`: no Maps
+   `maneuverLayout` and no Maps-owned ETA overlay. Arrival time remains available
+   independently through NAVSD FctID 22.

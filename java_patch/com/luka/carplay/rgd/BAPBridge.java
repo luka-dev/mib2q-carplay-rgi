@@ -76,7 +76,7 @@ public class BAPBridge {
     /* Set only after the complete synchronous BAP start sequence has returned successfully.
      * RouteGuidance combines this with renderer FRAME_READY before exposing context 80. */
     private volatile boolean bapSessionStarted = false;
-    /* Duo alone uses FctID 19 for the legacy lower-bar arrow/street label. */
+    /* CarPlay owns FctID 19 for the whole active RGI interval. */
     private String latchedTurnToText = "";
     private boolean viewAreaLowerBarPublished = false;
 
@@ -697,18 +697,17 @@ public class BAPBridge {
             sendDistanceToManeuverRaw(0, false, 0);                                  /* FctID 18 */
             sendExitView();                                                          /* FctID 49 */
 
-            /* Non-sync FctIDs */
-            traceBap("updateCurrentPositionInfo", "\"\"");
-            try {
-                appConnectorNavi.updateCurrentPositionInfo("");                       /* FctID 19 */
-            } catch (Throwable t) {
-                Log.w(TAG, "BAP FctID 19 failed during start: "
-                    + t.getClass().getName() + ": " + t.getMessage());
-            }
-
             Log.i(TAG, "Started (rgType=" + ACTIVE_RGTYPE
                 + ", cr=" + customRendererStarted + ")");
             bapSessionStarted = true;
+            /* Never expose the VC's empty "---" shell while the first iOS
+             * maneuver snapshot is still arriving. */
+            try {
+                traceBap("updateCurrentPositionInfo", "\"\u2191\" RGI start");
+                appConnectorNavi.updateCurrentPositionInfo("\u2191");
+            } catch (Throwable t) {
+                Log.w(TAG, "BAP FctID 19 startup fallback failed: " + t);
+            }
             return true;
 
         } catch (Throwable e) {
@@ -794,7 +793,7 @@ public class BAPBridge {
                 traceBap("updateManeuverState", "0");
                 appConnectorNavi.updateManeuverState(0);
                 traceBap("updateCurrentPositionInfo", "\"\"");
-                try { appConnectorNavi.updateCurrentPositionInfo(""); } catch (Throwable t) {}
+                appConnectorNavi.updateCurrentPositionInfo("");
                 sendDistanceToDestinationRaw(0, false);
                 traceBap("updateTimeToDestination", "0,0,-1");
                 appConnectorNavi.updateTimeToDestination(0, 0, -1);
@@ -1060,10 +1059,8 @@ public class BAPBridge {
                         if (bargraph < 0) bargraph = 0;
                         if (bargraph > 100) bargraph = 100;
                         if (bargraph < BARGRAPH_BLINK_PERCENT) {
-                            /*
-                             * Blink zone: blink thread sends FctID 18 + renderer.
-                             * Don't send from here to avoid jitter with periodic blink sends.
-                             */
+                            /* Blink zone: the 600 ms worker sends FctID 18 and
+                             * maneuver_render together from one state snapshot. */
                         } else {
                             sendDistanceToManeuverRaw(distM, bargraphOn, bargraph);
                         }
@@ -1080,10 +1077,8 @@ public class BAPBridge {
                 }
             }
 
-            /* 4. Duo-only lower bar (FctID 19).  Fullscreen deliberately keeps
-             * this empty; its Maps/KDK layout is already correct without the
-             * stock VC strip.  The surrounding NavStatus gate still suppresses
-             * stock compass/scale writers in both modes. */
+            /* 4. Persistent CarPlay lower bar (FctID 19).  It is independent
+             * of fullscreen/duo and always carries arrow + next direction. */
             if (!viewAreaLowerBarPublished ||
                     (dirty & (RouteGuidance.State.DIRTY_CURRENT_ROAD |
                           RouteGuidance.State.DIRTY_MANEUVER_TEXT |
@@ -1277,39 +1272,32 @@ public class BAPBridge {
     private void sendViewAreaLowerBar(RouteGuidance.State s,
                                       boolean explicitClear,
                                       boolean shouldClearManeuver) throws Exception {
-        String road = "";
-        if (com.luka.carplay.core.AltScreenModule.isDuoViewArea()) {
-            boolean turnTextMode = inApproachZone && !explicitClear && !shouldClearManeuver;
-            if (turnTextMode) {
-                int idx = getFirstManeuverIndex(s);
-                String candidate = "";
-                if (idx >= 0) {
-                    if (s.mExitInfo != null && idx < s.mExitInfo.length
-                            && s.mExitInfo[idx] != null && s.mExitInfo[idx].length() > 0) {
-                        candidate = keepLastColonPart(s.mExitInfo[idx]);
-                    } else if (s.mAfterRoad != null && idx < s.mAfterRoad.length
-                            && s.mAfterRoad[idx] != null && s.mAfterRoad[idx].length() > 0) {
-                        candidate = keepLastColonPart(s.mAfterRoad[idx]);
-                    } else if (s.mName != null && idx < s.mName.length
-                            && s.mName[idx] != null && s.mName[idx].length() > 0) {
-                        candidate = s.mName[idx];
-                    }
-                }
-                if (candidate.length() > 0) {
-                    latchedTurnToText = directionArrow(s, idx) + " " + candidate;
-                }
-                road = latchedTurnToText;
-            } else {
-                latchedTurnToText = "";
-                road = (s.currentRoad != null) ? s.currentRoad : "";
+        int idx = getFirstManeuverIndex(s);
+        String candidate = "";
+        if (idx >= 0) {
+            if (s.mExitInfo != null && idx < s.mExitInfo.length
+                    && s.mExitInfo[idx] != null && s.mExitInfo[idx].length() > 0) {
+                candidate = keepLastColonPart(s.mExitInfo[idx]);
+            } else if (s.mAfterRoad != null && idx < s.mAfterRoad.length
+                    && s.mAfterRoad[idx] != null && s.mAfterRoad[idx].length() > 0) {
+                candidate = keepLastColonPart(s.mAfterRoad[idx]);
+            } else if (s.mName != null && idx < s.mName.length
+                    && s.mName[idx] != null && s.mName[idx].length() > 0) {
+                candidate = s.mName[idx];
             }
-        } else {
-            latchedTurnToText = "";
         }
-        road = limitUtf8(road, 96);
-        traceBap("updateCurrentPositionInfo", "\"" + road + "\" viewArea="
+        if (candidate.length() == 0 && s.currentRoad != null) candidate = s.currentRoad;
+
+        String next = directionArrow(s, idx);
+        if (candidate.length() > 0) next += " " + candidate;
+        next = limitUtf8(next, 96);
+        if (next.length() > 0) latchedTurnToText = next;
+        if (latchedTurnToText.length() == 0) latchedTurnToText = "\u2191";
+
+        traceBap("updateCurrentPositionInfo", "\"" + latchedTurnToText
+            + "\" RGI active viewArea="
             + (com.luka.carplay.core.AltScreenModule.isDuoViewArea() ? "duo" : "fullscreen"));
-        appConnectorNavi.updateCurrentPositionInfo(road);
+        appConnectorNavi.updateCurrentPositionInfo(latchedTurnToText);
         viewAreaLowerBarPublished = true;
     }
 

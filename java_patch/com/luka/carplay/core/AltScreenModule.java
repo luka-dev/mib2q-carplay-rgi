@@ -209,10 +209,6 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
             desiredCtx = !ownCluster ? CTX_STOCK_CLUSTER : (navActive ? CTX_CLUSTER : CTX_CLUSTER_MAP);
             LOCK.notifyAll();
         }
-        /* NavStatus widgets belong to the same presentation lifetime as plane
-         * 99, not to RouteGuidance.  Keep the gate through short TMDev bounces
-         * whenever the decoder still proves that altScreen video is live. */
-        AltScreenNavStatusGate.setActive(ownCluster);
     }
 
     /** Data-plane fallback for transient/incorrect TMDev lifecycle events. */
@@ -318,15 +314,6 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
             com.luka.carplay.cluster.ClusterLayerController.bind(
                 (IDisplayManagerKombiControl)d, TERMINAL_CLUSTER);
         }
-        /* Plane 99 does not depend on the stock Navigation/BAP service.  On a cold HU boot that
-         * service can appear several seconds after TerminalMode activates CarPlay; making it a
-         * start prerequisite unnecessarily held ctx 81 on the stock map.  Request suppression
-         * now, but let AltScreenNavStatusGate attach asynchronously when ClusterService publishes
-         * CombiBAPServiceNavi.  Until then the only possible artefact is a short-lived native
-         * NavStatus overlay -- never a delayed/absent CarPlay cluster picture. */
-        if (!AltScreenNavStatusGate.setActive(true))
-            Log.i(TAG, "NavStatus gate pending; starting ctx 81 without waiting for stock Navigation");
-
         CarplayBus bus = CarplayBus.getInstance();
         bus.on(CarplayBus.EVT_HELLO, this);
         bus.on(CarplayBus.CMD_ALT_ZONE_ACK, this);

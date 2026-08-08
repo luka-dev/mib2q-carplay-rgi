@@ -1748,21 +1748,19 @@ static void alt_kick_viewarea(void)
  * showUI{uuid,url}.  Stock 210 has no altScreen policy layer to make that choice,
  * so choose the Maps map URL when the 111 stream first becomes decodable.
  *
- * Fullscreen retains Maps' right-hand turn card and ETA. Duo is map-only because
- * Audi supplies both the right-hand KDK maneuver and the duo-only BAP lower bar.
- * Omitting maneuverLayout disables the Maps turn card; ETA is independent and
- * is therefore explicitly disabled. */
+ * Use Maps' plain map item in both layouts. ETA and maneuver guidance are
+ * supplied by Audi BAP/KDK, so do not request Maps-owned overlays here. */
 static const char *alt_cluster_url_for_mode(int mode)
 {
     const char *url;
     if (mode == ALT_ZONE_DUO) {
         url = getenv("ALTSCREEN_CLUSTER_URL_DUO");
         if (!url || !url[0])
-            url = "maps:/car/instrumentcluster/map?showETA=no";
+            url = "maps:/car/instrumentcluster/map";
     } else {
         url = getenv("ALTSCREEN_CLUSTER_URL");
         if (!url || !url[0])
-            url = "maps:/car/instrumentcluster/map?maneuverLayout=rightAligned&showETA=yes";
+            url = "maps:/car/instrumentcluster/map";
     }
     return url;
 }

@@ -1,10 +1,7 @@
 /*
- * AltScreenNavStatusGate - owns the stock NavStatus suppression while the
- * CarPlay cluster plane owns terminal 1.
- *
- * Installation is deliberately here, not in RouteGuidance: altScreen exists
- * for the whole projection session, including map-without-maneuver and the
- * short TMDev lifecycle bounces covered by videoAvailable.
+ * AltScreenNavStatusGate - installs the single wrapper that prevents stock
+ * route-guidance BAP writes from racing CarPlay RGI.  It deliberately does not
+ * alter NAVSD availability, initializing state, compass, scale or map status.
  */
 package com.luka.carplay.core;
 
@@ -20,9 +17,7 @@ public final class AltScreenNavStatusGate {
 
     private static ClusterService clusterService;
     private static GatedCombiService gate;
-    private static boolean desiredActive;
     private static boolean desiredRouteBlocked;
-    private static boolean appliedActive;
     private static boolean appliedRouteBlocked;
     private static boolean installScheduled;
 
@@ -55,9 +50,6 @@ public final class AltScreenNavStatusGate {
             if (current == null) return;
 
             if (cs != clusterService || gate == null || current != gate) {
-                if (gate != null && clusterService != cs) {
-                    try { gate.setAltScreenTakeover(false); } catch (Throwable t) { }
-                }
                 if (current instanceof GatedCombiService) {
                     gate = (GatedCombiService) current;
                 } else {
@@ -65,21 +57,11 @@ public final class AltScreenNavStatusGate {
                     cs.setCombiBAPListenerCombiService(gate);
                 }
                 clusterService = cs;
-                Log.i(TAG, "native NavStatus gate installed/reused");
+                Log.i(TAG, "native route-guidance gate installed/reused");
             }
 
-            boolean releasingTakeover = appliedActive && !desiredActive;
-            gate.setAltScreenTakeover(desiredActive);
             gate.setRouteGuidanceBlocked(desiredRouteBlocked);
-            appliedActive = desiredActive;
             appliedRouteBlocked = desiredRouteBlocked;
-            if (releasingTakeover) {
-                /* Deferred callbacks normally restore the last native request.  Recompute it as
-                 * well: if stock Navigation made no show/hide call during CarPlay, replay alone
-                 * would leave the app-ready=true override behind after disconnect. */
-                try { cs.refreshInitializingScreenAfterCarPlay(); }
-                catch (Throwable t) { Log.d(TAG, "native init-screen refresh failed: " + t); }
-            }
         } catch (Throwable t) {
             Log.d(TAG, "gate not ready: " + t);
         }
@@ -93,11 +75,9 @@ public final class AltScreenNavStatusGate {
             ClusterService cs, CombiBAPServiceNavi incoming) {
         if (incoming == null) {
             if (cs == clusterService && gate != null) {
-                try { gate.setAltScreenTakeover(false); } catch (Throwable t) { }
                 try { gate.setRouteGuidanceBlocked(false); } catch (Throwable t) { }
                 clusterService = null;
                 gate = null;
-                appliedActive = false;
                 appliedRouteBlocked = false;
             }
             return null;
@@ -110,29 +90,15 @@ public final class AltScreenNavStatusGate {
             next = new GatedCombiService(incoming);
         }
         if (gate != null && gate != next) {
-            try { gate.setAltScreenTakeover(false); } catch (Throwable t) { }
             try { gate.setRouteGuidanceBlocked(false); } catch (Throwable t) { }
         }
         clusterService = cs;
         gate = next;
-        gate.setAltScreenTakeover(desiredActive);
         gate.setRouteGuidanceBlocked(desiredRouteBlocked);
-        appliedActive = desiredActive;
         appliedRouteBlocked = desiredRouteBlocked;
         installScheduled = false;
-        Log.i(TAG, "native NavStatus gate installed on Navigation service edge");
+        Log.i(TAG, "native route-guidance gate installed on Navigation service edge");
         return gate;
-    }
-
-    /** Called only when connected||videoAvailable changes. */
-    public static synchronized boolean setActive(boolean active) {
-        boolean changed = desiredActive != active;
-        desiredActive = active;
-        /* Re-run even with an existing gate: this both applies desiredActive on the stock thread
-         * and detects a ClusterService replacement after component restart. */
-        if (gate == null || changed || appliedActive != active) scheduleInstallLocked();
-        if (gate == null && active) Log.d(TAG, "takeover pending - ClusterService not ready");
-        return gate != null && appliedActive == active && !installScheduled;
     }
 
     /** Single owner of the native CombiBAP wrapper for both altScreen and RGI. */
@@ -152,7 +118,6 @@ public final class AltScreenNavStatusGate {
         catch (Throwable t) { }
 
         if (cs != clusterService || current != gate) {
-            appliedActive = false;
             appliedRouteBlocked = false;
         }
         if (current == null) {
@@ -163,7 +128,7 @@ public final class AltScreenNavStatusGate {
             CarPlayApp.onNavigationServiceChanged();
             return;
         }
-        if (desiredActive || desiredRouteBlocked) scheduleInstallLocked();
+        if (desiredRouteBlocked) scheduleInstallLocked();
         CarPlayApp.onNavigationServiceChanged();
     }
 }
