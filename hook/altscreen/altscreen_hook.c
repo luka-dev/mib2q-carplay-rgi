@@ -206,17 +206,17 @@ static void set_i64(void *d, const char *key, int64_t val)
  * physical non-rectangular masks cannot be represented exactly; keep critical
  * UI in the nested safe frame:
  *
- *   fullscreen rectangular safeArea: D2 + half a cell through M4 - half
- *              a cell = x 315..1125, y 90..361 = (315,90) 810x271
+ *   fullscreen rectangular safeArea: complete cells D2 through M5
+ *              = x 270..1170, y 90..452 = (270,90) 900x362
  *   duo rectangular safeArea (the original compact layout): B2.5 through E5
  *              = x 90..450, y 135..452 = (90,135) 360x317
  *
  * The background may render under a physical mask; route focus and critical UI
  * stay inside these nested safe rectangles. */
-#define FULL_SAFE_X     315
+#define FULL_SAFE_X     270
 #define FULL_SAFE_Y      90
-#define FULL_SAFE_W     810
-#define FULL_SAFE_H     271
+#define FULL_SAFE_W     900
+#define FULL_SAFE_H     362
 
 #define DUO_SAFE_X       90
 #define DUO_SAFE_Y      135
