@@ -21,6 +21,7 @@
  * tiled bytes without YUV->RGBA conversion, producing green/black output.
  */
 #include "screen_egl_present.h"
+#include "carplay_loader.h"
 #include "cluster_surface.h"
 
 #include <screen/screen.h>
@@ -34,6 +35,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #define EP_DISPLAYABLE_ID          99
 #define EP_QCOM_TILED_NV12          0x1000c
@@ -80,6 +82,21 @@ struct screen_egl_present {
     GLint attr_pos;
     GLint attr_uv;
     GLint uniform_tex;
+
+    GLuint loader_program;
+    GLint loader_attr_pos;
+    GLint loader_attr_uv;
+    GLint loader_uniform_tex;
+    GLuint loader_texture;
+    uint8_t *loader_pixels;
+    size_t loader_stride;
+    pthread_t loader_thread;
+    int loader_thread_started;
+    int loader_stop;
+    unsigned long loader_frames;
+    unsigned long loader_failures;
+    int loader_first_logged;
+
     pthread_mutex_t gl_lock;
     int gl_lock_initialized;
 
@@ -168,6 +185,88 @@ fail:
     if (vs) glDeleteShader(vs);
     if (fs) glDeleteShader(fs);
     return -1;
+}
+
+static int ep_make_loader_program(screen_egl_present_t *p) {
+    static const char *vertex_source =
+        "attribute vec2 a_pos;\n"
+        "attribute vec2 a_uv;\n"
+        "varying vec2 v_uv;\n"
+        "void main() { gl_Position=vec4(a_pos,0.0,1.0); v_uv=a_uv; }\n";
+    static const char *fragment_source =
+        "precision mediump float;\n"
+        "uniform sampler2D u_tex;\n"
+        "varying vec2 v_uv;\n"
+        "void main() { gl_FragColor=texture2D(u_tex,v_uv); }\n";
+    GLuint vs = 0, fs = 0;
+    GLint ok = 0;
+
+    vs = ep_compile_shader(GL_VERTEX_SHADER, vertex_source, "loader vertex");
+    fs = ep_compile_shader(GL_FRAGMENT_SHADER, fragment_source, "loader RGBA");
+    if (!vs || !fs) goto fail;
+    p->loader_program = glCreateProgram();
+    if (!p->loader_program) goto fail;
+    glAttachShader(p->loader_program, vs);
+    glAttachShader(p->loader_program, fs);
+    glLinkProgram(p->loader_program);
+    glGetProgramiv(p->loader_program, GL_LINK_STATUS, &ok);
+    if (!ok) {
+        char log[768];
+        GLsizei used = 0;
+        log[0] = '\0';
+        glGetProgramInfoLog(p->loader_program, (GLsizei)sizeof(log) - 1,
+                            &used, log);
+        log[(used >= 0 && used < (GLsizei)sizeof(log))
+                ? used : (GLsizei)sizeof(log) - 1] = '\0';
+        fprintf(stderr,
+                "altscreen_render[egl]: loader program link FAILED: %s\n",
+                log);
+        goto fail;
+    }
+    p->loader_attr_pos = glGetAttribLocation(p->loader_program, "a_pos");
+    p->loader_attr_uv = glGetAttribLocation(p->loader_program, "a_uv");
+    p->loader_uniform_tex = glGetUniformLocation(p->loader_program, "u_tex");
+    glDeleteShader(vs);
+    glDeleteShader(fs);
+    return (p->loader_attr_pos >= 0 && p->loader_attr_uv >= 0 &&
+            p->loader_uniform_tex >= 0) ? 0 : -1;
+
+fail:
+    if (vs) glDeleteShader(vs);
+    if (fs) glDeleteShader(fs);
+    return -1;
+}
+
+static int ep_make_loader_texture(screen_egl_present_t *p) {
+    size_t bytes;
+    GLenum gl_error;
+
+    if ((size_t)p->width > ((size_t)-1) / 4U) return -1;
+    p->loader_stride = (size_t)p->width * 4U;
+    if ((size_t)p->height > ((size_t)-1) / p->loader_stride) return -1;
+    bytes = p->loader_stride * (size_t)p->height;
+    p->loader_pixels = (uint8_t *)malloc(bytes);
+    if (!p->loader_pixels) return -1;
+
+    glGenTextures(1, &p->loader_texture);
+    if (!p->loader_texture) return -1;
+    glBindTexture(GL_TEXTURE_2D, p->loader_texture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, p->width, p->height, 0,
+                 GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    gl_error = glGetError();
+    glBindTexture(GL_TEXTURE_2D, 0);
+    if (gl_error != GL_NO_ERROR) {
+        fprintf(stderr,
+                "altscreen_render[egl]: loader texture allocation FAILED gl=0x%x\n",
+                (unsigned)gl_error);
+        return -1;
+    }
+    return 0;
 }
 
 static int ep_create_source_buffers(screen_egl_present_t *p) {
@@ -383,7 +482,8 @@ static int ep_init_egl(screen_egl_present_t *p) {
                 (void *)p->image_target_texture);
         return -1;
     }
-    if (ep_make_program(p) != 0) return -1;
+    if (ep_make_program(p) != 0 || ep_make_loader_program(p) != 0 ||
+        ep_make_loader_texture(p) != 0) return -1;
     eglSwapInterval(p->egl_display, 1);
     fprintf(stderr,
             "altscreen_render[egl]: live GPU=%s GL=%s EGL=%d.%d pixmap-image+external-image OK\n",
@@ -435,16 +535,50 @@ static int ep_import_sources(screen_egl_present_t *p) {
     return 0;
 }
 
-screen_egl_present_t *screen_egl_present_create(int width, int height,
-                                                 unsigned int source_count) {
+/* Caller holds gl_lock with this presenter's EGL context current. */
+static void ep_release_sources(screen_egl_present_t *p) {
+    unsigned int i;
+    if (!p) return;
+
+    if (p->textures) glDeleteTextures((GLsizei)p->source_count, p->textures);
+    if (p->destroy_image && p->images) {
+        for (i = 0; i < p->source_count; ++i) {
+            if (p->images[i] != EGL_NO_IMAGE_KHR)
+                p->destroy_image(p->egl_display, p->images[i]);
+        }
+    }
+    if (p->source_pixmaps) {
+        for (i = 0; i < p->source_count; ++i) {
+            if (p->source_pixmaps[i])
+                screen_destroy_pixmap(p->source_pixmaps[i]);
+        }
+    }
+    if (p->source_window) screen_destroy_window(p->source_window);
+
+    free(p->source_buffers);
+    free(p->source_pixmaps);
+    free(p->source_pointers);
+    free(p->source_capacities);
+    free(p->images);
+    free(p->textures);
+    p->source_window = NULL;
+    p->source_buffers = NULL;
+    p->source_pixmaps = NULL;
+    p->source_pointers = NULL;
+    p->source_capacities = NULL;
+    p->images = NULL;
+    p->textures = NULL;
+    p->source_count = 0;
+}
+
+screen_egl_present_t *screen_egl_present_create_output(int width, int height) {
     screen_egl_present_t *p;
     cluster_surface_cfg cfg;
-    if (width <= 0 || height <= 0 || source_count == 0) return NULL;
+    if (width <= 0 || height <= 0) return NULL;
     p = (screen_egl_present_t *)calloc(1, sizeof(*p));
     if (!p) return NULL;
     p->width = width;
     p->height = height;
-    p->source_count = source_count;
     p->egl_display = EGL_NO_DISPLAY;
     p->egl_surface = EGL_NO_SURFACE;
     p->egl_context = EGL_NO_CONTEXT;
@@ -462,22 +596,219 @@ screen_egl_present_t *screen_egl_present_create(int width, int height,
     p->rgba_surface = cluster_surface_create(&cfg);
     if (!p->rgba_surface) goto fail;
     p->screen_ctx = cluster_surface_context(p->rgba_surface);
-    if (ep_create_source_buffers(p) != 0) goto fail;
-    if (ep_alias_source_pixmaps(p) != 0) goto fail;
     if (ep_init_egl(p) != 0) goto fail;
-    if (ep_import_sources(p) != 0) goto fail;
 
-    /* The OMX callback owns the context while drawing.  Release it from the
-     * setup thread now; every frame binds and unbinds under gl_lock. */
+    /* Loader/OMX threads bind the context only while drawing. */
     eglMakeCurrent(p->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
     fprintf(stderr,
-            "altscreen_render[egl]: ready %dx%d, %u native-32m WINDOW buffers -> attached pixmaps -> external EGLImage -> RGBA plane 99\n",
-            width, height, source_count);
+            "altscreen_render[egl]: early RGBA output ready %dx%d plane=99 (sources deferred)\n",
+            width, height);
     return p;
 
 fail:
     screen_egl_present_destroy(p);
     return NULL;
+}
+
+int screen_egl_present_attach_sources(screen_egl_present_t *p,
+                                      unsigned int source_count) {
+    int result = -1;
+    if (!p || source_count == 0 || !p->gl_lock_initialized) return -1;
+
+    pthread_mutex_lock(&p->gl_lock);
+    if (p->source_count == source_count && p->source_pointers && p->images) {
+        result = 0;
+        goto out;
+    }
+    if (p->source_count != 0) {
+        fprintf(stderr,
+                "altscreen_render[egl]: refusing live source-count change old=%u new=%u\n",
+                p->source_count, source_count);
+        goto out;
+    }
+    if (!eglMakeCurrent(p->egl_display, p->egl_surface, p->egl_surface,
+                        p->egl_context)) {
+        fprintf(stderr,
+                "altscreen_render[egl]: attach sources eglMakeCurrent FAILED err=0x%x\n",
+                (unsigned)eglGetError());
+        goto out;
+    }
+
+    p->source_count = source_count;
+    if (ep_create_source_buffers(p) != 0 || ep_alias_source_pixmaps(p) != 0 ||
+        ep_import_sources(p) != 0) {
+        fprintf(stderr,
+                "altscreen_render[egl]: attach %u native sources FAILED\n",
+                source_count);
+        ep_release_sources(p);
+        goto release_context;
+    }
+    fprintf(stderr,
+            "altscreen_render[egl]: attached %u native-32m sources to existing RGBA plane 99\n",
+            source_count);
+    result = 0;
+
+release_context:
+    eglMakeCurrent(p->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE,
+                   EGL_NO_CONTEXT);
+out:
+    pthread_mutex_unlock(&p->gl_lock);
+    return result;
+}
+
+static uint64_t ep_monotonic_ns(void) {
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) return 0;
+    return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+}
+
+static int ep_loader_should_stop(screen_egl_present_t *p) {
+    int stop;
+    pthread_mutex_lock(&p->gl_lock);
+    stop = p->loader_stop;
+    pthread_mutex_unlock(&p->gl_lock);
+    return stop;
+}
+
+static int ep_loader_frame(screen_egl_present_t *p, uint64_t elapsed_ms) {
+    static const GLfloat positions[] = {
+        -1.0f, -1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f,  1.0f,  1.0f
+    };
+    /* CPU RGBA row zero is the visual top. OpenGL uploads it at v=0, so map
+     * v=0 to the top vertices. */
+    static const GLfloat texcoords[] = {
+         0.0f, 1.0f,  1.0f, 1.0f,
+         0.0f, 0.0f,  1.0f, 0.0f
+    };
+    GLenum gl_error = GL_NO_ERROR;
+    int ok = -1;
+
+    if (!p || !p->loader_pixels || !p->loader_texture) return -1;
+    if (carplay_loader_render_rgba8888(p->loader_pixels, p->width, p->height,
+                                       p->loader_stride, elapsed_ms) != 0)
+        return -1;
+
+    pthread_mutex_lock(&p->gl_lock);
+    if (p->loader_stop) {
+        pthread_mutex_unlock(&p->gl_lock);
+        return 1;
+    }
+    if (!eglMakeCurrent(p->egl_display, p->egl_surface, p->egl_surface,
+                        p->egl_context)) goto out;
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, p->loader_texture);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, p->width, p->height,
+                    GL_RGBA, GL_UNSIGNED_BYTE, p->loader_pixels);
+    glViewport(0, 0, p->width, p->height);
+    glDisable(GL_BLEND);
+    glUseProgram(p->loader_program);
+    glUniform1i(p->loader_uniform_tex, 0);
+    glEnableVertexAttribArray((GLuint)p->loader_attr_pos);
+    glEnableVertexAttribArray((GLuint)p->loader_attr_uv);
+    glVertexAttribPointer((GLuint)p->loader_attr_pos, 2, GL_FLOAT, GL_FALSE, 0,
+                          positions);
+    glVertexAttribPointer((GLuint)p->loader_attr_uv, 2, GL_FLOAT, GL_FALSE, 0,
+                          texcoords);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    gl_error = glGetError();
+    if (gl_error != GL_NO_ERROR ||
+        !eglSwapBuffers(p->egl_display, p->egl_surface)) goto out;
+
+    p->loader_frames++;
+    if (!p->loader_first_logged) {
+        p->loader_first_logged = 1;
+        fprintf(stderr,
+                "altscreen_render[loader]: RGBA window 99 visible %dx%d @30fps\n",
+                p->width, p->height);
+    }
+    ok = 0;
+
+out:
+    if (ok != 0) {
+        p->loader_failures++;
+        if (p->loader_failures <= 3)
+            fprintf(stderr,
+                    "altscreen_render[loader]: frame FAILED #%lu egl=0x%x gl=0x%x\n",
+                    p->loader_failures, (unsigned)eglGetError(),
+                    (unsigned)gl_error);
+    }
+    eglMakeCurrent(p->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE,
+                   EGL_NO_CONTEXT);
+    pthread_mutex_unlock(&p->gl_lock);
+    return ok;
+}
+
+static void *ep_loader_thread_main(void *context) {
+    screen_egl_present_t *p = (screen_egl_present_t *)context;
+    uint64_t started = ep_monotonic_ns();
+    uint64_t deadline = started;
+
+    while (!ep_loader_should_stop(p)) {
+        uint64_t now = ep_monotonic_ns();
+        uint64_t elapsed_ms = (started != 0 && now >= started)
+            ? (now - started) / 1000000ULL : 0;
+        struct timespec req;
+
+        if (ep_loader_frame(p, elapsed_ms) == 1) break;
+        deadline += (uint64_t)CARPLAY_LOADER_FRAME_INTERVAL_NS;
+        now = ep_monotonic_ns();
+        if (now == 0 || deadline <= now)
+            deadline = now + (uint64_t)CARPLAY_LOADER_FRAME_INTERVAL_NS;
+
+        while (!ep_loader_should_stop(p)) {
+            uint64_t remain;
+            now = ep_monotonic_ns();
+            if (now == 0 || now >= deadline) break;
+            remain = deadline - now;
+            req.tv_sec = (time_t)(remain / 1000000000ULL);
+            req.tv_nsec = (long)(remain % 1000000000ULL);
+            if (nanosleep(&req, NULL) == 0 || errno != EINTR) break;
+        }
+    }
+    return NULL;
+}
+
+int screen_egl_present_start_loader(screen_egl_present_t *p) {
+    int result;
+    if (!p || !p->gl_lock_initialized) return -1;
+    pthread_mutex_lock(&p->gl_lock);
+    if (p->loader_thread_started) {
+        pthread_mutex_unlock(&p->gl_lock);
+        return 0;
+    }
+    p->loader_stop = 0;
+    p->loader_frames = 0;
+    p->loader_failures = 0;
+    p->loader_first_logged = 0;
+    result = pthread_create(&p->loader_thread, NULL, ep_loader_thread_main, p);
+    if (result == 0) p->loader_thread_started = 1;
+    pthread_mutex_unlock(&p->gl_lock);
+    if (result != 0)
+        fprintf(stderr,
+                "altscreen_render[loader]: thread create FAILED rc=%d\n",
+                result);
+    return result == 0 ? 0 : -1;
+}
+
+void screen_egl_present_stop_loader(screen_egl_present_t *p) {
+    pthread_t thread;
+    int started;
+    if (!p || !p->gl_lock_initialized) return;
+    pthread_mutex_lock(&p->gl_lock);
+    started = p->loader_thread_started;
+    p->loader_stop = 1;
+    thread = p->loader_thread;
+    pthread_mutex_unlock(&p->gl_lock);
+    if (!started) return;
+
+    pthread_join(thread, NULL);
+    pthread_mutex_lock(&p->gl_lock);
+    p->loader_thread_started = 0;
+    pthread_mutex_unlock(&p->gl_lock);
+    fprintf(stderr,
+            "altscreen_render[loader]: stopped for decoded-video takeover\n");
 }
 
 void *screen_egl_present_source_pointer(screen_egl_present_t *p,
@@ -511,6 +842,9 @@ int screen_egl_present_frame(screen_egl_present_t *p,
     int ok = -1;
 
     if (!p || source_index >= p->source_count || filled_len == 0) return -1;
+    /* The join is the ownership barrier: after it returns no loader draw can
+     * race this first decoded frame or any subsequent video swap. */
+    screen_egl_present_stop_loader(p);
     pthread_mutex_lock(&p->gl_lock);
     stage = "eglMakeCurrent";
     if (!eglMakeCurrent(p->egl_display, p->egl_surface, p->egl_surface,
@@ -640,8 +974,8 @@ out:
 }
 
 void screen_egl_present_destroy(screen_egl_present_t *p) {
-    unsigned int i;
     if (!p) return;
+    screen_egl_present_stop_loader(p);
     if (p->gl_lock_initialized) pthread_mutex_lock(&p->gl_lock);
     if (p->egl_display != EGL_NO_DISPLAY &&
         p->egl_surface != EGL_NO_SURFACE &&
@@ -649,14 +983,10 @@ void screen_egl_present_destroy(screen_egl_present_t *p) {
         eglMakeCurrent(p->egl_display, p->egl_surface, p->egl_surface,
                        p->egl_context);
     }
-    if (p->textures) glDeleteTextures((GLsizei)p->source_count, p->textures);
+    ep_release_sources(p);
+    if (p->loader_texture) glDeleteTextures(1, &p->loader_texture);
+    if (p->loader_program) glDeleteProgram(p->loader_program);
     if (p->program) glDeleteProgram(p->program);
-    if (p->destroy_image && p->images) {
-        for (i = 0; i < p->source_count; ++i) {
-            if (p->images[i] != EGL_NO_IMAGE_KHR)
-                p->destroy_image(p->egl_display, p->images[i]);
-        }
-    }
     if (p->egl_display != EGL_NO_DISPLAY) {
         eglMakeCurrent(p->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE,
                        EGL_NO_CONTEXT);
@@ -668,21 +998,7 @@ void screen_egl_present_destroy(screen_egl_present_t *p) {
     }
     if (p->gl_lock_initialized) pthread_mutex_unlock(&p->gl_lock);
 
-    /* EGL released its screen_ref_pixmap references above.  Remove the
-     * non-owning aliases before freeing the WINDOW allocations they point at. */
-    if (p->source_pixmaps) {
-        for (i = 0; i < p->source_count; ++i) {
-            if (p->source_pixmaps[i])
-                screen_destroy_pixmap(p->source_pixmaps[i]);
-        }
-    }
-    if (p->source_window) screen_destroy_window(p->source_window);
-    free(p->source_buffers);
-    free(p->source_pixmaps);
-    free(p->source_pointers);
-    free(p->source_capacities);
-    free(p->images);
-    free(p->textures);
+    free(p->loader_pixels);
     if (p->rgba_surface) cluster_surface_destroy(p->rgba_surface);
     if (p->gl_lock_initialized) pthread_mutex_destroy(&p->gl_lock);
     free(p);

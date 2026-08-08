@@ -24,7 +24,8 @@ else
   # OMX core + libscreen come from the MHI2Q BSP (unit/VM), NOT the generic SDP;
   # -lOmxCore is the expected OMX IL core name — CONFIRM on-unit if the link fails.
   CC   = /usr/qnx650/host/qnx6/x86/usr/bin/ntoarmv7-gcc
-  SINK = sink_omx_qnx.c screen_egl_present.c $(COMMON_INC)/cluster_surface.c
+  SINK = sink_omx_qnx.c screen_egl_present.c $(COMMON_INC)/cluster_surface.c \
+         $(COMMON_INC)/carplay_loader.c
   CFLAGS = -O2 -std=gnu99 -Wall -D__QNX__ -DPLATFORM_QNX -fdata-sections -ffunction-sections -I$(OMX_INC) -I$(COMMON_INC)
   LDFLAGS = -Wl,--gc-sections -lscreen -lOmxCore -lEGL -lGLESv2 -lsocket
   BUILD_TEST = 0
@@ -59,6 +60,8 @@ hostcheck:
 	      -Ihostcheck -I$(COMMON_INC) -I. screen_egl_present.c
 	$(CC) -fsyntax-only -std=gnu99 -Wall -D__QNX__ -DPLATFORM_QNX \
 	      -Ihostcheck -I$(COMMON_INC) $(COMMON_INC)/cluster_surface.c
+	$(CC) -fsyntax-only -std=c99 -Wall -Wextra \
+	      -I$(COMMON_INC) $(COMMON_INC)/carplay_loader.c
 	# The Docker QNX build remains the authoritative Screen/OMX ABI link check.
 
 clean:

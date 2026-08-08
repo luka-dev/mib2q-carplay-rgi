@@ -22,6 +22,7 @@ typedef char GLchar;
 #define GL_COMPILE_STATUS 0x8b81
 #define GL_LINK_STATUS 0x8b82
 #define GL_TEXTURE0 0x84c0
+#define GL_TEXTURE_2D 0x0de1
 #define GL_TEXTURE_MIN_FILTER 0x2801
 #define GL_TEXTURE_MAG_FILTER 0x2800
 #define GL_TEXTURE_WRAP_S 0x2802
@@ -32,6 +33,7 @@ typedef char GLchar;
 #define GL_FLOAT 0x1406
 #define GL_UNSIGNED_BYTE 0x1401
 #define GL_RGBA 0x1908
+#define GL_UNPACK_ALIGNMENT 0x0cf5
 #define GL_TRIANGLE_STRIP 0x0005
 
 const unsigned char *glGetString(GLenum name);
@@ -54,6 +56,13 @@ void glGenTextures(GLsizei count, GLuint *textures);
 void glDeleteTextures(GLsizei count, const GLuint *textures);
 void glBindTexture(GLenum target, GLuint texture);
 void glTexParameteri(GLenum target, GLenum pname, GLint value);
+void glPixelStorei(GLenum pname, GLint value);
+void glTexImage2D(GLenum target, GLint level, GLint internal_format,
+                  GLsizei width, GLsizei height, GLint border, GLenum format,
+                  GLenum type, const void *pixels);
+void glTexSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset,
+                     GLsizei width, GLsizei height, GLenum format, GLenum type,
+                     const void *pixels);
 GLenum glGetError(void);
 void glViewport(GLint x, GLint y, GLsizei width, GLsizei height);
 void glDisable(GLenum cap);

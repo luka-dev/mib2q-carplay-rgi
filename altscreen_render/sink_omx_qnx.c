@@ -276,20 +276,52 @@ static void _DestroyPresent(ScreenSink *me) {
     me->presentWidth = me->presentHeight = 0;
 }
 
+static int _CreateEarlyPresent(ScreenSink *me) {
+    me->present = screen_egl_present_create_output(me->width, me->height);
+    if (!me->present) {
+        fprintf(stderr,
+                "altscreen_render[qnx]: early RGBA plane-99 setup FAILED\n");
+        return -1;
+    }
+    me->presentWidth = me->width;
+    me->presentHeight = me->height;
+    me->presentOutCount = 0;
+    if (screen_egl_present_start_loader(me->present) != 0) {
+        fprintf(stderr,
+                "altscreen_render[qnx]: early RGBA loader start FAILED\n");
+        _DestroyPresent(me);
+        return -1;
+    }
+    return 0;
+}
+
 static int _MakePresent(ScreenSink *me, OMX_U32 count) {
-    if (me->present && me->presentOutCount == count
-            && me->presentWidth == me->width
-            && me->presentHeight == me->height) {
+    if (!me->present || me->presentWidth != me->width ||
+        me->presentHeight != me->height) {
+        if (me->present) _DestroyPresent(me);
+        if (_CreateEarlyPresent(me) != 0) return -1;
+    }
+    if (me->presentOutCount == count) {
         me->winReady = 1;
         fprintf(stderr,
                 "altscreen_render[qnx]: reusing persistent EGL/Screen presenter across reconnect (%u buffers)\n",
                 (unsigned)count);
         return 0;
     }
-    if (me->present) _DestroyPresent(me);
-    me->present = screen_egl_present_create(me->width, me->height, count);
-    if (!me->present) {
-        fprintf(stderr, "altscreen_render[qnx]: EGLImage GPU path setup FAILED\n");
+    if (me->presentOutCount != 0) {
+        /* A live source-count change cannot be detached safely from a presenter
+         * whose pointers may have been handed to OMX. Recreate only on this ABI
+         * mismatch; the normal path keeps the early RGBA window. */
+        fprintf(stderr,
+                "altscreen_render[qnx]: source-count changed %u -> %u; rebuilding presenter\n",
+                (unsigned)me->presentOutCount, (unsigned)count);
+        _DestroyPresent(me);
+        if (_CreateEarlyPresent(me) != 0) return -1;
+    }
+    if (screen_egl_present_attach_sources(me->present,
+                                          (unsigned int)count) != 0) {
+        fprintf(stderr,
+                "altscreen_render[qnx]: EGLImage GPU source attach FAILED\n");
         me->winReady = 0;
         return -1;
     }
@@ -298,7 +330,7 @@ static int _MakePresent(ScreenSink *me, OMX_U32 count) {
     me->presentHeight = me->height;
     me->winReady = 1;
     fprintf(stderr,
-            "altscreen_render[qnx]: output path OMX=0x7f000004 tiled Screen buffer -> external EGLImage -> RGBA8888 plane=99\n");
+            "altscreen_render[qnx]: output path attached to existing plane99: OMX=0x7f000004 -> EGLImage -> RGBA8888\n");
     return 0;
 }
 
@@ -474,6 +506,8 @@ static void _Teardown(ScreenSink *me, int destroyPresent) {
     me->presentRecoveryAttempts = 0;
     me->presentNeedsFullRebuild = 0;
     me->presentRecoveryAfterMs = 0;
+    if (!destroyPresent && me->present)
+        screen_egl_present_start_loader(me->present);
 }
 
 /* Bring up native 32m OMX output + post-decode EGL external-image conversion. */
@@ -593,7 +627,7 @@ int av_sink_open(void) {
     g_ss.height = eh ? atoi(eh) : 542;            /* qcdisplaycfg_MMX2.xml: "Audi 1440x542 Kombi panel" */
     fprintf(stderr, "altscreen_render[qnx]: sink open (%dx%d, OMX 32m Screen buffer -> EGL GPU RGBA)\n",
             g_ss.width, g_ss.height);
-    return 0;
+    return _CreateEarlyPresent(&g_ss);
 }
 
 /* Minimal Annex-B scan used only to recognise the cached SPS/PPS message. */

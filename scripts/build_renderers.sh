@@ -63,7 +63,7 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
 
   echo "--- altscreen_render ---"
   cd /src/altscreen_render
-  AS_SRCS="main.c frame_io.c altctl.c sink_omx_qnx.c screen_egl_present.c ../common/cluster_surface.c"
+  AS_SRCS="main.c frame_io.c altctl.c sink_omx_qnx.c screen_egl_present.c ../common/cluster_surface.c ../common/carplay_loader.c"
   gen_stub libscreen.so.1  "\bscreen_[a-z_]+"       $AS_SRCS
   gen_stub libEGL.so.1     "\begl[A-Z][A-Za-z0-9]+" $AS_SRCS
   gen_stub libGLESv2.so.1  "\bgl[A-Z][A-Za-z0-9]+"  $AS_SRCS

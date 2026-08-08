@@ -32,6 +32,7 @@
 #include "../framework/bus.h"
 #include "altscreen_hook.h"
 #include "altscreen_av.h"
+#include "main_loader.h"
 
 #include <unistd.h>
 #include <pthread.h>
@@ -1816,7 +1817,11 @@ void altscreen_init(void)
     bus_on(CMD_ALT_UICTX, uictx_on_cmd, NULL);
     LOG_INFO(LOG_MODULE, "AltScreen injector loaded (control negotiation + self-contained stream 111; cluster ZOOM/ZONE/APPEARANCE/UICTX registered; NIGHT mirrored from stock /info + SetNightMode)");
 }
-void altscreen_shutdown(void) { altav_shutdown(); }
+void altscreen_shutdown(void)
+{
+    main_loader_shutdown();
+    altav_shutdown();
+}
 
 __attribute__((constructor)) static void altscreen_module_init(void) { altscreen_init(); }
 __attribute__((destructor))  static void altscreen_module_fini(void) { altscreen_shutdown(); }

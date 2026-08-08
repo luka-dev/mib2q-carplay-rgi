@@ -3,14 +3,21 @@
 
 typedef struct screen_egl_present screen_egl_present_t;
 
-/*
- * Allocate the decoder-native Qualcomm 32m Screen WINDOW buffers and a managed
- * RGBA8888 cluster EGL window.  OMX writes to the returned source pointers;
- * EGL imports non-owning pixmap aliases of those Screen buffers as external
- * images (the original window allocations remain owned by this presenter).
- */
-screen_egl_present_t *screen_egl_present_create(int width, int height,
-                                                 unsigned int source_count);
+/* Create the managed RGBA8888 cluster output immediately, before an RTSP/OMX
+ * session exists.  The returned presenter owns a local 30-fps startup loader;
+ * decoder-native Qualcomm 32m sources are attached later. */
+screen_egl_present_t *screen_egl_present_create_output(int width, int height);
+
+/* Allocate decoder-native Qualcomm 32m Screen WINDOW buffers and import them as
+ * external EGLImages without replacing the existing RGBA output window. */
+int screen_egl_present_attach_sources(screen_egl_present_t *p,
+                                      unsigned int source_count);
+
+/* Loader lifecycle. start is idempotent; stop joins the loader thread and
+ * guarantees it no longer draws or posts the output window. */
+int  screen_egl_present_start_loader(screen_egl_present_t *p);
+void screen_egl_present_stop_loader(screen_egl_present_t *p);
+
 void *screen_egl_present_source_pointer(screen_egl_present_t *p,
                                         unsigned int index);
 unsigned int screen_egl_present_source_capacity(screen_egl_present_t *p,
