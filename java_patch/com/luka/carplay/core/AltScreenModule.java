@@ -52,6 +52,11 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
     public static final int VIEWAREA_DUO        = 1;
     private static final int VIEWAREA_ANIMATION_MS = 250;
 
+    /** Lightweight notification for consumers whose cluster presentation differs by view area. */
+    public interface ViewAreaModeListener {
+        void onViewAreaModeChanged(int mode);
+    }
+
     private static final Object LOCK = new Object();
     private IDisplayManager dm;                  /* current DisplayManager (guarded by LOCK); stable across sessions */
     private Thread worker;                        /* the ONE persistent switch worker (guarded by LOCK) */
@@ -140,6 +145,19 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
     /* Desired Audi View-button state. The C hook also caches this before the
      * RTSP altScreen session exists and applies it on the first decoded IDR. */
     private static int desiredViewAreaMode = VIEWAREA_FULLSCREEN;
+    private static volatile ViewAreaModeListener viewAreaModeListener;
+
+    public static boolean isDuoViewArea() {
+        synchronized (LOCK) { return desiredViewAreaMode == VIEWAREA_DUO; }
+    }
+
+    public static void setViewAreaModeListener(ViewAreaModeListener listener) {
+        viewAreaModeListener = listener;
+    }
+
+    public static void clearViewAreaModeListener(ViewAreaModeListener listener) {
+        if (viewAreaModeListener == listener) viewAreaModeListener = null;
+    }
 
     private static boolean sendViewAreaMode(String reason) {
         int mode;
@@ -162,6 +180,11 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
             desiredViewAreaMode = mode;
         }
         sendViewAreaMode("NAV_VIEW_SIZE_CHOICE");
+        ViewAreaModeListener listener = viewAreaModeListener;
+        if (listener != null) {
+            try { listener.onViewAreaModeChanged(mode); }
+            catch (Throwable t) { Log.w(TAG, "viewArea listener failed: " + t); }
+        }
     }
 
     public void onFrame(int type, int flags, byte[] payload, int len) {

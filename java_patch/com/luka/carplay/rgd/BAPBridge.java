@@ -48,8 +48,14 @@ public class BAPBridge {
     private static final int EXITVIEW_ROW = 2;
     private static final int EXITVIEW_ASIA = 3;
 
-    /* BAP supports 3 maneuver slots */
-    private static final int MAX_BAP_MANEUVERS = 3;
+    /*
+     * BAP supports three maneuver slots, but publish only the current one.
+     * Supplying look-ahead maneuvers makes the HUD combine Maneuver_1 and
+     * Maneuver_2 into instructions such as "left, then left again".  The full
+     * iOS maneuverOrder remains cached for renderer/lane-guidance consumers;
+     * this limit applies only to FctID 0x17 ManeuverDescriptor output.
+     */
+    private static final int MAX_BAP_MANEUVERS = 1;
 
     /*
      * Fixed maneuver thresholds (meters).
@@ -70,6 +76,9 @@ public class BAPBridge {
     /* Set only after the complete synchronous BAP start sequence has returned successfully.
      * RouteGuidance combines this with renderer FRAME_READY before exposing context 80. */
     private volatile boolean bapSessionStarted = false;
+    /* Duo alone uses FctID 19 for the legacy lower-bar arrow/street label. */
+    private String latchedTurnToText = "";
+    private boolean viewAreaLowerBarPublished = false;
 
     /*
      * Approach mode: true when distM <= prepareThreshold (showing real maneuver icon),
@@ -611,6 +620,8 @@ public class BAPBridge {
         try {
             bapSessionStarted = false;
             inApproachZone = false;
+            latchedTurnToText = "";
+            viewAreaLowerBarPublished = false;
             lastFirstManeuverIdx = -1;
             lastFirstManeuverVer = -1;
             resetActionBlinkState();
@@ -738,6 +749,8 @@ public class BAPBridge {
              * black screen. BAP teardown happens in onShutdown() on real disconnect. */
             stopActionBlinkThread();
             inApproachZone = false;
+            latchedTurnToText = "";
+            viewAreaLowerBarPublished = false;
             lastFirstManeuverIdx = -1;
             lastFirstManeuverVer = -1;
             Log.d(TAG, "Stopped (lightweight, renderer + BAP kept alive)");
@@ -759,6 +772,8 @@ public class BAPBridge {
              * zone exit, but onShutdown can be called from non-approach
              * states too — e.g., disconnect mid-route). */
             stopActionBlinkThread();
+            latchedTurnToText = "";
+            viewAreaLowerBarPublished = false;
 
             /*
              * Guidance stop — full BAP teardown:
@@ -1065,8 +1080,21 @@ public class BAPBridge {
                 }
             }
 
+            /* 4. Duo-only lower bar (FctID 19).  Fullscreen deliberately keeps
+             * this empty; its Maps/KDK layout is already correct without the
+             * stock VC strip.  The surrounding NavStatus gate still suppresses
+             * stock compass/scale writers in both modes. */
+            if (!viewAreaLowerBarPublished ||
+                    (dirty & (RouteGuidance.State.DIRTY_CURRENT_ROAD |
+                          RouteGuidance.State.DIRTY_MANEUVER_TEXT |
+                          RouteGuidance.State.DIRTY_MANEUVER_LIST |
+                          RouteGuidance.State.DIRTY_MANEUVER_ICON |
+                          RouteGuidance.State.DIRTY_MANEUVER_COUNT)) != 0) {
+                sendViewAreaLowerBar(s, explicitClear, shouldClearManeuver);
+            }
+
             /*
-             * 4. Maneuver state (FctID 24) - for HUD
+             * 5. Maneuver state (FctID 24) - for HUD
              */
             if ((dirty & (RouteGuidance.State.DIRTY_MANEUVER_STATE |
                           RouteGuidance.State.DIRTY_MANEUVER_ICON |
@@ -1235,6 +1263,56 @@ public class BAPBridge {
         return bapSessionStarted && customRendererStarted && r != null && r.isFrameReady();
     }
 
+    /** Immediate view-button refresh, executed by RouteGuidance's worker rather than the HMI thread. */
+    public void refreshViewAreaLowerBar(RouteGuidance.State s) {
+        if (!initialized || !bapSessionStarted || s == null) return;
+        try {
+            boolean shouldClear = (s.maneuverCount == 0) && (s.routeState <= 0);
+            sendViewAreaLowerBar(s, shouldClear, shouldClear);
+        } catch (Throwable t) {
+            Log.w(TAG, "viewArea lower-bar refresh failed: " + t);
+        }
+    }
+
+    private void sendViewAreaLowerBar(RouteGuidance.State s,
+                                      boolean explicitClear,
+                                      boolean shouldClearManeuver) throws Exception {
+        String road = "";
+        if (com.luka.carplay.core.AltScreenModule.isDuoViewArea()) {
+            boolean turnTextMode = inApproachZone && !explicitClear && !shouldClearManeuver;
+            if (turnTextMode) {
+                int idx = getFirstManeuverIndex(s);
+                String candidate = "";
+                if (idx >= 0) {
+                    if (s.mExitInfo != null && idx < s.mExitInfo.length
+                            && s.mExitInfo[idx] != null && s.mExitInfo[idx].length() > 0) {
+                        candidate = keepLastColonPart(s.mExitInfo[idx]);
+                    } else if (s.mAfterRoad != null && idx < s.mAfterRoad.length
+                            && s.mAfterRoad[idx] != null && s.mAfterRoad[idx].length() > 0) {
+                        candidate = keepLastColonPart(s.mAfterRoad[idx]);
+                    } else if (s.mName != null && idx < s.mName.length
+                            && s.mName[idx] != null && s.mName[idx].length() > 0) {
+                        candidate = s.mName[idx];
+                    }
+                }
+                if (candidate.length() > 0) {
+                    latchedTurnToText = directionArrow(s, idx) + " " + candidate;
+                }
+                road = latchedTurnToText;
+            } else {
+                latchedTurnToText = "";
+                road = (s.currentRoad != null) ? s.currentRoad : "";
+            }
+        } else {
+            latchedTurnToText = "";
+        }
+        road = limitUtf8(road, 96);
+        traceBap("updateCurrentPositionInfo", "\"" + road + "\" viewArea="
+            + (com.luka.carplay.core.AltScreenModule.isDuoViewArea() ? "duo" : "fullscreen"));
+        appConnectorNavi.updateCurrentPositionInfo(road);
+        viewAreaLowerBarPublished = true;
+    }
+
     /** Advance the renderer handshake without waiting. Called by the presentation worker. */
     public boolean preparePresentation() {
         startCustomRenderer();
@@ -1242,7 +1320,7 @@ public class BAPBridge {
     }
 
     /* ============================================================
-     * Maneuver Sending (supports up to 3 maneuvers for VC/HUD)
+     * Maneuver Sending (current maneuver only for VC/HUD)
      * ============================================================ */
 
     /**
@@ -1266,7 +1344,8 @@ public class BAPBridge {
     }
 
     /**
-     * Send up to 3 maneuvers from state.
+     * Send only the current (first valid) maneuver from iOS maneuverOrder.
+     * AppConnectorNavi resets absent Maneuver_2/Maneuver_3 slots to NO_SYMBOL.
      */
     private void sendManeuvers(RouteGuidance.State s) throws Exception {
         int[] idxs = getManeuverIndexList(s);
@@ -1298,10 +1377,9 @@ public class BAPBridge {
             return;
         }
 
-        /* Build array of CombiBAPNaviManeuverDescriptor - send all valid
-         * maneuvers in order.  START_ROUTE already maps to FOLLOW_STREET,
-         * so no skip needed; keeping pos=0 ensures BAP descriptor index
-         * stays aligned with distance[0]. */
+        /* Build a one-entry CombiBAPNaviManeuverDescriptor array. START_ROUTE
+         * already maps to FOLLOW_STREET, so no skip is needed; keeping only
+         * pos=0 ensures BAP Maneuver_1 stays aligned with DistanceToNextManeuver. */
         CombiBAPNaviManeuverDescriptor[] arr = new CombiBAPNaviManeuverDescriptor[validCount];
         int out = 0;
         for (int i = 0; i < idxs.length && out < validCount; i++) {
@@ -2258,6 +2336,32 @@ public class BAPBridge {
             if (s.length() <= maxBytes) return s;
             return s.substring(0, maxBytes);
         }
+    }
+
+    /** Pick a compact Unicode arrow matching the current BAP maneuver direction. */
+    private static String directionArrow(RouteGuidance.State s, int idx) {
+        if (idx < 0 || s.mType == null || idx >= s.mType.length) return "\u2191";
+        int[] mapped = ManeuverMapper.map(
+            s.mType[idx], s.mTurnAngle[idx], s.mJunctionType[idx], s.mDrivingSide[idx]);
+        int dir = mapped[1];
+        if (dir == ManeuverMapper.DIR_LEFT)         return "\u2190";
+        if (dir == ManeuverMapper.DIR_SLIGHT_LEFT)  return "\u2196";
+        if (dir == ManeuverMapper.DIR_SHARP_LEFT)   return "\u2199";
+        if (dir == ManeuverMapper.DIR_RIGHT)        return "\u2192";
+        if (dir == ManeuverMapper.DIR_SLIGHT_RIGHT) return "\u2197";
+        if (dir == ManeuverMapper.DIR_SHARP_RIGHT)  return "\u2198";
+        if (dir == ManeuverMapper.DIR_UTURN)        return "\u21B6";
+        return "\u2191";
+    }
+
+    private static String keepLastColonPart(String v) {
+        if (v == null) return "";
+        int pos = v.lastIndexOf(':');
+        if (pos >= 0 && pos + 1 < v.length()) {
+            String tail = v.substring(pos + 1).trim();
+            if (tail.length() > 0) return tail;
+        }
+        return v;
     }
 
     private static int getFirstManeuverIndex(RouteGuidance.State s) {

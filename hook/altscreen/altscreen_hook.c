@@ -208,11 +208,8 @@ static void set_i64(void *d, const char *key, int64_t val)
  *
  *   fullscreen rectangular safeArea: D2 + half a cell through M4 - half
  *              a cell = x 315..1125, y 90..361 = (315,90) 810x271
- *   duo rectangular safeArea: B2 through E5 + 15% of F5
- *              = x 90..464, y 90..452 = (90,90) 374x362
- *
- * Fractional grid coordinates are rounded to the nearest whole encoded pixel:
- * the E/F boundary plus 15% of F is 450 + 13.5 = 463.5 -> 464.
+ *   duo rectangular safeArea (the original compact layout): B2.5 through E5
+ *              = x 90..450, y 135..452 = (90,135) 360x317
  *
  * The background may render under a physical mask; route focus and critical UI
  * stay inside these nested safe rectangles. */
@@ -222,9 +219,9 @@ static void set_i64(void *d, const char *key, int64_t val)
 #define FULL_SAFE_H     271
 
 #define DUO_SAFE_X       90
-#define DUO_SAFE_Y       90
-#define DUO_SAFE_W      374
-#define DUO_SAFE_H      362
+#define DUO_SAFE_Y      135
+#define DUO_SAFE_W      360
+#define DUO_SAFE_H      317
 
 /* one rect dict, iOS keys: {originXPixels, originYPixels, widthPixels, heightPixels}
  * (CarKit CROrigin/CRSizeFromAirPlayDictionary). */
@@ -591,6 +588,7 @@ static fn_aes_ctr_final_t   aes_ctr_final;
 static fn_sess_sendcmd_t    sess_sendcmd;   /* session-level {type,params} command shipper (zone switch) */
 static void alt_kick_viewarea(void);        /* fwd: apply cached fullscreen/duo geometry when 111 is live */
 static void alt_kick_show_ui(void);         /* fwd: select Maps content for the cluster display */
+static int  alt_show_ui_for_mode(int mode, const char *reason); /* fwd: full cards vs duo map-only */
 static int  alt_send_cluster_night_mode(int night, const char *reason); /* fwd: per-display day/night */
 static int  alt_request_cluster_idr(const char *reason); /* fwd: forceKeyFrame targeted by params.uuid */
 static fn_derive_aes_t      derive_aes;
@@ -1468,6 +1466,11 @@ static void zone_cmd_done(int status, void *resp, void *ctx)
     (void)resp;
     LOG_INFO(LOG_MODULE, "updateViewArea ack: mode=%d status=%d", mode, status);
     zone_send_ack(mode, status);
+    /* Maps scene options are independent of safeArea. Apply the matching URL
+     * only after this view area succeeded, and ignore a stale ACK after a rapid
+     * second View-button press. */
+    if (status == 0 && mode == g_alt_zone_mode)
+        alt_show_ui_for_mode(mode, "viewArea-accepted");
 }
 
 /* Ship a command against the live altScreen session, serialized with teardown:
@@ -1744,19 +1747,42 @@ static void alt_kick_viewarea(void)
  * The normal protocol is Maps -> suggestUI{urls:[...]} -> HU chooses one ->
  * showUI{uuid,url}.  Stock 210 has no altScreen policy layer to make that choice,
  * so choose the Maps map URL when the 111 stream first becomes decodable.
- * ALTSCREEN_CLUSTER_URL keeps the choice testable and permits another provider. */
-static void alt_kick_show_ui(void)
+ *
+ * Fullscreen retains Maps' right-hand turn card and ETA. Duo is map-only because
+ * Audi supplies both the right-hand KDK maneuver and the duo-only BAP lower bar.
+ * Omitting maneuverLayout disables the Maps turn card; ETA is independent and
+ * is therefore explicitly disabled. */
+static const char *alt_cluster_url_for_mode(int mode)
 {
-    const char *url = getenv("ALTSCREEN_CLUSTER_URL");
-    if (!url || !url[0])
-        url = "maps:/car/instrumentcluster/map?maneuverLayout=rightAligned&showETA=yes";
+    const char *url;
+    if (mode == ALT_ZONE_DUO) {
+        url = getenv("ALTSCREEN_CLUSTER_URL_DUO");
+        if (!url || !url[0])
+            url = "maps:/car/instrumentcluster/map?showETA=no";
+    } else {
+        url = getenv("ALTSCREEN_CLUSTER_URL");
+        if (!url || !url[0])
+            url = "maps:/car/instrumentcluster/map?maneuverLayout=rightAligned&showETA=yes";
+    }
+    return url;
+}
 
+static int alt_show_ui_for_mode(int mode, const char *reason)
+{
+    const char *url = alt_cluster_url_for_mode(mode);
     void *p = alt_params_new(1);                        /* uuid = cluster display */
-    if (!p) return;
+    if (!p) return -6728;
     set_str(p, "url", url);
     int rc = alt_ship("showUI", p);
-    LOG_INFO(LOG_MODULE, "alt: auto showUI uuid=%s url=%s rc=%d",
-             CLUSTER_DISPLAY_UUID, url, rc);
+    LOG_INFO(LOG_MODULE, "alt: showUI mode=%s reason=%s uuid=%s url=%s rc=%d",
+             mode == ALT_ZONE_DUO ? "duo-map-only" : "fullscreen-cards",
+             reason ? reason : "?", CLUSTER_DISPLAY_UUID, url, rc);
+    return rc;
+}
+
+static void alt_kick_show_ui(void)
+{
+    alt_show_ui_for_mode(g_alt_zone_mode, "first-IDR");
 }
 
 static void appearance_on_cmd(uint16_t type, uint8_t flags, const uint8_t *payload, uint32_t len, void *ctx)

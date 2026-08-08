@@ -51,8 +51,17 @@ public class RouteGuidance implements CarplayBus.Listener {
     private final Object presentationLock = new Object();
     private Thread presentationThread;
     private boolean presentationWake;
+    private boolean presentationDrivePending;
+    private boolean viewAreaRefreshPending;
     private int presentationGeneration;
     private static final long PRESENTATION_RETRY_MS = 500L;
+
+    private final com.luka.carplay.core.AltScreenModule.ViewAreaModeListener viewAreaModeListener =
+        new com.luka.carplay.core.AltScreenModule.ViewAreaModeListener() {
+            public void onViewAreaModeChanged(int mode) {
+                requestViewAreaRefresh(mode);
+            }
+        };
 
     /* Parsed state (reused to avoid allocations) */
     private State state = new State();
@@ -274,6 +283,7 @@ public class RouteGuidance implements CarplayBus.Listener {
                 requestPresentationCheck(reason);
             }
         });
+        com.luka.carplay.core.AltScreenModule.setViewAreaModeListener(viewAreaModeListener);
 
         Log.i(TAG, "Initialized");
         return true;
@@ -296,6 +306,8 @@ public class RouteGuidance implements CarplayBus.Listener {
         synchronized (presentationLock) {
             generation = ++presentationGeneration;
             presentationWake = false;
+            presentationDrivePending = false;
+            viewAreaRefreshPending = false;
             presentationThread = new Thread(new Runnable() {
                 public void run() { presentationLoop(generation); }
             }, "carplay-rgi-presentation");
@@ -330,6 +342,8 @@ public class RouteGuidance implements CarplayBus.Listener {
             running = false;
             presentationGeneration++;
             presentationWake = true;
+            presentationDrivePending = false;
+            viewAreaRefreshPending = false;
             presentationLock.notifyAll();
             worker = presentationThread;
             presentationThread = null;
@@ -346,6 +360,7 @@ public class RouteGuidance implements CarplayBus.Listener {
                 bap.setPresentationListener(null);
             }
         }
+        com.luka.carplay.core.AltScreenModule.clearViewAreaModeListener(viewAreaModeListener);
         if (worker != null && worker != Thread.currentThread()) {
             try { worker.join(1000L); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
         }
@@ -507,14 +522,29 @@ public class RouteGuidance implements CarplayBus.Listener {
     private void requestPresentationCheck(String reason) {
         synchronized (presentationLock) {
             if (!running) return;
+            presentationDrivePending = true;
             presentationWake = true;
             presentationLock.notifyAll();
         }
         Log.d(TAG, "presentation wake: " + reason);
     }
 
+    /** View-button changes must update FctID 19 without blocking the HMI caller thread. */
+    private void requestViewAreaRefresh(int mode) {
+        synchronized (presentationLock) {
+            if (!running) return;
+            viewAreaRefreshPending = true;
+            presentationWake = true;
+            presentationLock.notifyAll();
+        }
+        Log.d(TAG, "viewArea lower-bar refresh queued: "
+            + (mode == com.luka.carplay.core.AltScreenModule.VIEWAREA_DUO ? "duo" : "fullscreen"));
+    }
+
     private void presentationLoop(int generation) {
         while (true) {
+            boolean drivePresentation;
+            boolean refreshViewArea;
             synchronized (presentationLock) {
                 while (running && generation == presentationGeneration && !presentationWake) {
                     try { presentationLock.wait(); }
@@ -522,9 +552,14 @@ public class RouteGuidance implements CarplayBus.Listener {
                 }
                 if (!running || generation != presentationGeneration) return;
                 presentationWake = false;
+                drivePresentation = presentationDrivePending;
+                presentationDrivePending = false;
+                refreshViewArea = viewAreaRefreshPending;
+                viewAreaRefreshPending = false;
             }
 
-            boolean retry = driveCachedPresentation();
+            if (refreshViewArea) driveViewAreaLowerBar();
+            boolean retry = drivePresentation && driveCachedPresentation();
             if (retry) {
                 synchronized (presentationLock) {
                     if (!running || generation != presentationGeneration) return;
@@ -532,10 +567,19 @@ public class RouteGuidance implements CarplayBus.Listener {
                         try { presentationLock.wait(PRESENTATION_RETRY_MS); }
                         catch (InterruptedException e) { Thread.currentThread().interrupt(); return; }
                     }
-                    if (running && generation == presentationGeneration) presentationWake = true;
+                    if (running && generation == presentationGeneration) {
+                        presentationDrivePending = true;
+                        presentationWake = true;
+                    }
                 }
             }
         }
+    }
+
+    /** Serialized with onFrame/stop; publishes only the duo/fullscreen lower-bar delta. */
+    private synchronized void driveViewAreaLowerBar() {
+        if (!running || bap == null || !rgActive) return;
+        bap.refreshViewAreaLowerBar(state);
     }
 
     /** Serialized with onFrame/stop so cached State and BAP are never mutated concurrently. */
