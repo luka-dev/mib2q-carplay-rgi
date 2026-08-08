@@ -12,10 +12,6 @@
  */
 package com.luka.carplay.rgd;
 
-import com.luka.carplay.framework.Log;
-
-import de.audi.app.bap.fw.AbstractBAPModuleFSG;
-import de.audi.app.bap.fw.functiontypes.BAPFunctionPropertyFSG;
 import de.audi.atip.interapp.combi.bap.navi.CombiBAPServiceNavi;
 import de.audi.atip.interapp.combi.bap.audio.data.CombiBAPTMCInfoMessage;
 import de.audi.atip.interapp.combi.bap.navi.data.CombiBAPDestinationInfo;
@@ -25,24 +21,10 @@ import de.audi.atip.interapp.combi.bap.navi.data.CombiBAPNaviLaneGuidanceData;
 import de.audi.atip.interapp.combi.bap.navi.data.CombiBAPNaviManeuverDescriptor;
 import de.audi.atip.interapp.combi.bap.navi.data.CombiBAPSemiDynamicRouteInfo;
 import de.audi.atip.interapp.combi.bap.navi.data.EtcStatus;
-import de.vw.mib.bap.generated.navsd.serializer.FunctionList_Status;
-import de.vw.mib.bap.generated.navsd.serializer.Map_Presentation_Status;
-import de.vw.mib.bap.requests.StatusProperty;
-import java.lang.reflect.Field;
 
 public class GatedCombiService implements CombiBAPServiceNavi {
-    private static final String TAG = "GatedCombi";
-    private static final int FCT_FUNCTION_LIST = 3;
-    private static final int FCT_MAP_PRESENTATION = 54;
-
     final CombiBAPServiceNavi real;
     volatile boolean blockRouteGuidance;
-    private boolean sideMenusHidden;
-    private boolean haveMapPresentation;
-    private boolean largeMapView;
-    private BAPFunctionPropertyFSG functionListProperty;
-    private BAPFunctionPropertyFSG mapPresentationProperty;
-    private FunctionList_Status stockFunctionList;
     private boolean haveMapScale;
     private int mapScaleAutoZoom, mapScaleValue, mapScaleUnit;
     private boolean mapScaleAutoZoomActive, mapScaleIntersectionSupported;
@@ -50,127 +32,6 @@ public class GatedCombiService implements CombiBAPServiceNavi {
     private int altitudeValue, altitudeUnit;
 
     public GatedCombiService(CombiBAPServiceNavi r) { this.real = r; }
-
-    /**
-     * Hide only the native navigation side-menu capability while altScreen owns
-     * the cluster.  The stock FunctionList snapshot is cloned bit-for-bit and
-     * only FctID 54 (Map_Presentation) is cleared.  All destination, map-option,
-     * RGI and HUD functions therefore keep their stock availability.
-     *
-     * Fail open if the concrete AppConnector/module or its initialized stock
-     * FunctionList cannot be recovered: emitting a default all-false list would
-     * remove the whole NAVSD domain from the cluster.
-     */
-    public synchronized boolean setSideMenusHidden(boolean hidden) {
-        if (sideMenusHidden == hidden) return true;
-
-        if (hidden) {
-            if (!resolveBapProperties()) return false;
-
-            StatusProperty last = functionListProperty.getLastStatus();
-            if (!(last instanceof FunctionList_Status)) {
-                Log.w(TAG, "side-menu gate unavailable: Fct3 status has unexpected type");
-                return false;
-            }
-
-            FunctionList_Status stock = copyFunctionList((FunctionList_Status)last);
-            if (stock == null || !isInitializedFunctionList(stock)) {
-                Log.w(TAG, "side-menu gate deferred: stock FunctionList is not initialized");
-                return false;
-            }
-
-            stockFunctionList = stock;
-            captureMapPresentation();
-            closeSideMenusIfKnown();
-
-            FunctionList_Status masked = copyFunctionList(stock);
-            if (masked == null) return false;
-            masked.fctMap_PresentationAvailable = false;
-            functionListProperty.sendStatus(masked);
-            sideMenusHidden = true;
-            Log.i(TAG, "native side menus hidden: FunctionList Fct54=false");
-            return true;
-        }
-
-        if (stockFunctionList != null && functionListProperty != null) {
-            FunctionList_Status restored = copyFunctionList(stockFunctionList);
-            if (restored == null) return false;
-            functionListProperty.sendStatus(restored);
-        }
-        closeSideMenusIfKnown();
-        sideMenusHidden = false;
-        stockFunctionList = null;
-        Log.i(TAG, "native side menus released: stock FunctionList restored");
-        return true;
-    }
-
-    private boolean resolveBapProperties() {
-        if (functionListProperty != null && mapPresentationProperty != null) return true;
-        try {
-            Class type = real.getClass();
-            Field moduleField = null;
-            while (type != null && moduleField == null) {
-                try { moduleField = type.getDeclaredField("moduleFsg"); }
-                catch (NoSuchFieldException e) { type = type.getSuperclass(); }
-            }
-            if (moduleField == null) throw new NoSuchFieldException("moduleFsg");
-            moduleField.setAccessible(true);
-            Object value = moduleField.get(real);
-            if (!(value instanceof AbstractBAPModuleFSG)) {
-                throw new IllegalStateException("moduleFsg type=" + value);
-            }
-            AbstractBAPModuleFSG module = (AbstractBAPModuleFSG)value;
-            if (!module.getFunctionList().isFunctionSupported(FCT_FUNCTION_LIST)) {
-                throw new IllegalStateException("NAVSD FunctionList unsupported");
-            }
-            functionListProperty = module.getBAPFunctionPropertyFSG(FCT_FUNCTION_LIST);
-            mapPresentationProperty = module.getBAPFunctionPropertyFSG(FCT_MAP_PRESENTATION);
-            return functionListProperty != null && mapPresentationProperty != null;
-        } catch (Throwable t) {
-            Log.w(TAG, "side-menu gate fail-open: " + t);
-            functionListProperty = null;
-            mapPresentationProperty = null;
-            return false;
-        }
-    }
-
-    private static boolean isInitializedFunctionList(FunctionList_Status status) {
-        return status.fctGetAllAvailable
-            && status.fctFunctionListAvailable
-            && status.fctFsg_OperationStateAvailable;
-    }
-
-    private static FunctionList_Status copyFunctionList(FunctionList_Status source) {
-        if (source == null) return null;
-        try {
-            FunctionList_Status copy = new FunctionList_Status();
-            Field[] fields = FunctionList_Status.class.getFields();
-            for (int i = 0; i < fields.length; i++) {
-                if (fields[i].getType() == Boolean.TYPE) {
-                    fields[i].setBoolean(copy, fields[i].getBoolean(source));
-                }
-            }
-            return copy;
-        } catch (Throwable t) {
-            Log.w(TAG, "FunctionList clone failed: " + t);
-            return null;
-        }
-    }
-
-    private void captureMapPresentation() {
-        if (mapPresentationProperty == null || !mapPresentationProperty.isDataValid()) return;
-        StatusProperty last = mapPresentationProperty.getLastStatus();
-        if (last instanceof Map_Presentation_Status) {
-            largeMapView = ((Map_Presentation_Status)last).asg_Hmi_State.largeMapView;
-            haveMapPresentation = true;
-        }
-    }
-
-    /** Preserve large/small map mode; only force the two open bits low. */
-    private void closeSideMenusIfKnown() {
-        if (!haveMapPresentation) return;
-        real.updateMapPresentation(largeMapView, false, false);
-    }
 
     /** Route-data ownership. BAPBridge is the only writer while CarPlay RGI is active.
      * Keep stock compass and NAVSD state untouched; hide only scale and altitude. */
@@ -286,11 +147,7 @@ public class GatedCombiService implements CombiBAPServiceNavi {
     public void poiSearchResult(int a, int b) { real.poiSearchResult(a, b); }
     public void updatePOIListSize(int a) { real.updatePOIListSize(a); }
     public void updateFSGSetup(int a, boolean b) { real.updateFSGSetup(a, b); }
-    public synchronized void updateMapPresentation(boolean a, boolean b, boolean c) {
-        largeMapView = a;
-        haveMapPresentation = true;
-        if (sideMenusHidden) real.updateMapPresentation(a, false, false);
-        else real.updateMapPresentation(a, b, c);
-    }
+    public void updateMapPresentation(boolean a, boolean b, boolean c) {
+        real.updateMapPresentation(a, b, c); }
     public void updateEtcStatus(EtcStatus a) { real.updateEtcStatus(a); }
 }

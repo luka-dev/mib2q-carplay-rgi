@@ -344,7 +344,6 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
             LOCK.notifyAll();
         }
         Log.i(TAG, "ready (DisplayManager acquired, session reset -> ctx 81)");
-        AltScreenNavStatusGate.setSideMenusHidden(true);
         return true;
     }
 
@@ -364,7 +363,6 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
             generation = ++lifecycleGeneration;
         }
         republish();
-        AltScreenNavStatusGate.setSideMenusHidden(false);
         /* Bridge only short TMDev/dio bounces. A real disconnect must not leave a stale control
          * socket pinning plane 99 forever. A re-activate increments the generation and cancels this. */
         Thread grace = new Thread(new Runnable() {

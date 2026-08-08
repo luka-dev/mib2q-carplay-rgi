@@ -1,8 +1,7 @@
 /*
  * AltScreenNavStatusGate - installs the single wrapper that prevents stock
- * route-guidance BAP writes from racing CarPlay RGI.  Its independent session
- * gate masks only NAVSD Fct54 so the native navigation side menus disappear;
- * initializing state, compass and every other availability bit remain stock.
+ * route-guidance BAP writes from racing CarPlay RGI.  It deliberately does not
+ * alter NAVSD availability, initializing state, compass, scale or map status.
  */
 package com.luka.carplay.core;
 
@@ -20,8 +19,6 @@ public final class AltScreenNavStatusGate {
     private static GatedCombiService gate;
     private static boolean desiredRouteBlocked;
     private static boolean appliedRouteBlocked;
-    private static boolean desiredSideMenusHidden;
-    private static boolean appliedSideMenusHidden;
     private static boolean installScheduled;
 
     private AltScreenNavStatusGate() { }
@@ -60,13 +57,9 @@ public final class AltScreenNavStatusGate {
                     cs.setCombiBAPListenerCombiService(gate);
                 }
                 clusterService = cs;
-                appliedSideMenusHidden = false;
                 Log.i(TAG, "native route-guidance gate installed/reused");
             }
 
-            if (gate.setSideMenusHidden(desiredSideMenusHidden)) {
-                appliedSideMenusHidden = desiredSideMenusHidden;
-            }
             gate.setRouteGuidanceBlocked(desiredRouteBlocked);
             appliedRouteBlocked = desiredRouteBlocked;
         } catch (Throwable t) {
@@ -83,11 +76,9 @@ public final class AltScreenNavStatusGate {
         if (incoming == null) {
             if (cs == clusterService && gate != null) {
                 try { gate.setRouteGuidanceBlocked(false); } catch (Throwable t) { }
-                try { gate.setSideMenusHidden(false); } catch (Throwable t) { }
                 clusterService = null;
                 gate = null;
                 appliedRouteBlocked = false;
-                appliedSideMenusHidden = false;
             }
             return null;
         }
@@ -100,14 +91,9 @@ public final class AltScreenNavStatusGate {
         }
         if (gate != null && gate != next) {
             try { gate.setRouteGuidanceBlocked(false); } catch (Throwable t) { }
-            try { gate.setSideMenusHidden(false); } catch (Throwable t) { }
         }
         clusterService = cs;
         gate = next;
-        appliedSideMenusHidden = false;
-        if (gate.setSideMenusHidden(desiredSideMenusHidden)) {
-            appliedSideMenusHidden = desiredSideMenusHidden;
-        }
         gate.setRouteGuidanceBlocked(desiredRouteBlocked);
         appliedRouteBlocked = desiredRouteBlocked;
         installScheduled = false;
@@ -123,14 +109,6 @@ public final class AltScreenNavStatusGate {
         return gate != null && appliedRouteBlocked == blocked && !installScheduled;
     }
 
-    /** Session-level gate for the two native navigation side menus. */
-    public static synchronized boolean setSideMenusHidden(boolean hidden) {
-        boolean changed = desiredSideMenusHidden != hidden;
-        desiredSideMenusHidden = hidden;
-        if (gate == null || changed || appliedSideMenusHidden != hidden) scheduleInstallLocked();
-        return gate != null && appliedSideMenusHidden == hidden && !installScheduled;
-    }
-
     /** Exact stock-service availability edge, after prepareCombiBAPService + stock updateAll.
      * Also wakes CarPlayApp so RgdModule releases/reacquires its paired OSGi reference when the
      * Navigation service is replaced without a phone reconnect. */
@@ -141,7 +119,6 @@ public final class AltScreenNavStatusGate {
 
         if (cs != clusterService || current != gate) {
             appliedRouteBlocked = false;
-            appliedSideMenusHidden = false;
         }
         if (current == null) {
             if (cs == clusterService) {
@@ -151,7 +128,7 @@ public final class AltScreenNavStatusGate {
             CarPlayApp.onNavigationServiceChanged();
             return;
         }
-        if (desiredRouteBlocked || desiredSideMenusHidden) scheduleInstallLocked();
+        if (desiredRouteBlocked) scheduleInstallLocked();
         CarPlayApp.onNavigationServiceChanged();
     }
 }
