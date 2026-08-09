@@ -4,7 +4,8 @@
  *
  * When blockRouteGuidance=true, native route-guidance related calls from
  * CombiBAPListener are silently dropped so they don't overwrite BAPBridge.
- * This keeps BAPBridge as the single source for FctIDs 17/18/19/23/24/39/49/55.
+ * This keeps BAPBridge as the single source for FctIDs
+ * 17/18/19/21/22/23/24/39/46/49/55.
  *
  * Non-route-guidance methods always delegate.
  *
@@ -25,9 +26,10 @@ import de.audi.atip.interapp.combi.bap.navi.data.EtcStatus;
 public class GatedCombiService implements CombiBAPServiceNavi {
     final CombiBAPServiceNavi real;
     volatile boolean blockRouteGuidance;
-    /* FctID 19 has different ownership from the rest of route guidance:
+    /* FctIDs 19/21/22/46 have different ownership from the rest of route guidance:
      * outside CarPlay RGI the stock navigator may keep driving the lower bar,
-     * while maneuver/distance/lane records remain session-gated. */
+     * travel information and destination menu; maneuver/lane records remain
+     * session-gated. */
     volatile boolean blockCurrentPositionInfo;
     private boolean haveMapScale;
     private int mapScaleAutoZoom, mapScaleValue, mapScaleUnit;
@@ -104,9 +106,9 @@ public class GatedCombiService implements CombiBAPServiceNavi {
     public void updateCompassInfo(int a, int b) { real.updateCompassInfo(a, b); }
     public void updateTurnToInfo(String a, String b) { real.updateTurnToInfo(a, b); }
     public void updateDistanceToDestination(int a, int b, boolean c) {
-        real.updateDistanceToDestination(a, b, c); }
+        if (!blockCurrentPositionInfo) real.updateDistanceToDestination(a, b, c); }
     public void updateTimeToDestination(int a, int b, long c) {
-        real.updateTimeToDestination(a, b, c); }
+        if (!blockCurrentPositionInfo) real.updateTimeToDestination(a, b, c); }
     public void updateTMCInfoMessages(CombiBAPTMCInfoMessage[] a) {
         real.updateTMCInfoMessages(a); }
     public void updateLastDestinationsList(CombiBAPDestinationListEntry[] a) {
@@ -141,7 +143,7 @@ public class GatedCombiService implements CombiBAPServiceNavi {
         else real.updateMapScale(a, b, c, d, e);
     }
     public void updateDestinationInfo(CombiBAPDestinationInfo a) {
-        real.updateDestinationInfo(a); }
+        if (!blockCurrentPositionInfo) real.updateDestinationInfo(a); }
     public synchronized void updateAltitude(int a, int b) {
         altitudeValue = a;
         altitudeUnit = b;

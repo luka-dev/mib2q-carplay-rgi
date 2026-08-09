@@ -76,9 +76,18 @@ public class BAPBridge {
     /* Set only after the complete synchronous BAP start sequence has returned successfully.
      * RouteGuidance combines this with renderer FRAME_READY before exposing context 80. */
     private volatile boolean bapSessionStarted = false;
-    /* CarPlay owns FctID 19 for the whole active RGI interval. */
+    /* CarPlay owns FctID 19/21/22/46 for the whole active RGI interval. */
     private String latchedTurnToText = "";
     private boolean viewAreaLowerBarPublished = false;
+    /* User-selectable route-info representation. View changes always reset it
+     * to 0; only the serialized RouteGuidance presentation worker mutates it. */
+    private int infoPhase = 0;
+    /* Explicit output caches allow View/OK to repaint immediately without
+     * waiting for another iOS RGI delta. */
+    private long lastEtaSeconds = -1L;
+    private long lastTimeRemainingSeconds = -1L;
+    private long lastTimeRemainingSampleSeconds = -1L;
+    private int lastDistanceToDestinationM = -1;
 
     /*
      * Approach mode: true when distM <= prepareThreshold (showing real maneuver icon),
@@ -622,6 +631,11 @@ public class BAPBridge {
             inApproachZone = false;
             latchedTurnToText = "";
             viewAreaLowerBarPublished = false;
+            infoPhase = 0;
+            lastEtaSeconds = -1L;
+            lastTimeRemainingSeconds = -1L;
+            lastTimeRemainingSampleSeconds = -1L;
+            lastDistanceToDestinationM = -1;
             lastFirstManeuverIdx = -1;
             lastFirstManeuverVer = -1;
             resetActionBlinkState();
@@ -756,6 +770,7 @@ public class BAPBridge {
             inApproachZone = false;
             latchedTurnToText = "";
             viewAreaLowerBarPublished = false;
+            infoPhase = 0;
             lastFirstManeuverIdx = -1;
             lastFirstManeuverVer = -1;
             Log.d(TAG, "Stopped (lightweight, renderer + BAP kept alive)");
@@ -779,6 +794,11 @@ public class BAPBridge {
             stopActionBlinkThread();
             latchedTurnToText = "";
             viewAreaLowerBarPublished = false;
+            infoPhase = 0;
+            lastEtaSeconds = -1L;
+            lastTimeRemainingSeconds = -1L;
+            lastTimeRemainingSampleSeconds = -1L;
+            lastDistanceToDestinationM = -1;
 
             /*
              * Guidance stop — full BAP teardown:
@@ -883,6 +903,7 @@ public class BAPBridge {
         if (!initialized || s == null) return false;
 
         int dirty = s.dirtyMask;
+        cacheTravelInfo(s, dirty);
         if (dirty == 0) return false;
         Log.d(TAG, "Update delta mask=0x" + Integer.toHexString(dirty));
 
@@ -1086,19 +1107,28 @@ public class BAPBridge {
                 }
             }
 
-            /* 4. Persistent CarPlay lower bar (FctID 19).  It is independent
-             * of fullscreen/duo and always carries arrow + next direction. */
-            if (!viewAreaLowerBarPublished ||
-                    (dirty & (RouteGuidance.State.DIRTY_CURRENT_ROAD |
-                          RouteGuidance.State.DIRTY_MANEUVER_TEXT |
-                          RouteGuidance.State.DIRTY_MANEUVER_LIST |
-                          RouteGuidance.State.DIRTY_MANEUVER_ICON |
-                          RouteGuidance.State.DIRTY_MANEUVER_COUNT)) != 0) {
-                sendViewAreaLowerBar(s, explicitClear, shouldClearManeuver);
+            /* 4. Persistent CarPlay lower bar (FctID 19).
+             * Phase 0 is always the cached real arrow/road text. In fullscreen
+             * phase 1 replaces it with ETA + remaining time + remaining distance;
+             * duo keeps the real position because its phase switch belongs to
+             * the dedicated FctID 22 field. */
+            int lowerBarDirty = RouteGuidance.State.DIRTY_CURRENT_ROAD
+                | RouteGuidance.State.DIRTY_MANEUVER_TEXT
+                | RouteGuidance.State.DIRTY_MANEUVER_LIST
+                | RouteGuidance.State.DIRTY_MANEUVER_ICON
+                | RouteGuidance.State.DIRTY_MANEUVER_COUNT;
+            if (!com.luka.carplay.core.AltScreenModule.isDuoViewArea() && infoPhase != 0) {
+                lowerBarDirty |= RouteGuidance.State.DIRTY_DIST_DEST
+                    | RouteGuidance.State.DIRTY_TIME_REMAINING
+                    | RouteGuidance.State.DIRTY_ETA;
+            }
+            if (!viewAreaLowerBarPublished || (dirty & lowerBarDirty) != 0) {
+                updateLatchedPositionText(s);
+                publishCurrentPositionForMode();
             }
 
             /*
-             * 5. Maneuver state (FctID 24) - for HUD
+             * 5. Maneuver state (FctID 55) - for HUD
              */
             if ((dirty & (RouteGuidance.State.DIRTY_MANEUVER_STATE |
                           RouteGuidance.State.DIRTY_MANEUVER_ICON |
@@ -1164,35 +1194,11 @@ public class BAPBridge {
                 sendDistanceToDestinationRaw(s.distDestM, false);
             }
 
-            /* 8. Time to destination (FctID 22) - via AppConnectorNavi */
+            /* 8. Time to destination (FctID 22). In duo, phase 0 publishes
+             * arrival time and phase 1 publishes remaining travel time. */
             if ((dirty & (RouteGuidance.State.DIRTY_TIME_REMAINING |
                           RouteGuidance.State.DIRTY_ETA)) != 0) {
-                long eta = s.etaSeconds;
-                int timeInfoType = 1;
-                int timeFormat = getHuNavigationTimeFormat();
-                long timeVal;
-
-                if (eta >= 0) {
-                    timeVal = eta;
-                } else if (s.timeRemainingSeconds >= 0) {
-                    long nowMs = getUtcMillis();
-                    timeVal = (nowMs / 1000L) + s.timeRemainingSeconds;
-                } else {
-                    timeVal = -1;
-                }
-
-                /* JVM default TZ is UTC on MHI2. AppConnectorNavi uses
-                 * GregorianCalendar(Date(epoch*1000)) which would show UTC.
-                 * Convert UTC epoch to local epoch so calendar shows local time.
-                 * Uses fw.convertUTCTimeToLocalTime() -- DST-aware, always correct. */
-                if (timeVal >= 0) {
-                    long utcMs = timeVal * 1000L;
-                    long localMs = convertUtcToLocalMs(utcMs);
-                    timeVal = localMs / 1000L;
-                }
-
-                traceBap("updateTimeToDestination", timeInfoType + "," + timeFormat + "," + timeVal);
-                appConnectorNavi.updateTimeToDestination(timeInfoType, timeFormat, timeVal);
+                publishTimeToDestinationForMode();
             }
 
             /* 9. Destination info (FctID 46) - via AppConnectorNavi */
@@ -1267,20 +1273,28 @@ public class BAPBridge {
         return bapSessionStarted && customRendererStarted && r != null && r.isFrameReady();
     }
 
-    /** Immediate view-button refresh, executed by RouteGuidance's worker rather than the HMI thread. */
-    public void refreshViewAreaLowerBar(RouteGuidance.State s) {
+    /**
+     * Immediate View/OK refresh, executed by RouteGuidance's serialized worker.
+     * State and the explicit output caches survive ordinary delta clearing, so
+     * this never waits for the next iOS route-guidance packet.
+     */
+    public void refreshInfoPresentation(RouteGuidance.State s, int phase) {
+        infoPhase = (phase == 0) ? 0 : 1;
         if (!initialized || !bapSessionStarted || s == null) return;
         try {
-            boolean shouldClear = (s.maneuverCount == 0) && (s.routeState <= 0);
-            sendViewAreaLowerBar(s, shouldClear, shouldClear);
+            cacheTravelInfo(s, s.dirtyMask);
+            updateLatchedPositionText(s);
+            publishCurrentPositionForMode();
+            publishTimeToDestinationForMode();
+            Log.i(TAG, "route-info phase=" + infoPhase + " applied view="
+                + (com.luka.carplay.core.AltScreenModule.isDuoViewArea() ? "duo" : "fullscreen"));
         } catch (Throwable t) {
-            Log.w(TAG, "viewArea lower-bar refresh failed: " + t);
+            Log.w(TAG, "route-info refresh failed: " + t);
         }
     }
 
-    private void sendViewAreaLowerBar(RouteGuidance.State s,
-                                      boolean explicitClear,
-                                      boolean shouldClearManeuver) throws Exception {
+    /** Refresh only the real FctID 19 position cache; never store the phase-1 summary here. */
+    private void updateLatchedPositionText(RouteGuidance.State s) {
         int idx = getFirstManeuverIndex(s);
         String candidate = "";
         if (idx >= 0) {
@@ -1302,12 +1316,142 @@ public class BAPBridge {
         next = limitUtf8(next, 96);
         if (next.length() > 0) latchedTurnToText = next;
         if (latchedTurnToText.length() == 0) latchedTurnToText = "\u2191";
+    }
 
-        traceBap("updateCurrentPositionInfo", "\"" + latchedTurnToText
-            + "\" RGI active viewArea="
+    private void publishCurrentPositionForMode() {
+        boolean summaryMode = !com.luka.carplay.core.AltScreenModule.isDuoViewArea()
+            && infoPhase != 0;
+        String text = summaryMode ? buildTripSummary() : latchedTurnToText;
+        if (text == null || text.length() == 0) text = latchedTurnToText;
+        if (text == null || text.length() == 0) text = "\u2191";
+        text = limitUtf8(text, 96);
+        traceBap("updateCurrentPositionInfo", "\"" + text + "\" phase=" + infoPhase
+            + " view="
             + (com.luka.carplay.core.AltScreenModule.isDuoViewArea() ? "duo" : "fullscreen"));
-        appConnectorNavi.updateCurrentPositionInfo(latchedTurnToText);
+        appConnectorNavi.updateCurrentPositionInfo(text);
         viewAreaLowerBarPublished = true;
+    }
+
+    private void cacheTravelInfo(RouteGuidance.State s, int dirty) {
+        if (s == null) return;
+        if ((dirty & RouteGuidance.State.DIRTY_ETA) != 0) {
+            lastEtaSeconds = s.etaSeconds;
+        }
+        if ((dirty & RouteGuidance.State.DIRTY_TIME_REMAINING) != 0) {
+            lastTimeRemainingSeconds = s.timeRemainingSeconds;
+            lastTimeRemainingSampleSeconds = getUtcMillis() / 1000L;
+        }
+        if ((dirty & RouteGuidance.State.DIRTY_DIST_DEST) != 0) {
+            lastDistanceToDestinationM = s.distDestM;
+        }
+    }
+
+    private long currentRemainingSeconds() {
+        long now = getUtcMillis() / 1000L;
+        if (lastEtaSeconds >= 0L) {
+            long remaining = lastEtaSeconds - now;
+            return remaining > 0L ? remaining : 0L;
+        }
+        if (lastTimeRemainingSeconds < 0L) return -1L;
+        long elapsed = lastTimeRemainingSampleSeconds >= 0L
+            ? now - lastTimeRemainingSampleSeconds : 0L;
+        if (elapsed < 0L) elapsed = 0L;
+        long remaining = lastTimeRemainingSeconds - elapsed;
+        return remaining > 0L ? remaining : 0L;
+    }
+
+    private long currentArrivalSeconds() {
+        if (lastEtaSeconds >= 0L) return lastEtaSeconds;
+        long remaining = currentRemainingSeconds();
+        return remaining >= 0L ? (getUtcMillis() / 1000L) + remaining : -1L;
+    }
+
+    private void publishTimeToDestinationForMode() {
+        boolean remainingMode = com.luka.carplay.core.AltScreenModule.isDuoViewArea()
+            && infoPhase != 0;
+        int timeInfoType = remainingMode ? 0 : 1;
+        int timeFormat = getHuNavigationTimeFormat();
+        long timeVal = remainingMode ? currentRemainingSeconds() : currentArrivalSeconds();
+
+        /* JVM default TZ is UTC on MHI2. AppConnectorNavi converts a type-1
+         * epoch with GregorianCalendar, so shift it to HU local time first.
+         * Type 0 is a duration and must never receive the timezone offset. */
+        if (!remainingMode && timeVal >= 0L) {
+            timeVal = convertUtcToLocalMs(timeVal * 1000L) / 1000L;
+        }
+
+        traceBap("updateTimeToDestination", timeInfoType + "," + timeFormat + "," + timeVal);
+        appConnectorNavi.updateTimeToDestination(timeInfoType, timeFormat, timeVal);
+    }
+
+    private String buildTripSummary() {
+        StringBuffer out = new StringBuffer();
+        appendSummaryPart(out, formatArrivalForText(currentArrivalSeconds()));
+        appendSummaryPart(out, formatRemainingForText(currentRemainingSeconds()));
+        appendSummaryPart(out, formatDistanceForText(lastDistanceToDestinationM));
+        return out.toString();
+    }
+
+    private static void appendSummaryPart(StringBuffer out, String value) {
+        if (value == null || value.length() == 0) return;
+        if (out.length() > 0) out.append(" | ");
+        out.append(value);
+    }
+
+    private static String formatArrivalForText(long utcSeconds) {
+        if (utcSeconds < 0L) return "";
+        long localMs = convertUtcToLocalMs(utcSeconds * 1000L);
+        java.util.GregorianCalendar cal = new java.util.GregorianCalendar();
+        cal.setTimeInMillis(localMs);
+        int hour = cal.get(java.util.Calendar.HOUR_OF_DAY);
+        int minute = cal.get(java.util.Calendar.MINUTE);
+        StringBuffer out = new StringBuffer("ETA ");
+        if (getHuNavigationTimeFormat() == 1) {
+            boolean pm = hour >= 12;
+            int hour12 = hour % 12;
+            if (hour12 == 0) hour12 = 12;
+            out.append(hour12).append(':');
+            if (minute < 10) out.append('0');
+            out.append(minute).append(pm ? " PM" : " AM");
+        } else {
+            if (hour < 10) out.append('0');
+            out.append(hour).append(':');
+            if (minute < 10) out.append('0');
+            out.append(minute);
+        }
+        return out.toString();
+    }
+
+    private static String formatRemainingForText(long seconds) {
+        if (seconds < 0L) return "";
+        long minutes = (seconds + 59L) / 60L;
+        long hours = minutes / 60L;
+        minutes %= 60L;
+        StringBuffer out = new StringBuffer();
+        if (hours > 0L) out.append(hours).append(" h");
+        if (minutes > 0L || hours == 0L) {
+            if (out.length() > 0) out.append(' ');
+            out.append(minutes).append(" min");
+        }
+        return out.toString();
+    }
+
+    private static String formatDistanceForText(int meters) {
+        if (meters < 0) return "";
+        if (isMetricDistanceUnits()) {
+            if (meters < 1000) return String.valueOf(meters) + " m";
+            long tenths = (meters + 50L) / 100L;
+            return formatTenths(tenths) + " km";
+        }
+        long feet = (meters * 328084L + 50000L) / 100000L;
+        if (feet < 5280L) return String.valueOf(feet) + " ft";
+        long tenths = (meters * 10L + 804L) / 1609L;
+        return formatTenths(tenths) + " mi";
+    }
+
+    private static String formatTenths(long value) {
+        if ((value % 10L) == 0L) return String.valueOf(value / 10L);
+        return String.valueOf(value / 10L) + "." + String.valueOf(value % 10L);
     }
 
     /** Advance the renderer handshake without waiting. Called by the presentation worker. */

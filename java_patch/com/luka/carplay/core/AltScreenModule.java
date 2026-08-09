@@ -57,6 +57,11 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
         void onViewAreaModeChanged(int mode);
     }
 
+    /** Steering-wheel map encoder press, consumed from NavSD MapScale.SetGet. */
+    public interface InfoModeListener {
+        void onInfoModeToggle();
+    }
+
     private static final Object LOCK = new Object();
     private IDisplayManager dm;                  /* current DisplayManager (guarded by LOCK); stable across sessions */
     private Thread worker;                        /* the ONE persistent switch worker (guarded by LOCK) */
@@ -96,10 +101,26 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
         return true;
     }
 
-    /** Suppress a simultaneous native-map auto-zoom setting while CarPlay owns the cluster. */
+    /**
+     * The steering-wheel map encoder press arrives as a MapScale auto-zoom SetGet,
+     * while rotation arrives separately in {@link #consumeSteeringWheelScale(int)}.
+     * Repurpose the press as the CarPlay route-info presentation toggle and keep
+     * the hidden Audi map untouched.
+     */
     public static boolean consumeSteeringWheelScaleSetting(int setting) {
         if (!isConnected()) return false;
-        Log.i(TAG, "MFL native map-scale setting suppressed=" + setting);
+        InfoModeListener listener = infoModeListener;
+        if (navActive && listener != null) {
+            try {
+                listener.onInfoModeToggle();
+                Log.i(TAG, "MFL encoder press -> route-info toggle (MapScale setting=" + setting + ")");
+            } catch (Throwable t) {
+                Log.w(TAG, "route-info toggle listener failed: " + t);
+            }
+        } else {
+            Log.i(TAG, "MFL map-scale setting suppressed=" + setting
+                + " (route-info inactive)");
+        }
         return true;
     }
 
@@ -146,6 +167,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
      * RTSP altScreen session exists and applies it on the first decoded IDR. */
     private static int desiredViewAreaMode = VIEWAREA_FULLSCREEN;
     private static volatile ViewAreaModeListener viewAreaModeListener;
+    private static volatile InfoModeListener infoModeListener;
 
     public static boolean isDuoViewArea() {
         synchronized (LOCK) { return desiredViewAreaMode == VIEWAREA_DUO; }
@@ -157,6 +179,14 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
 
     public static void clearViewAreaModeListener(ViewAreaModeListener listener) {
         if (viewAreaModeListener == listener) viewAreaModeListener = null;
+    }
+
+    public static void setInfoModeListener(InfoModeListener listener) {
+        infoModeListener = listener;
+    }
+
+    public static void clearInfoModeListener(InfoModeListener listener) {
+        if (infoModeListener == listener) infoModeListener = null;
     }
 
     private static boolean sendViewAreaMode(String reason) {

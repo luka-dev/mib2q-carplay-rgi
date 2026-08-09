@@ -1,0 +1,186 @@
+# MU1316 NavSD FctID matrix
+
+## Scope and authority
+
+This is the Navigation BAP LSG `0x32` exposed by the stock MU1316 Java stack.
+It distinguishes three different facts:
+
+1. **Registered** — `FunctionRegistrationNavi` creates a property, array, or
+   method object for the FctID.
+2. **Advertised** — the coded `FunctionListNaviEvo` variant exposes it to the
+   instrument cluster. Registration alone does not make a function available.
+3. **Writable through the public service** — stock `CombiBAPServiceNavi` and
+   `AppConnectorNavi` provide a usable Java call. Some registered functions are
+   framework-owned command/list machinery and have no direct publishing API.
+
+Authoritative sources:
+
+- stock ID/name catalogue: `FunctionIDsNavi.java`, FctID 1–56;
+- stock type registration: `FunctionRegistrationNavi.java` (33 properties,
+  6 arrays, 5 methods, plus framework functions);
+- coded availability: `FunctionListNaviEvo.java`;
+- public seam: `CombiBAPServiceNavi.java` and `AppConnectorNavi.java`;
+- our ownership policy: `GatedCombiService.java` and `BAPBridge.java`.
+
+Variant legend: `S` = Std, `H` = HighPrem, `M` = MMIKombi, `MH` =
+MMIKombiHUD. `All` means all four. China additionally disables FctID 47.
+The feature set observed on the MHI2Q virtual cockpit most closely matches
+`H`, but the live FunctionList remains the final authority.
+
+## Complete catalogue
+
+| ID | Hex | Stock name | Kind | Advertised variants | Public HU-side seam | Payload / visible role | Current CarPlay policy |
+|---:|---:|---|---|---|---|---|---|
+| 1 | `0x01` | GetAll | protocol | All | framework-owned | Request a complete status snapshot | Stock/framework |
+| 2 | `0x02` | BAP_Config | property | All | framework-owned | BAP version/configuration | Stock/framework |
+| 3 | `0x03` | FunctionList | property | All | framework-owned | Runtime availability bitmap | Stock/framework; use as capability truth |
+| 4 | `0x04` | HeartBeat | protocol | All | framework-owned | LSG liveness | Stock/framework |
+| 5–14 | — | Reserved/unknown | — | None | none | No NavSD function in this firmware | Do not use |
+| 15 | `0x0F` | FSG_OperationState | property | All | `showInitializingScreen()` / `hideInitializingScreen()` | Navigation READY/INITIALIZING state | Always delegated to stock; high-risk lifecycle control |
+| 16 | `0x10` | CompassInfo | property | All | `updateCompassInfo(angle, symbolic)` | Compass heading and `N/NE/...` indicator | Delegated to stock |
+| 17 | `0x11` | RG_Status | property | All | `updateRGStatus(status)` | Route-guidance active state; starts FctSync | CarPlay-owned for connected session; sent during RGI |
+| 18 | `0x12` | DistanceToNextManeuver | property | All | `updateDistanceToNextManeuver(distance, unit, barOn, bar)` | Next-turn distance plus optional bargraph | CarPlay-owned/gated; actively sent |
+| 19 | `0x13` | CurrentPositionInfo | property | All | `updateCurrentPositionInfo(text)` | Lower-bar current road/direction text | Gated only while CarPlay RGI is active; stock allowed for `CP && !RGI` |
+| 20 | `0x14` | TurnToInfo | property | All | `updateTurnToInfo(turnTo, signPost)` | Turn-to/signpost text overlay | Delegated to stock; not currently sent by CarPlay |
+| 21 | `0x15` | DistanceToDestination | property | All | `updateDistanceToDestination(value, unit, stopover)` | Destination/trip distance | CarPlay-owned/gated during active RGI; cached for instant info-mode refresh |
+| 22 | `0x16` | TimeToDestination | property | All | `updateTimeToDestination(type, format, time)` | ETA or remaining travel time | CarPlay-owned/gated during active RGI; phase selects absolute ETA or remaining time |
+| 23 | `0x17` | ManeuverDescriptor | property | `S/H/MH` | `updateManeuverDescriptor(slots[])` | Up to three maneuver descriptors for VC/HUD | CarPlay-owned/gated; current-only descriptor is sent |
+| 24 | `0x18` | LaneGuidance | array | `S/H/MH` | `updateLaneGuidance(show, lanes[])` | Lane arrows and recommended-lane flags | CarPlay-owned/gated; actively sent |
+| 25 | `0x19` | TMCinfo | property | `S/H` | `updateTMCInfoMessages(messages[])` | Urgent traffic messages | Delegated to stock |
+| 26 | `0x1A` | MagnetFieldZone | property/SetGet | None | no public publisher | Compass calibration region | Registered but not advertised; do not use |
+| 27 | `0x1B` | Calibration | property/SetGet | None | no public publisher | Compass calibration state | Registered but not advertised; do not use |
+| 28 | `0x1C` | ASG_Capabilities | property/SetGet | None | no public publisher | Cluster/navigation capabilities | Registered but not advertised; framework-owned |
+| 29 | `0x1D` | LastDest_List | array | `S/H` | `updateLastDestinationsList(entries[])` | Last-destination menu | Delegated to stock |
+| 30 | `0x1E` | FavoriteDest_List | array | `S/H` | `updateFavoriteDestinationsList(entries[])` | Favorite-destination menu | Delegated to stock |
+| 31 | `0x1F` | PreferredDest_List | property | None | no direct publisher | Selects preferred source list | Registered, not advertised |
+| 32 | `0x20` | NavBook | array | None | no direct publisher | Navigation address book | Registered, not advertised |
+| 33 | `0x21` | Address_List | array | `S/H` | `updateHomeAddress(destination)` | Address/home list content | Delegated to stock |
+| 34 | `0x22` | RG_ActDeact | method | `S/H` | `routeGuidanceActDeactResult(result)` | Response to cluster start/stop-guidance command | Stock command path; not a drawing primitive |
+| 35 | `0x23` | RepeatLastNavAnnouncement | method | None | `repeatLastNavAnnouncementResult(result)` | Response to repeat-announcement command | Registered but not advertised |
+| 36 | `0x24` | VoiceGuidance | property/SetGet | `S/H` | `updateVoiceGuidanceState(state)` | Voice-guidance mode | Delegated to stock |
+| 37 | `0x25` | FunctionSynchronisation | property | All | framework-owned | Atomic RG status synchronization | Used implicitly by FctID 17/23/18/49; never write directly |
+| 38 | `0x26` | InfoStates | property | All | `updateInfoStates(state)` | No error, no GPS, initializing map, mobile-device navigation | Always delegated to stock; **high-risk global navigation state** |
+| 39 | `0x27` | ActiveRGType | property/SetGet | `S/H` | `updateActiveRGType(type)` | Selects RGI/MOST/LVDS guidance presentation | CarPlay-owned/gated; currently sends type `0` (BAP RGI) |
+| 40 | `0x28` | TrafficBlock_Indication | property | `S/H/MH` | `updateTrafficBlockIndication(symbol)` | Traffic-block/TMC icon | Delegated to stock |
+| 41 | `0x29` | GetNextListPos | method | `S/H` | no public result seam | Internal list paging | Framework/list manager |
+| 42 | `0x2A` | NB_Speller | method | None | no public result seam | Navigation-book spelling/input | Registered but not advertised |
+| 43 | `0x2B` | MapColorAndType | property/SetGet | `H` | `updateMapColor`, `updateMapType`, `updateSupportedMapTypes` | Stock map colour/type/capabilities | Delegated to stock; does not control the CarPlay video map |
+| 44 | `0x2C` | MapViewAndOrientation | property/SetGet | `H` | `updateMapView`, `updateSupportedMapViews`, `updateMapVisibility`, `updateMapOrientation` | Stock map view, orientation and visibility | Delegated to stock; high risk for native-map lifecycle |
+| 45 | `0x2D` | MapScale | property/SetGet | `H` | `updateMapScale(auto, enabled, value, unit, intersection)` | Native scale/auto-zoom and steering-wheel SetGet ACK | Cached and replaced with hidden status while CarPlay owns cluster; restored afterward |
+| 46 | `0x2E` | DestinationInfo | property | All | `updateDestinationInfo(info)` | Destination details/menu | CarPlay-owned/gated during active RGI |
+| 47 | `0x2F` | Altitude | property | `H/M/MH`, except China | `updateAltitude(value, unit)` | Native lower-bar altitude | Cached/suppressed while CarPlay owns cluster; restored afterward |
+| 48 | `0x30` | OnlineNavigationState | property | `H/M/MH` | `updateOnlineNavigationState(state, progress, system)` | Online-map/download status | Delegated to stock |
+| 49 | `0x31` | Exitview | property | `S/H/MH` | `updateExitView(variant, id)` | Junction/exit-view data and RG FctSync member | CarPlay-owned/gated; actively toggled to complete sync |
+| 50 | `0x32` | SemidynamicRouteGuidance | property | All | `updateSemidynamicRouteGuidance(info)` | Traffic delay and alternative-route distance/new ETA | Delegated to stock; not current-route live ETA |
+| 51 | `0x33` | POI_Search | method | None | `poiSearchResult(result, count)` | Response to cluster POI search | Registered but not advertised |
+| 52 | `0x34` | POI_List | array | None | `updatePOIListSize()` is a stock no-op stub | POI result list | Registered but not usable through current service |
+| 53 | `0x35` | FSG_Setup | property | `S/H` | `updateFSGSetup(voiceMask, poiSupport)` | Voice-guidance and POI capabilities | Delegated to stock |
+| 54 | `0x36` | Map_Presentation | property/SetGet | `H` | `updateMapPresentation(largeMap, leftMenu, rightMenu)` | Reports stock map size and side-menu states | Delegated to stock; status does not guarantee forced menu closure |
+| 55 | `0x37` | ManeuverState | property | `S/H` | `updateManeuverState(state)` | Maneuver/action transition state used by HUD/VC | CarPlay-owned/gated; actively sent |
+| 56 | `0x38` | ETC_Status | property | `M/MH` | `updateEtcStatus(status)` | Electronic-toll-card status | Not advertised by HighPrem; delegated to stock |
+
+## Important enums and compound functions
+
+### FctID 22 — TimeToDestination
+
+`timeInfoType` is not another FctID; it changes the meaning of FctID 22:
+
+| Value | Meaning | Value passed to `updateTimeToDestination` |
+|---:|---|---|
+| `0` | Remaining travel time | Duration in seconds; serializer emits hours/minutes |
+| `1` | Absolute arrival time | Unix epoch seconds; serializer emits date/hour/minute |
+| `2` | Arrival time local to another time zone | Explicit remote-local ETA |
+| `15` | Unsupported/invalid | Validity bits cleared |
+
+The bridge uses type `1` in presentation phase 0. In duo phase 1 it uses type
+`0` so the same field changes from absolute ETA to remaining travel time. If
+iOS supplies only remaining time for phase 0, the bridge computes
+`now + remaining` and publishes an absolute ETA.
+
+### FctID 38 — InfoStates
+
+Relevant values are `0` no error, `3` no GPS, `5` initializing MOST map, and
+`6` navigation in a mobile device active. This property affects the whole
+navigation presentation and was involved in earlier `Initializing` / navigation
+unavailable behaviour. It must not be repurposed merely to hide a widget.
+
+### FctID 39 — ActiveRGType
+
+Values: `0` BAP ManeuverDescriptor RGI, `1` MOST KDK, `2` compass, `3` MOST
+map, `4` LVDS map, `5` LVDS KDK, `255` cluster default. Our custom maneuver
+pipeline deliberately uses `0`; the separate Screen planes do not require
+claiming an LVDS RG type.
+
+### FctID 50 — SemidynamicRouteGuidance
+
+This packages traffic impact, alternative-route availability, delay, new
+distance, and a **new-route ETA**. It should not replace FctID 22 for the live
+current route.
+
+## Current ownership summary
+
+| Ownership class | FctIDs | Rule |
+|---|---|---|
+| CarPlay exclusive while takeover/RGI owns them | `17,18,23,24,39,49,55` | Stock writes are dropped by `GatedCombiService`; `BAPBridge` publishes them |
+| CarPlay exclusive only during active RGI | `19,21,22,46` | Stock lower-bar/trip output is allowed again for `CP && !RGI`; CarPlay owns it atomically while RGI is active |
+| Suppressed native-map decorations | `45,47` | Cache stock value, publish hidden/invalid while takeover is active, restore on release |
+| Explicitly left stock-owned | `15,16,20,25,29,30,33,36,38,40,43,44,48,50,53,54,56` | Avoid disturbing native navigation lifecycle and unrelated menus |
+| Framework/command plumbing | `1–4,26–28,31,32,34,35,37,41,42,51,52` | Not general-purpose UI setters; method seams are command results rather than status controls |
+
+## Practical candidates
+
+- **Safe/useful now:** variants of FctID 22; richer FctID 21/46 destination
+  data; FctID 25/40 only if CarPlay traffic data is available.
+- **Single-owner interactive presentation:** FctID `19,21,22,46` while
+  CarPlay RGI is active.
+- **Potentially destructive:** FctID `15,38,43,44,45,54`; these control the
+  stock navigation state/map rather than the CarPlay altScreen scene.
+- **Not useful for visual customization:** method responses `34,35,41,42,51`
+  and framework synchronization `37`.
+
+## Representation selectors inside a FctID
+
+These fields alter presentation without selecting a different FctID. They are
+not all equally safe to drive during CarPlay ownership.
+
+| FctID | Selector | Values / effect | CarPlay use |
+|---:|---|---|---|
+| 16 | `direction_Symbolic`, `direction_Angle` | 16 compass sectors or unsupported, plus angle | Stock-owned. `255` does not prove that the VC will hide the compass container. |
+| 17 | `rg_Status` | `0` inactive, `1` active, `2` suspended, `255` unsupported | Lifecycle control, not cosmetic; do not use as a display toggle. |
+| 18 | `bargraphOnOff`, distance validity | Numeric next-turn distance and bargraph can be enabled independently | Safe. Our patched VC consumer deliberately permits distance and bargraph together. |
+| 21 | `distanceToStopover` | `false` final destination, `true` next stopover | Safe if the CarPlay route exposes a real waypoint distinction. |
+| 22 | `timeInfoType` | `0` remaining time, `1` arrival time, `2` arrival in another time zone, `15` invalid | Safe and the best user-selectable ETA/RTT representation switch. |
+| 22 | `navigationTimeFormat` | `0` 24-hour, `1` 12-hour | Follow HU locale; this changes formatting, not ETA/RTT semantics. |
+| 23 | `mainElement`, `direction`, `zLevelGuidance`, descriptor slot | Selects maneuver glyph, signed direction/angle, level up/down and current/next maneuver | Safe only when derived from the actual iOS maneuver. |
+| 24 | `laneGuidanceOnOff`, per-lane `guidanceInfo` | Hide/show lanes; `0` not recommended, `1` recommended, `2` best | Safe when sourced from iOS lane guidance. Lane type/markings/description further alter glyphs. |
+| 25 | `messageStatus`, `messageWaitingIndication` | Traffic-message popup request/confirmation and waiting count | Not a general overlay switch; leave stock-owned unless CarPlay traffic events are mapped fully. |
+| 38 | `states` | Normal/error/no GPS/initializing/mobile-device navigation | Global navigation lifecycle. Never use merely to alter a widget. |
+| 39 | `rgtype` | BAP RGI, MOST KDK, compass, MOST map, LVDS map, LVDS KDK, default | Selects the entire guidance presentation source; high-risk, not a cosmetic toggle. |
+| 40 | `tmc_Symbol` | No icon or a specific traffic-event glyph | Safe only with a matching real traffic event. |
+| 43 | `colour`, `activeMapType`, `mainMapSetup` | Day/night/auto and native destination/2D/3D/overview/range map | Controls the stock map, not stream 111; leave stock-owned. |
+| 44 | `mapView`, `supplementaryMapView`, `mapOrientation`, visibility bits | Standard/online/traffic, compass/intersection/box, north/heading, map visibility | Controls the stock map and lifecycle; leave stock-owned. |
+| 45 | `autoZoom`, `scale`, `unit` | Auto-zoom mode and native scale display; incoming SetGet carries wheel steps/settings | Keep the status hidden during CarPlay. Its consumed SetGet is a useful steering-wheel input seam. |
+| 49 | `variant`, `exitview_Id` | EU/NAR/ROW/Asia junction-view resource selection | Only useful with a real matching exit-view resource. |
+| 50 | alternative-route/traffic flags, distance type, nested `timeInfoType` | Controls alternative-route/traffic card and its proposed distance/ETA | Not the current-route ETA; leave stock-owned until alternative-route data exists. |
+| 54 | `largeMapView`, `leftSideMenueOpen`, `rightSideMenueOpen` | Reports map size and side-menu state | This is ASG HMI state, not a reliable command to force-close VC UI. |
+| 55 | `state` | `0` unknown, `1` follow, `2` prepare, `3` distance, `4` call-for-action | Changes maneuver phase/animation; safe only when synchronized to the real maneuver. |
+
+FctID 19 is different: it has no representation enum. It is one UTF-8 text
+field (`positionInfo`, maximum 96 bytes). A fullscreen summary such as arrival
+time + remaining time + remaining distance must therefore be composed as text.
+
+## CarPlay route-info phases
+
+The steering-wheel map encoder press is consumed from the incoming FctID 45
+SetGet while CarPlay RGI is active. Rotation remains the independent CarPlay
+map-zoom input. The press toggles this presentation matrix:
+
+| View | Phase 0 | Phase 1 |
+|---|---|---|
+| Fullscreen | FctID 19: real maneuver arrow/road; FctID 22: absolute ETA | FctID 19: `ETA | remaining | distance`; FctID 22 remains absolute ETA |
+| Duo | FctID 19: real maneuver arrow/road; FctID 22: absolute ETA (`timeInfoType=1`) | FctID 19 unchanged; FctID 22: remaining time (`timeInfoType=0`) |
+
+Every fullscreen/duo View transition resets to phase 0. `BAPBridge` retains
+the last real FctID 19 text plus ETA, remaining time, and destination distance,
+so the serialized presentation worker can republish phase 0 immediately rather
+than waiting for another iOS route-guidance delta.
