@@ -5,10 +5,12 @@
  *   CarPlayApp.onActivate(ctx)   // CarPlay device connected  (ctx = IContext)
  *   CarPlayApp.onDeactivate()    // disconnected
  *
- * Starts the bus, then starts each registered Module.  A module may return false
- * from start() if a service it needs is not up yet; we retry the whole start pass
- * on a daemon thread until everything is up or the CarPlay generation ends.  Navigation can
- * appear much later than TerminalMode on a cold boot, so this must not have a fixed timeout.
+ * TerminalMode callbacks only publish the desired active/context generation and
+ * return.  A persistent daemon worker serializes every Module start/stop away
+ * from the stock HMI lifecycle thread.  A module may return false from start()
+ * if a service it needs is not up yet; a separate daemon retry keeps trying
+ * until everything is up or the CarPlay generation ends.  Navigation can appear
+ * much later than TerminalMode on a cold boot, so this must not have a fixed timeout.
  *
  * Java 1.2 (no generics/autoboxing).
  */
@@ -36,6 +38,10 @@ public final class CarPlayApp {
     private static Thread retryThread;
     private static int retryGeneration;
     private static int serviceChangeGeneration;
+    private static Thread lifecycleThread;
+    private static int lifecycleGeneration;
+    private static int lifecycleAppliedGeneration;
+    private static IContext desiredContext;
     private static final int RGD_MODULE_INDEX = 1;
 
     private CarPlayApp() {}
@@ -63,51 +69,171 @@ public final class CarPlayApp {
         if (context instanceof IContext) {
             synchronized (lock) {
                 if (fwRef == null) fwRef = new FrameworkRef((IContext) context);
+                ensureLifecycleWorkerLocked();
             }
         }
         Log.i(TAG, "transport up (bus always-on) build=" + BUILD_ID);
     }
 
     public static void onActivate(Object context) {
-        Log.i(TAG, "onActivate build=" + BUILD_ID);
-        CarplayBus.getInstance().start();            /* idempotent (already up via init) */
-
         if (!(context instanceof IContext)) {
             Log.e(TAG, "context is not IContext: " + context);
             return;
         }
-        synchronized (lifecycleLock) {
-            stopRetry();
-            synchronized (lock) { active = false; serviceChangeGeneration++; }
-            /* Stop every module, including one whose previous start returned false after partial
-             * setup. Never call external module teardown while holding the shared state lock. */
-            for (int i = MODULES.length - 1; i >= 0; i--) {
-                try { MODULES[i].stop(); } catch (Throwable t) { Log.w(TAG, MODULES[i].name() + " stop: " + t); }
-            }
-            synchronized (lock) {
-                for (int i = 0; i < MODULES.length; i++) started[i] = false;
-                active = true;
-                fwRef = new FrameworkRef((IContext) context);
-            }
-            if (!startPass()) startRetry();
+        synchronized (lock) {
+            ensureLifecycleWorkerLocked();
+            /* ACTIVATING may be repeated for the same TMDevice.  Publishing the
+             * same desired edge twice must not restart modules that are already
+             * converging on the worker/retry path. */
+            if (active && desiredContext == context) return;
+            active = true;                           /* visible to stock HMI immediately */
+            desiredContext = (IContext) context;
+            serviceChangeGeneration++;
+            lifecycleGeneration++;
+            lock.notifyAll();
         }
     }
 
-    public static void onDeactivate() {
-        Log.i(TAG, "onDeactivate");
-        synchronized (lifecycleLock) {
-            synchronized (lock) { active = false; serviceChangeGeneration++; }
-            stopRetry();
-            for (int i = MODULES.length - 1; i >= 0; i--) {
-                try { MODULES[i].stop(); } catch (Throwable t) { Log.w(TAG, MODULES[i].name() + " stop: " + t); }
-            }
-            synchronized (lock) {
-                for (int i = 0; i < MODULES.length; i++) started[i] = false;
+    private static int publishDeactivate() {
+        synchronized (lock) {
+            ensureLifecycleWorkerLocked();
+            if (!active && desiredContext == null) return lifecycleGeneration;
+            active = false;                          /* release stock HMI immediately */
+            desiredContext = null;
+            serviceChangeGeneration++;
+            lifecycleGeneration++;
+            lock.notifyAll();
+            return lifecycleGeneration;
+        }
+    }
+
+    public static void onDeactivate() { publishDeactivate(); }
+
+    /** Component teardown is not the hot TMDevice callback.  Let it wait for
+     * the already-published async cleanup before TerminalMode closes its OSGi
+     * trackers; the bound prevents a broken module from hanging HMI shutdown. */
+    public static void onDeactivateAndWait() {
+        int generation = publishDeactivate();
+        long deadline = System.currentTimeMillis() + 3000L;
+        synchronized (lock) {
+            while (lifecycleAppliedGeneration != generation
+                    && lifecycleGeneration == generation) {
+                long remaining = deadline - System.currentTimeMillis();
+                if (remaining <= 0L) {
+                    Log.w(TAG, "deactivate cleanup timed out generation=" + generation);
+                    break;
+                }
+                try { lock.wait(remaining); }
+                catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
             }
         }
     }
 
     public static FrameworkRef fw() { synchronized (lock) { return fwRef; } }
+
+    /** Caller holds lock.  Started at TerminalMode component init, so the hot
+     * ACTIVATING callback normally performs only field stores + notifyAll(). */
+    private static void ensureLifecycleWorkerLocked() {
+        if (lifecycleThread != null && lifecycleThread.isAlive()) return;
+        Thread t = new Thread(new Runnable() {
+            public void run() { lifecycleLoop(); }
+        }, "carplay-lifecycle");
+        t.setDaemon(true);
+        lifecycleThread = t;
+        try {
+            t.start();
+        } catch (Throwable x) {
+            lifecycleThread = null;
+            Log.e(TAG, "lifecycle worker start failed: " + x);
+        }
+    }
+
+    private static boolean lifecycleCurrent(int generation, boolean wantActive,
+                                            IContext context) {
+        synchronized (lock) {
+            return generation == lifecycleGeneration && active == wantActive
+                && (!wantActive || desiredContext == context);
+        }
+    }
+
+    private static void clearStarted() {
+        synchronized (lock) {
+            for (int i = 0; i < MODULES.length; i++) started[i] = false;
+        }
+    }
+
+    private static void stopModules() {
+        /* A false-returning start may still have acquired partial resources, so
+         * every new lifecycle generation stops all modules in reverse order. */
+        for (int i = MODULES.length - 1; i >= 0; i--) {
+            try { MODULES[i].stop(); }
+            catch (Throwable t) { Log.w(TAG, MODULES[i].name() + " stop: " + t); }
+        }
+        clearStarted();
+    }
+
+    private static void applyLifecycle(int generation, boolean wantActive,
+                                       IContext context) {
+        synchronized (lifecycleLock) {
+            if (!lifecycleCurrent(generation, wantActive, context)) return;
+            stopRetry();
+
+            if (!wantActive) {
+                Log.i(TAG, "onDeactivate async apply generation=" + generation);
+                stopModules();
+                return;
+            }
+
+            /* FrameworkRef construction calls into stock IContext and therefore
+             * also belongs here, not on ActiveDeviceStateListener. */
+            FrameworkRef next = new FrameworkRef(context);
+            if (!lifecycleCurrent(generation, true, context)) return;
+            synchronized (lock) { fwRef = next; }
+
+            Log.i(TAG, "onActivate async apply generation=" + generation
+                + " build=" + BUILD_ID);
+            CarplayBus.getInstance().start();        /* idempotent; off stock lifecycle thread */
+            stopModules();
+            if (!lifecycleCurrent(generation, true, context)) return;
+            if (!startPass(generation)
+                    && lifecycleCurrent(generation, true, context)) {
+                startRetry(generation);
+            }
+        }
+    }
+
+    private static void lifecycleLoop() {
+        while (true) {
+            int generation;
+            boolean wantActive;
+            IContext context;
+            synchronized (lock) {
+                while (lifecycleAppliedGeneration == lifecycleGeneration) {
+                    try { lock.wait(); }
+                    catch (InterruptedException e) { /* persistent worker */ }
+                }
+                generation = lifecycleGeneration;
+                wantActive = active;
+                context = desiredContext;
+            }
+            try {
+                applyLifecycle(generation, wantActive, context);
+            } catch (Throwable t) {
+                Log.e(TAG, "lifecycle apply failed generation=" + generation + ": " + t);
+            } finally {
+                synchronized (lock) {
+                    /* If a newer request arrived while external code ran, mark
+                     * only this snapshot applied; the loop immediately observes
+                     * the newer generation and coalesces to its final state. */
+                    lifecycleAppliedGeneration = generation;
+                    lock.notifyAll();
+                }
+            }
+        }
+    }
 
     /** Navigation's OSGi service can disappear/reappear without a CarPlay reconnect.  The RGD
      * module owns a paired ServiceReference, so rebuild only that module on the exact service
@@ -116,23 +242,34 @@ public final class CarPlayApp {
      * dispatcher and coalesces rapid remove+add pairs. */
     public static void onNavigationServiceChanged() {
         final int generation;
+        final int activeLifecycleGeneration;
+        final IContext activeContext;
         synchronized (lock) {
             if (!active) return;
             generation = ++serviceChangeGeneration;
+            activeLifecycleGeneration = lifecycleGeneration;
+            activeContext = desiredContext;
         }
         Thread t = new Thread(new Runnable() {
             public void run() {
                 if (!sleepInterruptibly(50)) return;
                 synchronized (lifecycleLock) {
                     synchronized (lock) {
-                        if (!active || generation != serviceChangeGeneration) return;
+                        if (!active || generation != serviceChangeGeneration
+                                || activeLifecycleGeneration != lifecycleGeneration
+                                || lifecycleAppliedGeneration
+                                    != activeLifecycleGeneration) return;
                     }
                     stopRetry();
                     try { MODULES[RGD_MODULE_INDEX].stop(); }
                     catch (Throwable x) { Log.w(TAG, "rgd rebind stop: " + x); }
                     synchronized (lock) { started[RGD_MODULE_INDEX] = false; }
                     Log.i(TAG, "Navigation service changed - rebinding RGD");
-                    if (!startPass()) startRetry();
+                    if (!startPass(activeLifecycleGeneration)
+                            && lifecycleCurrent(activeLifecycleGeneration, true,
+                                                activeContext)) {
+                        startRetry(activeLifecycleGeneration);
+                    }
                 }
             }
         }, "carplay-rgd-rebind");
@@ -141,10 +278,11 @@ public final class CarPlayApp {
     }
 
     /* start every not-yet-started module; return true when all are started. */
-    private static boolean startPass() {
+    private static boolean startPass(int expectedLifecycleGeneration) {
         FrameworkRef fw;
         synchronized (lock) {
-            if (!active || fwRef == null || !fwRef.isReady()) {
+            if (!active || expectedLifecycleGeneration != lifecycleGeneration
+                    || fwRef == null || !fwRef.isReady()) {
                 Log.d(TAG, "startPass: framework not ready");
                 return false;
             }
@@ -160,13 +298,26 @@ public final class CarPlayApp {
         boolean allUp = true;
         for (int i = 0; i < MODULES.length; i++) {
             synchronized (lock) {
+                if (!active || expectedLifecycleGeneration != lifecycleGeneration
+                        || fwRef != fw) return false;
                 if (started[i]) continue;
             }
             boolean ok;
             try { ok = MODULES[i].start(fw); }
             catch (Throwable t) { Log.w(TAG, MODULES[i].name() + " start threw: " + t); ok = false; }
+            boolean current;
             synchronized (lock) {
-                started[i] = ok;
+                current = active && expectedLifecycleGeneration == lifecycleGeneration
+                    && fwRef == fw;
+                started[i] = current && ok;
+            }
+            if (!current) {
+                /* A disconnect/reconnect was published while external start()
+                 * ran.  Undo even a false-returning partial start here; the
+                 * worker will apply the newer generation next. */
+                try { MODULES[i].stop(); }
+                catch (Throwable t) { Log.w(TAG, MODULES[i].name() + " stale-start stop: " + t); }
+                return false;
             }
             if (ok) {
                 Log.i(TAG, "started " + MODULES[i].name());
@@ -181,7 +332,7 @@ public final class CarPlayApp {
         return allUp;
     }
 
-    private static void startRetry() {
+    private static void startRetry(final int expectedLifecycleGeneration) {
         stopRetry();
         final int generation;
         synchronized (lock) { generation = ++retryGeneration; }
@@ -197,9 +348,10 @@ public final class CarPlayApp {
                         synchronized (lifecycleLock) {
                             synchronized (lock) {
                                 if (!active || generation != retryGeneration
+                                        || expectedLifecycleGeneration != lifecycleGeneration
                                         || retryThread != Thread.currentThread()) return;
                             }
-                            if (startPass()) return;
+                            if (startPass(expectedLifecycleGeneration)) return;
                         }
                         n++;
                         if (n == 50) Log.w(TAG, "modules still pending after 10 s; continuing low-rate retry");

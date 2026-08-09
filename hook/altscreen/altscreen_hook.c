@@ -939,9 +939,11 @@ static void alt_recv_loop(altslot_t *slot, int fd)
     uint64_t last_idr_request_ms = 0;
     int main_omx_ready = 0;
     int main_ready_exact = 0;
+    int main_exact_wait_logged = 0;
     unsigned int main_generation;
     uint64_t main_wait_started_ms;
     const uint64_t main_fallback_ms = alt_main_ready_fallback_ms();
+    const int main_exact_gate = main_loader_main_omx_gate_available();
 
     if (aes_ctr_init) { aes_ctr_init(aesctx, slot->key, slot->iv); aes_ready = 1; }
 
@@ -952,7 +954,10 @@ static void alt_recv_loop(altslot_t *slot, int fd)
     altav_set_main_ready(0);
     main_generation = main_loader_session_generation(slot->session);
     main_wait_started_ms = alt_now_ms();
-    if (!main_loader_main_omx_gate_available()) {
+    if (main_exact_gate) {
+        LOG_INFO(LOG_MODULE,
+                 "OMX ORDER: exact stock-110 readiness seam active; timer fallback disabled");
+    } else {
         LOG_WARN(LOG_MODULE,
                  "OMX ORDER: exact stock-110 readiness seam unavailable; bounded fallback in %lums",
                  (unsigned long)main_fallback_ms);
@@ -1014,7 +1019,6 @@ static void alt_recv_loop(altslot_t *slot, int fd)
                      avccHex, (bodySize > hn) ? "..." : "");
         } else if (opcode == 0) {                         /* encrypted AVCC video access unit */
             int is_idr;
-            int exact_gate_available;
             int stock_main_ready;
             unsigned int current_generation;
             uint64_t now_ms;
@@ -1042,6 +1046,7 @@ static void alt_recv_loop(altslot_t *slot, int fd)
                 main_generation = current_generation;
                 main_omx_ready = 0;
                 main_ready_exact = 0;
+                main_exact_wait_logged = 0;
                 renderer_wait_idr = 1;
                 main_wait_started_ms = now_ms;
                 altav_set_main_ready(0);
@@ -1051,19 +1056,11 @@ static void alt_recv_loop(altslot_t *slot, int fd)
             }
 
             stock_main_ready = main_loader_main_omx_ready(slot->session);
-            exact_gate_available = main_loader_main_omx_gate_available();
-            if (exact_gate_available && main_omx_ready && !main_ready_exact &&
-                !stock_main_ready) {
-                /* ScreenRegister may install the exact GOT seam after the
-                 * bounded compatibility fallback has already opened. Close
-                 * that temporary path immediately and resume exact ordering. */
-                main_omx_ready = 0;
-                renderer_wait_idr = 1;
-                main_wait_started_ms = now_ms;
-                altav_set_main_ready(0);
-                LOG_INFO(LOG_MODULE,
-                         "OMX ORDER: exact stock-110 seam became available; fallback withdrawn");
-            } else if (stock_main_ready && (!main_omx_ready || !main_ready_exact)) {
+            if (stock_main_ready && (!main_omx_ready || !main_ready_exact)) {
+                /* A late exact READY upgrades an already-open fallback without
+                 * disconnecting its healthy renderer link.  Pause at the frame
+                 * gate and request a fresh IDR, but never revoke useful progress
+                 * merely because ScreenRegister installed the GOT seam later. */
                 main_omx_ready = 1;
                 main_ready_exact = 1;
                 renderer_wait_idr = 1;
@@ -1082,9 +1079,12 @@ static void alt_recv_loop(altslot_t *slot, int fd)
                 altav_set_main_ready(0);
                 LOG_WARN(LOG_MODULE,
                          "OMX ORDER: stock 110 readiness cleared; 111 renderer disconnected");
-            } else if (!exact_gate_available && !main_omx_ready && now_ms &&
+            } else if (!main_exact_gate && !main_omx_ready && now_ms &&
                        main_wait_started_ms &&
                        now_ms - main_wait_started_ms >= main_fallback_ms) {
+                /* Compatibility mode only: without the verified stock-210 GOT
+                 * seam there is no exact READY edge to wait for.  Exact mode
+                 * must never start the second Qualcomm OMX decoder by timer. */
                 main_omx_ready = 1;
                 main_ready_exact = 0;
                 renderer_wait_idr = 1;
@@ -1094,7 +1094,14 @@ static void alt_recv_loop(altslot_t *slot, int fd)
                 altav_set_main_ready(1);
                 alt_request_cluster_idr("stock-110-ready-timeout");
                 LOG_WARN(LOG_MODULE,
-                         "OMX ORDER: stock 110 READY not observed after %lums; opening bounded fallback and requesting fresh 111 IDR",
+                         "OMX ORDER: stock 110 READY not observed after %lums (exactSeam=0); opening bounded compatibility fallback and requesting fresh 111 IDR",
+                         (unsigned long)main_fallback_ms);
+            } else if (main_exact_gate && !main_omx_ready && !main_exact_wait_logged &&
+                       now_ms && main_wait_started_ms &&
+                       now_ms - main_wait_started_ms >= main_fallback_ms) {
+                main_exact_wait_logged = 1;
+                LOG_WARN(LOG_MODULE,
+                         "OMX ORDER: stock 110 READY not observed after %lums (exactSeam=1); fallback SUPPRESSED to protect Qualcomm OMX ordering",
                          (unsigned long)main_fallback_ms);
             }
 

@@ -68,7 +68,7 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
     }
 
     public void deinit() {
-        try { com.luka.carplay.core.CarPlayApp.onDeactivate(); }
+        try { com.luka.carplay.core.CarPlayApp.onDeactivateAndWait(); }
         catch (Throwable t) { /* optional lifecycle cleanup */ }
         try { com.luka.carplay.coverart.CoverArt.getInstance().stop(this.eventListener); }
         catch (Throwable t) { /* optional */ }
@@ -119,8 +119,6 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
                     && tmdevice.isCarplayDevice()
                     && !com.luka.carplay.core.CarPlayApp.isActive()) {
                 try {
-                    com.luka.carplay.framework.Log.i("TMDev",
-                        "ACTIVE after lifecycle bounce: reactivating CarPlay modules");
                     com.luka.carplay.coverart.CoverArt.getInstance().resetSession();
                     this.this$0.eventListener.resetCoverMerge();
                     com.luka.carplay.core.CarPlayApp.onActivate(this.this$0.context);
