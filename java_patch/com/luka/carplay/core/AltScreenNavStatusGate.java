@@ -19,6 +19,7 @@ public final class AltScreenNavStatusGate {
     private static GatedCombiService gate;
     private static boolean desiredRouteBlocked;
     private static boolean appliedRouteBlocked;
+    private static boolean desiredCurrentPositionBlocked;
     private static boolean installScheduled;
 
     private AltScreenNavStatusGate() { }
@@ -61,6 +62,7 @@ public final class AltScreenNavStatusGate {
             }
 
             gate.setRouteGuidanceBlocked(desiredRouteBlocked);
+            gate.setCurrentPositionInfoBlocked(desiredCurrentPositionBlocked);
             appliedRouteBlocked = desiredRouteBlocked;
         } catch (Throwable t) {
             Log.d(TAG, "gate not ready: " + t);
@@ -76,6 +78,7 @@ public final class AltScreenNavStatusGate {
         if (incoming == null) {
             if (cs == clusterService && gate != null) {
                 try { gate.setRouteGuidanceBlocked(false); } catch (Throwable t) { }
+                try { gate.setCurrentPositionInfoBlocked(false); } catch (Throwable t) { }
                 clusterService = null;
                 gate = null;
                 appliedRouteBlocked = false;
@@ -95,6 +98,7 @@ public final class AltScreenNavStatusGate {
         clusterService = cs;
         gate = next;
         gate.setRouteGuidanceBlocked(desiredRouteBlocked);
+        gate.setCurrentPositionInfoBlocked(desiredCurrentPositionBlocked);
         appliedRouteBlocked = desiredRouteBlocked;
         installScheduled = false;
         Log.i(TAG, "native route-guidance gate installed on Navigation service edge");
@@ -105,8 +109,20 @@ public final class AltScreenNavStatusGate {
     public static synchronized boolean setRouteGuidanceBlocked(boolean blocked) {
         boolean changed = desiredRouteBlocked != blocked;
         desiredRouteBlocked = blocked;
+        if (!blocked) {
+            desiredCurrentPositionBlocked = false;
+            if (gate != null) gate.setCurrentPositionInfoBlocked(false);
+        }
         if (gate == null || changed || appliedRouteBlocked != blocked) scheduleInstallLocked();
         return gate != null && appliedRouteBlocked == blocked && !installScheduled;
+    }
+
+    /** FctID 19 ownership follows actual CarPlay RGI, not the session-long
+     * native-RG gate. The wrapper is already installed on NavigationJobs, so
+     * changing this volatile policy bit requires no service-field mutation. */
+    public static synchronized void setCurrentPositionInfoBlocked(boolean blocked) {
+        desiredCurrentPositionBlocked = blocked;
+        if (gate != null) gate.setCurrentPositionInfoBlocked(blocked);
     }
 
     /** Exact stock-service availability edge, after prepareCombiBAPService + stock updateAll.

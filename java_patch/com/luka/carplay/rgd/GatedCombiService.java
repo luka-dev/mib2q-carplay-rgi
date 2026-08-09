@@ -25,6 +25,10 @@ import de.audi.atip.interapp.combi.bap.navi.data.EtcStatus;
 public class GatedCombiService implements CombiBAPServiceNavi {
     final CombiBAPServiceNavi real;
     volatile boolean blockRouteGuidance;
+    /* FctID 19 has different ownership from the rest of route guidance:
+     * outside CarPlay RGI the stock navigator may keep driving the lower bar,
+     * while maneuver/distance/lane records remain session-gated. */
+    volatile boolean blockCurrentPositionInfo;
     private boolean haveMapScale;
     private int mapScaleAutoZoom, mapScaleValue, mapScaleUnit;
     private boolean mapScaleAutoZoomActive, mapScaleIntersectionSupported;
@@ -57,6 +61,10 @@ public class GatedCombiService implements CombiBAPServiceNavi {
         real.updateMapScale(15, false, 0xFFFF, 0xFF, false);
     }
 
+    public void setCurrentPositionInfoBlocked(boolean blocked) {
+        blockCurrentPositionInfo = blocked;
+    }
+
     /* GATED ROUTE-GUIDANCE METHODS */
     public void updateRGStatus(int a) {
         if (!blockRouteGuidance) real.updateRGStatus(a);
@@ -71,7 +79,7 @@ public class GatedCombiService implements CombiBAPServiceNavi {
     }
 
     public void updateCurrentPositionInfo(String s) {
-        if (!blockRouteGuidance) real.updateCurrentPositionInfo(s);
+        if (!blockCurrentPositionInfo) real.updateCurrentPositionInfo(s);
     }
 
     public void updateManeuverDescriptor(CombiBAPNaviManeuverDescriptor[] a) {

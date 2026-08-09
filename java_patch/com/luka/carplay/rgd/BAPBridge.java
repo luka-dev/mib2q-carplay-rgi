@@ -667,6 +667,9 @@ public class BAPBridge {
                 }
             }
 
+            /* FctID 19 is shared with stock outside RGI. Claim it only for the
+             * interval in which this bridge publishes CarPlay lower-bar text. */
+            com.luka.carplay.core.AltScreenNavStatusGate.setCurrentPositionInfoBlocked(true);
             /* Block native route-guidance BAP stream during CarPlay RG. */
             com.luka.carplay.core.AltScreenNavStatusGate.setRouteGuidanceBlocked(true);
 
@@ -734,6 +737,9 @@ public class BAPBridge {
         bapSessionStarted = false;
         rendererPrimed = false;
         crConsecutiveSendFailures = 0;
+        /* Release FctID 19 only after our cleanup transaction has completed,
+         * so stock cannot overwrite the lower bar in the middle of rollback. */
+        com.luka.carplay.core.AltScreenNavStatusGate.setCurrentPositionInfoBlocked(false);
         Log.w(TAG, "onStart rollback complete");
     }
 
@@ -802,6 +808,9 @@ public class BAPBridge {
             } catch (Throwable t) {
                 Log.w(TAG, "onShutdown: BAP teardown threw (continuing to cleanup): " + t);
             }
+            /* CarPlay RGI no longer owns FctID 19. Keep the rest of native RG
+             * gated until phone disconnect, but let stock update the lower bar. */
+            com.luka.carplay.core.AltScreenNavStatusGate.setCurrentPositionInfoBlocked(false);
 
             /* Decide before stopping the custom renderer: stop used to clear rgActive
              * unconditionally, making the nativeHasRoute=true branch below ineffective. */

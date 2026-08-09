@@ -31,9 +31,13 @@ void altav_init(const char *host, int port);
 void altav_set_enabled(int on);
 int  altav_is_enabled(void);
 
+/* Exact stock-main OMX ordering gate. Disabling closes any existing renderer
+ * link; enabling does not connect until an IDR-safe frame is forwarded. */
+void altav_set_main_ready(int ready);
+
 /* Forward one already-Annex-B buffer verbatim (used for the SPS/PPS header). */
 void altav_forward_frame(const uint8_t *annexb, uint32_t len);
-/* cache + send Annex-B SPS/PPS; replayed on every reconnect so the decoder always gets config first */
+/* Cache Annex-B SPS/PPS; replayed before the first frame on every connection. */
 void altav_set_config(const uint8_t *annexb_cfg, uint32_t len);
 
 /* Convert one AVCC frame (lengthSize-byte BE prefixes from the AirPlay screen

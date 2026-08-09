@@ -18,7 +18,6 @@
 #include <unistd.h>
 #include <signal.h>
 #include <errno.h>
-#include <time.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <netinet/in.h>
@@ -28,27 +27,6 @@
 static volatile sig_atomic_t g_running = 1;
 static volatile sig_atomic_t g_listen_fd = -1;
 static volatile sig_atomic_t g_client_fd = -1;
-
-/* iOS offers type 111 just before stock 210 starts its type-110 decoder. Starting
- * a second Qualcomm OMX/EGL pipeline at that exact point can contend for the
- * APQ8064 video/GPU services. Keep the TCP contract live immediately, but let
- * the stock main-screen decoder claim its resources first. 750 ms covers the
- * measured 110 INITIALIZING->READY interval (~260 ms) with margin while staying
- * well below the hook's 8-second bounded localhost back-pressure window. */
-static void main_screen_priority_grace(void) {
-    const char *s = getenv("ALTSCREEN_MAIN_GRACE_MS");
-    long ms = s ? strtol(s, NULL, 10) : 750;
-    struct timespec req, rem;
-    if (ms <= 0) return;
-    if (ms > 3000) ms = 3000;
-    fprintf(stderr,
-            "altscreen_render: main-screen priority grace %ld ms before alt OMX/EGL\n",
-            ms);
-    req.tv_sec = ms / 1000;
-    req.tv_nsec = (ms % 1000) * 1000000L;
-    while (g_running && nanosleep(&req, &rem) != 0 && errno == EINTR)
-        req = rem;
-}
 
 /* close() is async-signal-safe. Closing both sockets guarantees SIGTERM breaks
  * an idle accept() and an active/partial frame read immediately, so the normal
@@ -171,7 +149,6 @@ int main(void) {
         g_client_fd = cfd;
         fprintf(stderr, "altscreen_render: hook connected\n");
         altctl_set_video(0);                     /* remain on stock ctx until a real RGBA swap */
-        main_screen_priority_grace();
         serve_client(cfd, &video_signaled);
         if ((int)g_client_fd == cfd) {
             g_client_fd = -1;

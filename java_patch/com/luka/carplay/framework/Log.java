@@ -1,7 +1,8 @@
 /*
- * Minimal logger — writes to BOTH stdout (captured by the lsd runtime into the HMI slog) and
- * an own file /tmp/carplay_java.log (append; matches the C modules so everything is SSH-tailable
- * from /tmp).  Java 1.4 / Foundation 1.1 (no varargs, no String.format in hot paths).
+ * Minimal file-only logger.  Never write to System.out/System.err: lsd routes
+ * them through the shared HMI slog path, adding boot-time contention and noisy
+ * duplicate records.  /tmp/carplay_java.log is bounded and rotated so it stays
+ * independently SSH-tailable.  Java 1.4 / Foundation 1.1.
  */
 package com.luka.carplay.framework;
 
@@ -37,7 +38,6 @@ public final class Log {
     private static synchronized void out(int l, String p, String tag, String msg) {
         if (l > level) return;
         String line = "[CP/" + p + "][" + tag + "] " + msg;
-        System.out.println(line);                       /* HMI slog */
         PrintStream f = logFile();
         if (f != null) {
             int bytes = line.getBytes().length + 1;
@@ -62,7 +62,7 @@ public final class Log {
                 fileBytes = current.exists() ? current.length() : 0L;
                 file = new PrintStream(new FileOutputStream(FILE, true), true);
             }
-            catch (Throwable t) { file = null; }        /* fall back to stdout only */
+            catch (Throwable t) { file = null; }        /* logging is best-effort */
         }
         return file;
     }

@@ -14,11 +14,12 @@
  *   CScreenRender::stop                    0x8bab0
  *   CScreenRender::config                  0x8bcc8
  *   OmxVideoImpl::configure                0x8c388
- *   internal create/config/stop GOT slots  0xb97ac/0xb9d30/0xb9ca4
+ *   COMXVideoDecoder::start                0x89670
+ *   internal create/config/stop/start GOT  0xb97ac/0xb9d30/0xb9ca4/0xb9704
  *
- * The offsets are accepted only after all five exported method addresses and
- * several text words match the shipped 210.81 image.  Any mismatch leaves the
- * stock path untouched.
+ * The offsets are accepted only after every required exported method address
+ * and text fingerprint matches the shipped 210.81 image.  Any mismatch leaves
+ * the stock path untouched.
  */
 #include "../framework/common.h"
 #include "../framework/logging.h"
@@ -34,10 +35,12 @@ DEFINE_LOG_MODULE(main_loader);
 #define STOCK210_OFF_SHARED       0x0008b9e0U
 #define STOCK210_OFF_STOP         0x0008bab0U
 #define STOCK210_OFF_CONFIG       0x0008bcc8U
+#define STOCK210_OFF_OMX_START    0x00089670U
 
 #define STOCK210_GOT_CREATE       0x000b97acU
 #define STOCK210_GOT_STOP         0x000b9ca4U
 #define STOCK210_GOT_CONFIG       0x000b9d30U
+#define STOCK210_GOT_OMX_START    0x000b9704U
 
 #define MAIN_WIDTH                1024U
 #define MAIN_HEIGHT               480U
@@ -54,6 +57,7 @@ DEFINE_LOG_MODULE(main_loader);
 #define SYM_STOP    "_ZN3dio13CScreenRender4stopEv"
 #define SYM_CONFIG  "_ZN3dio13CScreenRender6configERKNS_16st_screen_configE"
 #define SYM_DELETE  "_ZN3dio13CScreenRenderD0Ev"
+#define SYM_OMX_START "_ZN3dio16COMXVideoDecoder5startEv"
 
 /* Layout copied by CScreenRender::config@0x8bf90 (11 x uint32_t). */
 typedef struct main_screen_config {
@@ -76,6 +80,7 @@ typedef int   (*fn_shared_t)(void *, unsigned char ***);
 typedef int   (*fn_render_t)(void *, unsigned char *);
 typedef void  (*fn_stop_t)(void *);
 typedef void  (*fn_delete_t)(void *);
+typedef int   (*fn_omx_start_t)(void *);
 typedef int   (*fn_screen_register_t)(void *);
 
 typedef enum main_loader_state {
@@ -106,6 +111,14 @@ static struct {
     fn_render_t real_render;
     fn_stop_t real_stop;
     fn_delete_t real_delete;
+    fn_omx_start_t real_omx_start;
+
+    /* One CarPlay receiver session is active in dio_manager.  Generation
+     * prevents a late return from an old decoder start from opening a newer
+     * session's stream-111 gate. */
+    void *session;
+    uint32_t session_generation;
+    int main_omx_ready;
 
     void *render_object;
     unsigned char **buffers;
@@ -209,9 +222,11 @@ static int stock210_resolve(void)
     g_main.real_render = (fn_render_t)dlsym(RTLD_NEXT, SYM_RENDER);
     g_main.real_stop = (fn_stop_t)dlsym(RTLD_NEXT, SYM_STOP);
     g_main.real_delete = (fn_delete_t)dlsym(RTLD_NEXT, SYM_DELETE);
+    g_main.real_omx_start = (fn_omx_start_t)dlsym(RTLD_NEXT, SYM_OMX_START);
     if (!g_main.real_create || !g_main.real_config || !g_main.real_shared ||
-        !g_main.real_render || !g_main.real_stop || !g_main.real_delete) {
-        LOG_WARN(LOG_MODULE, "loader[main]: stock CScreenRender symbols unavailable; disabled");
+        !g_main.real_render || !g_main.real_stop || !g_main.real_delete ||
+        !g_main.real_omx_start) {
+        LOG_WARN(LOG_MODULE, "loader[main]: stock render/OMX symbols unavailable; disabled");
         return -1;
     }
 
@@ -219,7 +234,8 @@ static int stock210_resolve(void)
     if ((uintptr_t)g_main.real_config != base + STOCK210_OFF_CONFIG ||
         (uintptr_t)g_main.real_shared != base + STOCK210_OFF_SHARED ||
         (uintptr_t)g_main.real_render != base + STOCK210_OFF_RENDER ||
-        (uintptr_t)g_main.real_stop != base + STOCK210_OFF_STOP) {
+        (uintptr_t)g_main.real_stop != base + STOCK210_OFF_STOP ||
+        (uintptr_t)g_main.real_omx_start != base + STOCK210_OFF_OMX_START) {
         LOG_ERROR(LOG_MODULE, "loader[main]: libairplay layout is not stock 210.81; no patch");
         return -1;
     }
@@ -230,7 +246,8 @@ static int stock210_resolve(void)
         text[STOCK210_OFF_CONFIG / 4U] != 0xe92d47f0U ||
         text[STOCK210_OFF_SHARED / 4U] != 0xe5900040U ||
         text[STOCK210_OFF_RENDER / 4U] != 0xe92d45f0U ||
-        text[STOCK210_OFF_STOP / 4U] != 0xe92d4070U) {
+        text[STOCK210_OFF_STOP / 4U] != 0xe92d4070U ||
+        text[STOCK210_OFF_OMX_START / 4U] != 0xe92d4ff0U) {
         LOG_ERROR(LOG_MODULE, "loader[main]: stock-210 text fingerprint mismatch; no patch");
         return -1;
     }
@@ -241,24 +258,28 @@ static int stock210_resolve(void)
 static void *main_create_wrapper(unsigned int output_device);
 static int main_config_wrapper(void *object, const main_screen_config_t *config);
 static void main_stop_wrapper(void *object);
+static int main_omx_start_wrapper(void *decoder);
 
 static int install_internal_patches(void)
 {
     volatile uintptr_t *create_slot;
     volatile uintptr_t *config_slot;
     volatile uintptr_t *stop_slot;
+    volatile uintptr_t *omx_start_slot;
 
     if (!g_main.stock_base) return -1;
     create_slot = (volatile uintptr_t *)(g_main.stock_base + STOCK210_GOT_CREATE);
     config_slot = (volatile uintptr_t *)(g_main.stock_base + STOCK210_GOT_CONFIG);
     stop_slot = (volatile uintptr_t *)(g_main.stock_base + STOCK210_GOT_STOP);
+    omx_start_slot = (volatile uintptr_t *)(g_main.stock_base + STOCK210_GOT_OMX_START);
 
     /* SET_32 relocations resolve these slots directly to the exported methods.
      * Refuse to overwrite another patch/hook even when the text fingerprint is
      * correct: composing two unknown ownership schemes is not safe. */
     if (*create_slot != (uintptr_t)g_main.real_create ||
         *config_slot != (uintptr_t)g_main.real_config ||
-        *stop_slot != (uintptr_t)g_main.real_stop) {
+        *stop_slot != (uintptr_t)g_main.real_stop ||
+        *omx_start_slot != (uintptr_t)g_main.real_omx_start) {
         LOG_ERROR(LOG_MODULE,
                   "loader[main]: stock GOT already modified; preserving existing path");
         return -1;
@@ -267,6 +288,7 @@ static int install_internal_patches(void)
     /* Stock 210 has no RELRO; .got is writable.  Publish stop/config first and
      * create LAST as the commit point.  Once stock can receive our prepared
      * object, every later lifecycle call is guaranteed to reach the wrappers. */
+    *omx_start_slot = (uintptr_t)main_omx_start_wrapper;
     *stop_slot = (uintptr_t)main_stop_wrapper;
     *config_slot = (uintptr_t)main_config_wrapper;
     __sync_synchronize();
@@ -275,14 +297,30 @@ static int install_internal_patches(void)
 
     if (*create_slot != (uintptr_t)main_create_wrapper ||
         *config_slot != (uintptr_t)main_config_wrapper ||
-        *stop_slot != (uintptr_t)main_stop_wrapper) {
+        *stop_slot != (uintptr_t)main_stop_wrapper ||
+        *omx_start_slot != (uintptr_t)main_omx_start_wrapper) {
         LOG_ERROR(LOG_MODULE, "loader[main]: stock GOT write verification failed");
+        /* This is a four-slot transaction. patches_installed is deliberately
+         * still false here, so restore every slot which accepted our value
+         * before returning; never leave a partial lifecycle interpose. */
+        if (*create_slot == (uintptr_t)main_create_wrapper)
+            *create_slot = (uintptr_t)g_main.real_create;
+        if (*config_slot == (uintptr_t)main_config_wrapper)
+            *config_slot = (uintptr_t)g_main.real_config;
+        if (*stop_slot == (uintptr_t)main_stop_wrapper)
+            *stop_slot = (uintptr_t)g_main.real_stop;
+        if (*omx_start_slot == (uintptr_t)main_omx_start_wrapper)
+            *omx_start_slot = (uintptr_t)g_main.real_omx_start;
+        __sync_synchronize();
         return -1;
     }
+    pthread_mutex_lock(&g_main.lock);
     g_main.patches_installed = 1;
+    pthread_mutex_unlock(&g_main.lock);
     LOG_INFO(LOG_MODULE,
-             "loader[main]: stock210 GOT installed create=+0x%x config=+0x%x stop=+0x%x",
-             STOCK210_GOT_CREATE, STOCK210_GOT_CONFIG, STOCK210_GOT_STOP);
+             "loader[main]: stock210 GOT installed create=+0x%x config=+0x%x stop=+0x%x omxStart=+0x%x",
+             STOCK210_GOT_CREATE, STOCK210_GOT_CONFIG, STOCK210_GOT_STOP,
+             STOCK210_GOT_OMX_START);
     return 0;
 }
 
@@ -291,11 +329,18 @@ static void uninstall_internal_patches(void)
     volatile uintptr_t *create_slot;
     volatile uintptr_t *config_slot;
     volatile uintptr_t *stop_slot;
+    volatile uintptr_t *omx_start_slot;
 
-    if (!g_main.patches_installed || !g_main.stock_base) return;
+    int installed;
+
+    pthread_mutex_lock(&g_main.lock);
+    installed = g_main.patches_installed;
+    pthread_mutex_unlock(&g_main.lock);
+    if (!installed || !g_main.stock_base) return;
     create_slot = (volatile uintptr_t *)(g_main.stock_base + STOCK210_GOT_CREATE);
     config_slot = (volatile uintptr_t *)(g_main.stock_base + STOCK210_GOT_CONFIG);
     stop_slot = (volatile uintptr_t *)(g_main.stock_base + STOCK210_GOT_STOP);
+    omx_start_slot = (volatile uintptr_t *)(g_main.stock_base + STOCK210_GOT_OMX_START);
 
     /* Disable new adoption first.  A stock object which is already alive can
      * then finish through the original config/stop methods even if this preload
@@ -307,8 +352,12 @@ static void uninstall_internal_patches(void)
         *config_slot = (uintptr_t)g_main.real_config;
     if (*stop_slot == (uintptr_t)main_stop_wrapper)
         *stop_slot = (uintptr_t)g_main.real_stop;
+    if (*omx_start_slot == (uintptr_t)main_omx_start_wrapper)
+        *omx_start_slot = (uintptr_t)g_main.real_omx_start;
     __sync_synchronize();
+    pthread_mutex_lock(&g_main.lock);
     g_main.patches_installed = 0;
+    pthread_mutex_unlock(&g_main.lock);
 }
 
 static void destroy_prepared(void *object)
@@ -601,6 +650,20 @@ static void main_stop_wrapper(void *object)
 {
     int was_owned = 0;
     int was_bypass = 0;
+    int stops_main = 0;
+
+    /* Close the stream-111 ordering gate before the stock object releases its
+     * OMX/Screen resources.  The receiver observes the generation change and
+     * waits for the next successful COMXVideoDecoder::start (or its bounded
+     * fail-safe) before reconnecting the alt renderer. */
+    pthread_mutex_lock(&g_main.lock);
+    stops_main = ((object && object == g_main.render_object &&
+                   (g_main.state == ML_OMX_OWNED ||
+                    g_main.state == ML_HANDOFF)) ||
+                  g_main.state == ML_BYPASS_SESSION);
+    pthread_mutex_unlock(&g_main.lock);
+    if (stops_main) main_loader_main_stream_stopped(NULL);
+
     g_main.real_stop(object);
 
     pthread_mutex_lock(&g_main.lock);
@@ -629,6 +692,131 @@ static void main_stop_wrapper(void *object)
         pthread_mutex_unlock(&g_main.lock);
         start_worker();
     }
+}
+
+/* Stock OmxVideoImpl::configure@0x8c550 has the only code xref to the PLT/GOT
+ * entry at +0xb9704.  COMXVideoDecoder::start@0x89670 is synchronous: it
+ * performs Loaded->Idle->Executing and queues every output buffer before a
+ * zero return.  That return is therefore the exact, timer-free point at which
+ * the main (type-110) decoder owns its Qualcomm resources. */
+static int main_omx_start_wrapper(void *decoder)
+{
+    uint32_t generation;
+    void *session;
+    int published = 0;
+    int rc;
+
+    pthread_mutex_lock(&g_main.lock);
+    generation = g_main.session_generation;
+    session = g_main.session;
+    pthread_mutex_unlock(&g_main.lock);
+
+    rc = g_main.real_omx_start(decoder);
+
+    pthread_mutex_lock(&g_main.lock);
+    if (rc == 0 && session && g_main.session == session &&
+        g_main.session_generation == generation) {
+        g_main.main_omx_ready = 1;
+        published = 1;
+    }
+    pthread_mutex_unlock(&g_main.lock);
+
+    if (published) {
+        LOG_INFO(LOG_MODULE,
+                 "OMX ORDER: stock 110 decoder READY session=%p generation=%u",
+                 session, (unsigned)generation);
+    } else if (rc == 0 && session) {
+        LOG_WARN(LOG_MODULE,
+                 "OMX ORDER: ignoring stale stock 110 READY session=%p generation=%u",
+                 session, (unsigned)generation);
+    } else if (rc != 0) {
+        LOG_ERROR(LOG_MODULE,
+                  "OMX ORDER: stock 110 decoder start FAILED rc=%d session=%p generation=%u; 111 remains gated",
+                  rc, session, (unsigned)generation);
+    }
+    return rc;
+}
+
+int main_loader_session_begin(void *session)
+{
+    int is_new = 0;
+    pthread_mutex_lock(&g_main.lock);
+    if (g_main.session != session) {
+        ++g_main.session_generation;
+        if (g_main.session_generation == 0) ++g_main.session_generation;
+        g_main.session = session;
+        g_main.main_omx_ready = 0;
+        is_new = 1;
+    }
+    pthread_mutex_unlock(&g_main.lock);
+    if (is_new) {
+        LOG_INFO(LOG_MODULE,
+                 "OMX ORDER: new CarPlay session=%p; 111 gated pending stock 110",
+                 session);
+    }
+    return is_new;
+}
+
+void main_loader_session_end(void *session)
+{
+    pthread_mutex_lock(&g_main.lock);
+    if (!session || g_main.session == session) {
+        ++g_main.session_generation;
+        if (g_main.session_generation == 0) ++g_main.session_generation;
+        g_main.session = NULL;
+        g_main.main_omx_ready = 0;
+    }
+    pthread_mutex_unlock(&g_main.lock);
+}
+
+void main_loader_main_stream_stopped(void *session)
+{
+    void *active_session = NULL;
+    uint32_t generation = 0;
+
+    pthread_mutex_lock(&g_main.lock);
+    if (g_main.session && (!session || g_main.session == session)) {
+        ++g_main.session_generation;
+        if (g_main.session_generation == 0) ++g_main.session_generation;
+        g_main.main_omx_ready = 0;
+        active_session = g_main.session;
+        generation = g_main.session_generation;
+    }
+    pthread_mutex_unlock(&g_main.lock);
+
+    if (active_session) {
+        LOG_INFO(LOG_MODULE,
+                 "OMX ORDER: stock 110 stopped session=%p; rearmed generation=%u",
+                 active_session, (unsigned)generation);
+    }
+}
+
+int main_loader_main_omx_ready(void *session)
+{
+    int ready;
+    pthread_mutex_lock(&g_main.lock);
+    ready = session && g_main.session == session && g_main.main_omx_ready;
+    pthread_mutex_unlock(&g_main.lock);
+    return ready;
+}
+
+int main_loader_main_omx_gate_available(void)
+{
+    int available;
+    pthread_mutex_lock(&g_main.lock);
+    available = g_main.patches_installed && !g_main.shutdown;
+    pthread_mutex_unlock(&g_main.lock);
+    return available;
+}
+
+unsigned int main_loader_session_generation(void *session)
+{
+    uint32_t generation = 0;
+    pthread_mutex_lock(&g_main.lock);
+    if (session && g_main.session == session)
+        generation = g_main.session_generation;
+    pthread_mutex_unlock(&g_main.lock);
+    return (unsigned int)generation;
 }
 
 static void main_loader_after_screen_register(void)
