@@ -43,19 +43,6 @@ typedef struct {
     void* user_data;
 } hook_module_def_t;
 
-/* Link-layer injection context.
- *
- * iAP2 link-layer checksum is fixed at "negated 8-bit sum" by Apple's
- * spec (R12+). We don't carry an algo selector - calculation always
- * uses iap2_cksum_neg() directly. */
-typedef struct {
-    uint8_t* prefix_buf;        /* Stored link header prefix */
-    size_t prefix_len;          /* Prefix length */
-    size_t original_total_len;  /* Original total frame length */
-    void* transport_self;       /* NmeTransport* for injection */
-    bool valid;                 /* Context is valid for injection */
-} injection_ctx_t;
-
 /* Hook Context */
 struct hook_context {
     msg_direction_t direction;
@@ -73,9 +60,6 @@ struct hook_context {
     uint16_t rgd_component_id;
     bool rgd_component_valid;
 
-    /* Injection context */
-    injection_ctx_t inject;
-
     /* Module being called */
     hook_module_t* current_module;
 
@@ -89,7 +73,12 @@ hook_result_t hook_framework_register_module(const hook_module_def_t* def);
 hook_result_t hook_framework_unregister_module(const char* name);
 hook_context_t* hook_framework_get_context(void);
 
-/* Injection API - uses stored link-layer context */
+/* Injection API.
+ *
+ * The frame is queued and atomically substitutes the next outgoing LocationInfo
+ * NmeIAP2Message::Encode result.  The stock Cinemo iAP2 stack then owns the
+ * link header, seq/ack and checksum.  This deliberately never writes a copied
+ * FF5A link header through NmeTransport::Send. */
 hook_result_t hook_inject_frame(const uint8_t* frame, size_t len);
 hook_result_t hook_inject_message(uint16_t msgid, const uint8_t* payload, size_t payload_len);
 

@@ -92,10 +92,10 @@ The feature set observed on the MHI2Q virtual cockpit most closely matches
 | `2` | Arrival time local to another time zone | Explicit remote-local ETA |
 | `15` | Unsupported/invalid | Validity bits cleared |
 
-The bridge uses type `1` in presentation phase 0. In duo phase 1 it uses type
-`0` so the same field changes from absolute ETA to remaining travel time. If
-iOS supplies only remaining time for phase 0, the bridge computes
-`now + remaining` and publishes an absolute ETA.
+The bridge always uses type `1`, independent of view and presentation phase.
+If iOS supplies only remaining time, the bridge computes `now + remaining` and
+publishes an absolute ETA. Remaining time is exposed only by the compact
+fullscreen FctID 19 summary.
 
 ### FctID 38 — InfoStates
 
@@ -171,14 +171,14 @@ time + remaining time + remaining distance must therefore be composed as text.
 
 ## CarPlay route-info phases
 
-The steering-wheel map encoder press is consumed from the incoming FctID 45
-SetGet while CarPlay RGI is active. Rotation remains the independent CarPlay
-map-zoom input. The press toggles this presentation matrix:
+The compact route-info representation is retained for a future input binding,
+but it is currently not mapped to a steering-wheel control. FctID 45 carries
+map-scale steps and auto-zoom state; it does not expose the raw OK key.
 
 | View | Phase 0 | Phase 1 |
 |---|---|---|
-| Fullscreen | FctID 19: real maneuver arrow/road; FctID 22: absolute ETA | FctID 19: `ETA | remaining | distance`; FctID 22 remains absolute ETA |
-| Duo | FctID 19: real maneuver arrow/road; FctID 22: absolute ETA (`timeInfoType=1`) | FctID 19 unchanged; FctID 22: remaining time (`timeInfoType=0`) |
+| Fullscreen | FctID 19: real maneuver arrow/road; FctID 22: absolute ETA | FctID 19: `ETA <local time> | <total minutes> min`; FctID 22 remains absolute ETA |
+| Duo | FctID 19: real maneuver arrow/road; FctID 22: absolute ETA (`timeInfoType=1`) | No phase toggle; presentation remains phase 0 |
 
 Every fullscreen/duo View transition resets to phase 0. `BAPBridge` retains
 the last real FctID 19 text plus ETA, remaining time, and destination distance,

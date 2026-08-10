@@ -25,7 +25,6 @@ DEFINE_LOG_MODULE(altscreen_av);
 static char            g_host[64] = ALTAV_DEFAULT_HOST;
 static int             g_port     = ALTAV_DEFAULT_PORT;
 static int             g_enabled  = 1;
-static int             g_main_ready = 0;
 static int             g_fd       = -1;
 static int             g_need_config = 0;
 static pthread_mutex_t g_lock     = PTHREAD_MUTEX_INITIALIZER;
@@ -50,25 +49,6 @@ void altav_init(const char *host, int port)
 
 void altav_set_enabled(int on) { g_enabled = on ? 1 : 0; }
 int  altav_is_enabled(void)    { return g_enabled; }
-
-void altav_set_main_ready(int ready)
-{
-    int changed;
-    pthread_mutex_lock(&g_lock);
-    ready = ready ? 1 : 0;
-    changed = (g_main_ready != ready);
-    g_main_ready = ready;
-    if (!ready && g_fd >= 0) {
-        close(g_fd);
-        g_fd = -1;
-        g_need_config = 0;
-    }
-    pthread_mutex_unlock(&g_lock);
-    if (changed) {
-        LOG_INFO(LOG_MODULE, "OMX ORDER: alt renderer forwarding %s",
-                 ready ? "ENABLED after stock 110 READY" : "GATED");
-    }
-}
 
 /* caller holds g_lock */
 static void av_connect_locked(void)
@@ -132,7 +112,6 @@ static int av_send_all_locked(const void *data, uint32_t len)
 static int av_send_locked(const uint8_t *buf, uint32_t len)
 {
     int opened = 0;
-    if (!g_main_ready) return -1;
     if (g_fd < 0) {
         av_connect_locked();
         if (g_fd >= 0) opened = 1;
@@ -182,7 +161,7 @@ void altav_set_config(const uint8_t *annexb_cfg, uint32_t len)
     pthread_mutex_lock(&g_lock);
     memcpy(g_cfg, annexb_cfg, len);
     g_cfg_len = len;
-    if (g_main_ready && g_fd >= 0)
+    if (g_fd >= 0)
         (void)av_send_locked(g_cfg, g_cfg_len);
     pthread_mutex_unlock(&g_lock);
 }
@@ -238,6 +217,5 @@ void altav_shutdown(void)
     pthread_mutex_lock(&g_lock);
     if (g_fd >= 0) { close(g_fd); g_fd = -1; }
     g_need_config = 0;
-    g_main_ready = 0;
     pthread_mutex_unlock(&g_lock);
 }

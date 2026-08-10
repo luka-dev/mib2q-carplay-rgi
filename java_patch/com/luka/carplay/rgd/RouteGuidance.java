@@ -569,6 +569,10 @@ public class RouteGuidance implements CarplayBus.Listener {
 
     /** Steering-wheel encoder press: toggle phase without touching the HMI/BAP caller thread. */
     private void requestInfoModeToggle() {
+        if (com.luka.carplay.core.AltScreenModule.isDuoViewArea()) {
+            Log.i(TAG, "route-info toggle ignored in duo");
+            return;
+        }
         int phase;
         synchronized (presentationLock) {
             if (!running) return;

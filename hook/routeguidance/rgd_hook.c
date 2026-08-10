@@ -1262,7 +1262,7 @@ hook_result_t rgd_request_updates(void) {
         pthread_mutex_unlock(&g_rgd_start_lock);
         g_rgd.active = true;
         rgd_update_session_active();
-        LOG_INFO(LOG_MODULE, "Sent 0x5200 attempt=%u (component=0x%04X, opts=source_name+source_supports_rg+exit_info)",
+        LOG_INFO(LOG_MODULE, "Queued 0x5200 attempt=%u (component=0x%04X, opts=source_name+source_supports_rg+exit_info)",
                  attempt, g_rgd.component_id);
     } else {
         /* A transport failure was not a real attempt.  Make the next heartbeat
@@ -1572,6 +1572,11 @@ static void rgd_state_handler(hook_context_t* ctx, int event, void* event_data) 
     (void)event_data;
 
     switch (event) {
+        case HOOK_EVENT_IDENTIFY_START:
+            /* dio_manager may survive a fast phone reconnect.  Never carry
+             * got_520x/retry state into the new iAP2 identification cycle. */
+            rgd_clear_state("new_identify");
+            break;
         case HOOK_EVENT_SHUTDOWN:
         case HOOK_EVENT_DISCONNECT:
             rgd_stop_updates();

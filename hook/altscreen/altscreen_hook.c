@@ -32,7 +32,6 @@
 #include "../framework/bus.h"
 #include "altscreen_hook.h"
 #include "altscreen_av.h"
-#include "main_loader.h"
 
 #include <unistd.h>
 #include <pthread.h>
@@ -897,29 +896,12 @@ static int avcc_has_nal_type(const uint8_t *a, uint32_t len, uint8_t ls,
 #define ALT_MAX_BODY  (4u * 1024 * 1024)
 #define ALT_IDR_RETRY_MS       2000ULL
 #define ALT_IDR_MAX_REQUESTS   6U
-#define ALT_MAIN_READY_FALLBACK_MS 750ULL
 
 static uint64_t alt_now_ms(void)
 {
     struct timeval tv;
     if (gettimeofday(&tv, NULL) != 0) return 0;
     return ((uint64_t)tv.tv_sec * 1000ULL) + ((uint64_t)tv.tv_usec / 1000ULL);
-}
-
-static uint64_t alt_main_ready_fallback_ms(void)
-{
-    const char *value = getenv("ALTSCREEN_MAIN_READY_FALLBACK_MS");
-    unsigned long ms;
-    char *end = NULL;
-
-    if (!value || !*value) return ALT_MAIN_READY_FALLBACK_MS;
-    errno = 0;
-    ms = strtoul(value, &end, 10);
-    if (errno || end == value || *end != '\0')
-        return ALT_MAIN_READY_FALLBACK_MS;
-    if (ms < 100UL) ms = 100UL;
-    if (ms > 5000UL) ms = 5000UL;
-    return (uint64_t)ms;
 }
 
 static void alt_recv_loop(altslot_t *slot, int fd)
@@ -937,31 +919,8 @@ static void alt_recv_loop(altslot_t *slot, int fd)
     unsigned int idr_requests = 0;
     int idr_limit_logged = 0;
     uint64_t last_idr_request_ms = 0;
-    int main_omx_ready = 0;
-    int main_ready_exact = 0;
-    int main_exact_wait_logged = 0;
-    unsigned int main_generation;
-    uint64_t main_wait_started_ms;
-    const uint64_t main_fallback_ms = alt_main_ready_fallback_ms();
-    const int main_exact_gate = main_loader_main_omx_gate_available();
 
     if (aes_ctr_init) { aes_ctr_init(aesctx, slot->key, slot->iv); aes_ready = 1; }
-
-    /* Never let opening the 111 renderer race stock's main-screen OMX start.
-     * The exact readiness bit is set by the stock-210 internal start GOT seam;
-     * keeping this link closed means altscreen_render cannot create its OMX
-     * component prematurely. */
-    altav_set_main_ready(0);
-    main_generation = main_loader_session_generation(slot->session);
-    main_wait_started_ms = alt_now_ms();
-    if (main_exact_gate) {
-        LOG_INFO(LOG_MODULE,
-                 "OMX ORDER: exact stock-110 readiness seam active; timer fallback disabled");
-    } else {
-        LOG_WARN(LOG_MODULE,
-                 "OMX ORDER: exact stock-110 readiness seam unavailable; bounded fallback in %lums",
-                 (unsigned long)main_fallback_ms);
-    }
 
     /* A decoder cannot start mid-GOP. Ask iOS for a cluster-targeted IDR over
      * the generic command channel. Retries below are deliberately slow and
@@ -1019,9 +978,6 @@ static void alt_recv_loop(altslot_t *slot, int fd)
                      avccHex, (bodySize > hn) ? "..." : "");
         } else if (opcode == 0) {                         /* encrypted AVCC video access unit */
             int is_idr;
-            int stock_main_ready;
-            unsigned int current_generation;
-            uint64_t now_ms;
             if (aes_ready) aes_ctr_update(aesctx, body, bodySize, body);
             is_idr = avcc_has_nal_type(body, bodySize, ls, 5);
             if (is_idr && !stream_has_idr) {
@@ -1040,72 +996,7 @@ static void alt_recv_loop(altslot_t *slot, int fd)
                 alt_kick_viewarea();
             }
 
-            now_ms = alt_now_ms();
-            current_generation = main_loader_session_generation(slot->session);
-            if (current_generation && current_generation != main_generation) {
-                main_generation = current_generation;
-                main_omx_ready = 0;
-                main_ready_exact = 0;
-                main_exact_wait_logged = 0;
-                renderer_wait_idr = 1;
-                main_wait_started_ms = now_ms;
-                altav_set_main_ready(0);
-                LOG_INFO(LOG_MODULE,
-                         "OMX ORDER: observed stock 110 rearm generation=%u; 111 gated",
-                         current_generation);
-            }
-
-            stock_main_ready = main_loader_main_omx_ready(slot->session);
-            if (stock_main_ready && (!main_omx_ready || !main_ready_exact)) {
-                /* A late exact READY upgrades an already-open fallback without
-                 * disconnecting its healthy renderer link.  Pause at the frame
-                 * gate and request a fresh IDR, but never revoke useful progress
-                 * merely because ScreenRegister installed the GOT seam later. */
-                main_omx_ready = 1;
-                main_ready_exact = 1;
-                renderer_wait_idr = 1;
-                idr_requests = 1;
-                idr_limit_logged = 0;
-                last_idr_request_ms = now_ms;
-                altav_set_main_ready(1);
-                alt_request_cluster_idr("stock-110-OMX-ready");
-                LOG_INFO(LOG_MODULE,
-                         "OMX ORDER: observed stock 110 READY; requesting fresh 111 IDR");
-            } else if (!stock_main_ready && main_omx_ready && main_ready_exact) {
-                main_omx_ready = 0;
-                main_ready_exact = 0;
-                renderer_wait_idr = 1;
-                main_wait_started_ms = now_ms;
-                altav_set_main_ready(0);
-                LOG_WARN(LOG_MODULE,
-                         "OMX ORDER: stock 110 readiness cleared; 111 renderer disconnected");
-            } else if (!main_exact_gate && !main_omx_ready && now_ms &&
-                       main_wait_started_ms &&
-                       now_ms - main_wait_started_ms >= main_fallback_ms) {
-                /* Compatibility mode only: without the verified stock-210 GOT
-                 * seam there is no exact READY edge to wait for.  Exact mode
-                 * must never start the second Qualcomm OMX decoder by timer. */
-                main_omx_ready = 1;
-                main_ready_exact = 0;
-                renderer_wait_idr = 1;
-                idr_requests = 1;
-                idr_limit_logged = 0;
-                last_idr_request_ms = now_ms;
-                altav_set_main_ready(1);
-                alt_request_cluster_idr("stock-110-ready-timeout");
-                LOG_WARN(LOG_MODULE,
-                         "OMX ORDER: stock 110 READY not observed after %lums (exactSeam=0); opening bounded compatibility fallback and requesting fresh 111 IDR",
-                         (unsigned long)main_fallback_ms);
-            } else if (main_exact_gate && !main_omx_ready && !main_exact_wait_logged &&
-                       now_ms && main_wait_started_ms &&
-                       now_ms - main_wait_started_ms >= main_fallback_ms) {
-                main_exact_wait_logged = 1;
-                LOG_WARN(LOG_MODULE,
-                         "OMX ORDER: stock 110 READY not observed after %lums (exactSeam=1); fallback SUPPRESSED to protect Qualcomm OMX ordering",
-                         (unsigned long)main_fallback_ms);
-            }
-
-            if (main_omx_ready && is_idr && renderer_wait_idr) {
+            if (is_idr && renderer_wait_idr) {
                 renderer_wait_idr = 0;
                 LOG_INFO(LOG_MODULE,
                          "alt recv: WAIT_IDR gate OPEN at frame#%lu body=%u — decoder may resume",
@@ -1121,7 +1012,7 @@ static void alt_recv_loop(altslot_t *slot, int fd)
              * P-frames until iOS answers the cluster-targeted keyframe request.
              * The first IDR then reconnects, replays cached SPS/PPS, and opens
              * decoding with a valid random-access picture. */
-            if (main_omx_ready && !renderer_wait_idr) {
+            if (!renderer_wait_idr) {
                 int forward_rc = altav_forward_avcc_frame(body, bodySize, ls);
                 if (forward_rc < 0) {
                     renderer_wait_idr = 1;
@@ -1137,12 +1028,11 @@ static void alt_recv_loop(altslot_t *slot, int fd)
                 }
             } else if ((nframes & 0x7f) == 0) {
                 LOG_INFO(LOG_MODULE,
-                         "alt recv: dropping frame pending %s (frame#%lu body=%u)",
-                         main_omx_ready ? "fresh IDR" : "stock 110 OMX READY",
+                         "alt recv: dropping frame pending fresh IDR (frame#%lu body=%u)",
                          nframes, bodySize);
             }
             ++nframes;
-            if (main_omx_ready && renderer_wait_idr) {
+            if (renderer_wait_idr) {
                 uint64_t now_ms = alt_now_ms();
                 if (idr_requests < ALT_IDR_MAX_REQUESTS && now_ms != 0 &&
                     (last_idr_request_ms == 0 ||
@@ -1413,11 +1303,6 @@ int AirPlayReceiverSessionSetup(void *session, void *request, void **respOut, in
         setupIsControl = isControlSetup;
         if (kReq && cf_rel) cf_rel(kReq);
         if (isControlSetup) {
-            /* Control SETUP begins a new generation before any 110/111 media
-             * SETUP. A late stock-start return from the previous generation
-             * therefore cannot open this session's renderer gate. */
-            if (main_loader_session_begin(session))
-                altav_set_main_ready(0);
             void *kEnab = cf_str(0, "enabledFeatures", CFENC_UTF8);
             if (kEnab) {
                 void *cur  = cf_getval(*respOut, kEnab);            /* receiver's existing accepted set (usually NULL on 210) */
@@ -1486,24 +1371,17 @@ int AirPlayReceiverSessionTearDown(void *session, void *request, int reason, int
 {
     static fn_sess_teardown_t real;
     int requestHas111 = 0;
-    int requestHas110 = 0;
     int tearDownAlt = (request == NULL);
     if (!real) real = (fn_sess_teardown_t)dlsym(RTLD_NEXT, "AirPlayReceiverSessionTearDown");
 
     if (request && alt_resolve() == 1) {
         requestHas111 = (alt_find_111(request) != NULL);
-        requestHas110 = (alt_find_stream_type(request, 110) != NULL);
         if (requestHas111) tearDownAlt = 1;
     }
 
-    if (requestHas110) {
-        main_loader_main_stream_stopped(session);
-        altav_set_main_ready(0);
-    }
-
     LOG_INFO(LOG_MODULE,
-             "AirPlayReceiverSessionTearDown session=%p request=%p reason=%d a4=%d main110=%d alt111=%d action=%s",
-             session, request, reason, a4, requestHas110, requestHas111,
+             "AirPlayReceiverSessionTearDown session=%p request=%p reason=%d a4=%d alt111=%d action=%s",
+             session, request, reason, a4, requestHas111,
              tearDownAlt ? "stop-alt" : "preserve-alt");
 
     altslot_t *slot;
@@ -1537,11 +1415,6 @@ int AirPlayReceiverSessionTearDown(void *session, void *request, int reason, int
         LOG_INFO(LOG_MODULE,
                  "per-stream TEARDOWN has no 111 - preserving altScreen session=%p",
                  session);
-    }
-
-    if (request == NULL) {
-        main_loader_session_end(session);
-        altav_set_main_ready(0);
     }
 
     if (!real) return reason;
@@ -1951,7 +1824,6 @@ void altscreen_init(void)
 }
 void altscreen_shutdown(void)
 {
-    main_loader_shutdown();
     altav_shutdown();
 }
 

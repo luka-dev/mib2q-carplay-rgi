@@ -57,7 +57,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
         void onViewAreaModeChanged(int mode);
     }
 
-    /** Steering-wheel map encoder press, consumed from NavSD MapScale.SetGet. */
+    /** Route-info toggle seam; deliberately unbound until a real OK event is available. */
     public interface InfoModeListener {
         void onInfoModeToggle();
     }
@@ -97,29 +97,6 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
             byte[] payload = new byte[]{ (byte) steps };
             boolean ok = CarplayBus.getInstance().sendBinary(CarplayBus.CMD_ALT_ZOOM, payload);
             Log.i(TAG, "MFL roller -> altScreen zoom step=" + steps + " queued=" + ok);
-        }
-        return true;
-    }
-
-    /**
-     * The steering-wheel map encoder press arrives as a MapScale auto-zoom SetGet,
-     * while rotation arrives separately in {@link #consumeSteeringWheelScale(int)}.
-     * Repurpose the press as the CarPlay route-info presentation toggle and keep
-     * the hidden Audi map untouched.
-     */
-    public static boolean consumeSteeringWheelScaleSetting(int setting) {
-        if (!isConnected()) return false;
-        InfoModeListener listener = infoModeListener;
-        if (navActive && listener != null) {
-            try {
-                listener.onInfoModeToggle();
-                Log.i(TAG, "MFL encoder press -> route-info toggle (MapScale setting=" + setting + ")");
-            } catch (Throwable t) {
-                Log.w(TAG, "route-info toggle listener failed: " + t);
-            }
-        } else {
-            Log.i(TAG, "MFL map-scale setting suppressed=" + setting
-                + " (route-info inactive)");
         }
         return true;
     }

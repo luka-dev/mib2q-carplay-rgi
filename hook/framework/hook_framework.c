@@ -11,7 +11,7 @@
 DEFINE_LOG_MODULE(HOOK);
 
 #define MAX_MODULES 16
-#define MAX_PREFIX_LEN 64
+#define MAX_PENDING_FRAME 512
 
 /* True only for the main dio_manager process.  dio_manager exec()s helper processes that
  * inherit the LD_PRELOAD; each loads the hook and, on its first hooked call, would open its
@@ -37,10 +37,19 @@ struct hook_module {
     bool active;
 };
 
-/* Sanity-check guard: log once per session if the first observed stock
- * frame's checksum doesn't match iap2_cksum_neg (would mean Apple
- * shipped a non-NEG algo, theoretically possible on a future iOS). */
-static volatile int cksum_sanity_checked = 0;
+/* Semantic injection queue.  We cannot safely call NmeTransport::Send with a
+ * copied FF5A prefix: that replays the previous link seq/ack and can either be
+ * dropped or desynchronise unrelated iAP2 services.  Instead we replace one
+ * outgoing LocationInfo Encode result and let the stock stack wrap it. */
+static struct {
+    pthread_mutex_t lock;
+    bool valid;
+    uint8_t frame[MAX_PENDING_FRAME];
+    size_t len;
+    uint16_t msgid;
+} g_pending = {
+    .lock = PTHREAD_MUTEX_INITIALIZER
+};
 
 /* Framework state */
 static struct {
@@ -49,7 +58,6 @@ static struct {
     hook_context_t ctx;
     pthread_mutex_t lock;
     bool initialized;
-    volatile bool in_send;  /* Prevent recursive injection */
 
     /* Function pointers (only the Cinemo NME seams we actually act on).
      * write/writev/MsgSend/MsgSendv were interposed but did nothing except
@@ -64,8 +72,7 @@ static struct {
     hook_transport_recv_sink_t transport_recv_sink;
     hook_transport_recv_reset_t transport_recv_reset;
 } g_fw = {
-    .initialized = false,
-    .in_send = false
+    .initialized = false
 };
 
 static bool g_fw_lock_initialized = false;
@@ -75,6 +82,14 @@ static void ensure_fw_lock_init(void) {
         pthread_mutex_init(&g_fw.lock, NULL);
         g_fw_lock_initialized = true;
     }
+}
+
+static void clear_pending_frame(void) {
+    pthread_mutex_lock(&g_pending.lock);
+    g_pending.valid = false;
+    g_pending.len = 0;
+    g_pending.msgid = 0;
+    pthread_mutex_unlock(&g_pending.lock);
 }
 
 static void resolve_functions(void) {
@@ -117,58 +132,6 @@ static void log_unknown_52xx_msg(const uint8_t* buf, size_t len, uint16_t msgid,
     const char* dir_str = (dir == MSG_DIR_INCOMING) ? "IN" : "OUT";
     LOG_WARN(LOG_MODULE, "Unknown 0x52xx msgid=0x%04X dir=%s len=%zu", msgid, dir_str, len);
     LOG_HEXDUMP(LOG_MODULE, "IAP2 0x52xx raw", buf, len);
-}
-
-/* Store link-layer prefix for later injection */
-static void store_injection_context(void* transport_self, const uint8_t* buf, size_t len, size_t frame_offset) {
-    injection_ctx_t* inj = &g_fw.ctx.inject;
-
-    ensure_fw_lock_init();
-    pthread_mutex_lock(&g_fw.lock);
-
-    /* Free old prefix */
-    if (inj->prefix_buf) {
-        free(inj->prefix_buf);
-        inj->prefix_buf = NULL;
-    }
-
-    inj->transport_self = transport_self;
-    inj->original_total_len = len;
-
-    /* Store prefix (link header before iAP2 frame) */
-    if (frame_offset > 0 && frame_offset <= MAX_PREFIX_LEN) {
-        inj->prefix_buf = (uint8_t*)malloc(frame_offset);
-        if (inj->prefix_buf) {
-            memcpy(inj->prefix_buf, buf, frame_offset);
-            inj->prefix_len = frame_offset;
-        }
-    } else {
-        inj->prefix_len = 0;
-    }
-
-    /* One-shot insurance log: verify the hard-coded iap2_cksum_neg algo
-     * matches what iOS actually puts on the wire.  If a future iOS ships
-     * a different algo, our injected frames will be rejected and the
-     * log line below is the only clue.  Cost: one cksum calc per session. */
-    if (!cksum_sanity_checked && frame_offset > 0) {
-        iap2_frame_t frame;
-        if (iap2_find_frame(buf, len, &frame)) {
-            size_t cksum_pos = frame.offset + frame.frame_len;
-            if (cksum_pos < len) {
-                uint8_t expected = buf[cksum_pos];
-                uint8_t computed = iap2_cksum_neg(buf + frame.offset, frame.frame_len);
-                cksum_sanity_checked = 1;
-                if (expected != computed) {
-                    LOG_WARN(LOG_MODULE,
-                             "cksum mismatch: expected=0x%02x neg=0x%02x - iOS may have switched algo, injected frames will be rejected",
-                             expected, computed);
-                }
-            }
-        }
-    }
-
-    inj->valid = (transport_self != NULL);
-    pthread_mutex_unlock(&g_fw.lock);
 }
 
 /* Notify modules of state change */
@@ -220,6 +183,15 @@ static bool dispatch_message(const iap2_frame_t* frame) {
 static void handle_state_messages(uint16_t msgid) {
     switch (msgid) {
         case IAP2_MSG_IDENTIFY_START:
+            /* A new phone/session may reuse the same dio_manager process.
+             * Re-arm Identify patching and discard any request queued for the
+             * previous iAP2 link before modules observe the boundary. */
+            g_fw.ctx.identify_patched = false;
+            g_fw.ctx.identify_accepted = false;
+            g_fw.ctx.auth_done = false;
+            g_fw.ctx.session_active = false;
+            g_fw.ctx.rgd_component_valid = false;
+            clear_pending_frame();
             /* New session boundary — let the transport-recv sink (cover art)
              * drop any half-reassembled stream from a prior session. */
             if (g_fw.transport_recv_reset) g_fw.transport_recv_reset();
@@ -271,6 +243,61 @@ static bool parse_array_bytes(void* arr, uint8_t** out_data, unsigned int* out_l
     return (*out_data != NULL && *out_len > 0);
 }
 
+/* Substitute one expendable LocationInfo message at the NmeIAP2Message
+ * boundary.  At this point the bytes are still the 0x4040 session message;
+ * Cinemo has not assigned the FF5A link seq/ack yet. */
+static bool replace_location_with_pending(void* out_array,
+                                          uint8_t** io_data,
+                                          unsigned int* io_len,
+                                          uint16_t carrier_msgid,
+                                          uint16_t* out_msgid) {
+    if (!out_array || !io_data || !io_len || !out_msgid)
+        return false;
+    if (carrier_msgid != IAP2_MSG_LOCATION_INFO)
+        return false;
+
+    pthread_mutex_lock(&g_pending.lock);
+    if (!g_pending.valid || g_pending.len < IAP2_MIN_FRAME) {
+        pthread_mutex_unlock(&g_pending.lock);
+        return false;
+    }
+
+    uint8_t* base = *(uint8_t**)((char*)out_array + 0);
+    unsigned int cap = *(unsigned int*)((char*)out_array + 8);
+    if (cap < g_pending.len) {
+        size_t new_cap = g_pending.len + 64;
+        uint8_t* grown = (uint8_t*)realloc(base, new_cap);
+        if (!grown) {
+            pthread_mutex_unlock(&g_pending.lock);
+            LOG_ERROR(LOG_MODULE,
+                      "Semantic iAP2 carrier resize failed: need=%zu cap=%u",
+                      g_pending.len, cap);
+            return false;
+        }
+        base = grown;
+        *(uint8_t**)((char*)out_array + 0) = grown;
+        *(unsigned int*)((char*)out_array + 8) = (unsigned int)new_cap;
+    }
+
+    memcpy(base, g_pending.frame, g_pending.len);
+    *(unsigned int*)((char*)out_array + 4) = (unsigned int)g_pending.len;
+    *io_data = base;
+    *io_len = (unsigned int)g_pending.len;
+    *out_msgid = g_pending.msgid;
+
+    uint16_t injected_msgid = g_pending.msgid;
+    size_t injected_len = g_pending.len;
+    g_pending.valid = false;
+    g_pending.len = 0;
+    g_pending.msgid = 0;
+    pthread_mutex_unlock(&g_pending.lock);
+
+    LOG_INFO(LOG_MODULE,
+             "Semantic iAP2 send: replaced carrier 0x%04X with 0x%04X len=%zu; stock owns FF5A seq/ack",
+             carrier_msgid, injected_msgid, injected_len);
+    return true;
+}
+
 /* Public API */
 
 hook_result_t hook_framework_init(void) {
@@ -287,8 +314,7 @@ hook_result_t hook_framework_init(void) {
 
     memset(&g_fw.ctx, 0, sizeof(g_fw.ctx));
     g_fw.ctx.rgd_component_id = 0x0010;
-    /* No cksum algo init - every injected frame uses iap2_cksum_neg()
-     * directly (Apple iAP2 spec, R12+). */
+    clear_pending_frame();
 
     g_fw.initialized = true;
     pthread_mutex_unlock(&g_fw.lock);
@@ -319,11 +345,7 @@ void hook_framework_shutdown(void) {
     /* Stop TCP bus */
     bus_shutdown();
 
-    /* Free injection context */
-    if (g_fw.ctx.inject.prefix_buf) {
-        free(g_fw.ctx.inject.prefix_buf);
-        g_fw.ctx.inject.prefix_buf = NULL;
-    }
+    clear_pending_frame();
 
     for (int i = 0; i < g_fw.module_count; i++) {
         g_fw.modules[i].active = false;
@@ -397,77 +419,29 @@ hook_context_t* hook_framework_get_context(void) {
     return &g_fw.ctx;
 }
 
-/* Inject frame with proper link-layer handling */
+/* Queue a semantic iAP2 frame for the stock Encode -> link-layer path. */
 hook_result_t hook_inject_frame(const uint8_t* frame, size_t frame_len) {
     if (!frame || frame_len < 6) return HOOK_ERR_PARAM;
     if (!g_fw.initialized) return HOOK_ERR_INIT;
+    if (frame_len > MAX_PENDING_FRAME || !iap2_validate_frame(frame, frame_len)
+            || read_be16(frame + 2) != frame_len)
+        return HOOK_ERR_PARAM;
 
-    injection_ctx_t* inj = &g_fw.ctx.inject;
-
-    if (!inj->valid || !inj->transport_self || !g_fw.real_transport_send) {
-        LOG_WARN(LOG_MODULE, "No valid injection context");
-        return HOOK_ERR_IO;
+    uint16_t msgid = read_be16(frame + 4);
+    pthread_mutex_lock(&g_pending.lock);
+    if (g_pending.valid && g_pending.msgid != msgid) {
+        pthread_mutex_unlock(&g_pending.lock);
+        return HOOK_ERR_BUSY;
     }
+    memcpy(g_pending.frame, frame, frame_len);
+    g_pending.len = frame_len;
+    g_pending.msgid = msgid;
+    g_pending.valid = true;
+    pthread_mutex_unlock(&g_pending.lock);
 
-    g_fw.in_send = true;
-
-    hook_result_t result = HOOK_OK;
-
-    if (inj->prefix_len > 0 && inj->prefix_buf) {
-        /* Build full frame: prefix + iAP2 frame + checksum.
-         * NOTE: a previous version used `static __thread` 16K scratch to
-         * avoid malloc per inject.  gcc 4.4 on QNX 6.5 emits __thread as
-         * emulated TLS in LD_PRELOAD'd .so (__emutls_v.* + emutls_get_address)
-         * which crashes dio_manager.  Reverted to malloc.
-         *
-         * ASSUMPTION (latent risk): `prefix_buf` is the link header captured
-         * from the LAST outgoing NmeTransport::Send.  We recompute the length
-         * and header checksum below, but REUSE its ctrl/seq/ack/session bytes
-         * verbatim.  Replaying a stale link sequence number could in theory
-         * desync the iAP2 link or get the frame dropped.  In practice RGD
-         * injection works because Cinemo re-drives seq/ack on the wire, but if
-         * injected frames ever start getting silently dropped, this is the
-         * first place to look. */
-        size_t total = inj->prefix_len + frame_len + 1;
-        uint8_t* out = (uint8_t*)malloc(total);
-        if (!out) {
-            g_fw.in_send = false;
-            return HOOK_ERR_MEMORY;
-        }
-
-        /* Copy prefix */
-        memcpy(out, inj->prefix_buf, inj->prefix_len);
-
-        /* Copy frame */
-        memcpy(out + inj->prefix_len, frame, frame_len);
-
-        /* Append iAP2 link-layer checksum (negated 8-bit sum, the only
-         * algo Apple's USB Host iAP2 uses). */
-        out[inj->prefix_len + frame_len] = iap2_cksum_neg(frame, frame_len);
-
-        /* Patch length in prefix (link header) */
-        iap2_patch_link_header(out, inj->prefix_len, total);
-
-        unsigned int sent = 0;
-        int ret = g_fw.real_transport_send(inj->transport_self, out, (unsigned int)total, &sent);
-        if (ret != 0) {
-            result = HOOK_ERR_IO;
-        }
-
-        free(out);
-        LOG_INFO(LOG_MODULE, "Injected frame with prefix (len=%zu)", total);
-    } else {
-        /* No prefix - send raw frame */
-        unsigned int sent = 0;
-        int ret = g_fw.real_transport_send(inj->transport_self, frame, (unsigned int)frame_len, &sent);
-        if (ret != 0) {
-            result = HOOK_ERR_IO;
-        }
-        LOG_INFO(LOG_MODULE, "Injected raw frame (len=%zu)", frame_len);
-    }
-
-    g_fw.in_send = false;
-    return result;
+    LOG_INFO(LOG_MODULE, "Queued semantic iAP2 msg=0x%04X len=%zu for stock Encode path",
+             msgid, frame_len);
+    return HOOK_OK;
 }
 
 hook_result_t hook_inject_message(uint16_t msgid, const uint8_t* payload, size_t payload_len) {
@@ -577,6 +551,17 @@ int _ZNK14NmeIAP2Message6EncodeER8NmeArrayIhE(const void* self, void* out_array)
         }
     }
 
+    /* Route-guidance requests must enter before Cinemo's link layer.  Replace
+     * a single periodic LocationInfo carrier rather than issuing a second raw
+     * NmeTransport::Send with a duplicated link sequence number. */
+    {
+        uint16_t outgoing_msgid = (uint16_t)msgid;
+        if (replace_location_with_pending(out_array, &data, &len,
+                                          (uint16_t)msgid, &outgoing_msgid)) {
+            msgid = (int)outgoing_msgid;
+        }
+    }
+
     iap2_frame_t frame = {
         .offset = 0,
         .frame_len = read_be16(data + 2),
@@ -605,19 +590,14 @@ int _ZN12NmeTransport4SendEPKhjPj(void* self, const uint8_t* buf, unsigned int l
 
     if (!g_fw.real_transport_send) return -1;
 
-    /* Skip if we're injecting */
-    if (g_fw.in_send) {
-        return g_fw.real_transport_send(self, buf, len, sent);
-    }
-
-    /* Find iAP2 frame and store injection context */
+    /* Observe the final stock-produced link packet.  Injection has already
+     * happened at NmeIAP2Message::Encode, so this function never recursively
+     * calls Send and never manufactures an FF5A header. */
     if (buf && len >= 6) {
         iap2_frame_t frame;
         if (iap2_find_frame(buf, (size_t)len, &frame)) {
-            /* Store context for injection */
-            store_injection_context(self, buf, (size_t)len, frame.offset);
-
-            /* Notify modules - they can trigger injection here */
+            /* Notify modules.  A LocationInfo may queue a request for the
+             * next LocationInfo Encode; the current packet is already built. */
             notify_transport_send(frame.msgid);
         }
     }

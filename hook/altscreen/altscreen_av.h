@@ -31,10 +31,6 @@ void altav_init(const char *host, int port);
 void altav_set_enabled(int on);
 int  altav_is_enabled(void);
 
-/* Exact stock-main OMX ordering gate. Disabling closes any existing renderer
- * link; enabling does not connect until an IDR-safe frame is forwarded. */
-void altav_set_main_ready(int ready);
-
 /* Forward one already-Annex-B buffer verbatim (used for the SPS/PPS header). */
 void altav_forward_frame(const uint8_t *annexb, uint32_t len);
 /* Cache Annex-B SPS/PPS; replayed before the first frame on every connection. */

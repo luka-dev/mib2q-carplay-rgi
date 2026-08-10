@@ -1194,8 +1194,9 @@ public class BAPBridge {
                 sendDistanceToDestinationRaw(s.distDestM, false);
             }
 
-            /* 8. Time to destination (FctID 22). In duo, phase 0 publishes
-             * arrival time and phase 1 publishes remaining travel time. */
+            /* 8. Time to destination (FctID 22). It always remains the normal
+             * absolute ETA; the user-selectable compact summary is fullscreen
+             * FctID 19 only. */
             if ((dirty & (RouteGuidance.State.DIRTY_TIME_REMAINING |
                           RouteGuidance.State.DIRTY_ETA)) != 0) {
                 publishTimeToDestinationForMode();
@@ -1367,16 +1368,13 @@ public class BAPBridge {
     }
 
     private void publishTimeToDestinationForMode() {
-        boolean remainingMode = com.luka.carplay.core.AltScreenModule.isDuoViewArea()
-            && infoPhase != 0;
-        int timeInfoType = remainingMode ? 0 : 1;
+        int timeInfoType = 1;
         int timeFormat = getHuNavigationTimeFormat();
-        long timeVal = remainingMode ? currentRemainingSeconds() : currentArrivalSeconds();
+        long timeVal = currentArrivalSeconds();
 
         /* JVM default TZ is UTC on MHI2. AppConnectorNavi converts a type-1
-         * epoch with GregorianCalendar, so shift it to HU local time first.
-         * Type 0 is a duration and must never receive the timezone offset. */
-        if (!remainingMode && timeVal >= 0L) {
+         * epoch with GregorianCalendar, so shift it to HU local time first. */
+        if (timeVal >= 0L) {
             timeVal = convertUtcToLocalMs(timeVal * 1000L) / 1000L;
         }
 
@@ -1388,7 +1386,6 @@ public class BAPBridge {
         StringBuffer out = new StringBuffer();
         appendSummaryPart(out, formatArrivalForText(currentArrivalSeconds()));
         appendSummaryPart(out, formatRemainingForText(currentRemainingSeconds()));
-        appendSummaryPart(out, formatDistanceForText(lastDistanceToDestinationM));
         return out.toString();
     }
 
@@ -1425,33 +1422,7 @@ public class BAPBridge {
     private static String formatRemainingForText(long seconds) {
         if (seconds < 0L) return "";
         long minutes = (seconds + 59L) / 60L;
-        long hours = minutes / 60L;
-        minutes %= 60L;
-        StringBuffer out = new StringBuffer();
-        if (hours > 0L) out.append(hours).append(" h");
-        if (minutes > 0L || hours == 0L) {
-            if (out.length() > 0) out.append(' ');
-            out.append(minutes).append(" min");
-        }
-        return out.toString();
-    }
-
-    private static String formatDistanceForText(int meters) {
-        if (meters < 0) return "";
-        if (isMetricDistanceUnits()) {
-            if (meters < 1000) return String.valueOf(meters) + " m";
-            long tenths = (meters + 50L) / 100L;
-            return formatTenths(tenths) + " km";
-        }
-        long feet = (meters * 328084L + 50000L) / 100000L;
-        if (feet < 5280L) return String.valueOf(feet) + " ft";
-        long tenths = (meters * 10L + 804L) / 1609L;
-        return formatTenths(tenths) + " mi";
-    }
-
-    private static String formatTenths(long value) {
-        if ((value % 10L) == 0L) return String.valueOf(value / 10L);
-        return String.valueOf(value / 10L) + "." + String.valueOf(value % 10L);
+        return String.valueOf(minutes) + " min";
     }
 
     /** Advance the renderer handshake without waiting. Called by the presentation worker. */

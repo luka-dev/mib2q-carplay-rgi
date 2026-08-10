@@ -22,7 +22,6 @@ import de.audi.tghu.navi.app.map.MapManager;
  * runs unchanged.
  */
 public final class AltScreenCombiBAPListener extends CombiBAPListener {
-
     public AltScreenCombiBAPListener(
         ClusterService service,
         LogChannel logChannel,
@@ -48,7 +47,8 @@ public final class AltScreenCombiBAPListener extends CombiBAPListener {
     }
 
     public void setMapScale(int steps) {
-        if (AltScreenModule.consumeSteeringWheelScale(steps)) {
+        if (AltScreenModule.isConnected()) {
+            AltScreenModule.consumeSteeringWheelScale(steps);
             /* Complete the BAP SetGet with the unchanged native-map status. */
             this.updateMapScale();
             return;
@@ -57,9 +57,9 @@ public final class AltScreenCombiBAPListener extends CombiBAPListener {
     }
 
     public void setMapScaleSetting(int setting) {
-        if (AltScreenModule.consumeSteeringWheelScaleSetting(setting)) {
-            /* Do not mutate the hidden Audi map's auto-zoom state. */
-            this.updateMapScale();
+        if (AltScreenModule.isConnected()) {
+            /* This is autoZoom, not the steering-wheel OK key.  Do not mutate
+             * the hidden Audi map; setMapScale() sends the one Status ACK. */
             return;
         }
         super.setMapScaleSetting(setting);
