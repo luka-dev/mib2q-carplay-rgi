@@ -43,6 +43,16 @@ typedef struct {
     void* user_data;
 } hook_module_def_t;
 
+/* Stock iAP2 passthrough context.  The link-session id is captured from the
+ * most recent stock NmeTransport::Send.  The live ICinemoIAP handle is owned
+ * separately by the framework (with a COM AddRef) and SendIAP2 allocates fresh
+ * FF5A sequence/ack/checksums inside the stock Cinemo stack. */
+typedef struct {
+    uint8_t link_session;
+    uint32_t generation;
+    bool valid;
+} injection_ctx_t;
+
 /* Hook Context */
 struct hook_context {
     msg_direction_t direction;
@@ -60,6 +70,9 @@ struct hook_context {
     uint16_t rgd_component_id;
     bool rgd_component_valid;
 
+    /* Extra-message injection state. */
+    injection_ctx_t inject;
+
     /* Module being called */
     hook_module_t* current_module;
 
@@ -73,12 +86,9 @@ hook_result_t hook_framework_register_module(const hook_module_def_t* def);
 hook_result_t hook_framework_unregister_module(const char* name);
 hook_context_t* hook_framework_get_context(void);
 
-/* Injection API.
- *
- * The frame is queued and atomically substitutes the next outgoing LocationInfo
- * NmeIAP2Message::Encode result.  The stock Cinemo iAP2 stack then owns the
- * link header, seq/ack and checksum.  This deliberately never writes a copied
- * FF5A link header through NmeTransport::Send. */
+/* Injection API - sends an additional semantic frame through stock
+ * ICinemoIAP::SendIAP2; it never replaces a stock semantic message and never
+ * copies FF5A sequence/ack state. */
 hook_result_t hook_inject_frame(const uint8_t* frame, size_t len);
 hook_result_t hook_inject_message(uint16_t msgid, const uint8_t* payload, size_t payload_len);
 

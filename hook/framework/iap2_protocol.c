@@ -213,23 +213,3 @@ bool iap2_parse_link_header(const uint8_t* buf, size_t len, iap2_link_header_t* 
 
     return true;
 }
-
-void iap2_patch_link_header(uint8_t* buf, size_t prefix_len, size_t new_total_len) {
-    if (!buf || prefix_len < 9) return;
-
-    /* iAP2 USB link header layout: FF 5A LL LL ...  The 2-byte big-endian
-     * packet length is at offset 2.  (The previous version "scanned" for it
-     * with a loop that could only ever act at offset 2 — same result, but it
-     * read like a bug.  Length written directly now.)  A zero length means
-     * there's nothing to patch. */
-    if (read_be16(buf + 2) == 0) return;
-    write_be16(buf + 2, (uint16_t)new_total_len);
-
-    /* Recompute the 1-byte header checksum: negated 8-bit sum of bytes
-     * 0..prefix_len-2, stored at prefix_len-1. */
-    uint8_t sum = 0;
-    for (size_t i = 0; i < prefix_len - 1; i++) {
-        sum += buf[i];
-    }
-    buf[prefix_len - 1] = (uint8_t)(0u - (unsigned)sum);
-}

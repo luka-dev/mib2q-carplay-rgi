@@ -43,6 +43,7 @@
 #include <poll.h>     /* poll() in read_exact — wait for data + honor teardown stop */
 #include <stdio.h>    /* snprintf for avcC diagnostics */
 #include <sys/time.h> /* rate-limit key-frame recovery without frame-rate assumptions */
+#include <time.h>     /* clock_gettime + timespec for the bounded alt_setup close-wait (R2) */
 
 DEFINE_LOG_MODULE(altscreen);
 
@@ -110,7 +111,11 @@ static const void *resolve_arr_cb(void)
 static int cf_init(void)
 {
     pthread_mutex_lock(&cf_lock);
-    if (cf_ok < 0) {
+    /* Retry until ready (!=1), not just once (<0): a first /info that lost a
+     * symbol-resolution race must not latch cf_ok=0 for the whole boot and leave
+     * altScreen silently dark.  Cold path (per /info/SETUP/command), so re-running
+     * the dlsym batch until it resolves is free; it stops once cf_ok==1. */
+    if (cf_ok != 1) {
         cf_str     = (cf_str_t)     dlsym(RTLD_DEFAULT, "CFStringCreateWithCString");
         cf_arrm    = (cf_arrm_t)    dlsym(RTLD_DEFAULT, "CFArrayCreateMutable");
         cf_arrappc = (cf_arrappc_t) dlsym(RTLD_DEFAULT, "CFArrayAppendCString");
@@ -413,15 +418,24 @@ static void *build_displays(int night)
 {
     int err = 0;
     void *mainDisp = fn_copydisp(0, &err);      /* arg ignored; builds via ScreenCopyMain */
+    if (!mainDisp) {
+        /* Without the stock main (display-0) the array degrades to just [cluster];
+         * iOS's 110-vs-111 UUID compare and CarKit's display-0 assumptions then
+         * reject the whole displays set and teardown-loop the session.  This can
+         * happen on an early /info before graphics is up, so publish NEITHER key
+         * this request (caller skips injection); a later /info retries. */
+        LOG_ERROR(LOG_MODULE, "build_displays: stock main unavailable err=%d — skipping displays this /info", err);
+        return 0;
+    }
     main_disp_modernize(mainDisp, night);       /* uuid→uid + initialVideoStreams for CarKit */
     void *cluster  = build_cluster_dict(night);
     void *arr = cf_arrm(0, 2, arr_cb);
     if (!arr) {
-        if (mainDisp && cf_rel) cf_rel(mainDisp);
+        if (cf_rel) cf_rel(mainDisp);
         if (cluster && cf_rel)  cf_rel(cluster);
         return 0;
     }
-    if (mainDisp) { cf_arrapp(arr, mainDisp); if (cf_rel) cf_rel(mainDisp); }
+    cf_arrapp(arr, mainDisp); if (cf_rel) cf_rel(mainDisp);
     if (cluster)  { cf_arrapp(arr, cluster);  if (cf_rel) cf_rel(cluster);  }
     return arr;
 }
@@ -510,36 +524,33 @@ void *AirPlayCopyServerInfo(void *session, void *qualifier, void *macAddr, void 
         /* displays/displayPanels provide the distinct second UUID that makes iOS
          * construct stream 111.  Keep the separate env gate for controlled rollback. */
         if (disp_ok == 1 && env_on("ALTSCREEN_ADVERT_DISPLAYS")) {
-            void *dk = cf_str(0, "displays", CFENC_UTF8);
-            void *dv = build_displays(infoNight);
-            if (dk && dv) {
-                cf_dictset(info, dk, dv);
-                LOG_INFO(LOG_MODULE, "injected displays=[main,cluster] into /info=%p", info);
-            } else {
-                LOG_ERROR(LOG_MODULE, "inject displays build failed dk=%p dv=%p", dk, dv);
-            }
-            if (dv && cf_rel) cf_rel(dv);
-            if (dk && cf_rel) cf_rel(dk);
-
-            /* ALSO inject displayPanels = [main, cluster].  iOS reads BOTH keys:
+            /* iOS reads BOTH keys:
              *  - "displays"      → Activate.mm:822 = the display-COUNT gate (needs count vs altScreen-flag).
              *  - "displayPanels" → CARSessionConfiguration builds _displays (→ hasGaugeClusterScreen =
              *    _displays contains "Instrument Cluster") via initWithPhysicalScreenDictionary — which reads
              *    exactly our shape (uid/widthPixels/widthPhysical/properties/initialVideoStreams).
-             * Providing only "displays" (parsed as LOGICAL screens, different schema) likely leaves the
-             * cluster unrecognized → carkitd never proposes "altScreen" → the negotiated altScreen flag
-             * stays off → the 2-display count is rejected ("car won't add").  Give the phone displayPanels
-             * in our physical schema so hasGaugeClusterScreen is set. */
-            void *pk = cf_str(0, "displayPanels", CFENC_UTF8);
-            void *pv = build_displays(infoNight);
-            if (pk && pv) {
-                cf_dictset(info, pk, pv);
-                LOG_INFO(LOG_MODULE, "injected displayPanels=[main,cluster] into /info=%p", info);
+             * Providing only "displays" (LOGICAL-screen schema) leaves the cluster unrecognized → carkitd
+             * never proposes "altScreen" → the 2-display count is rejected ("car won't add").
+             *
+             * Build the [main,cluster] array ONCE and publish it under both keys (cf_dictset retains, so a
+             * single object under two keys is safe; the two arrays are byte-identical anyway).  This avoids
+             * a second full CF-tree build AND a second stock ScreenCopyMain per /info (latency on the
+             * negotiation path).  build_displays() returns NULL when the stock main (display-0) is
+             * unavailable — publish NEITHER key then, rather than a display-0-less array that teardown-loops
+             * the whole session. */
+            void *dv = build_displays(infoNight);
+            void *dk = dv ? cf_str(0, "displays", CFENC_UTF8) : 0;
+            void *pk = dv ? cf_str(0, "displayPanels", CFENC_UTF8) : 0;
+            if (dv && dk && pk) {
+                cf_dictset(info, dk, dv);
+                cf_dictset(info, pk, dv);
+                LOG_INFO(LOG_MODULE, "injected displays+displayPanels=[main,cluster] into /info=%p", info);
             } else {
-                LOG_ERROR(LOG_MODULE, "inject displayPanels build failed pk=%p pv=%p", pk, pv);
+                LOG_ERROR(LOG_MODULE, "inject displays skipped dv=%p dk=%p pk=%p (stock main unavailable?)", dv, dk, pk);
             }
-            if (pv && cf_rel) cf_rel(pv);
+            if (dk && cf_rel) cf_rel(dk);
             if (pk && cf_rel) cf_rel(pk);
+            if (dv && cf_rel) cf_rel(dv);
         }
     }
     return info;
@@ -586,17 +597,27 @@ static fn_aes_ctr_init_t    aes_ctr_init;
 static fn_aes_ctr_update_t  aes_ctr_update;
 static fn_aes_ctr_final_t   aes_ctr_final;
 static fn_sess_sendcmd_t    sess_sendcmd;   /* session-level {type,params} command shipper (zone switch) */
-static void alt_kick_viewarea(void);        /* fwd: apply cached fullscreen/duo geometry when 111 is live */
-static void alt_kick_show_ui(void);         /* fwd: select Maps content for the cluster display */
-static int  alt_show_ui_for_mode(int mode, const char *reason); /* fwd: full cards vs duo map-only */
-static int  alt_send_cluster_night_mode(int night, const char *reason); /* fwd: per-display day/night */
-static int  alt_request_cluster_idr(const char *reason); /* fwd: forceKeyFrame targeted by params.uuid */
+/* Receiver-owned session commands carry `gen`: the transport generation of the receiver
+ * issuing them.  gen==0 means "current session, no generation check" (Java/BAP + dio
+ * SetNightMode deliberately target whatever session is live).  gen>0 is dropped unless it
+ * still equals g_alt_session_gen, so an immediate command from a superseded stream-111
+ * receiver cannot command the NEW session.  The showUI/view-area async completions below
+ * intentionally reissue their idempotent follow-up against gen=0; they are documented at
+ * those call sites and are not covered by this receiver-generation guarantee. */
+static void alt_kick_viewarea(uint32_t gen);
+static void alt_kick_show_ui(uint32_t gen);
+static int  alt_show_ui_for_mode(uint32_t gen, int mode, const char *reason);
+static int  alt_send_cluster_night_mode(uint32_t gen, int night, const char *reason);
+static int  alt_request_cluster_idr(uint32_t gen, const char *reason);
 static fn_derive_aes_t      derive_aes;
 
-/* main AirPlay session with a live altScreen — set on alt_setup success, cleared
- * on teardown.  Read by the CMD_ALT_ZONE handler to target AirPlayReceiverSessionSendCommand.
- * ponytail: single altScreen session assumed; aligned pointer store = atomic on ARMv7. */
+/* Main AirPlay session belonging to the newest committed altScreen transport claim;
+ * cleared on teardown. Read by CMD_ALT_ZONE to target AirPlayReceiverSessionSendCommand.
+ * Single altScreen session assumed; all accesses that can race teardown use alt_lock. */
 static void *volatile g_alt_session;
+/* Transport generation that owns g_alt_session (set + cleared with it under alt_lock).
+ * A receiver-owned command shipped with gen>0 is dropped unless gen==g_alt_session_gen. */
+static uint32_t g_alt_session_gen;
 static fn_srv_sockopen_t    srv_sockopen;
 static fn_sock_setqos_t     sock_setqos;
 static fn_sock_accept_t     sock_accept;
@@ -613,7 +634,9 @@ static pthread_cond_t alt_cond = PTHREAD_COND_INITIALIZER;
 static int alt_resolve(void)
 {
     pthread_mutex_lock(&alt_lock);   /* no lock-free fast path — see cf_init note */
-    if (alt_syms_ok < 0) {
+    /* Retry until ready (!=1), not just once (<0): same startup-race reasoning as
+     * cf_init — never latch a transient miss as "altScreen off for this boot". */
+    if (alt_syms_ok != 1) {
         if (cf_init() != 1) { alt_syms_ok = 0; pthread_mutex_unlock(&alt_lock); return 0; }
         aes_ctr_init    = (fn_aes_ctr_init_t)   dlsym(RTLD_DEFAULT, "AES_CTR_Init");
         aes_ctr_update  = (fn_aes_ctr_update_t) dlsym(RTLD_DEFAULT, "AES_CTR_Update");
@@ -706,11 +729,24 @@ typedef struct {
 } altslot_t;
 typedef struct {
     altslot_t *slot;
-    uint32_t generation;
+    uint32_t generation;   /* per-slot generation (slot-state reuse guard) */
+    uint32_t av_gen;       /* global transport-owner generation (altav ownership) */
     int listenSock;
 } altthread_arg_t;
 #define ALT_MAX_SESSIONS 4
+/* R2: bounded wait for a concurrent teardown to finish clearing this session's slot
+ * before a new SETUP gives up. Fast-replug pointer reuse can otherwise hit a slot
+ * mid-close and fail the whole control SETUP. */
+#define ALT_SETUP_CLOSE_WAIT_MS 500
+/* A SETUP/TEARDOWN must never block forever in pthread_join.  The receiver
+ * checks stop every 500 ms and renderer forwarding has a 1000 ms stall cap;
+ * 1800 ms covers both while staying far below AirPlay's control-SETUP timeout. */
+#define ALT_REAP_WAIT_MS 1800
 static altslot_t alt_slots[ALT_MAX_SESSIONS];
+/* Monotonic transport-owner generation, assigned per successfully-created receiver
+ * (guarded by alt_lock).  Distinct from the per-slot generation: it is GLOBAL so a
+ * later receiver on any slot supersedes every earlier one as the single altav owner. */
+static uint32_t g_alt_gen_counter = 0;
 
 static altslot_t *alt_slot_get(void *session)   /* find or alloc (caller holds alt_lock) */
 {
@@ -734,19 +770,38 @@ static altslot_t *alt_slot_find(void *session)
     return NULL;
 }
 
-/* Claim and join exactly one receiver generation.  For a replacement SETUP,
- * only an already-exited thread is eligible.  TEARDOWN first requests stop and
- * closes the listener, then joins outside alt_lock. */
+/* Claim and reap exactly one receiver generation.  A live generation is asked
+ * to stop and its listener is closed; collection is allowed only after the
+ * bounded terminal-flag wait below, then join runs outside alt_lock. */
+static void alt_deadline_after_ms(struct timespec *deadline, long ms)
+{
+    clock_gettime(CLOCK_REALTIME, deadline);
+    deadline->tv_sec += ms / 1000L;
+    deadline->tv_nsec += (ms % 1000L) * 1000000L;
+    if (deadline->tv_nsec >= 1000000000L) {
+        deadline->tv_sec++;
+        deadline->tv_nsec -= 1000000000L;
+    }
+}
+
 static int alt_reap_thread(altslot_t *slot, int requestStop)
 {
     pthread_t thread;
     uint32_t generation;
     int listener = -1;
+    int wait_rc = 0;
+    struct timespec deadline;
 
     if (!slot) return 0;
+    alt_deadline_after_ms(&deadline, ALT_REAP_WAIT_MS);
     pthread_mutex_lock(&alt_lock);
-    while (slot->threadReaping)
-        pthread_cond_wait(&alt_cond, &alt_lock);
+    while (slot->threadReaping && wait_rc != ETIMEDOUT)
+        wait_rc = pthread_cond_timedwait(&alt_cond, &alt_lock, &deadline);
+    if (slot->threadReaping) {
+        pthread_mutex_unlock(&alt_lock);
+        LOG_WARN(LOG_MODULE, "alt: reap owner wait timed out session=%p", slot->session);
+        return -1;
+    }
     if (!slot->threadCreated) {
         if (requestStop) {
             slot->stop = 1;
@@ -770,6 +825,26 @@ static int alt_reap_thread(altslot_t *slot, int requestStop)
     pthread_mutex_unlock(&alt_lock);
 
     if (listener >= 0) close(listener);
+
+    /* pthread_join itself has no portable timeout on QNX 6.5.  Wait for the
+     * receiver's terminal flag first; once set, join can only collect a thread
+     * that is already at its final unlock/return. */
+    pthread_mutex_lock(&alt_lock);
+    wait_rc = 0;
+    while (slot->generation == generation && slot->threadCreated &&
+           !slot->threadExited && wait_rc != ETIMEDOUT)
+        wait_rc = pthread_cond_timedwait(&alt_cond, &alt_lock, &deadline);
+    if (slot->generation == generation && slot->threadCreated && !slot->threadExited) {
+        slot->threadReaping = 0;
+        pthread_cond_broadcast(&alt_cond);
+        pthread_mutex_unlock(&alt_lock);
+        LOG_WARN(LOG_MODULE,
+                 "alt: receiver stop timed out after %d ms session=%p gen=%u; cleanup deferred",
+                 ALT_REAP_WAIT_MS, slot->session, (unsigned)generation);
+        return -1;
+    }
+    pthread_mutex_unlock(&alt_lock);
+
     pthread_join(thread, NULL);
 
     pthread_mutex_lock(&alt_lock);
@@ -781,6 +856,35 @@ static int alt_reap_thread(altslot_t *slot, int requestStop)
     pthread_cond_broadcast(&alt_cond);
     pthread_mutex_unlock(&alt_lock);
     return 0;
+}
+
+/* Reclaim slots whose receiver has already EXITED (a superseded different-slot stream on
+ * fast reconnect) but whose stock TearDown never arrived.  Without this a few missed
+ * teardowns fill all ALT_MAX_SESSIONS and every later SETUP fails with -6728.  Caller must
+ * NOT hold alt_lock.  Only a fully-idle exited slot that is neither the current session nor
+ * mid-lifecycle is reclaimed. */
+static void alt_gc_exited_slots(void)
+{
+    int i;
+    for (i = 0; i < ALT_MAX_SESSIONS; i++) {
+        altslot_t *slot = &alt_slots[i];
+        int eligible = 0;
+        pthread_mutex_lock(&alt_lock);
+        if (slot->inUse && slot->threadCreated && slot->threadExited &&
+            !slot->threadReaping && !slot->settingUp &&
+            slot->session != g_alt_session)
+            eligible = 1;
+        pthread_mutex_unlock(&alt_lock);
+        if (!eligible) continue;
+        alt_reap_thread(slot, 1);   /* join the already-exited thread (fast) */
+        pthread_mutex_lock(&alt_lock);
+        if (slot->inUse && !slot->threadCreated && !slot->settingUp &&
+            slot->session != g_alt_session) {
+            LOG_INFO(LOG_MODULE, "alt: reclaimed orphaned exited slot session=%p", slot->session);
+            memset(slot, 0, sizeof(*slot));
+        }
+        pthread_mutex_unlock(&alt_lock);
+    }
 }
 
 /* _AddResponseStream replica (stock sub_26EFC): append desc to resp["streams"] */
@@ -904,7 +1008,7 @@ static uint64_t alt_now_ms(void)
     return ((uint64_t)tv.tv_sec * 1000ULL) + ((uint64_t)tv.tv_usec / 1000ULL);
 }
 
-static void alt_recv_loop(altslot_t *slot, int fd)
+static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
 {
     uint8_t  aesctx[512] __attribute__((aligned(16)));
     int      aes_ready = 0;
@@ -926,11 +1030,19 @@ static void alt_recv_loop(altslot_t *slot, int fd)
      * the generic command channel. Retries below are deliberately slow and
      * bounded: stock 210 owns the asynchronous control queue, so an unbounded
      * frame-count retry can exhaust dio_manager when iOS never answers. */
-    alt_request_cluster_idr("stream-start");
+    alt_request_cluster_idr(av_gen, "stream-start");
     idr_requests = 1;
     last_idr_request_ms = alt_now_ms();
 
     for (;;) {
+        /* A later receiver (fast reconnect) may have claimed the single renderer
+         * transport.  Once superseded, exit BEFORE reading/forwarding/commanding so
+         * this stream can neither touch the new owner's connection nor send control
+         * commands (ForceKeyFrame/showUI) into the new session. */
+        if (!altav_is_owner(av_gen)) {
+            LOG_INFO(LOG_MODULE, "alt recv: superseded (gen=%u no longer owner) — exiting", (unsigned)av_gen);
+            break;
+        }
         if (read_exact(fd, hdr, ALT_HDR_SIZE, &slot->stop) != 0) {
             LOG_INFO(LOG_MODULE,
                      "alt recv: header read ended stop=%d errno=%d after %lu frames",
@@ -971,7 +1083,7 @@ static void alt_recv_loop(altslot_t *slot, int fd)
             avccHex[hn * 2] = 0;
 
             ls = avcc_config_to_annexb(body, bodySize, cfg, sizeof(cfg), &clen);
-            if (clen) altav_set_config(cfg, clen);   /* cache; replayed before first safe IDR */
+            if (clen) altav_set_config(av_gen, cfg, clen);   /* cache; replayed before first safe IDR */
             LOG_INFO(LOG_MODULE,
                      "alt recv: avcC config encoded=%dx%d body=%u lengthSize=%u annexb=%u bytes=%s%s",
                      (int)(cfgWidth + 0.5f), (int)(cfgHeight + 0.5f), bodySize, ls, clen,
@@ -980,6 +1092,10 @@ static void alt_recv_loop(altslot_t *slot, int fd)
             int is_idr;
             if (aes_ready) aes_ctr_update(aesctx, body, bodySize, body);
             is_idr = avcc_has_nal_type(body, bodySize, ls, 5);
+            /* Re-check ownership here: the header/body read above can block in poll for
+             * up to 500 ms, during which a reconnect may have superseded us.  The control
+             * commands below target g_alt_session and must never run for a stale stream. */
+            if (!altav_is_owner(av_gen)) break;
             if (is_idr && !stream_has_idr) {
                 stream_has_idr = 1;
                 LOG_INFO(LOG_MODULE,
@@ -987,13 +1103,13 @@ static void alt_recv_loop(altslot_t *slot, int fd)
                          nframes, bodySize);
                 /* A live video stream is only the canvas.  Select the Maps instrument-cluster
                  * UI explicitly, then tell the encoder which predeclared view area is visible. */
-                alt_kick_show_ui();
+                alt_kick_show_ui(av_gen);
                 /* `/info` can precede dio startService and contain the old
                  * day/night bit. Refresh from the live platform callback now,
                  * before applying the per-display cluster command. */
                 alt_refresh_night_mode(slot->session, "first-IDR");
-                alt_send_cluster_night_mode(g_alt_night_mode, "first-IDR");
-                alt_kick_viewarea();
+                alt_send_cluster_night_mode(av_gen, g_alt_night_mode, "first-IDR");
+                alt_kick_viewarea(av_gen);
             }
 
             if (is_idr && renderer_wait_idr) {
@@ -1013,10 +1129,10 @@ static void alt_recv_loop(altslot_t *slot, int fd)
              * The first IDR then reconnects, replays cached SPS/PPS, and opens
              * decoding with a valid random-access picture. */
             if (!renderer_wait_idr) {
-                int forward_rc = altav_forward_avcc_frame(body, bodySize, ls);
+                int forward_rc = altav_forward_avcc_frame(av_gen, body, bodySize, ls);
                 if (forward_rc < 0) {
                     renderer_wait_idr = 1;
-                    alt_request_cluster_idr("renderer-link-lost");
+                    alt_request_cluster_idr(av_gen, "renderer-link-lost");
                     idr_requests = 1;
                     idr_limit_logged = 0;
                     last_idr_request_ms = alt_now_ms();
@@ -1037,7 +1153,7 @@ static void alt_recv_loop(altslot_t *slot, int fd)
                 if (idr_requests < ALT_IDR_MAX_REQUESTS && now_ms != 0 &&
                     (last_idr_request_ms == 0 ||
                      now_ms - last_idr_request_ms >= ALT_IDR_RETRY_MS)) {
-                    alt_request_cluster_idr("WAIT_IDR-retry");
+                    alt_request_cluster_idr(av_gen, "WAIT_IDR-retry");
                     ++idr_requests;
                     last_idr_request_ms = now_ms;
                 } else if (idr_requests >= ALT_IDR_MAX_REQUESTS &&
@@ -1066,6 +1182,7 @@ static void *alt_thread_main(void *arg)
     altthread_arg_t *threadArg = (altthread_arg_t *)arg;
     altslot_t *slot = threadArg->slot;
     uint32_t generation = threadArg->generation;
+    uint32_t av_gen = threadArg->av_gen;
     int        listenSock = threadArg->listenSock;
     int        fd = -1;
     int        ls;
@@ -1088,19 +1205,25 @@ static void *alt_thread_main(void *arg)
     if (ls >= 0) close(ls);
 
     LOG_INFO(LOG_MODULE, "alt-screen receiver started (self-contained)");
-    alt_recv_loop(slot, fd);
+    alt_recv_loop(slot, fd, av_gen);
 
 done:
     if (fd >= 0) close(fd);
-    altav_shutdown();                                     /* disconnect renderer → it resets its decoder */
+    /* Only close the renderer transport if WE still own it — a superseded receiver's
+     * exit must not tear down the new owner's connection (that caused black 111 on
+     * fast reconnect). */
+    altav_shutdown_if_owner(av_gen);
+    /* This log is intentionally before threadExited.  Once the terminal flag
+     * is published, the reaper may call pthread_join and must not wait behind
+     * a potentially blocking logger write. */
+    LOG_INFO(LOG_MODULE, "alt-screen receiver thread exit generation=%u",
+             (unsigned)generation);
     pthread_mutex_lock(&alt_lock);
     if (slot->generation == generation && slot->threadCreated) {
         slot->threadExited = 1;
         pthread_cond_broadcast(&alt_cond);
     }
     pthread_mutex_unlock(&alt_lock);
-    LOG_INFO(LOG_MODULE, "alt-screen receiver thread exit generation=%u",
-             (unsigned)generation);
     return NULL;
 }
 
@@ -1115,21 +1238,44 @@ static int alt_setup(void *session, void *streamDesc, void *responseParams)
     uint8_t key[16], iv[16];
     void  *rdesc = NULL;
     altthread_arg_t *threadArg = NULL;
+    uint32_t av_gen = 0;   /* transport-owner generation for THIS receiver (claimed on success) */
 
+    alt_gc_exited_slots();   /* reclaim orphaned exited slots so a fresh slot is available */
     pthread_mutex_lock(&alt_lock);
     slot = alt_slot_get(session);
+    /* R2: a concurrent teardown of THIS session's slot (possible on a fast replug when
+     * dio frees the old session and the new one reuses its address) must NOT fail the
+     * whole control SETUP — the interpose propagates our error as ret=arc.  Wait,
+     * bounded, for teardown to finish clearing the slot, then re-acquire it fresh. */
+    if (slot && slot->closing) {
+        int waited_ms = 0;
+        while (slot->closing && waited_ms < ALT_SETUP_CLOSE_WAIT_MS) {
+            struct timespec ts;
+            clock_gettime(CLOCK_REALTIME, &ts);
+            ts.tv_nsec += 50 * 1000000L;
+            if (ts.tv_nsec >= 1000000000L) { ts.tv_sec++; ts.tv_nsec -= 1000000000L; }
+            pthread_cond_timedwait(&alt_cond, &alt_lock, &ts);
+            waited_ms += 50;
+        }
+        slot = alt_slot_get(session);   /* teardown may have freed+reallocated the slot */
+    }
     if (slot && (slot->closing || slot->settingUp)) {
         pthread_mutex_unlock(&alt_lock);
-        return -6719;   /* already set up */
-    }
-    if (slot && slot->threadCreated && !slot->threadExited) {
-        pthread_mutex_unlock(&alt_lock);
-        return -6719;   /* live stream already set up */
+        LOG_WARN(LOG_MODULE, "alt_setup: slot busy (closing/settingUp) after wait — deferring");
+        return -6719;
     }
     if (slot) slot->settingUp = 1; /* reserve lifecycle across old-thread reap */
     pthread_mutex_unlock(&alt_lock);
     if (!slot) return -6728;
-    if (alt_reap_thread(slot, 0) != 0) goto fail;
+    /* A live receiver from a prior session/SETUP must NOT fail this SETUP.  The
+     * interpose propagates alt_setup's error as the WHOLE control SETUP result
+     * (ret=arc in AirPlayReceiverSessionSetup), so returning -6719 for a lingering
+     * thread after a fast replug killed the entire CarPlay session — it only came
+     * up on the retry once the old thread finally exited.  Force-stop and join the
+     * stale generation, then set up a fresh stream.  alt_reap_thread(,1) also
+     * handles the not-created and already-exited cases and never returns the -1
+     * "still live" refusal, so this replaces the old reap(,0) + hard bail. */
+    if (alt_reap_thread(slot, 1) != 0) goto fail;
 
     pthread_mutex_lock(&alt_lock);
     if (slot->closing || !slot->inUse || slot->session != session) {
@@ -1186,12 +1332,14 @@ static int alt_setup(void *session, void *streamDesc, void *responseParams)
     }
     slot->generation++;
     if (slot->generation == 0) slot->generation = 1;
+    av_gen = ++g_alt_gen_counter;
+    if (av_gen == 0) av_gen = ++g_alt_gen_counter;   /* 0 = unclaimed sentinel; never assign it */
     slot->altSock = sock;
     slot->threadExited = 0;
     threadArg->slot = slot;
     threadArg->generation = slot->generation;
+    threadArg->av_gen = av_gen;
     threadArg->listenSock = sock;
-    g_alt_session = session;      /* thread blocks on alt_lock before its first command */
     if (pthread_create(&slot->thread, NULL, alt_thread_main, threadArg) == 0) {
         slot->threadCreated = 1;
         started = 1;
@@ -1199,7 +1347,6 @@ static int alt_setup(void *session, void *streamDesc, void *responseParams)
         sock = -1;                    /* slot/thread owns the listener now */
     } else {
         slot->altSock = -1;
-        g_alt_session = NULL;
     }
     pthread_mutex_unlock(&alt_lock);
     if (!started) { err = -6728; goto fail; }
@@ -1208,8 +1355,24 @@ static int alt_setup(void *session, void *streamDesc, void *responseParams)
         goto fail;
     }
     if (cf_rel) { cf_rel(rdesc); rdesc = NULL; }
-
+    /* Commit the SETUP atomically with respect to Java/BAP/dio session commands.  Until
+     * the response descriptor exists and the monotonic transport claim succeeds,
+     * g_alt_session must continue to name the previous committed session: publishing it
+     * before this point allowed a gen=0 command to run while the new control SETUP was
+     * still being built.  Hold alt_lock across claim+publication.  No altav path holds
+     * g_lock while acquiring alt_lock, so the alt_lock -> g_lock order cannot deadlock.
+     * A slower older SETUP whose claim is rejected still returns its already-built
+     * response, but it never becomes the command target; its receiver observes that it
+     * is not transport owner and exits after the connection arrives. */
     pthread_mutex_lock(&alt_lock);
+    if (altav_claim(av_gen)) {
+        g_alt_session = session;
+        g_alt_session_gen = av_gen;
+    } else {
+        LOG_INFO(LOG_MODULE,
+                 "alt_setup: gen=%u committed response but not session target (newer owner won)",
+                 (unsigned)av_gen);
+    }
     slot->settingUp = 0;
     pthread_cond_broadcast(&alt_cond);
     pthread_mutex_unlock(&alt_lock);
@@ -1222,16 +1385,22 @@ static int alt_setup(void *session, void *streamDesc, void *responseParams)
 fail:
     if (rdesc && cf_rel) cf_rel(rdesc);
     if (threadArg) free(threadArg);
-    if (started) {
-        alt_reap_thread(slot, 1);
-    }
+    if (started) alt_reap_thread(slot, 1);
     if (sock >= 0) close(sock);
     pthread_mutex_lock(&alt_lock);
-    if (g_alt_session == session) g_alt_session = NULL;   /* defensive (only set on success) */
-    slot->altSock = -1;
-    slot->stop = 0;
-    memset(slot->key, 0, sizeof(slot->key));
-    memset(slot->iv, 0, sizeof(slot->iv));
+    if (g_alt_session == session) { g_alt_session = NULL; g_alt_session_gen = 0; }   /* defensive (only set on success) */
+    /* If bounded reap timed out, the receiver still owns this slot/key/iv.
+     * Keep it stopped+closing and let alt_gc_exited_slots collect it after its
+     * terminal flag; clearing it here would be a slot UAF on fast reconnect. */
+    if (!slot->threadCreated) {
+        slot->altSock = -1;
+        slot->stop = 0;
+        memset(slot->key, 0, sizeof(slot->key));
+        memset(slot->iv, 0, sizeof(slot->iv));
+    } else {
+        slot->stop = 1;
+        slot->closing = 1;
+    }
     slot->settingUp = 0;
     pthread_cond_broadcast(&alt_cond);
     pthread_mutex_unlock(&alt_lock);
@@ -1372,6 +1541,7 @@ int AirPlayReceiverSessionTearDown(void *session, void *request, int reason, int
     static fn_sess_teardown_t real;
     int requestHas111 = 0;
     int tearDownAlt = (request == NULL);
+    int reapRc = 0;
     if (!real) real = (fn_sess_teardown_t)dlsym(RTLD_NEXT, "AirPlayReceiverSessionTearDown");
 
     if (request && alt_resolve() == 1) {
@@ -1391,13 +1561,20 @@ int AirPlayReceiverSessionTearDown(void *session, void *request, int reason, int
         slot->closing = 1;
         while (slot->settingUp)
             pthread_cond_wait(&alt_cond, &alt_lock);
+        /* Revoke command-channel ownership before asking the receiver to stop.
+         * Even if bounded reap is deferred, it cannot send a command through a
+         * stock session that TearDown is about to free. */
+        if (g_alt_session == session) {
+            g_alt_session = NULL;
+            g_alt_session_gen = 0;
+        }
     }
     pthread_mutex_unlock(&alt_lock);
     if (slot && tearDownAlt) {
         /* Stop the self-contained receiver: the reaper sets stop, closes the
          * listener to wake pre-connect accept, and joins outside alt_lock.  An
          * already-exited receiver follows the identical single-owner path. */
-        alt_reap_thread(slot, 1);
+        reapRc = alt_reap_thread(slot, 1);
         pthread_mutex_lock(&alt_lock);
         if (slot->altSock >= 0) {
             int ls = slot->altSock;
@@ -1406,17 +1583,33 @@ int AirPlayReceiverSessionTearDown(void *session, void *request, int reason, int
             close(ls);
             pthread_mutex_lock(&alt_lock);
         }
-        if (g_alt_session == session) g_alt_session = NULL;
-        memset(slot, 0, sizeof(*slot));
+        if (reapRc == 0 && !slot->threadCreated) {
+            memset(slot, 0, sizeof(*slot));
+        } else {
+            /* The thread owns the slot until it publishes threadExited.  GC at
+             * the next SETUP will join and clear it without blocking teardown. */
+            slot->closing = 1;
+            slot->stop = 1;
+        }
         pthread_cond_broadcast(&alt_cond);
         pthread_mutex_unlock(&alt_lock);
-        LOG_INFO(LOG_MODULE, "altScreen torn down for session=%p", session);
+        if (reapRc == 0)
+            LOG_INFO(LOG_MODULE, "altScreen torn down for session=%p", session);
+        else
+            LOG_WARN(LOG_MODULE,
+                     "altScreen teardown deferred receiver cleanup session=%p", session);
     } else if (slot) {
         LOG_INFO(LOG_MODULE,
                  "per-stream TEARDOWN has no 111 - preserving altScreen session=%p",
                  session);
     }
 
+    /* NOTE: deliberately NO hook_notify_disconnect() here.  A full AirPlay teardown is
+     * an AirPlay-layer event; the iAP2 link (and thus RGD component_valid) can survive it.
+     * Firing HOOK_EVENT_DISCONNECT would rgd_clear_state()->component_valid=false, and only
+     * a new iAP2 Identify restores it — so an AirPlay restart without a re-Identify would
+     * strand RGI dead until a physical reconnect.  The authoritative per-session RGD reset
+     * stays on IAP2_MSG_IDENTIFY_START (hook_framework.c handle_state_messages). */
     if (!real) return reason;
     return real(session, request, reason, a4);
 }
@@ -1476,7 +1669,7 @@ static void zone_cmd_done(int status, void *resp, void *ctx)
      * only after this view area succeeded, and ignore a stale ACK after a rapid
      * second View-button press. */
     if (status == 0 && mode == g_alt_zone_mode)
-        alt_show_ui_for_mode(mode, "viewArea-accepted");
+        alt_show_ui_for_mode(0, mode, "viewArea-accepted");   /* gen=0: idempotent cluster-map showUI */
 }
 
 /* Ship a command against the live altScreen session, serialized with teardown:
@@ -1485,18 +1678,34 @@ static void zone_cmd_done(int status, void *resp, void *ctx)
  * mid-call.  Returns the SendCommand rc, or -6735 if no active session/shipper.
  * (SendCommand only posts to the HTTP control channel — it never re-enters
  * alt_lock — so holding the lock across it is safe.) */
-static int alt_send_locked(void *cmd, void *completion, void *ctx)
+static int alt_send_locked_for_gen(uint32_t gen, void *cmd, void *completion, void *ctx)
 {
     int rc = -6735;
     pthread_mutex_lock(&alt_lock);
-    if (sess_sendcmd && g_alt_session)
-        rc = sess_sendcmd(g_alt_session, cmd, completion, ctx);
+    void *sess = g_alt_session;
+    /* gen==0: Java/BAP/dio command — deliberately targets the current session.  gen>0:
+     * receiver-owned command — additionally require g_alt_session_gen to still equal it,
+     * checked HERE under alt_lock right before the call, so a supersede between a caller's
+     * owner check and this send cannot leak the command into the NEW session.
+     *
+     * R3: also require an in-use slot with a created, not-exited receiver — g_alt_session
+     * can momentarily dangle if a stock session is freed without a TearDown that clears it;
+     * this avoids sess_sendcmd on a stale pointer (use-after-free). */
+    if (sess_sendcmd && sess && (gen == 0 || g_alt_session_gen == gen)) {
+        altslot_t *s = alt_slot_find(sess);
+        if (s && s->threadCreated && !s->threadExited)
+            rc = sess_sendcmd(sess, cmd, completion, ctx);
+    }
     pthread_mutex_unlock(&alt_lock);
     return rc;
 }
+static int alt_send_locked(void *cmd, void *completion, void *ctx)
+{
+    return alt_send_locked_for_gen(0, cmd, completion, ctx);   /* current-session (Java/BAP/dio) */
+}
 
 /* Build and ship one of the two known-good view-area indexes. */
-static int zone_send_mode(int mode, int dur, void *completion)
+static int zone_send_mode(uint32_t gen, int mode, int dur, void *completion)
 {
     int index, rc = -6728;
     void *params = NULL, *cmd = NULL, *adj = NULL, *pk = NULL, *ak = NULL;
@@ -1523,7 +1732,7 @@ static int zone_send_mode(int mode, int dur, void *completion)
         set_str(cmd, "type", "updateViewArea");
         pk = cf_str(0, "params", CFENC_UTF8);
         if (pk) cf_dictset(cmd, pk, params);
-        rc = alt_send_locked(cmd, completion, (void *)(intptr_t)mode);
+        rc = alt_send_locked_for_gen(gen, cmd, completion, (void *)(intptr_t)mode);
         LOG_INFO(LOG_MODULE,
                  "updateViewArea ship mode=%s index=%d adjacent=%s dur=%dms rc=%d",
                  mode == ALT_ZONE_DUO ? "duo" : "fullscreen",
@@ -1548,7 +1757,7 @@ static void zone_on_cmd(uint16_t type, uint8_t flags, const uint8_t *payload, ui
     /* Cache even before the RTSP session exists. The first IDR will apply the
      * latest Audi mode, making fast reconnect and pre-session View presses safe. */
     g_alt_zone_mode = mode;
-    rc = zone_send_mode(mode, dur, (void *)zone_cmd_done);
+    rc = zone_send_mode(0, mode, dur, (void *)zone_cmd_done);   /* Java View press → current session */
     if (rc != 0) zone_send_ack(mode, rc); /* no async completion on sync failure */
 }
 
@@ -1578,8 +1787,11 @@ static void alt_cmd_done(int status, void *resp, void *ctx)
      * CarKit attaching/foregrounding the cluster app scene and merely encode a
      * second blank random-access picture.  Serialize with teardown so session stays
      * live for the entire boundary call. */
+    /* gen=0 (current session): a re-issued forceKeyFrame is idempotent — if the session
+     * changed under us, the new session wants keyframes anyway, so this is benign and we
+     * avoid heap-carrying a generation through the async completion. */
     if (status == 0 && !strcmp(type, "showUI"))
-        alt_request_cluster_idr("showUI-accepted");
+        alt_request_cluster_idr(0, "showUI-accepted");
 }
 
 /* new params dict (uuid preset when wantUuid); NULL if CF syms not ready. */
@@ -1594,7 +1806,7 @@ static void *alt_params_new(int wantUuid)
 }
 
 /* ship {type, params} with the logging completion; consumes (releases) params. */
-static int alt_ship(const char *type, void *params)
+static int alt_ship(uint32_t gen, const char *type, void *params)
 {
     if (!params) return -6728;
     int rc = -6728;
@@ -1604,9 +1816,9 @@ static int alt_ship(const char *type, void *params)
         void *pk = cf_str(0, "params", CFENC_UTF8);
         if (pk) cf_dictset(cmd, pk, params);
         if (pk && cf_rel) cf_rel(pk);
-        rc = alt_send_locked(cmd, (void *)alt_cmd_done, (void *)type);  /* serialized vs teardown */
+        rc = alt_send_locked_for_gen(gen, cmd, (void *)alt_cmd_done, (void *)type);  /* gen-scoped vs teardown/supersede */
         if (cf_rel) cf_rel(cmd);
-        LOG_INFO(LOG_MODULE, "session cmd '%s' shipped rc=%d", type, rc);
+        LOG_INFO(LOG_MODULE, "session cmd '%s' shipped gen=%u rc=%d", type, (unsigned)gen, rc);
     }
     if (cf_rel) cf_rel(params);
     return rc;
@@ -1618,13 +1830,13 @@ static int alt_ship(const char *type, void *params)
  * same command must be repeated with its UUID.  CarKit accepts NSNumber here
  * (it reads boolValue), so set_i64 produces the same boolean semantics without
  * depending on CFLite's private boolean singleton symbols. */
-static int alt_send_cluster_night_mode(int night, const char *reason)
+static int alt_send_cluster_night_mode(uint32_t gen, int night, const char *reason)
 {
     void *p = alt_params_new(1);
     int rc;
     if (!p) return -6728;
     set_i64(p, "nightMode", night ? 1 : 0);
-    rc = alt_ship("setNightMode", p);
+    rc = alt_ship(gen, "setNightMode", p);
     LOG_INFO(LOG_MODULE,
              "alt: cluster nightMode=%d uuid=%s reason=%s rc=%d",
              night ? 1 : 0, CLUSTER_DISPLAY_UUID,
@@ -1658,7 +1870,7 @@ int AirPlayReceiverSessionSetNightMode(void *session, int night,
     g_alt_night_mode = night ? 1 : 0;
     rc = real(session, night, completion, context);
     if (env_on("ALTSCREEN_HANDLE_ALT"))
-        clusterRc = alt_send_cluster_night_mode(g_alt_night_mode, "dio-update");
+        clusterRc = alt_send_cluster_night_mode(0, g_alt_night_mode, "dio-update");   /* dio → current session */
 
     LOG_INFO(LOG_MODULE,
              "AirPlayReceiverSessionSetNightMode night=%d stock_rc=%d cluster_rc=%d",
@@ -1699,7 +1911,7 @@ static void zoom_on_cmd(uint16_t type, uint8_t flags,
         void *p = alt_params_new(1); /* params.uuid = cluster display UUID */
         if (!p) { rc = -6728; break; }
         set_i64(p, "zoomDirection", direction);
-        rc = alt_ship("changeMapZoomLevel", p);
+        rc = alt_ship(0, "changeMapZoomLevel", p);   /* Java MFL roller → current session */
         if (rc != 0) break;
     }
     LOG_INFO(LOG_MODULE,
@@ -1715,7 +1927,7 @@ static void zoom_on_cmd(uint16_t type, uint8_t flags,
  * cluster UUID explicitly. This request intentionally has no completion callback:
  * recovery is proven by observing an actual type-5 NAL, and retaining a callback
  * for every retry would grow stock 210's asynchronous response queue. */
-static int alt_request_cluster_idr(const char *reason)
+static int alt_request_cluster_idr(uint32_t gen, const char *reason)
 {
     void *p = alt_params_new(1);
     void *cmd = NULL;
@@ -1727,7 +1939,7 @@ static int alt_request_cluster_idr(const char *reason)
         set_str(cmd, "type", "forceKeyFrame");
         pk = cf_str(0, "params", CFENC_UTF8);
         if (pk) cf_dictset(cmd, pk, p);
-        rc = alt_send_locked(cmd, NULL, NULL);
+        rc = alt_send_locked_for_gen(gen, cmd, NULL, NULL);
     }
     if (pk && cf_rel) cf_rel(pk);
     if (cmd && cf_rel) cf_rel(cmd);
@@ -1741,10 +1953,10 @@ static int alt_request_cluster_idr(const char *reason)
 /* Apply the latest Audi fullscreen/duo state once the 111 stream is live. The
  * Java command may have arrived before g_alt_session existed; g_alt_zone_mode
  * intentionally preserves it across that window. */
-static void alt_kick_viewarea(void)
+static void alt_kick_viewarea(uint32_t gen)
 {
     int mode = g_alt_zone_mode;
-    int rc = zone_send_mode(mode, 0, NULL);
+    int rc = zone_send_mode(gen, mode, 0, NULL);
     LOG_INFO(LOG_MODULE, "alt: initial updateViewArea mode=%s rc=%d",
              mode == ALT_ZONE_DUO ? "duo" : "fullscreen", rc);
 }
@@ -1771,22 +1983,22 @@ static const char *alt_cluster_url_for_mode(int mode)
     return url;
 }
 
-static int alt_show_ui_for_mode(int mode, const char *reason)
+static int alt_show_ui_for_mode(uint32_t gen, int mode, const char *reason)
 {
     const char *url = alt_cluster_url_for_mode(mode);
     void *p = alt_params_new(1);                        /* uuid = cluster display */
     if (!p) return -6728;
     set_str(p, "url", url);
-    int rc = alt_ship("showUI", p);
+    int rc = alt_ship(gen, "showUI", p);
     LOG_INFO(LOG_MODULE, "alt: showUI mode=%s reason=%s uuid=%s url=%s rc=%d",
              mode == ALT_ZONE_DUO ? "duo-map-only" : "fullscreen-cards",
              reason ? reason : "?", CLUSTER_DISPLAY_UUID, url, rc);
     return rc;
 }
 
-static void alt_kick_show_ui(void)
+static void alt_kick_show_ui(uint32_t gen)
 {
-    alt_show_ui_for_mode(g_alt_zone_mode, "first-IDR");
+    alt_show_ui_for_mode(gen, g_alt_zone_mode, "first-IDR");
 }
 
 static void appearance_on_cmd(uint16_t type, uint8_t flags, const uint8_t *payload, uint32_t len, void *ctx)
@@ -1797,7 +2009,7 @@ static void appearance_on_cmd(uint16_t type, uint8_t flags, const uint8_t *paylo
     if (!p) return;
     set_i64(p, "appearanceMode",    (uint8_t)payload[1]);
     set_i64(p, "appearanceSetting", (uint8_t)payload[2]);
-    alt_ship(payload[0] ? "mapAppearanceUpdate" : "uiAppearanceUpdate", p);
+    alt_ship(0, payload[0] ? "mapAppearanceUpdate" : "uiAppearanceUpdate", p);   /* Java → current session */
 }
 
 static void uictx_on_cmd(uint16_t type, uint8_t flags, const uint8_t *payload, uint32_t len, void *ctx)
@@ -1811,7 +2023,7 @@ static void uictx_on_cmd(uint16_t type, uint8_t flags, const uint8_t *payload, u
     memcpy(url, payload, n);
     url[n] = 0;
     set_str(p, "url", url);
-    alt_ship("changeUIContext", p);
+    alt_ship(0, "changeUIContext", p);   /* Java → current session */
 }
 
 void altscreen_init(void)

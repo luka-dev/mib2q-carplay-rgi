@@ -31,18 +31,34 @@ void altav_init(const char *host, int port);
 void altav_set_enabled(int on);
 int  altav_is_enabled(void);
 
+/* Generation ownership.  The single global renderer transport (g_fd/g_cfg) belongs to
+ * exactly ONE receiver generation at a time, so an old stream-111 receiver on a fast
+ * reconnect cannot corrupt or close the new receiver's connection.  altav_claim() makes
+ * `gen` the owner only when it is newer than the current owner (dropping the previous
+ * owner's connection + cached config) and returns 1 when accepted, 0 when a newer owner
+ * already won.  Every forward/config/shutdown checks ownership INSIDE g_lock (no TOCTOU).
+ * A non-owner call is a no-op.  altav_is_owner() lets a receiver notice it has been
+ * superseded and exit. */
+int  altav_claim(uint32_t gen);
+int  altav_is_owner(uint32_t gen);
+
 /* Forward one already-Annex-B buffer verbatim (used for the SPS/PPS header). */
-void altav_forward_frame(const uint8_t *annexb, uint32_t len);
+void altav_forward_frame(uint32_t gen, const uint8_t *annexb, uint32_t len);
 /* Cache Annex-B SPS/PPS; replayed before the first frame on every connection. */
-void altav_set_config(const uint8_t *annexb_cfg, uint32_t len);
+void altav_set_config(uint32_t gen, const uint8_t *annexb_cfg, uint32_t len);
 
 /* Convert one AVCC frame (lengthSize-byte BE prefixes from the AirPlay screen
  * opcode-0 body) to Annex-B and forward it. */
 /* Returns 1 when this frame had to open a fresh renderer connection, 0 on the
- * existing connection, and -1 when it could not be delivered.  A reconnect
- * means the renderer created a fresh AVC decoder and therefore needs a new IDR. */
-int altav_forward_avcc_frame(const uint8_t *avcc, uint32_t len, uint8_t length_size);
+ * existing connection, and -1 when it could not be delivered (or `gen` is not the
+ * owner).  A reconnect means the renderer created a fresh AVC decoder and therefore
+ * needs a new IDR. */
+int altav_forward_avcc_frame(uint32_t gen, const uint8_t *avcc, uint32_t len, uint8_t length_size);
 
+/* Close the transport ONLY if `gen` is the current owner (a superseded receiver's exit
+ * must not close the new owner's connection). */
+void altav_shutdown_if_owner(uint32_t gen);
+/* Unconditional close — process-exit path only (altscreen_shutdown). */
 void altav_shutdown(void);
 
 #endif /* CARPLAY_ALTSCREEN_AV_H */

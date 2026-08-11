@@ -30,9 +30,18 @@ start_renderer()
     SR_NAME=$1
     SR_REASON=$2
     if cp_renderer_running "$SR_NAME"; then
-        [ "$SR_REASON" = initial ] &&
-            echo "[supervisor] $SR_NAME already running - leave untouched" >> "$WLOG"
-        return 0
+        # An adopted renderer from a previous generation may be alive but wedged
+        # (see cp_renderer_healthy). On initial adoption, require its port to be
+        # LISTENing; if not, kill the wedged PID and fall through to a fresh start.
+        # The 2s monitor loop keeps the cheap PID-only check (it restarts exits).
+        if [ "$SR_REASON" = initial ] && ! cp_renderer_healthy "$SR_NAME"; then
+            echo "[supervisor] $SR_NAME alive but not serving - restarting" >> "$WLOG"
+            cp_kill_renderer "$SR_NAME"
+        else
+            [ "$SR_REASON" = initial ] &&
+                echo "[supervisor] $SR_NAME already running - leave untouched" >> "$WLOG"
+            return 0
+        fi
     fi
 
     echo "[supervisor] starting $SR_NAME reason=$SR_REASON" >> "$WLOG"
@@ -73,11 +82,11 @@ monitor_renderers()
     while [ -d "/proc/$MR_DIO_PID" ]; do
         if [ -e "$STOP_FILE" ]; then
             echo "[supervisor] monitor observed cleanup request" >> "$WLOG"
-            kill -TERM "$MR_DIO_PID" 2>/dev/null
+            kill -15 "$MR_DIO_PID" 2>/dev/null
             sleep 3
             if [ -d "/proc/$MR_DIO_PID" ]; then
                 echo "[supervisor] monitor SIGKILL stuck dio_manager pid=$MR_DIO_PID" >> "$WLOG"
-                kill -KILL "$MR_DIO_PID" 2>/dev/null
+                kill -9 "$MR_DIO_PID" 2>/dev/null
             fi
             break
         fi

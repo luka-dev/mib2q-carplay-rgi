@@ -1,4 +1,4 @@
-# iAP2 RGI injection: link-layer hang fix
+# iAP2 RGI injection: preserve the stock LocationInfo carrier
 
 ## Observed failure
 
@@ -8,15 +8,14 @@ first `0x5201`.  During that interval RTSP streams 110/111 continued, but route 
 media metadata did not advance.  A physical reconnect created a new `dio_manager`/iAP2 link; its
 `0x5200` received `0x5201` about 1.19 seconds later and both RGI and metadata resumed.
 
-## Root cause in the old hook
+## Failed semantic-carrier experiment
 
-The old `NmeTransport::Send` interpose copied the FF5A prefix of the last outgoing packet and called
-the real transport a second time with a hook-built `0x5200`.  Recomputing length/checksum did not
-allocate a new iAP2 link sequence number: `ctrl`, `seq`, `ack`, and `session` were replayed verbatim.
-The first injection ran recursively from the callback observing the current `0xFFFB`; later 1 Hz
-retries necessarily reused an already-transmitted prefix.  A receiver may drop the duplicate, and a
-second writer operating outside the stock link state machine can disturb acknowledgements for other
-services on the same iAP2 link.
+Commit `687596f` tried to avoid copied FF5A sequence state by replacing the next outgoing
+LocationInfo (`0xFFFB`) Encode result with `0x5200`. On-unit logs disproved the assumption that this
+carrier is expendable during startup: Identify and authentication completed, the replacement fired,
+iOS commonly replied with `STOP_LOCATION`, and AirPlay never reached control SETUP across repeated
+generations. Known-good logs preserve LocationInfo, inject `0x5200` as an extra packet, and reach
+control SETUP roughly one second after authentication.
 
 Relevant stock symbols (MU1316 NME image/database):
 
@@ -24,8 +23,15 @@ Relevant stock symbols (MU1316 NME image/database):
 - `NmeIAP2Message::AddParam` at `0x11fde8`;
 - `NmeIAP2Message::Encode` at `0x11ffe8`;
 - `NmeTransport::Send` at `0x186e60`;
-- `ICinemoIAP_SendIAP2` at `0x9b748` in `libNmeSDK.so` (vtable dispatch at `+0x3c`; no live handle is
-  exposed at the dio/lib boundary).
+- dio's PLT call to `CinemoCreateIAP` at `dio_manager:0x17d330`, with the out-parameter block at
+  `wrapper+0x9c` and the resulting `ICinemoIAP*` at block offset `+0x00`;
+- `CinemoCreateIAP` at `libNmeSDK.so:0x5848c`;
+- `ICinemoIAP_AddRef` / `Release` / `SendIAP2` at
+  `libNmeSDK.so:0x9b60c` / `0x9b620` / `0x9b748`;
+- the concrete ICinemoIAP `SendIAP2` vtable target at `libNmeSDK.so:0x58914`;
+- `IAPPassthru::SendIAP2` at `libNmeVfs.so:0x49d60`, which transports the semantic payload with
+  explicit `SESSION` and `SIZE` fields; its receiving dispatch is
+  `libNmeVfs.so:0x60554` and the local vtable forwarder is `0x64800`.
 
 `Encode` produces the `0x4040` session message in `NmeArray<unsigned char>`; the downstream stock
 path wraps that array in FF5A and owns link sequence/ack/checksums.  The already-proven Identify
@@ -33,25 +39,32 @@ patch uses this same exported Encode boundary.
 
 ## Fix
 
-`hook/framework/hook_framework.c` now queues only a validated semantic `0x4040` message.  At the next
-outgoing LocationInfo (`0xFFFB`) `NmeIAP2Message::Encode` result, it replaces the encoded array with
-the queued RGI request and updates the array length/capacity.  It never creates or resends an FF5A
-header.  LocationInfo is periodic and expendable; only the one carrier frame is replaced.
+`hook/framework/hook_framework.c` preserves every stock semantic message.  The hook interposes the
+real dio-to-libNmeSDK `CinemoCreateIAP` factory, retains the returned live `ICinemoIAP` with
+`AddRef`, and captures only the active link-session byte from a successfully-sent stock FF5A packet.
+After stock LocationInfo has completed its own `NmeTransport::Send`, the RGI trigger submits the
+additional semantic `0x5200` through `ICinemoIAP_SendIAP2(iap, session, frame, frameLen)`.
 
-The final `NmeTransport::Send` interpose is observation-only.  The log proving the safe path is:
+This is not a raw retransmit: Cinemo's stock stack builds a new FF5A packet and owns its current
+sequence, acknowledgement and checksums.  The injection path takes a transient `AddRef` while sending,
+so a concurrent factory replacement/shutdown cannot free the object.  Identify-start invalidates the
+captured link-session context; no copied prefix or dio-owned transport pointer survives a reconnect.
+
+The log proving the restored path is:
 
 ```
-Semantic iAP2 send: replaced carrier 0xFFFB with 0x5200 ... stock owns FF5A seq/ack
+Captured stock ICinemoIAP=... via CinemoCreateIAP
+Injected semantic frame via stock SendIAP2 session=... len=...
 ```
 
-Incoming `0x1D00` (Identify start) also clears queued data and all per-session RGI retry/response
+Incoming `0x1D00` (Identify start) also clears captured transport state and all per-session RGI retry/response
 state so a fast reconnect in a surviving `dio_manager` cannot inherit `got_520x` or a pending request
 from the old link.
 
 ## On-unit acceptance
 
-1. Exactly one semantic-send line must precede the first `0x5201`.
+1. Both proof lines above must appear, followed by control SETUP without suppressing stock LocationInfo.
 2. The first `0x5201` should arrive within the normal one-to-two-second window.
 3. Song metadata/cover art must continue changing while RGI is active.
 4. A fast unplug/replug must produce a new Identify-start reset and a new successful `0x5200`.
-5. There must be no old `Injected frame with prefix` / `Injected raw frame` log line.
+5. There must be no `Injected frame with prefix` or `Semantic iAP2 send: replaced carrier` log line.

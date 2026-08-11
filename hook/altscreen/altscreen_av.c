@@ -20,7 +20,10 @@ DEFINE_LOG_MODULE(altscreen_av);
 #define MSG_NOSIGNAL 0
 #endif
 
-#define AV_SEND_STALL_LIMIT_MS 8000L
+/* Bounded per-record send stall.  Lowered from 8000: a receiver stuck here holds g_lock,
+ * and a teardown/reap that joins it inherits this as latency on the RTSP path.  The
+ * renderer's OMX still starts within this window; a genuinely dead link now fails ~1 s. */
+#define AV_SEND_STALL_LIMIT_MS 1000L
 
 static char            g_host[64] = ALTAV_DEFAULT_HOST;
 static int             g_port     = ALTAV_DEFAULT_PORT;
@@ -28,6 +31,9 @@ static int             g_enabled  = 1;
 static int             g_fd       = -1;
 static int             g_need_config = 0;
 static pthread_mutex_t g_lock     = PTHREAD_MUTEX_INITIALIZER;
+/* The generation that currently owns the single renderer transport (g_fd/g_cfg).
+ * Guarded by g_lock; 0 = unclaimed. Only the owner may connect/config/forward/close. */
+static uint32_t        g_owner_gen = 0;
 /* Cached Annex-B SPS/PPS.  The renderer marks the FIRST message on each connection as
  * OMX_BUFFERFLAG_CODECCONFIG, so on every (re)connect we must resend the config BEFORE any frame —
  * otherwise a reconnect mid-stream sends a video frame first, the decoder takes it as config and
@@ -49,6 +55,42 @@ void altav_init(const char *host, int port)
 
 void altav_set_enabled(int on) { g_enabled = on ? 1 : 0; }
 int  altav_is_enabled(void)    { return g_enabled; }
+
+/* Make `gen` the transport owner only when it is newer than the committed owner.
+ * An accepted claim drops the previous owner's connection and cached config so the
+ * new owner starts clean (its first frame reconnects + replays SPS/PPS). */
+int altav_claim(uint32_t gen)
+{
+    int accepted = 0;
+    pthread_mutex_lock(&g_lock);
+    /* MONOTONIC: only a strictly newer generation may take ownership.  A slower older
+     * SETUP that runs altav_claim() AFTER a newer one must not reclaim the transport
+     * (that would make the newer receiver see itself superseded and exit).  g_alt_gen_counter
+     * is monotonic under alt_lock, so a later SETUP always has a higher gen; no wrap over a
+     * dio lifetime. */
+    if (gen > g_owner_gen) {
+        if (g_fd >= 0) { close(g_fd); g_fd = -1; }
+        g_need_config = 0;
+        g_cfg_len = 0;
+        g_owner_gen = gen;
+        accepted = 1;
+        LOG_INFO(LOG_MODULE, "transport owner -> gen=%u", (unsigned)gen);
+    } else {
+        LOG_INFO(LOG_MODULE, "transport claim gen=%u ignored (owner=%u newer)",
+                 (unsigned)gen, (unsigned)g_owner_gen);
+    }
+    pthread_mutex_unlock(&g_lock);
+    return accepted;
+}
+
+int altav_is_owner(uint32_t gen)
+{
+    int owner;
+    pthread_mutex_lock(&g_lock);
+    owner = (g_owner_gen == gen);
+    pthread_mutex_unlock(&g_lock);
+    return owner;
+}
 
 /* caller holds g_lock */
 static void av_connect_locked(void)
@@ -144,25 +186,28 @@ static int av_send_locked(const uint8_t *buf, uint32_t len)
     return opened;
 }
 
-void altav_forward_frame(const uint8_t *avcc_data, uint32_t len)
+void altav_forward_frame(uint32_t gen, const uint8_t *avcc_data, uint32_t len)
 {
     if (!g_enabled || !avcc_data || len == 0) return;
     pthread_mutex_lock(&g_lock);
-    (void)av_send_locked(avcc_data, len);
+    if (g_owner_gen == gen)
+        (void)av_send_locked(avcc_data, len);
     pthread_mutex_unlock(&g_lock);
 }
 
 /* Cache the Annex-B SPS/PPS.  Do not create the renderer connection merely for
  * config: the first IDR-safe access unit opens it and atomically replays config
  * first.  A mid-stream codec change is still sent to an existing decoder. */
-void altav_set_config(const uint8_t *annexb_cfg, uint32_t len)
+void altav_set_config(uint32_t gen, const uint8_t *annexb_cfg, uint32_t len)
 {
     if (!g_enabled || !annexb_cfg || len == 0 || len > sizeof(g_cfg)) return;
     pthread_mutex_lock(&g_lock);
-    memcpy(g_cfg, annexb_cfg, len);
-    g_cfg_len = len;
-    if (g_fd >= 0)
-        (void)av_send_locked(g_cfg, g_cfg_len);
+    if (g_owner_gen == gen) {                 /* a superseded receiver must not replace the new config */
+        memcpy(g_cfg, annexb_cfg, len);
+        g_cfg_len = len;
+        if (g_fd >= 0)
+            (void)av_send_locked(g_cfg, g_cfg_len);
+    }
     pthread_mutex_unlock(&g_lock);
 }
 
@@ -194,7 +239,7 @@ static uint32_t avcc_to_annexb(const uint8_t *in, uint32_t inlen, uint8_t ls,
     return o;
 }
 
-int altav_forward_avcc_frame(const uint8_t *avcc, uint32_t len, uint8_t ls)
+int altav_forward_avcc_frame(uint32_t gen, const uint8_t *avcc, uint32_t len, uint8_t ls)
 {
     int result = -1;
     if (!g_enabled || !avcc || len == 0) return -1;
@@ -205,11 +250,24 @@ int altav_forward_avcc_frame(const uint8_t *avcc, uint32_t len, uint8_t ls)
     uint32_t n = avcc_to_annexb(avcc, len, ls, ab, need);     /* pass 2: fill */
     if (n) {
         pthread_mutex_lock(&g_lock);
-        result = av_send_locked(ab, n);
+        /* Ownership checked HERE under g_lock, not before the call: a supersede between
+         * a caller-side check and this send would otherwise write into the new owner's fd. */
+        if (g_owner_gen == gen)
+            result = av_send_locked(ab, n);
         pthread_mutex_unlock(&g_lock);
     }
     free(ab);
     return result;
+}
+
+void altav_shutdown_if_owner(uint32_t gen)
+{
+    pthread_mutex_lock(&g_lock);
+    if (g_owner_gen == gen) {
+        if (g_fd >= 0) { close(g_fd); g_fd = -1; }
+        g_need_config = 0;
+    }
+    pthread_mutex_unlock(&g_lock);
 }
 
 void altav_shutdown(void)

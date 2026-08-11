@@ -146,7 +146,4 @@ typedef struct {
 /* Parse link header (9 bytes: FF 5A len[2] ctrl seq ack sess cksum) */
 bool iap2_parse_link_header(const uint8_t* buf, size_t len, iap2_link_header_t* hdr);
 
-/* Update link header length and recalculate checksum */
-void iap2_patch_link_header(uint8_t* buf, size_t prefix_len, size_t new_total_len);
-
 #endif /* CARPLAY_IAP2_PROTOCOL_H */

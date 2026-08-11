@@ -24,7 +24,8 @@ Install these executable files under `/mnt/app/root/hooks`:
 - `flag_atlas.rgba`
 
 Do not overwrite `/etc/scripts/carplay_cleanup.sh`: the custom cleanup calls that
-stock script after stopping the renderers.
+stock script only for Audi's mdnsd/PPS cleanup. Renderer teardown belongs to the
+generation-aware owner monitor in `carplay_startup.sh`.
 
 Lifecycle semantics:
 
@@ -40,9 +41,12 @@ Lifecycle semantics:
 - when no replacement generation appears, the old monitor SIGTERMs only the
   renderer PID snapshot captured when its dio exited, then force-kills only those
   same residual PIDs. It never re-scans and kills a new renderer;
-- external cleanup creates `/tmp/carplay_supervisor.stop` first, so the monitor cannot
-  race by respawning a renderer, then performs the same renderer cleanup and finally
-  invokes Audi's `/etc/scripts/carplay_cleanup.sh` for the stock mdnsd/PPS cleanup.
+- external cleanup is identity-less (smartphone_integrator does not tell it which dio
+  generation it runs for), so it does NOT create the global stop marker and does NOT
+  stop renderers by the shared PID files — either could damage an already-started
+  replacement generation. Renderer teardown is left to the owner-monitor above, which
+  holds this generation's dio PID and renderer PID snapshot. Cleanup only invokes
+  Audi's `/etc/scripts/carplay_cleanup.sh` for the stock mdnsd/PPS cleanup.
 
 Verify on the unit in `/tmp/carplay_wrapper.log`: `already running - leave untouched`
 or `starting ...`, followed by either `superseded ... leave new renderers untouched`
@@ -62,7 +66,11 @@ firmware:
 
 - `/bin/sh` is QNX PD KSH 5.2.14 (`VERSION=650-4423`) and supports the functions,
   traps, command substitution, background jobs, `read`, and `exec` used here;
-- `kill` is also a shell builtin and accepts QNX forms `-TERM` and `-KILL`;
+- `kill` is a shell builtin; the scripts use **numeric** signals (`kill -15`, `kill -9`)
+  because that form is accepted by every kill implementation. Stock scripts kill by name
+  via `slay -f -s SIGTERM -m name` and, in one spot, `kill -sigkill <pid>`; we kill by the
+  captured PID snapshot instead (slay-by-name would also hit the replacement generation),
+  so only the signal token had to be a universally-accepted numeric one;
 - `pidin ar` supplies a finite process snapshot; no blocking `/proc/*/cmdline`
   walk and no GNU process utilities are used. It is only the compatibility
   fallback for adopting pre-existing renderers; normal checks use recorded PIDs;
