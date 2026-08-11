@@ -3,6 +3,7 @@
  */
 
 #include "hook_framework.h"
+#include "../coverart/coverart_hook.h"
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -105,11 +106,35 @@ static void resolve_functions(void) {
 }
 
 void hook_set_transport_recv_sink(hook_transport_recv_sink_t sink) {
+    ensure_fw_lock_init();
+    pthread_mutex_lock(&g_fw.lock);
     g_fw.transport_recv_sink = sink;
+    pthread_mutex_unlock(&g_fw.lock);
 }
 
 void hook_set_transport_recv_reset(hook_transport_recv_reset_t reset) {
+    ensure_fw_lock_init();
+    pthread_mutex_lock(&g_fw.lock);
     g_fw.transport_recv_reset = reset;
+    pthread_mutex_unlock(&g_fw.lock);
+}
+
+static hook_transport_recv_sink_t hook_get_transport_recv_sink(void) {
+    hook_transport_recv_sink_t sink;
+    ensure_fw_lock_init();
+    pthread_mutex_lock(&g_fw.lock);
+    sink = g_fw.transport_recv_sink;
+    pthread_mutex_unlock(&g_fw.lock);
+    return sink;
+}
+
+static void hook_call_transport_recv_reset(void) {
+    hook_transport_recv_reset_t reset;
+    ensure_fw_lock_init();
+    pthread_mutex_lock(&g_fw.lock);
+    reset = g_fw.transport_recv_reset;
+    pthread_mutex_unlock(&g_fw.lock);
+    if (reset) reset();
 }
 
 static bool is_known_52xx_msg(uint16_t msgid) {
@@ -227,7 +252,7 @@ static void handle_state_messages(uint16_t msgid) {
             clear_injection_context();
             /* New session boundary — let the transport-recv sink (cover art)
              * drop any half-reassembled stream from a prior session. */
-            if (g_fw.transport_recv_reset) g_fw.transport_recv_reset();
+            hook_call_transport_recv_reset();
             notify_state(HOOK_EVENT_IDENTIFY_START, NULL);
             break;
         case IAP2_MSG_IDENTIFY_ACCEPTED:
@@ -355,6 +380,12 @@ hook_result_t hook_framework_init(void) {
     }
     pthread_mutex_unlock(&g_fw.lock);
 
+    /* Register the cover-art receive sink from the same lazy boundary as the
+     * rest of the framework.  coverart_runtime_init() is pthread_once-backed,
+     * so concurrent first Decode/Encode/Send/Recv calls all wait until the
+     * sink is completely installed.  No thread is created here. */
+    coverart_runtime_init();
+
     /* Start/retry the TCP bus only in dio_manager.  Safe here: init is lazy on
      * a real Cinemo call, not in the LD_PRELOAD constructor. */
     framework_try_start_bus();
@@ -368,6 +399,11 @@ hook_result_t hook_framework_init(void) {
 void hook_framework_shutdown(void) {
     void* iap_to_release = NULL;
     int iap_owner_pid = 0;
+
+    /* Stop accepting cover-art callbacks and join its optional worker before
+     * the bus and framework state disappear.  A final in-flight decode may
+     * still publish EVT_COVERART while the bus is alive. */
+    coverart_runtime_shutdown();
 
     ensure_fw_lock_init();
     pthread_mutex_lock(&g_fw.lock);
@@ -742,7 +778,7 @@ int _ZN12NmeTransport4RecvER8NmeArrayIhE(void* self, void* out_array) {
     }
     int ret = g_fw.real_transport_recv(self, out_array);
 
-    hook_transport_recv_sink_t sink = g_fw.transport_recv_sink;
+    hook_transport_recv_sink_t sink = hook_get_transport_recv_sink();
     uint8_t* data = NULL;
     unsigned int len = 0;
     bool have = (out_array && parse_array_bytes(out_array, &data, &len));

@@ -12,6 +12,7 @@
 #include "../framework/common.h"
 #include "../framework/logging.h"
 #include "../framework/bus.h"
+#include "coverart_hook.h"
 
 /* stb_image for JPEG/PNG decoding.
  * STBI_NO_THREAD_LOCALS: stb defaults its globals (g_failure_reason, load flags)
@@ -114,7 +115,10 @@ typedef struct {
  * hook_set_transport_recv_sink → coverart_on_transport_recv).  There is
  * exactly one Cinemo transport carrying the iAP2 link, so one stream suffices
  * — no fd-keyed pool, no global mutex, no libc interposition. */
-static StreamState g_recv_stream;
+static StreamState g_recv_stream = {
+    .target_session = -1,
+    .lock = PTHREAD_MUTEX_INITIALIZER
+};
 
 /* Module state */
 static struct {
@@ -698,9 +702,19 @@ static pthread_mutex_t worker_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t worker_cond = PTHREAD_COND_INITIALIZER;
 static uint8_t* pending_data = NULL;     /* owned by queue */
 static size_t pending_len = 0;
-static volatile int worker_started = 0;
-static volatile int worker_shutdown = 0;
-static volatile int worker_busy = 0;     /* 1 while inside maybe_handle_image */
+static int worker_started = 0;           /* guarded by worker_mutex */
+static int worker_shutdown = 0;          /* guarded by worker_mutex */
+
+/* Receive-callback quiescence.  Unregistering a function pointer alone is not
+ * enough: a concurrent NmeTransport::Recv may already have copied the old
+ * pointer.  The enter/leave count lets shutdown wait before freeing stream
+ * buffers. */
+static pthread_once_t coverart_init_once = PTHREAD_ONCE_INIT;
+static pthread_mutex_t runtime_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t runtime_cond = PTHREAD_COND_INITIALIZER;
+static int runtime_initialized = 0;      /* guarded by runtime_mutex */
+static int runtime_shutting_down = 0;    /* guarded by runtime_mutex */
+static int runtime_callbacks = 0;        /* guarded by runtime_mutex */
 
 static void* coverart_worker_main(void* arg) {
     (void)arg;
@@ -720,48 +734,47 @@ static void* coverart_worker_main(void* arg) {
         len = pending_len;
         pending_data = NULL;
         pending_len = 0;
-        /* Mark busy WHILE holding worker_mutex, before unlocking — closes the
-         * dequeue→busy window so coverart_fini (which takes worker_mutex) never
-         * observes idle while a decode is actually about to run. */
-        if (data) worker_busy = 1;
         pthread_mutex_unlock(&worker_mutex);
 
         if (data) {
             (void)maybe_handle_image(data, len);
             free(data);
-            worker_busy = 0;
         }
     }
     return NULL;
 }
 
-static void ensure_worker_started(void) {
-    pthread_mutex_lock(&worker_mutex);
-    if (!worker_started) {
-        if (pthread_create(&worker_thread, NULL, coverart_worker_main, NULL) == 0) {
-            pthread_detach(worker_thread);
-            worker_started = 1;
-            LOG_INFO(LOG_MODULE, "Async cover-art worker started");
-        } else {
-            LOG_ERROR(LOG_MODULE, "Failed to start cover-art worker (will fall back to sync decode)");
-        }
-    }
-    pthread_mutex_unlock(&worker_mutex);
-}
-
 /* Hand off image bytes to the worker.  Takes ownership of `data` —
- * worker frees it.  If the worker isn't running, processes inline so
- * we never lose an image. */
+ * worker frees it.  The worker is created lazily for the first complete
+ * image.  Never fall back to inline decode: this function is called from the
+ * stock NmeIAP2Link receive thread and blocking it can wedge the session. */
 static void enqueue_image_async(uint8_t* data, size_t len) {
-    if (!worker_started) {
-        /* Worker not running — fall back to inline processing so cover
-         * art still appears even in degraded mode. */
-        (void)maybe_handle_image(data, len);
+    int create_rc = 0;
+    int started_now = 0;
+
+    if (!data) return;
+
+    pthread_mutex_lock(&worker_mutex);
+    if (worker_shutdown) {
+        pthread_mutex_unlock(&worker_mutex);
         free(data);
         return;
     }
 
-    pthread_mutex_lock(&worker_mutex);
+    if (!worker_started) {
+        create_rc = pthread_create(&worker_thread, NULL, coverart_worker_main, NULL);
+        if (create_rc != 0) {
+            pthread_mutex_unlock(&worker_mutex);
+            LOG_ERROR(LOG_MODULE,
+                      "Failed to start lazy cover-art worker rc=%d; dropping image to protect iAP2 receive thread",
+                      create_rc);
+            free(data);
+            return;
+        }
+        worker_started = 1;
+        started_now = 1;
+    }
+
     if (pending_data) {
         /* Coalesce — drop the older pending image, latest wins. */
         free(pending_data);
@@ -770,6 +783,9 @@ static void enqueue_image_async(uint8_t* data, size_t len) {
     pending_len = len;
     pthread_cond_signal(&worker_cond);
     pthread_mutex_unlock(&worker_mutex);
+
+    if (started_now)
+        LOG_INFO(LOG_MODULE, "Lazy joinable cover-art worker started");
 }
 
 /* FF 5A reassembly core — MUST be called with st->lock held.  Appends `buf`
@@ -946,11 +962,31 @@ static void handle_recv_stream(const uint8_t* buf, size_t len) {
     }
 }
 
+static int coverart_callback_enter(void) {
+    int allowed;
+
+    pthread_mutex_lock(&runtime_mutex);
+    allowed = runtime_initialized && !runtime_shutting_down;
+    if (allowed) runtime_callbacks++;
+    pthread_mutex_unlock(&runtime_mutex);
+    return allowed;
+}
+
+static void coverart_callback_leave(void) {
+    pthread_mutex_lock(&runtime_mutex);
+    if (runtime_callbacks > 0) runtime_callbacks--;
+    if (runtime_shutting_down && runtime_callbacks == 0)
+        pthread_cond_broadcast(&runtime_cond);
+    pthread_mutex_unlock(&runtime_mutex);
+}
+
 /* Sink registered with the framework (hook_set_transport_recv_sink).  Called
  * for every NmeTransport::Recv delivery.  (The framework logs the first
  * delivery's ret + leading bytes for on-unit seam validation.) */
 static void coverart_on_transport_recv(const uint8_t* data, unsigned int len) {
+    if (!coverart_callback_enter()) return;
     handle_recv_stream(data, (size_t)len);
+    coverart_callback_leave();
 }
 
 /* Session-boundary reset (hook_set_transport_recv_reset).  Framework calls
@@ -960,35 +996,33 @@ static void coverart_on_transport_recv(const uint8_t* data, unsigned int len) {
  * belt-and-suspenders for any future single-process multi-session transport.
  * Buffers are kept (lengths reset) to avoid realloc churn. */
 static void coverart_reset_recv_stream(void) {
+    if (!coverart_callback_enter()) return;
     pthread_mutex_lock(&g_recv_stream.lock);
     g_recv_stream.raw_len = 0;
     g_recv_stream.jpeg_len = 0;
     g_recv_stream.target_session = -1;
     g_recv_stream.is_carplay_stream = 0;
     pthread_mutex_unlock(&g_recv_stream.lock);
+    coverart_callback_leave();
 }
 
-/* Resolve write() once at load time (used for the PNG output file). */
+/* Resolve write() once from the lazy runtime init (used for PNG output). */
 static void coverart_resolve_syms(void) {
     if (!real_write) real_write = (WriteFunc)dlsym(RTLD_NEXT, "write");
 }
 
-__attribute__((constructor))
-static void coverart_init(void) {
-    /* Only dio_manager processes CarPlay transport → only it needs the cover-art tap +
-     * decode worker.  Helper processes that inherit LD_PRELOAD would otherwise each spawn
-     * their own worker thread (and could race on /var/app/icab/tmp/.../coverart.png).
-     * Gate exactly like bus_init so those helpers load the hook inert. */
-    if (!hook_process_is_dio_manager()) {
-        return;
-    }
+static void coverart_runtime_init_once(void) {
+    /* Only dio_manager owns the Cinemo CarPlay transport.  Inherited helper
+     * processes remain completely inert: no sink, no symbol resolution and,
+     * most importantly, no pthread. */
+    if (!hook_process_is_dio_manager()) return;
+
     coverart_resolve_syms();
 
-    /* The single reassembler stream fed by the NmeTransport::Recv seam.
-     * target_session must start at -1 (0 would falsely lock session 0). */
-    memset(&g_recv_stream, 0, sizeof(g_recv_stream));
-    g_recv_stream.target_session = -1;
-    pthread_mutex_init(&g_recv_stream.lock, NULL);
+    pthread_mutex_lock(&runtime_mutex);
+    runtime_shutting_down = 0;
+    runtime_initialized = 1;
+    pthread_mutex_unlock(&runtime_mutex);
 
     /* Register the narrow transport-receive tap — cover art's ONLY input.
      * No libc read/recv/open/close interposition.  The reset fires on each
@@ -996,21 +1030,46 @@ static void coverart_init(void) {
     hook_set_transport_recv_sink(coverart_on_transport_recv);
     hook_set_transport_recv_reset(coverart_reset_recv_stream);
 
-    /* Spin up the async decode worker eagerly — by the time the first
-     * complete JPEG arrives, the worker is ready to take it.  Avoids
-     * lazy-start overhead landing on the first cover-art event. */
-    ensure_worker_started();
-    LOG_INFO(LOG_MODULE, "Cover art hook initialized (NmeTransport::Recv seam)");
+    LOG_INFO(LOG_MODULE,
+             "Cover art runtime initialized lazily (NmeTransport::Recv seam; worker deferred)");
 }
 
-__attribute__((destructor))
-static void coverart_fini(void) {
+void coverart_runtime_init(void) {
+    pthread_once(&coverart_init_once, coverart_runtime_init_once);
+}
+
+void coverart_runtime_shutdown(void) {
+    pthread_t thread_to_join;
+    int join_worker = 0;
+    uint8_t* raw_buf;
+    uint8_t* jpeg_buf;
+
     /* Unregister the framework taps FIRST so no new Recv delivery enters
-     * cover art (and reaches g_recv_stream) while we tear it down. */
+     * cover art.  A caller that already copied the old function pointer is
+     * covered by runtime_callbacks below. */
     hook_set_transport_recv_sink(NULL);
     hook_set_transport_recv_reset(NULL);
 
-    /* Tell the worker to exit so it doesn't outlive the library. */
+    pthread_mutex_lock(&runtime_mutex);
+    if (!runtime_initialized) {
+        pthread_mutex_unlock(&runtime_mutex);
+        return;
+    }
+    if (runtime_shutting_down) {
+        while (runtime_initialized)
+            pthread_cond_wait(&runtime_cond, &runtime_mutex);
+        pthread_mutex_unlock(&runtime_mutex);
+        return;
+    }
+    runtime_shutting_down = 1;
+    while (runtime_callbacks != 0)
+        pthread_cond_wait(&runtime_cond, &runtime_mutex);
+    pthread_mutex_unlock(&runtime_mutex);
+
+    /* Tell the worker to exit and drop an unprocessed coalesced image.  A
+     * decode already in progress is allowed to finish and publish while the
+     * framework bus is still alive; pthread_join then gives a hard lifetime
+     * boundary before this shared object's text can be unloaded. */
     pthread_mutex_lock(&worker_mutex);
     worker_shutdown = 1;
     if (pending_data) {
@@ -1019,20 +1078,45 @@ static void coverart_fini(void) {
         pending_len = 0;
     }
     pthread_cond_signal(&worker_cond);
+    if (worker_started) {
+        thread_to_join = worker_thread;
+        join_worker = 1;
+    }
     pthread_mutex_unlock(&worker_mutex);
 
-    /* Best-effort wait if worker is mid-decode — up to 200 ms.  Avoids
-     * the rare SIGSEGV where dlclose pulls the library text out from
-     * under stbi_load_from_memory.  Detached worker means we can't
-     * pthread_join, so poll worker_busy with a short backoff. */
-    for (int i = 0; i < 20 && worker_busy; i++) {
-        struct timespec ts = { 0, 10L * 1000L * 1000L };  /* 10 ms */
-        nanosleep(&ts, NULL);
+    if (join_worker) {
+        int join_rc = pthread_join(thread_to_join, NULL);
+        if (join_rc != 0)
+            LOG_ERROR(LOG_MODULE, "cover-art worker pthread_join failed rc=%d", join_rc);
     }
 
-    free(g_recv_stream.raw_buf);
-    free(g_recv_stream.jpeg_buf);
+    pthread_mutex_lock(&worker_mutex);
+    worker_started = 0;
+    pthread_mutex_unlock(&worker_mutex);
+
+    /* No callback or worker can touch the reassembler now.  Detach its
+     * buffers under the stream lock, then free outside the critical section. */
+    pthread_mutex_lock(&g_recv_stream.lock);
+    raw_buf = g_recv_stream.raw_buf;
+    jpeg_buf = g_recv_stream.jpeg_buf;
+    g_recv_stream.raw_buf = NULL;
+    g_recv_stream.raw_len = 0;
+    g_recv_stream.raw_cap = 0;
+    g_recv_stream.jpeg_buf = NULL;
+    g_recv_stream.jpeg_len = 0;
+    g_recv_stream.jpeg_cap = 0;
+    g_recv_stream.target_session = -1;
+    g_recv_stream.is_carplay_stream = 0;
+    pthread_mutex_unlock(&g_recv_stream.lock);
+
+    free(raw_buf);
+    free(jpeg_buf);
 
     LOG_INFO(LOG_MODULE, "Cleanup: recv_bytes seam, images=%d",
              g_coverart.images_found);
+
+    pthread_mutex_lock(&runtime_mutex);
+    runtime_initialized = 0;
+    pthread_cond_broadcast(&runtime_cond);
+    pthread_mutex_unlock(&runtime_mutex);
 }
