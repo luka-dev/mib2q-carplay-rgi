@@ -22,6 +22,7 @@ typedef char GLchar;
 #define GL_COMPILE_STATUS 0x8b81
 #define GL_LINK_STATUS 0x8b82
 #define GL_TEXTURE0 0x84c0
+#define GL_TEXTURE1 0x84c1
 #define GL_TEXTURE_2D 0x0de1
 #define GL_TEXTURE_MIN_FILTER 0x2801
 #define GL_TEXTURE_MAG_FILTER 0x2800
@@ -69,6 +70,8 @@ void glDisable(GLenum cap);
 void glUseProgram(GLuint program);
 void glActiveTexture(GLenum texture);
 void glUniform1i(GLint location, GLint value);
+void glUniform1f(GLint location, GLfloat v0);
+void glUniform2f(GLint location, GLfloat v0, GLfloat v1);
 void glEnableVertexAttribArray(GLuint index);
 void glVertexAttribPointer(GLuint index, GLint size, GLenum type,
                            GLboolean normalized, GLsizei stride,

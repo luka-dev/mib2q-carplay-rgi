@@ -6,3 +6,5 @@
 /build/java/
 /build/libcarplay_hook.so
 /local_logs/
+/log/
+tools/loader_preview/loader_preview

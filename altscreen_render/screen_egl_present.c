@@ -21,7 +21,8 @@
  * tiled bytes without YUV->RGBA conversion, producing green/black output.
  */
 #include "screen_egl_present.h"
-#include "carplay_loader.h"
+#include "carplay_loader.h"   /* CARPLAY_LOADER_FRAME_INTERVAL_NS (frame cadence) */
+#include "loader_assets.h"    /* baked Apple logo + @LuKa_dev signature (raw RGBA) */
 #include "cluster_surface.h"
 
 #include <screen/screen.h>
@@ -85,11 +86,11 @@ struct screen_egl_present {
 
     GLuint loader_program;
     GLint loader_attr_pos;
-    GLint loader_attr_uv;
-    GLint loader_uniform_tex;
-    GLuint loader_texture;
-    uint8_t *loader_pixels;
-    size_t loader_stride;
+    GLint loader_u_ires, loader_u_itime;
+    GLint loader_u_center, loader_u_scale;
+    GLint loader_u_logo, loader_u_sig;
+    GLint loader_u_sigc, loader_u_sigh, loader_u_siga;
+    GLuint logo_texture, sig_texture;
     pthread_t loader_thread;
     int loader_thread_started;
     int loader_stop;
@@ -187,22 +188,70 @@ fail:
     return -1;
 }
 
+/* Apple-boot loader: pure fragment shader (per-pixel AA, true gradients).
+ * Black field + Apple logo + HIG activity indicator below it + @LuKa_dev
+ * signature in the corner. Composition math mirrors tools/loader_preview. */
 static int ep_make_loader_program(screen_egl_present_t *p) {
     static const char *vertex_source =
         "attribute vec2 a_pos;\n"
-        "attribute vec2 a_uv;\n"
-        "varying vec2 v_uv;\n"
-        "void main() { gl_Position=vec4(a_pos,0.0,1.0); v_uv=a_uv; }\n";
+        "void main() { gl_Position=vec4(a_pos,0.0,1.0); }\n";
     static const char *fragment_source =
-        "precision mediump float;\n"
-        "uniform sampler2D u_tex;\n"
-        "varying vec2 v_uv;\n"
-        "void main() { gl_FragColor=texture2D(u_tex,v_uv); }\n";
+        "precision highp float;\n"
+        "uniform vec2  iRes;\n"
+        "uniform float iTime;\n"
+        "uniform vec2  uCenter;\n"
+        "uniform float uScale;\n"
+        "uniform sampler2D uLogo;\n"
+        "uniform sampler2D uSig;\n"
+        "uniform vec2  uSigC;\n"
+        "uniform vec2  uSigH;\n"
+        "uniform float uSigA;\n"
+        "const float TAU = 6.28318531;\n"
+        "float sdSeg(vec2 p, vec2 a, vec2 b, float rad){\n"
+        "  vec2 pa=p-a, ba=b-a;\n"
+        "  float h=clamp(dot(pa,ba)/dot(ba,ba),0.0,1.0);\n"
+        "  return length(pa-ba*h)-rad;\n"
+        "}\n"
+        "float spinner(vec2 q, float t, float R1, float R2, float wth){\n"
+        "  float aa = 1.4/iRes.y;\n"
+        "  float phase = t/1.1;\n"
+        "  float lum = 0.0;\n"
+        "  for(int k=0;k<12;k++){\n"
+        "    float a = TAU*float(k)/12.0;\n"
+        "    vec2 dir = vec2(sin(a), cos(a));\n"
+        "    float d = sdSeg(q, dir*R1, dir*R2, wth);\n"
+        "    float seg = smoothstep(aa, -aa, d);\n"
+        "    float age = fract(phase - float(k)/12.0);\n"
+        "    lum = max(lum, seg*(0.16 + 0.84*age));\n"
+        "  }\n"
+        "  return lum;\n"
+        "}\n"
+        "void main(){\n"
+        "  float t = iTime;\n"
+        "  vec2 p = (gl_FragCoord.xy - 0.5*iRes)/iRes.y;\n"
+        "  vec2 q = (p - uCenter)/uScale;\n"
+        "  vec3 col = vec3(0.0);\n"
+        "  vec2 lc = vec2(0.0, 0.1125); float lh = 0.115;\n"
+        "  vec2 lp = (q - lc)/lh;\n"
+        "  if(abs(lp.x) < 1.0 && abs(lp.y) < 1.0){\n"
+        "    vec2 uv = vec2(lp.x*0.5 + 0.5, 0.5 - lp.y*0.5);\n"
+        "    col = mix(col, vec3(0.97,0.98,1.0), texture2D(uLogo, uv).a);\n"
+        "  }\n"
+        "  float lum = spinner(q - vec2(0.0,-0.1475), t, 0.048, 0.080, 0.0075);\n"
+        "  col += vec3(0.93,0.95,1.0) * lum;\n"
+        "  col *= smoothstep(0.0, 0.45, t);\n"
+        "  vec2 sp = (p - uSigC)/uSigH;\n"
+        "  if(abs(sp.x) < 1.0 && abs(sp.y) < 1.0){\n"
+        "    vec2 uv = vec2(sp.x*0.5 + 0.5, 0.5 - sp.y*0.5);\n"
+        "    col = mix(col, vec3(1.0), texture2D(uSig, uv).a * uSigA);\n"
+        "  }\n"
+        "  gl_FragColor = vec4(col, 1.0);\n"
+        "}\n";
     GLuint vs = 0, fs = 0;
     GLint ok = 0;
 
     vs = ep_compile_shader(GL_VERTEX_SHADER, vertex_source, "loader vertex");
-    fs = ep_compile_shader(GL_FRAGMENT_SHADER, fragment_source, "loader RGBA");
+    fs = ep_compile_shader(GL_FRAGMENT_SHADER, fragment_source, "loader SDF");
     if (!vs || !fs) goto fail;
     p->loader_program = glCreateProgram();
     if (!p->loader_program) goto fail;
@@ -224,12 +273,22 @@ static int ep_make_loader_program(screen_egl_present_t *p) {
         goto fail;
     }
     p->loader_attr_pos = glGetAttribLocation(p->loader_program, "a_pos");
-    p->loader_attr_uv = glGetAttribLocation(p->loader_program, "a_uv");
-    p->loader_uniform_tex = glGetUniformLocation(p->loader_program, "u_tex");
+    p->loader_u_ires   = glGetUniformLocation(p->loader_program, "iRes");
+    p->loader_u_itime  = glGetUniformLocation(p->loader_program, "iTime");
+    p->loader_u_center = glGetUniformLocation(p->loader_program, "uCenter");
+    p->loader_u_scale  = glGetUniformLocation(p->loader_program, "uScale");
+    p->loader_u_logo   = glGetUniformLocation(p->loader_program, "uLogo");
+    p->loader_u_sig    = glGetUniformLocation(p->loader_program, "uSig");
+    p->loader_u_sigc   = glGetUniformLocation(p->loader_program, "uSigC");
+    p->loader_u_sigh   = glGetUniformLocation(p->loader_program, "uSigH");
+    p->loader_u_siga   = glGetUniformLocation(p->loader_program, "uSigA");
     glDeleteShader(vs);
     glDeleteShader(fs);
-    return (p->loader_attr_pos >= 0 && p->loader_attr_uv >= 0 &&
-            p->loader_uniform_tex >= 0) ? 0 : -1;
+    return (p->loader_attr_pos >= 0 && p->loader_u_ires >= 0 &&
+            p->loader_u_itime >= 0 && p->loader_u_center >= 0 &&
+            p->loader_u_scale >= 0 && p->loader_u_logo >= 0 &&
+            p->loader_u_sig >= 0 && p->loader_u_sigc >= 0 &&
+            p->loader_u_sigh >= 0 && p->loader_u_siga >= 0) ? 0 : -1;
 
 fail:
     if (vs) glDeleteShader(vs);
@@ -237,33 +296,27 @@ fail:
     return -1;
 }
 
-static int ep_make_loader_texture(screen_egl_present_t *p) {
-    size_t bytes;
-    GLenum gl_error;
-
-    if ((size_t)p->width > ((size_t)-1) / 4U) return -1;
-    p->loader_stride = (size_t)p->width * 4U;
-    if ((size_t)p->height > ((size_t)-1) / p->loader_stride) return -1;
-    bytes = p->loader_stride * (size_t)p->height;
-    p->loader_pixels = (uint8_t *)malloc(bytes);
-    if (!p->loader_pixels) return -1;
-
-    glGenTextures(1, &p->loader_texture);
-    if (!p->loader_texture) return -1;
-    glBindTexture(GL_TEXTURE_2D, p->loader_texture);
+static GLuint ep_upload_rgba(const unsigned char *data, int w, int h) {
+    GLuint tex = 0;
+    glGenTextures(1, &tex);
+    if (!tex) return 0;
+    glBindTexture(GL_TEXTURE_2D, tex);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, p->width, p->height, 0,
-                 GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-    gl_error = glGetError();
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0,
+                 GL_RGBA, GL_UNSIGNED_BYTE, data);
     glBindTexture(GL_TEXTURE_2D, 0);
-    if (gl_error != GL_NO_ERROR) {
-        fprintf(stderr,
-                "altscreen_render[egl]: loader texture allocation FAILED gl=0x%x\n",
-                (unsigned)gl_error);
+    return tex;
+}
+
+static int ep_make_loader_textures(screen_egl_present_t *p) {
+    p->logo_texture = ep_upload_rgba(LOADER_LOGO_RGBA, LOADER_LOGO_W, LOADER_LOGO_H);
+    p->sig_texture  = ep_upload_rgba(LOADER_SIG_RGBA,  LOADER_SIG_W,  LOADER_SIG_H);
+    if (!p->logo_texture || !p->sig_texture || glGetError() != GL_NO_ERROR) {
+        fprintf(stderr, "altscreen_render[egl]: loader art upload FAILED\n");
         return -1;
     }
     return 0;
@@ -483,7 +536,7 @@ static int ep_init_egl(screen_egl_present_t *p) {
         return -1;
     }
     if (ep_make_program(p) != 0 || ep_make_loader_program(p) != 0 ||
-        ep_make_loader_texture(p) != 0) return -1;
+        ep_make_loader_textures(p) != 0) return -1;
     eglSwapInterval(p->egl_display, 1);
     fprintf(stderr,
             "altscreen_render[egl]: live GPU=%s GL=%s EGL=%d.%d pixmap-image+external-image OK\n",
@@ -675,19 +728,26 @@ static int ep_loader_frame(screen_egl_present_t *p, uint64_t elapsed_ms) {
         -1.0f, -1.0f,  1.0f, -1.0f,
         -1.0f,  1.0f,  1.0f,  1.0f
     };
-    /* CPU RGBA row zero is the visual top. OpenGL uploads it at v=0, so map
-     * v=0 to the top vertices. */
-    static const GLfloat texcoords[] = {
-         0.0f, 1.0f,  1.0f, 1.0f,
-         0.0f, 0.0f,  1.0f, 0.0f
-    };
     GLenum gl_error = GL_NO_ERROR;
     int ok = -1;
+    /* fullscreen safe area + lift: the lower half of grid row 5 (y>=406) is
+     * reserved for important cluster info, so pull the whole group up. */
+    float sx = 270.0f, sy = 90.0f, sw = 900.0f, sh = 362.0f;
+    float y_occ = 406.0f, gap = 12.0f;
+    float t = (float)elapsed_ms / 1000.0f;
+    float W = (float)p->width, H = (float)p->height, aspect = W / H;
+    float ub = sy + sh;
+    float cx_p, cy_p, sigAspect, ph, pw, pad, rcx, rcy, rhw, rhh, sf;
 
-    if (!p || !p->loader_pixels || !p->loader_texture) return -1;
-    if (carplay_loader_render_rgba8888(p->loader_pixels, p->width, p->height,
-                                       p->loader_stride, elapsed_ms) != 0)
-        return -1;
+    if (!p || !p->logo_texture || !p->sig_texture) return -1;
+    if (ub > y_occ - gap) ub = y_occ - gap;
+    cx_p = ((sx + sw*0.5f)/W - 0.5f) * aspect;
+    cy_p = 0.5f - ((sy + ub)*0.5f)/H;
+    sigAspect = (float)LOADER_SIG_W / (float)LOADER_SIG_H;
+    ph = sh*0.055f; pw = ph*sigAspect; pad = sh*0.045f;
+    rcx = sx + pad + pw*0.5f; rcy = (ub - pad) - ph*0.5f;   /* top-down px */
+    rhw = pw*0.5f; rhh = ph*0.5f;
+    sf = (t - 0.3f)/0.6f; sf = sf < 0.0f ? 0.0f : (sf > 1.0f ? 1.0f : sf);
 
     pthread_mutex_lock(&p->gl_lock);
     if (p->loader_stop) {
@@ -697,20 +757,25 @@ static int ep_loader_frame(screen_egl_present_t *p, uint64_t elapsed_ms) {
     if (!eglMakeCurrent(p->egl_display, p->egl_surface, p->egl_surface,
                         p->egl_context)) goto out;
 
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, p->loader_texture);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, p->width, p->height,
-                    GL_RGBA, GL_UNSIGNED_BYTE, p->loader_pixels);
     glViewport(0, 0, p->width, p->height);
     glDisable(GL_BLEND);
     glUseProgram(p->loader_program);
-    glUniform1i(p->loader_uniform_tex, 0);
+    glUniform2f(p->loader_u_ires, W, H);
+    glUniform1f(p->loader_u_itime, t);
+    glUniform2f(p->loader_u_center, cx_p, cy_p);
+    glUniform1f(p->loader_u_scale, 1.0f);
+    glUniform2f(p->loader_u_sigc, (rcx/W - 0.5f)*aspect, 0.5f - rcy/H);
+    glUniform2f(p->loader_u_sigh, (rhw/W)*aspect, rhh/H);
+    glUniform1f(p->loader_u_siga, 0.55f*sf);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, p->logo_texture);
+    glUniform1i(p->loader_u_logo, 0);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, p->sig_texture);
+    glUniform1i(p->loader_u_sig, 1);
     glEnableVertexAttribArray((GLuint)p->loader_attr_pos);
-    glEnableVertexAttribArray((GLuint)p->loader_attr_uv);
     glVertexAttribPointer((GLuint)p->loader_attr_pos, 2, GL_FLOAT, GL_FALSE, 0,
                           positions);
-    glVertexAttribPointer((GLuint)p->loader_attr_uv, 2, GL_FLOAT, GL_FALSE, 0,
-                          texcoords);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     gl_error = glGetError();
     if (gl_error != GL_NO_ERROR ||
@@ -984,7 +1049,8 @@ void screen_egl_present_destroy(screen_egl_present_t *p) {
                        p->egl_context);
     }
     ep_release_sources(p);
-    if (p->loader_texture) glDeleteTextures(1, &p->loader_texture);
+    if (p->logo_texture) glDeleteTextures(1, &p->logo_texture);
+    if (p->sig_texture) glDeleteTextures(1, &p->sig_texture);
     if (p->loader_program) glDeleteProgram(p->loader_program);
     if (p->program) glDeleteProgram(p->program);
     if (p->egl_display != EGL_NO_DISPLAY) {
@@ -998,7 +1064,6 @@ void screen_egl_present_destroy(screen_egl_present_t *p) {
     }
     if (p->gl_lock_initialized) pthread_mutex_unlock(&p->gl_lock);
 
-    free(p->loader_pixels);
     if (p->rgba_surface) cluster_surface_destroy(p->rgba_surface);
     if (p->gl_lock_initialized) pthread_mutex_destroy(&p->gl_lock);
     free(p);
