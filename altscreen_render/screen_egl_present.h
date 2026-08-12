@@ -6,7 +6,8 @@ typedef struct screen_egl_present screen_egl_present_t;
 /* Create the managed RGBA8888 cluster output immediately, before an RTSP/OMX
  * session exists.  The returned presenter owns a local 30-fps startup loader;
  * decoder-native Qualcomm 32m sources are attached later. */
-screen_egl_present_t *screen_egl_present_create_output(int width, int height);
+screen_egl_present_t *screen_egl_present_create_output(int width, int height,
+                                                       volatile int *view_area_mode);
 
 /* Allocate decoder-native Qualcomm 32m Screen WINDOW buffers and import them as
  * external EGLImages without replacing the existing RGBA output window. */

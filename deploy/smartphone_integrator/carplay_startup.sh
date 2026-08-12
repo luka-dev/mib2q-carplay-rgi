@@ -10,7 +10,8 @@
 #   2. fork a renderer monitor, then EXEC dio_manager with the hook and altScreen
 #      gates (exec is mandatory: smartphone_integrator tracks this exact PID);
 #   3. while that PID lives, the monitor restarts a renderer if it exits;
-#   4. when dio exits (or cleanup requests stop), the monitor stops both renderers.
+#   4. ordinary dio exit/replacement leaves both persistent renderers alive;
+#      only an explicit supervisor stop tears them down.
 
 DIODIR=/mnt/app/eso/bin/apps
 H=/mnt/app/root/hooks
@@ -31,8 +32,10 @@ start_renderer()
     SR_REASON=$2
     if cp_renderer_running "$SR_NAME"; then
         # An adopted renderer from a previous generation may be alive but wedged
-        # (see cp_renderer_healthy). On initial adoption, require its port to be
-        # LISTENing; if not, kill the wedged PID and fall through to a fresh start.
+        # (see cp_renderer_healthy). On initial adoption, probe only a readiness
+        # signal the renderer actually owns: :19831 for altscreen_render; a live
+        # PID for maneuver_render, which is a CLIENT of Java's optional :19800.
+        # If that renderer-specific check fails, replace the wedged PID.
         # The 2s monitor loop keeps the cheap PID-only check (it restarts exits).
         if [ "$SR_REASON" = initial ] && ! cp_renderer_healthy "$SR_NAME"; then
             echo "[supervisor] $SR_NAME alive but not serving - restarting" >> "$WLOG"
@@ -44,6 +47,10 @@ start_renderer()
         fi
     fi
 
+    if [ "$SR_REASON" = restart ]; then
+        echo "[supervisor] $SR_NAME crash backoff 5s before restart" >> "$WLOG"
+        sleep 5
+    fi
     echo "[supervisor] starting $SR_NAME reason=$SR_REASON" >> "$WLOG"
     case "$SR_NAME" in
         maneuver_render)
@@ -78,10 +85,12 @@ trap 'request_stop' 1 2 15
 monitor_renderers()
 {
     MR_DIO_PID=$1
+    MR_EXPLICIT_STOP=0
     echo "[supervisor] renderer monitor watching dio pid=$MR_DIO_PID" >> "$WLOG"
     while [ -d "/proc/$MR_DIO_PID" ]; do
         if [ -e "$STOP_FILE" ]; then
             echo "[supervisor] monitor observed cleanup request" >> "$WLOG"
+            MR_EXPLICIT_STOP=1
             kill -15 "$MR_DIO_PID" 2>/dev/null
             sleep 3
             if [ -d "/proc/$MR_DIO_PID" ]; then
@@ -95,27 +104,15 @@ monitor_renderers()
         sleep 2
     done
 
-    # Capture this generation's renderer PIDs before a replacement wrapper can
-    # start anything. If cleanup is ultimately required, only these exact PIDs
-    # may be signalled; never re-enumerate and hit the replacement generation.
-    MR_MANEUVER_PIDS=`cp_renderer_pids maneuver_render`
-    MR_ALTSCREEN_PIDS=`cp_renderer_pids altscreen_render`
-
-    # smartphone_integrator normally launches the replacement generation almost
-    # immediately. Give its wrapper time to publish the new owner before deciding
-    # to clean up shared renderers. Without this grace period, the old monitor can
-    # win the race, decide it still owns cleanup, and tear down the new stream.
-    sleep 2
-    MR_OWNER=
-    if [ -r "$OWNER_FILE" ]; then
-        read MR_OWNER < "$OWNER_FILE"
-    fi
-    if [ "$MR_OWNER" = "$MR_DIO_PID" ]; then
-        echo "[supervisor] dio_manager pid=$MR_DIO_PID gone - stopping renderers" >> "$WLOG"
+    if [ "$MR_EXPLICIT_STOP" = 1 ]; then
+        # Snapshot once so an explicit stop cannot hit a later replacement.
+        MR_MANEUVER_PIDS=`cp_renderer_pids maneuver_render`
+        MR_ALTSCREEN_PIDS=`cp_renderer_pids altscreen_render`
+        echo "[supervisor] explicit stop - stopping renderer snapshot" >> "$WLOG"
         cp_stop_renderer_snapshot "$WLOG" \
             "$MR_MANEUVER_PIDS" "$MR_ALTSCREEN_PIDS"
     else
-        echo "[supervisor] dio_manager pid=$MR_DIO_PID gone but superseded by pid=$MR_OWNER - leave new renderers untouched" >> "$WLOG"
+        echo "[supervisor] dio_manager pid=$MR_DIO_PID gone - persistent renderers left alive" >> "$WLOG"
     fi
 }
 
@@ -126,8 +123,13 @@ echo "===== carplay_startup.sh run pid=$$ ppid=$PPID =====" >> "$WLOG"
 # One finite process snapshot at most. All following checks use the recorded PID
 # and /proc directly, keeping expensive pidin enumeration out of dio startup.
 cp_seed_renderer_pid_files
-start_renderer maneuver_render initial
+# Initialise one Qualcomm EGL client at a time. altscreen_render binds :19831
+# only after its early EGL/Screen output exists; one second is enough on MU1316
+# to avoid the dual eglInitialize stampede without consuming the 10 s SI startup
+# budget. Both processes remain persistent after this generation of dio exits.
 start_renderer altscreen_render initial
+sleep 1
+start_renderer maneuver_render initial
 
 cd "$DIODIR" 2>/dev/null || {
     echo "[supervisor] cannot cd to $DIODIR" >> "$WLOG"

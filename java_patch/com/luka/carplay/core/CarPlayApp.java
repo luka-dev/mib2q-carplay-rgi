@@ -205,6 +205,10 @@ public final class CarPlayApp {
         }
     }
 
+    /** Grace window to absorb a transient TMDevice deactivate bounce (Mode A) before
+     * committing a full teardown; a re-activation within it drops the stale edge. */
+    private static final long DEACTIVATE_DEBOUNCE_MS = 400L;
+
     private static void lifecycleLoop() {
         while (true) {
             int generation;
@@ -218,6 +222,27 @@ public final class CarPlayApp {
                 generation = lifecycleGeneration;
                 wantActive = active;
                 context = desiredContext;
+
+                /* Debounce a deactivate edge (Mode A): a rough reconnect/replug bounces the
+                 * stock TMDevice ACTIVATING<->INVALID<->ACTIVE, publishing a transient inactive
+                 * edge superseded by an active one ~ms later.  Applying it at once does a full
+                 * BAPBridge takeover teardown that then has to re-init — and if a dio reconnect
+                 * lands mid-teardown the session collapses.  Wait briefly; if a newer edge
+                 * arrives (the re-activation), drop this stale inactive edge and coalesce to it. */
+                if (!wantActive) {
+                    long deadline = System.currentTimeMillis() + DEACTIVATE_DEBOUNCE_MS;
+                    while (lifecycleGeneration == generation) {
+                        long remaining = deadline - System.currentTimeMillis();
+                        if (remaining <= 0L) break;
+                        try { lock.wait(remaining); }
+                        catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
+                    }
+                    if (lifecycleGeneration != generation) {
+                        lifecycleAppliedGeneration = generation;   /* stale inactive edge — drop it */
+                        lock.notifyAll();
+                        continue;                                  /* re-snapshot the newer edge */
+                    }
+                }
             }
             try {
                 applyLifecycle(generation, wantActive, context);

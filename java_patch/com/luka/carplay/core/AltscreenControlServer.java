@@ -17,6 +17,7 @@ package com.luka.carplay.core;
 import com.luka.carplay.framework.Log;
 
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -27,14 +28,41 @@ final class AltscreenControlServer {
     private static final int    PORT = 19832;            /* must match altscreen protocol.h ALTCTL_PORT */
     private static final int    EVT_VIDEO_ON  = 0x81;
     private static final int    EVT_VIDEO_OFF = 0x82;
+    private static final int    CMD_VIEW_AREA = 0x01;
 
     private static final Object LOCK = new Object();
     private static Thread   thread;
     private static volatile boolean run;
     private static Socket client;
     private static int clientGeneration;
+    private static int viewAreaMode;                /* 0=fullscreen, 1=smallscreen */
 
     private AltscreenControlServer() {}
+
+    /** Cache and publish the current Audi View-button state. */
+    static void setViewAreaMode(int mode) {
+        synchronized (LOCK) {
+            viewAreaMode = mode == 1 ? 1 : 0;
+            sendViewAreaLocked("view-change");
+        }
+    }
+
+    /* All writes use LOCK, so the initial state and a simultaneous View press
+     * cannot interleave their fixed four-byte packets. */
+    private static void sendViewAreaLocked(String reason) {
+        if (client == null) return;
+        try {
+            byte[] pkt = new byte[] { (byte)CMD_VIEW_AREA, (byte)viewAreaMode, 0, 0 };
+            OutputStream out = client.getOutputStream();
+            out.write(pkt);
+            out.flush();
+            Log.i(TAG, "-> VIEW_AREA " + (viewAreaMode == 1 ? "smallscreen" : "fullscreen")
+                + " reason=" + reason);
+        } catch (Throwable t) {
+            Log.d(TAG, "VIEW_AREA send failed: " + t);
+            try { client.close(); } catch (Throwable ignored) { }
+        }
+    }
 
     static void start() {
         synchronized (LOCK) {
@@ -61,6 +89,7 @@ final class AltscreenControlServer {
                         if (client != null) try { client.close(); } catch (Throwable t) { }
                         client = c;
                         generation = ++clientGeneration;
+                        sendViewAreaLocked("renderer-connect");
                     }
                     Log.i(TAG, "altscreen_render connected generation=" + generation);
                     Thread reader = new Thread(new Runnable() {

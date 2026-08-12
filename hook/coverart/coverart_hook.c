@@ -40,6 +40,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <stdarg.h>
+#include <time.h>
 
 DEFINE_LOG_MODULE(COVERART);
 
@@ -68,6 +69,8 @@ DEFINE_LOG_MODULE(COVERART);
 
 /* Output size */
 #define OUTPUT_WIDTH  256
+#define COVERART_CALLBACK_DRAIN_MS 500
+#define COVERART_WORKER_DRAIN_MS 1000
 #define OUTPUT_HEIGHT 256
 
 /* Packet parser constants */
@@ -704,6 +707,7 @@ static uint8_t* pending_data = NULL;     /* owned by queue */
 static size_t pending_len = 0;
 static int worker_started = 0;           /* guarded by worker_mutex */
 static int worker_shutdown = 0;          /* guarded by worker_mutex */
+static int worker_exited = 0;            /* guarded by worker_mutex */
 
 /* Receive-callback quiescence.  Unregistering a function pointer alone is not
  * enough: a concurrent NmeTransport::Recv may already have copied the old
@@ -715,6 +719,16 @@ static pthread_cond_t runtime_cond = PTHREAD_COND_INITIALIZER;
 static int runtime_initialized = 0;      /* guarded by runtime_mutex */
 static int runtime_shutting_down = 0;    /* guarded by runtime_mutex */
 static int runtime_callbacks = 0;        /* guarded by runtime_mutex */
+
+static void coverart_deadline_after_ms(struct timespec* deadline, long ms) {
+    clock_gettime(CLOCK_REALTIME, deadline);
+    deadline->tv_sec += ms / 1000L;
+    deadline->tv_nsec += (ms % 1000L) * 1000000L;
+    if (deadline->tv_nsec >= 1000000000L) {
+        deadline->tv_sec++;
+        deadline->tv_nsec -= 1000000000L;
+    }
+}
 
 static void* coverart_worker_main(void* arg) {
     (void)arg;
@@ -741,6 +755,10 @@ static void* coverart_worker_main(void* arg) {
             free(data);
         }
     }
+    pthread_mutex_lock(&worker_mutex);
+    worker_exited = 1;
+    pthread_cond_broadcast(&worker_cond);
+    pthread_mutex_unlock(&worker_mutex);
     return NULL;
 }
 
@@ -762,6 +780,7 @@ static void enqueue_image_async(uint8_t* data, size_t len) {
     }
 
     if (!worker_started) {
+        worker_exited = 0;
         create_rc = pthread_create(&worker_thread, NULL, coverart_worker_main, NULL);
         if (create_rc != 0) {
             pthread_mutex_unlock(&worker_mutex);
@@ -1041,6 +1060,10 @@ void coverart_runtime_init(void) {
 void coverart_runtime_shutdown(void) {
     pthread_t thread_to_join;
     int join_worker = 0;
+    int callbacks_quiesced = 0;
+    int worker_quiesced = 1;
+    int wait_rc = 0;
+    struct timespec deadline;
     uint8_t* raw_buf;
     uint8_t* jpeg_buf;
 
@@ -1056,15 +1079,21 @@ void coverart_runtime_shutdown(void) {
         return;
     }
     if (runtime_shutting_down) {
-        while (runtime_initialized)
-            pthread_cond_wait(&runtime_cond, &runtime_mutex);
         pthread_mutex_unlock(&runtime_mutex);
         return;
     }
     runtime_shutting_down = 1;
-    while (runtime_callbacks != 0)
-        pthread_cond_wait(&runtime_cond, &runtime_mutex);
+    coverart_deadline_after_ms(&deadline, COVERART_CALLBACK_DRAIN_MS);
+    while (runtime_callbacks != 0 && wait_rc != ETIMEDOUT)
+        wait_rc = pthread_cond_timedwait(&runtime_cond, &runtime_mutex,
+                                         &deadline);
+    callbacks_quiesced = (runtime_callbacks == 0);
     pthread_mutex_unlock(&runtime_mutex);
+
+    if (!callbacks_quiesced)
+        LOG_WARN(LOG_MODULE,
+                 "cover-art callback drain exceeded %d ms; preserving buffers for process-exit reclaim",
+                 COVERART_CALLBACK_DRAIN_MS);
 
     /* Tell the worker to exit and drop an unprocessed coalesced image.  A
      * decode already in progress is allowed to finish and publish while the
@@ -1080,7 +1109,14 @@ void coverart_runtime_shutdown(void) {
     pthread_cond_signal(&worker_cond);
     if (worker_started) {
         thread_to_join = worker_thread;
-        join_worker = 1;
+        worker_quiesced = worker_exited;
+        wait_rc = 0;
+        coverart_deadline_after_ms(&deadline, COVERART_WORKER_DRAIN_MS);
+        while (!worker_exited && wait_rc != ETIMEDOUT)
+            wait_rc = pthread_cond_timedwait(&worker_cond, &worker_mutex,
+                                             &deadline);
+        worker_quiesced = worker_exited;
+        join_worker = worker_quiesced;
     }
     pthread_mutex_unlock(&worker_mutex);
 
@@ -1088,14 +1124,19 @@ void coverart_runtime_shutdown(void) {
         int join_rc = pthread_join(thread_to_join, NULL);
         if (join_rc != 0)
             LOG_ERROR(LOG_MODULE, "cover-art worker pthread_join failed rc=%d", join_rc);
+    } else if (!worker_quiesced) {
+        LOG_WARN(LOG_MODULE,
+                 "cover-art worker drain exceeded %d ms; process-exit cleanup will reclaim it",
+                 COVERART_WORKER_DRAIN_MS);
     }
 
     pthread_mutex_lock(&worker_mutex);
-    worker_started = 0;
+    if (worker_quiesced) worker_started = 0;
     pthread_mutex_unlock(&worker_mutex);
 
     /* No callback or worker can touch the reassembler now.  Detach its
      * buffers under the stream lock, then free outside the critical section. */
+    if (!callbacks_quiesced) goto finish;
     pthread_mutex_lock(&g_recv_stream.lock);
     raw_buf = g_recv_stream.raw_buf;
     jpeg_buf = g_recv_stream.jpeg_buf;
@@ -1115,6 +1156,7 @@ void coverart_runtime_shutdown(void) {
     LOG_INFO(LOG_MODULE, "Cleanup: recv_bytes seam, images=%d",
              g_coverart.images_found);
 
+finish:
     pthread_mutex_lock(&runtime_mutex);
     runtime_initialized = 0;
     pthread_cond_broadcast(&runtime_cond);

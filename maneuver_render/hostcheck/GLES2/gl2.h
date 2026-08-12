@@ -8,4 +8,5 @@ typedef unsigned char GLubyte;
 #define GL_EXTENSIONS 0x1F03
 
 const GLubyte *glGetString(unsigned int name);
+void glFinish(void);
 #endif

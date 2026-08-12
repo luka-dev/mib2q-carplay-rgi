@@ -1110,14 +1110,14 @@ public class BAPBridge {
             /* 4. Persistent CarPlay lower bar (FctID 19).
              * Phase 0 is always the cached real arrow/road text. In fullscreen
              * phase 1 replaces it with ETA + remaining time + remaining distance;
-             * duo keeps the real position because its phase switch belongs to
+             * smallscreen keeps the real position because its phase switch belongs to
              * the dedicated FctID 22 field. */
             int lowerBarDirty = RouteGuidance.State.DIRTY_CURRENT_ROAD
                 | RouteGuidance.State.DIRTY_MANEUVER_TEXT
                 | RouteGuidance.State.DIRTY_MANEUVER_LIST
                 | RouteGuidance.State.DIRTY_MANEUVER_ICON
                 | RouteGuidance.State.DIRTY_MANEUVER_COUNT;
-            if (!com.luka.carplay.core.AltScreenModule.isDuoViewArea() && infoPhase != 0) {
+            if (!com.luka.carplay.core.AltScreenModule.isSmallScreenViewArea() && infoPhase != 0) {
                 lowerBarDirty |= RouteGuidance.State.DIRTY_DIST_DEST
                     | RouteGuidance.State.DIRTY_TIME_REMAINING
                     | RouteGuidance.State.DIRTY_ETA;
@@ -1288,7 +1288,7 @@ public class BAPBridge {
             publishCurrentPositionForMode();
             publishTimeToDestinationForMode();
             Log.i(TAG, "route-info phase=" + infoPhase + " applied view="
-                + (com.luka.carplay.core.AltScreenModule.isDuoViewArea() ? "duo" : "fullscreen"));
+                + (com.luka.carplay.core.AltScreenModule.isSmallScreenViewArea() ? "smallscreen" : "fullscreen"));
         } catch (Throwable t) {
             Log.w(TAG, "route-info refresh failed: " + t);
         }
@@ -1320,7 +1320,7 @@ public class BAPBridge {
     }
 
     private void publishCurrentPositionForMode() {
-        boolean summaryMode = !com.luka.carplay.core.AltScreenModule.isDuoViewArea()
+        boolean summaryMode = !com.luka.carplay.core.AltScreenModule.isSmallScreenViewArea()
             && infoPhase != 0;
         String text = summaryMode ? buildTripSummary() : latchedTurnToText;
         if (text == null || text.length() == 0) text = latchedTurnToText;
@@ -1328,7 +1328,7 @@ public class BAPBridge {
         text = limitUtf8(text, 96);
         traceBap("updateCurrentPositionInfo", "\"" + text + "\" phase=" + infoPhase
             + " view="
-            + (com.luka.carplay.core.AltScreenModule.isDuoViewArea() ? "duo" : "fullscreen"));
+            + (com.luka.carplay.core.AltScreenModule.isSmallScreenViewArea() ? "smallscreen" : "fullscreen"));
         appConnectorNavi.updateCurrentPositionInfo(text);
         viewAreaLowerBarPublished = true;
     }

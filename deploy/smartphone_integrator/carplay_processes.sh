@@ -35,17 +35,6 @@ cp_renderer_record_pid()
     echo "$2" > "$CP_REC_FILE"
 }
 
-# TCP port each renderer LISTENs on (hook/Java connect to these). Used only for
-# the initial-adoption health probe below.
-cp_renderer_port()
-{
-    case "$1" in
-        maneuver_render)  echo 19800 ;;
-        altscreen_render) echo 19831 ;;
-        *) return 1 ;;
-    esac
-}
-
 # Run at most once in a startup wrapper. This preserves renderers inherited from
 # an older script generation while avoiding two pidin scans before dio exec and
 # two more scans immediately in the monitor.
@@ -70,16 +59,24 @@ cp_seed_renderer_pid_files()
     CP_RENDERER_SCAN_DONE=1
 }
 
-# Success only when the renderer's TCP port is actually LISTENing. A PID-alive
-# check alone adopts a renderer that is alive but wedged (crashed listener thread
-# / stuck before serving), leaving a dead cluster/overlay until the next reboot.
-# netstat is a finite kernel-socket snapshot (unlike a blocking /proc walk) and is
-# on the shared PATH. Ceiling: this catches "never started serving"; a renderer
-# that bound the port then hung afterwards still reads healthy.
-# ponytail: port-LISTEN probe; add a real ping/heartbeat only if post-bind hangs appear.
+# Initial-adoption health differs by renderer topology:
+#   - altscreen_render OWNS the :19831 listener, so LISTEN is a valid readiness
+#     signal and catches a process wedged before serving the hook;
+#   - maneuver_render is a CLIENT of Java RendererServer's :19800 listener.
+#     Java deliberately closes :19800 when RGI is inactive, while the persistent
+#     renderer stays alive and retries. Treating that normal interval as an
+#     unhealthy renderer killed/recreated its Qualcomm EGL context on every
+#     CarPlay reconnect. For maneuver_render, a live recorded PID is therefore
+#     the only non-invasive adoption check until a renderer-owned control/health
+#     endpoint exists.
+# netstat is a finite kernel-socket snapshot (unlike a blocking /proc walk).
 cp_renderer_healthy()
 {
-    CP_HP=`cp_renderer_port "$1"` || return 1
+    case "$1" in
+        maneuver_render)  return 0 ;;
+        altscreen_render) CP_HP=19831 ;;
+        *) return 1 ;;
+    esac
     CP_NS=`netstat -an 2>/dev/null`
     # Fail-OPEN if netstat produced nothing usable: a probe glitch must never kill a
     # live renderer (that would just re-add the pre-P3 "leave untouched" risk for a
@@ -97,7 +94,10 @@ cp_kill_renderer()
         echo "[carplay] SIGTERM wedged $1 pid=$CP_PID" >> "${WLOG:-/dev/null}"
         kill -15 "$CP_PID" 2>/dev/null
     done
-    sleep 1
+    # Qualcomm WFD/EGL may still hold native images for several vsyncs after
+    # SIGTERM.  Give normal OMX/EGL teardown time to complete before the final
+    # emergency SIGKILL; ordinary dio churn never enters this path anymore.
+    sleep 4
     for CP_PID in $CP_KP; do
         [ -d "/proc/$CP_PID" ] && kill -9 "$CP_PID" 2>/dev/null
     done
@@ -174,7 +174,9 @@ cp_stop_renderer_snapshot()
         echo "[carplay] SIGTERM altscreen_render pid=$CP_PID" >> "$CP_STOP_LOG"
         kill -15 "$CP_PID" 2>/dev/null
     done
-    sleep 1
+    # The Qualcomm WFD/EGL teardown path may retain native images for several
+    # vsyncs.  Match cp_kill_renderer's grace before the emergency SIGKILL.
+    sleep 4
     for CP_PID in $CP_STOP_MANEUVER_PIDS; do
         if [ -d "/proc/$CP_PID" ]; then
             echo "[carplay] SIGKILL residual maneuver_render pid=$CP_PID" >> "$CP_STOP_LOG"
@@ -194,7 +196,7 @@ cp_stop_renderers()
     CP_STOP_LOG=$1
 
     # Snapshot the exact old generation once. A replacement dio_manager may
-    # start new renderers during the one-second graceful shutdown window. The
+    # start new renderers during the graceful shutdown window. The
     # previous implementation re-scanned all processes before SIGKILL and thus
     # killed those brand-new renderers, breaking the hook TCP link mid-GOP.
     CP_STOP_MANEUVER_PIDS=`cp_renderer_pids maneuver_render`

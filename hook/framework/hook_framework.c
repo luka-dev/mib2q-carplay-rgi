@@ -9,10 +9,14 @@
 #include <unistd.h>
 #include <string.h>
 #include <time.h>
+#include <errno.h>
 
 DEFINE_LOG_MODULE(HOOK);
 
 #define MAX_MODULES 16
+#define INJECT_QUEUE_CAPACITY 8
+#define INJECT_FRAME_CAPACITY 512
+#define INJECT_SHUTDOWN_WAIT_MS 500
 /* True only for the main dio_manager process.  dio_manager exec()s helper processes that
  * inherit the LD_PRELOAD; each loads the hook and, on its first hooked call, would open its
  * OWN connection to Java's single-accept bus (127.0.0.1:19810).  Those competing connects
@@ -44,6 +48,7 @@ static struct {
     hook_context_t ctx;
     pthread_mutex_t lock;
     bool initialized;
+    bool shutting_down;
     volatile bool bus_started;
     volatile bool bus_disabled;
     bool bus_starting;
@@ -72,9 +77,35 @@ static struct {
     hook_transport_recv_reset_t transport_recv_reset;
 } g_fw = {
     .initialized = false,
+    .shutting_down = false,
     .bus_started = false,
     .bus_disabled = false
 };
+
+/* ICinemoIAP::SendIAP2 is a synchronous stock call with no timeout.  It must
+ * never run on NmeTransport's thread, the 1 Hz bus timer, or an ELF destructor:
+ * a stuck Cinemo call on any of those paths used to make bus_shutdown() join a
+ * non-returning thread and SI eventually reported TIMEOUT_WATCHDOG.  A single
+ * process-lifetime worker contains that risk.  The queue stores only immutable
+ * frame bytes plus the captured session generation; the worker acquires its own
+ * transient COM ref immediately before the stock call. */
+typedef struct inject_item_s {
+    uint8_t frame[INJECT_FRAME_CAPACITY];
+    uint16_t len;
+    uint8_t link_session;
+    uint32_t generation;
+} inject_item_t;
+
+static pthread_mutex_t g_inject_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t g_inject_cond = PTHREAD_COND_INITIALIZER;
+static pthread_t g_inject_tid;
+static inject_item_t g_inject_queue[INJECT_QUEUE_CAPACITY];
+static unsigned int g_inject_head;
+static unsigned int g_inject_tail;
+static unsigned int g_inject_count;
+static bool g_inject_created;
+static bool g_inject_shutdown;
+static bool g_inject_exited;
 
 static pthread_once_t g_fw_lock_once = PTHREAD_ONCE_INIT;
 
@@ -84,6 +115,157 @@ static void init_fw_lock_once(void) {
 
 static void ensure_fw_lock_init(void) {
     pthread_once(&g_fw_lock_once, init_fw_lock_once);
+}
+
+static void inject_deadline_after_ms(struct timespec* deadline, long ms) {
+    clock_gettime(CLOCK_REALTIME, deadline);
+    deadline->tv_sec += ms / 1000L;
+    deadline->tv_nsec += (ms % 1000L) * 1000000L;
+    if (deadline->tv_nsec >= 1000000000L) {
+        deadline->tv_sec++;
+        deadline->tv_nsec -= 1000000000L;
+    }
+}
+
+static void* inject_worker_main(void* arg) {
+    (void)arg;
+    LOG_INFO(LOG_MODULE, "iAP2 injection worker started");
+    for (;;) {
+        inject_item_t item;
+        void* iap = NULL;
+        int (*send_iap2)(void*, int, const void*, int) = NULL;
+        int (*release_iap)(void*) = NULL;
+        int ret;
+
+        pthread_mutex_lock(&g_inject_lock);
+        while (!g_inject_shutdown && g_inject_count == 0)
+            pthread_cond_wait(&g_inject_cond, &g_inject_lock);
+        if (g_inject_shutdown) {
+            pthread_mutex_unlock(&g_inject_lock);
+            break;
+        }
+        item = g_inject_queue[g_inject_head];
+        g_inject_head = (g_inject_head + 1u) % INJECT_QUEUE_CAPACITY;
+        --g_inject_count;
+        pthread_mutex_unlock(&g_inject_lock);
+
+        /* Revalidate immediately before sending.  A queued frame from an old
+         * phone generation is simply discarded after Identify/reconnect. */
+        ensure_fw_lock_init();
+        pthread_mutex_lock(&g_fw.lock);
+        if (!g_fw.shutting_down && g_fw.initialized &&
+            g_fw.ctx.inject.valid &&
+            g_fw.ctx.inject.generation == item.generation &&
+            g_fw.ctx.inject.link_session == item.link_session &&
+            g_fw.cinemo_iap && g_fw.cinemo_iap_owner_pid == (int)getpid() &&
+            g_fw.real_iap_send_iap2 && g_fw.real_iap_addref &&
+            g_fw.real_iap_release) {
+            iap = g_fw.cinemo_iap;
+            g_fw.real_iap_addref(iap);
+            send_iap2 = g_fw.real_iap_send_iap2;
+            release_iap = g_fw.real_iap_release;
+        }
+        pthread_mutex_unlock(&g_fw.lock);
+
+        if (!iap) {
+            LOG_INFO(LOG_MODULE,
+                     "Dropped stale semantic frame gen=%u session=%u len=%u",
+                     (unsigned)item.generation, (unsigned)item.link_session,
+                     (unsigned)item.len);
+            continue;
+        }
+
+        /* No hook/framework lock is held across the stock synchronous call. */
+        ret = send_iap2(iap, (int)item.link_session, item.frame, (int)item.len);
+        release_iap(iap);
+        if (ret != 0) {
+            LOG_WARN(LOG_MODULE,
+                     "Stock ICinemoIAP::SendIAP2 failed session=%u len=%u rc=%d",
+                     (unsigned)item.link_session, (unsigned)item.len, ret);
+        } else {
+            LOG_INFO(LOG_MODULE,
+                     "Injected semantic frame via stock SendIAP2 session=%u len=%u",
+                     (unsigned)item.link_session, (unsigned)item.len);
+        }
+    }
+
+    pthread_mutex_lock(&g_inject_lock);
+    g_inject_exited = true;
+    pthread_cond_broadcast(&g_inject_cond);
+    pthread_mutex_unlock(&g_inject_lock);
+    LOG_INFO(LOG_MODULE, "iAP2 injection worker exiting");
+    return NULL;
+}
+
+static hook_result_t inject_worker_enqueue(const uint8_t* frame, size_t frame_len,
+                                           uint8_t link_session,
+                                           uint32_t generation) {
+    hook_result_t result = HOOK_OK;
+
+    pthread_mutex_lock(&g_inject_lock);
+    if (g_inject_shutdown) {
+        result = HOOK_ERR_INIT;
+    } else {
+        if (!g_inject_created) {
+            g_inject_exited = false;
+            if (pthread_create(&g_inject_tid, NULL, inject_worker_main, NULL) != 0) {
+                result = HOOK_ERR_INIT;
+            } else {
+                g_inject_created = true;
+            }
+        }
+        if (result == HOOK_OK) {
+            if (g_inject_count >= INJECT_QUEUE_CAPACITY) {
+                result = HOOK_ERR_BUSY;
+            } else {
+                inject_item_t* item = &g_inject_queue[g_inject_tail];
+                memcpy(item->frame, frame, frame_len);
+                item->len = (uint16_t)frame_len;
+                item->link_session = link_session;
+                item->generation = generation;
+                g_inject_tail = (g_inject_tail + 1u) % INJECT_QUEUE_CAPACITY;
+                ++g_inject_count;
+                pthread_cond_signal(&g_inject_cond);
+            }
+        }
+    }
+    pthread_mutex_unlock(&g_inject_lock);
+    return result;
+}
+
+/* Called only from the process-exit framework destructor.  Never wait forever
+ * for a stock SendIAP2 which is already wedged: after the bounded wait the OS
+ * will reclaim the process and its threads. */
+static void inject_worker_shutdown(void) {
+    pthread_t tid;
+    bool join_worker = false;
+    bool exited = false;
+    struct timespec deadline;
+    int wait_rc = 0;
+
+    pthread_mutex_lock(&g_inject_lock);
+    g_inject_shutdown = true;
+    g_inject_head = g_inject_tail = g_inject_count = 0;
+    pthread_cond_broadcast(&g_inject_cond);
+    if (g_inject_created) {
+        tid = g_inject_tid;
+        inject_deadline_after_ms(&deadline, INJECT_SHUTDOWN_WAIT_MS);
+        while (!g_inject_exited && wait_rc != ETIMEDOUT)
+            wait_rc = pthread_cond_timedwait(&g_inject_cond, &g_inject_lock,
+                                             &deadline);
+        exited = g_inject_exited;
+        join_worker = exited;
+        if (exited) g_inject_created = false;
+    }
+    pthread_mutex_unlock(&g_inject_lock);
+
+    if (join_worker) {
+        pthread_join(tid, NULL);
+    } else if (g_inject_created) {
+        LOG_WARN(LOG_MODULE,
+                 "iAP2 injection worker did not exit within %d ms; process-exit cleanup will reclaim it",
+                 INJECT_SHUTDOWN_WAIT_MS);
+    }
 }
 
 static void resolve_functions(void) {
@@ -317,7 +499,7 @@ static void framework_try_start_bus(void) {
 
     ensure_fw_lock_init();
     pthread_mutex_lock(&g_fw.lock);
-    if (g_fw.bus_started || g_fw.bus_disabled) {
+    if (g_fw.shutting_down || g_fw.bus_started || g_fw.bus_disabled) {
         pthread_mutex_unlock(&g_fw.lock);
         return;
     }
@@ -332,7 +514,7 @@ static void framework_try_start_bus(void) {
     now = framework_now_ms();
     ensure_fw_lock_init();
     pthread_mutex_lock(&g_fw.lock);
-    if (g_fw.bus_started || g_fw.bus_disabled || g_fw.bus_starting ||
+    if (g_fw.shutting_down || g_fw.bus_started || g_fw.bus_disabled || g_fw.bus_starting ||
         (now != 0 && g_fw.bus_retry_after_ms != 0 &&
          now < g_fw.bus_retry_after_ms)) {
         pthread_mutex_unlock(&g_fw.lock);
@@ -366,6 +548,10 @@ hook_result_t hook_framework_init(void) {
 
     ensure_fw_lock_init();
     pthread_mutex_lock(&g_fw.lock);
+    if (g_fw.shutting_down) {
+        pthread_mutex_unlock(&g_fw.lock);
+        return HOOK_ERR_INIT;
+    }
     already_initialized = g_fw.initialized;
 
     if (!already_initialized) {
@@ -399,15 +585,12 @@ hook_result_t hook_framework_init(void) {
 void hook_framework_shutdown(void) {
     void* iap_to_release = NULL;
     int iap_owner_pid = 0;
-
-    /* Stop accepting cover-art callbacks and join its optional worker before
-     * the bus and framework state disappear.  A final in-flight decode may
-     * still publish EVT_COVERART while the bus is alive. */
-    coverart_runtime_shutdown();
+    bool was_initialized;
 
     ensure_fw_lock_init();
     pthread_mutex_lock(&g_fw.lock);
-    if (!g_fw.initialized) {
+    was_initialized = g_fw.initialized;
+    if (!was_initialized) {
         iap_to_release = g_fw.cinemo_iap;
         iap_owner_pid = g_fw.cinemo_iap_owner_pid;
         g_fw.cinemo_iap = NULL;
@@ -418,18 +601,33 @@ void hook_framework_shutdown(void) {
         return;
     }
 
+    /* Publish the terminal state while holding the framework lock, then drop
+     * it BEFORE callbacks, worker shutdown, bus shutdown, or pthread_join.
+     * An in-flight timer injection which has not acquired this lock will now
+     * observe shutting_down and return instead of deadlocking with our join. */
+    g_fw.shutting_down = true;
+    g_fw.initialized = false;
+    memset(&g_fw.ctx.inject, 0, sizeof(g_fw.ctx.inject));
+    pthread_mutex_unlock(&g_fw.lock);
+
     notify_state(HOOK_EVENT_SHUTDOWN, NULL);
+
+    /* No module may enqueue another stock transport call after the terminal
+     * state above.  Bound the only already-running synchronous SendIAP2. */
+    inject_worker_shutdown();
+
+    /* Stop accepting cover-art callbacks and collect its optional worker while
+     * the bus is still alive.  Its shutdown path is independently bounded. */
+    coverart_runtime_shutdown();
 
     /* Stop TCP bus */
     bus_shutdown();
 
-    memset(&g_fw.ctx.inject, 0, sizeof(g_fw.ctx.inject));
-
+    pthread_mutex_lock(&g_fw.lock);
     for (int i = 0; i < g_fw.module_count; i++) {
         g_fw.modules[i].active = false;
     }
     g_fw.module_count = 0;
-    g_fw.initialized = false;
     g_fw.bus_started = false;
     g_fw.bus_starting = false;
     g_fw.bus_retry_after_ms = 0;
@@ -508,50 +706,43 @@ hook_context_t* hook_framework_get_context(void) {
 
 /* Send an additional iAP2 frame without consuming the stock carrier. */
 hook_result_t hook_inject_frame(const uint8_t* frame, size_t frame_len) {
-    void* iap;
     uint8_t link_session;
-    int ret;
+    uint32_t generation;
+    hook_result_t queued;
 
     if (!frame || frame_len < 6 || frame_len > 512 ||
         !iap2_validate_frame(frame, frame_len) ||
         read_be16(frame + 2) != frame_len)
         return HOOK_ERR_PARAM;
-    if (!g_fw.initialized) return HOOK_ERR_INIT;
+    if (!g_fw.initialized || g_fw.shutting_down) return HOOK_ERR_INIT;
 
     resolve_functions();
     if (!g_fw.real_iap_send_iap2 || !g_fw.real_iap_addref || !g_fw.real_iap_release)
         return HOOK_ERR_INIT;
 
-    /* The persistent capture ref makes cinemo_iap stable while the lock is
-     * held.  Take a transient ref before dropping the lock so a concurrent
-     * CinemoCreateIAP replacement/shutdown cannot free it during SendIAP2. */
+    /* Snapshot only immutable routing state.  The injection worker revalidates
+     * it and acquires the transient COM reference immediately before sending. */
     ensure_fw_lock_init();
     pthread_mutex_lock(&g_fw.lock);
-    if (!g_fw.ctx.inject.valid || !g_fw.cinemo_iap ||
+    if (g_fw.shutting_down || !g_fw.initialized ||
+        !g_fw.ctx.inject.valid || !g_fw.cinemo_iap ||
         g_fw.cinemo_iap_owner_pid != (int)getpid()) {
         pthread_mutex_unlock(&g_fw.lock);
         LOG_WARN(LOG_MODULE, "No valid stock ICinemoIAP/link-session context");
         return HOOK_ERR_IO;
     }
-    iap = g_fw.cinemo_iap;
     link_session = g_fw.ctx.inject.link_session;
-    /* COM-style AddRef returns the new reference count, not a status code. */
-    g_fw.real_iap_addref(iap);
+    generation = g_fw.ctx.inject.generation;
     pthread_mutex_unlock(&g_fw.lock);
 
-    ret = g_fw.real_iap_send_iap2(iap, (int)link_session,
-                                  frame, (int)frame_len);
-    g_fw.real_iap_release(iap);
-    if (ret != 0) {
+    queued = inject_worker_enqueue(frame, frame_len, link_session, generation);
+    if (queued != HOOK_OK) {
         LOG_WARN(LOG_MODULE,
-                 "Stock ICinemoIAP::SendIAP2 failed session=%u len=%zu rc=%d",
-                 (unsigned)link_session, frame_len, ret);
-        return HOOK_ERR_IO;
+                 "Semantic injection queue rejected session=%u gen=%u len=%zu rc=%d",
+                 (unsigned)link_session, (unsigned)generation, frame_len,
+                 queued);
     }
-    LOG_INFO(LOG_MODULE,
-             "Injected semantic frame via stock SendIAP2 session=%u len=%zu",
-             (unsigned)link_session, frame_len);
-    return HOOK_OK;
+    return queued;
 }
 
 hook_result_t hook_inject_message(uint16_t msgid, const uint8_t* payload, size_t payload_len) {

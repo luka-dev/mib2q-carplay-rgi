@@ -1594,9 +1594,14 @@ static void rgd_state_handler(hook_context_t* ctx, int event, void* event_data) 
             rgd_clear_state("new_identify");
             break;
         case HOOK_EVENT_SHUTDOWN:
+            /* Process teardown is not a live protocol transition.  Never call
+             * stock SendIAP2 from an ELF destructor: the link may already be
+             * gone and the synchronous call has no timeout. */
+            rgd_clear_state("shutdown");
+            break;
         case HOOK_EVENT_DISCONNECT:
             rgd_stop_updates();
-            rgd_clear_state(event == HOOK_EVENT_SHUTDOWN ? "shutdown" : "disconnect");
+            rgd_clear_state("disconnect");
             break;
         case HOOK_EVENT_IDENTIFY_END:
             /* IdentifyEnd means the phone accepted the component we just
@@ -1704,7 +1709,9 @@ void rgd_shutdown(void) {
      * Avoids a heartbeat-thread callback racing with a half-disposed
      * RGD module during process shutdown. */
     bus_set_periodic_tick(NULL);
-    rgd_stop_updates();
+    /* Do not emit 0x5203 while dio_manager/DSI is already exiting.  A blocking
+     * stock SendIAP2 here prevented the child from completing destruction and
+     * SI eventually killed it as TIMEOUT_WATCHDOG. */
     rgd_clear_state("module_shutdown");
 }
 

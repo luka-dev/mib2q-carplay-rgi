@@ -7,7 +7,7 @@
  *
  * DEBUG overlays (drawn on top, not part of the shippable loader):
  *   G = calibration grid (16 cols A..P x 6 rows 1..6, matching the on-unit checkerboard)
- *   V = advertised view-area safe regions (off -> fullscreen -> duo)
+ *   V = advertised view-area safe regions (off -> fullscreen -> smallscreen)
  *   ESC = quit,  CR_T=<ms> freeze a moment.
  *
  * NOTE: the Apple logo is Apple's trademark — personal cluster mod only.
@@ -79,10 +79,10 @@ static const int k_row_y[GRID_ROWS + 1] = { 0, 90, 181, 271, 361, 452, 542 };
 #define FULL_SAFE_Y  90
 #define FULL_SAFE_W 900
 #define FULL_SAFE_H 362
-#define DUO_SAFE_X   90
-#define DUO_SAFE_Y  135
-#define DUO_SAFE_W  360
-#define DUO_SAFE_H  317
+#define SMALLSCREEN_SAFE_X   90
+#define SMALLSCREEN_SAFE_Y  135
+#define SMALLSCREEN_SAFE_W  360
+#define SMALLSCREEN_SAFE_H  317
 
 static const uint8_t k_font[36][7] = {
     {0x0E,0x11,0x13,0x15,0x19,0x11,0x0E},{0x04,0x0C,0x04,0x04,0x04,0x04,0x0E},
@@ -147,17 +147,17 @@ static void draw_grid(uint8_t *b){
 }
 static void draw_view(uint8_t *b, int mode){
     int ax,ay,aw,ah; const char *name;
-    if (mode==2){ ax=DUO_SAFE_X;ay=DUO_SAFE_Y;aw=DUO_SAFE_W;ah=DUO_SAFE_H;name="DUO"; }
+    if (mode==2){ ax=SMALLSCREEN_SAFE_X;ay=SMALLSCREEN_SAFE_Y;aw=SMALLSCREEN_SAFE_W;ah=SMALLSCREEN_SAFE_H;name="SMALLSCREEN"; }
     else        { ax=FULL_SAFE_X;ay=FULL_SAFE_Y;aw=FULL_SAFE_W;ah=FULL_SAFE_H;name="FULLSCREEN"; }
     set_rect(b,0,0,PANEL_W,ay, 0,0,0,130);
     set_rect(b,0,ay+ah,PANEL_W,PANEL_H-(ay+ah), 0,0,0,130);
     set_rect(b,0,ay,ax,ah, 0,0,0,130);
     set_rect(b,ax+aw,ay,PANEL_W-(ax+aw),ah, 0,0,0,130);
     if (mode==2) outline(b,FULL_SAFE_X,FULL_SAFE_Y,FULL_SAFE_W,FULL_SAFE_H,2, 0xff,0xb4,0x3c,150);
-    else         outline(b,DUO_SAFE_X, DUO_SAFE_Y, DUO_SAFE_W, DUO_SAFE_H, 2, 0xff,0xb4,0x3c,150);
+    else         outline(b,SMALLSCREEN_SAFE_X, SMALLSCREEN_SAFE_Y, SMALLSCREEN_SAFE_W, SMALLSCREEN_SAFE_H, 2, 0xff,0xb4,0x3c,150);
     outline(b,ax,ay,aw,ah,4, 0x28,0xff,0x8c,235);
     draw_label(b,name,ax+10,ay+10,3, 0x28,0xff,0x8c);
-    draw_label(b, mode==2?"VIEW 1 DUO":"VIEW 0 FULLSCREEN", 12,8,3, 0x28,0xff,0x8c);
+    draw_label(b, mode==2?"VIEW 1 SMALLSCREEN":"VIEW 0 FULLSCREEN", 12,8,3, 0x28,0xff,0x8c);
 }
 
 /* ── GL helpers ──────────────────────────────────────────────────────────────── */
@@ -215,7 +215,7 @@ int main(void)
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
 
     int grid = getenv("CR_GRID")?1:0;
-    int view = getenv("CR_VIEW")?atoi(getenv("CR_VIEW")):0;   /* 0 off,1 full,2 duo */
+    int view = getenv("CR_VIEW")?atoi(getenv("CR_VIEW")):0;   /* 0 off,1 fullscreen,2 smallscreen */
     int dirty = 1, gp=GLFW_RELEASE, vp=GLFW_RELEASE;
     double start = glfwGetTime();
 
@@ -244,9 +244,9 @@ int main(void)
         int fbw,fbh; glfwGetFramebufferSize(win,&fbw,&fbh);
         glViewport(0,0,fbw,fbh);
         /* loader (shader) */
-        /* center+scale the loader into the active view-area safe frame (duo -> left, smaller) */
+        /* center+scale the loader into the active view-area safe frame (smallscreen -> left, smaller) */
         float sx,sy,sw,sh,vs;
-        if (view==2){ sx=DUO_SAFE_X; sy=DUO_SAFE_Y; sw=DUO_SAFE_W; sh=DUO_SAFE_H; vs=0.82f; }
+        if (view==2){ sx=SMALLSCREEN_SAFE_X; sy=SMALLSCREEN_SAFE_Y; sw=SMALLSCREEN_SAFE_W; sh=SMALLSCREEN_SAFE_H; vs=0.82f; }
         else        { sx=FULL_SAFE_X;sy=FULL_SAFE_Y;sw=FULL_SAFE_W;sh=FULL_SAFE_H;vs=1.0f; }
         float aspect=(float)PANEL_W/(float)PANEL_H;
         /* lower half of grid row 5 (y>=406) is reserved for important cluster info -> lift content */
@@ -267,7 +267,8 @@ int main(void)
         /* @LuKa_dev signature — bottom-left of the active view, padded (panel px -> NDC) */
         if (sig){
             float ph=sh*0.055f, pw=ph*sigAspect, pad=sh*0.045f;
-            float x0=sx+pad, y1=ub-pad, y0=y1-ph;
+            float sigdx=(view==2)?0.0f:45.0f;   /* nudge +half grid cell right in wide format */
+            float x0=sx+pad+sigdx, y1=ub-pad, y0=y1-ph;
             float nx0=(x0/PANEL_W)*2-1,      nx1=((x0+pw)/PANEL_W)*2-1;
             float ny0=1-(y0/PANEL_H)*2,      ny1=1-(y1/PANEL_H)*2;
             float sf=(t-0.3f)/0.6f; sf=sf<0?0:(sf>1?1:sf);

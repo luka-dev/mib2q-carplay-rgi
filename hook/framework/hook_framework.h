@@ -86,9 +86,9 @@ hook_result_t hook_framework_register_module(const hook_module_def_t* def);
 hook_result_t hook_framework_unregister_module(const char* name);
 hook_context_t* hook_framework_get_context(void);
 
-/* Injection API - sends an additional semantic frame through stock
- * ICinemoIAP::SendIAP2; it never replaces a stock semantic message and never
- * copies FF5A sequence/ack state. */
+/* Injection API - queues an additional semantic frame for the dedicated
+ * ICinemoIAP::SendIAP2 worker; it never replaces a stock semantic message,
+ * copies FF5A state, or blocks the caller in stock transport code. */
 hook_result_t hook_inject_frame(const uint8_t* frame, size_t len);
 hook_result_t hook_inject_message(uint16_t msgid, const uint8_t* payload, size_t payload_len);
 

@@ -178,9 +178,9 @@ map-scale steps and auto-zoom state; it does not expose the raw OK key.
 | View | Phase 0 | Phase 1 |
 |---|---|---|
 | Fullscreen | FctID 19: real maneuver arrow/road; FctID 22: absolute ETA | FctID 19: `ETA <local time> | <total minutes> min`; FctID 22 remains absolute ETA |
-| Duo | FctID 19: real maneuver arrow/road; FctID 22: absolute ETA (`timeInfoType=1`) | No phase toggle; presentation remains phase 0 |
+| Smallscreen | FctID 19: real maneuver arrow/road; FctID 22: absolute ETA (`timeInfoType=1`) | No phase toggle; presentation remains phase 0 |
 
-Every fullscreen/duo View transition resets to phase 0. `BAPBridge` retains
+Every fullscreen/smallscreen View transition resets to phase 0. `BAPBridge` retains
 the last real FctID 19 text plus ETA, remaining time, and destination distance,
 so the serialized presentation worker can republish phase 0 immediately rather
 than waiting for another iOS route-guidance delta.

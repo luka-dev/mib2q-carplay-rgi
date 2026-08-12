@@ -564,13 +564,13 @@ public class RouteGuidance implements CarplayBus.Listener {
             presentationLock.notifyAll();
         }
         Log.i(TAG, "viewArea info phase reset=0 queued: "
-            + (mode == com.luka.carplay.core.AltScreenModule.VIEWAREA_DUO ? "duo" : "fullscreen"));
+            + (mode == com.luka.carplay.core.AltScreenModule.VIEWAREA_SMALLSCREEN ? "smallscreen" : "fullscreen"));
     }
 
     /** Steering-wheel encoder press: toggle phase without touching the HMI/BAP caller thread. */
     private void requestInfoModeToggle() {
-        if (com.luka.carplay.core.AltScreenModule.isDuoViewArea()) {
-            Log.i(TAG, "route-info toggle ignored in duo");
+        if (com.luka.carplay.core.AltScreenModule.isSmallScreenViewArea()) {
+            Log.i(TAG, "route-info toggle ignored in smallscreen");
             return;
         }
         int phase;

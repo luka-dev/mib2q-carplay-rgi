@@ -38,6 +38,7 @@ DEFINE_LOG_MODULE(BUS);
  * Configuration
  * ============================================================ */
 #define SEND_QUEUE_CAPACITY   256        /* must be a power of two */
+#define BUS_SHUTDOWN_WAIT_MS 2500
 /* Directly-indexed per-type table.  Must cover all currently-assigned
  * event types from bus_protocol.h (highest in use: EVT_DEVICE_STATE
  * = 0x0030).  Sized at 0x40 for modest headroom; type values >=MAX_TYPES
@@ -806,6 +807,8 @@ hook_result_t bus_init(void) {
 }
 
 void bus_shutdown(void) {
+    int waited_ms = 0;
+    bool threads_stuck;
     /* Fork-safety: a dio_manager fork() inherits g_client_fd + the flags but not the threads.
      * Its __destructor calls us on exit — and shutdown(g_client_fd) would kill the OWNER's shared
      * socket.  Skip entirely unless we are the process that ran bus_init(). */
@@ -826,12 +829,44 @@ void bus_shutdown(void) {
     pthread_cond_broadcast(&g_cond);
     pthread_mutex_unlock(&g_lock);
 
-    /* 2. Join them — they are joinable, so this guarantees no thread is still
-     *    executing hook code before we free shared state / the .so unloads.
-     *    (Worst case ~2 s: the connector may be mid connect-retry backoff.) */
-    if (g_connector_created) { pthread_join(g_connector_tid, NULL); g_connector_created = false; }
-    if (g_writer_created)    { pthread_join(g_writer_tid,    NULL); g_writer_created    = false; }
-    if (g_timer_created)     { pthread_join(g_timer_tid,     NULL); g_timer_created     = false; }
+    /* 2. QNX 6.5 has no portable timed pthread_join.  Wait for each thread's
+     * terminal flag first, exactly like the stream-111 reaper.  Never enter an
+     * unbounded join from an ELF destructor: a wedged socket/stock callback
+     * must not keep dio_manager alive until SI's 60 s watchdog fires. */
+    while (waited_ms < BUS_SHUTDOWN_WAIT_MS &&
+           ((g_connector_created && g_connector_up) ||
+            (g_writer_created && g_writer_up) ||
+            (g_timer_created && g_timer_up))) {
+        usleep(10 * 1000);
+        waited_ms += 10;
+    }
+
+    if (g_connector_created && !g_connector_up) {
+        pthread_join(g_connector_tid, NULL);
+        g_connector_created = false;
+    }
+    if (g_writer_created && !g_writer_up) {
+        pthread_join(g_writer_tid, NULL);
+        g_writer_created = false;
+    }
+    if (g_timer_created && !g_timer_up) {
+        pthread_join(g_timer_tid, NULL);
+        g_timer_created = false;
+    }
+
+    threads_stuck = (g_connector_created || g_writer_created || g_timer_created);
+    if (threads_stuck) {
+        /* Process-exit path: keep all queue/cache storage intact for any thread
+         * still returning from a system/stock call.  The kernel will reclaim
+         * it moments later; freeing it here would trade a watchdog hang for UAF. */
+        LOG_WARN(LOG_MODULE,
+                 "bus shutdown deferred after %d ms connector=%d writer=%d timer=%d",
+                 BUS_SHUTDOWN_WAIT_MS,
+                 g_connector_created ? 1 : 0,
+                 g_writer_created ? 1 : 0,
+                 g_timer_created ? 1 : 0);
+        return;
+    }
 
     /* 3. Now single-threaded — safe to free the queue + sticky cache.  (bus_send
      *    also early-returns once g_shutdown is set, so nothing re-enqueues.) */

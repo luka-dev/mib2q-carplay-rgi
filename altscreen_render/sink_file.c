@@ -39,6 +39,8 @@ void av_sink_frame(const uint8_t *annexb, uint32_t len) {
         fprintf(stderr, "altscreen_render: %lu msgs, %lu bytes\n", g_msgs, g_bytes);
 }
 
+void av_sink_set_view_area(int mode) { (void)mode; }
+
 void av_sink_session_end(void) {
     fprintf(stderr, "altscreen_render: session end (%lu msgs, %lu bytes)\n", g_msgs, g_bytes);
 }

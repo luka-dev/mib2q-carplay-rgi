@@ -43,6 +43,7 @@
 #include <poll.h>     /* poll() in read_exact — wait for data + honor teardown stop */
 #include <stdio.h>    /* snprintf for avcC diagnostics */
 #include <sys/time.h> /* rate-limit key-frame recovery without frame-rate assumptions */
+#include <fcntl.h>    /* explicit O_NONBLOCK on accepted stream socket */
 #include <time.h>     /* clock_gettime + timespec for the bounded alt_setup close-wait (R2) */
 
 DEFINE_LOG_MODULE(altscreen);
@@ -61,6 +62,7 @@ typedef void *(*cf_dictm_t)(void *, long, const void *, const void *); /* CFDict
 typedef void  (*cf_dictseti_t)(void *, const void *, int64_t);     /* CFDictionarySetInt64       */
 typedef int64_t (*fn_cfdict_geti64_t)(void *, const void *, void *); /* CFDictionaryGetInt64      */
 typedef int64_t (*fn_cf_geti64_t)(void *, void *);                  /* CFGetInt64                 */
+typedef void *(*fn_cfdict_getval_t)(void *, const void *);          /* CFDictionaryGetValue       */
 /* AirPlayReceiverSessionScreen_CopyDisplaysInfo(screenSession, outErr) — 280 ref
  * ignores the session arg ((void)inSession) and builds the MAIN display dict via
  * ScreenCopyMain(); we pass NULL. */
@@ -78,6 +80,7 @@ static cf_dictseti_t cf_dictseti;
 static fn_cfdict_geti64_t cf_geti64;
 static fn_cf_geti64_t cf_geti64_value;
 static fn_copydisp_t fn_copydisp;
+static fn_cfdict_getval_t cf_getval;   /* resolved in alt_resolve(); used by main_disp_modernize */
 static const void  *arr_cb;          /* array callbacks constant (CFLite)            */
 static const void  *dict_keycb;      /* dictionary key callbacks constant            */
 static const void  *dict_valcb;      /* dictionary value callbacks constant          */
@@ -213,7 +216,7 @@ static void set_i64(void *d, const char *key, int64_t val)
  *
  *   fullscreen rectangular safeArea: complete cells D2 through M5
  *              = x 270..1170, y 90..452 = (270,90) 900x362
- *   duo rectangular safeArea (the original compact layout): B2.5 through E5
+ *   smallscreen rectangular safeArea (the original compact layout): B2.5 through E5
  *              = x 90..450, y 135..452 = (90,135) 360x317
  *
  * The background may render under a physical mask; route focus and critical UI
@@ -223,10 +226,10 @@ static void set_i64(void *d, const char *key, int64_t val)
 #define FULL_SAFE_W     900
 #define FULL_SAFE_H     362
 
-#define DUO_SAFE_X       90
-#define DUO_SAFE_Y      135
-#define DUO_SAFE_W      360
-#define DUO_SAFE_H      317
+#define SMALLSCREEN_SAFE_X       90
+#define SMALLSCREEN_SAFE_Y      135
+#define SMALLSCREEN_SAFE_W      360
+#define SMALLSCREEN_SAFE_H      317
 
 /* one rect dict, iOS keys: {originXPixels, originYPixels, widthPixels, heightPixels}
  * (CarKit CROrigin/CRSizeFromAirPlayDictionary). */
@@ -285,6 +288,27 @@ static void *build_stream_array(const char *uuid)
     return arr;
 }
 
+/* Same as build_stream/_array but keys "uuid" to an existing CFString (borrowed,
+ * CFDictionarySetValue retains it) instead of a C literal — used for the MAIN
+ * display, whose stream uuid MUST equal the real ScreenCopyMain display uuid. */
+static void *build_stream_array_cf(void *uuidCF)
+{
+    void *arr = cf_arrm(0, 1, arr_cb);
+    if (!arr) return 0;
+    void *d = cf_dictm(0, 0, dict_keycb, dict_valcb);
+    if (d) {
+        set_i64(d, "originXPixels", 0);
+        set_i64(d, "originYPixels", 0);
+        void *k = cf_str(0, "uuid", CFENC_UTF8);
+        if (k && uuidCF) cf_dictset(d, k, uuidCF);
+        if (k && cf_rel) cf_rel(k);
+        set_i64(d, "zIndex", 0);
+        cf_arrapp(arr, d);
+        if (cf_rel) cf_rel(d);
+    }
+    return arr;
+}
+
 static void *build_cluster_dict(int night)
 {
     void *d = cf_dictm(0, 0, dict_keycb, dict_valcb);
@@ -322,7 +346,7 @@ static void *build_cluster_dict(int night)
         }
         if (k && cf_rel) cf_rel(k);
     }
-    /* [0] fullscreen, [1] duo. The encoded and visible frame stays 1440x542;
+    /* [0] fullscreen, [1] smallscreen. The encoded and visible frame stays 1440x542;
      * the two entries carry different nested safe frames.  Match MHI3
      * AirPlayScreenDictSetViewAreas by declaring the initial current/adjacent
      * state alongside the array; these are display-level keys, not fields of
@@ -335,16 +359,16 @@ static void *build_cluster_dict(int night)
                                         FULL_SAFE_X, FULL_SAFE_Y,
                                         FULL_SAFE_W, FULL_SAFE_H);
             void *split = build_viewarea(0, 0, CLUSTER_W, CLUSTER_H,
-                                         DUO_SAFE_X, DUO_SAFE_Y,
-                                         DUO_SAFE_W, DUO_SAFE_H);
+                                         SMALLSCREEN_SAFE_X, SMALLSCREEN_SAFE_Y,
+                                         SMALLSCREEN_SAFE_W, SMALLSCREEN_SAFE_H);
             if (full)  { cf_arrapp(arr, full);  if (cf_rel) cf_rel(full); }
             if (split) { cf_arrapp(arr, split); if (cf_rel) cf_rel(split); }
             if (k) cf_dictset(d, k, arr);
             LOG_INFO(LOG_MODULE,
-                     "declared viewAreas: visible=(0,0 %dx%d); full safe=(%d,%d %dx%d); duo safe=(%d,%d %dx%d)",
+                     "declared viewAreas: visible=(0,0 %dx%d); fullscreen safe=(%d,%d %dx%d); smallscreen safe=(%d,%d %dx%d)",
                      CLUSTER_W, CLUSTER_H,
                      FULL_SAFE_X, FULL_SAFE_Y, FULL_SAFE_W, FULL_SAFE_H,
-                     DUO_SAFE_X, DUO_SAFE_Y, DUO_SAFE_W, DUO_SAFE_H);
+                     SMALLSCREEN_SAFE_X, SMALLSCREEN_SAFE_Y, SMALLSCREEN_SAFE_W, SMALLSCREEN_SAFE_H);
             if (cf_rel) cf_rel(arr);
         }
         if (k && cf_rel) cf_rel(k);
@@ -392,9 +416,31 @@ static void *build_cluster_dict(int night)
 static void main_disp_modernize(void *mainDisp, int night)
 {
     if (!mainDisp) return;
-    /* CarKit reads the display identifier as "uid" (stock emits only the legacy "uuid").  The value
-     * only needs to be a non-nil, unique string — give the main a fixed uid distinct from the cluster. */
-    set_str(mainDisp, "uid", "A0000000-0000-4000-8000-0000000000A1");
+    /* The stock dict already carries the REAL main display uuid (from
+     * ScreenCopyMain via CopyDisplaysInfo — the SAME value
+     * AirPlayReceiverSessionScreen_CopyDisplayUUID returns when the stock main
+     * decoder matches the incoming 110 video stream).  iOS-26.1 CarKit routes
+     * main video by the modern "uid"/"initialVideoStreams" uuid, so those MUST
+     * equal the real main uuid; a fabricated uid (the old A0000000… constant)
+     * routed main video to a stream the stock decoder never owned -> MAIN 110
+     * BLACK.  Mirror how the cluster keeps uuid==uid==stream-uuid self-consistent
+     * (RE-confirmed: iOS AirPlaySender fetch-once /info + MHI3 never fabricates). */
+    void *realUuid = 0;
+    {
+        void *kuuid = cf_str(0, "uuid", CFENC_UTF8);
+        if (kuuid && cf_getval) realUuid = cf_getval(mainDisp, kuuid);  /* borrowed */
+        if (kuuid && cf_rel) cf_rel(kuuid);
+    }
+    if (realUuid) {
+        void *kuid = cf_str(0, "uid", CFENC_UTF8);          /* uid = real main uuid */
+        if (kuid) { cf_dictset(mainDisp, kuid, realUuid); if (cf_rel) cf_rel(kuid); }
+        LOG_INFO(LOG_MODULE, "main display: uid+stream = real ScreenCopyMain uuid (no fabrication)");
+    } else {
+        /* stock dict unexpectedly lacked uuid — keep a stable non-nil uid so CarKit
+         * still accepts the display (main video will still mismatch, but no crash). */
+        set_str(mainDisp, "uid", "A0000000-0000-4000-8000-0000000000A1");
+        LOG_INFO(LOG_MODULE, "main display: stock uuid missing — fell back to fixed uid");
+    }
     /* complete the main dict like a real HU (MHI3 set) — see build_cluster_dict note */
     set_i64(mainDisp, "primaryInputDevice", 0);
     set_i64(mainDisp, "cornerMasks",        0);
@@ -408,7 +454,8 @@ static void main_disp_modernize(void *mainDisp, int night)
         if (k && cf_rel) cf_rel(k);
     }
     void *kivs = cf_str(0, "initialVideoStreams", CFENC_UTF8);
-    void *ivs  = build_stream_array("A0000000-0000-4000-8000-000000000001");
+    void *ivs  = realUuid ? build_stream_array_cf(realUuid)
+                          : build_stream_array("A0000000-0000-4000-8000-000000000001");
     if (kivs && ivs) cf_dictset(mainDisp, kivs, ivs);
     if (ivs && cf_rel) cf_rel(ivs);
     if (kivs && cf_rel) cf_rel(kivs);
@@ -589,7 +636,6 @@ typedef int      (*fn_srv_sockopen_t)(int, int, int, int, int *, int, int *);
 typedef void     (*fn_sock_setqos_t)(int, int);
 typedef int      (*fn_sock_accept_t)(int, int, int *, void *);
 typedef void *   (*fn_srv_copyprop_t)(void *, int, void *, void *, int *); /* AirPlayReceiverServerPlatformCopyProperty */
-typedef void *   (*fn_cfdict_getval_t)(void *, const void *);
 typedef long     (*fn_cfarr_count_t)(void *);
 typedef void *   (*fn_cfarr_getidx_t)(void *, long);
 
@@ -622,7 +668,6 @@ static fn_srv_sockopen_t    srv_sockopen;
 static fn_sock_setqos_t     sock_setqos;
 static fn_sock_accept_t     sock_accept;
 static fn_srv_copyprop_t    srv_copyprop;
-static fn_cfdict_getval_t   cf_getval;
 static fn_cfarr_count_t     cf_arrcount;
 static fn_cfarr_getidx_t    cf_arridx;
 
@@ -739,9 +784,18 @@ typedef struct {
  * mid-close and fail the whole control SETUP. */
 #define ALT_SETUP_CLOSE_WAIT_MS 500
 /* A SETUP/TEARDOWN must never block forever in pthread_join.  The receiver
- * checks stop every 500 ms and renderer forwarding has a 1000 ms stall cap;
+ * checks stop every 60 ms and renderer forwarding has a 1000 ms stall cap;
  * 1800 ms covers both while staying far below AirPlay's control-SETUP timeout. */
 #define ALT_REAP_WAIT_MS 1800
+/* The setup transaction contains one bounded old-receiver reap.  TearDown must
+ * not wait forever if a stock CF/socket primitive nevertheless wedges. */
+#define ALT_TEARDOWN_SETUP_WAIT_MS 2500
+/* iOS may issue the main-screen SETUP a few milliseconds before its already-
+ * advertised type-111 TCP connect completes. Both receivers prefer local port
+ * 6030. Wait only for the 111 listener to accept+close so stock 110 can bind
+ * 6030; never wait for video, renderer readiness, or the lifetime of the
+ * established 111 connection. */
+#define ALT_MAIN_PORT_HANDOFF_WAIT_MS 500
 static altslot_t alt_slots[ALT_MAX_SESSIONS];
 /* Monotonic transport-owner generation, assigned per successfully-created receiver
  * (guarded by alt_lock).  Distinct from the per-slot generation: it is GLOBAL so a
@@ -768,6 +822,53 @@ static altslot_t *alt_slot_find(void *session)
     for (i = 0; i < ALT_MAX_SESSIONS; i++)
         if (alt_slots[i].inUse && alt_slots[i].session == session) return &alt_slots[i];
     return NULL;
+}
+
+static void alt_deadline_after_ms(struct timespec *deadline, long ms);
+
+/* Caller does not hold alt_lock. Returns milliseconds spent waiting. */
+static int alt_wait_main_port_handoff(void *session)
+{
+    altslot_t *slot;
+    uint32_t generation;
+    struct timespec deadline;
+    int wait_rc = 0;
+    int waited = 0;
+    int timedOut = 0;
+
+    pthread_mutex_lock(&alt_lock);
+    slot = alt_slot_find(session);
+    if (!slot || !slot->threadCreated || slot->altSock < 0 || slot->closing) {
+        pthread_mutex_unlock(&alt_lock);
+        return 0;
+    }
+    generation = slot->generation;
+    alt_deadline_after_ms(&deadline, ALT_MAIN_PORT_HANDOFF_WAIT_MS);
+    while (slot->inUse && slot->session == session &&
+           slot->generation == generation && slot->threadCreated &&
+           slot->altSock >= 0 && !slot->closing && wait_rc != ETIMEDOUT) {
+        wait_rc = pthread_cond_timedwait(&alt_cond, &alt_lock, &deadline);
+        waited = 1;
+    }
+    if (waited) {
+        if (slot->inUse && slot->session == session &&
+            slot->generation == generation && slot->altSock >= 0 &&
+            !slot->closing)
+            timedOut = 1;
+    }
+    pthread_mutex_unlock(&alt_lock);
+    /* Never write the hook log while holding alt_lock: the logger is allowed to
+     * block briefly on QNX and teardown/setup must remain able to take the lock. */
+    if (waited) {
+        if (timedOut)
+            LOG_WARN(LOG_MODULE,
+                     "110 SETUP: 111 listener handoff timed out after %dms; continuing",
+                     ALT_MAIN_PORT_HANDOFF_WAIT_MS);
+        else
+            LOG_INFO(LOG_MODULE,
+                     "110 SETUP: 111 listener accepted; preferred port 6030 handed to stock");
+    }
+    return waited ? ALT_MAIN_PORT_HANDOFF_WAIT_MS : 0;
 }
 
 /* Claim and reap exactly one receiver generation.  A live generation is asked
@@ -928,7 +1029,9 @@ static int read_exact(int fd, uint8_t *buf, uint32_t n, volatile int *stop)
     while (got < n) {
         if (stop && *stop) return -1;
         struct pollfd pfd; pfd.fd = fd; pfd.events = POLLIN; pfd.revents = 0;
-        int pr = poll(&pfd, 1, 500);
+        int pr = poll(&pfd, 1, 60);   /* short tick so teardown stop is noticed in <=60ms
+                                       * (fast reconnect); during streaming poll returns on
+                                       * data anyway, so the idle-only tick cost is trivial */
         if (pr == 0) continue;                            /* tick → re-check stop */
         if (pr < 0) { if (errno == EINTR) continue; return -1; }
         if (pfd.revents & (POLLHUP | POLLERR | POLLNVAL)) return -1;
@@ -1192,12 +1295,21 @@ static void *alt_thread_main(void *arg)
      * SocketAccept.  A 10 s timeout left a joinable dead thread unreaped, so a
      * delayed phone connect permanently poisoned every later 111 re-SETUP. */
     if (sock_accept(listenSock, -1, &fd, NULL) != 0 || fd < 0) goto done;
+    /* Do not rely on undocumented SocketAccept flags.  read_exact() polls first,
+     * but an explicit non-blocking fd also closes the tiny poll->read race and
+     * guarantees teardown responsiveness on QNX io-pkt. */
+    {
+        int fdFlags = fcntl(fd, F_GETFL, 0);
+        if (fdFlags >= 0 && fcntl(fd, F_SETFL, fdFlags | O_NONBLOCK) != 0)
+            LOG_WARN(LOG_MODULE, "alt: failed to set accepted fd non-blocking errno=%d", errno);
+    }
     /* claim + close the listen socket (teardown may race to close it too — the
      * -1 sentinel under alt_lock ensures exactly one close). */
     pthread_mutex_lock(&alt_lock);
     if (slot->generation == generation && slot->altSock == listenSock) {
         ls = slot->altSock;
         slot->altSock = -1;
+        pthread_cond_broadcast(&alt_cond);
     } else {
         ls = -1;
     }
@@ -1234,6 +1346,7 @@ static int alt_setup(void *session, void *streamDesc, void *responseParams)
     altslot_t *slot;
     void  *server;
     int    err = -6719, family, port = 0, sock = -1, started = 0;
+    int    applyQos = 0;
     int64_t connID;
     uint8_t key[16], iv[16];
     void  *rdesc = NULL;
@@ -1304,13 +1417,29 @@ static int alt_setup(void *session, void *streamDesc, void *responseParams)
     memset(iv, 0, sizeof(iv));
 
     family = *(uint8_t *)((char *)session + OFF_FAMILY);
+    /* Snapshot every remaining stock-session field before ServerSocketOpen.
+     * If TearDown's bounded setup wait expires while that stock primitive is
+     * blocked, the resumed setup must not dereference a freed session. */
+    server = *(void **)((char *)session + OFF_SERVER);
+    applyQos = (server && sock_setqos &&
+                !*(uint8_t *)((char *)server + SVR_OFF_QOSDISABLED));
+    /* Match stock AirPlay's preferred RTPScreen port.  Although
+     * ServerSocketOpen can return an arbitrary dynamic dataPort, iOS 26.6 did
+     * not connect type 111 when on-unit testing returned a high ephemeral port
+     * (63956); the receiver stayed in accept while stock 110 came up. */
     err = srv_sockopen(family, 1 /*SOCK_STREAM*/, 6 /*IPPROTO_TCP*/, -6030, &port, -180224, &sock);
     LOG_INFO(LOG_MODULE, "alt_setup: srv_sockopen err=%d port=%d sock=%d family=%d", err, port, sock, family);
     if (err) goto fail;
 
-    server = *(void **)((char *)session + OFF_SERVER);
-    if (server && sock_setqos && !*(uint8_t *)((char *)server + SVR_OFF_QOSDISABLED))
-        sock_setqos(sock, 12);
+    pthread_mutex_lock(&alt_lock);
+    if (slot->closing || !slot->settingUp || !slot->inUse ||
+        slot->session != session) {
+        pthread_mutex_unlock(&alt_lock);
+        err = -6719;
+        goto fail;
+    }
+    pthread_mutex_unlock(&alt_lock);
+    if (applyQos) sock_setqos(sock, 12);
 
     /* Build the response descriptor before starting the acceptor.  The response
      * cannot leave this function before the thread is live; if thread creation
@@ -1365,6 +1494,12 @@ static int alt_setup(void *session, void *streamDesc, void *responseParams)
      * response, but it never becomes the command target; its receiver observes that it
      * is not transport owner and exits after the connection arrives. */
     pthread_mutex_lock(&alt_lock);
+    if (slot->closing || !slot->settingUp || !slot->inUse ||
+        slot->session != session) {
+        pthread_mutex_unlock(&alt_lock);
+        err = -6719;
+        goto fail;
+    }
     if (altav_claim(av_gen)) {
         g_alt_session = session;
         g_alt_session_gen = av_gen;
@@ -1447,10 +1582,20 @@ int AirPlayReceiverSessionSetup(void *session, void *request, void **respOut, in
     if (!real) real = (fn_sess_setup_t)dlsym(RTLD_NEXT, "AirPlayReceiverSessionSetup");
     if (!real) { LOG_ERROR(LOG_MODULE, "SessionSetup real==NULL"); return -6740; }
 
+    if (alt_enabled < 0) alt_enabled = env_on("ALTSCREEN_HANDLE_ALT") ? 1 : 0;
+    /* Keep stock 110's preferred port deterministic. In the failed on-unit run,
+     * 110 entered INITIALIZING 20 ms before the 111 acceptor closed its 6030
+     * listener and timed out ten seconds later without ever creating
+     * ScreenStream. In the successful run, the listener was already handed off
+     * and 110 reached READY. Scope this bounded wait to an actual type-110 SETUP
+     * with a live 111 listener; control/audio and 111 SETUPs never wait. */
+    if (alt_enabled && session && request && alt_resolve() == 1 &&
+        alt_find_stream_type(request, 110))
+        alt_wait_main_port_handoff(session);
+
     int ret = real(session, request, respOut, a4);
     realDoneMs = alt_now_ms();
 
-    if (alt_enabled < 0) alt_enabled = env_on("ALTSCREEN_HANDLE_ALT") ? 1 : 0;
     if (alt_enabled && ret == 0 && respOut && *respOut && session && request && alt_resolve() == 1) {
         /* NEGOTIATION — the REAL altScreen gate (VERIFIED against iOS 26.6 AirPlaySender/CarKit disasm):
          * The feature exchange is ASYMMETRIC — the phone proposes in the control-SETUP *request* under
@@ -1542,6 +1687,7 @@ int AirPlayReceiverSessionTearDown(void *session, void *request, int reason, int
     int requestHas111 = 0;
     int tearDownAlt = (request == NULL);
     int reapRc = 0;
+    int setupTimedOut = 0;
     if (!real) real = (fn_sess_teardown_t)dlsym(RTLD_NEXT, "AirPlayReceiverSessionTearDown");
 
     if (request && alt_resolve() == 1) {
@@ -1558,9 +1704,20 @@ int AirPlayReceiverSessionTearDown(void *session, void *request, int reason, int
     pthread_mutex_lock(&alt_lock);
     slot = alt_slot_find(session);
     if (slot && tearDownAlt) {
+        struct timespec setupDeadline;
+        int waitRc = 0;
         slot->closing = 1;
-        while (slot->settingUp)
-            pthread_cond_wait(&alt_cond, &alt_lock);
+        alt_deadline_after_ms(&setupDeadline, ALT_TEARDOWN_SETUP_WAIT_MS);
+        while (slot->settingUp && waitRc != ETIMEDOUT)
+            waitRc = pthread_cond_timedwait(&alt_cond, &alt_lock,
+                                            &setupDeadline);
+        if (slot->settingUp) {
+            setupTimedOut = 1;
+            slot->stop = 1;
+            LOG_WARN(LOG_MODULE,
+                     "altScreen TearDown: setup still active after %d ms; revoking generation and deferring slot GC",
+                     ALT_TEARDOWN_SETUP_WAIT_MS);
+        }
         /* Revoke command-channel ownership before asking the receiver to stop.
          * Even if bounded reap is deferred, it cannot send a command through a
          * stock session that TearDown is about to free. */
@@ -1570,7 +1727,7 @@ int AirPlayReceiverSessionTearDown(void *session, void *request, int reason, int
         }
     }
     pthread_mutex_unlock(&alt_lock);
-    if (slot && tearDownAlt) {
+    if (slot && tearDownAlt && !setupTimedOut) {
         /* Stop the self-contained receiver: the reaper sets stop, closes the
          * listener to wake pre-connect accept, and joins outside alt_lock.  An
          * already-exited receiver follows the identical single-owner path. */
@@ -1598,6 +1755,13 @@ int AirPlayReceiverSessionTearDown(void *session, void *request, int reason, int
         else
             LOG_WARN(LOG_MODULE,
                      "altScreen teardown deferred receiver cleanup session=%p", session);
+    } else if (slot && tearDownAlt) {
+        /* The setup owner will observe closing, unwind its transaction and
+         * publish settingUp=0.  Do not race it by touching thread/listener
+         * fields here; the next SETUP's GC collects the terminal slot. */
+        LOG_WARN(LOG_MODULE,
+                 "altScreen teardown proceeding with setup cleanup deferred session=%p",
+                 session);
     } else if (slot) {
         LOG_INFO(LOG_MODULE,
                  "per-stream TEARDOWN has no 111 - preserving altScreen session=%p",
@@ -1618,10 +1782,10 @@ int AirPlayReceiverSessionTearDown(void *session, void *request, int reason, int
 #define CLUSTER_DISPLAY_UUID "C1057E12-A0D1-4E20-B0C0-1057E12A0D10"
 
 /* ════════════════════════════════════════════════════════════════════════════
- * working zone (fullscreen ↔ duo) live-switch — Java-driven via the bus.
+ * working zone (fullscreen ↔ smallscreen) live-switch — Java-driven via the bus.
  *
  * Two full-frame view areas are PREDECLARED in /info, with different nested
- * safeArea geometry: fullscreen=[0], duo=[1]. Switching is a plain
+ * safeArea geometry: fullscreen=[0], smallscreen=[1]. Switching is a plain
  * session command — NOT a stream reconfig: we ship {type:"updateViewArea",
  * params:{uuid,viewAreaIndex,animationDurationMillis,adjacentViewAreas}} via the
  * stock generic command shipper
@@ -1630,7 +1794,7 @@ int AirPlayReceiverSessionTearDown(void *session, void *request, int reason, int
  * keys, bounds-checks the index against the declared viewAreas, and applies the
  * change.  Match MHI3 AirPlayReceiverSessionViewAreaUpdate exactly by always
  * carrying `adjacentViewAreas`: [] clears it in fullscreen, [0] tells CarKit
- * that view-area 0 is adjacent while duo area 1 is current.  iOS stores this as
+ * that view-area 0 is adjacent while smallscreen area 1 is current.  iOS stores this as
  * CARScreenInfo.adjacentViewArea separately from currentViewArea, so omitting it
  * is observably different from the native helper. Verified: stock 210 exports
  * the generic shipper and it does NOT whitelist command types.
@@ -1643,7 +1807,7 @@ int AirPlayReceiverSessionTearDown(void *session, void *request, int reason, int
  * The requested mode rides in ctx (0/1 fits a pointer). If SendCommand fails
  * synchronously the completion never fires, so we ack that error inline.
  * ════════════════════════════════════════════════════════════════════════════ */
-enum { ALT_ZONE_FULLSCREEN = 0, ALT_ZONE_DUO = 1 };
+enum { ALT_ZONE_FULLSCREEN = 0, ALT_ZONE_SMALLSCREEN = 1 };
 static volatile int g_alt_zone_mode = ALT_ZONE_FULLSCREEN;
 
 static void zone_send_ack(int mode, int status)
@@ -1710,7 +1874,7 @@ static int zone_send_mode(uint32_t gen, int mode, int dur, void *completion)
     int index, rc = -6728;
     void *params = NULL, *cmd = NULL, *adj = NULL, *pk = NULL, *ak = NULL;
 
-    if (mode == ALT_ZONE_DUO) index = 1;
+    if (mode == ALT_ZONE_SMALLSCREEN) index = 1;
     else { mode = ALT_ZONE_FULLSCREEN; index = 0; }
     if (cf_init() != 1 || !cf_dictm || !dict_keycb || !dict_valcb ||
         !cf_dictset || !cf_str || !cf_dictseti || !cf_arrm || !arr_cb ||
@@ -1721,12 +1885,12 @@ static int zone_send_mode(uint32_t gen, int mode, int dur, void *completion)
 
     params = cf_dictm(0, 0, dict_keycb, dict_valcb);
     cmd = cf_dictm(0, 0, dict_keycb, dict_valcb);
-    adj = cf_arrm(0, mode == ALT_ZONE_DUO ? 1 : 0, arr_cb);
+    adj = cf_arrm(0, mode == ALT_ZONE_SMALLSCREEN ? 1 : 0, arr_cb);
     if (params && cmd && adj) {
         set_str(params, "uuid", CLUSTER_DISPLAY_UUID);
         set_i64(params, "viewAreaIndex", index);
         set_i64(params, "animationDurationMillis", dur);
-        if (mode == ALT_ZONE_DUO) cf_arrappi64(adj, 0);
+        if (mode == ALT_ZONE_SMALLSCREEN) cf_arrappi64(adj, 0);
         ak = cf_str(0, "adjacentViewAreas", CFENC_UTF8);
         if (ak) cf_dictset(params, ak, adj);
         set_str(cmd, "type", "updateViewArea");
@@ -1735,8 +1899,8 @@ static int zone_send_mode(uint32_t gen, int mode, int dur, void *completion)
         rc = alt_send_locked_for_gen(gen, cmd, completion, (void *)(intptr_t)mode);
         LOG_INFO(LOG_MODULE,
                  "updateViewArea ship mode=%s index=%d adjacent=%s dur=%dms rc=%d",
-                 mode == ALT_ZONE_DUO ? "duo" : "fullscreen",
-                 index, mode == ALT_ZONE_DUO ? "[0]" : "[]", dur, rc);
+                 mode == ALT_ZONE_SMALLSCREEN ? "smallscreen" : "fullscreen",
+                 index, mode == ALT_ZONE_SMALLSCREEN ? "[0]" : "[]", dur, rc);
     }
     if (ak && cf_rel) cf_rel(ak);
     if (pk && cf_rel) cf_rel(pk);
@@ -1750,7 +1914,7 @@ static void zone_on_cmd(uint16_t type, uint8_t flags, const uint8_t *payload, ui
 {
     (void)type; (void)flags; (void)ctx;
     if (!payload || len < 1) return;
-    int mode = payload[0] == ALT_ZONE_DUO ? ALT_ZONE_DUO : ALT_ZONE_FULLSCREEN;
+    int mode = payload[0] == ALT_ZONE_SMALLSCREEN ? ALT_ZONE_SMALLSCREEN : ALT_ZONE_FULLSCREEN;
     int dur = (len >= 3) ? (payload[1] | (payload[2] << 8)) : 250;
     int rc;
 
@@ -1950,7 +2114,7 @@ static int alt_request_cluster_idr(uint32_t gen, const char *reason)
     return rc;
 }
 
-/* Apply the latest Audi fullscreen/duo state once the 111 stream is live. The
+/* Apply the latest Audi fullscreen/smallscreen state once the 111 stream is live. The
  * Java command may have arrived before g_alt_session existed; g_alt_zone_mode
  * intentionally preserves it across that window. */
 static void alt_kick_viewarea(uint32_t gen)
@@ -1958,7 +2122,7 @@ static void alt_kick_viewarea(uint32_t gen)
     int mode = g_alt_zone_mode;
     int rc = zone_send_mode(gen, mode, 0, NULL);
     LOG_INFO(LOG_MODULE, "alt: initial updateViewArea mode=%s rc=%d",
-             mode == ALT_ZONE_DUO ? "duo" : "fullscreen", rc);
+             mode == ALT_ZONE_SMALLSCREEN ? "smallscreen" : "fullscreen", rc);
 }
 
 /* iOS 26.6 Maps registers this exact URL for its map-based instrument-cluster UI.
@@ -1971,8 +2135,10 @@ static void alt_kick_viewarea(uint32_t gen)
 static const char *alt_cluster_url_for_mode(int mode)
 {
     const char *url;
-    if (mode == ALT_ZONE_DUO) {
-        url = getenv("ALTSCREEN_CLUSTER_URL_DUO");
+    if (mode == ALT_ZONE_SMALLSCREEN) {
+        url = getenv("ALTSCREEN_CLUSTER_URL_SMALLSCREEN");
+        /* Compatibility with already deployed startup scripts. */
+        if (!url || !*url) url = getenv("ALTSCREEN_CLUSTER_URL_DUO");
         if (!url || !url[0])
             url = "maps:/car/instrumentcluster/map";
     } else {
@@ -1991,7 +2157,7 @@ static int alt_show_ui_for_mode(uint32_t gen, int mode, const char *reason)
     set_str(p, "url", url);
     int rc = alt_ship(gen, "showUI", p);
     LOG_INFO(LOG_MODULE, "alt: showUI mode=%s reason=%s uuid=%s url=%s rc=%d",
-             mode == ALT_ZONE_DUO ? "duo-map-only" : "fullscreen-cards",
+             mode == ALT_ZONE_SMALLSCREEN ? "smallscreen-map-only" : "fullscreen-cards",
              reason ? reason : "?", CLUSTER_DISPLAY_UUID, url, rc);
     return rc;
 }

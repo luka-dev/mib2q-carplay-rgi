@@ -97,6 +97,9 @@ struct screen_egl_present {
     unsigned long loader_frames;
     unsigned long loader_failures;
     int loader_first_logged;
+    /* Stable process-lifetime word owned by sink_omx_qnx.  The control thread
+     * updates it atomically; EGL remains exclusively on the loader thread. */
+    volatile int *loader_view_area_mode;
 
     pthread_mutex_t gl_lock;
     int gl_lock_initialized;
@@ -624,7 +627,8 @@ static void ep_release_sources(screen_egl_present_t *p) {
     p->source_count = 0;
 }
 
-screen_egl_present_t *screen_egl_present_create_output(int width, int height) {
+screen_egl_present_t *screen_egl_present_create_output(int width, int height,
+                                                       volatile int *view_area_mode) {
     screen_egl_present_t *p;
     cluster_surface_cfg cfg;
     if (width <= 0 || height <= 0) return NULL;
@@ -632,6 +636,7 @@ screen_egl_present_t *screen_egl_present_create_output(int width, int height) {
     if (!p) return NULL;
     p->width = width;
     p->height = height;
+    p->loader_view_area_mode = view_area_mode;
     p->egl_display = EGL_NO_DISPLAY;
     p->egl_surface = EGL_NO_SURFACE;
     p->egl_context = EGL_NO_CONTEXT;
@@ -723,6 +728,22 @@ static int ep_loader_should_stop(screen_egl_present_t *p) {
     return stop;
 }
 
+typedef struct loader_layout {
+    float view_x, view_y, view_w, view_h;
+    float pad_left, pad_right, pad_top, pad_bottom;
+    float signature_x_offset;
+} loader_layout_t;
+
+/* Loader content frames, expressed as padding from each advertised view.
+ * Fullscreen preserves the proven D2-M5 composition exactly.  Smallscreen
+ * keeps the same content-frame height but translates it 7px upward. */
+static const loader_layout_t k_loader_layouts[2] = {
+    /* fullscreen: view (270,90)-(1170,452), content bottom capped at y=394 */
+    { 270.0f,  90.0f, 900.0f, 362.0f, 0.0f, 0.0f,  0.0f, 58.0f, 90.0f },
+    /* smallscreen: original y=135..394 content frame shifted to y=128..387 */
+    {  90.0f, 135.0f, 360.0f, 317.0f, 0.0f, 0.0f, -7.0f, 65.0f,  0.0f }
+};
+
 static int ep_loader_frame(screen_egl_present_t *p, uint64_t elapsed_ms) {
     static const GLfloat positions[] = {
         -1.0f, -1.0f,  1.0f, -1.0f,
@@ -730,22 +751,32 @@ static int ep_loader_frame(screen_egl_present_t *p, uint64_t elapsed_ms) {
     };
     GLenum gl_error = GL_NO_ERROR;
     int ok = -1;
-    /* fullscreen safe area + lift: the lower half of grid row 5 (y>=406) is
-     * reserved for important cluster info, so pull the whole group up. */
-    float sx = 270.0f, sy = 90.0f, sw = 900.0f, sh = 362.0f;
-    float y_occ = 406.0f, gap = 12.0f;
+    int viewMode = (p && p->loader_view_area_mode &&
+                    *p->loader_view_area_mode == 1) ? 1 : 0;
+    const loader_layout_t *layout = &k_loader_layouts[viewMode];
+    float sx = layout->view_x;
+    float sy = layout->view_y;
+    float sw = layout->view_w;
+    float sh = layout->view_h;
+    float content_left = sx + layout->pad_left;
+    float content_right = sx + sw - layout->pad_right;
+    float content_top = sy + layout->pad_top;
+    float content_bottom = sy + sh - layout->pad_bottom;
     float t = (float)elapsed_ms / 1000.0f;
     float W = (float)p->width, H = (float)p->height, aspect = W / H;
-    float ub = sy + sh;
-    float cx_p, cy_p, sigAspect, ph, pw, pad, rcx, rcy, rhw, rhh, sf;
+    float cx_p, cy_p, sigAspect, ph, pw, pad_x, pad_bottom;
+    float rcx, rcy, rhw, rhh, sf;
 
     if (!p || !p->logo_texture || !p->sig_texture) return -1;
-    if (ub > y_occ - gap) ub = y_occ - gap;
-    cx_p = ((sx + sw*0.5f)/W - 0.5f) * aspect;
-    cy_p = 0.5f - ((sy + ub)*0.5f)/H;
+    cx_p = (((content_left + content_right)*0.5f)/W - 0.5f) * aspect;
+    cy_p = 0.5f - ((content_top + content_bottom)*0.5f)/H;
     sigAspect = (float)LOADER_SIG_W / (float)LOADER_SIG_H;
-    ph = sh*0.055f; pw = ph*sigAspect; pad = sh*0.045f;
-    rcx = sx + pad + pw*0.5f; rcy = (ub - pad) - ph*0.5f;   /* top-down px */
+    ph = sh*0.055f;
+    pw = ph*sigAspect;
+    pad_x = sh*0.045f;
+    pad_bottom = sh*0.045f;
+    rcx = content_left + pad_x + layout->signature_x_offset + pw*0.5f;
+    rcy = (content_bottom - pad_bottom) - ph*0.5f; /* top-down px */
     rhw = pw*0.5f; rhh = ph*0.5f;
     sf = (t - 0.3f)/0.6f; sf = sf < 0.0f ? 0.0f : (sf > 1.0f ? 1.0f : sf);
 
@@ -1039,6 +1070,8 @@ out:
 }
 
 void screen_egl_present_destroy(screen_egl_present_t *p) {
+    int hidden = 0;
+    struct timespec release_wait;
     if (!p) return;
     screen_egl_present_stop_loader(p);
     if (p->gl_lock_initialized) pthread_mutex_lock(&p->gl_lock);
@@ -1048,6 +1081,17 @@ void screen_egl_present_destroy(screen_egl_present_t *p) {
         eglMakeCurrent(p->egl_display, p->egl_surface, p->egl_surface,
                        p->egl_context);
     }
+    /* Stop scanout and flush every external-image read before destroying the
+     * 32m EGLImages.  Without this grace the MU1316 WFD driver reports twelve
+     * DEFER DESTROY nativeImage entries with uUsageCnt=1 and the next EGL client
+     * may crash during eglInitialize. */
+    if (p->rgba_surface && cluster_surface_window(p->rgba_surface))
+        screen_set_window_property_iv(cluster_surface_window(p->rgba_surface),
+                                      SCREEN_PROPERTY_VISIBLE, &hidden);
+    if (p->egl_context != EGL_NO_CONTEXT) glFinish();
+    release_wait.tv_sec = 0;
+    release_wait.tv_nsec = 50L * 1000L * 1000L; /* >=3 frames at 60 Hz */
+    while (nanosleep(&release_wait, &release_wait) != 0 && errno == EINTR) {}
     ep_release_sources(p);
     if (p->logo_texture) glDeleteTextures(1, &p->logo_texture);
     if (p->sig_texture) glDeleteTextures(1, &p->sig_texture);
@@ -1060,7 +1104,9 @@ void screen_egl_present_destroy(screen_egl_present_t *p) {
             eglDestroySurface(p->egl_display, p->egl_surface);
         if (p->egl_context != EGL_NO_CONTEXT)
             eglDestroyContext(p->egl_display, p->egl_context);
-        eglTerminate(p->egl_display);
+        /* Do NOT eglTerminate on this old Qualcomm stack. EGLDisplay-wide
+         * teardown collides with the HMI/maneuver clients even though they are
+         * separate processes; process exit reclaims our remaining display ref. */
     }
     if (p->gl_lock_initialized) pthread_mutex_unlock(&p->gl_lock);
 

@@ -24,8 +24,8 @@ Install these executable files under `/mnt/app/root/hooks`:
 - `flag_atlas.rgba`
 
 Do not overwrite `/etc/scripts/carplay_cleanup.sh`: the custom cleanup calls that
-stock script only for Audi's mdnsd/PPS cleanup. Renderer teardown belongs to the
-generation-aware owner monitor in `carplay_startup.sh`.
+stock script only for Audi's mdnsd/PPS cleanup. Renderers are persistent services;
+an explicit supervisor stop, not ordinary dio churn, owns their final teardown.
 
 Lifecycle semantics:
 
@@ -36,24 +36,26 @@ Lifecycle semantics:
   process while `dio_manager` initializes;
 - the wrapper `exec`s `dio_manager`, so smartphone_integrator tracks the exact dio
   PID; a monitor shell restarts only a genuinely missing renderer while it lives;
-- an owner-generation file lets a fast replacement `dio_manager` inherit the
-  existing renderers without an old monitor tearing them down;
-- when no replacement generation appears, the old monitor SIGTERMs only the
-  renderer PID snapshot captured when its dio exited, then force-kills only those
-  same residual PIDs. It never re-scans and kills a new renderer;
+- every ordinary `dio_manager` exit leaves both renderers alive, so a replacement
+  inherits the existing EGL/OMX allocations instead of re-entering fragile Qualcomm
+  `eglInitialize`; only a missing/crashed renderer is restarted, after a 5 s backoff;
+- initial adoption checks `LISTEN :19831` only for `altscreen_render`, which owns
+  that socket. `maneuver_render` is a client of Java's route-scoped `:19800`
+  listener, so it is preserved by live PID while RGI/Java intentionally has the
+  listener closed;
+- cold boot starts `altscreen_render`, gives its EGL initialization a one-second
+  head start, then starts `maneuver_render` to avoid simultaneous subdriver loading;
 - external cleanup is identity-less (smartphone_integrator does not tell it which dio
   generation it runs for), so it does NOT create the global stop marker and does NOT
   stop renderers by the shared PID files — either could damage an already-started
-  replacement generation. Renderer teardown is left to the owner-monitor above, which
-  holds this generation's dio PID and renderer PID snapshot. Cleanup only invokes
+  replacement generation. Cleanup only invokes
   Audi's `/etc/scripts/carplay_cleanup.sh` for the stock mdnsd/PPS cleanup.
 
 Verify on the unit in `/tmp/carplay_wrapper.log`: `already running - leave untouched`
-or `starting ...`, followed by either `superseded ... leave new renderers untouched`
-or `gone - stopping renderers`. A `SIGKILL residual` line must name one of the old
-snapshot PIDs; it must never name a renderer started by the replacement generation.
+or `starting ...`, followed on dio exit by `persistent renderers left alive`.
+`SIGKILL residual` is valid only after an explicit supervisor stop.
 
-CarPlay keeps the stock `restartDelay: 2000`; `portResetTime` remains 250 ms.
+CarPlay uses `restartDelay: 3000`, `stopTimeout: 8000`; `portResetTime` remains 250 ms.
 The full settling delay is intentional: rapid OTG stop/start cycles can leave the
 iAP2 NCM accessory with only one of its two interfaces enabled. Renderer ownership
 is handled independently by the PID-snapshot cleanup and must not be used as a

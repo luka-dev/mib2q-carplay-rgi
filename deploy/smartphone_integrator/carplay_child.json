@@ -7,7 +7,7 @@
     "IPL_CONFIG_DIR_DIO_MANAGER=/etc/eso/production"
   ],
   "startupTimeout": 10000,
-  "stopTimeout": 5000,
+  "stopTimeout": 8000,
   "watchdogTimeout": 60000,
   "disableWatchdog": false,
   "maxSetupRetries": 2,
@@ -17,6 +17,6 @@
   "cleanupScript": "/mnt/app/root/hooks/carplay_cleanup.sh",
   "retriesBeforeDowntime": 3,
   "downtime": 30000,
-  "restartDelay": 2000,
+  "restartDelay": 3000,
   "portResetTime": 250
 }

@@ -21,12 +21,12 @@ renderers must implement.  Keep this in sync; it kept getting lost._
 
 VC tab focus is deliberately not observed and never participates in presentation state.
 Only CarPlay RGI activity selects the local composition; the Audi View button independently
-selects the iOS fullscreen/duo `viewArea`.
+selects the iOS fullscreen/smallscreen `viewArea`.
 
 | state | local context | BAP lower bar | iOS viewArea |
 |---|---|---|---|
-| **no CarPlay RGI** | `ctx81={99}` | inactive | last selected fullscreen/duo |
-| **CarPlay RGI active** | `ctx80={98,102,101,99}` | always `arrow + next direction` | fullscreen or duo from View button |
+| **no CarPlay RGI** | `ctx81={99}` | inactive | last selected fullscreen/smallscreen |
+| **CarPlay RGI active** | `ctx80={98,102,101,99}` | always `arrow + next direction` | fullscreen or smallscreen from View button |
 
 There is no MAP-tab special case and no dynamic FctID44 or NAVSD FunctionList manipulation.
 
@@ -39,7 +39,7 @@ the stock navigator; the not-to-touch part is our own BAP projection stream.)
 **BAP projection lifetime = navigation lifetime, NOT popup visibility.** Once CarPlay nav
 is detected (replace *or* new_tab) we cancel the *stock navigator's* RG and take full
 ownership of BAP.  The BAP projection then runs for the **entire** active-nav session.
-Only actual nav-end stops our BAP sends. Fullscreen/duo changes never stop RGI.
+Only actual nav-end stops our BAP sends. Fullscreen/smallscreen changes never stop RGI.
 
 ## Context mapping (corrected)
 
@@ -55,7 +55,7 @@ RGI presentation latch.
 ## Implementation status
 
 1. `AltScreenModule` selects ctx80/81 only from confirmed RGI presentation.
-2. Fullscreen/duo only sends `updateViewArea`; it does not alter context or BAP ownership.
+2. Fullscreen/smallscreen only sends `updateViewArea`; it does not alter context or BAP ownership.
 3. `BAPBridge` keeps RGI/HUD active for the route lifetime and always publishes FctID19 as
    `Unicode arrow + next direction/road`, with `↑` as the non-empty startup fallback.
 4. `GatedCombiService` blocks stock route-guidance writers, leaves initializing/compass/map

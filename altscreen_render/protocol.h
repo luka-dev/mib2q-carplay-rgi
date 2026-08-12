@@ -25,17 +25,18 @@
  * on anything larger (framing desync / hostile length). */
 #define ALTAV_MAX_MSG     (4u * 1024u * 1024u)
 
-/* ---- Control channel (altscreen_render -> Java/lsd) ---------------------------------------
+/* ---- Control channel (altscreen_render <-> Java/lsd) --------------------------------------
  * DATA (H.264) comes from the libairplay hook into ALTAV_PORT (above).  CONTROL is separate:
  * altscreen_render connects as a CLIENT to Java's control server on ALTCTL_PORT (mirrors how
  * maneuver_render connects to our TCP) and reports when the CarPlay 111 video is flowing, so
  * Java can flip AltScreenModule.setVideoAvailable() and switch the cluster to ctx 82/83.
- * One-way events for now (fixed 4-byte packets); commands (Java->altscreen) can be added later. */
+ * Both directions use fixed 4-byte packets. */
 #define ALTCTL_HOST       "127.0.0.1"
 #define ALTCTL_PORT       19832
 #define ALTCTL_PKT_SIZE   4
 
 #define ALTEVT_VIDEO_ON   0x81   /* a video client (hook) connected + streaming 111 */
 #define ALTEVT_VIDEO_OFF  0x82   /* the video client disconnected / stream ended */
+#define ALTCMD_VIEW_AREA  0x01   /* Java -> renderer: byte1 0=fullscreen, 1=smallscreen */
 
 #endif /* ALTSCREEN_RENDER_PROTOCOL_H */

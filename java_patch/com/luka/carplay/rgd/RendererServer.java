@@ -41,6 +41,7 @@ public class RendererServer {
     private static final String HOST = "127.0.0.1";
     private static final int PORT = 19800;
     private static final int PKT_SIZE = 48;
+    private static final int WRITE_QUEUE_CAPACITY = 32;
 
     /* Read timeout on the accepted renderer socket.  Renderer sends
      * EVT_HEARTBEAT (cmd=0x80) every 1 s; if no inbound for 5 s,
@@ -67,6 +68,7 @@ public class RendererServer {
     private Socket sock;             /* protected by lock */
     private OutputStream out;        /* protected by lock */
     private Thread acceptThread;
+    private Thread writerThread;
     private volatile boolean running;
     private volatile boolean rendererReady;
     private volatile boolean frameReady;
@@ -83,6 +85,17 @@ public class RendererServer {
     private volatile StateListener stateListener;
     private long lastBindFailureLogMs;
     private int suppressedBindFailures;
+    private int connectionGeneration;
+
+    private static final class PendingWrite {
+        byte[] packet;
+        int generation;
+    }
+
+    private final PendingWrite[] writeQueue = new PendingWrite[WRITE_QUEUE_CAPACITY];
+    private int writeHead;
+    private int writeTail;
+    private int writeCount;
 
     /** Edge notification only. The listener must not block the socket threads. */
     public interface StateListener {
@@ -120,6 +133,12 @@ public class RendererServer {
             }, "RendererServer-Accept");
             acceptThread.setDaemon(true);
             acceptThread.start();
+
+            writerThread = new Thread(new Runnable() {
+                public void run() { writerLoop(); }
+            }, "RendererServer-Write");
+            writerThread.setDaemon(true);
+            writerThread.start();
         }
         return true;
     }
@@ -169,6 +188,8 @@ public class RendererServer {
                         }
                         sock = s;
                         out = o;
+                        connectionGeneration++;
+                        clearWriteQueue();
                         everConnected = true;
                         rendererReady = false;
                         frameReady = false;
@@ -206,6 +227,59 @@ public class RendererServer {
             }
         }
         Log.i(TAG, "accept thread exiting");
+    }
+
+    /** The only thread allowed to perform the potentially blocking Java socket
+     * write. BAP/HMI callers merely enqueue one fixed packet and return. */
+    private void writerLoop() {
+        while (true) {
+            PendingWrite pending;
+            synchronized (writeLock) {
+                while (running && writeCount == 0) {
+                    try { writeLock.wait(); } catch (InterruptedException e) { }
+                }
+                if (!running) break;
+                pending = writeQueue[writeHead];
+                writeQueue[writeHead] = null;
+                writeHead = (writeHead + 1) % WRITE_QUEUE_CAPACITY;
+                writeCount--;
+            }
+
+            OutputStream ownedOut;
+            synchronized (lock) {
+                if (out == null || pending == null ||
+                        pending.generation != connectionGeneration) {
+                    continue;
+                }
+                ownedOut = out;
+            }
+
+            try {
+                ownedOut.write(pending.packet);
+                ownedOut.flush();
+            } catch (Exception e) {
+                Log.w(TAG, "Writer failed: " + e.getMessage());
+                boolean lostCurrent = false;
+                synchronized (lock) {
+                    if (out == ownedOut) {
+                        closeClientLocked();
+                        lostCurrent = true;
+                    }
+                }
+                if (lostCurrent) notifyStateChanged("send-failed");
+            }
+        }
+        Log.i(TAG, "writer thread exiting");
+    }
+
+    private void clearWriteQueue() {
+        synchronized (writeLock) {
+            for (int i = 0; i < WRITE_QUEUE_CAPACITY; i++) writeQueue[i] = null;
+            writeHead = 0;
+            writeTail = 0;
+            writeCount = 0;
+            writeLock.notifyAll();
+        }
     }
 
     /**
@@ -321,9 +395,15 @@ public class RendererServer {
                 server = null;
             }
         }
+        clearWriteQueue();
         if (acceptThread != null) {
             try { acceptThread.join(500); } catch (InterruptedException e) {}
             acceptThread = null;
+        }
+        synchronized (writeLock) { writeLock.notifyAll(); }
+        if (writerThread != null) {
+            try { writerThread.join(500); } catch (InterruptedException e) {}
+            writerThread = null;
         }
         notifyStateChanged("disposed");
     }
@@ -337,6 +417,8 @@ public class RendererServer {
             try { sock.close(); } catch (Exception e) {}
             sock = null;
         }
+        connectionGeneration++;
+        clearWriteQueue();
         rendererReady = false;
         frameReady = false;
         clearPending = false;
@@ -467,36 +549,33 @@ public class RendererServer {
     }
 
     private boolean sendPacket(byte[] pkt, boolean beginClear) {
-        OutputStream o;
+        int generation;
         synchronized (lock) {
             if (out == null) return false;
-            o = out;
+            generation = connectionGeneration;
             if (beginClear) {
                 frameReady = false;
                 clearPending = true;
                 lock.notifyAll();
             }
         }
-        try {
-            /* Maneuver updates and the blink timer are different producers. Preserve the fixed
-             * 48-byte packet boundary even when both emit at the same time. */
-            synchronized (writeLock) {
-                o.write(pkt);
-                o.flush();
+
+        synchronized (writeLock) {
+            PendingWrite pending = new PendingWrite();
+            pending.packet = pkt;
+            pending.generation = generation;
+            if (writeCount == WRITE_QUEUE_CAPACITY) {
+                /* Full state is resent frequently; discard the oldest stale
+                 * command rather than ever blocking a BAP/HMI caller. */
+                writeQueue[writeHead] = null;
+                writeHead = (writeHead + 1) % WRITE_QUEUE_CAPACITY;
+                writeCount--;
             }
-            return true;
-        } catch (Exception e) {
-            Log.w(TAG, "Send failed: " + e.getMessage());
-            boolean lostCurrent = false;
-            synchronized (lock) {
-                /* A send on a preempted stream must not close the replacement socket. */
-                if (out == o) {
-                    closeClientLocked();
-                    lostCurrent = true;
-                }
-            }
-            if (lostCurrent) notifyStateChanged("send-failed");
-            return false;
+            writeQueue[writeTail] = pending;
+            writeTail = (writeTail + 1) % WRITE_QUEUE_CAPACITY;
+            writeCount++;
+            writeLock.notifyAll();
         }
+        return true;
     }
 }

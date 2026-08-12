@@ -50,7 +50,7 @@ public final class CarplayBus {
     /* commands Java -> hook (mirror bus_protocol.h) */
     public static final int CMD_SYNC_REQ       = 0x0100;   /* replay all sticky state       */
     public static final int CMD_ALT_ZOOM       = 0x0110;   /* [i8 signed MapScale step]     */
-    public static final int CMD_ALT_ZONE       = 0x0111;   /* [u8 mode 0=full/1=duo][u16 LE durationMs] */
+    public static final int CMD_ALT_ZONE       = 0x0111;   /* [u8 mode 0=fullscreen/1=smallscreen][u16 LE durationMs] */
     public static final int CMD_ALT_ZONE_ACK   = 0x0112;   /* hook->Java [u8 mode][i32 LE status]       */
 
     public interface Listener {

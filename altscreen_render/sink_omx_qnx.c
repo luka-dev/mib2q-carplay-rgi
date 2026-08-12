@@ -33,6 +33,7 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <string.h>
 #include <time.h>
 #include <errno.h>
@@ -88,6 +89,7 @@ typedef struct {
     unsigned long long       presentRecoveryAfterMs;
     uint8_t                  config[4096];
     uint32_t                 configLen;
+    volatile int             viewAreaMode; /* control thread -> loader: 0=fullscreen, 1=smallscreen */
 } ScreenSink;
 
 static ScreenSink g_ss;
@@ -235,6 +237,7 @@ static OMX_CALLBACKTYPE kCallbacks = { _OnEvent, _OnEmptyDone, _OnFillDone };
 #define kOmxStartIdleWaitMs  10000L  /* APQ8064 may take seconds allocating native 32m */
 #define kOmxStartExecWaitMs   2000L
 #define kOmxStopWaitMs         900L  /* two stop edges fit the supervisor grace */
+#define kCallbackDrainWaitMs  1500L
 
 static void _AbsTimeoutMs(struct timespec *ts, long ms) {
     clock_gettime(CLOCK_REALTIME, ts);
@@ -277,7 +280,8 @@ static void _DestroyPresent(ScreenSink *me) {
 }
 
 static int _CreateEarlyPresent(ScreenSink *me) {
-    me->present = screen_egl_present_create_output(me->width, me->height);
+    me->present = screen_egl_present_create_output(me->width, me->height,
+                                                   &me->viewAreaMode);
     if (!me->present) {
         fprintf(stderr,
                 "altscreen_render[qnx]: early RGBA plane-99 setup FAILED\n");
@@ -472,11 +476,24 @@ static void _Teardown(ScreenSink *me, int destroyPresent) {
     me->winReady = 0;
     me->callbacksClosing = 1;
     pthread_cond_broadcast(&me->cond);
-    while (me->callbacksActive > 0) {
-        /* Never free OMX/Screen storage underneath a callback.  In the normal
-         * path this lasts at most one GPU swap; if the GPU itself is wedged the
-         * supervisor's SIGKILL backstop is safer than an in-process UAF. */
-        pthread_cond_wait(&me->cond, &me->lock);
+    {
+        struct timespec callbackDeadline;
+        int waitRc = 0;
+        _AbsTimeoutMs(&callbackDeadline, kCallbackDrainWaitMs);
+        while (me->callbacksActive > 0 && waitRc != ETIMEDOUT)
+            waitRc = pthread_cond_timedwait(&me->cond, &me->lock,
+                                            &callbackDeadline);
+        if (me->callbacksActive > 0) {
+            fprintf(stderr,
+                    "altscreen_render[qnx]: callback drain TIMEOUT active=%u; exiting without freeing live OMX/EGL storage\n",
+                    me->callbacksActive);
+            pthread_mutex_unlock(&me->lock);
+            /* A GPU callback is wedged inside this renderer. Continuing would
+             * either block forever or free buffers under the callback. Exit the
+             * isolated renderer; the persistent supervisor restarts it after
+             * backoff, while dio_manager and the HMI remain alive. */
+            _exit(86);
+        }
     }
     pthread_mutex_unlock(&me->lock);
     if (me->decoder) {
@@ -765,6 +782,13 @@ int av_sink_video_ready(void) {
     ready = g_ss.started && !g_ss.omxError && g_ss.presentationHealthy;
     pthread_mutex_unlock(&g_ss.lock);
     return ready;
+}
+
+void av_sink_set_view_area(int mode) {
+    mode = mode == 1 ? 1 : 0;
+    g_ss.viewAreaMode = mode;
+    fprintf(stderr, "altscreen_render[loader]: viewArea -> %s\n",
+            mode ? "smallscreen" : "fullscreen");
 }
 
 void av_sink_session_end(void) {

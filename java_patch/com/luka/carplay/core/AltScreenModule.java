@@ -49,7 +49,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
     private static final int CLUSTER_FPS      = 30;   /* cluster encoder rate; MOST/encoder may cap below this */
     private static final int KOMBI_TYPE_G24   = 4;
     public static final int VIEWAREA_FULLSCREEN = 0;
-    public static final int VIEWAREA_DUO        = 1;
+    public static final int VIEWAREA_SMALLSCREEN = 1;
     private static final int VIEWAREA_ANIMATION_MS = 250;
 
     /** Lightweight notification for consumers whose cluster presentation differs by view area. */
@@ -146,8 +146,8 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
     private static volatile ViewAreaModeListener viewAreaModeListener;
     private static volatile InfoModeListener infoModeListener;
 
-    public static boolean isDuoViewArea() {
-        synchronized (LOCK) { return desiredViewAreaMode == VIEWAREA_DUO; }
+    public static boolean isSmallScreenViewArea() {
+        synchronized (LOCK) { return desiredViewAreaMode == VIEWAREA_SMALLSCREEN; }
     }
 
     public static void setViewAreaModeListener(ViewAreaModeListener listener) {
@@ -174,14 +174,17 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
         payload[1] = (byte) (VIEWAREA_ANIMATION_MS & 0xff);
         payload[2] = (byte) ((VIEWAREA_ANIMATION_MS >>> 8) & 0xff);
         boolean ok = CarplayBus.getInstance().sendBinary(CarplayBus.CMD_ALT_ZONE, payload);
-        Log.i(TAG, "viewArea send mode=" + (mode == VIEWAREA_DUO ? "duo" : "fullscreen")
+        Log.i(TAG, "viewArea send mode=" + (mode == VIEWAREA_SMALLSCREEN ? "smallscreen" : "fullscreen")
             + " reason=" + reason + " queued=" + ok);
         return ok;
     }
 
-    /** Called by the stock NAV_VIEW_SIZE_CHOICE model: value 0=full, value 1=duo. */
+    /** Called by the stock NAV_VIEW_SIZE_CHOICE model: value 0=fullscreen, value 1=smallscreen. */
     public static void setViewAreaMode(int mode) {
-        mode = (mode == VIEWAREA_DUO) ? VIEWAREA_DUO : VIEWAREA_FULLSCREEN;
+        mode = (mode == VIEWAREA_SMALLSCREEN) ? VIEWAREA_SMALLSCREEN : VIEWAREA_FULLSCREEN;
+        /* Renderer starts before RTSP 111 and needs the mode independently of
+         * the hook so its loader uses the correct physical safe area. */
+        AltscreenControlServer.setViewAreaMode(mode);
         synchronized (LOCK) {
             if (desiredViewAreaMode == mode) return;
             desiredViewAreaMode = mode;
@@ -203,7 +206,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
                        | ((payload[2] & 0xff) << 8)
                        | ((payload[3] & 0xff) << 16)
                        | ((payload[4] & 0xff) << 24);
-            Log.i(TAG, "viewArea ack mode=" + (mode == VIEWAREA_DUO ? "duo" : "fullscreen")
+            Log.i(TAG, "viewArea ack mode=" + (mode == VIEWAREA_SMALLSCREEN ? "smallscreen" : "fullscreen")
                 + " status=" + status);
         }
     }

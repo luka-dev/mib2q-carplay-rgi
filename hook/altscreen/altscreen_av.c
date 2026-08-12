@@ -11,6 +11,9 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <sys/time.h>
+#include <fcntl.h>
+#include <poll.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -24,6 +27,7 @@ DEFINE_LOG_MODULE(altscreen_av);
  * and a teardown/reap that joins it inherits this as latency on the RTSP path.  The
  * renderer's OMX still starts within this window; a genuinely dead link now fails ~1 s. */
 #define AV_SEND_STALL_LIMIT_MS 1000L
+#define AV_CONNECT_TIMEOUT_MS 250
 
 static char            g_host[64] = ALTAV_DEFAULT_HOST;
 static int             g_port     = ALTAV_DEFAULT_PORT;
@@ -96,6 +100,8 @@ int altav_is_owner(uint32_t gen)
 static void av_connect_locked(void)
 {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
+    int original_flags;
+    int connected = 0;
     if (fd < 0) return;
     /* Bounded send: this is the hook-owned 111 receiver thread, not stock
      * libairplay's main-screen thread.  The renderer starts OMX synchronously
@@ -111,7 +117,27 @@ static void av_connect_locked(void)
     sa.sin_family = AF_INET;
     sa.sin_port   = htons((uint16_t)g_port);
     inet_pton(AF_INET, g_host, &sa.sin_addr);
+    original_flags = fcntl(fd, F_GETFL, 0);
+    if (original_flags < 0 || fcntl(fd, F_SETFL, original_flags | O_NONBLOCK) != 0) {
+        close(fd);
+        return;
+    }
     if (connect(fd, (struct sockaddr *)&sa, sizeof(sa)) == 0) {
+        connected = 1;
+    } else if (errno == EINPROGRESS || errno == EWOULDBLOCK) {
+        struct pollfd pfd;
+        int socket_error = 0;
+        socklen_t socket_error_len = sizeof(socket_error);
+        pfd.fd = fd;
+        pfd.events = POLLOUT;
+        pfd.revents = 0;
+        if (poll(&pfd, 1, AV_CONNECT_TIMEOUT_MS) > 0 &&
+            (pfd.revents & POLLOUT) &&
+            getsockopt(fd, SOL_SOCKET, SO_ERROR, &socket_error,
+                       &socket_error_len) == 0 && socket_error == 0)
+            connected = 1;
+    }
+    if (connected && fcntl(fd, F_SETFL, original_flags) == 0) {
         g_fd = fd;
         g_need_config = 1;
         LOG_INFO(LOG_MODULE, "connected to %s:%d (fd=%d)", g_host, g_port, fd);

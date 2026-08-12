@@ -24,6 +24,9 @@ void av_sink_frame(const uint8_t *annexb, uint32_t len);
  * readiness: Java uses this edge to leave the stock cluster context. */
 int  av_sink_video_ready(void);
 
+/* Select the Audi safe area used by the startup loader. */
+void av_sink_set_view_area(int mode);   /* 0=fullscreen, 1=smallscreen */
+
 /* Called when the client disconnects (session end) — flush/reset decoder so the
  * next session starts clean.  The process keeps running to accept the next one. */
 void av_sink_session_end(void);

@@ -63,6 +63,9 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
         try {
             com.luka.carplay.core.CarPlayApp.startTransport(this.context);
         } catch (Throwable t) { /* never crash the stock component init */ }
+        try {
+            com.luka.carplay.core.VcStyleLogger.start(this.context.getFramework(), this.bundleContext);
+        } catch (Throwable t) { /* read-only VC diagnostic; never affect stock startup */ }
         try { com.luka.carplay.coverart.CoverArt.getInstance().start(this.eventListener); }
         catch (Throwable t) { /* optional */ }
     }
@@ -71,6 +74,8 @@ public class TerminalModeBapCombi implements ITerminalModeComponent {
         try { com.luka.carplay.core.CarPlayApp.onDeactivateAndWait(); }
         catch (Throwable t) { /* optional lifecycle cleanup */ }
         try { com.luka.carplay.coverart.CoverArt.getInstance().stop(this.eventListener); }
+        catch (Throwable t) { /* optional */ }
+        try { com.luka.carplay.core.VcStyleLogger.stop(); }
         catch (Throwable t) { /* optional */ }
         this.serviceTracker.close();
         this.context.getEventBus().unregisterListener(this.eventListener);

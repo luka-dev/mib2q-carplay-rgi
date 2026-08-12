@@ -3,6 +3,7 @@
  */
 #include "altctl.h"
 #include "protocol.h"
+#include "sink.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -39,10 +40,13 @@ static void *ctl_loop(void *arg) {
     (void)arg;
     int fd = -1;
     int last_sent = -1;
+    unsigned char rx[ALTCTL_PKT_SIZE];
+    unsigned int rx_used = 0;
     while (g_run) {
         if (fd < 0) {
             fd = ctl_connect();
             last_sent = -1;                       /* force resend of the current state on (re)connect */
+            rx_used = 0;
             if (fd < 0) { sleep(1); continue; }   /* Java control server not up yet — retry */
             fprintf(stderr, "altscreen_render: control link to lsd up (:%d)\n", ALTCTL_PORT);
         }
@@ -61,9 +65,20 @@ static void *ctl_loop(void *arg) {
         /* ~10 Hz idle: catch state changes promptly + notice a peer close. */
         struct timespec ts = { 0, 100L * 1000000L };
         nanosleep(&ts, NULL);
-        char b;
-        ssize_t r = recv(fd, &b, 1, MSG_DONTWAIT);
+        ssize_t r = recv(fd, rx + rx_used, ALTCTL_PKT_SIZE - rx_used, MSG_DONTWAIT);
         if (r == 0) { close(fd); fd = -1; }        /* lsd closed the control link */
+        else if (r > 0) {
+            rx_used += (unsigned int)r;
+            if (rx_used == ALTCTL_PKT_SIZE) {
+                if (rx[0] == ALTCMD_VIEW_AREA) {
+                    av_sink_set_view_area(rx[1] == 1 ? 1 : 0);
+                } else {
+                    fprintf(stderr, "altscreen_render: unknown control command 0x%02x\n",
+                            (unsigned int)rx[0]);
+                }
+                rx_used = 0;
+            }
+        }
         else if (r < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
             close(fd); fd = -1;                    /* RST / hard error → drop dead fd, reconnect */
         }

@@ -380,6 +380,8 @@ int platform_should_close(void) {
 }
 
 void platform_shutdown(void) {
+    int hidden = 0;
+    struct timespec release_wait;
     /* Clean shutdown sequence:
      *   1. Release GL context and EGL surface while keeping EGLDisplay /
      *      displayinit globals alive (full teardown of shared display
@@ -389,6 +391,13 @@ void platform_shutdown(void) {
      * Context restore (switching the cluster back to the stock context) is
      * Java's job now — this renderer runs no dmdt. */
     if (g_egl_display != EGL_NO_DISPLAY) {
+        if (g_cs && cluster_surface_window(g_cs))
+            screen_set_window_property_iv(cluster_surface_window(g_cs),
+                                          SCREEN_PROPERTY_VISIBLE, &hidden);
+        if (g_egl_context != EGL_NO_CONTEXT) glFinish();
+        release_wait.tv_sec = 0;
+        release_wait.tv_nsec = 50L * 1000L * 1000L;
+        while (nanosleep(&release_wait, &release_wait) != 0 && errno == EINTR) {}
         eglMakeCurrent(g_egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
         if (g_egl_surface != EGL_NO_SURFACE) {
             eglDestroySurface(g_egl_display, g_egl_surface);
