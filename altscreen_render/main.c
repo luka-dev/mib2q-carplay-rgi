@@ -3,8 +3,9 @@
  * from libairplay's alt forward (screenstream.c) over TCP :19831 and feeds it to a
  * video sink (file capture on Mac, OMX decode + cluster present on QNX).
  *
- * Single-threaded blocking server: libairplay is the only client and (re)connects
- * once per CarPlay session.  On disconnect we notify the sink and accept again.
+ * The socket thread drains libairplay continuously while a bounded worker queue
+ * serializes decoder startup/teardown and frame delivery. On disconnect we
+ * notify the sink and accept again.
  * POSIX sockets — builds on macOS and QNX 6.5.
  */
 #include "protocol.h"
@@ -18,6 +19,9 @@
 #include <unistd.h>
 #include <signal.h>
 #include <errno.h>
+#include <pthread.h>
+#include <stdint.h>
+#include <time.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <netinet/in.h>
@@ -27,6 +31,293 @@
 static volatile sig_atomic_t g_running = 1;
 static volatile sig_atomic_t g_listen_fd = -1;
 static volatile sig_atomic_t g_client_fd = -1;
+static volatile int g_startup_complete;
+static volatile int g_teardown_complete;
+
+/* av_sink_open creates Screen/EGL before :19831 starts listening. A Qualcomm
+ * driver hang there otherwise leaves a live PID forever; the supervisor's
+ * recurring check intentionally avoids netstat churn and would adopt it. */
+static void *startup_watchdog_main(void *unused) {
+    unsigned int waited = 0;
+    (void)unused;
+    while (!g_startup_complete && waited < 15000) {
+        struct timespec pause = { 0, 100L * 1000000L };
+        nanosleep(&pause, NULL);
+        waited += 100;
+    }
+    if (!g_startup_complete) {
+        static const char msg[] =
+            "altscreen_render: Screen/EGL startup watchdog TIMEOUT; exiting isolated renderer\n";
+        (void)write(STDERR_FILENO, msg, sizeof(msg) - 1);
+        _exit(92);
+    }
+    return NULL;
+}
+
+static void *teardown_watchdog_main(void *unused) {
+    unsigned int waited = 0;
+    (void)unused;
+    while (!g_teardown_complete && waited < 3500) {
+        struct timespec pause = { 0, 100L * 1000000L };
+        nanosleep(&pause, NULL);
+        waited += 100;
+    }
+    if (!g_teardown_complete) {
+        static const char msg[] =
+            "altscreen_render: OMX/EGL teardown watchdog TIMEOUT; exiting isolated renderer\n";
+        (void)write(STDERR_FILENO, msg, sizeof(msg) - 1);
+        _exit(93);
+    }
+    return NULL;
+}
+
+/* Keep the loopback reader independent of Qualcomm OMX startup.  Loaded->Idle
+ * can legitimately take up to ten seconds on APQ8064; doing that work inline
+ * stopped draining :19831, filled the hook's socket, and made a dio-owned
+ * receiver thread spend its complete send-stall budget in renderer I/O.
+ *
+ * The bounded queue preserves config+first IDR (they are the first messages of
+ * each generation).  A newer connection atomically discards pending frames from
+ * the superseded generation; a BEGIN marker resets OMX before its first frame. */
+enum decode_item_type {
+    DECODE_BEGIN = 1,
+    DECODE_FRAME = 2,
+    DECODE_END   = 3
+};
+
+typedef struct decode_item {
+    struct decode_item *next;
+    uint8_t *data;
+    uint32_t len;
+    uint32_t generation;
+    int type;
+} decode_item_t;
+
+#define DECODE_QUEUE_MAX_ITEMS 1024u
+#define DECODE_QUEUE_MAX_BYTES (24u * 1024u * 1024u)
+
+static pthread_mutex_t g_decode_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t  g_decode_cond = PTHREAD_COND_INITIALIZER;
+static decode_item_t  *g_decode_head;
+static decode_item_t  *g_decode_tail;
+static unsigned int    g_decode_items;
+static size_t          g_decode_bytes;
+static uint32_t        g_decode_generation;
+static volatile uint32_t g_decode_active_generation;
+static int             g_decode_stop;
+static pthread_t       g_decode_thread;
+static int             g_decode_thread_started;
+static volatile int    g_decode_thread_exited;
+static unsigned long   g_decode_dropped;
+static unsigned long long g_decode_last_progress_ms;
+static int             g_decode_worker_busy;
+
+static unsigned long long decode_now_ms(void) {
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) return 0;
+    return (unsigned long long)ts.tv_sec * 1000ULL
+         + (unsigned long long)ts.tv_nsec / 1000000ULL;
+}
+
+static void decode_item_free(decode_item_t *item) {
+    if (!item) return;
+    free(item->data);
+    free(item);
+}
+
+static void decode_queue_clear_locked(void) {
+    decode_item_t *item = g_decode_head;
+    while (item) {
+        decode_item_t *next = item->next;
+        decode_item_free(item);
+        item = next;
+    }
+    g_decode_head = g_decode_tail = NULL;
+    g_decode_items = 0;
+    g_decode_bytes = 0;
+}
+
+static int decode_queue_push_locked(int type, uint32_t generation,
+                                    const uint8_t *data, uint32_t len) {
+    decode_item_t *item;
+    if (g_decode_stop) return -1;
+    if (type == DECODE_FRAME &&
+        (g_decode_items >= DECODE_QUEUE_MAX_ITEMS ||
+         g_decode_bytes + (size_t)len > DECODE_QUEUE_MAX_BYTES)) {
+        g_decode_dropped++;
+        if (g_decode_dropped <= 3 || (g_decode_dropped % 120) == 0)
+            fprintf(stderr,
+                    "altscreen_render: decode queue full; dropped frame #%lu len=%u\n",
+                    g_decode_dropped, (unsigned)len);
+        return -1;
+    }
+    item = (decode_item_t *)calloc(1, sizeof(*item));
+    if (!item) return -1;
+    if (len) {
+        item->data = (uint8_t *)malloc(len);
+        if (!item->data) { free(item); return -1; }
+        memcpy(item->data, data, len);
+    }
+    item->type = type;
+    item->generation = generation;
+    item->len = len;
+    if (g_decode_tail) g_decode_tail->next = item;
+    else g_decode_head = item;
+    g_decode_tail = item;
+    g_decode_items++;
+    g_decode_bytes += len;
+    pthread_cond_signal(&g_decode_cond);
+    return 0;
+}
+
+static int decode_generation_is_current(uint32_t generation) {
+    int current;
+    pthread_mutex_lock(&g_decode_lock);
+    current = !g_decode_stop && generation == g_decode_generation;
+    pthread_mutex_unlock(&g_decode_lock);
+    return current;
+}
+
+static void *decode_worker_main(void *unused) {
+    uint32_t workerGeneration = 0;
+    (void)unused;
+    for (;;) {
+        decode_item_t *item;
+        pthread_mutex_lock(&g_decode_lock);
+        while (!g_decode_head && !g_decode_stop)
+            pthread_cond_wait(&g_decode_cond, &g_decode_lock);
+        if (!g_decode_head && g_decode_stop) {
+            pthread_mutex_unlock(&g_decode_lock);
+            break;
+        }
+        item = g_decode_head;
+        g_decode_head = item->next;
+        if (!g_decode_head) g_decode_tail = NULL;
+        if (g_decode_items) g_decode_items--;
+        if (g_decode_bytes >= item->len) g_decode_bytes -= item->len;
+        else g_decode_bytes = 0;
+        g_decode_worker_busy = 1;
+        pthread_mutex_unlock(&g_decode_lock);
+
+        if (item->type == DECODE_BEGIN) {
+            if (decode_generation_is_current(item->generation)) {
+                g_decode_active_generation = 0;
+                __sync_synchronize();
+                av_sink_session_end();
+                workerGeneration = item->generation;
+                __sync_synchronize();
+                g_decode_active_generation = workerGeneration;
+                fprintf(stderr,
+                        "altscreen_render: decoder generation %u begin\n",
+                        (unsigned)workerGeneration);
+            }
+        } else if (item->type == DECODE_FRAME) {
+            if (item->generation == workerGeneration &&
+                decode_generation_is_current(item->generation))
+                av_sink_frame(item->data, item->len);
+        } else if (item->type == DECODE_END) {
+            if (item->generation == workerGeneration &&
+                decode_generation_is_current(item->generation)) {
+                g_decode_active_generation = 0;
+                __sync_synchronize();
+                av_sink_session_end();
+                workerGeneration = 0;
+            }
+        }
+        pthread_mutex_lock(&g_decode_lock);
+        g_decode_last_progress_ms = decode_now_ms();
+        g_decode_worker_busy = 0;
+        pthread_mutex_unlock(&g_decode_lock);
+        decode_item_free(item);
+    }
+    g_decode_active_generation = 0;
+    __sync_synchronize();
+    av_sink_session_end();
+    g_decode_thread_exited = 1;
+    __sync_synchronize();
+    return NULL;
+}
+
+static int decode_worker_start(void) {
+    int result;
+    g_decode_stop = 0;
+    g_decode_thread_exited = 0;
+    result = pthread_create(&g_decode_thread, NULL, decode_worker_main, NULL);
+    if (result == 0) g_decode_thread_started = 1;
+    return result == 0 ? 0 : -1;
+}
+
+static uint32_t decode_queue_begin(void) {
+    uint32_t generation;
+    pthread_mutex_lock(&g_decode_lock);
+    generation = ++g_decode_generation;
+    if (generation == 0) generation = ++g_decode_generation;
+    /* Nothing pending from the old TCP owner may reach OMX after this point. */
+    decode_queue_clear_locked();
+    if (!g_decode_worker_busy) g_decode_last_progress_ms = decode_now_ms();
+    if (decode_queue_push_locked(DECODE_BEGIN, generation, NULL, 0) != 0)
+        generation = 0;
+    pthread_mutex_unlock(&g_decode_lock);
+    return generation;
+}
+
+static int decode_queue_frame(uint32_t generation,
+                              const uint8_t *data, uint32_t len) {
+    int result;
+    int workerStuck = 0;
+    unsigned long long nowMs;
+    pthread_mutex_lock(&g_decode_lock);
+    if (generation != g_decode_generation) result = -1;
+    else result = decode_queue_push_locked(DECODE_FRAME, generation, data, len);
+    nowMs = decode_now_ms();
+    if (result == 0 && g_decode_items > 2 && nowMs != 0 &&
+        g_decode_last_progress_ms != 0 &&
+        nowMs - g_decode_last_progress_ms > 20000ULL)
+        workerStuck = 1;
+    pthread_mutex_unlock(&g_decode_lock);
+    if (workerStuck) {
+        fprintf(stderr,
+                "altscreen_render: decoder worker made no progress for 20s; exiting isolated renderer\n");
+        _exit(90);
+    }
+    return result;
+}
+
+static void decode_queue_end(uint32_t generation) {
+    pthread_mutex_lock(&g_decode_lock);
+    if (generation == g_decode_generation)
+        decode_queue_push_locked(DECODE_END, generation, NULL, 0);
+    pthread_mutex_unlock(&g_decode_lock);
+}
+
+static int decode_video_ready(uint32_t generation) {
+    __sync_synchronize();
+    return g_decode_active_generation == generation && av_sink_video_ready();
+}
+
+static void decode_worker_stop(void) {
+    unsigned int waited = 0;
+    if (!g_decode_thread_started) return;
+    pthread_mutex_lock(&g_decode_lock);
+    g_decode_stop = 1;
+    decode_queue_clear_locked();
+    pthread_cond_broadcast(&g_decode_cond);
+    pthread_mutex_unlock(&g_decode_lock);
+    while (!g_decode_thread_exited && waited < 1500) {
+        struct timespec pause;
+        pause.tv_sec = 0;
+        pause.tv_nsec = 10L * 1000000L;
+        nanosleep(&pause, NULL);
+        waited += 10;
+    }
+    if (!g_decode_thread_exited) {
+        fprintf(stderr,
+                "altscreen_render: decoder worker stop TIMEOUT; exiting isolated renderer\n");
+        _exit(88);
+    }
+    pthread_join(g_decode_thread, NULL);
+    g_decode_thread_started = 0;
+}
 
 /* close() is async-signal-safe. Closing both sockets guarantees SIGTERM breaks
  * an idle accept() and an active/partial frame read immediately, so the normal
@@ -62,7 +353,7 @@ static int listen_socket(void) {
 }
 
 /* Serve one connected client until it disconnects or a protocol error. */
-static void serve_client(int cfd, int *video_signaled) {
+static void serve_client(int cfd, uint32_t generation, int *video_signaled) {
     int one = 1;
     setsockopt(cfd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
     /* A stalled or half-open peer must never hang the sole server thread forever
@@ -82,8 +373,13 @@ static void serve_client(int cfd, int *video_signaled) {
     for (;;) {
         int r = av_read_frame(cfd, &buf, &cap, &len);
         if (r == 0) {
-            if (len > 0) av_sink_frame(buf, len);
-            if (av_sink_video_ready()) {
+            if (len > 0 && decode_queue_frame(generation, buf, len) != 0) {
+                fprintf(stderr,
+                        "altscreen_render: decode queue rejected generation %u frame\n",
+                        (unsigned)generation);
+                break;
+            }
+            if (decode_video_ready(generation)) {
                 if (!*video_signaled) {
                     *video_signaled = 1;
                     altctl_set_video(1);
@@ -128,11 +424,27 @@ int main(void) {
     freopen("/tmp/altscreen_render.log", "w", stderr);
     setvbuf(stderr, NULL, _IONBF, 0);
 
+    {
+        pthread_t watchdog;
+        if (pthread_create(&watchdog, NULL, startup_watchdog_main, NULL) == 0)
+            pthread_detach(watchdog);
+        else
+            fprintf(stderr, "altscreen_render: startup watchdog create FAILED\n");
+    }
+
     if (av_sink_open() != 0) return 1;
+    if (decode_worker_start() != 0) {
+        fprintf(stderr, "altscreen_render: decoder worker create FAILED\n");
+        av_sink_close();
+        return 1;
+    }
 
     int lfd = listen_socket();
-    if (lfd < 0) { av_sink_close(); return 1; }
+    if (lfd < 0) { decode_worker_stop(); av_sink_close(); return 1; }
     g_listen_fd = lfd;
+    __sync_synchronize();
+    g_startup_complete = 1;
+    __sync_synchronize();
     fprintf(stderr, "altscreen_render: listening on %s:%d\n", ALTAV_HOST, ALTAV_PORT);
 
     /* Control channel to Java/lsd — reports video on/off so Java flips setVideoAvailable(). */
@@ -147,23 +459,42 @@ int main(void) {
             break;
         }
         g_client_fd = cfd;
-        fprintf(stderr, "altscreen_render: hook connected\n");
-        altctl_set_video(0);                     /* remain on stock ctx until a real RGBA swap */
-        serve_client(cfd, &video_signaled);
+        {
+            uint32_t generation = decode_queue_begin();
+            if (generation == 0) {
+                fprintf(stderr, "altscreen_render: decoder BEGIN enqueue FAILED\n");
+            } else {
+                fprintf(stderr, "altscreen_render: hook connected generation=%u\n",
+                        (unsigned)generation);
+                altctl_set_video(0);             /* remain on stock ctx until a real RGBA swap */
+                serve_client(cfd, generation, &video_signaled);
+                decode_queue_end(generation);
+            }
+        }
         if ((int)g_client_fd == cfd) {
             g_client_fd = -1;
             close(cfd);
         }
-        av_sink_session_end();
         altctl_set_video(0);                     /* stream ended → tell Java (Java clears ctx 80/81) */
         fprintf(stderr, "altscreen_render: hook disconnected\n");
     }
 
+    {
+        pthread_t watchdog;
+        if (pthread_create(&watchdog, NULL, teardown_watchdog_main, NULL) == 0)
+            pthread_detach(watchdog);
+        else
+            fprintf(stderr, "altscreen_render: teardown watchdog create FAILED\n");
+    }
     altctl_stop();
     if ((int)g_listen_fd == lfd) {
         g_listen_fd = -1;
         close(lfd);
     }
+    decode_worker_stop();
     av_sink_close();
+    __sync_synchronize();
+    g_teardown_complete = 1;
+    __sync_synchronize();
     return 0;
 }

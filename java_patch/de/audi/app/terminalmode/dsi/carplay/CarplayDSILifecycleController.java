@@ -7,7 +7,6 @@ import de.audi.app.terminalmode.TerminalModeUtils;
 import de.audi.app.terminalmode.diagnosis.IDiagnosisCommandProvider;
 import de.audi.app.terminalmode.dsi.AbstractDSIController;
 import de.audi.app.terminalmode.dsi.AbstractDispatcherRunnable;
-import de.audi.app.terminalmode.dsi.DSIResource;
 import de.audi.app.terminalmode.dsi.IAppState;
 import de.audi.app.terminalmode.dsi.IDSIAppState;
 import de.audi.app.terminalmode.dsi.IDSIResource;
@@ -180,75 +179,6 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
             this.this$0.tmManager.getEventBus().registerListener(this);
         }
 
-        /**
-         * RVC and CarPlay service startup are dispatched by separate stock command
-         * lists.  If a phone activates while the rear-view camera is already on,
-         * StartService can observe the pre-restriction TMState and advertise the
-         * normal SCREEN resource even though MURVCActive is already true.  That
-         * lets projection remove displayable 17 from the main-display composition:
-         * the camera HMI remains, but its video becomes black.
-         *
-         * Re-read the authoritative sticky RVC property at the final DSI boundary
-         * and replace only SCREEN with stock CarPlay's restricted/RVC tuple.  Do
-         * not mutate the caller's resource array; it still represents TMState.
-         */
-        private IDSIResource[] enforceRVCInitialScreenConstraint(IDSIResource[] resources) {
-            boolean rvcActive = false;
-            try {
-                Object value = this.this$0
-                    .tmManager
-                    .getSmartphoneDSIManager()
-                    .getSmartphoneProperties()
-                    .getPropertyMURVCActive()
-                    .get();
-                rvcActive = value instanceof Boolean && ((Boolean)value).booleanValue();
-            } catch (Throwable t) {
-                /* Fail open to the unchanged stock resource list.  A property
-                 * lookup failure must never prevent CarPlay service startup. */
-                this.this$0.logger.log(
-                    100000,
-                    "[%1.startService] cannot read MURVCActive; preserving stock SCREEN resource: %2",
-                    LOGCLASS,
-                    t
-                );
-            }
-
-            if (!rvcActive || resources == null) return resources;
-
-            IDSIResource[] guarded = new IDSIResource[resources.length];
-            boolean screenFound = false;
-            for (int i = 0; i < resources.length; i++) {
-                IDSIResource resource = resources[i];
-                if (resource != null && resource.getResourceId() == 1) {
-                    /* Exact stock restricted SCREEN/RVC request:
-                     * CarplayUtils STARTSERVICE_LM_SCREEN_RVC = {3,1,0,0,3}. */
-                    guarded[i] = new DSIResource.Builder()
-                        .setpResourceId(1)
-                        .setpOwner(1)
-                        .setDsiResourceId(2)
-                        .setDsiResourceOwner(1)
-                        .setDsiTakeType(3)
-                        .setDSITransferPriority(1)
-                        .setDsiTakeConstraint(0)
-                        .setDsiBorrowConstraint(0)
-                        .setDsiUnborrowConstraint(3)
-                        .build();
-                    screenFound = true;
-                } else {
-                    guarded[i] = resource;
-                }
-            }
-
-            if (screenFound) {
-                this.this$0.logger.log(
-                    1000000,
-                    "[%1.startService] RVC active: forced stock restricted SCREEN constraints",
-                    LOGCLASS
-                );
-            }
-            return guarded;
-        }
-
         public void startService(IDSIAppState[] aidsiappstate, IDSIResource[] aidsiresource) {
             this.this$0
                 .logger
@@ -259,8 +189,7 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
                     TerminalModeUtils.logAppStates(aidsiappstate),
                     TerminalModeUtils.logResources(aidsiresource)
                 );
-            IDSIResource[] initialResources = this.enforceRVCInitialScreenConstraint(aidsiresource);
-            ResourceRequest[] aresourcerequest = this.convertResource2DSIResourceRequest(initialResources, true);
+            ResourceRequest[] aresourcerequest = this.convertResource2DSIResourceRequest(aidsiresource, true);
             AppStateRequest[] aappstaterequest = this.convertAppState2DSIAppStateRequest(aidsiappstate);
             byte b0 = 0;
             if (this.this$0.configuration.hasKnob()) {

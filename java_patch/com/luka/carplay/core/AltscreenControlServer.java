@@ -32,10 +32,14 @@ final class AltscreenControlServer {
 
     private static final Object LOCK = new Object();
     private static Thread   thread;
+    private static Thread   writerThread;
     private static volatile boolean run;
     private static Socket client;
     private static int clientGeneration;
     private static int viewAreaMode;                /* 0=fullscreen, 1=smallscreen */
+    private static boolean writePending;
+    private static int writeGeneration;
+    private static int writeMode;
 
     private AltscreenControlServer() {}
 
@@ -43,31 +47,29 @@ final class AltscreenControlServer {
     static void setViewAreaMode(int mode) {
         synchronized (LOCK) {
             viewAreaMode = mode == 1 ? 1 : 0;
-            sendViewAreaLocked("view-change");
+            queueViewAreaLocked("view-change");
         }
     }
 
-    /* All writes use LOCK, so the initial state and a simultaneous View press
-     * cannot interleave their fixed four-byte packets. */
-    private static void sendViewAreaLocked(String reason) {
+    /* Caller holds LOCK. Coalesce rapid View presses to the newest state; stock
+     * HMI callbacks never touch a potentially blocked renderer socket. */
+    private static void queueViewAreaLocked(String reason) {
         if (client == null) return;
-        try {
-            byte[] pkt = new byte[] { (byte)CMD_VIEW_AREA, (byte)viewAreaMode, 0, 0 };
-            OutputStream out = client.getOutputStream();
-            out.write(pkt);
-            out.flush();
-            Log.i(TAG, "-> VIEW_AREA " + (viewAreaMode == 1 ? "smallscreen" : "fullscreen")
-                + " reason=" + reason);
-        } catch (Throwable t) {
-            Log.d(TAG, "VIEW_AREA send failed: " + t);
-            try { client.close(); } catch (Throwable ignored) { }
-        }
+        writeMode = viewAreaMode;
+        writeGeneration = clientGeneration;
+        writePending = true;
+        LOCK.notifyAll();
+        Log.i(TAG, "queued VIEW_AREA " + (viewAreaMode == 1 ? "smallscreen" : "fullscreen")
+            + " reason=" + reason);
     }
 
     static void start() {
         synchronized (LOCK) {
             if (run) return;
             run = true;
+            writerThread = new Thread(new Runnable() { public void run() { writerLoop(); } }, "carplay-altctl-writer");
+            writerThread.setDaemon(true);
+            writerThread.start();
             thread = new Thread(new Runnable() { public void run() { loop(); } }, "carplay-altctl");
             thread.setDaemon(true);
             thread.start();
@@ -89,7 +91,7 @@ final class AltscreenControlServer {
                         if (client != null) try { client.close(); } catch (Throwable t) { }
                         client = c;
                         generation = ++clientGeneration;
-                        sendViewAreaLocked("renderer-connect");
+                        queueViewAreaLocked("renderer-connect");
                     }
                     Log.i(TAG, "altscreen_render connected generation=" + generation);
                     Thread reader = new Thread(new Runnable() {
@@ -103,6 +105,36 @@ final class AltscreenControlServer {
                 try { Thread.sleep(1000); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
             } finally {
                 if (ss != null) { try { ss.close(); } catch (Throwable t) { /* ignore */ } }
+            }
+        }
+    }
+
+    private static void writerLoop() {
+        while (true) {
+            Socket owned;
+            int generation;
+            int mode;
+            synchronized (LOCK) {
+                while (run && !writePending) {
+                    try { LOCK.wait(); } catch (InterruptedException e) { }
+                }
+                if (!run) return;
+                owned = client;
+                generation = writeGeneration;
+                mode = writeMode;
+                writePending = false;
+                if (owned == null || generation != clientGeneration) continue;
+            }
+            try {
+                byte[] pkt = new byte[] { (byte)CMD_VIEW_AREA, (byte)mode, 0, 0 };
+                OutputStream out = owned.getOutputStream();
+                out.write(pkt);
+                out.flush();
+                Log.i(TAG, "-> VIEW_AREA " + (mode == 1 ? "smallscreen" : "fullscreen")
+                    + " generation=" + generation);
+            } catch (Throwable t) {
+                Log.d(TAG, "VIEW_AREA writer failed: " + t);
+                try { owned.close(); } catch (Throwable ignored) { }
             }
         }
     }
@@ -139,6 +171,7 @@ final class AltscreenControlServer {
             synchronized (LOCK) {
                 if (client == c && generation == clientGeneration) {
                     client = null;
+                    writePending = false;
                     owned = true;
                 }
             }

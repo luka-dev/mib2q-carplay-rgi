@@ -21,6 +21,13 @@ public final class Log {
     private static PrintStream file;        /* lazily opened; stays null if it can't be created */
     private static boolean fileTried;
     private static long fileBytes;
+    private static final Object LOCK = new Object();
+    private static final int QUEUE_CAPACITY = 256;
+    private static final String[] queue = new String[QUEUE_CAPACITY];
+    private static int queueHead;
+    private static int queueTail;
+    private static int queueCount;
+    private static Thread writerThread;
 
     private Log() {}
 
@@ -35,9 +42,65 @@ public final class Log {
     public static void e(String tag, String msg, Throwable t) { out(E, "E", tag, msg + " :: " + t); }
     public static void w(String tag, String msg, Throwable t) { out(W, "W", tag, msg + " :: " + t); }
 
-    private static synchronized void out(int l, String p, String tag, String msg) {
+    private static void out(int l, String p, String tag, String msg) {
         if (l > level) return;
         String line = "[CP/" + p + "][" + tag + "] " + msg;
+        synchronized (LOCK) {
+            ensureWriterLocked();
+            if (writerThread == null) return;
+            if (queueCount == QUEUE_CAPACITY) {
+                queue[queueHead] = null;
+                queueHead = (queueHead + 1) % QUEUE_CAPACITY;
+                queueCount--;
+            }
+            queue[queueTail] = line;
+            queueTail = (queueTail + 1) % QUEUE_CAPACITY;
+            queueCount++;
+            LOCK.notifyAll();
+        }
+    }
+
+    /* No stock HMI/BAP callback ever performs file I/O. A single daemon owns
+     * open/write/flush/rotation; overload drops the oldest diagnostics rather
+     * than blocking lsd. */
+    private static void ensureWriterLocked() {
+        if (writerThread != null) return;
+        Thread t = new Thread(new Runnable() {
+            public void run() { writerLoop(); }
+        }, "carplay-log-writer");
+        t.setDaemon(true);
+        try {
+            t.start();
+            writerThread = t;
+        } catch (Throwable ignored) {
+            writerThread = null;
+        }
+    }
+
+    private static void writerLoop() {
+        while (true) {
+            String line;
+            synchronized (LOCK) {
+                while (queueCount == 0) {
+                    try { LOCK.wait(); } catch (InterruptedException ignored) { }
+                }
+                line = queue[queueHead];
+                queue[queueHead] = null;
+                queueHead = (queueHead + 1) % QUEUE_CAPACITY;
+                queueCount--;
+            }
+            /* Logging must remain best-effort even if the old Foundation/QNX
+             * file stack throws something other than IOException.  Never let
+             * the sole writer die while writerThread remains non-null: that
+             * would make every later diagnostic queue forever and churn the
+             * bounded ring for no useful output. */
+            try { writeLine(line); }
+            catch (Throwable ignored) { resetFileAfterFailure(); }
+        }
+    }
+
+    private static void writeLine(String line) {
+        if (line == null) return;
         PrintStream f = logFile();
         if (f != null) {
             int bytes = line.getBytes().length + 1;
@@ -53,7 +116,7 @@ public final class Log {
     }
 
     /* Open the file once, best-effort; append + autoflush so a crash still leaves the tail. */
-    private static synchronized PrintStream logFile() {
+    private static PrintStream logFile() {
         if (!fileTried) {
             fileTried = true;
             try {
@@ -74,6 +137,15 @@ public final class Log {
         }
         try { rotateFiles(new File(FILE)); }
         catch (Throwable t) { }
+        fileTried = false;
+        fileBytes = 0L;
+    }
+
+    private static void resetFileAfterFailure() {
+        if (file != null) {
+            try { file.close(); } catch (Throwable ignored) { }
+            file = null;
+        }
         fileTried = false;
         fileBytes = 0L;
     }

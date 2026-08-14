@@ -11,6 +11,8 @@
 #include <unistd.h>
 #include <errno.h>
 #include <pthread.h>
+#include <fcntl.h>
+#include <poll.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -18,12 +20,15 @@
 
 static volatile int g_video_on = 0;   /* set by the main thread (single writer) */
 static volatile int g_run = 0;
+static volatile int g_exited = 1;
 static pthread_t     g_thr;
 
 void altctl_set_video(int on) { g_video_on = on ? 1 : 0; }
 
 static int ctl_connect(void) {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
+    int flags;
+    int connected = 0;
     if (fd < 0) return -1;
     int one = 1;
     setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
@@ -32,7 +37,29 @@ static int ctl_connect(void) {
     a.sin_family      = AF_INET;
     a.sin_port        = htons((uint16_t)ALTCTL_PORT);
     a.sin_addr.s_addr = inet_addr(ALTCTL_HOST);
-    if (connect(fd, (struct sockaddr *)&a, sizeof(a)) != 0) { close(fd); return -1; }
+    flags = fcntl(fd, F_GETFL, 0);
+    if (flags < 0 || fcntl(fd, F_SETFL, flags | O_NONBLOCK) != 0) {
+        close(fd);
+        return -1;
+    }
+    if (connect(fd, (struct sockaddr *)&a, sizeof(a)) == 0) {
+        connected = 1;
+    } else if (errno == EINPROGRESS || errno == EWOULDBLOCK) {
+        struct pollfd pfd;
+        int socket_error = 0;
+        socklen_t error_len = sizeof(socket_error);
+        pfd.fd = fd;
+        pfd.events = POLLOUT;
+        pfd.revents = 0;
+        if (poll(&pfd, 1, 250) > 0 && (pfd.revents & POLLOUT) &&
+            getsockopt(fd, SOL_SOCKET, SO_ERROR, &socket_error, &error_len) == 0 &&
+            socket_error == 0)
+            connected = 1;
+    }
+    if (!connected || fcntl(fd, F_SETFL, flags) != 0) {
+        close(fd);
+        return -1;
+    }
     return fd;
 }
 
@@ -84,20 +111,37 @@ static void *ctl_loop(void *arg) {
         }
     }
     if (fd >= 0) close(fd);
+    __sync_synchronize();
+    g_exited = 1;
+    __sync_synchronize();
     return NULL;
 }
 
 void altctl_start(void) {
     if (g_run) return;
     g_run = 1;
+    g_exited = 0;
     if (pthread_create(&g_thr, NULL, ctl_loop, NULL) != 0) {
         g_run = 0;
+        g_exited = 1;
         fprintf(stderr, "altscreen_render: control thread spawn failed\n");
     }
 }
 
 void altctl_stop(void) {
+    unsigned int waited = 0;
     if (!g_run) return;
     g_run = 0;
+    while (!g_exited && waited < 1250) {
+        struct timespec pause = { 0, 10L * 1000000L };
+        nanosleep(&pause, NULL);
+        waited += 10;
+    }
+    if (!g_exited) {
+        static const char msg[] =
+            "altscreen_render: control worker stop TIMEOUT; exiting isolated renderer\n";
+        (void)write(STDERR_FILENO, msg, sizeof(msg) - 1);
+        _exit(91);
+    }
     pthread_join(g_thr, NULL);
 }

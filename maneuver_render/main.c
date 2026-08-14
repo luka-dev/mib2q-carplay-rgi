@@ -21,6 +21,8 @@
 #include <errno.h>
 #include <sched.h>
 #include <signal.h>
+#include <pthread.h>
+#include <unistd.h>
 #ifdef PLATFORM_QNX
 #include <sys/neutrino.h>     /* setprio() */
 #endif
@@ -83,6 +85,36 @@ typedef struct {
 } cr_engine_t;
 
 static cr_engine_t g_engine;
+
+/* eglSwapBuffers on the old Adreno/WFD stack has no timeout. A wedged process
+ * still has a live PID, so the external supervisor cannot distinguish it from
+ * a healthy always-on renderer. This watchdog never calls EGL or touches the
+ * render state; it only observes loop progress and exits this isolated process
+ * before a stuck graphics client can linger indefinitely. */
+static volatile unsigned long g_loop_progress;
+static volatile int g_renderer_running = 1;
+static volatile int g_render_loop_started;
+
+static void *renderer_watchdog_main(void *unused) {
+    unsigned long last = g_loop_progress;
+    int stalledSeconds = 0;
+    (void)unused;
+    while (g_renderer_running) {
+        struct timespec pause = { 1, 0 };
+        while (nanosleep(&pause, &pause) != 0 && errno == EINTR) { }
+        if (!g_renderer_running) break;
+        if (g_loop_progress != last) {
+            last = g_loop_progress;
+            stalledSeconds = 0;
+        } else if (++stalledSeconds >= (g_render_loop_started ? 5 : 15)) {
+            static const char msg[] =
+                "maneuver_render: render/EGL progress watchdog TIMEOUT; exiting isolated renderer\n";
+            (void)write(STDERR_FILENO, msg, sizeof(msg) - 1);
+            _exit(89);
+        }
+    }
+    return NULL;
+}
 
 /* Presentation alpha.  CLEAR keeps a deterministic FOLLOW_STREET frame prepared
  * underneath the compositor at alpha 0; the next real presentation fades it in. */
@@ -287,6 +319,18 @@ int main(int argc, char **argv) {
 
     fprintf(stderr, "maneuver_render: starting %dx%d\n", WINDOW_W, WINDOW_H);
 
+    /* Cover platform_init as well as runtime/teardown. A process blocked in
+     * eglInitialize has a valid PID but no useful output; the supervisor's
+     * PID-only maneuver health probe cannot detect it. Cold graphics gets a
+     * generous 15 s, then the isolated process exits for a backed-off restart. */
+    {
+        pthread_t watchdog;
+        if (pthread_create(&watchdog, NULL, renderer_watchdog_main, NULL) == 0)
+            pthread_detach(watchdog);
+        else
+            fprintf(stderr, "maneuver_render: progress watchdog create failed\n");
+    }
+
 #ifdef PLATFORM_QNX
     /* Raise our scheduling priority to match native HMI graphics workers
      * (typically 13-18 on QNX 6.5).  Default user priority 10 lets busy
@@ -348,6 +392,7 @@ int main(int argc, char **argv) {
     int dirty = 1;
     int running = 1;
     int announced_first_frame = 0;
+    g_render_loop_started = 1;
 
 #ifdef CR_DIAG_FRAME_LOG
     /* Per-second + per-frame render-loop instrumentation — only compiled
@@ -364,6 +409,7 @@ int main(int argc, char **argv) {
 
     while (running && !platform_should_close()) {
         struct timespec t_start;
+        g_loop_progress++;
         clock_gettime(CLOCK_MONOTONIC, &t_start);
 #ifdef CR_DIAG_FRAME_LOG
         stat_loop_iters++;
@@ -841,6 +887,7 @@ int main(int argc, char **argv) {
     cr_server_shutdown();
     render_shutdown();
     platform_shutdown();
+    g_renderer_running = 0;
 
     fprintf(stderr, "maneuver_render: exit\n");
     return 0;

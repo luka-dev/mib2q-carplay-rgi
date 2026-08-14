@@ -20,6 +20,88 @@ CP_MANEUVER_PID_FILE=/tmp/carplay_maneuver_render.pid
 CP_ALTSCREEN_PID_FILE=/tmp/carplay_altscreen_render.pid
 CP_RENDERER_SCAN_DONE=0
 
+# Guarded recovery state for the one failure class which happens before RTSP:
+# USB reports both iAP2 interfaces matched but only one running.  These files
+# survive SI child replacement but live only until HU reboot (/tmp).
+CP_USB_PPS=/ramdisk/pps/device/usb-1.0.1
+CP_USB_FAIL_FILE=/tmp/carplay_usb_pre_setup_failures
+CP_USB_RESET_PENDING=/tmp/carplay_usb_reset.pending
+CP_USB_RESET_LATCH=/tmp/carplay_usb_reset.latched
+
+cp_usb_stuck_pre_setup()
+{
+    [ -r "$CP_USB_PPS" ] || return 1
+    grep -q 'drivers_matched::2' "$CP_USB_PPS" 2>/dev/null || return 1
+    grep -q 'drivers_running::1' "$CP_USB_PPS" 2>/dev/null
+}
+
+cp_usb_clear_recovery_state()
+{
+    rm -f "$CP_USB_FAIL_FILE" "$CP_USB_RESET_PENDING" "$CP_USB_RESET_LATCH"
+}
+
+# Called once by the next SI-owned wrapper, before renderers and dio. The
+# monitor only queues the request; it never resets the connector underneath a
+# dying/starting CarPlay process. One latch permits at most one physical reset
+# until a successful control SETUP, a detached/non-stuck PPS state, or reboot.
+cp_usb_consume_pending_reset()
+{
+    if ! cp_usb_stuck_pre_setup; then
+        cp_usb_clear_recovery_state
+        return 0
+    fi
+    [ -e "$CP_USB_RESET_PENDING" ] || return 0
+    [ -e "$CP_USB_RESET_LATCH" ] && return 0
+
+    : > "$CP_USB_RESET_LATCH"
+    rm -f "$CP_USB_RESET_PENDING" "$CP_USB_FAIL_FILE"
+    if [ ! -w /dev/media-con-ctrl ]; then
+        echo "[supervisor] guarded USB reset skipped: /dev/media-con-ctrl unavailable" >> "${WLOG:-/dev/null}"
+        return 0
+    fi
+    echo "[supervisor] guarded USB reset: reset port 3 250 1" >> "${WLOG:-/dev/null}"
+    if print -n 'reset port 3 250 1' > /dev/media-con-ctrl; then
+        # Let the bridge re-enumerate before the ordinary SI launch continues.
+        sleep 1
+    else
+        echo "[supervisor] guarded USB reset write FAILED (latched; no reset loop)" >> "${WLOG:-/dev/null}"
+    fi
+}
+
+# Count only generations which lived long enough for normal control SETUP but
+# never produced its PID marker and still have the exact bad USB PPS signature.
+cp_usb_record_generation_result()
+{
+    CP_USB_DIO_PID=$1
+    CP_USB_LIVED_TICKS=$2
+    CP_USB_MARKER=/tmp/carplay_control_setup.$CP_USB_DIO_PID
+
+    if [ -e "$CP_USB_MARKER" ]; then
+        echo "[supervisor] control SETUP seen pid=$CP_USB_DIO_PID; USB recovery latch cleared" >> "${WLOG:-/dev/null}"
+        cp_usb_clear_recovery_state
+        rm -f "$CP_USB_MARKER"
+        return 0
+    fi
+    rm -f "$CP_USB_MARKER"
+    if [ "$CP_USB_LIVED_TICKS" -lt 4 ] || ! cp_usb_stuck_pre_setup; then
+        # A short SI replacement or any post-USB state is not evidence for the
+        # physical reset. A detached/non-stuck state also rearms the latch.
+        if ! cp_usb_stuck_pre_setup; then cp_usb_clear_recovery_state; fi
+        return 0
+    fi
+    [ -e "$CP_USB_RESET_LATCH" ] && return 0
+    CP_USB_FAILS=0
+    if [ -r "$CP_USB_FAIL_FILE" ]; then read CP_USB_FAILS < "$CP_USB_FAIL_FILE"; fi
+    case "$CP_USB_FAILS" in ''|*[!0-9]*) CP_USB_FAILS=0 ;; esac
+    CP_USB_FAILS=`expr "$CP_USB_FAILS" + 1`
+    echo "$CP_USB_FAILS" > "$CP_USB_FAIL_FILE"
+    echo "[supervisor] pre-control-SETUP USB failure $CP_USB_FAILS/3 pid=$CP_USB_DIO_PID" >> "${WLOG:-/dev/null}"
+    if [ "$CP_USB_FAILS" -ge 3 ]; then
+        : > "$CP_USB_RESET_PENDING"
+        echo "[supervisor] guarded USB reset queued for next SI generation" >> "${WLOG:-/dev/null}"
+    fi
+}
+
 cp_renderer_pid_file()
 {
     case "$1" in
@@ -90,6 +172,7 @@ cp_renderer_healthy()
 cp_kill_renderer()
 {
     CP_KP=`cp_renderer_pids "$1"`
+    CP_KILL_GRACE=${2:-4}
     for CP_PID in $CP_KP; do
         echo "[carplay] SIGTERM wedged $1 pid=$CP_PID" >> "${WLOG:-/dev/null}"
         kill -15 "$CP_PID" 2>/dev/null
@@ -97,7 +180,7 @@ cp_kill_renderer()
     # Qualcomm WFD/EGL may still hold native images for several vsyncs after
     # SIGTERM.  Give normal OMX/EGL teardown time to complete before the final
     # emergency SIGKILL; ordinary dio churn never enters this path anymore.
-    sleep 4
+    sleep "$CP_KILL_GRACE"
     for CP_PID in $CP_KP; do
         [ -d "/proc/$CP_PID" ] && kill -9 "$CP_PID" 2>/dev/null
     done

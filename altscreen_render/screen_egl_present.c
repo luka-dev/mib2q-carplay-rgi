@@ -36,6 +36,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <time.h>
 
 #define EP_DISPLAYABLE_ID          99
@@ -92,8 +93,9 @@ struct screen_egl_present {
     GLint loader_u_sigc, loader_u_sigh, loader_u_siga;
     GLuint logo_texture, sig_texture;
     pthread_t loader_thread;
-    int loader_thread_started;
-    int loader_stop;
+    volatile int loader_thread_started;
+    volatile int loader_stop;
+    volatile int loader_exited;
     unsigned long loader_frames;
     unsigned long loader_failures;
     int loader_first_logged;
@@ -863,6 +865,9 @@ static void *ep_loader_thread_main(void *context) {
             if (nanosleep(&req, NULL) == 0 || errno != EINTR) break;
         }
     }
+    __sync_synchronize();
+    p->loader_exited = 1;
+    __sync_synchronize();
     return NULL;
 }
 
@@ -875,11 +880,13 @@ int screen_egl_present_start_loader(screen_egl_present_t *p) {
         return 0;
     }
     p->loader_stop = 0;
+    p->loader_exited = 0;
     p->loader_frames = 0;
     p->loader_failures = 0;
     p->loader_first_logged = 0;
     result = pthread_create(&p->loader_thread, NULL, ep_loader_thread_main, p);
     if (result == 0) p->loader_thread_started = 1;
+    else p->loader_exited = 1;
     pthread_mutex_unlock(&p->gl_lock);
     if (result != 0)
         fprintf(stderr,
@@ -891,14 +898,33 @@ int screen_egl_present_start_loader(screen_egl_present_t *p) {
 void screen_egl_present_stop_loader(screen_egl_present_t *p) {
     pthread_t thread;
     int started;
+    uint64_t deadline;
     if (!p || !p->gl_lock_initialized) return;
-    pthread_mutex_lock(&p->gl_lock);
+
+    /* Do not take gl_lock to request stop: the loader deliberately holds that
+     * lock across eglSwapBuffers(), and an Adreno/WFD wedge there would block
+     * this caller forever before a timeout could even start. */
     started = p->loader_thread_started;
-    p->loader_stop = 1;
+    __sync_lock_test_and_set(&p->loader_stop, 1);
     thread = p->loader_thread;
-    pthread_mutex_unlock(&p->gl_lock);
     if (!started) return;
 
+    deadline = ep_monotonic_ns() + 750000000ULL;
+    while (!p->loader_exited) {
+        uint64_t now = ep_monotonic_ns();
+        struct timespec pause = { 0, 10L * 1000000L };
+        if (now == 0 || now >= deadline) {
+            fprintf(stderr,
+                    "altscreen_render[loader]: stop TIMEOUT in EGL/Adreno handoff; exiting isolated renderer safely\n");
+            /* The loader may still own EGL/native images. Never free storage
+             * under it and never let OMX's FillDone callback remain wedged.
+             * The external supervisor will restart this isolated service. */
+            _exit(87);
+        }
+        nanosleep(&pause, NULL);
+    }
+    __sync_synchronize();
+    /* The terminal flag makes this a collection-only join. */
     pthread_join(thread, NULL);
     pthread_mutex_lock(&p->gl_lock);
     p->loader_thread_started = 0;

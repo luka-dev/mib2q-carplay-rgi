@@ -39,7 +39,11 @@ start_renderer()
         # The 2s monitor loop keeps the cheap PID-only check (it restarts exits).
         if [ "$SR_REASON" = initial ] && ! cp_renderer_healthy "$SR_NAME"; then
             echo "[supervisor] $SR_NAME alive but not serving - restarting" >> "$WLOG"
-            cp_kill_renderer "$SR_NAME"
+            # This is pre-dio adoption inside SI's 10 s startup budget. One
+            # second is enough for a responsive renderer to run its SIGTERM
+            # handler; the explicit system-stop path still keeps the full 4 s
+            # Qualcomm EGL/OMX grace in cp_stop_renderer_snapshot().
+            cp_kill_renderer "$SR_NAME" 1
         else
             [ "$SR_REASON" = initial ] &&
                 echo "[supervisor] $SR_NAME already running - leave untouched" >> "$WLOG"
@@ -86,6 +90,7 @@ monitor_renderers()
 {
     MR_DIO_PID=$1
     MR_EXPLICIT_STOP=0
+    MR_LIVED_TICKS=0
     echo "[supervisor] renderer monitor watching dio pid=$MR_DIO_PID" >> "$WLOG"
     while [ -d "/proc/$MR_DIO_PID" ]; do
         if [ -e "$STOP_FILE" ]; then
@@ -102,6 +107,7 @@ monitor_renderers()
         start_renderer maneuver_render restart
         start_renderer altscreen_render restart
         sleep 2
+        MR_LIVED_TICKS=`expr "$MR_LIVED_TICKS" + 1`
     done
 
     if [ "$MR_EXPLICIT_STOP" = 1 ]; then
@@ -112,6 +118,7 @@ monitor_renderers()
         cp_stop_renderer_snapshot "$WLOG" \
             "$MR_MANEUVER_PIDS" "$MR_ALTSCREEN_PIDS"
     else
+        cp_usb_record_generation_result "$MR_DIO_PID" "$MR_LIVED_TICKS"
         echo "[supervisor] dio_manager pid=$MR_DIO_PID gone - persistent renderers left alive" >> "$WLOG"
     fi
 }
@@ -119,6 +126,10 @@ monitor_renderers()
 rm -f "$STOP_FILE"
 echo "$DIO_PID" > "$OWNER_FILE"
 echo "===== carplay_startup.sh run pid=$$ ppid=$PPID =====" >> "$WLOG"
+
+# A previous monitor may have proved the independent pre-RTSP USB wedge. Consume
+# its one-shot request before creating any graphics clients or exec'ing dio.
+cp_usb_consume_pending_reset
 
 # One finite process snapshot at most. All following checks use the recorded PID
 # and /proc directly, keeping expensive pidin enumeration out of dio startup.

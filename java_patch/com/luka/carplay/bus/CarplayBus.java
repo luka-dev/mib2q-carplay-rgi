@@ -64,14 +64,27 @@ public final class CarplayBus {
     private final Object lock = new Object();
     private final Object writeLock = new Object();
     private final Listener[] listeners = new Listener[MAX_TYPES];
+    private static final int WRITE_QUEUE_CAPACITY = 32;
 
     private volatile boolean running = false;
     private Thread ioThread;
+    private Thread writerThread;
     private ServerSocket serverSocket;
     private Socket sock;
     private InputStream in;
     private OutputStream out;
     private int txSeq = 1;
+    private int connectionGeneration;
+
+    private static final class PendingWrite {
+        byte[] packet;
+        int generation;
+        int type;
+    }
+    private final PendingWrite[] writeQueue = new PendingWrite[WRITE_QUEUE_CAPACITY];
+    private int writeHead;
+    private int writeTail;
+    private int writeCount;
 
     /* ---- lifecycle ---- */
     public void start() {
@@ -92,10 +105,16 @@ public final class CarplayBus {
             if (serverSocket != null) { try { serverSocket.close(); } catch (IOException e) {} serverSocket = null; }
             lock.notifyAll();                 /* wake the reader thread out of its wait() */
         }
-        Thread t, r;
-        synchronized (lock) { t = ioThread; ioThread = null; r = readerThread; readerThread = null; }
+        synchronized (writeLock) { clearWriteQueueLocked(); writeLock.notifyAll(); }
+        Thread t, r, w;
+        synchronized (lock) {
+            t = ioThread; ioThread = null;
+            r = readerThread; readerThread = null;
+            w = writerThread; writerThread = null;
+        }
         if (t != null) { try { t.join(1000); } catch (InterruptedException e) {} }
         if (r != null) { try { r.join(1000); } catch (InterruptedException e) {} }
+        if (w != null) { try { w.join(1000); } catch (InterruptedException e) {} }
     }
 
     private Thread readerThread;   /* dedicated reader — decoupled from accept (see ioLoop) */
@@ -119,38 +138,89 @@ public final class CarplayBus {
         if (len < 0 || len > MAX_PAYLOAD) return false;
         if (len > 0 && payload == null) return false;
 
-        OutputStream os;
-        int seq;
+        int seq, generation;
         synchronized (lock) {
-            os = out;
-            seq = txSeq++;
-        }
-        if (os == null) {
-            Log.w(TAG, "send dropped (no connection) type=0x" + Integer.toHexString(type));
-            return false;
-        }
-
-        byte[] hdr = new byte[HEADER_SIZE];
-        putBE32(hdr, 0, MAGIC);
-        putBE32(hdr, 4, seq);
-        putBE16(hdr, 8, type);
-        hdr[10] = (byte) flags;
-        hdr[11] = 0;
-        putBE32(hdr, 12, len);
-
-        /* one frame at a time on the wire */
-        synchronized (writeLock) {
-            try {
-                os.write(hdr, 0, HEADER_SIZE);
-                if (len > 0) os.write(payload, 0, len);
-                os.flush();
-                return true;
-            } catch (IOException e) {
-                Log.w(TAG, "send failed type=0x" + Integer.toHexString(type) + ": " + e.getMessage());
-                synchronized (lock) { if (out == os) closeConnectionLocked("send error"); }
+            if (out == null) {
+                Log.w(TAG, "send dropped (no connection) type=0x" + Integer.toHexString(type));
                 return false;
             }
+            seq = txSeq++;
+            generation = connectionGeneration;
         }
+
+        byte[] packet = new byte[HEADER_SIZE + len];
+        putBE32(packet, 0, MAGIC);
+        putBE32(packet, 4, seq);
+        putBE16(packet, 8, type);
+        packet[10] = (byte) flags;
+        packet[11] = 0;
+        putBE32(packet, 12, len);
+        if (len > 0) System.arraycopy(payload, 0, packet, HEADER_SIZE, len);
+
+        /* Never perform a socket write on a stock HMI/BAP callback.  The sole
+         * writer owns blocking I/O; connection generations discard commands
+         * queued for a preempted hook instance. */
+        synchronized (writeLock) {
+            if (!running) return false;
+            if (writeCount == WRITE_QUEUE_CAPACITY) {
+                PendingWrite dropped = writeQueue[writeHead];
+                writeQueue[writeHead] = null;
+                writeHead = (writeHead + 1) % WRITE_QUEUE_CAPACITY;
+                writeCount--;
+                Log.w(TAG, "writer queue full; dropped oldest type=0x"
+                    + Integer.toHexString(dropped == null ? -1 : dropped.type));
+            }
+            PendingWrite pending = new PendingWrite();
+            pending.packet = packet;
+            pending.generation = generation;
+            pending.type = type;
+            writeQueue[writeTail] = pending;
+            writeTail = (writeTail + 1) % WRITE_QUEUE_CAPACITY;
+            writeCount++;
+            writeLock.notifyAll();
+            return true;
+        }
+    }
+
+    private void writerLoop() {
+        while (true) {
+            PendingWrite pending;
+            synchronized (writeLock) {
+                while (running && writeCount == 0) {
+                    try { writeLock.wait(); } catch (InterruptedException e) { }
+                }
+                if (!running) return;
+                pending = writeQueue[writeHead];
+                writeQueue[writeHead] = null;
+                writeHead = (writeHead + 1) % WRITE_QUEUE_CAPACITY;
+                writeCount--;
+            }
+            OutputStream ownedOut;
+            synchronized (lock) {
+                if (pending == null || pending.generation != connectionGeneration || out == null)
+                    continue;
+                ownedOut = out;
+            }
+            try {
+                ownedOut.write(pending.packet);
+                ownedOut.flush();
+            } catch (IOException e) {
+                Log.w(TAG, "writer failed type=0x" + Integer.toHexString(pending.type)
+                    + ": " + e.getMessage());
+                synchronized (lock) {
+                    if (out == ownedOut) closeConnectionLocked("writer error");
+                }
+            }
+        }
+    }
+
+    private void clearWriteQueueLocked() {
+        for (int i = 0; i < WRITE_QUEUE_CAPACITY; i++) writeQueue[i] = null;
+        writeHead = writeTail = writeCount = 0;
+    }
+
+    private void clearWriteQueue() {
+        synchronized (writeLock) { clearWriteQueueLocked(); }
     }
 
     public boolean sendBinary(int type, byte[] payload) {
@@ -269,6 +339,10 @@ public final class CarplayBus {
             synchronized (lock) { running = false; }   /* allow a later start() to retry the bind */
             return;
         }
+        Thread w = new Thread(new Runnable() { public void run() { writerLoop(); } }, "carplay-bus-writer");
+        w.setDaemon(true);
+        synchronized (lock) { writerThread = w; }
+        w.start();
         Thread r = new Thread(new Runnable() { public void run() { readerLoop(); } }, "carplay-bus-reader");
         r.setDaemon(true);
         synchronized (lock) { readerThread = r; }
@@ -311,6 +385,8 @@ public final class CarplayBus {
                  * Multiple hook instances or a half-open peer can therefore never wedge the bus. */
                 if (sock != null) closeConnectionLocked("preempted by new connection");
                 sock = s; in = iin; out = oout;
+                connectionGeneration++;
+                clearWriteQueue();
                 lock.notifyAll();               /* wake the reader onto the new socket */
             }
             Log.i(TAG, "hook connected");

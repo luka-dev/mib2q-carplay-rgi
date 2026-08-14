@@ -41,6 +41,10 @@ void av_sink_frame(const uint8_t *annexb, uint32_t len) {
 
 void av_sink_set_view_area(int mode) { (void)mode; }
 
+/* The capture backend has no display swap; a successfully written payload is
+ * its equivalent readiness edge for desktop protocol tests. */
+int av_sink_video_ready(void) { return g_msgs != 0; }
+
 void av_sink_session_end(void) {
     fprintf(stderr, "altscreen_render: session end (%lu msgs, %lu bytes)\n", g_msgs, g_bytes);
 }

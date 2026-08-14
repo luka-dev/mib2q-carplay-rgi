@@ -9,14 +9,32 @@
 /* Maximum tracked dump files for once-only dumps */
 #define MAX_DUMP_FILES 32
 #define MAX_LOG_LINE 1024
+#define LOG_QUEUE_CAPACITY 64
+#define LOG_SHUTDOWN_WAIT_MS 750
+
+typedef struct {
+    size_t len;
+    char data[MAX_LOG_LINE];
+} log_entry_t;
 
 /* Module state */
 static struct {
     int fd;
     log_config_t config;
     pthread_mutex_t lock;
+    pthread_cond_t cond;
     bool initialized;
     bool lock_initialized;
+    bool writer_created;
+    bool writer_running;
+    bool shutdown;
+    pthread_t writer_tid;
+    int owner_pid;
+    log_entry_t queue[LOG_QUEUE_CAPACITY];
+    unsigned queue_head;
+    unsigned queue_tail;
+    unsigned queue_count;
+    unsigned dropped;
     /* Tracked dump files */
     char* dumped_files[MAX_DUMP_FILES];
     int dump_count;
@@ -36,6 +54,7 @@ static pthread_once_t g_log_lock_once = PTHREAD_ONCE_INIT;
 
 static void log_lock_init_once(void) {
     pthread_mutex_init(&g_log.lock, NULL);
+    pthread_cond_init(&g_log.cond, NULL);
     g_log.lock_initialized = true;
 }
 
@@ -108,6 +127,54 @@ static void check_rotation(void) {
     }
 }
 
+/* Only this thread performs normal log-file I/O.  Hooked stock threads format
+ * one bounded record and enqueue it; a wedged /tmp filesystem can therefore
+ * strand diagnostics, but can never strand dio_manager's RTSP/iAP2/watchdog
+ * path.  The queue is fixed-size and drops the oldest record under pressure. */
+static void* log_writer_main(void* unused) {
+    (void)unused;
+    for (;;) {
+        log_entry_t entry;
+
+        pthread_mutex_lock(&g_log.lock);
+        while (!g_log.shutdown && g_log.queue_count == 0)
+            pthread_cond_wait(&g_log.cond, &g_log.lock);
+        if (g_log.shutdown) {
+            g_log.writer_running = false;
+            pthread_cond_broadcast(&g_log.cond);
+            pthread_mutex_unlock(&g_log.lock);
+            return NULL;
+        }
+        entry = g_log.queue[g_log.queue_head];
+        g_log.queue_head = (g_log.queue_head + 1u) % LOG_QUEUE_CAPACITY;
+        --g_log.queue_count;
+        pthread_mutex_unlock(&g_log.lock);
+
+        if (g_log.fd < 0 && g_log.config.log_path)
+            g_log.fd = open(g_log.config.log_path,
+                            O_WRONLY | O_CREAT | O_APPEND, 0644);
+        if (g_log.fd >= 0) {
+            (void)do_write(g_log.fd, entry.data, entry.len);
+            if (g_log.config.flush_immediate) (void)fsync(g_log.fd);
+            check_rotation();
+        }
+    }
+}
+
+/* Caller holds g_log.lock. Never fall back to synchronous writes: losing a
+ * diagnostic is safer than putting a filesystem wait back on a stock thread. */
+static bool log_start_writer_locked(void) {
+    if (g_log.writer_created) return true;
+    if (g_log.shutdown) return false;
+    g_log.writer_running = true;
+    if (pthread_create(&g_log.writer_tid, NULL, log_writer_main, NULL) != 0) {
+        g_log.writer_running = false;
+        return false;
+    }
+    g_log.writer_created = true;
+    return true;
+}
+
 hook_result_t log_init(const log_config_t* config) {
     ensure_lock_init();
     pthread_mutex_lock(&g_log.lock);
@@ -125,16 +192,14 @@ hook_result_t log_init(const log_config_t* config) {
         g_log.config = def;
     }
 
-    /* Open log file */
-    if (g_log.config.log_path) {
-        g_log.fd = open(g_log.config.log_path, O_WRONLY | O_CREAT | O_APPEND, 0644);
-        if (g_log.fd < 0) {
-            pthread_mutex_unlock(&g_log.lock);
-            return HOOK_ERR_IO;
-        }
-    }
-
+    g_log.owner_pid = (int)getpid();
+    g_log.shutdown = false;
     g_log.initialized = true;
+    if (!log_start_writer_locked()) {
+        g_log.initialized = false;
+        pthread_mutex_unlock(&g_log.lock);
+        return HOOK_ERR_INIT;
+    }
     pthread_mutex_unlock(&g_log.lock);
 
     /* Write startup message */
@@ -144,7 +209,52 @@ hook_result_t log_init(const log_config_t* config) {
 }
 
 void log_shutdown(void) {
+    pthread_t writer;
+    bool collect = false;
+    int waited_ms = 0;
+
     ensure_lock_init();
+    pthread_mutex_lock(&g_log.lock);
+
+    /* fork children inherit state/fds but not the writer thread. They must not
+     * close or wait on the parent's logger during their ELF destruction. */
+    if (g_log.owner_pid != 0 && g_log.owner_pid != (int)getpid()) {
+        pthread_mutex_unlock(&g_log.lock);
+        return;
+    }
+
+    g_log.shutdown = true;
+    g_log.queue_head = g_log.queue_tail = g_log.queue_count = 0;
+    pthread_cond_broadcast(&g_log.cond);
+    while (g_log.writer_created && g_log.writer_running &&
+           waited_ms < LOG_SHUTDOWN_WAIT_MS) {
+        struct timespec deadline;
+        int wait_ms = 10;
+        clock_gettime(CLOCK_REALTIME, &deadline);
+        deadline.tv_nsec += wait_ms * 1000000L;
+        if (deadline.tv_nsec >= 1000000000L) {
+            deadline.tv_sec++;
+            deadline.tv_nsec -= 1000000000L;
+        }
+        (void)pthread_cond_timedwait(&g_log.cond, &g_log.lock, &deadline);
+        waited_ms += wait_ms;
+    }
+    if (g_log.writer_created && !g_log.writer_running) {
+        writer = g_log.writer_tid;
+        g_log.writer_created = false;
+        collect = true;
+    }
+    if (g_log.writer_created) {
+        /* The writer is stuck in file I/O. Preserve its fd/storage for process
+         * exit and, critically, do not turn logger shutdown into a watchdog
+         * wait. */
+        pthread_mutex_unlock(&g_log.lock);
+        return;
+    }
+    pthread_mutex_unlock(&g_log.lock);
+
+    if (collect) pthread_join(writer, NULL); /* terminal-only collection */
+
     pthread_mutex_lock(&g_log.lock);
 
     if (g_log.fd >= 0) {
@@ -162,6 +272,7 @@ void log_shutdown(void) {
     g_log.dump_count = 0;
 
     g_log.initialized = false;
+    g_log.owner_pid = 0;
     pthread_mutex_unlock(&g_log.lock);
 }
 
@@ -177,7 +288,9 @@ log_level_t log_get_level(void) {
 }
 
 void log_write(log_level_t level, const char* module, const char* fmt, ...) {
-    if (level < g_log.config.min_level) return;
+    log_config_t cfg;
+    char line[MAX_LOG_LINE];
+    int off = 0;
 
     ensure_lock_init();
     pthread_mutex_lock(&g_log.lock);
@@ -186,19 +299,23 @@ void log_write(log_level_t level, const char* module, const char* fmt, ...) {
     if (!g_log.initialized) {
         log_config_t def = LOG_CONFIG_DEFAULT;
         g_log.config = def;
-        if (g_log.config.log_path) {
-            g_log.fd = open(g_log.config.log_path, O_WRONLY | O_CREAT | O_APPEND, 0644);
-        }
+        g_log.owner_pid = (int)getpid();
+        g_log.shutdown = false;
         g_log.initialized = true;
+        if (!log_start_writer_locked()) g_log.initialized = false;
     }
+    if (!g_log.initialized || g_log.shutdown ||
+        (g_log.owner_pid != 0 && g_log.owner_pid != (int)getpid())) {
+        pthread_mutex_unlock(&g_log.lock);
+        return;
+    }
+    cfg = g_log.config;
+    pthread_mutex_unlock(&g_log.lock);
 
-    int out_fd = (g_log.fd >= 0) ? g_log.fd : STDERR_FILENO;
-
-    char line[MAX_LOG_LINE];
-    int off = 0;
+    if (level < cfg.min_level) return;
 
     /* Timestamp */
-    if (g_log.config.include_timestamp) {
+    if (cfg.include_timestamp) {
         struct timespec ts;
         clock_gettime(CLOCK_REALTIME, &ts);
         struct tm tm;
@@ -210,40 +327,65 @@ void log_write(log_level_t level, const char* module, const char* fmt, ...) {
     }
 
     /* Level */
-    if (g_log.config.include_level) {
+    if (cfg.include_level) {
         off += snprintf(line + off, sizeof(line) - off, "[%s] ", level_str(level));
     }
 
     /* Module */
-    if (g_log.config.include_module && module) {
+    if (cfg.include_module && module) {
         off += snprintf(line + off, sizeof(line) - off, "[%s] ", module);
     }
+
+    /* snprintf reports the size it wanted, not the bytes it stored. Keep the
+     * cursor inside the fixed stack record even if a future caller supplies an
+     * unexpectedly long module name. */
+    if (off < 0) off = 0;
+    if (off >= (int)sizeof(line)) off = (int)sizeof(line) - 1;
 
     /* Message */
     va_list ap;
     va_start(ap, fmt);
-    off += vsnprintf(line + off, sizeof(line) - off, fmt, ap);
+    if (off < (int)sizeof(line)) {
+        int available = (int)sizeof(line) - off;
+        int written = vsnprintf(line + off, (size_t)available, fmt, ap);
+        if (written > 0) {
+            /* vsnprintf returns the untruncated size. Clamp before using off as
+             * a memory length; the old code passed that oversized value to
+             * write(), reading beyond this stack buffer. */
+            off += (written >= available) ? (available - 1) : written;
+        }
+    }
     va_end(ap);
 
     /* Ensure newline */
-    if (off > 0 && off < (int)sizeof(line) - 1 && line[off - 1] != '\n') {
+    if (off > 0 && line[off - 1] != '\n' && off < (int)sizeof(line) - 1) {
         line[off++] = '\n';
+    } else if (off == (int)sizeof(line) - 1 && line[off - 1] != '\n') {
+        line[off - 1] = '\n';
     }
+    if (off <= 0) return;
 
-    (void)do_write(out_fd, line, (size_t)off);
-
-    if (g_log.config.flush_immediate && g_log.fd >= 0) {
-        (void)fsync(g_log.fd);
+    pthread_mutex_lock(&g_log.lock);
+    if (!g_log.initialized || g_log.shutdown || !g_log.writer_created ||
+        g_log.owner_pid != (int)getpid()) {
+        pthread_mutex_unlock(&g_log.lock);
+        return;
     }
-
-    check_rotation();
-
+    if (g_log.queue_count == LOG_QUEUE_CAPACITY) {
+        g_log.queue_head = (g_log.queue_head + 1u) % LOG_QUEUE_CAPACITY;
+        --g_log.queue_count;
+        ++g_log.dropped;
+    }
+    g_log.queue[g_log.queue_tail].len = (size_t)off;
+    memcpy(g_log.queue[g_log.queue_tail].data, line, (size_t)off);
+    g_log.queue_tail = (g_log.queue_tail + 1u) % LOG_QUEUE_CAPACITY;
+    ++g_log.queue_count;
+    pthread_cond_signal(&g_log.cond);
     pthread_mutex_unlock(&g_log.lock);
 }
 
 void log_hexdump(log_level_t level, const char* module, const char* prefix,
                  const uint8_t* data, size_t len, size_t max_bytes) {
-    if (level < g_log.config.min_level) return;
     if (!data || len == 0) return;
 
     size_t dump_len = (max_bytes > 0 && len > max_bytes) ? max_bytes : len;
@@ -252,17 +394,25 @@ void log_hexdump(log_level_t level, const char* module, const char* prefix,
     int off = 0;
 
     if (prefix) {
-        off += snprintf(line + off, sizeof(line) - off, "%s ", prefix);
+        int n = snprintf(line + off, sizeof(line) - (size_t)off, "%s ", prefix);
+        if (n > 0) off += (n >= (int)sizeof(line) - off)
+                           ? ((int)sizeof(line) - off - 1) : n;
     }
-    off += snprintf(line + off, sizeof(line) - off, "len=%zu bytes=", len);
+    if (off < (int)sizeof(line) - 1) {
+        int available = (int)sizeof(line) - off;
+        int n = snprintf(line + off, (size_t)available, "len=%zu bytes=", len);
+        if (n > 0) off += (n >= available) ? (available - 1) : n;
+    }
 
     for (size_t i = 0; i < dump_len && off < (int)sizeof(line) - 4; i++) {
-        off += snprintf(line + off, sizeof(line) - off, "%02X ", data[i]);
+        int available = (int)sizeof(line) - off;
+        int n = snprintf(line + off, (size_t)available, "%02X ", data[i]);
+        if (n <= 0) break;
+        off += (n >= available) ? (available - 1) : n;
     }
 
-    if (dump_len < len) {
-        off += snprintf(line + off, sizeof(line) - off, "...");
-    }
+    if (dump_len < len && off < (int)sizeof(line) - 1)
+        (void)snprintf(line + off, sizeof(line) - (size_t)off, "...");
 
     log_write(level, module, "%s", line);
 }
