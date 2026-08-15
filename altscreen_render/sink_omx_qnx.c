@@ -787,7 +787,7 @@ int av_sink_video_ready(void) {
     return ready;
 }
 
-void av_sink_set_layout(int mode, int style, int rawPreset) {
+void av_sink_set_layout(int mode, int style, int rawSkin) {
     const char *layoutName;
     mode = mode == 1 ? 1 : 0;
     g_ss.viewAreaMode = mode;
@@ -797,10 +797,10 @@ void av_sink_set_layout(int mode, int style, int rawPreset) {
         : (g_ss.layoutStyle == LOADER_STYLE_CLASSIC
             ? "classicscreen" : "sportscreen");
     fprintf(stderr,
-            "altscreen_render[loader]: layout -> view=%s style=%s rawPreset=%d\n",
+            "altscreen_render[loader]: layout -> view=%s style=%s rawSkin=%d\n",
             layoutName,
             g_ss.layoutStyle == LOADER_STYLE_CLASSIC ? "classic" : "sport",
-            rawPreset);
+            rawSkin);
 }
 
 void av_sink_session_end(void) {

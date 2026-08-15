@@ -24,23 +24,25 @@ Authoritative binary:
 
 ## HU-side seam
 
-The stock MU1316 HMI already owns `DSICarKombi` instance 0 through
-`de.audi.tghu.navi.app.car.kombi.DSICarKombiController`. Its listener originally
-subscribed only to attribute 4 (`BCViewOptions`). The classpath override keeps
-that logic and additionally observes:
+`DSICarKombi.DCDISPLAYPRESETSTYPE_CLASSIC = 2` is a real enum, but
+`DCDISPLAYPRESETSTYPE_DRIVINGPROFILE = 3` is **not** an alias for Sport. It is a
+dynamic display-preset class associated with the vehicle's drive profile and
+must not be used as the currently rendered skin.
 
-- 96: display-preset list element count;
-- 97: display-preset list updates (`pos -> type`);
-- 99: active display-preset position;
-- 100: display-view configuration (diagnostic only).
+The authoritative stock-HU seam is the integer persisted by
+`LastmodeStorage.getSkin()`:
 
-The DSI semantic types are declared by stock `DSICarKombi`:
+- `DisplayManagerEvo.getSkin()` obtains it from
+  `framework.getLastmodeHandler().getLastmodeStorage()`;
+- `DisplayManagerEvo.isSportSkin(int)` returns true only for `skin == 1`;
+- its KDK setup selects the explicit Sport assets for 1 and Classic assets for
+  the normal `skin == 0` path;
+- `DSICarTimeUnitsLanguageManager.updateSkin()` writes each live skin update to
+  that same `LastmodeStorage`.
 
-- `DCDISPLAYPRESETSTYPE_CLASSIC = 2`;
-- `DCDISPLAYPRESETSTYPE_DRIVINGPROFILE = 3` (Sport).
-
-Attribute 99 is resolved through the attribute-97 record whose `pos` matches the
-active value. Unknown/invalid updates do not change the last known style.
+`AltScreenModule` reads this value on start and during its existing 250-ms
+connected-context reconciliation. This follows live Classic/Sport changes
+without adding a second DSI activator or overriding the stock CarKombi listener.
 
 ## CarPlay view-area mapping
 

@@ -24,10 +24,10 @@ void av_sink_frame(const uint8_t *annexb, uint32_t len);
  * readiness: Java uses this edge to leave the stock cluster context. */
 int  av_sink_video_ready(void);
 
-/* Select the startup-loader geometry.  style: 0=Sport/driving-profile,
+/* Select the startup-loader geometry.  style: 0=Sport,
  * 1=Classic, 255=unknown (preserve the current/default Sport geometry).
- * rawPreset is diagnostic only and comes from DSICarKombi attribute 99. */
-void av_sink_set_layout(int mode, int style, int rawPreset);
+ * rawSkin is diagnostic only and comes from stock LastmodeStorage. */
+void av_sink_set_layout(int mode, int style, int rawSkin);
 
 /* Called when the client disconnects (session end) — flush/reset decoder so the
  * next session starts clean.  The process keeps running to accept the next one. */

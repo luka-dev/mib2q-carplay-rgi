@@ -39,8 +39,8 @@ void av_sink_frame(const uint8_t *annexb, uint32_t len) {
         fprintf(stderr, "altscreen_render: %lu msgs, %lu bytes\n", g_msgs, g_bytes);
 }
 
-void av_sink_set_layout(int mode, int style, int rawPreset) {
-    (void)mode; (void)style; (void)rawPreset;
+void av_sink_set_layout(int mode, int style, int rawSkin) {
+    (void)mode; (void)style; (void)rawSkin;
 }
 
 /* The capture backend has no display swap; a successfully written payload is

@@ -26,6 +26,7 @@ import com.luka.carplay.bus.CarplayBus;
 import com.luka.carplay.framework.Log;
 
 import de.audi.atip.hmi.view.IDisplayManager;
+import de.audi.atip.start.ILastmodeStorage;
 import de.audi.tghu.fwhmi.IDisplayManagerKombiControl;
 
 public final class AltScreenModule implements Module, CarplayBus.Listener {
@@ -145,7 +146,12 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
     /* Desired Audi View-button state. The C hook also caches this before the
      * RTSP altScreen session exists and applies it on the first decoded IDR. */
     private static int desiredViewAreaMode = VIEWAREA_FULLSCREEN;
-    private static int clusterStyle = AltscreenControlServer.STYLE_SPORT;
+    /* Stock MIB2High's actual visual skin, not DSICarKombi's display-preset
+     * semantic.  DisplayManagerEvo treats LastmodeStorage skin 1 as Sport and
+     * all normal skin-0 operation as Classic.  Unknown falls back to Sport
+     * geometry until the stock store becomes available. */
+    private static int clusterStyle = AltscreenControlServer.STYLE_UNKNOWN;
+    private static volatile ILastmodeStorage layoutStorage;
     private static volatile ViewAreaModeListener viewAreaModeListener;
     private static volatile InfoModeListener infoModeListener;
 
@@ -200,23 +206,39 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
         }
     }
 
-    /** Called by the stock DSICarKombi preset listener.  Audi exposes one
-     * logical compact View-button state, but its safe area is left-aligned in
-     * Sport and centered in Classic; select the matching predeclared iOS area. */
-    public static void setClusterStyle(int style, int rawPreset) {
-        if (style != AltscreenControlServer.STYLE_CLASSIC &&
-            style != AltscreenControlServer.STYLE_SPORT) return;
-        AltscreenControlServer.setClusterStyle(style, rawPreset);
+    /** Refresh from the same stock value DisplayManagerEvo uses to choose its
+     * Classic/Sport KDK assets.  Called on module start and by the existing
+     * 250-ms connected-context reconcile worker, so a live skin switch is
+     * reflected without another DSI activator or classpath override. */
+    private static void refreshClusterStyleFromStock(String reason) {
+        ILastmodeStorage storage = layoutStorage;
+        if (storage == null) return;
+        int skin;
+        try { skin = storage.getSkin(); }
+        catch (Throwable t) {
+            Log.d(TAG, "VC skin read failed: " + t);
+            return;
+        }
+        int style;
+        if (skin == 1) style = AltscreenControlServer.STYLE_SPORT;
+        else if (skin == 0) style = AltscreenControlServer.STYLE_CLASSIC;
+        else {
+            Log.w(TAG, "unknown stock VC skin=" + skin + "; preserving geometry");
+            return;
+        }
         boolean resend;
         synchronized (LOCK) {
             resend = clusterStyle != style &&
                 desiredViewAreaMode == VIEWAREA_SMALLSCREEN;
+            if (clusterStyle == style) return;
             clusterStyle = style;
         }
+        AltscreenControlServer.setClusterStyle(style, skin);
         Log.i(TAG, "VC style="
             + (style == AltscreenControlServer.STYLE_CLASSIC ? "classic" : "sport")
-            + " rawPreset=" + rawPreset + " resendCompact=" + resend);
-        if (resend) sendViewAreaMode("VC_DISPLAY_PRESET");
+            + " stockSkin=" + skin + " reason=" + reason
+            + " resendCompact=" + resend);
+        if (resend) sendViewAreaMode("VC_SKIN_CHANGE");
     }
 
     /* Caller holds LOCK. */
@@ -356,6 +378,13 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
             Log.d(TAG, "getDisplayManager not ready: " + t);
         }
         if (d == null) return false;                 /* DM not up yet → retry */
+        try {
+            if (fw.framework().getLastmodeHandler() != null)
+                layoutStorage = fw.framework().getLastmodeHandler().getLastmodeStorage();
+        } catch (Throwable t) {
+            Log.d(TAG, "stock VC skin storage not ready: " + t);
+        }
+        refreshClusterStyleFromStock("module-start");
         if (d instanceof IDisplayManagerKombiControl) {
             com.luka.carplay.cluster.ClusterLayerController.bind(
                 (IDisplayManagerKombiControl)d, TERMINAL_CLUSTER);
@@ -441,6 +470,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
     private void switchLoop() {
         contextWriterThread = Thread.currentThread();
         while (true) {
+            refreshClusterStyleFromStock("context-reconcile");
             int target; IDisplayManager d; boolean reconcileOnly = false;
             synchronized (LOCK) {
                 while (dm == null) {

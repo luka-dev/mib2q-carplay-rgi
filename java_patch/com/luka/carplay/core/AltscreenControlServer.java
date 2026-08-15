@@ -40,13 +40,13 @@ final class AltscreenControlServer {
     private static Socket client;
     private static int clientGeneration;
     private static int viewAreaMode;                /* 0=fullscreen, 1=smallscreen */
-    private static int layoutStyle = STYLE_UNKNOWN; /* DSICarKombi preset semantic */
-    private static int rawPreset = STYLE_UNKNOWN;   /* attribute-99 value, diagnostics */
+    private static int layoutStyle = STYLE_UNKNOWN; /* current stock VC visual skin */
+    private static int rawSkin = STYLE_UNKNOWN;     /* LastmodeStorage skin, diagnostics */
     private static boolean writePending;
     private static int writeGeneration;
     private static int writeMode;
     private static int writeStyle;
-    private static int writeRawPreset;
+    private static int writeRawSkin;
 
     private AltscreenControlServer() {}
 
@@ -58,13 +58,13 @@ final class AltscreenControlServer {
         }
     }
 
-    /** Cache and publish the VC's authoritative display-preset style. */
-    static void setClusterStyle(int style, int preset) {
+    /** Cache and publish the VC's authoritative stock visual skin. */
+    static void setClusterStyle(int style, int skin) {
         synchronized (LOCK) {
             layoutStyle = style == STYLE_CLASSIC ? STYLE_CLASSIC
                 : (style == STYLE_SPORT ? STYLE_SPORT : STYLE_UNKNOWN);
-            rawPreset = preset >= 0 && preset <= 254 ? preset : STYLE_UNKNOWN;
-            queueViewAreaLocked("preset-change");
+            rawSkin = skin >= 0 && skin <= 254 ? skin : STYLE_UNKNOWN;
+            queueViewAreaLocked("skin-change");
         }
     }
 
@@ -74,13 +74,13 @@ final class AltscreenControlServer {
         if (client == null) return;
         writeMode = viewAreaMode;
         writeStyle = layoutStyle;
-        writeRawPreset = rawPreset;
+        writeRawSkin = rawSkin;
         writeGeneration = clientGeneration;
         writePending = true;
         LOCK.notifyAll();
         Log.i(TAG, "queued layout view="
             + layoutName(viewAreaMode, layoutStyle)
-            + " style=" + styleName(layoutStyle) + " rawPreset=" + rawPreset
+            + " style=" + styleName(layoutStyle) + " rawSkin=" + rawSkin
             + " reason=" + reason);
     }
 
@@ -146,7 +146,7 @@ final class AltscreenControlServer {
                 generation = writeGeneration;
                 mode = writeMode;
                 style = writeStyle;
-                preset = writeRawPreset;
+                preset = writeRawSkin;
                 writePending = false;
                 if (owned == null || generation != clientGeneration) continue;
             }
@@ -159,7 +159,7 @@ final class AltscreenControlServer {
                 out.flush();
                 Log.i(TAG, "-> layout view="
                     + layoutName(mode, style)
-                    + " style=" + styleName(style) + " rawPreset=" + preset
+                    + " style=" + styleName(style) + " rawSkin=" + preset
                     + " generation=" + generation);
             } catch (Throwable t) {
                 Log.d(TAG, "VIEW_AREA writer failed: " + t);
