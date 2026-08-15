@@ -90,6 +90,11 @@ public class CombiMapController extends DisplayControllerEvo implements NaviMoKo
         if (dm != null && layout != null) {
             dm.setDisplayType(1, this.displayType);
             this.positionKdkBackgrounds(dm, layout);
+            if (dm instanceof IDisplayManagerKombiControl) {
+                /* Cache the skin-selected OEM KDK geometry before the first model delta. */
+                com.luka.carplay.cluster.ClusterLayerController.updateLayout(
+                    (IDisplayManagerKombiControl)dm, this.kombiTerminal, layout);
+            }
             this.onViewSizeChanged(); /* seed current fullscreen/smallscreen state, not a hardcoded fullscreen */
         }
     }
@@ -167,7 +172,7 @@ public class CombiMapController extends DisplayControllerEvo implements NaviMoKo
         if (this.kombiTerminal != 0
                 && this.framework.getSysConst(SYSCONST_KOMBI_VARIANT) == KOMBI_KDK_VIA_DISPLAYABLES) {
             com.luka.carplay.cluster.ClusterLayerController.apply(
-                dm, this.kombiTerminal, !inTube,
+                dm, this.kombiTerminal, layout, !inTube,
                 this.visibleKdk != NO_KDK, this.kdkOpacity);
         }
     }

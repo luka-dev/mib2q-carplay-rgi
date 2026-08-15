@@ -14,15 +14,16 @@
  * backing.  ctx 80/81 (AltScreenModule) already removes the layers from composition on nav-off; the
  * opacity=0 here is the belt to that suspenders.
  *
- * Geometry is HARDCODED (tuned on-unit against the red popup-crop frame, CR_POPUP=(59,27,210,153) in
- * maneuver_render).  setCropping dst anchor != setPosition: crop dst = setPosition value + crop src
- * offset (pos 1032,83 => crop dst 1091,110 = +59,+27).  Values are final — the old
- * /tmp/cluster_planes.cfg live-tuning path is gone.
+ * Geometry comes from the terminal's active stock Layout.  This is important on B9: Classic and
+ * Sport use different in-tube anchors/crops, and the stock skin switch changes the Layout object at
+ * runtime.  We cache primitive values rather than the Layout itself so reapply() remains safe after
+ * a context transition.
  */
 package com.luka.carplay.cluster;
 
 import com.luka.carplay.framework.Log;
 import de.audi.tghu.fwhmi.IDisplayManagerKombiControl;
+import de.esolutions.hmi.widgets.audi.base.Layout;
 
 public final class ClusterLayerController {
 
@@ -30,6 +31,14 @@ public final class ClusterLayerController {
     private static final int MANEUVER      = 98;    /* maneuver_render (Software) */
     private static final int BACKING_SPORT = 101;   /* 987 KDK backing, 328x180 */
     private static final int BACKING_POPUP = 102;   /* 987 KDK backing, 210x153 */
+    /* Stock CombiMapController/Layout slots.  Names describe the KDK stage, not the skin: the
+     * in-tube values themselves differ between LayoutMIB2HighB9 and LayoutMIB2HighB9Sport. */
+    private static final int LC_IN_TUBE_X = 58, LC_IN_TUBE_Y = 59;
+    private static final int LC_POPUP_X = 60, LC_POPUP_Y = 61;
+    private static final int LC_POPUP_CROP_X = 118, LC_POPUP_CROP_Y = 119;
+    private static final int LC_POPUP_CROP_W = 120, LC_POPUP_CROP_H = 121;
+    private static final int LC_IN_TUBE_CROP_X = 122, LC_IN_TUBE_CROP_Y = 123;
+    private static final int LC_IN_TUBE_CROP_W = 124, LC_IN_TUBE_CROP_H = 125;
     /* The VC's KDK fade completion is not exported to HU Java.  Prefer the stock
      * BITFIELD_KDK_FADED_IN-derived opacity, but never strand a valid CarPlay
      * presentation invisible if that model delta is lost. */
@@ -40,6 +49,12 @@ public final class ClusterLayerController {
     private static boolean lastPopup;
     private static boolean lastStockVisible;
     private static int lastStockOpacity;
+    /* Safe fallback used only before stock CombiMapController publishes its live Layout. */
+    private static Geometry lastGeometry = new Geometry(
+        984, 139, 1091, 110,
+        59, 27, 210, 153,
+        0, 0, 328, 180,
+        "fallback-sport");
     private static boolean haveLayout;
     private static boolean errorLogged;
     private static boolean popupCycleActive;
@@ -48,6 +63,89 @@ public final class ClusterLayerController {
     private static int popupRevealGeneration;
 
     private ClusterLayerController() {}
+
+    private static final class Geometry {
+        final int inTubeX, inTubeY, popupX, popupY;
+        final int popupCropX, popupCropY, popupCropW, popupCropH;
+        final int inTubeCropX, inTubeCropY, inTubeCropW, inTubeCropH;
+        final String layoutName;
+
+        Geometry(int inTubeX, int inTubeY, int popupX, int popupY,
+                 int popupCropX, int popupCropY, int popupCropW, int popupCropH,
+                 int inTubeCropX, int inTubeCropY, int inTubeCropW, int inTubeCropH,
+                 String layoutName) {
+            this.inTubeX = inTubeX;
+            this.inTubeY = inTubeY;
+            this.popupX = popupX;
+            this.popupY = popupY;
+            this.popupCropX = popupCropX;
+            this.popupCropY = popupCropY;
+            this.popupCropW = popupCropW;
+            this.popupCropH = popupCropH;
+            this.inTubeCropX = inTubeCropX;
+            this.inTubeCropY = inTubeCropY;
+            this.inTubeCropW = inTubeCropW;
+            this.inTubeCropH = inTubeCropH;
+            this.layoutName = layoutName;
+        }
+
+        boolean sameValues(Geometry other) {
+            return other != null
+                && inTubeX == other.inTubeX && inTubeY == other.inTubeY
+                && popupX == other.popupX && popupY == other.popupY
+                && popupCropX == other.popupCropX && popupCropY == other.popupCropY
+                && popupCropW == other.popupCropW && popupCropH == other.popupCropH
+                && inTubeCropX == other.inTubeCropX && inTubeCropY == other.inTubeCropY
+                && inTubeCropW == other.inTubeCropW && inTubeCropH == other.inTubeCropH;
+        }
+    }
+
+    private static Geometry geometryFrom(Layout layout) {
+        return new Geometry(
+            layout.getIntegerConstant(LC_IN_TUBE_X),
+            layout.getIntegerConstant(LC_IN_TUBE_Y),
+            layout.getIntegerConstant(LC_POPUP_X),
+            layout.getIntegerConstant(LC_POPUP_Y),
+            layout.getIntegerConstant(LC_POPUP_CROP_X),
+            layout.getIntegerConstant(LC_POPUP_CROP_Y),
+            layout.getIntegerConstant(LC_POPUP_CROP_W),
+            layout.getIntegerConstant(LC_POPUP_CROP_H),
+            layout.getIntegerConstant(LC_IN_TUBE_CROP_X),
+            layout.getIntegerConstant(LC_IN_TUBE_CROP_Y),
+            layout.getIntegerConstant(LC_IN_TUBE_CROP_W),
+            layout.getIntegerConstant(LC_IN_TUBE_CROP_H),
+            layout.getClass().getName());
+    }
+
+    /** Seed/cache the exact OEM geometry even before the first KDK model delta. */
+    public static void updateLayout(IDisplayManagerKombiControl dm, int terminal, Layout layout) {
+        if (dm == null || layout == null) return;
+        Geometry geometry;
+        try {
+            geometry = geometryFrom(layout);
+        } catch (Throwable t) {
+            Log.w("ClusterLayers", "layout read failed: " + t);
+            return;
+        }
+        boolean changed;
+        synchronized (LOCK) {
+            changed = !geometry.sameValues(lastGeometry)
+                || !geometry.layoutName.equals(lastGeometry.layoutName);
+            lastDm = dm;
+            lastTerminal = terminal;
+            lastGeometry = geometry;
+            haveLayout = true;
+        }
+        if (changed) {
+            Log.i("ClusterLayers", "layout=" + geometry.layoutName
+                + " inTube=(" + geometry.inTubeX + "," + geometry.inTubeY + ") crop=("
+                + geometry.inTubeCropX + "," + geometry.inTubeCropY + ","
+                + geometry.inTubeCropW + "x" + geometry.inTubeCropH + ") popup=("
+                + geometry.popupX + "," + geometry.popupY + ") crop=("
+                + geometry.popupCropX + "," + geometry.popupCropY + ","
+                + geometry.popupCropW + "x" + geometry.popupCropH + ")");
+        }
+    }
 
     /** Cold-boot fallback before the first stock KDK model update. The first real update replaces
      * the conservative popup geometry with the authoritative popup/in-tube layout. */
@@ -67,11 +165,14 @@ public final class ClusterLayerController {
 
     /**
      * Apply the CarPlay cluster plane geometry for one KDK model update.
-     * @param popup true = 210x153 popup zone (hint&8 == 0); false = full 328x181 sport (hint&8 != 0).
+     * @param popup true = popup stage (hint&8 == 0); false = in-tube stage (hint&8 != 0).
+     *               Exact crop and size come from the current Classic/Sport Layout.
      * Reads the nav-active gate itself; never throws into the HMI thread.
      */
-    public static void apply(IDisplayManagerKombiControl dm, int terminal, boolean popup,
-                             boolean stockVisible, int stockOpacity) {
+    public static void apply(IDisplayManagerKombiControl dm, int terminal, Layout layout,
+                             boolean popup, boolean stockVisible, int stockOpacity) {
+        updateLayout(dm, terminal, layout);
+        Geometry geometry;
         synchronized (LOCK) {
             lastDm = dm;
             lastTerminal = terminal;
@@ -79,8 +180,9 @@ public final class ClusterLayerController {
             lastStockVisible = stockVisible;
             lastStockOpacity = stockOpacity;
             haveLayout = true;
+            geometry = lastGeometry;
         }
-        applyNow(dm, terminal, popup, stockVisible, stockOpacity);
+        applyNow(dm, terminal, geometry, popup, stockVisible, stockOpacity);
     }
 
     /** Re-apply the last stock KDK geometry after AltScreenModule changes ctx 80/81. */
@@ -90,6 +192,7 @@ public final class ClusterLayerController {
         boolean popup;
         boolean stockVisible;
         int stockOpacity;
+        Geometry geometry;
         synchronized (LOCK) {
             if (!haveLayout || lastDm == null) return;
             dm = lastDm;
@@ -97,12 +200,13 @@ public final class ClusterLayerController {
             popup = lastPopup;
             stockVisible = lastStockVisible;
             stockOpacity = lastStockOpacity;
+            geometry = lastGeometry;
         }
-        applyNow(dm, terminal, popup, stockVisible, stockOpacity);
+        applyNow(dm, terminal, geometry, popup, stockVisible, stockOpacity);
     }
 
-    private static void applyNow(IDisplayManagerKombiControl dm, int terminal, boolean popup,
-                                 boolean stockVisible, int stockOpacity) {
+    private static void applyNow(IDisplayManagerKombiControl dm, int terminal, Geometry geometry,
+                                 boolean popup, boolean stockVisible, int stockOpacity) {
         boolean carplayOwnsCluster = com.luka.carplay.core.AltScreenModule.isConnected();
         boolean navActive = com.luka.carplay.core.AltScreenModule.isNavActive();
         int carplayOpacity = resolveCarPlayOpacity(carplayOwnsCluster, navActive, popup,
@@ -132,17 +236,25 @@ public final class ClusterLayerController {
                 return;
             }
             if (popup) {
-                /* popup: show only the 210x153 popup zone of 98, over the 210x153 backing 102 */
-                dm.setCropping(MANEUVER, terminal, 59, 27, 210, 153, 1091, 110, 210, 153);
+                /* Popup crop/anchor from the active OEM Layout. */
+                dm.setCropping(MANEUVER, terminal,
+                    geometry.popupCropX, geometry.popupCropY,
+                    geometry.popupCropW, geometry.popupCropH,
+                    geometry.popupX, geometry.popupY,
+                    geometry.popupCropW, geometry.popupCropH);
                 dm.setOpacity(MANEUVER, terminal, carplayOpacity);
-                dm.setPosition(BACKING_POPUP, terminal, 1091, 110);
+                dm.setPosition(BACKING_POPUP, terminal, geometry.popupX, geometry.popupY);
                 dm.setOpacity(BACKING_POPUP, terminal, carplayOpacity);
                 dm.setOpacity(BACKING_SPORT, terminal, 0);
             } else {
-                /* sport: full 328x181 of 98, over the 328x180 backing 101 */
-                dm.setCropping(MANEUVER, terminal, 0, 0, 328, 181, 984, 139, 328, 181);
+                /* In-tube crop/anchor differs between Classic and Sport layouts. */
+                dm.setCropping(MANEUVER, terminal,
+                    geometry.inTubeCropX, geometry.inTubeCropY,
+                    geometry.inTubeCropW, geometry.inTubeCropH,
+                    geometry.inTubeX, geometry.inTubeY,
+                    geometry.inTubeCropW, geometry.inTubeCropH);
                 dm.setOpacity(MANEUVER, terminal, 100);
-                dm.setPosition(BACKING_SPORT, terminal, 984, 139);
+                dm.setPosition(BACKING_SPORT, terminal, geometry.inTubeX, geometry.inTubeY);
                 dm.setOpacity(BACKING_SPORT, terminal, 100);
                 dm.setOpacity(BACKING_POPUP, terminal, 0);
             }
