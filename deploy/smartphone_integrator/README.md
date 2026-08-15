@@ -32,7 +32,9 @@ Lifecycle semantics:
 - the wrapper validates and loads an otherwise-stock PF ruleset extending the
   CarPlay TCP allow-list from `6030` to `6030:6031`, then guards it for the first
   30 seconds of a CarPlay generation in case stock network startup reloads
-  `/etc/pf.conf`;
+  its rules. The runtime copy is derived from the currently active stock PF
+  profile (`pf.conf`, `pf.mlan0.conf`, `pf.ppp0.conf`, or `pf.ecm0.conf`) so the
+  guard never replaces Wi-Fi/modem/ECM-specific NAT and ALTQ rules;
   MU1316's stock rule blocks every other inbound `carplay0` port, while native
   altScreen requires TCP 6031 beside the main screen's TCP 6030;
 - if either renderer already exists when CarPlay starts, it is not restarted;

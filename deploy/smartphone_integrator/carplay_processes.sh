@@ -39,7 +39,11 @@ CP_USB_RESET_LATCH=/tmp/carplay_usb_reset.latched
 CP_PFCTL=/armle/sbin/pfctl
 CP_PF_SED=/usr/bin/sed
 CP_PF_GREP=/usr/bin/grep
-CP_PF_SOURCE=/etc/pf.conf
+CP_NETSTAT=/proc/boot/netstat
+CP_PF_SOURCE_DEFAULT=/etc/pf.conf
+CP_PF_SOURCE_MLAN=/etc/pf.mlan0.conf
+CP_PF_SOURCE_PPP=/etc/pf.ppp0.conf
+CP_PF_SOURCE_ECM=/etc/pf.ecm0.conf
 CP_PF_RUNTIME=/tmp/pf.carplay_alt.conf
 CP_PF_RULES=/tmp/pf.carplay_alt.rules
 CP_PF_MARKER=/tmp/carplay_pf_6031.enabled
@@ -51,6 +55,39 @@ cp_altscreen_firewall_ready()
     "$CP_PF_GREP" -q 'carplay0.*6030:6031' "$CP_PF_RULES"
 }
 
+# connectionmanager swaps the complete PF ruleset when the active Internet
+# bearer changes. These profiles are not interchangeable: each one contains
+# different NAT/ALTQ rules for mlan0, ppp0, or ecm0/ecm1. Derive the source from
+# the kernel's current default route so adding TCP 6031 never replaces an active
+# tethering profile with generic /etc/pf.conf.
+cp_active_pf_source()
+{
+    CP_PF_UPLINK=
+    if [ -x "$CP_NETSTAT" ]; then
+        CP_PF_UPLINK=`"$CP_NETSTAT" -rn 2>/dev/null | (
+            while read CP_ROUTE_LINE; do
+                set -- $CP_ROUTE_LINE
+                [ "$1" = default ] || continue
+                for CP_ROUTE_FIELD in "$@"; do
+                    case "$CP_ROUTE_FIELD" in
+                        mlan0|ppp0|ecm0|ecm1)
+                            echo "$CP_ROUTE_FIELD"
+                            exit 0
+                            ;;
+                    esac
+                done
+            done
+        )`
+    fi
+
+    case "$CP_PF_UPLINK" in
+        mlan0)     echo "$CP_PF_SOURCE_MLAN" ;;
+        ppp0)      echo "$CP_PF_SOURCE_PPP" ;;
+        ecm0|ecm1) echo "$CP_PF_SOURCE_ECM" ;;
+        *)         echo "$CP_PF_SOURCE_DEFAULT" ;;
+    esac
+}
+
 cp_enable_altscreen_firewall()
 {
     if cp_altscreen_firewall_ready; then
@@ -58,9 +95,10 @@ cp_enable_altscreen_firewall()
         return 0
     fi
     [ -e "$CP_PF_MARKER" ] && rm -f "$CP_PF_MARKER"
+    CP_PF_SOURCE=`cp_active_pf_source`
     if [ ! -r "$CP_PF_SOURCE" ] || [ ! -x "$CP_PF_SED" ] ||
        [ ! -x "$CP_PF_GREP" ] || [ ! -x "$CP_PFCTL" ]; then
-        echo "[supervisor] altScreen PF setup unavailable; TCP 6031 remains blocked" >> "${WLOG:-/dev/null}"
+        echo "[supervisor] altScreen PF setup unavailable source=$CP_PF_SOURCE; TCP 6031 remains blocked" >> "${WLOG:-/dev/null}"
         return 1
     fi
 
@@ -85,7 +123,7 @@ cp_enable_altscreen_firewall()
         return 1
     fi
     : > "$CP_PF_MARKER"
-    echo "[supervisor] altScreen PF enabled: carplay0 TCP 6030:6031" >> "${WLOG:-/dev/null}"
+    echo "[supervisor] altScreen PF enabled: carplay0 TCP 6030:6031 source=$CP_PF_SOURCE" >> "${WLOG:-/dev/null}"
     return 0
 }
 
