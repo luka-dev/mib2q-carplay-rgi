@@ -50,6 +50,8 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
     private static final int KOMBI_TYPE_G24   = 4;
     public static final int VIEWAREA_FULLSCREEN = 0;
     public static final int VIEWAREA_SMALLSCREEN = 1;
+    private static final int VIEWAREA_SPORTSCREEN = 1;
+    private static final int VIEWAREA_CLASSICSCREEN = 2;
     private static final int VIEWAREA_ANIMATION_MS = 250;
 
     /** Lightweight notification for consumers whose cluster presentation differs by view area. */
@@ -143,6 +145,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
     /* Desired Audi View-button state. The C hook also caches this before the
      * RTSP altScreen session exists and applies it on the first decoded IDR. */
     private static int desiredViewAreaMode = VIEWAREA_FULLSCREEN;
+    private static int clusterStyle = AltscreenControlServer.STYLE_SPORT;
     private static volatile ViewAreaModeListener viewAreaModeListener;
     private static volatile InfoModeListener infoModeListener;
 
@@ -168,13 +171,13 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
 
     private static boolean sendViewAreaMode(String reason) {
         int mode;
-        synchronized (LOCK) { mode = desiredViewAreaMode; }
+        synchronized (LOCK) { mode = effectiveViewAreaModeLocked(); }
         byte[] payload = new byte[3];
         payload[0] = (byte) mode;
         payload[1] = (byte) (VIEWAREA_ANIMATION_MS & 0xff);
         payload[2] = (byte) ((VIEWAREA_ANIMATION_MS >>> 8) & 0xff);
         boolean ok = CarplayBus.getInstance().sendBinary(CarplayBus.CMD_ALT_ZONE, payload);
-        Log.i(TAG, "viewArea send mode=" + (mode == VIEWAREA_SMALLSCREEN ? "smallscreen" : "fullscreen")
+        Log.i(TAG, "viewArea send mode=" + viewAreaName(mode)
             + " reason=" + reason + " queued=" + ok);
         return ok;
     }
@@ -197,6 +200,39 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
         }
     }
 
+    /** Called by the stock DSICarKombi preset listener.  Audi exposes one
+     * logical compact View-button state, but its safe area is left-aligned in
+     * Sport and centered in Classic; select the matching predeclared iOS area. */
+    public static void setClusterStyle(int style, int rawPreset) {
+        if (style != AltscreenControlServer.STYLE_CLASSIC &&
+            style != AltscreenControlServer.STYLE_SPORT) return;
+        AltscreenControlServer.setClusterStyle(style, rawPreset);
+        boolean resend;
+        synchronized (LOCK) {
+            resend = clusterStyle != style &&
+                desiredViewAreaMode == VIEWAREA_SMALLSCREEN;
+            clusterStyle = style;
+        }
+        Log.i(TAG, "VC style="
+            + (style == AltscreenControlServer.STYLE_CLASSIC ? "classic" : "sport")
+            + " rawPreset=" + rawPreset + " resendCompact=" + resend);
+        if (resend) sendViewAreaMode("VC_DISPLAY_PRESET");
+    }
+
+    /* Caller holds LOCK. */
+    private static int effectiveViewAreaModeLocked() {
+        if (desiredViewAreaMode != VIEWAREA_SMALLSCREEN)
+            return VIEWAREA_FULLSCREEN;
+        return clusterStyle == AltscreenControlServer.STYLE_CLASSIC
+            ? VIEWAREA_CLASSICSCREEN : VIEWAREA_SPORTSCREEN;
+    }
+
+    private static String viewAreaName(int mode) {
+        if (mode == VIEWAREA_SPORTSCREEN) return "sportscreen";
+        if (mode == VIEWAREA_CLASSICSCREEN) return "classicscreen";
+        return "fullscreen";
+    }
+
     public void onFrame(int type, int flags, byte[] payload, int len) {
         if (type == CarplayBus.EVT_HELLO) {
             sendViewAreaMode("hook-hello");
@@ -206,7 +242,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
                        | ((payload[2] & 0xff) << 8)
                        | ((payload[3] & 0xff) << 16)
                        | ((payload[4] & 0xff) << 24);
-            Log.i(TAG, "viewArea ack mode=" + (mode == VIEWAREA_SMALLSCREEN ? "smallscreen" : "fullscreen")
+            Log.i(TAG, "viewArea ack mode=" + viewAreaName(mode)
                 + " status=" + status);
         }
     }

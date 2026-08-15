@@ -93,9 +93,9 @@
 #define CMD_ALT_ZOOM            0x0110  /* binary [int8 signed MapScale step]  */
                                         /* hook emits UUID-addressed           */
                                         /* changeMapZoomLevel (0=in, 1=out)    */
-#define CMD_ALT_ZONE            0x0111  /* binary [u8 mode][u16 LE durationMs] */
-                                        /* mode 0=fullscreen, 1=smallscreen; hook maps */
-                                        /* each to primary+adjacent viewAreas  */
+#define CMD_ALT_ZONE            0x0111  /* [u8 0=full/1=sport/2=classic][u16 LE durationMs] */
+                                        /* hook maps each mode to the matching */
+                                        /* primary+adjacent viewAreas          */
 #define CMD_ALT_ZONE_ACK        0x0112  /* hook→Java confirmation for a switch */
                                         /* binary [u8 mode][i32 LE status]     */
                                         /* status 0 = phone applied it, else   */

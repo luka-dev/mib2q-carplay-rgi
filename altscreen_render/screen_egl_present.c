@@ -24,6 +24,7 @@
 #include "carplay_loader.h"   /* CARPLAY_LOADER_FRAME_INTERVAL_NS (frame cadence) */
 #include "loader_assets.h"    /* baked Apple logo + @LuKa_dev signature (raw RGBA) */
 #include "cluster_surface.h"
+#include "loader_layout.h"
 
 #include <screen/screen.h>
 #include <EGL/egl.h>
@@ -102,6 +103,7 @@ struct screen_egl_present {
     /* Stable process-lifetime word owned by sink_omx_qnx.  The control thread
      * updates it atomically; EGL remains exclusively on the loader thread. */
     volatile int *loader_view_area_mode;
+    volatile int *loader_layout_style;
 
     pthread_mutex_t gl_lock;
     int gl_lock_initialized;
@@ -242,7 +244,10 @@ static int ep_make_loader_program(screen_egl_present_t *p) {
         "    vec2 uv = vec2(lp.x*0.5 + 0.5, 0.5 - lp.y*0.5);\n"
         "    col = mix(col, vec3(0.97,0.98,1.0), texture2D(uLogo, uv).a);\n"
         "  }\n"
-        "  float lum = spinner(q - vec2(0.0,-0.1475), t, 0.048, 0.080, 0.0075);\n"
+        "  vec2 sq = q - vec2(0.0,-0.1475);\n"
+        "  float lum = 0.0;\n"
+        "  if(abs(sq.x) < 0.050 && abs(sq.y) < 0.050)\n"
+        "    lum = spinner(sq, t, 0.024, 0.040, 0.00375);\n"
         "  col += vec3(0.93,0.95,1.0) * lum;\n"
         "  col *= smoothstep(0.0, 0.45, t);\n"
         "  vec2 sp = (p - uSigC)/uSigH;\n"
@@ -630,7 +635,8 @@ static void ep_release_sources(screen_egl_present_t *p) {
 }
 
 screen_egl_present_t *screen_egl_present_create_output(int width, int height,
-                                                       volatile int *view_area_mode) {
+                                                       volatile int *view_area_mode,
+                                                       volatile int *layout_style) {
     screen_egl_present_t *p;
     cluster_surface_cfg cfg;
     if (width <= 0 || height <= 0) return NULL;
@@ -639,6 +645,7 @@ screen_egl_present_t *screen_egl_present_create_output(int width, int height,
     p->width = width;
     p->height = height;
     p->loader_view_area_mode = view_area_mode;
+    p->loader_layout_style = layout_style;
     p->egl_display = EGL_NO_DISPLAY;
     p->egl_surface = EGL_NO_SURFACE;
     p->egl_context = EGL_NO_CONTEXT;
@@ -730,22 +737,6 @@ static int ep_loader_should_stop(screen_egl_present_t *p) {
     return stop;
 }
 
-typedef struct loader_layout {
-    float view_x, view_y, view_w, view_h;
-    float pad_left, pad_right, pad_top, pad_bottom;
-    float signature_x_offset;
-} loader_layout_t;
-
-/* Loader content frames, expressed as padding from each advertised view.
- * Fullscreen preserves the proven D2-M5 composition exactly.  Smallscreen
- * keeps the same content-frame height but translates it 7px upward. */
-static const loader_layout_t k_loader_layouts[2] = {
-    /* fullscreen: view (270,90)-(1170,452), content bottom capped at y=394 */
-    { 270.0f,  90.0f, 900.0f, 362.0f, 0.0f, 0.0f,  0.0f, 58.0f, 90.0f },
-    /* smallscreen: original y=135..394 content frame shifted to y=128..387 */
-    {  90.0f, 135.0f, 360.0f, 317.0f, 0.0f, 0.0f, -7.0f, 65.0f,  0.0f }
-};
-
 static int ep_loader_frame(screen_egl_present_t *p, uint64_t elapsed_ms) {
     static const GLfloat positions[] = {
         -1.0f, -1.0f,  1.0f, -1.0f,
@@ -755,7 +746,10 @@ static int ep_loader_frame(screen_egl_present_t *p, uint64_t elapsed_ms) {
     int ok = -1;
     int viewMode = (p && p->loader_view_area_mode &&
                     *p->loader_view_area_mode == 1) ? 1 : 0;
-    const loader_layout_t *layout = &k_loader_layouts[viewMode];
+    int layoutStyle = (p && p->loader_layout_style &&
+                       *p->loader_layout_style == LOADER_STYLE_CLASSIC)
+        ? LOADER_STYLE_CLASSIC : LOADER_STYLE_SPORT;
+    const loader_layout_t *layout = carplay_loader_layout(viewMode, layoutStyle);
     float sx = layout->view_x;
     float sy = layout->view_y;
     float sw = layout->view_w;

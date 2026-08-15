@@ -28,6 +28,64 @@ CP_USB_FAIL_FILE=/tmp/carplay_usb_pre_setup_failures
 CP_USB_RESET_PENDING=/tmp/carplay_usb_reset.pending
 CP_USB_RESET_LATCH=/tmp/carplay_usb_reset.latched
 
+# Stock MU1316 PF admits the single SDK-210 screen socket on TCP 6030 and then
+# drops every other inbound carplay0 packet. Native altScreen uses the adjacent
+# TCP 6031, so the second IPv6 screen connection never reaches accept() unless
+# the stock rule is extended. Keep /etc immutable: once per HU boot, validate
+# and load an otherwise-identical runtime ruleset with 6030:6031 enabled.
+CP_PFCTL=/armle/sbin/pfctl
+CP_PF_SED=/usr/bin/sed
+CP_PF_GREP=/usr/bin/grep
+CP_PF_SOURCE=/etc/pf.conf
+CP_PF_RUNTIME=/tmp/pf.carplay_alt.conf
+CP_PF_RULES=/tmp/pf.carplay_alt.rules
+CP_PF_MARKER=/tmp/carplay_pf_6031.enabled
+
+cp_altscreen_firewall_ready()
+{
+    [ -x "$CP_PFCTL" ] || return 1
+    "$CP_PFCTL" -sr > "$CP_PF_RULES" 2>/dev/null || return 1
+    "$CP_PF_GREP" -q 'carplay0.*6030:6031' "$CP_PF_RULES"
+}
+
+cp_enable_altscreen_firewall()
+{
+    if cp_altscreen_firewall_ready; then
+        : > "$CP_PF_MARKER"
+        return 0
+    fi
+    [ -e "$CP_PF_MARKER" ] && rm -f "$CP_PF_MARKER"
+    if [ ! -r "$CP_PF_SOURCE" ] || [ ! -x "$CP_PF_SED" ] ||
+       [ ! -x "$CP_PF_GREP" ] || [ ! -x "$CP_PFCTL" ]; then
+        echo "[supervisor] altScreen PF setup unavailable; TCP 6031 remains blocked" >> "${WLOG:-/dev/null}"
+        return 1
+    fi
+
+    # Match the exact stock CarPlay allow-list token. If a future firmware no
+    # longer has it, fail open to normal CarPlay instead of loading a malformed
+    # or incomplete firewall configuration.
+    "$CP_PF_SED" 's/ 6030,/ 6030:6031,/' "$CP_PF_SOURCE" > "$CP_PF_RUNTIME" || return 1
+    if ! "$CP_PF_GREP" -q ' 6030:6031,' "$CP_PF_RUNTIME"; then
+        echo "[supervisor] altScreen PF stock rule not found; ruleset left untouched" >> "${WLOG:-/dev/null}"
+        return 1
+    fi
+    if ! "$CP_PFCTL" -nf "$CP_PF_RUNTIME" >> "${WLOG:-/dev/null}" 2>&1; then
+        echo "[supervisor] altScreen PF syntax check FAILED; ruleset left untouched" >> "${WLOG:-/dev/null}"
+        return 1
+    fi
+    if ! "$CP_PFCTL" -f "$CP_PF_RUNTIME" >> "${WLOG:-/dev/null}" 2>&1; then
+        echo "[supervisor] altScreen PF load FAILED; stock rules remain active" >> "${WLOG:-/dev/null}"
+        return 1
+    fi
+    if ! cp_altscreen_firewall_ready; then
+        echo "[supervisor] altScreen PF verification FAILED after load" >> "${WLOG:-/dev/null}"
+        return 1
+    fi
+    : > "$CP_PF_MARKER"
+    echo "[supervisor] altScreen PF enabled: carplay0 TCP 6030:6031" >> "${WLOG:-/dev/null}"
+    return 0
+}
+
 cp_usb_stuck_pre_setup()
 {
     [ -r "$CP_USB_PPS" ] || return 1

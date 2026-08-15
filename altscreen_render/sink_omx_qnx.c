@@ -30,6 +30,7 @@
 #include "OMX_Video.h"
 
 #include "screen_egl_present.h"
+#include "loader_layout.h"
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -90,6 +91,7 @@ typedef struct {
     uint8_t                  config[4096];
     uint32_t                 configLen;
     volatile int             viewAreaMode; /* control thread -> loader: 0=fullscreen, 1=smallscreen */
+    volatile int             layoutStyle;  /* 0=Sport/driving-profile, 1=Classic */
 } ScreenSink;
 
 static ScreenSink g_ss;
@@ -281,7 +283,8 @@ static void _DestroyPresent(ScreenSink *me) {
 
 static int _CreateEarlyPresent(ScreenSink *me) {
     me->present = screen_egl_present_create_output(me->width, me->height,
-                                                   &me->viewAreaMode);
+                                                   &me->viewAreaMode,
+                                                   &me->layoutStyle);
     if (!me->present) {
         fprintf(stderr,
                 "altscreen_render[qnx]: early RGBA plane-99 setup FAILED\n");
@@ -784,11 +787,20 @@ int av_sink_video_ready(void) {
     return ready;
 }
 
-void av_sink_set_view_area(int mode) {
+void av_sink_set_layout(int mode, int style, int rawPreset) {
+    const char *layoutName;
     mode = mode == 1 ? 1 : 0;
     g_ss.viewAreaMode = mode;
-    fprintf(stderr, "altscreen_render[loader]: viewArea -> %s\n",
-            mode ? "smallscreen" : "fullscreen");
+    if (style == LOADER_STYLE_SPORT || style == LOADER_STYLE_CLASSIC)
+        g_ss.layoutStyle = style;
+    layoutName = !mode ? "fullscreen"
+        : (g_ss.layoutStyle == LOADER_STYLE_CLASSIC
+            ? "classicscreen" : "sportscreen");
+    fprintf(stderr,
+            "altscreen_render[loader]: layout -> view=%s style=%s rawPreset=%d\n",
+            layoutName,
+            g_ss.layoutStyle == LOADER_STYLE_CLASSIC ? "classic" : "sport",
+            rawPreset);
 }
 
 void av_sink_session_end(void) {

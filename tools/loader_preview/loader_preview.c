@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "../../hook/coverart/stb_image.h"   /* prototypes; impl in stbi.c */
+#include "../../common/loader_layout.h"
 
 #define PANEL_W 1440
 #define PANEL_H 542
@@ -64,7 +65,10 @@ static const char *k_frag =
     "    vec2 uv = vec2(lp.x*0.5 + 0.5, 0.5 - lp.y*0.5);\n"
     "    col = mix(col, vec3(0.97,0.98,1.0), texture2D(uLogo, uv).a);\n"
     "  }\n"
-    "  float lum = spinner(q - vec2(0.0,-0.1475), t, 0.048, 0.080, 0.0075);\n"
+    "  vec2 sq = q - vec2(0.0,-0.1475);\n"
+    "  float lum = 0.0;\n"
+    "  if(abs(sq.x) < 0.050 && abs(sq.y) < 0.050)\n"
+    "    lum = spinner(sq, t, 0.024, 0.040, 0.00375);\n"
     "  col += vec3(0.93,0.95,1.0) * lum;\n"
     "  col *= smoothstep(0.0, 0.45, t);\n"
     "  gl_FragColor = vec4(col, 1.0);\n"
@@ -74,16 +78,6 @@ static const char *k_frag =
 #define GRID_COLS 16
 #define GRID_ROWS 6
 static const int k_row_y[GRID_ROWS + 1] = { 0, 90, 181, 271, 361, 452, 542 };
-/* advertised view-area SAFE frames (altscreen_hook.c). */
-#define FULL_SAFE_X 270
-#define FULL_SAFE_Y  90
-#define FULL_SAFE_W 900
-#define FULL_SAFE_H 362
-#define SMALLSCREEN_SAFE_X   90
-#define SMALLSCREEN_SAFE_Y  135
-#define SMALLSCREEN_SAFE_W  360
-#define SMALLSCREEN_SAFE_H  317
-
 static const uint8_t k_font[36][7] = {
     {0x0E,0x11,0x13,0x15,0x19,0x11,0x0E},{0x04,0x0C,0x04,0x04,0x04,0x04,0x0E},
     {0x0E,0x11,0x01,0x02,0x04,0x08,0x1F},{0x1F,0x02,0x04,0x02,0x01,0x11,0x0E},
@@ -145,19 +139,22 @@ static void draw_grid(uint8_t *b){
     for (c=0;c<=GRID_COLS;++c) set_rect(b, c*(PANEL_W/GRID_COLS)-(c==GRID_COLS?2:0),0,2,PANEL_H, 0xff,0xff,0xff,80);
     for (r=0;r<=GRID_ROWS;++r) set_rect(b, 0,k_row_y[r]-(r==GRID_ROWS?2:0),PANEL_W,2, 0xff,0xff,0xff,80);
 }
-static void draw_view(uint8_t *b, int mode){
-    int ax,ay,aw,ah; const char *name;
-    if (mode==2){ ax=SMALLSCREEN_SAFE_X;ay=SMALLSCREEN_SAFE_Y;aw=SMALLSCREEN_SAFE_W;ah=SMALLSCREEN_SAFE_H;name="SMALLSCREEN"; }
-    else        { ax=FULL_SAFE_X;ay=FULL_SAFE_Y;aw=FULL_SAFE_W;ah=FULL_SAFE_H;name="FULLSCREEN"; }
+static void draw_view(uint8_t *b, int mode, int style){
+    const loader_layout_t *active = carplay_loader_layout(mode==2 ? 1 : 0, style);
+    const loader_layout_t *other = carplay_loader_layout(mode==2 ? 0 : 1, style);
+    int ax=(int)active->view_x, ay=(int)active->view_y;
+    int aw=(int)active->view_w, ah=(int)active->view_h;
+    const char *name = mode==2 ? "SMALLSCREEN" : "FULLSCREEN";
     set_rect(b,0,0,PANEL_W,ay, 0,0,0,130);
     set_rect(b,0,ay+ah,PANEL_W,PANEL_H-(ay+ah), 0,0,0,130);
     set_rect(b,0,ay,ax,ah, 0,0,0,130);
     set_rect(b,ax+aw,ay,PANEL_W-(ax+aw),ah, 0,0,0,130);
-    if (mode==2) outline(b,FULL_SAFE_X,FULL_SAFE_Y,FULL_SAFE_W,FULL_SAFE_H,2, 0xff,0xb4,0x3c,150);
-    else         outline(b,SMALLSCREEN_SAFE_X, SMALLSCREEN_SAFE_Y, SMALLSCREEN_SAFE_W, SMALLSCREEN_SAFE_H, 2, 0xff,0xb4,0x3c,150);
+    outline(b,(int)other->view_x,(int)other->view_y,
+            (int)other->view_w,(int)other->view_h,2, 0xff,0xb4,0x3c,150);
     outline(b,ax,ay,aw,ah,4, 0x28,0xff,0x8c,235);
     draw_label(b,name,ax+10,ay+10,3, 0x28,0xff,0x8c);
     draw_label(b, mode==2?"VIEW 1 SMALLSCREEN":"VIEW 0 FULLSCREEN", 12,8,3, 0x28,0xff,0x8c);
+    draw_label(b, style==LOADER_STYLE_CLASSIC?"CLASSIC":"SPORT", 12,34,3, 0x28,0xff,0x8c);
 }
 
 /* ── GL helpers ──────────────────────────────────────────────────────────────── */
@@ -188,7 +185,7 @@ int main(void)
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
     GLFWwindow *win = glfwCreateWindow(PANEL_W, PANEL_H,
-        "CarPlay cluster loader (1440x542) — Apple boot — G:grid V:view ESC:quit", NULL, NULL);
+        "CarPlay cluster loader (1440x542) — G:grid V:view S:style ESC:quit", NULL, NULL);
     if (!win){ fprintf(stderr,"window failed\n"); glfwTerminate(); return 1; }
     glfwMakeContextCurrent(win);
     glfwSwapInterval(1);
@@ -216,7 +213,9 @@ int main(void)
 
     int grid = getenv("CR_GRID")?1:0;
     int view = getenv("CR_VIEW")?atoi(getenv("CR_VIEW")):0;   /* 0 off,1 fullscreen,2 smallscreen */
-    int dirty = 1, gp=GLFW_RELEASE, vp=GLFW_RELEASE;
+    int style = getenv("CR_STYLE") && atoi(getenv("CR_STYLE"))==1
+        ? LOADER_STYLE_CLASSIC : LOADER_STYLE_SPORT;
+    int dirty = 1, gp=GLFW_RELEASE, vp=GLFW_RELEASE, sp=GLFW_RELEASE;
     double start = glfwGetTime();
 
     while (!glfwWindowShouldClose(win)){
@@ -228,11 +227,18 @@ int main(void)
         int vn=glfwGetKey(win,GLFW_KEY_V);
         if (vn==GLFW_PRESS && vp==GLFW_RELEASE){ view=(view+1)%3; dirty=1; fprintf(stderr,"view=%d\n",view); }
         vp=vn;
+        int sn=glfwGetKey(win,GLFW_KEY_S);
+        if (sn==GLFW_PRESS && sp==GLFW_RELEASE){
+            style = style==LOADER_STYLE_CLASSIC ? LOADER_STYLE_SPORT : LOADER_STYLE_CLASSIC;
+            dirty=1;
+            fprintf(stderr,"style=%s\n",style==LOADER_STYLE_CLASSIC?"classic":"sport");
+        }
+        sp=sn;
 
         if (dirty){
             memset(ov,0,sizeof(ov));
             if (grid) draw_grid(ov);
-            if (view) draw_view(ov,view);
+            if (view) draw_view(ov,view,style);
             glBindTexture(GL_TEXTURE_2D,ovTex);
             glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,PANEL_W,PANEL_H,0,GL_RGBA,GL_UNSIGNED_BYTE,ov);
             dirty=0;
@@ -244,22 +250,22 @@ int main(void)
         int fbw,fbh; glfwGetFramebufferSize(win,&fbw,&fbh);
         glViewport(0,0,fbw,fbh);
         /* loader (shader) */
-        /* center+scale the loader into the active view-area safe frame (smallscreen -> left, smaller) */
-        float sx,sy,sw,sh,vs;
-        if (view==2){ sx=SMALLSCREEN_SAFE_X; sy=SMALLSCREEN_SAFE_Y; sw=SMALLSCREEN_SAFE_W; sh=SMALLSCREEN_SAFE_H; vs=0.82f; }
-        else        { sx=FULL_SAFE_X;sy=FULL_SAFE_Y;sw=FULL_SAFE_W;sh=FULL_SAFE_H;vs=1.0f; }
+        /* Exact shared production geometry: [style][fullscreen/smallscreen]. */
+        const loader_layout_t *layout = carplay_loader_layout(view==2 ? 1 : 0, style);
+        float sx=layout->view_x, sy=layout->view_y;
+        float sw=layout->view_w, sh=layout->view_h;
+        float content_left=sx+layout->pad_left;
+        float content_right=sx+sw-layout->pad_right;
+        float content_top=sy+layout->pad_top;
+        float content_bottom=sy+sh-layout->pad_bottom;
         float aspect=(float)PANEL_W/(float)PANEL_H;
-        /* lower half of grid row 5 (y>=406) is reserved for important cluster info -> lift content */
-        float y_occ = getenv("CR_OCC") ? (float)atoi(getenv("CR_OCC")) : 406.0f;
-        float gap   = getenv("CR_GAP") ? (float)atoi(getenv("CR_GAP")) : 12.0f;
-        float ub = sy+sh; if (ub>y_occ-gap) ub=y_occ-gap;   /* usable bottom, gap above reserved band */
-        float cx_p=((sx+sw*0.5f)/(float)PANEL_W-0.5f)*aspect;
-        float cy_p=0.5f-((sy+ub)*0.5f)/(float)PANEL_H;
+        float cx_p=(((content_left+content_right)*0.5f)/(float)PANEL_W-0.5f)*aspect;
+        float cy_p=0.5f-((content_top+content_bottom)*0.5f)/(float)PANEL_H;
         glUseProgram(prog);
         glUniform2f(uRes,(float)fbw,(float)fbh);
         glUniform1f(uTime,t);
         glUniform2f(uCenter,cx_p,cy_p);
-        glUniform1f(uScale,vs);
+        glUniform1f(uScale,1.0f);
         glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D,logo); glUniform1i(uLogo,0);
         glBegin(GL_QUADS);
         glVertex2f(-1,-1); glVertex2f(1,-1); glVertex2f(1,1); glVertex2f(-1,1);
@@ -267,8 +273,8 @@ int main(void)
         /* @LuKa_dev signature — bottom-left of the active view, padded (panel px -> NDC) */
         if (sig){
             float ph=sh*0.055f, pw=ph*sigAspect, pad=sh*0.045f;
-            float sigdx=(view==2)?0.0f:45.0f;   /* nudge +half grid cell right in wide format */
-            float x0=sx+pad+sigdx, y1=ub-pad, y0=y1-ph;
+            float x0=content_left+pad+layout->signature_x_offset;
+            float y1=content_bottom-pad, y0=y1-ph;
             float nx0=(x0/PANEL_W)*2-1,      nx1=((x0+pw)/PANEL_W)*2-1;
             float ny0=1-(y0/PANEL_H)*2,      ny1=1-(y1/PANEL_H)*2;
             float sf=(t-0.3f)/0.6f; sf=sf<0?0:(sf>1?1:sf);

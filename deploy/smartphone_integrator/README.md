@@ -29,6 +29,10 @@ an explicit supervisor stop, not ordinary dio churn, owns their final teardown.
 
 Lifecycle semantics:
 
+- once per HU boot, the wrapper validates and loads an otherwise-stock PF
+  ruleset extending the CarPlay TCP allow-list from `6030` to `6030:6031`;
+  MU1316's stock rule blocks every other inbound `carplay0` port, while native
+  altScreen requires TCP 6031 beside the main screen's TCP 6030;
 - if either renderer already exists when CarPlay starts, it is not restarted;
 - renderer PIDs are kept under `/tmp`; one finite `pidin ar` snapshot seeds the
   files when adopting an older running generation, then startup and the monitor
@@ -78,6 +82,9 @@ firmware:
   fallback for adopting pre-existing renderers; normal checks use recorded PIDs;
 - `rm -f` and integer `sleep` are stock facilities; the original firmware uses
   `sleep` throughout `startup.sh` and `/etc/scripts`;
+- `/armle/sbin/pfctl`, `/usr/bin/sed`, and `/usr/bin/grep` are stock MU1316
+  binaries. The generated PF file is syntax-checked before load, and a missing
+  exact stock `6030,` token leaves the live ruleset untouched;
 - the shared process helper appends a safe subset of the stock MMX command search
   locations and retains the inherited head, so its utilities do not depend on
   `smartphone_integrator` preserving `PATH` and dio keeps its original resolution order.

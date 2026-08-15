@@ -56,6 +56,11 @@ All lifecycle defects identified by this audit are now addressed:
    where an overlong formatted message could make `write()` read beyond the
    stack buffer. Logger shutdown waits only for a published terminal flag and
    never blindly joins a writer wedged in filesystem I/O.
+10. MU1316's stock PF rules permit inbound `carplay0` TCP 6030 and then drop all
+    other traffic. The native 111 listener on TCP 6031 therefore bound
+    successfully but never received the iPhone's IPv6 connection. The wrapper
+    now validates and loads an otherwise-stock, once-per-boot runtime ruleset
+    extending only that allow-list entry to `6030:6031` before starting dio.
 
 Current source anchors:
 
@@ -71,6 +76,7 @@ Current source anchors:
 | Java bus/control/log writers | `CarplayBus.java:67-219`, `AltscreenControlServer.java:46-139`, `Log.java:24-100` |
 | Nonblocking C hook logging | `hook/framework/logging.c` (`log_writer_main`, bounded `log_write`, terminal-only shutdown) |
 | Guarded USB recovery | `carplay_processes.sh:23-103`, consumed/recorded by `carplay_startup.sh:121,132` |
+| Native 111 firewall admission | `carplay_processes.sh` (`cp_enable_altscreen_firewall`), invoked before dio by `carplay_startup.sh` |
 
 ### The watchdog-hang path, separated from its trigger
 

@@ -127,6 +127,12 @@ rm -f "$STOP_FILE"
 echo "$DIO_PID" > "$OWNER_FILE"
 echo "===== carplay_startup.sh run pid=$$ ppid=$PPID =====" >> "$WLOG"
 
+# SDK 210's stock firewall admits only the main screen on TCP 6030. Enable the
+# native adjacent altScreen port before either listener is advertised. Failure
+# is intentionally non-fatal: ordinary CarPlay 110 must still be able to start.
+cp_enable_altscreen_firewall ||
+    echo "[supervisor] continuing without altScreen TCP 6031 firewall rule" >> "$WLOG"
+
 # A previous monitor may have proved the independent pre-RTSP USB wedge. Consume
 # its one-shot request before creating any graphics clients or exec'ing dio.
 cp_usb_consume_pending_reset

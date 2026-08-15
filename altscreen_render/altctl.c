@@ -98,7 +98,8 @@ static void *ctl_loop(void *arg) {
             rx_used += (unsigned int)r;
             if (rx_used == ALTCTL_PKT_SIZE) {
                 if (rx[0] == ALTCMD_VIEW_AREA) {
-                    av_sink_set_view_area(rx[1] == 1 ? 1 : 0);
+                    av_sink_set_layout(rx[1] == 1 ? 1 : 0,
+                                       (int)rx[2], (int)rx[3]);
                 } else {
                     fprintf(stderr, "altscreen_render: unknown control command 0x%02x\n",
                             (unsigned int)rx[0]);

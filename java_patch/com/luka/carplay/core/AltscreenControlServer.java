@@ -29,6 +29,9 @@ final class AltscreenControlServer {
     private static final int    EVT_VIDEO_ON  = 0x81;
     private static final int    EVT_VIDEO_OFF = 0x82;
     private static final int    CMD_VIEW_AREA = 0x01;
+    static final int STYLE_SPORT   = 0;
+    static final int STYLE_CLASSIC = 1;
+    static final int STYLE_UNKNOWN = 0xFF;
 
     private static final Object LOCK = new Object();
     private static Thread   thread;
@@ -37,9 +40,13 @@ final class AltscreenControlServer {
     private static Socket client;
     private static int clientGeneration;
     private static int viewAreaMode;                /* 0=fullscreen, 1=smallscreen */
+    private static int layoutStyle = STYLE_UNKNOWN; /* DSICarKombi preset semantic */
+    private static int rawPreset = STYLE_UNKNOWN;   /* attribute-99 value, diagnostics */
     private static boolean writePending;
     private static int writeGeneration;
     private static int writeMode;
+    private static int writeStyle;
+    private static int writeRawPreset;
 
     private AltscreenControlServer() {}
 
@@ -51,15 +58,29 @@ final class AltscreenControlServer {
         }
     }
 
+    /** Cache and publish the VC's authoritative display-preset style. */
+    static void setClusterStyle(int style, int preset) {
+        synchronized (LOCK) {
+            layoutStyle = style == STYLE_CLASSIC ? STYLE_CLASSIC
+                : (style == STYLE_SPORT ? STYLE_SPORT : STYLE_UNKNOWN);
+            rawPreset = preset >= 0 && preset <= 254 ? preset : STYLE_UNKNOWN;
+            queueViewAreaLocked("preset-change");
+        }
+    }
+
     /* Caller holds LOCK. Coalesce rapid View presses to the newest state; stock
      * HMI callbacks never touch a potentially blocked renderer socket. */
     private static void queueViewAreaLocked(String reason) {
         if (client == null) return;
         writeMode = viewAreaMode;
+        writeStyle = layoutStyle;
+        writeRawPreset = rawPreset;
         writeGeneration = clientGeneration;
         writePending = true;
         LOCK.notifyAll();
-        Log.i(TAG, "queued VIEW_AREA " + (viewAreaMode == 1 ? "smallscreen" : "fullscreen")
+        Log.i(TAG, "queued layout view="
+            + layoutName(viewAreaMode, layoutStyle)
+            + " style=" + styleName(layoutStyle) + " rawPreset=" + rawPreset
             + " reason=" + reason);
     }
 
@@ -114,6 +135,8 @@ final class AltscreenControlServer {
             Socket owned;
             int generation;
             int mode;
+            int style;
+            int preset;
             synchronized (LOCK) {
                 while (run && !writePending) {
                     try { LOCK.wait(); } catch (InterruptedException e) { }
@@ -122,21 +145,38 @@ final class AltscreenControlServer {
                 owned = client;
                 generation = writeGeneration;
                 mode = writeMode;
+                style = writeStyle;
+                preset = writeRawPreset;
                 writePending = false;
                 if (owned == null || generation != clientGeneration) continue;
             }
             try {
-                byte[] pkt = new byte[] { (byte)CMD_VIEW_AREA, (byte)mode, 0, 0 };
+                byte[] pkt = new byte[] {
+                    (byte)CMD_VIEW_AREA, (byte)mode, (byte)style, (byte)preset
+                };
                 OutputStream out = owned.getOutputStream();
                 out.write(pkt);
                 out.flush();
-                Log.i(TAG, "-> VIEW_AREA " + (mode == 1 ? "smallscreen" : "fullscreen")
+                Log.i(TAG, "-> layout view="
+                    + layoutName(mode, style)
+                    + " style=" + styleName(style) + " rawPreset=" + preset
                     + " generation=" + generation);
             } catch (Throwable t) {
                 Log.d(TAG, "VIEW_AREA writer failed: " + t);
                 try { owned.close(); } catch (Throwable ignored) { }
             }
         }
+    }
+
+    private static String styleName(int style) {
+        if (style == STYLE_CLASSIC) return "classic";
+        if (style == STYLE_SPORT) return "sport";
+        return "unknown";
+    }
+
+    private static String layoutName(int mode, int style) {
+        if (mode != 1) return "fullscreen";
+        return style == STYLE_CLASSIC ? "classicscreen" : "sportscreen";
     }
 
     private static void serveClient(Socket c, int generation) {

@@ -356,17 +356,15 @@ static int listen_socket(void) {
 static void serve_client(int cfd, uint32_t generation, int *video_signaled) {
     int one = 1;
     setsockopt(cfd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
-    /* A stalled or half-open peer must never hang the sole server thread forever
-     * (it would freeze the service and never fire altctl_set_video(0)).
-     * KEEPALIVE reaps a genuinely dead TCP peer (crash / half-open).  RCVTIMEO is a
-     * 5s backstop for a peer that holds the connection but stops sending
-     * mid-frame → av_read_frame then returns an error and we drop + accept() again.
-     * A healthy 111 stream sends continuously (including a static map); keeping the
-     * old 60s timeout made a half-open pre-restart dio monopolise the only accept loop
-     * for a full minute and defeated fast phone reconnect. */
+    /* A static/occluded instrument-cluster scene is allowed to stop producing
+     * encoded frames without closing the stream.  Do NOT put SO_RCVTIMEO on this
+     * loopback connection: the old 5 s timeout treated that legal idle period as
+     * EOF, tore down a healthy decoder and exposed the loader forever while the
+     * hook was still waiting on the live iOS socket.  Process shutdown remains
+     * bounded because on_signal() closes g_client_fd, and a hook/dio exit closes
+     * the peer socket in the kernel.  KEEPALIVE covers a genuinely half-open TCP
+     * peer without assigning protocol meaning to ordinary frame silence. */
     setsockopt(cfd, SOL_SOCKET, SO_KEEPALIVE, &one, sizeof(one));
-    struct timeval tv; tv.tv_sec = 5; tv.tv_usec = 0;
-    setsockopt(cfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
     uint8_t *buf = NULL;
     uint32_t cap = 0, len = 0;
@@ -394,7 +392,12 @@ static void serve_client(int cfd, uint32_t generation, int *video_signaled) {
             }
             continue;
         }
-        if (r == -2) fprintf(stderr, "altscreen_render: protocol error, dropping link\n");
+        if (r == -2)
+            fprintf(stderr, "altscreen_render: protocol error, dropping hook link\n");
+        else
+            fprintf(stderr,
+                    "altscreen_render: hook link ended (EOF/error errno=%d); waiting for reconnect\n",
+                    errno);
         break;                                   /* -1 disconnect / -2 proto error */
     }
     free(buf);

@@ -261,8 +261,10 @@ static int set_i64(void *d, const char *key, int64_t val)
  *
  *   fullscreen rectangular safeArea: complete cells D2 through M5
  *              = x 270..1170, y 90..452 = (270,90) 900x362
- *   smallscreen rectangular safeArea (the original compact layout): B2.5 through E5
+ *   sportscreen rectangular safeArea (compact Sport layout): B2.5 through E5
  *              = x 90..450, y 135..452 = (90,135) 360x317
+ *   classicscreen uses the same compact dimensions, centered horizontally
+ *              = x 540..900, y 135..452 = (540,135) 360x317
  *
  * The background may render under a physical mask; route focus and critical UI
  * stay inside these nested safe rectangles. */
@@ -275,6 +277,7 @@ static int set_i64(void *d, const char *key, int64_t val)
 #define SMALLSCREEN_SAFE_Y      135
 #define SMALLSCREEN_SAFE_W      360
 #define SMALLSCREEN_SAFE_H      317
+#define CLASSICSCREEN_SAFE_X    540
 
 /* one rect dict, iOS keys: {originXPixels, originYPixels, widthPixels, heightPixels}
  * (CarKit CROrigin/CRSizeFromAirPlayDictionary). */
@@ -430,14 +433,15 @@ static void *build_cluster_dict(int night)
         if (k && cf_rel) cf_rel(k);
     }
     if (!properties_ok) goto fail;
-    /* [0] fullscreen, [1] smallscreen. The encoded and visible frame stays 1440x542;
-     * the two entries carry different nested safe frames.  Match MHI3
+    /* [0] fullscreen, [1] sportscreen (compact left), [2] classicscreen
+     * (same compact size, centered). The encoded and visible frame stays 1440x542;
+     * the entries carry different nested safe frames.  Match MHI3
      * AirPlayScreenDictSetViewAreas by declaring the initial current/adjacent
      * state alongside the array; these are display-level keys, not fields of
      * the individual view-area dictionaries. */
     {
         void *k   = cf_str(0, "viewAreas", CFENC_UTF8);
-        void *arr = cf_arrm(0, 2, arr_cb);
+        void *arr = cf_arrm(0, 3, arr_cb);
         if (arr) {
             void *full = build_viewarea(0, 0, CLUSTER_W, CLUSTER_H,
                                         FULL_SAFE_X, FULL_SAFE_Y,
@@ -445,19 +449,25 @@ static void *build_cluster_dict(int night)
             void *split = build_viewarea(0, 0, CLUSTER_W, CLUSTER_H,
                                          SMALLSCREEN_SAFE_X, SMALLSCREEN_SAFE_Y,
                                          SMALLSCREEN_SAFE_W, SMALLSCREEN_SAFE_H);
-            if (full && split && k) {
+            void *classic = build_viewarea(0, 0, CLUSTER_W, CLUSTER_H,
+                                           CLASSICSCREEN_SAFE_X, SMALLSCREEN_SAFE_Y,
+                                           SMALLSCREEN_SAFE_W, SMALLSCREEN_SAFE_H);
+            if (full && split && classic && k) {
                 cf_arrapp(arr, full);
                 cf_arrapp(arr, split);
+                cf_arrapp(arr, classic);
                 cf_dictset(d, k, arr);
                 view_areas_ok = 1;
                 LOG_INFO(LOG_MODULE,
-                         "declared viewAreas: visible=(0,0 %dx%d); fullscreen safe=(%d,%d %dx%d); smallscreen safe=(%d,%d %dx%d)",
+                         "declared viewAreas: visible=(0,0 %dx%d); fullscreen=(%d,%d %dx%d); sportscreen=(%d,%d %dx%d); classicscreen=(%d,%d %dx%d)",
                          CLUSTER_W, CLUSTER_H,
                          FULL_SAFE_X, FULL_SAFE_Y, FULL_SAFE_W, FULL_SAFE_H,
-                         SMALLSCREEN_SAFE_X, SMALLSCREEN_SAFE_Y, SMALLSCREEN_SAFE_W, SMALLSCREEN_SAFE_H);
+                         SMALLSCREEN_SAFE_X, SMALLSCREEN_SAFE_Y, SMALLSCREEN_SAFE_W, SMALLSCREEN_SAFE_H,
+                         CLASSICSCREEN_SAFE_X, SMALLSCREEN_SAFE_Y, SMALLSCREEN_SAFE_W, SMALLSCREEN_SAFE_H);
             }
             if (full && cf_rel) cf_rel(full);
             if (split && cf_rel) cf_rel(split);
+            if (classic && cf_rel) cf_rel(classic);
             if (cf_rel) cf_rel(arr);
         }
         if (k && cf_rel) cf_rel(k);
@@ -1962,10 +1972,11 @@ int AirPlayReceiverSessionTearDown(void *session, void *request, int reason, int
 #define CLUSTER_DISPLAY_UUID "C1057E12-A0D1-4E20-B0C0-1057E12A0D10"
 
 /* ════════════════════════════════════════════════════════════════════════════
- * working zone (fullscreen ↔ smallscreen) live-switch — Java-driven via the bus.
+ * working zone (fullscreen / sportscreen / classicscreen) live-switch — Java-driven via the bus.
  *
- * Two full-frame view areas are PREDECLARED in /info, with different nested
- * safeArea geometry: fullscreen=[0], smallscreen=[1]. Switching is a plain
+ * Three full-frame view areas are PREDECLARED in /info, with different nested
+ * safeArea geometry: fullscreen=[0], sportscreen=[1], classicscreen=[2].
+ * Switching is a plain
  * session command — NOT a stream reconfig: we ship {type:"updateViewArea",
  * params:{uuid,viewAreaIndex,animationDurationMillis,adjacentViewAreas}} via the
  * stock generic command shipper
@@ -1984,11 +1995,22 @@ int AirPlayReceiverSessionTearDown(void *session, void *request, int reason, int
  * completion(int status, CFDictionaryRef resp|NULL, void *ctx) — status 0 = the
  * phone accepted/applied the switch.  We relay it to Java as CMD_ALT_ZONE_ACK so
  * the focus arbiter knows the zone actually changed (and can retry on failure).
- * The requested mode rides in ctx (0/1 fits a pointer). If SendCommand fails
+ * The requested mode rides in ctx (two low bits). If SendCommand fails
  * synchronously the completion never fires, so we ack that error inline.
  * ════════════════════════════════════════════════════════════════════════════ */
-enum { ALT_ZONE_FULLSCREEN = 0, ALT_ZONE_SMALLSCREEN = 1 };
+enum {
+    ALT_ZONE_FULLSCREEN = 0,
+    ALT_ZONE_SPORTSCREEN = 1,
+    ALT_ZONE_CLASSICSCREEN = 2
+};
 static volatile int g_alt_zone_mode = ALT_ZONE_FULLSCREEN;
+
+static const char *alt_zone_name(int mode)
+{
+    if (mode == ALT_ZONE_SPORTSCREEN) return "sportscreen";
+    if (mode == ALT_ZONE_CLASSICSCREEN) return "classicscreen";
+    return "fullscreen";
+}
 
 static void zone_send_ack(int mode, int status)
 {
@@ -2006,8 +2028,8 @@ static void zone_send_ack(int mode, int status)
 static void zone_cmd_done(int status, void *resp, void *ctx)
 {
     uintptr_t packed = (uintptr_t)ctx;
-    int mode = (int)(packed & 1U);
-    uint32_t gen = (uint32_t)(packed >> 1);
+    int mode = (int)(packed & 3U);
+    uint32_t gen = (uint32_t)(packed >> 2);
     (void)resp;
     if (!gen || !alt_generation_is_current(gen)) {
         LOG_INFO(LOG_MODULE,
@@ -2188,13 +2210,14 @@ static void alt_command_worker_shutdown(void)
                  ALT_CMD_SHUTDOWN_WAIT_MS);
 }
 
-/* Build and ship one of the two known-good view-area indexes. */
+/* Build and ship one of the three predeclared view-area indexes. */
 static int zone_send_mode(uint32_t gen, int mode, int dur, void *completion)
 {
     int index, rc = -6728;
     void *params = NULL, *cmd = NULL, *adj = NULL, *pk = NULL, *ak = NULL;
 
-    if (mode == ALT_ZONE_SMALLSCREEN) index = 1;
+    if (mode == ALT_ZONE_SPORTSCREEN) index = 1;
+    else if (mode == ALT_ZONE_CLASSICSCREEN) index = 2;
     else { mode = ALT_ZONE_FULLSCREEN; index = 0; }
     if (cf_init() != 1 || !cf_dictm || !dict_keycb || !dict_valcb ||
         !cf_dictset || !cf_str || !cf_dictseti || !cf_arrm || !arr_cb ||
@@ -2205,25 +2228,25 @@ static int zone_send_mode(uint32_t gen, int mode, int dur, void *completion)
 
     params = cf_dictm(0, 0, dict_keycb, dict_valcb);
     cmd = cf_dictm(0, 0, dict_keycb, dict_valcb);
-    adj = cf_arrm(0, mode == ALT_ZONE_SMALLSCREEN ? 1 : 0, arr_cb);
+    adj = cf_arrm(0, mode == ALT_ZONE_FULLSCREEN ? 0 : 1, arr_cb);
     if (params && cmd && adj) {
         set_str(params, "uuid", CLUSTER_DISPLAY_UUID);
         set_i64(params, "viewAreaIndex", index);
         set_i64(params, "animationDurationMillis", dur);
-        if (mode == ALT_ZONE_SMALLSCREEN) cf_arrappi64(adj, 0);
+        if (mode != ALT_ZONE_FULLSCREEN) cf_arrappi64(adj, 0);
         ak = cf_str(0, "adjacentViewAreas", CFENC_UTF8);
         if (ak) cf_dictset(params, ak, adj);
         set_str(cmd, "type", "updateViewArea");
         pk = cf_str(0, "params", CFENC_UTF8);
         if (pk) cf_dictset(cmd, pk, params);
-        uintptr_t packed = (((uintptr_t)(gen & 0x7FFFFFFFU)) << 1) |
-                           (uintptr_t)(mode & 1);
+        uintptr_t packed = (((uintptr_t)(gen & 0x3FFFFFFFU)) << 2) |
+                           (uintptr_t)(mode & 3);
         rc = alt_send_async_for_gen(gen, cmd, completion,
                                     completion ? (void *)packed : NULL);
         LOG_INFO(LOG_MODULE,
                  "updateViewArea ship mode=%s index=%d adjacent=%s dur=%dms rc=%d",
-                 mode == ALT_ZONE_SMALLSCREEN ? "smallscreen" : "fullscreen",
-                 index, mode == ALT_ZONE_SMALLSCREEN ? "[0]" : "[]", dur, rc);
+                 alt_zone_name(mode), index,
+                 mode == ALT_ZONE_FULLSCREEN ? "[]" : "[0]", dur, rc);
     }
     if (ak && cf_rel) cf_rel(ak);
     if (pk && cf_rel) cf_rel(pk);
@@ -2237,7 +2260,9 @@ static void zone_on_cmd(uint16_t type, uint8_t flags, const uint8_t *payload, ui
 {
     (void)type; (void)flags; (void)ctx;
     if (!payload || len < 1) return;
-    int mode = payload[0] == ALT_ZONE_SMALLSCREEN ? ALT_ZONE_SMALLSCREEN : ALT_ZONE_FULLSCREEN;
+    int mode = payload[0] == ALT_ZONE_SPORTSCREEN ? ALT_ZONE_SPORTSCREEN
+        : (payload[0] == ALT_ZONE_CLASSICSCREEN
+            ? ALT_ZONE_CLASSICSCREEN : ALT_ZONE_FULLSCREEN);
     int dur = (len >= 3) ? (payload[1] | (payload[2] << 8)) : 250;
     int rc;
     uint32_t gen;
@@ -2461,7 +2486,7 @@ static void alt_kick_viewarea(uint32_t gen)
     int mode = g_alt_zone_mode;
     int rc = zone_send_mode(gen, mode, 0, NULL);
     LOG_INFO(LOG_MODULE, "alt: initial updateViewArea mode=%s rc=%d",
-             mode == ALT_ZONE_SMALLSCREEN ? "smallscreen" : "fullscreen", rc);
+             alt_zone_name(mode), rc);
 }
 
 /* iOS 26.6 Maps registers this exact URL for its map-based instrument-cluster UI.
@@ -2474,7 +2499,7 @@ static void alt_kick_viewarea(uint32_t gen)
 static const char *alt_cluster_url_for_mode(int mode)
 {
     const char *url;
-    if (mode == ALT_ZONE_SMALLSCREEN) {
+    if (mode != ALT_ZONE_FULLSCREEN) {
         url = getenv("ALTSCREEN_CLUSTER_URL_SMALLSCREEN");
         /* Compatibility with already deployed startup scripts. */
         if (!url || !*url) url = getenv("ALTSCREEN_CLUSTER_URL_DUO");
@@ -2503,7 +2528,7 @@ static int alt_show_ui_for_mode(uint32_t gen, int mode, const char *reason)
     set_str(p, "url", url);
     int rc = alt_ship(gen, "showUI", p);
     LOG_INFO(LOG_MODULE, "alt: showUI mode=%s reason=%s uuid=%s url=%s rc=%d",
-             mode == ALT_ZONE_SMALLSCREEN ? "smallscreen-map-only" : "fullscreen-cards",
+             mode == ALT_ZONE_FULLSCREEN ? "fullscreen-cards" : alt_zone_name(mode),
              reason ? reason : "?", CLUSTER_DISPLAY_UUID, url, rc);
     return rc;
 }
