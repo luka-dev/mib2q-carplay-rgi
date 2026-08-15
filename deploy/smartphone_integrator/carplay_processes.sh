@@ -39,7 +39,7 @@ CP_USB_RESET_LATCH=/tmp/carplay_usb_reset.latched
 CP_PFCTL=/armle/sbin/pfctl
 CP_PF_SED=/usr/bin/sed
 CP_PF_GREP=/usr/bin/grep
-CP_NETSTAT=/proc/boot/netstat
+CP_NETSTAT=/mnt/app/armle/usr/bin/netstat
 CP_PF_SOURCE_DEFAULT=/etc/pf.conf
 CP_PF_SOURCE_MLAN=/etc/pf.mlan0.conf
 CP_PF_SOURCE_PPP=/etc/pf.ppp0.conf
@@ -81,11 +81,25 @@ cp_active_pf_source()
     fi
 
     case "$CP_PF_UPLINK" in
-        mlan0)     echo "$CP_PF_SOURCE_MLAN" ;;
-        ppp0)      echo "$CP_PF_SOURCE_PPP" ;;
-        ecm0|ecm1) echo "$CP_PF_SOURCE_ECM" ;;
-        *)         echo "$CP_PF_SOURCE_DEFAULT" ;;
+        mlan0)     CP_PF_ACTIVE_SOURCE=$CP_PF_SOURCE_MLAN ;;
+        ppp0)      CP_PF_ACTIVE_SOURCE=$CP_PF_SOURCE_PPP ;;
+        ecm0|ecm1) CP_PF_ACTIVE_SOURCE=$CP_PF_SOURCE_ECM ;;
+        *)
+            # A bearer transition can temporarily remove the default route.
+            # Fall back to signatures unique to pfctl's compiled profile; this
+            # snapshot was already refreshed by cp_altscreen_firewall_ready().
+            if "$CP_PF_GREP" -q 'block.* in on ecm1 all' "$CP_PF_RULES" 2>/dev/null; then
+                CP_PF_ACTIVE_SOURCE=$CP_PF_SOURCE_ECM
+            elif "$CP_PF_GREP" -q 'block.* in on ppp0 all' "$CP_PF_RULES" 2>/dev/null; then
+                CP_PF_ACTIVE_SOURCE=$CP_PF_SOURCE_PPP
+            elif "$CP_PF_GREP" -q 'block.* in on mlan0 all' "$CP_PF_RULES" 2>/dev/null; then
+                CP_PF_ACTIVE_SOURCE=$CP_PF_SOURCE_MLAN
+            else
+                CP_PF_ACTIVE_SOURCE=$CP_PF_SOURCE_DEFAULT
+            fi
+            ;;
     esac
+    echo "$CP_PF_ACTIVE_SOURCE"
 }
 
 cp_enable_altscreen_firewall()
