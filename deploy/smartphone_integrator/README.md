@@ -29,8 +29,10 @@ an explicit supervisor stop, not ordinary dio churn, owns their final teardown.
 
 Lifecycle semantics:
 
-- once per HU boot, the wrapper validates and loads an otherwise-stock PF
-  ruleset extending the CarPlay TCP allow-list from `6030` to `6030:6031`;
+- the wrapper validates and loads an otherwise-stock PF ruleset extending the
+  CarPlay TCP allow-list from `6030` to `6030:6031`, then guards it for the first
+  30 seconds of a CarPlay generation in case stock network startup reloads
+  `/etc/pf.conf`;
   MU1316's stock rule blocks every other inbound `carplay0` port, while native
   altScreen requires TCP 6031 beside the main screen's TCP 6030;
 - if either renderer already exists when CarPlay starts, it is not restarted;

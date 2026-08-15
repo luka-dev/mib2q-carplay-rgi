@@ -91,6 +91,7 @@ monitor_renderers()
     MR_DIO_PID=$1
     MR_EXPLICIT_STOP=0
     MR_LIVED_TICKS=0
+    MR_PF_GUARD_TICKS=0
     echo "[supervisor] renderer monitor watching dio pid=$MR_DIO_PID" >> "$WLOG"
     while [ -d "/proc/$MR_DIO_PID" ]; do
         if [ -e "$STOP_FILE" ]; then
@@ -106,7 +107,30 @@ monitor_renderers()
         fi
         start_renderer maneuver_render restart
         start_renderer altscreen_render restart
-        sleep 2
+
+        # start_network() performs a late full `pfctl -ef /etc/pf.conf` during
+        # HU boot. If a connected phone makes SI start CarPlay before that
+        # reload, it silently restores the stock 6030-only allow-list after our
+        # initial setup and iOS's TCP 6031 SYN never reaches alt accept(). Guard
+        # the overlap at one-second resolution for 30 seconds. Keep the normal
+        # two-second monitor cadence (and MR_LIVED_TICKS semantics) unchanged.
+        if [ "$MR_PF_GUARD_TICKS" -lt 15 ]; then
+            if ! cp_altscreen_firewall_ready; then
+                echo "[supervisor] stock PF reload detected - restoring carplay0 TCP 6030:6031" >> "$WLOG"
+                cp_enable_altscreen_firewall ||
+                    echo "[supervisor] altScreen PF restore FAILED" >> "$WLOG"
+            fi
+            sleep 1
+            if ! cp_altscreen_firewall_ready; then
+                echo "[supervisor] stock PF reload detected - restoring carplay0 TCP 6030:6031" >> "$WLOG"
+                cp_enable_altscreen_firewall ||
+                    echo "[supervisor] altScreen PF restore FAILED" >> "$WLOG"
+            fi
+            sleep 1
+            MR_PF_GUARD_TICKS=`expr "$MR_PF_GUARD_TICKS" + 1`
+        else
+            sleep 2
+        fi
         MR_LIVED_TICKS=`expr "$MR_LIVED_TICKS" + 1`
     done
 

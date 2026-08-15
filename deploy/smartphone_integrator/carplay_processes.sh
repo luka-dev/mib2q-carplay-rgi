@@ -31,8 +31,11 @@ CP_USB_RESET_LATCH=/tmp/carplay_usb_reset.latched
 # Stock MU1316 PF admits the single SDK-210 screen socket on TCP 6030 and then
 # drops every other inbound carplay0 packet. Native altScreen uses the adjacent
 # TCP 6031, so the second IPv6 screen connection never reaches accept() unless
-# the stock rule is extended. Keep /etc immutable: once per HU boot, validate
-# and load an otherwise-identical runtime ruleset with 6030:6031 enabled.
+# the stock rule is extended. Keep /etc immutable: validate and load an
+# otherwise-identical runtime ruleset with 6030:6031 enabled. The stock network
+# startup may reload /etc/pf.conf after an early CarPlay child has already
+# started, so carplay_startup.sh also guards this rule during the short
+# boot-overlap window.
 CP_PFCTL=/armle/sbin/pfctl
 CP_PF_SED=/usr/bin/sed
 CP_PF_GREP=/usr/bin/grep
