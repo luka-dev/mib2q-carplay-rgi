@@ -171,9 +171,17 @@ time + remaining time + remaining distance must therefore be composed as text.
 
 ## CarPlay route-info phases
 
-The compact route-info representation is retained for a future input binding,
-but it is currently not mapped to a steering-wheel control. FctID 45 carries
-map-scale steps and auto-zoom state; it does not expose the raw OK key.
+The compact route-info representation is bound to the left steering-wheel
+roller press.  It is intentionally not derived from Navi FctID 45: that BAP
+function carries map-scale steps and auto-zoom, not OK.  A dedicated
+`DSIKeyPanel` listener observes raw `KEY_MFW_ROLLER_LEFT` (key 40) before the
+stock keyboard stack collapses it and the centre-console DDS (key 16) into the
+same `INC_MENU_ENTER`/`Key.DDS_SELECT` event.  The action is fail-closed unless
+`IMMICombiScreenChangeManager.getLastConfirmedDisplayStatus()` reports
+`MAIN_CONTEXT_NAVIGATION_MAP` (20), i.e. the VC is really on its map tab.
+The marked key-40 copy is removed at the CarPlay DSI controller on every tab,
+so it never becomes an iOS Select; unmarked key 16 remains normal CarPlay
+Select.
 
 | View | Phase 0 | Phase 1 |
 |---|---|---|

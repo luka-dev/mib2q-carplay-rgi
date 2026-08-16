@@ -1,6 +1,7 @@
 package de.audi.tghu.navi.app.cluster;
 
 import com.luka.carplay.core.AltScreenModule;
+import com.luka.carplay.core.CarPlayApp;
 
 import de.audi.atip.log.LogChannel;
 import de.audi.atip.mmicombi.IViewSizeManager;
@@ -63,5 +64,18 @@ public final class AltScreenCombiBAPListener extends CombiBAPListener {
             return;
         }
         super.setMapScaleSetting(setting);
+    }
+
+    public void setMapPresentation(boolean largeMapView, boolean leftSideMenuOpen,
+                                   boolean rightSideMenuOpen) {
+        if (CarPlayApp.isActive()) {
+            /* The side-menu UI and selector live in the instrument cluster.  It
+             * reports their requested state through NavSD FctID 54.  Preserve
+             * the requested full/small map view, but acknowledge both drawers
+             * as closed for the complete CarPlay connection lifetime. */
+            super.setMapPresentation(largeMapView, false, false);
+            return;
+        }
+        super.setMapPresentation(largeMapView, leftSideMenuOpen, rightSideMenuOpen);
     }
 }

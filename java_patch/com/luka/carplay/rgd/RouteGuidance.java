@@ -573,6 +573,12 @@ public class RouteGuidance implements CarplayBus.Listener {
             Log.i(TAG, "route-info toggle ignored in smallscreen");
             return;
         }
+        synchronized (this) {
+            if (!running || !rgActive) {
+                Log.i(TAG, "route-info toggle ignored without active RGI");
+                return;
+            }
+        }
         int phase;
         synchronized (presentationLock) {
             if (!running) return;

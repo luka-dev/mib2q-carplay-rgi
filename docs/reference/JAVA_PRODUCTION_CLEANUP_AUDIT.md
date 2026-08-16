@@ -3,6 +3,13 @@
 Date: 2026-08-15  
 Scope: current `java_patch/` against stock MU1316 `MU1316-combined-final.jar`
 
+> Update: the route-info finding below was closed after this audit.
+> `SteeringWheelInputModule` now binds the raw MFW left-roller press from
+> `DSIKeyPanel.ATTR_KEY2` to `InfoModeListener` only while the VC's last
+> confirmed main context is `MAIN_CONTEXT_NAVIGATION_MAP` (20), without
+> conflating it with the centre-console DDS.  The phase code is therefore live
+> and must not be removed.
+
 ## Verdict
 
 The tree does not contain an entire disposable Java subsystem or source file. The 28 sources are
@@ -12,18 +19,18 @@ silently remove the intended hook.
 
 There are, however, four concrete cleanup groups:
 
-1. a route-info phase feature which has no input and can never leave phase 0;
+1. ~~a route-info phase feature which has no input and can never leave phase 0~~ (closed);
 2. no-op `ClusterService` pipeline methods which pretend to provide readiness;
 3. an over-engineered KOMO reflection path despite public stock APIs;
 4. disabled diagnostic calls which still allocate strings on hot BAP paths.
 
-The current tree contains 28 Java sources / 12,348 lines. The built JAR contains 94 class files and
+The current tree contains 29 Java sources / 12,617 lines. The built JAR contains 97 class files and
 uses Java class version 48. All six replaced stock outer classes retain every stock
 public/protected member descriptor.
 
-## Remove now: unreachable route-info phase
+## Closed: route-info phase now has an authoritative input
 
-`AltScreenModule.InfoModeListener` is explicitly described as unbound
+Historical finding: `AltScreenModule.InfoModeListener` was described as unbound
 (`AltScreenModule.java:63-66`). The only implementation is registered by `RouteGuidance`
 (`RouteGuidance.java:69-74,300,322`), but no code invokes `onInfoModeToggle()`. The complete source
 search contains only the declaration and that implementation.
@@ -38,7 +45,7 @@ and its sole transition to phase 1 is the unreachable `requestInfoModeToggle()`
 - `lastDistanceToDestinationM`, which is written and reset but never read
   (`BAPBridge.java:90,638,801,1346`).
 
-Remove the `InfoModeListener`, phase state, toggle method, and phase-1 text formatters. Preserve the
+Do not apply the removal below: the raw key-40 listener now reaches this path. Preserve the
 `ViewAreaModeListener`: its real job is still to replay cached FctID 19/22 data immediately after a
 fullscreen/smallscreen switch (`RouteGuidance.java:62-67,554-568,625-629`). Simplify that replay to
 one fixed phase-0 presentation.
@@ -157,7 +164,7 @@ changes for a functional reason.
 
 ## Recommended patch order
 
-1. Remove unreachable route-info phase and small dead members.
+1. Keep and validate the now-live route-info phase through raw MFW key 40.
 2. Remove fake `ClusterService` pipeline/initializing methods and callers.
 3. Remove disabled BAP/debug trace allocations.
 4. Replace KOMO reflection with direct stock API and validate it on-unit.

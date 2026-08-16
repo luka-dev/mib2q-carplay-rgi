@@ -50,6 +50,7 @@ import org.dsi.ifc.carplay.ServiceConfiguration;
 import org.dsi.ifc.carplay.TelephonyState;
 import org.dsi.ifc.carplay.TouchEvent;
 import com.luka.carplay.cursor.CursorController;
+import com.luka.carplay.core.SteeringWheelInputModule;
 import org.dsi.ifc.carplay.TrackData;
 import org.dsi.ifc.global.ResourceLocator;
 
@@ -864,6 +865,18 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
         }
 
         public void updateKey(Key key, KeyState keystate) {
+            /* Raw key 40 (left MFW roller) and raw key 16 (centre DDS) both become
+             * DDS_SELECT in the stock keyboard stack.  The raw listener marks only
+             * key 40, so consume that copy here before it reaches iOS.  This applies
+             * on every VC tab: on MAP the press drives cluster route-info; elsewhere
+             * it remains a VC-only key.  The centre-console knob is never marked. */
+            if (Key.DDS_SELECT.is(key)
+                    && SteeringWheelInputModule.consumeCollapsedSelect(keystate)) {
+                this.this$0.logger.log(
+                    1000000, "[%1.updateKey] suppress MFW DDS_SELECT for CarPlay", LOGCLASS);
+                return;
+            }
+
             /* Central-console knob press (DDS_SELECT = Dreh-Drück-Steller) must SELECT in the
              * CarPlay Main UI — it falls through to postButtonEvent below.  An earlier build
              * redirected DDS_SELECT to a cluster virtual HID and returned, swallowing the

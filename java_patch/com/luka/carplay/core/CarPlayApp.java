@@ -28,7 +28,9 @@ public final class CarPlayApp {
 
     /* Modules, in start order.  Populated as each module lands (rgd, coverart,
      * input, altscreen). */
-    private static final Module[] MODULES = new Module[] { new AltScreenModule(), new RgdModule() };
+    private static final Module[] MODULES = new Module[] {
+        new AltScreenModule(), new RgdModule(), new SteeringWheelInputModule()
+    };
 
     private static final Object lock = new Object();
     private static final Object lifecycleLock = new Object();

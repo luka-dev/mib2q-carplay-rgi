@@ -60,7 +60,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
         void onViewAreaModeChanged(int mode);
     }
 
-    /** Route-info toggle seam; deliberately unbound until a real OK event is available. */
+    /** Route-info toggle seam driven by the raw MFW left-roller press listener. */
     public interface InfoModeListener {
         void onInfoModeToggle();
     }
@@ -173,6 +173,22 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
 
     public static void clearInfoModeListener(InfoModeListener listener) {
         if (infoModeListener == listener) infoModeListener = null;
+    }
+
+    /** Raw DSI key 40 (left steering-wheel roller), never the centre-console DDS.
+     *  SteeringWheelInputModule already gates this callback to the confirmed
+     *  VC map tab. Route-info is meaningful only with an active RGI snapshot. */
+    public static void onSteeringWheelOkPressed() {
+        if (!isConnected() || !isNavActive()) {
+            Log.d(TAG, "MFW OK ignored: no active RGI presentation");
+            return;
+        }
+        InfoModeListener listener = infoModeListener;
+        if (listener == null) {
+            Log.d(TAG, "MFW OK ignored: RGI listener not ready");
+            return;
+        }
+        listener.onInfoModeToggle();
     }
 
     private static boolean sendViewAreaMode(String reason) {
