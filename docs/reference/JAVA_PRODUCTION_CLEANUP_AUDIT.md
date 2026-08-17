@@ -174,6 +174,6 @@ changes for a functional reason.
 Expected reduction is roughly 250-350 source lines, mostly in hot `BAPBridge`/presentation code,
 without deleting any functional subsystem.
 
-`docs/reference/JAVA_PATCH_STOCK_AUDIT.md` should remain historical or be clearly archived: its
-headline counts (80 class files / 11,081 lines) and several dead-code findings describe an older
-tree and are no longer authoritative for production cleanup.
+`docs/archive/JAVA_PATCH_STOCK_AUDIT.md` is archived (historical): its headline counts (80 class
+files / 11,081 lines) and several dead-code findings describe an older tree and are no longer
+authoritative for production cleanup.

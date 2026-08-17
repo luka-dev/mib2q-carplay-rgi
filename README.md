@@ -76,7 +76,7 @@ on a live HU is unsafe.
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — current process, Java and cluster architecture.
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — renderer/runtime deployment.
-- [`docs/reference/JAVA_PATCH_STOCK_AUDIT.md`](docs/reference/JAVA_PATCH_STOCK_AUDIT.md) — patched-versus-stock audit.
+- [`docs/archive/JAVA_PATCH_STOCK_AUDIT.md`](docs/archive/JAVA_PATCH_STOCK_AUDIT.md) — patched-versus-stock audit (archived; superseded by JAVA_PRODUCTION_CLEANUP_AUDIT.md).
 - [`docs/reference/ALTSCREEN_VC_NAV_STATUSBAR.md`](docs/reference/ALTSCREEN_VC_NAV_STATUSBAR.md) — VC status-bar findings.
 
 Historical altScreen negotiation reports and from-source experiments are under `research/altscreen/`;
