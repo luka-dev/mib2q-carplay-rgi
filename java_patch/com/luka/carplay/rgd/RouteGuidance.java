@@ -556,6 +556,7 @@ public class RouteGuidance implements CarplayBus.Listener {
      * replay the cached real position/ETA on the serialized worker.
      */
     private void requestViewAreaRefresh(int mode) {
+        if (bap != null) bap.resetTimeInfoType();
         synchronized (presentationLock) {
             if (!running) return;
             desiredInfoPhase = 0;
@@ -570,7 +571,23 @@ public class RouteGuidance implements CarplayBus.Listener {
     /** Steering-wheel encoder press: toggle phase without touching the HMI/BAP caller thread. */
     private void requestInfoModeToggle() {
         if (com.luka.carplay.core.AltScreenModule.isSmallScreenViewArea()) {
-            Log.i(TAG, "route-info toggle ignored in smallscreen");
+            /* Smallscreen has no text summary; OK flips the native FctID 22 time
+             * slot between arrival clock and remaining duration instead. */
+            boolean remaining;
+            synchronized (this) {
+                if (!running || !rgActive || bap == null) {
+                    Log.i(TAG, "time-info toggle ignored without active RGI");
+                    return;
+                }
+                remaining = bap.toggleTimeInfoType();
+            }
+            synchronized (presentationLock) {
+                if (!running) return;
+                infoPresentationRefreshPending = true;
+                presentationWake = true;
+                presentationLock.notifyAll();
+            }
+            Log.i(TAG, "time-info type=" + (remaining ? "remaining" : "arrival") + " queued (smallscreen)");
             return;
         }
         synchronized (this) {
