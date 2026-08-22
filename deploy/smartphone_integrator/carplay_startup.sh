@@ -145,6 +145,10 @@ monitor_renderers()
             sleep 2
         fi
         MR_LIVED_TICKS=`expr "$MR_LIVED_TICKS" + 1`
+        # ~2 s per tick: check the uncapped logs every ~5 minutes.
+        if [ `expr "$MR_LIVED_TICKS" % 150` -eq 0 ]; then
+            cp_cap_all_logs "$WLOG"
+        fi
     done
 
     if [ "$MR_EXPLICIT_STOP" = 1 ]; then

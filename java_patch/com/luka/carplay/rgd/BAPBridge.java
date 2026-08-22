@@ -36,7 +36,6 @@ public class BAPBridge {
      * FPK has rgType=4 hardcoded in CombiBAPListener -- our BAP rgType=0 is for the
      * AppConnectorNavi FSG sync flow, not for view mode selection. */
     private static final int ACTIVE_RGTYPE = 0;  /* RGI -- BAP icons. maneuver_render handles LVDS video. */
-    private static final boolean BAP_TRACE_ENABLED = false;
 
     /* ExitView variants (BAP spec FctID 49).  EU/NAR are used by
      * sendExitView() which toggles between them to defeat AppConnectorNavi's
@@ -216,8 +215,6 @@ public class BAPBridge {
             actionBlinkThread.setDaemon(true);
             actionBlinkThread.start();
         }
-        Log.d(TAG, "Action blink timer started gen=" + myGen
-              + " (" + ACTION_BLINK_INTERVAL_MS + "ms)");
     }
 
     private void stopActionBlinkThread() {
@@ -244,7 +241,6 @@ public class BAPBridge {
                 Log.w(TAG, "Blink thread still alive after join(500); orphaned by generation bump");
             }
         }
-        Log.d(TAG, "Action blink timer stopped");
     }
 
     private void actionBlinkLoop(int myGen) {
@@ -326,8 +322,6 @@ public class BAPBridge {
         }
 
         FormattedDistance fd = formatDistanceToTurn(meters);
-        traceBap("updateDistanceToNextManeuver",
-            fd.value + "," + fd.unit + "," + bargraphOn + "," + bargraph);
         appConnectorNavi.updateDistanceToNextManeuver(fd.value, fd.unit, bargraphOn, bargraph);
         /* BAP confirmed emitted → push same state to renderer so HUD bar
          * flips at the same moment as VC.  Derive renderer level/mode from
@@ -347,7 +341,6 @@ public class BAPBridge {
 
     private void sendDistanceToDestinationRaw(int meters, boolean isStopOver) {
         FormattedDistance fd = formatDistanceToDestination(meters);
-        traceBap("updateDistanceToDestination", fd.value + "," + fd.unit + "," + isStopOver);
         appConnectorNavi.updateDistanceToDestination(fd.value, fd.unit, isStopOver);
     }
 
@@ -391,30 +384,7 @@ public class BAPBridge {
         }
     }
 
-    private void traceBap(String call, String args) {
-        if (!BAP_TRACE_ENABLED) return;
-        Log.d(TAG, "[BAP] " + call + "(" + args + ")");
-    }
 
-    private void traceDescriptor(int outPos, int idx, int type, int main, int dir, int zLevel, byte[] sideStreets) {
-        if (!BAP_TRACE_ENABLED) return;
-        StringBuffer sb = new StringBuffer();
-        sb.append("pos=").append(outPos)
-          .append(" idx=").append(idx)
-          .append(" type=").append(type)
-          .append(" main=").append(main)
-          .append(" dir=").append(dir)
-          .append(" z=").append(zLevel)
-          .append(" side=[");
-        if (sideStreets != null) {
-            for (int i = 0; i < sideStreets.length; i++) {
-                if (i > 0) sb.append(',');
-                sb.append(sideStreets[i] & 0xFF);
-            }
-        }
-        sb.append(']');
-        Log.d(TAG, "[BAP] descriptor " + sb.toString());
-    }
 
     /* ============================================================
      * Initialization
@@ -555,19 +525,18 @@ public class BAPBridge {
             DSIResponseContainer container = csRef.getDSIResponseContainer();
             if (container != null) container.setRgActive(active);
         } catch (Exception e) {
-            Log.d(TAG, "force container rgActive failed: " + e.getMessage());
         }
 
         if (active) {
             try { csRef.updateRGIString(new short[]{1}); }
-            catch (Exception e) { Log.d(TAG, "force rgiValid=true failed: " + e.getMessage()); }
+            catch (Exception e) { Log.w(TAG, "force rgiValid=true failed: " + e.getMessage()); }
         } else {
             try { csRef.updateRGIString(null); }
-            catch (Exception e) { Log.d(TAG, "force rgiValid=false failed: " + e.getMessage()); }
+            catch (Exception e) { Log.w(TAG, "force rgiValid=false failed: " + e.getMessage()); }
         }
 
         try { csRef.triggerRefreshRGIValid(); }
-        catch (Exception e) { Log.d(TAG, "refreshRGIValid failed: " + e.getMessage()); }
+        catch (Exception e) { Log.w(TAG, "refreshRGIValid failed: " + e.getMessage()); }
     }
 
 
@@ -598,7 +567,6 @@ public class BAPBridge {
                 Log.i(TAG, "REPLACE: takeover engaged (stock nav cancelled, RG gate shut)");
                 return true;
             }
-            Log.d(TAG, "REPLACE: takeover PENDING — ClusterService not up, will retry");
             return false;
         } catch (Throwable t) {
             Log.w(TAG, "engageTakeover failed: " + t);
@@ -704,9 +672,7 @@ public class BAPBridge {
              * 1. RGStatus(1) - FctID 17 -> triggers startSync(0) for {17,39,23,18,49}
              * 2. Complete sync(0) window: rgType(39), descriptor(23), distance(18), exitView(49)
              */
-            traceBap("updateRGStatus", "1");
             appConnectorNavi.updateRGStatus(1);                                      /* FctID 17 -> sync(0) */
-            traceBap("updateActiveRGType", String.valueOf(ACTIVE_RGTYPE));
             appConnectorNavi.updateActiveRGType(ACTIVE_RGTYPE);                      /* FctID 39 */
 
             /* Sync(0) FctIDs: descriptor, distance, exitView */
@@ -720,7 +686,6 @@ public class BAPBridge {
             /* Never expose the VC's empty "---" shell while the first iOS
              * maneuver snapshot is still arriving. */
             try {
-                traceBap("updateCurrentPositionInfo", "\"\u2191\" RGI start");
                 appConnectorNavi.updateCurrentPositionInfo("\u2191");
             } catch (Throwable t) {
                 Log.w(TAG, "BAP FctID 19 startup fallback failed: " + t);
@@ -773,7 +738,6 @@ public class BAPBridge {
             infoPhase = 0;
             lastFirstManeuverIdx = -1;
             lastFirstManeuverVer = -1;
-            Log.d(TAG, "Stopped (lightweight, renderer + BAP kept alive)");
         } catch (Exception e) {
             Log.e(TAG, "onStop error", e);
         }
@@ -809,21 +773,15 @@ public class BAPBridge {
              * cleanup below (else a mid-teardown exception leaves an orphan renderer or, in TAB,
              * a permanently shut RG gate). */
             try {
-                traceBap("updateRGStatus", "0");
                 appConnectorNavi.updateRGStatus(0);
-                traceBap("updateActiveRGType", "0");
                 appConnectorNavi.updateActiveRGType(0);
                 sendNoSymbol();
                 sendDistanceToManeuverRaw(0, false, 0);
                 sendExitView();
-                traceBap("updateManeuverState", "0");
                 appConnectorNavi.updateManeuverState(0);
-                traceBap("updateCurrentPositionInfo", "\"\"");
                 appConnectorNavi.updateCurrentPositionInfo("");
                 sendDistanceToDestinationRaw(0, false);
-                traceBap("updateTimeToDestination", "0,0,-1");
                 appConnectorNavi.updateTimeToDestination(0, 0, -1);
-                traceBap("updateLaneGuidance", "[],false");
                 appConnectorNavi.updateLaneGuidance(false, new CombiBAPNaviLaneGuidanceData[0]);
             } catch (Throwable t) {
                 Log.w(TAG, "onShutdown: BAP teardown threw (continuing to cleanup): " + t);
@@ -890,7 +848,6 @@ public class BAPBridge {
             de.audi.tghu.navi.app.routeguidance.IRouteManager rm = navi.getRouteManager();
             return rm != null && rm.getRoute() != null;
         } catch (Throwable t) {
-            Log.d(TAG, "native route-state query failed: " + t.getMessage());
             return false;
         }
     }
@@ -905,7 +862,6 @@ public class BAPBridge {
         int dirty = s.dirtyMask;
         cacheTravelInfo(s, dirty);
         if (dirty == 0) return false;
-        Log.d(TAG, "Update delta mask=0x" + Integer.toHexString(dirty));
 
         try {
             /*
@@ -1027,13 +983,11 @@ public class BAPBridge {
                         sendNoSymbol();
                         descriptorSent = true;
                     } else if (hasAnyManeuver) {
-                        Log.d(TAG, "Slot data pending for list, keeping last icons (count=" + s.maneuverCount + ")");
                     }
                 } else if (shouldClearManeuver) {
                     sendNoSymbol();
                     descriptorSent = true;
                 } else if (hasAnyManeuver) {
-                    Log.d(TAG, "Maneuver list missing (count=" + s.maneuverCount + "), keep last icons");
                 }
             }
 
@@ -1108,16 +1062,15 @@ public class BAPBridge {
             }
 
             /* 4. Persistent CarPlay lower bar (FctID 19).
-             * Phase 0 is always the cached real arrow/road text. In fullscreen
-             * phase 1 replaces it with ETA + remaining time + remaining distance;
-             * smallscreen keeps the real position because its phase switch belongs to
-             * the dedicated FctID 22 field. */
+             * Phase 0 is always the cached real arrow/road text. Phase 1 replaces it with
+             * the trip summary: the full one in fullscreen, a short "ETA 4 min" in
+             * smallscreen, where the row is narrow. */
             int lowerBarDirty = RouteGuidance.State.DIRTY_CURRENT_ROAD
                 | RouteGuidance.State.DIRTY_MANEUVER_TEXT
                 | RouteGuidance.State.DIRTY_MANEUVER_LIST
                 | RouteGuidance.State.DIRTY_MANEUVER_ICON
                 | RouteGuidance.State.DIRTY_MANEUVER_COUNT;
-            if (!com.luka.carplay.core.AltScreenModule.isSmallScreenViewArea() && infoPhase != 0) {
+            if (infoPhase != 0) {
                 lowerBarDirty |= RouteGuidance.State.DIRTY_DIST_DEST
                     | RouteGuidance.State.DIRTY_TIME_REMAINING
                     | RouteGuidance.State.DIRTY_ETA;
@@ -1136,7 +1089,6 @@ public class BAPBridge {
                           RouteGuidance.State.DIRTY_MANEUVER_COUNT |
                           RouteGuidance.State.DIRTY_DIST_MAN)) != 0) {
                 if (explicitClear) {
-                    traceBap("updateManeuverState", "0");
                     appConnectorNavi.updateManeuverState(0);
                 } else if (shouldClearManeuver || (hasManeuverList && showManeuver)) {
                     int bapState;
@@ -1151,13 +1103,10 @@ public class BAPBridge {
                     } else {
                         bapState = 0;
                     }
-                    traceBap("updateManeuverState", String.valueOf(bapState));
                     appConnectorNavi.updateManeuverState(bapState);
                 } else if (hasManeuverList && hasAnyManeuver) {
-                    traceBap("updateManeuverState", "1");
                     appConnectorNavi.updateManeuverState(1);
                 } else if (hasAnyManeuver && !hasManeuverList) {
-                    Log.d(TAG, "Maneuver state unchanged: list missing (count=" + s.maneuverCount + ")");
                 }
             }
 
@@ -1184,7 +1133,6 @@ public class BAPBridge {
                 if (wantLaneGuidance) {
                     sendLaneGuidance(s);
                 } else {
-                    traceBap("updateLaneGuidance", "[],false");
                     appConnectorNavi.updateLaneGuidance(false, new CombiBAPNaviLaneGuidanceData[0]);
                 }
             }
@@ -1209,7 +1157,6 @@ public class BAPBridge {
                 CombiBAPNaviDestination naviDest =
                     new CombiBAPNaviDestination("", "", dest, "", "", "", "");
                 CombiBAPDestinationInfo destInfo = new CombiBAPDestinationInfo(naviDest);
-                traceBap("updateDestinationInfo", "\"" + dest + "\"");
                 appConnectorNavi.updateDestinationInfo(destInfo);
             }
 
@@ -1254,7 +1201,6 @@ public class BAPBridge {
                 }
             }
 
-            Log.d(TAG, "Update: dist=" + distM + "m maneuvers=" + Math.min(s.maneuverCount, MAX_BAP_MANEUVERS));
             return true;
 
         } catch (Exception e) {
@@ -1320,15 +1266,12 @@ public class BAPBridge {
     }
 
     private void publishCurrentPositionForMode() {
-        boolean summaryMode = !com.luka.carplay.core.AltScreenModule.isSmallScreenViewArea()
-            && infoPhase != 0;
-        String text = summaryMode ? buildTripSummary() : latchedTurnToText;
+        boolean smallScreen = com.luka.carplay.core.AltScreenModule.isSmallScreenViewArea();
+        String text = infoPhase == 0 ? latchedTurnToText
+            : (smallScreen ? buildShortSummary() : buildTripSummary());
         if (text == null || text.length() == 0) text = latchedTurnToText;
         if (text == null || text.length() == 0) text = "\u2191";
         text = limitUtf8(text, 96);
-        traceBap("updateCurrentPositionInfo", "\"" + text + "\" phase=" + infoPhase
-            + " view="
-            + (com.luka.carplay.core.AltScreenModule.isSmallScreenViewArea() ? "smallscreen" : "fullscreen"));
         appConnectorNavi.updateCurrentPositionInfo(text);
         viewAreaLowerBarPublished = true;
     }
@@ -1382,7 +1325,6 @@ public class BAPBridge {
         if (timeVal >= 0L) {
             timeVal = convertUtcToLocalMs(timeVal * 1000L) / 1000L;
         }
-        traceBap("updateTimeToDestination", "1," + timeFormat + "," + timeVal);
         appConnectorNavi.updateTimeToDestination(1, timeFormat, timeVal);
     }
 
@@ -1391,6 +1333,15 @@ public class BAPBridge {
         appendSummaryPart(out, formatArrivalForText(currentArrivalSeconds()));
         appendSummaryPart(out, formatRemainingForText(currentRemainingSeconds()));
         return out.toString();
+    }
+
+    /** Smallscreen phase 1: one short field for a narrow row, e.g. "ETA 4 min".
+     *  Prefers the remaining duration; falls back to the arrival clock, which
+     *  formatArrivalForText already prefixes with "ETA". */
+    private String buildShortSummary() {
+        String remaining = formatRemainingForText(currentRemainingSeconds());
+        if (remaining.length() > 0) return "ETA " + remaining;
+        return formatArrivalForText(currentArrivalSeconds());
     }
 
     private static void appendSummaryPart(StringBuffer out, String value) {
@@ -1445,7 +1396,6 @@ public class BAPBridge {
     private void sendFollowStreet() throws Exception {
         CombiBAPNaviManeuverDescriptor[] arr = new CombiBAPNaviManeuverDescriptor[1];
         arr[0] = createDescriptor(ManeuverMapper.FOLLOW_STREET, ManeuverMapper.DIR_STRAIGHT, 0, new byte[0]);
-        traceBap("updateManeuverDescriptor", "count=1 FOLLOW_STREET");
         appConnectorNavi.updateManeuverDescriptor(arr);
     }
 
@@ -1455,7 +1405,6 @@ public class BAPBridge {
     private void sendNoSymbol() throws Exception {
         CombiBAPNaviManeuverDescriptor[] arr = new CombiBAPNaviManeuverDescriptor[1];
         arr[0] = createDescriptor(0, 0, 0, new byte[0]);
-        traceBap("updateManeuverDescriptor", "count=1 NO_SYMBOL");
         appConnectorNavi.updateManeuverDescriptor(arr);
     }
 
@@ -1469,7 +1418,6 @@ public class BAPBridge {
             if (s.maneuverCount == 0) {
                 sendNoSymbol();
             } else {
-                Log.d(TAG, "Maneuver list missing (count=" + s.maneuverCount + "), keep last icons");
             }
             return;
         }
@@ -1488,7 +1436,6 @@ public class BAPBridge {
             if (s.maneuverCount == 0) {
                 sendNoSymbol();
             } else {
-                Log.d(TAG, "No valid maneuvers yet (count=" + s.maneuverCount + "), keep last icons");
             }
             return;
         }
@@ -1521,13 +1468,10 @@ public class BAPBridge {
                     s.mExitAngle[idx]
                 );
             }
-            traceDescriptor(out, idx, s.mType[idx], mapped[0], mapped[1], zLevel, sideStreets);
             arr[out++] = createDescriptor(mapped[0], mapped[1], zLevel, sideStreets);
         }
 
-        traceBap("updateManeuverDescriptor", "count=" + validCount);
         appConnectorNavi.updateManeuverDescriptor(arr);
-        Log.d(TAG, "Sent " + validCount + " maneuvers");
     }
 
     /* ============================================================
@@ -1542,7 +1486,6 @@ public class BAPBridge {
         if (hasRealData) {
             sendRealLaneGuidance(s, idx, count);
         } else {
-            traceBap("updateLaneGuidance", "[],false");
             appConnectorNavi.updateLaneGuidance(false, new CombiBAPNaviLaneGuidanceData[0]);
         }
     }
@@ -1560,16 +1503,12 @@ public class BAPBridge {
             }
             byte[] laneSideStreets = mapLaneSideStreets(s, idx, i, laneDir);
             byte gi = mapGuidanceInfo(s, idx, i);
-            Log.d(TAG, "  lane[" + i + "] pos=" + lanePos + " dir=0x"
-                + Integer.toHexString(laneDir & 0xFF) + " gi=" + gi
-                + " sideStreets=" + hexBytes(laneSideStreets));
             tmp[out++] = new CombiBAPNaviLaneGuidanceData(
                 lanePos, laneDir, laneSideStreets, (short) 0,
                 (byte) 0, (byte) 0, (byte) 0, gi);
         }
 
         if (out <= 0) {
-            traceBap("updateLaneGuidance", "[],false");
             appConnectorNavi.updateLaneGuidance(false, new CombiBAPNaviLaneGuidanceData[0]);
             return;
         }
@@ -1580,10 +1519,6 @@ public class BAPBridge {
             for (int i = 0; i < out; i++) arr[i] = tmp[i];
         }
 
-        traceBap("updateLaneGuidance", "real,count=" + out
-            + ",slot=" + idx
-            + ",current=" + s.laneGuidanceIndex
-            + ",mapped=" + s.laneGuidanceSlot);
         appConnectorNavi.updateLaneGuidance(true, arr);
     }
 
@@ -1978,7 +1913,6 @@ public class BAPBridge {
 
     private synchronized boolean startCustomRenderer() {
         if (csRef == null) {
-            Log.d(TAG, "CR: cannot start (csRef null)");
             return false;
         }
         try {
@@ -2370,10 +2304,8 @@ public class BAPBridge {
         try {
             int v = DateMetric.timeFormat;
             int bap = (v == 11) ? 1 : 0;
-            Log.d(TAG, "timeFormat DateMetric.timeFormat=" + v + " bap=" + bap);
             return bap;
         } catch (Throwable t) {
-            Log.d(TAG, "timeFormat access failed: " + t.getMessage());
         }
         return 0;
     }
@@ -2414,7 +2346,6 @@ public class BAPBridge {
         exitViewNum = 0;
         exitViewSendCount++;
         int variant = (exitViewSendCount % 2 == 0) ? EXITVIEW_EU : EXITVIEW_NAR;
-        traceBap("updateExitView", variant + "," + exitViewNum);
         appConnectorNavi.updateExitView(variant, exitViewNum);
     }
 

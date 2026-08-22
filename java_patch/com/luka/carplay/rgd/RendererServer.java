@@ -214,11 +214,9 @@ public class RendererServer {
                     /* accept() succeeded but post-accept setup failed — close the
                      * orphan socket so its FD isn't leaked, then keep accepting. */
                     try { s.close(); } catch (Exception e2) {}
-                    Log.d(TAG, "renderer setup failed, dropped: " + setupEx.getMessage());
                 }
             } catch (IOException e) {
                 if (running) {
-                    Log.d(TAG, "accept ended: " + e.getMessage());
                 }
                 /* If the listen socket was closed (dispose()), exit. */
                 synchronized (lock) {

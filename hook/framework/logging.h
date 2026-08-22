@@ -43,10 +43,12 @@ typedef struct {
     bool flush_immediate;       /* Flush after each write */
 } log_config_t;
 
-/* Default configuration */
+/* Default configuration.
+ * Production emits WARN and ERROR only.  INFO/DEBUG stay compiled in and are lifted to INFO
+ * without a rebuild by `touch /mnt/app/carplay_verbose` - see log_init() in logging.c. */
 #define LOG_CONFIG_DEFAULT { \
     .log_path = "/tmp/carplay_hook.log", \
-    .min_level = LOG_LEVEL_DEBUG, \
+    .min_level = LOG_LEVEL_WARN, \
     .max_size = 1024 * 1024, \
     .max_files = 3, \
     .include_timestamp = true, \

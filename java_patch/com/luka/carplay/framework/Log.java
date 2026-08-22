@@ -12,8 +12,30 @@ import java.io.PrintStream;
 
 public final class Log {
     public static final int E = 0, W = 1, I = 2, D = 3;
-    /* Production default. DEBUG can still be enabled explicitly for a diagnostic build. */
-    private static int level = I;
+    /* Production emits WARN and ERROR only.  INFO carries the state-transition trace that is
+     * worth having while diagnosing (session start, module ready, context/geometry decisions);
+     * it stays compiled in and is switched on without a rebuild - and without a unit reboot -
+     * by `touch /mnt/app/carplay_verbose` or /tmp/carplay_verbose. */
+    private static final String VERBOSE_MARKERS =
+        "/mnt/app/carplay_verbose:/tmp/carplay_verbose";
+    private static int level = resolveInitialLevel();
+
+    private static int resolveInitialLevel() {
+        try {
+            int from = 0;
+            while (from < VERBOSE_MARKERS.length()) {
+                int sep = VERBOSE_MARKERS.indexOf(':', from);
+                String path = sep < 0 ? VERBOSE_MARKERS.substring(from)
+                                      : VERBOSE_MARKERS.substring(from, sep);
+                if (new File(path).exists()) return I;
+                if (sep < 0) break;
+                from = sep + 1;
+            }
+        } catch (Throwable t) {
+            /* Never let logging setup break startup. */
+        }
+        return W;
+    }
 
     private static final String FILE = "/tmp/carplay_java.log";
     private static final String FILE_OLD = "/tmp/carplay_java.log.1";

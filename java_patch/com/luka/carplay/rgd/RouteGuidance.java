@@ -413,7 +413,6 @@ public class RouteGuidance implements CarplayBus.Listener {
         /* Parse into state (delta) */
         parse(d);
         if (state.dirtyMask == 0) {
-            Log.d(TAG, "Bus update: none (keys=" + d.size() + ")");
             if (rgActive && !presentationConfirmed) requestPresentationCheck("empty-rgi-delta");
             return;
         }
@@ -548,7 +547,6 @@ public class RouteGuidance implements CarplayBus.Listener {
             presentationWake = true;
             presentationLock.notifyAll();
         }
-        Log.d(TAG, "presentation wake: " + reason);
     }
 
     /**
@@ -569,13 +567,10 @@ public class RouteGuidance implements CarplayBus.Listener {
 
     /** Steering-wheel encoder press: toggle phase without touching the HMI/BAP caller thread. */
     private void requestInfoModeToggle() {
-        if (com.luka.carplay.core.AltScreenModule.isSmallScreenViewArea()) {
-            /* Smallscreen has no text summary row, and the cluster has no widget for the
-             * remaining-duration time type either (VC has only NavFPK_DTD_ArrivalTime), so the
-             * old arrival<->remaining flip could only blank the clock. OK does nothing here. */
-            Log.i(TAG, "MFW OK ignored in smallscreen: cluster shows arrival time only");
-            return;
-        }
+        /* Same phase toggle in both views; only the text differs (BAPBridge picks the short
+         * "ETA 4 min" form in smallscreen). The old smallscreen branch flipped FctID 22's
+         * timeInfoType instead, which the cluster cannot render - it has no remaining-duration
+         * widget - so it only blanked the clock. */
         synchronized (this) {
             if (!running || !rgActive) {
                 Log.i(TAG, "route-info toggle ignored without active RGI");
@@ -703,7 +698,6 @@ public class RouteGuidance implements CarplayBus.Listener {
             }
         } else if (state.disconnectReason != null && d.size() > 0) {
             /* One-shot field: clear on any subsequent non-empty update */
-            Log.d(TAG, "Clearing disconnect_reason on new bus update");
             state.disconnectReason = null;
             state.markDirty(State.DIRTY_DISCONNECT);
         }
@@ -1142,9 +1136,6 @@ public class RouteGuidance implements CarplayBus.Listener {
             }
         }
 
-        Log.d(TAG, "Bus update: mask=0x" + Integer.toHexString(state.dirtyMask) +
-              " keys=" + d.size() + " [" + dirtyToString(state) + "]" +
-              " count=" + state.maneuverCount + " dist=" + state.distManeuverM + "m");
     }
 
     /**

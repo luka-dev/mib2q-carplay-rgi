@@ -442,8 +442,6 @@ public final class CarplayBus {
         Listener l;
         synchronized (lock) { l = listeners[type]; }
         if (l == null) {
-            if (type != EVT_HELLO && type != EVT_SYNC_BEGIN && type != EVT_SYNC_END)
-                Log.d(TAG, "no listener for 0x" + Integer.toHexString(type));
             return;
         }
         try { l.onFrame(type, flags, payload, len); }

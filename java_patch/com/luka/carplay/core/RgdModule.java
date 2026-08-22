@@ -31,7 +31,6 @@ final class RgdModule implements Module {
         if (naviHandle == null) naviHandle = fw.getServiceHandle(CombiBAPServiceNavi.class);
         Object navi = naviHandle != null ? naviHandle.service() : null;
         if (navi == null) {
-            Log.d(TAG, "CombiBAPServiceNavi not up yet — retry");
             return false;
         }
 
@@ -41,7 +40,6 @@ final class RgdModule implements Module {
         if (rg == null) {
             RouteGuidance r = new RouteGuidance();
             if (!r.init(navi)) {                                  /* BAPBridge init (ClusterService) not ready */
-                Log.d(TAG, "RouteGuidance.init not ready — retry");
                 return false;
             }
             rg = r;
@@ -50,7 +48,6 @@ final class RgdModule implements Module {
          * returns false while ClusterService isn't up yet → CarPlayApp keeps retrying, so a
          * connected session with no CarPlay navigation still gets stock RG blocked. */
         if (!rg.engageTakeover()) {
-            Log.d(TAG, "takeover gate pending (ClusterService not up) — retry");
             return false;
         }
         if (!rg.isRunning()) rg.start();                           /* subscribe only after gate is shut */

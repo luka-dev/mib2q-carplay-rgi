@@ -108,6 +108,10 @@ registry for which no public setter exists (`CoverArtProviderMux.java:27-51`).
 
 ## Remove now: disabled diagnostics and small dead APIs
 
+> Done for the two logging items: `traceBap`/`traceDescriptor` and every standalone `Log.d` call
+> site are gone, and both the Java logger and the C hook now default to WARN. See
+> `docs/reference/PRODUCTION_LOGGING.md`. `Log.i` was deliberately kept.
+
 `BAP_TRACE_ENABLED` is a compile-time false constant (`BAPBridge.java:39`). `javac` compiles
 `traceBap()` and `traceDescriptor()` to immediate returns, but it does not remove argument
 construction at their 25 + 1 call sites. For example the built bytecode for

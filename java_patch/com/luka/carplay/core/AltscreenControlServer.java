@@ -162,7 +162,6 @@ final class AltscreenControlServer {
                     + " style=" + styleName(style) + " rawSkin=" + preset
                     + " generation=" + generation);
             } catch (Throwable t) {
-                Log.d(TAG, "VIEW_AREA writer failed: " + t);
                 try { owned.close(); } catch (Throwable ignored) { }
             }
         }
@@ -205,7 +204,6 @@ final class AltscreenControlServer {
                 }
             }
         } catch (Throwable t) {
-            if (run) Log.d(TAG, "client dropped: " + t);
         } finally {
             boolean owned = false;
             synchronized (LOCK) {

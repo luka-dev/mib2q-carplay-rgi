@@ -310,7 +310,6 @@ public final class CarPlayApp {
         synchronized (lock) {
             if (!active || expectedLifecycleGeneration != lifecycleGeneration
                     || fwRef == null || !fwRef.isReady()) {
-                Log.d(TAG, "startPass: framework not ready");
                 return false;
             }
             fw = fwRef;

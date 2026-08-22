@@ -190,6 +190,12 @@ hook_result_t log_init(const log_config_t* config) {
     } else {
         log_config_t def = LOG_CONFIG_DEFAULT;
         g_log.config = def;
+        /* Production is WARN+ERROR.  One marker file lifts the whole hook to INFO for a
+         * diagnostic drive, matching the Java side's /mnt/app/carplay_verbose. */
+        if (access("/mnt/app/carplay_verbose", F_OK) == 0
+                || access("/tmp/carplay_verbose", F_OK) == 0) {
+            g_log.config.min_level = LOG_LEVEL_INFO;
+        }
     }
 
     g_log.owner_pid = (int)getpid();

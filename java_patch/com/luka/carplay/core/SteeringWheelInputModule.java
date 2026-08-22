@@ -38,14 +38,6 @@ public final class SteeringWheelInputModule implements Module {
     private static final int ATTR_VALID = 1;
     private static final long COLLAPSED_SELECT_WINDOW_MS = 600L;
 
-    /* Raw-key census: stock KbdListener has `case 40` only in updateEncoderInternal (roller
-     * TURN); there is no key-40 PRESS anywhere in MU1316, so the constant above may simply be
-     * the wrong event to wait for.  Log each distinct (keyboard, code, state) triple exactly
-     * once - bounded, no flood, and one OK press names the real code. */
-    private static final int SEEN_CAP = 64;
-    private static final int[] seenKeys = new int[SEEN_CAP];
-    private static int seenCount;
-
     private static final Object SELECT_LOCK = new Object();
     private static long pendingPressUntil;
     private static long pendingReleaseUntil;
@@ -140,11 +132,11 @@ public final class SteeringWheelInputModule implements Module {
 
         if (panel != null) {
             try { panel.clearNotification(DSIKeyPanel.ATTR_KEY2, listener); }
-            catch (Throwable t) { Log.d(TAG, "clear notification failed: " + t); }
+            catch (Throwable t) { Log.w(TAG, "clear notification failed: " + t); }
         }
         if (registration != null) {
             try { registration.unregister(); }
-            catch (Throwable t) { Log.d(TAG, "unregister failed: " + t); }
+            catch (Throwable t) { Log.w(TAG, "unregister failed: " + t); }
         }
         if (handle != null) handle.release();
         if (combiHandle != null) combiHandle.release();
@@ -209,22 +201,10 @@ public final class SteeringWheelInputModule implements Module {
         }
     }
 
-    /** First sighting of each (keyboard, code, state) triple, at INFO. */
-    private static void noteRawKey(int keyboardId, int keyCode, int keyState) {
-        int key = (keyboardId << 16) | ((keyCode & 0xff) << 8) | (keyState & 0xff);
-        synchronized (SELECT_LOCK) {
-            for (int i = 0; i < seenCount; i++) if (seenKeys[i] == key) return;
-            if (seenCount == SEEN_CAP) return;
-            seenKeys[seenCount++] = key;
-        }
-        Log.i(TAG, "raw key board=" + keyboardId + " code=" + keyCode + " state=" + keyState);
-    }
-
     private final class RawKeyListener implements DSIKeyPanelListener {
         public void updateKey2(int keyboardId, int keyCode, int keyState,
                                int timeStamp, int validFlag) {
             if (!running || validFlag != ATTR_VALID) return;
-            noteRawKey(keyboardId, keyCode, keyState);
 
             if (keyCode == KEY_DDS) {
                 clearCollapsedSelect(keyState);

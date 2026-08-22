@@ -189,12 +189,10 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
      *  VC map tab. Route-info is meaningful only with an active RGI snapshot. */
     public static void onSteeringWheelOkPressed() {
         if (!isConnected() || !isNavActive()) {
-            Log.d(TAG, "MFW OK ignored: no active RGI presentation");
             return;
         }
         InfoModeListener listener = infoModeListener;
         if (listener == null) {
-            Log.d(TAG, "MFW OK ignored: RGI listener not ready");
             return;
         }
         listener.onInfoModeToggle();
@@ -244,7 +242,6 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
         int skin;
         try { skin = storage.getSkin(); }
         catch (Throwable t) {
-            Log.d(TAG, "VC skin read failed: " + t);
             return;
         }
         int style;
@@ -312,7 +309,6 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
         synchronized (LOCK) {
             if (!platformSupported) return;
             if (available && !connected && !acceptVideoFallback) {
-                Log.d(TAG, "ignoring stale VIDEO_ON outside session/grace");
                 return;
             }
             if (videoAvailable == available) return;
@@ -403,14 +399,12 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
                 d = fw.framework().getHMIService().getDisplayManager();
             }
         } catch (Throwable t) {
-            Log.d(TAG, "getDisplayManager not ready: " + t);
         }
         if (d == null) return false;                 /* DM not up yet → retry */
         try {
             if (fw.framework().getLastmodeHandler() != null)
                 layoutStorage = fw.framework().getLastmodeHandler().getLastmodeStorage();
         } catch (Throwable t) {
-            Log.d(TAG, "stock VC skin storage not ready: " + t);
         }
         refreshClusterStyleFromStock("module-start");
         if (d instanceof IDisplayManagerKombiControl) {

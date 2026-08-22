@@ -233,6 +233,41 @@ cp_usb_record_generation_result()
     fi
 }
 
+# --- bounded /tmp logs -------------------------------------------------------
+# The Java Log and the C hook both rotate themselves; the renderer stdout logs and this
+# wrapper log are plain `>>` redirects with no cap, on a ramdisk, in a unit that stays
+# powered for weeks.  Cap them in place: truncating a file held open with O_APPEND simply
+# restarts it at offset 0, so no descriptor has to be reopened and no `cp`/`mv` is needed
+# (neither is guaranteed present here).  Size comes from `ls -l` field 5 via positional
+# parameters, so this depends on no external utility at all.
+CP_LOG_MAX_BYTES=524288
+
+cp_log_size()
+{
+    set -- `ls -l "$1" 2>/dev/null`
+    echo "${5:-0}"
+}
+
+cp_cap_log()
+{
+    CP_CAP_PATH="$1"
+    [ -f "$CP_CAP_PATH" ] || return 0
+    CP_CAP_SIZE=`cp_log_size "$CP_CAP_PATH"`
+    case "$CP_CAP_SIZE" in
+        ''|*[!0-9]*) return 0 ;;                 # unreadable size: leave it alone
+    esac
+    [ "$CP_CAP_SIZE" -gt "$CP_LOG_MAX_BYTES" ] || return 0
+    : > "$CP_CAP_PATH"
+    echo "[supervisor] truncated $CP_CAP_PATH at $CP_CAP_SIZE bytes" >> "$CP_CAP_PATH"
+}
+
+cp_cap_all_logs()
+{
+    cp_cap_log /tmp/maneuver_render.log
+    cp_cap_log /tmp/altscreen_render.log
+    cp_cap_log "${1:-/tmp/carplay_wrapper.log}"
+}
+
 cp_renderer_pid_file()
 {
     case "$1" in

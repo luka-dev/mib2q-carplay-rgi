@@ -65,7 +65,6 @@ public final class AltScreenNavStatusGate {
             gate.setCurrentPositionInfoBlocked(desiredCurrentPositionBlocked);
             appliedRouteBlocked = desiredRouteBlocked;
         } catch (Throwable t) {
-            Log.d(TAG, "gate not ready: " + t);
         }
     }
 
