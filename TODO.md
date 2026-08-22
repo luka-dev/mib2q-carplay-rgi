@@ -2,60 +2,89 @@
 
 ## Open
 
-### ~~Wife's phone — CarPlay connect restart-loop~~ CLOSED 2026-08-21
-**Cause: stale iOS state on that phone. A phone reboot fixed it on the first
-attempt.** Nothing on the head unit was at fault.
+### Wife's phone connect loop — mechanism found 2026-08-21/22, root cause OPEN
+**The head unit was never publishing its Bonjour service, so the phone had
+nothing to connect to. A head-unit reboot fixed it; the phone was innocent.**
 
-Proven live on-unit, 13 consecutive failing dio generations:
-
-```
-GENS=13  IDENT=13  AUTH=13  COVER=13   INFO=0  SETUP=0
-carplay0 up, fe80::22ff:fe44:6..., Ipkts/Opkts ~5 per generation (IPv6 ND only)
-usb-1.0.1 "AUDI AG / iAP2 NCM Accessory" drivers_matched::2 drivers_running::2
-```
-
-So the HU side was fully up every single time — the NCM gadget ran, `carplay0`
-existed with an IPv6 link-local, dio served, and iAP2 completed Identify + Auth +
-cover art on 13 of 13 attempts. The phone answered Neighbor Discovery, i.e. it saw
-us, and then never issued a single `GET /info`, mDNS query or TCP connection. iOS
-simply did not start its CarPlay client.
-
-After a phone reboot, same cable, same port, same build:
+**How wired CarPlay actually starts** (from the phone's sysdiagnose, with Apple's
+CarPlay Diagnostics profile installed):
 
 ```
-GENS=1  IDENT=1  AUTH=1  INFO=1  SETUP=2  ALT111=1
-/info #1 -> control SETUP -> altScreen 111 -> 5376+ frames @ ~44 fps, no restarts
-carplay0 Ipkts 59459
+accessoryd : Accessory identification accepted and identified for CarPlay
+ACCCarPlayService : iAP NCM Start -- success
+airplayd   : Created APEndpointCarPlay 'CarPlay' id '2C:DC:AD:56:64:3E'
+airplayd   : APBrowserCarBonjour DNS = 'CarPlay._airplay._tcp.local.%31'
+airplayd   : Connect over DirectLink
+airplayd   : APTransportConnectionHTTP 'CarPlay-ctrl' created  -> GET /info -> RTSP
 ```
 
-**Signature to recognise this again:** iAP2 100% healthy (music, artwork, Identify,
-Auth) + `INFO=0` + `carplay0` up with only a handful of ND packets ⇒ phone-side,
-reboot it. It is NOT the cable, the port, the firewall, or the hook.
+The session is started by **`airplayd`**, not `carkitd`, and it is gated on
+**mDNS discovery of `CarPlay._airplay._tcp.local` on the NCM link**. `carkitd`
+only does navigation/connection-time bookkeeping.
 
-**Kept from this investigation:**
-- `AirPlayCopyServerInfo` logs every call unconditionally (`altscreen_hook.c`).
-  This is the seam that proved the phone never asked for `/info`; it used to log
-  only inside the advert branch, which needs `advert_ready_for_session()` and so
-  only runs after control SETUP.
-- `cp_usb_record_generation_result` logs `drivers_*` and the `carplay0` row for
-  every generation without control SETUP.
-- `CP_USB_LIVED_TICKS` threshold 4 -> 2. A monitor tick is not two seconds: while
-  the boot PF guard is armed it runs two `pfctl -sr` snapshots per iteration, so a
-  tick costs ~5 s wall and a full ~15 s generation reports `ticks=3`. The old
-  `-lt 4` bailed out before incrementing on every real generation, so the guarded
-  USB reset could never arm.
+**Proof it was the HU.** In the whole evening's log archive
+`Created APEndpointCarPlay` appears **exactly once** — in the single successful
+session. In every failing cycle `airplayd` starts, brings up `CarPlayAVVC Server`,
+and never creates the endpoint. Meanwhile on the HU `carplay0` carried ~5 packets
+per cycle (IPv6 ND only) — no mDNS advertisement ever left the unit.
 
-**On-unit measurement traps** (all three silently produced empty output and cost a
-capture each):
-- QNX `grep` has no `\|` alternation — use one pattern per call.
-- QNX has no `tail` on the wrapper PATH — use `grep`/`cat`/`sed -n`.
-- `netstat -in` truncates the interface name to the column width: the row reads
-  `carpl`, never `carplay0`. Match `^carpl`.
+After an HU reboot, with the same phone and cable, `dns-sd -B _airplay._tcp` on
+the unit finally showed the missing line and the session came up immediately:
+
+```
+Add  if 8  local.  _airplay._tcp.  CarPlay      <- registered on carplay0
+GENS=3 IDENT=3 INFO=1 SETUP=2 ALT111=1   carplay0 7318/3998 packets
+```
+
+**Still open:** why the registration is missing. `carplay0` is destroyed and
+recreated by `stopncm.sh`/`startncm.sh` on every dio generation, so `mdnsd` must
+re-register the service each cycle while SI kills dio at ~15 s. That is a race,
+and it is self-feeding: the more the loop churns the less chance it has to win.
+It also explains "works once after a reboot, then never" — the first attempt on a
+clean state wins. Not yet proven; next step is `dns-sd -B _airplay._tcp` on the
+unit during a failing cycle, plus checking whether our PF ruleset change (never
+reverted in any test all day) affects outbound mDNS on `carplay0`.
+
+**Hypotheses that died, in order — do not re-test these:**
+1. NCM function not starting (`drivers_running::1`) — that value is NORMAL; NCM is
+   a `start"..."` one-shot in `usblauncher_otg.lua`, only `io-otg-cinemo` is a
+   long-lived `driver"..."`.
+2. Cable orientation — same cable works for the other phone.
+3. `usblauncher -r` ("treat suspend as cable removed") — removing it does not
+   help; `devu-usbrndis-msm8960-ci.so` itself declares the suspend a disconnect,
+   before usblauncher sees it. Removing `-r` also left the device side dead.
+4. USB bus speed — both phones negotiate `Full`, and CarPlay works fine on it.
+5. Different USB controllers between iPhone models — both are 17 Pro-class, same
+   silicon.
+6. Phone-side settings, Bluetooth pairing, iOS version, Screen Time, pairing
+   record — all symmetric between the two phones or excluded by measurement.
+
+**Also learned:** the guarded USB reset (`reset port 3 250 1`) makes this state
+WORSE — measured live, `drivers_running` went 1 -> 0. Do not widen
+`cp_usb_stuck_pre_setup` to `running < 2`.
+
+**On-unit measurement traps** (each cost a capture):
+- QNX `grep` has no `\|` alternation — one pattern per call.
+- No `tail` on the wrapper PATH — use `grep`/`cat`/`sed -n`/`awk`.
+- `netstat -in` truncates the interface name: the row reads `carpl`.
 - `/ramdisk/pps/device/usb-1.0.1` is the HU's **own** device-mode gadget
-  ("AUDI AG / iAP2 NCM Accessory", VID `0x1a96`) — in wired CarPlay the iPhone is
-  the USB host and the HU is the device, so there is no Apple VID `0x05ac` node in
-  the tree at all. A rapid re-read of a PPS object can also return no fields, so
-  sampling it right after dio dies is unreliable.
+  ("AUDI AG / iAP2 NCM Accessory", VID `0x1a96`). In wired CarPlay the iPhone is
+  the USB host, so no Apple VID `0x05ac` node exists in the tree at all.
+- The slog ring is 1 MB and rolls in ~2 minutes with USB verbosity on — read it
+  within ~20 s of the event.
+- `io-usb-dcd`'s `-vv` does not raise the device-controller DLL's verbosity; that
+  needs `verbose=` in `/etc/scripts/start_usb_device_stack.sh` (stock is 0).
+- Never kill the OTG `usblauncher`: a hand-restarted instance loses the
+  media-connector event chain and the unit stops seeing any phone until reboot.
+  There is no `reboot`/`shutdown` binary on the unit — it must be power-cycled by
+  holding the MMI knob.
+
+**Phone-side capture recipe that worked:** Apple's CarPlay Diagnostics profile
+from developer.apple.com/bug-reporting/profiles-and-logs, reboot, reproduce, then
+sysdiagnose (both volume keys + side, ~1.5 s), collect from Settings → Privacy &
+Security → Analytics & Improvements → Analytics Data. Read
+`system_logs.logarchive` with `log show --archive`, and
+`crashes_and_spins/accessoryd-packets-*.log.ips` for the raw iAP2 packet trace.
 
 ## Other open (tracked elsewhere)
 - On-unit lifecycle validation (5 fault-replay tests + drive) — `docs/reference/CARPLAY_SESSION_LIFECYCLE_AUDIT.md`.
