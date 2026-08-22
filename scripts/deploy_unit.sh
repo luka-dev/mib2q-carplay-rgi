@@ -15,8 +15,9 @@ DST="/mnt/app/root/hooks/libcarplay_hook.so"
 [ -f "$HOOK" ] || { echo "missing hook: $HOOK (run ./scripts/build_hook.sh first)"; exit 1; }
 echo "Deploying $(ls -la "$HOOK" | awk '{print $5}') bytes -> $DST"
 
-# 1. Keep one recoverable backup instead of accumulating timestamped copies.
-sshpass -p "$PASS" ssh $OPTS "$DEV" 'mount -uw /mnt/app; cp '"$DST"' '"$DST"'.bak 2>/dev/null; echo backed-up'
+# 1. No on-device backup: git holds every previous hook, and stale .bak copies in
+# /mnt/app/root/hooks only cost flash and confuse the next deploy.
+sshpass -p "$PASS" ssh $OPTS "$DEV" 'mount -uw /mnt/app; echo rw'
 sshpass -p "$PASS" scp $OPTS "$HOOK" "$DEV:$DST"
 sshpass -p "$PASS" ssh $OPTS "$DEV" 'chmod 755 '"$DST"'; ls -la '"$DST"
 

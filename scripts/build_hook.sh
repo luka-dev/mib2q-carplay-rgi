@@ -16,7 +16,7 @@ set -e
 
 [ "$#" -eq 0 ] || { echo "usage: ./scripts/build_hook.sh"; exit 2; }
 
-IMG=qnx65-armv7-toolchain
+IMG=qnx65-armv7-toolchain:latest
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 OUT="$PROJECT_DIR/build/libcarplay_hook.so"

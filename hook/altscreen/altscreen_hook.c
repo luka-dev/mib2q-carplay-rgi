@@ -745,6 +745,18 @@ void *AirPlayCopyServerInfo(void *session, void *qualifier, void *macAddr, void 
 
     void *info = real(session, qualifier, macAddr, outErr);   /* stock /info — untouched */
 
+    /* Unconditional: this is the ONLY seam that proves the phone reached us over
+     * the carplay0 IP link.  Everything below runs only after control SETUP, so a
+     * generation that never starts CarPlay used to leave no trace at all here.
+     * A failing generation WITH these lines means NCM/HTTP are up and the phone
+     * read /info and then declined CarPlay (protocol/content — ours); a failing
+     * generation WITHOUT them means the phone never reached us (cable/pairing). */
+    {
+        static int info_calls;
+        LOG_INFO(LOG_MODULE, "/info #%d session=%p qualifier=%p out=%p",
+                 ++info_calls, session, qualifier, info);
+    }
+
     /* Advertise only when every primitive required by the self-contained 111
      * receiver resolves.  A partial advert would make iOS demand a contract the
      * stock receiver cannot satisfy and can restart the whole CarPlay session. */

@@ -196,7 +196,25 @@ cp_usb_record_generation_result()
         return 0
     fi
     rm -f "$CP_USB_MARKER"
-    if [ "$CP_USB_LIVED_TICKS" -lt 4 ] || ! cp_usb_stuck_pre_setup; then
+    # A generation without control SETUP is a failure, and the wrapper log so far
+    # records only that it happened. These two snapshots separate the two causes
+    # we cannot otherwise tell apart afterwards: no carplay0 row (or Ipkts=0)
+    # means the phone never brought up the CarPlay NCM link at all -- cable,
+    # enumeration or pairing -- while a live link with traffic moves the fault to
+    # the RTSP/protocol side. The USB PPS line records the real driver state for
+    # the failures that do not match cp_usb_stuck_pre_setup's signature.
+    echo "[supervisor] no control SETUP pid=$CP_USB_DIO_PID ticks=$CP_USB_LIVED_TICKS" >> "${WLOG:-/dev/null}"
+    "$CP_PF_GREP" drivers_ "$CP_USB_PPS" >> "${WLOG:-/dev/null}" 2>/dev/null
+    # netstat -in truncates the interface name to its column width, so the row
+    # reads "carpl", never "carplay0". Match the prefix or this never fires.
+    netstat -in 2>/dev/null | "$CP_PF_GREP" '^carpl' >> "${WLOG:-/dev/null}" 2>/dev/null
+    # A tick is NOT a fixed two seconds: while the boot PF guard is armed the
+    # monitor runs two `pfctl -sr` snapshots per iteration, so a tick costs ~5 s
+    # wall and a full ~15 s generation reports ticks=3. The old `-lt 4` therefore
+    # bailed out before incrementing on every real generation and the recovery
+    # never armed. Control SETUP lands ~2.5 s in, so two ticks already prove the
+    # generation outlived it; this only still filters sub-second SI replacements.
+    if [ "$CP_USB_LIVED_TICKS" -lt 2 ] || ! cp_usb_stuck_pre_setup; then
         # A short SI replacement or any post-USB state is not evidence for the
         # physical reset. A detached/non-stuck state also rearms the latch.
         if ! cp_usb_stuck_pre_setup; then cp_usb_clear_recovery_state; fi
