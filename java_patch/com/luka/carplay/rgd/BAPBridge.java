@@ -44,8 +44,6 @@ public class BAPBridge {
      * selected -- if regional variant logic returns, the codes are here. */
     private static final int EXITVIEW_EU = 0;
     private static final int EXITVIEW_NAR = 1;
-    private static final int EXITVIEW_ROW = 2;
-    private static final int EXITVIEW_ASIA = 3;
 
     /*
      * BAP supports three maneuver slots, but publish only the current one.
@@ -197,9 +195,6 @@ public class BAPBridge {
         }
     }
 
-    private synchronized boolean isActionBlinkThreadRunning() {
-        return actionBlinkThreadRunning;
-    }
 
     private void startActionBlinkThread() {
         final int myGen;
@@ -1935,7 +1930,6 @@ public class BAPBridge {
             /* If the current peer vanished/reconnected, withdraw the old presentation before
              * priming the replacement. All calls remain on RouteGuidance's worker/update path. */
             if (customRendererStarted && !rendererClient.isFrameReady()) {
-                try { csRef.deactivateCustomRendererPipeline(); } catch (Throwable t) { }
                 forceGfxAvailable(false);
                 customRendererStarted = false;
                 rendererPrimed = false;
@@ -1960,15 +1954,10 @@ public class BAPBridge {
             }
             if (!rendererClient.isFrameReady()) return false;
 
-            /* Switch cluster display to renderer's context only after the
-             * renderer is connected, initialized, and has swapped a frame. */
-            String result = csRef.activateCustomRendererPipeline();
-            Log.i(TAG, "CR: pipeline " + result);
-            if (result == null || result.startsWith("FAILED")) {
-                Log.w(TAG, "CR: pipeline activation failed; keeping gfx disabled");
-                customRendererStarted = false;
-                return false;
-            }
+            /* Readiness is already decided above: the renderer is connected, initialized and
+             * has swapped a frame (isFrameReady()).  The ClusterService "pipeline" call that
+             * used to sit here returned a constant string and could never report a failure, so
+             * the branch that read it was unreachable. */
 
             /* BAP route info state for HUD icons.  onStart() also forces this,
              * but renderer respawn can happen mid-route without onStart(). */
@@ -2021,9 +2010,6 @@ public class BAPBridge {
              * cluster context + stop feeding.  Do NOT kill the renderer (always-on framework
              * service) and keep the server socket + link up for the next route in this session. */
             if (rendererClient != null) rendererClient.sendClear();
-            if (csRef != null) {
-                csRef.deactivateCustomRendererPipeline();
-            }
             forceGfxAvailable(false);
             if (clearRouteInfo) forceClusterRouteInfoState(false);
             customRendererStarted = false;

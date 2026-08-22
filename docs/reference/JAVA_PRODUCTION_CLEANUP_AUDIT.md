@@ -54,7 +54,19 @@ Do not remove `lastEtaSeconds`, `lastTimeRemainingSeconds`,
 `lastTimeRemainingSampleSeconds`, `currentRemainingSeconds()`, or `currentArrivalSeconds()`.
 They are still used to publish the real FctID 22 absolute ETA (`BAPBridge.java:1336-1383`).
 
-## Remove now: fake ClusterService pipeline API
+## DONE: fake ClusterService pipeline API (removed)
+
+> `activateCustomRendererPipeline()`, `deactivateCustomRendererPipeline()` and
+> `refreshInitializingScreenAfterCarPlay()` are gone, together with the BAPBridge branch that
+> read the constant string. That branch was unreachable - the string was never null and never
+> started with "FAILED" - and real readiness (`isFrameReady()`) is still checked immediately
+> above it, so behaviour is unchanged. The dead members listed further down are gone too:
+> `CarPlayApp.fw()`, `CarplayBus.Data.strList()`, `BAPBridge.isActionBlinkThreadRunning()`,
+> `EXITVIEW_ROW/ASIA`, `AltScreenModule.isClusterActive()` and
+> `RouteGuidance.ROUTE_STATE_ACCEPT_ALL_MANEUVER_IDX`.
+>
+> Still open: the KOMO reflection ladder (below). It is a semantic change and needs an on-car
+> validation pass, not a blind edit.
 
 The added methods do not control any renderer or stock pipeline:
 

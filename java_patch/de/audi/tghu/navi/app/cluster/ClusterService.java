@@ -1118,18 +1118,4 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
     /** Restore the authoritative stock INITIALIZING/NORMAL decision after CarPlay releases the
      * cluster.  A deferred-call replay alone is insufficient when no map-ready edge occurred while
      * the takeover was active. */
-    public synchronized void refreshInitializingScreenAfterCarPlay() {
-        this.combiBAPListener.forceShowInitScreen(this.initScreenNeededOnKombi());
-    }
-
-    /* Cluster projection activate/deactivate.  These remain BAPBridge readiness hooks; the actual
-     * DisplayManager switch is serialized by AltScreenModule.  A successful return here is only
-     * one part of the permission: RouteGuidance additionally waits for the BAP update and the
-     * renderer's FRAME_READY before it changes ctx 81 -> 80. */
-    public String activateCustomRendererPipeline() {
-        return "RGI active (maneuver popup)";
-    }
-
-    public void deactivateCustomRendererPipeline() {
-    }
 }

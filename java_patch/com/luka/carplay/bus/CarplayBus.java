@@ -280,21 +280,6 @@ public final class CarplayBus {
             }
             return out;
         }
-        public String[] strList(String key, char delim) {
-            String v = str(key, null);
-            if (v == null || v.length() == 0) return null;
-            int c = 1;
-            for (int i = 0; i < v.length(); i++) if (v.charAt(i) == delim) c++;
-            String[] out = new String[c];
-            int start = 0, idx = 0;
-            for (int i = 0; i <= v.length(); i++) {
-                if (i == v.length() || v.charAt(i) == delim) {
-                    out[idx++] = v.substring(start, i);
-                    start = i + 1;
-                }
-            }
-            return out;
-        }
         public boolean has(String key) {
             for (int i = 0; i < count; i++) if (key.equals(keys[i])) return true;
             return false;

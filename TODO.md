@@ -95,5 +95,11 @@ Security → Analytics & Improvements → Analytics Data. Read
 
 ## Other open (tracked elsewhere)
 - On-unit lifecycle validation (5 fault-replay tests + drive) — `docs/reference/CARPLAY_SESSION_LIFECYCLE_AUDIT.md`.
-- Java cleanup groups 1–3 + KOMO reflection (group B) — `docs/reference/JAVA_PRODUCTION_CLEANUP_AUDIT.md`.
+- Java cleanup: groups 1-3 DONE (fake pipeline API, disabled diagnostics, dead members).
+  **Only the KOMO reflection ladder is left** - `BAPBridge.forceGfxAvailable()`, ~96 lines of
+  three-strategy reflection whose two assumptions stock source contradicts (`KOMOService` has no
+  `dataRate` field; `setKOMODataRate()` is a no-op unless `Util.isClusterMapMOST()`). The public
+  path is `ClusterService.getClusterViewMode()` -> `ClusterViewMode.setDataRate/setGFXAvailable`.
+  Semantic change: validate map/popup start, renderer respawn and RGI stop on the car before
+  release. `docs/reference/JAVA_PRODUCTION_CLEANUP_AUDIT.md`.
 - `routeState==5` accept-all-maneuvers logic not implemented (MHI3 has it) — decide if needed.

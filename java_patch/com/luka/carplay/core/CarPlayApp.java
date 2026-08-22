@@ -134,7 +134,6 @@ public final class CarPlayApp {
         }
     }
 
-    public static FrameworkRef fw() { synchronized (lock) { return fwRef; } }
 
     /** Caller holds lock.  Started at TerminalMode component init, so the hot
      * ACTIVATING callback normally performs only field stores + notifyAll(). */

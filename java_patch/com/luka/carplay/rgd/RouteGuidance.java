@@ -34,7 +34,6 @@ public class RouteGuidance implements CarplayBus.Listener {
      *
      * Note: naming in accNav docs varies (Locating/Rerouting). We match the observed check (==5).
      */
-    private static final int ROUTE_STATE_ACCEPT_ALL_MANEUVER_IDX = ROUTE_STATE_REROUTING;
 
     /* State */
     private BAPBridge bap;
