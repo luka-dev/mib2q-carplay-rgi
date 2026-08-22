@@ -75,7 +75,7 @@ The feature set observed on the MHI2Q virtual cockpit most closely matches
 | 51 | `0x33` | POI_Search | method | None | `poiSearchResult(result, count)` | Response to cluster POI search | Registered but not advertised |
 | 52 | `0x34` | POI_List | array | None | `updatePOIListSize()` is a stock no-op stub | POI result list | Registered but not usable through current service |
 | 53 | `0x35` | FSG_Setup | property | `S/H` | `updateFSGSetup(voiceMask, poiSupport)` | Voice-guidance and POI capabilities | Delegated to stock |
-| 54 | `0x36` | Map_Presentation | property/SetGet | `H` | `updateMapPresentation(largeMap, leftMenu, rightMenu)` | Reports stock map size and side-menu states | Delegated to stock; status does not guarantee forced menu closure |
+| 54 | `0x36` | Map_Presentation | property/SetGet | `H` | `updateMapPresentation(largeMap, leftMenu, rightMenu)` | Reports stock map size and side-menu states | Delegated to stock; the echo cannot close a VC-local drawer |
 | 55 | `0x37` | ManeuverState | property | `S/H` | `updateManeuverState(state)` | Maneuver/action transition state used by HUD/VC | CarPlay-owned/gated; actively sent |
 | 56 | `0x38` | ETC_Status | property | `M/MH` | `updateEtcStatus(status)` | Electronic-toll-card status | Not advertised by HighPrem; delegated to stock |
 
@@ -162,7 +162,7 @@ not all equally safe to drive during CarPlay ownership.
 | 45 | `autoZoom`, `scale`, `unit` | Auto-zoom mode and native scale display; incoming SetGet carries wheel steps/settings | Keep the status hidden during CarPlay. Its consumed SetGet is a useful steering-wheel input seam. |
 | 49 | `variant`, `exitview_Id` | EU/NAR/ROW/Asia junction-view resource selection | Only useful with a real matching exit-view resource. |
 | 50 | alternative-route/traffic flags, distance type, nested `timeInfoType` | Controls alternative-route/traffic card and its proposed distance/ETA | Not the current-route ETA; leave stock-owned until alternative-route data exists. |
-| 54 | `largeMapView`, `leftSideMenueOpen`, `rightSideMenueOpen` | Reports map size and side-menu state | This is ASG HMI state, not a reliable command to force-close VC UI. |
+| 54 | `largeMapView`, `leftSideMenueOpen`, `rightSideMenueOpen` | Reports map size and side-menu state | This is ASG HMI state, not a command: the VC *reports* its drawer through it. Blocking the cluster side menus from the HU was tried and failed - see docs/reference/CLUSTER_SIDE_MENUS.md before trying again. |
 | 55 | `state` | `0` unknown, `1` follow, `2` prepare, `3` distance, `4` call-for-action | Changes maneuver phase/animation; safe only when synchronized to the real maneuver. |
 
 FctID 19 is different: it has no representation enum. It is one UTF-8 text

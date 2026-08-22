@@ -381,6 +381,23 @@ int main(int argc, char **argv) {
 #ifdef CR_DEBUG_GRID
     render_set_debug_grid(1);
 #endif
+    /* Crop-outline overlay for on-car tuning; off unless asked for. */
+    {
+        const char *o = getenv("CR_CROP_OUTLINE");
+        const char *r = getenv("CR_CROP_RECT");
+        if (r && r[0]) {
+            int x, y, w, h;
+            if (sscanf(r, "%d,%d,%d,%d", &x, &y, &w, &h) == 4)
+                render_set_crop_rect(x, y, w, h);
+            else
+                fprintf(stderr, "maneuver_render: bad CR_CROP_RECT '%s', want x,y,w,h\n", r);
+        }
+        if (o && o[0] && o[0] != '0') {
+            render_set_crop_outline(1);
+            fprintf(stderr, "maneuver_render: crop outline ON%s\n",
+                    (r && r[0]) ? " (custom rect)" : "");
+        }
+    }
 
     /* Engine always has a deterministic hidden FOLLOW_STREET frame. */
     memset(&g_engine, 0, sizeof(g_engine));
@@ -616,6 +633,7 @@ int main(int argc, char **argv) {
 
         /* Render if needed */
         if (g_engine.dirty || render_is_animating() || maneuver_needs_redraw() || got_screenshot
+            || render_crop_outline_enabled()   /* keep the tuning overlay on screen while idle */
 #ifdef CR_DEBUG_GRID
             || 1  /* always render when grid is compiled in */
 #endif
@@ -672,6 +690,7 @@ int main(int argc, char **argv) {
                 render_bargraph(bl, ba);
             }
             render_debug_grid();
+            render_crop_outline();
             render_end_frame();
 #ifdef CR_DIAG_FRAME_LOG
             struct timespec t_after_draw;

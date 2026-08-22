@@ -159,6 +159,15 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
         synchronized (LOCK) { return desiredViewAreaMode == VIEWAREA_SMALLSCREEN; }
     }
 
+    /** "classic" / "sport" / "unknown" - what the geometry decision actually saw. */
+    public static String styleLabel() {
+        int st;
+        synchronized (LOCK) { st = clusterStyle; }
+        if (st == AltscreenControlServer.STYLE_CLASSIC) return "classic";
+        if (st == AltscreenControlServer.STYLE_SPORT) return "sport";
+        return "unknown";
+    }
+
     public static void setViewAreaModeListener(ViewAreaModeListener listener) {
         viewAreaModeListener = listener;
     }
@@ -215,6 +224,9 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
             desiredViewAreaMode = mode;
         }
         sendViewAreaMode("NAV_VIEW_SIZE_CHOICE");
+        /* The maneuver plane carries stock's small-stage slide (Layout 80/81), and during CarPlay
+         * no stock KDK delta ever arrives to re-apply it — push it here. */
+        com.luka.carplay.cluster.ClusterLayerController.reapply();
         ViewAreaModeListener listener = viewAreaModeListener;
         if (listener != null) {
             try { listener.onViewAreaModeChanged(mode); }
@@ -487,6 +499,10 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
         contextWriterThread = Thread.currentThread();
         while (true) {
             refreshClusterStyleFromStock("context-reconcile");
+                /* Live geometry tuning: a saved /tmp/cluster_geom.cfg takes effect within one
+                 * reconcile tick, no restart. Absent file = pure stock layout. */
+                if (com.luka.carplay.cluster.ClusterGeomOverride.poll())
+                    com.luka.carplay.cluster.ClusterLayerController.reapply();
             int target; IDisplayManager d; boolean reconcileOnly = false;
             synchronized (LOCK) {
                 while (dm == null) {

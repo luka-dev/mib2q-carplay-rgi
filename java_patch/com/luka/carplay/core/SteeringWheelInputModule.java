@@ -38,6 +38,14 @@ public final class SteeringWheelInputModule implements Module {
     private static final int ATTR_VALID = 1;
     private static final long COLLAPSED_SELECT_WINDOW_MS = 600L;
 
+    /* Raw-key census: stock KbdListener has `case 40` only in updateEncoderInternal (roller
+     * TURN); there is no key-40 PRESS anywhere in MU1316, so the constant above may simply be
+     * the wrong event to wait for.  Log each distinct (keyboard, code, state) triple exactly
+     * once - bounded, no flood, and one OK press names the real code. */
+    private static final int SEEN_CAP = 64;
+    private static final int[] seenKeys = new int[SEEN_CAP];
+    private static int seenCount;
+
     private static final Object SELECT_LOCK = new Object();
     private static long pendingPressUntil;
     private static long pendingReleaseUntil;
@@ -45,6 +53,7 @@ public final class SteeringWheelInputModule implements Module {
     private final RawKeyListener listener = new RawKeyListener();
     private FrameworkRef.ServiceHandle keyPanelHandle;
     private FrameworkRef.ServiceHandle combiManagerHandle;
+    private boolean keyPanelMissLogged;
     private DSIKeyPanel keyPanel;
     private volatile IMMICombiScreenChangeManager combiManager;
     private ServiceRegistration listenerRegistration;
@@ -53,29 +62,39 @@ public final class SteeringWheelInputModule implements Module {
     public String name() { return "mfw-input"; }
 
     public synchronized boolean start(FrameworkRef fw) {
-        if (listenerRegistration != null && keyPanel != null && combiManager != null) return true;
+        /* combiManager is optional, so it must NOT be part of the already-started test - it would
+         * make every retry re-register the listener. */
+        if (listenerRegistration != null && keyPanel != null) return true;
         if (fw == null || !fw.isReady() || fw.serviceManager() == null) return false;
 
         FrameworkRef.ServiceHandle handle = fw.getServiceHandle(DSIKeyPanel.class);
         if (handle == null || !(handle.service() instanceof DSIKeyPanel)) {
             if (handle != null) handle.release();
-            Log.d(TAG, "DSIKeyPanel not ready - retry");
+            /* Log.d is below the production level, so a permanently failing start used to be
+             * completely silent. Say it once at INFO instead. */
+            if (!keyPanelMissLogged) {
+                keyPanelMissLogged = true;
+                Log.i(TAG, "DSIKeyPanel not available yet - retrying, MFW OK inactive until it is");
+            }
             return false;
         }
 
+        /* IMMICombiScreenChangeManager is OPTIONAL.  It belongs to the "MMI inside the cluster"
+         * variant and is never registered on this A5-class unit, so requiring it left the module
+         * permanently in the retry loop ("modules still pending after 10 s") and the MFW OK key
+         * was never hooked at all - in either view.  When it is absent the map-tab gate falls
+         * back to our own authoritative state, which onSteeringWheelOkPressed() re-checks anyway
+         * (CarPlay owns the cluster AND RGI is active). */
         FrameworkRef.ServiceHandle combiHandle =
             fw.getServiceHandle(IMMICombiScreenChangeManager.class);
-        if (combiHandle == null
-                || !(combiHandle.service() instanceof IMMICombiScreenChangeManager)) {
-            if (combiHandle != null) combiHandle.release();
-            handle.release();
-            Log.d(TAG, "IMMICombiScreenChangeManager not ready - retry");
-            return false;
+        if (combiHandle != null && !(combiHandle.service() instanceof IMMICombiScreenChangeManager)) {
+            combiHandle.release();
+            combiHandle = null;
         }
 
         DSIKeyPanel panel = (DSIKeyPanel)handle.service();
-        IMMICombiScreenChangeManager manager =
-            (IMMICombiScreenChangeManager)combiHandle.service();
+        IMMICombiScreenChangeManager manager = combiHandle == null
+            ? null : (IMMICombiScreenChangeManager)combiHandle.service();
         ServiceRegistration registration = null;
         try {
             registration = fw.serviceManager().registerDSIListener(
@@ -89,7 +108,8 @@ public final class SteeringWheelInputModule implements Module {
             listenerRegistration = registration;
             running = true;
             clearPendingSelects();
-            Log.i(TAG, "raw MFW OK listener ready (key=40 mapContext=20)");
+            Log.i(TAG, "raw MFW OK listener ready (key=40 mapContext="
+                + (manager == null ? "unavailable, using CarPlay RGI state" : "20") + ")");
             return true;
         } catch (Throwable t) {
             try { panel.clearNotification(DSIKeyPanel.ATTR_KEY2, listener); }
@@ -99,7 +119,7 @@ public final class SteeringWheelInputModule implements Module {
                 catch (Throwable ignored) { }
             }
             handle.release();
-            combiHandle.release();
+            if (combiHandle != null) combiHandle.release();
             Log.w(TAG, "raw MFW listener start failed: " + t);
             return false;
         }
@@ -174,8 +194,11 @@ public final class SteeringWheelInputModule implements Module {
     }
 
     private boolean isConfirmedMapTab() {
+        if (!running) return false;
         IMMICombiScreenChangeManager manager = combiManager;
-        if (!running || manager == null) return false;
+        /* No combi manager on this variant: CarPlay owning the cluster with RGI up IS the
+         * "map tab" here, and that is exactly what the handler below verifies. */
+        if (manager == null) return AltScreenModule.isConnected() && AltScreenModule.isNavActive();
         try {
             MMICombiDisplayStatus status = manager.getLastConfirmedDisplayStatus();
             return status != null
@@ -186,10 +209,22 @@ public final class SteeringWheelInputModule implements Module {
         }
     }
 
+    /** First sighting of each (keyboard, code, state) triple, at INFO. */
+    private static void noteRawKey(int keyboardId, int keyCode, int keyState) {
+        int key = (keyboardId << 16) | ((keyCode & 0xff) << 8) | (keyState & 0xff);
+        synchronized (SELECT_LOCK) {
+            for (int i = 0; i < seenCount; i++) if (seenKeys[i] == key) return;
+            if (seenCount == SEEN_CAP) return;
+            seenKeys[seenCount++] = key;
+        }
+        Log.i(TAG, "raw key board=" + keyboardId + " code=" + keyCode + " state=" + keyState);
+    }
+
     private final class RawKeyListener implements DSIKeyPanelListener {
         public void updateKey2(int keyboardId, int keyCode, int keyState,
                                int timeStamp, int validFlag) {
             if (!running || validFlag != ATTR_VALID) return;
+            noteRawKey(keyboardId, keyCode, keyState);
 
             if (keyCode == KEY_DDS) {
                 clearCollapsedSelect(keyState);

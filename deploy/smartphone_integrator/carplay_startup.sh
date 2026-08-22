@@ -58,9 +58,22 @@ start_renderer()
     echo "[supervisor] starting $SR_NAME reason=$SR_REASON" >> "$WLOG"
     case "$SR_NAME" in
         maneuver_render)
+            # On-car tuning overlay: `touch /mnt/app/carplay_crop_outline` draws a red border
+            # around the rectangle the cluster layout crops out of the 328x180 canvas, so the
+            # panel can be aligned by eye. Put `x,y,w,h` in that file to outline a different
+            # rect (Classic in-tube is 59,27,210,153). `rm` it to go back to normal.
+            SR_OUTLINE=
+            SR_RECT=
+            if [ -e /mnt/app/carplay_crop_outline ]; then
+                SR_OUTLINE=1
+                read SR_RECT < /mnt/app/carplay_crop_outline 2>/dev/null
+                echo "[supervisor] maneuver_render crop outline ON rect=${SR_RECT:-default}" >> "$WLOG"
+            fi
             (
                 cd "$H" || exit 1
-                LD_PRELOAD= GRAPHICS_ROOT=/proc/boot exec "$H/maneuver_render" \
+                LD_PRELOAD= GRAPHICS_ROOT=/proc/boot \
+                CR_CROP_OUTLINE="$SR_OUTLINE" CR_CROP_RECT="$SR_RECT" \
+                exec "$H/maneuver_render" \
                     </dev/null >>/tmp/maneuver_render.log 2>&1
             ) &
             cp_renderer_record_pid "$SR_NAME" "$!"

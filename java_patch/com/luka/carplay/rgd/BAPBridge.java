@@ -82,9 +82,6 @@ public class BAPBridge {
     /* User-selectable route-info representation. View changes always reset it
      * to 0; only the serialized RouteGuidance presentation worker mutates it. */
     private int infoPhase = 0;
-    /* Smallscreen OK toggles the native FctID 22 time slot between absolute
-     * arrival (type 1) and remaining travel duration (type 0). */
-    private volatile boolean timeInfoRemaining = false;
     /* Explicit output caches allow View/OK to repaint immediately without
      * waiting for another iOS RGI delta. */
     private long lastEtaSeconds = -1L;
@@ -639,7 +636,6 @@ public class BAPBridge {
             lastTimeRemainingSeconds = -1L;
             lastTimeRemainingSampleSeconds = -1L;
             lastDistanceToDestinationM = -1;
-            timeInfoRemaining = false;
             lastFirstManeuverIdx = -1;
             lastFirstManeuverVer = -1;
             resetActionBlinkState();
@@ -803,7 +799,6 @@ public class BAPBridge {
             lastTimeRemainingSeconds = -1L;
             lastTimeRemainingSampleSeconds = -1L;
             lastDistanceToDestinationM = -1;
-            timeInfoRemaining = false;
 
             /*
              * Guidance stop — full BAP teardown:
@@ -1374,34 +1369,21 @@ public class BAPBridge {
 
     private void publishTimeToDestinationForMode() {
         int timeFormat = getHuNavigationTimeFormat();
-        int timeInfoType;
-        long timeVal;
-        if (timeInfoRemaining) {
-            timeInfoType = 0;                      /* remaining travel duration (seconds) */
-            timeVal = currentRemainingSeconds();   /* -1 when unknown -> stock clears the slot */
-        } else {
-            timeInfoType = 1;                      /* absolute arrival clock */
-            timeVal = currentArrivalSeconds();
-            /* JVM default TZ is UTC on MHI2. AppConnectorNavi converts a type-1
-             * epoch with GregorianCalendar, so shift it to HU local time first. */
-            if (timeVal >= 0L) {
-                timeVal = convertUtcToLocalMs(timeVal * 1000L) / 1000L;
-            }
+        /* ALWAYS type 1, the absolute arrival clock.  The cluster has no widget for
+         * timeInfoType 0: its whole distance-to-destination block in the VC is
+         * NavFPK_DTD_{ArrivalTime,ArrivalTime_visible,Distance,Distance_Unit,Distance_visible}
+         * - there is no remaining/duration field anywhere in gtf2.  Sending type 0 therefore
+         * does not switch the display, it blanks it (ArrivalTime_visible goes false), which is
+         * exactly what the smallscreen OK toggle used to do.  See
+         * docs/reference/CLUSTER_KDK_GEOMETRY.md. */
+        long timeVal = currentArrivalSeconds();
+        /* JVM default TZ is UTC on MHI2. AppConnectorNavi converts a type-1
+         * epoch with GregorianCalendar, so shift it to HU local time first. */
+        if (timeVal >= 0L) {
+            timeVal = convertUtcToLocalMs(timeVal * 1000L) / 1000L;
         }
-        traceBap("updateTimeToDestination", timeInfoType + "," + timeFormat + "," + timeVal);
-        appConnectorNavi.updateTimeToDestination(timeInfoType, timeFormat, timeVal);
-    }
-
-    /** Smallscreen OK: flip the native FctID 22 time slot arrival<->remaining.
-     *  The serialized presentation worker republishes it. */
-    public boolean toggleTimeInfoType() {
-        timeInfoRemaining = !timeInfoRemaining;
-        return timeInfoRemaining;
-    }
-
-    /** View change is a hard boundary: every page starts at arrival (like phase 0). */
-    public void resetTimeInfoType() {
-        timeInfoRemaining = false;
+        traceBap("updateTimeToDestination", "1," + timeFormat + "," + timeVal);
+        appConnectorNavi.updateTimeToDestination(1, timeFormat, timeVal);
     }
 
     private String buildTripSummary() {

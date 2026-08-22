@@ -39,6 +39,12 @@ public final class ClusterLayerController {
     private static final int LC_POPUP_CROP_W = 120, LC_POPUP_CROP_H = 121;
     private static final int LC_IN_TUBE_CROP_X = 122, LC_IN_TUBE_CROP_Y = 123;
     private static final int LC_IN_TUBE_CROP_W = 124, LC_IN_TUBE_CROP_H = 125;
+    /* Stock's small-stage (singlescreen) offset.  CombiMapController.positionMap() adds it to the
+     * map planes 33/58 when NAV_VIEW_SIZE_CHOICE == 1.  Our CarPlay map is plane 99, a full
+     * 1440x542 window that cannot be translated, so the offset is applied to OUR maneuver plane
+     * 98 and its backing instead — they are what has to follow the map.  Sport = (-476,0),
+     * Classic = (0,0) (LayoutMIB2HighQ7 fallback), so Classic is unaffected for free. */
+    private static final int LC_SMALL_STAGE_DX = 80, LC_SMALL_STAGE_DY = 81;
     /* The VC's KDK fade completion is not exported to HU Java.  Prefer the stock
      * BITFIELD_KDK_FADED_IN-derived opacity, but never strand a valid CarPlay
      * presentation invisible if that model delta is lost. */
@@ -54,12 +60,14 @@ public final class ClusterLayerController {
         984, 139, 1091, 110,
         59, 27, 210, 153,
         0, 0, 328, 180,
+        -476, 0,
         "fallback-sport");
     private static boolean haveLayout;
     private static boolean errorLogged;
     private static boolean popupCycleActive;
     private static boolean popupRevealed;
     private static boolean popupRevealPending;
+    private static String lastAppliedSignature;
     private static int popupRevealGeneration;
 
     private ClusterLayerController() {}
@@ -68,11 +76,13 @@ public final class ClusterLayerController {
         final int inTubeX, inTubeY, popupX, popupY;
         final int popupCropX, popupCropY, popupCropW, popupCropH;
         final int inTubeCropX, inTubeCropY, inTubeCropW, inTubeCropH;
+        final int smallStageDX, smallStageDY;
         final String layoutName;
 
         Geometry(int inTubeX, int inTubeY, int popupX, int popupY,
                  int popupCropX, int popupCropY, int popupCropW, int popupCropH,
                  int inTubeCropX, int inTubeCropY, int inTubeCropW, int inTubeCropH,
+                 int smallStageDX, int smallStageDY,
                  String layoutName) {
             this.inTubeX = inTubeX;
             this.inTubeY = inTubeY;
@@ -86,6 +96,8 @@ public final class ClusterLayerController {
             this.inTubeCropY = inTubeCropY;
             this.inTubeCropW = inTubeCropW;
             this.inTubeCropH = inTubeCropH;
+            this.smallStageDX = smallStageDX;
+            this.smallStageDY = smallStageDY;
             this.layoutName = layoutName;
         }
 
@@ -96,7 +108,8 @@ public final class ClusterLayerController {
                 && popupCropX == other.popupCropX && popupCropY == other.popupCropY
                 && popupCropW == other.popupCropW && popupCropH == other.popupCropH
                 && inTubeCropX == other.inTubeCropX && inTubeCropY == other.inTubeCropY
-                && inTubeCropW == other.inTubeCropW && inTubeCropH == other.inTubeCropH;
+                && inTubeCropW == other.inTubeCropW && inTubeCropH == other.inTubeCropH
+                && smallStageDX == other.smallStageDX && smallStageDY == other.smallStageDY;
         }
     }
 
@@ -114,6 +127,8 @@ public final class ClusterLayerController {
             layout.getIntegerConstant(LC_IN_TUBE_CROP_Y),
             layout.getIntegerConstant(LC_IN_TUBE_CROP_W),
             layout.getIntegerConstant(LC_IN_TUBE_CROP_H),
+            layout.getIntegerConstant(LC_SMALL_STAGE_DX),
+            layout.getIntegerConstant(LC_SMALL_STAGE_DY),
             layout.getClass().getName());
     }
 
@@ -143,7 +158,8 @@ public final class ClusterLayerController {
                 + geometry.inTubeCropW + "x" + geometry.inTubeCropH + ") popup=("
                 + geometry.popupX + "," + geometry.popupY + ") crop=("
                 + geometry.popupCropX + "," + geometry.popupCropY + ","
-                + geometry.popupCropW + "x" + geometry.popupCropH + ")");
+                + geometry.popupCropW + "x" + geometry.popupCropH + ")"
+                + " smallStage=(" + geometry.smallStageDX + "," + geometry.smallStageDY + ")");
         }
     }
 
@@ -207,6 +223,27 @@ public final class ClusterLayerController {
 
     private static void applyNow(IDisplayManagerKombiControl dm, int terminal, Geometry geometry,
                                  boolean popup, boolean stockVisible, int stockOpacity) {
+        /* The caller's stage is the stock KDK hint BITFIELD_KDK_POSITION_IN_TUBE, and during
+         * CarPlay the stock nav sends no KDK model updates at all — so it is a stale cache stuck
+         * at its bind() default (popup).  That is why fullscreen always looked right and every
+         * small-stage view was wrong.
+         *
+         * Derive it the way stock does.  ClusterKDKHandlerImpl.setKDKPositionHints():
+         *     isSmallStageActive() -> addHint(8)     "small stage - kdk in tube"
+         *     else                 -> removeHint(8)  "big stage - kdk in flap"
+         * Small stage is the same axis as NAV_VIEW_SIZE_CHOICE == 1, which we already track.
+         * This is skin-independent: Classic does have an in-tube stage, it just inherits the
+         * 210x153 crop from LayoutMIB2HighQ7 instead of overriding it like Sport's 328x180. */
+        popup = !com.luka.carplay.core.AltScreenModule.isSmallScreenViewArea();
+        int forced = ClusterGeomOverride.stage();
+        if (forced == ClusterGeomOverride.STAGE_POPUP) popup = true;
+        else if (forced == ClusterGeomOverride.STAGE_IN_TUBE) popup = false;
+        logDecision(geometry, popup);
+        /* Do NOT apply the layout's small-stage offset (80/81) here.  Stock adds it to the map
+         * planes 33/58 only; the KDK panel and its backing have no view-size dependency at all
+         * (positionKDKBackgrounds / handleKdkDualTerminal read no view size).  Moving the panel
+         * by -476 in Sport singlescreen was measured on the car to break a view that stock keeps
+         * correct.  The offset is logged below for diagnosis, never applied. */
         boolean carplayOwnsCluster = com.luka.carplay.core.AltScreenModule.isConnected();
         boolean navActive = com.luka.carplay.core.AltScreenModule.isNavActive();
         int carplayOpacity = resolveCarPlayOpacity(carplayOwnsCluster, navActive, popup,
@@ -237,24 +274,28 @@ public final class ClusterLayerController {
             }
             if (popup) {
                 /* Popup crop/anchor from the active OEM Layout. */
-                dm.setCropping(MANEUVER, terminal,
-                    geometry.popupCropX, geometry.popupCropY,
-                    geometry.popupCropW, geometry.popupCropH,
-                    geometry.popupX, geometry.popupY,
-                    geometry.popupCropW, geometry.popupCropH);
+                int cx = ClusterGeomOverride.popupCropX(geometry.popupCropX);
+                int cy = ClusterGeomOverride.popupCropY(geometry.popupCropY);
+                int cw = ClusterGeomOverride.popupCropW(geometry.popupCropW);
+                int ch = ClusterGeomOverride.popupCropH(geometry.popupCropH);
+                int dx = ClusterGeomOverride.popupX(geometry.popupX);
+                int dy = ClusterGeomOverride.popupY(geometry.popupY);
+                dm.setCropping(MANEUVER, terminal, cx, cy, cw, ch, dx, dy, cw, ch);
                 dm.setOpacity(MANEUVER, terminal, carplayOpacity);
-                dm.setPosition(BACKING_POPUP, terminal, geometry.popupX, geometry.popupY);
+                dm.setPosition(BACKING_POPUP, terminal, dx, dy);
                 dm.setOpacity(BACKING_POPUP, terminal, carplayOpacity);
                 dm.setOpacity(BACKING_SPORT, terminal, 0);
             } else {
                 /* In-tube crop/anchor differs between Classic and Sport layouts. */
-                dm.setCropping(MANEUVER, terminal,
-                    geometry.inTubeCropX, geometry.inTubeCropY,
-                    geometry.inTubeCropW, geometry.inTubeCropH,
-                    geometry.inTubeX, geometry.inTubeY,
-                    geometry.inTubeCropW, geometry.inTubeCropH);
+                int cx = ClusterGeomOverride.inTubeCropX(geometry.inTubeCropX);
+                int cy = ClusterGeomOverride.inTubeCropY(geometry.inTubeCropY);
+                int cw = ClusterGeomOverride.inTubeCropW(geometry.inTubeCropW);
+                int ch = ClusterGeomOverride.inTubeCropH(geometry.inTubeCropH);
+                int dx = ClusterGeomOverride.inTubeX(geometry.inTubeX);
+                int dy = ClusterGeomOverride.inTubeY(geometry.inTubeY);
+                dm.setCropping(MANEUVER, terminal, cx, cy, cw, ch, dx, dy, cw, ch);
                 dm.setOpacity(MANEUVER, terminal, 100);
-                dm.setPosition(BACKING_SPORT, terminal, geometry.inTubeX, geometry.inTubeY);
+                dm.setPosition(BACKING_SPORT, terminal, dx, dy);
                 dm.setOpacity(BACKING_SPORT, terminal, 100);
                 dm.setOpacity(BACKING_POPUP, terminal, 0);
             }
@@ -266,6 +307,42 @@ public final class ClusterLayerController {
                 Log.w("ClusterLayers", "apply failed: " + t);
             }
         }
+    }
+
+    /** One line per distinct geometry decision — the exact numbers written to the DM.
+     *  Every Classic/Sport/singlescreen bug so far was a guess about which branch ran; this makes
+     *  it readable in /tmp/carplay_java.log instead. Logged only when the tuple changes. */
+    private static void logDecision(Geometry g, boolean popup) {
+        int cropX = popup ? ClusterGeomOverride.popupCropX(g.popupCropX)
+                          : ClusterGeomOverride.inTubeCropX(g.inTubeCropX);
+        int cropY = popup ? ClusterGeomOverride.popupCropY(g.popupCropY)
+                          : ClusterGeomOverride.inTubeCropY(g.inTubeCropY);
+        int cropW = popup ? ClusterGeomOverride.popupCropW(g.popupCropW)
+                          : ClusterGeomOverride.inTubeCropW(g.inTubeCropW);
+        int cropH = popup ? ClusterGeomOverride.popupCropH(g.popupCropH)
+                          : ClusterGeomOverride.inTubeCropH(g.inTubeCropH);
+        int dstX  = popup ? ClusterGeomOverride.popupX(g.popupX)
+                          : ClusterGeomOverride.inTubeX(g.inTubeX);
+        int dstY  = popup ? ClusterGeomOverride.popupY(g.popupY)
+                          : ClusterGeomOverride.inTubeY(g.inTubeY);
+
+        String line = "apply " + g.layoutName
+            + " style=" + com.luka.carplay.core.AltScreenModule.styleLabel()
+            + " view=" + (com.luka.carplay.core.AltScreenModule.isSmallScreenViewArea()
+                          ? "single" : "full")
+            + " stage=" + (popup ? "popup" : "inTube")
+            + " backing=" + (popup ? BACKING_POPUP : BACKING_SPORT)
+            + " src=(" + cropX + "," + cropY + " " + cropW + "x" + cropH + ")"
+            + " dst=(" + dstX + "," + dstY + ")"
+            + " smallStageOffset=(" + g.smallStageDX + "," + g.smallStageDY + ") [not applied]";
+
+        /* Every value that can change the picture is in the line, so comparing the line itself
+         * is both the dedup key and the guarantee that a /tmp/cluster_geom.cfg edit re-logs. */
+        synchronized (LOCK) {
+            if (line.equals(lastAppliedSignature)) return;
+            lastAppliedSignature = line;
+        }
+        Log.i("ClusterLayers", line);
     }
 
     /** Resolve one shared opacity for the maneuver and its backing.
