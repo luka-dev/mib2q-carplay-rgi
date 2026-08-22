@@ -36,7 +36,14 @@ Add  if 8  local.  _airplay._tcp.  CarPlay      <- registered on carplay0
 GENS=3 IDENT=3 INFO=1 SETUP=2 ALT111=1   carplay0 7318/3998 packets
 ```
 
-**Still open:** why the registration is missing. `carplay0` is destroyed and
+**Confirmed after the reboot (2026-08-22, same phone and cable):** the fix holds
+across replugs. `NOSETUP=0` — zero failed generations, where every attempt all day
+had produced 3-6. One generation, immediate success, cluster stream up, and
+`dns-sd` shows `Add if 8 CarPlay` on each connect and `Rmv` on each unplug. So the
+broken state accumulates over a session and a head-unit reboot clears it; it is
+not a permanent property of the phone or the hardware.
+
+**Still open:** why the registration goes missing in the first place. `carplay0` is destroyed and
 recreated by `stopncm.sh`/`startncm.sh` on every dio generation, so `mdnsd` must
 re-register the service each cycle while SI kills dio at ~15 s. That is a race,
 and it is self-feeding: the more the loop churns the less chance it has to win.
