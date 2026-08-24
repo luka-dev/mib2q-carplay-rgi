@@ -8,3 +8,7 @@
 /local_logs/
 /log/
 tools/loader_preview/loader_preview
+
+# Phone-side captures: sysdiagnose tarballs and log archives are hundreds of MB
+# and contain the owner's device logs. Keep them local.
+/logs/
