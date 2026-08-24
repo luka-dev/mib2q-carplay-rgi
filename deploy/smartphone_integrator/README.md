@@ -30,13 +30,24 @@ an explicit supervisor stop, not ordinary dio churn, owns their final teardown.
 Lifecycle semantics:
 
 - the wrapper validates and loads an otherwise-stock PF ruleset extending the
-  CarPlay TCP allow-list from `6030` to `6030:6031`, then guards it for the first
-  30 seconds of a CarPlay generation in case stock network startup reloads
-  its rules. The runtime copy is derived from the currently active stock PF
-  profile (`pf.conf`, `pf.mlan0.conf`, `pf.ppp0.conf`, or `pf.ecm0.conf`) so the
-  guard never replaces Wi-Fi/modem/ECM-specific NAT and ALTQ rules;
-  MU1316's stock rule blocks every other inbound `carplay0` port, while native
-  altScreen requires TCP 6031 beside the main screen's TCP 6030;
+  CarPlay TCP allow-list from `6030` to `6030:6031`. The runtime copy is derived
+  from the currently active stock PF profile (`pf.conf`, `pf.mlan0.conf`,
+  `pf.ppp0.conf`, or `pf.ecm0.conf`) so it never replaces Wi-Fi/modem/ECM-specific
+  NAT and ALTQ rules; MU1316's stock rule blocks every other inbound `carplay0`
+  port, while native altScreen requires TCP 6031 beside the main screen's TCP 6030;
+- the load is guarded against stock's *one* full `pfctl -ef /etc/pf.conf` reload,
+  which `start_network()` runs once early in stock boot (`normal_startup`/
+  `swdl_startup` in `/etc/boot/startup.sh`, mutually exclusive, never re-triggered
+  by Wi-Fi/USB/CarPlay events - confirmed against stock `startup.sh`, not assumed).
+  If a phone is already connected at power-on, SI can start CarPlay before that
+  reload runs, which would silently restore the stock 6030-only allow-list under
+  us. The guard polls at one-second resolution for up to 30 seconds, but only
+  until it has completed once **this power cycle** - tracked by
+  `/tmp/carplay_pf_boot_race_cleared`, which does not survive a reboot, so it is
+  exactly power-cycle-scoped for free. Before this fix the guard's counter was a
+  local shell variable reset on every dio generation, so every reconnection all
+  day re-paid up to 30s of `pfctl -sr` polling (~5s/tick - two calls per tick) it
+  could never have needed after the first;
 - if either renderer already exists when CarPlay starts, it is not restarted;
 - renderer PIDs are kept under `/tmp`; one finite `pidin ar` snapshot seeds the
   files when adopting an older running generation, then startup and the monitor

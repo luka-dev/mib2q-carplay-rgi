@@ -18,6 +18,11 @@ H=/mnt/app/root/hooks
 WLOG=/tmp/carplay_wrapper.log
 STOP_FILE=/tmp/carplay_supervisor.stop
 OWNER_FILE=/tmp/carplay_supervisor.owner
+# Set once the boot-time PF race (see monitor_renderers) has been guarded through
+# to completion in ANY generation this power cycle. /tmp does not survive a unit
+# reboot, so its absence after a real reboot is exactly the right default again -
+# no separate reset logic needed.
+PF_BOOT_RACE_CLEARED_FILE=/tmp/carplay_pf_boot_race_cleared
 DIO_PID=$$
 
 if [ ! -r "$H/carplay_processes.sh" ]; then
@@ -121,13 +126,23 @@ monitor_renderers()
         start_renderer maneuver_render restart
         start_renderer altscreen_render restart
 
-        # start_network() performs a late full `pfctl -ef /etc/pf.conf` during
-        # HU boot. If a connected phone makes SI start CarPlay before that
-        # reload, it silently restores the stock 6030-only allow-list after our
-        # initial setup and iOS's TCP 6031 SYN never reaches alt accept(). Guard
-        # the overlap at one-second resolution for 30 seconds. Keep the normal
-        # two-second monitor cadence (and MR_LIVED_TICKS semantics) unchanged.
-        if [ "$MR_PF_GUARD_TICKS" -lt 15 ]; then
+        # start_network() performs its ONE full `pfctl -ef /etc/pf.conf` reload
+        # early during HU boot (normal_startup/swdl_startup, mutually exclusive,
+        # each calling it exactly once - verified against stock startup.sh, not
+        # re-triggered by WiFi/USB/CarPlay events). If a connected phone makes SI
+        # start CarPlay before that one reload, it silently restores the stock
+        # 6030-only allow-list after our initial setup and iOS's TCP 6031 SYN
+        # never reaches alt accept(). Guard the overlap at one-second resolution
+        # for 30 seconds - but only until it has been guarded through to
+        # completion once THIS POWER CYCLE: the race this defends against cannot
+        # recur once start_network's single reload has already happened, yet
+        # MR_PF_GUARD_TICKS used to reset to 0 on every dio generation, re-paying
+        # the ~5s/tick pfctl -sr cost (see cp_altscreen_firewall_ready) on every
+        # reconnection all day, competing with dio for wall-clock time in exactly
+        # the window that matters for NCM to survive to the next USB teardown.
+        if [ -e "$PF_BOOT_RACE_CLEARED_FILE" ]; then
+            sleep 2
+        elif [ "$MR_PF_GUARD_TICKS" -lt 15 ]; then
             if ! cp_altscreen_firewall_ready; then
                 echo "[supervisor] stock PF reload detected - restoring carplay0 TCP 6030:6031" >> "$WLOG"
                 cp_enable_altscreen_firewall ||
@@ -141,6 +156,10 @@ monitor_renderers()
             fi
             sleep 1
             MR_PF_GUARD_TICKS=`expr "$MR_PF_GUARD_TICKS" + 1`
+            if [ "$MR_PF_GUARD_TICKS" -ge 15 ]; then
+                : > "$PF_BOOT_RACE_CLEARED_FILE"
+                echo "[supervisor] PF boot race window cleared - no more guarding this power cycle" >> "$WLOG"
+            fi
         else
             sleep 2
         fi
