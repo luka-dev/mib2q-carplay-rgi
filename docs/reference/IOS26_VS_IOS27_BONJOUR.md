@@ -18,30 +18,35 @@ Binaries compared (same build family, same arch):
 `caraccessoryd`'s growth is almost entirely a new Swift `CAFDLatencyMonitor` (write-timeout and
 high-frequency-alert sampling) — unrelated to session setup.
 
-The relevant change is in **`carkitd`**. iOS 26 contains only the *declarations*:
+The relevant change is in **`carkitd`**, and it is narrow.
 
-    _OBJC_CLASS_$_CARSessionRequestBonjourHost
-    v24@0:8@?<v@?B@"CARSessionRequestBonjourHost"@"NSError">16
-    v32@0:8@"NSString"16@?<v@?B@"CARSessionRequestBonjourHost"@"NSError">24
+Corrected 2026-08-24: an earlier version of this note claimed iOS 26 "carries only the
+declarations, no implementation". That was wrong. The `fetchCarPlayControlAdvertising*` family is
+implemented in **both** builds, and the older `wantsCarPlayControlAdvertising*` family is present
+in both (6 occurrences each). The real delta is one log parameter and two selectors:
 
-iOS 27 has the class, the same signatures, **and a live implementation**:
+| | iOS 26.6 | iOS 27.0b6 |
+|---|---|---|
+| `fetch…ForUSBWithReply:` log | `YES for vehicle %@` | `YES for vehicle %@`**`, host: %@`** |
+| `fetch…ForWiFiUUID:` log | no host | `YES for vehicle %@, host: %@` |
+| `updateBonjourHost:completion:` | **absent** | present |
+| `updateBonjourHostForVehicle:reply:` | **absent** | present |
+| `CARSessionRequestBonjourHost` class | present | present |
 
-    fetchCarPlayControlAdvertisingForUSBWithReply:
-    fetchCarPlayControlAdvertisingForWiFiUUID:reply:
-    updateBonjourHost:completion:
-    updateBonjourHostForVehicle:reply:
-    [DISPLAY_CONFIGURATION] fetchCarPlayControlAdvertisingForUSBWithReply: YES for vehicle %@, host: %@
-    [DISPLAY_CONFIGURATION] fetchCarPlayControlAdvertisingForUSBWithReply: Requested advertising with host
-    [DISPLAY_CONFIGURATION] fetchCarPlayControlAdvertisingForUSBWithReply: _isRestricted, should not advertise
+So both versions decide *whether* to advertise CarPlay control over USB for a given vehicle.
+Only iOS 27 carries a **host** alongside that decision and has a path to push a corrected host
+into AirPlay:
+
     [DISPLAY_CONFIGURATION] updateBonjourHostForVehicle: updating BonjourHost for vehicle %@ with displayScaleMode=%ld
     [DISPLAY_CONFIGURATION] updateBonjourHostForVehicle: sending updated BonjourHost to AirPlay: %@
     [DISPLAY_CONFIGURATION] updateBonjourHostForVehicle: successfully updated BonjourHost for vehicle %@
     [DISPLAY_CONFIGURATION] updateBonjourHostForVehicle: failed to update BonjourHost in AirPlay: %@
 
-In iOS 27 `carkitd` decides for itself whether to advertise CarPlay control over USB and **with
-which host**, then pushes a corrected `BonjourHost` into AirPlay. In iOS 26 that plumbing is
-declared but not driven: the phone must take the head unit's `_airplay._tcp` advertisement as it
-finds it.
+iOS 26 has the type but no way to update it: it must use the host the head unit advertised.
+
+**This is a hypothesis consistent with the diff and the field data, not proof.** The strings show
+that the `host` parameter and the update path are new; they do not show the full semantics. The
+proof would be `dns-sd -L` on the unit during a failing cycle.
 
 ## What this means for us
 
