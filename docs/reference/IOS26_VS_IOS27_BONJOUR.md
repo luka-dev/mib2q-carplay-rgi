@@ -75,6 +75,23 @@ this head unit is not a stock car: we advertise a second display for the cluster
 asset. A single `zoomFactor` for a car that presents two displays is the kind of mismatch iOS 27's
 per-display model removes.
 
+### One bug this already found
+
+Independent of any iOS theory, the cluster's advertised physical size was simply wrong.
+
+| display | pixels | diagonal | px/mm | dpi | physical |
+|---|---|---|---:|---:|---|
+| main MMI | 1024x480 | 8.25" | 5.40 | 137 | 190 x 89 mm |
+| cluster, real | 1440x542 | 12.3" | 4.93 | 125 | 292 x 110 mm |
+| cluster, **as advertised** | 1440x542 | — | 8.00 | **203** | **180 x 68 mm** |
+
+180 x 68 implies a **7.6"** cluster. It also inverts the density relationship: a real Audi presents
+a cluster slightly *coarser* than its main screen (125/137 = **0.91x**); we claimed **1.48x**.
+With one car-wide `zoomFactor` no value can be right for a 1.48x mismatch. Fixed to 292 x 110 in
+`hook/altscreen/altscreen_hook.c` (`CLUSTER_PHYS_W/H`), which also lands the ratio at 0.91x.
+
+This is worth having regardless of whether it turns out to be *the* trigger.
+
 **Cheap decisive test, no new tooling:** we already gate the second-display advertisement behind
 an env knob. Set `ALTSCREEN_ADVERT_DISPLAYS=0` in `carplay_startup.sh` (`env_on()` checks the
 value, so `=0` really disables it; the change needs a dio-supervisor relaunch) and try the phone

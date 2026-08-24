@@ -248,6 +248,23 @@ static int set_i64(void *d, const char *key, int64_t val)
 #define CLUSTER_W       1440
 #define CLUSTER_H       542
 
+/* Physical panel size in millimetres, as widthPhysical/heightPhysical.
+ *
+ * The Audi Virtual Cockpit is a 12.3" panel: 1440x542 across a 312.4 mm diagonal is 4.93 px/mm,
+ * i.e. 292 x 110 mm at ~125 dpi.  This used to advertise 180 x 68, which is 8.00 px/mm = 203 dpi
+ * and implies a 7.6" cluster - wrong by a wide margin, and wrong in the direction that matters.
+ *
+ * It matters because of how the phone derives scale.  The main MMI is 1024x480 on 8.25", i.e.
+ * 5.40 px/mm = 137 dpi (190 x 89 mm).  A real Audi therefore presents a cluster that is slightly
+ * COARSER than its main screen (125/137 = 0.91x).  At 180 x 68 we claimed the opposite and by a
+ * lot: 203/137 = 1.48x.  iOS <= 26 carries a single car-wide zoomFactor for both displays
+ * (verified by decompiling -[CRCarKitServiceAgent fetchCarPlayControlAdvertisingForUSBWithReply:]:
+ * initWithDisplayScaleMode:zoomFactor:, one value, looked up by vehicle UUID), so no zoom can be
+ * correct for a 1.48x mismatch; iOS 27 replaced it with zoomFactorByDisplayIndex.  See
+ * docs/reference/IOS26_VS_IOS27_BONJOUR.md. */
+#define CLUSTER_PHYS_W  292
+#define CLUSTER_PHYS_H  110
+
 /* Instrument-cluster calibration grid is 16 columns (A..P) by 6 rows on the
  * 1440x542 panel: one column is exactly 90 px; the row boundaries are rounded
  * to 0/90/181/271/361/452/542.
@@ -394,8 +411,8 @@ static void *build_cluster_dict(int night)
         set_i64(d, "maxFPS", 60) != 0 ||
         set_i64(d, "widthPixels", CLUSTER_W) != 0 ||
         set_i64(d, "heightPixels", CLUSTER_H) != 0 ||
-        set_i64(d, "widthPhysical", 180) != 0 ||
-        set_i64(d, "heightPhysical", 68) != 0)
+        set_i64(d, "widthPhysical", CLUSTER_PHYS_W) != 0 ||
+        set_i64(d, "heightPhysical", CLUSTER_PHYS_H) != 0)
         goto fail;
     /* CarKit's CARDisplayInfo parser reads the display identifier as "uid" (verified in the
      * iOS 26.1 CarKit decompile — initWithPhysicalScreenDictionary reads objectForKey:@"uid";
