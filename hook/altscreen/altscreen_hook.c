@@ -408,7 +408,11 @@ static void *build_cluster_dict(int night)
     if (!d) return 0;
     if (set_str(d, "name", "Instrument Cluster") != 0 ||
         set_i64(d, "type", 111) != 0 ||
-        set_i64(d, "maxFPS", 60) != 0 ||
+        /* 30, matching stock: dio_manager.json declares "screen": { "maxFPS": 30 } for the main
+         * screen, and 30 is also what we actually deliver on the cluster - AltScreenModule's
+         * CLUSTER_FPS is 30, maneuver_render's CR_TARGET_FPS is 30, and altscreen_render presents
+         * at 30.  Advertising 60 promised twice the rate that exists. */
+        set_i64(d, "maxFPS", 30) != 0 ||
         set_i64(d, "widthPixels", CLUSTER_W) != 0 ||
         set_i64(d, "heightPixels", CLUSTER_H) != 0 ||
         set_i64(d, "widthPhysical", CLUSTER_PHYS_W) != 0 ||

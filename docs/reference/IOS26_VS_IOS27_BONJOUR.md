@@ -119,8 +119,11 @@ Both confirmed values recover their real diagonals — 8.17" against the owner's
 The probe in `main_disp_modernize` is kept for a smaller question: which `sysConst(522)` branch this
 car takes, and that dio passes the value into `/info` unchanged.
 
-Incidental find worth a bisect entry: `dio_manager.json` sets `"screen": { "maxFPS": 30 }` for the
-main screen, while we advertise `maxFPS 60` on the cluster.
+`maxFPS` was the same kind of mismatch and is fixed too: `dio_manager.json` declares
+`"screen": { "maxFPS": 30 }` for the main screen, and 30 is also what we actually deliver on the
+cluster — `AltScreenModule.CLUSTER_FPS` is 30, `maneuver_render`'s `CR_TARGET_FPS` is 30, and
+`altscreen_render` presents at 30. Advertising 60 promised twice the rate that exists, so the
+cluster now advertises 30.
 
 Either way, claiming a 7.6" 203 dpi Virtual Cockpit was wrong on its own merits.
 
