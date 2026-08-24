@@ -254,14 +254,19 @@ static int set_i64(void *d, const char *key, int64_t val)
  * i.e. 292 x 110 mm at ~125 dpi.  This used to advertise 180 x 68, which is 8.00 px/mm = 203 dpi
  * and implies a 7.6" cluster - wrong by a wide margin, and wrong in the direction that matters.
  *
- * It matters because of how the phone derives scale.  The main MMI is 1024x480 on 8.25", i.e.
- * 5.40 px/mm = 137 dpi (190 x 89 mm).  A real Audi therefore presents a cluster that is slightly
- * COARSER than its main screen (125/137 = 0.91x).  At 180 x 68 we claimed the opposite and by a
- * lot: 203/137 = 1.48x.  iOS <= 26 carries a single car-wide zoomFactor for both displays
- * (verified by decompiling -[CRCarKitServiceAgent fetchCarPlayControlAdvertisingForUSBWithReply:]:
- * initWithDisplayScaleMode:zoomFactor:, one value, looked up by vehicle UUID), so no zoom can be
- * correct for a 1.48x mismatch; iOS 27 replaced it with zoomFactorByDisplayIndex.  See
- * docs/reference/IOS26_VS_IOS27_BONJOUR.md. */
+ * Stock advertises 188 x 88 for the main panel (AbstractTerminalModeConfiguration:
+ * sysConst(522) == 2 ? 188 : 152 / 88 : 91), i.e. 5.45 px/mm = 138 dpi, implying 8.17" - which
+ * matches the real 8.25" screen.  292 x 110 implies 12.28" against a real 12.3", so the cluster is
+ * legitimately slightly COARSER than the main screen (125/138 = 0.91x).  180 x 68 claimed the
+ * opposite and by a lot (1.47x) for a panel it described as 7.6".
+ *
+ * NOTE, so nobody rebuilds a story on this: this is a correctness fix, not a known fix for the
+ * old-iOS connect failures.  iOS <= 26 does carry a single car-wide zoomFactor
+ * (-[CRCarKitServiceAgent fetchCarPlayControlAdvertisingForUSBWithReply:] ->
+ * initWithDisplayScaleMode:zoomFactor:) where iOS 27 uses zoomFactorByDisplayIndex, but that zoom
+ * is looked up from the phone's own CRCarPlayCapabilities store by vehicle UUID - it is NOT derived
+ * from these fields.  Where our physical size is actually read is CarKit's display parsing, which
+ * has not been decompiled for this field.  See docs/reference/IOS26_VS_IOS27_BONJOUR.md. */
 #define CLUSTER_PHYS_W  292
 #define CLUSTER_PHYS_H  110
 

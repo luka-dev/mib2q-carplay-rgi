@@ -86,9 +86,20 @@ Independent of any iOS theory, the cluster's advertised physical size was simply
 | cluster, **as advertised** | 1440x542 | — | 8.00 | **203** | **180 x 68 mm** |
 
 180 x 68 implies a **7.6"** cluster. It also inverts the density relationship: a real Audi presents
-a cluster slightly *coarser* than its main screen (125/137 = **0.91x**); we claimed **1.48x**.
-With one car-wide `zoomFactor` no value can be right for a 1.48x mismatch. Fixed to 292 x 110 in
-`hook/altscreen/altscreen_hook.c` (`CLUSTER_PHYS_W/H`), which also lands the ratio at 0.91x.
+a cluster slightly *coarser* than its main screen (**0.91x**); we claimed **1.47x**. Fixed to
+292 x 110 in `hook/altscreen/altscreen_hook.c` (`CLUSTER_PHYS_W/H`).
+
+**This is a correctness fix, not a known fix for the connect failures — do not rebuild a causal
+story on it.** An earlier revision of this note argued that a single car-wide `zoomFactor` cannot
+reconcile a 1.47x density mismatch. The decompilation does not support that: iOS <= 26 takes the
+zoom from the phone's own `+[CRCarPlayCapabilities fetchCarCapabilitiesWithIdentifier:<vehicle
+UUID>]` store, **not** from our `widthPhysical`/`heightPhysical`. Our density never enters that
+path. Where the advertised physical size *is* read is CarKit's display parsing, which has not been
+decompiled for this field.
+
+What the decompilation *does* imply is worth a separate test: if iOS <= 26 derives the zoom from a
+capabilities record keyed by **vehicle UUID**, the state of that record on the phone is a variable.
+Forgetting the car in CarPlay settings and re-pairing resets it.
 
 **Where the main panel's physical size comes from — and it is not zero.** `dio_manager` logs it at
 `<START_CARPLAY>` as `Physical Dimensions(w,h)` from `CDSICarplayImpl`, i.e. the HMI supplies it
