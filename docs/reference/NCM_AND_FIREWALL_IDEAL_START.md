@@ -101,31 +101,36 @@ Even stock "tupilo" (was slightly slow) because `start_network &` and `start_hmi
 (`startup.sh:1555-1561`). The persistent-pf edit also helps there: the ruleset is correct before
 either finishes, so there is no window where the port is missing.
 
-## A real stock defect in NCM bringup
+## The startncm.sh en-dash: cosmetic, NOT a defect (retracted)
 
 `/etc/scripts/startncm.sh` mounts `devnp-usbdnet.so` then runs:
 
     if if_up -p ${IF_NAME} <U+2013>s 2 <U+2013>r 1
 
-The `s`/`r` flags are **U+2013 en-dashes, not ASCII hyphens** (verified byte-wise). So `if_up` never
-receives `-s 2 -r 1`; its retry tuning is silently dropped and `carplay0` comes up
-non-deterministically — a concrete reason "even stock was flaky". On the `if_up` failure branch the
-stock script prints `not found` and does **not** `ifconfig up`, leaving the interface created but
-down.
+The `s`/`r` flags really are U+2013 en-dashes, not ASCII hyphens — verified byte-identical across
+two independent extractions (same md5 `3135298af5f4ade6df94eff15b486fd9`). An earlier version of
+this note called that a defect that makes NCM flaky. **That was wrong.** Reading `if_up`'s own usage
+(`ifs2/ifs_coreservices3/bin/if_up`):
 
-`deploy/smartphone_integrator/startncm.sh` is our drop-in replacement: identical mount (same options,
-MACs, `npkt`), ASCII flags, a wider `-s 1 -r 10` poll, and it brings the interface up even when
-`if_up` is inconclusive instead of dead-ending. `install_startncm.sh` writes it over
-`/mnt/system/etc/scripts/startncm.sh` persistently (same flash source + ramdisk-copy mechanism as
-the pf.conf edit), idempotent with a `.stock` backup. Takes effect on the next OTG device-mode
-start — no reboot.
+    if_up [-ap] [-r retries] [-s seconds] interface...
+      -p  wait until present;  -a  wait until ALL present;  default: a SINGLE interface present
 
-This is a robustness fix for the bringup path, not the churn fix. It helps the cases where the
-interface exists but does not come up cleanly (the `No Local IP` verdicts); the dominant
-`No Network Interface` verdicts are the OTG teardown/restart, addressed by stopping the ~15 s dio
-churn.
+`if_up` uses POSIX `getopt`, which stops option parsing at the first non-option operand
+(`carplay0`). So `<U+2013>s 2 <U+2013>r 1` become extra interface operands, not flags. But `-a` is
+not set, so `if_up` succeeds as soon as **any one** listed interface is present — and `carplay0` was
+just mounted, so it is present on the first walk. The en-dash tokens are harmless phantom operands;
+the only thing lost is the intended retry tuning, which never matters because the interface is
+already there.
 
-## What NOT to do
+Empirical proof: this exact script ships in every production MHI2Q and stock CarPlay works. The
+en-dash cannot be breaking NCM. Likely origin: an editor/wiki auto-correcting hyphens to typographic
+dashes (Word/Confluence smart-dashes, or a paste from a PDF spec) when the script was authored;
+never caught because it does nothing.
+
+No startncm replacement is shipped — it would have been a deploy step and a write to `/mnt/system`
+for zero behavioural change.
+
+## What NOT to do## What NOT to do
 
 Do not chase a faster `startncm.sh` or a parallel mount — the mount is already a one-shot the moment
 the class appears, and it is not the bottleneck. The bottleneck is teardown/restart. Fix the churn.
