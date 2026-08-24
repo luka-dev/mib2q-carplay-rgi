@@ -1,0 +1,22 @@
+{
+  "exec": "dio_manager",
+  "path": "/mnt/app/eso/bin/apps",
+  "params": "",
+  "envs": [
+    "LD_LIBRARY_PATH=/mnt/app/root/lib-target:/eso/lib:/mnt/app/usr/lib:/mnt/app/armle/lib:/mnt/app/armle/lib/dll:/mnt/app/armle/usr/lib",
+    "IPL_CONFIG_DIR_DIO_MANAGER=/etc/eso/production"
+  ],
+  "startupTimeout": 10000,
+  "stopTimeout": 3000,
+  "watchdogTimeout": 60000,
+  "disableWatchdog": false,
+  "maxSetupRetries": 2,
+  "maxRuntimeRetries": 2,
+  "decoderUse": false,
+  "selfTermination": true,
+  "cleanupScript": "/etc/scripts/carplay_cleanup.sh",
+  "retriesBeforeDowntime": 3,
+  "downtime": 30000,
+  "restartDelay": 2000,
+  "portResetTime": 250
+}
