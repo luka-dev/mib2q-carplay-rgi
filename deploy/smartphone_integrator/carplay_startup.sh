@@ -105,6 +105,23 @@ monitor_renderers()
     MR_EXPLICIT_STOP=0
     MR_LIVED_TICKS=0
     echo "[supervisor] renderer monitor watching dio pid=$MR_DIO_PID" >> "$WLOG"
+
+    # Renderer adoption runs HERE, not before the exec, because smartphone_integrator's
+    # children.carplay.startupTimeout (10 s) starts when SI spawns THIS SCRIPT — not when
+    # dio_manager starts. Every millisecond spent before `exec` is taken out of dio's budget.
+    # `pidin ar`, up to two `netstat -an` and a 1 s settle used to run in that window; if dio
+    # then misses the deadline SI reports TIMEOUT_STARTUP, and per SI_STACK_RESTART_RE.md that
+    # branch calls prepare(retry=1) -> RestartDeviceStack -> stopncm.sh -> `carplay0` destroyed,
+    # which is exactly the "No Network Interface" the phone reports.
+    # Renderers are persistent services and no dio startup step waits on them, so adopting them
+    # a few hundred ms later costs nothing.
+    cp_seed_renderer_pid_files
+    # One Qualcomm EGL client at a time: altscreen_render binds :19831 only after its early
+    # EGL/Screen output exists, and a dual eglInitialize stampede is what the settle avoids.
+    start_renderer altscreen_render initial
+    sleep 1
+    start_renderer maneuver_render initial
+
     while [ -d "/proc/$MR_DIO_PID" ]; do
         if [ -e "$STOP_FILE" ]; then
             echo "[supervisor] monitor observed cleanup request" >> "$WLOG"
@@ -153,17 +170,8 @@ echo "===== carplay_startup.sh run pid=$$ ppid=$PPID =====" >> "$WLOG"
 # its one-shot request before creating any graphics clients or exec'ing dio.
 cp_usb_consume_pending_reset
 
-# One finite process snapshot at most. All following checks use the recorded PID
-# and /proc directly, keeping expensive pidin enumeration out of dio startup.
-cp_seed_renderer_pid_files
-# Initialise one Qualcomm EGL client at a time. altscreen_render binds :19831
-# only after its early EGL/Screen output exists; one second is enough on MU1316
-# to avoid the dual eglInitialize stampede without consuming the 10 s SI startup
-# budget. Both processes remain persistent after this generation of dio exits.
-start_renderer altscreen_render initial
-sleep 1
-start_renderer maneuver_render initial
-
+# Nothing else may run before the exec: renderer adoption now happens inside the
+# monitor (see monitor_renderers) so dio_manager gets the full SI startup budget.
 cd "$DIODIR" 2>/dev/null || {
     echo "[supervisor] cannot cd to $DIODIR" >> "$WLOG"
     cp_stop_renderers "$WLOG"

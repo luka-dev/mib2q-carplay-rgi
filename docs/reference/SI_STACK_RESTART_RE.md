@@ -82,3 +82,39 @@ Read-only: no reboot, no redeploy.
 | +1376 | portResetNeeded |
 | +1378 | teardownIndication |
 | +1380 | restartMe |
+
+---
+
+## Static-only conclusion: the startup-budget path
+
+No HU logs were available, so this is reasoned from the binaries and our own scripts.
+
+`children.carplay.startupTimeout` is **10000 ms**, and SI starts that clock when it spawns the
+configured `exec` — for us that is `carplay_startup.sh`, not `dio_manager`. Everything the wrapper
+did before `exec` was therefore subtracted from dio's startup budget:
+
+| pre-exec step | cost |
+|---|---|
+| `cp_usb_consume_pending_reset` | `sleep 1` on the latched USB-reset path (rare) |
+| `cp_seed_renderer_pid_files` | one full `pidin ar` process snapshot |
+| `start_renderer altscreen_render initial` | `cp_renderer_healthy` → `netstat -an`; `cp_kill_renderer … 1` adds a 1 s grace when the adopted renderer is wedged |
+| explicit settle | `sleep 1` |
+| `start_renderer maneuver_render initial` | second `netstat -an` on the same path |
+
+Guaranteed floor ≈ 1 s plus a `pidin` and up to two `netstat`s; the bad path reaches ~3-4 s. If dio
+then misses the 10 s deadline, SI reports **`TIMEOUT_STARTUP`**, which is exactly the branch proven
+above: `prepare(retry=1)` → `RestartDeviceStack` → `stopncm.sh` → `ifconfig carplay0 destroy` →
+the phone's `USB eligible: N (No Network Interface)`. The previously observed ~15 s generation
+lifetime is consistent with `startupTimeout 10000` + `restartDelay 3000` + overhead.
+
+**Status: hypothesis.** The branch and its consequence are proven by decompilation; that we
+actually hit `TIMEOUT_STARTUP` is not — that needs one `[CSIStateRunning]` line from the HU slog.
+
+### Change applied
+
+`carplay_startup.sh` now performs renderer adoption **inside `monitor_renderers`**, which is forked
+just before the exec, instead of on the pre-exec path. `pidin ar`, both `netstat -an` probes and the
+1 s EGL settle now run concurrently with dio's startup rather than ahead of it, giving dio the full
+SI budget. Renderers are persistent services and no dio startup step waits on them, so adopting
+them a few hundred ms later is free. `cp_usb_consume_pending_reset` deliberately stays before the
+exec — it must not race a dio that is already creating graphics clients.
