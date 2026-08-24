@@ -127,7 +127,7 @@ monitor_renderers()
         # initial setup and iOS's TCP 6031 SYN never reaches alt accept(). Guard
         # the overlap at one-second resolution for 30 seconds. Keep the normal
         # two-second monitor cadence (and MR_LIVED_TICKS semantics) unchanged.
-        if [ "$MR_PF_GUARD_TICKS" -lt 15 ]; then
+        if [ "${CP_PF_PERSISTENT:-0}" != 1 ] && [ "$MR_PF_GUARD_TICKS" -lt 15 ]; then
             if ! cp_altscreen_firewall_ready; then
                 echo "[supervisor] stock PF reload detected - restoring carplay0 TCP 6030:6031" >> "$WLOG"
                 cp_enable_altscreen_firewall ||
@@ -168,11 +168,19 @@ rm -f "$STOP_FILE"
 echo "$DIO_PID" > "$OWNER_FILE"
 echo "===== carplay_startup.sh run pid=$$ ppid=$PPID =====" >> "$WLOG"
 
-# SDK 210's stock firewall admits only the main screen on TCP 6030. Enable the
-# native adjacent altScreen port before either listener is advertised. Failure
-# is intentionally non-fatal: ordinary CarPlay 110 must still be able to start.
-cp_enable_altscreen_firewall ||
-    echo "[supervisor] continuing without altScreen TCP 6031 firewall rule" >> "$WLOG"
+# altScreen needs carplay0 TCP 6031 beside the stock 6030. The permanent home for
+# that is /mnt/system/etc/pf.conf (install_persistent_pf.sh): start_network loads it
+# at boot, so the live ruleset already carries 6030:6031 and there is nothing to do
+# here and no reload to fight. Only when that persistent edit is absent do we fall
+# back to loading it at runtime and arming the boot-overlap guard below.
+if cp_altscreen_firewall_ready; then
+    CP_PF_PERSISTENT=1
+    echo "[supervisor] altScreen TCP 6031 already in ruleset (persistent pf.conf); no runtime PF work" >> "$WLOG"
+else
+    CP_PF_PERSISTENT=0
+    cp_enable_altscreen_firewall ||
+        echo "[supervisor] continuing without altScreen TCP 6031 firewall rule" >> "$WLOG"
+fi
 
 # A previous monitor may have proved the independent pre-RTSP USB wedge. Consume
 # its one-shot request before creating any graphics clients or exec'ing dio.
