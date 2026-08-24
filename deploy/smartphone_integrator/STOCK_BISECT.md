@@ -1,5 +1,13 @@
 # Bisecting our own supervisor against stock
 
+> **CORRECTION 2026-08-24 (user).** SI kills dio routinely — on disconnect and around the
+> normal connection cycle. Stock `children.carplay` sets `selfTermination: true` and a
+> `cleanupScript` that slays `mdnsd` every time, i.e. a dying dio generation is the DESIGN, not an
+> anomaly. So "the ~15 s dio churn" below is the wrong frame: dio generations ending is normal and
+> stopping them is not the goal. The real question is **why a normal dio cycle takes `carplay0`
+> with it**. See "What actually has to be answered" at the end. The wrapper-cost measurements in
+> this doc are still valid as measurements; only their significance changes.
+
 `CONNECT_FAILURE_ROOT_CAUSE.md` established that the phone fails with
 `USB eligible: N (No Network Interface)` and that the trigger is the ~15 s dio generation churn.
 The churn may well be self-inflicted. This is how to find out without guessing.
@@ -63,3 +71,40 @@ drops `LD_PRELOAD` — the wrapper and all of its startup work still run under t
 
 Nothing here restarts anything on its own: replacing the JSON takes effect on the next CarPlay
 start.
+
+
+---
+
+## What actually has to be answered (post-correction)
+
+A dio generation ending is normal. `carplay0` disappearing is not — it is created by
+`startncm.sh` when the phone enumerates our NCM interface, and destroyed by `stopncm.sh`
+(`ifconfig carplay0 destroy`). There are exactly two callers of `stopncm.sh`:
+
+1. **USB removal** — `usblauncher_otg.lua` `func_removal` on the NCM interface. Fires when the
+   USB device stack actually goes away.
+2. **smartphone_integrator itself** — `smartphone_integrator.json` sets
+   `"otgStackCleanupScript": "/etc/scripts/stopncm.sh"`. SI runs it as part of restarting the OTG
+   stack (`CMediaConnectionServiceJob_RestartDeviceStack` / `_RestartHostStack` exist in the
+   binary's vtables).
+
+So SI has a direct path to destroying `carplay0` that has nothing to do with unplugging the
+phone. The open question is what escalates SI onto that path. Candidate: retry exhaustion —
+`maxRuntimeRetries: 2`, `retriesBeforeDowntime: 3`, `downtime: 30000`, `portResetTime: 250`.
+
+### The one log line that settles it
+
+SI prints, on every app-state transition:
+
+```
+[CSIStateRunning] %s : App=%s with [deviceID=%i|oldAppState=%s|reportedAppState=%s|newAppState=%s|
+  oldRemovedFlag=%s|newRemovedFlag=%s|runtimeRetries=%i|setupRetries=%i|downTimeRetries=%i|
+  portResetNeeded=%d|teardownIndication=%d|restartMe=%d]
+```
+
+plus `AppState=%s for app=%s, retry triggered...!` and `... ne more runtime retries left!`.
+
+Grep the HU slog for `CSIStateRunning` across a failing session and read `runtimeRetries`,
+`portResetNeeded` and `teardownIndication`. That says directly whether SI is escalating to a port
+reset / stack restart (which would explain `No Network Interface`), or whether `carplay0` is being
+lost some other way. This is a read-only diagnostic — no reboot, no redeploy.
