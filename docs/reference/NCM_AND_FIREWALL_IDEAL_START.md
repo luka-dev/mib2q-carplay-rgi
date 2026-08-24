@@ -101,6 +101,30 @@ Even stock "tupilo" (was slightly slow) because `start_network &` and `start_hmi
 (`startup.sh:1555-1561`). The persistent-pf edit also helps there: the ruleset is correct before
 either finishes, so there is no window where the port is missing.
 
+## A real stock defect in NCM bringup
+
+`/etc/scripts/startncm.sh` mounts `devnp-usbdnet.so` then runs:
+
+    if if_up -p ${IF_NAME} <U+2013>s 2 <U+2013>r 1
+
+The `s`/`r` flags are **U+2013 en-dashes, not ASCII hyphens** (verified byte-wise). So `if_up` never
+receives `-s 2 -r 1`; its retry tuning is silently dropped and `carplay0` comes up
+non-deterministically — a concrete reason "even stock was flaky". On the `if_up` failure branch the
+stock script prints `not found` and does **not** `ifconfig up`, leaving the interface created but
+down.
+
+`deploy/smartphone_integrator/startncm.sh` is our drop-in replacement: identical mount (same options,
+MACs, `npkt`), ASCII flags, a wider `-s 1 -r 10` poll, and it brings the interface up even when
+`if_up` is inconclusive instead of dead-ending. `install_startncm.sh` writes it over
+`/mnt/system/etc/scripts/startncm.sh` persistently (same flash source + ramdisk-copy mechanism as
+the pf.conf edit), idempotent with a `.stock` backup. Takes effect on the next OTG device-mode
+start — no reboot.
+
+This is a robustness fix for the bringup path, not the churn fix. It helps the cases where the
+interface exists but does not come up cleanly (the `No Local IP` verdicts); the dominant
+`No Network Interface` verdicts are the OTG teardown/restart, addressed by stopping the ~15 s dio
+churn.
+
 ## What NOT to do
 
 Do not chase a faster `startncm.sh` or a parallel mount — the mount is already a one-shot the moment
