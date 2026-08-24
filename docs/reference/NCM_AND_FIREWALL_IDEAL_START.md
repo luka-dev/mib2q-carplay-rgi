@@ -141,3 +141,108 @@ the class appears, and it is not the bottleneck. The bottleneck is teardown/rest
 
 Takes effect on next boot (ramdisk /etc rebuild) or immediately if followed by a manual
 `pfctl -ef /etc/pf.conf`. Then the PF code can be removed from the wrapper.
+
+---
+
+# Stock connect path, re-read from the firmware (2026-08-24)
+
+Source: `Firmwares/HU/MHI2Q_US_AUG22_P5087_MU1316/extracted`. Everything below was read out of the
+stock files or decompiled, not inferred.
+
+## The chain, end to end
+
+1. `startup.sh:start_usblauncher()` launches usblauncher **instance 0** on the host port
+   (`-n /dev/io-usb/io-usb -S 0`). Verbosity defaults to **`-vv`** — the flag files only raise it
+   to `-vvvvvv`; there is no quiet setting.
+2. `usblauncher.lua` detects the MediaConnector hub (`0x0424:0x4040` / `0x0424:0x2530`) and starts
+   usblauncher **instance 1** on the OTG port with `-w 10000`.
+3. `smartphone_integrator` drives the OTG stack over PPS `/ramdisk/pps/device/usb_ctrl1`
+   (`start_stack::host` / `device,2` / `none`), per `smartphone_integrator.json` → `usb.launcher`.
+4. Phone plugged in: seen first as an Apple device in **host** mode. `usblauncher_otg.lua` matches
+   `product(0x05AC, 0x1200, 0x12FF)` and runs `driver"echo dummy iOS driver"` — a deliberate no-op
+   whose only job is to let usblauncher issue `role_swap`.
+5. Role reversal → we become the **device**: composite gadget, iAP2 `0xFF/0xF0/0x00` and
+   NCM `0x02/0x0d/0x00`.
+6. The phone (now host) enumerates us. `usblauncher_otg.lua` fires per interface:
+   - iAP2 → `io-otg-cinemo -s /dev/io-usb/otg_dev -lc 212 -v -t 8`
+   - NCM  → `startncm.sh /dev/io-usb/otg_dev carplay io-pkt`
+7. `startncm.sh` mounts `devnp-usbdnet.so` (`protocol=ncm, npkt=10, mac=020022446688`), then
+   `if_up -p carplay0`, then `ifconfig carplay0 up`.
+8. The IPv6 link-local `fe80::22ff:fe44:6688%carplay0` comes up — confirmed by the stock
+   `CP_get_ip_address.sh`, which documents exactly that address. CarPlay rides link-local IPv6.
+
+## Three suspects cleared (do not re-investigate)
+
+- **`-w 10000` on the second usblauncher is NOT a 10 s delay.** Decompiled `start_usb_ctrl_thread`
+  (`usblauncher` @ `0x106b60`): it polls `eaccess()` on the ctrl path every 50 ms and **breaks out
+  as soon as the path is absent** — it waits for a previous instance to release `usb_ctrl1`.
+  On a clean boot it exits on the first iteration. `-w` is a timeout, not a sleep.
+- **The en-dashes in stock `startncm.sh` (`if_up -p ${IF_NAME} –s 2 –r 1`) cost nothing.**
+  Decompiled `if_up` main: `v7 = argc - optind; if (!v5) v7 = 1;` — without `-a` it needs
+  **one** matching interface out of the operand list and `exit(0)`s on the first hit. The mangled
+  `–s 2 –r 1` just become extra operands that are never matched. Defaults (`retries=5`,
+  `seconds=1`) only apply while `carplay0` does not exist yet. `-p` additionally skips the
+  IPv4-address check, so it returns on interface presence alone.
+- **`connect_poll = 100`** in `Device_Stack` is already a stock optimisation — the comment says
+  "poll 100ms in order to improve CarPlay connection times".
+
+## Where the time actually goes
+
+### IPv6 DAD — ~1 s, on every connect including the first
+
+`startup.sh` sets **no** `net.inet6.*` sysctl anywhere, so `ip6_dad_count` keeps its default of 1.
+Decompiled `nd6_dad_start` (`io-pkt-v6-hc`):
+
+```c
+if ( (flags & 1) != 0 || !ip6_dad_count ) {
+    ifa->ia6_flags &= ~IN6_IFF_TENTATIVE;   /* DAD skipped, address usable immediately */
+    return;
+}
+...
+callout_reset(dp, hz * ND_IFINFO(ifp)->retrans / 1000, nd6_dad_timer, ...);
+```
+
+So with `dad_count=1` the link-local stays **tentative for one RETRANS_TIMER (~1 s)**, and a
+tentative address cannot be used as a source. With `dad_count=0` the tentative bit is cleared
+synchronously and the address is usable at once.
+
+This sits exactly where the phone-side sysdiagnose shows `Session: No Remote IP` for ~2 s before
+`Starting Accessory Authentication` (which itself takes only ~330 ms). **Strong hypothesis, not a
+measurement**: the code proves DAD costs ~1 s and sits in this path; it does not prove those are
+the same 2 s.
+
+`in6if_do_dad()` decompiles to a check on `IFF_LOOPBACK`, `if_type != 242`, and `IFF_UP|IFF_RUNNING`
+— there is **no** per-interface opt-out, and `ndp -i` can only display `retrans`, not set it.
+So the only lever is the global `net.inet6.ip6.dad_count`.
+
+### Role-reversal power delays — ~2 s, first connect only
+
+`smartphone_integrator.json`: `powerDelayTimeHostMode: 1000` + `powerDelayTimeDeviceMode: 1000`,
+plus `deviceRemovalDelay: 1250` and `restartOtgStackDelayTime: 5000`. These bracket the host↔device
+switch, which is precisely the first-connect path. SI ships no function symbols (only vtable names
+in rodata), so the exact call sites were not traced — the values are config, though, and testable
+by A/B.
+
+### Teardown — 1 s per reconnect
+
+`stopncm.sh` opens with `sleep 1`, commented "workaround race condition between removal/unmount".
+Not first-connect, and not to be touched without understanding the race.
+
+## Ranked levers
+
+**Tier 1 — does not touch USB at all:**
+1. `sysctl -w net.inet6.ip6.dad_count=0` before `start_network`. Saves ~1 s on every connect
+   including the first. Risk is global (wlan/ecm lose duplicate detection); on `carplay0`, a
+   point-to-point USB link, a duplicate is impossible by construction.
+2. Drop usblauncher's default `-vv`. Zero risk, unknown gain, costs only diagnostics.
+
+**Tier 2 — touches USB, needs A/B measurement and a rollback:**
+3. `powerDelayTimeHostMode` / `powerDelayTimeDeviceMode` 1000 → 500. Biggest first-connect target
+   (~2 s), but it governs port power settling — undershooting can break enumeration of slow hubs
+   and devices. Config-only, so trivially revertible.
+4. `connect_poll` 100 → 50. Small gain, small risk.
+
+**Tier 3 — the real one:**
+5. Stop paying the whole sequence repeatedly. The first connect pays enumeration + role reversal +
+   auth + addressing once by definition; our ~15 s dio generation death makes us re-pay it. See
+   `STOCK_BISECT.md`. Nothing above matters as much as not re-running the whole chain.
