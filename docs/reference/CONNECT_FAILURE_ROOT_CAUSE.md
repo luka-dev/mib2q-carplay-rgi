@@ -76,6 +76,32 @@ rebuilt:
 The iOS-version dependence is still unexplained: this capture is iOS 26 only, so why iOS 27
 tolerates the same churn is open. It is now a narrow question, and secondary — the churn is ours.
 
+## Who owns NCM (checked in the firmware, not from memory)
+
+Three different owners, and `dio_manager` is not one of them:
+
+| thing | owner |
+|---|---|
+| creating `carplay0` | `usblauncher` (OTG instance), rule `class(USB_CLASS_COMMS, USB_COMMS_SUBCLASS_NCM, 0x00)` = `0x02/0x0d/0x00` in `usblauncher_otg.lua:254` -> `/etc/scripts/startncm.sh`, which mounts `devnp-usbdnet.so` into io-pkt (`protocol=ncm, usbdnet_mac=000022446688, mac=020022446688, name=carplay, npkt=10`) then `if_up -p carplay0` + `ifconfig carplay0 up` |
+| destroying `carplay0` | **`smartphone_integrator`** — `smartphone_integrator.json:92` sets `"otgStackCleanupScript": "/etc/scripts/stopncm.sh"`, and that script does `sleep 1; ifconfig carplay0 destroy` |
+| the OTG stack itself | also `smartphone_integrator`: `otgStackStartScriptDeviceMode`, `otgStackStopScript`, `otgCmdStartStackDeviceModeCarPlay = start_stack::device,2`, `restartOtgStackDelayTime: 5000`, `otgStackReconnectTimeout: 30000` |
+| iAP2 | a *separate* function of the same composite gadget: `class(0xFF, 0xF0, 0x00)` -> `io-otg-cinemo -s /dev/io-usb/otg_dev -lc 212 -v -t 8`, a long-lived driver |
+| `dio_manager` | owns none of it — it is a consumer of the finished IP link |
+
+That asymmetry is exactly what the phone showed us. iAP2 survives because its driver is long-lived;
+NCM is a one-shot script, so if the class rule does not re-match after a stack restart there is
+simply no interface — `No Network Interface`.
+
+**So the churn is driven by `smartphone_integrator`, not by dio.** A dio generation death makes SI
+run its OTG cleanup (destroying `carplay0`), restart the stack after
+`restartOtgStackDelayTime` = 5 s, and hope `usblauncher` re-matches *both* functions. At a ~15 s
+generation cycle it does not get there.
+
+Second, smaller mine in the same cycle: the stock `/etc/scripts/carplay_cleanup.sh` — which our
+supervisor calls on cleanup — does `slay -f -s SIGTERM -m name mdnsd`, killing the Bonjour daemon
+the unit needs to *discover* the phone's advertisement. Downstream of the real problem, but in the
+same loop.
+
 ## Where to work
 
 Stop the generation churn, or make the NCM function survive it. Relevant existing knobs:
