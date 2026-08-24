@@ -33,113 +33,8 @@ CP_USB_RESET_LATCH=/tmp/carplay_usb_reset.latched
 # TCP 6031, so the second IPv6 screen connection never reaches accept() unless
 # the stock rule is extended. Keep /etc immutable: validate and load an
 # otherwise-identical runtime ruleset with 6030:6031 enabled. The stock network
-# startup may reload /etc/pf.conf after an early CarPlay child has already
-# started, so carplay_startup.sh also guards this rule during the short
-# boot-overlap window.
-CP_PFCTL=/armle/sbin/pfctl
-CP_PF_SED=/usr/bin/sed
-CP_PF_GREP=/usr/bin/grep
-CP_NETSTAT=/mnt/app/armle/usr/bin/netstat
-CP_PF_SOURCE_DEFAULT=/etc/pf.conf
-CP_PF_SOURCE_MLAN=/etc/pf.mlan0.conf
-CP_PF_SOURCE_PPP=/etc/pf.ppp0.conf
-CP_PF_SOURCE_ECM=/etc/pf.ecm0.conf
-CP_PF_RUNTIME=/tmp/pf.carplay_alt.conf
-CP_PF_RULES=/tmp/pf.carplay_alt.rules
-CP_PF_MARKER=/tmp/carplay_pf_6031.enabled
-
-cp_altscreen_firewall_ready()
-{
-    [ -x "$CP_PFCTL" ] || return 1
-    "$CP_PFCTL" -sr > "$CP_PF_RULES" 2>/dev/null || return 1
-    "$CP_PF_GREP" -q 'carplay0.*6030:6031' "$CP_PF_RULES"
-}
-
-# connectionmanager swaps the complete PF ruleset when the active Internet
-# bearer changes. These profiles are not interchangeable: each one contains
-# different NAT/ALTQ rules for mlan0, ppp0, or ecm0/ecm1. Derive the source from
-# the kernel's current default route so adding TCP 6031 never replaces an active
-# tethering profile with generic /etc/pf.conf.
-cp_active_pf_source()
-{
-    CP_PF_UPLINK=
-    if [ -x "$CP_NETSTAT" ]; then
-        CP_PF_UPLINK=`"$CP_NETSTAT" -rn 2>/dev/null | (
-            while read CP_ROUTE_LINE; do
-                set -- $CP_ROUTE_LINE
-                [ "$1" = default ] || continue
-                for CP_ROUTE_FIELD in "$@"; do
-                    case "$CP_ROUTE_FIELD" in
-                        mlan0|ppp0|ecm0|ecm1)
-                            echo "$CP_ROUTE_FIELD"
-                            exit 0
-                            ;;
-                    esac
-                done
-            done
-        )`
-    fi
-
-    case "$CP_PF_UPLINK" in
-        mlan0)     CP_PF_ACTIVE_SOURCE=$CP_PF_SOURCE_MLAN ;;
-        ppp0)      CP_PF_ACTIVE_SOURCE=$CP_PF_SOURCE_PPP ;;
-        ecm0|ecm1) CP_PF_ACTIVE_SOURCE=$CP_PF_SOURCE_ECM ;;
-        *)
-            # A bearer transition can temporarily remove the default route.
-            # Fall back to signatures unique to pfctl's compiled profile; this
-            # snapshot was already refreshed by cp_altscreen_firewall_ready().
-            if "$CP_PF_GREP" -q 'block.* in on ecm1 all' "$CP_PF_RULES" 2>/dev/null; then
-                CP_PF_ACTIVE_SOURCE=$CP_PF_SOURCE_ECM
-            elif "$CP_PF_GREP" -q 'block.* in on ppp0 all' "$CP_PF_RULES" 2>/dev/null; then
-                CP_PF_ACTIVE_SOURCE=$CP_PF_SOURCE_PPP
-            elif "$CP_PF_GREP" -q 'block.* in on mlan0 all' "$CP_PF_RULES" 2>/dev/null; then
-                CP_PF_ACTIVE_SOURCE=$CP_PF_SOURCE_MLAN
-            else
-                CP_PF_ACTIVE_SOURCE=$CP_PF_SOURCE_DEFAULT
-            fi
-            ;;
-    esac
-    echo "$CP_PF_ACTIVE_SOURCE"
-}
-
-cp_enable_altscreen_firewall()
-{
-    if cp_altscreen_firewall_ready; then
-        : > "$CP_PF_MARKER"
-        return 0
-    fi
-    [ -e "$CP_PF_MARKER" ] && rm -f "$CP_PF_MARKER"
-    CP_PF_SOURCE=`cp_active_pf_source`
-    if [ ! -r "$CP_PF_SOURCE" ] || [ ! -x "$CP_PF_SED" ] ||
-       [ ! -x "$CP_PF_GREP" ] || [ ! -x "$CP_PFCTL" ]; then
-        echo "[supervisor] altScreen PF setup unavailable source=$CP_PF_SOURCE; TCP 6031 remains blocked" >> "${WLOG:-/dev/null}"
-        return 1
-    fi
-
-    # Match the exact stock CarPlay allow-list token. If a future firmware no
-    # longer has it, fail open to normal CarPlay instead of loading a malformed
-    # or incomplete firewall configuration.
-    "$CP_PF_SED" 's/ 6030,/ 6030:6031,/' "$CP_PF_SOURCE" > "$CP_PF_RUNTIME" || return 1
-    if ! "$CP_PF_GREP" -q ' 6030:6031,' "$CP_PF_RUNTIME"; then
-        echo "[supervisor] altScreen PF stock rule not found; ruleset left untouched" >> "${WLOG:-/dev/null}"
-        return 1
-    fi
-    if ! "$CP_PFCTL" -nf "$CP_PF_RUNTIME" >> "${WLOG:-/dev/null}" 2>&1; then
-        echo "[supervisor] altScreen PF syntax check FAILED; ruleset left untouched" >> "${WLOG:-/dev/null}"
-        return 1
-    fi
-    if ! "$CP_PFCTL" -f "$CP_PF_RUNTIME" >> "${WLOG:-/dev/null}" 2>&1; then
-        echo "[supervisor] altScreen PF load FAILED; stock rules remain active" >> "${WLOG:-/dev/null}"
-        return 1
-    fi
-    if ! cp_altscreen_firewall_ready; then
-        echo "[supervisor] altScreen PF verification FAILED after load" >> "${WLOG:-/dev/null}"
-        return 1
-    fi
-    : > "$CP_PF_MARKER"
-    echo "[supervisor] altScreen PF enabled: carplay0 TCP 6030:6031 source=$CP_PF_SOURCE" >> "${WLOG:-/dev/null}"
-    return 0
-}
+# grep binary (also used by the USB diagnostic below).
+CP_GREP=/usr/bin/grep
 
 cp_usb_stuck_pre_setup()
 {
@@ -204,10 +99,10 @@ cp_usb_record_generation_result()
     # the RTSP/protocol side. The USB PPS line records the real driver state for
     # the failures that do not match cp_usb_stuck_pre_setup's signature.
     echo "[supervisor] no control SETUP pid=$CP_USB_DIO_PID ticks=$CP_USB_LIVED_TICKS" >> "${WLOG:-/dev/null}"
-    "$CP_PF_GREP" drivers_ "$CP_USB_PPS" >> "${WLOG:-/dev/null}" 2>/dev/null
+    "$CP_GREP" drivers_ "$CP_USB_PPS" >> "${WLOG:-/dev/null}" 2>/dev/null
     # netstat -in truncates the interface name to its column width, so the row
     # reads "carpl", never "carplay0". Match the prefix or this never fires.
-    netstat -in 2>/dev/null | "$CP_PF_GREP" '^carpl' >> "${WLOG:-/dev/null}" 2>/dev/null
+    netstat -in 2>/dev/null | "$CP_GREP" '^carpl' >> "${WLOG:-/dev/null}" 2>/dev/null
     # A tick is NOT a fixed two seconds: while the boot PF guard is armed the
     # monitor runs two `pfctl -sr` snapshots per iteration, so a tick costs ~5 s
     # wall and a full ~15 s generation reports ticks=3. The old `-lt 4` therefore

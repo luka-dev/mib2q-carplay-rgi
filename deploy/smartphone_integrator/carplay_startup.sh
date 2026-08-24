@@ -104,7 +104,6 @@ monitor_renderers()
     MR_DIO_PID=$1
     MR_EXPLICIT_STOP=0
     MR_LIVED_TICKS=0
-    MR_PF_GUARD_TICKS=0
     echo "[supervisor] renderer monitor watching dio pid=$MR_DIO_PID" >> "$WLOG"
     while [ -d "/proc/$MR_DIO_PID" ]; do
         if [ -e "$STOP_FILE" ]; then
@@ -121,29 +120,7 @@ monitor_renderers()
         start_renderer maneuver_render restart
         start_renderer altscreen_render restart
 
-        # start_network() performs a late full `pfctl -ef /etc/pf.conf` during
-        # HU boot. If a connected phone makes SI start CarPlay before that
-        # reload, it silently restores the stock 6030-only allow-list after our
-        # initial setup and iOS's TCP 6031 SYN never reaches alt accept(). Guard
-        # the overlap at one-second resolution for 30 seconds. Keep the normal
-        # two-second monitor cadence (and MR_LIVED_TICKS semantics) unchanged.
-        if [ "${CP_PF_PERSISTENT:-0}" != 1 ] && [ "$MR_PF_GUARD_TICKS" -lt 15 ]; then
-            if ! cp_altscreen_firewall_ready; then
-                echo "[supervisor] stock PF reload detected - restoring carplay0 TCP 6030:6031" >> "$WLOG"
-                cp_enable_altscreen_firewall ||
-                    echo "[supervisor] altScreen PF restore FAILED" >> "$WLOG"
-            fi
-            sleep 1
-            if ! cp_altscreen_firewall_ready; then
-                echo "[supervisor] stock PF reload detected - restoring carplay0 TCP 6030:6031" >> "$WLOG"
-                cp_enable_altscreen_firewall ||
-                    echo "[supervisor] altScreen PF restore FAILED" >> "$WLOG"
-            fi
-            sleep 1
-            MR_PF_GUARD_TICKS=`expr "$MR_PF_GUARD_TICKS" + 1`
-        else
-            sleep 2
-        fi
+        sleep 2
         MR_LIVED_TICKS=`expr "$MR_LIVED_TICKS" + 1`
         # ~2 s per tick: check the uncapped logs every ~5 minutes.
         if [ `expr "$MR_LIVED_TICKS" % 150` -eq 0 ]; then
@@ -168,19 +145,9 @@ rm -f "$STOP_FILE"
 echo "$DIO_PID" > "$OWNER_FILE"
 echo "===== carplay_startup.sh run pid=$$ ppid=$PPID =====" >> "$WLOG"
 
-# altScreen needs carplay0 TCP 6031 beside the stock 6030. The permanent home for
-# that is /mnt/system/etc/pf.conf (install_persistent_pf.sh): start_network loads it
-# at boot, so the live ruleset already carries 6030:6031 and there is nothing to do
-# here and no reload to fight. Only when that persistent edit is absent do we fall
-# back to loading it at runtime and arming the boot-overlap guard below.
-if cp_altscreen_firewall_ready; then
-    CP_PF_PERSISTENT=1
-    echo "[supervisor] altScreen TCP 6031 already in ruleset (persistent pf.conf); no runtime PF work" >> "$WLOG"
-else
-    CP_PF_PERSISTENT=0
-    cp_enable_altscreen_firewall ||
-        echo "[supervisor] continuing without altScreen TCP 6031 firewall rule" >> "$WLOG"
-fi
+# altScreen's carplay0 TCP 6031 lives permanently in /mnt/system/etc/pf.conf
+# (install_persistent_pf.sh, a one-time deploy step). start_network loads it at
+# boot, so the wrapper does no firewall work at all.
 
 # A previous monitor may have proved the independent pre-RTSP USB wedge. Consume
 # its one-shot request before creating any graphics clients or exec'ing dio.

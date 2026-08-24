@@ -29,33 +29,14 @@ an explicit supervisor stop, not ordinary dio churn, owns their final teardown.
 
 Lifecycle semantics:
 
-- **PF port, permanent home:** the altScreen adjacent port (carplay0 TCP 6031 beside stock 6030)
-  belongs in `/mnt/system/etc/pf.conf`. Run `install_persistent_pf.sh` once — it widens the stock
-  `6030` token to `6030:6031` in that source file (idempotent, `.stock` backup, `mount -uw` first).
-  `/mnt/system` is `/dev/fs0p1`, a real qnx6 flash partition (fstab: mounted `ro`, remount-rw to
-  edit); boot's `move_etc_to_ramdisk` copies it into the ramdisk `/etc`, so `start_network`'s
-  `pfctl -ef /etc/pf.conf` loads 6031 with no race and no reset. Reverted only by an OTA rewriting
-  `fs0p1`. Once this is in place the wrapper does **zero** PF work (`cp_altscreen_firewall_ready`
-  short-circuits startup and the monitor guard). See `NCM_AND_FIREWALL_IDEAL_START.md`.
-- runtime fallback (only when the persistent edit is absent): the wrapper validates and loads an
-  otherwise-stock PF ruleset extending the CarPlay TCP allow-list from `6030` to `6030:6031`. The runtime copy is derived
-  from the currently active stock PF profile (`pf.conf`, `pf.mlan0.conf`,
-  `pf.ppp0.conf`, or `pf.ecm0.conf`) so it never replaces Wi-Fi/modem/ECM-specific
-  NAT and ALTQ rules; MU1316's stock rule blocks every other inbound `carplay0`
-  port, while native altScreen requires TCP 6031 beside the main screen's TCP 6030;
-- the load is guarded against stock's *one* full `pfctl -ef /etc/pf.conf` reload,
-  which `start_network()` runs once early in stock boot (`normal_startup`/
-  `swdl_startup` in `/etc/boot/startup.sh`, mutually exclusive, never re-triggered
-  by Wi-Fi/USB/CarPlay events - confirmed against stock `startup.sh`, not assumed).
-  If a phone is already connected at power-on, SI can start CarPlay before that
-  reload runs, which would silently restore the stock 6030-only allow-list under
-  us. The guard polls at one-second resolution for up to 30 seconds, but only
-  until it has completed once **this power cycle** - tracked by
-  `/tmp/carplay_pf_boot_race_cleared`, which does not survive a reboot, so it is
-  exactly power-cycle-scoped for free. Before this fix the guard's counter was a
-  local shell variable reset on every dio generation, so every reconnection all
-  day re-paid up to 30s of `pfctl -sr` polling (~5s/tick - two calls per tick) it
-  could never have needed after the first;
+- **PF port (deploy prerequisite, no runtime logic):** altScreen needs carplay0 TCP 6031 beside the
+  stock 6030. Run `install_persistent_pf.sh` once — it widens the stock `6030` token to `6030:6031`
+  in `/mnt/system/etc/pf.conf` (idempotent, `.stock` backup, `mount -uw` first). That is a real
+  qnx6 flash partition (`/dev/fs0p1`); boot's `move_etc_to_ramdisk` copies it into the ramdisk
+  `/etc`, so `start_network`'s `pfctl -ef /etc/pf.conf` loads 6031 with no race and no reset. The
+  wrapper does **no** firewall work — it assumes the port is open, exactly like it assumes the
+  child JSON and the hook are installed. Reverted only by an OTA rewriting `fs0p1`; re-run the
+  script. See `NCM_AND_FIREWALL_IDEAL_START.md`.
 - if either renderer already exists when CarPlay starts, it is not restarted;
 - renderer PIDs are kept under `/tmp`; one finite `pidin ar` snapshot seeds the
   files when adopting an older running generation, then startup and the monitor

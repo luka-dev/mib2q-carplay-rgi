@@ -36,10 +36,12 @@ every other `/mnt/system` and `/mnt/app` edit we ship.
 **Fix: widen `6030` -> `6030:6031` in `/mnt/system/etc/pf.conf`, once.**
 `install_persistent_pf.sh` does exactly that, idempotently, with a `.stock` backup. Then the
 ramdisk copy carries 6031, `start_network` loads the correct ruleset, and **CarPlay never touches
-PF**. This deletes:
-
-- `cp_enable_altscreen_firewall` from `carplay_startup.sh` (pre-exec work in dio's startup budget);
-- the 30 s monitor PF guard that runs 2x `pfctl -sr` per tick (~5 s/tick — the churn we measured).
+PF**. All firewall logic is now **gone** from the wrapper (146 lines deleted): the
+`cp_enable_altscreen_firewall` startup call, the 30 s monitor guard (2x `pfctl -sr` per tick,
+~5 s/tick — the churn we measured), and the `cp_active_pf_source` / `cp_altscreen_firewall_ready`
+helpers. The port is a deploy prerequisite, exactly like the hook `.so` or the child JSON — if
+`install_persistent_pf.sh` was not run, altScreen 6031 is simply blocked, the same failure mode as
+a missing renderer binary. No runtime fallback, no re-checks.
 
 Your instinct — "just append the port and stop the re-checks" — is the correct design. The
 re-checks only existed because we were fighting a boot-time reload we don't own; edit the source
