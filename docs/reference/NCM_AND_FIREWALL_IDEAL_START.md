@@ -16,6 +16,20 @@ Answers three questions, all grounded in `MHI2Q_US_AUG22_P5087_MU1316` boot anal
 
     pass in quick on carplay0 proto tcp from any to any port { ..., 6030, ... } allow-opts
 
+**Verified against fstab, not assumed.** `ifs2/ifs_startup/ifs_coreservices2/proc/boot/fstab`:
+
+    /dev/mnand0t177   /mnt/app       qnx6   ro
+    /dev/fs0p1        /mnt/system    qnx6   ro
+    /dev/fs0p2        /mnt/persist   qnx6   rw
+
+`/mnt/system` is a real qnx6 flash partition (`/dev/fs0p1`), mounted **ro by default**, not an
+overlay and not a tmpfs. `pf.conf` exists in exactly one place in the whole image
+(`/mnt/system/etc/pf.conf`); `ifs2` carries no `pf.conf` or `etc` that could shadow it. So editing
+it is persistent across reboots — the same partition and persistence model as our existing
+`smartphone_integrator.json` deploy. It needs `mount -uw /mnt/system` first (the ro default), which
+the script does. The one thing that reverts it is an OTA rewriting `fs0p1` — identical caveat to
+every other `/mnt/system` and `/mnt/app` edit we ship.
+
 **The source is writable.** We already deploy `smartphone_integrator.json` to
 `/mnt/system/etc/eso/production/`, so `/mnt/system/etc/pf.conf` is on the same writable eMMC.
 
