@@ -18,50 +18,68 @@ Binaries compared (same build family, same arch):
 `caraccessoryd`'s growth is almost entirely a new Swift `CAFDLatencyMonitor` (write-timeout and
 high-frequency-alert sampling) — unrelated to session setup.
 
-The relevant change is in **`carkitd`**, and it is narrow.
+The relevant change is in **`carkitd`**, and decompiling it (2026-08-24) settles what the
+strings could only hint at. Two earlier readings in this note were wrong and are corrected below.
 
-Corrected 2026-08-24: an earlier version of this note claimed iOS 26 "carries only the
-declarations, no implementation". That was wrong. The `fetchCarPlayControlAdvertising*` family is
-implemented in **both** builds, and the older `wantsCarPlayControlAdvertising*` family is present
-in both (6 occurrences each). The real delta is one log parameter and two selectors:
+### `-[CRCarKitServiceAgent fetchCarPlayControlAdvertisingForUSBWithReply:]`
 
-| | iOS 26.6 | iOS 27.0b6 |
-|---|---|---|
-| `fetch…ForUSBWithReply:` log | `YES for vehicle %@` | `YES for vehicle %@`**`, host: %@`** |
-| `fetch…ForWiFiUUID:` log | no host | `YES for vehicle %@, host: %@` |
-| `updateBonjourHost:completion:` | **absent** | present |
-| `updateBonjourHostForVehicle:reply:` | **absent** | present |
-| `CARSessionRequestBonjourHost` class | present | present |
+Both versions do the same thing up to picking the vehicle: `_isRestricted:`, then walk
+`messagingConnector.connectedVehicles` for one with `transportType == 1`, `supportsUSBCarPlay`
+and **not** `supportsCarPlayConnectionRequest`, then
+`vehicleMatchingMessagingVehicle:inVehicles:` against `vehicleStore.allStoredVehicles`.
 
-So both versions decide *whether* to advertise CarPlay control over USB for a given vehicle.
-Only iOS 27 carries a **host** alongside that decision and has a path to push a corrected host
-into AirPlay:
+They differ in how the display configuration behind the BonjourHost is built.
 
-    [DISPLAY_CONFIGURATION] updateBonjourHostForVehicle: updating BonjourHost for vehicle %@ with displayScaleMode=%ld
-    [DISPLAY_CONFIGURATION] updateBonjourHostForVehicle: sending updated BonjourHost to AirPlay: %@
-    [DISPLAY_CONFIGURATION] updateBonjourHostForVehicle: successfully updated BonjourHost for vehicle %@
-    [DISPLAY_CONFIGURATION] updateBonjourHostForVehicle: failed to update BonjourHost in AirPlay: %@
+**iOS 26.6** builds it synchronously from the stored vehicle:
 
-iOS 26 has the type but no way to update it: it must use the host the head unit advertised.
+    displayScaleMode = storedVehicle.displayScaleMode                 // 2 when no vehicle
+    caps  = +[CRCarPlayCapabilities fetchCarCapabilitiesWithIdentifier: vehicle.identifier.UUIDString]
+    zoom  = caps.zoomFactor                                           // ONE value for the car
+    cfg   = [CARSessionRequestDisplayConfiguration initWithDisplayScaleMode: zoom Factor: zoom]
+    host  = [CARSessionRequestBonjourHost initWithDisplayConfiguration: cfg]
 
-**This is a hypothesis consistent with the diff and the field data, not proof.** The strings show
-that the `host` parameter and the update path are new; they do not show the full semantics. The
-proof would be `dns-sd -L` on the unit during a failing cycle.
+**iOS 27.0b6** fetches capabilities asynchronously and keys them differently:
 
-## What this means for us
+    [carCapabilitiesManager fetchCapabilitiesWithCertificateSerialNumber: msgVehicle.certificateSerialNumber
+                                                  clusterAssetIdentifier: storedVehicle.clusterAssetIdentifier
+                                                           callbackQueue: main
+                                                       completionHandler: ^(caps) {
+        cfg  = [CARSessionRequestDisplayConfiguration initWithDisplayScaleMode: storedVehicle.displayScaleMode
+                                                     zoomFactorByDisplayIndex: caps.zoomFactorByDisplayIndex]
+        host = [CARSessionRequestBonjourHost initWithDisplayConfiguration: cfg]
+    }]
 
-The head unit is still the thing that is wrong. iOS 27 merely stopped depending on it.
+So, proven:
 
-This reconciles two observations that looked contradictory:
+1. `zoomFactor` (one per car) became **`zoomFactorByDisplayIndex`** (one per display);
+2. the capabilities lookup key moved from the **vehicle UUID** to the **MFi certificate serial
+   number plus `clusterAssetIdentifier`**;
+3. `updateBonjourHostForVehicle:reply:` is new, but it is a **re-publish** path for when a
+   vehicle's display configuration changes — it runs the same
+   `fetchCapabilitiesWithCertificateSerialNumber:clusterAssetIdentifier:` and rebuilds the host.
+   It is *not* a repair path for a malformed accessory advertisement.
 
-- 2026-08-21: the HU was not advertising `CarPlay._airplay._tcp.local` at all — `carplay0` carried
-  ~5 packets per failing cycle (IPv6 Neighbor Discovery only), and `Created APEndpointCarPlay`
-  appeared exactly once across a whole evening of attempts. A **head-unit** reboot fixed it, and
-  both phones then connected first try.
-- 2026-08-23: iOS version alone flips the behaviour on the same head unit.
+### Corrections to earlier readings in this file
 
-Both are true if our Bonjour registration on `carplay0` is unreliable — missing, stale, or
-carrying a host record that does not resolve. iOS 26 gives up after ~10 s; iOS 27 repairs it.
+- "iOS 26 carries only declarations, no implementation" — **wrong**. `fetchCarPlayControlAdvertising*`
+  is implemented in both.
+- "iOS 27 repairs a broken BonjourHost coming from the head unit" — **wrong**. Neither version
+  takes a host *from* the accessory here; both **construct** it on the phone. The delta is the
+  display model used to construct it.
+
+### What this points at
+
+Every part of the delta is about **multiple displays and the cluster**, and that is exactly where
+this head unit is not a stock car: we advertise a second display for the cluster altScreen
+(stream 111) with fabricated identifiers, and `clusterAssetIdentifier` is literally the cluster
+asset. A single `zoomFactor` for a car that presents two displays is the kind of mismatch iOS 27's
+per-display model removes.
+
+**Cheap decisive test, no new tooling:** we already gate the second-display advertisement behind
+an env knob. Set `ALTSCREEN_ADVERT_DISPLAYS=0` in `carplay_startup.sh` (`env_on()` checks the
+value, so `=0` really disables it; the change needs a dio-supervisor relaunch) and try the phone
+that reproduces the failure. If it then connects reliably, our cluster-display advertisement is
+what iOS <= 26 chokes on.
 
 ## Next measurement (unchanged, now better motivated)
 
