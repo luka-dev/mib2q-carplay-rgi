@@ -90,7 +90,20 @@ a cluster slightly *coarser* than its main screen (125/137 = **0.91x**); we clai
 With one car-wide `zoomFactor` no value can be right for a 1.48x mismatch. Fixed to 292 x 110 in
 `hook/altscreen/altscreen_hook.c` (`CLUSTER_PHYS_W/H`), which also lands the ratio at 0.91x.
 
-This is worth having regardless of whether it turns out to be *the* trigger.
+**What is confirmed and what is not.** Both resolutions are firmware-confirmed -
+`qcdisplaycfg_MMX2.xml` declares `uVisWidth/uVisHeight` of 1440x542 for the LVDS cluster panel and
+1024x480 for the main. The 12.3" cluster diagonal is the published Virtual Cockpit spec, not a
+measurement. And critically, **nothing in the firmware states a physical size for either panel**:
+the only nearby setting is Android Auto's `gal.json`, which leaves `physicalDisplayWidth` at 0 with
+the comment "use the values provided by the HMI".
+
+So it is not yet known what stock reports in the main display's `widthPhysical`. If it reports 0,
+the phone has no density for display 0 and the cluster's numbers cannot be inconsistent with it -
+which would leave `CLUSTER_PHYS_W/H` merely truthful rather than the mechanism. `main_disp_modernize`
+now logs the stock main dict once (`stock main panel: … px, physical … mm`); it needs
+`touch /mnt/app/carplay_verbose` because production runs at WARN.
+
+Either way, claiming a 7.6" 203 dpi Virtual Cockpit was wrong on its own merits.
 
 **Cheap decisive test, no new tooling:** we already gate the second-display advertisement behind
 an env knob. Set `ALTSCREEN_ADVERT_DISPLAYS=0` in `carplay_startup.sh` (`env_on()` checks the

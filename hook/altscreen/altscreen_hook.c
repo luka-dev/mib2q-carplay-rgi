@@ -578,6 +578,32 @@ static int main_disp_modernize(void *mainDisp, int night)
                   "main display: stock uuid missing — refusing altScreen advert");
         return -1;
     }
+    /* What does stock actually claim for the main panel?  The whole density argument behind
+     * CLUSTER_PHYS_W/H assumes stock reports a real physical size here; nothing in the firmware
+     * configs states one (gal.json leaves physicalDisplayWidth at 0, "use the values provided by
+     * the HMI"), so measure it instead of assuming.  If the physical pair comes back 0 the phone
+     * has no density for display 0, and the cluster's numbers cannot be inconsistent with it -
+     * which would make CLUSTER_PHYS_W/H merely truthful rather than the mechanism.
+     * Needs `touch /mnt/app/carplay_verbose`: production runs at WARN. */
+    if (cf_geti64) {
+        static int logged;
+        if (!logged) {
+            logged = 1;
+            int64_t v[4] = { 0, 0, 0, 0 };
+            static const char *keys[4] =
+                { "widthPixels", "heightPixels", "widthPhysical", "heightPhysical" };
+            for (unsigned i = 0; i < 4; i++) {
+                void *k = cf_str(0, keys[i], CFENC_UTF8);
+                if (k) {
+                    v[i] = cf_geti64(mainDisp, k, NULL);
+                    if (cf_rel) cf_rel(k);
+                }
+            }
+            LOG_INFO(LOG_MODULE,
+                     "stock main panel: %lldx%lld px, physical %lldx%lld mm (0 = absent or zero)",
+                     (long long)v[0], (long long)v[1], (long long)v[2], (long long)v[3]);
+        }
+    }
     /* complete the main dict like a real HU (MHI3 set) — see build_cluster_dict note */
     set_i64(mainDisp, "primaryInputDevice", 0);
     set_i64(mainDisp, "cornerMasks",        0);
