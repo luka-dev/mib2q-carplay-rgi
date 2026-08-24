@@ -92,8 +92,11 @@ With one car-wide `zoomFactor` no value can be right for a 1.48x mismatch. Fixed
 
 **What is confirmed and what is not.** Both resolutions are firmware-confirmed -
 `qcdisplaycfg_MMX2.xml` declares `uVisWidth/uVisHeight` of 1440x542 for the LVDS cluster panel and
-1024x480 for the main. The 12.3" cluster diagonal is the published Virtual Cockpit spec, not a
-measurement. And critically, **nothing in the firmware states a physical size for either panel**:
+1024x480 for the main. The cluster diagonal is confirmed by the owner as 12.3" /
+31.2 cm, which puts 1440x542 at 4.932 px/mm = 125.3 dpi, i.e. 292.0 x 109.9 mm - matching the
+committed `CLUSTER_PHYS_W/H` of 292 x 110 exactly. Against the main's 5.397 px/mm / 137.1 dpi that
+is a density ratio of **0.914** (a bigger screen is legitimately coarser); the old 180 x 68 claimed
+**1.48**. The one remaining unknown is the main side: **nothing in the firmware states a physical size for either panel**:
 the only nearby setting is Android Auto's `gal.json`, which leaves `physicalDisplayWidth` at 0 with
 the comment "use the values provided by the HMI".
 
