@@ -45,6 +45,28 @@ Your instinct — "just append the port and stop the re-checks" — is the corre
 re-checks only existed because we were fighting a boot-time reload we don't own; edit the source
 and the fight disappears.
 
+## Why our earlier pf edits rolled back (they were a different thing)
+
+We *did* try before, and it rolled back — for a reason that the source edit specifically fixes.
+Everything shipped so far (`cp_enable_altscreen_firewall`) only ever touched the **live in-kernel
+ruleset**:
+
+    CP_PF_RUNTIME=/tmp/pf.carplay_alt.conf      # generated in /tmp (ramdisk)
+    sed 's/ 6030,/ 6030:6031,/' <source> > $CP_PF_RUNTIME
+    pfctl -f /tmp/pf.carplay_alt.conf           # load into the live kernel ruleset
+
+It never wrote `/mnt/system/etc/pf.conf` (git history confirms: the only mention of that path is
+the persistent script). The live ruleset is volatile:
+
+- any `pfctl -ef /etc/pf.conf` wipes it — `start_network` does exactly that at boot, so it is gone
+  after a reboot;
+- `start_network` re-running mid-boot clobbered it too, which is why the 30 s monitor guard existed
+  to fight the reload.
+
+The source edit is a different operation: it changes the file the ramdisk `/etc` is rebuilt from,
+so there is nothing to wipe and nothing to fight. Do not confuse the two — a live `pfctl -f` will
+always roll back; the source edit will not.
+
 ## 2. Move it out of CarPlay: yes
 
 The PF port is a boot-time property of the platform, not a per-session CarPlay concern. It belongs
