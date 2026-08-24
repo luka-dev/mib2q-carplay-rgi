@@ -90,21 +90,37 @@ a cluster slightly *coarser* than its main screen (125/137 = **0.91x**); we clai
 With one car-wide `zoomFactor` no value can be right for a 1.48x mismatch. Fixed to 292 x 110 in
 `hook/altscreen/altscreen_hook.c` (`CLUSTER_PHYS_W/H`), which also lands the ratio at 0.91x.
 
-**What is confirmed and what is not.** Both resolutions are firmware-confirmed -
-`qcdisplaycfg_MMX2.xml` declares `uVisWidth/uVisHeight` of 1440x542 for the LVDS cluster panel and
-1024x480 for the main. The cluster diagonal is confirmed by the owner as 12.3" /
-31.2 cm, which puts 1440x542 at 4.932 px/mm = 125.3 dpi, i.e. 292.0 x 109.9 mm - matching the
-committed `CLUSTER_PHYS_W/H` of 292 x 110 exactly. Against the main's 5.397 px/mm / 137.1 dpi that
-is a density ratio of **0.914** (a bigger screen is legitimately coarser); the old 180 x 68 claimed
-**1.48**. The one remaining unknown is the main side: **nothing in the firmware states a physical size for either panel**:
-the only nearby setting is Android Auto's `gal.json`, which leaves `physicalDisplayWidth` at 0 with
-the comment "use the values provided by the HMI".
+**Where the main panel's physical size comes from — and it is not zero.** `dio_manager` logs it at
+`<START_CARPLAY>` as `Physical Dimensions(w,h)` from `CDSICarplayImpl`, i.e. the HMI supplies it
+over DSI in `ServiceConfiguration.physicalDisplayWidth/Height`
+(`org/dsi/ifc/carplay/ServiceConfiguration`). The Java side fills it from
+`ITerminalModeConfiguration.getCarPlayPhysicalDisplay{Width,Height}`, which in
+`AbstractTerminalModeConfiguration` is:
 
-So it is not yet known what stock reports in the main display's `widthPhysical`. If it reports 0,
-the phone has no density for display 0 and the cluster's numbers cannot be inconsistent with it -
-which would leave `CLUSTER_PHYS_W/H` merely truthful rather than the mechanism. `main_disp_modernize`
-now logs the stock main dict once (`stock main panel: … px, physical … mm`); it needs
-`touch /mnt/app/carplay_verbose` because production runs at WARN.
+    getPhysicalDisplayWidth():   sysConst(522) == 2 ? 188 : 152
+    getPhysicalDisplayHeight():  sysConst(522) == 2 ?  88 :  91
+
+(`EvoTMConfiguration` overrides the `screenRes == 4` case to 145 x 73.)
+
+So stock really does advertise a physical size, and the numbers line up with the hardware:
+
+| display | pixels | physical | px/mm | dpi | implied diagonal |
+|---|---|---|---:|---:|---:|
+| main, stock `sysConst522==2` | 1024x480 | **188 x 88** | 5.447 | 138.3 | **8.17"** |
+| main, other branch | 1024x480 | 152 x 91 | 6.737 | 171.1 | 6.61" |
+| cluster, ours **now** | 1440x542 | **292 x 110** | 4.932 | 125.3 | **12.28"** |
+| cluster, ours **before** | 1440x542 | 180 x 68 | 8.000 | 203.2 | 7.57" |
+
+Both confirmed values recover their real diagonals — 8.17" against the owner's 8.25/8.3", and
+12.28" against the confirmed 12.3" / 31.2 cm. Density ratio cluster/main is **0.905** now and was
+**1.469**. Resolutions are firmware-confirmed from `qcdisplaycfg_MMX2.xml` (1440x542 LVDS cluster,
+1024x480 main).
+
+The probe in `main_disp_modernize` is kept for a smaller question: which `sysConst(522)` branch this
+car takes, and that dio passes the value into `/info` unchanged.
+
+Incidental find worth a bisect entry: `dio_manager.json` sets `"screen": { "maxFPS": 30 }` for the
+main screen, while we advertise `maxFPS 60` on the cluster.
 
 Either way, claiming a 7.6" 203 dpi Virtual Cockpit was wrong on its own merits.
 
