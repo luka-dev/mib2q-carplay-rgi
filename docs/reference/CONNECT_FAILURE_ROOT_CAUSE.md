@@ -113,3 +113,36 @@ Capture kept locally at `logs/` (gitignored: ~1 GB and it is the owner's device 
 
     log show --archive logs/system_logs.logarchive --style compact \
         --predicate 'eventMessage CONTAINS "USB eligible"'
+
+## Connection latency (measured, phone-side)
+
+"Even stock connects slowly" — the one successful cycle in the capture, timed from the phone logs:
+
+    23:36:57.184  USB eligible: Y            NCM up, phone has a local IP
+                  Session: No Remote IP      waiting for the HU's IP on carplay0
+    23:36:58.179  Session: No Remote IP      (~1 s still waiting)
+    23:36:59.272  Link Connected:1 + ConfigUSBHost   role reversal, phone becomes host
+    23:36:59.280  Starting Accessory Authentication
+    23:36:59.611  Authentication Passed      iAP2 auth = ~330 ms
+    23:37:00.034  Created APEndpointCarPlay   session up
+
+Breakdown:
+
+- **iAP2/MFi auth is fast — ~330 ms** — not the bottleneck, and a fixed Apple cost we cannot tune.
+- The visible delay is **~2 s of `No Remote IP`**: the phone is ready (USB eligible: Y at 57.184)
+  but waits for the **head unit to configure its end of `carplay0` and announce an address**. So the
+  slow part is HU-side NCM link addressing, not auth.
+- An iAP2 link bounce (`Connected: 0 -> 1`) immediately precedes success.
+
+Caveat: this is one success amid failures, so the 2 s wait may be partly churn-induced, and we only
+have phone-side timing — no HU-side timestamps for when `carplay0` addressing actually completes.
+
+Improvement candidate (hypothesis, needs HU-side measurement, not a proven fix): `carplay0` is a
+point-to-point USB link that auto-configures an IPv6 link-local (`fe80::`) address, and IPv6 runs
+DAD (duplicate address detection) — ~1 s of pointless waiting on a link where a duplicate is
+impossible. Disabling DAD on `carplay0` (or configuring the address without DAD) could remove that
+second. Measure HU-side first.
+
+The larger lever is unchanged: every teardown re-pays this whole sequence (enumeration + role
+reversal + auth + addressing). Not churning the OTG stack makes the first connection pay it once and
+keep it — the same fix as the reliability problem.
