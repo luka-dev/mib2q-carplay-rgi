@@ -186,6 +186,38 @@ monitor_renderers "$DIO_PID" &
 echo "[supervisor] exec dio_manager pid=$DIO_PID with private LD_PRELOAD" >> "$WLOG"
 
 export LD_PRELOAD="$H/libcarplay_hook.so"
-export ALTSCREEN_HANDLE_ALT=1
-export ALTSCREEN_ADVERT_DISPLAYS=1
+
+# altScreen (the cluster second display, stream 111) is OFF by default so the base
+# CarPlay handshake stays byte-identical to stock and connects on EVERY iOS.
+#
+# We advertise a fabricated second display; iOS 27's per-display capability model
+# (zoomFactorByDisplayIndex/clusterAssetIdentifier) accepts it, but iOS <= 26 has a
+# single-zoom-for-the-whole-car model (initWithDisplayScaleMode:zoomFactor:) and rejects
+# it (docs/reference/IOS26_VS_IOS27_BONJOUR.md). Advertising it unconditionally is what
+# breaks old iOS. So the cluster feature is enabled only when the marker asks for it:
+#
+#   touch /mnt/app/carplay_altscreen         # enable cluster altScreen (newer iOS)
+#   echo 0 > /mnt/app/carplay_altscreen      # explicitly keep it off
+#   rm /mnt/app/carplay_altscreen            # default: off, stock-compatible
+#
+# The hook value-checks these envs (env_on): "0"/"false"/"no"/"off"/empty = off. We only
+# export them when enabled, leaving the base path clean otherwise.
+CP_ALTSCREEN_MARKER=/mnt/app/carplay_altscreen
+if [ -e "$CP_ALTSCREEN_MARKER" ]; then
+    CP_ALT_VAL=1
+    read CP_ALT_VAL < "$CP_ALTSCREEN_MARKER" 2>/dev/null
+    case "$CP_ALT_VAL" in
+        ""|0|false|no|off) CP_ALT_ON=0 ;;
+        *) CP_ALT_ON=1 ;;
+    esac
+else
+    CP_ALT_ON=0
+fi
+if [ "$CP_ALT_ON" = 1 ]; then
+    echo "[supervisor] altScreen cluster advert ON (marker $CP_ALTSCREEN_MARKER)" >> "$WLOG"
+    export ALTSCREEN_HANDLE_ALT=1
+    export ALTSCREEN_ADVERT_DISPLAYS=1
+else
+    echo "[supervisor] altScreen OFF - stock-compatible base CarPlay (all iOS)" >> "$WLOG"
+fi
 exec "$DIODIR/dio_manager" "$@"
