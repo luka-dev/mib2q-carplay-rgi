@@ -167,3 +167,55 @@ beta IPSW exists but is indexed by **AppleDB**, not ipsw.me:
 `ipsw download appledb --os iOS --device iPhone18,3 --build 24A5418b --urls`.
 `ipsw extract` leaves multi-GB decrypted DMGs in `/var/folders/**/T/ipsw_extract_*` when it fails
 or is interrupted; clean them up or the next run dies on "no space left on device".
+
+
+---
+
+# Decompiler verification on the exact 23G71 (26.6) and 24A5418b (27.0) binaries — 2026-08-25
+
+Both `carkitd` re-analyzed side by side (`ios_carplay_diff/ios26|ios27/.../usr/libexec/carkitd.i64`).
+This supersedes the earlier strings-only reading.
+
+## Proven (decompiler, not strings)
+
+**iOS 26.6 `ios26_buildDisplayConfig_singleZoom` @0x10006D680** builds exactly ONE
+`CARSessionRequestDisplayConfiguration` with ONE `displayScaleMode` and ONE **scalar** `zoomFactor`,
+taken from `+[CRCarPlayCapabilities fetchCarCapabilitiesWithIdentifier:]` for the whole vehicle.
+No loop, no per-display index, no cluster-asset handling anywhere in this path.
+
+**iOS 27.0 start-session build @0x100066FB8** uses a `zoomFactorByDisplayIndex` **dictionary**
+(`CRZoomFactorByDisplayIndexKey`), extracts a fallback scalar for compat, and then does full
+cluster-asset work: `clusterAssetVersion`, `SDKVersion`,
+`_mainQueue_updateClusterAssetIdentifier:assetVersion:sdkVersion:forVehicle:`, `supportsThemeAssets`,
+and the "Ultra-capable HU delivered Classic…" opt-out. 27 also adds the initializer
+`initWithDisplays:certificateSerialNumber:` and `initWithDisplayScaleMode:zoomFactorByDisplayIndex:`
+that 26 does not have (26 has only `initWithDisplayScaleMode:zoomFactor:`).
+
+Net: the display-capability model diverges **structurally** — 26 is single-display / scalar-zoom /
+no-cluster-asset; 27 is per-display-zoom-dict + cluster-asset + theme/Ultra.
+
+## What this does NOT prove (honesty boundary)
+
+- **26 does not reject a multi-display advert by count.**
+  `-[CRCarKitServiceAgent fetchScaledDisplaysWithCertificateSerialNumber:displays:reply:]`
+  @0x1000728B8 hands the whole `displays` array to `CRScreenScaleHeuristics
+  scaledDisplays:withDisplayScaling:reply:` — it scales each element, no count guard, no bail.
+  So a bare extra display is not obviously fatal to 26. What 26 categorically lacks is the
+  **cluster-asset / per-display-zoom** machinery — exactly what the cluster altScreen relies on
+  (our advert carries a `clusterAssetIdentifier`).
+
+- **This is a different layer from the observed failure.** `USB eligible: N (No Network Interface)`
+  is a USB-layer symptom (carplay0 destroyed = SI stack restart, see SI_STACK_RESTART_RE.md). The
+  display advert is consumed later, at the CarPlay-session layer, after NCM is already up. For the
+  advert incompatibility to cause `No Network Interface`, 26 would have to fail the session hard
+  enough that dio errors out and SI restarts the stack — plausible, multi-hop, unproven. It is
+  equally possible the 26/27 split is a timing race against the startup-budget churn and not the
+  advert at all.
+
+## Decisive test (now enabled)
+
+`carplay_startup.sh` gates the cluster advert behind `/mnt/app/carplay_altscreen` (off by default).
+With the marker absent, base CarPlay is stock and should connect on every iOS. If the iOS-26 phone
+that reproduced the failure then connects, the cluster-display advert was the 26 blocker and the
+above chain is confirmed. Until that A/B run, the structural divergence is proven but its causal
+role in the connect failure is not.
