@@ -366,3 +366,50 @@ dependency" framing was wrong — it is a HU-side deva cap, not an amp change.
 
 Net: discrete CarPlay 5.1 to the B&O amp is **not architecturally blocked** and needs only (1) the
 libairplay ASBD hook + (2) a small `mpl5_dio_ent` 2→6 voices bump on the HU. No amp-side work.
+
+---
+
+## 12. iOS side — does "Spatial (Y) without Dolby (N)" send raw multichannel PCM? (IMPORTANT correction)
+
+Checked iOS 27 `AirPlaySupport` (the format-negotiation layer our libairplay-class receiver talks to).
+Two decompiled builders settle it:
+
+**`_audioFormatDescriptionUtils_CreateAudioFormatDescriptionListForBufferedSender`** — what the phone
+OFFERS to send for buffered audio (Apple Music streaming). It appends:
+- 22, 23 — AAC/ALAC **stereo** base
+- `if (atmosAllowed)` → 39, 40 — **Dolby Atmos EC3** (DDP JOC)
+- `if (losslessAllowed)` → 21 (+ 20/86 for 16/20-bit) — lossless ALAC
+- `if (feature && APAC_allowed)` → **APAC** (Apple Positional Audio Codec — Apple's spatial codec)
+- passthrough list
+- **NO raw multichannel PCM.** The buffered sender never offers PCM 5.1/7.1.
+
+**`_APSAudioFormatDescriptionListCreateForBufferedReceiverWithAudioCapabilities`** — what a receiver
+ADVERTISES it can accept. Raw multichannel PCM appears here: inside `if (feature && atmosAllowed)`, it
+loops the peer's caps and, for an `lpcm` entry, appends **65 (PCM 5.1) if channels>=6**, **67 if >=8**.
+So raw multichannel PCM is an ACCEPT-side format for realtime/medium-latency streams, gated on the
+peer advertising `lpcm >= 6ch`.
+
+### Conclusion (corrects §5/§10 optimism)
+- **Three separate multichannel transports** exist in iOS: raw multichannel **PCM** (65/67),
+  **Atmos EC3** (39/40), and **APAC** (Apple's spatial codec).
+- **Apple Music surround is delivered as EC3-Atmos or APAC — NOT raw PCM.** The buffered sender has no
+  raw-multichannel-PCM offer, so advertising PCM 5.1 alone makes Apple Music fall back to **stereo**
+  AAC/ALAC. This is exactly why the press always pairs "Spatial + Dolby Atmos": for Apple Music the
+  spatial content *is* the Atmos/APAC stream.
+- Raw multichannel PCM (our hook's path) is only taken by **realtime/app audio that itself outputs
+  multichannel PCM** (some games/apps), where the phone renders to PCM and the receiver advertised
+  `lpcm >= 6ch`. It will carry those — but not the Apple Music catalogue.
+
+### What this means for us
+- Our libairplay ASBD hook + deva 2→6 patch **still delivers discrete 5.1 for realtime/app PCM audio**
+  (and any source the phone renders to PCM). Keep it.
+- **For Apple Music surround specifically, PCM-only is not enough.** The realistic options:
+  1. **EC3 (Atmos) decode in the car** — we already have `libNmeAudioDolby` (E-AC-3, licensed
+     channel_limit=6). Advertise EC3/48000 + `dolbyAtmosAudioSupported`, route the EC3 bitstream
+     through libNmeAudioDolby → 6ch PCM → the same 6ch sink. This is the path that actually gets
+     Apple Music surround. Heavier (decoder integration into the CarPlay audio path).
+  2. **APAC** — Apple's codec; not available to us, skip.
+- Open nuance to confirm on-unit: whether CarPlay Apple Music uses the *buffered* or a
+  *medium-latency/realtime* sender path (the raw-PCM-multichannel accept path lives on realtime). If
+  CarPlay music turns out to ride a realtime path that DOES emit multichannel PCM, the PCM route could
+  still get it — but the buffered-sender evidence says plan for EC3.
