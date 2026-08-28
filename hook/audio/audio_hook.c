@@ -59,6 +59,30 @@ static int spa_enabled(void)
 #define SPA_CHANNELS  6
 #define SPA_BPF       (SPA_CHANNELS * (SPA_BITS / 8))   /* bytes per frame = 12 */
 
+/* ---- format probe -------------------------------------------------------------------------
+ * Decode a negotiated AirPlayAudioFormat (uint64) to a human string so ONE connect reveals whether
+ * iOS chose multichannel PCM (our path) or a Dolby/EC3 bitstream (Atmos → needs the decode path).
+ * Bit map from iOS 27 AirPlaySupport (AUDIO.md §9): 38=PCM 5.1.2, 44=PCM 5.1, 47=PCM 32f 5.1,
+ * 50=DDP/EC3 5.1, 53=DDP/EC3 9.1.6. Stock low bits (<=31) = stereo/mono PCM + AAC. */
+static const char *spa_fmt_desc(uint64_t fmt)
+{
+    if (fmt == 0) return "0 (invalid/none)";
+    if (__builtin_popcountll(fmt) == 1) {
+        switch (__builtin_ctzll(fmt)) {
+            case 38: return "bit38 PCM 48k/16/5.1.2 (multichannel PCM)";
+            case 44: return "bit44 PCM 48k/16/5.1 (multichannel PCM = our target)";
+            case 47: return "bit47 PCM 48k/32f/5.1 (multichannel PCM)";
+            case 50: return "bit50 DDP/EC3 48k/5.1 (Dolby Atmos BITSTREAM -> needs decode)";
+            case 53: return "bit53 DDP/EC3 48k/9.1.6 (Dolby Atmos BITSTREAM -> needs decode)";
+            default: break;
+        }
+        /* single bit, not in the table */
+        return __builtin_ctzll(fmt) <= 31 ? "low-bit (stock stereo/mono PCM or AAC)"
+                                          : "high-bit (multichannel? not in known table)";
+    }
+    return "multi-bit mask (see hex)";
+}
+
 /* ---- AudioSessionGetSupportedOutputFormats -------------------------------------------------
  * The 64-bit capability mask the AirPlay negotiation offers the phone. OR-in the 5.1 bit so the
  * phone is allowed to send 6ch. Stereo path untouched. */
@@ -68,13 +92,17 @@ int64_t AudioSessionGetSupportedOutputFormats(int streamType)
 {
     static fn_get_formats_t real;
     if (!real) real = (fn_get_formats_t)dlsym(RTLD_NEXT, "AudioSessionGetSupportedOutputFormats");
-    int64_t caps = real ? real(streamType) : 0;
+    int64_t base = real ? real(streamType) : 0;
+    int64_t caps = base;
 
-    if (spa_enabled() && streamType == 100 /* main audio only */) {
+    if (spa_enabled() && streamType == 100 /* main audio only */)
         caps |= (int64_t)SPA_FMT_5_1;
-        LOG_INFO(LOG_MODULE, "advertise 5.1: caps now %#llx (type=%d)",
-                 (unsigned long long)caps, streamType);
-    }
+
+    /* PROBE (always): what we advertise to the phone, per stream type. Compare base vs offered to see
+     * the augmentation, and to know the stock ceiling on a plain connect. */
+    LOG_INFO(LOG_MODULE, "getSupportedFormats(type=%d): stock=%#llx offered=%#llx%s",
+             streamType, (unsigned long long)base, (unsigned long long)caps,
+             caps != base ? " (+5.1)" : "");
     return caps;
 }
 
@@ -91,6 +119,13 @@ typedef uint32_t (*fn_fmt_to_asbd_t)(uint64_t /*fmt*/, uint32_t * /*asbd*/, uint
 
 uint32_t AirPlayAudioFormatToASBD(uint64_t fmt, uint32_t *asbd, uint32_t *bits_out)
 {
+    /* PROBE (always): the phone's NEGOTIATED format arrives here during SETUP/_UpdateStreams. This is
+     * the decisive line — it says exactly what iOS chose. A bit50/53 here = Dolby Atmos bitstream (we
+     * must decode, not PCM). A bit44/etc = multichannel PCM (our path works). NOTE: if the phone picks
+     * an EC3/passthrough format that libairplay routes WITHOUT calling ToASBD, you'll see it in the
+     * offered caps above but NOT here — absence of a main-audio ToASBD call is itself the EC3 signal. */
+    LOG_INFO(LOG_MODULE, "ToASBD(fmt=%#llx) => %s", (unsigned long long)fmt, spa_fmt_desc(fmt));
+
     if (spa_enabled() && fmt == SPA_FMT_5_1 && asbd) {
         asbd[0] = SPA_SR;             /* sampleRate      */
         asbd[1] = 1819304813;         /* 'lpcm'          */
