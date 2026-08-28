@@ -195,3 +195,37 @@ offers (iOS 27 lists PCM/48000/16/5·7·9; the 6ch/5.1 variant is probe-confirme
 ### Net
 No patching of libairplay internals — only boundary hooks. The real gate is the dio/mixer 6-voice
 route (B&O agent). Coordinate: **`mpl5_dio_ent` -> 6 voices -> six_channel_speakerp.**
+
+---
+
+## 9. AirPlay audio-format bit map (iOS 27) — extracted statically
+
+From AirPlaySupport `_APAudioFormatCopyAudioFormatsToReadableString` (iOS 27,
+`Refferences/ios27_dsc/.../extracted_dylibs/AirPlaySupport`), the bit->format-string table. The
+`AirPlayAudioFormat` mask is uint64; multichannel lives above bit 31. Key values:
+
+| format string | bit | value |
+|---|---|---|
+| **PCM/48000/16/5.1** (our Spatial target) | 44 | `0x100000000000` |
+| PCM/48000/16/5.1.2 | 38 | `0x4000000000` |
+| PCM/48000/32f/5.1 (32-bit float) | 47 | `0x800000000000` |
+| PCM/48000/32f/5.1.2 | 48 | `0x1000000000000` |
+| DDPLUS/48000/5.1 (Dolby, 5.1) | 50 | `0x4000000000000` |
+| DDPLUS/48000/9.1.6 | 53 | `0x20000000000000` |
+
+Full layout family exists: PCM 16 & 32f in 5.1 / 5.1.2 / 5.1.4 / 7.1 / 7.1.2 / 7.1.4 / 9.1.6;
+QAAC/QAACHE/QC3/DDPLUS multichannel variants. Format-string layout notation is `codec/rate/bits/L.F.H`
+(e.g. 5.1.2 = 5 main + 1 LFE + 2 height).
+
+### Critical: the 5.1 bit (44) exceeds the stock 32-bit format pipeline
+Bit 44 fits `AudioSessionGetSupportedOutputFormats` (returns __int64) so we CAN advertise it. But
+stock `AirPlayAudioFormatToPCM(int a1)` and the stored format (`AudioStreamPrivate+16`, a _DWORD) are
+32-bit — bit 44's low 32 bits are 0, so those stock paths cannot carry it. **The multichannel case
+must be handled at the 64-bit SETUP/negotiation layer** (advertise via the capability query, detect
+the phone's 5.1 selection in the RTSP SETUP, and drive `AudioStreamCreate`/`AudioStreamSetProperty`
+with a 6ch ASBD ourselves) — NOT by tweaking `AirPlayAudioFormatToPCM`. The hook module reflects this
+(`SPA_FMT_5_1 = 1<<44`, `SPA_FMT_ARMED 0` until the SETUP-layer path exists).
+
+### Channel order
+Apple 5.1 PCM order = canonical **L R C LFE Ls Rs**. Must be matched to the Audi
+`six_channel_speakerp` order (deva mixer / B&O agent side); a mismatch swaps speakers.

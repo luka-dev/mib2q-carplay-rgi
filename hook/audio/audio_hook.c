@@ -41,12 +41,24 @@ static int spa_enabled(void)
 }
 
 /*
- * The AirPlayAudioFormat bit for 5.1 PCM (PCM/48000/16/6).  UNKNOWN until probed on a live connect:
- * iOS 27 puts multichannel at bits 31+ of the 64-bit AirPlayAudioFormat mask (classic bits 0-30 are
- * full — verified in AirPlayCommon.h). 0 = not set = module inert. Set to the probed bit to arm.
+ * The AirPlayAudioFormat bit for 5.1 PCM (PCM/48000/16/5.1).  EXTRACTED STATICALLY from iOS 27
+ * AirPlaySupport `_APAudioFormatCopyAudioFormatsToReadableString` (bit->string table): bit 44.
+ * Other useful bits from the same table: PCM/48000/32f/5.1 = 1<<47; PCM/48000/16/5.1.2 = 1<<38;
+ * DDPLUS/48000/5.1 = 1<<50; DDPLUS/48000/9.1.6 = 1<<53. Channel order = Apple canonical 5.1
+ * (L R C LFE Ls Rs) — must be matched to the Audi six_channel_speakerp order on the mixer side.
+ *
+ * WARNING — 32-bit pipeline: bit 44 is > 31, but stock `AirPlayAudioFormatToPCM(int a1)` receives the
+ * format as a 32-bit int (and the stored format at AudioStreamPrivate+16 is a _DWORD). So the low 32
+ * bits of bit 44 are 0 -> the ToPCM hook below CANNOT match our format; the multichannel case must be
+ * handled at the 64-bit negotiation layer (SETUP) and drive the AudioStream setup directly. The ToPCM
+ * hook stays for the (unreachable-for-bit44) stereo-compatible case + as a probe log. See AUDIO.md.
  */
-#define SPA_FMT_5_1   ((uint64_t)0)   /* TODO(probe): e.g. (1ULL << 31) once confirmed on the unit */
-#define SPA_CHANNELS  6               /* L R C LFE Ls Rs; channel-order map is a mixer-side concern */
+#define SPA_FMT_5_1   ((uint64_t)1 << 44)   /* PCM/48000/16/5.1 — verified in AirPlaySupport */
+#define SPA_CHANNELS  6                     /* L R C LFE Ls Rs (Apple order) */
+
+/* Kept OFF regardless until the 64-bit SETUP-layer path is built (bit 44 can't ride the 32-bit ToPCM
+ * pipeline). Flip to 1 only alongside that work. */
+#define SPA_FMT_ARMED 0
 
 /* ---- AudioSessionGetSupportedOutputFormats -------------------------------------------------
  * Returns the 64-bit capability mask the AirPlay negotiation offers the phone. We OR-in the 5.1 bit
@@ -59,11 +71,13 @@ int64_t AudioSessionGetSupportedOutputFormats(int streamType)
     if (!real) real = (fn_get_formats_t)dlsym(RTLD_NEXT, "AudioSessionGetSupportedOutputFormats");
     int64_t caps = real ? real(streamType) : 0;
 
-    if (spa_enabled() && SPA_FMT_5_1 && streamType == 100 /* main audio only */) {
+#if SPA_FMT_ARMED
+    if (spa_enabled() && streamType == 100 /* main audio only */) {
         caps |= (int64_t)SPA_FMT_5_1;
         LOG_INFO(LOG_MODULE, "advertise 5.1: caps now %#llx (type=%d)",
                  (unsigned long long)caps, streamType);
     }
+#endif
     return caps;
 }
 
@@ -86,7 +100,11 @@ int AirPlayAudioFormatToPCM(int a1, int a2, uint32_t *a3)
 
     int rc = real(a1, a2, a3);
 
-    if (rc == 0 && a3 && spa_enabled() && SPA_FMT_5_1 && ((uint64_t)(uint32_t)a1 == SPA_FMT_5_1)) {
+#if SPA_FMT_ARMED
+    /* NOTE: bit 44 is truncated to 0 in this 32-bit `a1`, so this can never match SPA_FMT_5_1 as-is.
+     * The real 5.1 path drives the AudioStream setup from the 64-bit SETUP layer. Left here only for
+     * the eventual low-bit / probe case and as a channel-rewrite reference (offsets verified above). */
+    if (rc == 0 && a3 && spa_enabled() && ((uint64_t)(uint32_t)a1 == (uint32_t)SPA_FMT_5_1)) {
         uint32_t bits  = a3[7] ? a3[7] : 16;
         uint32_t bpf   = SPA_CHANNELS * (bits / 8);   /* bytes per frame  */
         a3[6] = SPA_CHANNELS;                         /* channelsPerFrame */
@@ -95,6 +113,7 @@ int AirPlayAudioFormatToPCM(int a1, int a2, uint32_t *a3)
         LOG_INFO(LOG_MODULE, "ASBD -> %u ch, %u-bit, bpf=%u (fmt=%#x)",
                  SPA_CHANNELS, bits, bpf, (unsigned)a1);
     }
+#endif
     return rc;
 }
 
