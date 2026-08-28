@@ -115,3 +115,37 @@ the realistic conclusion is that the gate is the **AirPlay session version the o
 not a key we can bolt on. Chasing the exact Fig byte in AirPlaySupport would confirm this but is very
 unlikely to yield a working enable on a 210.81 stack. RE goal achieved: mechanism, layer, class,
 ivar, key name, and the inversion are all pinned; "just flip a bit" is ruled out.
+
+---
+
+# The dig, to the bottom — it is PROTOTYPE-gated (2026-08-28)
+
+Pushed past CarKit into the value's true origin. `CARSessionConfiguration.lodWidgetsMode` (ivar +184)
+is NOT written in `initWithSessionStatusOptions:` — it is written only by
+`-[CARSessionConfiguration updateCarCapabilities]` (`0x1c200af60`):
+
+```
++184 (lodWidgetsMode)  = disabledCheck ? 1 /*off*/ : [carCaps <lodWidgetsMode>]
++176 (liveActivities)  = disabledCheck ? 1 /*off*/ : [carCaps <liveActivitiesMode>]
+```
+where `carCaps` = an **`_OBJC_CLASS_$_CRCarPlayCapabilities`** instance (off_1E1766960 resolved via
+the shared cache).
+
+`CRCarPlayCapabilities.lodWidgetsMode` is set by `-[CRCarPlayCapabilitiesManager reconcileCapabilities]`
+(carkitd), which blends three sources:
+1. the accessory's advertised value,
+2. per-vehicle stored user prefs, and
+3. **`+[CARPrototypePref lodWidgets]`** / `+[CARPrototypePref liveActivities]` — an Apple
+   **prototype/internal preference** (a `dispatch_once` singleton created with a `CRLocalizedStringForKey`
+   title, i.e. a toggle that shows up only in an Apple-internal/prototype Settings menu), plus the
+   server-pushed **deny-list** (`com.apple.carkit.liveactivity.denylist-changed`).
+
+Persistence/coding keys: **`CapabilitiesLodWidgetsKey`**, **`CapabilitiesLiveActivitiesKey`**,
+plus a `disabledFeature` bitmask.
+
+## Definitive verdict
+This is not merely "our stack is too old". As of iOS 27, CarPlay LOD widgets / Live Activities are
+**still gated behind `CARPrototypePref` (Apple prototype/internal prefs) and a server deny-list**,
+blended with the car's advertisement. There is no clean, car-advertised boolean that turns them on:
+even a modern head unit is subject to Apple's prototype flag + deny-list. So **we cannot enable them
+from the accessory side** — full stop. The RE is complete and conclusive; closing this line of work.
