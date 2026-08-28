@@ -76,3 +76,42 @@ NOT "add a missing key", but one of:
    is gated by session version, not a key we can add — i.e. not reachable without a much newer stack.
    The RE was still worth it: it proved the layer (CARSessionConfiguration, same as altScreen) and
    ruled out "just flip a bit".
+
+---
+
+# Wire key FOUND — dyld_shared_cache extracted (2026-08-28)
+
+Extracted `dyld_shared_cache_arm64e` from the iOS 27 IPSW, located the class, pulled the dylib:
+`ipsw dyld extract … /System/Library/PrivateFrameworks/CarKit.framework/CarKit`. `CARSessionConfiguration`
+is defined in **CarKit** (0x1e8938ce0).
+
+## The full chain, end to end
+1. **AirPlay receiver session (Fig endpoint)** — `-[CARSession initWithFigEndpoint:sessionStatusOptions:
+   nightModeProvider:]`. The car's advertised session properties arrive as **`sessionStatusOptions`**
+   (a MediaToolbox/AirPlay Fig-endpoint status dict).
+2. **`-[CARSessionConfiguration initWithSessionStatusOptions:propertySupplier:]`** (`0x1c2008f7c`) reads
+   each property through a `propertySupplier(key)` keyed by string constants. CarKit's own key strings
+   include **`LodWidgetsKey`**, **`LodWidgetsMode`**, `LodWidgets`, and the LiveActivities equivalents.
+3. Getter `-[CARSessionConfiguration lodWidgetsMode]` = **ivar +184**; `liveActivitiesMode` similarly.
+4. `-[CRPairingAirPlaySessionInfo initWithSession:]` → `supportsLodWidgets = (lodWidgetsMode != 1)`,
+   `supportsLiveActivities = (liveActivitiesMode != 1)`.
+
+## What this nails down
+- The capability is carried in the **AirPlay session-status-options** — the same AirPlay/Fig session
+  transport as the rest of CarPlay setup. **Not a new protocol, not a feature bit.** Confirmed.
+- CarKit key name: `LodWidgetsKey` / `LiveActivities…`. The value is a tri-state MODE.
+
+## The remaining (and final) unknown
+Where the ACCESSORY populates `sessionStatusOptions.lodWidgetsMode` on the wire lives one dylib
+further out — in **AirPlaySupport / MediaToolbox (the Fig endpoint)**, not CarKit. That is the byte
+the HU would emit.
+
+## Verdict (recommendation: stop)
+The inversion still stands: `supports = (mode != 1)`, so **absent ⇒ supported**. Combined with:
+- our stock libairplay 210.81 (and the 280.33.8 SDK) emitting **none** of these session-status
+  fields, and
+- the whole path being iOS-17-era AirPlay session status the old stack never negotiates,
+the realistic conclusion is that the gate is the **AirPlay session version the old stack advertises**,
+not a key we can bolt on. Chasing the exact Fig byte in AirPlaySupport would confirm this but is very
+unlikely to yield a working enable on a 210.81 stack. RE goal achieved: mechanism, layer, class,
+ivar, key name, and the inversion are all pinned; "just flip a bit" is ruled out.
