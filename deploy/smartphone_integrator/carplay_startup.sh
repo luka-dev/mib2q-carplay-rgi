@@ -220,4 +220,29 @@ if [ "$CP_ALT_ON" = 1 ]; then
 else
     echo "[supervisor] altScreen OFF - stock-compatible base CarPlay (all iOS)" >> "$WLOG"
 fi
+
+# Discrete 5.1 PCM (Spatial): the hook advertises the iOS 5.1 format bit and emits a 6ch ASBD so the
+# phone pushes discrete surround; libairplay opens mpl5_dio_ent at 6 voices. This ALSO requires the
+# patched deva-ctrl-qc.so (mpl5_dio_ent 2->6 voices) + a 6-voice amp path — see
+# deploy/spatial_5_1/README.md. OFF by default; the base stereo path is untouched when off. Same
+# marker/value-check pattern as altScreen:
+#   touch /mnt/app/carplay_spatial_5_1        # enable discrete 5.1 (needs the deva patch installed)
+#   rm /mnt/app/carplay_spatial_5_1           # default: off, stock stereo
+CP_SPATIAL_MARKER=/mnt/app/carplay_spatial_5_1
+if [ -e "$CP_SPATIAL_MARKER" ]; then
+    CP_SPA_VAL=1
+    read CP_SPA_VAL < "$CP_SPATIAL_MARKER" 2>/dev/null
+    case "$CP_SPA_VAL" in
+        ""|0|false|no|off) CP_SPA_ON=0 ;;
+        *) CP_SPA_ON=1 ;;
+    esac
+else
+    CP_SPA_ON=0
+fi
+if [ "$CP_SPA_ON" = 1 ]; then
+    echo "[supervisor] Spatial 5.1 advert ON (marker $CP_SPATIAL_MARKER)" >> "$WLOG"
+    export SPATIAL_5_1=1
+else
+    echo "[supervisor] Spatial 5.1 OFF - stock stereo audio" >> "$WLOG"
+fi
 exec "$DIODIR/dio_manager" "$@"
