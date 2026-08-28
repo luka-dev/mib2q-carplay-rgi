@@ -51,8 +51,15 @@ Two items first listed here as "to add" are ALREADY in stock and active:
   destination handoff.
 - Electronic Toll Collection (`supportsElectronicTollCollection`).
 - Dolby Atmos / Spatial audio (`supportsDolbyAtmos`, `supportsSpatialAudio`) — vs our stereo PCM.
-- DND while driving (`SupportsDNDWhileDriving`), Live Activities / LOD widgets
-  (`supportsLiveActivities`, `supportsLodWidgets`).
+- DND while driving (`SupportsDNDWhileDriving`) — genuinely phone-side, gated by a car flag; the
+  only cheap one here IF we find where to advertise it.
+- **Live Activities / LOD widgets — NOT feasible (corrected 2026-08-28).** Neither the stock
+  libairplay 210.81 NOR the leaked 280.33.8 SDK has any lodWidget/liveActivity feature bit or key
+  (verified: the AirPlay feature enum is Audio/AudioAAC_LC/AudioPCM/Car/CarPlayControl/Screen/Rotate/
+  Pairing/UnifiedBonjour — no widget/dashboard bit). These are an iOS 17+ capability negotiated by a
+  newer CarPlay-capabilities mechanism our stack version predates entirely. Enabling would require RE
+  of that negotiation from carkitd plus a much newer stack — not a flag flip. My earlier "low effort"
+  note was wrong.
 
 ## Out of scope for this box
 - **Wireless CarPlay** (`supportsWirelessCarPlay`) — needs the BT+WiFi pairing stack and radios; we
