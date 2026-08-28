@@ -696,3 +696,52 @@ Two earlier worries are now closed, both negative:
 - **`channel_map` min_voices quirk: unreachable.** The only wrapper for that ioctl is
   `snd_pcm_query_channel_map`, and a grep of the whole MU1316 image finds **no importer** — the symbol
   exists only inside `libasound.so.2`. Playback uses the hardcoded maps instead. Left alone.
+
+---
+
+## 17. What the Dolby Atmos capability actually does on the phone (it is a CONTENT switch, not a transport switch)
+
+Natural follow-up to §15: if CarPlay never carries EC3, what is `dolbyAtmosAudioSupported` for? Traced
+in iOS 27 `MediaToolbox` + `AirPlaySupport`. **It selects a different asset, not a different wire format.**
+
+### The chain (MediaToolbox)
+1. **`FPSupport_GetAtmosSupport(audioInfo, …, &canPassthrough, &supported)` @0x196E415B8** reads Atmos
+   support as a **property of the current audio output device** (or, for AirPlay, of the
+   `FigBufferedAirPlayOutput` object). Route capability in, two booleans out — the ones behind the log
+   line `ac3IsDecodable:%s ec3IsDecodable:%s atmosIsDecodable:%s, … atmosCanPassthrough:%s`.
+2. **`itemfig_isAtmosSupported` @0x1970D46DC** combines them per media item:
+   route-can-passthrough **OR** `itemfig_isSpatializationAllowed` (the phone can render it itself)
+   **OR** `FPSupport_GetMaxPhysicalOutputChannelCount` is non-zero → then `itemfig_isTrackDecodable`.
+3. If that says yes, **HLS alternate selection picks the Atmos rendition**:
+   `FigAlternateSelectionUtility_AlternateListHasATMOSAlternate` @0x196E2F9A0,
+   `FigAlternateHighestAtmosBitrateFilterCreate` @0x196CFDB74 (`HighestAtmosBitrateFilter`),
+   driven by the `AutoSwitchAtmosVariants` preference (`fpfsi_handleAutoSwitchAtmosVariantsChanged`).
+
+So the flag literally means *"this output deserves the Atmos master"* — the player fetches a different,
+higher-tier variant of the track. It never changes what goes over the link.
+
+### For CarPlay it is branch 2 that fires
+The car cannot take an Atmos bitstream — there is no EC3 bit in the screen-receiver mask at all (§15).
+So the phone takes the Atmos master, **renders it on-device**, and ships the result as
+`AAC_LC/48000/5.1.2` (bit 42). **Dolby = the source tier; AAC 5.1.2 = the wire.** That is exactly why
+the press always pairs "CarPlay Spatial Audio" with "powered by Dolby Atmos" (§13) — they are two
+different layers, not two names for one thing.
+
+### What the accessory's declaration does NOT do
+`APAudioFormatIsScreenSpatialAudioReceiver` @0x22669B1F4 — the gate that adds bit 42 — is
+`APSSettingsIsFeatureEnabled(<feature>)` **plus a device-model check**, nothing else. The car's
+declared capability never enters it. Likewise `APAudioFormatAtmosIsAllowedForCurrentDeviceAsSender` is
+a `dispatch_once` device-level allowance, and `APAudioFormatFilterFormatsForSpatialSender` gates on
+`APSIsAPMSpeaker` + `APAudioFormatGetBufferedPassthroughSupportedFormats` — the **buffered**
+(HomePod-class) path, not ours.
+
+### The badge is derived, not declared
+`APSBadgingFormatInfoCopyBadgeType` @0x22663D760 picks the "Dolby Atmos" / "Dolby Audio" /
+"Apple Spatial Audio" label (`kAPSBadgingFormatInfoType_*`) from the **actual codec fourCC + channel
+count** of the running stream. Declaring a capability does not paint a badge; carrying the format does.
+
+### Not traced (honest gap)
+The hop from CarKit `CRVehicle.supportsDolbyAtmos` / `CARSessionConfiguration.dolbyAtmosAudioSupported`
+(+22) into the CoreAudio route property that `FPSupport_GetAtmosSupport` reads. CarKit itself never
+calls `setSupportsDolbyAtmos:` — the consumer lives outside it. The architecture above is proven; that
+one link is inferred.
