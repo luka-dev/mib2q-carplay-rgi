@@ -22,10 +22,15 @@ say(){ echo "[spatial_5_1] $*"; }
 
 [ -f "$DEVA_SRC" ] || { say "MISSING $DEVA_SRC (run deploy/deva-ctrl-qc/patch_deva.sh first)"; exit 1; }
 
-# integrity gate: patched .so must have mpl5_dio_ent(idx4) max_voices=0x06 at file 0xA6E1C
-b=$(xxd -s $((0xA6E1C)) -l 1 -p "$DEVA_SRC" 2>/dev/null || od -An -tx1 -j $((0xA6E1C)) -N1 "$DEVA_SRC" | tr -d ' ')
-[ "$b" = "06" ] || { say "REFUSE: $DEVA_SRC max_voices byte=0x$b (expected 0x06 - not the patched build)"; exit 1; }
-say "patched deva verified (mpl5_dio_ent max_voices=0x06)"
+# integrity gate: patched .so must carry all three mpl5_dio_ent(idx4) edits (see deva-ctrl-qc/patch_deva.sh)
+chk(){ # chk <file-offset> <expected LE dword hex> <label>
+    v=$(xxd -s "$1" -l 4 -p "$DEVA_SRC" 2>/dev/null)
+    [ "$v" = "$2" ] || { say "REFUSE: $DEVA_SRC $3=$v (expected $2 - not the patched build)"; exit 1; }
+}
+chk $((0xA6E1C)) 06000000 max_voices
+chk $((0xA6E24)) 00480000 max_fragsize
+chk $((0xA6E28)) 00d00200 max_buffer
+say "patched deva verified (mpl5_dio_ent: 6 voices, 0x4800 fragsize, 0x2D000 buffer)"
 
 if [ "$APPLY" = 0 ]; then
     say "DRY-RUN. Would:"

@@ -671,3 +671,28 @@ stock device has min == max so it never mattered. Our patch set mpl5 to min=2 / 
 `SND_PCM_IOCTL_QUERY/GET_CHANNEL_MAP` on `mpl5_dio_ent` would return the *stereo* map. This does
 **not** affect playback: the actual stream setup uses the hardcoded maps above, not the table. Leave
 min at 2 so stock stereo still opens with the hook off.
+
+### Patch fixed: 1 byte → 4 bytes (fragment size had to move with the voice count)
+Raising `mpl5_dio_ent` to 6 voices alone was **incomplete**. The record's `max_fragsize` is `0x1800`
+= 6144 B, which is 1536 frames at stereo but only **512 frames at 6ch** — a 3× shorter fragment
+(10.7 ms vs 32 ms @48 kHz) than any other path on this HU. The stock 6-channel device `mpl1_int_ent`
+carries `0x4800` precisely for that reason, and `max_buffer` tracks it (`max_fragsize * max_frags(10)`:
+`0x1800*10 = 0xF000` vs `0x4800*10 = 0x2D000`). So the patch now mirrors mpl1 on all three:
+
+| field | file off | stock | patched |
+|---|--:|--:|--:|
+| max_voices | 0xA6E1C | 2 | **6** |
+| max_fragsize | 0xA6E24 | 0x1800 | **0x4800** |
+| max_buffer | 0xA6E28 | 0xF000 | **0x2D000** |
+
+Both **min** fields stay stock — every edit only *widens* the accepted range, so stereo with the hook
+off is unchanged. `deploy/deva-ctrl-qc/patch_deva.sh` verifies against the live mpl1 record and
+asserts exactly 4 differing bytes.
+
+Two earlier worries are now closed, both negative:
+- **Mixer coupling: none.** `build_playback_mixer` (inlined in `deva_setup_mixer` @0x3C248) switches on
+  `mix_config[6]`, hardcoded to **1** by `deva_pcm_and_mixer_device_init_platform_mib` @0x5707C. The
+  card mixer is one volume/mute tree; it never reads a device's voice count.
+- **`channel_map` min_voices quirk: unreachable.** The only wrapper for that ioctl is
+  `snd_pcm_query_channel_map`, and a grep of the whole MU1316 image finds **no importer** — the symbol
+  exists only inside `libasound.so.2`. Playback uses the hardcoded maps instead. Left alone.
