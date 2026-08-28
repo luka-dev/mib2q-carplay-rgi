@@ -229,3 +229,51 @@ with a 6ch ASBD ourselves) — NOT by tweaking `AirPlayAudioFormatToPCM`. The ho
 ### Channel order
 Apple 5.1 PCM order = canonical **L R C LFE Ls Rs**. Must be matched to the Audi
 `six_channel_speakerp` order (deva mixer / B&O agent side); a mismatch swaps speakers.
+
+---
+
+## 10. SETUP-layer design for 5.1 (reusing the altscreen infrastructure)
+
+Bit 44 can't ride the stock 32-bit format pipeline (section 9), so the 5.1 case is handled at the
+64-bit RTSP SETUP layer. This reuses what altscreen already built.
+
+### What altscreen already provides (reuse, don't rebuild)
+- It OWNS the `AirPlayReceiverSessionSetup` interposition (only one definition allowed) — the audio
+  module must NOT define its own; it hooks in via seams called from altscreen's wrapper.
+- CF helper suite resolved via dlsym: `cf_str`, `cf_getval` (dict get), `cf_arrcount`/`cf_arridx`,
+  `cf_geti64` (CFDictionaryGetInt64, 3-arg), `cf_dictset`/`cf_dictseti`, `cf_arrapp*`.
+- `alt_find_stream_type(request, type)`: walks `request["streams"]`, matches `type`. The audio module
+  finds its stream the same way (or by presence of the `audioFormat` key, which is the confirmed
+  SETUP key holding the 64-bit format).
+
+### The flow
+1. **Advertise** (done): `AudioSessionGetSupportedOutputFormats` OR-in bit 44; `spatialAudioSupported`
+   into the response enabledFeatures via `spa_augment_setup_response` (control SETUP).
+2. **Detect + rewrite BEFORE real()** — seam `spa_pre_setup(request)` called from the top of the
+   altscreen wrapper: find the audio stream (the `streams[i]` dict carrying `audioFormat`); read
+   `audioFormat` as int64 (full 64-bit, via `cf_geti64`). If `== SPA_FMT_5_1` (bit 44):
+   - set a session flag `g_want_5_1 = 1` (+ stash sr/bits);
+   - **rewrite** `streams[i]["audioFormat"]` to a stereo bit stock accepts (e.g. bit 17 =
+     PCM/48000/24/2 = 0x20000) via `cf_dictseti`. This sidesteps the risk that stock SETUP validates
+     `audioFormat` against its 32-bit supported mask and rejects bit 44 (bit 44's low 32 bits are 0).
+3. **real()** sets up a (nominally stereo) audio stream with a valid low-bit format.
+4. **Bridge to ToPCM** — our `AirPlayAudioFormatToPCM` hook: when `g_want_5_1`, force the ASBD to 6
+   channels (offsets confirmed, section 7). Stock then opens `mpl5_dio_ent` with 6 voices
+   (`AudioStreamPrepare` takes channels straight from the ASBD, section 8). The phone — told bit 44 —
+   sends 6ch PCM, matching the 6ch sink.
+5. **Teardown**: clear `g_want_5_1` (seam `spa_post_teardown`), so alt/prompt streams stay stereo.
+
+Scope note: only the MAIN media stream carries bit 44; alt audio (prompts) keeps its own stereo
+low-bit format, so it is never rewritten and `g_want_5_1` is main-only.
+
+### Two integration touches in altscreen (small, additive)
+- top of the `AirPlayReceiverSessionSetup` wrapper, before `real()`:  `spa_pre_setup(request);`
+- in the existing enabledFeatures block (control SETUP): `spa_augment_setup_response(session, request, response);`
+- teardown wrapper: `spa_post_teardown();`
+
+### To verify on the unit
+- Does stock SETUP actually reject bit 44 (decides whether the pre-real rewrite is required or just
+  belt-and-suspenders)? The rewrite is safe either way.
+- The exact audio stream `type` number (else match by `audioFormat`-key presence).
+- Channel order L R C LFE Ls Rs vs `six_channel_speakerp` (mixer / B&O agent).
+- `mpl5_dio_ent` provisioned for 6 voices (B&O agent).
