@@ -360,8 +360,9 @@ dependency" framing was wrong — it is a HU-side deva cap, not an amp change.
    VA `0xA7D44 + 48*4 = 0xA7E04`, dwords [5]/[6] (`+0x14`/`+0x18` → VA `0xA7E18`/`0xA7E1C`), value
    `0x02`→`0x06`. (Also review [7]/[8] fragsize, currently 0xC00 = per-2ch; mpl1's 6ch uses 0x4800.)
    Translate VA→file offset via section headers before patching.
-   **First check** `deva_parse_commandline_parameters` (it references `mpl5_dio_ent`) for a per-device
-   voices override — if one exists, this becomes a `DEVA_ARGS` line in `startup.sh` (no binary patch).
+   **Confirmed a binary patch, not config:** `deva_parse_commandline_parameters` is a name→id
+   `strcasecmp` chain (for `default_device=`/`dev_id=`); it exposes NO per-device voices knob, so the
+   voice count can only be changed in the static caps table above.
 
 Net: discrete CarPlay 5.1 to the B&O amp is **not architecturally blocked** and needs only (1) the
 libairplay ASBD hook + (2) a small `mpl5_dio_ent` 2→6 voices bump on the HU. No amp-side work.
