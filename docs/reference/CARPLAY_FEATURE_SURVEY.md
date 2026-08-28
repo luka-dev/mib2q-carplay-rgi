@@ -4,22 +4,36 @@ Source: capability flags in carkitd/accessoryd 23G71 (iOS 26.6). "We" = this pro
 top of Audi's stock CarPlay.
 
 ## Baseline (already there, NOT our work)
-Stock Audi CarPlay (stock dio_manager + libairplay) already provides: **main-screen video, audio
-out, touch/HID input on the main screen, Siri, phone/telephony, media playback**. Our project only
+Stock Audi CarPlay (stock dio_manager + libairplay) already provides FAR more than the base screen.
+From the ACTIVE message allowlist in `dio_manager.json` (the `##` lines are a legend; the arrays
+below them are live): main-screen video, audio out, touch/HID on the main screen, Siri,
+phone/telephony (CallState 0x4154/56, Communications 0x4157/59), Power updates (0xAE00-03),
+**NowPlaying + metadata** (0x5000/0x5001; CIAP2ServiceCinemo logs title/albumTitle/artist/genre/
+composer/elapsed/shuffle/repeat/appName), **Media Library browsing** (0x4C00-05), and
+**LocationInformation + dead reckoning** (Sent 0xFFFB, Received 0xFFFA/0xFFFC; `nmea` block
+`deadReckoning:true`, bitmask 0x0003 = GPGGA+GPRMC position+speed/course — the "China No GNSS"
+CNMEAProvider path). Our project only
 ADDS two things on top: **RGI** (RouteGuidanceDisplayComponent, cluster turn-by-turn) and
 **AltScreen** (cluster second display, stream 111).
 
 So "what else does CP support that we haven't enabled" = features beyond stock CP + RGI/AltScreen.
 
-## Tier 1 — nav-aligned, natural extensions of what we're building
-- **Vehicle motion data → phone** (`ForwardAccel`, `LateralAccel`, wheel/ground speed) +
-  **`SupportsLocationDeadReckoning`**: the car streams its own motion to the phone so nav keeps
-  working in tunnels / parking decks / GPS-denied, and the ETA/position stay live. Car→phone
-  direction. No new hardware — the signals already exist on the vehicle bus; work is advertising the
-  sensor component and piping the values. **Biggest lever, squarely in our lane.**
+## CORRECTION (2026-08-28, verified in dio_manager.json)
+Two items first listed here as "to add" are ALREADY in stock and active:
+- **LocationInformation + dead reckoning** — stock dio does it by default (0xFFFA/0xFFFB/0xFFFC
+  active, `deadReckoning:true`). NOT something to add; if we want it richer we tune the existing
+  `nmea` config/bitmask, not build it.
+- **NowPlaying + metadata** — stock-active (0x5000/0x5001). Only the album-ART image render has
+  historically been finicky here (DSICarplay coverArtUrl), the metadata pipe is stock.
+
+## Tier 1 — genuinely not in stock, nav-aligned
 - **RoadObjectDetection / speed-limit signs** (`ACCNavigationRoadObjectDetectionInfo`, RoadSign
-  Type+Value — see IAP2_RG_TLV_COVERAGE.md): speed limit + sign detection on the cluster. Depends on
-  feeding ego-speed/yaw above, so it pairs with Tier-1 vehicle data.
+  Type+Value — see IAP2_RG_TLV_COVERAGE.md): not in the stock message allowlist. Needs an
+  advertised detection component + ego-speed/yaw. Note stock already streams speed via GPRMC
+  (LocationInformation), so part of the ego-motion prerequisite is met.
+- **Raw vehicle IMU to phone** (`ForwardAccel`/`LateralAccel` as a distinct accessory feed, beyond
+  the NMEA position/speed already sent) — only if RoadObjectDetection needs finer ego-motion than
+  GPRMC speed.
 
 ## Tier 2 — media / interaction
 - **Now Playing metadata + album art** (`AccessoryNowPlaying`, `nowPlayingAlbumArt`,
