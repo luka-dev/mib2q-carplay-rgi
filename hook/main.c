@@ -6,3 +6,4 @@
 #include "routeguidance/rgd_hook.h"
 #include "coverart/coverart_hook.h"
 #include "altscreen/altscreen_hook.h"
+#include "audio/audio_hook.h"

@@ -48,7 +48,7 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
   cd /src/hook
   SRCS="framework/logging.c framework/bus.c framework/iap2_protocol.c framework/hook_framework.c \
         routeguidance/rgd_tlv.c routeguidance/rgd_hook.c coverart/coverart_hook.c \
-        altscreen/altscreen_av.c altscreen/altscreen_hook.c main.c"
+        altscreen/altscreen_av.c altscreen/altscreen_hook.c audio/audio_hook.c main.c"
   $CC -shared -fPIC -O2 -std=gnu99 -fdata-sections -ffunction-sections '"$CFLAGS_EXTRA"' \
       -I. $SRCS -o /src/build/libcarplay_hook.so -Wl,--gc-sections -lz -lsocket
   # emutls trap: the hook must never carry thread-local emutls (QNX 6.5 crash).
