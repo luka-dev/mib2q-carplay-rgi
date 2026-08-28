@@ -132,3 +132,30 @@ already use for altScreen. Order: Phase 0 → Phase 1 (spatial PCM) → Phase 2 
 - Hi-res (96/192 kHz) — the 48 k TDM bus resamples everything down.
 - Higher bit depth than 24 to CarPlay — already at the CarPlay/main-audio ceiling.
 - Wireless CarPlay, Car Keys — out of scope (radios / UWB not present / not this box).
+
+---
+
+## 7. Dolby decoder licence (libNmeAudioDolby) — decoded values
+
+The Cinemo Dolby DDP/E-AC-3 decoder is gated by a Dolby IUDC signed licence (project number +
+channel_limit + caps), verified at init (`sub_AB04` → `NmeDDPIUDCVerify`). No external licence file —
+the expected values are embedded, obfuscated as `sub_D6B4(enc,k1,k2) = enc ^ ~k2 ^ k1`
+(k1=1211559425, k2=-893184683). Decoded:
+
+| field | value |
+|---|---|
+| project_number | **1500** (0x5DC) |
+| **channel_limit** | **6** (0x00000006) |
+| caps | 2 |
+| API version | 1.1 (major=1, minor=1) |
+
+**`channel_limit=6` = up to 5.1 (6 channels).** Dolby DDP channel_limit convention: 2=stereo,
+6=5.1, 8=7.1. So this HU's Dolby decoder IS licensed for **5.1 output** — NOT stereo-only. (Corrects
+the earlier "probably stereo" worry.)
+
+**Implication for the Atmos path**: Dolby decode to **5.1 is licensed** — no stereo gate. But the
+AirPlay Atmos format `EC3/48000/7` is 7 channels, 1 over the 6 limit → the decoder would clamp/downmix
+to 5.1 or reject; full 7.1/Atmos-height (7-9ch) exceeds the licence. **Atmos→5.1 is the licensed,
+workable target; 7.1.4 is not.** The licence is signed (`NmeDDPIUDCVerify`) → channel_limit cannot be
+forged upward. Still, Spatial (multichannel PCM) remains the cleaner first target — it needs no Dolby
+decoder/licence at all.
