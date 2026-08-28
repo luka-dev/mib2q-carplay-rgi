@@ -435,3 +435,38 @@ advertised. Consequences:
 to discrete 5.1 PCM for CarPlay when we advertise 6ch + `spatialAudioSupported`, or always downmixes to
 stereo for CarPlay regardless. The transport (realtime multichannel PCM) is sound; only Apple's
 content-side render decision for the CarPlay realtime path needs a live connect to confirm.
+
+---
+
+## 13. External evidence — first shipping CarPlay Spatial (Volvo EX90), and our stance
+
+MacRumors, 2026-08-28: "Spatial Audio in CarPlay Now Rolling Out in Volvo Vehicles" — Spatial Audio in
+CarPlay **powered by Dolby Atmos**, rolling out to Volvo EX90 (also EX60/ES90) via a **car software
+update**, **requires the optional Bowers & Wilkins** sound system.
+
+What it establishes:
+- CarPlay Spatial Audio is real, shipping (iOS 26 era), and **branded/powered by Dolby Atmos** — the
+  content is Atmos (matches "the press always pairs Spatial + Atmos": for CarPlay they are one feature).
+- It needs a **premium Atmos-class sound system** (B&W in Volvo ≈ **B&O in our Audi** — same tier).
+- It shipped as a **car-side software update**, i.e. NOT a trivial "advertise a bit" — the car's
+  software had to add spatial/Atmos handling. This aligns with our work being real (hook + deva +
+  possibly a decode path), not a flag flip.
+
+What it does NOT settle: whether the wire format to the car is an **EC3-Atmos bitstream** (car decodes)
+or **phone-rendered multichannel PCM** (car plays PCM). iOS has both mechanisms; the article doesn't
+say which CarPlay uses.
+
+Dolby machinery already present in OUR stack:
+- HU `libNmeAudioDolby` (Cinemo E-AC-3 decoder, licence channel_limit=6) — today only on the LOCAL
+  media path, NOT wired into CarPlay.
+- B&O amp SHARC ROM carries Dolby/DTS decoders on some variants (SoundAmp datasheet, §2 of the amp doc).
+
+**Stance (stable — keep both paths, let a live connect decide):**
+1. **PCM path** — libairplay ASBD hook + deva 2→6 (cheap). Works immediately if CarPlay negotiates
+   multichannel PCM.
+2. **EC3-Atmos path** — route the EC3 bitstream through `libNmeAudioDolby` → 6ch PCM → the 6ch sink
+   (heavier). Needed if CarPlay insists on an Atmos bitstream.
+
+Decisive next step is a single on-unit iPhone (iOS 26+) CarPlay connect with our 5.1 advertisement +
+`spatialAudioSupported`: capture which audio format the phone actually offers/selects, then commit to
+that path. Do not pre-commit to PCM-only.
