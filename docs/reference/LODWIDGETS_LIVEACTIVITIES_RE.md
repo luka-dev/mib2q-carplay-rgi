@@ -149,3 +149,36 @@ This is not merely "our stack is too old". As of iOS 27, CarPlay LOD widgets / L
 blended with the car's advertisement. There is no clean, car-advertised boolean that turns them on:
 even a modern head unit is subject to Apple's prototype flag + deny-list. So **we cannot enable them
 from the accessory side** — full stop. The RE is complete and conclusive; closing this line of work.
+
+---
+
+# CORRECTION — the prototype default is ON, not off (2026-08-28)
+
+I was WRONG to call this "prototype-gated / impossible". Read the actual default:
+`+[CARPrototypePref lodWidgets]` factory (block @0x1c204fef0) passes default =
+`unk_1ED9EB928` = an **NSConstantIntegerNumber value 2**. Mode semantics (from
+`supports = (mode != 1)`): **1 = OFF, 2 = default = ON**, -1 = use car's value, 0 = unset.
+
+`reconcileCapabilities` on a production phone (user hasn't set the prototype toggle, so
+`[pref value] == nil`): the override is skipped, then `if (!mode) mode = [pref defaultValue] = 2`.
+So **lodWidgetsMode defaults to 2 → supportsLodWidgets = TRUE by default**. The prototype pref does
+NOT gate the feature off; it defaults it ON. Same story expected for liveActivities.
+
+## Revised picture — this is NOT impossible from the accessory side
+Consistent with the project's own altScreen / spatialAudio approach (CARSessionConfiguration
+properties advertised via the dio SetProperty patch, see AUDIO.md / CARPLAY_SPATIAL_DOLBY_PLAN.md).
+The real remaining gates are, in order:
+1. **The server deny-list** (`CarPlayWidgetDenyList` / `CarPlayLiveActivityDenyList`,
+   `com.apple.carkit.liveactivity.denylist-changed`) — Apple can exclude specific/unknown cars.
+2. **The `disabledFeature` path in `updateCarCapabilities`** — `+184 = disabledCheck ? 1 : carCaps`
+   — some condition can still force mode=1 (off).
+3. **The car must actually surface the Dashboard/widget UI** — Live Activities / LOD widgets are
+   drawn by the phone into the CarPlay video; the car needs a modern-enough CarPlay UI/Dashboard for
+   the phone to place them. This, plus the AirPlay session version, is the likely practical wall for
+   our 210.81 stack — but it is NOT a hard prototype flag.
+
+## Bottom line
+Reachability is OPEN again: default-ON means the car does not have to fight a prototype gate. Whether
+our specific stack can actually get widgets to render is now the real question (deny-list + Dashboard
+surface + session version), same class of problem as any CARSessionConfiguration advert we already
+do for altScreen — not a categorical "no".
