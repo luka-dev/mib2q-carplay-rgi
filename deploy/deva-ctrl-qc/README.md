@@ -42,6 +42,20 @@ On-unit `deva-ctrl-qc.so` lives under the mounted app image (`app/armle/lib/dll/
 Replacing it requires restarting `io-audio`/deva = the whole audio subsystem → reboot territory.
 **Do not deploy or restart without asking** (per the no-reboot rule). Confirm the live path first.
 
+## 6 is the ceiling — 8 is NOT reachable by a byte (AUDIO.md §16)
+The CarPlay spatial transport is 5.1.2 = 8 channels (AUDIO.md §15), so "why not just write 8 here?"
+is the natural next question. Answer: no. `deva_mib2_channel_map` @0x54ACC switches on
+`{1, 2, 3, 6}` and rejects everything else, no device in the table exceeds 6, there is no 8ch output
+node (`mono_` / `stereo_` / `six_channel_speakerp` only), and `deva_csd_start_csd_session_playback`
+@0x24F28 **hardcodes 6** in its `voices > 2` branch (`setStreamMultichannel(s, 6, map)` etc.) — the
+count is not even read from this table. 8 channels would need real driver surgery. An 8→6 fold is
+therefore mandatory on our side.
+
+## Channel order — RESOLVED (was an open item)
+The hardcoded QCOM `PCM_CHANNEL_*` maps in that branch (`FL=1 FR=2 FC=3 LS=4 RS=5 LFE=6 CS=7 LB=8 RB=9`):
+stream/decoder = `01 02 03 06 08 09` = **L R C LFE Ls Rs** (Apple canonical — matches our ASBD, no
+reorder needed); context/device = `01 02 08 09 03 06` = L R Ls Rs C LFE (the driver re-orders itself).
+
 ## Open items to confirm on-unit (pending)
 1. Whether the per-device mixer mask is built from `max_voices` at create-time or from the runtime
    negotiated voices. If create-time, a 2ch open into a now-6ch mixer may up-map; mirror the proven
@@ -50,3 +64,6 @@ Replacing it requires restarting `io-audio`/deva = the whole audio subsystem →
    (18432 B) to hold ~1536 frames/frag at 6ch. If underruns appear, match it (records +28/+32,
    file 0xA6E20/0xA6E24, `0x1800`→`0x4800`). Left minimal for now (ponytail: tune only if measured).
 3. Sample-format field differs (mpl5 `[1]=0xC` == mpl1's — same, good; channels are orthogonal).
+4. Cosmetic: `deva_mib2_channel_map` reads **min_voices** (+20), not max_voices, so a
+   `QUERY/GET_CHANNEL_MAP` ioctl on mpl5 returns the stereo map. Playback is unaffected (it uses the
+   hardcoded maps above). Only worth fixing if some client actually queries the map.

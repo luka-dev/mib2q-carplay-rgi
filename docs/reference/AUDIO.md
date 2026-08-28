@@ -619,3 +619,55 @@ So bits 39–42 are the **AAC_ELD / AAC_LC 48 kHz 5.1 and 5.1.2** pairs, and **b
 **Status of our current work:** the deva 2→6 patch and the /info rail remain valid; the *format bit* in
 `audio_hook.c` (`SPA_FMT_5_1 = 1<<44`) is aimed at the wrong target for CarPlay and must become bit 42
 if we pursue this — together with the AAC-decode and 8→6 fold work above. Not changed yet.
+
+---
+
+## 16. Is 6 the ceiling, or can the sink be 8? — SETTLED: 6, hard
+
+We already forced the sink to 6 (`mpl5_dio_ent` max_voices 2→6). Since the CarPlay spatial transport
+is 5.1.2 = **8 channels** (§15), the obvious next question is whether the same byte could be 8.
+It cannot. `deva-ctrl-qc.so` caps at 6 in **three independent places**:
+
+1. **No 8-channel device exists.** The 31-slot device table (names VA `0xA5C54`, stride 272; caps VA
+   `0xA7D44`, stride 48) has max_voices ∈ {1, 2, 3, 6}. The only ≥6 entry is `mpl1_int_ent` (6/6).
+   Output nodes are exactly `mono_speakerp`, `stereo_speakerp`, `six_channel_speakerp` — no 8ch node.
+
+2. **`deva_mib2_channel_map` @0x54ACC** switches on the device's voice count with
+   `case 1 / case 2 / case 3 / case 6` and a `default:` that logs
+   `"deva_channel_map: voices = %d not supported"` and returns −1. There is no case 8.
+
+3. **The CSD playback setup hardcodes 6.** `deva_csd_start_csd_session_playback` @0x24F28:
+   ```c
+   if (voices > 2) {                                  /* the ONLY multichannel branch */
+       openAudioStreamV2(0, 2, 8*rate, 28, 32);       /* 28 = multichannel stream type */
+       setStreamMultichannel        (stream, 6, &ch_map_stream);   /* literal 6 */
+       setContextMultichannel       (ctx,    6, &ch_map_ctx);      /* literal 6 */
+       setStreamFormatPcmMultichannel(0, stream, sr, 6, ...);      /* literal 6 */
+   } else {
+       setStreamFormat2(..., voices, ...);            /* 1..2 */
+   }
+   ```
+   **Any** `voices > 2` is configured as exactly 6 channels — the count is not even read from the caps
+   table. So 8ch would need real driver surgery (new CSD channel map + an 8ch output node + amp-side
+   TDM/MOST slot work), not a byte.
+
+**⇒ the 8→6 fold from §15 is mandatory**, not an optimisation. There is no 8-channel route on this HU.
+
+### Bonus: the channel order is Apple's (open item from `deploy/deva-ctrl-qc/README.md` — resolved)
+The two hardcoded channel maps in the branch above are 6-byte QCOM `PCM_CHANNEL_*` arrays
+(`FL=1 FR=2 FC=3 LS=4 RS=5 LFE=6 CS=7 LB=8 RB=9`):
+
+| map | bytes | order |
+|---|---|---|
+| stream/decoder (`setStreamMultichannel`, `setStreamFormatPcmMultichannel`) | `01 02 03 06 08 09` | FL FR FC LFE LB RB = **L R C LFE Ls Rs** |
+| context/device (`setContextMultichannel`)                                  | `01 02 08 09 03 06` | FL FR LB RB FC LFE = L R Ls Rs C LFE |
+
+The **stream side wants Apple canonical `L R C LFE Ls Rs`** — which is exactly what our ASBD assumes,
+so no reorder is needed on our side. The driver itself re-orders to L R Ls Rs C LFE for the device.
+
+### Caveat found in our own patch (harmless, but note it)
+`deva_mib2_channel_map` reads the **min_voices** dword (caps `+20`), not max_voices (`+24`) — every
+stock device has min == max so it never mattered. Our patch set mpl5 to min=2 / max=6, so a
+`SND_PCM_IOCTL_QUERY/GET_CHANNEL_MAP` on `mpl5_dio_ent` would return the *stereo* map. This does
+**not** affect playback: the actual stream setup uses the hardcoded maps above, not the table. Leave
+min at 2 so stock stereo still opens with the hook off.

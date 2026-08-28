@@ -52,8 +52,9 @@ static int spa_enabled(void)
  * AirPlaySupport `_APAudioFormatCopyAudioFormatsToReadableString` (bit->string table) = bit 44.
  * Other useful bits from the same table: PCM/48000/32f/5.1 = 1<<47; PCM/48000/16/5.1.2 = 1<<38;
  * DDPLUS/48000/5.1 = 1<<50; DDPLUS/48000/9.1.6 = 1<<53. SPA_FMT_5_1 is defined in audio_hook.h.
- * Channel order = Apple canonical 5.1 (L R C LFE Ls Rs) — match to the Audi six_channel_speakerp
- * order on the mixer side. */
+ * Channel order = Apple canonical 5.1 (L R C LFE Ls Rs). CONFIRMED correct: deva's multichannel
+ * stream map is 01 02 03 06 08 09 = FL FR FC LFE LB RB = exactly that (AUDIO.md §16) — no reorder.
+ * Note also (§16): deva's `voices > 2` branch is hardcoded to 6 channels, so 6 is the hard ceiling. */
 #define SPA_SR        48000
 #define SPA_BITS      16
 #define SPA_CHANNELS  6
