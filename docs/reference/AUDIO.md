@@ -159,3 +159,39 @@ to 5.1 or reject; full 7.1/Atmos-height (7-9ch) exceeds the licence. **Atmos→5
 workable target; 7.1.4 is not.** The licence is signed (`NmeDDPIUDCVerify`) → channel_limit cannot be
 forged upward. Still, Spatial (multichannel PCM) remains the cleaner first target — it needs no Dolby
 decoder/licence at all.
+
+---
+
+## 8. Spatial 5.1 via Option A (dio 6-channel route) — verified path
+
+Decision: PCM 5.1 Spatial (drop Atmos), delivered through the stock dio audio route (Option A), NOT
+by intercepting and writing `six_channel_speakerp` ourselves. Hardware = B&O (surround), so the amp
+renders 5.1 (a separate agent reverses the B&O firmware/mixer).
+
+### Verified: the channel count is NOT hardcoded — it flows from the ASBD
+`libairplay.so` on this HU embeds the dio platform sink (`dio::CQNXSoundIF`, opens `/dev/snd/*` via
+QSA). `AudioStreamPrepare` (0x4a9d0):
+- `get_audio_path(type)` (0x49398): media -> `mpl5_dio_ent`, phone -> `tel2_dio_phone`,
+  speech -> `ann4_dio_voice`.
+- `CAudioDriverIFFactory::create("mpl5_dio_ent")` then `driver->setFormat(channels=*(a1+92), bps, sr)`
+  (vtable+16). The **channel count `*(a1+92)` comes straight from the negotiated ASBD**, so a 6ch ASBD
+  makes libairplay open `mpl5_dio_ent` with 6 voices — no stereo hardcode to patch.
+
+### Division of labour
+- **This repo (libairplay hook)**: advertise the 5.1 PCM format + `spatialAudioSupported` (config,
+  altScreen-class); hook `AirPlayAudioFormatToPCM` (0x2c308) to emit a 6-channel ASBD (a3[6]=6). Then
+  `AudioStreamPrepare` opens the sink at 6ch automatically.
+- **B&O firmware / mixer agent (dependency)**: provision `mpl5_dio_ent` for **6 voices** routed to
+  `six_channel_speakerp` -> B&O amp. Stock provisions the CarPlay virtual channel as stereo (2
+  voices); opening 6 voices on a 2-voice channel fails with `deva_channel_map: voices not supported`
+  (AudioStreamPrepare returns -6736). io-audio already runs `default_device=six_channel_speakerp`, so
+  the system output is 6ch — only the `mpl5_dio_ent` virtual-channel voices + route need lifting.
+
+### Channel order to confirm
+Apple 5.1 PCM order (L R C LFE Ls Rs) vs the Audi TDM / `six_channel_speakerp` expected order — map
+on the mixer side; a mismatch swaps speakers. Also confirm the exact multichannel format the phone
+offers (iOS 27 lists PCM/48000/16/5·7·9; the 6ch/5.1 variant is probe-confirmed on connect).
+
+### Net
+No patching of libairplay internals — only boundary hooks. The real gate is the dio/mixer 6-voice
+route (B&O agent). Coordinate: **`mpl5_dio_ent` -> 6 voices -> six_channel_speakerp.**
