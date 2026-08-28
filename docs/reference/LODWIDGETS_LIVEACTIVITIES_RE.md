@@ -44,3 +44,35 @@ property → setup-dict key. Only then do we know the exact bytes to add to our 
 Reality check: the stock HU libairplay (210.81) and even the leaked 280.33.8 SDK have NO
 lodwidget/liveactivity strings, so whatever the key is, our stack does not emit it today — this is a
 net-new addition to the setup config, gated by whether the phone accepts it from a stack this old.
+
+---
+
+# Wire-key hunt — where it stalls (2026-08-28)
+
+Traced the phone side to `CARSessionConfiguration.lodWidgetsMode` / `.liveActivitiesMode`. The class
+that DEFINES those properties and decodes them from the wire is **not in the extracted standalone
+binaries** (carkitd / accessoryd / caraccessoryd / CoreAccessories.framework). `caraccessoryd` only
+carries the method-signature type string `...@"CARSessionConfiguration"...` — the implementation
+lives in a framework inside the **dyld_shared_cache**, which our IPSW extraction did not unpack.
+
+## Reframe that changes the plan
+`supports* = (mode != 1)`. `lodWidgetsMode`/`liveActivitiesMode` are tri-state; **1 = explicitly
+off**, and **absent/0 reads as SUPPORTED**. So the phone does NOT need a key set to "on" — a car
+that says nothing already looks like it supports them. That means the real gate is almost certainly
+NOT "add a missing key", but one of:
+- a **minimum CarPlay/AirPlay session version** the config carries (our 210.81 stack is far below
+  iOS-17-era), so the phone never even evaluates these fields for an old session;
+- the **CarPlayWidgetDenyList / CarPlayLiveActivityDenyList** (server-pushed) excluding unknown/old cars;
+- the car must actually accept the **Dashboard/widget render** into the video stream, which is a
+  whole UI negotiation, not a bool.
+
+## To go further (two options)
+1. **Extract the defining framework from the dyld_shared_cache** in the iOS 27 IPSW
+   (`ipsw dyld extract <cache> <CARSessionConfiguration-owner>` after unpacking the cache), then
+   trace `lodWidgetsMode` property → the setup-dict key + the session-version guard. Heavy (multi-GB
+   cache) but it is the only path to the exact bytes.
+2. **Stop here and treat it as low-yield.** Given the inversion (absent=supported) plus the
+   210.81/280.33.8 stack having zero widget/session-version support, the likely truth is the feature
+   is gated by session version, not a key we can add — i.e. not reachable without a much newer stack.
+   The RE was still worth it: it proved the layer (CARSessionConfiguration, same as altScreen) and
+   ruled out "just flip a bit".
