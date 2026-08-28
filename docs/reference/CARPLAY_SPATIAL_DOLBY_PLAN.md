@@ -101,3 +101,37 @@ tool that folds shared cstrings (`dyldextractor`, newer ipsw), then read the enu
 multichannel is a few bits at 31+. In from-source libairplay advertise a candidate multichannel
 format at a probe bit and read the phone's negotiated format back from the RTSP/SETUP exchange; a
 couple of tries pins the exact bit. Treat the bit as a `#define` TODO until then.
+
+---
+
+## Implementation strategy: HOOK stock libairplay (not from-source)
+
+Decision: implement as an LD_PRELOAD hook of stock `libairplay.so` (210.81), like our dio hook — NOT
+a from-source rebuild.
+
+### Hookability (verified in the stock .so)
+All target functions are exported (T) -> interposable via LD_PRELOAD (internal calls go via `j_`
+thunks / PLT):
+- `AudioSessionGetSupportedOutputFormats` @0x497bc — returns __int64 (64-bit capability mask; can
+  carry multichannel bits).
+- `AirPlayReceiverSessionSetup` @0x272b8 — builds advertised format list + negotiates.
+- `AirPlayAudioFormatToPCM` @0x2c308 — format->ASBD; channels land at a3[6]. Takes `int a1` (32-bit).
+- `AudioStreamCreate` @0x49d38, `AudioStreamSetProperty`/`AudioStreamCopyProperty` — building blocks.
+
+### The catch: stock's format pipeline is 32-bit
+Only the capability query is 64-bit. The negotiated/stored format is 32-bit (`_UpdateStreams` reads
+`*(_DWORD*)(v2+16)`; `AirPlayAudioFormatToPCM` takes `int`). A multichannel format at bit 32+ cannot
+flow through stock's internal path unchanged — "OR in a bit" is not enough.
+
+### Consequence: the hook REIMPLEMENTS the multichannel path (stock keeps stereo)
+1. `AudioSessionGetSupportedOutputFormats` hook: OR-in the multichannel capability bit.
+2. `AirPlayReceiverSessionSetup` hook: advertise the multichannel format; on the phone selecting it,
+   drive our own AudioStream setup (via exported `AudioStreamCreate`/`AudioStreamSetProperty`) with a
+   6ch ASBD, bypassing stock's 32-bit format storage.
+3. `AirPlayAudioFormatToPCM` hook: for our format, fill a 6-channel ASBD (a3[6]=channels).
+4. Route the multichannel PCM to `six_channel_speakerp` (dio side / output callback).
+5. Advertise `spatialAudioSupported` in `CARSessionConfiguration` via the dio /info patch (altScreen-class).
+
+Substantial hook (a small multichannel negotiator), not a one-liner, but it fits the existing
+LD_PRELOAD infra and avoids maintaining a full from-source libairplay. Exact format bit stays a
+probe-determined `#define` (Phase 0 tooling wall).
