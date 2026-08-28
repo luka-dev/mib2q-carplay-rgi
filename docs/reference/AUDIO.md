@@ -273,3 +273,52 @@ not depend on it.
 
 Enable with `export SPATIAL_5_1=1` (value-checked; off by default). Env change needs a dio-supervisor
 relaunch, per the getenv-presence-check trap.
+
+---
+
+## 11. HU-side path: does discrete 5.1 even reach the amp? (deva-ctrl-qc RE)
+
+The amp (SoundAmp doc) is genuinely 5.1/surround-native (19 speakers, 16-ch Class-D, Symphoria).
+So the binding question is the HU→amp link. Traced statically this session (imagebase 0):
+
+### Topology
+App opens a QSA PCM `mplN_<owner>_ent` → `io-audio -d qc` (**deva-ctrl-qc.so**, Qualcomm
+APQ8064/WCD9310 ADSP) → mixer → output device → AFE → **MOST** → B&O amp. Sources:
+`deva_srf_platform.c` / `deva_mixer.c` (paths in the binary).
+- CarPlay = **`mpl5_dio_ent`** (libairplay opens it directly; channels come from the ASBD → my hook = 6).
+- GAL media = `mpl6_gal_ent`; nav/tel/ann have their own `annN_*` / `telN_*` nodes.
+
+### Key findings (good news — the HU is NOT stereo-locked)
+1. **Output to the amp is 6-channel.** io-audio's default device is **`six_channel_speakerp`**
+   (`io-audio -d qc default_device=six_channel_speakerp`), alongside `mono_speakerp` / `stereo_speakerp`
+   / `stereo_to_all_speakersp`. The AFE/MOST port is 6-wide by default.
+2. **The deva mixer has a real 6-channel (5.1) playback path.** `build_playback_mixer` (in
+   `deva_setup_mixer`) switches on a channel-position mask and builds the PCM/IO mixer element with the
+   matching voice count + channel-map table:
+   | mask | voices | channel-map |
+   |---:|---:|---|
+   | 1  | 1 (mono)   | `unk_A5814` |
+   | 3  | 2 (stereo) | `unk_A5424` |
+   | **63** | **6 (5.1)** | `unk_A5520` |
+   So a 6-voice mixer element with a dedicated 5.1 channel map exists in the shipping driver — not a
+   stereo-only build.
+3. GAL configures its OWN media sink stereo (`gal.json` media.channels=2 → `mpl6_gal_ent`) — an app
+   choice, not a driver limit. CarPlay's `mpl5_dio_ent` is independent.
+4. Per-device struct stride 0x160; the first field (`5` for mpl5, `6` for mpl6) is the device **index**
+   (mpl5/mpl6), not a channel count.
+
+### Remaining unknowns (the last mile — best confirmed on-unit, read-only)
+A. **`mpl5_dio_ent`'s instantiated width** — is its mix_config mask 63 (6ch) or 3 (stereo)? Sets whether
+   a 6ch open passes through discretely or gets downmixed at the device. (Static: buried in the PCM-cap
+   / mix_config build; on-unit: open the device and read `max_voices` / channel map.)
+B. **ADSP/ACDB COPP topology** on the ent→MOST path — a 6-in→6-out passthrough (true discrete) vs a
+   2→6 up-mix. Lives in the opaque Qualcomm ACDB blobs (`/etc/acdb/mmx2_8064/*`); practically settled by
+   streaming discrete 6ch test tones on-unit and checking which amp channels move.
+C. **MOST synchronous allocation** for the ent stream = 6 channels (MOST NetServices/INIC). The amp is
+   MOST Gen2 16-ch, so bandwidth is not the limit.
+
+### Verdict
+The HU is 6-channel-capable end to end at the driver + output level — far better than "stereo-only +
+amp Symphoria up-mix". Discrete 5.1 from CarPlay is **plausible, not architecturally blocked**. The
+decision now rides on (A) the `mpl5_dio_ent` device width and (B) the ADSP topology, both best nailed
+by a targeted on-unit probe rather than more static grind on ACDB blobs.
