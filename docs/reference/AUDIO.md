@@ -413,3 +413,25 @@ peer advertising `lpcm >= 6ch`.
   *medium-latency/realtime* sender path (the raw-PCM-multichannel accept path lives on realtime). If
   CarPlay music turns out to ride a realtime path that DOES emit multichannel PCM, the PCM route could
   still get it — but the buffered-sender evidence says plan for EC3.
+
+### §12 CORRECTION — the buffered-sender evidence does NOT apply to CarPlay
+
+The §12 analysis above decompiled `CreateForBufferedSender` — that is the **AirPlay-2 buffered** path
+(phone streams *encoded* audio to a HomePod/speaker that decodes). **CarPlay is not that path.**
+
+CarPlay audio is **realtime PCM**: the phone decodes the content on-device (Apple Music AAC included)
+and sends finished **PCM** to the car; libairplay never decodes (stock "210 audio = PCM passthrough").
+So the wire format to the car is PCM, always, and the phone renders whatever the AirPlay negotiation
+advertised. Consequences:
+- Today libairplay advertises **stereo** PCM → the phone downmixes everything (Atmos masters too) to
+  stereo PCM. That is why CarPlay is stereo — by our advertisement.
+- Advertise **6ch** PCM (the hook) → the phone renders to 6ch PCM. The multichannel-PCM accept path
+  (65/67) is exactly this machinery. **No EC3/APAC needed for CarPlay** — those are the AirPlay-speaker
+  / buffered story.
+- So the PCM route (libairplay ASBD hook + deva 2→6) is the correct first target for CarPlay,
+  including Apple Music, contrary to the §12 conclusion which mis-applied the buffered path.
+
+**The one real unknown stays on-unit:** whether the phone renders an Apple Music *spatial/Atmos master*
+to discrete 5.1 PCM for CarPlay when we advertise 6ch + `spatialAudioSupported`, or always downmixes to
+stereo for CarPlay regardless. The transport (realtime multichannel PCM) is sound; only Apple's
+content-side render decision for the CarPlay realtime path needs a live connect to confirm.
