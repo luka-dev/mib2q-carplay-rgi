@@ -450,20 +450,27 @@ public class RouteGuidance implements CarplayBus.Listener {
                 && (state.maneuverCount == 0);
 
             /*
-             * visible_in_app is mapped from iAP2 route update and is the closest
-             * equivalent to native TBT_Active ownership.
-             *   - 1 => active
-             *   - 0 => inactive
-             *   - -1 => unknown (fallback to heuristics)
+             * visible_in_app is iAP2 RouteGuidanceUpdate TLV 0x0F.  Verified against Apple's own
+             * source (accessoryd 23G71, +[ACCNavigationRouteGuidanceUpdateInfo keyForType:] case 0xF):
+             * it is ACCNav_RGUpdate_RouteGuidanceBeingShownInApp -- whether the nav app's guidance UI
+             * is currently ON SCREEN, NOT whether a route is active.  iOS sends it 0 for third-party
+             * maps and whenever the nav app isn't the foreground CarPlay app, even mid-route, so it
+             * must NOT override an otherwise-active route (issue #8: 3rd-party nav on iOS 26+ showed
+             * cached info then vanished within a second).  Route activity comes from the separate
+             * fields RouteGuidanceState / ManeuverCount / maneuver list.
              */
+            boolean routeLooksActive = (state.routeState >= ROUTE_STATE_ROUTE_SET)
+                || (state.maneuverCount > 0)
+                || (state.maneuverOrder != null && state.maneuverOrder.length > 0);
             boolean hasActiveAuthority = (state.visibleInApp >= 0);
             boolean wantActive;
             if (hasActiveAuthority) {
-                wantActive = (state.visibleInApp != 0);
+                /* being-shown-in-app=1 activates; being-shown-in-app=0 only deactivates when the
+                 * route itself no longer looks active (real end-of-route is still caught by the
+                 * routeState==NO_ROUTE_SET hard override below). */
+                wantActive = (state.visibleInApp != 0) || routeLooksActive;
             } else {
-                wantActive = (state.routeState >= ROUTE_STATE_ROUTE_SET)
-                    || (state.maneuverCount > 0)
-                    || (state.maneuverOrder != null && state.maneuverOrder.length > 0);
+                wantActive = routeLooksActive;
                 if (explicitClear && state.routeState < ROUTE_STATE_ROUTE_SET) {
                     wantActive = false;
                 }
