@@ -508,3 +508,56 @@ carEndpoint). **spatial/dolby ride the same session-config rail — NOT the audi
 - Whether announcing `dolbyAtmosAudioSupported` makes the phone send EC3 (then we need the
   libNmeAudioDolby decode path, §13) or escalate to multichannel PCM. Gate the announcement OFF by
   default (announcing Dolby without an EC3 decode path risks the phone sending EC3 we can't play).
+
+### §14 UPDATE — the announcement rail, resolved end to end
+
+Corrections + the decisive finding.
+
+**Correction to §14:** `sessionStatusOptions` is a **bitmask** (`unint64_t`), not a dict — CarKit tests
+it with `& 2` / `& 4` / `& 8`. The dict CarKit actually reads capabilities from is fetched by the
+propertySupplier with key **`CARkAPEndpointProperty_EndpointInfo`** (symbol visible at CarKit
+`0x1c20093b0`) = **the accessory's AirPlay `/info` dictionary**. Every capability is then a keyed
+lookup on that dict (`X0`=/info, `X2`=CFString key).
+
+Verified ivars: **`spatialAudioSupported` = +21**, **`dolbyAtmosAudioSupported` = +22**.
+Parse shapes differ:
+- **dolbyAtmos** — an **explicit BOOL** (NSNumber) read from a sub-dict of /info.
+- **spatial** — **INFERRED**: CarKit iterates an **array of dicts** from /info and sets +21 = 1 when an
+  element carries the key it looks for.
+- Neither is an `extendedFeatures` string — the full iOS 27 vocabulary is `uiContext, focusTransfer,
+  h.264Level5.1, mainBuffered, altScreen, enhancedSiri, hevc, fileTransfer, uiSync,
+  vehicleStateProtocol, sessionManagement, videoPlayback, logTransfer` (no spatial/atmos). So the
+  altScreen string-list rail is NOT how these are announced.
+- The feature is **iOS 27+**: iOS 26.1 CarKit has no spatial/atmos symbols at all.
+
+**The decisive finding — our audio hook already IS the spatial announcement rail.**
+Stock `AirPlayReceiverServerPlatformCopyProperty` (`0x1fe08`) serves the /info `audioFormats` property
+by building exactly an **array of two dicts** (one per audio type) — and fills each with our formats:
+```c
+for (i = 0; i < 2; i++) {                       // v21[] = 'd'(0x64=100 main), 'e'(0x65=101 alt)
+    d = CFDictionaryCreateMutable(...);
+    CFArrayAppendValue(arr, d);
+    CFDictionarySetInt64(d, <type>, v11, 0);
+    in  = AudioSessionGetSupportedInputFormats(v11);
+    if (in)  CFDictionarySetInt64(d, <audioInputFormats>,  in,  HIDWORD(in));
+    out = AudioSessionGetSupportedOutputFormats(v11);        // <<< OUR HOOK
+    if (out) CFDictionarySetInt64(d, <audioOutputFormats>, out, HIDWORD(out));  // full 64-bit
+}
+```
+So: the array-of-dicts CarKit scans for spatial **is** `/info audioFormats`, its `audioOutputFormats`
+value comes straight from the function our hook interposes, and it is written as a **full 64-bit**
+int (high dword included) — bit 44 survives into /info. Bonus confirmation: `'d'` = 0x64 = **100** and
+`'e'` = 0x65 = 101, so the hook's `streamType == 100` guard targets exactly the main-audio entry.
+
+**Practical answer**
+- **Spatial**: no separate flag to add — advertising the multichannel bit through the hook already puts
+  it in the /info array CarKit inspects. The on-unit connect tells us whether iOS accepts it as the
+  spatial signal.
+- **Dolby Atmos**: a genuinely separate, explicit BOOL key in /info. Candidate wire key `dolbyAtmos`
+  (camelCase string present in the iOS 27 shared cache). Adding it means extending the /info dict —
+  same platform `copyProperty` rail (or the dio-patch SetProperty path altScreen uses). **Keep it OFF
+  until an EC3 decode path exists** (§13): announcing Atmos without decode risks the phone sending EC3
+  we cannot play.
+- Not pinned statically: the exact CFString key names (they live in the shared cache; the CFString
+  structs point at cache-relative offsets, and the interned string pool makes neighbour analysis
+  useless). Resolve with a cache-aware tool or read them at runtime if the Dolby announce is pursued.
