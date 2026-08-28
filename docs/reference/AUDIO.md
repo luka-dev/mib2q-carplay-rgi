@@ -470,3 +470,41 @@ Dolby machinery already present in OUR stack:
 Decisive next step is a single on-unit iPhone (iOS 26+) CarPlay connect with our 5.1 advertisement +
 `spatialAudioSupported`: capture which audio format the phone actually offers/selects, then commit to
 that path. Do not pre-commit to PCM-only.
+
+---
+
+## 14. Where to announce Dolby/Spatial — the advertisement point (step 1 RE)
+
+Question: where does our stack advertise `spatialAudioSupported`/`dolbyAtmosAudioSupported`, and do we
+announce Dolby at all? Answer: **we don't — nowhere in the HU firmware** (grep of the whole extracted
+tree for spatialAudio/dolbyAtmos/sessionStatusOptions = zero hits, incl. stock libairplay 210.81). Our
+stack predates these; they must be added from scratch.
+
+### How iOS consumes them (confirmed)
+- CarKit `-[CARSessionConfiguration initWithSessionStatusOptions:propertySupplier:]` (@0x1c2008f7c)
+  parses the accessory's **`sessionStatusOptions`** dict: keys at GOT `0x1E00FA4C0`/`4C8`/`4D0` →
+  config ivars +280 / +30(BYTE) / block_invoke_6. Property names confirmed (`spatialAudioSupported`,
+  `dolbyAtmosAudioSupported`; literal `@"spatialAudioSupported"` seen in iOS 26.1 sources).
+- These are **session-level accessory capabilities**, distinct from (a) the per-stream SETUP
+  `enabledFeatures` (where altScreen lives) and (b) the `AudioSessionGetSupportedOutputFormats` mask
+  (the audio FORMAT lever our hook already touches).
+
+### The emit rail on our side
+libairplay's capability surface = `AirPlayCopyServerInfo` (/info dict) + `AirPlayGetFeatures` +
+`AirPlayGetStatusFlags`. altScreen already proves the pattern: a new iOS-27-era capability is injected
+into our old stack via the **dio-patch SetProperty into the session config + our altscreen hook merging
+into the SETUP response** ([[altscreen_ios26_gate_verified]], "altScreen" in /info extendedFeatures →
+carEndpoint). **spatial/dolby ride the same session-config rail — NOT the audio hook.**
+
+### Two levers, both required
+1. **FORMAT** — `AudioSessionGetSupportedOutputFormats` (audio hook) advertises the PCM channels we accept.
+2. **CAPABILITY** — `spatialAudioSupported`/`dolbyAtmosAudioSupported` in `sessionStatusOptions` unlock
+   the phone offering spatial/Atmos at all (per the Volvo "powered by Atmos" evidence, §13). Advertised
+   via the altScreen rail.
+
+### Still to pin before implementing
+- The exact **wire-key CFString** for each in the `sessionStatusOptions` dict (cross-dylib CFString in
+  CarKit/carkitd; property name known, wire key to be read from IDA at implementation time).
+- Whether announcing `dolbyAtmosAudioSupported` makes the phone send EC3 (then we need the
+  libNmeAudioDolby decode path, §13) or escalate to multichannel PCM. Gate the announcement OFF by
+  default (announcing Dolby without an EC3 decode path risks the phone sending EC3 we can't play).
