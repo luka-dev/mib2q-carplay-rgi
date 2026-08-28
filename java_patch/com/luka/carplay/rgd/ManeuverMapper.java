@@ -312,17 +312,18 @@ public class ManeuverMapper {
             case MT_OFF_RAMP:
                 /*
                  * BAP EXIT_RIGHT/EXIT_LEFT renders a highway off-ramp icon.
-                 * MHI3 used TURN+slight (coarsened to 90-degree), but on MHI2
-                 * VC the EXIT icon is much clearer for ramp maneuvers.  iOS's
-                 * JunctionElementExitAngle is signed, so it is authoritative
-                 * when present; drivingSide is only the missing-angle fallback.
+                 * iOS's JunctionElementExitAngle (arrives here as turnAngle -- the hook
+                 * writes both m*_turn_angle and m*_exit_angle from man->exit_angle) is
+                 * signed, so it drives BOTH side and sharpness.  drivingSide is only the
+                 * missing-angle fallback for the side.  We no longer hardcode SLIGHT: a
+                 * sharp ramp now gets a fuller arrow instead of a shallow keep-arrow.
                  */
                 if (rampGoesLeft(turnAngle, drivingSide)) {
                     mainElement = EXIT_LEFT;
-                    direction = DIR_SLIGHT_LEFT;
+                    direction = rampDirection(turnAngle, true);
                 } else {
                     mainElement = EXIT_RIGHT;
-                    direction = DIR_SLIGHT_RIGHT;
+                    direction = rampDirection(turnAngle, false);
                 }
                 break;
 
@@ -337,13 +338,14 @@ public class ManeuverMapper {
                 break;
 
             case MT_HIGHWAY_OFF_RAMP_LEFT:
+                /* Side is explicit in the type; sharpness still comes from the exit angle. */
                 mainElement = EXIT_LEFT;
-                direction = DIR_SLIGHT_LEFT;
+                direction = rampDirection(turnAngle, true);
                 break;
 
             case MT_HIGHWAY_OFF_RAMP_RIGHT:
                 mainElement = EXIT_RIGHT;
-                direction = DIR_SLIGHT_RIGHT;
+                direction = rampDirection(turnAngle, false);
                 break;
 
             case MT_ARRIVE_DESTINATION_LEFT:
@@ -391,6 +393,21 @@ public class ManeuverMapper {
     private static boolean rampGoesLeft(int turnAngle, int drivingSide) {
         if (hasDirectionalTurnAngle(turnAngle)) return turnAngle < 0;
         return drivingSide == DRIVING_SIDE_LEFT;
+    }
+
+    /**
+     * Direction for a ramp/off-ramp from the iAP2 JunctionElementExitAngle (passed in as
+     * exitAngle; the hook mirrors it into m*_turn_angle).  ±1000 or 0 = no angle -> keep the
+     * gentle SLIGHT default (a ramp with unknown geometry reads as a shallow peel).  With a
+     * real angle we defer to the same slight/normal/sharp bucketing MHI3 used for end-of-road
+     * turns, so a sharp ramp stops rendering as a shallow keep-arrow.
+     */
+    private static int rampDirection(int exitAngle, boolean goesLeft) {
+        boolean absent = (exitAngle == 0 || exitAngle == 1000 || exitAngle == -1000);
+        if (goesLeft) {
+            return absent ? DIR_SLIGHT_LEFT : dirFromEndOfRoadAngleLeft(exitAngle);
+        }
+        return absent ? DIR_SLIGHT_RIGHT : dirFromEndOfRoadAngleRight(exitAngle);
     }
 
     private static int applyDsiNavBapDirectionOverride(int maneuverType, int dir) {
