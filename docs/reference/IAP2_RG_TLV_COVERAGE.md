@@ -25,7 +25,7 @@ Ours: `hook/routeguidance/rgd_tlv.h` (parser) + `RouteGuidance.State` fields (wh
 | 0x10 | LaneGuidanceCurrentIndex | yes | yes (laneGuidanceIndex) | |
 | 0x11 | LaneGuidanceTotalCount | yes | yes (laneGuidanceTotal) | |
 | 0x12 | LaneGuidanceShowing | yes | yes (laneGuidanceShowing) | |
-| 0x13 | **SourceName** | define only | **no** | which nav app (Apple Maps/Waze/Google). Parsed name exists, no State field. |
+| 0x13 | **SourceName** | yes, ON THE BUS | **Java drops it** | which nav app. Hook parses AND writes `source_name` to the bus (rgd_hook.c:1030); Java never reads it. Cheapest win: Java field + surface only, no hook change. |
 | 0x14 | SourceSupportsRouteGuidance | yes | yes (sourceSupportsRg) | |
 | 0x15 | **DestinationTimeZoneOffsetMinutes** | parsed, dropped | no | destination TZ; we render the arrival clock in the VEHICLE's current TZ instead (see below) |
 | 0x16 | **StopType** | parsed, dropped | no | multi-stop: waypoint vs final destination |
@@ -54,6 +54,27 @@ ExitInfo). Nothing missing here.
 - The `Ego*` fields imply the accessory feeds its own speed/yaw and the phone returns detected
   objects — a negotiated request/response, only live if the HU advertises the detection component.
   We advertise no such component, so iOS sends none of this today.
+
+## Already parsed at the hook but dropped downstream (cheapest wins)
+
+Two useful fields are fully parsed by the C hook and then lost before the cluster:
+
+- **SourceName (0x13)** — parsed into `out->source_name`, written to the bus as key `source_name`
+  (`rgd_hook.c:1030`). Java has no `sourceName` in `RouteGuidance.State` and never reads the key.
+  Surfacing it is Java-only work.
+- **Lane InstructionText (0x5204 / 0x03, `lane_guidance_description`)** — parsed and copied onto each
+  per-lane `description` (`rgd_hook.c:908`). Not surfaced on the cluster. A ready phrase like
+  "Use the 2 left lanes".
+
+Lane ARROW geometry is NOT missed: per-lane positions/directions(angles)/status are parsed and reach
+Java as `mLanePositions[][]` / `mLaneDirections[][]` / `mLaneStatus[][]`. ManeuverUpdate (0x5202) is
+100% covered. So the core turn+lane path is complete; the gaps are metadata (source, EV, TZ, signs).
+
+## Other ACCNavigation* classes (unverified)
+
+`ACCNavigationAccessoryInfo`, `ACCNavigationProviderInfo`, `ACCNavigationUpdateInfo` appear in
+accessoryd but were not decompiled here; they look like iOS-internal plumbing rather than new wire
+TLV sets. Not confirmed either way.
 
 ## Opportunities, ranked by cluster value vs effort
 
