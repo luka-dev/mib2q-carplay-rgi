@@ -69,10 +69,13 @@ int64_t AudioSessionGetSupportedOutputFormats(int streamType)
 
 /* ---- AirPlayAudioFormatToPCM ---------------------------------------------------------------
  * Fills a 36-byte PCM ASBD (a3) for the negotiated format a1. For our 5.1 format we let the real fill
- * a base ASBD, then rewrite the channel-dependent fields to 6 channels. ASBD dword layout from the
- * stock decompile (0x2c308): a3[1]='lpcm'(1819304813), a3[6]=channelsPerFrame, a3[7]=bitsPerChannel,
- * a3[5]=bytesPerFrame, a3[3]=bytesPerPacket, a3[4]=framesPerPacket(=1). TODO(unit): confirm offsets
- * by logging a real ASBD before trusting the rewrite. */
+ * a base ASBD, then rewrite the channel-dependent fields to 6 channels. ASBD dword layout CONFIRMED
+ * from AirPlayAudioFormatToASBD (0x2bda0) — NOT the standard CoreAudio ASBD (sampleRate is UInt32,
+ * not Float64):
+ *   a3[0]=sampleRate(UInt32) a3[1]='lpcm'(1819304813) a3[2]=formatFlags(0xC=signed+packed)
+ *   a3[3]=bytesPerPacket a3[4]=framesPerPacket(1) a3[5]=bytesPerFrame
+ *   a3[6]=channelsPerFrame a3[7]=bitsPerChannel a3[8]=reserved(0)
+ * Stock stereo defaults: 48000/24/2 -> bpf=6 ; 48000/16/2 -> bpf=4 (bpf = channels*(bits/8)). */
 typedef int (*fn_fmt_to_pcm_t)(int /*a1*/, int /*a2*/, uint32_t * /*a3 ASBD*/);
 
 int AirPlayAudioFormatToPCM(int a1, int a2, uint32_t *a3)
