@@ -23,9 +23,25 @@
 #ifndef AUDIO_HOOK_H
 #define AUDIO_HOOK_H
 
+#include <stdint.h>
+
+/* The AirPlayAudioFormat bit for 5.1 PCM (PCM/48000/16/5.1), extracted statically from iOS 27
+ * AirPlaySupport. Shared so the altscreen SETUP wrapper can recognise the phone's 64-bit selection
+ * before stock truncates it to 32-bit. See audio_hook.c / AUDIO.md sections 9-10. */
+#define SPA_FMT_5_1   ((uint64_t)1 << 44)
+
 /* Called from the altscreen SessionSetup wrapper (control SETUP only) to add "spatialAudio" to the
  * response enabledFeatures set. No-op unless the module is enabled. Returns 1 if it added anything.
  * Kept as a seam so we do not duplicate the AirPlayReceiverSessionSetup interposition. */
 int spa_augment_setup_response(void *session, void *request, void *response);
+
+/* SETUP-layer 5.1 bridge (AUDIO.md section 10). The altscreen wrapper owns the CF helpers and the
+ * `request["streams"]` walk (alt_find_stream_type), so it does the detection + the pre-real rewrite
+ * of the audio stream's `audioFormat` (bit 44 -> a stereo bit stock accepts), then calls
+ * spa_set_want_5_1(1). Our AirPlayAudioFormatToPCM hook reads the flag and forces the 6ch ASBD, since
+ * bit 44 is truncated to 0 in the 32-bit format arg and cannot be recognised there. Cleared on
+ * teardown so alt/prompt streams stay stereo. */
+void spa_set_want_5_1(int on);
+int  spa_want_5_1(void);
 
 #endif /* AUDIO_HOOK_H */

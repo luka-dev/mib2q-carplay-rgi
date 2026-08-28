@@ -53,8 +53,15 @@ static int spa_enabled(void)
  * handled at the 64-bit negotiation layer (SETUP) and drive the AudioStream setup directly. The ToPCM
  * hook stays for the (unreachable-for-bit44) stereo-compatible case + as a probe log. See AUDIO.md.
  */
-#define SPA_FMT_5_1   ((uint64_t)1 << 44)   /* PCM/48000/16/5.1 — verified in AirPlaySupport */
+/* SPA_FMT_5_1 (= 1<<44, PCM/48000/16/5.1) lives in audio_hook.h — shared with the altscreen wrapper. */
 #define SPA_CHANNELS  6                     /* L R C LFE Ls Rs (Apple order) */
+
+/* Set by the altscreen SETUP wrapper (spa_set_want_5_1) once it has seen audioFormat==bit44 on the
+ * main audio stream and rewritten it to a stereo bit stock accepts. Bridges the 64-bit SETUP detection
+ * to the 32-bit-blind AirPlayAudioFormatToPCM below. Main-audio-only; cleared on teardown. */
+static volatile int g_want_5_1 = 0;
+void spa_set_want_5_1(int on) { g_want_5_1 = on ? 1 : 0; }
+int  spa_want_5_1(void)       { return g_want_5_1; }
 
 /* Kept OFF regardless until the 64-bit SETUP-layer path is built (bit 44 can't ride the 32-bit ToPCM
  * pipeline). Flip to 1 only alongside that work. */
@@ -101,10 +108,11 @@ int AirPlayAudioFormatToPCM(int a1, int a2, uint32_t *a3)
     int rc = real(a1, a2, a3);
 
 #if SPA_FMT_ARMED
-    /* NOTE: bit 44 is truncated to 0 in this 32-bit `a1`, so this can never match SPA_FMT_5_1 as-is.
-     * The real 5.1 path drives the AudioStream setup from the 64-bit SETUP layer. Left here only for
-     * the eventual low-bit / probe case and as a channel-rewrite reference (offsets verified above). */
-    if (rc == 0 && a3 && spa_enabled() && ((uint64_t)(uint32_t)a1 == (uint32_t)SPA_FMT_5_1)) {
+    /* bit 44 is truncated to 0 in this 32-bit `a1`, so we can't recognise our format from `a1`. Instead
+     * the altscreen SETUP wrapper has already detected audioFormat==bit44 on the main audio stream and
+     * called spa_set_want_5_1(1); we key the 6ch override off that flag. Alt/prompt streams keep their
+     * own valid stereo `a1` and never set the flag, so they stay stereo. (offsets verified above) */
+    if (rc == 0 && a3 && spa_enabled() && g_want_5_1) {
         uint32_t bits  = a3[7] ? a3[7] : 16;
         uint32_t bpf   = SPA_CHANNELS * (bits / 8);   /* bytes per frame  */
         a3[6] = SPA_CHANNELS;                         /* channelsPerFrame */
