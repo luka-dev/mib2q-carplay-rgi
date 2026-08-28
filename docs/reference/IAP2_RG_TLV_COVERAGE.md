@@ -27,14 +27,16 @@ Ours: `hook/routeguidance/rgd_tlv.h` (parser) + `RouteGuidance.State` fields (wh
 | 0x12 | LaneGuidanceShowing | yes | yes (laneGuidanceShowing) | |
 | 0x13 | **SourceName** | define only | **no** | which nav app (Apple Maps/Waze/Google). Parsed name exists, no State field. |
 | 0x14 | SourceSupportsRouteGuidance | yes | yes (sourceSupportsRg) | |
-| 0x15 | **DestinationTimeZoneOffsetMinutes** | **not defined** | no | ETA in destination TZ |
-| 0x16 | **StopType** | **not defined** | no | multi-stop: waypoint vs final destination |
-| 0x17 | **ChargingStationInfoList** | **not defined** | no | EV: charging stops along the route |
-| 0x18 | **ArrivalBatteryLevel** | **not defined** | no | EV: battery % at arrival |
-| 0x19 | **DepartureBatteryLevel** | **not defined** | no | EV |
-| 0x1A | **FinalWaypointBatteryLevel** | **not defined** | no | EV |
+| 0x15 | **DestinationTimeZoneOffsetMinutes** | parsed, dropped | no | destination TZ; we render the arrival clock in the VEHICLE's current TZ instead (see below) |
+| 0x16 | **StopType** | parsed, dropped | no | multi-stop: waypoint vs final destination |
+| 0x17 | **ChargingStationInfoList** | parsed, dropped | no | EV: charging stops along the route |
+| 0x18 | **ArrivalBatteryLevel** | parsed, dropped | no | EV: battery % at arrival |
+| 0x19 | **DepartureBatteryLevel** | parsed, dropped | no | EV |
+| 0x1A | **FinalWaypointBatteryLevel** | parsed, dropped | no | EV |
 
-Our `rgd_tlv.h` stops defining at 0x14; **0x15–0x1A do not exist in our parser at all**.
+CORRECTION: 0x15–0x1A ARE handled in `rgd_tlv.c:405` — the switch recognises them and
+deliberately drops them (they are not silently unknown). `rgd_tlv.h` only stops adding *named*
+macros at 0x14; the C parser knows 0x15–0x1A and skips them.
 
 ## ManeuverUpdate (0x5202) — Apple types 0x01–0x0D
 
@@ -60,8 +62,14 @@ ExitInfo). Nothing missing here.
 2. **EV fields (0x17 ChargingStationInfoList, 0x18 ArrivalBatteryLevel, 0x1A FinalWaypointBattery)** —
    high value on e-tron / EV Audis, medium effort: extend the 0x5201 parser past 0x14 + BAP surface.
    Only worth it if the cluster has (or we can drive) a battery/charging widget.
-3. **StopType (0x16) / DestinationTimeZoneOffsetMinutes (0x15)** — minor polish (multi-stop label,
-   correct arrival clock across time zones).
+3. **StopType (0x16) / DestinationTimeZoneOffsetMinutes (0x15)** — minor polish. NOTE on 0x15: we
+   already render ETA as an absolute arrival wall-clock (`BAPBridge.publishTimeToDestination`,
+   `updateTimeToDestination(1,...)`), converting the Apple ETA epoch with
+   `convertUtcToLocalMs` = the HU UTCOffset DSI = **the vehicle's CURRENT timezone** (DST-aware).
+   We do NOT know the destination's timezone. Same-TZ trips: identical. Cross-TZ trips: our clock
+   is in the car's current zone, iPhone shows the destination zone — they diverge until the car
+   crosses the boundary and the HU offset updates. 0x15 would close that cross-TZ gap; it is an
+   edge case, not redundant with what we have.
 4. **RoadObjectDetection / speed-limit signs** — highest wow (speed limit on the cluster) but highest
    effort: needs us to advertise a detection component AND feed EgoSpeed/EgoYawRate from vehicle
    sensors; unverified that iOS streams it over wired CarPlay in practice. Research-grade, not a quick win.
