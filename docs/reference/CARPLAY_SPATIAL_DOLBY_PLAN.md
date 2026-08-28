@@ -81,3 +81,23 @@ bits, Phase 1 can advertise them.
 (extracted, none carried the format strings — extraction dropped shared cstrings). String lives at
 byte offset 0x630E38A in subcache `.36`. Next: resolve that offset's owning dylib via the cache map,
 extract it intact, read the table.
+
+### Phase 0 — exact bits: tooling wall (2026-08-28)
+Reading the exact multichannel bit numbers from the iOS 27 AirPlay format table is BLOCKED in this
+environment:
+- Ghidra headless (7.0.0): **OOM (Java heap)** importing the full cache; MCP import can't select a
+  single module from a dyld cache.
+- IDA idalib: can't open the full `dyld_shared_cache_arm64e` in one shot.
+- `ipsw dyld extract <dylib>`: produces a valid Mach-O but **drops the shared __cstring table** — the
+  extracted CoreUtils/CarPlay/AVConference/CoreMediaStream/AirPlaySenderKit carry neither the format
+  strings nor the table code (no immediate `0x2000000` in CoreUtils → `AudioStreamDescriptionToString`
+  is not in that build). `o2a`/`str` either hang on indexing or are subcache-ambiguous.
+- The string lives in subcaches `.36`/`.48` (byte offset ~0x630E38A in `.36`).
+
+To finish cleanly later: bump Ghidra `-Xmx` + use its single-module dyld loader, or extract with a
+tool that folds shared cstrings (`dyldextractor`, newer ipsw), then read the enum/ternary.
+
+**Chosen path: get the bit by on-device probe in Phase 1.** Field is uint64, bits 0–30 known/full;
+multichannel is a few bits at 31+. In from-source libairplay advertise a candidate multichannel
+format at a probe bit and read the phone's negotiated format back from the RTSP/SETUP exchange; a
+couple of tries pins the exact bit. Treat the bit as a `#define` TODO until then.
