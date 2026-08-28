@@ -561,3 +561,61 @@ int (high dword included) — bit 44 survives into /info. Bonus confirmation: `'
 - Not pinned statically: the exact CFString key names (they live in the shared cache; the CFString
   structs point at cache-relative offsets, and the interned string pool makes neighbour analysis
   useless). Resolve with a cache-aware tool or read them at runtime if the Dolby announce is pursued.
+
+---
+
+## 15. DECISIVE — CarPlay spatial transport is AAC 5.1.2, NOT Dolby and NOT PCM
+
+Answer to "does Apple Music 5.1 need Dolby?": **no — and it isn't PCM either.** Found the phone-side
+function that defines what iOS may send to a CarPlay ("screen") receiver, iOS 27 AirPlaySupport:
+
+```c
+__int64 APAudioFormatGetSupportedTransportAudioFormatsForScreenReceiver(_QWORD *a1)
+{
+  bool spatial = APAudioFormatIsScreenSpatialAudioReceiver();   // device-model + feature gate
+  if (a1) *a1 = 0x400000;                                        // bit 22
+  return spatial ? 0x40001440800LL                               // bits 11,18,22,24 + bit 42
+                 : 21235712;                                     // 0x1440800 = bits 11,18,22,24
+}
+```
+**The entire spatial delta is ONE bit: 42.** (`0x40000000000`)
+
+### What bit 42 is
+`APAudioFormatSelectTransportFormatForAudioSourceInputFormat` picks the transport format and logs its
+groups, which pins the neighbourhood:
+- 5.1 case tries **bit 39** (`0x8000000000`) then **bit 41** (`0x20000000000`) → log: *"Supported format
+  does not include **AAC-ELD/AAC-LC 48k 5.1** format"*
+- 5.1.2 case tries **bit 40** (`0x10000000000`) then **bit 42** (`0x40000000000`) → log: *"Supported
+  format does not include **AAC-ELD/AAC-LC 48k 5.1.2** format"*
+- stereo fallback tries bit 21 / bit 23 → *"AAC-LC 48k stereo"*
+
+So bits 39–42 are the **AAC_ELD / AAC_LC 48 kHz 5.1 and 5.1.2** pairs, and **bit 42 = `AAC_LC/48000/5.1.2`**
+(the descriptor strings `AAC_ELD/48000/5.1`, `AAC_ELD/48000/5.1.2`, `AAC_LC/48000/5.1`,
+`AAC_LC/48000/5.1.2` all exist in AirPlaySupport).
+
+### Consequences — three of them are hard
+1. **Dolby is NOT the CarPlay transport.** No EC3/DDPLUS bit appears in the screen-receiver mask at all.
+   Announcing `dolbyAtmosAudioSupported` will not make the phone send EC3 over CarPlay, and the §13
+   "EC3 via libNmeAudioDolby" plan does not apply to CarPlay. (Atmos remains the *content* brand; the
+   phone renders it into the AAC 5.1.2 transport.)
+2. **PCM multichannel is NOT offered to CarPlay either.** Raw multichannel PCM (bits 65/67 in the
+   description-list API, `PCM/48000/16/5.1` = bit 44) belongs to *buffered* receivers (HomePod-class),
+   not to a screen receiver. **Our hook currently advertises bit 44 — a bit the phone never offers for
+   CarPlay — so it can never be selected; the session would just stay stereo.**
+3. **It is 8 channels (5.1.2 = 5 + LFE + 2 height) and it is AAC-compressed.** That breaks two of our
+   assumptions: our stack is *PCM passthrough and never decodes AAC* ([[audio_210_pcm_passthrough]]),
+   and our sink is **6-channel** (`six_channel_speakerp`), so 5.1.2 would need an 8→6 fold.
+
+### What a real CarPlay spatial implementation would require
+- Advertise **bit 42** (`AAC_LC/48000/5.1.2`) in `audioOutputFormats` for stream type 100 (the /info
+  rail from §14 still holds — that part was right).
+- Add an **AAC-LC multichannel decoder** into the CarPlay audio path (the HU has Cinemo AAC decoders,
+  but they are on the local-media path, not CarPlay).
+- **Downmix 8 → 6** (fold the two height channels) for `six_channel_speakerp`, or find an 8-channel
+  route. The deva `mpl5_dio_ent` 2→6 patch stays necessary but is no longer sufficient.
+- The phone side is additionally gated by `APAudioFormatIsScreenSpatialAudioReceiver` (device-model +
+  feature flag) — so it also depends on the iPhone model.
+
+**Status of our current work:** the deva 2→6 patch and the /info rail remain valid; the *format bit* in
+`audio_hook.c` (`SPA_FMT_5_1 = 1<<44`) is aimed at the wrong target for CarPlay and must become bit 42
+if we pursue this — together with the AAC-decode and 8→6 fold work above. Not changed yet.
