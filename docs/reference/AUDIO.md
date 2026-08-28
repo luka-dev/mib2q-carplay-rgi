@@ -322,3 +322,46 @@ The HU is 6-channel-capable end to end at the driver + output level — far bett
 amp Symphoria up-mix". Discrete 5.1 from CarPlay is **plausible, not architecturally blocked**. The
 decision now rides on (A) the `mpl5_dio_ent` device width and (B) the ADSP topology, both best nailed
 by a targeted on-unit probe rather than more static grind on ACDB blobs.
+
+### §11 UPDATE — last mile SOLVED statically (deva caps table)
+
+The three unknowns are resolved by reading the deva-ctrl-qc platform capability table.
+
+**Tables** (from `deva_mib_get_session_handles_from_platform_id`, platform_id=mib2==2, 31 slots):
+names @`0xA5C54` (stride 272, name at +16), **caps @`0xA7D44`** (stride 48), ctx @dynamic (stride 352).
+Devices are 1-indexed (slot 0 reserved). Caps record dwords: [1]=format(1<<n), [2]=rates,
+[3]=min_rate, [4]=max_rate, **[5]=min_voices, [6]=max_voices**, [7]/[8]=frag min/max.
+
+**max_voices read directly:**
+| idx | device | max_voices |
+|--:|---|--:|
+| 1 | `mpl1_int_ent` (internal media) | **6** |
+| 2 | mpl3_mirror_lnk | 2 |
+| 3 | mpl4_sdis_a2ls | 2 |
+| 4 | **`mpl5_dio_ent` (CarPlay)** | **2** |
+| 5 | mpl6_gal_ent (GAL) | 2  ← matches gal.json media.channels=2 (parse cross-check ✓) |
+
+**(A) The bottleneck is `mpl5_dio_ent` = 2 voices** — a stereo cap on the CarPlay entertainment PCM
+in the deva platform table. NOT the output (`six_channel_speakerp`=6ch) and NOT the mixer.
+
+**(B)+(C) already solved:** `mpl1_int_ent` = **6 voices**, i.e. the internal-media path already streams
+6 discrete channels through the same chain (mixer 6ch path → `six_channel_speakerp` → MOST → amp). So
+the discrete-6ch topology + MOST allocation exist and are exercised today. **The amp needs no change**
+(it already receives 6 discrete from internal media). The earlier "provision mpl5 for 6 voices / B&O
+dependency" framing was wrong — it is a HU-side deva cap, not an amp change.
+
+**The mixer follows automatically:** `build_playback_mixer`'s channel mask = `(1<<voices)-1`
+(1→1, 2→3, 6→63). Bump mpl5 voices to 6 → the mixer auto-selects the 63/6-voice element (channel-map
+`unk_A5520`). No separate mixer edit.
+
+### The fix (two pieces)
+1. **libairplay**: the 64-bit `AirPlayAudioFormatToASBD` interposer (section 10) → 6ch ASBD for bit44.
+2. **deva-ctrl-qc.so**: raise `mpl5_dio_ent` caps from 2→6 voices — caps record idx 4 at
+   VA `0xA7D44 + 48*4 = 0xA7E04`, dwords [5]/[6] (`+0x14`/`+0x18` → VA `0xA7E18`/`0xA7E1C`), value
+   `0x02`→`0x06`. (Also review [7]/[8] fragsize, currently 0xC00 = per-2ch; mpl1's 6ch uses 0x4800.)
+   Translate VA→file offset via section headers before patching.
+   **First check** `deva_parse_commandline_parameters` (it references `mpl5_dio_ent`) for a per-device
+   voices override — if one exists, this becomes a `DEVA_ARGS` line in `startup.sh` (no binary patch).
+
+Net: discrete CarPlay 5.1 to the B&O amp is **not architecturally blocked** and needs only (1) the
+libairplay ASBD hook + (2) a small `mpl5_dio_ent` 2→6 voices bump on the HU. No amp-side work.
