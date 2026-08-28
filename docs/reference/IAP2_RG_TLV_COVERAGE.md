@@ -97,3 +97,54 @@ TLV sets. Not confirmed either way.
 
 The display-string variants (0x08/0x09/0x0B/0x0C) are deliberately ignored — we format distances
 ourselves for the cluster's unit/locale, so consuming Apple's pre-baked strings would be a regression.
+
+---
+
+# Maneuver coverage — do we handle every type? (2026-08-28)
+
+Two layers checked.
+
+## ManeuverUpdate TLV fields (0x5202 / 0x01–0x0D)
+All parsed — confirmed 1:1 against accessoryd 23G71 `+[ACCNavigationManeuverUpdateInfo keyForType:]`
+(Index, ManeuverDescription, ManeuverType, AfterManeuverRoadName, DistanceBetweenManeuver
+{,DisplayString,DisplayUnits}, DrivingSide, JunctionType, JunctionElementAngle,
+JunctionElementExitAngle, LinkedLaneGuidanceInfo, ExitInfo). Nothing missing.
+
+## ManeuverType coverage (all 54 values 0–53)
+`convertManeuverTypeForFunc` is a bounds-checked passthrough (valid 0..53, >=54 -> 0xFF), so the wire
+values equal our `MT_*` enum. Every value maps in `ManeuverMapper.map()`:
+
+| type | → main / dir |
+|---|---|
+| 0 NO_TURN, 5 FOLLOW_ROAD | FOLLOW_STREET |
+| 1 LEFT_TURN, 2 RIGHT_TURN, 3 STRAIGHT | TURN + L/R/straight |
+| 4 U_TURN, 18 START_ROUTE_WITH_U_TURN, 26 U_TURN_WHEN_POSSIBLE | UTURN |
+| 6 ENTER_ROUNDABOUT | TURN + L/R (simplified, not a roundabout glyph) |
+| 7 EXIT_ROUNDABOUT | EXIT_ROUNDABOUT_TRS (junctionType==1 only) |
+| 8 OFF_RAMP | EXIT_L/R + angle-derived dir |
+| 9 ON_RAMP | TURN + slight |
+| 10,12,27 ARRIVE_* | ARRIVED |
+| 11 START_ROUTE, 16 EXIT_FERRY, 51 CHANGE_HIGHWAY | TURN + angle |
+| 13 KEEP_LEFT, 49 SLIGHT_LEFT | TURN + SLIGHT_LEFT |
+| 14 KEEP_RIGHT, 50 SLIGHT_RIGHT | TURN + SLIGHT_RIGHT |
+| 15 ENTER_FERRY, 17 CHANGE_FERRY | FOLLOW_STREET |
+| 19 U_TURN_AT_ROUNDABOUT | ROUNDABOUT_TRS + UTURN |
+| 20 LEFT_TURN_AT_END, 21 RIGHT_TURN_AT_END | TURN + end-of-road angle |
+| 22 HWY_OFF_RAMP_LEFT, 23 HWY_OFF_RAMP_RIGHT | EXIT_L/R + angle-derived dir |
+| 24,25 ARRIVE_DESTINATION_L/R | ARRIVED + L/R |
+| 28–46 ROUNDABOUT_EXIT_1..19 | ROUNDABOUT_TRS + angle16 (junctionType==1 only) |
+| 47 SHARP_LEFT, 48 SHARP_RIGHT | TURN + SHARP |
+| 52 CHANGE_HIGHWAY_LEFT, 53 CHANGE_HIGHWAY_RIGHT | CHANGE_LANE + L/R |
+| 255 NOT_SET | NO_SYMBOL |
+
+**No type is unconditionally dropped.** The only conditional NO_INFO is the roundabout family
+(7, 28–46) when `junctionType != 1`. That gate is sound: `convertJunctionTypeForFunc` proves iOS
+emits junctionType ∈ {0,1} only (0=intersection, 1=roundabout), exactly our constants — so a
+roundabout maneuver always arrives with junctionType==1 and is handled.
+
+**Deliberate simplifications (not gaps):** ENTER_ROUNDABOUT → plain TURN (no dedicated approach
+glyph); CHANGE_HIGHWAY_L/R → CHANGE_LANE; ferries → FOLLOW_STREET/TURN. All render *something*
+sensible.
+
+**List depth:** the full per-maneuver arrays (type/angles/name/lane) are parsed for up to
+MANEUVER_CACHE_SIZE=32 maneuvers; BAP/HUD renders only the current one (pos 0) by design.
