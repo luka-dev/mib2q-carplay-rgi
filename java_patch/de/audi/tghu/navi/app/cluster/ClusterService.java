@@ -78,7 +78,7 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
     protected ModelGroup travelParametersGroup;
     private ModelGroup nextManeuverGroup;
     private boolean showBargraph = false;
-    private String turnToStreet = Util.INVALID_DISTANCE_NULL_AT_KOMBI_WITHOUT_TEXT_FOR_UNIT;
+    private String turnToStreet = "";
     private boolean turnToStreetValid = false;
     protected KOMOService komoService = null;
     protected final CombiBAPListener combiBAPListener;
@@ -152,16 +152,16 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         this.clusterInputListener = this.createClusterInputListener(navigationenv);
         this.mapScaleHandler = new MapScaleHandler();
         this.mapScaleTimer = new MapScaleTimer(navigationenv, this, this.mapScaleHandler);
-        navigationenv.getLabelModel(62).setText(Util.INVALID_DISTANCE_NULL_AT_KOMBI_WITHOUT_TEXT_FOR_UNIT);
+        navigationenv.getLabelModel(62).setText("");
         this.initializeModels();
     }
 
     private void initializeModels() {
         this.logChannel.log(10000000, "ClusterService#initializeModels() ");
-        this.env.getLabelModel(71).setText(Util.INVALID_DISTANCE_NULL_AT_KOMBI_WITHOUT_TEXT_FOR_UNIT);
+        this.env.getLabelModel(71).setText("");
         this.env.getChoiceModel(69).setValue(0);
         this.turnToStreetValid = false;
-        this.turnToStreet = Util.INVALID_DISTANCE_NULL_AT_KOMBI_WITHOUT_TEXT_FOR_UNIT;
+        this.turnToStreet = "";
         this.env.getMetricsModel(MODEL_ARRIVAL_TIME).setStatus(MODEL_STATUS_INVALID);
         this.env.getMetricsModel(MODEL_ARRIVAL_TIME).setMetric(this.etaDateMetric);
         this.env.getMetricsModel(MODEL_DIST_TO_DESTINATION).setStatus(MODEL_STATUS_INVALID);
@@ -268,8 +268,8 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         String s3 = s;
         if (Util.isEmpty(s1)) {
             this.logChannel.log(10000000, "ClusterService#updateCurrentStreet() - invalid currentStreet: %1", s1);
-            s2 = Util.INVALID_DISTANCE_NULL_AT_KOMBI_WITHOUT_TEXT_FOR_UNIT;
-            s1 = Util.INVALID_DISTANCE_NULL_AT_KOMBI_WITHOUT_TEXT_FOR_UNIT;
+            s2 = "";
+            s1 = "";
             s3 = EMPTY_STREET_LABEL;
         }
 
@@ -298,13 +298,13 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         if (this.turnToStreetValid && this.showBargraph) {
             choicemodelapp.setValue(1);
             this.komoService
-                .setTurnToStreet(this.turnToStreet, Util.INVALID_DISTANCE_NULL_AT_KOMBI_WITHOUT_TEXT_FOR_UNIT);
+                .setTurnToStreet(this.turnToStreet, "");
         } else {
             choicemodelapp.setValue(0);
             this.komoService
                 .setTurnToStreet(
-                    Util.INVALID_DISTANCE_NULL_AT_KOMBI_WITHOUT_TEXT_FOR_UNIT,
-                    Util.INVALID_DISTANCE_NULL_AT_KOMBI_WITHOUT_TEXT_FOR_UNIT
+                    "",
+                    ""
                 );
         }
     }
@@ -418,7 +418,7 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
 
     private void clearRouteInfoElement(RouteInfoElement routeinfoelement) {
         if (routeinfoelement != null) {
-            routeinfoelement.distanceToElement = Util.INVALID_DISTANCE_NULL_AT_KOMBI_WITHOUT_TEXT_FOR_UNIT;
+            routeinfoelement.distanceToElement = "";
             routeinfoelement.estimatedTimeToElement = "--:--";
             routeinfoelement.routeInfoElementType = 0;
             routeinfoelement.elementIconIDs = null;
@@ -514,7 +514,7 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
             this.logChannel
                 .log(10000000, "ClusterService#updateDistanceToDestination() - invalid distanceToDestination! ");
             Util.setModelStatus(metricsmodelapp, MODEL_STATUS_INVALID);
-            s = Util.INVALID_DISTANCE_NULL_AT_KOMBI_WITHOUT_TEXT_FOR_UNIT;
+            s = "";
             flag1 = false;
         }
 
@@ -568,7 +568,7 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         this.clusterViewMode.refreshRGState();
         if (!flag) {
             this.initializeModels();
-            this.updateTurnToStreet(Util.INVALID_DISTANCE_NULL_AT_KOMBI_WITHOUT_TEXT_FOR_UNIT, false);
+            this.updateTurnToStreet("", false);
             this.clearRouteInfoElement(this.followInfoRIE);
             this.clearRouteInfoElement(this.nextManeuverElement);
             this.updateDestinationInfo(null, 0, 0);
@@ -810,7 +810,7 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
                     navlocation, this.env
                 );
                 String s = locationformattingresponse.getFirstLineAsText();
-                return s != null ? s : Util.INVALID_DISTANCE_NULL_AT_KOMBI_WITHOUT_TEXT_FOR_UNIT;
+                return s != null ? s : "";
             } catch (Exception exception) {
                 this.env
                     .getLogChannel()
@@ -819,10 +819,10 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
                         "Util#getString4BAPFromNavLocation - got an exception from AddressFormatter#formatTwoLines: %1",
                         exception
                     );
-                return Util.INVALID_DISTANCE_NULL_AT_KOMBI_WITHOUT_TEXT_FOR_UNIT;
+                return "";
             }
         } else {
-            return Util.INVALID_DISTANCE_NULL_AT_KOMBI_WITHOUT_TEXT_FOR_UNIT;
+            return "";
         }
     }
 
@@ -940,7 +940,7 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
                     rccievent.delay, 2, this.env
                 );
             } else {
-                this.followInfoRIE.trafficInfo.trafficOffset = Util.INVALID_DISTANCE_NULL_AT_KOMBI_WITHOUT_TEXT_FOR_UNIT;
+                this.followInfoRIE.trafficInfo.trafficOffset = "";
                 this.followInfoRIE.estimatedTimeToElement = "--:--";
             }
 
@@ -950,8 +950,8 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
                 .setTrafficOffset(
                     KOMOService.convertTimeFormatToKOMO(DateMetric.timeFormat), short3, short2, short1, false
                 );
-            this.followInfoRIE.trafficInfo.trafficOffset = Util.INVALID_DISTANCE_NULL_AT_KOMBI_WITHOUT_TEXT_FOR_UNIT;
-            this.followInfoRIE.trafficInfo.trafficOffsetAffix = Util.INVALID_DISTANCE_NULL_AT_KOMBI_WITHOUT_TEXT_FOR_UNIT;
+            this.followInfoRIE.trafficInfo.trafficOffset = "";
+            this.followInfoRIE.trafficInfo.trafficOffsetAffix = "";
         }
 
         this.updateKOMOFollowInfo();
