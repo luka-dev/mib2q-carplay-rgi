@@ -76,7 +76,11 @@ static void spa_tune(unsigned *bit, unsigned *channels)
     if (!f) return;
     if (fscanf(f, "%u:%u", &b, &c) >= 1) {
         if (b >= 32 && b <= 63) *bit = b;
-        if (c >= 1 && c <= 8)   *channels = c;
+        /* channels == 0 is PROBE-ONLY: advertise the bit, but refuse it if the phone actually picks
+         * it (see ToASBD). Needed because our ASBD always describes 16-bit lpcm — if the phone selects
+         * a bit that means something else on the wire (bit 38 = 8 channels, 47 = 32-bit float,
+         * 42 = AAC), emitting that ASBD would feed the amp full-scale noise instead of music. */
+        if (c <= 8) *channels = c;
     }
     fclose(f);
 }
@@ -165,7 +169,14 @@ uint32_t AirPlayAudioFormatToASBD(uint64_t fmt, uint32_t *asbd, uint32_t *bits_o
     {
         unsigned bit, channels;
         spa_tune(&bit, &channels);
-        if (spa_enabled() && fmt == ((uint64_t)1 << bit) && asbd) {
+        if (spa_enabled() && fmt == ((uint64_t)1 << bit) && channels == 0) {
+            /* PROBE-ONLY hit: this is the answer we were after — the phone WILL select this bit. Say so
+             * loudly, then fall through to stock (which rejects it with -6735) rather than describing
+             * foreign wire data as 16-bit lpcm and blasting the amp. */
+            LOG_ERROR(LOG_MODULE, "*** PHONE SELECTED bit%u (fmt=%#llx) — probe-only, rejecting to "
+                      "stock. Multichannel IS reachable on this path. ***",
+                      bit, (unsigned long long)fmt);
+        } else if (spa_enabled() && fmt == ((uint64_t)1 << bit) && asbd) {
             uint32_t bpf = channels * (SPA_BITS / 8);
             asbd[0] = SPA_SR;             /* sampleRate      */
             asbd[1] = 1819304813;         /* 'lpcm'          */
