@@ -1070,3 +1070,63 @@ So the experiment must listen for the right thing: not "is there sound", but **w
 carry real, distinct content**. If they are silent, the transport works and the content tier is the
 missing half — and that is when the declared-capability route (`supportsSpatialAudio` /
 `supportsDolbyAtmos`, §17) becomes worth trying, on top of the 6-channel advert rather than instead of it.
+
+---
+
+## 23. FOUND — the two levers that set the Atmos/spatial capability, and one of them is our formats array
+
+Disassembling `-[CARSessionConfiguration initWithSessionStatusOptions:propertySupplier:]` @0x1C2008F7C
+around the ivar stores (offsets confirmed by decoding the getters: `LDRB W0,[X0,#0x15]` =
+`spatialAudioSupported`, `LDRB W0,[X0,#0x16]` = `dolbyAtmosAudioSupported`):
+
+```asm
+1C20099B0  ADRL  X2, cfstr_DCXEnabled        ; CFString "DCXEnabled"  (len 10)
+1C20099B8  MOV   X0, X22
+1C20099BC  BL    <property lookup>
+1C20099E8  TBZ   W0, #0, loc_1C20099F8       ; conditional cast (Bool?) failed -> X21 = nil
+1C2009A04  CBZ   X21, loc_1C2009A18          ; nil -> fall through to the audioFormats path
+1C2009A0C  BL    <get Bool value>
+1C2009A10  STRB  W0, [X20,#0x16]             ; *** dolbyAtmosAudioSupported = DCXEnabled ***
+
+loc_1C2009A18:
+           ADRL  X2, cfstr_audioFormats      ; CFString "audioFormats" (len 12)
+           ...
+1C2009B50  MOV   W4, #0x10                   ; 16
+1C2009B54  BL    <scan formats>
+1C2009B64  MOV   W8, #1
+1C2009B68  STRB  W8, [X20,#0x15]             ; *** spatialAudioSupported = (scan succeeded) ***
+```
+
+Two separate levers, and they work very differently:
+
+| ivar | source | shape |
+|---|---|---|
+| `dolbyAtmosAudioSupported` (+0x16) | key **`DCXEnabled`** | a plain **Bool** we declare |
+| `spatialAudioSupported` (+0x15) | key **`audioFormats`** | **derived** — set by scanning the formats array we already publish |
+
+**`spatialAudioSupported` is not a flag at all — it is inferred from what we advertise.** That is the
+formats array our `AirPlayReceiverServerPlatformCopyProperty` @0x1fe08 already builds (§14), the one our
+hook already augments. So the spatial half is reachable through the *same* edit as the transport half.
+
+And `DCXEnabled` is the long-missing wire key for the Dolby declaration — a Bool, not a bitmask.
+
+### Which repairs the plan §22a broke
+§22a was right that 6 channels alone will not satisfy `itemfig_isAtmosSupported` (that branch tests the
+buffered sentinel `== 16`). But the branch that *does* apply to us is `FPSupport_GetAtmosSupport`, which
+reads a property off the audio **device** — and the CarKit flags above are what populate the route. So
+the content tier is reachable, just through declaration rather than through channel count:
+
+1. advertise a 6-channel PCM format → transport (and, per the scan above, plausibly
+   `spatialAudioSupported` too);
+2. publish `DCXEnabled = true` → `dolbyAtmosAudioSupported` → the content tier;
+3. phone fetches the Atmos master and renders it into the route's 6 channels.
+
+Which is exactly the plan as originally proposed — the correction was only about *why* step 2 is
+mandatory and cannot be substituted by step 1.
+
+### Still to pin down
+- **Which dictionary `DCXEnabled` must appear in.** The key name is certain; its container (X22 — the
+  `propertySupplier` result vs the AirPlay /info dict fetched as `CARkAPEndpointProperty_EndpointInfo`)
+  is not yet traced. That determines whether we publish it from libairplay's /info builder or elsewhere.
+- **What the `audioFormats` scan actually matches** (the `W4 = 0x10` argument). If 16 is a channel-count
+  or an audio-type selector, it tells us exactly which entry makes `spatialAudioSupported` true.
