@@ -1130,3 +1130,62 @@ mandatory and cannot be substituted by step 1.
   is not yet traced. That determines whether we publish it from libairplay's /info builder or elsewhere.
 - **What the `audioFormats` scan actually matches** (the `W4 = 0x10` argument). If 16 is a channel-count
   or an audio-type selector, it tells us exactly which entry makes `spatialAudioSupported` true.
+
+---
+
+## 24. LIVE MEASUREMENT (on-unit, stock, no patch) — the static analysis is confirmed
+
+Captured with `sloginfo -w` across a phone reconnect on the untouched unit: stock `deva-ctrl-qc.so`
+(26 Feb 2018, 694904 B), `SPATIAL_5_1` commented out in `carplay_startup.sh:206`, nothing deployed.
+`io-audio` runs with `log_level=high`, so all of this is **stock logging**.
+
+### 1. What we advertise — exactly as decompiled
+```
+[AudioStream] <AirPlay> Supported output formats: 0X8010     (stream type 100, main)
+[AudioStream] <AirPlay> Supported output formats: 0X10       (stream type 101, alt)
+```
+`0x8010` = bits {4, 15}, `0x10` = bit {4}. Precisely what §19 predicted from
+`AudioSessionGetSupportedOutputFormats` @0x497bc (`GetSupportedInputFormats()==16`, OR `0x8000` for main
+and `16` for alt). **Static reading validated on hardware.**
+
+### 2. What CarPlay actually negotiates today
+```
+[AudioStream] <iPhone>Audio type: media
+[AudioStream] <AirPlay> Audio Format: (48000[kHz] | 16[bits] | channels: 2)
+[AudioStreamPrepare] Stream type: 100 (main) | Format = 1819304813 | Ch = 2 | SR = 48000 | BPS = 16
+[CQNXSoundIF] [open]<AUDIO> Open the path: "mpl5_dio_ent"(direction: 1)
+DEVA: deva_aquire: ado_pcm_t found at device_id = 4 <mpl5_dio_ent>, stream_type=2
+```
+Format `1819304813` = `'lpcm'`. **The realtime CarPlay stream is raw PCM, 48 kHz, 16-bit, stereo — i.e.
+bit 15 — on `mpl5_dio_ent`, device_id 4.** Exactly the device (and index) the deva patch targets.
+
+### 3. The 6-channel chain is live on this unit RIGHT NOW
+```
+DEVA: session_csd_setup: Setting up session while DEVICE_ID = <1> is being attached
+DEVA: session_csd_setup: pcm format => sample_rate=48000, channels=6, bit_per_sample=24
+```
+Device 1 = `mpl1_int_ent`. So discrete 6-channel 48 kHz playback into `six_channel_speakerp` → MOST → amp
+is not an inference from the caps table any more — it was **observed running**, minutes before the
+CarPlay session. §20's "the win is joining that path" is now measured, not argued.
+
+### 4. The fragsize fix is proven necessary (not speculative)
+```
+[AudioStream] [thread]<AUDIO>[kAudioStreamType_MainAudio]<Tx> nTFrames: 768, nTxFramesInBytes: 3072
+```
+768 frames × 4 B/frame (2ch × 16-bit) = 3072 B. **At 6 channels the same 768 frames are 9216 B — larger
+than mpl5's stock `max_fragsize` of 6144.** The 0x1800 → 0x4800 correction in §16a/`patch_deva.sh` is
+therefore load-bearing, not tuning: without it a 6-channel transfer cannot fit a fragment.
+
+### 5. The phone never asked for the extended/buffered stream
+No `Extended`, no `bufferStream` anywhere in the capture — consistent with our /info not publishing
+`audioOutputFormatsExtended` (§21). Caveat on that section: `Audio type: media` appears here on the
+**realtime** stream type 100, so the string `"media"` alone does not prove the buffered path; the
+distinct `bufferStream` key still does.
+
+### Baseline established — what a successful experiment must change
+| line | today | on success |
+|---|---|---|
+| `Supported output formats` | `0X8010` | `0X8010` + our multichannel bit |
+| `Audio Format` | `48000 \| 16 \| channels: 2` | `channels: 6` |
+| `session_csd_setup: pcm format` (device 4) | `channels=2` | `channels=6` |
+| `nTxFramesInBytes` | 3072 | 9216 |
