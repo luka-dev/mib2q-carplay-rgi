@@ -204,10 +204,13 @@ export LD_PRELOAD="$H/libcarplay_hook.so"
 # export them when enabled, leaving the base path clean otherwise.
 CP_ALTSCREEN_MARKER=/mnt/app/carplay_altscreen
 if [ -e "$CP_ALTSCREEN_MARKER" ]; then
-    CP_ALT_VAL=1
+    CP_ALT_VAL=
     read CP_ALT_VAL < "$CP_ALTSCREEN_MARKER" 2>/dev/null
+    # An EMPTY marker (a bare `touch`) means ON -- that is the documented gesture above.
+    # `read` on an empty file leaves CP_ALT_VAL empty, so empty must NOT fall in the OFF set;
+    # only an explicit 0/false/no/off disables.
     case "$CP_ALT_VAL" in
-        ""|0|false|no|off) CP_ALT_ON=0 ;;
+        0|false|no|off) CP_ALT_ON=0 ;;
         *) CP_ALT_ON=1 ;;
     esac
 else
