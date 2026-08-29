@@ -971,3 +971,58 @@ Consequences for the two streams:
   path would additionally need resampling in dio/libairplay before deva. Another cost on top of §21's
   "implement a stream type we don't have". (Note the spatial addition, bit 42, is 48 kHz — Atmos masters
   are 48k — so only the *base* music formats are the mismatch.)
+
+---
+
+## 22. The realtime path is ASBD-based, not bitmask-based — which makes "Atmos master → PCM 5.1" the best plan we have
+
+`APAudioFormatSelectorRealTimeCreate` @0x251049A1C (AirPlaySender) is the **realtime** counterpart of the
+buffered selector from §18, and it works on a completely different principle:
+
+```c
+FigEndpointStreamCopyProperty(stream, <kSupportedPCMFormats>, ...);   // a LIST, from the stream
+...
+do {                                            // stride 0x38 = 56 bytes per entry
+    Log("%@ SupportedPCMFormat[%d]: [%{asbd}]", sel, i, entry);
+    if ((chosen & 1) == 0) {                    // take the first if nothing already negotiated
+        *(_OWORD *)(sel +  8) = *(_OWORD *)entry;        // 40-byte ASBD copied wholesale
+        *(_OWORD *)(sel + 24) = *(_OWORD *)(entry + 16);
+        *(_QWORD *)(sel + 40) = *(_QWORD *)(entry + 32);
+    }
+    entry += 56; chosen = 1;
+} while (...);
+```
+and `realTimeAudioEngine_setTransportAudioFormatInternal` @0x2510431C8 takes an
+`AudioStreamBasicDescription *` and logs `%{asbd}` — no format bit anywhere.
+
+**⇒ On the realtime stream the channel count is just an ASBD field.** There is no ladder of
+"5.1.2 → 5.1 → stereo → error" and no AAC-only vocabulary — that was the *buffered* selector (§18/§21).
+Multichannel PCM is structurally representable here, which also fits our PCM-only stack perfectly.
+
+### So the answer to "can the phone take the Atmos master and push it as PCM 5.1?"
+Not senseless — it is the **strongest** version of the plan, and it needs only the cheap lever:
+
+1. Advertise a 6-channel PCM format (bit 44 = `PCM/48000/16/5.1`, rate-native per §21a).
+2. iOS turns our advertised formats into HAL/ASBD descriptions (`APCarPlayAudioFormatsCreate`
+   @0x25107B82C → `APCarPlayAudioFormatsGetHALDescriptions` @0x250F69A40) — the list the selector above
+   enumerates. A 6-channel entry makes the CarPlay route a 6-channel route.
+3. **The content half may then come along for free.** §17's `itemfig_isAtmosSupported` succeeds via its
+   third branch, `FPSupport_GetMaxPhysicalOutputChannelCount != 0` — a multichannel route qualifies, so
+   Apple Music selects the Atmos rendition (`HasAtmosAlternates` / `AutoSwitchAtmosVariants`).
+4. The phone renders that master into the route's format — 6 channels of PCM — because the realtime
+   stream *is* the phone's rendered output, not a passthrough of an encoded asset.
+
+That is one change (advertise 6ch) buying both halves, on the stream we already own, at the rate our
+hardware already runs, with the deva patch already built. No buffered stream, no AAC decoder, no 8→6
+fold.
+
+### What is proven vs inferred here
+- **Proven:** the realtime selector is ASBD/list-based with no codec ladder; the transport format is set
+  from an ASBD; our stack and the mpl5 device are 48 kHz PCM and now 6-voice capable.
+- **Inferred, and the two things to verify:** (a) that bit 44 survives `APCarPlayAudioFormatsCreate` /
+  `carPlayAudioFormat_repackageFormatsForStream` @0x25107C9B0 into a 6-channel HAL description for a
+  CarPlay stream; (b) that the CarPlay route's channel count is what
+  `FPSupport_GetMaxPhysicalOutputChannelCount` reports, so the content branch fires.
+
+Both fall out of the same experiment: deploy the deva patch, advertise bit 44, connect, and read
+`ToASBD` plus the phone's `SupportedPCMFormat[i]` enumeration.
