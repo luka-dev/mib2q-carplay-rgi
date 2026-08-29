@@ -187,42 +187,13 @@ echo "[supervisor] exec dio_manager pid=$DIO_PID with private LD_PRELOAD" >> "$W
 
 export LD_PRELOAD="$H/libcarplay_hook.so"
 
-# altScreen (the cluster second display, stream 111) is OFF by default so the base
-# CarPlay handshake stays byte-identical to stock and connects on EVERY iOS.
-#
-# We advertise a fabricated second display; iOS 27's per-display capability model
-# (zoomFactorByDisplayIndex/clusterAssetIdentifier) accepts it, but iOS <= 26 has a
-# single-zoom-for-the-whole-car model (initWithDisplayScaleMode:zoomFactor:) and rejects
-# it (docs/reference/IOS26_VS_IOS27_BONJOUR.md). Advertising it unconditionally is what
-# breaks old iOS. So the cluster feature is enabled only when the marker asks for it:
-#
-#   touch /mnt/app/carplay_altscreen         # enable cluster altScreen (newer iOS)
-#   echo 0 > /mnt/app/carplay_altscreen      # explicitly keep it off
-#   rm /mnt/app/carplay_altscreen            # default: off, stock-compatible
-#
-# The hook value-checks these envs (env_on): "0"/"false"/"no"/"off"/empty = off. We only
-# export them when enabled, leaving the base path clean otherwise.
-CP_ALTSCREEN_MARKER=/mnt/app/carplay_altscreen
-if [ -e "$CP_ALTSCREEN_MARKER" ]; then
-    CP_ALT_VAL=
-    read CP_ALT_VAL < "$CP_ALTSCREEN_MARKER" 2>/dev/null
-    # An EMPTY marker (a bare `touch`) means ON -- that is the documented gesture above.
-    # `read` on an empty file leaves CP_ALT_VAL empty, so empty must NOT fall in the OFF set;
-    # only an explicit 0/false/no/off disables.
-    case "$CP_ALT_VAL" in
-        0|false|no|off) CP_ALT_ON=0 ;;
-        *) CP_ALT_ON=1 ;;
-    esac
-else
-    CP_ALT_ON=0
-fi
-if [ "$CP_ALT_ON" = 1 ]; then
-    echo "[supervisor] altScreen cluster advert ON (marker $CP_ALTSCREEN_MARKER)" >> "$WLOG"
-    export ALTSCREEN_HANDLE_ALT=1
-    export ALTSCREEN_ADVERT_DISPLAYS=1
-else
-    echo "[supervisor] altScreen OFF - stock-compatible base CarPlay (all iOS)" >> "$WLOG"
-fi
+# altScreen — cluster second display (stream 111). Plain flag, like SPATIAL_5_1 below.
+# We advertise a fabricated second display; iOS 27+ (per-display capability model) accepts it,
+# but iOS <= 26 has a single-zoom-for-the-whole-car model and can reject it, which then breaks the
+# BASE CarPlay connection too (docs/reference/IOS26_VS_IOS27_BONJOUR.md).
+# Comment BOTH lines out for a stock-compatible base CarPlay that connects on every iOS.
+export ALTSCREEN_HANDLE_ALT=1
+export ALTSCREEN_ADVERT_DISPLAYS=1
 
 # Discrete 5.1 PCM (Spatial): the hook advertises the iOS 5.1 format bit and emits a 6ch ASBD so the
 # phone pushes discrete surround; libairplay opens mpl5_dio_ent at 6 voices. Default ON.
