@@ -1228,3 +1228,36 @@ on its own, so it is only worth wiring once a multichannel transport is actually
 Probe-only mode (`<bit>:0`) advertises a bit but refuses it in `ToASBD` if selected. Without it, a
 selected bit 42 would have had our 16-bit `lpcm` ASBD describing AAC wire data — full-scale noise into
 a 19-speaker amp. It cost five lines and should stay the default way to test any new bit.
+
+### 25a. The gate has a name: `ScreenSpatialAudioReceiver`
+
+The handset is an **iPhone 17 Pro Max on iOS 27 beta 6** — newest hardware, and the exact OS our RE
+targets. So "the device is too old" is not the explanation. Resolving the CFString constant in
+`APAudioFormatIsScreenSpatialAudioReceiver` @0x22669B1F4 gives the real gate:
+
+```c
+if (!APSSettingsIsFeatureEnabled(CFSTR("ScreenSpatialAudioReceiver"))) return 0;   // <-- the gate
+v1 = <device identifier>();
+if (v1 != 0x5BD62321 && v1 != 0xA10F2923 && v1 != 0xFCBBE892)
+    return <fallback check>() != 0;
+return 1;
+```
+The three constants are not FourCCs (no printable ASCII) — hashed product identifiers, most likely; and
+note that a non-matching device can still qualify through the fallback. **The dominant gate is the
+feature flag, and it takes no arguments** — it is purely phone-side state, upstream of anything the
+accessory advertises. Nothing we publish in /info can switch it on.
+
+That explains every observation at once: our bit reaches the negotiation (proven in our own log), and
+iOS never even considers it, because `GetSupportedTransportAudioFormatsForScreenReceiver` returns the
+non-spatial mask for this device.
+
+### Where that leaves the project
+- **The HU side is finished and correct.** deva patched (6 voices / 0x4800 / 0x2D000), the 6-channel
+  chain observed live (§24), ASBD emission and the announce rail proven working (§25). If iOS ever
+  selects a multichannel bit, the rest of the path is already there.
+- **Leaving it armed is harmless.** With `SPATIAL_5_1=1` and the default `44:6`, today's behaviour is
+  byte-for-byte stock: the phone ignores the extra bit and picks bit 15 exactly as before. Re-testing a
+  future iOS build costs one replug and one `grep` of the hook log.
+- **The remaining real work is the buffered media stream** (§21: `audioOutputFormatsExtended` →
+  `bufferStream` → type 103, 44.1 kHz), which is where lossless/spatial actually live. That is a stream
+  type our 210 libairplay has no notion of — a different order of magnitude from anything above.
