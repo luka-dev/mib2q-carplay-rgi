@@ -30,9 +30,16 @@
 
 #include <stdint.h>
 
-/* The AirPlayAudioFormat bit for 5.1 PCM (PCM/48000/16/5.1), extracted statically from iOS 27
- * AirPlaySupport. See audio_hook.c / AUDIO.md sections 9-10. */
-#define SPA_FMT_5_1   ((uint64_t)1 << 44)
+/* Default AirPlayAudioFormat bit: 5.1 PCM (PCM/48000/16/5.1), from the iOS 27 descriptor table.
+ * Which bit we actually advertise is RUNTIME-TUNABLE (see SPA_TUNE_PATH) so alternatives can be tried
+ * without a reboot — the env var only reads once at supervisor start. See AUDIO.md sections 9-10, 24. */
+#define SPA_DEFAULT_BIT   44u
+#define SPA_FMT_5_1       ((uint64_t)1 << SPA_DEFAULT_BIT)
+
+/* "<bit>" or "<bit>:<channels>", e.g. "44:6" (the default), "38:8", "47:6". Re-read on every call, so
+ * the experiment loop is: echo 38 > /tmp/spatial_bit ; replug the phone ; read the log. Absent file =
+ * defaults. Bit is clamped to 32..63 so a typo can never disturb the stock stereo/mono bits (2..25). */
+#define SPA_TUNE_PATH     "/tmp/spatial_bit"
 
 /* Optional seam: add "spatialAudio" (head-tracked UX flag) to the control-SETUP enabledFeatures from
  * the existing altscreen SessionSetup wrapper, without a second AirPlayReceiverSessionSetup

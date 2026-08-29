@@ -40,9 +40,20 @@ if [ "$APPLY" = 0 ]; then
     exit 0
 fi
 
-# deva driver swap (in-use lib; takes effect only after io-audio/deva restart = reboot)
-cp "$DEVA_SRC" "$DEVA_DST"
+# deva driver swap. Two on-unit facts make a plain `cp` fail:
+#   1. /mnt/app is mounted READ-ONLY -> `mount -uw /mnt/app` first (same as scripts/deploy_unit.sh).
+#   2. the .so is mapped by the running io-audio -> writing it gives "Resource busy".
+# So: stage a copy next to the target (same fs, persistent), unlink the busy original, rename into
+# place. If any step fails the previous file is still there, and the staged copy is on flash rather
+# than in /dev/shmem (which is RAM and would vanish on the reboot this needs anyway).
+mount -uw /mnt/app || { say "REFUSE: could not remount /mnt/app rw"; exit 1; }
+cp "$DEVA_SRC" "$DEVA_DST.new"        || { say "FAIL: stage copy"; exit 1; }
+rm "$DEVA_DST"                        || { say "FAIL: unlink busy original (staged copy left at $DEVA_DST.new)"; exit 1; }
+mv "$DEVA_DST.new" "$DEVA_DST"        || { say "FAIL: rename into place"; exit 1; }
+chmod 777 "$DEVA_DST"
 say "copied deva-ctrl-qc.so -> $DEVA_DST"
+# NOTE: the unit has no strings/od/cmp/wc/tail/printf, and its grep returns 0 on binaries even when
+# the pattern IS present — verify the result by reading the file back and comparing on the host.
 
 say "DONE (staged). NOT ACTIVE YET:"
 say "  - deva change needs io-audio/deva restart (audio subsystem) = REBOOT. Ask before rebooting."

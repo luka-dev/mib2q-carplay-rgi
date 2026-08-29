@@ -22,10 +22,21 @@
 
 #include <dlfcn.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 DEFINE_LOG_MODULE(audio);
+
+/* ---- the format we emit ---------------------------------------------------------------------
+ * Rate/depth are fixed by the hardware: every media device in deva is 48000-only, 16-bit on the wire
+ * (measured on-unit, AUDIO.md §21a/§24). Only the channel count is variable, and 6 is the ceiling —
+ * deva's `voices > 2` branch is hardcoded to 6 channels (§16).
+ * Channel order = Apple canonical 5.1 (L R C LFE Ls Rs). CONFIRMED correct: deva's multichannel stream
+ * map is 01 02 03 06 08 09 = FL FR FC LFE LB RB = exactly that (§16) — no reorder needed. */
+#define SPA_SR        48000
+#define SPA_BITS      16
+#define SPA_CHANNELS  6
 
 /* ---- gating -------------------------------------------------------------------------------- */
 
@@ -47,6 +58,29 @@ static int spa_enabled(void)
     return cached;
 }
 
+/* Runtime tuning of WHICH format bit we advertise, re-read on every call (these run once per stream
+ * SETUP, not per frame). The env var is only read at supervisor start, so without this every attempt
+ * at a different bit would cost a reboot; with it the loop is
+ *     echo 38 > /tmp/spatial_bit ; replug the phone ; read the log.
+ * File absent/garbage = defaults. Bit clamped to 32..63: the stock stereo/mono bits live at 2..25
+ * (AUDIO.md section 19), so a typo can never disturb the working stereo advert. */
+static void spa_tune(unsigned *bit, unsigned *channels)
+{
+    unsigned b = 0, c = 0;
+    FILE *f;
+
+    *bit = SPA_DEFAULT_BIT;
+    *channels = SPA_CHANNELS;
+
+    f = fopen(SPA_TUNE_PATH, "r");
+    if (!f) return;
+    if (fscanf(f, "%u:%u", &b, &c) >= 1) {
+        if (b >= 32 && b <= 63) *bit = b;
+        if (c >= 1 && c <= 8)   *channels = c;
+    }
+    fclose(f);
+}
+
 /*
  * The AirPlayAudioFormat bit for 5.1 PCM (PCM/48000/16/5.1), extracted statically from iOS 27
  * AirPlaySupport `_APAudioFormatCopyAudioFormatsToReadableString` (bit->string table) = bit 44.
@@ -55,11 +89,6 @@ static int spa_enabled(void)
  * Channel order = Apple canonical 5.1 (L R C LFE Ls Rs). CONFIRMED correct: deva's multichannel
  * stream map is 01 02 03 06 08 09 = FL FR FC LFE LB RB = exactly that (AUDIO.md §16) — no reorder.
  * Note also (§16): deva's `voices > 2` branch is hardcoded to 6 channels, so 6 is the hard ceiling. */
-#define SPA_SR        48000
-#define SPA_BITS      16
-#define SPA_CHANNELS  6
-#define SPA_BPF       (SPA_CHANNELS * (SPA_BITS / 8))   /* bytes per frame = 12 */
-
 /* ---- format probe -------------------------------------------------------------------------
  * Decode a negotiated AirPlayAudioFormat (uint64) to a human string so ONE connect reveals whether
  * iOS chose multichannel PCM (our path) or a Dolby/EC3 bitstream (Atmos → needs the decode path).
@@ -95,15 +124,21 @@ int64_t AudioSessionGetSupportedOutputFormats(int streamType)
     if (!real) real = (fn_get_formats_t)dlsym(RTLD_NEXT, "AudioSessionGetSupportedOutputFormats");
     int64_t base = real ? real(streamType) : 0;
     int64_t caps = base;
+    unsigned bit, channels;
 
+    spa_tune(&bit, &channels);
     if (spa_enabled() && streamType == 100 /* main audio only */)
-        caps |= (int64_t)SPA_FMT_5_1;
+        caps |= (int64_t)((uint64_t)1 << bit);
 
-    /* PROBE (always): what we advertise to the phone, per stream type. Compare base vs offered to see
-     * the augmentation, and to know the stock ceiling on a plain connect. */
-    LOG_INFO(LOG_MODULE, "getSupportedFormats(type=%d): stock=%#llx offered=%#llx%s",
-             streamType, (unsigned long long)base, (unsigned long long)caps,
-             caps != base ? " (+5.1)" : "");
+    /* PROBE (always): what we advertise to the phone, per stream type. Stock main is 0x8010 = bits
+     * {4,15} = PCM/48000/16/2 (+mic), measured on-unit (AUDIO.md section 24) — so `stock` here is the
+     * regression check, and `offered` is what the phone gets to choose from. */
+    if (caps != base)
+        LOG_INFO(LOG_MODULE, "getSupportedFormats(type=%d): stock=%#llx offered=%#llx (+bit%u, %uch)",
+                 streamType, (unsigned long long)base, (unsigned long long)caps, bit, channels);
+    else
+        LOG_INFO(LOG_MODULE, "getSupportedFormats(type=%d): stock=%#llx offered=%#llx",
+                 streamType, (unsigned long long)base, (unsigned long long)caps);
     return caps;
 }
 
@@ -127,20 +162,25 @@ uint32_t AirPlayAudioFormatToASBD(uint64_t fmt, uint32_t *asbd, uint32_t *bits_o
      * offered caps above but NOT here — absence of a main-audio ToASBD call is itself the EC3 signal. */
     LOG_INFO(LOG_MODULE, "ToASBD(fmt=%#llx) => %s", (unsigned long long)fmt, spa_fmt_desc(fmt));
 
-    if (spa_enabled() && fmt == SPA_FMT_5_1 && asbd) {
-        asbd[0] = SPA_SR;             /* sampleRate      */
-        asbd[1] = 1819304813;         /* 'lpcm'          */
-        asbd[2] = 0xC;                /* signed + packed */
-        asbd[3] = SPA_BPF;            /* bytesPerPacket  */
-        asbd[4] = 1;                  /* framesPerPacket */
-        asbd[5] = SPA_BPF;            /* bytesPerFrame   */
-        asbd[6] = SPA_CHANNELS;       /* channelsPerFrame*/
-        asbd[7] = SPA_BITS;           /* bitsPerChannel  */
-        asbd[8] = 0;                  /* reserved        */
-        if (bits_out) *bits_out = SPA_BITS;
-        LOG_INFO(LOG_MODULE, "ASBD 5.1: %u Hz, %u ch, %u-bit, bpf=%u (fmt=%#llx)",
-                 SPA_SR, SPA_CHANNELS, SPA_BITS, SPA_BPF, (unsigned long long)fmt);
-        return 0;
+    {
+        unsigned bit, channels;
+        spa_tune(&bit, &channels);
+        if (spa_enabled() && fmt == ((uint64_t)1 << bit) && asbd) {
+            uint32_t bpf = channels * (SPA_BITS / 8);
+            asbd[0] = SPA_SR;             /* sampleRate      */
+            asbd[1] = 1819304813;         /* 'lpcm'          */
+            asbd[2] = 0xC;                /* signed + packed */
+            asbd[3] = bpf;                /* bytesPerPacket  */
+            asbd[4] = 1;                  /* framesPerPacket */
+            asbd[5] = bpf;                /* bytesPerFrame   */
+            asbd[6] = channels;           /* channelsPerFrame*/
+            asbd[7] = SPA_BITS;           /* bitsPerChannel  */
+            asbd[8] = 0;                  /* reserved        */
+            if (bits_out) *bits_out = SPA_BITS;
+            LOG_INFO(LOG_MODULE, "ASBD MULTICH: %u Hz, %u ch, %u-bit, bpf=%u (bit%u, fmt=%#llx)",
+                     SPA_SR, channels, SPA_BITS, bpf, bit, (unsigned long long)fmt);
+            return 0;
+        }
     }
 
     static fn_fmt_to_asbd_t real;
@@ -164,8 +204,11 @@ int spa_augment_setup_response(void *session, void *request, void *response)
 
 __attribute__((constructor)) static void audio_module_init(void)
 {
+    unsigned bit, channels;
+    spa_tune(&bit, &channels);
     if (spa_enabled())
-        LOG_INFO(LOG_MODULE, "5.1 PCM audio hook ARMED (SPATIAL_5_1=on) — advertising bit44 + 6ch ASBD");
+        LOG_INFO(LOG_MODULE, "multichannel PCM hook ARMED (SPATIAL_5_1=on): bit%u, %uch ASBD "
+                 "(tune live via `echo <bit>[:<ch>] > %s`, no reboot)", bit, channels, SPA_TUNE_PATH);
     else
-        LOG_INFO(LOG_MODULE, "5.1 PCM audio hook present, OFF (SPATIAL_5_1 unset) -> stock stereo");
+        LOG_INFO(LOG_MODULE, "multichannel PCM hook present, OFF (SPATIAL_5_1 unset) -> stock stereo");
 }
