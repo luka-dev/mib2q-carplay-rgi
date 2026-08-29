@@ -226,5 +226,8 @@ fi
 # REQUIRES the patched deva-ctrl-qc.so (mpl5_dio_ent 2->6 voices) to be installed + a reboot — without
 # it the 6-voice open is rejected and CarPlay main audio fails. Comment out for stock stereo.
 # See deploy/spatial_5_1/README.md.
-export SPATIAL_5_1=1
+# DISABLED for this deploy: the patched deva-ctrl-qc.so is NOT on the unit (max_voices still 2,
+# stock file dated 2018). With the flag ON and stock deva the 6-voice open is rejected and CarPlay
+# main audio FAILS. Re-enable together with the deva swap + reboot (deploy/spatial_5_1/README.md).
+#export SPATIAL_5_1=1
 exec "$DIODIR/dio_manager" "$@"
