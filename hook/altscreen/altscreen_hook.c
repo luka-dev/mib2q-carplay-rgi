@@ -32,6 +32,7 @@
 #include "../framework/bus.h"
 #include "altscreen_hook.h"
 #include "altscreen_av.h"
+#include "../audio/audio_hook.h"   /* spa_augment_setup_response — this file owns SessionSetup */
 
 #include <unistd.h>
 #include <pthread.h>
@@ -1833,6 +1834,13 @@ int AirPlayReceiverSessionSetup(void *session, void *request, void **respOut, in
      * unavailable: that must never be misclassified as a pre-RTSP USB wedge. */
     if (ret == 0 && session && request && respOut && *respOut)
         mark_control_setup_seen();
+
+    /* type-103 buffered-media negotiation probe (audio module). Deliberately OUTSIDE the alt_enabled
+     * gate: it has nothing to do with altScreen and must work with the altScreen advert off. It gates
+     * itself on its own marker file and is a no-op without it. This wrapper is simply the single
+     * owner of the AirPlayReceiverSessionSetup interposition. */
+    if (ret == 0 && session && request && respOut && *respOut)
+        spa_augment_setup_response(session, request, *respOut);
 
     if (alt_enabled && ret == 0 && respOut && *respOut && session && request && alt_resolve() == 1) {
         /* NEGOTIATION — the REAL altScreen gate (VERIFIED against iOS 26.6 AirPlaySender/CarKit disasm):

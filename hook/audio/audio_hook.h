@@ -41,9 +41,25 @@
  * defaults. Bit is clamped to 32..63 so a typo can never disturb the stock stereo/mono bits (2..25). */
 #define SPA_TUNE_PATH     "/tmp/spatial_bit"
 
-/* Optional seam: add "spatialAudio" (head-tracked UX flag) to the control-SETUP enabledFeatures from
- * the existing altscreen SessionSetup wrapper, without a second AirPlayReceiverSessionSetup
- * interposition. No-op today; discrete 5.1 PCM does not depend on it. */
+/* ---- type-103 buffered-media negotiation probe (AUDIO.md §26, docs/HANDOFF_SPATIAL_AUDIO.md) -----
+ * iOS 27 reaches multichannel over CarPlay through a SECOND, buffered stream, not the realtime one.
+ * Two accessory-controlled prerequisites, both metadata:
+ *   1. /info `audioFormats` gains an entry {type:103, audioType:"media",
+ *      audioOutputFormats:0x1440800, audioOutputFormatsExtended:[65]}  (65 = APAC/48000/5.1, the only
+ *      index our 6-channel 48 kHz hardware could ever render).
+ *   2. the control-SETUP response's `enabledFeatures` gains the token "mainBuffered", without which
+ *      AirPlaySender never sets SupportsBufferedAudio and never opens `bufferStream`.
+ * This is a NEGOTIATION PROBE, not playable audio: we have no type-103 receiver and no APAC decoder,
+ * so if the phone actually starts the stream it must fail closed. Hence OFF by default and gated on a
+ * marker file that can be removed and re-tested with a replug — no reboot. */
+#define SPA_PROBE103_PATH   "/tmp/spatial_probe103"
+#define SPA_APAC_48K_5_1    65      /* APAudioFormatIndex, NOT a bitmask bit */
+#define SPA_BUFFERED_LEGACY_MASK  0x1440800  /* required companion mask: bits 11,18,22,24 */
+
+/* Adds "mainBuffered" to the control-SETUP response's enabledFeatures, preserving whatever the
+ * receiver already accepted. Called from the altscreen SessionSetup wrapper (the single owner of that
+ * interposition) but deliberately NOT gated on altScreen being enabled. Returns 1 if it added the
+ * token, 0 otherwise. No-op unless the probe marker exists. */
 int spa_augment_setup_response(void *session, void *request, void *response);
 
 #endif /* AUDIO_HOOK_H */

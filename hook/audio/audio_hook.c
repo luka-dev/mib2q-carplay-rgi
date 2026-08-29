@@ -200,15 +200,197 @@ uint32_t AirPlayAudioFormatToASBD(uint64_t fmt, uint32_t *asbd, uint32_t *bits_o
     return real(fmt, asbd, bits_out);
 }
 
-/* ---- config seam (optional, called from altscreen SessionSetup wrapper) --------------------
- * Discrete 5.1 PCM rides the format bit above and needs nothing here. `spatialAudioSupported`
- * (head-tracked "Spatial Audio" UX, CARSessionConfiguration / altScreen-class) is a SEPARATE flag;
- * kept as a seam so altscreen can add "spatialAudio" to the control-SETUP enabledFeatures without a
- * second AirPlayReceiverSessionSetup interposition. No-op for now (the 6ch PCM path is independent). */
+/* ================= type-103 buffered-media negotiation probe (see audio_hook.h) ==================
+ * CFLite is linked INTO libairplay.so and every symbol below is GLOBAL there, so plain dlsym works.
+ * ARITIES VERIFIED AGAINST THE DISASSEMBLY — this stack's CFLite is not stock CoreFoundation:
+ *   CFStringGetCString(str, buf, size)          3 args — NO encoding parameter (stock CF has 4)
+ *   CFArrayAppendCString(arr, cstr, len)        3 args, len == -1 means strlen
+ *   CFDictionarySetCString(dict, key, cstr,len) 4 args, len == -1 means strlen
+ *   CFDictionarySetInt64(dict, key, int64)      3 C args (rides two ARM regs)
+ *   CFNumberCreateInt64(int64)                  1 arg  — NOT (alloc, type, ptr)
+ * Getting an arity wrong here puts register garbage into CFLite; see the CFLite ABI trap note. */
+#define SPA_CFENC_UTF8  134217984u   /* kCFStringEncodingUTF8, the literal libairplay itself passes */
+
+typedef void *(*cf_str_t)(void *, const char *, unsigned);
+typedef int   (*cf_equal_t)(const void *, const void *);
+typedef void *(*cf_dictm_t)(void *, long, const void *, const void *);
+typedef void *(*cf_arrm_t)(void *, long, const void *);
+typedef void  (*cf_arrapp_t)(void *, const void *);
+typedef int   (*cf_arrappc_t)(void *, const char *, int);
+typedef long  (*cf_arrcount_t)(const void *);
+typedef void *(*cf_arridx_t)(const void *, long);
+typedef void  (*cf_dictset_t)(void *, const void *, const void *);
+typedef void  (*cf_dictseti_t)(void *, const void *, int64_t);
+typedef int   (*cf_dictsetc_t)(void *, const void *, const char *, int);
+typedef void *(*cf_dictget_t)(const void *, const void *);
+typedef void  (*cf_rel_t)(const void *);
+
+static cf_str_t      cfa_str;
+static cf_equal_t    cfa_equal;
+static cf_dictm_t    cfa_dictm;
+static cf_arrm_t     cfa_arrm;
+static cf_arrapp_t   cfa_arrapp;
+static cf_arrappc_t  cfa_arrappc;
+static cf_arrcount_t cfa_arrcount;
+static cf_arridx_t   cfa_arridx;
+static cf_dictset_t  cfa_dictset;
+static cf_dictseti_t cfa_dictseti;
+static cf_dictsetc_t cfa_dictsetc;
+static cf_dictget_t  cfa_dictget;
+static cf_rel_t      cfa_rel;
+static void         *cfa_arr_cb, *cfa_dk_cb, *cfa_dv_cb;
+static int           cfa_ready = -1;
+
+static int spa_cf_resolve(void)
+{
+    if (cfa_ready >= 0) return cfa_ready;
+    cfa_str      = (cf_str_t)      dlsym(RTLD_DEFAULT, "CFStringCreateWithCString");
+    cfa_equal    = (cf_equal_t)    dlsym(RTLD_DEFAULT, "CFEqual");
+    cfa_dictm    = (cf_dictm_t)    dlsym(RTLD_DEFAULT, "CFDictionaryCreateMutable");
+    cfa_arrm     = (cf_arrm_t)     dlsym(RTLD_DEFAULT, "CFArrayCreateMutable");
+    cfa_arrapp   = (cf_arrapp_t)   dlsym(RTLD_DEFAULT, "CFArrayAppendValue");
+    cfa_arrappc  = (cf_arrappc_t)  dlsym(RTLD_DEFAULT, "CFArrayAppendCString");
+    cfa_arrcount = (cf_arrcount_t) dlsym(RTLD_DEFAULT, "CFArrayGetCount");
+    cfa_arridx   = (cf_arridx_t)   dlsym(RTLD_DEFAULT, "CFArrayGetValueAtIndex");
+    cfa_dictset  = (cf_dictset_t)  dlsym(RTLD_DEFAULT, "CFDictionarySetValue");
+    cfa_dictseti = (cf_dictseti_t) dlsym(RTLD_DEFAULT, "CFDictionarySetInt64");
+    cfa_dictsetc = (cf_dictsetc_t) dlsym(RTLD_DEFAULT, "CFDictionarySetCString");
+    cfa_dictget  = (cf_dictget_t)  dlsym(RTLD_DEFAULT, "CFDictionaryGetValue");
+    cfa_rel      = (cf_rel_t)      dlsym(RTLD_DEFAULT, "CFRelease");
+    cfa_arr_cb   = dlsym(RTLD_DEFAULT, "kCFLArrayCallBacksCFLTypes");
+    cfa_dk_cb    = dlsym(RTLD_DEFAULT, "kCFLDictionaryKeyCallBacksCFLTypes");
+    cfa_dv_cb    = dlsym(RTLD_DEFAULT, "kCFLDictionaryValueCallBacksCFLTypes");
+
+    cfa_ready = (cfa_str && cfa_equal && cfa_dictm && cfa_arrm && cfa_arrapp && cfa_arrcount &&
+                 cfa_arridx && cfa_dictset && cfa_dictseti && cfa_dictsetc && cfa_dictget &&
+                 cfa_rel && cfa_arr_cb && cfa_dk_cb && cfa_dv_cb) ? 1 : 0;
+    if (!cfa_ready)
+        LOG_ERROR(LOG_MODULE, "probe103: CFLite symbol resolution FAILED — probe disabled");
+    return cfa_ready;
+}
+
+/* Marker file, not an env var: the env is read once at supervisor start, and this must be revertible
+ * with a replug when the phone bites and our (absent) type-103 receiver fails the session. */
+static int spa_probe103(void)
+{
+    FILE *f = fopen(SPA_PROBE103_PATH, "r");
+    if (!f) return 0;
+    fclose(f);
+    return 1;
+}
+
+/* ---- /info: append the type-103 buffered-media entry ---------------------------------------
+ * Stock AirPlayReceiverServerPlatformCopyProperty @0x1fe08 builds `audioFormats` as a MUTABLE array
+ * of two mutable dicts ('d'=100 main, 'e'=101 alt), each {type, audioInputFormats?, audioOutputFormats}.
+ * Because the array it returns is mutable and unowned by anyone else yet, appending a third entry is
+ * enough — no copy, no reallocation of the caller's object. */
+typedef void *(*fn_copyprop_t)(void *, int, const void *, const void *, int32_t *);
+
+void *AirPlayReceiverServerPlatformCopyProperty(void *server, int sessionID, const void *property,
+                                                const void *qualifier, int32_t *outErr)
+{
+    static fn_copyprop_t real;
+    void *result;
+    void *kAudioFormats, *dict, *ext, *kType, *kAudioType, *kOut, *kExt;
+
+    if (!real) real = (fn_copyprop_t)dlsym(RTLD_NEXT, "AirPlayReceiverServerPlatformCopyProperty");
+    if (!real) { LOG_ERROR(LOG_MODULE, "CopyProperty real==NULL"); if (outErr) *outErr = -6714; return 0; }
+
+    result = real(server, sessionID, property, qualifier, outErr);
+    if (!result || !property || !spa_probe103() || !spa_cf_resolve()) return result;
+
+    kAudioFormats = cfa_str(0, "audioFormats", SPA_CFENC_UTF8);
+    if (!kAudioFormats) return result;
+    if (!cfa_equal(property, kAudioFormats)) { cfa_rel(kAudioFormats); return result; }
+    cfa_rel(kAudioFormats);
+
+    dict = cfa_dictm(0, 0, cfa_dk_cb, cfa_dv_cb);
+    ext  = cfa_arrm(0, 1, cfa_arr_cb);
+    kType      = cfa_str(0, "type",                       SPA_CFENC_UTF8);
+    kAudioType = cfa_str(0, "audioType",                  SPA_CFENC_UTF8);
+    kOut       = cfa_str(0, "audioOutputFormats",         SPA_CFENC_UTF8);
+    kExt       = cfa_str(0, "audioOutputFormatsExtended", SPA_CFENC_UTF8);
+
+    if (dict && ext && kType && kAudioType && kOut && kExt) {
+        /* CFNumberCreateInt64 takes ONE argument on this stack (verified: libairplay calls it as
+         * `CFNumberCreateInt64(4, 0)` = one int64 across two ARM regs), not (alloc, type, ptr). */
+        void *num = 0;
+        void *(*cfnum)(int64_t) = (void *(*)(int64_t))dlsym(RTLD_DEFAULT, "CFNumberCreateInt64");
+
+        cfa_dictseti(dict, kType,      103);
+        cfa_dictsetc(dict, kAudioType, "media", -1);
+        cfa_dictseti(dict, kOut,       SPA_BUFFERED_LEGACY_MASK);
+
+        if (cfnum) num = cfnum(SPA_APAC_48K_5_1);
+        if (num) {
+            cfa_arrapp(ext, num);
+            cfa_rel(num);
+            cfa_dictset(dict, kExt, ext);
+            cfa_arrapp(result, dict);
+            LOG_INFO(LOG_MODULE,
+                     "probe103: /info audioFormats += {type:103, audioType:media, "
+                     "audioOutputFormats:%#x, audioOutputFormatsExtended:[%d]} (now %ld entries)",
+                     SPA_BUFFERED_LEGACY_MASK, SPA_APAC_48K_5_1, cfa_arrcount(result));
+        } else {
+            LOG_ERROR(LOG_MODULE, "probe103: CFNumberCreateInt64 unavailable — entry NOT added");
+        }
+    }
+
+    if (kExt) cfa_rel(kExt);
+    if (kOut) cfa_rel(kOut);
+    if (kAudioType) cfa_rel(kAudioType);
+    if (kType) cfa_rel(kType);
+    if (ext) cfa_rel(ext);
+    if (dict) cfa_rel(dict);
+    return result;
+}
+
+/* ---- control-SETUP response: add the "mainBuffered" feature token ---------------------------
+ * The response key is `enabledFeatures` (the phone proposes under `features` in the REQUEST and reads
+ * the negotiated set from `enabledFeatures` in the RESPONSE — established by the altscreen work).
+ * Seed from whatever the receiver already accepted and add exactly one token; never echo the phone's
+ * proposal, since each string flips a sibling endpoint flag. */
 int spa_augment_setup_response(void *session, void *request, void *response)
 {
-    (void)session; (void)request; (void)response;
-    return 0;
+    void *kReq, *kEnab, *cur, *neg;
+    long curN, i;
+    int added = 0;
+
+    (void)session;
+    if (!request || !response || !spa_probe103() || !spa_cf_resolve()) return 0;
+
+    /* control SETUP only — the media SETUPs carry no `features` proposal */
+    kReq = cfa_str(0, "features", SPA_CFENC_UTF8);
+    if (!kReq) return 0;
+    if (!cfa_dictget(request, kReq)) { cfa_rel(kReq); return 0; }
+    cfa_rel(kReq);
+
+    kEnab = cfa_str(0, "enabledFeatures", SPA_CFENC_UTF8);
+    if (!kEnab) return 0;
+    cur  = cfa_dictget(response, kEnab);
+    curN = cur ? cfa_arrcount(cur) : 0;
+    neg  = cfa_arrm(0, 0, cfa_arr_cb);
+    if (neg) {
+        for (i = 0; i < curN; i++) {
+            void *e = cfa_arridx(cur, i);
+            if (e) cfa_arrapp(neg, e);
+        }
+        if (cfa_arrappc && cfa_arrappc(neg, "mainBuffered", -1) == 0) {
+            added = 1;
+        } else {
+            void *s = cfa_str(0, "mainBuffered", SPA_CFENC_UTF8);
+            if (s) { cfa_arrapp(neg, s); cfa_rel(s); added = 1; }
+        }
+        if (added) {
+            cfa_dictset(response, kEnab, neg);
+            LOG_INFO(LOG_MODULE,
+                     "probe103: control SETUP response enabledFeatures += mainBuffered "
+                     "(preserved %ld existing)", curN);
+        }
+        cfa_rel(neg);
+    }
+    cfa_rel(kEnab);
+    return added;
 }
 
 /* ---- module init ---------------------------------------------------------------------------- */

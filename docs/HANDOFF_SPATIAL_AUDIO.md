@@ -11,12 +11,13 @@ Make an iPhone send **discrete multichannel audio** over **wired CarPlay** to an
 (QNX 6.5, APQ8064) so a B&O 3D Advanced amp receives real 5.1 instead of a stereo downmix that the amp
 then upmixes algorithmically (Fraunhofer Symphoria).
 
-The head-unit half is **finished and proven**. The phone refuses. This handoff is about *why*, and
-whether it can be changed.
+The head-unit 6-channel PCM path is **finished and proven**. The phone's legacy/realtime CarPlay path
+refuses the added multichannel bits. iOS 27 also has a newer buffered path, but our 210.81 receiver
+does not implement it. This handoff records why the cheap path is closed and the exact next probe.
 
 ---
 
-## 1. ⭐ THE KEY FINDING — the gate is a named phone-side feature flag
+## 1. ⭐ RESOLVED — the gate is local phone-side feature state
 
 `APAudioFormatIsScreenSpatialAudioReceiver` in **AirPlaySupport** @ `0x22669B1F4` (iOS 27 beta 6,
 iPhone18,1 shared cache):
@@ -26,9 +27,9 @@ bool APAudioFormatIsScreenSpatialAudioReceiver(void)
 {
     if (!APSSettingsIsFeatureEnabled(CFSTR("ScreenSpatialAudioReceiver")))   // <-- THE GATE
         return 0;
-    v1 = <device-identifier function>();          // an unresolved cross-dylib stub
+    v1 = MGGetProductType();
     if (v1 != 0x5BD62321 && v1 != 0xA10F2923 && v1 != 0xFCBBE892)
-        return <fallback check>() != 0;
+        return IsAppleTV() != 0;
     return 1;
 }
 ```
@@ -44,26 +45,56 @@ Why this is the crux:
   ```
 * **It takes no arguments.** It is pure phone-side state — *upstream* of anything the accessory
   publishes. Nothing we put in the head unit's AirPlay `/info` can flip it.
-* The three constants are **not FourCCs** (no printable ASCII), most likely hashed product
-  identifiers; note a non-matching device can still qualify via the fallback branch. So the
-  **feature flag dominates**.
+* The first unresolved call is `MGGetProductType()` and the fallback is `IsAppleTV()`. The three
+  values are product-type enum values, not FourCCs. Their precise per-model labels remain unresolved;
+  local Apple call sites group the same values with default low-latency-surround and Atmos receiver
+  behavior. This identity does not change the gate result.
 
-### Question 1 (highest value): what turns `ScreenSpatialAudioReceiver` on?
-Trace `APSSettingsIsFeatureEnabled` in AirPlaySupport. Specifically:
-- Which backing store does it read — a `CFPreferences` domain (`com.apple.airplay`?), a
-  `/Library/Preferences/FeatureFlags/*.plist`, an entitlement, MobileGestalt, or a
-  server-fetched/staged-rollout config?
-- Is it cached per-process or re-read?
-- Is there **any** input path from the connected accessory (a vehicle allowlist keyed on
-  manufacturer/model from `/info`, a certification bit, an MFi capability)? Volvo EX90 was the launch
-  vehicle for "CarPlay Spatial Audio, powered by Dolby Atmos" (Aug 2026), which smells like a
-  per-vehicle allowlist — if such a list exists, find where it lives and what it keys on.
+### Exact `APSSettings` precedence and cache
+
+`APSSettingsIsFeatureEnabled` @ `0x2266529DC` does this:
+
+1. Return a value from its mutex-protected, per-process dictionary cache if present.
+2. Read an integer app preference named `ScreenSpatialAudioReceiver` with
+   `CFPreferencesCopyAppValue`. The default application ID is exactly **`com.apple.airplay`**. A
+   present nonzero value wins.
+3. Otherwise call `_os_feature_enabled_impl("AirPlay", "ScreenSpatialAudioReceiver")`.
+4. Cache the resulting Boolean. `APSSettingsSetValue` does not invalidate this cache, so set an
+   override before the first query or restart the process that hosts AirPlay.
+
+The system feature evaluator is `/usr/lib/system/libsystem_featureflags.dylib`. Its fast path opens
+the read-only shared-memory table **`com.apple.featureflags.shm`**. Its file-backed slow path layers:
+
+* `/System/Library/FeatureFlags/Unified`
+* `/System/Library/FeatureFlags`
+* `/Library/Preferences/FeatureFlags`
+
+For this flag it reads `Domain/AirPlay.plist`; a feature entry is a dictionary whose `Enabled` value
+is Boolean. It also reads the usual `Global.plist`, `Profiles.plist`, and `Settings.plist` layers.
+The environment override is a colon-separated list in `FEATUREFLAGS_ENABLED` or
+`FEATUREFLAGS_DISABLED`; the exact entry here is `AirPlay/ScreenSpatialAudioReceiver`.
+
+### Consequence
+
+There is **no connected-accessory, MFi, vehicle identity, entitlement, or network input** in either
+the AirPlaySupport wrapper or the feature evaluator: the latter receives only the domain and feature
+strings and consults local preference/file/shared-memory/environment state. A separate privileged
+service could pre-provision a local profile or the shared-memory table (including from a server
+rollout), but the evaluator itself cannot dynamically key the result on the current car.
+
+On a rooted/jailbroken handset, the three useful override points are therefore:
+
+* the integer `com.apple.airplay` app preference `ScreenSpatialAudioReceiver` (shortest path);
+* `/Library/Preferences/FeatureFlags/Domain/AirPlay.plist`, with
+  `ScreenSpatialAudioReceiver = { Enabled = true; }`;
+* `FEATUREFLAGS_ENABLED=AirPlay/ScreenSpatialAudioReceiver` in the relevant process environment.
+
+All require a process restart if the gate has already been queried. This closes the accessory-side
+route to the old bit-42 gate; changing `/info` cannot turn it on.
 
 ---
 
-## 2. ⭐ Question 2 — the one lever still on OUR side: the shape of `audioFormats`
-
-This is the most promising actionable lead, because it is something we can change.
+## 2. ⭐ RESOLVED — the modern `audioFormats` shape
 
 `-[CARSessionConfiguration initWithSessionStatusOptions:propertySupplier:]` in **CarKit**
 @ `0x1C2008F7C` sets two ivars (offsets decoded from the getters: `LDRB W0,[X0,#0x15]` /
@@ -81,25 +112,51 @@ loc_1C2009A18:
 1C2009B68  STRB  W8, [X20,#0x15]               ; spatialAudioSupported <- DERIVED from the scan
 ```
 
-So `spatialAudioSupported` is **not a flag we set — it is inferred by scanning the `audioFormats`
-array we publish**. Our head unit publishes the *old* shape (stock `AirPlayReceiverServerPlatformCopyProperty`
-@ `0x1fe08` in our libairplay 210.81 builds an array of two dicts, `'d'`=100 main and `'e'`=101 alt, each
-with an integer `audioOutputFormats`).
+`spatialAudioSupported` is **not a Boolean we set**. CarKit gets the top-level `audioFormats` value,
+requires an `NSArray`, fast-enumerates it, requires each entry to be an `NSDictionary`, and asks each
+dictionary for the exact key `audioOutputFormatsExtended`. Any non-null value sets the ivar at
+`+0x15`; it does not validate the value's type or contents. `W4 = 0x10` is merely the
+`countByEnumeratingWithState:objects:count:` batch capacity: **16 array objects, not 16 channels or an
+audio enum**.
 
-**Sub-questions:**
-- What exactly does that scan match, and what is `W4 = 0x10` (16)? A channel count? An audio type? An
-  enum case? Decompile the callee.
-- iOS 27's `AirPlaySender` also parses a key we have **never published**:
-  **`audioOutputFormatsExtended`** (`0x2511D5199`). See
-  `airPlayDescription_copyCarPlayAudioFormatsExtended` @ `0x25109C5DC`, which — behind a settings check
-  **and** a byte flag at `desc+65` — calls
-  `APCarPlayAudioFormatsCopyFormatsForAudioType(formats, 103, "media", …)` and publishes the result
-  under the key **`"bufferStream"`**.
-- Follow `APCarPlayAudioFormatsCreate` @ `0x25107B82C` and
-  `carPlayAudioFormat_repackageFormatsForStream` @ `0x25107C9B0`: **what /info shape does iOS 27
-  actually want**, and would publishing the newer shape (or `audioOutputFormatsExtended`) change what
-  the phone offers? Our SDK is 210.81; iOS 27 may be reading a format description our vintage never
-  emits.
+Our head unit publishes the old shape (stock `AirPlayReceiverServerPlatformCopyProperty` @ `0x1fe08`
+in libairplay 210.81): two dictionaries, stream type 100 main and type 101 alt, each with an integer
+`audioOutputFormats` mask.
+
+iOS 27's `APCarPlayAudioFormatsCreate` @ `0x25107B82C` accepts stream types 100, 101, 103, 106, and
+107. Each entry has:
+
+* `type`: numeric stream type;
+* `audioType`: a string, with `media` selected here and `default` as fallback;
+* `audioOutputFormats`: the legacy numeric bitmask, which must remain nonzero even when an extended
+  array exists;
+* optional `audioOutputFormatsExtended`: an array of numeric **`APAudioFormatIndex` values**, not a
+  second bitmask and not an array of dictionaries.
+
+For the new buffered media path, the minimal candidate added alongside the existing entries is:
+
+```text
+{
+    "type": 103,
+    "audioType": "media",
+    "audioOutputFormats": 0x1440800,
+    "audioOutputFormatsExtended": [65]
+}
+```
+
+Index 65 is `APAC/48000/5.1`. `airPlayDescription_copyCarPlayAudioFormatsExtended` @ `0x25109C5DC`
+selects type 103 / `media` and exports it as `{"bufferStream": extendedArray}`.
+
+There is a second mandatory gate: the receiver's setup response must advertise the exact supported
+feature token **`mainBuffered`**. `AirPlaySender` searches the setup-response feature array for that
+token; only then does it set endpoint property `SupportsBufferedAudio` (the byte at description
+offset `+65`) and permit the `bufferStream` path. Merely inserting the extended key can make CarKit's
+`spatialAudioSupported` Boolean true, but cannot activate the sender path.
+
+The `bufferedAPACSurround` setting defaults enabled in this build. Thus the two accessory-controlled
+metadata requirements are a type-103 entry with a nonempty extended array and the `mainBuffered`
+feature token. They can make the phone attempt the modern path; they do not make our old receiver
+capable of handling it.
 
 ---
 
@@ -182,14 +239,35 @@ targets, so "device too old" is not the explanation. This is what points at §1'
 
 ---
 
-## 6. The other known path (large, unimplemented)
+## 6. The modern buffered path (identified, still unimplemented)
 
-iOS 27 appears to carry a **second, buffered CarPlay audio stream** where lossless/spatial actually
-live: `audioOutputFormatsExtended` → key `"bufferStream"` → audio **type 103**, sub-key `"media"`.
-Evidence in §2 above. Its base transport mask is all-44.1 kHz PCM/ALAC/AAC (music formats), which is
-why the mask `0x1440800` never intersects our 48 kHz realtime advert — a contradiction that took a
-while to resolve. Our libairplay 210.81 has no notion of this stream type. Implementing it would also
-need resampling, since the hardware is 48 kHz-only.
+iOS 27 carries a **second, buffered CarPlay audio stream** where APAC spatial formats live:
+`audioOutputFormatsExtended` → `"bufferStream"` → stream type **103** → audio type `"media"`. Its
+required legacy mask `0x1440800` contains bits {11, 18, 22, 24}: 44.1 kHz stereo PCM, ALAC, AAC-LC,
+and AAC-ELD. That mask is a compatibility/selection prerequisite; the extended array separately
+names APAC formats and can contain the 48 kHz index 65.
+
+The exact extended indices accepted by iOS 27's CarPlay spatial predicate are:
+
+| index | descriptor |
+|--:|---|
+| 65 | `APAC/48000/5.1` |
+| 66 | `APAC/48000/5.1.2` |
+| 67 | `APAC/48000/7.1` |
+| 68 | `APAC/48000/7.1.4` |
+| 76 | `APAC/48000/5.1.4` |
+| 77 | `APAC/48000/7.1.2` |
+| 92 | `APAC/48000/9.1.6` |
+
+Our hardware ceiling makes **index 65 the only sensible target**. It is 48 kHz and maps exactly to
+the proven six-channel order `L R C LFE Ls Rs` after decoding.
+
+Our libairplay 210.81 has no type-103 receiver implementation. A real implementation needs at least
+the setup/control state machine, stream lifecycle, timing/clock synchronization, buffering and
+jitter handling, APAC framing and decode, loss/retransmit behavior, conversion to interleaved
+six-channel PCM, and delivery to `mpl5_dio_ent`. Resampling may still be required for legacy/fallback
+content because all HU media endpoints are 48 kHz-only. Advertising the metadata alone is therefore
+a negotiation probe, not a playable patch.
 
 Caveat: `Audio type: media` also appears on the **realtime** stream in live logs, so the string
 `"media"` alone does not prove the buffered path — the distinct `bufferStream` key does.
@@ -232,25 +310,40 @@ Caveat: `Audio type: media` also appears on the **realtime** stream in live logs
   re-read per call (no reboot); `<bit>:0` advertises the bit but *refuses* it in `ToASBD`. Without it,
   a selected foreign-format bit (38 = 8ch, 47 = 32-bit float, 42 = AAC) would be described by our
   16-bit `lpcm` ASBD and feed **full-scale noise into a 19-speaker amp**.
-* Format-bit indices: the descriptor strings in file order are **offset by 2** from the real bit
-  numbers. Derive them from `ToASBD`'s literal cases, not from `strings` output order.
+* **Do not derive `APAudioFormatIndex` from descriptor-string file order.** The early legacy subset
+  can look offset by two, but later insertions break that relationship. Derive indices only from the
+  formatter's switch/table or `ToASBD`'s literal cases. That is how the exact APAC map in §6 was
+  recovered.
 
 ---
 
-## 9. What a useful answer looks like
+## 9. Next experiment and remaining work
 
-Ranked by value:
+### First experiment: metadata-only, fail closed
 
-1. **How `APSSettingsIsFeatureEnabled("ScreenSpatialAudioReceiver")` is satisfied** — the backing
-   store, and whether anything accessory-side (a vehicle allowlist, a certification/MFi bit, an /info
-   field) feeds it. If it is purely a staged-rollout server flag, say so plainly; that closes the
-   project's cheap path and is worth knowing definitively.
-2. **What the CarKit `audioFormats` scan (`W4 = 0x10`) matches**, and whether publishing a newer /info
-   shape — or `audioOutputFormatsExtended` — changes what iOS offers. This is the only remaining lever
-   on our side of the wire.
-3. **The identity of the three constants** `0x5BD62321 / 0xA10F2923 / 0xFCBBE892` and the function that
-   produces them (an unresolved cross-dylib stub in the extracted AirPlaySupport).
-4. A realistic scope for implementing the buffered media stream (type 103) in a 210.81-era libairplay.
+On a muted/isolated bench setup:
 
-Negative answers are valuable. "This is server-gated and unreachable from the accessory" is a perfectly
-good result — it stops further work on a dead path.
+1. Preserve the working type-100/type-101 entries.
+2. Add the type-103 / `media` entry from §2 with legacy mask `0x1440800` and extended array `[65]`.
+3. Add `mainBuffered` to the receiver's setup-response supported-feature array.
+4. Do **not** route or describe an unknown selected payload as PCM. Refuse/abort type 103 until its
+   framing has been captured and decoded.
+5. Capture the full setup exchange, sender logs, stream-control requests, ports, timing traffic, and
+   first payload packets. Check separately whether CarKit reports spatial support, whether the phone
+   emits `bufferStream`, and whether it attempts to start type 103.
+
+This experiment distinguishes three layers without risking speaker damage: CarKit UI capability,
+AirPlaySender negotiation, and actual stream transport.
+
+### If type 103 is attempted
+
+Document the control protocol and APAC packet framing before writing audio output code. Then build a
+receiver that decodes index 65 to six-channel 48 kHz PCM and feeds the already-proven HU path. Keep a
+hard reject for every other extended index; the platform cannot render 5.1.2, 7.1, or higher.
+
+### Remaining low-priority question
+
+Map the individual model labels for `MGGetProductType()` values `0x5BD62321`, `0xA10F2923`, and
+`0xFCBBE892` if needed for completeness. The producer and fallback are resolved, and this mapping no
+longer affects the project decision: the old gate is local phone state, while the only accessory-side
+lever is the separate type-103 buffered protocol.
