@@ -884,3 +884,62 @@ the MOST channel count**, and `mpl1_int_ent` (6 voices, internal media) is the e
 The failure mode to watch on the first live test: if the amp instead picks discrete-vs-upmix by **source
 identity** (media source ⇒ expect 5.1, phone source ⇒ expect stereo), our 6 channels could be
 down-mixed or partly ignored even though they arrive. Listen for a real centre/LFE, not just width.
+
+---
+
+## 21. RESOLVES §19 — iOS 27 has a SECOND CarPlay audio stream (buffered "media"), and that is where lossless/spatial live
+
+Chasing "declare Atmos to get the Atmos master, render it to 5.1, hand us PCM 5.1" turned up the piece
+that explains everything. `AirPlaySender` (the phone-side parser of **our** /info) has two format keys:
+
+```
+0x2511d54cd  "audioOutputFormats"           <- what our libairplay writes today
+0x2511d5199  "audioOutputFormatsExtended"   <- NEW, we have never published it
+```
+
+`airPlayDescription_copyCarPlayAudioFormatsExtended` @0x25109C5DC:
+```c
+if ( settingsEnabled(<feature>, 1) && *(BYTE *)(desc + 65) ) {          // feature flag + a desc flag
+    APCarPlayAudioFormatsCopyFormatsForAudioType(formats, 103, "media", 0, &out, 0);
+    dict = CFDictionaryCreateMutable(...);
+    CFDictionarySetValue(dict, "bufferStream", out);                    // ← the tell
+}
+```
+(Key CFStrings resolved from the constant structs: `"bufferStream"`, `"media"`, and for
+`carPlayAudioFormat_getFormatsKeyForAudioType` @0x25107B5C0: type 107 → `audioInputFormats`,
+type 100 → `audioInputFormats`/`audioOutputFormats`, else → `audioOutputFormats`.)
+
+**Audio type 103, sub-key `media`, published under `bufferStream`.** Strongly indicated reading: iOS 27
+carries a **buffered media stream** over CarPlay, separate from the classic realtime audio stream — and
+that is the high-quality music path.
+
+### This dissolves the §19 contradiction
+Everything that refused to line up now does:
+- `GetSupportedTransportAudioFormatsForScreenReceiver` returning **44.1 kHz PCM/ALAC/AAC-LC/AAC-ELD** —
+  those are *music* formats. It describes the buffered media stream, not our realtime stream. Hence the
+  empty intersection with our 48 kHz realtime advert, while CarPlay audio still works.
+- `APAudioFormatSelectTransportFormatForAudioSourceInputFormat` emitting only ALAC/AAC (§18) — it is the
+  buffered-music selector, with ALAC 48k as the settings-gated lossless preference.
+- `APAudioFormatFilterFormatsForSpatialSender` gating on `APSIsAPMSpeaker` +
+  `GetBufferedPassthroughSupportedFormats` (§17) — buffered again.
+- Why a shipping car (Volvo EX90, §13) gets CarPlay spatial at all: it implements this stream.
+
+### What that means for "force Atmos, take PCM 5.1"
+The idea is sound in mechanism but the two halves sit on **different streams**:
+
+| half | stream | cost |
+|---|---|---|
+| Atmos-tier **content** | buffered media stream (type 103, `audioOutputFormatsExtended` → `bufferStream`) | **large** — a stream type our 210 libairplay has no notion of |
+| PCM 5.1 **transport** | classic realtime stream (type 100, `audioOutputFormats`, bit 44) | small — hook + the deva patch we already built |
+
+So we cannot simply declare Atmos and have the master arrive rendered on the realtime stream. Getting
+the Atmos content tier means implementing the buffered stream. Conversely the cheap PCM-5.1 lever stays
+on the realtime stream — where the content is whatever iOS renders live, today stereo.
+
+**The open question this creates, and it is the right one to measure:** does iOS render *multichannel*
+into the realtime stream when the receiver advertises a multichannel PCM format? No evidence either way
+yet. If yes, bit 44 alone gets us discrete 5.1 (§20's target) with no buffered-stream work at all.
+
+### Order of work is unchanged
+Still one connect with the existing probes first (§19). It now also answers a second question for free:
+whether the phone ever asks us for `audioOutputFormatsExtended` / a type-103 stream.
