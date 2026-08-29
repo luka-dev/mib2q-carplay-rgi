@@ -781,3 +781,59 @@ Each step logs *"Supported format does not include AAC-ELD/AAC-LC 48k 5.1[.2] fo
 **⇒ There is no shortcut.** Discrete multichannel over CarPlay requires bit 42 *and* AAC-LC multichannel
 decode *and* the 8→6 fold (§15/§16). Advertising a capability we cannot honour only risks the classic
 advertised-but-unhandled failure mode.
+
+---
+
+## 19. CORRECTION to §15/§18 — the bit table, what we actually advertise, and a contradiction
+
+Before planning any implementation I rebuilt the format table from **our own** libairplay 210 instead of
+trusting the iOS-side reading. `AirPlayAudioFormatToASBD` @0x2bda0 decodes format→ASBD with literal
+cases; those literals pin the bit indices exactly (cross-check of all 16 PCM cases against the ordered
+descriptor strings: **PASS**).
+
+| bits | family | notes |
+|--:|---|---|
+| 2–17 | **PCM**, 16 combos | bit 11 = `PCM/44100/16/2`, bit 15 = `PCM/48000/16/2` |
+| 18–21 | ALAC | bit 21 = `ALAC/48000/24/2` |
+| 22–23 | AAC-LC | bit 22 = 44.1, bit 23 = 48k |
+| 24–25 | AAC-ELD | bit 24 = 44.1, bit 25 = 48k |
+| 39–42, 44… | post-210 additions | the multichannel ones (§15) |
+
+This re-reads the §18 selector correctly: its stereo branch tries bit 21 = **ALAC 48k** (settings-gated
+— lossless preference) then bit 23 = **AAC-LC 48k**, which is exactly what its error string says. Good.
+
+### What our HU advertises today
+```c
+AudioSessionGetSupportedInputFormats()  { return 16; }          // bit 4  = PCM/16000/16/1 (mic)
+AudioSessionGetSupportedOutputFormats(t){ return GetInput() | (t==101 ? 16 : 0x8000); }
+```
+→ main (type 100) = bits {4, 15} = **`PCM/48000/16/2`**. And `AudioConverterNew_compat` @0x3ddf0 is a
+**dead stub** (`return -6735`), while ToASBD rejects every ALAC/AAC bit — so this stack is genuinely
+PCM-only, exactly as [[audio_210_pcm_passthrough]] said.
+
+### The contradiction — and what it invalidates
+`APAudioFormatGetSupportedTransportAudioFormatsForScreenReceiver` returns `0x1440800` =
+{11 `PCM/44100/16/2`, 18 `ALAC/44100/16/2`, 22 `AAC-LC/44100/2`, 24 `AAC-ELD/44100/2`} — all 44.1 kHz.
+Intersect that with what we advertise, {4, 15}: **empty**. Yet CarPlay audio demonstrably works on this
+unit today. Therefore **that function is not the gate for our main audio stream** — it governs some
+other (newer, AirPlay-audio-over-CarPlay) path.
+
+Consequences, stated plainly:
+- **Still solid:** bit 42's identity (`AAC_LC/48000/5.1.2`) and that it is the one bit iOS 27 adds when
+  spatial is permitted; that our stack cannot decode AAC or ALAC at all; what we advertise today.
+- **NOT established (downgrade §15/§18):** that bit 44 (`PCM/48000/16/5.1`) "can never be selected", and
+  that the transport vocabulary is "AAC-only". Both were inferred from the mask above, which provably
+  does not describe our stream. **Bit 44 may still be live for the PCM path.**
+
+### Resolving it costs one connect, no code, no deploy
+The probes already in `audio_hook.c` print both halves:
+```
+getSupportedFormats(type=100): stock=0x... offered=0x...   <- confirms {4,15} and our +bit44
+ToASBD(fmt=0x...) => ...                                    <- the format iOS actually chose
+```
+Read those two lines on one phone connect and the branch is decided:
+- **negotiated = a PCM bit** → the PCM path is the live one; try bit 44 for real (deva patch + hook are
+  already aimed there), and only the fold/decode questions of §15 fall away.
+- **negotiated = an AAC/ALAC bit** → impossible on this stack (stub converter), so it would mean the
+  audio rides a different component than we think — re-open the trace there.
+Nothing else should be built until that line is read.
