@@ -901,6 +901,35 @@ void *AirPlayCopyServerInfo(void *session, void *qualifier, void *macAddr, void 
             if (dk && cf_rel) cf_rel(dk);
             if (pk && cf_rel) cf_rel(pk);
         }
+
+        /* ── CarPlay video capability probe (env-gated, OFF by default) ──────
+         * PROVEN chain (CarKit 24A5418b, extracted from the iOS 27 dyld cache):
+         *   CARkAPEndpointProperty_EndpointInfo        = "EndpointInfo"      (= this /info response)
+         *   CARkAPEndpointInfoResponseKey_VideoInfo    = "videoPlaybackInfo"
+         *   -[CARSessionConfiguration initWithSessionStatusOptions:propertySupplier:]:
+         *       propertySupplier("EndpointInfo")["videoPlaybackInfo"]
+         *       CMP X0,#0 / CSET NE  -> ivar +15 = videoPlaybackSupported   (PRESENCE only,
+         *       contents unparsed: the string occurs exactly once in CarKit)
+         *   -> CRPairingAirPlaySessionInfo.supportsVideoPlayback -> CRVehicle.
+         *
+         * This is a PROBE, not a feature: it only raises the capability bit, which on the
+         * phone surfaces CRVideoSettingsApp / onboarding.  Whether pixels then flow is a
+         * separate question, and the in-motion restriction rides a different channel
+         * entirely (Fig property AirPlayVideoPlaybackAudioOnlyMode, None/Elected/Forced —
+         * neither our stock 210.81 nor the 280 SDK knows it).  Keep it dark by default so
+         * the base handshake stays byte-identical for every iOS. */
+        if (env_on("CARPLAY_VIDEO_PLAYBACK")) {
+            void *vk = cf_str(0, "videoPlaybackInfo", CFENC_UTF8);
+            void *vv = cf_dictm ? cf_dictm(0, 0, dict_keycb, dict_valcb) : 0;
+            if (vk && vv) {
+                cf_dictset(info, vk, vv);
+                LOG_INFO(LOG_MODULE, "injected videoPlaybackInfo into /info=%p", info);
+            } else {
+                LOG_ERROR(LOG_MODULE, "videoPlaybackInfo skipped vk=%p vv=%p", vk, vv);
+            }
+            if (vv && cf_rel) cf_rel(vv);
+            if (vk && cf_rel) cf_rel(vk);
+        }
         pthread_mutex_unlock(&advert_lock);
     }
     return info;
