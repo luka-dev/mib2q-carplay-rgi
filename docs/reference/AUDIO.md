@@ -1026,3 +1026,47 @@ fold.
 
 Both fall out of the same experiment: deploy the deva patch, advertise bit 44, connect, and read
 `ToASBD` plus the phone's `SupportedPCMFormat[i]` enumeration.
+
+### 22a. CORRECTION to §22 step 3 — 6 channels alone does NOT unlock the Atmos content tier
+
+§22 claimed a multichannel route would satisfy `itemfig_isAtmosSupported` via its
+`FPSupport_GetMaxPhysicalOutputChannelCount` branch. That was read off a heavily *outlined* decompile
+where the decompiler had mapped shared registers to misleading names. Reading the real signature fixes it.
+
+`FPSupport_GetMaxPhysicalOutputChannelCount(a1, int *a2, int *a3)` @0x197315E4C returns an **OSStatus**
+and writes the channel count to `*a2`:
+```c
+if (bufferedAirPlayOutput /* a1+16 */) {
+    ... FigBufferedAirPlayOutputGetCMBaseObject(...) -> query <atmos property>
+    *a2 = (prop == kCFBooleanTrue) ? 16 : 2;          // 16 = a SENTINEL, not a channel count
+} else if (audioSession /* a1+24 */) {
+    ret = FPSupport_GetAudioSessionOutputChannelCount(session, ..., &count);
+    *a2 = count;                                       // the REAL route channel count
+}
+```
+Two consequences, one good and one bad:
+
+- **Good, and load-bearing:** for a non-buffered route — *ours* — the count comes from
+  `FPSupport_GetAudioSessionOutputChannelCount`, i.e. the genuine channel count of the current audio
+  session output. So **a 6-channel CarPlay route is visible to the media stack as 6.**
+- **Bad:** the call site in `itemfig_isAtmosSupported` reads
+  `if (status == 0 && count == 16)` — the decompiler's `MaxPhysicalOutputChannelCount` there is the
+  *return status*, and `a11` is the count. **16 is the buffered-AirPlay Atmos sentinel above, not
+  "multichannel".** 6 ≠ 16, so a 6-channel CarPlay route does **not** fire that branch.
+
+The remaining branches are `FPSupport_GetAtmosSupport` (a property on the audio *device* — i.e. the
+declared capability) and `itemfig_isSpatializationAllowed` @0x1970D4BBC (which consults
+`FPSupport_CopyAudioSpatializationCapabilities` / `kFigSpatialCapabilitiesKey_alwaysSpatialize`; its
+decompile shows a single `return 0`, so its real result may live in an outlined tail — treat as unknown).
+
+### The caution this raises before spending a reboot
+Transport and content are now clearly separable:
+- **Transport half still works:** a 6-channel route means the phone renders its output into 6 channels.
+- **Content half does not come free:** with stereo/lossless source material and no spatializer engaged,
+  a 6-channel route plausibly carries **L/R plus four silent channels** — which would sound *worse* than
+  today, where Symphoria at least fills all 19 speakers from the stereo feed (§20).
+
+So the experiment must listen for the right thing: not "is there sound", but **whether centre/LFE/surround
+carry real, distinct content**. If they are silent, the transport works and the content tier is the
+missing half — and that is when the declared-capability route (`supportsSpatialAudio` /
+`supportsDolbyAtmos`, §17) becomes worth trying, on top of the 6-channel advert rather than instead of it.
