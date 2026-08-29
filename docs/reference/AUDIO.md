@@ -837,3 +837,50 @@ Read those two lines on one phone connect and the branch is decided:
 - **negotiated = an AAC/ALAC bit** → impossible on this stack (stub converter), so it would mean the
   audio rides a different component than we think — re-open the trace there.
 Nothing else should be built until that line is read.
+
+---
+
+## 20. Amp-side reality (B&O 3D Advanced) — settles the target at discrete 5.1, and retires 5.1.2
+
+Owner-supplied spec + our RE agree; recording it so it stops being re-litigated.
+
+**The amp is already a 5.1 system.** B&O 3D Advanced: 16 MOST channels, 19 speakers, 5.1 surround +
+Fraunhofer Symphoria 3D. Nothing to "force" — it *is* the 5.1 target.
+
+**What it does today with CarPlay.** The HU sends **stereo** over MOST; the amp synthesises the field
+across all speakers with Symphoria. That is an **algorithmic upmix, not discrete channels** — the amp
+cannot manufacture discrete 5.1 from stereo, only spread it. Discrete 5.1 reaches it only when the
+*source* actually delivers 6 channels (internal media / DVD modes).
+
+**⇒ the win we are chasing, stated precisely:** replace a synthetic upmix of a stereo downmix with the
+phone's genuine discrete 5.1. Same speakers, real channels.
+
+### 5.1.2 / Atmos height is out — three independent stops
+1. **No height source.** 5.1.2 is object/height content; nothing on the B9 platform (~2016) carries a
+   height layer over MOST from MIB2. Firmware cannot create channels absent from the input.
+2. **The amp is not an Atmos renderer.** The SHARC ROM has legacy Dolby/DTS decoders, not an object
+   renderer. It is upmixer + EQ/crossover + power stage.
+3. **"3D" here is Symphoria synthesis, not a discrete top layer.** The height drivers (pop-up tweeters /
+   dash 3D) are already fed — by the upmix, not by a separate Atmos track.
+
+This also reframes §16: the 8→6 fold would only ever be needed if the *phone* offered nothing but bit 42
+(AAC 5.1.2). Folding then discards exactly the height layer the amp cannot render discretely anyway —
+so the fold is a cost on the phone-facing side, **not a musical loss**. It is not, and never was, a
+delivery target.
+
+### Convergence with §19
+Both lines now point the same way: the ideal wire format is **PCM 48k/16/6ch — bit 44** — because it is
+a native match end to end (6ch PCM in → `six_channel_speakerp` → MOST → amp), needs **no decoder and no
+fold**, and lands exactly on what the amp wants. That is what the current hook already targets, and §19
+reopened the possibility that it is live. The pending measurement decides it.
+
+### The one open item left on this boundary
+**How does the amp learn to stop upmixing?** Checked the HU side: `app/` contains no Symphoria / upmix /
+sound-mode control at all — the only channel signalling is Qualcomm AFE-level `ChannelConfig` per port
+(`audio_service`), which is DSP-internal and not amp-facing. So the switch is most likely **implicit in
+the MOST channel count**, and `mpl1_int_ent` (6 voices, internal media) is the existence proof that a
+6-channel stream reaches the amp and is used as such.
+
+The failure mode to watch on the first live test: if the amp instead picks discrete-vs-upmix by **source
+identity** (media source ⇒ expect 5.1, phone source ⇒ expect stereo), our 6 channels could be
+down-mixed or partly ignored even though they arrive. Listen for a real centre/LFE, not just width.
