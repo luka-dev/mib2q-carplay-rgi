@@ -175,6 +175,20 @@ static bool log_start_writer_locked(void) {
     return true;
 }
 
+/* Production is WARN+ERROR.  One marker file lifts the whole hook to INFO for a diagnostic drive,
+ * matching the Java side's /mnt/app/carplay_verbose.  MUST be shared by log_init() and the lazy
+ * auto-init in log_write(): nothing actually calls log_init() (hook_framework.c keeps logging lazy on
+ * purpose), so when this check lived only in log_init() the marker was dead code and INFO could never
+ * be enabled at all — which is exactly how a session of audio probes came back empty. */
+static void log_apply_defaults_locked(void) {
+    log_config_t def = LOG_CONFIG_DEFAULT;
+    g_log.config = def;
+    if (access("/mnt/app/carplay_verbose", F_OK) == 0
+            || access("/tmp/carplay_verbose", F_OK) == 0) {
+        g_log.config.min_level = LOG_LEVEL_INFO;
+    }
+}
+
 hook_result_t log_init(const log_config_t* config) {
     ensure_lock_init();
     pthread_mutex_lock(&g_log.lock);
@@ -188,14 +202,7 @@ hook_result_t log_init(const log_config_t* config) {
     if (config) {
         g_log.config = *config;
     } else {
-        log_config_t def = LOG_CONFIG_DEFAULT;
-        g_log.config = def;
-        /* Production is WARN+ERROR.  One marker file lifts the whole hook to INFO for a
-         * diagnostic drive, matching the Java side's /mnt/app/carplay_verbose. */
-        if (access("/mnt/app/carplay_verbose", F_OK) == 0
-                || access("/tmp/carplay_verbose", F_OK) == 0) {
-            g_log.config.min_level = LOG_LEVEL_INFO;
-        }
+        log_apply_defaults_locked();
     }
 
     g_log.owner_pid = (int)getpid();
@@ -301,10 +308,10 @@ void log_write(log_level_t level, const char* module, const char* fmt, ...) {
     ensure_lock_init();
     pthread_mutex_lock(&g_log.lock);
 
-    /* Auto-init if needed */
+    /* Auto-init if needed. Same defaults AND the same verbose-marker check as log_init() — this is the
+     * path that actually runs, so the marker has to be honoured here or it does nothing. */
     if (!g_log.initialized) {
-        log_config_t def = LOG_CONFIG_DEFAULT;
-        g_log.config = def;
+        log_apply_defaults_locked();
         g_log.owner_pid = (int)getpid();
         g_log.shutdown = false;
         g_log.initialized = true;
