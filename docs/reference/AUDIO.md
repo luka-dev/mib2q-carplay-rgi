@@ -1189,3 +1189,42 @@ distinct `bufferStream` key still does.
 | `Audio Format` | `48000 \| 16 \| channels: 2` | `channels: 6` |
 | `session_csd_setup: pcm format` (device 4) | `channels=2` | `channels=6` |
 | `nTxFramesInBytes` | 3072 | 9216 |
+
+---
+
+## 25. LIVE RESULT — the realtime CarPlay stream refuses multichannel, whatever we advertise
+
+Full experiment on the unit: patched deva (6 voices, 0x4800 fragsize, 0x2D000 buffer, verified
+byte-identical), new hook, `SPATIAL_5_1=1`, verbose logging fixed. **The interposition provably works** —
+the hook's own probes show our augmented mask reaching the negotiation:
+
+| tuned bit | advertised (`getSupportedFormats` type 100) | phone selected (`ToASBD`) |
+|---|---|---|
+| 44 — `PCM/48000/16/5.1` | `0x8010` → **`0x100000008010`** | `0x8000` = bit 15, **stereo** |
+| 42 — `AAC_LC/48000/5.1.2` (the bit iOS itself adds for spatial) | `0x8010` → **`0x40000008010`** | `0x8000` = bit 15, **stereo** |
+
+Both refused. Not our bug: `ARMED`, the `+bit` in the offered mask, and the phone's own selection all
+appear in the same log. **Advertising a multichannel format on the realtime stream is not sufficient —
+iOS simply does not pick it.**
+
+Two hypotheses remain, and they are not mutually exclusive:
+1. **The phone does not qualify for spatial at all.**
+   `APAudioFormatIsScreenSpatialAudioReceiver` @0x22669B1F4 is `APSSettingsIsFeatureEnabled(<feature>)`
+   **plus a device-model check** (§17). If either fails, bit 42 is absent from the phone's transport mask
+   and no advert of ours can put it back. This depends on the handset and its iOS build — our RE is
+   against an iOS 27 shared cache, and a phone on an older build may not carry the path at all.
+2. **Multichannel lives only on the buffered media stream** (§21): `audioOutputFormatsExtended` →
+   `bufferStream` → audio type 103, which we do not implement and which is 44.1 kHz-based (§21a).
+
+What this closes: the cheap lever is exhausted. The deva patch, the 6-channel chain (§24 saw it running
+on `mpl1_int_ent`), the ASBD emission and the announce rail are all correct and in place — the missing
+piece is entirely on the phone's side of the negotiation.
+
+What it does NOT close: the declaration route (§23, `DCXEnabled`) was never tested. But per §17 that flag
+drives the *content* tier, not the transport — with the transport refusing multichannel it cannot help
+on its own, so it is only worth wiring once a multichannel transport is actually selectable.
+
+### Safety note that earned its keep
+Probe-only mode (`<bit>:0`) advertises a bit but refuses it in `ToASBD` if selected. Without it, a
+selected bit 42 would have had our 16-bit `lpcm` ASBD describing AAC wire data — full-scale noise into
+a 19-speaker amp. It cost five lines and should stay the default way to test any new bit.
