@@ -943,3 +943,31 @@ yet. If yes, bit 44 alone gets us discrete 5.1 (§20's target) with no buffered-
 ### Order of work is unchanged
 Still one connect with the existing probes first (§19). It now also answers a second question for free:
 whether the phone ever asks us for `audioOutputFormatsExtended` / a type-103 stream.
+
+### 21a. Sample rate: the realtime CarPlay stream is 48 kHz, and our hardware is 48 kHz ONLY
+
+Worth pinning, because §21's two streams differ on rate and it changes the cost of each.
+
+From the deva caps table (§16 dump), the rates field is a QNX `SND_PCM_RATE_*` bitmask
+(bit 3 = 16000, bit 7 = 48000 — cross-checked on two devices: `ann3_dio_ann` mask `0x8` @16 kHz,
+`mpl5_dio_ent` mask `0x80` @48 kHz):
+
+| device | rates mask | min_rate | max_rate |
+|---|--:|--:|--:|
+| `mpl1_int_ent`, `mpl3`, `mpl4`, **`mpl5_dio_ent`**, `mpl6`, `mpl7`, `tel1`, `sse`, `ent1`, `mic*` | `0x80` | 48000 | 48000 |
+| `ann1_int_nav`, `ann2_int_sds` | `0x1000` | 24000 | 24000 |
+| `ann3`…`ann11`, `tel2`…`tel5` | `0x8` | 16000 | 16000 |
+
+**Every media device is a single fixed rate, and for the CarPlay device that rate is 48000 — there is no
+44.1 kHz bit anywhere in the table.** Consistent with what we advertise (bit 15 = `PCM/48000/16/2`) and
+proven by existence: CarPlay audio works today, so the realtime stream is 48 kHz.
+
+Consequences for the two streams:
+- **Realtime (type 100), 48 kHz — native.** Bit 44 is `PCM/48000/16/5.1`: same rate, same bit depth,
+  just 6 voices. Nothing to resample; the deva patch is the only HU-side change. This is why the cheap
+  lever is cheap.
+- **Buffered media (type 103) — 44.1 kHz base.** `GetSupportedTransportAudioFormatsForScreenReceiver`'s
+  base set is all 44.1 kHz (Apple Music masters). Our media devices cannot open 44.1 at all, so that
+  path would additionally need resampling in dio/libairplay before deva. Another cost on top of §21's
+  "implement a stream type we don't have". (Note the spatial addition, bit 42, is 48 kHz — Atmos masters
+  are 48k — so only the *base* music formats are the mismatch.)
