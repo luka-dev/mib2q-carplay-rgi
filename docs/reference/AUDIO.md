@@ -745,3 +745,39 @@ The hop from CarKit `CRVehicle.supportsDolbyAtmos` / `CARSessionConfiguration.do
 (+22) into the CoreAudio route property that `FPSupport_GetAtmosSupport` reads. CarKit itself never
 calls `setSupportsDolbyAtmos:` — the consumer lives outside it. The architecture above is proven; that
 one link is inferred.
+
+---
+
+## 18. "Declare Dolby but hand over only PCM 5.1" — impossible; the transport vocabulary is AAC-only
+
+The full body of `APAudioFormatSelectTransportFormatForAudioSourceInputFormat` @0x22669C568 settles it.
+`a1` = the source's input format class, `a2` = the **supported/transport mask**, `*a3` = the chosen wire
+format. Every branch picks a bit **out of `a2`**, and the complete set it can ever emit is:
+
+| branch | tries, in order | bits |
+|---|---|--:|
+| early-out (stereo, no high bits) | `0x400000` | 22 |
+| 5.1.2 source | `0x10000000000` then `0x40000000000` | 40, 42 |
+| 5.1 source | `0x8000000000` then `0x20000000000` | 39, 41 |
+| stereo | `0x200000` (settings-gated) then `0x800000` | 21, 23 |
+
+**Bits 21, 22, 23, 39, 40, 41, 42 — every one of them AAC.** There is no branch that can emit a PCM bit
+(44/38/47) or a DDP/EC3 bit (50/53). Our `SPA_FMT_5_1 = 1<<44` is not merely absent from the
+screen-receiver mask (§15) — it is absent from the selector's entire vocabulary.
+
+The fallback is a strict ladder with a hard floor:
+`5.1.2 → 5.1 → stereo → APSSignalErrorAt("Supported format does not include AAC-LC 48k stereo format")`.
+Each step logs *"Supported format does not include AAC-ELD/AAC-LC 48k 5.1[.2] format. Checking next…"*.
+
+### So: declaring Dolby while offering only PCM 5.1 changes nothing
+1. The Dolby declaration adds no bits to `a2`. `a2` is (screen-receiver mask) ∩ (what we advertise), and
+   the screen mask is fixed by feature-flag + iPhone model (§17) — our declaration never enters it.
+2. Our PCM bit can never be selected, so the ladder falls all the way to **stereo AAC** — exactly what
+   we get today, with or without the Dolby claim.
+3. The one thing the claim *can* do is the §17 content switch: make the player fetch the **Atmos master**
+   and then fold it down to stereo for the wire. More data, more battery, no benefit, and a fold-down
+   instead of the native stereo master. Strictly a downside.
+
+**⇒ There is no shortcut.** Discrete multichannel over CarPlay requires bit 42 *and* AAC-LC multichannel
+decode *and* the 8→6 fold (§15/§16). Advertising a capability we cannot honour only risks the classic
+advertised-but-unhandled failure mode.
