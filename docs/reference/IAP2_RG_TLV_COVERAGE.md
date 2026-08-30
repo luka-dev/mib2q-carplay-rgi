@@ -148,3 +148,36 @@ sensible.
 
 **List depth:** the full per-maneuver arrays (type/angles/name/lane) are parsed for up to
 MANEUVER_CACHE_SIZE=32 maneuvers; BAP/HUD renders only the current one (pos 0) by design.
+
+## Angle sentinels — three of them, and they are not interchangeable
+
+Fixed 2026-08-30 (ported from `Patches/mib2q-carplay-rgi-old`, which had it and this tree did not).
+
+An angle reaching `ManeuverMapper` can be absent for three different reasons, each with its own
+value, and code that only knows some of them misrenders:
+
+| value | origin | meaning |
+|---|---|---|
+| `0` | wire | iOS sent an angle of zero, i.e. straight |
+| `±1000` | our C hook | iAP2 omitted the angle field; hook's "no angle" convention (`rgd_hook.c`) |
+| `-1` | Java | the `RouteGuidance.State` slot was never filled |
+
+The `-1` case is easy to miss because it is not a wire value at all. `RouteGuidance.State` resets
+`mTurnAngle[i] = -1` (`RouteGuidance.java:224`) and parses `turn_angle` with `-1` as the
+missing-field default (`:998`); note `mExitAngle[i]` resets to `1000` instead, so the two fields do
+**not** share a default.
+
+`ManeuverMapper` previously tested only `0` and `±1000`, so an unfilled slot took the signed path:
+
+```java
+directionFromTurnAngle(-1)  ->  turnAngle < 0  ->  DIR_LEFT
+```
+
+— a maneuver with no angle data rendered as a **left turn**. The same gap made
+`hasDirectionalTurnAngle(-1)` report that angle data existed, and made `rampDirection()` compute
+`dirFromEndOfRoadAngleLeft(-1)` instead of falling back to SLIGHT_LEFT/RIGHT. All three sites now
+include `-1`; `tests/RendererMapperDirectionTest` covers the fallbacks (it is in-tree but wired into
+no build script — run it by hand).
+
+**Rule for new code:** treat `0`, `1000`, `-1000` and `-1` as "no directional angle" everywhere, and
+prefer the shared `hasDirectionalTurnAngle()` predicate over open-coding the comparison.
