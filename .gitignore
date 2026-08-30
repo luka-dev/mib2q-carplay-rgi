@@ -16,4 +16,4 @@ tools/loader_preview/loader_preview
 
 # Obsidian MCP transaction journal + per-user workspace state
 .obsidian-mcp/
-**/.obsidian/workspace.json
+**/.obsidian/

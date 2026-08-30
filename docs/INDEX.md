@@ -12,50 +12,50 @@ final verified fact. `reconciles:` frontmatter records which legacy docs were fo
 
 > **All topics seeded [x]** - 29 notes. `(!)` items inside notes are real product TODOs, not doc gaps.
 
-## [[architecture]] - process topology, threading, boot / init - build & deploy  [x]
+## [architecture](architecture.md) - process topology, threading, boot / init - build & deploy  [x]
 
 ## Hook - `libcarplay_hook.so`  [x]
-- [[iap2-interception]] - recv/read hooks, FF-5A framing, Identify patch
-- [[bus-protocol]] - localhost TCP :19810, sticky event/command frames
-- [[cover-art]] - chunked JPEG reassembly, async decode -> VC picture
-- [[integration-seam]] - what LD_PRELOAD interposes vs stays stock; NME injection ABI; hardening
+- [iap2-interception](hook/iap2-interception.md) - recv/read hooks, FF-5A framing, Identify patch
+- [bus-protocol](hook/bus-protocol.md) - localhost TCP :19810, sticky event/command frames
+- [cover-art](hook/cover-art.md) - chunked JPEG reassembly, async decode -> VC picture
+- [integration-seam](hook/integration-seam.md) - what LD_PRELOAD interposes vs stays stock; NME injection ABI; hardening
 
 ## Route guidance - RGD -> BAP  [x]
-- [[rgd-tlv]] - iAP2 RouteGuidanceUpdate TLV map (0x5200-0x5204)
-- [[rgd-activation]] - route state machine, `visible_in_app`, gating
-- [[maneuver-mapping]] - full EManeuverType 0-53 -> BAP descriptor
-- [[bap-fctids]] - CarPlay-owned FctID matrix + gating
-- [[bargraph-sync]] - distance fill + call-for-action blink
-- [[navsd-catalogue]] - complete NavSD FctID catalogue (1-56)
+- [rgd-tlv](rgd/rgd-tlv.md) - iAP2 RouteGuidanceUpdate TLV map (0x5200-0x5204)
+- [rgd-activation](rgd/rgd-activation.md) - route state machine, `visible_in_app`, gating
+- [maneuver-mapping](rgd/maneuver-mapping.md) - full EManeuverType 0-53 -> BAP descriptor
+- [bap-fctids](rgd/bap-fctids.md) - CarPlay-owned FctID matrix + gating
+- [bargraph-sync](rgd/bargraph-sync.md) - distance fill + call-for-action blink
+- [navsd-catalogue](rgd/navsd-catalogue.md) - complete NavSD FctID catalogue (1-56)
 
 ## Cluster  [x]
-- [[display-contexts]] - dc[74]/dc[80], displayables 98/33/101/102, switch worker
-- [[compositing]] - maneuver overlay over native map, HU->MOST->VC H.264
-- [[kdk-geometry]] - KDK backings 101/102, stages, HU-side geometry table
+- [display-contexts](cluster/display-contexts.md) - dc[74]/dc[80], displayables 98/33/101/102, switch worker
+- [compositing](cluster/compositing.md) - maneuver overlay over native map, HU->MOST->VC H.264
+- [kdk-geometry](cluster/kdk-geometry.md) - KDK backings 101/102, stages, HU-side geometry table
 
 ## Input  [x]
-- [[touchpad-dpad]] - MMI touchpad -> DPAD bridge (CursorController)
-- [[steering-wheel]] - MFW roller: rotation = stock zoom, press = route-info toggle
+- [touchpad-dpad](input/touchpad-dpad.md) - MMI touchpad -> DPAD bridge (CursorController)
+- [steering-wheel](input/steering-wheel.md) - MFW roller: rotation = stock zoom, press = route-info toggle
 
 ## Deploy  [x]
-- [[supervisor-lifecycle]] - smartphone_integrator, renderer ownership
-- [[connect]] - USB / NCM / Bonjour connect flow + failure root cause
-- [[session-lifecycle]] - session audit: watchdog-hang, USB pre-RTSP class, resilience risks R1-R4
+- [supervisor-lifecycle](deploy/supervisor-lifecycle.md) - smartphone_integrator, renderer ownership
+- [connect](deploy/connect.md) - USB / NCM / Bonjour connect flow + failure root cause
+- [session-lifecycle](deploy/session-lifecycle.md) - session audit: watchdog-hang, USB pre-RTSP class, resilience risks R1-R4
 
 ## Maintenance  [x]
-- [[java-cleanup-audit]] - Java patch cleanup status; the remaining `forceGfxAvailable` reflection ladder
+- [java-cleanup-audit](maintenance/java-cleanup-audit.md) - Java patch cleanup status; the remaining `forceGfxAvailable` reflection ladder
 
 ## Reverse engineering - iOS  [x]
-- [[accessoryd-rgd]] - ACCNav RGUpdate enum (accessoryd 23G71)
-- [[carkitd-bonjour]] - iOS 26 vs 27 connect divergence
-- [[maps-maneuvers]] - Maps accNav enum + signed exit angle
+- [accessoryd-rgd](re/ios/accessoryd-rgd.md) - ACCNav RGUpdate enum (accessoryd 23G71)
+- [carkitd-bonjour](re/ios/carkitd-bonjour.md) - iOS 26 vs 27 connect divergence
+- [maps-maneuvers](re/ios/maps-maneuvers.md) - Maps accNav enum + signed exit angle
 
 ## Reverse engineering - firmware (MIB2Q MU1316)  [x]
-- [[display-manager]] - DisplayManager + dmdt, window binding
-- [[komo-widget-video]] - KOMO widget video + gfxAvailable gate
-- [[dsi-carkombi]] - DSICarKombi + DSIKombiSync2
-- [[vc-aio-arrow]] - why the VC-native AIO arrow path is blocked (InfoStates=6 rejected) -> BAP HUD instead
-- [[phone-tab-gating]] - abandoned experiment: hiding the stock PHONE2 tab (why the lever failed)
+- [display-manager](re/firmware/display-manager.md) - DisplayManager + dmdt, window binding
+- [komo-widget-video](re/firmware/komo-widget-video.md) - KOMO widget video + gfxAvailable gate
+- [dsi-carkombi](re/firmware/dsi-carkombi.md) - DSICarKombi + DSIKombiSync2
+- [vc-aio-arrow](re/firmware/vc-aio-arrow.md) - why the VC-native AIO arrow path is blocked (InfoStates=6 rejected) -> BAP HUD instead
+- [phone-tab-gating](re/firmware/phone-tab-gating.md) - abandoned experiment: hiding the stock PHONE2 tab (why the lever failed)
 
 ---
 
