@@ -116,8 +116,10 @@ place - both are required.)
 **4. Java patch.** Copy `build/carplay_hook.jar` to `/mnt/app/eso/hmi/lsd/jars/`; the HMI loads it on
 the next start.
 
-**5. Reboot.** On boot `smartphone_integrator` launches everything; check `/tmp/carplay_hook.log` and
-`/tmp/carplay_java.log` (see [Logging](#logging)).
+**5. Reboot.** Let the writes reach the flash first - run `sync` and give it a few seconds. A forced
+reboot (or pulling power) right after copying can leave the files truncated or gone entirely, and
+you will be left wondering why nothing loaded. On boot `smartphone_integrator` launches everything;
+check `/tmp/carplay_hook.log` and `/tmp/carplay_java.log` (see [Logging](#logging)).
 
 Exact ownership rules, the `LD_PRELOAD`/env constraints and the MU1316 QNX-compat audit are in
 [`deploy/smartphone_integrator/README.md`](deploy/smartphone_integrator/README.md).
