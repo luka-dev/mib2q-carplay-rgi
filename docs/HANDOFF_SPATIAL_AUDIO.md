@@ -634,9 +634,9 @@ The practical target is therefore no longer an undocumented receiver. Reimplemen
 Pioneer type-103 subset—SETUP/lifecycle, APAP reader, security, clock/queue, APAC converter, and
 downmixer—and bridge its resulting PCM6 to the already proven Audi DIO5 path. This is a behavioral
 and algorithmic reference, **not a directly loadable donor binary**: Pioneer is AArch64 Linux while
-the target MHI2Q userland is ARMv7 QNX. Pioneer's complete consumer also explains why our
-socket-only sink still suffered the orderly roughly five-second sender teardown: accepting and
-pacing TCP data did not create a registered buffered audio session or consume decoded samples.
+the target MHI2Q userland is ARMv7 QNX. Decode/render remains necessary for audible output, but it
+does not explain the fixed five-second teardown; §10 identifies the exact earlier failure as four
+missing RTSP buffered-control methods and the sender's 50-retry terminal-error path.
 
 ### Hardware-confirmed type-103 request and complete legacy response contract
 
@@ -1010,7 +1010,7 @@ the heap server at `HTTPServer+0x64`; the outer server global is image VA `0xbab
 `audio_hook.c` now replaces that slot only after exact prologue/original-pointer checks, handles only
 the exact custom method, stores at most 16 cookies of at most 1 MiB, and delegates every other RTSP
 method unchanged. A fresh local QNX/ARMv7 build passed with `emutls=0`, SHA-256
-`fb0c60a6d259d3347319dd429cf19ba5daed5daf2fdb62ae73628a871bb38d2e`; it was **not deployed**.
+`840a3720141b4e7b733f074674b95527614d7693f6e7577e72447360c473e36a`; it was **not deployed**.
 Each first accepted cookie is retained in memory and captured mode-0600 as
 `/tmp/spatial_magiccookie_<sequence>_<id-hex>.bin` for the decoder bench; teardown restores the
 stock request callback.
@@ -1025,14 +1025,17 @@ AirPlaySender negotiation, and actual stream transport.
 1. Keep `/tmp/spatial_probe103` absent until the receiver implementation and secure capture are
    ready. Merely having the diagnostic `.so` installed does not enable 103; type-100 PCM/6 remains
    the fallback.
-2. Start the controlled A/B with the fresh repository build's fingerprint-locked
-   `SETMAGICCOOKIE` wrapper. Confirm its store/ACK log and determine whether this removes the early
-   clean teardown. The method uses the existing RTSP connection; do not add a 6033 listener.
-3. Implement the exact Pioneer crypto/APAP/TLV state contract and a bounded queue. Reject the
+2. Extend the fingerprint-locked RTSP wrapper with `GETANCHOR`, `SETRATE`, `SETRATEANCHORTIME` and
+   `FLUSHBUFFERED`, then confirm a hardware session survives the sender's former 50-retry/~5 s wall.
+   Put the returned anchor on the phone's NTP timeline so the subsequent 10 s clock-lock gate also
+   clears. Exact sender/receiver paths and plist fields are in §10.
+3. Confirm the same wrapper stores and ACKs `SETMAGICCOOKIE`. It uses the existing RTSP connection;
+   do not add a 6033 listener. Match the stored ID to the subsequent APAP TLV 17.
+4. Implement the exact Pioneer crypto/APAP/TLV state contract and a bounded queue. Reject the
    session on any invalid Poly1305 tag, missing cookie/format, impossible length, or unsupported
    index; never feed encrypted/compressed bytes to DIO5. TLV 17 may select only an ID already stored
    by `SETMAGICCOOKIE`.
-4. Use **index 40 first**. Port only MH2p's small ARMv7 `AudioConverter`/AAC adapter interface to the
+5. Use **index 40 first**. Port only MH2p's small ARMv7 `AudioConverter`/AAC adapter interface to the
    hook/helper and use Audi's existing `CinemoCreateAudioCodec` + `libNmeAudioAAC.so`. Do not load or
    replace the complete MH2p `libairplay.so`. Capture a real index-40 SETUP/config and prove that the
    target Cinemo emits eight channels in the expected order. The static adapter ABI is now closed in
@@ -1041,17 +1044,17 @@ AirPlaySender negotiation, and actual stream transport.
    Initialize/Write/Drain/Flush/Release and decoded-callback signatures are recorded. `dio_manager`
    already configures Cinemo's global plugin directory as `/armle/usr/lib/cinemo`; the hook must
    verify the wrappers/factory/callback and fail closed, not mutate that process-global path.
-5. Apply the recovered 5.1 matrix: preserve `L/R/C`, attenuate LFE by 0.5, fold each height channel
+6. Apply the recovered 5.1 matrix: preserve `L/R/C`, attenuate LFE by 0.5, fold each height channel
    into its matching surround at 0.5, use saturating accumulation, and size PCM6 S16LE output as
    `frames*12` bytes. Bridge the result into the already proven type-100/DIO5 read path only while
    the 103 session is active; otherwise call stock behavior.
-6. Implement the remaining clock/anchor, trim, gap/underrun, flush and idempotent teardown behavior.
-   Socket pacing alone is not a renderer and has already been falsified as the five-second fix.
-7. After continuous AAC type-103 playback works, repeat a controlled 65/66 capture. Decrypt it with
+7. Implement the remaining trim, gap/underrun, queue and idempotent teardown behavior. Socket pacing
+   alone is not a renderer and has already been falsified as the five-second fix.
+8. After continuous AAC type-103 playback works, repeat a controlled 65/66 capture. Decrypt it with
    `tools/pioneer_apap_decrypt.py`, inspect the real cookie with `tools/pioneer_apac_cookie.py`, and
    validate each packet against `tools/apple_apac_oracle.c`. Only then decide whether a native APAC
    backend is still worth implementing.
-8. The fresh source needs only `6030:6032`; reduce all four production PF profiles after the old
+9. The fresh source needs only `6030:6032`; reduce all four production PF profiles after the old
    diagnostic build is replaced. Until then leave the current `6030:6033` configuration in place.
 
 The first production milestone is now stable index-40 **AAC-LC 5.1.2 → PCM8 → PCM6 playback**

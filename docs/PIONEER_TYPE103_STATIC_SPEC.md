@@ -60,21 +60,26 @@ Pioneer SPHERA и целевого Audi MU1316. Начальный и post-SETUP
    `HTTPServer+0x40`, поэтому request callback действительно находится в `HTTPServer+0x64`.
    PIC-base в этой функции даёт outer-server global ровно `image+0xbabcc`. Поля stock HTTPMessage
    также подтверждены кодом handler: method `+0x201c/+0x2020`, body `+0x209c/+0x20a8`.
+8. После prime buffered engine требует ещё четыре RTSP control method на том же соединении:
+   `GETANCHOR`, `SETRATE`, `SETRATEANCHORTIME` и `FLUSHBUFFERED`. Stock Audi 210.81 не знает ни одного
+   из них. Sender повторяет `SETRATEANCHORTIME`/anchor sequence 50 раз, затем вызывает
+   `bufferedAudioEngine_handleTerminalSetRateError -> sendSessionFailureEvent`, что точно объясняет
+   прежний wall-clock teardown через примерно 4.5–5 секунд независимо от объёма принятого APAP.
 
-Это означает, что сам negotiation/wire contract больше не содержит неизвестного обязательного
-шага. Но это **не** является статическим доказательством причины прежнего teardown через примерно
-пять секунд. Ошибка синхронного запуска `SETMAGICCOOKIE` может сорвать enqueue, однако ошибка уже
-отправленного HTTP-запроса приходит в completion handler, который в исследованном sender главным
-образом логирует результат. Поэтому отсутствие handler в Audi — доказанный protocol defect и
-обязательная поправка, но утверждение «именно оно на 100% вызвало teardown» требует hardware A/B.
+Это означает, что negotiation и обязательный playback-start control contract больше не содержат
+неизвестного шага. Отдельное уточнение: `SETMAGICCOOKIE` остаётся обязательным protocol operation,
+но именно его отсутствие **не** является доказанной причиной пятисекундного teardown. Ошибка уже
+отправленного cookie HTTP-запроса приходит в completion handler, который главным образом логирует
+результат. Точный teardown path — 50 неуспешных buffered rate/anchor retries из-за отсутствующих
+методов выше. Полные sender/receiver адреса и plist-схемы зафиксированы в
+`HANDOFF_SPATIAL_AUDIO.md`, §10.
 
-Остаются три динамических доказательства: фактический выбор index 40, успешный
-`SETMAGICCOOKIE -> 200` вместе с последующим TLV 17/APAP и непрерывное playback после реального
-decrypt/decode/downmix/render. Текущий hook является negotiation/capture sink; production receiver
-ещё должен валидировать `audioFormatIndex`, `packetFormatAPAP`, `spf` и 32-байтный `shk`, а затем
-реализовать payload pipeline. Диагностический лог всё ещё печатает отсутствующий ключ `formatIndex`
-вместо `audioFormatIndex`; функциональный buffer-size path использует правильное имя, поэтому на
-negotiation это не влияет.
+Остаются динамические доказательства: фактический выбор index 40, успешная связка
+`SETMAGICCOOKIE -> 200 -> TLV 17/APAP`, корректный NTP anchor/clock lock и непрерывное playback после
+реального decrypt/decode/downmix/render. Текущий hook является negotiation/capture sink; production
+receiver ещё должен валидировать `audioFormatIndex`, `packetFormatAPAP`, `spf` и 32-байтный `shk`,
+реализовать четыре buffered-control метода и payload pipeline. Диагностический log key исправлен на
+`audioFormatIndex`; функциональное поведение при этом не изменилось.
 
 ## Проверенные бинарники
 
@@ -261,9 +266,10 @@ Receiver хранит первый `CFData` для каждого ID; повто
 обеих setter-функций. Его список методов @ `0xa15a4` ограничен
 `ANNOUNCE, SETUP, RECORD, PAUSE, FLUSH, TEARDOWN, OPTIONS, GET_PARAMETER, SET_PARAMETER, POST, GET`.
 Однако добавлять custom method в OPTIONS/Public не надо: Pioneer Public list @ `0x34a0e8` также его
-не рекламирует, а sender всё равно отправляет команду. Missing gate — именно отсутствие dispatch
-branch/parser/storage в Audi. Это правдоподобное объяснение clean teardown через несколько секунд;
-причинность последнего ещё требует hardware A/B.
+не рекламирует, а sender всё равно отправляет команду. Отсутствие dispatch branch/parser/storage в
+Audi — доказанный protocol defect, но не найденный пятисекундный watchdog: exact teardown вызывают
+50 неуспешных rate/anchor retries из-за отсутствующих `GETANCHOR`, `SETRATE`,
+`SETRATEANCHORTIME` и `FLUSHBUFFERED`.
 
 Для MU1316 найден seam без переписывания `.text`:
 
@@ -538,18 +544,20 @@ Pioneer wrapper сначала резервирует общий worst case `flo
    32 байта; открывает data listener до публикации response.
 3. До публикации SETUP response установить fingerprint-locked RTSP wrapper, принять
    `SETMAGICCOOKIE` и сохранить bounded first-ID-wins map; 6033 для этого не открывать.
-4. Session state хранит key, stream ID, active format, cookie map/current cookie, seq/timestamp,
+4. Тем же wrapper обработать `GETANCHOR`, `SETRATE`, `SETRATEANCHORTIME` и `FLUSHBUFFERED`; вернуть
+   anchor на NTP timeline телефона и пережить следующий 10-секундный clock-lock gate.
+5. Session state хранит key, stream ID, active format, cookie map/current cookie, seq/timestamp,
    bounded queue, clock anchor/rate, flush target и stop flags.
-5. Reader decrypt/authenticates APAP и применяет TLV state до queue.
-6. Для index 40 минимальный Cinemo adapter декодирует AAC-LC в PCM8; index 42 остаётся AAC-ELD
+6. Reader decrypt/authenticates APAP и применяет TLV state до queue.
+7. Для index 40 минимальный Cinemo adapter декодирует AAC-LC в PCM8; index 42 остаётся AAC-ELD
    fallback, а для 65/66 отдельный APAC backend
    добавляется позже и сверяется с macOS oracle.
-7. PCM8 проходит canonical 5.1 matrix; PCM6 уже готов без downmix.
-8. Пока 103 active, interposer stock `AirPlayReceiverSessionReadAudio` для type 100 выдаёт готовые
+8. PCM8 проходит canonical 5.1 matrix; PCM6 уже готов без downmix.
+9. Пока 103 active, interposer stock `AirPlayReceiverSessionReadAudio` для type 100 выдаёт готовые
    PCM6 samples из buffered renderer в существующий DIO5 path. При inactive/error/teardown он
    немедленно возвращается к исходному stock поведению type 100.
-9. Flush/teardown очищают ключи, cookies, decoder и очередь; никакой stale 103 state не переживает новую
-   CarPlay generation.
+10. Flush/teardown очищают ключи, cookies, decoder и очередь; никакой stale 103 state не переживает
+    новую CarPlay generation.
 
 Этот bridge через уже доказанный type-100/DIO5 output минимизирует изменения в QNX audio stack.
 Нельзя передавать encrypted/compressed APAP как PCM, нельзя объявлять неизвестный индекс как
@@ -565,6 +573,7 @@ Pioneer wrapper сначала резервирует общий worst case `flo
 * exact crypto/key/body/AAD;
 * extension IDs и state transitions;
 * exact `SETMAGICCOOKIE` method/body/storage semantics и MU1316 HTTPServer callback seam;
+* пятисекундный sender retry-to-terminal path и обязательные buffered-control методы;
 * APAC cookie offset, sync и metadata formulas;
 * setup/read/queue/clock/flush/teardown lifecycle;
 * точная 5.1.2 -> 5.1 matrix и buffer sizing;
@@ -573,11 +582,11 @@ Pioneer wrapper сначала резервирует общий worst case `flo
 
 Остаются только динамические доказательства и реализация:
 
-1. hardware A/B подтвердить, что новый `SETMAGICCOOKIE` ACK убирает ранний clean teardown, и
-   зафиксировать реальный index-40 SETUP/AAC-LC cookie/payload;
-2. подтвердить PCM8 output и channel order целевого Cinemo;
-3. реализовать receiver/decoder/downmix/clock bridge и проверить continuous playback;
-4. затем повторить capture 65/66, прогнать APAC через macOS oracle и решать, нужен ли собственный
+1. реализовать четыре buffered-control метода и подтвердить hardware-run дольше пяти секунд;
+2. подтвердить NTP anchor/clock lock, `SETMAGICCOOKIE` ACK и реальный index-40 payload;
+3. подтвердить PCM8 output и channel order целевого Cinemo;
+4. реализовать decrypt/decoder/downmix/clock bridge и проверить continuous playback;
+5. затем повторить capture 65/66, прогнать APAC через macOS oracle и решать, нужен ли собственный
    APAC backend после уже работающего AAC 103.
 
 До выполнения этих пунктов корректная формулировка статуса: **протокол и архитектура 103

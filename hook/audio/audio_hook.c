@@ -592,7 +592,7 @@ int spa_inspect_setup_request(void *request, uint32_t sequence)
              (unsigned)sequence);
     spa_log_setup_i64(desc, "type");
     spa_log_setup_i64(desc, "audioFormat");
-    spa_log_setup_i64(desc, "formatIndex");
+    spa_log_setup_i64(desc, "audioFormatIndex");
     spa_log_setup_i64(desc, "streamConnectionID");
     spa_log_setup_i64(desc, "controlPort");
     spa_log_setup_i64(desc, "timingPort");
