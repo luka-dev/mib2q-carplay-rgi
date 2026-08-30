@@ -103,8 +103,8 @@ place and reboot.
 **2. Point the supervisor at them.** In `/mnt/system/etc/eso/production/smartphone_integrator.json`,
 replace the `children.carplay` block with [`deploy/smartphone_integrator/carplay_child.json`](deploy/smartphone_integrator/carplay_child.json).
 
-**3. Java patch.** `build/carplay_hook.jar` is a set of class replacements patched into `lsd.jxe`
-(not a drop-in file).
+**3. Java patch.** Copy `build/carplay_hook.jar` to `/mnt/app/eso/hmi/lsd/jars/`; the HMI loads it on
+the next start.
 
 **4. Reboot.** On boot `smartphone_integrator` launches everything; check `/tmp/carplay_hook.log` and
 `/tmp/carplay_java.log` (see [Logging](#logging)).

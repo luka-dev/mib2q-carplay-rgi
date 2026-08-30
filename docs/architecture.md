@@ -34,7 +34,7 @@ guidance is active. Base CarPlay stays byte-identical to stock.
 | Component | Type | Output | Topic |
 |---|---|---|---|
 | `hook/` | C (ARM32 QNX), `LD_PRELOAD` into `dio_manager` | `libcarplay_hook.so` | [[iap2-interception]] [[cover-art]] |
-| `java_patch/` | Java 1.4 class-replacements in `lsd.jxe` | `carplay_hook.jar` | [[rgd-activation]] [[display-contexts]] [[touchpad-dpad]] |
+| `java_patch/` | Java 1.4 class overrides loaded by the HMI (`lsd`) | `carplay_hook.jar` | [[rgd-activation]] [[display-contexts]] [[touchpad-dpad]] |
 | `maneuver_render/` | C EGL/GLES2 (ARM QNX / macOS) | `maneuver_render` | [[compositing]] |
 
 ## Process topology
@@ -93,9 +93,8 @@ jar. The native builds synthesize import stubs; the resulting ELF binds the unit
 Screen/EGL/GLES libs at runtime.
 
 Deploy by copying the runtime files to `/mnt/app/root/hooks/`, pointing `smartphone_integrator.json`
-at `carplay_child.json`, and rebooting - there is no one-shot flasher. Java is patched into `lsd.jxe`
-separately (restarting the Java stack on a live HU is unsafe). Runtime integration + install paths:
-[[supervisor-lifecycle]].
+at `carplay_child.json`, dropping `carplay_hook.jar` into `/mnt/app/eso/hmi/lsd/jars/`, and
+rebooting - there is no one-shot flasher. Runtime integration + install paths: [[supervisor-lifecycle]].
 
 ## Reverse-engineering references
 
