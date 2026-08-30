@@ -103,10 +103,20 @@ place and reboot.
 **2. Point the supervisor at them.** In `/mnt/system/etc/eso/production/smartphone_integrator.json`,
 replace the `children.carplay` block with [`deploy/smartphone_integrator/carplay_child.json`](deploy/smartphone_integrator/carplay_child.json).
 
-**3. Java patch.** Copy `build/carplay_hook.jar` to `/mnt/app/eso/hmi/lsd/jars/`; the HMI loads it on
+**3. Register the route-guidance message IDs.** In
+`/mnt/system/etc/eso/production/dio_manager.json`, add the RGD message IDs so the Cinemo iAP2 SDK
+actually pumps them (without this, iOS sends route guidance and the SDK silently drops it):
+
+- `MessagesSentByAccessory` += `"0x5200"`, `"0x5203"`
+- `MessagesReceivedFromDevice` += `"0x5201"`, `"0x5202"`, `"0x5204"`
+
+(The hook separately patches the outgoing Identify so iOS starts sending route guidance in the first
+place - both are required.)
+
+**4. Java patch.** Copy `build/carplay_hook.jar` to `/mnt/app/eso/hmi/lsd/jars/`; the HMI loads it on
 the next start.
 
-**4. Reboot.** On boot `smartphone_integrator` launches everything; check `/tmp/carplay_hook.log` and
+**5. Reboot.** On boot `smartphone_integrator` launches everything; check `/tmp/carplay_hook.log` and
 `/tmp/carplay_java.log` (see [Logging](#logging)).
 
 Exact ownership rules, the `LD_PRELOAD`/env constraints and the MU1316 QNX-compat audit are in

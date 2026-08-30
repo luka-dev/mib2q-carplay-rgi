@@ -93,7 +93,8 @@ jar. The native builds synthesize import stubs; the resulting ELF binds the unit
 Screen/EGL/GLES libs at runtime.
 
 Deploy by copying the runtime files to `/mnt/app/root/hooks/`, pointing `smartphone_integrator.json`
-at `carplay_child.json`, dropping `carplay_hook.jar` into `/mnt/app/eso/hmi/lsd/jars/`, and
+at `carplay_child.json`, registering the RGD message IDs (0x5200/0x5203 sent, 0x5201/0x5202/0x5204
+received) in `dio_manager.json`, dropping `carplay_hook.jar` into `/mnt/app/eso/hmi/lsd/jars/`, and
 rebooting - there is no one-shot flasher. Runtime integration + install paths: [[supervisor-lifecycle]].
 
 ## Reverse-engineering references
