@@ -1,206 +1,179 @@
 /*
- * CarPlay Hook Framework - Unified Logging
- *
- * Single logging solution for all modules:
- * - Configurable log levels (DEBUG, INFO, WARN, ERROR)
- * - Single log file output
- * - Thread-safe operation
- * - Enable/disable via static flag
- *
+ * Minimal file-only logger.  Never write to System.out/System.err: lsd routes
+ * them through the shared HMI slog path, adding boot-time contention and noisy
+ * duplicate records.  /tmp/carplay_java.log is bounded and rotated so it stays
+ * independently SSH-tailable.  Java 1.4 / Foundation 1.1.
  */
 package com.luka.carplay.framework;
 
-import java.io.FileWriter;
+import java.io.FileOutputStream;
+import java.io.File;
+import java.io.PrintStream;
 
-public class Log {
+public final class Log {
+    public static final int E = 0, W = 1, I = 2, D = 3;
+    /* Production emits WARN and ERROR only.  INFO carries the state-transition trace that is
+     * worth having while diagnosing (session start, module ready, context/geometry decisions);
+     * it stays compiled in and is switched on without a rebuild - and without a unit reboot -
+     * by `touch /mnt/app/carplay_verbose` or /tmp/carplay_verbose. */
+    private static final String VERBOSE_MARKERS = "/mnt/app/carplay_verbose:/tmp/carplay_verbose";
+    private static int level = resolveInitialLevel();
 
-    /* Log levels */
-    public static final int LEVEL_DEBUG = 0;
-    public static final int LEVEL_INFO = 1;
-    public static final int LEVEL_WARN = 2;
-    public static final int LEVEL_ERROR = 3;
-    public static final int LEVEL_NONE = 4;
+    private static int resolveInitialLevel() {
+        try {
+            int from = 0;
+            while (from < VERBOSE_MARKERS.length()) {
+                int sep = VERBOSE_MARKERS.indexOf(':', from);
+                String path = sep < 0 ? VERBOSE_MARKERS.substring(from)
+                                      : VERBOSE_MARKERS.substring(from, sep);
+                if (new File(path).exists()) return I;
+                if (sep < 0) break;
+                from = sep + 1;
+            }
+        } catch (Throwable t) {
+            /* Never let logging setup break startup. */
+        }
+        return W;
+    }
 
-    /* Configuration */
-    private static String logPath = "/tmp/carplay_hook.log";
-    private static int minLevel = LEVEL_DEBUG;
-    private static boolean enabled = true;
-    private static boolean includeTimestamp = true;
+    private static final String FILE = "/tmp/carplay_java.log";
+    private static final String FILE_OLD = "/tmp/carplay_java.log.1";
+    private static final long MAX_FILE_BYTES = 512L * 1024L;
+    private static PrintStream file;        /* lazily opened; stays null if it can't be created */
+    private static boolean fileTried;
+    private static long fileBytes;
+    private static final Object LOCK = new Object();
+    private static final int QUEUE_CAPACITY = 256;
+    private static final String[] queue = new String[QUEUE_CAPACITY];
+    private static int queueHead;
+    private static int queueTail;
+    private static int queueCount;
+    private static Thread writerThread;
 
-
-    /* Prevent instantiation */
     private Log() {}
 
-    /* ============================================================
-     * Configuration
-     * ============================================================ */
+    public static void setLevel(int l) { level = l; }
 
-    /**
-     * Set log file path.
-     */
-    public static void setPath(String path) {
-        logPath = path;
-    }
+    public static void e(String tag, String msg) { out(E, "E", tag, msg); }
+    public static void w(String tag, String msg) { out(W, "W", tag, msg); }
+    public static void i(String tag, String msg) { out(I, "I", tag, msg); }
+    public static void d(String tag, String msg) { out(D, "D", tag, msg); }
 
-    /**
-     * Set minimum log level.
-     */
-    public static void setLevel(int level) {
-        minLevel = level;
-    }
+    /* throwable overloads (ports pass an exception) */
+    public static void e(String tag, String msg, Throwable t) { out(E, "E", tag, msg + " :: " + t); }
+    public static void w(String tag, String msg, Throwable t) { out(W, "W", tag, msg + " :: " + t); }
 
-    /**
-     * Enable or disable logging globally.
-     */
-    public static void setEnabled(boolean enabled) {
-        Log.enabled = enabled;
-    }
-
-    /**
-     * Include timestamps in log output.
-     */
-    public static void setIncludeTimestamp(boolean include) {
-        includeTimestamp = include;
-    }
-
-
-    /* ============================================================
-     * Logging Methods
-     * ============================================================ */
-
-    /**
-     * Log debug message.
-     */
-    public static void d(String tag, String msg) {
-        write(LEVEL_DEBUG, tag, msg);
-    }
-
-    /**
-     * Log info message.
-     */
-    public static void i(String tag, String msg) {
-        write(LEVEL_INFO, tag, msg);
-    }
-
-    /**
-     * Log warning message.
-     */
-    public static void w(String tag, String msg) {
-        write(LEVEL_WARN, tag, msg);
-    }
-
-    /**
-     * Log error message.
-     */
-    public static void e(String tag, String msg) {
-        write(LEVEL_ERROR, tag, msg);
-    }
-
-    /**
-     * Log error message with exception.
-     */
-    public static void e(String tag, String msg, Throwable t) {
-        write(LEVEL_ERROR, tag, msg + ": " + t.getClass().getName() + ": " + t.getMessage());
-    }
-
-    /**
-     * Core logging method.
-     */
-    public static synchronized void write(int level, String tag, String msg) {
-        if (!enabled || level < minLevel) {
-            return;
+    private static void out(int l, String p, String tag, String msg) {
+        if (l > level) return;
+        String line = "[CP/" + p + "][" + tag + "] " + msg;
+        synchronized (LOCK) {
+            ensureWriterLocked();
+            if (writerThread == null) return;
+            if (queueCount == QUEUE_CAPACITY) {
+                queue[queueHead] = null;
+                queueHead = (queueHead + 1) % QUEUE_CAPACITY;
+                queueCount--;
+            }
+            queue[queueTail] = line;
+            queueTail = (queueTail + 1) % QUEUE_CAPACITY;
+            queueCount++;
+            LOCK.notifyAll();
         }
+    }
 
-        StringBuffer sb = new StringBuffer();
-
-        /* Timestamp */
-        if (includeTimestamp) {
-            sb.append(System.currentTimeMillis());
-            sb.append(" ");
+    /* No stock HMI/BAP callback ever performs file I/O. A single daemon owns
+     * open/write/flush/rotation; overload drops the oldest diagnostics rather
+     * than blocking lsd. */
+    private static void ensureWriterLocked() {
+        if (writerThread != null) return;
+        Thread t = new Thread(new Runnable() {
+            public void run() { writerLoop(); }
+        }, "carplay-log-writer");
+        t.setDaemon(true);
+        try {
+            t.start();
+            writerThread = t;
+        } catch (Throwable ignored) {
+            writerThread = null;
         }
+    }
 
-        /* Level */
-        sb.append("[");
-        sb.append(levelStr(level));
-        sb.append("] ");
-
-        /* Tag */
-        if (tag != null) {
-            sb.append("[");
-            sb.append(tag);
-            sb.append("] ");
-        }
-
-        /* Message */
-        sb.append(msg);
-
-        String line = sb.toString();
-
-        /* File */
-        if (logPath != null) {
-            FileWriter fw = null;
-            try {
-                fw = new FileWriter(logPath, true);
-                fw.write(line);
-                fw.write("\n");
-            } catch (Exception e) {
-                // ignore
-            } finally {
-                if (fw != null) {
-                    try { fw.close(); } catch (Exception e) {}
+    private static void writerLoop() {
+        while (true) {
+            String line;
+            synchronized (LOCK) {
+                while (queueCount == 0) {
+                    try { LOCK.wait(); } catch (InterruptedException ignored) { }
                 }
+                line = queue[queueHead];
+                queue[queueHead] = null;
+                queueHead = (queueHead + 1) % QUEUE_CAPACITY;
+                queueCount--;
+            }
+            /* Logging must remain best-effort even if the old Foundation/QNX
+             * file stack throws something other than IOException.  Never let
+             * the sole writer die while writerThread remains non-null: that
+             * would make every later diagnostic queue forever and churn the
+             * bounded ring for no useful output. */
+            try { writeLine(line); }
+            catch (Throwable ignored) { resetFileAfterFailure(); }
+        }
+    }
+
+    private static void writeLine(String line) {
+        if (line == null) return;
+        PrintStream f = logFile();
+        if (f != null) {
+            int bytes = line.getBytes().length + 1;
+            if (fileBytes + bytes > MAX_FILE_BYTES) {
+                rotateFile();
+                f = logFile();
+            }
+            if (f != null) {
+                f.println(line);                        /* /tmp/carplay_java.log (autoflush) */
+                fileBytes += bytes;
             }
         }
     }
 
-    /**
-     * Log hex dump of binary data.
-     */
-    public static void hexdump(String tag, String prefix, byte[] data, int offset, int len, int maxBytes) {
-        if (!enabled || LEVEL_DEBUG < minLevel) {
-            return;
+    /* Open the file once, best-effort; append + autoflush so a crash still leaves the tail. */
+    private static PrintStream logFile() {
+        if (!fileTried) {
+            fileTried = true;
+            try {
+                File current = new File(FILE);
+                if (current.length() >= MAX_FILE_BYTES) rotateFiles(current);
+                fileBytes = current.exists() ? current.length() : 0L;
+                file = new PrintStream(new FileOutputStream(FILE, true), true);
+            }
+            catch (Throwable t) { file = null; }        /* logging is best-effort */
         }
-
-        if (data == null || len <= 0) {
-            return;
-        }
-
-        int dumpLen = (maxBytes > 0 && len > maxBytes) ? maxBytes : len;
-
-        StringBuffer sb = new StringBuffer();
-        if (prefix != null) {
-            sb.append(prefix);
-            sb.append(" ");
-        }
-        sb.append("len=");
-        sb.append(len);
-        sb.append(" bytes=");
-
-        for (int i = 0; i < dumpLen; i++) {
-            int b = data[offset + i] & 0xFF;
-            sb.append(hexChar(b >> 4));
-            sb.append(hexChar(b & 0x0F));
-            sb.append(" ");
-        }
-
-        if (dumpLen < len) {
-            sb.append("...");
-        }
-
-        write(LEVEL_DEBUG, tag, sb.toString());
+        return file;
     }
 
-    private static String levelStr(int level) {
-        switch (level) {
-            case LEVEL_DEBUG: return "DBG";
-            case LEVEL_INFO:  return "INF";
-            case LEVEL_WARN:  return "WRN";
-            case LEVEL_ERROR: return "ERR";
-            default:          return "???";
+    private static void rotateFile() {
+        if (file != null) {
+            try { file.close(); } catch (Throwable t) { }
+            file = null;
         }
+        try { rotateFiles(new File(FILE)); }
+        catch (Throwable t) { }
+        fileTried = false;
+        fileBytes = 0L;
     }
 
-    private static char hexChar(int nibble) {
-        return (nibble < 10) ? (char)('0' + nibble) : (char)('A' + nibble - 10);
+    private static void resetFileAfterFailure() {
+        if (file != null) {
+            try { file.close(); } catch (Throwable ignored) { }
+            file = null;
+        }
+        fileTried = false;
+        fileBytes = 0L;
+    }
+
+    private static void rotateFiles(File current) {
+        File old = new File(FILE_OLD);
+        if (old.exists()) old.delete();
+        if (current.exists()) current.renameTo(old);
     }
 }

@@ -1,8 +1,19 @@
-.idea
-.claude
-/java_patch/out
-/java_test/out
-carplay_hook.jar
-libcarplay_hook.so
-mu1316_lsd.jar
+.idea/
+.claude/
+.venv*/
 **/.DS_Store
+*.o
+# build/ ships empty (just .gitkeep); artifacts are generated, never committed
+/build/*
+!/build/.gitkeep
+/local_logs/
+/log/
+tools/loader_preview/loader_preview
+
+# Phone-side captures: sysdiagnose tarballs and log archives are hundreds of MB
+# and contain the owner's device logs. Keep them local.
+/logs/
+
+# Obsidian MCP transaction journal + per-user workspace state
+.obsidian-mcp/
+**/.obsidian/workspace.json

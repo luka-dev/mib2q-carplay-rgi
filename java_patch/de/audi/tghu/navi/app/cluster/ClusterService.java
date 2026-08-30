@@ -1,6 +1,5 @@
 package de.audi.tghu.navi.app.cluster;
 
-import de.audi.atip.base.IFrameworkAccess;
 import de.audi.atip.hmi.intercommunication.NaviMoKoKDKConstants;
 import de.audi.atip.hmi.model.ModelGroup;
 import de.audi.atip.hmi.modelaccess.ChoiceModelApp;
@@ -19,9 +18,8 @@ import de.audi.atip.metrics.Distance;
 import de.audi.atip.mmicombi.IViewSizeManager;
 import de.audi.atip.power.PowerEventListener;
 import de.audi.tghu.command.ICommandListFactory;
-import de.audi.tghu.navi.app.NavigationEnv;
 import de.audi.tghu.navi.app.command.DSIResponseContainer;
-import java.lang.reflect.Field;
+import de.audi.tghu.navi.app.NavigationEnv;
 import de.audi.tghu.navi.app.OperationManager;
 import de.audi.tghu.navi.app.SpeechManager;
 import de.audi.tghu.navi.app.audio.AudioStateMachine;
@@ -34,7 +32,7 @@ import de.audi.tghu.navi.app.map.handler.MapScaleHandler;
 import de.audi.tghu.navi.app.map.handler.MapScaleInfo;
 import de.audi.tghu.navi.app.map.handler.MapScaleTimer;
 import de.audi.tghu.navi.app.map.routecalc.RcciEvent;
-import de.audi.tghu.navi.app.rp.TripHandler$TripData;
+import de.audi.tghu.navi.app.rp.TripHandler;
 import de.audi.tghu.navi.app.util.LocationFormatter;
 import de.audi.tghu.navi.app.util.Util;
 import de.audi.tghu.navi.app.util.addressformatting.AddressFormatter;
@@ -54,6 +52,21 @@ import org.dsi.ifc.tmc.TmcMessage;
 
 public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener {
     public static final String EMPTY_STREET_LABEL = "---";
+
+    /* HMI model ids driven on the cluster (env.getMetricsModel/getChoiceModel).  Only the ids whose
+     * meaning is unambiguous from usage are named; 62/69/71/162 are left as literals on purpose. */
+    private static final int MODEL_ARRIVAL_TIME        = 66;   // ETA date metric (travel params)
+    private static final int MODEL_DIST_TO_DESTINATION = 63;   // remaining distance metric
+    private static final int MODEL_DIST_TO_MANEUVER    = 64;   // distance-to-next-maneuver (FctID 18)
+    private static final int MODEL_BARGRAPH            = 65;   // approach bargraph choice (FctID 18)
+
+    /* MetricsModel status (Util.setModelStatus/setStatus): 1 = valid/shown, 3 = invalid/hidden. */
+    private static final int MODEL_STATUS_VALID   = 1;
+    private static final int MODEL_STATUS_INVALID = 3;
+
+    /* Cluster MOST/LVDS display contexts (switchDisplayContextKombi - NOT DisplayManager contexts). */
+    private static final int KOMBI_CTX_MAP      = 8;   // map available
+    private static final int KOMBI_CTX_KDK_ONLY = 9;   // KDK-only cluster
     protected LogChannel logChannel;
     protected final NavigationEnv env;
     private boolean rgiDataValid = false;
@@ -86,42 +99,42 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
     private boolean satMapProviderChanged = true;
 
     public ClusterService(
-        NavigationEnv navigationEnv,
-        SpeechManager speechManager,
-        OperationManager operationManager,
-        AudioStateMachine audioStateMachine,
-        MapManager mapManager,
-        ICommandListFactory iCommandListFactory
+        NavigationEnv navigationenv,
+        SpeechManager speechmanager,
+        OperationManager operationmanager,
+        AudioStateMachine audiostatemachine,
+        MapManager mapmanager,
+        ICommandListFactory icommandlistfactory
     ) {
         this(
-            navigationEnv,
-            speechManager,
-            operationManager,
-            audioStateMachine,
-            mapManager,
-            iCommandListFactory,
-            new NullViewSizeManager(navigationEnv.getClusterLogChannel()),
+            navigationenv,
+            speechmanager,
+            operationmanager,
+            audiostatemachine,
+            mapmanager,
+            icommandlistfactory,
+            new NullViewSizeManager(navigationenv.getClusterLogChannel()),
             new NullViewSizeChangeHandler()
         );
     }
 
-    protected ClusterKDKHandler initClusterKDKHandler(IViewSizeChangeHandler iViewSizeChangeHandler) {
-        return new ClusterKDKHandlerImpl(this.env, iViewSizeChangeHandler, this.combiBAPListener);
+    protected ClusterKDKHandler initClusterKDKHandler(IViewSizeChangeHandler iviewsizechangehandler) {
+        return new ClusterKDKHandlerImpl(this.env, iviewsizechangehandler, this.combiBAPListener);
     }
 
     public ClusterService(
-        NavigationEnv navigationEnv,
-        SpeechManager speechManager,
-        OperationManager operationManager,
-        AudioStateMachine audioStateMachine,
-        MapManager mapManager,
-        ICommandListFactory iCommandListFactory,
-        IViewSizeManager iViewSizeManager,
-        IViewSizeChangeHandler iViewSizeChangeHandler
+        NavigationEnv navigationenv,
+        SpeechManager speechmanager,
+        OperationManager operationmanager,
+        AudioStateMachine audiostatemachine,
+        MapManager mapmanager,
+        ICommandListFactory icommandlistfactory,
+        IViewSizeManager iviewsizemanager,
+        IViewSizeChangeHandler iviewsizechangehandler
     ) {
-        this.env = navigationEnv;
-        this.mapInterface = mapManager.getMapInterface();
-        this.logChannel = navigationEnv.getClusterLogChannel();
+        this.env = navigationenv;
+        this.mapInterface = mapmanager.getMapInterface();
+        this.logChannel = navigationenv.getClusterLogChannel();
         this.bapDistanceFormatter = new BAPDistanceFormatter(this.logChannel);
         this.travelParametersGroup = new ModelGroup();
         this.nextManeuverGroup = new ModelGroup();
@@ -131,15 +144,15 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
             null, null, 0, null, null, null, 0, null, null, null, null, new TrafficInfo(), 0, null, null, null, null, 0
         );
         this.combiBAPListener = this.initBAPListener(
-            speechManager, operationManager, audioStateMachine, mapManager, iCommandListFactory, iViewSizeManager
+            speechmanager, operationmanager, audiostatemachine, mapmanager, icommandlistfactory, iviewsizemanager
         );
-        this.clusterViewMode = new ClusterViewMode(navigationEnv, this);
-        this.clusterKDKHandler = this.initClusterKDKHandler(iViewSizeChangeHandler);
-        this.komoService = new KOMOService(navigationEnv, this, this.clusterKDKHandler);
-        this.clusterInputListener = this.createClusterInputListener(navigationEnv);
+        this.clusterViewMode = new ClusterViewMode(navigationenv, this);
+        this.clusterKDKHandler = this.initClusterKDKHandler(iviewsizechangehandler);
+        this.komoService = new KOMOService(navigationenv, this, this.clusterKDKHandler);
+        this.clusterInputListener = this.createClusterInputListener(navigationenv);
         this.mapScaleHandler = new MapScaleHandler();
-        this.mapScaleTimer = new MapScaleTimer(navigationEnv, this, this.mapScaleHandler);
-        navigationEnv.getLabelModel(62).setText("");
+        this.mapScaleTimer = new MapScaleTimer(navigationenv, this, this.mapScaleHandler);
+        navigationenv.getLabelModel(62).setText("");
         this.initializeModels();
     }
 
@@ -149,49 +162,49 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         this.env.getChoiceModel(69).setValue(0);
         this.turnToStreetValid = false;
         this.turnToStreet = "";
-        this.env.getMetricsModel(66).setStatus(3);
-        this.env.getMetricsModel(66).setMetric(this.etaDateMetric);
-        this.env.getMetricsModel(63).setStatus(3);
-        this.env.getMetricsModel(63).setMetric(this.distanceToDestination);
-        this.travelParametersGroup.add(this.env.getMetricsModel(66));
-        this.travelParametersGroup.add(this.env.getMetricsModel(63));
-        this.env.getMetricsModel(64).setStatus(3);
-        this.env.getMetricsModel(64).setMetric(this.distanceToManeuver);
-        this.env.getChoiceModel(65).setValue(-1);
+        this.env.getMetricsModel(MODEL_ARRIVAL_TIME).setStatus(MODEL_STATUS_INVALID);
+        this.env.getMetricsModel(MODEL_ARRIVAL_TIME).setMetric(this.etaDateMetric);
+        this.env.getMetricsModel(MODEL_DIST_TO_DESTINATION).setStatus(MODEL_STATUS_INVALID);
+        this.env.getMetricsModel(MODEL_DIST_TO_DESTINATION).setMetric(this.distanceToDestination);
+        this.travelParametersGroup.add(this.env.getMetricsModel(MODEL_ARRIVAL_TIME));
+        this.travelParametersGroup.add(this.env.getMetricsModel(MODEL_DIST_TO_DESTINATION));
+        this.env.getMetricsModel(MODEL_DIST_TO_MANEUVER).setStatus(MODEL_STATUS_INVALID);
+        this.env.getMetricsModel(MODEL_DIST_TO_MANEUVER).setMetric(this.distanceToManeuver);
+        this.env.getChoiceModel(MODEL_BARGRAPH).setValue(-1);
         this.showBargraph = false;
-        this.nextManeuverGroup.add(this.env.getMetricsModel(64));
-        this.nextManeuverGroup.add(this.env.getChoiceModel(65));
+        this.nextManeuverGroup.add(this.env.getMetricsModel(MODEL_DIST_TO_MANEUVER));
+        this.nextManeuverGroup.add(this.env.getChoiceModel(MODEL_BARGRAPH));
         if (Util.isClusterKDKOnly(this.env.getFramework())) {
-            this.switchDisplayContextKombi(9);
+            this.switchDisplayContextKombi(KOMBI_CTX_KDK_ONLY);
         } else if (Util.isClusterMapAvailable(this.env.getFramework())) {
-            this.switchDisplayContextKombi(8);
+            this.switchDisplayContextKombi(KOMBI_CTX_MAP);
         }
     }
 
     protected CombiBAPListener initBAPListener(
-        SpeechManager speechManager,
-        OperationManager operationManager,
-        AudioStateMachine audioStateMachine,
-        MapManager mapManager,
-        ICommandListFactory iCommandListFactory,
-        IViewSizeManager iViewSizeManager
+        SpeechManager speechmanager,
+        OperationManager operationmanager,
+        AudioStateMachine audiostatemachine,
+        MapManager mapmanager,
+        ICommandListFactory icommandlistfactory,
+        IViewSizeManager iviewsizemanager
     ) {
-        return new CombiBAPListener(
+        return new ScreenCombiBAPListener(
             this,
             this.logChannel,
             this.env,
-            speechManager,
-            operationManager,
-            audioStateMachine,
-            mapManager,
-            iCommandListFactory,
-            iViewSizeManager
+            speechmanager,
+            operationmanager,
+            audiostatemachine,
+            mapmanager,
+            icommandlistfactory,
+            iviewsizemanager
         );
     }
 
-    public synchronized void unitsChanged(TripHandler$TripData tripData) {
+    public synchronized void unitsChanged(TripHandler.TripData triphandler$tripdata) {
         this.logChannel.log(10000000, "ClusterService#unitsChanged()");
-        this.refreshTravelParameters(tripData);
+        this.refreshTravelParameters(triphandler$tripdata);
         this.refreshDistanceToNextManeuver();
         this.combiBAPListener.updateSemidynamicRouteGuidance();
         this.combiBAPListener.updateAltitude();
@@ -210,57 +223,66 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         return this.clusterInputListener;
     }
 
-    protected ClusterInputListener createClusterInputListener(NavigationEnv navigationEnv) {
-        return new ClusterInputListener(navigationEnv, this);
+    protected ClusterInputListener createClusterInputListener(NavigationEnv navigationenv) {
+        return new ClusterInputListener(navigationenv, this);
     }
 
     public CombiBAPServiceNaviListener getCombiBAPListener() {
         return this.combiBAPListener;
     }
 
-    public void setCombiBAPService(CombiBAPServiceNavi combiBAPServiceNavi) {
+    public void setCombiBAPService(CombiBAPServiceNavi combibapservicenavi) {
         this.logChannel.log(10000000, "ClusterService#setCombiBAPService()");
-        this.combiBAPListener.setCombiService(combiBAPServiceNavi);
-        this.combiBAPServiceNavi = combiBAPServiceNavi;
+        /* This setter runs on NavigationJobs.  Install the transparent CarPlay gate BEFORE the
+         * stock setter's immediate updateAll(), so native NavStatus never paints across the
+         * takeover edge and no other dispatcher writes CombiBAPListener.combiservice. */
+        CombiBAPServiceNavi effective = com.luka.carplay.core.ScreenNavStatusGate
+            .prepareCombiBAPService(this, combibapservicenavi);
+        this.combiBAPListener.setCombiService(effective);
+        this.combiBAPServiceNavi = combibapservicenavi;
+        /* CarPlay's map plane may already be live during a cold boot.  Notify the optional
+         * NavStatus wrapper on the exact OSGi service edge instead of making the cluster module poll -- or
+         * worse, wait for stock Navigation before showing its own video. */
+        com.luka.carplay.core.ScreenNavStatusGate.onCombiBAPServiceChanged(this);
     }
 
-    public void setCombiService(CombiService combiService) {
+    public void setCombiService(CombiService combiservice) {
         this.logChannel.log(10000000, "ClusterService#setCombiService()");
-        this.clusterViewMode.setCombiService(combiService);
-        this.combiDDP2ServiceNavi = combiService;
+        this.clusterViewMode.setCombiService(combiservice);
+        this.combiDDP2ServiceNavi = combiservice;
     }
 
-    public void setMOSTFrameVisible(boolean bl) {
-        this.logChannel.log(10000000, "ClusterService#setMOSTFrameVisible( %1 )", bl);
-        this.komoService.notifyVisibility(bl);
+    public void setMOSTFrameVisible(boolean flag) {
+        this.logChannel.log(10000000, "ClusterService#setMOSTFrameVisible( %1 )", flag);
+        this.komoService.notifyVisibility(flag);
     }
 
     public boolean isLvdsMapVisible() {
         return this.combiBAPListener.lvdsMapVisible;
     }
 
-    public void updateCurrentStreet(String string) {
-        this.logChannel.log(100000000, "ClusterService#updateCurrentStreet( %1 )", string);
-        String string1 = string;
-        String string2 = string;
-        String string3 = string;
-        if (Util.isEmpty(string)) {
-            this.logChannel.log(10000000, "ClusterService#updateCurrentStreet() - invalid currentStreet: %1", string);
-            string2 = "";
-            string1 = "";
-            string3 = "---";
+    public void updateCurrentStreet(String s) {
+        this.logChannel.log(100000000, "ClusterService#updateCurrentStreet( %1 )", s);
+        String s1 = s;
+        String s2 = s;
+        String s3 = s;
+        if (Util.isEmpty(s1)) {
+            this.logChannel.log(10000000, "ClusterService#updateCurrentStreet() - invalid currentStreet: %1", s1);
+            s2 = "";
+            s1 = "";
+            s3 = EMPTY_STREET_LABEL;
         }
 
-        this.env.getLabelModel(62).setText(string3);
-        this.komoService.setCurrentStreet(string1);
-        this.combiBAPListener.setCurrentStreet(string2);
+        this.env.getLabelModel(62).setText(s3);
+        this.komoService.setCurrentStreet(s1);
+        this.combiBAPListener.setCurrentStreet(s2);
     }
 
-    public void updateTurnToStreet(String string, boolean bl) {
-        this.logChannel.log(100000000, "ClusterService#updateTurnToStreet( %1 )", string);
-        this.turnToStreet = string;
-        this.turnToStreetValid = !Util.isEmpty(string);
-        this.env.getLabelModel(71).setText(string);
+    public void updateTurnToStreet(String s, boolean flag) {
+        this.logChannel.log(100000000, "ClusterService#updateTurnToStreet( %1 )", s);
+        this.turnToStreet = s;
+        this.turnToStreetValid = !Util.isEmpty(s);
+        this.env.getLabelModel(71).setText(s);
         this.refreshStreetMode();
     }
 
@@ -272,19 +294,24 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
                 this.turnToStreetValid,
                 this.showBargraph
             );
-        ChoiceModelApp choiceModelApp = this.env.getChoiceModel(69);
+        ChoiceModelApp choicemodelapp = this.env.getChoiceModel(69);
         if (this.turnToStreetValid && this.showBargraph) {
-            choiceModelApp.setValue(1);
-            this.komoService.setTurnToStreet(this.turnToStreet, "");
+            choicemodelapp.setValue(1);
+            this.komoService
+                .setTurnToStreet(this.turnToStreet, "");
         } else {
-            choiceModelApp.setValue(0);
-            this.komoService.setTurnToStreet("", "");
+            choicemodelapp.setValue(0);
+            this.komoService
+                .setTurnToStreet(
+                    "",
+                    ""
+                );
         }
     }
 
     public void refreshDistanceToNextManeuver() {
-        DistanceToNextManeuver distanceToNextManeuver = this.env.getContainer().getDistanceToNextManeuver();
-        this.refreshDistanceToNextManeuver(distanceToNextManeuver);
+        DistanceToNextManeuver distancetonextmaneuver = this.env.getContainer().getDistanceToNextManeuver();
+        this.refreshDistanceToNextManeuver(distancetonextmaneuver);
     }
 
     private int convertBAP2KOMODistanceUnit(int i) {
@@ -306,17 +333,13 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
             case 255:
             default:
                 this.logChannel
-                    .log(
-                        100000,
-                        "ClusterService#convertBAP2KOMOUnit() - unknown or not convertable BAP unit: %1",
-                        (long)i
-                    );
+                    .log(100000, "ClusterService#convertBAP2KOMOUnit() - unknown or not convertable BAP unit: %1", i);
                 return 255;
         }
     }
 
-    protected void refreshDistanceToNextManeuver(DistanceToNextManeuver distanceToNextManeuver) {
-        if (distanceToNextManeuver == null) {
+    protected void refreshDistanceToNextManeuver(DistanceToNextManeuver distancetonextmaneuver) {
+        if (distancetonextmaneuver == null) {
             this.logChannel
                 .log(1000000, "ClusterService#refreshDistanceToNextManeuver() - distanceToNextManeuver is null! ");
         } else {
@@ -324,92 +347,105 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
                 .log(
                     100000000,
                     "ClusterService#refreshDistanceToNextManeuver() - distanceToNextManeuver: %1",
-                    distanceToNextManeuver
+                    distancetonextmaneuver
                 );
-            boolean bl = distanceToNextManeuver.showDistance;
-            int i = distanceToNextManeuver.distance;
-            this.showBargraph = distanceToNextManeuver.showBargraph;
-            int j = distanceToNextManeuver.bargraph;
-            long l;
-            int k;
-            boolean bl1;
+            boolean flag = distancetonextmaneuver.showDistance;
+            int i = distancetonextmaneuver.distance;
+            this.showBargraph = distancetonextmaneuver.showBargraph;
+            int j = distancetonextmaneuver.bargraph;
+            long k;
+            int l;
+            boolean flag1;
             if (i > 0) {
-                BAPDistanceFormatter$BAPDistance bAPDistance = this.bapDistanceFormatter
+                BAPDistanceFormatter.BAPDistance bapdistanceformatter$bapdistance = this.bapDistanceFormatter
                     .formatDistanceToTurn(i, Distance.getSystemUnit() == 1);
-                l = bAPDistance.getValue();
-                k = this.convertBAP2KOMODistanceUnit(bAPDistance.getUnit());
-                bl1 = !this.showBargraph;
+                k = bapdistanceformatter$bapdistance.getValue();
+                l = this.convertBAP2KOMODistanceUnit(bapdistanceformatter$bapdistance.getUnit());
+                flag1 = !this.showBargraph;
             } else {
-                l = -1L;
-                k = 255;
-                bl1 = false;
+                k = -1L;
+                l = 255;
+                flag1 = false;
             }
 
-            MetricsModelApp metricsModelApp = this.env.getMetricsModel(64);
-            if (bl && i > 0) {
+            MetricsModelApp metricsmodelapp = this.env.getMetricsModel(MODEL_DIST_TO_MANEUVER);
+            if (flag && i > 0) {
                 this.distanceToManeuver.setValue(i / 1000.0F);
-                metricsModelApp.setMetric(this.distanceToManeuver);
+                metricsmodelapp.setMetric(this.distanceToManeuver);
             }
 
-            if (bl && i > 0) {
-                Util.setModelStatus(metricsModelApp, 1);
+            /* FctID 18: distance number and bargraph are INDEPENDENT records in the BAP spec and
+             * must be able to render together.  Stock gated the distance-valid status on
+             * !showBargraph, making them mutually exclusive (distance vanished whenever the
+             * bargraph was active).  Drop the !showBargraph term so the number stays valid
+             * alongside the bargraph.  (Model 65 bargraph value is set independently below.) */
+            if (flag && i > 0 && (!this.showBargraph || com.luka.carplay.core.ScreenModule.isConnected())) {
+                Util.setModelStatus(metricsmodelapp, MODEL_STATUS_VALID);
             } else {
-                Util.setModelStatus(metricsModelApp, 3);
+                Util.setModelStatus(metricsmodelapp, MODEL_STATUS_INVALID);
             }
 
-            int m = this.showBargraph ? j : -1;
-            this.env.getChoiceModel(65).setValue(m);
+            int i1 = this.showBargraph ? j : -1;
+            this.env.getChoiceModel(MODEL_BARGRAPH).setValue(i1);
             this.refreshStreetMode();
             this.nextManeuverGroup.flush();
-            this.refreshDistanceToNextManeuverMOST(l, k, bl1, bl);
+            this.refreshDistanceToNextManeuverMOST(k, l, flag1, flag);
             this.combiBAPListener.setDistanceToNextManeuver(i, this.showBargraph, j);
         }
     }
 
-    public void refreshTravelParameters(TripHandler$TripData tripData) {
+    public void refreshTravelParameters(TripHandler.TripData triphandler$tripdata) {
         this.logChannel.log(100000000, "ClusterService#refreshTravelParameters()");
-        if (tripData.etaModeActive) {
-            this.updateArrivalTime(tripData.etaValid, tripData.etaToNextDestination, tripData.isTimeZoneOffset);
+        if (triphandler$tripdata.etaModeActive) {
+            this.updateArrivalTime(
+                triphandler$tripdata.etaValid,
+                triphandler$tripdata.etaToNextDestination,
+                triphandler$tripdata.isTimeZoneOffset
+            );
         } else {
-            this.updateRemainingTravelTime(tripData.etaValid, tripData.timeToNextDestination * 1000L);
+            this.updateRemainingTravelTime(
+                triphandler$tripdata.etaValid, triphandler$tripdata.timeToNextDestination * 1000L
+            );
         }
 
         this.followInfoRIE.destinationIndex = this.getDestIndex();
-        this.updateDistanceToDestination(tripData.distanceToNextDestination, this.followInfoRIE.destinationIndex == 0);
+        this.updateDistanceToDestination(
+            triphandler$tripdata.distanceToNextDestination, this.followInfoRIE.destinationIndex == 0
+        );
         this.updateKOMOFollowInfo();
         this.travelParametersGroup.flush();
     }
 
-    private void clearRouteInfoElement(RouteInfoElement routeInfoElement) {
-        if (routeInfoElement != null) {
-            routeInfoElement.distanceToElement = "";
-            routeInfoElement.estimatedTimeToElement = "--:--";
-            routeInfoElement.routeInfoElementType = 0;
-            routeInfoElement.elementIconIDs = null;
-            routeInfoElement.prio1EventText = null;
-            routeInfoElement.streetIconText = null;
-            routeInfoElement.streetIconID = 0;
-            routeInfoElement.exitNumber = null;
-            routeInfoElement.turnToStreet = null;
-            routeInfoElement.pOIElementNames = null;
-            routeInfoElement.maneuverDescriptor = null;
-            if (routeInfoElement.trafficInfo != null) {
-                routeInfoElement.trafficInfo.trafficOffset = null;
-                routeInfoElement.trafficInfo.trafficOffsetAffix = null;
-                routeInfoElement.trafficInfo.affixPlacementBefore = false;
+    private void clearRouteInfoElement(RouteInfoElement routeinfoelement) {
+        if (routeinfoelement != null) {
+            routeinfoelement.distanceToElement = "";
+            routeinfoelement.estimatedTimeToElement = "--:--";
+            routeinfoelement.routeInfoElementType = 0;
+            routeinfoelement.elementIconIDs = null;
+            routeinfoelement.prio1EventText = null;
+            routeinfoelement.streetIconText = null;
+            routeinfoelement.streetIconID = 0;
+            routeinfoelement.exitNumber = null;
+            routeinfoelement.turnToStreet = null;
+            routeinfoelement.pOIElementNames = null;
+            routeinfoelement.maneuverDescriptor = null;
+            if (routeinfoelement.trafficInfo != null) {
+                routeinfoelement.trafficInfo.trafficOffset = null;
+                routeinfoelement.trafficInfo.trafficOffsetAffix = null;
+                routeinfoelement.trafficInfo.affixPlacementBefore = false;
             }
 
-            routeInfoElement.destinationIndex = 0;
-            routeInfoElement.signPostInfo = null;
-            routeInfoElement.distanceToManeuver = null;
-            routeInfoElement.estimatedTimeToManeuver = null;
-            routeInfoElement.streetCardinalDirection = null;
-            routeInfoElement.exitIconId = 0;
+            routeinfoelement.destinationIndex = 0;
+            routeinfoelement.signPostInfo = null;
+            routeinfoelement.distanceToManeuver = null;
+            routeinfoelement.estimatedTimeToManeuver = null;
+            routeinfoelement.streetCardinalDirection = null;
+            routeinfoelement.exitIconId = 0;
         }
     }
 
-    protected void refreshDistanceToNextManeuverMOST(long l, int i, boolean bl, boolean bl1) {
-        this.komoService.setDistanceToNextManeuver(l, i, bl);
+    protected void refreshDistanceToNextManeuverMOST(long i, int j, boolean flag, boolean flag1) {
+        this.komoService.setDistanceToNextManeuver(i, j, flag);
     }
 
     protected int getDestIndex() {
@@ -418,106 +454,106 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         return j + 1 < i ? 0 : -1;
     }
 
-    protected void updateArrivalTime(boolean bl, long l, boolean bl1) {
-        this.logChannel.log(100000000, "ClusterService#updateArrivalTime( %1, %2 )", bl, l);
-        MetricsModelApp metricsModelApp = this.env.getMetricsModel(66);
-        String string;
-        if (bl) {
-            this.etaDateMetric.setDate(l);
-            metricsModelApp.setMetric(this.etaDateMetric);
-            Util.setModelStatus(metricsModelApp, 1);
-            string = Util.formatTime(l, 2, this.env);
+    protected void updateArrivalTime(boolean flag, long i, boolean flag1) {
+        this.logChannel.log(100000000, "ClusterService#updateArrivalTime( %1, %2 )", flag, i);
+        MetricsModelApp metricsmodelapp = this.env.getMetricsModel(MODEL_ARRIVAL_TIME);
+        String s;
+        if (flag) {
+            this.etaDateMetric.setDate(i);
+            metricsmodelapp.setMetric(this.etaDateMetric);
+            Util.setModelStatus(metricsmodelapp, MODEL_STATUS_VALID);
+            s = Util.formatTime(i, 2, this.env);
         } else {
             this.logChannel.log(10000000, "ClusterService#updateArrivalTime() - invalid flag for ETA set! ");
-            Util.setModelStatus(metricsModelApp, 3);
-            string = "--:--";
+            Util.setModelStatus(metricsmodelapp, MODEL_STATUS_INVALID);
+            s = "--:--";
         }
 
-        int i = KOMOService.convertTimeFormatToKOMO(DateMetric.timeFormat);
-        KOMOTime kOMOTime = KOMOService.convertTimeToKOMO(l);
-        this.followInfoRIE.estimatedTimeToElement = string;
-        this.komoService.setETA(i, kOMOTime.day, kOMOTime.hour, kOMOTime.min, bl, bl1);
-        this.combiBAPListener.setRgTimeToNextDestination(l, true, bl);
+        int j = KOMOService.convertTimeFormatToKOMO(DateMetric.timeFormat);
+        KOMOTime komotime = KOMOService.convertTimeToKOMO(i);
+        this.followInfoRIE.estimatedTimeToElement = s;
+        this.komoService.setETA(j, komotime.day, komotime.hour, komotime.min, flag, flag1);
+        this.combiBAPListener.setRgTimeToNextDestination(i, true, flag);
     }
 
-    protected void updateRemainingTravelTime(boolean bl, long l) {
-        this.logChannel.log(100000000, "ClusterService#RemainingTravelTime( %1, %2 )", bl, l);
-        MetricsModelApp metricsModelApp = this.env.getMetricsModel(66);
-        if (bl) {
-            this.rttDateMetric.setDate(l);
-            metricsModelApp.setMetric(this.rttDateMetric);
-            Util.setModelStatus(metricsModelApp, 1);
+    protected void updateRemainingTravelTime(boolean flag, long i) {
+        this.logChannel.log(100000000, "ClusterService#RemainingTravelTime( %1, %2 )", flag, i);
+        MetricsModelApp metricsmodelapp = this.env.getMetricsModel(MODEL_ARRIVAL_TIME);
+        if (flag) {
+            this.rttDateMetric.setDate(i);
+            metricsmodelapp.setMetric(this.rttDateMetric);
+            Util.setModelStatus(metricsmodelapp, MODEL_STATUS_VALID);
         } else {
             this.logChannel.log(10000000, "ClusterService#updateArrivalTime() - invalid flag for ETA set! ");
-            Util.setModelStatus(metricsModelApp, 3);
+            Util.setModelStatus(metricsmodelapp, MODEL_STATUS_INVALID);
         }
 
-        KOMOTime kOMOTime = KOMOService.convertDurationToKOMO(l);
-        this.komoService.setRTT(kOMOTime.hour, kOMOTime.min, bl);
-        this.combiBAPListener.setRgTimeToNextDestination(l, false, bl);
+        KOMOTime komotime = KOMOService.convertDurationToKOMO(i);
+        this.komoService.setRTT(komotime.hour, komotime.min, flag);
+        this.combiBAPListener.setRgTimeToNextDestination(i, false, flag);
     }
 
-    protected void updateDistanceToDestination(int i, boolean bl) {
-        this.logChannel.log(100000000, "ClusterService#updateDistanceToDestination( %1 )", (long)i);
-        long l = -1L;
-        int j = -1;
-        MetricsModelApp metricsModelApp = this.env.getMetricsModel(63);
-        String string;
-        boolean bl1;
+    protected void updateDistanceToDestination(int i, boolean flag) {
+        this.logChannel.log(100000000, "ClusterService#updateDistanceToDestination( %1 )", i);
+        long j = -1L;
+        int k = -1;
+        MetricsModelApp metricsmodelapp = this.env.getMetricsModel(MODEL_DIST_TO_DESTINATION);
+        String s;
+        boolean flag1;
         if (i > 0) {
             this.distanceToDestination.setValue(i / 1000.0F);
-            metricsModelApp.setMetric(this.distanceToDestination);
-            Util.setModelStatus(metricsModelApp, 1);
-            string = Util.formatDistance(i, 1, 2, "---");
-            BAPDistanceFormatter$BAPDistance bAPDistance = this.bapDistanceFormatter
+            metricsmodelapp.setMetric(this.distanceToDestination);
+            Util.setModelStatus(metricsmodelapp, MODEL_STATUS_VALID);
+            s = Util.formatDistance(i, 1, 2, EMPTY_STREET_LABEL);
+            BAPDistanceFormatter.BAPDistance bapdistanceformatter$bapdistance = this.bapDistanceFormatter
                 .formatDistanceToDestination(i, Distance.getSystemUnit() == 1);
-            l = bAPDistance.getValue();
-            j = this.convertBAP2KOMODistanceUnit(bAPDistance.getUnit());
-            bl1 = true;
+            j = bapdistanceformatter$bapdistance.getValue();
+            k = this.convertBAP2KOMODistanceUnit(bapdistanceformatter$bapdistance.getUnit());
+            flag1 = true;
         } else {
             this.logChannel
                 .log(10000000, "ClusterService#updateDistanceToDestination() - invalid distanceToDestination! ");
-            Util.setModelStatus(metricsModelApp, 3);
-            string = "";
-            bl1 = false;
+            Util.setModelStatus(metricsmodelapp, MODEL_STATUS_INVALID);
+            s = "";
+            flag1 = false;
         }
 
-        this.followInfoRIE.distanceToElement = string;
-        this.komoService.setDistanceToDestination(l, j, bl1);
-        this.combiBAPListener.setRgDistanceToNextDestination(i, bl);
+        this.followInfoRIE.distanceToElement = s;
+        this.komoService.setDistanceToDestination(j, k, flag1);
+        this.combiBAPListener.setRgDistanceToNextDestination(i, flag);
     }
 
-    public void updateSoPosPosition(PosPosition posPosition) {
-        this.logChannel.log(100000000, "ClusterService#updateSoPosPosition( %1 )", posPosition);
-        short s = 0;
-        short t = 255;
+    public void updateSoPosPosition(PosPosition posposition) {
+        this.logChannel.log(100000000, "ClusterService#updateSoPosPosition( %1 )", posposition);
+        short short1 = 0;
+        short short2 = 255;
         int i = -1;
-        if (posPosition != null) {
-            s = (short)posPosition.getDirectionAngle();
-            t = (short)posPosition.getDirectionSymbolic();
-            i = posPosition.getState();
+        if (posposition != null) {
+            short1 = (short)posposition.getDirectionAngle();
+            short2 = (short)posposition.getDirectionSymbolic();
+            i = posposition.getState();
         } else {
             this.logChannel.log(100000, "ClusterService#updateSoPosPosition() - invalid soPosPosition!");
         }
 
-        this.combiBAPListener.setVehicleHeading(s, t);
+        this.combiBAPListener.setVehicleHeading(short1, short2);
         this.combiBAPListener.setInfoStateGPS(i);
     }
 
-    public void updateSoPosPositionDescription(NavLocation navLocation) {
-        this.logChannel.log(100000000, "ClusterService#updateSoPosPositionDescription( %1 )", navLocation);
-        String string = LocationFormatter.formatCity(navLocation);
-        this.komoService.setCityName(string);
+    public void updateSoPosPositionDescription(NavLocation navlocation) {
+        this.logChannel.log(100000000, "ClusterService#updateSoPosPositionDescription( %1 )", navlocation);
+        String s = LocationFormatter.formatCity(navlocation);
+        this.komoService.setCityName(s);
     }
 
-    public void updateRgDirectionToNextDestination(short s) {
-        this.logChannel.log(100000000, "ClusterService#updateRgDirectionToNextDestination( %1 )", (long)s);
+    public void updateRgDirectionToNextDestination(short short1) {
+        this.logChannel.log(100000000, "ClusterService#updateRgDirectionToNextDestination( %1 )", short1);
     }
 
-    public void updateRGIString(short[] s) {
-        if (s != null && s.length > 0) {
+    public void updateRGIString(short[] ashort) {
+        if (ashort != null && ashort.length > 0) {
             this.rgiDataValid = true;
-            this.env.getDataModel(68).set(s);
+            this.env.getDataModel(68).set(ashort);
         } else {
             this.rgiDataValid = false;
             this.logChannel.log(10000000, "ClusterService#updateRGIData() - invalid RGI data ");
@@ -526,11 +562,11 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         this.refreshRGIValid();
     }
 
-    public void updateRgActive(boolean bl) {
-        this.logChannel.log(100000000, "ClusterService#updateRgActive( %1 )", bl);
+    public void updateRgActive(boolean flag) {
+        this.logChannel.log(100000000, "ClusterService#updateRgActive( %1 )", flag);
         this.refreshRGIValid();
         this.clusterViewMode.refreshRGState();
-        if (!bl) {
+        if (!flag) {
             this.initializeModels();
             this.updateTurnToStreet("", false);
             this.clearRouteInfoElement(this.followInfoRIE);
@@ -538,8 +574,8 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
             this.updateDestinationInfo(null, 0, 0);
         }
 
-        this.clusterKDKHandler.updateRgActive(bl);
-        this.combiBAPListener.setRgActive(bl);
+        this.clusterKDKHandler.updateRgActive(flag);
+        this.combiBAPListener.setRgActive(flag);
     }
 
     public void updateNavState(int i, int j) {
@@ -550,33 +586,34 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
     }
 
     private void refreshRGIValid() {
-        boolean bl = this.env.getContainer().isRgActive();
-        boolean bl1 = bl && this.rgiDataValid;
+        boolean flag = this.env.getContainer().isRgActive();
+        boolean flag1 = flag && this.rgiDataValid;
         this.logChannel
-            .log(100000000, "ClusterService#refreshRGIValid() - rgActive: %1, rgiDataValid: %2", bl, this.rgiDataValid);
-        this.clusterViewMode.setRGIValid(bl1);
+            .log(
+                100000000, "ClusterService#refreshRGIValid() - rgActive: %1, rgiDataValid: %2", flag, this.rgiDataValid
+            );
+        this.clusterViewMode.setRGIValid(flag1);
     }
 
     public void refreshViewMode(int i) {
         this.combiBAPListener.setViewMode(i);
     }
 
-    public void updateLaneGuidance(NavLaneGuidanceData[] navLaneGuidanceDatas, boolean bl) {
-        this.combiBAPListener.setLaneGuidance(navLaneGuidanceDatas, bl);
+    public void updateLaneGuidance(NavLaneGuidanceData[] anavlaneguidancedata, boolean flag) {
+        this.combiBAPListener.setLaneGuidance(anavlaneguidancedata, flag);
     }
 
-    public void updateManeuverDescriptor(BapManeuverDescriptor[] bapManeuverDescriptors) {
-        this.rgiDataValid = bapManeuverDescriptors != null && bapManeuverDescriptors.length > 0;
+    public void updateManeuverDescriptor(BapManeuverDescriptor[] abapmaneuverdescriptor) {
+        this.rgiDataValid = abapmaneuverdescriptor != null && abapmaneuverdescriptor.length > 0;
         this.refreshRGIValid();
-        this.combiBAPListener.setManeuverDescriptor(bapManeuverDescriptors);
+        this.combiBAPListener.setManeuverDescriptor(abapmaneuverdescriptor);
     }
 
-    public void updateManeuverDescriptor(BapManeuverDescriptor[] bapManeuverDescriptors, int i) {
-        this.rgiDataValid = bapManeuverDescriptors != null && bapManeuverDescriptors.length > 0;
+    public void updateManeuverDescriptor(BapManeuverDescriptor[] abapmaneuverdescriptor, int i) {
+        this.rgiDataValid = abapmaneuverdescriptor != null && abapmaneuverdescriptor.length > 0;
         this.refreshRGIValid();
-        this.combiBAPListener.setManeuverDescriptor(bapManeuverDescriptors, i);
+        this.combiBAPListener.setManeuverDescriptor(abapmaneuverdescriptor, i);
     }
-
 
     public String toString() {
         Buffer buffer = new Buffer();
@@ -585,8 +622,8 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         return buffer.toString();
     }
 
-    public void updateBapTurnToInfo(BapTurnToInfo[] bapTurnToInfos) {
-        this.combiBAPListener.setTurnToInfo(bapTurnToInfos);
+    public void updateBapTurnToInfo(BapTurnToInfo[] abapturntoinfo) {
+        this.combiBAPListener.setTurnToInfo(abapturntoinfo);
     }
 
     public void updateInfoStatesGPS(int i) {
@@ -594,19 +631,19 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
     }
 
     private boolean initScreenNeededOnKombi() {
-        boolean bl = this.env.getContainer().getNavstateOfOperation() == 5;
-        boolean bl1 = Util.isClusterMapAvailable(this.env.getFramework());
-        boolean bl2 = false;
-        AbstractMap abstractMap = this.mapInterface.getKombiMap();
-        if (abstractMap != null && abstractMap.isInitialized()) {
-            bl2 = true;
+        boolean flag = this.env.getContainer().getNavstateOfOperation() == 5;
+        boolean flag1 = Util.isClusterMapAvailable(this.env.getFramework());
+        boolean flag2 = false;
+        AbstractMap abstractmap = this.mapInterface.getKombiMap();
+        if (abstractmap != null && abstractmap.isInitialized()) {
+            flag2 = true;
         }
 
-        return bl && !bl2 && bl1 ? true : !this.operationStateIsKnownToTheKombi;
+        return flag && !flag2 && flag1 ? true : !this.operationStateIsKnownToTheKombi;
     }
 
     public synchronized void updateOperationState(int i) {
-        this.logChannel.log(1000000, "ClusterService#updateOperationState( %1 )", (long)i);
+        this.logChannel.log(1000000, "ClusterService#updateOperationState( %1 )", i);
         this.operationStateIsKnownToTheKombi = this.combiBAPListener.setInfoStateNavi(i);
         this.combiBAPListener.forceShowInitScreen(this.initScreenNeededOnKombi());
         if (this.combiBAPListener.lvdsMapVisible && this.env.getContainer().getNavstateOfOperation() == 5) {
@@ -614,32 +651,32 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         }
     }
 
-    public void updateXUrgentMessages(TmcMessage[] tmcMessages) {
-        this.combiBAPListener.setXUrgentMessages(tmcMessages);
+    public void updateXUrgentMessages(TmcMessage[] atmcmessage) {
+        this.combiBAPListener.setXUrgentMessages(atmcmessage);
     }
 
-    public void updateMessagesOnRoute(TmcMessage[] tmcMessages) {
-        this.combiBAPListener.setMessagesOnRoute(tmcMessages);
+    public void updateMessagesOnRoute(TmcMessage[] atmcmessage) {
+        this.combiBAPListener.setMessagesOnRoute(atmcmessage);
     }
 
     public void setRouteGuidanceAborted() {
         this.combiBAPListener.setRouteGuidanceAborted();
     }
 
-    public void updateRgInfoForNextDestination(RgInfoForNextDestination rgInfoForNextDestination) {
-        this.logChannel.log(100000000, "ClusterService#updateRgInfoForNextDestination(%1)", rgInfoForNextDestination);
-        this.rgInfoForNextDestination = rgInfoForNextDestination;
-        this.updateRgDirectionToNextDestination(rgInfoForNextDestination.getDirectionToNextDest());
+    public void updateRgInfoForNextDestination(RgInfoForNextDestination rginfofornextdestination) {
+        this.logChannel.log(100000000, "ClusterService#updateRgInfoForNextDestination(%1)", rginfofornextdestination);
+        this.rgInfoForNextDestination = rginfofornextdestination;
+        this.updateRgDirectionToNextDestination(rginfofornextdestination.getDirectionToNextDest());
     }
 
-    public void updateDistanceToNextManeuver(DistanceToNextManeuver distanceToNextManeuver) {
-        this.refreshDistanceToNextManeuver(distanceToNextManeuver);
+    public void updateDistanceToNextManeuver(DistanceToNextManeuver distancetonextmaneuver) {
+        this.refreshDistanceToNextManeuver(distancetonextmaneuver);
     }
 
-    public synchronized void updateKombiMapReady(boolean bl) {
-        this.logChannel.log(1000000, "ClusterService#updateKombiMapReady( %1 )", bl);
-        if (bl) {
-            this.switchDisplayContextKombi(8);
+    public synchronized void updateKombiMapReady(boolean flag) {
+        this.logChannel.log(1000000, "ClusterService#updateKombiMapReady( %1 )", flag);
+        if (flag) {
+            this.switchDisplayContextKombi(KOMBI_CTX_MAP);
             if (Util.isClusterMapAlwaysOn()) {
                 this.combiBAPListener.setMainMapVisibility(true);
             }
@@ -650,18 +687,18 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         }
 
         this.combiBAPListener.forceShowInitScreen(this.initScreenNeededOnKombi());
-        this.getClusterViewMode().setKombiMapReady(bl);
+        this.getClusterViewMode().setKombiMapReady(flag);
     }
 
-    public void showKombiMap(boolean bl) {
-        this.logChannel.log(1000000, "ClusterService#showKombiMap( %1 )", bl);
-        this.mapInterface.showKombiMap(bl);
+    public void showKombiMap(boolean flag) {
+        this.logChannel.log(1000000, "ClusterService#showKombiMap( %1 )", flag);
+        this.mapInterface.showKombiMap(flag);
     }
 
-    public void setSupplementaryMap(int i, boolean bl) {
+    public void setSupplementaryMap(int i, boolean flag) {
         this.logChannel
-            .log(10000000, "ClusterService#setSupplementaryMap() - supplementaryMapView: %2, visible: %1", bl, i);
-        if (i != 1 && bl) {
+            .log(10000000, "ClusterService#setSupplementaryMap() - supplementaryMapView: %2, visible: %1", flag, i);
+        if (i != 1 && flag) {
             this.logChannel
                 .log(
                     100000,
@@ -669,29 +706,28 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
                 );
         }
 
-        this.setKDKVisibility(bl);
+        this.setKDKVisibility(flag);
     }
 
     public void switchDisplayContextKombi(int i) {
-        this.logChannel.log(1000000, "ClusterService#switchDisplayContextKombi( %1 )", (long)i);
+        this.logChannel.log(1000000, "ClusterService#switchDisplayContextKombi( %1 )", i);
         this.mapInterface.switchDisplayContextKombi(i);
     }
 
     public void setKOMODataRate(int i) {
-        if (Util.isClusterMapMOST(this.env.getFramework())
-                || Util.isClusterMapFPK(this.env.getFramework())) {
+        if (Util.isClusterMapMOST(this.env.getFramework())) {
             this.setKOMODataRate(i, true);
         }
     }
 
     public int getKOMODataRate() {
         this.logChannel.log(100000000, "ClusterService#getKOMODataRate()");
-        ChoiceModelApp choiceModelApp = this.env.getChoiceModel(1, 168);
-        int i = choiceModelApp.getHints();
-        boolean bl = (i & 2) == 2;
-        boolean bl1 = (i & 1) == 1;
-        if (bl) {
-            if (bl1) {
+        ChoiceModelApp choicemodelapp = this.env.getChoiceModel(1, 168);
+        int i = choicemodelapp.getHints();
+        boolean flag = (i & 2) == 2;
+        boolean flag1 = (i & 1) == 1;
+        if (flag) {
+            if (flag1) {
                 this.logChannel
                     .log(
                         100000,
@@ -701,7 +737,7 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
 
             return 2;
         } else {
-            return bl1 ? 1 : 0;
+            return flag1 ? 1 : 0;
         }
     }
 
@@ -715,34 +751,34 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         }
     }
 
-    private void setKOMODataRate(int i, boolean bl) {
-        this.logChannel.log(1000000, "ClusterService#setKOMODataRate( %1 )", (long)i);
+    private void setKOMODataRate(int i, boolean flag) {
+        this.logChannel.log(1000000, "ClusterService#setKOMODataRate( %1 )", i);
         synchronized (this.komoDataRateMutex) {
-            ChoiceModelApp choiceModelApp = this.env.getChoiceModel(1, 168);
+            ChoiceModelApp choicemodelapp = this.env.getChoiceModel(1, 168);
             if (i == 2) {
-                choiceModelApp.removeHint(1);
-                choiceModelApp.addHint(2);
+                choicemodelapp.removeHint(1);
+                choicemodelapp.addHint(2);
             } else if (i == 1) {
-                choiceModelApp.removeHint(2);
-                choiceModelApp.addHint(1);
+                choicemodelapp.removeHint(2);
+                choicemodelapp.addHint(1);
             } else {
-                choiceModelApp.removeHint(2);
-                choiceModelApp.removeHint(1);
+                choicemodelapp.removeHint(2);
+                choicemodelapp.removeHint(1);
             }
 
-            if (bl) {
-                choiceModelApp.publishHints();
+            if (flag) {
+                choicemodelapp.publishHints();
             }
         }
     }
 
-    public void onAutoZoomStateChanged(boolean bl) {
-        this.combiBAPListener.setAutoZoomActive(bl);
+    public void onAutoZoomStateChanged(boolean flag) {
+        this.combiBAPListener.setAutoZoomActive(flag);
     }
 
     public void updateKOMOFollowInfo() {
         this.logChannel.log(100000000, "ClusterService#updateKOMOFollowInfo())");
-        if (this.komoService != null) {
+        if (this.komoService != null && Util.isKOMOFollowMode(this.env.getFramework())) {
             try {
                 this.logChannel
                     .log(
@@ -751,7 +787,11 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
                         this.followInfoRIE,
                         this.nextManeuverElement
                     );
-                this.komoService.setRouteInfo(new RouteInfoElement[]{this.followInfoRIE, this.nextManeuverElement});
+                if (Util.isSetRouteInfoDSIAvailable(this.env.getFramework())) {
+                    this.komoService.setRouteInfo(new RouteInfoElement[]{this.followInfoRIE, this.nextManeuverElement});
+                } else {
+                    this.komoService.setRouteInfoElement(this.followInfoRIE);
+                }
             } catch (Exception exception) {
                 this.logChannel.log(10000, "ClusterService#updateFollowInfo() - ERROR=%1", exception);
             }
@@ -759,25 +799,25 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
     }
 
     public void updateAltitude(int i) {
-        this.logChannel.log(100000000, "ClusterService#updateAltitude( %1 )", (long)i);
+        this.logChannel.log(100000000, "ClusterService#updateAltitude( %1 )", i);
         this.combiBAPListener.setAltitude(i);
     }
 
-    private String getDestinationDescription4BAP(NavLocation navLocation) {
-        if (navLocation != null && navLocation.isPositionValid()) {
+    private String getDestinationDescription4BAP(NavLocation navlocation) {
+        if (navlocation != null && navlocation.isPositionValid()) {
             try {
-                LocationFormattingResponse locationFormattingResponse = AddressFormatter.formatTwoLines(
-                    navLocation, this.env
+                LocationFormattingResponse locationformattingresponse = AddressFormatter.formatTwoLines(
+                    navlocation, this.env
                 );
-                String string = locationFormattingResponse.getFirstLineAsText();
-                return string != null ? string : "";
+                String s = locationformattingresponse.getFirstLineAsText();
+                return s != null ? s : "";
             } catch (Exception exception) {
                 this.env
                     .getLogChannel()
                     .log(
                         100000,
                         "Util#getString4BAPFromNavLocation - got an exception from AddressFormatter#formatTwoLines: %1",
-                        (Throwable)exception
+                        exception
                     );
                 return "";
             }
@@ -786,116 +826,118 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         }
     }
 
-    private CombiBAPNaviDestination getBAPNaviDestFromLocation(NavLocation navLocation) {
-        if (navLocation == null) {
+    private CombiBAPNaviDestination getBAPNaviDestFromLocation(NavLocation navlocation) {
+        if (navlocation == null) {
             return new CombiBAPNaviDestination();
-        } else {
-            IMyLocationAccessor iMyLocationAccessor = Util.getLocationAccessor(navLocation);
-            String string = this.getDestinationDescription4BAP(navLocation);
-            if (Util.isEmpty(string)) {
-                string = Util.isEmpty(iMyLocationAccessor.getPoiName()) ? null : iMyLocationAccessor.getPoiName();
-            }
-
-            return new CombiBAPNaviDestination(
-                null,
-                null,
-                Util.isEmpty(navLocation.getStreet()) ? null : navLocation.getStreet(),
-                Util.isEmpty(navLocation.getHousenumber()) ? null : navLocation.getHousenumber(),
-                Util.isEmpty(navLocation.getTown()) ? null : navLocation.getTown(),
-                Util.isEmpty(navLocation.getTownRefinement()) ? null : navLocation.getTownRefinement(),
-                Util.isEmpty(iMyLocationAccessor.getState()) ? null : iMyLocationAccessor.getState(),
-                Util.isEmpty(navLocation.getZipCode()) ? null : navLocation.getZipCode(),
-                Util.isEmpty(navLocation.getCountry()) ? null : navLocation.getCountry(),
-                wgs84ToDeg(navLocation.getLatitude()),
-                wgs84ToDeg(navLocation.getLongitude()),
-                iMyLocationAccessor.getType() == 1 ? 255 : 0,
-                string,
-                Util.isEmpty(iMyLocationAccessor.getPoiCategory()) ? null : iMyLocationAccessor.getPoiCategory(),
-                255
-            );
         }
+
+        IMyLocationAccessor imylocationaccessor = Util.getLocationAccessor(navlocation);
+        String s = this.getDestinationDescription4BAP(navlocation);
+        if (Util.isEmpty(s)) {
+            s = Util.isEmpty(imylocationaccessor.getPoiName()) ? null : imylocationaccessor.getPoiName();
+        }
+
+        return new CombiBAPNaviDestination(
+            null,
+            null,
+            Util.isEmpty(navlocation.getStreet()) ? null : navlocation.getStreet(),
+            Util.isEmpty(navlocation.getHousenumber()) ? null : navlocation.getHousenumber(),
+            Util.isEmpty(navlocation.getTown()) ? null : navlocation.getTown(),
+            Util.isEmpty(navlocation.getTownRefinement()) ? null : navlocation.getTownRefinement(),
+            Util.isEmpty(imylocationaccessor.getState()) ? null : imylocationaccessor.getState(),
+            Util.isEmpty(navlocation.getZipCode()) ? null : navlocation.getZipCode(),
+            Util.isEmpty(navlocation.getCountry()) ? null : navlocation.getCountry(),
+            wgs84ToDeg(navlocation.getLatitude()),
+            wgs84ToDeg(navlocation.getLongitude()),
+            imylocationaccessor.getType() == 1 ? 255 : 0,
+            s,
+            Util.isEmpty(imylocationaccessor.getPoiCategory()) ? null : imylocationaccessor.getPoiCategory(),
+            255
+        );
     }
 
-    public void updateDestinationInfo(NavLocation navLocation, int i, int j) {
+    public void updateDestinationInfo(NavLocation navlocation, int i, int j) {
         if (this.logChannel.isDebug2()) {
             this.logChannel
                 .log(
                     100000000,
                     "ClusterService#updateDestinationInfo() - noOfStopovers: %2, noOfNextStopover: %3, nextDestination: %1",
-                    LocationFormatter.formatLocationShort(navLocation),
+                    LocationFormatter.formatLocationShort(navlocation),
                     i,
                     j
                 );
         }
 
-        CombiBAPNaviDestination combiBAPNaviDestination = this.getBAPNaviDestFromLocation(navLocation);
-        CombiBAPDestinationInfo combiBAPDestinationInfo;
-        if (navLocation != null) {
-            combiBAPDestinationInfo = new CombiBAPDestinationInfo(combiBAPNaviDestination);
-            combiBAPDestinationInfo.setStopoverInformation(i, j);
+        CombiBAPNaviDestination combibapnavidestination = this.getBAPNaviDestFromLocation(navlocation);
+        CombiBAPDestinationInfo combibapdestinationinfo;
+        if (navlocation != null) {
+            combibapdestinationinfo = new CombiBAPDestinationInfo(combibapnavidestination);
+            combibapdestinationinfo.setStopoverInformation(i, j);
         } else {
-            combiBAPDestinationInfo = new CombiBAPDestinationInfo(combiBAPNaviDestination);
-            combiBAPDestinationInfo.setStopoverInformation(0, 0);
+            combibapdestinationinfo = new CombiBAPDestinationInfo(combibapnavidestination);
+            combibapdestinationinfo.setStopoverInformation(0, 0);
         }
 
-        this.combiBAPListener.setDestinationInfo(combiBAPDestinationInfo);
+        this.combiBAPListener.setDestinationInfo(combibapdestinationinfo);
     }
 
-    public void updateSemidynamicRouteGuidance(RcciEvent rcciEvent) {
+    public void updateSemidynamicRouteGuidance(RcciEvent rccievent) {
         this.logChannel
             .log(
                 10000000,
                 "ClusterService#updateSemidynamicRouteGuidance() - TrafficImpactOnCurrentRoute: %1, delay: %2",
-                rcciEvent.hasTrafficImpactOnCurrentRoute(),
-                rcciEvent.delay
+                rccievent.hasTrafficImpactOnCurrentRoute(),
+                rccievent.delay
             );
-        KOMOTime kOMOTime = KOMOService.convertDurationToKOMO(rcciEvent.delay);
-        short s = kOMOTime.min;
-        short t = kOMOTime.hour;
-        short u = kOMOTime.day;
-        byte b = 0;
+        KOMOTime komotime = KOMOService.convertDurationToKOMO(rccievent.delay);
+        short short1 = komotime.min;
+        short short2 = komotime.hour;
+        short short3 = komotime.day;
+        byte b0 = 0;
         if (this.rgInfoForNextDestination != null) {
-            b = 0;
+            b0 = 0;
         }
 
-        CombiBAPSemiDynamicRouteInfo combiBAPSemiDynamicRouteInfo;
-        if (rcciEvent.hasBetterRoute && rcciEvent.origin != null) {
-            Util.formatDistance((int)rcciEvent.origin.newRoute.distance, 1);
-            long l = (long)Util.getFormattedDistance();
-            int i = Util.getFormattedUnit();
-            KOMOTime kOMOTime1 = KOMOService.convertTimeToKOMO(
-                this.env.getFramework().getKombiTime() + rcciEvent.origin.newRoute.getEtaWithSpeedAndFlow() + b
+        CombiBAPSemiDynamicRouteInfo combibapsemidynamicrouteinfo;
+        if (rccievent.hasBetterRoute && rccievent.origin != null) {
+            Util.formatDistance((int)rccievent.origin.newRoute.distance, 1);
+            long i = (long)Util.getFormattedDistance();
+            int j = Util.getFormattedUnit();
+            KOMOTime komotime1 = KOMOService.convertTimeToKOMO(
+                this.env.getFramework().getKombiTime() + rccievent.origin.newRoute.getEtaWithSpeedAndFlow() + b0
             );
-            combiBAPSemiDynamicRouteInfo = new CombiBAPSemiDynamicRouteInfo(
-                rcciEvent.hasTrafficImpactOnCurrentRoute(),
-                rcciEvent.hasBetterRoute,
-                t + u * 24,
-                s,
-                l,
+            combibapsemidynamicrouteinfo = new CombiBAPSemiDynamicRouteInfo(
+                rccievent.hasTrafficImpactOnCurrentRoute(),
+                rccievent.hasBetterRoute,
+                short2 + short3 * 24,
+                short1,
                 i,
+                j,
                 0,
                 1,
                 DateMetric.timeFormat == 10 ? 0 : 1,
-                kOMOTime1.min,
-                kOMOTime1.hour,
-                kOMOTime1.day,
-                kOMOTime1.month,
-                kOMOTime1.year
+                komotime1.min,
+                komotime1.hour,
+                komotime1.day,
+                komotime1.month,
+                komotime1.year
             );
         } else {
-            combiBAPSemiDynamicRouteInfo = new CombiBAPSemiDynamicRouteInfo(
-                rcciEvent.hasTrafficImpactOnCurrentRoute(), rcciEvent.hasBetterRoute, t + u * 24, s
+            combibapsemidynamicrouteinfo = new CombiBAPSemiDynamicRouteInfo(
+                rccievent.hasTrafficImpactOnCurrentRoute(), rccievent.hasBetterRoute, short2 + short3 * 24, short1
             );
         }
 
-        this.combiBAPListener.setSemidynamicRouteGuidance(combiBAPSemiDynamicRouteInfo);
-        this.komoService.setSemiDynRoute(rcciEvent.hasBetterRoute);
-        if (rcciEvent.hasTrafficImpactOnCurrentRoute()) {
+        this.combiBAPListener.setSemidynamicRouteGuidance(combibapsemidynamicrouteinfo);
+        this.komoService.setSemiDynRoute(rccievent.hasBetterRoute);
+        if (rccievent.hasTrafficImpactOnCurrentRoute()) {
             this.komoService
-                .setTrafficOffset(KOMOService.convertTimeFormatToKOMO(DateMetric.timeFormat), u, t, s, true);
-            if (rcciEvent.reliable) {
+                .setTrafficOffset(
+                    KOMOService.convertTimeFormatToKOMO(DateMetric.timeFormat), short3, short2, short1, true
+                );
+            if (rccievent.reliable) {
                 this.followInfoRIE.trafficInfo.trafficOffset = Util.formatTrafficOffsetDuration(
-                    rcciEvent.delay, 2, this.env
+                    rccievent.delay, 2, this.env
                 );
             } else {
                 this.followInfoRIE.trafficInfo.trafficOffset = "";
@@ -905,7 +947,9 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
             this.followInfoRIE.trafficInfo.trafficOffsetAffix = this.env.getTranslatedText(49, "incl.");
         } else {
             this.komoService
-                .setTrafficOffset(KOMOService.convertTimeFormatToKOMO(DateMetric.timeFormat), u, t, s, false);
+                .setTrafficOffset(
+                    KOMOService.convertTimeFormatToKOMO(DateMetric.timeFormat), short3, short2, short1, false
+                );
             this.followInfoRIE.trafficInfo.trafficOffset = "";
             this.followInfoRIE.trafficInfo.trafficOffsetAffix = "";
         }
@@ -914,32 +958,28 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
     }
 
     public void updateExitView(int i) {
-        this.logChannel.log(100000000, "ClusterService#updateExitView( %1 )", (long)i);
+        this.logChannel.log(100000000, "ClusterService#updateExitView( %1 )", i);
         this.combiBAPListener.setExitView(i);
     }
-
 
     public void notifyPowerListenerOnEnterState(int i, int j) {
         this.clusterKDKHandler.notifyPowerListenerOnEnterState(i, j);
     }
 
-
     public void notifyPowerListenerOnExitState(int i, int j) {
         this.clusterKDKHandler.notifyPowerListenerOnExitState(i, j);
     }
-
 
     public void notifyPowerTriggerAction(int i, int j) {
         this.clusterKDKHandler.notifyPowerTriggerAction(i, j);
     }
 
-
-    public void updateClampState(boolean bl, boolean bl1, boolean bl2, boolean bl3) {
-        this.clusterKDKHandler.updateClampState(bl, bl1, bl2, bl3);
+    public void updateClampState(boolean flag, boolean flag1, boolean flag2, boolean flag3) {
+        this.clusterKDKHandler.updateClampState(flag, flag1, flag2, flag3);
     }
 
-    public void showKombiSplashScreen(boolean bl) {
-        this.combiBAPListener.showSplashScreen(bl);
+    public void showKombiSplashScreen(boolean flag) {
+        this.combiBAPListener.showSplashScreen(flag);
     }
 
     public void updateBapManeuverState(int i) {
@@ -951,8 +991,8 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         this.combiBAPListener.initFromSetup();
     }
 
-    public void setKDKVisibility(boolean bl) {
-        this.clusterKDKHandler.setKDKVisibility(bl);
+    public void setKDKVisibility(boolean flag) {
+        this.clusterKDKHandler.setKDKVisibility(flag);
     }
 
     public void updateManoeuvreViewActive(int i) {
@@ -960,18 +1000,18 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
 
     public void onMagnificationChanged(int i) {
         this.combiBAPListener.onMapScaleChanged(i);
-        AbstractMap abstractMap = this.mapInterface.getKombiMap();
-        if (abstractMap != null) {
-            float[] f = abstractMap.getZoomHandler().getZoomList();
-            MapScaleInfo mapScaleInfo = this.mapScaleHandler.createMapScaleInfo(i, f);
-            if (!mapScaleInfo.equals(this.mapScaleTimer.mapScaleInfo)) {
-                this.mapScaleTimer.restart(mapScaleInfo);
+        AbstractMap abstractmap = this.mapInterface.getKombiMap();
+        if (abstractmap != null) {
+            float[] afloat = abstractmap.getZoomHandler().getZoomList();
+            MapScaleInfo mapscaleinfo = this.mapScaleHandler.createMapScaleInfo(i, afloat);
+            if (!mapscaleinfo.equals(this.mapScaleTimer.mapScaleInfo)) {
+                this.mapScaleTimer.restart(mapscaleinfo);
             }
         }
     }
 
-    public void updateNextManeuver(RouteInfoElement routeInfoElement) {
-        this.nextManeuverElement = routeInfoElement;
+    public void updateNextManeuver(RouteInfoElement routeinfoelement) {
+        this.nextManeuverElement = routeinfoelement;
         this.updateKOMOFollowInfo();
     }
 
@@ -1014,45 +1054,49 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         this.mapScaleTimer.cancel();
     }
 
-    public void updateGALState(boolean bl) {
-        this.combiBAPListener.setGALState(bl);
+    public void updateGALState(boolean flag) {
+        this.combiBAPListener.setGALState(flag);
     }
 
-    public void updateOnlineConnectionState(boolean bl) {
-        this.dataConnectivityAvailable = bl;
+    public void updateOnlineConnectionState(boolean flag) {
+        this.dataConnectivityAvailable = flag;
         this.updateOnlineNavigationState();
     }
 
-    public void updateMapScale(int i, int j, boolean bl) {
-        this.logChannel.log(100000000, "ClusterService#updateMapScale( %1, %2, %3 )", i, j, bl);
-        boolean[] bl1 = new boolean[]{false};
-        boolean[] bl2 = new boolean[]{false};
-        this.komoService.setMapScale(0, 0, bl1, i, j, bl2, bl);
+    public void updateMapScale(int i, int j, boolean flag) {
+        this.logChannel.log(100000000, "ClusterService#updateMapScale( %1, %2, %3 )", i, j, flag);
+        boolean[] aboolean = new boolean[]{false};
+        boolean[] aboolean1 = new boolean[]{false};
+        this.komoService.setMapScale(0, 0, aboolean, i, j, aboolean1, flag);
     }
 
-    public void setHomeAddress(NavLocation navLocation) {
+    public void setHomeAddress(NavLocation navlocation) {
         this.logChannel
             .log(
                 10000000,
                 "ClusterService#updateHomeAddress() - homeAddress: %1",
-                LocationFormatter.formatLocationShort(navLocation)
+                LocationFormatter.formatLocationShort(navlocation)
             );
-        if (navLocation == null) {
+        if (navlocation == null) {
             this.combiBAPListener.setHomeAddress(null);
         } else {
-            this.combiBAPListener.setHomeAddress(this.getBAPNaviDestFromLocation(navLocation));
+            this.combiBAPListener.setHomeAddress(this.getBAPNaviDestFromLocation(navlocation));
         }
     }
 
-    public void setProviderChangeFlag(boolean bl) {
-        this.satMapProviderChanged = bl;
+    public void setProviderChangeFlag(boolean flag) {
+        this.satMapProviderChanged = flag;
     }
 
     private boolean hasSatMapProviderChanged() {
         return this.satMapProviderChanged;
     }
 
-    /* === CarPlay hook accessors (avoid reflection in BAPBridge) === */
+    /* ============================================================
+     * CarPlay hook accessors (patched-in; avoid reflection in BAPBridge).
+     * Graft onto combined-final stock — env/combiBAPListener/refreshRGIValid
+     * are the same members the stock already exposes.
+     * ============================================================ */
 
     public DSIResponseContainer getDSIResponseContainer() {
         return this.env.getContainer();
@@ -1066,365 +1110,12 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         return this.combiBAPListener.combiservice;
     }
 
+    /** NavigationJobs-only recovery seam used by ScreenNavStatusGate. */
     public void setCombiBAPListenerCombiService(CombiBAPServiceNavi svc) {
         this.combiBAPListener.combiservice = svc;
     }
 
-    public String getCombiBAPListenerDiagnostics() {
-        try {
-            Field fStatus = CombiBAPListener.class.getDeclaredField("rgStatus");
-            fStatus.setAccessible(true);
-            Field fType = CombiBAPListener.class.getDeclaredField("rgType");
-            fType.setAccessible(true);
-            Field fPhone = CombiBAPListener.class.getDeclaredField("naviIsRunningOnSmartphone");
-            fPhone.setAccessible(true);
-            return "rgStatus=" + fStatus.getInt(this.combiBAPListener)
-                + " rgType=" + fType.getInt(this.combiBAPListener)
-                + " naviOnPhone=" + fPhone.getBoolean(this.combiBAPListener);
-        } catch (Exception e) {
-            return "diagnostics unavailable";
-        }
-    }
-
-    public void updateKDKRgActive(boolean active) {
-        this.clusterKDKHandler.updateRgActive(active);
-    }
-
-    public void setValidRGTypeReceived(boolean valid) {
-        this.combiBAPListener.validRGTypeReceived(valid);
-    }
-
-    public int getKOMOHintsRaw() {
-        return this.env.getChoiceModel(1, 168).getHints();
-    }
-
-    /** Compact diagnostic string for ClusterViewMode state (video pipeline debugging). */
-    public String getClusterViewModeDiag() {
-        try {
-            java.lang.reflect.Field fGfx = ClusterViewMode.class.getDeclaredField("gfxAvailable");
-            fGfx.setAccessible(true);
-            java.lang.reflect.Field fEnabled = ClusterViewMode.class.getDeclaredField("komoViewEnabled");
-            fEnabled.setAccessible(true);
-            java.lang.reflect.Field fVisible = ClusterViewMode.class.getDeclaredField("komoViewVisible");
-            fVisible.setAccessible(true);
-            java.lang.reflect.Field fRate = ClusterViewMode.class.getDeclaredField("dataRate");
-            fRate.setAccessible(true);
-            java.lang.reflect.Field fMapReady = ClusterViewMode.class.getDeclaredField("mapReady");
-            fMapReady.setAccessible(true);
-            return "gfx=" + fGfx.getBoolean(this.clusterViewMode)
-                + " en=" + fEnabled.getBoolean(this.clusterViewMode)
-                + " vis=" + fVisible.getBoolean(this.clusterViewMode)
-                + " rate=" + fRate.getInt(this.clusterViewMode)
-                + " mapRdy=" + fMapReady.getBoolean(this.clusterViewMode);
-        } catch (Exception e) {
-            return "diag-err";
-        }
-    }
-
-    private Field findFieldInHierarchy(Class clazz, String name) {
-        Class c = clazz;
-        while (c != null) {
-            try {
-                Field f = c.getDeclaredField(name);
-                f.setAccessible(true);
-                return f;
-            } catch (NoSuchFieldException e) {
-                c = c.getSuperclass();
-            } catch (Throwable t) {
-                return null;
-            }
-        }
-        return null;
-    }
-
-    private String getDisplayManagerInitState(Object dm) {
-        if (dm == null) return "init=n/a dsi=n/a";
-        try {
-            Field fInit = this.findFieldInHierarchy(dm.getClass(), "initialized");
-            Field fDsi = this.findFieldInHierarchy(dm.getClass(), "dsiDispMgmt");
-            String init = "n/a";
-            String dsi = "n/a";
-            if (fInit != null) {
-                init = String.valueOf(fInit.get(dm));
-            }
-            if (fDsi != null) {
-                dsi = String.valueOf(fDsi.get(dm) != null);
-            }
-            return "init=" + init + " dsi=" + dsi;
-        } catch (Throwable t) {
-            return "init-diag-err:" + t.getClass().getName();
-        }
-    }
-
-    public String getDisplayManagerDiag() {
-        try {
-            de.audi.atip.hmi.view.IDisplayManager dm =
-                ((de.audi.atip.hmi.HMIService) this.env.getHMIService()).getDisplayManager();
-            int ctx = -1;
-            try {
-                ctx = dm.getCurrentContextID(1);
-            } catch (Throwable t) {
-                /* ignore */
-            }
-            return "dmType=" + dm.getClass().getName()
-                + " ctx1=" + ctx
-                + " " + this.getDisplayManagerInitState(dm);
-        } catch (Throwable t) {
-            return "dmDiagFailed:" + t.getClass().getName() + ": " + t.getMessage();
-        }
-    }
-
-    public String getFrameworkDiag() {
-        try {
-            IFrameworkAccess fw = this.env.getFramework();
-            return "kombiType=" + fw.getKombiType()
-                + " sys541=" + fw.getSysConst(541)
-                + " sys4383=" + fw.getSysConst(4383)
-                + " sys4388=" + fw.getSysConst(4388)
-                + " mapFPK=" + Util.isClusterMapFPK(fw)
-                + " mapMOST=" + Util.isClusterMapMOST(fw)
-                + " setRouteInfoDSI=" + Util.isSetRouteInfoDSIAvailable(fw);
-        } catch (Throwable t) {
-            return "fwDiagFailed:" + t.getClass().getName() + ": " + t.getMessage();
-        }
-    }
-
-    public String setClusterUpdateRateDiag(int rate) {
-        try {
-            de.audi.atip.hmi.view.IDisplayManager dm =
-                ((de.audi.atip.hmi.HMIService) this.env.getHMIService()).getDisplayManager();
-            int ctx = -1;
-            try {
-                ctx = dm.getCurrentContextID(1);
-            } catch (Throwable t) {
-                /* ignore */
-            }
-            String base = "rate=" + rate
-                + " ctx1=" + ctx
-                + " dmType=" + dm.getClass().getName()
-                + " " + this.getDisplayManagerInitState(dm);
-            dm.setUpdateRate(1, rate);
-            return "OK " + base;
-        } catch (Throwable t) {
-            return "FAILED: " + t.getClass().getName() + ": " + t.getMessage();
-        }
-    }
-
-    public void setClusterUpdateRate(int rate) {
-        this.setClusterUpdateRateDiag(rate);
-    }
-
-    private String trySetVisibleKDKReflective(de.audi.atip.hmi.view.IDisplayManager dm, int displayable, int terminal) {
-        try {
-            java.lang.reflect.Method setMethod = dm.getClass()
-                .getMethod("setKDKVisible", new Class[]{Integer.TYPE, Integer.TYPE});
-            setMethod.invoke(dm, new Object[]{new Integer(displayable), new Integer(terminal)});
-            try {
-                java.lang.reflect.Method getMethod = dm.getClass().getMethod("getVisibleKDK", new Class[]{Integer.TYPE});
-                Object result = getMethod.invoke(dm, new Object[]{new Integer(terminal)});
-                if (result instanceof Integer) {
-                    return String.valueOf(((Integer) result).intValue());
-                }
-            } catch (Throwable t) {
-                return "set-only";
-            }
-            return String.valueOf(displayable);
-        } catch (NoSuchMethodException e) {
-            return "no-kdk-api";
-        } catch (Throwable t) {
-            return "kdk-err:" + t.getClass().getName();
-        }
-    }
-
-    /**
-     * Activate the cluster video pipeline directly on the DisplayManager.
-     *
-     * Native display manager calls setActiveDisplayable on videoencoderservice
-     * ONLY from CContextManager::preContextSwitchHook during a REAL context
-     * switch. Java DisplayManager.switchContext() skips the DSI call when the
-     * requested context equals confirmedActiveContext -- so if context 72 is
-     * already active, setActiveDisplayable never fires and videoencoderservice
-     * captures displayable 0 (nothing).
-     *
-     * Context 72: displayables {33} -- base map only.
-     * Context 74: displayables {20, 102, 101, 33} -- map + KDK widget.
-     *   First displayable = 20 (KDK composited view with map underneath).
-     *
-     * The KOMO GuidanceView renders into displayable 20 (KDK area).
-     * With PresentationController patches keeping the rendering pipeline alive
-     * (NOP StopDSIs + force StartDrawing + hardcode 10fps), displayable 20
-     * has content. We use context 74 so the encoder captures the composited
-     * map+widget output.
-     *
-     * Steps:
-     * 1. Ensure KDK mapping is set (context 72 -> 74).
-     * 2. Force context switch: 0 -> 72 (triggers preContextSwitchHook).
-     *    With KDK mapping active, context 72 becomes 74 internally ->
-     *    setActiveDisplayable(4, 20) -> encoder captures composited view.
-     * 3. Start video encoding at 10fps.
-     */
-    public String activateClusterVideoPipeline() {
-        try {
-            de.audi.atip.hmi.view.IDisplayManager dm =
-                ((de.audi.atip.hmi.HMIService) this.env.getHMIService()).getDisplayManager();
-            int ctxBefore = dm.getCurrentContextID(1);
-
-            /* 1. Set KDK mapping: context 72 -> 74 (includes displayable 20).
-             *    setKDKVisible(20, terminal) adds KDK displayable overlay. */
-            String kdkSet = this.trySetVisibleKDKReflective(dm, 20, 1);
-            try { Thread.sleep(200); } catch (InterruptedException ie) { /* ignore */ }
-
-            /* 2. Force context away so next switchContext is a real change. */
-            dm.switchContext(0, 1, null);
-            int ctxAfterReset = dm.getCurrentContextID(1);
-
-            /* 3. Wait for native DM to confirm the context switch via DSI. */
-            try { Thread.sleep(300); } catch (InterruptedException ie) { /* ignore */ }
-
-            /* 4. Switch to FPK context 72. With KDK mapping active, this
-             *    becomes context 74 internally -> preContextSwitchHook ->
-             *    setActiveDisplayable(4, 20) -> encoder captures KDK composite
-             *    (map + widget). */
-            dm.switchContext(72, 1, null);
-            int ctxAfterMap = dm.getCurrentContextID(1);
-
-            try { Thread.sleep(300); } catch (InterruptedException ie) { /* ignore */ }
-
-            /* 5. Start video encoding at 10fps. */
-            dm.setUpdateRate(1, 10);
-
-            return "ctx=" + ctxBefore + "->" + ctxAfterReset + "->" + ctxAfterMap
-                + " kdk=" + kdkSet
-                + " dmType=" + dm.getClass().getName()
-                + " " + this.getDisplayManagerInitState(dm);
-        } catch (Throwable t) {
-            return "FAILED: " + t.getClass().getName() + ": " + t.getMessage();
-        }
-    }
-
-    public void deactivateClusterVideoPipeline() {
-        try {
-            de.audi.atip.hmi.view.IDisplayManager dm =
-                ((de.audi.atip.hmi.HMIService) this.env.getHMIService()).getDisplayManager();
-            dm.setUpdateRate(1, 0);
-        } catch (Throwable t) {
-            /* non-fatal */
-        }
-    }
-
-    /**
-     * Update followInfoRIE trip data fields so PresentationController sees
-     * changed data on each setRouteInfo() call and re-renders the arrow.
-     * Also clears empty-string defaults from the widget.
-     */
-    public void updateFollowInfoData(String distance, String eta, String turnTo) {
-        if (this.followInfoRIE != null) {
-            this.followInfoRIE.distanceToElement = (distance != null) ? distance : "";
-            this.followInfoRIE.estimatedTimeToElement = (eta != null) ? eta : "";
-            this.followInfoRIE.turnToStreet = turnTo;
-            if (this.followInfoRIE.trafficInfo != null) {
-                this.followInfoRIE.trafficInfo.trafficOffset = "";
-                this.followInfoRIE.trafficInfo.trafficOffsetAffix = "";
-            }
-        }
-        this.env.getLabelModel(71).setText((turnTo != null) ? turnTo : "");
-    }
-
-    /**
-     * Activate custom renderer video pipeline.
-     * Ensures the cluster is on context 74.  The renderer process has already
-     * taken over native displayable 20 (DISPLAYABLE_MAP_ROUTE_GUIDANCE) by
-     * registering its own screen window with ID="20" in displaymanager's
-     * m_surfaceSources; we just need the cluster on context 74 so the MOST
-     * encoder's setActiveDisplayable(4, 20) hook reads from our window.
-     */
-    public String activateCustomRendererPipeline() {
-        /*
-         * Renderer takes over native displayable 20 (KOMO RG widget slot).
-         *
-         * IMPORTANT: ALWAYS force a real context-switch transition here,
-         * even when the cluster is already on 74.  Captured from a real
-         * engine-start with native nav already active:
-         *
-         *   1. Native nav had a route → cluster on context 74.
-         *   2. Our pre-gate cancels native route via
-         *      RouteManager.stopRouteGuidance() → native's KOMO window
-         *      for displayable 20 is destroyed.
-         *   3. We create our own window with ID="20".
-         *   4. We call switchContext(74, 1) — but cluster IS already on 74.
-         *   5. DSI short-circuits: confirmedActiveContext[term] == 74
-         *      → no DSI call → preContextSwitchHook never fires
-         *      → CASIMostEncoder::setActiveDisplayable(4, 20) never called
-         *      → encoder is still bound to native's destroyed displayable
-         *      → MOST stream is BLACK on the VC.
-         *
-         * Fix: explicitly bounce AWAY to context 72 (just KOMBI_MAP_VIEW,
-         * a benign nav-only context) with a settle delay, then switch BACK
-         * to 74.  This guarantees a real context transition runs through
-         * preContextSwitchHook → setActiveDisplayable → encoder picks up
-         * our fresh ID="20" window.
-         *
-         * See memory/lvds_video_pipeline.md "ROOT CAUSE: setActiveDisplayable
-         * Never Called" for the underlying VC pipeline analysis.
-         */
-        try {
-            de.audi.atip.hmi.view.IDisplayManager dm =
-                ((de.audi.atip.hmi.HMIService) this.env.getHMIService()).getDisplayManager();
-            int ctxBefore = dm.getCurrentContextID(1);
-
-            /* Step 1: bounce away to ctx 72 — forces a different context
-             * so the next switchContext(74) is treated as a real transition. */
-            if (ctxBefore == 74) {
-                dm.switchContext(72, 1, null);
-                try { Thread.sleep(180); } catch (InterruptedException ie) { /* ignore */ }
-            }
-
-            /* Step 2: switch INTO 74 — this is the transition we want
-             * preContextSwitchHook to see so it pushes setActiveDisplayable
-             * (4, 20) into the encoder. */
-            dm.switchContext(74, 1, null);
-            try { Thread.sleep(180); } catch (InterruptedException ie) { /* ignore */ }
-
-            int ctxAfter = dm.getCurrentContextID(1);
-
-            /* Defensive retry in case something else stole focus mid-bounce. */
-            if (ctxAfter != 74) {
-                dm.switchContext(74, 1, null);
-                try { Thread.sleep(150); } catch (InterruptedException ie) { /* ignore */ }
-                ctxAfter = dm.getCurrentContextID(1);
-            }
-            if (ctxAfter != 74) {
-                return "FAILED: cluster ctx=" + ctxBefore + "->" + ctxAfter + " not 74";
-            }
-            return "cluster ctx=" + ctxBefore + "->72->" + ctxAfter;
-        } catch (Throwable t) {
-            return "FAILED: " + t.getClass().getName() + ": " + t.getMessage();
-        }
-    }
-
-    /**
-     * Deactivate custom renderer pipeline. Stop encoding and restore context.
-     */
-    public void deactivateCustomRendererPipeline() {
-        /* Backstop for renderer teardown: the renderer normally restores
-         * context 74 from its own atexit handler, but Java may have to slay
-         * the process if TCP teardown races.  Re-declare the native context
-         * here so the cluster compositor doesn't keep our (now destroyed)
-         * screen window mapped to displayable 20. */
-        try {
-            de.audi.atip.util.CommandLineExecuter.executeCommand(
-                "/bin/sh", new String[] { "-c", "/eso/bin/apps/dmdt dc 74 20 102 101 33 >/dev/null 2>&1" });
-        } catch (Throwable t) {
-            /* non-fatal */
-        }
-
-        try {
-            de.audi.atip.hmi.view.IDisplayManager dm =
-                ((de.audi.atip.hmi.HMIService) this.env.getHMIService()).getDisplayManager();
-            dm.switchContext(74, 1, null);
-        } catch (Throwable t) {
-            /* non-fatal */
-        }
-    }
-
+    /** Restore the authoritative stock INITIALIZING/NORMAL decision after CarPlay releases the
+     * cluster.  A deferred-call replay alone is insufficient when no map-ready edge occurred while
+     * the takeover was active. */
 }

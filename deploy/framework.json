@@ -1,0 +1,1072 @@
+{
+	"nodes":{
+		"mmx":{
+			"transport":{
+				"comm":{
+					"mmx":{
+						"mode":"resman",
+						"serializer":"BE",
+						"resman":{
+							"root_path":"/dev/eso"
+						}
+					},
+					"sdis":{
+						"mode":"ssl",
+						"serializer":"BE",
+						"ssl":{
+							"address":"10.173.189.1",
+							"ciphers" : "ECDHE-RSA-AES256-SHA",
+							"ec_name" : "prime256v1",
+							"server" : {
+								"ca" : "/etc/eso/certs/sdis.pem",
+								"cert" : "/etc/eso/certs/mib2-1-cert.pem"
+							}
+						}
+					},
+					"*":{
+						"mode":"tcpip",
+						"serializer":"BE",
+						"tcpip":{
+							"address":"10.0.0.15"
+						}
+					}
+				},
+				"rdi2hmi":{
+					"*":{
+							"mode":"ssl",
+							"serializer":"BE",
+							"ssl":{
+								"address":"hotspot.mibhigh",
+								"ciphers" : "ECDHE-RSA-AES256-SHA",
+								"ec_name" : "prime256v1",
+								"server" : {
+									"ca" : "/etc/eso/certs/sdis.pem",
+									"cert" : "/etc/eso/certs/mib2-1-cert.pem"
+								}
+							}
+					}
+				},
+				"tracing":{
+					"mmx":{
+						"mode":"resman",
+						"serializer":"BE",
+						"resman":{
+							"root_path":"/dev/eso"
+						}
+					},
+					"*":{
+						"mode":"tcpip",
+						"serializer":"BE",
+						"tcpip":{
+							"address":"10.0.0.15"
+						}
+					}
+				},
+				"logger":{
+					"*":{
+						"mode":"tcpip",
+						"serializer":"BE",
+						"tcpip":{
+							"address":"0.0.0.0",
+                            "no_delay":false
+						}
+					}
+				}
+			}
+		},
+		"rcc":{
+			"transport":{
+				"comm":{
+					"*":{
+						"mode":"tcpip",
+						"serializer":"BE",
+						"tcpip":{
+							"address":"10.0.0.16"
+						}
+					}
+				}
+			}
+		},
+		"pcsim":{
+			"transport":{
+				"comm":{
+					"*":{
+						"mode":"tcpip",
+						"serializer":"BE",
+						"tcpip":{
+							"address":"172.16.250.1"
+						}
+					}
+				}
+			}
+		},
+		"sdis":{
+			"transport":{
+				"comm":{
+					"*":{
+						"mode":"tcpip",
+						"serializer":"BE",
+						"tcpip":{
+							"address":"0.0.0.0"
+						}
+					}
+				}
+			}
+		}
+	},
+	"procs":[
+		{
+			"name":"traceserver","exec":null, "node":"mmx","id":1,
+			"transport":{
+				"tracing":{
+					"mmx":{	"resman":{"path":"tracing"}},
+					"*":{	"tcpip":{"port":21001}}
+				},
+				"logger":{
+					"*":{	"tcpip":{"port":21002}}
+				},
+				"comm":{
+					"mmx":{	"resman":{"path":"traceserver"}}
+				}
+			}
+		},
+		{
+			"name":"traceserverRCC","exec":null, "node":"rcc","id":2,
+			"transport":{
+				"comm":{
+					"*":{	"tcpip":{"port":21010}}
+				}
+			}
+		},
+		{
+			"name":"broker","exec":"/eso/bin/broker","node":"mmx","id":100,
+			"transport":{
+				"comm":{
+					"mmx":{	"resman":{"path":"broker"}},
+					"sdis":{ "ssl":{ "port":21600}},
+					"*":{	"tcpip":{"port":21100}}
+				}
+			},
+			"servicemgr" : { "external": true}
+		},
+		{
+			"name": "ooc","exec": null,"node": "mmx", "id" :101,
+			"transport":{
+				"comm":{
+					"mmx" : { "resman": {"path":"ooc"}},
+					"*" : {	"tcpip": {"port": 21101}}
+				}
+			}
+		},
+		{
+			"name":"servicemgr","exec":null,"node":"mmx","id":102,
+			"transport":{
+				"comm":{
+					"mmx":{	"resman":{"path":"servicemgr"}},
+					"*":{"tcpip":{"port":21102}}
+				}
+			}
+		},
+		{
+			"name":"displaymanagementProc","exec":null,"node":"mmx","id":103,
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"displaymanagement"}},
+					"*":{"tcpip":{"port":21103}}
+				}
+			}
+		},
+		{
+			"name":"persistence_mibhigh","exec":"./bin/apps/persistenceTNG_mibhigh","node":"mmx","id":104,
+			"transport":{
+				"comm":{
+					"mmx":{	"resman":{"path":"persistence"}},
+					"*":{	"tcpip":{"port":21104}}
+				}
+			},
+			"servicemgr":{"singleapp":true,"name":"persistence","wd_period" : 60000}
+		},
+		{
+			"name":"styledbservice","exec":null,"node":"mmx","id":105,
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"styledbservice"}},
+					"*":{	"tcpip":{"port":21105}}
+				}
+			}
+		},
+		{
+			"name":"coverflow","exec":"./bin/apps/coverflow","node":"mmx","id":106,
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"coverflow"}},
+					"*":{"tcpip":{"port":21106}}
+				}
+			},
+			"servicemgr":{"singleapp":true,"name":"coverflow"}
+		},
+		{
+			"name":"comm_forwarder","exec":null, "node":"mmx","id":107,
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"comm_forwarder"}},
+					"sdis":{"ssl":{"port":21605}},
+					"*":{"tcpip":{"port":21107}}
+				}
+			}
+		},
+		{
+			"name":"hmi","exec":null,"node":"mmx","id":200,
+			"transport":{
+				"comm":{
+					"mmx":{	"resman":{"path":"hmi"}},
+					"*":{"tcpip":{"port":21200}}
+				}
+			}
+		},
+		{
+			"name":"LibEAL","exec":null,"node":"mmx","id":201
+		},
+		{
+			"name":"speechProc","exec":"/speech/SpeechLauncher","node":"mmx","id":300,
+			"environment":{
+				"LD_LIBRARY_PATH":"/speech:${LD_LIBRARY_PATH}"
+			},
+			"transport":{
+				"comm":{
+					"mmx":{	"resman":{"path":"speech"}},
+					"*":{	"tcpip":{"port":21300}}
+				}
+			},
+			"servicemgr":{"singleapp":true,"name":"speech"}
+		},
+		{
+			"name":"trufflesSpeech","exec":"./bin/apps/trufflesSpeech","node":"mmx","id":455,
+			"transport":{
+				"comm":{
+					"mmx":{ "resman":{"path":"speech-eso"}},
+					"*":{ "tcpip":{"port":21455}}
+				}
+			},
+			"servicemgr":{"singleapp":true,"name":"speech-eso"}
+		},
+		{
+			"name":"browserProc","exec":"./bin/apps/browser","node":"mmx","id":301,
+			"environment":{
+				"LD_LIBRARY_PATH":"/mnt/app/armle/webkit:${LD_LIBRARY_PATH}",
+				"CUSTOMER_UPDATE_FLAG_CHECK_SWDL_STATE":"/net/rcc/mnt/efs-persist/SWDL/update.txt"
+			},
+			"transport":{
+				"comm":{
+					"mmx":{	"resman":{"path":"browser"}},
+					"*":{	"tcpip":{"port":21301}}
+				}
+			},
+			"servicemgr":{"singleapp":true,"name":"browser"}
+		},
+		{
+			"name":"browserProc0","exec":null,"node":"mmx","id":302
+		},
+		{
+			"name":"medialauncher","exec":"./bin/apps/medialauncher","node":"mmx","id":307,
+			"environment":{
+				"CUSTOMER_UPDATE_ROOT":"/eso/bin/apps/customerupdate_media",
+				"IPL_CONFIG_DIR_MEDIALAUNCHER":"/etc/eso/production",
+				"IPL_CONFIG_DIR_MEDIA-VERSIONS":"/etc/eso/production",
+				"IPL_CONFIG_DIR_GRACENOTE":"/var/app/gracenotedb/config"
+			},
+			"transport":{
+				"comm":{
+					"mmx":{	"resman":{"path":"medialauncher"}},
+					"*":{	"tcpip":{"port":21307}}
+				}
+			},
+			"servicemgr":{"singleapp":true,"name":"medialauncher","wd_period":30000}
+		},
+		{
+			"name":"media","exec":null,"node":"mmx","id":308,
+			"transport":{
+				"comm":{
+					"mmx":{	"resman":{"path":"media"}},
+					"*":{	"tcpip":{"port":21308}
+					}
+				}
+			}
+		},
+		{
+			"name":"telephoneProc","exec":null,"node":"mmx","id":309,
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"telephone"}},
+					"*":{"tcpip":{"port":21309}}
+				}
+			}
+		},
+		{
+			"name":"organizerProc","exec":"./bin/apps/organizer","node":"mmx","id":310,
+			"environment":{
+				"ORG_DB_PATH":"/var/app/organizer"
+			},
+			"transport":{
+				"comm":{
+					"mmx":{	"resman":{"path":"organizer"}},
+					"*":{	"tcpip":{"port":21310}}
+				}
+			},
+			"servicemgr":{"singleapp":true,"name":"organizer"}
+		},
+		{
+			"name":"navigationProc","exec":"/navigation/navStartup","node":"mmx","id":311,
+			"environment":{
+				"LD_LIBRARY_PATH":"/navigation:/navigation/lib:${LD_LIBRARY_PATH}",
+				"NAV_MAP_PATHS":"/fs/sda0/navDatabase:/mnt/navdb",
+				"STYLE_DB_PATHS":"/mnt/app/navigation",
+				"MAPMATCH_PRIO":"13",
+				"SI_PRIO":"13",
+				"PDP_PRIO":"13",
+				"JOBMANAGER_PRIO":"10",
+				"CARSENSORDATACONSUMER_INSTANCEID":"0",
+				"CARSENSORDATACONTROLLER_INSTANCEID":"0"
+			},
+			"transport":{
+				"comm":{
+					"mmx":{	"resman":{"path":"navigation"}},
+					"*":{	"tcpip":{"port":21311}}
+				}
+			},
+			"servicemgr":{"singleapp":true,"name":"navigation"}
+		},
+		{
+			"name":"bluetoothProc","exec":null,"node":"mmx","id":312,
+			"transport":{
+				"comm":{
+					"mmx":{	"resman":{"path":"bluetooth"}},
+					"*":{	"tcpip":{"port":21312}}
+				}
+			}
+		},
+		{
+			"name":"messagingProc","exec":null,"node":"mmx","id":313,
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"messaging"}},
+					"*":{	"tcpip":{"port":21313}}
+				}
+			}
+		},
+		{
+			"name":"connectivityProc","exec":null,"node":"mmx","id":314,
+			"transport":{
+				"comm":{
+					"mmx":{	"resman":{"path":"connectivity"}},
+					"*":{	"tcpip":{"port":21314}}
+				}
+			}
+		},
+		{
+			"name":"connectivity_launcher","exec":"./bin/apps/connectivity_launcher","node":"mmx","id":315,
+			"transport":{
+				"comm":{
+					"mmx":{	"resman":{"path":"connectivitylauncher"}},
+					"*":{	"tcpip":{"port":21315}}
+				}
+			},
+			"servicemgr":{"singleapp":true,"name":"connectivity_launcher"}
+		},
+		{
+			"name":"connectionmanager","exec":null,"node":"mmx","id":316,
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"connectionmanager"}},
+					"*":{	"tcpip":{"port":21316}}
+				}
+			}
+		},
+		{
+			"name":"explorerProc","exec":"./bin/apps/explorer","node":"mmx","id":317,
+			"environment":{
+				"PICSTORE_DB_PATH":"/var/app/explorer",
+				"PICSTORE_PIC_PATH":"/var/app/explorer/pics"
+			},
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"explorer"}},
+					"*":{"tcpip":{"port":21317}}
+				}
+			},
+			"servicemgr":{"singleapp":true,"name":"explorer"}
+		},
+		{
+			"name":"swdlclient","exec":"./bin/apps/swdlclient","node":"mmx","id":318,
+			"environment":{
+				"LD_BIND_NOW":"1",
+				"NOR_DEVICE_DRIVER":"devf-generic-tegra2"
+			},
+			"transport":{
+				"comm":{
+					"mmx":{	"resman":{"path":"swdlclient"}},
+					"*":{	"tcpip":{"port":21318}}
+				}
+			},
+			"servicemgr":{"singleapp":true,"name":"swdlclient"}
+		},
+		{
+			"name":"MMXDiagService","exec":"./bin/apps/diagnosis","node":"mmx","id":319,
+			"transport":{
+				"comm":{
+					"mmx":{	"resman":{"path":"diagnosis"}},
+					"*":{	"tcpip":{"port":21319}}
+				}
+			},
+			"servicemgr":{"singleapp":true,"name":"diagnosis"}
+		},
+		{
+			"name":"dev-avrcp","exec":null,"node":"mmx","id":320,
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"dev-avrcp"}},
+					"*":{	"tcpip":{"port":21320}}
+				}
+			}
+		},
+		{
+			"name":"TelitDownloader","exec":null,"node":"mmx","id":321,
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"telitdownloader"}},
+					"*":{	"tcpip":{"port":21321}}
+				}
+			}
+		},
+		{
+			"name":"navi","exec":null,"node":"mmx","id":322,
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"navipath"}},
+					"*":{	"tcpip":{"port":21322}}
+				}
+			}
+		},
+		{
+			"name":"deadrec","exec":null,"node":"mmx","id":323,
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"deadrecpath"}},
+					"*":{	"tcpip":{"port":21323}}
+				}
+			}
+		},
+		{
+			"name":"dev-upnp","exec":null,"node":"mmx","id":324,
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"dev-upnp"}},
+					"*":{	"tcpip":{"port":21324}}
+				}
+			}
+		},
+		{
+			"name":"gemmiProc","exec":"/gemib/gemib_launcher","node":"mmx","id":325,
+			"environment":{
+				"LD_LIBRARY_PATH":"/gemib/lib:${LD_LIBRARY_PATH}"
+			},
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"gemib"}},
+					"*":{	"tcpip":{"port":21325}}
+				}
+			},
+			"servicemgr":{"singleapp":true,"name":"gemib"}
+		},
+		{
+			"name":"MMXFecService","exec":"./bin/apps/fec","node":"mmx","id":326,
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"fec"}},
+					"*":{	"tcpip":{"port":21326}}
+				}
+			},
+			"servicemgr":{"singleapp":true,"name":"fec"}
+		},
+		{
+			"name":"rdv_controller","exec":"./bin/apps/rdv_controller","node":"mmx","id":327,
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"rdvcontroller"}},
+					"*":{	"tcpip":{"port":21327}}
+				}
+			},
+			"servicemgr":{"singleapp":true,"name":"rdv_controller"}
+		},
+		{
+			"name":"streetviewProc","exec":"/streetview/streetview_launcher","node":"mmx","id":328,
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"streetview"}},
+					"*":{	"tcpip":{"port":21328}}
+				}
+			},
+			"servicemgr":{"singleapp":true,"name":"streetview"}
+		},
+		{
+			"name":"bthsProc","exec":null,"node":"mmx","id":329,
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"bths"}},
+					 "*":{"tcpip":{"port":21329}}
+				}
+			}
+		},
+		{
+			"name":"voice_encoder_app","exec":"./bin/apps/voice_encoder_app","node":"mmx","id":330,
+			"environment":{
+				"LD_LIBRARY_PATH":"/eso/bin/apps:${LD_LIBRARY_PATH}"
+			},
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"voice_encoder_app"}},
+					"*":{	"tcpip":{"port":21330}}
+				}
+			},
+			"servicemgr":{"singleapp":true,"name":"voice_encoder_app","wd_period":30000}
+		},
+		{
+			"name":"cartimeprovider","exec":null,"node":"mmx","id":331,
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"cartimeprovider"}},
+					"*":{	"tcpip":{"port":21331}}
+				}
+			}
+		},
+		{
+			"name":"systemservices","exec":"./bin/apps/systemservices","node":"mmx","id":332,
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"systemservices"}},
+					"*":{	"tcpip":{"port":21332}}
+				}
+			},
+			"servicemgr":{"singleapp":true,"name":"systemservices","wd_period":30000}
+		},
+		{
+			"name":"videoovermost","exec": "./bin/apps/videoovermost.sh","node":"mmx","id":333,
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"videoovermost"}},
+					"*":{	"tcpip":{"port":21333}}
+				}
+			},
+			# service manager application
+			"servicemgr":{"singleapp":true,"name":"videoovermostApp"}
+		},
+		{
+			"name":"gemibMain","exec":null,"node":"mmx","id":334,
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"gemibMain"}},
+					"*":{	"tcpip":{"port":21334}}
+				}
+			}
+		},
+		{
+		"name":"streetviewMain","exec":null,"node":"mmx","id":335,
+				"transport":{
+				"comm":{
+				"mmx":{"resman":{"path":"streetviewMain"}},
+				"*":{	"tcpip":{"port":21335}}
+				}
+			}
+		},
+		{
+			"name":"esosearchProc","exec":"./bin/apps/esosearch","node":"mmx","id":336,
+			"environment":{
+				"SEARCH_DB_PATH":"/mnt/navdb/truffles",
+				"PROFILE_DB_PATH":"/var/app/organizer",
+				"BASIC_DB_PATH":"/eso/truffles"
+			},
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"esosearch"}},
+					"*":{"tcpip":{"port":21336}}
+				}
+			},
+			"servicemgr":{"singleapp":true,"name":"esosearch"}
+		},
+		{
+			"name":"mediaonline","exec":"./bin/apps/mediaonline","node":"mmx","id":337,
+			"environment":{
+					"LD_LIBRARY_PATH":"/mnt/app/armle/webkit:${LD_LIBRARY_PATH}",
+					"IPL_CONFIG_DIR_MEDIAONLINE":"/etc/eso/production"
+			},
+			"transport":{
+				"comm":{
+					"mmx":{	"resman":{"path":"mediaonline"}},
+					"*":{	"tcpip":{"port":21337}}
+				}
+			},
+			"servicemgr":{"singleapp":true,"name":"mediaonline","wd_period":30000}
+		},
+		{
+			"name":"dataconnectionulp","exec":"./bin/apps/dataconnectionulp","node":"mmx","id":338,
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"dataconnectionulp"}},
+					"*":{"tcpip":{"port":21338}}
+				}
+			},
+			"servicemgr":{"singleapp":true,"name":"dataconnectionulp"}
+		},
+		{
+			"name":"nadProc","exec":"./bin/apps/nad","node":"mmx","id":339,
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"nad"}},
+					"*":{"tcpip":{"port":21339}}
+				}
+			},
+			"servicemgr":{"singleapp":true,"name":"nad"}
+		},
+		{
+			"name":"mirrorlink","exec":null,"node":"mmx","id":340,
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"mirrorlink"}},
+					"*":{"tcpip":{"port":21340}}
+				}
+			}
+		},
+		{
+			"name":"rdiserver","exec":"./bin/apps/rdiserver","node":"mmx","id":341,
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"rdiserver"}},
+					"sdis":{"ssl":{"port":21601}},
+					"*":{"tcpip":{"port":21341}}
+				},
+				"rdi2hmi":{
+					"*":{
+# ssl enabled variant
+						"mode":"ssl",
+						"serializer":"BE",
+						"ssl":{
+							"port":21602,
+							"address":"hotspot.mibhigh"
+						}
+					}
+				}
+			},
+			"servicemgr":{"singleapp":true,"name":"rdiserverApp"}
+		},
+		{
+			"name":"gemibMain2","exec":null,"node":"mmx","id":342,
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"gemibMain2"}},
+					"*":{	"tcpip":{"port":21342}}
+				}
+			}
+		},
+		{
+			"name":"cinflash","exec":"./bin/apps/cinflash","node":"mmx","id":343,
+			"environment":{
+				"LD_BIND_NOW":"1"
+			},
+			"transport":{
+				"comm":{
+					"mmx":{ "resman":{"path":"cinflash"}},
+					"*":{	"tcpip":{"port":21343}}
+				}
+			},
+			"servicemgr":{"singleapp":true,"name":"cinflash"}
+		},
+		{
+			"name":"mediarouter","exec":"./bin/apps/mediarouter","node":"mmx","id":344,
+			"environment":{
+				"IPL_CONFIG_DIR_MEDIAROUTER":"/etc/eso/production",
+				"NVMS_NRD_QUEUE_SIZE":"100",
+				"NVMS_AUDIO_RENDERER_PREROLL_US":"500000",
+				"NVMS_AUDIO_RENDER_LB_DELTA_HI_US":"100000",
+				"NVMS_AUDIO_RENDER_LB_DELTA_LOW_US":"490000"
+			},
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"mediarouter"}},
+					"*":{"tcpip":{"port":21344}}
+				}
+			},
+			"servicemgr":{"singleapp":true,"name":"mediarouter"}
+		},
+		{
+			"name":"trdevapp","exec":"./bin/apps/trdevapp","node":"mmx","id":345,
+			"environment":{
+				"LD_BIND_NOW":"1"
+			},
+			"transport":{
+				"comm":{
+					"mmx":{ "resman":{"path":"trdevapp"}},
+					"sdis":{"ssl":{"port":21603}},
+					"*":{	"tcpip":{"port":21345}}
+				}
+			},
+			"servicemgr":{"singleapp":true,"name":"trdevapp"}
+		},
+		{
+			"name":"iconprv","exec":null,"node":"mmx","id":346,
+			"transport":{
+				"comm":{
+					"mmx":{ "resman":{"path":"iconprv"}},
+					"*":{	"tcpip":{"port":21346}}
+				}
+			}
+		},
+		{
+			"name":"sseProc","exec":"/mnt/app/eso/bin/apps/sseProc","node":"mmx","id":347,
+			"transport":{
+				"comm":{
+					"mmx":{ "resman":{"path":"sseProc"}},
+					"*":{	"tcpip":{"port":21347}}
+				}
+			},
+			"servicemgr":{"singleapp":true,"name":"sseProc"}
+		},
+		{
+			"name":"gemib_commServer","exec":null,"node":"mmx","id":348,
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"gemib_commServer"}},
+					"*":{	"tcpip":{"port":21348}}
+				}
+			}
+		},
+		{
+			"name":"EsoPosProviderProcess","exec":"./bin/apps/esoposprovider","node":"mmx","id":349,
+			"environment":{
+				"CARSENSORDATA2_RCC_INSTANCEID":"1",
+				"CARSENSORDATA2_NAV_INSTANCEID":"0"
+			},
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"EsoPosProviderProcess"}},
+					"sdis":{"ssl":{"port":21604}},
+					"*":{"tcpip":{"port":21349}}
+				}
+			},
+			"servicemgr":{"singleapp":true,"name":"EsoPosProvider"}
+		},
+		{
+			"name":"radiodata","exec":"./bin/apps/radiodata","node":"mmx","id":350,
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"radiodata"}},
+					"*":{"tcpip":{"port":21350}}
+				}
+			},
+			"servicemgr":{"singleapp":true,"name":"radiodata", "wd_period" : 10000}
+		},
+		{
+			"name":"dio_manager","exec":null,"node":"mmx","id":351,
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"dio_manager"}}
+				}
+			}
+		},
+		{
+			"name":"sdtool","exec":"./bin/apps/sdtool","node":"mmx","id":352,
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"sdtool"}}
+				}
+			},
+            "servicemgr" : { "singleapp": true, "name" : "sdtool" }
+		},
+		{
+			"name":"smartphone_integrator","exec":"./bin/apps/smartphone_integrator","node":"mmx","id":353,
+			"environment":{
+				"IPL_CONFIG_DIR_SMARTPHONE_INTEGRATOR":"/etc/eso/production",
+				"CU_SMARTPHONE_ROOT":"/eso/bin/apps/customerupdate_smartphone",
+				"CU_SMARTPHONE_AVAILABLE":"/var/customerUpdateSmartphoneAvailable",
+				"IPL_CONFIG_DIR_SMARTPHONE-VERSIONS":"/etc/eso/production",
+				"USB_HOST_LIB_PATH":"/lib/libusbdi.so",
+				"USB_DEVICE_LIB_PATH":"/mnt/app/armle/lib/libusbdci.so"
+			},
+			"transport":{
+				"comm":{
+					"mmx":{ "resman":{"path":"smartphone_integrator"}},
+					"*":{	"tcpip":{"port":21353}
+					}
+				}
+			},
+			"servicemgr":{"singleapp":true,"name":"smartphone_integrator","wd_period":15000}
+		},
+		{
+			"name":"gal","exec":null,"node":"mmx","id":354,
+			"transport":{
+				"comm":{
+					"mmx":{ "resman":{"path":"gal"}},
+					"*":{	"tcpip":{"port":21354}
+					}
+				}
+			}
+		},
+		{
+			"name":"asiaWordPredictionProc","exec":"/mnt/app/wordprediction/awp","node":"mmx","id":355,
+			"transport":{
+				"comm":{
+					"mmx":{ "resman":{"path":"awp"}},
+					"*":{	"tcpip":{"port":21355}
+					}
+				}
+			},
+			"servicemgr":{"singleapp":true,"name":"awp"}
+		},
+		{
+			"name":"pnav","exec":null,"node":"mmx","id":356,
+			"transport":{
+				"comm":{
+					"mmx":{ "resman":{"path":"pnav"}},
+					"*":{	"tcpip":{"port":21356}
+					}
+				}
+			}
+		},
+		{
+			"name":"videoencoderservice","exec": "./bin/apps/videoencoderservice","node":"mmx","id":357,
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"videoencoderservice"}},
+					"*":{	"tcpip":{"port":21357}}
+				}
+			},
+			# service manager application
+			"servicemgr":{"singleapp":true,"name":"videoencoderserviceapp"}
+		},
+		{
+			"name":"rselightProc","exec":"./bin/apps/rselight","node":"mmx","id":358,
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"rselight"}},
+					"*":{   "tcpip":{"port":21358}}
+				}
+			},
+			"servicemgr":{"singleapp":true,"name":"rselight"}
+		},
+		{
+			"name":"carlife","exec":null,"node":"mmx","id":359,
+			"transport":{
+				"comm":{
+					"mmx":{"resman":{"path":"carlife"}},
+					"*":{"tcpip":{"port":21359}}
+				}
+			}
+        },
+		{
+			"name":"MIBRoot","exec":"null","node":"rcc","id":400,
+			"transport":{
+				"comm":{
+					"*":{"tcpip":{"port":21400}}
+				}
+			}
+		},
+		{
+			"name":"ASIBridge","exec":"null","node":"rcc","id":401,
+			"transport":{
+				"comm":{
+					"*":{"tcpip":{"port":21401}}
+				}
+			}
+		},
+		{
+			"name":"DSIBridge","exec":"null","node":"rcc","id":402,
+			"transport":{
+				"comm":{
+					"*":{"tcpip":{"port":21402}}
+				}
+			}
+		},
+		{
+			"name":"remotehmi","exec":null,"node":"pcsim","id":500,
+			"transport":{
+				"comm":{
+					"*":{"tcpip":{"port":21500}}}
+			}
+		},
+		{
+			"name":"jtfclient","exec":null,"node":"pcsim","id":501,
+			"transport":{
+				"comm":{
+					"*":{"tcpip":{"port":21501}}}
+			}
+		},
+		{
+			"name":"jtfservice","exec":null,"node":"pcsim","id":502,
+			"transport":{
+				"comm":{
+					"*":{"tcpip":{"port":21502}}}
+			}
+		},
+		{
+			"name":"testclient","exec":null,"node":"mmx","id":503,
+			"transport":{
+				"comm":{
+					"mmx":{	"resman":{"path":"testclient"}},
+					"*":{	"tcpip":{"port":21503}}
+				}
+			}
+		},
+		{
+			"name": "DMRCClient","exec": null,"node": "mmx", "id" : 504,
+			"transport": {
+				"comm":{
+					"mmx":{"resman":{"path":"dmrcclient"}},
+					"*":{	"tcpip":{"port":21504}}
+				}
+			}
+		},
+		{
+		  "name":"vdetestservice","exec":null,"node":"mmx","id":506,
+		  "transport":{
+			  "comm":{
+				"mmx":{"resman":{"path":"vdetestservice"}},
+				  "*":{	"tcpip":{"port":21506}}
+				}
+			}
+		},
+		{
+			"name":"testservice", "exec":null, "node": "mmx", "id": 507,
+			"transport":{
+				"comm":{
+					"mmx": { "resman": { "path": "testservice" } },
+					"*": { "tcpip": { "port": 21507 } }
+				}
+			}
+		},
+		{
+			"name":"testclientRCC","exec":"null","node":"rcc","id":508,
+			"transport":{
+				"comm":{
+					"*":{"tcpip":{"port":21508}}
+				}
+			}
+		},
+		{
+			"name":"testclientRCC_2","exec":null,"node":"rcc","id":509,
+			"transport":{
+				"comm":{
+					"*":{	"tcpip":{"port":21509}}
+				}
+			}
+		},
+		{
+			"name":"MMX2RCCEarlyApp","exec":null,"node":"rcc","id":510,
+			"transport":{
+				"comm":{
+					"*":{	"tcpip":{"port":21510}}
+				}
+			}
+		},
+		{
+			"name":"cap_app","exec":null,"node":"mmx","id":511,
+			"transport":{
+				"comm":{
+					"mmx": { "resman": { "path": "cap_app_fw" } },
+					"*":{	"tcpip":{"port":21511}}
+				}
+			}
+		},
+		{
+			"name":"persistence_reader","exec":null,"node":"mmx","id":512,
+			"transport":{
+				"comm":{
+					"mmx": { "resman": { "path": "persistence_reader" } }
+				}
+			}
+		},
+		{
+			"name": "vom-debugtool","exec": null,"node": "mmx", "id": 513,
+			"transport": {
+				"comm":{
+					"mmx":{"resman":{"path":"vom_debugtool"}},
+					"*":{"tcpip":{"port":21513}}
+				}
+			}
+		},
+		{
+			"name": "videoencoderservice-debugtool","exec": null,"node": "mmx", "id": 514,
+			"transport": {
+				"comm":{
+					"mmx":{"resman":{"path":"versedt"}},
+					"*":{"tcpip":{"port":21514}}
+				}
+			}
+		},
+		{
+			"name":"persistence_writer","exec":null,"node":"mmx","id":515,
+			"transport":{
+				"comm":{
+					"mmx": { "resman": { "path": "persistence_writer" } }
+				}
+			}
+		},
+		{
+			"name":"persistence_subscriber","exec":null,"node":"mmx","id":516,
+			"transport":{
+				"comm":{
+					"mmx": { "resman": { "path": "persistence_subscriber" } }
+				}
+			}
+		}
+	],
+	"transport" : {
+		"loadable_path":"/eso/lib/transports"
+	},
+	"comm_settings":{
+		"cpp":{
+			"factory_path":"/eso/lib/factories",
+			"agent_connect_retries":0,
+			"agent_connect_retry_delay":100,
+			"interface_mismatch":"allow",
+			"priorities" : {
+				"default_ao" : {
+					"asi.navigation.styledb.Navstyledb" : 10,
+					"asi.navigation.navicon.NavIconProviderReply" :10
+				},
+				"styledbservice" : {
+					"worker" : 10,
+					"notifier" : 10,
+					"agentthread" : 10
+				}
+			}
+		},
+		"java":{
+			"svc_call_queue_size":128,
+			"ignore_ik":true,
+            "transport": {
+                "rx":{
+                    "default": {
+                        "prio" : 5,
+                        "async" : false
+                    },
+                    "static":
+                    [
+                        {
+                            "procs":"MIBRoot",
+                            "prio":9
+                        }
+                    ]
+                }
+            }
+        },
+		"ping" : {
+			"peer_agent" : "dynamic",
+			"check_enabled" : true,
+			"start_send" : true
+		},
+		"dyn_agent_ids" : {
+			"enabled":true
+			,"range" : [31000,32000]
+			,"reuse_timeout" : 3000
+		}
+	}
+}
