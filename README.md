@@ -174,7 +174,7 @@ Thanks for the prior work and knowledge that helped figure this out.
 It was just the warm-up, next:
 
 <p align="center">
-  <img src="assets/teaser.jpg" width="70%" />
+  <img src="assets/teaser.png" width="70%" />
 </p>
 
 - **AltScreen** - full CarPlay map, right in cluster
