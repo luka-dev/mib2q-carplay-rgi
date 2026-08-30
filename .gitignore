@@ -12,3 +12,9 @@ tools/loader_preview/loader_preview
 # Phone-side captures: sysdiagnose tarballs and log archives are hundreds of MB
 # and contain the owner's device logs. Keep them local.
 /logs/
+
+# Key material extracted from donor firmware, and live AirPlay session keys
+# (`shk`). Analysis reads them from here; nothing about them belongs in history.
+/tools/keys/
+__pycache__/
+.ida-mcp/

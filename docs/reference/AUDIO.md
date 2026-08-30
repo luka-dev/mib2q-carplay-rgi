@@ -589,7 +589,9 @@ groups, which pins the neighbourhood:
   format does not include **AAC-ELD/AAC-LC 48k 5.1.2** format"*
 - stereo fallback tries bit 21 / bit 23 → *"AAC-LC 48k stereo"*
 
-So bits 39–42 are the **AAC_ELD / AAC_LC 48 kHz 5.1 and 5.1.2** pairs, and **bit 42 = `AAC_LC/48000/5.1.2`**
+So bits 39–42 are the AAC-LC/AAC-ELD 48 kHz 5.1 and 5.1.2 pairs. The exact order, confirmed from
+the descriptor/ASBD tables, is `39=AAC_LC/5.1`, `40=AAC_LC/5.1.2`, `41=AAC_ELD/5.1`, and
+**`42=AAC_ELD/5.1.2`**
 (the descriptor strings `AAC_ELD/48000/5.1`, `AAC_ELD/48000/5.1.2`, `AAC_LC/48000/5.1`,
 `AAC_LC/48000/5.1.2` all exist in AirPlaySupport).
 
@@ -607,9 +609,9 @@ So bits 39–42 are the **AAC_ELD / AAC_LC 48 kHz 5.1 and 5.1.2** pairs, and **b
    and our sink is **6-channel** (`six_channel_speakerp`), so 5.1.2 would need an 8→6 fold.
 
 ### What a real CarPlay spatial implementation would require
-- Advertise **bit 42** (`AAC_LC/48000/5.1.2`) in `audioOutputFormats` for stream type 100 (the /info
+- Advertise **bit 42** (`AAC_ELD/48000/5.1.2`) in `audioOutputFormats` for stream type 100 (the /info
   rail from §14 still holds — that part was right).
-- Add an **AAC-LC multichannel decoder** into the CarPlay audio path (the HU has Cinemo AAC decoders,
+- Add an **AAC-ELD multichannel decoder** into the CarPlay audio path (the HU has Cinemo AAC decoders,
   but they are on the local-media path, not CarPlay).
 - **Downmix 8 → 6** (fold the two height channels) for `six_channel_speakerp`, or find an 8-channel
   route. The deva `mpl5_dio_ent` 2→6 patch stays necessary but is no longer sufficient.
@@ -723,7 +725,8 @@ higher-tier variant of the track. It never changes what goes over the link.
 ### For CarPlay it is branch 2 that fires
 The car cannot take an Atmos bitstream — there is no EC3 bit in the screen-receiver mask at all (§15).
 So the phone takes the Atmos master, **renders it on-device**, and ships the result as
-`AAC_LC/48000/5.1.2` (bit 42). **Dolby = the source tier; AAC 5.1.2 = the wire.** That is exactly why
+`AAC_ELD/48000/5.1.2` (bit 42) on this old screen-receiver branch. **Dolby = the source tier;
+AAC 5.1.2 = the wire.** That is exactly why
 the press always pairs "CarPlay Spatial Audio" with "powered by Dolby Atmos" (§13) — they are two
 different layers, not two names for one thing.
 
@@ -778,7 +781,7 @@ Each step logs *"Supported format does not include AAC-ELD/AAC-LC 48k 5.1[.2] fo
    and then fold it down to stereo for the wire. More data, more battery, no benefit, and a fold-down
    instead of the native stereo master. Strictly a downside.
 
-**⇒ There is no shortcut.** Discrete multichannel over CarPlay requires bit 42 *and* AAC-LC multichannel
+**⇒ There is no shortcut.** Discrete multichannel over this branch requires bit 42 *and* AAC-ELD multichannel
 decode *and* the 8→6 fold (§15/§16). Advertising a capability we cannot honour only risks the classic
 advertised-but-unhandled failure mode.
 
@@ -819,7 +822,7 @@ unit today. Therefore **that function is not the gate for our main audio stream*
 other (newer, AirPlay-audio-over-CarPlay) path.
 
 Consequences, stated plainly:
-- **Still solid:** bit 42's identity (`AAC_LC/48000/5.1.2`) and that it is the one bit iOS 27 adds when
+- **Still solid:** bit 42's identity (`AAC_ELD/48000/5.1.2`) and that it is the one bit iOS 27 adds when
   spatial is permitted; that our stack cannot decode AAC or ALAC at all; what we advertise today.
 - **NOT established (downgrade §15/§18):** that bit 44 (`PCM/48000/16/5.1`) "can never be selected", and
   that the transport vocabulary is "AAC-only". Both were inferred from the mask above, which provably
@@ -1201,7 +1204,7 @@ the hook's own probes show our augmented mask reaching the negotiation:
 | tuned bit | advertised (`getSupportedFormats` type 100) | phone selected (`ToASBD`) |
 |---|---|---|
 | 44 — `PCM/48000/16/5.1` | `0x8010` → **`0x100000008010`** | `0x8000` = bit 15, **stereo** |
-| 42 — `AAC_LC/48000/5.1.2` (the bit iOS itself adds for spatial) | `0x8010` → **`0x40000008010`** | `0x8000` = bit 15, **stereo** |
+| 42 — `AAC_ELD/48000/5.1.2` (the bit iOS itself adds for the old spatial gate) | `0x8010` → **`0x40000008010`** | `0x8000` = bit 15, **stereo** |
 
 Both refused. Not our bug: `ARMED`, the `+bit` in the offered mask, and the phone's own selection all
 appear in the same log. **Advertising a multichannel format on the realtime stream is not sufficient —

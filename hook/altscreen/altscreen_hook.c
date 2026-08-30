@@ -823,6 +823,8 @@ void *AirPlayCopyServerInfo(void *session, void *qualifier, void *macAddr, void 
         if (!g_advert_ready || g_advert_session != session ||
             !g_advert_displays || !g_advert_features) {
             pthread_mutex_unlock(&advert_lock);
+            spa_augment_server_info(session, info);
+            spa_capture_server_info(info);
             return info;
         }
         /* MU1316 dio's serverCopyPropertyCallback returns its startInNightMode
@@ -904,6 +906,8 @@ void *AirPlayCopyServerInfo(void *session, void *qualifier, void *macAddr, void 
         }
         pthread_mutex_unlock(&advert_lock);
     }
+    spa_augment_server_info(session, info);
+    spa_capture_server_info(info);
     return info;
 }
 
@@ -1821,12 +1825,26 @@ int AirPlayReceiverSessionSetup(void *session, void *request, void **respOut, in
     uint64_t realDoneMs;
     int setupIsControl = 0;
     int setupHas111 = 0;
+    int setupHas103 = 0;
+    int setup103Rc = 0;
     if (!real) real = (fn_sess_setup_t)dlsym(RTLD_NEXT, "AirPlayReceiverSessionSetup");
     if (!real) { LOG_ERROR(LOG_MODULE, "SessionSetup real==NULL"); return -6740; }
 
     if (alt_enabled < 0) alt_enabled = env_on("ALTSCREEN_HANDLE_ALT") ? 1 : 0;
+    /* Stock AirPlay 210 rejects type 103 before producing a response. Inspect/capture it first so the
+     * receiver implementation can be based on the phone's real request rather than a guessed schema. */
+    setupHas103 = spa_inspect_setup_request(request, setupSequence);
     int ret = real(session, request, respOut, a4);
     realDoneMs = alt_now_ms();
+    spa_note_setup_result(setupHas103, ret, (respOut && *respOut) ? *respOut : NULL, setupSequence);
+
+    /* Stock 210 logs type 103 as unsupported but returns success with an empty dictionary. Supply
+     * the receiver-owned dataPort before the response leaves this interposer; otherwise iOS closes
+     * the complete screen session as soon as playback starts. */
+    if (setupHas103 && ret == 0 && session && request && respOut && *respOut) {
+        setup103Rc = spa_setup_buffered_receiver(session, request, *respOut, setupSequence);
+        if (setup103Rc != 0) ret = setup103Rc;
+    }
 
     /* Any successful RTSP SETUP proves USB+iAP2 reached the AirPlay control
      * plane. The first one is control SETUP in the real protocol, but marking
@@ -1840,7 +1858,7 @@ int AirPlayReceiverSessionSetup(void *session, void *request, void **respOut, in
      * itself on its own marker file and is a no-op without it. This wrapper is simply the single
      * owner of the AirPlayReceiverSessionSetup interposition. */
     if (ret == 0 && session && request && respOut && *respOut)
-        spa_augment_setup_response(session, request, *respOut);
+        spa_augment_setup_response(session, request, *respOut, setupSequence);
 
     if (alt_enabled && ret == 0 && respOut && *respOut && session && request && alt_resolve() == 1) {
         /* NEGOTIATION — the REAL altScreen gate (VERIFIED against iOS 26.6 AirPlaySender/CarKit disasm):
@@ -1922,6 +1940,8 @@ int AirPlayReceiverSessionSetup(void *session, void *request, void **respOut, in
         LOG_INFO(LOG_MODULE, "SETUP: alt gated off in interpose (resp=%p session=%p resolve=%d)",
                  (respOut ? *respOut : (void*)0), session, alt_resolve());
     }
+    if (request && respOut && *respOut)
+        spa_capture_setup_response(request, *respOut, setupSequence);
     {
         uint64_t setupDoneMs = alt_now_ms();
         unsigned long realMs = (setupBeginMs && realDoneMs && realDoneMs >= setupBeginMs) ?
@@ -1929,8 +1949,8 @@ int AirPlayReceiverSessionSetup(void *session, void *request, void **respOut, in
         unsigned long hookMs = (realDoneMs && setupDoneMs && setupDoneMs >= realDoneMs) ?
                                (unsigned long)(setupDoneMs - realDoneMs) : 0;
         LOG_INFO(LOG_MODULE,
-                 "STARTUP SETUP timing control=%d alt111=%d real=%lums hook=%lums total=%lums ret=%d",
-                 setupIsControl, setupHas111, realMs, hookMs,
+                 "STARTUP SETUP timing control=%d alt111=%d audio103=%d real=%lums hook=%lums total=%lums ret=%d",
+                 setupIsControl, setupHas111, setupHas103, realMs, hookMs,
                  (unsigned long)(realMs + hookMs), ret);
     }
     return ret;
@@ -1960,6 +1980,10 @@ int AirPlayReceiverSessionTearDown(void *session, void *request, int reason, int
              "AirPlayReceiverSessionTearDown session=%p request=%p reason=%d a4=%d alt111=%d action=%s",
              session, request, reason, a4, requestHas111,
              tearDownAlt ? "stop-alt" : "preserve-alt");
+
+    /* Independent from altScreen and safe even after the runtime marker is removed: a live
+     * type-103 socket still belongs to this session and must be stopped before stock frees it. */
+    spa_teardown_buffered_receiver(session, request);
 
     altslot_t *slot;
     pthread_mutex_lock(&alt_lock);

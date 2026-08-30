@@ -29,11 +29,12 @@ an explicit supervisor stop, not ordinary dio churn, owns their final teardown.
 
 Lifecycle semantics:
 
-- **PF port (deploy prerequisite, no runtime logic):** altScreen needs carplay0 TCP 6031 beside the
-  stock 6030. Run `install_persistent_pf.sh` once — it widens the stock `6030` token to `6030:6031`
-  in `/mnt/system/etc/pf.conf` (idempotent, `.stock` backup, `mount -uw` first). That is a real
+- **PF ports (deploy prerequisite, no runtime logic):** altScreen needs carplay0 TCP 6031, buffered
+  audio uses TCP 6032, and its legacy RTCP control uses TCP 6033 beside stock 6030. Run
+  `install_persistent_pf.sh` once — it widens `6030` to `6030:6033` in all four
+  `/mnt/system/etc/pf*.conf` profiles (idempotent, `.stock` backup, `mount -uw` first). That is a real
   qnx6 flash partition (`/dev/fs0p1`); boot's `move_etc_to_ramdisk` copies it into the ramdisk
-  `/etc`, so `start_network`'s `pfctl -ef /etc/pf.conf` loads 6031 with no race and no reset. The
+  `/etc`, so `start_network` loads the selected profile with all four ports and no runtime race. The
   wrapper does **no** firewall work — it assumes the port is open, exactly like it assumes the
   child JSON and the hook are installed. Reverted only by an OTA rewriting `fs0p1`; re-run the
   script. See `NCM_AND_FIREWALL_IDEAL_START.md`.

@@ -162,9 +162,10 @@ rm -f "$STOP_FILE"
 echo "$DIO_PID" > "$OWNER_FILE"
 echo "===== carplay_startup.sh run pid=$$ ppid=$PPID =====" >> "$WLOG"
 
-# altScreen's carplay0 TCP 6031 lives permanently in /mnt/system/etc/pf.conf
-# (install_persistent_pf.sh, a one-time deploy step). start_network loads it at
-# boot, so the wrapper does no firewall work at all.
+# altScreen TCP 6031, buffered-audio TCP 6032, and its RTCP TCP 6033 live in all four
+# /mnt/system/etc/pf*.conf profiles (install_persistent_pf.sh, a one-time deploy
+# step). start_network loads the selected profile at boot, so the wrapper does
+# no firewall work at all.
 
 # A previous monitor may have proved the independent pre-RTSP USB wedge. Consume
 # its one-shot request before creating any graphics clients or exec'ing dio.

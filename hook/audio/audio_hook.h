@@ -45,21 +45,73 @@
  * iOS 27 reaches multichannel over CarPlay through a SECOND, buffered stream, not the realtime one.
  * Two accessory-controlled prerequisites, both metadata:
  *   1. /info `audioFormats` gains an entry {type:103, audioType:"media",
- *      audioOutputFormats:0x1440800, audioOutputFormatsExtended:[65]}  (65 = APAC/48000/5.1, the only
- *      index our 6-channel 48 kHz hardware could ever render).
+ *      audioOutputFormats:0x400000, audioOutputFormatsExtended:[65]}. The legacy value is the single
+ *      AAC-LC/44.1 compatibility bit required by iOS's buffered-engine repackager; advertising the
+ *      broader 0x1440800 transport-family mask makes wired iOS retain both PCM and AAC families and
+ *      reject the whole CarPlay audio-format object before either stream is set up. The extended
+ *      index is runtime tunable to 40 (AAC-LC/5.1.2), 42 (AAC-ELD/5.1.2), 50 (DD+/5.1),
+ *      53 (DD+/9.1.6), 65 (APAC/5.1), or 66 (APAC/5.1.2); only decoded PCM6 can be sent directly
+ *      to the HU, so larger layouts require a deliberate downmix.
  *   2. the control-SETUP response's `enabledFeatures` gains the token "mainBuffered", without which
  *      AirPlaySender never sets SupportsBufferedAudio and never opens `bufferStream`.
- * This is a NEGOTIATION PROBE, not playable audio: we have no type-103 receiver and no APAC decoder,
- * so if the phone actually starts the stream it must fail closed. Hence OFF by default and gated on a
+ * This remains a PROBE, not playable audio: the hook now supplies the complete legacy type-103
+ * SETUP descriptor (listener port, buffer size, latency and dynamic stream ID), captures/drains
+ * APAP, and receives the asynchronous SETMAGICCOOKIE binary plist on the existing RTSP connection.
+ * The latter is installed through an exact MU1316 HTTPServer callback fingerprint; it does not need
+ * controlPort/6033. There is still no APAC/AAC render path. Hence OFF by default and gated on a
  * marker file that can be removed and re-tested with a replug — no reboot. */
 #define SPA_PROBE103_PATH   "/tmp/spatial_probe103"
-#define SPA_APAC_48K_5_1    65      /* APAudioFormatIndex, NOT a bitmask bit */
-#define SPA_BUFFERED_LEGACY_MASK  0x1440800  /* required companion mask: bits 11,18,22,24 */
+#define SPA_103_INDEX_PATH  "/tmp/spatial_103_index"
+#define SPA_103_MODE_PATH   "/tmp/spatial_103_mode"
+#define SPA_103_DCX_PATH    "/tmp/spatial_103_dcx"
+#define SPA_103_MASK_PATH   "/tmp/spatial_103_mask"
+#define SPA_103_MODE_INFO       1u  /* advertise the type-103 /info descriptor only */
+#define SPA_103_MODE_FEATURE    2u  /* negotiate mainBuffered only (when proposed) */
+#define SPA_103_MODE_BOTH       (SPA_103_MODE_INFO | SPA_103_MODE_FEATURE)
+#define SPA_AAC_LC_48K_5_1_2 40      /* APAudioFormatIndex; AAC-LC/48000/5.1.2 */
+#define SPA_AAC_ELD_48K_5_1_2 42     /* APAudioFormatIndex; AAC-ELD/48000/5.1.2 */
+#define SPA_DDP_48K_5_1      50      /* APAudioFormatIndex; DDPLUS/48000/5.1 */
+#define SPA_DDP_48K_9_1_6    53      /* APAudioFormatIndex; DDPLUS/48000/9.1.6 */
+#define SPA_APAC_48K_5_1    65      /* APAudioFormatIndex; APAC/48000/5.1 */
+#define SPA_APAC_48K_5_1_2  66      /* APAudioFormatIndex; APAC/48000/5.1.2 */
+#define SPA_BUFFERED_AAC_MASK        0x400000   /* bit 22: AAC-LC/44100/2; valid type-103 codec family */
+#define SPA_BUFFERED_BROAD_MASK      0x1440800  /* old failed probe: mixed bits 11,18,22,24 */
 
-/* Adds "mainBuffered" to the control-SETUP response's enabledFeatures, preserving whatever the
- * receiver already accepted. Called from the altscreen SessionSetup wrapper (the single owner of that
- * interposition) but deliberately NOT gated on altScreen being enabled. Returns 1 if it added the
- * token, 0 otherwise. No-op unless the probe marker exists. */
-int spa_augment_setup_response(void *session, void *request, void *response);
+/* Called by the single SessionSetup interposer before stock libairplay. When the request contains
+ * stream type 103 and the probe marker is present, records the stream fields and writes the complete
+ * request to a mode-0600 binary plist in /tmp. Returns 1 iff a type-103 request was found. */
+int spa_inspect_setup_request(void *request, uint32_t sequence);
+
+/* Records what stock 210 did with the type-103 request and, if it unexpectedly returned a response,
+ * writes that response beside the request. No-op when has103 == 0. */
+void spa_note_setup_result(int has103, int result, void *response, uint32_t sequence);
+
+/* Supply the missing legacy type-103 SETUP response, including AirPlaySender's mandatory
+ * audioBufferSize field, install the fingerprint-locked SETMAGICCOOKIE request wrapper, and start a
+ * bounded APAP capture/drain receiver before the response is returned. Codec decode/render is a
+ * later stage. Returns an OSStatus-style error. */
+int spa_setup_buffered_receiver(void *session, void *request, void *response, uint32_t sequence);
+
+/* Stop the capture receiver for a per-stream type-103 or full-session teardown. */
+void spa_teardown_buffered_receiver(void *session, void *request);
+
+/* Captures the control request, then adds "mainBuffered" to enabledFeatures only in feature/both
+ * mode AND only when the phone proposed that exact token. Preserves whatever the receiver already
+ * accepted. Called from the altscreen SessionSetup wrapper (the single owner of that interposition),
+ * but deliberately not gated on altScreen. Returns 1 iff it added the token. */
+int spa_augment_setup_response(void *session, void *request, void *response, uint32_t sequence);
+
+/* Capture the final control response after every hook has finished merging enabledFeatures. */
+void spa_capture_setup_response(void *request, void *response, uint32_t sequence);
+
+/* Fulfil AirPlaySender's strict feature/info pairing: after this session negotiated mainBuffered,
+ * add the required top-level /info `mainBufferedInfo` dictionary. It stays empty by default. The
+ * probe-only /tmp/spatial_103_dcx marker adds a real CFBoolean `DCXEnabled=true` so the Dolby/DCX
+ * branch can be A/B tested without rebuilding; removing the master marker still disables all 103
+ * mutations. */
+void spa_augment_server_info(void *session, void *info);
+
+/* Capture the final /info dictionary after all stock and hook-owned mutations. */
+void spa_capture_server_info(void *info);
 
 #endif /* AUDIO_HOOK_H */
