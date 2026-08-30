@@ -14,6 +14,14 @@
 
 #include "../framework/common.h"
 
+/* Raw RGD packet tracing (opt-in: build with -DRGD_TRACE_RAW_FULL=1). Value-based (#if) so a
+ * -D...=0 build is consistent between the struct fields below and every writer. Presence-based
+ * #ifdef would make -D...=0 enable the trace, and — worse — would give rgd_tlv.c a different
+ * rgd_maneuver_t layout from rgd_hook.c the moment any translation unit sees a default define. */
+#ifndef RGD_TRACE_RAW_FULL
+#define RGD_TRACE_RAW_FULL 0
+#endif
+
 /* ============================================================
  * Identify TLV for RouteGuidanceDisplayComponent (0x001E)
  * ============================================================ */
@@ -343,12 +351,12 @@ typedef struct {
     rgd_lane_t lanes[MAX_LANE_GUIDANCE];
     uint8_t lane_count;
     uint16_t lane_guidance_raw_len;
-#ifdef RGD_TRACE_RAW_FULL
+#if RGD_TRACE_RAW_FULL
     char lane_guidance_hex[(RGD_HEX_PREVIEW_MAX * 3) + 1];
 #endif
     uint16_t linked_lane_guidance_index;
     uint16_t exit_info_raw_len;
-#ifdef RGD_TRACE_RAW_FULL
+#if RGD_TRACE_RAW_FULL
     char exit_info_hex[(RGD_HEX_PREVIEW_MAX * 3) + 1];
 #endif
     char exit_info_str[RGD_EXIT_INFO_MAX + 1];

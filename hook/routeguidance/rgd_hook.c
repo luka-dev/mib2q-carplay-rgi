@@ -527,7 +527,7 @@ static void write_slot_data_keys(bus_text_builder_t* b, unsigned idx, const rgd_
     if (man->present & RGD_MAN_LANE_GUIDANCE_RAW) {
         snprintf(key, sizeof(key), "m%u_lane_guidance_len", idx);
         bus_text_int(b, key, man->lane_guidance_raw_len);
-#ifdef RGD_TRACE_RAW_FULL
+#if RGD_TRACE_RAW_FULL
         snprintf(key, sizeof(key), "m%u_lane_guidance_hex", idx);
         bus_text_str(b, key, man->lane_guidance_hex);
 #endif
@@ -632,7 +632,7 @@ static void write_slot_data_keys(bus_text_builder_t* b, unsigned idx, const rgd_
     if (man->present & RGD_MAN_EXIT_INFO_RAW) {
         snprintf(key, sizeof(key), "m%u_exit_info_len", idx);
         bus_text_int(b, key, man->exit_info_raw_len);
-#ifdef RGD_TRACE_RAW_FULL
+#if RGD_TRACE_RAW_FULL
         snprintf(key, sizeof(key), "m%u_exit_info_hex", idx);
         bus_text_str(b, key, man->exit_info_hex);
 #endif

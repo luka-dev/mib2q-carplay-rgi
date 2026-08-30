@@ -387,7 +387,8 @@ public class ManeuverMapper {
     }
 
     private static boolean hasDirectionalTurnAngle(int turnAngle) {
-        return turnAngle != 0 && turnAngle != 1000 && turnAngle != -1000;
+        /* 0 and ±1000 are the hook's "no angle" sentinels; -1 is the unset State-slot default. */
+        return turnAngle != 0 && turnAngle != 1000 && turnAngle != -1000 && turnAngle != -1;
     }
 
     private static boolean rampGoesLeft(int turnAngle, int drivingSide) {
@@ -403,7 +404,7 @@ public class ManeuverMapper {
      * turns, so a sharp ramp stops rendering as a shallow keep-arrow.
      */
     private static int rampDirection(int exitAngle, boolean goesLeft) {
-        boolean absent = (exitAngle == 0 || exitAngle == 1000 || exitAngle == -1000);
+        boolean absent = (exitAngle == 0 || exitAngle == 1000 || exitAngle == -1000 || exitAngle == -1);
         if (goesLeft) {
             return absent ? DIR_SLIGHT_LEFT : dirFromEndOfRoadAngleLeft(exitAngle);
         }
@@ -487,7 +488,7 @@ public class ManeuverMapper {
      */
     private static int directionFromTurnAngle(int turnAngle) {
         if (turnAngle == 1000 || turnAngle == -1000) return DIR_STRAIGHT;
-        if (turnAngle == 0) return DIR_STRAIGHT;
+        if (turnAngle == 0 || turnAngle == -1) return DIR_STRAIGHT;  /* -1 = unset State-slot default */
         if (turnAngle < 0) return DIR_LEFT;
         return DIR_RIGHT;
     }
