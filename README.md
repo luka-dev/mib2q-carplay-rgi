@@ -117,7 +117,7 @@ place - both are required.)
 the next start.
 
 **5. Reboot.** Let the writes reach the flash first - run `sync` and give it a few seconds. A forced
-reboot (or pulling power) right after copying can leave the files truncated or gone entirely, and
+reboot (the MMI button combo) right after copying can leave the files truncated or gone entirely, and
 you will be left wondering why nothing loaded. On boot `smartphone_integrator` launches everything;
 check `/tmp/carplay_hook.log` and `/tmp/carplay_java.log` (see [Logging](#logging)).
 
