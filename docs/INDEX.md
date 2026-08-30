@@ -38,7 +38,7 @@ final verified fact. `reconciles:` frontmatter records which legacy docs were fo
 - [steering-wheel](input/steering-wheel.md) - MFW roller: rotation = stock zoom, press = route-info toggle
 
 ## Deploy  [x]
-- [supervisor-lifecycle](deploy/supervisor-lifecycle.md) - smartphone_integrator, renderer ownership
+- [supervisor-lifecycle](deploy/supervisor-lifecycle.md) - install map (what goes where), smartphone_integrator, renderer ownership
 - [connect](deploy/connect.md) - USB / NCM / Bonjour connect flow + failure root cause
 - [session-lifecycle](deploy/session-lifecycle.md) - session audit: watchdog-hang, USB pre-RTSP class, resilience risks R1-R4
 

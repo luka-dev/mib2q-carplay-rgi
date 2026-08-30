@@ -6,6 +6,8 @@ sources:
   - code: deploy/smartphone_integrator/carplay_startup.sh
   - code: deploy/smartphone_integrator/carplay_processes.sh
   - code: deploy/smartphone_integrator/carplay_cleanup.sh
+  - code: deploy/smartphone_integrator/carplay_child.json
+  - code: deploy/smartphone_integrator/README.md
 reconciles:
   - docs/reference/SI_STACK_RESTART_RE.md
   - docs/reference/PRODUCTION_LOGGING.md
@@ -40,6 +42,26 @@ sequenceDiagram
 
 > `smartphone_integrator` (phone connect) -> **carplay_startup.sh** -> monitor + `exec dio_manager`
 > (with LD_PRELOAD) - adopts/starts `maneuver_render`. Why the NCM link churns: [[connect]].
+
+## Install map (what goes where on the unit)
+
+| On-unit path | Content |
+|---|---|
+| `/mnt/app/root/hooks/` | `carplay_startup.sh`, `carplay_cleanup.sh`, `carplay_processes.sh` (executable) + `libcarplay_hook.so`, `maneuver_render`, `flag_atlas.rgba` |
+| `/mnt/app/eso/hmi/lsd/jars/carplay_hook.jar` | Java patch; the HMI loads it on the next start |
+| `/mnt/system/etc/eso/production/smartphone_integrator.json` | `children.carplay` block replaced by `carplay_child.json` (exec/envs/timings; **no** `LD_PRELOAD` in `envs` - the wrapper scopes it to its own `dio_manager`) |
+| `/mnt/system/etc/eso/production/dio_manager.json` | RGD message IDs registered so the Cinemo SDK pumps them: `MessagesSentByAccessory` += `0x5200`, `0x5203`; `MessagesReceivedFromDevice` += `0x5201`, `0x5202`, `0x5204` |
+
+The `dio_manager.json` registration and the hook's runtime Identify patch (component `0x001E`, see
+[[iap2-interception]]) are **both** required: without the JSON edit iOS sends route guidance and the
+SDK drops it; without the Identify patch iOS never starts sending.
+
+Do not overwrite the stock `/etc/scripts/carplay_cleanup.sh` - the custom cleanup calls it only for
+Audi's mdnsd/PPS teardown.
+
+After copying, run `sync` and wait a few seconds before rebooting: a forced reboot (MMI button combo)
+straight after the copy can leave the files truncated or missing. There is no one-shot flasher, and
+Java is never auto-deployed - restarting the Java stack on a live HU is unsafe.
 
 ## Ownership rules
 
