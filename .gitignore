@@ -13,8 +13,11 @@ tools/loader_preview/loader_preview
 # and contain the owner's device logs. Keep them local.
 /logs/
 
-# Key material extracted from donor firmware, and live AirPlay session keys
-# (`shk`). Analysis reads them from here; nothing about them belongs in history.
-/tools/keys/
+# tools/keys holds analysis key material. Default is to keep it out of history —
+# live AirPlay session keys (`shk`) must never be committed. Public values
+# extracted from donor firmware are opted back in individually.
+/tools/keys/*
+!/tools/keys/README.md
+!/tools/keys/*_rsa_modulus.hex
 __pycache__/
 .ida-mcp/
