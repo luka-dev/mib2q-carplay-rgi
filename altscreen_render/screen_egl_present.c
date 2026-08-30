@@ -21,7 +21,6 @@
  * tiled bytes without YUV->RGBA conversion, producing green/black output.
  */
 #include "screen_egl_present.h"
-#include "carplay_loader.h"   /* CARPLAY_LOADER_FRAME_INTERVAL_NS (frame cadence) */
 #include "loader_assets.h"    /* baked Apple logo + @LuKa_dev signature (raw RGBA) */
 #include "cluster_surface.h"
 #include "loader_layout.h"
@@ -34,6 +33,7 @@
 
 #include <errno.h>
 #include <pthread.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -48,6 +48,17 @@
  * imports the same allocation through a non-owning pixmap alias below. */
 #define EP_QCOM_VIDEO_USAGE         0x484
 #define EP_RGBA_BUFFER_COUNT        2
+
+/* The HU composites this window at 60 Hz; the LVDS capture that feeds the VC
+ * samples it at a fixed 30 Hz.  At interval 1 our ~30 fps posts land on
+ * arbitrary 60 Hz slots, so a posted frame lives 1, 2 or 3 scans and the 30 Hz
+ * capture periodically grabs one frame twice and skips the next — visible
+ * judder even though every stage is nominally 30 fps.  Interval 2 pins each
+ * post to exactly two scans = exactly one capture period.  maneuver_render
+ * reached the same conclusion independently (platform_qnx.c:345, and see
+ * maneuver_render/main.c:838 "pacing rides eglSwapBuffers ... NEVER" a timer)
+ * and is smooth on this hardware. */
+#define EP_SWAP_INTERVAL            2
 
 /* Present in KHR_image headers, but keep the value explicit for the QNX 6.5
  * build shim.  The live eglsub-screen.so compares this exact value. */
@@ -111,6 +122,17 @@ struct screen_egl_present {
     unsigned long frames;
     unsigned long failures;
     int first_success_logged;
+
+    /* Cadence probe, reported with the periodic frame log.  arrival = spacing
+     * of decoded frames reaching us (the phone's rate); swap = time spent
+     * inside eglSwapBuffers (the interval block).  Together they say whether a
+     * cadence problem is upstream or ours. */
+    uint64_t pace_last_entry_ns;
+    uint64_t pace_arrival_sum_ns;
+    uint64_t pace_arrival_max_ns;
+    uint64_t pace_swap_sum_ns;
+    uint64_t pace_swap_max_ns;
+    unsigned long pace_samples;
 };
 
 static int ep_has_extension(const char *extensions, const char *wanted) {
@@ -125,6 +147,31 @@ static int ep_has_extension(const char *extensions, const char *wanted) {
         p += n;
     }
     return 0;
+}
+
+/* eglsub-screen.so keeps its own swap state while the native window carries a
+ * Screen property of the same name, and this firmware accepts eglSwapInterval()
+ * without reliably updating the latter (proven in Tools/retroarch-qnx,
+ * src/gfx/drivers_context/qnx_ctx.c:425-432).  Set both sides explicitly, and
+ * the Screen side before eglCreateWindowSurface() so the subdriver cannot
+ * snapshot libdisplayinit's default of 1. */
+static void ep_set_native_swap_interval(screen_egl_present_t *p) {
+    int interval = EP_SWAP_INTERVAL;
+    int readback = -1;
+    screen_window_t win;
+    if (!p || !p->rgba_surface) return;
+    win = cluster_surface_window(p->rgba_surface);
+    if (!win) return;
+    if (screen_set_window_property_iv(win, SCREEN_PROPERTY_SWAP_INTERVAL,
+                                      &interval) != 0) {
+        fprintf(stderr,
+                "altscreen_render[egl]: Screen swap interval=%d failed errno=%d "
+                "(EGL side still applied)\n", interval, errno);
+        return;
+    }
+    screen_get_window_property_iv(win, SCREEN_PROPERTY_SWAP_INTERVAL, &readback);
+    fprintf(stderr, "altscreen_render[egl]: Screen swap interval requested=%d readback=%d\n",
+            interval, readback);
 }
 
 static GLuint ep_compile_shader(GLenum type, const char *source,
@@ -547,7 +594,7 @@ static int ep_init_egl(screen_egl_present_t *p) {
     }
     if (ep_make_program(p) != 0 || ep_make_loader_program(p) != 0 ||
         ep_make_loader_textures(p) != 0) return -1;
-    eglSwapInterval(p->egl_display, 1);
+    eglSwapInterval(p->egl_display, EP_SWAP_INTERVAL);
     fprintf(stderr,
             "altscreen_render[egl]: live GPU=%s GL=%s EGL=%d.%d pixmap-image+external-image OK\n",
             (const char *)glGetString(GL_RENDERER),
@@ -663,6 +710,7 @@ screen_egl_present_t *screen_egl_present_create_output(int width, int height,
     p->rgba_surface = cluster_surface_create(&cfg);
     if (!p->rgba_surface) goto fail;
     p->screen_ctx = cluster_surface_context(p->rgba_surface);
+    ep_set_native_swap_interval(p);   /* must precede eglCreateWindowSurface */
     if (ep_init_egl(p) != 0) goto fail;
 
     /* Loader/OMX threads bind the context only while drawing. */
@@ -832,32 +880,23 @@ out:
     return ok;
 }
 
+/* Cadence rides eglSwapBuffers alone: at EP_SWAP_INTERVAL each ep_loader_frame()
+ * blocks in the swap for exactly two 60 Hz scans, i.e. the loader's 30 fps.  The
+ * software deadline that used to sit here quantised posts onto a 33.33 ms grid
+ * unrelated to scanout, so loader frames lived 2 or 3 scans and beat against the
+ * 30 Hz LVDS capture exactly like the video path did — and with interval 2 it
+ * would additionally stack a second full period on top of the swap and halve the
+ * rate.  See maneuver_render/main.c:838, which pins the same rule as NEVER. */
 static void *ep_loader_thread_main(void *context) {
     screen_egl_present_t *p = (screen_egl_present_t *)context;
     uint64_t started = ep_monotonic_ns();
-    uint64_t deadline = started;
 
     while (!ep_loader_should_stop(p)) {
         uint64_t now = ep_monotonic_ns();
         uint64_t elapsed_ms = (started != 0 && now >= started)
             ? (now - started) / 1000000ULL : 0;
-        struct timespec req;
 
         if (ep_loader_frame(p, elapsed_ms) == 1) break;
-        deadline += (uint64_t)CARPLAY_LOADER_FRAME_INTERVAL_NS;
-        now = ep_monotonic_ns();
-        if (now == 0 || deadline <= now)
-            deadline = now + (uint64_t)CARPLAY_LOADER_FRAME_INTERVAL_NS;
-
-        while (!ep_loader_should_stop(p)) {
-            uint64_t remain;
-            now = ep_monotonic_ns();
-            if (now == 0 || now >= deadline) break;
-            remain = deadline - now;
-            req.tv_sec = (time_t)(remain / 1000000000ULL);
-            req.tv_nsec = (long)(remain % 1000000000ULL);
-            if (nanosleep(&req, NULL) == 0 || errno != EINTR) break;
-        }
     }
     __sync_synchronize();
     p->loader_exited = 1;
@@ -956,8 +995,20 @@ int screen_egl_present_frame(screen_egl_present_t *p,
     GLenum gl_error = GL_NO_ERROR;
     const char *stage = "validate";
     int ok = -1;
+    uint64_t entry_ns, swap_begin_ns;
 
     if (!p || source_index >= p->source_count || filled_len == 0) return -1;
+
+    /* Sampled before the loader join / gl_lock so it measures how fast decoded
+     * frames actually arrive, not how long we then take to show them. */
+    entry_ns = ep_monotonic_ns();
+    if (entry_ns && p->pace_last_entry_ns && entry_ns > p->pace_last_entry_ns) {
+        uint64_t d = entry_ns - p->pace_last_entry_ns;
+        p->pace_arrival_sum_ns += d;
+        if (d > p->pace_arrival_max_ns) p->pace_arrival_max_ns = d;
+        p->pace_samples++;
+    }
+    if (entry_ns) p->pace_last_entry_ns = entry_ns;
     /* The join is the ownership barrier: after it returns no loader draw can
      * race this first decoded frame or any subsequent video swap. */
     screen_egl_present_stop_loader(p);
@@ -997,7 +1048,16 @@ int screen_egl_present_frame(screen_egl_present_t *p,
     if (gl_error != GL_NO_ERROR) goto fail;
 
     stage = "eglSwapBuffers";
+    swap_begin_ns = ep_monotonic_ns();
     if (!eglSwapBuffers(p->egl_display, p->egl_surface)) goto fail;
+    {
+        uint64_t swap_end_ns = ep_monotonic_ns();
+        if (swap_begin_ns && swap_end_ns > swap_begin_ns) {
+            uint64_t d = swap_end_ns - swap_begin_ns;
+            p->pace_swap_sum_ns += d;
+            if (d > p->pace_swap_max_ns) p->pace_swap_max_ns = d;
+        }
+    }
     p->frames++;
     if (!p->first_success_logged) {
         p->first_success_logged = 1;
@@ -1005,8 +1065,25 @@ int screen_egl_present_frame(screen_egl_present_t *p,
                 "altscreen_render[egl]: VISIBLE PATH OK: Qcom 32m -> EGLImage external sampler -> RGBA8888 swap (%dx%d src=%u)\n",
                 p->width, p->height, source_index);
     } else if ((p->frames % 600) == 0) {
-        fprintf(stderr, "altscreen_render[egl]: %lu GPU RGBA frames swapped\n",
-                p->frames);
+        unsigned long n = p->pace_samples;
+        fprintf(stderr,
+                "altscreen_render[egl]: %lu GPU RGBA frames swapped; "
+                "arrival avg=%lu.%02lu max=%lu.%02lu ms, swap avg=%lu.%02lu max=%lu.%02lu ms (interval=%d)\n",
+                p->frames,
+                n ? (unsigned long)(p->pace_arrival_sum_ns / n / 1000000ULL) : 0UL,
+                n ? (unsigned long)(p->pace_arrival_sum_ns / n / 10000ULL % 100ULL) : 0UL,
+                (unsigned long)(p->pace_arrival_max_ns / 1000000ULL),
+                (unsigned long)(p->pace_arrival_max_ns / 10000ULL % 100ULL),
+                n ? (unsigned long)(p->pace_swap_sum_ns / n / 1000000ULL) : 0UL,
+                n ? (unsigned long)(p->pace_swap_sum_ns / n / 10000ULL % 100ULL) : 0UL,
+                (unsigned long)(p->pace_swap_max_ns / 1000000ULL),
+                (unsigned long)(p->pace_swap_max_ns / 10000ULL % 100ULL),
+                EP_SWAP_INTERVAL);
+        p->pace_arrival_sum_ns = 0;
+        p->pace_arrival_max_ns = 0;
+        p->pace_swap_sum_ns = 0;
+        p->pace_swap_max_ns = 0;
+        p->pace_samples = 0;
     }
     ok = 0;
     goto out;
@@ -1076,7 +1153,8 @@ int screen_egl_present_recover_output(screen_egl_present_t *p) {
         p->egl_surface = EGL_NO_SURFACE;
         goto out;
     }
-    eglSwapInterval(p->egl_display, 1);
+    eglSwapInterval(p->egl_display, EP_SWAP_INTERVAL);
+    ep_set_native_swap_interval(p);
     p->first_success_logged = 0;
     fprintf(stderr,
             "altscreen_render[egl]: output surface recreated; OMX/EGLImage source ABI unchanged\n");

@@ -38,7 +38,8 @@ enum {
     SCREEN_PROPERTY_RENDER_BUFFERS,
     SCREEN_PROPERTY_POINTER,
     SCREEN_PROPERTY_STRIDE,
-    SCREEN_PROPERTY_PLANAR_OFFSETS
+    SCREEN_PROPERTY_PLANAR_OFFSETS,
+    SCREEN_PROPERTY_SWAP_INTERVAL   /* real BSP value is 45; host shim only type-checks */
 };
 
 int screen_create_context(screen_context_t *ctx, int type);
