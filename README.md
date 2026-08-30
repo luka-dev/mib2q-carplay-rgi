@@ -53,7 +53,7 @@ What this patch makes the head unit + cluster do that stock MHI2Q doesn't:
 | `maneuver_render/` | GLES maneuver overlay renderer |
 | `common/` | Shared QNX Screen surface code |
 | `deploy/smartphone_integrator/` | Runtime scripts and child-process configuration for the HU |
-| `scripts/` | Host build and deployment entry points |
+| `scripts/` | Docker build entry points (Java / hook / renderer) |
 | `toolchain/qnx65-abi/` | QNX Screen ABI headers used only for cross-compilation |
 | `docs/` | Obsidian knowledge base - validated RE + implementation notes (open [`docs/INDEX.md`](docs/INDEX.md)) |
 | `assets/` | Screenshots and visual reference material |
@@ -89,20 +89,28 @@ Full toolchain, threading and boot details live in the knowledge base - see
 
 ## Deployment
 
-The runtime integration lives in [`deploy/smartphone_integrator/`](deploy/smartphone_integrator/README.md).
-It starts `maneuver_render` around the lifetime of `dio_manager`, does not restart Java, and performs
-bounded cleanup when `dio_manager` exits.
+Get a root shell on the unit (SSH), **back up every file you touch**, then just drop the files in
+place and reboot.
 
-To replace only the native hook and restart `dio_manager`:
+**1. Copy the runtime files to `/mnt/app/root/hooks/`** (`chmod +x` the scripts):
 
-```sh
-./scripts/deploy_unit.sh
-```
+| Source | Files |
+| --- | --- |
+| `deploy/smartphone_integrator/` | `carplay_startup.sh`, `carplay_cleanup.sh`, `carplay_processes.sh` |
+| `build/` | `libcarplay_hook.so`, `maneuver_render` |
+| `maneuver_render/resources/` | `flag_atlas.rgba` |
 
-The deploy helper keeps one on-unit `libcarplay_hook.so.bak`; it does not accumulate timestamped
-backups. Java deployment is deliberately not automated - restarting the Java stack on a live HU is
-unsafe; install the jar and let the HMI pick it up. Full install paths and supervisor behaviour:
-[`docs/INDEX.md`](docs/INDEX.md) → *supervisor-lifecycle*.
+**2. Point the supervisor at them.** In `/mnt/system/etc/eso/production/smartphone_integrator.json`,
+replace the `children.carplay` block with [`deploy/smartphone_integrator/carplay_child.json`](deploy/smartphone_integrator/carplay_child.json).
+
+**3. Java patch.** `build/carplay_hook.jar` is a set of class replacements patched into `lsd.jxe`
+(not a drop-in file).
+
+**4. Reboot.** On boot `smartphone_integrator` launches everything; check `/tmp/carplay_hook.log` and
+`/tmp/carplay_java.log` (see [Logging](#logging)).
+
+Exact ownership rules, the `LD_PRELOAD`/env constraints and the MU1316 QNX-compat audit are in
+[`deploy/smartphone_integrator/README.md`](deploy/smartphone_integrator/README.md).
 
 ## Logging
 

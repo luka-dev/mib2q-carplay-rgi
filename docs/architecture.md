@@ -92,9 +92,10 @@ All three build in Docker - no host toolchain. No Java variants; `java_patch/` b
 jar. The native builds synthesize import stubs; the resulting ELF binds the unit's real
 Screen/EGL/GLES libs at runtime.
 
-`./scripts/deploy_unit.sh` scp's `libcarplay_hook.so` and restarts `dio_manager` (keeps one `.bak`).
-Java is **not** auto-deployed - restarting the Java stack on a live HU is unsafe; install the jar and
-let the HMI pick it up. Runtime integration + install paths: [[supervisor-lifecycle]].
+Deploy by copying the runtime files to `/mnt/app/root/hooks/`, pointing `smartphone_integrator.json`
+at `carplay_child.json`, and rebooting - there is no one-shot flasher. Java is patched into `lsd.jxe`
+separately (restarting the Java stack on a live HU is unsafe). Runtime integration + install paths:
+[[supervisor-lifecycle]].
 
 ## Reverse-engineering references
 
