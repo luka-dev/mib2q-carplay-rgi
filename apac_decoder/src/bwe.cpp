@@ -22,6 +22,14 @@ bool BWE2Decoder::GetActiveFlag(uint32_t channel) const
 // The payload of one active channel: two 9-bit envelope fields and one 6-bit
 // scale per window group.  `groups` is always the FIRST channel's group count,
 // even for the second half of a channel pair - that is what the original reads.
+//
+// The number of 6-bit reads is NOT clamped, deliberately: it is what keeps the
+// bitstream in step, and shortening it would desynchronise every later field
+// rather than protect anything.  What is clamped is the STORE - Deserialize is
+// handed the element rather than the bitstream, so nothing here enforces the
+// cap of 8 that APACICSInfo::Deserialize puts on numWindowGroups, and mScale is
+// a fixed array.  A count past the cap therefore mis-parses (and is caught by
+// the caller running out of bits) instead of writing off the end.
 void BWE2Decoder::ReadChannel(BitstreamReader& bs, uint32_t channel, uint32_t groups)
 {
     mEnvelope[channel][0] = bs.GetBits(9);

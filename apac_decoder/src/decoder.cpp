@@ -166,11 +166,26 @@ uint32_t CoreDecoder::DecodeAPACFrame(BitstreamReader& bs, uint32_t frameType,
     // 0x0007bcd0  APACChannelRemapper::Process - a cycle-following swap, not a
     // gather: entry i is chased through the map until it stops rising, and the
     // two slots are exchanged.
+    //
+    // COUNTED, where the original's walk is not.  `j = mRemap[j]` terminates
+    // only if the map is a permutation: a fixed point above i, or a cycle among
+    // entries above i, spins forever, and an entry >= mNumChannels indexes past
+    // the port's fixed array.  The original grows its map from the bitstream and
+    // never validates it, and Process is handed the map rather than the bits, so
+    // the invariant is not enforced where it is relied on - the same shape of
+    // risk as APACTNSData::Apply.  The port bounds the walk by the number of
+    // channels, which is the length of any real cycle, and refuses an index it
+    // cannot hold.  On a well-formed map this is the original, step for step.
     if (mHasRemap) {
         for (uint32_t i = 0; i < n; ++i) {
             uint32_t j = mRemap[i];
-            while (j > i)
+            for (uint32_t hops = 0; j > i && hops < n; ++hops) {
+                if (j >= kMaxDecoderChannels)
+                    return kBadValue;
                 j = mRemap[j];
+            }
+            if (j > i || j >= n)
+                return kBadValue;       // not a permutation of 0 .. n-1
             if (j != i) {
                 float* t = channels[i];
                 channels[i] = channels[j];

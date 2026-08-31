@@ -137,11 +137,26 @@ bool CACDecoder::ProcessCac(const APACICSInfo& ics, const SFBOffsets& table,
     const uint16_t* offs = eightShort ? table.sfbOffsetShort : table.sfbOffsetLong;
     const uint32_t numBands = eightShort ? table.numSfbShort : table.numSfbLong;
 
+    // COUNTED, where the original's band walks are not.  Every band loop below
+    // reads offs[band + 1], and the offset array holds numBands + 1 entries, so
+    // a maxSfb above numBands walks off the end of a .rodata table.
+    // APACICSInfo::Deserialize cannot produce one - it rejects a maxSfb past the
+    // limit the SFB table gave it - but ProcessCac is handed the ICSInfo rather
+    // than the bitstream, so the invariant is not enforced where it is relied
+    // on.  Same reasoning as APACTNSData::Apply.
+    if (maxSfb > numBands)
+        return true;
+    // Eight nibbles is all the window-grouping word carries, and 8 x 15 is the
+    // gain map's whole capacity; the RLE expansion below asserts the product
+    // again per group.
+    const uint32_t groups = ics.numWindowGroups;
+    if (groups > 8)
+        return true;
+
     // The run-length expansion, one slot per (window group, band).
     uint8_t gains[kCacMaxBands];
     memset(gains, 0, sizeof gains);
 
-    const uint32_t groups = ics.numWindowGroups;
     if (groups == 0) {
         // The original returns immediately for an eight-short frame with no
         // groups and otherwise runs the band loop over an all-zero gain map.
