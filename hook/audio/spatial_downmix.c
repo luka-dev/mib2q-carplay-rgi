@@ -9,6 +9,30 @@ static int16_t spa_saturate_s16(int32_t value)
     return (int16_t)value;
 }
 
+size_t spa_reorder_5_1_decoder_to_declared_s16(const int16_t *input, size_t frames,
+                                               int16_t *output)
+{
+    /* decoder C L R Ls Rs LFE  ->  declared L R C LFE Ls Rs */
+    static const int kFromDeclared[SPA_PCM_5_1_CHANNELS] = { 1, 2, 0, 5, 3, 4 };
+    size_t frame;
+
+    if (!input || !output) return 0;
+
+    for (frame = 0; frame < frames; frame++) {
+        const int16_t *src = input + frame * SPA_PCM_5_1_CHANNELS;
+        int16_t *dst = output + frame * SPA_PCM_5_1_CHANNELS;
+        int16_t tmp[SPA_PCM_5_1_CHANNELS];
+        int ch;
+
+        for (ch = 0; ch < SPA_PCM_5_1_CHANNELS; ch++)
+            tmp[ch] = src[kFromDeclared[ch]];
+        for (ch = 0; ch < SPA_PCM_5_1_CHANNELS; ch++)
+            dst[ch] = tmp[ch];
+    }
+
+    return frames * SPA_PCM_5_1_CHANNELS;
+}
+
 size_t spa_downmix_5_1_2_s16(const int16_t *input, size_t frames, int16_t *output)
 {
     size_t frame;

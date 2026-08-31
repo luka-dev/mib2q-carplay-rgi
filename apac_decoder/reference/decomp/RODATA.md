@@ -166,7 +166,10 @@ Full entry lists:
 ## Tables whose contents are identified exactly
 
 * **`0x003308c0`, 4096 bytes, `float[1024]`** — read by `APACSpectralData::Deserialize`.
-  Entry `i` equals `i^(4/3)` to the last bit of float precision for all 1024 entries
+  Entry `i` equals `i^(4/3)` for all 1024 entries to **within 1 ULP**, not to the last bit:
+  recomputing the table as `float32(i ** (4.0/3.0))` gives a maximum relative error of 7.56e-08,
+  which is under one float32 ULP but is not a bit-for-bit match. Copy the bytes; do not generate
+  this table
   (checked exhaustively). This is the inverse-quantisation power table. The extent reported
   by the boundary scan is 4272 bytes; the last 176 bytes are a different object, because
   entries past index 1023 do not fit `i^(4/3)`. **Use 1024 entries.**
