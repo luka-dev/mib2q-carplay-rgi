@@ -900,8 +900,8 @@ IPC. The short answer, and then what it rests on:
 
 | | mean per packet | worst packet, of 3977 |
 | --- | ---: | ---: |
-| decode alone, ARMv7 instructions | **950 955** | **1 238 410** |
-| whole hook chain, ARMv7 instructions | **1 045 452** | **1 330 594** |
+| decode alone, ARMv7 instructions | **950 655** | **1 237 622** |
+| whole hook chain, ARMv7 instructions | **1 045 101** | **1 330 430** |
 | at 1.7 GHz **assuming IPC 1.0** | 0.615 ms | 0.783 ms |
 | of one core's 21.333 ms | **2.9 %** | **3.7 %** |
 
@@ -977,16 +977,16 @@ Mean instructions per packet, whole chain, from the per-stage pass:
 
 | stage | mean | worst | share |
 | --- | ---: | ---: | ---: |
-| framer (BE32 reassembly) | 285 | 382 | 0.03 % |
-| AEAD, two Poly1305 passes | 13 741 | 26 611 | 1.3 % |
-| ChaCha20 over the payload | 11 052 | 33 440 | 1.1 % |
-| TLV split | 609 | 765 | 0.06 % |
-| **decode** | **950 252** | 1 237 803 | **90.9 %** |
-| channel permutation | 69 591 | 70 151 | 6.7 % |
+| framer (BE32 reassembly) | 282 | 382 | 0.03 % |
+| AEAD, two Poly1305 passes | 13 736 | 26 591 | 1.3 % |
+| ChaCha20 over the payload | 11 046 | 33 435 | 1.1 % |
+| TLV split | 607 | 765 | 0.06 % |
+| **decode** | **949 948** | 1 237 638 | **90.9 %** |
+| channel permutation | 69 440 | 69 502 | 6.6 % |
 
 So the plumbing is **9 %** of the chain and the codec is **91 %**. The single largest piece of
 plumbing is not the crypto — the whole AEAD, both Poly1305 passes and the ChaCha20 together, is
-24 793 instructions, 2.4 % — it is the 6.7 % spent moving six channels of S16 into the declared
+24 782 instructions, 2.4 % — it is the 6.6 % spent moving six channels of S16 into the declared
 order.
 
 Inside a decode, split by a spectrum sink that fires after the bitstream is parsed and before the
@@ -994,9 +994,9 @@ first filter bank call:
 
 | | mean | worst | share of a decode |
 | --- | ---: | ---: | ---: |
-| frame layer — Huffman, scalefactors, TNS parse, CAC, BWE header | 85 483 | 371 673 | 9.0 % |
-| transform and output — filter bank, MDCT, FFT, remap | 693 386 | 694 749 | 72.9 % |
-| float32 to S16 in `apac_bridge.cpp` | 172 086 | — | 18.1 % |
+| frame layer — Huffman, scalefactors, TNS parse, CAC, BWE header | 85 295 | 371 645 | 9.0 % |
+| transform and output — filter bank, MDCT, FFT, remap | 693 125 | 694 638 | 72.9 % |
+| float32 to S16 in `apac_bridge.cpp` | 172 235 | — | 18.1 % |
 
 ### The FFT is the hot spot, and by how much
 
@@ -1019,10 +1019,10 @@ would have to be touched. **It does not need to be**, at 3.7 % of a core in the 
 
 ### Why the tail is short
 
-The transform half costs **693 386 instructions on average and 694 749 at its worst — a 0.2 %
+The transform half costs **693 125 instructions on average and 694 638 at its worst — a 0.2 %
 spread over 3977 packets**. It is a fixed six transforms of a fixed size; nothing in the bitstream
-can make it dearer. All of the variation is in the frame layer, which runs from 85 483 on average
-to 371 673 at its worst, and that is 4.3x on 9 % of the packet.
+can make it dearer. All of the variation is in the frame layer, which runs from 85 295 on average
+to 371 645 at its worst, and that is 4.4x on 9 % of the packet.
 
 So a bad packet cannot be a disaster: the expensive part is constant and the variable part is
 small. That is structural rather than a property of this capture — the filter bank always runs
@@ -1041,9 +1041,9 @@ packets are 249, 221, 346, 106, 102, 175, 143 and 104 bytes, against a mean of 2
 All three checked on the target build, not argued from the source:
 
 * **Stack.** `bench/apac_bench.cpp` paints 128 KiB of stack below the caller and scans it
-  afterwards. A decode disturbs **5 248 bytes**; the whole chain, framer and crypto included,
-  **5 504**. The 1.6 MB decoder object lives on the heap — `spa_apac_create()` `malloc`s it once at
-  stream start — and `SynthesisFilterBank` (94 804 bytes on this build) and `LPMDCTFilter` (49 312)
+  afterwards. A decode disturbs **5 264 bytes**; the whole chain, framer and crypto included,
+  **5 584**. The 1.6 MB decoder object lives on the heap — `spa_apac_create()` `malloc`s it once at
+  stream start — and `SynthesisFilterBank` (94 804 bytes on armle-v7) and `LPMDCTFilter` (49 312)
   are members of it, so neither ever sees a stack. 5 248 bytes is a rounding error against any
   thread stack `dio_manager` creates; the thing that would not have been is the object, and it is
   on the heap.
@@ -1073,16 +1073,26 @@ not assumed: on the host, `--key --stream` runs the same chain over the capture'
 bytes with the session's own key, and the two agree to **0.7 % on the mean and 0.4 % on the worst
 packet** (31 568 ns against 31 774 ns; 43 625 against 43 791).
 
-Measured against the tree at `4f5f080` **plus the then in-flight BWE synthesis work** — which is why
-`sizeof(apac::Decoder)` reads 1 636 036 here and 1 462 096 in the sections above. Stage e has since
-landed and the figure is 1 637 272; the 1 236 bytes between the two are the last of its scratch.
+Re-measured at `4268ec4`, with stage e landed. The instruction counts above are that build's:
+the run against the earlier tree and the run against this one are **byte identical, every figure**,
+which is a stronger statement than "unaffected" — a deterministic instruction count that does not
+move by one is the BWE synthesis never being entered on this content, not merely being cheap.
+Rebuilding under the unified flags of `scripts/apac_flags.sh`, which added `-fPIC`, moved the
+chain mean by 0.03 % and the worst packet by 0.06 %.
 
-Correcting one attribution in that note: it is NOT the BWE tables that grew the object. The two
-512 x 16 LSF codebooks and the 64-entry gain table are 64 KB of `.rodata` and are not in the object
-at all. The +175 KB is `apac::BWELPC` — one for the whole decoder, mostly the two
-`apac::LPMDCTFilter`s' FFT scratch — plus a 4 KB envelope buffer per core decoder and 2 KB per
-`ComplexFFT` for the radix-3 twiddles. None of it is touched on this content and the decode cost is
-unaffected, which is the point that note was making.
+**The +175 KB is not the BWE tables** — the two 512 x 16 LSF codebooks and the 64-entry gain table
+are 64 KB of `.rodata` and are not in the object at all. It is `apac::BWELPC`, one for the whole
+decoder and mostly its two `apac::LPMDCTFilter`s' FFT scratch, plus a 4 KB envelope buffer per core
+decoder and 2 KB per `ComplexFFT` for the radix-3 twiddles. The first version of this note got that
+wrong.
+
+**And 1 636 036 against 1 637 272 is not a version difference, it is an architecture one.**
+`sizeof(apac::Decoder)` is 1 636 036 on armle-v7 and 1 637 272 on this arm64 host, from the same
+sources; the gap is ABI padding and it was there before stage e too (1 460 880 against 1 462 096,
+i.e. 1 216 bytes, where it is now 1 236). Every number in this section is the **armv7** one, which
+is the only one that describes the head unit. Reading the host figure as "the version with stage e
+in it" and the target figure as "the version without" would attribute 1 236 bytes of padding to a
+feature.
 
 ## Known traps, all found the hard way
 

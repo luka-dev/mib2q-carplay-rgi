@@ -1,52 +1,52 @@
 @@QNXRUN-START@@
 apac_bench: 3980 records, 33 byte cookie, clock = ClockCycles
 apac_bench: syspage cycles_per_sec = 24000000
-apac_bench: clock read overhead 3 ticks; spin2 251005, spin4 501720, ratio 1.999
+apac_bench: clock read overhead 3 ticks; spin2 251007, spin4 501762, ratio 1.999
 apac_bench: 0.0627 ticks per instruction (from the loop difference); spin2 implies 0.0628
 apac_bench: 16 MB stride walk, taken as 4 instructions/iteration (the compiler's real number is higher): 0.1097 ticks per instruction (1.75x the arithmetic loop) [acc=3014515712]
-apac_bench: the two exact loops agree to 0.12% and the memory bound one is only 1.75x dearer, so this clock counts instructions: 1 tick = 15.95 instructions
+apac_bench: the two exact loops agree to 0.10% and the memory bound one is only 1.75x dearer, so this clock counts instructions: 1 tick = 15.95 instructions
 apac_bench: sizeof Decoder=1636036 ASPDecoder=1636036 SynthesisFilterBank=94804 LPMDCTFilter=49312 LRVQDecoder=58740
 apac_bench: 48000 Hz, 6 channels, 1024 frames per packet -> 46.88 packets/s
 
 apac_bench: 2 repetitions, per-packet minimum across them; 3980 records, 3977 carrying audio
   (a packet is 1024 frames at 48000 Hz, so the deadline is 21.333 ms and the budget is 1/46.9 of a core)
 
-  whole chain/packet     n=3980  mean      65528  p50      64037  p90      72730  p99      76284  p99.9      77281  max      83400
-                                     1045452 instructions mean, 1330594 max
-  decode/packet          n=3977  mean      59605  p50      57620  p90      67369  p99      70966  p99.9      71921  max      77622
-                                      950955 instructions mean, 1238410 max
-    frame layer          n=3977  mean       5358  p50       3406  p90      13072  p99      16639  p99.9      17635  max      23296
-                                       85483 instructions mean, 371673 max
-    transform+output     n=3977  mean      43461  p50      43506  p90      43545  p99      43546  p99.9      43546  max      43546
-                                      693386 instructions mean, 694749 max
+  whole chain/packet     n=3980  mean      65516  p50      64024  p90      72732  p99      76284  p99.9      77285  max      83403
+                                     1045101 instructions mean, 1330430 max
+  decode/packet          n=3977  mean      59595  p50      57606  p90      67380  p99      70969  p99.9      71927  max      77585
+                                      950655 instructions mean, 1237622 max
+    frame layer          n=3977  mean       5347  p50       3392  p90      13076  p99      16644  p99.9      17600  max      23298
+                                       85295 instructions mean, 371645 max
+    transform+output     n=3977  mean      43451  p50      43503  p90      43542  p99      43546  p99.9      43546  max      43546
+                                      693125 instructions mean, 694638 max
 
   at 1.7 GHz, ASSUMING an IPC (nothing here measures one):
-    IPC 0.6 -> chain mean 1.025 ms, worst 1.305 ms of a 21.333 ms deadline = 4.80 % / 6.11 % of one core
+    IPC 0.6 -> chain mean 1.025 ms, worst 1.304 ms of a 21.333 ms deadline = 4.80 % / 6.11 % of one core
     IPC 1.0 -> chain mean 0.615 ms, worst 0.783 ms of a 21.333 ms deadline = 2.88 % / 3.67 % of one core
     IPC 1.4 -> chain mean 0.439 ms, worst 0.559 ms of a 21.333 ms deadline = 2.06 % / 2.62 % of one core
 
   per stage, clock read between each (attribution only):
     framer               n=3980  mean         18  p50         18  p90         19  p99         20  p99.9         21  max         24
-                                         285 instructions mean, 382 max
-    AEAD (2 x poly1305)  n=3980  mean        861  p50        853  p90       1051  p99       1131  p99.9       1289  max       1668
-                                       13741 instructions mean, 26611 max
-    ChaCha20 payload     n=3980  mean        693  p50        699  p90        987  p99       1126  p99.9       1403  max       2096
-                                       11052 instructions mean, 33440 max
-    TLV split            n=3980  mean         38  p50         38  p90         39  p99         44  p99.9         45  max         48
-                                         609 instructions mean, 765 max
-    decode               n=3980  mean      59561  p50      57617  p90      67374  p99      70965  p99.9      71923  max      77584
-                                      950252 instructions mean, 1237803 max
-    channel permute      n=3980  mean       4362  p50       4357  p90       4396  p99       4397  p99.9       4397  max       4397
-                                       69591 instructions mean, 70151 max
+                                         282 instructions mean, 382 max
+    AEAD (2 x poly1305)  n=3980  mean        861  p50        853  p90       1051  p99       1131  p99.9       1289  max       1667
+                                       13736 instructions mean, 26591 max
+    ChaCha20 payload     n=3980  mean        692  p50        698  p90        987  p99       1125  p99.9       1403  max       2096
+                                       11046 instructions mean, 33435 max
+    TLV split            n=3980  mean         38  p50         38  p90         38  p99         44  p99.9         45  max         48
+                                         607 instructions mean, 765 max
+    decode               n=3980  mean      59551  p50      57603  p90      67375  p99      70971  p99.9      71927  max      77586
+                                      949948 instructions mean, 1237638 max
+    channel permute      n=3980  mean       4353  p50       4356  p90       4357  p99       4357  p99.9       4357  max       4357
+                                       69440 instructions mean, 69502 max
 
   the eight most expensive packets (decode), by record index:
-    #166(77622, 249 B) #771(74152, 221 B) #3222(73228, 346 B) #2368(71921, 106 B) #2868(71910, 102 B) #598(71745, 175 B) #548(71702, 143 B) #2066(71688, 104 B)
+    #166(77585, 249 B) #771(74154, 221 B) #3222(73226, 346 B) #2368(71927, 106 B) #2868(71915, 102 B) #598(71709, 175 B) #548(71705, 143 B) #2066(71694, 104 B)
 
   inside one packet, six long blocks driven directly:
     6 x MDCT(1024)             36036   =  60.5 % of a mean decode
-    6 x ComplexFFT(512)        28510   =  47.8 % of a mean decode,  79.1 % of the MDCT above
+    6 x ComplexFFT(512)        28509   =  47.8 % of a mean decode,  79.1 % of the MDCT above
 
-  stack below the caller: decode 5248 bytes, whole chain 5504 bytes (paint 131072)
+  stack below the caller: decode 5264 bytes, whole chain 5584 bytes (paint 131072)
 
 Process 3 (apac_bench) exited status=0.
 @@QNXRUN-END@@
