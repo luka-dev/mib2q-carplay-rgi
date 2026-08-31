@@ -858,9 +858,20 @@ only the top `patchWidth` bins of it, `[bwStart - w, bwStart)`. A frame whose `m
 enough that its coded content stops below that slice passes the guard, runs every FFT, and
 multiplies a slice of zeros — so every extension coefficient comes out `+0.0f` on top of the `+0.0f`
 already there. Cases 4, 5, 26 and 30 are exactly those, the library does the same, and the fixture
-agrees bit for bit. **They cost full price.** A `memcmp` of the spectrum before and after is a
-correctness criterion, not a cost one: it cannot separate these four from the 11 that are genuinely
-gated, so a cost average must exclude 11, not 15.
+agrees bit for bit. **They cost full price** — 6 386, 6 471, 2 255 and 2 219 ns on the host, against
+~296 ns for a genuinely gated one. A `memcmp` of the spectrum before and after is a correctness
+criterion, not a cost one: it cannot separate these four from the 11 that are genuinely gated, so a
+cost average must exclude **11, not 15** (4 837 ns against 4 906 ns, +1.4 % on this case mix — small
+here, but the rule matters: "quiet ⇒ free" applied to real content prices a low-bandwidth channel at
+zero when it costs as much as any other long-narrow one). Say it as: **11 are free; 4 more produce
+nothing but cost full price; 15 look identical to a `memcmp`.**
+
+That the ORIGINAL also runs on those four is settled from the disassembly, not from the fixture — a
+fixture whose spectrum equals its input cannot distinguish "the library gated" from "the library ran
+and wrote zeros". The long guard at `0x78490` is `sub_78370(spec, spec + bwStart)`, find-first-
+non-zero over the whole `[0, bwStart)` rather than over the replicated slice, and it proceeds when
+one is found; cases 4 and 5 have content inside that range, and the short scan is the same shape for
+26 and 30.
 
 Block type is 2.5x, the wide/narrow geometry a further 1.2-1.3x, and the **window-group count costs
 nothing** — the short inner loop is always 8 windows x 64 multiplies plus 64 gain multiplies
