@@ -33,11 +33,10 @@ public class DisplayManagerMIB2High extends DisplayManager implements IDisplayLi
     private static final int CTX_MAP_ALT_KDK = 77;   // alt map + KDK + backings
     private static final int CTX_CARPLAY_NAV = 80;   // CarPlay: maneuver + backing + map
     private static final int CTX_CARPLAY_MAP = 81;   // CarPlay: map only
-    private static final int CTX_RETROARCH_MAIN = 90; // RetroArch: HMI overlays over video
     private static final int FIRST_CARPLAY_CONTEXT = 80;   // every stock context id is < this
 
     /* ---- context-table sizing / G24 KDK variants ---- */
-    private static final int DC_SIZE_A5  = 91;    // stock 0..78 + CarPlay 80/81 + RetroArch 90
+    private static final int DC_SIZE_A5  = 82;    // stock 0..78 + CarPlay 80/81
     private static final int DC_SIZE_G24 = 158;   // stock + the +79 KDK-hoisted variants
     private static final int G24_KDK_CTX_OFFSET = 79;
     private int lastBlockedCarPlayContext = -1;
@@ -63,7 +62,7 @@ public class DisplayManagerMIB2High extends DisplayManager implements IDisplayLi
         if (this.framework.getKombiType() == KOMBI_TYPE_G24) {
             this.dc = new DisplayContext[DC_SIZE_G24];
         } else {
-            this.dc = new DisplayContext[DC_SIZE_A5];   // stock + CarPlay 80/81 + RetroArch 90
+            this.dc = new DisplayContext[DC_SIZE_A5];   // stock contexts + CarPlay ctx 80/81
         }
 
         this.dc[0] = new DisplayContext(0, new int[]{16});
@@ -178,9 +177,6 @@ public class DisplayManagerMIB2High extends DisplayManager implements IDisplayLi
         if (this.framework.getKombiType() != KOMBI_TYPE_G24) {
             this.dc[CTX_CARPLAY_NAV] = new DisplayContext(CTX_CARPLAY_NAV, new int[]{98, 101, 102, 99});
             this.dc[CTX_CARPLAY_MAP] = new DisplayContext(CTX_CARPLAY_MAP, new int[]{99});
-            /* Main-terminal RetroArch composition: HMI/partial popups (16)
-             * remain above the video plane (43). */
-            this.dc[CTX_RETROARCH_MAIN] = new DisplayContext(CTX_RETROARCH_MAIN, new int[]{16, 43});
         } else {
             this.defineContextsForG24();
         }
