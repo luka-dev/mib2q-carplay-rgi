@@ -24,6 +24,14 @@
  *    confirms the decoder preserves encoder slot order rather than re-ordering
  *    to the layout tag, so this is a property of the stream, not of the oracle.
  *
+ * 3. The order the STREAM ITSELF declares.  Parsing the live 33-byte cookie's
+ *    apac::GlobalConfig gives channel layout tag 0x007c0006, which CoreAudio
+ *    resolves as C L R Ls Rs LFE.  That is the same order the decoder was
+ *    measured to emit, arrived at independently: from the bitstream rather than
+ *    from the audio.  Where it disagrees with Pioneer's format-index table
+ *    (which maps index 65 to 0x00790006, L R C LFE Ls Rs), the cookie wins -
+ *    it is what the sender actually encoded.
+ *
  * So a decoder frame must be normalised into the declared order before it is
  * folded.  spa_reorder_5_1_decoder_to_declared_s16() does that for 5.1.
  *

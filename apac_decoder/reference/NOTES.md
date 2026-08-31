@@ -193,7 +193,9 @@ bytes. On the captured 33-byte cookie that gives **offset 12, 21 bytes**, starti
 16-bit `0x0800` sync word*. GlobalConfig starts two bytes further on. Called on the sync word
 the helpers read `0x08007c41` instead of `0x7c41800c` and report 96000 Hz, 32 channels and
 frame length 0 — which is how they were first misread here as broken leftovers. They are not
-broken: their bit ranges (`[20:15]` sample-rate index, `[8:1]` channels, mask `0x7e00` for the
+broken - with one real exception. `SampleRate`, `FrameLength` and `NumberOfChannels` agree with
+the bitstream exactly once called at `offset + 2`; `GetProfile` reads its six bits one position
+late and disagrees, so that one genuinely is wrong and should not be trusted. Their bit ranges (`[20:15]` sample-rate index, `[8:1]` channels, mask `0x7e00` for the
 1024-frame test) are exactly the formulas `tools/pioneer_apac_cookie.py` implements, and
 `docs/PIONEER_TYPE103_STATIC_SPEC.md` already documents the same `+2` correction. At the right
 offset they return 48000 Hz, 1024 frames and 6 channels, matching `Configure`'s own log line.
