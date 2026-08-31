@@ -32,10 +32,20 @@
 // bool reads that way round, and `false` is only meaningful on a CPE.
 //
 // LRVQ.  A leading 1 bit in an SCE, an LFE or a CPE selects Apple's LRVQ frame
-// mode, whose decoder is stage h1 and deliberately not ported: it is never
-// entered on the CarPlay 5.1 content (proved twice, see PORT_STATUS.md).  The
-// port returns kPortNeedsLRVQ there, which propagates as a hard error exactly
-// as APACLRVQDecoder's own non-zero return does.
+// mode.  Deserialize takes the decoder for it as an argument rather than owning
+// one, for two reasons the stage-h1 port established from the binary: every
+// APACLRVQDecoder member is STATIC, so there is no decoder object in the
+// original at all, and the prediction state its wrappers use lives on their own
+// stack, so nothing survives a call.  One instance shared by the whole decoder
+// therefore reproduces the original exactly - the port's
+// SpectrumDeserialize{SCE,CPE,LFE} each call ResetPrediction on entry - and
+// costs 56 KiB once instead of 56 KiB per element.
+//
+// A null pointer means "this build has no LRVQ decoder": the element then
+// returns kPortNeedsLRVQ, which propagates as a hard error exactly as
+// APACLRVQDecoder's own non-zero return does.  LRVQ is never entered on the
+// CarPlay 5.1 content - proved three times, see PORT_STATUS.md - so on that
+// content the argument is never dereferenced either way.
 
 #ifndef APAC_ELEMENT_H
 #define APAC_ELEMENT_H
@@ -50,6 +60,8 @@
 #include "apac/tns.h"
 
 namespace apac {
+
+class LRVQDecoder;
 
 // Element type codes, as they appear in apac::chan::CoreDecoderConfig.
 enum ElementType {
@@ -89,8 +101,9 @@ public:
     uint32_t NumChannels() const;   // 2 for a CPE, 0 for type 6, else 1
 
     // Returns 0 on success.  Non-zero propagates out of the core decoder as a
-    // frame error, which is what every original return path does.
-    uint32_t Deserialize(BitstreamReader& bs);
+    // frame error, which is what every original return path does.  `lrvq` may
+    // be null; see the note on the LRVQ frame mode above.
+    uint32_t Deserialize(BitstreamReader& bs, LRVQDecoder* lrvq);
 
     void Reset();
 
@@ -98,9 +111,16 @@ public:
     const APACICSInfo& GetICSInfo(bool first) const;
     APACICSInfo&       GetICSInfo(bool first);
 
+    // The 190-byte APACTNSData record, for differential tests: TNS is the last
+    // thing an element does to its spectrum and the record is the only part of
+    // that the spectrum itself does not show.  The original has no such
+    // accessor - it reaches the record at a fixed offset off `this`.
+    const TNSData&     TNSRecord(bool first) const { return mTNS[first ? 0 : 1]; }
+
 private:
     uint32_t DeserializeSQFrame(BitstreamReader& bs);
     uint32_t ApplyTNS(uint32_t channel);
+    SpectralData View(uint32_t channel);
 
     uint32_t                mType;
     const SFBOffsets*       mTable;

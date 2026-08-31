@@ -335,12 +335,26 @@ cannot touch the dump, which is taken before the transform runs.
 
 ### What stages f and g deliberately do not implement
 
-* **LRVQ.** A set frame-mode bit in a CPE, or a set coding-type bit in an SCE or LFE, returns
-  `kPortNeedsLRVQ`. Unreachable: patching each of
-  `APACLRVQDecoder::SpectrumDeserialize{SCE,CPE,LFE}` in the running library to return 0 — to
-  consume no bits — leaves the whole capture's decoded float32 output bit identical, which none of
-  them could do if it read a single bit. `src/element.cpp` carries the exact three-way seam for the
-  stage-h1 port to be dropped into.
+* **LRVQ is wired**, to stage h1. `SyntacticElement::Deserialize` takes the decoder as an argument
+  rather than owning one, because there is no decoder object in the original at all: every
+  `APACLRVQDecoder` member is static and its prediction state is a stack local of the wrapper, so
+  nothing survives a call. One instance shared by the whole `apac::Decoder` therefore reproduces the
+  original exactly — the port's `SpectrumDeserialize{SCE,CPE,LFE}` each call `ResetPrediction` on
+  entry — and costs 56 KiB once instead of 56 KiB per element; `sizeof(apac::Decoder)` went from
+  1 405 344 to 1 462 096. A null pointer still means `kPortNeedsLRVQ`.
+
+  None of it is reachable on this content, so `tests/test_frames.cpp` checks the SEAM instead, by
+  driving the stage-h1 test's own library-checked cases through the element and requiring the same
+  state: 24 CPE frames through `DeserializeLrvqFrame`, 12 SCE and 27 LFE through the two spectrum
+  entry points, each with exactly one more bit consumed than the body — the frame-mode or
+  coding-type bit this layer adds. Seven of eight deliberate mutations of the seam are caught
+  (crossed `spec` or `tns` pointers, swapped long/short band tables, a lost frame-mode or
+  coding-type bit, the LFE routed to the SCE entry point and back). The eighth, crossing
+  `ctx.ics[0]` with `ctx.ics[1]`, is **not**: both LRVQ ICS headers are read at coding type 1, which
+  fixes maxSfb at 27 long / 7 short and reads no grouping field, and the case generator gives both
+  channels the same window sequence, so the two objects come out identical. It would still be a
+  defect on a frame whose channels differ, because `DecodeAPACFrame` windows channel 0 with
+  `GetICSInfo(true)`. Recorded in the test rather than papered over.
 * **The BWE synthesis**, as above.
 * **A codec config whose channel remap is non-empty.** `APACChannelRemapper::Process` is ported
   (the cycle-following swap, not a gather) but the live cookie carries no remap, and patching

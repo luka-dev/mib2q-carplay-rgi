@@ -43,6 +43,10 @@
 
 #include "apac/config.h"
 #include "apac/decoder.h"
+#include "apac/element.h"
+#include "apac/lrvq.h"
+
+#include "../reference/lrvq_cases.h"
 
 namespace {
 
@@ -71,6 +75,280 @@ void CountSequence(void* ctx, uint32_t channel, uint32_t windowSequence,
     (void)ctx; (void)channel; (void)spectrum; (void)count;
     if (windowSequence < 4)
         ++g_seq[windowSequence];
+}
+
+// ---------------------------------------------------------- the LRVQ seam ---
+//
+// LRVQ is unreachable on this content - patching each of
+// APACLRVQDecoder::SpectrumDeserialize{SCE,CPE,LFE} in the running library to
+// consume no bits leaves the whole capture bit identical - so the element
+// layer's LRVQ branch cannot be exercised by the capture at all.  What it CAN
+// be checked against is the stage-h1 test's own frame cases, whose expected
+// spectra, TNS records and bit counts came from the library:
+// tests/test_lrvq.cpp drives apac::DeserializeLrvqFrame with a hand-built
+// context and compares against reference/.../lrvq_cpe_frame.fixture.
+//
+// This drives the SAME cases through APACChannelPairElement instead, and
+// requires that the element reaches exactly the same state.  Anything the seam
+// can plausibly get wrong - a context pointer crossed, the long and short band
+// tables swapped, the frame-mode bit forgotten or read twice, the wrong ICSInfo
+// handed to TNS - moves the spectra, the TNS bytes or the bit count.  The
+// element must consume exactly ONE bit more than the frame body: the frame-mode
+// bit this layer adds in front.
+int g_lrvqCases, g_lrvqShort, g_lrvqFiltered, g_lrvqSce, g_lrvqLfe;
+
+// What this cannot see, and why.  LrvqBuildFrameCases sets ws1 = ws0 on every
+// case and both LRVQ ICS headers are read at coding type 1, which fixes maxSfb
+// at 27 long / 7 short and reads no grouping field - so the two APACICSInfo
+// objects come out identical and crossing ctx.ics[0] with ctx.ics[1] is
+// unobservable here.  It would still be a defect on a frame whose two channels
+// have different window sequences, because CoreDecoder::DecodeAPACFrame windows
+// channel 0 with GetICSInfo(true).  Crossing ctx.spec or ctx.tns, swapping the
+// long and short band tables, or losing the frame-mode bit all ARE caught.
+
+// Prepend a single 1 bit - the CPE's frame-mode selector - to a bit buffer.
+void PrependOneBit(const uint8_t* src, uint32_t n, uint8_t* dst)
+{
+    dst[0] = (uint8_t)(0x80u | (src[0] >> 1));
+    for (uint32_t i = 1; i < n; ++i)
+        dst[i] = (uint8_t)((src[i - 1] << 7) | (src[i] >> 1));
+    dst[n] = (uint8_t)(src[n - 1] << 7);
+}
+
+void CheckLrvqSeam()
+{
+    static LrvqFrameCase cases[64];
+    const int n = LrvqBuildFrameCases(cases, 64);
+    assert(n > 0);
+
+    const apac::SFBOffsets* tab = apac::GetSFBOffsetTable(48000, 1024);
+    assert(tab != 0);
+
+    static apac::LRVQDecoder lrvqA, lrvqB;
+    static apac::SyntacticElement element;
+    static float spec0[1024], spec1[1024];
+    static uint8_t tnsA[190], tnsB[190];
+    static uint8_t shifted[kLrvqMaxBytes + 1];
+
+    for (int i = 0; i < n; ++i) {
+        const LrvqFrameCase& c = cases[i];
+
+        // Reference side: the frame body on its own, exactly as the stage-h1
+        // test drives it - which is the side the library checked.
+        apac::APACICSInfo ics0, ics1;
+        ics0.Clear(); ics1.Clear();
+        ics0.maxSfbLong = (uint8_t)tab->numSfbLong;
+        ics0.maxSfbShort = (uint8_t)tab->numSfbShort;
+        ics1.maxSfbLong = ics0.maxSfbLong;
+        ics1.maxSfbShort = ics0.maxSfbShort;
+        apac::TNSData tns0, tns1;
+        memset(&tns0, 0, sizeof tns0);
+        memset(&tns1, 0, sizeof tns1);
+        tns0.Configure(48000);
+        tns1.Configure(48000);
+        for (int k = 0; k < 1024; ++k)
+            spec0[k] = spec1[k] = -777.0f;
+        apac::SpectralData sp0, sp1;
+        sp0.begin = spec0; sp0.end = spec0 + 1024;
+        sp1.begin = spec1; sp1.end = spec1 + 1024;
+
+        apac::LrvqFrameContext ctx;
+        ctx.ics[0] = &ics0;   ctx.ics[1] = &ics1;
+        ctx.spec[0] = &sp0;   ctx.spec[1] = &sp1;
+        ctx.tns[0] = &tns0;   ctx.tns[1] = &tns1;
+        ctx.sfbLong.numBands  = tab->numSfbLong;
+        ctx.sfbLong.offset    = tab->sfbOffsetLong;
+        ctx.sfbShort.numBands = tab->numSfbShort;
+        ctx.sfbShort.offset   = tab->sfbOffsetShort;
+        ctx.lrvq = &lrvqA;
+
+        apac::BitstreamReader bsA(c.bits, c.nbytes);
+        const int32_t beforeA = bsA.BitsRemaining();
+        const int32_t rcA = apac::DeserializeLrvqFrame(bsA, ctx);
+        const int32_t usedA = beforeA - bsA.BitsRemaining();
+
+        // Seam side: the same bits behind a set frame-mode bit, through the
+        // element.
+        PrependOneBit(c.bits, c.nbytes, shifted);
+        assert(element.Configure(apac::kElementCPE, tab, 48000) == apac::kOk);
+        apac::BitstreamReader bsB(shifted, c.nbytes + 1);
+        const int32_t beforeB = bsB.BitsRemaining();
+        const uint32_t rcB = element.Deserialize(bsB, &lrvqB);
+        const int32_t usedB = beforeB - bsB.BitsRemaining();
+
+        if ((rcA != 0) != (rcB != apac::kOk)) {
+            printf("FAIL lrvq seam case %d (%s): body rc %d, element rc %u\n",
+                   i, c.name, (int)rcA, rcB);
+            exit(1);
+        }
+        if (usedB != usedA + 1) {
+            printf("FAIL lrvq seam case %d (%s): body used %d bits, element %d "
+                   "- expected exactly one more, the frame-mode bit\n",
+                   i, c.name, (int)usedA, (int)usedB);
+            exit(1);
+        }
+        if (rcA != 0)
+            continue;
+
+        // Bit patterns, not values: LRVQ writes signed zeros too.
+        if (memcmp(spec0, element.ChannelData(true), sizeof spec0) != 0 ||
+            memcmp(spec1, element.ChannelData(false), sizeof spec1) != 0) {
+            printf("FAIL lrvq seam case %d (%s): spectra differ\n", i, c.name);
+            exit(1);
+        }
+        memcpy(tnsA, &tns0, 190);
+        memcpy(tnsB, &element.TNSRecord(true), 190);
+        if (memcmp(tnsA, tnsB, 190) != 0) {
+            printf("FAIL lrvq seam case %d (%s): channel 0 TNS record differs\n",
+                   i, c.name);
+            exit(1);
+        }
+        memcpy(tnsA, &tns1, 190);
+        memcpy(tnsB, &element.TNSRecord(false), 190);
+        if (memcmp(tnsA, tnsB, 190) != 0) {
+            printf("FAIL lrvq seam case %d (%s): channel 1 TNS record differs\n",
+                   i, c.name);
+            exit(1);
+        }
+        const apac::APACICSInfo& e0 = element.GetICSInfo(true);
+        const apac::APACICSInfo& e1 = element.GetICSInfo(false);
+        assert(e0.windowSequence == ics0.windowSequence && e0.maxSfb == ics0.maxSfb);
+        assert(e1.windowSequence == ics1.windowSequence && e1.maxSfb == ics1.maxSfb);
+        if (c.ws0 == 2) ++g_lrvqShort;
+        if (c.tnsFilter) ++g_lrvqFiltered;
+        ++g_lrvqCases;
+    }
+
+    // And with no decoder supplied the same frame must be refused, not
+    // mis-parsed: that is the build this port shipped before stage h1 landed.
+    {
+        PrependOneBit(cases[0].bits, cases[0].nbytes, shifted);
+        assert(element.Configure(apac::kElementCPE, tab, 48000) == apac::kOk);
+        apac::BitstreamReader bs(shifted, cases[0].nbytes + 1);
+        assert(element.Deserialize(bs, 0) == apac::kPortNeedsLRVQ);
+    }
+}
+
+// The SCE and LFE halves of the seam.  Those two do not go through
+// DeserializeLrvqFrame: the element reads the coding-type bit and the ICS
+// header itself - two bits at coding type 1 - and then calls
+// SpectrumDeserialize{SCE,LFE} directly, with the SCE carrying on into the
+// shared TNS tail and the LFE stopping.  The stage-h1 test's element cases are
+// exactly those two spectrum payloads, so this frames one and requires the
+// element to reach the same state as the entry point called on its own.
+void CheckLrvqSceLfeSeam()
+{
+    static LrvqElemCase cases[64];
+    const int n = LrvqBuildElemCases(cases, 64);
+    assert(n > 0);
+
+    const apac::SFBOffsets* tab = apac::GetSFBOffsetTable(48000, 1024);
+    assert(tab != 0);
+
+    static apac::LRVQDecoder lrvqA, lrvqB;
+    static apac::SyntacticElement element;
+    static float spec[1024];
+    static uint8_t framed[kLrvqMaxBytes + 4];
+
+    for (int i = 0; i < n; ++i) {
+        const LrvqElemCase& c = cases[i];
+        const bool isLfe = (c.kind == kLrvqElemLFE);
+        if (!isLfe && c.kind != kLrvqElemSCE)
+            continue;                       // the CPE cases go through the frame body
+
+        // [windowSequence:2][the case's own spectrum payload][tnsPresent:0 for
+        // the SCE].  The window sequence is the only field an LRVQ ICS header
+        // carries; 2 selects eight short windows.
+        const uint32_t ws = c.isShort0 ? 2u : 0u;
+        LrvqBitWriter w;
+        w.Init(framed, sizeof framed);
+        w.Put(ws, 2);
+        for (uint32_t bit = 0; bit < c.nbytes * 8u; ++bit)
+            w.Put((c.bits[bit >> 3] >> (7 - (bit & 7))) & 1u, 1);
+        if (!isLfe)
+            w.Put(0, 1);                    // no TNS block
+        const uint32_t framedBytes = (uint32_t)sizeof framed;
+
+        // Reference: the ICS header and the entry point, called directly.
+        apac::APACICSInfo ics;
+        ics.Clear();
+        ics.maxSfbLong  = (uint8_t)tab->numSfbLong;
+        ics.maxSfbShort = (uint8_t)tab->numSfbShort;
+        for (int k = 0; k < 1024; ++k)
+            spec[k] = -333.0f;
+        apac::SpectralData sp;
+        sp.begin = spec; sp.end = spec + 1024;
+
+        apac::TNSData tns;
+        memset(&tns, 0, sizeof tns);
+        tns.Configure(48000);
+
+        apac::BitstreamReader bsA(framed, framedBytes);
+        const int32_t beforeA = bsA.BitsRemaining();
+        if (ics.Deserialize(bsA, apac::kCodingTypeSpecial))
+            continue;                       // the header itself was rejected
+        int32_t rcA = isLfe ? lrvqA.SpectrumDeserializeLFE(bsA, ics, sp)
+                            : lrvqA.SpectrumDeserializeSCE(bsA, ics, sp);
+        if (!isLfe && rcA == 0) {
+            // The SCE's shared tail, spelled out here rather than borrowed from
+            // the element under test: the TNS-present bit, the block if it is
+            // set, and the filter over the band table the window sequence picks.
+            tns.present = (uint8_t)(bsA.GetBit() != 0);
+            if (tns.present) {
+                if (tns.ParseTNSData(bsA, ics))
+                    rcA = 1;
+            } else {
+                tns.nFilt = 0;
+            }
+            if (rcA == 0) {
+                apac::SFBBandOffsets bands;
+                if (ics.windowSequence == 2) {
+                    bands.numBands = tab->numSfbShort;
+                    bands.offset   = tab->sfbOffsetShort;
+                } else {
+                    bands.numBands = tab->numSfbLong;
+                    bands.offset   = tab->sfbOffsetLong;
+                }
+                tns.Apply(ics, bands, sp);
+            }
+        }
+        const int32_t usedA = beforeA - bsA.BitsRemaining();
+
+        // Seam: the same bits behind the coding-type bit, through the element.
+        static uint8_t shifted[sizeof framed + 1];
+        PrependOneBit(framed, framedBytes, shifted);
+        assert(element.Configure(isLfe ? apac::kElementLFE : apac::kElementSCE,
+                                 tab, 48000) == apac::kOk);
+        apac::BitstreamReader bsB(shifted, framedBytes + 1);
+        const int32_t beforeB = bsB.BitsRemaining();
+        const uint32_t rcB = element.Deserialize(bsB, &lrvqB);
+        const int32_t usedB = beforeB - bsB.BitsRemaining();
+
+        if ((rcA != 0) != (rcB != apac::kOk)) {
+            printf("FAIL lrvq %s seam case %d: entry rc %d, element rc %u\n",
+                   isLfe ? "LFE" : "SCE", i, (int)rcA, rcB);
+            exit(1);
+        }
+        if (rcA != 0)
+            continue;
+        if (usedB != usedA + 1) {
+            printf("FAIL lrvq %s seam case %d: entry used %d bits, element %d "
+                   "- expected exactly one more, the coding-type bit\n",
+                   isLfe ? "LFE" : "SCE", i, (int)usedA, (int)usedB);
+            exit(1);
+        }
+        if (memcmp(spec, element.ChannelData(true), sizeof spec) != 0) {
+            printf("FAIL lrvq %s seam case %d: spectrum differs\n",
+                   isLfe ? "LFE" : "SCE", i);
+            exit(1);
+        }
+        assert(element.GetICSInfo(true).windowSequence == ics.windowSequence);
+        if (!isLfe && memcmp(&tns, &element.TNSRecord(true), 190) != 0) {
+            printf("FAIL lrvq SCE seam case %d: TNS record differs\n", i);
+            exit(1);
+        }
+        if (isLfe) ++g_lrvqLfe; else ++g_lrvqSce;
+    }
 }
 
 }  // namespace
@@ -196,6 +474,9 @@ int main(int argc, char** argv)
     assert(g_seq[0] + g_seq[1] + g_seq[2] + g_seq[3] ==
            (int)(numPackets * channels));
 
+    CheckLrvqSeam();
+    CheckLrvqSceLfeSeam();
+
     const double rel = worst / peak;
     if (!(rel < kTolerance)) {
         printf("FAIL worst %.4g of peak %.4g = %.3g, tolerance %.3g\n",
@@ -206,9 +487,11 @@ int main(int argc, char** argv)
     }
 
     printf("OK  %u packets x %u ch, seq %d/%d/%d/%d, worst %.2g of full scale, "
-           "%.1f%% bit-identical\n",
+           "%.1f%% bit-identical; LRVQ seam %d CPE frames (%d short, %d "
+           "filtered), %d SCE, %d LFE\n",
            numPackets, channels, g_seq[0], g_seq[1], g_seq[2], g_seq[3], rel,
-           100.0 * identical / total);
+           100.0 * identical / total, g_lrvqCases, g_lrvqShort, g_lrvqFiltered,
+           g_lrvqSce, g_lrvqLfe);
     free(pcm);
     free(g_blob);
     return 0;

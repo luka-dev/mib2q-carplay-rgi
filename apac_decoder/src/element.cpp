@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "apac/config.h"
+#include "apac/lrvq.h"
 
 namespace apac {
 
@@ -116,48 +117,60 @@ void SyntacticElement::Reset()
     }
 }
 
+SpectralData SyntacticElement::View(uint32_t channel)
+{
+    SpectralData view;
+    view.begin = mStream[channel].spectrum;
+    view.end   = mStream[channel].spectrum + kFrameLength;
+    return view;
+}
+
 uint32_t SyntacticElement::ApplyTNS(uint32_t channel)
 {
     const APACICSInfo& ics = mICS[channel];
     const SFBBandOffsets bands = BandsFor(*mTable, ics);
-    SpectralData view;
-    view.begin = mStream[channel].spectrum;
-    view.end   = mStream[channel].spectrum + kFrameLength;
+    SpectralData view = View(channel);
     mTNS[channel].Apply(ics, bands, view);
     return kOk;
 }
 
-// THE LRVQ SEAM.  Three of the four refusals below are one call each, and the
-// stage-h1 port (include/apac/lrvq.h) is written to be dropped straight in:
+// LRVQ, wired.  The stage-h1 port supplies the frame body
+// (apac::DeserializeLrvqFrame) and the three spectrum entry points;
+// LrvqFrameContext just names the seven things off `this` the original touches,
+// and the offsets in its declaration are the ones this class reproduces.
 //
-//   CPE  ->  LrvqFrameContext ctx = { { &mICS[0], &mICS[1] },
-//                                     { &view0, &view1 },
-//                                     { &mTNS[0], &mTNS[1] },
-//                                     BandsFor(*mTable, long), BandsFor(short),
-//                                     &lrvq };
-//            return (uint32_t)DeserializeLrvqFrame(bs, ctx);
-//   SCE  ->  lrvq.SpectrumDeserializeSCE(bs, mICS[0], view0)  after the ICSInfo
-//            read, then on through the shared TNS tail.
-//   LFE  ->  lrvq.SpectrumDeserializeLFE(bs, mICS[0], view0), and return.
-//
-// It is deliberately NOT wired here.  LRVQ is never entered on the CarPlay 5.1
-// content - established twice, and again by this port: patching each of
+// None of it is reachable on the CarPlay 5.1 content: patching each of
 // APACLRVQDecoder::SpectrumDeserialize{SCE,CPE,LFE} in the running library to
-// return 0, i.e. to consume no bits, leaves the decoded float32 output of the
-// whole capture bit identical, which it could not do if any of them read a bit.
-// So the refusal below is unreachable, and wiring an untestable path into the
-// element layer would prove nothing.  The status propagates as a frame error
-// exactly as APACLRVQDecoder's own non-zero return does.
+// return 0 - to consume no bits - leaves the decoded float32 output of the whole
+// capture bit identical, which none of them could do if it read a single bit.
+// So this path is checked against the oracle only indirectly, by
+// tests/test_frames.cpp driving the stage-h1 test's own library-checked frame
+// cases through this element and requiring the same spectra, the same TNS
+// records and one extra bit - the frame-mode bit this layer adds.
 //
 // 0x000ac3f0  APACSingleChannelElement::Deserialize
 // 0x000ac2a0  APACLFEElement::Deserialize
 // 0x000adea0  APACChannelPairElement::Deserialize
-uint32_t SyntacticElement::Deserialize(BitstreamReader& bs)
+uint32_t SyntacticElement::Deserialize(BitstreamReader& bs, LRVQDecoder* lrvq)
 {
     if (mType == kElementCPE) {
-        // The CPE reads its frame-mode bit first and dispatches.
-        if (bs.GetBit())
-            return kPortNeedsLRVQ;      // DeserializeLrvqFrame; see the seam below
+        // The CPE reads its frame-mode bit first and dispatches.  The LRVQ body
+        // reads BOTH ICS headers itself, at coding type 1.
+        if (bs.GetBit()) {
+            if (lrvq == 0)
+                return kPortNeedsLRVQ;
+            LrvqFrameContext ctx;
+            SpectralData sp0 = View(0), sp1 = View(1);
+            ctx.ics[0]  = &mICS[0];   ctx.ics[1]  = &mICS[1];
+            ctx.spec[0] = &sp0;       ctx.spec[1] = &sp1;
+            ctx.tns[0]  = &mTNS[0];   ctx.tns[1]  = &mTNS[1];
+            ctx.sfbLong.numBands  = mTable->numSfbLong;
+            ctx.sfbLong.offset    = mTable->sfbOffsetLong;
+            ctx.sfbShort.numBands = mTable->numSfbShort;
+            ctx.sfbShort.offset   = mTable->sfbOffsetShort;
+            ctx.lrvq = lrvq;
+            return DeserializeLrvqFrame(bs, ctx) ? kBadValue : kOk;
+        }
         return DeserializeSQFrame(bs);
     }
 
@@ -166,13 +179,26 @@ uint32_t SyntacticElement::Deserialize(BitstreamReader& bs)
     const uint32_t codingType = bs.GetBit();
     if (mICS[0].Deserialize(bs, (int32_t)codingType))
         return kBadValue;
-    if (codingType == 1)
-        return kPortNeedsLRVQ;          // SpectrumDeserializeSCE / ...LFE
-    if (mStream[0].Deserialize(bs, mICS[0], *mTable))
-        return kBadValue;
-
-    if (mType == kElementLFE)
-        return kOk;                     // the LFE carries no TNS
+    if (codingType == 1) {
+        if (lrvq == 0)
+            return kPortNeedsLRVQ;
+        SpectralData sp = View(0);
+        const int32_t err = (mType == kElementLFE)
+            ? lrvq->SpectrumDeserializeLFE(bs, mICS[0], sp)
+            : lrvq->SpectrumDeserializeSCE(bs, mICS[0], sp);
+        if (err)
+            return kBadValue;
+        // The LFE stops here; the SCE falls through to the shared TNS tail,
+        // which is what APACSingleChannelElement::Deserialize does after either
+        // spectrum path.
+        if (mType == kElementLFE)
+            return kOk;
+    } else {
+        if (mStream[0].Deserialize(bs, mICS[0], *mTable))
+            return kBadValue;
+        if (mType == kElementLFE)
+            return kOk;                 // the LFE carries no TNS
+    }
 
     mTNS[0].present = (uint8_t)(bs.GetBit() != 0);
     if (mTNS[0].present) {

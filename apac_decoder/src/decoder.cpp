@@ -33,8 +33,11 @@ bool TrimmingData::Deserialize(BitstreamReader& bs)
 // ---------------------------------------------------------------------------
 
 uint32_t CoreDecoder::Initialize(const CoreDecoderConfig& cfg,
-                                 uint32_t sampleRate, uint32_t frameLength)
+                                 uint32_t sampleRate, uint32_t frameLength,
+                                 LRVQDecoder* lrvq)
 {
+    mLRVQ = lrvq;
+
     // APACInstanceConfig::Create, 0x0009a870: the SFB record for the stream's
     // rate and frame length, or nothing at all.
     mTable = GetSFBOffsetTable(sampleRate, frameLength);
@@ -98,7 +101,7 @@ uint32_t CoreDecoder::Deserialize(BitstreamReader& bs, bool align)
     for (uint32_t i = 0; i < mNumElements; ++i) {
         SyntacticElement& e = mElement[i];
         if (bs.GetBit()) {
-            const uint32_t rc = e.Deserialize(bs);
+            const uint32_t rc = e.Deserialize(bs, mLRVQ);
             if (rc != kOk)
                 return rc;
             if (e.Type() != kElementNone) {
@@ -213,7 +216,7 @@ uint32_t Decoder::Initialize(const GlobalConfig& cfg)
 
     for (uint32_t i = 0; i < mNumCores; ++i) {
         const uint32_t rc = mCore[i].Initialize(cfg.codecConfigs[i], cfg.sampleRate,
-                                                cfg.frameLength);
+                                                cfg.frameLength, &mLRVQ);
         if (rc != kOk)
             return rc;
         mNumChannels += mCore[i].GetNumChannels();

@@ -75,6 +75,7 @@
 #include "apac/config.h"
 #include "apac/element.h"
 #include "apac/filterbank.h"
+#include "apac/lrvq.h"
 #include "apac/sfb_offsets.h"
 
 namespace apac {
@@ -108,8 +109,13 @@ struct TrimmingData {
 // object.  It MUST NOT be put on a stack.
 class CoreDecoder {
 public:
+    // `lrvq` may be null, in which case an LRVQ frame is refused with
+    // kPortNeedsLRVQ.  One instance is shared by the whole decoder: every
+    // APACLRVQDecoder member is static in the original and its prediction state
+    // is a stack local of the wrapper, so nothing survives a call and the port
+    // resets it on entry to each of the three spectrum entry points.
     uint32_t Initialize(const CoreDecoderConfig& cfg, uint32_t sampleRate,
-                        uint32_t frameLength);
+                        uint32_t frameLength, LRVQDecoder* lrvq);
 
     void Reset();                               // filter-bank overlap only
     uint32_t GetNumChannels() const { return mNumChannels; }
@@ -145,6 +151,7 @@ private:
     uint8_t             mRemap[kMaxDecoderChannels];
     SpectrumSink        mSink;
     void*               mSinkCtx;
+    LRVQDecoder*        mLRVQ;
 };
 
 // APACDecoder.  One core decoder per codec config; the channels of the configs
@@ -185,6 +192,9 @@ protected:
     uint32_t DecodeBody(BitstreamReader& bs, float* out);
 
     CoreDecoder  mCore[kMaxCodecConfigs];
+    // One for the whole decoder, not one per core: 56 KiB once.  See
+    // CoreDecoder::Initialize for why a single instance is faithful.
+    LRVQDecoder  mLRVQ;
     TrimmingData mTrimming;
     uint32_t     mNumCores;
     uint32_t     mNumChannels;

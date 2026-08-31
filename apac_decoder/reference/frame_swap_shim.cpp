@@ -45,6 +45,7 @@
 
 #include "apac/config.h"
 #include "apac/decoder.h"
+#include "apac/lrvq.h"
 
 namespace {
 
@@ -74,6 +75,9 @@ int  g_used = 0;
 long g_frames = 0;
 apac::GlobalConfig g_config;
 bool g_haveConfig = false;
+// One for the whole shim, exactly as apac::Decoder holds one for the whole
+// decoder: the LRVQ prediction state is reset on entry to each spectrum call.
+apac::LRVQDecoder g_lrvq;
 
 uint32_t BE32(const unsigned char* p)
 {
@@ -121,7 +125,7 @@ apac::CoreDecoder* coreFor(const void* self)
     // Only the single-codec-config path is exercised, which is all either
     // cookie produces.
     const uint32_t rc = s.core.Initialize(g_config.codecConfigs[0], g_config.sampleRate,
-                                          g_config.frameLength);
+                                          g_config.frameLength, &g_lrvq);
     if (rc != apac::kOk) {
         fprintf(stderr, "[frame] port CoreDecoder::Initialize -> %u\n", rc);
         abort();
