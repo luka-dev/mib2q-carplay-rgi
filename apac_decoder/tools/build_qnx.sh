@@ -117,7 +117,12 @@ if [ "$QEMU" = 1 ]; then
           O=.build-qnx/'"$V"'
           for t in tests/test_*.cpp; do
               n=$(basename "$t" .cpp)
-              arm-unknown-nto-qnx6.5.0eabi-g++ '"$CXXFLAGS"' -c "$t" -o "$O/$n.to"
+              # -fno-threadsafe-statics: a function-local static with a dynamic
+              # initializer (tests/test_frames.cpp) otherwise needs
+              # __cxa_guard_acquire, which lives in libstdc++ and which the port
+              # is not allowed to want.  The tests are single-threaded, and the
+              # port itself is checked for __cxa_guard by the assertions above.
+              arm-unknown-nto-qnx6.5.0eabi-g++ '"$CXXFLAGS"' -fno-threadsafe-statics -c "$t" -o "$O/$n.to"
               # Link with gcc, not g++: the port needs no C++ runtime and linking
               # with the C++ driver would drag libstdc++.so.6 onto the target.
               arm-unknown-nto-qnx6.5.0eabi-gcc "$O/$n.to" $(ls "$O"/*.o) -o "$O/$n" -lm
@@ -128,19 +133,33 @@ if [ "$QEMU" = 1 ]; then
         '
 
     # One boot runs the whole suite: a boot costs about a minute, twelve cost
-    # twelve.  Each test reads its fixture by basename out of /proc/boot.
-    FILES=(); RUNS=()
+    # twelve.  The fixture each test wants is read out of the test's own source
+    # rather than guessed from its name (test_frames wants frames.bin), and it
+    # is handed over as an absolute /proc/boot path - the IFS is flat and the
+    # cwd is not the repo.
+    #
+    # test_lrvq is the one test this cannot run: it opens six fixtures through
+    # a hardcoded "tests/fixtures/%s" and the IFS has no subdirectories, so
+    # there is nowhere to put them.  It is a host-only check; the frame mode it
+    # covers is unreachable on this content anyway (see PORT_STATUS).
+    SKIP="test_lrvq"
+    FILES=(); RUNS=(); skipped=""
     for t in "$APAC"/tests/test_*.cpp; do
         n=$(basename "$t" .cpp)
+        case " $SKIP " in *" $n "*) skipped="$skipped $n"; continue ;; esac
         FILES+=(--file "$O/$n")
-        fx="$APAC/tests/fixtures/${n#test_}.fixture"
-        if [ -f "$fx" ]; then
-            FILES+=(--file "$fx")
-            RUNS+=(--run "$n /proc/boot/$(basename "$fx")")
-        else
-            RUNS+=(--run "$n")
-        fi
+        # Every distinct fixture the source names.  More than one and we cannot
+        # pass them all through argv[1], so that test would go in SKIP too.
+        fx=$(grep -oE 'tests/fixtures/[A-Za-z0-9_]+\.[A-Za-z0-9]+' "$t" | sort -u || true)
+        case $(printf '%s\n' "$fx" | grep -c . || true) in
+            0) RUNS+=(--run "$n") ;;
+            1) FILES+=(--file "$APAC/$fx")
+               RUNS+=(--run "$n /proc/boot/$(basename "$fx")") ;;
+            *) echo "  $n names several fixtures; add it to SKIP or teach it argv"; exit 1 ;;
+        esac
     done
+    [ -z "$skipped" ] || echo "  not run on the target:$skipped"
+
     echo "=== the APAC test suite on QNX 6.5 armle-v7 under QEMU (GCC $V) ==="
     LOG="$OUT/qemu-suite.log"
     set +e
@@ -169,6 +188,7 @@ if [ "$QEMU" = 1 ]; then
     bad=0
     for t in "$APAC"/tests/test_*.cpp; do
         n=$(basename "$t" .cpp)
+        case " $SKIP " in *" $n "*) continue ;; esac
         if grep -q "Process [0-9]* ($n) exited status=0\." "$LOG"; then continue; fi
         case " $EXPECTED " in
             *" $n "*) echo "  $n: known ARMv7 tolerance delta, see PORT_STATUS stage i" ;;

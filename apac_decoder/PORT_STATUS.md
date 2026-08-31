@@ -15,13 +15,13 @@ differently and a 1 LSB mismatch there means nothing.
 | b | band layout | `APACICSInfo`, `APACScaleFactorData`, `apac::SFBOffsets` | **DONE** | `tests/test_icsinfo.cpp`, `tests/test_sfb_offsets.cpp`, `tests/test_scalefactors.cpp` |
 | c | spectrum core | `APACSpectralData`, `apac::GetHuffmanTable` and the 12 codebooks | **DONE** | `tests/test_spectraldata.cpp`; LRVQ is NOT here, see below |
 | d | transform | `APACTNSData`, `apac::LSFTools`, `apac::LPCBase`, `apac::LPMDCTFilter`, `APACSynthesisFilterBank`, `MDCT`, `DCT_IV`, `MultiRadix*FFT` | **DONE**, one documented gap | `tests/test_transform_tables.cpp`, `test_mdct.cpp`, `test_filterbank.cpp`, `test_tns.cpp`, `test_lpc.cpp`, `test_lpmdct.cpp` |
-| e | bandwidth extension | `APACBWE2Decoder`, `BWELPC` | **PARSER DONE**, synthesis TODO | the header is on the bit path and is ported; the synthesis is never active on this content, see below |
+| e | bandwidth extension | `APACBWE2Decoder`, `BWELPC` | **PARSER DONE**, synthesis TODO — the last unported piece | the header is on the bit path and is ported; the synthesis is never active on this content, see below |
 | f | elements | `APACSingleChannelElement`, `APACChannelPairElement`, `APACLFEElement`, `APACSyntacticElement`, `APACIndividualChannelStream`, `APACCACDecoder` | **DONE**, bit exact | `tests/test_frames.cpp`; whole capture with `reference/run.sh port` |
 | g | top level | `APACCoreDecoder`, `APACCoreLBRDecoder`, `APACDecoder`, `APACASPDecoder`, `APACChannelRemapper`, `apac::TrimmingData` | **DONE**, bit exact above the transform | `tests/test_frames.cpp`; whole capture with `reference/run.sh port` |
 | h1 | LRVQ frame mode | `APACLRVQDecoder`, `APACChannelPairElement::DeserializeLrvqFrame`, `apac::LSFTools::LSF_To_LPC` | **DONE**, bit exact wherever no FFT is under it | `tests/test_lrvq.cpp`; still unreachable on our content, and not yet wired into `src/element.cpp` |
 | h | loudness | `apac::drc`, `apac::APACDRCDecoder`, `apac::LoudnessDRCConfig` | **DONE** for the `apac` layer; `mpddrc` is a stage of its own | `tests/test_drc.cpp`, plus the reachability run below |
 | i | ARMv7/QNX build | — | **DONE** | `tools/build_qnx.sh` (`--both`, `--qemu`), `tests/test_escape_pow.cpp` |
-| j | hook integration | — | TODO | decode -> `spa_reorder_5_1_decoder_to_declared_s16` -> PCM6/DIO5 |
+| j | hook integration | — | **DONE**, on-car verification pending | `tests/apac_integration_test.c` via `scripts/run_tests.sh`; `scripts/build_hook.sh` links the decoder, `libstdc++=0` |
 
 Out of scope for the CarPlay 5.1 target: `apac::scene`, `apac::APACAudioSceneDecoder`,
 `apac::AudioSceneConfig` (Ambisonics), `apac::lbr`.

@@ -28,6 +28,7 @@
 #ifndef AUDIO_HOOK_H
 #define AUDIO_HOOK_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 /* Default AirPlayAudioFormat bit: 5.1 PCM (PCM/48000/16/5.1), from the iOS 27 descriptor table.
@@ -114,5 +115,18 @@ void spa_augment_server_info(void *session, void *info);
 
 /* Capture the final /info dictionary after all stock and hook-owned mutations. */
 void spa_capture_server_info(void *info);
+
+/* ---- the decoded type-103 PCM6 rail (stage j) -----------------------------------------------
+ * While a type-103 stream is carrying APAC media the receiver decodes it, reorders it into the
+ * declared CarPlay order (L R C LFE Ls Rs) and queues it here.  These two calls are the seam the
+ * type-100 read path takes over through: when spa_buffered_pcm6_active() is true it serves
+ * spa_buffered_pcm6_read() instead of its own samples, and the instant it is false stock type-100
+ * behaviour resumes unchanged.  That fallback is the whole safety story of this path.
+ *
+ * spa_buffered_pcm6_read() writes `frames` * 6 interleaved S16 samples at most and returns the
+ * number of frames actually written; a short return is an underrun and the caller decides whether
+ * to pad with silence or hold.  Both are safe to call from any thread. */
+int spa_buffered_pcm6_active(void);
+size_t spa_buffered_pcm6_read(int16_t *out, size_t frames);
 
 #endif /* AUDIO_HOOK_H */

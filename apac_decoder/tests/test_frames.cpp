@@ -66,6 +66,29 @@ uint32_t Rd32(size_t at)
            ((uint32_t)g_blob[at + 2] << 16) | ((uint32_t)g_blob[at + 3] << 24);
 }
 
+// The expected PCM starts wherever the packet payloads happen to end, so its
+// offset in the blob is arbitrary and casting to `const float*` there is
+// undefined - and not harmlessly so.  On ARMv7 the VFP load faults: built for
+// armle-v7 and run on QNX this test died with SIGBUS at an odd address
+// (`ref=00300725`) under both GCC 4.9.4 and 8.5.0, while x86 and arm64 hide it
+// completely.  Read the bit pattern instead; everything downstream compares
+// bit patterns anyway.
+uint32_t RdF32Bits(size_t at)
+{
+    assert(at + 4 <= g_blobBytes);
+    uint32_t b;
+    memcpy(&b, g_blob + at, 4);
+    return b;
+}
+
+float RdF32(size_t at)
+{
+    const uint32_t b = RdF32Bits(at);
+    float f;
+    memcpy(&f, &b, 4);
+    return f;
+}
+
 // Window sequences seen, counted through the decoder's spectrum sink.  This is
 // the fixture's coverage claim, checked rather than asserted in a comment.
 int g_seq[4];
@@ -504,7 +527,6 @@ int main(int argc, char** argv)
     assert(decoder.FrameLength() == frameLength);
     decoder.SetSpectrumSink(&CountSequence, 0);
 
-    const float* expected = (const float*)(g_blob + pcmAt);
     float* pcm = (float*)malloc(sizeof(float) * channels * frameLength);
 
     double worst = 0.0, worstCh[16];
@@ -525,19 +547,18 @@ int main(int argc, char** argv)
         assert(decoder.FrameType() == 1);       // every packet in this capture
         pkt += len;
 
-        const float* want = expected + (size_t)i * channels * frameLength;
+        const size_t wantAt = pcmAt + (size_t)i * channels * frameLength * 4;
         for (uint32_t k = 0; k < channels * frameLength; ++k) {
-            const double a = want[k], b = pcm[k];
+            const double a = RdF32(wantAt + 4 * (size_t)k), b = pcm[k];
             const double d = fabs(a - b);
             if (fabs(a) > peak) peak = fabs(a);
             if (d > worst) worst = d;
             if (d > worstCh[k % channels]) worstCh[k % channels] = d;
             // Compare bit patterns, not values: signed zeros are meaningful in
             // this codec and a float compare hides them.
-            uint32_t ua, ub;
-            memcpy(&ua, &want[k], 4);
+            uint32_t ub;
             memcpy(&ub, &pcm[k], 4);
-            if (ua == ub) ++identical;
+            if (RdF32Bits(wantAt + 4 * (size_t)k) == ub) ++identical;
             ++total;
         }
     }

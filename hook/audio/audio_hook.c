@@ -18,6 +18,9 @@
  * provision mpl5_dio_ent for 6 voices -> six_channel_speakerp (B&O firmware agent's dependency).
  */
 #include "audio_hook.h"
+#include "apac_bridge.h"
+#include "apap_crypto.h"
+#include "spatial_downmix.h"
 #include "../framework/logging.h"
 
 #include <dlfcn.h>
@@ -746,6 +749,11 @@ typedef struct {
     spa103_transport_time_t firstAudible;
     spa103_network_time_t networkTime;
     uint32_t controlRequestCount;
+    /* The type-103 SETUP `shk`, copied verbatim: it IS the ChaCha20-Poly1305 key,
+     * with no HKDF anywhere on this path.  Cleared on every teardown. */
+    uint8_t shk[SPA_APAP_KEY_SIZE];
+    int haveKey;
+    int64_t formatIndex;
 } spa103_receiver_t;
 
 typedef struct {
@@ -785,6 +793,387 @@ static int spa103_http_process(void *connection, void *request);
 static int spa103_resolve(void);
 static size_t spa103_write_capture(int fd, const uint8_t *data, size_t size);
 static int spa103_response_set_i64(void *responseDesc, const char *name, int64_t value);
+
+/* ---- decode / render ------------------------------------------------------------------------
+ *
+ * Stage j: the APAP receiver stops being a capture drain and becomes a decoder.  Per frame:
+ *
+ *   BE32-inclusive framing -> ChaCha20-Poly1305 open -> TLV split -> APAC decode (float32)
+ *   -> S16 -> spa_reorder_5_1_decoder_to_declared_s16 -> bounded PCM6 ring
+ *
+ * The ring is where the existing PCM6/DIO5 rail collects it: while type 103 is carrying media
+ * the type-100 read path hands out these samples instead of its own (the interposition itself
+ * is the remaining on-car step, see PORT_STATUS.md stage j).  spa_buffered_pcm6_read() is that
+ * seam, and nothing in this file drains the ring, so with no consumer attached the behaviour is
+ * exactly what it was before: paced at one packet per 1024/48k, oldest dropped.
+ *
+ * Failure policy.  A frame that will not authenticate or will not decode is counted and
+ * dropped; it does not stop the receiver, because the capture/drain has to keep the phone's
+ * session alive whatever the codec does.  A format this rail cannot carry - anything but index
+ * 65 - disables decoding for the whole stream with its own distinct status and is logged once.
+ * Index 66 lands there deliberately: its eight-channel native order has never been measured, and
+ * guessing a permutation would produce plausible, wrong audio.
+ */
+#define SPA_103_RENDER_CHANNELS   SPA_PCM_5_1_CHANNELS
+#define SPA_103_RENDER_FRAMES     1024u
+#define SPA_103_RENDER_MAX_SAMPLES (SPA_103_RENDER_CHANNELS * SPA_103_RENDER_FRAMES)
+/* Half a second of 48 kHz 5.1: 288 KB.  Big enough to absorb the phone's burst between two
+ * reads of the sink, small enough that a stalled sink cannot hide a minute of latency. */
+#define SPA_103_RING_FRAMES       24000u
+/* Above this the producer paces itself.  With no consumer the ring sits full and every frame
+ * pauses, which is the backpressure the capture-only build faked with an unconditional sleep. */
+#define SPA_103_RING_HIGH_FRAMES  (SPA_103_RING_FRAMES / 2u)
+
+enum {
+    SPA_103_RENDER_IDLE = 0,        /* not started, or type 103 not active */
+    SPA_103_RENDER_WAITING = 1,     /* have the key, waiting for a magic cookie */
+    SPA_103_RENDER_RUNNING = 2,
+    SPA_103_RENDER_NO_KEY = 3,      /* SETUP carried no usable shk */
+    SPA_103_RENDER_UNSUPPORTED_FORMAT = 4,  /* an index this rail cannot carry at all */
+    SPA_103_RENDER_UNSUPPORTED_LAYOUT = 5,  /* index 66: decodable, order unmeasured */
+    SPA_103_RENDER_COOKIE_FAILED = 6,       /* the cookie would not configure a decoder */
+    SPA_103_RENDER_NO_MEMORY = 7
+};
+
+typedef struct {
+    pthread_mutex_t lock;
+    int state;
+    spa_apac_decoder_t *decoder;
+    int64_t cookieId;               /* the cookie the decoder was built from */
+    int haveCookieId;
+    int16_t *ring;                  /* SPA_103_RING_FRAMES * 6 samples */
+    size_t head;                    /* frame index of the oldest buffered frame */
+    size_t fill;                    /* frames buffered */
+    uint64_t framesIn;
+    uint64_t framesOut;
+    uint64_t dropped;               /* frames overwritten because nothing drained */
+    uint64_t authFailed;
+    uint64_t tlvFailed;
+    uint64_t decodeFailed;
+    uint32_t sampleRate;
+} spa103_render_t;
+
+static spa103_render_t spa103_render = { PTHREAD_MUTEX_INITIALIZER, SPA_103_RENDER_IDLE,
+                                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+
+static const char *spa103_render_state_name(int state)
+{
+    switch (state) {
+    case SPA_103_RENDER_IDLE:                return "idle";
+    case SPA_103_RENDER_WAITING:             return "waiting-for-cookie";
+    case SPA_103_RENDER_RUNNING:             return "running";
+    case SPA_103_RENDER_NO_KEY:              return "no-key";
+    case SPA_103_RENDER_UNSUPPORTED_FORMAT:  return "unsupported-format";
+    case SPA_103_RENDER_UNSUPPORTED_LAYOUT:  return "unsupported-layout";
+    case SPA_103_RENDER_COOKIE_FAILED:       return "cookie-failed";
+    case SPA_103_RENDER_NO_MEMORY:           return "no-memory";
+    default:                                 return "?";
+    }
+}
+
+/* Called with the receiver lock NOT held. */
+static void spa103_render_start(int64_t formatIndex, int haveKey)
+{
+    int state;
+
+    pthread_mutex_lock(&spa103_render.lock);
+    if (spa103_render.decoder) {
+        spa_apac_destroy(spa103_render.decoder);
+        spa103_render.decoder = 0;
+    }
+    if (!spa103_render.ring) {
+        spa103_render.ring = (int16_t *)malloc((size_t)SPA_103_RING_FRAMES *
+                                               SPA_103_RENDER_CHANNELS * sizeof(int16_t));
+    }
+    spa103_render.head = 0;
+    spa103_render.fill = 0;
+    spa103_render.framesIn = 0;
+    spa103_render.framesOut = 0;
+    spa103_render.dropped = 0;
+    spa103_render.authFailed = 0;
+    spa103_render.tlvFailed = 0;
+    spa103_render.decodeFailed = 0;
+    spa103_render.cookieId = 0;
+    spa103_render.haveCookieId = 0;
+    spa103_render.sampleRate = 0;
+
+    if (!spa103_render.ring)
+        state = SPA_103_RENDER_NO_MEMORY;
+    else if (formatIndex == SPA_APAC_48K_5_1_2)
+        state = SPA_103_RENDER_UNSUPPORTED_LAYOUT;
+    else if (formatIndex != SPA_APAC_48K_5_1)
+        state = SPA_103_RENDER_UNSUPPORTED_FORMAT;
+    else if (!haveKey)
+        state = SPA_103_RENDER_NO_KEY;
+    else
+        state = SPA_103_RENDER_WAITING;
+    spa103_render.state = state;
+    pthread_mutex_unlock(&spa103_render.lock);
+
+    LOG_INFO(LOG_MODULE, "buffer103: render %s formatIndex=%lld key=%s",
+             spa103_render_state_name(state), (long long)formatIndex,
+             haveKey ? "yes" : "no");
+}
+
+static void spa103_render_stop(void)
+{
+    pthread_mutex_lock(&spa103_render.lock);
+    if (spa103_render.decoder) {
+        spa_apac_destroy(spa103_render.decoder);
+        spa103_render.decoder = 0;
+    }
+    free(spa103_render.ring);
+    spa103_render.ring = 0;
+    spa103_render.head = 0;
+    spa103_render.fill = 0;
+    spa103_render.state = SPA_103_RENDER_IDLE;
+    pthread_mutex_unlock(&spa103_render.lock);
+}
+
+/* FLUSHBUFFERED: drop what is queued and clear the filter banks' overlap memory.  The next
+ * packet is then windowed against silence, which is what the original's Reset does; resuming is
+ * only legal on an Audio Synchronization Packet, and every packet of this stream is one. */
+static void spa103_render_flush(void)
+{
+    pthread_mutex_lock(&spa103_render.lock);
+    if (spa103_render.decoder) spa_apac_reset(spa103_render.decoder);
+    spa103_render.head = 0;
+    spa103_render.fill = 0;
+    pthread_mutex_unlock(&spa103_render.lock);
+}
+
+/* Copy of the magic cookie for `id`, or the only stored cookie when the stream never named one.
+ * The caller owns the returned block. */
+static uint8_t *spa103_copy_cookie(int haveId, int64_t id, size_t *sizeOut)
+{
+    uint8_t *copy = 0;
+    size_t i;
+
+    pthread_mutex_lock(&spa103_lock);
+    for (i = 0; i < spa103_receiver.magicCookieCount; i++) {
+        const spa103_magic_cookie_t *slot = &spa103_receiver.magicCookies[i];
+        if (haveId && slot->id != id) continue;
+        if (!haveId && spa103_receiver.magicCookieCount != 1) break;
+        if (!slot->bytes || !slot->size) break;
+        copy = (uint8_t *)malloc(slot->size);
+        if (copy) {
+            memcpy(copy, slot->bytes, slot->size);
+            *sizeOut = slot->size;
+        }
+        break;
+    }
+    pthread_mutex_unlock(&spa103_lock);
+    return copy;
+}
+
+/* Push one decoded packet, already in the DECLARED channel order, into the ring.  Overwrites the
+ * oldest frames when nothing is draining; that is preferable to unbounded growth and to blocking
+ * the socket reader, and it is counted. */
+static void spa103_ring_push_locked(const int16_t *pcm, size_t frames)
+{
+    size_t at = 0;
+
+    if (!spa103_render.ring || !frames) return;
+    if (frames > SPA_103_RING_FRAMES) {
+        pcm += (frames - SPA_103_RING_FRAMES) * SPA_103_RENDER_CHANNELS;
+        spa103_render.dropped += frames - SPA_103_RING_FRAMES;
+        frames = SPA_103_RING_FRAMES;
+    }
+    while (at < frames) {
+        const size_t tail = (spa103_render.head + spa103_render.fill) % SPA_103_RING_FRAMES;
+        size_t run = SPA_103_RING_FRAMES - tail;
+        if (run > frames - at) run = frames - at;
+        memcpy(spa103_render.ring + tail * SPA_103_RENDER_CHANNELS,
+               pcm + at * SPA_103_RENDER_CHANNELS,
+               run * SPA_103_RENDER_CHANNELS * sizeof(int16_t));
+        if (spa103_render.fill + run > SPA_103_RING_FRAMES) {
+            const size_t lost = spa103_render.fill + run - SPA_103_RING_FRAMES;
+            spa103_render.head = (spa103_render.head + lost) % SPA_103_RING_FRAMES;
+            spa103_render.fill = SPA_103_RING_FRAMES;
+            spa103_render.dropped += lost;
+        } else {
+            spa103_render.fill += run;
+        }
+        at += run;
+    }
+}
+
+/* One whole APAP packet (the bytes after the BE32 length prefix).  Returns nothing: a frame that
+ * cannot be decoded is counted and dropped, never fatal to the receiver. */
+static void spa103_render_frame(const uint8_t *packet, size_t length)
+{
+    static uint8_t plaintext[SPA_103_APAP_MAX_FRAME];
+    static int16_t decoded[SPA_103_RENDER_MAX_SAMPLES];
+    uint8_t key[SPA_APAP_KEY_SIZE];
+    spa_apap_extension_t ext;
+    const uint8_t *audio = 0;
+    size_t audioLength = 0, plainLength = 0;
+    uint32_t frames = 0;
+    int variant = 0, rc, state;
+
+    pthread_mutex_lock(&spa103_render.lock);
+    state = spa103_render.state;
+    pthread_mutex_unlock(&spa103_render.lock);
+    if (state != SPA_103_RENDER_WAITING && state != SPA_103_RENDER_RUNNING) return;
+
+    pthread_mutex_lock(&spa103_lock);
+    memcpy(key, spa103_receiver.shk, sizeof(key));
+    pthread_mutex_unlock(&spa103_lock);
+
+    if (!spa_apap_open(key, packet, length, plaintext, sizeof(plaintext),
+                       &plainLength, &variant)) {
+        pthread_mutex_lock(&spa103_render.lock);
+        spa103_render.authFailed++;
+        pthread_mutex_unlock(&spa103_render.lock);
+        memset(key, 0, sizeof(key));
+        return;
+    }
+    memset(key, 0, sizeof(key));
+
+    memset(&ext, 0, sizeof(ext));
+    if (variant == SPA_APAP_AAD_EXTENSION) {
+        if (!spa_apap_parse_extension(plaintext, plainLength, &ext, &audio, &audioLength)) {
+            pthread_mutex_lock(&spa103_render.lock);
+            spa103_render.tlvFailed++;
+            pthread_mutex_unlock(&spa103_render.lock);
+            return;
+        }
+    } else {
+        audio = plaintext;
+        audioLength = plainLength;
+    }
+    if (!audioLength) return;   /* a state-only packet: authentic, and carries no audio */
+
+    /* Bring the decoder up on the first frame that names a cookie we hold.  Doing it here rather
+     * than at SETUP is not laziness: SETMAGICCOOKIE arrives asynchronously on the RTSP control
+     * connection and may land after the first APAP frame. */
+    pthread_mutex_lock(&spa103_render.lock);
+    if (!spa103_render.decoder ||
+        (ext.hasMagicCookieId && spa103_render.haveCookieId &&
+         spa103_render.cookieId != (int64_t)ext.magicCookieId)) {
+        uint8_t *cookie;
+        size_t cookieSize = 0;
+        uint32_t channels = 0, frameLength = 0, sampleRate = 0;
+
+        pthread_mutex_unlock(&spa103_render.lock);
+        cookie = spa103_copy_cookie(ext.hasMagicCookieId, (int64_t)ext.magicCookieId,
+                                    &cookieSize);
+        if (!cookie) return;    /* no cookie yet; the next frame tries again */
+
+        pthread_mutex_lock(&spa103_render.lock);
+        if (spa103_render.decoder) {
+            spa_apac_destroy(spa103_render.decoder);
+            spa103_render.decoder = 0;
+        }
+        rc = spa_apac_create(cookie, cookieSize, &spa103_render.decoder,
+                             &channels, &frameLength, &sampleRate);
+        free(cookie);
+        if (rc != SPA_APAC_OK) {
+            spa103_render.state = SPA_103_RENDER_COOKIE_FAILED;
+            pthread_mutex_unlock(&spa103_render.lock);
+            LOG_ERROR(LOG_MODULE,
+                      "buffer103: APAC decoder setup failed status=%d cookie=%u bytes; "
+                      "decode disabled, capture continues", rc, (unsigned)cookieSize);
+            return;
+        }
+        spa103_render.cookieId = (int64_t)ext.magicCookieId;
+        spa103_render.haveCookieId = ext.hasMagicCookieId;
+        spa103_render.sampleRate = sampleRate;
+        spa103_render.state = SPA_103_RENDER_RUNNING;
+        LOG_INFO(LOG_MODULE,
+                 "buffer103: APAC decoder up id=%lld %u Hz %u ch %u frames/packet",
+                 (long long)spa103_render.cookieId, (unsigned)sampleRate,
+                 (unsigned)channels, (unsigned)frameLength);
+    }
+
+    rc = spa_apac_decode_s16(spa103_render.decoder, audio, audioLength,
+                             decoded, SPA_103_RENDER_MAX_SAMPLES, &frames);
+    if (rc != SPA_APAC_OK) {
+        spa103_render.decodeFailed++;
+        pthread_mutex_unlock(&spa103_render.lock);
+        return;
+    }
+    if (frames) {
+        /* The decoder emits C L R Ls Rs LFE; the rail below expects L R C LFE Ls Rs.  In place:
+         * the permutation is a pure per-frame shuffle. */
+        spa_reorder_5_1_decoder_to_declared_s16(decoded, frames, decoded);
+        spa103_ring_push_locked(decoded, frames);
+        spa103_render.framesIn += frames;
+    }
+    pthread_mutex_unlock(&spa103_render.lock);
+}
+
+/* 1 while the producer should pace itself: nothing is draining the ring, or it is already half
+ * full.  When decoding is off this is always true, which reproduces the capture-only build's
+ * unconditional one-packet-per-frame-period sleep exactly. */
+static int spa103_render_backpressure(void)
+{
+    int paced;
+
+    pthread_mutex_lock(&spa103_render.lock);
+    paced = spa103_render.state != SPA_103_RENDER_RUNNING ||
+            spa103_render.fill >= SPA_103_RING_HIGH_FRAMES;
+    pthread_mutex_unlock(&spa103_render.lock);
+    return paced;
+}
+
+/* The type-103 SETUP stream descriptor's `shk`: 32 raw bytes of CFData, the ChaCha20-Poly1305
+ * key verbatim.  Copied into the receiver and never logged, printed or written anywhere. */
+static int spa103_read_shk(const void *streamDesc, uint8_t out[SPA_APAP_KEY_SIZE])
+{
+    void *key, *data;
+    const uint8_t *bytes;
+    long length;
+    int32_t err = 0;
+
+    if (!streamDesc || !spa103_cf_dict_get_typed || !spa103_cf_data_type_id ||
+        !spa103_cf_data_length || !spa103_cf_data_bytes)
+        return 0;
+    key = cfa_str(0, "shk", SPA_CFENC_UTF8);
+    if (!key) return 0;
+    data = spa103_cf_dict_get_typed(streamDesc, key, spa103_cf_data_type_id(), &err);
+    cfa_rel(key);
+    if (!data || err) return 0;
+    length = spa103_cf_data_length(data);
+    bytes = spa103_cf_data_bytes(data);
+    if (length != (long)SPA_APAP_KEY_SIZE || !bytes) return 0;
+    memcpy(out, bytes, SPA_APAP_KEY_SIZE);
+    return 1;
+}
+
+int spa_buffered_pcm6_active(void)
+{
+    int active;
+
+    pthread_mutex_lock(&spa103_render.lock);
+    active = spa103_render.state == SPA_103_RENDER_RUNNING && spa103_render.ring != 0;
+    pthread_mutex_unlock(&spa103_render.lock);
+    return active;
+}
+
+size_t spa_buffered_pcm6_read(int16_t *out, size_t frames)
+{
+    size_t done = 0;
+
+    if (!out || !frames) return 0;
+    pthread_mutex_lock(&spa103_render.lock);
+    if (spa103_render.state == SPA_103_RENDER_RUNNING && spa103_render.ring) {
+        while (done < frames && spa103_render.fill) {
+            size_t run = SPA_103_RING_FRAMES - spa103_render.head;
+            if (run > spa103_render.fill) run = spa103_render.fill;
+            if (run > frames - done) run = frames - done;
+            memcpy(out + done * SPA_103_RENDER_CHANNELS,
+                   spa103_render.ring + spa103_render.head * SPA_103_RENDER_CHANNELS,
+                   run * SPA_103_RENDER_CHANNELS * sizeof(int16_t));
+            spa103_render.head = (spa103_render.head + run) % SPA_103_RING_FRAMES;
+            spa103_render.fill -= run;
+            done += run;
+        }
+        spa103_render.framesOut += done;
+    }
+    pthread_mutex_unlock(&spa103_render.lock);
+    return done;
+}
 
 /* Stock 210 has no object for the hook-owned buffered stream, so its feedback enumerator keeps
  * reporting the still-present realtime type-100 stream while 103 is carrying media.  Keep the
@@ -1301,6 +1690,9 @@ static int spa103_process_buffered_control(void *connection, void *request,
                 spa103_receiver.anchor = untilTime;
             }
             pthread_mutex_unlock(&spa103_lock);
+            /* Drop the queued PCM and clear the filter banks' overlap memory.  Resuming is only
+             * legal on an Audio Synchronization Packet; every packet of this stream is one. */
+            spa103_render_flush();
             response = cfa_dictm(0, 0, cfa_dk_cb, cfa_dv_cb);
             if (!response) {
                 status = 500;
@@ -1714,14 +2106,16 @@ static void *spa103_thread_main(void *opaque)
                                           : SPA_103_CAPTURE_LIMIT;
     uint8_t buffer[16384];
     uint8_t prefix[32];
-    uint8_t apapHeader[4];
     char path[128];
     uint64_t total = 0;
     uint64_t apapFrames = 0;
     size_t saved = 0;
     size_t prefixSize = 0;
-    size_t apapHeaderSize = 0;
-    uint32_t apapPayloadRemaining = 0;
+    /* The frame body is retained now, so a whole APAP packet can be handed to the decoder.
+     * spa_apap_framer_* owns the assembly; the loop keeps the one-framing-phase-per-read clamp
+     * that stops the drain from defeating TCP flow control. */
+    spa_apap_framer_t framer;
+    uint8_t *frameBuf = 0;
     int fd = -1, captureFd = -1, accepted = 0, closeListen = 0;
     int prefixLogged = 0;
     free(arg);
@@ -1765,6 +2159,14 @@ static void *spa103_thread_main(void *opaque)
     if (captureFd < 0)
         LOG_ERROR(LOG_MODULE, "buffer103: cannot open %s errno=%d; draining without capture",
                   path, errno);
+    if (!isControl) {
+        frameBuf = (uint8_t *)malloc(SPA_103_APAP_MAX_FRAME);
+        if (!frameBuf)
+            LOG_ERROR(LOG_MODULE,
+                      "buffer103: cannot allocate the %u-byte frame buffer; draining without "
+                      "decode", (unsigned)SPA_103_APAP_MAX_FRAME);
+        spa_apap_framer_init(&framer, frameBuf, SPA_103_APAP_MAX_FRAME);
+    }
     LOG_INFO(LOG_MODULE,
              "buffer103: iPhone connected; draining %s generation=%u capture=%s limit=%u",
              transport, (unsigned)generation, path, (unsigned)captureLimit);
@@ -1785,10 +2187,7 @@ static void *spa103_thread_main(void *opaque)
             /* Buffered APAP is BE32-inclusive-length framed.  Read exactly one framing phase at a
              * time so the capture drain itself cannot defeat TCP flow control by swallowing the
              * phone's entire multi-minute burst in a few seconds. */
-            if (apapPayloadRemaining == 0 && apapHeaderSize < sizeof(apapHeader))
-                want = sizeof(apapHeader) - apapHeaderSize;
-            else if (apapPayloadRemaining < want)
-                want = apapPayloadRemaining;
+            want = spa_apap_framer_want(&framer, want);
         }
         n = read(fd, buffer, want);
         if (n > 0) {
@@ -1810,47 +2209,47 @@ static void *spa103_thread_main(void *opaque)
                 saved += spa103_write_capture(captureFd, buffer, keep);
 
             if (!isControl) {
-                int frameComplete = 0;
+                size_t at = 0;
+                int framingFailed = 0;
 
-                if (apapPayloadRemaining == 0 && apapHeaderSize < sizeof(apapHeader)) {
-                    uint32_t frameLength;
-                    memcpy(apapHeader + apapHeaderSize, buffer, (size_t)n);
-                    apapHeaderSize += (size_t)n;
-                    if (apapHeaderSize == sizeof(apapHeader)) {
-                        frameLength = ((uint32_t)apapHeader[0] << 24) |
-                                      ((uint32_t)apapHeader[1] << 16) |
-                                      ((uint32_t)apapHeader[2] << 8) |
-                                      (uint32_t)apapHeader[3];
-                        if (frameLength < sizeof(apapHeader) ||
-                            frameLength > SPA_103_APAP_MAX_FRAME) {
-                            LOG_ERROR(LOG_MODULE,
-                                      "buffer103: invalid APAP inclusive frame length=%u after "
-                                      "%llu frames; closing capture receiver",
-                                      (unsigned)frameLength,
-                                      (unsigned long long)apapFrames);
-                            break;
+                while (at < (size_t)n) {
+                    const uint8_t *frame = 0;
+                    size_t frameLength = 0, consumed = 0;
+                    const int rc = spa_apap_framer_push(&framer, buffer + at, (size_t)n - at,
+                                                        &consumed, &frame, &frameLength);
+                    at += consumed;
+                    if (rc < 0) {
+                        LOG_ERROR(LOG_MODULE,
+                                  "buffer103: invalid APAP inclusive frame length after %llu "
+                                  "frames; closing capture receiver",
+                                  (unsigned long long)apapFrames);
+                        framingFailed = 1;
+                        break;
+                    }
+                    if (rc == 0) break;
+
+                    {
+                        struct timespec pace = { 0, SPA_103_APAP_FRAME_NS };
+                        apapFrames++;
+
+                        if (frame && frameLength)
+                            spa103_render_frame(frame, frameLength);
+
+                        /* Apple's buffered hose queues 32 packages and then suspends network
+                         * reads until playback consumes one.  Real consumption is the
+                         * backpressure now: spa103_render_backpressure() is false only while a
+                         * sink is actually draining the decoded ring, so with decoding off or
+                         * unconsumed this is the same unconditional one-package-per-1024/48k
+                         * pace the capture-only build used, and the receiver still never
+                         * advertises 21 MB and swallows a hundred seconds of audio in four and a
+                         * half. */
+                        if (apapFrames >= SPA_103_APAP_PREFILL_FRAMES &&
+                            spa103_render_backpressure()) {
+                            while (nanosleep(&pace, &pace) != 0 && errno == EINTR) {}
                         }
-                        apapPayloadRemaining = frameLength - sizeof(apapHeader);
-                        if (apapPayloadRemaining == 0) frameComplete = 1;
-                    }
-                } else {
-                    apapPayloadRemaining -= (uint32_t)n;
-                    if (apapPayloadRemaining == 0) frameComplete = 1;
-                }
-
-                if (frameComplete) {
-                    struct timespec pace = { 0, SPA_103_APAP_FRAME_NS };
-                    apapFrames++;
-                    apapHeaderSize = 0;
-
-                    /* Apple's buffered hose queues 32 packages and then suspends network reads
-                     * until playback consumes one.  We do not decode yet, but pacing one package
-                     * per 1024/48k interval reproduces that backpressure instead of advertising a
-                     * 21 MB receiver and draining roughly 100 seconds of audio in 4.5 seconds. */
-                    if (apapFrames >= SPA_103_APAP_PREFILL_FRAMES) {
-                        while (nanosleep(&pace, &pace) != 0 && errno == EINTR) {}
                     }
                 }
+                if (framingFailed) break;
             }
         } else if (n == 0) {
             break;
@@ -1860,6 +2259,7 @@ static void *spa103_thread_main(void *opaque)
     }
 
 done:
+    free(frameBuf);
     if (captureFd >= 0) close(captureFd);
     pthread_mutex_lock(&spa103_lock);
     if (spa103_receiver.generation == generation) {
@@ -1944,10 +2344,15 @@ static void spa103_stop_receiver(void *session, int anySession)
         memset(&spa103_receiver.firstAudible, 0, sizeof(spa103_receiver.firstAudible));
         memset(&spa103_receiver.networkTime, 0, sizeof(spa103_receiver.networkTime));
         spa103_receiver.controlRequestCount = 0;
+        memset(spa103_receiver.shk, 0, sizeof(spa103_receiver.shk));
+        spa103_receiver.haveKey = 0;
+        spa103_receiver.formatIndex = 0;
         spa103_clear_magic_cookies_locked();
         pthread_cond_broadcast(&spa103_cond);
     }
     pthread_mutex_unlock(&spa103_lock);
+    /* No stale decoder, ring or key survives into the next CarPlay generation. */
+    spa103_render_stop();
 }
 
 int spa_setup_buffered_receiver(void *session, void *request, void *response,
@@ -1955,6 +2360,9 @@ int spa_setup_buffered_receiver(void *session, void *request, void *response,
 {
     spa103_thread_arg_t *threadArg = 0;
     void *streamDesc = 0, *responseDesc = 0;
+    uint8_t shk[SPA_APAP_KEY_SIZE] = { 0 };
+    int64_t formatIndex = 0;
+    int haveKey = 0;
     uint64_t streamID = 0;
     int64_t supportsDynamicStreamID = 0;
     uint32_t generation = 0;
@@ -1967,6 +2375,8 @@ int spa_setup_buffered_receiver(void *session, void *request, void *response,
     streamDesc = spa_find_setup_stream(request, SPA_103_STREAM_TYPE);
     if (!streamDesc) return 0;
     audioBufferSize = spa103_audio_buffer_size(streamDesc);
+    haveKey = spa103_read_shk(streamDesc, shk);
+    if (!spa_cf_get_i64(streamDesc, "audioFormatIndex", &formatIndex)) formatIndex = 0;
 
     spa103_stop_receiver(0, 1);
     pthread_mutex_lock(&spa103_lock);
@@ -1988,7 +2398,12 @@ int spa_setup_buffered_receiver(void *session, void *request, void *response,
     memset(&spa103_receiver.firstAudible, 0, sizeof(spa103_receiver.firstAudible));
     memset(&spa103_receiver.networkTime, 0, sizeof(spa103_receiver.networkTime));
     spa103_receiver.controlRequestCount = 0;
+    memcpy(spa103_receiver.shk, shk, sizeof(spa103_receiver.shk));
+    spa103_receiver.haveKey = haveKey;
+    spa103_receiver.formatIndex = formatIndex;
     pthread_mutex_unlock(&spa103_lock);
+    memset(shk, 0, sizeof(shk));
+    spa103_render_start(formatIndex, haveKey);
 
     family = *(const uint8_t *)((const char *)session + SPA_103_SESSION_FAMILY_OFF);
     err = spa103_srv_sockopen(family, 1 /* SOCK_STREAM */, 6 /* IPPROTO_TCP */,
