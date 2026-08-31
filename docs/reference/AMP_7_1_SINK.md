@@ -57,6 +57,58 @@ make eight channels reachable, because **the blocker is on the HU side**, and al
 Grepping the whole extracted MHI2Q tree finds **no** `Entertainment_*` label anywhere, so the HU does
 not reference these sinks by name; selection is presumably numeric or handled inside the MOST stack.
 
+## Follow-up: what the V850 actually decides (Ghidra, V850:LE:32, base 0)
+
+Imported the CodeFlash image and read the two call sites that touch the descriptor table.
+
+**`FUN_000C7694` — the MOST property that returns a sink name.** Request must carry a 1-byte
+selector. It is validated against a **7-entry table at `0x96E2C`**:
+
+```
+0x96E2C:  21 22 23 24 26 2A 32        selectors  = 33 34 35 36 38 42 50
+0x96E35:  02 04 06 08 08 08 00        parallel   =  2  4  6  8  8  8  0
+0x96E3C:  10 10 10 00 00 00 00        parallel   = 16 16 16  0  0  0  0
+```
+
+The index is `selector - 0x21`, computed at `0x0C7746` (`addi -0x21,r10,r10`). An unlisted selector
+takes the error path (`0x00099EBC`, "parameter wrong"); a listed one returns the string.
+
+The parallel row at `0x96E35` reads as a **channel count per selector: 2, 4, 6, 8, 8, 8** — three
+distinct eight-channel configurations. This is independent corroboration of the `Entertainment_7.1`
+labels: the amp does not merely carry the string, it carries per-mode channel counts that include 8.
+Similar byte runs with `02` / `06 06` / `08 08` / `10` / `18` continue to `0x96E9x`, unparsed.
+
+**`FUN_000C8F0C`** — a second property, sub-index `0..11`, three bytes per entry, base `0x952B1`,
+with index 0 returning a 30-byte blob from `0x952B4`. Twelve entries is suggestive next to the twelve
+coefficient groups in `DAT_00097028`, but the records did not resolve into anything readable and are
+recorded here only as a pointer for whoever picks this up.
+
+**FktID tables.** A `{u32 ptr, u32 id}` table at `0x96DE8` carries MOST function ids `0x0A00`,
+`0x0A01`, `0x0A02`, `0x0A03`, `0x0A10`, terminated `0xFFFF`. Separately, the 49-entry
+`{u16 id, u16 = 3}` list at `0x95360` spans `0x000/001/011`, `0x100-0x125`, `0x202/203`,
+`0x402-0x467`, `0xC02-0xCFF`, `0xD10-0xD29` — the FBlock's advertised function list.
+
+## The routing matrix is not in this dump — stop looking for it here
+
+The channel-to-speaker assignment is **not answerable from `CodeFlash_*.bin`**, and no further static
+work on that file will produce it. The amp document's §4a already establishes why: there is **no
+SHARC code in the dump**. The V850 is the control MCU — it selects a mode, gates per-channel gain and
+enable, and pushes a configuration; the actual mixing/routing executes on the ADSP-2148x from the
+`AD301A07` download stream, and all we have of A07 is `param_addr -> final_value` with no parameter
+semantics (`AMP_DSP_A07_cells.csv`). The V850 tables that *are* decoded — `DAT_00097028`
+coefficient-block indices, `DAT_000970B0` reorder, per-channel gain/limit/enable — are all
+**output-side**: they describe what happens to a speaker channel, never which source channel feeds it.
+
+So the gating question has exactly two honest routes, and neither is more static analysis of this
+binary:
+
+1. **Bench measurement.** Put the amp in `Entertainment_7.1`, drive source channel 7 alone with a
+   tone, and find which driver moves. One afternoon, unambiguous, and it also settles the `_SAD`
+   variants. This is the cheap answer.
+2. **Obtain the SHARC image or an A07 parameter map.** The download stream would have to be decoded
+   against ADSP-2148x semantics; the flash region `0x100000+` carries no footer CRC, so the image is
+   readable and writable, but nothing in hand explains what the cells mean.
+
 ## The one question that gates everything
 
 **In `Entertainment_7.1`, where do source channels 7 and 8 physically land?**
