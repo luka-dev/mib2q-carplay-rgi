@@ -109,7 +109,7 @@ Four functions carry Hex-Rays' `local variable allocation has failed, the output
 
 | addr | function | why it matters |
 |---|---|---|
-| `0x0009a950` | `LRVQLPC::Initialize()` | small, low risk |
+| `0x0009a950` | `dequantizeLrvqGain(uint16 gainIndex, uint16 gainMode, float*)` — **not** `LRVQLPC::Initialize()`; it is a *static* function and Hex-Rays invented a `this` | solved, see `LRVQ_SEMANTICS.md` §4.1 |
 | `0x0009aa10` | `lsfsToMdctSpectralEnvelope(bool, aligned_array<uint16,5> const&, aligned_array<float,1024>&)` | 1232 bytes; selects among the seven envelope tables |
 | `0x0009aee0` | `ltpToMdctSpectralEnvelope(uint16, uint16, aligned_array<float,1024>&)` | 536 bytes |
 | `0x0009b100` | `LrvqDeserialize(...)` | **3264 bytes, 811 instructions — the largest and most important function in the entropy core** |
@@ -143,8 +143,10 @@ directly. Bands whose codebook is 0 are memset to zero with a NEON `stp q`.
    fields the library never touches are absent, padding is invisible, and a handful of entries are
    artefacts. A known example: `APACICSInfo` shows `+0x2f0`/`+0x2f8` as a `u64` pair, seen once
    each, 700 bytes above every other member — that is from
-   `APACLRVQDecoder::SpectrumDeserializeSCE`, where it may be a genuine `std::vector` member of a
-   large `APACICSInfo` or may be register aliasing. It was not resolved. **Treat a low-`n` offset
+   `APACLRVQDecoder::SpectrumDeserializeSCE`. **Resolved: it is not `APACICSInfo` at all.**
+   `SpectrumDeserializeSCE` is static, so Hex-Rays shifted its arguments; the pointer pair is
+   `APACIndividualChannelStream + 0x2F0` / `+0x2F8`, the begin/end of that channel's spectrum,
+   which is passed to `LrvqDeserialize` as its `APACSpectralData&`. See `LRVQ_SEMANTICS.md` §3.1. **Treat a low-`n` offset
    far from a class's main cluster as suspect.**
 4. **Four vtables have NULL slots** where the destructor pair belongs: `apac::IASCConfig`,
    `apac::DecElement`, `APACSyntacticElement`, `apac::LPCBase`. This was checked against
@@ -183,11 +185,20 @@ Two tables are now known exactly:
 
 Ranked by how much a wrong guess would cost.
 
-1. **`APACLRVQDecoder::LrvqDeserialize` (`0x0009b100`)** and the three other warned LRVQ
-   functions. Run them against the Pioneer library in the `linux/arm64` container with recorded
-   inputs and compare state, function by function. Nothing else in the port is as likely to be
-   subtly wrong.
-2. **The Huffman codebook structure.** `RODATA.md` gives the exact byte layout — a 12-entry
+1. ~~**`APACLRVQDecoder::LrvqDeserialize` (`0x0009b100`)** and the three other warned LRVQ
+   functions.~~ **Done — see `LRVQ_SEMANTICS.md`.** All four were reconstructed from the
+   disassembly and confirmed against the library in the container: `LrvqDeserialize` matches
+   bit-exactly over 1000 two-channel runs, `dequantizeLrvqGain` over all 1024 inputs,
+   `ltpToMdctSpectralEnvelope` to 4e-06 over 136 192 bins. `lsfsToMdctSpectralEnvelope` is
+   still static-analysis only. All four are **static** functions; the pseudocode's `this` is
+   a decompiler artefact and every argument in it is shifted by one.
+2. ~~**The Huffman codebook structure.**~~ **Done — see `LRVQ_SEMANTICS.md` §1.** `n` is the
+   cap on the unary prefix fed to `clz`, `a` is a right-shift producing a payload index, and
+   the payload word is `(symbol << 6) | length`. `entries[n]` is a real guard record. All 12
+   books confirmed bit-exactly against the running library. Original note kept below for
+   context.
+
+   **The Huffman codebook structure.** `RODATA.md` gives the exact byte layout — a 12-entry
    pointer array at `0x00424d98`, each pointing at `{const Entry *entries; uint64 n;}`, each entry
    `{uint64 a; const void *payload;}`, with `a` ascending 6..31 and payload sizes halving. What
    those fields *mean* is not established. `APACScaleFactorData::Deserialize` uses `n` as a shift
