@@ -1244,14 +1244,40 @@ picking one.
 The original keeps six persistent `apac::LPMDCTFilter`s; this port keeps **two** and re-`Initialize`s
 on demand — a deliberate 190 KiB saving, observationally identical and proven bit-exact. A stream
 whose geometry changes between frames therefore rebuilds ~768 sin/cos twiddles per channel per
-frame. That costs **+110 % on armle-v7** against **+34 % on an arm64 host**: QNX libm's `sin`/`cos`
-on scalar VFPv3 is a far larger share of a call than on an M3. So a steady-state-only measurement
-under-reports the port's worst case by more than half, and the host ratio under-reports the lever's
-value. **The filters stay at two** — decided on this number, not around it: the path executes zero
+frame. That costs **+110 % on armle-v7** against **+34 % on an arm64 host** — both measured. So a
+steady-state-only measurement under-reports the port's worst case by more than half, and the host
+ratio under-reports the lever's value.
+
+*Why* the target ratio is three times the host's is **a hypothesis and not a measurement**: QNX
+libm's `sin`/`cos` on a scalar VFPv3 core is presumably a far larger share of a rebuild than on an
+M3 with a vector unit. Nothing here separates the transcendentals from the rest of `Initialize`, and
+that would take one more experiment.
+
+**The filters stay at two** — decided on the +110 %, not around it: the path executes zero
 instructions on our content, and +94 KiB (four filters) or +188 KiB (six) inside `dio_manager` buys
 down a cost nobody is paying. If a real BWE-active stream ever appears *and* alternates geometry
-frame to frame, +110 % is the figure to reopen it on. The lever is written up with its price in
-"The two-filter trade" and at the top of `include/apac/bwe_lpc.h`.
+frame to frame, +110 % is the figure to reopen it on.
+
+**Two levers, not one, and the cheaper one is currently unwritten anywhere else.** If the hypothesis
+above holds, the cost is in the transcendentals rather than in the filter objects, so:
+
+| lever | cost | removes | status |
+| --- | --- | --- | --- |
+| four or six `LPMDCTFilter`s | +94 KiB / +188 KiB of RAM | the rebuild entirely | written up in "The two-filter trade" and at the top of `include/apac/bwe_lpc.h`, with its price |
+| a cheaper twiddle generator — a small table plus refinement, or the standard recurrence | a few KiB | most of the *cost* of the rebuild, at a fraction of the memory | **unmeasured**, and conditional on the hypothesis above |
+
+The second is recorded here so that whoever reopens this does not reach for the first merely because
+it is the one with a price tag attached. It is not free of risk, and the constraint is the general
+rule below rather than a detail of this lever.
+
+**A rule, stated once because it has now come up twice.** The twiddles feed a transform whose output
+is within 1.4 ULP of exact and whose differential results — the whole of stages d and e — rest on
+that. So **any cheaper arithmetic on this path has to be shown bit-identical to what it replaces, or
+it invalidates the very numbers that justify it.** That is why a cheaper twiddle generator is a
+measurement task and not a patch, and it is the same reason the long path's 512 unpipelined VFP
+divides must not be "fixed" with a reciprocal multiply: both trade exactness for speed on a path
+whose value is its exactness. First instance was the divides, second is the twiddles; treat it as
+the rule for anything else on this path.
 
 **How many channels can be active.** `BWE2Decoder::Deserialize` reads a presence bit only for an
 SCE and a CPE; every other element type clears the channel's bit and returns having read nothing
