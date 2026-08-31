@@ -27,6 +27,7 @@
 // Usage:
 //   apac_fn_ref probe                       resolve every symbol, print nothing else
 //   apac_fn_ref bs      < cases > results    bit-reader differential, see below
+//   apac_fn_ref ics     < cases > results    APACICSInfo::Deserialize, per case
 //   apac_fn_ref sfb                          dump apac::GetSFBOffsetTable for all rates
 //   apac_fn_ref gc COOKIE [--offset N]       apac::GlobalConfig::Deserialize on a cookie
 //   apac_fn_ref gc-raw FILE [--offset N]     ... on a raw config blob (no atom walk)
@@ -88,6 +89,7 @@ typedef int32_t  (*fn_bs_remaining_t)(const void*);
 typedef void     (*fn_bs_fill_t)(void*, const uint8_t*);
 typedef int32_t  (*fn_gc_deser_t)(void*, void*);
 typedef int32_t  (*fn_scene_deser_t)(void*, void*);
+typedef uint8_t  (*fn_ics_deser_t)(void*, void*, int32_t);
 typedef void     (*fn_gc_reset_t)(void*);
 typedef const SFBOffsetRecord* (*fn_sfb_t)(uint32_t, uint32_t);
 typedef uint32_t (*fn_cookie_u32_t)(const void*, uint32_t);
@@ -103,6 +105,7 @@ fn_bs_remaining_t bs_remaining;
 fn_bs_fill_t      bs_fill;
 fn_gc_deser_t     gc_deserialize;
 fn_scene_deser_t  scene_deserialize;
+fn_ics_deser_t    ics_deserialize;
 fn_gc_reset_t     gc_reset;
 fn_sfb_t          sfb_table;
 void*             gc_vt_asc;
@@ -140,6 +143,8 @@ void load_library()
     scene_deserialize = need<fn_scene_deser_t>(
         "_ZN4apac16AudioSceneConfig11DeserializeER16TBitstreamReaderIjE");
     sfb_table    = need<fn_sfb_t>         ("_ZN4apac17GetSFBOffsetTableEjj");
+    ics_deserialize = need<fn_ics_deser_t>(
+        "_ZN11APACICSInfo11DeserializeER16TBitstreamReaderIjEN4apac10CodingTypeE");
     gc_vt_asc    = need<void*>            ("_ZTVN4apac12GlobalConfig13ASCConfigDataE");
     gc_vt_codec  = need<void*>            ("_ZTVN4apac12GlobalConfig15CodecConfigDataE");
 }
@@ -242,6 +247,59 @@ int cmd_bs()
             printf("R %d %s %ld %ld %08x %d\n", opIdx++, tok, ret,
                    (long)(bs.cur - base), bs.cache, bs.bitsLeft);
         }
+        fflush(stdout);
+    }
+    return 0;
+}
+
+// ----------------------------------------------------------------- ics ----
+// APACICSInfo is 768 bytes but Deserialize only reads +8 and +9 - the maximum
+// scalefactor-band counts for long and short blocks, which the element sets from
+// the SFB table - and only writes +10 .. +16.  A zeroed slab with those two
+// bytes filled in is therefore a legal object.
+//
+//   ICS <idx> <maxSfbLong> <maxSfbShort> <codingType> <bufferHex|->
+//   R <idx> <rc> <windowSequence> <maxSfb> <numWindowGroups> <groupWord> <bitsUsed>
+int cmd_ics()
+{
+    char line[8192];
+    static uint8_t slab[4096] __attribute__((aligned(64)));
+    static uint8_t obj[1024] __attribute__((aligned(16)));
+
+    while (fgets(line, sizeof line, stdin)) {
+        size_t n = strlen(line);
+        while (n && (line[n - 1] == '\n' || line[n - 1] == '\r')) line[--n] = 0;
+        if (strncmp(line, "ICS ", 4) != 0) { printf("%s\n", line); continue; }
+        printf("%s\n", line);
+
+        char idxs[64], bufhex[4096];
+        unsigned maxLong, maxShort;
+        int coding;
+        if (sscanf(line, "ICS %63s %u %u %d %4095s",
+                   idxs, &maxLong, &maxShort, &coding, bufhex) != 5) {
+            fprintf(stderr, "apac_fn_ref: malformed ICS: %s\n", line);
+            return 2;
+        }
+        std::vector<uint8_t> buf;
+        if (!parse_hex(bufhex, buf)) { fprintf(stderr, "apac_fn_ref: bad hex\n"); return 2; }
+        memset(slab, 0, sizeof slab);
+        if (!buf.empty()) memcpy(slab, &buf[0], buf.size());
+        memset(obj, 0, sizeof obj);
+        obj[8] = (uint8_t)maxLong;
+        obj[9] = (uint8_t)maxShort;
+
+        BsState bs;
+        memset(&bs, 0, sizeof bs);
+        bs_ctor(&bs, slab, (uint32_t)buf.size());
+        int32_t before = bs_remaining(&bs);
+        uint8_t rc = ics_deserialize(obj, &bs, coding);
+        int32_t after = bs_remaining(&bs);
+
+        uint32_t groupWord;
+        memcpy(&groupWord, obj + 16, 4);
+        printf("R %s %u %u %u %u %u %d\n", idxs, (unsigned)(rc & 1),
+               (unsigned)obj[10], (unsigned)obj[11], (unsigned)obj[12],
+               groupWord, before - after);
         fflush(stdout);
     }
     return 0;
@@ -437,6 +495,7 @@ int main(int argc, char** argv)
         return 0;
     }
     if (cmd == "bs")  return cmd_bs();
+    if (cmd == "ics") return cmd_ics();
     if (cmd == "sfb") return cmd_sfb(argc - 2, argv + 2);
 
     if (cmd == "gc" || cmd == "gc-raw" || cmd == "cookie" || cmd == "scene") {

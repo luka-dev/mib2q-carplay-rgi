@@ -113,6 +113,49 @@ echo "running the bit reader against the library"
 grep -c '^R ' "$FIX/bitreader.fixture" | sed 's/^/  result lines: /'
 rm -f "$FIX/bitreader.cases"
 
+# ------------------------------------------------------------- ICS info ----
+echo "generating APACICSInfo cases"
+python3 - "$FIX/icsinfo.cases" <<'ICSPY'
+import random, sys
+rnd = random.Random(0x49435349)   # 'ICSI'
+cases = []
+idx = 0
+# 48 kHz - the CarPlay case - is 49 long bands and 14 short; the rest sweep the
+# limits so both rejections and the codingType == 1 shortcuts are exercised.
+LIMITS = [(49, 14), (51, 14), (41, 12), (40, 15), (0, 0), (7, 7), (63, 63), (26, 6), (27, 7)]
+for (ml, ms) in LIMITS:
+    for coding in (0, 1, 2, 3):
+        for _ in range(12):
+            ln = rnd.choice([1, 2, 3, 4, 8])
+            buf = bytes(rnd.randrange(256) for _ in range(ln))
+            cases.append((idx, ml, ms, coding, buf)); idx += 1
+# Every window sequence crossed with every value of the 6-bit maxSfb field, on a
+# buffer long enough that nothing runs off the end.
+for ws in range(4):
+    for field in range(64):
+        b0 = (ws << 6) | (field & 0x3f)
+        buf = bytes([b0, rnd.randrange(256), rnd.randrange(256), rnd.randrange(256)])
+        for coding in (0, 1):
+            cases.append((idx, 49, 14, coding, buf)); idx += 1
+with open(sys.argv[1], 'w') as out:
+    for i, ml, ms, coding, buf in cases:
+        out.write('ICS %d %d %d %d %s\n' % (i, ml, ms, coding, buf.hex() if buf else '-'))
+sys.stderr.write('%d cases\n' % len(cases))
+ICSPY
+
+{
+    echo "# apac_decoder/tests/fixtures/icsinfo.fixture"
+    echo "# GENERATED - do not edit.  Regenerate with tools/gen_fixtures.sh (needs Docker)."
+    echo "# APACICSInfo::Deserialize at 0x00099e60, called on a zeroed 768-byte object"
+    echo "# whose +8 / +9 (maxSfbLong / maxSfbShort) were set from the case line."
+    echo "#   ICS <idx> <maxSfbLong> <maxSfbShort> <codingType> <bufferHex|->"
+    echo "#   R <idx> <rc> <windowSequence> <maxSfb> <numWindowGroups> <groupWord> <bitsUsed>"
+    echo "# rc is the original's convention: 1 means ERROR."
+    "$RUN" fn ics < "$FIX/icsinfo.cases" 2>/dev/null
+} > "$FIX/icsinfo.fixture"
+grep -c '^R ' "$FIX/icsinfo.fixture" | sed 's/^/  result lines: /'
+rm -f "$FIX/icsinfo.cases"
+
 # ----------------------------------------------------------- SFB offsets ----
 echo "dumping apac::GetSFBOffsetTable"
 {
