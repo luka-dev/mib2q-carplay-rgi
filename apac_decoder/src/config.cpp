@@ -4,6 +4,16 @@
 #include <math.h>
 #include <string.h>
 
+#if defined(__QNX__) && !defined(log2f)
+// QNX 6.5 hides every C99 function in <math.h> behind `#if _HAS_C9X`, which the
+// headers set only for C compiled as C99 - so in C++ the declaration is simply
+// absent, even though libm.so.2 exports the symbol (`nm -D` finds log2f, exp2f,
+// pow, ceilf).  Declaring it is the whole fix.  Defining _HAS_C9X globally
+// instead would also switch on QNX's own C++ <math.h> overloads, which then
+// collide with GCC's <cmath> wherever a translation unit includes both.
+extern "C" float log2f(float);
+#endif
+
 namespace apac {
 
 namespace {
