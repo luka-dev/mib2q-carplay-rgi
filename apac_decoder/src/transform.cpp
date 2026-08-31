@@ -34,22 +34,35 @@ const float* GetDCTIVModulationCoefficients(uint32_t n)
 
 // ------------------------------------------------------------------ FFT ----
 
-ComplexFFT::ComplexFFT() : mM(0)
+ComplexFFT::ComplexFFT() : mM(0), mP3(0)
 {
 }
 
 bool ComplexFFT::Initialize(uint32_t m)
 {
-    if (m < 2 || m > kMaxFFT || (m & (m - 1)) != 0)
+    // The length the radix-2 core runs at: the whole transform, or a third of
+    // it when m is 3 * a power of two.  BWELPC needs 48 and 384; every other
+    // caller in the decoder is a power of two.
+    uint32_t p = m;
+    uint32_t p3 = 0;
+    if (m >= 2 && m <= kMaxFFT && (m & (m - 1)) == 0) {
+        p3 = 0;
+    } else if (m % 3 == 0) {
+        p = m / 3;
+        if (p < 2 || p > kMaxFFTRadix3 || (p & (p - 1)) != 0)
+            return false;
+        p3 = p;
+    } else {
         return false;
+    }
     if (m == mM)
         return true;
 
     uint32_t bits = 0;
-    while ((1u << bits) < m)
+    while ((1u << bits) < p)
         ++bits;
 
-    for (uint32_t i = 0; i < m; ++i) {
+    for (uint32_t i = 0; i < p; ++i) {
         uint32_t r = 0;
         for (uint32_t b = 0; b < bits; ++b)
             if (i & (1u << b))
@@ -57,43 +70,104 @@ bool ComplexFFT::Initialize(uint32_t m)
         mRev[i] = (uint16_t)r;
     }
 
-    // exp(-2*pi*i*j/m), j < m/2.  Computed in double and rounded once: the
+    // exp(-2*pi*i*j/p), j < p/2.  Computed in double and rounded once: the
     // twiddles are the only place a recurrence would visibly cost accuracy.
     const double kTwoPi = 6.283185307179586476925286766559;
-    for (uint32_t j = 0; j < m / 2; ++j) {
-        double a = -kTwoPi * (double)j / (double)m;
+    for (uint32_t j = 0; j < p / 2; ++j) {
+        double a = -kTwoPi * (double)j / (double)p;
         mTwRe[j] = (float)cos(a);
         mTwIm[j] = (float)sin(a);
     }
+    if (p3) {
+        for (uint32_t k = 0; k < p3; ++k) {
+            const double a = -kTwoPi * (double)k / (double)m;
+            mW1Re[k] = (float)cos(a);
+            mW1Im[k] = (float)sin(a);
+            mW2Re[k] = (float)cos(2.0 * a);
+            mW2Im[k] = (float)sin(2.0 * a);
+        }
+    }
     mM = m;
+    mP3 = p3;
     return true;
+}
+
+// The decimation-in-time radix-2 butterflies over p points already permuted
+// into bit-reversed order.  Lifted out of Forward unchanged so the radix-3 path
+// can run it on each third.
+void ComplexFFT::Radix2(float* re, float* im, uint32_t p) const
+{
+    for (uint32_t half = 1; half < p; half <<= 1) {
+        const uint32_t step = p / (half << 1);
+        for (uint32_t base = 0; base < p; base += (half << 1)) {
+            for (uint32_t j = 0; j < half; ++j) {
+                const float wr = mTwRe[j * step];
+                const float wi = mTwIm[j * step];
+                const uint32_t a = base + j;
+                const uint32_t b = a + half;
+                const float xr = re[b] * wr - im[b] * wi;
+                const float xi = re[b] * wi + im[b] * wr;
+                re[b] = re[a] - xr;
+                im[b] = im[a] - xi;
+                re[a] = re[a] + xr;
+                im[a] = im[a] + xi;
+            }
+        }
+    }
 }
 
 void ComplexFFT::Forward(const float* inRe, const float* inIm,
                          float* outRe, float* outIm) const
 {
     const uint32_t m = mM;
-    for (uint32_t i = 0; i < m; ++i) {
-        const uint32_t r = mRev[i];
-        outRe[i] = inRe[r];
-        outIm[i] = inIm[r];
-    }
-    for (uint32_t half = 1; half < m; half <<= 1) {
-        const uint32_t step = m / (half << 1);
-        for (uint32_t base = 0; base < m; base += (half << 1)) {
-            for (uint32_t j = 0; j < half; ++j) {
-                const float wr = mTwRe[j * step];
-                const float wi = mTwIm[j * step];
-                const uint32_t a = base + j;
-                const uint32_t b = a + half;
-                const float xr = outRe[b] * wr - outIm[b] * wi;
-                const float xi = outRe[b] * wi + outIm[b] * wr;
-                outRe[b] = outRe[a] - xr;
-                outIm[b] = outIm[a] - xi;
-                outRe[a] = outRe[a] + xr;
-                outIm[a] = outIm[a] + xi;
-            }
+    if (mP3 == 0) {
+        for (uint32_t i = 0; i < m; ++i) {
+            const uint32_t r = mRev[i];
+            outRe[i] = inRe[r];
+            outIm[i] = inIm[r];
         }
+        Radix2(outRe, outIm, m);
+        return;
+    }
+
+    // m == 3p.  Split by residue mod 3, transform each third with the radix-2
+    // core in place in its own slice of the output, then one three-point
+    // butterfly per k recombines them:
+    //
+    //   X[k]      = A + s          with u = W^k B, v = W^2k C,
+    //   X[k+p]    = A - s/2 - i c d    s = u + v, d = u - v,
+    //   X[k+2p]   = A - s/2 + i c d    c = sqrt(3)/2,
+    //
+    // which is A + w^j u + w^2j v for w = exp(-2*pi*i/3) written out, using
+    // w^4 == w.
+    const uint32_t p = mP3;
+    for (uint32_t t = 0; t < 3; ++t) {
+        float* re = outRe + t * p;
+        float* im = outIm + t * p;
+        for (uint32_t i = 0; i < p; ++i) {
+            const uint32_t r = 3u * mRev[i] + t;
+            re[i] = inRe[r];
+            im[i] = inIm[r];
+        }
+        Radix2(re, im, p);
+    }
+    const float c = 0.86602540378443864676f;     // sqrt(3)/2
+    for (uint32_t k = 0; k < p; ++k) {
+        const float ar = outRe[k],         ai = outIm[k];
+        const float br = outRe[p + k],     bi = outIm[p + k];
+        const float cr = outRe[2 * p + k], ci = outIm[2 * p + k];
+        const float ur = br * mW1Re[k] - bi * mW1Im[k];
+        const float ui = br * mW1Im[k] + bi * mW1Re[k];
+        const float vr = cr * mW2Re[k] - ci * mW2Im[k];
+        const float vi = cr * mW2Im[k] + ci * mW2Re[k];
+        const float sr = ur + vr, si = ui + vi;
+        const float dr = ur - vr, di = ui - vi;
+        outRe[k]         = ar + sr;
+        outIm[k]         = ai + si;
+        outRe[p + k]     = ar - 0.5f * sr + c * di;
+        outIm[p + k]     = ai - 0.5f * si - c * dr;
+        outRe[2 * p + k] = ar - 0.5f * sr - c * di;
+        outIm[2 * p + k] = ai - 0.5f * si + c * dr;
     }
 }
 
@@ -108,7 +182,9 @@ RealFFT::RealFFT() : mN(0)
 
 bool RealFFT::Initialize(uint32_t n)
 {
-    if (n < 4 || n > kMaxRealFFT || (n & (n - 1)) != 0)
+    // n must be even and n/2 a length ComplexFFT accepts - a power of two, or
+    // 3 * one, which is what BWELPC's 768- and 96-point filters ask for.
+    if (n < 4 || n > kMaxRealFFT || (n & 1) != 0)
         return false;
     if (n == mN)
         return true;

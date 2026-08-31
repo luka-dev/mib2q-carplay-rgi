@@ -48,6 +48,15 @@ const uint32_t kMaxTransform   = kTransformLong;
 const uint32_t kMaxRealFFT     = 2048;
 const uint32_t kMaxFFT         = kMaxRealFFT / 2;
 
+// Not every transform length in this decoder is a power of two.  BWELPC (stage
+// e) builds filters of 768 and 96 points, which need complex transforms of 384
+// and 48 - both 3 * 2^k.  vDSP, which the library calls, takes f * 2^k for
+// f in {1, 3, 5, 15} and so never noticed; the port's radix-2 FFT did.
+// ComplexFFT therefore also accepts m = 3 * p for a power-of-two p up to this
+// bound, which it transforms as three interleaved sub-FFTs of length p and one
+// three-point butterfly.  384 / 3 = 128 is the largest p any of it asks for.
+const uint32_t kMaxFFTRadix3   = 128;
+
 // The original's own return values, spelled as the FourCCs they are.
 enum TransformStatus {
     kTransformOk      = 0,
@@ -86,7 +95,8 @@ const float* GetDCTIVModulationCoefficients(uint32_t n);
 //     out[k] = sum_j in[j] * exp(-2*pi*i*j*k/m)
 //
 // No scaling, which is what vDSP_DFT_Execute on a vDSP_DFT_zop setup does.
-// Sizes actually used are 64 and 512; m must be a power of two >= 2.
+// Sizes actually used are 48, 64, 384 and 512.  m must be a power of two >= 2,
+// or 3 * p for such a p no larger than kMaxFFTRadix3.
 class ComplexFFT {
 public:
     ComplexFFT();
@@ -96,10 +106,21 @@ public:
                  float* outRe, float* outIm) const;
 
 private:
+    // The radix-2 core, over `p` points already in bit-reversed order in
+    // re / im.  Shared by the plain path and by each third of the radix-3 one.
+    void Radix2(float* re, float* im, uint32_t p) const;
+
     uint32_t mM;
-    uint16_t mRev[kMaxFFT];
+    uint32_t mP3;                     // 0 = plain radix 2; else m / 3
+    uint16_t mRev[kMaxFFT];           // built for mP3 ? mP3 : mM
     float    mTwRe[kMaxFFT / 2];
     float    mTwIm[kMaxFFT / 2];
+    // exp(-2*pi*i*k/m) and its square, k < m/3.  Only the radix-3 path uses
+    // them; 4 * kMaxFFTRadix3 floats, i.e. 2 KiB.
+    float    mW1Re[kMaxFFTRadix3];
+    float    mW1Im[kMaxFFTRadix3];
+    float    mW2Re[kMaxFFTRadix3];
+    float    mW2Im[kMaxFFTRadix3];
 };
 
 // MDCT is DCT_IV plus a scale factor; the library expresses that as
@@ -155,7 +176,10 @@ private:
 class RealFFT {
 public:
     RealFFT();
-    bool Initialize(uint32_t n);          // power of two, 4 <= n <= kMaxRealFFT
+    // 4 <= n <= kMaxRealFFT and n / 2 a length ComplexFFT accepts, so a power
+    // of two or 3 * a power of two - the latter is what BWELPC's 768- and
+    // 96-point filters need.
+    bool Initialize(uint32_t n);
     uint32_t Size() const { return mN; }
 
     // Both stage through internal scratch, so neither is const.
