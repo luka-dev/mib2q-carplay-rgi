@@ -25,6 +25,17 @@
 //     walk all fail there rather than inside a tolerance;
 //   * the return code and the two early exits (an inactive channel, maxSfb 0).
 //
+// FOUR CASES RUN THE WHOLE SYNTHESIS AND WRITE NOTHING, and that is correct.
+// The `find_if` guard asks whether ANY of `[0, bwStart)` is non-zero, but what
+// gets replicated is only the top `patchWidth` bins of it, `[bwStart - w,
+// bwStart)`.  A frame whose maxSfb is small enough that its coded content stops
+// below that slice therefore passes the guard, runs every FFT, and multiplies a
+// slice of zeros - so every extension coefficient comes out `+0.0f` on top of
+// the `+0.0f` that was already there.  Cases 4, 5, 26 and 30 are those; the
+// library does exactly the same and the fixture agrees bit for bit.  They cost
+// FULL price, so anything measuring cost must count them as work even though a
+// memcmp of the spectrum cannot tell them from the 11 that are truly gated.
+//
 // Not bit-exact, and it cannot be: apac::LPMDCTFilter ends in a real FFT, and
 // the library's is Apple's closed vDSP_DFT_Execute.  Same reason as stage d and
 // the LRVQ envelopes, and the same machinery (tests/dsp_fixture.h).  Two
@@ -445,6 +456,7 @@ struct BitWriter {
     }
 };
 
+int      gZeroWrite = 0;
 long     gBandBins = 0;
 long     gBandLoose = 0;
 double   gWorstBandRatio = 0.0;
@@ -595,6 +607,18 @@ void checkFrame(double* worstTouched, int* nLong, int* nShort, int* nWide,
                 ++gBandBins;
                 if (sc > 0.0 && d / sc > *worstTouched)
                     *worstTouched = d / sc;
+                // Non-finite, explicitly, and on BOTH sides.  The two gates
+                // below cannot see a NaN: `(o < 0) != (t < 0)` is false for
+                // any NaN, and `d > 1.0 * |t|` is false when d is NaN, so a
+                // NaN on both sides would slip through silently.  It is not a
+                // hypothetical - the multiplier is coreEnv / bweEnv and the
+                // product is `0.0f * mult`, so a bweEnv bin that underflows to
+                // zero gives inf and then NaN wherever the source bin is zero.
+                // The original divides and multiplies exactly the same way, so
+                // if it ever happens it happens to both; this makes it visible
+                // instead of passing.
+                if (o != o || t != t || o - o != 0.0 || t - t != 0.0)
+                    fail("a non-finite coefficient in the extension band", i);
                 if (t == 0.0) {
                     if (o != 0.0) fail("a zero coefficient came back non-zero", i);
                     ++within2;
@@ -620,6 +644,12 @@ void checkFrame(double* worstTouched, int* nLong, int* nShort, int* nWide,
                         "coefficients within 1e-02 of the library\n",
                         i, within2, m);
                 exit(1);
+            }
+            {
+                uint32_t nz = 0;
+                for (uint32_t k = 0; k < m; ++k)
+                    if (theirs[k] != 0.0f) { nz = 1; break; }
+                if (!nz) ++gZeroWrite;
             }
             if (m - within2 > gWorstCaseLoose) {
                 gWorstCaseLoose = m - within2;
@@ -730,9 +760,10 @@ int main(int argc, char** argv)
 
     printf("OK  %d bit-exact checks, %d toleranced; %d LSF index pairs, "
            "%d envelope calls, %d DecodeFrame cases (%d long, %d short, "
-           "%d wide geometry, %d skipped by a gate, %d window groups)\n",
+           "%d wide geometry, %d skipped by a gate, %d that run everything and "
+           "write only zeros, %d window groups)\n",
            gBitChecks, gChecks, kBweLsfCases, envCases, kBweFrameCases,
-           nLong, nShort, nWide, nSkipped, nGroups);
+           nLong, nShort, nWide, nSkipped, gZeroWrite, nGroups);
     printf("    bit-exact: the two 512x16 LSF codebooks and the 64-entry gain "
            "table, every conditioned LSF vector, every coefficient outside the "
            "extension band on BOTH sides, and shared-vs-fresh BWELPC on every "

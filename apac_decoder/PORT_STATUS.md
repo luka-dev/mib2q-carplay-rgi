@@ -852,6 +852,16 @@ by eye. Host ns per `DecodeFrame`, one channel:
 | short, narrow | 9 x 64-pt + 1 x 128-pt | 2 130 |
 | gated: `maxSfb == 0`, or an all-zero core | none | ~0 |
 
+**Careful with "does nothing": 11 of the 44 cases are free, but 15 leave the spectrum unchanged.**
+The `find_if` guard asks whether ANY of `[0, bwStart)` is non-zero, while what gets replicated is
+only the top `patchWidth` bins of it, `[bwStart - w, bwStart)`. A frame whose `maxSfb` is small
+enough that its coded content stops below that slice passes the guard, runs every FFT, and
+multiplies a slice of zeros — so every extension coefficient comes out `+0.0f` on top of the `+0.0f`
+already there. Cases 4, 5, 26 and 30 are exactly those, the library does the same, and the fixture
+agrees bit for bit. **They cost full price.** A `memcmp` of the spectrum before and after is a
+correctness criterion, not a cost one: it cannot separate these four from the 11 that are genuinely
+gated, so a cost average must exclude 11, not 15.
+
 Block type is 2.5x, the wide/narrow geometry a further 1.2-1.3x, and the **window-group count costs
 nothing** — the short inner loop is always 8 windows x 64 multiplies plus 64 gain multiplies
 whatever the grouping; grouping only selects which gain slot is read. The long path also does **512
