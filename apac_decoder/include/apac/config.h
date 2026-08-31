@@ -54,7 +54,17 @@ enum Status {
     kPortTooManyElements   = 0x102,
     kPortTooManyChannels   = 0x103,
     kPortTooManyConfigs    = 0x104,
-    kPortNeedsProfileTable = 0x105   // SetChannelLayout's profile-derived layout
+    kPortNeedsProfileTable = 0x105,  // SetChannelLayout's profile-derived layout
+
+    // Frame layer.  The first two are refusals: each stands in for a tool this
+    // port does not implement, each is proved unreachable on the CarPlay 5.1
+    // capture, and each propagates as a frame error exactly as the original's
+    // own non-zero return from that tool does.  The last two are this port's
+    // fixed capacities, which the original grows instead.
+    kPortNeedsLRVQ         = 0x106,  // APACLRVQDecoder, stage h1
+    kPortNeedsBWE          = 0x107,  // APACBWE2Decoder::DecodeFrame, stage e
+    kPortTooManyElementsRT = 0x108,  // more elements than the decoder can hold
+    kPortBadElementType    = 0x109   // an element type CreateList would reject
 };
 
 // apac::ProfileLevelConfig - GlobalConfig + 32, three bytes.
