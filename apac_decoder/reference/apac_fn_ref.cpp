@@ -983,6 +983,170 @@ int cmd_tns()
 }
 
 
+
+// ------------------------------------------------------------------ lpc ----
+// apac::LPCBase and the stateless half of apac::LSFTools.
+//
+//   0x0b4190  _ZN4apac7LPCBase13LPC_WeightingEPKfPfft
+//   0x0b4620  _ZN4apac7LPCBase14LevinsonDurbinEPKf
+//   0x0b4930  _ZN4apac7LPCBase11ComputeLPCsEPKfb
+//   0x0b4220  _ZN4apac8LSFTools23get_LSFWeightingFactorsEPKfPftf
+//   0x0b4390  _ZN4apac8LSFTools14Condition_LSFsEPfff
+//   0x9c6e0   _ZN4apac8LSFTools13ConditionLSFsEPf
+//   0x0b4460  _ZN4apac8LSFTools10LSP_To_LPCEPKfPft
+//   0x0b5010  _ZN4apac8LSFTools10LSP_To_LSFEPKfPftf
+//   0x0b50f0  _ZN4apac8LSFTools10LSF_To_LSPEPKfPff
+//   0x0b51c0  _ZN4apac8LSFTools10LSF_To_LSPEPff
+//
+// Neither class has an exported constructor, so both objects are built by hand.
+// What each one actually reads:
+//
+//   apac::LPCBase, 80 bytes.  +0 vptr (ComputeLPCs reaches LevinsonDurbin
+//   through it, at vtable slot 6), +8 the order as a uint16, +24 the caller's
+//   output buffer, +72 an apac::Autocorr.
+//
+//   apac::Autocorr, 32 bytes.  +8 the lag count as a uint16, +16/+24 the
+//   analysis window as a {begin, end} pair.  Its destructor would free +16, so
+//   it is never destroyed here.
+//
+//   apac::LSFTools, 232 bytes.  The conversions below read only +104 (the
+//   order, a uint16); ConditionLSFs also dispatches through the vtable.
+//   LSP_To_LSF, LSP_To_LPC and get_LSFWeightingFactors touch nothing at all.
+
+typedef void (*fn_lpc_weight_t)(void*, const float*, float*, float, uint16_t);
+typedef void (*fn_lpc_levinson_t)(void*, const float*);
+typedef void (*fn_lpc_compute_t)(void*, const float*, bool);
+typedef void (*fn_lsf_weights_t)(void*, const float*, float*, uint16_t, float);
+typedef void (*fn_lsf_cond3_t)(void*, float*, float, float);
+typedef void (*fn_lsf_cond1_t)(void*, float*);
+typedef void (*fn_lsp_to_lpc_t)(void*, const float*, float*, uint16_t);
+typedef void (*fn_lsp_to_lsf_t)(void*, const float*, float*, uint16_t, float);
+typedef void (*fn_lsf_to_lsp2_t)(void*, const float*, float*, float);
+typedef void (*fn_lsf_to_lsp1_t)(void*, float*, float);
+
+fn_lpc_weight_t   lpc_weighting;
+fn_lpc_levinson_t lpc_levinson;
+fn_lpc_compute_t  lpc_compute;
+fn_lsf_weights_t  lsf_weights;
+fn_lsf_cond3_t    lsf_cond3;
+fn_lsf_cond1_t    lsf_cond1;
+fn_lsp_to_lpc_t   lsp_to_lpc;
+fn_lsp_to_lsf_t   lsp_to_lsf;
+fn_lsf_to_lsp2_t  lsf_to_lsp2;
+fn_lsf_to_lsp1_t  lsf_to_lsp1;
+void*             lpc_vtable;
+void*             lsf_vtable;
+
+void load_lpc()
+{
+    lpc_weighting = need<fn_lpc_weight_t>  ("_ZN4apac7LPCBase13LPC_WeightingEPKfPfft");
+    lpc_levinson  = need<fn_lpc_levinson_t>("_ZN4apac7LPCBase14LevinsonDurbinEPKf");
+    lpc_compute   = need<fn_lpc_compute_t> ("_ZN4apac7LPCBase11ComputeLPCsEPKfb");
+    lsf_weights   = need<fn_lsf_weights_t> ("_ZN4apac8LSFTools23get_LSFWeightingFactorsEPKfPftf");
+    lsf_cond3     = need<fn_lsf_cond3_t>   ("_ZN4apac8LSFTools14Condition_LSFsEPfff");
+    lsf_cond1     = need<fn_lsf_cond1_t>   ("_ZN4apac8LSFTools13ConditionLSFsEPf");
+    lsp_to_lpc    = need<fn_lsp_to_lpc_t>  ("_ZN4apac8LSFTools10LSP_To_LPCEPKfPft");
+    lsp_to_lsf    = need<fn_lsp_to_lsf_t>  ("_ZN4apac8LSFTools10LSP_To_LSFEPKfPftf");
+    lsf_to_lsp2   = need<fn_lsf_to_lsp2_t> ("_ZN4apac8LSFTools10LSF_To_LSPEPKfPff");
+    lsf_to_lsp1   = need<fn_lsf_to_lsp1_t> ("_ZN4apac8LSFTools10LSF_To_LSPEPff");
+    lpc_vtable    = need<void*>            ("_ZTVN4apac7LPCBaseE");
+    lsf_vtable    = need<void*>            ("_ZTVN4apac8LSFToolsE");
+}
+
+int cmd_lpc()
+{
+    static uint8_t lpcObj[128] __attribute__((aligned(16)));
+    static uint8_t acObj[64]   __attribute__((aligned(16)));
+    static uint8_t lsfObj[512] __attribute__((aligned(16)));
+    static float   r[64], out[64], in[64], win[apac_cases::kLPCSignal + 64];
+    static float   sig[apac_cases::kLPCSignal + 64];
+
+    const float kFs = 48000.0f;
+
+    for (unsigned c = 0; c < apac_cases::kLPCCases; ++c) {
+        const uint32_t order = apac_cases::lpc_plan()[c].order;
+        printf("LPC %u order=%u\n", c, order);
+
+        memset(lpcObj, 0, sizeof lpcObj);
+        *(void**)(lpcObj + 0) = (char*)lpc_vtable + 16;
+        *(uint16_t*)(lpcObj + 8) = (uint16_t)order;
+        *(float**)(lpcObj + 24) = out;
+
+        // LPC_Weighting: pure, and the gamma exponent has to compound.
+        apac_cases::lpc_fill_autocorr(c, in, order);
+        memset(out, 0, sizeof out);
+        lpc_weighting(lpcObj, in, out, 0.92f, (uint16_t)order);
+        printf("WEIGHT\n ");
+        print_floats(out, order + 1);
+
+        // LevinsonDurbin: writes order + 1 coefficients through +24.
+        apac_cases::lpc_fill_autocorr(c, r, order);
+        memset(out, 0, sizeof out);
+        lpc_levinson(lpcObj, r);
+        printf("LEVINSON\n ");
+        print_floats(out, order + 1);
+
+        // ComputeLPCs, both with and without the lag window at 0x332f80.
+        memset(acObj, 0, sizeof acObj);
+        *(uint16_t*)(acObj + 8) = (uint16_t)order;
+        apac_cases::lpc_fill_window(c, win, apac_cases::kLPCSignal);
+        *(float**)(acObj + 16) = win;
+        *(float**)(acObj + 24) = win + apac_cases::kLPCSignal;
+        *(void**)(lpcObj + 72) = acObj;
+        apac_cases::lpc_fill_signal(c, sig, apac_cases::kLPCSignal);
+        for (int lw = 0; lw < 2; ++lw) {
+            memset(out, 0, sizeof out);
+            lpc_compute(lpcObj, sig, lw != 0);
+            printf("COMPUTE %d\n ", lw);
+            print_floats(out, order + 1);
+        }
+
+        // ---- LSFTools ----
+        memset(lsfObj, 0, sizeof lsfObj);
+        *(void**)(lsfObj + 0) = (char*)lsf_vtable + 16;
+        *(uint16_t*)(lsfObj + 104) = (uint16_t)order;
+
+        apac_cases::lpc_fill_lsp(c, in, order);
+        memset(out, 0, sizeof out);
+        lsp_to_lsf(lsfObj, in, out, (uint16_t)order, kFs);
+        printf("LSP2LSF\n ");
+        print_floats(out, order);
+
+        memset(out, 0, sizeof out);
+        lsp_to_lpc(lsfObj, in, out, (uint16_t)order);
+        printf("LSP2LPC\n ");
+        print_floats(out, order + 1);
+
+        apac_cases::lpc_fill_lsf(c, in, order, kFs);
+        memset(out, 0, sizeof out);
+        lsf_to_lsp2(lsfObj, in, out, kFs);
+        printf("LSF2LSP\n ");
+        print_floats(out, order);
+
+        memcpy(out, in, sizeof(float) * order);
+        lsf_to_lsp1(lsfObj, out, kFs);
+        printf("LSF2LSPIP\n ");
+        print_floats(out, order);
+
+        memset(out, 0, sizeof out);
+        lsf_weights(lsfObj, in, out, (uint16_t)order, kFs);
+        printf("LSFWEIGHT\n ");
+        print_floats(out, order);
+
+        memcpy(out, in, sizeof(float) * order);
+        lsf_cond3(lsfObj, out, 50.0f, kFs);
+        printf("COND3\n ");
+        print_floats(out, order);
+
+        memcpy(out, in, sizeof(float) * order);
+        lsf_cond1(lsfObj, out);
+        printf("COND1\n ");
+        print_floats(out, order);
+    }
+    return 0;
+}
+
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -995,7 +1159,7 @@ int main(int argc, char** argv)
             "       apac_fn_ref scf           < cases.txt\n"
             "       apac_fn_ref spec          < cases.txt\n"
             "       apac_fn_ref sfb [RATE...]\n"
-            "       apac_fn_ref win | mdct | fb | tns\n"
+            "       apac_fn_ref win | mdct | fb | tns | lpc\n"
             "       apac_fn_ref gc COOKIE  [--offset N] [--dump]\n"
             "       apac_fn_ref gc-raw FILE [--offset N] [--dump]\n"
             "       apac_fn_ref cookie COOKIE\n");
@@ -1012,6 +1176,7 @@ int main(int argc, char** argv)
     if (cmd == "mdct") { load_stage_d(); return cmd_mdct(); }
     if (cmd == "fb")   { load_stage_d(); return cmd_fb(); }
     if (cmd == "tns")  { load_stage_d(); load_tns(); return cmd_tns(); }
+    if (cmd == "lpc")  { load_lpc(); return cmd_lpc(); }
     if (cmd == "bs")  return cmd_bs();
     if (cmd == "ics") return cmd_ics();
     if (cmd == "scf") return cmd_scf();

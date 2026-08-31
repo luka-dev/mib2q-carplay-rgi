@@ -186,6 +186,108 @@ inline void tns_fill_bits(unsigned c, uint8_t* buf, uint32_t len)
         buf[i] = (uint8_t)(xorshift32(&s) >> 19);
 }
 
+// -------------------------------------------------------------- LPC plan ----
+// Inputs for apac::LPCBase and the stateless half of apac::LSFTools.
+//
+// These are not arbitrary noise.  Levinson-Durbin needs a positive-definite
+// autocorrelation or it divides by a negative error; LSP_To_LPC needs line
+// spectral pairs that are actually a descending sequence in (-1, 1); and
+// Condition_LSFs is only interesting on line spectral frequencies that are
+// ascending and inside (0, fs/2).  So each generator produces the right SHAPE
+// and randomises inside it, and the autocorrelation is derived from a real
+// signal rather than made up, which guarantees it is positive definite.
+//
+// The deliberately hostile cases are still there: `order` runs down to 2, and
+// the `tight` cases bunch the LSFs far below Condition_LSFs' 50 Hz minimum and
+// push the last one up against fs/2 so both of its clamping passes run.
+struct LPCCase {
+    uint8_t order;      // even, 2 .. 16
+    uint8_t seed;
+    uint8_t tight;
+};
+
+enum { kLPCCases = 16, kLPCSignal = 256 };
+
+inline const LPCCase* lpc_plan()
+{
+    static const LPCCase kPlan[kLPCCases] = {
+        {  2, 1, 0 }, {  4, 2, 0 }, {  6, 3, 0 }, {  8, 4, 0 },
+        { 10, 5, 0 }, { 12, 6, 0 }, { 14, 7, 0 }, { 16, 8, 0 },
+        {  2, 9, 1 }, {  4,10, 1 }, {  8,11, 1 }, { 10,12, 1 },
+        { 12,13, 1 }, { 16,14, 1 }, { 16,15, 0 }, {  6,16, 1 }
+    };
+    return kPlan;
+}
+
+inline uint32_t lpc_seed(unsigned c, uint32_t salt)
+{
+    uint32_t s = 0xb7e15163u ^ (lpc_plan()[c].seed * 2654435761u) ^ salt;
+    return s ? s : 1u;
+}
+
+// A plain random signal; the autocorrelation below is taken from it.
+inline void lpc_fill_signal(unsigned c, float* x, uint32_t n)
+{
+    uint32_t s = lpc_seed(c, 0x51ed270bu);
+    for (uint32_t i = 0; i < n; ++i) x[i] = rnd_unit(&s);
+}
+
+// An analysis window: symmetric, built from integers plus a little noise so it
+// is not accidentally a special case.
+inline void lpc_fill_window(unsigned c, float* w, uint32_t n)
+{
+    uint32_t s = lpc_seed(c, 0x2b992ddfu);
+    for (uint32_t i = 0; i < n; ++i) {
+        const uint32_t d = (i < n / 2) ? i : (n - 1 - i);
+        w[i] = (float)(2 * d + 1) / (float)n + 0.03125f * rnd_unit(&s);
+    }
+}
+
+// r[k] = sum_n x[n] * x[n+k], positive definite by construction.
+inline void lpc_fill_autocorr(unsigned c, float* r, uint32_t order)
+{
+    float x[kLPCSignal + 64];
+    uint32_t i, k;
+    lpc_fill_signal(c, x, kLPCSignal);
+    for (i = 0; i < 64; ++i) x[kLPCSignal + i] = 0.0f;
+    for (k = 0; k <= order; ++k) {
+        float acc = 0.0f;
+        for (i = 0; i < kLPCSignal; ++i) acc += x[i] * x[i + k];
+        r[k] = acc;
+    }
+    r[0] *= 1.0001f;                 // the ridge the original applies anyway
+}
+
+// Ascending LSFs in (0, fs/2).  `tight` bunches them so Condition_LSFs has
+// something to do and pushes the last one up against the top clamp.
+inline void lpc_fill_lsf(unsigned c, float* lsf, uint32_t order, float fs)
+{
+    uint32_t s = lpc_seed(c, 0x9d2c5680u);
+    const float span = fs * 0.5f;
+    const float tight = lpc_plan()[c].tight ? 0.06f : 1.0f;
+    float v = span * 0.01f;
+    for (uint32_t i = 0; i < order; ++i) {
+        v += tight * span / (float)(order + 1) *
+             (0.4f + 0.6f * (0.5f * (rnd_unit(&s) + 1.0f)));
+        lsf[i] = v;
+    }
+    if (lpc_plan()[c].tight && order)
+        lsf[order - 1] = span - 3.0f;
+}
+
+// Descending LSPs in (-1, 1).  cos() of an ascending LSF run would do it too,
+// but keeping the generator free of trig means both sides agree exactly.
+inline void lpc_fill_lsp(unsigned c, float* lsp, uint32_t order)
+{
+    uint32_t s = lpc_seed(c, 0x1f123bb5u);
+    float v = 0.97f;
+    for (uint32_t i = 0; i < order; ++i) {
+        v -= (1.9f / (float)(order + 1)) *
+             (0.5f + 0.5f * (0.5f * (rnd_unit(&s) + 1.0f)));
+        lsp[i] = v;
+    }
+}
+
 }  // namespace apac_cases
 
 #endif  // APAC_DSP_CASES_H

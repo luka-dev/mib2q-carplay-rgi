@@ -58,4 +58,8 @@ emit filterbank.fixture fb
 # layouts, and four cases the library rejects.
 emit tns.fixture tns
 
+# apac::LPCBase and the stateless half of apac::LSFTools: ten entry points over
+# the 16-case plan in dsp_cases.h, orders 2 to 16.
+emit lpc.fixture lpc
+
 echo "stage-d fixtures written to $FIX"
