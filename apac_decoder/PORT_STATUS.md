@@ -12,11 +12,12 @@ differently and a 1 LSB mismatch there means nothing.
 | 0 | build + per-function oracle | — | **DONE** | `reference/apac_fn_ref.cpp`, `run.sh fn`; `make check` runs 4 tests |
 | a | bit reader and config | `TBitstreamReader`, `apac::GlobalConfig`, `BaseASCConfig`, `ProfileLevelConfig` | **DONE**, two documented gaps | `tests/test_bitreader.cpp`, `tests/test_globalconfig.cpp` |
 | b | band layout | `APACICSInfo`, `APACScaleFactorData`, `apac::SFBOffsets` | **PARTIAL** — `APACScaleFactorData` not started | `tests/test_icsinfo.cpp`, `tests/test_sfb_offsets.cpp` |
-| c | spectrum core | `APACLRVQDecoder`, `APACSpectralData` | TODO | |
+| c | spectrum core | `APACSpectralData` | TODO | LRVQ is NOT here, see below |
 | d | transform | `APACTNSData`, `apac::LSFTools`, `apac::LPCBase`, `apac::LPMDCTFilter`, `APACSynthesisFilterBank`, `MDCT`, `DCT_IV`, `MultiRadix*FFT` | TODO | |
 | e | bandwidth extension | `APACBWE2Decoder`, `BWELPC` | TODO | |
 | f | elements | `APACSingleChannelElement`, `APACChannelPairElement`, `APACLFEElement`, `APACSyntacticElement` | TODO | |
 | g | top level | `APACCoreDecoder`, `APACDecoder`, `APACASPDecoder` | TODO | |
+| h1 | LRVQ frame mode | `APACLRVQDecoder`, `APACChannelPairElement::DeserializeLrvqFrame` | DEFERRED | semantics established, unreachable on our content |
 | h | loudness | `apac::drc`, `apac::APACDRCDecoder` | TODO | parser only; gains need not be applied, but the bit reader must advance past them |
 | i | ARMv7/QNX build | — | TODO | cross-build clean, `nm | grep emutls` empty |
 | j | hook integration | — | TODO | decode -> `spa_reorder_5_1_decoder_to_declared_s16` -> PCM6/DIO5 |
@@ -81,6 +82,24 @@ position:
   pinning down (`reference/scratch/lrvq_probe.cpp`); this should be picked up from there
   rather than guessed at here, and it will land with stage c's tables rather than duplicate
   them.
+
+## LRVQ is off the critical path — verified twice
+
+`APACLRVQDecoder` is never entered on the CarPlay 5.1 stream. Patching the entry of
+`LrvqDeserialize` to `MOV W0,#1 ; RET` leaves the decoded output byte-identical, and so does the
+same patch on `SpectrumDeserializeCPE`; patching `APACSpectralData::Deserialize` instead produces
+no output at all. Independently reproduced with `reference/scratch/stub_shim.c` over 600 packets,
+after the same result over all 3977.
+
+So this content is entirely transform/SQ coded and LRVQ is a different frame mode. Its semantics
+are established anyway (`reference/decomp/LRVQ_SEMANTICS.md`) and its return value propagates as a
+hard error, so it still has to be ported eventually — but after the transform path works, not
+before. Reordered above.
+
+Instrumenting the library: it is linked `DT_SYMBOLIC`, so `LD_PRELOAD` cannot interpose its
+internals. Patch the function entry in memory, as `stub_shim.c` does. Build the mangled name by
+reading it out of the binary (`gobjdump -T`); hand-constructing one is how the first attempt at
+this experiment silently proved nothing.
 
 ## Known traps, all found the hard way
 
