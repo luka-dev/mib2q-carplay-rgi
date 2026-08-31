@@ -51,6 +51,11 @@ enum WindowShape {
 
 // A limit of this port, not of the format: 5.1.2 (CarPlay format index 66) is
 // eight channels and nothing in the profile goes above that.
+//
+// It is also what makes this object 90 KiB - the overlap buffer alone is
+// channels * 1024 floats.  The original heap-allocates that; the port cannot
+// allocate on the decode path, so it is inline and the object MUST NOT be put
+// on a stack.  Same for LPMDCTFilter (47 KiB) and MDCT (10 KiB).
 const uint32_t kFilterBankMaxChannels = 16;
 
 class SynthesisFilterBank {
