@@ -487,6 +487,15 @@ Hex-Rays is unusable for this whole class: **every APACLRVQDecoder member is sta
 decompiler invented a `this` for each and shifted every argument by one. The port comes from the
 disassembly.
 
+`APACLRVQDecoder` has 15 functions and seven of them are ported: the four static workers and the
+three element wrappers. The other eight are not code the port needs. Six are the destructors of
+`LPMDCT_LONG`, `LPMDCT_LTP` and `LRVQLPC` (`D1` and `D0` each) — teardown of objects the original
+builds on its own stack and this port holds as members, and each one rewrites a vptr and then runs
+a chain of `if (p) operator delete(p)` over vectors that are all null. The other two are both
+overloads of `LRVQLPC::Initialize` (`0x70c6c`, `0x70cb0`) and both are three instructions of
+`__cxa_allocate_exception` / `__cxa_throw`: "not supported", which is also the proof that LRVQ
+never reaches `LSFTools::Initialize`.
+
 ### What is bit-exact, and what cannot be
 
 The plan splits deliberately. 40 of the 80 `LrvqDeserialize` cases set `reuseEnvelope` — and, on a
