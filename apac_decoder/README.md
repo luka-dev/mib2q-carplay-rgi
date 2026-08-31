@@ -18,7 +18,7 @@ Symbol list: [`../docs/reference/apac_symbols_pioneer.txt`](../docs/reference/ap
 | --- | --- |
 | `include/`, `src/` | the port itself |
 | `tests/` | differential and unit tests |
-| `reference/` | native AArch64 harness that runs Pioneer's original decoder, whole frame (`apac_ref`) and per function (`apac_fn_ref`) |
+| `reference/` | native AArch64 harness that runs Pioneer's original decoder, whole frame (`apac_ref`), per function (`apac_fn_ref`), and one file per late stage (`apac_lrvq_ref`, `apac_bwe_ref`) |
 | `reference/decomp/` | IDA/Ghidra decompiler output, one file per class |
 | `tools/` | vector generation, packet extraction, comparison |
 | `vectors/` | generated APAC test vectors and their expected PCM |

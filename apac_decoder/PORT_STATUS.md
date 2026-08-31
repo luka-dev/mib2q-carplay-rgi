@@ -4,8 +4,8 @@ One row per stage. A stage is DONE only when its differential test passes agains
 real data — never on inspection of the decompilation alone.
 
 Oracles: `reference/run.sh` (whole frame, Apple vs Pioneer), `reference/apac_fn_ref` (per function,
-calls the library directly), `reference/apac_lrvq_ref` (stage h1, same idea, its own file so the
-two can be regenerated independently). Diff in **float32**, not S16: the int16 paths of the two decoders round
+calls the library directly), `reference/apac_lrvq_ref` (stage h1) and `reference/apac_bwe_ref`
+(stage e) — same idea, each in its own file so they can be regenerated independently. Diff in **float32**, not S16: the int16 paths of the two decoders round
 differently and a 1 LSB mismatch there means nothing.
 
 | # | stage | classes | state | test |
@@ -15,7 +15,7 @@ differently and a 1 LSB mismatch there means nothing.
 | b | band layout | `APACICSInfo`, `APACScaleFactorData`, `apac::SFBOffsets` | **DONE** | `tests/test_icsinfo.cpp`, `tests/test_sfb_offsets.cpp`, `tests/test_scalefactors.cpp` |
 | c | spectrum core | `APACSpectralData`, `apac::GetHuffmanTable` and the 12 codebooks | **DONE** | `tests/test_spectraldata.cpp`; LRVQ is NOT here, see below |
 | d | transform | `APACTNSData`, `apac::LSFTools`, `apac::LPCBase`, `apac::LPMDCTFilter`, `APACSynthesisFilterBank`, `MDCT`, `DCT_IV`, `MultiRadix*FFT` | **DONE**, one documented gap | `tests/test_transform_tables.cpp`, `test_mdct.cpp`, `test_filterbank.cpp`, `test_tns.cpp`, `test_lpc.cpp`, `test_lpmdct.cpp` |
-| e | bandwidth extension | `APACBWE2Decoder`, `BWELPC` | **PARSER DONE**, synthesis TODO — the last unported piece | the header is on the bit path and is ported; the synthesis is never active on this content, see below |
+| e | bandwidth extension | `APACBWE2Decoder`, `BWELPC`, `apac::LSFTools::{Initialize,DecodeLSF}` | **DONE**, bit exact wherever no FFT is under it | `tests/test_bwe.cpp`; still unreachable on our content, wired into `src/decoder.cpp` |
 | f | elements | `APACSingleChannelElement`, `APACChannelPairElement`, `APACLFEElement`, `APACSyntacticElement`, `APACIndividualChannelStream`, `APACCACDecoder` | **DONE**, bit exact | `tests/test_frames.cpp`; whole capture with `reference/run.sh port` |
 | g | top level | `APACCoreDecoder`, `APACCoreLBRDecoder`, `APACDecoder`, `APACASPDecoder`, `APACChannelRemapper`, `apac::TrimmingData` | **DONE**, bit exact above the transform | `tests/test_frames.cpp`; whole capture with `reference/run.sh port` |
 | h1 | LRVQ frame mode | `APACLRVQDecoder`, `APACChannelPairElement::DeserializeLrvqFrame`, `apac::LSFTools::LSF_To_LPC` | **DONE**, bit exact wherever no FFT is under it | `tests/test_lrvq.cpp`; still unreachable on our content, and not yet wired into `src/element.cpp` |
@@ -183,10 +183,10 @@ rather than a shrug. Three things are **checked on every run**, not argued:
    `max|d|` is 1–2 LSB in both, unchanged. Pioneer and Apple are already 1–2 LSB apart on this
    capture; the port's transform vanishes inside that gap.
 
-**The one gap, and it was mis-attributed.** `LSF_To_LPC` landed with stage h1 and is tested there.
-The other four — `apac::LSFTools::Initialize` (`0xb5a10`), `Reset` (`0xb5290`), `DecodeLSF`
-(`0xb4f30`) and `QuantizeLSF` (`0xb5870`) — are **still not started, and they are not
-`APACLRVQDecoder`'s**. Read out of the binary rather than assumed:
+**The one gap, and it was mis-attributed — now closed.** `LSF_To_LPC` landed with stage h1 and is
+tested there. The other four — `apac::LSFTools::Initialize` (`0xb5a10`), `Reset` (`0xb5290`),
+`DecodeLSF` (`0xb4f30`) and `QuantizeLSF` (`0xb5870`) — are **not `APACLRVQDecoder`'s**. Read out of
+the binary rather than assumed:
 
 * `APACLRVQDecoder` calls exactly one `LSFTools` member, `LSF_To_LPC`, at `0x9aba8` — the only
   `BL` to `0xb5370` in the whole library. Its own `LRVQLPC` overrides both `Initialize` slots
@@ -199,6 +199,12 @@ The other four — `apac::LSFTools::Initialize` (`0xb5a10`), `Reset` (`0xb5290`)
 * `Reset` and `QuantizeLSF` have **no call site at all** in this library — they appear only in the
   `LSFTools` vtable at `0x42b798`. `QuantizeLSF` is the encoder half: it calls
   `apac::LPCodeBook::LSF_Quant_Weighting` and `VQSearch`.
+
+Stage e landed `Initialize` and `DecodeLSF`, in `include/apac/bwe_lpc.h` rather than in
+`apac::LSFTools`, because what they need is BWELPC's fixed geometry and not a general LSFTools; see
+the stage-e section. `Reset`'s only decode-visible effect is zeroing the same vectors, and the
+sixteen constants it writes at `+120` are read only by `QuantizeLSF`, which is still not ported and
+still has no caller.
 
 Four things the differential runs settled that static analysis had not:
 
@@ -383,7 +389,12 @@ cannot touch the dump, which is taken before the transform runs.
   channels the same window sequence, so the two objects come out identical. It would still be a
   defect on a frame whose channels differ, because `DecodeAPACFrame` windows channel 0 with
   `GetICSInfo(true)`. Recorded in the test rather than papered over.
-* **The BWE synthesis**, as above.
+* **The BWE synthesis** — no longer. It is stage e above, and `CoreDecoder::Deserialize` now runs
+  it in the original's own place: after the element's `Deserialize` (so after TNS) and after the
+  BWE header, once per channel of a present element, each call guarded by its own active flag.
+  `0x7e440` devirtualises both guards - it compares the vtable slot against
+  `APACBWE2Decoder::GetActiveFlag` and inlines the bitmap test when it matches - which is why the
+  decompilation shows the same test twice in two different shapes.
 * **A codec config whose channel remap is non-empty.** `APACChannelRemapper::Process` is ported
   (the cycle-following swap, not a gather) but the live cookie carries no remap, and patching
   `Process` out of the library changes nothing.
@@ -658,6 +669,148 @@ carry state between elements where the original could not — so `test_frames` d
 twice, once with one instance reused across all of them and once with a fresh instance per case,
 and requires identical output. 37 decodes, none differ, including a hand-built CPE whose first
 channel is skipped: precisely where the original reads its uninitialised stack.
+
+## Stage e — the bandwidth extension, proven
+
+`APACBWE2Decoder::DecodeFrame`, `BWELPC` and the two `apac::LSFTools` members BWELPC needs are
+ported (`include/apac/bwe.h`, `include/apac/bwe_lpc.h`, `src/bwe.cpp`, `src/bwe_lpc.cpp`,
+`src/bwe_tables.cpp`) and checked against the library by `tests/test_bwe.cpp` — **118 754
+bit-exact checks and 52 794 toleranced ones**, fixtures from `reference/apac_bwe_ref.cpp` via
+`tools/gen_fixtures_bwe.sh`, inputs regenerated on both sides from `reference/bwe_cases.h`.
+`src/bwe.cpp` no longer refuses; `src/decoder.cpp` calls the synthesis in the original's own place.
+
+BWE never fires on the CarPlay 5.1 capture — patching `GetActiveFlag` to return 0, or `DecodeFrame`
+to return 0, leaves all 3977 packets' float32 output bit identical — so, exactly as for stage h1,
+none of the coverage comes from the capture. Every case is a spectrum and a header built for the
+purpose and driven straight at the library.
+
+### What the synthesis does
+
+The core coder stops at the band `maxSfb` names. Let `coreEnd` be that band's first coefficient
+(the long table's entry, or eight times the short table's). **One comparison, `coreEnd >= 384`,
+sets the whole geometry:**
+
+| | `coreEnd >= 384` | `coreEnd < 384` |
+| --- | ---: | ---: |
+| `bwStart`, the first extended bin | 384 | 256 |
+| patches | 2 | 4 |
+| patch width, long block | 256 | 128 |
+| patch width, short block (per 128-bin window) | 32 | 16 |
+
+and the extension always covers exactly 512 long bins, or 64 per window. Per channel:
+
+1. if every core coefficient is zero, stop (`sub_78370` is `find_if(!= 0)`);
+2. `MDCTCoefficientsToLPC` — the core's magnitude spectrum to an autocorrelation through
+   `LPMDCTFilter::MDCTToAutoCorr` (one block for a long frame, **eight 128-spaced ones summed** for
+   a short one), a `1.0001` ridge on lag 0, Levinson-Durbin at order 16;
+3. that LPC to a magnitude envelope over `[0, bwStart)`;
+4. the two 9-bit header fields index two 512 x 16 LSF codebooks; their sum is conditioned with a
+   50 Hz gap against 24000 Hz, converted to LSPs and to 17 coefficients, and that gives the
+   extension envelope over `[bwStart, bwStart + 512)`;
+5. per patch, `spec[bwStart + j] = spec[bwStart - w + j] * coreEnv[bwStart - w + j] /
+   bweEnv[bwStart + j]` — the top `w` core bins copied up, flattened by the core's own envelope and
+   re-shaped by the extension's;
+6. one 6-bit gain over the whole extension — one for a long block, **one per window GROUP** for a
+   short one, walked with the same hex-digit-per-group word `APACICSInfo` carries.
+
+### What is bit-exact, and what cannot be
+
+| what | agreement | coverage |
+| --- | --- | --- |
+| the two 512 x 16 LSF codebooks and the 64-entry gain table | **bit exact** | 16 448 words, taken from the ELF by `tools/gen_bwe_tables.py` |
+| the conditioned LSF vector | **bit exact** | 72 index pairs incl. all four corners of 512 x 512 |
+| every coefficient OUTSIDE the extension band, on BOTH sides | **bit exact** | 44 frames x 1024, i.e. the whole geometry |
+| shared-vs-fresh `BWELPC`, and fresh-vs-reused `LPMDCTFilter` | **bit exact** | every frame case and every envelope call |
+| `LPCToMDCTSpectrum`, both sides given the SAME LPC | 2.1e-07 of full scale | 10 minimum-phase vectors x the six real sizes |
+| `LSF_To_LSP` | 6.1e-08 | 72 cases |
+| `LSP_To_LPC` | 4.8e-05 | 72 cases (stage h1 measures the same chain the same way) |
+| `MDCTCoefficientsToLPC` | 1.4e-03 of the vector's peak | 44 spectra, long and eight-short |
+| the extension band end to end | 1.1e-02 of the band's peak; every bin within 1e-01 of the library's own value for that bin, >= 99 % of each case within 1e-02 | 16 896 coefficients |
+
+The two loose rows have a reason and it is checked rather than asserted.
+`MDCTCoefficientsToLPC` is **0.8x** as far from the library as the port's own answer moves when its
+own autocorrelation is perturbed by 2e-07 — the size the row above measures the FFT at — so it is
+order-16 Levinson conditioning arriving at the output, not an index. And the end-to-end band is a
+**scatter, not a shift**: 90 of 16 896 coefficients (0.53 %) are outside 1e-03 of the library's own
+value, the rest agree far more closely, and the reconstruction *divides* by an LP envelope, so a
+null of `|A(w)|` is ill-conditioned by construction — in the original as much as here. Stage h1
+measured the same effect on the LRVQ residual.
+
+**Fifteen deliberate mutations, fifteen caught.** The long divisor slice moved up by one patch; the
+long patch source off by one bin; the long gain read from window group 1; `coreEnd >= 384` weakened
+to `>`; the narrow `bwStart` changed from 256 to 128; the long extension envelope built over 256
+bins instead of 512; the short patch source pinned to window 0 instead of following the window; the
+short group walk off by one; the short LPC analysis given 1 block instead of 8; the short extension
+envelope 32 bins instead of 64; the two LSF codebooks swapped; the 1.0001 ridge dropped; the filter
+selector answering 512 where it should answer 768; the radix-3 butterfly's `sqrt(3)/2` sign
+flipped; and the radix-3 gather taking the three sub-sequences in the wrong order.
+
+### How it was driven, given there is no decoder to hand
+
+`reference/apac_bwe_ref.cpp` builds the two objects the library needs, from the disassembly:
+
+* **`BWELPC`** exactly as `APACBWE2Decoder::InitInterFrameMemory` builds one — `calloc(1, 0x120)`,
+  the vtable pointer, and three constants the function materialises inline (`0x100400010` at +8,
+  `16` at +104, `0x4248000046BB8000` at +112, i.e. order 16 / 24000.0f / 50.0f) — then calls the
+  real `BWELPC::Initialize`. None of that geometry comes from the bitstream or from any config.
+* **`APACBWE2Decoder`** as a 128-byte slab with the five fields `DecodeFrame` reads: the
+  `vector<bool>` word array at +8, the per-channel gain array at +56, the codebook-index array at
+  +72, an `APACInstanceConfig` whose +16 is the `apac::SFBOffsets` record at +80, and the per-channel
+  `BWELPC` vector at +88. `APACICSInfo` needs only +10, +11 and +16 and takes no virtual call.
+
+The host test does NOT inject the header: it builds the bits `APACBWE2Decoder::Deserialize` reads
+for a single-channel element (a 1 bit, two 9-bit indices, one 6-bit gain per window group) and
+parses them, so the seam between the parser and the synthesis is under test and the gain array is
+filled the only way a decoder can fill it.
+
+### Ownership and size
+
+`sizeof(apac::Decoder)` went **1 462 096 -> 1 637 272**, +171 KiB, and the port still allocates
+nothing dynamically. Two decisions got it there, and both are measured rather than argued:
+
+* **One `BWELPC` for the whole decoder**, handed down the way `LRVQDecoder` is. The original builds
+  one per CHANNEL in `InitInterFrameMemory`, but nothing in it survives a call —
+  `MDCTCoefficientsToLPC` and `DecodeLSFsToLPCs` overwrite every buffer they read and the filters
+  are pure scratch. `tests/test_bwe.cpp` runs every frame case twice, once on the shared instance
+  and once on a freshly `Initialize`d one, and requires identical bits; the cases are spread over
+  six channel indices so that anything carrying across a call would show.
+* **Two `apac::LPMDCTFilter`s instead of the original's six.** `BWELPC::kDftSizes` at `0x00331a58`
+  is `{1024, 768, 512, 128, 96, 64}` and the selector always picks `2n`; six of the port's filters
+  would be 282 KiB, because each carries kMaxRealFFT-sized scratch the original heap-allocates per
+  size. `LPMDCTFilter` holds no state across calls and `Initialize` is a pure function of
+  `(fftSize, order)` that returns early when the size is unchanged, so the port keeps one "core"
+  filter for the `2*bwStart` sizes and one "extension" filter for the two fixed ones — nothing
+  thrashes within a frame, and the test drives all six sizes interleaved and requires the same bits
+  as a fresh object every time.
+
+### What stage e clamped, and what it deliberately did not
+
+The audit the other stages ask for — *a function handed a parsed object rather than the bitstream,
+so the invariant is not enforced where it is relied on* — finds two in this one:
+
+* **`maxSfb` indexes a `.rodata` table.** `DecodeFrame` is handed the parsed `APACICSInfo`, so
+  nothing there enforces the bound `APACICSInfo::Deserialize` applies. The original loads
+  `sfbOffset[maxSfb]` unchecked; the port refuses with `kBadValue`. Same shape as
+  `APACCACDecoder::ProcessCac` reading past its table when `maxSfb > numBands`.
+* **The two 9-bit LSF indices index a 512-entry codebook.** `BWELPC::DecodeLSFsToLPCs` takes them
+  as a `const unsigned short*` and multiplies by 16 floats with no bound at all — a 16-bit value
+  would read up to 512 KiB past the table. The port returns false. Both are unreachable from any
+  bitstream, which is exactly why the check belongs where the value is used.
+
+Left unclamped, on purpose: the **per-window-group 6-bit gain index**, because a 6-bit field cannot
+leave a 64-entry table (the fold in `src/bwe.cpp` is a no-op that documents the invariant); the
+**per-group 6-bit read count** in the header, which is what keeps the bitstream in phase rather than
+protecting anything and was already left alone by the parser; and the **stale gain slot** a channel
+whose header carried fewer groups than the synthesis walks would read, which is the original's own
+behaviour (its array is zeroed only at Initialize).
+
+### What is not ported
+
+* `apac::LSFTools::Reset`'s sixteen constants at `+120` (from `0x00332fc0`). Its only reader is
+  `QuantizeLSF`. The zeroing half of Reset is folded into `BWELPC::Initialize`.
+* `apac::LSFTools::QuantizeLSF` — the encoder half, still with no call site in this library.
+* The six destructors and the `std::vector` bookkeeping of `InitInterFrameMemory`: the port's
+  buffers are fixed members.
 
 ## Stage j — the integration seam, located
 
@@ -1024,6 +1177,28 @@ cost is unaffected.
   inaudible on quiet frames and wrong everywhere else.
 * `APACSynthesisFilterBank::FrequencyToTimeInPlace` is called **directly**, not through a vtable, so
   it cannot be traced by swapping a vtable slot. Everything else on the frame path can be.
+* **Not every transform length in this decoder is a power of two.** `BWELPC::kDftSizes` holds 768
+  and 96, whose real FFTs need complex transforms of 384 and 48. vDSP takes `f * 2^k` for
+  `f in {1, 3, 5, 15}`, so the library never noticed; the port's radix-2 `ComplexFFT` returned false
+  and `LPMDCTFilter::Initialize` silently kept the previous size. `ComplexFFT` now also accepts
+  `3 * 2^k`, as three interleaved sub-FFTs and one three-point butterfly, and `RealFFT` no longer
+  requires a power of two — only an even `n` whose half `ComplexFFT` accepts. The six real BWE sizes
+  all agree with the library to 2.1e-07, the radix-3 ones included.
+* **`vDSP_vdiv(A, IA, B, IB, C, IC, N)` computes `C = B / A`,** not `A / B`. In
+  `APACBWE2Decoder::DecodeFrame` that means the *extension* envelope is the divisor and the quotient
+  lands back on top of it, in place. Reading it the other way round inverts the whole shaping.
+* **`BWELPC::MDCTCoefficientsToLPC`'s arguments are not in the order it forwards them.**
+  `(spec, n, n2, n3)` becomes `MDCTToAutoCorr(spec, r, hop = n, count = n3, len = n2)`, and `n2` is
+  ALSO what selects the filter. Hex-Rays shows four arguments where the call takes five and drops
+  the one in `w5` entirely, so the shape has to come from the disassembly (`mov w5, w3 ; mov w3, w2`
+  at the head of `0xb0e10`).
+* **`BWELPC` overrides exactly one vtable slot**, `Initialize(void)`. An earlier note in
+  `src/lpc.cpp` said it overrides `ConditionLSFs` too; the vtable at `0x0042b5d8` says otherwise, and
+  BWELPC never calls `LSF_To_LPC` at all - `DecodeLSFsToLPCs` calls `Condition_LSFs`, `LSF_To_LSP`
+  and `LSP_To_LPC` itself. Corrected in place. Read a vtable rather than inferring an override.
+* **`bwStart - patchWidth` is 16 in BOTH short geometries** (48 - 32 and 32 - 16), so a test that
+  exercises only one of them cannot tell the divisor slice from a constant offset of 16. Both are in
+  the plan for that reason.
 * The Makefile had **no header dependencies** until stage d. Changing a constant in
   `include/apac/` recompiled some translation units and not others, and the survivors disagreed
   about a struct's size — which failed as wrong numbers in a differential test, not as a link

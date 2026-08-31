@@ -330,6 +330,8 @@ LSBs, plus the worst 1024-frame block so a localised divergence cannot average a
 | `run.sh` | one command: stage libs → build image → decode → Apple oracle → compare |
 | `apac_ref.cpp` | the harness; compiled inside the container on every run so editing it needs no image rebuild |
 | `apac_fn_ref.cpp` | the per-function oracle: calls individual library members by mangled name, `run.sh fn ...` |
+| `apac_lrvq_ref.cpp` | stage h1's own oracle, driven by `tools/gen_fixtures_lrvq.sh` |
+| `apac_bwe_ref.cpp` | stage e's own oracle - `BWELPC` and `APACBWE2Decoder::DecodeFrame`, on objects it builds field by field the way `InitInterFrameMemory` does. Driven by `tools/gen_fixtures_bwe.sh` |
 | `compare_pcm.py` | per-channel RMS / max-error / cross-channel permutation report |
 | `decomp/apac_c_api.asm` | disassembly of `0x105670`–`0x106e00`, the evidence for every signature above |
 | `.build/` | generated: staged libs, packet lists, `apple.pcm`, `pioneer.pcm`. Gitignored |
