@@ -838,6 +838,20 @@ Nothing else has to change; `FilterFor` in `src/bwe_lpc.cpp` is the only functio
 and `tests/test_bwe.cpp` already asserts bit-for-bit that a re-initialised filter and a fresh one
 give the same answers, which is the property that makes either count legal.
 
+**A second lever, unmeasured, and probably the cheaper one.** Stage k found the transient costs
+**+110 % on armle-v7** against the +34 % measured on a host, and attributes that to QNX libm
+`sin`/`cos` on scalar VFPv3 being a far larger share of a rebuild than on an M3 — an explanation,
+not a measurement. If it is right then the cost is in the transcendentals, not in the filter
+objects, and generating the twiddles more cheaply — a table with refinement, or the standard
+recurrence — would remove most of the cost for a fraction of 94 KiB. Nobody has tried it.
+
+The constraint that makes it non-trivial is the same one that forbids "fixing" the 512 unpipelined
+divides with a reciprocal multiply, and it is worth stating once as a rule rather than twice as an
+incident: **anything that changes how a number is computed has to be shown bit-identical to what it
+replaces, or it invalidates the differential results that justify it.** The transform's output is
+within 1.4 ULP of exact and every acceptance figure in this document rests on that. A cheaper
+twiddle generator that is merely accurate is not good enough; it has to be the same.
+
 ### What a BWE-active packet would cost, and what it would not
 
 Stage k prices the decoder on the capture, where BWE never runs. These are the numbers for the
