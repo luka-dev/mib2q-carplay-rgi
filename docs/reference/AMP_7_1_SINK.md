@@ -105,9 +105,40 @@ binary:
 1. **Bench measurement.** Put the amp in `Entertainment_7.1`, drive source channel 7 alone with a
    tone, and find which driver moves. One afternoon, unambiguous, and it also settles the `_SAD`
    variants. This is the cheap answer.
-2. **Obtain the SHARC image or an A07 parameter map.** The download stream would have to be decoded
-   against ADSP-2148x semantics; the flash region `0x100000+` carries no footer CRC, so the image is
-   readable and writable, but nothing in hand explains what the cells mean.
+2. **Obtain the SHARC image or an A07 parameter map.** Both halves of this were tried; see below.
+   Neither survives, and the surviving half needs hardware access anyway.
+
+### Route 2 was followed and it dead-ends
+
+**2a — the A07 parameter map is tuning, not routing.** The stream at `0x100038` parses as records
+carrying a small id, an audio-band frequency and a signed gain. The first records read 987 Hz/-10,
+7000/+20, 2000/-10, 250/+5, 135/+20, 1170/-20, 64/+10, 8000/-2 — roughly 69% of the parsed fields sit
+in 20..20000 Hz and -30..+30 dB, so the stream is not uniform 8-byte records, but what is legible is
+unambiguous EQ/filter *design* data of the same nature as the B01 catalog. There is no matrix in it:
+a routing matrix would show as a block of near-0.0/1.0 cells, and a scan of
+`AMP_DSP_A07_cells.csv` finds no contiguous run of 16 or more parameters restricted to {0.0, 1.0}
+anywhere. Decoding A07 further yields better EQ knowledge and nothing about channel assignment.
+
+**2b — the SHARC firmware is not in this flash at all.** Occupancy of the 1.5 MB image, counting
+bytes that are neither 0x00 nor 0xFF:
+
+```
+000000-0EFFFF   V850 code, dense          (000000-01FFFF is mirrored at 020000-03FFFF)
+0F0000-0FFFFF   blank except the AD301FLASH0 footer at 0FFFF0
+100000-10FFFF   AD301A07   27389 bytes
+110000-11FFFF   blank (16 bytes)
+120000-127FF0   AD301B01    4969 bytes
+130000-17FFFF   blank, entirely 0xFF
+```
+
+320 KB at the top plus two more blank windows, and no 48-bit SHARC instruction image anywhere —
+confirming the amp document's §4a from the layout side rather than by search. The ADSP-2148x
+therefore boots from its own memory, not from the V850, so its code lives on a **separate device on
+the amplifier PCB**. The only other dump we hold is `S-25C640A@TMSOP8.BIN`, an 8 KB EEPROM — three
+orders of magnitude too small to be SHARC firmware, and already accounted for as the tuning dataset.
+
+Recovering it is therefore a hardware job: identify and read the SHARC's boot flash off the board.
+That is strictly more work than route 1, and route 1 answers the same question.
 
 ## The one question that gates everything
 
