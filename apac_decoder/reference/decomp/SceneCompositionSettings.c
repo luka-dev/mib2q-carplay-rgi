@@ -185,6 +185,9 @@ LABEL_6:
  *   [_ZN24SceneCompositionSettings13SetFromPresetEtRK19SC_SceneCompositiont]
  *   data refs: 0x3304e0, 0x330508, 0x42ce00, 0x43e520
  */
+/* !! Hex-Rays reported 'local variable allocation has failed' for this
+ * !! function. Treat the pseudocode below as a sketch, not as source.
+ * !! The disassembly appended after it is the ground truth. */
 // local variable allocation has failed, the output may be wrong!
 __int64 __fastcall SceneCompositionSettings::SetFromPreset(
         SceneCompositionSettings *this,
@@ -712,6 +715,501 @@ LABEL_45:
   return result;
 }
 
+
+#if 0 /* disassembly of 0x0009f540, for verification */
+0009F540  e91340d1  SUB             X9, SP, #4,LSL#12
+0009F544  3f9907f9  STR             XZR, [X9,#0xF30]
+0009F548  fd7bb3a9  STP             X29, X30, [SP,#var_D0]!
+0009F54C  fd030091  MOV             X29, SP
+0009F550  f55b02a9  STP             X21, X22, [SP,#0xD0+var_B0]
+0009F554  f50300aa  MOV             X21, X0
+0009F558  601c00b0  ADRP            X0, #__stack_chk_guard_ptr@PAGE
+0009F55C  f35301a9  STP             X19, X20, [SP,#0xD0+var_C0]
+0009F560  f76303a9  STP             X23, X24, [SP,#0xD0+var_A0]
+0009F564  783c0012  AND             W24, W3, #0xFFFF
+0009F568  f96b04a9  STP             X25, X26, [SP,#0xD0+var_90]
+0009F56C  fb7305a9  STP             X27, X28, [SP,#0xD0+var_80]
+0009F570  fc0302aa  MOV             X28, X2
+0009F574  000047f9  LDR             X0, [X0,#__stack_chk_guard_ptr@PAGEOFF]; __stack_chk_guard
+0009F578  b6d240a9  LDP             X22, X20, [X21,#8]
+0009F57C  020040f9  LDR             X2, [X0]
+0009F580  e26700f9  STR             X2, [SP,#0xD0+var_8]
+0009F584  020080d2  MOV             X2, #0
+0009F588  bf020039  STRB            WZR, [X21]
+0009F58C  a10a0079  STRH            W1, [X21,#4]
+0009F590  9f0216eb  CMP             X20, X22
+0009F594  a0010054  B.EQ            loc_9F5C8
+0009F598  f30316aa  MOV             X19, X22
+0009F59C  1f2003d5  NOP
+0009F5A0  600e40f9  LDR             X0, [X19,#0x18]; void *
+0009F5A4  400000b4  CBZ             X0, loc_9F5AC
+0009F5A8  be42ff97  BL              ._ZdlPv; operator delete(void *)
+0009F5AC  600240f9  LDR             X0, [X19]; void *
+0009F5B0  400000b4  CBZ             X0, loc_9F5B8
+0009F5B4  bb42ff97  BL              ._ZdlPv; operator delete(void *)
+0009F5B8  73020191  ADD             X19, X19, #0x40 ; '@'
+0009F5BC  9f0213eb  CMP             X20, X19
+0009F5C0  01ffff54  B.NE            loc_9F5A0
+0009F5C4  b60a00f9  STR             X22, [X21,#0x10]
+0009F5C8  b65242a9  LDP             X22, X20, [X21,#0x20]
+0009F5CC  9f0216eb  CMP             X20, X22
+0009F5D0  80010054  B.EQ            loc_9F600
+0009F5D4  f30316aa  MOV             X19, X22
+0009F5D8  602240f9  LDR             X0, [X19,#0x40]; void *
+0009F5DC  400000b4  CBZ             X0, loc_9F5E4
+0009F5E0  b042ff97  BL              ._ZdlPv; operator delete(void *)
+0009F5E4  601640f9  LDR             X0, [X19,#0x28]; void *
+0009F5E8  400000b4  CBZ             X0, loc_9F5F0
+0009F5EC  ad42ff97  BL              ._ZdlPv; operator delete(void *)
+0009F5F0  73620191  ADD             X19, X19, #0x58 ; 'X'
+0009F5F4  7f0214eb  CMP             X19, X20
+0009F5F8  01ffff54  B.NE            loc_9F5D8
+0009F5FC  b61600f9  STR             X22, [X21,#0x28]
+0009F600  80c34439  LDRB            W0, [X28,#0x130]
+0009F604  a01d0035  CBNZ            W0, loc_9F9B8
+0009F608  b45a42a9  LDP             X20, X22, [X21,#0x20]
+0009F60C  f30314aa  MOV             X19, X20
+0009F610  9f0216eb  CMP             X20, X22
+0009F614  80140054  B.EQ            loc_9F8A4
+0009F618  602240f9  LDR             X0, [X19,#0x40]; void *
+0009F61C  400000b4  CBZ             X0, loc_9F624
+0009F620  a042ff97  BL              ._ZdlPv; operator delete(void *)
+0009F624  601640f9  LDR             X0, [X19,#0x28]; void *
+0009F628  400000b4  CBZ             X0, loc_9F630
+0009F62C  9d42ff97  BL              ._ZdlPv; operator delete(void *)
+0009F630  73620191  ADD             X19, X19, #0x58 ; 'X'
+0009F634  df0213eb  CMP             X22, X19
+0009F638  01ffff54  B.NE            loc_9F618
+0009F63C  b41600f9  STR             X20, [X21,#0x28]
+0009F640  617491d2  MOV             X1, #0xBA2E8BA3
+0009F648  b61240f9  LDR             X22, [X21,#0x20]
+0009F64C  015dd4f2  MOVK            X1, #0xA2E8,LSL#32
+0009F650  61d1e5f2  MOVK            X1, #0x2E8B,LSL#48
+0009F654  840b48a9  LDP             X4, X2, [X28,#0x80]
+0009F658  800216cb  SUB             X0, X20, X22
+0009F65C  00fc4393  ASR             X0, X0, #3
+0009F660  420004cb  SUB             X2, X2, X4
+0009F664  007c019b  MUL             X0, X0, X1
+0009F668  42fc4893  ASR             X2, X2, #8
+0009F66C  e30302aa  MOV             X3, X2
+0009F670  e10302aa  MOV             X1, X2
+0009F674  5f0000eb  CMP             X2, X0
+0009F678  28120054  B.HI            loc_9F8BC
+0009F67C  82020054  B.CS            loc_9F6CC
+0009F680  000b80d2  MOV             X0, #0x58 ; 'X'
+0009F684  5658009b  MADD            X22, X2, X0, X22
+0009F688  9f0216eb  CMP             X20, X22
+0009F68C  00020054  B.EQ            loc_9F6CC
+0009F690  f30316aa  MOV             X19, X22
+0009F694  1f2003d5  NOP
+0009F698  602240f9  LDR             X0, [X19,#0x40]; void *
+0009F69C  400000b4  CBZ             X0, loc_9F6A4
+0009F6A0  8042ff97  BL              ._ZdlPv; operator delete(void *)
+0009F6A4  601640f9  LDR             X0, [X19,#0x28]; void *
+0009F6A8  400000b4  CBZ             X0, loc_9F6B0
+0009F6AC  7d42ff97  BL              ._ZdlPv; operator delete(void *)
+0009F6B0  73620191  ADD             X19, X19, #0x58 ; 'X'
+0009F6B4  9f0213eb  CMP             X20, X19
+0009F6B8  01ffff54  B.NE            loc_9F698
+0009F6BC  b61600f9  STR             X22, [X21,#0x28]
+0009F6C0  840f48a9  LDP             X4, X3, [X28,#0x80]
+0009F6C4  630004cb  SUB             X3, X3, X4
+0009F6C8  63fc4893  ASR             X3, X3, #8
+0009F6CC  a30c0034  CBZ             W3, loc_9F860
+0009F6D0  00068052  MOV             W0, #0x30 ; '0'
+0009F6D4  faa30291  ADD             X26, SP, #0xD0+var_28
+0009F6D8  16008052  MOV             W22, #0
+0009F6DC  e827066d  STP             D8, D9, [SP,#0xD0+var_70]
+0009F6E0  007fa09b  UMULL           X0, W24, W0
+0009F6E4  e04f00f9  STR             X0, [SP,#0xD0+var_38]
+0009F6E8  ea3b00fd  STR             D10, [SP,#0xD0+var_60]
+0009F6EC  1f2003d5  NOP
+0009F6F0  d47e78d3  UBFIZ           X20, X22, #8, #0x20 ; ' '
+0009F6F4  21008052  MOV             W1, #1; unsigned __int16
+0009F6F8  8400148b  ADD             X4, X4, X20
+0009F6FC  e34f40f9  LDR             X3, [SP,#0xD0+var_38]
+0009F700  801c40f9  LDR             X0, [X4,#0x38]
+0009F704  0200038b  ADD             X2, X0, X3; bool
+0009F708  00686338  LDRB            W0, [X0,X3]
+0009F70C  48784039  LDRB            W8, [X2,#0x1E]
+0009F710  47884039  LDRB            W7, [X2,#0x22]
+0009F714  4b484079  LDRH            W11, [X2,#0x24]
+0009F718  4a504079  LDRH            W10, [X2,#0x28]
+0009F71C  49584079  LDRH            W9, [X2,#0x2C]
+0009F720  e8031229  STP             W8, W0, [SP,#0xD0+var_40]
+0009F724  40404079  LDRH            W0, [X2,#0x20]; this
+0009F728  58a84039  LDRB            W24, [X2,#0x2A]
+0009F72C  576c4039  LDRB            W23, [X2,#0x1B]
+0009F730  59384079  LDRH            W25, [X2,#0x1C]
+0009F734  53984039  LDRB            W19, [X2,#0x26]
+0009F738  5b5c4079  LDRH            W27, [X2,#0x2E]
+0009F73C  e92b1029  STP             W9, W10, [SP,#0xD0+var_50]
+0009F740  eb1f1129  STP             W11, W7, [SP,#0x88]
+0009F744  3b110094  BL              _ZN4apac5scene23DecodeInteractivityGainEtb; apac::scene::DecodeInteractivityGain(ushort,bool)
+0009F748  eb8b40b9  LDR             W11, [SP,#0x88]
+0009F74C  0a40201e  FMOV            S10, S0
+0009F750  c1008052  MOV             W1, #6; unsigned __int16
+0009F754  e0030b2a  MOV             W0, W11; this
+0009F758  f2100094  BL              _ZN4apac5scene17DecodeAngleOffsetEtt; apac::scene::DecodeAngleOffset(ushort,ushort)
+0009F75C  0940201e  FMOV            S9, S0
+0009F760  ea8740b9  LDR             W10, [SP,#0xD0+var_50+4]
+0009F764  c1008052  MOV             W1, #6; unsigned __int16
+0009F768  e0030a2a  MOV             W0, W10; this
+0009F76C  ed100094  BL              _ZN4apac5scene17DecodeAngleOffsetEtt; apac::scene::DecodeAngleOffset(ushort,ushort)
+0009F770  0840201e  FMOV            S8, S0
+0009F774  e98340b9  LDR             W9, [SP,#0xD0+var_50]
+0009F778  81008052  MOV             W1, #4; unsigned __int16
+0009F77C  e003092a  MOV             W0, W9; this
+0009F780  08110094  BL              _ZN4apac5scene19DecodeDistanceRatioEtt; apac::scene::DecodeDistanceRatio(ushort,ushort)
+0009F784  020b8052  MOV             W2, #0x58 ; 'X'
+0009F788  a11240f9  LDR             X1, [X21,#0x20]
+0009F78C  c27ea29b  UMULL           X2, W22, W2
+0009F790  e7a35129  LDP             W7, W8, [SP,#0x8C]
+0009F794  2000028b  ADD             X0, X1, X2
+0009F798  37682238  STRB            W23, [X1,X2]
+0009F79C  08040039  STRB            W8, [X0,#1]
+0009F7A0  07200039  STRB            W7, [X0,#8]
+0009F7A4  13400039  STRB            W19, [X0,#0x10]
+0009F7A8  18600039  STRB            W24, [X0,#0x18]
+0009F7AC  1b400079  STRH            W27, [X0,#0x20]
+0009F7B0  0a0400bd  STR             S10, [X0,#4]
+0009F7B4  090c00bd  STR             S9, [X0,#0xC]
+0009F7B8  081400bd  STR             S8, [X0,#0x14]
+0009F7BC  001c00bd  STR             S0, [X0,#0x1C]
+0009F7C0  a01240f9  LDR             X0, [X21,#0x20]
+0009F7C4  0000028b  ADD             X0, X0, X2
+0009F7C8  19480079  STRH            W25, [X0,#0x24]
+0009F7CC  a11240f9  LDR             X1, [X21,#0x20]
+0009F7D0  2100028b  ADD             X1, X1, X2
+0009F7D4  38a00091  ADD             X24, X1, #0x28 ; '('
+0009F7D8  249842a9  LDP             X4, X6, [X1,#0x28]
+0009F7DC  9f0006eb  CMP             X4, X6
+0009F7E0  40000054  B.EQ            loc_9F7E8
+0009F7E4  241800f9  STR             X4, [X1,#0x30]
+0009F7E8  97070035  CBNZ            W23, loc_9F8D8
+0009F7EC  e09740b9  LDR             W0, [SP,#0xD0+var_3C]
+0009F7F0  40070035  CBNZ            W0, loc_9F8D8
+0009F7F4  844340f9  LDR             X4, [X28,#0x80]
+0009F7F8  07008052  MOV             W7, #0
+0009F7FC  19008052  MOV             W25, #0
+0009F800  8100148b  ADD             X1, X4, X20
+0009F804  26cc40a9  LDP             X6, X19, [X1,#8]
+0009F808  730206cb  SUB             X19, X19, X6
+0009F80C  73fe4193  ASR             X19, X19, #1
+0009F810  ff00136b  CMP             W7, W19
+0009F814  22070054  B.CS            loc_9F8F8
+0009F818  233f7fd3  UBFIZ           X3, X25, #1, #0x10
+0009F81C  01128052  MOV             W1, #0x90
+0009F820  841f40f9  LDR             X4, [X28,#0x38]
+0009F824  c3686378  LDRH            W3, [X6,X3]
+0009F828  a01240f9  LDR             X0, [X21,#0x20]
+0009F82C  6110a19b  UMADDL          X1, W3, W1, X4
+0009F830  0000028b  ADD             X0, X0, X2
+0009F834  00000191  ADD             X0, X0, #0x40 ; '@'
+0009F838  4a8eff97  BL              _ZNSt6vectorItSaItEEaSERKS1_; std::vector<ushort>::operator=(std::vector<ushort> const&)
+0009F83C  844340f9  LDR             X4, [X28,#0x80]
+0009F840  d6060011  ADD             W22, W22, #1
+0009F844  804740f9  LDR             X0, [X28,#0x88]
+0009F848  000004cb  SUB             X0, X0, X4
+0009F84C  00fc4893  ASR             X0, X0, #8
+0009F850  df02006b  CMP             W22, W0
+0009F854  e3f4ff54  B.CC            loc_9F6F0
+0009F858  e827466d  LDP             D8, D9, [SP,#0xD0+var_70]
+0009F85C  ea3b40fd  LDR             D10, [SP,#0xD0+var_60]
+0009F860  e00315aa  MOV             X0, X21; this
+0009F864  fffcff97  BL              _ZN24SceneCompositionSettings26SetSceneComponentModifiersEv; SceneCompositionSettings::SetSceneComponentModifiers(void)
+0009F868  00210034  CBZ             W0, loc_9FC88
+0009F86C  1f2003d5  NOP
+0009F870  611c00b0  ADRP            X1, #__stack_chk_guard_ptr@PAGE
+0009F874  350047f9  LDR             X21, [X1,#__stack_chk_guard_ptr@PAGEOFF]; __stack_chk_guard
+0009F878  e26740f9  LDR             X2, [SP,#0xD0+var_8]
+0009F87C  a10240f9  LDR             X1, [X21]
+0009F880  410001ca  EOR             X1, X2, X1
+0009F884  812300b5  CBNZ            X1, loc_9FCF4
+0009F888  f35341a9  LDP             X19, X20, [SP,#0xD0+var_C0]
+0009F88C  f55b42a9  LDP             X21, X22, [SP,#0xD0+var_B0]
+0009F890  f76343a9  LDP             X23, X24, [SP,#0xD0+var_A0]
+0009F894  f96b44a9  LDP             X25, X26, [SP,#0xD0+var_90]
+0009F898  fb7345a9  LDP             X27, X28, [SP,#0xD0+var_80]
+0009F89C  fd7bcda8  LDP             X29, X30, [SP+0xD0+var_D0],#0xD0
+0009F8A0  c0035fd6  RET
+0009F8A4  840748a9  LDP             X4, X1, [X28,#0x80]
+0009F8A8  210004cb  SUB             X1, X1, X4
+0009F8AC  ff2381eb  CMP             XZR, X1,ASR#8
+0009F8B0  21fc4893  ASR             X1, X1, #8
+0009F8B4  60fdff54  B.EQ            loc_9F860
+0009F8B8  000080d2  MOV             X0, #0
+0009F8BC  210000cb  SUB             X1, X1, X0
+0009F8C0  a0820091  ADD             X0, X21, #0x20 ; ' '
+0009F8C4  db080094  BL              _ZNSt6vectorIN24SceneCompositionSettings22SelectionGroupSettingsESaIS1_EE17_M_default_appendEm; std::vector<SceneCompositionSettings::SelectionGroupSettings>::_M_default_append(ulong)
+0009F8C8  840f48a9  LDP             X4, X3, [X28,#0x80]
+0009F8CC  630004cb  SUB             X3, X3, X4
+0009F8D0  63fc4893  ASR             X3, X3, #8
+0009F8D4  7effff17  B               loc_9F6CC
+0009F8D8  844340f9  LDR             X4, [X28,#0x80]
+0009F8DC  e703192a  MOV             W7, W25
+0009F8E0  8100148b  ADD             X1, X4, X20
+0009F8E4  26cc40a9  LDP             X6, X19, [X1,#8]
+0009F8E8  730206cb  SUB             X19, X19, X6
+0009F8EC  73fe4193  ASR             X19, X19, #1
+0009F8F0  ff00136b  CMP             W7, W19
+0009F8F4  23f9ff54  B.CC            loc_9F818
+0009F8F8  346c42a9  LDP             X20, X27, [X1,#0x20]
+0009F8FC  733e0012  AND             W19, W19, #0xFFFF
+0009F900  9f021beb  CMP             X20, X27
+0009F904  e0f9ff54  B.EQ            loc_9F840
+0009F908  17128052  MOV             W23, #0x90
+0009F90C  06000014  B               loc_9F924
+0009F910  73060011  ADD             W19, W19, #1
+0009F914  940a0091  ADD             X20, X20, #2
+0009F918  733e0012  AND             W19, W19, #0xFFFF
+0009F91C  7f0314eb  CMP             X27, X20
+0009F920  80030054  B.EQ            loc_9F990
+0009F924  3f03136b  CMP             W25, W19
+0009F928  41ffff54  B.NE            loc_9F910
+0009F92C  84024079  LDRH            W4, [X20]
+0009F930  e0e702b2  MOV             X0, #0xCCCCCCCCCCCCCCCC
+0009F934  870745a9  LDP             X7, X1, [X28,#0x50]
+0009F938  a09999f2  MOVK            X0, #0xCCCD
+0009F93C  883740f9  LDR             X8, [X28,#0x68]
+0009F940  827cb79b  UMULL           X2, W4, W23
+0009F944  210007cb  SUB             X1, X1, X7
+0009F948  026962f8  LDR             X2, [X8,X2]
+0009F94C  21fc4493  ASR             X1, X1, #4
+0009F950  42004079  LDRH            W2, [X2]
+0009F954  217c009b  MUL             X1, X1, X0
+0009F958  5f20216b  CMP             W2, W1,UXTH
+0009F95C  e2010054  B.CS            loc_9F998
+0009F960  000a8052  MOV             W0, #0x50 ; 'P'
+0009F964  e1031aaa  MOV             X1, X26
+0009F968  73060011  ADD             W19, W19, #1
+0009F96C  940a0091  ADD             X20, X20, #2
+0009F970  421ca09b  UMADDL          X2, W2, W0, X7
+0009F974  e00318aa  MOV             X0, X24
+0009F978  e4530179  STRH            W4, [SP,#0xD0+var_28]
+0009F97C  733e0012  AND             W19, W19, #0xFFFF
+0009F980  e25b00f9  STR             X2, [SP,#0xD0+var_20]
+0009F984  d70d0094  BL              _ZNSt6vectorIN24SceneCompositionSettings20SelectionSetSettingsESaIS1_EE12emplace_backIJS1_EEEvDpOT_; std::vector<SceneCompositionSettings::SelectionSetSettings>::emplace_back<SceneCompositionSettings::SelectionSetSettings>(SceneCompositionSettings::SelectionSetSettings &&)
+0009F988  7f0314eb  CMP             X27, X20
+0009F98C  c1fcff54  B.NE            loc_9F924
+0009F990  844340f9  LDR             X4, [X28,#0x80]
+0009F994  abffff17  B               loc_9F840
+0009F998  811400b0  ADRL            X1, aErrorItemIndex; "ERROR: item index out of range\n"
+0009F9A0  20008052  MOV             W0, #1
+0009F9A4  bf43ff97  BL              .__printf_chk
+0009F9A8  00008012  MOV             W0, #0xFFFFFFFF
+0009F9AC  ea3b40fd  LDR             D10, [SP,#0xD0+var_60]
+0009F9B0  e827466d  LDP             D8, D9, [SP,#0xD0+var_70]
+0009F9B4  afffff17  B               loc_9F870
+0009F9B8  80cf53a9  LDP             X0, X19, [X28,#0x138]
+0009F9BC  617491d2  MOV             X1, #0xBA2E8BA3
+0009F9C4  b7da40a9  LDP             X23, X22, [X21,#8]
+0009F9C8  015dd4f2  MOVK            X1, #0xA2E8,LSL#32
+0009F9CC  61d1e5f2  MOVK            X1, #0x2E8B,LSL#48
+0009F9D0  730200cb  SUB             X19, X19, X0
+0009F9D4  73fe4493  ASR             X19, X19, #4
+0009F9D8  c00217cb  SUB             X0, X22, X23
+0009F9DC  737e019b  MUL             X19, X19, X1
+0009F9E0  00fc4693  ASR             X0, X0, #6
+0009F9E4  613e4092  AND             X1, X19, #0xFFFF
+0009F9E8  733e0012  AND             W19, W19, #0xFFFF
+0009F9EC  3f0000eb  CMP             X1, X0
+0009F9F0  a8170054  B.HI            loc_9FCE4
+0009F9F4  83150054  B.CC            loc_9FCA4
+0009F9F8  93e0ff34  CBZ             W19, loc_9F608
+0009F9FC  60060051  SUB             W0, W19, #1
+0009FA00  141680d2  MOV             X20, #0xB0
+0009FA04  160080d2  MOV             X22, #0
+0009FA08  170080d2  MOV             X23, #0
+0009FA0C  1450149b  MADD            X20, X0, X20, X20
+0009FA10  28000014  B               loc_9FAB0
+0009FA14  a2010054  B.CS            loc_9FA48
+0009FA18  8300038b  ADD             X3, X4, X3
+0009FA1C  df0003eb  CMP             X6, X3
+0009FA20  40010054  B.EQ            loc_9FA48
+0009FA24  030400f9  STR             X3, [X0,#8]
+0009FA28  819f40f9  LDR             X1, [X28,#0x138]
+0009FA2C  a00640f9  LDR             X0, [X21,#8]
+0009FA30  2200168b  ADD             X2, X1, X22
+0009FA34  216876f8  LDR             X1, [X1,X22]
+0009FA38  0000178b  ADD             X0, X0, X23
+0009FA3C  420440f9  LDR             X2, [X2,#8]
+0009FA40  420001cb  SUB             X2, X2, X1
+0009FA44  42fc4193  ASR             X2, X2, #1
+0009FA48  040c40f9  LDR             X4, [X0,#0x18]
+0009FA4C  011440f9  LDR             X1, [X0,#0x28]; s
+0009FA50  063040b9  LDR             W6, [X0,#0x30]
+0009FA54  230004cb  SUB             X3, X1, X4
+0009FA58  e703062a  MOV             W7, W6
+0009FA5C  e30c038b  ADD             X3, X7, X3,LSL#3
+0009FA60  7f0002eb  CMP             X3, X2
+0009FA64  89040054  B.LS            loc_9FAF4
+0009FA68  5f0000f1  CMP             X2, #0
+0009FA6C  41fc0091  ADD             X1, X2, #0x3F ; '?'
+0009FA70  21b0829a  CSEL            X1, X1, X2, LT
+0009FA74  e30302eb  NEGS            X3, X2
+0009FA78  63144092  AND             X3, X3, #0x3F ; '?'
+0009FA7C  42144092  AND             X2, X2, #0x3F ; '?'
+0009FA80  21fc4693  ASR             X1, X1, #6
+0009FA84  424483da  CSNEG           X2, X2, X3, MI
+0009FA88  810c018b  ADD             X1, X4, X1,LSL#3
+0009FA8C  6200f8b6  TBZ             X2, #0x3F, loc_9FA98 ; '?'
+0009FA90  42000191  ADD             X2, X2, #0x40 ; '@'
+0009FA94  212000d1  SUB             X1, X1, #8
+0009FA98  011400f9  STR             X1, [X0,#0x28]
+0009FA9C  d6c20291  ADD             X22, X22, #0xB0
+0009FAA0  023000b9  STR             W2, [X0,#0x30]
+0009FAA4  f7020191  ADD             X23, X23, #0x40 ; '@'
+0009FAA8  9f0216eb  CMP             X20, X22
+0009FAAC  a0030054  B.EQ            loc_9FB20
+0009FAB0  a20640f9  LDR             X2, [X21,#8]
+0009FAB4  819f40f9  LDR             X1, [X28,#0x138]
+0009FAB8  4000178b  ADD             X0, X2, X23
+0009FABC  446877f8  LDR             X4, [X2,X23]
+0009FAC0  2300168b  ADD             X3, X1, X22
+0009FAC4  226876f8  LDR             X2, [X1,X22]
+0009FAC8  060440f9  LDR             X6, [X0,#8]
+0009FACC  630440f9  LDR             X3, [X3,#8]
+0009FAD0  c10004cb  SUB             X1, X6, X4
+0009FAD4  630002cb  SUB             X3, X3, X2
+0009FAD8  21fc4193  ASR             X1, X1, #1
+0009FADC  62fc4193  ASR             X2, X3, #1
+0009FAE0  5f0001eb  CMP             X2, X1
+0009FAE4  89f9ff54  B.LS            loc_9FA14
+0009FAE8  410001cb  SUB             X1, X2, X1
+0009FAEC  fd070094  BL              _ZNSt6vectorItSaItEE17_M_default_appendEm; std::vector<ushort>::_M_default_append(ulong)
+0009FAF0  ceffff17  B               loc_9FA28
+0009FAF4  e6c300b9  STR             W6, [SP,#0xD0+var_10]
+0009FAF8  430003cb  SUB             X3, X2, X3
+0009FAFC  00600091  ADD             X0, X0, #0x18; int
+0009FB00  d6c20291  ADD             X22, X22, #0xB0
+0009FB04  e26340f9  LDR             X2, [SP,#0xD0+var_10]
+0009FB08  04008052  MOV             W4, #0
+0009FB0C  e15f00f9  STR             X1, [SP,#0xD0+var_18]
+0009FB10  f7020191  ADD             X23, X23, #0x40 ; '@'
+0009FB14  df6aff97  BL              _ZNSt6vectorIbSaIbEE14_M_fill_insertESt13_Bit_iteratormb; std::vector<bool>::_M_fill_insert(std::_Bit_iterator,ulong,bool)
+0009FB18  9f0216eb  CMP             X20, X22
+0009FB1C  a1fcff54  B.NE            loc_9FAB0
+0009FB20  190080d2  MOV             X25, #0
+0009FB24  141680d2  MOV             X20, #0xB0
+0009FB28  829f40f9  LDR             X2, [X28,#0x138]
+0009FB2C  3a7f149b  MUL             X26, X25, X20
+0009FB30  163f4092  AND             X22, X24, #0xFFFF
+0009FB34  173f7fd3  UBFIZ           X23, X24, #1, #0x10
+0009FB38  44001a8b  ADD             X4, X2, X26
+0009FB3C  810042a9  LDP             X1, X0, [X4,#0x20]
+0009FB40  000001cb  SUB             X0, X0, X1
+0009FB44  df0680eb  CMP             X22, X0,ASR#1
+0009FB48  e2040054  B.CS            loc_9FBE4
+0009FB4C  1f2003d5  NOP
+0009FB50  42687af8  LDR             X2, [X2,X26]
+0009FB54  3be77ad3  LSL             X27, X25, #6
+0009FB58  800440f9  LDR             X0, [X4,#8]
+0009FB5C  27687778  LDRH            W7, [X1,X23]
+0009FB60  000002cb  SUB             X0, X0, X2
+0009FB64  00fc4193  ASR             X0, X0, #1
+0009FB68  00020034  CBZ             W0, loc_9FBA8
+0009FB6C  03008052  MOV             W3, #0
+0009FB70  a10640f9  LDR             X1, [X21,#8]
+0009FB74  607c7fd3  UBFIZ           X0, X3, #1, #0x20 ; ' '
+0009FB78  63040011  ADD             W3, W3, #1
+0009FB7C  21687bf8  LDR             X1, [X1,X27]
+0009FB80  42686078  LDRH            W2, [X2,X0]
+0009FB84  22682078  STRH            W2, [X1,X0]
+0009FB88  809f40f9  LDR             X0, [X28,#0x138]
+0009FB8C  04001a8b  ADD             X4, X0, X26
+0009FB90  02687af8  LDR             X2, [X0,X26]
+0009FB94  810440f9  LDR             X1, [X4,#8]
+0009FB98  210002cb  SUB             X1, X1, X2
+0009FB9C  21fc4193  ASR             X1, X1, #1
+0009FBA0  7f00016b  CMP             W3, W1
+0009FBA4  63feff54  B.CC            loc_9FB70
+0009FBA8  81604039  LDRB            W1, [X4,#0x18]
+0009FBAC  a00640f9  LDR             X0, [X21,#8]
+0009FBB0  00001b8b  ADD             X0, X0, X27; this
+0009FBB4  41020035  CBNZ            W1, loc_9FBFC
+0009FBB8  faf7ff97  BL              _ZN24SceneCompositionSettings16CategorySettings8SetAllOnEv; SceneCompositionSettings::CategorySettings::SetAllOn(void)
+0009FBBC  39070091  ADD             X25, X25, #1
+0009FBC0  7f02196b  CMP             W19, W25
+0009FBC4  29d2ff54  B.LS            loc_9F608
+0009FBC8  829f40f9  LDR             X2, [X28,#0x138]
+0009FBCC  3a7f149b  MUL             X26, X25, X20
+0009FBD0  44001a8b  ADD             X4, X2, X26
+0009FBD4  810042a9  LDP             X1, X0, [X4,#0x20]
+0009FBD8  000001cb  SUB             X0, X0, X1
+0009FBDC  df0680eb  CMP             X22, X0,ASR#1
+0009FBE0  83fbff54  B.CC            loc_9FB50
+0009FBE4  811400b0  ADRL            X1, aErrorPresetInd; "ERROR: preset index out of range\n"
+0009FBEC  20008052  MOV             W0, #1
+0009FBF0  2c43ff97  BL              .__printf_chk
+0009FBF4  00008012  MOV             W0, #0xFFFFFFFF
+0009FBF8  1effff17  B               loc_9F870
+0009FBFC  e78300b9  STR             W7, [SP,#0xD0+var_50]
+0009FC00  10f8ff97  BL              _ZN24SceneCompositionSettings16CategorySettings9SetAllOffEv; SceneCompositionSettings::CategorySettings::SetAllOff(void)
+0009FC04  829f40f9  LDR             X2, [X28,#0x138]
+0009FC08  03008052  MOV             W3, #0
+0009FC0C  e78340b9  LDR             W7, [SP,#0xD0+var_50]
+0009FC10  40001a8b  ADD             X0, X2, X26
+0009FC14  41687af8  LDR             X1, [X2,X26]
+0009FC18  000440f9  LDR             X0, [X0,#8]
+0009FC1C  000001cb  SUB             X0, X0, X1
+0009FC20  00fc4193  ASR             X0, X0, #1
+0009FC24  c0fcff34  CBZ             W0, loc_9FBBC
+0009FC28  a00640f9  LDR             X0, [X21,#8]
+0009FC2C  e103032a  MOV             W1, W3
+0009FC30  04001b8b  ADD             X4, X0, X27
+0009FC34  00687bf8  LDR             X0, [X0,X27]
+0009FC38  00586378  LDRH            W0, [X0,W3,UXTW#1]
+0009FC3C  1f00076b  CMP             W0, W7
+0009FC40  21010054  B.NE            loc_9FC64
+0009FC44  840c40f9  LDR             X4, [X4,#0x18]
+0009FC48  21fc46d3  LSR             X1, X1, #6
+0009FC4C  200080d2  MOV             X0, #1
+0009FC50  0020c39a  LSL             X0, X0, X3
+0009FC54  827861f8  LDR             X2, [X4,X1,LSL#3]
+0009FC58  400000aa  ORR             X0, X2, X0
+0009FC5C  807821f8  STR             X0, [X4,X1,LSL#3]
+0009FC60  829f40f9  LDR             X2, [X28,#0x138]
+0009FC64  41001a8b  ADD             X1, X2, X26
+0009FC68  44687af8  LDR             X4, [X2,X26]
+0009FC6C  63040011  ADD             W3, W3, #1
+0009FC70  200440f9  LDR             X0, [X1,#8]
+0009FC74  000004cb  SUB             X0, X0, X4
+0009FC78  00fc4193  ASR             X0, X0, #1
+0009FC7C  7f00006b  CMP             W3, W0
+0009FC80  43fdff54  B.CC            loc_9FC28
+0009FC84  ceffff17  B               loc_9FBBC
+0009FC88  e1031caa  MOV             X1, X28; SC_SceneComposition *
+0009FC8C  e00315aa  MOV             X0, X21; this
+0009FC90  a4fbff97  BL              _ZN24SceneCompositionSettings30SetEffectiveInteractivityGainsERK19SC_SceneComposition; SceneCompositionSettings::SetEffectiveInteractivityGains(SC_SceneComposition const&)
+0009FC94  e0deff35  CBNZ            W0, loc_9F870
+0009FC98  21008052  MOV             W1, #1
+0009FC9C  a1020039  STRB            W1, [X21]
+0009FCA0  f4feff17  B               loc_9F870
+0009FCA4  f71a018b  ADD             X23, X23, X1,LSL#6
+0009FCA8  df0217eb  CMP             X22, X23
+0009FCAC  60eaff54  B.EQ            loc_9F9F8
+0009FCB0  f40317aa  MOV             X20, X23
+0009FCB4  1f2003d5  NOP
+0009FCB8  800e40f9  LDR             X0, [X20,#0x18]; void *
+0009FCBC  400000b4  CBZ             X0, loc_9FCC4
+0009FCC0  f840ff97  BL              ._ZdlPv; operator delete(void *)
+0009FCC4  800240f9  LDR             X0, [X20]; void *
+0009FCC8  400000b4  CBZ             X0, loc_9FCD0
+0009FCCC  f540ff97  BL              ._ZdlPv; operator delete(void *)
+0009FCD0  94020191  ADD             X20, X20, #0x40 ; '@'
+0009FCD4  df0214eb  CMP             X22, X20
+0009FCD8  01ffff54  B.NE            loc_9FCB8
+0009FCDC  b70a00f9  STR             X23, [X21,#0x10]
+0009FCE0  46ffff17  B               loc_9F9F8
+0009FCE4  210000cb  SUB             X1, X1, X0
+0009FCE8  a0220091  ADD             X0, X21, #8
+0009FCEC  fd060094  BL              _ZNSt6vectorIN24SceneCompositionSettings16CategorySettingsESaIS1_EE17_M_default_appendEm; std::vector<SceneCompositionSettings::CategorySettings>::_M_default_append(ulong)
+0009FCF0  42ffff17  B               loc_9F9F8
+0009FCF4  e827066d  STP             D8, D9, [SP,#0xD0+var_70]
+0009FCF8  ea3b00fd  STR             D10, [SP,#0xD0+var_60]
+0009FCFC  853fff97  BL              .__stack_chk_fail
+#endif
 
 /* ------------------------------------------------------------------------ */
 /* 0x000a00d0  size 3896 bytes  967 insns

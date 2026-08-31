@@ -530,6 +530,9 @@ __int64 __fastcall apac::GetSFBOffsetTable(unsigned int n, unsigned int n2)
  *   [_ZN4apac22ConvertToAudioDataTypeENS_7ASCTypeE]
  *   data refs: 0x42ce00, 0x43e520
  */
+/* !! Hex-Rays reported 'local variable allocation has failed' for this
+ * !! function. Treat the pseudocode below as a sketch, not as source.
+ * !! The disassembly appended after it is the ground truth. */
 // local variable allocation has failed, the output may be wrong!
 __int64 __fastcall apac::ConvertToAudioDataType(int n)
 {
@@ -544,6 +547,28 @@ __int64 __fastcall apac::ConvertToAudioDataType(int n)
   return result;
 }
 
+
+#if 0 /* disassembly of 0x000b0d20, for verification */
+000B0D20  e91340d1  SUB             X9, SP, #4,LSL#12
+000B0D24  3ff107f9  STR             XZR, [X9,#0xFE0]
+000B0D28  e11b0090  ADRP            X1, #__stack_chk_guard_ptr@PAGE
+000B0D2C  fd7bbea9  STP             X29, X30, [SP,#var_20]!
+000B0D30  02018052  MOV             W2, #8
+000B0D34  fd030091  MOV             X29, SP
+000B0D38  210047f9  LDR             X1, [X1,#__stack_chk_guard_ptr@PAGEOFF]; __stack_chk_guard
+000B0D3C  1f180071  CMP             W0, #6
+000B0D40  0010821a  CSEL            W0, W0, W2, NE
+000B0D44  220040f9  LDR             X2, [X1]
+000B0D48  e20f00f9  STR             X2, [SP,#0x20+var_8]
+000B0D4C  020080d2  MOV             X2, #0
+000B0D50  e20f40f9  LDR             X2, [SP,#0x20+var_8]
+000B0D54  210040f9  LDR             X1, [X1]
+000B0D58  410001ca  EOR             X1, X2, X1
+000B0D5C  610000b5  CBNZ            X1, loc_B0D68
+000B0D60  fd7bc2a8  LDP             X29, X30, [SP+0x20+var_20],#0x20
+000B0D64  c0035fd6  RET
+000B0D68  6afbfe97  BL              .__stack_chk_fail
+#endif
 
 /* ------------------------------------------------------------------------ */
 /* 0x000b2750  size 412 bytes  103 insns
