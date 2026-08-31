@@ -4,7 +4,8 @@ One row per stage. A stage is DONE only when its differential test passes agains
 real data — never on inspection of the decompilation alone.
 
 Oracles: `reference/run.sh` (whole frame, Apple vs Pioneer), `reference/apac_fn_ref` (per function,
-calls the library directly). Diff in **float32**, not S16: the int16 paths of the two decoders round
+calls the library directly), `reference/apac_lrvq_ref` (stage h1, same idea, its own file so the
+two can be regenerated independently). Diff in **float32**, not S16: the int16 paths of the two decoders round
 differently and a 1 LSB mismatch there means nothing.
 
 | # | stage | classes | state | test |
@@ -17,7 +18,7 @@ differently and a 1 LSB mismatch there means nothing.
 | e | bandwidth extension | `APACBWE2Decoder`, `BWELPC` | **PARSER DONE**, synthesis TODO | the header is on the bit path and is ported; the synthesis is never active on this content, see below |
 | f | elements | `APACSingleChannelElement`, `APACChannelPairElement`, `APACLFEElement`, `APACSyntacticElement`, `APACIndividualChannelStream`, `APACCACDecoder` | **DONE**, bit exact | `tests/test_frames.cpp`; whole capture with `reference/run.sh port` |
 | g | top level | `APACCoreDecoder`, `APACCoreLBRDecoder`, `APACDecoder`, `APACASPDecoder`, `APACChannelRemapper`, `apac::TrimmingData` | **DONE**, bit exact above the transform | `tests/test_frames.cpp`; whole capture with `reference/run.sh port` |
-| h1 | LRVQ frame mode | `APACLRVQDecoder`, `APACChannelPairElement::DeserializeLrvqFrame` | DEFERRED | semantics established, unreachable on our content |
+| h1 | LRVQ frame mode | `APACLRVQDecoder`, `APACChannelPairElement::DeserializeLrvqFrame`, `apac::LSFTools::LSF_To_LPC` | **DONE**, bit exact wherever no FFT is under it | `tests/test_lrvq.cpp`; still unreachable on our content, and not yet wired into `src/element.cpp` |
 | h | loudness | `apac::drc`, `apac::APACDRCDecoder`, `apac::LoudnessDRCConfig` | **DONE** for the `apac` layer; `mpddrc` is a stage of its own | `tests/test_drc.cpp`, plus the reachability run below |
 | i | ARMv7/QNX build | — | **DONE** | `tools/build_qnx.sh` (`--both`, `--qemu`), `tests/test_escape_pow.cpp` |
 | j | hook integration | — | TODO | decode -> `spa_reorder_5_1_decoder_to_declared_s16` -> PCM6/DIO5 |
@@ -181,11 +182,22 @@ rather than a shrug. Three things are **checked on every run**, not argued:
    `max|d|` is 1–2 LSB in both, unchanged. Pioneer and Apple are already 1–2 LSB apart on this
    capture; the port's transform vanishes inside that gap.
 
-**The one gap.** `apac::LSFTools::Initialize`, `Reset`, `DecodeLSF`, `QuantizeLSF` and the
-`LSF_To_LPC` that chains the conversions are **not started**. They need the object's six
-`std::vector` members and the 64 KiB codebook block at `0x333000` that `Initialize` unpacks, and
-their only caller is `APACLRVQDecoder` — already established below as never entered on the
-CarPlay 5.1 stream. Guessing at them was not worth it; they land with stage h1.
+**The one gap, and it was mis-attributed.** `LSF_To_LPC` landed with stage h1 and is tested there.
+The other four — `apac::LSFTools::Initialize` (`0xb5a10`), `Reset` (`0xb5290`), `DecodeLSF`
+(`0xb4f30`) and `QuantizeLSF` (`0xb5870`) — are **still not started, and they are not
+`APACLRVQDecoder`'s**. Read out of the binary rather than assumed:
+
+* `APACLRVQDecoder` calls exactly one `LSFTools` member, `LSF_To_LPC`, at `0x9aba8` — the only
+  `BL` to `0xb5370` in the whole library. Its own `LRVQLPC` overrides both `Initialize` slots
+  with a function that **throws** (`0x70c6c` / `0x70cb0`: `__cxa_allocate_exception` then
+  `__cxa_throw`), so LRVQ cannot reach `Initialize` even in principle.
+* The single `BL` to `LSFTools::Initialize` in the library is at `0xb1090`, inside
+  `BWELPC::Initialize`, and `DecodeLSF` is reached through vtable slot 72 by
+  `BWELPC::DecodeLSFsToLPCs` (`0xb0f60`). So both belong to **stage e**, the bandwidth extension,
+  and the 64 KiB codebook block at `0x333000` is a BWE table, not an LRVQ one.
+* `Reset` and `QuantizeLSF` have **no call site at all** in this library — they appear only in the
+  `LSFTools` vtable at `0x42b798`. `QuantizeLSF` is the encoder half: it calls
+  `apac::LPCodeBook::LSF_Quant_Weighting` and `VQSearch`.
 
 Four things the differential runs settled that static analysis had not:
 
@@ -232,6 +244,42 @@ float32:
 FFT: decoding the capture with the LIBRARY's frame layer and the PORT's transform, and comparing
 that against the port end to end, gives **0.000e+00 on every one of the 24 434 688 samples**. So
 stages a..g are bit exact and stage d's `vDSP_DFT_Execute` gap is the whole of the difference.
+
+**In situ, which is the measure that decides it.** `reference/run.sh swapframe` patches the port's
+whole frame layer into Pioneer's own decoder at `APACCoreDecoder::DecodeAPACFrame` - the element
+loop, the SCE/CPE/LFE bodies, the CAC tool, TNS, the BWE header, the filter bank and the remap -
+and leaves the library holding the frame-type field, the trimming record, `ContentOutBuffer` and
+`InterleaveConvert`. So it measures stages f and g with the port's own reimplementation of the top
+level taken out of the picture, which the end-to-end run cannot do. Substituting the port does not
+change how well the decoder matches Apple: per-channel `rms(diff)` against AudioToolbox over all
+3977 packets, in S16 LSBs, both sides through the library's own S16 path.
+
+| ch | Pioneer, unmodified | with the ported frame layer | max &#124;d&#124; | identical |
+| -: | ---: | ---: | ---: | ---: |
+| 0 | 0.2637 | 0.2638 | 1 / 1 | 93.044 % / 93.042 % |
+| 1 | 0.5925 | 0.5925 | 2 / 2 | 64.900 % / 64.899 % |
+| 2 | 0.4724 | 0.4724 | 2 / 2 | 77.689 % / 77.687 % |
+| 3 | 0.2944 | 0.2944 | 1 / 1 | 91.334 % / 91.334 % |
+| 4 | 0.2967 | 0.2967 | 1 / 1 | 91.199 % / 91.199 % |
+| 5 | 0.2471 | 0.2471 | 1 / 1 | 93.896 % / 93.896 % |
+
+Unchanged to four significant figures on every channel bar the fourth digit of channel 0, and the
+cross-channel permutation check still says the channel order is identical. The port's frame layer
+disappears inside the gap that already exists between the two reference decoders.
+
+And end to end, with the port's transform and top level in as well, quantised the way Apple's
+converter does (`round(x * 32768)`), against AudioToolbox over the same 3977 packets:
+
+| ch | Apple rms | library rms(diff) | port rms(diff) | max &#124;d&#124; |
+| -: | ---: | ---: | ---: | ---: |
+| 0 | 1887.12 | 0.0078 | 0.0077 | 1 / 1 |
+| 1 | 2179.84 | 0.0102 | 0.0107 | 1 / 1 |
+| 2 | 1919.79 | 0.0095 | 0.0100 | 1 / 1 |
+| 3 | 1547.58 | 0.0072 | 0.0077 | 1 / 1 |
+| 4 | 1744.13 | 0.0085 | 0.0086 | 1 / 1 |
+| 5 | 1079.13 | 0.0050 | 0.0051 | 1 / 1 |
+
+99.993 % of all 24 434 688 samples identical to Apple, for the library and for the port alike.
 
 `make check` runs the same test on six committed packets (`tests/fixtures/frames.bin`, 149 KB,
 `tools/gen_frame_fixture.sh` to regenerate). They are packets 429..434 of the capture, contiguous,
@@ -427,29 +475,132 @@ does not want loudness normalisation applied on top of its own. `APACDRCDecoder:
 the original's call with the processing left out, and `tests/test_drc.cpp` checks it leaves the
 samples untouched.
 
-## Open: wiring LRVQ into the element layer
+## Stage h1 — LRVQ, proven
 
-Stage h1 ported `APACLRVQDecoder` and tested it against the library (`tests/test_lrvq.cpp`,
-360 506 checks), and `src/element.cpp` carries the exact three-way wiring in the comment headed
-"THE LRVQ SEAM". The element layer still refuses all three paths with `kPortNeedsLRVQ`.
+`APACLRVQDecoder` and `APACChannelPairElement::DeserializeLrvqFrame` are ported
+(`include/apac/lrvq.h`, `src/lrvq.cpp`, `src/lrvq_frame.cpp`, `src/lrvq_tables.cpp`) and checked
+against the library by `tests/test_lrvq.cpp` — **418 994 checks**, fixtures from
+`reference/apac_lrvq_ref.cpp` via `tools/gen_fixtures_lrvq.sh`, inputs regenerated on both sides
+from `reference/lrvq_cases.h`.
 
-It should be wired — a decoder that hard-errors on a frame mode it has already ported is not
-finished, and a different iOS build or bitrate can emit it. Two things block a safe edit:
+Hex-Rays is unusable for this whole class: **every APACLRVQDecoder member is static**, the
+decompiler invented a `this` for each and shifted every argument by one. The port comes from the
+disassembly.
 
-1. **Ownership is unresolved.** `LrvqFrameContext::lrvq` is a bare pointer with no recovered
-   offset, unlike every other field in that struct. In the original,
-   `APACChannelPairElement::DeserializeLrvqFrame` reaches it with a virtual call through
-   `*((_QWORD *)this + 2)`, which does not by itself settle whether the element owns the decoder,
-   borrows one, or shares it. It matters: `sizeof(LRVQDecoder)` is 56 688 bytes against
-   `SyntacticElement`'s 10 528, and `CoreDecoder` holds eight elements, so embedding one per
-   element adds roughly 450 KiB inside `dio_manager`. The port has no dynamic allocation anywhere
-   and that should stay true.
-2. **Prediction state has a scope.** Inter-channel index reuse shares `qidx`/`prevMode`, and
-   `ResetPrediction` exists. Whether that state is per element, per frame or per stream decides
-   whether one shared decoder is correct or silently wrong across elements.
+### What is bit-exact, and what cannot be
 
-Both are answerable against the library — the element-level differential harness stage h1 already
-built drives elements directly. Neither should be answered by reading alone.
+The plan splits deliberately. 40 of the 80 `LrvqDeserialize` cases set `reuseEnvelope` — and, on a
+long block, `noLtpSection` — which skips **both** envelope builders. There is then no FFT anywhere
+under the call: the decoder divides by an envelope the test supplied and every float on both sides
+is compared as a **bit pattern**.
+
+| what | agreement | coverage |
+| --- | --- | --- |
+| `dequantizeLrvqGain` | **bit exact** | all 512 indices x both gain modes |
+| `LrvqDeserialize`, FFT-free half | **bit exact**, work + env + all 1024 coefficients | 40 cases: both VQ modes, `sameMode` reuse, `reuseResidual`, the envelope division, the interleaved short layout |
+| return code, bit count, `prevMode`, all 64 `qidx` | **bit exact** | all 80 cases, the five invalid mode rows included |
+| the reversed short layout | **bit exact** | replayed from the library's own post-call `work` |
+| `SpectrumDeserializeLFE` | **bit exact**, all 12 coefficients | 32 element cases, all 16 mode rows, skip bit both ways |
+| `DeserializeLrvqFrame` | bit count and both 190-byte `APACTNSData` objects **exact** | 24 frames, long and eight-short, with and without a real TNS filter |
+| the two-stage LSF codebook sum and `Condition_LSFs` | **bit exact** | 1024 sums, 64 conditioned vectors |
+| `ltpToMdctSpectralEnvelope` | 1.6e-06 relative, per bin | 96 (gainIndex, lag) pairs |
+| `lsfsToMdctSpectralEnvelope`, FFT half alone | 2.3e-07 of full scale | driven from the library's own LPC coefficients |
+| `lsfsToMdctSpectralEnvelope`, whole chain | 1.3e-04 of full scale | 64 index sets, both codebook sets |
+| the VQ residual, recovered as `work * env` | 9.3e-08 of full scale | every single-call case that runs an envelope |
+
+### Why the envelope is looser than stage d, and why that is not a defect
+
+Two separate reasons, and only the first is the FFT.
+
+1. `lsfsToMdctSpectralEnvelope` ends in a 512-point real FFT, and the library's is
+   `vDSP_DFT_Execute`. Driven from the library's own LPC coefficients the port's envelope agrees
+   to **2.3e-07** — stage d's number. So the transform half is not what costs.
+2. The cost is `LSFTools::LSP_To_LPC`. At order 16 its polynomial recursion cancels hard, and
+   *both* float versions are the **same distance, 1.33e-04, from the same recursion evaluated in
+   double** on the library's own LSPs. The test computes that reference and asserts the port is
+   not more than 8x further from it than the library is — a wrong index or a swapped polynomial
+   fails that by orders of magnitude, accumulated rounding does not. The two float versions differ
+   from each other by 4.8e-05, i.e. they track each other more closely than either tracks the
+   exact answer, which is what a faithful transcription looks like.
+
+   Related and checked: `-ffp-contract=off` makes the port **worse** (5.6e-05 from exact where the
+   library is 3.1e-06 on the same coefficient), so the library is using FMA and the default
+   contraction is the right match. Do not add `-ffp-contract=off`.
+
+**The one number that looks alarming.** `work` and `spec` on the envelope-running cases differ by
+up to **1.1e-01 of the block's peak**. That is not a porting error and the test says why: at the
+worst bin the envelope is `8.2e-04` against the library's `9.1e-04` — an absolute gap of 3.5e-05
+of the envelope's *own* peak, i.e. exactly the 1.3e-04 above — and the reconstruction *divides* by
+it. Near a null of `|A(w)|` the LRVQ reconstruction is ill-conditioned by construction, in the
+original as much as here: the library's own LPC coefficients carry that same 1.33e-04 of
+uncertainty, so where the null sits is not knowable to better than that from float arithmetic.
+The check that this is only the envelope is `work * env` on each side, which recovers the VQ
+residual and agrees to **9.3e-08**.
+
+### Six things the differential runs settled
+
+* **`dequantizeLrvqGain` needs `pow`, not `powf`.** The library's `powf(10, y)` is correctly
+  rounded on all 1024 inputs (checked against a 200-bit reference); macOS's `powf` is one ULP off
+  on 6 of them and QNX 6.5's is untested. The port evaluates the power in double and rounds once,
+  which gives the correctly rounded float on any sane libm and therefore matches the library where
+  `powf` would not. Everything after the power stays in float.
+* **`ltpToMdctSpectralEnvelope` has a case the closed form misses.** The original writes
+  `impulse[0] = 1` and *then* `impulse[lag] = -g`, so **`lag == 0` overwrites the leading 1** and
+  the response is the constant `-g`, magnitude `g/(1+g)` at every bin. `lag` is a 10-bit field.
+  The earlier probe swept from lag 1 and never saw it; the port special-cases it and the fixture
+  pins it (`3e4ccccd` = 0.2 for `g = 0.25`).
+* **`SpectrumDeserializeCPE` and `...LFE` read uninitialised stack.** Only
+  `SpectrumDeserializeSCE` zeroes its `qidx` and `prevMode`; the CPE has no clear loop and no
+  memset (0x9bf60 has only the stack-clash probes). A CPE whose FIRST channel carries the skip bit
+  therefore lets the second channel's `sameMode` reuse predict from whatever was on the stack.
+  The port's `ResetPrediction` zeroes in all three, which is deterministic and is what the library
+  itself does in the one place it initialises at all. That combination is excluded from the
+  fixture — there is nothing reproducible to compare against.
+* **`qidx = -1` is unreachable.** `LRVQ_SEMANTICS.md` §6.4 left it open. `sameMode` means both
+  channels selected the same mode **row**, and whether a row has a stage 1 is a property of the
+  row — so a mode that could reuse the `-1` sentinel is a mode that never reads a stage-1
+  codebook. The only path that broke that argument was the uninitialised CPE stack above, and
+  `ResetPrediction` closes it: with `qidx` zero and `prevMode` zero, `sameMode` can only select
+  row 0, which is single-stage. `tests/test_lrvq.cpp` also asserts that every vector a legal index
+  can reach lies inside the codebook block, so if this stops being true the table check fails
+  first. (Row 3's stage 0 sits at the very start of the block and row 4's stage 1 at the very end,
+  so the two reads the original's own bound check would let through — `idx == n`, because the
+  compare is `n < idx` and not `n <= idx` — leave it. Also unreachable, for the same reason.)
+* **`reuseResidual`'s double division is real, and its intent is still unknown.**
+  `LRVQ_SEMANTICS.md` §6.5 asked. A second channel with `reuseResidual = 1` reuses `work` as the
+  previous channel left it — already divided by that channel's envelope, and in the short case
+  already multiplied by that channel's gain — and divides it again by its own envelope. The port
+  reproduces it and the bit-exact family covers it (14 cases). *Why* Apple does that is not
+  something this analysis can answer: the stack slot is overloaded (before the VQ section it means
+  "no VQ data follows", after it "an LTP envelope was decoded"), and the double division falls out
+  of the second meaning being reached through the first. It is recorded as reproduced, not
+  understood.
+* **`DeserializeLrvqFrame` reads one bit nobody would guess.** At 0xac7d8, when the second channel
+  has **no** TNS block and the first channel **did**, one more bit is read and discarded. Absent
+  from `DeserializeSQFrame`. Six of the 24 frame cases exercise it and dropping it fails as a
+  one-bit gap in the frame's bit count.
+
+### Open: wiring LRVQ into the element layer
+
+`src/element.cpp` still refuses all three paths with `kPortNeedsLRVQ`; its comment "THE LRVQ SEAM"
+carries the exact wiring. The two questions that blocked a safe edit are now answered, from the
+binary rather than by reading:
+
+1. **Ownership: there is no decoder object.** Every `APACLRVQDecoder` member is static.
+   `SpectrumDeserialize{SCE,CPE,LFE}` alloca 9.5 KiB of `env`/`env2`/`work`/`qidx`/`prevMode` per
+   call and `lsfsToMdctSpectralEnvelope` stack-constructs its own `LPMDCTFilter` and `LSFTools`
+   per call; nothing survives a call. The `*((_QWORD *)this + 2)` virtual call in
+   `DeserializeLrvqFrame` is not a decoder — `ldr x0,[x0,#16]` at 0xac628 loads the channel-0
+   `APACICSInfo` and the call is its vtable slot 2, `APACICSInfo::Deserialize`;
+   `SpectrumDeserializeCPE` is a plain `bl` at 0xac69c with no `this`. So **one** shared
+   `LRVQDecoder` for the whole `CoreDecoder` is correct: 56 688 bytes once, not one per element.
+2. **Prediction scope: per element, per frame.** `qidx` and `prevMode` are stack locals of the
+   wrapper and cannot cross elements or frames. `ResetPrediction` on entry to each of the three
+   wrappers reproduces that with a single shared instance.
+
+Two facts the seam needs: an LRVQ ICS header is exactly **two bits** (coding type 1 for both
+channels fixes maxSfb at 27 long / 7 short and reads no grouping field), and the extra bit at
+0xac7d8 above.
 
 ## Stage j — the integration seam, located
 
@@ -490,10 +641,11 @@ same patch on `SpectrumDeserializeCPE`; patching `APACSpectralData::Deserialize`
 no output at all. Independently reproduced with `reference/scratch/stub_shim.c` over 600 packets,
 after the same result over all 3977.
 
-So this content is entirely transform/SQ coded and LRVQ is a different frame mode. Its semantics
-are established anyway (`reference/decomp/LRVQ_SEMANTICS.md`) and its return value propagates as a
-hard error, so it still has to be ported eventually — but after the transform path works, not
-before. Reordered above.
+So this content is entirely transform/SQ coded and LRVQ is a different frame mode. Its return value
+propagates as a hard error, so it had to be ported anyway; that is stage h1 above, and it is done.
+Being unreachable on this capture is exactly why none of its coverage comes from the capture: every
+case in `tests/test_lrvq.cpp` is a bitstream built for the purpose and driven through the library
+directly.
 
 Instrumenting the library: it is linked `DT_SYMBOLIC`, so `LD_PRELOAD` cannot interpose its
 internals. Patch the function entry in memory, as `stub_shim.c` does. Build the mangled name by
@@ -502,6 +654,23 @@ this experiment silently proved nothing.
 
 ## Known traps, all found the hard way
 
+* **`powf` is not correctly rounded everywhere and `dequantizeLrvqGain` depends on it.** The
+  library's glibc/aarch64 `powf(10, y)` is correctly rounded on all 1024 gain inputs; macOS's is
+  one ULP off on 6 of them. Evaluate the power in **double** and round once. The same trap bit the
+  codebook-11 escape (stage c) independently.
+* **`ltpToMdctSpectralEnvelope` at `lag == 0`** is not `|1 - g e^{-jw*0}|`: the original writes
+  `impulse[0] = 1` and then `impulse[lag] = -g`, so lag 0 overwrites the 1 and the answer is the
+  constant `g/(1+g)`. A sweep that starts at lag 1 never sees it.
+* **A function-local `static` with a constructor does not link on QNX 6.5 / GCC 4.9.4**: it emits
+  `__cxa_guard_acquire` / `__cxa_guard_release`, which are not in that libstdc++ configuration.
+  Put such objects at file scope. `tests/test_lrvq.cpp` and `tests/test_frames.cpp` both hit this.
+* **`-ffp-contract=off` makes the LPC chain worse, not better.** The library uses FMA; with
+  contraction off the port drifts to 5.6e-05 from the exact (double) answer where the library is
+  at 3.1e-06. Leave the compiler's default contraction alone.
+* Every `APACLRVQDecoder` member is **static**, and so are `apac::LSFTools`' conversions.
+  Hex-Rays invented a `this` for each and shifted every argument by one; its pseudocode for
+  `LrvqDeserialize` is unusable and its argument names for the three `SpectrumDeserialize`
+  wrappers are all off by one. Count the arguments at the call site before believing a signature.
 * `TBitstreamReader` refill is a **big-endian** 32-bit load; a short tail pads with **`0xFF`**, not
   zero; the constructor pre-aligns an unaligned buffer.
 * Cookie metadata helpers must be called at `GetCookieOffset() + 2` — the `dapa` payload starts with

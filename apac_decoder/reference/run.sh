@@ -35,6 +35,14 @@
 #   ./apac_decoder/reference/run.sh port            # all 3977 packets
 #   ./apac_decoder/reference/run.sh port 400        # the first 400
 #
+# and the stage-f/g COMPOSITION test, the counterpart of `swap`: the port's whole
+# frame layer patched into Pioneer's own decoder at APACCoreDecoder::
+# DecodeAPACFrame, with the library keeping the frame-type field, the trimming
+# record, ContentOutBuffer and the interleave:
+#
+#   ./apac_decoder/reference/run.sh swapframe       # all 3977 packets
+#   ./apac_decoder/reference/run.sh swapframe 400
+#
 # Paths given to `fn` are host paths and are bind-mounted read-only.
 #
 # Everything it writes lives in apac_decoder/reference/.build/ except
@@ -57,6 +65,8 @@ SWAP=0
 if [ "${1:-}" = "swap" ]; then SWAP=1; shift; fi
 PORT=0
 if [ "${1:-}" = "port" ]; then PORT=1; shift; fi
+SWAPFRAME=0
+if [ "${1:-}" = "swapframe" ]; then SWAPFRAME=1; shift; fi
 
 REBUILD=0
 PROBE=0
@@ -64,7 +74,7 @@ FLOAT=0
 COUNT=""
 EXTRA=()
 # The `fn`, `swap` and `port` modes take their own arguments; do not eat them.
-while [ "$FN" = 0 ] && [ "$SWAP" = 0 ] && [ "$PORT" = 0 ] && [ $# -gt 0 ]; do
+while [ "$FN" = 0 ] && [ "$SWAP" = 0 ] && [ "$PORT" = 0 ] && [ "$SWAPFRAME" = 0 ] && [ $# -gt 0 ]; do
     case "$1" in
         --rebuild) REBUILD=1 ;;
         --probe)   PROBE=1 ;;
@@ -201,6 +211,35 @@ run_port() {
         ' _ "$@"
 }
 
+# ------------------------------------------------------- frame-layer swap ----
+# The port's element and core-decoder layers patched into the library at
+# APACCoreDecoder::DecodeAPACFrame.  Everything above stays the library's, so
+# this measures stages f and g with the port's own top level taken out of the
+# picture - which the plain end-to-end run cannot do.
+run_swapframe() {
+    local dec; dec="$(cd "$HERE/.." && pwd)"
+    docker run --rm --platform linux/arm64 \
+        -v "$HERE:/src:ro" -v "$dec/src:/port/src:ro" -v "$dec/include:/port/include:ro" \
+        -v "$CAPTURE:/data:ro" -v "$WORK:/out" \
+        -e APAC_COOKIE="/data/$(basename "$COOKIE")" \
+        "$IMAGE" bash -c '
+            set -e
+            g++ -std=c++11 -O2 -g -Wall -o /tmp/apac_ref /src/apac_ref.cpp -ldl
+            g++ -std=c++11 -O2 -g -Wall -Wextra -fno-exceptions -fno-rtti \
+                -I/port/include -shared -fPIC -o /tmp/frame.so \
+                /src/frame_swap_shim.cpp /port/src/*.cpp -ldl
+            echo "=== Pioneer, unmodified ==="
+            /tmp/apac_ref --f32 "$@" /out/pioneer_plain.f32
+            /tmp/apac_ref       "$@" /out/pioneer_plain.pcm
+            echo
+            echo "=== Pioneer, with the ported frame layer patched in ==="
+            APAC_SWAP_COOKIE="$APAC_COOKIE" LD_PRELOAD=/tmp/frame.so \
+                /tmp/apac_ref --f32 "$@" /out/pioneer_frameswap.f32
+            APAC_SWAP_COOKIE="$APAC_COOKIE" LD_PRELOAD=/tmp/frame.so \
+                /tmp/apac_ref       "$@" /out/pioneer_frameswap.pcm
+        ' _ "$@"
+}
+
 if [ "$PROBE" = 1 ]; then
     run_ref --probe
     exit $?
@@ -274,6 +313,47 @@ if [ "$SWAP" = 1 ]; then
         echo
         echo "=== Apple vs Pioneer, with the ported transform ==="
         python3 "$HERE/compare_pcm.py" "$WORK/apple.pcm" "$WORK/pioneer_swapped.pcm" 6
+    fi
+    exit 0
+fi
+
+# -------------------------------------------------------------- swapframe ----
+if [ "$SWAPFRAME" = 1 ]; then
+    COUNT_ARGS=()
+    [ $# -gt 0 ] && COUNT_ARGS=(--count "$1")
+    run_swapframe --list /out/ctr_list.txt "${COUNT_ARGS[@]+"${COUNT_ARGS[@]}"}" \
+        "/data/$(basename "$COOKIE")"
+    echo
+    echo "=== what the ported frame layer costs, end to end ==="
+    python3 "$HERE/compare_f32.py" "$WORK/pioneer_plain.f32" \
+        "$WORK/pioneer_frameswap.f32" 6
+
+    # The measure that decides whether a substitution is acceptable: not how
+    # close the two Pioneer runs are to each other, but whether swapping the
+    # port in changes how well the decoder matches APPLE.  Both sides here come
+    # out of the library's own S16 path, so the two tables are directly
+    # comparable and any change is the port's.
+    ORACLE="$ROOT/build/apple_apac_oracle"
+    if [ ! -x "$ORACLE" ] && [ "$(uname -s)" = "Darwin" ]; then
+        mkdir -p "$ROOT/build"
+        clang -std=c11 -O2 "$ROOT/tools/apple_apac_oracle.c" \
+            -framework AudioToolbox -framework CoreFoundation -o "$ORACLE"
+    fi
+    if [ -x "$ORACLE" ]; then
+        if [ $# -gt 0 ]; then
+            head -n "$1" "$WORK/host_list.txt" > "$WORK/host_list_sf.txt"
+        else
+            cp "$WORK/host_list.txt" "$WORK/host_list_sf.txt"
+        fi
+        # shellcheck disable=SC2046
+        "$ORACLE" "$COOKIE" "$WORK/apple_sf.pcm" $(cat "$WORK/host_list_sf.txt") \
+            | tail -n 1
+        echo
+        echo "=== Pioneer, unmodified, against Apple AudioToolbox ==="
+        python3 "$HERE/compare_pcm.py" "$WORK/apple_sf.pcm" "$WORK/pioneer_plain.pcm" 6
+        echo
+        echo "=== Pioneer with the ported frame layer, against Apple AudioToolbox ==="
+        python3 "$HERE/compare_pcm.py" "$WORK/apple_sf.pcm" "$WORK/pioneer_frameswap.pcm" 6
     fi
     exit 0
 fi
