@@ -13,35 +13,51 @@ then upmixes algorithmically (Fraunhofer Symphoria).
 
 The head-unit 6-channel PCM path is **finished and proven**. The phone's legacy/realtime CarPlay path
 refuses the added multichannel bits. iOS 27 also has a newer buffered path, but our 210.81 receiver
-does not implement it. A hook-owned type-103 TCP listener/capture stage is now deployed; codec
-decode/downmix/render is still unimplemented. This handoff records why the cheap path is closed and
-the exact next probe.
+does not implement it. A hook-owned type-103 TCP listener/capture and buffered-control stage is now
+deployed and proven to keep the sender alive; decrypt/decode/downmix/render is still unimplemented.
 
-### Current HU state at handoff (2026-08-29)
+### Current HU state at handoff (2026-08-31)
 
-Type 103 is deliberately **disabled** on the live HU: `/tmp/spatial_probe103` was removed and the
-unit returned `TYPE103_DISABLED`. The installed hook remains in place, but all type-103 advertising,
-negotiation, listeners, and captures are gated by that marker. Consequently the next phone
-connection uses the existing type-100 PCM path. The six-channel DIO5/PCM patch was not reverted or
-modified.
+Type 103 is enabled only through the persistent startup environment: `SPATIAL_103=1`,
+`SPATIAL_103_MODE=both`, `SPATIAL_103_INDEX=65`, `SPATIAL_103_DCX=0`, and
+`SPATIAL_103_MASK=0x400000`. There are no type-103 `/tmp` marker controls. `SPATIAL_5_1=1` remains
+exported independently, so the existing six-channel DIO5/PCM type-100 fallback is preserved.
+Neither the fallback nor the amplifier patch was reverted.
 
-The hook currently installed at `/mnt/app/root/hooks/libcarplay_hook.so` and the local
-`build/libcarplay_hook.so` have SHA-256
-`13aee019f355b1839446a631f3d077e66437c9556ea1b1cf71082845f889aa77`. It is the diagnostic
-type-103 receiver build with:
+Live iOS declined type 103 when index 40 was advertised and selected stereo type 100 (`0x8000`).
+With index 65 it selected a genuine type-103 APAP stream, displayed Dolby Atmos, sent a 33-byte
+`SETMAGICCOOKIE`, and connected to TCP 6032. TCP 6033 is not used by this path.
 
-* paired `mainBuffered` / `mainBufferedInfo` negotiation;
-* runtime-selectable format index, legacy mask, and optional `DCXEnabled`;
-* TCP 6032 APAP and TCP 6033 diagnostic control listeners;
-* inclusive-BE32 APAP frame parsing, bounded capture, and teardown-safe threads;
-* stock `updateFeedback` rewritten to the current receiver's exact `{streams:[]}` shape only while
-  the hook-owned type-103 stream is active;
-* an experimental 32-frame prefill followed by one 21.333333 ms sleep per 1,024-sample/48 kHz APAP
-  frame.
+The installed hook at `/mnt/app/root/hooks/libcarplay_hook.so` is build
+`d7dc11dbee6e9d0b1e81e15c8776693aa69c169ee192cdfb788ceee86d1aa7cc` (402839 bytes). Its copy-back
+SHA-256 matches the local build. It adds:
 
-This build is still only a protocol/capture sink. It does **not** decrypt, decode, downmix, register
-a real buffered receiver session, or render type-103 audio. Removing the master marker is therefore
-the correct safe resting state.
+* paired `mainBuffered` / `mainBufferedInfo` negotiation and type-103 index 65;
+* an exported `AirTunesServer_EnsureCreated` interposer which installs the fingerprint-locked
+  buffered-method dispatcher before the first control connection is accepted;
+* `SETMAGICCOOKIE`, `GETANCHOR`, `SETRATE`, `SETRATEANCHORTIME`, and `FLUSHBUFFERED` handling on the
+  existing RTSP control connection;
+* TCP 6032 inclusive-BE32 APAP capture, bounded storage, and teardown-safe threads;
+* stock `updateFeedback` rewritten to `{streams:[]}` only while hook-owned type 103 is active.
+
+Build `dc5545c946961f406060ca328b40c2c200365eca47887e76e2572e7ab75744a0` was verified live:
+`SETRATE rate=1` was accepted and the former deterministic 5-second teardown disappeared; the
+session remained active for more than two minutes and the playback counter advanced. Live iOS 27
+omits `rtpTime` from SETRATE and sends only `mediaTimeValue`, `mediaTimeScale`, and `rate`; accepting
+that form was the decisive correction.
+
+Pause exposed the next exact contract. iOS sends `SETRATEANCHORTIME {rate:0}`, followed by a
+media-only FLUSH such as `{flushUntilSeq, flushUntilMediaTimeValue, flushUntilMediaTimeScale}`. The
+older parser returned HTTP 400 because it incorrectly required both from/until boundaries and RTP
+timestamps. Build `b8305141…` was verified live to ACK both rate=0 and that optional-boundary FLUSH.
+The later teardown was the user's physical unplug, not a receiver crash. The remaining timeline
+rollback came from returning a zero/synthetic clock: only about 0.576 s/27 APAP frames were sent.
+Build `d7dc11db…` now obtains the synchronized AirTunes clock from the exact MU1316 session+5072
+field and returns a 150 ms-ahead network anchor; its first live nonzero-timeline test is pending.
+
+This remains a protocol/capture sink. It does **not** yet authenticate/decrypt APAP, decode APAC,
+downmix, or render type-103 audio. A moving playback counter proves control-plane acceptance, not
+audible output.
 
 ---
 
@@ -309,8 +325,12 @@ described below.
   anywhere in the table — which matters because the buffered/music path (§6) is 44.1-based.
 * The amp is already a 5.1 system (16 MOST channels, 19 speakers). It cannot synthesise discrete
   channels from stereo — it upmixes. Discrete 5.1 arrives only when the source delivers 6 channels.
-  5.1.2/height is impossible on this platform (no height source over MOST, the SHARC is a legacy
-  Dolby/DTS decoder + upmixer, not an object renderer).
+  5.1.2/height was previously written off here as impossible. **That claim is retracted (2026-08-30):**
+  the amp's V850 image exposes a MOST string table containing `Entertainment_7.1` and
+  `Entertainment_7.1_SAD` alongside the 5.1 and 2.0 entries, so the amplifier advertises an
+  eight-channel sink. What blocks eight channels is now entirely on the HU side (the four deva limits
+  above), and the open question is where channels 7/8 of that sink physically land — rear surrounds
+  or the two 3D/height drivers. See `docs/reference/AMP_7_1_SINK.md`.
 
 ---
 
@@ -415,8 +435,8 @@ creates the format. The captured MHI2Q `/info` already contains a universal entr
 audio type and `inputLatencyMicros=95000`, `outputLatencyMicros=80000`, so it matches stream 103.
 
 `mainBufferedInfo` may be an empty dictionary; `DCXEnabled` inside it is a separate optional Boolean
-queried by `airPlayDescription_isDCXSupportedForSpatialAudio` @ `0x2511545A8`. The hook can now add a
-real CFLite `true` with `/tmp/spatial_103_dcx` for a controlled Dolby/DCX A/B run. This is a probe-only
+queried by `airPlayDescription_isDCXSupportedForSpatialAudio` @ `0x2511545A8`. The hook can add a
+real CFLite `true` with `SPATIAL_103_DCX=1` for a controlled Dolby/DCX A/B run. This is a probe-only
 capability claim, not proof that the old receiver can decode or render the resulting payload.
 
 ### Donor-firmware result: no hidden type-103 receiver
@@ -948,28 +968,25 @@ support or an Atmos object renderer; the licensed channel limit still needs a ru
 
 ### Safe runtime controls
 
-The 40/42 labels below describe the corrected repository source. The currently installed
-`13aee019...` diagnostic binary predates that correction and must be rebuilt before an index-40
-run; its master marker remains absent.
+Type-103 configuration is env-only and is inherited when `carplay_startup.sh` execs `dio_manager`.
+Changing it therefore requires a fresh `dio_manager` generation; deleting `/tmp` files has no
+effect. On a muted/isolated bench setup:
 
-On a muted/isolated bench setup:
-
-1. `/tmp/spatial_probe103` is the master switch. With it absent, all buffered-probe behavior and
-   captures are off; the existing type-100 PCM/6 fallback remains unchanged.
-2. Choose one independent probe in `/tmp/spatial_103_mode`:
+1. `SPATIAL_103=1` is the master switch. `0`, `false`, `no`, `off`, empty, or absent disables every
+   buffered mutation/capture; the independent type-100 PCM/6 fallback remains unchanged.
+2. `SPATIAL_103_MODE` chooses the contract half:
    `feature` = negotiate `mainBuffered` only; `info` = append the type-103 `/info` descriptor only;
-   `both` = both changes. A missing mode file preserves the old `both` behavior.
-3. Select the extended format by writing one exact decimal value to `/tmp/spatial_103_index`:
+   `both` = both changes. Absent defaults to `both`.
+3. `SPATIAL_103_INDEX` selects one exact decimal extended format:
    `40` = AAC-LC 5.1.2, `42` = AAC-ELD 5.1.2, `50` = DD+ 5.1, `53` = DD+ 9.1.6,
    `65` = APAC 5.1, `66` = APAC 5.1.2.
-   File absent defaults to 65; every other value is rejected and falls back to 65.
-4. `/tmp/spatial_103_mask` selects the legacy compatibility mask. Missing file defaults to the
+   Absent defaults to 65; every other value is rejected and falls back to 65.
+4. `SPATIAL_103_MASK` selects the legacy compatibility mask. Absent defaults to the
    corrected `0x400000` single AAC-LC bit. `0x1440800` is accepted only to reproduce the old failed
    mixed-codec probe; all other values fail back to `0x400000`.
-5. Optional: create `/tmp/spatial_103_dcx` to add
-   `mainBufferedInfo={DCXEnabled:true}` as a genuine CFLite Boolean. Without it the required
-   `mainBufferedInfo` dictionary remains empty. This marker is only for an isolated negotiation
-   probe; it must not become a production default before the receive/decode path exists.
+5. Optional: set `SPATIAL_103_DCX=1` to add `mainBufferedInfo={DCXEnabled:true}` as a genuine CFLite
+   Boolean. `0` leaves the required dictionary empty. Keep it off by default until decode/render
+   exists.
 6. Reconnect the phone. The hook writes mode-0600 binary plists:
    `/tmp/spatial_control_<sequence>_request.bplist`,
    `/tmp/spatial_control_<sequence>_response.bplist`, and
@@ -979,19 +996,18 @@ On a muted/isolated bench setup:
    `/tmp/spatial_apap_<sequence>.bin`. The hook logs the stock result, allocated `dataPort`, first
    APAP bytes, total bytes drained, and bounded bytes saved. With the control-port build, also
    retrieve `/tmp/spatial_rtcp_<sequence>.bin` and the `controlPort`/RTCP connection log lines.
-8. Remove `/tmp/spatial_probe103` and reconnect to restore ordinary negotiation deterministically.
+8. To restore ordinary negotiation, export `SPATIAL_103=0` in startup and start a fresh
+   `dio_manager` generation.
 
 The feature-only run established that the phone proposes `mainBuffered`, but iOS requires the paired
 `mainBufferedInfo` key in `/info`. The broad legacy mask then failed because it mixed PCM and AAC
 families. The corrected single AAC bit `0x400000` solved that gate and produced the hardware-confirmed
 type-103 request above.
 
-Current installed build is
-`13aee019f355b1839446a631f3d077e66437c9556ea1b1cf71082845f889aa77`; it was atomically installed
-and copied back with the identical SHA-256. The last verified test settings were
-`both + legacy 0x400000 + extended index 65 + DCX absent`. The master marker is currently absent, so
-type 103 is off and those subordinate files have no effect. Type-100 PCM/6 and DIO5 remain unchanged
-as fallback. That installed diagnostic binary predates the 2026-08-29 static correction
+Current installed build is `d7dc11dbee6e9d0b1e81e15c8776693aa69c169ee192cdfb788ceee86d1aa7cc`;
+it was atomically installed and copied back with the identical SHA-256. Startup selects
+`both + legacy 0x400000 + extended index 65 + DCX off`. Type-100 PCM/6 and DIO5 remain unchanged as
+fallback.
 `40=AAC-LC, 42=AAC-ELD`; it must not be used for an index-40 run until a fresh hook is built and
 explicitly deployed. Only the repository source and documentation were corrected here; the HU was
 not touched.
@@ -1014,23 +1030,22 @@ method unchanged. A fresh local QNX/ARMv7 build passed with `emutls=0`, SHA-256
 Each first accepted cookie is retained in memory and captured mode-0600 as
 `/tmp/spatial_magiccookie_<sequence>_<id-hex>.bin` for the decoder bench; teardown restores the
 stock request callback.
-The fresh source also omits `controlPort`/6033 from type-103 SETUP. The currently installed
-`13aee019…` diagnostic build is unchanged and still belongs with the existing `6030:6033` PF rules.
+The source and installed build omit `controlPort`/6033 from type-103 SETUP. Only data port 6032 is
+needed for this path; keeping the existing broader PF rules is harmless.
 
 This experiment distinguishes three layers without risking speaker damage: CarKit UI capability,
 AirPlaySender negotiation, and actual stream transport.
 
 ### Exact next steps when type 103 work resumes
 
-1. Keep `/tmp/spatial_probe103` absent until the receiver implementation and secure capture are
-   ready. Merely having the diagnostic `.so` installed does not enable 103; type-100 PCM/6 remains
-   the fallback.
-2. Extend the fingerprint-locked RTSP wrapper with `GETANCHOR`, `SETRATE`, `SETRATEANCHORTIME` and
-   `FLUSHBUFFERED`, then confirm a hardware session survives the sender's former 50-retry/~5 s wall.
-   Put the returned anchor on the phone's NTP timeline so the subsequent 10 s clock-lock gate also
-   clears. Exact sender/receiver paths and plist fields are in §10.
-3. Confirm the same wrapper stores and ACKs `SETMAGICCOOKIE`. It uses the existing RTSP connection;
-   do not add a 6033 listener. Match the stored ID to the subsequent APAP TLV 17.
+1. Start the env-enabled build and verify `SETRATE ... timeline=<nonzero>` from the real MU1316
+   AirTunes clock. After 5–10 seconds APAP must continue at roughly 47 frames/s instead of stopping
+   at the initial 27-frame/~0.576 s window.
+2. Repeat `Play -> Pause -> Play`: `SETRATEANCHORTIME rate=0` and the media-only `FLUSHBUFFERED` must
+   ACK, its position must advance by the wall playback duration, and the iPhone timeline must not
+   jump back.
+3. Preserve the existing `SETMAGICCOOKIE` map and APAP TLV-17 ID pairing. It uses the existing RTSP
+   connection; do not add a 6033 listener.
 4. Implement the exact Pioneer crypto/APAP/TLV state contract and a bounded queue. Reject the
    session on any invalid Poly1305 tag, missing cookie/format, impossible length, or unsupported
    index; never feed encrypted/compressed bytes to DIO5. TLV 17 may select only an ID already stored
