@@ -64,6 +64,28 @@ converts requested media time to 48 kHz sample time before replying. Live values
 returned `rtpTime=0`; current source now returns that modulo-2^32 conversion for SETRATE, FLUSH, and
 GETANCHOR.
 
+The first live RTP build returned the exact APAP value but still stopped after the initial buffered
+window and the iPhone timeline rolled back. Static re-check of the actual iOS sender response parser
+found a response-shape mismatch: `SETRATE` expects the complete transport triple
+`rtpTime + mediaTimeValue + mediaTimeScale`, the four
+`networkTime{Secs,Frac,TimelineID,Flags}` fields, and optional `status` (default zero). The last live
+build omitted both media-time fields and is therefore a known regression. Current source restores
+the complete triple and includes `status=0`.
+
+The regressed build produced two authenticated 27-packet APAP windows (54/54 packets decrypted and
+authenticated). Each packet advances RTP by 1024 samples; the first automatic flush covered exactly
+those 27 packets. `SETRATE rate=1` to the automatic `rate=0` request took 9.298 seconds, strongly
+matching the sender's 10-second network-clock lock timeout rather than the earlier 5-second method
+wall. APAP packets contain a valid TLV prefix followed by the actual APAC payload; the decrypt tool's
+`trailing_hex` is not extension-only padding.
+
+The next instrumented live build exposed the clock defect directly: successive returned seconds
+jumped by millions and the 64-bit fractions were unrelated. `AirTunesTime` itself was laid out
+correctly; the bug was the hook's declaration of `MillisecondsToUpTicks(uint32_t)`. Target
+`TickUtils.h` and ARM disassembly both prove a `uint64_t` argument in `r0:r1`; the old declaration
+left `r1` undefined and converted the requested +150 ms lead into a random interval. Current source
+uses the correct 64-bit ABI.
+
 This remains a protocol/capture sink. It does **not** yet authenticate/decrypt APAP, decode APAC,
 downmix, or render type-103 audio. A moving playback counter proves control-plane acceptance, not
 audible output.
@@ -334,12 +356,15 @@ described below.
   anywhere in the table — which matters because the buffered/music path (§6) is 44.1-based.
 * The amp is already a 5.1 system (16 MOST channels, 19 speakers). It cannot synthesise discrete
   channels from stereo — it upmixes. Discrete 5.1 arrives only when the source delivers 6 channels.
-  5.1.2/height was previously written off here as impossible. **That claim is retracted (2026-08-30):**
-  the amp's V850 image exposes a MOST string table containing `Entertainment_7.1` and
-  `Entertainment_7.1_SAD` alongside the 5.1 and 2.0 entries, so the amplifier advertises an
-  eight-channel sink. What blocks eight channels is now entirely on the HU side (the four deva limits
-  above), and the open question is where channels 7/8 of that sink physically land — rear surrounds
-  or the two 3D/height drivers. See `docs/reference/AMP_7_1_SINK.md`.
+  5.1.2/height is not transportable to this amplifier — **re-confirmed 2026-08-31, on better evidence
+  than the original claim.** The amp does advertise an eight-channel sink, `SinkNr 0x32`
+  (`Entertainment_7.1_SAD`, MOST-DTCP, 8 x 24-bit, BlockWidth 26), but `SinkInfo` declares its stream
+  positions 7 and 8 as `AudioChannelName` `0x13`/`0x14` = Back Left/Right of Center. Height is
+  `0x0D`/`0x0F` (Top Front L/R) and appears in none of the amp's 18 sink profiles. So the eight
+  channels are rear 7.1, not 5.1.2, and a height layer sent there lands on rear-surround inputs.
+  Decode 5.1.2 if the codec makes it convenient, but always fold to six. Details and the selectable
+  sink table: `docs/reference/AMP_7_1_SINK.md`; full amp-side RE in
+  `Firmwares/SoundAmp/AMP_ENTERTAINMENT_7_1_MOST.md`.
 
 ---
 
