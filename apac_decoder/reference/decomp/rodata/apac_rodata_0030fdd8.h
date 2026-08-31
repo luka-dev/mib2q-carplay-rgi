@@ -1,0 +1,15 @@
+/* unnamed table
+ * libSPF_CP_PlugInWrapper.so (Pioneer SPHERA 1.030010) @ 0x0030fdd8, 32 bytes.
+ * reached by:
+ *   code 0x00099dc0 apac::GetHuffmanTable(unsigned int)
+ *   code 0x00099e10 apac::GetSCFHuffmanTable()
+ *   via .data.rel.ro slot 0x424db8
+ *   via .data.rel.ro slot 0x425438
+ *   via .data.rel.ro slot 0x4254a0
+ * Size is an UPPER BOUND (distance to the next referenced address in the image).
+ * The byte array is exact; the typed view is inferred (bytes) and may be wrong.
+ */
+static const unsigned char apac_rodata_0030fdd8_raw[32] = {
+    0x09, 0x69, 0x09, 0x69, 0x09, 0xa5, 0x09, 0xa5, 0x09, 0x99, 0x09, 0x99, 0x09, 0x5a, 0x09, 0x5a,
+    0x09, 0x66, 0x09, 0x66, 0x09, 0x96, 0x09, 0x96, 0x0a, 0x68, 0x0a, 0xa4, 0x0a, 0x98, 0x0a, 0x29,
+};
