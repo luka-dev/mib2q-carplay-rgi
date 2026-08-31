@@ -1,0 +1,39 @@
+# apac_decoder/tests/fixtures/globalconfig.fixture
+# GENERATED - do not edit.  Regenerate with tools/gen_fixtures.sh (needs Docker).
+# apac::GlobalConfig::Deserialize at 0x00097d50, driven by apac_fn_ref gc.
+# The reader starts at APACDecoder_GetCookieOffset(cookie) + 2: the dapa
+# payload begins with the 0x0800 sync word and GlobalConfig is two bytes on.
+COOKIE live
+rc=0
+offset=14
+configBytes=19
+profile=31
+profileLevel=1
+sampleRate=48000
+frameLenIdx=0
+numChannels=6
+flag248=1
+flag249=0
+bitsBefore=152
+bitsAfter=2
+bitsUsed=150
+bsCurOff=20
+bsCache=3fc00000
+bsBitsLeft=10
+COOKIE generated
+rc=0
+offset=14
+configBytes=111
+profile=31
+profileLevel=1
+sampleRate=48000
+frameLenIdx=0
+numChannels=6
+flag248=1
+flag249=0
+bitsBefore=888
+bitsAfter=0
+bitsUsed=888
+bsCurOff=112
+bsCache=ff000000
+bsBitsLeft=8

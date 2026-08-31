@@ -14,6 +14,16 @@
 #   ./apac_decoder/reference/run.sh --probe         # just load the library
 #   ./apac_decoder/reference/run.sh --rebuild       # force an image rebuild
 #
+# The per-function oracle (apac_fn_ref.cpp) rides in the same image:
+#
+#   ./apac_decoder/reference/run.sh fn probe        # resolve every symbol
+#   ./apac_decoder/reference/run.sh fn sfb          # apac::GetSFBOffsetTable
+#   ./apac_decoder/reference/run.sh fn cookie CK    # the C cookie parsers
+#   ./apac_decoder/reference/run.sh fn gc CK        # GlobalConfig::Deserialize
+#   ./apac_decoder/reference/run.sh fn bs < cases   # TBitstreamReader, per call
+#
+# Paths given to `fn` are host paths and are bind-mounted read-only.
+#
 # Everything it writes lives in apac_decoder/reference/.build/ except
 # build/apple_apac_oracle.
 set -euo pipefail
@@ -28,12 +38,15 @@ CAPTURE="${APAC_CAPTURE:-$ROOT/captures/apac_5_1_live_20260831_0205}"
 COOKIE="$CAPTURE/spatial_magiccookie_5_60100d08f9d19abb.bin"
 PACKETS="$CAPTURE/apac_packets"
 
+FN=0
+if [ "${1:-}" = "fn" ]; then FN=1; shift; fi
+
 REBUILD=0
 PROBE=0
 FLOAT=0
 COUNT=""
 EXTRA=()
-while [ $# -gt 0 ]; do
+while [ "$FN" = 0 ] && [ $# -gt 0 ]; do
     case "$1" in
         --rebuild) REBUILD=1 ;;
         --probe)   PROBE=1 ;;
@@ -80,6 +93,27 @@ stage_libs
 if [ "$REBUILD" = 1 ] || ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
     echo "building $IMAGE (linux/arm64)"
     docker build --platform linux/arm64 -t "$IMAGE" -f "$HERE/Dockerfile" "$HERE"
+fi
+
+# Per-function oracle.  Any host path in the argument list is bind-mounted at
+# the same path inside the container so the arguments need no rewriting.
+run_fn() {
+    local mounts=() a
+    for a in "$@"; do
+        if [ -e "$a" ]; then
+            mounts+=(-v "$(cd "$(dirname "$a")" && pwd)/$(basename "$a"):$a:ro")
+        fi
+    done
+    docker run --rm -i --platform linux/arm64 \
+        -v "$HERE:/src:ro" "${mounts[@]+"${mounts[@]}"}" \
+        "$IMAGE" bash -c \
+        'g++ -std=c++11 -O2 -g -Wall -o /tmp/apac_fn_ref /src/apac_fn_ref.cpp -ldl && exec /tmp/apac_fn_ref "$@"' \
+        _ "$@"
+}
+
+if [ "$FN" = 1 ]; then
+    run_fn "$@"
+    exit $?
 fi
 
 run_ref() {
