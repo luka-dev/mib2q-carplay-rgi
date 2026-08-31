@@ -93,6 +93,24 @@ inline float peak(const float* v, uint32_t n)
 
 // Compares and, on failure, prints the first offending index and exits.
 // Returns the worst |diff| / (peak + tiny) seen, so a test can report it.
+//
+// Non-finite values are rejected before the tolerance is applied, and that
+// ordering is the point.  `d > tol` is FALSE when `d` is NaN, so a comparison
+// written only from `>` cannot see a NaN at all: one side going non-finite, or
+// both, would slip through and the test would report a clean worst-case number
+// while nothing was actually being checked.  `peak()` has the same blindness
+// for the same reason, so a NaN in the reference would also be dropped from the
+// scale.  Found by apac-bwe2 in its own band gates - `bweEnv` can underflow to
+// zero, `coreEnv / bweEnv` is then inf, and `0.0f * inf` is NaN - and the same
+// shape was here.  Any predicate built from `<` or `>` is NaN-blind; say what
+// is required, not what is forbidden.
+// An exponent of all ones is inf or NaN.  Written on the bit pattern rather
+// than with a comparison, for the reason given above.
+inline bool isfinite_f(float v)
+{
+    return (float_to_bits(v) & 0x7f800000u) != 0x7f800000u;
+}
+
 inline double compare(const float* ours, const float* theirs, uint32_t n,
                       const char* what, float inputScale)
 {
@@ -101,6 +119,14 @@ inline double compare(const float* ours, const float* theirs, uint32_t n,
     const float tol = kRelTol * scale + kAbsFloor;
     double worstRel = 0.0;
     for (uint32_t i = 0; i < n; ++i) {
+        if (!isfinite_f(ours[i]) || !isfinite_f(theirs[i])) {
+            fprintf(stderr,
+                    "\nNON-FINITE %s at index %u: ours %.9g (%08x), "
+                    "library %.9g (%08x)\n",
+                    what, i, (double)ours[i], float_to_bits(ours[i]),
+                    (double)theirs[i], float_to_bits(theirs[i]));
+            exit(1);
+        }
         const float d = fabsf(ours[i] - theirs[i]);
         if (d > tol) {
             fprintf(stderr,
