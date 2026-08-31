@@ -18,12 +18,17 @@
 // Decompiled in reference/decomp/apac_LPCBase.c, apac_LSFTools.c and
 // _free_functions.c.
 //
-// WHAT IS NOT HERE, and why.  apac::LSFTools also has Initialize, Reset,
-// DecodeLSF, QuantizeLSF and the LSF_To_LPC that chains the conversions
-// together.  Those need the object's six std::vector members and the 64 KiB
-// codebook block at 0x333000 that Initialize unpacks, and their only caller is
-// APACLRVQDecoder, which PORT_STATUS.md has verified is never entered on the
-// CarPlay 5.1 stream.  They are recorded as not started rather than guessed at.
+// WHAT IS NOT HERE, and why.  apac::LSFTools also has Initialize (0xb5a10),
+// Reset (0xb5290), DecodeLSF (0xb4f30) and QuantizeLSF (0xb5870).  Those need
+// the object's six std::vector members and the 64 KiB codebook block at
+// 0x333000 that Initialize unpacks.  They are NOT reachable from
+// APACLRVQDecoder: the only LSFTools member it calls is LSF_To_LPC, and its own
+// LRVQLPC::Initialize overrides both Initialize slots with a function that
+// throws.  Their real caller is BWELPC - BWELPC::Initialize calls
+// LSFTools::Initialize directly (the only BL to it in the whole library) and
+// BWELPC::DecodeLSFsToLPCs reaches DecodeLSF through vtable slot 72 - so they
+// belong to stage e, the bandwidth extension, and land with it.  QuantizeLSF is
+// the encoder half (LPCodeBook::VQSearch) and has no caller at all here.
 //
 // The trig here is DOUBLE precision on purpose: the original calls the double
 // `cos` and divides by the literal 3.14159265 - which is not M_PI, it is a
@@ -105,6 +110,10 @@ struct LSFTools {
     // LSPs to direct-form LPC through the two half-order polynomials.
     // lpc must hold order + 1 floats; order must be even.
     static void LSP_To_LPC(const float* lsp, float* lpc, uint16_t order);
+
+    // 0xb5370.  The chain: condition the LSFs in place, convert to LSPs, then
+    // to `order` + 1 direct-form coefficients.  `lsf` is modified.
+    void LSF_To_LPC(float* lsf, float* lpc) const;
 
     // Force a minimum gap of `minGap` between neighbouring LSFs, from the
     // bottom up and then from the top down against fs/2 - minGap.

@@ -262,6 +262,31 @@ void LSFTools::LSP_To_LPC(const float* lsp, float* lpc, uint16_t order)
     }
 }
 
+// apac::LSFTools::LSF_To_LPC, 0xb5370.  Three virtual calls in the original,
+// all through the object's own vtable:
+//
+//   if (vtable[136] == apac::LSFTools::ConditionLSFs)   // slot 17
+//        vtable[128](this, lsf, 50.0f, 24000.0f);       // Condition_LSFs
+//   else vtable[136](this, lsf);                        // a derived override
+//   vtable[96] (this, lsf, lsp, *(float*)(this + 112)); // LSF_To_LSP
+//   vtable[112](this, lsp, lpc, *(u16*)(this + 104));   // LSP_To_LPC
+//
+// The equality test is a devirtualisation: for apac::LSFTools itself and for
+// APACLRVQDecoder::LRVQLPC - the only two types that reach here in this port's
+// scope - slot 17 IS ConditionLSFs, so the branch taken is the one with the
+// literal 50 and 24000, whatever this object's own sampleRate says.  BWELPC
+// overrides it and takes the other branch; that is stage e's problem.
+//
+// Note the two rates are not the same value: Condition_LSFs is handed the
+// hardcoded 24000 and LSF_To_LSP the member.  For every caller here they agree.
+void LSFTools::LSF_To_LPC(float* lsf, float* lpc) const
+{
+    float lsp[kMaxLPCOrder];
+    ConditionLSFs(lsf);
+    LSF_To_LSP(lsf, lsp, sampleRate);
+    LSP_To_LPC(lsp, lpc, (uint16_t)order);
+}
+
 // --------------------------------------------------------- LPMDCTFilter ----
 
 LPMDCTFilter::LPMDCTFilter() : mFFTSize(0), mOrder(0), mScale(0.0f)
