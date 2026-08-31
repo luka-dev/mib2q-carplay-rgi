@@ -15,7 +15,8 @@ of the library (`/tmp/apacwork/lib.so`, so the shared `.i64` was never contended
 1. **Enumerate.** Parse `.dynsym` directly out of the ELF, demangle with `c++filt`, and select
    every `.text` symbol whose demangled name is scoped to `apac::`, an `APAC*` class,
    `TBitstreamReader`, `SC_*`, or `ContentOutBuffer`, while excluding `mpddrc::` (the MPEG-D DRC
-   reference code that `apac::drc` wraps, and which is a separate body of code).
+   reference code that `apac::drc` wraps, and which is a separate body of code). **Then close that
+   set over the call graph**, because a name filter is not enough — see below.
 2. **Type.** Rebuild each function's prototype from its Itanium mangling — the mangling encodes
    every parameter type exactly — map the C++ types onto IDA types, and apply. 321 of 334
    prototypes applied cleanly. The 13 that did not are the `extern "C"` entry points
@@ -35,21 +36,39 @@ from and material you cannot.
 
 | | |
 |---|---|
-| functions decompiled | **334 / 334** (0 failures) |
-| `.text` covered | 161 044 bytes, 40 046 instructions |
+| functions decompiled | **396 / 396** (0 failures) |
+| `.text` covered | 179 120 bytes |
 | vtables recovered | 37 |
 | `_ZTI` records parsed | 45 |
-| data objects extracted byte-for-byte | 223 (205 232 bytes) |
-| functions with a Hex-Rays reliability warning | 6 |
+| data objects extracted byte-for-byte | 234 |
+| functions with a Hex-Rays reliability warning | 8 |
 
-### The brief's function count was low
+### The brief's function count was low, twice over
 
 The brief said 307 functions / 126 988 bytes, from `apac_symbols_pioneer.txt`. That file has 307
 rows but only **263 unique addresses** (destructors are listed two or three times for the D0/D1/D2
-aliases, which share one body). And it is missing 71 functions that are in `.dynsym` — the whole
+aliases, which share one body). It also misses 71 functions that are in `.dynsym` — the whole
 `SC_*` audio-scene family, `ContentOutBuffer`'s destructors, and the `boost::any::holder` shims.
-The true set is **334 unique addresses, 161 044 bytes**. Nothing in the priority list a–f was
-missing; the additions are almost all scene code, which is out of scope for the CarPlay target.
+
+Fixing that got to 334. But a name filter of any kind is the wrong instrument here, because
+**Apple's DSP layer is not named after APAC at all.** Closing the set over the call graph from the
+334 turned up 62 more functions that the codec cannot run without:
+
+| class | fns | what it is |
+|---|---:|---|
+| `MDCT` | 4 | `Initialize(n, scale)` and `InverseInPlaceTransform` — the actual inverse MDCT |
+| `DCT_IV` | 5 | `PreModulation` / `PostModulationExtend`, the DCT-IV under the MDCT |
+| `MultiRadixRealFFT`, `MultiRadixFFT` | 4 | the FFT under the DCT-IV, on `DSPSplitComplex` |
+| `BWELPC` | 3 | `DecodeLSFsToLPCs`, `LPCToMDCTSpectrum`, `MDCTCoefficientsToLPC` |
+| `CacDecoder`, `CacQuantizer` | 4 | tables behind `APACCACDecoder` |
+| `DRCConfiguration` | ~20 | the DRC config object `apac::drc` is driven by |
+| free functions | | `GetSineWindowCoefficientPtr`, `GetKBDWindowCoefficientPtr`, `GetDCTIVModulationCoefficients`, `InterleaveConvert` |
+
+`GetSineWindowCoefficientPtr` and `GetKBDWindowCoefficientPtr` matter most: they are how the
+synthesis filter bank gets its windows, and they are the only route to those four tables. A scan
+for "APAC" or "apac::" finds none of this. **The final set is 396 functions, 179 120 bytes** — 41 %
+more code than the brief's figure. The signature style (`DSPSplitComplex`, `vDSP_vsmul` calls)
+says this layer is Apple's Accelerate vector API, reimplemented in-tree for Linux.
 
 ## What is solid, stage by stage
 
@@ -64,7 +83,8 @@ about whether the codec is understood.
 | **c. `APACLRVQDecoder`** | done, but 4 of 15 carry a decompiler warning | **medium** |
 | **c. `APACSpectralData::Deserialize`** | done, clean, no warning | high |
 | **d. TNS / LSF / LPC / LPMDCT / filter bank** | done, clean | high |
-| **e. `APACBWE2Decoder`** | done, clean | high |
+| **d. `MDCT` / `DCT_IV` / `MultiRadix*FFT` / window tables** | found late via the call graph, decompiled clean | high |
+| **e. `APACBWE2Decoder` + `BWELPC`** | done, clean | high |
 | **f. element classes, core, `APACDecoder`, `APACASPDecoder`** | done, clean | high |
 | **g. `apac::drc` / `APACDRCDecoder`** | done | high for the parser; the gain application lives in `mpddrc`, which was deliberately not decompiled |
 | **skipped tier** (`apac::scene`, `SC_*`, `AudioSceneConfig`, LBR) | decompiled anyway, since it was free | high, but unreviewed |
@@ -153,6 +173,11 @@ Two tables are now known exactly:
 * The scalefactor-band offset table is completely decoded — 12 sample rates, both long and short
   offset arrays, in `RODATA.md`. For 48 kHz: 49 long bands, 14 short. That is `apac::SFBOffsets`
   fully solved, which was priority (b).
+* **The four MDCT window tables are identified.** `GetSineWindowCoefficientPtr` and
+  `GetKBDWindowCoefficientPtr` accept only `n == 128` and `n == 1024`, so the decoder has exactly
+  two block sizes, and each table holds the rising half of a symmetric `2n` window. Both sine
+  tables are `sinf(pi*(i+0.5)/(2n))` to within 7.3e-08 over every entry and can be *generated*.
+  The two KBD tables are not sine and the Kaiser alpha was not solved for — **copy those bytes**.
 
 ## What still needs dynamic verification
 
@@ -188,7 +213,12 @@ Ranked by how much a wrong guess would cost.
 6. **The seven envelope tables** at `0x00317e90 … 0x0032be90`. Which base is selected under which
    conditions is decided inside `lsfsToMdctSpectralEnvelope`, one of the four warned functions.
    Both the selection and the table lengths need confirming against the running library.
-7. **`apac::drc`.** Everything below `apac::drc::DynRangeCompressor` calls into `mpddrc`, which
+7. **`MDCT::Initialize(unsigned int, float)`'s scale argument** and which window
+   (`GetSineWindowCoefficientPtr` vs `GetKBDWindowCoefficientPtr`) is selected per block. Both are
+   decided in `APACSynthesisFilterBank::Initialize` / `FrequencyToTimeInPlace`; read them there,
+   and confirm the overlap-add convention against the real filter bank rather than assuming the
+   AAC one.
+8. **`apac::drc`.** Everything below `apac::drc::DynRangeCompressor` calls into `mpddrc`, which
    was excluded from this job. The bitstream parser is here and is what the port needs first (the
    reader has to advance past mandatory DRC metadata even if no gain is applied), but the gain
    computation is not.

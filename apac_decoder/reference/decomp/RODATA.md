@@ -26,8 +26,8 @@ that only follows `ADRP` out of `.text` finds the accessor's array and stops.
 
 So the table set here was built by: taking every `.rodata`/`.data`/`.data.rel.ro` address
 referenced by any of the 334 APAC functions (143 addresses, 61 of them in `.data.rel.ro`),
-then walking the `.data.rel.ro` pointer graph transitively. That reaches **333 distinct
-objects, 223 of them data (205232 bytes) and 110 C strings**.
+then walking the `.data.rel.ro` pointer graph transitively. That reaches **346 distinct
+objects, 234 of them data (219676 bytes) and 112 C strings**.
 
 ### Extents are upper bounds
 
@@ -192,6 +192,28 @@ Full entry lists:
 
 ---
 
+## The MDCT window tables — fully identified
+
+`GetSineWindowCoefficientPtr(n)` at `0x00105590` and `GetKBDWindowCoefficientPtr(n)` at
+`0x00105600` each accept only `n == 128` or `n == 1024` and return `NULL` otherwise, so the
+decoder has exactly two block sizes. Each table stores the **rising half** of a symmetric
+window of length `2n`; the falling half is its mirror.
+
+| table | addr | entries | bytes | window |
+|---|---|---:|---:|---|
+| sine, short | `0x00345e00` | 128 | 512 | `w[i] = sinf(pi * (i + 0.5) / 256)` |
+| sine, long | `0x00347200` | 1024 | 4096 | `w[i] = sinf(pi * (i + 0.5) / 2048)` |
+| KBD, short | `0x00346000` | 128 | 512 | Kaiser-Bessel derived; alpha not determined |
+| KBD, long | `0x00346200` | 1024 | 4096 | Kaiser-Bessel derived; alpha not determined |
+
+Both sine tables were verified against `sin(pi*(i+0.5)/(2N))` over every entry; the worst
+absolute error is 7.3e-08, i.e. float rounding. **They can be generated rather than embedded.**
+The two KBD tables are monotone rising, run from 4.38e-05 to 1.0 (short) and 2.93e-04 to
+1.0 (long), and are definitely not sine. The Kaiser alpha was not solved for, so **copy the KBD
+bytes; do not try to regenerate them**.
+
+---
+
 ## Complete data-object index
 
 | addr | bytes | inferred | reached by | file |
@@ -207,11 +229,19 @@ Full entry lists:
 | `0x00314290` | 8192 | float32 | code 0x0009b100 APACLRVQDecoder::LrvqDeserialize(TBitstreamReader<unsigned int>&, bool, bool, APACSpectralData | `rodata/apac_rodata_00314290.h` |
 | `0x0031de90` | 8192 | float32 | code 0x0009aa10 APACLRVQDecoder::lsfsToMdctSpectralEnvelope(bool, apac::aligned_array<unsigned short, 5ul> con | `rodata/apac_rodata_0031de90.h` |
 | `0x0031be90` | 8192 | float32 | code 0x0009aa10 APACLRVQDecoder::lsfsToMdctSpectralEnvelope(bool, apac::aligned_array<unsigned short, 5ul> con | `rodata/apac_rodata_0031be90.h` |
+| `0x00331f20` | 4120 | float32 | code 0x000b33b0 GetDCTIVModulationCoefficients | `rodata/apac_rodata_00331f20.h` |
+| `0x00346200` | 4096 | float32 | code 0x00105600 GetKBDWindowCoefficientPtr | `rodata/apac_rodata_00346200.h` |
+| `0x00347200` | 4096 | float32 | code 0x00105590 GetSineWindowCoefficientPtr | `rodata/apac_rodata_00347200.h` |
 | `0x003308c0` | 4096 | float32 | code 0x000ab3b0 APACSpectralData::Deserialize(TBitstreamReader<unsigned int>&, APACICSInfo const&, APACScaleFa | `rodata/apac_rodata_003308c0.h` |
 | `0x00316290` | 4096 | float32 | code 0x0009b100 APACLRVQDecoder::LrvqDeserialize(TBitstreamReader<unsigned int>&, bool, bool, APACSpectralData | `rodata/apac_rodata_00316290.h` |
 | `0x00317290` | 2048 | float32 | code 0x0009b100 APACLRVQDecoder::LrvqDeserialize(TBitstreamReader<unsigned int>&, bool, bool, APACSpectralData | `rodata/apac_rodata_00317290.h` |
 | `0x00317a90` | 1024 | float32 | code 0x0009b100 APACLRVQDecoder::LrvqDeserialize(TBitstreamReader<unsigned int>&, bool, bool, APACSpectralData | `rodata/apac_rodata_00317a90.h` |
+| `0x00346000` | 512 | float32 | code 0x00105600 GetKBDWindowCoefficientPtr | `rodata/apac_rodata_00346000.h` |
+| `0x00345e00` | 512 | float32 | code 0x00105590 GetSineWindowCoefficientPtr (+1 more paths) | `rodata/apac_rodata_00345e00.h` |
+| `0x00331d20` | 512 | float32 | code 0x000b33b0 GetDCTIVModulationCoefficients | `rodata/apac_rodata_00331d20.h` |
+| `0x00331c00` | 264 | uint16 | code 0x000b2070 CacDecoder::RepeatCodeTableDec() const | `rodata/apac_rodata_00331c00.h` |
 | `0x0030ec80` | 256 | float32 | code 0x00078490 APACBWE2Decoder::DecodeFrame(APACICSInfo const&, APACSpectralData&, unsigned int) | `rodata/apac_rodata_0030ec80.h` |
+| `0x00331b28` | 216 | uint16 | code 0x000b20c0 CacDecoder::GainIndexCodeTableDec() const | `rodata/apac_rodata_00331b28.h` |
 | `0x003319d0` | 128 | float32 | code 0x000af240 APACTNSData::Apply(APACICSInfo const&, apac::SFBOffsets const&, APACSpectralData&) const | `rodata/apac_rodata_003319d0.h` |
 | `0x0032ff00` | 128 | float32 | code 0x0009b100 APACLRVQDecoder::LrvqDeserialize(TBitstreamReader<unsigned int>&, bool, bool, APACSpectralData | `rodata/apac_rodata_0032ff00.h` |
 | `0x0030f4c8` | 128 | bytes | code 0x00099dc0 apac::GetHuffmanTable(unsigned int) (+4 more paths) | `rodata/apac_rodata_0030f4c8.h` |
@@ -227,6 +257,7 @@ Full entry lists:
 | `0x003300a8` | 88 | uint16 | code 0x0009d9d0 apac::GetSFBOffsetTable(unsigned int, unsigned int) (+1 more paths) | `rodata/apac_rodata_003300a8.h` |
 | `0x00330120` | 88 | uint16 | code 0x0009d9d0 apac::GetSFBOffsetTable(unsigned int, unsigned int) (+1 more paths) | `rodata/apac_rodata_00330120.h` |
 | `0x00330388` | 88 | uint16 | code 0x0009d9d0 apac::GetSFBOffsetTable(unsigned int, unsigned int) (+1 more paths) | `rodata/apac_rodata_00330388.h` |
+| `0x00345db4` | 76 | bytes | code 0x001033d0 MultiRadixRealFFT::RealInPlaceTransform(DSPSplitComplex*, int) | `rodata/apac_rodata_00345db4.h` |
 | `0x00332f80` | 64 | float32 | code 0x000b4930 apac::LPCBase::ComputeLPCs(float const*, bool) (+1 more paths) | `rodata/apac_rodata_00332f80.h` |
 | `0x00310150` | 64 | bytes | code 0x00099e10 apac::GetSCFHuffmanTable() (+2 more paths) | `rodata/apac_rodata_00310150.h` |
 | `0x0030f448` | 64 | bytes | code 0x00099dc0 apac::GetHuffmanTable(unsigned int) (+4 more paths) | `rodata/apac_rodata_0030f448.h` |
@@ -282,6 +313,8 @@ Full entry lists:
 | `0x0030ffe8` | 32 | bytes | code 0x00099dc0 apac::GetHuffmanTable(unsigned int) (+4 more paths) | `rodata/apac_rodata_0030ffe8.h` |
 | `0x00310098` | 32 | bytes | code 0x00099dc0 apac::GetHuffmanTable(unsigned int) (+4 more paths) | `rodata/apac_rodata_00310098.h` |
 | `0x003100c8` | 32 | bytes | code 0x00099dc0 apac::GetHuffmanTable(unsigned int) (+4 more paths) | `rodata/apac_rodata_003100c8.h` |
+| `0x00343060` | 24 | bytes | code 0x000b70b0 DCT_IV::PostModulationExtend(DSPSplitComplex const*, float*, float*) const | `rodata/apac_rodata_00343060.h` |
+| `0x00343050` | 16 | uint16 | code 0x000b6e80 DCT_IV::PreModulation(float const*, DSPSplitComplex*, float) const | `rodata/apac_rodata_00343050.h` |
 | `0x00310280` | 16 | float32 | code 0x0009a140 APACScaleFactorData::Deserialize(TBitstreamReader<unsigned int>&, APACICSInfo const&) | `rodata/apac_rodata_00310280.h` |
 | `0x00310120` | 16 | bytes | code 0x00099e10 apac::GetSCFHuffmanTable() (+2 more paths) | `rodata/apac_rodata_00310120.h` |
 | `0x003101b0` | 16 | bytes | code 0x00099e10 apac::GetSCFHuffmanTable() (+2 more paths) | `rodata/apac_rodata_003101b0.h` |
@@ -553,6 +586,8 @@ Full entry lists:
 | `0x00332f38` | `N4apac12LPMDCTFilterE` |
 | `0x00332f50` | `N4apac7LPCBaseE` |
 | `0x00332f60` | `N4apac8LSFToolsE` |
+| `0x00343020` | `9DFTHandleILb1EE` |
+| `0x00343038` | `13MultiRadixFFT` |
 | `0x00348200` | `mAPACBsVersion = 0x%04x mAPACProfile = %d and mAPACProfileLevel = %d  
 ` |
 | `0x00348248` | `## APACDecoder_Initialize ## sampleRate = %d packetSizePerChannel = %d  numChannels = %d 

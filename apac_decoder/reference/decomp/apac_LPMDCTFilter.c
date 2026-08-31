@@ -120,10 +120,9 @@ __int64 __fastcall apac::LPMDCTFilter::AutocorrFromPSD(
   __int64 v17; // x1
   __int64 v18; // x4
   float v20[4]; // [xsp+0h] [xbp+0h] BYREF
-  float *v21; // [xsp+58h] [xbp+58h] BYREF
-  float *v22; // [xsp+60h] [xbp+60h]
-  __int64 v23; // [xsp+68h] [xbp+68h]
-  __int64 v24; // [xsp+70h] [xbp+70h]
+  DSPSplitComplex v21; // [xsp+58h] [xbp+58h] BYREF
+  __int64 v22; // [xsp+68h] [xbp+68h]
+  __int64 v23; // [xsp+70h] [xbp+70h]
   v6 = &v20[-3072];
   v9 = 4LL * *((unsigned __int16 *)this + 4);
   v10 = v9 + 15;
@@ -155,10 +154,10 @@ __int64 __fastcall apac::LPMDCTFilter::AutocorrFromPSD(
   memset(v20, 0, v9);
   vDSP_vsq(a, 1, v20, 1, n);
   v16 = *((_WORD *)this + 4) >> 1;
-  v21 = v20;
-  v22 = &v20[v16];
-  *v22 = 0.0;
-  MultiRadixRealFFT::RealOutOfPlaceInverseTransform((char *)this + 16, &v21, v20);
+  v21.realp = v20;
+  v21.imagp = &v20[v16];
+  *v21.imagp = 0.0;
+  MultiRadixRealFFT::RealOutOfPlaceInverseTransform((apac__LPMDCTFilter *)((char *)this + 16), &v21, v20);
   v17 = 0;
   do
   {
@@ -170,7 +169,7 @@ __int64 __fastcall apac::LPMDCTFilter::AutocorrFromPSD(
     buf[v17++] = v20[v18];
   }
   while ( *((unsigned __int16 *)this + 5) >= (unsigned int)v17 );
-  return v23 ^ _stack_chk_guard;
+  return v22 ^ _stack_chk_guard;
 }
 
 
@@ -234,10 +233,9 @@ __int64 __fastcall apac::LPMDCTFilter::LPImpulseToSpecEnvelope(
   __int64 v10; // x5
   _QWORD *v11; // x3
   _QWORD v13[2]; // [xsp+0h] [xbp+0h] BYREF
-  _QWORD *v14; // [xsp+38h] [xbp+38h] BYREF
-  _DWORD *v15; // [xsp+40h] [xbp+40h]
-  __int64 v16; // [xsp+48h] [xbp+48h]
-  __int64 v17; // [xsp+50h] [xbp+50h]
+  DSPSplitComplex v14; // [xsp+38h] [xbp+38h] BYREF
+  __int64 v15; // [xsp+48h] [xbp+48h]
+  __int64 v16; // [xsp+50h] [xbp+50h]
   v5 = &v13[-1536];
   v6 = *((_WORD *)this + 4);
   v8 = 4 * v6 + 15;
@@ -254,12 +252,12 @@ __int64 __fastcall apac::LPMDCTFilter::LPImpulseToSpecEnvelope(
     while ( v5 != v11 );
   }
   *(_QWORD *)((char *)v5 - (v10 - v9)) = 0;
-  v14 = v13;
-  v15 = (_DWORD *)v13 + (v6 >> 1);
-  MultiRadixRealFFT::RealOutOfPlaceForwardTransform((char *)this + 16, a, &v14);
-  *v15 = 0;
-  vDSP_vdist(v14, (*((unsigned __int16 *)this + 4) / n == 4) + 1LL, v15);
-  return v16 ^ _stack_chk_guard;
+  v14.realp = (float *)v13;
+  v14.imagp = (float *)v13 + (v6 >> 1);
+  MultiRadixRealFFT::RealOutOfPlaceForwardTransform((apac__LPMDCTFilter *)((char *)this + 16), a, &v14);
+  *v14.imagp = 0.0;
+  vDSP_vdist(v14.realp, (*((unsigned __int16 *)this + 4) / n == 4) + 1LL, v14.imagp);
+  return v15 ^ _stack_chk_guard;
 }
 
 

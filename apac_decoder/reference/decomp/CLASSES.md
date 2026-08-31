@@ -631,6 +631,80 @@ observed extent: `0` .. `0x18` (24 bytes), 3 distinct offsets
 | +0x010 (16) | u32 | 84 |
 | +0x014 (20) | u32 | 82 |
 
+### `DRCConfiguration`
+observed extent: `0` .. `0x169` (361 bytes), 68 distinct offsets
+
+| offset | width(s) | n |
+|---:|---|---:|
+| +0x004 (4) | u8 | 2 |
+| +0x008 (8) | u32 | 3 |
+| +0x00c (12) | u8, u16 | 4 |
+| +0x00d (13) | u8 | 2 |
+| +0x010 (16) | u32, u64 | 4 |
+| +0x018 (24) | u32, u64 | 4 |
+| +0x01c (28) | u32 | 3 |
+| +0x020 (32) | u8, u16 | 2 |
+| +0x021 (33) | u8, u16 | 3 |
+| +0x022 (34) | u8 | 3 |
+| +0x024 (36) | u32 | 4 |
+| +0x028 (40) | u8, u16 | 2 |
+| +0x029 (41) | u8 | 1 |
+| +0x02c (44) | u32 | 2 |
+| +0x030 (48) | u8, u16 | 2 |
+| +0x031 (49) | u8 | 1 |
+| +0x034 (52) | u32 | 2 |
+| +0x038 (56) | u8, u16 | 2 |
+| +0x039 (57) | u8 | 1 |
+| +0x03c (60) | u32 | 2 |
+| +0x040 (64) | u8, u16 | 7 |
+| +0x041 (65) | u8 | 3 |
+| +0x044 (68) | u8, u32, u64 | 4 |
+| +0x048 (72) | u64 | 3 |
+| +0x04c (76) | u64 | 1 |
+| +0x050 (80) | u32 | 2 |
+| +0x058 (88) | u64 | 4 |
+| +0x060 (96) | u32 | 6 |
+| +0x068 (104) | u64 | 2 |
+| +0x070 (112) | u64 | 1 |
+| +0x078 (120) | u64 | 1 |
+| +0x080 (128) | u64 | 1 |
+| +0x088 (136) | u64 | 1 |
+| +0x090 (144) | u64 | 1 |
+| +0x098 (152) | u64 | 1 |
+| +0x0a0 (160) | u8 | 2 |
+| +0x0a4 (164) | u32 | 2 |
+| +0x0a8 (168) | u8, u16 | 4 |
+| +0x0a9 (169) | u8 | 2 |
+| +0x0aa (170) | u8 | 1 |
+| +0x0ac (172) | u32 | 1 |
+| +0x0b0 (176) | u32, u64 | 3 |
+| +0x0b4 (180) | u8 | 2 |
+| +0x0b5 (181) | u8 | 2 |
+| +0x0b8 (184) | u64 | 1 |
+| +0x0bf (191) | u8 | 1 |
+| +0x0c0 (192) | u64 | 3 |
+| +0x0c8 (200) | u64 | 3 |
+| +0x0d0 (208) | u64 | 1 |
+| +0x0d8 (216) | u64 | 3 |
+| +0x0e0 (224) | u64 | 3 |
+| +0x0e8 (232) | u64 | 1 |
+| +0x0f0 (240) | u64 | 2 |
+| +0x0f8 (248) | u64 | 2 |
+| +0x100 (256) | u64 | 1 |
+| +0x108 (264) | u64 | 2 |
+| +0x110 (272) | u64 | 2 |
+| +0x118 (280) | u64 | 1 |
+| +0x120 (288) | u64 | 3 |
+| +0x128 (296) | u64 | 3 |
+| +0x130 (304) | u64 | 1 |
+| +0x138 (312) | u64 | 2 |
+| +0x140 (320) | u64 | 2 |
+| +0x148 (328) | u64 | 1 |
+| +0x150 (336) | u64 | 2 |
+| +0x158 (344) | u64 | 2 |
+| +0x160 (352) | u64 | 1 |
+| +0x168 (360) | u8 | 1 |
+
 ### `SC_SceneComposition`
 observed extent: `0` .. `0x1e1` (481 bytes), 19 distinct offsets
 
@@ -821,6 +895,23 @@ observed extent: `0` .. `0x300` (768 bytes), 8 distinct offsets
 | +0x2f0 (752) | u64 | 1 |
 | +0x2f8 (760) | u64 | 1 |
 
+### `SceneCompositionSettings`
+observed extent: `0` .. `0x68` (104 bytes), 11 distinct offsets
+
+| offset | width(s) | n |
+|---:|---|---:|
+| +0x002 (2) | u16 | 2 |
+| +0x004 (4) | u16 | 3 |
+| +0x008 (8) | u64 | 7 |
+| +0x010 (16) | u64 | 5 |
+| +0x020 (32) | u64 | 21 |
+| +0x028 (40) | u64 | 7 |
+| +0x038 (56) | u64 | 3 |
+| +0x040 (64) | u64 | 5 |
+| +0x050 (80) | u64 | 2 |
+| +0x058 (88) | u64 | 4 |
+| +0x060 (96) | u64 | 1 |
+
 ### `apac__drc__DynRangeCompressor`
 observed extent: `0` .. `0x44` (68 bytes), 10 distinct offsets
 
@@ -857,67 +948,12 @@ observed extent: `0` .. `0x260` (608 bytes), 21 distinct offsets
 | +0x188 (392) | u64 | 1 |
 | +0x1b0 (432) | u64 | 3 |
 | +0x1b8 (440) | u64 | 1 |
-| +0x220 (544) | u64 | 3 |
+| +0x220 (544) | u64 | 1 |
 | +0x228 (552) | u64 | 3 |
 | +0x238 (568) | u64 | 2 |
 | +0x240 (576) | u32 | 5 |
 | +0x250 (592) | u64 | 3 |
 | +0x258 (600) | u64 | 2 |
-
-### `DRCConfiguration`
-observed extent: `0` .. `0x160` (352 bytes), 34 distinct offsets
-
-| offset | width(s) | n |
-|---:|---|---:|
-| +0x008 (8) | u32 | 1 |
-| +0x00d (13) | u8 | 1 |
-| +0x010 (16) | u32 | 1 |
-| +0x018 (24) | u32 | 1 |
-| +0x01c (28) | u32 | 1 |
-| +0x022 (34) | u8 | 1 |
-| +0x024 (36) | u32 | 1 |
-| +0x029 (41) | u8 | 1 |
-| +0x02c (44) | u32 | 1 |
-| +0x031 (49) | u8 | 1 |
-| +0x034 (52) | u32 | 1 |
-| +0x039 (57) | u8 | 1 |
-| +0x03c (60) | u32 | 1 |
-| +0x041 (65) | u8 | 2 |
-| +0x044 (68) | u8 | 1 |
-| +0x0a0 (160) | u8 | 1 |
-| +0x0a4 (164) | u32 | 1 |
-| +0x0a8 (168) | u8 | 2 |
-| +0x0a9 (169) | u8 | 1 |
-| +0x0bf (191) | u8 | 1 |
-| +0x0c0 (192) | u64 | 2 |
-| +0x0c8 (200) | u64 | 2 |
-| +0x0d8 (216) | u64 | 2 |
-| +0x0e0 (224) | u64 | 2 |
-| +0x0f0 (240) | u64 | 1 |
-| +0x0f8 (248) | u64 | 1 |
-| +0x108 (264) | u64 | 1 |
-| +0x110 (272) | u64 | 1 |
-| +0x120 (288) | u64 | 2 |
-| +0x128 (296) | u64 | 2 |
-| +0x138 (312) | u64 | 1 |
-| +0x140 (320) | u64 | 1 |
-| +0x150 (336) | u64 | 1 |
-| +0x158 (344) | u64 | 1 |
-
-### `SceneCompositionSettings`
-observed extent: `0` .. `0x68` (104 bytes), 9 distinct offsets
-
-| offset | width(s) | n |
-|---:|---|---:|
-| +0x002 (2) | u16 | 2 |
-| +0x004 (4) | u16 | 1 |
-| +0x008 (8) | u64 | 7 |
-| +0x010 (16) | u64 | 5 |
-| +0x020 (32) | u64 | 14 |
-| +0x028 (40) | u64 | 5 |
-| +0x050 (80) | u64 | 2 |
-| +0x058 (88) | u64 | 4 |
-| +0x060 (96) | u64 | 1 |
 
 ### `APACBWE2Decoder`
 observed extent: `0` .. `0x68` (104 bytes), 10 distinct offsets
@@ -1108,24 +1144,6 @@ observed extent: `0` .. `0x20` (32 bytes), 9 distinct offsets
 | +0x00c (12) | u32 | 2 |
 | +0x018 (24) | u64 | 6 |
 
-### `__int64`
-observed extent: `0` .. `0x851` (2129 bytes), 12 distinct offsets
-
-| offset | width(s) | n |
-|---:|---|---:|
-| +0x000 (0) | u64 | 1 |
-| +0x810 (2064) | u32 | 1 |
-| +0x818 (2072) | u32 | 3 |
-| +0x81c (2076) | u16 | 6 |
-| +0x824 (2084) | u32 | 1 |
-| +0x838 (2104) | u32 | 1 |
-| +0x83c (2108) | u32 | 1 |
-| +0x840 (2112) | u32 | 1 |
-| +0x848 (2120) | u32 | 4 |
-| +0x84c (2124) | u16 | 2 |
-| +0x84e (2126) | u16 | 1 |
-| +0x850 (2128) | u8 | 3 |
-
 ### `SC_Tag`
 observed extent: `0` .. `0x3c` (60 bytes), 6 distinct offsets
 
@@ -1252,6 +1270,22 @@ observed extent: `0` .. `0x48` (72 bytes), 9 distinct offsets
 | +0x038 (56) | u64 | 2 |
 | +0x040 (64) | u64 | 2 |
 
+### `__int64`
+observed extent: `0` .. `0x851` (2129 bytes), 10 distinct offsets
+
+| offset | width(s) | n |
+|---:|---|---:|
+| +0x810 (2064) | u32 | 1 |
+| +0x818 (2072) | u32 | 1 |
+| +0x81c (2076) | u16 | 3 |
+| +0x824 (2084) | u32 | 1 |
+| +0x838 (2104) | u32 | 1 |
+| +0x83c (2108) | u32 | 1 |
+| +0x840 (2112) | u32 | 1 |
+| +0x84c (2124) | u16 | 2 |
+| +0x84e (2126) | u16 | 1 |
+| +0x850 (2128) | u8 | 2 |
+
 ### `SC_LanguageSpecificItem`
 observed extent: `0` .. `0x4a` (74 bytes), 5 distinct offsets
 
@@ -1263,6 +1297,19 @@ observed extent: `0` .. `0x4a` (74 bytes), 5 distinct offsets
 | +0x048 (72) | u8 | 3 |
 | +0x049 (73) | u8 | 3 |
 
+### `BWELPC`
+observed extent: `0` .. `0xf8` (248 bytes), 7 distinct offsets
+
+| offset | width(s) | n |
+|---:|---|---:|
+| +0x000 (0) | u64 | 1 |
+| +0x030 (48) | u64 | 1 |
+| +0x068 (104) | u16 | 1 |
+| +0x0c0 (192) | u64 | 2 |
+| +0x0d8 (216) | u64 | 3 |
+| +0x0e0 (224) | u64 | 1 |
+| +0x0f0 (240) | u64 | 4 |
+
 ### `ContentOutBuffer`
 observed extent: `0` .. `0x30` (48 bytes), 4 distinct offsets
 
@@ -1272,6 +1319,15 @@ observed extent: `0` .. `0x30` (48 bytes), 4 distinct offsets
 | +0x010 (16) | u64 | 5 |
 | +0x020 (32) | u64 | 2 |
 | +0x028 (40) | u64 | 2 |
+
+### `SceneCompositionSettings__CategorySettings`
+observed extent: `0` .. `0x34` (52 bytes), 3 distinct offsets
+
+| offset | width(s) | n |
+|---:|---|---:|
+| +0x018 (24) | u64 | 4 |
+| +0x028 (40) | u32 | 4 |
+| +0x030 (48) | u32 | 4 |
 
 ### `SC_Extension`
 observed extent: `0` .. `0x38` (56 bytes), 6 distinct offsets
@@ -1303,6 +1359,18 @@ observed extent: `0` .. `0x50` (80 bytes), 3 distinct offsets
 | +0x008 (8) | u16 | 6 |
 | +0x018 (24) | u64 | 5 |
 | +0x048 (72) | u64 | 1 |
+
+### `DCT_IV`
+observed extent: `0` .. `0x30` (48 bytes), 6 distinct offsets
+
+| offset | width(s) | n |
+|---:|---|---:|
+| +0x000 (0) | u32 | 3 |
+| +0x008 (8) | u64 | 2 |
+| +0x010 (16) | u32 | 1 |
+| +0x018 (24) | u64 | 1 |
+| +0x020 (32) | u64 | 1 |
+| +0x028 (40) | u64 | 4 |
 
 ### `APACSyntacticElement`
 observed extent: `0` .. `0x20` (32 bytes), 4 distinct offsets
@@ -1395,6 +1463,15 @@ observed extent: `0` .. `0x38` (56 bytes), 5 distinct offsets
 | +0x028 (40) | u32 | 1 |
 | +0x030 (48) | u64 | 4 |
 
+### `MultiRadixRealFFT`
+observed extent: `0` .. `0x20` (32 bytes), 3 distinct offsets
+
+| offset | width(s) | n |
+|---:|---|---:|
+| +0x008 (8) | u32 | 5 |
+| +0x010 (16) | u64 | 1 |
+| +0x018 (24) | u64 | 2 |
+
 ### `MP4LoudnessMeasure`
 observed extent: `0` .. `0xc` (12 bytes), 1 distinct offsets
 
@@ -1450,13 +1527,12 @@ observed extent: `0` .. `0x10` (16 bytes), 2 distinct offsets
 | +0x000 (0) | u32 | 2 |
 | +0x008 (8) | u64 | 2 |
 
-### `APACIndividualChannelStream`
-observed extent: `0` .. `0x2f8` (760 bytes), 2 distinct offsets
+### `apac__ParamList`
+observed extent: `0` .. `0x18` (24 bytes), 1 distinct offsets
 
 | offset | width(s) | n |
 |---:|---|---:|
-| +0x010 (16) | u64 | 1 |
-| +0x2f0 (752) | u64 | 2 |
+| +0x010 (16) | u64 | 3 |
 
 ### `APACExtFrameDecoder`
 observed extent: `0` .. `0x18` (24 bytes), 2 distinct offsets
@@ -1472,6 +1548,23 @@ observed extent: `0` .. `0x20` (32 bytes), 3 distinct offsets
 | offset | width(s) | n |
 |---:|---|---:|
 | +0x004 (4) | u32 | 1 |
+| +0x010 (16) | u64 | 1 |
+| +0x018 (24) | u64 | 1 |
+
+### `MDCT`
+observed extent: `0` .. `0x34` (52 bytes), 2 distinct offsets
+
+| offset | width(s) | n |
+|---:|---|---:|
+| +0x028 (40) | u64 | 1 |
+| +0x030 (48) | u32 | 2 |
+
+### `MultiRadixFFT`
+observed extent: `0` .. `0x20` (32 bytes), 3 distinct offsets
+
+| offset | width(s) | n |
+|---:|---|---:|
+| +0x008 (8) | u32 | 1 |
 | +0x010 (16) | u64 | 1 |
 | +0x018 (24) | u64 | 1 |
 
@@ -1525,6 +1618,14 @@ observed extent: `0` .. `0x2` (2 bytes), 1 distinct offsets
 | offset | width(s) | n |
 |---:|---|---:|
 | +0x000 (0) | u16 | 2 |
+
+### `CacQuantizer`
+observed extent: `0` .. `0x10` (16 bytes), 2 distinct offsets
+
+| offset | width(s) | n |
+|---:|---|---:|
+| +0x000 (0) | u64 | 1 |
+| +0x008 (8) | u64 | 1 |
 
 ### `_QWORD`
 observed extent: `0` .. `0x851` (2129 bytes), 2 distinct offsets
@@ -1582,6 +1683,13 @@ observed extent: `0` .. `0x38` (56 bytes), 1 distinct offsets
 | offset | width(s) | n |
 |---:|---|---:|
 | +0x030 (48) | u64 | 1 |
+
+### `APACIndividualChannelStream`
+observed extent: `0` .. `0x18` (24 bytes), 1 distinct offsets
+
+| offset | width(s) | n |
+|---:|---|---:|
+| +0x010 (16) | u64 | 1 |
 
 ### `apac__scene__SC_Language`
 observed extent: `0` .. `0x29` (41 bytes), 1 distinct offsets
@@ -1829,6 +1937,28 @@ observed extent: `0` .. `0x29` (41 bytes), 1 distinct offsets
 | `0x000aedc0` | 1140 | `APACTNSData::ParseTNSData(TBitstreamReader<unsigned int>&, APACICSInfo const&)` |
 | `0x000af240` | 880 | `APACTNSData::Apply(APACICSInfo const&, apac::SFBOffsets const&, APACSpectralData&) const` |
 
+### `BWELPC` — 3 functions, 688 bytes
+
+| addr | size | signature |
+|---|---:|---|
+| `0x000b0d70` | 160 | `BWELPC::LPCToMDCTSpectrum(float const*, float*, unsigned int)` |
+| `0x000b0e10` | 328 | `BWELPC::MDCTCoefficientsToLPC(float const*, unsigned int, unsigned int, unsigned int)` |
+| `0x000b0f60` | 200 | `BWELPC::DecodeLSFsToLPCs(unsigned short const*)` |
+
+### `CacDecoder` — 2 functions, 144 bytes
+
+| addr | size | signature |
+|---|---:|---|
+| `0x000b2070` | 72 | `CacDecoder::RepeatCodeTableDec() const` |
+| `0x000b20c0` | 72 | `CacDecoder::GainIndexCodeTableDec() const` |
+
+### `CacQuantizer` — 2 functions, 600 bytes
+
+| addr | size | signature |
+|---|---:|---|
+| `0x000b2110` | 188 | `CacQuantizer::GainTableEntry(unsigned int) const` |
+| `0x000b21d0` | 412 | `CacQuantizer::Initialize()` |
+
 ### `ContentOutBuffer` — 5 functions, 2044 bytes
 
 | addr | size | signature |
@@ -1839,6 +1969,56 @@ observed extent: `0` .. `0x29` (41 bytes), 1 distinct offsets
 | `0x000b2500` | 272 | `ContentOutBuffer::SetAudioData(apac::AudioDataType, unsigned int, __gnu_cxx::__normal_iterator<float* const*, std::vector<float*, std::allocator<float*> > >, __gnu_cxx::__normal_iterator<float* const*, std::vector<float*, std::allocator<float*> > >, unsigned int)` |
 | `0x000b2610` | 312 | `ContentOutBuffer::GetAudioData(std::vector<std::pair<unsigned int, std::unique_ptr<apac::DecElement, std::default_delete<apac::DecElement> > >, std::allocator<std::pair<unsigned int, std::unique_ptr<apac::DecElement, std::default_delete<apac::DecElement> > > > > const&, apac::FrameOutRecord&)` |
 | `0x000b28f0` | 1032 | `ContentOutBuffer::Initialize(apac::GlobalConfig const&)` |
+
+### `DCT_IV` — 5 functions, 1564 bytes
+
+| addr | size | signature |
+|---|---:|---|
+| `0x000b6e80` | 560 | `DCT_IV::PreModulation(float const*, DSPSplitComplex*, float) const` |
+| `0x000b70b0` | 656 | `DCT_IV::PostModulationExtend(DSPSplitComplex const*, float*, float*) const` |
+| `0x000b7340` | 100 | `DCT_IV::DCT_IV()` |
+| | | `DCT_IV::DCT_IV()` (alias, same code) |
+| `0x000b73b0` | 88 | `DCT_IV::~DCT_IV()` |
+| | | `DCT_IV::~DCT_IV()` (alias, same code) |
+| `0x000b7410` | 160 | `DCT_IV::Initialize(unsigned int)` |
+
+### `DRCConfiguration` — 20 functions, 3288 bytes
+
+| addr | size | signature |
+|---|---:|---|
+| `0x00082850` | 356 | `DRCConfiguration::~DRCConfiguration()` |
+| | | `DRCConfiguration::~DRCConfiguration()` (alias, same code) |
+| `0x000b3420` | 64 | `DRCConfiguration::LogStatus() const` |
+| `0x000b3460` | 104 | `DRCConfiguration::SetCompressionMode(unsigned int)` |
+| `0x000b34d0` | 72 | `DRCConfiguration::SetTargetLevelChanged(unsigned char)` |
+| `0x000b3520` | 148 | `DRCConfiguration::SetTargetLevel(float)` |
+| `0x000b35c0` | 72 | `DRCConfiguration::SetCutBoostChanged(unsigned char)` |
+| `0x000b3610` | 156 | `DRCConfiguration::SetCutFactor(float)` |
+| `0x000b36b0` | 156 | `DRCConfiguration::SetBoostFactor(float)` |
+| `0x000b3750` | 72 | `DRCConfiguration::SetSensitivityChanged(unsigned char)` |
+| `0x000b37a0` | 72 | `DRCConfiguration::SetPlaybackGainChanged(unsigned char)` |
+| `0x000b37f0` | 72 | `DRCConfiguration::SetAudioScenePresetParamsChanged(unsigned char)` |
+| `0x000b3840` | 72 | `DRCConfiguration::SetLoudnessEqStrengthChanged(unsigned char)` |
+| `0x000b3890` | 72 | `DRCConfiguration::SetUniDRCCompressionProfileChanged(unsigned char)` |
+| `0x000b38e0` | 132 | `DRCConfiguration::SetUniDRCCompressionProfile(unsigned int)` |
+| `0x000b3970` | 108 | `DRCConfiguration::SetUniDrcDelay(unsigned int)` |
+| `0x000b39e0` | 72 | `DRCConfiguration::SetUniDrcDelayChanged(unsigned char)` |
+| `0x000b3a30` | 72 | `DRCConfiguration::SetUniDrcDelayIsSetOnCodec(unsigned char)` |
+| `0x000b3a80` | 80 | `DRCConfiguration::SetAlbumMode(unsigned char)` |
+| `0x000b3ad0` | 908 | `DRCConfiguration::SetAudioScenePresetParams(unsigned char, std::vector<bool, std::allocator<bool> > const&, std::vector<float, std::allocator<float> > const&, std::vector<float, std::allocator<float> > const&)` |
+| `0x000b3e60` | 428 | `DRCConfiguration::DRCConfiguration()` |
+| | | `DRCConfiguration::DRCConfiguration()` (alias, same code) |
+
+### `MDCT` — 4 functions, 560 bytes
+
+| addr | size | signature |
+|---|---:|---|
+| `0x000b74b0` | 64 | `MDCT::MDCT()` |
+| | | `MDCT::MDCT()` (alias, same code) |
+| `0x000b74f0` | 64 | `MDCT::~MDCT()` |
+| | | `MDCT::~MDCT()` (alias, same code) |
+| `0x000b7530` | 132 | `MDCT::Initialize(unsigned int, float)` |
+| `0x000b75c0` | 300 | `MDCT::InverseInPlaceTransform(float*, float*)` |
 
 ### `MP4LoudnessInfo` — 1 functions, 1948 bytes
 
@@ -1851,6 +2031,20 @@ observed extent: `0` .. `0x29` (41 bytes), 1 distinct offsets
 | addr | size | signature |
 |---|---:|---|
 | `0x000b77b0` | 788 | `MP4LoudnessMeasure::Deserialize(TBitstreamReader<unsigned int>&, bool)` |
+
+### `MultiRadixFFT` — 1 functions, 156 bytes
+
+| addr | size | signature |
+|---|---:|---|
+| `0x00103330` | 156 | `MultiRadixFFT::CplxOutOfPlaceTransform(DSPSplitComplex const*, DSPSplitComplex*, int)` |
+
+### `MultiRadixRealFFT` — 3 functions, 612 bytes
+
+| addr | size | signature |
+|---|---:|---|
+| `0x001033d0` | 244 | `MultiRadixRealFFT::RealInPlaceTransform(DSPSplitComplex*, int)` |
+| `0x001034d0` | 124 | `MultiRadixRealFFT::RealOutOfPlaceForwardTransform(float const*, DSPSplitComplex*)` |
+| `0x00103550` | 244 | `MultiRadixRealFFT::RealOutOfPlaceInverseTransform(DSPSplitComplex const*, float*)` |
 
 ### `SC_AudioScenes` — 4 functions, 2844 bytes
 
@@ -1970,14 +2164,22 @@ observed extent: `0` .. `0x29` (41 bytes), 1 distinct offsets
 | `0x000a41d0` | 260 | `SC_Tag::operator==(SC_Tag const&) const` |
 | `0x000a5c90` | 916 | `SC_Tag::Deserialize(TBitstreamReader<unsigned int>&)` |
 
-### `SceneCompositionSettings` — 4 functions, 6620 bytes
+### `SceneCompositionSettings` — 5 functions, 7844 bytes
 
 | addr | size | signature |
 |---|---:|---|
 | `0x0009dfa0` | 420 | `SceneCompositionSettings::Initialize(SC_SceneComposition const&, unsigned int)` |
 | `0x0009eb20` | 320 | `SceneCompositionSettings::SetEffectiveInteractivityGains(SC_SceneComposition const&)` |
+| `0x0009ec60` | 1224 | `SceneCompositionSettings::SetSceneComponentModifiers()` |
 | `0x0009f540` | 1984 | `SceneCompositionSettings::SetFromPreset(unsigned short, SC_SceneComposition const&, unsigned short)` |
 | `0x000a00d0` | 3896 | `SceneCompositionSettings::ApplyUserInput(unsigned int, SC_SceneComposition const&, CD_AudioSceneControlData::SceneCompositionData const&)` |
+
+### `SceneCompositionSettings::CategorySettings` — 2 functions, 312 bytes
+
+| addr | size | signature |
+|---|---:|---|
+| `0x0009dba0` | 156 | `SceneCompositionSettings::CategorySettings::SetAllOn()` |
+| `0x0009dc40` | 156 | `SceneCompositionSettings::CategorySettings::SetAllOff()` |
 
 ### `TBitstreamReader` — 8 functions, 1376 bytes
 
@@ -2337,12 +2539,21 @@ observed extent: `0` .. `0x29` (41 bytes), 1 distinct offsets
 | `0x00106f50` | 168 | `std::vector<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> >, std::allocator<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> > > >::~vector()` |
 | | | `std::vector<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> >, std::allocator<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> > > >::~vector()` (alias, same code) |
 
-### free functions / C API — 26
+### free functions / C API — 45
 
 | addr | size | signature |
 |---|---:|---|
+| `0x00070c28` | 68 | `sub_70C28` |
+| `0x00070cf4` | 72 | `sub_70CF4` |
+| `0x00071fc0` | 64 | `DRCLoggingRegisterScopeOnce()` |
 | `0x00078150` | 544 | `unsigned int apac::GetEscBits<16u, 20u>(TBitstreamReader<unsigned int>&, unsigned int)` |
+| `0x00078370` | 288 | `sub_78370` |
+| `0x0007b070` | 1316 | `sub_7B070` |
 | `0x00096630` | 536 | `unsigned int apac::GetEscBits<8u, 16u>(TBitstreamReader<unsigned int>&, unsigned int)` |
+| `0x00096850` | 2736 | `sub_96850` |
+| `0x00097350` | 348 | `sub_97350` |
+| `0x000974b0` | 308 | `sub_974B0` |
+| `0x00097670` | 592 | `sub_97670` |
 | `0x00099220` | 536 | `unsigned int apac::GetEscBits<6u, 12u>(TBitstreamReader<unsigned int>&, unsigned int)` |
 | `0x00099650` | 836 | `int GetEffectiveDecoderOutConfig<__gnu_cxx::__normal_iterator<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> >*, std::vector<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> >, std::allocator<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> > > > > >(__gnu_cxx::__normal_iterator<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> >*, std::vector<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> >, std::allocator<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> > > > >, __gnu_cxx::__normal_iterator<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> >*, std::vector<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> >, std::allocator<std::unique_ptr<apac::IASCConfig, std::default_delete<apac::IASCConfig> > > > >, std::vector<apac::observer_ptr<apac::IASCConfig const>, std::allocator<apac::observer_ptr<apac::IASCConfig const> > >&)` |
 | `0x00099dc0` | 76 | `apac::GetHuffmanTable(unsigned int)` |
@@ -2352,8 +2563,18 @@ observed extent: `0` .. `0x29` (41 bytes), 1 distinct offsets
 | `0x000a3b20` | 128 | `apac::scene::DecodeAngleOffset(unsigned short, unsigned short)` |
 | `0x000a3ba0` | 144 | `apac::scene::DecodeDistanceRatio(unsigned short, unsigned short)` |
 | `0x000a3c30` | 100 | `apac::scene::DecodeInteractivityGain(unsigned short, bool)` |
+| `0x000aec20` | 232 | `sub_AEC20` |
 | `0x000b0d20` | 76 | `apac::ConvertToAudioDataType(apac::ASCType)` |
+| `0x000b19b0` | 316 | `sub_B19B0` |
+| `0x000b1d90` | 724 | `InterleaveConvert(float const* const*, void* const*, unsigned int, unsigned int, bool, bool, float)` |
 | `0x000b2750` | 412 | `apac::CreateContentMixer(apac::GlobalConfig const&)` |
+| `0x000b33b0` | 104 | `GetDCTIVModulationCoefficients` |
+| `0x000b40b0` | 220 | `sub_B40B0` |
+| `0x00105590` | 104 | `GetSineWindowCoefficientPtr` |
+| `0x00105600` | 108 | `GetKBDWindowCoefficientPtr` |
+| `0x00105670` | 380 | `sub_105670` |
+| `0x001057f0` | 244 | `sub_1057F0` |
+| `0x001058f0` | 704 | `sub_1058F0` |
 | `0x00105bb0` | 552 | `APACDecoder_DecodeFrame` |
 | `0x00105de0` | 132 | `APACDecoder_Reset` |
 | `0x00105e70` | 440 | `APACDecoder_GetParameter` |

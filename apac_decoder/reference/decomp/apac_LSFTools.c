@@ -402,80 +402,87 @@ __int64 __fastcall apac::LSFTools::Condition_LSFs(apac__LSFTools *this, float *b
  */
 __int64 __fastcall apac::LSFTools::LSP_To_LPC(apac__LSFTools *this, const float *a, float *buf, unsigned __int16 v)
 {
-  _QWORD *v4; // x5
-  unsigned int v5; // w20
-  int v6; // w4
-  _QWORD *v9; // x1
-  __int64 v11; // x1
-  _QWORD *v12; // x0
-  __int64 v13; // x4
-  _QWORD *v14; // x2
-  __int64 v15; // x3
-  float *v16; // x1
-  float *v17; // x0
-  unsigned __int16 v18; // w5
-  float v19; // s0
-  float *v20; // x3
-  float *v21; // x1
-  __int64 v22; // x0
-  float v23; // s0
-  _QWORD v25[12]; // [xsp+0h] [xbp+0h] BYREF
-  __int64 v26; // [xsp+60h] [xbp+60h]
-  v4 = &v25[-1536];
-  v5 = v >> 1;
-  v6 = 4 * (unsigned __int16)(v5 + 1) + 15;
-  v9 = (_QWORD *)((char *)&v25[-1536] - (*(_QWORD *)&v6 & 0x7F000LL));
-  if ( &v25[-1536] != v9 )
+  __int64 v4; // x7
+  __int64 *v5; // x5
+  int v6; // w20
+  int v7; // w4
+  __int64 *v10; // x1
+  _QWORD *v12; // x5
+  __int64 v13; // x1
+  __int64 *v14; // x0
+  __int64 v15; // x4
+  __int64 *v16; // x2
+  __int64 v17; // x3
+  __int64 v18; // x4
+  __int64 v19; // x5
+  __int64 v20; // x6
+  __int64 v21; // x7
+  float *v22; // x1
+  float *v23; // x0
+  unsigned __int16 v24; // w5
+  float v25; // s0
+  float *v26; // x3
+  float *v27; // x1
+  __int64 v28; // x0
+  float v29; // s0
+  __int64 v31[12]; // [xsp+0h] [xbp+0h] BYREF
+  __int64 v32; // [xsp+60h] [xbp+60h]
+  v5 = &v31[-1536];
+  v6 = v >> 1;
+  v7 = 4 * (unsigned __int16)(v6 + 1) + 15;
+  v10 = (__int64 *)((char *)&v31[-1536] - (*(_QWORD *)&v7 & 0x7F000LL));
+  if ( &v31[-1536] != v10 )
   {
     do
     {
-      v4 -= 512;
-      *v4 = 0;
+      v5 -= 512;
+      *v5 = 0;
     }
-    while ( v4 != v9 );
+    while ( v5 != v10 );
   }
-  *(_QWORD *)((char *)v4 - ((*(_QWORD *)&v6 & 0x7FFF0LL) - (*(_QWORD *)&v6 & 0x7F000LL))) = 0;
-  v11 = *(_QWORD *)&v6 & 0x7F000LL;
-  v12 = &v25[-1536];
-  v13 = *(_QWORD *)&v6 & 0x7FFF0LL;
-  v14 = (_QWORD *)((char *)&v25[-1536] - v11);
-  if ( &v25[-1536] != v14 )
+  v12 = (__int64 *)((char *)v5 - ((*(_QWORD *)&v7 & 0x7FFF0LL) - (*(_QWORD *)&v7 & 0x7F000LL)));
+  *v12 = 0;
+  v13 = *(_QWORD *)&v7 & 0x7F000LL;
+  v14 = &v31[-1536];
+  v15 = *(_QWORD *)&v7 & 0x7FFF0LL;
+  v16 = (__int64 *)((char *)&v31[-1536] - v13);
+  if ( &v31[-1536] != v16 )
   {
     do
     {
-      v12 -= 512;
-      *v12 = 0;
+      v14 -= 512;
+      *v14 = 0;
     }
-    while ( v12 != v14 );
+    while ( v14 != v16 );
   }
-  *(_QWORD *)((char *)v12 - (v13 - v11)) = 0;
-  sub_B40B0(a, v25, v >> 1, 0);
-  sub_B40B0(a + 1, v25, v5, v15);
-  v16 = (float *)v25 + (v5 & 0x7FFF) - 1;
-  v17 = v16;
-  v18 = 0;
+  *(__int64 *)((char *)v14 - (v15 - v13)) = 0;
+  sub_B40B0((float *)a, (float *)v31, v6, 0, v15, (__int64)v12, (__int64)&_stack_chk_guard, v4, v31[0]);
+  sub_B40B0((float *)a + 1, (float *)v31, v6, v17, v18, v19, v20, v21, v31[0]);
+  v22 = (float *)v31 + (v6 & 0x7FFF) - 1;
+  v23 = v22;
+  v24 = 0;
   do
   {
-    --v17;
-    --v16;
-    ++v18;
-    v19 = v16[2] - v16[1];
-    v17[2] = v17[2] + v17[1];
-    v16[2] = v19;
+    --v23;
+    --v22;
+    ++v24;
+    v25 = v22[2] - v22[1];
+    v23[2] = v23[2] + v23[1];
+    v22[2] = v25;
   }
-  while ( (unsigned __int16)(v5 - 1) >= (unsigned int)v18 );
-  v20 = &buf[v];
-  v21 = (float *)((char *)v20 + ((4LL * (unsigned __int16)(v5 - 1)) ^ 0xFFFFFFFFFFFFFFFCLL));
-  v22 = 1;
+  while ( (unsigned __int16)(v6 - 1) >= (unsigned int)v24 );
+  v26 = &buf[v];
+  v27 = (float *)((char *)v26 + ((4LL * (unsigned __int16)(v6 - 1)) ^ 0xFFFFFFFFFFFFFFFCLL));
+  v28 = 1;
   *buf = 1.0;
   do
   {
-    v23 = *(float *)((char *)v25 + v22 * 4);
-    buf[v22++] = (float)(v23 + v23) * 0.5;
-    *v20-- = (float)(v23 - v23) * 0.5;
+    v29 = *(float *)((char *)v31 + v28 * 4);
+    buf[v28++] = (float)(v29 + v29) * 0.5;
+    *v26-- = (float)(v29 - v29) * 0.5;
   }
-  while ( v21 != v20 );
-  return v25[11] ^ _stack_chk_guard;
+  while ( v27 != v26 );
+  return v31[11] ^ _stack_chk_guard;
 }
 
 

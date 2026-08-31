@@ -200,18 +200,18 @@ __int64 __fastcall ContentOutBuffer::GetAudioData(
         apac__FrameOutRecord *a)
 {
   apac__FrameOutRecord *v3; // x23
-  const float *const *v4; // x24
+  const float **v4; // x24
   __int64 v5; // x27
   __int64 v7; // x20
   __int64 v8; // x26
   unsigned int v9; // w21
   unsigned int v10; // w27
-  const float *const *v11; // x0
+  const float **v11; // x0
   char *v12; // x4
   size_t v13; // x19
   __int64 result; // x0
   apac__FrameOutRecord *v15; // [xsp+30h] [xbp+30h]
-  const float *const *v16; // [xsp+38h] [xbp+38h]
+  const float **v16; // [xsp+38h] [xbp+38h]
   __int64 v17; // [xsp+50h] [xbp+50h]
   __int64 v18; // [xsp+68h] [xbp+68h]
   __int64 v19; // [xsp+70h] [xbp+70h]
@@ -222,7 +222,7 @@ __int64 __fastcall ContentOutBuffer::GetAudioData(
     v9 = 0;
     v3 = a;
     v17 = v5;
-    v4 = *((const float *const **)this + 4);
+    v4 = *((const float ***)this + 4);
     v10 = *(_DWORD *)(v7 + 40);
     v11 = v4;
     v12 = *((char **)this + 4);
@@ -240,7 +240,7 @@ __int64 __fastcall ContentOutBuffer::GetAudioData(
       {
         InterleaveConvert(
           v4,
-          (void *const *)v3,
+          (void **)v3,
           v9,
           v10,
           *((_DWORD *)v3 + 517) & 1,
@@ -252,7 +252,7 @@ __int64 __fastcall ContentOutBuffer::GetAudioData(
         v5 = v17;
         goto LABEL_12;
       }
-      v11 = *((const float *const **)this + 4);
+      v11 = *((const float ***)this + 4);
     }
     v5 = v17;
   }

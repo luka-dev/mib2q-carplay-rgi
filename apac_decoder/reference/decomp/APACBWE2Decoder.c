@@ -45,67 +45,75 @@ __int64 __fastcall APACBWE2Decoder::DecodeFrame(
   unsigned int v17; // w27
   __int64 v18; // x26
   bool v19; // zf
-  const float *v21; // x21
-  char *v22; // x22
-  int v23; // w21
-  __int64 v24; // x0
+  __int64 v21; // x3
+  __int64 v22; // x4
+  __int64 v23; // x5
+  __int64 v24; // x6
   __int64 v25; // x7
-  __int64 v26; // x28
-  __int64 v27; // x7
-  unsigned __int64 v28; // x5
-  unsigned int v29; // w24
-  __int64 v30; // x0
-  char *v31; // x22
-  __int64 v32; // x20
-  float *v33; // x28
-  __int64 v34; // x3
-  float *v35; // x1
-  float *v36; // x20
-  __int64 v37; // x27
-  __int64 v38; // x0
-  float *v39; // x3
-  __int64 v41; // x20
-  APACSpectralData *v42; // x19
+  float *v26; // x21
+  float *v27; // x22
+  int v28; // w21
+  __int64 v29; // x0
+  __int64 v30; // x7
+  __int64 v31; // x28
+  __int64 v32; // x7
+  unsigned __int64 v33; // x5
+  unsigned int v34; // w24
+  __int64 v35; // x0
+  char *v36; // x22
+  __int64 v37; // x20
+  float *v38; // x28
+  __int64 v39; // x3
+  float *v40; // x1
+  __int64 v41; // x0
+  __int64 v42; // x3
   __int64 v43; // x2
-  const float **v44; // x0
-  __int64 v45; // x2
-  __int64 v46; // x7
-  int v47; // w4
-  APACSpectralData *v48; // x27
-  int v49; // w20
+  float *v44; // x20
+  __int64 v45; // x27
+  unsigned int v46; // w19
+  float *v47; // x0
+  __int64 v49; // x20
   APACSpectralData *v50; // x19
-  int v51; // w26
-  __int64 v52; // x0
-  __int64 v53; // x20
-  int v54; // w24
-  int v55; // w2
-  int v56; // w28
-  unsigned int v57; // w21
-  __int64 v58; // x20
-  unsigned int v59; // w20
-  __int64 v60; // x3
-  unsigned int v61; // w0
-  __int64 v62; // [xsp+0h] [xbp-10E0h]
-  __int64 v63; // [xsp+8h] [xbp-10D8h]
-  unsigned int v64[2]; // [xsp+68h] [xbp-1078h]
-  __int64 v65; // [xsp+70h] [xbp-1070h]
-  __int64 v66; // [xsp+78h] [xbp-1068h]
-  unsigned int v67[2]; // [xsp+80h] [xbp-1060h]
-  APACSpectralData *v68; // [xsp+88h] [xbp-1058h]
-  float *v69; // [xsp+90h] [xbp-1050h]
-  __int64 v70; // [xsp+98h] [xbp-1048h]
-  _DWORD *v71; // [xsp+A0h] [xbp-1040h]
-  int *v72; // [xsp+A8h] [xbp-1038h]
-  __int64 v73; // [xsp+B0h] [xbp-1030h]
-  float *v74; // [xsp+B8h] [xbp-1028h]
-  float v75; // [xsp+C0h] [xbp-1020h] BYREF
-  int v76; // [xsp+C4h] [xbp-101Ch] BYREF
-  unsigned __int16 v77; // [xsp+C8h] [xbp-1018h] BYREF
-  __int16 v78; // [xsp+CAh] [xbp-1016h]
-  float v79[1026]; // [xsp+D0h] [xbp-1010h] BYREF
-  __int64 v80; // [xsp+10E0h] [xbp+0h]
-  v62 = v4;
-  v63 = v5;
+  __int64 v51; // x2
+  const float **v52; // x0
+  __int64 v53; // x2
+  __int64 v54; // x7
+  int v55; // w4
+  APACSpectralData *v56; // x27
+  int v57; // w20
+  APACSpectralData *v58; // x19
+  int v59; // w26
+  __int64 v60; // x0
+  __int64 v61; // x20
+  int v62; // w24
+  int v63; // w2
+  int v64; // w28
+  unsigned int v65; // w21
+  __int64 v66; // x20
+  unsigned int v67; // w20
+  __int64 v68; // x3
+  unsigned int v69; // w0
+  __int64 v70; // [xsp+0h] [xbp-10E0h]
+  __int64 v71; // [xsp+8h] [xbp-10D8h]
+  unsigned int v72[2]; // [xsp+68h] [xbp-1078h]
+  __int64 v73; // [xsp+70h] [xbp-1070h]
+  __int64 v74; // [xsp+78h] [xbp-1068h]
+  unsigned int v75[2]; // [xsp+80h] [xbp-1060h]
+  APACSpectralData *v76; // [xsp+88h] [xbp-1058h]
+  float *v77; // [xsp+90h] [xbp-1050h]
+  __int64 v78; // [xsp+98h] [xbp-1048h]
+  _DWORD *v79; // [xsp+A0h] [xbp-1040h]
+  int *v80; // [xsp+A8h] [xbp-1038h]
+  __int64 v81; // [xsp+B0h] [xbp-1030h]
+  float *v82; // [xsp+B8h] [xbp-1028h]
+  float v83; // [xsp+C0h] [xbp-1020h] BYREF
+  int v84; // [xsp+C4h] [xbp-101Ch] BYREF
+  unsigned __int16 v85; // [xsp+C8h] [xbp-1018h] BYREF
+  __int16 v86; // [xsp+CAh] [xbp-1016h]
+  float v87[1026]; // [xsp+D0h] [xbp-1010h] BYREF
+  __int64 v88; // [xsp+10E0h] [xbp+0h]
+  v70 = v4;
+  v71 = v5;
   v10 = *((unsigned __int8 *)ics + 11);
   v11 = *((unsigned __int8 *)ics + 10);
   v12 = *(_QWORD *)(*((_QWORD *)this + 10) + 16LL);
@@ -133,170 +141,174 @@ __int64 __fastcall APACBWE2Decoder::DecodeFrame(
   v19 = ((1LL << n) & *(_QWORD *)(*((_QWORD *)this + 1) + 8LL * (n >> 6))) == 0 || v10 == 0;
   if ( !v19 )
   {
-    v64[0] = v15;
-    v75 = 1.0;
-    vDSP_vfill(&v75, v79, 1, 1024, 0);
-    *(_QWORD *)v67 = 8LL * n;
-    v65 = *((_QWORD *)this + 11);
+    v72[0] = v15;
+    v83 = 1.0;
+    vDSP_vfill(&v83, v87, 1, 1024, 0);
+    *(_QWORD *)v75 = 8LL * n;
+    v73 = *((_QWORD *)this + 11);
     if ( *((_BYTE *)ics + 10) == 2 )
     {
-      v34 = v64[0] >> 3;
-      v67[0] = v64[0] >> 3;
-      v35 = *(float **)spectrum;
-      v70 = v34;
-      v66 = (__int64)this;
-      v36 = &v35[v34 & 0x1FFFFFFF];
-      v37 = -1 * v34;
-      v68 = spectrum;
-      v69 = v35;
-      LOWORD(spectrum) = 0;
-      *(_QWORD *)v64 = 4 * (v34 & 0x1FFFFFFF);
+      v39 = v72[0] >> 3;
+      v75[0] = v72[0] >> 3;
+      v40 = *(float **)spectrum;
+      v41 = v39 & 0x1FFFFFFF;
+      v78 = v39;
+      v42 = -4 * v39;
+      v43 = 0;
+      v74 = (__int64)this;
+      v44 = &v40[v41];
+      v45 = v42;
+      v76 = spectrum;
+      v77 = v40;
+      v46 = 0;
+      *(_QWORD *)v72 = v41 * 4;
       do
       {
-        v38 = sub_78370(&v36[v37], v36);
-        v39 = v36;
-        LODWORD(spectrum) = (unsigned __int16)((_WORD)spectrum + 1);
-        v36 += 128;
+        v47 = sub_78370((float *)((char *)v44 + v45), v44, v43, v42, v22, v23, v24, v25, v70);
+        v43 = v46 + 1;
+        v42 = (__int64)v44;
+        v46 = (unsigned __int16)(v46 + 1);
+        v44 += 128;
       }
-      while ( (unsigned int)spectrum <= 7 && v38 == (_QWORD)v39 );
-      v41 = v66;
-      v42 = v68;
-      if ( (float *)v38 != v39 )
+      while ( v46 <= 7 && v47 == (float *)v42 );
+      v49 = v74;
+      v50 = v76;
+      if ( v47 != (float *)v42 )
       {
-        v43 = *((_QWORD *)v68 + 1);
-        v66 = v67[0] - v16;
+        v51 = *((_QWORD *)v76 + 1);
+        v74 = v75[0] - v16;
         BWELPC::MDCTCoefficientsToLPC(
-          *(BWELPC **)(v65 + 8LL * n),
-          v69,
-          (unsigned __int64)(v43 - (_QWORD)v69) >> 5,
-          v67[0],
+          *(BWELPC **)(v73 + 8LL * n),
+          v77,
+          (unsigned __int64)(v51 - (_QWORD)v77) >> 5,
+          v75[0],
           8u);
-        LODWORD(v69) = 0;
-        LODWORD(v71) = v67[0];
-        v44 = *(const float ***)(v65 + 8LL * n);
-        v68 = (APACSpectralData *)&v79[v66];
-        BWELPC::LPCToMDCTSpectrum((BWELPC *)v44, v44[3], v79, v67[0]);
-        v45 = *(_QWORD *)(v41 + 72);
-        v77 = *(_DWORD *)(v45 + 8LL * n);
-        v78 = *(_DWORD *)(v45 + 8LL * (n & 0x7FFFFFFF) + 4);
-        BWELPC::DecodeLSFsToLPCs(*(BWELPC **)(v65 + 8LL * n), &v77);
+        LODWORD(v77) = 0;
+        LODWORD(v79) = v75[0];
+        v52 = *(const float ***)(v73 + 8LL * n);
+        v76 = (APACSpectralData *)&v87[v74];
+        BWELPC::LPCToMDCTSpectrum((BWELPC *)v52, v52[3], v87, v75[0]);
+        v53 = *(_QWORD *)(v49 + 72);
+        v85 = *(_DWORD *)(v53 + 8LL * n);
+        v86 = *(_DWORD *)(v53 + 8LL * (n & 0x7FFFFFFF) + 4);
+        BWELPC::DecodeLSFsToLPCs(*(BWELPC **)(v73 + 8LL * n), &v85);
         BWELPC::LPCToMDCTSpectrum(
-          *(BWELPC **)(v65 + 8LL * n),
-          *(const float **)(*(_QWORD *)(v65 + 8LL * n) + 48LL),
-          (float *)((char *)v79 + *(_QWORD *)v64),
+          *(BWELPC **)(v73 + 8LL * n),
+          *(const float **)(*(_QWORD *)(v73 + 8LL * n) + 48LL),
+          (float *)((char *)v87 + *(_QWORD *)v72),
           0x40u);
-        v65 = v41;
-        v47 = (int)v69;
-        v69 = (float *)ics;
-        v48 = v42;
-        v49 = (int)v71;
-        v50 = v68;
+        v73 = v49;
+        v55 = (int)v77;
+        v77 = (float *)ics;
+        v56 = v50;
+        v57 = (int)v79;
+        v58 = v76;
         do
         {
-          v51 = v47;
-          vDSP_vdiv(&v79[v49], 1, v50, 1, &v79[v49], 1, v16, v46, v62, v63);
-          v47 = v51 + 1;
-          v49 += v16;
+          v59 = v55;
+          vDSP_vdiv(&v87[v57], 1, v58, 1, &v87[v57], 1, v16, v54, v70, v71);
+          v55 = v59 + 1;
+          v57 += v16;
         }
-        while ( v14 != v51 + 1 );
-        v53 = v65;
-        v52 = v66;
-        v54 = 0;
-        LODWORD(v65) = 0;
-        LODWORD(v66) = 0;
-        v73 = v53;
-        v74 = v69;
-        v55 = *((_DWORD *)v69 + 4);
-        LODWORD(v69) = 8 * n;
-        v70 = 4 * (v52 - v70);
-        LODWORD(v68) = v55 & 0xF;
-        v71 = dword_30EC80;
-        v72 = &v76;
+        while ( v14 != v59 + 1 );
+        v61 = v73;
+        v60 = v74;
+        v62 = 0;
+        LODWORD(v73) = 0;
+        LODWORD(v74) = 0;
+        v81 = v61;
+        v82 = v77;
+        v63 = *((_DWORD *)v77 + 4);
+        LODWORD(v77) = 8 * n;
+        v78 = 4 * (v60 - v78);
+        LODWORD(v76) = v63 & 0xF;
+        v79 = dword_30EC80;
+        v80 = &v84;
         do
         {
-          v56 = 0;
-          v57 = v67[0];
-          v58 = v70 + *(_QWORD *)v64;
-          v76 = v71[*(int *)(*(_QWORD *)(v73 + 56) + 4LL * (unsigned int)((_DWORD)v69 + v66))];
+          v64 = 0;
+          v65 = v75[0];
+          v66 = v78 + *(_QWORD *)v72;
+          v84 = v79[*(int *)(*(_QWORD *)(v81 + 56) + 4LL * (unsigned int)((_DWORD)v77 + v74))];
           do
           {
-            vDSP_vmul(*(_QWORD *)v48 + v58, 1, &v79[v57], 1, *(_QWORD *)v48 + 4LL * (v54 + v57));
-            v19 = v51 == v56;
-            v57 += v16;
-            ++v56;
+            vDSP_vmul(*(_QWORD *)v56 + v66, 1, &v87[v65], 1, *(_QWORD *)v56 + 4LL * (v62 + v65));
+            v19 = v59 == v64;
+            v65 += v16;
+            ++v64;
           }
           while ( !v19 );
-          v60 = *(_QWORD *)v48 + *(_QWORD *)v64;
-          LODWORD(v65) = v65 + 1;
-          v59 = v65;
-          vDSP_vsmul(v60, 1, v72, v60, 1, 64);
-          if ( v59 >= (unsigned int)v68 )
+          v68 = *(_QWORD *)v56 + *(_QWORD *)v72;
+          LODWORD(v73) = v73 + 1;
+          v67 = v73;
+          vDSP_vsmul(v68, 1, v80, v68, 1, 64);
+          if ( v67 >= (unsigned int)v76 )
           {
-            v61 = v66 + 1;
-            LODWORD(v66) = v61;
-            LODWORD(v65) = 0;
-            if ( v61 > 7 )
-              LODWORD(v68) = 0;
+            v69 = v74 + 1;
+            LODWORD(v74) = v69;
+            LODWORD(v73) = 0;
+            if ( v69 > 7 )
+              LODWORD(v76) = 0;
             else
-              LODWORD(v68) = (*((_DWORD *)v74 + 4) >> (4 * v61)) & 0xF;
+              LODWORD(v76) = (*((_DWORD *)v82 + 4) >> (4 * v69)) & 0xF;
           }
-          v54 += 128;
-          *(_QWORD *)v64 += 512LL;
+          v62 += 128;
+          *(_QWORD *)v72 += 512LL;
         }
-        while ( v54 != 1024 );
+        while ( v62 != 1024 );
       }
     }
     else
     {
-      v21 = *(const float **)spectrum;
-      v66 = 4LL * v64[0];
-      v22 = (char *)v21 + v66;
-      v68 = (APACSpectralData *)v64[0];
-      if ( v22 != (char *)sub_78370(v21, (char *)v21 + v66) )
+      v26 = *(float **)spectrum;
+      v74 = 4LL * v72[0];
+      v27 = (float *)((char *)v26 + v74);
+      v76 = (APACSpectralData *)v72[0];
+      if ( v27 != sub_78370(v26, (float *)((char *)v26 + v74), v74, v21, v22, v72[0], v24, v25, v70) )
       {
         BWELPC::MDCTCoefficientsToLPC(
-          *(BWELPC **)(v65 + 8LL * n),
-          v21,
-          (*((_QWORD *)spectrum + 1) - (_QWORD)v21) >> 2,
-          v64[0],
+          *(BWELPC **)(v73 + 8LL * n),
+          v26,
+          (*((_QWORD *)spectrum + 1) - (_QWORD)v26) >> 2,
+          v72[0],
           1u);
-        v23 = 0;
+        v28 = 0;
         BWELPC::LPCToMDCTSpectrum(
-          *(BWELPC **)(v65 + 8LL * n),
-          *(const float **)(*(_QWORD *)(v65 + 8LL * n) + 24LL),
-          v79,
-          v64[0]);
-        v24 = *((_QWORD *)this + 9);
-        v25 = v24 + 8LL * (n & 0x7FFFFFFF);
-        v77 = *(_DWORD *)(v24 + 8LL * n);
-        v26 = v65;
-        v78 = *(_DWORD *)(v25 + 4);
-        BWELPC::DecodeLSFsToLPCs(*(BWELPC **)(v65 + 8 * v18), &v77);
+          *(BWELPC **)(v73 + 8LL * n),
+          *(const float **)(*(_QWORD *)(v73 + 8LL * n) + 24LL),
+          v87,
+          v72[0]);
+        v29 = *((_QWORD *)this + 9);
+        v30 = v29 + 8LL * (n & 0x7FFFFFFF);
+        v85 = *(_DWORD *)(v29 + 8LL * n);
+        v31 = v73;
+        v86 = *(_DWORD *)(v30 + 4);
+        BWELPC::DecodeLSFsToLPCs(*(BWELPC **)(v73 + 8 * v18), &v85);
         BWELPC::LPCToMDCTSpectrum(
-          *(BWELPC **)(v26 + 8 * v18),
-          *(const float **)(*(_QWORD *)(v26 + 8 * v18) + 48LL),
-          (float *)((char *)v79 + v66),
+          *(BWELPC **)(v31 + 8 * v18),
+          *(const float **)(*(_QWORD *)(v31 + 8 * v18) + 48LL),
+          (float *)((char *)v87 + v74),
           0x200u);
-        LODWORD(v65) = v14;
-        v28 = (unsigned __int64)v68;
-        v29 = v64[0];
-        v30 = *(int *)(*((_QWORD *)this + 7) + 4LL * v67[0]);
-        *(_QWORD *)v64 = 4LL * (v64[0] - v17);
-        v31 = (char *)v79 + *(_QWORD *)v64;
-        v76 = dword_30EC80[v30];
+        LODWORD(v73) = v14;
+        v33 = (unsigned __int64)v76;
+        v34 = v72[0];
+        v35 = *(int *)(*((_QWORD *)this + 7) + 4LL * v75[0]);
+        *(_QWORD *)v72 = 4LL * (v72[0] - v17);
+        v36 = (char *)v87 + *(_QWORD *)v72;
+        v84 = dword_30EC80[v35];
         while ( 1 )
         {
-          v32 = 4 * v28;
-          v33 = &v79[v28];
-          vDSP_vdiv(v33, 1, v31, 1, v33, 1, v17, v27, v62, v63);
-          vDSP_vmul(*(_QWORD *)spectrum + *(_QWORD *)v64, 1, v33, 1, *(_QWORD *)spectrum + v32);
-          ++v23;
-          v29 += v17;
-          if ( (_DWORD)v65 == v23 )
+          v37 = 4 * v33;
+          v38 = &v87[v33];
+          vDSP_vdiv(v38, 1, v36, 1, v38, 1, v17, v32, v70, v71);
+          vDSP_vmul(*(_QWORD *)spectrum + *(_QWORD *)v72, 1, v38, 1, *(_QWORD *)spectrum + v37);
+          ++v28;
+          v34 += v17;
+          if ( (_DWORD)v73 == v28 )
             break;
-          v28 = v29;
+          v33 = v34;
         }
-        vDSP_vsmul(*(_QWORD *)spectrum + v66, 1, &v76, *(_QWORD *)spectrum + v66, 1, 512);
+        vDSP_vsmul(*(_QWORD *)spectrum + v74, 1, &v84, *(_QWORD *)spectrum + v74, 1, 512);
       }
     }
   }

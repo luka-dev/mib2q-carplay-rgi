@@ -31,20 +31,20 @@ __int64 __fastcall APACCACDecoder::Deserialize(APACCACDecoder *this, TBitstreamR
   __int64 v7; // x27
   __int64 v8; // x28
   __int64 result; // x0
-  __int64 v11; // x28
-  __int64 v12; // x0
+  char *v11; // x28
+  char *v12; // x0
   unsigned int cache; // w2
-  __int64 v14; // x5
+  char *v14; // x5
   int v15; // w19
-  __int64 v16; // x23
+  char *v16; // x23
   __int64 v17; // x26
-  __int64 v18; // x3
+  char *v18; // x3
   int v19; // w0
   int v20; // w19
   unsigned int v21; // w2
   int v22; // w1
   unsigned int v23; // w27
-  __int64 v24; // x3
+  char *v24; // x3
   int v25; // w1
   unsigned int v26; // w3
   int v27; // w2
@@ -69,7 +69,7 @@ __int64 __fastcall APACCACDecoder::Deserialize(APACCACDecoder *this, TBitstreamR
   TBitstreamReader_u32 *v46; // [xsp+28h] [xbp+28h]
   __int64 v47; // [xsp+50h] [xbp+50h]
   __int64 v48; // [xsp+58h] [xbp+58h]
-  __int64 v49; // [xsp+68h] [xbp+68h]
+  char *v49; // [xsp+68h] [xbp+68h]
   __int64 v50; // [xsp+78h] [xbp+78h]
   __int64 v51; // [xsp+80h] [xbp+80h]
   result = 0;
@@ -80,14 +80,14 @@ __int64 __fastcall APACCACDecoder::Deserialize(APACCACDecoder *this, TBitstreamR
     v6 = bs;
     v47 = v7;
     v48 = v8;
-    v11 = CacDecoder::GainIndexCodeTableDec((APACCACDecoder *)((char *)this + 24));
-    v12 = CacDecoder::RepeatCodeTableDec((APACCACDecoder *)((char *)this + 24));
+    v11 = (char *)CacDecoder::GainIndexCodeTableDec((APACCACDecoder *)((char *)this + 24));
+    v12 = (char *)CacDecoder::RepeatCodeTableDec((APACCACDecoder *)((char *)this + 24));
     cache = v6->cache;
     v14 = v12;
     LODWORD(v12) = v6->bitsLeft - 16;
-    v6->bitsLeft = v12;
+    v6->bitsLeft = (int)v12;
     v15 = HIWORD(cache);
-    if ( (v12 & 0x80000000) != 0 )
+    if ( ((unsigned int)v12 & 0x80000000) != 0 )
     {
       cur = v6->cur;
       v49 = v14;
@@ -113,14 +113,14 @@ __int64 __fastcall APACCACDecoder::Deserialize(APACCACDecoder *this, TBitstreamR
     while ( 2 )
     {
       v18 = v11;
-      while ( *(unsigned __int16 *)(v18 + 2) != v15 >> (16 - *(_BYTE *)(v18 + 4)) )
+      while ( *((unsigned __int16 *)v18 + 1) != v15 >> (16 - v18[4]) )
       {
         v18 += 6;
         if ( v18 == v11 + 210 )
           goto LABEL_21;
       }
-      *(_BYTE *)(*((_QWORD *)this + 4) + v17) = *(_BYTE *)v18;
-      v19 = *(unsigned __int8 *)(v18 + 4);
+      *(_BYTE *)(*((_QWORD *)this + 4) + v17) = *v18;
+      v19 = (unsigned __int8)v18[4];
       v20 = (unsigned __int16)(v15 << v19);
       if ( (unsigned int)(v19 - 1) <= 0x1F )
       {
@@ -158,14 +158,14 @@ __int64 __fastcall APACCACDecoder::Deserialize(APACCACDecoder *this, TBitstreamR
         }
       }
       v24 = v14;
-      while ( *(unsigned __int16 *)(v24 + 2) != v20 >> (16 - *(_BYTE *)(v24 + 4)) )
+      while ( *((unsigned __int16 *)v24 + 1) != v20 >> (16 - v24[4]) )
       {
         v24 += 6;
         if ( v24 == v16 )
           goto LABEL_21;
       }
-      *(_BYTE *)(*((_QWORD *)this + 7) + v17) = *(_BYTE *)v24;
-      v25 = *(unsigned __int8 *)(v24 + 4);
+      *(_BYTE *)(*((_QWORD *)this + 7) + v17) = *v24;
+      v25 = (unsigned __int8)v24[4];
       v15 = (unsigned __int16)(v20 << v25);
       if ( (unsigned int)(v25 - 1) <= 0x1F )
       {
@@ -264,9 +264,9 @@ __int64 __fastcall APACCACDecoder::ProcessCac(
   unsigned int v17; // w12
   __int64 *v19; // x4
   int v20; // w15
-  __int64 v21; // x28
+  float32x4_t *v21; // x28
   __int64 v22; // x0
-  __int64 v23; // x25
+  float32x4_t *v23; // x25
   unsigned __int16 *v24; // x14
   unsigned __int16 *v25; // x0
   __int64 v26; // x20
@@ -283,61 +283,74 @@ __int64 __fastcall APACCACDecoder::ProcessCac(
   int v37; // w3
   unsigned int v38; // w27
   int v39; // w0
-  __int64 v40; // x22
+  unsigned __int64 v40; // x22
   float v41; // s0
-  float v42; // s1
-  float v43; // s2
+  float v42; // s3
+  int v43; // s1
+  double v44; // d0
+  int v45; // s2
+  double v46; // d1
+  long double v47; // q2
+  __int64 v48; // x4
+  __int64 v49; // x5
+  __int64 v50; // x6
+  __int64 v51; // x7
   __int64 result; // x0
-  __int64 v45; // x1
-  int v46; // w27
-  unsigned int v47; // w23
-  int v48; // w22
-  int v49; // w3
-  __int64 v50; // x26
-  float v51; // s0
-  float v52; // s1
-  float v53; // s8
-  float v54; // s2
-  float v55; // s9
-  unsigned int v56; // w9
-  unsigned int v57; // w5
-  int v58; // w0
-  unsigned int v59; // w1
-  __int64 v60; // x0
-  __int64 v61; // [xsp+10h] [xbp+10h]
-  __int64 v62; // [xsp+18h] [xbp+18h]
-  __int64 v63; // [xsp+30h] [xbp+30h]
-  __int64 v64; // [xsp+38h] [xbp+38h]
-  __int64 v65; // [xsp+40h] [xbp+40h]
-  __int64 v66; // [xsp+48h] [xbp+48h]
-  __int64 v67; // [xsp+50h] [xbp+50h]
-  __int64 v68; // [xsp+58h] [xbp+58h]
-  __int64 v69; // [xsp+60h] [xbp+60h]
-  __int64 v70; // [xsp+68h] [xbp+68h]
-  __int64 v71; // [xsp+70h] [xbp+70h]
-  unsigned int v72; // [xsp+80h] [xbp+80h]
-  unsigned int v73; // [xsp+84h] [xbp+84h]
-  int v74; // [xsp+88h] [xbp+88h]
-  int v75; // [xsp+8Ch] [xbp+8Ch]
-  _BOOL4 v76; // [xsp+90h] [xbp+90h]
-  int v77; // [xsp+94h] [xbp+94h]
-  unsigned int v78; // [xsp+98h] [xbp+98h]
-  unsigned int v79; // [xsp+9Ch] [xbp+9Ch]
-  float v80; // [xsp+A0h] [xbp+A0h]
-  float v81; // [xsp+A4h] [xbp+A4h]
-  float v82; // [xsp+A8h] [xbp+A8h]
-  _BYTE v83[120]; // [xsp+B0h] [xbp+B0h] BYREF
-  __int64 v84; // [xsp+128h] [xbp+128h] BYREF
-  __int64 v85; // [xsp+130h] [xbp+130h]
+  __int64 v53; // x1
+  int v54; // w27
+  unsigned int v55; // w23
+  int v56; // w22
+  int v57; // w3
+  unsigned __int64 v58; // x26
+  __int64 v59; // x4
+  __int64 v60; // x6
+  __int64 v61; // x7
+  double v62; // d0
+  double v63; // d1
+  long double v64; // q2
+  int v65; // s8
+  int v66; // s9
+  unsigned int v67; // w9
+  unsigned int v68; // w5
+  __int64 v69; // x5
+  int v70; // w0
+  unsigned int v71; // w1
+  __int64 v72; // x0
+  __int64 v73; // [xsp+0h] [xbp+0h]
+  __int64 v74; // [xsp+10h] [xbp+10h]
+  __int64 v75; // [xsp+18h] [xbp+18h]
+  __int64 v76; // [xsp+30h] [xbp+30h]
+  __int64 v77; // [xsp+38h] [xbp+38h]
+  __int64 v78; // [xsp+40h] [xbp+40h]
+  __int64 v79; // [xsp+48h] [xbp+48h]
+  __int64 v80; // [xsp+50h] [xbp+50h]
+  __int64 v81; // [xsp+58h] [xbp+58h]
+  __int64 v82; // [xsp+60h] [xbp+60h]
+  __int64 v83; // [xsp+68h] [xbp+68h]
+  __int64 v84; // [xsp+70h] [xbp+70h]
+  unsigned int v85; // [xsp+80h] [xbp+80h]
+  unsigned int v86; // [xsp+84h] [xbp+84h]
+  int v87; // [xsp+88h] [xbp+88h]
+  int v88; // [xsp+8Ch] [xbp+8Ch]
+  _BOOL4 v89; // [xsp+90h] [xbp+90h]
+  int v90; // [xsp+94h] [xbp+94h]
+  unsigned int v91; // [xsp+98h] [xbp+98h]
+  unsigned int v92; // [xsp+9Ch] [xbp+9Ch]
+  float v93; // [xsp+A0h] [xbp+A0h]
+  int v94; // [xsp+A4h] [xbp+A4h]
+  int v95; // [xsp+A8h] [xbp+A8h]
+  _BYTE v96[120]; // [xsp+B0h] [xbp+B0h] BYREF
+  __int64 v97; // [xsp+128h] [xbp+128h] BYREF
+  __int64 v98; // [xsp+130h] [xbp+130h]
   v16 = *((unsigned __int8 *)ics + 11);
   if ( !*((_BYTE *)ics + 11) )
     goto LABEL_24;
   v17 = *((unsigned __int8 *)ics + 11);
-  v19 = (__int64 *)v83;
+  v19 = (__int64 *)v96;
   v20 = *((unsigned __int8 *)ics + 10);
-  v21 = *((_QWORD *)ics_stream2 + 94);
+  v21 = *((float32x4_t **)ics_stream2 + 94);
   v22 = *(_QWORD *)(*((_QWORD *)this + 10) + 16LL);
-  v23 = *((_QWORD *)ics_stream + 94);
+  v23 = *((float32x4_t **)ics_stream + 94);
   v24 = (unsigned __int16 *)(v22 + 24);
   v25 = (unsigned __int16 *)(v22 + 8);
   if ( v20 != 2 )
@@ -348,25 +361,25 @@ __int64 __fastcall APACCACDecoder::ProcessCac(
     *(_BYTE *)v19 = 0;
     v19 = (__int64 *)((char *)v19 + 1);
   }
-  while ( &v84 != v19 );
+  while ( &v97 != v19 );
   v27 = *((unsigned __int8 *)ics + 12);
   if ( !*((_BYTE *)ics + 12) )
   {
     if ( v20 == 2 )
     {
       result = 0;
-      v4 = v61;
-      v5 = v62;
-      v6 = v63;
-      v7 = v64;
-      v8 = v65;
-      v9 = v66;
-      v10 = v67;
-      v11 = v68;
+      v4 = v74;
+      v5 = v75;
+      v6 = v76;
+      v7 = v77;
+      v8 = v78;
+      v9 = v79;
+      v10 = v80;
+      v11 = v81;
       goto LABEL_45;
     }
-    v69 = v12;
-    v70 = v13;
+    v82 = v12;
+    v83 = v13;
     goto LABEL_14;
   }
   v28 = v16;
@@ -375,8 +388,8 @@ __int64 __fastcall APACCACDecoder::ProcessCac(
   v31 = 0;
   v32 = 0;
   v33 = -1;
-  v69 = v12;
-  v70 = v13;
+  v82 = v12;
+  v83 = v13;
   do
   {
     v34 = v29;
@@ -387,7 +400,7 @@ __int64 __fastcall APACCACDecoder::ProcessCac(
         v31 = *(_BYTE *)(*((_QWORD *)this + 4) + v32);
         v33 = *(unsigned __int8 *)(*((_QWORD *)this + 7) + v32++);
       }
-      v83[v34++] = v31;
+      v96[v34++] = v31;
       --v33;
     }
     while ( v28 != v34 );
@@ -413,16 +426,20 @@ LABEL_15:
           break;
         v35 = *(unsigned __int16 *)(v26 + 2LL * v36);
         v40 = (unsigned int)(v35 - v37);
-        if ( v83[v39] )
+        if ( v96[v39] )
         {
-          CacQuantizer::GainTableEntry(this, (unsigned __int8)v83[v39]);
-          v80 = v41;
-          v81 = v42;
-          v82 = v43;
-          sub_7B070(fabsf(v41) >= 0.999, v23, v21, v40, v42, v43);
+          CacQuantizer::GainTableEntry(this, (unsigned __int8)v96[v39]);
+          v42 = v41;
+          LODWORD(v44) = v43;
+          LODWORD(v46) = v45;
+          *(float *)&v47 = fabsf(v42);
+          v93 = v42;
+          v94 = LODWORD(v44);
+          v95 = LODWORD(v46);
+          sub_7B070(*(float *)&v47 >= 0.999, v23, v21, v40, v44, v46, v47, v48, v49, v50, v51, v73);
           v17 = *((unsigned __int8 *)ics + 11);
-          v23 += 4 * v40;
-          v21 += 4 * v40;
+          v23 = (float32x4_t *)((char *)v23 + 4 * v40);
+          v21 = (float32x4_t *)((char *)v21 + 4 * v40);
           if ( v38 == v36 )
           {
 LABEL_22:
@@ -433,148 +450,163 @@ LABEL_22:
         }
         else
         {
-          v23 += 4 * v40;
-          v21 += 4 * v40;
+          v23 = (float32x4_t *)((char *)v23 + 4 * v40);
+          v21 = (float32x4_t *)((char *)v21 + 4 * v40);
           if ( v38 == v36 )
             goto LABEL_22;
         }
         v37 = v35;
       }
 LABEL_44:
-      v4 = v61;
-      v5 = v62;
+      v4 = v74;
+      v5 = v75;
       result = 1;
-      v6 = v63;
-      v7 = v64;
-      v8 = v65;
-      v9 = v66;
-      v10 = v67;
-      v11 = v68;
-      v12 = v69;
-      v13 = v70;
+      v6 = v76;
+      v7 = v77;
+      v8 = v78;
+      v9 = v79;
+      v10 = v80;
+      v11 = v81;
+      v12 = v82;
+      v13 = v83;
       goto LABEL_45;
     }
 LABEL_23:
-    v4 = v61;
-    v5 = v62;
-    v6 = v63;
-    v7 = v64;
-    v8 = v65;
-    v9 = v66;
-    v10 = v67;
-    v11 = v68;
-    v12 = v69;
-    v13 = v70;
+    v4 = v74;
+    v5 = v75;
+    v6 = v76;
+    v7 = v77;
+    v8 = v78;
+    v9 = v79;
+    v10 = v80;
+    v11 = v81;
+    v12 = v82;
+    v13 = v83;
 LABEL_24:
     result = 0;
     goto LABEL_45;
   }
-  v71 = v14;
-  v45 = *v24;
-  v46 = 0;
-  v79 = 0;
-  v75 = *(unsigned __int16 *)(v26 + 2 * v45);
+  v84 = v14;
+  v53 = *v24;
+  v54 = 0;
+  v92 = 0;
+  v88 = *(unsigned __int16 *)(v26 + 2 * v53);
   do
   {
-    v47 = 0;
-    v48 = 0;
-    v74 = 4 * v79;
+    v55 = 0;
+    v56 = 0;
+    v87 = 4 * v92;
 LABEL_27:
     if ( v16 )
     {
-      v49 = v48;
-      v78 = v47 + v16;
+      v57 = v56;
+      v91 = v55 + v16;
       while ( 1 )
       {
-        if ( v16 < ++v47 )
+        if ( v16 < ++v55 )
         {
-          v14 = v71;
+          v14 = v84;
           goto LABEL_44;
         }
-        v48 = *(unsigned __int16 *)(v26 + 2LL * v47);
-        v50 = (unsigned int)(v48 - v49);
-        if ( v83[v46] )
+        v56 = *(unsigned __int16 *)(v26 + 2LL * v55);
+        v58 = (unsigned int)(v56 - v57);
+        if ( v96[v54] )
         {
-          CacQuantizer::GainTableEntry(this, (unsigned __int8)v83[v46]);
-          v53 = v52;
-          v80 = v51;
-          v81 = v52;
-          v55 = v54;
-          v82 = v54;
-          if ( v79 <= 7 )
+          CacQuantizer::GainTableEntry(this, (unsigned __int8)v96[v54]);
+          v65 = LODWORD(v63);
+          v93 = *(float *)&v62;
+          v94 = LODWORD(v63);
+          v66 = LODWORD(v64);
+          v95 = LODWORD(v64);
+          if ( v92 <= 7 )
           {
-            v56 = 0;
-            v57 = 0;
-            v76 = fabsf(v51) >= 0.999;
-            while ( ((*((_DWORD *)ics + 4) >> v74) & 0xFu) > v57 )
+            v67 = 0;
+            v68 = 0;
+            v89 = fabsf(*(float *)&v62) >= 0.999;
+            while ( ((*((_DWORD *)ics + 4) >> v87) & 0xFu) > v68 )
             {
-              v72 = v56 + v75;
-              v73 = v57 + 1;
-              v77 = v56 + v75;
-              sub_7B070(v76, v23 + 4LL * v56, v21 + 4LL * v56, v50, v53, v55);
-              v56 = v72;
-              v57 = v73;
+              LODWORD(v63) = v66;
+              LODWORD(v62) = v65;
+              v69 = v68 + 1;
+              v85 = v67 + v88;
+              v86 = v69;
+              v90 = v67 + v88;
+              sub_7B070(
+                v89,
+                (float32x4_t *)((char *)v23 + 4 * v67),
+                (float32x4_t *)((char *)v21 + 4 * v67),
+                v58,
+                v62,
+                v63,
+                v64,
+                v59,
+                v69,
+                v60,
+                v61,
+                v73);
+              v67 = v85;
+              v68 = v86;
             }
           }
           v16 = *((unsigned __int8 *)ics + 11);
-          ++v46;
-          v23 += 4 * v50;
-          v21 += 4 * v50;
-          if ( v78 == v47 )
+          ++v54;
+          v23 = (float32x4_t *)((char *)v23 + 4 * v58);
+          v21 = (float32x4_t *)((char *)v21 + 4 * v58);
+          if ( v91 == v55 )
           {
 LABEL_38:
-            if ( v47 < v16 )
+            if ( v55 < v16 )
               goto LABEL_27;
             break;
           }
         }
         else
         {
-          ++v46;
-          v23 += 4 * v50;
-          v21 += 4 * v50;
-          if ( v78 == v47 )
+          ++v54;
+          v23 = (float32x4_t *)((char *)v23 + 4 * v58);
+          v21 = (float32x4_t *)((char *)v21 + 4 * v58);
+          if ( v91 == v55 )
             goto LABEL_38;
         }
-        v49 = v48;
+        v57 = v56;
       }
     }
-    v58 = 0;
-    if ( v79 <= 7 )
-      v58 = ((*((_DWORD *)ics + 4) >> v74) & 0xF) * v75;
-    v59 = *((unsigned __int8 *)ics + 12);
-    ++v79;
-    v60 = 4LL * (unsigned int)(v58 - v48);
-    v23 += v60;
-    v21 += v60;
+    v70 = 0;
+    if ( v92 <= 7 )
+      v70 = ((*((_DWORD *)ics + 4) >> v87) & 0xF) * v88;
+    v71 = *((unsigned __int8 *)ics + 12);
+    ++v92;
+    v72 = 4LL * (unsigned int)(v70 - v56);
+    v23 = (float32x4_t *)((char *)v23 + v72);
+    v21 = (float32x4_t *)((char *)v21 + v72);
   }
-  while ( v59 > v79 );
+  while ( v71 > v92 );
   result = 0;
-  v14 = v71;
-  v4 = v61;
-  v5 = v62;
-  v6 = v63;
-  v7 = v64;
-  v8 = v65;
-  v9 = v66;
-  v10 = v67;
-  v11 = v68;
-  v12 = v69;
-  v13 = v70;
+  v14 = v84;
+  v4 = v74;
+  v5 = v75;
+  v6 = v76;
+  v7 = v77;
+  v8 = v78;
+  v9 = v79;
+  v10 = v80;
+  v11 = v81;
+  v12 = v82;
+  v13 = v83;
 LABEL_45:
-  if ( v84 != _stack_chk_guard )
+  if ( v97 != _stack_chk_guard )
   {
-    v61 = v4;
-    v62 = v5;
-    v63 = v6;
-    v64 = v7;
-    v65 = v8;
-    v66 = v9;
-    v67 = v10;
-    v68 = v11;
-    v69 = v12;
-    v70 = v13;
-    v71 = v14;
+    v74 = v4;
+    v75 = v5;
+    v76 = v6;
+    v77 = v7;
+    v78 = v8;
+    v79 = v9;
+    v80 = v10;
+    v81 = v11;
+    v82 = v12;
+    v83 = v13;
+    v84 = v14;
   }
   return result;
 }

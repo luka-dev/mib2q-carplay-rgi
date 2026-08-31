@@ -3,7 +3,7 @@
  *
  * Hex-Rays 9.3 decompilation of Apple's APAC decoder as linked into
  * Pioneer SPHERA 1.030010  libSPF_CP_PlugInWrapper.so  (AArch64 Linux ELF).
- * 4 function(s), 6620 bytes of .text.
+ * 7 function(s), 8156 bytes of .text.
  *
  * Addresses are file/virtual offsets in that .so (image base 0).
  * This is REFERENCE MATERIAL for a hand port - it does not compile.
@@ -16,10 +16,77 @@
  * ========================================================================== */
 
 /* ---- index -------------------------------------------------------------- */
+/* 0x0009dba0    156  SceneCompositionSettings::CategorySettings::SetAllOn() */
+/* 0x0009dc40    156  SceneCompositionSettings::CategorySettings::SetAllOff() */
 /* 0x0009dfa0    420  SceneCompositionSettings::Initialize(SC_SceneComposition const&, unsigned int) */
 /* 0x0009eb20    320  SceneCompositionSettings::SetEffectiveInteractivityGains(SC_SceneComposition const&) */
+/* 0x0009ec60   1224  SceneCompositionSettings::SetSceneComponentModifiers() */
 /* 0x0009f540   1984  SceneCompositionSettings::SetFromPreset(unsigned short, SC_SceneComposition const&, unsigned short) */
 /* 0x000a00d0   3896  SceneCompositionSettings::ApplyUserInput(unsigned int, SC_SceneComposition const&, CD_AudioSceneControlData::SceneCompositionData const&) */
+
+/* ------------------------------------------------------------------------ */
+/* 0x0009dba0  size 156 bytes  39 insns
+ *   SceneCompositionSettings::CategorySettings::SetAllOn()
+ *   [_ZN24SceneCompositionSettings16CategorySettings8SetAllOnEv]
+ *   data refs: 0x42ce00, 0x43e520
+ */
+__int64 __fastcall SceneCompositionSettings::CategorySettings::SetAllOn(
+        SceneCompositionSettings__CategorySettings *this)
+{
+  __int64 v1; // x3
+  unsigned int v2; // w2
+  __int64 v3; // x4
+  __int64 v4; // x6
+  __int64 v6; // [xsp+18h] [xbp+18h]
+  __int64 v7; // [xsp+20h] [xbp+20h]
+  v1 = *((_QWORD *)this + 3);
+  if ( *((_DWORD *)this + 12) + 8 * (*((_DWORD *)this + 10) - (_DWORD)v1) )
+  {
+    v2 = 0;
+    do
+    {
+      v3 = v2 >> 6;
+      v4 = 1LL << v2++;
+      *(_QWORD *)(v1 + 8 * v3) |= v4;
+      v1 = *((_QWORD *)this + 3);
+    }
+    while ( v2 < *((_DWORD *)this + 12) + 8 * (*((_DWORD *)this + 10) - (int)v1) );
+  }
+  return v6 ^ _stack_chk_guard;
+}
+
+
+/* ------------------------------------------------------------------------ */
+/* 0x0009dc40  size 156 bytes  39 insns
+ *   SceneCompositionSettings::CategorySettings::SetAllOff()
+ *   [_ZN24SceneCompositionSettings16CategorySettings9SetAllOffEv]
+ *   data refs: 0x42ce00, 0x43e520
+ */
+__int64 __fastcall SceneCompositionSettings::CategorySettings::SetAllOff(
+        SceneCompositionSettings__CategorySettings *this)
+{
+  __int64 v1; // x3
+  unsigned int v2; // w2
+  __int64 v3; // x4
+  __int64 v4; // x1
+  __int64 v6; // [xsp+18h] [xbp+18h]
+  __int64 v7; // [xsp+20h] [xbp+20h]
+  v1 = *((_QWORD *)this + 3);
+  if ( *((_DWORD *)this + 12) + 8 * (*((_DWORD *)this + 10) - (_DWORD)v1) )
+  {
+    v2 = 0;
+    do
+    {
+      v3 = v2 >> 6;
+      v4 = 1LL << v2++;
+      *(_QWORD *)(v1 + 8 * v3) &= ~v4;
+      v1 = *((_QWORD *)this + 3);
+    }
+    while ( v2 < *((_DWORD *)this + 12) + 8 * (*((_DWORD *)this + 10) - (int)v1) );
+  }
+  return v6 ^ _stack_chk_guard;
+}
+
 
 /* ------------------------------------------------------------------------ */
 /* 0x0009dfa0  size 420 bytes  101 insns
@@ -180,6 +247,324 @@ LABEL_6:
 
 
 /* ------------------------------------------------------------------------ */
+/* 0x0009ec60  size 1224 bytes  301 insns
+ *   SceneCompositionSettings::SetSceneComponentModifiers()
+ *   [_ZN24SceneCompositionSettings26SetSceneComponentModifiersEv]
+ *   data refs: 0x42ce00, 0x43e520
+ */
+__int64 __fastcall SceneCompositionSettings::SetSceneComponentModifiers(SceneCompositionSettings *this)
+{
+  __int64 v2; // x0
+  __int64 *v3; // x20
+  __int64 *v4; // x23
+  __int64 v5; // x3
+  __int64 v6; // x5
+  unsigned int v7; // w19
+  __int64 v8; // x0
+  __int64 v9; // x5
+  __int64 v10; // x6
+  unsigned int v11; // w22
+  unsigned __int16 *v12; // x0
+  char v13; // w1
+  int v14; // t1
+  __int64 v15; // x20
+  __int64 v16; // x2
+  __int64 v17; // x3
+  __int64 v18; // x4
+  unsigned __int64 v19; // x1
+  unsigned __int64 v20; // x0
+  char *v21; // x4
+  char *v22; // x6
+  char *begin; // x0
+  unsigned int v24; // w2
+  __int64 v25; // x5
+  char *v26; // x1
+  __int64 v27; // x3
+  __int64 v28; // x5
+  __int64 v29; // x5
+  __int16 *v31; // x19
+  __int16 *v32; // x23
+  __int64 v33; // x2
+  _QWORD *v34; // x1
+  __int64 v35; // x2
+  __int64 v36; // x5
+  __int64 v37; // x5
+  char *v38; // x0
+  __int16 v39; // w0
+  __int64 v40; // x24
+  __int64 v41; // x28
+  __int16 **v42; // x0
+  __int16 *v43; // x19
+  __int16 *v44; // x23
+  __int64 v45; // x2
+  _QWORD *end; // x1
+  __int64 v47; // x2
+  __int64 v48; // x5
+  __int64 v49; // x5
+  char *v50; // x0
+  __int16 v51; // w0
+  __int64 v52; // x2
+  __int64 v53; // [xsp+68h] [xbp+68h]
+  __int16 v54; // [xsp+7Eh] [xbp+7Eh]
+  void *v55; // [xsp+80h] [xbp+80h] BYREF
+  unsigned __int16 *v56; // [xsp+88h] [xbp+88h]
+  unsigned __int16 *v57; // [xsp+90h] [xbp+90h]
+  void *v58; // [xsp+98h] [xbp+98h] BYREF
+  char *v59; // [xsp+A0h] [xbp+A0h]
+  char *v60; // [xsp+A8h] [xbp+A8h]
+  std_vector v61; // [xsp+B0h] [xbp+B0h] BYREF
+  __int64 v62; // [xsp+D0h] [xbp+D0h]
+  v2 = *((_QWORD *)this + 7);
+  if ( *((_QWORD *)this + 8) != v2 )
+    *((_QWORD *)this + 8) = v2;
+  v3 = *((__int64 **)this + 1);
+  v4 = *((__int64 **)this + 2);
+  v55 = nullptr;
+  v56 = nullptr;
+  v57 = nullptr;
+  v58 = nullptr;
+  v59 = nullptr;
+  v60 = nullptr;
+  memset(&v61, 0, sizeof(v61));
+  if ( v3 != v4 )
+  {
+    while ( 1 )
+    {
+      v5 = *v3;
+      v6 = v3[1];
+      v7 = 0;
+      if ( (unsigned int)((v6 - *v3) >> 1) )
+        break;
+LABEL_10:
+      v3 += 8;
+      if ( v4 == v3 )
+        goto LABEL_11;
+    }
+    while ( 1 )
+    {
+      while ( ((1LL << v7) & *(_QWORD *)(v3[3] + 8LL * (v7 >> 6))) != 0 )
+      {
+LABEL_6:
+        if ( ++v7 >= (unsigned int)((v6 - v5) >> 1) )
+          goto LABEL_10;
+      }
+      v8 = 2LL * v7;
+      if ( v56 == v57 )
+      {
+        std::vector<unsigned short>::_M_realloc_insert<unsigned short const&>(&v55);
+        v5 = *v3;
+        v6 = v3[1];
+        goto LABEL_6;
+      }
+      ++v7;
+      *v56++ = *(_WORD *)(v5 + v8);
+      v5 = *v3;
+      v6 = v3[1];
+      if ( v7 >= (unsigned int)((v6 - *v3) >> 1) )
+        goto LABEL_10;
+    }
+  }
+LABEL_11:
+  v9 = *((_QWORD *)this + 4);
+  v10 = *((_QWORD *)this + 5);
+  v11 = 0;
+  if ( -1171354717 * (unsigned int)((v10 - v9) >> 3) )
+  {
+    v53 = 0x2E8BA2E8BA2E8BA3LL;
+    while ( 1 )
+    {
+      v12 = (unsigned __int16 *)v55;
+      v13 = 0;
+      if ( v56 != v55 )
+      {
+        do
+        {
+          v14 = *v12++;
+          if ( v14 == v11 )
+            v13 = 1;
+        }
+        while ( v56 != v12 );
+      }
+      v15 = 88LL * v11;
+      v16 = v9 + v15;
+      if ( (unsigned __int8)v13 | *(_BYTE *)(v9 + v15) ^ 1 )
+        goto LABEL_18;
+      v31 = *(__int16 **)(v16 + 64);
+      v32 = *(__int16 **)(v16 + 72);
+      if ( v31 != v32 )
+        break;
+LABEL_42:
+      v40 = *(_QWORD *)(v9 + v15 + 40);
+      v41 = *(_QWORD *)(v9 + v15 + 48);
+      if ( v40 != v41 )
+      {
+        while ( 1 )
+        {
+          v42 = *(__int16 ***)(v40 + 8);
+          v43 = *v42;
+          v44 = v42[1];
+          if ( *v42 != v44 )
+            break;
+LABEL_50:
+          v40 += 16;
+          if ( v41 == v40 )
+          {
+            v9 = *((_QWORD *)this + 4);
+            goto LABEL_52;
+          }
+        }
+        while ( 1 )
+        {
+          v51 = *v43;
+          v54 = *v43;
+          if ( v59 == v60 )
+          {
+            std::vector<unsigned short>::_M_realloc_insert<unsigned short const&>(&v58);
+            end = v61.end;
+            v47 = *((_QWORD *)this + 4) + v15;
+            if ( v61.end == v61.cap )
+              goto LABEL_49;
+LABEL_46:
+            v48 = *(_QWORD *)(v47 + 8);
+            *end = *(_QWORD *)v47;
+            end[1] = v48;
+            ++v43;
+            v49 = *(_QWORD *)(v47 + 24);
+            end[2] = *(_QWORD *)(v47 + 16);
+            end[3] = v49;
+            v50 = (char *)v61.end + 36;
+            *((_DWORD *)end + 8) = *(_DWORD *)(v47 + 32);
+            v61.end = v50;
+            if ( v44 == v43 )
+              goto LABEL_50;
+          }
+          else
+          {
+            *(_WORD *)v59 = v51;
+            v45 = *((_QWORD *)this + 4);
+            v59 += 2;
+            end = v61.end;
+            v47 = v45 + v15;
+            if ( v61.end != v61.cap )
+              goto LABEL_46;
+LABEL_49:
+            std::vector<SC_ComponentModifier>::_M_realloc_insert<SC_ComponentModifier const&>(
+              &v61,
+              end,
+              (const SC_ComponentModifier *)v47);
+            if ( v44 == ++v43 )
+              goto LABEL_50;
+          }
+        }
+      }
+LABEL_52:
+      v10 = *((_QWORD *)this + 5);
+LABEL_18:
+      if ( ++v11 >= (unsigned int)((v10 - v9) >> 3) * (unsigned int)v53 )
+        goto LABEL_19;
+    }
+    while ( 1 )
+    {
+      v39 = *v31;
+      v54 = *v31;
+      if ( v59 == v60 )
+      {
+        std::vector<unsigned short>::_M_realloc_insert<unsigned short const&>(&v58);
+        v34 = v61.end;
+        v35 = *((_QWORD *)this + 4) + v15;
+        if ( v61.end == v61.cap )
+          goto LABEL_40;
+LABEL_37:
+        v36 = *(_QWORD *)(v35 + 8);
+        *v34 = *(_QWORD *)v35;
+        v34[1] = v36;
+        ++v31;
+        v37 = *(_QWORD *)(v35 + 24);
+        v34[2] = *(_QWORD *)(v35 + 16);
+        v34[3] = v37;
+        v38 = (char *)v61.end + 36;
+        *((_DWORD *)v34 + 8) = *(_DWORD *)(v35 + 32);
+        v61.end = v38;
+        if ( v32 == v31 )
+          goto LABEL_41;
+      }
+      else
+      {
+        *(_WORD *)v59 = v39;
+        v33 = *((_QWORD *)this + 4);
+        v59 += 2;
+        v34 = v61.end;
+        v35 = v33 + v15;
+        if ( v61.end != v61.cap )
+          goto LABEL_37;
+LABEL_40:
+        std::vector<SC_ComponentModifier>::_M_realloc_insert<SC_ComponentModifier const&>(
+          &v61,
+          v34,
+          (const SC_ComponentModifier *)v35);
+        if ( v32 == ++v31 )
+        {
+LABEL_41:
+          v9 = *((_QWORD *)this + 4);
+          goto LABEL_42;
+        }
+      }
+    }
+  }
+LABEL_19:
+  v18 = *((_QWORD *)this + 7);
+  v17 = *((_QWORD *)this + 8);
+  v19 = *((unsigned __int16 *)this + 2);
+  v20 = 0x8E38E38E38E38E39LL * ((v17 - v18) >> 2);
+  if ( v19 > v20 )
+  {
+    std::vector<SC_ComponentModifier>::_M_default_append((std_vector *)((char *)this + 56), v19 - v20);
+  }
+  else if ( v19 < v20 )
+  {
+    v52 = v18 + 36LL * *((unsigned __int16 *)this + 2);
+    if ( v17 != v52 )
+      *((_QWORD *)this + 8) = v52;
+  }
+  v21 = (char *)v58;
+  v22 = v59;
+  begin = (char *)v61.begin;
+  if ( (unsigned int)((v59 - (_BYTE *)v58) >> 1) )
+  {
+    v24 = 0;
+    do
+    {
+      v25 = *((_QWORD *)this + 7);
+      if ( *(unsigned __int16 *)&v21[2 * v24] < 954437177 * (unsigned int)((*((_QWORD *)this + 8) - v25) >> 2) )
+      {
+        v26 = &begin[36 * v24];
+        v27 = v25 + 36LL * *(unsigned __int16 *)&v21[2 * v24];
+        v28 = *((_QWORD *)v26 + 1);
+        *(_QWORD *)v27 = *(_QWORD *)v26;
+        *(_QWORD *)(v27 + 8) = v28;
+        v29 = *((_QWORD *)v26 + 3);
+        *(_QWORD *)(v27 + 16) = *((_QWORD *)v26 + 2);
+        *(_QWORD *)(v27 + 24) = v29;
+        v21 = (char *)v58;
+        v22 = v59;
+        begin = (char *)v61.begin;
+        *(_WORD *)(v27 + 32) = *((_WORD *)v26 + 16);
+      }
+      ++v24;
+    }
+    while ( v24 < (unsigned int)((v22 - v21) >> 1) );
+  }
+  if ( begin )
+    operator delete(begin);
+  if ( v58 )
+    operator delete(v58);
+  if ( v55 )
+    operator delete(v55);
+  return 0;
+}
+
+
+/* ------------------------------------------------------------------------ */
 /* 0x0009f540  size 1984 bytes  492 insns
  *   SceneCompositionSettings::SetFromPreset(unsigned short, SC_SceneComposition const&, unsigned short)
  *   [_ZN24SceneCompositionSettings13SetFromPresetEtRK19SC_SceneCompositiont]
@@ -289,7 +674,7 @@ __int64 __fastcall SceneCompositionSettings::SetFromPreset(
   int v97; // w7
   unsigned int v98; // w3
   __int64 v99; // x0
-  SceneCompositionSettings::CategorySettings *v100; // x0
+  SceneCompositionSettings__CategorySettings *v100; // x0
   int v101; // w7
   _QWORD *v102; // x4
   __int64 v103; // x23
@@ -474,7 +859,7 @@ LABEL_86:
       }
       while ( v98 < (unsigned int)((__int64)(*(_QWORD *)(v93 + 8) - *(_QWORD *)v93) >> 1) );
     }
-    v100 = (SceneCompositionSettings::CategorySettings *)(*((_QWORD *)this + 1) + v96);
+    v100 = (SceneCompositionSettings__CategorySettings *)(*((_QWORD *)this + 1) + v96);
     if ( *(_BYTE *)(v93 + 24) )
     {
       v109 = v97;

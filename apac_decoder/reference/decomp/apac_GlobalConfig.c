@@ -148,31 +148,38 @@ __int64 __fastcall apac::GlobalConfig::SetChannelLayout(apac__GlobalConfig *this
   char *v33; // x0
   char *v34; // x24
   void *v35; // x21
-  unsigned int v36; // w28
-  _QWORD *v37; // x2
-  unsigned int v38; // w1
+  __int64 v36; // x2
+  __int64 v37; // x3
+  __int64 v38; // x4
+  __int64 v39; // x5
+  __int64 v40; // x6
+  __int64 v41; // x7
+  unsigned int v42; // w28
+  _QWORD *v43; // x2
+  unsigned int v44; // w1
   __int16 *ProfileConfig; // x0
-  int *v40; // x1
-  int *v41; // x4
-  int v42; // w0
-  __int64 v43; // [xsp+40h] [xbp+40h]
-  __int64 v44; // [xsp+48h] [xbp+48h]
-  __int64 v45; // [xsp+50h] [xbp+50h]
-  __int64 v46; // [xsp+58h] [xbp+58h]
-  _QWORD *v47; // [xsp+68h] [xbp+68h]
-  void *v48; // [xsp+70h] [xbp+70h] BYREF
-  char *v49; // [xsp+78h] [xbp+78h]
-  char *v50; // [xsp+80h] [xbp+80h]
-  __int64 v51; // [xsp+88h] [xbp+88h]
-  __int64 v52; // [xsp+90h] [xbp+90h]
+  int *v46; // x1
+  int *v47; // x4
+  int v48; // w0
+  __int64 v49; // [xsp+0h] [xbp+0h]
+  __int64 v50; // [xsp+40h] [xbp+40h]
+  __int64 v51; // [xsp+48h] [xbp+48h]
+  __int64 v52; // [xsp+50h] [xbp+50h]
+  __int64 v53; // [xsp+58h] [xbp+58h]
+  _QWORD *v54; // [xsp+68h] [xbp+68h]
+  void *v55; // [xsp+70h] [xbp+70h] BYREF
+  char *v56; // [xsp+78h] [xbp+78h]
+  char *v57; // [xsp+80h] [xbp+80h]
+  __int64 v58; // [xsp+88h] [xbp+88h]
+  __int64 v59; // [xsp+90h] [xbp+90h]
   v6 = GetEffectiveDecoderOutConfig<__gnu_cxx::__normal_iterator<std::unique_ptr<apac::IASCConfig> *,std::vector<std::unique_ptr<apac::IASCConfig>>>>(
          *((void **)this + 22),
          *((void **)this + 23),
          (std_vector *)((char *)this + 224));
   if ( v6 )
     goto LABEL_16;
-  v43 = v1;
-  v44 = v2;
+  v50 = v1;
+  v51 = v2;
   v7 = *((__int64 **)this + 28);
   v8 = *((__int64 **)this + 29);
   if ( v7 == v8 )
@@ -195,7 +202,7 @@ __int64 __fastcall apac::GlobalConfig::SetChannelLayout(apac__GlobalConfig *this
     {
       v24 = *((_QWORD *)this + 32);
       v23 = *((char **)this + 33);
-      LOBYTE(v48) = 0;
+      LOBYTE(v55) = 0;
       v25 = 20LL * v9 + 12;
       if ( v25 > (unsigned __int64)&v23[-v24] )
       {
@@ -211,12 +218,12 @@ __int64 __fastcall apac::GlobalConfig::SetChannelLayout(apac__GlobalConfig *this
       *(_DWORD *)(v24 + 8) = v9;
       **((_DWORD **)this + 32) = 0;
       v27 = *((_QWORD **)this + 28);
-      v47 = *((_QWORD **)this + 29);
+      v54 = *((_QWORD **)this + 29);
       v28 = *((_QWORD *)this + 32) + 12LL;
-      if ( v27 != v47 )
+      if ( v27 != v54 )
       {
-        v45 = v3;
-        v46 = v4;
+        v52 = v3;
+        v53 = v4;
         while ( 1 )
         {
           v29 = (*(__int64 (__fastcall **)(_QWORD))(*(_QWORD *)*v27 + 24LL))(*v27);
@@ -224,14 +231,14 @@ __int64 __fastcall apac::GlobalConfig::SetChannelLayout(apac__GlobalConfig *this
           {
             if ( v29 )
             {
-              v37 = (_QWORD *)v28;
-              v38 = 0x10000;
+              v43 = (_QWORD *)v28;
+              v44 = 0x10000;
               do
               {
-                *v37 = v38++;
-                v37 = (_QWORD *)((char *)v37 + 20);
+                *v43 = v44++;
+                v43 = (_QWORD *)((char *)v43 + 20);
               }
-              while ( v38 != v29 + 0x10000 );
+              while ( v44 != v29 + 0x10000 );
               v28 += 20LL * (v29 - 1) + 20;
             }
           }
@@ -239,38 +246,38 @@ __int64 __fastcall apac::GlobalConfig::SetChannelLayout(apac__GlobalConfig *this
           {
             v30 = (_DWORD *)(*(__int64 (__fastcall **)(_QWORD))(*(_QWORD *)*v27 + 32LL))(*v27);
             v31 = v30[2];
-            v48 = nullptr;
-            v49 = nullptr;
-            v50 = nullptr;
+            v55 = nullptr;
+            v56 = nullptr;
+            v57 = nullptr;
             v32 = 20LL * v31 + 12;
             v33 = (char *)operator new(v32);
             v34 = &v33[v32];
             v35 = v33;
-            v48 = v33;
-            v50 = &v33[v32];
+            v55 = v33;
+            v57 = &v33[v32];
             memset(v33, 0, v32);
-            v49 = v34;
+            v56 = v34;
             memcpy(v35, v30, v32);
-            v36 = sub_96850(&v48, v28);
-            if ( v48 )
-              operator delete(v48);
-            if ( v36 )
+            v42 = sub_96850((unsigned int **)&v55, v28, v36, v37, v38, v39, v40, v41, v49);
+            if ( v55 )
+              operator delete(v55);
+            if ( v42 )
             {
-              v6 = v36;
-              v1 = v43;
-              v2 = v44;
-              v3 = v45;
-              v4 = v46;
+              v6 = v42;
+              v1 = v50;
+              v2 = v51;
+              v3 = v52;
+              v4 = v53;
               goto LABEL_16;
             }
             v28 += 20LL * v29;
           }
-          if ( v47 == ++v27 )
+          if ( v54 == ++v27 )
           {
-            v1 = v43;
-            v2 = v44;
-            v3 = v45;
-            v4 = v46;
+            v1 = v50;
+            v2 = v51;
+            v3 = v52;
+            v4 = v53;
             goto LABEL_16;
           }
         }
@@ -305,8 +312,8 @@ __int64 __fastcall apac::GlobalConfig::SetChannelLayout(apac__GlobalConfig *this
       if ( !(unsigned __int16)*i )
         goto LABEL_13;
 LABEL_31:
-      v1 = v43;
-      v2 = v44;
+      v1 = v50;
+      v2 = v51;
       goto LABEL_16;
     }
     v19.n64_u32[0] = i[1];
@@ -328,38 +335,38 @@ LABEL_13:
   if ( (unsigned __int16)*ProfileConfig == 0xFFFF )
   {
     v6 = 4;
-    v1 = v43;
-    v2 = v44;
+    v1 = v50;
+    v2 = v51;
   }
   else
   {
-    v40 = *((int **)ProfileConfig + 3);
-    v41 = *((int **)ProfileConfig + 4);
-    for ( i = *((int **)this + 32); v41 != v40; ++v40 )
+    v46 = *((int **)ProfileConfig + 3);
+    v47 = *((int **)ProfileConfig + 4);
+    for ( i = *((int **)this + 32); v47 != v46; ++v46 )
     {
-      v42 = *v40;
-      if ( (*v40 & 0xFFFF0000) == 0x930000 )
+      v48 = *v46;
+      if ( (*v46 & 0xFFFF0000) == 0x930000 )
       {
-        v21 = v9 | v42;
+        v21 = v9 | v48;
       }
-      else if ( v9 == (unsigned __int16)v42 )
+      else if ( v9 == (unsigned __int16)v48 )
       {
-        v21 = *v40;
+        v21 = *v46;
         break;
       }
     }
 LABEL_15:
     *i = v21;
-    v1 = v43;
-    v2 = v44;
+    v1 = v50;
+    v2 = v51;
   }
 LABEL_16:
-  if ( v51 != _stack_chk_guard )
+  if ( v58 != _stack_chk_guard )
   {
-    v43 = v1;
-    v44 = v2;
-    v45 = v3;
-    v46 = v4;
+    v50 = v1;
+    v51 = v2;
+    v52 = v3;
+    v53 = v4;
   }
   return v6;
 }
@@ -487,97 +494,113 @@ __int64 __fastcall apac::GlobalConfig::Deserialize(apac__GlobalConfig *this, TBi
   int v116; // w1
   unsigned int v117; // w21
   _DWORD *v118; // x1
+  __int64 v119; // x2
+  __int64 v120; // x3
+  __int64 v121; // x4
+  __int64 v122; // x5
+  __int64 v123; // x6
+  __int64 v124; // x7
   char *i; // x0
-  unsigned __int64 v120; // x24
-  __int64 v121; // x1
-  unsigned int v122; // w27
-  void (__fastcall *v123)(apac::chan::CoreDecoderConfig *__hidden); // x20
-  unsigned __int64 v124; // x0
-  char *v125; // x1
-  __int64 v126; // x3
-  char *v127; // x0
-  unsigned int v128; // w1
-  __int64 v129; // x2
-  unsigned int v130; // w0
-  __int64 v131; // x0
-  __int64 v132; // x1
-  __int64 v133; // x20
+  unsigned __int64 v126; // x24
+  __int64 v127; // x1
+  unsigned int v128; // w27
+  void (__fastcall *v129)(apac::chan::CoreDecoderConfig *__hidden); // x20
+  unsigned __int64 v130; // x0
+  char *v131; // x1
+  __int64 v132; // x3
+  char *v133; // x0
   unsigned int v134; // w1
-  int v135; // w0
-  unsigned int v136; // w21
-  unsigned int v137; // w21
-  unsigned int v138; // w1
-  int v139; // w0
-  unsigned int v140; // w21
+  __int64 v135; // x2
+  unsigned int v136; // w0
+  __int64 v137; // x0
+  __int64 v138; // x1
+  __int64 v139; // x20
+  unsigned int v140; // w1
   int v141; // w0
-  unsigned int v142; // w2
-  int v143; // w5
-  const unsigned __int8 *v144; // x1
-  const unsigned __int8 *v145; // x1
-  unsigned int v146; // w3
-  int v147; // w5
-  const unsigned __int8 *v148; // x1
-  const unsigned __int8 *v149; // x1
-  unsigned int v150; // w5
+  unsigned int v142; // w21
+  unsigned int v143; // w21
+  unsigned int v144; // w1
+  int v145; // w0
+  unsigned int v146; // w21
+  int v147; // w0
+  unsigned int v148; // w2
+  int v149; // w5
+  const unsigned __int8 *v150; // x1
   const unsigned __int8 *v151; // x1
-  int v152; // w3
-  int v153; // w0
-  unsigned int v154; // w2
-  int v155; // w5
-  const unsigned __int8 *v156; // x1
-  int v157; // w2
-  unsigned int v158; // w0
-  int v159; // w1
-  unsigned int v160; // w0
-  __int64 v161; // x21
-  int8x8_t v162; // d0
-  _BYTE *v163; // x0
-  _BYTE *v164; // x1
-  signed __int64 v165; // x21
-  char *v166; // x3
-  char *v167; // x2
-  size_t v168; // x21
-  unsigned int *v169; // x23
-  unsigned int v170; // w0
-  unsigned int *v171; // x21
-  unsigned int *v172; // x24
-  __int64 v173; // x27
-  unsigned int *v174; // x23
-  unsigned int v175; // w2
-  unsigned int *v176; // x0
-  unsigned int v177; // w1
-  __int64 v178; // x6
-  unsigned int *v179; // x5
-  unsigned int v180; // t1
-  unsigned int v181; // w1
-  __int64 v182; // x4
-  char *v183; // x3
-  _DWORD *v184; // x2
-  __int64 v185; // x0
+  unsigned int v152; // w3
+  int v153; // w5
+  const unsigned __int8 *v154; // x1
+  const unsigned __int8 *v155; // x1
+  unsigned int v156; // w5
+  const unsigned __int8 *v157; // x1
+  int v158; // w3
+  int v159; // w0
+  unsigned int v160; // w2
+  int v161; // w5
+  const unsigned __int8 *v162; // x1
+  int v163; // w2
+  unsigned int v164; // w0
+  int v165; // w1
+  unsigned int v166; // w0
+  __int64 v167; // x21
+  __int64 v168; // x5
+  __int64 v169; // x6
+  __int64 v170; // x7
+  int8x8_t v171; // d0
+  _BYTE *v172; // x0
+  _BYTE *v173; // x1
+  signed __int64 v174; // x21
+  char *v175; // x3
+  char *v176; // x2
+  size_t v177; // x21
+  unsigned int *v178; // x23
+  unsigned int v179; // w0
+  char *v180; // x21
+  unsigned int *v181; // x24
+  signed __int64 v182; // x27
+  __int64 v183; // x4
+  __int64 v184; // x3
+  __int64 v185; // x4
   __int64 v186; // x5
-  _DWORD *v187; // x7
-  int v188; // w6
-  _DWORD *v189; // x2
-  int v190; // w0
-  int v191; // w21
-  _DWORD *v192; // x0
-  int *v193; // x2
-  int v194; // w0
-  __int64 v195; // [xsp+50h] [xbp+50h]
-  __int64 v196; // [xsp+58h] [xbp+58h]
-  void (__fastcall **v197)(apac::chan::CoreDecoderConfig *__hidden); // [xsp+60h] [xbp+60h]
-  __int64 *v198; // [xsp+68h] [xbp+68h]
-  unsigned int v199; // [xsp+74h] [xbp+74h]
-  void (__fastcall **v200)(apac::BaseASCConfig *__hidden); // [xsp+78h] [xbp+78h]
-  char v201; // [xsp+8Fh] [xbp+8Fh] BYREF
-  void *v202; // [xsp+90h] [xbp+90h] BYREF
-  unsigned int *v203; // [xsp+98h] [xbp+98h]
-  void *v204[3]; // [xsp+A8h] [xbp+A8h] BYREF
-  void *v205; // [xsp+C0h] [xbp+C0h] BYREF
-  char *v206; // [xsp+C8h] [xbp+C8h]
-  char *v207; // [xsp+D0h] [xbp+D0h]
-  __int64 v208; // [xsp+D8h] [xbp+D8h]
-  __int64 v209; // [xsp+E0h] [xbp+E0h]
+  __int64 v187; // x6
+  __int64 v188; // x7
+  char *v189; // x23
+  unsigned int v190; // w2
+  unsigned int *v191; // x0
+  int v192; // w1
+  __int64 v193; // x6
+  _DWORD *v194; // x5
+  unsigned int v195; // t1
+  unsigned int v196; // w1
+  __int64 v197; // x4
+  char *v198; // x3
+  _DWORD *v199; // x2
+  __int64 v200; // x0
+  __int64 v201; // x5
+  _DWORD *v202; // x7
+  int v203; // w6
+  _DWORD *v204; // x2
+  int v205; // w0
+  int v206; // w21
+  _DWORD *v207; // x0
+  int *v208; // x2
+  int v209; // w0
+  __int64 v210; // [xsp+0h] [xbp+0h]
+  __int64 v211; // [xsp+50h] [xbp+50h]
+  __int64 v212; // [xsp+58h] [xbp+58h]
+  void (__fastcall **v213)(apac::chan::CoreDecoderConfig *__hidden); // [xsp+60h] [xbp+60h]
+  __int64 *v214; // [xsp+68h] [xbp+68h]
+  unsigned int v215; // [xsp+74h] [xbp+74h]
+  void (__fastcall **v216)(apac::BaseASCConfig *__hidden); // [xsp+78h] [xbp+78h]
+  char v217; // [xsp+8Fh] [xbp+8Fh] BYREF
+  void *v218; // [xsp+90h] [xbp+90h] BYREF
+  char *v219; // [xsp+98h] [xbp+98h]
+  void *v220[3]; // [xsp+A8h] [xbp+A8h] BYREF
+  void *v221; // [xsp+C0h] [xbp+C0h] BYREF
+  char *v222; // [xsp+C8h] [xbp+C8h]
+  char *v223; // [xsp+D0h] [xbp+D0h]
+  __int64 v224; // [xsp+D8h] [xbp+D8h]
+  __int64 v225; // [xsp+E0h] [xbp+E0h]
   apac::GlobalConfig::Reset(this);
   cache = bs->cache;
   v7 = bs->bitsLeft - 6;
@@ -800,23 +823,23 @@ LABEL_12:
 LABEL_14:
   if ( v27 )
     goto LABEL_64;
-  v195 = v2;
-  v196 = v3;
+  v211 = v2;
+  v212 = v3;
   Esc = apac::GetEscBits<6u,12u>(bs, 3u);
-  v205 = nullptr;
-  v206 = nullptr;
-  v207 = nullptr;
+  v221 = nullptr;
+  v222 = nullptr;
+  v223 = nullptr;
   if ( !Esc )
     goto LABEL_87;
   v29 = 0;
   v30 = 0;
-  v197 = off_42A990;
-  v198 = &`vtable for'apac::lbr::DecoderConfig;
+  v213 = off_42A990;
+  v214 = &`vtable for'apac::lbr::DecoderConfig;
   do
   {
     v31 = bs->cache;
     v32 = bs->bitsLeft;
-    v204[0] = nullptr;
+    v220[0] = nullptr;
     bs->bitsLeft = v32 - 8;
     v33 = HIBYTE(v31);
     if ( v32 - 8 < 0 )
@@ -868,17 +891,17 @@ LABEL_90:
 LABEL_21:
     if ( v36 )
     {
-      if ( v204[0] )
-        (*(void (__fastcall **)(void *))(*(_QWORD *)v204[0] + 8LL))(v204[0]);
-      if ( v205 )
-        operator delete(v205);
+      if ( v220[0] )
+        (*(void (__fastcall **)(void *))(*(_QWORD *)v220[0] + 8LL))(v220[0]);
+      if ( v221 )
+        operator delete(v221);
       v27 = 4;
-      v2 = v195;
-      v3 = v196;
+      v2 = v211;
+      v3 = v212;
       goto LABEL_64;
     }
     v37 = (_DWORD *)operator new(0x68u);
-    v38 = v197;
+    v38 = v213;
     v37[2] = 0;
     *(_QWORD *)v37 = v38;
     *((_QWORD *)v37 + 2) = 0;
@@ -893,61 +916,61 @@ LABEL_21:
     *((_QWORD *)v37 + 11) = 0;
     v39 = operator new(0xCu);
     v40 = v39 + 12;
-    v41 = v198 + 2;
+    v41 = v214 + 2;
     v42 = v39;
     *((_QWORD *)v37 + 9) = v39;
-    v43 = v204[0];
+    v43 = v220[0];
     *((_QWORD *)v37 + 11) = v40;
     *(_QWORD *)v37 = v41;
     *(_QWORD *)v42 = 0;
     *(_DWORD *)(v42 + 8) = 0;
     *((_QWORD *)v37 + 10) = v40;
     *((_BYTE *)v37 + 96) = 0;
-    v204[0] = v37;
+    v220[0] = v37;
     v44 = apac::lbr::DecoderConfig::Deserialize;
     if ( v43 )
     {
       (*(void (__fastcall **)(void *))(*(_QWORD *)v43 + 8LL))(v43);
-      v37 = v204[0];
-      v44 = *(__int64 (__fastcall **)(apac__lbr__DecoderConfig *, TBitstreamReader_u32 *))(*(_QWORD *)v204[0] + 16LL);
+      v37 = v220[0];
+      v44 = *(__int64 (__fastcall **)(apac__lbr__DecoderConfig *, TBitstreamReader_u32 *))(*(_QWORD *)v220[0] + 16LL);
     }
     v27 = v44((apac__lbr__DecoderConfig *)v37, bs);
-    v45 = v204[0];
+    v45 = v220[0];
     if ( v27 )
       goto LABEL_104;
-    v46 = (*(__int64 (__fastcall **)(void *))(*(_QWORD *)v204[0] + 24LL))(v204[0]);
+    v46 = (*(__int64 (__fastcall **)(void *))(*(_QWORD *)v220[0] + 24LL))(v220[0]);
     v47 = v46;
     if ( !v46 || (v30 += v46, v30 <= v33) )
     {
       v27 = 1;
-      v45 = v204[0];
+      v45 = v220[0];
 LABEL_104:
       if ( v45 )
         (*(void (__fastcall **)(void *))(*(_QWORD *)v45 + 8LL))(v45);
-      v106 = v205;
-      if ( !v205 )
+      v106 = v221;
+      if ( !v221 )
         goto LABEL_117;
       goto LABEL_107;
     }
     v48 = apac::ConvertToAudioDataType(0);
-    v49 = !apac::ASCChannelMap::AddMap((apac__ASCChannelMap *)&v205, v48, v33, v47 + v33);
-    v45 = v204[0];
+    v49 = !apac::ASCChannelMap::AddMap((apac__ASCChannelMap *)&v221, v48, v33, v47 + v33);
+    v45 = v220[0];
     if ( v49 )
     {
       v27 = 1;
       goto LABEL_104;
     }
-    *((_WORD *)v204[0] + 21) = v33;
+    *((_WORD *)v220[0] + 21) = v33;
     std::vector<std::unique_ptr<apac::IASCConfig>>::emplace_back<std::unique_ptr<apac::IASCConfig>>(
       (std_vector *)((char *)this + 176),
-      v204);
-    if ( v204[0] )
-      (*(void (__fastcall **)(void *))(*(_QWORD *)v204[0] + 8LL))(v204[0]);
+      v220);
+    if ( v220[0] )
+      (*(void (__fastcall **)(void *))(*(_QWORD *)v220[0] + 8LL))(v220[0]);
     ++v29;
   }
   while ( Esc != v29 );
-  if ( v205 )
-    operator delete(v205);
+  if ( v221 )
+    operator delete(v221);
   v27 = apac::ProfileLevelConfig::ValidateProfileLevelData(
           (apac__GlobalConfig *)((char *)this + 32),
           (const std_vector *)((char *)this + 176));
@@ -963,15 +986,15 @@ LABEL_104:
   if ( v51 < 0 )
   {
     TBitstreamReader<unsigned int>::FillCacheFrom(bs, bs->cur);
-    v158 = bs->cache;
-    v159 = bs->bitsLeft;
-    LOBYTE(v52) = v52 | (v158 >> (v159 + 32));
-    v160 = v158 << -(char)v159;
-    if ( v159 == -32 )
-      v160 = 0;
+    v164 = bs->cache;
+    v165 = bs->bitsLeft;
+    LOBYTE(v52) = v52 | (v164 >> (v165 + 32));
+    v166 = v164 << -(char)v165;
+    if ( v165 == -32 )
+      v166 = 0;
     bs->cur += 4;
-    bs->cache = v160;
-    bs->bitsLeft = v159 + 32;
+    bs->cache = v166;
+    bs->bitsLeft = v165 + 32;
   }
   else
   {
@@ -980,20 +1003,20 @@ LABEL_104:
   *((_BYTE *)this + 249) = (unsigned __int8)v52 != 0;
   if ( !(_BYTE)v52 )
     goto LABEL_150;
-  v199 = apac::GetEscBits<6u,12u>(bs, 3u);
-  if ( !v199 )
+  v215 = apac::GetEscBits<6u,12u>(bs, 3u);
+  if ( !v215 )
   {
-    v2 = v195;
-    v3 = v196;
+    v2 = v211;
+    v3 = v212;
     goto LABEL_67;
   }
-  LODWORD(v197) = 0;
-  v200 = off_42AFC8;
+  LODWORD(v213) = 0;
+  v216 = off_42AFC8;
   while ( 1 )
   {
     v61 = bs->cache;
     v60 = bs->bitsLeft;
-    v205 = nullptr;
+    v221 = nullptr;
     v62 = v60 - 8;
     bs->bitsLeft = v62;
     v63 = HIBYTE(v61);
@@ -1031,18 +1054,18 @@ LABEL_104:
     }
     if ( v63 >= v54 )
     {
-      if ( v205 )
-        (*(void (__fastcall **)(void *))(*(_QWORD *)v205 + 8LL))(v205);
+      if ( v221 )
+        (*(void (__fastcall **)(void *))(*(_QWORD *)v221 + 8LL))(v221);
 LABEL_87:
       v27 = 1;
-      v2 = v195;
-      v3 = v196;
+      v2 = v211;
+      v3 = v212;
       goto LABEL_64;
     }
     v55 = bs->cache;
     v56 = v62 - 3;
     bs->bitsLeft = v56;
-    LODWORD(v198) = v55 >> 29;
+    LODWORD(v214) = v55 >> 29;
     if ( v56 < 0 )
     {
       TBitstreamReader<unsigned int>::FillCacheFrom(bs, bs->cur);
@@ -1050,183 +1073,193 @@ LABEL_87:
       v111 = bs->bitsLeft;
       v112 = v110 >> (v111 + 32);
       v113 = v110 << -(char)v111;
-      v114 = (unsigned int)v198 | v112;
+      v114 = (unsigned int)v214 | v112;
       if ( v111 == -32 )
         v113 = 0;
       bs->cur += 4;
       bs->cache = v113;
       bs->bitsLeft = v111 + 32;
-      LODWORD(v198) = v114;
+      LODWORD(v214) = v114;
     }
     else
     {
       bs->cache = 8 * v55;
     }
     v57 = (_WORD *)operator new(0x48u);
-    *((_DWORD *)v57 + 2) = (_DWORD)v198;
+    *((_DWORD *)v57 + 2) = (_DWORD)v214;
     *((_QWORD *)v57 + 2) = 0;
     *((_QWORD *)v57 + 3) = 0;
     *((_QWORD *)v57 + 4) = 0;
     *((_DWORD *)v57 + 10) = -1;
-    *(_QWORD *)v57 = v200;
+    *(_QWORD *)v57 = v216;
     *((_QWORD *)v57 + 6) = 0;
     *((_QWORD *)v57 + 7) = 0;
     *((_QWORD *)v57 + 8) = 0;
     v58 = operator new(0xCu);
     *((_QWORD *)v57 + 6) = v58;
-    v59 = v205;
+    v59 = v221;
     *((_QWORD *)v57 + 8) = v58 + 12;
     *(_QWORD *)v58 = 0;
     *(_DWORD *)(v58 + 8) = 0;
     *((_QWORD *)v57 + 7) = v58 + 12;
-    v205 = v57;
+    v221 = v57;
     if ( v59 )
     {
       (*(void (__fastcall **)(void *))(*(_QWORD *)v59 + 8LL))(v59);
-      v57 = v205;
+      v57 = v221;
     }
     v57[21] = v63;
     std::vector<std::unique_ptr<apac::IASCConfig>>::emplace_back<std::unique_ptr<apac::IASCConfig>>(
       (std_vector *)((char *)this + 200),
-      &v205);
-    if ( v205 )
-      (*(void (__fastcall **)(void *))(*(_QWORD *)v205 + 8LL))(v205);
-    if ( v199 == (_DWORD)v197 + 1 )
+      &v221);
+    if ( v221 )
+      (*(void (__fastcall **)(void *))(*(_QWORD *)v221 + 8LL))(v221);
+    if ( v215 == (_DWORD)v213 + 1 )
       break;
-    LODWORD(v197) = (_DWORD)v197 + 1;
+    LODWORD(v213) = (_DWORD)v213 + 1;
   }
-  if ( v199 == 1 )
+  if ( v215 == 1 )
   {
     std::vector<char>::operator=(**((_QWORD **)this + 25) + 48LL, (char *)this + 256);
   }
   else
   {
-    v161 = v199;
-    std::vector<unsigned int>::vector(&v202, v199, &v205);
-    std::vector<unsigned int>::vector(v204, v161, &v205);
-    v164 = *((_BYTE **)this + 32);
-    v163 = *((_BYTE **)this + 33);
-    v205 = nullptr;
-    v206 = nullptr;
-    v207 = nullptr;
-    v165 = v163 - v164;
-    if ( v163 == v164 )
+    v167 = v215;
+    std::vector<unsigned int>::vector(&v218, v215, &v221);
+    std::vector<unsigned int>::vector(v220, v167, &v221);
+    v173 = *((_BYTE **)this + 32);
+    v172 = *((_BYTE **)this + 33);
+    v221 = nullptr;
+    v222 = nullptr;
+    v223 = nullptr;
+    v174 = v172 - v173;
+    if ( v172 == v173 )
     {
-      v166 = nullptr;
+      v175 = nullptr;
     }
     else
     {
-      if ( v163 - v164 < 0 )
+      if ( v172 - v173 < 0 )
         std::__throw_bad_alloc();
-      v166 = (char *)operator new(v163 - v164);
-      v164 = *((_BYTE **)this + 32);
-      v163 = *((_BYTE **)this + 33);
+      v175 = (char *)operator new(v172 - v173);
+      v173 = *((_BYTE **)this + 32);
+      v172 = *((_BYTE **)this + 33);
     }
-    v167 = &v166[v165];
-    v205 = v166;
-    v206 = v166;
-    v168 = v163 - v164;
-    v207 = v167;
-    if ( v163 != v164 )
-      v166 = (char *)memmove(v166, v164, v168);
-    v169 = (unsigned int *)v202;
-    v206 = &v166[v168];
-    v170 = 0;
-    if ( v202 != v203 )
+    v176 = &v175[v174];
+    v221 = v175;
+    v222 = v175;
+    v177 = v172 - v173;
+    v223 = v176;
+    if ( v172 != v173 )
+      v175 = (char *)memmove(v175, v173, v177);
+    v178 = (unsigned int *)v218;
+    v222 = &v175[v177];
+    v179 = 0;
+    if ( v218 != v219 )
     {
       do
       {
-        *v169 = v170++;
-        v171 = v203;
+        *v178 = v179++;
+        v180 = v219;
       }
-      while ( v169 != v203 );
-      v172 = (unsigned int *)v202;
-      if ( v203 != v202 )
+      while ( v178 != (unsigned int *)v219 );
+      v181 = (unsigned int *)v218;
+      if ( v219 != v218 )
       {
-        v173 = (char *)v203 - (_BYTE *)v202;
-        sub_97670(v202, v203, 2LL * (int)(63 - __clz(((char *)v203 - (_BYTE *)v202) >> 2)), this);
-        if ( v173 <= 64 )
+        v182 = v219 - (_BYTE *)v218;
+        v183 = __clz((v219 - (_BYTE *)v218) >> 2);
+        sub_97670(
+          (unsigned int *)v218,
+          (unsigned int *)v219,
+          2LL * (63 - (int)v183),
+          (__int64)this,
+          v183,
+          v168,
+          v169,
+          v170,
+          v210);
+        if ( v182 <= 64 )
         {
-          sub_974B0(v172);
+          sub_974B0(v181, (char *)v178, (__int64)this, v184, v185, v186, v187, v188, v210);
         }
         else
         {
-          v174 = v172 + 16;
-          sub_974B0(v172);
-          if ( v171 != v172 + 16 )
+          v189 = (char *)(v181 + 16);
+          sub_974B0(v181, (char *)v181 + 64, (__int64)this, v184, v185, v186, v187, v188, v210);
+          if ( v180 != (char *)(v181 + 16) )
           {
             do
             {
-              v175 = *(v174 - 1);
-              v176 = v174 - 1;
-              v177 = *v174;
-              v178 = 8LL * *v174;
-              if ( *(unsigned __int16 *)(*(_QWORD *)(*((_QWORD *)this + 25) + v178) + 42LL) >= (unsigned int)*(unsigned __int16 *)(*(_QWORD *)(*((_QWORD *)this + 25) + 8LL * v175) + 42LL) )
+              v190 = *((_DWORD *)v189 - 1);
+              v191 = (unsigned int *)(v189 - 4);
+              v192 = *(_DWORD *)v189;
+              v193 = 8LL * *(unsigned int *)v189;
+              if ( *(unsigned __int16 *)(*(_QWORD *)(*((_QWORD *)this + 25) + v193) + 42LL) >= (unsigned int)*(unsigned __int16 *)(*(_QWORD *)(*((_QWORD *)this + 25) + 8LL * v190) + 42LL) )
               {
-                v179 = v174;
+                v194 = v189;
               }
               else
               {
                 do
                 {
-                  v176[1] = v175;
-                  v179 = v176;
-                  v180 = *--v176;
-                  v175 = v180;
+                  v191[1] = v190;
+                  v194 = v191;
+                  v195 = *--v191;
+                  v190 = v195;
                 }
-                while ( *(unsigned __int16 *)(*(_QWORD *)(*((_QWORD *)this + 25) + v178) + 42LL) < (unsigned int)*(unsigned __int16 *)(*(_QWORD *)(*((_QWORD *)this + 25) + 8LL * v180) + 42LL) );
+                while ( *(unsigned __int16 *)(*(_QWORD *)(*((_QWORD *)this + 25) + v193) + 42LL) < (unsigned int)*(unsigned __int16 *)(*(_QWORD *)(*((_QWORD *)this + 25) + 8LL * v195) + 42LL) );
               }
-              *v179 = v177;
-              ++v174;
+              *v194 = v192;
+              v189 += 4;
             }
-            while ( v171 != v174 );
+            while ( v180 != v189 );
           }
         }
       }
     }
-    v181 = 0;
-    v182 = 0;
-    v183 = (char *)v202;
-    v184 = v204[0];
+    v196 = 0;
+    v197 = 0;
+    v198 = (char *)v218;
+    v199 = v220[0];
     do
     {
-      v185 = *(unsigned int *)&v183[v182];
-      v186 = *((_QWORD *)this + 25);
-      v187 = &v184[v185];
-      v188 = *(unsigned __int16 *)(*(_QWORD *)(v186 + 8 * v185) + 42LL);
-      if ( v181 < (unsigned int)v197 )
+      v200 = *(unsigned int *)&v198[v197];
+      v201 = *((_QWORD *)this + 25);
+      v202 = &v199[v200];
+      v203 = *(unsigned __int16 *)(*(_QWORD *)(v201 + 8 * v200) + 42LL);
+      if ( v196 < (unsigned int)v213 )
       {
-        v184[v185] = *(unsigned __int16 *)(*(_QWORD *)(v186 + 8LL * *(unsigned int *)&v183[v182 + 4]) + 42LL) - v188;
+        v199[v200] = *(unsigned __int16 *)(*(_QWORD *)(v201 + 8LL * *(unsigned int *)&v198[v197 + 4]) + 42LL) - v203;
       }
       else
       {
-        v189 = *((_DWORD **)this + 32);
-        if ( *v189 )
+        v204 = *((_DWORD **)this + 32);
+        if ( *v204 )
         {
-          v190 = (unsigned __int16)*v189;
-          if ( *v189 == 0x10000 )
+          v205 = (unsigned __int16)*v204;
+          if ( *v204 == 0x10000 )
           {
-            v162.n64_u32[0] = v189[1];
-            v162.n64_u64[0] = vcnt_s8(v162).n64_u64[0];
-            v190 = (unsigned __int8)vaddv_s8(v162);
+            v171.n64_u32[0] = v204[1];
+            v171.n64_u64[0] = vcnt_s8(v171).n64_u64[0];
+            v205 = (unsigned __int8)vaddv_s8(v171);
           }
         }
         else
         {
-          v190 = v189[2];
+          v205 = v204[2];
         }
-        *v187 = v190 - v188;
+        *v202 = v205 - v203;
       }
-      v183 = (char *)v202;
-      v184 = v204[0];
-      i = (char *)v204[0];
-      if ( !*((_DWORD *)v204[0] + *(unsigned int *)((char *)v202 + v182)) )
+      v198 = (char *)v218;
+      v199 = v220[0];
+      i = (char *)v220[0];
+      if ( !*((_DWORD *)v220[0] + *(unsigned int *)((char *)v218 + v197)) )
       {
         v27 = 1;
         goto LABEL_112;
       }
-      v182 += 4;
-      v49 = v181++ == (_DWORD)v197;
+      v197 += 4;
+      v49 = v196++ == (_DWORD)v213;
     }
     while ( !v49 );
     v115 = *((int **)this + 32);
@@ -1237,103 +1270,103 @@ LABEL_87:
       {
         if ( v116 == 0x10000 )
         {
-          v162.n64_u32[0] = v115[1];
-          v117 = (unsigned __int8)vaddv_s8(vcnt_s8(v162));
+          v171.n64_u32[0] = v115[1];
+          v117 = (unsigned __int8)vaddv_s8(vcnt_s8(v171));
         }
         else
         {
           v117 = (unsigned __int16)*v115;
         }
-        v201 = 0;
-        std::vector<char>::resize(&v205, 20LL * v117 + 12, &v201);
-        v118 = v205;
-        *(_DWORD *)v205 = 0;
+        v217 = 0;
+        std::vector<char>::resize(&v221, 20LL * v117 + 12, &v217);
+        v118 = v221;
+        *(_DWORD *)v221 = 0;
         v118[2] = v117;
-        v27 = sub_96850((char *)this + 256, (char *)v205 + 12);
+        v27 = sub_96850((unsigned int **)this + 32, (__int64)v221 + 12, v119, v120, v121, v122, v123, v124, v210);
         if ( !v27 )
           goto LABEL_134;
 LABEL_112:
-        if ( v205 )
-          operator delete(v205);
-        if ( v204[0] )
-          operator delete(v204[0]);
-        v106 = v202;
-        if ( !v202 )
+        if ( v221 )
+          operator delete(v221);
+        if ( v220[0] )
+          operator delete(v220[0]);
+        v106 = v218;
+        if ( !v218 )
         {
 LABEL_117:
-          v2 = v195;
-          v3 = v196;
+          v2 = v211;
+          v3 = v212;
           goto LABEL_64;
         }
 LABEL_107:
         operator delete(v106);
-        v2 = v195;
-        v3 = v196;
+        v2 = v211;
+        v3 = v212;
         goto LABEL_64;
       }
-      v191 = (unsigned __int16)*v115;
-      v201 = 0;
-      std::vector<char>::resize(&v205, 20LL * (unsigned __int16)v116 + 12, &v201);
-      v192 = v205;
-      *(_DWORD *)v205 = 0;
-      v192[2] = v191;
-      v193 = (int *)((char *)v205 + 12);
-      if ( v191 )
+      v206 = (unsigned __int16)*v115;
+      v217 = 0;
+      std::vector<char>::resize(&v221, 20LL * (unsigned __int16)v116 + 12, &v217);
+      v207 = v221;
+      *(_DWORD *)v221 = 0;
+      v207[2] = v206;
+      v208 = (int *)((char *)v221 + 12);
+      if ( v206 )
       {
-        v194 = 0x40000;
+        v209 = 0x40000;
         do
         {
-          *v193 = v194;
-          v193[1] = 0;
-          ++v194;
-          v193 += 5;
+          *v208 = v209;
+          v208[1] = 0;
+          ++v209;
+          v208 += 5;
         }
-        while ( v194 != v191 + 0x40000 );
+        while ( v209 != v206 + 0x40000 );
       }
 LABEL_134:
-      i = (char *)v204[0];
+      i = (char *)v220[0];
     }
-    v120 = 0;
-    v121 = 4LL * (unsigned int)v197 + 4;
-    v197 = *((void (__fastcall ***)(apac::chan::CoreDecoderConfig *__hidden))this + 25);
-    v198 = (__int64 *)v121;
+    v126 = 0;
+    v127 = 4LL * (unsigned int)v213 + 4;
+    v213 = *((void (__fastcall ***)(apac::chan::CoreDecoderConfig *__hidden))this + 25);
+    v214 = (__int64 *)v127;
     do
     {
-      v122 = *(_DWORD *)&i[v120];
-      v123 = v197[v120 / 4];
-      v201 = 0;
-      v124 = 20LL * v122 + 12;
-      v126 = *((_QWORD *)v123 + 6);
-      v125 = *((char **)v123 + 7);
-      if ( v124 > (unsigned __int64)&v125[-v126] )
+      v128 = *(_DWORD *)&i[v126];
+      v129 = v213[v126 / 4];
+      v217 = 0;
+      v130 = 20LL * v128 + 12;
+      v132 = *((_QWORD *)v129 + 6);
+      v131 = *((char **)v129 + 7);
+      if ( v130 > (unsigned __int64)&v131[-v132] )
       {
-        std::vector<char>::_M_fill_insert((_DWORD)v123 + 48, v125, v124 - (_QWORD)&v125[-v126]);
-        v126 = *((_QWORD *)v123 + 6);
+        std::vector<char>::_M_fill_insert((_DWORD)v129 + 48, v131, v130 - (_QWORD)&v131[-v132]);
+        v132 = *((_QWORD *)v129 + 6);
       }
-      else if ( v124 < (unsigned __int64)&v125[-v126] )
+      else if ( v130 < (unsigned __int64)&v131[-v132] )
       {
-        v127 = (char *)(v126 + v124);
-        if ( v125 != v127 )
-          *((_QWORD *)v123 + 7) = v127;
+        v133 = (char *)(v132 + v130);
+        if ( v131 != v133 )
+          *((_QWORD *)v129 + 7) = v133;
       }
-      *(_DWORD *)(v126 + 8) = v122;
-      v128 = 0;
-      **((_DWORD **)v123 + 6) = 0;
-      for ( i = (char *)v204[0]; *(_DWORD *)((char *)v204[0] + v120) > v128; i = (char *)v204[0] )
+      *(_DWORD *)(v132 + 8) = v128;
+      v134 = 0;
+      **((_DWORD **)v129 + 6) = 0;
+      for ( i = (char *)v220[0]; *(_DWORD *)((char *)v220[0] + v126) > v134; i = (char *)v220[0] )
       {
-        v129 = 20LL * v128 + 12;
-        v130 = *((unsigned __int16 *)v123 + 21) + v128++;
-        *(_DWORD *)(*((_QWORD *)v123 + 6) + v129) = *((_DWORD *)v205 + 5 * v130 + 3);
+        v135 = 20LL * v134 + 12;
+        v136 = *((unsigned __int16 *)v129 + 21) + v134++;
+        *(_DWORD *)(*((_QWORD *)v129 + 6) + v135) = *((_DWORD *)v221 + 5 * v136 + 3);
       }
-      v120 += 4LL;
+      v126 += 4LL;
     }
-    while ( v198 != (__int64 *)v120 );
-    if ( v205 )
-      operator delete(v205);
-    if ( v204[0] )
-      operator delete(v204[0]);
-    if ( v202 )
-      operator delete(v202);
+    while ( v214 != (__int64 *)v126 );
+    if ( v221 )
+      operator delete(v221);
+    if ( v220[0] )
+      operator delete(v220[0]);
+    if ( v218 )
+      operator delete(v218);
   }
   v27 = GetEffectiveDecoderOutConfig<__gnu_cxx::__normal_iterator<std::unique_ptr<apac::IASCConfig> *,std::vector<std::unique_ptr<apac::IASCConfig>>>>(
           *((void **)this + 25),
@@ -1342,62 +1375,62 @@ LABEL_134:
   if ( v27 )
     goto LABEL_117;
 LABEL_150:
-  v131 = *((_QWORD *)this + 3);
-  if ( *(_BYTE *)(v131 + 249) )
+  v137 = *((_QWORD *)this + 3);
+  if ( *(_BYTE *)(v137 + 249) )
   {
-    v68 = *(_QWORD *)(v131 + 200);
-    v132 = v131 + 200;
+    v68 = *(_QWORD *)(v137 + 200);
+    v138 = v137 + 200;
   }
   else
   {
-    v132 = v131 + 176;
-    v68 = *(_QWORD *)(v131 + 176);
+    v138 = v137 + 176;
+    v68 = *(_QWORD *)(v137 + 176);
   }
-  v133 = *(_QWORD *)(v132 + 8);
-  if ( v133 != v68 )
+  v139 = *(_QWORD *)(v138 + 8);
+  if ( v139 != v68 )
   {
     while ( 2 )
     {
-      v134 = bs->cache;
-      v135 = bs->bitsLeft - 3;
-      bs->bitsLeft = v135;
-      v136 = v134 >> 29;
-      if ( (v135 & 0x80000000) == 0 )
+      v140 = bs->cache;
+      v141 = bs->bitsLeft - 3;
+      bs->bitsLeft = v141;
+      v142 = v140 >> 29;
+      if ( (v141 & 0x80000000) == 0 )
       {
-        v65 = 8 * v134;
+        v65 = 8 * v140;
         bs->cache = v65;
         goto LABEL_155;
       }
       TBitstreamReader<unsigned int>::FillCacheFrom(bs, bs->cur);
-      v142 = bs->cache;
-      v143 = bs->bitsLeft;
-      v144 = bs->cur;
-      v135 = v143 + 32;
-      bs->bitsLeft = v143 + 32;
-      v145 = v144 + 4;
-      bs->cur = v145;
-      v136 |= v142 >> (v143 + 32);
-      if ( v143 == -32 )
+      v148 = bs->cache;
+      v149 = bs->bitsLeft;
+      v150 = bs->cur;
+      v141 = v149 + 32;
+      bs->bitsLeft = v149 + 32;
+      v151 = v150 + 4;
+      bs->cur = v151;
+      v142 |= v148 >> (v149 + 32);
+      if ( v149 == -32 )
       {
         bs->cache = 0;
-        if ( v136 != 7 )
+        if ( v142 != 7 )
           goto LABEL_168;
-        v137 = 0;
+        v143 = 0;
         bs->bitsLeft = -6;
 LABEL_183:
-        TBitstreamReader<unsigned int>::FillCacheFrom(bs, v145);
-        v154 = bs->cache;
-        v155 = bs->bitsLeft;
-        v156 = bs->cur;
-        v135 = v155 + 32;
-        bs->bitsLeft = v155 + 32;
-        v145 = v156 + 4;
-        bs->cur = v145;
-        v137 |= v154 >> (v155 + 32);
-        if ( v155 == -32 )
+        TBitstreamReader<unsigned int>::FillCacheFrom(bs, v151);
+        v160 = bs->cache;
+        v161 = bs->bitsLeft;
+        v162 = bs->cur;
+        v141 = v161 + 32;
+        bs->bitsLeft = v161 + 32;
+        v151 = v162 + 4;
+        bs->cur = v151;
+        v143 |= v160 >> (v161 + 32);
+        if ( v161 == -32 )
         {
           bs->cache = 0;
-          if ( v137 != 63 )
+          if ( v143 != 63 )
           {
 LABEL_168:
             v66 = 0;
@@ -1407,123 +1440,123 @@ LABEL_168:
           bs->bitsLeft = -9;
 LABEL_186:
           TBitstreamReader<unsigned int>::FillCacheFrom(bs, bs->cur);
-          v157 = bs->bitsLeft;
-          v145 = bs->cur + 4;
-          bs->cur = v145;
-          v135 = v157 + 32;
-          bs->bitsLeft = v157 + 32;
-          if ( v157 == -32 )
+          v163 = bs->bitsLeft;
+          v151 = bs->cur + 4;
+          bs->cur = v151;
+          v141 = v163 + 32;
+          bs->bitsLeft = v163 + 32;
+          if ( v163 == -32 )
           {
             v66 = 0;
             *(_QWORD *)&bs->cache = 0xFFFFFFFE00000000LL;
 LABEL_169:
-            TBitstreamReader<unsigned int>::FillCacheFrom(bs, v145);
-            v146 = bs->cache;
-            v147 = bs->bitsLeft;
-            v148 = bs->cur;
-            bs->bitsLeft = v147 + 32;
-            v149 = v148 + 4;
-            bs->cur = v149;
-            v66 |= v146 >> (v147 + 32);
-            if ( v147 == -32 )
+            TBitstreamReader<unsigned int>::FillCacheFrom(bs, v151);
+            v152 = bs->cache;
+            v153 = bs->bitsLeft;
+            v154 = bs->cur;
+            bs->bitsLeft = v153 + 32;
+            v155 = v154 + 4;
+            bs->cur = v155;
+            v66 |= v152 >> (v153 + 32);
+            if ( v153 == -32 )
             {
               bs->cache = 0;
               if ( v66 == 3 )
               {
-                v140 = 0;
+                v146 = 0;
                 bs->bitsLeft = -8;
                 goto LABEL_172;
               }
 LABEL_60:
               v68 += 8;
-              if ( v133 == v68 )
+              if ( v139 == v68 )
                 goto LABEL_61;
               continue;
             }
-            bs->cache = v146 << -(char)v147;
+            bs->cache = v152 << -(char)v153;
 LABEL_59:
             if ( v66 != 3 )
               goto LABEL_60;
-            v138 = bs->cache;
-            v139 = bs->bitsLeft - 8;
-            bs->bitsLeft = v139;
-            v140 = HIBYTE(v138);
-            if ( (v139 & 0x80000000) == 0 )
+            v144 = bs->cache;
+            v145 = bs->bitsLeft - 8;
+            bs->bitsLeft = v145;
+            v146 = HIBYTE(v144);
+            if ( (v145 & 0x80000000) == 0 )
             {
-              bs->cache = v138 << 8;
+              bs->cache = v144 << 8;
               goto LABEL_163;
             }
-            v149 = bs->cur;
+            v155 = bs->cur;
 LABEL_172:
-            TBitstreamReader<unsigned int>::FillCacheFrom(bs, v149);
-            v150 = bs->cache;
-            v151 = bs->cur;
-            v152 = bs->bitsLeft;
-            v139 = v152 + 32;
-            bs->bitsLeft = v152 + 32;
-            bs->cur = v151 + 4;
-            v140 |= v150 >> (v152 + 32);
-            if ( v152 == -32 )
+            TBitstreamReader<unsigned int>::FillCacheFrom(bs, v155);
+            v156 = bs->cache;
+            v157 = bs->cur;
+            v158 = bs->bitsLeft;
+            v145 = v158 + 32;
+            bs->bitsLeft = v158 + 32;
+            bs->cur = v157 + 4;
+            v146 |= v156 >> (v158 + 32);
+            if ( v158 == -32 )
             {
               bs->cache = 0;
-              if ( v140 != 255 )
+              if ( v146 != 255 )
                 goto LABEL_60;
               bs->bitsLeft = -32;
               goto LABEL_175;
             }
-            bs->cache = v150 << -(char)v152;
+            bs->cache = v156 << -(char)v158;
 LABEL_163:
-            if ( v140 != 255 )
+            if ( v146 != 255 )
               goto LABEL_60;
-            v141 = v139 - 32;
-            bs->bitsLeft = v141;
-            if ( v141 < 0 )
+            v147 = v145 - 32;
+            bs->bitsLeft = v147;
+            if ( v147 < 0 )
             {
 LABEL_175:
               TBitstreamReader<unsigned int>::FillCacheFrom(bs, bs->cur);
-              v153 = bs->bitsLeft;
+              v159 = bs->bitsLeft;
               bs->cur += 4;
-              bs->bitsLeft = v153 + 32;
-              if ( v153 != -32 )
+              bs->bitsLeft = v159 + 32;
+              if ( v159 != -32 )
               {
-                bs->cache <<= -(char)v153;
+                bs->cache <<= -(char)v159;
                 goto LABEL_60;
               }
             }
             bs->cache = 0;
             goto LABEL_60;
           }
-          v65 = bs->cache << -(char)v157;
+          v65 = bs->cache << -(char)v163;
           bs->cache = v65;
 LABEL_56:
           v66 = v65 >> 30;
 LABEL_57:
-          v67 = v135 - 2;
+          v67 = v141 - 2;
           bs->bitsLeft = v67;
           if ( v67 < 0 )
           {
-            v145 = bs->cur;
+            v151 = bs->cur;
             goto LABEL_169;
           }
           bs->cache = 4 * v65;
           goto LABEL_59;
         }
-        v65 = v154 << -(char)v155;
+        v65 = v160 << -(char)v161;
         bs->cache = v65;
       }
       else
       {
-        v65 = v142 << -(char)v143;
+        v65 = v148 << -(char)v149;
         bs->cache = v65;
 LABEL_155:
-        if ( v136 != 7 )
+        if ( v142 != 7 )
           goto LABEL_56;
-        v135 -= 6;
-        bs->bitsLeft = v135;
-        v137 = v65 >> 26;
-        if ( v135 < 0 )
+        v141 -= 6;
+        bs->bitsLeft = v141;
+        v143 = v65 >> 26;
+        if ( v141 < 0 )
         {
-          v145 = bs->cur;
+          v151 = bs->cur;
           goto LABEL_183;
         }
         v65 <<= 6;
@@ -1531,11 +1564,11 @@ LABEL_155:
       }
       break;
     }
-    if ( v137 != 63 )
+    if ( v143 != 63 )
       goto LABEL_56;
-    v135 -= 9;
-    bs->bitsLeft = v135;
-    if ( v135 < 0 )
+    v141 -= 9;
+    bs->bitsLeft = v141;
+    if ( v141 < 0 )
       goto LABEL_186;
     v65 <<= 9;
     bs->cache = v65;
@@ -1555,13 +1588,13 @@ LABEL_61:
   if ( v27 )
     goto LABEL_117;
   *((_BYTE *)this + 248) = 1;
-  v2 = v195;
-  v3 = v196;
+  v2 = v211;
+  v3 = v212;
 LABEL_64:
-  if ( v208 != _stack_chk_guard )
+  if ( v224 != _stack_chk_guard )
   {
-    v195 = v2;
-    v196 = v3;
+    v211 = v2;
+    v212 = v3;
   }
   return v27;
 }

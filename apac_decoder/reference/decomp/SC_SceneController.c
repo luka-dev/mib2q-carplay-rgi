@@ -351,11 +351,11 @@ __int64 __fastcall SC_SceneController::Initialize(
             if ( !updated )
             {
               DRCConfiguration::SetAudioScenePresetParams(
-                *((_QWORD *)this + 68),
+                *((DRCConfiguration **)this + 68),
                 0,
-                (char *)this + 552,
-                (char *)this + 592,
-                (char *)this + 280);
+                (const std_vector *)this + 23,
+                (const std_vector *)((char *)this + 592),
+                (const std_vector *)((char *)this + 280));
               DRCConfiguration::SetAudioScenePresetParamsChanged(*((DRCConfiguration **)this + 68), 1u);
             }
           }
@@ -443,11 +443,11 @@ LABEL_9:
         if ( !updated )
         {
           DRCConfiguration::SetAudioScenePresetParams(
-            *((_QWORD *)this + 68),
+            *((DRCConfiguration **)this + 68),
             0,
-            (char *)this + 552,
-            (char *)this + 592,
-            (char *)this + 280);
+            (const std_vector *)this + 23,
+            (const std_vector *)((char *)this + 592),
+            (const std_vector *)((char *)this + 280));
           DRCConfiguration::SetAudioScenePresetParamsChanged(*((DRCConfiguration **)this + 68), 1u);
         }
       }

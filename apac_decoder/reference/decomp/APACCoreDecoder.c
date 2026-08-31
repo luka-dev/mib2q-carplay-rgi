@@ -145,92 +145,97 @@ void __fastcall APACCoreDecoder::~APACCoreDecoder(APACCoreDecoder *this)
  */
 __int64 __fastcall APACCoreDecoder::Initialize(APACCoreDecoder *this, const apac__ParamList *a, void *a2)
 {
-  char *v4; // x3
-  char *v5; // x25
-  APACCoreDecoder *v6; // x19
-  char *v8; // x4
-  char *v9; // x20
-  __int64 v10; // x0
-  const char *v11; // x0
-  _QWORD *v12; // x1
-  const char *v13; // x24
+  __int64 v3; // x5
+  __int64 v4; // x6
+  __int64 v5; // x7
+  __int64 v7; // x3
+  __int64 v8; // x4
+  char *v9; // x25
+  APACCoreDecoder *v10; // x19
+  char *v12; // x20
+  __int64 v13; // x0
+  const char *v14; // x0
+  _QWORD *v15; // x1
+  const char *v16; // x24
   _QWORD *exception; // x20
-  __int64 v15; // x0
-  unsigned int v16; // w23
-  char *v17; // x20
   __int64 v18; // x0
-  _QWORD *v19; // x0
-  const char *v20; // x0
-  void *v21; // x3
-  void *v22; // x0
-  std_vector *v23; // x1
-  const std_vector *v24; // x1
+  unsigned int v19; // w23
+  char *v20; // x20
+  __int64 v21; // x0
+  _QWORD *v22; // x0
+  const char *v23; // x0
+  void *v24; // x3
+  void *v25; // x0
+  std_vector *v26; // x1
+  const std_vector *v27; // x1
   unsigned int List; // w20
-  _QWORD *v26; // x24
-  _QWORD *v27; // x25
-  _QWORD *v28; // x20
-  unsigned int v29; // w0
-  unsigned int *v30; // x2
-  _QWORD *v31; // x0
-  _QWORD *v32; // x23
-  void (__fastcall *v33)(APACChannelRemapper *); // x2
-  void *v34; // x0
-  __int64 (*v35)(void); // x2
-  unsigned int v36; // w0
-  _QWORD *v38; // x20
-  void (__fastcall **v39)(boost::bad_any_cast *__hidden); // [xsp+50h] [xbp+50h]
-  void *v40; // [xsp+58h] [xbp+58h] BYREF
-  exception v41; // [xsp+60h] [xbp+60h] BYREF
-  __int64 v42; // [xsp+90h] [xbp+90h]
-  v4 = *((char **)a + 2);
-  if ( !v4 )
+  _QWORD *v29; // x24
+  _QWORD *v30; // x25
+  _QWORD *v31; // x20
+  unsigned int v32; // w0
+  unsigned int *v33; // x2
+  _QWORD *v34; // x0
+  _QWORD *v35; // x23
+  void (__fastcall *v36)(APACChannelRemapper *); // x2
+  void *v37; // x0
+  __int64 (*v38)(void); // x2
+  unsigned int v39; // w0
+  _QWORD *v41; // x20
+  __int64 v42; // [xsp+0h] [xbp+0h]
+  void (__fastcall **v43)(boost::bad_any_cast *__hidden); // [xsp+50h] [xbp+50h]
+  void *v44; // [xsp+58h] [xbp+58h] BYREF
+  exception v45; // [xsp+60h] [xbp+60h] BYREF
+  __int64 v46; // [xsp+90h] [xbp+90h]
+  v7 = *((_QWORD *)a + 2);
+  v8 = 0;
+  if ( !v7 )
     goto LABEL_57;
-  v5 = (char *)a + 8;
-  v6 = this;
-  v8 = *((char **)a + 2);
   v9 = (char *)a + 8;
+  v10 = this;
+  v8 = *((_QWORD *)a + 2);
+  v12 = (char *)a + 8;
   do
   {
     while ( 1 )
     {
-      this = (APACCoreDecoder *)*((unsigned int *)v8 + 8);
+      this = (APACCoreDecoder *)*(unsigned int *)(v8 + 32);
       if ( ((unsigned int)this & 0x80000000) != 0 )
         break;
-      v9 = v8;
-      v8 = *((char **)v8 + 2);
+      v12 = (char *)v8;
+      v8 = *(_QWORD *)(v8 + 16);
       if ( !v8 )
         goto LABEL_5;
     }
-    v8 = *((char **)v8 + 3);
+    v8 = *(_QWORD *)(v8 + 24);
   }
   while ( v8 );
 LABEL_5:
-  if ( v5 == v9 || (this = (APACCoreDecoder *)*((unsigned int *)v9 + 8), (int)this > 0) )
+  if ( v9 == v12 || (this = (APACCoreDecoder *)*((unsigned int *)v12 + 8), (int)this > 0) )
 LABEL_57:
-    sub_70C28(this, &_stack_chk_guard, a2);
-  v10 = *((_QWORD *)v9 + 5);
-  if ( v10 )
+    sub_70C28((__int64)this, (__int64)&_stack_chk_guard, (__int64)a2, v7, v8, v3, v4, v5, v42);
+  v13 = *((_QWORD *)v12 + 5);
+  if ( v13 )
   {
-    v11 = *(const char **)((*(__int64 (__fastcall **)(__int64))(*(_QWORD *)v10 + 16LL))(v10) + 8);
-    v12 = `typeinfo for'unsigned int;
-    v13 = (const char *)`typeinfo for'unsigned int[1];
-    if ( v11 == v13 )
+    v14 = *(const char **)((*(__int64 (__fastcall **)(__int64))(*(_QWORD *)v13 + 16LL))(v13) + 8);
+    v15 = `typeinfo for'unsigned int;
+    v16 = (const char *)`typeinfo for'unsigned int[1];
+    if ( v14 == v16 )
       goto LABEL_12;
   }
   else
   {
-    v12 = `typeinfo for'unsigned int;
-    v11 = (const char *)`typeinfo for'void[1];
-    v13 = (const char *)`typeinfo for'unsigned int[1];
-    if ( v13 == v11 )
+    v15 = `typeinfo for'unsigned int;
+    v14 = (const char *)`typeinfo for'void[1];
+    v16 = (const char *)`typeinfo for'unsigned int[1];
+    if ( v16 == v14 )
     {
-      v16 = *((_DWORD *)v8 + 2);
+      v19 = *(_DWORD *)(v8 + 8);
       goto LABEL_13;
     }
   }
-  if ( *v11 == 42 || strcmp(v11, v13) )
+  if ( *v14 == 42 || strcmp(v14, v16) )
   {
-    v39 = off_42A4F0;
+    v43 = off_42A4F0;
     exception = __cxa_allocate_exception(0x38u);
     exception[2] = 0;
     exception[3] = 0;
@@ -239,160 +244,160 @@ LABEL_57:
     *exception = &unk_42A690;
     exception[1] = off_42A620;
     exception[6] = &off_42A6E0;
-    v40 = off_42A588;
-    *(_QWORD *)&v41.type = off_42A5B0;
-    memset(&v41.name, 0, 24);
-    LODWORD(v41.retval) = -1;
+    v44 = off_42A588;
+    *(_QWORD *)&v45.type = off_42A5B0;
+    memset(&v45.name, 0, 24);
+    LODWORD(v45.retval) = -1;
     boost::exception_detail::copy_boost_exception(
       (boost::exception_detail *)(exception + 1),
-      &v41,
+      &v45,
       (const exception *)off_42A5B0);
     *exception = off_42A738;
     exception[1] = off_42A770;
     exception[6] = &off_42A7A8;
-    boost::exception_detail::error_info_injector<boost::bad_any_cast>::~error_info_injector((std::bad_cast *)&v40);
+    boost::exception_detail::error_info_injector<boost::bad_any_cast>::~error_info_injector((std::bad_cast *)&v44);
     __cxa_throw(
       exception,
       (struct type_info *)&`typeinfo for'boost::wrapexcept<boost::bad_any_cast>,
       (void (*)(void *))boost::wrapexcept<boost::bad_any_cast>::~wrapexcept);
   }
 LABEL_12:
-  v4 = *((char **)a + 2);
-  v15 = *((_QWORD *)v9 + 5);
-  v16 = *(_DWORD *)(v15 + 8);
-  if ( !v4 )
+  v7 = *((_QWORD *)a + 2);
+  v18 = *((_QWORD *)v12 + 5);
+  v19 = *(_DWORD *)(v18 + 8);
+  if ( !v7 )
     goto LABEL_58;
 LABEL_13:
-  v17 = v5;
+  v20 = v9;
   do
   {
     while ( 1 )
     {
-      v15 = *((unsigned int *)v4 + 8);
-      if ( (int)v15 <= 1 )
+      v18 = *(unsigned int *)(v7 + 32);
+      if ( (int)v18 <= 1 )
         break;
-      v17 = v4;
-      v4 = *((char **)v4 + 2);
-      if ( !v4 )
+      v20 = (char *)v7;
+      v7 = *(_QWORD *)(v7 + 16);
+      if ( !v7 )
         goto LABEL_16;
     }
-    v4 = *((char **)v4 + 3);
+    v7 = *(_QWORD *)(v7 + 24);
   }
-  while ( v4 );
+  while ( v7 );
 LABEL_16:
-  if ( v5 == v17 || (v15 = *((unsigned int *)v17 + 8), (int)v15 > 2) )
+  if ( v9 == v20 || (v18 = *((unsigned int *)v20 + 8), (int)v18 > 2) )
 LABEL_58:
-    sub_70C28(v15, v12, a2);
-  v18 = *((_QWORD *)v17 + 5);
-  if ( v18 )
-    v19 = (_QWORD *)(*(__int64 (__fastcall **)(__int64))(*(_QWORD *)v18 + 16LL))(v18);
+    sub_70C28(v18, (__int64)v15, (__int64)a2, v7, v8, v3, v4, v5, v42);
+  v21 = *((_QWORD *)v20 + 5);
+  if ( v21 )
+    v22 = (_QWORD *)(*(__int64 (__fastcall **)(__int64))(*(_QWORD *)v21 + 16LL))(v21);
   else
-    v19 = `typeinfo for'void;
-  v20 = (const char *)v19[1];
-  if ( v20 != v13 && (*v20 == 42 || strcmp(v20, v13)) )
+    v22 = `typeinfo for'void;
+  v23 = (const char *)v22[1];
+  if ( v23 != v16 && (*v23 == 42 || strcmp(v23, v16)) )
   {
-    v39 = off_42A4F0;
-    v38 = __cxa_allocate_exception(0x38u);
-    v38[2] = 0;
-    v38[3] = 0;
-    v38[4] = 0;
-    *((_DWORD *)v38 + 10) = -1;
-    *v38 = &unk_42A690;
-    v38[1] = off_42A620;
-    v38[6] = &off_42A6E0;
-    v40 = off_42A588;
-    *(_QWORD *)&v41.type = off_42A5B0;
-    memset(&v41.name, 0, 24);
-    LODWORD(v41.retval) = -1;
+    v43 = off_42A4F0;
+    v41 = __cxa_allocate_exception(0x38u);
+    v41[2] = 0;
+    v41[3] = 0;
+    v41[4] = 0;
+    *((_DWORD *)v41 + 10) = -1;
+    *v41 = &unk_42A690;
+    v41[1] = off_42A620;
+    v41[6] = &off_42A6E0;
+    v44 = off_42A588;
+    *(_QWORD *)&v45.type = off_42A5B0;
+    memset(&v45.name, 0, 24);
+    LODWORD(v45.retval) = -1;
     boost::exception_detail::copy_boost_exception(
-      (boost::exception_detail *)(v38 + 1),
-      &v41,
+      (boost::exception_detail *)(v41 + 1),
+      &v45,
       (const exception *)off_42A5B0);
-    *v38 = off_42A738;
-    v38[1] = off_42A770;
-    v38[6] = &off_42A7A8;
-    boost::exception_detail::error_info_injector<boost::bad_any_cast>::~error_info_injector((std::bad_cast *)&v40);
+    *v41 = off_42A738;
+    v41[1] = off_42A770;
+    v41[6] = &off_42A7A8;
+    boost::exception_detail::error_info_injector<boost::bad_any_cast>::~error_info_injector((std::bad_cast *)&v44);
     __cxa_throw(
-      v38,
+      v41,
       (struct type_info *)&`typeinfo for'boost::wrapexcept<boost::bad_any_cast>,
       (void (*)(void *))boost::wrapexcept<boost::bad_any_cast>::~wrapexcept);
   }
   if ( !a2 )
     return 1;
-  APACInstanceConfig::Create((APACInstanceConfig *)v16, *(_DWORD *)(*((_QWORD *)v17 + 5) + 8LL), (unsigned int)a2);
-  v22 = *((void **)v6 + 1);
-  v23 = (std_vector *)v40;
-  *((_QWORD *)v6 + 1) = v40;
-  v40 = nullptr;
-  if ( v22 )
+  APACInstanceConfig::Create((APACInstanceConfig *)v19, *(_DWORD *)(*((_QWORD *)v20 + 5) + 8LL), (unsigned int)a2);
+  v25 = *((void **)v10 + 1);
+  v26 = (std_vector *)v44;
+  *((_QWORD *)v10 + 1) = v44;
+  v44 = nullptr;
+  if ( v25 )
   {
-    operator delete(v22);
-    if ( v40 )
-      operator delete(v40);
-    v23 = *((std_vector **)v6 + 1);
+    operator delete(v25);
+    if ( v44 )
+      operator delete(v44);
+    v26 = *((std_vector **)v10 + 1);
   }
-  if ( v23 )
+  if ( v26 )
   {
-    List = APACSyntacticElement::CreateList((APACCoreDecoder *)((char *)v6 + 208), v23, (APACInstanceConfig *)a2, v21);
+    List = APACSyntacticElement::CreateList((APACCoreDecoder *)((char *)v10 + 208), v26, (APACInstanceConfig *)a2, v24);
     if ( !List )
     {
-      v27 = *((_QWORD **)v6 + 29);
-      v26 = *((_QWORD **)v6 + 30);
-      if ( v27 != v26 )
+      v30 = *((_QWORD **)v10 + 29);
+      v29 = *((_QWORD **)v10 + 30);
+      if ( v30 != v29 )
       {
-        v28 = *((_QWORD **)v6 + 29);
+        v31 = *((_QWORD **)v10 + 29);
         do
         {
-          if ( *v28 )
-            (*(void (__fastcall **)(_QWORD))(*(_QWORD *)*v28 + 8LL))(*v28);
-          ++v28;
+          if ( *v31 )
+            (*(void (__fastcall **)(_QWORD))(*(_QWORD *)*v31 + 8LL))(*v31);
+          ++v31;
         }
-        while ( v26 != v28 );
-        *((_QWORD *)v6 + 30) = v27;
+        while ( v29 != v31 );
+        *((_QWORD *)v10 + 30) = v30;
       }
-      v29 = APACSyntacticElement::NumberOfChannels((APACCoreDecoder *)((char *)v6 + 208), v24);
-      v30 = *((unsigned int **)v6 + 1);
-      *((_DWORD *)v6 + 50) = v29;
-      List = APACSynthesisFilterBank::Initialize((APACCoreDecoder *)((char *)v6 + 16), v29, *v30);
+      v32 = APACSyntacticElement::NumberOfChannels((APACCoreDecoder *)((char *)v10 + 208), v27);
+      v33 = *((unsigned int **)v10 + 1);
+      *((_DWORD *)v10 + 50) = v32;
+      List = APACSynthesisFilterBank::Initialize((APACCoreDecoder *)((char *)v10 + 16), v32, *v33);
       if ( !List )
       {
         if ( *((_QWORD *)a2 + 6) == *((_QWORD *)a2 + 7) )
           goto LABEL_44;
-        v31 = (_QWORD *)operator new(0x20u);
-        v32 = *((_QWORD **)v6 + 32);
-        *((_QWORD *)v6 + 32) = v31;
-        *v31 = off_42A8C8;
-        v31[1] = 0;
-        v31[2] = 0;
-        v31[3] = 0;
-        if ( v32 )
+        v34 = (_QWORD *)operator new(0x20u);
+        v35 = *((_QWORD **)v10 + 32);
+        *((_QWORD *)v10 + 32) = v34;
+        *v34 = off_42A8C8;
+        v34[1] = 0;
+        v34[2] = 0;
+        v34[3] = 0;
+        if ( v35 )
         {
-          v33 = *(void (__fastcall **)(APACChannelRemapper *))(*v32 + 8LL);
-          if ( v33 == APACChannelRemapper::~APACChannelRemapper )
+          v36 = *(void (__fastcall **)(APACChannelRemapper *))(*v35 + 8LL);
+          if ( v36 == APACChannelRemapper::~APACChannelRemapper )
           {
-            v34 = (void *)v32[1];
-            *v32 = off_42A8C8;
-            if ( v34 )
-              operator delete(v34);
-            operator delete(v32);
-            v35 = *(__int64 (**)(void))(**((_QWORD **)v6 + 32) + 16LL);
+            v37 = (void *)v35[1];
+            *v35 = off_42A8C8;
+            if ( v37 )
+              operator delete(v37);
+            operator delete(v35);
+            v38 = *(__int64 (**)(void))(**((_QWORD **)v10 + 32) + 16LL);
           }
           else
           {
-            v33((APACChannelRemapper *)v32);
-            v35 = *(__int64 (**)(void))(**((_QWORD **)v6 + 32) + 16LL);
+            v36((APACChannelRemapper *)v35);
+            v38 = *(__int64 (**)(void))(**((_QWORD **)v10 + 32) + 16LL);
           }
         }
         else
         {
-          v35 = (__int64 (*)(void))APACChannelRemapper::Initialize;
+          v38 = (__int64 (*)(void))APACChannelRemapper::Initialize;
         }
-        v36 = v35();
-        if ( v36 )
-          return v36;
+        v39 = v38();
+        if ( v39 )
+          return v39;
         else
 LABEL_44:
-          *((_BYTE *)v6 + 204) = 1;
+          *((_BYTE *)v10 + 204) = 1;
       }
     }
   }
