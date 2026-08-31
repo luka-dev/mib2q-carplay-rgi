@@ -19,6 +19,7 @@ Install these executable files under `/mnt/app/root/hooks`:
 - `carplay_cleanup.sh`
 - `carplay_processes.sh`
 - `libcarplay_hook.so`
+- `libcarplay_apac.so`
 - `maneuver_render`
 - `altscreen_render`
 - `flag_atlas.rgba`
@@ -29,9 +30,10 @@ an explicit supervisor stop, not ordinary dio churn, owns their final teardown.
 
 Lifecycle semantics:
 
-- **PF ports (deploy prerequisite, no runtime logic):** altScreen needs carplay0 TCP 6031, buffered
-  audio uses TCP 6032, and its legacy RTCP control uses TCP 6033 beside stock 6030. Run
-  `install_persistent_pf.sh` once — it widens `6030` to `6030:6033` in all four
+- **PF ports (deploy prerequisite, no runtime logic):** altScreen needs carplay0 TCP 6031 and
+  buffered audio uses TCP 6032 beside stock 6030. `SETMAGICCOOKIE` and buffered controls reuse the
+  existing RTSP connection, so 6033 is not needed. Run `install_persistent_pf.sh` once — it widens
+  `6030` to `6030:6032` in all four
   `/mnt/system/etc/pf*.conf` profiles (idempotent, `.stock` backup, `mount -uw` first). That is a real
   qnx6 flash partition (`/dev/fs0p1`); boot's `move_etc_to_ramdisk` copies it into the ramdisk
   `/etc`, so `start_network` loads the selected profile with all four ports and no runtime race. The

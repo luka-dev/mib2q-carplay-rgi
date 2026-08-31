@@ -43,6 +43,21 @@ static void test_exact_in_place(void)
     assert(memcmp(samples, expected, sizeof(expected)) == 0);
 }
 
+static void test_drop_in_place(void)
+{
+    int16_t samples[16] = {
+        1, 2, 3, 4, 5, 6, 700, 800,
+        -1, -2, -3, -4, -5, -6, -700, -800
+    };
+    const int16_t expected[12] = {
+        1, 2, 3, 4, 5, 6,
+        -1, -2, -3, -4, -5, -6
+    };
+
+    assert(spa_drop_5_1_2_s16(samples, 2, samples) == 12);
+    assert(memcmp(samples, expected, sizeof(expected)) == 0);
+}
+
 static void test_reorder(void)
 {
     /* decoder slots C L R Ls Rs LFE tagged by value */
@@ -91,11 +106,14 @@ int main(void)
 
     assert(spa_downmix_5_1_2_s16(0, 1, &sink) == 0);
     assert(spa_downmix_5_1_2_s16(&sink, 1, 0) == 0);
+    assert(spa_drop_5_1_2_s16(0, 1, &sink) == 0);
+    assert(spa_drop_5_1_2_s16(&sink, 1, 0) == 0);
     assert(spa_reorder_5_1_decoder_to_declared_s16(0, 1, &sink) == 0);
     assert(spa_reorder_5_1_decoder_to_declared_s16(&sink, 1, 0) == 0);
     test_matrix();
     test_saturation();
     test_exact_in_place();
+    test_drop_in_place();
     test_reorder();
     test_reorder_in_place();
     test_reorder_then_downmix();

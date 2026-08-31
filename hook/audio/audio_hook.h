@@ -42,6 +42,15 @@
  * defaults. Bit is clamped to 32..63 so a typo can never disturb the stock stereo/mono bits (2..25). */
 #define SPA_TUNE_PATH     "/tmp/spatial_bit"
 
+/* User-facing audio policy. Values are strict booleans:
+ * 1/true/yes/on and 0/false/no/off (case-insensitive).
+ * AUDIO_SPATAIL is accepted only as a warned compatibility alias for the
+ * historically published typo; new configurations must use AUDIO_SPATIAL. */
+#define SPA_AUDIO_ENV                 "AUDIO_SPATIAL"
+#define SPA_AUDIO_TYPO_ENV            "AUDIO_SPATAIL"
+#define SPA_AUDIO_ATMOS_ENV           "AUDIO_SPATIAL_ATMOS"
+#define SPA_AUDIO_ATMOS_MODE_ENV      "AUDIO_SPATIAL_ATMOS_MODE"
+
 /* ---- type-103 buffered-media negotiation probe (AUDIO.md §26, docs/HANDOFF_SPATIAL_AUDIO.md) -----
  * iOS 27 reaches multichannel over CarPlay through a SECOND, buffered stream, not the realtime one.
  * Two accessory-controlled prerequisites, both metadata:
@@ -50,18 +59,15 @@
  *      AAC-LC/44.1 compatibility bit required by iOS's buffered-engine repackager; advertising the
  *      broader 0x1440800 transport-family mask makes wired iOS retain both PCM and AAC families and
  *      reject the whole CarPlay audio-format object before either stream is set up. The extended
- *      index is runtime tunable to 40 (AAC-LC/5.1.2), 42 (AAC-ELD/5.1.2), 50 (DD+/5.1),
- *      53 (DD+/9.1.6), 65 (APAC/5.1), or 66 (APAC/5.1.2); only decoded PCM6 can be sent directly
- *      to the HU, so larger layouts require a deliberate downmix.
+ *      canonical policy selects 65 (APAC/5.1) or 66 (APAC/5.1.2). Legacy debug variables retain
+ *      the older AAC/DD+ probe indices only when no AUDIO_SPATIAL controls are present.
  *   2. the control-SETUP response's `enabledFeatures` gains the token "mainBuffered", without which
  *      AirPlaySender never sets SupportsBufferedAudio and never opens `bufferStream`.
- * This remains a PROBE, not playable audio: the hook now supplies the complete legacy type-103
- * SETUP descriptor (listener port, buffer size, latency and dynamic stream ID), captures/drains
- * APAP, and receives the asynchronous SETMAGICCOOKIE binary plist on the existing RTSP connection.
- * The latter is installed through an exact MU1316 HTTPServer callback fingerprint; it does not need
- * controlPort/6033. There is still no APAC/AAC render path. Hence OFF by default and gated on a
- * startup environment. These variables must be exported before AirTunesServer_EnsureCreated so
- * the private dispatcher is installed before the first control connection. */
+ * The hook supplies SETUP, control methods and APAP receive/decrypt, then loads the optional APAC
+ * codec and renders PCM6/PCM8 through the existing DIO5 QSA handle. The private HTTP dispatcher is
+ * exact-profile fingerprinted and uses the existing RTSP connection, so controlPort/6033 is not
+ * needed. Policy variables must be exported before AirTunesServer_EnsureCreated so the dispatcher
+ * is installed before the first control connection. */
 #define SPA_PROBE103_ENV   "SPATIAL_103"
 #define SPA_103_INDEX_ENV  "SPATIAL_103_INDEX"
 #define SPA_103_EXTRA_INDEX_ENV "SPATIAL_103_EXTRA_INDEX"
@@ -133,5 +139,12 @@ void spa_capture_server_info(void *info);
  * to pad with silence or hold.  Both are safe to call from any thread. */
 int spa_buffered_pcm6_active(void);
 size_t spa_buffered_pcm6_read(int16_t *out, size_t frames);
+
+/* Generic rail used by the sink: 6 channels for 5.1 and for Atmos
+ * downmix/drop, 8 only for explicit passthrough. The read returns zero if the
+ * caller's expected channel count no longer matches the active stream. */
+int spa_buffered_pcm_active(void);
+unsigned spa_buffered_pcm_channels(void);
+size_t spa_buffered_pcm_read(int16_t *out, size_t frames, unsigned channels);
 
 #endif /* AUDIO_HOOK_H */

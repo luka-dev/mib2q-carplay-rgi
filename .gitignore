@@ -5,6 +5,7 @@
 *.o
 /build/java/
 /build/libcarplay_hook.so
+/build/libcarplay_apac.so
 /build/apple_apac_oracle
 /local_logs/
 /log/

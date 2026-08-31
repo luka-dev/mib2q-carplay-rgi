@@ -47,6 +47,7 @@ Canonical outputs:
 ```text
 build/carplay_hook.jar
 build/libcarplay_hook.so
+build/libcarplay_apac.so
 build/maneuver_render
 build/altscreen_render
 ```
@@ -68,9 +69,9 @@ To replace only the native hook and restart `dio_manager`:
 ./scripts/deploy_unit.sh
 ```
 
-The deploy helper keeps one on-unit `libcarplay_hook.so.bak`; it does not accumulate timestamped backup
-copies. Java deployment is deliberately not automated by that script because restarting the Java stack
-on a live HU is unsafe.
+The deploy helper stages both native audio artifacts through `.new` files and does not accumulate
+stale backup copies. Java deployment is deliberately not automated by that script because restarting
+the Java stack on a live HU is unsafe.
 
 ## Current design documents
 

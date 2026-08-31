@@ -27,8 +27,7 @@
 
 namespace {
 
-const uint32_t kExpectedChannels = 6;
-const uint32_t kExpectedFrameLength = 1024;
+const uint32_t kExpectedFrameLength = SPA_APAC_FRAME_LENGTH;
 
 uint32_t BE32(const uint8_t* p)
 {
@@ -86,7 +85,7 @@ struct spa_apac_decoder {
     apac::ASPDecoder decoder;
     uint32_t channels;
     uint32_t frameLength;
-    float pcm[kExpectedChannels * kExpectedFrameLength];
+    float pcm[SPA_APAC_MAX_CHANNELS * kExpectedFrameLength];
 };
 
 extern "C" int spa_apac_create(const uint8_t* cookie, size_t cookieLength,
@@ -123,7 +122,7 @@ extern "C" int spa_apac_create(const uint8_t* cookie, size_t cookieLength,
 
     d->channels = d->decoder.NumChannels();
     d->frameLength = d->decoder.FrameLength();
-    if (d->channels != kExpectedChannels) {
+    if (d->channels == 0 || d->channels > SPA_APAC_MAX_CHANNELS) {
         free(block);
         return SPA_APAC_ERR_CHANNELS;
     }
@@ -176,4 +175,33 @@ extern "C" void spa_apac_destroy(spa_apac_decoder_t* decoder)
     // spa_apac_decoder is trivially destructible (checked: the port's objects
     // are plain arrays and scalars), so free() is the whole teardown.
     free(decoder);
+}
+
+extern "C" int spa_apac_get_info(const spa_apac_decoder_t* decoder,
+                                  spa_apac_stream_info_t* info)
+{
+    if (!decoder || !info) return SPA_APAC_ERR_ARGS;
+    info->channels = decoder->channels;
+    info->frameLength = decoder->frameLength;
+    info->sampleRate = decoder->config.sampleRate;
+    info->channelLayoutTag = decoder->config.layout.tag;
+    return SPA_APAC_OK;
+}
+
+extern "C" int spa_apac_codec_get_api(uint32_t requestedVersion,
+                                       spa_apac_codec_api_t* api, size_t apiSize)
+{
+    if (!api || apiSize != sizeof(*api) ||
+        requestedVersion != SPA_APAC_CODEC_ABI_VERSION)
+        return SPA_APAC_ERR_ARGS;
+
+    memset(api, 0, sizeof(*api));
+    api->structSize = sizeof(*api);
+    api->abiVersion = SPA_APAC_CODEC_ABI_VERSION;
+    api->create = spa_apac_create;
+    api->decodeS16 = spa_apac_decode_s16;
+    api->reset = spa_apac_reset;
+    api->destroy = spa_apac_destroy;
+    api->getInfo = spa_apac_get_info;
+    return SPA_APAC_OK;
 }

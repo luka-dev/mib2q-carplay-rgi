@@ -282,8 +282,9 @@ static void test_rejections(const unsigned char *goodFrame, size_t goodLength)
     assert(!spa_apap_open(kTestKey, frame, goodLength, plaintext, sizeof(plaintext),
                           &plainLength, &variant));
 
-    /* every byte of the authenticated header range must matter */
-    for (i = 0; i < 12; i++) {
+    /* This fixture is the audio-AAD variant: exactly header[4:12] is
+     * authenticated. Bytes 0..3 are deliberately outside its AAD. */
+    for (i = 4; i < 12; i++) {
         memcpy(frame, goodFrame, goodLength);
         frame[i] ^= 0x01;
         assert(!spa_apap_open(kTestKey, frame, goodLength, plaintext, sizeof(plaintext),
@@ -479,7 +480,7 @@ int main(int argc, char **argv)
 
     spa_apac_destroy(decoder);
     printf("OK  %u packets sealed and reopened at %zu split sizes, %ld samples within one LSB "
-           "of the library (worst %.3f LSB, %.1f%% exact), both AAD variants, 21 rejections\n",
+           "of the library (worst %.3f LSB, %.1f%% exact), both AAD variants, 18 rejections\n",
            numPackets, sizeof(chunks) / sizeof(chunks[0]), compared, worst * 32768.0,
            100.0 * (double)identical / (double)compared);
     free(g_blob);

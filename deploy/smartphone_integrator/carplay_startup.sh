@@ -162,7 +162,7 @@ rm -f "$STOP_FILE"
 echo "$DIO_PID" > "$OWNER_FILE"
 echo "===== carplay_startup.sh run pid=$$ ppid=$PPID =====" >> "$WLOG"
 
-# altScreen TCP 6031, buffered-audio TCP 6032, and its RTCP TCP 6033 live in all four
+# altScreen TCP 6031 and buffered-audio TCP 6032 live in all four
 # /mnt/system/etc/pf*.conf profiles (install_persistent_pf.sh, a one-time deploy
 # step). start_network loads the selected profile at boot, so the wrapper does
 # no firewall work at all.
@@ -196,23 +196,22 @@ export LD_PRELOAD="$H/libcarplay_hook.so"
 export ALTSCREEN_HANDLE_ALT=1
 export ALTSCREEN_ADVERT_DISPLAYS=1
 
-# Discrete 5.1 PCM (Spatial): the hook advertises the iOS 5.1 format bit and emits a 6ch ASBD so the
-# phone pushes discrete surround; libairplay opens mpl5_dio_ent at 6 voices. Default ON.
-# REQUIRES the patched deva-ctrl-qc.so (mpl5_dio_ent 2->6 voices) to be installed + a reboot — without
-# it the 6-voice open is rejected and CarPlay main audio fails. Comment out for stock stereo.
-# See deploy/spatial_5_1/README.md.
-# The unit now has the patched deva-ctrl-qc.so (mpl5_dio_ent max_voices 2->6), so keep this exported.
-# Removing it preserves type-103 probing but turns the independent type-100 fallback back to stereo.
-export SPATIAL_5_1=1
-
-# Buffered Spatial/Dolby (type 103). These must be in dio_manager's environment before
-# AirTunesServer_EnsureCreated accepts the first control connection. No /tmp markers are used.
-export SPATIAL_103=1
-export SPATIAL_103_MODE=both
-export SPATIAL_103_INDEX=65
-# Optional second extended format. Empty for normal 65/66 profiles; 65 with primary index 40 is the
-# explicit experimental AAC bridge and must never be confused with a proven APAC profile.
-export SPATIAL_103_EXTRA_INDEX=
-export SPATIAL_103_DCX=0
-export SPATIAL_103_MASK=0x400000
+# CarPlay buffered Spatial policy. Boolean values accept 0/1/true/false
+# (also yes/no/on/off, case-insensitive).
+#
+# AUDIO_SPATIAL=1 requests APAC 5.1 (format index 65) and keeps the existing
+# type-100 PCM6 path as fallback. It requires the HU PCM/mixer patch for at
+# least six channels.
+#
+# AUDIO_SPATIAL_ATMOS=1 requests the full APAC 5.1.2 master (format index 66).
+# It implies Spatial even if AUDIO_SPATIAL=0.
+#
+# downmix    folds Ltm/Rtm into Ls/Rs at -6 dB and sends PCM6
+# drop       discards Ltm/Rtm and sends PCM6
+# passthrough sends PCM8 and requires BOTH an 8ch HU PCM patch and a patched amp;
+#             the current six-channel Audi patch is not sufficient.
+export AUDIO_SPATIAL=1
+export AUDIO_SPATIAL_ATMOS=0
+export AUDIO_SPATIAL_ATMOS_MODE=downmix
+export AUDIO_SPATIAL_CODEC_LIB="$H/libcarplay_apac.so"
 exec "$DIODIR/dio_manager" "$@"

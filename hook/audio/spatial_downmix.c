@@ -61,3 +61,19 @@ size_t spa_downmix_5_1_2_s16(const int16_t *input, size_t frames, int16_t *outpu
 
     return frames * SPA_PCM_5_1_CHANNELS;
 }
+
+size_t spa_drop_5_1_2_s16(const int16_t *input, size_t frames, int16_t *output)
+{
+    size_t frame;
+
+    if (!input || !output) return 0;
+    for (frame = 0; frame < frames; frame++) {
+        const int16_t *src = input + frame * SPA_PCM_5_1_2_CHANNELS;
+        int16_t *dst = output + frame * SPA_PCM_5_1_CHANNELS;
+        int ch;
+
+        for (ch = 0; ch < SPA_PCM_5_1_CHANNELS; ch++)
+            dst[ch] = src[ch];
+    }
+    return frames * SPA_PCM_5_1_CHANNELS;
+}

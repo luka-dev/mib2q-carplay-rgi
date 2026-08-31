@@ -3,7 +3,7 @@
 #
 # Replaces the old VM-SSH recipe (root@192.168.64.16 + stock ntoarmv7-gcc 4.4.2).
 # Now uses the self-contained image `qnx65-armv7-toolchain` (Tools/qnx-65-sdp-docker,
-# GCC 4.9.4).  No VM required.  The hook links only -lz -lsocket (both in the SDP),
+# GCC 4.9.4).  No VM required.  The hook links only SDP system libraries,
 # so no BSP import stubs are needed.
 #
 #   ./scripts/build_hook.sh                        # default (LOG=1)
@@ -13,13 +13,14 @@
 # NOTE: this is GCC 4.9.4, not the stock QNX 4.4.2.  The hook uses no __thread
 # (verified) so the emutls trap does not apply; the build asserts emutls==0 below.
 #
-# THE APAC DECODER.  Since stage j the hook also links the APAC decoder port
-# (apac_decoder/src/*.cpp) plus its C shim hook/audio/apac_bridge.cpp, so the
-# type-103 buffered stream can be decoded rather than only captured.  That code
-# is C++ and the hook is C, so the C++ objects are built separately and the .so
-# is linked with GCC, not G++ - linking with the C++ driver would put
+# THE APAC DECODER.  It ships as optional build/libcarplay_apac.so and is
+# dlopen'd only for an enabled buffered Spatial stream.  The main LD_PRELOAD
+# hook therefore has no DT_NEEDED edge to the codec: a missing or rejected codec
+# disables type-103 decode fail-closed without breaking ordinary CarPlay.
+# The decoder is C++ and its versioned seam is C, so objects are built
+# separately and the .so is linked with GCC, not G++ - the C++ driver would put
 # libstdc++.so.6 in DT_NEEDED, and that library is not on the head unit's image
-# in a configuration this code may rely on.  The four assertions at the end of
+# in a configuration this code may rely on.  The safety assertions at the end of
 # the build are the same ones apac_decoder/tools/build_qnx.sh makes, applied to
 # the object that actually ships:
 #
@@ -38,6 +39,7 @@ IMG=qnx65-armv7-toolchain:latest
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 OUT="$PROJECT_DIR/build/libcarplay_hook.so"
+APAC_OUT="$PROJECT_DIR/build/libcarplay_apac.so"
 mkdir -p "$(dirname "$OUT")"
 
 LOG="${LOG:-1}"
@@ -82,13 +84,18 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
   done
   echo "  compiled $(ls $OBJ/cxx_*.o | wc -l | tr -d " ") APAC decoder objects"
 
+  # Optional decoder library. One versioned C function table is its only
+  # contract with libcarplay_hook.so.
+  $CC -shared -fPIC -O2 $OBJ/cxx_*.o -o /src/build/libcarplay_apac.so \
+      -Wl,--gc-sections -Wl,-soname,libcarplay_apac.so -lm
+
   cd /src/hook
   SRCS="framework/logging.c framework/bus.c framework/iap2_protocol.c framework/hook_framework.c \
         routeguidance/rgd_tlv.c routeguidance/rgd_hook.c coverart/coverart_hook.c \
         altscreen/altscreen_av.c altscreen/altscreen_hook.c audio/spatial_downmix.c \
-        audio/apap_crypto.c audio/audio_hook.c main.c"
+        audio/apap_crypto.c audio/apac_codec_loader.c audio/audio_hook.c main.c"
   $CC -shared -fPIC -O2 -std=gnu99 -fdata-sections -ffunction-sections '"$CFLAGS_EXTRA"' \
-      -I. -I/src/apac_decoder/include $SRCS $OBJ/cxx_*.o \
+      -I. -I/src/apac_decoder/include $SRCS \
       -o /src/build/libcarplay_hook.so -Wl,--gc-sections -lz -lsocket -lm
 
   fail() { echo "REJECTED: $*"; exit 1; }
@@ -109,6 +116,10 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
   # 5. and therefore no libstdc++ in DT_NEEDED, which the unit must not require.
   n=$($READELF -d $SO | grep -c libstdc || true)
   [ "$n" = "0" ] || fail "the hook links libstdc++"
+  n=$($READELF -d $SO | grep -c libcarplay_apac || true)
+  [ "$n" = "0" ] || fail "the hook has a hard dependency on libcarplay_apac"
+  n=$($NM -D $SO | grep -cE " T snd_pcm_(open_name|plugin_params|plugin_setup|plugin_write|close)$" || true)
+  [ "$n" = "5" ] || fail "QSA bridge exports=$n (expected open/params/setup/write/close)"
 
   # 6. ldqnx must run compiler bookkeeping only.  Module constructors used to
   # reach LOG_INFO -> pthread_create while the QNX loader lock was still held,
@@ -119,10 +130,29 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
   n=$($NM -an $SO | grep -cE "(rgd|altscreen|audio)_module_(init|fini)" || true)
   [ "$n" = "0" ] || fail "$n eager module constructor/destructor symbols"
 
+  # Validate the optional decoder independently: dlopen must not reintroduce
+  # the QNX emutls/constructor/runtime hazards removed from the main hook.
+  APAC_SO=/src/build/libcarplay_apac.so
+  n=$($NM $APAC_SO 2>/dev/null | grep -ci emutls || true)
+  [ "$n" = "0" ] || fail "APAC: $n emutls symbols present"
+  n=$($NM $APAC_SO 2>/dev/null | grep -cE "__cxa_throw|__cxa_allocate_exception|__gxx_personality|_ZTI|_ZTS|_ZTV" || true)
+  [ "$n" = "0" ] || fail "APAC: $n exception/RTTI symbols"
+  n=$($NM -D --undefined-only $APAC_SO 2>/dev/null | grep -cE "_Znw|_Znа|_Zna|_ZdlPv|_ZdaPv|__cxa_guard|_ZSt|_ZNSt" || true)
+  [ "$n" = "0" ] || fail "APAC: $n C++ runtime/STL symbols"
+  n=$($READELF -d $APAC_SO | grep -c libstdc || true)
+  [ "$n" = "0" ] || fail "APAC links libstdc++"
+  init_size=$($READELF -W -S $APAC_SO | awk "\$2 == \".init_array\" { print \$6 }")
+  [ "$init_size" = "000004" ] || fail "APAC: .init_array size=$init_size (expected compiler-only 000004)"
+  n=$($NM -D $APAC_SO | grep -c " T spa_apac_codec_get_api" || true)
+  [ "$n" = "1" ] || fail "APAC: versioned C API export missing/duplicated"
+
   echo "  undefined:$($NM -D --undefined-only $SO | sed "s/^ *//" | awk "\$1 == \"U\" { printf \" %s\", \$2 }" | head -c 400)"
-  echo "  built build/libcarplay_hook.so (emutls=0 exceptions=0 rtti=0 stl=0 libstdc++=0 init_array=compiler-only)"
+  echo "  built build/libcarplay_apac.so (ABI v1, emutls=0 exceptions=0 rtti=0 stl=0 libstdc++=0)"
+  echo "  built build/libcarplay_hook.so (APAC=dlopen, emutls=0 init_array=compiler-only)"
 '
 
 echo ""
 echo "Compiled: $OUT"
 ls -lh "$OUT"
+echo "Compiled: $APAC_OUT"
+ls -lh "$APAC_OUT"

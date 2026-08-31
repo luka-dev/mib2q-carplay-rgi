@@ -1,7 +1,7 @@
 # Pristine stock PF rulesets (MHI2Q MU1316)
 
 Untouched originals pulled off the unit before `install_persistent_pf.sh` widened the carplay0 TCP
-rule to `6030:6033` (6031 altScreen, 6032 buffered audio, 6033 buffered RTCP). Kept here so a rollback never depends on on-unit `.stock` copies —
+rule to `6030:6032` (6031 altScreen, 6032 buffered audio). Kept here so a rollback never depends on on-unit `.stock` copies —
 those were deleted from the unit to avoid clutter.
 
 | file | bytes |
@@ -17,10 +17,10 @@ All four carry the stock single-port rule:
 ## Why four
 The live ruleset is chosen per external interface. On a car with the LTE modem the active profile is
 **`pf.ecm0.conf`**, NOT `pf.conf` — and the selected profile can change. Patch all four profiles;
-patching only `pf.conf` can silently leave 6031/6032/6033 blocked. Always verify the ACTIVE ruleset:
+patching only `pf.conf` can silently leave 6031/6032 blocked. Always verify the ACTIVE ruleset:
 
 ```
-pfctl -sr | grep -E 'carplay0.*603'     # want: port 6030:6033
+pfctl -sr | grep -E 'carplay0.*603'     # want: port 6030:6032
 ```
 
 ## Rollback (per profile)

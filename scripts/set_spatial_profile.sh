@@ -11,7 +11,7 @@ REMOTE_STARTUP=/mnt/app/root/hooks/carplay_startup.sh
 
 usage()
 {
-    echo "usage: $0 {status|spatial-5.1|spatial-5.1.2|experimental-aac-5.1.2|fallback-5.1|fallback-stereo}" >&2
+    echo "usage: $0 {status|spatial-5.1|spatial-5.1.2|atmos-downmix|atmos-drop|atmos-passthrough|fallback-stereo}" >&2
     exit 2
 }
 
@@ -25,45 +25,40 @@ profile=${1:-status}
 case "$profile" in
     status)
         "$AUDI_SSH" exec \
-            "grep -n '^export SPATIAL_' '$REMOTE_STARTUP'; pidin ar | grep dio_manager || true"
+            "grep -n '^export AUDIO_SPATIAL' '$REMOTE_STARTUP'; pidin ar | grep dio_manager || true"
         exit 0
         ;;
     spatial-5.1)
-        spatial_5_1=1
-        spatial_103=1
-        format_index=65
-        extra_index=
+        audio_spatial=1
+        audio_atmos=0
+        atmos_mode=downmix
         ;;
-    spatial-5.1.2)
-        spatial_5_1=1
-        spatial_103=1
-        format_index=66
-        extra_index=
+    spatial-5.1.2|atmos-downmix)
+        audio_spatial=1
+        audio_atmos=1
+        atmos_mode=downmix
         ;;
-    experimental-aac-5.1.2)
-        spatial_5_1=1
-        spatial_103=1
-        format_index=40
-        extra_index=65
+    atmos-drop)
+        audio_spatial=1
+        audio_atmos=1
+        atmos_mode=drop
         ;;
-    fallback-5.1)
-        spatial_5_1=1
-        spatial_103=0
-        format_index=65
-        extra_index=
+    atmos-passthrough)
+        audio_spatial=1
+        audio_atmos=1
+        atmos_mode=passthrough
         ;;
     fallback-stereo)
-        spatial_5_1=0
-        spatial_103=0
-        format_index=65
-        extra_index=
+        audio_spatial=0
+        audio_atmos=0
+        atmos_mode=downmix
         ;;
     *)
         usage
         ;;
 esac
 
-echo "Selecting $profile (SPATIAL_103=$spatial_103, index=$format_index, extra=${extra_index:-none}, SPATIAL_5_1=$spatial_5_1)"
+echo "Selecting $profile (AUDIO_SPATIAL=$audio_spatial, ATMOS=$audio_atmos, mode=$atmos_mode)"
 
 # Values substituted into the remote command come exclusively from the case
 # statement above.  Require every key exactly once before touching flash, make
@@ -75,28 +70,25 @@ f='$REMOTE_STARTUP'
 new='${REMOTE_STARTUP}.profile.new'
 backup='${REMOTE_STARTUP}.pre_spatial_profiles'
 
-test \"\$(grep -c '^export SPATIAL_5_1=' \"\$f\")\" = 1
-test \"\$(grep -c '^export SPATIAL_103=' \"\$f\")\" = 1
-test \"\$(grep -c '^export SPATIAL_103_INDEX=' \"\$f\")\" = 1
-test \"\$(grep -c '^export SPATIAL_103_EXTRA_INDEX=' \"\$f\")\" = 1
+test \"\$(grep -c '^export AUDIO_SPATIAL=' \"\$f\")\" = 1
+test \"\$(grep -c '^export AUDIO_SPATIAL_ATMOS=' \"\$f\")\" = 1
+test \"\$(grep -c '^export AUDIO_SPATIAL_ATMOS_MODE=' \"\$f\")\" = 1
 
 mount -uw /mnt/app
 test -e \"\$backup\" || cp \"\$f\" \"\$backup\"
 /usr/bin/sed \\
-  -e 's/^export SPATIAL_5_1=.*/export SPATIAL_5_1=$spatial_5_1/' \\
-  -e 's/^export SPATIAL_103=.*/export SPATIAL_103=$spatial_103/' \\
-  -e 's/^export SPATIAL_103_INDEX=.*/export SPATIAL_103_INDEX=$format_index/' \\
-  -e 's/^export SPATIAL_103_EXTRA_INDEX=.*/export SPATIAL_103_EXTRA_INDEX=$extra_index/' \\
+  -e 's/^export AUDIO_SPATIAL=.*/export AUDIO_SPATIAL=$audio_spatial/' \\
+  -e 's/^export AUDIO_SPATIAL_ATMOS=.*/export AUDIO_SPATIAL_ATMOS=$audio_atmos/' \\
+  -e 's/^export AUDIO_SPATIAL_ATMOS_MODE=.*/export AUDIO_SPATIAL_ATMOS_MODE=$atmos_mode/' \\
   \"\$f\" > \"\$new\"
 
-test \"\$(grep -c '^export SPATIAL_5_1=$spatial_5_1$' \"\$new\")\" = 1
-test \"\$(grep -c '^export SPATIAL_103=$spatial_103$' \"\$new\")\" = 1
-test \"\$(grep -c '^export SPATIAL_103_INDEX=$format_index$' \"\$new\")\" = 1
-test \"\$(grep -c '^export SPATIAL_103_EXTRA_INDEX=$extra_index$' \"\$new\")\" = 1
+test \"\$(grep -c '^export AUDIO_SPATIAL=$audio_spatial$' \"\$new\")\" = 1
+test \"\$(grep -c '^export AUDIO_SPATIAL_ATMOS=$audio_atmos$' \"\$new\")\" = 1
+test \"\$(grep -c '^export AUDIO_SPATIAL_ATMOS_MODE=$atmos_mode$' \"\$new\")\" = 1
 chmod 755 \"\$new\"
 mv \"\$new\" \"\$f\"
 sync
-grep -n '^export SPATIAL_' \"\$f\"
+grep -n '^export AUDIO_SPATIAL' \"\$f\"
 "
 
 echo "Profile stored. It applies to the next dio_manager generation; no HU reboot is required."

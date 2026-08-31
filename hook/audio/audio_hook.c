@@ -18,7 +18,7 @@
  * provision mpl5_dio_ent for 6 voices -> six_channel_speakerp (B&O firmware agent's dependency).
  */
 #include "audio_hook.h"
-#include "apac_bridge.h"
+#include "apac_codec_loader.h"
 #include "apap_crypto.h"
 #include "spatial_downmix.h"
 #include "../framework/logging.h"
@@ -28,12 +28,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <fcntl.h>
 #include <pthread.h>
 #include <unistd.h>
 #include <errno.h>
 #include <poll.h>
 #include <time.h>
+#include <sys/asoundlib.h>
 
 DEFINE_LOG_MODULE(audio);
 
@@ -60,11 +62,104 @@ static int spa_env_on(const char *name)
     return 1;
 }
 
+enum {
+    SPA_ATMOS_DOWNMIX = 1,
+    SPA_ATMOS_DROP = 2,
+    SPA_ATMOS_PASSTHROUGH = 3
+};
+
+typedef struct {
+    int usesNewControls;
+    int realtimePCM;
+    int buffered;
+    int atmos;
+    int atmosMode;
+} spa_audio_config_t;
+
+static spa_audio_config_t spa_audio_config_value;
+static pthread_once_t spa_audio_config_once = PTHREAD_ONCE_INIT;
+
+static int spa_parse_bool(const char *name, int *present)
+{
+    const char *value = getenv(name);
+
+    *present = value != 0;
+    if (!value || !value[0] || !strcasecmp(value, "0") ||
+        !strcasecmp(value, "false") || !strcasecmp(value, "no") ||
+        !strcasecmp(value, "off"))
+        return 0;
+    if (!strcasecmp(value, "1") || !strcasecmp(value, "true") ||
+        !strcasecmp(value, "yes") || !strcasecmp(value, "on"))
+        return 1;
+    LOG_ERROR(LOG_MODULE,
+              "audio config: invalid %s='%s'; expected 0/1/true/false; treating as false",
+              name, value);
+    return 0;
+}
+
+static void spa_audio_config_init_once(void)
+{
+    const char *modeValue;
+    int spatialPresent, typoPresent, atmosPresent;
+    int spatial = spa_parse_bool(SPA_AUDIO_ENV, &spatialPresent);
+    int typo = spa_parse_bool(SPA_AUDIO_TYPO_ENV, &typoPresent);
+    int atmos = spa_parse_bool(SPA_AUDIO_ATMOS_ENV, &atmosPresent);
+
+    memset(&spa_audio_config_value, 0, sizeof(spa_audio_config_value));
+    spa_audio_config_value.usesNewControls =
+        spatialPresent || typoPresent || atmosPresent;
+    spa_audio_config_value.atmosMode = SPA_ATMOS_DOWNMIX;
+
+    if (spa_audio_config_value.usesNewControls) {
+        if (!spatialPresent && typoPresent) {
+            spatial = typo;
+            LOG_WARN(LOG_MODULE,
+                     "audio config: %s is a deprecated typo alias; use %s",
+                     SPA_AUDIO_TYPO_ENV, SPA_AUDIO_ENV);
+        } else if (spatialPresent && typoPresent && spatial != typo) {
+            LOG_WARN(LOG_MODULE,
+                     "audio config: %s conflicts with typo alias %s; canonical value wins",
+                     SPA_AUDIO_ENV, SPA_AUDIO_TYPO_ENV);
+        }
+        spa_audio_config_value.atmos = atmos;
+        spa_audio_config_value.buffered = spatial || atmos;
+        spa_audio_config_value.realtimePCM = spatial || atmos;
+    } else {
+        /* Migration only: old deployments retain their exact behavior until
+         * carplay_startup.sh is replaced with the canonical variables. */
+        spa_audio_config_value.realtimePCM = spa_env_on("SPATIAL_5_1");
+        spa_audio_config_value.buffered = spa_env_on(SPA_PROBE103_ENV);
+        spa_audio_config_value.atmos =
+            spa_audio_config_value.buffered &&
+            getenv(SPA_103_INDEX_ENV) &&
+            !strcmp(getenv(SPA_103_INDEX_ENV), "66");
+    }
+
+    modeValue = getenv(SPA_AUDIO_ATMOS_MODE_ENV);
+    if (modeValue && modeValue[0]) {
+        if (!strcasecmp(modeValue, "downmix"))
+            spa_audio_config_value.atmosMode = SPA_ATMOS_DOWNMIX;
+        else if (!strcasecmp(modeValue, "drop"))
+            spa_audio_config_value.atmosMode = SPA_ATMOS_DROP;
+        else if (!strcasecmp(modeValue, "passthrough"))
+            spa_audio_config_value.atmosMode = SPA_ATMOS_PASSTHROUGH;
+        else
+            LOG_ERROR(LOG_MODULE,
+                      "audio config: invalid %s='%s'; expected downmix/drop/passthrough; "
+                      "using downmix",
+                      SPA_AUDIO_ATMOS_MODE_ENV, modeValue);
+    }
+}
+
+static const spa_audio_config_t *spa_audio_config(void)
+{
+    pthread_once(&spa_audio_config_once, spa_audio_config_init_once);
+    return &spa_audio_config_value;
+}
+
 static int spa_enabled(void)
 {
-    static int cached = -1;
-    if (cached < 0) cached = spa_env_on("SPATIAL_5_1") ? 1 : 0;
-    return cached;
+    return spa_audio_config()->realtimePCM;
 }
 
 /* Runtime tuning of WHICH format bit we advertise, re-read on every call (these run once per stream
@@ -321,7 +416,7 @@ static int spa_cf_resolve(void)
 /* Type-103 is armed only by the startup environment, before AirTunesServer_EnsureCreated. */
 static int spa_probe103(void)
 {
-    return spa_env_on(SPA_PROBE103_ENV) && spa103_private_image_compatible();
+    return spa_audio_config()->buffered && spa103_private_image_compatible();
 }
 
 static int spa_probe103_dcx(void)
@@ -333,10 +428,12 @@ static int spa_probe103_dcx(void)
  * kill switch; an absent mode selects the established combined behavior. */
 static unsigned spa_probe103_mode(void)
 {
+    const spa_audio_config_t *config = spa_audio_config();
     const char *value;
     unsigned numeric;
 
     if (!spa_probe103()) return 0;
+    if (config->usesNewControls) return SPA_103_MODE_BOTH;
     value = getenv(SPA_103_MODE_ENV);
     if (!value || !value[0]) return SPA_103_MODE_BOTH;
     if (!strcmp(value, "info") || !strcmp(value, "1")) numeric = SPA_103_MODE_INFO;
@@ -361,11 +458,14 @@ static unsigned spa_probe103_mode(void)
  * none of these payloads is accepted or played by this hook yet. */
 static int spa_probe103_index(void)
 {
+    const spa_audio_config_t *config = spa_audio_config();
     const char *value = getenv(SPA_103_INDEX_ENV);
     char *end = 0;
     int index = SPA_APAC_48K_5_1;
     long candidate;
 
+    if (config->usesNewControls)
+        return config->atmos ? SPA_APAC_48K_5_1_2 : SPA_APAC_48K_5_1;
     if (!value || !value[0]) return index;
     candidate = strtol(value, &end, 0);
     if (end && end != value && !*end &&
@@ -390,6 +490,7 @@ static int spa_probe103_index(void)
  * weakening the primary selector or silently changing proven APAC negotiation. */
 static int spa_probe103_extra_index(int primaryIndex)
 {
+    if (spa_audio_config()->usesNewControls) return -1;
     const char *value = getenv(SPA_103_EXTRA_INDEX_ENV);
     char *end = 0;
     long candidate;
@@ -617,7 +718,7 @@ void spa_note_setup_result(int has103, int result, void *response, uint32_t sequ
     } else {
         LOG_INFO(LOG_MODULE,
                  "probe103: stock libairplay rejected type-103 SETUP as expected: err=%d (sequence=%u); "
-                 "type-100 PCM/6 code path remains untouched",
+                 "type-100 fallback remains available through the QSA sink bridge",
                  result, (unsigned)sequence);
     }
 }
@@ -640,11 +741,11 @@ void spa_note_setup_result(int has103, int result, void *response, uint32_t sequ
  * sends its codec cookies as SETMAGICCOOKIE on the existing RTSP control connection.  Therefore a
  * fresh build opens only the APAP data listener. Latency is optional (zero is the sender's own
  * fallback) and streamID is returned because this request explicitly advertises
- * supportsDynamicStreamID. This stage intentionally does not decode or render audio yet; type-100/
- * DIO5 remains entirely stock and available as fallback.
+ * supportsDynamicStreamID. APAC is decoded into the bounded PCM rail below and drained through the
+ * existing type-100-owned DIO5/QSA handle; type 100 remains the fallback scheduler/source until
+ * the buffered decoder reaches RUNNING.
  */
 #define SPA_103_STREAM_TYPE       103
-#define SPA_103_SESSION_FAMILY_OFF 85  /* peer sockaddr family, verified on stock 210.81 */
 #define SPA_103_PREFERRED_PORT   (-6032) /* -6030 main screen, -6031 alt screen */
 #define SPA_103_AUDIO_BUFFER_SIZE_AAC   5000000 /* receiver default for compression types 4/8 */
 #define SPA_103_AUDIO_BUFFER_SIZE_OTHER 21168000 /* receiver default for type 0, including APAC */
@@ -659,70 +760,88 @@ void spa_note_setup_result(int has103, int result, void *response, uint32_t sequ
 #define SPA_103_MAX_MAGIC_COOKIE_SIZE (1024u * 1024u)
 #define SPA_103_MAX_MAGIC_COOKIE_BODY_SIZE (SPA_103_MAX_MAGIC_COOKIE_SIZE + 65536u)
 
-/* MU1316 libairplay.so fingerprinted private request-dispatch seam.  AirTunesServer_EnsureCreated
- * passes a 0x2c-byte callback table to HTTPServerCreate; HTTPServerCreate copies it to server+0x40,
- * putting the request callback at server+0x64.  Replacing this heap slot is safer than rewriting
- * ARM instructions.  The installer below refuses every image/slot that does not exactly match the
- * reviewed MU1316 layout. */
-#define SPA_103_MU1316_ENSURE_CREATED_VA 0x0002e9acu
-#define SPA_103_MU1316_SET_PLIST_RESPONSE_VA 0x0002f040u
-#define SPA_103_MU1316_HTTP_PROCESS_VA   0x000302e0u
-#define SPA_103_MU1316_SERVER_GLOBAL_VA  0x000babccu
-#define SPA_103_HTTP_PROCESS_SLOT_OFF    0x64u
-#define SPA_103_MU1316_SESSION_CLOCK_OFF 5072u
 #define SPA_103_ANCHOR_LEAD_MS           150u
 
-/* Target HTTPMessage layout used by the stock 210.81 dispatcher. */
-#define SPA_103_HTTP_METHOD_PTR_OFF      0x201cu
-#define SPA_103_HTTP_METHOD_LEN_OFF      0x2020u
-#define SPA_103_HTTP_BODY_PTR_OFF        0x209cu
-#define SPA_103_HTTP_BODY_LEN_OFF        0x20a8u
-
-static const uint8_t spa103_ensure_created_prologue[12] = {
-    0xf0, 0x45, 0x2d, 0xe9, 0xdc, 0x41, 0x9f, 0xe5,
-    0xdc, 0x61, 0x9f, 0xe5
-};
-static const uint8_t spa103_set_plist_response_prologue[12] = {
-    0xf0, 0x41, 0x2d, 0xe9, 0xc8, 0x50, 0x90, 0xe5,
-    0x03, 0x70, 0xa0, 0xe1
-};
-
-/* The public type-103 hooks are portable, but their HTTP dispatcher and
- * session-clock bridge use reviewed private MU1316 addresses.  Never
- * advertise mainBuffered on another libairplay image merely because the
- * environment requested it.  K1004, for example, places EnsureCreated at
- * 0x2e94c rather than 0x2e9ac.  Advertising 103 there while refusing the
- * private dispatcher later guarantees a phone-side teardown.
+/* The public type-103 hooks are portable, but the HTTP dispatcher, request
+ * layout and session-clock bridge use private libairplay addresses.  Keep all
+ * of those values in one fingerprinted firmware profile instead of embedding
+ * a release name in common SPA103 logic.  K1004, for example, places
+ * EnsureCreated at 0x2e94c rather than 0x2e9ac and therefore needs its own
+ * independently reviewed profile.
  *
  * This check is first reached from a real interposed call.  No hook-owned ELF
  * constructor may call dlsym, inspect code bytes, log, or create a thread. */
-static int spa103_private_image_compatible(void)
-{
-    static volatile int compatibility; /* 0 unknown, 1 compatible, -1 rejected */
-    uintptr_t ensureAddress, imageBase;
-    int result = compatibility;
+typedef struct {
+    const char *name;
+    uintptr_t ensureCreatedVA;
+    uintptr_t setPlistResponseVA;
+    uintptr_t httpProcessVA;
+    uintptr_t serverGlobalVA;
+    size_t httpProcessSlotOffset;
+    size_t sessionClockOffset;
+    size_t sessionFamilyOffset;
+    size_t httpMethodPointerOffset;
+    size_t httpMethodLengthOffset;
+    size_t httpBodyPointerOffset;
+    size_t httpBodyLengthOffset;
+    uint8_t ensureCreatedPrologue[12];
+    uint8_t setPlistResponsePrologue[12];
+} spa103_private_profile_t;
 
-    if (result) return result > 0;
+static const spa103_private_profile_t spa103_private_profiles[] = {
+    {
+        "MHI2Q AirPlay 210.81",
+        0x0002e9acu, 0x0002f040u, 0x000302e0u, 0x000babccu,
+        0x64u, 5072u, 85u,
+        0x201cu, 0x2020u, 0x209cu, 0x20a8u,
+        { 0xf0, 0x45, 0x2d, 0xe9, 0xdc, 0x41, 0x9f, 0xe5,
+          0xdc, 0x61, 0x9f, 0xe5 },
+        { 0xf0, 0x41, 0x2d, 0xe9, 0xc8, 0x50, 0x90, 0xe5,
+          0x03, 0x70, 0xa0, 0xe1 }
+    }
+};
+
+static const spa103_private_profile_t *spa103_private_profile(void)
+{
+    static const spa103_private_profile_t *selected;
+    static volatile int checked; /* 0 unknown, 1 selected, -1 rejected */
+    uintptr_t ensureAddress;
+    size_t i;
+
+    if (checked) return checked > 0 ? selected : 0;
 
     ensureAddress = (uintptr_t)dlsym(RTLD_NEXT, "AirTunesServer_EnsureCreated");
-    if (ensureAddress >= SPA_103_MU1316_ENSURE_CREATED_VA) {
-        imageBase = ensureAddress - SPA_103_MU1316_ENSURE_CREATED_VA;
+    for (i = 0; i < sizeof(spa103_private_profiles) / sizeof(spa103_private_profiles[0]); i++) {
+        const spa103_private_profile_t *profile = &spa103_private_profiles[i];
+        uintptr_t imageBase;
+
+        if (ensureAddress < profile->ensureCreatedVA) continue;
+        imageBase = ensureAddress - profile->ensureCreatedVA;
         if ((imageBase & 0xfffu) == 0 &&
-            memcmp((const void *)(imageBase + SPA_103_MU1316_ENSURE_CREATED_VA),
-                   spa103_ensure_created_prologue,
-                   sizeof(spa103_ensure_created_prologue)) == 0 &&
-            memcmp((const void *)(imageBase + SPA_103_MU1316_SET_PLIST_RESPONSE_VA),
-                   spa103_set_plist_response_prologue,
-                   sizeof(spa103_set_plist_response_prologue)) == 0) {
-            compatibility = 1;
-            return 1;
+            memcmp((const void *)(imageBase + profile->ensureCreatedVA),
+                   profile->ensureCreatedPrologue,
+                   sizeof(profile->ensureCreatedPrologue)) == 0 &&
+            memcmp((const void *)(imageBase + profile->setPlistResponseVA),
+                   profile->setPlistResponsePrologue,
+                   sizeof(profile->setPlistResponsePrologue)) == 0) {
+            selected = profile;
+            __sync_synchronize();
+            checked = 1;
+            LOG_INFO(LOG_MODULE, "probe103: selected private profile '%s'", profile->name);
+            return profile;
         }
     }
 
-    compatibility = -1;
+    checked = -1;
     LOG_WARN(LOG_MODULE,
-             "probe103 requested but private libairplay profile is not MU1316; disabled fail-closed");
+             "probe103 requested but no reviewed private libairplay profile matched; "
+             "disabled fail-closed");
     return 0;
+}
+
+static int spa103_private_image_compatible(void)
+{
+    return spa103_private_profile() != 0;
 }
 
 typedef int (*spa_srv_sockopen_t)(int, int, int, int, int *, int, int *);
@@ -741,7 +860,8 @@ typedef uint64_t (*spa_up_ticks_t)(void);
  * undefined, turning the intended +150 ms anchor into a random 64-bit interval. */
 typedef uint64_t (*spa_milliseconds_to_up_ticks_t)(uint64_t);
 
-/* MU1316 AirTunesTime, verified from AirTunesClock_GetSynchronizedTimeNearUpTicks @ 0x2dc30:
+/* AirTunesTime for the AirPlay 210.81 profile, verified from
+ * AirTunesClock_GetSynchronizedTimeNearUpTicks @ 0x2dc30:
  * seconds at +0, reserved padding at +4, and 64-bit fractional seconds at +8. Unlike the newer
  * 32-byte Pioneer structure, this target image does not return a timeline ID here. */
 typedef struct {
@@ -862,9 +982,9 @@ static int spa103_response_set_i64(void *responseDesc, const char *name, int64_t
  * Index 66 lands there deliberately: its eight-channel native order has never been measured, and
  * guessing a permutation would produce plausible, wrong audio.
  */
-#define SPA_103_RENDER_CHANNELS   SPA_PCM_5_1_CHANNELS
+#define SPA_103_RENDER_MAX_CHANNELS SPA_PCM_5_1_2_CHANNELS
 #define SPA_103_RENDER_FRAMES     1024u
-#define SPA_103_RENDER_MAX_SAMPLES (SPA_103_RENDER_CHANNELS * SPA_103_RENDER_FRAMES)
+#define SPA_103_RENDER_MAX_SAMPLES (SPA_103_RENDER_MAX_CHANNELS * SPA_103_RENDER_FRAMES)
 /* Half a second of 48 kHz 5.1: 288 KB.  Big enough to absorb the phone's burst between two
  * reads of the sink, small enough that a stalled sink cannot hide a minute of latency. */
 #define SPA_103_RING_FRAMES       24000u
@@ -880,12 +1000,14 @@ enum {
     SPA_103_RENDER_UNSUPPORTED_FORMAT = 4,  /* an index this rail cannot carry at all */
     SPA_103_RENDER_UNSUPPORTED_LAYOUT = 5,  /* index 66: decodable, order unmeasured */
     SPA_103_RENDER_COOKIE_FAILED = 6,       /* the cookie would not configure a decoder */
-    SPA_103_RENDER_NO_MEMORY = 7
+    SPA_103_RENDER_NO_MEMORY = 7,
+    SPA_103_RENDER_NO_DECODER = 8
 };
 
 typedef struct {
     pthread_mutex_t lock;
     int state;
+    const spa_apac_codec_api_t *codec;
     spa_apac_decoder_t *decoder;
     int64_t cookieId;               /* the cookie the decoder was built from */
     int haveCookieId;
@@ -899,10 +1021,17 @@ typedef struct {
     uint64_t tlvFailed;
     uint64_t decodeFailed;
     uint32_t sampleRate;
+    uint32_t sourceChannels;
+    uint32_t outputChannels;
+    uint32_t channelLayoutTag;
+    int64_t formatIndex;
+    int atmosMode;
 } spa103_render_t;
 
-static spa103_render_t spa103_render = { PTHREAD_MUTEX_INITIALIZER, SPA_103_RENDER_IDLE,
-                                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+static spa103_render_t spa103_render = {
+    .lock = PTHREAD_MUTEX_INITIALIZER,
+    .state = SPA_103_RENDER_IDLE
+};
 
 static const char *spa103_render_state_name(int state)
 {
@@ -915,6 +1044,7 @@ static const char *spa103_render_state_name(int state)
     case SPA_103_RENDER_UNSUPPORTED_LAYOUT:  return "unsupported-layout";
     case SPA_103_RENDER_COOKIE_FAILED:       return "cookie-failed";
     case SPA_103_RENDER_NO_MEMORY:           return "no-memory";
+    case SPA_103_RENDER_NO_DECODER:          return "decoder-unavailable";
     default:                                 return "?";
     }
 }
@@ -922,17 +1052,23 @@ static const char *spa103_render_state_name(int state)
 /* Called with the receiver lock NOT held. */
 static void spa103_render_start(int64_t formatIndex, int haveKey)
 {
+    const spa_audio_config_t *config = spa_audio_config();
+    const char *codecPath = 0;
+    uint32_t outputChannels =
+        formatIndex == SPA_APAC_48K_5_1_2 &&
+        config->atmosMode == SPA_ATMOS_PASSTHROUGH ?
+        SPA_PCM_5_1_2_CHANNELS : SPA_PCM_5_1_CHANNELS;
     int state;
 
     pthread_mutex_lock(&spa103_render.lock);
-    if (spa103_render.decoder) {
-        spa_apac_destroy(spa103_render.decoder);
+    if (spa103_render.decoder && spa103_render.codec) {
+        spa103_render.codec->destroy(spa103_render.decoder);
         spa103_render.decoder = 0;
     }
-    if (!spa103_render.ring) {
-        spa103_render.ring = (int16_t *)malloc((size_t)SPA_103_RING_FRAMES *
-                                               SPA_103_RENDER_CHANNELS * sizeof(int16_t));
-    }
+    spa103_render.codec = spa_apac_runtime_load(&codecPath);
+    free(spa103_render.ring);
+    spa103_render.ring = (int16_t *)malloc((size_t)SPA_103_RING_FRAMES *
+                                           outputChannels * sizeof(int16_t));
     spa103_render.head = 0;
     spa103_render.fill = 0;
     spa103_render.framesIn = 0;
@@ -944,13 +1080,19 @@ static void spa103_render_start(int64_t formatIndex, int haveKey)
     spa103_render.cookieId = 0;
     spa103_render.haveCookieId = 0;
     spa103_render.sampleRate = 0;
+    spa103_render.sourceChannels = 0;
+    spa103_render.outputChannels = outputChannels;
+    spa103_render.channelLayoutTag = 0;
+    spa103_render.formatIndex = formatIndex;
+    spa103_render.atmosMode = config->atmosMode;
 
     if (!spa103_render.ring)
         state = SPA_103_RENDER_NO_MEMORY;
-    else if (formatIndex == SPA_APAC_48K_5_1_2)
-        state = SPA_103_RENDER_UNSUPPORTED_LAYOUT;
-    else if (formatIndex != SPA_APAC_48K_5_1)
+    else if (formatIndex != SPA_APAC_48K_5_1 &&
+             formatIndex != SPA_APAC_48K_5_1_2)
         state = SPA_103_RENDER_UNSUPPORTED_FORMAT;
+    else if (!spa103_render.codec)
+        state = SPA_103_RENDER_NO_DECODER;
     else if (!haveKey)
         state = SPA_103_RENDER_NO_KEY;
     else
@@ -958,16 +1100,23 @@ static void spa103_render_start(int64_t formatIndex, int haveKey)
     spa103_render.state = state;
     pthread_mutex_unlock(&spa103_render.lock);
 
-    LOG_INFO(LOG_MODULE, "buffer103: render %s formatIndex=%lld key=%s",
+    LOG_INFO(LOG_MODULE,
+             "buffer103: render %s formatIndex=%lld key=%s output=%uch atmosMode=%s",
              spa103_render_state_name(state), (long long)formatIndex,
-             haveKey ? "yes" : "no");
+             haveKey ? "yes" : "no", (unsigned)outputChannels,
+             config->atmosMode == SPA_ATMOS_DOWNMIX ? "downmix" :
+             config->atmosMode == SPA_ATMOS_DROP ? "drop" : "passthrough");
+    if (state == SPA_103_RENDER_NO_DECODER)
+        LOG_ERROR(LOG_MODULE,
+                  "buffer103: optional APAC codec unavailable/rejected at %s; capture continues",
+                  codecPath ? codecPath : "<unknown>");
 }
 
 static void spa103_render_stop(void)
 {
     pthread_mutex_lock(&spa103_render.lock);
-    if (spa103_render.decoder) {
-        spa_apac_destroy(spa103_render.decoder);
+    if (spa103_render.decoder && spa103_render.codec) {
+        spa103_render.codec->destroy(spa103_render.decoder);
         spa103_render.decoder = 0;
     }
     free(spa103_render.ring);
@@ -984,7 +1133,8 @@ static void spa103_render_stop(void)
 static void spa103_render_flush(void)
 {
     pthread_mutex_lock(&spa103_render.lock);
-    if (spa103_render.decoder) spa_apac_reset(spa103_render.decoder);
+    if (spa103_render.decoder && spa103_render.codec)
+        spa103_render.codec->reset(spa103_render.decoder);
     spa103_render.head = 0;
     spa103_render.fill = 0;
     pthread_mutex_unlock(&spa103_render.lock);
@@ -1023,7 +1173,7 @@ static void spa103_ring_push_locked(const int16_t *pcm, size_t frames)
 
     if (!spa103_render.ring || !frames) return;
     if (frames > SPA_103_RING_FRAMES) {
-        pcm += (frames - SPA_103_RING_FRAMES) * SPA_103_RENDER_CHANNELS;
+        pcm += (frames - SPA_103_RING_FRAMES) * spa103_render.outputChannels;
         spa103_render.dropped += frames - SPA_103_RING_FRAMES;
         frames = SPA_103_RING_FRAMES;
     }
@@ -1031,9 +1181,9 @@ static void spa103_ring_push_locked(const int16_t *pcm, size_t frames)
         const size_t tail = (spa103_render.head + spa103_render.fill) % SPA_103_RING_FRAMES;
         size_t run = SPA_103_RING_FRAMES - tail;
         if (run > frames - at) run = frames - at;
-        memcpy(spa103_render.ring + tail * SPA_103_RENDER_CHANNELS,
-               pcm + at * SPA_103_RENDER_CHANNELS,
-               run * SPA_103_RENDER_CHANNELS * sizeof(int16_t));
+        memcpy(spa103_render.ring + tail * spa103_render.outputChannels,
+               pcm + at * spa103_render.outputChannels,
+               run * spa103_render.outputChannels * sizeof(int16_t));
         if (spa103_render.fill + run > SPA_103_RING_FRAMES) {
             const size_t lost = spa103_render.fill + run - SPA_103_RING_FRAMES;
             spa103_render.head = (spa103_render.head + lost) % SPA_103_RING_FRAMES;
@@ -1101,6 +1251,7 @@ static void spa103_render_frame(const uint8_t *packet, size_t length)
          spa103_render.cookieId != (int64_t)ext.magicCookieId)) {
         uint8_t *cookie;
         size_t cookieSize = 0;
+        spa_apac_stream_info_t info;
         uint32_t channels = 0, frameLength = 0, sampleRate = 0;
 
         pthread_mutex_unlock(&spa103_render.lock);
@@ -1109,24 +1260,46 @@ static void spa103_render_frame(const uint8_t *packet, size_t length)
         if (!cookie) return;    /* no cookie yet; the next frame tries again */
 
         pthread_mutex_lock(&spa103_render.lock);
-        if (spa103_render.decoder) {
-            spa_apac_destroy(spa103_render.decoder);
+        if (spa103_render.decoder && spa103_render.codec) {
+            spa103_render.codec->destroy(spa103_render.decoder);
             spa103_render.decoder = 0;
         }
-        rc = spa_apac_create(cookie, cookieSize, &spa103_render.decoder,
-                             &channels, &frameLength, &sampleRate);
+        rc = spa103_render.codec->create(cookie, cookieSize, &spa103_render.decoder,
+                                         &channels, &frameLength, &sampleRate);
         free(cookie);
-        if (rc != SPA_APAC_OK) {
-            spa103_render.state = SPA_103_RENDER_COOKIE_FAILED;
+        memset(&info, 0, sizeof(info));
+        if (rc == SPA_APAC_OK)
+            rc = spa103_render.codec->getInfo(spa103_render.decoder, &info);
+        if (rc != SPA_APAC_OK ||
+            frameLength != SPA_103_RENDER_FRAMES || sampleRate != SPA_SR ||
+            (spa103_render.formatIndex == SPA_APAC_48K_5_1 &&
+             (channels != SPA_PCM_5_1_CHANNELS ||
+              info.channelLayoutTag != 0x007c0006u)) ||
+            (spa103_render.formatIndex == SPA_APAC_48K_5_1_2 &&
+             (channels != SPA_PCM_5_1_2_CHANNELS ||
+              info.channelLayoutTag != 0x00c20008u))) {
+            if (spa103_render.decoder) {
+                spa103_render.codec->destroy(spa103_render.decoder);
+                spa103_render.decoder = 0;
+            }
+            if (rc == SPA_APAC_OK)
+                spa103_render.state = SPA_103_RENDER_UNSUPPORTED_LAYOUT;
+            else
+                spa103_render.state = SPA_103_RENDER_COOKIE_FAILED;
             pthread_mutex_unlock(&spa103_render.lock);
             LOG_ERROR(LOG_MODULE,
-                      "buffer103: APAC decoder setup failed status=%d cookie=%u bytes; "
-                      "decode disabled, capture continues", rc, (unsigned)cookieSize);
+                      "buffer103: APAC decoder setup rejected status=%d cookie=%u bytes "
+                      "index=%lld geometry=%uHz/%uch/%u layout=%#x; capture continues",
+                      rc, (unsigned)cookieSize, (long long)spa103_render.formatIndex,
+                      (unsigned)sampleRate, (unsigned)channels, (unsigned)frameLength,
+                      (unsigned)info.channelLayoutTag);
             return;
         }
         spa103_render.cookieId = (int64_t)ext.magicCookieId;
         spa103_render.haveCookieId = ext.hasMagicCookieId;
         spa103_render.sampleRate = sampleRate;
+        spa103_render.sourceChannels = channels;
+        spa103_render.channelLayoutTag = info.channelLayoutTag;
         spa103_render.state = SPA_103_RENDER_RUNNING;
         LOG_INFO(LOG_MODULE,
                  "buffer103: APAC decoder up id=%lld %u Hz %u ch %u frames/packet",
@@ -1134,17 +1307,23 @@ static void spa103_render_frame(const uint8_t *packet, size_t length)
                  (unsigned)channels, (unsigned)frameLength);
     }
 
-    rc = spa_apac_decode_s16(spa103_render.decoder, audio, audioLength,
-                             decoded, SPA_103_RENDER_MAX_SAMPLES, &frames);
+    rc = spa103_render.codec->decodeS16(spa103_render.decoder, audio, audioLength,
+                                        decoded, SPA_103_RENDER_MAX_SAMPLES, &frames);
     if (rc != SPA_APAC_OK) {
         spa103_render.decodeFailed++;
         pthread_mutex_unlock(&spa103_render.lock);
         return;
     }
     if (frames) {
-        /* The decoder emits C L R Ls Rs LFE; the rail below expects L R C LFE Ls Rs.  In place:
-         * the permutation is a pure per-frame shuffle. */
-        spa_reorder_5_1_decoder_to_declared_s16(decoded, frames, decoded);
+        if (spa103_render.formatIndex == SPA_APAC_48K_5_1) {
+            /* Measured APAC cookie order C L R Ls Rs LFE -> DIO declared order. */
+            spa_reorder_5_1_decoder_to_declared_s16(decoded, frames, decoded);
+        } else if (spa103_render.atmosMode == SPA_ATMOS_DOWNMIX) {
+            /* Atmos tag 0x00c20008 is already L R C LFE Ls Rs Ltm Rtm. */
+            spa_downmix_5_1_2_s16(decoded, frames, decoded);
+        } else if (spa103_render.atmosMode == SPA_ATMOS_DROP) {
+            spa_drop_5_1_2_s16(decoded, frames, decoded);
+        }
         spa103_ring_push_locked(decoded, frames);
         spa103_render.framesIn += frames;
     }
@@ -1191,28 +1370,45 @@ static int spa103_read_shk(const void *streamDesc, uint8_t out[SPA_APAP_KEY_SIZE
 
 int spa_buffered_pcm6_active(void)
 {
-    int active;
+    return spa_buffered_pcm_active() &&
+           spa_buffered_pcm_channels() == SPA_PCM_5_1_CHANNELS;
+}
 
+int spa_buffered_pcm_active(void)
+{
+    int active;
     pthread_mutex_lock(&spa103_render.lock);
     active = spa103_render.state == SPA_103_RENDER_RUNNING && spa103_render.ring != 0;
     pthread_mutex_unlock(&spa103_render.lock);
     return active;
 }
 
-size_t spa_buffered_pcm6_read(int16_t *out, size_t frames)
+unsigned spa_buffered_pcm_channels(void)
+{
+    unsigned channels = 0;
+
+    pthread_mutex_lock(&spa103_render.lock);
+    if (spa103_render.state == SPA_103_RENDER_RUNNING && spa103_render.ring)
+        channels = spa103_render.outputChannels;
+    pthread_mutex_unlock(&spa103_render.lock);
+    return channels;
+}
+
+size_t spa_buffered_pcm_read(int16_t *out, size_t frames, unsigned channels)
 {
     size_t done = 0;
 
     if (!out || !frames) return 0;
     pthread_mutex_lock(&spa103_render.lock);
-    if (spa103_render.state == SPA_103_RENDER_RUNNING && spa103_render.ring) {
+    if (spa103_render.state == SPA_103_RENDER_RUNNING && spa103_render.ring &&
+        channels == spa103_render.outputChannels) {
         while (done < frames && spa103_render.fill) {
             size_t run = SPA_103_RING_FRAMES - spa103_render.head;
             if (run > spa103_render.fill) run = spa103_render.fill;
             if (run > frames - done) run = frames - done;
-            memcpy(out + done * SPA_103_RENDER_CHANNELS,
-                   spa103_render.ring + spa103_render.head * SPA_103_RENDER_CHANNELS,
-                   run * SPA_103_RENDER_CHANNELS * sizeof(int16_t));
+            memcpy(out + done * channels,
+                   spa103_render.ring + spa103_render.head * channels,
+                   run * channels * sizeof(int16_t));
             spa103_render.head = (spa103_render.head + run) % SPA_103_RING_FRAMES;
             spa103_render.fill -= run;
             done += run;
@@ -1221,6 +1417,319 @@ size_t spa_buffered_pcm6_read(int16_t *out, size_t frames)
     }
     pthread_mutex_unlock(&spa103_render.lock);
     return done;
+}
+
+size_t spa_buffered_pcm6_read(int16_t *out, size_t frames)
+{
+    return spa_buffered_pcm_read(out, frames, SPA_PCM_5_1_CHANNELS);
+}
+
+/* ---- stock DIO5/QSA sink bridge -------------------------------------------------------------
+ *
+ * Stock 210.81 reaches snd_pcm_plugin_write from both CQNXSoundIF write variants. The live
+ * type-100 fallback is normally stereo even when type 103 carries Spatial media, so merely
+ * replacing its bytes with PCM6 would make QSA interpret three PCM frames as one. Interpose the
+ * matching params call as well: configure the existing mpl5_dio_ent handle for 6/8 voices while
+ * leaving CQNXSoundIF's own stereo cadence untouched, expand each stock write to the same number
+ * of output frames, and report the original byte count back to the stock caller.
+ *
+ * This reuses the already-owned CarPlay device/focus path; no second PCM handle races it. Before
+ * type 103 is running, stereo is copied to L/R and the other outputs are silent. While it is
+ * running, decoded ring samples replace that fallback. A short ring read is padded with silence.
+ */
+#define SPA_PCM_SINK_NAME "mpl5_dio_ent"
+#define SPA_PCM_SINK_MAX_WRITE (1024u * 1024u)
+
+typedef int (*spa_snd_open_name_t)(snd_pcm_t **, char *, int);
+typedef int (*spa_snd_params_t)(snd_pcm_t *, snd_pcm_channel_params_t *);
+typedef int (*spa_snd_setup_t)(snd_pcm_t *, snd_pcm_channel_setup_t *);
+typedef ssize_t (*spa_snd_write_t)(snd_pcm_t *, const void *, size_t);
+typedef int (*spa_snd_close_t)(snd_pcm_t *);
+
+typedef struct {
+    pthread_mutex_t lock;
+    snd_pcm_t *handle;
+    int sourceFormat;
+    unsigned sourceChannels;
+    unsigned outputChannels;
+    int expandedParams;
+    int16_t *scratch;
+    size_t scratchBytes;
+    uint64_t writes;
+    uint64_t bufferedWrites;
+    uint64_t underrunFrames;
+} spa_pcm_sink_t;
+
+static spa_pcm_sink_t spa_pcm_sink = {
+    .lock = PTHREAD_MUTEX_INITIALIZER
+};
+
+static unsigned spa_audio_requested_output_channels(void)
+{
+    const spa_audio_config_t *config = spa_audio_config();
+
+    if (!config->realtimePCM) return 0;
+    return config->atmos && config->atmosMode == SPA_ATMOS_PASSTHROUGH ?
+           SPA_PCM_5_1_2_CHANNELS : SPA_PCM_5_1_CHANNELS;
+}
+
+int snd_pcm_open_name(snd_pcm_t **handle, char *name, int mode)
+{
+    static spa_snd_open_name_t real;
+    int result;
+
+    if (!real) real = (spa_snd_open_name_t)dlsym(RTLD_NEXT, "snd_pcm_open_name");
+    if (!real) return -1;
+    result = real(handle, name, mode);
+    if (result == 0 && handle && *handle && name &&
+        !strcmp(name, SPA_PCM_SINK_NAME) && (mode & SND_PCM_OPEN_PLAYBACK)) {
+        pthread_mutex_lock(&spa_pcm_sink.lock);
+        spa_pcm_sink.handle = *handle;
+        spa_pcm_sink.sourceChannels = 0;
+        spa_pcm_sink.outputChannels = 0;
+        spa_pcm_sink.expandedParams = 0;
+        spa_pcm_sink.writes = 0;
+        spa_pcm_sink.bufferedWrites = 0;
+        spa_pcm_sink.underrunFrames = 0;
+        pthread_mutex_unlock(&spa_pcm_sink.lock);
+        LOG_INFO(LOG_MODULE, "audio sink: captured %s playback handle=%p",
+                 SPA_PCM_SINK_NAME, *handle);
+    }
+    return result;
+}
+
+int snd_pcm_plugin_params(snd_pcm_t *handle, snd_pcm_channel_params_t *params)
+{
+    static spa_snd_params_t real;
+    snd_pcm_channel_params_t adjusted;
+    unsigned outputChannels;
+    size_t sourceFrameBytes, outputFrameBytes;
+    int isSink, result;
+
+    if (!real) real = (spa_snd_params_t)dlsym(RTLD_NEXT, "snd_pcm_plugin_params");
+    if (!real) return -1;
+
+    outputChannels = spa_audio_requested_output_channels();
+    pthread_mutex_lock(&spa_pcm_sink.lock);
+    isSink = handle && handle == spa_pcm_sink.handle;
+    if (isSink) spa_pcm_sink.expandedParams = 0;
+    pthread_mutex_unlock(&spa_pcm_sink.lock);
+    if (!isSink || !params || !outputChannels ||
+        params->channel != SND_PCM_CHANNEL_PLAYBACK ||
+        params->format.format != SND_PCM_SFMT_S16_LE ||
+        params->format.voices < 1 || params->format.voices > SPA_PCM_5_1_2_CHANNELS)
+        return real(handle, params);
+
+    adjusted = *params;
+    adjusted.format.voices = (int32_t)outputChannels;
+    sourceFrameBytes = (size_t)params->format.voices * sizeof(int16_t);
+    outputFrameBytes = (size_t)outputChannels * sizeof(int16_t);
+    if (adjusted.mode == SND_PCM_MODE_BLOCK && adjusted.buf.block.frag_size > 0) {
+        size_t fragmentBytes = (size_t)adjusted.buf.block.frag_size;
+        if (fragmentBytes % sourceFrameBytes != 0 ||
+            fragmentBytes / sourceFrameBytes > SPA_PCM_SINK_MAX_WRITE / outputFrameBytes) {
+            LOG_ERROR(LOG_MODULE,
+                      "audio sink: fragment size %u is not safe for %u->%u channels; "
+                      "leaving stock params",
+                      (unsigned)fragmentBytes, (unsigned)params->format.voices,
+                      outputChannels);
+            return real(handle, params);
+        }
+        adjusted.buf.block.frag_size =
+            (int32_t)((fragmentBytes / sourceFrameBytes) * outputFrameBytes);
+    }
+    result = real(handle, &adjusted);
+
+    pthread_mutex_lock(&spa_pcm_sink.lock);
+    if (handle == spa_pcm_sink.handle) {
+        spa_pcm_sink.sourceFormat = params->format.format;
+        spa_pcm_sink.sourceChannels = (unsigned)params->format.voices;
+        spa_pcm_sink.outputChannels = outputChannels;
+        spa_pcm_sink.expandedParams = result == 0;
+    }
+    pthread_mutex_unlock(&spa_pcm_sink.lock);
+    if (result != 0) params->why_failed = adjusted.why_failed;
+    LOG_INFO(LOG_MODULE,
+             "audio sink: params source=%uch target=%uch format=%d result=%d why=%#x",
+             (unsigned)params->format.voices, outputChannels,
+             params->format.format, result, (unsigned)adjusted.why_failed);
+    return result;
+}
+
+int snd_pcm_plugin_setup(snd_pcm_t *handle, snd_pcm_channel_setup_t *setup)
+{
+    static spa_snd_setup_t real;
+    snd_pcm_channel_setup_t actual;
+    unsigned sourceChannels, outputChannels;
+    int translate, result;
+
+    if (!real) real = (spa_snd_setup_t)dlsym(RTLD_NEXT, "snd_pcm_plugin_setup");
+    if (!real) return -1;
+    if (!setup) return real(handle, setup);
+
+    pthread_mutex_lock(&spa_pcm_sink.lock);
+    translate = handle && handle == spa_pcm_sink.handle &&
+                spa_pcm_sink.expandedParams;
+    sourceChannels = spa_pcm_sink.sourceChannels;
+    outputChannels = spa_pcm_sink.outputChannels;
+    pthread_mutex_unlock(&spa_pcm_sink.lock);
+    if (!translate || !sourceChannels || !outputChannels)
+        return real(handle, setup);
+
+    actual = *setup;
+    result = real(handle, &actual);
+    if (result != 0) return result;
+
+    *setup = actual;
+    setup->format.voices = (int32_t)sourceChannels;
+    if (setup->mode == SND_PCM_MODE_BLOCK && setup->buf.block.frag_size > 0) {
+        size_t actualFrameBytes = outputChannels * sizeof(int16_t);
+        size_t stockFrameBytes = sourceChannels * sizeof(int16_t);
+        size_t actualFragmentBytes = (size_t)setup->buf.block.frag_size;
+
+        if (actualFragmentBytes % actualFrameBytes != 0) {
+            LOG_ERROR(LOG_MODULE,
+                      "audio sink: QSA setup fragment %u not aligned to %uch; refusing translation",
+                      (unsigned)actualFragmentBytes, outputChannels);
+            return -1;
+        }
+        setup->buf.block.frag_size =
+            (int32_t)((actualFragmentBytes / actualFrameBytes) * stockFrameBytes);
+        setup->buf.block.max_frag_size =
+            (uint32_t)(((size_t)actual.buf.block.max_frag_size / actualFrameBytes) *
+                       stockFrameBytes);
+    }
+    LOG_INFO(LOG_MODULE,
+             "audio sink: setup actual=%uch/%d-byte fragment -> stock=%uch/%d-byte fragment",
+             outputChannels, actual.buf.block.frag_size,
+             sourceChannels, setup->buf.block.frag_size);
+    return 0;
+}
+
+static void spa_pcm_expand_fallback(const int16_t *input, size_t frames,
+                                    unsigned sourceChannels, int16_t *output,
+                                    unsigned outputChannels)
+{
+    size_t frame;
+
+    for (frame = 0; frame < frames; frame++) {
+        const int16_t *src = input + frame * sourceChannels;
+        int16_t *dst = output + frame * outputChannels;
+        unsigned copyChannels = sourceChannels < outputChannels ?
+                                sourceChannels : outputChannels;
+        unsigned channel;
+
+        memset(dst, 0, outputChannels * sizeof(*dst));
+        for (channel = 0; channel < copyChannels; channel++)
+            dst[channel] = src[channel];
+        if (sourceChannels == 1 && outputChannels >= 2)
+            dst[1] = src[0];
+    }
+}
+
+ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, size_t size)
+{
+    static spa_snd_write_t real;
+    unsigned sourceChannels, outputChannels;
+    size_t sourceFrameBytes, outputFrameBytes, frames, outputBytes;
+    size_t bufferedFrames = 0;
+    ssize_t written;
+    int useBridge;
+
+    if (!real) real = (spa_snd_write_t)dlsym(RTLD_NEXT, "snd_pcm_plugin_write");
+    if (!real) return -1;
+
+    pthread_mutex_lock(&spa_pcm_sink.lock);
+    useBridge = handle && handle == spa_pcm_sink.handle && spa_pcm_sink.expandedParams;
+    sourceChannels = spa_pcm_sink.sourceChannels;
+    outputChannels = spa_pcm_sink.outputChannels;
+    if (!useBridge || !buffer || !sourceChannels || !outputChannels) {
+        pthread_mutex_unlock(&spa_pcm_sink.lock);
+        return real(handle, buffer, size);
+    }
+
+    sourceFrameBytes = sourceChannels * sizeof(int16_t);
+    outputFrameBytes = outputChannels * sizeof(int16_t);
+    if (size == 0 || size % sourceFrameBytes != 0) {
+        pthread_mutex_unlock(&spa_pcm_sink.lock);
+        return real(handle, buffer, size);
+    }
+    frames = size / sourceFrameBytes;
+    if (frames > SPA_PCM_SINK_MAX_WRITE / outputFrameBytes) {
+        pthread_mutex_unlock(&spa_pcm_sink.lock);
+        LOG_ERROR(LOG_MODULE,
+                  "audio sink: refusing oversized expanded write size=%u frames=%u",
+                  (unsigned)size, (unsigned)frames);
+        return real(handle, buffer, size);
+    }
+    outputBytes = frames * outputFrameBytes;
+    if (spa_pcm_sink.scratchBytes < outputBytes) {
+        int16_t *replacement = (int16_t *)realloc(spa_pcm_sink.scratch, outputBytes);
+        if (!replacement) {
+            pthread_mutex_unlock(&spa_pcm_sink.lock);
+            return real(handle, buffer, size);
+        }
+        spa_pcm_sink.scratch = replacement;
+        spa_pcm_sink.scratchBytes = outputBytes;
+    }
+
+    if (spa_buffered_pcm_active() &&
+        spa_buffered_pcm_channels() == outputChannels) {
+        bufferedFrames = spa_buffered_pcm_read(spa_pcm_sink.scratch, frames,
+                                               outputChannels);
+        if (bufferedFrames < frames) {
+            memset(spa_pcm_sink.scratch + bufferedFrames * outputChannels, 0,
+                   (frames - bufferedFrames) * outputFrameBytes);
+            spa_pcm_sink.underrunFrames += frames - bufferedFrames;
+        }
+        spa_pcm_sink.bufferedWrites++;
+    } else {
+        spa_pcm_expand_fallback((const int16_t *)buffer, frames, sourceChannels,
+                                spa_pcm_sink.scratch, outputChannels);
+    }
+    spa_pcm_sink.writes++;
+    written = real(handle, spa_pcm_sink.scratch, outputBytes);
+    if (spa_pcm_sink.writes == 1 || (spa_pcm_sink.writes % 1024u) == 0) {
+        LOG_INFO(LOG_MODULE,
+                 "audio sink: writes=%llu buffered=%llu underrunFrames=%llu "
+                 "source=%uch target=%uch ringRead=%u/%u",
+                 (unsigned long long)spa_pcm_sink.writes,
+                 (unsigned long long)spa_pcm_sink.bufferedWrites,
+                 (unsigned long long)spa_pcm_sink.underrunFrames,
+                 sourceChannels, outputChannels,
+                 (unsigned)bufferedFrames, (unsigned)frames);
+    }
+    pthread_mutex_unlock(&spa_pcm_sink.lock);
+
+    if (written < 0) return written;
+    if ((size_t)written >= outputBytes) return (ssize_t)size;
+    return (ssize_t)(((size_t)written / outputFrameBytes) * sourceFrameBytes);
+}
+
+int snd_pcm_close(snd_pcm_t *handle)
+{
+    static spa_snd_close_t real;
+    int isSink, result;
+
+    if (!real) real = (spa_snd_close_t)dlsym(RTLD_NEXT, "snd_pcm_close");
+    if (!real) return -1;
+    pthread_mutex_lock(&spa_pcm_sink.lock);
+    isSink = handle && handle == spa_pcm_sink.handle;
+    pthread_mutex_unlock(&spa_pcm_sink.lock);
+    result = real(handle);
+    if (isSink) {
+        pthread_mutex_lock(&spa_pcm_sink.lock);
+        if (handle == spa_pcm_sink.handle) {
+            spa_pcm_sink.handle = 0;
+            spa_pcm_sink.expandedParams = 0;
+            spa_pcm_sink.sourceChannels = 0;
+            spa_pcm_sink.outputChannels = 0;
+        }
+        pthread_mutex_unlock(&spa_pcm_sink.lock);
+        LOG_INFO(LOG_MODULE, "audio sink: released %s handle=%p result=%d",
+                 SPA_PCM_SINK_NAME, handle, result);
+    }
+    return result;
 }
 
 /* Stock 210 has no object for the hook-owned buffered stream, so its feedback enumerator keeps
@@ -1342,6 +1851,7 @@ static int spa103_method_equal(const uint8_t *method, uint32_t methodLength,
 static void *spa103_parse_control_plist(void *request, const char *methodName,
                                        uint32_t *sessionSequence, uint32_t *requestNumber)
 {
+    const spa103_private_profile_t *profile = spa103_private_profile();
     const uint8_t *body;
     uint32_t bodyLength;
     void *plist;
@@ -1350,6 +1860,7 @@ static void *spa103_parse_control_plist(void *request, const char *methodName,
     int active;
     char captureKind[64];
 
+    if (!profile) return 0;
     pthread_mutex_lock(&spa103_lock);
     active = spa103_receiver.session && !spa103_receiver.stop;
     if (active) {
@@ -1363,8 +1874,10 @@ static void *spa103_parse_control_plist(void *request, const char *methodName,
         return 0;
     }
 
-    body = *(const uint8_t * const *)((const uint8_t *)request + SPA_103_HTTP_BODY_PTR_OFF);
-    bodyLength = *(const uint32_t *)((const uint8_t *)request + SPA_103_HTTP_BODY_LEN_OFF);
+    body = *(const uint8_t * const *)((const uint8_t *)request +
+                                      profile->httpBodyPointerOffset);
+    bodyLength = *(const uint32_t *)((const uint8_t *)request +
+                                     profile->httpBodyLengthOffset);
     if (!body || bodyLength == 0 || bodyLength > SPA_103_MAX_MAGIC_COOKIE_BODY_SIZE) {
         LOG_ERROR(LOG_MODULE, "buffer103: invalid %s body length=%u",
                   methodName, (unsigned)bodyLength);
@@ -1504,21 +2017,22 @@ static void spa103_make_fallback_network_time(spa103_network_time_t *value)
 }
 
 /* Pioneer ReturnAnchorForRTP anchors playback 150 ms in the future on the receiver's synchronized
- * AirTunes clock. MU1316 already owns the same NTP clock for the stock AirPlay session; reuse it so
+ * AirTunes clock. The profiled target already owns the same NTP clock for the stock session; reuse it so
  * the sender sees the actual negotiated timeline instead of the previous timelineID=0 wall-clock
  * placeholder. AirTunesClock_Create receives session+0x13d0 as an output slot and stock callers
  * load the resulting clock pointer from that slot. The private session offset is protected by the
  * same exact-image fingerprint as the buffered HTTP dispatcher. */
 static int spa103_get_session_network_time(void *session, spa103_network_time_t *value)
 {
+    const spa103_private_profile_t *profile = spa103_private_profile();
     spa103_air_tunes_time_t synchronized;
     void *clock;
     uint64_t anchorTicks;
 
-    if (!session || !value || !spa103_up_ticks || !spa103_milliseconds_to_up_ticks ||
+    if (!profile || !session || !value || !spa103_up_ticks || !spa103_milliseconds_to_up_ticks ||
         !spa103_clock_get_near_ticks)
         return 0;
-    clock = *(void **)((uint8_t *)session + SPA_103_MU1316_SESSION_CLOCK_OFF);
+    clock = *(void **)((uint8_t *)session + profile->sessionClockOffset);
     if (!clock) return 0;
 
     memset(&synchronized, 0, sizeof(synchronized));
@@ -1535,7 +2049,7 @@ static int spa103_get_session_network_time(void *session, spa103_network_time_t 
     return 1;
 }
 
-/* MU1316's private SETUP/info helper at image+0x2f040 is the stock, already-reviewed path that
+/* The selected profile's private SETUP/info helper is the stock, already-reviewed path that
  * serializes a CFLite dictionary as application/x-apple-binary-plist and initializes the response
  * with the request's RTSP/HTTP version. The surrounding callback fingerprint must match before the
  * pointer is published. */
@@ -1780,12 +2294,13 @@ done:
     return result;
 }
 
-/* Request callback installed only in the verified MU1316 HTTPServer object. The request is already
+/* Request callback installed only in a fingerprinted HTTPServer object. The request is already
  * fully read when this callback runs, so the binary-plist body lives at the same HTTPMessage fields
  * used by the stock POST/SET_PARAMETER handlers. */
 static int spa103_http_process(void *connection, void *request)
 {
     static const char cookieMethod[] = "SETMAGICCOOKIE";
+    const spa103_private_profile_t *profile = spa103_private_profile();
     const uint8_t *method;
     const uint8_t *body;
     const uint8_t *cookieBytes;
@@ -1799,13 +2314,13 @@ static int spa103_http_process(void *connection, void *request)
     int32_t err = 0;
     int status = 200;
 
-    if (!request || !connection || !spa103_original_http_process)
+    if (!profile || !request || !connection || !spa103_original_http_process)
         return -6714;
 
     method = *(const uint8_t * const *)((const uint8_t *)request +
-                                         SPA_103_HTTP_METHOD_PTR_OFF);
+                                         profile->httpMethodPointerOffset);
     methodLength = *(const uint32_t *)((const uint8_t *)request +
-                                       SPA_103_HTTP_METHOD_LEN_OFF);
+                                       profile->httpMethodLengthOffset);
     if (!spa103_method_equal(method, methodLength, cookieMethod)) {
         if (spa103_method_equal(method, methodLength, "GETANCHOR")) {
             controlMethod = SPA103_CONTROL_GET_ANCHOR;
@@ -1830,8 +2345,10 @@ static int spa103_http_process(void *connection, void *request)
     if (!spa_probe103_mode())
         return spa103_original_http_process(connection, request);
 
-    body = *(const uint8_t * const *)((const uint8_t *)request + SPA_103_HTTP_BODY_PTR_OFF);
-    bodyLength = *(const uint32_t *)((const uint8_t *)request + SPA_103_HTTP_BODY_LEN_OFF);
+    body = *(const uint8_t * const *)((const uint8_t *)request +
+                                      profile->httpBodyPointerOffset);
+    bodyLength = *(const uint32_t *)((const uint8_t *)request +
+                                     profile->httpBodyLengthOffset);
     if (!body || bodyLength == 0 || bodyLength > SPA_103_MAX_MAGIC_COOKIE_BODY_SIZE) {
         LOG_ERROR(LOG_MODULE, "buffer103: invalid SETMAGICCOOKIE body length=%u",
                   (unsigned)bodyLength);
@@ -1897,38 +2414,40 @@ done:
 
 static int spa103_install_buffered_dispatcher(void)
 {
+    const spa103_private_profile_t *profile;
     uintptr_t ensureAddress, imageBase;
     void *outer, *server;
     void **callbackSlot;
     int installed = 0;
 
     pthread_mutex_lock(&spa103_http_lock);
-    if (!spa103_private_image_compatible() || !spa_cf_resolve() || !spa103_resolve()) {
+    profile = spa103_private_profile();
+    if (!profile || !spa_cf_resolve() || !spa103_resolve()) {
         LOG_ERROR(LOG_MODULE,
                   "buffer103: cannot resolve CFLite/HTTP runtime before dispatcher install");
         goto done;
     }
     ensureAddress = (uintptr_t)dlsym(RTLD_NEXT, "AirTunesServer_EnsureCreated");
-    if (ensureAddress < SPA_103_MU1316_ENSURE_CREATED_VA) {
+    if (ensureAddress < profile->ensureCreatedVA) {
         LOG_ERROR(LOG_MODULE, "buffer103: AirTunesServer_EnsureCreated unavailable");
         goto done;
     }
-    imageBase = ensureAddress - SPA_103_MU1316_ENSURE_CREATED_VA;
+    imageBase = ensureAddress - profile->ensureCreatedVA;
     if ((imageBase & 0xfffu) != 0 ||
-        memcmp((const void *)(imageBase + SPA_103_MU1316_ENSURE_CREATED_VA),
-               spa103_ensure_created_prologue,
-               sizeof(spa103_ensure_created_prologue)) != 0 ||
-        memcmp((const void *)(imageBase + SPA_103_MU1316_SET_PLIST_RESPONSE_VA),
-               spa103_set_plist_response_prologue,
-               sizeof(spa103_set_plist_response_prologue)) != 0) {
+        memcmp((const void *)(imageBase + profile->ensureCreatedVA),
+               profile->ensureCreatedPrologue,
+               sizeof(profile->ensureCreatedPrologue)) != 0 ||
+        memcmp((const void *)(imageBase + profile->setPlistResponseVA),
+               profile->setPlistResponsePrologue,
+               sizeof(profile->setPlistResponsePrologue)) != 0) {
         LOG_ERROR(LOG_MODULE,
                   "buffer103: libairplay private dispatcher fingerprint mismatch; refusing patch");
         goto done;
     }
     spa103_http_set_plist_response = (spa_http_set_plist_response_t)
-        (imageBase + SPA_103_MU1316_SET_PLIST_RESPONSE_VA);
+        (imageBase + profile->setPlistResponseVA);
 
-    outer = *(void **)(imageBase + SPA_103_MU1316_SERVER_GLOBAL_VA);
+    outer = *(void **)(imageBase + profile->serverGlobalVA);
     if (!outer || ((uintptr_t)outer & 3u) != 0) {
         LOG_ERROR(LOG_MODULE, "buffer103: AirTunes server object unavailable");
         goto done;
@@ -1938,16 +2457,16 @@ static int spa103_install_buffered_dispatcher(void)
         LOG_ERROR(LOG_MODULE, "buffer103: HTTPServer object unavailable");
         goto done;
     }
-    callbackSlot = (void **)((uint8_t *)server + SPA_103_HTTP_PROCESS_SLOT_OFF);
+    callbackSlot = (void **)((uint8_t *)server + profile->httpProcessSlotOffset);
     if (*callbackSlot == (void *)spa103_http_process && spa103_original_http_process) {
         spa103_http_process_slot = callbackSlot;
         installed = 1;
         goto done;
     }
-    if (*callbackSlot != (void *)(imageBase + SPA_103_MU1316_HTTP_PROCESS_VA)) {
+    if (*callbackSlot != (void *)(imageBase + profile->httpProcessVA)) {
         LOG_ERROR(LOG_MODULE,
                   "buffer103: HTTPServer request slot mismatch actual=%p expected=%p; refusing patch",
-                  *callbackSlot, (void *)(imageBase + SPA_103_MU1316_HTTP_PROCESS_VA));
+                  *callbackSlot, (void *)(imageBase + profile->httpProcessVA));
         goto done;
     }
 
@@ -2400,6 +2919,7 @@ static void spa103_stop_receiver(void *session, int anySession)
 int spa_setup_buffered_receiver(void *session, void *request, void *response,
                                 uint32_t sequence)
 {
+    const spa103_private_profile_t *profile = spa103_private_profile();
     spa103_thread_arg_t *threadArg = 0;
     void *streamDesc = 0, *responseDesc = 0;
     uint8_t shk[SPA_APAP_KEY_SIZE] = { 0 };
@@ -2412,7 +2932,7 @@ int spa_setup_buffered_receiver(void *session, void *request, void *response,
     int sock = -1, err = -6728;
     int started = 0;
 
-    if (!session || !request || !response || !spa_probe103() ||
+    if (!profile || !session || !request || !response || !spa_probe103() ||
         !spa_cf_resolve() || !spa103_resolve()) return -6714;
     streamDesc = spa_find_setup_stream(request, SPA_103_STREAM_TYPE);
     if (!streamDesc) return 0;
@@ -2447,7 +2967,7 @@ int spa_setup_buffered_receiver(void *session, void *request, void *response,
     memset(shk, 0, sizeof(shk));
     spa103_render_start(formatIndex, haveKey);
 
-    family = *(const uint8_t *)((const char *)session + SPA_103_SESSION_FAMILY_OFF);
+    family = *(const uint8_t *)((const char *)session + profile->sessionFamilyOffset);
     err = spa103_srv_sockopen(family, 1 /* SOCK_STREAM */, 6 /* IPPROTO_TCP */,
                               SPA_103_PREFERRED_PORT, &port, -180224, &sock);
     LOG_INFO(LOG_MODULE,
@@ -2529,8 +3049,7 @@ int spa_setup_buffered_receiver(void *session, void *request, void *response,
     spa_write_setup103_plist(response, "hook_response", sequence);
     LOG_WARN(LOG_MODULE,
              "buffer103: response committed {type:103,dataPort:%d,audioBufferSize:%d,"
-             "arrivalToRenderLatencyMs:0,streamID:%llu}; capture receiver live; "
-             "audio decode/render intentionally pending",
+             "arrivalToRenderLatencyMs:0,streamID:%llu}; APAP receiver/render rail live",
              port, audioBufferSize, (unsigned long long)streamID);
     return 0;
 
@@ -2911,11 +3430,21 @@ int AirPlayReceiverSessionControl(void *session, uint32_t flags, const void *com
 
 void audio_init(void)
 {
+    const spa_audio_config_t *config = spa_audio_config();
     unsigned bit, channels;
     spa_tune(&bit, &channels);
-    if (spa_enabled())
-        LOG_INFO(LOG_MODULE, "multichannel PCM hook ARMED (SPATIAL_5_1=on): bit%u, %uch ASBD "
-                 "(tune live via `echo <bit>[:<ch>] > %s`, no reboot)", bit, channels, SPA_TUNE_PATH);
+    if (spa_enabled()) {
+        LOG_INFO(LOG_MODULE,
+                 "audio policy: spatial=%d atmos=%d mode=%s buffered=%d; "
+                 "PCM fallback armed bit%u/%uch; codec=%s",
+                 config->buffered && !config->atmos, config->atmos,
+                 config->atmosMode == SPA_ATMOS_DOWNMIX ? "downmix" :
+                 config->atmosMode == SPA_ATMOS_DROP ? "drop" : "passthrough",
+                 config->buffered, bit, channels,
+                 getenv(SPA_APAC_CODEC_PATH_ENV) ?
+                 getenv(SPA_APAC_CODEC_PATH_ENV) : SPA_APAC_CODEC_DEFAULT_PATH);
+    }
     else
-        LOG_INFO(LOG_MODULE, "multichannel PCM hook present, OFF (SPATIAL_5_1 unset) -> stock stereo");
+        LOG_INFO(LOG_MODULE,
+                 "audio policy OFF (AUDIO_SPATIAL=0, AUDIO_SPATIAL_ATMOS=0) -> stock stereo");
 }

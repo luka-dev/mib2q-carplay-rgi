@@ -72,4 +72,8 @@ size_t spa_reorder_5_1_decoder_to_declared_s16(const int16_t *input, size_t fram
  */
 size_t spa_downmix_5_1_2_s16(const int16_t *input, size_t frames, int16_t *output);
 
+/* Test/reference policy that deliberately discards the two height channels.
+ * Input and output orders are the same as spa_downmix_5_1_2_s16(). */
+size_t spa_drop_5_1_2_s16(const int16_t *input, size_t frames, int16_t *output);
+
 #endif /* SPATIAL_DOWNMIX_H */

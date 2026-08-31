@@ -8,6 +8,7 @@ Runtime files installed together under `/mnt/app/root/hooks/`:
 
 ```text
 libcarplay_hook.so
+libcarplay_apac.so
 maneuver_render
 altscreen_render
 flag_atlas.rgba
@@ -28,5 +29,6 @@ immediately restart processes that the CarPlay cleanup intentionally stopped.
 
 See `deploy/smartphone_integrator/README.md` for installation paths and the exact child JSON replacement.
 
-For hook-only iteration, `scripts/deploy_unit.sh` uploads `build/libcarplay_hook.so`, keeps one `.bak`
-copy and restarts only `dio_manager`. It intentionally does not restart or redeploy Java.
+For hook-only iteration, `scripts/deploy_unit.sh` uploads `build/libcarplay_hook.so` and the optional
+`build/libcarplay_apac.so` through `.new` files, renames both before restart, and restarts only
+`dio_manager`. It intentionally does not restart or redeploy Java.

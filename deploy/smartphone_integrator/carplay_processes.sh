@@ -30,8 +30,9 @@ CP_USB_RESET_LATCH=/tmp/carplay_usb_reset.latched
 
 # Stock MU1316 PF admits the single SDK-210 screen socket on TCP 6030 and then
 # drops every other inbound carplay0 packet. Native altScreen uses TCP 6031 and
-# hook-owned buffered audio uses TCP 6032 plus RTCP control on TCP 6033. The persistent installer
-# extends all four source profiles to 6030:6033; this helper performs no live PF mutation.
+# hook-owned buffered audio uses TCP 6032; buffered control stays on the existing RTSP connection.
+# The persistent installer extends all four source profiles to 6030:6032; this helper performs no
+# live PF mutation.
 # Stock grep binary (also used by the USB diagnostic below).
 CP_GREP=/usr/bin/grep
 

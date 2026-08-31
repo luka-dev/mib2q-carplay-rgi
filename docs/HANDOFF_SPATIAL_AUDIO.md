@@ -5,6 +5,75 @@ disassembler**, and it is labelled which. Full history in `docs/reference/AUDIO.
 
 ---
 
+## Latest source status — decoder/render implementation
+
+The current source supersedes the earlier capture-only status retained below for live-test history.
+It has not been deployed to the vehicle in this work session.
+
+The type-103 path is now complete through the Audi PCM boundary:
+
+1. APAP BE32 framing, ChaCha20-Poly1305 authentication, extension TLV/cookie selection;
+2. APAC decode through an optional, versioned `libcarplay_apac.so` (ABI v1);
+3. index 65 normalization from cookie order `C L R Ls Rs LFE` to PCM6
+   `L R C LFE Ls Rs`;
+4. index 66 validation against CoreAudio Atmos 5.1.2 tag `0x00c20008`, followed by selectable
+   `downmix`, `drop`, or 8-channel `passthrough`;
+5. a bounded PCM ring drained at stock timing by interposing `snd_pcm_plugin_params/write` on the
+   existing `mpl5_dio_ent` handle. The hook does not open a competing PCM device. A stereo
+   type-100 stream is expanded to the configured output frame width and remains the immediate
+   fallback until decoded type 103 is running; underruns are padded with silence.
+
+The APAC implementation is no longer linked into the LD_PRELOAD object. `libcarplay_hook.so`
+loads `/mnt/app/root/hooks/libcarplay_apac.so` only when a buffered APAC stream starts and verifies
+the ABI table before use. If the codec is missing or incompatible, capture/control remain alive and
+decode fails closed; base CarPlay does not gain a loader dependency on the codec.
+
+User-facing startup policy is:
+
+| variable | meaning |
+|---|---|
+| `AUDIO_SPATIAL=0/1/true/false` | request APAC 5.1/index 65 and arm the PCM6 fallback |
+| `AUDIO_SPATIAL_ATMOS=0/1/true/false` | request the full APAC 5.1.2/index 66 master; implies Spatial |
+| `AUDIO_SPATIAL_ATMOS_MODE=downmix` | PCM8 -> PCM6 with heights folded into surrounds at -6 dB |
+| `AUDIO_SPATIAL_ATMOS_MODE=drop` | PCM8 -> PCM6 with height channels discarded |
+| `AUDIO_SPATIAL_ATMOS_MODE=passthrough` | PCM8; requires a real 8ch HU PCM path and patched amp |
+
+`AUDIO_SPATAIL` is accepted only as a warned compatibility alias for the typo. Old `SPATIAL_*`
+variables are read only when none of the new boolean controls is present, for migration of an older
+on-unit startup script. The repository startup defaults to Spatial 5.1 with Atmos off.
+
+`SPA_103_MU1316_*` identifiers were removed from common logic. All private VA/offset/prologue data
+now lives in a `spa103_private_profile_t` table. The first profile is named `MHI2Q AirPlay 210.81`;
+unknown `libairplay.so` builds still fail closed. K1004 must receive its own independently verified
+profile because its private offsets differ.
+
+Bench gates passed after this change: the full APAC port suite, 3,980-frame capture integration,
+the six-packet end-to-end APAP/decode test, downmix/drop/reorder tests, and the QNX builds of both
+shared objects. Both QNX objects have no emutls, exceptions, RTTI, STL/libstdc++ dependency, or
+hook-owned ELF constructor. The main hook has no `DT_NEEDED` entry for `libcarplay_apac.so`.
+The verified local artifacts are `libcarplay_hook.so` SHA-256
+`2ae75989818f2d8415d3563a5c5893c090b55d6fb20b09d5a99af6aea1a5d670` (427,047 bytes)
+and `libcarplay_apac.so` SHA-256
+`5e72de6f61d4ebafcfad9934033f7a396e813a25ec5e9d8c8a52b9d9cd0d5814` (678,871 bytes).
+
+The only remaining proof is live hardware validation: deploy both shared objects and the startup
+file, start with `spatial-5.1`, confirm the `audio sink:` counters and audible PCM6, then test
+pause/resume and a long session. Only after that use index 66/downmix. PCM8 passthrough must remain
+off on the current six-channel HU/amp patch.
+
+The QSA seam is fingerprinted by static evidence from the exact AirPlay 210.81 binary
+(`SHA-256 01c116b1674215daa0602d556a6d9b2eb48c2113ca294ea1f5d58787e3f656f2`). Its
+`snd_pcm_plugin_write` PLT entry is at `0x1b1d8`; the only two callers are the SingleThreadPolicy
+writer (`0x47324`, retry `0x473f8`) and ObjectLockPolicy writer (`0x48648`, retry `0x4871c`). At
+both calls ARM `r0=handle`, `r1=buffer`, `r2=byte count`, and the stock method compares the return
+against that original byte count. This is why the bridge writes an expanded PCM6/PCM8 byte count
+to QSA but translates a complete result back to the stock caller's original size.
+Stock `prepare` also calls `snd_pcm_plugin_setup` at `0x466d8` (SingleThreadPolicy) and `0x47a08`
+(ObjectLockPolicy), then stores the returned voices/fragment geometry for allocation and
+`getBytesPerFrame`. The hook therefore translates setup back to the original type-100 geometry
+while QSA retains the expanded parameters; without this third interposer the stock layer would see
+six channels and the write bridge would expand the buffer a second time.
+
 ## 0. The goal
 
 Make an iPhone send **discrete multichannel audio** over **wired CarPlay** to an Audi MHI2Q head unit

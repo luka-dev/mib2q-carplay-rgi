@@ -93,6 +93,7 @@ static void check_reorder_moves_the_lfe(const int16_t *decoded, uint32_t frames)
 
 int main(void)
 {
+    spa_apac_codec_api_t codecApi;
     const char *dir = capture_dir();
     unsigned char *key, *stream, *plaintext, *frameBuffer;
     size_t keyLength = 0, streamLength = 0, offset = 0;
@@ -102,6 +103,14 @@ int main(void)
     unsigned long frames = 0, opened = 0, audioPackets = 0, decodedPackets = 0;
     unsigned long matched = 0, aadAudio = 0, aadExtension = 0;
     int16_t *decoded;
+
+    memset(&codecApi, 0, sizeof(codecApi));
+    assert(spa_apac_codec_get_api(SPA_APAC_CODEC_ABI_VERSION, &codecApi,
+                                  sizeof(codecApi)) == SPA_APAC_OK);
+    assert(codecApi.structSize == sizeof(codecApi));
+    assert(codecApi.abiVersion == SPA_APAC_CODEC_ABI_VERSION);
+    assert(codecApi.create && codecApi.decodeS16 && codecApi.reset &&
+           codecApi.destroy && codecApi.getInfo);
 
     key = slurp(dir, "shk.bin", &keyLength);
     stream = slurp(dir, "spatial_apap_5.bin", &streamLength);

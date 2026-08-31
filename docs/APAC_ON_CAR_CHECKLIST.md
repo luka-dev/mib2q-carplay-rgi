@@ -1,5 +1,11 @@
 # APAC on the car: what to check, and what each failure looks like
 
+> Updated source status: the decoder now ships separately as `libcarplay_apac.so`, and the hook
+> drains its PCM ring into the existing `mpl5_dio_ent` QSA handle through the stock
+> `snd_pcm_plugin_params/write` cadence. This implementation is bench-verified but has not yet been
+> exercised on the vehicle. Older capture-only wording below is retained where it explains failure
+> signatures.
+
 The decoder is finished and proven on the bench. Nothing in this document has been done on the
 vehicle yet, because deployment is the owner's call and the head unit is never restarted from here.
 
@@ -13,20 +19,19 @@ What "proven on the bench" means, precisely, so the on-car result can be judged 
 * `scripts/run_tests.sh` drives the hook's own chain — framer, decrypt, TLV split, decode,
   channel permutation — over the whole capture: 3980 frames authenticate, the 3977 APAC packets
   extracted are byte-identical to the reference, and the permutation is checked on real audio;
-* `scripts/build_hook.sh` links the decoder into the shipping `.so` with
-  `emutls=0 exceptions=0 rtti=0 stl=0 libstdc++=0`.
+* `scripts/build_hook.sh` builds `libcarplay_hook.so` and optional `libcarplay_apac.so` separately;
+  both pass `emutls=0 exceptions=0 rtti=0 stl=0 libstdc++=0`, and the main hook has no hard codec
+  dependency.
 
 ## Before deploying
 
-Deployment replaces `/mnt/app/root/hooks/libcarplay_hook.so` and restarts `dio_manager`. That is
+Deployment replaces `/mnt/app/root/hooks/libcarplay_hook.so` and `libcarplay_apac.so`, then restarts `dio_manager`. That is
 `scripts/deploy_unit.sh`, and it is the owner's to run. Java is not touched, so no full reboot is
 involved — but a `dio_manager` restart still drops any active CarPlay session.
 
-The profile is set by `scripts/set_spatial_profile.sh`, which edits only the four `SPATIAL_*`
-exports in the startup file. `spatial-5.1` is the profile this work targets: type 103 on, format
-index 65, and the type-100 PCM6 fallback left enabled underneath. `fallback-5.1` turns type 103 off
-entirely and is the way back if anything below goes wrong. A profile change applies to the next
-`dio_manager` generation; no reboot.
+The profile is set by `scripts/set_spatial_profile.sh`, which edits the three exact
+`AUDIO_SPATIAL*` policy exports. Start with `spatial-5.1`; `fallback-stereo` disables both requests.
+A profile change applies to the next `dio_manager` generation; no reboot.
 
 ## The first question: does it decode at all
 
@@ -45,15 +50,13 @@ If that line never appears, the render state says why, and each state is a diffe
 | `WAITING` | key in hand, no magic cookie yet | `SETMAGICCOOKIE` handling; the stream may have torn down first |
 | `NO_KEY` | SETUP carried no usable `shk` | the SETUP descriptor path, not the decoder |
 | `UNSUPPORTED_FORMAT` | an index this rail cannot carry | expected for anything but 65 today |
-| `UNSUPPORTED_LAYOUT` | index 66 — decodable, but its channel order is unmeasured | deliberate refusal, see below |
+| `UNSUPPORTED_LAYOUT` | cookie geometry/tag does not match the requested 5.1 or 5.1.2 contract | inspect the cookie before adding a mapping |
 | `COOKIE_FAILED` | the cookie would not configure a decoder | compare the cookie against the bench one |
 | `NO_MEMORY` | allocation failed inside `dio_manager` | size, not correctness |
 
-`UNSUPPORTED_LAYOUT` is a deliberate refusal rather than a defect. Index 66 is eight-channel 5.1.2
-and the decoder handles it, but its **native channel order has never been measured** — only the
-six-channel case was, three independent ways. Guessing an eight-channel permutation would put the
-LFE on a surround with no way to notice by ear. Measuring it needs an index-66 capture treated the
-way the index-65 one was.
+For index 66 the hook accepts only CoreAudio tag `0x00c20008`, whose defined order is
+`L R C LFE Ls Rs Ltm Rtm`. Any other eight-channel cookie remains a deliberate refusal: it must be
+captured and mapped explicitly rather than guessed.
 
 ## The second question: does it sound right
 
@@ -90,8 +93,6 @@ Correct decoding and correct routing are different failures and they present dif
 
 ## If it goes wrong
 
-`scripts/set_spatial_profile.sh fallback-5.1` disables type 103 and leaves the type-100 PCM6 path
-exactly as it is today. That path was never modified by this work and is the reason it is safe to
-try: the failure mode is the audio the car already has, not no audio.
-
-The deploy helper keeps one `libcarplay_hook.so.bak` on the unit.
+`scripts/set_spatial_profile.sh fallback-stereo` disables both Spatial requests. The type-100 stream
+is the runtime fallback while Spatial is enabled; before the APAC decoder reaches RUNNING, the QSA
+bridge maps its L/R samples into the configured PCM6/PCM8 frame and zeros the remaining channels.
