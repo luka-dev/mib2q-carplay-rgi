@@ -630,27 +630,33 @@ residual and agrees to **9.3e-08**.
   from `DeserializeSQFrame`. Six of the 24 frame cases exercise it and dropping it fails as a
   one-bit gap in the frame's bit count.
 
-### Open: wiring LRVQ into the element layer
+### Resolved: LRVQ ownership and prediction scope
 
-`src/element.cpp` still refuses all three paths with `kPortNeedsLRVQ`; its comment "THE LRVQ SEAM"
-carries the exact wiring. The two questions that blocked a safe edit are now answered, from the
-binary rather than by reading:
+Recorded here as open while the element layer still refused with `kPortNeedsLRVQ`. Both questions
+were settled in the disassembly, not by reading the decompiler's output, and both answers are now
+tested. Kept because the reasoning is worth not repeating.
 
-1. **Ownership: there is no decoder object.** Every `APACLRVQDecoder` member is static.
-   `SpectrumDeserialize{SCE,CPE,LFE}` alloca 9.5 KiB of `env`/`env2`/`work`/`qidx`/`prevMode` per
-   call and `lsfsToMdctSpectralEnvelope` stack-constructs its own `LPMDCTFilter` and `LSFTools`
-   per call; nothing survives a call. The `*((_QWORD *)this + 2)` virtual call in
-   `DeserializeLrvqFrame` is not a decoder — `ldr x0,[x0,#16]` at 0xac628 loads the channel-0
-   `APACICSInfo` and the call is its vtable slot 2, `APACICSInfo::Deserialize`;
-   `SpectrumDeserializeCPE` is a plain `bl` at 0xac69c with no `this`. So **one** shared
-   `LRVQDecoder` for the whole `CoreDecoder` is correct: 56 688 bytes once, not one per element.
-2. **Prediction scope: per element, per frame.** `qidx` and `prevMode` are stack locals of the
-   wrapper and cannot cross elements or frames. `ResetPrediction` on entry to each of the three
-   wrappers reproduces that with a single shared instance.
+**There is no decoder object.** `SpectrumDeserializeSCE` takes the bit reader in `x0`, the
+`APACICSInfo` in `x1` and the channel stream in `x2` and never uses `x0` as a `this`;
+`SpectrumDeserializeCPE` is reached by a plain `bl` at `0xac69c` with five arguments. All three
+spectrum entry points are static, and the wrappers put their state on the stack per call. The
+virtual call through `*((_QWORD *)this + 2)` that made this look like an ownership question is at
+`0xac638` and is `APACICSInfo::Deserialize(bs, codingType 1)` on the channel's own ICS object —
+the two-bit LRVQ header — not a decoder. `LrvqFrameContext::lrvq` has no recovered offset because
+it corresponds to nothing in the original.
 
-Two facts the seam needs: an LRVQ ICS header is exactly **two bits** (coding type 1 for both
-channels fixes maxSfb at 27 long / 7 short and reads no grouping field), and the extra bit at
-0xac7d8 above.
+**The prediction state is per element, per frame.** Both spectrum wrappers open with
+`sub sp, sp, #0x2500` — 9 472 bytes holding `env[1024]`, `env2[1024]`, `work[256]`, `qidx[64]` and
+`prevMode`. Call-local, so it cannot cross an element or a frame.
+
+So one shared `LRVQDecoder` is faithful and costs 56 KiB once: `sizeof(apac::Decoder)` went
+1 405 344 to 1 462 096 rather than 1 858 688, and the port still allocates nothing dynamically.
+
+The port hoists `env`/`env2`/`work` off the stack into members, which is the one thing that could
+carry state between elements where the original could not — so `test_frames` decodes every case
+twice, once with one instance reused across all of them and once with a fresh instance per case,
+and requires identical output. 37 decodes, none differ, including a hand-built CPE whose first
+channel is skipped: precisely where the original reads its uninitialised stack.
 
 ## Stage j — the integration seam, located
 
