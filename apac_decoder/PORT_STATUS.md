@@ -1216,6 +1216,151 @@ is the only one that describes the head unit. Reading the host figure as "the ve
 in it" and the target figure as "the version without" would attribute 1 236 bytes of padding to a
 feature.
 
+### The two paths this capture never takes
+
+Everything above is measured on content that enters neither the BWE synthesis nor the LRVQ frame
+mode. That is proven rather than assumed — the target run before stage e landed and the one after
+are byte identical on every figure — but it makes the headline a fact about this recording until
+both are priced. They are now, and **neither changes the conclusion**.
+
+Per channel on armle-v7, the dearest ACTIVE 48 kHz case of each shape, with the filter cache warm:
+
+| shape | ticks | instructions |
+| --- | ---: | ---: |
+| long, wide (`coreEnd >= 384`) | 16 364 | ~261 000 |
+| long, narrow | 13 232 | ~211 000 |
+| short, wide | 5 936 | ~95 000 |
+| short, narrow | 4 439 | ~71 000 |
+| **alternating geometry, long wide <-> narrow** | 34 325 | **~547 000** |
+
+Block type is the first-order term — long costs about three times short — and geometry the second.
+Two independent measurements disagree on the size of the second: this bench puts wide within a few
+per cent of narrow, `apac-bwe2`'s host harness puts wide 1.2–1.3x dearer. Both agree on the term
+that matters and on which shape is worst, and the difference is most likely a per-call minimum
+against a mean over 4 000 warmed repetitions. Recorded as two measurements rather than resolved by
+picking one.
+
+**The alternating row is a port cost, not the original's, and it is worse here than on a host.**
+The original keeps six persistent `apac::LPMDCTFilter`s; this port keeps **two** and re-`Initialize`s
+on demand — a deliberate 190 KiB saving, observationally identical and proven bit-exact. A stream
+whose geometry changes between frames therefore rebuilds ~768 sin/cos twiddles per channel per
+frame. That costs **+110 % on armle-v7** against **+34 % on an arm64 host**: QNX libm's `sin`/`cos`
+on scalar VFPv3 is a far larger share of a call than on an M3. So a steady-state-only measurement
+under-reports the port's worst case by more than half, and the host ratio under-reports the lever's
+value. **The filters stay at two** — decided on this number, not around it: the path executes zero
+instructions on our content, and +94 KiB (four filters) or +188 KiB (six) inside `dio_manager` buys
+down a cost nobody is paying. If a real BWE-active stream ever appears *and* alternates geometry
+frame to frame, +110 % is the figure to reopen it on. The lever is written up with its price in
+"The two-filter trade" and at the top of `include/apac/bwe_lpc.h`.
+
+**How many channels can be active.** `BWE2Decoder::Deserialize` reads a presence bit only for an
+SCE and a CPE; every other element type clears the channel's bit and returns having read nothing
+(`src/bwe.cpp`, checked here rather than taken on trust). The live cookie's elements are
+`{SCE, CPE, CPE, LFE}`, so **the LFE can never come up active in any bitstream** and the hard
+ceiling is five of six, not six. On this capture the most channels ever carrying a non-empty core in
+one packet is **four**, in 11 packets of 3980, and the mode is two — measured by `apac-bwe2` over the
+whole capture, along with the fact that 69 % of non-empty channel-frames already sit at
+`coreEnd >= 384`, i.e. the expensive geometry is the common one on real content rather than a corner.
+
+Composed onto the measured worst packet (1 237 622 instructions). LRVQ *replaces* the SQ spectrum
+path per element and what it replaces is not subtracted, which makes that row an upper bound rather
+than an estimate:
+
+| | instructions | multiple | of one core, IPC 1.0 |
+| --- | ---: | ---: | ---: |
+| BWE x4 steady — **the realistic worst** | 2 283 700 | 1.85x | ~6 % |
+| BWE x5 steady — the structural ceiling | 2 545 200 | 2.06x | ~7 % |
+| BWE x5 alternating — a labelled bound | 3 977 700 | 3.21x | ~11 % |
+| LRVQ on SCE + CPE + CPE + LFE | 1 730 000 | 1.40x | ~5 % |
+| **both at once, BWE alternating** | **4 470 300** | **3.61x** | **12.3 %** |
+
+At IPC 0.6 the last row is 20.5 % of a core and at IPC 1.4 it is 8.8 %. **So the worst case that can
+be constructed — alternating geometry and LRVQ and five active channels, none of which co-occur on
+any observed content — still leaves a factor of five.** The headline is unchanged.
+
+**What the case sets are, and what they are not.** Neither is a packet. The BWE cases build only the
+BWE header bits and call `Deserialize` and `DecodeFrame` directly: no spectrum decode, no TNS, no
+CAC, no filter bank, no framing or decrypt. The LRVQ cases drive one element's spectrum. Both are
+composed into a packet above rather than measured as one. They are also synthetic in a way the
+capture is not — built to exercise the decoder, with uniform-random spectra, `maxSfb` swept to both
+sides of every threshold, and sample rates this rail never carries (the 24 kHz cases are excluded
+from every figure above; letting one set the worst case would price a packet the stream cannot
+send). **A maximum drawn from them is a SHAPE maximum**: a sound upper bound on the arithmetic, and
+not equivalent to a capture-derived per-packet figure. And the honest gap: nobody has a BWE-active
+stream, so what geometry a real one emits is unknown. All of this prices the arithmetic, not content
+that turns BWE on.
+
+### "Quiet" is not "free", and a memcmp cannot tell them apart
+
+Fifteen of the 44 BWE cases leave the spectrum bit-identical. **Eleven are gated before the
+arithmetic and cost nothing; four run every FFT and write zeros, at full price.** Measured on the
+target, in ticks:
+
+    #4:13233* #5:13234* #6:312 #7:312 #17:368 #18:368 #19:368 #26:4446* #27:316
+    #28:317 #30:4444* #37:372 #39:373 #42:5 #43:5          (* = full price)
+
+Two orders between the groups, not a continuum. The mechanism is `apac-bwe2`'s: the `find_if` guard
+asks whether *any* of `[0, bwStart)` is non-zero, but only the top `patchWidth` bins of it get
+replicated, so a frame whose coded content stops below that slice passes the guard, runs everything
+and multiplies a slice of zeros.
+
+This matters beyond bookkeeping. **A `memcmp` is a correctness criterion and not a cost one.** A
+reader who takes "unchanged output ⇒ free" and applies it to real content prices a quiet-but-not-
+silent channel like case 4 at zero when it costs as much as a full long-narrow channel — on content
+where most channels are quiet but not silent, that is the difference between "BWE is nearly free on
+this packet" and "BWE costs five full-price channels". The benchmark therefore records the synthesis
+cost for every case that reached `DecodeFrame`, changed or not, and splits the quiet ones by
+**measured cost** with nothing hardcoded. It arrives at the same four cases `apac-bwe2` identified
+structurally, by an entirely different route.
+
+`bench/gate_check.cpp` answers the question that sits under this: does the LIBRARY also write
+nothing? It does, on exactly the same 15, so there is no case where one implementation writes and
+the other does not. That check is **necessary and not sufficient** — "fixture spectrum == input"
+cannot separate *gated* from *ran and wrote zeros*, since both leave the buffer untouched — and the
+gap is closed from the disassembly instead: the original's long guard at `0x78490` is
+`sub_78370(spec, spec + bwStart)`, a find-first-non-zero over the whole `[0, bwStart)`, so the
+original proceeds on cases 4 and 5 exactly where the port does. `tests/test_bwe.cpp`'s assertion
+that every coefficient outside the predicted band is unchanged on both sides is the complementary
+half: it catches wrote-versus-did-not, `gate_check` catches quiet-versus-quiet.
+
+### The bench had a memory corruption, and what it cost to find
+
+Worth recording because the instrument produced a wrong number before it produced a right one, and
+because the shape recurs.
+
+On armle-v7 the instruction conversions in this section came back as ~10^23 and `2^64-1` while the
+tick arithmetic beside them stayed exactly right, and the host could not reproduce it with the
+conversion forced either on or off. Three hypotheses died before the real one:
+
+* **A display bug.** No: a global that converts the main table correctly and reads wrong later in
+  the same run is being written, not misread.
+* **The `__cxa_guard` shape.** `nm` did find four function-local statics with dynamic initialisers
+  inside `main`, each with a guard variable — the exact shape `-fno-threadsafe-statics` exists to
+  survive on this toolchain, inherited the moment the bench started sharing `scripts/apac_flags.sh`
+  without inheriting the assertions that police it. Hoisting them to file scope took the guard count
+  to zero and **the corruption persisted**. Real hygiene, not the cause.
+* **A second write to the constant.** `grep` says exactly one assignment. Closed.
+
+Canaries either side of the constant plus a nine-point bisect localised it: correct before the
+component block, `2.58845e-25` after it, **canaries never touched**. The cause was one line of
+benchmark code:
+
+    gMDCT.InverseInPlaceTransform(c, c + apac::kTransformLong / 2);   // c is float[1024]
+
+`buf2` is the FFT staging area as well as the second-half output, so it must be `n` floats of its
+own; `c + 512` runs 512 floats past the end. On armle-v7 that landed on the calibration constant in
+`.bss`, on the host on nothing that mattered. **The decoder is not implicated and this was checked
+rather than assumed**: both call sites in `src/filterbank.cpp` pass a properly sized separate
+scratch, and `mScratch[kTransformLong + kTransformShort]` is 1152 precisely so the long path's 1024
+and the short path's 128 both fit, with no slack anywhere.
+
+Three checks in this episode could not see their own failure mode, and that is the part worth
+keeping: a **`memcmp`** cannot see cost; a **canary** is a containment criterion and reported
+"untouched" while an object three words away was destroyed, because the write was aimed rather than
+adjacent; and **`d > tol` is false when `d` is NaN**, which six tests shared through
+`tests/dsp_fixture.h`. When a check reports clean, ask what it is able to observe before concluding
+anything from it. The benchmark keeps its integrity probes permanently, silent unless they fire.
+
 ## Known traps, all found the hard way
 
 * **`powf` is not correctly rounded everywhere and `dequantizeLrvqGain` depends on it.** The

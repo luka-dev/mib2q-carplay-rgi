@@ -1,7 +1,7 @@
 @@QNXRUN-START@@
 apac_bench: 3980 records, 33 byte cookie, clock = ClockCycles
 apac_bench: syspage cycles_per_sec = 24000000
-apac_bench: clock read overhead 3 ticks; spin2 251007, spin4 501762, ratio 1.999
+apac_bench: clock read overhead 3 ticks; spin2 251005, spin4 501764, ratio 1.999
 apac_bench: 0.0627 ticks per instruction (from the loop difference); spin2 implies 0.0628
 apac_bench: 16 MB stride walk, taken as 4 instructions/iteration (the compiler's real number is higher): 0.1097 ticks per instruction (1.75x the arithmetic loop) [acc=3014515712]
 apac_bench: the two exact loops agree to 0.10% and the memory bound one is only 1.75x dearer, so this clock counts instructions: 1 tick = 15.95 instructions
@@ -11,14 +11,14 @@ apac_bench: 48000 Hz, 6 channels, 1024 frames per packet -> 46.88 packets/s
 apac_bench: 2 repetitions, per-packet minimum across them; 3980 records, 3977 carrying audio
   (a packet is 1024 frames at 48000 Hz, so the deadline is 21.333 ms and the budget is 1/46.9 of a core)
 
-  whole chain/packet     n=3980  mean      65516  p50      64024  p90      72732  p99      76284  p99.9      77285  max      83403
-                                     1045101 instructions mean, 1330430 max
-  decode/packet          n=3977  mean      59595  p50      57606  p90      67380  p99      70969  p99.9      71927  max      77585
-                                      950655 instructions mean, 1237622 max
-    frame layer          n=3977  mean       5347  p50       3392  p90      13076  p99      16644  p99.9      17600  max      23298
-                                       85295 instructions mean, 371645 max
-    transform+output     n=3977  mean      43451  p50      43503  p90      43542  p99      43546  p99.9      43546  max      43546
-                                      693125 instructions mean, 694638 max
+  whole chain/packet     n=3980  mean      65517  p50      64024  p90      72732  p99      76285  p99.9      77284  max      83403
+                                     1045093 instructions mean, 1330408 max
+  decode/packet          n=3977  mean      59596  p50      57602  p90      67374  p99      70968  p99.9      71927  max      77585
+                                      950644 instructions mean, 1237602 max
+    frame layer          n=3977  mean       5347  p50       3392  p90      13075  p99      16647  p99.9      17600  max      23298
+                                       85301 instructions mean, 371639 max
+    transform+output     n=3977  mean      43452  p50      43503  p90      43543  p99      43546  p99.9      43546  max      43546
+                                      693131 instructions mean, 694627 max
 
   at 1.7 GHz, ASSUMING an IPC (nothing here measures one):
     IPC 0.6 -> chain mean 1.025 ms, worst 1.304 ms of a 21.333 ms deadline = 4.80 % / 6.11 % of one core
@@ -26,25 +26,54 @@ apac_bench: 2 repetitions, per-packet minimum across them; 3980 records, 3977 ca
     IPC 1.4 -> chain mean 0.439 ms, worst 0.559 ms of a 21.333 ms deadline = 2.06 % / 2.62 % of one core
 
   per stage, clock read between each (attribution only):
-    framer               n=3980  mean         18  p50         18  p90         19  p99         20  p99.9         21  max         24
-                                         282 instructions mean, 382 max
-    AEAD (2 x poly1305)  n=3980  mean        861  p50        853  p90       1051  p99       1131  p99.9       1289  max       1667
-                                       13736 instructions mean, 26591 max
-    ChaCha20 payload     n=3980  mean        692  p50        698  p90        987  p99       1125  p99.9       1403  max       2096
-                                       11046 instructions mean, 33435 max
+    framer               n=3980  mean         18  p50         18  p90         19  p99         20  p99.9         21  max         23
+                                         283 instructions mean, 366 max
+    AEAD (2 x poly1305)  n=3980  mean        861  p50        853  p90       1051  p99       1131  p99.9       1289  max       1668
+                                       13736 instructions mean, 26607 max
+    ChaCha20 payload     n=3980  mean        693  p50        698  p90        987  p99       1125  p99.9       1404  max       2096
+                                       11047 instructions mean, 33434 max
     TLV split            n=3980  mean         38  p50         38  p90         38  p99         44  p99.9         45  max         48
-                                         607 instructions mean, 765 max
-    decode               n=3980  mean      59551  p50      57603  p90      67375  p99      70971  p99.9      71927  max      77586
-                                      949948 instructions mean, 1237638 max
-    channel permute      n=3980  mean       4353  p50       4356  p90       4357  p99       4357  p99.9       4357  max       4357
-                                       69440 instructions mean, 69502 max
+                                         608 instructions mean, 765 max
+    decode               n=3980  mean      59552  p50      57608  p90      67359  p99      70969  p99.9      71928  max      77586
+                                      949945 instructions mean, 1237618 max
+    channel permute      n=3980  mean       4354  p50       4356  p90       4357  p99       4396  p99.9       4396  max       4396
+                                       69450 instructions mean, 70123 max
 
   the eight most expensive packets (decode), by record index:
-    #166(77585, 249 B) #771(74154, 221 B) #3222(73226, 346 B) #2368(71927, 106 B) #2868(71915, 102 B) #598(71709, 175 B) #548(71705, 143 B) #2066(71694, 104 B)
+    #166(77585, 249 B) #771(74154, 221 B) #3222(73226, 346 B) #2368(71927, 106 B) #2868(71915, 102 B) #598(71749, 175 B) #548(71705, 143 B) #2066(71694, 104 B)
 
   inside one packet, six long blocks driven directly:
-    6 x MDCT(1024)             36036   =  60.5 % of a mean decode
-    6 x ComplexFFT(512)        28509   =  47.8 % of a mean decode,  79.1 % of the MDCT above
+    6 x MDCT(1024)             36031   =  60.5 % of a mean decode
+    6 x ComplexFFT(512)        28510   =  47.8 % of a mean decode,  79.1 % of the MDCT above
+
+  the two paths this capture never takes (synthetic cases, NOT packets):
+  BWE header/channel     n=29    mean         18  p50         14  p90         30  p99         30  p99.9         30  max         30
+                                         282 instructions mean, 478 max
+  LRVQ spectrum/element  n=55    mean       2424  p50        263  p90       7796  p99      11514  p99.9      11514  max      11514
+                                       38670 instructions mean, 183666 max
+    29 of 44 cases change the spectrum, 15 leave it identical; the latter, with their synthesis cost:
+      #4:13233* #5:13232* #6:312 #7:312 #17:368 #18:368 #19:368 #26:4483* #27:317 #28:317 #30:4442* #37:373 #39:373 #42:5 #43:5 
+      11 gated before the arithmetic, cost nothing;  4 (*) run every FFT and write zeros - FULL PRICE, so a memcmp is a
+      correctness criterion and not a cost one
+    55 LRVQ elements (12 SCE, 16 CPE, 27 LFE)
+    BWE synthesis per channel, 48 kHz, dearest case of each shape,
+    repeated so the filter cache is warm (steady state):
+      long narrow   case #0  maxSfb 30       13230
+      long wide     case #11 maxSfb 31       16363
+      short narrow  case #22 maxSfb 8         4437
+      short wide    case #32 maxSfb 9         5934
+      ALTERNATING   long wide <-> narrow       34324   (+110 % on the dearest steady shape)
+
+  composed onto the measured worst packet (77585 ticks), five BWE channels   [ticks/instruction now reads 0.0626898, calibration said 0.0627]:
+    + BWE x4, steady (realistic)           65572  ->     143157  (1.85x)
+    + BWE x5, steady (ceiling)             81965  ->     159550  (2.06x)
+    + BWE x5, alternating (bound)         171770  ->     249355  (3.21x)
+    + LRVQ on SCE + CPE + CPE + LFE        30875  ->     108460  (1.40x)
+    + both, BWE alternating               202645  ->     280230  (3.61x)
+      both, IPC 0.6 -> 4.382 ms = 20.54 % of one core
+      both, IPC 1.0 -> 2.629 ms = 12.33 % of one core
+      both, IPC 1.4 -> 1.878 ms = 8.80 % of one core
+  integrity: 9 probes, constant intact, canaries untouched
 
   stack below the caller: decode 5264 bytes, whole chain 5584 bytes (paint 131072)
 
