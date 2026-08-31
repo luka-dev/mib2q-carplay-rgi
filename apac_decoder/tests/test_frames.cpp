@@ -351,6 +351,89 @@ void CheckLrvqSceLfeSeam()
     }
 }
 
+// Is ONE shared LRVQDecoder the same as one per element?
+//
+// The port shares a single instance across the whole decoder because the
+// original has no decoder object at all - APACLRVQDecoder's members are static,
+// and env/env2/work/qidx/prevMode are stack locals of the wrapper (0x9bdc0 and
+// 0x9bf60 both open with `sub sp, sp, #0x2500`, 9472 bytes).  Sharing hoists
+// those off the stack, which is the one thing that could carry state between
+// elements where the original could not.
+//
+// So drive every case twice - once with an instance reused across all of them,
+// once with a fresh one per case - and require identical output.  Including a
+// CPE whose FIRST channel is skipped, which NO generated case covers (they all
+// set skip0 = 0) and which is precisely where the original reads uninitialised
+// stack: if the port's carried-over envelope were ever observable, it would be
+// there.
+int g_shareChecked;
+
+void CheckLrvqSharing()
+{
+    static LrvqFrameCase frames[64];
+    static LrvqElemCase elems[64];
+    const int nf = LrvqBuildFrameCases(frames, 64);
+    const int ne = LrvqBuildElemCases(elems, 64);
+    const apac::SFBOffsets* tab = apac::GetSFBOffsetTable(48000, 1024);
+    assert(tab != 0);
+
+    static apac::SyntacticElement element;
+    static apac::LRVQDecoder shared;
+    static float keep0[64][1024], keep1[64][1024];
+    static uint8_t framed[kLrvqMaxBytes + 8];
+    static uint8_t shifted[kLrvqMaxBytes + 9];
+    static bool decoded[64];
+
+    for (int forced = 0; forced < 2; ++forced) {
+        memset(decoded, 0, sizeof decoded);
+        for (int pass = 0; pass < 2; ++pass) {
+            shared = apac::LRVQDecoder();
+            for (int i = 0; i < (forced ? ne : nf); ++i) {
+                if (forced && elems[i].kind != kLrvqElemCPE)
+                    continue;
+                apac::LRVQDecoder fresh;
+                apac::LRVQDecoder* dec = pass ? &fresh : &shared;
+                uint32_t nbytes;
+                if (!forced) {
+                    memcpy(framed, frames[i].bits, frames[i].nbytes);
+                    nbytes = frames[i].nbytes;
+                } else {
+                    // [ws:2][skip0 = 1][the rest of the case][no TNS][no TNS]
+                    LrvqBitWriter w;
+                    w.Init(framed, sizeof framed);
+                    w.Put(0, 2);
+                    w.Put(1, 1);
+                    for (uint32_t b = 1; b < elems[i].nbytes * 8u; ++b)
+                        w.Put((elems[i].bits[b >> 3] >> (7 - (b & 7))) & 1u, 1);
+                    w.Put(0, 1);
+                    w.Put(0, 1);
+                    nbytes = (uint32_t)sizeof framed;
+                }
+                PrependOneBit(framed, nbytes, shifted);
+                assert(element.Configure(apac::kElementCPE, tab, 48000) == apac::kOk);
+                apac::BitstreamReader bs(shifted, nbytes + 1);
+                if (element.Deserialize(bs, dec) != apac::kOk)
+                    continue;
+                if (pass == 0) {
+                    memcpy(keep0[i], element.ChannelData(true), sizeof keep0[i]);
+                    memcpy(keep1[i], element.ChannelData(false), sizeof keep1[i]);
+                    decoded[i] = true;
+                    ++g_shareChecked;
+                } else if (decoded[i]) {
+                    if (memcmp(keep0[i], element.ChannelData(true), sizeof keep0[i]) != 0 ||
+                        memcmp(keep1[i], element.ChannelData(false), sizeof keep1[i]) != 0) {
+                        printf("FAIL lrvq sharing: %scase %d differs between a "
+                               "shared decoder and a fresh one - the port's "
+                               "hoisted envelope is carrying state the original "
+                               "could not\n", forced ? "forced-skip0 " : "", i);
+                        exit(1);
+                    }
+                }
+            }
+        }
+    }
+}
+
 }  // namespace
 
 int main(int argc, char** argv)
@@ -476,6 +559,7 @@ int main(int argc, char** argv)
 
     CheckLrvqSeam();
     CheckLrvqSceLfeSeam();
+    CheckLrvqSharing();
 
     const double rel = worst / peak;
     if (!(rel < kTolerance)) {
@@ -488,10 +572,10 @@ int main(int argc, char** argv)
 
     printf("OK  %u packets x %u ch, seq %d/%d/%d/%d, worst %.2g of full scale, "
            "%.1f%% bit-identical; LRVQ seam %d CPE frames (%d short, %d "
-           "filtered), %d SCE, %d LFE\n",
+           "filtered), %d SCE, %d LFE, %d share-invariant\n",
            numPackets, channels, g_seq[0], g_seq[1], g_seq[2], g_seq[3], rel,
            100.0 * identical / total, g_lrvqCases, g_lrvqShort, g_lrvqFiltered,
-           g_lrvqSce, g_lrvqLfe);
+           g_lrvqSce, g_lrvqLfe, g_shareChecked);
     free(pcm);
     free(g_blob);
     return 0;

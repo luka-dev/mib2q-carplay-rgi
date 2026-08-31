@@ -335,13 +335,40 @@ cannot touch the dump, which is taken before the transform runs.
 
 ### What stages f and g deliberately do not implement
 
-* **LRVQ is wired**, to stage h1. `SyntacticElement::Deserialize` takes the decoder as an argument
-  rather than owning one, because there is no decoder object in the original at all: every
-  `APACLRVQDecoder` member is static and its prediction state is a stack local of the wrapper, so
-  nothing survives a call. One instance shared by the whole `apac::Decoder` therefore reproduces the
+* **LRVQ is wired**, to stage h1. Two things had to be settled against the library first, and both
+  are answered in the disassembly rather than by reading:
+
+  *Ownership.* There is no decoder object in the original. At the SCE call site the arguments go in
+  `x0 = the bit reader`, `x1 = the APACICSInfo`, `x2 = the channel stream` — `SpectrumDeserializeSCE`
+  opens `mov x21, x1 ; ldrb w23, [x21, #10]` (the ICSInfo's window sequence) and
+  `mov x20, x2 ; ldr x4, [x20, #752]` (the spectrum vector), and never touches `x0` as a `this`.
+  `SpectrumDeserializeCPE` is reached by a plain `bl` at `0xac69c` with five arguments in `x0..x4`,
+  matching its declared five references exactly. All three are **static**. The virtual call at
+  `*((_QWORD *)this + 2)` that made this look ambiguous is not a decoder: at `0xac638` it is
+  `ldr x3,[x0] ; ldr x3,[x3,#16] ; blr x3` with `w2 = 1` on an object loaded from `this + 16`, and
+  the second one from `this + 512` — i.e. `APACICSInfo::Deserialize(bs, codingType 1)` on each
+  channel's header. `LrvqFrameContext::lrvq` has no recovered offset because it corresponds to
+  nothing in the original.
+
+  *Prediction scope.* Per element, per frame. `SpectrumDeserializeSCE` and `...CPE` both open with
+  `sub sp, sp, #0x2500` — 9472 bytes — which is where `env[1024]`, `env2[1024]`, `work[256]`,
+  `qidx[64]` and `prevMode` live. They are call-local and cannot cross an element or a frame.
+
+  So one instance shared by the whole `apac::Decoder` is faithful, and
+  `SyntacticElement::Deserialize` takes the decoder as an argument rather than owning one. One instance shared by the whole `apac::Decoder` therefore reproduces the
   original exactly — the port's `SpectrumDeserialize{SCE,CPE,LFE}` each call `ResetPrediction` on
   entry — and costs 56 KiB once instead of 56 KiB per element; `sizeof(apac::Decoder)` went from
-  1 405 344 to 1 462 096. A null pointer still means `kPortNeedsLRVQ`.
+  1 405 344 to 1 462 096 rather than to 1 858 688. A null pointer still means `kPortNeedsLRVQ`, so a
+  build without stage h1 refuses rather than mis-parses.
+
+  Sharing is also **measured**, not just argued. The port hoists `env`/`env2`/`work` off the stack
+  into members, which is the one thing that could carry state between elements where the original
+  could not, so `tests/test_frames.cpp` drives every case twice — once with an instance reused
+  across all of them, once with a fresh one per case — and requires identical output. 37 decodes,
+  none differ. That includes a CPE whose FIRST channel is skipped, constructed by hand because no
+  generated case covers it (they all set `skip0 = 0`) and because that is exactly the path where the
+  original reads uninitialised stack; `SpectrumDeserializeCPE` resets `qidx`/`prevMode` on entry, and
+  with those zeroed the carried-over envelope turns out not to be observable there either.
 
   None of it is reachable on this content, so `tests/test_frames.cpp` checks the SEAM instead, by
   driving the stage-h1 test's own library-checked cases through the element and requiring the same
