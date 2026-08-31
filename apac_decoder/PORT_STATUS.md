@@ -858,13 +858,32 @@ only the top `patchWidth` bins of it, `[bwStart - w, bwStart)`. A frame whose `m
 enough that its coded content stops below that slice passes the guard, runs every FFT, and
 multiplies a slice of zeros — so every extension coefficient comes out `+0.0f` on top of the `+0.0f`
 already there. Cases 4, 5, 26 and 30 are exactly those, the library does the same, and the fixture
-agrees bit for bit. **They cost full price** — 6 386, 6 471, 2 255 and 2 219 ns on the host, against
-~296 ns for a genuinely gated one. A `memcmp` of the spectrum before and after is a correctness
-criterion, not a cost one: it cannot separate these four from the 11 that are genuinely gated, so a
-cost average must exclude **11, not 15** (4 837 ns against 4 906 ns, +1.4 % on this case mix — small
-here, but the rule matters: "quiet ⇒ free" applied to real content prices a low-bandwidth channel at
-zero when it costs as much as any other long-narrow one). Say it as: **11 are free; 4 more produce
+agrees bit for bit. **They cost full price.** A `memcmp` of the spectrum before and after is a
+correctness criterion, not a cost one: it cannot separate these four from the 11 that are genuinely
+gated, so a cost average must exclude **11, not 15**. Say it as: **11 are free; 4 more produce
 nothing but cost full price; 15 look identical to a `memcmp`.**
+
+The arithmetic, from one host run so the subtraction reproduces (per-call ns; the absolutes drift a
+few per cent run to run on this machine, the ratio does not):
+
+```
+  the four:  case 4 = 6 225   case 5 = 6 206   case 26 = 2 151   case 30 = 2 149
+             a genuinely gated case, for scale:  ~ 380
+  sum over the 33 cases that do work      = 154 210 ns   mean = 4 673   <- exclude 11: correct
+  the four, summed                        =  16 731 ns   mean = 4 183
+  154 210 - 16 731                        = 137 479 ns over 29
+  mean over the remaining 29              =   4 741 ns                  <- exclude 15: wrong
+  4 741 / 4 673                           = +1.45 %
+```
+
+Note the direction, because it reads backwards at first glance: this is a **removal**, not an
+addition. The four average 4 183, *below* the 33-case mean of 4 673, and removing below-mean items
+**raises** the mean of what is left. (Adding them would lower it, which is the same statement the
+other way round.) Both denominators are stated on purpose: 33 and 29, never 44.
+
++1.45 % would not move a headline. The rule is what matters: "quiet ⇒ free" applied to real content
+prices a low-bandwidth channel at zero when it costs 6.2 us, as much as any other long-narrow one -
+a cost-model error that would look perfectly reasonable in a table.
 
 That the ORIGINAL also runs on those four is settled from the disassembly, not from the fixture — a
 fixture whose spectrum equals its input cannot distinguish "the library gated" from "the library ran
@@ -872,6 +891,15 @@ and wrote zeros". The long guard at `0x78490` is `sub_78370(spec, spec + bwStart
 non-zero over the whole `[0, bwStart)` rather than over the replicated slice, and it proceeds when
 one is found; cases 4 and 5 have content inside that range, and the short scan is the same shape for
 26 and 30.
+
+**Two checks cover this, they look redundant, and they are not — do not delete either as duplicated
+coverage.** `tests/test_bwe.cpp` asserts every coefficient OUTSIDE the predicted extension band is
+bit-identical on both sides, on all 44 cases, so it catches *one side wrote where the other did
+not*. It cannot express *both sides were quiet* — a case where neither writes is simply a case with
+an empty predicted band. `bench/gate_check.cpp` compares the fixture's spectrum against the case's
+input and so catches exactly that: quiet-vs-quiet, on both implementations, which is the branch a
+differential test is blind to because agreeing to do nothing looks like agreeing. Each is blind
+precisely where the other sees.
 
 Block type is 2.5x, the wide/narrow geometry a further 1.2-1.3x, and the **window-group count costs
 nothing** — the short inner loop is always 8 windows x 64 multiplies plus 64 gain multiplies
