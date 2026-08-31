@@ -36,7 +36,9 @@ ordered module chain:
 2. `RgdModule` starts after the first module is ready, then publishes RGI/BAP maneuver state.
 
 Patched stock classes provide lifecycle seams, cluster contexts, cover-art integration and input
-interception. They are compiled against `MU1316-combined-final.jar` as Java 1.4 bytecode.
+interception. The right-hand pure OPS popup (`2100008`) has a narrow `SMALL_STAGE` exception: CarPlay
+keeps `Resource.SCREEN`, while every ordinary HMI deactivation and fullscreen camera takeover stays
+stock. They are compiled against `MU1316-combined-final.jar` as Java 1.4 bytecode.
 
 ## Cluster composition
 
@@ -51,6 +53,10 @@ Displayable 98 belongs to `maneuver_render`; displayable 99 belongs to `altscree
 is selected as soon as the CarPlay cluster is owned. The switch to context 80 happens only after RGI
 presentation is confirmed; it returns to 81 when guidance/presentation ends. `AltScreenModule`
 serializes all context writes.
+
+The A5 context table also declares main-terminal context 90 as `{16,43}` for RetroArch: HMI overlays
+and partial popups remain above its video displayable. G24 is excluded because stock already uses ID
+90 for its generated `11 + 79` KDK context.
 
 ## Local protocols
 

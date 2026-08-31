@@ -26,3 +26,6 @@ __pycache__/
 # Live CarPlay session captures. The SETUP plist carries the 32-byte `shk`
 # session key in plaintext — never commit it. Keep captures local, mode 0600.
 /captures/
+
+# Test binaries built by scripts/run_tests.sh.
+/build/tests/
