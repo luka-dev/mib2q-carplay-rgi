@@ -63,7 +63,8 @@ PROBE=0
 FLOAT=0
 COUNT=""
 EXTRA=()
-while [ "$FN" = 0 ] && [ $# -gt 0 ]; do
+# The `fn`, `swap` and `port` modes take their own arguments; do not eat them.
+while [ "$FN" = 0 ] && [ "$SWAP" = 0 ] && [ "$PORT" = 0 ] && [ $# -gt 0 ]; do
     case "$1" in
         --rebuild) REBUILD=1 ;;
         --probe)   PROBE=1 ;;
