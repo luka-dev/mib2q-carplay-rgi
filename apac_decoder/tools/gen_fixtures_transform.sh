@@ -62,4 +62,8 @@ emit tns.fixture tns
 # the 16-case plan in dsp_cases.h, orders 2 to 16.
 emit lpc.fixture lpc
 
+# MultiRadixRealFFT on its own, then apac::LPMDCTFilter's five entry points,
+# over four transform lengths and both values of the fftSize/n ratio.
+emit lpmdct.fixture lpmdct
+
 echo "stage-d fixtures written to $FIX"

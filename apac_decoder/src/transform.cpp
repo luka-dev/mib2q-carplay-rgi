@@ -97,6 +97,111 @@ void ComplexFFT::Forward(const float* inRe, const float* inIm,
     }
 }
 
+// ------------------------------------------------------------- real FFT ----
+// The classic "pack a real sequence of n into a complex one of n/2, transform,
+// then split" method.  Every constant in it was checked against the library
+// rather than assumed - see the note on RealFFT in the header.
+
+RealFFT::RealFFT() : mN(0)
+{
+}
+
+bool RealFFT::Initialize(uint32_t n)
+{
+    if (n < 4 || n > kMaxRealFFT || (n & (n - 1)) != 0)
+        return false;
+    if (n == mN)
+        return true;
+    if (!mFFT.Initialize(n >> 1))
+        return false;
+    const double kTwoPi = 6.283185307179586476925286766559;
+    for (uint32_t k = 0; k < n / 2; ++k) {
+        double a = -kTwoPi * (double)k / (double)n;
+        mWRe[k] = (float)cos(a);
+        mWIm[k] = (float)sin(a);
+    }
+    mN = n;
+    return true;
+}
+
+void RealFFT::Forward(const float* x, float* re, float* im)
+{
+    const uint32_t n = mN;
+    const uint32_t m = n >> 1;
+    // z[k] = x[2k] + i*x[2k+1]; the FFT is out of place, so the interleave
+    // costs nothing extra.
+    float* zr = mAr;
+    float* zi = mAi;
+    float* Zr = mBr;
+    float* Zi = mBi;
+    for (uint32_t k = 0; k < m; ++k) {
+        zr[k] = x[2 * k];
+        zi[k] = x[2 * k + 1];
+    }
+    mFFT.Forward(zr, zi, Zr, Zi);
+
+    // k == 0 carries both DC and Nyquist, which is the whole reason for the
+    // packing: X[0] and X[n/2] are real, so one slot holds both.
+    re[0] = Zr[0] + Zi[0];
+    im[0] = Zr[0] - Zi[0];
+    for (uint32_t k = 1; k < m; ++k) {
+        const uint32_t j = m - k;
+        const float er =  0.5f * (Zr[k] + Zr[j]);
+        const float ei =  0.5f * (Zi[k] - Zi[j]);
+        const float dr =  0.5f * (Zi[k] + Zi[j]);   //  Re of -i*(Z[k]-conj Z[j])/2
+        const float di = -0.5f * (Zr[k] - Zr[j]);   //  Im of the same
+        const float wr = mWRe[k], wi = mWIm[k];
+        re[k] = er + (dr * wr - di * wi);
+        im[k] = ei + (dr * wi + di * wr);
+    }
+}
+
+void RealFFT::Inverse(const float* re, const float* im, float* out)
+{
+    const uint32_t n = mN;
+    const uint32_t m = n >> 1;
+    float* Zr = mAr;
+    float* Zi = mAi;
+    float* zr = mBr;
+    float* zi = mBi;
+
+    // Undo the split: E = (X[k] + X[k+m])/2, O = conj(W^k) * (X[k] - X[k+m])/2,
+    // Z[k] = E + i*O.  X[k+m] is conj(X[m-k]) by the Hermitian symmetry the
+    // packing assumes, and X[0] / X[m] come out of the two halves of slot 0.
+    {
+        const float x0 = re[0];        // X[0],   real
+        const float xm = im[0];        // X[n/2], real
+        Zr[0] = 0.5f * (x0 + xm);
+        Zi[0] = 0.5f * (x0 - xm);
+    }
+    for (uint32_t k = 1; k < m; ++k) {
+        const uint32_t j = m - k;
+        const float ar = re[k],  ai = im[k];       // X[k]
+        const float br = re[j],  bi = -im[j];      // X[k+m] = conj(X[m-k])
+        const float er = 0.5f * (ar + br);
+        const float ei = 0.5f * (ai + bi);
+        const float fr = 0.5f * (ar - br);
+        const float fi = 0.5f * (ai - bi);
+        const float wr = mWRe[k], wi = -mWIm[k];   // conj(W^k)
+        const float or_ = fr * wr - fi * wi;
+        const float oi_ = fr * wi + fi * wr;
+        Zr[k] = er - oi_;
+        Zi[k] = ei + or_;
+    }
+
+    // Unnormalised inverse of length m, by conjugation around the forward one.
+    for (uint32_t k = 0; k < m; ++k)
+        Zi[k] = -Zi[k];
+    mFFT.Forward(Zr, Zi, zr, zi);
+
+    // z came out m times too large and conjugated; the library's inverse is
+    // n times the true signal, so the surviving factor is exactly 2.
+    for (uint32_t k = 0; k < m; ++k) {
+        out[2 * k]     =  2.0f * zr[k];
+        out[2 * k + 1] = -2.0f * zi[k];
+    }
+}
+
 // ----------------------------------------------------------------- MDCT ----
 
 MDCT::MDCT() : mN(0), mScale(0.0f), mCoef(0)

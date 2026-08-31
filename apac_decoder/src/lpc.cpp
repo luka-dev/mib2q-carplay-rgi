@@ -253,4 +253,81 @@ void LSFTools::LSP_To_LPC(const float* lsp, float* lpc, uint16_t order)
     }
 }
 
+// --------------------------------------------------------- LPMDCTFilter ----
+
+LPMDCTFilter::LPMDCTFilter() : mFFTSize(0), mOrder(0), mScale(0.0f)
+{
+    memset(mTmp, 0, sizeof mTmp);
+    memset(mImpulse, 0, sizeof mImpulse);
+    memset(mAcc, 0, sizeof mAcc);
+}
+
+// apac::LPMDCTFilter::Initialize(unsigned short, unsigned short), 0x9c7b0.
+float LPMDCTFilter::Initialize(uint16_t fftSize, uint16_t order)
+{
+    mFFTSize = fftSize;
+    mOrder = order;
+    mFFT.Initialize(fftSize);
+    mScale = 2.0f / (float)fftSize;
+    return mScale;
+}
+
+// apac::LPMDCTFilter::LPImpulseToSpecEnvelope, 0xb4ce0.  Forward real FFT, then
+// vDSP_vdist - the magnitude of each bin.  The Nyquist slot is zeroed first;
+// after the packing that means bin 0's magnitude is |DC| rather than
+// sqrt(DC^2 + Nyquist^2), which would be meaningless.
+void LPMDCTFilter::LPImpulseToSpecEnvelope(const float* impulse, float* env,
+                                           uint32_t n)
+{
+    const uint32_t half = mFFTSize >> 1;
+    float* re = mTmp;
+    float* im = mTmp + half;
+    mFFT.Forward(impulse, re, im);
+    im[0] = 0.0f;
+    const uint32_t stride = (n && mFFTSize / n == 4) ? 2 : 1;
+    for (uint32_t i = 0; i < n; ++i) {
+        const float a = re[i * stride];
+        const float b = im[i * stride];
+        env[i] = sqrtf(a * a + b * b);
+    }
+}
+
+// apac::LPMDCTFilter::LPCToSpecEnvelope, 0xb4be0: zero-pad the coefficients to
+// the transform length and hand them to LPImpulseToSpecEnvelope, which the
+// original reaches through its own vtable.
+void LPMDCTFilter::LPCToSpecEnvelope(const float* lpc, float* env, uint32_t n)
+{
+    memset(mImpulse, 0, sizeof(float) * mFFTSize);
+    memcpy(mImpulse, lpc, sizeof(float) * (mOrder + 1));
+    LPImpulseToSpecEnvelope(mImpulse, env, n);
+}
+
+// apac::LPMDCTFilter::AutocorrFromPSD, 0xb47b0.  Square the magnitudes into the
+// real half of a packed spectrum, zero the Nyquist slot, inverse transform, and
+// read off the first order+1 lags - every second one when fftSize/n is 4.
+void LPMDCTFilter::AutocorrFromPSD(const float* mag, float* r, uint32_t n)
+{
+    const uint32_t N = mFFTSize;
+    memset(mTmp, 0, sizeof(float) * N);
+    for (uint32_t i = 0; i < n; ++i)
+        mTmp[i] = mag[i] * mag[i];
+    mTmp[N >> 1] = 0.0f;
+    mFFT.Inverse(mTmp, mTmp + (N >> 1), mTmp);
+    const uint32_t stride = (n && N / n == 4) ? 2 : 1;
+    for (uint32_t i = 0; i <= mOrder; ++i)
+        r[i] = mTmp[i * stride];
+}
+
+// apac::LPMDCTFilter::MDCTToAutoCorr, 0xb4de0.
+void LPMDCTFilter::MDCTToAutoCorr(const float* spec, float* r, uint32_t hop,
+                                  uint32_t count, uint32_t n)
+{
+    memset(r, 0, sizeof(float) * (mOrder + 1));
+    for (uint32_t i = 0; i < count; ++i) {
+        AutocorrFromPSD(spec + i * hop, mAcc, n);
+        for (uint32_t j = 0; j <= mOrder; ++j)
+            r[j] = mAcc[j] + r[j];
+    }
+}
+
 }  // namespace apac

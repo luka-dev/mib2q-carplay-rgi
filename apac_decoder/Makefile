@@ -8,6 +8,10 @@ CXX      ?= c++
 # -fno-exceptions/-fno-rtti are not taste: the target is an LD_PRELOADed .so on
 # QNX 6.5 / GCC 4.9.4 and the decode path must not need either.
 CXXFLAGS ?= -std=c++11 -O2 -g -Wall -Wextra -Werror -fno-exceptions -fno-rtti -Iinclude
+# -MMD/-MP: without header dependencies, changing a constant in include/apac
+# recompiles only some translation units and the survivors disagree about a
+# struct's size.  That fails as wrong numbers, not as a link error.
+DEPFLAGS := -MMD -MP
 BUILD    := .build
 
 SRC  := $(wildcard src/*.cpp)
@@ -18,10 +22,10 @@ TBIN := $(patsubst tests/%.cpp,$(BUILD)/%,$(TSRC))
 all: $(OBJ)
 
 $(BUILD)/%.o: src/%.cpp | $(BUILD)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) $(DEPFLAGS) -c $< -o $@
 
 $(BUILD)/%: tests/%.cpp $(OBJ) | $(BUILD)
-	$(CXX) $(CXXFLAGS) $< $(OBJ) -o $@
+	$(CXX) $(CXXFLAGS) $(DEPFLAGS) $< $(OBJ) -o $@
 
 $(BUILD):
 	@mkdir -p $(BUILD)
@@ -32,5 +36,7 @@ check: $(TBIN)
 
 clean:
 	rm -rf $(BUILD)
+
+-include $(BUILD)/*.d
 
 .PHONY: all check clean

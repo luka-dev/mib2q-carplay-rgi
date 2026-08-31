@@ -70,6 +70,12 @@ struct BsState {
     int32_t        bitsLeft;
 };
 
+// Apple's DSPSplitComplex: two pointers, real and imaginary parts held apart.
+struct DSPSplit {
+    float* realp;
+    float* imagp;
+};
+
 // 40-byte record returned by apac::GetSFBOffsetTable; RODATA.md section 2.
 struct SFBOffsetRecord {
     uint64_t        sampleRate;
@@ -1147,6 +1153,126 @@ int cmd_lpc()
 }
 
 
+
+// --------------------------------------------------------------- lpmdct ----
+// MultiRadixRealFFT and apac::LPMDCTFilter.
+//
+//   0x1034d0  _ZN17MultiRadixRealFFT30RealOutOfPlaceForwardTransformEPKfP15DSPSplitComplex
+//   0x103550  _ZN17MultiRadixRealFFT30RealOutOfPlaceInverseTransformEPK15DSPSplitComplexPf
+//   0x09c7b0  _ZN4apac12LPMDCTFilter10InitializeEtt
+//   0x0b47b0  _ZN4apac12LPMDCTFilter15AutocorrFromPSDEPKfPfj
+//   0x0b4be0  _ZN4apac12LPMDCTFilter17LPCToSpecEnvelopeEPKfPfj
+//   0x0b4ce0  _ZN4apac12LPMDCTFilter23LPImpulseToSpecEnvelopeEPKfPfj
+//   0x0b4de0  _ZN4apac12LPMDCTFilter14MDCTToAutoCorrEPKfPfjjj
+//
+// apac::LPMDCTFilter is 52 bytes: +0 vptr, +8 the FFT size and +10 the LPC
+// order (both uint16), +16 a DFTHandle<false> - the MultiRadixRealFFT itself -
+// and +48 the 2/N scale.  Neither class has an exported constructor, so the
+// vptr comes from _ZTVN4apac12LPMDCTFilterE and the DFT handle is constructed
+// with its own exported ctor before Initialize is called.  Two of the entry
+// points dispatch through that vtable, so it has to be the real one.
+//
+// The two MultiRadixRealFFT calls are dumped separately from the LPMDCTFilter
+// ones on purpose: they are Apple's vDSP real-FFT packing (DC in realp[0],
+// Nyquist in imagp[0], and a factor of two the wrapper divides back out), and
+// a port has to reproduce that convention before anything above it can agree.
+
+typedef float   (*fn_lpm_init_t)(void*, uint16_t, uint16_t);
+typedef void    (*fn_dft_ctor_t)(void*);
+typedef int32_t (*fn_lpm3_t)(void*, const float*, float*, uint32_t);
+typedef int32_t (*fn_lpm5_t)(void*, const float*, float*, uint32_t, uint32_t, uint32_t);
+typedef int32_t (*fn_rfft_fwd_t)(void*, const float*, DSPSplit*);
+typedef int32_t (*fn_rfft_inv_t)(void*, const DSPSplit*, float*);
+
+fn_lpm_init_t lpm_init;
+fn_dft_ctor_t dft_ctor;
+fn_lpm3_t     lpm_autocorr;
+fn_lpm3_t     lpm_lpc2env;
+fn_lpm3_t     lpm_imp2env;
+fn_lpm5_t     lpm_mdct2ac;
+fn_rfft_fwd_t rfft_fwd;
+fn_rfft_inv_t rfft_inv;
+void*         lpm_vtable;
+
+void load_lpmdct()
+{
+    lpm_init     = need<fn_lpm_init_t>("_ZN4apac12LPMDCTFilter10InitializeEtt");
+    dft_ctor     = need<fn_dft_ctor_t>("_ZN9DFTHandleILb0EEC1Ev");
+    lpm_autocorr = need<fn_lpm3_t>("_ZN4apac12LPMDCTFilter15AutocorrFromPSDEPKfPfj");
+    lpm_lpc2env  = need<fn_lpm3_t>("_ZN4apac12LPMDCTFilter17LPCToSpecEnvelopeEPKfPfj");
+    lpm_imp2env  = need<fn_lpm3_t>("_ZN4apac12LPMDCTFilter23LPImpulseToSpecEnvelopeEPKfPfj");
+    lpm_mdct2ac  = need<fn_lpm5_t>("_ZN4apac12LPMDCTFilter14MDCTToAutoCorrEPKfPfjjj");
+    rfft_fwd     = need<fn_rfft_fwd_t>(
+        "_ZN17MultiRadixRealFFT30RealOutOfPlaceForwardTransformEPKfP15DSPSplitComplex");
+    rfft_inv     = need<fn_rfft_inv_t>(
+        "_ZN17MultiRadixRealFFT30RealOutOfPlaceInverseTransformEPK15DSPSplitComplexPf");
+    lpm_vtable   = need<void*>("_ZTVN4apac12LPMDCTFilterE");
+}
+
+int cmd_lpmdct()
+{
+    static uint8_t obj[128] __attribute__((aligned(64)));
+    static float x[2048], y[2048], split[2048], scratch[4096];
+
+    for (unsigned c = 0; c < apac_cases::kLPMDCTCases; ++c) {
+        const apac_cases::LPMDCTCase& lc = apac_cases::lpmdct_plan()[c];
+        const uint32_t N = lc.fftSize;
+        const uint32_t n = N / lc.divisor;
+
+        memset(obj, 0, sizeof obj);
+        *(void**)(obj + 0) = (char*)lpm_vtable + 16;
+        dft_ctor(obj + 16);
+        float scale = lpm_init(obj, (uint16_t)N, (uint16_t)lc.order);
+        printf("LPM %u fft=%u order=%u div=%u n=%u scale=%08x\n",
+               c, N, lc.order, lc.divisor, n, apac_cases::float_to_bits(scale));
+
+        // 1. The raw real FFT, forward then inverse, on the same input.
+        apac_cases::lpmdct_fill(c, 0x11111111u, x, N);
+        memset(split, 0, sizeof split);
+        DSPSplit sp;
+        sp.realp = split;
+        sp.imagp = split + N / 2;
+        rfft_fwd((char*)obj + 16, x, &sp);
+        printf("RFFTFWD\n ");
+        print_floats(split, N);
+
+        memset(y, 0, sizeof y);
+        rfft_inv((char*)obj + 16, &sp, y);
+        printf("RFFTINV\n ");
+        print_floats(y, N);
+
+        // 2. LPImpulseToSpecEnvelope: magnitude spectrum of an N-point signal.
+        apac_cases::lpmdct_fill(c, 0x22222222u, x, N);
+        memset(y, 0, sizeof y);
+        lpm_imp2env(obj, x, y, n);
+        printf("IMP2ENV\n ");
+        print_floats(y, n);
+
+        // 3. LPCToSpecEnvelope: the same, from order+1 coefficients.
+        apac_cases::lpmdct_fill(c, 0x33333333u, x, lc.order + 1);
+        memset(y, 0, sizeof y);
+        lpm_lpc2env(obj, x, y, n);
+        printf("LPC2ENV\n ");
+        print_floats(y, n);
+
+        // 4. AutocorrFromPSD: n spectral magnitudes -> order+1 lags.
+        apac_cases::lpmdct_fill(c, 0x44444444u, x, n);
+        memset(y, 0, sizeof y);
+        lpm_autocorr(obj, x, y, n);
+        printf("PSD2AC\n ");
+        print_floats(y, lc.order + 1);
+
+        // 5. MDCTToAutoCorr: four hops of `n` summed.
+        apac_cases::lpmdct_fill(c, 0x55555555u, scratch, 4 * n);
+        memset(y, 0, sizeof y);
+        lpm_mdct2ac(obj, scratch, y, n, 4, n);
+        printf("MDCT2AC\n ");
+        print_floats(y, lc.order + 1);
+    }
+    return 0;
+}
+
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -1159,7 +1285,7 @@ int main(int argc, char** argv)
             "       apac_fn_ref scf           < cases.txt\n"
             "       apac_fn_ref spec          < cases.txt\n"
             "       apac_fn_ref sfb [RATE...]\n"
-            "       apac_fn_ref win | mdct | fb | tns | lpc\n"
+            "       apac_fn_ref win | mdct | fb | tns | lpc | lpmdct\n"
             "       apac_fn_ref gc COOKIE  [--offset N] [--dump]\n"
             "       apac_fn_ref gc-raw FILE [--offset N] [--dump]\n"
             "       apac_fn_ref cookie COOKIE\n");
@@ -1177,6 +1303,7 @@ int main(int argc, char** argv)
     if (cmd == "fb")   { load_stage_d(); return cmd_fb(); }
     if (cmd == "tns")  { load_stage_d(); load_tns(); return cmd_tns(); }
     if (cmd == "lpc")  { load_lpc(); return cmd_lpc(); }
+    if (cmd == "lpmdct") { load_lpmdct(); return cmd_lpmdct(); }
     if (cmd == "bs")  return cmd_bs();
     if (cmd == "ics") return cmd_ics();
     if (cmd == "scf") return cmd_scf();

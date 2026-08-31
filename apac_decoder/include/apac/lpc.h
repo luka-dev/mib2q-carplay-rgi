@@ -34,6 +34,8 @@
 
 #include <stdint.h>
 
+#include "apac/transform.h"
+
 namespace apac {
 
 // The port's caps.  The original has no fixed limit; these are far above
@@ -114,6 +116,54 @@ struct LSFTools {
     // as 0 and lsf[order] as fs/2.
     static void get_LSFWeightingFactors(const float* lsf, float* w,
                                         uint16_t order, float fs);
+};
+
+// apac::LPMDCTFilter - the bridge between an MDCT magnitude spectrum and an
+// LPC autocorrelation, and back.  0x9c7b0 (Initialize), 0xb47b0
+// (AutocorrFromPSD), 0xb4be0 (LPCToSpecEnvelope), 0xb4ce0
+// (LPImpulseToSpecEnvelope) and 0xb4de0 (MDCTToAutoCorr).
+//
+// The object is 52 bytes: the FFT size and the LPC order as uint16s at +8 and
+// +10, a MultiRadixRealFFT at +16, and 2/fftSize at +48.  Every entry point
+// takes an `n` and compares fftSize / n against 4; that single comparison is
+// what switches the output between stride 1 and stride 2, and it is the only
+// use either function makes of `n` beyond the element count.
+//
+// Its callers are APACBWE2Decoder (stage e) and APACLRVQDecoder.
+class LPMDCTFilter {
+public:
+    LPMDCTFilter();
+
+    // Returns 2.0f / fftSize, which is what the original returns and stores.
+    float Initialize(uint16_t fftSize, uint16_t order);
+
+    uint32_t FFTSize() const { return mFFTSize; }
+    uint32_t Order() const { return mOrder; }
+    float    Scale() const { return mScale; }
+
+    // n spectral magnitudes -> order + 1 autocorrelation lags, through the
+    // inverse real FFT of the power spectrum.
+    void AutocorrFromPSD(const float* mag, float* r, uint32_t n);
+
+    // order + 1 LPC coefficients -> n magnitudes of the LP spectrum.
+    void LPCToSpecEnvelope(const float* lpc, float* env, uint32_t n);
+
+    // An fftSize-point impulse response -> n magnitudes.
+    void LPImpulseToSpecEnvelope(const float* impulse, float* env, uint32_t n);
+
+    // `count` consecutive `hop`-spaced spectra, each turned into an
+    // autocorrelation by AutocorrFromPSD and summed.
+    void MDCTToAutoCorr(const float* spec, float* r, uint32_t hop,
+                        uint32_t count, uint32_t n);
+
+private:
+    uint32_t mFFTSize;
+    uint32_t mOrder;
+    float    mScale;
+    RealFFT  mFFT;
+    float    mTmp[kMaxRealFFT];
+    float    mImpulse[kMaxRealFFT];
+    float    mAcc[kMaxLPCOrder + 2];
 };
 
 }  // namespace apac

@@ -41,7 +41,12 @@ namespace apac {
 const uint32_t kTransformLong  = 1024;
 const uint32_t kTransformShort = 128;
 const uint32_t kMaxTransform   = kTransformLong;
-const uint32_t kMaxFFT         = kMaxTransform / 2;
+
+// The largest real FFT apac::LPMDCTFilter is ever initialised with, and the
+// complex FFT length that needs (half of it).  The MDCT itself only ever asks
+// for 512.
+const uint32_t kMaxRealFFT     = 2048;
+const uint32_t kMaxFFT         = kMaxRealFFT / 2;
 
 // The original's own return values, spelled as the FourCCs they are.
 enum TransformStatus {
@@ -132,6 +137,40 @@ private:
     const float* mCoef;
     ComplexFFT   mFFT;
     float        mScratch[kMaxTransform];
+};
+
+// Real-input DFT in Apple's vDSP packing, which is what MultiRadixRealFFT
+// wraps and therefore what apac::LPMDCTFilter is built on.  Measured against
+// the library rather than assumed:
+//
+//   Forward: re[0] = X[0], im[0] = X[n/2] (both real), and re[k] / im[k] are
+//            Re/Im X[k] for k = 1 .. n/2-1.  UNSCALED - the wrapper's
+//            vDSP_vsmul by the 0.5 at 0x345db4 cancels vDSP's factor of two,
+//            so what comes out is the plain DFT.
+//   Inverse: the plain unnormalised inverse, x[j] = sum_k X[k] e^{+2pi i jk/n},
+//            so Inverse(Forward(x)) == n * x.
+//
+// `Inverse` may be called with `out` aliasing `re` - AutocorrFromPSD does
+// exactly that - so it stages through its own scratch.
+class RealFFT {
+public:
+    RealFFT();
+    bool Initialize(uint32_t n);          // power of two, 4 <= n <= kMaxRealFFT
+    uint32_t Size() const { return mN; }
+
+    // Both stage through internal scratch, so neither is const.
+    void Forward(const float* x, float* re, float* im);
+    void Inverse(const float* re, const float* im, float* out);
+
+private:
+    uint32_t   mN;
+    ComplexFFT mFFT;
+    float      mWRe[kMaxRealFFT / 2];
+    float      mWIm[kMaxRealFFT / 2];
+    float      mAr[kMaxRealFFT / 2];
+    float      mAi[kMaxRealFFT / 2];
+    float      mBr[kMaxRealFFT / 2];
+    float      mBi[kMaxRealFFT / 2];
 };
 
 }  // namespace apac

@@ -288,6 +288,41 @@ inline void lpc_fill_lsp(unsigned c, float* lsp, uint32_t order)
     }
 }
 
+// ---------------------------------------------------------- LPMDCT plan ----
+// Inputs for MultiRadixRealFFT and apac::LPMDCTFilter.
+//
+// `fftSize` is the transform length the filter is initialised with and `order`
+// its LPC order.  `divisor` is fftSize / n, the third argument every
+// LPMDCTFilter entry point takes: the original only ever compares it against 4,
+// and that comparison is what switches the output between stride 1 and stride
+// 2, so both values have to be exercised.
+struct LPMDCTCase {
+    uint16_t fftSize;
+    uint8_t  order;
+    uint8_t  divisor;    // 2 or 4
+    uint8_t  seed;
+};
+
+enum { kLPMDCTCases = 12 };
+
+inline const LPMDCTCase* lpmdct_plan()
+{
+    static const LPMDCTCase kPlan[kLPMDCTCases] = {
+        {  64,  8, 2, 1 }, {  64,  8, 4, 2 }, { 128, 16, 2, 3 },
+        { 128, 16, 4, 4 }, { 256, 10, 2, 5 }, { 256, 10, 4, 6 },
+        { 512, 16, 2, 7 }, { 512, 16, 4, 8 }, { 128,  4, 2, 9 },
+        { 256,  1, 4,10 }, { 512,  8, 4,11 }, {  64, 16, 2,12 }
+    };
+    return kPlan;
+}
+
+inline void lpmdct_fill(unsigned c, uint32_t salt, float* x, uint32_t n)
+{
+    uint32_t s = 0x3c6ef372u ^ (lpmdct_plan()[c].seed * 2246822519u) ^ salt;
+    if (s == 0) s = 1;
+    for (uint32_t i = 0; i < n; ++i) x[i] = rnd_unit(&s);
+}
+
 }  // namespace apac_cases
 
 #endif  // APAC_DSP_CASES_H
