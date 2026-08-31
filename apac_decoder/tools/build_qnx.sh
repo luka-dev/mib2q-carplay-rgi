@@ -159,7 +159,12 @@ if [ "$QEMU" = 1 ]; then
         nfx=$(printf '%s\n' "$fx" | grep -c . || true)
         case " $DIRARG " in
             *" $n "*)
-                for f in $fx; do FILES+=(--file "$APAC/$f"); done
+                # These open their fixtures by BASENAME under a directory in
+                # argv[1], so the full path never appears in the source and the
+                # grep above finds nothing.  Collect the basenames instead.
+                for f in $(grep -oE '"[A-Za-z0-9_]+\.fixture"' "$t" | tr -d '"' | sort -u); do
+                    FILES+=(--file "$APAC/tests/fixtures/$f")
+                done
                 RUNS+=(--run "$n /proc/boot")
                 continue ;;
         esac
