@@ -142,20 +142,32 @@ if [ "$QEMU" = 1 ]; then
     # a hardcoded "tests/fixtures/%s" and the IFS has no subdirectories, so
     # there is nowhere to put them.  It is a host-only check; the frame mode it
     # covers is unreachable on this content anyway (see PORT_STATUS).
+    #
+    # test_bwe names four fixtures but takes a fixture DIRECTORY in argv[1], so
+    # it does run: all four are staged and it is handed /proc/boot, which is
+    # where the flat IFS puts them.  DIRARG lists the tests that work that way.
     SKIP="test_lrvq"
+    DIRARG="test_bwe"
     FILES=(); RUNS=(); skipped=""
     for t in "$APAC"/tests/test_*.cpp; do
         n=$(basename "$t" .cpp)
         case " $SKIP " in *" $n "*) skipped="$skipped $n"; continue ;; esac
         FILES+=(--file "$O/$n")
         # Every distinct fixture the source names.  More than one and we cannot
-        # pass them all through argv[1], so that test would go in SKIP too.
+        # pass them all through argv[1] unless the test takes a directory.
         fx=$(grep -oE 'tests/fixtures/[A-Za-z0-9_]+\.[A-Za-z0-9]+' "$t" | sort -u || true)
-        case $(printf '%s\n' "$fx" | grep -c . || true) in
+        nfx=$(printf '%s\n' "$fx" | grep -c . || true)
+        case " $DIRARG " in
+            *" $n "*)
+                for f in $fx; do FILES+=(--file "$APAC/$f"); done
+                RUNS+=(--run "$n /proc/boot")
+                continue ;;
+        esac
+        case "$nfx" in
             0) RUNS+=(--run "$n") ;;
             1) FILES+=(--file "$APAC/$fx")
                RUNS+=(--run "$n /proc/boot/$(basename "$fx")") ;;
-            *) echo "  $n names several fixtures; add it to SKIP or teach it argv"; exit 1 ;;
+            *) echo "  $n names several fixtures; add it to SKIP or DIRARG"; exit 1 ;;
         esac
     done
     [ -z "$skipped" ] || echo "  not run on the target:$skipped"
