@@ -78,6 +78,14 @@
 // "fresh vs reused filter" assertion in tests/test_bwe.cpp is what makes any of
 // those counts legal.  Written up in PORT_STATUS.md, "The two-filter trade".
 
+// SIZE.  `sizeof(apac::BWELPC)` is 107 456 bytes - the LARGEST single object in
+// this decoder, ahead of `APACSynthesisFilterBank`'s 94 832 - because it holds
+// two kMaxRealFFT-scratch `apac::LPMDCTFilter`s.  It MUST NOT go on a stack.
+// One instance lives in `apac::Decoder` and is handed down; anything else that
+// needs one - a test, a benchmark, a tool - declares it at FILE SCOPE.  Not a
+// function-local static either: that avoids the stack but emits a guard
+// variable, and this toolchain has no `__cxa_guard_acquire`.
+
 #ifndef APAC_BWE_LPC_H
 #define APAC_BWE_LPC_H
 

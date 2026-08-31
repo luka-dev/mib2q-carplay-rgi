@@ -1311,10 +1311,15 @@ feature.
   syntactic element, not by `ParseTNSData`.
 * `APACSynthesisFilterBank` only works at `frameLength == 1024`: it looks its short window up at
   `frameLength >> 3`, and the only windows that exist are 128 and 1024.
-* The stage-d objects are **big and must not go on a stack**: `SynthesisFilterBank` is 90 KiB
-  (its overlap buffer is channels x 1024 floats), `LPMDCTFilter` 47 KiB, `RealFFT` 30 KiB, `MDCT`
-  10 KiB. The original heap-allocates those buffers; the port cannot allocate on the decode path,
-  so they are inline members. `tools/build_qnx.sh` links the whole set for armle-v7 with
+* The decoder's objects are **big and must not go on a stack**, and the biggest is not a stage-d
+  one. Host `sizeof`, largest first: **`BWELPC` 105 KiB** (stage e - two `LPMDCTFilter`s),
+  `SynthesisFilterBank` 92.6 KiB (its overlap buffer is channels x 1024 floats), `LRVQDecoder`
+  57.4 KiB, `LPMDCTFilter` 48.2 KiB, `RealFFT` 32 KiB, `MDCT` 12 KiB, `ComplexFFT` 8 KiB,
+  `BWE2Decoder` 4.6 KiB. The original heap-allocates those buffers; the port cannot allocate on the
+  decode path, so they are inline members. Anything holding one of these - a test, a benchmark, a
+  tool - puts it at **file scope**, never in a function, and that is a size rule on top of the
+  `__cxa_guard` rule below: a function-local static avoids the stack but still emits a guard
+  variable. `tools/build_qnx.sh` links the whole set for armle-v7 with
   `emutls=0 exceptions=0 rtti=0 stl=0` and no undefined symbol beyond libc/libm.
 * The decoder the C API hands back is an **`APACASPDecoder`**, so a frame begins with a **two-bit**
   frame type, not the one bit `APACDecoder::DecodeFrame` reads. `APACDecoder_Create` builds the base
