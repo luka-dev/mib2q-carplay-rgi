@@ -58,6 +58,16 @@ The A5 context table also declares main-terminal context 90 as `{16,43}` for Ret
 and partial popups remain above its video displayable. G24 is excluded because stock already uses ID
 90 for its generated `11 + 79` KDK context.
 
+That context is declared here rather than in RetroArch's own repository
+(`luka-dev/audi-mib2q-retroarch`, working tree `Tools/retroarch-qnx`) because there is nowhere else
+it can go: `DisplayManagerMIB2High` is a patched stock class and only `carplay_hook.jar` carries it.
+RetroArch's `java_patch/java_src/` patches different stock classes and builds a separate
+`ra_mhi2q.jar`; both land in `/mnt/app/eso/hmi/lsd/jars/`, so they coexist rather than overwrite —
+but a stock class may only be patched by one of them. **RetroArch therefore depends on a context
+defined in this repository.** Anyone rebuilding this jar without context 90 breaks it, and anyone
+adding a `DisplayManagerMIB2High` patch to the RetroArch tree creates a duplicate of a class that
+already exists in another jar in the same directory.
+
 ## Local protocols
 
 | Port | Direction | Payload |
