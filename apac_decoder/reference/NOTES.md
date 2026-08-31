@@ -221,6 +221,42 @@ The object is 24 bytes: `+0` current byte pointer, `+8` end pointer, `+16` 32-bi
 `+20` bit count in the cache. Construct it into a zeroed 64-byte buffer and every exported
 `X::Deserialize(TBitstreamReader<unsigned>&, ...)` becomes directly callable from the harness.
 
+That is what `apac_fn_ref.cpp` does. It is a sibling of `apac_ref.cpp`, built and run in the
+same image:
+
+```sh
+./apac_decoder/reference/run.sh fn probe             # resolve every symbol
+./apac_decoder/reference/run.sh fn sfb               # apac::GetSFBOffsetTable, all rates
+./apac_decoder/reference/run.sh fn cookie CK         # the pure C cookie parsers
+./apac_decoder/reference/run.sh fn gc CK             # apac::GlobalConfig::Deserialize
+./apac_decoder/reference/run.sh fn scene CK --at 97  # AudioSceneConfig at a bit offset
+./apac_decoder/reference/run.sh fn bs  < cases       # TBitstreamReader, one call at a time
+./apac_decoder/reference/run.sh fn ics < cases       # APACICSInfo::Deserialize, per case
+```
+
+Host paths in the argument list are bind-mounted read-only at the same path inside the
+container, so nothing has to be copied by hand. `bs` and `ics` read a case file on stdin and
+echo it back with a result line after each case; `apac_decoder/tools/gen_fixtures.sh` uses
+that to write the committed expectation files under `apac_decoder/tests/fixtures/`, which is
+why `make check` needs no Docker.
+
+Two objects needed help to be constructible without a public constructor:
+
+* **`apac::GlobalConfig`** — `Deserialize` starts with `Reset()`, which walks the two
+  `unique_ptr` vectors at `+176` and `+200`; on zeroed memory `begin == end == NULL` and both
+  loops are skipped, so a zeroed slab is a legal empty object. What zero is *not* enough for
+  is the embedded `CodecConfigData` / `ASCConfigData` sub-objects at `+0` and `+16`, each
+  `{vptr, GlobalConfig*}`: `Deserialize` dereferences the back pointer at `+24` near the end.
+  Set `+8` and `+24` to the object itself and take the two vtable pointers from the exported
+  `_ZTVN4apac12GlobalConfig15CodecConfigDataE` / `...13ASCConfigDataE`, plus 16.
+* **`APACICSInfo`** — 768 bytes, but `Deserialize` reads only `+8` and `+9` (the maximum
+  scalefactor-band counts, which the syntactic element fills from the SFB table) and writes
+  only `+10 ... +16`. A zeroed slab with those two bytes set is enough.
+
+`apac::AudioSceneConfig` needs nothing but eight zeroed bytes, which makes `fn scene` a cheap
+way to pin a bit offset: run the library's own parser at a candidate position and see whether
+it accepts. On the afconvert-generated cookie exactly one offset in +-4 bits does.
+
 ## Files
 
 | file | contents |
@@ -228,6 +264,7 @@ The object is 24 bytes: `+0` current byte pointer, `+8` end pointer, `+16` 32-bi
 | `Dockerfile` | arm64 Ubuntu 20.04 image: deps, `apluser` group/user, `libMali.so` + OpenSSL-3 stub |
 | `run.sh` | one command: stage libs → build image → decode → Apple oracle → compare |
 | `apac_ref.cpp` | the harness; compiled inside the container on every run so editing it needs no image rebuild |
+| `apac_fn_ref.cpp` | the per-function oracle: calls individual library members by mangled name, `run.sh fn ...` |
 | `compare_pcm.py` | per-channel RMS / max-error / cross-channel permutation report |
 | `decomp/apac_c_api.asm` | disassembly of `0x105670`–`0x106e00`, the evidence for every signature above |
 | `.build/` | generated: staged libs, packet lists, `apple.pcm`, `pioneer.pcm`. Gitignored |

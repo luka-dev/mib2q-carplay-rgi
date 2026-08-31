@@ -18,7 +18,7 @@ Symbol list: [`../docs/reference/apac_symbols_pioneer.txt`](../docs/reference/ap
 | --- | --- |
 | `include/`, `src/` | the port itself |
 | `tests/` | differential and unit tests |
-| `reference/` | native AArch64 harness that runs Pioneer's original decoder |
+| `reference/` | native AArch64 harness that runs Pioneer's original decoder, whole frame (`apac_ref`) and per function (`apac_fn_ref`) |
 | `reference/decomp/` | IDA/Ghidra decompiler output, one file per class |
 | `tools/` | vector generation, packet extraction, comparison |
 | `vectors/` | generated APAC test vectors and their expected PCM |
@@ -29,6 +29,9 @@ Symbol list: [`../docs/reference/apac_symbols_pioneer.txt`](../docs/reference/ap
    decodes raw APAC packets with the real magic cookie into S16LE PCM.
 2. **Pioneer's original**, per function: the library is AArch64 Linux and this Mac is arm64, so it
    runs *natively* in a `linux/arm64` container — no emulation, no Unicorn. See `reference/`.
+   `reference/run.sh fn ...` calls individual library members by their mangled name;
+   `tools/gen_fixtures.sh` turns their answers into the committed fixtures under
+   `tests/fixtures/`, so `make check` runs on the host without Docker.
 3. **Generated vectors**: `afconvert` encodes any signal to APAC.
 
    ```sh
