@@ -11,7 +11,7 @@ REMOTE_STARTUP=/mnt/app/root/hooks/carplay_startup.sh
 
 usage()
 {
-    echo "usage: $0 {status|spatial-5.1|spatial-5.1.2|experimental-aac-5.1.2|fallback-5.1}" >&2
+    echo "usage: $0 {status|spatial-5.1|spatial-5.1.2|experimental-aac-5.1.2|fallback-5.1|fallback-stereo}" >&2
     exit 2
 }
 
@@ -29,21 +29,31 @@ case "$profile" in
         exit 0
         ;;
     spatial-5.1)
+        spatial_5_1=1
         spatial_103=1
         format_index=65
         extra_index=
         ;;
     spatial-5.1.2)
+        spatial_5_1=1
         spatial_103=1
         format_index=66
         extra_index=
         ;;
     experimental-aac-5.1.2)
+        spatial_5_1=1
         spatial_103=1
         format_index=40
         extra_index=65
         ;;
     fallback-5.1)
+        spatial_5_1=1
+        spatial_103=0
+        format_index=65
+        extra_index=
+        ;;
+    fallback-stereo)
+        spatial_5_1=0
         spatial_103=0
         format_index=65
         extra_index=
@@ -53,7 +63,7 @@ case "$profile" in
         ;;
 esac
 
-echo "Selecting $profile (SPATIAL_103=$spatial_103, index=$format_index, extra=${extra_index:-none}, PCM6 fallback=on)"
+echo "Selecting $profile (SPATIAL_103=$spatial_103, index=$format_index, extra=${extra_index:-none}, SPATIAL_5_1=$spatial_5_1)"
 
 # Values substituted into the remote command come exclusively from the case
 # statement above.  Require every key exactly once before touching flash, make
@@ -73,13 +83,13 @@ test \"\$(grep -c '^export SPATIAL_103_EXTRA_INDEX=' \"\$f\")\" = 1
 mount -uw /mnt/app
 test -e \"\$backup\" || cp \"\$f\" \"\$backup\"
 /usr/bin/sed \\
-  -e 's/^export SPATIAL_5_1=.*/export SPATIAL_5_1=1/' \\
+  -e 's/^export SPATIAL_5_1=.*/export SPATIAL_5_1=$spatial_5_1/' \\
   -e 's/^export SPATIAL_103=.*/export SPATIAL_103=$spatial_103/' \\
   -e 's/^export SPATIAL_103_INDEX=.*/export SPATIAL_103_INDEX=$format_index/' \\
   -e 's/^export SPATIAL_103_EXTRA_INDEX=.*/export SPATIAL_103_EXTRA_INDEX=$extra_index/' \\
   \"\$f\" > \"\$new\"
 
-test \"\$(grep -c '^export SPATIAL_5_1=1$' \"\$new\")\" = 1
+test \"\$(grep -c '^export SPATIAL_5_1=$spatial_5_1$' \"\$new\")\" = 1
 test \"\$(grep -c '^export SPATIAL_103=$spatial_103$' \"\$new\")\" = 1
 test \"\$(grep -c '^export SPATIAL_103_INDEX=$format_index$' \"\$new\")\" = 1
 test \"\$(grep -c '^export SPATIAL_103_EXTRA_INDEX=$extra_index$' \"\$new\")\" = 1

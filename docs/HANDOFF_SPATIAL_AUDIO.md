@@ -20,12 +20,12 @@ not make an indefinitely stable or audible session.
 
 ### Current HU state at handoff (2026-08-31)
 
-Type 103 is enabled only through the persistent startup environment: `SPATIAL_103=1`,
-`SPATIAL_103_MODE=both`, `SPATIAL_103_INDEX=65`, empty `SPATIAL_103_EXTRA_INDEX`,
-`SPATIAL_103_DCX=0`, and `SPATIAL_103_MASK=0x400000`. There are no type-103 `/tmp` marker controls.
-`SPATIAL_5_1=1` remains
-exported independently, so the existing six-channel DIO5/PCM type-100 fallback is preserved.
-Neither the fallback nor the amplifier patch was reverted.
+The HU is deliberately parked in ordinary stock stereo fallback: `SPATIAL_103=0` and
+`SPATIAL_5_1=0`. The remaining type-103 values stay inert at index 65, empty extra index, DCX off,
+and mask `0x400000`. No binary or driver patch was removed. Run
+`scripts/set_spatial_profile.sh spatial-5.1` to restore the APAC 5.1 capture profile for the next
+`dio_manager` generation; `fallback-stereo` restores this standby state. There are no type-103
+`/tmp` marker controls.
 
 Live iOS declined type 103 when index 40 was advertised alone and selected stereo type 100
 (`0x8000`). With index 65 it selected a genuine type-103 APAP 5.1 stream, displayed Dolby Atmos,
@@ -41,6 +41,15 @@ was present only to satisfy iOS's spatial capability gate. iOS saw that exact ar
 visible Spatial Audio session was genuine APAC 5.1, and the installed Cinemo AAC decoder cannot be
 used as an APAC decoder or as an AAC bypass for this sender.
 
+A later clean index-65 session is documented in
+[`APAC_5_1_LIVE_20260831.md`](captures/APAC_5_1_LIVE_20260831.md). The private local corpus at
+`captures/apac_5_1_live_20260831_0205` contains the exact 1,320,019-byte HU APAP audio capture,
+matching SETUP/`shk`, 33-byte cookie and control plists. The final four bytes are a dangling
+next-record length prefix written during full teardown; after ignoring only that prefix, all 3,980
+complete frames authenticate successfully and yield 1,148,875 bytes of plaintext APAC packet data.
+Preserve the local raw file unchanged; `/captures/` is deliberately excluded from git because it
+contains the session key and captured programme audio.
+
 The profiles are now explicit and persistent. Run `scripts/set_spatial_profile.sh` from the repo:
 
 | profile | type 103 | wire layout | type-100 PCM6 fallback |
@@ -49,6 +58,7 @@ The profiles are now explicit and persistent. Run `scripts/set_spatial_profile.s
 | `spatial-5.1.2` | on, index 66 | APAC 5.1.2 / 8 ch | kept on |
 | `experimental-aac-5.1.2` | on, `[40,65]` | negative-control only: iOS selected APAC 65 | kept on |
 | `fallback-5.1` | off | none | on |
+| `fallback-stereo` | off | none | off; stock stereo |
 
 The tool edits only the four exact `SPATIAL_5_1`, `SPATIAL_103`, `SPATIAL_103_INDEX`, and
 `SPATIAL_103_EXTRA_INDEX` exports in the HU startup file, verifies uniqueness before writing, keeps
