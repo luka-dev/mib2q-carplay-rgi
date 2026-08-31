@@ -22,6 +22,7 @@ differently and a 1 LSB mismatch there means nothing.
 | h | loudness | `apac::drc`, `apac::APACDRCDecoder`, `apac::LoudnessDRCConfig` | **DONE** for the `apac` layer; `mpddrc` is a stage of its own | `tests/test_drc.cpp`, plus the reachability run below |
 | i | ARMv7/QNX build | — | **DONE** | `tools/build_qnx.sh` (`--both`, `--qemu`), `tests/test_escape_pow.cpp` |
 | j | hook integration | — | **DONE**, on-car verification pending | `tests/apac_integration_test.c` via `scripts/run_tests.sh`; `scripts/build_hook.sh` links the decoder, `libstdc++=0` |
+| k | does it fit in real time | — | **DONE**, measured on armle-v7; the conversion to seconds is an assumption and is stated | `bench/`, `bench/qnx_qemu_bench.sh` (QEMU `-icount`), `bench/footprint.cpp` |
 
 Out of scope for the CarPlay 5.1 target: `apac::scene`, `apac::APACAudioSceneDecoder`,
 `apac::AudioSceneConfig` (Ambisonics), `apac::lbr`.
@@ -707,6 +708,196 @@ Instrumenting the library: it is linked `DT_SYMBOLIC`, so `LD_PRELOAD` cannot in
 internals. Patch the function entry in memory, as `stub_shim.c` does. Build the mangled name by
 reading it out of the binary (`gobjdump -T`); hand-constructing one is how the first attempt at
 this experiment silently proved nothing.
+
+## Stage k — the cost, measured on armle-v7
+
+Correctness was settled above. This is the other question: 46.9 packets a second arrive, each one
+1024 frames of six-channel APAC at 48 kHz, and each has **21.333 ms** to be decoded inside
+`dio_manager` alongside everything else the unit is doing. Missing that deadline is not a quality
+problem, it is a dropout.
+
+**It fits, with a factor of about 27 in hand on the worst packet** — 16 even on the pessimistic
+IPC. The short answer, and then what it rests on:
+
+| | mean per packet | worst packet, of 3977 |
+| --- | ---: | ---: |
+| decode alone, ARMv7 instructions | **950 955** | **1 238 410** |
+| whole hook chain, ARMv7 instructions | **1 045 452** | **1 330 594** |
+| at 1.7 GHz **assuming IPC 1.0** | 0.615 ms | 0.783 ms |
+| of one core's 21.333 ms | **2.9 %** | **3.7 %** |
+
+Or, without a per-packet frame: the chain costs **49.0 million ARMv7 instructions per second of
+audio played**, and a 1.7 GHz core retires 1.7 billion a second at IPC 1.0.
+
+The worst case is only 1.27x the mean, and it is bounded by construction rather than by luck — see
+"why the tail is short" below.
+
+### What was measured, and what was assumed
+
+Two instruments, neither of them a Krait, each quoted for what it is.
+
+**The instruction counts are measured, on the target's own binary.** `bench/qnx_qemu_bench.sh`
+boots real QNX 6.5 on an emulated ARMv7 and runs the cross-built benchmark with QEMU's `-icount`,
+which advances the guest's clock by a fixed amount per instruction retired — so a guest-side timer
+read is an instruction count, not a wall clock. The binary is built by `bench/build_qnx_bench.sh`
+with the flags `scripts/build_hook.sh` ships the decoder under, and linked with `gcc` so no
+libstdc++ appears; the code being counted is the code that will run.
+
+`apac_bench` does not take the clock's word for it. It times two assembly loops differing by
+exactly two instructions per iteration, and one loop that is memory bound, and converts ticks to
+instructions only if the two exact loops agree within 2 % **and** the memory-bound loop is no more
+than 5x dearer per instruction. On the target:
+
+    spin2 251005, spin4 501720, ratio 1.999
+    the two exact loops agree to 0.12% and the memory bound one is only 1.75x dearer,
+    so this clock counts instructions: 1 tick = 15.95 instructions
+
+15.95 is 16 to within the loop's entry cost, and 16 is what it should be: QEMU's generic timer runs
+at 62.5 MHz, one tick is 16 ns of virtual time, and at `shift=0` one nanosecond is one instruction.
+Three independent routes to the same constant. Run the same check on this Mac's real silicon and it
+**fails** — the cache-missing loop comes out 30 to 180 times dearer per instruction — and the
+benchmark then refuses to report instructions at all. That is the instrument distinguishing itself
+from a wall clock, which is the only reason to trust it here.
+
+**The seconds are assumed.** Nothing above measures a cycle. The conversion uses 1.7 GHz and an
+IPC, and the IPC is a judgement:
+
+| assumed IPC | mean | worst packet | of one core |
+| ---: | ---: | ---: | ---: |
+| 0.6 | 1.025 ms | 1.305 ms | 4.8 % / 6.1 % |
+| **1.0** | **0.615 ms** | **0.783 ms** | **2.9 % / 3.7 %** |
+| 1.4 | 0.439 ms | 0.559 ms | 2.1 % / 2.6 % |
+
+Krait is a three-issue out-of-order core, so 1.0 is not optimistic for it; the code is scalar
+VFPv3 (`Tag_VFP_arch: VFPv3`, `fmuls`/`fadds`/`flds`, no NEON — GCC 4.9.4 at `-O2` vectorises none
+of it), and VFP latency plus L1 misses are what would pull it below one. **Even the pessimistic row
+fits with 16x to spare**, which is why the IPC question does not have to be settled to answer the
+one that was asked.
+
+Two things that would move the number and are not modelled at all: cache and memory stalls, which
+QEMU has none of, and whatever else the unit is doing on that core. Both are why the answer is
+stated as a fraction of a core rather than as "it fits".
+
+**Working set, since that is what decides the IPC.** `bench/footprint.cpp` maps the decoder object
+with every page unreadable and counts the pages a decode faults in. One packet touches **11 of the
+100 16 KiB pages — at most 176 KiB, 11 % of the object**, and the same 11 every packet. So the
+1.6 MB object is not a 1.6 MB working set: it fits inside the APQ8064's 2 MB L2 many times over,
+though not inside a 16 KB L1D, which is the argument for expecting an IPC near 1 rather than near 2.
+
+**And a same-ISA-family wall clock, for what it is worth.** The identical sources built with clang
+`-O2` for arm64 and run on this M3 Max: whole chain **31.6 µs mean, 43.6 µs worst**; decode alone
+29.9 µs / 42.3 µs. That is 0.15 % of one core. It is not a target measurement and is not offered as
+one — the M3 is far wider and clang vectorises with NEON and FMA where GCC 4.9.4 emits scalar VFP,
+so it is doing less work per packet AND doing it faster, and nothing here measures how much of the
+gap is which. It is a floor. The point of quoting it is that the floor and the emulated ceiling
+both land far under the deadline, from opposite directions.
+
+### Where the time goes
+
+Mean instructions per packet, whole chain, from the per-stage pass:
+
+| stage | mean | worst | share |
+| --- | ---: | ---: | ---: |
+| framer (BE32 reassembly) | 285 | 382 | 0.03 % |
+| AEAD, two Poly1305 passes | 13 741 | 26 611 | 1.3 % |
+| ChaCha20 over the payload | 11 052 | 33 440 | 1.1 % |
+| TLV split | 609 | 765 | 0.06 % |
+| **decode** | **950 252** | 1 237 803 | **90.9 %** |
+| channel permutation | 69 591 | 70 151 | 6.7 % |
+
+So the plumbing is **9 %** of the chain and the codec is **91 %**. The single largest piece of
+plumbing is not the crypto — the whole AEAD, both Poly1305 passes and the ChaCha20 together, is
+24 793 instructions, 2.4 % — it is the 6.7 % spent moving six channels of S16 into the declared
+order.
+
+Inside a decode, split by a spectrum sink that fires after the bitstream is parsed and before the
+first filter bank call:
+
+| | mean | worst | share of a decode |
+| --- | ---: | ---: | ---: |
+| frame layer — Huffman, scalefactors, TNS parse, CAC, BWE header | 85 483 | 371 673 | 9.0 % |
+| transform and output — filter bank, MDCT, FFT, remap | 693 386 | 694 749 | 72.9 % |
+| float32 to S16 in `apac_bridge.cpp` | 172 086 | — | 18.1 % |
+
+### The FFT is the hot spot, and by how much
+
+Driven directly, six long blocks — one packet's worth for the window sequence this stream uses most:
+
+| | instructions | of a mean decode |
+| --- | ---: | ---: |
+| 6 x `MDCT::InverseInPlaceTransform(1024)` | ~574 900 | 60.5 % |
+| 6 x `ComplexFFT::Forward(512)` | ~454 900 | 47.8 % |
+
+The FFT is **79 %** of the MDCT and **48 % of a whole decode**; the MDCT is 83 % of the transform
+half. A host sampling profile agrees independently — `sample(1)` over 21 133 samples puts 54.5 %
+in `MDCT::InverseInPlaceTransform` with the FFT inlined into it.
+
+That matters for more than curiosity. The FFT is also the **only** part of this port that is not
+bit exact — stage d's `vDSP_DFT_Execute` gap, the whole of the 1-LSB difference against Apple — so
+it is the one piece with both the most to gain and the least to lose from being rewritten. If the
+decoder ever needed to be twice as fast, a NEON radix-4 FFT is the entire answer and nothing else
+would have to be touched. **It does not need to be**, at 3.7 % of a core in the worst packet.
+
+### Why the tail is short
+
+The transform half costs **693 386 instructions on average and 694 749 at its worst — a 0.2 %
+spread over 3977 packets**. It is a fixed six transforms of a fixed size; nothing in the bitstream
+can make it dearer. All of the variation is in the frame layer, which runs from 85 483 on average
+to 371 673 at its worst, and that is 4.3x on 9 % of the packet.
+
+So a bad packet cannot be a disaster: the expensive part is constant and the variable part is
+small. That is structural rather than a property of this capture — the filter bank always runs
+`channels x frameLength` samples through, whatever the window sequence says, and an eight-short
+frame is eight 128-point transforms where a long one is a single 1024, which by `n log n` is
+*cheaper*. The long block is therefore the worst case for the expensive half, and it is a bound
+rather than a percentile.
+
+The worst packet is **not** the biggest packet. Decode cost and compressed size are *negatively*
+correlated on this capture (r = -0.56 measured on the host per-packet CSV): the eight dearest
+packets are 249, 221, 346, 106, 102, 175, 143 and 104 bytes, against a mean of 250 and a p99 of
+462. Sizing a worst case by picking the largest packet would have picked the wrong one.
+
+### Nothing large lands on a stack, and nothing is allocated
+
+All three checked on the target build, not argued from the source:
+
+* **Stack.** `bench/apac_bench.cpp` paints 128 KiB of stack below the caller and scans it
+  afterwards. A decode disturbs **5 248 bytes**; the whole chain, framer and crypto included,
+  **5 504**. The 1.6 MB decoder object lives on the heap — `spa_apac_create()` `malloc`s it once at
+  stream start — and `SynthesisFilterBank` (94 804 bytes on this build) and `LPMDCTFilter` (49 312)
+  are members of it, so neither ever sees a stack. 5 248 bytes is a rounding error against any
+  thread stack `dio_manager` creates; the thing that would not have been is the object, and it is
+  on the heap.
+* **Allocation.** `bench/build_qnx_bench.sh` greps the target objects for an allocator and finds
+  none: no `malloc`, `calloc`, `realloc`, `free`, `memalign`, `sbrk`, `mmap` or `operator new` is
+  referenced by any decoder translation unit. It cannot allocate on the decode path because it has
+  no way to.
+* **No mutable static state either**, which was not asked and is worth having: every decoder object
+  reports `data 0  bss 0`. The 246 KB of `.text` plus `.rodata` is code and const tables — of which
+  `lrvq_tables.o` (128 KB) and `bwe_tables.o` (64 KB) are never touched on this content — and all
+  the state is in the caller's object.
+
+### What this run was, exactly
+
+3980 records from `captures/apac_5_1_live_20260831_0205`, 3977 of them carrying an APAC packet; the
+real capture throughout, never synthetic input. `--reps 2`, keeping the per-packet minimum. The
+target measurement is deterministic under `-icount`: one repetition and two differ by under 0.1 %
+on every figure, so the minimum is a check rather than a necessity.
+
+Timer interrupts that land inside a measured window are counted against the packet they landed in.
+That inflates rather than flatters, so the worst case above is conservative.
+
+**The session key never went near the target.** The AEAD is driven there with an all-zero key over
+records of the real lengths — ChaCha20 and Poly1305 cost a function of length, not of bytes — and
+the payload ChaCha20 that a failed authentication skips is called explicitly. The decomposition is
+not assumed: on the host, `--key --stream` runs the same chain over the capture's own encrypted
+bytes with the session's own key, and the two agree to **0.7 % on the mean and 0.4 % on the worst
+packet** (31 568 ns against 31 774 ns; 43 625 against 43 791).
+
+Measured against the tree at `4f5f080` **plus the in-flight BWE synthesis work** — which is why
+`sizeof(apac::Decoder)` reads 1 636 036 here and 1 462 096 in the sections above. The BWE tables
+grew the object by 174 KB; they are `.rodata`, they are not touched on this content, and the decode
+cost is unaffected.
 
 ## Known traps, all found the hard way
 

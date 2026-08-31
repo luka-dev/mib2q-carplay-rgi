@@ -1,0 +1,38 @@
+apac_bench: 3980 records, 33 byte cookie, clock = CLOCK_UPTIME_RAW ns
+apac_bench: clock read overhead 0 ticks; spin2 729834, spin4 712459, ratio 0.976
+apac_bench: -0.0043 ticks per instruction (from the loop difference); spin2 implies 0.1825
+apac_bench: 16 MB stride walk, taken as 4 instructions/iteration (the compiler's real number is higher): 0.3578 ticks per instruction (0.00x the arithmetic loop) [acc=3014515712]
+apac_bench: exact loops agree to -100.00%, memory bound loop 0.0x dearer - this clock is measuring TIME, not instructions; no conversion is applied
+apac_bench: sizeof Decoder=1637272 ASPDecoder=1637272 SynthesisFilterBank=94832 LPMDCTFilter=49312 LRVQDecoder=58740
+apac_bench: 48000 Hz, 6 channels, 1024 frames per packet -> 46.88 packets/s
+
+apac_bench: 20 repetitions, per-packet minimum across them; 3980 records, 3977 carrying audio
+  (a packet is 1024 frames at 48000 Hz, so the deadline is 21.333 ms and the budget is 1/46.9 of a core)
+
+  whole chain/packet     n=3980  mean      31568  p50      30417  p90      38417  p99      42042  p99.9      42875  max      43625
+  decode/packet          n=3977  mean      29906  p50      28541  p90      37209  p99      40791  p99.9      41791  max      42333
+    frame layer          n=3977  mean       5606  p50       3959  p90      12542  p99      16083  p99.9      17125  max      17750
+    transform+output     n=3977  mean      18835  p50      19125  p90      19167  p99      19208  p99.9      19250  max      19708
+
+  per stage, clock read between each (attribution only):
+    framer               n=3980  mean          0  p50          0  p90          0  p99          0  p99.9          0  max          0
+    AEAD (2 x poly1305)  n=3980  mean        548  p50        541  p90        708  p99        791  p99.9        916  max       1291
+    ChaCha20 payload     n=3980  mean        327  p50        333  p90        458  p99        541  p99.9        667  max       1041
+    TLV split            n=3980  mean          2  p50          0  p90          0  p99         41  p99.9         41  max         42
+    decode               n=3980  mean      30023  p50      28791  p90      37333  p99      40625  p99.9      41833  max      43459
+    channel permute      n=3980  mean        553  p50        542  p90        583  p99        583  p99.9        583  max        667
+
+  the eight most expensive packets (decode), by record index:
+    #3799(42333, 151 B) #588(41834, 97 B) #9(41792, 126 B) #532(41791, 182 B) #2137(41750, 185 B) #2272(41667, 210 B) #3219(41625, 97 B) #157(41625, 99 B)
+
+  inside one packet, six long blocks driven directly:
+    6 x MDCT(1024)             16791   =  56.1 % of a mean decode
+    6 x ComplexFFT(512)        13541   =  45.3 % of a mean decode,  80.6 % of the MDCT above
+
+  stack below the caller: decode 5152 bytes, whole chain 5472 bytes (paint 131072)
+
+  the same chain over the capture's own encrypted bytes, with the
+  session's own key (3980 frames; the key is read here and goes nowhere):
+  real chain/packet      n=3980  mean      31774  p50      30500  p90      38500  p99      42250  p99.9      43375  max      43791
+
+  per-packet numbers written to /tmp/apac_bench_host.csv

@@ -1,0 +1,3 @@
+footprint: 300 packets, decoder object 1637272 bytes in 100 pages of 16384
+footprint: touched per packet - mean 11.0 pages (176 KiB), worst 11 pages (176 KiB)
+footprint: that is 11.0 % of the object
