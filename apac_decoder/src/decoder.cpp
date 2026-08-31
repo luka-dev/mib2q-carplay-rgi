@@ -34,7 +34,7 @@ bool TrimmingData::Deserialize(BitstreamReader& bs)
 
 uint32_t CoreDecoder::Initialize(const CoreDecoderConfig& cfg,
                                  uint32_t sampleRate, uint32_t frameLength,
-                                 LRVQDecoder* lrvq)
+                                 LRVQDecoder* lrvq, BWELPC* bwe)
 {
     mLRVQ = lrvq;
 
@@ -68,7 +68,7 @@ uint32_t CoreDecoder::Initialize(const CoreDecoderConfig& cfg,
             mRemap[i] = cfg.remap[i];
     }
 
-    mBWE.Initialize();
+    mBWE.Initialize(mTable, bwe);
     mSink = 0;
     mSinkCtx = 0;
 
@@ -108,9 +108,31 @@ uint32_t CoreDecoder::Deserialize(BitstreamReader& bs, bool align)
                 const uint32_t brc = mBWE.Deserialize(bs, channel, e);
                 if (brc != kOk)
                     return brc;
-                // GetActiveFlag is 0 for every channel on this content, so the
-                // synthesis pass the original runs here does nothing.  If it
-                // were ever set, BWE2Decoder::Deserialize has already refused.
+                // The synthesis, in the original's own place: after the
+                // element's Deserialize (so after TNS) and after the BWE
+                // header, once per channel, each guarded by its own active
+                // flag.  0x7e440 devirtualises both calls - it compares the
+                // vtable slot against APACBWE2Decoder::GetActiveFlag and
+                // inlines the bitmap test when it matches - which is why the
+                // decompilation shows the test twice in different shapes.
+                //
+                // GetActiveFlag is 0 for every channel on the CarPlay 5.1
+                // capture, so on that content neither call does anything; see
+                // include/apac/bwe.h for how that was measured.
+                if (mBWE.GetActiveFlag(channel)) {
+                    const uint32_t drc = mBWE.DecodeFrame(e.GetICSInfo(true),
+                                                          e.ChannelData(true),
+                                                          channel);
+                    if (drc != kOk)
+                        return drc;
+                }
+                if (e.Type() == kElementCPE && mBWE.GetActiveFlag(channel + 1)) {
+                    const uint32_t drc = mBWE.DecodeFrame(e.GetICSInfo(false),
+                                                          e.ChannelData(false),
+                                                          channel + 1);
+                    if (drc != kOk)
+                        return drc;
+                }
                 channel += (e.Type() == kElementCPE) ? 2u : 1u;
             }
         } else {
@@ -216,7 +238,8 @@ uint32_t Decoder::Initialize(const GlobalConfig& cfg)
 
     for (uint32_t i = 0; i < mNumCores; ++i) {
         const uint32_t rc = mCore[i].Initialize(cfg.codecConfigs[i], cfg.sampleRate,
-                                                cfg.frameLength, &mLRVQ);
+                                                cfg.frameLength, &mLRVQ,
+                                                &mBWELPC);
         if (rc != kOk)
             return rc;
         mNumChannels += mCore[i].GetNumChannels();

@@ -114,8 +114,11 @@ public:
     // APACLRVQDecoder member is static in the original and its prediction state
     // is a stack local of the wrapper, so nothing survives a call and the port
     // resets it on entry to each of the three spectrum entry points.
+    // `bwe` may be null too, in which case an ACTIVE bandwidth-extension
+    // channel is refused with kPortNeedsBWE.  Shared for the same reason and
+    // on the same evidence as `lrvq`: BWELPC carries nothing across a call.
     uint32_t Initialize(const CoreDecoderConfig& cfg, uint32_t sampleRate,
-                        uint32_t frameLength, LRVQDecoder* lrvq);
+                        uint32_t frameLength, LRVQDecoder* lrvq, BWELPC* bwe);
 
     void Reset();                               // filter-bank overlap only
     uint32_t GetNumChannels() const { return mNumChannels; }
@@ -195,6 +198,10 @@ protected:
     // One for the whole decoder, not one per core: 56 KiB once.  See
     // CoreDecoder::Initialize for why a single instance is faithful.
     LRVQDecoder  mLRVQ;
+    // And one BWELPC, for the same reason.  The original has one per CHANNEL;
+    // nothing in it survives a call, so this costs ~100 KiB once instead of
+    // ~100 KiB per channel.  See include/apac/bwe.h.
+    BWELPC       mBWELPC;
     TrimmingData mTrimming;
     uint32_t     mNumCores;
     uint32_t     mNumChannels;
