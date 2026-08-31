@@ -177,6 +177,30 @@ python3 "$HERE/gen_scf_cases.py" > "$FIX/scf.cases"
 grep -c '^R ' "$FIX/scalefactors.fixture" | sed 's/^/  result lines: /'
 rm -f "$FIX/scf.cases"
 
+# ---------------------------------------------------------- spectral data ----
+echo "generating APACSpectralData cases"
+python3 "$HERE/gen_spec_cases.py" > "$FIX/spec.cases"
+
+{
+    echo "# apac_decoder/tests/fixtures/spectraldata.fixture"
+    echo "# GENERATED - do not edit.  Regenerate with tools/gen_fixtures.sh (needs Docker)."
+    echo "# APACSpectralData::Deserialize at 0x000ab3b0.  A case is six lines and the"
+    echo "# reply is two:"
+    echo "#   SPEC <idx> <windowSequence> <maxSfb> <numWindowGroups> <groupWord>"
+    echo "#        <numBands> <numOut>"
+    echo "#   OFF <hex, numBands+1 uint16 LE>   NREC <hex, 8 bytes>"
+    echo "#   REC <hex, uint16 LE>              SCF  <hex, float32 LE>"
+    echo "#   BUF <hex|->"
+    echo "#   R <idx> <rc> <bitsUsed>"
+    echo "#   OUT <hex, numOut float32 LE>"
+    echo "# The scalefactor object is supplied whole rather than decoded, so a case can"
+    echo "# aim a chosen codebook at a chosen band.  Output slots the decoder does not"
+    echo "# write show up as the poison value -777.0f (0xc4423000)."
+    "$RUN" fn spec < "$FIX/spec.cases" 2>/dev/null
+} > "$FIX/spectraldata.fixture"
+grep -c '^R ' "$FIX/spectraldata.fixture" | sed 's/^/  result lines: /'
+rm -f "$FIX/spec.cases"
+
 # ----------------------------------------------------------- SFB offsets ----
 echo "dumping apac::GetSFBOffsetTable"
 {

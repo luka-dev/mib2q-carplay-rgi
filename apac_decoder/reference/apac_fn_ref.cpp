@@ -402,6 +402,110 @@ int cmd_scf()
     return 0;
 }
 
+// ---------------------------------------------------------------- spec ----
+// APACSpectralData::Deserialize at 0x000ab3b0.  A case is six lines:
+//
+//   SPEC <idx> <windowSequence> <maxSfb> <numWindowGroups> <groupWord> <numBands> <numOut>
+//   OFF  <hex, (numBands + 1) uint16 LE>
+//   NREC <hex, 8 bytes>
+//   REC  <hex, up to 120 uint16 LE; short lines are zero-padded>
+//   SCF  <hex, up to 120 float32 LE; short lines are zero-padded>
+//   BUF  <hex|->
+//
+// and the reply is
+//
+//   R <idx> <rc> <bitsUsed>
+//   OUT <hex, numOut float32 LE>
+//
+// The scalefactor object is supplied whole rather than decoded, so a case can
+// aim a specific codebook at a specific band without having to find a
+// bitstream that produces it.
+int cmd_spec()
+{
+    static char line[1 << 18];
+    static uint8_t slab[1 << 16] __attribute__((aligned(64)));
+    static uint8_t ics[1024] __attribute__((aligned(16)));
+    static SFDataObj sfd __attribute__((aligned(16)));
+    static uint16_t off[2048];
+    static float out[4096];
+
+    char idxs[64] = "";
+    unsigned ws = 0, maxSfb = 0, groups = 0, groupWord = 0, numBands = 0, numOut = 0;
+    std::vector<uint8_t> recBytes, scfBytes, nrecBytes, offBytes, buf;
+    int have = 0;
+
+    while (fgets(line, sizeof line, stdin)) {
+        size_t n = strlen(line);
+        while (n && (line[n - 1] == '\n' || line[n - 1] == '\r')) line[--n] = 0;
+        printf("%s\n", line);
+
+        static char hex[1 << 18];
+        if (!strncmp(line, "SPEC ", 5)) {
+            if (sscanf(line, "SPEC %63s %u %u %u %u %u %u", idxs, &ws, &maxSfb,
+                       &groups, &groupWord, &numBands, &numOut) != 7) {
+                fprintf(stderr, "apac_fn_ref: malformed SPEC: %s\n", line);
+                return 2;
+            }
+            have = 1;
+            continue;
+        }
+        if (!strncmp(line, "OFF ",  4)) { sscanf(line, "OFF %262143s",  hex); parse_hex(hex, offBytes);  have |= 2;  continue; }
+        if (!strncmp(line, "NREC ", 5)) { sscanf(line, "NREC %262143s", hex); parse_hex(hex, nrecBytes); have |= 4;  continue; }
+        if (!strncmp(line, "REC ",  4)) { sscanf(line, "REC %262143s",  hex); parse_hex(hex, recBytes);  have |= 8;  continue; }
+        if (!strncmp(line, "SCF ",  4)) { sscanf(line, "SCF %262143s",  hex); parse_hex(hex, scfBytes);  have |= 16; continue; }
+        if (strncmp(line, "BUF ", 4)) continue;
+        sscanf(line, "BUF %262143s", hex);
+        if (!parse_hex(hex, buf)) { fprintf(stderr, "apac_fn_ref: bad hex\n"); return 2; }
+        if (have != 31) { fprintf(stderr, "apac_fn_ref: incomplete SPEC case\n"); return 2; }
+        have = 0;
+
+        if (buf.size() > sizeof slab || offBytes.size() > sizeof off ||
+            numOut > sizeof out / sizeof out[0] ||
+            nrecBytes.size() != 8 || recBytes.size() > 240 || scfBytes.size() > 480) {
+            fprintf(stderr, "apac_fn_ref: SPEC case out of range\n");
+            return 2;
+        }
+
+        memset(slab, 0, sizeof slab);
+        if (!buf.empty()) memcpy(slab, &buf[0], buf.size());
+        memset(ics, 0, sizeof ics);
+        ics[10] = (uint8_t)ws;
+        ics[11] = (uint8_t)maxSfb;
+        ics[12] = (uint8_t)groups;
+        memcpy(ics + 16, &groupWord, 4);
+        memset(&sfd, 0, sizeof sfd);
+        memcpy(sfd.nrec, &nrecBytes[0], 8);
+        if (!recBytes.empty()) memcpy(sfd.rec, &recBytes[0], recBytes.size());
+        if (!scfBytes.empty()) memcpy(sfd.scf, &scfBytes[0], scfBytes.size());
+        memset(off, 0, sizeof off);
+        if (!offBytes.empty()) memcpy(off, &offBytes[0], offBytes.size());
+        // -777 is a poison value: any slot the decoder does not write shows up.
+        for (unsigned i = 0; i < numOut; ++i) out[i] = -777.0f;
+
+        SFBOffsetsObj sfb;
+        sfb.numBands = numBands;
+        sfb.offset = off;
+        SpecDataObj sd;
+        sd.begin = out;
+        sd.end = out + numOut;
+
+        BsState bs;
+        memset(&bs, 0, sizeof bs);
+        bs_ctor(&bs, slab, (uint32_t)buf.size());
+        int32_t before = bs_remaining(&bs);
+        int64_t rc = spec_deserialize(&sd, &bs, ics, &sfd, &sfb);
+        int32_t after = bs_remaining(&bs);
+
+        printf("R %s %d %d\nOUT ", idxs, (int)rc, before - after);
+        if (!numOut) printf("-");
+        const uint8_t* op = (const uint8_t*)out;
+        for (unsigned i = 0; i < 4 * numOut; ++i) printf("%02x", op[i]);
+        printf("\n");
+        fflush(stdout);
+    }
+    return 0;
+}
+
 // ----------------------------------------------------------------- sfb ----
 void dump_sfb(uint32_t rate, uint32_t frameLength)
 {
@@ -889,6 +993,7 @@ int main(int argc, char** argv)
             "       apac_fn_ref bs            < cases.txt\n"
             "       apac_fn_ref ics           < cases.txt\n"
             "       apac_fn_ref scf           < cases.txt\n"
+            "       apac_fn_ref spec          < cases.txt\n"
             "       apac_fn_ref sfb [RATE...]\n"
             "       apac_fn_ref win | mdct | fb | tns\n"
             "       apac_fn_ref gc COOKIE  [--offset N] [--dump]\n"
@@ -910,6 +1015,7 @@ int main(int argc, char** argv)
     if (cmd == "bs")  return cmd_bs();
     if (cmd == "ics") return cmd_ics();
     if (cmd == "scf") return cmd_scf();
+    if (cmd == "spec") return cmd_spec();
     if (cmd == "sfb") return cmd_sfb(argc - 2, argv + 2);
 
     if (cmd == "gc" || cmd == "gc-raw" || cmd == "cookie" || cmd == "scene") {

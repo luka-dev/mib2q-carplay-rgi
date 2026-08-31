@@ -9,10 +9,10 @@ differently and a 1 LSB mismatch there means nothing.
 
 | # | stage | classes | state | test |
 | --- | --- | --- | --- | --- |
-| 0 | build + per-function oracle | — | **DONE** | `reference/apac_fn_ref.cpp`, `run.sh fn`; `make check` runs 4 tests |
+| 0 | build + per-function oracle | — | **DONE** | `reference/apac_fn_ref.cpp`, `run.sh fn`; `make check` runs the per-stage tests |
 | a | bit reader and config | `TBitstreamReader`, `apac::GlobalConfig`, `BaseASCConfig`, `ProfileLevelConfig` | **DONE**, two documented gaps | `tests/test_bitreader.cpp`, `tests/test_globalconfig.cpp` |
-| b | band layout | `APACICSInfo`, `APACScaleFactorData`, `apac::SFBOffsets` | **PARTIAL** — `APACScaleFactorData` not started | `tests/test_icsinfo.cpp`, `tests/test_sfb_offsets.cpp` |
-| c | spectrum core | `APACSpectralData` | TODO | LRVQ is NOT here, see below |
+| b | band layout | `APACICSInfo`, `APACScaleFactorData`, `apac::SFBOffsets` | **DONE** | `tests/test_icsinfo.cpp`, `tests/test_sfb_offsets.cpp`, `tests/test_scalefactors.cpp` |
+| c | spectrum core | `APACSpectralData`, `apac::GetHuffmanTable` and the 12 codebooks | **DONE** | `tests/test_spectraldata.cpp`; LRVQ is NOT here, see below |
 | d | transform | `APACTNSData`, `apac::LSFTools`, `apac::LPCBase`, `apac::LPMDCTFilter`, `APACSynthesisFilterBank`, `MDCT`, `DCT_IV`, `MultiRadix*FFT` | TODO | |
 | e | bandwidth extension | `APACBWE2Decoder`, `BWELPC` | TODO | |
 | f | elements | `APACSingleChannelElement`, `APACChannelPairElement`, `APACLFEElement`, `APACSyntacticElement` | TODO | |
@@ -25,11 +25,11 @@ differently and a 1 LSB mismatch there means nothing.
 Out of scope for the CarPlay 5.1 target: `apac::scene`, `apac::APACAudioSceneDecoder`,
 `apac::AudioSceneConfig` (Ambisonics), `APACCoreLBRDecoder`, `apac::lbr`.
 
-## Where stages 0, a and b stand
+## Where stages 0, a, b and c stand
 
 **Stage 0.** `reference/apac_fn_ref.cpp` is a sibling of `apac_ref.cpp` in the same arm64
 container. It resolves individual members by their Itanium mangling and calls them:
-`run.sh fn probe | bs | ics | sfb | gc | gc-raw | cookie | scene`. Host paths handed to `fn`
+`run.sh fn probe | bs | ics | scf | spec | sfb | gc | gc-raw | cookie | scene`. Host paths handed to `fn`
 are bind-mounted read-only. `tools/gen_fixtures.sh` drives it and writes
 `tests/fixtures/*.fixture`; those are committed, so `make check` runs on the host with no
 Docker. Every expectation in them is a value the library actually produced.
@@ -66,7 +66,7 @@ position:
 * The sort and slice-assignment the original applies to the `BaseASCConfig` list. The bits
   are read; the bookkeeping over them is not.
 
-**Stage b — `apac::SFBOffsets` and `APACICSInfo` proven, `APACScaleFactorData` not started.**
+**Stage b — proven.**
 
 * `apac::GetSFBOffsetTable`: all 13 sample rates and both `frameLength` rejections agree with
   the library, offset for offset — 733 band offsets. 48 kHz gives 49 long bands and 14 short.
@@ -76,12 +76,38 @@ position:
   field, both `codingType` branches and nine `(maxSfbLong, maxSfbShort)` limit pairs.
   `maxSfbLong` / `maxSfbShort` are inputs the syntactic element fills from the SFB table;
   wiring them up is stage f.
-* `APACScaleFactorData::Deserialize` (0x9a140) is **not started**. It decodes through
-  `apac::GetSCFHuffmanTable` and the codebook descriptors, whose field semantics the port
-  brief flags as unestablished. That is exactly what the concurrent entropy-core work is
-  pinning down (`reference/scratch/lrvq_probe.cpp`); this should be picked up from there
-  rather than guessed at here, and it will land with stage c's tables rather than duplicate
-  them.
+* `APACScaleFactorData::Deserialize` (0x9a140): 459 cases agree on the return code, the
+  exact bit count, all eight per-group record counts and every `(codebook, run)` record and
+  scalefactor the call wrote — 18 615 of each, compared as **bit patterns**, because the
+  original builds a scalefactor by adding an exponent into the float's bit pattern
+  (`bits(2^(k/4)) + (((v - 100) >> 2) << 23)`) rather than with a `pow`, and only a
+  bit-exact match proves the exponent arithmetic. 179 of the cases are rejections
+  (codebook > 11, a run past `maxSfb`, a zero run) and 205 are eight-short frames on 3-bit
+  run fields. Both precomputed clamp constants — `0x13000000` = 2^-89 and `0x52D744FD` =
+  2^38.75, for a running value driven out of `[-256, 255]` — are reached, by cases that
+  encode book-0 codewords explicitly to walk the value there.
+
+**Stage c — proven, short-window de-interleave included.**
+
+`APACSpectralData::Deserialize` (0xab3b0): 379 cases agree on the return code, the exact bit
+count and all 102 432 output coefficients, compared as bit patterns. Coverage measured by
+instrumenting the port and replaying the fixture: 5 365 all-zero tuples through the odd
+books' 1-bit flag, 2 092 codebook-11 escapes of which **562 exceed 1023 and take the
+`pow(v, 4/3)` path**, and 6 556 lookups at a NEGATIVE index into the `i^(4/3)` table. 47 of
+the 51 eight-short cases use a window grouping other than eight groups of one, sweeping
+every grouping from `{8}` through `{2,3,3}` to `{1,2,4,1}` — so the band-interleaved staging
+and the de-interleave that unpacks it, which `LRVQ_SEMANTICS.md` §6.8 flagged as transcribed
+but never tested, are now covered. The 48 kHz long (49 bands, 1024 coefficients) and short
+(14 bands) layouts are both exercised with the library's own band offsets.
+
+`apac::GetHuffmanTable` and all twelve codebooks are generated into `src/huff_tables.cpp` by
+`tools/gen_huff_tables.py`, which parses the structure out of `reference/decomp/RODATA.md`,
+asserts every field against the library ELF, and takes the payload bytes from the ELF after
+asserting they equal the committed dumps in `reference/decomp/rodata/`. Nothing is retyped.
+Every book's Kraft sum is exactly 1 counting the guard record.
+
+`APACSpectralData::Deserialize`'s only exit sets `W0 = 0`, so it cannot fail; malformed input
+is caught upstream in `APACScaleFactorData::Deserialize`.
 
 ## LRVQ is off the critical path — verified twice
 
@@ -114,8 +140,10 @@ this experiment silently proved nothing.
   sizes.
 * `LrvqDeserialize` (0x…, 3264 bytes, 811 insns) has no usable Hex-Rays output — port it from the
   disassembly appended in the `#if 0` block.
-* Huffman codebook byte layout is known; the field semantics are **not** — `n` is used as a shift
-  (`0x80000000u >> n`), which is not an element count. Establish this dynamically before porting.
+* Huffman codebook field semantics: `n` is a cap on the unary prefix used as a shift
+  (`0x80000000u >> n`), NOT an element count, and `a` is a right shift giving
+  `1 << (31 - a)` uint16 payload slots. Established against the library and written up in
+  `reference/decomp/LRVQ_SEMANTICS.md` §1.1; the port follows that document.
 * The 16-bit config word's fields do **not** all line up with the C cookie helpers.
   `APACDecoder_SampleRate`, `_FrameLength` and `_NumberOfChannels` match
   `GlobalConfig::Deserialize` exactly, but `APACDecoder_GetProfile` reads six bits one
@@ -131,6 +159,35 @@ this experiment silently proved nothing.
   the layout as "use descriptions" with a count of zero. That looks like a bug in Apple's
   source. It is unreachable on the CarPlay streams (tag 121 or 124) and the port reproduces
   it rather than correcting it.
+* The Huffman guard record `entries[n]` is the **one** record whose payload is not
+  `1 << (31 - a)` slots. Having no terminating zero, its index `(w << n) >> 31` is the bit
+  after the n ones — which belongs to the next codeword and can be either value — so the
+  binary gives it TWO slots holding the same word. Sizing it by the formula reads two bytes
+  past the table. Found by round-tripping every codeword of every book back through the
+  tables.
+* `APACScaleFactorData` and `APACSpectralData` are handed **different `apac::SFBOffsets`
+  types than `apac::GetSFBOffsetTable` returns**. The table record is 40 bytes,
+  `{u64 rate, SFBOffsets long, SFBOffsets short}`; the spectrum decoder's argument is one of
+  those halves, `{u64 numBands, const u16* offset}`, and it reads `numBands` as a **u16**.
+* The scalefactor struct's stride is **15 records and 15 scalefactors per window group**, but
+  a single-group long block legitimately runs past 15: 49 bands and up to 49 records all live
+  in group 0's slice because there is no group 1. A test vector that hands
+  `APACSpectralData` `nrec[0] > 15` with only 15 records supplied makes the original read a
+  zero record — codebook 0, run 0 — and its band-zeroing loop is a `do/while` that
+  decrements by four and stops only on exactly zero, so it runs away and writes over
+  everything. The library segfaults; a run of zero must never reach it. `APACScaleFactorData`
+  rejects one, which is why this is only reachable from a hand-built object.
+* For the same reason every band width must be a multiple of the codebook's tuple size (4 for
+  books 1..4, 2 for the rest). The 48 kHz tables are; the original would hang if one were not.
+  The port uses a bounded `for` loop instead, which differs only where the original runs away.
+* Codebook 11's escape exponent is the `double` nearest `4/3`, not `1.33333333`; the
+  decompiler prints the latter. The two differ by one float ULP above 1023. macOS libm and
+  glibc/aarch64 agree bit-for-bit on `pow(v, 4/3)` over the 562 escapes the fixture drives
+  through that path, but that is an observation about two libms, not a guarantee.
+* Zeroed coefficients are **not** all written the same way. Codebooks 3 and 4 leave their
+  zero lanes at `0.0f` and then multiply all four lanes by the scalefactor, so a negative
+  scalefactor puts `-0.0` in the output; every other book stores a literal `+0.0`. A float
+  comparison hides this. Compare bit patterns.
 * `APACICSInfo`'s window-grouping word is one hex digit per group counting the windows in it,
   built from seven bits where a **zero** opens a new group: all ones gives 8 (one group of
   eight), all zeros gives `0x11111111` (eight groups of one).
