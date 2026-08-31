@@ -6,7 +6,10 @@
 #       -> apac_decoder/.build-bench/qnx-<variant>/apac_bench
 #
 # The flags are the ones scripts/build_hook.sh ships the decoder with, not a
-# benchmark's own: the same -O2, the same -fno-exceptions/-fno-rtti, the same
+# benchmark's own, and they are not copied here: scripts/apac_flags.sh is the
+# single definition and build_hook.sh sources the same file.  A copy that drifts
+# does not announce itself - the benchmark would keep reporting headroom for a
+# binary that is no longer the one being shipped.  Formerly the same -O2, the
 # -D_NO_CPP_INLINES, and the link is done with gcc rather than g++ so nothing
 # drags libstdc++ in.  A benchmark built differently from the thing that ships
 # measures a different program.
@@ -34,10 +37,9 @@ docker run --rm --platform=linux/amd64 -v "$ROOT":/src -w /src "$IMG" bash -c '
   O=apac_decoder/.build-bench/qnx-'"$V"'
   rm -rf "$O"; mkdir -p "$O"
 
-  CXXFLAGS="-std=c++11 -O2 -g -Wall -Wextra -fno-exceptions -fno-rtti
-            -fno-threadsafe-statics -D_NO_CPP_INLINES
-            -Iapac_decoder/include -Ihook/audio"
-  CFLAGS="-O2 -g -std=gnu99 -Wall -Wextra -D__QNX__ -Ihook/audio"
+  . /src/scripts/apac_flags.sh
+  CXXFLAGS="$APAC_CXXFLAGS_NOINC -Wno-error -Iapac_decoder/include -Ihook/audio"
+  CFLAGS="$APAC_CFLAGS_NOINC -D__QNX__ -Ihook/audio"
 
   for f in apac_decoder/src/*.cpp; do
       $CXX $CXXFLAGS -c "$f" -o "$O/$(basename "$f" .cpp).o"

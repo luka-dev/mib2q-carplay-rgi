@@ -56,6 +56,8 @@ if ! docker image inspect "$IMG" >/dev/null 2>&1; then
     exit 1
 fi
 
+. "$(dirname "$0")/apac_flags.sh"
+
 echo "=== CarPlay Hook Build (Docker $IMG) ==="
 
 docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
@@ -68,12 +70,11 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
   OBJ=/tmp/hookobj
   rm -rf $OBJ; mkdir -p $OBJ
 
-  # The APAC decoder port and its C shim.  Same flags apac_decoder/tools/build_qnx.sh
-  # proves on this toolchain; -fno-threadsafe-statics keeps a function-local static
-  # from ever needing __cxa_guard_acquire, which this libstdc++ configuration lacks.
-  CXXFLAGS="-std=c++11 -O2 -g -Wall -Wextra -Werror -fno-exceptions -fno-rtti \
-            -fno-threadsafe-statics -D_NO_CPP_INLINES -fPIC \
-            -fdata-sections -ffunction-sections \
+  # The APAC decoder port and its C shim.  The flag set comes from
+  # scripts/apac_flags.sh, which apac_decoder/bench/build_qnx_bench.sh sources
+  # too - a benchmark compiled with drifted flags reports headroom for a binary
+  # nobody ships, and says nothing about it.
+  CXXFLAGS="'"$APAC_CXXFLAGS_NOINC"' \
             -I/src/apac_decoder/include -I/src/hook/audio"
   for f in /src/apac_decoder/src/*.cpp /src/hook/audio/apac_bridge.cpp; do
       $CXX $CXXFLAGS -c "$f" -o "$OBJ/cxx_$(basename "$f" .cpp).o"
