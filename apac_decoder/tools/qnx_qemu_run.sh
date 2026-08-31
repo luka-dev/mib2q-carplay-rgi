@@ -48,8 +48,18 @@ docker image inspect "$IMG" >/dev/null 2>&1 || { echo "$IMG not built" >&2; exit
 WORK=$(mktemp -d); trap 'rm -rf "$WORK"' EXIT
 cp "$Q/startup-virt" "$Q/libstartup.a" "$Q/devc-serdebug" "$WORK/"
 NAMES=""
-for f in ${FILES+"${FILES[@]}"}; do cp "$f" "$WORK/"; NAMES="$NAMES
-$(basename "$f")"; done
+# --file FILE            lands at /proc/boot/<basename>
+# --file DEST=FILE       lands at /proc/boot/<DEST>, directories and all
+for f in ${FILES+"${FILES[@]}"}; do
+    case "$f" in
+        *=*) dest="${f%%=*}"; src="${f#*=}" ;;
+        *)   dest="$(basename "$f")"; src="$f" ;;
+    esac
+    mkdir -p "$WORK/$(dirname "$dest")"
+    cp "$src" "$WORK/$dest"
+    NAMES="$NAMES
+$dest"
+done
 [ -n "$LIBM" ] && { cp "$LIBM" "$WORK/libm.so.2"; touch "$WORK/OWN_LIBM"; }
 
 SCRIPT=""

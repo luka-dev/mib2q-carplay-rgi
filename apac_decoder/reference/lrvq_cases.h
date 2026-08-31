@@ -443,6 +443,99 @@ inline int LrvqBuildElemCases(LrvqElemCase* out, int max)
     return n;
 }
 
+// ---------------------------------------------------------- the LRVQ frame ----
+//
+// APACChannelPairElement::DeserializeLrvqFrame: two ICS headers at coding type
+// 1, the CPE spectrum, then one TNS block per channel and the odd extra bit
+// between them.  An LRVQ ICS header is exactly two bits - coding type 1 fixes
+// maxSfb at 27 long / 7 short and reads no grouping field - so the whole frame
+// is those four bits, the element payload, and the TNS section.
+
+struct LrvqFrameCase {
+    const char* name;
+    int         ws0;          // window sequence, 2 = eight short windows
+    int         ws1;
+    int         tns0;         // TNS block present
+    int         tns1;
+    int         tnsFilter;    // 1 = a real filter rather than a zero count
+    uint8_t     bits[kLrvqMaxBytes];
+    uint32_t    nbytes;
+};
+
+// One TNS block, long or short.  `filter` picks between a zero filter count -
+// the shortest thing that parses - and one real order-4 filter.
+inline void LrvqEmitTNS(LrvqBitWriter& w, int isShort, int filter)
+{
+    if (isShort) {
+        for (int win = 0; win < 8; ++win) {
+            w.Put(filter ? 1u : 0u, 1);
+            if (!filter)
+                continue;
+            w.Put(1, 1);                 // coefRes
+            w.Put((5u << 3) | 3u, 7);    // length 5, order 3
+            w.Put(0, 2);                 // direction 0, coefCompress 0
+            for (int j = 0; j < 3; ++j)
+                w.Put((uint32_t)(j + 1) & 15u, 4);   // 3 + coefRes - 0 bits
+        }
+        return;
+    }
+    if (!filter) {
+        w.Put(0, 2);                     // zero filters
+        return;
+    }
+    w.Put(1, 2);                         // one filter
+    w.Put(1, 1);                         // coefRes
+    w.Put((8u << 5) | 4u, 11);           // length 8, order 4
+    w.Put(0, 2);                         // direction 0, coefCompress 0
+    for (int j = 0; j < 4; ++j)
+        w.Put((uint32_t)(j + 1) & 15u, 4);
+}
+
+inline int LrvqBuildFrameCases(LrvqFrameCase* out, int max)
+{
+    int n = 0;
+    LrvqRandom r;
+    LrvqCase scratch;
+    for (int i = 0; i < 24 && n < max; ++i) {
+        LrvqFrameCase& e = out[n];
+        memset(&e, 0, sizeof e);
+        e.name = "frame";
+        const int isShort = (i >> 2) & 1;
+        e.ws0 = isShort ? 2 : (i & 1);          // 0 long start, 1 long, 2 short
+        e.ws1 = e.ws0;
+        e.tns0 = i & 1;
+        e.tns1 = (i >> 1) & 1;
+        e.tnsFilter = (i >> 3) & 1;
+        const int mode0 = i % 11;
+        const int mode1 = (i & 4) ? mode0 : (mode0 + 6) % 11;
+        memset(&scratch, 0, sizeof scratch);
+        r.Seed(0x21000 + i);
+        LrvqBitWriter w; w.Init(e.bits, kLrvqMaxBytes);
+        w.Put((uint32_t)e.ws0, 2);
+        w.Put((uint32_t)e.ws1, 2);
+        w.Put(0, 1);                             // channel 0 is present
+        LrvqEmitChannel(w, r, scratch, 0, isShort, 1, 0, 0, 0, (i >> 3) & 1,
+                        (i >> 3) & 1, mode0, 0);
+        w.Put(0, 1);                             // channel 1 is present
+        LrvqEmitChannel(w, r, scratch, 1, isShort, 0, (i >> 2) & 1,
+                        isShort ? 0 : ((i >> 4) & 1), 0, 0, (i >> 4) & 1, mode1,
+                        mode1 == mode0);
+        w.Put((uint32_t)e.tns0, 1);
+        if (e.tns0)
+            LrvqEmitTNS(w, isShort, e.tnsFilter);
+        w.Put((uint32_t)e.tns1, 1);
+        if (e.tns1)
+            LrvqEmitTNS(w, isShort, e.tnsFilter);
+        // If channel 1 has no TNS block and channel 0 did, the original reads
+        // one more bit and throws it away.  Nothing has to be written for it -
+        // the padding is already there - but the case exists to catch a port
+        // that does not read it.
+        e.nbytes = kLrvqMaxBytes;
+        ++n;
+    }
+    return n;
+}
+
 // ------------------------------------------------- the two envelope builders --
 // dequantizeLrvqGain: every input there is.
 // ltpToMdctSpectralEnvelope: a sweep that INCLUDES lag 0, which overwrites the

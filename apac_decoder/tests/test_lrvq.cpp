@@ -33,6 +33,7 @@
 #include <string.h>
 
 #include "apac/lrvq.h"
+#include "apac/sfb_offsets.h"
 
 #include "../reference/lrvq_cases.h"
 #include "dsp_fixture.h"
@@ -105,6 +106,25 @@ struct Fixture {
             got += parse_hex_floats(l, out, n, got);
         }
     }
+    void Bytes(uint8_t* out, uint32_t n)
+    {
+        uint32_t got = 0;
+        while (got < n) {
+            const char* l = Next();
+            if (!l) { fprintf(stderr, "\nfixture: short byte block\n"); exit(1); }
+            const char* p = l;
+            while (*p && got < n) {
+                while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') ++p;
+                if (!*p) break;
+                char* e = 0;
+                long v = strtol(p, &e, 16);
+                if (e == p) break;
+                out[got++] = (uint8_t)v;
+                p = e;
+            }
+        }
+    }
+
     void Ints(int* out, uint32_t n)
     {
         uint32_t got = 0;
@@ -849,6 +869,126 @@ void checkElem(ElemStats& st)
     }
 }
 
+// -------------------------------------------------- DeserializeLrvqFrame -----
+// The LRVQ frame body: two ICS headers at coding type 1, the channel pair, both
+// TNS blocks and the extra bit the original reads when the SECOND channel has
+// no TNS block and the first one did.  The port's LrvqFrameContext stands in for
+// the APACChannelPairElement the library was handed.
+struct FrameStats2 {
+    int cases, withFilter, extraBit, shortBlocks;
+    double worstSpec;
+};
+
+void checkCpeFrame(FrameStats2& st)
+{
+    memset(&st, 0, sizeof st);
+    Fixture f;
+    f.Open("lrvq_cpe_frame.fixture");
+    static LrvqFrameCase cases[64];
+    const int n = LrvqBuildFrameCases(cases, 64);
+    static float spec0[1024], spec1[1024], want0[1024], want1[1024];
+    static uint8_t wantTns0[190], wantTns1[190];
+    static apac::LRVQDecoder dec;
+
+    const apac::SFBOffsets* tab = apac::GetSFBOffsetTable(48000, 1024);
+    if (!tab)
+        fail("GetSFBOffsetTable(48000, 1024)", 0);
+
+    for (int i = 0; i < n; ++i) {
+        LrvqFrameCase& c = cases[i];
+        const char* l = f.Next();
+        int idx = -1, w0 = 0, w1 = 0, t0 = 0, t1 = 0, filt = 0, ret = 0, bits = 0;
+        unsigned a0, a1, a2, a3, b0, b1, b2, b3, p0, p1, q0, q1;
+        if (!l || sscanf(l, "FRAME %d ws=%d,%d tns=%d,%d filter=%d ret=%d "
+                            "bits=%d ics0=%u,%u,%u,%u ics1=%u,%u,%u,%u "
+                            "tnsp=%u,%u tnsn=%u,%u",
+                         &idx, &w0, &w1, &t0, &t1, &filt, &ret, &bits, &a0, &a1,
+                         &a2, &a3, &b0, &b1, &b2, &b3, &p0, &p1, &q0, &q1) != 20)
+            fail("frame header", i);
+        if (idx != i || w0 != c.ws0 || t0 != c.tns0 || t1 != c.tns1)
+            fail("frame case plan drifted from the fixture", i);
+        f.Expect("TNS0");
+        f.Bytes(wantTns0, 190);
+        f.Expect("TNS1");
+        f.Bytes(wantTns1, 190);
+        f.Expect("SPEC0");
+        f.Floats(want0, 1024);
+        f.Expect("SPEC1");
+        f.Floats(want1, 1024);
+
+        apac::APACICSInfo ics0, ics1;
+        ics0.Clear(); ics1.Clear();
+        ics0.maxSfbLong = 49; ics0.maxSfbShort = 14;
+        ics1.maxSfbLong = 49; ics1.maxSfbShort = 14;
+        apac::TNSData tns0, tns1;
+        memset(&tns0, 0, sizeof tns0);
+        memset(&tns1, 0, sizeof tns1);
+        tns0.Configure(48000);
+        tns1.Configure(48000);
+        for (int k = 0; k < 1024; ++k)
+            spec0[k] = spec1[k] = -777.0f;
+        apac::SpectralData sp0, sp1;
+        sp0.begin = spec0; sp0.end = spec0 + 1024;
+        sp1.begin = spec1; sp1.end = spec1 + 1024;
+
+        apac::LrvqFrameContext ctx;
+        ctx.ics[0] = &ics0;   ctx.ics[1] = &ics1;
+        ctx.spec[0] = &sp0;   ctx.spec[1] = &sp1;
+        ctx.tns[0] = &tns0;   ctx.tns[1] = &tns1;
+        ctx.sfbLong.numBands = tab->numSfbLong;
+        ctx.sfbLong.offset = tab->sfbOffsetLong;
+        ctx.sfbShort.numBands = tab->numSfbShort;
+        ctx.sfbShort.offset = tab->sfbOffsetShort;
+        ctx.lrvq = &dec;
+
+        apac::BitstreamReader bs(c.bits, c.nbytes);
+        const int32_t before = bs.BitsRemaining();
+        const int32_t r = apac::DeserializeLrvqFrame(bs, ctx);
+        const int32_t used = before - bs.BitsRemaining();
+
+        if (r != ret)
+            fail("frame return code", i);
+        if (used != bits) {
+            fprintf(stderr,
+                    "\nMISMATCH frame bits case %d: ours %d, library %d - a "
+                    "one-bit gap here is the extra bit at 0xac7d8\n",
+                    i, (int)used, bits);
+            exit(1);
+        }
+        if (ics0.windowSequence != a0 || ics0.maxSfb != a1 ||
+            ics0.numWindowGroups != a2 || ics0.windowGroupWord != a3 ||
+            ics1.windowSequence != b0 || ics1.maxSfb != b1 ||
+            ics1.numWindowGroups != b2 || ics1.windowGroupWord != b3)
+            fail("frame ICS headers", i);
+        // The whole 190-byte TNS object, byte for byte - present, the filter
+        // count or short-window mask, every filter record and the four caps.
+        if (memcmp(&tns0, wantTns0, 190) || memcmp(&tns1, wantTns1, 190)) {
+            for (int k = 0; k < 190; ++k) {
+                const uint8_t o0 = ((const uint8_t*)&tns0)[k];
+                const uint8_t o1 = ((const uint8_t*)&tns1)[k];
+                if (o0 != wantTns0[k] || o1 != wantTns1[k]) {
+                    fprintf(stderr,
+                            "\nMISMATCH frame TNS case %d byte %d: ch0 %02x vs "
+                            "%02x, ch1 %02x vs %02x\n", i, k, o0, wantTns0[k],
+                            o1, wantTns1[k]);
+                    exit(1);
+                }
+            }
+        }
+        gChecks += 190 * 2 + 9;
+        const double s0 = relCompare(spec0, want0, 1024, "frame spec0", i, 0.25);
+        const double s1 = relCompare(spec1, want1, 1024, "frame spec1", i, 0.25);
+        if (s0 > st.worstSpec) st.worstSpec = s0;
+        if (s1 > st.worstSpec) st.worstSpec = s1;
+        gChecks += 2048;
+        if (c.tnsFilter) ++st.withFilter;
+        if (c.tns0 && !c.tns1) ++st.extraBit;
+        if (c.ws0 == 2) ++st.shortBlocks;
+        ++st.cases;
+        (void)p0; (void)p1; (void)q0; (void)q1;
+    }
+}
+
 }  // namespace
 
 int main()
@@ -866,6 +1006,8 @@ double worstLsfFFT = 0.0;
     checkFrame(fr);
     ElemStats el;
     checkElem(el);
+    FrameStats2 cf;
+    checkCpeFrame(cf);
 
     printf("OK  %d checks; %d gains bit-exact; %d LrvqDeserialize cases "
            "(%d FFT-free and BIT-EXACT, %d with an envelope, %d rejections), "
@@ -889,6 +1031,10 @@ double worstLsfFFT = 0.0;
            "imprecise envelope; see PORT_STATUS.md\n",
            fr.worstResidual, fr.worstWork, fr.worstSpec);
     printf("    element spectra %.2e of full scale, same cause\n", el.worstSpec);
+    printf("    DeserializeLrvqFrame: %d frames, bit count and both 190-byte "
+           "TNS objects exact, %d with a real TNS filter, %d eight-short, %d "
+           "exercising the extra bit at 0xac7d8; spectra %.2e\n",
+           cf.cases, cf.withFilter, cf.shortBlocks, cf.extraBit, cf.worstSpec);
     printf("    LSF -> LPC has no FFT under it: %d cases, 1024 codebook sums "
            "and every conditioned LSF bit-exact, LSPs %.2e and coefficients "
            "%.2e of full scale\n", lpcCases, worstLsp, worstLpc);

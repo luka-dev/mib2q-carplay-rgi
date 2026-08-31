@@ -862,8 +862,6 @@ int cmd_fb()
     return 0;
 }
 
-
-
 // ------------------------------------------------------------------ tns ----
 // APACTNSData: the constructor, ParseTNSData and Apply, in one pass so the
 // filters Apply runs are the ones ParseTNSData actually produced.
@@ -987,8 +985,6 @@ int cmd_tns()
     }
     return 0;
 }
-
-
 
 // ------------------------------------------------------------------ lpc ----
 // apac::LPCBase and the stateless half of apac::LSFTools.
@@ -1152,8 +1148,6 @@ int cmd_lpc()
     return 0;
 }
 
-
-
 // --------------------------------------------------------------- lpmdct ----
 // MultiRadixRealFFT and apac::LPMDCTFilter.
 //
@@ -1271,7 +1265,6 @@ int cmd_lpmdct()
     }
     return 0;
 }
-
 
 } // namespace
 

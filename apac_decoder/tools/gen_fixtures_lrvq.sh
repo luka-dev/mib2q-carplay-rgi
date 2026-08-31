@@ -68,6 +68,10 @@ emit lrvq_lsfs.fixture lsfs
 # consumed, prevMode, qidx, work, env and the 1024-coefficient spectrum.
 emit lrvq_frame.fixture lrvq
 
+# APACChannelPairElement::DeserializeLrvqFrame on a hand-built element: the two
+# ICS headers, the CPE spectrum, both TNS blocks and the extra bit between them.
+emit lrvq_cpe_frame.fixture frame
+
 # SpectrumDeserializeSCE / CPE / LFE - the element wrappers and their skip bit.
 emit lrvq_elem.fixture elem
 

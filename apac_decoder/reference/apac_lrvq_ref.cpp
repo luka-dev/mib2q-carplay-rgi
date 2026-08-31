@@ -46,6 +46,7 @@ typedef int32_t  (*fn_icsdes)(void*, BS*, int32_t);
 typedef void     (*fn_icsreset)(void*);
 typedef int32_t  (*fn_frame)(void*, BS*);
 typedef int32_t  (*fn_tnsparse)(void*, BS*, const void*);
+typedef void*    (*fn_sfbtable)(uint32_t, uint32_t);
 typedef int32_t  (*fn_lsf2lpc)(void*, float*, float*);
 typedef int32_t  (*fn_condlsf)(void*, float*);
 
@@ -63,6 +64,7 @@ static fn_lfe     LFE;
 static fn_icsdes  ICSDeserialize;
 static fn_icsreset ICSReset;
 static fn_frame   LrvqFrame;
+static fn_sfbtable SFBTable;
 static fn_lsf2lpc LSF_To_LPC;
 static fn_condlsf CondLSFs;
 
@@ -92,6 +94,7 @@ static void resolve()
     ICSDeserialize = need<fn_icsdes>("_ZN11APACICSInfo11DeserializeER16TBitstreamReaderIjEN4apac10CodingTypeE");
     ICSReset  = need<fn_icsreset>("_ZN11APACICSInfo5ResetEv");
     LrvqFrame = need<fn_frame>("_ZN22APACChannelPairElement20DeserializeLrvqFrameER16TBitstreamReaderIjE");
+    SFBTable   = need<fn_sfbtable>("_ZN4apac17GetSFBOffsetTableEjj");
     LSF_To_LPC = need<fn_lsf2lpc>("_ZN4apac8LSFTools10LSF_To_LPCEPfS1_");
     CondLSFs   = need<fn_condlsf>("_ZN4apac8LSFTools13ConditionLSFsEPf");
 }
@@ -105,6 +108,16 @@ static void pf(const char* tag, const float* v, uint32_t n)
         memcpy(&b, &v[i], 4);
         printf("%s%08x", (i % 12) ? " " : "  ", b);
         if (i % 12 == 11 || i + 1 == n)
+            printf("\n");
+    }
+}
+
+static void pb(const char* tag, const uint8_t* v, uint32_t n)
+{
+    printf("%s\n", tag);
+    for (uint32_t i = 0; i < n; ++i) {
+        printf("%s%02x", (i % 32) ? " " : "  ", v[i]);
+        if (i % 32 == 31 || i + 1 == n)
             printf("\n");
     }
 }
@@ -378,6 +391,83 @@ int main(int argc, char** argv)
                 fprintf(stderr, "LSF_To_LPC is not the three steps\n");
                 return 2;
             }
+        }
+        return 0;
+    }
+
+    // ------------------------------------------------------------ frame ----
+    // APACChannelPairElement::DeserializeLrvqFrame on a hand-built element.
+    // The function touches exactly seven things off `this`, all at fixed
+    // offsets read out of the disassembly at 0xac600:
+    //
+    //   +16  APACICSInfo*                 channel 0
+    //   +24  APACIndividualChannelStream* channel 0 (its spectrum is at +0x2F0)
+    //   +32  a config whose +16 is the 40-byte apac::GetSFBOffsetTable record
+    //   +128 APACTNSData                  channel 0, 190 bytes
+    //   +318 APACTNSData                  channel 1
+    //   +512 APACICSInfo*                 channel 1
+    //   +520 APACIndividualChannelStream* channel 1
+    //
+    // so a byte array with those filled in takes the same path a real element
+    // does.  The ICSInfo vtable needs slot 2 (Deserialize) and slot 3 (Reset);
+    // the frame calls Deserialize through the vtable and the CPE compares slot
+    // 3 against APACICSInfo::Reset to devirtualise it.
+    if (!strcmp(cmd, "frame")) {
+        static LrvqFrameCase cases[64];
+        const int n = LrvqBuildFrameCases(cases, 64);
+        gICSVTable[2 + 2] = (const void*)ICSDeserialize;
+        const void* sfb = (const void*)SFBTable(48000, 1024);
+        if (!sfb) {
+            fprintf(stderr, "GetSFBOffsetTable(48000, 1024) returned NULL\n");
+            return 2;
+        }
+        static uint8_t element[1024];
+        static FakeICS ics0, ics1;
+        static FakeICStream st0, st1;
+        static float spec0[1024], spec1[1024];
+        static const void* config[4];
+        config[2] = sfb;                       // config + 16
+
+        for (int i = 0; i < n; ++i) {
+            LrvqFrameCase& c = cases[i];
+            memset(element, 0, sizeof element);
+            memset(&st0, 0, sizeof st0);
+            memset(&st1, 0, sizeof st1);
+            for (int k = 0; k < 1024; ++k)
+                spec0[k] = spec1[k] = -777.0f;
+            st0.spec.begin = spec0; st0.spec.end = spec0 + 1024;
+            st1.spec.begin = spec1; st1.spec.end = spec1 + 1024;
+            icsInit(ics0, 49, 14, 0);
+            icsInit(ics1, 49, 14, 0);
+            *(void**)(element + 16) = &ics0;
+            *(void**)(element + 24) = &st0;
+            *(void**)(element + 32) = config;
+            *(void**)(element + 512) = &ics1;
+            *(void**)(element + 520) = &st1;
+            // APACTNSData's constructor caps: order 12 long / 7 short, and the
+            // 48 kHz band caps 40 long / 14 short out of the table at 0x331970.
+            for (int t = 0; t < 2; ++t) {
+                uint8_t* o = element + (t ? 318 : 128);
+                o[186] = 12; o[187] = 7; o[188] = 40; o[189] = 14;
+            }
+
+            BS bs;
+            BsCtor(&bs, c.bits, c.nbytes);
+            const int32_t before = Remaining(&bs);
+            const int32_t r = LrvqFrame(element, &bs);
+            const int32_t used = before - Remaining(&bs);
+            printf("FRAME %d ws=%d,%d tns=%d,%d filter=%d ret=%d bits=%d "
+                   "ics0=%u,%u,%u,%u ics1=%u,%u,%u,%u tnsp=%u,%u tnsn=%u,%u\n",
+                   i, c.ws0, c.ws1, c.tns0, c.tns1, c.tnsFilter, r, used,
+                   *icsField(ics0, 10), *icsField(ics0, 11), *icsField(ics0, 12),
+                   *(uint32_t*)icsField(ics0, 16),
+                   *icsField(ics1, 10), *icsField(ics1, 11), *icsField(ics1, 12),
+                   *(uint32_t*)icsField(ics1, 16),
+                   element[128], element[318], element[129], element[319]);
+            pb("TNS0", element + 128, 190);
+            pb("TNS1", element + 318, 190);
+            pf("SPEC0", spec0, 1024);
+            pf("SPEC1", spec1, 1024);
         }
         return 0;
     }

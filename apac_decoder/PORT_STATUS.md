@@ -427,6 +427,37 @@ does not want loudness normalisation applied on top of its own. `APACDRCDecoder:
 the original's call with the processing left out, and `tests/test_drc.cpp` checks it leaves the
 samples untouched.
 
+## Stage j — the integration seam, located
+
+The decoder is finished; what remains is wiring. The seam is exact:
+`hook/audio/audio_hook.c:1841`, the `if (frameComplete)` block inside `spa103_thread_main`'s
+receive loop. The loop already frames APAP correctly (BE32 inclusive length, one framing phase per
+`read` so the drain cannot defeat TCP flow control) and raises `frameComplete` on each whole frame.
+
+Today that block does nothing but pace: it sleeps `SPA_103_APAP_FRAME_NS` per frame after
+`SPA_103_APAP_PREFILL_FRAMES`, deliberately reproducing the backpressure of Apple's 32-package
+hose so the receiver does not advertise 21 MB and swallow 100 seconds of audio in 4.5. Real
+decoding replaces that artificial pacing with real consumption, and the backpressure then comes
+from the sink rather than from a `nanosleep`.
+
+Four things have to be solved there, in this order:
+
+1. **The frame body is not retained.** The loop streams bytes to the capture file and keeps only
+   `apapHeader`; there is no contiguous frame buffer to hand a decoder. One is needed, bounded by
+   `SPA_103_APAP_MAX_FRAME`.
+2. **Decrypt.** ChaCha20-Poly1305, original 64x64 construction with an 8-byte nonce, body laid out
+   `ciphertext || tag[16] || nonce[8]`, key = the SETUP `shk` copied verbatim with no HKDF. AAD is
+   `header[4:12]` for queued audio and `header[0:12]` for extension/state packets — try both, as
+   `tools/pioneer_apap_decrypt.py` does.
+3. **Entry point.** Decoding may only start at an Audio Synchronization Packet, and so may every
+   resume after a flush. `APACASPDecoder` is ported for exactly this.
+4. **Sink.** `spa_reorder_5_1_decoder_to_declared_s16`, then the fold for index 66 only, then the
+   existing PCM6/DIO5 rail. Index 66's native channel order is still unverified — fail it cleanly
+   rather than guessing a permutation.
+
+The type-100 PCM6 realtime fallback must keep working exactly as it does today; it is what the car
+falls back to.
+
 ## LRVQ is off the critical path — verified twice
 
 `APACLRVQDecoder` is never entered on the CarPlay 5.1 stream. Patching the entry of
