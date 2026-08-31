@@ -473,6 +473,189 @@ int cmd_cookie(const std::vector<uint8_t>& cookie)
     return 0;
 }
 
+
+// ================================================================== stage d ==
+// The transform path: window / modulation tables, MDCT and the synthesis
+// filter bank.  Every symbol below was read out of the binary with
+//
+//     gobjdump -T libSPF_CP_PlugInWrapper.so | grep -E 'MDCT|FilterBank|Window'
+//
+// and pasted verbatim.  Hand-building an Itanium name is how the first attempt
+// at the stub experiment silently proved nothing (NOTES.md), so nothing here is
+// spelled from memory.
+//
+//   0x105590  GetSineWindowCoefficientPtr            (int n) -> const float*
+//   0x105600  GetKBDWindowCoefficientPtr             (int n) -> const float*
+//   0x0b33b0  GetDCTIVModulationCoefficients         (int n) -> const float*
+//   0x0b74b0  _ZN4MDCTC1Ev
+//   0x0b7530  _ZN4MDCT10InitializeEjf
+//   0x0b75c0  _ZN4MDCT23InverseInPlaceTransformEPfS0_
+//   0x0ae980  _ZN23APACSynthesisFilterBank10InitializeEjj
+//   0x0ae5b0  _ZN23APACSynthesisFilterBank22FrequencyToTimeInPlaceEjPfjj
+//   0x0ae530  _ZN23APACSynthesisFilterBank5ResetEv
+
+#include "dsp_cases.h"
+
+typedef const float* (*fn_tbl_t)(int);
+typedef void    (*fn_mdct_ctor_t)(void*);
+typedef int32_t (*fn_mdct_init_t)(void*, uint32_t, float);
+typedef int32_t (*fn_mdct_inv_t)(void*, float*, float*);
+typedef int32_t (*fn_fb_init_t)(void*, uint32_t, uint32_t);
+typedef int32_t (*fn_fb_f2t_t)(void*, uint32_t, float*, uint32_t, uint32_t);
+typedef int32_t (*fn_fb_reset_t)(void*);
+
+fn_tbl_t       sine_window;
+fn_tbl_t       kbd_window;
+fn_tbl_t       dctiv_mod;
+fn_mdct_ctor_t mdct_ctor;
+fn_mdct_init_t mdct_init;
+fn_mdct_inv_t  mdct_inv;
+fn_fb_init_t   fb_init;
+fn_fb_f2t_t    fb_f2t;
+fn_fb_reset_t  fb_reset;
+void*          fb_vtable;
+
+void load_stage_d()
+{
+    sine_window = need<fn_tbl_t>("GetSineWindowCoefficientPtr");
+    kbd_window  = need<fn_tbl_t>("GetKBDWindowCoefficientPtr");
+    dctiv_mod   = need<fn_tbl_t>("GetDCTIVModulationCoefficients");
+    mdct_ctor   = need<fn_mdct_ctor_t>("_ZN4MDCTC1Ev");
+    mdct_init   = need<fn_mdct_init_t>("_ZN4MDCT10InitializeEjf");
+    mdct_inv    = need<fn_mdct_inv_t>("_ZN4MDCT23InverseInPlaceTransformEPfS0_");
+    fb_init     = need<fn_fb_init_t>("_ZN23APACSynthesisFilterBank10InitializeEjj");
+    fb_f2t      = need<fn_fb_f2t_t>(
+        "_ZN23APACSynthesisFilterBank22FrequencyToTimeInPlaceEjPfjj");
+    fb_reset    = need<fn_fb_reset_t>("_ZN23APACSynthesisFilterBank5ResetEv");
+    fb_vtable   = need<void*>("_ZTV23APACSynthesisFilterBank");
+}
+
+void print_floats(const float* v, size_t n)
+{
+    for (size_t i = 0; i < n; ++i) {
+        if (i && (i % 12) == 0) printf("\n ");
+        printf(" %08x", apac_cases::float_to_bits(v[i]));
+    }
+    printf("\n");
+}
+
+// ------------------------------------------------------------------ win ----
+// Dumps every table the transform path reads, plus the NULL answers, so the
+// port's copies can be checked word for word and its size gate can be checked
+// at all.
+int cmd_win()
+{
+    static const int kSizes[] = { 0, 1, 32, 64, 128, 256, 512, 1024, 2048 };
+    for (size_t i = 0; i < sizeof kSizes / sizeof kSizes[0]; ++i) {
+        int n = kSizes[i];
+        printf("PTR %d sine=%d kbd=%d dctiv=%d\n", n,
+               sine_window(n) ? 1 : 0, kbd_window(n) ? 1 : 0, dctiv_mod(n) ? 1 : 0);
+    }
+    static const struct { const char* name; int n; int which; } kTables[] = {
+        { "sine",  128, 0 }, { "sine",  1024, 0 },
+        { "kbd",   128, 1 }, { "kbd",   1024, 1 },
+        { "dctiv", 128, 2 }, { "dctiv", 1024, 2 }
+    };
+    for (size_t i = 0; i < sizeof kTables / sizeof kTables[0]; ++i) {
+        const float* p = kTables[i].which == 0 ? sine_window(kTables[i].n)
+                       : kTables[i].which == 1 ? kbd_window(kTables[i].n)
+                                               : dctiv_mod(kTables[i].n);
+        printf("TABLE %s %d\n", kTables[i].name, kTables[i].n);
+        print_floats(p, (size_t)kTables[i].n);
+    }
+    return 0;
+}
+
+// ----------------------------------------------------------------- mdct ----
+// MDCT is 56 bytes (DCT_IV's 48 plus the scale at +48); the slab is
+// over-allocated and zeroed, and the library's own constructor installs the
+// DFTHandle vptr.  The destructor is deliberately never called: it would run
+// operator delete on pointers this harness did not allocate.
+int cmd_mdct()
+{
+    static const uint32_t kSizes[] = { 128, 1024 };
+    static float in[1200], second[1200];
+
+    for (size_t si = 0; si < sizeof kSizes / sizeof kSizes[0]; ++si) {
+        const uint32_t n = kSizes[si];
+        void* obj = 0;
+        if (posix_memalign(&obj, 64, 256) != 0 || !obj) return 1;
+        memset(obj, 0, 256);
+        mdct_ctor(obj);
+        int32_t rc = mdct_init(obj, n, 0.0f);
+        printf("MDCT %u init=%d scale=%08x\n", n, rc,
+               apac_cases::float_to_bits(*(const float*)((char*)obj + 48)));
+        for (unsigned c = 0; c < apac_cases::kNumCases; ++c) {
+            apac_cases::case_fill(c, in, n);
+            memset(second, 0, sizeof second);
+            int32_t r = mdct_inv(obj, in, second);
+            printf("CASE %u %u %s rc=%d\n", n, c, apac_cases::case_name(c), r);
+            printf("FIRST\n ");
+            print_floats(in, n);
+            printf("SECOND\n ");
+            print_floats(second, n);
+        }
+        free(obj);
+    }
+    return 0;
+}
+
+// ------------------------------------------------------------------- fb ----
+// APACSynthesisFilterBank has no exported constructor, so the object is built
+// by hand.  Layout, from CLASSES.md plus Initialize / FrequencyToTimeInPlace:
+//
+//   +0    vptr                        (vtable object + 16)
+//   +8    overlap element count       (frameLength * channels)
+//   +16   overlap buffer, float*
+//   +24   channel count
+//   +32   per-channel previous window SHAPE, uint8*
+//   +40   MDCT, long   (56 bytes)
+//   +96   MDCT, short  (56 bytes)
+//   +152  window pointer pairs, indexed by shape: { short, long } x 2
+//
+// Initialize() calls operator new for the two buffers and reaches Reset()
+// through the vtable, so the vptr has to be real; +8/+16 and +24/+32 must be
+// zero going in so its "size changed?" test takes the allocate branch on a
+// null pointer.
+int cmd_fb()
+{
+    const uint32_t kFrame = 1024;
+    const uint32_t kChannels = apac_cases::kFBChannels;
+
+    void* obj = 0;
+    if (posix_memalign(&obj, 64, 512) != 0 || !obj) return 1;
+    memset(obj, 0, 512);
+    char* o = (char*)obj;
+    *(void**)(o + 0) = (char*)fb_vtable + 16;
+    mdct_ctor(o + 40);
+    mdct_ctor(o + 96);
+
+    int32_t rc = fb_init(obj, kChannels, kFrame);
+    printf("FB init=%d channels=%u frame=%u\n", rc, kChannels, kFrame);
+    if (rc != 0) return 1;
+    fb_reset(obj);
+
+    static float buf[1200];
+    const apac_cases::FBStep* plan = apac_cases::fb_plan();
+    for (unsigned s = 0; s < apac_cases::kFBSteps; ++s) {
+        const apac_cases::FBStep& st = plan[s];
+        apac_cases::case_fill(st.caseIdx, buf, kFrame);
+        int32_t r = fb_f2t(obj, st.channel, buf, st.shape, st.sequence);
+        printf("STEP %u ch=%u shape=%u seq=%u case=%u rc=%d\n",
+               s, st.channel, st.shape, st.sequence, st.caseIdx, r);
+        printf("OUT\n ");
+        print_floats(buf, kFrame);
+    }
+
+    // The two rejection paths: a channel index at or past the count, and a
+    // window sequence above 3.  Both must return 1 and leave the buffer alone.
+    apac_cases::case_fill(9, buf, kFrame);
+    printf("REJECT badchannel rc=%d\n", fb_f2t(obj, kChannels, buf, 0, 0));
+    printf("REJECT badsequence rc=%d\n", fb_f2t(obj, 0, buf, 0, 4));
+    return 0;
+}
+
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -482,6 +665,7 @@ int main(int argc, char** argv)
             "usage: apac_fn_ref probe\n"
             "       apac_fn_ref bs            < cases.txt\n"
             "       apac_fn_ref sfb [RATE...]\n"
+            "       apac_fn_ref win | mdct | fb\n"
             "       apac_fn_ref gc COOKIE  [--offset N] [--dump]\n"
             "       apac_fn_ref gc-raw FILE [--offset N] [--dump]\n"
             "       apac_fn_ref cookie COOKIE\n");
@@ -494,6 +678,9 @@ int main(int argc, char** argv)
         fprintf(stderr, "apac_fn_ref: library loaded, all symbols resolved\n");
         return 0;
     }
+    if (cmd == "win")  { load_stage_d(); return cmd_win(); }
+    if (cmd == "mdct") { load_stage_d(); return cmd_mdct(); }
+    if (cmd == "fb")   { load_stage_d(); return cmd_fb(); }
     if (cmd == "bs")  return cmd_bs();
     if (cmd == "ics") return cmd_ics();
     if (cmd == "sfb") return cmd_sfb(argc - 2, argv + 2);
