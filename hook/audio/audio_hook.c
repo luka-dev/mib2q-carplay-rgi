@@ -314,58 +314,37 @@ static int spa_cf_resolve(void)
     return cfa_ready;
 }
 
-/* Marker file, not an env var: the env is read once at supervisor start, and this must be revertible
- * with a replug when the phone bites and our (absent) type-103 receiver fails the session. */
+/* Type-103 is armed only by the startup environment, before AirTunesServer_EnsureCreated. */
 static int spa_probe103(void)
 {
-    FILE *f = fopen(SPA_PROBE103_PATH, "r");
-    if (!f) return 0;
-    fclose(f);
-    return 1;
+    return spa_env_on(SPA_PROBE103_ENV);
 }
 
 static int spa_probe103_dcx(void)
 {
-    FILE *f;
-
-    if (!spa_probe103()) return 0;
-    f = fopen(SPA_103_DCX_PATH, "r");
-    if (!f) return 0;
-    fclose(f);
-    return 1;
+    return spa_probe103() && spa_env_on(SPA_103_DCX_ENV);
 }
 
-/* Split the two independent pieces of the buffered-audio contract so one replug identifies which
- * one the phone rejects. The marker remains the master kill switch. With the marker present and no
- * mode file, preserve the old combined behavior. Re-read on every negotiation call so no HU reboot
- * is needed between `info`, `feature`, and `both` bench runs. */
+/* Split the two independent pieces of the buffered-audio contract. SPATIAL_103 remains the master
+ * kill switch; an absent mode selects the established combined behavior. */
 static unsigned spa_probe103_mode(void)
 {
-    char value[24];
-    unsigned numeric = 0;
-    FILE *f;
+    const char *value;
+    unsigned numeric;
 
     if (!spa_probe103()) return 0;
-    f = fopen(SPA_103_MODE_PATH, "r");
-    if (!f) return SPA_103_MODE_BOTH;
-    value[0] = '\0';
-    if (fscanf(f, "%23s", value) == 1) {
-        if (!strcmp(value, "info")) numeric = SPA_103_MODE_INFO;
-        else if (!strcmp(value, "feature") || !strcmp(value, "features"))
-            numeric = SPA_103_MODE_FEATURE;
-        else if (!strcmp(value, "both")) numeric = SPA_103_MODE_BOTH;
-        else if (sscanf(value, "%u", &numeric) != 1 || numeric < SPA_103_MODE_INFO ||
-                 numeric > SPA_103_MODE_BOTH) {
-            numeric = SPA_103_MODE_BOTH;
-            LOG_ERROR(LOG_MODULE,
-                      "probe103: invalid %s value '%s'; expected info/feature/both; using both",
-                      SPA_103_MODE_PATH, value);
-        }
-    } else {
+    value = getenv(SPA_103_MODE_ENV);
+    if (!value || !value[0]) return SPA_103_MODE_BOTH;
+    if (!strcmp(value, "info") || !strcmp(value, "1")) numeric = SPA_103_MODE_INFO;
+    else if (!strcmp(value, "feature") || !strcmp(value, "features") || !strcmp(value, "2"))
+        numeric = SPA_103_MODE_FEATURE;
+    else if (!strcmp(value, "both") || !strcmp(value, "3")) numeric = SPA_103_MODE_BOTH;
+    else {
         numeric = SPA_103_MODE_BOTH;
-        LOG_ERROR(LOG_MODULE, "probe103: empty %s; using both", SPA_103_MODE_PATH);
+        LOG_ERROR(LOG_MODULE,
+                  "probe103: invalid %s value '%s'; expected info/feature/both; using both",
+                  SPA_103_MODE_ENV, value);
     }
-    fclose(f);
     return numeric;
 }
 
@@ -378,24 +357,26 @@ static unsigned spa_probe103_mode(void)
  * none of these payloads is accepted or played by this hook yet. */
 static int spa_probe103_index(void)
 {
+    const char *value = getenv(SPA_103_INDEX_ENV);
+    char *end = 0;
     int index = SPA_APAC_48K_5_1;
-    int candidate = 0;
-    FILE *f = fopen(SPA_103_INDEX_PATH, "r");
-    if (!f) return index;
-    if (fscanf(f, "%d", &candidate) == 1 &&
+    long candidate;
+
+    if (!value || !value[0]) return index;
+    candidate = strtol(value, &end, 0);
+    if (end && end != value && !*end &&
         (candidate == SPA_AAC_LC_48K_5_1_2 || candidate == SPA_AAC_ELD_48K_5_1_2 ||
          candidate == SPA_DDP_48K_5_1 ||
          candidate == SPA_DDP_48K_9_1_6 || candidate == SPA_APAC_48K_5_1 ||
          candidate == SPA_APAC_48K_5_1_2)) {
-        index = candidate;
+        index = (int)candidate;
     } else {
         LOG_ERROR(LOG_MODULE,
-                  "probe103: invalid %s; allowed indices: %d/%d/%d/%d/%d/%d; using %d",
-                  SPA_103_INDEX_PATH, SPA_AAC_LC_48K_5_1_2, SPA_AAC_ELD_48K_5_1_2,
+                  "probe103: invalid %s value '%s'; allowed indices: %d/%d/%d/%d/%d/%d; using %d",
+                  SPA_103_INDEX_ENV, value, SPA_AAC_LC_48K_5_1_2, SPA_AAC_ELD_48K_5_1_2,
                   SPA_DDP_48K_5_1, SPA_DDP_48K_9_1_6, SPA_APAC_48K_5_1,
                   SPA_APAC_48K_5_1_2, index);
     }
-    fclose(f);
     return index;
 }
 
@@ -406,27 +387,18 @@ static int spa_probe103_index(void)
  * reproduce the negative result without another rebuild. */
 static uint32_t spa_probe103_legacy_mask(void)
 {
-    char value[32];
+    const char *value = getenv(SPA_103_MASK_ENV);
     char *end = 0;
     unsigned long candidate;
-    FILE *f = fopen(SPA_103_MASK_PATH, "r");
 
-    if (!f) return SPA_BUFFERED_AAC_MASK;
-    value[0] = '\0';
-    if (fscanf(f, "%31s", value) != 1) {
-        fclose(f);
-        LOG_ERROR(LOG_MODULE, "probe103: empty %s; using %#x",
-                  SPA_103_MASK_PATH, SPA_BUFFERED_AAC_MASK);
-        return SPA_BUFFERED_AAC_MASK;
-    }
-    fclose(f);
+    if (!value || !value[0]) return SPA_BUFFERED_AAC_MASK;
 
     candidate = strtoul(value, &end, 0);
     if (!end || end == value || *end ||
         (candidate != SPA_BUFFERED_AAC_MASK && candidate != SPA_BUFFERED_BROAD_MASK)) {
         LOG_ERROR(LOG_MODULE,
                   "probe103: invalid %s value '%s'; allowed %#x/%#x; using %#x",
-                  SPA_103_MASK_PATH, value, SPA_BUFFERED_AAC_MASK,
+                  SPA_103_MASK_ENV, value, SPA_BUFFERED_AAC_MASK,
                   SPA_BUFFERED_BROAD_MASK, SPA_BUFFERED_AAC_MASK);
         return SPA_BUFFERED_AAC_MASK;
     }
@@ -665,9 +637,12 @@ void spa_note_setup_result(int has103, int result, void *response, uint32_t sequ
  * ARM instructions.  The installer below refuses every image/slot that does not exactly match the
  * reviewed MU1316 layout. */
 #define SPA_103_MU1316_ENSURE_CREATED_VA 0x0002e9acu
+#define SPA_103_MU1316_SET_PLIST_RESPONSE_VA 0x0002f040u
 #define SPA_103_MU1316_HTTP_PROCESS_VA   0x000302e0u
 #define SPA_103_MU1316_SERVER_GLOBAL_VA  0x000babccu
 #define SPA_103_HTTP_PROCESS_SLOT_OFF    0x64u
+#define SPA_103_MU1316_SESSION_CLOCK_OFF 5072u
+#define SPA_103_ANCHOR_LEAD_MS           150u
 
 /* Target HTTPMessage layout used by the stock 210.81 dispatcher. */
 #define SPA_103_HTTP_METHOD_PTR_OFF      0x201cu
@@ -685,6 +660,35 @@ typedef long (*spa_cf_data_length_t)(const void *);
 typedef const uint8_t *(*spa_cf_data_bytes_t)(const void *);
 typedef int (*spa_http_init_response_t)(void *, int);
 typedef int (*spa_http_send_response_t)(void *);
+typedef int (*spa_http_set_plist_response_t)(void *, void *, void *, int *);
+typedef uint64_t (*spa_up_ticks_t)(void);
+typedef uint64_t (*spa_milliseconds_to_up_ticks_t)(uint32_t);
+
+/* MU1316 AirTunesTime, verified from AirTunesClock_GetSynchronizedTimeNearUpTicks @ 0x2dc30:
+ * seconds at +0, 32-bit timeline ID at +4, and 64-bit fractional seconds at +8. */
+typedef struct {
+    uint32_t secs;
+    uint32_t timelineID;
+    uint64_t frac;
+} spa103_air_tunes_time_t;
+
+typedef void (*spa_air_tunes_clock_get_near_ticks_t)(
+    void *, spa103_air_tunes_time_t *, uint64_t);
+
+typedef struct {
+    int valid;
+    int64_t rtpTime;
+    int64_t mediaTimeValue;
+    int64_t mediaTimeScale;
+} spa103_transport_time_t;
+
+typedef struct {
+    int valid;
+    int64_t secs;
+    int64_t frac;
+    int64_t timelineID;
+    int64_t flags;
+} spa103_network_time_t;
 
 typedef struct {
     int64_t id;
@@ -710,6 +714,11 @@ typedef struct {
     uint32_t sequence;
     spa103_magic_cookie_t magicCookies[SPA_103_MAX_MAGIC_COOKIES];
     size_t magicCookieCount;
+    int64_t rate;
+    spa103_transport_time_t anchor;
+    spa103_transport_time_t firstAudible;
+    spa103_network_time_t networkTime;
+    uint32_t controlRequestCount;
 } spa103_receiver_t;
 
 typedef struct {
@@ -732,7 +741,6 @@ static spa_srv_sockopen_t spa103_srv_sockopen;
 static spa_sock_accept_t  spa103_sock_accept;
 static spa_http_process_t spa103_original_http_process;
 static void **spa103_http_process_slot;
-static uint32_t spa103_http_generation;
 static spa_cf_create_plist_bytes_t spa103_cf_create_plist_bytes;
 static spa_cf_type_id_t spa103_cf_dictionary_type_id;
 static spa_cf_type_id_t spa103_cf_data_type_id;
@@ -741,9 +749,15 @@ static spa_cf_data_length_t spa103_cf_data_length;
 static spa_cf_data_bytes_t spa103_cf_data_bytes;
 static spa_http_init_response_t spa103_http_init_response;
 static spa_http_send_response_t spa103_http_send_response;
+static spa_http_set_plist_response_t spa103_http_set_plist_response;
+static spa_up_ticks_t spa103_up_ticks;
+static spa_milliseconds_to_up_ticks_t spa103_milliseconds_to_up_ticks;
+static spa_air_tunes_clock_get_near_ticks_t spa103_clock_get_near_ticks;
 
 static int spa103_http_process(void *connection, void *request);
+static int spa103_resolve(void);
 static size_t spa103_write_capture(int fd, const uint8_t *data, size_t size);
+static int spa103_response_set_i64(void *responseDesc, const char *name, int64_t value);
 
 /* Stock 210 has no object for the hook-owned buffered stream, so its feedback enumerator keeps
  * reporting the still-present realtime type-100 stream while 103 is carrying media.  Keep the
@@ -851,15 +865,455 @@ static int spa103_send_http_status(void *connection, int status)
     return err;
 }
 
+static int spa103_method_equal(const uint8_t *method, uint32_t methodLength,
+                               const char *wanted)
+{
+    size_t wantedLength = strlen(wanted);
+    return method && methodLength == wantedLength &&
+           memcmp(method, wanted, wantedLength) == 0;
+}
+
+/* The stock request callback already waited for the complete HTTP body. All buffered-control
+ * methods use the same binary-plist envelope as SETUP and SETMAGICCOOKIE. */
+static void *spa103_parse_control_plist(void *request, const char *methodName,
+                                       uint32_t *sessionSequence, uint32_t *requestNumber)
+{
+    const uint8_t *body;
+    uint32_t bodyLength;
+    void *plist;
+    int32_t err = 0;
+    uint32_t sequence = 0, number = 0;
+    int active;
+    char captureKind[64];
+
+    pthread_mutex_lock(&spa103_lock);
+    active = spa103_receiver.session && !spa103_receiver.stop;
+    if (active) {
+        sequence = spa103_receiver.sequence;
+        number = ++spa103_receiver.controlRequestCount;
+    }
+    pthread_mutex_unlock(&spa103_lock);
+    if (!active) {
+        LOG_WARN(LOG_MODULE, "buffer103: %s received without active type-103 stream",
+                 methodName);
+        return 0;
+    }
+
+    body = *(const uint8_t * const *)((const uint8_t *)request + SPA_103_HTTP_BODY_PTR_OFF);
+    bodyLength = *(const uint32_t *)((const uint8_t *)request + SPA_103_HTTP_BODY_LEN_OFF);
+    if (!body || bodyLength == 0 || bodyLength > SPA_103_MAX_MAGIC_COOKIE_BODY_SIZE) {
+        LOG_ERROR(LOG_MODULE, "buffer103: invalid %s body length=%u",
+                  methodName, (unsigned)bodyLength);
+        return 0;
+    }
+
+    plist = spa103_cf_create_plist_bytes(body, bodyLength, 0,
+                                          spa103_cf_dictionary_type_id(), &err);
+    if (!plist || err) {
+        if (plist) cfa_rel(plist);
+        LOG_ERROR(LOG_MODULE, "buffer103: cannot parse %s binary plist err=%d",
+                  methodName, (int)err);
+        return 0;
+    }
+
+    snprintf(captureKind, sizeof(captureKind), "%u_%s", (unsigned)number, methodName);
+    spa_write_control_plist(plist, captureKind, sequence);
+    if (sessionSequence) *sessionSequence = sequence;
+    if (requestNumber) *requestNumber = number;
+    return plist;
+}
+
+/* Return 1 when all three keys exist. `valid` mirrors APSAudioTransportTime validity sufficiently
+ * for this bridge: a non-zero media timescale is required for rate-1 anchors, while FLUSH may carry
+ * an explicitly invalid triple and still be a well-formed request. */
+static int spa103_read_transport_time(const void *dict, const char *rtpKey,
+                                      const char *valueKey, const char *scaleKey,
+                                      spa103_transport_time_t *out)
+{
+    spa103_transport_time_t value;
+
+    memset(&value, 0, sizeof(value));
+    if (!spa_cf_get_i64(dict, rtpKey, &value.rtpTime) ||
+        !spa_cf_get_i64(dict, valueKey, &value.mediaTimeValue) ||
+        !spa_cf_get_i64(dict, scaleKey, &value.mediaTimeScale))
+        return 0;
+    value.valid = value.mediaTimeScale != 0;
+    *out = value;
+    return 1;
+}
+
+/* Pioneer ConvertMediaTimeToSampleTime computes floor(mediaValue/mediaScale*sampleRate) modulo
+ * 2^32. Live hardware closes this exactly: 46670057988423/1e9 at 48 kHz becomes 0x85862bdf, the
+ * media-time value in the first APAP fixed header. Avoid floating point while preserving that
+ * quotient/remainder result for the positive media timeline used by CarPlay. */
+static int64_t spa103_media_time_to_rtp(int64_t mediaValue, int64_t mediaScale)
+{
+    uint64_t whole, remainder, samples;
+
+    if (mediaValue < 0 || mediaScale <= 0) return 0;
+    whole = (uint64_t)mediaValue / (uint64_t)mediaScale;
+    remainder = (uint64_t)mediaValue % (uint64_t)mediaScale;
+    samples = whole * SPA_SR + (remainder * SPA_SR) / (uint64_t)mediaScale;
+    return (int64_t)(uint32_t)samples;
+}
+
+/* Apple's serializers omit an invalid RTP component.  Live iOS 27 FLUSHBUFFERED uses this
+ * media-only form (flushUntilMediaTimeValue/Scale) and may omit the entire "from" boundary. */
+static int spa103_read_optional_rtp_transport_time(const void *dict, const char *rtpKey,
+                                                   const char *valueKey, const char *scaleKey,
+                                                   spa103_transport_time_t *out)
+{
+    spa103_transport_time_t value;
+
+    memset(&value, 0, sizeof(value));
+    if (!spa_cf_get_i64(dict, valueKey, &value.mediaTimeValue) ||
+        !spa_cf_get_i64(dict, scaleKey, &value.mediaTimeScale) ||
+        value.mediaTimeScale == 0)
+        return 0;
+    if (!spa_cf_get_i64(dict, rtpKey, &value.rtpTime))
+        value.rtpTime = spa103_media_time_to_rtp(value.mediaTimeValue,
+                                                  value.mediaTimeScale);
+    value.valid = 1;
+    *out = value;
+    return 1;
+}
+
+static int spa103_read_network_time(const void *dict, const char *prefix,
+                                    spa103_network_time_t *out)
+{
+    spa103_network_time_t value;
+    char secsKey[64], fracKey[64], timelineKey[80], flagsKey[64];
+
+    memset(&value, 0, sizeof(value));
+    snprintf(secsKey, sizeof(secsKey), "%sSecs", prefix);
+    snprintf(fracKey, sizeof(fracKey), "%sFrac", prefix);
+    snprintf(timelineKey, sizeof(timelineKey), "%sTimelineID", prefix);
+    snprintf(flagsKey, sizeof(flagsKey), "%sFlags", prefix);
+    if (!spa_cf_get_i64(dict, secsKey, &value.secs) ||
+        !spa_cf_get_i64(dict, fracKey, &value.frac) ||
+        !spa_cf_get_i64(dict, timelineKey, &value.timelineID) ||
+        !spa_cf_get_i64(dict, flagsKey, &value.flags))
+        return 0;
+    value.valid = 1;
+    *out = value;
+    return 1;
+}
+
+static int spa103_set_transport_time(void *dict, const char *rtpKey,
+                                     const char *valueKey, const char *scaleKey,
+                                     const spa103_transport_time_t *value)
+{
+    return spa103_response_set_i64(dict, rtpKey, value->rtpTime) ||
+           spa103_response_set_i64(dict, valueKey, value->mediaTimeValue) ||
+           spa103_response_set_i64(dict, scaleKey, value->mediaTimeScale) ? -1 : 0;
+}
+
+static int spa103_set_network_time(void *dict, const char *prefix,
+                                   const spa103_network_time_t *value)
+{
+    char secsKey[64], fracKey[64], timelineKey[80], flagsKey[64];
+
+    snprintf(secsKey, sizeof(secsKey), "%sSecs", prefix);
+    snprintf(fracKey, sizeof(fracKey), "%sFrac", prefix);
+    snprintf(timelineKey, sizeof(timelineKey), "%sTimelineID", prefix);
+    snprintf(flagsKey, sizeof(flagsKey), "%sFlags", prefix);
+    return spa103_response_set_i64(dict, secsKey, value->secs) ||
+           spa103_response_set_i64(dict, fracKey, value->frac) ||
+           spa103_response_set_i64(dict, timelineKey, value->timelineID) ||
+           spa103_response_set_i64(dict, flagsKey, value->flags) ? -1 : 0;
+}
+
+static void spa103_make_fallback_network_time(spa103_network_time_t *value)
+{
+    struct timespec now;
+    uint64_t fraction;
+    uint32_t ntpSeconds;
+
+    clock_gettime(CLOCK_REALTIME, &now);
+    ntpSeconds = (uint32_t)((uint64_t)now.tv_sec + UINT64_C(2208988800));
+    fraction = ((uint64_t)(uint32_t)now.tv_nsec << 32) / UINT64_C(1000000000);
+    memset(value, 0, sizeof(*value));
+    value->valid = 1;
+    /* Apple's receiver transports the NTP seconds field as a signed 32-bit integer in the plist. */
+    value->secs = (int64_t)(int32_t)ntpSeconds;
+    value->frac = (int64_t)fraction;
+}
+
+/* Pioneer ReturnAnchorForRTP anchors playback 150 ms in the future on the receiver's synchronized
+ * AirTunes clock. MU1316 already owns the same NTP clock for the stock AirPlay session; reuse it so
+ * the sender sees the actual negotiated timeline instead of the previous timelineID=0 wall-clock
+ * placeholder. AirTunesClock_Create receives session+0x13d0 as an output slot and stock callers
+ * load the resulting clock pointer from that slot. The private session offset is protected by the
+ * same exact-image fingerprint as the buffered HTTP dispatcher. */
+static int spa103_get_session_network_time(void *session, spa103_network_time_t *value)
+{
+    spa103_air_tunes_time_t synchronized;
+    void *clock;
+    uint64_t anchorTicks;
+
+    if (!session || !value || !spa103_up_ticks || !spa103_milliseconds_to_up_ticks ||
+        !spa103_clock_get_near_ticks)
+        return 0;
+    clock = *(void **)((uint8_t *)session + SPA_103_MU1316_SESSION_CLOCK_OFF);
+    if (!clock) return 0;
+
+    memset(&synchronized, 0, sizeof(synchronized));
+    anchorTicks = spa103_up_ticks() +
+                  spa103_milliseconds_to_up_ticks(SPA_103_ANCHOR_LEAD_MS);
+    spa103_clock_get_near_ticks(clock, &synchronized, anchorTicks);
+
+    memset(value, 0, sizeof(*value));
+    value->valid = 1;
+    value->secs = (int64_t)(int32_t)synchronized.secs;
+    value->frac = (int64_t)synchronized.frac;
+    value->timelineID = (int64_t)synchronized.timelineID;
+    value->flags = 0;
+    return 1;
+}
+
+/* MU1316's private SETUP/info helper at image+0x2f040 is the stock, already-reviewed path that
+ * serializes a CFLite dictionary as application/x-apple-binary-plist and initializes the response
+ * with the request's RTSP/HTTP version. The surrounding callback fingerprint must match before the
+ * pointer is published. */
+static int spa103_send_http_plist(void *connection, void *request, void *plist)
+{
+    int bodyErr = 0;
+    int status;
+
+    if (!spa103_http_set_plist_response || !plist)
+        return spa103_send_http_status(connection, 500);
+    status = spa103_http_set_plist_response(connection, request, plist, &bodyErr);
+    if (status != 200 || bodyErr) {
+        LOG_ERROR(LOG_MODULE,
+                  "buffer103: binary-plist response build failed status=%d err=%d",
+                  status, bodyErr);
+        return spa103_send_http_status(connection, status == 200 ? 500 : status);
+    }
+    return spa103_http_send_response(connection);
+}
+
+enum spa103_control_method {
+    SPA103_CONTROL_NONE = 0,
+    SPA103_CONTROL_GET_ANCHOR,
+    SPA103_CONTROL_SET_RATE,
+    SPA103_CONTROL_SET_RATE_ANCHOR,
+    SPA103_CONTROL_FLUSH
+};
+
+static int spa103_process_buffered_control(void *connection, void *request,
+                                           enum spa103_control_method method,
+                                           const char *methodName)
+{
+    void *params = 0, *response = 0;
+    spa103_transport_time_t anchor, firstAudible, fromTime, untilTime;
+    spa103_network_time_t networkTime;
+    int64_t rate = 0, fromSeq = 0, untilSeq = 0;
+    uint32_t sequence = 0, requestNumber = 0;
+    int haveFromSeq = 0, haveUntilSeq = 0;
+    int haveFromTime = 0, haveUntilTime = 0;
+    int status = 200;
+    int result;
+
+    memset(&anchor, 0, sizeof(anchor));
+    memset(&firstAudible, 0, sizeof(firstAudible));
+    memset(&fromTime, 0, sizeof(fromTime));
+    memset(&untilTime, 0, sizeof(untilTime));
+    memset(&networkTime, 0, sizeof(networkTime));
+
+    params = spa103_parse_control_plist(request, methodName, &sequence, &requestNumber);
+    if (!params) return spa103_send_http_status(connection, 400);
+
+    if (method == SPA103_CONTROL_GET_ANCHOR || method == SPA103_CONTROL_SET_RATE ||
+        method == SPA103_CONTROL_SET_RATE_ANCHOR) {
+        if (!spa_cf_get_i64(params, "rate", &rate)) {
+            status = 400;
+            goto done;
+        }
+    }
+
+    switch (method) {
+        case SPA103_CONTROL_SET_RATE_ANCHOR:
+            if (rate == 1) {
+                if (!spa103_read_transport_time(params, "rtpTime", "mediaTimeValue",
+                                                "mediaTimeScale", &anchor) || !anchor.valid ||
+                    !spa103_read_transport_time(params, "firstAudibleRTPTime",
+                                                "firstAudibleMediaTimeValue",
+                                                "firstAudibleMediaTimeScale", &firstAudible) ||
+                    !spa103_read_network_time(params, "networkTime", &networkTime)) {
+                    status = 400;
+                    goto done;
+                }
+            }
+            pthread_mutex_lock(&spa103_lock);
+            if (spa103_receiver.session && !spa103_receiver.stop &&
+                spa103_receiver.sequence == sequence) {
+                spa103_receiver.rate = rate;
+                if (rate == 1) {
+                    spa103_receiver.anchor = anchor;
+                    spa103_receiver.firstAudible = firstAudible;
+                    spa103_receiver.networkTime = networkTime;
+                }
+            }
+            pthread_mutex_unlock(&spa103_lock);
+            LOG_WARN(LOG_MODULE,
+                     "buffer103: %s[%u] ACK rate=%lld rtp=%lld media=%lld/%lld "
+                     "firstAudible=%lld timeline=%lld",
+                     methodName, (unsigned)requestNumber, (long long)rate,
+                     (long long)anchor.rtpTime, (long long)anchor.mediaTimeValue,
+                     (long long)anchor.mediaTimeScale, (long long)firstAudible.rtpTime,
+                     (long long)networkTime.timelineID);
+            /* Apple's own receiver sends an empty 200 response on the success path. */
+            break;
+
+        case SPA103_CONTROL_SET_RATE:
+            if (rate == 1) {
+                /* The live iOS 27 hose emitted only mediaTimeValue/mediaTimeScale here. Apple's
+                 * CFDictionaryGetAudioTransportTime accepts that valid media-time form with an
+                 * absent RTP component; its sender-side serializer omits invalid rtpTime. */
+                if (!spa_cf_get_i64(params, "mediaTimeValue", &anchor.mediaTimeValue) ||
+                    !spa_cf_get_i64(params, "mediaTimeScale", &anchor.mediaTimeScale) ||
+                    anchor.mediaTimeScale == 0) {
+                    status = 400;
+                    goto done;
+                }
+                if (!spa_cf_get_i64(params, "rtpTime", &anchor.rtpTime))
+                    anchor.rtpTime = spa103_media_time_to_rtp(anchor.mediaTimeValue,
+                                                               anchor.mediaTimeScale);
+                anchor.valid = 1;
+            }
+            pthread_mutex_lock(&spa103_lock);
+            if (spa103_receiver.session && !spa103_receiver.stop &&
+                spa103_receiver.sequence == sequence) {
+                spa103_receiver.rate = rate;
+                if (rate == 1) spa103_receiver.anchor = anchor;
+                if (!anchor.valid) anchor = spa103_receiver.anchor;
+                if (!spa103_get_session_network_time(spa103_receiver.session, &networkTime))
+                    networkTime = spa103_receiver.networkTime;
+                else
+                    spa103_receiver.networkTime = networkTime;
+            }
+            pthread_mutex_unlock(&spa103_lock);
+            if (!anchor.valid) {
+                anchor.valid = 1;
+                anchor.mediaTimeScale = SPA_SR;
+            }
+            if (!networkTime.valid) spa103_make_fallback_network_time(&networkTime);
+            response = cfa_dictm(0, 0, cfa_dk_cb, cfa_dv_cb);
+            if (!response ||
+                spa103_set_transport_time(response, "rtpTime", "mediaTimeValue",
+                                          "mediaTimeScale", &anchor) != 0 ||
+                spa103_set_network_time(response, "networkTime", &networkTime) != 0) {
+                status = 500;
+                goto done;
+            }
+            LOG_WARN(LOG_MODULE,
+                     "buffer103: %s[%u] ACK rate=%lld rtp=%lld anchor=%lld/%lld timeline=%lld",
+                     methodName, (unsigned)requestNumber, (long long)rate,
+                     (long long)anchor.rtpTime,
+                     (long long)anchor.mediaTimeValue, (long long)anchor.mediaTimeScale,
+                     (long long)networkTime.timelineID);
+            break;
+
+        case SPA103_CONTROL_GET_ANCHOR:
+            pthread_mutex_lock(&spa103_lock);
+            if (spa103_receiver.session && !spa103_receiver.stop &&
+                spa103_receiver.sequence == sequence) {
+                anchor = spa103_receiver.anchor;
+                if (!spa103_get_session_network_time(spa103_receiver.session, &networkTime))
+                    networkTime = spa103_receiver.networkTime;
+                else
+                    spa103_receiver.networkTime = networkTime;
+            }
+            pthread_mutex_unlock(&spa103_lock);
+            if (!anchor.valid) {
+                anchor.valid = 1;
+                anchor.mediaTimeScale = SPA_SR;
+            }
+            if (!networkTime.valid) spa103_make_fallback_network_time(&networkTime);
+            response = cfa_dictm(0, 0, cfa_dk_cb, cfa_dv_cb);
+            if (!response ||
+                spa103_set_transport_time(response, "rtpTime", "mediaTimeValue",
+                                          "mediaTimeScale", &anchor) != 0 ||
+                spa103_set_network_time(response, "networkTime", &networkTime) != 0) {
+                status = 500;
+                goto done;
+            }
+            LOG_WARN(LOG_MODULE,
+                     "buffer103: %s[%u] ACK rate=%lld rtp=%lld anchor=%lld/%lld timeline=%lld",
+                     methodName, (unsigned)requestNumber, (long long)rate,
+                     (long long)anchor.rtpTime,
+                     (long long)anchor.mediaTimeValue, (long long)anchor.mediaTimeScale,
+                     (long long)networkTime.timelineID);
+            break;
+
+        case SPA103_CONTROL_FLUSH:
+            haveFromSeq = spa_cf_get_i64(params, "flushFromSeq", &fromSeq);
+            haveUntilSeq = spa_cf_get_i64(params, "flushUntilSeq", &untilSeq);
+            haveFromTime = spa103_read_optional_rtp_transport_time(
+                params, "flushFromTS", "flushFromMediaTimeValue",
+                "flushFromMediaTimeScale", &fromTime);
+            haveUntilTime = spa103_read_optional_rtp_transport_time(
+                params, "flushUntilTS", "flushUntilMediaTimeValue",
+                "flushUntilMediaTimeScale", &untilTime);
+            /* At least one boundary must be present. Each side and each sequence/RTP component
+             * is optional; the live pause path carries only untilSeq + until media time. */
+            if ((!haveFromSeq && !haveFromTime) && (!haveUntilSeq && !haveUntilTime)) {
+                status = 400;
+                goto done;
+            }
+            pthread_mutex_lock(&spa103_lock);
+            if (spa103_receiver.session && !spa103_receiver.stop &&
+                spa103_receiver.sequence == sequence && haveUntilTime) {
+                spa103_receiver.anchor = untilTime;
+            }
+            pthread_mutex_unlock(&spa103_lock);
+            response = cfa_dictm(0, 0, cfa_dk_cb, cfa_dv_cb);
+            if (!response) {
+                status = 500;
+                goto done;
+            }
+            LOG_WARN(LOG_MODULE,
+                     "buffer103: %s[%u] ACK fromSeq=%s%lld untilSeq=%s%lld "
+                     "from=%s%lld/%lld until=%s%lld/%lld",
+                     methodName, (unsigned)requestNumber, haveFromSeq ? "" : "absent/",
+                     (long long)fromSeq, haveUntilSeq ? "" : "absent/",
+                     (long long)untilSeq, haveFromTime ? "" : "absent/",
+                     (long long)fromTime.mediaTimeValue, (long long)fromTime.mediaTimeScale,
+                     haveUntilTime ? "" : "absent/",
+                     (long long)untilTime.mediaTimeValue, (long long)untilTime.mediaTimeScale);
+            break;
+
+        default:
+            status = 501;
+            break;
+    }
+
+done:
+    if (status != 200) {
+        LOG_ERROR(LOG_MODULE, "buffer103: %s[%u] rejected HTTP status=%d",
+                  methodName, (unsigned)requestNumber, status);
+        result = spa103_send_http_status(connection, status);
+    } else if (response) {
+        result = spa103_send_http_plist(connection, request, response);
+    } else {
+        result = spa103_send_http_status(connection, 200);
+    }
+    if (response) cfa_rel(response);
+    cfa_rel(params);
+    return result;
+}
+
 /* Request callback installed only in the verified MU1316 HTTPServer object. The request is already
  * fully read when this callback runs, so the binary-plist body lives at the same HTTPMessage fields
  * used by the stock POST/SET_PARAMETER handlers. */
 static int spa103_http_process(void *connection, void *request)
 {
-    static const char methodName[] = "SETMAGICCOOKIE";
+    static const char cookieMethod[] = "SETMAGICCOOKIE";
     const uint8_t *method;
     const uint8_t *body;
     const uint8_t *cookieBytes;
+    const char *controlMethodName = 0;
+    enum spa103_control_method controlMethod = SPA103_CONTROL_NONE;
     uint32_t methodLength, bodyLength;
     void *plist = 0, *idKey = 0, *cookieKey = 0, *cookieData = 0;
     uint8_t *cookieCopy = 0;
@@ -875,8 +1329,28 @@ static int spa103_http_process(void *connection, void *request)
                                          SPA_103_HTTP_METHOD_PTR_OFF);
     methodLength = *(const uint32_t *)((const uint8_t *)request +
                                        SPA_103_HTTP_METHOD_LEN_OFF);
-    if (!method || methodLength != sizeof(methodName) - 1 ||
-        memcmp(method, methodName, sizeof(methodName) - 1) != 0)
+    if (!spa103_method_equal(method, methodLength, cookieMethod)) {
+        if (spa103_method_equal(method, methodLength, "GETANCHOR")) {
+            controlMethod = SPA103_CONTROL_GET_ANCHOR;
+            controlMethodName = "GETANCHOR";
+        } else if (spa103_method_equal(method, methodLength, "SETRATE")) {
+            controlMethod = SPA103_CONTROL_SET_RATE;
+            controlMethodName = "SETRATE";
+        } else if (spa103_method_equal(method, methodLength, "SETRATEANCHORTIME")) {
+            controlMethod = SPA103_CONTROL_SET_RATE_ANCHOR;
+            controlMethodName = "SETRATEANCHORTIME";
+        } else if (spa103_method_equal(method, methodLength, "FLUSHBUFFERED")) {
+            controlMethod = SPA103_CONTROL_FLUSH;
+            controlMethodName = "FLUSHBUFFERED";
+        } else {
+            return spa103_original_http_process(connection, request);
+        }
+        if (!spa_probe103_mode())
+            return spa103_original_http_process(connection, request);
+        return spa103_process_buffered_control(connection, request, controlMethod,
+                                               controlMethodName);
+    }
+    if (!spa_probe103_mode())
         return spa103_original_http_process(connection, request);
 
     body = *(const uint8_t * const *)((const uint8_t *)request + SPA_103_HTTP_BODY_PTR_OFF);
@@ -944,11 +1418,15 @@ done:
     return spa103_send_http_status(connection, status);
 }
 
-static int spa103_install_magic_cookie_dispatcher(uint32_t generation)
+static int spa103_install_buffered_dispatcher(void)
 {
     static const uint8_t ensureCreatedPrologue[12] = {
         0xf0, 0x45, 0x2d, 0xe9, 0xdc, 0x41, 0x9f, 0xe5,
         0xdc, 0x61, 0x9f, 0xe5
+    };
+    static const uint8_t setPlistResponsePrologue[12] = {
+        0xf0, 0x41, 0x2d, 0xe9, 0xc8, 0x50, 0x90, 0xe5,
+        0x03, 0x70, 0xa0, 0xe1
     };
     uintptr_t ensureAddress, imageBase;
     void *outer, *server;
@@ -956,6 +1434,11 @@ static int spa103_install_magic_cookie_dispatcher(uint32_t generation)
     int installed = 0;
 
     pthread_mutex_lock(&spa103_http_lock);
+    if (!spa_cf_resolve() || !spa103_resolve()) {
+        LOG_ERROR(LOG_MODULE,
+                  "buffer103: cannot resolve CFLite/HTTP runtime before dispatcher install");
+        goto done;
+    }
     ensureAddress = (uintptr_t)dlsym(RTLD_NEXT, "AirTunesServer_EnsureCreated");
     if (ensureAddress < SPA_103_MU1316_ENSURE_CREATED_VA) {
         LOG_ERROR(LOG_MODULE, "buffer103: AirTunesServer_EnsureCreated unavailable");
@@ -964,11 +1447,15 @@ static int spa103_install_magic_cookie_dispatcher(uint32_t generation)
     imageBase = ensureAddress - SPA_103_MU1316_ENSURE_CREATED_VA;
     if ((imageBase & 0xfffu) != 0 ||
         memcmp((const void *)(imageBase + SPA_103_MU1316_ENSURE_CREATED_VA),
-               ensureCreatedPrologue, sizeof(ensureCreatedPrologue)) != 0) {
+               ensureCreatedPrologue, sizeof(ensureCreatedPrologue)) != 0 ||
+        memcmp((const void *)(imageBase + SPA_103_MU1316_SET_PLIST_RESPONSE_VA),
+               setPlistResponsePrologue, sizeof(setPlistResponsePrologue)) != 0) {
         LOG_ERROR(LOG_MODULE,
                   "buffer103: libairplay private dispatcher fingerprint mismatch; refusing patch");
         goto done;
     }
+    spa103_http_set_plist_response = (spa_http_set_plist_response_t)
+        (imageBase + SPA_103_MU1316_SET_PLIST_RESPONSE_VA);
 
     outer = *(void **)(imageBase + SPA_103_MU1316_SERVER_GLOBAL_VA);
     if (!outer || ((uintptr_t)outer & 3u) != 0) {
@@ -983,7 +1470,6 @@ static int spa103_install_magic_cookie_dispatcher(uint32_t generation)
     callbackSlot = (void **)((uint8_t *)server + SPA_103_HTTP_PROCESS_SLOT_OFF);
     if (*callbackSlot == (void *)spa103_http_process && spa103_original_http_process) {
         spa103_http_process_slot = callbackSlot;
-        spa103_http_generation = generation;
         installed = 1;
         goto done;
     }
@@ -998,10 +1484,9 @@ static int spa103_install_magic_cookie_dispatcher(uint32_t generation)
     __sync_synchronize();
     *callbackSlot = (void *)spa103_http_process;
     spa103_http_process_slot = callbackSlot;
-    spa103_http_generation = generation;
     __sync_synchronize();
     LOG_WARN(LOG_MODULE,
-             "buffer103: installed fingerprint-locked SETMAGICCOOKIE dispatcher server=%p slot=%p",
+             "buffer103: installed fingerprint-locked buffered RTSP dispatcher server=%p slot=%p",
              server, callbackSlot);
     installed = 1;
 
@@ -1010,31 +1495,34 @@ done:
     return installed;
 }
 
-static void spa103_restore_magic_cookie_dispatcher(uint32_t generation)
-{
-    void **callbackSlot;
+/* AirTunesServer_EnsureCreated is called through libairplay's preemptible PLT. Install immediately
+ * after the stock function creates its HTTPServer, before the first control connection copies the
+ * server callback table. Installing later from type-103 SETUP is too late for that existing TCP
+ * connection: hardware then receives APAP but none of SETMAGICCOOKIE/SETRATE* reaches our slot.
+ *
+ * Keep the wrapper for the dio_manager process lifetime. It delegates every stock verb byte-for-
+ * byte and custom verbs additionally require SPATIAL_103, so type-100 PCM remains stock.
+ */
+typedef int (*spa_air_tunes_ensure_created_t)(void);
 
-    pthread_mutex_lock(&spa103_http_lock);
-    callbackSlot = spa103_http_process_slot;
-    if (!callbackSlot || !spa103_original_http_process ||
-        spa103_http_generation != generation) {
-        pthread_mutex_unlock(&spa103_http_lock);
-        return;
+int AirTunesServer_EnsureCreated(void)
+{
+    static spa_air_tunes_ensure_created_t real_ensure_created;
+    int err;
+
+    if (!real_ensure_created)
+        real_ensure_created = (spa_air_tunes_ensure_created_t)
+            dlsym(RTLD_NEXT, "AirTunesServer_EnsureCreated");
+    if (!real_ensure_created) {
+        LOG_ERROR(LOG_MODULE, "buffer103: stock AirTunesServer_EnsureCreated unavailable");
+        return -6735;
     }
-    if (*callbackSlot == (void *)spa103_http_process) {
-        __sync_synchronize();
-        *callbackSlot = (void *)spa103_original_http_process;
-        __sync_synchronize();
-        LOG_INFO(LOG_MODULE, "buffer103: restored stock RTSP request dispatcher slot=%p",
-                 callbackSlot);
-    } else if (*callbackSlot != (void *)spa103_original_http_process) {
+
+    err = real_ensure_created();
+    if (!err && spa_probe103_mode() && !spa103_install_buffered_dispatcher())
         LOG_ERROR(LOG_MODULE,
-                  "buffer103: RTSP request slot changed by another owner actual=%p; not restoring",
-                  *callbackSlot);
-    }
-    spa103_http_process_slot = 0;
-    spa103_http_generation = 0;
-    pthread_mutex_unlock(&spa103_http_lock);
+                  "buffer103: early RTSP dispatcher install failed; buffered audio unavailable");
+    return err;
 }
 
 static int spa103_resolve(void)
@@ -1067,10 +1555,19 @@ static int spa103_resolve(void)
     if (!spa103_http_send_response)
         spa103_http_send_response =
             (spa_http_send_response_t)dlsym(RTLD_DEFAULT, "HTTPConnectionSendResponse");
+    if (!spa103_up_ticks)
+        spa103_up_ticks = (spa_up_ticks_t)dlsym(RTLD_DEFAULT, "UpTicks");
+    if (!spa103_milliseconds_to_up_ticks)
+        spa103_milliseconds_to_up_ticks = (spa_milliseconds_to_up_ticks_t)
+            dlsym(RTLD_DEFAULT, "MillisecondsToUpTicks");
+    if (!spa103_clock_get_near_ticks)
+        spa103_clock_get_near_ticks = (spa_air_tunes_clock_get_near_ticks_t)
+            dlsym(RTLD_DEFAULT, "AirTunesClock_GetSynchronizedTimeNearUpTicks");
     if (!spa103_srv_sockopen || !spa103_sock_accept || !spa103_cf_create_plist_bytes ||
         !spa103_cf_dictionary_type_id || !spa103_cf_data_type_id ||
         !spa103_cf_dict_get_typed || !spa103_cf_data_length || !spa103_cf_data_bytes ||
-        !spa103_http_init_response || !spa103_http_send_response) {
+        !spa103_http_init_response || !spa103_http_send_response || !spa103_up_ticks ||
+        !spa103_milliseconds_to_up_ticks || !spa103_clock_get_near_ticks) {
         LOG_ERROR(LOG_MODULE,
                   "buffer103: socket/CFLite/HTTP symbols unavailable; receiver disabled");
         return 0;
@@ -1405,11 +1902,15 @@ static void spa103_stop_receiver(void *session, int anySession)
         spa103_receiver.settingUp = 0;
         spa103_receiver.stop = 0;
         spa103_receiver.sequence = 0;
+        spa103_receiver.rate = 0;
+        memset(&spa103_receiver.anchor, 0, sizeof(spa103_receiver.anchor));
+        memset(&spa103_receiver.firstAudible, 0, sizeof(spa103_receiver.firstAudible));
+        memset(&spa103_receiver.networkTime, 0, sizeof(spa103_receiver.networkTime));
+        spa103_receiver.controlRequestCount = 0;
         spa103_clear_magic_cookies_locked();
         pthread_cond_broadcast(&spa103_cond);
     }
     pthread_mutex_unlock(&spa103_lock);
-    spa103_restore_magic_cookie_dispatcher(generation);
 }
 
 int spa_setup_buffered_receiver(void *session, void *request, void *response,
@@ -1445,6 +1946,11 @@ int spa_setup_buffered_receiver(void *session, void *request, void *response,
     spa103_receiver.controlClientSock = -1;
     spa103_receiver.threadCreated = 0;
     spa103_receiver.controlThreadCreated = 0;
+    spa103_receiver.rate = 0;
+    memset(&spa103_receiver.anchor, 0, sizeof(spa103_receiver.anchor));
+    memset(&spa103_receiver.firstAudible, 0, sizeof(spa103_receiver.firstAudible));
+    memset(&spa103_receiver.networkTime, 0, sizeof(spa103_receiver.networkTime));
+    spa103_receiver.controlRequestCount = 0;
     pthread_mutex_unlock(&spa103_lock);
 
     family = *(const uint8_t *)((const char *)session + SPA_103_SESSION_FAMILY_OFF);
@@ -1455,9 +1961,10 @@ int spa_setup_buffered_receiver(void *session, void *request, void *response,
              err, family, port, sock, (unsigned)sequence);
     if (err || sock < 0 || port <= 0) goto fail;
 
-    /* SETMAGICCOOKIE is a custom method on the already-open RTSP connection, not a 6033/RTCP
-     * payload. Install its strictly fingerprinted dispatcher before publishing this SETUP. */
-    if (!spa103_install_magic_cookie_dispatcher(generation)) {
+    /* SETMAGICCOOKIE and the four buffered-control verbs use the existing RTSP connection, not a
+     * 6033/RTCP payload. AirTunesServer_EnsureCreated installed the dispatcher before that
+     * connection was accepted; re-check its fingerprinted slot before publishing this SETUP. */
+    if (!spa103_install_buffered_dispatcher()) {
         err = -6735;
         goto fail;
     }
@@ -1677,8 +2184,8 @@ int spa_augment_setup_response(void *session, void *request, void *response, uin
     if (!proposed) { cfa_rel(kReq); return 0; }
     cfa_rel(kReq);
 
-    /* A new control SETUP retires any previous session's contract even when the marker was removed
-     * between reconnects. Once this response enables the feature we set the new owner below. */
+    /* A new control SETUP retires any previous session's contract. Once this response enables the
+     * feature we set the new owner below. */
     spa_set_mainbuffered_contract(session, 0, sequence);
     mode = spa_probe103_mode();
     if (!mode) return 0;
@@ -1747,8 +2254,8 @@ void spa_augment_server_info(void *session, void *info)
                 dcx = 1;
             } else {
                 LOG_ERROR(LOG_MODULE,
-                          "probe103: %s present but CFLite Boolean unavailable; DCX disabled",
-                          SPA_103_DCX_PATH);
+                          "probe103: %s enabled but CFLite Boolean unavailable; DCX disabled",
+                          SPA_103_DCX_ENV);
             }
             if (dcxKey) cfa_rel(dcxKey);
         }
@@ -1810,7 +2317,7 @@ void spa_capture_server_info(void *info)
  * While the hook-owned type-103 stream is active, stock's {type:100,sr:48000} feedback is stale.
  * Apple's current receiver returns {streams:[]} for this command, including with buffered media,
  * so replace only that array for the owning session.  Every other command and the pre/post-103
- * type-100 fallback response stays stock.  The master type-103 marker gates logs and plist files. */
+ * type-100 fallback response stays stock. SPATIAL_103 gates logs and plist files. */
 typedef int (*fn_session_control_t)(void *, uint32_t, const void *, const void *,
                                     const void *, void **);
 

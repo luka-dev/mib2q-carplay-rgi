@@ -59,12 +59,13 @@
  * APAP, and receives the asynchronous SETMAGICCOOKIE binary plist on the existing RTSP connection.
  * The latter is installed through an exact MU1316 HTTPServer callback fingerprint; it does not need
  * controlPort/6033. There is still no APAC/AAC render path. Hence OFF by default and gated on a
- * marker file that can be removed and re-tested with a replug — no reboot. */
-#define SPA_PROBE103_PATH   "/tmp/spatial_probe103"
-#define SPA_103_INDEX_PATH  "/tmp/spatial_103_index"
-#define SPA_103_MODE_PATH   "/tmp/spatial_103_mode"
-#define SPA_103_DCX_PATH    "/tmp/spatial_103_dcx"
-#define SPA_103_MASK_PATH   "/tmp/spatial_103_mask"
+ * startup environment. These variables must be exported before AirTunesServer_EnsureCreated so
+ * the private dispatcher is installed before the first control connection. */
+#define SPA_PROBE103_ENV   "SPATIAL_103"
+#define SPA_103_INDEX_ENV  "SPATIAL_103_INDEX"
+#define SPA_103_MODE_ENV   "SPATIAL_103_MODE"
+#define SPA_103_DCX_ENV    "SPATIAL_103_DCX"
+#define SPA_103_MASK_ENV   "SPATIAL_103_MASK"
 #define SPA_103_MODE_INFO       1u  /* advertise the type-103 /info descriptor only */
 #define SPA_103_MODE_FEATURE    2u  /* negotiate mainBuffered only (when proposed) */
 #define SPA_103_MODE_BOTH       (SPA_103_MODE_INFO | SPA_103_MODE_FEATURE)
@@ -78,7 +79,7 @@
 #define SPA_BUFFERED_BROAD_MASK      0x1440800  /* old failed probe: mixed bits 11,18,22,24 */
 
 /* Called by the single SessionSetup interposer before stock libairplay. When the request contains
- * stream type 103 and the probe marker is present, records the stream fields and writes the complete
+ * stream type 103 and SPATIAL_103 is enabled, records the stream fields and writes the complete
  * request to a mode-0600 binary plist in /tmp. Returns 1 iff a type-103 request was found. */
 int spa_inspect_setup_request(void *request, uint32_t sequence);
 
@@ -106,9 +107,8 @@ void spa_capture_setup_response(void *request, void *response, uint32_t sequence
 
 /* Fulfil AirPlaySender's strict feature/info pairing: after this session negotiated mainBuffered,
  * add the required top-level /info `mainBufferedInfo` dictionary. It stays empty by default. The
- * probe-only /tmp/spatial_103_dcx marker adds a real CFBoolean `DCXEnabled=true` so the Dolby/DCX
- * branch can be A/B tested without rebuilding; removing the master marker still disables all 103
- * mutations. */
+ * probe-only SPATIAL_103_DCX=1 adds a real CFBoolean `DCXEnabled=true` so the Dolby/DCX branch can
+ * be A/B tested without rebuilding; SPATIAL_103=0 still disables all type-103 mutations. */
 void spa_augment_server_info(void *session, void *info);
 
 /* Capture the final /info dictionary after all stock and hook-owned mutations. */

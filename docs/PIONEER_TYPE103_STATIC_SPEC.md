@@ -10,7 +10,7 @@
 штатный spatial downmix. Отдельно найден нативный ARMv7/QNX путь декодирования AAC через уже
 установленный в Audi Cinemo.
 
-Рекомендуемый первый рабочий тракт:
+Первоначально рекомендуемый статикой тракт был:
 
 ```text
 iOS type 103 / index 40 (AAC-LC 48 kHz 5.1.2)
@@ -25,13 +25,40 @@ APAC 65/66 остаётся вторым, полностью описанным 
 Pioneer-библиотеку нельзя переносить как готовый бинарник: это AArch64 Linux, а Audi MHI2Q — ARMv7
 QNX. Патч матрицы Pioneer нужен только как проверяемый статический oracle.
 
+## Live delta — Audi + iOS 27, 2026-08-31
+
+Hardware изменил порядок реализации: iOS отказался от type 103 при рекламе index 40 и выбрал
+стерео type 100, но при index 65 действительно создал type 103/APAP и показал Dolby Atmos. Поэтому
+текущий рабочий probe остаётся на **APAC index 65**; index 40 статически допустим, но live-selection
+для этой пары phone/HU не подтверждён.
+
+Пятисекундное завершение сессии найдено и устранено на control-plane. Поздняя подмена callback
+`HTTPServer+0x64` не перехватывала уже принятую control connection. Экспортированный interposer
+`AirTunesServer_EnsureCreated` теперь ставит dispatcher сразу после создания HTTPServer, до первого
+accept. После этого iOS успешно передал 33-byte `SETMAGICCOOKIE`; SETRATE был перехвачен, а после
+разрешения media-only формы без `rtpTime` получил HTTP 200. Atmos/type 103 и playback counter
+держались больше двух минут вместо teardown через 5 секунд.
+
+Реальные pause-пакеты уточнили сериализацию:
+
+```text
+SETRATEANCHORTIME { rate = 0 }
+FLUSHBUFFERED {
+  flushUntilSeq = <seq>
+  flushUntilMediaTimeValue = <value>
+  flushUntilMediaTimeScale = 48000
+}
+```
+
+`flushFrom*` и `flushUntilTS` при этом отсутствуют. Build `b8305141…` принимает опциональные
+границы и RTP-компоненты; его live pause/resume проверка ещё не завершена. Decrypt/APAC decode,
+5.1.2-to-5.1 downmix и DIO5 render по-прежнему следующие отдельные этапы.
+
 Type 100 остаётся штатным realtime PCM/6 fallback. Никакой результат этой статической работы не
 требует менять его формат, DIO5 или усилитель.
 
-Важно: на HU остаётся прежний диагностический build `13aee019…`, созданный до исправления
-`40=AAC-LC, 42=AAC-ELD`; type 103 там выключен marker-ом. В этой работе изменены только repository
-source/docs/tools. Для index-40 теста позже потребуется осознанно собрать и отдельно развернуть
-новый hook; автоматического deployment не выполнялось.
+Текущий HU build и live-результаты описаны выше; прежнее состояние с выключенным marker и build
+`13aee019…` больше не актуально.
 
 ## Повторный статический аудит negotiation (2026-08-29)
 
@@ -183,6 +210,12 @@ Legacy-ответ receiver должен содержать массив `streams
 | 8 | 4 | signed media-time scale, big-endian int32 |
 | 12 | 3 | sequence number, big-endian 24-bit |
 
+Pioneer `AirPlayReceiverSessionConvertMediaTimeToSampleTime` вычисляет RTP/sample time как
+`floor(mediaTimeValue / mediaTimeScale * sampleRate) mod 2^32`. Это подтверждено live-захватом:
+`46670057988423 / 1e9 * 48000 = 2240162783 = 0x85862bdf`, и первый APAP fixed header содержит
+ровно media value `0x0000000085862bdf`. Поэтому ответ `SETRATE` не может оставлять `rtpTime=0`,
+даже когда iOS опускает его во входном media-only запросе.
+
 Тело защищено так:
 
 ```text
@@ -285,8 +318,7 @@ Repository hook теперь ставит wrapper в этот slot только 
 first-ID-wins и отправляет обычный RTSP success/error. Любой другой method без изменений передаётся
 оригинальному handler. Первая принятая CFData сохраняется mode-0600 как
 `/tmp/spatial_magiccookie_<sequence>_<id-hex>.bin` для decoder bench. Изменение выключено вместе с
-master marker type 103, а callback возвращается stock handler при teardown; на HU это не
-развёртывалось.
+`SPATIAL_103=0`, а callback возвращается stock handler при teardown.
 
 ## APAC cookie и decoder API
 

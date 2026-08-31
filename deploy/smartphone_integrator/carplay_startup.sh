@@ -201,8 +201,15 @@ export ALTSCREEN_ADVERT_DISPLAYS=1
 # REQUIRES the patched deva-ctrl-qc.so (mpl5_dio_ent 2->6 voices) to be installed + a reboot — without
 # it the 6-voice open is rejected and CarPlay main audio fails. Comment out for stock stereo.
 # See deploy/spatial_5_1/README.md.
-# DISABLED for this deploy: the patched deva-ctrl-qc.so is NOT on the unit (max_voices still 2,
-# stock file dated 2018). With the flag ON and stock deva the 6-voice open is rejected and CarPlay
-# main audio FAILS. Re-enable together with the deva swap + reboot (deploy/spatial_5_1/README.md).
-#export SPATIAL_5_1=1
+# The unit now has the patched deva-ctrl-qc.so (mpl5_dio_ent max_voices 2->6), so keep this exported.
+# Removing it preserves type-103 probing but turns the independent type-100 fallback back to stereo.
+export SPATIAL_5_1=1
+
+# Buffered Spatial/Dolby (type 103). These must be in dio_manager's environment before
+# AirTunesServer_EnsureCreated accepts the first control connection. No /tmp markers are used.
+export SPATIAL_103=1
+export SPATIAL_103_MODE=both
+export SPATIAL_103_INDEX=65
+export SPATIAL_103_DCX=0
+export SPATIAL_103_MASK=0x400000
 exec "$DIODIR/dio_manager" "$@"

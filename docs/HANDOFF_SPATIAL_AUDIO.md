@@ -29,7 +29,7 @@ With index 65 it selected a genuine type-103 APAP stream, displayed Dolby Atmos,
 `SETMAGICCOOKIE`, and connected to TCP 6032. TCP 6033 is not used by this path.
 
 The installed hook at `/mnt/app/root/hooks/libcarplay_hook.so` is build
-`d7dc11dbee6e9d0b1e81e15c8776693aa69c169ee192cdfb788ceee86d1aa7cc` (402839 bytes). Its copy-back
+`cbbdeea621918ae156b5a11f3be61e7c5be57d64d772635b5a8e5b3be91f1260` (403088 bytes). Its copy-back
 SHA-256 matches the local build. It adds:
 
 * paired `mainBuffered` / `mainBufferedInfo` negotiation and type-103 index 65;
@@ -52,8 +52,17 @@ older parser returned HTTP 400 because it incorrectly required both from/until b
 timestamps. Build `b8305141…` was verified live to ACK both rate=0 and that optional-boundary FLUSH.
 The later teardown was the user's physical unplug, not a receiver crash. The remaining timeline
 rollback came from returning a zero/synthetic clock: only about 0.576 s/27 APAP frames were sent.
-Build `d7dc11db…` now obtains the synchronized AirTunes clock from the exact MU1316 session+5072
-field and returns a 150 ms-ahead network anchor; its first live nonzero-timeline test is pending.
+Build `d7dc11db…` obtains the MU1316 clock pointer from session+5072 and safely returns an anchor,
+but live output still had timeline 0. A follow-up build incorrectly treated session+5072 as the
+inline object and crashed on Play. Static stock callers proved the correct contract: Create receives
+session+0x13d0 as an output slot and later code loads `[session+0x13d0]`. That unsafe build was
+immediately reverted; the timeline-ID source remains under investigation.
+
+The decisive static/live correlation is RTP, not the old clock's absent timeline-ID field. Pioneer
+converts requested media time to 48 kHz sample time before replying. Live values match exactly:
+`46670057988423/1e9*48000 = 0x85862bdf`, which is the first APAP header media value. The hook had
+returned `rtpTime=0`; current source now returns that modulo-2^32 conversion for SETRATE, FLUSH, and
+GETANCHOR.
 
 This remains a protocol/capture sink. It does **not** yet authenticate/decrypt APAP, decode APAC,
 downmix, or render type-103 audio. A moving playback counter proves control-plane acceptance, not
@@ -1004,7 +1013,7 @@ The feature-only run established that the phone proposes `mainBuffered`, but iOS
 families. The corrected single AAC bit `0x400000` solved that gate and produced the hardware-confirmed
 type-103 request above.
 
-Current installed build is `d7dc11dbee6e9d0b1e81e15c8776693aa69c169ee192cdfb788ceee86d1aa7cc`;
+Current installed build is `cbbdeea621918ae156b5a11f3be61e7c5be57d64d772635b5a8e5b3be91f1260`;
 it was atomically installed and copied back with the identical SHA-256. Startup selects
 `both + legacy 0x400000 + extended index 65 + DCX off`. Type-100 PCM/6 and DIO5 remain unchanged as
 fallback.

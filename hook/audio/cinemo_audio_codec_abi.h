@@ -4,7 +4,7 @@
  *
  * This is an ABI contract, not an enabled decoder.  The declarations below
  * were recovered from the target MU1316 libNmeSDK.so and checked against the
- * working MH2p AirPlay AAC adapter.  Keep the type-103 marker disabled until
+ * working MH2p AirPlay AAC adapter.  Keep SPATIAL_103 disabled until
  * the authenticated APAP receiver, bounded queue, decoder and renderer are
  * connected as one fail-closed path.
  *
