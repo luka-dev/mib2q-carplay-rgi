@@ -28,6 +28,13 @@
 #   ./apac_decoder/reference/run.sh swap            # all 3977 packets
 #   ./apac_decoder/reference/run.sh swap 400        # the first 400
 #
+# And the stage-f/g acceptance test - the whole capture decoded by the PORT and
+# compared against the library, both as float32 PCM and, bit for bit, as the
+# spectra the frame layer hands the filter bank:
+#
+#   ./apac_decoder/reference/run.sh port            # all 3977 packets
+#   ./apac_decoder/reference/run.sh port 400        # the first 400
+#
 # Paths given to `fn` are host paths and are bind-mounted read-only.
 #
 # Everything it writes lives in apac_decoder/reference/.build/ except
@@ -48,6 +55,8 @@ FN=0
 if [ "${1:-}" = "fn" ]; then FN=1; shift; fi
 SWAP=0
 if [ "${1:-}" = "swap" ]; then SWAP=1; shift; fi
+PORT=0
+if [ "${1:-}" = "port" ]; then PORT=1; shift; fi
 
 REBUILD=0
 PROBE=0
@@ -162,6 +171,35 @@ run_swap() {
         ' _ "$@"
 }
 
+# --------------------------------------------------------- port acceptance ----
+# Decode the capture twice: once with the library, dumping the spectrum it hands
+# its own filter bank for every channel of every frame, and once with the port,
+# dumping the same thing.  The frame layer has no other observable output of its
+# own - everything below it is the transform, which cannot be bit exact because
+# the library's FFT is vDSP - so the spectra settle stages a..g on their own
+# terms and the PCM comparison shows what the transform then costs.
+#
+# The library's dump run substitutes the PORT's filter bank for its own, because
+# the hook has to overwrite the entry point to see the buffer at all; that
+# substitution is the one `run.sh swap` measures, and it does not touch the
+# spectra, which are read before the transform runs.
+run_port() {
+    local dec; dec="$(cd "$HERE/.." && pwd)"
+    docker run --rm --platform linux/arm64 \
+        -v "$HERE:/src:ro" -v "$dec/src:/port/src:ro" -v "$dec/include:/port/include:ro" \
+        -v "$CAPTURE:/data:ro" -v "$WORK:/out" \
+        "$IMAGE" bash -c '
+            set -e
+            g++ -std=c++11 -O2 -g -Wall -o /tmp/apac_ref /src/apac_ref.cpp -ldl
+            g++ -std=c++11 -O2 -g -Wall -Wextra -fno-exceptions -fno-rtti \
+                -I/port/include -shared -fPIC -o /tmp/dump.so \
+                /src/spectrum_dump_shim.cpp /port/src/transform.cpp \
+                /port/src/transform_tables.cpp /port/src/filterbank.cpp -ldl
+            APAC_DUMP_SPECTRA=/out/lib.spec LD_PRELOAD=/tmp/dump.so \
+                /tmp/apac_ref --f32 "$@" /out/pioneer_port_ref.f32
+        ' _ "$@"
+}
+
 if [ "$PROBE" = 1 ]; then
     run_ref --probe
     exit $?
@@ -236,6 +274,48 @@ if [ "$SWAP" = 1 ]; then
         echo "=== Apple vs Pioneer, with the ported transform ==="
         python3 "$HERE/compare_pcm.py" "$WORK/apple.pcm" "$WORK/pioneer_swapped.pcm" 6
     fi
+    exit 0
+fi
+
+# ------------------------------------------------------------------- port ----
+if [ "$PORT" = 1 ]; then
+    DEC="$(cd "$HERE/.." && pwd)"
+    COUNT_ARGS=()
+    HOST_LIST="$WORK/host_list.txt"
+    if [ $# -gt 0 ]; then
+        COUNT_ARGS=(--count "$1")
+        head -n "$1" "$WORK/host_list.txt" > "$WORK/host_list_port.txt"
+        HOST_LIST="$WORK/host_list_port.txt"
+    fi
+
+    echo
+    echo "=== the original, unmodified ==="
+    run_ref --list /out/ctr_list.txt "${COUNT_ARGS[@]+"${COUNT_ARGS[@]}"}" \
+        "/data/$(basename "$COOKIE")" /out/pioneer.f32 --f32
+
+    echo
+    echo "=== the original again, with the frame layer's spectra dumped ==="
+    run_port --list /out/ctr_list.txt "${COUNT_ARGS[@]+"${COUNT_ARGS[@]}"}" \
+        "/data/$(basename "$COOKIE")"
+
+    echo
+    echo "=== the port ==="
+    make -C "$DEC" tools >/dev/null
+    "$DEC/.build/apac_decode" "$COOKIE" "$WORK/port.f32" \
+        --list "$HOST_LIST" --dump-spectra "$WORK/port.spec"
+
+    echo
+    echo "=== stages a..g: the spectra the frame layer hands the filter bank ==="
+    python3 "$HERE/compare_spectra.py" "$WORK/lib.spec" "$WORK/port.spec"
+
+    echo
+    echo "=== the port against the ORIGINAL, float32 (FFT-limited) ==="
+    python3 "$HERE/compare_f32.py" "$WORK/pioneer.f32" "$WORK/port.f32" 6
+
+    echo
+    echo "=== the port against the original carrying the port's own transform,"
+    echo "    float32 (expect exactly zero: this isolates the FFT) ==="
+    python3 "$HERE/compare_f32.py" "$WORK/pioneer_port_ref.f32" "$WORK/port.f32" 6
     exit 0
 fi
 

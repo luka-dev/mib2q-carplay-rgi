@@ -10,6 +10,7 @@ every one of 24 434 688 samples.
 ./apac_decoder/reference/run.sh --count 64   # first 64 packets only
 ./apac_decoder/reference/run.sh --f32        # float32 out, skips the Apple compare
 ./apac_decoder/reference/run.sh --probe      # just load the library
+./apac_decoder/reference/run.sh port         # the PORT against the library, whole capture
 ```
 
 ## Result
@@ -94,6 +95,29 @@ Three things had to be fixed, in this order:
 `dlopen` uses `RTLD_LAZY | RTLD_GLOBAL`; `RTLD_NOW` still fails (there are undefined symbols
 on paths the APAC code never takes). The Pioneer libs print their own
 `NStandardLib: DLL_PROCESS_ATTACHED` banners on load; that is normal and harmless.
+
+## Instrumenting the running library
+
+The library is linked `DT_SYMBOLIC`, so `LD_PRELOAD` cannot interpose its internals. Three
+techniques, in increasing order of how much they destroy:
+
+1. **Swap an exported vtable slot** — `reference/scratch/trace_shim.c`. `_ZTV11APACICSInfo`,
+   `_ZTV24APACSingleChannelElement`, `_ZTV22APACChannelPairElement`, `_ZTV14APACLFEElement`,
+   `_ZTV18APACCoreLBRDecoder` and the rest are all exported, and slot `k + 2` is virtual index `k`.
+   The wrapper still calls the real function by its own symbol, so nothing is lost. This is what
+   showed that the frame-type field is two bits, not one.
+2. **Patch an entry to a constant return** — `reference/scratch/reach_shim.c`. `APAC_STUB` is a
+   comma-separated list of mangled names; `MOV W0,#1 ; RET` by default, `MOV W0,#0 ; RET` with
+   `APAC_STUB_RET0=1`. Return-1 answers "is this called at all"; return-0 answers "does it read
+   bits, or change the output". Both questions are needed — `apac::TrimmingData::Deserialize` is
+   called on every frame and cannot change anything, because it is the last thing that reads a bit.
+3. **Patch an entry to a jump into the port** — `reference/transform_swap_shim.cpp` and
+   `reference/spectrum_dump_shim.cpp`. Needed for a function called directly rather than through a
+   vtable; `APACSynthesisFilterBank::FrequencyToTimeInPlace` is the one that matters. The original
+   is gone, so the shim has to finish the job itself.
+
+Read every mangled name out of the binary with `gobjdump -T`. A hand-built name resolves to nothing
+and the experiment then proves whatever you hoped.
 
 ## The entry points actually used
 

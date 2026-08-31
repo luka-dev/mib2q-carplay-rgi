@@ -30,6 +30,13 @@ $(BUILD)/%: tests/%.cpp $(OBJ) | $(BUILD)
 $(BUILD):
 	@mkdir -p $(BUILD)
 
+# The whole-capture harness.  Not a test: it needs the capture, which is
+# gitignored.  `make check` runs on committed fixtures alone.
+$(BUILD)/apac_decode: tools/apac_decode.cpp $(OBJ) | $(BUILD)
+	$(CXX) $(CXXFLAGS) $(DEPFLAGS) $< $(OBJ) -o $@
+
+tools: $(BUILD)/apac_decode
+
 check: $(TBIN)
 	@if [ -z "$(TBIN)" ]; then echo "no tests yet"; exit 1; fi
 	@for t in $(TBIN); do printf '%-40s ' "$$(basename $$t)"; ./$$t || exit 1; done
@@ -39,4 +46,4 @@ clean:
 
 -include $(BUILD)/*.d
 
-.PHONY: all check clean
+.PHONY: all check clean tools
