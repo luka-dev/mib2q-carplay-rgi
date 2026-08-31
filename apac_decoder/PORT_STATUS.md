@@ -13,7 +13,7 @@ differently and a 1 LSB mismatch there means nothing.
 | a | bit reader and config | `TBitstreamReader`, `apac::GlobalConfig`, `BaseASCConfig`, `ProfileLevelConfig` | **DONE**, two documented gaps | `tests/test_bitreader.cpp`, `tests/test_globalconfig.cpp` |
 | b | band layout | `APACICSInfo`, `APACScaleFactorData`, `apac::SFBOffsets` | **DONE** | `tests/test_icsinfo.cpp`, `tests/test_sfb_offsets.cpp`, `tests/test_scalefactors.cpp` |
 | c | spectrum core | `APACSpectralData`, `apac::GetHuffmanTable` and the 12 codebooks | **DONE** | `tests/test_spectraldata.cpp`; LRVQ is NOT here, see below |
-| d | transform | `APACTNSData`, `apac::LSFTools`, `apac::LPCBase`, `apac::LPMDCTFilter`, `APACSynthesisFilterBank`, `MDCT`, `DCT_IV`, `MultiRadix*FFT` | TODO | |
+| d | transform | `APACTNSData`, `apac::LSFTools`, `apac::LPCBase`, `apac::LPMDCTFilter`, `APACSynthesisFilterBank`, `MDCT`, `DCT_IV`, `MultiRadix*FFT` | **DONE**, one documented gap | `tests/test_transform_tables.cpp`, `test_mdct.cpp`, `test_filterbank.cpp`, `test_tns.cpp`, `test_lpc.cpp`, `test_lpmdct.cpp` |
 | e | bandwidth extension | `APACBWE2Decoder`, `BWELPC` | TODO | |
 | f | elements | `APACSingleChannelElement`, `APACChannelPairElement`, `APACLFEElement`, `APACSyntacticElement` | TODO | |
 | g | top level | `APACCoreDecoder`, `APACDecoder`, `APACASPDecoder` | TODO | |
@@ -25,11 +25,12 @@ differently and a 1 LSB mismatch there means nothing.
 Out of scope for the CarPlay 5.1 target: `apac::scene`, `apac::APACAudioSceneDecoder`,
 `apac::AudioSceneConfig` (Ambisonics), `APACCoreLBRDecoder`, `apac::lbr`.
 
-## Where stages 0, a, b and c stand
+## Where stages 0, a, b, c and d stand
 
 **Stage 0.** `reference/apac_fn_ref.cpp` is a sibling of `apac_ref.cpp` in the same arm64
 container. It resolves individual members by their Itanium mangling and calls them:
-`run.sh fn probe | bs | ics | scf | spec | sfb | gc | gc-raw | cookie | scene`. Host paths handed to `fn`
+`run.sh fn probe | bs | ics | scf | spec | sfb | gc | gc-raw | cookie | scene | win | mdct | fb |
+tns | lpc | lpmdct`. Host paths handed to `fn`
 are bind-mounted read-only. `tools/gen_fixtures.sh` drives it and writes
 `tests/fixtures/*.fixture`; those are committed, so `make check` runs on the host with no
 Docker. Every expectation in them is a value the library actually produced.
@@ -108,6 +109,49 @@ Every book's Kraft sum is exactly 1 counting the guard record.
 
 `APACSpectralData::Deserialize`'s only exit sets `W0 = 0`, so it cannot fail; malformed input
 is caught upstream in `APACScaleFactorData::Deserialize`.
+
+**Stage d — proven, except the LSFTools codebook half.**
+
+Everything in the transform path is transcribed index for index out of the disassembly except
+the FFTs, and there is a reason for that: `MultiRadixFFT::CplxOutOfPlaceTransform` and
+`MultiRadixRealFFT` are three-line wrappers around **`vDSP_DFT_Execute`** — Apple's Accelerate
+framework, which is closed and is not on the head unit. So the port has its own radix-2 FFT and
+the agreement there is float noise rather than bit-exact. Everything with no FFT under it comes
+out bit-exact, and does.
+
+| what | agreement | coverage |
+| --- | --- | --- |
+| the six constant tables + the size gate | **bit exact**, 3456 words | sine/KBD/DCT-IV modulation at both sizes, 27 NULL checks |
+| `MDCT::InverseInPlaceTransform` | 1.4e-07 of full scale (denormals 2.1e-06) | both block sizes x 16 cases x both halves, 36 864 floats |
+| `APACSynthesisFilterBank::FrequencyToTimeInPlace` | 3e-08 | 30 stateful steps, 3 channels, all 4 window sequences, both shapes |
+| `APACTNSData` ctor / ParseTNSData / Apply | **bit exact** | 14 rates; 32 parses compared over the whole 190-byte object; 32 applies |
+| `apac::LPCBase` + the stateless `apac::LSFTools` | 9.4e-08 | 10 entry points x 16 orders, 176 checks |
+| `MultiRadixRealFFT` + `apac::LPMDCTFilter` | 2.7e-07 | 4 transform lengths, both fftSize/n ratios, 72 checks |
+
+`reference/dsp_cases.h` generates every input and is included by BOTH the oracle and the host
+tests, so the committed fixtures carry only the expectations. Regenerate with
+`tools/gen_fixtures_transform.sh`.
+
+**The one gap.** `apac::LSFTools::Initialize`, `Reset`, `DecodeLSF`, `QuantizeLSF` and the
+`LSF_To_LPC` that chains the conversions are **not started**. They need the object's six
+`std::vector` members and the 64 KiB codebook block at `0x333000` that `Initialize` unpacks, and
+their only caller is `APACLRVQDecoder` — already established below as never entered on the
+CarPlay 5.1 stream. Guessing at them was not worth it; they land with stage h1.
+
+Four things the differential runs settled that static analysis had not:
+
+* The complex FFT is **forward**, `exp(-2*pi*i*j*k/m)`, unscaled. `DFTHandle<true>` keeps two
+  vDSP setups and the direction was not readable from the decompilation.
+* The real FFT is the **plain unscaled DFT** with `X[0]` in `realp[0]` and `X[n/2]` in
+  `imagp[0]`; its inverse is unnormalised, so `Inverse(Forward(x)) == n*x`. vDSP's factor of two
+  and the `0.5` at `0x345db4` cancel.
+* `FrequencyToTimeInPlace`'s third argument is the window **shape** and its fourth the window
+  **sequence**, and the shape is remembered **per channel**: frame k's rising half is windowed
+  with frame k-1's shape.
+* In `LSFTools::LSP_To_LPC` it is the polynomial built from the **even-indexed** LSPs that takes
+  the sum recursion. Hex-Rays gave both stack arrays the same base pointer and dropped one side
+  of every merged expression, so this was not in its output at all; the wrong choice leaves
+  `lpc[0]` and `lpc[1]` right and every later coefficient off by a constant.
 
 ## LRVQ is off the critical path — verified twice
 
@@ -191,3 +235,20 @@ this experiment silently proved nothing.
 * `APACICSInfo`'s window-grouping word is one hex digit per group counting the windows in it,
   built from seven bits where a **zero** opens a new group: all ones gives 8 (one group of
   eight), all zeros gives `0x11111111` (eight groups of one).
+* Hex-Rays **merges adjacent stack VLAs** into one array and then drops one side of every
+  expression that used the other. It did this three times in stage d — `APACTNSData::Apply`'s
+  parcor-to-LPC recursion, `LPCBase::ComputeLPCs` (the pseudocode appears to zero the signal it
+  just windowed), and `LSFTools::LSP_To_LPC`. If a decompiled function looks like it clobbers
+  its own work, count the `alloca`s before believing it.
+* The LSF trig divides by the literal **`3.14159265`**, not `M_PI`, and calls the **double**
+  `cos` / `acosf`. Substituting either misses by far more than float noise.
+* `APACTNSData`'s byte at `+1` is a filter **count** for a long block and an 8-bit per-window
+  **present mask** (window 0 in bit 7) for a short one — so a long block's filter records are
+  indexed by filter and a short block's by window. Its `present` byte at `+0` is set by the
+  syntactic element, not by `ParseTNSData`.
+* `APACSynthesisFilterBank` only works at `frameLength == 1024`: it looks its short window up at
+  `frameLength >> 3`, and the only windows that exist are 128 and 1024.
+* The Makefile had **no header dependencies** until stage d. Changing a constant in
+  `include/apac/` recompiled some translation units and not others, and the survivors disagreed
+  about a struct's size — which failed as wrong numbers in a differential test, not as a link
+  error. `-MMD -MP` now; if you see an inexplicable numeric regression, `make clean` first.
