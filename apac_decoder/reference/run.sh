@@ -22,6 +22,12 @@
 #   ./apac_decoder/reference/run.sh fn gc CK        # GlobalConfig::Deserialize
 #   ./apac_decoder/reference/run.sh fn bs < cases   # TBitstreamReader, per call
 #
+# And the stage-d composition test - the whole capture decoded twice, once with
+# Pioneer's filter bank and once with the port's patched into its place:
+#
+#   ./apac_decoder/reference/run.sh swap            # all 3977 packets
+#   ./apac_decoder/reference/run.sh swap 400        # the first 400
+#
 # Paths given to `fn` are host paths and are bind-mounted read-only.
 #
 # Everything it writes lives in apac_decoder/reference/.build/ except
@@ -40,6 +46,8 @@ PACKETS="$CAPTURE/apac_packets"
 
 FN=0
 if [ "${1:-}" = "fn" ]; then FN=1; shift; fi
+SWAP=0
+if [ "${1:-}" = "swap" ]; then SWAP=1; shift; fi
 
 REBUILD=0
 PROBE=0
@@ -124,6 +132,36 @@ run_ref() {
         _ "$@"
 }
 
+# ------------------------------------------------------- transform swap ----
+# Decode the whole capture twice: once with Pioneer's own filter bank and once
+# with the port's patched into its place, then diff the two float32 streams.
+# This is the composition test for stage d - the per-function tests use
+# synthetic vectors, this one uses the coefficients the real stream produces.
+# See transform_swap_shim.cpp for how the substitution is made.
+run_swap() {
+    local dec; dec="$(cd "$HERE/.." && pwd)"
+    docker run --rm --platform linux/arm64 \
+        -v "$HERE:/src:ro" -v "$dec/src:/port/src:ro" -v "$dec/include:/port/include:ro" \
+        -v "$CAPTURE:/data:ro" -v "$WORK:/out" \
+        "$IMAGE" bash -c '
+            set -e
+            g++ -std=c++11 -O2 -g -Wall -o /tmp/apac_ref /src/apac_ref.cpp -ldl
+            g++ -std=c++11 -O2 -g -Wall -Wextra -fno-exceptions -fno-rtti \
+                -I/port/include -shared -fPIC -o /tmp/swap.so \
+                /src/transform_swap_shim.cpp /port/src/transform.cpp \
+                /port/src/transform_tables.cpp /port/src/filterbank.cpp -ldl
+            echo "=== Pioneer, unmodified ==="
+            /tmp/apac_ref --f32 "$@" /out/pioneer_plain.f32
+            /tmp/apac_ref       "$@" /out/pioneer_plain.pcm
+            echo
+            echo "=== Pioneer, with the ported transform patched in ==="
+            APAC_SWAP_TRANSFORM=1 LD_PRELOAD=/tmp/swap.so \
+                /tmp/apac_ref --f32 "$@" /out/pioneer_swapped.f32
+            APAC_SWAP_TRANSFORM=1 LD_PRELOAD=/tmp/swap.so \
+                /tmp/apac_ref       "$@" /out/pioneer_swapped.pcm
+        ' _ "$@"
+}
+
 if [ "$PROBE" = 1 ]; then
     run_ref --probe
     exit $?
@@ -165,6 +203,41 @@ esac
 find "$PACKETS" -name '*.bin' ! -size 0 | sort > "$WORK/host_list.txt"
 sed "s|.*/|$CTR_PREFIX/|" "$WORK/host_list.txt" > "$WORK/ctr_list.txt"
 echo "packets: $(wc -l < "$WORK/host_list.txt" | tr -d ' ') non-empty of $(ls "$PACKETS" | wc -l | tr -d ' ')"
+
+# ------------------------------------------------------------------- swap ----
+if [ "$SWAP" = 1 ]; then
+    COUNT_ARGS=()
+    [ $# -gt 0 ] && COUNT_ARGS=(--count "$1")
+    run_swap --list /out/ctr_list.txt "${COUNT_ARGS[@]+"${COUNT_ARGS[@]}"}" \
+        "/data/$(basename "$COOKIE")"
+    echo
+    echo "=== what the ported transform costs, end to end ==="
+    python3 "$HERE/compare_f32.py" "$WORK/pioneer_plain.f32" \
+        "$WORK/pioneer_swapped.f32" 6
+
+    # The acceptance question is not "how far is the port from Pioneer" but
+    # "does substituting it change how far Pioneer is from Apple".  Both are
+    # already 1-2 LSB apart on this capture (NOTES.md), so that is the bar.
+    ORACLE="$ROOT/build/apple_apac_oracle"
+    if [ ! -x "$ORACLE" ] && [ "$(uname -s)" = "Darwin" ]; then
+        mkdir -p "$ROOT/build"
+        clang -std=c11 -O2 "$ROOT/tools/apple_apac_oracle.c" \
+            -framework AudioToolbox -framework CoreFoundation -o "$ORACLE"
+    fi
+    if [ -x "$ORACLE" ]; then
+        echo
+        echo "=== Apple AudioToolbox (macOS), same packets ==="
+        # shellcheck disable=SC2046
+        "$ORACLE" "$COOKIE" "$WORK/apple.pcm" $(cat "$WORK/host_list.txt") | tail -n 1
+        echo
+        echo "=== Apple vs Pioneer, unmodified ==="
+        python3 "$HERE/compare_pcm.py" "$WORK/apple.pcm" "$WORK/pioneer_plain.pcm" 6
+        echo
+        echo "=== Apple vs Pioneer, with the ported transform ==="
+        python3 "$HERE/compare_pcm.py" "$WORK/apple.pcm" "$WORK/pioneer_swapped.pcm" 6
+    fi
+    exit 0
+fi
 
 # ---------------------------------------------------------------- pioneer ----
 PIONEER_OUT="pioneer.pcm"

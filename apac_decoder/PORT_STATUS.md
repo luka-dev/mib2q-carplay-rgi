@@ -122,7 +122,7 @@ out bit-exact, and does.
 | what | agreement | coverage |
 | --- | --- | --- |
 | the six constant tables + the size gate | **bit exact**, 3456 words | sine/KBD/DCT-IV modulation at both sizes, 27 NULL checks |
-| `MDCT::InverseInPlaceTransform` | 1.4e-07 of full scale (denormals 2.1e-06) | both block sizes x 16 cases x both halves, 36 864 floats |
+| `MDCT::InverseInPlaceTransform` | 1.4e-07 of full scale (denormals 2.1e-06) | both block sizes x 21 cases x both halves, 48 384 floats |
 | `APACSynthesisFilterBank::FrequencyToTimeInPlace` | 3e-08 | 30 stateful steps, 3 channels, all 4 window sequences, both shapes |
 | `APACTNSData` ctor / ParseTNSData / Apply | **bit exact** | 14 rates; 32 parses compared over the whole 190-byte object; 32 applies |
 | `apac::LPCBase` + the stateless `apac::LSFTools` | 9.4e-08 | 10 entry points x 16 orders, 176 checks |
@@ -131,6 +131,49 @@ out bit-exact, and does.
 `reference/dsp_cases.h` generates every input and is included by BOTH the oracle and the host
 tests, so the committed fixtures carry only the expectations. Regenerate with
 `tools/gen_fixtures_transform.sh`.
+
+### Why the transform tolerance is not a defect
+
+Every other stage of this port is bit-exact, so the two rows above that are not needed a reason
+rather than a shrug. Three things are **checked on every run**, not argued:
+
+1. **A double-precision reference.** `test_mdct.cpp` runs the same algorithm — same
+   pre-modulation, an O(m²) DFT, same eight-store post-modulation — entirely in double, on the
+   library's own float32 modulation table promoted to double. That is the exact answer both
+   sides are approximating. Measured distance from it, excluding the all-denormal case:
+   **port 1.41 ULP, library 1.28 ULP.** The same size. On the worst case of all (the denormal
+   one) the library is the *further* of the two, 45.7 ULP against the port's 42.7. The test
+   asserts `err(port) <= 4 * err(library)`, which an off-by-one in a twiddle, a window index or
+   the post-modulation index map would fail by orders of magnitude while the library sat at one
+   ULP.
+2. **The error tracks the number of terms summed.** Cases 16–20 hold exactly 2, 4, 16, 64 and
+   256 non-zero coefficients. At n = 1024 the absolute error, in ULPs of the input's full scale,
+   runs `1:0.0005  2:0.0009  4:0.0012  16:0.0034  64:0.0108  256:0.0231  1024:0.0453` — two
+   orders of magnitude across the sweep. Relative to each block's *own* peak it rises from
+   0.48 ULP at one active bin and then saturates at about 1.0, because the peak grows with the
+   term count too. That is accumulated rounding. A wrong index would be just as wrong with two
+   active bins as with a thousand.
+3. **It does not compound on real data.** `run.sh swap` patches the port's filter bank into the
+   middle of Pioneer's own decoder (`reference/transform_swap_shim.cpp`) and decodes the whole
+   capture through it — 3977 packets, 4 072 448 frames, 24.4 M samples of real coefficients in
+   the real window-sequence and window-shape order:
+
+   | | |
+   | --- | --- |
+   | max abs difference | 2.09e-07, i.e. **3.5e-07 of full scale, −129 dBFS** |
+   | in S16 | **1 LSB**, on **0.0059 %** of samples (1444 of 24 434 688) |
+   | worst 1024-frame block | 2.1e-04 of that block's own peak, still 1 LSB |
+
+   And the acceptance measure — does the substitution change how well the decoder matches
+   Apple? Per-channel `rms(diff)` against Apple's AudioToolbox, over the whole capture:
+
+   | | ch0 | ch1 | ch2 | ch3 | ch4 | ch5 |
+   | --- | --- | --- | --- | --- | --- | --- |
+   | Pioneer, unmodified | 0.2637 | 0.5925 | 0.4724 | 0.2944 | 0.2967 | 0.2471 |
+   | Pioneer, port's transform | 0.2638 | 0.5925 | 0.4724 | 0.2944 | 0.2967 | 0.2471 |
+
+   `max|d|` is 1–2 LSB in both, unchanged. Pioneer and Apple are already 1–2 LSB apart on this
+   capture; the port's transform vanishes inside that gap.
 
 **The one gap.** `apac::LSFTools::Initialize`, `Reset`, `DecodeLSF`, `QuantizeLSF` and the
 `LSF_To_LPC` that chains the conversions are **not started**. They need the object's six

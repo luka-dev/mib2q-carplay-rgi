@@ -176,14 +176,21 @@ void TNSData::Apply(const APACICSInfo& ics, const SFBBandOffsets& sfb,
     float* base = spectrum.begin;
 
     for (uint32_t w = 0; w < numWindows; ++w, base += windowLength) {
-        const uint32_t count = eightShort ? ((nFilt >> (7 - w)) & 1) : nFilt;
+        uint32_t count = eightShort ? ((nFilt >> (7 - w)) & 1) : nFilt;
         if (count == 0)
             continue;
+        // ParseTNSData reads the long-block count from two bits so it is at
+        // most 3, but Apply is handed the object rather than the bitstream and
+        // `filter` is a fixed array.  Clamp instead of trusting the field.
+        if (count > kTNSMaxFilters)
+            count = kTNSMaxFilters;
 
         uint32_t top = numBands;
         for (uint32_t fi = 0; fi < count; ++fi) {
             const TNSFilter& rec = filter[eightShort ? w : fi];
-            const uint32_t order = rec.order;
+            uint32_t order = rec.order;
+            if (order > kTNSMaxOrder)
+                order = kTNSMaxOrder;      // same reasoning as `count` above
             const int32_t start = (int32_t)top - (int32_t)rec.length;
 
             uint32_t startBand;

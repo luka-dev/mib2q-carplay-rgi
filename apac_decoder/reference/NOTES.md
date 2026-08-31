@@ -259,6 +259,45 @@ Two objects needed help to be constructible without a public constructor:
 way to pin a bit offset: run the library's own parser at a candidate position and see whether
 it accepts. On the afconvert-generated cookie exactly one offset in +-4 bits does.
 
+## The composition test: `run.sh swap`
+
+The per-function oracle proves each transform member against the library on synthetic vectors.
+`run.sh swap` answers the different question — what the port costs **in the finished audio**,
+driven by the coefficients the real stream actually produces.
+
+```sh
+./apac_decoder/reference/run.sh swap
+```
+
+It decodes the capture twice. The second run preloads `transform_swap_shim.cpp`, which patches
+the entries of `APACSynthesisFilterBank::FrequencyToTimeInPlace` and `::Reset` with a 16-byte
+absolute jump into the ported filter bank:
+
+```
+LDR X16, [PC, #8]   ; 0x58000050
+BR  X16             ; 0xd61f0200
+.quad target
+```
+
+Same technique as `scratch/stub_shim.c`, and for the same reason — the library is `DT_SYMBOLIC`
+so `LD_PRELOAD` cannot interpose its internals. Everything except the transform stage is still
+the library's code, so any difference in the output is the port's transform and nothing else.
+The port keeps its own overlap state; the library's copy goes stale, which is safe because the
+only two functions that read it are the two being replaced.
+
+Result on the full capture — 3977 packets, 4 072 448 frames, 24.4 M samples:
+
+* max difference 2.09e-07 absolute, **3.5e-07 of full scale, −129 dBFS**;
+* **1 S16 LSB**, on 0.0059 % of samples;
+* agreement with Apple's AudioToolbox **unchanged to four significant figures** — per-channel
+  `rms(diff)` 0.2637 / 0.5925 / 0.4724 / 0.2944 / 0.2967 / 0.2471 before, 0.2638 / 0.5925 /
+  0.4724 / 0.2944 / 0.2967 / 0.2471 after.
+
+`compare_f32.py` does the float-domain half of that report (per channel, in dBFS and in S16
+LSBs, plus the worst 1024-frame block so a localised divergence cannot average away);
+`compare_pcm.py` does the Apple comparison as usual.
+
+
 ## Files
 
 | file | contents |

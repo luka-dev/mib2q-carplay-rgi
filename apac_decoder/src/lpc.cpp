@@ -50,16 +50,17 @@ void LPCBase::LevinsonDurbin(const float* r)
         for (uint32_t j = 0; j < m; ++j)
             acc = acc + r[m - j] * a[j];
         k = -acc / err;
-        uint32_t i = 1;
-        uint32_t hi = m - 1;
-        for (;;) {
+        // The original spells this as `while (1)` with a computed break, and it
+        // runs exactly m>>1 times: the pair (i, m-i) walking inwards.  Written
+        // as a counted loop so it cannot run away on a malformed order - the
+        // same call the spectrum agent made on the band-zeroing loop.
+        for (uint32_t t = 1; t <= (m >> 1); ++t) {
+            const uint32_t i = t;
+            const uint32_t hi = m - t;
             const float lo = a[i];
             const float up = a[hi];
             a[hi] = up + k * lo;
             a[i] = lo + k * up;
-            ++i;
-            if (m - 1 - (m >> 1) == hi - 1) break;
-            --hi;
         }
         err = err + k * acc;
         a[m] = k;
@@ -77,9 +78,15 @@ void LPCBase::LevinsonDurbin(const float* r)
 // past the end) and one for the autocorrelation itself (order + 1 floats).
 void LPCBase::ComputeLPCs(const float* signal, bool lagWindow)
 {
-    const uint32_t order = mAutocorr->order;
-    const uint32_t len = mAutocorr->windowLength;
+    uint32_t order = mAutocorr->order;
+    uint32_t len = mAutocorr->windowLength;
     const float* win = mAutocorr->window;
+    // The original allocas to fit whatever the Autocorr says; the port has
+    // fixed buffers, so an over-long window or order is clamped rather than
+    // allowed to run off the end.  Both caps are far above anything the profile
+    // produces (orders are 8 to 16, windows a frame long).
+    if (order > kMaxLPCOrder) order = kMaxLPCOrder;
+    if (len > kMaxLPCWindow) len = kMaxLPCWindow;
     float* x = mSignal;
     float* r = mCorr;
     uint32_t i, n, k;
@@ -177,7 +184,9 @@ void LSFTools::get_LSFWeightingFactors(const float* a, float* w,
 
     if (end > 1) {
         uint32_t i = 1, j = 1;
-        for (;;) {
+        // Bounded: `i` steps by two and the original's break is `end <= i`, so
+        // this cannot exceed order iterations even on a nonsense order.
+        for (uint32_t guard = 0; guard <= (uint32_t)order; ++guard) {
             i += 2;
             m = i;
             const float g = 1.0f / (a[j] - prev);

@@ -56,7 +56,7 @@ inline uint32_t float_to_bits(float f)
     return u;
 }
 
-enum { kNumCases = 16 };
+enum { kNumCases = 21 };
 
 inline const char* case_name(unsigned c)
 {
@@ -64,7 +64,9 @@ inline const char* case_name(unsigned c)
         "zeros",        "impulse0",     "impulseN1",    "impulseHalf",
         "alternating",  "dc",           "denormal",     "tiny",
         "huge",         "rand1",        "rand2",        "rand3",
-        "rand-tiny",    "rand-huge",    "ramp",         "sparse"
+        "rand-tiny",    "rand-huge",    "ramp",         "sparse",
+        "bins2",        "bins4",        "bins16",       "bins64",
+        "bins256"
     };
     return c < kNumCases ? kNames[c] : "?";
 }
@@ -101,6 +103,24 @@ inline void case_fill(unsigned c, float* out, uint32_t n)
         for (i = 0; i < n; ++i)
             out[i] = ((xorshift32(&s) & 31u) == 0) ? rnd_unit(&s) * 100.0f : 0.0f;
         break;
+    // Cases 16..20 hold exactly 2, 4, 16, 64 and 256 non-zero coefficients, at
+    // positions spread evenly so the count is the same at both block sizes.
+    // They exist for one reason: the transform's disagreement with the library
+    // is float accumulation, and the way to SHOW that rather than assert it is
+    // to sweep the number of terms being summed and watch the error track it.
+    // An off-by-one in a twiddle or a window index would not care.
+    case 16:
+    case 17:
+    case 18:
+    case 19:
+    case 20: {
+        const uint32_t want = (c == 16) ? 2u : (c == 17) ? 4u
+                            : (c == 18) ? 16u : (c == 19) ? 64u : 256u;
+        const uint32_t step = (n > want) ? (n / want) : 1u;
+        for (i = 0; i < want && i * step < n; ++i)
+            out[i * step] = rnd_unit(&s);
+        break;
+    }
     default: break;
     }
 }
