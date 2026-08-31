@@ -380,6 +380,30 @@ static int spa_probe103_index(void)
     return index;
 }
 
+/* Experimental AAC bridge: iOS's spatial gate looks for at least one APAC-family index in the
+ * extended array, while the type-103 format copier preserves lower AAC indices.  Keep the normal
+ * profiles single-format.  An explicit extra 65/66 lets us test [40,65] or [42,65] without
+ * weakening the primary selector or silently changing proven APAC negotiation. */
+static int spa_probe103_extra_index(int primaryIndex)
+{
+    const char *value = getenv(SPA_103_EXTRA_INDEX_ENV);
+    char *end = 0;
+    long candidate;
+
+    if (!value || !value[0]) return -1;
+    candidate = strtol(value, &end, 0);
+    if (end && end != value && !*end &&
+        (candidate == SPA_APAC_48K_5_1 || candidate == SPA_APAC_48K_5_1_2)) {
+        if (candidate == primaryIndex) return -1;
+        return (int)candidate;
+    }
+
+    LOG_ERROR(LOG_MODULE,
+              "probe103: invalid %s value '%s'; allowed extra gate indices: %d/%d; ignored",
+              SPA_103_EXTRA_INDEX_ENV, value, SPA_APAC_48K_5_1, SPA_APAC_48K_5_1_2);
+    return -1;
+}
+
 /* iOS repackages every bit in the legacy mask into one buffered-engine codec family. On wired
  * CarPlay its local support filter leaves bits 11 (PCM) and 22 (AAC-LC) from the old 0x1440800
  * transport-family mask, then rejects the mixed family with -6705 before endpoint activation.
@@ -662,13 +686,16 @@ typedef int (*spa_http_init_response_t)(void *, int);
 typedef int (*spa_http_send_response_t)(void *);
 typedef int (*spa_http_set_plist_response_t)(void *, void *, void *, int *);
 typedef uint64_t (*spa_up_ticks_t)(void);
-typedef uint64_t (*spa_milliseconds_to_up_ticks_t)(uint32_t);
+/* TickUtils.h and the ARM EABI body both take uint64_t. Declaring this as uint32_t leaves r1
+ * undefined, turning the intended +150 ms anchor into a random 64-bit interval. */
+typedef uint64_t (*spa_milliseconds_to_up_ticks_t)(uint64_t);
 
 /* MU1316 AirTunesTime, verified from AirTunesClock_GetSynchronizedTimeNearUpTicks @ 0x2dc30:
- * seconds at +0, 32-bit timeline ID at +4, and 64-bit fractional seconds at +8. */
+ * seconds at +0, reserved padding at +4, and 64-bit fractional seconds at +8. Unlike the newer
+ * 32-byte Pioneer structure, this target image does not return a timeline ID here. */
 typedef struct {
     uint32_t secs;
-    uint32_t timelineID;
+    uint32_t reserved;
     uint64_t frac;
 } spa103_air_tunes_time_t;
 
@@ -1059,14 +1086,14 @@ static int spa103_get_session_network_time(void *session, spa103_network_time_t 
 
     memset(&synchronized, 0, sizeof(synchronized));
     anchorTicks = spa103_up_ticks() +
-                  spa103_milliseconds_to_up_ticks(SPA_103_ANCHOR_LEAD_MS);
+                  spa103_milliseconds_to_up_ticks((uint64_t)SPA_103_ANCHOR_LEAD_MS);
     spa103_clock_get_near_ticks(clock, &synchronized, anchorTicks);
 
     memset(value, 0, sizeof(*value));
     value->valid = 1;
     value->secs = (int64_t)(int32_t)synchronized.secs;
     value->frac = (int64_t)synchronized.frac;
-    value->timelineID = (int64_t)synchronized.timelineID;
+    value->timelineID = 0;
     value->flags = 0;
     return 1;
 }
@@ -1113,6 +1140,7 @@ static int spa103_process_buffered_control(void *connection, void *request,
     int haveFromTime = 0, haveUntilTime = 0;
     int status = 200;
     int result;
+    char responseKind[96];
 
     memset(&anchor, 0, sizeof(anchor));
     memset(&firstAudible, 0, sizeof(firstAudible));
@@ -1202,16 +1230,19 @@ static int spa103_process_buffered_control(void *connection, void *request,
             if (!response ||
                 spa103_set_transport_time(response, "rtpTime", "mediaTimeValue",
                                           "mediaTimeScale", &anchor) != 0 ||
-                spa103_set_network_time(response, "networkTime", &networkTime) != 0) {
+                spa103_set_network_time(response, "networkTime", &networkTime) != 0 ||
+                spa103_response_set_i64(response, "status", 0) != 0) {
                 status = 500;
                 goto done;
             }
             LOG_WARN(LOG_MODULE,
-                     "buffer103: %s[%u] ACK rate=%lld rtp=%lld anchor=%lld/%lld timeline=%lld",
+                     "buffer103: %s[%u] ACK rate=%lld rtp=%lld anchor=%lld/%lld "
+                     "network=%lld/%lld timeline=%lld flags=%lld",
                      methodName, (unsigned)requestNumber, (long long)rate,
                      (long long)anchor.rtpTime,
                      (long long)anchor.mediaTimeValue, (long long)anchor.mediaTimeScale,
-                     (long long)networkTime.timelineID);
+                     (long long)networkTime.secs, (long long)networkTime.frac,
+                     (long long)networkTime.timelineID, (long long)networkTime.flags);
             break;
 
         case SPA103_CONTROL_GET_ANCHOR:
@@ -1234,16 +1265,19 @@ static int spa103_process_buffered_control(void *connection, void *request,
             if (!response ||
                 spa103_set_transport_time(response, "rtpTime", "mediaTimeValue",
                                           "mediaTimeScale", &anchor) != 0 ||
-                spa103_set_network_time(response, "networkTime", &networkTime) != 0) {
+                spa103_set_network_time(response, "networkTime", &networkTime) != 0 ||
+                spa103_response_set_i64(response, "status", 0) != 0) {
                 status = 500;
                 goto done;
             }
             LOG_WARN(LOG_MODULE,
-                     "buffer103: %s[%u] ACK rate=%lld rtp=%lld anchor=%lld/%lld timeline=%lld",
+                     "buffer103: %s[%u] ACK rate=%lld rtp=%lld anchor=%lld/%lld "
+                     "network=%lld/%lld timeline=%lld flags=%lld",
                      methodName, (unsigned)requestNumber, (long long)rate,
                      (long long)anchor.rtpTime,
                      (long long)anchor.mediaTimeValue, (long long)anchor.mediaTimeScale,
-                     (long long)networkTime.timelineID);
+                     (long long)networkTime.secs, (long long)networkTime.frac,
+                     (long long)networkTime.timelineID, (long long)networkTime.flags);
             break;
 
         case SPA103_CONTROL_FLUSH:
@@ -1294,6 +1328,9 @@ done:
                   methodName, (unsigned)requestNumber, status);
         result = spa103_send_http_status(connection, status);
     } else if (response) {
+        snprintf(responseKind, sizeof(responseKind), "%u_%s_response",
+                 (unsigned)requestNumber, methodName);
+        spa_write_control_plist(response, responseKind, sequence);
         result = spa103_send_http_plist(connection, request, response);
     } else {
         result = spa103_send_http_status(connection, 200);
@@ -2118,7 +2155,7 @@ void *AirPlayReceiverServerPlatformCopyProperty(void *server, int sessionID, con
     cfa_rel(kAudioFormats);
 
     dict = cfa_dictm(0, 0, cfa_dk_cb, cfa_dv_cb);
-    ext  = cfa_arrm(0, 1, cfa_arr_cb);
+    ext  = cfa_arrm(0, 2, cfa_arr_cb);
     legacyMask = spa_probe103_legacy_mask();
     kType      = cfa_str(0, "type",                       SPA_CFENC_UTF8);
     kAudioType = cfa_str(0, "audioType",                  SPA_CFENC_UTF8);
@@ -2128,29 +2165,43 @@ void *AirPlayReceiverServerPlatformCopyProperty(void *server, int sessionID, con
     if (dict && ext && kType && kAudioType && kOut && kExt) {
         /* CFNumberCreateInt64 takes ONE argument on this stack (verified: libairplay calls it as
          * `CFNumberCreateInt64(4, 0)` = one int64 across two ARM regs), not (alloc, type, ptr). */
-        void *num = 0;
+        void *num = 0, *extraNum = 0;
         void *(*cfnum)(int64_t) = (void *(*)(int64_t))dlsym(RTLD_DEFAULT, "CFNumberCreateInt64");
+        int formatIndex = spa_probe103_index();
+        int extraIndex = spa_probe103_extra_index(formatIndex);
 
         cfa_dictseti(dict, kType,      103);
         cfa_dictsetc(dict, kAudioType, "media", -1);
         cfa_dictseti(dict, kOut,       legacyMask);
 
-        {
-            int formatIndex = spa_probe103_index();
-            if (cfnum) num = cfnum(formatIndex);
-            if (num) {
-                cfa_arrapp(ext, num);
-                cfa_rel(num);
-                cfa_dictset(dict, kExt, ext);
-                cfa_arrapp(result, dict);
+        if (cfnum) {
+            num = cfnum(formatIndex);
+            if (extraIndex >= 0) extraNum = cfnum(extraIndex);
+        }
+        if (num && (extraIndex < 0 || extraNum)) {
+            cfa_arrapp(ext, num);
+            if (extraNum) cfa_arrapp(ext, extraNum);
+            cfa_dictset(dict, kExt, ext);
+            cfa_arrapp(result, dict);
+            if (extraNum) {
                 LOG_INFO(LOG_MODULE,
                          "probe103: /info audioFormats += {type:103, audioType:media, "
-                         "audioOutputFormats:%#x, audioOutputFormatsExtended:[%d]} (now %ld entries)",
-                         legacyMask, formatIndex, cfa_arrcount(result));
+                         "audioOutputFormats:%#x, audioOutputFormatsExtended:[%d,%d]} "
+                         "(experimental AAC bridge; now %ld entries)",
+                         legacyMask, formatIndex, extraIndex, cfa_arrcount(result));
             } else {
-                LOG_ERROR(LOG_MODULE, "probe103: CFNumberCreateInt64 unavailable — entry NOT added");
+                LOG_INFO(LOG_MODULE,
+                         "probe103: /info audioFormats += {type:103, audioType:media, "
+                         "audioOutputFormats:%#x, audioOutputFormatsExtended:[%d]} "
+                         "(now %ld entries)",
+                         legacyMask, formatIndex, cfa_arrcount(result));
             }
+        } else {
+            LOG_ERROR(LOG_MODULE,
+                      "probe103: CFNumberCreateInt64 unavailable — entry NOT added");
         }
+        if (extraNum) cfa_rel(extraNum);
+        if (num) cfa_rel(num);
     }
 
     if (kExt) cfa_rel(kExt);

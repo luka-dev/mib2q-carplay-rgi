@@ -7,10 +7,11 @@
 Статический контракт buffered-потока CarPlay type 103 восстановлен достаточно полно, чтобы больше
 не угадывать протокол на HU. Из Pioneer SPHERA восстановлены SETUP/lifecycle, APAP framing,
 аутентификация, расширения, cookie/format switching, очередь, clock, flush, teardown, APAC API и
-штатный spatial downmix. Отдельно найден нативный ARMv7/QNX путь декодирования AAC через уже
-установленный в Audi Cinemo.
+штатный spatial downmix. Отдельно исследован нативный ARMv7/QNX путь декодирования AAC через уже
+установленный в Audi Cinemo, но hardware negotiation показал, что iPhone не выбирает его для
+Spatial Audio.
 
-Первоначально рекомендуемый статикой тракт был:
+Первоначально рекомендуемый статикой AAC-тракт был:
 
 ```text
 iOS type 103 / index 40 (AAC-LC 48 kHz 5.1.2)
@@ -28,9 +29,10 @@ QNX. Патч матрицы Pioneer нужен только как провер
 ## Live delta — Audi + iOS 27, 2026-08-31
 
 Hardware изменил порядок реализации: iOS отказался от type 103 при рекламе index 40 и выбрал
-стерео type 100, но при index 65 действительно создал type 103/APAP и показал Dolby Atmos. Поэтому
-текущий рабочий probe остаётся на **APAC index 65**; index 40 статически допустим, но live-selection
-для этой пары phone/HU не подтверждён.
+стерео type 100, но при index 65 действительно создал type 103/APAP и показал Dolby Atmos. Финальный
+dual-list тест объявил `[40,65]`; iOS увидел его, но выбрал `audioFormatIndex=65`,
+`packetFormatAPAP=true`, а cookie подтвердил APAC 48 kHz/1024/6ch. Поэтому текущий рабочий probe
+остаётся на **APAC index 65**, а AAC/Cinemo bypass для этой пары phone/HU закрыт.
 
 Пятисекундное завершение сессии найдено и устранено на control-plane. Поздняя подмена callback
 `HTTPServer+0x64` не перехватывала уже принятую control connection. Экспортированный interposer
@@ -101,8 +103,8 @@ Pioneer SPHERA и целевого Audi MU1316. Начальный и post-SETUP
 методов выше. Полные sender/receiver адреса и plist-схемы зафиксированы в
 `HANDOFF_SPATIAL_AUDIO.md`, §10.
 
-Остаются динамические доказательства: фактический выбор index 40, успешная связка
-`SETMAGICCOOKIE -> 200 -> TLV 17/APAP`, корректный NTP anchor/clock lock и непрерывное playback после
+Остаются динамические доказательства: успешная связка `SETMAGICCOOKIE -> 200 -> TLV 17/APAP`,
+корректный NTP anchor/clock lock и непрерывное playback после
 реального decrypt/decode/downmix/render. Текущий hook является negotiation/capture sink; production
 receiver ещё должен валидировать `audioFormatIndex`, `packetFormatAPAP`, `spf` и 32-байтный `shk`,
 реализовать четыре buffered-control метода и payload pipeline. Диагностический log key исправлен на
@@ -128,7 +130,7 @@ API/crypto/codec references, но замена Audi 210 на 320/450 не доб
 
 | индекс | wire codec | частота/каналы | PCM equivalent | роль |
 |---:|---|---|---:|---|
-| 40 | AAC-LC (`aac `) | 48 kHz, 5.1.2 / 8 ch | — | первый production-кандидат: Audi уже имеет ARMv7 Cinemo AAC |
+| 40 | AAC-LC (`aac `) | 48 kHz, 5.1.2 / 8 ch | — | статически допустим, но live: один 40 дал type-100 fallback, `[40,65]` выбрал APAC 65 |
 | 42 | AAC-ELD (`aace`) | 48 kHz, 5.1.2 / 8 ch | — | резервный AAC-вариант; тот же buffer class, отдельный decoder constructor |
 | 65 | APAC | 48 kHz, 5.1 / 6 ch | 44 | первый APAC-кандидат, downmix не нужен |
 | 66 | APAC | 48 kHz, 5.1.2 / 8 ch | 38 | целевой spatial master с downmix 8 -> 6 |
@@ -143,17 +145,24 @@ API/crypto/codec references, но замена Audi 210 на 320/450 не доб
 подтверждает receiver-механику, а точное значение новых AAC index-ов задаёт sender. Статически
 MH2p-конструктор AAC-LC
 передаёт sample rate и channel count в Cinemo без найденного clamp до двух или шести каналов.
-Однако реальный восьмиканальный output конкретной Audi-сборки Cinemo остаётся обязательным
-bench-тестом.
+Однако этот decoder bench больше не является production gate: live sender не выбрал AAC.
 
 В type-103 ветке `APCarPlayAudioFormatsCopyFormatsForAudioType` sender создаёт mutable copy
 extended-массива и специально удаляет только legacy index 23; whitelist только из APAC-индексов
-там нет, поэтому 40/42 сохраняются. Это закрывает статическую допустимость AAC-кандидата на данном
-этапе negotiation, но реальный выбор index 40 всё равно надо один раз подтвердить hardware capture.
+там нет, поэтому 40/42 сохраняются. Это закрывает только статическую допустимость AAC-кандидата на
+данном этапе negotiation. Hardware capture уже поставил отрицательную точку: index 40 один не
+открыл type 103, а `[40,65]` выбрал 65.
 
 Индекс 65 уже был реально запрошен iOS после правильной рекламы: type 103, `audioFormatIndex=65`,
 `packetFormatAPAP=true`, `spf=1024`, `shk=<32 bytes>`. Это доказывает negotiation и transport, но не
 делает APAC-декодер доступным на Audi.
+
+Индекс 66 также подтверждён hardware-запросом iOS: type 103, `audioFormatIndex=66`,
+`packetFormatAPAP=true`, `spf=1024`, `shk=<32 bytes>`. Его отдельный 34-байтный `dapa` cookie имеет
+валидный sync `0x0800`; GlobalConfig декодируется как 48 kHz, 1024 samples и **8 channels**. Поэтому
+это прямое доказательство реального APAC 5.1.2 на проводе, независимое от надписи Dolby Atmos в UI.
+No-render receiver затем получил sender-driven `rate=0`, flush и per-stream teardown: decode/queue/
+render всё ещё обязательны для стабильной сессии и звука.
 
 ## SETUP и транспорт
 
@@ -215,6 +224,24 @@ Pioneer `AirPlayReceiverSessionConvertMediaTimeToSampleTime` вычисляет 
 `46670057988423 / 1e9 * 48000 = 2240162783 = 0x85862bdf`, и первый APAP fixed header содержит
 ровно media value `0x0000000085862bdf`. Поэтому ответ `SETRATE` не может оставлять `rtpTime=0`,
 даже когда iOS опускает его во входном media-only запросе.
+
+Статический разбор фактического iOS sender response parser уточнил success-форму ответа `SETRATE`:
+`CFDictionaryGetAudioTransportTime` читает полный transport triple — `rtpTime`,
+`mediaTimeValue`, `mediaTimeScale`; затем четыре поля
+`networkTime{Secs,Frac,TimelineID,Flags}` и `status` (по умолчанию ноль). Последний live build
+ошибочно убрал media-time пару и тем самым внёс регрессию. Текущий repository снова возвращает
+полный triple и явно добавляет `status=0`.
+
+В live A/B регрессивный ответ каждый раз давал окно ровно из 27 APAP-пакетов: RTP увеличивается на
+1024 сэмпла, а `flushUntilSeq` совпадает с последним пакетом окна. Два запуска дали 54/54 успешно
+аутентифицированных пакета. От `SETRATE rate=1` до автоматического `rate=0` прошло 9.298 секунды,
+что соответствует следующей стене — 10-секундному timeout синхронизации network clock. После TLV
+префикса в расшифрованном APAP находится настоящий APAC payload, а не только extension padding.
+
+Инструментированный live build затем показал прыгающие на миллионы секунд anchors. Причина оказалась
+не в layout `AirTunesTime`, а в ABI: целевой `MillisecondsToUpTicks` принимает `uint64_t` в `r0:r1`,
+а hook объявлял `uint32_t`, оставляя `r1` случайным. Поэтому планируемые +150 ms превращались в
+случайный 64-битный интервал. Текущий код исправляет прототип и явно передаёт 64-битное значение.
 
 Тело защищено так:
 
@@ -614,12 +641,11 @@ Pioneer wrapper сначала резервирует общий worst case `flo
 
 Остаются только динамические доказательства и реализация:
 
-1. реализовать четыре buffered-control метода и подтвердить hardware-run дольше пяти секунд;
-2. подтвердить NTP anchor/clock lock, `SETMAGICCOOKIE` ACK и реальный index-40 payload;
-3. подтвердить PCM8 output и channel order целевого Cinemo;
-4. реализовать decrypt/decoder/downmix/clock bridge и проверить continuous playback;
-5. затем повторить capture 65/66, прогнать APAC через macOS oracle и решать, нужен ли собственный
-   APAC backend после уже работающего AAC 103.
+1. завершить buffered-control implementation и подтвердить стабильный hardware-run;
+2. подтвердить NTP anchor/clock lock и `SETMAGICCOOKIE` ACK;
+3. реализовать/портировать настоящий APAC backend для ARMv7/QNX и начать с index 65/PCM6;
+4. подключить уже реализованный 5.1.2-to-5.1 helper для index 66 и проверить continuous playback;
+5. проверять output 65/66 против macOS APAC oracle до подключения к DIO5.
 
 До выполнения этих пунктов корректная формулировка статуса: **протокол и архитектура 103
 доработаны статически до implementation-ready, но playable 103 на HU ещё не реализован**.

@@ -63,6 +63,7 @@
  * the private dispatcher is installed before the first control connection. */
 #define SPA_PROBE103_ENV   "SPATIAL_103"
 #define SPA_103_INDEX_ENV  "SPATIAL_103_INDEX"
+#define SPA_103_EXTRA_INDEX_ENV "SPATIAL_103_EXTRA_INDEX"
 #define SPA_103_MODE_ENV   "SPATIAL_103_MODE"
 #define SPA_103_DCX_ENV    "SPATIAL_103_DCX"
 #define SPA_103_MASK_ENV   "SPATIAL_103_MASK"

@@ -14,31 +14,60 @@ then upmixes algorithmically (Fraunhofer Symphoria).
 The head-unit 6-channel PCM path is **finished and proven**. The phone's legacy/realtime CarPlay path
 refuses the added multichannel bits. iOS 27 also has a newer buffered path, but our 210.81 receiver
 does not implement it. A hook-owned type-103 TCP listener/capture and buffered-control stage is now
-deployed and proven to keep the sender alive; decrypt/decode/downmix/render is still unimplemented.
+deployed: both APAC 5.1 and APAC 5.1.2 negotiation are proven on hardware. The sender still closes
+type 103 because decrypt/decode/queue/render is unimplemented; control-plane acceptance alone does
+not make an indefinitely stable or audible session.
 
 ### Current HU state at handoff (2026-08-31)
 
 Type 103 is enabled only through the persistent startup environment: `SPATIAL_103=1`,
-`SPATIAL_103_MODE=both`, `SPATIAL_103_INDEX=65`, `SPATIAL_103_DCX=0`, and
-`SPATIAL_103_MASK=0x400000`. There are no type-103 `/tmp` marker controls. `SPATIAL_5_1=1` remains
+`SPATIAL_103_MODE=both`, `SPATIAL_103_INDEX=65`, empty `SPATIAL_103_EXTRA_INDEX`,
+`SPATIAL_103_DCX=0`, and `SPATIAL_103_MASK=0x400000`. There are no type-103 `/tmp` marker controls.
+`SPATIAL_5_1=1` remains
 exported independently, so the existing six-channel DIO5/PCM type-100 fallback is preserved.
 Neither the fallback nor the amplifier patch was reverted.
 
-Live iOS declined type 103 when index 40 was advertised and selected stereo type 100 (`0x8000`).
-With index 65 it selected a genuine type-103 APAP stream, displayed Dolby Atmos, sent a 33-byte
-`SETMAGICCOOKIE`, and connected to TCP 6032. TCP 6033 is not used by this path.
+Live iOS declined type 103 when index 40 was advertised alone and selected stereo type 100
+(`0x8000`). With index 65 it selected a genuine type-103 APAP 5.1 stream, displayed Dolby Atmos,
+sent a 33-byte `SETMAGICCOOKIE`, and connected to TCP 6032. With index 66 it selected type 103 again;
+its 34-byte `dapa` cookie independently reports 48 kHz, 1024 frames and **8 channels**, proving that
+the wire stream really is 5.1.2 rather than merely a UI badge. TCP 6033 is not used by this path.
+
+The final AAC bypass test advertised `[40,65]`: index 40 was the AAC-LC 5.1.2 candidate and index 65
+was present only to satisfy iOS's spatial capability gate. iOS saw that exact array but selected
+`audioFormatIndex=65`, `packetFormatAPAP=true`, `spf=1024`; the 33-byte cookie decoded to 48 kHz,
+1024 samples and six channels. The first Play interval lasted about 19 seconds and the second about
+11 seconds before sender-driven rate=0/flush/teardown; `dio_manager` stayed alive. Therefore the
+visible Spatial Audio session was genuine APAC 5.1, and the installed Cinemo AAC decoder cannot be
+used as an APAC decoder or as an AAC bypass for this sender.
+
+The profiles are now explicit and persistent. Run `scripts/set_spatial_profile.sh` from the repo:
+
+| profile | type 103 | wire layout | type-100 PCM6 fallback |
+|---|---:|---|---:|
+| `spatial-5.1` | on, index 65 | APAC 5.1 / 6 ch | kept on |
+| `spatial-5.1.2` | on, index 66 | APAC 5.1.2 / 8 ch | kept on |
+| `experimental-aac-5.1.2` | on, `[40,65]` | negative-control only: iOS selected APAC 65 | kept on |
+| `fallback-5.1` | off | none | on |
+
+The tool edits only the four exact `SPATIAL_5_1`, `SPATIAL_103`, `SPATIAL_103_INDEX`, and
+`SPATIAL_103_EXTRA_INDEX` exports in the HU startup file, verifies uniqueness before writing, keeps
+a one-time recovery copy, and never replaces the rest of the user's startup script. The setting
+applies to the next `dio_manager` generation; no HU reboot is required.
 
 The installed hook at `/mnt/app/root/hooks/libcarplay_hook.so` is build
-`cbbdeea621918ae156b5a11f3be61e7c5be57d64d772635b5a8e5b3be91f1260` (403088 bytes). Its copy-back
+`78e93829d1f4234c2d28905235bb198b6cef3017cd011914b3599c667e020e39` (404640 bytes). Its copy-back
 SHA-256 matches the local build. It adds:
 
-* paired `mainBuffered` / `mainBufferedInfo` negotiation and type-103 index 65;
+* paired `mainBuffered` / `mainBufferedInfo` negotiation and selectable type-103 index 65/66;
 * an exported `AirTunesServer_EnsureCreated` interposer which installs the fingerprint-locked
   buffered-method dispatcher before the first control connection is accepted;
 * `SETMAGICCOOKIE`, `GETANCHOR`, `SETRATE`, `SETRATEANCHORTIME`, and `FLUSHBUFFERED` handling on the
   existing RTSP control connection;
 * TCP 6032 inclusive-BE32 APAP capture, bounded storage, and teardown-safe threads;
-* stock `updateFeedback` rewritten to `{streams:[]}` only while hook-owned type 103 is active.
+* stock `updateFeedback` rewritten to `{streams:[]}` only while hook-owned type 103 is active;
+* an explicit optional second format index used only for the completed `[40,65]` negative test;
+* a tested S16 5.1.2-to-5.1 downmix helper, not yet connected to a decoder or DIO5 render path.
 
 Build `dc5545c946961f406060ca328b40c2c200365eca47887e76e2572e7ab75744a0` was verified live:
 `SETRATE rate=1` was accepted and the former deterministic 5-second teardown disappeared; the
@@ -85,6 +114,14 @@ correctly; the bug was the hook's declaration of `MillisecondsToUpTicks(uint32_t
 `TickUtils.h` and ARM disassembly both prove a `uint64_t` argument in `r0:r1`; the old declaration
 left `r1` undefined and converted the requested +150 ms lead into a random interval. Current source
 uses the correct 64-bit ABI.
+
+The corrected-ABI index-65 build authenticated all 2561/2561 captured APAP packets and saved 833952
+bytes; the first `rate=1` interval lasted about 30 seconds before sender-driven `rate=0`, flushes and
+per-stream teardown. The index-66 run on 2026-08-31 then proved the independent 8-channel contract:
+SETUP contained `audioFormatIndex=66`, `packetFormatAPAP=true`, `spf=1024`, and the cookie decoded to
+48 kHz / 1024 / 8 channels. In that no-render run the sender issued `rate=0` after about six seconds,
+then per-stream teardown; the receiver process did not crash. The visible Dolby Atmos -> Spatial
+transition therefore marks loss of the type-103 stream, not an in-place 5.1.2 -> 5.1 conversion.
 
 This remains a protocol/capture sink. It does **not** yet authenticate/decrypt APAP, decode APAC,
 downmix, or render type-103 audio. A moving playback counter proves control-plane acceptance, not
@@ -401,7 +438,7 @@ exactly to the proven six-channel order `L R C LFE Ls Rs` after decoding. Index 
 5.1.2 master, but must be decoded to eight PCM channels and deliberately downmixed to six before it
 reaches the HU device.
 
-There is also a potentially much shorter first playable route: `APAudioFormatIndexToAPAudioFormat`
+There was also a potentially shorter playable route: `APAudioFormatIndexToAPAudioFormat`
 proves that every index below 64 maps exactly to its legacy bit (`1ULL << index`). A final table
 cross-check corrected an earlier labeling error: extended index **40** is
 `AAC-LC/48000/5.1.2`; index **42** is `AAC-ELD/48000/5.1.2`. The MHI2Q firmware
@@ -411,12 +448,14 @@ paths; the AAC-LC constructor passes
 48-kHz rate and eight-channel count into `CinemoCreateAudioCodec` without a discovered channel
 clamp. Audi's installed `libNmeSDK.so` exports that factory and its installed `libNmeAudioAAC.so`
 exports the matching AAC plugin; `dio_manager` already has `libNmeSDK.so` in DT_NEEDED. It is not
-yet verified that iOS will select index 40 or that this
-Cinemo build emits eight channels, but index 40 is now the shortest production candidate:
-buffered 103 → AAC-LC 5.1.2 → Cinemo → PCM8 → downmix PCM6, avoiding a proprietary APAC decoder.
+necessary to bench that path for production: although the adapter can request eight channels, the
+hardware negotiation test has rejected the route. When the HU advertised `[40,65]`, iOS selected
+index 65/APAP rather than 40/AAC. Cinemo therefore remains useful only as an AAC reference and must
+not receive APAC.
 The type-103 extended-array copy path does not whitelist only APAC: in the recovered sender it makes
 a mutable copy and removes legacy index 23, while leaving 40/42 intact. This makes the AAC request
-statically valid at that layer, although actual index-40 selection still needs one hardware run.
+statically valid at that copy layer, but it is not selected by this iPhone when a spatial-gating
+APAC index is also present; index 40 alone had already caused iOS to fall back to type 100.
 
 The target also has a genuine Dolby Digital Plus decoder, so extended indices **50**
 (`DDPLUS/48000/5.1`) and **53** (`DDPLUS/48000/9.1.6`) are exposed as fail-closed runtime probes.
@@ -1006,45 +1045,48 @@ Type-103 configuration is env-only and is inherited when `carplay_startup.sh` ex
 Changing it therefore requires a fresh `dio_manager` generation; deleting `/tmp` files has no
 effect. On a muted/isolated bench setup:
 
-1. `SPATIAL_103=1` is the master switch. `0`, `false`, `no`, `off`, empty, or absent disables every
+1. Prefer `scripts/set_spatial_profile.sh spatial-5.1`, `spatial-5.1.2`, or `fallback-5.1`. The
+   `status` command is read-only. The script does not restart a running session.
+2. `SPATIAL_103=1` is the master switch. `0`, `false`, `no`, `off`, empty, or absent disables every
    buffered mutation/capture; the independent type-100 PCM/6 fallback remains unchanged.
-2. `SPATIAL_103_MODE` chooses the contract half:
+3. `SPATIAL_103_MODE` chooses the contract half:
    `feature` = negotiate `mainBuffered` only; `info` = append the type-103 `/info` descriptor only;
    `both` = both changes. Absent defaults to `both`.
-3. `SPATIAL_103_INDEX` selects one exact decimal extended format:
+4. `SPATIAL_103_INDEX` selects one exact decimal extended format:
    `40` = AAC-LC 5.1.2, `42` = AAC-ELD 5.1.2, `50` = DD+ 5.1, `53` = DD+ 9.1.6,
    `65` = APAC 5.1, `66` = APAC 5.1.2.
    Absent defaults to 65; every other value is rejected and falls back to 65.
-4. `SPATIAL_103_MASK` selects the legacy compatibility mask. Absent defaults to the
+5. `SPATIAL_103_EXTRA_INDEX` is normally empty. Values 65/66 append one explicit secondary gate
+   index. It exists only to reproduce the completed `[40,65]` AAC negative-control and is not a
+   production profile.
+6. `SPATIAL_103_MASK` selects the legacy compatibility mask. Absent defaults to the
    corrected `0x400000` single AAC-LC bit. `0x1440800` is accepted only to reproduce the old failed
    mixed-codec probe; all other values fail back to `0x400000`.
-5. Optional: set `SPATIAL_103_DCX=1` to add `mainBufferedInfo={DCXEnabled:true}` as a genuine CFLite
+7. Optional: set `SPATIAL_103_DCX=1` to add `mainBufferedInfo={DCXEnabled:true}` as a genuine CFLite
    Boolean. `0` leaves the required dictionary empty. Keep it off by default until decode/render
    exists.
-6. Reconnect the phone. The hook writes mode-0600 binary plists:
+8. Reconnect the phone. The hook writes mode-0600 binary plists:
    `/tmp/spatial_control_<sequence>_request.bplist`,
    `/tmp/spatial_control_<sequence>_response.bplist`, and
    `/tmp/spatial_info_<sequence>.bplist`. It also logs every proposed and finally enabled feature.
-7. If the phone requests 103, retrieve `/tmp/spatial_setup103_<sequence>_request.bplist`,
+9. If the phone requests 103, retrieve `/tmp/spatial_setup103_<sequence>_request.bplist`,
    `/tmp/spatial_setup103_<sequence>_hook_response.bplist`, and
    `/tmp/spatial_apap_<sequence>.bin`. The hook logs the stock result, allocated `dataPort`, first
-   APAP bytes, total bytes drained, and bounded bytes saved. With the control-port build, also
-   retrieve `/tmp/spatial_rtcp_<sequence>.bin` and the `controlPort`/RTCP connection log lines.
-8. To restore ordinary negotiation, export `SPATIAL_103=0` in startup and start a fresh
-   `dio_manager` generation.
+   APAP bytes, total bytes drained, and bounded bytes saved. This path has no separate RTCP/control
+   connection on 6033.
+10. To restore ordinary negotiation while preserving DIO5 PCM6, select `fallback-5.1` and start a
+   fresh `dio_manager` generation.
 
 The feature-only run established that the phone proposes `mainBuffered`, but iOS requires the paired
 `mainBufferedInfo` key in `/info`. The broad legacy mask then failed because it mixed PCM and AAC
 families. The corrected single AAC bit `0x400000` solved that gate and produced the hardware-confirmed
 type-103 request above.
 
-Current installed build is `cbbdeea621918ae156b5a11f3be61e7c5be57d64d772635b5a8e5b3be91f1260`;
+Current installed build is `78e93829d1f4234c2d28905235bb198b6cef3017cd011914b3599c667e020e39`;
 it was atomically installed and copied back with the identical SHA-256. Startup selects
-`both + legacy 0x400000 + extended index 65 + DCX off`. Type-100 PCM/6 and DIO5 remain unchanged as
-fallback.
-`40=AAC-LC, 42=AAC-ELD`; it must not be used for an index-40 run until a fresh hook is built and
-explicitly deployed. Only the repository source and documentation were corrected here; the HU was
-not touched.
+`both + legacy 0x400000 + extended index 65 + no extra index + DCX off`. Type-100 PCM/6 and DIO5
+remain unchanged as fallback. Index 65 and 66 are both live-proven. Index 40 alone was rejected and
+the dual `[40,65]` advertisement selected 65/APAP, so the AAC/Cinemo bypass is closed.
 
 The static pass then found one more mandatory control-plane operation. Codec configuration is not
 the SETUP `ct` field and does not arrive on 6033. After media SETUP, iOS sends a custom
@@ -1072,9 +1114,9 @@ AirPlaySender negotiation, and actual stream transport.
 
 ### Exact next steps when type 103 work resumes
 
-1. Start the env-enabled build and verify `SETRATE ... timeline=<nonzero>` from the real MU1316
-   AirTunes clock. After 5–10 seconds APAP must continue at roughly 47 frames/s instead of stopping
-   at the initial 27-frame/~0.576 s window.
+1. Do not require a nonzero timeline ID: MU1316's 16-byte `AirTunesTime` has no such field. Keep the
+   now-correct 64-bit tick ABI and full transport/network-time response shape, and validate clock
+   behavior together with the real decoder/queue/render loop.
 2. Repeat `Play -> Pause -> Play`: `SETRATEANCHORTIME rate=0` and the media-only `FLUSHBUFFERED` must
    ACK, its position must advance by the wall playback duration, and the iPhone timeline must not
    jump back.
@@ -1084,31 +1126,23 @@ AirPlaySender negotiation, and actual stream transport.
    session on any invalid Poly1305 tag, missing cookie/format, impossible length, or unsupported
    index; never feed encrypted/compressed bytes to DIO5. TLV 17 may select only an ID already stored
    by `SETMAGICCOOKIE`.
-5. Use **index 40 first**. Port only MH2p's small ARMv7 `AudioConverter`/AAC adapter interface to the
-   hook/helper and use Audi's existing `CinemoCreateAudioCodec` + `libNmeAudioAAC.so`. Do not load or
-   replace the complete MH2p `libairplay.so`. Capture a real index-40 SETUP/config and prove that the
-   target Cinemo emits eight channels in the expected order. The static adapter ABI is now closed in
-   `hook/audio/cinemo_audio_codec_abi.h`: `CinemoMediaType` is exactly `0x80`, index-40 ASC is
-   `11 c0 00 00`, the output descriptor is PCM/S16/48000/8, and the exported factory,
-   Initialize/Write/Drain/Flush/Release and decoded-callback signatures are recorded. `dio_manager`
-   already configures Cinemo's global plugin directory as `/armle/usr/lib/cinemo`; the hook must
-   verify the wrappers/factory/callback and fail closed, not mutate that process-global path.
-6. Apply the recovered 5.1 matrix: preserve `L/R/C`, attenuate LFE by 0.5, fold each height channel
-   into its matching surround at 0.5, use saturating accumulation, and size PCM6 S16LE output as
-   `frames*12` bytes. Bridge the result into the already proven type-100/DIO5 read path only while
-   the 103 session is active; otherwise call stock behavior.
+5. Implement or port an actual ARMv7/QNX APAC decoder. The macOS AudioToolbox oracle and Pioneer's
+   AArch64 Linux decoder are validation references, not deployable target decoders. Start with index
+   65 so decoded output is already PCM6; do not send compressed, encrypted, or guessed PCM to DIO5.
+6. For index 66, apply the recovered 5.1 matrix: preserve `L/R/C`, attenuate LFE by 0.5, fold each
+   height channel into its matching surround at 0.5, use saturating accumulation, and size PCM6
+   S16LE output as `frames*12` bytes. Bridge the result into the already proven type-100/DIO5 read
+   path only while the 103 session is active; otherwise call stock behavior.
 7. Implement the remaining trim, gap/underrun, queue and idempotent teardown behavior. Socket pacing
    alone is not a renderer and has already been falsified as the five-second fix.
-8. After continuous AAC type-103 playback works, repeat a controlled 65/66 capture. Decrypt it with
-   `tools/pioneer_apap_decrypt.py`, inspect the real cookie with `tools/pioneer_apac_cookie.py`, and
-   validate each packet against `tools/apple_apac_oracle.c`. Only then decide whether a native APAC
-   backend is still worth implementing.
+8. Decrypt controlled 65/66 captures with `tools/pioneer_apap_decrypt.py`, inspect their cookies with
+   `tools/pioneer_apac_cookie.py`, and validate decoder output against `tools/apple_apac_oracle.c`.
 9. The fresh source needs only `6030:6032`; reduce all four production PF profiles after the old
    diagnostic build is replaced. Until then leave the current `6030:6033` configuration in place.
 
-The first production milestone is now stable index-40 **AAC-LC 5.1.2 → PCM8 → PCM6 playback**
-without the five-second teardown. APAC 65/66 is the second codec milestone. Native height rendering
-remains an amplifier/HU-output project after the buffered receiver works.
+The first production milestone is stable index-65 **APAC 5.1 → PCM6 playback**. The second is index
+66 **APAC 5.1.2 → PCM8 → tested PCM6 downmix**. Native height rendering remains an amplifier/HU-output
+project after the buffered receiver works.
 
 ### Remaining low-priority question
 

@@ -210,6 +210,9 @@ export SPATIAL_5_1=1
 export SPATIAL_103=1
 export SPATIAL_103_MODE=both
 export SPATIAL_103_INDEX=65
+# Optional second extended format. Empty for normal 65/66 profiles; 65 with primary index 40 is the
+# explicit experimental AAC bridge and must never be confused with a proven APAC profile.
+export SPATIAL_103_EXTRA_INDEX=
 export SPATIAL_103_DCX=0
 export SPATIAL_103_MASK=0x400000
 exec "$DIODIR/dio_manager" "$@"
