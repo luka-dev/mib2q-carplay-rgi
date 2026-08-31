@@ -15,7 +15,7 @@ differently and a 1 LSB mismatch there means nothing.
 | b | band layout | `APACICSInfo`, `APACScaleFactorData`, `apac::SFBOffsets` | **DONE** | `tests/test_icsinfo.cpp`, `tests/test_sfb_offsets.cpp`, `tests/test_scalefactors.cpp` |
 | c | spectrum core | `APACSpectralData`, `apac::GetHuffmanTable` and the 12 codebooks | **DONE** | `tests/test_spectraldata.cpp`; LRVQ is NOT here, see below |
 | d | transform | `APACTNSData`, `apac::LSFTools`, `apac::LPCBase`, `apac::LPMDCTFilter`, `APACSynthesisFilterBank`, `MDCT`, `DCT_IV`, `MultiRadix*FFT` | **DONE**, one documented gap | `tests/test_transform_tables.cpp`, `test_mdct.cpp`, `test_filterbank.cpp`, `test_tns.cpp`, `test_lpc.cpp`, `test_lpmdct.cpp` |
-| e | bandwidth extension | `APACBWE2Decoder`, `BWELPC`, `apac::LSFTools::{Initialize,DecodeLSF}` | **DONE**, bit exact wherever no FFT is under it | `tests/test_bwe.cpp`; still unreachable on our content, wired into `src/decoder.cpp` |
+| e | bandwidth extension | `APACBWE2Decoder`, `BWELPC`, `apac::LSFTools::{Initialize,DecodeLSF}` | **DONE**, bit exact wherever no FFT is under it | `tests/test_bwe.cpp`; still unreachable on our content, wired into `src/decoder.cpp`. Two shared `LPMDCTFilter`s instead of six: -190 KiB, +34 % on a geometry change, priced and reversible — see "The two-filter trade" |
 | f | elements | `APACSingleChannelElement`, `APACChannelPairElement`, `APACLFEElement`, `APACSyntacticElement`, `APACIndividualChannelStream`, `APACCACDecoder` | **DONE**, bit exact | `tests/test_frames.cpp`; whole capture with `reference/run.sh port` |
 | g | top level | `APACCoreDecoder`, `APACCoreLBRDecoder`, `APACDecoder`, `APACASPDecoder`, `APACChannelRemapper`, `apac::TrimmingData` | **DONE**, bit exact above the transform | `tests/test_frames.cpp`; whole capture with `reference/run.sh port` |
 | h1 | LRVQ frame mode | `APACLRVQDecoder`, `APACChannelPairElement::DeserializeLrvqFrame`, `apac::LSFTools::LSF_To_LPC` | **DONE**, bit exact wherever no FFT is under it | `tests/test_lrvq.cpp`; still unreachable on our content, wired into `src/element.cpp` at 6068138 and covered by `tests/test_frames.cpp` |
@@ -809,6 +809,79 @@ nothing dynamically. Two decisions got it there, and both are measured rather th
   thrashes within a frame, and the test drives all six sizes interleaved and requires the same bits
   as a fresh object every time.
 
+#### The two-filter trade has a running cost. It is priced, and it is reversible.
+
+Sharing the two filters saves **190 KiB** and costs a **re-`Initialize` whenever the geometry
+changes between frames**: `RealFFT::Initialize` rebuilds the twiddles, about 768 sin/cos for the
+1024-point filter, and that is paid per channel per frame. Measured on the host, one channel, 4000
+reps, warmed:
+
+| | ns per `DecodeFrame` |
+| --- | ---: |
+| steady state, wide-long repeated | 7 252 |
+| alternating narrow-long <-> wide-long | 9 695 |
+| alternating wide-long <-> wide-short | 9 614 |
+
+i.e. **+34 %** on a stream whose block type or `bwStart` changes frame to frame. That is a cost the
+ORIGINAL does not have — it keeps six persistent objects — so it must not be quoted as the
+decoder's cost without saying whose it is.
+
+**The decision is to keep two filters**, and it was taken on the numbers rather than by default:
+the path does not execute at all on this content (patching `GetActiveFlag` or `DecodeFrame` to
+return 0 leaves the whole capture byte-identical, and so does landing the synthesis — see stage k),
+the real-time budget has 27x of headroom over the committed worst packet so even paying the
+transient in full does not threaten it, and 190 KiB inside `dio_manager` is the scarcer resource.
+
+**The lever, if that ever stops being true:** four filters — core-long, core-short, ext-long,
+ext-short — removes the transient entirely for **+94 KiB**; all six removes it for **+188 KiB**.
+Nothing else has to change; `FilterFor` in `src/bwe_lpc.cpp` is the only function that would move,
+and `tests/test_bwe.cpp` already asserts bit-for-bit that a re-initialised filter and a fresh one
+give the same answers, which is the property that makes either count legal.
+
+### What a BWE-active packet would cost, and what it would not
+
+Stage k prices the decoder on the capture, where BWE never runs. These are the numbers for the
+counterfactual, measured rather than guessed, so that a future real BWE-active stream is not priced
+by eye. Host ns per `DecodeFrame`, one channel:
+
+| shape | FFTs per call | ns |
+| --- | --- | ---: |
+| long, wide (`coreEnd >= 384`) | 2 x 768-pt + 1 x 1024-pt real | **7 250** |
+| long, narrow | 2 x 512-pt + 1 x 1024-pt | 6 050 |
+| short, wide | 9 x 96-pt + 1 x 128-pt | 2 840 |
+| short, narrow | 9 x 64-pt + 1 x 128-pt | 2 130 |
+| gated: `maxSfb == 0`, or an all-zero core | none | ~0 |
+
+Block type is 2.5x, the wide/narrow geometry a further 1.2-1.3x, and the **window-group count costs
+nothing** — the short inner loop is always 8 windows x 64 multiplies plus 64 gain multiplies
+whatever the grouping; grouping only selects which gain slot is read. The long path also does **512
+float divides**, and VFPv3 divide is unpipelined on Cortex-A8/A9 at 15-20 cycles, so that alone is
+8-10 k cycles and can rival an FFT. Do not "fix" it with a reciprocal multiply: that changes the
+arithmetic and invalidates every differential number above.
+
+**The multiplier is at most 5, not 6, and this content never exceeds 4.** Two separate reasons:
+
+* *Structural.* `BWE2Decoder::Deserialize` reads a presence bit only for an SCE and a CPE; for any
+  other element type it clears the channel's bit and returns having read nothing. The live cookie
+  declares `{SCE, CPE, CPE, LFE}` — 48000 Hz, 6 channels, one codec config — so **the LFE can never
+  come up active, in any bitstream**.
+* *Content.* `DecodeFrame`'s `find_if` guard skips everything when the core is all zero, so an
+  active flag on a silent channel is free. Instrumenting the port's spectrum sink over all 3980
+  packets, the number of channels per packet carrying a non-empty core is
+  `0:31 1:1210 2:2475 3:253 4:11 5:0 6:0` — never more than **4**, and 4 in 0.28 % of packets.
+
+**And the expensive geometry is the COMMON one, not a corner.** Over the same 3980 packets: 23 862
+channel-frames, 23 686 long and 176 eight-short; **16 899 (71 %) have an entirely empty spectrum**;
+and of the 6 963 that do not, **4 794 (69 %) already have `coreEnd >= 384`**, i.e. the wide
+geometry. That is a lower bound — the last non-zero coefficient bounds `coreEnd` from below, since
+every coded coefficient sits strictly beneath it — so the true fraction is at least that.
+
+**What none of this measures.** No BWE-active stream exists to test against, so all of the above
+prices the arithmetic rather than observing content that turns the tool on. A figure drawn from
+`reference/bwe_cases.h` is a **shape** maximum, not a content maximum: 11 of its 44 cases exist only
+to hit a gate, several use 24 kHz that CarPlay never carries, and the spectra are uniform random.
+Quote it as a labelled bound, never in the same column as a capture-derived per-packet number.
+
 ### What stage e clamped, and what it deliberately did not
 
 The audit the other stages ask for — *a function handed a parsed object rather than the bitstream,
@@ -1238,6 +1311,15 @@ feature.
   `src/lpc.cpp` said it overrides `ConditionLSFs` too; the vtable at `0x0042b5d8` says otherwise, and
   BWELPC never calls `LSF_To_LPC` at all - `DecodeLSFsToLPCs` calls `Condition_LSFs`, `LSF_To_LSP`
   and `LSP_To_LPC` itself. Corrected in place. Read a vtable rather than inferring an override.
+* **In this decoder, cost follows GEOMETRY, not size.** Two independent measurements say the same
+  thing and both cost someone time to find. On the real capture, per-packet decode cost and
+  compressed packet size correlate **-0.56** — the biggest packet is not the dearest one (stage k).
+  And in the bandwidth extension, `maxSfb` is the wrong heuristic for picking the expensive case:
+  case 16 of `reference/bwe_cases.h` (maxSfb 49, `coreEnd` 1024) and case 11 (maxSfb 31, `coreEnd`
+  384) cost **identically**, because the LPC analysis only ever reads `[0, bwStart)` and `bwStart`
+  is 384 for both. What sets the cost is the block type and which side of `coreEnd >= 384` the
+  frame falls on; the coefficients themselves barely matter. Pick a worst case by driving the
+  geometry, never by sorting a case list on a field that looks big.
 * **`bwStart - patchWidth` is 16 in BOTH short geometries** (48 - 32 and 32 - 16), so a test that
   exercises only one of them cannot tell the divisor slice from a constant offset of 16. Both are in
   the plan for that reason.

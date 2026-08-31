@@ -61,6 +61,22 @@
 // a "core" filter for the 2*bwStart sizes {64, 96, 512, 768} and an "extension"
 // filter for the two fixed ones {128, 1024}.  tests/test_bwe.cpp drives the six
 // sizes in interleaved orders and requires the same answers as a fresh object.
+//
+// IT HAS A PRICE AND THE PRICE IS MEASURED.  Saving those 190 KiB costs a
+// twiddle rebuild - about 768 sin/cos for the 1024-point filter - every time
+// the GEOMETRY changes between frames, per channel per frame.  On the host,
+// one channel, warmed: 7 252 ns steady state against 9 695 ns alternating
+// narrow-long / wide-long, i.e. +34 %.  The original does not pay it, so it
+// must never be quoted as the decoder's cost without saying whose it is.
+//
+// The decision is deliberate: the path does not execute at all on the CarPlay
+// content, and the real-time budget has 27x of headroom over the worst packet,
+// so 190 KiB inside dio_manager is the scarcer resource.  If that ever stops
+// being true the lever is here and nothing else moves: give this class four
+// filters (core-long, core-short, ext-long, ext-short) for +94 KiB, or all six
+// for +188 KiB, and change FilterFor below to pick between them.  The bit-exact
+// "fresh vs reused filter" assertion in tests/test_bwe.cpp is what makes any of
+// those counts legal.  Written up in PORT_STATUS.md, "The two-filter trade".
 
 #ifndef APAC_BWE_LPC_H
 #define APAC_BWE_LPC_H

@@ -52,8 +52,11 @@ uint32_t BWELPC::FFTSizeFor(uint32_t n)
 }
 
 // Two objects standing in for the original's six.  See the header for why that
-// is observationally identical; the split is by role so that the two sizes one
-// DecodeFrame uses never land on the same object.
+// is observationally identical, and for what it costs: the Initialize below
+// rebuilds ~768 sin/cos whenever the geometry changes between frames, which is
+// +34 % per channel on an alternating stream.  This function is the whole of
+// the lever - four or six filters here removes the transient for +94 or
+// +188 KiB - so if you are here to change it, read the header note first.
 LPMDCTFilter* BWELPC::FilterFor(uint32_t n)
 {
     const uint32_t fft = FFTSizeFor(n);
