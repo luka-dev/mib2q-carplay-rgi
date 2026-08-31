@@ -2,6 +2,6 @@
 
 #include "framework/hook_framework.h"
 
-/* Module headers (auto-register via constructors) */
+/* Module headers (registered lazily by hook_framework_init()) */
 #include "routeguidance/rgd_hook.h"
 #include "coverart/coverart_hook.h"

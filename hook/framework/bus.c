@@ -756,10 +756,8 @@ hook_result_t bus_init(void) {
     signal(SIGILL,  bus_crash_handler);
     signal(SIGFPE,  bus_crash_handler);
 
-    /* Do NOT memset g_types here: modules may have called bus_on()
-     * from their own __constructor before bus_init ran (constructor
-     * order is unspecified across object files).  BSS zero-init
-     * already guarantees clean initial state. */
+    /* Do NOT memset g_types here: lazy module registration runs before
+     * bus_init.  BSS zero-init already guarantees clean initial state. */
     pthread_mutex_lock(&g_lock);
     g_ring_head = 0;
     g_ring_tail = 0;

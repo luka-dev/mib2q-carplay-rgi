@@ -1623,7 +1623,7 @@ static void rgd_state_handler(hook_context_t* ctx, int event, void* event_data) 
 static bool g_rgd_module_registered = false;
 
 void rgd_init(void) {
-    /* Just register module - no file ops in constructor */
+    /* Called from the framework's first real Cinemo boundary. */
     if (!g_rgd_module_registered) {
         hook_framework_register_module(&rgd_module_def);
         g_rgd_module_registered = true;
@@ -1713,14 +1713,4 @@ void rgd_shutdown(void) {
      * stock SendIAP2 here prevented the child from completing destruction and
      * SI eventually killed it as TIMEOUT_WATCHDOG. */
     rgd_clear_state("module_shutdown");
-}
-
-__attribute__((constructor))
-static void rgd_module_init(void) {
-    rgd_init();
-}
-
-__attribute__((destructor))
-static void rgd_module_fini(void) {
-    rgd_shutdown();
 }

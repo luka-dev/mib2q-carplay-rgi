@@ -46,7 +46,7 @@ static struct {
 };
 
 /* The log lock is first touched concurrently by the bus connector/writer/timer
- * threads and the cover-art worker — all spawned from library constructors.  A
+ * threads and the cover-art worker after lazy runtime initialisation.  A
  * plain `if (!lock_initialized)` guard let two of them race into pthread_mutex_init
  * on the same mutex (undefined behaviour → nondeterministic startup crash).
  * pthread_once makes the init run exactly once regardless of which thread is first. */

@@ -117,6 +117,16 @@ support - it supplies a genuinely absent case. *(RE-derived; not re-checkable fr
 
 ## Hardening findings
 
+- **FIXED - RGD module work from the ELF constructor** [x] (K1004 investigation, 2026-08-31).
+  The exact hook shipped in the standalone `carplay-rgi-new` package used an RGD constructor which
+  called `rgd_init()` at `dlopen` time. Registration immediately entered the logger's lazy init and
+  could create its pthread while QNX `ldqnx` still held the loader lock, before iAP2 Identify. RGD is
+  now registered from the framework's first real Cinemo interpose instead. The build rejects any
+  reintroduced `rgd_module_init`/`rgd_module_fini` and requires `.init_array` to be exactly four bytes
+  (the compiler's `frame_dummy` entry only). The one-time WARN
+  `lazy runtime init complete (constructor-free; first Cinemo boundary)` is the live boundary marker.
+  Fresh standalone artifact: `build/libcarplay_hook.so`, SHA-256
+  `1dfee4db2d3ff836e518bd53b0adfd3652b0ba1fa112f37390fc4a9f55feedcb`.
 - **FIXED - eager cover-art constructor** [x] (confirmed resolved on this branch). `coverart_runtime_init`
   is `pthread_once`-backed and installs the `NmeTransport::Recv` sink from the framework's lazy
   first-Cinemo-call boundary - **no thread is created there**. The worker is created lazily on the first
@@ -137,8 +147,9 @@ support - it supplies a genuinely absent case. *(RE-derived; not re-checkable fr
 ## Bottom line
 
 The decisive native seams are present in the exact shipped binaries and are interposed correctly, the
-Java outer-class ABI is preserved, and `LD_PRELOAD` is confined to `dio_manager`. The **eager cover-art
-loader thread is gone** (biggest cold-boot blocker closed). The two section 6 re-notes that no longer match code
+Java outer-class ABI is preserved, and `LD_PRELOAD` is confined to `dio_manager`. The **RGD module and
+logger are now constructor-free**, and the eager cover-art loader thread is gone. The two section 6
+re-notes that no longer match code
 (`videoAvailable` intent term, and the map-scale sentinel) have both been **simplified out** on this
 branch. Remaining non-altScreen work is bounded hardening: ELF visibility, fail-closing the process
 gate, tightening `g_fw.ctx` locking, and the supervisor 2 s ownership margin.
