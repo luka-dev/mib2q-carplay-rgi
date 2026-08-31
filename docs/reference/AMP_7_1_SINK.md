@@ -74,12 +74,57 @@ image exists anywhere in the 1.5 MB CodeFlash dump (blank at `0x0F0000-0x0FFFFF`
 The amp note adds that the selected profile index at `gp-3592` is never read by the DSP service code,
 so no register-write delta between 5.1 and 7.1 can be derived from the V850 at all.
 
+## Update: the branch reopens conditionally (2026-08-31)
+
+The amp note now carries a patch plan — `AMP_ENTERTAINMENT_7_1_MOST.md`, "Patch plan: replace
+selectable `0x32` with 5.1.2". It repurposes the apparently unused `Entertainment_7.1_SAD` profile
+rather than adding a sink, and the V850 half is an exact two-byte delta in profile row 17 at
+`0x96F21`:
+
+```
+0x96F27:  13 -> 0D    BCL -> Top Front Left
+0x96F28:  14 -> 0F    BCR -> Top Front Right
+```
+
+Transport is untouched — still protected GenericPCM, 8 x 24-bit, BlockWidth `0x001A`, same Connect
+message. So **"5.1.2 is not transportable" was true of the stock amp, not of a patched one**, and my
+line below claiming the branch was closed on evidence is retracted: it is closed on *cost*, and the
+cost is now itemised rather than unknown.
+
+Two things from this side sharpen that cost.
+
+**The two bytes are inside the CRC-covered region.** `AMP_AUDIO_DSP_TUNING.md` §10a establishes that
+`AD301FLASH0` block-integrity footers cover `0x0-0xFFFFF`, the V850 code, and that the DSP region
+`0x100000+` has none. `0x96F27` sits inside the covered range, so this is not a free two-byte poke:
+it needs the main-flash integrity value resolved on the MCU that also holds component protection.
+The amp plan already lists this as step 2; noting the boundary explicitly because "two bytes" reads
+cheaper than it is.
+
+**The HU has no MOST audio stack in its filesystem.** Grepping the whole extracted MHI2Q tree for
+`NetServices`, `Mns`, `MostNs`, `AudioAmplifier`, `SyncSink`, `Allocate`, `ConnectionLabel`, `SinkNr`,
+`BlockWidth` and `FBlock` returns **zero files for every one of them**, alongside the earlier zero
+hits for `Entertainment_*`. Absence of strings is not proof — the code could be numeric, or live in a
+companion controller outside this image — but ten independent MOST terms all missing is strong. The
+Connect that would select `SinkNr 0x32` is therefore not issued by anything we can see, let alone
+patch, which matters for the amp plan's "check whether stock ever connects 0x32" step and for any
+notion of us issuing that Connect ourselves.
+
+**And the payoff is narrower than the plan's framing suggests.** Its SHARC step 6 — bypass the
+synthesized Symphoria height for this profile so it is not summed with discrete TFL/TFR — is the tell:
+those height speakers already play today, driven by Symphoria from the bed. The delta being bought is
+**discrete height versus synthesized height**, not height versus none.
+
 ## Consequence for the CarPlay plan
 
-None, and that is the useful part. 5.1 was already the target and remains it. What changes is that
-the 8-channel branch is now **closed on evidence rather than open on cost**: there is no height-capable
-sink to aim at, so the missing `eight_channel_speakerp` node in deva no longer needs considering, and
-5.1.2 content should be folded to 5.1 without hesitation.
+Unchanged: 5.1 is the target. The full 5.1.2 chain is seven serial steps — working type-103 receiver,
+a decodable 5.1.2 format, deva 6->8 including a mixer-topology node that does not exist, an 8-channel
+MOST allocation from a stack we cannot find, the V850 two bytes plus CRC, a chip-off read and matrix
+patch of the SHARC boot flash, and the Symphoria bypass. Four of those are open research or hardware
+access. The 5.1 path needs only the first, which is the actual project and is no longer blocked now
+that the five-second teardown is fixed.
+
+So the amp plan is well-scoped and worth keeping, and it should sit behind working 5.1 audio.
+5.1.2 content still gets folded to 5.1 in the meantime.
 
 The implementation note stands anyway and costs nothing: when index 40 (AAC-LC 5.1.2) decodes, keep
 the PCM8 stage in its own buffer and make the 8->6 fold the last step. Not for a future 8-channel
