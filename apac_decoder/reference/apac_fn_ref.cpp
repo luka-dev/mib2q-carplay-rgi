@@ -656,6 +656,132 @@ int cmd_fb()
 }
 
 
+
+// ------------------------------------------------------------------ tns ----
+// APACTNSData: the constructor, ParseTNSData and Apply, in one pass so the
+// filters Apply runs are the ones ParseTNSData actually produced.
+//
+//   0x0aed10  _ZN11APACTNSDataC1ER18APACInstanceConfig
+//   0x0aedc0  _ZN11APACTNSData12ParseTNSDataER16TBitstreamReaderIjERK11APACICSInfo
+//   0x0af240  _ZNK11APACTNSData5ApplyERK11APACICSInfoRKN4apac10SFBOffsetsER16APACSpectralData
+//
+// Objects it has to build by hand:
+//
+//   APACInstanceConfig  only +4 is read: the sample rate.
+//   APACICSInfo         768 bytes; Apply reads +10 (window sequence) and +11
+//                       (maxSfb), ParseTNSData reads +10.
+//   apac::SFBOffsets    NOT the 40-byte table record - the per-block-type view
+//                       the syntactic element hands down: { uint64 numBands;
+//                       const uint16* offset; }.  numBands is read as a uint16.
+//   APACSpectralData    { float* begin; float* end; }.
+//
+// `present` (+0) is set by the caller, not by the parser, so the harness sets
+// it before Apply - otherwise Apply is a no-op and would prove nothing.
+
+typedef void    (*fn_tns_ctor_t)(void*, void*);
+typedef int32_t (*fn_tns_parse_t)(void*, void*, const void*);
+typedef int32_t (*fn_tns_apply_t)(const void*, const void*, const void*, void*);
+
+fn_tns_ctor_t  tns_ctor;
+fn_tns_parse_t tns_parse;
+fn_tns_apply_t tns_apply;
+
+struct LibSFBOffsets {
+    uint64_t        numBands;
+    const uint16_t* offset;
+};
+
+struct LibSpectralData {
+    float* begin;
+    float* end;
+};
+
+void load_tns()
+{
+    tns_ctor  = need<fn_tns_ctor_t> ("_ZN11APACTNSDataC1ER18APACInstanceConfig");
+    tns_parse = need<fn_tns_parse_t>(
+        "_ZN11APACTNSData12ParseTNSDataER16TBitstreamReaderIjERK11APACICSInfo");
+    tns_apply = need<fn_tns_apply_t>(
+        "_ZNK11APACTNSData5ApplyERK11APACICSInfoRKN4apac10SFBOffsetsER16APACSpectralData");
+}
+
+int cmd_tns()
+{
+    const size_t kObj = 190;
+    static uint8_t obj[256] __attribute__((aligned(16)));
+    static uint8_t ics[768] __attribute__((aligned(16)));
+    static uint8_t cfg[64]  __attribute__((aligned(16)));
+    static uint8_t bits[apac_cases::kTNSBitBytes + 32] __attribute__((aligned(64)));
+    static float   spec[1200];
+
+    // The constructor's rate table, checked across every rate the decoder
+    // knows plus one it does not.
+    static const uint32_t kRates[] = {
+        96000, 88200, 64000, 48000, 44100, 32000,
+        24000, 22050, 16000, 12000, 11025, 8000, 7350, 0
+    };
+    for (size_t i = 0; i < sizeof kRates / sizeof kRates[0]; ++i) {
+        memset(obj, 0, sizeof obj);
+        memset(cfg, 0, sizeof cfg);
+        *(uint32_t*)(cfg + 4) = kRates[i];
+        tns_ctor(obj, cfg);
+        printf("CFG %u maxOrderLong=%u maxOrderShort=%u bandsLong=%u bandsShort=%u\n",
+               kRates[i], obj[186], obj[187], obj[188], obj[189]);
+    }
+
+    const SFBOffsetRecord* rec = sfb_table(48000, 1024);
+    if (!rec) { fprintf(stderr, "apac_fn_ref: no 48 kHz SFB record\n"); return 1; }
+
+    const apac_cases::TNSCase* plan = apac_cases::tns_plan();
+    for (unsigned c = 0; c < apac_cases::kTNSCases; ++c) {
+        const apac_cases::TNSCase& tc = plan[c];
+        const bool eightShort = (tc.windowSequence == 2);
+
+        memset(obj, 0, sizeof obj);
+        memset(cfg, 0, sizeof cfg);
+        *(uint32_t*)(cfg + 4) = 48000;
+        tns_ctor(obj, cfg);
+
+        memset(ics, 0, sizeof ics);
+        ics[8]  = (uint8_t)rec->numSfbLong;
+        ics[9]  = (uint8_t)rec->numSfbShort;
+        ics[10] = tc.windowSequence;
+        ics[11] = tc.maxSfb;
+
+        memset(bits, 0, sizeof bits);
+        apac_cases::tns_fill_bits(c, bits, apac_cases::kTNSBitBytes);
+
+        BsState bs;
+        memset(&bs, 0, sizeof bs);
+        bs_ctor(&bs, bits, apac_cases::kTNSBitBytes);
+        int32_t before = bs_remaining(&bs);
+        int32_t rc = tns_parse(obj, &bs, ics);
+        int32_t after = bs_remaining(&bs);
+
+        printf("TNS %u seq=%u maxSfb=%u rc=%d bits=%d\n",
+               c, tc.windowSequence, tc.maxSfb, rc, before - after);
+        printf("OBJ ");
+        for (size_t i = 0; i < kObj; ++i) printf("%02x", obj[i]);
+        printf("\n");
+
+        obj[0] = 1;                       // the syntactic element's tns_present
+        LibSFBOffsets so;
+        so.numBands = eightShort ? rec->numSfbShort : rec->numSfbLong;
+        so.offset   = eightShort ? rec->sfbOffsetShort : rec->sfbOffsetLong;
+
+        apac_cases::case_fill(tc.spectrumCase, spec, 1024);
+        LibSpectralData sd;
+        sd.begin = spec;
+        sd.end = spec + 1024;
+        int32_t arc = tns_apply(obj, ics, &so, &sd);
+        printf("APPLY %u rc=%d\n", c, arc);
+        printf("SPEC\n ");
+        print_floats(spec, 1024);
+    }
+    return 0;
+}
+
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -665,7 +791,7 @@ int main(int argc, char** argv)
             "usage: apac_fn_ref probe\n"
             "       apac_fn_ref bs            < cases.txt\n"
             "       apac_fn_ref sfb [RATE...]\n"
-            "       apac_fn_ref win | mdct | fb\n"
+            "       apac_fn_ref win | mdct | fb | tns\n"
             "       apac_fn_ref gc COOKIE  [--offset N] [--dump]\n"
             "       apac_fn_ref gc-raw FILE [--offset N] [--dump]\n"
             "       apac_fn_ref cookie COOKIE\n");
@@ -681,6 +807,7 @@ int main(int argc, char** argv)
     if (cmd == "win")  { load_stage_d(); return cmd_win(); }
     if (cmd == "mdct") { load_stage_d(); return cmd_mdct(); }
     if (cmd == "fb")   { load_stage_d(); return cmd_fb(); }
+    if (cmd == "tns")  { load_stage_d(); load_tns(); return cmd_tns(); }
     if (cmd == "bs")  return cmd_bs();
     if (cmd == "ics") return cmd_ics();
     if (cmd == "sfb") return cmd_sfb(argc - 2, argv + 2);

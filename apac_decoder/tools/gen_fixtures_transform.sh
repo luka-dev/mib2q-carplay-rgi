@@ -53,4 +53,9 @@ emit mdct.fixture mdct
 # sequences, plus the two rejection paths.
 emit filterbank.fixture fb
 
+# APACTNSData: the constructor's rate table over all 13 rates, then
+# ParseTNSData + Apply over the 32-case plan in dsp_cases.h - both block
+# layouts, and four cases the library rejects.
+emit tns.fixture tns
+
 echo "stage-d fixtures written to $FIX"

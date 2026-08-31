@@ -140,6 +140,52 @@ inline const FBStep* fb_plan()
     return kPlan;
 }
 
+// -------------------------------------------------------------- TNS plan ----
+// One entry per APACTNSData::ParseTNSData + Apply pair.
+//
+// The bit payload is pseudo-random rather than hand-built, which is deliberate:
+// TNS's own fields are wide enough that a random buffer is a legal filter set
+// most of the time (a long block's band length is six bits and only zero is
+// rejected), while the cases that do trip the zero-length rejection exercise
+// the error path for free.  A parse that fails still leaves a partly filled
+// object, and Apply is run on it anyway - both sides see the same bytes, so
+// that is a real comparison and not an accident.
+//
+// windowSequence 2 means eight short windows; anything else is a long block.
+// maxSfb is what the syntactic element would have taken from APACICSInfo, and
+// it clamps the TNS band cap (40 long / 14 short at 48 kHz).
+struct TNSCase {
+    uint8_t  windowSequence;
+    uint8_t  maxSfb;
+    uint8_t  spectrumCase;   // index into case_fill, 1024 floats
+    uint8_t  bitSeed;
+};
+
+enum { kTNSCases = 32, kTNSBitBytes = 64 };
+
+inline const TNSCase* tns_plan()
+{
+    static const TNSCase kPlan[kTNSCases] = {
+        { 0, 49,  9,  1 }, { 0, 49, 10,  2 }, { 0, 49, 11,  3 }, { 0, 49, 14,  4 },
+        { 0, 40,  9,  5 }, { 0, 30, 10,  6 }, { 0, 20, 11,  7 }, { 0, 10, 15,  8 },
+        { 0,  1,  9,  9 }, { 0,  0, 10, 10 }, { 0, 49,  8, 11 }, { 0, 49,  6, 12 },
+        { 0, 49,  7, 13 }, { 0, 49,  0, 14 }, { 0, 49,  4, 15 }, { 0, 49,  5, 16 },
+        { 2, 14,  9, 17 }, { 2, 14, 10, 18 }, { 2, 14, 11, 19 }, { 2, 14, 14, 20 },
+        { 2, 10,  9, 21 }, { 2,  8, 10, 22 }, { 2,  4, 11, 23 }, { 2,  1, 15, 24 },
+        { 2,  0,  9, 25 }, { 2, 14,  8, 26 }, { 2, 14,  6, 27 }, { 2, 14,  7, 28 },
+        { 2, 14,  0, 29 }, { 2, 14,  4, 30 }, { 2, 14,  5, 31 }, { 2, 14, 12, 32 }
+    };
+    return kPlan;
+}
+
+inline void tns_fill_bits(unsigned c, uint8_t* buf, uint32_t len)
+{
+    uint32_t s = 0x243f6a88u ^ (tns_plan()[c].bitSeed * 2246822519u);
+    if (s == 0) s = 1;
+    for (uint32_t i = 0; i < len; ++i)
+        buf[i] = (uint8_t)(xorshift32(&s) >> 19);
+}
+
 }  // namespace apac_cases
 
 #endif  // APAC_DSP_CASES_H

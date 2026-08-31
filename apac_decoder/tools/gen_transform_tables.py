@@ -50,6 +50,14 @@ TABLES = [
      'index 1 and hardcodes 0.99941 for it'),
 ]
 
+# Integer tables, emitted as uint32 arrays.  Same rule: copied, not retyped.
+U32_TABLES = [
+    ('kTNSMaxBandRecords', 0x00331970, 24,
+     'twelve {sampleRate, limits} pairs read by APACTNSData::APACTNSData.  The '
+     'second word of each pair carries the TNS band limits in its low two '
+     'bytes: byte 0 long, byte 1 short.  48000 gives 3624 = 40 long, 14 short'),
+]
+
 
 def main():
     parts = []
@@ -69,6 +77,8 @@ def main():
 // at all.  tests/test_transform_tables.cpp checks every word against a fixture
 // the library itself produced.
 
+#include <stdint.h>
+
 #include "apac/transform.h"
 
 namespace apac {
@@ -85,6 +95,19 @@ namespace tables {
         parts.append('extern const F32 %s[%d] = {\n' % (name, count))
         for i in range(0, count, 6):
             row = ', '.join('{0x%08xu}' % w for w in words[i:i + 6])
+            parts.append('    ' + row + ',\n')
+        parts.append('};\n\n')
+    for name, addr, count, what in U32_TABLES:
+        path = os.path.join(RODATA, 'apac_rodata_%08x.bin' % addr)
+        with open(path, 'rb') as fh:
+            blob = fh.read()
+        if len(blob) < count * 4:
+            sys.exit('%s: %d bytes, need %d' % (path, len(blob), count * 4))
+        words = struct.unpack('<%dI' % count, blob[:count * 4])
+        parts.append('// 0x%08x, %d uint32 - %s\n' % (addr, count, what))
+        parts.append('extern const uint32_t %s[%d] = {\n' % (name, count))
+        for i in range(0, count, 6):
+            row = ', '.join('0x%08xu' % w for w in words[i:i + 6])
             parts.append('    ' + row + ',\n')
         parts.append('};\n\n')
     parts.append('} // namespace tables\n} // namespace apac\n')

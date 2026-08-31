@@ -14,6 +14,8 @@
 // at all.  tests/test_transform_tables.cpp checks every word against a fixture
 // the library itself produced.
 
+#include <stdint.h>
+
 #include "apac/transform.h"
 
 namespace apac {
@@ -636,6 +638,14 @@ extern const F32 kLPCLagWindow[16] = {
     {0x3f7fd91eu}, {0x3f7f7839u}, {0x3f7ed70eu}, {0x3f7df615u}, {0x3f7cd5fau}, {0x3f7b7794u},
     {0x3f79dbeau}, {0x3f780430u}, {0x3f75f1c5u}, {0x3f73a631u}, {0x3f712324u}, {0x3f6e6a73u},
     {0x3f6b7e18u}, {0x3f68602cu}, {0x3f6512e7u}, {0x3f61989eu},
+};
+
+// 0x00331970, 24 uint32 - twelve {sampleRate, limits} pairs read by APACTNSData::APACTNSData.  The second word of each pair carries the TNS band limits in its low two bytes: byte 0 long, byte 1 short.  48000 gives 3624 = 40 long, 14 short
+extern const uint32_t kTNSMaxBandRecords[24] = {
+    0x00017700u, 0x0000091fu, 0x00015888u, 0x0000091fu, 0x0000fa00u, 0x00000a22u,
+    0x0000bb80u, 0x00000e28u, 0x0000ac44u, 0x00000e2au, 0x00007d00u, 0x00000e33u,
+    0x00005dc0u, 0x00000e2eu, 0x00005622u, 0x00000e2eu, 0x00003e80u, 0x00000e2au,
+    0x00002ee0u, 0x00000e2au, 0x00002b11u, 0x00000e2au, 0x00001f40u, 0x00000e27u,
 };
 
 } // namespace tables

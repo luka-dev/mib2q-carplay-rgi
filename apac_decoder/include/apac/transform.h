@@ -66,6 +66,7 @@ extern const F32 kDCTIVMod128[128];
 extern const F32 kDCTIVMod1024[1024];
 extern const F32 kTNSCoefficients[32];
 extern const F32 kLPCLagWindow[16];
+extern const uint32_t kTNSMaxBandRecords[24];
 }  // namespace tables
 
 // The three table lookups, exactly as the library implements them: any n other
