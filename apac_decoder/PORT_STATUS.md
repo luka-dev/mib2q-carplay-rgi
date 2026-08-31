@@ -1073,10 +1073,16 @@ not assumed: on the host, `--key --stream` runs the same chain over the capture'
 bytes with the session's own key, and the two agree to **0.7 % on the mean and 0.4 % on the worst
 packet** (31 568 ns against 31 774 ns; 43 625 against 43 791).
 
-Measured against the tree at `4f5f080` **plus the in-flight BWE synthesis work** — which is why
-`sizeof(apac::Decoder)` reads 1 636 036 here and 1 462 096 in the sections above. The BWE tables
-grew the object by 174 KB; they are `.rodata`, they are not touched on this content, and the decode
-cost is unaffected.
+Measured against the tree at `4f5f080` **plus the then in-flight BWE synthesis work** — which is why
+`sizeof(apac::Decoder)` reads 1 636 036 here and 1 462 096 in the sections above. Stage e has since
+landed and the figure is 1 637 272; the 1 236 bytes between the two are the last of its scratch.
+
+Correcting one attribution in that note: it is NOT the BWE tables that grew the object. The two
+512 x 16 LSF codebooks and the 64-entry gain table are 64 KB of `.rodata` and are not in the object
+at all. The +175 KB is `apac::BWELPC` — one for the whole decoder, mostly the two
+`apac::LPMDCTFilter`s' FFT scratch — plus a 4 KB envelope buffer per core decoder and 2 KB per
+`ComplexFFT` for the radix-3 twiddles. None of it is touched on this content and the decode cost is
+unaffected, which is the point that note was making.
 
 ## Known traps, all found the hard way
 
