@@ -1321,6 +1321,22 @@ feature.
   `__cxa_guard` rule below: a function-local static avoids the stack but still emits a guard
   variable. `tools/build_qnx.sh` links the whole set for armle-v7 with
   `emutls=0 exceptions=0 rtti=0 stl=0` and no undefined symbol beyond libc/libm.
+* **`MDCT::InverseInPlaceTransform(buf, buf2)`'s second argument must be `n` floats, not `n/2`,
+  and must not be `buf + n/2`.** The name says in-place and the header calls the output "the second
+  n time samples", so the natural reading is half a block inside the same array. It is not: `buf2`
+  is the FFT staging area *as well as* the output - `PreModulation` fills `buf2[0 .. n/2)` and
+  `buf2[n/2 .. n)` before `PostModulationExtend` overwrites all of it. A caller who passes
+  `buf + n/2` on an `n`-float array writes `n/2` floats past the end. This is not hypothetical: a
+  caller read the header and still got it wrong, and the write landed on nothing on the host and on
+  a global on armle-v7 - invisible where you debug, fatal where you ship. The decoder's own two call
+  sites are the worked example and are correct: `SynthesisFilterBank::mScratch` is
+  `kTransformLong + kTransformShort` floats *precisely* so the long transform gets its 1024 at
+  `mScratch` and the short one its own 128 at `mScratch + 1024`, with no slack anywhere.
+* **A canary is a containment criterion, not a correctness one.** Canaries either side of an object
+  reported "untouched" while a global three words away was being destroyed, because the write was
+  aimed rather than adjacent. Same family as "a `memcmp` of the output is a correctness criterion
+  and not a cost one": when a check reports clean, ask what it is actually able to observe before
+  concluding anything from it.
 * The decoder the C API hands back is an **`APACASPDecoder`**, so a frame begins with a **two-bit**
   frame type, not the one bit `APACDecoder::DecodeFrame` reads. `APACDecoder_Create` builds the base
   object and then overwrites its vptr. Reading one bit decodes the first packet as an LRVQ frame and

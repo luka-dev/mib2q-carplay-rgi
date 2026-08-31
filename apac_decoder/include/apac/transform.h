@@ -135,8 +135,24 @@ public:
     int32_t Initialize(uint32_t n, float scale);
 
     // The inverse MDCT of `buf` (n coefficients).  Writes the first n time
-    // samples over `buf` and the second n into `buf2`.  buf2 is also used as
-    // scratch, so it must be n floats and its contents are not read.
+    // samples over `buf` and the second n into `buf2`.
+    //
+    // *** buf2 MUST BE n FLOATS OF ITS OWN.  NOT n/2, AND NOT buf + n/2. ***
+    //
+    // The name says "in place" and the output is described as "the second
+    // half", so the natural reading is that `buf2` is half a block inside the
+    // same array.  It is not: `buf2` is the FFT staging area as well as the
+    // output - PreModulation writes n/2 reals at buf2[0] and n/2 imaginaries at
+    // buf2[n/2] before PostModulationExtend overwrites the whole of it - so a
+    // caller passing `buf + n/2` on an n-float array writes n/2 floats past the
+    // end.  A real caller made exactly that mistake; on the host it landed on
+    // nothing and on armle-v7 it destroyed a global, which is the worst way for
+    // it to fail.  Its contents are not read on entry.
+    //
+    // The two call sites in src/filterbank.cpp are the worked example:
+    // `mScratch` is `kTransformLong + kTransformShort` floats precisely so that
+    // the long transform gets 1024 at `mScratch` and the short one gets its own
+    // 128 at `mScratch + 1024`.
     //
     // The output is antisymmetric in the first half and symmetric in the
     // second - `buf[j] == -buf[n-1-j]`, `buf2[j] == buf2[n-1-j]` - which is
