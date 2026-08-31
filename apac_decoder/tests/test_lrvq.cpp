@@ -63,6 +63,11 @@ void fail(const char* what, int idx)
 }
 
 // ------------------------------------------------------------ fixture I/O ----
+// Where the six fixtures live.  argv[1] overrides it, which is how this runs
+// on the QNX target: the IFS is flat, so tools/build_qnx.sh stages every
+// fixture into /proc/boot and passes that as the directory.
+const char* gFixtureDir = "tests/fixtures";
+
 struct Fixture {
     FILE* fh;
     char  line[8192];
@@ -70,16 +75,10 @@ struct Fixture {
     void Open(const char* name)
     {
         char path[512];
-        snprintf(path, sizeof path, "tests/fixtures/%s", name);
+        snprintf(path, sizeof path, "%s/%s", gFixtureDir, name);
         fh = fopen(path, "r");
         if (!fh) {
-            snprintf(path, sizeof path, "%s/tests/fixtures/%s",
-                     getenv("APAC_DECODER_DIR") ? getenv("APAC_DECODER_DIR") : ".",
-                     name);
-            fh = fopen(path, "r");
-        }
-        if (!fh) {
-            fprintf(stderr, "\ncannot open tests/fixtures/%s\n", name);
+            fprintf(stderr, "\ncannot open %s\n", path);
             exit(1);
         }
     }
@@ -994,8 +993,10 @@ void checkCpeFrame(FrameStats2& st)
 
 }  // namespace
 
-int main()
+int main(int argc, char** argv)
 {
+    if (argc > 1)
+        gFixtureDir = argv[1];
     checkTables();
     const int gains = checkGain();
     int ltpCases = 0, lsfCases = 0, lpcCases = 0;

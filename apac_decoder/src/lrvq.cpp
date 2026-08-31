@@ -52,13 +52,17 @@ LRVQDecoder::LRVQDecoder() : mPrevMode(0)
 }
 
 // SpectrumDeserializeSCE zeroes qidx and prevMode before the call.
-// SpectrumDeserializeCPE and SpectrumDeserializeLFE do NOT - their copies are
-// uninitialised stack, and a CPE whose first channel carries the skip bit then
-// lets the second channel predict from whatever was there.  That is a real
-// uninitialised read in the library, and it is also the only route by which the
-// `-1` stage-1 sentinel could ever reach a codebook index (see LrvqDeserialize).
-// The port zeroes in all three, which is both deterministic and what the
-// library itself does in the one place it initialises at all.
+// SpectrumDeserializeCPE does NOT - its copies are uninitialised stack (0x9bf60
+// has no clear loop and no memset, only the stack-clash probes), so a CPE whose
+// FIRST channel carries the skip bit lets the second channel's `sameMode` reuse
+// predict from whatever was there.  That is a real uninitialised read in the
+// library, and it is also the only route by which the `-1` stage-1 sentinel
+// could ever reach a codebook index (see LrvqDeserialize).  The port calls this
+// from both, which is deterministic and is what the library itself does in the
+// one place it initialises at all.
+//
+// SpectrumDeserializeLFE needs none of it: the LFE has no inter-channel reuse,
+// so it neither reads nor writes qidx or prevMode.
 void LRVQDecoder::ResetPrediction()
 {
     memset(mQIdx, 0, sizeof mQIdx);
