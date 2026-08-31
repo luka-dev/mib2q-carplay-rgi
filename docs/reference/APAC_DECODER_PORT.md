@@ -170,8 +170,14 @@ Bottom-up, each stage tested against Unicorn before the next is started:
    and the bit reader has to advance past it even if the gains are not applied.
 
 Droppable for the CarPlay 5.1 target: `apac::scene`, `apac::APACAudioSceneDecoder`,
-`apac::AudioSceneConfig` (Ambisonics), `APACCoreLBRDecoder` and `apac::lbr` (low bitrate),
-`APACCACDecoder` unless tracing shows index 65 uses it.
+`apac::AudioSceneConfig` (Ambisonics).
+
+**Corrected once the port ran.** This document originally also listed `APACCoreLBRDecoder`,
+`apac::lbr` and `APACCACDecoder` as droppable. All three are live: every channel pair of every
+packet in the capture is joint/CAC-coded, and `APACBWE2Decoder::Deserialize` is on the bit path
+even though BWE synthesis never activates. Guessing what a codec does not use, from names, was
+wrong twice in this document — the reachability of a path is a measurement, made by stubbing it
+in the running library and checking whether the output changes.
 
 ## Open items
 

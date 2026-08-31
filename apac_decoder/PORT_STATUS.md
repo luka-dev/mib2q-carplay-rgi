@@ -427,6 +427,30 @@ does not want loudness normalisation applied on top of its own. `APACDRCDecoder:
 the original's call with the processing left out, and `tests/test_drc.cpp` checks it leaves the
 samples untouched.
 
+## Open: wiring LRVQ into the element layer
+
+Stage h1 ported `APACLRVQDecoder` and tested it against the library (`tests/test_lrvq.cpp`,
+360 506 checks), and `src/element.cpp` carries the exact three-way wiring in the comment headed
+"THE LRVQ SEAM". The element layer still refuses all three paths with `kPortNeedsLRVQ`.
+
+It should be wired — a decoder that hard-errors on a frame mode it has already ported is not
+finished, and a different iOS build or bitrate can emit it. Two things block a safe edit:
+
+1. **Ownership is unresolved.** `LrvqFrameContext::lrvq` is a bare pointer with no recovered
+   offset, unlike every other field in that struct. In the original,
+   `APACChannelPairElement::DeserializeLrvqFrame` reaches it with a virtual call through
+   `*((_QWORD *)this + 2)`, which does not by itself settle whether the element owns the decoder,
+   borrows one, or shares it. It matters: `sizeof(LRVQDecoder)` is 56 688 bytes against
+   `SyntacticElement`'s 10 528, and `CoreDecoder` holds eight elements, so embedding one per
+   element adds roughly 450 KiB inside `dio_manager`. The port has no dynamic allocation anywhere
+   and that should stay true.
+2. **Prediction state has a scope.** Inter-channel index reuse shares `qidx`/`prevMode`, and
+   `ResetPrediction` exists. Whether that state is per element, per frame or per stream decides
+   whether one shared decoder is correct or silently wrong across elements.
+
+Both are answerable against the library — the element-level differential harness stage h1 already
+built drives elements directly. Neither should be answered by reading alone.
+
 ## Stage j — the integration seam, located
 
 The decoder is finished; what remains is wiring. The seam is exact:

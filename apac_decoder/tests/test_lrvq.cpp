@@ -47,6 +47,15 @@ namespace {
 
 int gChecks = 0;
 
+// File scope, not function-local statics: a function-local static with a
+// constructor emits __cxa_guard_acquire / __cxa_guard_release, which the QNX
+// 6.5 armle-v7 link in tools/build_qnx.sh does not have.  Both are big enough
+// that a stack local is not an option either - LRVQDecoder carries a 47 KiB
+// LPMDCTFilter.
+apac::LRVQDecoder gDec;
+apac::LPMDCTFilter gFilt;
+bool gFiltReady = false;
+
 void fail(const char* what, int idx)
 {
     fprintf(stderr, "\nFAIL %s at case %d\n", what, idx);
@@ -478,7 +487,6 @@ double checkLsfs(int* cases, double* fftWorst)
     Fixture f;
     f.Open("lrvq_lsfs.fixture");
     static float want[256], got[1024];
-    static apac::LRVQDecoder dec;
     double worst = 0.0;
     int n = 0;
     for (int i = 0; i < kLrvqLsfCases; ++i) {
@@ -501,7 +509,7 @@ double checkLsfs(int* cases, double* fftWorst)
             fail("lsfs case plan drifted from the fixture", i);
 
         memset(got, 0x5a, sizeof got);
-        if (dec.LsfsToMdctSpectralEnvelope(cshort != 0, cidx, got) != ret)
+        if (gDec.LsfsToMdctSpectralEnvelope(cshort != 0, cidx, got) != ret)
             fail("lsfs return", i);
         for (int k = 256; k < 1024; ++k)
             if (got[k] != 0.0f)
@@ -511,11 +519,9 @@ double checkLsfs(int* cases, double* fftWorst)
         // First the FFT half ALONE: the port's 512-point |A(w)| driven from the
         // LIBRARY's own LPC coefficients.  Nothing but the transform differs
         // there, so it gets the stage-d tolerance.
-        static apac::LPMDCTFilter filt;
-        static bool filtReady = false;
-        if (!filtReady) { filt.Initialize(512, 16); filtReady = true; }
+        if (!gFiltReady) { gFilt.Initialize(512, 16); gFiltReady = true; }
         static float fromLibLpc[256];
-        filt.LPCToSpecEnvelope(gLibLpc[i], fromLibLpc, 256);
+        gFilt.LPCToSpecEnvelope(gLibLpc[i], fromLibLpc, 256);
         const double wf = dspfx::compare(fromLibLpc, want, 256,
                                          "envelope from the library's own LPC",
                                          peak(want, 256));
@@ -567,7 +573,6 @@ void checkFrame(FrameStats& st)
     static float wantWork[256], wantEnv[1024], wantSpec[1024], replay[1024];
     static int16_t qidx[64];
     static int wantQ[64];
-    static apac::LRVQDecoder dec;
 
     for (int i = 0; i < n; ++i) {
         LrvqCase& c = cases[i];
@@ -613,7 +618,7 @@ void checkFrame(FrameStats& st)
         int32_t ret[2] = { 0, 0 };
         int ran = 0;
         for (int k = 0; k < c.nCalls; ++k) {
-            ret[k] = dec.LrvqDeserialize(bs, c.call[k].isShort != 0,
+            ret[k] = gDec.LrvqDeserialize(bs, c.call[k].isShort != 0,
                                          c.call[k].firstChannel != 0, sp, env,
                                          env2, work, qidx, &prevMode);
             ++ran;
@@ -777,7 +782,6 @@ void checkElem(ElemStats& st)
     static LrvqElemCase cases[128];
     const int n = LrvqBuildElemCases(cases, 128);
     static float spec0[1024], spec1[1024], want0[1024], want1[1024];
-    static apac::LRVQDecoder dec;
 
     for (int i = 0; i < n; ++i) {
         LrvqElemCase& c = cases[i];
@@ -816,13 +820,13 @@ void checkElem(ElemStats& st)
         const int32_t before = bs.BitsRemaining();
         int32_t r;
         if (c.kind == kLrvqElemSCE) {
-            r = dec.SpectrumDeserializeSCE(bs, ics0, sp0);
+            r = gDec.SpectrumDeserializeSCE(bs, ics0, sp0);
             ++st.sce;
         } else if (c.kind == kLrvqElemCPE) {
-            r = dec.SpectrumDeserializeCPE(bs, ics0, ics1, sp0, sp1);
+            r = gDec.SpectrumDeserializeCPE(bs, ics0, ics1, sp0, sp1);
             ++st.cpe;
         } else {
-            r = dec.SpectrumDeserializeLFE(bs, ics0, sp0);
+            r = gDec.SpectrumDeserializeLFE(bs, ics0, sp0);
             ++st.lfe;
         }
         const int32_t used = before - bs.BitsRemaining();
@@ -888,7 +892,6 @@ void checkCpeFrame(FrameStats2& st)
     const int n = LrvqBuildFrameCases(cases, 64);
     static float spec0[1024], spec1[1024], want0[1024], want1[1024];
     static uint8_t wantTns0[190], wantTns1[190];
-    static apac::LRVQDecoder dec;
 
     const apac::SFBOffsets* tab = apac::GetSFBOffsetTable(48000, 1024);
     if (!tab)
@@ -939,7 +942,7 @@ void checkCpeFrame(FrameStats2& st)
         ctx.sfbLong.offset = tab->sfbOffsetLong;
         ctx.sfbShort.numBands = tab->numSfbShort;
         ctx.sfbShort.offset = tab->sfbOffsetShort;
-        ctx.lrvq = &dec;
+        ctx.lrvq = &gDec;
 
         apac::BitstreamReader bs(c.bits, c.nbytes);
         const int32_t before = bs.BitsRemaining();
