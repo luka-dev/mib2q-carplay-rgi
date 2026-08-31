@@ -94,6 +94,28 @@ typedef void     (*fn_gc_reset_t)(void*);
 typedef const SFBOffsetRecord* (*fn_sfb_t)(uint32_t, uint32_t);
 typedef uint32_t (*fn_cookie_u32_t)(const void*, uint32_t);
 
+// Stage b/c.  Both mangled names were read out of the binary with
+// `gobjdump -T libSPF_CP_PlugInWrapper.so`; do NOT hand-build one, a name that
+// resolves to nothing turns the whole differential into a tautology.
+//   0x9a140  _ZN19APACScaleFactorData11DeserializeER16TBitstreamReaderIjERK11APACICSInfo
+//   0xab3b0  _ZN16APACSpectralData11DeserializeER16TBitstreamReaderIjERK11APACICSInfoRK19APACScaleFactorDataRKN4apac10SFBOffsetsE
+typedef int64_t (*fn_sfd_deser_t)(void*, void*, const void*);
+typedef int64_t (*fn_spec_deser_t)(void*, void*, const void*, const void*, const void*);
+
+// APACScaleFactorData, 728 bytes; LRVQ_SEMANTICS.md section 2.1.
+struct SFDataObj {
+    float    scf[120];      // +0
+    uint8_t  nrec[8];       // +480
+    uint16_t rec[120];      // +488
+};
+// The apac::SFBOffsets the spectrum decoder is handed: numBands read as a u16
+// at +0, the offset array at +8.  NOT the 40-byte GetSFBOffsetTable record.
+struct SFBOffsetsObj {
+    uint64_t        numBands;
+    const uint16_t* offset;
+};
+struct SpecDataObj { float* begin; float* end; };
+
 void*             g_lib = 0;
 fn_bs_ctor_t      bs_ctor;
 fn_bs_getbits_t   bs_getbits;
@@ -108,6 +130,8 @@ fn_scene_deser_t  scene_deserialize;
 fn_ics_deser_t    ics_deserialize;
 fn_gc_reset_t     gc_reset;
 fn_sfb_t          sfb_table;
+fn_sfd_deser_t    sfd_deserialize;
+fn_spec_deser_t   spec_deserialize;
 void*             gc_vt_asc;
 void*             gc_vt_codec;
 
@@ -143,6 +167,11 @@ void load_library()
     scene_deserialize = need<fn_scene_deser_t>(
         "_ZN4apac16AudioSceneConfig11DeserializeER16TBitstreamReaderIjE");
     sfb_table    = need<fn_sfb_t>         ("_ZN4apac17GetSFBOffsetTableEjj");
+    sfd_deserialize = need<fn_sfd_deser_t>(
+        "_ZN19APACScaleFactorData11DeserializeER16TBitstreamReaderIjERK11APACICSInfo");
+    spec_deserialize = need<fn_spec_deser_t>(
+        "_ZN16APACSpectralData11DeserializeER16TBitstreamReaderIjERK11APACICSInfo"
+        "RK19APACScaleFactorDataRKN4apac10SFBOffsetsE");
     ics_deserialize = need<fn_ics_deser_t>(
         "_ZN11APACICSInfo11DeserializeER16TBitstreamReaderIjEN4apac10CodingTypeE");
     gc_vt_asc    = need<void*>            ("_ZTVN4apac12GlobalConfig13ASCConfigDataE");
@@ -300,6 +329,74 @@ int cmd_ics()
         printf("R %s %u %u %u %u %u %d\n", idxs, (unsigned)(rc & 1),
                (unsigned)obj[10], (unsigned)obj[11], (unsigned)obj[12],
                groupWord, before - after);
+        fflush(stdout);
+    }
+    return 0;
+}
+
+// ----------------------------------------------------------------- scf ----
+// APACScaleFactorData::Deserialize at 0x0009a140, one case per input line.
+//
+//   SCF <idx> <windowSequence> <maxSfb> <numWindowGroups> <bufferHex|->
+//   R <idx> <rc> <bitsUsed> <nrecHex> <recHex> <scfHex>
+//
+// The object is zeroed first, so every byte in the reply is one this call
+// wrote.  rc is the original's convention: 1 means ERROR.  recHex and scfHex
+// cover 15 * numWindowGroups entries, the stride the struct actually uses.
+int cmd_scf()
+{
+    static char line[1 << 16];
+    static uint8_t slab[1 << 15] __attribute__((aligned(64)));
+    static uint8_t ics[1024] __attribute__((aligned(16)));
+    static SFDataObj sfd __attribute__((aligned(16)));
+
+    while (fgets(line, sizeof line, stdin)) {
+        size_t n = strlen(line);
+        while (n && (line[n - 1] == '\n' || line[n - 1] == '\r')) line[--n] = 0;
+        if (strncmp(line, "SCF ", 4) != 0) { printf("%s\n", line); continue; }
+        printf("%s\n", line);
+
+        char idxs[64];
+        static char bufhex[1 << 16];
+        unsigned ws, maxSfb, groups;
+        if (sscanf(line, "SCF %63s %u %u %u %65535s",
+                   idxs, &ws, &maxSfb, &groups, bufhex) != 5) {
+            fprintf(stderr, "apac_fn_ref: malformed SCF: %s\n", line);
+            return 2;
+        }
+        std::vector<uint8_t> buf;
+        if (!parse_hex(bufhex, buf)) { fprintf(stderr, "apac_fn_ref: bad hex\n"); return 2; }
+        if (buf.size() > sizeof slab) { fprintf(stderr, "apac_fn_ref: buffer too big\n"); return 2; }
+
+        memset(slab, 0, sizeof slab);
+        if (!buf.empty()) memcpy(slab, &buf[0], buf.size());
+        memset(ics, 0, sizeof ics);
+        ics[10] = (uint8_t)ws;
+        ics[11] = (uint8_t)maxSfb;
+        ics[12] = (uint8_t)groups;
+        memset(&sfd, 0, sizeof sfd);
+
+        BsState bs;
+        memset(&bs, 0, sizeof bs);
+        bs_ctor(&bs, slab, (uint32_t)buf.size());
+        int32_t before = bs_remaining(&bs);
+        int64_t rc = sfd_deserialize(&sfd, &bs, ics);
+        int32_t after = bs_remaining(&bs);
+
+        const unsigned used = groups > 8 ? 8 : groups;
+        printf("R %s %d %d ", idxs, (int)rc, before - after);
+        for (int i = 0; i < 8; ++i) printf("%02x", sfd.nrec[i]);
+        // "-" rather than an empty field, so every reply line has six of them
+        // even when numWindowGroups is zero.
+        printf(" ");
+        if (!used) printf("-");
+        const uint8_t* rp = (const uint8_t*)sfd.rec;
+        for (unsigned i = 0; i < 2 * 15 * used; ++i) printf("%02x", rp[i]);
+        printf(" ");
+        if (!used) printf("-");
+        const uint8_t* sp = (const uint8_t*)sfd.scf;
+        for (unsigned i = 0; i < 4 * 15 * used; ++i) printf("%02x", sp[i]);
+        printf("\n");
         fflush(stdout);
     }
     return 0;
@@ -790,6 +887,8 @@ int main(int argc, char** argv)
         fprintf(stderr,
             "usage: apac_fn_ref probe\n"
             "       apac_fn_ref bs            < cases.txt\n"
+            "       apac_fn_ref ics           < cases.txt\n"
+            "       apac_fn_ref scf           < cases.txt\n"
             "       apac_fn_ref sfb [RATE...]\n"
             "       apac_fn_ref win | mdct | fb | tns\n"
             "       apac_fn_ref gc COOKIE  [--offset N] [--dump]\n"
@@ -810,6 +909,7 @@ int main(int argc, char** argv)
     if (cmd == "tns")  { load_stage_d(); load_tns(); return cmd_tns(); }
     if (cmd == "bs")  return cmd_bs();
     if (cmd == "ics") return cmd_ics();
+    if (cmd == "scf") return cmd_scf();
     if (cmd == "sfb") return cmd_sfb(argc - 2, argv + 2);
 
     if (cmd == "gc" || cmd == "gc-raw" || cmd == "cookie" || cmd == "scene") {

@@ -156,6 +156,27 @@ ICSPY
 grep -c '^R ' "$FIX/icsinfo.fixture" | sed 's/^/  result lines: /'
 rm -f "$FIX/icsinfo.cases"
 
+# ----------------------------------------------------- scale factor data ----
+echo "generating APACScaleFactorData cases"
+python3 "$HERE/gen_scf_cases.py" > "$FIX/scf.cases"
+
+{
+    echo "# apac_decoder/tests/fixtures/scalefactors.fixture"
+    echo "# GENERATED - do not edit.  Regenerate with tools/gen_fixtures.sh (needs Docker)."
+    echo "# APACScaleFactorData::Deserialize at 0x0009a140, called on a ZEROED 728-byte"
+    echo "# object, so every byte in a reply is one this call wrote."
+    echo "#   SCF <idx> <windowSequence> <maxSfb> <numWindowGroups> <bufferHex|->"
+    echo "#   R <idx> <rc> <bitsUsed> <numRecordsHex> <recordsHex> <scfHex>"
+    echo "# recordsHex and scfHex cover 15 * numWindowGroups entries, the struct's"
+    echo "# stride, and are LITTLE-ENDIAN raw bytes: the scalefactors are compared as"
+    echo "# bit patterns because the original builds them by adding an exponent into"
+    echo "# the float rather than with a pow.  rc is the original's convention: 1 is"
+    echo "# ERROR."
+    "$RUN" fn scf < "$FIX/scf.cases" 2>/dev/null
+} > "$FIX/scalefactors.fixture"
+grep -c '^R ' "$FIX/scalefactors.fixture" | sed 's/^/  result lines: /'
+rm -f "$FIX/scf.cases"
+
 # ----------------------------------------------------------- SFB offsets ----
 echo "dumping apac::GetSFBOffsetTable"
 {
