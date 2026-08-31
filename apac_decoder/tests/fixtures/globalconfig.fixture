@@ -3,7 +3,19 @@
 # apac::GlobalConfig::Deserialize at 0x00097d50, driven by apac_fn_ref gc.
 # The reader starts at APACDecoder_GetCookieOffset(cookie) + 2: the dapa
 # payload begins with the 0x0800 sync word and GlobalConfig is two bytes on.
+# COOKIEHEX carries the cookie itself, so the host test needs neither the
+# capture directory (gitignored - it also holds a live session key) nor the
+# generated vectors.  Magic cookies are codec configuration, not key material.
 COOKIE live
+COOKIEHEX 00000021646170610000000008007c41800c042000404b007c0009a01807001230
+CAPI cookieBytes=33
+CAPI payloadOffset=12
+CAPI configOffset=14
+CAPI sync=2048
+CAPI profileAtCfg=32
+CAPI sampleRate=48000
+CAPI frameLength=1024
+CAPI numChannels=6
 rc=0
 offset=14
 configBytes=19
@@ -21,6 +33,15 @@ bsCurOff=20
 bsCache=3fc00000
 bsBitsLeft=10
 COOKIE generated
+COOKIEHEX 0000007d646170610000000008007c41800c0420004219007900c018100008820405404000080080a803088003803cb79800c228944444a2223325020920fc5c403802a200020032231458c025100028019118e162c601a88008000c88c6850e22000108afffff0484be50396a42f980e6aa0100067942680441b01894
+CAPI cookieBytes=125
+CAPI payloadOffset=12
+CAPI configOffset=14
+CAPI sync=2048
+CAPI profileAtCfg=32
+CAPI sampleRate=48000
+CAPI frameLength=1024
+CAPI numChannels=6
 rc=0
 offset=14
 configBytes=111
@@ -37,3 +58,13 @@ bitsUsed=888
 bsCurOff=112
 bsCache=ff000000
 bsBitsLeft=8
+SCENEPROBE generated
+SCENE 93 1 106
+SCENE 94 1 107
+SCENE 95 1 131
+SCENE 96 1 146
+SCENE 97 0 258
+SCENE 98 1 18031
+SCENE 99 1 1704
+SCENE 100 1 1153
+SCENE 101 1 3017

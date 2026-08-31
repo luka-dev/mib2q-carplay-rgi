@@ -31,6 +31,10 @@
 //   apac_fn_ref gc COOKIE [--offset N]       apac::GlobalConfig::Deserialize on a cookie
 //   apac_fn_ref gc-raw FILE [--offset N]     ... on a raw config blob (no atom walk)
 //   apac_fn_ref cookie  COOKIE               the pure C cookie parsers
+//   apac_fn_ref scene   COOKIE --at BITS     apac::AudioSceneConfig::Deserialize
+//                                            at a given bit position, so a port
+//                                            that stops there can prove it is
+//                                            standing in the right place
 //
 // `bs` reads a case file on stdin and writes the same file back with a result
 // line appended after each case:
@@ -83,6 +87,7 @@ typedef void     (*fn_bs_putback_t)(void*, uint32_t);
 typedef int32_t  (*fn_bs_remaining_t)(const void*);
 typedef void     (*fn_bs_fill_t)(void*, const uint8_t*);
 typedef int32_t  (*fn_gc_deser_t)(void*, void*);
+typedef int32_t  (*fn_scene_deser_t)(void*, void*);
 typedef void     (*fn_gc_reset_t)(void*);
 typedef const SFBOffsetRecord* (*fn_sfb_t)(uint32_t, uint32_t);
 typedef uint32_t (*fn_cookie_u32_t)(const void*, uint32_t);
@@ -97,6 +102,7 @@ fn_bs_putback_t   bs_putback;
 fn_bs_remaining_t bs_remaining;
 fn_bs_fill_t      bs_fill;
 fn_gc_deser_t     gc_deserialize;
+fn_scene_deser_t  scene_deserialize;
 fn_gc_reset_t     gc_reset;
 fn_sfb_t          sfb_table;
 void*             gc_vt_asc;
@@ -131,6 +137,8 @@ void load_library()
     bs_fill      = need<fn_bs_fill_t>     ("_ZN16TBitstreamReaderIjE13FillCacheFromEPKh");
     gc_deserialize = need<fn_gc_deser_t>  ("_ZN4apac12GlobalConfig11DeserializeER16TBitstreamReaderIjE");
     gc_reset     = need<fn_gc_reset_t>    ("_ZN4apac12GlobalConfig5ResetEv");
+    scene_deserialize = need<fn_scene_deser_t>(
+        "_ZN4apac16AudioSceneConfig11DeserializeER16TBitstreamReaderIjE");
     sfb_table    = need<fn_sfb_t>         ("_ZN4apac17GetSFBOffsetTableEjj");
     gc_vt_asc    = need<void*>            ("_ZTVN4apac12GlobalConfig13ASCConfigDataE");
     gc_vt_codec  = need<void*>            ("_ZTVN4apac12GlobalConfig15CodecConfigDataE");
@@ -353,6 +361,35 @@ int run_gc(const std::vector<uint8_t>& blob, uint32_t offset, bool dump)
     return 0;
 }
 
+// ----------------------------------------------------------- scene ----
+// apac::AudioSceneConfig is an 8-byte object - one owning pointer to an
+// SC_AudioScenes, which its Deserialize allocates - so unlike GlobalConfig it
+// needs nothing but zeroed memory.  GlobalConfig::Deserialize reaches it through
+// AncillaryConfig; running it here at an explicit bit offset is how a port that
+// stops short of the audio-scene branch proves it stopped in the right place.
+int run_scene(const std::vector<uint8_t>& blob, uint32_t offset, uint32_t atBit)
+{
+    if (offset > blob.size()) {
+        fprintf(stderr, "apac_fn_ref: offset %u past end\n", offset);
+        return 2;
+    }
+    std::vector<uint8_t> cfg(blob.begin() + offset, blob.end());
+    uint64_t obj[4];
+    memset(obj, 0, sizeof obj);
+    BsState bs;
+    memset(&bs, 0, sizeof bs);
+    bs_ctor(&bs, cfg.empty() ? (const uint8_t*)"" : &cfg[0], (uint32_t)cfg.size());
+    int32_t total = bs_remaining(&bs);
+    bs_skip(&bs, atBit);
+    int32_t rc = scene_deserialize(obj, &bs);
+    int32_t after = bs_remaining(&bs);
+    printf("sceneAtBit=%u\n", atBit);
+    printf("sceneRc=%d\n", rc);
+    printf("sceneEndBit=%d\n", total - after);
+    printf("configBits=%d\n", total);
+    return 0;
+}
+
 // ------------------------------------------------------------- cookie ----
 int cmd_cookie(const std::vector<uint8_t>& cookie)
 {
@@ -402,16 +439,17 @@ int main(int argc, char** argv)
     if (cmd == "bs")  return cmd_bs();
     if (cmd == "sfb") return cmd_sfb(argc - 2, argv + 2);
 
-    if (cmd == "gc" || cmd == "gc-raw" || cmd == "cookie") {
+    if (cmd == "gc" || cmd == "gc-raw" || cmd == "cookie" || cmd == "scene") {
         if (argc < 3) { fprintf(stderr, "apac_fn_ref: %s needs a file\n", cmd.c_str()); return 2; }
         std::vector<uint8_t> blob;
         if (!read_file(argv[2], blob)) return 1;
         if (blob.empty()) { fprintf(stderr, "apac_fn_ref: %s is empty\n", argv[2]); return 1; }
         bool dump = false;
-        long offset = -1;
+        long offset = -1, atBit = -1;
         for (int i = 3; i < argc; ++i) {
             if (!strcmp(argv[i], "--dump")) dump = true;
             else if (!strcmp(argv[i], "--offset") && i + 1 < argc) offset = strtol(argv[++i], 0, 0);
+            else if (!strcmp(argv[i], "--at") && i + 1 < argc) atBit = strtol(argv[++i], 0, 0);
         }
         if (cmd == "cookie") return cmd_cookie(blob);
         if (offset < 0) {
@@ -422,6 +460,10 @@ int main(int argc, char** argv)
                     need<fn_cookie_u32_t>("APACDecoder_GetCookieOffset");
                 offset = (long)GetCookieOffset(&blob[0], (uint32_t)blob.size()) + 2;
             }
+        }
+        if (cmd == "scene") {
+            if (atBit < 0) { fprintf(stderr, "apac_fn_ref: scene needs --at BITS\n"); return 2; }
+            return run_scene(blob, (uint32_t)offset, (uint32_t)atBit);
         }
         return run_gc(blob, (uint32_t)offset, dump);
     }

@@ -132,10 +132,31 @@ echo "running apac::GlobalConfig::Deserialize on both cookies"
     echo "# apac::GlobalConfig::Deserialize at 0x00097d50, driven by apac_fn_ref gc."
     echo "# The reader starts at APACDecoder_GetCookieOffset(cookie) + 2: the dapa"
     echo "# payload begins with the 0x0800 sync word and GlobalConfig is two bytes on."
-    echo "COOKIE live"
-    "$RUN" fn gc "$LIVE_COOKIE" 2>/dev/null
-    echo "COOKIE generated"
-    "$RUN" fn gc "$GEN_COOKIE" 2>/dev/null
+    echo "# COOKIEHEX carries the cookie itself, so the host test needs neither the"
+    echo "# capture directory (gitignored - it also holds a live session key) nor the"
+    echo "# generated vectors.  Magic cookies are codec configuration, not key material."
+    for name in live generated; do
+        case "$name" in
+            live)      ck="$LIVE_COOKIE" ;;
+            generated) ck="$GEN_COOKIE" ;;
+        esac
+        echo "COOKIE $name"
+        echo "COOKIEHEX $(xxd -p -c 4096 "$ck")"
+        "$RUN" fn cookie "$ck" 2>/dev/null | sed 's/^/CAPI /'
+        "$RUN" fn gc "$ck" 2>/dev/null
+    done
+
+    # The generated cookie carries an apac::AudioSceneConfig, which is out of
+    # scope for the CarPlay 5.1 target, so the port stops at the flag that
+    # announces it.  Probing the library's own AudioSceneConfig::Deserialize
+    # either side of that position shows only one offset it accepts, which is
+    # what turns "the port stopped at bit 97" into a checkable claim.
+    echo "SCENEPROBE generated"
+    for at in 93 94 95 96 97 98 99 100 101; do
+        echo "SCENE $at $("$RUN" fn scene "$GEN_COOKIE" --at $at 2>/dev/null \
+            | sed -n 's/^sceneRc=//p') $("$RUN" fn scene "$GEN_COOKIE" --at $at 2>/dev/null \
+            | sed -n 's/^sceneEndBit=//p')"
+    done
 } > "$FIX/globalconfig.fixture"
 
 echo "fixtures written to $FIX"

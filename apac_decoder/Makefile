@@ -5,7 +5,9 @@
 #   make check      build and run the tests
 #
 CXX      ?= c++
-CXXFLAGS ?= -std=c++11 -O2 -g -Wall -Wextra -Werror -Iinclude
+# -fno-exceptions/-fno-rtti are not taste: the target is an LD_PRELOADed .so on
+# QNX 6.5 / GCC 4.9.4 and the decode path must not need either.
+CXXFLAGS ?= -std=c++11 -O2 -g -Wall -Wextra -Werror -fno-exceptions -fno-rtti -Iinclude
 BUILD    := .build
 
 SRC  := $(wildcard src/*.cpp)
