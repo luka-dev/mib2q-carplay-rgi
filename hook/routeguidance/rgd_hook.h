@@ -24,8 +24,7 @@
 #define LANE_DIR_SHARP_LEFT     0x21
 #define LANE_DIR_SHARP_RIGHT    0x30
 
-/* Initialize route guidance module
- * Called automatically via constructor */
+/* Initialize route guidance module at the framework's first real Cinemo call. */
 void rgd_init(void);
 
 /* Shutdown route guidance module */

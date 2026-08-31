@@ -11,12 +11,12 @@ The central production design is technically sound. The native hook uses real, A
 
 This audit does **not** support replacing stock libairplay. `Patches/libairplay-mhi2q` is an experiment and was excluded as an authority. All native conclusions below come from the actual MU1316 binaries, stock `libairplay.so` 210.81, or the extracted iOS 26.6 binaries.
 
-There are, however, four material hardening findings:
+There are three remaining material hardening findings. A fourth startup finding was closed during
+the K1004 investigation on 2026-08-31: hook module registration no longer runs from ELF constructors.
 
-1. **P0/P1 — cover-art starts a detached worker from an `LD_PRELOAD` constructor.** This contradicts the deliberately lazy framework initialization and is the most credible remaining cold-boot/session-initialization risk.
-2. **P1 — stream-111 same-slot replacement can hold RTSP SETUP for up to 1.8 s.** The old 8 s sender stall is gone, but reconnect latency is still not strictly non-blocking.
-3. **P1 — terminal-1 context protection is intentionally broader than the stock contract.** While CarPlay is considered connected, every non-owner stock context write is rejected. This prevents context theft but can also suppress a legitimate stock transition.
-4. **P1/P2 — supervisor ownership has zero scheduling margin.** Old-generation cleanup waits 2 s, exactly the configured restart delay. A delayed replacement owner publication can still stop adopted renderers and cause a visible restart.
+1. **P1 — stream-111 same-slot replacement can hold RTSP SETUP for up to 1.8 s.** The old 8 s sender stall is gone, but reconnect latency is still not strictly non-blocking.
+2. **P1 — terminal-1 context protection is intentionally broader than the stock contract.** While CarPlay is considered connected, every non-owner stock context write is rejected. This prevents context theft but can also suppress a legitimate stock transition.
+3. **P1/P2 — supervisor ownership has zero scheduling margin.** Old-generation cleanup waits 2 s, exactly the configured restart delay. A delayed replacement owner publication can still stop adopted renderers and cause a visible restart.
 
 The remainder is mostly bounded hardening: an excessive ELF export surface, a fail-open process-name gate, and a few behaviors that are operationally proven on the car but not fully derivable from one phone-side binary.
 
@@ -27,6 +27,7 @@ The following artifacts were inspected directly:
 - Stock AirPlay: `Patches/carplay_vc/libairplay.so`.
 - Stock MU1316 executable and Cinemo libraries from `MU1316-appimg`.
 - Stock Java API: `MU1316-combined-final.jar` and its decompile.
+- Exact K1004 comparison set from `MHI2Q_CN_AUG22_K1004_requested_files`.
 - Current production hook, Java patch, supervisor, and renderers in this repository.
 - iOS 26.6 `AirPlaySender` and `CarKit` extracted from iPhone18,2 build 23G71.
 
@@ -195,6 +196,23 @@ The helper script uses QNX-available commands and paths; it does not assume GNU 
 
 ## 8. Remaining hardening findings
 
+### FIXED: pre-Identify module/runtime initialization
+
+The standalone RGI hook installed on K1004 had an ELF constructor which called `rgd_init()` during
+`dlopen`. Module registration logged immediately; the logger's lazy initialization could therefore
+create a pthread while QNX `ldqnx` still held the loader lock, before the sender could reach Identify.
+The combined hook also had eager RGD, altScreen, and audio module constructors. All module registration
+now happens through one `pthread_once` at the first real Cinemo interpose. The build requires a
+four-byte `.init_array` containing only the compiler `frame_dummy` entry and rejects the former module
+constructor/destructor symbols. A one-time WARN log marks this boundary:
+`lazy runtime init complete (constructor-free; first Cinemo boundary)`.
+
+Static comparison of the supplied K1004 files found the public DIO/Cinemo seams used by the hook ABI-
+compatible with MU1316; no missing dynamic import explains the pre-Identify stop. K1004's private
+`libairplay.so` layout does differ. The MU1316-only type-103 request-dispatch patch now requires an
+exact MU1316 code fingerprint and fails closed on K1004 or an unknown image, instead of advertising a
+103 session which the private handler cannot sustain.
+
 ### FIXED: eager cover-art constructor
 
 The cover-art loader constructor and detached worker have been removed. The framework now installs the receive sink from its existing lazy first-Cinemo-call boundary ([hook_framework.c](../../hook/framework/hook_framework.c#L383)); no thread is created there. The first complete image starts one joinable latest-wins worker ([coverart_hook.c](../../hook/coverart/coverart_hook.c#L747)), and shutdown unregisters the sink, quiesces copied callbacks, then joins the worker before stopping the bus ([coverart_hook.c](../../hook/coverart/coverart_hook.c#L1041)).
@@ -220,7 +238,7 @@ Core altScreen protocol and rendering: **confirmed**.
 Hook ABI against current MU1316 stock: **confirmed**.
 
 Java outer-class ABI: **confirmed**.
-Cold-boot/reconnect hardening: **cover-art loader blocker closed; remaining script/reconnect findings above still require on-unit validation**.
+Cold-boot/reconnect hardening: **module and cover-art loader blockers closed; remaining script/reconnect findings above still require on-unit validation**.
 
 Before release, perform these focused checks:
 
@@ -234,4 +252,4 @@ Before release, perform these focused checks:
 
 ## Bottom line
 
-The project is no longer relying on a fictional stock altScreen implementation or on undefined `LD_PRELOAD` behavior. The decisive seams are present in the exact shipped binaries, and the iOS 26.6 gate from accepted feature through two displays to type 111 is matched correctly. The eager cover-art loader thread has now been removed. The largest remaining startup risks are the bounded same-slot 111 reaper, the 1000 ms renderer send-stall threshold, and supervisor-generation ownership around the two-second restart boundary—not the negotiated CarPlay protocol or the tiled-to-RGBA video path.
+The project is no longer relying on a fictional stock altScreen implementation or on undefined `LD_PRELOAD` behavior. The decisive seams are present in the exact shipped binaries, and the iOS 26.6 gate from accepted feature through two displays to type 111 is matched correctly. Module registration and cover-art are now absent from the loader phase. The largest remaining startup risks are the bounded same-slot 111 reaper, the 1000 ms renderer send-stall threshold, and supervisor-generation ownership around the two-second restart boundary—not the negotiated CarPlay protocol or the tiled-to-RGBA video path.

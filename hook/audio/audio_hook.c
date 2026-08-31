@@ -257,6 +257,7 @@ static cf_rel_t      cfa_rel;
 static void         *cfa_arr_cb, *cfa_dk_cb, *cfa_dv_cb;
 static void         *cfa_bool_true;
 static int           cfa_ready = -1;
+static int spa103_private_image_compatible(void);
 
 /* AirPlaySender validates enabledFeatures against /info after control SETUP. In particular,
  * negotiated mainBuffered requires a top-level mainBufferedInfo key and rejects the entire CarPlay
@@ -320,7 +321,7 @@ static int spa_cf_resolve(void)
 /* Type-103 is armed only by the startup environment, before AirTunesServer_EnsureCreated. */
 static int spa_probe103(void)
 {
-    return spa_env_on(SPA_PROBE103_ENV);
+    return spa_env_on(SPA_PROBE103_ENV) && spa103_private_image_compatible();
 }
 
 static int spa_probe103_dcx(void)
@@ -676,6 +677,53 @@ void spa_note_setup_result(int has103, int result, void *response, uint32_t sequ
 #define SPA_103_HTTP_METHOD_LEN_OFF      0x2020u
 #define SPA_103_HTTP_BODY_PTR_OFF        0x209cu
 #define SPA_103_HTTP_BODY_LEN_OFF        0x20a8u
+
+static const uint8_t spa103_ensure_created_prologue[12] = {
+    0xf0, 0x45, 0x2d, 0xe9, 0xdc, 0x41, 0x9f, 0xe5,
+    0xdc, 0x61, 0x9f, 0xe5
+};
+static const uint8_t spa103_set_plist_response_prologue[12] = {
+    0xf0, 0x41, 0x2d, 0xe9, 0xc8, 0x50, 0x90, 0xe5,
+    0x03, 0x70, 0xa0, 0xe1
+};
+
+/* The public type-103 hooks are portable, but their HTTP dispatcher and
+ * session-clock bridge use reviewed private MU1316 addresses.  Never
+ * advertise mainBuffered on another libairplay image merely because the
+ * environment requested it.  K1004, for example, places EnsureCreated at
+ * 0x2e94c rather than 0x2e9ac.  Advertising 103 there while refusing the
+ * private dispatcher later guarantees a phone-side teardown.
+ *
+ * This check is first reached from a real interposed call.  No hook-owned ELF
+ * constructor may call dlsym, inspect code bytes, log, or create a thread. */
+static int spa103_private_image_compatible(void)
+{
+    static volatile int compatibility; /* 0 unknown, 1 compatible, -1 rejected */
+    uintptr_t ensureAddress, imageBase;
+    int result = compatibility;
+
+    if (result) return result > 0;
+
+    ensureAddress = (uintptr_t)dlsym(RTLD_NEXT, "AirTunesServer_EnsureCreated");
+    if (ensureAddress >= SPA_103_MU1316_ENSURE_CREATED_VA) {
+        imageBase = ensureAddress - SPA_103_MU1316_ENSURE_CREATED_VA;
+        if ((imageBase & 0xfffu) == 0 &&
+            memcmp((const void *)(imageBase + SPA_103_MU1316_ENSURE_CREATED_VA),
+                   spa103_ensure_created_prologue,
+                   sizeof(spa103_ensure_created_prologue)) == 0 &&
+            memcmp((const void *)(imageBase + SPA_103_MU1316_SET_PLIST_RESPONSE_VA),
+                   spa103_set_plist_response_prologue,
+                   sizeof(spa103_set_plist_response_prologue)) == 0) {
+            compatibility = 1;
+            return 1;
+        }
+    }
+
+    compatibility = -1;
+    LOG_WARN(LOG_MODULE,
+             "probe103 requested but private libairplay profile is not MU1316; disabled fail-closed");
+    return 0;
+}
 
 typedef int (*spa_srv_sockopen_t)(int, int, int, int, int *, int, int *);
 typedef int (*spa_sock_accept_t)(int, int, int *, void *);
@@ -1849,21 +1897,13 @@ done:
 
 static int spa103_install_buffered_dispatcher(void)
 {
-    static const uint8_t ensureCreatedPrologue[12] = {
-        0xf0, 0x45, 0x2d, 0xe9, 0xdc, 0x41, 0x9f, 0xe5,
-        0xdc, 0x61, 0x9f, 0xe5
-    };
-    static const uint8_t setPlistResponsePrologue[12] = {
-        0xf0, 0x41, 0x2d, 0xe9, 0xc8, 0x50, 0x90, 0xe5,
-        0x03, 0x70, 0xa0, 0xe1
-    };
     uintptr_t ensureAddress, imageBase;
     void *outer, *server;
     void **callbackSlot;
     int installed = 0;
 
     pthread_mutex_lock(&spa103_http_lock);
-    if (!spa_cf_resolve() || !spa103_resolve()) {
+    if (!spa103_private_image_compatible() || !spa_cf_resolve() || !spa103_resolve()) {
         LOG_ERROR(LOG_MODULE,
                   "buffer103: cannot resolve CFLite/HTTP runtime before dispatcher install");
         goto done;
@@ -1876,9 +1916,11 @@ static int spa103_install_buffered_dispatcher(void)
     imageBase = ensureAddress - SPA_103_MU1316_ENSURE_CREATED_VA;
     if ((imageBase & 0xfffu) != 0 ||
         memcmp((const void *)(imageBase + SPA_103_MU1316_ENSURE_CREATED_VA),
-               ensureCreatedPrologue, sizeof(ensureCreatedPrologue)) != 0 ||
+               spa103_ensure_created_prologue,
+               sizeof(spa103_ensure_created_prologue)) != 0 ||
         memcmp((const void *)(imageBase + SPA_103_MU1316_SET_PLIST_RESPONSE_VA),
-               setPlistResponsePrologue, sizeof(setPlistResponsePrologue)) != 0) {
+               spa103_set_plist_response_prologue,
+               sizeof(spa103_set_plist_response_prologue)) != 0) {
         LOG_ERROR(LOG_MODULE,
                   "buffer103: libairplay private dispatcher fingerprint mismatch; refusing patch");
         goto done;
@@ -2867,7 +2909,7 @@ int AirPlayReceiverSessionControl(void *session, uint32_t flags, const void *com
 
 /* ---- module init ---------------------------------------------------------------------------- */
 
-__attribute__((constructor)) static void audio_module_init(void)
+void audio_init(void)
 {
     unsigned bit, channels;
     spa_tune(&bit, &channels);

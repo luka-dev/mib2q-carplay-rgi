@@ -4,6 +4,9 @@
 
 #include "hook_framework.h"
 #include "../coverart/coverart_hook.h"
+#include "../routeguidance/rgd_hook.h"
+#include "../altscreen/altscreen_hook.h"
+#include "../audio/audio_hook.h"
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -108,6 +111,7 @@ static bool g_inject_shutdown;
 static bool g_inject_exited;
 
 static pthread_once_t g_fw_lock_once = PTHREAD_ONCE_INIT;
+static pthread_once_t g_modules_once = PTHREAD_ONCE_INIT;
 
 static void init_fw_lock_once(void) {
     pthread_mutex_init(&g_fw.lock, NULL);
@@ -115,6 +119,16 @@ static void init_fw_lock_once(void) {
 
 static void ensure_fw_lock_init(void) {
     pthread_once(&g_fw_lock_once, init_fw_lock_once);
+}
+
+/* Nothing in this list may be an ELF constructor.  On QNX 6.5 the old module
+ * constructors reached LOG_INFO, whose lazy logger created a pthread while
+ * ldqnx still owned the loader lock.  Register modules only after a real
+ * Cinemo call proves that dio_manager and all dependencies are live. */
+static void init_modules_once(void) {
+    rgd_init();
+    altscreen_init();
+    audio_init();
 }
 
 static void inject_deadline_after_ms(struct timespec* deadline, long ms) {
@@ -546,6 +560,7 @@ static void framework_try_start_bus(void) {
 hook_result_t hook_framework_init(void) {
     bool already_initialized;
 
+    pthread_once(&g_modules_once, init_modules_once);
     ensure_fw_lock_init();
     pthread_mutex_lock(&g_fw.lock);
     if (g_fw.shutting_down) {
@@ -565,6 +580,13 @@ hook_result_t hook_framework_init(void) {
         g_fw.initialized = true;
     }
     pthread_mutex_unlock(&g_fw.lock);
+
+    /* One production-visible breadcrumb.  Absence means no interposed Cinemo
+     * boundary was ever reached; presence proves ldqnx completed the preload
+     * and the hook entered only after normal dio runtime began. */
+    if (!already_initialized)
+        LOG_WARN(LOG_MODULE,
+                 "lazy runtime init complete (constructor-free; first Cinemo boundary)");
 
     /* Register the cover-art receive sink from the same lazy boundary as the
      * rest of the framework.  coverart_runtime_init() is pthread_once-backed,
@@ -611,6 +633,12 @@ void hook_framework_shutdown(void) {
     pthread_mutex_unlock(&g_fw.lock);
 
     notify_state(HOOK_EVENT_SHUTDOWN, NULL);
+
+    /* Module destructors used to run in unspecified ELF order, including when
+     * framework initialisation had never happened.  Keep teardown ordered and
+     * reachable only from the framework destructor. */
+    rgd_shutdown();
+    altscreen_shutdown();
 
     /* No module may enqueue another stock transport call after the terminal
      * state above.  Bound the only already-running synchronous SendIAP2. */
@@ -997,12 +1025,11 @@ int _ZN12NmeTransport4RecvER8NmeArrayIhE(void* self, void* out_array) {
  * they carried no hook logic, only added a dlsym-miss -> return -1 failure
  * mode onto every process write. Left to libc directly. */
 
-/* No LD_PRELOAD constructor.  hook_framework_init() — and therefore bus_init() plus
- * the process-wide fault handlers it installs — must NOT run during dio_manager's
- * dlopen/link, before dio has initialised itself.  Every hooked NmeIAP2Message entry
- * (Decode/Encode/Send/Recv) lazily calls hook_framework_init() on its first invocation,
- * and each module self-registers via its own constructor, so init happens on the first
- * real iAP2 message — exactly the lazy behaviour the bus_init comment above assumes. */
+/* No LD_PRELOAD constructor.  hook_framework_init() — and therefore module registration,
+ * logging, bus_init() and its process-wide fault handlers — must NOT run during
+ * dio_manager's dlopen/link, before dio has initialised itself.  Every hooked Cinemo/NME
+ * boundary lazily calls hook_framework_init() on its first invocation, so all hook-owned
+ * work starts on the first real iAP2 call. */
 __attribute__((destructor))
 static void hook_lib_fini(void) {
     hook_framework_shutdown();

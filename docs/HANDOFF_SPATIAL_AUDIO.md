@@ -1116,6 +1116,14 @@ method unchanged. A fresh local QNX/ARMv7 build passed with `emutls=0`, SHA-256
 Each first accepted cookie is retained in memory and captured mode-0600 as
 `/tmp/spatial_magiccookie_<sequence>_<id-hex>.bin` for the decoder bench; teardown restores the
 stock request callback.
+
+This private dispatcher path is **MU1316-specific**, not a generic MHI2Q address. Static comparison
+against `MHI2Q_CN_AUG22_K1004` found `AirTunesServer_EnsureCreated@0x2e94c` and a different private
+image layout. The hook now verifies the MU1316 function prologues and page-aligned image base before
+enabling any type-103 private patch. On K1004 or an unknown image it logs a warning and leaves type 103
+disabled; type-100 stock fallback remains untouched. Porting 103 to K1004 requires recovering and
+fingerprinting that build's private request-handler table rather than reusing MU1316 offsets.
+
 The source and installed build omit `controlPort`/6033 from type-103 SETUP. Only data port 6032 is
 needed for this path; keeping the existing broader PF rules is harmless.
 

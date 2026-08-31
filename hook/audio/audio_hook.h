@@ -80,6 +80,11 @@
 #define SPA_BUFFERED_AAC_MASK        0x400000   /* bit 22: AAC-LC/44100/2; valid type-103 codec family */
 #define SPA_BUFFERED_BROAD_MASK      0x1440800  /* old failed probe: mixed bits 11,18,22,24 */
 
+/* Called by the framework at the first real Cinemo boundary.  Deliberately not
+ * an ELF constructor: QNX must finish loading dio_manager before the hook may
+ * inspect files, initialise logging or create a writer thread. */
+void audio_init(void);
+
 /* Called by the single SessionSetup interposer before stock libairplay. When the request contains
  * stream type 103 and SPATIAL_103 is enabled, records the stream fields and writes the complete
  * request to a mode-0600 binary plist in /tmp. Returns 1 iff a type-103 request was found. */

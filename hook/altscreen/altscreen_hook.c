@@ -2672,6 +2672,3 @@ void altscreen_shutdown(void)
     alt_command_worker_shutdown();
     altav_shutdown();
 }
-
-__attribute__((constructor)) static void altscreen_module_init(void) { altscreen_init(); }
-__attribute__((destructor))  static void altscreen_module_fini(void) { altscreen_shutdown(); }

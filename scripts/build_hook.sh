@@ -67,6 +67,7 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
   CC=arm-unknown-nto-qnx6.5.0eabi-gcc
   CXX=arm-unknown-nto-qnx6.5.0eabi-g++
   NM=arm-unknown-nto-qnx6.5.0eabi-nm
+  READELF=arm-unknown-nto-qnx6.5.0eabi-readelf
   OBJ=/tmp/hookobj
   rm -rf $OBJ; mkdir -p $OBJ
 
@@ -106,11 +107,20 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
   [ "$n" = "0" ] || fail "$n C++ runtime/STL symbols"
 
   # 5. and therefore no libstdc++ in DT_NEEDED, which the unit must not require.
-  n=$(arm-unknown-nto-qnx6.5.0eabi-readelf -d $SO | grep -c libstdc || true)
+  n=$($READELF -d $SO | grep -c libstdc || true)
   [ "$n" = "0" ] || fail "the hook links libstdc++"
 
+  # 6. ldqnx must run compiler bookkeeping only.  Module constructors used to
+  # reach LOG_INFO -> pthread_create while the QNX loader lock was still held,
+  # making cold-start success depend on scheduler timing.  A normal GCC shared
+  # object has one 4-byte frame_dummy entry; anything larger is a regression.
+  init_size=$($READELF -W -S $SO | awk "\$2 == \".init_array\" { print \$6 }")
+  [ "$init_size" = "000004" ] || fail ".init_array size=$init_size (expected compiler-only 000004)"
+  n=$($NM -an $SO | grep -cE "(rgd|altscreen|audio)_module_(init|fini)" || true)
+  [ "$n" = "0" ] || fail "$n eager module constructor/destructor symbols"
+
   echo "  undefined:$($NM -D --undefined-only $SO | sed "s/^ *//" | awk "\$1 == \"U\" { printf \" %s\", \$2 }" | head -c 400)"
-  echo "  built build/libcarplay_hook.so (emutls=0 exceptions=0 rtti=0 stl=0 libstdc++=0)"
+  echo "  built build/libcarplay_hook.so (emutls=0 exceptions=0 rtti=0 stl=0 libstdc++=0 init_array=compiler-only)"
 '
 
 echo ""
