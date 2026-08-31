@@ -1,4 +1,5 @@
 #include "apac/config.h"
+#include "apac/drc.h"
 #include "apac/sfb_offsets.h"
 
 #include <math.h>
@@ -309,10 +310,17 @@ uint32_t GlobalConfig::Deserialize(BitstreamReader& bs)
         // apac::AudioSceneConfig::Deserialize - the Ambisonics scene
         // description, explicitly out of scope for the CarPlay 5.1 target.
         APAC_RETURN(kPortNeedsAudioScene);
-    if (bs.GetBit())
-        // apac::LoudnessDRCConfig::Deserialize, which descends into mpddrc.
-        // Stage h.
-        APAC_RETURN(kPortNeedsLoudnessDRC);
+    if (bs.GetBit()) {
+        // apac::LoudnessDRCConfig::Deserialize, 0x00072bb0, with
+        // HeaderPayloadType 4 - the value AncillaryConfig passes.  Ported in
+        // src/drc.cpp, where it is three dispatchers deep and then stops at
+        // mpddrc::UniDrc::Deserialize, the only bit consumer in the DRC layer
+        // and not part of this port.  It consumes nothing on the way out, so
+        // the position reported here is still exact.
+        LoudnessDRCConfig drcCfg;
+        drcCfg.Clear();
+        APAC_RETURN(drcCfg.Deserialize(bs, kHeaderPayloadConfig));
+    }
     if (bs.GetBits(2) != 0)
         APAC_RETURN(kOk);
 
