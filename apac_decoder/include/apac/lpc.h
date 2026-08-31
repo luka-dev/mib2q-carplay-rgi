@@ -26,9 +26,20 @@
 // LRVQLPC::Initialize overrides both Initialize slots with a function that
 // throws.  Their real caller is BWELPC - BWELPC::Initialize calls
 // LSFTools::Initialize directly (the only BL to it in the whole library) and
-// BWELPC::DecodeLSFsToLPCs reaches DecodeLSF through vtable slot 72 - so they
-// belong to stage e, the bandwidth extension, and land with it.  QuantizeLSF is
-// the encoder half (LPCodeBook::VQSearch) and has no caller at all here.
+// BWELPC::DecodeLSFsToLPCs reaches DecodeLSF through vtable slot 72.
+//
+// STAGE e LANDED THEM, in include/apac/bwe_lpc.h rather than here, because
+// what they need is BWELPC's fixed geometry (order 16, 24000 Hz, two 512-entry
+// codebooks) and not a general LSFTools:
+//
+//   Initialize  the sizing is BWELPC's constant geometry, so the port has fixed
+//               members instead of six resized vectors.
+//   DecodeLSF   ported, as apac::BWELPC::DecodeLSFsToLPCs' first step.
+//   Reset       its only effect the decode path could see is zeroing those same
+//               vectors; the sixteen constants it also writes at +120 are read
+//               ONLY by QuantizeLSF, so the port does not carry them.
+//   QuantizeLSF the encoder half (LPCodeBook::VQSearch).  Still no call site
+//               anywhere in this library, and still not ported.
 //
 // The trig here is DOUBLE precision on purpose: the original calls the double
 // `cos` and divides by the literal 3.14159265 - which is not M_PI, it is a

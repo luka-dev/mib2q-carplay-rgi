@@ -272,10 +272,16 @@ void LSFTools::LSP_To_LPC(const float* lsp, float* lpc, uint16_t order)
 //   vtable[112](this, lsp, lpc, *(u16*)(this + 104));   // LSP_To_LPC
 //
 // The equality test is a devirtualisation: for apac::LSFTools itself and for
-// APACLRVQDecoder::LRVQLPC - the only two types that reach here in this port's
-// scope - slot 17 IS ConditionLSFs, so the branch taken is the one with the
-// literal 50 and 24000, whatever this object's own sampleRate says.  BWELPC
-// overrides it and takes the other branch; that is stage e's problem.
+// APACLRVQDecoder::LRVQLPC - and, it turned out, for BWELPC as well - slot 17
+// IS ConditionLSFs, so the branch taken is the one with the literal 50 and
+// 24000, whatever this object's own sampleRate says.
+//
+// CORRECTION, stage e.  This note used to say BWELPC overrides slot 17 and
+// takes the other branch.  It does not: BWELPC's vtable at 0x0042b5d8
+// overrides EXACTLY ONE slot, `Initialize(void)`, and every other entry is
+// apac::LSFTools' or apac::LPCBase's own.  BWELPC also never calls LSF_To_LPC
+// at all - BWELPC::DecodeLSFsToLPCs calls Condition_LSFs, LSF_To_LSP and
+// LSP_To_LPC itself, with the same two literals.  Read out of the binary.
 //
 // Note the two rates are not the same value: Condition_LSFs is handed the
 // hardcoded 24000 and LSF_To_LSP the member.  For every caller here they agree.
