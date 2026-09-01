@@ -963,6 +963,7 @@ static int spa103_http_process(void *connection, void *request);
 static int spa103_resolve(void);
 static size_t spa103_write_capture(int fd, const uint8_t *data, size_t size);
 static int spa103_response_set_i64(void *responseDesc, const char *name, int64_t value);
+static int64_t spa103_media_time_to_rtp(int64_t mediaValue, int64_t mediaScale);
 
 /* ---- decode / render ------------------------------------------------------------------------
  *
@@ -993,6 +994,14 @@ static int spa103_response_set_i64(void *responseDesc, const char *name, int64_t
 /* Above this the producer paces itself.  With no consumer the ring sits full and every frame
  * pauses, which is the backpressure the capture-only build faked with an unconditional sleep. */
 #define SPA_103_RING_HIGH_FRAMES  (SPA_103_RING_FRAMES / 2u)
+/* Serving the sink from an almost-empty ring is what the car heard.  The stock
+ * type-100 write cadence, not the phone's buffered delivery, decides when a
+ * fragment must be handed over; starting at fill=0 meant the first second of
+ * every session was padded with silence -- roughly 50 frames missing out of each
+ * 768, a ~1 ms hole every 16 ms, which is a 62 Hz buzz rather than a dropout.
+ * Wait for a cushion before the first serve.  400 ms is 25 fragments of head
+ * start and one sixtieth of the 24000-frame ring. */
+#define SPA_103_PRIME_FRAMES      ((SPA_SR * 400u) / 1000u)
 
 enum {
     SPA_103_RENDER_IDLE = 0,        /* not started, or type 103 not active */
@@ -1022,6 +1031,20 @@ typedef struct {
     uint64_t authFailed;
     uint64_t tlvFailed;
     uint64_t decodeFailed;
+    uint64_t flushDiscarded;
+    int playing;
+    int primed;                      /* ring reached the start cushion at least once */
+    int flushPending;
+    int haveFlushUntilSequence;
+    uint32_t flushUntilSequence;
+    int haveFlushUntilRTP;
+    uint32_t flushUntilRTP;
+    uint64_t statsFrames;
+    uint64_t statsAbs[SPA_103_RENDER_MAX_CHANNELS];
+    uint64_t statsZeroCrossings[SPA_103_RENDER_MAX_CHANNELS];
+    uint32_t statsPeak[SPA_103_RENDER_MAX_CHANNELS];
+    int16_t statsPrevious[SPA_103_RENDER_MAX_CHANNELS];
+    int statsHavePrevious;
     uint32_t sampleRate;
     uint32_t sourceChannels;
     uint32_t outputChannels;
@@ -1073,12 +1096,25 @@ static void spa103_render_start(int64_t formatIndex, int haveKey)
                                            outputChannels * sizeof(int16_t));
     spa103_render.head = 0;
     spa103_render.fill = 0;
+    spa103_render.primed = 0;
     spa103_render.framesIn = 0;
     spa103_render.framesOut = 0;
     spa103_render.dropped = 0;
     spa103_render.authFailed = 0;
     spa103_render.tlvFailed = 0;
     spa103_render.decodeFailed = 0;
+    spa103_render.flushDiscarded = 0;
+    spa103_render.playing = 1;
+    spa103_render.flushPending = 0;
+    spa103_render.haveFlushUntilSequence = 0;
+    spa103_render.haveFlushUntilRTP = 0;
+    spa103_render.statsFrames = 0;
+    memset(spa103_render.statsAbs, 0, sizeof(spa103_render.statsAbs));
+    memset(spa103_render.statsZeroCrossings, 0,
+           sizeof(spa103_render.statsZeroCrossings));
+    memset(spa103_render.statsPeak, 0, sizeof(spa103_render.statsPeak));
+    memset(spa103_render.statsPrevious, 0, sizeof(spa103_render.statsPrevious));
+    spa103_render.statsHavePrevious = 0;
     spa103_render.cookieId = 0;
     spa103_render.haveCookieId = 0;
     spa103_render.sampleRate = 0;
@@ -1125,21 +1161,109 @@ static void spa103_render_stop(void)
     spa103_render.ring = 0;
     spa103_render.head = 0;
     spa103_render.fill = 0;
+    spa103_render.primed = 0;
+    spa103_render.playing = 0;
+    spa103_render.flushPending = 0;
     spa103_render.state = SPA_103_RENDER_IDLE;
     pthread_mutex_unlock(&spa103_render.lock);
 }
 
-/* FLUSHBUFFERED: drop what is queued and clear the filter banks' overlap memory.  The next
- * packet is then windowed against silence, which is what the original's Reset does; resuming is
- * only legal on an Audio Synchronization Packet, and every packet of this stream is one. */
-static void spa103_render_flush(void)
+/* Signed modular comparison on the wire's wrapping counters. */
+static int spa103_counter24_after(uint32_t value, uint32_t boundary)
+{
+    uint32_t delta = (value - boundary) & 0x00ffffffu;
+    return delta != 0 && delta < 0x00800000u;
+}
+
+static int spa103_counter32_after(uint32_t value, uint32_t boundary)
+{
+    uint32_t delta = value - boundary;
+    return delta != 0 && delta < 0x80000000u;
+}
+
+static int64_t spa103_apap_media_value(const uint8_t *packet)
+{
+    uint64_t value = ((uint64_t)packet[0] << 56) | ((uint64_t)packet[1] << 48) |
+                     ((uint64_t)packet[2] << 40) | ((uint64_t)packet[3] << 32) |
+                     ((uint64_t)packet[4] << 24) | ((uint64_t)packet[5] << 16) |
+                     ((uint64_t)packet[6] << 8) | (uint64_t)packet[7];
+    return (int64_t)value;
+}
+
+static int32_t spa103_apap_media_scale(const uint8_t *packet)
+{
+    uint32_t value = ((uint32_t)packet[8] << 24) | ((uint32_t)packet[9] << 16) |
+                     ((uint32_t)packet[10] << 8) | (uint32_t)packet[11];
+    return (int32_t)value;
+}
+
+static uint32_t spa103_apap_sequence(const uint8_t *packet)
+{
+    return ((uint32_t)packet[12] << 16) | ((uint32_t)packet[13] << 8) |
+           (uint32_t)packet[14];
+}
+
+static void spa103_render_set_rate(int64_t rate)
+{
+    pthread_mutex_lock(&spa103_render.lock);
+    spa103_render.playing = rate == 1;
+    pthread_mutex_unlock(&spa103_render.lock);
+}
+
+/* FLUSHBUFFERED has two queues to clear.  The decoded PCM ring is local and can be emptied now;
+ * APAP frames already accepted by TCP must be discarded through the sender's inclusive until
+ * boundary.  Without the latter, pressing Pause audibly drains stale media for seconds. */
+static void spa103_render_flush(int haveUntilSequence, uint32_t untilSequence,
+                                int haveUntilRTP, uint32_t untilRTP)
 {
     pthread_mutex_lock(&spa103_render.lock);
     if (spa103_render.decoder && spa103_render.codec)
         spa103_render.codec->reset(spa103_render.decoder);
     spa103_render.head = 0;
     spa103_render.fill = 0;
+    spa103_render.primed = 0;
+    spa103_render.flushPending = haveUntilSequence || haveUntilRTP;
+    spa103_render.haveFlushUntilSequence = haveUntilSequence;
+    spa103_render.flushUntilSequence = untilSequence & 0x00ffffffu;
+    spa103_render.haveFlushUntilRTP = haveUntilRTP;
+    spa103_render.flushUntilRTP = untilRTP;
+    spa103_render.flushDiscarded = 0;
     pthread_mutex_unlock(&spa103_render.lock);
+}
+
+/* Called only after the packet authenticated, so an unauthenticated header cannot move the flush
+ * window.  Returns 1 while the packet is at/before the inclusive boundary. */
+static int spa103_render_drop_for_flush(const uint8_t *packet)
+{
+    uint32_t sequence = spa103_apap_sequence(packet);
+    uint32_t rtp = (uint32_t)spa103_media_time_to_rtp(
+        spa103_apap_media_value(packet), spa103_apap_media_scale(packet));
+    uint64_t discarded = 0;
+    int drop = 0, crossed = 0;
+
+    pthread_mutex_lock(&spa103_render.lock);
+    if (spa103_render.flushPending) {
+        int after = spa103_render.haveFlushUntilSequence ?
+            spa103_counter24_after(sequence, spa103_render.flushUntilSequence) :
+            spa103_counter32_after(rtp, spa103_render.flushUntilRTP);
+        if (!after) {
+            spa103_render.flushDiscarded++;
+            drop = 1;
+        } else {
+            discarded = spa103_render.flushDiscarded;
+            spa103_render.flushPending = 0;
+            spa103_render.haveFlushUntilSequence = 0;
+            spa103_render.haveFlushUntilRTP = 0;
+            crossed = 1;
+        }
+    }
+    pthread_mutex_unlock(&spa103_render.lock);
+
+    if (crossed)
+        LOG_INFO(LOG_MODULE,
+                 "buffer103: flush boundary crossed at seq=%u rtp=%u discarded=%llu",
+                 (unsigned)sequence, (unsigned)rtp, (unsigned long long)discarded);
+    return drop;
 }
 
 /* Copy of the magic cookie for `id`, or the only stored cookie when the stream never named one.
@@ -1198,6 +1322,62 @@ static void spa103_ring_push_locked(const int16_t *pcm, size_t frames)
     }
 }
 
+/* Bounded, privacy-preserving PCM telemetry.  Mean absolute level, peak and zero-crossing rate are
+ * enough to spot a misplaced LFE channel or a decoder that has shifted the spectrum, without
+ * retaining any playable audio.  Called with spa103_render.lock held. */
+static void spa103_pcm_stats_locked(const int16_t *pcm, size_t frames)
+{
+    size_t frame;
+    unsigned channels = spa103_render.outputChannels;
+    unsigned channel;
+
+    if (!pcm || !frames || !channels || channels > SPA_103_RENDER_MAX_CHANNELS) return;
+    for (frame = 0; frame < frames; frame++) {
+        for (channel = 0; channel < channels; channel++) {
+            int16_t sample = pcm[frame * channels + channel];
+            uint32_t magnitude = sample < 0 ? (uint32_t)(-(int32_t)sample) :
+                                              (uint32_t)sample;
+            spa103_render.statsAbs[channel] += magnitude;
+            if (magnitude > spa103_render.statsPeak[channel])
+                spa103_render.statsPeak[channel] = magnitude;
+            if (spa103_render.statsHavePrevious &&
+                ((sample < 0) != (spa103_render.statsPrevious[channel] < 0)))
+                spa103_render.statsZeroCrossings[channel]++;
+            spa103_render.statsPrevious[channel] = sample;
+        }
+        spa103_render.statsHavePrevious = 1;
+    }
+    spa103_render.statsFrames += frames;
+
+    if (spa103_render.statsFrames >= 192u * SPA_103_RENDER_FRAMES && channels >= 6) {
+        uint64_t count = spa103_render.statsFrames;
+        uint32_t mean[6], zcHz[6];
+        for (channel = 0; channel < 6; channel++) {
+            mean[channel] = (uint32_t)(spa103_render.statsAbs[channel] / count);
+            zcHz[channel] = (uint32_t)((spa103_render.statsZeroCrossings[channel] * SPA_SR) /
+                                       (2u * count));
+        }
+        LOG_INFO(LOG_MODULE,
+                 "buffer103: pcm stats frames=%llu fill=%u in=%llu out=%llu drop=%llu "
+                 "meanAbs=[%u,%u,%u,%u,%u,%u] peak=[%u,%u,%u,%u,%u,%u] "
+                 "zcHz=[%u,%u,%u,%u,%u,%u]",
+                 (unsigned long long)count, (unsigned)spa103_render.fill,
+                 (unsigned long long)spa103_render.framesIn,
+                 (unsigned long long)spa103_render.framesOut,
+                 (unsigned long long)spa103_render.dropped,
+                 mean[0], mean[1], mean[2], mean[3], mean[4], mean[5],
+                 spa103_render.statsPeak[0], spa103_render.statsPeak[1],
+                 spa103_render.statsPeak[2], spa103_render.statsPeak[3],
+                 spa103_render.statsPeak[4], spa103_render.statsPeak[5],
+                 zcHz[0], zcHz[1], zcHz[2], zcHz[3], zcHz[4], zcHz[5]);
+        spa103_render.statsFrames = 0;
+        memset(spa103_render.statsAbs, 0, sizeof(spa103_render.statsAbs));
+        memset(spa103_render.statsZeroCrossings, 0,
+               sizeof(spa103_render.statsZeroCrossings));
+        memset(spa103_render.statsPeak, 0, sizeof(spa103_render.statsPeak));
+    }
+}
+
 /* One whole APAP packet (the bytes after the BE32 length prefix).  Returns nothing: a frame that
  * cannot be decoded is counted and dropped, never fatal to the receiver. */
 static void spa103_render_frame(const uint8_t *packet, size_t length)
@@ -1230,6 +1410,8 @@ static void spa103_render_frame(const uint8_t *packet, size_t length)
     }
     memset(key, 0, sizeof(key));
 
+    if (spa103_render_drop_for_flush(packet)) return;
+
     memset(&ext, 0, sizeof(ext));
     if (variant == SPA_APAP_AAD_EXTENSION) {
         if (!spa_apap_parse_extension(plaintext, plainLength, &ext, &audio, &audioLength)) {
@@ -1243,6 +1425,11 @@ static void spa103_render_frame(const uint8_t *packet, size_t length)
         audioLength = plainLength;
     }
     if (!audioLength) return;   /* a state-only packet: authentic, and carries no audio */
+
+    pthread_mutex_lock(&spa103_render.lock);
+    state = spa103_render.playing;
+    pthread_mutex_unlock(&spa103_render.lock);
+    if (!state) return;         /* rate=0: authenticate/drain, but never render stale media */
 
     /* Bring the decoder up on the first frame that names a cookie we hold.  Doing it here rather
      * than at SETUP is not laziness: SETMAGICCOOKIE arrives asynchronously on the RTSP control
@@ -1326,6 +1513,7 @@ static void spa103_render_frame(const uint8_t *packet, size_t length)
         } else if (spa103_render.atmosMode == SPA_ATMOS_DROP) {
             spa_drop_5_1_2_s16(decoded, frames, decoded);
         }
+        spa103_pcm_stats_locked(decoded, frames);
         spa103_ring_push_locked(decoded, frames);
         spa103_render.framesIn += frames;
     }
@@ -1340,7 +1528,7 @@ static int spa103_render_backpressure(void)
     int paced;
 
     pthread_mutex_lock(&spa103_render.lock);
-    paced = spa103_render.state != SPA_103_RENDER_RUNNING ||
+    paced = spa103_render.state != SPA_103_RENDER_RUNNING || !spa103_render.playing ||
             spa103_render.fill >= SPA_103_RING_HIGH_FRAMES;
     pthread_mutex_unlock(&spa103_render.lock);
     return paced;
@@ -1402,7 +1590,13 @@ size_t spa_buffered_pcm_read(int16_t *out, size_t frames, unsigned channels)
 
     if (!out || !frames) return 0;
     pthread_mutex_lock(&spa103_render.lock);
-    if (spa103_render.state == SPA_103_RENDER_RUNNING && spa103_render.ring &&
+    /* Returning 0 here is deliberate: the sink then expands the phone's own
+     * realtime stereo for this fragment, which is real audio.  Padding silence
+     * instead is what made the gap audible. */
+    if (!spa103_render.primed && spa103_render.fill >= SPA_103_PRIME_FRAMES)
+        spa103_render.primed = 1;
+    if (spa103_render.state == SPA_103_RENDER_RUNNING && spa103_render.playing &&
+        spa103_render.primed && spa103_render.ring &&
         channels == spa103_render.outputChannels) {
         while (done < frames && spa103_render.fill) {
             size_t run = SPA_103_RING_FRAMES - spa103_render.head;
@@ -1441,6 +1635,11 @@ size_t spa_buffered_pcm6_read(int16_t *out, size_t frames)
  */
 #define SPA_PCM_SINK_NAME "mpl5_dio_ent"
 #define SPA_PCM_SINK_MAX_WRITE (1024u * 1024u)
+#define SPA_PCM_SINK_PERIOD_MS 16u
+#define SPA_PCM_SINK_PERIOD_FRAMES ((SPA_SR * SPA_PCM_SINK_PERIOD_MS) / 1000u)
+/* Eight fragments is the floor the RetroArch QNX QSA driver established on this
+ * head unit; below it the CSD session cycles instead of absorbing jitter. */
+#define SPA_PCM_SINK_MIN_FRAGS     8
 
 typedef int (*spa_snd_open_name_t)(snd_pcm_t **, char *, int);
 typedef int (*spa_snd_params_t)(snd_pcm_t *, snd_pcm_channel_params_t *);
@@ -1506,7 +1705,7 @@ int snd_pcm_plugin_params(snd_pcm_t *handle, snd_pcm_channel_params_t *params)
     snd_pcm_channel_params_t adjusted;
     unsigned outputChannels;
     size_t sourceFrameBytes, outputFrameBytes;
-    int isSink, result;
+    int isSink, result, renegotiated;
 
     if (!real) real = (spa_snd_params_t)dlsym(RTLD_NEXT, "snd_pcm_plugin_params");
     if (!real) return -1;
@@ -1518,7 +1717,9 @@ int snd_pcm_plugin_params(snd_pcm_t *handle, snd_pcm_channel_params_t *params)
     pthread_mutex_unlock(&spa_pcm_sink.lock);
     if (!isSink || !params || !outputChannels ||
         params->channel != SND_PCM_CHANNEL_PLAYBACK ||
+        params->mode != SND_PCM_MODE_BLOCK ||
         params->format.format != SND_PCM_SFMT_S16_LE ||
+        params->format.rate != SPA_SR ||
         params->format.voices < 1 || params->format.voices > SPA_PCM_5_1_2_CHANNELS)
         return real(handle, params);
 
@@ -1539,8 +1740,76 @@ int snd_pcm_plugin_params(snd_pcm_t *handle, snd_pcm_channel_params_t *params)
         }
         adjusted.buf.block.frag_size =
             (int32_t)((fragmentBytes / sourceFrameBytes) * outputFrameBytes);
+        /* Widening the fragment without touching the fragment COUNT leaves the
+         * ring as deep as stock sized it for a fragment a third this size.  The
+         * RetroArch QNX driver, tuned on this exact head unit, records that the
+         * device needs at least eight fragments or the CSD session start/stops
+         * around render jitter -- audible as a periodic tick rather than a
+         * dropout.  deva's caps allow ten of the widened fragment
+         * (max_buffer 0x2D000 = 10 * 0x4800), so ask for eight when stock asked
+         * for fewer; never reduce a deeper request. */
+        if (adjusted.buf.block.frags_max < SPA_PCM_SINK_MIN_FRAGS)
+            adjusted.buf.block.frags_max = SPA_PCM_SINK_MIN_FRAGS;
+        if (adjusted.buf.block.frags_min > adjusted.buf.block.frags_max)
+            adjusted.buf.block.frags_min = adjusted.buf.block.frags_max;
     }
     result = real(handle, &adjusted);
+    /* Never let our widening be the reason CarPlay ends up with no audio at all.
+     * If the device refuses the expanded geometry -- the eight-fragment floor is
+     * a new way that can happen -- hand it back exactly what stock asked for and
+     * carry on in stereo. */
+    if (result != 0) {
+        LOG_ERROR(LOG_MODULE,
+                  "audio sink: expanded params rejected (why=%#x); reopening stock %dch",
+                  (unsigned)adjusted.why_failed, (int)params->format.voices);
+        result = real(handle, params);
+        pthread_mutex_lock(&spa_pcm_sink.lock);
+        if (handle == spa_pcm_sink.handle) spa_pcm_sink.expandedParams = 0;
+        pthread_mutex_unlock(&spa_pcm_sink.lock);
+        return result;
+    }
+
+    /* This exact QSA plugin build writes its negotiated values back into params,
+     * although the public QNX contract calls these fields write-only.  Use that
+     * observed behavior as an early, pre-sample guard and confirm it again from
+     * the authoritative setup readback below. */
+    renegotiated = adjusted.format.rate != params->format.rate ||
+                   adjusted.format.voices != (int32_t)outputChannels;
+    /* mpl5's hardware timer consumes one fragment every fixed 16 ms.  The bad
+     * caps-only deva returned 3072 client bytes = 256 S16/6ch frames per tick,
+     * hence 16 kframes/s and exactly 3x-slow playback.  The dynamic deva patch
+     * raises the internal S32 fragment to 0x4800 for six voices; QSA exposes it
+     * here as 9216 S16 bytes = 768 frames, exactly 16 ms at 48 kHz.  The caller's
+     * original 480-frame request is not the clock contract: setup translates the
+     * negotiated 768-frame period back to a 3072-byte stereo-facing fragment. */
+    if (!renegotiated && adjusted.mode == SND_PCM_MODE_BLOCK &&
+        adjusted.buf.block.frag_size > 0 && params->buf.block.frag_size > 0) {
+        size_t gotFrames = (size_t)adjusted.buf.block.frag_size / outputFrameBytes;
+        if ((size_t)adjusted.buf.block.frag_size % outputFrameBytes != 0 ||
+            gotFrames != SPA_PCM_SINK_PERIOD_FRAMES) {
+            LOG_ERROR(LOG_MODULE,
+                      "audio sink: device fragment carries %u frames, expected %u per %u ms "
+                      "(%d bytes at %uch); expansion abandoned",
+                      (unsigned)gotFrames, (unsigned)SPA_PCM_SINK_PERIOD_FRAMES,
+                      (unsigned)SPA_PCM_SINK_PERIOD_MS,
+                      (int)adjusted.buf.block.frag_size, outputChannels);
+            renegotiated = 1;
+        }
+    }
+    if (result == 0 && renegotiated) {
+        LOG_ERROR(LOG_MODULE,
+                  "audio sink: QSA renegotiated rate %d->%d voices %d->%d frag %d->%d; "
+                  "expansion abandoned, reopening stock %dch",
+                  (int)params->format.rate, (int)adjusted.format.rate,
+                  (int)outputChannels, (int)adjusted.format.voices,
+                  (int)params->buf.block.frag_size, (int)adjusted.buf.block.frag_size,
+                  (int)params->format.voices);
+        result = real(handle, params);
+        pthread_mutex_lock(&spa_pcm_sink.lock);
+        if (handle == spa_pcm_sink.handle) spa_pcm_sink.expandedParams = 0;
+        pthread_mutex_unlock(&spa_pcm_sink.lock);
+        return result;
+    }
 
     pthread_mutex_lock(&spa_pcm_sink.lock);
     if (handle == spa_pcm_sink.handle) {
@@ -1552,9 +1821,14 @@ int snd_pcm_plugin_params(snd_pcm_t *handle, snd_pcm_channel_params_t *params)
     pthread_mutex_unlock(&spa_pcm_sink.lock);
     if (result != 0) params->why_failed = adjusted.why_failed;
     LOG_INFO(LOG_MODULE,
-             "audio sink: params source=%uch target=%uch format=%d result=%d why=%#x",
+             "audio sink: params source=%uch target=%uch rate=%d->%d format=%d "
+             "frag=%d->%d frags=%d..%d result=%d why=%#x",
              (unsigned)params->format.voices, outputChannels,
-             params->format.format, result, (unsigned)adjusted.why_failed);
+             (int)params->format.rate, (int)adjusted.format.rate,
+             params->format.format,
+             (int)params->buf.block.frag_size, (int)adjusted.buf.block.frag_size,
+             (int)adjusted.buf.block.frags_min, (int)adjusted.buf.block.frags_max,
+             result, (unsigned)adjusted.why_failed);
     return result;
 }
 
@@ -1582,17 +1856,47 @@ int snd_pcm_plugin_setup(snd_pcm_t *handle, snd_pcm_channel_setup_t *setup)
     result = real(handle, &actual);
     if (result != 0) return result;
 
+    if (actual.mode != SND_PCM_MODE_BLOCK || actual.buf.block.frag_size <= 0) {
+        LOG_ERROR(LOG_MODULE,
+                  "audio sink: setup rejected mode=%d fragment=%d; expected block mode",
+                  (int)actual.mode, (int)actual.buf.block.frag_size);
+        pthread_mutex_lock(&spa_pcm_sink.lock);
+        if (handle == spa_pcm_sink.handle) spa_pcm_sink.expandedParams = 0;
+        pthread_mutex_unlock(&spa_pcm_sink.lock);
+        return -1;
+    }
+
     *setup = actual;
     setup->format.voices = (int32_t)sourceChannels;
-    if (setup->mode == SND_PCM_MODE_BLOCK && setup->buf.block.frag_size > 0) {
+    {
         size_t actualFrameBytes = outputChannels * sizeof(int16_t);
         size_t stockFrameBytes = sourceChannels * sizeof(int16_t);
         size_t actualFragmentBytes = (size_t)setup->buf.block.frag_size;
+        size_t actualFrames;
 
         if (actualFragmentBytes % actualFrameBytes != 0) {
             LOG_ERROR(LOG_MODULE,
                       "audio sink: QSA setup fragment %u not aligned to %uch; refusing translation",
                       (unsigned)actualFragmentBytes, outputChannels);
+            pthread_mutex_lock(&spa_pcm_sink.lock);
+            if (handle == spa_pcm_sink.handle) spa_pcm_sink.expandedParams = 0;
+            pthread_mutex_unlock(&spa_pcm_sink.lock);
+            return -1;
+        }
+        actualFrames = actualFragmentBytes / actualFrameBytes;
+        if (actual.format.rate != SPA_SR ||
+            actual.format.voices != (int32_t)outputChannels ||
+            actualFrames != SPA_PCM_SINK_PERIOD_FRAMES) {
+            LOG_ERROR(LOG_MODULE,
+                      "audio sink: setup rejected actual=%dHz/%dch/%u frames; "
+                      "expected %dHz/%uch/%u frames per %u ms",
+                      (int)actual.format.rate, (int)actual.format.voices,
+                      (unsigned)actualFrames, SPA_SR, outputChannels,
+                      (unsigned)SPA_PCM_SINK_PERIOD_FRAMES,
+                      (unsigned)SPA_PCM_SINK_PERIOD_MS);
+            pthread_mutex_lock(&spa_pcm_sink.lock);
+            if (handle == spa_pcm_sink.handle) spa_pcm_sink.expandedParams = 0;
+            pthread_mutex_unlock(&spa_pcm_sink.lock);
             return -1;
         }
         setup->buf.block.frag_size =
@@ -1602,8 +1906,9 @@ int snd_pcm_plugin_setup(snd_pcm_t *handle, snd_pcm_channel_setup_t *setup)
                        stockFrameBytes);
     }
     LOG_INFO(LOG_MODULE,
-             "audio sink: setup actual=%uch/%d-byte fragment -> stock=%uch/%d-byte fragment",
-             outputChannels, actual.buf.block.frag_size,
+             "audio sink: setup actual=%uch/%dHz/%d-byte fragment -> "
+             "stock=%uch/%d-byte fragment",
+             outputChannels, (int)actual.format.rate, actual.buf.block.frag_size,
              sourceChannels, setup->buf.block.frag_size);
     return 0;
 }
@@ -1679,12 +1984,21 @@ ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, size_t size)
         spa_buffered_pcm_channels() == outputChannels) {
         bufferedFrames = spa_buffered_pcm_read(spa_pcm_sink.scratch, frames,
                                                outputChannels);
-        if (bufferedFrames < frames) {
-            memset(spa_pcm_sink.scratch + bufferedFrames * outputChannels, 0,
-                   (frames - bufferedFrames) * outputFrameBytes);
-            spa_pcm_sink.underrunFrames += frames - bufferedFrames;
+        if (bufferedFrames == 0) {
+            /* Nothing decoded is ready -- the ring is still filling its start
+             * cushion, or it ran dry.  Play the phone's own realtime stereo
+             * widened instead: that is real audio.  Filling the whole fragment
+             * with zeroes here is what made a not-yet-primed session silent. */
+            spa_pcm_expand_fallback((const int16_t *)buffer, frames, sourceChannels,
+                                    spa_pcm_sink.scratch, outputChannels);
+        } else {
+            if (bufferedFrames < frames) {
+                memset(spa_pcm_sink.scratch + bufferedFrames * outputChannels, 0,
+                       (frames - bufferedFrames) * outputFrameBytes);
+                spa_pcm_sink.underrunFrames += frames - bufferedFrames;
+            }
+            spa_pcm_sink.bufferedWrites++;
         }
-        spa_pcm_sink.bufferedWrites++;
     } else {
         spa_pcm_expand_fallback((const int16_t *)buffer, frames, sourceChannels,
                                 spa_pcm_sink.scratch, outputChannels);
@@ -2136,6 +2450,7 @@ static int spa103_process_buffered_control(void *connection, void *request,
                 }
             }
             pthread_mutex_unlock(&spa103_lock);
+            spa103_render_set_rate(rate);
             LOG_WARN(LOG_MODULE,
                      "buffer103: %s[%u] ACK rate=%lld rtp=%lld media=%lld/%lld "
                      "firstAudible=%lld timeline=%lld",
@@ -2174,6 +2489,7 @@ static int spa103_process_buffered_control(void *connection, void *request,
                     spa103_receiver.networkTime = networkTime;
             }
             pthread_mutex_unlock(&spa103_lock);
+            spa103_render_set_rate(rate);
             if (!anchor.valid) {
                 anchor.valid = 1;
                 anchor.mediaTimeScale = SPA_SR;
@@ -2256,7 +2572,8 @@ static int spa103_process_buffered_control(void *connection, void *request,
             pthread_mutex_unlock(&spa103_lock);
             /* Drop the queued PCM and clear the filter banks' overlap memory.  Resuming is only
              * legal on an Audio Synchronization Packet; every packet of this stream is one. */
-            spa103_render_flush();
+            spa103_render_flush(haveUntilSeq, (uint32_t)untilSeq,
+                                haveUntilTime, (uint32_t)untilTime.rtpTime);
             response = cfa_dictm(0, 0, cfa_dk_cb, cfa_dv_cb);
             if (!response) {
                 status = 500;
