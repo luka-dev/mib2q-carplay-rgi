@@ -108,22 +108,44 @@ deva patch had not taken effect they would see six voices, report everything
 healthy, and let a hidden downmix run. Every clean counter in the last drive's log
 was gathered through exactly that call.
 
+## The callback contract, recovered
+
+`registerCallBack` @0x2c8e8 is one ioctl:
+
+    csd_ioctl(h, 0x11401, {callback_fn, context}, 8)
+
+and the trace captures both values live:
+
+    csd_ioctl(h=257 cmd=0x11401 len=8) [0x780298b0 0x13cba0]
+
+`csdUserCallBack` @0x290f4 takes `(event, buf_desc[2], _, context)` and handles
+three events — 71169 `BUF_DONE`, 71170 `BUF_READY`, 71171 `EOS` — releasing the
+buffer back to the pool and signalling a condvar. So the playback loop is: deva
+fills a PMEM buffer, submits it, and waits for the DSP to call back. A stub that
+registers the callback and never calls it stalls that loop after `buffer_count`
+buffers.
+
+Closing the loop is also what makes the capture work: the moment the stub is
+about to answer `BUF_DONE`, the buffer it is acknowledging holds exactly what
+would have been played.
+
 ## Next
 
-Two things, in order.
+The command histogram over a run where the probe writes 62 fragments shows no
+submission at all:
 
-1. **Move the capture point.** The CSD PMEM pools the stub owns stay silent, so
-   the audio does not pass through them. `deva_mib2_aquire` mallocs its own DMA
-   buffer (`malloc(10 * frag_size)`) and its timer advances through that; the PMEM
-   pools are a separate, smaller set (buffer_count=8, buffer_size=1536). The copy
-   between the two is what has to be found — or the stub has to answer whichever
-   ioctl hands the DSP a buffer address, and read it there.
+    64 cmd=0x11420   (ALLOC_PMEM)
+    64 cmd=0x11417   (MAP_SHARED_MEMORY)
+     9 cmd=0x11801    9 cmd=0x11410    9 cmd=0x11401
+     7 cmd=0x11804    6 cmd=0x11c01    2 cmd=0x11809
 
-   A watcher thread inside the stub was tried and reverted: creating a thread
-   inside io-audio from a driver library destabilised the guest and killed the run
-   before the trace was even printed. Whatever samples those buffers has to do it
-   without adding a thread to that process.
+Nothing repeats per fragment, so the audio never reaches CSD. The client's writes
+land in io-audio's mixer and deva's own DMA buffer, and it is deva's timer
+(`session_deva_timer_start`, pulse handler at 0x6E85C) that is supposed to move
+one fragment per tick into a pool buffer and submit it. That timer is not driving
+here.
 
-2. **The guest faults on the way out**, after both probes have written. It does
-   not affect the measurements already taken, but it truncates the serial log
-   before the trace file is dumped, so the harness cannot yet run unattended.
+So the next question is why the timer does not run in the guest — and there is a
+second device in the enumeration, `SW MIX PCM`, which suggests the path may be
+client -> mixer -> `sse_bundle_1` -> CSD rather than straight out of
+`mpl5_dio_ent`. Both are answerable from the same slog the harness already prints.

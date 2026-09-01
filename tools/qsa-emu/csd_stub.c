@@ -55,8 +55,9 @@ static int   g_next_handle = 0x100;
 static void csd_trace_open(void)
 {
     if (g_trace) return;
-    g_trace = fopen("/tmp/csd_trace.log", "w");
-    if (!g_trace) g_trace = stderr;
+    /* Straight to the console: the guest can fault on the way out, and a trace
+     * that only exists in /tmp is lost exactly when it is most wanted. */
+    g_trace = stderr;
     setvbuf(g_trace, 0, _IONBF, 0);          /* QNX /tmp logs need this */
     g_pcm = fopen("/tmp/csd_dma.pcm", "wb");
 }
@@ -136,8 +137,18 @@ static void csd_dump_pools_once(void)
 int32_t csd_ioctl(int32_t handle, uint32_t cmd, void *arg, uint32_t len)
 {
     csd_dump_pools_once();
-    fprintf(g_trace, "csd_ioctl(h=%d cmd=%#x arg=%p len=%u)\n",
-            handle, (unsigned)cmd, arg, (unsigned)len);
+    /* Two words of the payload are safe once len says they exist, and they are
+     * what identifies a buffer submission: the descriptor csdUserCallBack is
+     * handed back is a {addr, len} pair. */
+    if (arg && len >= 8) {
+        const uint32_t *w = (const uint32_t *)arg;
+        fprintf(g_trace, "csd_ioctl(h=%d cmd=%#x len=%u) [%#x %#x]\n",
+                handle, (unsigned)cmd, (unsigned)len,
+                (unsigned)w[0], (unsigned)w[1]);
+    } else {
+        fprintf(g_trace, "csd_ioctl(h=%d cmd=%#x len=%u)\n",
+                handle, (unsigned)cmd, (unsigned)len);
+    }
 
     /* CSD_AS_CMD_ALLOC_PMEM, recovered from allocateCsdBufferPool @0x2e374:
      * the driver passes {size, pid, 0, 0} and expects the DSP side to write a
