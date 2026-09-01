@@ -213,12 +213,12 @@ export ALTSCREEN_ADVERT_DISPLAYS=1
 export AUDIO_SPATIAL=1
 export AUDIO_SPATIAL_ATMOS=0
 export AUDIO_SPATIAL_ATMOS_MODE=downmix
-# mpl5_dio_ent is natively S32_LE (deva caps format 0xc) and we open it as S16, so
-# QSA inserts a converting plugin.  That path is exercised constantly at two
-# voices and never at six.  With this on, the hook hands the device its native
-# width and does the widening itself, taking that plugin out of the picture.
-# Experiment with an on-car A/B; the sink falls back to stock params if the
-# device refuses the S32 open.
-export AUDIO_SPATIAL_S32=1
+# Was an experiment: hand the device its native S32 width and do the widening in
+# the hook, to take QSA's converting plugin out of the six-voice path.  MEASURED
+# AND ANSWERED in tools/qsa-emu -- QSA's widening is exactly a left shift by 16
+# with channel order intact, so doing it ourselves produces identical bytes.
+# Left at 0 because turning it on cannot change anything; the code is a candidate
+# for deletion once nothing else needs the S32 path.
+export AUDIO_SPATIAL_S32=0
 export AUDIO_SPATIAL_CODEC_LIB="$H/libcarplay_apac.so"
 exec "$DIODIR/dio_manager" "$@"

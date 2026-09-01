@@ -1718,6 +1718,53 @@ int snd_pcm_open_name(snd_pcm_t **handle, char *name, int mode)
     return result;
 }
 
+/* Ask the DEVICE what it can do, not the plugin layer.
+ *
+ * snd_pcm_plugin_setup reflects the CLIENT's geometry back: measured in the QNX
+ * harness (tools/qsa-emu), a stereo-only mpl5_dio_ent accepted a six-voice
+ * plugin_params AND reported "6 voices, frag 9216" from plugin_setup, because
+ * QSA had quietly inserted a channel conversion.  Both guards below used to rest
+ * on that readback, so a unit whose deva patch had not taken effect would report
+ * perfect health -- zero underruns, right rate, right fragment -- while a hidden
+ * downmix ran underneath.
+ *
+ * snd_pcm_channel_info reports the hardware's own limits.  In the same harness it
+ * said voices 2..2 against the stock driver and 2..6 against the patched one,
+ * which is exactly the distinction that was missing. */
+static int spa_sink_device_supports_voices(snd_pcm_t *handle, unsigned voices)
+{
+    static int (*real_info)(snd_pcm_t *, snd_pcm_channel_info_t *);
+    snd_pcm_channel_info_t info;
+
+    if (!real_info)
+        real_info = (int (*)(snd_pcm_t *, snd_pcm_channel_info_t *))
+                    dlsym(RTLD_NEXT, "snd_pcm_channel_info");
+    /* Unavailable: say yes rather than silently disabling Spatial on a build
+     * where the symbol cannot be resolved. */
+    if (!real_info) return 1;
+
+    memset(&info, 0, sizeof(info));
+    info.channel = SND_PCM_CHANNEL_PLAYBACK;
+    if (real_info(handle, &info) != 0) return 1;
+
+    LOG_INFO(LOG_MODULE,
+             "audio sink: device reports voices %d..%d, rate %d..%d, frag %d..%d, formats %#x",
+             (int)info.min_voices, (int)info.max_voices,
+             (int)info.min_rate, (int)info.max_rate,
+             (int)info.min_fragment_size, (int)info.max_fragment_size,
+             (unsigned)info.formats);
+
+    if (info.max_voices > 0 && info.max_voices < (int)voices) {
+        LOG_ERROR(LOG_MODULE,
+                  "audio sink: device tops out at %d voices, %u requested -- the deva "
+                  "patch is not in effect; refusing to expand (plugin_setup would "
+                  "have claimed success)",
+                  (int)info.max_voices, voices);
+        return 0;
+    }
+    return 1;
+}
+
 int snd_pcm_plugin_params(snd_pcm_t *handle, snd_pcm_channel_params_t *params)
 {
     static spa_snd_params_t real;
@@ -1741,6 +1788,15 @@ int snd_pcm_plugin_params(snd_pcm_t *handle, snd_pcm_channel_params_t *params)
         params->format.rate != SPA_SR ||
         params->format.voices < 1 || params->format.voices > SPA_PCM_5_1_2_CHANNELS)
         return real(handle, params);
+
+    /* Before touching anything, confirm the hardware really has the voices.  A
+     * plugin-level "yes" is not evidence. */
+    if (!spa_sink_device_supports_voices(handle, outputChannels)) {
+        pthread_mutex_lock(&spa_pcm_sink.lock);
+        if (handle == spa_pcm_sink.handle) spa_pcm_sink.expandedParams = 0;
+        pthread_mutex_unlock(&spa_pcm_sink.lock);
+        return real(handle, params);
+    }
 
     outputSampleBytes = spa_sink_wants_s32() ? sizeof(int32_t) : sizeof(int16_t);
     adjusted = *params;
