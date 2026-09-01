@@ -263,17 +263,38 @@ The driver's own usage text names the switch:
     - data_dump_path=path              Path on target for the data dump.
     # io-audio -d qc default_device=six_channel_speakerp,log_level=high,data_dump_path=/var/log/
 
-Setting it is necessary but not sufficient. The dump is gated three ways:
+Setting it is necessary but nowhere near sufficient. The dump is gated three ways:
 
     if (!*(BYTE*)(timer + 336) || *(DWORD*)(timer + 328) != 2 || !*(DWORD*)(timer + 332))
         return 0;
 
-a per-timer enable flag, a session type of exactly 2 (CSD), and a non-null
-session pointer. `csd_enable_data_dumps` and `deva_data_dump_ctrl` exist, so the
-flag has its own runtime control that still has to be found. In the harness the
-path is accepted and nothing is written, which means one of the other two gates
-is closed — most likely the session type, and that would also explain the empty
-pools and the absent CSD traffic.
+a per-timer enable byte, a session type of exactly 2 (CSD), and a non-null
+session pointer. Only `deva_data_dump_ctrl` sets that byte, and it is a runtime
+command, not a command-line option:
+
+```c
+deva_data_dump_ctrl(dev, cmd)
+    if (cmd+12 non-empty)  strlcpy(g_file_path, cmd+12, 256);
+    off_B0C54(dev, cmd, timers, csds);        /* "get_fn": collects the lists */
+    if (*(DWORD*)cmd == 0)  disable: close files, clear +336
+    else                    enable:  create the file, set +336, csd_enable_data_dumps
+```
+
+`off_B0C54` is assigned in `deva_data_dump_init`, which refuses outright unless
+the platform is one of three:
+
+```c
+platform_id = *(DWORD*)(cfg + 12);
+if (platform_id > 7 || ((1 << platform_id) & 0xA4) == 0)   /* bits 2, 5, 7 */
+    return -1;                       /* "Un-supported platform_id: %d!" */
+```
+
+and in the harness `deva_data_dump_init` is never called at all -- no line from it
+appears in any run -- so `get_fn` stays null and `deva_data_dump_ctrl` would fail
+with "get_fn not initialized!". The pointer at 0x9b710 that holds
+`deva_data_dump_ctrl` is a relocation filled at load time, i.e. a callback slot in
+a table something else invokes; on the head unit that something is the audio
+service.
 
 **This matters more on the car than here.** There the session really is a CSD one
 and the audio is real, so enabling this dump captures what the driver sends to the
