@@ -112,12 +112,18 @@ was gathered through exactly that call.
 
 Two things, in order.
 
-1. The pools stay empty, so the audio does not reach the CSD PMEM the stub owns.
-   `deva_mib2_aquire` mallocs its own DMA buffer (`malloc(10 * frag_size)`) and the
-   timer advances through that; the PMEM pools are a separate, smaller set
-   (buffer_count=8, buffer_size=1536). The capture point has to move to whatever
-   copies one into the other, or the dump has to trigger on the timer rather than
-   on an ioctl.
-2. The guest faults on the way out, after both tests have written. Harmless to the
-   measurements taken so far, but it needs fixing before the harness can run
-   unattended.
+1. **Move the capture point.** The CSD PMEM pools the stub owns stay silent, so
+   the audio does not pass through them. `deva_mib2_aquire` mallocs its own DMA
+   buffer (`malloc(10 * frag_size)`) and its timer advances through that; the PMEM
+   pools are a separate, smaller set (buffer_count=8, buffer_size=1536). The copy
+   between the two is what has to be found — or the stub has to answer whichever
+   ioctl hands the DSP a buffer address, and read it there.
+
+   A watcher thread inside the stub was tried and reverted: creating a thread
+   inside io-audio from a driver library destabilised the guest and killed the run
+   before the trace was even printed. Whatever samples those buffers has to do it
+   without adding a thread to that process.
+
+2. **The guest faults on the way out**, after both probes have written. It does
+   not affect the measurements already taken, but it truncates the serial log
+   before the trace file is dumped, so the harness cannot yet run unattended.

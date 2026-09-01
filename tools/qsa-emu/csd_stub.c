@@ -64,6 +64,7 @@ static void csd_trace_open(void)
 /* Called before main() in the guest so the very first driver call is traced. */
 __attribute__((constructor)) static void csd_stub_init_once(void) { csd_trace_open(); }
 
+
 int32_t csd_init(void)
 {
     csd_trace_open();
