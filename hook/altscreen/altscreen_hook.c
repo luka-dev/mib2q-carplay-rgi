@@ -32,7 +32,6 @@
 #include "../framework/bus.h"
 #include "altscreen_hook.h"
 #include "altscreen_av.h"
-#include "../audio/audio_hook.h"   /* spa_augment_setup_response — this file owns SessionSetup */
 
 #include <unistd.h>
 #include <pthread.h>
@@ -100,7 +99,6 @@ static void           *g_advert_features;
 static int             g_advert_ready;
 static int             g_advert_published;
 static uint32_t        g_advert_sequence;
-static volatile uint32_t g_setup_sequence_counter;
 /* Seeded from stock /info's authoritative nightMode, then updated by the
  * dio->libairplay AirPlayReceiverSessionSetNightMode boundary call. */
 static volatile int g_alt_night_mode;
@@ -703,8 +701,8 @@ static void advert_clear_for_session(void *session)
  * Signature (280 ref, Server.c): CFMutableDictionaryRef AirPlayCopyServerInfo(
  *   AirPlayReceiverSessionRef session, CFArrayRef qualifier, uint8_t *macAddr,
  *   OSStatus *outErr ).  The returned dict is mutable (CFDictionaryCreateMutable),
- *   so CFDictionarySetValue on it is safe. */
-typedef void *(*fn_copyinfo)(void *, void *, void *, void *);
+ *   so CFDictionarySetValue on it is safe.  The framework owns the interposition
+ *   itself (framework/airplay_seams.c) and calls alt_on_server_info below. */
 static int alt_resolve(void);
 
 /* env gate by VALUE, not mere presence — `export FOO=0` must DISABLE, not enable
@@ -790,30 +788,15 @@ static int advert_ready_for_session(void *session)
     return ready;
 }
 
-void *AirPlayCopyServerInfo(void *session, void *qualifier, void *macAddr, void *outErr)
+/* /info seam (module def's on_server_info).  The framework owns
+ * AirPlayCopyServerInfo and hands us the mutable dictionary stock just built.
+ *
+ * Advertise only when every primitive required by the self-contained 111
+ * receiver resolves.  A partial advert would make iOS demand a contract the
+ * stock receiver cannot satisfy and can restart the whole CarPlay session. */
+static void alt_on_server_info(void *session, void *info)
 {
-    static fn_copyinfo real;
-    if (!real) real = (fn_copyinfo)dlsym(RTLD_NEXT, "AirPlayCopyServerInfo");
-    if (!real) { LOG_ERROR(LOG_MODULE, "AirPlayCopyServerInfo real==NULL"); return 0; }
-
-    void *info = real(session, qualifier, macAddr, outErr);   /* stock /info — untouched */
-
-    /* Unconditional: this is the ONLY seam that proves the phone reached us over
-     * the carplay0 IP link.  Everything below runs only after control SETUP, so a
-     * generation that never starts CarPlay used to leave no trace at all here.
-     * A failing generation WITH these lines means NCM/HTTP are up and the phone
-     * read /info and then declined CarPlay (protocol/content — ours); a failing
-     * generation WITHOUT them means the phone never reached us (cable/pairing). */
-    {
-        static int info_calls;
-        LOG_INFO(LOG_MODULE, "/info #%d session=%p qualifier=%p out=%p",
-                 ++info_calls, session, qualifier, info);
-    }
-
-    /* Advertise only when every primitive required by the self-contained 111
-     * receiver resolves.  A partial advert would make iOS demand a contract the
-     * stock receiver cannot satisfy and can restart the whole CarPlay session. */
-    if (info && cf_init() == 1 && env_on("ALTSCREEN_HANDLE_ALT") &&
+    if (cf_init() == 1 && env_on("ALTSCREEN_HANDLE_ALT") &&
         alt_resolve() == 1 && advert_ready_for_session(session)) {
         /* Hold the retained contract stable until BOTH extendedFeatures and
          * display arrays have been inserted. Teardown may otherwise clear the
@@ -823,9 +806,7 @@ void *AirPlayCopyServerInfo(void *session, void *qualifier, void *macAddr, void 
         if (!g_advert_ready || g_advert_session != session ||
             !g_advert_displays || !g_advert_features) {
             pthread_mutex_unlock(&advert_lock);
-            spa_augment_server_info(session, info);
-            spa_capture_server_info(info);
-            return info;
+            return;
         }
         /* MU1316 dio's serverCopyPropertyCallback returns its startInNightMode
          * byte for the stock top-level /info key "nightMode" (dio 0x160484-
@@ -906,9 +887,6 @@ void *AirPlayCopyServerInfo(void *session, void *qualifier, void *macAddr, void 
         }
         pthread_mutex_unlock(&advert_lock);
     }
-    spa_augment_server_info(session, info);
-    spa_capture_server_info(info);
-    return info;
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -1814,53 +1792,30 @@ static void *alt_find_111(void *request)
     return alt_find_stream_type(request, ALT_STREAM_TYPE);
 }
 
-/* interpose the SETUP entry: real handles 100/101/110 (skips 111), then we
- * bring up 111 ourselves and append its desc to the response. */
-typedef int (*fn_sess_setup_t)(void *, void *, void **, int);
-int AirPlayReceiverSessionSetup(void *session, void *request, void **respOut, int a4)
+/* SETUP seam (module def's on_setup_response).  The framework owns
+ * AirPlayReceiverSessionSetup; stock handles 100/101/110 and skips 111, then we
+ * negotiate altScreen and bring 111 up ourselves, appending its descriptor to
+ * the response. */
+static void alt_on_setup_response(hook_setup_ctx_t *setup)
 {
-    static fn_sess_setup_t real;
-    uint32_t setupSequence = __sync_add_and_fetch(&g_setup_sequence_counter, 1);
-    uint64_t setupBeginMs = alt_now_ms();
-    uint64_t realDoneMs;
+    void *session = setup->session;
+    void *request = setup->request;
+    void *respOut = setup->response;
+    uint32_t setupSequence = setup->sequence;
+    int ret = setup->result;
     int setupIsControl = 0;
     int setupHas111 = 0;
-    int setupHas103 = 0;
-    int setup103Rc = 0;
-    if (!real) real = (fn_sess_setup_t)dlsym(RTLD_NEXT, "AirPlayReceiverSessionSetup");
-    if (!real) { LOG_ERROR(LOG_MODULE, "SessionSetup real==NULL"); return -6740; }
 
     if (alt_enabled < 0) alt_enabled = env_on("ALTSCREEN_HANDLE_ALT") ? 1 : 0;
-    /* Stock AirPlay 210 rejects type 103 before producing a response. Inspect/capture it first so the
-     * receiver implementation can be based on the phone's real request rather than a guessed schema. */
-    setupHas103 = spa_inspect_setup_request(request, setupSequence);
-    int ret = real(session, request, respOut, a4);
-    realDoneMs = alt_now_ms();
-    spa_note_setup_result(setupHas103, ret, (respOut && *respOut) ? *respOut : NULL, setupSequence);
-
-    /* Stock 210 logs type 103 as unsupported but returns success with an empty dictionary. Supply
-     * the receiver-owned dataPort before the response leaves this interposer; otherwise iOS closes
-     * the complete screen session as soon as playback starts. */
-    if (setupHas103 && ret == 0 && session && request && respOut && *respOut) {
-        setup103Rc = spa_setup_buffered_receiver(session, request, *respOut, setupSequence);
-        if (setup103Rc != 0) ret = setup103Rc;
-    }
 
     /* Any successful RTSP SETUP proves USB+iAP2 reached the AirPlay control
      * plane. The first one is control SETUP in the real protocol, but marking
      * here also remains fail-safe if optional altScreen CF symbol resolution is
      * unavailable: that must never be misclassified as a pre-RTSP USB wedge. */
-    if (ret == 0 && session && request && respOut && *respOut)
+    if (ret == 0 && session && request && respOut)
         mark_control_setup_seen();
 
-    /* type-103 buffered-media negotiation probe (audio module). Deliberately OUTSIDE the alt_enabled
-     * gate: it has nothing to do with altScreen and must work with the altScreen advert off. It gates
-     * itself on its own marker file and is a no-op without it. This wrapper is simply the single
-     * owner of the AirPlayReceiverSessionSetup interposition. */
-    if (ret == 0 && session && request && respOut && *respOut)
-        spa_augment_setup_response(session, request, *respOut, setupSequence);
-
-    if (alt_enabled && ret == 0 && respOut && *respOut && session && request && alt_resolve() == 1) {
+    if (alt_enabled && ret == 0 && respOut && session && request && alt_resolve() == 1) {
         /* NEGOTIATION — the REAL altScreen gate (VERIFIED against iOS 26.6 AirPlaySender/CarKit disasm):
          * The feature exchange is ASYMMETRIC — the phone proposes in the control-SETUP *request* under
          * "features", but reads the NEGOTIATED set from the SETUP *response* under **"enabledFeatures"**
@@ -1884,7 +1839,7 @@ int AirPlayReceiverSessionSetup(void *session, void *request, void **respOut, in
             int featureEnabled = 0;
             void *kEnab = cf_str(0, "enabledFeatures", CFENC_UTF8);
             if (kEnab) {
-                void *cur  = cf_getval(*respOut, kEnab);            /* receiver's existing accepted set (usually NULL on 210) */
+                void *cur  = cf_getval(respOut, kEnab);            /* receiver's existing accepted set (usually NULL on 210) */
                 long  curN = (cur && cf_arrcount) ? cf_arrcount(cur) : -1;
                 void *neg  = cf_arrm(0, 0, arr_cb);
                 if (neg) {
@@ -1906,7 +1861,7 @@ int AirPlayReceiverSessionSetup(void *session, void *request, void **respOut, in
                         else negOk = 0;
                     }
                     if (negOk) {
-                        cf_dictset(*respOut, kEnab, neg); /* existing + contracts implemented by this hook */
+                        cf_dictset(respOut, kEnab, neg); /* existing + contracts implemented by this hook */
                         featureEnabled = 1;
                         LOG_INFO(LOG_MODULE,
                                  "control SETUP: response enabledFeatures merged (existing count=%ld) + altScreen + viewAreas",
@@ -1930,7 +1885,7 @@ int AirPlayReceiverSessionSetup(void *session, void *request, void **respOut, in
         if (altDesc) {
             setupHas111 = 1;
             LOG_INFO(LOG_MODULE, "SETUP: 111 stream offered — bringing up altScreen");
-            int arc = alt_setup(session, altDesc, *respOut);
+            int arc = alt_setup(session, altDesc, respOut);
             LOG_INFO(LOG_MODULE, "SETUP: alt_setup returned %d", arc);
             if (arc != 0) ret = arc;  /* never return HTTP success without a usable 111 dataPort */
         } else {
@@ -1938,38 +1893,26 @@ int AirPlayReceiverSessionSetup(void *session, void *request, void **respOut, in
         }
     } else if (alt_enabled && ret == 0) {
         LOG_INFO(LOG_MODULE, "SETUP: alt gated off in interpose (resp=%p session=%p resolve=%d)",
-                 (respOut ? *respOut : (void*)0), session, alt_resolve());
+                 respOut, session, alt_resolve());
     }
-    if (request && respOut && *respOut)
-        spa_capture_setup_response(request, *respOut, setupSequence);
-    {
-        uint64_t setupDoneMs = alt_now_ms();
-        unsigned long realMs = (setupBeginMs && realDoneMs && realDoneMs >= setupBeginMs) ?
-                               (unsigned long)(realDoneMs - setupBeginMs) : 0;
-        unsigned long hookMs = (realDoneMs && setupDoneMs && setupDoneMs >= realDoneMs) ?
-                               (unsigned long)(setupDoneMs - realDoneMs) : 0;
-        LOG_INFO(LOG_MODULE,
-                 "STARTUP SETUP timing control=%d alt111=%d audio103=%d real=%lums hook=%lums total=%lums ret=%d",
-                 setupIsControl, setupHas111, setupHas103, realMs, hookMs,
-                 (unsigned long)(realMs + hookMs), ret);
-    }
-    return ret;
+    LOG_INFO(LOG_MODULE, "SETUP seq=%u control=%d alt111=%d ret=%d",
+             (unsigned)setupSequence, setupIsControl, setupHas111, ret);
+    setup->result = ret;
 }
 
-/* Interpose teardown. A non-NULL request is a per-stream teardown; only stop
- * our receiver when that request actually contains type 111. Stock also calls
- * this entry for unrelated streams while altScreen remains live. A NULL request
- * tears down the full session, so the receiver must be joined before stock frees
- * the session fields used by the thread. */
-typedef int (*fn_sess_teardown_t)(void *, void *, int, int);
-int AirPlayReceiverSessionTearDown(void *session, void *request, int reason, int a4)
+/* TearDown seam (module def's on_teardown).  A non-NULL request is a per-stream
+ * teardown; only stop our receiver when that request actually contains type
+ * 111 — stock also calls this entry for unrelated streams while altScreen
+ * remains live.  A NULL request tears down the full session, so the receiver
+ * must be joined before stock frees the session fields used by the thread.
+ * The framework runs every module here before calling stock, for exactly that
+ * reason. */
+static void alt_on_teardown(void *session, void *request, int reason)
 {
-    static fn_sess_teardown_t real;
     int requestHas111 = 0;
     int tearDownAlt = (request == NULL);
     int reapRc = 0;
     int setupTimedOut = 0;
-    if (!real) real = (fn_sess_teardown_t)dlsym(RTLD_NEXT, "AirPlayReceiverSessionTearDown");
 
     if (request && alt_resolve() == 1) {
         requestHas111 = (alt_find_111(request) != NULL);
@@ -1977,13 +1920,9 @@ int AirPlayReceiverSessionTearDown(void *session, void *request, int reason, int
     }
 
     LOG_INFO(LOG_MODULE,
-             "AirPlayReceiverSessionTearDown session=%p request=%p reason=%d a4=%d alt111=%d action=%s",
-             session, request, reason, a4, requestHas111,
+             "altScreen teardown session=%p request=%p reason=%d alt111=%d action=%s",
+             session, request, reason, requestHas111,
              tearDownAlt ? "stop-alt" : "preserve-alt");
-
-    /* Independent from altScreen and safe even after the runtime marker is removed: a live
-     * type-103 socket still belongs to this session and must be stopped before stock frees it. */
-    spa_teardown_buffered_receiver(session, request);
 
     altslot_t *slot;
     pthread_mutex_lock(&alt_lock);
@@ -2054,14 +1993,6 @@ int AirPlayReceiverSessionTearDown(void *session, void *request, int reason, int
                  session);
     }
 
-    /* NOTE: deliberately NO hook_notify_disconnect() here.  A full AirPlay teardown is
-     * an AirPlay-layer event; the iAP2 link (and thus RGD component_valid) can survive it.
-     * Firing HOOK_EVENT_DISCONNECT would rgd_clear_state()->component_valid=false, and only
-     * a new iAP2 Identify restores it — so an AirPlay restart without a re-Identify would
-     * strand RGI dead until a physical reconnect.  The authoritative per-session RGD reset
-     * stays on IAP2_MSG_IDENTIFY_START (hook_framework.c handle_state_messages). */
-    if (!real) return reason;
-    return real(session, request, reason, a4);
 }
 
 /* MUST match the cluster display uuid advertised in build_cluster_dict() (#1b). */
@@ -2659,7 +2590,7 @@ static void uictx_on_cmd(uint16_t type, uint8_t flags, const uint8_t *payload, u
     alt_ship(0, "changeUIContext", p);   /* Java → current session */
 }
 
-void altscreen_init(void)
+static void altscreen_init(void)
 {
     bus_on(CMD_ALT_ZOOM, zoom_on_cmd, NULL);
     bus_on(CMD_ALT_ZONE, zone_on_cmd, NULL);
@@ -2667,8 +2598,26 @@ void altscreen_init(void)
     bus_on(CMD_ALT_UICTX, uictx_on_cmd, NULL);
     LOG_INFO(LOG_MODULE, "AltScreen injector loaded (control negotiation + self-contained stream 111; cluster ZOOM/ZONE/APPEARANCE/UICTX registered; NIGHT mirrored from stock /info + SetNightMode)");
 }
-void altscreen_shutdown(void)
+
+static void altscreen_shutdown(void)
 {
     alt_command_worker_shutdown();
     altav_shutdown();
 }
+
+/* altScreen lives entirely on the AirPlay side: it negotiates the feature in
+ * the SETUP response, publishes the two-display contract in /info, and owns the
+ * type-111 receiver that TearDown must stop.  It reads no iAP2 message.
+ * AirPlayReceiverSessionSetNightMode stays interposed here — it has exactly one
+ * consumer, so it needs no framework seam. */
+const hook_module_def_t altscreen_module_def = {
+    .name = "altscreen",
+    .priority = HOOK_PRIORITY_NORMAL,
+    .on_init = altscreen_init,
+    .on_shutdown = altscreen_shutdown,
+    .airplay = {
+        .on_setup_response = alt_on_setup_response,
+        .on_server_info = alt_on_server_info,
+        .on_teardown = alt_on_teardown
+    }
+};

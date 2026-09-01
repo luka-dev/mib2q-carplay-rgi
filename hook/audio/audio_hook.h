@@ -31,6 +31,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "../framework/hook_framework.h"
+
 /* Default AirPlayAudioFormat bit: 5.1 PCM (PCM/48000/16/5.1), from the iOS 27 descriptor table.
  * Which bit we actually advertise is RUNTIME-TUNABLE (see SPA_TUNE_PATH) so alternatives can be tried
  * without a reboot — the env var only reads once at supervisor start. See AUDIO.md sections 9-10, 24. */
@@ -86,46 +88,13 @@
 #define SPA_BUFFERED_AAC_MASK        0x400000   /* bit 22: AAC-LC/44100/2; valid type-103 codec family */
 #define SPA_BUFFERED_BROAD_MASK      0x1440800  /* old failed probe: mixed bits 11,18,22,24 */
 
-/* Called by the framework at the first real Cinemo boundary.  Deliberately not
- * an ELF constructor: QNX must finish loading dio_manager before the hook may
- * inspect files, initialise logging or create a writer thread. */
-void audio_init(void);
-
-/* Called by the single SessionSetup interposer before stock libairplay. When the request contains
- * stream type 103 and SPATIAL_103 is enabled, records the stream fields and writes the complete
- * request to a mode-0600 binary plist in /tmp. Returns 1 iff a type-103 request was found. */
-int spa_inspect_setup_request(void *request, uint32_t sequence);
-
-/* Records what stock 210 did with the type-103 request and, if it unexpectedly returned a response,
- * writes that response beside the request. No-op when has103 == 0. */
-void spa_note_setup_result(int has103, int result, void *response, uint32_t sequence);
-
-/* Supply the missing legacy type-103 SETUP response, including AirPlaySender's mandatory
- * audioBufferSize field, install the fingerprint-locked SETMAGICCOOKIE request wrapper, and start a
- * bounded APAP capture/drain receiver before the response is returned. Codec decode/render is a
- * later stage. Returns an OSStatus-style error. */
-int spa_setup_buffered_receiver(void *session, void *request, void *response, uint32_t sequence);
-
-/* Stop the capture receiver for a per-stream type-103 or full-session teardown. */
-void spa_teardown_buffered_receiver(void *session, void *request);
-
-/* Captures the control request, then adds "mainBuffered" to enabledFeatures only in feature/both
- * mode AND only when the phone proposed that exact token. Preserves whatever the receiver already
- * accepted. Called from the altscreen SessionSetup wrapper (the single owner of that interposition),
- * but deliberately not gated on altScreen. Returns 1 iff it added the token. */
-int spa_augment_setup_response(void *session, void *request, void *response, uint32_t sequence);
-
-/* Capture the final control response after every hook has finished merging enabledFeatures. */
-void spa_capture_setup_response(void *request, void *response, uint32_t sequence);
-
-/* Fulfil AirPlaySender's strict feature/info pairing: after this session negotiated mainBuffered,
- * add the required top-level /info `mainBufferedInfo` dictionary. It stays empty by default. The
- * probe-only SPATIAL_103_DCX=1 adds a real CFBoolean `DCXEnabled=true` so the Dolby/DCX branch can
- * be A/B tested without rebuilding; SPATIAL_103=0 still disables all type-103 mutations. */
-void spa_augment_server_info(void *session, void *info);
-
-/* Capture the final /info dictionary after all stock and hook-owned mutations. */
-void spa_capture_server_info(void *info);
+/* Registered by the framework from hook_module_table (hook/main.c).  The
+ * AirPlay SETUP/ /info/TearDown work this module needs is declared as seam
+ * callbacks in that def and implemented statically in audio_hook.c; nothing
+ * outside this module calls into the type-103 negotiation any more.  on_init is
+ * lazy, never an ELF constructor: QNX must finish loading dio_manager before
+ * the hook may inspect files, initialise logging or create a writer thread. */
+extern const hook_module_def_t audio_module_def;
 
 /* ---- the decoded type-103 PCM6 rail (stage j) -----------------------------------------------
  * While a type-103 stream is carrying APAC media the receiver decodes it, reorders it into the

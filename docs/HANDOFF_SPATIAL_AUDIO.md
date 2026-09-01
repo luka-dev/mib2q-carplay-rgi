@@ -52,9 +52,12 @@ the six-packet end-to-end APAP/decode test, downmix/drop/reorder tests, and the 
 shared objects. Both QNX objects have no emutls, exceptions, RTTI, STL/libstdc++ dependency, or
 hook-owned ELF constructor. The main hook has no `DT_NEEDED` entry for `libcarplay_apac.so`.
 The verified local artifacts are `libcarplay_hook.so` SHA-256
-`2ae75989818f2d8415d3563a5c5893c090b55d6fb20b09d5a99af6aea1a5d670` (427,047 bytes)
+`1312072cb931192fde3dc0027168f77e8a3eaac66cb1da4aab0268a348da3a29` (427,891 bytes)
 and `libcarplay_apac.so` SHA-256
 `5e72de6f61d4ebafcfad9934033f7a396e813a25ec5e9d8c8a52b9d9cd0d5814` (678,871 bytes).
+The hook hash moved when the AirPlay SETUP/`/info`/TearDown interpositions were
+lifted out of the altScreen module into `hook/framework/airplay_seams.c`; the
+codec object is byte-identical, and the type-103 logic itself is unchanged.
 
 The only remaining proof is live hardware validation: deploy both shared objects and the startup
 file, start with `spatial-5.1`, confirm the `audio sink:` counters and audible PCM6, then test

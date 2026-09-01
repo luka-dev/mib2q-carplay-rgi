@@ -435,8 +435,10 @@ static uint16_t rgd_msg_filter[] = {
     IAP2_MSG_ROUTE_GUIDANCE_LANE
 };
 
-/* Module definition */
-static hook_module_def_t rgd_module_def = {
+/* Module definition.  Route guidance is pure iAP2: it wants Identify, three
+ * 0x52xx messages, the session state edges and outgoing transport frames, and
+ * nothing from the AirPlay side at all. */
+const hook_module_def_t rgd_module_def = {
     .name = "routeguidance",
     .priority = HOOK_PRIORITY_NORMAL,
     .msg_filter = rgd_msg_filter,
@@ -445,6 +447,7 @@ static hook_module_def_t rgd_module_def = {
     .on_identify = rgd_identify_patcher,
     .on_state = rgd_state_handler,
     .on_transport_send = rgd_transport_handler,
+    .on_shutdown = rgd_shutdown,
     .user_data = NULL
 };
 
@@ -1620,15 +1623,6 @@ static void rgd_state_handler(hook_context_t* ctx, int event, void* event_data) 
 }
 
 /* Public API */
-static bool g_rgd_module_registered = false;
-
-void rgd_init(void) {
-    /* Called from the framework's first real Cinemo boundary. */
-    if (!g_rgd_module_registered) {
-        hook_framework_register_module(&rgd_module_def);
-        g_rgd_module_registered = true;
-    }
-}
 
 /* Periodic tick (1 Hz from bus timer thread).
  *

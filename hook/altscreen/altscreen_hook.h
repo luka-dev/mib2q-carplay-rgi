@@ -11,7 +11,9 @@
 #ifndef CARPLAY_ALTSCREEN_HOOK_H
 #define CARPLAY_ALTSCREEN_HOOK_H
 
-void altscreen_init(void);
-void altscreen_shutdown(void);
+#include "../framework/hook_framework.h"
+
+/* Registered by the framework from hook_module_table (hook/main.c). */
+extern const hook_module_def_t altscreen_module_def;
 
 #endif /* CARPLAY_ALTSCREEN_HOOK_H */

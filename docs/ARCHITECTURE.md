@@ -22,10 +22,37 @@ a replacement `dio_manager` has already taken ownership.
 
 ## Native hook
 
-`hook/main.c` initializes the production framework bus, iAP2 helpers, route-guidance parser,
-cover-art path and altScreen receiver. The stream-111 H.264 path is self-contained in the hook and
-forwards Annex-B access units to `altscreen_render` on port 19831. Stock `libairplay.so` remains
-installed and loaded.
+`hook/main.c` is the module table and nothing else. The framework registers what stands there, in
+that order, at the first real Cinemo boundary, and tears it down in reverse from its destructor;
+there is no ELF constructor. The stream-111 H.264 path is self-contained in the hook and forwards
+Annex-B access units to `altscreen_render` on port 19831. Stock `libairplay.so` remains installed
+and loaded.
+
+Every module declares what it needs in one `hook_module_def_t` next to its own code:
+
+| field | seam |
+| --- | --- |
+| `on_init` / `on_shutdown` | framework lifecycle, reverse-order teardown |
+| `on_identify` | patch the outgoing Identify |
+| `on_message` + `msg_filter` | incoming iAP2 messages |
+| `on_state`, `on_transport_send` | session edges, outgoing transport frames |
+| `on_transport_recv` / `_reset` | raw `NmeTransport::Recv` bytes, Identify boundary |
+| `airplay.*` | AirPlay SETUP request/response, `/info`, TearDown |
+
+The three AirPlay entry points wanted by more than one module — `AirPlayReceiverSessionSetup`,
+`AirPlayCopyServerInfo`, `AirPlayReceiverSessionTearDown` — are interposed once, by the framework
+(`hook/framework/airplay_seams.c`), and fan out to subscribers in module priority order. An ELF
+symbol has one definition per object, so before this the altScreen module owned all three and
+called the audio module's type-103 negotiation on its behalf. Single-consumer interpositions
+(`SetNightMode`, `AirPlayReceiverServerPlatformCopyProperty`, the QSA writers) stay in the module
+that uses them.
+
+| module | priority | seams used |
+| --- | --- | --- |
+| `routeguidance` | normal | Identify, 0x52xx messages, state, transport send |
+| `coverart` | low | transport recv + reset |
+| `altscreen` | normal | AirPlay setup response, `/info`, teardown |
+| `audio` | high | AirPlay setup request/response (+final), `/info` (+final), teardown |
 
 ## Java patch
 

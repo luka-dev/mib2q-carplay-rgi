@@ -21,6 +21,41 @@ typedef void (*hook_state_callback_t)(hook_context_t* ctx, int event, void* even
 /* Called when transport sends a frame - for injection triggers */
 typedef void (*hook_transport_callback_t)(hook_context_t* ctx, uint16_t msgid);
 
+/* ---- AirPlay seams -------------------------------------------------------
+ * Three stock libairplay entry points are needed by more than one module, and
+ * an ELF symbol can only have one definition in this shared object.  The
+ * framework owns them (framework/airplay_seams.c) and modules subscribe here
+ * instead of one module interposing on another's behalf.
+ *
+ * Callbacks run in module priority order.  `result` starts as stock's return
+ * value; a module that cannot fulfil its part of the negotiation writes a
+ * non-zero error into it, and later callbacks see it — the same threading the
+ * single hand-written wrapper used to do with a local `ret`. */
+typedef struct {
+    void* session;
+    void* request;
+    void* response;         /* NULL in the request phase */
+    uint32_t sequence;      /* per-SETUP, assigned before stock runs */
+    int result;
+} hook_setup_ctx_t;
+
+typedef void (*hook_setup_callback_t)(hook_setup_ctx_t* setup);
+typedef void (*hook_server_info_callback_t)(void* session, void* info);
+typedef void (*hook_teardown_callback_t)(void* session, void* request, int reason);
+
+typedef struct {
+    /* AirPlayReceiverSessionSetup: before stock, after stock, and after every
+     * module has finished merging the response (for capture/diagnostics). */
+    hook_setup_callback_t on_setup_request;
+    hook_setup_callback_t on_setup_response;
+    hook_setup_callback_t on_setup_response_final;
+    /* AirPlayCopyServerInfo: the /info dictionary stock just built. */
+    hook_server_info_callback_t on_server_info;
+    hook_server_info_callback_t on_server_info_final;
+    /* AirPlayReceiverSessionTearDown, before stock frees the session. */
+    hook_teardown_callback_t on_teardown;
+} hook_airplay_seams_t;
+
 /* State Events */
 #define HOOK_EVENT_INIT             1
 #define HOOK_EVENT_SHUTDOWN         2
@@ -30,7 +65,11 @@ typedef void (*hook_transport_callback_t)(hook_context_t* ctx, uint16_t msgid);
 #define HOOK_EVENT_IDENTIFY_END     7
 #define HOOK_EVENT_AUTH_DONE        8
 
-/* Hook Module Definition */
+/* Hook Module Definition.
+ *
+ * Everything a module needs from the framework is declared here; the framework
+ * knows no module by name.  Lifecycle, the iAP2 message/Identify/state seams,
+ * the raw transport taps and the AirPlay seams all come from this one table. */
 typedef struct {
     const char* name;
     hook_priority_t priority;
@@ -40,8 +79,28 @@ typedef struct {
     hook_identify_patcher_t on_identify;
     hook_state_callback_t on_state;
     hook_transport_callback_t on_transport_send;  /* Called on outgoing transport frames */
+
+    /* Lifecycle.  on_init runs once from the framework's first real Cinemo
+     * boundary (never an ELF constructor); on_shutdown runs from the framework
+     * destructor in reverse table order, before the injection worker and bus
+     * are stopped. */
+    void (*on_init)(void);
+    void (*on_shutdown)(void);
+
+    /* Raw NmeTransport::Recv link bytes, and a session-boundary reset fired on
+     * a new Identify so partial reassembly cannot cross sessions. */
+    hook_transport_recv_sink_t on_transport_recv;
+    hook_transport_recv_reset_t on_transport_recv_reset;
+
+    hook_airplay_seams_t airplay;
+
     void* user_data;
 } hook_module_def_t;
+
+/* The shipping module set, in initialisation order (hook/main.c).  This is the
+ * only place a module is named; adding one is a line there plus its own def. */
+extern const hook_module_def_t* const hook_module_table[];
+extern const size_t hook_module_table_count;
 
 /* Stock iAP2 passthrough context.  The link-session id is captured from the
  * most recent stock NmeTransport::Send.  The live ICinemoIAP handle is owned
@@ -85,6 +144,14 @@ void hook_framework_shutdown(void);
 hook_result_t hook_framework_register_module(const hook_module_def_t* def);
 hook_result_t hook_framework_unregister_module(const char* name);
 hook_context_t* hook_framework_get_context(void);
+
+/* Registered modules in priority order, for the framework-owned seam files.
+ * The list is built once under pthread_once before any seam can fire, so these
+ * are read without the framework lock — same rule the message dispatcher and
+ * state notifier already follow.  Returns NULL past the end or for a module
+ * that has been deactivated. */
+size_t hook_framework_module_count(void);
+const hook_module_def_t* hook_framework_module_at(size_t index);
 
 /* Injection API - queues an additional semantic frame for the dedicated
  * ICinemoIAP::SendIAP2 worker; it never replaces a stock semantic message,

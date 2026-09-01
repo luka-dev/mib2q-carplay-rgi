@@ -682,7 +682,7 @@ static void spa_log_feature_array(const char *label, const void *array)
     }
 }
 
-int spa_inspect_setup_request(void *request, uint32_t sequence)
+static int spa_inspect_setup_request(void *request, uint32_t sequence)
 {
     void *desc;
     if (!request || !spa_probe103_mode() || !spa_cf_resolve()) return 0;
@@ -706,7 +706,7 @@ int spa_inspect_setup_request(void *request, uint32_t sequence)
     return 1;
 }
 
-void spa_note_setup_result(int has103, int result, void *response, uint32_t sequence)
+static void spa_note_setup_result(int has103, int result, void *response, uint32_t sequence)
 {
     if (!has103) return;
     if (result == 0) {
@@ -2916,7 +2916,7 @@ static void spa103_stop_receiver(void *session, int anySession)
     spa103_render_stop();
 }
 
-int spa_setup_buffered_receiver(void *session, void *request, void *response,
+static int spa_setup_buffered_receiver(void *session, void *request, void *response,
                                 uint32_t sequence)
 {
     const spa103_private_profile_t *profile = spa103_private_profile();
@@ -3070,7 +3070,7 @@ fail:
     return err;
 }
 
-void spa_teardown_buffered_receiver(void *session, void *request)
+static void spa_teardown_buffered_receiver(void *session, void *request)
 {
     int requestHas103 = 0;
     int tearDown103 = request == 0;
@@ -3194,7 +3194,7 @@ void *AirPlayReceiverServerPlatformCopyProperty(void *server, int sessionID, con
  * the negotiated set from `enabledFeatures` in the RESPONSE — established by the altscreen work).
  * Seed from whatever the receiver already accepted and add exactly one token; never echo the phone's
  * proposal, since each string flips a sibling endpoint flag. */
-int spa_augment_setup_response(void *session, void *request, void *response, uint32_t sequence)
+static int spa_augment_setup_response(void *session, void *request, void *response, uint32_t sequence)
 {
     void *kReq, *proposed, *kEnab, *cur, *neg;
     long curN, i;
@@ -3260,7 +3260,7 @@ int spa_augment_setup_response(void *session, void *request, void *response, uin
     return added;
 }
 
-void spa_augment_server_info(void *session, void *info)
+static void spa_augment_server_info(void *session, void *info)
 {
     void *key, *dict;
     int dcx = 0;
@@ -3302,7 +3302,7 @@ void spa_augment_server_info(void *session, void *info)
     if (key) cfa_rel(key);
 }
 
-void spa_capture_setup_response(void *request, void *response, uint32_t sequence)
+static void spa_capture_setup_response(void *request, void *response, uint32_t sequence)
 {
     void *kReq, *proposed, *kEnab, *enabled;
 
@@ -3321,7 +3321,7 @@ void spa_capture_setup_response(void *request, void *response, uint32_t sequence
     spa_log_feature_array("final control response enabledFeatures", enabled);
 }
 
-void spa_capture_server_info(void *info)
+static void spa_capture_server_info(void *info)
 {
     static volatile uint32_t info_sequence;
     char path[128];
@@ -3428,7 +3428,83 @@ int AirPlayReceiverSessionControl(void *session, uint32_t flags, const void *com
 
 /* ---- module init ---------------------------------------------------------------------------- */
 
-void audio_init(void)
+/* Same test spa_inspect_setup_request() makes, re-run on the response side.
+ * The two callbacks used to share a local `setupHas103` inside altscreen's
+ * wrapper; re-deriving it from the request is one CF lookup and keeps the seam
+ * callbacks free of state that would have to be keyed by sequence. */
+static int spa_request_has_103(void *request)
+{
+    if (!request || !spa_probe103_mode() || !spa_cf_resolve()) return 0;
+    return spa_find_setup_stream(request, SPA_103_STREAM_TYPE) != 0;
+}
+
+/* ---- AirPlay seam callbacks (declared in audio_module_def) ------------------
+ * Deliberately NOT gated on altScreen: type-103 buffered media has nothing to
+ * do with the cluster stream and must work with the altScreen advert off.  Each
+ * of these gates itself on its own policy variables and is a no-op without
+ * them. */
+
+/* Stock AirPlay 210 rejects type 103 before producing a response.  Inspect and
+ * capture the phone's request first, so the receiver is built from what it
+ * really sends rather than a guessed schema. */
+static void spa_on_setup_request(hook_setup_ctx_t *setup)
+{
+    spa_inspect_setup_request(setup->request, setup->sequence);
+}
+
+static void spa_on_setup_response(hook_setup_ctx_t *setup)
+{
+    int has103 = spa_request_has_103(setup->request);
+
+    spa_note_setup_result(has103, setup->result, setup->response, setup->sequence);
+    if (!setup->session || !setup->request || !setup->response) return;
+    if (setup->result != 0) return;
+
+    /* Stock 210 logs type 103 as unsupported but returns success with an empty
+     * dictionary.  Supply the receiver-owned dataPort before the response
+     * leaves the seam; otherwise iOS closes the complete screen session as soon
+     * as playback starts. */
+    if (has103) {
+        int rc = spa_setup_buffered_receiver(setup->session, setup->request,
+                                             setup->response, setup->sequence);
+        if (rc != 0) { setup->result = rc; return; }
+    }
+    spa_augment_setup_response(setup->session, setup->request, setup->response,
+                               setup->sequence);
+}
+
+/* After every module has merged its own keys into the response. */
+static void spa_on_setup_response_final(hook_setup_ctx_t *setup)
+{
+    if (setup->request && setup->response)
+        spa_capture_setup_response(setup->request, setup->response, setup->sequence);
+}
+
+/* spa_capture_server_info() predates the seam and takes only the dictionary. */
+static void spa_capture_server_info_seam(void *session, void *info)
+{
+    (void)session;
+    spa_capture_server_info(info);
+}
+
+static void spa_on_teardown(void *session, void *request, int reason)
+{
+    (void)reason;
+    /* A live type-103 socket belongs to this session and must be stopped before
+     * stock frees it, independent of altScreen and of the runtime marker. */
+    spa_teardown_buffered_receiver(session, request);
+}
+
+/* Stop the type-103 receiver at process teardown.  Without this the receiver
+ * thread outlived every stock object it reads, because its only stop path was
+ * a per-session AirPlay TearDown that a crashing or killed session never
+ * delivers. */
+static void audio_shutdown(void)
+{
+    spa103_stop_receiver(0, 1);
+}
+
+static void audio_init(void)
 {
     const spa_audio_config_t *config = spa_audio_config();
     unsigned bit, channels;
@@ -3448,3 +3524,24 @@ void audio_init(void)
         LOG_INFO(LOG_MODULE,
                  "audio policy OFF (AUDIO_SPATIAL=0, AUDIO_SPATIAL_ATMOS=0) -> stock stereo");
 }
+
+/* Audio is an AirPlay-side module: it needs the SETUP request before stock sees
+ * it, the response after stock and again after every other module has merged
+ * into it, the finished /info dictionary, and the session teardown.  It reads
+ * no iAP2 message.  AirPlayReceiverServerPlatformCopyProperty and the QSA
+ * writers stay interposed in this file — each has exactly one consumer, so they
+ * need no framework seam. */
+const hook_module_def_t audio_module_def = {
+    .name = "audio",
+    .priority = HOOK_PRIORITY_HIGH,
+    .on_init = audio_init,
+    .on_shutdown = audio_shutdown,
+    .airplay = {
+        .on_setup_request = spa_on_setup_request,
+        .on_setup_response = spa_on_setup_response,
+        .on_setup_response_final = spa_on_setup_response_final,
+        .on_server_info = spa_augment_server_info,
+        .on_server_info_final = spa_capture_server_info_seam,
+        .on_teardown = spa_on_teardown
+    }
+};

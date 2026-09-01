@@ -24,10 +24,10 @@
 #define LANE_DIR_SHARP_LEFT     0x21
 #define LANE_DIR_SHARP_RIGHT    0x30
 
-/* Initialize route guidance module at the framework's first real Cinemo call. */
-void rgd_init(void);
+/* Registered by the framework from hook_module_table (hook/main.c). */
+extern const hook_module_def_t rgd_module_def;
 
-/* Shutdown route guidance module */
+/* Shutdown route guidance module (module def's on_shutdown) */
 void rgd_shutdown(void);
 
 /* Force send 0x5200 request */
