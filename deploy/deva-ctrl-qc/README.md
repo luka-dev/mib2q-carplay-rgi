@@ -55,6 +55,28 @@ Regenerate: `./patch_deva.sh [path-to-stock-deva-ctrl-qc.so]` — idempotent, ve
 `idx4 == mpl5_dio_ent`, refuses anything but stock/already-patched values, and cross-checks the result
 against the live `mpl1_int_ent` record. Output: `deva-ctrl-qc.so` here.
 
+## The two `min` fields are settled — do not "finish" them (verified 2026-09-01)
+
+The record now differs from the proven `mpl1_int_ent` in exactly two fields, and every other one
+matches byte for byte (`flags 0x2b3`, `format 0xc`, `rates 0x80`, both rates `0xbb80`, `max_buffer`,
+`max_frags`). Both remaining differences are correct and must stay:
+
+* **`min_fragsize` 0x1800.** One static value cannot serve both modes, because the timer is a fixed
+  16 ms: at 2 voices `0x1800` is 768 frames (48 kHz, right) and `0x4800` would be 2304 (3x fast);
+  at 6 voices `0x1800` is 256 frames (3x slow) and `0x4800` is 768 (right). That is precisely why
+  the fix is the conditional helper on `channel->voices == 6` rather than a table edit. Writing
+  `0x4800` into the table would break stereo.
+* **`min_voices` 2.** Its only consumer is `deva_mib2_channel_map`, confirmed by xref: the function
+  is never called directly, it is installed as a device op in
+  `deva_pcm_and_mixer_device_init_platform_mib`, and it acts on just three commands —
+  `QUERY_CHANNEL_MAP`, `GET_CHANNEL_MAP`, `SET_CHANNEL_MAP`. Its switch reads
+  `aLe1[48*i + 268]`, and `0xA7C4C + 268 = 0xA7D58` is `caps_base + 20`, i.e. this field. Playback
+  never reaches it; the playback map is hardcoded in `deva_csd_start_csd_session_playback` and was
+  independently confirmed correct (`01 02 03 06 08 09`). Raising it to 6 would land in the ADO caps
+  as a *lower bound* and make every stereo open fail.
+
+So the caps table is finished. A remaining audio fault is not in this record.
+
 ## What our patch does NOT disturb (checked, so it stays checked)
 - **The mixer.** `deva_setup_mixer`/`build_playback_mixer` @0x3C248 switches on `mix_config[6]`, which
   `deva_pcm_and_mixer_device_init_platform_mib` hardcodes to **1** — the card mixer is a single
