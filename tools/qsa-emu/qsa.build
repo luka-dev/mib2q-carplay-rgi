@@ -32,7 +32,7 @@
     waitfor /dev/audio_service 5
 
     display_msg ">>> io-audio -d qc -vvvvv"
-    CACHE_NOP=1 io-audio -vvvvv -d qc platform_id=mib2,log_level=high
+    LD_PRELOAD=/proc/boot/libcsdIpcClient.so CACHE_NOP=1 io-audio -vvvvv -d qc platform_id=mib2,log_level=high
     waitfor /dev/snd 15
     display_msg ">>> wait for a real device node, not just the directory"
     waitfor /dev/snd/pcmPreferredp 25

@@ -19,6 +19,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/mman.h>
+#include <dlfcn.h>
 
 /* The firmware is built with -fstack-protector and resolves these from its own
  * libc; the QEMU BSP's libc.so.3 does not export them, so deva-ctrl-qc.so fails
@@ -111,6 +112,61 @@ int32_t csd_close(int32_t handle)
  * the whole reason the stub owns the memory: the driver fills these for the DSP,
  * so whatever is here is what the hardware would have played.  One shot -- the
  * question is the layout of the samples, not their evolution. */
+/* deva_mib2_aquire allocates its DMA ring with a plain malloc(10 * frag_size) --
+ * 184320 bytes at the six-voice fragment -- and the timer walks that, not the
+ * CSD pools, which is why the pools stay empty.  This stub already lives in
+ * io-audio's process, so interposing malloc is enough to find that ring and read
+ * it: whatever the driver leaves there IS the audio, whether or not it ever
+ * reaches a DSP.  Pass-through; the only addition is remembering the pointer. */
+static struct { void *base; size_t size; } g_dma[8];
+static int g_dma_count;
+
+void *malloc(size_t size)
+{
+    static void *(*real)(size_t);
+    void *p;
+    if (!real) real = dlsym(RTLD_NEXT, "malloc");
+    p = real(size);
+    /* Ten fragments of six-voice S32, or of any plausible fragment: record the
+     * shape rather than one hard-coded number. */
+    if (p && size >= 60000 && size <= 400000 && (size % 10) == 0 &&
+        g_dma_count < (int)(sizeof(g_dma) / sizeof(g_dma[0]))) {
+        g_dma[g_dma_count].base = p;
+        g_dma[g_dma_count].size = size;
+        if (g_trace)
+            fprintf(g_trace, "DMA candidate %d: %u bytes at %p\n",
+                    g_dma_count, (unsigned)size, p);
+        g_dma_count++;
+    }
+    return p;
+}
+
+static void csd_dma_summary(void)
+{
+    static int calls;
+    static int shown;
+    int i;
+    size_t j;
+    if (shown > 6) return;
+    if ((calls++ % 16) != 0) return;
+    for (i = 0; i < g_dma_count; i++) {
+        const unsigned char *b = (const unsigned char *)g_dma[i].base;
+        size_t nz = 0;
+        for (j = 0; j < g_dma[i].size; j++) if (b[j]) nz++;
+        fprintf(g_trace, "DMA %d: %u/%u non-zero", i, (unsigned)nz,
+                (unsigned)g_dma[i].size);
+        if (nz) {
+            shown++;
+            fprintf(g_trace, "  first 32 bytes:");
+            for (j = 0; j < 32; j++) {
+                if ((j & 3) == 0) fprintf(g_trace, " ");
+                fprintf(g_trace, "%02x", b[j]);
+            }
+        }
+        fprintf(g_trace, "\n");
+    }
+}
+
 /* Summarise every pool on each call: "all zero" is itself the answer to whether
  * the playback path uses this memory, and silence in the log cannot distinguish
  * "not dumped" from "nothing there". */
@@ -161,6 +217,7 @@ int32_t csd_ioctl(int32_t handle, uint32_t cmd, void *arg, uint32_t len)
 {
     csd_dump_pools_once();
     csd_pool_summary();
+    csd_dma_summary();
     /* Two words of the payload are safe once len says they exist, and they are
      * what identifies a buffer submission: the descriptor csdUserCallBack is
      * handed back is a {addr, len} pair. */
@@ -231,9 +288,11 @@ int32_t csd_write(int32_t handle, const void *buf, uint32_t len)
     return (int32_t)len;
 }
 
+static void csd_dma_summary(void);
+
 int32_t csd_read(int32_t handle, void *buf, uint32_t len)
 {
     if (buf && len) memset(buf, 0, len);
-    fprintf(g_trace, "csd_read(h=%d len=%u) -> 0\n", handle, (unsigned)len);
+    csd_dma_summary();
     return 0;
 }

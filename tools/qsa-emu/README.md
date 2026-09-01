@@ -231,14 +231,33 @@ Two corrections worth keeping, both cheap to get wrong again:
   `csd_read() returned [36] bytes, when expecting 0!` and fails the whole start
   with rc 0x24. Returning zero is what makes `session_csd_start_capture` succeed.
 
+## The DMA ring, located
+
+Preloading the stub into io-audio itself -- not merely letting it be pulled in as
+the driver's dependency, where its symbols do not preempt libc -- makes a `malloc`
+interposer effective, and the ring falls out immediately:
+
+    DMA candidate 0: 184320 bytes    (10 x 18432, the six-voice fragment)
+    DMA candidate 1:  61440 bytes    (10 x 6144, the stereo one)
+
+184320 is exactly `10 * frag_size` from `deva_mib2_aquire`, so this is the buffer
+the play timer walks. The stub now owns a pointer to the audio.
+
+What is still missing is a moment to read it. The snapshot hangs off `csd_read`,
+and `csd_read` is not called while playback runs -- the same shape as the earlier
+problem with `csd_ioctl`. Something that ticks during playback has to trigger it,
+and it cannot be a thread inside io-audio: that was tried and destabilised the
+guest.
+
 ## What is left, and what it is worth
 
-Carrying audio the rest of the way means finding what consumes deva's own DMA
-buffer on this platform -- the pools are demonstrably not it -- and that is real
-reverse engineering, not another stub field.
+The remaining step is small and specific: find a call the driver makes on every
+timer tick and hang the snapshot there. Everything else is in place -- the ring is
+located, the stub owns it, and the summary code is written.
 
 Worth weighing against the fact that the question this harness was built to answer
 is already answered: QSA's six-voice widening is correct byte for byte, and with
 it every layer from the APAC decoder down to the bytes handed to the driver is
-accounted for. Going further turns this into a capture rig for the layers *below*
-the driver, which is a different job from the one that was needed.
+accounted for. Reading the ring would extend the harness into a capture rig for
+the layers *below* the driver, which is a different job from the one that was
+needed.
