@@ -8,6 +8,7 @@
 /build/libcarplay_apac.so
 /build/apple_apac_oracle
 /build/qsa_play
+/build/qsa-emu/
 /local_logs/
 /log/
 tools/loader_preview/loader_preview
