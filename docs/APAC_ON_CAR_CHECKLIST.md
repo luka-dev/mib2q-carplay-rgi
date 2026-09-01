@@ -1,13 +1,15 @@
 # APAC on the car: what to check, and what each failure looks like
 
-> Updated source status: the decoder now ships separately as `libcarplay_apac.so`, and the hook
-> drains its PCM ring into the existing `mpl5_dio_ent` QSA handle through the stock
-> `snd_pcm_plugin_params/write` cadence. This implementation is bench-verified but has not yet been
-> exercised on the vehicle. Older capture-only wording below is retained where it explains failure
-> signatures.
+> Current source status: the decoder ships separately as `libcarplay_apac.so`, and the hook drains
+> its PCM ring into the existing `mpl5_dio_ent` QSA handle through the stock
+> `snd_pcm_plugin_params/setup/write` cadence. The index-65 decode chain is bench-verified; the QSA
+> bridge and the complete index-66 chain still require live vehicle validation.
 
-The decoder is finished and proven on the bench. Nothing in this document has been done on the
-vehicle yet, because deployment is the owner's call and the head unit is never restarted from here.
+The index-65 decoder is finished and proven on the bench. Index 66 is accepted as eight-channel
+APAC, validates the known 5.1.2 layout and reaches the implemented `downmix`, `drop`, or
+`passthrough` stage, but no complete real index-66 APAP capture has yet been differential-tested.
+Nothing in this document has been done on the vehicle yet, because deployment is the owner's call
+and the head unit is never restarted from here.
 
 What "proven on the bench" means, precisely, so the on-car result can be judged against it:
 
@@ -25,9 +27,12 @@ What "proven on the bench" means, precisely, so the on-car result can be judged 
 
 ## Before deploying
 
-Deployment replaces `/mnt/app/root/hooks/libcarplay_hook.so` and `libcarplay_apac.so`, then restarts `dio_manager`. That is
-`scripts/deploy_unit.sh`, and it is the owner's to run. Java is not touched, so no full reboot is
-involved — but a `dio_manager` restart still drops any active CarPlay session.
+`scripts/deploy_unit.sh` replaces `/mnt/app/root/hooks/libcarplay_hook.so` and
+`libcarplay_apac.so`, then restarts `dio_manager`. It does not deploy `carplay_startup.sh`; the unit
+must already have the current startup file with `AUDIO_SPATIAL`, `AUDIO_SPATIAL_ATMOS`,
+`AUDIO_SPATIAL_ATMOS_MODE`, and `AUDIO_SPATIAL_CODEC_LIB`. Java is not touched, so no full reboot
+is involved — but a `dio_manager` restart still drops any active CarPlay session. TCP 6032 must
+already be admitted by all four persistent PF profiles.
 
 The profile is set by `scripts/set_spatial_profile.sh`, which edits the three exact
 `AUDIO_SPATIAL*` policy exports. Start with `spatial-5.1`; `fallback-stereo` disables both requests.
@@ -36,27 +41,31 @@ A profile change applies to the next `dio_manager` generation; no reboot.
 ## The first question: does it decode at all
 
 Grep the slog for `buffer103: APAC decoder up`. On a healthy start it carries the geometry the
-cookie declared:
+cookie declared. Index 65 must report six channels; index 66 must report eight:
 
 ```
 buffer103: APAC decoder up id=<cookie> 48000 Hz 6 ch 1024 frames/packet
+buffer103: APAC decoder up id=<cookie> 48000 Hz 8 ch 1024 frames/packet
 ```
 
 If that line never appears, the render state says why, and each state is a different problem:
 
 | state | meaning | where to look |
 | --- | --- | --- |
-| `IDLE` | type 103 never became active | the profile, and whether iOS selected index 65 at all |
-| `WAITING` | key in hand, no magic cookie yet | `SETMAGICCOOKIE` handling; the stream may have torn down first |
-| `NO_KEY` | SETUP carried no usable `shk` | the SETUP descriptor path, not the decoder |
-| `UNSUPPORTED_FORMAT` | an index this rail cannot carry | expected for anything but 65 today |
-| `UNSUPPORTED_LAYOUT` | cookie geometry/tag does not match the requested 5.1 or 5.1.2 contract | inspect the cookie before adding a mapping |
-| `COOKIE_FAILED` | the cookie would not configure a decoder | compare the cookie against the bench one |
-| `NO_MEMORY` | allocation failed inside `dio_manager` | size, not correctness |
+| `idle` | type 103 never became active | the profile, private AirPlay profile, and whether iOS selected index 65 or 66 |
+| `waiting-for-cookie` | key in hand, no usable magic cookie yet | `SETMAGICCOOKIE` handling; the stream may have torn down first |
+| `no-key` | SETUP carried no usable `shk` | the SETUP descriptor path, not the decoder |
+| `unsupported-format` | this rail received an index other than 65 or 66 | advertisement/selection policy |
+| `unsupported-layout` | cookie geometry/tag does not match the selected 5.1 or 5.1.2 contract | inspect the cookie before adding a mapping |
+| `cookie-failed` | the cookie would not configure a decoder | compare the cookie against the bench one |
+| `no-memory` | allocation failed inside `dio_manager` | allocation size and available process memory |
+| `decoder-unavailable` | the optional codec could not be loaded or rejected ABI v1 | deployed path, permissions, loader diagnostics, and codec build |
 
 For index 66 the hook accepts only CoreAudio tag `0x00c20008`, whose defined order is
 `L R C LFE Ls Rs Ltm Rtm`. Any other eight-channel cookie remains a deliberate refusal: it must be
-captured and mapped explicitly rather than guessed.
+captured and mapped explicitly rather than guessed. `downmix` folds `Ltm/Rtm` into `Ls/Rs` at
+-6 dB, `drop` discards them, and `passthrough` is forbidden until both the HU PCM path and amplifier
+really accept eight channels.
 
 ## The second question: does it sound right
 
@@ -75,21 +84,46 @@ Correct decoding and correct routing are different failures and they present dif
 * **Silence with the decoder up** — the ring is filling but nothing drains it, i.e. the DIO5 side,
   not the codec.
 
+## The third question: does QSA drain the ring
+
+The decoder-up line proves only APAC -> PCM. The existing Audi output handle must also be captured,
+widened, and written successfully. Expect these lines in order for the first index-65 run:
+
+```
+audio sink: captured mpl5_dio_ent playback handle=<ptr>
+audio sink: params source=2ch target=6ch format=<S16LE> result=0 why=0
+audio sink: setup actual=6ch/<bytes>-byte fragment -> stock=2ch/<bytes>-byte fragment
+audio sink: writes=<n> buffered=<n> underrunFrames=<n> source=2ch target=6ch ringRead=<n>/<n>
+```
+
+`buffered` must increase after the decoder enters `running`, and `ringRead` must become non-zero.
+An occasional startup underrun is diagnostic; an `underrunFrames` counter that continuously races
+up means the producer, timing, or sink cadence is not stable. If the decoder is running but no
+`audio sink: captured` line appears, the remaining fault is the QSA handle/name or call seam rather
+than APAC.
+
 ## What the bench could not answer
 
 1. **Real-time headroom on the actual silicon.** The stream is 46.9 packets per second of
-   six-channel 48 kHz, and the decoder runs inside `dio_manager` alongside everything else. Any
-   figure produced under emulation is a bound with assumptions attached, not a measurement of a
-   Krait. The honest test is the car.
+   six- or eight-channel 48 kHz, and the decoder runs inside `dio_manager` alongside everything
+   else. Any figure produced under emulation is a bound with assumptions attached, not a
+   measurement of a Krait. The honest test is the car.
 2. **Behaviour across a pause and resume.** An Audio Synchronization Packet is the only legal entry
    point into a running stream, so it is also the only legal resume point after a `FLUSHBUFFERED`.
    The whole captured stream is ASPs, which is why this matters and why it was ported rather than
    treated as a formality — but a real pause/resume cycle has never been driven.
 3. **A long session.** The capture is 84.8 seconds. Nothing has run for an hour.
-4. **Anything the content never did.** BWE synthesis is not ported and refuses; the LRVQ frame mode
-   is ported and wired but the capture never enters it; a non-joint channel pair, a non-empty
-   channel remap and more than one codec config are all implemented and none is exercised. A
-   stream that uses any of them is new territory.
+4. **The complete real index-66 path.** Cookie/layout validation and PCM8 -> PCM6 helpers are tested,
+   but a real eight-channel APAP corpus has not been decoded and compared with an Apple/Pioneer
+   oracle end to end.
+5. **Anything the captured 5.1 content never did.** BWE synthesis and LRVQ are now ported and wired,
+   but the live index-65 capture enters neither active mode. A non-joint channel pair, a non-empty
+   channel remap and more than one codec config are also implemented but not exercised by that
+   capture. A stream that uses any of them is new territory until it gains a differential fixture.
+6. **Exact render timeline behaviour.** The hook acknowledges and stores rate/anchor/network-time
+   controls, while PCM is currently drained FIFO at the stock type-100 QSA cadence. Hardware must
+   prove that this is sufficient; persistent start offset or drift requires anchor-aware prebuffer
+   and scheduling rather than codec changes.
 
 ## If it goes wrong
 
