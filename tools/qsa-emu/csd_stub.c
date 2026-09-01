@@ -141,6 +141,47 @@ void *malloc(size_t size)
     return p;
 }
 
+/* The trigger problem, solved by the copy itself.  Nothing the driver calls per
+ * tick reaches this library -- csd_ioctl and csd_read both go quiet once the
+ * timer takes over -- but the timer's whole job is to move audio into the ring,
+ * and it does that with memcpy.  Filtering on a destination inside the ring we
+ * already located makes this fire exactly when there is something to see, and
+ * costs a couple of pointer compares on calls that are not it.
+ *
+ * A thread would have been the obvious alternative and is not available: one
+ * inside io-audio destabilised the guest. */
+static int spa_in_dma(const void *d, size_t n)
+{
+    int i;
+    for (i = 0; i < g_dma_count; i++) {
+        const unsigned char *b = (const unsigned char *)g_dma[i].base;
+        const unsigned char *p = (const unsigned char *)d;
+        if (p >= b && p + n <= b + g_dma[i].size) return i + 1;
+    }
+    return 0;
+}
+
+void *memcpy(void *dst, const void *src, size_t n)
+{
+    static void *(*real)(void *, const void *, size_t);
+    static int shown;
+    int which;
+    if (!real) real = dlsym(RTLD_NEXT, "memcpy");
+    which = (g_dma_count && n >= 64) ? spa_in_dma(dst, n) : 0;
+    if (which && shown < 4) {
+        const unsigned char *b = (const unsigned char *)src;
+        size_t j;
+        shown++;
+        fprintf(g_trace, "RING%d <- %u bytes:", which - 1, (unsigned)n);
+        for (j = 0; j < 32 && j < n; j++) {
+            if ((j & 3) == 0) fprintf(g_trace, " ");
+            fprintf(g_trace, "%02x", b[j]);
+        }
+        fprintf(g_trace, "\n");
+    }
+    return real(dst, src, n);
+}
+
 static void csd_dma_summary(void)
 {
     static int calls;

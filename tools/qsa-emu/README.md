@@ -231,7 +231,57 @@ Two corrections worth keeping, both cheap to get wrong again:
   `csd_read() returned [36] bytes, when expecting 0!` and fails the whole start
   with rc 0x24. Returning zero is what makes `session_csd_start_capture` succeed.
 
+## Where to look: the driver dumps audio itself
+
+`session_deva_timer_thread` @0x6E85C is the tick handler, and it says what the
+timer does with each fragment:
+
+```c
+switch (session_type) {              /* timer + 328 */
+  case 1: session_void_stream_buffer(...);          /* discards it */
+  case 2: session_csd_stream_buffer(...);           /* sends it to the DSP */
+  case 4: session_loopback_deva_stream_buffer(...);
+}
+deva_timer_data_dumps(timer, dma_base + cursor, frag_size);
+dma_interrupt(...);
+```
+
+That third call is a **capture point built into the driver**. `deva_timer_data_dumps`
+@`deva_data_dump.c` writes the fragment straight to a file, and
+`deva_timer_create_data_dump_files` names it:
+
+```c
+snprintf(s, 256, "%s%s_%d.bin", "/var/log/", timer_name, counter);
+open(s, O_WRONLY|O_CREAT|O_TRUNC, 0644);
+```
+
+so a run produces `/var/log/deva_timer_play_mpl5_dio_ent_0.bin` — the raw audio,
+exactly as the timer hands it on, at the moment it hands it on.
+
+The driver's own usage text names the switch:
+
+    - data_dump_path=path              Path on target for the data dump.
+    # io-audio -d qc default_device=six_channel_speakerp,log_level=high,data_dump_path=/var/log/
+
+Setting it is necessary but not sufficient. The dump is gated three ways:
+
+    if (!*(BYTE*)(timer + 336) || *(DWORD*)(timer + 328) != 2 || !*(DWORD*)(timer + 332))
+        return 0;
+
+a per-timer enable flag, a session type of exactly 2 (CSD), and a non-null
+session pointer. `csd_enable_data_dumps` and `deva_data_dump_ctrl` exist, so the
+flag has its own runtime control that still has to be found. In the harness the
+path is accepted and nothing is written, which means one of the other two gates
+is closed — most likely the session type, and that would also explain the empty
+pools and the absent CSD traffic.
+
+**This matters more on the car than here.** There the session really is a CSD one
+and the audio is real, so enabling this dump captures what the driver sends to the
+DSP — a measurement point below everything the hook can see, and one we did not
+know existed.
+
 ## The DMA ring, located
+
 
 Preloading the stub into io-audio itself -- not merely letting it be pulled in as
 the driver's dependency, where its symbols do not preempt libc -- makes a `malloc`

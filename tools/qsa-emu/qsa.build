@@ -32,7 +32,7 @@
     waitfor /dev/audio_service 5
 
     display_msg ">>> io-audio -d qc -vvvvv"
-    LD_PRELOAD=/proc/boot/libcsdIpcClient.so CACHE_NOP=1 io-audio -vvvvv -d qc platform_id=mib2,log_level=high
+    LD_PRELOAD=/proc/boot/libcsdIpcClient.so CACHE_NOP=1 io-audio -vvvvv -d qc platform_id=mib2,log_level=high,default_device=six_channel_speakerp,data_dump_path=/var/log/
     waitfor /dev/snd 15
     display_msg ">>> wait for a real device node, not just the directory"
     waitfor /dev/snd/pcmPreferredp 25
@@ -54,6 +54,7 @@
 [type=link] /usr/lib/ldqnx.so.2=/proc/boot/libc.so.3
 [type=link] /dev/console=/dev/ser1
 [type=link] /tmp=/dev/shmem
+[type=link] /var/log=/dev/shmem
 
 # --- boot + base runtime (QEMU virt BSP) ---
 /proc/boot/libc.so.3=BSP/libc.so.3
