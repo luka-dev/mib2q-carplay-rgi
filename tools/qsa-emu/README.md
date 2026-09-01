@@ -32,26 +32,54 @@ extracted copy lost its ELF header to dumpifs and mkifs cannot identify it.
 
 ## Where it got to
 
-| | |
+The whole stack runs. `io-audio` stays up as a resource manager, `deva-ctrl-qc.so`
+initialises against the stub, and the driver creates all 27 PCM devices —
+including `mpl5_dio_ent`, the CarPlay one:
+
+    mpl1_int_ent mpl3_mirror_lnk mpl4_sdis_a2ls mpl5_dio_ent mpl6_gal_ent
+    mpl7_bcl_ent ann1_int_nav ... sse ent1 mic1 ... sse_bundle_1
+
+`/tmp/csd_trace.log` records the conversation the driver believes it is having
+with the DSP:
+
+    csd_init
+    csd_query_driver_version -> 0x10000
+    csd_open(0x5 0 0 0x58) -> 256
+    csd_open(0xc 0xff978 0x28 0x2) -> 257
+    csd_ioctl(h=257 cmd=0x11410 len=88)
+    csd_ioctl(h=257 cmd=0x11425 len=8) ...
+
+What it took, in order, each found by reading the guest's own slog:
+
+| symptom | cause |
 |---|---|
-| guest boots, script runs | yes |
-| `io-audio` runs as a resource manager | yes, needs `CACHE_NOP=1` |
-| `deva-ctrl-qc.so` loads | yes, once the stub also exports `__stack_chk_guard`/`__stack_chk_fail` and `rtpd_init` |
-| `/dev/audio_service` | `devstub`, borrowed from the dio harness — deva blocks on it before mounting a card |
-| CSD init through the stub | `deva_csd_init: LEAVE (rc = 0x0)` — playback and capture init both succeed |
-| MIB platform selected | `deva_init_platform_mib: ENTER` with `platform_id=mib2` — this is the caps table holding `mpl5_dio_ent` |
-| capture probe records calls | `/tmp/csd_trace.log` gets `csd_init`, `csd_query_driver_version` |
-| `/dev/snd` appears | **not yet** |
+| `Unable to start "io-audio" (2)` | the firmware was unpacked without `+x` and mkifs copies the host mode |
+| `Failed to initialize cache library` | needs `CACHE_NOP=1`, the same workaround the dio harness uses |
+| `unknown symbol: __stack_chk_guard` | firmware built with stack protector; the BSP libc does not export it, so the stub does |
+| `Unresolved symbol "rtpd_init"` | lazily bound Harman platform symbol; stubbed |
+| blocked in `Resource_BlockWait` | deva waits for `/dev/audio_service` before it will mount a card — `devstub` answers it |
+| driver logged version FAILED | `csd_query_driver_version()` takes NO arguments and returns the version; recovered from `csd_log_driver_version` @0x28ba8 |
+| crash inside `csd_open` | the stub printed argument 1 as a string and it is not one — never dereference a parameter whose type has not been recovered |
 
-## The blocker
+## What it has already established
 
-io-audio exits right after `deva_init_platform_mib: csd_init() SUCCEEDED`, and the
-trace shows why the stub is not good enough yet:
+The driver states its own stream geometry, which no log on the car exposed:
 
-    csd_query_driver_version(out=64 len=268763137)
+    session_csd_setup: pcm format => sample_rate=48000, channels=6,
+                       bit_per_sample=24, sign=1, interleave=1
+    setStreamFormatPcmMultichannel: num_ch=<6>, bits_per_sample=<24> ... SUCCEEDED
 
-Those arguments are nonsense, so the stub's signature does not match the real
-one. deva almost certainly gates initialisation on the version it reads back.
-Recovering the true prototypes — from the call sites in the IDA database, which
-is already open on this binary — is the next step; every other CSD entry point
-will need the same treatment before the card mounts.
+So the caps advertise `format 0xc` = `SND_PCM_SFMT_S32_LE`, a 32-bit container,
+while the DSP is told the samples carry **24 significant bits**. Whether QSA's
+S16->S32 widening leaves them where the DSP expects them is exactly the open
+question, and it is now answerable here rather than by ear in a moving car.
+
+## Next
+
+A client inside the guest that opens `mpl5_dio_ent` at six voices and writes the
+captured PCM, with the hook's two taps recording both sides of the conversion.
+Then the same run at two voices — the configuration that works on the car — and
+diff. `tools/qsa_play.c` is the client, and it still needs the sequence the
+RetroArch QNX driver uses: `snd_pcm_plugin_set_disable(PLUGIN_DISABLE_MMAP)`,
+`snd_pcm_channel_info` to read the device's own geometry, then
+`snd_pcm_channel_params`.

@@ -66,18 +66,22 @@ int32_t csd_deinit(void)
     return 0;
 }
 
-int32_t csd_query_driver_version(void *out, uint32_t len)
+/* Recovered from csd_log_driver_version @0x28ba8: no arguments, and the version
+ * IS the return value -- zero is the failure path the driver logs as FAILED. */
+int32_t csd_query_driver_version(void)
 {
-    fprintf(g_trace, "csd_query_driver_version(out=%p len=%u)\n", out, (unsigned)len);
-    if (out && len >= 4) *(uint32_t *)out = 0x00010000;
-    return 0;
+    fprintf(g_trace, "csd_query_driver_version -> 0x10000\n");
+    return 0x00010000;
 }
 
-int32_t csd_open(const char *name, uint32_t flags, uint32_t a3, uint32_t a4)
+/* Never dereference an argument whose type has not been recovered from a call
+ * site: printing csd_open's first parameter as a string crashed the driver,
+ * because it is not one.  Scalars only. */
+int32_t csd_open(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4)
 {
     int32_t h = g_next_handle++;
-    fprintf(g_trace, "csd_open(name=%s flags=%#x %#x %#x) -> %d\n",
-            name ? name : "(null)", (unsigned)flags, (unsigned)a3, (unsigned)a4, h);
+    fprintf(g_trace, "csd_open(%#x %#x %#x %#x) -> %d\n",
+            (unsigned)a1, (unsigned)a2, (unsigned)a3, (unsigned)a4, h);
     return h;
 }
 
@@ -92,27 +96,21 @@ int32_t csd_close(int32_t handle)
  * that is where a wrong voice count or channel map would be visible. */
 int32_t csd_ioctl(int32_t handle, uint32_t cmd, void *arg, uint32_t len)
 {
-    fprintf(g_trace, "csd_ioctl(h=%d cmd=%#x arg=%p len=%u)", handle, (unsigned)cmd, arg, (unsigned)len);
-    if (arg && len) {
-        uint32_t i, n = len < 32 ? len : 32;
-        fprintf(g_trace, " [");
-        for (i = 0; i < n; i++) fprintf(g_trace, "%02x ", ((unsigned char *)arg)[i]);
-        fprintf(g_trace, "]");
-    }
-    fprintf(g_trace, "\n");
+    /* Log the shape, not the contents: `len` is only trustworthy once the real
+     * prototype is known, and a wrong length here reads unmapped memory. */
+    fprintf(g_trace, "csd_ioctl(h=%d cmd=%#x arg=%p len=%u)\n",
+            handle, (unsigned)cmd, arg, (unsigned)len);
     return 0;
 }
 
 int32_t csd_write(int32_t handle, const void *buf, uint32_t len)
 {
-    fprintf(g_trace, "csd_write(h=%d len=%u)\n", handle, (unsigned)len);
-    if (g_pcm && buf && len) fwrite(buf, 1, len, g_pcm);
+    fprintf(g_trace, "csd_write(h=%d buf=%p len=%u)\n", handle, buf, (unsigned)len);
     return (int32_t)len;
 }
 
 int32_t csd_read(int32_t handle, void *buf, uint32_t len)
 {
-    fprintf(g_trace, "csd_read(h=%d len=%u)\n", handle, (unsigned)len);
-    if (buf && len) memset(buf, 0, len);
+    fprintf(g_trace, "csd_read(h=%d buf=%p len=%u)\n", handle, buf, (unsigned)len);
     return (int32_t)len;
 }
