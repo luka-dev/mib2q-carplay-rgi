@@ -88,16 +88,6 @@ Our CarPlay map is plane 99, a full 1440x542 window (`altscreen_render/screen_eg
 `EP_DISPLAYABLE_ID 99`); it is not the stock map window and must not be translated either. The
 content shift lives inside the advertised safe area in `hook/altscreen/altscreen_hook.c`.
 
-## Tuning knobs
-
-Rebuilding the jar costs a full unit reboot, so the numbers are adjustable in place:
-
-- `/tmp/cluster_geom.cfg` - absolute overrides for anchors/crops plus `stage = auto|popup|intube`.
-  Re-read within one 250 ms reconcile tick. Absent file = pure stock layout. See
-  `ClusterGeomOverride`.
-- `touch /mnt/app/carplay_crop_outline` (optionally containing `x,y,w,h`) - `maneuver_render`
-  draws a red border around the rect being cropped, so the panel can be aligned by eye.
-
 ## Measure it on the unit
 
 `/tmp/carplay_java.log`, one line per distinct decision - every value that can change the picture

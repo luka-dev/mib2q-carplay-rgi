@@ -70,13 +70,6 @@ void render_set_perspective(int enabled);
 void render_set_debug_grid(int on);
 void render_debug_grid(void);
 
-/* Crop-outline overlay (see render.c): the rectangle the cluster layout crops out of the
- * 328x180 canvas.  Runtime-enabled, no debug build needed. */
-int  render_crop_outline_enabled(void);
-void render_set_crop_outline(int on);
-void render_set_crop_rect(int x, int y, int w, int h);
-void render_crop_outline(void);
-
 /* Set camera pan offset in maneuver space (shifts entire scene). */
 void render_set_camera_pan(float x, float y);
 

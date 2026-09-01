@@ -1219,56 +1219,6 @@ void render_debug_grid(void) {
 }
 
 
-/* Crop-outline overlay: draws just the rectangle the cluster layout lifts out of this 328x180
- * canvas, so the panel position can be eyeballed on the car without a debug build.
- *   CR_CROP_OUTLINE=1              enable (defaults to the popup rect)
- *   CR_CROP_RECT=x,y,w,h           show a different rect, e.g. Classic in-tube 59,27,210,153
- * Pairs with /tmp/cluster_geom.cfg on the Java side, which moves where that rect lands. */
-static int g_crop_outline = 0;
-static int g_crop_x = CR_POPUP_X, g_crop_y = CR_POPUP_Y;
-static int g_crop_w = CR_POPUP_W, g_crop_h = CR_POPUP_H;
-
-int  render_crop_outline_enabled(void) { return g_crop_outline; }
-void render_set_crop_outline(int on)   { g_crop_outline = on; }
-
-void render_set_crop_rect(int x, int y, int w, int h) {
-    if (w <= 0 || h <= 0) return;
-    g_crop_x = x; g_crop_y = y; g_crop_w = w; g_crop_h = h;
-}
-
-void render_crop_outline(void) {
-    if (!g_crop_outline) return;
-    glDisable(GL_DEPTH_TEST);
-    glUniform1f(g_uni_tex_mode, 0.0f);
-    /* red border at the crop rect */
-    {
-        float content_w = (float)CR_DEFAULT_WIDTH;
-        float content_h = (float)(CR_DEFAULT_HEIGHT - 1);
-        float px0 = (float)g_crop_x / (content_w * 0.5f) - 1.0f;
-        float py0 = 1.0f - (float)g_crop_y / (content_h * 0.5f);
-        float px1 = (float)(g_crop_x + g_crop_w) / (content_w * 0.5f) - 1.0f;
-        float py1 = 1.0f - (float)(g_crop_y + g_crop_h) / (content_h * 0.5f);
-        float t = 0.01f;  /* line thickness */
-
-        glUniform4f(g_uni_color, 1.0f, 0.0f, 0.0f, 0.9f);
-        /* Top */
-        vb_reset();
-        vb_v(px0,py0,0, 0,0,1); vb_v(px1,py0,0, 0,0,1); vb_v(px1,py0-t,0, 0,0,1);
-        vb_v(px0,py0,0, 0,0,1); vb_v(px1,py0-t,0, 0,0,1); vb_v(px0,py0-t,0, 0,0,1);
-        /* Bottom */
-        vb_v(px0,py1+t,0, 0,0,1); vb_v(px1,py1+t,0, 0,0,1); vb_v(px1,py1,0, 0,0,1);
-        vb_v(px0,py1+t,0, 0,0,1); vb_v(px1,py1,0, 0,0,1); vb_v(px0,py1,0, 0,0,1);
-        /* Left */
-        vb_v(px0,py0,0, 0,0,1); vb_v(px0+t,py0,0, 0,0,1); vb_v(px0+t,py1,0, 0,0,1);
-        vb_v(px0,py0,0, 0,0,1); vb_v(px0+t,py1,0, 0,0,1); vb_v(px0,py1,0, 0,0,1);
-        /* Right */
-        vb_v(px1-t,py0,0, 0,0,1); vb_v(px1,py0,0, 0,0,1); vb_v(px1,py1,0, 0,0,1);
-        vb_v(px1-t,py0,0, 0,0,1); vb_v(px1,py1,0, 0,0,1); vb_v(px1-t,py1,0, 0,0,1);
-        vb_flush(1, 0, 0, 0.9f);
-    }
-    glEnable(GL_DEPTH_TEST);
-}
-
 void render_sync_camera(void) {
     glUseProgram(g_program);
     sync_camera_uniforms();

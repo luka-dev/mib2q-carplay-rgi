@@ -494,10 +494,6 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
         contextWriterThread = Thread.currentThread();
         while (true) {
             refreshClusterStyleFromStock("context-reconcile");
-                /* Live geometry tuning: a saved /tmp/cluster_geom.cfg takes effect within one
-                 * reconcile tick, no restart. Absent file = pure stock layout. */
-                if (com.luka.carplay.cluster.ClusterGeomOverride.poll())
-                    com.luka.carplay.cluster.ClusterLayerController.reapply();
             int target; IDisplayManager d; boolean reconcileOnly = false;
             synchronized (LOCK) {
                 while (dm == null) {
