@@ -13,6 +13,8 @@
  * much later than TerminalMode on a cold boot, so this must not have a fixed timeout.
  *
  * Java 1.2 (no generics/autoboxing).
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 package com.luka.carplay.core;
 

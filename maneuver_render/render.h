@@ -1,6 +1,8 @@
 /*
  * OpenGL rendering -- shared between macOS and QNX.
  * Uses GLES2-compatible subset (shaders, no fixed-function).
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
 #ifndef CR_RENDER_H

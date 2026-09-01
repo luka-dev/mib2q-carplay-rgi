@@ -9,6 +9,8 @@
  *     .getDeviceManager()  -> IDeviceManager
  *   IFrameworkAccess.getHmiServiceApp() -> IHMIServiceApp
  *     (the object TMVirtualButtonListener uses: getVirtualButtonModel(...) — our roller).
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 package com.luka.carplay.core;
 

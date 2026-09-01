@@ -16,6 +16,8 @@
  *
  * Payload helpers for the text key:type:value builder are provided so
  * route guidance / cover art publishers can share a compact bus format.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
 #ifndef CARPLAY_BUS_H

@@ -15,6 +15,8 @@
  *
  * Heartbeats from renderer are drained silently so the kernel TCP
  * buffer doesn't fill.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
 #include <stdio.h>

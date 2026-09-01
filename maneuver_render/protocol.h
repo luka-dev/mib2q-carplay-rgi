@@ -3,6 +3,8 @@
  *
  * Fixed 48-byte packets over TCP :19800.
  * External clients send commands; renderer acts autonomously.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
 #ifndef CR_PROTOCOL_H

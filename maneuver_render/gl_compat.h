@@ -4,6 +4,8 @@
  * Includes the correct GL headers for each platform and provides
  * compatibility shims so rendering code works on both OpenGL 2.1
  * (macOS) and GLES2 (QNX).
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
 #ifndef CR_GL_COMPAT_H

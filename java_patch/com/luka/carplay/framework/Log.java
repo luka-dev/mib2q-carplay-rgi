@@ -3,6 +3,8 @@
  * them through the shared HMI slog path, adding boot-time contention and noisy
  * duplicate records.  /tmp/carplay_java.log is bounded and rotated so it stays
  * independently SSH-tailable.  Java 1.4 / Foundation 1.1.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 package com.luka.carplay.framework;
 

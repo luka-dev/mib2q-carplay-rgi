@@ -7,6 +7,8 @@
  * junction_angles[] serves double duty:
  *   ICON_TURN / ICON_APPROACH: side street angles at the junction
  *   ICON_ROUNDABOUT: all road angles around the ring
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
 #ifndef CR_MANEUVER_H

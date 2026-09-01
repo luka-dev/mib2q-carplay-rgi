@@ -17,6 +17,8 @@
  *   3D y  = extrusion height (0=ground, H=top)
  *
  * Uses GLES2-compatible subset (shaders, no fixed-function).
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
 #include <stdio.h>

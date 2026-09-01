@@ -4,6 +4,8 @@
  * Creates a managed displayable (id 98) via the shared cluster_surface primitive
  * (raw screen_create_window + screen_manage_window, no libdisplayinit) and sets up
  * EGL/GLES2 for rendering. Context routing is Java-driven (no dmdt).
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
 #ifdef PLATFORM_QNX

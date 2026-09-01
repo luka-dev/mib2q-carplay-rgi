@@ -1,5 +1,7 @@
 /*
  * CarPlay Hook Framework - iAP2 Protocol Implementation
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
 #include "iap2_protocol.h"

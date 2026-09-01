@@ -2,6 +2,8 @@
  * cluster_surface — managed QNX Screen window for the cluster renderers.
  * See cluster_surface.h.  Uses screen_* directly (link -lscreen).  QNX 6.5
  * ARMv7 gcc: no __thread; plain struct + fprintf.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 #include "cluster_surface.h"
 

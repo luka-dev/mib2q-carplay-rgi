@@ -7,6 +7,8 @@
  * - 0x5202 RouteGuidanceManeuverUpdate
  * - 0x5203 StopRouteGuidanceUpdates
  * - 0x5204 RouteGuidanceLaneGuidanceInformation
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
 #ifndef RGD_TLV_H

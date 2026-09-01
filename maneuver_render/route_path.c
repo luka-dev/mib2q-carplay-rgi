@@ -11,6 +11,8 @@
  * roundabout entry/exit corners stay consistently rounded.
  *
  * 2D (x, y) -> 3D (x, height, z=y).
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
 #include <stdio.h>

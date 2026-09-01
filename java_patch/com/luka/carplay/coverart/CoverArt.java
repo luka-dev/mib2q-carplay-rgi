@@ -4,6 +4,8 @@
  * Subscribes to EVT_COVERART on CarplayBus, pushes to BAP service via a callback.
  * Bus: EVT_COVERART carries text payload "crc:n:<uint>\npath:s:<path>\n"
  * PNG file: /var/app/icab/tmp/37/coverart.png (path echoed in payload for sanity).
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 package com.luka.carplay.coverart;
 

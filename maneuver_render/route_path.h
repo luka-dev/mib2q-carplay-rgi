@@ -7,6 +7,8 @@
  *
  * Coordinates are 2D maneuver space (same as mask rendering).
  * Extrusion maps 2D y -> 3D z, adds 3D y for height.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
 #ifndef CR_ROUTE_PATH_H

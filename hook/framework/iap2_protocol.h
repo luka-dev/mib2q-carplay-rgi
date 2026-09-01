@@ -2,6 +2,8 @@
  * CarPlay Hook Framework - iAP2 Protocol Helpers
  *
  * iAP2 frame parsing, building, and checksum utilities
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
 #ifndef CARPLAY_IAP2_PROTOCOL_H

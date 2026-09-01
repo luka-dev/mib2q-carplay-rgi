@@ -6,6 +6,8 @@
  * - angles are mapped to 16-step direction codes (0..240 step 16)
  * - payload is a byte[] of direction codes (Int8Array-style, one byte per entry)
  *
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 package com.luka.carplay.rgd;
 
