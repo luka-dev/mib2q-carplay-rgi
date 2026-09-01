@@ -26,6 +26,8 @@
  * builder AirPlayReceiverSessionScreen_CopyDisplaysInfo, cluster synthesized with
  * properties:["Instrument Cluster"] + type:111 → iOS-26.1 hasGaugeClusterScreen
  * (gate verified in CarKit CARSessionConfiguration.mm:956 + CARDisplayInfo.mm:409).
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 #include "../framework/common.h"
 #include "../framework/logging.h"

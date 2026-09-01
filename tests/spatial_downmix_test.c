@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 #include "audio/spatial_downmix.h"
 
 #include <assert.h>

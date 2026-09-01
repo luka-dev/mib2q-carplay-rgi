@@ -3,6 +3,8 @@
  *
  * macOS: GLFW + OpenGL 2.1
  * QNX:   libdisplayinit.so + EGL + GLES2
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
 #ifndef CR_PLATFORM_H

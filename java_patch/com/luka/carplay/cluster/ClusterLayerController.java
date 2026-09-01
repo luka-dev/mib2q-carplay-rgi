@@ -18,6 +18,8 @@
  * Sport use different in-tube anchors/crops, and the stock skin switch changes the Layout object at
  * runtime.  We cache primitive values rather than the Layout itself so reapply() remains safe after
  * a context transition.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 package com.luka.carplay.cluster;
 

@@ -19,6 +19,8 @@
  * DisplayManager.switchContext/setUpdateRate.  Single writer => two switches can never race the
  * bounce+settle, and no stale per-session worker can exist.  start()/stop() only publish the
  * desired context; the worker converges the cluster to it.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 package com.luka.carplay.core;
 

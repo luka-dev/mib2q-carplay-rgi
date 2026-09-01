@@ -20,6 +20,8 @@
  *
  * Shared state is protected by a single mutex.  The send queue is a
  * simple ring buffer of heap-allocated frames.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
 #include "bus.h"

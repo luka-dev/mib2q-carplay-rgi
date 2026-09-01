@@ -11,6 +11,8 @@
  *
  * Started always-on from CarPlayApp.startTransport() (boot) — altscreen_render is a framework
  * service that comes up before CarPlay, so the server must already be listening.  Java 1.4.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 package com.luka.carplay.core;
 

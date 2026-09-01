@@ -18,6 +18,8 @@
  * that into the declared order, and it is a separate step on purpose: the two
  * orders were established independently and conflating them is how the channel
  * map went wrong the first time.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 #ifndef APAC_BRIDGE_H
 #define APAC_BRIDGE_H

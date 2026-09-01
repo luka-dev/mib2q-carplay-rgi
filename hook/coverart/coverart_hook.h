@@ -4,6 +4,8 @@
  * Reassembles artwork from the stock Cinemo NmeTransport::Recv stream,
  * decodes JPEG/PNG off the iAP2 receive thread, resizes to 256x256, and
  * notifies Java over the bus.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
 #ifndef COVERART_HOOK_H

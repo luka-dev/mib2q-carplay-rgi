@@ -1,5 +1,7 @@
 /*
  * altctl — control channel to Java/lsd.  See altctl.h.  QNX 6.5 ARMv7 gcc 4.4: no __thread.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 #include "altctl.h"
 #include "protocol.h"

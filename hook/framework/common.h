@@ -1,6 +1,7 @@
 /*
  * CarPlay Hook Framework - Common Types and Utilities
- * Copyright (c) 2024
+ *
+ * Copyright (c) 2024-2026 LuKa (@LuKa_dev)
  */
 
 #ifndef CARPLAY_COMMON_H

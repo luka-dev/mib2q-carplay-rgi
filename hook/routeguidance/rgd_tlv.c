@@ -1,5 +1,7 @@
 /*
  * Route Guidance TLV Parsing and Building Implementation
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
 #include "rgd_tlv.h"

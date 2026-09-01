@@ -12,6 +12,8 @@
  * The action itself is gated by the VC's last confirmed main context.  The
  * stock IMMICombiScreenChangeManager reports MAIN_CONTEXT_NAVIGATION_MAP=20;
  * our private cluster render contexts must not be confused with this tab ID.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 package com.luka.carplay.core;
 

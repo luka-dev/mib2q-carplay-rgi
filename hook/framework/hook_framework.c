@@ -1,5 +1,7 @@
 /*
  * CarPlay Hook Framework - Implementation
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
 /* This file deliberately includes no module header.  Modules reach the

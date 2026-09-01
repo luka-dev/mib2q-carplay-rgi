@@ -7,6 +7,8 @@
  * 256x256, and writes it as a PNG file (+ bus notify).  There is NO libc
  * read()/recv()/open()/close() interposition — cover art no longer touches
  * the process-wide I/O path.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
 #include "../framework/common.h"

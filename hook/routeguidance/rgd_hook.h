@@ -7,6 +7,8 @@
  * - Parses RouteGuidanceUpdate (0x5201), ManeuverUpdate (0x5202),
  *   and LaneGuidanceInformation (0x5204)
  * - Writes only fields present in each packet to the bus (stateless)
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
 #ifndef RGD_HOOK_H

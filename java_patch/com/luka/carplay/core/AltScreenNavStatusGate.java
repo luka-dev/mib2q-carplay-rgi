@@ -2,6 +2,8 @@
  * AltScreenNavStatusGate - installs the single wrapper that prevents stock
  * route-guidance BAP writes from racing CarPlay RGI.  It deliberately does not
  * alter NAVSD availability, initializing state, compass, scale or map status.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 package com.luka.carplay.core;
 

@@ -12,6 +12,8 @@
  * as their own Annex-B message (converted from opcode-1 avcC) before frames.
  *
  * No __thread anywhere (QNX 6.5 ARMv7 gcc 4.4 emutls trap) — globals + mutex.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 #ifndef CARPLAY_ALTSCREEN_AV_H
 #define CARPLAY_ALTSCREEN_AV_H

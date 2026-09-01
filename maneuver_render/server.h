@@ -3,6 +3,8 @@
  *
  * Single client, reconnectable. Accumulates partial reads
  * into complete 48-byte packets.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
 #ifndef CR_SERVER_H

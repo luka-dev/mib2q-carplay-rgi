@@ -11,6 +11,8 @@
  *   dist_maneuver_m:n:<meters>
  *   m0_type:n:<maneuver type>
  *   ...
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 package com.luka.carplay.rgd;
 

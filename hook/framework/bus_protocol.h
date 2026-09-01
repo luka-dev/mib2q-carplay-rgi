@@ -43,6 +43,8 @@
  *     known baseline at connect-time should emit an initial frame at
  *     their module init (see rgd_lazy_init → rgd_clear_state("init") for
  *     the pattern).
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
 #ifndef CARPLAY_BUS_PROTOCOL_H

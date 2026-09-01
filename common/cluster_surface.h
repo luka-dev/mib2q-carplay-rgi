@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 #ifndef CLUSTER_SURFACE_H
 #define CLUSTER_SURFACE_H
 /*

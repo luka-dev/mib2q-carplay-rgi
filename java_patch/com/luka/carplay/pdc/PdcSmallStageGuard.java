@@ -8,6 +8,8 @@
  * path; ordinary AP_METHOD_HMI_DEACTIVATED events remain completely stock.
  *
  * Java 1.2 compatible.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 package com.luka.carplay.pdc;
 

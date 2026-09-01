@@ -24,6 +24,8 @@
  *
  * OFF by default: enabled only when env SPATIAL_5_1 is truthy (value-checked). The 6-voice mixer side
  * (B&O agent) must be ready before arming, else the 6ch open has nowhere to land.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 #ifndef AUDIO_HOOK_H
 #define AUDIO_HOOK_H

@@ -13,6 +13,8 @@
  * hacks needed.
  *
  * POSIX sockets — works on macOS and QNX 6.5.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
 #include <stdio.h>

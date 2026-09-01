@@ -2,6 +2,8 @@
  * Shared startup scene used while the iPhone negotiates its video streams.
  * Integer-only drawing keeps this usable in the QNX 6.5 hook: no libm, no TLS,
  * no allocation and no platform headers.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 #include "carplay_loader.h"
 

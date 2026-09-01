@@ -10,6 +10,8 @@
  *
  * Define ENABLE_LOGGING=1 to enable logging, or ENABLE_LOGGING=0 to disable.
  * When disabled, all logging macros become no-ops with zero overhead.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
 #ifndef CARPLAY_LOGGING_H

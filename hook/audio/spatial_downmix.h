@@ -39,6 +39,8 @@
  * the six-channel case has been measured.  Do not assume the eight-channel
  * stream is "the same plus two heights" until an index-66 capture is measured
  * the same way.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 #ifndef SPATIAL_DOWNMIX_H
 #define SPATIAL_DOWNMIX_H

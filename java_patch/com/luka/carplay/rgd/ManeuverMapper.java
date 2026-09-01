@@ -4,6 +4,8 @@
  * Based on TBT_MAPPING_PLAN.md and mib2-android-auto-vc patterns.
  * Uses correct MU1316 LSD BAP constants.
  *
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 package com.luka.carplay.rgd;
 

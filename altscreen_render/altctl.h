@@ -8,6 +8,8 @@
  *
  * The current video-on state is resent on every (re)connect, so a transient lsd restart or a
  * control link that comes up after the video already started still converges.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 #ifndef ALTSCREEN_ALTCTL_H
 #define ALTSCREEN_ALTCTL_H

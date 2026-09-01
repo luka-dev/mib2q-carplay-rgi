@@ -7,6 +7,8 @@
  *                       whole hook→renderer wire is provable with ffplay).
  *   - sink_omx_qnx.c  : QNX — OMX AVC decode → GL texture → present on the
  *                       instrument-cluster surface (the real target).
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 #ifndef ALTSCREEN_RENDER_SINK_H
 #define ALTSCREEN_RENDER_SINK_H

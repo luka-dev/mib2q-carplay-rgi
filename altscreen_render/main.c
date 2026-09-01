@@ -7,6 +7,8 @@
  * serializes decoder startup/teardown and frame delivery. On disconnect we
  * notify the sink and accept again.
  * POSIX sockets — builds on macOS and QNX 6.5.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 #include "protocol.h"
 #include "frame_io.h"

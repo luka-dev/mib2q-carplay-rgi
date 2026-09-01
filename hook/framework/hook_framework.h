@@ -1,5 +1,7 @@
 /*
  * CarPlay Hook Framework - Main API
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
 #ifndef CARPLAY_HOOK_FRAMEWORK_H

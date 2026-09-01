@@ -7,6 +7,8 @@
  * altscreen_render on 127.0.0.1:19831. No from-source libairplay is loaded or required.
  *
  * QNX: NO __thread (gcc 4.4 emutls trap) — globals + pthread_mutex throughout.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 #ifndef CARPLAY_ALTSCREEN_HOOK_H
 #define CARPLAY_ALTSCREEN_HOOK_H

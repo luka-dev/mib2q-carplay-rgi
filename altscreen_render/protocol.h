@@ -11,6 +11,8 @@
  * payload is raw Annex-B H.264 (00 00 00 01 start codes).  The SPS/PPS header is
  * sent as its own message before the first frame; concatenating every payload in
  * arrival order yields a valid Annex-B elementary stream (feed straight to OMX).
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 #ifndef ALTSCREEN_RENDER_PROTOCOL_H
 #define ALTSCREEN_RENDER_PROTOCOL_H

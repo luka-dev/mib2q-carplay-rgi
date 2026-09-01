@@ -12,6 +12,8 @@
  *        encoder to capture our window for the LVDS stream landing on the
  *        VC's MAP tab.  Native widget process keeps running but is no
  *        longer the source for displayable 20 while we own the cluster.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
 #include <stdio.h>

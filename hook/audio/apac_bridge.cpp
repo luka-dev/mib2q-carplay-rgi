@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // apac_bridge.cpp - the C++ side of the hook's APAC seam.  See apac_bridge.h.
 //
 // Constraints this file works under, all of them from apac_decoder/tools/build_qnx.sh,

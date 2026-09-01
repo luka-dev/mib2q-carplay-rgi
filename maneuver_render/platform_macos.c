@@ -1,5 +1,7 @@
 /*
  * macOS platform implementation -- GLFW + OpenGL 2.1
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
 #ifdef PLATFORM_MACOS

@@ -33,6 +33,8 @@
  * two-finger sample can't arm a dpad emission.
  *
  * Java 1.2 compatible: no generics, no lambdas, no java.util.Timer.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 package com.luka.carplay.cursor;
 

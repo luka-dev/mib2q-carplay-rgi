@@ -1,5 +1,7 @@
 /*
  * Route Guidance Hook Module Implementation
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
 #include "rgd_hook.h"

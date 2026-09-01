@@ -2,6 +2,8 @@
  * altscreen_av — AltScreen H.264 forward (hook side). See altscreen_av.h.
  * Ported from mhi3-altscreen libaltscreen_hook_ultra.c forward path; adapted to
  * MHI2Q (ARM32 QNX), no __thread, lazy-connect to the decoder process.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 #include "../framework/common.h"
 #include "../framework/logging.h"

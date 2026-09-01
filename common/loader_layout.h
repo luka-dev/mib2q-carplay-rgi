@@ -5,6 +5,8 @@
  *
  * Keep all four cells explicit.  Fullscreen is common to both VC presets;
  * compact Sport is left-aligned and compact Classic is the same size centered.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 #ifndef CARPLAY_LOADER_LAYOUT_H
 #define CARPLAY_LOADER_LAYOUT_H

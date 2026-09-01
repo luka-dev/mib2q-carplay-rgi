@@ -5,6 +5,8 @@
  * proven retry-until-ready gate: CombiBAPServiceNavi (and the ClusterService BAP
  * listener it drives) appears a beat after CarPlay activate, so we return false
  * until the service is registered — CarPlayApp.startRetry() calls us again.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 package com.luka.carplay.core;
 

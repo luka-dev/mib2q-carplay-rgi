@@ -2,6 +2,8 @@
  * altscreen_render — framing self-test (host build).
  * Exercises av_read_frame over a socketpair: happy path (incl. empty keep-alive),
  * EOF, and the oversize-length protocol error.  Build+run: `make test && ./test`.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 #include "frame_io.h"
 #include "protocol.h"

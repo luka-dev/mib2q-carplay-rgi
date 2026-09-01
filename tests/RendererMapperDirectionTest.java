@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 import com.luka.carplay.rgd.ManeuverMapper;
 import com.luka.carplay.rgd.RendererMapper;
 

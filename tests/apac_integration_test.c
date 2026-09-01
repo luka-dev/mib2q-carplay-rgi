@@ -17,6 +17,8 @@
  *       -Ihook/audio tests/apac_integration_test.c hook/audio/apap_crypto.c \
  *       hook/audio/spatial_downmix.c hook/audio/apac_bridge.cpp \
  *       apac_decoder/src/*.cpp -o /tmp/apac_integration_test
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 #include "apac_bridge.h"
 #include "apap_crypto.h"

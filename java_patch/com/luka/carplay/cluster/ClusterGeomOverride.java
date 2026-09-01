@@ -19,6 +19,8 @@
  * polls it, so a save takes effect within a quarter second with no restart.
  *
  * Absent file = zero overrides = pure stock layout, which is the production state.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 package com.luka.carplay.cluster;
 

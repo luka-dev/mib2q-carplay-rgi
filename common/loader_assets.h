@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 /* Auto-generated baked loader art (raw RGBA). Apple logo = Apple trademark; personal mod. */
 #ifndef LOADER_ASSETS_H
 #define LOADER_ASSETS_H

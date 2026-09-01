@@ -10,6 +10,8 @@
  *   [u32 MAGIC][u32 seq][u16 type][u8 flags][u8 reserved][u32 len][payload]
  *
  * Java 1.2 (MU1316 lsd): no generics/autoboxing/enhanced-for.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 package com.luka.carplay.bus;
 

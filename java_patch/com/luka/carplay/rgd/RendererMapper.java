@@ -6,6 +6,8 @@
  * Exit angle: signed degrees, positive=right, negative=left.
  *
  * Java 1.2 compatible (no generics, no autoboxing, no enhanced for).
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 package com.luka.carplay.rgd;
 

@@ -24,6 +24,8 @@
  * All methods are non-fatal (swallow exceptions, log only).
  *
  * Java 1.2 compatible (no generics, no autoboxing, no enhanced for).
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 package com.luka.carplay.rgd;
 

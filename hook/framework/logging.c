@@ -1,5 +1,7 @@
 /*
  * CarPlay Hook Framework - Logging Implementation
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
 #include "logging.h"

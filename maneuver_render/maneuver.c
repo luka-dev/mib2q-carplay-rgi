@@ -8,6 +8,8 @@
  * Outline and fill are rendered flat into the same FBO (no blending).
  * render_composite() applies materials and perspective (no subtraction).
  * Route is rendered as direct 3D geometry after composite.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
 #include <stdio.h>

@@ -10,6 +10,8 @@
  *
  * Important: use the exported C wrappers named below.  Do not copy MH2p C++
  * objects or call target-private vtable addresses directly.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 #ifndef CINEMO_AUDIO_CODEC_ABI_H
 #define CINEMO_AUDIO_CODEC_ABI_H

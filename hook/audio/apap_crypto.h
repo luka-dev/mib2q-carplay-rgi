@@ -22,6 +22,8 @@
  *
  * The plaintext of an extension packet is a ULEB128 TLV list terminated by a
  * zero field id; the APAC packet is whatever follows the terminator.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 #ifndef APAP_CRYPTO_H
 #define APAP_CRYPTO_H

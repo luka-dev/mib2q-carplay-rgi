@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 #ifndef APAC_CODEC_LOADER_H
 #define APAC_CODEC_LOADER_H
 

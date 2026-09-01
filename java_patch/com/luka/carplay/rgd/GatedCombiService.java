@@ -10,6 +10,8 @@
  * Non-route-guidance methods always delegate.
  *
  *
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 package com.luka.carplay.rgd;
 

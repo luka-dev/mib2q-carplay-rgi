@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 #ifndef CARPLAY_LOADER_H
 #define CARPLAY_LOADER_H
 

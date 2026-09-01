@@ -1,6 +1,8 @@
 /*
  * altscreen_render — framed message reader (isolated so it is unit-testable
  * over a socketpair without the network/OMX/display stack).
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 #ifndef ALTSCREEN_RENDER_FRAME_IO_H
 #define ALTSCREEN_RENDER_FRAME_IO_H

@@ -5,6 +5,8 @@
  * boundary, and tears it down in reverse from its destructor.  What each
  * module wants from Identify, iAP2 messages, the raw transport, AirPlay SETUP,
  * /info and TearDown is declared in its own hook_module_def_t, next to the
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  * code that implements it. */
 
 #include "framework/hook_framework.h"

@@ -22,6 +22,8 @@
  * EGL external-image draw have both run on-unit; exact-usage chroma is the next test.
  *
  * QNX 6.5 ARMv7 gcc: no __thread; globals + pthread.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 #include "sink.h"
 

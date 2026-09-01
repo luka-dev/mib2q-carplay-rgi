@@ -9,6 +9,8 @@
  * in hook_airplay_seams_t, in module priority order.
  *
  * Nothing in this file knows what any module does with them.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
 #include "hook_framework.h"

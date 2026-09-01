@@ -22,6 +22,8 @@
  * uses (tools/pioneer_apap_decrypt.py -> PyCryptodome), on random keys and both AAD variants.
  *
  * Build and run:  ./scripts/test_hook_audio.sh
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
 #include "apac_bridge.h"

@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 #ifndef ALTSCREEN_SCREEN_EGL_PRESENT_H
 #define ALTSCREEN_SCREEN_EGL_PRESENT_H
 

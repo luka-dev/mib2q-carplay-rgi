@@ -16,6 +16,8 @@
  *   2. AirPlayAudioFormatToASBD               — emit a 48000/16/6ch ASBD for our format.
  * OFF by default: only when env SPATIAL_5_1 is truthy (value-checked). The mixer/dio side must
  * provision mpl5_dio_ent for 6 voices -> six_channel_speakerp (B&O firmware agent's dependency).
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 #include "audio_hook.h"
 #include "apac_codec_loader.h"

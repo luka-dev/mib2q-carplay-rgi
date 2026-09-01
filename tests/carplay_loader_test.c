@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 #include "../common/carplay_loader.h"
 
 #include <stdint.h>

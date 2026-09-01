@@ -7,6 +7,8 @@
  *     ffplay altscreen_capture.h264      # or: ffmpeg -i ... out.mp4
  * This proves the entire hook→forward→receiver path end-to-end without the
  * OMX/cluster hardware.  Path override: env ALTSCREEN_CAPTURE.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 #include "sink.h"
 
