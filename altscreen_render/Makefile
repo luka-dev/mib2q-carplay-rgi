@@ -13,10 +13,14 @@ COMMON_INC = ../common
 COMMON = main.c frame_io.c altctl.c
 
 ifeq ($(UNAME), Darwin)
-  # macOS — file-capture sink (proves the wire; no OMX/GL deps).
+  # macOS — host sink (proves the wire; no OMX/GL deps).  `make CAPTURE=1` adds
+  # the .h264 dump; without it the sink writes nothing at all.
   CC   = cc
   SINK = sink_file.c
   CFLAGS = -O2 -std=c99 -Wall -Wextra
+  ifeq ($(CAPTURE),1)
+    CFLAGS += -DALTSCREEN_CAPTURE
+  endif
   LDFLAGS =
   BUILD_TEST = 1
 else
