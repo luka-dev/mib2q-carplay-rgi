@@ -32,3 +32,10 @@ __pycache__/
 
 # Test binaries built by scripts/run_tests.sh.
 /build/tests/
+
+# IDA unpacks its database beside the .i64 while a session is open
+*.id0
+*.id1
+*.id2
+*.nam
+*.til
