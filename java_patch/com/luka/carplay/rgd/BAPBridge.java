@@ -2431,11 +2431,18 @@ public class BAPBridge {
         if (manIdx < 0 || s == null || s.mDistance == null || manIdx >= s.mDistance.length) {
             return -1;
         }
-        int denominator = s.mDistance[manIdx];
-        if (denominator <= 0) return -1;
         int policyCap = (prepareThresholdM * BARGRAPH_ACTION_PERCENT_OF_PREPARE) / 100;
         if (policyCap <= 0) return -1;
-        if (denominator > policyCap) {
+        int denominator = s.mDistance[manIdx];
+        /*
+         * Step length is CPManeuver.initialDistance, derived from
+         * initialTravelEstimates.distanceRemaining.  Third-party nav apps that
+         * never set initialTravelEstimates (Google Maps) omit iAP2 TLV 0x0005
+         * entirely, so mDistance stays -1 and the bargraph used to be dead for
+         * the whole route.  Unknown step length -> run the bargraph over the
+         * policy cap, same window the capped case uses.
+         */
+        if (denominator <= 0 || denominator > policyCap) {
             return policyCap;
         }
         return denominator;
