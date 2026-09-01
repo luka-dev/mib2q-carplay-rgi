@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // APACSynthesisFilterBank - inverse MDCT, windowing and overlap-add.
 //
 // Original: libSPF_CP_PlugInWrapper.so (Pioneer SPHERA 1.030010)

@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // APACLRVQDecoder - the LRVQ frame mode.
 //
 // Transcribed from the AArch64 disassembly appended to

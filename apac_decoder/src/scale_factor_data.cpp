@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // APACScaleFactorData::Deserialize, 0x0009a140, 1224 bytes, 304 instructions.
 //
 // Transcribed from reference/decomp/APACScaleFactorData.c with the codebook

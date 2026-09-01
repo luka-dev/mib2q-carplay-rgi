@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // APACScaleFactorData and APACSpectralData - the APAC entropy/spectrum core.
 //
 // Originals in libSPF_CP_PlugInWrapper.so (Pioneer SPHERA 1.030010):

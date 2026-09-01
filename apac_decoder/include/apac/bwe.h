@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // APACBWE2Decoder - Apple's bandwidth extension: the header parser and the
 // synthesis.
 //

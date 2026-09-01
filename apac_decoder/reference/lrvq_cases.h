@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // The LRVQ differential-test plan, included by BOTH the oracle
 // (reference/apac_lrvq_ref.cpp, which calls the real library) and the host test
 // (tests/test_lrvq.cpp).  The committed fixtures therefore carry only the

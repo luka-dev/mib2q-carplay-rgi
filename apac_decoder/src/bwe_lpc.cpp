@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 #include "apac/bwe_lpc.h"
 
 #include <string.h>

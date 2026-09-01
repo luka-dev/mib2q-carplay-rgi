@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // APACTNSData - temporal noise shaping: the per-filter parcor coefficients in
 // the bitstream, and the all-pole filter they drive along the spectrum.
 //

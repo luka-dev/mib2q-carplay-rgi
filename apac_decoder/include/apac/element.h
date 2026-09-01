@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // The APAC syntactic elements: the objects that own one or two channels of
 // spectrum and know how to read them out of the bitstream.
 //

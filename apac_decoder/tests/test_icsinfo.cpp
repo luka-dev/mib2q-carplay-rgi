@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // Differential test: our APACICSInfo::Deserialize against the real one.
 //
 // FIXTURE: tests/fixtures/icsinfo.fixture.  Each R line is what

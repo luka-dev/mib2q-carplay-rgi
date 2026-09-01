@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // Differential test: apac::MDCT against MDCT::InverseInPlaceTransform in the
 // real library.
 //

@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // Differential test: apac::TNSData against APACTNSData in the real library -
 // the constructor's rate table, ParseTNSData, and Apply.
 //

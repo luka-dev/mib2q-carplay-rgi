@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // Differential test: apac::LPCBase and the stateless half of apac::LSFTools
 // against the real library.
 //

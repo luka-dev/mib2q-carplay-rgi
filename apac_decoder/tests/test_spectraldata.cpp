@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // Differential test: our APACSpectralData::Deserialize against the real one.
 //
 // FIXTURE: tests/fixtures/spectraldata.fixture.  Each case carries the exact

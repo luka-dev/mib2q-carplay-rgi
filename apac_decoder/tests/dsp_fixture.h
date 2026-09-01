@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // Shared helpers for the stage-d (transform) differential tests: reading a
 // fixture's hex float words, and deciding whether two float32 vectors agree.
 //

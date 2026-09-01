@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // Shared test-vector generator for the stage-d (transform) differential tests.
 //
 // Included by BOTH sides of the comparison:

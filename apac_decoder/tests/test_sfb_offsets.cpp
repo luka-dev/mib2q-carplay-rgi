@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // Differential test: our apac::GetSFBOffsetTable against the real one.
 //
 // FIXTURE: tests/fixtures/sfb_offsets.fixture, produced by calling

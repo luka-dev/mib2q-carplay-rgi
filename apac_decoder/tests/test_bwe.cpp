@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // Stage e - APACBWE2Decoder's synthesis and BWELPC - against the real library.
 //
 // Fixtures: tests/fixtures/bwe_{lsf,env,lpc,frame}.fixture, produced by

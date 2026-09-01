@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // apac_decode - decode APAC packets with the PORT and write float32 PCM.
 //
 // This is the port's side of the whole-capture comparison that

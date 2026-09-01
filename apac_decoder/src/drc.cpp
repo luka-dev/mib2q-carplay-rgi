@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // apac::LoudnessDRCConfig / apac::drc::DynRangeCompressor / apac::APACDRCDecoder.
 //
 // Transcribed from reference/decomp/apac_LoudnessDRCConfig.c, apac_drc.c and

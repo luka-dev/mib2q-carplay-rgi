@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // apac_ref - native AArch64 reference harness for Apple's APAC decoder as
 // linked into Pioneer's libSPF_CP_PlugInWrapper.so (SPHERA 1.030010).
 //

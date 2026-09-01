@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // scratch oracle driver: drives APACSpectralData::Deserialize in the real
 // Pioneer/Apple library with crafted bitstreams and compares its output with a
 // model built from the hypothesised Huffman-codebook semantics.

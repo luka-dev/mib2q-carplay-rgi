@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // BWELPC - the LPC machinery APACBWE2Decoder::DecodeFrame runs on.
 //
 // Originals in libSPF_CP_PlugInWrapper.so (Pioneer SPHERA 1.030010):

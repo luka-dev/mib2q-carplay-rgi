@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // APACChannelPairElement::DeserializeLrvqFrame, 0xac600 - 712 bytes,
 // 178 instructions.
 //

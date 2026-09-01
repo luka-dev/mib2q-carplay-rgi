@@ -8,6 +8,8 @@
  *
  * Each line reports the bits still unread when the call was entered, so the
  * absolute bit position in a packet of L bytes is 8*L - remaining.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 #define _GNU_SOURCE
 #include <dlfcn.h>

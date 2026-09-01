@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // Differential test: our APACScaleFactorData::Deserialize against the real one.
 //
 // FIXTURE: tests/fixtures/scalefactors.fixture.  Each R line is what

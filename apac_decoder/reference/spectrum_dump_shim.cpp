@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // spectrum_dump_shim - dump the spectrum the ORIGINAL frame layer hands to the
 // filter bank, one record per channel per frame.
 //

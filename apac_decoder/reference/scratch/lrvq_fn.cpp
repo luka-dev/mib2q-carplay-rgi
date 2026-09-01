@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // scratch oracle driver #2: drives APACLRVQDecoder::LrvqDeserialize in the real
 // library against a model reconstructed from its disassembly.
 //   g++ -std=c++11 -O2 -o /tmp/lrvq_fn /src/scratch/lrvq_fn.cpp -ldl -lm

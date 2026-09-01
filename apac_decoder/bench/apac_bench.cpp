@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // apac_bench - how long the APAC port takes per packet, on the host and on the
 // target, driven by the live capture rather than by synthetic input.
 //

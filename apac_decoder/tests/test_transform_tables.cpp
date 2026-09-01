@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // Differential test: the transform path's constant tables, word for word.
 //
 // FIXTURE: tests/fixtures/transform_tables.fixture, produced by calling

@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // Differential test: apac::SynthesisFilterBank against
 // APACSynthesisFilterBank in the real library.
 //

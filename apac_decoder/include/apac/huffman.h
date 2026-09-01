@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // The APAC Huffman codebooks: one scalefactor book and eleven spectral books.
 //
 // Original: apac::GetHuffmanTable(uint32) at 0x00099dc0 is `return

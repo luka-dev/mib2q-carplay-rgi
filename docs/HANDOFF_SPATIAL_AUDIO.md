@@ -54,10 +54,13 @@ hook-owned ELF constructor. The main hook has no `DT_NEEDED` entry for `libcarpl
 The verified local artifacts are `libcarplay_hook.so` SHA-256
 `1312072cb931192fde3dc0027168f77e8a3eaac66cb1da4aab0268a348da3a29` (427,891 bytes)
 and `libcarplay_apac.so` SHA-256
-`5e72de6f61d4ebafcfad9934033f7a396e813a25ec5e9d8c8a52b9d9cd0d5814` (678,871 bytes).
-The hook hash moved when the AirPlay SETUP/`/info`/TearDown interpositions were
-lifted out of the altScreen module into `hook/framework/airplay_seams.c`; the
-codec object is byte-identical, and the type-103 logic itself is unchanged.
+`a6a7bc8c3f17dfe170765b04a461259a407269de47dde6fe0a2b3f6b2695044f` (678,911 bytes).
+Both hashes have moved since the type-103 work landed, for reasons that are not
+it: the hook when the AirPlay SETUP/`/info`/TearDown interpositions were lifted
+out of the altScreen module into `hook/framework/airplay_seams.c`, and the codec
+by 40 bytes of DWARF when file headers were added — `scripts/apac_flags.sh`
+builds with `-g`, so adding four lines to a file shifts every line number under
+it. No decoder code changed.
 
 The only remaining proof is live hardware validation: deploy both shared objects and the startup
 file, start with `spatial-5.1`, confirm the `audio sink:` counters and audible PCM6, then test

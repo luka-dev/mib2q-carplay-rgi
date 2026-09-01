@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // Stage h: the loudness / DRC layer's bit accounting.
 //
 // What this test can and cannot prove.

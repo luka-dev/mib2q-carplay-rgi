@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 #include "apac/config.h"
 #include "apac/drc.h"
 #include "apac/sfb_offsets.h"

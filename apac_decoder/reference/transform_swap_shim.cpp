@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // transform_swap_shim - decode the real capture with the PORT's transform stage
 // substituted into the middle of Pioneer's decoder, and see what it costs.
 //

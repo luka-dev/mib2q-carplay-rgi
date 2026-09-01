@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // Differential test: our apac::GlobalConfig::Deserialize against the real one,
 // on the two magic cookies that exist.
 //

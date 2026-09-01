@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // APACLRVQDecoder - the LRVQ frame mode: lattice/residual vector quantisation
 // under an LPC spectral envelope, the alternative to the transform/SQ path in
 // APACSpectralData.

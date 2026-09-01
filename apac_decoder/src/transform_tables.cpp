@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // APAC transform-path constant tables - COPIED byte-for-byte out of
 // libSPF_CP_PlugInWrapper.so (Pioneer SPHERA 1.030010, image base 0).
 //

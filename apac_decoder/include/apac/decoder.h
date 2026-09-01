@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // The APAC decoder's top two layers: the per-ASC core decoder and the frame
 // decoder that drives it.
 //

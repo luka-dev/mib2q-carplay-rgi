@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // APACICSInfo - the per-channel individual-channel-stream header: window
 // sequence, maximum scalefactor band, and the window grouping.
 //

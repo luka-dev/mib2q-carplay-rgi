@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // apac::LoudnessDRCConfig, apac::drc::DynRangeCompressor and
 // apac::APACDRCDecoder - the loudness / dynamic-range-control layer.
 //

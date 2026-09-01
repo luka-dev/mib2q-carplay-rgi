@@ -2,6 +2,8 @@
    each named function's entry is overwritten with `MOV W0,#1 ; RET`.  If a
    function is never entered on this content the decode is unchanged; if it is,
    the 1 propagates as a decode error.  Same in-memory patch as stub_shim.c -
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
    the library is DT_SYMBOLIC so LD_PRELOAD cannot interpose its internals. */
 #define _GNU_SOURCE
 #include <dlfcn.h>

@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // Whole-frame differential test for stages f and g: six real packets out of the
 // live CarPlay 5.1 capture, decoded by the port and compared against the float32
 // PCM the ORIGINAL library produced for exactly the same six.

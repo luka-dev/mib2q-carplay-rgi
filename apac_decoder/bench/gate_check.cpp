@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // gate_check - which BWE frame cases do no work, and does the LIBRARY agree?
 //
 // The timing pass in apac_bench classifies a case as "gated" observationally:

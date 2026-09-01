@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // Per-function oracle for stage e (the bandwidth extension).  It dlopens
 // Pioneer's copy of Apple's APAC decoder and calls BWELPC's and
 // APACBWE2Decoder's members directly, then prints what the library produced in

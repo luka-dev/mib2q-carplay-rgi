@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // APACCACDecoder - the channel-pair "CAC" tool: a per-band Givens rotation
 // between the two channels of a channel-pair element, with the rotation angle
 // carried as a run-length-coded index into a quantised gain table.

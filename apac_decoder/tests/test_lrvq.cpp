@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // Stage h1 - APACLRVQDecoder and the LRVQ frame - against the real library.
 //
 // Fixtures: tests/fixtures/lrvq_{gain,ltp,lsfs,frame,elem}.fixture, produced by

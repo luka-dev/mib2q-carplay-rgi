@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // The APAC inverse transform: DCT_IV, MDCT and the window / modulation tables.
 //
 // Originals in libSPF_CP_PlugInWrapper.so (Pioneer SPHERA 1.030010):

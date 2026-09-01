@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // Codebook 11's escape magnitude, pow(v, 4/3), on whatever libm is underneath.
 //
 // PORT_STATUS listed this as the one open portability question: the port's

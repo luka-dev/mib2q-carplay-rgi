@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // apac::GlobalConfig and the configuration objects it deserialises.
 //
 // Originals in libSPF_CP_PlugInWrapper.so (Pioneer SPHERA 1.030010):

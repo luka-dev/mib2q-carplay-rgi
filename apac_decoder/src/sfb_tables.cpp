@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // Scalefactor-band offset tables, copied byte-for-byte out of
 // libSPF_CP_PlugInWrapper.so (Pioneer SPHERA 1.030010).  Nothing here is
 // retyped from a specification or regenerated from a formula: each array is the

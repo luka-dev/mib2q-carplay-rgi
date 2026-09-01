@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // apac_fn_ref - PER-FUNCTION reference harness for Apple's APAC decoder as
 // linked into Pioneer's libSPF_CP_PlugInWrapper.so (SPHERA 1.030010).
 //

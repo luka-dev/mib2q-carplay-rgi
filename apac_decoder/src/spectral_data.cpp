@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // APACSpectralData::Deserialize, 0x000ab3b0, 3820 bytes, 950 instructions.
 //
 // Transcribed from reference/decomp/APACSpectralData.c with the codebook

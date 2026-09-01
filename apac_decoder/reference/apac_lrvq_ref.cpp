@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // Per-function oracle for stage h1 (LRVQ).  It dlopens Pioneer's copy of
 // Apple's APAC decoder and calls APACLRVQDecoder's members directly, then
 // prints what the library produced in the fixture format tests/fixtures/ uses.

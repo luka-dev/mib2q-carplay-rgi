@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // TBitstreamReader<unsigned int> - Apple's APAC bit reader, ported bit-exactly.
 //
 // Original: libSPF_CP_PlugInWrapper.so (Pioneer SPHERA 1.030010), out-of-line

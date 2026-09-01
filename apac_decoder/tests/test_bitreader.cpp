@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // Differential test: our TBitstreamReader against the real one.
 //
 // FIXTURE: tests/fixtures/bitreader.fixture.  Every `R` line in it is what

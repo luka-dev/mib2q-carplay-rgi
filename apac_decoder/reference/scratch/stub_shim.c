@@ -1,5 +1,7 @@
 /* The library is linked DT_SYMBOLIC, so LD_PRELOAD cannot interpose its own
    internals.  Instead patch the entry of a chosen function to `return 1` and
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
    see whether decoding the capture changes at all.  APAC_STUB names it. */
 #define _GNU_SOURCE
 #include <dlfcn.h>

@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // apac::SFBOffsets - the scalefactor-band layout for one sample rate.
 //
 // Original: apac::GetSFBOffsetTable(uint32 sampleRate, uint32 frameLength) at

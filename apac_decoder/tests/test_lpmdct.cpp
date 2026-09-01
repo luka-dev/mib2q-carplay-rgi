@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // Differential test: apac::RealFFT and apac::LPMDCTFilter against
 // MultiRadixRealFFT and apac::LPMDCTFilter in the real library.
 //

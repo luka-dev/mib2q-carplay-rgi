@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // footprint - how much of the 1.5 MB decoder object a single packet actually
 // touches.  Host only; it needs mprotect and a signal handler.
 //

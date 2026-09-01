@@ -1,4 +1,6 @@
 /* LD_PRELOAD shim: counts entry-point calls in the APAC entropy core so we can
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
    tell which paths a real capture actually exercises. */
 #define _GNU_SOURCE
 #include <dlfcn.h>

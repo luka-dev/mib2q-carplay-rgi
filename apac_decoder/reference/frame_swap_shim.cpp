@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // frame_swap_shim - run the PORT's element and core-decoder layers inside
 // Pioneer's own decoder, and let the library's top level do everything else.
 //

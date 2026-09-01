@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
 // scratch oracle driver #3: checks the closed forms for dequantizeLrvqGain and
 // ltpToMdctSpectralEnvelope against the real library.
 #include <dlfcn.h>
