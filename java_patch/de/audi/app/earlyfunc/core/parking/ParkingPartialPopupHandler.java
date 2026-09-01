@@ -76,7 +76,10 @@ public class ParkingPartialPopupHandler implements IParkingPopupHandler, IPartia
                         "[ParkingPartialPopupHandler#showPopup] popupID=%1",
                         popupId
                     );
-                    PdcSmallStageGuard.showRequested(popupId);
+                    PdcSmallStageGuard.showRequested(
+                        popupId,
+                        this.application.getFrameworkAccess().getHMIService()
+                    );
                     this.application.getFrameworkAccess().getHMIService().showPartialPopup(0, popupId);
                 }
             } else {

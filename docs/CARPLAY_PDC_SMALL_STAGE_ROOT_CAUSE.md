@@ -4,7 +4,7 @@
 Платформа: Audi MHI2Q, MU1316  
 Исходники для анализа: `/Users/luka/Desktop/AUDI_2/Tools/jxe2jar/out/MU1316-combined-vf`
 
-Статус: исправление реализовано в `java_patch/` и собрано в `build/carplay_hook.jar`.
+Статус на 2026-09-01: первая реализация **не сработала на автомобиле** — при появлении правого OPS popup CarPlay всё равно закрылся. Вторая реализация закрывает дополнительные пути `SMALL_STAGE_OMISSION` и AP `1002`, собрана в `build/carplay_hook.jar`, но ещё требует проверки на автомобиле.
 
 ## Краткий вывод
 
@@ -233,11 +233,11 @@ displayManagerService.activateComponentRVC(17);
 
 Поэтому корень проблемы — несовместимость двух политик: PDC ожидает совместимое с small stage фоновое приложение, а TerminalMode специально не разрешает CarPlay оставаться видимым в small stage.
 
-## Реализованное исправление CarPlay
+## Первая реализация CarPlay — не прошла проверку на автомобиле
 
-Исправление должно находиться на границе `SMALL_STAGE -> hmiDeactivated`, а не в отрисовке PDC.
+Первая гипотеза состояла в том, что достаточно перехватить границу `SMALL_STAGE -> hmiDeactivated`, не меняя отрисовку PDC.
 
-Реализована parking-specific политика:
+Была реализована parking-specific политика:
 
 ```text
 если viewSize == SMALL
@@ -264,7 +264,47 @@ displayManagerService.activateComponentRVC(17);
 - полноэкранный VPS/RVC по-прежнему активирует component `17`; его HMI/action-proxy деактивация не маскируется;
 - громкость, массаж и другие partial popup не поднимают guard.
 
-Таким образом, MMI всё ещё переходит в малую сцену и может использовать штатную геометрию/crop, но TerminalMode больше не отдаёт экранный ресурс только из-за правого OPS.
+Тест на автомобиле опроверг вывод, что одного этого перехвата достаточно. CarPlay всё равно закрылся.
+
+В первой реализации остались как минимум две независимые ветки, способные убрать проекцию:
+
+1. Screen `TERMINALMODEIPODOUT` (`3200000`) по-прежнему создаётся с `setSmallStageType(1)`, то есть `SMALL_STAGE_OMISSION`. Поэтому HMI compositor может исключить сам screen/display controller при переходе в малую сцену, даже если `Resource.SCREEN` не был передан `MAINUNIT` через перехваченную ветку.
+2. Action-proxy `AP_METHOD_HMI_DEACTIVATED` (`1002`) в replacement `ExternalEventsListener` намеренно оставлен безусловным и всё равно вызывает `hmiDeactivated()`. Если реальная parking policy на автомобиле посылает `1002` вместе со `SMALL_STAGE`, guard в `updateKombiStage(false)` не может сохранить CarPlay.
+
+Поэтому точная следующая проверка — определить по живому логу, появился ли перед закрытием `AP_METHOD_HMI_DEACTIVATED`, и сработал ли вообще лог `SMALL_STAGE pure OPS: keep CarPlay SCREEN owner`. До этой проверки нельзя снова помечать исправление как готовое.
+
+## Вторая реализация PDC-only — ожидает проверки на автомобиле
+
+Вторая реализация не меняет display context `78`, не добавляет camera displayable `17` и не касается RetroArch context `90`.
+
+Перед `showPartialPopup(0, 2100008)` guard получает текущий screen terminal `0`. Только если активна CarPlay-сессия и текущий screen имеет ID `3200000`, его политика временно меняется:
+
+```text
+SMALL_STAGE_OMISSION (1) -> SMALL_STAGE_NO_CHANGE (6)
+```
+
+Это изменение выполняется на уже созданном `AbstractScreenWidget`; replacement для всего `TerminalModeScreenBag1` не нужен. После `partialPopupHidden`, `partialPopupRemoved`, unregister, deinit или истечения неподтверждённого show-request возвращается исходное значение small-stage policy.
+
+Тот же узкий guard теперь проверяется в обеих ветках `ExternalEventsListener`:
+
+1. `updateKombiStage(false)` не создаёт `HMIDeactivated`;
+2. первый `AP_METHOD_HMI_DEACTIVATED` (`1002`), сопровождающий открытие popup, не создаёт `HMIDeactivated` и не сбрасывает `screenActive`.
+
+Подавление AP `1002` одноразовое, потому что событие не содержит параметра source. Это позволяет следующему `1002` от HOME или настоящего fullscreen takeover работать штатно, даже если OPS ещё видим. В обеих parking-ветках key handler CarPlay временно выключается, чтобы ввод не проходил под popup. После возврата `BIG_STAGE` штатный `hmiActivated()` снова включает ввод. За пределами одновременного состояния `CarPlay active + popup 2100008 guarded` обе ветки работают штатно.
+
+Собранный JAR проходит Java 1.4 compilation, ZIP integrity, сравнение public/protected ABI двух replacement-классов и host-тесты. Проверка на машине всё ещё обязательна: особенно последовательность `showPopup -> SMALL_STAGE/AP1002 -> popupVisible` и момент возврата `BIG_STAGE`.
+
+### Почему замена display context сама по себе не исправляет обычный OPS
+
+Для OPS без видеокамеры stock CarPlay context уже содержит нужную композицию:
+
+```java
+this.dc[78] = new DisplayContext(78, new int[]{16, 59});
+```
+
+`16` — HMI, на котором рисуется partial popup `2100008`; `59` — CarPlay video. Поэтому добавление другого context не отменяет ни `SMALL_STAGE_OMISSION`, ни `hmiDeactivated()`. Исправление OPS-only должно одновременно сохранить screen widget и владельца `Resource.SCREEN`.
+
+Displayable `17` требуется только для отдельной задачи partial 360-camera. Добавление `17` в `78` или новый context `91` не является исправлением закрытия CarPlay при обычном OPS.
 
 ## Проект: CarPlay + partial 360/PDC
 
@@ -333,7 +373,7 @@ displayManagerService.activateComponentRVC(17);
 
 ## Следствие для RetroArch context 90
 
-Контекст RetroArch `90={16,43}` теперь также добавлен в replacement `DisplayManagerMIB2High` для поддерживаемой A5-конфигурации:
+Контекст RetroArch `90={16,43}` первоначально был добавлен в replacement `DisplayManagerMIB2High`, но затем удалён из CarPlay JAR коммитом `7590e88`. Его владельцем должен быть собственный Java-патч RetroArch, а не этот репозиторий:
 
 - HMI displayable `16` сверху;
 - video displayable `43` снизу.
@@ -349,33 +389,41 @@ VPS/RVC fullscreen   -> штатный полный takeover экрана воз
 
 Это различие следует сохранить: копировать TerminalMode small-stage deactivation в RA не нужно.
 
-Таблица A5 увеличена до 91 элемента и содержит точную запись:
+Требуемая запись для A5 остаётся такой, но в текущем `mhi2-carplay/java_patch` её нет:
 
 ```java
 this.dc[90] = new DisplayContext(90, new int[]{16, 43});
 ```
 
-Для `KOMBI_TYPE_G24` ID `90` уже занят stock-генератором контекстов как `11 + 79`; патч намеренно не перезаписывает этот stock KDK-контекст.
+Для `KOMBI_TYPE_G24` ID `90` уже занят stock-генератором контекстов как `11 + 79`; RetroArch-патч не должен перезаписывать этот stock KDK-контекст.
 
 ## Что проверять в живом логе
 
-После установки исправленного JAR ожидается такая последовательность сообщений:
+Для второй реализации ожидается такая последовательность сообщений:
 
 ```text
 ParkingPartialPopupHandler#showPopup popupID=2100008
+OPS guard: screen 3200000 smallStageType 1 -> 6
 MMICombiStageListener.viewSizeChanged SMALL_STAGE
 ExternalEventsListener.updateKombiStage SMALL_STAGE pure OPS: keep CarPlay SCREEN owner
 ```
 
-Между `SMALL_STAGE` и закрытием popup **не должно** быть `HMIDeactivated.execute`.
+Если parking policy дополнительно посылает AP `1002`, после его обычного входного лога должно появиться:
+
+```text
+ExternalEventsListener.actionProxyCallPerformed partial OPS: suppress HMI_DEACTIVATED
+```
+
+До закрытия popup не должно появиться `HMIDeactivated.execute`. Если нет лога `smallStageType 1 -> 6`, guard не увидел текущий TerminalMode screen или replacement-класс не был загружен.
 
 После исчезновения PDC ожидается:
 
 ```text
 MMICombiStageListener.viewSizeChanged BIG_STAGE
 ExternalEventsListener ... hmiActivated / HMIActivated
+OPS guard: restored screen 3200000 smallStageType 1
 ```
 
 Для полноэкранной камеры, HOME или другого настоящего takeover по-прежнему ожидается `AP_METHOD_HMI_DEACTIVATED` и `HMIDeactivated.execute`.
 
-Сборочная проверка выполнена: `./scripts/build_java.sh`, `unzip -t`, Java class major `48`, а `javap -protected -s` не выявил пропавших stock public/protected ABI-членов у трёх затронутых replacement-классов.
+Сборочная проверка выполнена: `./scripts/build_java.sh`, `unzip -t`, Java class major `48`, host audio/integration tests и `javap -protected -s` для изменённых stock replacement-классов. SHA-256 собранного `build/carplay_hook.jar`: `37bfcce592f32b5639e476c6b86929f56aa5f3f76d0275056a5a9b68e10c2448`.

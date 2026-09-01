@@ -32,11 +32,12 @@ import java.util.Map;
 import org.osgi.framework.ServiceRegistration;
 
 /**
- * Stock MU1316 listener with a parking-specific SMALL_STAGE exception.
+ * Stock MU1316 listener with a parking-specific partial-OPS exception.
  *
- * Only the stage-driven deactivation for CarPlay + pure OPS popup 2100008 is
- * intercepted.  AP_METHOD_HMI_DEACTIVATED (HOME, another HMI component,
- * fullscreen RVC/VPS, disconnect) still follows the original stock path.
+ * Only deactivation while CarPlay + pure OPS popup 2100008 are simultaneously
+ * active is intercepted, on both observed paths: SMALL_STAGE and AP 1002.
+ * HOME, another HMI component, fullscreen RVC/VPS and disconnect still follow
+ * the original stock path when that narrow popup guard is not active.
  */
 public class ExternalEventsListener
     extends DefaultEventListener
@@ -144,8 +145,23 @@ public class ExternalEventsListener
                                     "<<- [%1.actionProxyCallPerformed] AP_METHOD_HMI_DEACTIVATED",
                                     LOGCLASS
                                 );
-                                ExternalEventsListener.this.hmiDeactivated();
-                                ExternalEventsListener.this.screenActive = false;
+                                if (ExternalEventsListener.this.screenActive
+                                    && CarPlayApp.isActive()
+                                    && PdcSmallStageGuard.consumeParkingHmiDeactivation()) {
+                                    /* On the real unit the parking SMALL_STAGE can also publish
+                                     * AP 1002.  Treat it as part of the same partial-OPS
+                                     * transition; a genuine HOME/fullscreen takeover still takes
+                                     * the stock branch when popup 2100008 is not guarded. */
+                                    ExternalEventsListener.this.logger.log(
+                                        1000000,
+                                        "[%1.actionProxyCallPerformed] partial OPS: suppress HMI_DEACTIVATED",
+                                        LOGCLASS
+                                    );
+                                    ExternalEventsListener.this.context.getKeyEventsHandler().deactivate();
+                                } else {
+                                    ExternalEventsListener.this.hmiDeactivated();
+                                    ExternalEventsListener.this.screenActive = false;
+                                }
                                 break;
 
                             default:
@@ -158,6 +174,7 @@ public class ExternalEventsListener
 
     public void deinit() {
         this.logger.log(1000000, "[%1.deinit]", LOGCLASS);
+        PdcSmallStageGuard.reset();
         this.context.removeActionProxyListener(this);
         this.eventBus.unregisterListener(this);
         if (this.phoneServiceRegistration != null) {
