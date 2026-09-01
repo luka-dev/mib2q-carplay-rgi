@@ -96,3 +96,27 @@ The caps-only run already proved that a 6-voice `mpl5_dio_ent` open succeeds and
 speakers. It also exposed the active-fragment bug. After reboot, confirm that the dynamic build now
 returns a 9216-byte S16 client fragment (768 frames per 16 ms), with bounded APAC buffering and normal
 pitch. Full checklist: [`RE_TIMING.md`](RE_TIMING.md).
+
+## Stock PCM dump — ground truth from the unit, no reboot
+
+The driver carries Qualcomm's own capture facility, and it is reachable on a running
+unit. Two halves:
+
+* `data_dump_path=<path>` is a real documented command-line key — the driver's own
+  usage text spells out
+  `io-audio -d qc default_device=six_channel_speakerp,log_level=high,bmetrics_level=medium,data_dump_path=/var/log/`.
+  Files land as `<path><name>_<n>.bin`.
+* `deva_mixer_switch_data_dump_set` calls `deva_data_dump_ctrl` — dumping is a
+  **mixer switch**, so it toggles at runtime. Enabling it does not require
+  restarting `io-audio`, and therefore does not require a reboot.
+
+`deva_timer_data_dumps` writes what the playback timer actually consumes, which is
+past every layer the QEMU harness can see. `csd_data_dumps` and `csd_sad_dumps`
+sit at the CSD boundary. Symbols: `deva_data_dump_init @0x2fd0c`,
+`deva_data_dump_ctrl @0x30c88`.
+
+Why this matters: the harness proved the six-channel PCM is byte-exact and
+correctly ordered all the way to `csd_write`, so any remaining fault is downstream
+of that boundary — exactly where the harness stubs the DSP and can no longer look.
+This dump is the one measurement that crosses it, taken on the real unit with the
+real amplifier in the loop.

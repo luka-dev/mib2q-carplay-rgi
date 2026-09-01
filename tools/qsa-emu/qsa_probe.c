@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <sys/asoundlib.h>
 
 static void dump_info(const snd_pcm_channel_info_t *ci)
@@ -28,14 +29,26 @@ static int g_bundle_frag;
 static int try_device(int card, int dev, int voices, int rate, int seconds)
 {
     snd_pcm_t *pcm = 0;
+    FILE *music = 0;
     snd_pcm_channel_info_t info;
     snd_pcm_channel_params_t params;
     snd_pcm_channel_setup_t setup;
     snd_pcm_info_t pinfo;
     int rc, i, f, frag_frames, total;
+    size_t frag_bytes;
     short *buf;
 
-    rc = snd_pcm_open(&pcm, card, dev, SND_PCM_OPEN_PLAYBACK);
+    if (card < 0) {
+        int selected_card = -1, selected_dev = -1;
+        rc = snd_pcm_open_preferred(
+            &pcm, &selected_card, &selected_dev, SND_PCM_OPEN_PLAYBACK);
+        printf("preferred playback resolves to card %d dev %d (open=%d)\n",
+               selected_card, selected_dev, rc);
+        card = selected_card;
+        dev = selected_dev;
+    } else {
+        rc = snd_pcm_open(&pcm, card, dev, SND_PCM_OPEN_PLAYBACK);
+    }
     if (rc < 0) return -1;
 
     memset(&pinfo, 0, sizeof(pinfo));
@@ -54,7 +67,11 @@ static int try_device(int card, int dev, int voices, int rate, int seconds)
     memset(&params, 0, sizeof(params));
     params.channel             = SND_PCM_CHANNEL_PLAYBACK;
     params.mode                = SND_PCM_MODE_BLOCK;
-    params.start_mode          = SND_PCM_START_DATA;
+    /* START_FULL gives the emulated timer an initial ring prefill. START_DATA
+     * begins consuming after the first fragment; console tracing can then win
+     * the race to slot 1 and manufacture a startup underrun in the harness. */
+    params.start_mode          = getenv("QSA_SUBMIT_MEASURE") ?
+                                 SND_PCM_START_FULL : SND_PCM_START_DATA;
     params.stop_mode           = SND_PCM_STOP_STOP;
     params.format.interleave   = 1;
     params.format.format       = SND_PCM_SFMT_S16_LE;
@@ -79,35 +96,93 @@ static int try_device(int card, int dev, int voices, int rate, int seconds)
 
     frag_frames = setup.buf.block.frag_size / (voices * 2);
     if (frag_frames <= 0) frag_frames = (rate / 1000) * 16;
-    buf = (short *)malloc((size_t)frag_frames * voices * sizeof(short));
+    frag_bytes = (size_t)frag_frames * voices * sizeof(short);
+    buf = (short *)malloc(frag_bytes);
+    if (!buf) {
+        printf("  cannot allocate %u-byte fragment\n", (unsigned)frag_bytes);
+        snd_pcm_close(pcm);
+        return 1;
+    }
     /* Real music, not the flat pattern.  A constant per channel is identical in
      * every frame, so it cannot catch a duplicated, dropped or reordered frame --
      * and a periodic tick is exactly that kind of fault.  One second of the car
      * capture, in the declared order the sink hands to QSA, has none of that
-     * symmetry: any frame-level damage shows up as a mismatch. */
-    {
-        FILE *mf = fopen("/proc/boot/music6.s16", "rb");
-        size_t want = (size_t)frag_frames * voices * sizeof(short);
-        size_t got = 0;
-        if (mf) { got = fread(buf, 1, want, mf); fclose(mf); }
-        if (got != want) {
-            printf("  no music file (%u of %u bytes) -- falling back to the flat pattern\n",
-                   (unsigned)got, (unsigned)want);
-            for (f = 0; f < frag_frames; f++)
-                for (i = 0; i < voices; i++)
-                    buf[f * voices + i] = (short)(0x1000 * (i + 1));
-        } else {
-            printf("  first fragment is real music: %u frames from the car capture\n",
-                   (unsigned)frag_frames);
-        }
+     * symmetry: any frame-level damage shows up as a mismatch.
+     *
+     * Keep the file open and read the NEXT fragment before every write.  The old
+     * probe read once and replayed that one buffer 62 times, while the server-side
+     * validator advanced through the reference file. */
+    if (voices == 6) music = fopen("/proc/boot/music6.s16", "rb");
+    if (music) {
+        printf("  streaming real music: %d frames per fragment\n", frag_frames);
+    } else {
+        printf("  no six-channel music file -- falling back to the flat pattern\n");
+        for (f = 0; f < frag_frames; f++)
+            for (i = 0; i < voices; i++)
+                buf[f * voices + i] = (short)(0x1000 * (i + 1));
     }
 
     total = (rate * seconds) / frag_frames;
+    if (getenv("QSA_SUBMIT_MEASURE"))
+        printf("  writes are paced by QSA's ring and deva's existing timer\n");
     for (i = 0; i < total; i++) {
-        ssize_t w = snd_pcm_plugin_write(pcm, buf, (size_t)frag_frames * voices * 2);
-        if (w < 0) { printf("  write %d failed: %s\n", i, snd_strerror((int)w)); break; }
+        ssize_t w;
+        int attempt;
+        if (music) {
+            size_t got = fread(buf, 1, frag_bytes, music);
+            if (got != frag_bytes) {
+                printf("  music ended at fragment %d (%u of %u bytes)\n",
+                       i, (unsigned)got, (unsigned)frag_bytes);
+                break;
+            }
+        }
+        w = 0;
+        for (attempt = 0; attempt < 3; attempt++) {
+            w = snd_pcm_plugin_write(pcm, buf, frag_bytes);
+            if (w == (ssize_t)frag_bytes) break;
+            /* With no DSP tick the firmware client reports the server's EIO as
+             * a zero-byte plugin write after the first fragment. Preparing the
+             * same channel clears that terminal state and deliberately makes
+             * the SAME source fragment retry; the file index must not advance
+             * until QSA has actually accepted it. */
+            if (w == 0 && attempt < 2) {
+                int prep = snd_pcm_plugin_prepare(
+                    pcm, SND_PCM_CHANNEL_PLAYBACK);
+                if (i < 3)
+                    printf("  recover fragment %d after zero write: prepare -> %d\n",
+                           i, prep);
+                if (prep >= 0) continue;
+            }
+            break;
+        }
+        if (w != (ssize_t)frag_bytes) {
+            printf("  write %d incomplete: %d of %u\n", i, (int)w,
+                   (unsigned)frag_bytes);
+            break;
+        }
     }
     printf("  wrote %d fragments of %d frames\n", i, frag_frames);
+    if (getenv("QSA_SUBMIT_MEASURE")) {
+        int submitted = 0, emitted = 0, poll;
+        for (poll = 0; poll < 500 && submitted < i; poll++) {
+            FILE *count = fopen("/tmp/csd_submit_count", "r");
+            if (count) {
+                if (fscanf(count, "%d", &submitted) != 1) submitted = 0;
+                fclose(count);
+            }
+            if (submitted < i) usleep(4000);
+        }
+        /* The serial console is shared bytewise between processes. Stay silent
+         * while io-audio emits base64, or even one printf can corrupt markers
+         * and payload lines. */
+        for (poll = 0; poll < 5000 && !emitted; poll++) {
+            emitted = access("/tmp/csd_submit_emitted", F_OK) == 0;
+            if (!emitted) usleep(4000);
+        }
+        printf("  observed %d ring-backed csd_write submissions before flush\n",
+               submitted);
+    }
+    if (music) fclose(music);
     free(buf);
     snd_pcm_plugin_flush(pcm, SND_PCM_CHANNEL_PLAYBACK);
     snd_pcm_close(pcm);
@@ -117,6 +192,12 @@ static int try_device(int card, int dev, int voices, int rate, int seconds)
 int main(int argc, char **argv)
 {
     int dev, target = argc > 1 ? atoi(argv[1]) : 3;   /* mpl5_dio_ent */
+    int requested_voices = argc > 3 ? atoi(argv[3]) : 0;
+
+    /* CSD instrumentation writes unbuffered stderr from io-audio. Keep the
+     * probe's phase markers unbuffered too so the combined serial log preserves
+     * which open/start/stop command belongs to which requested voice count. */
+    setvbuf(stdout, 0, _IONBF, 0);
 
     printf("=== what does the library see? ===\n");
     printf("  snd_cards() = %d\n", snd_cards());
@@ -147,7 +228,7 @@ int main(int argc, char **argv)
      * deva_timer_play_mpl5_dio_ent and deva_timer_cap_sse_bundle_1).  On the head
      * unit the audio manager keeps that side running.  Nothing does here, so the
      * played audio has nowhere to go -- open the bundle for capture first. */
-    if (argc > 2) {
+    if (argc > 2 && !getenv("QSA_SUBMIT_MEASURE")) {
         int bundle = atoi(argv[2]);
         snd_pcm_t *cap = 0;
         int rc = snd_pcm_open(&cap, 0, bundle, SND_PCM_OPEN_CAPTURE);
@@ -212,12 +293,27 @@ int main(int argc, char **argv)
         }
     }
 
-    printf("=== six voices on device %d (the CarPlay configuration) ===\n", target);
-    try_device(0, target, 6, 48000, 1);
+    printf("=== isolated probe mode: %s ===\n",
+           requested_voices == 6 ? "six voices" :
+           requested_voices == 2 ? "two voices" : "six then two voices");
+    if (requested_voices == 0 || requested_voices == 6) {
+        if (getenv("QSA_SUBMIT_MEASURE")) {
+            /* default_device=six_channel_speakerp selects the CSD-backed sink.
+             * mpl5_dio_ent is its upstream CarPlay input and has a void/MIB
+             * timer, so opening it alone cannot execute csd_write in the
+             * audio-manager-free guest. */
+            printf("=== six voices on preferred output (six_channel_speakerp) ===\n");
+            try_device(-1, -1, 6, 48000, 1);
+        } else {
+            printf("=== six voices on device %d (the CarPlay configuration) ===\n", target);
+            try_device(0, target, 6, 48000, 1);
+        }
+    }
     /* A capture channel with START_DATA begins on the first read, so the mix only
      * moves once somebody pulls it.  This is the step that makes the played audio
      * travel mpl5 -> mixer -> bundle -> CSD, where the stub can see it. */
-    if (g_bundle && g_bundle_frag > 0) {
+    if ((requested_voices == 0 || requested_voices == 6) &&
+        g_bundle && g_bundle_frag > 0) {
         char *rb = (char *)malloc((size_t)g_bundle_frag);
         int k, ok = 0;
         printf("=== draining the mixer outlet (%d-byte fragments) ===\n", g_bundle_frag);
@@ -230,7 +326,9 @@ int main(int argc, char **argv)
         free(rb);
     }
 
-    printf("=== two voices on device %d (the one that works on the car) ===\n", target);
-    try_device(0, target, 2, 48000, 1);
+    if (requested_voices == 0 || requested_voices == 2) {
+        printf("=== two voices on device %d (the one that works on the car) ===\n", target);
+        try_device(0, target, 2, 48000, 1);
+    }
     return 0;
 }

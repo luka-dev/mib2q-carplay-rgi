@@ -19,7 +19,9 @@ from it and builds every higher-level CSD call (`openAudioStreamV2`,
 `setStreamMultichannel`, `setStreamFormatPcmMultichannel`, `allocateCsdBufferPool`)
 on top of them, so standing in for those eight runs the whole driver. Preloading
 the stand-in into `io-audio` also lets it locate deva's DMA ring and capture the
-resource-manager copy into that ring.
+resource-manager copy into that ring. The stand-in now also renders every
+accepted S32 word under both plausible sample-width interpretations and exports
+the resulting six-channel S16 streams as base64 on the serial console.
 
     ./build_ifs.sh          # stages, runs mkifs in the qnx65 Docker image
     # boot: qemu-system-arm -M virt -m 512 -cpu cortex-a15 -icount shift=auto \
@@ -71,8 +73,8 @@ The driver states its own stream geometry, which no log on the car exposed:
 
 So the caps advertise `format 0xc` = `SND_PCM_SFMT_S32_LE`, a 32-bit container,
 while the DSP is told the samples carry **24 significant bits**. Whether QSA's
-S16->S32 widening leaves them where the DSP expects them is exactly the open
-question, and it is now answerable here rather than by ear in a moving car.
+S16->S32 widening leaves them where the DSP expects them was the remaining
+question. The two renderings at the end of this README now measure both layouts.
 
 ## What it proved
 
@@ -85,6 +87,12 @@ and both configurations open and write:
     plugin_params(S16,6ch,48000Hz,frag=9216) -> 0
     setup readback: 6 voices, 48000 Hz, format 4, frag 9216, frags 10
     wrote 62 fragments of 768 frames
+
+The final line now means 62 **full accepted writes**, not merely 62 calls. The
+old probe missed that the raw second write returned EIO and the plugin reduced it
+to zero bytes; its loop counted zero as success. The current probe requires the
+full 9,216-byte client result, prepares the channel after zero, and retries the
+same source fragment before advancing the file.
 
 `formats 0x1000` is `1 << SND_PCM_SFMT_S32_LE`: the device accepts **only** S32,
 so QSA always converts, and `voices 2..6` is the patched driver's widened range.
@@ -159,9 +167,12 @@ The slog names two timers, `deva_timer_play_mpl5_dio_ent` and
 `deva_timer_cap_sse_bundle_1`, so the path is client -> mpl5 -> software mixer ->
 bundle -> CSD. The play timer starts: `deva_trigger` fires for device_id 4
 `<mpl5_dio_ent>`, `session_deva_timer_start` returns 0, and `deva_aquire` finds
-the device. What never happens is an emulated per-fragment tick or submission —
-over a run where the probe writes 62 fragments the command histogram does not
-move at all beyond the 64 pool allocations.
+the device. What never happens is an emulated per-fragment tick or submission.
+After one accepted fragment, `snd_pcm_write_internal` therefore returns `-EIO`;
+`snd_pcm_plugin_write` masks it as a zero-byte return. Preparing the channel and
+retrying the same fragment gives the harness another accepted resource-manager
+copy without inventing a timer or adding a thread inside `io-audio`. The command
+histogram still does not move beyond the 64 pool allocations.
 
 Opening `sse_bundle_1` from the client does not start it either: the open
 succeeds but `snd_pcm_plugin_params` returns ENOENT with `why_failed = 0`, for
@@ -204,9 +215,9 @@ leaving for the DSP.
 
 | step | state |
 |---|---|
-| client writes to `mpl5_dio_ent` at six voices | works, 62 fragments of 768 frames |
+| client writes to `mpl5_dio_ent` at six voices | 62 full fragments accepted with same-buffer prepare/retry recovery |
 | QSA converts S16 -> S32 | works, measured correct above |
-| resource manager copies into deva's DMA ring | captured; a full six-channel fragment has zero mismatches |
+| resource manager copies into deva's DMA ring | 62 fragments / 1,142,784 bytes captured; zero mismatches |
 | deva play timer starts | `deva_trigger` fires for device_id 4, but the emulated timer receives no fragment ticks |
 | playback CSD session starts | `setStartSession: SUCCESS session handle 277` |
 | capture session on the bundle starts | `session_csd_start_capture() SUCCEEDED`, `deva_trigger` fires for device_id 30 |
@@ -323,54 +334,218 @@ recognizes a destination inside either recorded ring, appends the copied bytes t
 `/tmp/resmgr_dma_<ring>_<ring-size>.bin`, and validates every S32 word before the
 ring can be changed. The six-channel run reports:
 
-    RESMGR_DMA open /tmp/resmgr_dma_0_184320.bin rc=18432 size=18432 offset=16 ...
-    RESMGR_VERIFY ring=0 voices=6 calls=1 bytes=18432 mismatches=0 FULL_FRAGMENT_PASS
+    DSP_VERIFY ring=0 source=resmgr voices=6 fragments=62 \
+      bytes=1142784 mismatches=0 CONTINUOUS_PASS
 
-That is one complete 768-frame fragment: 18,432 bytes, or 4,608 S32 samples.
-Every word matched `qsa_probe`'s deterministic six-channel input after the
-expected `S16 << 16` widening. The stereo control reached at least 20 complete
-captured fragments with zero mismatches.
+That is 62 complete 768-frame fragments: 1,142,784 bytes, or 285,696 S32
+samples. Every word matched the next sample from the known-good six-channel car
+capture after the expected `S16 << 16` widening.
 
-Only the first six-channel write crosses `resmgr_msgread`; the remaining writes
-do not call that import, consistent with reuse of the already mapped buffer path.
-The probe deliberately writes the same channel constants in all 62 fragments,
-so comparison of the complete first fragment is the definitive byte-for-byte
-result for this deterministic test.
+The earlier “only first fragment” result was a harness accounting bug, not a
+mapped-transfer discovery. Return-value logging showed:
+
+    call 1: snd_pcm_write_internal rc=18432, plugin_write rc=9216
+    call 2: snd_pcm_write_internal rc=-5,    plugin_write rc=0
+
+The plugin's zero was counted as a successful fragment even though it never
+crossed the resource manager. The probe now calls `snd_pcm_plugin_prepare` after
+zero and retries the same source buffer. The retry reaches `resmgr_msgread`; only
+then does the probe read the next file fragment. No `io-audio` thread or firmware
+binary patch is involved, and the staged `io-audio` remains byte-identical to the
+firmware (`b38fafad...b875ef`).
+
+## Verified continuously on real audio
+
+The flat pattern -- channel `c` holding a constant -- is identical in every frame,
+so it cannot catch a duplicated, dropped or reordered frame. Replaying the car
+capture in the declared order the sink hands to QSA removes that blind spot.
+`qsa_probe` keeps the file open and reads the next fragment only after the current
+one has been accepted:
+
+    DSP_CAPTURE reference: 288000 music samples
+    DSP_VERIFY ring=0 source=resmgr voices=6 fragments=62 \
+      bytes=1142784 mismatches=0 CONTINUOUS_PASS
+
+The result covers 47,616 frames, 285,696 samples, and 0.992 seconds. The complete
+run reaches deva's DMA ring byte for byte; the old post-first-fragment validator
+false positives are gone because input and reference now advance together.
+
+## The DSP interpretations
+
+The stub renders every captured S32 word `w` two ways while preserving the
+six-channel interleave:
+
+```c
+A = (int16_t)(w >> 16);
+low24 = sign_extend(w & 0x00ffffff, 24);
+B = low24 / 256;
+```
+
+It emits each raw S16 stream between unambiguous BEGIN/END markers as `DSP64 `
+base64 lines. `carve_renders.py` extracts them, writes 6-channel/48-kHz/S16 WAV
+headers, compares A with the reference, and measures B:
+
+    frames=47616 duration=0.992000s samples=285696
+    A_HIGH16_CORRECT bit_identical=True mismatches=0 peak=12526 rms=1598.896
+    B_LOW24_DSP peak=32768 saturated=99/285696 \
+      saturated_percent=0.034652 different_from_input=76907/285696 rms=6331.105
+
+Interpretation A's PCM SHA-256 is
+`f0f37e6c1f2e5d32d0c938053b9f2f70fbac25868e61f6e1fe2342ae0c90c312`,
+identical to the first 47,616 reference frames. It is the already
+human-confirmed known-good audio and does not resemble the car fault.
+
+Interpretation B is severely corrupted and reaches full scale, so it is the only
+one qualitatively compatible with recognisable but distorted/wrong audio. The
+literal low-24 extraction does **not**, however, create widespread hard clipping:
+only 99 samples (0.034652%) are exactly full scale. This measurement therefore
+supports B as a possible distortion mechanism but does not prove that the car's
+DSP extracts those exact bits, nor that B is the car's precise failure mode.
+
+The checked artifacts are:
+
+* `build/qsa-emu/qsa-render-serial-20260901-14.log`
+* `build/qsa-emu/renders/dsp_render_a_high16.wav`
+* `build/qsa-emu/renders/dsp_render_b_low24.wav`
+
+## CSD descriptor audit: no stale stereo geometry
+
+The CSD stub now prints every `csd_open` pointer/length payload and every
+`csd_ioctl` payload in full, before it mutates commands such as `ALLOC_PMEM`.
+Each block has a monotonically increasing sequence number and explicit
+`BEGIN`/`HEX`/`END` records. `qsa_probe` can be built as an isolated two- or
+six-voice run so the known teardown fault cannot hide the second case:
+
+```sh
+QSA_PROBE_VOICES=2 ./tools/qsa-emu/build_ifs.sh
+QSA_PROBE_VOICES=6 ./tools/qsa-emu/build_ifs.sh
+```
+
+The resulting serial logs are
+`build/qsa-emu/qsa-csd-2.log` and `build/qsa-emu/qsa-csd-6.log`. The 694 CSD
+trace lines through sequence 196, immediately before the isolated PCM write,
+are byte-identical in both runs (SHA-256
+`7281e96c729d7a871d82881cda63cada0dada2be980852836bb69792977bbf1e`).
+That is architectural, not a missing trace: io-audio creates persistent CSD
+streams during driver startup; opening `mpl5_dio_ent` at two or six client
+voices does not construct another format descriptor. Only the QSA/deva DMA
+geometry changes:
+
+| isolated probe | QSA S16 fragment | deva S32 fragment | captured run |
+|---|---:|---:|---:|
+| 2 voices | 3072 | 6144 | 62 fragments, 380928 bytes, zero mismatches |
+| 6 voices | 9216 | 18432 | 62 fragments, 1142784 bytes, zero mismatches |
+
+The startup graph contains coherent reference descriptors for both geometries.
+The six-channel stream is CSD handle 257 (`open` sequence 2, format sequence 3):
+
+```text
+format=0x1c  rate=48000  channels=6  bits_per_sample=24
+sign=1  interleaved=1  map=01 02 03 06 08 09
+7 buffers * 18432 bytes; 18432 / (6 * 4) = 768 frames = 16 ms
+```
+
+The stereo stream is handle 271 (`open` sequence 128, format sequence 129):
+
+```text
+format=1  rate=48000  channels=2  bits_per_sample=16
+sign=1  interleaved=1
+7 buffers * 3072 bytes; 3072 / (2 * 2) = 768 frames = 16 ms
+```
+
+The matching `openAudioContextV2` payloads also say 48000 Hz and respectively
+24 and 16 bits. There is no retained stereo rate, channel count, byte stride,
+period, buffer size, buffer count, or interleave flag in the six-channel CSD
+descriptor. In particular, the 18432-byte six-channel allocation is 24 bytes
+per frame, proving that this interface uses a four-byte container for each of
+its six 24-bit samples; it is not describing packed S16 downstream data.
+
+Static recovery explains why the caps widening cannot leave a separate CSD
+format field stale. `deva_csd_start_playback` at VA/file `0x26810` copies the
+live negotiated PCM format into the CSD structure immediately before calling
+`deva_csd_start_csd_session_playback`:
+
+| instruction | CSD field | source |
+|---:|---|---|
+| `0x26948` | sample rate (`config+0x54`) | live PCM format `+0x0c` |
+| `0x26954` | voices (`config+0x58`) | live PCM format `+0x10` |
+| `0x26978` | bits/sample (`config+0x5a`) | `ado_pcm_format_bit_width(format)` |
+| `0x26960` | signed (`config+0x5c`) | constant 1 |
+| `0x26984` | interleave (`config+0x5e`) | live format flag bit 0 |
+| `0x26a64` | start call | `config = device+0x188` |
+
+The callee reads those fields at `0x253e0..0x253f0`; when voices are greater
+than two, `0x25400` explicitly passes six and `0x25414` calls
+`setStreamFormatPcmMultichannel`. The caps patch at file offsets `0xA6E1C`,
+`0xA6E24`, and `0xA6E28` widens negotiation/allocation; it does not need a
+parallel CSD-format edit because the CSD values are derived from the live
+format, not another static caps record.
+
+This closes the stale-CSD-descriptor hypothesis. The downstream
+`session_csd_stream_playback` / cursor boundary described below is now measured
+as well.
+
+Static-analysis fingerprint: ELF32 little-endian ARM EABI5 PIC, image base 0,
+`.text` VA/file `0x84F8`, GNU build ID
+`9168acff553fc86d6a3c991613d620fd`, SHA-256
+`8b55b8d8f02b97d6f30191b54ef8a847e4706067f21cbf068d4b02a563ea84c9`.
+
+## CSD submission-order audit: faithful single pass
+
+The stub now executes the CSD-backed preferred output and associates each
+`session_csd_stream_playback` copy at `0x6924c..0x6926c` with the following
+`csd_write` at `0x69318`. It records the ring-relative source offset, payload
+length, ring-slot generation, and the high-16 PCM in actual submission order.
+`csd_write` returns descriptor word 1 (18432 audio bytes), not the 36-byte
+descriptor size.
+
+Seven CSD buffers are recycled through the registered BUF_DONE callback at the
+existing post-cursor timer boundary. deva calls io-audio's `dma_interrupt` at
+`0x6e890`, after updating the cursor at `0x6e864..0x6e874`; the first imported
+call inside `dma_interrupt` is `pthread_mutex_lock` at io-audio `0x10f7a8`.
+Because the main executable's `dma_interrupt` takes ELF symbol precedence, the
+harness redirects only io-audio's already-resolved mutex GOT slot `0x124f78`,
+requires the same `pthread_self()` that called `csd_write`, drains the queued
+callbacks, and passes through to the saved libc target. It does not dereference
+the opaque subchannel, modify deva, or add a thread.
+
+`SND_PCM_START_FULL` prefills the ring before the traced timer starts; without
+that, serial logging can manufacture a slot-1 startup underrun. The frozen
+62-fragment window in `build/qsa-emu/qsa-submit-final2.log` reports:
+
+```text
+TIMER_CURSOR_SUMMARY ring=0 advances=62 delta_0x4800=61 delta_0x2400=0 delta_other=0
+CSD_REGION_SUMMARY written_generations=62 distinct_submitted=62 submitted_once=62 repeated_generations=0 duplicate_submissions=0 missing_generations=0 unknown=0
+CSD_BYTE_SUMMARY submitted=1142784 written=1142784 difference=0
+CSD_SUBMIT_RENDER_SUMMARY fragments=62 frames=47616 samples=285696 pcm_bytes=571392 reference_mismatches=0 overflow_calls=0
+```
+
+Thus every consecutive cursor delta is `0x4800`, generations 1 through 62 are
+each submitted exactly once, and ring-backed submitted bytes equal written
+bytes. Two zero-filled 18432-byte CSD startup-prime writes precede the first ring
+pull and are reported separately; they are not ring consumption and are not in
+the 62-fragment comparison WAV.
+
+The carver produced
+`build/qsa-emu/submission-order-final2/dsp_submission_order.wav`. It is 6-channel
+48-kHz S16, 47,616 frames (0.992 seconds), and its PCM is bit-identical to the
+first 47,616 reference frames: zero mismatches, PCM SHA-256
+`f0f37e6c1f2e5d32d0c938053b9f2f70fbac25868e61f6e1fe2342ae0c90c312`.
+The WAV SHA-256 is
+`4daa9fc9915ce9929fa1874d2a4c5bf531d996be4c733cb3e12d5feae4909112`.
+
+After `DSP_SUBMIT_COMPLETE`, the timer can pull one stale slot while the client
+flush races STOP; that post-marker teardown pull is outside the frozen window.
+It is not included in the statistics or WAV. This closes the ring cursor and
+submission-order path through `csd_write`; the measured 62-fragment playback is
+a faithful single pass, so the vehicle fault lies downstream of this boundary.
 
 ## Final result
 
-The harness job is complete. It accounts for the bytes from `qsa_probe`, through
-QSA's conversion, and into deva's DMA ring. Six-channel widening is a left shift
-by 16, channel order is intact, and the DMA fragment has zero mismatches.
+The harness accounts continuously for the bytes from `qsa_probe`, through QSA's
+conversion, into deva's DMA ring, and through both requested DSP interpretations.
+Six-channel widening is a left shift by 16, channel order is intact, and A is
+bit-identical to the input.
 
-The final `=== AUDIO STACK PROBE DONE ===` marker appears before a known fault in
-the minimal guest's shutdown path. The verification is complete before that
-teardown fault; stop QEMU with Ctrl-C after the marker.
-
-## Verified on real audio, not just a pattern
-
-The flat pattern -- channel `c` holding a constant -- is identical in every frame,
-so it cannot catch a duplicated, dropped or reordered frame, and a periodic tick
-is exactly that kind of fault. Replaying one second of the car capture instead,
-in the declared order the sink hands to QSA, removes that blind spot:
-
-    first fragment is real music: 768 frames from the car capture
-    RESMGR_VERIFY reference: 288000 music samples
-    RESMGR_VERIFY ring=0 voices=6 calls=1 bytes=18432 mismatches=0 FULL_FRAGMENT_PASS
-
-A full 16 ms fragment of six-channel music -- 4,608 words -- reaches deva's DMA
-ring byte for byte.
-
-Two limits worth stating. Only the **first** fragment is a valid comparison: the
-probe fills its buffer from the file once and then rewrites the same buffer while
-the reference index walks forward, so a mismatch after that is the harness, not
-the path (the stereo run shows one). And nothing here has been **listened to** --
-the DSP is a stub and the guest has no audio output. What is proved is that the
-bytes arrive intact, not that the hardware then interprets them as intended.
-
-That distinction is the whole remaining question. The driver tells the DSP
-`bits_per_sample = 24` while QSA leaves the sample in bits 31..16 of a 32-bit
-word. If the DSP reads that word as a 24-bit sample, everything is 256x too loud
--- hard clipping, from the right speakers, with correct timing. No byte-level test
-can see it, because both sides are internally consistent and merely disagree about
-where in the word the sample lives. It is answerable only on the car.
+`=== DSP_RENDER_COMPLETE ===` is printed before the known minimal-guest teardown
+fault. The result is complete at that marker; stop QEMU with Ctrl-C afterward.

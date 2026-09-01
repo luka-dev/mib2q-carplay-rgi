@@ -32,17 +32,29 @@ static void preview(const char *tag, const void *buf, size_t len, int words)
 ssize_t snd_pcm_plugin_write(snd_pcm_t *pcm, const void *buf, size_t len)
 {
     static ssize_t (*real)(snd_pcm_t *, const void *, size_t);
-    static int shown;
+    static unsigned calls;
+    ssize_t rc;
     if (!real) real = dlsym(RTLD_NEXT, "snd_pcm_plugin_write");
-    if (shown < 2) { shown++; preview("in ", buf, len, 8); }
-    return real(pcm, buf, len);
+    calls++;
+    if (calls <= 2) preview("in ", buf, len, 8);
+    rc = real(pcm, buf, len);
+    if (calls <= 2 || calls == 10 || calls == 20 || calls == 40 || calls == 62)
+        fprintf(stderr, "TAP plugin_write calls=%u len=%u rc=%d\n",
+                calls, (unsigned)len, (int)rc);
+    return rc;
 }
 
 ssize_t snd_pcm_write_internal(snd_pcm_t *pcm, const void *buf, size_t len)
 {
     static ssize_t (*real)(snd_pcm_t *, const void *, size_t);
-    static int shown;
+    static unsigned calls;
+    ssize_t rc;
     if (!real) real = dlsym(RTLD_NEXT, "snd_pcm_write_internal");
-    if (shown < 2) { shown++; preview("out", buf, len, 8); }
-    return real(pcm, buf, len);
+    calls++;
+    if (calls <= 2) preview("out", buf, len, 8);
+    rc = real(pcm, buf, len);
+    if (calls <= 2 || calls == 10 || calls == 20 || calls == 40 || calls == 62)
+        fprintf(stderr, "TAP write_internal calls=%u len=%u rc=%d\n",
+                calls, (unsigned)len, (int)rc);
+    return rc;
 }
