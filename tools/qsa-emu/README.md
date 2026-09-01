@@ -198,33 +198,47 @@ deployed expecting a fix.
 
 ## How far the audio path gets
 
-Playback works end to end up to the mixer. What does not happen is the mix
-leaving for CSD.
+Playback works end to end up to the driver. What does not happen is the audio
+leaving for the DSP.
 
 | step | state |
 |---|---|
 | client writes to `mpl5_dio_ent` at six voices | works, 62 fragments of 768 frames |
 | QSA converts S16 -> S32 | works, measured correct above |
-| deva play timer runs | `deva_trigger` fires for device_id 4, `session_deva_timer_start` returns 0 |
-| bundle acquired by the driver | `deva_aquire: device_id = 30 <sse_bundle_1>, stream_type=2` |
-| bundle configured | only through `snd_pcm_channel_params`; the **plugin** path refuses it with ENOENT and `why_failed = 0` |
-| reading the bundle | blocks forever on the first read, so nothing pulls the mix |
-| submissions to CSD | none — the command histogram never moves past the 64 pool allocations |
+| deva play timer runs | `deva_trigger` fires for device_id 4 `<deva_timer_play_mpl5_dio_ent>` |
+| playback CSD session starts | `setStartSession: SUCCESS session handle 277` |
+| capture session on the bundle starts | `session_csd_start_capture() SUCCEEDED`, `deva_trigger` fires for device_id 30 |
+| reading the bundle | returns EIO -- it captures *from* the DSP, so with a stub DSP there is nothing to capture |
+| **the DSP's PMEM pools** | **always zero** |
 
-`csd_read` is reached (the capture side really does go through it, and
-`deva_rate_match_csd_setup_capture` checks the byte count it returns), and the
-stub now zero-fills as a DSP returning silence would. It did not unblock the read.
+That last row is the finding. The stub owns every pool the driver asked for and
+reports their contents on a schedule:
 
-The remaining gap is orchestration, not another missing stub symbol: on the head
-unit the audio service behind `/dev/audio_service` is what routes the mixer and
-starts the bundle's capture side, and `devstub` only answers its existence. Going
-further means implementing enough of that service's protocol for deva to consider
-the capture stream running.
+    POOLSUM(all zero) 0/18432 0/18432 0/18432 ... 0/768 0/768
 
-## Worth knowing before continuing
+Seven pools at 18432 bytes -- exactly the six-voice fragment -- and five at 768,
+never holding a single non-zero byte across a run that writes 62 fragments. So
+the playback path does not move audio through CSD PMEM in this configuration at
+all; it stays in the DMA buffer `deva_mib2_aquire` mallocs, and whatever consumes
+that buffer is not reached here.
 
-The question this harness was built to answer is already answered — QSA's
-six-voice widening is correct, byte for byte. Everything from the APAC decoder
-down to the bytes handed to the driver is accounted for. Driving audio all the
-way to CSD would extend the harness into a capture rig for the layers *below*
-that, which is a different and larger job than the one that has been done.
+Two corrections worth keeping, both cheap to get wrong again:
+
+* `sse_bundle_1` is **not** the path playback takes to the DSP. Its CSD session is
+  `csd_capture_sse` -- it captures the mix *from* the DSP, which is why reads
+  return EIO against a stub that has nothing to give.
+* `csd_read` is a probe during capture start, not a transfer: the driver logs
+  `csd_read() returned [36] bytes, when expecting 0!` and fails the whole start
+  with rc 0x24. Returning zero is what makes `session_csd_start_capture` succeed.
+
+## What is left, and what it is worth
+
+Carrying audio the rest of the way means finding what consumes deva's own DMA
+buffer on this platform -- the pools are demonstrably not it -- and that is real
+reverse engineering, not another stub field.
+
+Worth weighing against the fact that the question this harness was built to answer
+is already answered: QSA's six-voice widening is correct byte for byte, and with
+it every layer from the APAC decoder down to the bytes handed to the driver is
+accounted for. Going further turns this into a capture rig for the layers *below*
+the driver, which is a different job from the one that was needed.

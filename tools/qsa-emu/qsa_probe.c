@@ -178,7 +178,17 @@ int main(int argc, char **argv)
                     printf("  capture prepare -> %d\n",
                            snd_pcm_plugin_prepare(cap, SND_PCM_CHANNEL_CAPTURE));
                 }
-                if (rc == 0) { g_bundle = cap; g_bundle_frag = cp.buf.block.frag_size; }
+                if (rc == 0) {
+                    g_bundle = cap;
+                    g_bundle_frag = cp.buf.block.frag_size;
+                    /* Blocking reads hang the whole probe when the capture side
+                     * never produces, and that also costs the slog: sloginfo runs
+                     * after this program returns. Non-blocking keeps the driver's
+                     * own account of what happened. */
+                    printf("  capture nonblock -> %d\n", snd_pcm_nonblock_mode(cap, 1));
+                    printf("  capture go -> %d\n",
+                           snd_pcm_channel_go(cap, SND_PCM_CHANNEL_CAPTURE));
+                }
                 cap = 0;   /* deliberately not closed: releasing it stops the outlet */
             }
         }
@@ -193,10 +203,10 @@ int main(int argc, char **argv)
         char *rb = (char *)malloc((size_t)g_bundle_frag);
         int k, ok = 0;
         printf("=== draining the mixer outlet (%d-byte fragments) ===\n", g_bundle_frag);
-        for (k = 0; k < 16 && rb; k++) {
+        for (k = 0; k < 200 && rb; k++) {
             ssize_t r = snd_pcm_read(g_bundle, rb, (size_t)g_bundle_frag);
-            if (r <= 0) { printf("  read %d -> %d\n", k, (int)r); break; }
-            ok++;
+            if (r > 0) { ok++; continue; }
+            if (k < 3 || (k % 50) == 0) printf("  read %d -> %d\n", k, (int)r);
         }
         printf("  drained %d fragments\n", ok);
         free(rb);

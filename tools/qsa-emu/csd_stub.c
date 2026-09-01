@@ -111,6 +111,29 @@ int32_t csd_close(int32_t handle)
  * the whole reason the stub owns the memory: the driver fills these for the DSP,
  * so whatever is here is what the hardware would have played.  One shot -- the
  * question is the layout of the samples, not their evolution. */
+/* Summarise every pool on each call: "all zero" is itself the answer to whether
+ * the playback path uses this memory, and silence in the log cannot distinguish
+ * "not dumped" from "nothing there". */
+static void csd_pool_summary(void)
+{
+    static int calls;
+    int i, j, any = 0;
+    char line[512];
+    size_t off = 0;
+    if ((calls++ % 8) != 0) return;
+    for (i = 0; i < g_pool_count && i < 12; i++) {
+        const unsigned char *b = (const unsigned char *)g_pool[i].base;
+        uint32_t n = g_pool[i].size, nz = 0;
+        if (!b) continue;
+        for (j = 0; j < (int)n; j++) if (b[j]) nz++;
+        if (nz) any = 1;
+        if (off < sizeof(line) - 24)
+            off += snprintf(line + off, sizeof(line) - off, "%u/%u ", (unsigned)nz, (unsigned)n);
+    }
+    if (g_pool_count)
+        fprintf(g_trace, "POOLSUM%s %s\n", any ? "(DATA)" : "(all zero)", line);
+}
+
 static void csd_dump_pools_once(void)
 {
     static int done;
@@ -137,6 +160,7 @@ static void csd_dump_pools_once(void)
 int32_t csd_ioctl(int32_t handle, uint32_t cmd, void *arg, uint32_t len)
 {
     csd_dump_pools_once();
+    csd_pool_summary();
     /* Two words of the payload are safe once len says they exist, and they are
      * what identifies a buffer submission: the descriptor csdUserCallBack is
      * handed back is a {addr, len} pair. */
@@ -210,6 +234,6 @@ int32_t csd_write(int32_t handle, const void *buf, uint32_t len)
 int32_t csd_read(int32_t handle, void *buf, uint32_t len)
 {
     if (buf && len) memset(buf, 0, len);
-    fprintf(g_trace, "csd_read(h=%d len=%u) -> silence\n", handle, (unsigned)len);
-    return (int32_t)len;
+    fprintf(g_trace, "csd_read(h=%d len=%u) -> 0\n", handle, (unsigned)len);
+    return 0;
 }
