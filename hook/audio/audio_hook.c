@@ -1641,6 +1641,22 @@ size_t spa_buffered_pcm6_read(int16_t *out, size_t frames)
  * head unit; below it the CSD session cycles instead of absorbing jitter. */
 #define SPA_PCM_SINK_MIN_FRAGS     8
 
+/* The caps record says mpl5_dio_ent is natively S32_LE (format 0xc), and we open
+ * it as S16, so QSA inserts a converting plugin.  On two voices that path is
+ * exercised by every stock CarPlay session; on six it is not, and after the deva
+ * driver was cleared it is the last layer between correct PCM and wrong sound.
+ * AUDIO_SPATIAL_S32=1 hands the device its native width and does the widening
+ * here instead, which removes the plugin conversion from the picture entirely.
+ * Off by default: this is an experiment with an on-car A/B, not a conclusion. */
+#define SPA_AUDIO_S32_ENV          "AUDIO_SPATIAL_S32"
+
+static int spa_sink_wants_s32(void)
+{
+    static int cached = -1;
+    if (cached < 0) cached = spa_env_on(SPA_AUDIO_S32_ENV) ? 1 : 0;
+    return cached;
+}
+
 typedef int (*spa_snd_open_name_t)(snd_pcm_t **, char *, int);
 typedef int (*spa_snd_params_t)(snd_pcm_t *, snd_pcm_channel_params_t *);
 typedef int (*spa_snd_setup_t)(snd_pcm_t *, snd_pcm_channel_setup_t *);
@@ -1654,8 +1670,11 @@ typedef struct {
     unsigned sourceChannels;
     unsigned outputChannels;
     int expandedParams;
+    unsigned outputSampleBytes;     /* 2 while we hand QSA S16, 4 when we convert */
     int16_t *scratch;
     size_t scratchBytes;
+    int32_t *scratch32;
+    size_t scratch32Bytes;
     uint64_t writes;
     uint64_t bufferedWrites;
     uint64_t underrunFrames;
@@ -1703,7 +1722,7 @@ int snd_pcm_plugin_params(snd_pcm_t *handle, snd_pcm_channel_params_t *params)
 {
     static spa_snd_params_t real;
     snd_pcm_channel_params_t adjusted;
-    unsigned outputChannels;
+    unsigned outputChannels, outputSampleBytes;
     size_t sourceFrameBytes, outputFrameBytes;
     int isSink, result, renegotiated;
 
@@ -1723,10 +1742,13 @@ int snd_pcm_plugin_params(snd_pcm_t *handle, snd_pcm_channel_params_t *params)
         params->format.voices < 1 || params->format.voices > SPA_PCM_5_1_2_CHANNELS)
         return real(handle, params);
 
+    outputSampleBytes = spa_sink_wants_s32() ? sizeof(int32_t) : sizeof(int16_t);
     adjusted = *params;
     adjusted.format.voices = (int32_t)outputChannels;
+    if (outputSampleBytes == sizeof(int32_t))
+        adjusted.format.format = SND_PCM_SFMT_S32_LE;
     sourceFrameBytes = (size_t)params->format.voices * sizeof(int16_t);
-    outputFrameBytes = (size_t)outputChannels * sizeof(int16_t);
+    outputFrameBytes = (size_t)outputChannels * outputSampleBytes;
     if (adjusted.mode == SND_PCM_MODE_BLOCK && adjusted.buf.block.frag_size > 0) {
         size_t fragmentBytes = (size_t)adjusted.buf.block.frag_size;
         if (fragmentBytes % sourceFrameBytes != 0 ||
@@ -1816,16 +1838,17 @@ int snd_pcm_plugin_params(snd_pcm_t *handle, snd_pcm_channel_params_t *params)
         spa_pcm_sink.sourceFormat = params->format.format;
         spa_pcm_sink.sourceChannels = (unsigned)params->format.voices;
         spa_pcm_sink.outputChannels = outputChannels;
+        spa_pcm_sink.outputSampleBytes = outputSampleBytes;
         spa_pcm_sink.expandedParams = result == 0;
     }
     pthread_mutex_unlock(&spa_pcm_sink.lock);
     if (result != 0) params->why_failed = adjusted.why_failed;
     LOG_INFO(LOG_MODULE,
-             "audio sink: params source=%uch target=%uch rate=%d->%d format=%d "
+             "audio sink: params source=%uch target=%uch rate=%d->%d format=%d->%d "
              "frag=%d->%d frags=%d..%d result=%d why=%#x",
              (unsigned)params->format.voices, outputChannels,
              (int)params->format.rate, (int)adjusted.format.rate,
-             params->format.format,
+             params->format.format, adjusted.format.format,
              (int)params->buf.block.frag_size, (int)adjusted.buf.block.frag_size,
              (int)adjusted.buf.block.frags_min, (int)adjusted.buf.block.frags_max,
              result, (unsigned)adjusted.why_failed);
@@ -1836,7 +1859,7 @@ int snd_pcm_plugin_setup(snd_pcm_t *handle, snd_pcm_channel_setup_t *setup)
 {
     static spa_snd_setup_t real;
     snd_pcm_channel_setup_t actual;
-    unsigned sourceChannels, outputChannels;
+    unsigned sourceChannels, outputChannels, outputSampleBytes;
     int translate, result;
 
     if (!real) real = (spa_snd_setup_t)dlsym(RTLD_NEXT, "snd_pcm_plugin_setup");
@@ -1848,6 +1871,8 @@ int snd_pcm_plugin_setup(snd_pcm_t *handle, snd_pcm_channel_setup_t *setup)
                 spa_pcm_sink.expandedParams;
     sourceChannels = spa_pcm_sink.sourceChannels;
     outputChannels = spa_pcm_sink.outputChannels;
+    outputSampleBytes = spa_pcm_sink.outputSampleBytes ?
+                        spa_pcm_sink.outputSampleBytes : sizeof(int16_t);
     pthread_mutex_unlock(&spa_pcm_sink.lock);
     if (!translate || !sourceChannels || !outputChannels)
         return real(handle, setup);
@@ -1869,7 +1894,7 @@ int snd_pcm_plugin_setup(snd_pcm_t *handle, snd_pcm_channel_setup_t *setup)
     *setup = actual;
     setup->format.voices = (int32_t)sourceChannels;
     {
-        size_t actualFrameBytes = outputChannels * sizeof(int16_t);
+        size_t actualFrameBytes = outputChannels * outputSampleBytes;
         size_t stockFrameBytes = sourceChannels * sizeof(int16_t);
         size_t actualFragmentBytes = (size_t)setup->buf.block.frag_size;
         size_t actualFrames;
@@ -1906,9 +1931,10 @@ int snd_pcm_plugin_setup(snd_pcm_t *handle, snd_pcm_channel_setup_t *setup)
                        stockFrameBytes);
     }
     LOG_INFO(LOG_MODULE,
-             "audio sink: setup actual=%uch/%dHz/%d-byte fragment -> "
+             "audio sink: setup actual=%uch/%dHz/%ubit/%d-byte fragment -> "
              "stock=%uch/%d-byte fragment",
-             outputChannels, (int)actual.format.rate, actual.buf.block.frag_size,
+             outputChannels, (int)actual.format.rate, outputSampleBytes * 8u,
+             actual.buf.block.frag_size,
              sourceChannels, setup->buf.block.frag_size);
     return 0;
 }
@@ -1934,11 +1960,72 @@ static void spa_pcm_expand_fallback(const int16_t *input, size_t frames,
     }
 }
 
+/* ---- what QSA's plugin chain actually produces ----------------------------
+ * snd_pcm_plugin_write runs the conversion chain and hands the result to the
+ * device through snd_pcm_write_internal, which libasound exports and reaches
+ * through its own PLT -- the same property that lets us interpose inside
+ * libairplay.  Capturing here therefore shows the bytes AFTER conversion, which
+ * is the one thing neither an on-unit counter nor the decoded PCM can show:
+ * whether QSA's S16->S32 widening at six voices is what corrupts the audio.
+ *
+ * A bounded one-shot dump.  AUDIO_SPATIAL_TAP=<bytes> arms it; the file pairs
+ * with the pre-conversion dump below, so the two can be diffed offline against
+ * a trivial s32 = s16 << 16 reference. */
+#define SPA_TAP_ENV        "AUDIO_SPATIAL_TAP"
+#define SPA_TAP_OUT_PATH   "/tmp/spatial_tap_out.bin"
+#define SPA_TAP_IN_PATH    "/tmp/spatial_tap_in.bin"
+
+static size_t spa_tap_limit(void)
+{
+    static long cached = -1;
+    if (cached < 0) {
+        const char *v = getenv(SPA_TAP_ENV);
+        cached = (v && v[0]) ? strtol(v, 0, 0) : 0;
+        if (cached < 0) cached = 0;
+    }
+    return (size_t)cached;
+}
+
+static void spa_tap_write(const char *path, size_t *taken, const void *buf, size_t len)
+{
+    size_t limit = spa_tap_limit();
+    int fd;
+    if (!limit || *taken >= limit || !buf || !len) return;
+    if (len > limit - *taken) len = limit - *taken;
+    fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0600);
+    if (fd < 0) return;
+    (void)write(fd, buf, len);
+    close(fd);
+    *taken += len;
+    if (*taken >= limit)
+        LOG_WARN(LOG_MODULE, "audio tap: %s complete (%u bytes)",
+                 path, (unsigned)*taken);
+}
+
+typedef ssize_t (*spa_snd_write_internal_t)(snd_pcm_t *, const void *, size_t);
+
+ssize_t snd_pcm_write_internal(snd_pcm_t *handle, const void *buffer, size_t size)
+{
+    static spa_snd_write_internal_t real;
+    static size_t taken;
+    int isSink;
+
+    if (!real) real = (spa_snd_write_internal_t)dlsym(RTLD_NEXT, "snd_pcm_write_internal");
+    if (!real) return -1;
+
+    pthread_mutex_lock(&spa_pcm_sink.lock);
+    isSink = handle && handle == spa_pcm_sink.handle && spa_pcm_sink.expandedParams;
+    pthread_mutex_unlock(&spa_pcm_sink.lock);
+    if (isSink) spa_tap_write(SPA_TAP_OUT_PATH, &taken, buffer, size);
+
+    return real(handle, buffer, size);
+}
+
 ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, size_t size)
 {
     static spa_snd_write_t real;
-    unsigned sourceChannels, outputChannels;
-    size_t sourceFrameBytes, outputFrameBytes, frames, outputBytes;
+    unsigned sourceChannels, outputChannels, outputSampleBytes;
+    size_t sourceFrameBytes, outputFrameBytes, frames, outputBytes, pcmBytes;
     size_t bufferedFrames = 0;
     ssize_t written;
     int useBridge;
@@ -1950,13 +2037,15 @@ ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, size_t size)
     useBridge = handle && handle == spa_pcm_sink.handle && spa_pcm_sink.expandedParams;
     sourceChannels = spa_pcm_sink.sourceChannels;
     outputChannels = spa_pcm_sink.outputChannels;
+    outputSampleBytes = spa_pcm_sink.outputSampleBytes ?
+                        spa_pcm_sink.outputSampleBytes : sizeof(int16_t);
     if (!useBridge || !buffer || !sourceChannels || !outputChannels) {
         pthread_mutex_unlock(&spa_pcm_sink.lock);
         return real(handle, buffer, size);
     }
 
     sourceFrameBytes = sourceChannels * sizeof(int16_t);
-    outputFrameBytes = outputChannels * sizeof(int16_t);
+    outputFrameBytes = outputChannels * outputSampleBytes;
     if (size == 0 || size % sourceFrameBytes != 0) {
         pthread_mutex_unlock(&spa_pcm_sink.lock);
         return real(handle, buffer, size);
@@ -1970,14 +2059,26 @@ ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, size_t size)
         return real(handle, buffer, size);
     }
     outputBytes = frames * outputFrameBytes;
-    if (spa_pcm_sink.scratchBytes < outputBytes) {
-        int16_t *replacement = (int16_t *)realloc(spa_pcm_sink.scratch, outputBytes);
+    /* The ring and the stereo expansion both produce S16, so the working buffer
+     * is always S16-sized; only what we hand QSA changes width. */
+    pcmBytes = frames * outputChannels * sizeof(int16_t);
+    if (spa_pcm_sink.scratchBytes < pcmBytes) {
+        int16_t *replacement = (int16_t *)realloc(spa_pcm_sink.scratch, pcmBytes);
         if (!replacement) {
             pthread_mutex_unlock(&spa_pcm_sink.lock);
             return real(handle, buffer, size);
         }
         spa_pcm_sink.scratch = replacement;
-        spa_pcm_sink.scratchBytes = outputBytes;
+        spa_pcm_sink.scratchBytes = pcmBytes;
+    }
+    if (outputSampleBytes == sizeof(int32_t) && spa_pcm_sink.scratch32Bytes < outputBytes) {
+        int32_t *replacement = (int32_t *)realloc(spa_pcm_sink.scratch32, outputBytes);
+        if (!replacement) {
+            pthread_mutex_unlock(&spa_pcm_sink.lock);
+            return real(handle, buffer, size);
+        }
+        spa_pcm_sink.scratch32 = replacement;
+        spa_pcm_sink.scratch32Bytes = outputBytes;
     }
 
     if (spa_buffered_pcm_active() &&
@@ -2004,7 +2105,22 @@ ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, size_t size)
                                 spa_pcm_sink.scratch, outputChannels);
     }
     spa_pcm_sink.writes++;
-    written = real(handle, spa_pcm_sink.scratch, outputBytes);
+    {
+        static size_t takenIn;
+        spa_tap_write(SPA_TAP_IN_PATH, &takenIn, spa_pcm_sink.scratch,
+                      frames * outputChannels * sizeof(int16_t));
+    }
+    if (outputSampleBytes == sizeof(int32_t)) {
+        /* Left-justify into the device's native 32-bit slot.  QSA's own S16->S32
+         * plugin does the same shift; doing it here is what takes that plugin
+         * out of the six-voice path. */
+        size_t sample, samples = frames * outputChannels;
+        for (sample = 0; sample < samples; sample++)
+            spa_pcm_sink.scratch32[sample] = (int32_t)spa_pcm_sink.scratch[sample] << 16;
+        written = real(handle, spa_pcm_sink.scratch32, outputBytes);
+    } else {
+        written = real(handle, spa_pcm_sink.scratch, outputBytes);
+    }
     if (spa_pcm_sink.writes == 1 || (spa_pcm_sink.writes % 1024u) == 0) {
         LOG_INFO(LOG_MODULE,
                  "audio sink: writes=%llu buffered=%llu underrunFrames=%llu "
