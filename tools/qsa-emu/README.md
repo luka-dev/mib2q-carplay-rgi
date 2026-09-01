@@ -76,10 +76,22 @@ question, and it is now answerable here rather than by ear in a moving car.
 
 ## Next
 
-A client inside the guest that opens `mpl5_dio_ent` at six voices and writes the
-captured PCM, with the hook's two taps recording both sides of the conversion.
-Then the same run at two voices — the configuration that works on the car — and
-diff. `tools/qsa_play.c` is the client, and it still needs the sequence the
-RetroArch QNX driver uses: `snd_pcm_plugin_set_disable(PLUGIN_DISABLE_MMAP)`,
-`snd_pcm_channel_info` to read the device's own geometry, then
-`snd_pcm_channel_params`.
+`io-audio` now dies at the point where the driver wants real memory from the DSP:
+
+    io-audio terminated SIGSEGV at libc.so.3@memset+0x54, ref=00000000
+
+That is `allocateCsdBufferPool`. On hardware the allocation ioctl hands back
+mapped PMEM addresses; the stub answers "success" without filling anything in, so
+the driver memsets a null pointer. The trace already shows the command codes in
+play — `0x11410`, `0x11425`, `0x11401`, `0x11420`, `0x11417` — and which of them
+is the allocation, plus the shape it expects back, comes from decompiling
+`allocateCsdBufferPool` (thunk at 0x8288) the same way
+`csd_query_driver_version` did.
+
+Once the stub owns those buffers it also becomes the capture point for the audio
+itself: what the driver leaves in them is exactly what would have reached the DSP.
+
+After that, `qsa_probe` drives `mpl5_dio_ent` at six voices with a pattern whose
+position in the widened word is unmistakable — channel c carries the constant
+0x1000*(c+1) — and again at two voices, the configuration that works on the car.
+Diffing the two says whether QSA's widening is what breaks six-channel audio.

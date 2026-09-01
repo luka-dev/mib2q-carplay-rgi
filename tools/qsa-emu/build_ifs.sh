@@ -21,7 +21,7 @@ cp "$A/Tools/qnx-carplay-emu/build/re/startup-virt" "$STAGE/"
 cp "$FW/app/armle/sbin/io-audio" "$STAGE/"
 cp "$FW/app/armle/lib/dll/deva-ctrl-qc.so" "$STAGE/"
 cp "$FW/ifs2/ifs_coreservices3/lib/libasound.so.2" "$STAGE/"
-cp "$OUT/libcsdIpcClient.so" "$OUT/devstub" "$STAGE/"
+cp "$OUT/libcsdIpcClient.so" "$OUT/devstub" "$OUT/qsa_probe" "$STAGE/"
 # The firmware was unpacked without the execute bit and mkifs copies the host
 # file mode straight into the image, so procnto refuses to exec them.
 chmod 755 "$STAGE"/*

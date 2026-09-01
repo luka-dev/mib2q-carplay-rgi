@@ -34,6 +34,12 @@
     display_msg ">>> io-audio -d qc -vvvvv"
     CACHE_NOP=1 io-audio -vvvvv -d qc platform_id=mib2,log_level=high
     waitfor /dev/snd 15
+    display_msg ">>> wait for a real device node, not just the directory"
+    waitfor /dev/snd/pcmPreferredp 25
+
+    display_msg ">>> drive the device the way dio does: S16 in, six voices"
+    qsa_probe
+
     display_msg ">>> slog (io-audio explains itself here, not on stderr)"
     sloginfo
 
@@ -59,6 +65,7 @@
 /proc/boot/cat=SDP/bin/cat
 /proc/boot/sloginfo=SDP/bin/sloginfo
 /proc/boot/devstub=OUT/devstub
+/proc/boot/qsa_probe=OUT/qsa_probe
 /proc/boot/libm.so.2=SDP/lib/libm.so.2
 
 # --- the firmware audio stack itself ---
