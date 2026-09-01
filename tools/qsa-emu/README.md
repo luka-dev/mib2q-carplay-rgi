@@ -76,22 +76,35 @@ question, and it is now answerable here rather than by ear in a moving car.
 
 ## Next
 
-`io-audio` now dies at the point where the driver wants real memory from the DSP:
+The driver now runs complete playback sessions against the stub:
 
-    io-audio terminated SIGSEGV at libc.so.3@memset+0x54, ref=00000000
+    allocateCsdBufferPool: ENTER (buffer_count=8, buffer_size=1536) -> LEAVE (rc=0x0)
+    openAudioContextV2: SUCCEEDED (dev_id=11)
+    streamAttach: SUCCEEDED
+    enableContext: SUCCEEDED
+    setStartSession: SUCCESS session handle 277
 
-That is `allocateCsdBufferPool`. On hardware the allocation ioctl hands back
-mapped PMEM addresses; the stub answers "success" without filling anything in, so
-the driver memsets a null pointer. The trace already shows the command codes in
-play — `0x11410`, `0x11425`, `0x11401`, `0x11420`, `0x11417` — and which of them
-is the allocation, plus the shape it expects back, comes from decompiling
-`allocateCsdBufferPool` (thunk at 0x8288) the same way
-`csd_query_driver_version` did.
+64 PMEM pools are handed out, and the first ones come back at 18432 bytes —
+0x4800, exactly the six-voice fragment the deva patch produces, which is a useful
+independent confirmation that the driver really is running the six-channel
+geometry here.
 
-Once the stub owns those buffers it also becomes the capture point for the audio
-itself: what the driver leaves in them is exactly what would have reached the DSP.
+What made that work is the contract recovered from `allocateCsdBufferPool`
+@0x2e374: `csd_ioctl(h, 0x11420, {size, pid, 0, 0}, 16)` and the DSP side is
+expected to write a shared-memory **file descriptor** into word 3. The driver
+then calls `mem_offset64` on it, so an ordinary `shm_open` is not enough — the
+object has to be anonymous physical memory (`shm_ctl(fd, SHMCTL_ANON|SHMCTL_PHYS,
+0, size)`). Returning success without filling word 3 is what made the driver
+memset a null pointer.
 
-After that, `qsa_probe` drives `mpl5_dio_ent` at six voices with a pattern whose
-position in the widened word is unmistakable — channel c carries the constant
-0x1000*(c+1) — and again at two voices, the configuration that works on the car.
-Diffing the two says whether QSA's widening is what breaks six-channel audio.
+It still dies a little later, the same way:
+
+    io-audio terminated SIGSEGV at libc.so.3@memset+0x28, ref=0000003e
+
+`0x3e` is not a pointer, so another ioctl output field is being consumed as one.
+The method is now established: find the caller in the IDA database, read what it
+expects back, fill it in. Each one moves the driver further.
+
+Once it survives, `qsa_probe` writes its pattern and the pools — which this stub
+owns and keeps mapped — hold exactly what would have reached the DSP. Comparing
+six voices against two, the configuration that works on the car, is then a diff.

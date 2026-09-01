@@ -16,6 +16,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <sys/mman.h>
 
 /* The firmware is built with -fstack-protector and resolves these from its own
  * libc; the QEMU BSP's libc.so.3 does not export them, so deva-ctrl-qc.so fails
@@ -36,6 +39,14 @@ void __stack_chk_fail(void)
  * hardware they front is exactly what is being left out. */
 int rtpd_init(void)   { return 0; }
 int rtpd_deinit(void) { return 0; }
+
+#define CSD_AS_CMD_ALLOC_PMEM         70688u   /* 0x11420 */
+#define CSD_AS_CMD_MAP_SHARED_MEMORY  70679u   /* 0x11417 */
+
+/* Every PMEM pool the driver asks for, kept mapped so its contents can be dumped:
+ * this is the memory the driver fills with audio destined for the DSP. */
+static struct { int fd; uint32_t size; void *base; } g_pool[32];
+static int g_pool_count;
 
 static FILE *g_trace;
 static FILE *g_pcm;
@@ -96,10 +107,45 @@ int32_t csd_close(int32_t handle)
  * that is where a wrong voice count or channel map would be visible. */
 int32_t csd_ioctl(int32_t handle, uint32_t cmd, void *arg, uint32_t len)
 {
-    /* Log the shape, not the contents: `len` is only trustworthy once the real
-     * prototype is known, and a wrong length here reads unmapped memory. */
     fprintf(g_trace, "csd_ioctl(h=%d cmd=%#x arg=%p len=%u)\n",
             handle, (unsigned)cmd, arg, (unsigned)len);
+
+    /* CSD_AS_CMD_ALLOC_PMEM, recovered from allocateCsdBufferPool @0x2e374:
+     * the driver passes {size, pid, 0, 0} and expects the DSP side to write a
+     * shared-memory FILE DESCRIPTOR into word 3.  It then calls mem_offset64 on
+     * that fd to get a physical offset, so an ordinary shm_open is not enough --
+     * the object has to be anonymous physical memory.  Answering "success"
+     * without filling word 3 is what made the driver memset a null pointer.
+     *
+     * These buffers are also the prize: this is the memory the driver fills with
+     * audio for the DSP, so owning it is what lets the bytes be inspected. */
+    if (cmd == CSD_AS_CMD_ALLOC_PMEM && arg && len >= 16) {
+        uint32_t *w = (uint32_t *)arg;
+        uint32_t size = w[0];
+        char name[40];
+        int fd;
+
+        snprintf(name, sizeof(name), "/csd_pool_%d", g_pool_count);
+        shm_unlink(name);
+        fd = shm_open(name, O_RDWR | O_CREAT, 0666);
+        if (fd < 0 || shm_ctl(fd, SHMCTL_ANON | SHMCTL_PHYS, 0, size) == -1) {
+            fprintf(g_trace, "  ALLOC_PMEM size=%u FAILED (%s)\n",
+                    (unsigned)size, strerror(errno));
+            if (fd >= 0) close(fd);
+            return -1;
+        }
+        w[3] = (uint32_t)fd;
+        if (g_pool_count < (int)(sizeof(g_pool) / sizeof(g_pool[0]))) {
+            g_pool[g_pool_count].fd = fd;
+            g_pool[g_pool_count].size = size;
+            g_pool[g_pool_count].base =
+                mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+        }
+        fprintf(g_trace, "  ALLOC_PMEM size=%u -> fd=%d (pool %d)\n",
+                (unsigned)size, fd, g_pool_count);
+        g_pool_count++;
+        return 0;
+    }
     return 0;
 }
 
