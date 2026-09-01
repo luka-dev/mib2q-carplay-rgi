@@ -1,5 +1,7 @@
 /*
  * CarPlay Hook Framework - Main API
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
 #ifndef CARPLAY_HOOK_FRAMEWORK_H
@@ -30,7 +32,11 @@ typedef void (*hook_transport_callback_t)(hook_context_t* ctx, uint16_t msgid);
 #define HOOK_EVENT_IDENTIFY_END     7
 #define HOOK_EVENT_AUTH_DONE        8
 
-/* Hook Module Definition */
+/* Hook Module Definition.
+ *
+ * Everything a module needs from the framework is declared here; the framework
+ * knows no module by name.  Lifecycle, the iAP2 message/Identify/state seams
+ * and the raw transport taps all come from this one table. */
 typedef struct {
     const char* name;
     hook_priority_t priority;
@@ -40,8 +46,26 @@ typedef struct {
     hook_identify_patcher_t on_identify;
     hook_state_callback_t on_state;
     hook_transport_callback_t on_transport_send;  /* Called on outgoing transport frames */
+
+    /* Lifecycle.  on_init runs once from the framework's first real Cinemo
+     * boundary (never an ELF constructor); on_shutdown runs from the framework
+     * destructor in reverse table order, before the injection worker and bus
+     * are stopped. */
+    void (*on_init)(void);
+    void (*on_shutdown)(void);
+
+    /* Raw NmeTransport::Recv link bytes, and a session-boundary reset fired on
+     * a new Identify so partial reassembly cannot cross sessions. */
+    hook_transport_recv_sink_t on_transport_recv;
+    hook_transport_recv_reset_t on_transport_recv_reset;
+
     void* user_data;
 } hook_module_def_t;
+
+/* The shipping module set, in initialisation order (hook/main.c).  This is the
+ * only place a module is named; adding one is a line there plus its own def. */
+extern const hook_module_def_t* const hook_module_table[];
+extern const size_t hook_module_table_count;
 
 /* Stock iAP2 passthrough context.  The link-session id is captured from the
  * most recent stock NmeTransport::Send.  The live ICinemoIAP handle is owned

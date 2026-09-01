@@ -1,12 +1,14 @@
 /*
  * CarPlay Cover Art Hook
  *
- * Taps the Cinemo transport at NmeTransport::Recv (via the framework's
- * hook_set_transport_recv_sink), reassembles the FF 5A framed iAP2 link
+ * Taps the Cinemo transport at NmeTransport::Recv (declared as the module
+ * def's on_transport_recv), reassembles the FF 5A framed iAP2 link
  * stream, extracts the NowPlaying artwork JPEG, decodes + resizes to
  * 256x256, and writes it as a PNG file (+ bus notify).  There is NO libc
  * read()/recv()/open()/close() interposition — cover art no longer touches
  * the process-wide I/O path.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
 #include "../framework/common.h"
@@ -114,8 +116,8 @@ typedef struct {
  * 32 MB is well above any legitimate single-image size). */
 #define COVERART_MAX_JPEG  (32u * 1024u * 1024u)
 
-/* The single reassembler stream, fed by the NmeTransport::Recv seam (via
- * hook_set_transport_recv_sink → coverart_on_transport_recv).  There is
+/* The single reassembler stream, fed by the NmeTransport::Recv seam (the
+ * module def's on_transport_recv → coverart_on_transport_recv).  There is
  * exactly one Cinemo transport carrying the iAP2 link, so one stream suffices
  * — no fd-keyed pool, no global mutex, no libc interposition. */
 static StreamState g_recv_stream = {
@@ -999,8 +1001,8 @@ static void coverart_callback_leave(void) {
     pthread_mutex_unlock(&runtime_mutex);
 }
 
-/* Sink registered with the framework (hook_set_transport_recv_sink).  Called
- * for every NmeTransport::Recv delivery.  (The framework logs the first
+/* Sink declared by the module def (on_transport_recv).  Called for every
+ * NmeTransport::Recv delivery.  (The framework logs the first
  * delivery's ret + leading bytes for on-unit seam validation.) */
 static void coverart_on_transport_recv(const uint8_t* data, unsigned int len) {
     if (!coverart_callback_enter()) return;
@@ -1008,9 +1010,9 @@ static void coverart_on_transport_recv(const uint8_t* data, unsigned int len) {
     coverart_callback_leave();
 }
 
-/* Session-boundary reset (hook_set_transport_recv_reset).  Framework calls
- * this on a new Identify so a JPEG left half-reassembled by a prior session's
- * disconnect can't concatenate into the next.  dio_manager is spawned per
+/* Session-boundary reset (module def's on_transport_recv_reset).  Framework
+ * calls this on a new Identify so a JPEG left half-reassembled by a prior
+ * session's disconnect can't concatenate into the next.  dio_manager is spawned per
  * phone connect so the stream is normally fresh per process anyway; this is
  * belt-and-suspenders for any future single-process multi-session transport.
  * Buffers are kept (lengths reset) to avoid realloc churn. */
@@ -1043,21 +1045,28 @@ static void coverart_runtime_init_once(void) {
     runtime_initialized = 1;
     pthread_mutex_unlock(&runtime_mutex);
 
-    /* Register the narrow transport-receive tap — cover art's ONLY input.
-     * No libc read/recv/open/close interposition.  The reset fires on each
-     * new Identify to drop stale partial-JPEG state at a session boundary. */
-    hook_set_transport_recv_sink(coverart_on_transport_recv);
-    hook_set_transport_recv_reset(coverart_reset_recv_stream);
-
     LOG_INFO(LOG_MODULE,
              "Cover art runtime initialized lazily (NmeTransport::Recv seam; worker deferred)");
 }
 
-void coverart_runtime_init(void) {
+static void coverart_runtime_shutdown(void);
+
+static void coverart_runtime_init(void) {
     pthread_once(&coverart_init_once, coverart_runtime_init_once);
 }
 
-void coverart_runtime_shutdown(void) {
+/* Cover art is a pure receive-side tap: it wants the raw NmeTransport::Recv
+ * bytes and the Identify session boundary. */
+const hook_module_def_t coverart_module_def = {
+    .name = "coverart",
+    .priority = HOOK_PRIORITY_LOW,
+    .on_init = coverart_runtime_init,
+    .on_shutdown = coverart_runtime_shutdown,
+    .on_transport_recv = coverart_on_transport_recv,
+    .on_transport_recv_reset = coverart_reset_recv_stream
+};
+
+static void coverart_runtime_shutdown(void) {
     pthread_t thread_to_join;
     int join_worker = 0;
     int callbacks_quiesced = 0;
@@ -1067,12 +1076,10 @@ void coverart_runtime_shutdown(void) {
     uint8_t* raw_buf;
     uint8_t* jpeg_buf;
 
-    /* Unregister the framework taps FIRST so no new Recv delivery enters
-     * cover art.  A caller that already copied the old function pointer is
-     * covered by runtime_callbacks below. */
-    hook_set_transport_recv_sink(NULL);
-    hook_set_transport_recv_reset(NULL);
-
+    /* The taps stay declared in the module def for the life of the process;
+     * runtime_shutting_down below is what actually stops them.  It always was:
+     * the old unregister could not stop a caller which had already copied the
+     * function pointer, so the callback drain was the real barrier. */
     pthread_mutex_lock(&runtime_mutex);
     if (!runtime_initialized) {
         pthread_mutex_unlock(&runtime_mutex);

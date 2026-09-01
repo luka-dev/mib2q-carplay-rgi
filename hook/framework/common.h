@@ -1,6 +1,7 @@
 /*
  * CarPlay Hook Framework - Common Types and Utilities
- * Copyright (c) 2024
+ *
+ * Copyright (c) 2024-2026 LuKa (@LuKa_dev)
  */
 
 #ifndef CARPLAY_COMMON_H
@@ -129,16 +130,12 @@ static inline uint64_t get_timestamp_ms(void) {
 /* Raw transport-receive seam (cover art).
  * The framework interposes NmeTransport::Recv(NmeArray<uchar>&) — the symmetric
  * pair to NmeTransport::Send — and hands each freshly received link buffer to
- * the registered sink.  Lets cover art tap the Cinemo transport directly
- * instead of globally interposing libc read()/recv()/open()/close(). */
+ * every module that declares on_transport_recv.  Lets cover art tap the Cinemo
+ * transport directly instead of globally interposing libc read()/recv().
+ * on_transport_recv_reset fires on a new Identify (IAP2_MSG_IDENTIFY_START) so
+ * a sink can drop state half-reassembled by a prior session. */
 typedef void (*hook_transport_recv_sink_t)(const uint8_t* data, unsigned int len);
-void hook_set_transport_recv_sink(hook_transport_recv_sink_t sink);
-
-/* Optional session-boundary reset: the framework invokes this on a new
- * Identify (IAP2_MSG_IDENTIFY_START) so the sink can drop any partially
- * reassembled state from a prior session.  NULL to unregister. */
 typedef void (*hook_transport_recv_reset_t)(void);
-void hook_set_transport_recv_reset(hook_transport_recv_reset_t reset);
 
 /* True if the current process is dio_manager (reads /proc/self/cmdline).  Used to gate
  * per-process resources (bus connector, cover-art worker) so the LD_PRELOAD-inheriting

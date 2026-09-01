@@ -1,10 +1,13 @@
 /*
  * CarPlay Hook Framework - Implementation
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
+/* This file deliberately includes no module header.  Modules reach the
+ * framework through hook_module_def_t; the framework reaches them only through
+ * hook_module_table (hook/main.c). */
 #include "hook_framework.h"
-#include "../coverart/coverart_hook.h"
-#include "../routeguidance/rgd_hook.h"
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -74,8 +77,6 @@ static struct {
     int (*real_iap_addref)(void*);
     int (*real_iap_release)(void*);
     int (*real_iap_send_iap2)(void*, int, const void*, int);
-    hook_transport_recv_sink_t transport_recv_sink;
-    hook_transport_recv_reset_t transport_recv_reset;
 } g_fw = {
     .initialized = false,
     .shutting_down = false,
@@ -119,11 +120,29 @@ static void ensure_fw_lock_init(void) {
     pthread_once(&g_fw_lock_once, init_fw_lock_once);
 }
 
-/* Keep ldqnx constructor-free.  The old RGD constructor registered the module,
- * logged, and therefore created the logger pthread while the QNX loader lock
- * was still held.  Register only after a real Cinemo call reaches us. */
+/* Nothing here may run from an ELF constructor.  On QNX 6.5 the old module
+ * constructors reached LOG_INFO, whose lazy logger created a pthread while
+ * ldqnx still owned the loader lock.  Register modules only after a real
+ * Cinemo call proves that dio_manager and all dependencies are live. */
 static void init_modules_once(void) {
-    rgd_init();
+    size_t i;
+    for (i = 0; i < hook_module_table_count; i++) {
+        const hook_module_def_t* def = hook_module_table[i];
+        if (!def) continue;
+        hook_framework_register_module(def);
+        if (def->on_init) def->on_init();
+    }
+}
+
+/* Reverse table order, so a module always tears down before the ones it was
+ * initialised after.  Runs before the injection worker and the bus stop, which
+ * is what lets a module still publish a final bus message here. */
+static void shutdown_modules(void) {
+    size_t i;
+    for (i = hook_module_table_count; i-- > 0;) {
+        const hook_module_def_t* def = hook_module_table[i];
+        if (def && def->on_shutdown) def->on_shutdown();
+    }
 }
 
 static void inject_deadline_after_ms(struct timespec* deadline, long ms) {
@@ -296,36 +315,24 @@ static void resolve_functions(void) {
         g_fw.real_iap_send_iap2 = (int(*)(void*, int, const void*, int))dlsym(RTLD_NEXT, "ICinemoIAP_SendIAP2");
 }
 
-void hook_set_transport_recv_sink(hook_transport_recv_sink_t sink) {
-    ensure_fw_lock_init();
-    pthread_mutex_lock(&g_fw.lock);
-    g_fw.transport_recv_sink = sink;
-    pthread_mutex_unlock(&g_fw.lock);
+/* Raw link bytes from NmeTransport::Recv, to every module that asked for them.
+ * A sink stays declared for the life of the process: quiescing it during
+ * shutdown is the module's own business (cover art drains its in-flight
+ * callbacks under its runtime mutex), which is why there is no unregister. */
+static void notify_transport_recv(const uint8_t* data, unsigned int len) {
+    for (int i = 0; i < g_fw.module_count; i++) {
+        hook_module_t* mod = &g_fw.modules[i];
+        if (mod->active && mod->def.on_transport_recv)
+            mod->def.on_transport_recv(data, len);
+    }
 }
 
-void hook_set_transport_recv_reset(hook_transport_recv_reset_t reset) {
-    ensure_fw_lock_init();
-    pthread_mutex_lock(&g_fw.lock);
-    g_fw.transport_recv_reset = reset;
-    pthread_mutex_unlock(&g_fw.lock);
-}
-
-static hook_transport_recv_sink_t hook_get_transport_recv_sink(void) {
-    hook_transport_recv_sink_t sink;
-    ensure_fw_lock_init();
-    pthread_mutex_lock(&g_fw.lock);
-    sink = g_fw.transport_recv_sink;
-    pthread_mutex_unlock(&g_fw.lock);
-    return sink;
-}
-
-static void hook_call_transport_recv_reset(void) {
-    hook_transport_recv_reset_t reset;
-    ensure_fw_lock_init();
-    pthread_mutex_lock(&g_fw.lock);
-    reset = g_fw.transport_recv_reset;
-    pthread_mutex_unlock(&g_fw.lock);
-    if (reset) reset();
+static void notify_transport_recv_reset(void) {
+    for (int i = 0; i < g_fw.module_count; i++) {
+        hook_module_t* mod = &g_fw.modules[i];
+        if (mod->active && mod->def.on_transport_recv_reset)
+            mod->def.on_transport_recv_reset();
+    }
 }
 
 static bool is_known_52xx_msg(uint16_t msgid) {
@@ -443,7 +450,7 @@ static void handle_state_messages(uint16_t msgid) {
             clear_injection_context();
             /* New session boundary — let the transport-recv sink (cover art)
              * drop any half-reassembled stream from a prior session. */
-            hook_call_transport_recv_reset();
+            notify_transport_recv_reset();
             notify_state(HOOK_EVENT_IDENTIFY_START, NULL);
             break;
         case IAP2_MSG_IDENTIFY_ACCEPTED:
@@ -582,12 +589,6 @@ hook_result_t hook_framework_init(void) {
         LOG_WARN(LOG_MODULE,
                  "lazy runtime init complete (constructor-free; first Cinemo boundary)");
 
-    /* Register the cover-art receive sink from the same lazy boundary as the
-     * rest of the framework.  coverart_runtime_init() is pthread_once-backed,
-     * so concurrent first Decode/Encode/Send/Recv calls all wait until the
-     * sink is completely installed.  No thread is created here. */
-    coverart_runtime_init();
-
     /* Start/retry the TCP bus only in dio_manager.  Safe here: init is lazy on
      * a real Cinemo call, not in the LD_PRELOAD constructor. */
     framework_try_start_bus();
@@ -628,16 +629,16 @@ void hook_framework_shutdown(void) {
 
     notify_state(HOOK_EVENT_SHUTDOWN, NULL);
 
-    /* This used to be a separate ELF destructor with unspecified order. */
-    rgd_shutdown();
+    /* Module destructors used to run in unspecified ELF order, including when
+     * framework initialisation had never happened.  Keep teardown ordered and
+     * reachable only from the framework destructor.  Each module's own path is
+     * independently bounded; the bus is still alive here so a module may
+     * publish a final message. */
+    shutdown_modules();
 
     /* No module may enqueue another stock transport call after the terminal
      * state above.  Bound the only already-running synchronous SendIAP2. */
     inject_worker_shutdown();
-
-    /* Stop accepting cover-art callbacks and collect its optional worker while
-     * the bus is still alive.  Its shutdown path is independently bounded. */
-    coverart_runtime_shutdown();
 
     /* Stop TCP bus */
     bus_shutdown();
@@ -988,7 +989,6 @@ int _ZN12NmeTransport4RecvER8NmeArrayIhE(void* self, void* out_array) {
     }
     int ret = g_fw.real_transport_recv(self, out_array);
 
-    hook_transport_recv_sink_t sink = hook_get_transport_recv_sink();
     uint8_t* data = NULL;
     unsigned int len = 0;
     bool have = (out_array && parse_array_bytes(out_array, &data, &len));
@@ -1006,8 +1006,8 @@ int _ZN12NmeTransport4RecvER8NmeArrayIhE(void* self, void* out_array) {
 
     /* Tap only on success.  On an error return the array may hold stale bytes;
      * re-feeding them would corrupt the reassembler with duplicates. */
-    if (ret == 0 && sink && have) {
-        sink(data, len);
+    if (ret == 0 && have) {
+        notify_transport_recv(data, len);
     }
     return ret;
 }
