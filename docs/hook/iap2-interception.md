@@ -33,9 +33,13 @@ flowchart LR
 
 ## Framework
 
-`main.c` includes three auto-registering modules (constructors): route-guidance, cover-art,
-cluster/screen. `hook_framework` keeps a priority-ordered module registry and routes each parsed frame
-to the modules that registered for its `msgid`.
+`main.c` is the module table and nothing else: it lists the shipping modules (route-guidance,
+cover-art) in initialisation order. Nothing auto-registers from an ELF constructor - the framework
+registers whatever stands in the table at its first real Cinemo boundary, calls each module's
+`on_init`, and tears them down in reverse order. Everything a module wants (Identify, `msgid` filter,
+session state, outgoing transport frames, the raw `NmeTransport::Recv` tap) is declared in its own
+`hook_module_def_t`, so `hook_framework.c` includes no module header. `hook_framework` keeps a
+priority-ordered registry and routes each parsed frame to the modules that asked for its `msgid`.
 
 ## Frame parsing
 

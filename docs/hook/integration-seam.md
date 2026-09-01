@@ -127,11 +127,13 @@ support - it supplies a genuinely absent case. *(RE-derived; not re-checkable fr
   `lazy runtime init complete (constructor-free; first Cinemo boundary)` is the live boundary marker.
   Fresh standalone artifact: `build/libcarplay_hook.so`, SHA-256
   `1dfee4db2d3ff836e518bd53b0adfd3652b0ba1fa112f37390fc4a9f55feedcb`.
-- **FIXED - eager cover-art constructor** [x] (confirmed resolved on this branch). `coverart_runtime_init`
-  is `pthread_once`-backed and installs the `NmeTransport::Recv` sink from the framework's lazy
-  first-Cinemo-call boundary - **no thread is created there**. The worker is created lazily on the first
-  complete image (joinable, latest-wins), and shutdown unregisters the sink, quiesces copied callbacks,
-  then **joins** the worker before stopping the bus. Helper processes stay fully inert (gated on
+- **FIXED - eager cover-art constructor** [x] (confirmed resolved on this branch). Cover art declares
+  its `NmeTransport::Recv` tap in its module def; the framework runs its `pthread_once`-backed
+  `on_init` from the lazy first-Cinemo-call boundary - **no thread is created there**. The worker is
+  created lazily on the first complete image (joinable, latest-wins). The tap stays declared for the
+  life of the process: shutdown quiesces copied callbacks and then **joins** the worker before stopping
+  the bus, which was always the real barrier (an unregister could never stop a caller that had already
+  copied the function pointer). Helper processes stay fully inert (gated on
   `hook_process_is_dio_manager`).
 - **P2 - excessive ELF export surface** (!) **open.** No `-fvisibility=hidden` / version-script in the
   hook build; the object still exports far more than the intended interposes. Every exported helper is a
