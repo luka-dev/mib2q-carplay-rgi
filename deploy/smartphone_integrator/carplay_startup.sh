@@ -213,12 +213,5 @@ export ALTSCREEN_ADVERT_DISPLAYS=1
 export AUDIO_SPATIAL=1
 export AUDIO_SPATIAL_ATMOS=0
 export AUDIO_SPATIAL_ATMOS_MODE=downmix
-# Was an experiment: hand the device its native S32 width and do the widening in
-# the hook, to take QSA's converting plugin out of the six-voice path.  MEASURED
-# AND ANSWERED in tools/qsa-emu -- QSA's widening is exactly a left shift by 16
-# with channel order intact, so doing it ourselves produces identical bytes.
-# Left at 0 because turning it on cannot change anything; the code is a candidate
-# for deletion once nothing else needs the S32 path.
-export AUDIO_SPATIAL_S32=0
 export AUDIO_SPATIAL_CODEC_LIB="$H/libcarplay_apac.so"
 exec "$DIODIR/dio_manager" "$@"
