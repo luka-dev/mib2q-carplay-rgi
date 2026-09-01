@@ -8,18 +8,18 @@ inspected without the car.
 
 On the car every counter above the driver is clean — correct 48 kHz timing, 768
 frames per 16 ms fragment, zero underruns, and PCM that is provably correct
-(decoded offline and listened to). The sound is still wrong. Everything left is
+(decoded offline and listened to). The sound is still wrong. Everything left was
 below the write: QSA's S16->S32 conversion at six voices, io-audio's mixer, and
-deva's DMA. None of it is observable from a log on the unit.
+deva's DMA. None of it was observable from a log on the unit.
 
 ## How
 
 `libcsdIpcClient.so` is the only substitute. deva imports exactly eight symbols
 from it and builds every higher-level CSD call (`openAudioStreamV2`,
 `setStreamMultichannel`, `setStreamFormatPcmMultichannel`, `allocateCsdBufferPool`)
-on top of them, so standing in for those eight runs the whole driver — and makes
-the stub the natural capture point: what deva hands down is exactly what would
-have reached the DSP.
+on top of them, so standing in for those eight runs the whole driver. Preloading
+the stand-in into `io-audio` also lets it locate deva's DMA ring and capture the
+resource-manager copy into that ring.
 
     ./build_ifs.sh          # stages, runs mkifs in the qnx65 Docker image
     # boot: qemu-system-arm -M virt -m 512 -cpu cortex-a15 -icount shift=auto \
@@ -39,7 +39,7 @@ including `mpl5_dio_ent`, the CarPlay one:
     mpl1_int_ent mpl3_mirror_lnk mpl4_sdis_a2ls mpl5_dio_ent mpl6_gal_ent
     mpl7_bcl_ent ann1_int_nav ... sse ent1 mic1 ... sse_bundle_1
 
-`/tmp/csd_trace.log` records the conversation the driver believes it is having
+The serial console records the conversation the driver believes it is having
 with the DSP:
 
     csd_init
@@ -125,9 +125,10 @@ fills a PMEM buffer, submits it, and waits for the DSP to call back. A stub that
 registers the callback and never calls it stalls that loop after `buffer_count`
 buffers.
 
-Closing the loop is also what makes the capture work: the moment the stub is
-about to answer `BUF_DONE`, the buffer it is acknowledging holds exactly what
-would have been played.
+That callback contract is recovered, but this emulated playback route does not
+exercise it: all CSD PMEM pools remain empty. The working capture point is the
+resource-manager copy into deva's separate malloc-backed DMA ring, described
+below.
 
 ## The device map, from the guest itself
 
@@ -156,11 +157,11 @@ the same 16 ms period everything else runs on.
 
 The slog names two timers, `deva_timer_play_mpl5_dio_ent` and
 `deva_timer_cap_sse_bundle_1`, so the path is client -> mpl5 -> software mixer ->
-bundle -> CSD. The play timer does run: `deva_trigger` fires for device_id 4
+bundle -> CSD. The play timer starts: `deva_trigger` fires for device_id 4
 `<mpl5_dio_ent>`, `session_deva_timer_start` returns 0, and `deva_aquire` finds
-the device. What never happens is a per-fragment submission — over a run where the
-probe writes 62 fragments the command histogram does not move at all beyond the
-64 pool allocations.
+the device. What never happens is an emulated per-fragment tick or submission —
+over a run where the probe writes 62 fragments the command histogram does not
+move at all beyond the 64 pool allocations.
 
 Opening `sse_bundle_1` from the client does not start it either: the open
 succeeds but `snd_pcm_plugin_params` returns ENOENT with `why_failed = 0`, for
@@ -205,7 +206,8 @@ leaving for the DSP.
 |---|---|
 | client writes to `mpl5_dio_ent` at six voices | works, 62 fragments of 768 frames |
 | QSA converts S16 -> S32 | works, measured correct above |
-| deva play timer runs | `deva_trigger` fires for device_id 4 `<deva_timer_play_mpl5_dio_ent>` |
+| resource manager copies into deva's DMA ring | captured; a full six-channel fragment has zero mismatches |
+| deva play timer starts | `deva_trigger` fires for device_id 4, but the emulated timer receives no fragment ticks |
 | playback CSD session starts | `setStartSession: SUCCESS session handle 277` |
 | capture session on the bundle starts | `session_csd_start_capture() SUCCEEDED`, `deva_trigger` fires for device_id 30 |
 | reading the bundle | returns EIO -- it captures *from* the DSP, so with a stub DSP there is nothing to capture |
@@ -231,9 +233,9 @@ Two corrections worth keeping, both cheap to get wrong again:
   `csd_read() returned [36] bytes, when expecting 0!` and fails the whole start
   with rc 0x24. Returning zero is what makes `session_csd_start_capture` succeed.
 
-## Where to look: the driver dumps audio itself
+## The driver's own lower capture point
 
-`session_deva_timer_thread` @0x6E85C is the tick handler, and it says what the
+`session_deva_timer_thread` starts at 0x6E2D0. Its call at 0x6E85C shows what the
 timer does with each fragment:
 
 ```c
@@ -246,7 +248,7 @@ deva_timer_data_dumps(timer, dma_base + cursor, frag_size);
 dma_interrupt(...);
 ```
 
-That third call is a **capture point built into the driver**. `deva_timer_data_dumps`
+The dump call is a **capture point built into the driver**. `deva_timer_data_dumps`
 @`deva_data_dump.c` writes the fragment straight to a file, and
 `deva_timer_create_data_dump_files` names it:
 
@@ -301,34 +303,46 @@ and the audio is real, so enabling this dump captures what the driver sends to t
 DSP — a measurement point below everything the hook can see, and one we did not
 know existed.
 
-## The DMA ring, located
+## The DMA ring, captured and verified
 
-
-Preloading the stub into io-audio itself -- not merely letting it be pulled in as
-the driver's dependency, where its symbols do not preempt libc -- makes a `malloc`
-interposer effective, and the ring falls out immediately:
+Preloading the stub into `io-audio` itself -- not merely letting it be pulled in
+as the driver's dependency, where its symbols do not preempt libc -- makes a
+`malloc` interposer effective, and the rings fall out immediately:
 
     DMA candidate 0: 184320 bytes    (10 x 18432, the six-voice fragment)
     DMA candidate 1:  61440 bytes    (10 x 6144, the stereo one)
 
-184320 is exactly `10 * frag_size` from `deva_mib2_aquire`, so this is the buffer
-the play timer walks. The stub now owns a pointer to the audio.
+The missing trigger was not a driver timer call or `memcpy`. In the firmware
+`io-audio`, `ado_pcm_write_block` at `io-audio+0x11094` computes
+`ring_base + fragment_index * fragment_size` and passes that address to imported
+`resmgr_msgread` at `io-audio+0x1111c0`. The QNX kernel copies the client's
+message directly into the ring, bypassing libc `memcpy` entirely.
 
-What is still missing is a moment to read it. The snapshot hangs off `csd_read`,
-and `csd_read` is not called while playback runs -- the same shape as the earlier
-problem with `csd_ioctl`. Something that ticks during playback has to trigger it,
-and it cannot be a thread inside io-audio: that was tried and destabilised the
-guest.
+The preloaded CSD stub now interposes `resmgr_msgread`, calls the real function,
+recognizes a destination inside either recorded ring, appends the copied bytes to
+`/tmp/resmgr_dma_<ring>_<ring-size>.bin`, and validates every S32 word before the
+ring can be changed. The six-channel run reports:
 
-## What is left, and what it is worth
+    RESMGR_DMA open /tmp/resmgr_dma_0_184320.bin rc=18432 size=18432 offset=16 ...
+    RESMGR_VERIFY ring=0 voices=6 calls=1 bytes=18432 mismatches=0 FULL_FRAGMENT_PASS
 
-The remaining step is small and specific: find a call the driver makes on every
-timer tick and hang the snapshot there. Everything else is in place -- the ring is
-located, the stub owns it, and the summary code is written.
+That is one complete 768-frame fragment: 18,432 bytes, or 4,608 S32 samples.
+Every word matched `qsa_probe`'s deterministic six-channel input after the
+expected `S16 << 16` widening. The stereo control reached at least 20 complete
+captured fragments with zero mismatches.
 
-Worth weighing against the fact that the question this harness was built to answer
-is already answered: QSA's six-voice widening is correct byte for byte, and with
-it every layer from the APAC decoder down to the bytes handed to the driver is
-accounted for. Reading the ring would extend the harness into a capture rig for
-the layers *below* the driver, which is a different job from the one that was
-needed.
+Only the first six-channel write crosses `resmgr_msgread`; the remaining writes
+do not call that import, consistent with reuse of the already mapped buffer path.
+The probe deliberately writes the same channel constants in all 62 fragments,
+so comparison of the complete first fragment is the definitive byte-for-byte
+result for this deterministic test.
+
+## Final result
+
+The harness job is complete. It accounts for the bytes from `qsa_probe`, through
+QSA's conversion, and into deva's DMA ring. Six-channel widening is a left shift
+by 16, channel order is intact, and the DMA fragment has zero mismatches.
+
+The final `=== AUDIO STACK PROBE DONE ===` marker appears before a known fault in
+the minimal guest's shutdown path. The verification is complete before that
+teardown fault; stop QEMU with Ctrl-C after the marker.

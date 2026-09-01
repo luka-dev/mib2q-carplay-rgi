@@ -3,8 +3,8 @@
 # io-audio + deva-ctrl-qc.so are the real firmware binaries.  The only substitute
 # is libcsdIpcClient.so: deva imports eight symbols from it and builds every
 # higher-level CSD call on top of them, so standing in for those eight runs the
-# whole driver on a machine with no Qualcomm DSP -- and makes the stub the place
-# where everything the driver would have sent to hardware can be captured.
+# whole driver on a machine with no Qualcomm DSP.  Preloading the stand-in also
+# lets it capture io-audio's resource-manager copies into deva's DMA ring.
 [linker="(40;1;)qcc -bootstrap -nostdlib -Wl,--no-keep-memory -o%o %i -Vgcc_nto%(m==40,arm%)"]
 [linker="(40;2;)cp %i %o"]
 
@@ -39,16 +39,6 @@
 
     display_msg ">>> drive the device the way dio does: S16 in, six voices"
     LD_PRELOAD=/proc/boot/libtap.so qsa_probe 3 27
-
-    display_msg ">>> slog (io-audio explains itself here, not on stderr)"
-    sloginfo
-
-    display_msg ">>> /dev/snd contents"
-    ls -la /dev/snd
-    display_msg ">>> csd trace"
-    cat /tmp/csd_trace.log
-    display_msg ">>> processes"
-    pidin -F "%b %N" ar
     display_msg "=== AUDIO STACK PROBE DONE ==="
 }
 [type=link] /usr/lib/ldqnx.so.2=/proc/boot/libc.so.3

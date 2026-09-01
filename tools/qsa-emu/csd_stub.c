@@ -6,10 +6,9 @@
  * on top of them.  Standing in for those eight is therefore enough to run the
  * whole driver on a machine with no ADSP.
  *
- * The point is not to emulate the DSP.  It is to be the capture probe: whatever
- * deva hands down here is exactly what would have reached the hardware, so
- * dumping it answers the question no on-car log can — whether the audio is
- * already wrong by the time it leaves the driver.
+ * The point is not to emulate the DSP.  Preloading the stand-in into io-audio
+ * also lets it locate deva's DMA ring and interpose resmgr_msgread, capturing
+ * and validating the exact post-QSA bytes copied into that ring.
  */
 #include <stdint.h>
 #include <stdio.h>
@@ -44,8 +43,9 @@ int rtpd_deinit(void) { return 0; }
 #define CSD_AS_CMD_ALLOC_PMEM         70688u   /* 0x11420 */
 #define CSD_AS_CMD_MAP_SHARED_MEMORY  70679u   /* 0x11417 */
 
-/* Every PMEM pool the driver asks for, kept mapped so its contents can be dumped:
- * this is the memory the driver fills with audio destined for the DSP. */
+/* Every PMEM pool the driver asks for, kept mapped so its contents can be
+ * inspected.  These stay empty in the emulated playback path; client PCM enters
+ * through deva's separate malloc-backed DMA ring. */
 static struct { int fd; uint32_t size; void *base; } g_pool[32];
 static int g_pool_count;
 
@@ -65,6 +65,21 @@ static void csd_trace_open(void)
 
 /* Called before main() in the guest so the very first driver call is traced. */
 __attribute__((constructor)) static void csd_stub_init_once(void) { csd_trace_open(); }
+
+static int capture_write_all(int fd, const void *buf, uint32_t len)
+{
+    const unsigned char *p = (const unsigned char *)buf;
+    uint32_t left = len;
+
+    while (left) {
+        ssize_t n = write(fd, p, left);
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) return -1;
+        p += n;
+        left -= (uint32_t)n;
+    }
+    return 0;
+}
 
 
 int32_t csd_init(void)
@@ -118,7 +133,13 @@ int32_t csd_close(int32_t handle)
  * io-audio's process, so interposing malloc is enough to find that ring and read
  * it: whatever the driver leaves there IS the audio, whether or not it ever
  * reaches a DSP.  Pass-through; the only addition is remembering the pointer. */
-static struct { void *base; size_t size; } g_dma[8];
+static struct {
+    void *base;
+    size_t size;
+    unsigned calls;
+    uint64_t bytes;
+    uint64_t mismatches;
+} g_dma[8];
 static int g_dma_count;
 
 void *malloc(size_t size)
@@ -141,19 +162,16 @@ void *malloc(size_t size)
     return p;
 }
 
-/* The trigger problem, solved by the copy itself.  Nothing the driver calls per
- * tick reaches this library -- csd_ioctl and csd_read both go quiet once the
- * timer takes over -- but the timer's whole job is to move audio into the ring,
- * and it does that with memcpy.  Filtering on a destination inside the ring we
- * already located makes this fire exactly when there is something to see, and
- * costs a couple of pointer compares on calls that are not it.
- *
- * A thread would have been the obvious alternative and is not available: one
- * inside io-audio destabilised the guest. */
+/* Kept as a diagnostic for the original copy-path hypothesis.  It does not fire
+ * for client writes: io-audio uses resmgr_msgread below, so the kernel copies
+ * directly into the ring without going through libc memcpy. */
 static int spa_in_dma(const void *d, size_t n)
 {
     int i;
-    for (i = 0; i < g_dma_count; i++) {
+    /* malloc commonly reuses the same address for the later stereo run.  Search
+     * newest-first so it gets its own capture instead of matching the stale,
+     * larger six-channel allocation recorded earlier. */
+    for (i = g_dma_count - 1; i >= 0; i--) {
         const unsigned char *b = (const unsigned char *)g_dma[i].base;
         const unsigned char *p = (const unsigned char *)d;
         if (p >= b && p + n <= b + g_dma[i].size) return i + 1;
@@ -180,6 +198,95 @@ void *memcpy(void *dst, const void *src, size_t n)
         fprintf(g_trace, "\n");
     }
     return real(dst, src, n);
+}
+
+/* ado_pcm_write_block @io-audio+0x11094 computes the DMA destination as
+ *
+ *     ring_base + fragment_index * fragment_size
+ *
+ * and passes that pointer directly to resmgr_msgread at 0x1111c0.  The kernel
+ * copies the client's message into the ring, so no libc memcpy call is involved.
+ * Interposing this imported function gives us an exact post-copy fragment and a
+ * reliable per-write trigger even though the emulated deva timer never ticks. */
+int resmgr_msgread(void *ctp, void *msg, int size, int offset)
+{
+    static int (*real)(void *, void *, int, int);
+    int rc, which;
+
+    if (!real) real = dlsym(RTLD_NEXT, "resmgr_msgread");
+    rc = real(ctp, msg, size, offset);
+    which = (rc != -1 && size > 0 && g_dma_count) ?
+            spa_in_dma(msg, (size_t)size) : 0;
+    if (which) {
+        uint32_t *words = (uint32_t *)msg;
+        uint64_t first_sample;
+        unsigned voices, word_count, j;
+        int index = which - 1;
+        char path[64];
+        off_t before;
+        int fd;
+
+        /* qsa_probe writes 768-frame fragments whose channel c is S16
+         * 0x1000*(c+1).  Validate every post-copy S32 word in place, before any
+         * later timer or teardown can touch the ring. */
+        voices = (size > 0 && (size % (768 * 4)) == 0) ?
+                 (unsigned)size / (768 * 4) : 0;
+        word_count = (unsigned)size / 4;
+        first_sample = g_dma[index].bytes / 4;
+        if (voices >= 1 && voices <= 8 && (size & 3) == 0) {
+            for (j = 0; j < word_count; j++) {
+                uint32_t expected =
+                    (uint32_t)(((first_sample + j) % voices) + 1) << 28;
+                if (words[j] != expected) {
+                    if (g_trace && g_dma[index].mismatches < 4)
+                        fprintf(g_trace,
+                                "RESMGR_VERIFY ring=%d sample=%llu got=%#x expected=%#x\n",
+                                index, (unsigned long long)(first_sample + j),
+                                (unsigned)words[j], (unsigned)expected);
+                    g_dma[index].mismatches++;
+                }
+            }
+        }
+        g_dma[index].calls++;
+        g_dma[index].bytes += (uint32_t)size;
+
+        snprintf(path, sizeof(path), "/tmp/resmgr_dma_%d_%u.bin",
+                 index, (unsigned)g_dma[index].size);
+        fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0644);
+        if (fd >= 0) {
+            before = lseek(fd, 0, SEEK_END);
+            if (capture_write_all(fd, msg, (uint32_t)size) < 0 &&
+                g_trace && before == 0)
+                fprintf(g_trace, "RESMGR_DMA write %s failed: %s\n",
+                        path, strerror(errno));
+            close(fd);
+            if (g_trace && before == 0) {
+                const unsigned char *b = (const unsigned char *)msg;
+                unsigned j, preview = size < 32 ? (unsigned)size : 32;
+                fprintf(g_trace,
+                        "RESMGR_DMA open %s rc=%d size=%d offset=%d preview:",
+                        path, rc, size, offset);
+                for (j = 0; j < preview; j++) {
+                    if ((j & 3) == 0) fputc(' ', g_trace);
+                    fprintf(g_trace, "%02x", b[j]);
+                }
+                fputc('\n', g_trace);
+            }
+        }
+        if (g_trace && (g_dma[index].calls == 1 ||
+                        g_dma[index].calls == 10 ||
+                        (g_dma[index].calls % 20) == 0 ||
+                        g_dma[index].calls == 62))
+            fprintf(g_trace,
+                    "RESMGR_VERIFY ring=%d voices=%u calls=%u bytes=%llu mismatches=%llu %s\n",
+                    index, voices, g_dma[index].calls,
+                    (unsigned long long)g_dma[index].bytes,
+                    (unsigned long long)g_dma[index].mismatches,
+                    voices >= 1 && voices <= 8 && !g_dma[index].mismatches ?
+                    (g_dma[index].calls == 1 ?
+                     "FULL_FRAGMENT_PASS" : "PASS_SO_FAR") : "FAIL");
+    }
+    return rc;
 }
 
 static void csd_dma_summary(void)
@@ -333,6 +440,7 @@ static void csd_dma_summary(void);
 
 int32_t csd_read(int32_t handle, void *buf, uint32_t len)
 {
+    (void)handle;
     if (buf && len) memset(buf, 0, len);
     csd_dma_summary();
     return 0;
