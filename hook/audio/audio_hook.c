@@ -1660,6 +1660,15 @@ typedef struct {
     uint64_t writes;
     uint64_t bufferedWrites;
     uint64_t underrunFrames;
+    /* What the device actually accepted.  `writes` counts our calls, not their
+     * success, and QSA masks a failing snd_pcm_write_internal as zero bytes
+     * written -- measured in the QNX harness, where every fragment after the
+     * first returned -EIO and surfaced as 0.  A stock caller reading 0 rewrites
+     * the same buffer, which is a repeated seam at the fragment rate, and none of
+     * the existing counters can see it. */
+    uint64_t shortWrites;
+    uint64_t zeroWrites;
+    int64_t  lastWriteResult;
 } spa_pcm_sink_t;
 
 static spa_pcm_sink_t spa_pcm_sink = {
@@ -2131,13 +2140,26 @@ ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, size_t size)
      * measured that widening to be exactly a left shift by 16 with channel order
      * intact -- so there is nothing for this path to improve on. */
     written = real(handle, spa_pcm_sink.scratch, outputBytes);
+    spa_pcm_sink.lastWriteResult = (int64_t)written;
+    if (written == 0) spa_pcm_sink.zeroWrites++;
+    else if (written > 0 && (size_t)written < outputBytes) spa_pcm_sink.shortWrites++;
+    if (spa_pcm_sink.zeroWrites == 1 || spa_pcm_sink.shortWrites == 1)
+        LOG_WARN(LOG_MODULE,
+                 "audio sink: device did not take the whole fragment (%d of %u bytes) "
+                 "at write %llu -- the stock caller will rewrite this buffer",
+                 (int)written, (unsigned)outputBytes,
+                 (unsigned long long)spa_pcm_sink.writes);
     if (spa_pcm_sink.writes == 1 || (spa_pcm_sink.writes % 1024u) == 0) {
         LOG_INFO(LOG_MODULE,
                  "audio sink: writes=%llu buffered=%llu underrunFrames=%llu "
+                 "zeroWrites=%llu shortWrites=%llu last=%lld "
                  "source=%uch target=%uch ringRead=%u/%u",
                  (unsigned long long)spa_pcm_sink.writes,
                  (unsigned long long)spa_pcm_sink.bufferedWrites,
                  (unsigned long long)spa_pcm_sink.underrunFrames,
+                 (unsigned long long)spa_pcm_sink.zeroWrites,
+                 (unsigned long long)spa_pcm_sink.shortWrites,
+                 (long long)spa_pcm_sink.lastWriteResult,
                  sourceChannels, outputChannels,
                  (unsigned)bufferedFrames, (unsigned)frames);
     }
