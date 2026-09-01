@@ -22,6 +22,9 @@ static void dump_info(const snd_pcm_channel_info_t *ci)
            ci->min_fragment_size, ci->max_fragment_size, (unsigned)ci->formats);
 }
 
+static snd_pcm_t *g_bundle;      /* the mixer's outlet, kept open and read below */
+static int g_bundle_frag;
+
 static int try_device(int card, int dev, int voices, int rate, int seconds)
 {
     snd_pcm_t *pcm = 0;
@@ -156,16 +159,49 @@ int main(int argc, char **argv)
                 cp.buf.block.frag_size = bi.min_fragment_size;
                 cp.buf.block.frags_min = 1;
                 cp.buf.block.frags_max = 8;
-                printf("  capture params -> %d (why=%#x)\n",
-                       snd_pcm_plugin_params(cap, &cp), (unsigned)cp.why_failed);
-                printf("  capture prepare -> %d\n",
-                       snd_pcm_plugin_prepare(cap, SND_PCM_CHANNEL_CAPTURE));
+                /* The requested geometry already equals the device's own, so there
+                 * is nothing for the plugin layer to convert -- and it refuses the
+                 * open anyway (ENOENT, why_failed 0). Take the raw channel path,
+                 * which is what the RetroArch QNX driver uses on this unit. */
+                rc = snd_pcm_plugin_params(cap, &cp);
+                printf("  capture plugin_params -> %d (why=%#x)\n", rc, (unsigned)cp.why_failed);
+                if (rc < 0) {
+                    snd_pcm_plugin_set_disable(cap, PLUGIN_DISABLE_MMAP);
+                    cp.why_failed = 0;
+                    rc = snd_pcm_channel_params(cap, &cp);
+                    printf("  capture channel_params -> %d (why=%#x)\n",
+                           rc, (unsigned)cp.why_failed);
+                    if (rc == 0)
+                        printf("  capture channel_prepare -> %d\n",
+                               snd_pcm_channel_prepare(cap, SND_PCM_CHANNEL_CAPTURE));
+                } else {
+                    printf("  capture prepare -> %d\n",
+                           snd_pcm_plugin_prepare(cap, SND_PCM_CHANNEL_CAPTURE));
+                }
+                if (rc == 0) { g_bundle = cap; g_bundle_frag = cp.buf.block.frag_size; }
+                cap = 0;   /* deliberately not closed: releasing it stops the outlet */
             }
         }
     }
 
     printf("=== six voices on device %d (the CarPlay configuration) ===\n", target);
     try_device(0, target, 6, 48000, 1);
+    /* A capture channel with START_DATA begins on the first read, so the mix only
+     * moves once somebody pulls it.  This is the step that makes the played audio
+     * travel mpl5 -> mixer -> bundle -> CSD, where the stub can see it. */
+    if (g_bundle && g_bundle_frag > 0) {
+        char *rb = (char *)malloc((size_t)g_bundle_frag);
+        int k, ok = 0;
+        printf("=== draining the mixer outlet (%d-byte fragments) ===\n", g_bundle_frag);
+        for (k = 0; k < 16 && rb; k++) {
+            ssize_t r = snd_pcm_read(g_bundle, rb, (size_t)g_bundle_frag);
+            if (r <= 0) { printf("  read %d -> %d\n", k, (int)r); break; }
+            ok++;
+        }
+        printf("  drained %d fragments\n", ok);
+        free(rb);
+    }
+
     printf("=== two voices on device %d (the one that works on the car) ===\n", target);
     try_device(0, target, 2, 48000, 1);
     return 0;

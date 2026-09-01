@@ -196,13 +196,35 @@ widening itself instead of letting QSA do it. Since QSA's result is bit-for-bit
 what a left shift produces, that switch would change nothing. It should not be
 deployed expecting a fix.
 
-## Next
+## How far the audio path gets
 
-What remains is below or beside all of it: io-audio's software mixer, the
-`sse_bundle_1` path that carries the mix to CSD, or the DSP and amplifier
-themselves. The harness stops short of the bundle -- the play timer runs and
-`deva_trigger` fires for `mpl5_dio_ent`, but no per-fragment submission ever
-reaches CSD, and a client open of the bundle is refused with ENOENT and
-`why_failed = 0`. Whatever attaches `deva_timer_cap_sse_bundle_1` on the head unit
-is the missing piece, and following `deva_trigger` for that device is the way to
-find it.
+Playback works end to end up to the mixer. What does not happen is the mix
+leaving for CSD.
+
+| step | state |
+|---|---|
+| client writes to `mpl5_dio_ent` at six voices | works, 62 fragments of 768 frames |
+| QSA converts S16 -> S32 | works, measured correct above |
+| deva play timer runs | `deva_trigger` fires for device_id 4, `session_deva_timer_start` returns 0 |
+| bundle acquired by the driver | `deva_aquire: device_id = 30 <sse_bundle_1>, stream_type=2` |
+| bundle configured | only through `snd_pcm_channel_params`; the **plugin** path refuses it with ENOENT and `why_failed = 0` |
+| reading the bundle | blocks forever on the first read, so nothing pulls the mix |
+| submissions to CSD | none — the command histogram never moves past the 64 pool allocations |
+
+`csd_read` is reached (the capture side really does go through it, and
+`deva_rate_match_csd_setup_capture` checks the byte count it returns), and the
+stub now zero-fills as a DSP returning silence would. It did not unblock the read.
+
+The remaining gap is orchestration, not another missing stub symbol: on the head
+unit the audio service behind `/dev/audio_service` is what routes the mixer and
+starts the bundle's capture side, and `devstub` only answers its existence. Going
+further means implementing enough of that service's protocol for deva to consider
+the capture stream running.
+
+## Worth knowing before continuing
+
+The question this harness was built to answer is already answered — QSA's
+six-voice widening is correct, byte for byte. Everything from the APAC decoder
+down to the bytes handed to the driver is accounted for. Driving audio all the
+way to CSD would extend the harness into a capture rig for the layers *below*
+that, which is a different and larger job than the one that has been done.

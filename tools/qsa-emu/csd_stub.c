@@ -209,6 +209,7 @@ int32_t csd_write(int32_t handle, const void *buf, uint32_t len)
 
 int32_t csd_read(int32_t handle, void *buf, uint32_t len)
 {
-    fprintf(g_trace, "csd_read(h=%d buf=%p len=%u)\n", handle, buf, (unsigned)len);
+    if (buf && len) memset(buf, 0, len);
+    fprintf(g_trace, "csd_read(h=%d len=%u) -> silence\n", handle, (unsigned)len);
     return (int32_t)len;
 }
