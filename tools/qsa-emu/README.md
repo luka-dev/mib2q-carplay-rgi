@@ -346,3 +346,31 @@ by 16, channel order is intact, and the DMA fragment has zero mismatches.
 The final `=== AUDIO STACK PROBE DONE ===` marker appears before a known fault in
 the minimal guest's shutdown path. The verification is complete before that
 teardown fault; stop QEMU with Ctrl-C after the marker.
+
+## Verified on real audio, not just a pattern
+
+The flat pattern -- channel `c` holding a constant -- is identical in every frame,
+so it cannot catch a duplicated, dropped or reordered frame, and a periodic tick
+is exactly that kind of fault. Replaying one second of the car capture instead,
+in the declared order the sink hands to QSA, removes that blind spot:
+
+    first fragment is real music: 768 frames from the car capture
+    RESMGR_VERIFY reference: 288000 music samples
+    RESMGR_VERIFY ring=0 voices=6 calls=1 bytes=18432 mismatches=0 FULL_FRAGMENT_PASS
+
+A full 16 ms fragment of six-channel music -- 4,608 words -- reaches deva's DMA
+ring byte for byte.
+
+Two limits worth stating. Only the **first** fragment is a valid comparison: the
+probe fills its buffer from the file once and then rewrites the same buffer while
+the reference index walks forward, so a mismatch after that is the harness, not
+the path (the stereo run shows one). And nothing here has been **listened to** --
+the DSP is a stub and the guest has no audio output. What is proved is that the
+bytes arrive intact, not that the hardware then interprets them as intended.
+
+That distinction is the whole remaining question. The driver tells the DSP
+`bits_per_sample = 24` while QSA leaves the sample in bits 31..16 of a 32-bit
+word. If the DSP reads that word as a 24-bit sample, everything is 256x too loud
+-- hard clipping, from the right speakers, with correct timing. No byte-level test
+can see it, because both sides are internally consistent and merely disagree about
+where in the word the sample lives. It is answerable only on the car.

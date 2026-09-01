@@ -31,6 +31,7 @@ else
   echo ">> using PATCHED deva"
 fi
 cp "$FW/ifs2/ifs_coreservices3/lib/libasound.so.2" "$STAGE/"
+cp /tmp/music6.s16 "$STAGE/" 2>/dev/null || true
 cp "$OUT/libcsdIpcClient.so" "$OUT/devstub" "$OUT/qsa_probe" "$OUT/libtap.so" "$STAGE/"
 # The firmware was unpacked without the execute bit and mkifs copies the host
 # file mode straight into the image, so procnto refuses to exec them.

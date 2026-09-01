@@ -80,9 +80,27 @@ static int try_device(int card, int dev, int voices, int rate, int seconds)
     frag_frames = setup.buf.block.frag_size / (voices * 2);
     if (frag_frames <= 0) frag_frames = (rate / 1000) * 16;
     buf = (short *)malloc((size_t)frag_frames * voices * sizeof(short));
-    for (f = 0; f < frag_frames; f++)
-        for (i = 0; i < voices; i++)
-            buf[f * voices + i] = (short)(0x1000 * (i + 1));
+    /* Real music, not the flat pattern.  A constant per channel is identical in
+     * every frame, so it cannot catch a duplicated, dropped or reordered frame --
+     * and a periodic tick is exactly that kind of fault.  One second of the car
+     * capture, in the declared order the sink hands to QSA, has none of that
+     * symmetry: any frame-level damage shows up as a mismatch. */
+    {
+        FILE *mf = fopen("/proc/boot/music6.s16", "rb");
+        size_t want = (size_t)frag_frames * voices * sizeof(short);
+        size_t got = 0;
+        if (mf) { got = fread(buf, 1, want, mf); fclose(mf); }
+        if (got != want) {
+            printf("  no music file (%u of %u bytes) -- falling back to the flat pattern\n",
+                   (unsigned)got, (unsigned)want);
+            for (f = 0; f < frag_frames; f++)
+                for (i = 0; i < voices; i++)
+                    buf[f * voices + i] = (short)(0x1000 * (i + 1));
+        } else {
+            printf("  first fragment is real music: %u frames from the car capture\n",
+                   (unsigned)frag_frames);
+        }
+    }
 
     total = (rate * seconds) / frag_frames;
     for (i = 0; i < total; i++) {

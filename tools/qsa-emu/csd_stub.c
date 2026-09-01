@@ -47,6 +47,11 @@ int rtpd_deinit(void) { return 0; }
  * inspected.  These stay empty in the emulated playback path; client PCM enters
  * through deva's separate malloc-backed DMA ring. */
 static struct { int fd; uint32_t size; void *base; } g_pool[32];
+
+/* The audio reference qsa_probe played, loaded once for word-by-word comparison. */
+static int16_t *g_music;
+static size_t   g_music_samples;
+static int      g_music_tried;
 static int g_pool_count;
 
 static FILE *g_trace;
@@ -226,17 +231,45 @@ int resmgr_msgread(void *ctp, void *msg, int size, int offset)
         off_t before;
         int fd;
 
-        /* qsa_probe writes 768-frame fragments whose channel c is S16
-         * 0x1000*(c+1).  Validate every post-copy S32 word in place, before any
-         * later timer or teardown can touch the ring. */
+        /* Validate every post-copy S32 word in place, before any later timer or
+         * teardown can touch the ring.
+         *
+         * The expected value comes from the same file qsa_probe played, when it
+         * played music.  A flat pattern -- channel c holding a constant -- is
+         * identical in every frame, so it cannot catch a duplicated, dropped or
+         * reordered frame, and a periodic tick is exactly that kind of fault.
+         * Real audio has no such symmetry: any frame-level damage is a mismatch.
+         * The constant pattern stays as the fallback when the file is absent.
+         *
+         * Only the FIRST fragment is a valid comparison: qsa_probe fills its
+         * buffer from the file once and then rewrites the same buffer, while the
+         * reference index below keeps walking forward, so later fragments differ
+         * by construction.  A mismatch after the first fragment is this harness,
+         * not the audio path. */
         voices = (size > 0 && (size % (768 * 4)) == 0) ?
                  (unsigned)size / (768 * 4) : 0;
         word_count = (unsigned)size / 4;
         first_sample = g_dma[index].bytes / 4;
+        if (!g_music && !g_music_tried) {
+            FILE *mf;
+            g_music_tried = 1;
+            mf = fopen("/proc/boot/music6.s16", "rb");
+            if (mf) {
+                g_music = (int16_t *)malloc(576000);
+                g_music_samples = g_music ? fread(g_music, 2, 288000, mf) : 0;
+                fclose(mf);
+                fprintf(g_trace, "RESMGR_VERIFY reference: %u music samples\n",
+                        (unsigned)g_music_samples);
+            }
+        }
         if (voices >= 1 && voices <= 8 && (size & 3) == 0) {
             for (j = 0; j < word_count; j++) {
-                uint32_t expected =
-                    (uint32_t)(((first_sample + j) % voices) + 1) << 28;
+                uint64_t idx = first_sample + j;
+                uint32_t expected;
+                if (g_music && idx < g_music_samples)
+                    expected = (uint32_t)((int32_t)g_music[idx] << 16);
+                else
+                    expected = (uint32_t)((idx % voices) + 1) << 28;
                 if (words[j] != expected) {
                     if (g_trace && g_dma[index].mismatches < 4)
                         fprintf(g_trace,

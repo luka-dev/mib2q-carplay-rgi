@@ -57,6 +57,7 @@
 /proc/boot/sloginfo=SDP/bin/sloginfo
 /proc/boot/devstub=OUT/devstub
 /proc/boot/qsa_probe=OUT/qsa_probe
+/proc/boot/music6.s16=OUT/music6.s16
 /proc/boot/libtap.so=OUT/libtap.so
 /proc/boot/libm.so.2=SDP/lib/libm.so.2
 
