@@ -168,11 +168,41 @@ both S32 and its own declared S16. That reads like a device deva drives itself
 rather than one a client is meant to claim, which fits it having its own capture
 timer.
 
+## The measurement this was built for
+
+Preloading a two-function tap into the probe captures both sides of QSA's
+conversion inside the client process, where it happens. Feeding it a pattern
+whose position in the widened word is unmistakable -- channel c carrying the
+constant 0x1000*(c+1) -- gives:
+
+    setup readback: 6 voices, 48000 Hz, format 4, frag 9216
+    TAP in  len=9216:  00100020 00300040 00500060 ...
+    TAP out len=18432: 00000010 00000020 00000030 00000040 00000050 00000060 ...
+
+Little-endian: the input is S16 `0x1000 0x2000 0x3000 0x4000 0x5000 0x6000`, the
+output is S32 `0x10000000 0x20000000 0x30000000 0x40000000 0x50000000 0x60000000`.
+
+**QSA's widening is exactly a left shift by 16, with channel order preserved.**
+No permutation, no loss, no misalignment at six voices.
+
+That clears the last layer anyone could still suspect. Taken with what was already
+established -- the decoded PCM is correct and was confirmed by ear, deva's caps
+and channel maps match the working six-channel device, and the timing measured on
+the car is exactly 48 kHz -- everything from the APAC decoder down to the bytes
+handed to the driver is now accounted for.
+
+It also settles a pending experiment: `AUDIO_SPATIAL_S32` makes the hook do this
+widening itself instead of letting QSA do it. Since QSA's result is bit-for-bit
+what a left shift produces, that switch would change nothing. It should not be
+deployed expecting a fix.
+
 ## Next
 
-Find what starts the bundle's capture side. Two concrete leads, both answerable
-from the slog the harness already prints: `deva_trigger` is reached for the play
-device, so following the same call for the bundle shows who is expected to call
-it; and `session_deva_timer_attach_stream` logs
-`deva_timer_session = <deva_timer_cap_sse_bundle_1>`, so whatever attaches that
-stream is the thing missing here.
+What remains is below or beside all of it: io-audio's software mixer, the
+`sse_bundle_1` path that carries the mix to CSD, or the DSP and amplifier
+themselves. The harness stops short of the bundle -- the play timer runs and
+`deva_trigger` fires for `mpl5_dio_ent`, but no per-fragment submission ever
+reaches CSD, and a client open of the bundle is refused with ENOENT and
+`why_failed = 0`. Whatever attaches `deva_timer_cap_sse_bundle_1` on the head unit
+is the missing piece, and following `deva_trigger` for that device is the way to
+find it.

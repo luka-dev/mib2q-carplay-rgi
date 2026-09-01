@@ -38,7 +38,7 @@
     waitfor /dev/snd/pcmPreferredp 25
 
     display_msg ">>> drive the device the way dio does: S16 in, six voices"
-    qsa_probe 3 27
+    LD_PRELOAD=/proc/boot/libtap.so qsa_probe 3 27
 
     display_msg ">>> slog (io-audio explains itself here, not on stderr)"
     sloginfo
@@ -66,6 +66,7 @@
 /proc/boot/sloginfo=SDP/bin/sloginfo
 /proc/boot/devstub=OUT/devstub
 /proc/boot/qsa_probe=OUT/qsa_probe
+/proc/boot/libtap.so=OUT/libtap.so
 /proc/boot/libm.so.2=SDP/lib/libm.so.2
 
 # --- the firmware audio stack itself ---
