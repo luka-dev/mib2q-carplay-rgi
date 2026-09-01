@@ -22,15 +22,17 @@ say(){ echo "[spatial_5_1] $*"; }
 
 [ -f "$DEVA_SRC" ] || { say "MISSING $DEVA_SRC (run deploy/deva-ctrl-qc/patch_deva.sh first)"; exit 1; }
 
-# integrity gate: patched .so must carry all three mpl5_dio_ent(idx4) edits (see deva-ctrl-qc/patch_deva.sh)
-chk(){ # chk <file-offset> <expected LE dword hex> <label>
-    v=$(xxd -s "$1" -l 4 -p "$DEVA_SRC" 2>/dev/null)
-    [ "$v" = "$2" ] || { say "REFUSE: $DEVA_SRC $3=$v (expected $2 - not the patched build)"; exit 1; }
+# integrity gate: patched .so must carry the caps edits AND the dynamic active-fragment helper.
+chk(){ # chk <file-offset> <length> <expected hex> <label>
+    v=$(xxd -s "$1" -l "$2" -p "$DEVA_SRC" 2>/dev/null)
+    [ "$v" = "$3" ] || { say "REFUSE: $DEVA_SRC $4=$v (expected $3 - not the complete patched build)"; exit 1; }
 }
-chk $((0xA6E1C)) 06000000 max_voices
-chk $((0xA6E24)) 00480000 max_fragsize
-chk $((0xA6E28)) 00d00200 max_buffer
-say "patched deva verified (mpl5_dio_ent: 6 voices, 0x4800 fragsize, 0x2D000 buffer)"
+chk $((0xA6E1C)) 4 06000000 max_voices
+chk $((0xA6E24)) 4 00480000 max_fragsize
+chk $((0xA6E28)) 4 00d00200 max_buffer
+chk $((0x563C8)) 4 bee300eb acquire_branch
+chk $((0x8F2C7)) 21 001c2095e5101096e5060051e3122ba0031eff2fe1 dynamic_helper
+say "patched deva verified (6 voices; dynamic 6ch S32 frag=0x4800; stock 2ch frag=0x1800)"
 
 if [ "$APPLY" = 0 ]; then
     say "DRY-RUN. Would:"

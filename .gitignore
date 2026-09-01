@@ -7,6 +7,7 @@
 /build/libcarplay_hook.so
 /build/libcarplay_apac.so
 /build/apple_apac_oracle
+/build/qsa_play
 /local_logs/
 /log/
 tools/loader_preview/loader_preview

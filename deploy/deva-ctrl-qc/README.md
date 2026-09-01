@@ -5,7 +5,13 @@ Local patch of the stock Qualcomm QNX audio driver so the CarPlay entertainment 
 (the other half is the libairplay `AirPlayAudioFormatToASBD` interposer — see `docs/reference/AUDIO.md`
 §10). Nothing here touches the unit.
 
-## Why this one byte
+> **Live-test status (2026-08-31): the old caps-only patch was incomplete.** It opened and routed
+> six voices, but retained the stock 2ch S32 DMA fragment and played exactly 3x slow. The current
+> `patch_deva.sh` includes the dynamic active-fragment fix and has been staged on the unit; it is not
+> active until reboot and remains untested in audio. Evidence and acceptance criteria:
+> [`RE_TIMING.md`](RE_TIMING.md).
+
+## Why caps widening plus dynamic timing
 Traced statically (`docs/reference/AUDIO.md` §11). The path is:
 `mpl5_dio_ent (QSA PCM) → io-audio -d qc → mixer → six_channel_speakerp (6ch) → MOST → B&O amp`.
 Everything downstream is already 6-channel and **exercised today** by the internal-media device
@@ -18,7 +24,7 @@ libairplay opens 6 discrete voices that ride the existing path to the amp — **
 There is no command-line / `DEVA_ARGS` knob for per-device voices (`deva_parse_commandline_parameters`
 is a name→id `strcasecmp` chain), so it must be a binary edit.
 
-## The edit (4 bytes / 3 fields)
+## Capability-table edit (4 bytes / 3 fields)
 Capability table `deva_mib_*` (platform `mib2`): VA `0xA7D44`, `.data` VA→file = `-0x1000`
 (file `0xA6D44`). Records are 48 bytes, device index 1-based; `mpl5_dio_ent` = **idx 4** (`0xA6E04`).
 Record layout confirmed against `deva_pcm_and_mixer_device_init_platform_mib` @0x5707C, which copies
@@ -34,15 +40,16 @@ these fields straight into the `ado_pcm` hw caps at `ado_pcm_create` time:
 | **max_fragsize** | +32 | **0xA6E24** | **0x1800** | **0x4800** | 0x4800 |
 | **max_buffer** | +36 | **0xA6E28** | **0xF000** | **0x2D000** | 0x2D000 |
 
-**Why fragsize/buffer had to move too.** `0x1800` = 6144 B is 1536 frames at stereo/16-bit but only
-**512 frames at 6ch** — a 3× shorter fragment (10.7 ms vs 32 ms @48 kHz) than anything else on this HU.
-That is exactly why the stock 6-channel device `mpl1_int_ent` carries `0x4800`. `max_buffer` must track
-it: in every stock record `max_buffer == max_fragsize * max_frags(10)` (mpl5 `0x1800*10 = 0xF000`,
-mpl1 `0x4800*10 = 0x2D000`), so raising the fragment cap without the buffer cap is inconsistent.
+**Why fragsize/buffer had to move too.** The MIB hardware side is S32 with a fixed 16-ms timer:
+`0x1800` is the 2ch period and `0x4800` is the 6ch period. `max_buffer` must track the widened maximum:
+in every stock record `max_buffer == max_fragsize * max_frags(10)` (mpl5 `0x1800*10 = 0xF000`,
+mpl1 `0x4800*10 = 0x2D000`). The active value cannot be changed statically because stock stereo must
+remain `0x1800`; the dynamic code patch is documented below.
 
-The two **min** fields are deliberately left at their stock values: all three edits only *widen* the
-accepted range, so stock stereo CarPlay opens byte-for-byte as before when the libairplay hook is OFF
-(`SPATIAL_5_1` unset). `cmp -l` vs stock = exactly 4 differing bytes.
+The two **min** fields are deliberately left at their stock values: all three table edits only
+*widen* the accepted range. The full generated binary differs from stock in 29 bytes: these four
+caps bytes plus the branch and 20-byte conditional helper described in [`RE_TIMING.md`](RE_TIMING.md).
+Stock stereo still selects `0x1800`; only a negotiated six-voice acquire selects `0x4800`.
 
 Regenerate: `./patch_deva.sh [path-to-stock-deva-ctrl-qc.so]` — idempotent, verifies
 `idx4 == mpl5_dio_ent`, refuses anything but stock/already-patched values, and cross-checks the result
@@ -63,10 +70,11 @@ against the live `mpl1_int_ent` record. Output: `deva-ctrl-qc.so` here.
 Deploy together with the armed libairplay hook (`SPATIAL_5_1=1`) — the hook forces the 6ch ASBD; this
 patch lets the device accept it. With the hook off, CarPlay stays stereo (min_voices=2 open still valid).
 
-## Deploy — NOT done here (needs explicit go)
+## Deploy status
 On-unit `deva-ctrl-qc.so` lives under the mounted app image (`app/armle/lib/dll/deva-ctrl-qc.so`).
 Replacing it requires restarting `io-audio`/deva = the whole audio subsystem → reboot territory.
-**Do not deploy or restart without asking** (per the no-reboot rule). Confirm the live path first.
+The complete dynamic build was staged there on 2026-08-31 and read back byte-for-byte. Nothing was
+restarted; the old mapped generation remains active until the user-controlled reboot.
 
 ## 6 is the ceiling — 8 is NOT reachable by a byte (AUDIO.md §16)
 The CarPlay spatial transport is 5.1.2 = 8 channels (AUDIO.md §15), so "why not just write 8 here?"
@@ -82,8 +90,9 @@ The hardcoded QCOM `PCM_CHANNEL_*` maps in that branch (`FL=1 FR=2 FC=3 LS=4 RS=
 stream/decoder = `01 02 03 06 08 09` = **L R C LFE Ls Rs** (Apple canonical — matches our ASBD, no
 reorder needed); context/device = `01 02 08 09 03 06` = L R Ls Rs C LFE (the driver re-orders itself).
 
-## Open items to confirm on-unit (pending)
-1. That a 6-voice open on `mpl5_dio_ent` actually succeeds and reaches `six_channel_speakerp`
-   (everything above is static analysis; nothing has run on the unit).
-2. Whether dio requests a fragment size that now benefits from the raised cap, or asks for a fixed
-   byte count regardless. Only measurable live (`buff_size = %d bytes` in the deva slog).
+## Remaining on-unit confirmation
+
+The caps-only run already proved that a 6-voice `mpl5_dio_ent` open succeeds and reaches all six
+speakers. It also exposed the active-fragment bug. After reboot, confirm that the dynamic build now
+returns a 9216-byte S16 client fragment (768 frames per 16 ms), with bounded APAC buffering and normal
+pitch. Full checklist: [`RE_TIMING.md`](RE_TIMING.md).
