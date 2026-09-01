@@ -3,12 +3,11 @@
 .venv*/
 **/.DS_Store
 *.o
-/build/java/
-/build/libcarplay_hook.so
-/build/libcarplay_apac.so
-/build/apple_apac_oracle
-/build/qsa_play
-/build/qsa-emu/
+
+# Build output. Everything under build/ is produced by scripts/build_*.sh, so the
+# tree carries the directory and nothing else.
+/build/*
+!/build/.gitkeep
 /local_logs/
 /log/
 tools/loader_preview/loader_preview
@@ -29,9 +28,6 @@ __pycache__/
 # Live CarPlay session captures. The SETUP plist carries the 32-byte `shk`
 # session key in plaintext — never commit it. Keep captures local, mode 0600.
 /captures/
-
-# Test binaries built by scripts/run_tests.sh.
-/build/tests/
 
 # IDA unpacks its database beside the .i64 while a session is open
 *.id0
