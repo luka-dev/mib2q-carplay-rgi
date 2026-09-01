@@ -38,7 +38,7 @@
     waitfor /dev/snd/pcmPreferredp 25
 
     display_msg ">>> drive the device the way dio does: S16 in, six voices"
-    qsa_probe
+    qsa_probe 3 27
 
     display_msg ">>> slog (io-audio explains itself here, not on stderr)"
     sloginfo

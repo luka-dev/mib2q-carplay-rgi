@@ -129,23 +129,50 @@ Closing the loop is also what makes the capture work: the moment the stub is
 about to answer `BUF_DONE`, the buffer it is acknowledging holds exactly what
 would have been played.
 
+## The device map, from the guest itself
+
+Playback and capture carry separate numbering, which is why a playback-only sweep
+stops at `sse` and never shows the bundle:
+
+    playback  0 mpl1_int_ent   1 mpl3_mirror_lnk  2 mpl4_sdis_a2ls  3 mpl5_dio_ent
+              4 mpl6_gal_ent   5 mpl7_bcl_ent     6 ann1_int_nav    7 ann2_int_sds
+              8 ann3_dio_ann   9 SW MIX PCM      10 ann4_dio_voice ... 20 sse
+    capture  21 ent1  22 mic1  23 mic2_dio  24 mic3_gal  25 mic4_mirror_lnk
+             26 mic5_bcl  27 sse_bundle_1
+
+Geometry, straight from `snd_pcm_channel_info`:
+
+| device | voices | rate | fragment | formats |
+|---|---|---|---|---|
+| `mpl5_dio_ent`, patched deva | 2..6 | 48000 | 6144..18432 | `0x1000` = S32_LE only |
+| `mpl5_dio_ent`, stock deva | 2..2 | 48000 | 6144..6144 | `0x1000` |
+| `sse_bundle_1` (capture) | 3..3 | 48000 | 4608..4608 | `0x10` = S16_LE only |
+
+The playback devices take **only S32**, so QSA is always converting under CarPlay.
+The bundle is S16 and three-voiced — 4608 bytes is 768 frames of 3-channel S16,
+the same 16 ms period everything else runs on.
+
+## Why the audio still stops short of CSD
+
+The slog names two timers, `deva_timer_play_mpl5_dio_ent` and
+`deva_timer_cap_sse_bundle_1`, so the path is client -> mpl5 -> software mixer ->
+bundle -> CSD. The play timer does run: `deva_trigger` fires for device_id 4
+`<mpl5_dio_ent>`, `session_deva_timer_start` returns 0, and `deva_aquire` finds
+the device. What never happens is a per-fragment submission — over a run where the
+probe writes 62 fragments the command histogram does not move at all beyond the
+64 pool allocations.
+
+Opening `sse_bundle_1` from the client does not start it either: the open
+succeeds but `snd_pcm_plugin_params` returns ENOENT with `why_failed = 0`, for
+both S32 and its own declared S16. That reads like a device deva drives itself
+rather than one a client is meant to claim, which fits it having its own capture
+timer.
+
 ## Next
 
-The command histogram over a run where the probe writes 62 fragments shows no
-submission at all:
-
-    64 cmd=0x11420   (ALLOC_PMEM)
-    64 cmd=0x11417   (MAP_SHARED_MEMORY)
-     9 cmd=0x11801    9 cmd=0x11410    9 cmd=0x11401
-     7 cmd=0x11804    6 cmd=0x11c01    2 cmd=0x11809
-
-Nothing repeats per fragment, so the audio never reaches CSD. The client's writes
-land in io-audio's mixer and deva's own DMA buffer, and it is deva's timer
-(`session_deva_timer_start`, pulse handler at 0x6E85C) that is supposed to move
-one fragment per tick into a pool buffer and submit it. That timer is not driving
-here.
-
-So the next question is why the timer does not run in the guest — and there is a
-second device in the enumeration, `SW MIX PCM`, which suggests the path may be
-client -> mixer -> `sse_bundle_1` -> CSD rather than straight out of
-`mpl5_dio_ent`. Both are answerable from the same slog the harness already prints.
+Find what starts the bundle's capture side. Two concrete leads, both answerable
+from the slog the harness already prints: `deva_trigger` is reached for the play
+device, so following the same call for the bundle shows who is expected to call
+it; and `session_deva_timer_attach_stream` logs
+`deva_timer_session = <deva_timer_cap_sse_bundle_1>`, so whatever attaches that
+stream is the thing missing here.

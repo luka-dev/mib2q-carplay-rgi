@@ -106,10 +106,64 @@ int main(int argc, char **argv)
         printf("  open_preferred -> %d (card %d dev %d)\n", rc, card, d);
         if (rc == 0) snd_pcm_close(p);
     }
-    printf("=== enumerating cards 0..1, devices 0..11 ===\n");
-    for (dev = 0; dev < 12; dev++) { try_device(0, dev, 0, 0, 0); try_device(1, dev, 0, 0, 0); }
+    printf("=== playback devices ===\n");
+    for (dev = 0; dev < 32; dev++) try_device(0, dev, 0, 0, 0);
+    /* Capture devices carry their own numbering, which is why the playback sweep
+     * stops at 'sse' and never shows the bundle. */
+    printf("=== capture devices ===\n");
+    for (dev = 0; dev < 32; dev++) {
+        snd_pcm_t *c = 0;
+        snd_pcm_info_t ci;
+        if (snd_pcm_open(&c, 0, dev, SND_PCM_OPEN_CAPTURE) < 0) continue;
+        memset(&ci, 0, sizeof(ci));
+        if (snd_pcm_info(c, &ci) == 0) printf("  cap dev %d: '%s'\n", dev, ci.name);
+        snd_pcm_close(c);
+    }
 
     if (target < 0) return 0;
+    /* mpl5 plays into the software mixer; it is sse_bundle_1's CAPTURE timer that
+     * pulls the mix out and hands it to CSD (the slog names the two timers
+     * deva_timer_play_mpl5_dio_ent and deva_timer_cap_sse_bundle_1).  On the head
+     * unit the audio manager keeps that side running.  Nothing does here, so the
+     * played audio has nowhere to go -- open the bundle for capture first. */
+    if (argc > 2) {
+        int bundle = atoi(argv[2]);
+        snd_pcm_t *cap = 0;
+        int rc = snd_pcm_open(&cap, 0, bundle, SND_PCM_OPEN_CAPTURE);
+        printf("=== opening device %d for capture (the mixer's outlet) -> %d ===\n",
+               bundle, rc);
+        if (rc == 0) {
+            snd_pcm_channel_info_t bi;
+            snd_pcm_channel_params_t cp;
+            /* Ask the bundle for its own geometry instead of guessing one: it is
+             * the mixer's outlet, not an ordinary stereo capture, and a guessed
+             * format is simply refused. */
+            memset(&bi, 0, sizeof(bi));
+            bi.channel = SND_PCM_CHANNEL_CAPTURE;
+            if (snd_pcm_channel_info(cap, &bi) == 0) {
+                printf("  bundle geometry: voices %d..%d, rate %d..%d, frag %d..%d, formats %#x\n",
+                       bi.min_voices, bi.max_voices, bi.min_rate, bi.max_rate,
+                       bi.min_fragment_size, bi.max_fragment_size, (unsigned)bi.formats);
+                memset(&cp, 0, sizeof(cp));
+                cp.channel = SND_PCM_CHANNEL_CAPTURE;
+                cp.mode = SND_PCM_MODE_BLOCK;
+                cp.start_mode = SND_PCM_START_DATA;
+                cp.stop_mode = SND_PCM_STOP_STOP;
+                cp.format.interleave = 1;
+                cp.format.format = SND_PCM_SFMT_S16_LE;
+                cp.format.rate = bi.min_rate ? bi.min_rate : 48000;
+                cp.format.voices = bi.min_voices ? bi.min_voices : 2;
+                cp.buf.block.frag_size = bi.min_fragment_size;
+                cp.buf.block.frags_min = 1;
+                cp.buf.block.frags_max = 8;
+                printf("  capture params -> %d (why=%#x)\n",
+                       snd_pcm_plugin_params(cap, &cp), (unsigned)cp.why_failed);
+                printf("  capture prepare -> %d\n",
+                       snd_pcm_plugin_prepare(cap, SND_PCM_CHANNEL_CAPTURE));
+            }
+        }
+    }
+
     printf("=== six voices on device %d (the CarPlay configuration) ===\n", target);
     try_device(0, target, 6, 48000, 1);
     printf("=== two voices on device %d (the one that works on the car) ===\n", target);
