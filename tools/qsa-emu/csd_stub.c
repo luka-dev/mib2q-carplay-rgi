@@ -105,8 +105,36 @@ int32_t csd_close(int32_t handle)
 /* The interesting one: every stream/context/format call deva makes lands here as
  * a command plus a payload.  Log the command and the first bytes of the payload;
  * that is where a wrong voice count or channel map would be visible. */
+/* Dump the first frames of every pool that has stopped being silent.  This is
+ * the whole reason the stub owns the memory: the driver fills these for the DSP,
+ * so whatever is here is what the hardware would have played.  One shot -- the
+ * question is the layout of the samples, not their evolution. */
+static void csd_dump_pools_once(void)
+{
+    static int done;
+    int i, j;
+    if (done) return;
+    for (i = 0; i < g_pool_count && i < 32; i++) {
+        const unsigned char *b = (const unsigned char *)g_pool[i].base;
+        uint32_t n = g_pool[i].size < 64 ? g_pool[i].size : 64;
+        int nonzero = 0;
+        if (!b) continue;
+        for (j = 0; j < (int)n; j++) if (b[j]) { nonzero = 1; break; }
+        if (!nonzero) continue;
+        done = 1;
+        fprintf(g_trace, "POOL %d (size %u) first %u bytes:\n  ", i,
+                (unsigned)g_pool[i].size, (unsigned)n);
+        for (j = 0; j < (int)n; j++) {
+            fprintf(g_trace, "%02x ", b[j]);
+            if ((j & 15) == 15) fprintf(g_trace, "\n  ");
+        }
+        fprintf(g_trace, "\n");
+    }
+}
+
 int32_t csd_ioctl(int32_t handle, uint32_t cmd, void *arg, uint32_t len)
 {
+    csd_dump_pools_once();
     fprintf(g_trace, "csd_ioctl(h=%d cmd=%#x arg=%p len=%u)\n",
             handle, (unsigned)cmd, arg, (unsigned)len);
 
@@ -124,6 +152,7 @@ int32_t csd_ioctl(int32_t handle, uint32_t cmd, void *arg, uint32_t len)
         uint32_t size = w[0];
         char name[40];
         int fd;
+        void *base;
 
         snprintf(name, sizeof(name), "/csd_pool_%d", g_pool_count);
         shm_unlink(name);
@@ -134,15 +163,26 @@ int32_t csd_ioctl(int32_t handle, uint32_t cmd, void *arg, uint32_t len)
             if (fd >= 0) close(fd);
             return -1;
         }
-        w[3] = (uint32_t)fd;
+        base = mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+        if (base == MAP_FAILED) {
+            fprintf(g_trace, "  ALLOC_PMEM size=%u mmap FAILED (%s)\n",
+                    (unsigned)size, strerror(errno));
+            close(fd);
+            return -1;
+        }
+        /* Word 3 is an ADDRESS, not a descriptor.  The caller passes it straight
+         * to mem_offset64(addr, -1, ...) -- the -1 is "no fd", which only makes
+         * sense if the first argument is a mapped pointer -- and then stores it
+         * for later use as a buffer.  Handing back the fd instead made the driver
+         * memset at address 62, which is exactly the fd we had returned. */
+        w[3] = (uint32_t)(uintptr_t)base;
         if (g_pool_count < (int)(sizeof(g_pool) / sizeof(g_pool[0]))) {
             g_pool[g_pool_count].fd = fd;
             g_pool[g_pool_count].size = size;
-            g_pool[g_pool_count].base =
-                mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+            g_pool[g_pool_count].base = base;
         }
-        fprintf(g_trace, "  ALLOC_PMEM size=%u -> fd=%d (pool %d)\n",
-                (unsigned)size, fd, g_pool_count);
+        fprintf(g_trace, "  ALLOC_PMEM size=%u -> addr=%p fd=%d (pool %d)\n",
+                (unsigned)size, base, fd, g_pool_count);
         g_pool_count++;
         return 0;
     }

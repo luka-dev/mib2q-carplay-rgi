@@ -19,7 +19,17 @@ cp "$BSP/libc.so.3" "$BSP/devc-serdebug" "$BSP/waitfor" "$BSP/slogger" \
 # image its own QNX guests already run.
 cp "$A/Tools/qnx-carplay-emu/build/re/startup-virt" "$STAGE/"
 cp "$FW/app/armle/sbin/io-audio" "$STAGE/"
-cp "$FW/app/armle/lib/dll/deva-ctrl-qc.so" "$STAGE/"
+# Use the PATCHED driver by default -- that is what the car runs, and the stock
+# one silently reports max_voices=2 while QSA hides a channel conversion behind a
+# setup readback that claims six.  QSA_STOCK_DEVA=1 selects the firmware original
+# for an A/B.
+if [ "${QSA_STOCK_DEVA:-0}" = "1" ]; then
+  cp "$FW/app/armle/lib/dll/deva-ctrl-qc.so" "$STAGE/"
+  echo ">> using STOCK deva"
+else
+  cp "$ROOT/deploy/deva-ctrl-qc/deva-ctrl-qc.so" "$STAGE/"
+  echo ">> using PATCHED deva"
+fi
 cp "$FW/ifs2/ifs_coreservices3/lib/libasound.so.2" "$STAGE/"
 cp "$OUT/libcsdIpcClient.so" "$OUT/devstub" "$OUT/qsa_probe" "$STAGE/"
 # The firmware was unpacked without the execute bit and mkifs copies the host

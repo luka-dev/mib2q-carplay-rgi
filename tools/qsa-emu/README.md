@@ -74,37 +74,50 @@ while the DSP is told the samples carry **24 significant bits**. Whether QSA's
 S16->S32 widening leaves them where the DSP expects them is exactly the open
 question, and it is now answerable here rather than by ear in a moving car.
 
+## What it proved
+
+The stack runs end to end. The card registers, every device enumerates by name,
+and both configurations open and write:
+
+    snd_cards() = 1
+    card 0 dev 3: 'mpl5_dio_ent'
+    device geometry: voices 2..6, rate 48000..48000, frag 6144..18432, formats 0x1000
+    plugin_params(S16,6ch,48000Hz,frag=9216) -> 0
+    setup readback: 6 voices, 48000 Hz, format 4, frag 9216, frags 10
+    wrote 62 fragments of 768 frames
+
+`formats 0x1000` is `1 << SND_PCM_SFMT_S32_LE`: the device accepts **only** S32,
+so QSA always converts, and `voices 2..6` is the patched driver's widened range.
+
+### QSA's setup readback cannot be trusted
+
+Running the same probe against the **stock** driver (`QSA_STOCK_DEVA=1`) is the
+finding that matters:
+
+    device geometry: voices 2..2, frag 6144..6144     <- device does stereo only
+    plugin_params(S16,6ch,...) -> 0                   <- accepted anyway
+    setup readback: 6 voices, frag 9216               <- and setup claims six
+
+The plugin layer inserted a channel conversion and reported the *client* geometry
+back through `snd_pcm_plugin_setup`. So a six-voice open "succeeding" and a setup
+readback saying six voices prove nothing about what the hardware is doing.
+
+That matters directly on the car: the hook's guards — the renegotiation check and
+the fragment-capacity check — both read `snd_pcm_plugin_setup`. On a unit whose
+deva patch had not taken effect they would see six voices, report everything
+healthy, and let a hidden downmix run. Every clean counter in the last drive's log
+was gathered through exactly that call.
+
 ## Next
 
-The driver now runs complete playback sessions against the stub:
+Two things, in order.
 
-    allocateCsdBufferPool: ENTER (buffer_count=8, buffer_size=1536) -> LEAVE (rc=0x0)
-    openAudioContextV2: SUCCEEDED (dev_id=11)
-    streamAttach: SUCCEEDED
-    enableContext: SUCCEEDED
-    setStartSession: SUCCESS session handle 277
-
-64 PMEM pools are handed out, and the first ones come back at 18432 bytes —
-0x4800, exactly the six-voice fragment the deva patch produces, which is a useful
-independent confirmation that the driver really is running the six-channel
-geometry here.
-
-What made that work is the contract recovered from `allocateCsdBufferPool`
-@0x2e374: `csd_ioctl(h, 0x11420, {size, pid, 0, 0}, 16)` and the DSP side is
-expected to write a shared-memory **file descriptor** into word 3. The driver
-then calls `mem_offset64` on it, so an ordinary `shm_open` is not enough — the
-object has to be anonymous physical memory (`shm_ctl(fd, SHMCTL_ANON|SHMCTL_PHYS,
-0, size)`). Returning success without filling word 3 is what made the driver
-memset a null pointer.
-
-It still dies a little later, the same way:
-
-    io-audio terminated SIGSEGV at libc.so.3@memset+0x28, ref=0000003e
-
-`0x3e` is not a pointer, so another ioctl output field is being consumed as one.
-The method is now established: find the caller in the IDA database, read what it
-expects back, fill it in. Each one moves the driver further.
-
-Once it survives, `qsa_probe` writes its pattern and the pools — which this stub
-owns and keeps mapped — hold exactly what would have reached the DSP. Comparing
-six voices against two, the configuration that works on the car, is then a diff.
+1. The pools stay empty, so the audio does not reach the CSD PMEM the stub owns.
+   `deva_mib2_aquire` mallocs its own DMA buffer (`malloc(10 * frag_size)`) and the
+   timer advances through that; the PMEM pools are a separate, smaller set
+   (buffer_count=8, buffer_size=1536). The capture point has to move to whatever
+   copies one into the other, or the dump has to trigger on the timer rather than
+   on an ioctl.
+2. The guest faults on the way out, after both tests have written. Harmless to the
+   measurements taken so far, but it needs fixing before the harness can run
+   unattended.

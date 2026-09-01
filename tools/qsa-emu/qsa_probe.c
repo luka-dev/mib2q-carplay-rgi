@@ -95,7 +95,7 @@ static int try_device(int card, int dev, int voices, int rate, int seconds)
 
 int main(int argc, char **argv)
 {
-    int dev, target = argc > 1 ? atoi(argv[1]) : -1;
+    int dev, target = argc > 1 ? atoi(argv[1]) : 3;   /* mpl5_dio_ent */
 
     printf("=== what does the library see? ===\n");
     printf("  snd_cards() = %d\n", snd_cards());
@@ -104,7 +104,7 @@ int main(int argc, char **argv)
         int card = -1, d = -1;
         int rc = snd_pcm_open_preferred(&p, &card, &d, SND_PCM_OPEN_PLAYBACK);
         printf("  open_preferred -> %d (card %d dev %d)\n", rc, card, d);
-        if (rc == 0) { target = d; snd_pcm_close(p); }
+        if (rc == 0) snd_pcm_close(p);
     }
     printf("=== enumerating cards 0..1, devices 0..11 ===\n");
     for (dev = 0; dev < 12; dev++) { try_device(0, dev, 0, 0, 0); try_device(1, dev, 0, 0, 0); }
