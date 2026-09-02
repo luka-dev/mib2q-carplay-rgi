@@ -1,8 +1,8 @@
 # Discrete 5.1 CarPlay audio — everything known, and what is still open
 
-Status as of 2026-09-02. The fault is **not fixed**, but a specific route-width
-defect is now proven statically: the widened MPL5 DMA timer is six-channel while
-its runtime CSD session is still built as stereo. See §14.
+Status as of 2026-09-02. The original rendering defect is fixed (§14–15), but the
+remaining delivery fault is not: a one-hot six-channel test delivers L/R and loses
+C/Ls/Rs before the amplifier matrix. The newest static boundary result is in §17.
 
 > ## Localised on 2026-09-02: the CarPlay stack is not at fault
 >
@@ -507,6 +507,35 @@ Amplifier instructions, exact HU constant sites, and the 14/20/26 reconciliation
 
 ---
 
+## 17. CSD/ACDB boundary: six-channel fields, stereo COPP topology — 2026-09-02
+
+The previously unopened `libcsdIpcClient.so`, `audio_service`, platform OEM binding,
+ACDB files and signed LPASS image were audited for a two-channel cap on CSD device 78.
+
+The direct counts are not stereo. The IPC client passes the caller's six-channel map
+unchanged; `audio_service` accepts up to eight channels; dev 78 has ACDB
+`ChannelConfig=6`; its newer slot-I2S property declares six 24-bit channels at offsets
+`2,5,8,11,14,17`; and both ADM COPP-open packet versions send
+`dev_num_channel=6`. The legacy scalar named `slot_channel_allocation` is not present for
+this device because it uses the newer explicit-offset property.
+
+The audit did find one stereo-specific value. For all four application modes,
+`Speaker_cal.acdb` selects topology `0x10314`. Qualcomm's public downstream definitions
+name that ID `SPEAKER_STEREO_AUDIO_COPP` (also the default COPP). The signed LPASS image
+also contains explicitly multichannel topologies `0x1031b` and `0x10715`.
+
+The exact static configuration is therefore contradictory rather than a simple numeric
+cap: **stereo-named topology `0x10314`, output count 6**. This makes the ACDB topology
+selection the surviving head-unit-side candidate, but it does not prove that this signed
+LPASS implementation drops channels 3–6; that behavior is below the static packet
+boundary. A blind topology-ID swap is unsafe without matching calibration. A controlled
+ACDB A/B or one-hot capture at `TDM_OUT_MPL` is decisive.
+
+Full property records, file offsets, ARM instructions, packet layouts and hashes:
+[`CSD_ACDB_CHANNEL_AUDIT.md`](CSD_ACDB_CHANNEL_AUDIT.md).
+
+---
+
 ## Sources
 
 * `tools/qsa-emu/` — the QEMU harness, `HANDOFF.md` and `README.md` carry the traps.
@@ -521,3 +550,4 @@ Amplifier instructions, exact HU constant sites, and the 14/20/26 reconciliation
 * `docs/SHARC_INPUT_OUTPUT_MATRIX.md` — recovered 8×8 SHARC input mixer and the remaining physical-output boundary.
 * `docs/MOST_SOURCE_BLOCKWIDTH_AUDIT.md` — DIO MC source allocation, Connect BlockWidth, and the next data-plane measurement.
 * `docs/CONNECT_BLOCKWIDTH_VALIDATION_AUDIT.md` — amplifier width acceptance, HU literal/table sites, and CSD/MOST packing boundary.
+* `docs/CSD_ACDB_CHANNEL_AUDIT.md` — CSD client/service limits, dev-78 ACDB channel/slot records, and COPP topology selection.
