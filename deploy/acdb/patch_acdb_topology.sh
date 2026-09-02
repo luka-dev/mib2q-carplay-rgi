@@ -10,30 +10,34 @@
 # vehicle result: L and R audible, C/Ls/Rs silent, while the amplifier's own matrix would have
 # routed those into the front buses at -3..-8 dB had they arrived.
 #
-# Which target.  The id is chosen on the command line because the naming is NOT verified.
-# Codex cited an upstream header for "SPEAKER_STEREO_AUDIO_COPP"; that header does not define
-# these constants at all, and in the tree it points at 0x00010312 is LOWLATENCY_COPP_TOPOLOGY.
-# The ADSP image carries a table of ~25 topology ids around file 0x4ecc80, but its entries
-# point into the log-string area rather than at names, so decoding it means reversing Hexagon.
+# Which target.  Chosen on the command line, because what these topologies DO is not proven.
 #
-#   0x00010be3  DEFAULT_COPP_TOPOLOGY -- default. Its name IS confirmed upstream, and
-#               audio_service falls back to "default audio COPP topology" on lookup failure,
-#               so it is a path the firmware itself exercises.
-#   0x00010312  what device 15 (TDM_ANN1) uses. Known-good on this platform, but its meaning
-#               is guesswork -- low latency and pass-through are both plausible.
+# What IS proven, read out of the signed LPASS image (segment va 0xc04b9000 -> file 0x4bc000):
 #
-# Why not 0x1031b or 0x10715.  A topology id is keyed to calibration blobs,
-# and neither 0x1031b nor 0x10715 appears anywhere in this database -- switching to one would
-# point the DSP at calibration that does not exist.  0x00010312 (NONE_AUDIO_COPP) is already
-# used in this very file by device 15 (TDM_ANN1), needs no calibration by definition, and does
-# no channel-reducing post-processing.  The B&O amplifier does the real processing anyway.
+#   topology 0x00010314  (device 78, stock)  -> RX descriptor 0xc04e981c
+#   topology 0x00010BE3  (DEFAULT_AUDIO_COPP)-> RX descriptor 0xc04e981c   <-- the SAME one
+#   topology 0x00010312  (device 15)         -> RX descriptor 0xc04e9804
 #
-# The file has no checksum: QCMSNDDB header, one AVDB chunk whose length is unchanged by a
-# dword-for-dword edit.  Reverting is restoring the original file.
+#   0xc04e981c: 11 modules, list 0xc0615980
+#   0xc04e9804:  3 modules, list 0xc0615be8
+#
+# So 0x10314 and 0x10BE3 share one processing graph: swapping to the default would change the
+# id and nothing else, and prove nothing.  Only 0x00010312 selects a different graph, and is
+# therefore the only target worth testing.
+#
+# It is still an experiment, and the honest caveats are:
+#   - stock ACDB uses 0x10312 only on devices carrying one to three channels; there is no
+#     six-channel precedent for it on this platform;
+#   - a three-module graph is not the same as "pass-through", and nothing here shows it
+#     preserves six channels;
+#   - that 0x10314 is what discards C/Ls/Rs is likewise unproven -- it is the only
+#     stereo-looking value left, which is suggestive, not conclusive.
+#
+# Reverting is restoring the original file.
 set -e
 IN="${1:?usage: patch_acdb_topology.sh <stock Speaker_cal.acdb> [out]}"
 OUT="${2:-$(dirname "$0")/Speaker_cal.acdb}"
-NEWTOPO="${3:-0x00010be3}"
+NEWTOPO="${3:-0x00010312}"
 
 python3 - "$IN" "$OUT" "$NEWTOPO" <<'PY'
 import sys, struct, hashlib
