@@ -55,6 +55,24 @@ int main(int argc, char **argv)
            devName[0] ? ", subchannel " : "", devName[0] ? devName : "");
     (void)card; (void)dev;
 
+    /* RetroArch's proven qnx_qsa driver does this before params and it matters:
+     * without it the plugin layer builds an mmap chain and plugin_params fails
+     * with ENOENT on this firmware. */
+    snd_pcm_plugin_set_disable(pcm, PLUGIN_DISABLE_MMAP);
+
+    {
+        snd_pcm_channel_info_t info;
+        memset(&info, 0, sizeof(info));
+        info.channel = SND_PCM_CHANNEL_PLAYBACK;
+        if (snd_pcm_channel_info(pcm, &info) == 0)
+            printf("device limits: voices %d..%d rate %d..%d frag %d..%d formats %#x\n",
+                   info.min_voices, info.max_voices, info.min_rate, info.max_rate,
+                   info.min_fragment_size, info.max_fragment_size,
+                   (unsigned)info.formats);
+        else
+            printf("device limits: channel_info failed\n");
+    }
+
     memset(&params, 0, sizeof(params));
     params.channel = SND_PCM_CHANNEL_PLAYBACK;
     params.mode = SND_PCM_MODE_BLOCK;

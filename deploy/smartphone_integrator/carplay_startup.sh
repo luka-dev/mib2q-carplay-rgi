@@ -197,7 +197,7 @@ export ALTSCREEN_ADVERT_DISPLAYS=1
 # drop       discards Ltm/Rtm and sends PCM6
 # passthrough sends PCM8 and requires BOTH an 8ch HU PCM patch and a patched amp;
 #             the current six-channel Audi patch is not sufficient.
-export AUDIO_SPATIAL=1
+export AUDIO_SPATIAL=0
 export AUDIO_SPATIAL_ATMOS=0
 export AUDIO_SPATIAL_ATMOS_MODE=downmix
 export AUDIO_SPATIAL_CODEC_LIB="$H/libcarplay_apac.so"

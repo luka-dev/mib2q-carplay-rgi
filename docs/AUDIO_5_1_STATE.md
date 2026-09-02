@@ -1,6 +1,17 @@
 # Discrete 5.1 CarPlay audio — everything known, and what is still open
 
-Status as of 2026-09-01. The fault is **not fixed**. This document exists because the
+Status as of 2026-09-02. The fault is **not fixed**, but it is now localised.
+
+> ## Localised on 2026-09-02: the CarPlay stack is not at fault
+>
+> A standalone player wrote a known-good six-channel file straight into
+> `/dev/snd/mpl5_dio_ent`, with CarPlay, libairplay, the APAC decoder, our ring, our hook and
+> the 2->6 expansion all out of the path. It sounded broken in exactly the way CarPlay sounds
+> broken. RetroArch writes six voices to `mpl1_int_ent` on the same unit and sounds correct.
+>
+> Same deva, same DSP, same MOST, same amplifier; two virtual channels; one clean, one broken.
+> **The fault is bound to the CarPlay virtual channel.** See §11 — read it before §8 and §10,
+> which were written before this was known. This document exists because the
 search has produced a large amount of solid negative knowledge that is expensive to
 re-derive and easy to re-derive *wrongly*.
 
@@ -219,6 +230,73 @@ the real amplifier in the loop.
 3. **Arm the stock dump** (§9) and listen to what deva really plays.
 
 Deploying files is fine; restarting `io-audio` or `j9` is not — always ask first.
+
+---
+
+## 11. The decisive measurement — 2026-09-02
+
+### What was done
+
+`tools/qsa_play.c`, built for QNX and deployed to `/mnt/app/root/hooks/qsa_play`, plays a raw
+interleaved file into a named QSA device and **measures** the achieved frame rate rather than
+leaving it to the ear. Its input was `session5_5_1_declared_order.wav` stripped to raw PCM:
+the decoded APAC capture from this car, six channels, 48 kHz, already confirmed clean on a Mac.
+
+Two details made it work where the earlier attempt failed. `snd_pcm_plugin_set_disable(pcm,
+PLUGIN_DISABLE_MMAP)` must be called before `snd_pcm_plugin_params`, exactly as RetroArch's
+proven `qnx_qsa.c` does, or params fails with ENOENT on this firmware. And the device only
+provisions while its source holds the amplifier focus — pausing CarPlay leaves `DIO_MEDIA`
+focus held, which is what made `mpl5_dio_ent` openable. `mpl1_int_ent` reports
+`voices 0..0 formats 0` while focus sits elsewhere.
+
+### Result
+
+    device limits: voices 2..6 rate 48000..48000 frag 6144..18432 formats 0x1000
+    device:        6 voices, 48000 Hz, frag 9216, frags 10
+    TOTAL 2445312 frames in 50822 ms -> 48115 frames/s (expected 48000)
+
+Correct geometry, correct clock — and **it sounded broken in exactly the way CarPlay sounds
+broken**: constant ticking, wrong pitch, recognisable content. Confirmed by ear on the
+channel-ID test track, which announced "Front Right".
+
+Meanwhile RetroArch (`Tools/retroarch-qnx`) writes six voices to `/dev/snd/mpl1_int_ent` on
+this same unit and sounds correct.
+
+### What it means
+
+Everything in the CarPlay stack is exonerated: libairplay, the APAC decoder, the ring, the
+hook, the 2->6 expansion, the type-103 path. Sections 8 and 10 were written before this and
+their priorities are superseded.
+
+The shared six-channel path is also exonerated: deva, the DSP, MOST and the amplifier are the
+same for both devices, and `mpl1_int_ent` is clean. What remains is the **CarPlay virtual
+channel** itself.
+
+### The hypothesis this lands on
+
+`docs/reference/AUDIO.md` always described two halves. The deva caps patch is done and
+confirmed loaded (`voices 2..6` read from the hardware). The second half — the B&O / mixer
+agent provisioning the CarPlay virtual channel for six voices toward the amplifier — was
+never done; stock provisions it as stereo.
+
+Against the amplifier's sink table (§4), a stereo sink means the amplifier reads 4- or 8-byte
+frames out of a 14-byte-wide stream. The frame boundary slides continuously, which is audible
+as ticking, a wandering pitch, and recognisable audio from the wrong speakers — every reported
+symptom, from one cause.
+
+Next step is therefore to find which component issues the amplifier's MOST Connect
+(`FBlock 0x22, FktID 0x0112, StartResult`) and which `SinkNr`/`BlockWidth` it uses for
+connection id 162. Brief: `docs/CODEX_PROMPT_DIO_MEDIA_SINK.md`.
+
+### Left on the unit
+
+`qsa_play` at `/mnt/app/root/hooks/`, and `test51.s16` plus FLAC/AAC/WAV copies under
+`/fs/sda0/AUDIOTEST/`. This is the only tool in the whole investigation that produced an
+unambiguous answer: it plays arbitrary audio into an arbitrary device with no CarPlay in the
+loop. Reach for it first next time.
+
+`AUDIO_SPATIAL` is back to `0` on the unit and in this repo, so CarPlay runs its clean stock
+stereo until the virtual channel is fixed.
 
 ---
 
