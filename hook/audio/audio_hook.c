@@ -1669,6 +1669,10 @@ typedef struct {
     uint64_t shortWrites;
     uint64_t zeroWrites;
     int64_t  lastWriteResult;
+    uint64_t oddSizeWrites;          /* caller wrote a fragment that was not our negotiated one */
+    size_t   lastOddSize;
+    int      deviceStatus;           /* SND_PCM_STATUS_* from the device, -1 = never asked */
+    uint64_t deviceUnderruns;
 } spa_pcm_sink_t;
 
 static spa_pcm_sink_t spa_pcm_sink = {
@@ -2097,6 +2101,13 @@ ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, size_t size)
         return real(handle, buffer, size);
     }
     outputBytes = frames * outputFrameBytes;
+    /* We told the caller its period is SPA_PCM_SINK_PERIOD_FRAMES, but it asked for a
+     * shorter one during params.  If it ever writes its own size anyway we hand the device
+     * a partial fragment, which is audible as a click -- so count it rather than assume. */
+    if (frames != SPA_PCM_SINK_PERIOD_FRAMES) {
+        spa_pcm_sink.oddSizeWrites++;
+        spa_pcm_sink.lastOddSize = size;
+    }
     if (spa_pcm_sink.scratchBytes < outputBytes) {
         int16_t *replacement = (int16_t *)realloc(spa_pcm_sink.scratch, outputBytes);
         if (!replacement) {
@@ -2150,10 +2161,24 @@ ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, size_t size)
                  (int)written, (unsigned)outputBytes,
                  (unsigned long long)spa_pcm_sink.writes);
     if (spa_pcm_sink.writes == 1 || (spa_pcm_sink.writes % 1024u) == 0) {
-        LOG_INFO(LOG_MODULE,
+        static int (*real_status)(snd_pcm_t *, snd_pcm_channel_status_t *);
+        snd_pcm_channel_status_t st;
+        if (!real_status)
+            real_status = (int (*)(snd_pcm_t *, snd_pcm_channel_status_t *))
+                          dlsym(RTLD_NEXT, "snd_pcm_plugin_status");
+        if (real_status) {
+            memset(&st, 0, sizeof(st));
+            st.channel = SND_PCM_CHANNEL_PLAYBACK;
+            if (real_status(handle, &st) == 0) {
+                spa_pcm_sink.deviceStatus = st.status;
+                spa_pcm_sink.deviceUnderruns = (uint64_t)st.underrun;
+            }
+        }
+        LOG_WARN(LOG_MODULE,
                  "audio sink: writes=%llu buffered=%llu underrunFrames=%llu "
                  "zeroWrites=%llu shortWrites=%llu last=%lld "
-                 "source=%uch target=%uch ringRead=%u/%u",
+                 "source=%uch target=%uch ringRead=%u/%u "
+                 "odd=%llu lastOdd=%u devStatus=%d devUnderruns=%llu",
                  (unsigned long long)spa_pcm_sink.writes,
                  (unsigned long long)spa_pcm_sink.bufferedWrites,
                  (unsigned long long)spa_pcm_sink.underrunFrames,
@@ -2161,7 +2186,11 @@ ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, size_t size)
                  (unsigned long long)spa_pcm_sink.shortWrites,
                  (long long)spa_pcm_sink.lastWriteResult,
                  sourceChannels, outputChannels,
-                 (unsigned)bufferedFrames, (unsigned)frames);
+                 (unsigned)bufferedFrames, (unsigned)frames,
+                 (unsigned long long)spa_pcm_sink.oddSizeWrites,
+                 (unsigned)spa_pcm_sink.lastOddSize,
+                 spa_pcm_sink.deviceStatus,
+                 (unsigned long long)spa_pcm_sink.deviceUnderruns);
     }
     pthread_mutex_unlock(&spa_pcm_sink.lock);
 
