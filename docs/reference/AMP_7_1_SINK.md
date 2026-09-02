@@ -4,6 +4,14 @@ Short note. The authoritative write-up is
 `Firmwares/SoundAmp/AMP_ENTERTAINMENT_7_1_MOST.md` (amp-side RE, owned elsewhere); this file keeps
 only what bears on the CarPlay audio project, plus corrections to what we got wrong here on the way.
 
+> **Later HU correction:** the MOST audio controller is present in `AudioProcess` and
+> MIBRoot in the complete MU1316 rootfs. For connection 162 it sends sink `0x26` with
+> controller-supplied `BlockWidth 26`; the sink table below still correctly advertises
+> width 14. The V850 Connect handler accepts that combination: it checks BlockWidth
+> only against `1..372`, not against the selected profile. See
+> [`../MOST_SOURCE_BLOCKWIDTH_AUDIT.md`](../MOST_SOURCE_BLOCKWIDTH_AUDIT.md) and
+> [`../CONNECT_BLOCKWIDTH_VALIDATION_AUDIT.md`](../CONNECT_BLOCKWIDTH_VALIDATION_AUDIT.md).
+
 ## The answer
 
 `SinkInfo.Get(0x32)` on the amplifier's FBlock `0x22`, FktID `0x0111`, returns:
@@ -68,11 +76,13 @@ Recorded so the errors do not get re-derived from this file's history:
 - The table at `0x96DE8` is a function-dispatch table into MOST network-service code, not audio
   profile data.
 
-Two earlier findings stand: A07 is EQ/filter design data with no routing matrix in it, and no SHARC
-image exists anywhere in the 1.5 MB CodeFlash dump (blank at `0x0F0000-0x0FFFFF`,
-`0x110000-0x11FFFF` and all of `0x130000-0x17FFFF`; `0x000000-0x01FFFF` is mirrored at `0x020000`).
-The amp note adds that the selected profile index at `gp-3592` is never read by the DSP service code,
-so no register-write delta between 5.1 and 7.1 can be derived from the V850 at all.
+The later matrix audit corrected two of these earlier findings. A07 contains eight profile
+sets of three 8×8 routing matrices at `0x101BB4`; `FUN_000C23C0` reads the selector at
+`gp-0x4592`/`gp-0x456A`, chooses a bank from the active `SinkNr`, and
+`FUN_000A9040` writes the resulting coefficients to SHARC parameters
+`0xC022A..0xC0269`. The available image still contains no SHARC instruction image, so the
+downstream eight-bus-to-physical-speaker binding remains unavailable. See
+[`../SHARC_INPUT_OUTPUT_MATRIX.md`](../SHARC_INPUT_OUTPUT_MATRIX.md).
 
 ## Update: the branch reopens conditionally (2026-08-31)
 
@@ -100,14 +110,14 @@ it needs the main-flash integrity value resolved on the MCU that also holds comp
 The amp plan already lists this as step 2; noting the boundary explicitly because "two bytes" reads
 cheaper than it is.
 
-**The HU has no MOST audio stack in its filesystem.** Grepping the whole extracted MHI2Q tree for
+**Historical result, superseded: the partial HU extraction appeared to have no MOST audio stack.**
+Grepping that extracted MHI2Q tree for
 `NetServices`, `Mns`, `MostNs`, `AudioAmplifier`, `SyncSink`, `Allocate`, `ConnectionLabel`, `SinkNr`,
 `BlockWidth` and `FBlock` returns **zero files for every one of them**, alongside the earlier zero
-hits for `Entertainment_*`. Absence of strings is not proof — the code could be numeric, or live in a
-companion controller outside this image — but ten independent MOST terms all missing is strong. The
-Connect that would select `SinkNr 0x32` is therefore not issued by anything we can see, let alone
-patch, which matters for the amp plan's "check whether stock ever connects 0x32" step and for any
-notion of us issuing that Connect ourselves.
+hits for `Entertainment_*`. The complete rootfs later exposed the controller chain in MIBRoot,
+AudioProcess and `car`, so absence from that partial extraction is not evidence that the HU lacks the
+stack. The source audit resolves connection 162 only; whether stock policy ever selects sink `0x32`
+remains unproved.
 
 **And the payoff is narrower than the plan's framing suggests.** Its SHARC step 6 — bypass the
 synthesized Symphoria height for this profile so it is not summed with discrete TFL/TFR — is the tell:

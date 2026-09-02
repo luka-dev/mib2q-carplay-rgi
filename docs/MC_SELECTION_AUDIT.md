@@ -3,6 +3,19 @@
 Date: 2026-09-02  
 Scope: static analysis of the MU1316 head-unit firmware and the already-audited amplifier material. No binary was modified.
 
+> **Subsequent amplifier result:** the logical SHARC input mixer was later recovered from
+> `AD301A07` in the V850 CodeFlash. Sink `0x26` selects a 5.1 bank that routes all six
+> inputs; it does not mute C/LFE/Ls/Rs. See
+> [`SHARC_INPUT_OUTPUT_MATRIX.md`](SHARC_INPUT_OUTPUT_MATRIX.md). Statements below that
+> the matrix is absent describe the boundary at the time of this head-unit audit and are
+> superseded by that later result.
+>
+> **Subsequent source-width result:** `eSRC_ENT_AMP_DIO_MEDIA_MC` resolves to
+> `DSI:MmxSourcePresCtrl/7`, which allocates 26 bytes per synchronous frame. The HU's
+> actual Connect fields are `SinkNr 0x26, BlockWidth 0x001a`. The sink's advertised
+> `BlockWidth 14` is a separate record. See
+> [`MOST_SOURCE_BLOCKWIDTH_AUDIT.md`](MOST_SOURCE_BLOCKWIDTH_AUDIT.md).
+
 ## Result
 
 For an externally coded amplifier, connection `162` selects the multichannel pair
@@ -41,13 +54,15 @@ path rather than copied from a vehicle dump.
 The head-unit control plane does **not** declare a CarPlay channel count. Its audio
 request contains connection ID, terminal and group only. Therefore the new one-hot result
 (L/R audible; C/LFE/Ls/Rs silent) is not explained by MIBRoot choosing a stereo route.
-The HU already asks for the protected 5.1 logical sink, whose physical profile is the
-previously proved `SinkNr 0x26`, `BlockWidth 14`.
+The HU already asks for the protected 5.1 logical sink. Its physical sink is `0x26`, whose
+advertised profile has `BlockWidth 14`; the later source audit shows that the controller
+independently supplies `BlockWidth 26` in Connect.
 
-The surviving boundary is the amplifier's SHARC source-to-output matrix. That matrix is
-absent from the V850 image; resolving it requires a dump of the external SHARC boot flash
-or a proven runtime matrix read. This audit provides no evidence for a particular matrix
-coefficient or output assignment.
+The surviving boundary at this stage was the amplifier's SHARC source-to-output matrix.
+The later amplifier audit recovered its logical 8×8 input-mixer layer from A07 and ruled
+out muted C/LFE/Ls/Rs rows. The still-later source audit also rules out a stereo-width MOST
+allocation. The remaining localization boundary is the audio content at Qualcomm
+`TDM_OUT_MPL` versus the content of the allocated MOST synchronous slots.
 
 ## Vehicle measurement that defines this audit
 
@@ -193,9 +208,11 @@ the stock connection-162 policy already and unconditionally selects
 `eSRC_ENT_AMP_DIO_MEDIA_MC + eSNK_DTCP51`. The measured loss of source positions 3..6
 occurs after that logical selection.
 
-The next useful measurement is a SHARC source-to-output matrix dump (or a supported runtime
-readback) from the amplifier. Static analysis of the available V850 CodeFlash cannot answer
-which matrix rows currently accept the six MOST source positions.
+The later A07 audit answers the static amplifier part: the selected 5.1 bank accepts and
+routes all six MOST source positions. The source-allocation audit then proves a 26-byte,
+not stereo-width, source. The next useful measurement is a one-hot capture at Qualcomm
+`TDM_OUT_MPL` and at the MOST synchronous source slots; that distinguishes ADSP packing
+from INIC/MOST formatting and amplifier ingress.
 
 ## Provenance
 
@@ -213,4 +230,6 @@ which matrix rows currently accept the six MOST source positions.
   [`../deploy/deva-ctrl-qc/BUILD_CHAIN.md`](../deploy/deva-ctrl-qc/BUILD_CHAIN.md)
 - Amplifier/SHARC boundary:
   `/Users/luka/Desktop/AUDI_2/Firmwares/SoundAmp/AMP_ENTERTAINMENT_7_1_MOST.md`
-
+- Recovered logical SHARC matrix: [`SHARC_INPUT_OUTPUT_MATRIX.md`](SHARC_INPUT_OUTPUT_MATRIX.md)
+- Source allocation and actual Connect BlockWidth:
+  [`MOST_SOURCE_BLOCKWIDTH_AUDIT.md`](MOST_SOURCE_BLOCKWIDTH_AUDIT.md)

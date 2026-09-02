@@ -88,7 +88,10 @@ the Java stack on a live HU is unsafe.
 - [`docs/AUDIO_5_1_STATE.md`](docs/AUDIO_5_1_STATE.md) — current audio evidence and closed hypotheses.
 - [`deploy/deva-ctrl-qc/BUILD_CHAIN.md`](deploy/deva-ctrl-qc/BUILD_CHAIN.md) — vehicle-confirmed deva fix and exact deployable build chain.
 - [`docs/ROUTER_INPUT_WIDTH_AUDIT.md`](docs/ROUTER_INPUT_WIDTH_AUDIT.md) — historical root cause of the now-fixed MPL5 render-width defect.
-- [`docs/MC_SELECTION_AUDIT.md`](docs/MC_SELECTION_AUDIT.md) — connection-162 MC selection, its `Sound_System` coding source, and the remaining SHARC boundary.
+- [`docs/MC_SELECTION_AUDIT.md`](docs/MC_SELECTION_AUDIT.md) — connection-162 MC selection and its `Sound_System` coding source.
+- [`docs/SHARC_INPUT_OUTPUT_MATRIX.md`](docs/SHARC_INPUT_OUTPUT_MATRIX.md) — recovered A07 8×8 SHARC input mixer, selection logic, coefficient addresses and the remaining physical-output boundary.
+- [`docs/MOST_SOURCE_BLOCKWIDTH_AUDIT.md`](docs/MOST_SOURCE_BLOCKWIDTH_AUDIT.md) — connection-162 source allocation and actual MOST Connect BlockWidth.
+- [`docs/CONNECT_BLOCKWIDTH_VALIDATION_AUDIT.md`](docs/CONNECT_BLOCKWIDTH_VALIDATION_AUDIT.md) — amplifier Connect validation and exact HU BlockWidth constant sites.
 
 Historical altScreen negotiation reports and from-source experiments are under `research/altscreen/`;
 they are useful research records, not the definition of the shipping architecture.

@@ -326,6 +326,9 @@ The follow-up static audit falsified §11's stereo-MOST-sink hypothesis. For DSI
 `eSRC_ENT_AMP_DIO_MEDIA_MC` plus `eSNK_DTCP51`. The amplifier's corresponding physical
 profile is `SinkNr 0x26`, `BlockWidth 14`, protected 6 x 16-bit PCM.
 
+Section 16 later separates that advertised sink profile from the controller-supplied
+Connect field. The latter is `BlockWidth 26`, not 14.
+
 This is a static connection/coding table, not a value derived from QSA voices. No sink patch
 is needed or justified: the relevant MIBRoot word is already `eSNK_DTCP51`. The detailed
 addresses, raw table records, ownership chain, and binary hashes are in
@@ -426,7 +429,7 @@ the result and the next, narrower delivery boundary.
 
 ---
 
-## 15. Rendering fixed; HU already selects MC, remaining boundary is the SHARC matrix — 2026-09-02
+## 15. Rendering fixed; HU selects MC; logical SHARC matrix recovered — 2026-09-02
 
 Mirroring MPL5's attach-time caps record to MPL1 fixed the six-voice rendering defect on
 the car. The unit now logs `channels=6` at route attach, the continuous 62.5 Hz tick is
@@ -450,11 +453,57 @@ contains a source channel count. The request is connection ID, terminal and grou
 six-voice negotiation does not feed the MIBRoot table mapper. Therefore no HU policy or
 sink-selection patch is justified by the one-hot result.
 
-The remaining suspect is the amplifier's SHARC source-to-output matrix. It is absent from
-the available V850 CodeFlash and needs an external SHARC boot-flash or proven runtime
-matrix dump. No static conclusion about its coefficient values is possible from the
-available image. Full addresses and the runtime coding chain:
-[`MC_SELECTION_AUDIT.md`](MC_SELECTION_AUDIT.md).
+The next static pass recovered the logical SHARC input mixer from `AD301A07` in the
+available V850 CodeFlash. Sink `0x26` selects profile 0/bank 1, an 8×8 signed-dB matrix
+written to SHARC parameters `0xC022A..0xC0269`. Its C/LFE/Ls/Rs rows all have non-muted
+routes, including contributions to the already-audible L/R buses. Therefore this static
+matrix does not match the one-hot result and is a clean negative for matrix-row muting.
+
+The vehicle result plus those non-muted routes closes matrix-row muting as an explanation:
+C/Ls/Rs would contribute to the already-audible L/R buses if they reached the amplifier
+matrix. Their total silence puts the loss upstream of that matrix. Full coefficients,
+selector code and reproducible CSV:
+[`SHARC_INPUT_OUTPUT_MATRIX.md`](SHARC_INPUT_OUTPUT_MATRIX.md). Head-unit addresses and
+the runtime coding chain remain in [`MC_SELECTION_AUDIT.md`](MC_SELECTION_AUDIT.md).
+
+---
+
+## 16. MOST source allocation is 26 bytes, not stereo width — 2026-09-02
+
+The follow-up static audit separates source allocation from sink declaration. On the
+external-amplifier branch, logical source `eSRC_ENT_AMP_DIO_MEDIA_MC` (`0x46f`) maps to
+`DSI:MmxSourcePresCtrl/7`. Source 7 has `srcID 52` and a fixed bandwidth/BlockWidth of
+`26` bytes per synchronous frame. AudioProcess preserves that value through source
+allocation and serializes it into the MOST Connect request.
+
+The actual stock Connect fields for connection 162 are therefore:
+
+```text
+SinkNr 0x26, BlockWidth 0x001a
+payload offsets 2..4: 26 00 1a
+```
+
+The amplifier's sink `0x26` still advertises `BlockWidth 14` in `SinkInfo.Get`. That is a
+separate sink-profile record; the earlier audits incorrectly inferred it was also the
+Connect value. The observed source/sink mismatch (`26` requested, `14` advertised) is real,
+but the follow-up V850 audit proves that the amplifier's Connect handler does not reject it.
+`FUN_000C4B30` checks only that the width is in `1..372`, then stores the received value;
+it never compares against the selected profile's own width.
+
+The apparent third value, 20 bytes for two protection bytes plus six packed 24-bit samples,
+assumes three-byte packing that is not proved here. Deva's actual DMA representation is six
+32-bit words containing 24 valid sample bits, so `2 + 6*4` also equals 26. No CPU-side
+CSD-to-MOST sample converter is visible in the available binaries; the packing boundary is
+Qualcomm `TDM_OUT_MPL` to the INIC/MLB/MOST formatter.
+
+This is a clean negative for the proposed stereo-width MOST allocation. The decisive next
+measurement is the one-hot signal at Qualcomm/LPASS `TDM_OUT_MPL` and in the allocated MOST
+synchronous slots. Missing C/Ls/Rs already at `TDM_OUT_MPL` establishes loss in Qualcomm
+ADSP routing/packing after deva; presence there but absence on MOST moves it to the
+INIC/MLB/MOST formatter. Details, addresses, table bytes and hashes:
+[`MOST_SOURCE_BLOCKWIDTH_AUDIT.md`](MOST_SOURCE_BLOCKWIDTH_AUDIT.md).
+Amplifier instructions, exact HU constant sites, and the 14/20/26 reconciliation:
+[`CONNECT_BLOCKWIDTH_VALIDATION_AUDIT.md`](CONNECT_BLOCKWIDTH_VALIDATION_AUDIT.md).
 
 ---
 
@@ -469,3 +518,6 @@ available image. Full addresses and the runtime coding chain:
 * `docs/DEVICE_TOPOLOGY_AUDIT.md` — virtual PCM to shared CSD device/topology audit.
 * `docs/ROUTER_INPUT_WIDTH_AUDIT.md` — runtime MPL1/MPL5 CSD width root cause, now fixed and confirmed.
 * `docs/MC_SELECTION_AUDIT.md` — connection-162 MC selector, EEPROM/basic-coding origin, and SHARC boundary.
+* `docs/SHARC_INPUT_OUTPUT_MATRIX.md` — recovered 8×8 SHARC input mixer and the remaining physical-output boundary.
+* `docs/MOST_SOURCE_BLOCKWIDTH_AUDIT.md` — DIO MC source allocation, Connect BlockWidth, and the next data-plane measurement.
+* `docs/CONNECT_BLOCKWIDTH_VALIDATION_AUDIT.md` — amplifier width acceptance, HU literal/table sites, and CSD/MOST packing boundary.

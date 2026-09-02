@@ -10,7 +10,11 @@ disassembler**, and it is labelled which. Full history in `docs/reference/AUDIO.
 > C/LFE/Ls/Rs were silent. Static analysis proves that this external-amplifier
 > car already selects `DIO_MEDIA_MC + DTCP51` unconditionally and that no HU
 > CarPlay channel-count field exists. The remaining boundary is the amplifier's
-> SHARC source-to-output matrix. See
+> SHARC source-to-output matrix. The logical 8×8 input mixer has now been
+> recovered from A07: sink `0x26` selects a matrix in which C/LFE/Ls/Rs are all
+> routed, so that static matrix does not explain the one-hot silence. The final
+> eight-bus-to-16-physical-output binding remains below the available image. See
+> [`SHARC_INPUT_OUTPUT_MATRIX.md`](SHARC_INPUT_OUTPUT_MATRIX.md),
 > [`MC_SELECTION_AUDIT.md`](MC_SELECTION_AUDIT.md) and
 > [`../deploy/deva-ctrl-qc/BUILD_CHAIN.md`](../deploy/deva-ctrl-qc/BUILD_CHAIN.md).
 

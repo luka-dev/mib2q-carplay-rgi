@@ -184,8 +184,10 @@ QSA). `AudioStreamPrepare` (0x4a9d0):
 - **deva caps (dependency, now implemented)**: provision `mpl5_dio_ent` for **6 voices**; opening
   6 voices against its stock 2-voice cap fails with `deva_channel_map: voices not supported`
   (AudioStreamPrepare returns -6736). The later static MOST audit proved that connection 162 already
-  selects `eSNK_DTCP51`, the amplifier's `SinkNr 0x26` / `BlockWidth 14` profile. There is no separate
-  B&O sink-route patch; see `docs/DIO_MEDIA_SINK_STATIC_AUDIT.md`.
+  selects `eSNK_DTCP51`, the amplifier's `SinkNr 0x26` / advertised `BlockWidth 14` profile. There is
+  no separate B&O sink-route patch. A later source audit proves the independently supplied Connect
+  width is 26, not 14; see `docs/DIO_MEDIA_SINK_STATIC_AUDIT.md` and
+  `docs/MOST_SOURCE_BLOCKWIDTH_AUDIT.md`.
 
 ### Channel order to confirm
 Apple 5.1 PCM order (L R C LFE Ls Rs) vs the Audi TDM / `six_channel_speakerp` expected order — map

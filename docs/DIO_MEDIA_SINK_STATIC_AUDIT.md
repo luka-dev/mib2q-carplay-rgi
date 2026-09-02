@@ -8,6 +8,18 @@ Scope: static analysis only; no hook, deva, HU, or amplifier binary was modified
 > `0xF1` byte 11: value `2` publishes `ExternalAmplifierCoded=true`. For that external
 > state, the `_MC + DTCP51` pair below is unconditional and no source channel count is
 > consulted.
+>
+> **Subsequent source-width correction:** this audit proved the sink identity and the
+> sink's advertised profile, but inferred that the same width appeared in Connect. The
+> source-allocation audit proves that the HU actually sends `SinkNr 0x26, BlockWidth
+> 0x001a`; `0x000e` belongs only to sink `0x26`'s `SinkInfo` declaration. See
+> [`MOST_SOURCE_BLOCKWIDTH_AUDIT.md`](MOST_SOURCE_BLOCKWIDTH_AUDIT.md).
+>
+> **Subsequent amplifier validation:** `FUN_000C4B30` accepts any BlockWidth in
+> `1..372` and stores it as runtime state; it does not compare the value with the
+> requested sink's advertised profile. Thus `0x26/0x001a` is not rejected for
+> disagreeing with sink `0x26`'s advertised `0x000e`. See
+> [`CONNECT_BLOCKWIDTH_VALIDATION_AUDIT.md`](CONNECT_BLOCKWIDTH_VALIDATION_AUDIT.md).
 
 ## Result
 
@@ -33,7 +45,7 @@ format     = 6 x 16-bit PCM plus the protected-stream overhead
 The route is selected from connection/coding tables. It is **not** derived from the QSA
 voice count and therefore is not something that the deva caps patch needed to retrigger.
 There is no smaller patch to make connection 162 select `0x26`: on an external-amplifier
-car it already selects the logical resource that resolves to `0x26/14`. Changing the
+car it already selects the logical resource that resolves to sink `0x26`. Changing the
 logical sink word would move it away from the correct DTCP 5.1 route.
 
 This closes only the proposed wrong-MOST-sink explanation. It does not identify the
@@ -187,7 +199,10 @@ The amplifier firmware supplies the decisive profile definition:
   ConnectionLabel(2)`, all multibyte fields big-endian.
 
 Together, the HU logical enum `eSNK_DTCP51` and the amplifier's only protected 5.1
-profile make the physical result unambiguous: `0x26/0x000e`.
+profile make the physical **sink identity** unambiguous: `0x26`. They do not determine
+the BlockWidth supplied in Connect. The later source-allocation trace proves that field
+is `0x001a`, sourced from `MmxSourcePresCtrl/7`, even though the sink advertises
+`0x000e`.
 
 ## Smallest-change answer
 
@@ -198,7 +213,7 @@ the correct external protected route with a different logical sink.
 
 If an on-wire confirmation is desired later, the narrow measurement is to enable the
 existing `CMOSTRoutingClient` request trace or capture the amplifier's Connect packet and
-verify bytes `26 00 0e` at payload offsets 2..4. That is a confirmation step, not a patch,
+verify bytes `26 00 1a` at payload offsets 2..4. That is a confirmation step, not a patch,
 and was outside this static-only pass.
 
 ## Reproducibility and provenance
