@@ -52,6 +52,22 @@ without substantially more reverse engineering on a driver that lives in a car. 
 minima match `mpl1_int_ent` makes the geometry right at attach time, so no late rebuild is
 needed at all.
 
+## Confirmed on the car, both ways (2026-09-02)
+
+With `AUDIO_SPATIAL=1`, discrete 5.1 plays correctly. With `AUDIO_SPATIAL=0` on the same
+driver, stereo plays correctly too — so the mirrored record is safe in both modes and no
+conditional build is needed.
+
+The driver's own log shows the fix working at the point that used to be wrong:
+
+    session_csd_setup: ... DEVICE_ID = <4> is being attached, update session info
+    pcm format => sample_rate=48000, channels=6, bit_per_sample=24, sign=1, interleave=1
+
+`channels=6` where it read `channels=2` for a month. The CSD session is now built
+six-channel at route attach, before any PCM channel exists, which is why nothing has to
+rebuild it later. Stereo clients reach the same six-channel session through QSA's channel
+conversion.
+
 ## The objection that turned out to be wrong
 
 Earlier notes said the minima must never be widened, because a stereo open would fall below
