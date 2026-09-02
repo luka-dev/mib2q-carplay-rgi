@@ -29,7 +29,8 @@ The shipped path always keeps stock `libairplay.so`. Historical alternative impl
 | `assets/` | Screenshots and visual reference material |
 | `build/` | Canonical deployable artifacts |
 
-Raw unit logs and generated class trees are intentionally kept outside Git. The cleanup archive is
+Build output, raw unit logs and generated class trees are intentionally kept outside Git;
+`build/` is reproduced by the three scripts below. The cleanup archive is
 under `/Users/luka/Desktop/AUDI_2/LocalLogs/`.
 
 ## Build
@@ -63,10 +64,13 @@ The runtime integration lives in [`deploy/smartphone_integrator/`](deploy/smartp
 It starts the two renderers around the lifetime of `dio_manager`, does not restart Java, and performs
 bounded cleanup when `dio_manager` exits.
 
-To replace only the native hook and restart `dio_manager`:
+Whole install from the M.I.B. SD card — runtime files, jar, child config and PF ports:
+see [`deploy/card/README.md`](deploy/card/README.md).
+
+To replace only the native hook and restart `dio_manager` over ssh:
 
 ```sh
-./scripts/deploy_unit.sh
+./scripts/deploy_over_ssh.sh
 ```
 
 The deploy helper stages both native audio artifacts through `.new` files and does not accumulate
@@ -81,6 +85,8 @@ the Java stack on a live HU is unsafe.
 - [`docs/reference/ALTSCREEN_VC_NAV_STATUSBAR.md`](docs/reference/ALTSCREEN_VC_NAV_STATUSBAR.md) — VC status-bar findings.
 - [`docs/reference/CLUSTER_PRESENT_CADENCE.md`](docs/reference/CLUSTER_PRESENT_CADENCE.md) — cluster swap-interval doctrine: why a nominally 30 fps chain judders, and the QNX/Screen platform traps behind it.
 - [`docs/HANDOFF_SPATIAL_AUDIO.md`](docs/HANDOFF_SPATIAL_AUDIO.md) — CarPlay discrete 5.1 handoff; §10 has the type-103 five-second-teardown root cause.
+- [`docs/AUDIO_5_1_STATE.md`](docs/AUDIO_5_1_STATE.md) — current audio evidence and closed hypotheses.
+- [`docs/ROUTER_INPUT_WIDTH_AUDIT.md`](docs/ROUTER_INPUT_WIDTH_AUDIT.md) — current MPL5 rendering defect: six-channel DMA feeding a stereo CSD session.
 
 Historical altScreen negotiation reports and from-source experiments are under `research/altscreen/`;
 they are useful research records, not the definition of the shipping architecture.

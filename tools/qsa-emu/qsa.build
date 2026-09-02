@@ -32,14 +32,15 @@
     waitfor /dev/audio_service 5
 
     display_msg ">>> io-audio -d qc -vvvvv"
-    QSA_SUBMIT_MEASURE=1 LD_PRELOAD=/proc/boot/libcsdIpcClient.so CACHE_NOP=1 io-audio -vvvvv -d qc platform_id=mib2,log_level=high,default_device=six_channel_speakerp,data_dump_path=/var/log/
+    MEASURE_ENV LD_PRELOAD=/proc/boot/libcsdIpcClient.so CACHE_NOP=1 io-audio -vvvvv -d qc platform_id=mib2,log_level=high,default_device=six_channel_speakerp,data_dump_path=/var/log/
     waitfor /dev/snd 15
     display_msg ">>> wait for a real device node, not just the directory"
     waitfor /dev/snd/pcmPreferredp 25
 
-    display_msg ">>> drive the device the way dio does: S16 in, six voices"
-    QSA_SUBMIT_MEASURE=1 LD_PRELOAD=/proc/boot/libtap.so qsa_probe 3 27 PROBE_VOICES
+    display_msg ">>> drive playback device PROBE_DEVICE: S16 in, PROBE_VOICES voices"
+    MEASURE_ENV LD_PRELOAD=/proc/boot/libtap.so qsa_probe PROBE_DEVICE -1 PROBE_VOICES
     display_msg "=== AUDIO STACK PROBE DONE ==="
+    TOPOLOGY_SLOG_COMMAND
 }
 [type=link] /usr/lib/ldqnx.so.2=/proc/boot/libc.so.3
 [type=link] /dev/console=/dev/ser1

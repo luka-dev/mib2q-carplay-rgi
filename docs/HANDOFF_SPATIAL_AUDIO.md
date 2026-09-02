@@ -1,7 +1,17 @@
 # Handoff — CarPlay discrete 5.1 on an Audi MHI2Q head unit
 
 Reverse-engineering handoff. Everything below is either **verified on hardware** or **verified in a
-disassembler**, and it is labelled which. Full history in `docs/reference/AUDIO.md` §9–§25a.
+disassembler**, and it is labelled which. Full history in `docs/reference/AUDIO.md` §9–§26.
+
+> **Latest rendering status, 2026-09-02:** keep `AUDIO_SPATIAL=0`. A standalone
+> player bypassed CarPlay and proved `mpl5_dio_ent` clean at two voices but
+> broken at six. The same-device A/B measured 48,107 frames/s at two voices
+> and 48,129 at six, both against 48,000 expected.
+> Static analysis then found the surviving defect: the six-channel DEVA timer
+> uses `0x4800`, while runtime CSD route setup still copies MPL5's stereo
+> `min_voices=2` and `min_fragsize=0x1800`. The current deva binary is not a
+> completed 5.1 fix. See
+> [`ROUTER_INPUT_WIDTH_AUDIT.md`](ROUTER_INPUT_WIDTH_AUDIT.md).
 
 ---
 
@@ -40,7 +50,9 @@ User-facing startup policy is:
 
 `AUDIO_SPATAIL` is accepted only as a warned compatibility alias for the typo. Old `SPATIAL_*`
 variables are read only when none of the new boolean controls is present, for migration of an older
-on-unit startup script. The repository startup defaults to Spatial 5.1 with Atmos off.
+on-unit startup script. The repository startup currently sets
+`AUDIO_SPATIAL=0` and Atmos off because the MPL5 CSD-width defect makes
+six-channel rendering unsafe to enable.
 
 `SPA_103_MU1316_*` identifiers were removed from common logic. All private VA/offset/prologue data
 now lives in a `spa103_private_profile_t` table. The first profile is named `MHI2Q AirPlay 210.81`;
@@ -62,10 +74,11 @@ by 40 bytes of DWARF when file headers were added — `scripts/apac_flags.sh`
 builds with `-g`, so adding four lines to a file shifts every line number under
 it. No decoder code changed.
 
-The only remaining proof is live hardware validation: deploy both shared objects and the startup
-file, start with `spatial-5.1`, confirm the `audio sink:` counters and audible PCM6, then test
-pause/resume and a long session. Only after that use index 66/downmix. PCM8 passthrough must remain
-off on the current six-channel HU/amp patch.
+The decoder/render implementation has passed its bench gates, but it must not be
+used as an end-to-end acceptance test until the independent deva CSD-width fault
+is fixed. After that fix, live validation still needs the two shared objects and
+startup file, `audio sink:` counters, audible PCM6, pause/resume, and a long
+session. PCM8 passthrough must remain off on the current six-channel HU/amp path.
 
 The QSA seam is fingerprinted by static evidence from the exact AirPlay 210.81 binary
 (`SHA-256 01c116b1674215daa0602d556a6d9b2eb48c2113ca294ea1f5d58787e3f656f2`). Its
@@ -86,7 +99,8 @@ Make an iPhone send **discrete multichannel audio** over **wired CarPlay** to an
 (QNX 6.5, APQ8064) so a B&O 3D Advanced amp receives real 5.1 instead of a stereo downmix that the amp
 then upmixes algorithmically (Fraunhofer Symphoria).
 
-The head-unit 6-channel PCM path is **finished and proven**. The phone's legacy/realtime CarPlay path
+The head-unit six-channel transport is proven through the DMA ring, but the
+MPL5-to-CSD render handoff is **not finished**; see the latest status above. The phone's legacy/realtime CarPlay path
 refuses the added multichannel bits. iOS 27 also has a newer buffered path, but our 210.81 receiver
 does not implement it. A hook-owned type-103 TCP listener/capture and buffered-control stage is now
 deployed: both APAC 5.1 and APAC 5.1.2 negotiation are proven on hardware. The sender still closes
@@ -437,7 +451,8 @@ There was no type-103 SETUP request, no `spatial_setup103_*` capture, no type-10
 and no hook crash. The later `TIMEOUT_STARTUP` was the supervisor's consequence of the orderly phone
 teardown, not its cause. Therefore the phone rejected the combined negotiation contract immediately
 after `/info`; it never reached payload transport or codec selection. This result does not implicate
-the existing six-channel PCM/DIO5 path.
+the PCM transport through the DIO5 DMA ring; the later CSD render-handoff defect
+is independent and documented at the top of this file.
 
 The subsequent `feature`-only capture recovered the exact control proposal. The iPhone offered 14
 features, including `mainBuffered` at array index 5. The hook correctly returned
@@ -461,7 +476,7 @@ described below.
 
 ---
 
-## 5. Head-unit side (complete, for context)
+## 5. Head-unit side (caps and DMA complete; CSD route width incomplete)
 
 * CarPlay audio device = `mpl5_dio_ent`, **device_id 4**, in `deva-ctrl-qc.so`'s 31-slot capability
   table (names VA `0xA5C54` stride 272, caps VA `0xA7D44` stride 48; `.data` VA→file = −0x1000).
@@ -469,6 +484,12 @@ described below.
   `max_voices 2→6` (file `0xA6E1C`), `max_fragsize 0x1800→0x4800` (`0xA6E24`),
   `max_buffer 0xF000→0x2D000` (`0xA6E28`). The fragsize part is **load-bearing**: the stream moves
   `nTFrames: 768` per transfer = 3072 B at stereo, but **9216 B at 6 channels > the stock 6144 cap**.
+* **Surviving defect:** route setup does not use those negotiated maxima. At
+  `deva_update_session_info_from_list @0x54848`, record `min_voices` and
+  `min_fragsize` become active CSD session fields. MPL5 therefore creates a
+  stereo/`0x1800` CSD consumer beside its six-channel/`0x4800` DMA producer.
+  Acquire, prepare, and trigger do not re-provision it. A correct dual-mode fix
+  must rebuild the CSD stream/context/buffer pool from the live PCM channel.
 * **6 channels is a hard ceiling**: `deva_mib2_channel_map` @ `0x54ACC` switches on `{1,2,3,6}` only;
   no device in the table exceeds 6; output nodes are only `mono_/stereo_/six_channel_speakerp`; and
   `deva_csd_start_csd_session_playback` @ `0x24F28` **hardcodes 6** in its `voices > 2` branch.
@@ -810,7 +831,8 @@ this host-side investigation.
 
 The practical target is therefore no longer an undocumented receiver. Reimplement the smallest
 Pioneer type-103 subset—SETUP/lifecycle, APAP reader, security, clock/queue, APAC converter, and
-downmixer—and bridge its resulting PCM6 to the already proven Audi DIO5 path. This is a behavioral
+downmixer—and bridge its resulting PCM6 to the proven Audi DIO5 DMA path after
+fixing the still-stereo CSD render handoff. This is a behavioral
 and algorithmic reference, **not a directly loadable donor binary**: Pioneer is AArch64 Linux while
 the target MHI2Q userland is ARMv7 QNX. Decode/render remains necessary for audible output, but it
 does not explain the fixed five-second teardown; §10 identifies the exact earlier failure as four
@@ -1122,7 +1144,12 @@ support or an Atmos object renderer; the licensed channel limit still needs a ru
 
 ---
 
-## 9. Current controls, next experiment, and remaining work
+## 9. Historical controls and experiments (do not enable 5.1 yet)
+
+The control details below remain useful for reproducing the type-103 work, but
+the router-width result at the top of this document supersedes their activation
+advice. Keep `AUDIO_SPATIAL=0` until the MPL5 CSD stream is dynamically
+re-provisioned from the negotiated PCM geometry.
 
 ### Safe runtime controls
 
@@ -1130,8 +1157,10 @@ Type-103 configuration is env-only and is inherited when `carplay_startup.sh` ex
 Changing it therefore requires a fresh `dio_manager` generation; deleting `/tmp` files has no
 effect. On a muted/isolated bench setup:
 
-1. Prefer `scripts/set_spatial_profile.sh spatial-5.1`, `spatial-5.1.2`, or `fallback-5.1`. The
-   `status` command is read-only. The script does not restart a running session.
+1. Use `scripts/set_spatial_profile.sh fallback-stereo` on the current driver.
+   The former `spatial-5.1`, `spatial-5.1.2`, and `fallback-5.1` experiments are
+   suspended until the CSD-width fix. The `status` command is read-only. The
+   script does not restart a running session.
 2. `SPATIAL_103=1` is the master switch. `0`, `false`, `no`, `off`, empty, or absent disables every
    buffered mutation/capture; the independent type-100 PCM/6 fallback remains unchanged.
 3. `SPATIAL_103_MODE` chooses the contract half:

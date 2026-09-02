@@ -22,3 +22,6 @@ c++ -std=c++11 -O2 -w -fno-exceptions -fno-rtti \
     hook/audio/spatial_downmix.c hook/audio/apac_bridge.cpp \
     apac_decoder/src/*.cpp -o "$OUT/integration"
 "$OUT/integration"
+
+printf '%-32s ' card_install_test
+sh tests/card_install_test.sh

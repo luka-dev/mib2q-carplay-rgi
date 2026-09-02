@@ -43,7 +43,7 @@ if [ "$APPLY" = 0 ]; then
 fi
 
 # deva driver swap. Two on-unit facts make a plain `cp` fail:
-#   1. /mnt/app is mounted READ-ONLY -> `mount -uw /mnt/app` first (same as scripts/deploy_unit.sh).
+#   1. /mnt/app is mounted READ-ONLY -> `mount -uw /mnt/app` first (same as scripts/deploy_over_ssh.sh).
 #   2. the .so is mapped by the running io-audio -> writing it gives "Resource busy".
 # So: stage a copy next to the target (same fs, persistent), unlink the busy original, rename into
 # place. If any step fails the previous file is still there, and the staged copy is on flash rather

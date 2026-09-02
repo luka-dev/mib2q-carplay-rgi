@@ -9,6 +9,19 @@ FW=$A/Firmwares/HU/MHI2Q_US_AUG22_P5087_MU1316/extracted
 OUT=$ROOT/build/qsa-emu
 mkdir -p "$OUT"
 
+# The submission-order harness drives the preferred CSD-backed output and needs
+# callback recycling.  The device-topology audit instead drives one named
+# virtual PCM at a time and compares the CSD traffic it causes after startup.
+# Keep the established behaviour as the default.
+PROBE_DEVICE=${QSA_PROBE_DEVICE:-3}
+if [ "${QSA_DEVICE_TOPOLOGY:-0}" = "1" ]; then
+  MEASURE_ENV=""
+  SLOG_COMMAND="sloginfo"
+else
+  MEASURE_ENV="QSA_SUBMIT_MEASURE=1"
+  SLOG_COMMAND='display_msg "=== topology slog dump disabled ==="'
+fi
+
 # Rebuild the three task-owned binaries so this script is the complete build, not
 # merely an IFS packer around whatever happened to be left in build/qsa-emu.
 docker run --rm --platform=linux/amd64 -v "$ROOT":/src -w /src \
@@ -63,6 +76,9 @@ sed -e "s#BSP/#/stage/#g" -e "s#OUT/#/stage/#g" \
     -e "s#FW/ifs2/ifs_coreservices3/lib/#/stage/#g" \
     -e "s#SDP/#/opt/qnx650/target/qnx6/armle-v7/#g" \
     -e "s#PROBE_VOICES#${QSA_PROBE_VOICES:-6}#g" \
+    -e "s#PROBE_DEVICE#$PROBE_DEVICE#g" \
+    -e "s#MEASURE_ENV#$MEASURE_ENV#g" \
+    -e "s#TOPOLOGY_SLOG_COMMAND#$SLOG_COMMAND#g" \
     -e "s#^    startup-virt #    /stage/startup-virt #" \
     -e "s#^    procnto-smp#    /stage/procnto-smp#" \
     "$HERE/qsa.build" > "$STAGE/qsa.build"

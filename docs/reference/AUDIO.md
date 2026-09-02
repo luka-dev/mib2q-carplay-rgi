@@ -181,11 +181,11 @@ QSA). `AudioStreamPrepare` (0x4a9d0):
 - **This repo (libairplay hook)**: advertise the 5.1 PCM format + `spatialAudioSupported` (config,
   altScreen-class); hook `AirPlayAudioFormatToPCM` (0x2c308) to emit a 6-channel ASBD (a3[6]=6). Then
   `AudioStreamPrepare` opens the sink at 6ch automatically.
-- **B&O firmware / mixer agent (dependency)**: provision `mpl5_dio_ent` for **6 voices** routed to
-  `six_channel_speakerp` -> B&O amp. Stock provisions the CarPlay virtual channel as stereo (2
-  voices); opening 6 voices on a 2-voice channel fails with `deva_channel_map: voices not supported`
-  (AudioStreamPrepare returns -6736). io-audio already runs `default_device=six_channel_speakerp`, so
-  the system output is 6ch — only the `mpl5_dio_ent` virtual-channel voices + route need lifting.
+- **deva caps (dependency, now implemented)**: provision `mpl5_dio_ent` for **6 voices**; opening
+  6 voices against its stock 2-voice cap fails with `deva_channel_map: voices not supported`
+  (AudioStreamPrepare returns -6736). The later static MOST audit proved that connection 162 already
+  selects `eSNK_DTCP51`, the amplifier's `SinkNr 0x26` / `BlockWidth 14` profile. There is no separate
+  B&O sink-route patch; see `docs/DIO_MEDIA_SINK_STATIC_AUDIT.md`.
 
 ### Channel order to confirm
 Apple 5.1 PCM order (L R C LFE Ls Rs) vs the Audi TDM / `six_channel_speakerp` expected order — map
@@ -193,8 +193,9 @@ on the mixer side; a mismatch swaps speakers. Also confirm the exact multichanne
 offers (iOS 27 lists PCM/48000/16/5·7·9; the 6ch/5.1 variant is probe-confirmed on connect).
 
 ### Net
-No patching of libairplay internals — only boundary hooks. The real gate is the dio/mixer 6-voice
-route (B&O agent). Coordinate: **`mpl5_dio_ent` -> 6 voices -> six_channel_speakerp.**
+No patching of libairplay internals — only boundary hooks. The device-cap gate was the
+`mpl5_dio_ent` 6-voice cap; the stock external-amplifier logical route is already DTCP 5.1.
+Coordinate: **`mpl5_dio_ent` -> 6 voices -> six_channel_speakerp.**
 
 ---
 
@@ -667,12 +668,16 @@ The two hardcoded channel maps in the branch above are 6-byte QCOM `PCM_CHANNEL_
 The **stream side wants Apple canonical `L R C LFE Ls Rs`** — which is exactly what our ASBD assumes,
 so no reorder is needed on our side. The driver itself re-orders to L R Ls Rs C LFE for the device.
 
-### Caveat found in our own patch (harmless, but note it)
+### 2026-09-02 correction: the `min_voices` asymmetry is not harmless
 `deva_mib2_channel_map` reads the **min_voices** dword (caps `+20`), not max_voices (`+24`) — every
 stock device has min == max so it never mattered. Our patch set mpl5 to min=2 / max=6, so a
-`SND_PCM_IOCTL_QUERY/GET_CHANNEL_MAP` on `mpl5_dio_ent` would return the *stereo* map. This does
-**not** affect playback: the actual stream setup uses the hardcoded maps above, not the table. Leave
-min at 2 so stock stereo still opens with the hook off.
+`SND_PCM_IOCTL_QUERY/GET_CHANNEL_MAP` on `mpl5_dio_ent` would return the *stereo* map. The old text
+stopped there and incorrectly concluded that playback was unaffected. A second
+consumer exists: `deva_update_session_info_from_list @0x54848` copies
+`min_voices` to active CSD session channels (`+0x84`) and `min_fragsize` to its
+buffer size (`+0x6c`). Leaving both minima at their valid stereo bounds therefore
+also leaves a six-voice MPL5 route configured as stereo. The capability range is
+correct; using its lower bounds as active geometry is the defect. See §26.
 
 ### Patch fixed: 1 byte → 4 bytes (fragment size had to move with the voice count)
 Raising `mpl5_dio_ent` to 6 voices alone was **incomplete**. The record's `max_fragsize` is `0x1800`
@@ -695,9 +700,10 @@ Two earlier worries are now closed, both negative:
 - **Mixer coupling: none.** `build_playback_mixer` (inlined in `deva_setup_mixer` @0x3C248) switches on
   `mix_config[6]`, hardcoded to **1** by `deva_pcm_and_mixer_device_init_platform_mib` @0x5707C. The
   card mixer is one volume/mute tree; it never reads a device's voice count.
-- **`channel_map` min_voices quirk: unreachable.** The only wrapper for that ioctl is
+- **The `channel_map` ioctl path is unreachable, but the field is not inert.** The only wrapper for that ioctl is
   `snd_pcm_query_channel_map`, and a grep of the whole MU1316 image finds **no importer** — the symbol
-  exists only inside `libasound.so.2`. Playback uses the hardcoded maps instead. Left alone.
+  exists only inside `libasound.so.2`. Independently, route setup consumes the same
+  minimum as active playback geometry; §26 supersedes the earlier negative conclusion.
 
 ---
 
@@ -1254,13 +1260,77 @@ That explains every observation at once: our bit reaches the negotiation (proven
 iOS never even considers it, because `GetSupportedTransportAudioFormatsForScreenReceiver` returns the
 non-spatial mask for this device.
 
-### Where that leaves the project
-- **The HU side is finished and correct.** deva patched (6 voices / 0x4800 / 0x2D000), the 6-channel
-  chain observed live (§24), ASBD emission and the announce rail proven working (§25). If iOS ever
-  selects a multichannel bit, the rest of the path is already there.
-- **Leaving it armed is harmless.** With `SPATIAL_5_1=1` and the default `44:6`, today's behaviour is
-  byte-for-byte stock: the phone ignores the extra bit and picks bit 15 exactly as before. Re-testing a
-  future iOS build costs one replug and one `grep` of the hook log.
-- **The remaining real work is the buffered media stream** (§21: `audioOutputFormatsExtended` →
-  `bufferStream` → type 103, 44.1 kHz), which is where lossless/spatial actually live. That is a stream
-  type our 210 libairplay has no notion of — a different order of magnitude from anything above.
+### Where that left the project at the time
+
+The bullets formerly here concluded that the HU side was finished, leaving the
+path armed was harmless, and only the buffered stream remained. Those were the
+conclusions of the realtime-negotiation experiment, not final rendering facts.
+They are superseded by the standalone two-voice/six-voice vehicle test and §26.
+The current repository intentionally keeps `AUDIO_SPATIAL=0`.
+
+---
+
+## 26. CORRECTION — MPL5 widens its DMA stream but leaves the routed CSD consumer stereo
+
+The earlier conclusion that the HU path was complete is superseded by a direct
+vehicle measurement and a static route audit. A standalone QSA player sent the
+same known-good material directly to `mpl5_dio_ent`, with CarPlay, libairplay,
+APAC, the hook, and its ring absent. At two voices it sounded excellent and
+delivered 2,445,312 frames in 50,831 ms (**48,107 frames/s**). At six voices it
+negotiated the correct geometry and delivered the same frame count in 50,807 ms
+(**48,129 frames/s**), yet produced the same recognisable, low-pitched,
+continuously ticking audio as CarPlay. Both are against 48,000 expected. Six
+correlated channels failed just like discrete 5.1, eliminating channel
+separation as the cause.
+
+MPL1 and MPL5 both route through output 128 and CSD device id `0x4e`/78, but
+their effective input widths are selected from different 48-byte MIB records:
+
+```text
+mpl1 / timer 1: min_voices=6, min_fragsize=0x4800
+mpl5 / timer 4: min_voices=2, min_fragsize=0x1800
+```
+
+Those are valid capability lower bounds, but
+`deva_update_session_info_from_list @0x54848` incorrectly treats them as the
+active format when a timer is attached to the shared CSD session:
+
+```text
+record +0x14 (min_voices)   -> session +0x84 (active channels)
+record +0x1c (min fragment)-> session +0x6c (CSD buffer bytes)
+```
+
+The current binary's helper at `0x8f2c8` independently sees negotiated
+`channel+0x10 == 6` and changes the DEVA timer/DMA fragment to `0x4800`.
+Nothing in acquire, prepare, or trigger rebuilds the already-created CSD
+stream/context/buffer pool. The resulting six-voice run therefore has a
+six-channel `0x4800` producer but a stereo `0x1800` consumer.
+
+`session_csd_stream_playback @0x69084` copies and submits exactly the session's
+`0x1800` bytes before the timer advances the DMA cursor by `0x4800`. It consumes
+only 256 of each 768 source frames, skips 512, and interprets successive source
+words as stereo pairs. With correlated six-channel input, each sample becomes
+three adjacent stereo frames before the next 16-ms block jumps forward. Total
+wall-clock duration remains correct, while the repeated samples lower the local
+pitch and the jump creates a **62.5-Hz** seam. This specifically predicts every
+observed symptom.
+
+The smallest controlled six-channel diagnostic is to change both MPL5 minima:
+
+```text
+file 0xa6e18 / VA 0xa7e18: min_voices   2      -> 6
+file 0xa6e20 / VA 0xa7e20: min_fragment 0x1800 -> 0x4800
+```
+
+Both are required, and neither is a production fix: they remove the clean
+stereo mode. Correct dual-mode behavior must take channels and fragment size
+from the live PCM channel (`timer+0x11c`, then channel `+0x10/+0x94`) and rebuild
+the CSD stream, context, and buffer pool on every 2/6 transition before the
+timer starts. Route-before-open must be handled; overwriting fields after
+allocation is not sufficient.
+
+This mismatch is statically proven and is the leading root cause. The isolated
+QEMU image cannot execute MPL5's Audioman-created route, so acoustic causality
+still needs the controlled six-only A/B. Full addresses, table records, call
+chain, harness scope, and fix constraints are in
+[`../ROUTER_INPUT_WIDTH_AUDIT.md`](../ROUTER_INPUT_WIDTH_AUDIT.md).

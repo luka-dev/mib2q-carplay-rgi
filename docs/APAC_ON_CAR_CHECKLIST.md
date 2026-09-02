@@ -1,5 +1,14 @@
 # APAC on the car: what to check, and what each failure looks like
 
+> **Blocked before deployment, 2026-09-02:** do not start this checklist with
+> `spatial-5.1` on the current deva binary. Direct QSA playback proved MPL5
+> clean at two voices and broken at six. Its DEVA timer/DMA side is correctly
+> six-channel, but the attached CSD stream remains stereo/`0x1800`; see
+> [`ROUTER_INPUT_WIDTH_AUDIT.md`](ROUTER_INPUT_WIDTH_AUDIT.md). Keep
+> `AUDIO_SPATIAL=0` until the CSD stream/context/buffer pool is dynamically
+> rebuilt from the negotiated PCM geometry. The decoder checks below remain
+> valid after that prerequisite is fixed.
+
 > Current source status: the decoder ships separately as `libcarplay_apac.so`, and the hook drains
 > its PCM ring into the existing `mpl5_dio_ent` QSA handle through the stock
 > `snd_pcm_plugin_params/setup/write` cadence. The index-65 decode chain is bench-verified; the QSA
@@ -27,16 +36,18 @@ What "proven on the bench" means, precisely, so the on-car result can be judged 
 
 ## Before deploying
 
-`scripts/deploy_unit.sh` replaces `/mnt/app/root/hooks/libcarplay_hook.so` and
+`scripts/deploy_over_ssh.sh` replaces `/mnt/app/root/hooks/libcarplay_hook.so` and
 `libcarplay_apac.so`, then restarts `dio_manager`. It does not deploy `carplay_startup.sh`; the unit
 must already have the current startup file with `AUDIO_SPATIAL`, `AUDIO_SPATIAL_ATMOS`,
 `AUDIO_SPATIAL_ATMOS_MODE`, and `AUDIO_SPATIAL_CODEC_LIB`. Java is not touched, so no full reboot
 is involved — but a `dio_manager` restart still drops any active CarPlay session. TCP 6032 must
 already be admitted by all four persistent PF profiles.
 
-The profile is set by `scripts/set_spatial_profile.sh`, which edits the three exact
-`AUDIO_SPATIAL*` policy exports. Start with `spatial-5.1`; `fallback-stereo` disables both requests.
-A profile change applies to the next `dio_manager` generation; no reboot.
+The profile is set by `scripts/set_spatial_profile.sh`, which edits the exact
+`AUDIO_SPATIAL*` policy exports. For now use only `fallback-stereo`; the former
+instruction to start with `spatial-5.1` is suspended until the CSD-width fix is
+implemented. A profile change applies to the next `dio_manager` generation; no
+reboot.
 
 ## The first question: does it decode at all
 

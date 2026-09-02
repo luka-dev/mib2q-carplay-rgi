@@ -1,6 +1,88 @@
-# Handoff: QSA/deva submission-order audit complete
+# Handoff: QSA/deva router-width audit complete
+
+## Latest result (CODEX_PROMPT_ROUTER_INPUT_WIDTH)
+
+Full audit:
+[`../../docs/ROUTER_INPUT_WIDTH_AUDIT.md`](../../docs/ROUTER_INPUT_WIDTH_AUDIT.md).
+
+The surviving width hypothesis is confirmed statically. The logical mixer
+router has no standalone width field; it resolves a DEVA timer and a shared CSD
+session. On connect, `deva_mixer_router_configure_switch_routing @0x51B94`
+calls `session_csd_setup @0x6BBDC`, whose
+`deva_update_session_info_from_list @0x54848` copies the timer record's
+**minimum** values into the active session:
+
+```text
+record +0x14 min_voices   -> session +0x84 channels
+record +0x1c min_frag     -> session +0x6c CSD buffer bytes
+```
+
+MPL1 router input 1 uses timer id 1 and record `6 / 0x4800`. MPL5 router input
+5 uses timer id 4 and record `2 / 0x1800`, even after the current patch widens
+its QSA maximum to six and dynamically gives its DMA timer a `0x4800`
+fragment. Acquire, prepare and trigger never rebuild the already-created CSD
+stream/context/buffer pool.
+
+`session_csd_stream_playback @0x69084` copies exactly session `+0x6c` and puts
+that same count in the descriptor passed to `csd_write @0x69318`. The broken
+six-voice path therefore advances `0x4800` in the DMA ring but copies/submits
+only `0x1800`, configured as stereo. It reads one third of each 768-frame
+fragment and skips 512 frames. With six correlated channels this repeats each
+sample three times inside the 16-ms block, then jumps ahead at 62.5 Hz. That
+predicts the car's correct total duration, low pitch, ticking, recognisable
+audio, and equal failure with correlated channels.
+
+Do not repeat the old conclusion that `min_voices` is used only by
+`deva_mib2_channel_map`; `0x54A14..0x54A18` is the load-bearing playback
+consumer. The capability minima themselves are valid. A static `min_voices=6`
+plus `min_fragsize=0x4800` is only a six-channel diagnostic and breaks/rejects
+the clean stereo mode. The production fix must use the recovered live PCM
+fields (`timer+0x11c -> channel`, voices `channel+0x10`, active fragment
+`channel+0x94`) and rebuild CSD when width changes before playback starts.
+
+No hook, harness source, deva binary, or patch was changed in this measurement
+pass. The existing QEMU limit matters: MPL5 has no Audioman route and stays
+`stream_type=1`, so the earlier six-channel CSD descriptor belongs to MPL1's
+default route. That result remains valid but did not measure MPL5's runtime
+attach.
+
+## Latest result (CODEX_PROMPT_DEVICE_TOPOLOGY)
+
+Full audit: [`../../docs/DEVICE_TOPOLOGY_AUDIT.md`](../../docs/DEVICE_TOPOLOGY_AUDIT.md).
+
+The per-virtual-channel CSD-**device-id** hypothesis is false. `mpl1_int_ent` (ENT
+router input 1) and `mpl5_dio_ent` (input 5) both route through output 128,
+`TDM_OUT_MPL`, to the same CSD playback session and `dev_id=0x4e` (78). The
+shared device is 48 kHz / 24-bit. Its stream/context width is selected at route
+attach and is not necessarily shared: the later audit above proves input 1 is
+six-channel while input 5 remains stereo.
+`CSD_DEV_CMD_ENABLE` contains no channel count, only id/rate/bit depth.
+
+The important asymmetry is route lifetime. MPL1 has a default input-1 to
+output-128 route and enters CSD-backed `stream_type=2`. MPL5 has no default
+route; a bare QEMU open, without Audioman, remains `stream_type=1` and
+deliberately discards buffers. It therefore produces zero post-open CSD calls.
+On the car, Audioman's runtime switch route attaches MPL5 to the same output
+session. Do not interpret the isolated zero-call trace as a hidden second CSD
+device.
+
+The opt-in reproducer is:
+
+```sh
+QSA_DEVICE_TOPOLOGY=1 QSA_PROBE_DEVICE=0 QSA_PROBE_VOICES=6 \
+  ./tools/qsa-emu/build_ifs.sh
+QSA_DEVICE_TOPOLOGY=1 QSA_PROBE_DEVICE=3 QSA_PROBE_VOICES=6 \
+  ./tools/qsa-emu/build_ifs.sh
+```
+
+It changes no hook, deva binary, or binary patch. Default harness behaviour is
+unchanged when `QSA_DEVICE_TOPOLOGY` is absent.
 
 ## Latest result (CODEX_PROMPT_3)
+
+Full audit: [`SUBMISSION_ORDER_AUDIT.md`](SUBMISSION_ORDER_AUDIT.md). Read it
+before changing submission instrumentation; it records the failed callback,
+ELF-interposition, lazy-GOT, startup-prefill, and serial-export approaches.
 
 The remaining ring-consumption hypothesis is closed. The checked 62-fragment
 window advances by `0x4800` on all 61 consecutive transitions, submits all 62
@@ -236,10 +318,14 @@ Binary fingerprint: GNU build ID `9168acff553fc86d6a3c991613d620fd`, SHA-256
 ## Files involved
 
 * `csd_stub.c`: ring discovery, continuous validator, two DSP interpretations,
-  and serial base64 export.
-* `qsa_probe.c`: sequential file playback and same-fragment EIO recovery.
+  CSD submission generations/cursor audit, callback recycling, and serial
+  base64 export.
+* `qsa_probe.c`: sequential file playback, same-fragment EIO recovery, preferred
+  CSD sink selection, START_FULL prefill, and silent export coordination.
 * `tap_preload.c`: input/output previews and raw/plugin return-value evidence.
 * `carve_renders.py`: marker extraction, WAV wrapping, A/reference comparison,
-  and B statistics.
+  B statistics, and `csd_write`-order PCM comparison.
+* `SUBMISSION_ORDER_AUDIT.md`: full CODEX_PROMPT_3 static recovery, measurement
+  design, rejected approaches, diagnostic log ledger, hashes, and conclusion.
 * `build_ifs.sh`: reproducible qcc rebuild, known-good PCM extraction, and IFS.
 * `qsa.build`: boots the real stack and runs the probe.

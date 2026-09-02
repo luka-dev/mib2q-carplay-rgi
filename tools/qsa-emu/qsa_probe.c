@@ -231,7 +231,12 @@ int main(int argc, char **argv)
     if (argc > 2 && !getenv("QSA_SUBMIT_MEASURE")) {
         int bundle = atoi(argv[2]);
         snd_pcm_t *cap = 0;
-        int rc = snd_pcm_open(&cap, 0, bundle, SND_PCM_OPEN_CAPTURE);
+        int rc;
+        if (bundle < 0) {
+            printf("=== mixer-outlet capture disabled for isolated device audit ===\n");
+            goto skip_bundle_open;
+        }
+        rc = snd_pcm_open(&cap, 0, bundle, SND_PCM_OPEN_CAPTURE);
         printf("=== opening device %d for capture (the mixer's outlet) -> %d ===\n",
                bundle, rc);
         if (rc == 0) {
@@ -291,6 +296,8 @@ int main(int argc, char **argv)
                 cap = 0;   /* deliberately not closed: releasing it stops the outlet */
             }
         }
+skip_bundle_open:
+        ;
     }
 
     printf("=== isolated probe mode: %s ===\n",
@@ -305,7 +312,7 @@ int main(int argc, char **argv)
             printf("=== six voices on preferred output (six_channel_speakerp) ===\n");
             try_device(-1, -1, 6, 48000, 1);
         } else {
-            printf("=== six voices on device %d (the CarPlay configuration) ===\n", target);
+            printf("=== six voices on isolated playback device %d ===\n", target);
             try_device(0, target, 6, 48000, 1);
         }
     }

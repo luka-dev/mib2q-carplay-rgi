@@ -1,8 +1,12 @@
 # `mpl5_dio_ent` 6-channel timing analysis
 
-Status: root cause verified statically against the on-unit trace. The dynamic driver fix below is
-implemented in `patch_deva.sh`, assembled/disassembled successfully, and staged on the unit. It is
-not active until `io-audio` reloads it at the next reboot, and its audio behavior is not yet tested.
+Status: this document closes the **DMA-side** 3x-slow timing fault. The dynamic
+fragment fix below is implemented in `patch_deva.sh`, assembled/disassembled
+successfully, and was staged on the unit. A later direct vehicle test proved
+that its six-channel DMA geometry and clock are correct, but audio is still
+broken because the independently created CSD stream remains stereo. The current
+binary is therefore not a complete 5.1 fix. See
+[`../../docs/ROUTER_INPUT_WIDTH_AUDIT.md`](../../docs/ROUTER_INPUT_WIDTH_AUDIT.md).
 
 ## Observed failure
 
@@ -16,6 +20,29 @@ The capability-only patch successfully widened `mpl5_dio_ent` from 2 to 6 voices
 
 The earlier "stereo byte clock" description was directionally correct, but the byte conversion is
 important: the MIB device is internally S32, while CarPlay supplies S16 through the QSA plugin layer.
+
+### 2026-09-02 follow-up
+
+The current patched driver was subsequently exercised directly, with CarPlay
+entirely out of the path. `qsa_play` into `mpl5_dio_ent` negotiated six voices,
+a 9216-byte S16 client fragment (the expected 768 frames), and delivered
+2,445,312 frames in 50,822 ms: **48,115 frames/s for 48,000 expected**. Two
+voices sounded excellent; six voices sounded broken with the same ticking and
+wrong pitch as CarPlay.
+
+A later controlled same-device A/B recorded the exact paired values: two
+voices delivered 2,445,312 frames in 50,831 ms (**48,107 frames/s**) and sounded
+excellent; six delivered them in 50,807 ms (**48,129 frames/s**) and sounded
+broken. The earlier 48,115 run and both A/B rates tell the same story: the DMA
+clock is not the remaining fault.
+
+Static follow-up found a second consumer of the record minima.
+`deva_update_session_info_from_list @0x54848` copies `min_voices=2` to CSD
+session `+0x84` and `min_fragsize=0x1800` to session `+0x6c`. The helper in this
+document widens only the DEVA timer/DMA side to `0x4800`; it does not rebuild
+the CSD stream, context, or buffer pool. Consequently the timer advances
+`0x4800` bytes while `session_csd_stream_playback` copies and submits only
+`0x1800` bytes per tick.
 
 ## Verified driver path
 
@@ -63,7 +90,7 @@ negotiation but never reaches the active DMA geometry.
 Changing `min_fragsize` statically is not acceptable: it would also make stock 2ch use the 6ch-sized
 DMA fragment. The fix must select the active fragment from the negotiated voice count.
 
-## Minimal dynamic fix (implemented; awaiting reboot/test)
+## DMA-side dynamic fix (implemented; necessary but insufficient)
 
 Replace the load at `0x563C8` with a branch to a five-instruction helper:
 
@@ -101,6 +128,14 @@ Using string storage as executable space is valid for this ELF because `.rodata`
 load segment, but it is still a binary-injection tradeoff. An ELF section/segment extension would be
 cleaner and materially more invasive.
 
+The helper remains correct and necessary: without it, six-channel DMA itself
+runs at one third speed. It is insufficient because no acquire, prepare, or
+trigger path updates the already-created CSD session. The production fix must
+derive the CSD channel count and buffer size from the negotiated PCM channel and
+rebuild the stream/context/buffer pool on a 2-to-6 or 6-to-2 transition before
+the timer starts. Merely overwriting the two session fields after allocation is
+unsafe.
+
 ## Hook implication (implemented and staged)
 
 The first guard rejected any negotiated fragment whose frame count differed from the caller's
@@ -118,16 +153,17 @@ frames for the fixed 16-ms timer. It checks the empirical params writeback befor
 and independently validates the authoritative `snd_pcm_plugin_setup()` readback. QNX documents
 `snd_pcm_channel_params_t` members as write-only, even though this libasound build rewrites them.
 
-## On-unit acceptance criteria
+## Historical DMA acceptance criteria
 
-After the staged binary becomes active at reboot and the spatial profile is explicitly enabled:
+These criteria describe the DMA-side change. Items 1 and 2 were later measured
+successfully, but they do not validate the independent CSD consumer:
 
 1. QSA setup reports `6ch / 48000 Hz / 9216-byte fragment` (and the hook translates that to 3072
    stereo-facing bytes).
 2. Each write contains 768 output frames and completes about every 16 ms.
 3. `bufferedWrites` no longer grows monotonically; the APAC ring remains bounded without sustained
    drops or underruns.
-4. All six speaker channels remain correctly routed.
+4. After the CSD re-provision fix, all six speaker channels remain correctly routed and audio is clean.
 5. With spatial disabled, `mpl5_dio_ent` still opens 2ch with the original internal `0x1800`
    geometry.
 

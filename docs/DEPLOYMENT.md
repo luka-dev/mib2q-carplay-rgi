@@ -29,6 +29,13 @@ immediately restart processes that the CarPlay cleanup intentionally stopped.
 
 See `deploy/smartphone_integrator/README.md` for installation paths and the exact child JSON replacement.
 
-For hook-only iteration, `scripts/deploy_unit.sh` uploads `build/libcarplay_hook.so` and the optional
-`build/libcarplay_apac.so` through `.new` files, renames both before restart, and restarts only
-`dio_manager`. It intentionally does not restart or redeploy Java.
+Two ways in:
+
+* **SD card, whole install.** `deploy/card/` — the card gets `/mod/custom.sh` plus
+  `/mod/carplay/` (copy commands are in that README), and the unit runs it from
+  *Advanced Settings -> Run Custom Script*. It installs every runtime file, the jar and the
+  `children.carplay` replacement, backs up what it changes as `<file>.orig`, and is idempotent.
+  See `deploy/card/README.md`.
+* **ssh, hook-only iteration.** `scripts/deploy_over_ssh.sh` overwrites
+  `/mnt/app/root/hooks/libcarplay_hook.so` and `libcarplay_apac.so` and restarts only `dio_manager`.
+  It intentionally does not restart or redeploy Java.

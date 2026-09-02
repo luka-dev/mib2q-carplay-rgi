@@ -492,6 +492,10 @@ Static-analysis fingerprint: ELF32 little-endian ARM EABI5 PIC, image base 0,
 
 ## CSD submission-order audit: faithful single pass
 
+The complete static recovery, harness chronology, rejected approaches, exact
+commands, hashes, and remaining boundary are preserved in
+[`SUBMISSION_ORDER_AUDIT.md`](SUBMISSION_ORDER_AUDIT.md).
+
 The stub now executes the CSD-backed preferred output and associates each
 `session_csd_stream_playback` copy at `0x6924c..0x6926c` with the following
 `csd_write` at `0x69318`. It records the ring-relative source offset, payload
@@ -549,3 +553,73 @@ bit-identical to the input.
 
 `=== DSP_RENDER_COMPLETE ===` is printed before the known minimal-guest teardown
 fault. The result is complete at that marker; stop QEMU with Ctrl-C afterward.
+
+## Virtual-device topology audit: one shared CSD device
+
+The complete static recovery, payload diff, id-namespace table, hashes and
+remaining boundary are in
+[`../../docs/DEVICE_TOPOLOGY_AUDIT.md`](../../docs/DEVICE_TOPOLOGY_AUDIT.md).
+
+`mpl1_int_ent` and `mpl5_dio_ent` are DEVA input timers. The mixer router maps
+ENT inputs 1 and 5 through the same output 128 (`TDM_OUT_MPL`) to one CSD
+device with `dev_id=0x4e` (78). The measured default MPL1 stream/context are
+six-channel, 48 kHz, 24-bit. Device enable has no channel member; it contains
+only id, rate and bit depth. There is no separate stereo MPL5 CSD/ACDB device,
+but the later audit below proves that MPL5 builds a stereo stream on the shared
+device.
+
+An isolated six-voice QEMU open on MPL1 produces
+`CONFIGURE(78) -> ENABLE(78,48000,24) -> START` because platform init installs a
+default MPL1-to-TDM route. The same open on MPL5 produces no CSD traffic and
+slog reports `stream_type=1`: Audioman is absent, so the runtime MPL5 route was
+never installed and its timer intentionally consumes through
+`session_void_stream_buffer`. When routed, MPL5 resolves to the same output
+session as MPL1.
+
+Use the topology mode only for this comparison:
+
+```sh
+QSA_DEVICE_TOPOLOGY=1 QSA_PROBE_DEVICE=0 QSA_PROBE_VOICES=6 \
+  ./tools/qsa-emu/build_ifs.sh
+QSA_DEVICE_TOPOLOGY=1 QSA_PROBE_DEVICE=3 QSA_PROBE_VOICES=6 \
+  ./tools/qsa-emu/build_ifs.sh
+```
+
+The mode suppresses the unrelated capture outlet and dumps slog; without it,
+the established submission-order harness remains the default.
+
+## Router-input width audit: MPL5 remains stereo at CSD setup
+
+The complete static trace and fix constraints are in
+[`../../docs/ROUTER_INPUT_WIDTH_AUDIT.md`](../../docs/ROUTER_INPUT_WIDTH_AUDIT.md).
+
+The effective router width is selected when a DEVA timer is attached to the
+shared CSD session. `deva_update_session_info_from_list @0x54848` treats the
+timer record's capability minima as active values:
+
+```text
+record min_voices   (+0x14) -> session channels (+0x84)
+record min_frag     (+0x1c) -> session buffer   (+0x6c)
+```
+
+That yields six channels/`0x4800` for MPL1, but two channels/`0x1800` for MPL5.
+The current dynamic acquire helper correctly makes a negotiated six-voice
+MPL5 DMA fragment `0x4800`; it does not update the CSD session. Nothing in
+acquire, prepare, or trigger re-provisions the stream.
+
+This distinction also scopes the earlier harness result. The six-channel CSD
+descriptor and faithful `csd_write` submission belong to MPL1's default route.
+The isolated MPL5 run cannot install Audioman's route and therefore cannot
+measure its descriptor. Do not infer MPL5 route width from common startup
+traffic or from the MPL1 session.
+
+On the real runtime path, `session_csd_stream_playback @0x69084` uses the stale
+session buffer size for both `memcpy` and `csd_write`: it copies/submits only
+`0x1800` of each `0x4800` DMA fragment. For correlated six-channel input this
+is a threefold sample repeat inside each 16-ms block followed by a 512-frame
+jump, producing a 62.5-Hz seam while preserving total duration.
+
+No harness source or binary was changed for this audit. A static six-only test
+can force MPL5 `min_voices=6` and `min_fragsize=0x4800`, but the production fix
+must read the recovered live PCM voice/fragment fields and rebuild CSD on a
+2-to-6 or 6-to-2 transition so the clean stereo mode remains supported.
