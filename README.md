@@ -86,7 +86,9 @@ the Java stack on a live HU is unsafe.
 - [`docs/reference/CLUSTER_PRESENT_CADENCE.md`](docs/reference/CLUSTER_PRESENT_CADENCE.md) — cluster swap-interval doctrine: why a nominally 30 fps chain judders, and the QNX/Screen platform traps behind it.
 - [`docs/HANDOFF_SPATIAL_AUDIO.md`](docs/HANDOFF_SPATIAL_AUDIO.md) — CarPlay discrete 5.1 handoff; §10 has the type-103 five-second-teardown root cause.
 - [`docs/AUDIO_5_1_STATE.md`](docs/AUDIO_5_1_STATE.md) — current audio evidence and closed hypotheses.
-- [`docs/ROUTER_INPUT_WIDTH_AUDIT.md`](docs/ROUTER_INPUT_WIDTH_AUDIT.md) — current MPL5 rendering defect: six-channel DMA feeding a stereo CSD session.
+- [`deploy/deva-ctrl-qc/BUILD_CHAIN.md`](deploy/deva-ctrl-qc/BUILD_CHAIN.md) — vehicle-confirmed deva fix and exact deployable build chain.
+- [`docs/ROUTER_INPUT_WIDTH_AUDIT.md`](docs/ROUTER_INPUT_WIDTH_AUDIT.md) — historical root cause of the now-fixed MPL5 render-width defect.
+- [`docs/MC_SELECTION_AUDIT.md`](docs/MC_SELECTION_AUDIT.md) — connection-162 MC selection, its `Sound_System` coding source, and the remaining SHARC boundary.
 
 Historical altScreen negotiation reports and from-source experiments are under `research/altscreen/`;
 they are useful research records, not the definition of the shipping architecture.

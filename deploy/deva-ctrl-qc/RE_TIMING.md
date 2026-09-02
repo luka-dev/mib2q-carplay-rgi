@@ -176,5 +176,6 @@ successfully, but they do not validate the independent CSD consumer:
 - Both files were streamed back from the unit and compared byte-for-byte with the local artifacts.
 - The running `io-audio` PID remained unchanged and `dio_manager` remained stopped; nothing was
   restarted.
-- Persistent profile remains `AUDIO_SPATIAL=0`. This prevents the old mapped driver generation from
-  being exercised before reboot. Enable `spatial-5.1` only after the reboot, then reconnect the phone.
+- Persistent profile was `AUDIO_SPATIAL=0` at the time, to keep the old mapped driver generation
+  from being exercised before reboot. **As of 2026-09-02 the default is `AUDIO_SPATIAL=1`**: the
+  geometry defect is fixed and confirmed on the car, and stereo works on the same driver.

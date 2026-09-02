@@ -1266,7 +1266,9 @@ The bullets formerly here concluded that the HU side was finished, leaving the
 path armed was harmless, and only the buffered stream remained. Those were the
 conclusions of the realtime-negotiation experiment, not final rendering facts.
 They are superseded by the standalone two-voice/six-voice vehicle test and §26.
-The current repository intentionally keeps `AUDIO_SPATIAL=0`.
+~~The current repository intentionally keeps `AUDIO_SPATIAL=0`.~~ **Superseded 2026-09-02:**
+the CSD geometry defect is fixed and confirmed on the car, so `AUDIO_SPATIAL=1` is the default
+again. See `deploy/deva-ctrl-qc/BUILD_CHAIN.md`.
 
 ---
 

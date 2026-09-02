@@ -4,10 +4,12 @@
 > `spatial-5.1` on the current deva binary. Direct QSA playback proved MPL5
 > clean at two voices and broken at six. Its DEVA timer/DMA side is correctly
 > six-channel, but the attached CSD stream remains stereo/`0x1800`; see
-> [`ROUTER_INPUT_WIDTH_AUDIT.md`](ROUTER_INPUT_WIDTH_AUDIT.md). Keep
-> `AUDIO_SPATIAL=0` until the CSD stream/context/buffer pool is dynamically
-> rebuilt from the negotiated PCM geometry. The decoder checks below remain
-> valid after that prerequisite is fixed.
+> [`ROUTER_INPUT_WIDTH_AUDIT.md`](ROUTER_INPUT_WIDTH_AUDIT.md).
+>
+> **FIXED 2026-09-02, confirmed on the car.** Not by rebuilding the session late -- the route
+> attaches fourteen seconds before the PCM channel exists -- but by making mpl5's caps record
+> mirror mpl1's, so the session is built six-channel at attach time. `AUDIO_SPATIAL=1` is the
+> default again and stereo still works. See `deploy/deva-ctrl-qc/BUILD_CHAIN.md`.
 
 > Current source status: the decoder ships separately as `libcarplay_apac.so`, and the hook drains
 > its PCM ring into the existing `mpl5_dio_ent` QSA handle through the stock

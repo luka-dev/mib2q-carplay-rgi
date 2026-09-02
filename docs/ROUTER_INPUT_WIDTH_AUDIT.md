@@ -2,6 +2,12 @@
 
 Date: 2026-09-02
 
+> Status update (2026-09-02): this defect is fixed and confirmed on the car by making
+> the MPL5 record mirror MPL1 at route-attach time. The unit now logs `channels=6`, the
+> 62.5 Hz discontinuity is gone, and both discrete 5.1 and stereo play. The exact shipped
+> build chain is [`../deploy/deva-ctrl-qc/BUILD_CHAIN.md`](../deploy/deva-ctrl-qc/BUILD_CHAIN.md).
+> The historical analysis below explains the failure that the fix removed.
+
 ## Result
 
 The surviving hypothesis is confirmed in `deva-ctrl-qc.so`, with one naming

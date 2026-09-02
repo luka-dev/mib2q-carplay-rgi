@@ -80,6 +80,14 @@ matches byte for byte (`flags 0x2b3`, `format 0xc`, `rates 0x80`, both rates `0x
   the **active** playback channel count. The same function copies
   `min_fragsize` to session `+0x6C` at `0x54A20..0x54A28`.
 
+**RESOLVED 2026-09-02 — and the fix was the opposite of what this section advised.**
+Both minima were raised to `6 / 0x4800`, mirroring `mpl1_int_ent`, and the car confirms
+discrete 5.1 works *and* stereo still works. The warning that a stereo open would fall below
+`min_voices` and fail was wrong: QSA inserts a channel conversion instead of refusing, which is
+how `mpl1` has served stereo clients with `min == max == 6` all along. Dynamic re-provisioning
+was attempted first and could not work -- the route attaches fourteen seconds before the PCM
+channel exists. See `BUILD_CHAIN.md`.
+
 So the caps **range** is finished, but playback incorrectly treats its lower
 bounds as the negotiated format. The production fix is dynamic CSD
 re-provisioning, not a permanent edit of the two minima. A static change of

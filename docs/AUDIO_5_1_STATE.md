@@ -136,7 +136,10 @@ cannot serve both widths:
 | 6 | `0x4800` | 768 | 48000 — correct |
 
 That is why the fix is a conditional helper keyed on `channel->voices == 6`, not a table
-edit. Writing `0x4800` into the table breaks stereo.
+edit. ~~Writing `0x4800` into the table breaks stereo.~~ **Wrong, disproven on the car
+2026-09-02:** both minima were raised to the `mpl1` values and stereo still works, because QSA
+converts 2->6 rather than refusing the open. That is the shipped fix -- see
+`deploy/deva-ctrl-qc/BUILD_CHAIN.md`.
 
 The former conclusion that **`min_voices` is inert for playback was wrong**.
 `deva_mib2_channel_map` is one consumer, but
@@ -418,6 +421,41 @@ stream/context/buffer pool on a 2<->6 transition before playback starts.
 Full call chain, addresses, record bytes, symptom math, harness scope and fix
 constraints: [`ROUTER_INPUT_WIDTH_AUDIT.md`](ROUTER_INPUT_WIDTH_AUDIT.md).
 
+This candidate was subsequently fixed and confirmed on the vehicle. Section 15 records
+the result and the next, narrower delivery boundary.
+
+---
+
+## 15. Rendering fixed; HU already selects MC, remaining boundary is the SHARC matrix — 2026-09-02
+
+Mirroring MPL5's attach-time caps record to MPL1 fixed the six-voice rendering defect on
+the car. The unit now logs `channels=6` at route attach, the continuous 62.5 Hz tick is
+gone, and both discrete 5.1 and stereo play. The deployed sequence is documented in
+[`../deploy/deva-ctrl-qc/BUILD_CHAIN.md`](../deploy/deva-ctrl-qc/BUILD_CHAIN.md).
+
+A subsequent standalone one-hot test wrote six-channel PCM directly to
+`/dev/snd/mpl5_dio_ent`, with no CarPlay in the path, at 48,243 frames/s against 48,000
+expected. Source positions L and R were audible; C, LFE, Ls and Rs were silent. This is
+now a channel-delivery problem after correct six-channel rendering.
+
+The MC-selection audit recovered the exact head-unit condition. Connection 162 has two
+table outcomes: internal coding selects `eSRC_ENT_AMP_DIO_MEDIA + eSNK_SPEAKERS`, while
+external coding selects `eSRC_ENT_AMP_DIO_MEDIA_MC + eSNK_DTCP51`. The only selector is
+`Amp.Amplifier.ExternalAmplifierCoded`, derived from RCC EEPROM/basic-coding field
+`Sound_System` at E2P record `0xF1`, byte 11 (`1=internal`, `2=external`). On this B&O
+external-amplifier car, the MC pair is unconditional.
+
+Neither `DSIAudioManagement.requestConnection` nor the CarPlay service configuration
+contains a source channel count. The request is connection ID, terminal and group; QSA's
+six-voice negotiation does not feed the MIBRoot table mapper. Therefore no HU policy or
+sink-selection patch is justified by the one-hot result.
+
+The remaining suspect is the amplifier's SHARC source-to-output matrix. It is absent from
+the available V850 CodeFlash and needs an external SHARC boot-flash or proven runtime
+matrix dump. No static conclusion about its coefficient values is possible from the
+available image. Full addresses and the runtime coding chain:
+[`MC_SELECTION_AUDIT.md`](MC_SELECTION_AUDIT.md).
+
 ---
 
 ## Sources
@@ -429,4 +467,5 @@ constraints: [`ROUTER_INPUT_WIDTH_AUDIT.md`](ROUTER_INPUT_WIDTH_AUDIT.md).
 * `Firmwares/SoundAmp/AMP_ENTERTAINMENT_7_1_MOST.md` — amplifier sinks and channel layout.
 * `docs/DIO_MEDIA_SINK_STATIC_AUDIT.md` — connection 162 to logical/physical MOST sink audit.
 * `docs/DEVICE_TOPOLOGY_AUDIT.md` — virtual PCM to shared CSD device/topology audit.
-* `docs/ROUTER_INPUT_WIDTH_AUDIT.md` — runtime MPL1/MPL5 CSD width selection and the surviving defect.
+* `docs/ROUTER_INPUT_WIDTH_AUDIT.md` — runtime MPL1/MPL5 CSD width root cause, now fixed and confirmed.
+* `docs/MC_SELECTION_AUDIT.md` — connection-162 MC selector, EEPROM/basic-coding origin, and SHARC boundary.

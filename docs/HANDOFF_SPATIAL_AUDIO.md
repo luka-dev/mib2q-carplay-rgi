@@ -3,15 +3,16 @@
 Reverse-engineering handoff. Everything below is either **verified on hardware** or **verified in a
 disassembler**, and it is labelled which. Full history in `docs/reference/AUDIO.md` §9–§26.
 
-> **Latest rendering status, 2026-09-02:** keep `AUDIO_SPATIAL=0`. A standalone
-> player bypassed CarPlay and proved `mpl5_dio_ent` clean at two voices but
-> broken at six. The same-device A/B measured 48,107 frames/s at two voices
-> and 48,129 at six, both against 48,000 expected.
-> Static analysis then found the surviving defect: the six-channel DEVA timer
-> uses `0x4800`, while runtime CSD route setup still copies MPL5's stereo
-> `min_voices=2` and `min_fragsize=0x1800`. The current deva binary is not a
-> completed 5.1 fix. See
-> [`ROUTER_INPUT_WIDTH_AUDIT.md`](ROUTER_INPUT_WIDTH_AUDIT.md).
+> **Latest audio status, 2026-09-02:** the six-voice render-width defect is fixed
+> and confirmed on the car. MPL5 now attaches as `channels=6`; the 62.5 Hz tick
+> is gone, and both discrete 5.1 and stereo render cleanly. A later direct
+> six-channel one-hot test measured 48,243 frames/s and found only L/R audible;
+> C/LFE/Ls/Rs were silent. Static analysis proves that this external-amplifier
+> car already selects `DIO_MEDIA_MC + DTCP51` unconditionally and that no HU
+> CarPlay channel-count field exists. The remaining boundary is the amplifier's
+> SHARC source-to-output matrix. See
+> [`MC_SELECTION_AUDIT.md`](MC_SELECTION_AUDIT.md) and
+> [`../deploy/deva-ctrl-qc/BUILD_CHAIN.md`](../deploy/deva-ctrl-qc/BUILD_CHAIN.md).
 
 ---
 
@@ -50,9 +51,10 @@ User-facing startup policy is:
 
 `AUDIO_SPATAIL` is accepted only as a warned compatibility alias for the typo. Old `SPATIAL_*`
 variables are read only when none of the new boolean controls is present, for migration of an older
-on-unit startup script. The repository startup currently sets
-`AUDIO_SPATIAL=0` and Atmos off because the MPL5 CSD-width defect makes
-six-channel rendering unsafe to enable.
+on-unit startup script. The repository startup now sets `AUDIO_SPATIAL=1` and
+leaves Atmos off. Six-channel rendering itself is safe with the vehicle-confirmed
+mirror build; source positions 3..6 remain inaudible at the amplifier-delivery
+boundary described above.
 
 `SPA_103_MU1316_*` identifiers were removed from common logic. All private VA/offset/prologue data
 now lives in a `spa103_private_profile_t` table. The first profile is named `MHI2Q AirPlay 210.81`;
@@ -476,7 +478,7 @@ described below.
 
 ---
 
-## 5. Head-unit side (caps and DMA complete; CSD route width incomplete)
+## 5. Head-unit side (caps, DMA and CSD route width complete)
 
 * CarPlay audio device = `mpl5_dio_ent`, **device_id 4**, in `deva-ctrl-qc.so`'s 31-slot capability
   table (names VA `0xA5C54` stride 272, caps VA `0xA7D44` stride 48; `.data` VA→file = −0x1000).
@@ -484,12 +486,11 @@ described below.
   `max_voices 2→6` (file `0xA6E1C`), `max_fragsize 0x1800→0x4800` (`0xA6E24`),
   `max_buffer 0xF000→0x2D000` (`0xA6E28`). The fragsize part is **load-bearing**: the stream moves
   `nTFrames: 768` per transfer = 3072 B at stereo, but **9216 B at 6 channels > the stock 6144 cap**.
-* **Surviving defect:** route setup does not use those negotiated maxima. At
-  `deva_update_session_info_from_list @0x54848`, record `min_voices` and
-  `min_fragsize` become active CSD session fields. MPL5 therefore creates a
-  stereo/`0x1800` CSD consumer beside its six-channel/`0x4800` DMA producer.
-  Acquire, prepare, and trigger do not re-provision it. A correct dual-mode fix
-  must rebuild the CSD stream/context/buffer pool from the live PCM channel.
+* **Fixed and vehicle-confirmed:** route setup uses record `min_voices` and
+  `min_fragsize` as active CSD geometry before a PCM channel exists. The production
+  mirror step therefore makes MPL5's record match MPL1 (`6 / 0x4800`) at attach time.
+  The unit logs `channels=6`, the former 62.5 Hz discontinuity is gone, and QSA
+  conversion preserves stereo clients. See `deploy/deva-ctrl-qc/BUILD_CHAIN.md`.
 * **6 channels is a hard ceiling**: `deva_mib2_channel_map` @ `0x54ACC` switches on `{1,2,3,6}` only;
   no device in the table exceeds 6; output nodes are only `mono_/stereo_/six_channel_speakerp`; and
   `deva_csd_start_csd_session_playback` @ `0x24F28` **hardcodes 6** in its `voices > 2` branch.
@@ -1144,12 +1145,13 @@ support or an Atmos object renderer; the licensed channel limit still needs a ru
 
 ---
 
-## 9. Historical controls and experiments (do not enable 5.1 yet)
+## 9. Historical controls and experiments
 
-The control details below remain useful for reproducing the type-103 work, but
-the router-width result at the top of this document supersedes their activation
-advice. Keep `AUDIO_SPATIAL=0` until the MPL5 CSD stream is dynamically
-re-provisioned from the negotiated PCM geometry.
+The control details below remain useful for reproducing the type-103 work. The
+router-width warnings retained in older experiment narratives are superseded by
+the vehicle-confirmed mirror build. Current startup uses `AUDIO_SPATIAL=1`; the
+remaining limitation is amplifier delivery of source positions 3..6, not QSA/CSD
+rendering safety.
 
 ### Safe runtime controls
 

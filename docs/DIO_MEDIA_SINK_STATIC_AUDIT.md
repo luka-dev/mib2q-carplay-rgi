@@ -3,6 +3,12 @@
 Date: 2026-09-02  
 Scope: static analysis only; no hook, deva, HU, or amplifier binary was modified.
 
+> Follow-up: [`MC_SELECTION_AUDIT.md`](MC_SELECTION_AUDIT.md) recovers the selector's
+> exact persistent source. It is `Sound_System` in RCC EEPROM/basic coding, E2P record
+> `0xF1` byte 11: value `2` publishes `ExternalAmplifierCoded=true`. For that external
+> state, the `_MC + DTCP51` pair below is unconditional and no source channel count is
+> consulted.
+
 ## Result
 
 The stereo-sink hypothesis is **falsified** for the B&O/external-amplifier route.

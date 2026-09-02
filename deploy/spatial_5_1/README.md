@@ -3,67 +3,59 @@
 Makes the iPhone push **discrete 5.1 PCM** over wired CarPlay to the B&O amp, instead of stereo.
 Two HU-side pieces, no amp-side change. Full RE in `docs/reference/AUDIO.md` §9–11.
 
-> **Do not activate this bundle for 5.1 yet.** A 2026-09-02 direct vehicle test
-> proved that the current driver patch negotiates and clocks six-channel DMA
-> correctly, but the runtime CSD route still initializes from MPL5's stereo
-> minima (`2 / 0x1800`). Six-channel playback is therefore known-broken while
-> ordinary two-channel playback is clean. Keep `AUDIO_SPATIAL=0` until the CSD
-> session is dynamically re-provisioned. Full evidence:
-> [`../../docs/ROUTER_INPUT_WIDTH_AUDIT.md`](../../docs/ROUTER_INPUT_WIDTH_AUDIT.md).
+> **Status update, 2026-09-02:** the CSD width defect is fixed and confirmed on
+> the car by the three-step mirror build in
+> [`../deva-ctrl-qc/BUILD_CHAIN.md`](../deva-ctrl-qc/BUILD_CHAIN.md). The unit now
+> attaches MPL5 as six-channel and the former 62.5 Hz corruption is gone. A
+> subsequent one-hot test found L/R audible but C/LFE/Ls/Rs silent. The HU already
+> selects `DIO_MEDIA_MC + DTCP51`; the remaining boundary is the amplifier SHARC
+> matrix. See [`../../docs/MC_SELECTION_AUDIT.md`](../../docs/MC_SELECTION_AUDIT.md).
 
-## Intended chain (the marked handoff is currently wrong)
+## Current chain
 ```
 iPhone --(advertised 5.1 bit)--> libairplay hook: AirPlayAudioFormatToASBD -> 6ch ASBD
        -> opens mpl5_dio_ent @ 6 voices  (needs the deva patch below)
-       -> deva timer/DMA 6ch -> CSD route/session [CURRENTLY LEFT AT 2ch]
+       -> deva timer/DMA 6ch -> CSD route/session 6ch [FIXED AND CONFIRMED]
        -> six_channel_speakerp (6ch output, io-audio default)
        -> TDM/MOST -> B&O amp (already 5.1-native; used today by mpl1_int_ent=6ch)
 ```
-The amp and its 6ch path exist and are exercised by internal media. Lifting the
-CarPlay device cap and widening its DMA period are necessary, but the route
-session must also follow the negotiated width; the current patch does not yet
-do that.
+The amp and its protected 5.1 sink exist. The HU render path is now correct through
+the six-channel CSD session. Current one-hot evidence narrows the unresolved delivery
+to the amplifier's source-to-output matrix.
 
 ## Components
 | piece | file | on-unit target | activation | reboot? |
 |---|---|---|---|---|
-| libairplay hook | `build/libcarplay_hook.so` | `/mnt/app/root/hooks/libcarplay_hook.so` | historical `SPATIAL_5_1`; current policy is `AUDIO_SPATIAL=0` | no — next dio fork |
-| deva driver patch | `deploy/deva-ctrl-qc/deva-ctrl-qc.so` | `/mnt/app/armle/lib/dll/deva-ctrl-qc.so` | swap the .so | **yes** — io-audio/deva restart |
+| libairplay hook | `build/libcarplay_hook.so` | `/mnt/app/root/hooks/libcarplay_hook.so` | `AUDIO_SPATIAL=1` | no — next dio fork |
+| deva driver patch | `deploy/deva-ctrl-qc/deva-ctrl-qc-mirror.so` | `/mnt/app/armle/lib/dll/deva-ctrl-qc.so` | swap the .so | **yes** — io-audio/deva restart |
 
 `SPATIAL_5_1` is the historical control used when this bundle was written. The
-current startup policy uses `AUDIO_SPATIAL` and defaults it to `0`. Do not turn
-either form on with the current deva binary. With an unpatched driver the
-six-voice open is rejected; with the current partial patch it opens but reaches
-a stereo CSD consumer and sounds broken.
+current startup policy uses `AUDIO_SPATIAL=1`. Deploy the final mirror output from
+the build chain, not the earlier partial `deva-ctrl-qc.so` stage.
 
-## Install (staging only — never reboots)
-```
-sh deploy/spatial_5_1/install_spatial_5_1.sh            # dry-run, shows the plan
-sh deploy/spatial_5_1/install_spatial_5_1.sh --apply    # copy the patched deva .so
-```
-`--apply` copies the patched deva `.so`. It does **not** restart io-audio, relaunch dio, or reboot.
-No on-device `.bak` (stock deva is recoverable from the firmware image). The hook flag lives in
-`carplay_startup.sh` (deployed separately) — it is already on by default.
+## Install
 
-## Activation order (blocked until the CSD fix exists)
-Do not use the former activation recipe with the current binary. It reproduces
-the six-channel corruption. Once a dynamic CSD re-provision fix is implemented
-and validated, deployment still requires the hook, startup profile, driver
-copy, and a user-approved reboot of `io-audio`.
+Do **not** use the legacy `install_spatial_5_1.sh`: it still stages the intermediate
+`deva-ctrl-qc.so`, not the vehicle-confirmed `deva-ctrl-qc-mirror.so`. Follow
+[`../deva-ctrl-qc/BUILD_CHAIN.md`](../deva-ctrl-qc/BUILD_CHAIN.md) and deploy its final
+mirror output. The hook flag lives in `carplay_startup.sh` and is already on by default.
+
+## Activation order
+
+Deploy the hook, startup profile and final mirror driver, then reboot so `io-audio`
+maps the replacement. Exact order and rollback are in
+[`../deva-ctrl-qc/BUILD_CHAIN.md`](../deva-ctrl-qc/BUILD_CHAIN.md).
 
 ## Rollback
 - Set `AUDIO_SPATIAL=0` in the current `carplay_startup.sh` → stock stereo (next connect).
-- Restore stock `deva-ctrl-qc.so` from the firmware image → reboot. (Stock stereo also still opens
-  with the patched deva since `min_voices` was kept at 2, so the deva revert is only for full cleanup.)
+- Restore stock `deva-ctrl-qc.so` from the firmware image → reboot. The mirror driver also serves
+  stereo correctly through QSA channel conversion, so the driver revert is only for full cleanup.
 
 ## Still to implement and confirm
 
-- Rebuild the MPL5 CSD stream, context, and buffer pool from the negotiated
-  voice count and active fragment on every 2/6 transition.
-- Preserve the already-proven clean two-channel mode.
-- Use the six-only minima change only as a controlled acoustic A/B, not as the
-  production patch.
+- Obtain the external SHARC source-to-output matrix or a proven runtime readback.
+- Explain why protected 5.1 source positions 3..6 do not reach physical outputs.
+- Preserve the vehicle-confirmed stereo and six-channel rendering behavior.
 
-This README is historical bundle documentation. Consult
-`deploy/deva-ctrl-qc/README.md` for the exact staged-artifact state; no reboot or
-new deployment was performed during the router-width measurement pass.
+This README began as historical bundle documentation. Use
+`deploy/deva-ctrl-qc/BUILD_CHAIN.md` as the authority for the vehicle-confirmed driver.
