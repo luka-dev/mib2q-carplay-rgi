@@ -1,0 +1,91 @@
+# The SAD header — what the head unit tells the amplifier is in the stream
+
+Written 2026-09-02, after the six-voice rendering defect was fixed and a one-hot test still
+put only L and R through to speakers.
+
+## What it is
+
+Beside the PCM on MOST rides a small **speaker-allocation** header. The PCM slots are always
+formed — six of them, whatever the content — and the SAD says **how many of them are
+meaningful**. Announce two, and there is no reason for anything downstream to route the other
+four to speakers.
+
+deva logs what it receives:
+
+    convert_sad_header_to_csd: media_type=.. codec_type=.. emi=.. asad=0x%x cgms=.. bitrate=.. sample_width=0x%x
+
+Observed on this car:
+
+| path | asad | sample_width |
+|---|---|---|
+| internal media / RetroArch on `mpl1_int_ent`, six voices, correct | `0xfc` | `24` |
+| CarPlay / AirPlay on `mpl5_dio_ent`, six voices, only L+R audible | `0xc0` | `16` |
+
+`asad` reads as a slot mask, most significant bit first:
+
+    0xfc = 1111 1100   slots 1..6 active, 7 and 8 not   -> 5.1
+    0xc0 = 1100 0000   slots 1..2 active                -> stereo
+
+That reading is inferred from the two observed values and the arithmetic, not from a
+specification we have read. It is self-consistent and matches the channel count in both cases.
+
+## Where it is built
+
+`dio::CQNXSoundIF<CLockingPolicy>::createMetadata` in `libairplay.so`, which documents its own
+arguments in its log string:
+
+    "[%s]<AUDIO>nChannels: %u, nBitsPerChannel: %u, nSampleRate: %u"
+
+so the signature is `createMetadata(this, nChannels, nBitsPerChannel, nSampleRate,
+en_encryption_t, en_codec_t)`. It pushes the result to the driver with
+`DCMD_PCM_SET_SAD_METADATA`, which `deva`'s `pcm_devctl @0x3f0a0` handles.
+
+The devctl numbers are **not** compile-time constants: `pcm_devctl` compares against values
+held in the driver context at `+92` and `+96`, registered at start-up. A userspace client
+cannot hardcode them, which is why the fix belongs at `createMetadata` and not at a raw
+`devctl` call.
+
+The metadata struct is 20 bytes; the GET path at `0x3f748` copies it field by field out of the
+driver context, which gives the layout:
+
+    [0] media_type  [1] codec_type  [2] emi  [3] asad  [4] cgms
+    [8] bitrate (dword)  [12] sample_width  [16] dword
+
+## The defect
+
+We widen the ASBD to six channels and six TDM slots are formed, but this call still carried the
+stock stereo count, so the header announced `asad=0xc0`. Six channels sent, two declared.
+
+Both template instantiations are exported weak and libairplay reaches them through its PLT, the
+same seam `AirPlayReceiverSessionSetup` already uses, so the hook interposes them with no new
+mechanism. With Spatial armed it now announces six channels and 24 bits, matching what the
+slots carry and what the working path declares. `AUDIO_SAD_CHANNELS` and `AUDIO_SAD_BITS`
+override; `0` disables. Both the original and substituted values are logged.
+
+## Why this also retracts an earlier conclusion
+
+`tools/qsa_play.c` sets no SAD at all, so it inherited whatever the last CarPlay session left —
+`0xc0`. The standalone player was therefore announcing stereo too, and its L/R-only output was
+**this bug, not evidence against the CarPlay stack**. That result was read as proof the fault
+lay below deva, and it sent the search into the ADSP, the MOST framer and the amplifier for two
+days. Everything found there was correct, which is consistent: the amplifier was doing what it
+was told.
+
+Consequence for testing: verify **through CarPlay**, not with `qsa_play`. The player still sets
+no SAD and will only show whatever the session left behind.
+
+## What is still unproven
+
+That the far side honours `asad` at all. deva's own line settles it in one drive:
+
+    asad=0xfc, sample_width=0x18   the interposer took effect
+    asad=0xc0, sample_width=0x10   it did not; look for another caller
+
+And separately: whether announcing six is sufficient, or whether something downstream also has
+to be told. Only the car answers that.
+
+## Related
+
+* `docs/AUDIO_5_1_STATE.md` — the whole investigation, with the negatives.
+* `docs/AFE_TDM_MOST_SLOT_AUDIT.md` — TDM slot geometry and where this asymmetry was found.
+* `deploy/deva-ctrl-qc/BUILD_CHAIN.md` — the rendering fix that came first.
