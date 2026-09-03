@@ -201,4 +201,29 @@ export AUDIO_SPATIAL=1
 export AUDIO_SPATIAL_ATMOS=0
 export AUDIO_SPATIAL_ATMOS_MODE=downmix
 export AUDIO_SPATIAL_CODEC_LIB="$H/libcarplay_apac.so"
+# --- the USB device stack must exist before dio starts ------------------------------
+#
+# A fast unplug/replug can leave io-usb-dcd dead.  Nothing restarts it: the OTG
+# usblauncher keeps running against a stack that is gone, and /etc/usblauncher.lua only
+# starts things when the media connector (0x0424:0x2530) is *inserted*, gated on a flag
+# in /tmp that is cleared only when the hub is removed -- and the hub is soldered in.
+# So the state survives every replug and only a reboot clears /tmp.
+#
+# The damage downstream is silent: startncm.sh mounts NCM on the missing
+# /dev/io-usb/otg_dev, carplay0 comes up with no carrier, iAP2 never starts, dio misses
+# its startup budget, and smartphone_integrator restarts it forever at TIMEOUT_STARTUP.
+# Seen once as ~500 consecutive dumps, unrecoverable without a reboot.
+#
+# The platform already ships the recovery -- it writes start_stack::device,2 to the PPS
+# object the OTG manager listens on -- so just call it.  Verified on the car: with
+# otg_dev missing this brought io-usb-dcd back and recreated the node.
+#
+# Here rather than in carplay_cleanup.sh because this runs on *every* launch, including
+# each retry of that loop, so the system heals itself on the next attempt; cleanup may
+# not run at all when SI kills dio on a startup timeout.
+if ! ls /dev/io-usb/otg_dev >/dev/null 2>&1; then
+    echo "[supervisor] USB device stack gone - asking the OTG manager to restart it" >> "$WLOG"
+    /etc/scripts/start_otg_stack_device_mode.sh >> "$WLOG" 2>&1
+fi
+
 exec "$DIODIR/dio_manager" "$@"
