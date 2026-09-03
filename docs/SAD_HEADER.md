@@ -74,7 +74,28 @@ was told.
 Consequence for testing: verify **through CarPlay**, not with `qsa_play`. The player still sets
 no SAD and will only show whatever the session left behind.
 
-## What is still unproven
+## Confirmed on the car, 2026-09-03
+
+Both sides of the seam, on a fresh boot with the interposer deployed:
+
+    [hook]   createMetadata(locked): announcing 6ch/24bit instead of 2ch/16bit at 48000 Hz
+    [deva]   convert_sad_header_to_csd: media_type=0x0 codec_type=0x1 emi=0x3
+             asad=0xfc cgms=0x0 bitrate=0x697800 sample_width=0x18
+
+Exactly the predicted values, and the channels arrive: the channel-ID track now plays centre
+and surrounds, where before only L and R reached speakers.
+
+Quality is unaffected. Over 8192 writes: `zeroWrites=0 shortWrites=0 devUnderruns=0
+ringRead=768/768 odd=0`, and `underrunFrames` sits at 256 -- one 5.3 ms gap at start-up that
+does not grow between samples, so it is priming rather than a leak.
+
+Note on height channels: a 7.1.4 test track's "TopSide" announcements come from behind and
+below, which is expected rather than a defect. The transport is 5.1 and carries no height
+channels, and the amplifier declares positions 7 and 8 as BCL/BCR -- rear, not height, with no
+`0x0D`/`0x0F` codes in any profile. Eight channels are a hardware limit here, which is why the
+8->6 fold is mandatory.
+
+## What was unproven before that test
 
 That the far side honours `asad` at all. deva's own line settles it in one drive:
 
