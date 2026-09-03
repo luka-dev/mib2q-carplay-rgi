@@ -15,6 +15,12 @@ Scope: static analysis of the MU1316 head-unit firmware and the already-audited 
 > actual Connect fields are `SinkNr 0x26, BlockWidth 0x001a`. The sink's advertised
 > `BlockWidth 14` is a separate record. See
 > [`MOST_SOURCE_BLOCKWIDTH_AUDIT.md`](MOST_SOURCE_BLOCKWIDTH_AUDIT.md).
+>
+> **Subsequent lower-boundary correction:** the high-level MIB connection request has no
+> channel-count field, but deva does send a separate custom TDM/SAD header below it. That
+> header contains `sample_width` and the ASAD active-channel mask. AirPlay has been observed
+> setting `ASAD=0xc0` (two active positions) independently of the widened six-channel PCM.
+> See [`AFE_TDM_MOST_SLOT_AUDIT.md`](AFE_TDM_MOST_SLOT_AUDIT.md).
 
 ## Result
 
@@ -51,8 +57,10 @@ through the external MOST amplifier. The internal branch terminates at
 in this static pass, so the exact byte is inferred from the active external-amplifier
 path rather than copied from a vehicle dump.
 
-The head-unit control plane does **not** declare a CarPlay channel count. Its audio
-request contains connection ID, terminal and group only. Therefore the new one-hot result
+The high-level MIBRoot connection-control plane does **not** declare a CarPlay channel count.
+Its audio request contains connection ID, terminal and group only. A later audit found a
+lower data-plane declaration in deva's TDM/SAD header; this paragraph does not apply to that
+header. Therefore the new one-hot result
 (L/R audible; C/LFE/Ls/Rs silent) is not explained by MIBRoot choosing a stereo route.
 The HU already asks for the protected 5.1 logical sink. Its physical sink is `0x26`, whose
 advertised profile has `BlockWidth 14`; the later source audit shows that the controller
@@ -199,7 +207,9 @@ not consumed by `DSIAudioManagement.requestConnection` or the connection-162 map
 
 At the lower data-plane boundary, QSA does negotiate six voices with deva. That declaration
 is real and is what fixed the earlier CSD width defect, but it never feeds MIBRoot's
-amplifier-pair selector.
+amplifier-pair selector. Separately, `DCMD_PCM_SET_SAD_METADATA` does feed an ASAD channel
+mask to the custom TDM header. That lower declaration is documented in the subsequent AFE
+audit and supersedes any broader reading of “no HU channel-count declaration.”
 
 ## Decision
 

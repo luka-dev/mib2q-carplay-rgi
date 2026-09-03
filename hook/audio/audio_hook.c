@@ -1688,6 +1688,83 @@ static unsigned spa_audio_requested_output_channels(void)
            SPA_PCM_5_1_2_CHANNELS : SPA_PCM_5_1_CHANNELS;
 }
 
+/* ── dio::CQNXSoundIF::createMetadata ───────────────────────────────────────
+ *
+ * The SAD (speaker-allocation) header that rides beside the PCM on MOST is built here and
+ * pushed to the driver with DCMD_PCM_SET_SAD_METADATA.  deva logs it as
+ * "convert_sad_header_to_csd: ... asad=0x%x ... sample_width=0x%x".
+ *
+ * We widen the ASBD to six channels, but this call still carries the stock stereo count, so
+ * the header announces asad=0xc0 -- two active channels -- while six slots are actually
+ * formed.  The working internal-media path announces asad=0xfc with sample_width=24.
+ *
+ * The function documents its own arguments in its log string:
+ *     "[%s]<AUDIO>nChannels: %u, nBitsPerChannel: %u, nSampleRate: %u"
+ * so a2/a3/a4 are channels, bits, rate.  Both template instantiations are exported weak, and
+ * libairplay reaches them through its PLT, which is the same seam SessionSetup uses.
+ *
+ * AUDIO_SAD_CHANNELS / AUDIO_SAD_BITS override the forced values; 0 disables the override. */
+typedef int (*spa_create_meta_t)(void *, uint32_t, uint32_t, uint32_t, int, int);
+
+static unsigned spa_env_uint(const char *name, unsigned fallback)
+{
+    const char *v = getenv(name);
+    char *end;
+    unsigned long n;
+    if (!v || !*v) return fallback;
+    n = strtoul(v, &end, 0);
+    if (*end) return fallback;
+    return (unsigned)n;
+}
+
+static int spa_create_metadata_common(spa_create_meta_t real, const char *which,
+                                      void *self, uint32_t channels, uint32_t bits,
+                                      uint32_t rate, int encryption, int codec)
+{
+    unsigned want = spa_audio_requested_output_channels();
+    uint32_t forcedCh = channels, forcedBits = bits;
+
+    if (want) {
+        forcedCh   = spa_env_uint("AUDIO_SAD_CHANNELS", want);
+        forcedBits = spa_env_uint("AUDIO_SAD_BITS", 24u);
+        if (!forcedCh)   forcedCh = channels;
+        if (!forcedBits) forcedBits = bits;
+    }
+    if (forcedCh != channels || forcedBits != bits)
+        LOG_WARN(LOG_MODULE,
+                 "createMetadata(%s): announcing %uch/%ubit instead of %uch/%ubit "
+                 "at %u Hz -- the SAD header is what the MOST side reads",
+                 which, (unsigned)forcedCh, (unsigned)forcedBits,
+                 (unsigned)channels, (unsigned)bits, (unsigned)rate);
+    else
+        LOG_INFO(LOG_MODULE, "createMetadata(%s): %uch/%ubit/%uHz unchanged",
+                 which, (unsigned)channels, (unsigned)bits, (unsigned)rate);
+    return real(self, forcedCh, forcedBits, rate, encryption, codec);
+}
+
+#define SPA_CREATE_META_SYM_ST \
+    "_ZN3dio11CQNXSoundIFINS_18SingleThreadPolicyEE14createMetadataEjjjNS_15en_encryption_tENS_10en_codec_tE"
+#define SPA_CREATE_META_SYM_OL \
+    "_ZN3dio11CQNXSoundIFINS_16ObjectLockPolicyILNS_6CMutex10en_mutex_tE2ELNS_14en_lock_type_tE0EEEE14createMetadataEjjjNS_15en_encryption_tENS_10en_codec_tE"
+
+int _ZN3dio11CQNXSoundIFINS_18SingleThreadPolicyEE14createMetadataEjjjNS_15en_encryption_tENS_10en_codec_tE(
+        void *self, uint32_t ch, uint32_t bits, uint32_t rate, int enc, int codec)
+{
+    static spa_create_meta_t real;
+    if (!real) real = (spa_create_meta_t)dlsym(RTLD_NEXT, SPA_CREATE_META_SYM_ST);
+    if (!real) return 0;
+    return spa_create_metadata_common(real, "single", self, ch, bits, rate, enc, codec);
+}
+
+int _ZN3dio11CQNXSoundIFINS_16ObjectLockPolicyILNS_6CMutex10en_mutex_tE2ELNS_14en_lock_type_tE0EEEE14createMetadataEjjjNS_15en_encryption_tENS_10en_codec_tE(
+        void *self, uint32_t ch, uint32_t bits, uint32_t rate, int enc, int codec)
+{
+    static spa_create_meta_t real;
+    if (!real) real = (spa_create_meta_t)dlsym(RTLD_NEXT, SPA_CREATE_META_SYM_OL);
+    if (!real) return 0;
+    return spa_create_metadata_common(real, "locked", self, ch, bits, rate, enc, codec);
+}
+
 int snd_pcm_open_name(snd_pcm_t **handle, char *name, int mode)
 {
     static spa_snd_open_name_t real;

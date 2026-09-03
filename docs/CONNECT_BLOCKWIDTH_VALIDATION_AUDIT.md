@@ -216,37 +216,35 @@ for 26 during source allocation, and `car` contains lower NAL resources of width
 not proved, so the number of sites required to change the physical source
 allocation consistently is not yet closed.
 
-## 3. Reconciling 14, 20, and 26
+## 3. Reconciling 14, 20, 26, and 32
 
-The three values describe different layers unless packed storage is proved:
+The subsequent signed-LPASS audit proves the physical packing which was still
+unknown during this pass:
 
 | Value | Exact known meaning |
 | ---: | --- |
 | 14 | amplifier sink `0x26` advertises 2 protection bytes + six 16-bit samples |
-| 20 | hypothetical packed representation: 2 + six 24-bit samples |
+| 20 | extent of the custom header and six dev-78 TDM slots: `2 + 6*3` |
 | 26 | HU source resource and Connect value |
+| 32 | complete shared grouped-TDM frame at the device's 48 kHz cadence |
 
-The inference `six channels × 24 bits = 18 payload bytes` assumes tightly packed
-three-byte samples. That is not the representation proved at the deva boundary.
-QSA/deva place each sample in a 32-bit word; the valid sample precision is 24
-bits, but the six-channel container stride is:
+QSA/deva do place each sample in a 32-bit internal word, but the LPASS TX packer
+arithmetic-shifts that word right by eight and writes three bytes to the physical
+TDM slot. The former `2 + 6*4 = 26` explanation is therefore wrong for the TDM
+wire layout.
 
-```text
-6 channels * 4-byte words = 24 audio bytes per frame
-2 protected-stream bytes + 24 audio bytes = 26
-```
-
-Thus `26` has two arithmetically valid decompositions:
+The compatible source-resource decomposition is:
 
 ```text
-2 + 8 * 3 bytes   (eight packed 24-bit samples)
-2 + 6 * 4 bytes   (six 24-bit samples in 32-bit slots)
+2 + 8 * 3 bytes   (eight potential packed 24-bit positions)
 ```
 
 Its equality to sink `0x32`'s advertised width does not by itself prove that the
-HU copied the 7.1 profile width. The source table can equally be describing the
-six 32-bit containers already present in deva's DMA path. Conversely, static
-configuration alone does not prove which of those layouts appears on the wire.
+HU copied the 7.1 profile width. Device 78 occupies only six positions at offsets
+`2,5,8,11,14,17`; its custom SAD/ASAD header separately declares active speaker
+positions. Qualcomm's matching MMXF platform table confirms two further potential
+positions at `20,23`, so bytes 0..25 are an exact protected eight-position region.
+The binding of the 26-byte Mmx source resource to that region remains unproved.
 
 No CPU-side sample repacker from six packed 24-bit samples to MOST bytes is
 visible in MIBRoot, AudioProcess, or `car`. The lower `car` configuration creates
@@ -261,25 +259,29 @@ car::CGMostSubsystemConfig / sub_19F7E8
 That code configures endpoints and widths; it does not copy or convert audio
 samples. The previously decoded resource-33 direction is StreamPort 0 toward
 MOST, but this audit still has no static proof binding source 7 to that numeric
-resource. The actual slot packing lies below these host binaries, at the
-Qualcomm LPASS/AFE `TDM_OUT_MPL` and INIC/MLB/MOST formatter boundary, or in
-firmware not present in the available image.
+resource. The actual slot packing lies below these host binaries. The subsequent
+signed-LPASS pass recovers the Qualcomm AFE half; the INIC/MLB/MOST formatter
+remains unavailable.
 
-Therefore the conversion to on-wire format is **not visible statically** in the
-available binaries. There may be no 18-to-24-byte conversion at all if the
-32-bit TDM slots are preserved. Capturing the one-hot frame at `TDM_OUT_MPL` and
-then in the MOST synchronous slots remains the measurement that distinguishes
-the layouts and localizes the channel loss.
+The AFE conversion is now visible statically: internal 32-bit containers become
+three-byte physical TDM slots. The next INIC/MLB/MOST conversion remains
+unavailable. The lower audit also found a cheaper discriminator than an electrical
+capture: deva's existing start log reports the SAD `ASAD` mask. A live `0xc0` mask
+declares only L/R active even while all six TDM slots are packed; `0xfc` clears
+that mismatch. See
+[`AFE_TDM_MOST_SLOT_AUDIT.md`](AFE_TDM_MOST_SLOT_AUDIT.md).
 
 ## Decision
 
 The amplifier does not reject `0x26/0x001a` because of a BlockWidth/profile
 mismatch. The width-rejection explanation for falling back to stereo is closed.
 
-The surviving static anomaly is still that the controller connects a 26-byte
-source to a sink advertising 14 bytes. Its acoustic effect cannot be derived
-from these control-plane handlers. The next useful evidence is audio content at
-the two data-plane boundaries, not another Connect-table patch.
+The controller still connects a 26-byte source to a sink advertising 14 bytes,
+but this handler accepts the pair. Its acoustic effect cannot be derived from
+these control-plane handlers. The later AFE audit finds a more direct surviving
+HU-side mismatch: a six-slot PCM frame can carry `ASAD=0xc0`, declaring only L/R
+active. That live header value should be checked before any Connect-table patch
+or electrical capture.
 
 ## Provenance
 

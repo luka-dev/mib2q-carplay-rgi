@@ -238,6 +238,12 @@ first sends the TDM SAD header through `set_device_tdm_sad_header @0x29d70`
 The harness sees exactly that pair on every `mpl1` start. Stop sends stream stop
 and `CSD_DEV_CMD_DISABLE`.
 
+**Subsequent qualification:** the enable request still has no channel field, but the
+preceding TDM SAD request does. Its ASAD mask declares active speaker positions and is
+stored independently of the PCM/CSD channel count. AirPlay has been observed writing
+`ASAD=0xc0` (two active positions), while the clean session default is `0xfc` (six).
+See [`AFE_TDM_MOST_SLOT_AUDIT.md`](AFE_TDM_MOST_SLOT_AUDIT.md).
+
 The corrected answer to “does six-voice open re-provision the device/session?”
 has three parts:
 
@@ -251,7 +257,9 @@ has three parts:
 For `mpl5`, the bare PCM open performs only the ring-side part because no CSD
 session is attached. Audioman's dynamic route attachment is the event that
 connects and starts the same output session. There is no device configuration
-left behind specifically by `mpl5` startup.
+left behind specifically by `mpl5` startup. SAD metadata is a separate persistent
+session field and can be left behind by a previous MPL5 writer; the later AFE audit
+records that exception.
 
 ## ACDB boundary and conclusion
 

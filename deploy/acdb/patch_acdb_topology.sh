@@ -1,16 +1,16 @@
 #!/bin/sh
-# Speaker_cal.acdb: give device 78 (TDM_ENTERTAINMENT1_RX) a pass-through audio topology
-# instead of the stereo speaker COPP.
+# Speaker_cal.acdb: prepare a controlled COPP-topology A/B for device 78
+# (TDM_ENTERTAINMENT1_RX). This is a diagnostic generator, not a proved 6ch fix.
 #
-# Why.  Every count in the chain is already six: audio_service allows eight, the ACDB entry for
+# Context.  Every count in the chain is already six: audio_service allows eight, the ACDB entry for
 # device 78 declares ChannelConfig 6 with slot offsets 2/5/8/11/14/17 at 24 bits, and ADM opens
-# the COPP with dev_num_channel=6 and the map FL FR FC LFE LS RS.  The single stereo-specific
-# value left is the topology, 0x00010314 = SPEAKER_STEREO_AUDIO_COPP, selected for all four
-# application types.  Six channels in, stereo post-processing out -- which is exactly the
-# vehicle result: L and R audible, C/Ls/Rs silent, while the amplifier's own matrix would have
-# routed those into the front buses at -3..-8 dB had they arrived.
+# the COPP with dev_num_channel=6 and the map FL FR FC LFE LS RS.  Topology 0x00010314 is
+# publicly named SPEAKER_STEREO_AUDIO_COPP, but Hexagon analysis has now shown that its name is
+# not evidence of a 6->2 conversion: incompatible stereo-only modules are disabled on 6ch
+# reinit, the remaining modules accept up to eight, and audproc_svc keeps outputChannels=6.
 #
-# Which target.  Chosen on the command line, because what these topologies DO is not proven.
+# Which target.  Chosen on the command line.  The default 0x10312 is retained for the existing
+# "variant 2" experiment; use 0x0001031b for the explicit multichannel graph described below.
 #
 # What IS proven, read out of the signed LPASS image (segment va 0xc04b9000 -> file 0x4bc000):
 #
@@ -21,21 +21,24 @@
 #   0xc04e981c: 11 modules, list 0xc0615980
 #   0xc04e9804:  3 modules, list 0xc0615be8
 #
+#   topology 0x0001031B  (SPEAKER_MCH_PEAK_VOL) -> RX descriptor 0xc04e9738
+#
 # So 0x10314 and 0x10BE3 share one processing graph: swapping to the default would change the
-# id and nothing else, and prove nothing.  Only 0x00010312 selects a different graph, and is
-# therefore the only target worth testing.
+# id and nothing else, and prove nothing.  Both 0x10312 and 0x1031B select different graphs.
+# Hexagon validators show every module in both alternative graphs accepts six channels.
 #
 # It is still an experiment, and the honest caveats are:
 #   - stock ACDB uses 0x10312 only on devices carrying one to three channels; there is no
 #     six-channel precedent for it on this platform;
-#   - a three-module graph is not the same as "pass-through", and nothing here shows it
-#     preserves six channels;
-#   - that 0x10314 is what discards C/Ls/Rs is likewise unproven -- it is the only
-#     stereo-looking value left, which is suggestive, not conclusive.
+#   - 0x10312 is publicly NULL/NONE COPP and has no stock six-channel user;
+#   - 0x1031B is explicitly multichannel and consists of resampler + Peak Meter + SoftVolume,
+#     but changing to it is still a runtime A/B rather than a statically proved repair;
+#   - static Hexagon analysis finds no 6->2 operation in stock 0x10314, so a no-change result
+#     from either A/B is expected and would move the boundary to AFE/TDM or the MOST framer.
 #
 # Reverting is restoring the original file.
 set -e
-IN="${1:?usage: patch_acdb_topology.sh <stock Speaker_cal.acdb> [out]}"
+IN="${1:?usage: patch_acdb_topology.sh <stock Speaker_cal.acdb> [out] [topology-id]}"
 OUT="${2:-$(dirname "$0")/Speaker_cal.acdb}"
 NEWTOPO="${3:-0x00010312}"
 

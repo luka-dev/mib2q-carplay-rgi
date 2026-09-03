@@ -6,9 +6,16 @@ firmware image, or analysis database was modified.
 
 > **Subsequent receiver-side result:** the amplifier Connect handler accepts
 > BlockWidth 26 for sink `0x26`. It validates only the generic range `1..372`,
-> not equality with the sink's advertised width 14. The value 26 can also be
-> decomposed as two protection bytes plus six 32-bit sample containers. See
+> not equality with the sink's advertised width 14. See
 > [`CONNECT_BLOCKWIDTH_VALIDATION_AUDIT.md`](CONNECT_BLOCKWIDTH_VALIDATION_AUDIT.md).
+>
+> **Subsequent AFE packing result:** device 78 does not put six four-byte slots on TDM.
+> It writes six three-byte slots at offsets `2,5,8,11,14,17` in a 32-byte shared frame.
+> Qualcomm's matching MMXF platform table confirms potential offsets `20,23` too, so
+> `2 + 8*3 = 26` exactly covers that media region; the last two positions are not enabled
+> for stock dev 78 and the exact Mmx-source binding remains an inference.
+> The same audit found an independent SAD/ASAD active-channel declaration. See
+> [`AFE_TDM_MOST_SLOT_AUDIT.md`](AFE_TDM_MOST_SLOT_AUDIT.md).
 
 ## Result
 
@@ -210,10 +217,11 @@ These are separate records and must not be conflated:
 | Connect field | AudioProcess MOST sink controller | **26** |
 | Sink `0x26` advertised profile | amplifier `SinkInfo.Get` | **14** |
 
-`26` is not a stereo allocation. It is consistent with a high-bandwidth
-synchronous resource, but the static metadata does not state which sample-slot
-packing accounts for every byte. Both `2 + 8*3` and `2 + 6*4` equal 26; the
-latter matches the six 32-bit containers already proved in deva's DMA path.
+`26` is not a stereo allocation. The subsequent signed-LPASS audit proves the
+sample-slot packing which was unknown in this pass: the internal 32-bit containers
+are repacked to six three-byte TDM slots. Thus `2 + 6*4` is not the physical TDM
+layout. `2 + 8*3` matches the resource width and the available positions in the
+shared group frame, but a direct binding of all 26 resource bytes remains unproved.
 
 The lower `car` binary independently contains synchronous NAL resources with
 configured bandwidth `26` (resource IDs 33 and 100). That corroborates the
@@ -221,7 +229,7 @@ presence of 26-byte transport resources, but this pass did not prove that either
 numeric NAL ID is the final binding of `MmxSourcePresCtrl/7`; it is not used as
 the primary source-width proof.
 
-## What would localize the missing channels
+## What localizes the missing channels
 
 The narrow runtime confirmation of this static result is the existing
 `CGGenMOSTSnkDevCtrl::raiseConnSR` trace. For connection 162 it should print
@@ -229,8 +237,12 @@ The narrow runtime confirmation of this static result is the existing
 `26 00 1a` at offsets 2..4 of the amplifier's Connect payload.
 
 That confirms allocation geometry but cannot show whether C/LFE/Ls/Rs contain
-audio. The decisive one-hot measurement needs the same samples observed at two
-data-plane boundaries:
+audio. The subsequent AFE audit adds a cheaper preceding check: the existing deva
+start log exposes the custom SAD active-channel mask. `ASAD=0xc0` declares only
+L/R active beside the six physical PCM slots; `ASAD=0xfc` declares all six.
+
+Only if the live value is `0xfc` does the decisive one-hot measurement still need
+the same samples observed at two data-plane boundaries:
 
 1. Qualcomm ADSP/LPASS output at `TDM_OUT_MPL`, before the INIC/MLB/MOST
    formatter.
@@ -245,8 +257,10 @@ Interpretation is direct:
 | Present on MOST, absent at amplifier matrix input | amplifier ingress/profile handling, including the 26-versus-14 discrepancy |
 
 Since the HU source allocation is 26 bytes/frame, a capture showing the extra
-channels absent at `TDM_OUT_MPL` is what would establish the remaining Qualcomm
-ADSP hypothesis. The static tables alone do not carry that conclusion.
+channels absent at `TDM_OUT_MPL` would establish a remaining Qualcomm ADSP
+runtime fault. Static analysis already proves a six-slot packing loop but cannot
+show live sample values. Full SAD and slot-packer details are in
+[`AFE_TDM_MOST_SLOT_AUDIT.md`](AFE_TDM_MOST_SLOT_AUDIT.md).
 
 ## Reproducibility and provenance
 

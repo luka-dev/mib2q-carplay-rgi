@@ -2,7 +2,7 @@
 
 Status as of 2026-09-02. The original rendering defect is fixed (§14–15), but the
 remaining delivery fault is not: a one-hot six-channel test delivers L/R and loses
-C/Ls/Rs before the amplifier matrix. The newest static boundary result is in §17.
+C/Ls/Rs before the amplifier matrix. The newest static boundary result is in §18.
 
 > ## Localised on 2026-09-02: the CarPlay stack is not at fault
 >
@@ -354,7 +354,9 @@ geometry is 48 kHz, 24-bit, six channels with map `01 02 03 06 08 09`.
 stream and context from the live session voice count. On a CSD-backed start,
 deva re-sends the TDM SAD configure request and
 `ENABLE(78, 48000, 24)`; there is no retained per-`mpl5` stereo device
-configuration.
+configuration. Section 18 later qualifies the SAD half of that sentence: the
+device configuration is shared, but the SAD metadata itself is persistent and can
+retain a two-active-channel ASAD mask independently of the CSD stream width.
 
 An isolated QEMU open explains the one apparent asymmetry. MPL1 has a default
 boot route to output 128, enters `stream_type=2`, and produces device
@@ -490,11 +492,13 @@ but the follow-up V850 audit proves that the amplifier's Connect handler does no
 `FUN_000C4B30` checks only that the width is in `1..372`, then stores the received value;
 it never compares against the selected profile's own width.
 
-The apparent third value, 20 bytes for two protection bytes plus six packed 24-bit samples,
-assumes three-byte packing that is not proved here. Deva's actual DMA representation is six
-32-bit words containing 24 valid sample bits, so `2 + 6*4` also equals 26. No CPU-side
-CSD-to-MOST sample converter is visible in the available binaries; the packing boundary is
-Qualcomm `TDM_OUT_MPL` to the INIC/MLB/MOST formatter.
+The later AFE audit proves the physical packing which was still unknown here. Device 78 uses
+six three-byte slots at byte offsets `2,5,8,11,14,17` in a 32-byte shared TDM frame; the
+32-bit words exist only on the internal deva/LPASS side. Therefore the former
+`2 + 6*4 = 26` explanation is wrong for the TDM wire layout. Qualcomm's MMXF platform table
+independently confirms eight potential positions at `2,5,8,11,14,17,20,23`, so
+`2 + 8*3 = 26` exactly covers their range. The exact Mmx-source-to-AFE-group binding remains
+an inference. See §18.
 
 This is a clean negative for the proposed stereo-width MOST allocation. The decisive next
 measurement is the one-hot signal at Qualcomm/LPASS `TDM_OUT_MPL` and in the allocated MOST
@@ -519,20 +523,86 @@ unchanged; `audio_service` accepts up to eight channels; dev 78 has ACDB
 `dev_num_channel=6`. The legacy scalar named `slot_channel_allocation` is not present for
 this device because it uses the newer explicit-offset property.
 
-The audit did find one stereo-specific value. For all four application modes,
+The audit found one topology distinction. For all four application modes,
 `Speaker_cal.acdb` selects topology `0x10314`. Qualcomm's public downstream definitions
-name that ID `SPEAKER_STEREO_AUDIO_COPP` (also the default COPP). The signed LPASS image
-also contains explicitly multichannel topologies `0x1031b` and `0x10715`.
+name that ID `SPEAKER_STEREO_AUDIO_COPP` (also the default COPP). The name alone does not
+prove that this signed implementation narrows the stream.
 
-The exact static configuration is therefore contradictory rather than a simple numeric
-cap: **stereo-named topology `0x10314`, output count 6**. This makes the ACDB topology
-selection the surviving head-unit-side candidate, but it does not prove that this signed
-LPASS implementation drops channels 3–6; that behavior is below the static packet
-boundary. A blind topology-ID swap is unsafe without matching calibration. A controlled
-ACDB A/B or one-hot capture at `TDM_OUT_MPL` is decisive.
+The internal LPASS registry first sharpened the result. `0x10314` and proposed replacement
+`0x10be3` both point to the same RX descriptor `0xc04e981c`, an 11-module graph, so that
+four-dword ACDB edit is not a meaningful graph A/B. `0x10312` points to a genuinely
+different three-module RX graph, but no stock six-channel device uses it; the widest
+stock user is three channels.
+
+The subsequent Hexagon disassembly closes the static module question. Resampler,
+delay, SoftVolume, ComboPP, RX gain and Sample Slip accept up to eight channels.
+PBE, QEnsemble and SPA are stereo-only, but they return a media-format failure on six
+channels; GenTopo disables that individual module and continues. Device-78 ACDB also
+sets QCPR, PBE, channel IIR and MBDRC enable values to zero. `audproc_svc` preserves
+the configured six-channel output count and map, and its generic downmixer explicitly
+bypasses `5.1 -> 5.1`.
+
+Consequently, the `SPEAKER_STEREO_AUDIO_COPP` name is **not the last proved 6ch fault**.
+No static `6 -> 2` operation remains in the stock COPP path. Variant `0x10312` is
+statically six-channel-safe, but is publicly NULL/NONE COPP and remains experimental.
+The better graph A/B is `0x1031b` (`SPEAKER_MCH_PEAK_VOL`): resampler, Peak Meter and
+SoftVolume, all accepting eight channels. Section 18 subsequently proves the static AFE
+slot packer and finds a separate two-channel SAD/ASAD declaration at the same boundary.
 
 Full property records, file offsets, ARM instructions, packet layouts and hashes:
 [`CSD_ACDB_CHANNEL_AUDIT.md`](CSD_ACDB_CHANNEL_AUDIT.md).
+Hexagon topology records, module validators, ACDB enable values and output-media code:
+[`LPASS_COPP_TOPOLOGY_AUDIT.md`](LPASS_COPP_TOPOLOGY_AUDIT.md).
+
+---
+
+## 18. AFE/TDM slots are correct; SAD can still declare only L/R — 2026-09-02
+
+The signed LPASS image closes the physical slot question. CSD device 78's ACDB property is
+the Qualcomm explicit slot-map parameter: six 24-bit slots at **byte** offsets
+`2,5,8,11,14,17`. `audio_service` forwards the record unchanged. LPASS validates all six,
+uses a 32-byte shared group frame, and its TX packer loops over six input samples.
+
+For each 24-bit slot the packer arithmetic-shifts the internal 32-bit word right by eight
+and writes three bytes. Since QSA/deva left-align S16 in bits 31..16, the TDM result is the
+original signed 16-bit sample in the high 16 bits of a 24-bit slot with eight zero low bits.
+This is a deliberate 16-in-24 representation, not low-24 extraction or a 256x gain error.
+
+The important new result is a second, independent description carried in the custom
+TDM/SAD header. It contains `sample_width` and ASAD, the active-speaker bit mask. LPASS
+parses the mask and records its popcount as `num_chan_from_header`, but does not use it to
+shorten the six-slot PCM copy loop.
+
+The persistent MPL session defaults to `ASAD=0xfc` (six active positions) and width 24.
+However, AirPlay explicitly sends `DCMD_PCM_SET_SAD_METADATA` using its original input
+geometry. The existing trace shows:
+
+```text
+createMetadata nChannels:2, nBitsPerChannel:16
+convert_sad_header_to_csd: ... asad=0xc0 ... sample_width=0x10
+TDM SAD Header Payload: 0x3c01, 0xb210, 0x0, 0xc0, ...
+```
+
+A saved vehicle slog for the known-good six-channel RetroArch/MPL1 path provides the
+counterexample: it sends `ASAD=0xfc`, `sample_width=0x18`, and payload
+`0x3c00, 0xb218, 0x6000, 0xfc, ...`. The two header states therefore occur in real
+starts and distinguish the clean six-channel path from the observed stereo metadata path.
+
+The PCM hook widens the QSA stream but does not modify this devctl. The standalone
+`qsa_play` does not send SAD metadata at all, so it inherits the session default or the
+previous writer's value. Consequently, the car's direct one-hot test did not control this
+lower channel declaration: it could have sent six PCM slots while declaring only L/R active.
+
+This is the leading remaining HU-side mechanism, not yet the final hardware conclusion.
+The unavailable INIC/MOST formatter is the consumer whose response to inactive ASAD bits is
+not visible statically. The smallest decisive vehicle check needs no MOST analyser: capture
+the existing `convert_sad_header_to_csd` line during one six-channel start. `ASAD=0xc0`
+establishes the mismatch on our side; `ASAD=0xfc` clears it and leaves the honest boundary
+after LPASS packing.
+
+Exact ACDB bytes, 32-byte frame arithmetic, ARM/Hexagon function addresses, existing slog,
+width reconciliation and provenance:
+[`AFE_TDM_MOST_SLOT_AUDIT.md`](AFE_TDM_MOST_SLOT_AUDIT.md).
 
 ---
 
@@ -551,3 +621,4 @@ Full property records, file offsets, ARM instructions, packet layouts and hashes
 * `docs/MOST_SOURCE_BLOCKWIDTH_AUDIT.md` — DIO MC source allocation, Connect BlockWidth, and the next data-plane measurement.
 * `docs/CONNECT_BLOCKWIDTH_VALIDATION_AUDIT.md` — amplifier width acceptance, HU literal/table sites, and CSD/MOST packing boundary.
 * `docs/CSD_ACDB_CHANNEL_AUDIT.md` — CSD client/service limits, dev-78 ACDB channel/slot records, and COPP topology selection.
+* `docs/AFE_TDM_MOST_SLOT_AUDIT.md` — byte-unit slot offsets, LPASS packing, grouped frame layout, and the independent SAD/ASAD declaration.

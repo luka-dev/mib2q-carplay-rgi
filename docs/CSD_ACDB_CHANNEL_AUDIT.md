@@ -1,8 +1,13 @@
 # MU1316 CSD/ACDB channel-width audit
 
-Status: static audit completed 2026-09-02. No target binary or calibration file was
-modified. IDA sidecar databases were created and annotated next to the extracted
-`audio_service` and `libcsdIpcClient.so` binaries.
+Status: static audit completed 2026-09-02 and extended through the signed Hexagon
+LPASS implementation. No target binary or calibration file was modified. IDA sidecar
+databases were created and annotated next to the extracted `audio_service` and
+`libcsdIpcClient.so` binaries. The Hexagon pass is recorded in
+[`LPASS_COPP_TOPOLOGY_AUDIT.md`](LPASS_COPP_TOPOLOGY_AUDIT.md).
+The subsequent AFE pass establishes the byte units, complete group frame, actual
+three-byte TX packing, and the independent SAD/ASAD active-channel declaration:
+[`AFE_TDM_MOST_SLOT_AUDIT.md`](AFE_TDM_MOST_SLOT_AUDIT.md).
 
 ## Question and result
 
@@ -22,7 +27,7 @@ The direct numeric fields do **not** impose a stereo cap:
 | ADM COPP-open `dev_num_channel` | 6 | endpoint count sent to LPASS is 6 |
 | selected COPP topology | `0x10314` | Qualcomm names this speaker-stereo/default topology |
 
-The last row is the only static stereo-specific finding. Device 78 selects topology
+The last row is the only stereo-specific name in the direct configuration. Device 78 selects topology
 `0x10314` for every application mode, while the same ADM open packet independently
 declares `dev_num_channel=6`. The resulting configuration is therefore:
 
@@ -32,10 +37,15 @@ COPP dev_num_channel   = 6
 endpoint channel map   = FL FR FC LFE LS RS
 ```
 
-That is not a clean “all fields say six” result, but it is also not proof that LPASS
-actually truncates the last four channels. Static analysis proves a contradictory
-stereo-topology/six-channel-open pair. Whether this build's implementation of topology
-`0x10314` consumes only two channels is behavior inside the signed LPASS image.
+The signed LPASS image has now been decoded far enough to resolve that ambiguity. In
+this build, the name does **not** imply a two-channel output: the modules which remain
+active accept six, incompatible stereo-only modules are disabled on media reinit, and
+`audproc_svc` preserves the configured six-channel output count and map.
+
+The later slot-packing audit also proves that the six offsets are byte offsets and
+that LPASS writes all six physical 24-bit slots. It finds a separate lower declaration,
+however: the custom TDM/SAD header can carry `ASAD=0xc0` (two active positions) even
+while the PCM and endpoint remain six-channel.
 
 ## Audited artifacts
 
@@ -268,23 +278,101 @@ multichannel support, and two explicitly multichannel topology IDs are compiled 
 Their mere presence does not establish that either has the calibration/module graph
 needed by device 78.
 
+### Internal registry comparison: `0x10be3` is not a different RX graph
+
+The LPASS registry is a sequence of 20-byte records. Its two relevant records are:
+
+```text
+file 0x4ecc8c: 00010be3 00000000 c04e981c 00000000 c04e9810
+file 0x4eccdc: 00010314 00000000 c04e981c 00000000 00000000
+```
+
+The `+8` pointer is the RX graph: speaker-only topology records populate this field,
+whereas the microphone topology records populate the `+16` TX pointer. Device 78 is
+`TDM_ENTERTAINMENT1_RX`. Consequently, `0x10be3` and `0x10314` resolve to the exact same
+RX descriptor, `0xc04e981c`. At file offset `0x4ec81c` that descriptor is:
+
+```text
+0000000b c0615980 00000000
+```
+
+That is the same 11-module graph in both cases. Changing only the four dev-78 ACDB
+topology values from `0x10314` to `0x10be3` changes the requested ID but does not select
+a different primary RX processing graph. It is therefore not a meaningful graph A/B for
+the missing-channel question.
+
+`0x10312` is genuinely different:
+
+```text
+file 0x4ecca0: 00010312 00000000 c04e9804 00000000 c04e97f8
+RX descriptor 0xc04e9804 / file 0x4ec804:
+                00000003 c0615be8 00000000
+```
+
+It selects a three-module RX graph. The exact cited Qualcomm header does contain these
+IDs and calls `0x10312` both `NULL_COPP_TOPOLOGY` and `NONE_AUDIO_COPP`; it does not call
+it `LOWLATENCY_COPP_TOPOLOGY`. Those public names still do not prove this signed build's
+channel behavior.
+
+Within the stock `Speaker_cal.acdb`, `0x10312` is used by devices 9, 11, 14, 15, 35,
+40, 65, 66 and 80. Their configured widths are one channel except for dev 65 (three)
+and dev 80 (two). No stock six-channel device exercises this graph. Also, dev 15 is
+`15_TDM_ANN1_DUP_RX`; the primary announcement RX device is dev 14.
+
+### Hexagon module audit closes the remaining topology question
+
+The full `0x10314` RX descriptor contains 11 modules. Its necessary transport and
+gain modules — resampler, delay, SoftVolume, ComboPP, RX gain and Sample Slip — each
+accept up to eight channels. PBE, QEnsemble and SPA are stereo-only, but their media
+validators return failure on six channels. GenTopo at `0xc01892c0..0xc0189408` then
+sets only that module's active byte to zero, logs `failed to reinit. Disabling it`, and
+continues. Device-78 ACDB independently disables QCPR, PBE, channel IIR and MBDRC at
+their enable parameters.
+
+The three modules in `0x10312` are resampler, SoftVolume and Sample Slip. All three
+accept up to eight channels, so variant 2 is statically six-channel-safe. Topology
+`0x1031b` is an even better diagnostic candidate: the public name is
+`SPEAKER_MCH_PEAK_VOL`, its exact graph is resampler, Peak Meter and SoftVolume, and
+all three accept eight channels.
+
+Finally, the `audproc_svc` output-media path at `0xc018e9f0` uses the requested output
+count and copies all eight channel-map bytes. The compiled 5.1 converter explicitly
+bypasses equal `5.1 -> 5.1` geometry. No static `6 -> 2` conversion remains in the
+stock COPP path. Exact module records, validators and ACDB enable values are in
+[`LPASS_COPP_TOPOLOGY_AUDIT.md`](LPASS_COPP_TOPOLOGY_AUDIT.md).
+
 ## Conclusion and safe next test
 
 There is no numeric two-channel cap in either CSD library, the device's ACDB channel
 record, the slot record, or the ADM endpoint count. All of those carry six (with an
 eight-channel service ceiling).
 
-There **is** a head-unit-side stereo selection: `Speaker_cal.acdb` binds dev 78 to COPP
-topology `0x10314` for all four application types. The ADM request nevertheless asks that
-stereo-named topology to produce six endpoint channels. This is the only surviving static
-candidate on the CSD boundary, but static data alone cannot tell whether Qualcomm's
-implementation honors `dev_num_channel=6` or truncates inside that topology.
+There is a head-unit-side topology distinction: `Speaker_cal.acdb` binds dev 78 to
+`0x10314` for all four application types while simple announcement/telephone paths use
+`0x10312`. The Hexagon pass does not find a narrowing mechanism in the stock graph.
+Stereo-only modules reject the format and are disabled individually; the remaining
+modules and the output-media path accept six.
 
-A production change from `0x10314` to `0x1031b` or `0x10715` is **not** justified blindly:
-the replacement topology must have matching module/calibration data. The decisive tests
-are either:
+The former `0x10be3` artifact was not a useful graph test because `0x10be3` and
+`0x10314` share RX descriptor `0xc04e981c`; it has been removed. The current prepared
+`deploy/acdb/Speaker_cal.acdb` selects `0x10312` at all four offsets and does choose a
+different three-module graph. Its complete module list is statically six-channel-safe.
+It is still an experiment rather than a production fix because the stock database never
+uses it with more than three channels and its public semantic is NULL/NONE COPP.
 
-1. a controlled ACDB A/B using a validated six-channel COPP graph, while keeping the
-   same device/channel/slot fields; or
-2. a one-hot electrical/runtime capture at `TDM_OUT_MPL`. If C/Ls/Rs are absent there,
-   the loss is inside LPASS/COPP; if present, it remains in the downstream MOST framer.
+A production change is **not** justified by the topology name alone. If a controlled
+topology A/B is required, `0x1031b` is the strongest candidate recovered from this
+image: it is explicitly multichannel and all of its modules accept eight.
+
+The subsequent AFE audit proves that LPASS is configured to pack all six physical
+slots, so the cheapest remaining runtime discriminator is now the existing SAD start
+log rather than a topology A/B or electrical capture:
+
+```text
+convert_sad_header_to_csd: ... asad=0x?? ... sample_width=0x??
+```
+
+`ASAD=0xc0` establishes a two-active-channel HU declaration beside the six slots;
+`ASAD=0xfc` clears it and leaves the downstream INIC/MOST formatter as the boundary
+which static analysis cannot see. Full proof and addresses are in
+[`AFE_TDM_MOST_SLOT_AUDIT.md`](AFE_TDM_MOST_SLOT_AUDIT.md).
