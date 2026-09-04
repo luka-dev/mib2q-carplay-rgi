@@ -2739,15 +2739,22 @@ static int spa103_process_buffered_control(void *connection, void *request,
     switch (method) {
         case SPA103_CONTROL_SET_RATE_ANCHOR:
             if (rate == 1) {
+                /* A resume that we cannot fully parse must still resume.  Rejecting it with 400
+                 * leaves `playing` at zero and the session silent until the user presses pause
+                 * and play, which is exactly the "sometimes no sound after changing track"
+                 * symptom: the anchor only positions the timeline, while audibility depends on
+                 * nothing but the rate.  Take what parsed, note what did not, and play. */
                 if (!spa103_read_transport_time(params, "rtpTime", "mediaTimeValue",
                                                 "mediaTimeScale", &anchor) || !anchor.valid ||
                     !spa103_read_transport_time(params, "firstAudibleRTPTime",
                                                 "firstAudibleMediaTimeValue",
                                                 "firstAudibleMediaTimeScale", &firstAudible) ||
-                    !spa103_read_network_time(params, "networkTime", &networkTime)) {
-                    status = 400;
-                    goto done;
-                }
+                    !spa103_read_network_time(params, "networkTime", &networkTime))
+                    LOG_WARN(LOG_MODULE,
+                             "buffer103: %s[%u] rate=1 with an incomplete anchor "
+                             "(anchor=%d firstAudible=%d networkTime=%d); resuming anyway",
+                             methodName, (unsigned)requestNumber, anchor.valid,
+                             firstAudible.valid, networkTime.valid);
             }
             pthread_mutex_lock(&spa103_lock);
             if (spa103_receiver.session && !spa103_receiver.stop &&
@@ -2775,17 +2782,20 @@ static int spa103_process_buffered_control(void *connection, void *request,
             if (rate == 1) {
                 /* The live iOS 27 hose emitted only mediaTimeValue/mediaTimeScale here. Apple's
                  * CFDictionaryGetAudioTransportTime accepts that valid media-time form with an
-                 * absent RTP component; its sender-side serializer omits invalid rtpTime. */
-                if (!spa_cf_get_i64(params, "mediaTimeValue", &anchor.mediaTimeValue) ||
-                    !spa_cf_get_i64(params, "mediaTimeScale", &anchor.mediaTimeScale) ||
-                    anchor.mediaTimeScale == 0) {
-                    status = 400;
-                    goto done;
+                 * absent RTP component; its sender-side serializer omits invalid rtpTime.
+                 * As above: an unparseable anchor is not a reason to refuse to play. */
+                if (spa_cf_get_i64(params, "mediaTimeValue", &anchor.mediaTimeValue) &&
+                    spa_cf_get_i64(params, "mediaTimeScale", &anchor.mediaTimeScale) &&
+                    anchor.mediaTimeScale != 0) {
+                    if (!spa_cf_get_i64(params, "rtpTime", &anchor.rtpTime))
+                        anchor.rtpTime = spa103_media_time_to_rtp(anchor.mediaTimeValue,
+                                                                   anchor.mediaTimeScale);
+                    anchor.valid = 1;
+                } else {
+                    LOG_WARN(LOG_MODULE,
+                             "buffer103: %s[%u] rate=1 without a usable media time; "
+                             "resuming anyway", methodName, (unsigned)requestNumber);
                 }
-                if (!spa_cf_get_i64(params, "rtpTime", &anchor.rtpTime))
-                    anchor.rtpTime = spa103_media_time_to_rtp(anchor.mediaTimeValue,
-                                                               anchor.mediaTimeScale);
-                anchor.valid = 1;
             }
             pthread_mutex_lock(&spa103_lock);
             if (spa103_receiver.session && !spa103_receiver.stop &&
