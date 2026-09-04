@@ -1,0 +1,120 @@
+# One quick replug, and CarPlay never came back — what was established and what was not
+
+Session of 2026-09-03. Written because most of what was learned here is negative knowledge,
+the kind that is expensive to re-derive and easy to re-derive wrongly. Four of my own
+hypotheses are recorded as refuted, with the data that refuted them.
+
+## The symptom
+
+CarPlay was working. The phone was unplugged and replugged once, quickly. It never
+reconnected — through roughly 500 retry cycles over 45 minutes, until a reboot.
+
+## What is measured, and how
+
+| observation | how it was read |
+|---|---|
+| `carplay0` UP but **without the `RUNNING` flag** | `ifconfig carplay0` — compare `ecm0`, which has it. No `RUNNING` = no carrier, i.e. a link/stack problem, not our software |
+| `dio_manager` killed at `appState=TIMEOUT_STARTUP`, ~500 dumps | `smartphone_integrator_error_*` in slog |
+| the iPhone **was** enumerated: `05ac:12a8`, four configurations including `iPod USB Interface` | `usb` — so the cable, the port and the phone are fine |
+| the hook log stops right after `Captured stock ICinemoIAP`, with no `NmeTransport::Recv` | iAP2 never starts. In a healthy boot, `Recv [FF 55 02 00]` follows within 20 ms, then Identify and Auth |
+| **`/dev/io-usb/otg_dev` missing**; `io-usb-dcd` not running | `ls`. Only the host stack `/dev/io-usb/io-usb` was present |
+
+The chain: no `io-usb-dcd` → no `otg_dev` → `startncm.sh` mounts NCM on a node that does not
+exist → `carplay0` has no carrier → iAP2 never starts → dio misses its startup budget → SI
+kills and relaunches it, forever.
+
+## Why it never recovers on its own
+
+`/etc/usblauncher.lua`, the media-connector block for our hub (`0x0424:0x2530`):
+
+```lua
+bLsResult = os.execute("ls /tmp/usblauncherFlag_mediaconnector_*")
+os.execute("touch /tmp/usblauncherFlag_mediaconnector_2530_" .. obj.devno)
+if bLsResult then
+    return 'echo "... NoOp because either 0x4040 or 0x2530 already detected"'
+else
+    return "usblauncher ... -c /etc/usblauncher_otg.lua ... -n /dev/io-usb/otg"
+end
+```
+
+The launcher is started **once**, gated on a flag in `/tmp`. The flag is removed only in the
+*removed* handler — that is, when the **hub** is unplugged. The hub is soldered in. `/tmp` is
+a RAM disk. So the state survives every replug and clears only on reboot, which is exactly
+what was observed.
+
+## The fix that shipped
+
+The platform already carries the recovery, so the guard just calls it —
+`deploy/smartphone_integrator/carplay_startup.sh`:
+
+```sh
+if ! ls /dev/io-usb/otg_dev >/dev/null 2>&1; then
+    /etc/scripts/start_otg_stack_device_mode.sh      # start_stack::device,2 -> PPS usb_ctrl1
+fi
+```
+
+Verified live: with `otg_dev` missing, this brought `io-usb-dcd` back and recreated the node.
+
+It is in **startup**, not `carplay_cleanup.sh`, because startup runs on every launch including
+each retry of the failure loop, so the system heals itself on the next attempt. Cleanup may
+not run at all when SI kills dio on a startup timeout.
+
+## Mechanism notes worth keeping
+
+* The two OTG stacks are **mutually exclusive** — one controller, one mode:
+  `start_otg_stack_host_mode.sh` → `start_stack::host` → `/dev/io-usb/otg`;
+  `start_otg_stack_device_mode.sh` → `start_stack::device,2` → `/dev/io-usb/otg_dev`.
+* `usblauncher` does **not** create a stack. It attaches to one. Restarting it against a dead
+  stack achieves nothing — the stack comes from `io-usb-dcd` (`start_usb_device_stack.sh`).
+* The physical port is switched between the main hub and the OTG hub through
+  `/dev/media-con-ctrl`: `switch port <1|2> <1=OTG|0=Main> 1`. `switchMediaConnectorPort.sh`
+  is a diagnostic wrapper; the real switching is done by a binary. `startup.sh` does it at
+  boot — gated on the same `/tmp` flag.
+
+## What is still not understood
+
+**Restoring the device stack did not, by itself, bring CarPlay back.** `otg_dev` was present,
+`dio_manager` started, and iAP2 still never began. So at least one more thing was wedged and
+was not identified. The fix above addresses a real failure that would otherwise never recover;
+it is **not proven** to be sufficient on its own.
+
+## Where I was wrong
+
+Recorded deliberately — each of these looked convincing and cost time.
+
+1. **"Memory is exhausted."** `FreeMem` was ~100 MB of 2 GB and `memmonit` warned constantly.
+   But sampled over time it was *stable*, oscillating 97–105 MB. My "116 → 94 declining" was
+   sampling noise read as a trend.
+2. **"tailscaled leaked it."** It was the largest process, but its size never moved across
+   samples. (Separately true and later fixed: it really did hold ~516 MB — see
+   `qnx_go_map_lazy` — but that is a different problem and not this failure's cause.)
+3. **"The CPU is pegged."** The heartbeat line reads `CPU=81…100%`, but sampling
+   `pidin times` twice showed the busiest process at **3% of one core**. Whatever that
+   heartbeat field means, it is not what I assumed.
+4. **"`usblauncher.lua` was modified."** A `.orig` sat beside it, which looked damning. The
+   only difference was `transmit=256,receive=256` on the **LTE modem's** ecmplus line.
+
+Two coding errors made the first version of the guard silently do nothing:
+
+* `/proc/<pid>/cmdline` is **empty** for `usblauncher`, though `pidin -F "%a %A"` shows its
+  full command line. The pid scan therefore never matched.
+* `usblauncher` is not on `PATH` (it lives in `/mnt/app/armle/bin/`), so the relaunch could
+  not have run either.
+
+And one claim I asserted without testing: that `[ -e ]` returns true on QNX resource-manager
+paths that `ls` cannot open. **It does not.** All of `-e -f -c -r -x -s -d` correctly return
+false for a missing `/dev/io-usb/otg`. `-x` is the one that misleads — a character device is
+not executable, so it returns false on a *live* node too.
+
+Finally, an action that made things worse: switching media-connector port 1 to the OTG hub
+moved the phone off the main host controller, after which it stopped enumerating at all.
+Switching back did not immediately restore it. The command was reversible; the state was not.
+
+## Reading the logs here
+
+`sloginfo`'s ring buffer is flushed in about **two minutes** by a
+`devp-iso-mmx[isoTX2]` / videoCore open-close storm — 59% of all lines. The originating event
+is therefore usually gone by the time anyone looks. Absence of evidence in slog proves
+nothing; find the moment in `/tmp/carplay_hook.log` instead, which is ours and much quieter.
+
+Related: `si_stack_restart_kills_carplay0` and `usb_device_stack_replug_wedge` in memory.
