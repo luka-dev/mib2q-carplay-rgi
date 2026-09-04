@@ -110,3 +110,36 @@ to be told. Only the car answers that.
 * `docs/AUDIO_5_1_STATE.md` — the whole investigation, with the negatives.
 * `docs/AFE_TDM_MOST_SLOT_AUDIT.md` — TDM slot geometry and where this asymmetry was found.
 * `deploy/deva-ctrl-qc/BUILD_CHAIN.md` — the rendering fix that came first.
+
+
+---
+
+## The other half: updateFeedback carries the sender's clock (2026-09-03)
+
+Announcing six channels got the channels to the speakers, but with `AUDIO_SPATIAL=1` the
+buffered session then played nothing and the phone skipped tracks as though they were
+unplayable. Same shape of mistake as the SAD header, one layer up.
+
+The hook replaced the `streams` array of every `updateFeedback` response with `[]` for an
+active type-103 session. The stock response is:
+
+    {'streams': [{'sr': 48004.0625, 'type': 100}]}
+
+`sr` is a **measured** rate, not a nominal one -- the receiver's clock as the sender should
+see it, and how the phone paces delivery. Blanking it did not merely omit a stream list, it
+took away the only clock reference the sender had. Delivery collapsed to about one packet a
+second where the stream needs forty-seven, so flush boundaries armed at one moment cleared
+three minutes later and everything in between was discarded by design.
+
+Measured in the failing session: boundary armed 00:44:31, crossed 00:47:42, 212 packets in
+191 seconds.
+
+Blanking is now opt-in behind `AUDIO_FEEDBACK_BLANK`. With it off an Atmos track plays, all
+six channels carry content, `underrunFrames` is zero and every ring read returns a full
+fragment.
+
+The stock response never mentions our type-103 stream -- the phone is fed clock feedback for
+the realtime type-100 stream only, and that is enough. Synthesising an entry for the buffered
+stream was the fallback plan and proved unnecessary.
+
+**Still open:** on connecting, the phone skips a few tracks before settling on one it plays.
