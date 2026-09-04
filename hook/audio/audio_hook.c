@@ -4030,8 +4030,15 @@ int AirPlayReceiverSessionControl(void *session, uint32_t flags, const void *com
 
     result = real(session, flags, command, qualifier, params, responseOut);
 
+    /* Blanking the feedback's stream list is how the phone was told nothing about our buffer.
+     * The failing session shows what that costs: a flush boundary armed at 00:44:31 took until
+     * 00:47:42 to clear, 191 seconds during which 212 packets arrived -- about one a second
+     * against the ~47 a second the stream needs.  We discard until the boundary, the boundary
+     * needs packets, and the phone will not send them because its flow control has been handed
+     * an empty list.  AUDIO_FEEDBACK_BLANK=1 restores the old behaviour for an A/B. */
     if (result == 0 && responseOut && *responseOut &&
         strcmp(commandText, "updateFeedback") == 0 &&
+        spa_env_on("AUDIO_FEEDBACK_BLANK") &&
         spa103_is_active_for_session(session)) {
         void *streamsKey = cfa_str(0, "streams", SPA_CFENC_UTF8);
         void *emptyStreams = cfa_arrm(0, 0, cfa_arr_cb);
