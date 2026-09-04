@@ -171,3 +171,22 @@ Cinemo's `libNmeAudioAAC.so` and `dio_manager` already links `libNmeSDK.so`.
 
 Until that exists the honest states are: `AUDIO_SPATIAL=0` and everything plays in stereo, or
 `AUDIO_SPATIAL=1` with `[65]` and spatial becomes an Atmos-only mode.
+
+
+### Does iOS upmix stereo into the spatial stream? No.
+
+Worth settling, because a lot of effort went into assuming it might. Neither `AirPlaySender`
+nor `AirPlaySupport` contains an upmix or spatialisation routine -- no `upmix`, no
+`spatializ*`, nothing of that shape. What exists is badging:
+
+    kAPSBadgingFormatInfoType_{AppleSpatialAudio, DolbyAtmos, DolbyAudio, Stereo, Surround}
+    audioStream_updateBadgingFormatInfoAndPostNotification
+
+"Spatial" is a label describing what is already being sent, not evidence that the sender
+converted anything. The spatial rendering heard on the phone itself is a local playback path
+and is not applied before transmission.
+
+So there is no configuration under which iOS delivers an ordinary track as APAC 5.1. Non-spatial
+content always arrives in a stereo codec, which makes an AAC-LC decoder the only route to
+"everything plays" rather than one option among several -- and it removes the idea of switching
+the advertised index per listening session, since there is nothing to switch to.
