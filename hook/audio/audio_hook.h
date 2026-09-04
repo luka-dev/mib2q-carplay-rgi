@@ -92,6 +92,11 @@
                                      * false, so the phone may simply never offer it. */
 #define SPA_APAC_48K_5_1    65      /* APAudioFormatIndex; APAC/48000/5.1 */
 #define SPA_APAC_48K_5_1_2  66      /* APAudioFormatIndex; APAC/48000/5.1.2 */
+#define SPA_ALAC_48K_24_STEREO 21   /* APAudioFormatIndex; ALAC/48000/24/stereo -- lossless and
+                                     * already at the sink rate, so no resampler.  In the
+                                     * buffered sender's set only under an extra condition. */
+#define SPA_AAC_LC_48K_STEREO 23    /* APAudioFormatIndex; AAC-LC/48000/stereo -- in the set
+                                     * whenever Atmos is allowed, and needs no resampler. */
 #define SPA_AAC_LC_44K_STEREO 22    /* APAudioFormatIndex; AAC-LC/44100/stereo -- indices below
                                      * 64 map to 1<<index, so this is legacy bit 22, the one the
                                      * buffered sender prefers first for ordinary content. */

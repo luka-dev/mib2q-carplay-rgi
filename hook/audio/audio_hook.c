@@ -511,15 +511,18 @@ static int spa_probe103_extra_index(int primaryIndex)
      * zero unless the device is an APM speaker, so bit 11 never reaches a CarPlay session. */
     if (end && end != value && !*end &&
         (candidate == SPA_APAC_48K_5_1 || candidate == SPA_APAC_48K_5_1_2 ||
-         candidate == SPA_APAC_48K_STEREO || candidate == SPA_AAC_LC_44K_STEREO)) {
+         candidate == SPA_APAC_48K_STEREO || candidate == SPA_AAC_LC_44K_STEREO ||
+         candidate == SPA_AAC_LC_48K_STEREO || candidate == SPA_ALAC_48K_24_STEREO)) {
         if (candidate == primaryIndex) return -1;
         return (int)candidate;
     }
 
     LOG_ERROR(LOG_MODULE,
-              "probe103: invalid %s value '%s'; allowed extra gate indices: %d/%d/%d/%d; ignored",
-              SPA_103_EXTRA_INDEX_ENV, value, SPA_APAC_48K_STEREO, SPA_APAC_48K_5_1,
-              SPA_APAC_48K_5_1_2, SPA_AAC_LC_44K_STEREO);
+              "probe103: invalid %s value '%s'; allowed extra gate indices: "
+              "%d/%d/%d/%d/%d/%d; ignored",
+              SPA_103_EXTRA_INDEX_ENV, value, SPA_ALAC_48K_24_STEREO, SPA_AAC_LC_44K_STEREO,
+              SPA_AAC_LC_48K_STEREO, SPA_APAC_48K_STEREO, SPA_APAC_48K_5_1,
+              SPA_APAC_48K_5_1_2);
     return -1;
 }
 
