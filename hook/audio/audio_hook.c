@@ -1116,6 +1116,8 @@ typedef struct {
     int statsHavePrevious;
     uint32_t sampleRate;
     unsigned decoderChannels;       /* what the cookie asked the decoder to produce */
+    int probeFraming;               /* negotiated a codec we cannot decode: open one packet,
+                                     * report how it is framed, decode nothing */
     uint32_t sourceChannels;
     uint32_t outputChannels;
     uint32_t channelLayoutTag;
@@ -1198,10 +1200,19 @@ static void spa103_render_start(int64_t formatIndex, int haveKey)
     spa103_render.outputChannels = outputChannels;
     spa103_render.channelLayoutTag = 0;
     spa103_render.formatIndex = formatIndex;
+    spa103_render.probeFraming = 0;
     spa103_render.atmosMode = config->atmosMode;
 
     if (!spa103_render.ring)
         state = SPA_103_RENDER_NO_MEMORY;
+    else if (formatIndex == SPA_AAC_LC_44K_STEREO ||
+             formatIndex == SPA_AAC_LC_48K_STEREO) {
+        /* No AAC decoder yet.  Let one packet through far enough to be authenticated and
+         * opened, so its framing can be reported -- ADTS starts 0xFF 0xF?, a raw access unit
+         * does not -- then stop.  Nothing is decoded and nothing reaches the sink. */
+        spa103_render.probeFraming = 1;
+        state = SPA_103_RENDER_WAITING;
+    }
     else if (formatIndex != SPA_APAC_48K_STEREO &&
              formatIndex != SPA_APAC_48K_5_1 &&
              formatIndex != SPA_APAC_48K_5_1_2)
@@ -1507,6 +1518,23 @@ static void spa103_render_frame(const uint8_t *packet, size_t length)
     state = spa103_render.playing;
     pthread_mutex_unlock(&spa103_render.lock);
     if (!state) return;         /* rate=0: authenticate/drain, but never render stale media */
+
+    if (spa103_render.probeFraming) {
+        static int reported;
+        if (!reported && audio && audioLength) {
+            size_t n = audioLength < 24 ? audioLength : 24;
+            char hex[3 * 24 + 1];
+            size_t i;
+            reported = 1;
+            for (i = 0; i < n; i++) sprintf(hex + i * 3, "%02x ", audio[i]);
+            hex[n * 3 - 1] = 0;
+            LOG_WARN(LOG_MODULE,
+                     "buffer103: framing probe, index %lld, access unit %u bytes, first: %s"
+                     " -- ADTS starts ff f?, a raw AU does not",
+                     (long long)spa103_render.formatIndex, (unsigned)audioLength, hex);
+        }
+        return;
+    }
 
     /* Bring the decoder up on the first frame that names a cookie we hold.  Doing it here rather
      * than at SETUP is not laziness: SETMAGICCOOKIE arrives asynchronously on the RTSP control

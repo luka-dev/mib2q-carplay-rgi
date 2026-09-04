@@ -1,4 +1,11 @@
-# Task: decode AAC-LC/44.1 on the buffered stream so non-spatial tracks play
+# Task: decode AAC-LC/48 kHz on the buffered stream so non-spatial tracks play
+
+> **2026-09-03 measurement update:** this brief originally named index 22 and assumed
+> per-track selection. The car subsequently selected index 23
+> (`AAC-LC/48000/stereo`), and `[65,23]` selected 23 once for the whole session.
+> The corrected static result and implementation plan are in
+> [`AAC_BUFFERED_PATH_PLAN.md`](AAC_BUFFERED_PATH_PLAN.md). The text below is kept as
+> the original task statement, with the now-known corrections folded in.
 
 ## The problem, stated exactly
 
@@ -6,7 +13,7 @@ With `AUDIO_SPATIAL=1` the hook advertises a buffered type-103 media stream and 
 natively-Atmos tracks in discrete 5.1 -- that part works end to end, six channels at the
 speakers, counters clean. Every other track is skipped.
 
-The cause is settled, and three candidate second formats were tried on the car:
+The cause is settled, and the following candidate formats were tried on the car:
 
 | index | what it is | outcome |
 |--:|---|---|
@@ -17,9 +24,11 @@ The cause is settled, and three candidate second formats were tried on the car:
 | 64 | APAC/48000/stereo | **never selected**: iOS gates it behind `bufferedAPACStereo`, static default false |
 | 11 | PCM | not offered: `APAudioFormatGetBufferedPassthroughSupportedFormats` returns zero unless the device is an APM speaker |
 
-The format is chosen per track inside an already-selected type 103, and the researched sender
-code has no fallback to the realtime type 100. So index 22 is the only route that makes
-ordinary content arrive at all, and it needs decoding on our side.
+The phone's tested behavior is session-wide, not per-track: `[65,23]` selected 23 for all
+content in that type-103 session, including Atmos material. There is still no observed fallback
+to realtime type 100. Index 23 is therefore the production AAC route for ordinary content and
+requires decoding, but merely advertising 65 and 23 together does not provide automatic
+APAC-spatial/AAC-stereo switching.
 
 ## What has to be built
 
@@ -43,17 +52,18 @@ without a discovered channel clamp. Treat that as the starting reference, not as
 
 ## What to determine, before any code
 
-1. **The framing.** Inside APAP, is an index-22 payload raw AAC-LC access units, ADTS, or
+1. **The framing.** Inside APAP, is an index-23 payload raw AAC-LC access units, ADTS, or
    something else? The capture in `captures/spatial_silent_20260903/` is APAC, so a fresh
-   index-22 capture is needed -- say what to capture and how to recognise the framing.
+   index-23 capture is needed -- say what to capture and how to recognise the framing.
 2. **The Cinemo contract.** Exact `CinemoCreateAudioCodec` arguments for AAC-LC, what it returns,
    how PCM comes out, and whether it can be driven from a hook thread inside `dio_manager`
    without disturbing the codec instances Cinemo already owns for local media. That last point is
    a real risk: the same library is serving the stock media path.
-3. **Resampling.** Where 44.1 -> 48 should happen and at what quality: inside the decode wrapper
-   before the ring, or in the sink. Say which existing code is closest and whether anything on
-   the unit already resamples that we could reuse rather than writing one.
-4. **Whether the magic cookie differs** for index 22 and what it carries -- the existing path
+3. **Resampling.** Confirm that index 23 needs none. For the index-22 fallback only, determine
+   where 44.1 -> 48 would happen, which existing implementation is reusable, and why it belongs
+   before the ring rather than in the 48 kHz-only sink.
+4. **Whether the magic cookie differs** for index 23 and what it carries -- the live session
+   measured a distinct 39-byte cookie, but its bytes still need to be captured. The existing path
    builds its decoder from the cookie, and the render code now replaces a stored cookie when its
    bytes change, so an AAC cookie must not be mistaken for an APAC one.
 
@@ -63,8 +73,10 @@ Static analysis and a written plan; no code in this pass. The car is in a workin
 Atmos and that state is expensive -- say clearly which steps can be tested without risking it,
 and which need a drive.
 
-Do not propose replacing the APAC path. The two must coexist: index 65 stays for spatial
-content, 22 handles the rest, and the render path dispatches on the negotiated index.
+Do not replace the APAC path. Both decoder branches must coexist and dispatch on the negotiated
+index: 65 remains the spatial/APAC branch and 23 is the 48 kHz AAC branch. This implementation
+requirement does not override the separate vehicle finding that iOS selected only one of them for
+an entire session.
 
 ## Deliverable
 

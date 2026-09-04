@@ -151,23 +151,26 @@ stream was the fallback plan and proved unnecessary.
 
 With `AUDIO_SPATIAL=1` the phone skips ordinary tracks and plays only natively-Atmos ones. It
 is not declining to upmix: advertising `audioOutputFormatsExtended:[65]` leaves a non-spatial
-item with no format it can arrive in, so the sender's per-item format choice fails and it moves
-on. The choice is made per track inside an already-selected type 103, and the researched sender
-code has no fallback to the realtime type 100.
+item with no usable stereo representation. There is no observed fallback to realtime type 100.
 
-Three second indices were tried on the car, and the results are worth keeping because two of
-them look right on paper:
+A later vehicle test corrects the earlier per-track interpretation: the phone selected one
+buffered format for the whole session. With `[65,23]` it selected 23 for everything and did not
+return to APAC 65 for an Atmos item.
+
+Four alternative indices were tried on the car, and the results are worth keeping because
+several of them look right on paper:
 
 | index | what it is | outcome |
 |---|---|---|
-| 22 | AAC-LC/44100/stereo | **selected** -- skipping stopped, the phone asked for 22 and the APAP header carried 0xAC44 (44100). Nothing decoded it, so playback ran silent. |
+| 23 | AAC-LC/48000/stereo | **selected and preferred** -- the APAP time scale was 0xBB80 (48000), and the stream carried a separate 39-byte cookie. Nothing decoded it, so playback was silent. No sample-rate conversion is needed. |
+| 22 | AAC-LC/44100/stereo | **selected in the earlier test** -- skipping stopped, the phone asked for 22 and the APAP time scale was 0xAC44 (44100). It is now only a fallback because it also needs 44.1 -> 48 resampling. |
 | 64 | APAC/48000/stereo | **never selected** -- advertised as `[65,64]`, the phone still requested 65. iOS gates it behind `bufferedAPACStereo`, whose static default is false. |
 | 11 | PCM | not offered at all: `APAudioFormatGetBufferedPassthroughSupportedFormats` returns zero unless the device is an APM speaker, so bit 11 never reaches a CarPlay session. |
 
-So the negotiation half of the AAC route is proven -- the phone will send ordinary content as
-AAC-LC/44.1 over the buffered stream when index 22 is advertised. Playing it needs an AAC-LC
-decoder and 44.1 -> 48 resampling, since every HU media endpoint is 48 kHz only. The unit has
-Cinemo's `libNmeAudioAAC.so` and `dio_manager` already links `libNmeSDK.so`.
+So the negotiation half of the AAC route is proven: the phone sends buffered stereo AAC-LC.
+Index 23 is the correct production candidate because it matches every HU media endpoint at
+48 kHz and therefore needs an AAC decoder but no resampler. The unit has Cinemo's
+`libNmeAudioAAC.so`, and `dio_manager` already links `libNmeSDK.so`.
 
 Until that exists the honest states are: `AUDIO_SPATIAL=0` and everything plays in stereo, or
 `AUDIO_SPATIAL=1` with `[65]` and spatial becomes an Atmos-only mode.
@@ -187,6 +190,37 @@ converted anything. The spatial rendering heard on the phone itself is a local p
 and is not applied before transmission.
 
 So there is no configuration under which iOS delivers an ordinary track as APAC 5.1. Non-spatial
-content always arrives in a stereo codec, which makes an AAC-LC decoder the only route to
-"everything plays" rather than one option among several -- and it removes the idea of switching
-the advertised index per listening session, since there is nothing to switch to.
+content needs a stereo codec, which makes an AAC-LC decoder necessary. It does not solve automatic
+mode selection: the measured phone chose index 23 once for the session, so `[65,23]` currently
+means buffered stereo for that session, not per-track spatial switching.
+
+Exact MHI2Q framing evidence, Cinemo ABI, cookie parser boundary, threading rules and the ordered
+no-drive validation plan are recorded in
+[`AAC_BUFFERED_PATH_PLAN.md`](AAC_BUFFERED_PATH_PLAN.md).
+
+
+### Framing of an index-23 stream, measured on the car (2026-09-03)
+
+The last unknown in the AAC plan, settled with a one-shot probe that authenticates and opens a
+packet, reports it, and decodes nothing.
+
+The APAP extension TLVs come first, and they carry more than expected:
+
+    02 01 17                        format index, 0x17 = 23
+    11 08 0e ae 55 37 e8 3c 74 18   magic cookie id
+    12 27 03 80 80 80 22 ...        the cookie itself, all 39 bytes, inline
+
+So the decoder configuration is repeated in **every packet**, not only in SETMAGICCOOKIE. That
+removes a dependency on command ordering -- a track change brings its new ASC alongside the
+data -- which is the exact hazard behind the duplicate-cookie handling that cost time earlier.
+
+The access unit that follows is raw:
+
+    access unit 904 bytes, first: 21 4e aa fb ff fd ef fd ...
+
+Not `ff f1` or `ff f9`, so there is no ADTS header: one raw AAC-LC access unit per APAP media
+item, handed to the decoder as-is.
+
+Combined with the cookie parse, the AAC route is now fully specified: index 23, AAC-LC at
+48000 Hz stereo (ASC `11 90`, reached by walking the ES_Descriptor rather than a fixed offset),
+raw access units, no resampler.

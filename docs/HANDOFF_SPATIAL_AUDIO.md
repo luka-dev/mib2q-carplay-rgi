@@ -1443,3 +1443,32 @@ seconds. Order:
    the HTTP log categories first, to see the real requests).
 2. Put the returned anchor on the phone's NTP timeline, so the 10 s clock-lock wall is cleared too.
 3. Only then decrypt (§6, Pioneer-derived ChaCha20-Poly1305 contract) and decode.
+
+---
+
+## Buffered AAC-LC handoff — MHI2Q, 2026-09-03
+
+The older type-103 milestone ordering above has been completed for APAC: control
+methods, authenticated APAP transport, feedback, six-channel SAD metadata and the
+APAC decoder now work on the vehicle. Do not restart that investigation.
+
+The remaining ordinary-content path is AAC-LC. Vehicle tests established index 23
+as `AAC-LC/48000/stereo`; its APAP time scale is `0xBB80` and its magic cookie is
+a separate 39-byte object. Index 22/44100 is only a fallback, so the production
+path needs no resampler.
+
+Static analysis of the actual MHI2Q Cinemo SDK/plugin, iOS APAP producer and a
+working ARMv7 donor recovered the exact ABI and lifecycle. The one remaining
+discovery gate is a short stationary index-23 capture containing the authenticated
+APAP records and exact cookie bytes. That capture must prove the AU framing and
+extract the raw ASC before implementation. No drive is required.
+
+Important policy limit: `[65,23]` selected 23 for the whole session, not per
+track. Retaining both decoder dispatches is correct engineering, but it does not
+make iOS alternate automatically between APAC spatial and AAC stereo.
+
+Continue from [`AAC_BUFFERED_PATH_PLAN.md`](AAC_BUFFERED_PATH_PLAN.md), which
+contains target hashes, function addresses, exact `CinemoMediaType` fields,
+`Write(..., 1, 0, 1)`, callback/thread restrictions, cookie parsing, the optional
+index-22 Speex fallback and risk-ordered tests. This analysis changed no hook or
+deployed binary. Safe startup remains `AUDIO_SPATIAL=0`.

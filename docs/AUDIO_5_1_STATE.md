@@ -641,6 +641,41 @@ documented in
 
 ---
 
+## 20. Buffered AAC-LC static closure and session policy — 2026-09-03
+
+The car selected extended index 23 (`AAC-LC/48000/stereo`) when it was offered.
+Its APAP time scale was `0x0000bb80`, and the setup delivered a distinct 39-byte
+magic cookie. This supersedes index 22 as the production candidate: index 23
+matches the HU's 48 kHz endpoints and needs no resampling.
+
+Static analysis on the MHI2Q MU1316 binaries recovered the complete Cinemo call
+boundary. `libNmeSDK.so` creates a fresh audio-codec wrapper; the registered
+`libNmeAudioAAC.so` plugin accepts media type 5/subtype `0x101a`, expects a raw
+MPEG-4 AudioSpecificConfig, and returns 48 kHz stereo S16 through a callback.
+The working MH2p adapter proves one AAC access unit per `Write` call with trailing
+arguments `(1, pts=0, 1)`. MH2p is an ABI oracle only; the implementation target
+and all library hashes in the plan are MHI2Q.
+
+Two facts deliberately remain separate. APAP copies the sender's compressed
+sample bytes verbatim and the target decoder's elementary-stream path does not
+add framing, which strongly indicates one raw AAC AU per APAP media item. The
+exact index-23 APAP bytes and 39-byte cookie were not retained, so a short
+stationary capture must still prove raw/ADTS/LOAS and extract the ASC before code.
+
+The phone also falsified the earlier per-track-switching assumption. Advertising
+`[65,23]` selected 23 once for the whole session; an Atmos item did not switch
+back to APAC 65. The decoder should still retain separate APAC and AAC dispatches,
+but current honest operating modes are type 100 stereo, type 103 `[65]` spatial
+only, and—after AAC decode—type 103 `[23]` buffered stereo. Automatic switching
+requires a separately proved renegotiation mechanism.
+
+The exact framing/cookie confidence ledger, C ABI, callback/thread restrictions,
+index-22 resampler fallback and ordered risk gates are in
+[`AAC_BUFFERED_PATH_PLAN.md`](AAC_BUFFERED_PATH_PLAN.md). This pass changed no
+hook, firmware or deployed binary. The safe default remains `AUDIO_SPATIAL=0`.
+
+---
+
 ## Sources
 
 * `tools/qsa-emu/` — the QEMU harness, `HANDOFF.md` and `README.md` carry the traps.
@@ -658,3 +693,4 @@ documented in
 * `docs/CSD_ACDB_CHANNEL_AUDIT.md` — CSD client/service limits, dev-78 ACDB channel/slot records, and COPP topology selection.
 * `docs/AFE_TDM_MOST_SLOT_AUDIT.md` — byte-unit slot offsets, LPASS packing, grouped frame layout, and the independent SAD/ASAD declaration.
 * `docs/APAC_FORMAT_INDEX_AUDIT.md` — complete iOS 27 format-index enumeration, APAC stereo index 64, legacy-mask semantics, and buffered/realtime selection boundary.
+* `docs/AAC_BUFFERED_PATH_PLAN.md` — MHI2Q AAC-LC framing, Cinemo ABI, cookie contract, thread model and safe implementation plan.

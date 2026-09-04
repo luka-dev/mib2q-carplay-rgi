@@ -400,3 +400,23 @@ At audit time the working tree contains an uncommitted change that permits index
 tree's `spa103_render_start` rejects every format except APAC 65/66, so index 22
 will become `unsupported-format`; it does not add AAC decode. Do not deploy that
 advertisement as a stereo fix without a real type-103 AAC dispatch and tests.
+
+## 7. Vehicle correction: index 23 and session-wide selection — 2026-09-03
+
+Later vehicle measurements supersede the safe-action proposal above:
+
+* index 64 was not selected, consistent with `bufferedAPACStereo` being false;
+* index 23 was selected as AAC-LC/48000/stereo, with APAP time scale `0xBB80`
+  and a separate 39-byte magic cookie;
+* `[65,23]` selected 23 once for the entire buffered session. It did not switch
+  back to 65 for an Atmos track.
+
+Therefore index 23, not 22, is the AAC implementation target and requires no
+resampler. The static selector can re-evaluate candidate descriptions, but that
+does not establish observable per-track renegotiation of an active stream. The
+vehicle result is authoritative for this phone/build.
+
+The decoder branches should remain format-index keyed—65 for APAC spatial and 23
+for AAC stereo—but advertising both is not currently an automatic content switch.
+The complete MHI2Q implementation and validation plan is
+[`AAC_BUFFERED_PATH_PLAN.md`](AAC_BUFFERED_PATH_PLAN.md).
