@@ -1,8 +1,11 @@
 # Discrete 5.1 CarPlay audio — everything known, and what is still open
 
-Status as of 2026-09-02. The original rendering defect is fixed (§14–15), but the
-remaining delivery fault is not: a one-hot six-channel test delivers L/R and loses
-C/Ls/Rs before the amplifier matrix. The newest static boundary result is in §18.
+Status as of 2026-09-03. Discrete 5.1 CarPlay now works end to end in the vehicle.
+The last two faults were both declaration/control mismatches rather than PCM
+corruption: the SAD header announced two active channels over six populated slots,
+and the hook blanked `updateFeedback`, removing the sender's clock reference. Both
+are corrected and vehicle-confirmed (§19). The historical fault-localisation below
+is retained to prevent those closed paths from being rediscovered.
 
 > ## Localised on 2026-09-02: the CarPlay stack is not at fault
 >
@@ -606,6 +609,38 @@ width reconciliation and provenance:
 
 ---
 
+## 19. Vehicle closure: SAD and feedback now match the stream — 2026-09-03
+
+The leading §18 mechanism was real. The active stream contained six valid PCM
+slots, but the SAD sideband still described the original two-channel source. The
+fixed path sends the six-channel SAD/ASAD geometry with the widened stream. With
+that declaration corrected, C/LFE/Ls/Rs are no longer discarded before the
+amplifier matrix.
+
+A second independent control mismatch was also real. The hook's experimental
+`updateFeedback` rewrite replaced the stock stream list with an empty list. That
+removed the clock/rate reference used by the sender: delivery collapsed to roughly
+one packet per second. The production behavior now preserves the stock feedback
+response; the vehicle reports a clock reference of `sr=48004.0625`, type 100, and
+normal packet delivery.
+
+After both corrections, discrete 5.1 CarPlay plays correctly end to end. This
+accepts and closes the earlier byte transport, CSD topology, AFE slot packing, MOST
+allocation, amplifier sink selection and SHARC matrix audits as clean boundaries.
+
+The remaining symptom is content selection, not six-channel rendering. The
+buffered type-103 `/info` entry currently offers only extended index 65
+(`APAC/48000/5.1`), so stereo catalogue items have no selectable format inside that
+buffered list. The iOS 27 enumeration corrects an old note: index 64 is
+`APAC/48000/stereo`. It is feature-gated by `bufferedAPACStereo`; a standard
+ungated buffered-stereo candidate is index 22 (AAC-LC), which the current APAC-only
+HU path is not yet proven to decode. Exact indices, legacy-bit semantics, stream
+selection, confidence and the bounded, negotiation-only `[64,65]` experiment are
+documented in
+[`APAC_FORMAT_INDEX_AUDIT.md`](APAC_FORMAT_INDEX_AUDIT.md).
+
+---
+
 ## Sources
 
 * `tools/qsa-emu/` — the QEMU harness, `HANDOFF.md` and `README.md` carry the traps.
@@ -622,3 +657,4 @@ width reconciliation and provenance:
 * `docs/CONNECT_BLOCKWIDTH_VALIDATION_AUDIT.md` — amplifier width acceptance, HU literal/table sites, and CSD/MOST packing boundary.
 * `docs/CSD_ACDB_CHANNEL_AUDIT.md` — CSD client/service limits, dev-78 ACDB channel/slot records, and COPP topology selection.
 * `docs/AFE_TDM_MOST_SLOT_AUDIT.md` — byte-unit slot offsets, LPASS packing, grouped frame layout, and the independent SAD/ASAD declaration.
+* `docs/APAC_FORMAT_INDEX_AUDIT.md` — complete iOS 27 format-index enumeration, APAC stereo index 64, legacy-mask semantics, and buffered/realtime selection boundary.

@@ -492,22 +492,34 @@ static int spa_probe103_index(void)
  * weakening the primary selector or silently changing proven APAC negotiation. */
 static int spa_probe103_extra_index(int primaryIndex)
 {
-    if (spa_audio_config()->usesNewControls) return -1;
+    /* The new-controls path used to refuse a second index outright.  That is what left the
+     * advertisement at [65] no matter what SPATIAL_103_EXTRA_INDEX said, and a non-spatial track
+     * with no format it can arrive in is a track the phone skips.  The variable is explicit, so
+     * honour it here too; absent or empty still means one index. */
     const char *value = getenv(SPA_103_EXTRA_INDEX_ENV);
     char *end = 0;
     long candidate;
 
     if (!value || !value[0]) return -1;
     candidate = strtol(value, &end, 0);
+    /* 22 is AAC-LC/44.1/stereo.  It is allowed because the sender's own buffered set contains it
+     * unconditionally: APAudioFormatGetSupportedTransportAudioFormatsForBufferedSender returns
+     * 0x400000 (bit 22) plus the spatial bits, and APAudioFormatCopyPreferredBufferedAudioFormats
+     * reaches for 0x400000 first.  Advertising 65 alone leaves a non-spatial track with no format
+     * it can arrive in, which is why the phone skips those.  PCM is not an option despite being
+     * third in that preference list: APAudioFormatGetBufferedPassthroughSupportedFormats returns
+     * zero unless the device is an APM speaker, so bit 11 never reaches a CarPlay session. */
     if (end && end != value && !*end &&
-        (candidate == SPA_APAC_48K_5_1 || candidate == SPA_APAC_48K_5_1_2)) {
+        (candidate == SPA_APAC_48K_5_1 || candidate == SPA_APAC_48K_5_1_2 ||
+         candidate == SPA_APAC_48K_STEREO || candidate == SPA_AAC_LC_44K_STEREO)) {
         if (candidate == primaryIndex) return -1;
         return (int)candidate;
     }
 
     LOG_ERROR(LOG_MODULE,
-              "probe103: invalid %s value '%s'; allowed extra gate indices: %d/%d; ignored",
-              SPA_103_EXTRA_INDEX_ENV, value, SPA_APAC_48K_5_1, SPA_APAC_48K_5_1_2);
+              "probe103: invalid %s value '%s'; allowed extra gate indices: %d/%d/%d/%d; ignored",
+              SPA_103_EXTRA_INDEX_ENV, value, SPA_APAC_48K_STEREO, SPA_APAC_48K_5_1,
+              SPA_APAC_48K_5_1_2, SPA_AAC_LC_44K_STEREO);
     return -1;
 }
 
@@ -1187,7 +1199,8 @@ static void spa103_render_start(int64_t formatIndex, int haveKey)
 
     if (!spa103_render.ring)
         state = SPA_103_RENDER_NO_MEMORY;
-    else if (formatIndex != SPA_APAC_48K_5_1 &&
+    else if (formatIndex != SPA_APAC_48K_STEREO &&
+             formatIndex != SPA_APAC_48K_5_1 &&
              formatIndex != SPA_APAC_48K_5_1_2)
         state = SPA_103_RENDER_UNSUPPORTED_FORMAT;
     else if (!spa103_render.codec)

@@ -1338,3 +1338,46 @@ QEMU image cannot execute MPL5's Audioman-created route, so acoustic causality
 still needs the controlled six-only A/B. Full addresses, table records, call
 chain, harness scope, and fix constraints are in
 [`../ROUTER_INPUT_WIDTH_AUDIT.md`](../ROUTER_INPUT_WIDTH_AUDIT.md).
+
+---
+
+## 27. VEHICLE CLOSURE AND iOS FORMAT-INDEX CORRECTION — 2026-09-03
+
+Sections 25–26 are retained as experiment history, but their open rendering state
+is superseded. Discrete 5.1 CarPlay now works end to end in the vehicle. Two final
+faults had the same form: metadata/control announced something other than the
+stream that actually existed.
+
+1. Six PCM slots were present, but the SAD header still announced the original
+   two-channel source. Sending the six-channel SAD/ASAD geometry made the remaining
+   channels reach the amplifier.
+2. The experimental hook blanked `updateFeedback`. That removed the sender's clock
+   reference and reduced delivery to about one packet per second. Preserving the
+   stock response restored the measured `sr=48004.0625`, type-100 clock reference
+   and normal delivery.
+
+The remaining catalogue-selection issue has now been enumerated directly from
+iOS 27 `24A5418b`. Contrary to the earlier handoff, APAC stereo exists:
+
+```text
+64 APAC/48000/stereo
+65 APAC/48000/5.1
+```
+
+The full APAC set is 64, 65, 66, 67, 68, 76, 77 and 92. All APAC indices are
+extended-only: `APAudioFormatIndexToAPAudioFormat` returns `1ULL << index` only
+for indices below 64, so none has a legacy mask bit. The current legacy
+`0x400000` is bit/index 22, AAC-LC 44.1-kHz stereo, and remains a separate
+type-103 compatibility field.
+
+Multiple values in `audioOutputFormatsExtended` are normal. Apple's APAC builder
+uses optional 64 followed by 65/66/67/76/77/68/92, while its receiver builder
+places ordinary stereo codecs and spatial APAC codecs in the same list. The
+smallest APAC-only negotiation probe is `[64,65]`, but use of 64 is guarded by
+`bufferedAPACStereo` with a static default of false. Current HU render code also
+accepts only APAC 65/66, so neither advertising 64 nor advertising AAC index 22 is
+yet an audible fix by itself.
+
+The complete 0–94 table, loaded addresses, image hashes, legacy-bit rules,
+type-100/type-103 selection boundary, confidence and safe test order are in
+[`../APAC_FORMAT_INDEX_AUDIT.md`](../APAC_FORMAT_INDEX_AUDIT.md).

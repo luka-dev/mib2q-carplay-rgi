@@ -1,29 +1,31 @@
 # Handoff — CarPlay discrete 5.1 on an Audi MHI2Q head unit
 
 Reverse-engineering handoff. Everything below is either **verified on hardware** or **verified in a
-disassembler**, and it is labelled which. Full history in `docs/reference/AUDIO.md` §9–§26.
+disassembler**, and it is labelled which. Full history in `docs/reference/AUDIO.md` §9–§27.
 
-> **Latest audio status, 2026-09-02:** the six-voice render-width defect is fixed
-> and confirmed on the car. MPL5 now attaches as `channels=6`; the 62.5 Hz tick
-> is gone, and both discrete 5.1 and stereo render cleanly. A later direct
-> six-channel one-hot test measured 48,243 frames/s and found only L/R audible;
-> C/LFE/Ls/Rs were silent. Static analysis proves that this external-amplifier
-> car already selects `DIO_MEDIA_MC + DTCP51` unconditionally and that no HU
-> CarPlay channel-count field exists. The remaining boundary is the amplifier's
-> SHARC source-to-output matrix. The logical 8×8 input mixer has now been
-> recovered from A07: sink `0x26` selects a matrix in which C/LFE/Ls/Rs are all
-> routed, so that static matrix does not explain the one-hot silence. The final
-> eight-bus-to-16-physical-output binding remains below the available image. See
-> [`SHARC_INPUT_OUTPUT_MATRIX.md`](SHARC_INPUT_OUTPUT_MATRIX.md),
-> [`MC_SELECTION_AUDIT.md`](MC_SELECTION_AUDIT.md) and
-> [`../deploy/deva-ctrl-qc/BUILD_CHAIN.md`](../deploy/deva-ctrl-qc/BUILD_CHAIN.md).
+> **Latest audio status, 2026-09-03:** discrete 5.1 now works end to end in the
+> vehicle. Two final declaration/feedback defects were corrected. The SAD header
+> had declared two active channels while six PCM slots were present; it now
+> declares the six-channel geometry. The hook had also blanked `updateFeedback`,
+> removing the sender clock reference; preserving the stock response restored
+> the measured `sr=48004.0625`, type 100 reference and normal packet delivery.
+> Both fixes are vehicle-confirmed. Do not reopen the earlier QSA, CSD, AFE,
+> MOST, sink-selection, or SHARC hypotheses retained below as investigation
+> history.
+>
+> One content-selection issue remains: the type-103 entry advertises only APAC
+> 5.1 index 65, so stereo catalogue items have no format in the buffered list.
+> The iOS 27 enumeration proves APAC stereo index 64 exists, but its sender use
+> is feature-gated. Full table, stream-selection boundary, confidence and safe
+> `/info` choices: [`APAC_FORMAT_INDEX_AUDIT.md`](APAC_FORMAT_INDEX_AUDIT.md).
 
 ---
 
 ## Latest source status — decoder/render implementation
 
-The current source supersedes the earlier capture-only status retained below for live-test history.
-It has not been deployed to the vehicle in this work session.
+The implementation described here supersedes the earlier capture-only status retained below for
+live-test history. The PCM6 path is now vehicle-confirmed; later uncommitted advertisement
+experiments in the working tree are not part of that accepted build.
 
 The type-103 path is now complete through the Audi PCM boundary:
 
@@ -57,8 +59,7 @@ User-facing startup policy is:
 variables are read only when none of the new boolean controls is present, for migration of an older
 on-unit startup script. The repository startup now sets `AUDIO_SPATIAL=1` and
 leaves Atmos off. Six-channel rendering itself is safe with the vehicle-confirmed
-mirror build; source positions 3..6 remain inaudible at the amplifier-delivery
-boundary described above.
+mirror/SAD build: all six discrete channels now reach the output path and play.
 
 `SPA_103_MU1316_*` identifiers were removed from common logic. All private VA/offset/prologue data
 now lives in a `spa103_private_profile_t` table. The first profile is named `MHI2Q AirPlay 210.81`;
@@ -80,11 +81,11 @@ by 40 bytes of DWARF when file headers were added — `scripts/apac_flags.sh`
 builds with `-g`, so adding four lines to a file shifts every line number under
 it. No decoder code changed.
 
-The decoder/render implementation has passed its bench gates, but it must not be
-used as an end-to-end acceptance test until the independent deva CSD-width fault
-is fixed. After that fix, live validation still needs the two shared objects and
-startup file, `audio sink:` counters, audible PCM6, pause/resume, and a long
-session. PCM8 passthrough must remain off on the current six-channel HU/amp path.
+The decoder/render implementation passed its bench gates, and its PCM6 path later
+passed the vehicle acceptance test after the CSD-width and SAD declaration fixes:
+discrete 5.1 is audible end to end and packet delivery is stable with stock
+`updateFeedback`. PCM8 passthrough remains outside the accepted six-channel
+HU/amp configuration and must stay off.
 
 The QSA seam is fingerprinted by static evidence from the exact AirPlay 210.81 binary
 (`SHA-256 01c116b1674215daa0602d556a6d9b2eb48c2113ca294ea1f5d58787e3f656f2`). Its
@@ -105,13 +106,12 @@ Make an iPhone send **discrete multichannel audio** over **wired CarPlay** to an
 (QNX 6.5, APQ8064) so a B&O 3D Advanced amp receives real 5.1 instead of a stereo downmix that the amp
 then upmixes algorithmically (Fraunhofer Symphoria).
 
-The head-unit six-channel transport is proven through the DMA ring, but the
-MPL5-to-CSD render handoff is **not finished**; see the latest status above. The phone's legacy/realtime CarPlay path
-refuses the added multichannel bits. iOS 27 also has a newer buffered path, but our 210.81 receiver
-does not implement it. A hook-owned type-103 TCP listener/capture and buffered-control stage is now
-deployed: both APAC 5.1 and APAC 5.1.2 negotiation are proven on hardware. The sender still closes
-type 103 because decrypt/decode/queue/render is unimplemented; control-plane acceptance alone does
-not make an indefinitely stable or audible session.
+The six-channel transport and rendering path are now vehicle-proven end to end;
+see the latest status above. The phone's legacy/realtime CarPlay path refused the
+added multichannel bits, so the implemented production route is the newer
+buffered type-103 path. The historical implementation stages and failed probes
+below are retained because their negative results are still useful, but claims
+that decrypt/decode/render or the MPL5 handoff remain unfinished are superseded.
 
 ### Current HU state at handoff (2026-08-31)
 
@@ -530,12 +530,17 @@ The correct current probe is bit 22 alone, `0x400000` = AAC-LC/44.1/stereo. The 
 `0x1440800` value came from
 `APAudioFormatGetSupportedTransportAudioFormatsForScreenReceiver`; that is a broad transport-family
 capability mask, not a valid type-103 CarPlay output entry. It mixes bits {11,18,22,24}: PCM, ALAC,
-AAC-LC, and AAC-ELD. The extended array independently names the desired 48 kHz APAC index 65.
+AAC-LC, and AAC-ELD. The extended array independently names the buffered transport candidates.
+When that array exists, its `bufferStream` list takes precedence over the legacy mask for content
+format selection; legacy bit 22 does not silently add stereo to an array containing only 65.
+
+**2026-09-03 correction:** the earlier list below omitted APAC stereo. The complete APAC subset is:
 
 The APAC extended indices identified by iOS 27 as CarPlay spatial-master formats are:
 
 | index | descriptor |
 |--:|---|
+| 64 | `APAC/48000/2` |
 | 65 | `APAC/48000/5.1` |
 | 66 | `APAC/48000/5.1.2` |
 | 67 | `APAC/48000/7.1` |
@@ -544,10 +549,22 @@ The APAC extended indices identified by iOS 27 as CarPlay spatial-master formats
 | 77 | `APAC/48000/7.1.2` |
 | 92 | `APAC/48000/9.1.6` |
 
-For a native APAC result, **index 65 is the only directly renderable target**. It is 48 kHz and maps
-exactly to the proven six-channel order `L R C LFE Ls Rs` after decoding. Index 66 carries the desired
-5.1.2 master, but must be decoded to eight PCM channels and deliberately downmixed to six before it
-reaches the HU device.
+Index 64 is the only APAC format below 5.1 and the only APAC stereo entry. Index 65 is the native
+six-channel target: it is 48 kHz and maps exactly to the proven six-channel order
+`L R C LFE Ls Rs` after decoding. Index 66 carries the desired 5.1.2 master, but must be decoded to
+eight PCM channels and deliberately downmixed to six before it reaches the HU device.
+
+iOS normally accepts multiple indices in one extended array. Its APAC list builder appends optional
+64 followed by 65/66/67/76/77/68/92. However, index 64 is guarded by the
+`bufferedAPACStereo` setting, whose static default is false; the test phone's runtime override is
+unknown. The smallest APAC-only negotiation experiment is `[64,65]`, leaving legacy `0x400000`
+unchanged. It is not yet playable: current `spa103_render_start` accepts only 65/66 and fails closed
+on 64. The ungated buffered-stereo alternative is `[22,65]`, but index 22 is AAC-LC rather than
+APAC and must not be offered until the HU has verified type-103 codec dispatch. An uncommitted
+working-tree change currently allows 22 as an extra advertised index but does not add that decoder;
+do not deploy it as a stereo fix. See
+[`APAC_FORMAT_INDEX_AUDIT.md`](APAC_FORMAT_INDEX_AUDIT.md) for the full 0–94 enumeration and the
+type-100/type-103 fallback analysis.
 
 There was also a potentially shorter playable route: `APAudioFormatIndexToAPAudioFormat`
 proves that every index below 64 maps exactly to its legacy bit (`1ULL << index`). A final table

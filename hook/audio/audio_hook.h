@@ -85,8 +85,16 @@
 #define SPA_AAC_ELD_48K_5_1_2 42     /* APAudioFormatIndex; AAC-ELD/48000/5.1.2 */
 #define SPA_DDP_48K_5_1      50      /* APAudioFormatIndex; DDPLUS/48000/5.1 */
 #define SPA_DDP_48K_9_1_6    53      /* APAudioFormatIndex; DDPLUS/48000/9.1.6 */
+#define SPA_APAC_48K_STEREO 64      /* APAudioFormatIndex; APAC/48000/stereo.  Same codec and
+                                     * sample rate as 5.1, so the existing decoder handles it and
+                                     * the sink widening covers the channel difference.  iOS gates
+                                     * it behind bufferedAPACStereo, whose static default is
+                                     * false, so the phone may simply never offer it. */
 #define SPA_APAC_48K_5_1    65      /* APAudioFormatIndex; APAC/48000/5.1 */
 #define SPA_APAC_48K_5_1_2  66      /* APAudioFormatIndex; APAC/48000/5.1.2 */
+#define SPA_AAC_LC_44K_STEREO 22    /* APAudioFormatIndex; AAC-LC/44100/stereo -- indices below
+                                     * 64 map to 1<<index, so this is legacy bit 22, the one the
+                                     * buffered sender prefers first for ordinary content. */
 #define SPA_BUFFERED_AAC_MASK        0x400000   /* bit 22: AAC-LC/44100/2; valid type-103 codec family */
 #define SPA_BUFFERED_BROAD_MASK      0x1440800  /* old failed probe: mixed bits 11,18,22,24 */
 
