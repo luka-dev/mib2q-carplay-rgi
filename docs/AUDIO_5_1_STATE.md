@@ -696,6 +696,42 @@ audit changed no hook, firmware or deployed binary. The safe default remains
 
 ---
 
+## 21. Amplifier stereo/5.1 matrix and live ASAD — 2026-09-04
+
+The amplifier does observe the incoming SAD allocation dynamically. V850
+`FUN_000D1D94` polls the INIC, stores a changed allocation at `gp-0x3E21`, and
+queues task-9 event 15. The event re-evaluates the selected A07 bank and rewrites
+the SHARC input-matrix groups.
+
+The target sink `0x26` has record `01 A5 10 00`: raw bank 1, SAD-capable,
+16-bit. Raw bank 1 is not remapped, so `ASAD=0xc0` and `ASAD=0xfc` both retain
+bank 1. ASAD-based bank 0/1/2 switching exists only on raw-bank-2 sink profiles
+such as `0x32`.
+
+Bank 0 is not the advertised “clever stereo upmix” in the recovered 8x8 layer.
+It passes L to Bus L and R to Bus R and folds any other populated input positions
+into those two buses. Profile-0 bank 1 maps L/R to their own buses at -2 dB and
+also to Bus C at -6 dB per side; it has no direct L/R-to-surround route.
+
+There is nevertheless a second, proven DSP-mode difference. A bank refresh
+writes SHARC control `0x10` from `0x6EAA0`: bank 0 sends float `2.0`, while banks
+1 and 2 send float `5.0`. The image supplies no semantic name, so this cannot be
+called a Symphoria switch without the missing SHARC program or runtime evidence.
+On sink `0x26`, changing only ASAD keeps the value at `5.0`.
+
+Consequently AAC stereo widened as `L,R,0,0,0,0` is valid PCM, but announcing
+`ASAD=0xfc` does not preserve the fact that its source was stereo. A separate-start
+`0xfc` versus `0xc0` A/B test can isolate allocation-aware behavior, but neither
+case enters the true bank-0/control-`2.0` mode on sink `0x26`. That mode requires
+a different stereo sink or a raw-bank-2 connection, which changes the MOST
+contract and is not a codec-hook-only edit. The adopted shipping policy is therefore
+one fixed `PCM6/48 kHz/S16` stream with `ASAD=0xfc` for the whole buffered session;
+only the APAC/AAC decoder changes between tracks. There is no live amplifier/SAD
+reconfiguration at a codec boundary. Full audit:
+[`AMP_STEREO_5_1_MATRIX_DIFF.md`](AMP_STEREO_5_1_MATRIX_DIFF.md).
+
+---
+
 ## Sources
 
 * `tools/qsa-emu/` — the QEMU harness, `HANDOFF.md` and `README.md` carry the traps.
@@ -715,3 +751,4 @@ audit changed no hook, firmware or deployed binary. The safe default remains
 * `docs/APAC_FORMAT_INDEX_AUDIT.md` — complete iOS 27 format-index enumeration, APAC stereo index 64, legacy-mask semantics, and buffered/realtime selection boundary.
 * `docs/AAC_BUFFERED_PATH_PLAN.md` — MHI2Q AAC-LC framing, Cinemo ABI, cookie contract, thread model and safe implementation plan.
 * `docs/DYNAMIC_BUFFERED_CODEC_SWITCH.md` — active iOS format reselection, APAP boundary contract and receiver switch state machine.
+* `docs/AMP_STEREO_5_1_MATRIX_DIFF.md` — live amplifier ASAD handling, exact stereo/5.1 matrix differences and bank-dependent SHARC mode control.

@@ -51,6 +51,24 @@ driver context, which gives the layout:
     [0] media_type  [1] codec_type  [2] emi  [3] asad  [4] cgms
     [8] bitrate (dword)  [12] sample_width  [16] dword
 
+**Runtime qualification, audited 2026-09-04:** the SET branch at
+`0x3f8a8..0x3f908` only saves these fields in the persistent MPL session. It does not issue a
+CSD configure command. `session_csd_start_playback` converts and sends the saved SAD at
+`0x6a048/0x6a058`; consequently another `createMetadata` call during an already-running track does
+not change the live LPASS header until the next playback start. The exact allocation table and the
+implications for APAC/AAC track switching are in
+[`DYNAMIC_BUFFERED_CODEC_SWITCH.md`](DYNAMIC_BUFFERED_CODEC_SWITCH.md#sad-speaker-allocation-exact-values-and-update-lifetime).
+
+**Amplifier-side qualification, audited 2026-09-04:** the far side is live even though the
+head-unit setter is not. Amplifier `FUN_000D1D94` polls the INIC/MOST allocation, compares the
+returned byte at `0xD1E4C` with saved `gp-0x3e21`, stores a change at `0xD1ED2`, and queues task-9
+event 15 at `0xD1ED6..0xD1EDA`. The event re-evaluates and rewrites the SHARC input matrix. On the
+current SAD-capable sink `0x26`, both `0xc0` and `0xfc` still select matrix bank 1 and SHARC control
+value `5.0`; only raw-bank-2 sink profiles use ASAD to choose bank 0/1/2. Thus the allocation repair
+was essential for keeping six source positions alive, but it was not what selected the amplifier's
+5.1 matrix on sink `0x26`. Full proof and stereo/5.1 coefficients:
+[`AMP_STEREO_5_1_MATRIX_DIFF.md`](AMP_STEREO_5_1_MATRIX_DIFF.md).
+
 ## The defect
 
 We widen the ASBD to six channels and six TDM slots are formed, but this call still carried the

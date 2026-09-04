@@ -69,10 +69,19 @@ Relevant `AD301A07` layout:
 `gp-0x3E20`:
 
 ```text
-profile = int8(A07[0x100008 + state_a + 21*state_b])
-bank    = table_0x95314[(SinkNr - 0x21) * 4]
-matrix  = A07[0x101BB4 + profile*0xC0 + bank*0x40]
+profile  = int8(A07[0x100008 + state_a + 21*state_b])
+raw_bank = table_0x95314[(SinkNr - 0x21) * 4]
+bank     = normalize(raw_bank, ASAD)
+matrix   = A07[0x101BB4 + profile*0xC0 + bank*0x40]
 ```
+
+The ASAD term was recovered completely on 2026-09-04. Raw banks 0 and 1 remain
+0 and 1. Raw bank 2 becomes bank 0 for `ASAD=0xc0`, bank 1 when ASAD is not
+`0xc0` but `(ASAD & 3)==0` (including `0xfc`), and otherwise remains bank 2.
+Raw values 3 and above become bank 0. This qualification does not change the
+target result: sink `0x26` has raw bank 1, so both stereo and 5.1 ASAD select
+bank 1. The live poll/reload proof is in
+[`AMP_STEREO_5_1_MATRIX_DIFF.md`](AMP_STEREO_5_1_MATRIX_DIFF.md).
 
 The two selector rows are identical:
 
@@ -102,15 +111,15 @@ records at `0x95314` select these banks:
 | `0x25` | six-position family | 1 | 1 |
 | `0x26` | protected 5.1 / `DTCP51` | 1 | 1 |
 | `0x27` | stereo family | 0 | 0 |
-| `0x28..0x29` | eight-position family | 2 | 1 or 2, mode-dependent |
+| `0x28..0x29` | eight-position family | 2 | 0, 1 or 2, ASAD-dependent |
 | `0x2A` | stereo family | 0 | 0 |
 | `0x2B..0x2C` | six-position family | 1 | 1 |
 | `0x2D..0x30` | mono/announcement family | 3 | 0 |
-| `0x31..0x32` | eight-position family | 2 | 1 or 2, mode-dependent |
+| `0x31..0x32` | eight-position family | 2 | 0, 1 or 2, ASAD-dependent |
 
-Raw bank values 3 and above fall back to bank 0. Bank 2 can fall back to bank 1 in
-some operating modes. Bank 1 is not remapped, so sink `0x26` selects the 5.1 matrix
-unconditionally once it is the active sink.
+Raw bank values 3 and above fall back to bank 0. Bank 2 falls back to bank 1
+for six-position ASAD, or to bank 0 for stereo ASAD. Bank 1 is not remapped, so
+sink `0x26` selects the 5.1 matrix unconditionally once it is the active sink.
 
 ## Proof of matrix orientation and SHARC load
 
@@ -137,6 +146,12 @@ that A07/RAM rows are inputs and columns are outputs.
 | 6 | `0xC0252..0xC0259` |
 | 7 | `0xC025A..0xC0261` |
 | 8 | `0xC0262..0xC0269` |
+
+A bank refresh also schedules parameter group `0x30`. Its handler writes SHARC
+control `0x10` from the three-float table at `0x6EAA0`: bank 0 writes `2.0`,
+while banks 1 and 2 write `5.0`. This is a proven additional DSP-mode difference,
+but its semantic name is absent from the image; it must not be labelled a
+Symphoria/upmix switch without runtime or SHARC-code evidence.
 
 The matrix also has an existing internal message-handler read/write surface. `FUN_000D394E` writes
 eight bytes to row `(row_number-1)` and queues parameter `0x0F`; `FUN_000D39B6` reads
