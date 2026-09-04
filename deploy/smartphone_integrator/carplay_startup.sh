@@ -197,14 +197,14 @@ export ALTSCREEN_ADVERT_DISPLAYS=1
 # drop       discards Ltm/Rtm and sends PCM6
 # passthrough sends PCM8 and requires BOTH an 8ch HU PCM patch and a patched amp;
 #             the current six-channel Audi patch is not sufficient.
-export AUDIO_SPATIAL=0
+export AUDIO_SPATIAL=1
 export AUDIO_SPATIAL_ATMOS=0
 export AUDIO_SPATIAL_ATMOS_MODE=downmix
 export AUDIO_SPATIAL_CODEC_LIB="$H/libcarplay_apac.so"
 # Second advertised APAudioFormatIndex for the buffered stream.  22 = AAC-LC/44.1/stereo,
 # which the sender's own buffered set carries unconditionally and reaches for first, so a
 # non-spatial track has a format it can arrive in instead of being skipped.  Empty = off.
-export SPATIAL_103_EXTRA_INDEX=
+export SPATIAL_103_EXTRA_INDEX=23
 # --- the USB device stack must exist before dio starts ------------------------------
 #
 # A fast unplug/replug can leave io-usb-dcd dead.  Nothing restarts it: the OTG

@@ -1005,6 +1005,9 @@ static int64_t spa103_media_time_to_rtp(int64_t mediaValue, int64_t mediaScale);
  */
 #define SPA_103_RENDER_MAX_CHANNELS SPA_PCM_5_1_2_CHANNELS
 #define SPA_103_RENDER_FRAMES     1024u
+/* Where the framing probe writes raw access units, and how much it will write. */
+#define SPA_103_ES_DUMP_PATH      "/tmp/spatial_aac_es.bin"
+#define SPA_103_ES_DUMP_LIMIT     (6u * 1024u * 1024u)
 #define SPA_103_RENDER_MAX_SAMPLES (SPA_103_RENDER_MAX_CHANNELS * SPA_103_RENDER_FRAMES)
 /* Half a second of 48 kHz 5.1: 288 KB.  Big enough to absorb the phone's burst between two
  * reads of the sink, small enough that a stalled sink cannot hide a minute of latency. */
@@ -1521,6 +1524,37 @@ static void spa103_render_frame(const uint8_t *packet, size_t length)
 
     if (spa103_render.probeFraming) {
         static int reported;
+        /* Elementary-stream dump for offline decoder work: 4-byte little-endian length, then
+         * that many bytes of raw access unit, repeated.  Only under an index we cannot decode,
+         * so it never touches a working audio path, and bounded so a long session cannot fill
+         * /dev/shmem.  This is decrypted audio on disk -- fine for debugging one's own unit,
+         * but delete it when done and do not ship a build that writes it. */
+        static FILE *es;
+        static size_t esBytes;
+        if (audio && audioLength && esBytes < SPA_103_ES_DUMP_LIMIT) {
+            if (!es) {
+                es = fopen(SPA_103_ES_DUMP_PATH, "wb");
+                if (es) setvbuf(es, 0, _IOFBF, 32768);
+            }
+            if (es) {
+                uint8_t len[4];
+                len[0] = (uint8_t)(audioLength & 0xff);
+                len[1] = (uint8_t)((audioLength >> 8) & 0xff);
+                len[2] = (uint8_t)((audioLength >> 16) & 0xff);
+                len[3] = (uint8_t)((audioLength >> 24) & 0xff);
+                fwrite(len, 1, 4, es);
+                fwrite(audio, 1, audioLength, es);
+                esBytes += audioLength + 4;
+                if (esBytes >= SPA_103_ES_DUMP_LIMIT) {
+                    fflush(es);
+                    LOG_WARN(LOG_MODULE,
+                             "buffer103: elementary-stream dump full at %u bytes: %s",
+                             (unsigned)esBytes, SPA_103_ES_DUMP_PATH);
+                } else if ((esBytes & 0x3ffff) < (unsigned)audioLength) {
+                    fflush(es);
+                }
+            }
+        }
         if (!reported && audio && audioLength) {
             size_t n = audioLength < 24 ? audioLength : 24;
             char hex[3 * 24 + 1];
@@ -1530,8 +1564,9 @@ static void spa103_render_frame(const uint8_t *packet, size_t length)
             hex[n * 3 - 1] = 0;
             LOG_WARN(LOG_MODULE,
                      "buffer103: framing probe, index %lld, access unit %u bytes, first: %s"
-                     " -- ADTS starts ff f?, a raw AU does not",
-                     (long long)spa103_render.formatIndex, (unsigned)audioLength, hex);
+                     " -- ADTS starts ff f?, a raw AU does not; elementary stream -> %s",
+                     (long long)spa103_render.formatIndex, (unsigned)audioLength, hex,
+                     SPA_103_ES_DUMP_PATH);
         }
         return;
     }
