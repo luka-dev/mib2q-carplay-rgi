@@ -71,12 +71,46 @@ not run at all when SI kills dio on a startup timeout.
   is a diagnostic wrapper; the real switching is done by a binary. `startup.sh` does it at
   boot — gated on the same `/tmp` flag.
 
-## What is still not understood
+## The missing piece — found by comparing with MH2P
 
-**Restoring the device stack did not, by itself, bring CarPlay back.** `otg_dev` was present,
-`dio_manager` started, and iAP2 still never began. So at least one more thing was wedged and
-was not identified. The fix above addresses a real failure that would otherwise never recover;
-it is **not proven** to be sufficient on its own.
+Restoring the device stack did not, by itself, bring CarPlay back: `otg_dev` was present,
+`dio_manager` started, and iAP2 still never began. Comparing the USB chain against
+`Firmwares/HU/MH2p_US_LB636_P2712` explains why.
+
+`/etc/usblauncher_otg.lua` declares:
+
+```lua
+Device_Stack = {
+    cmd  = '/etc/scripts/start_usb_device_stack.sh';
+    path = '/dev/io-usb/otg_dev';
+    connect_poll = 100;   -- "improve CarPlay connection times"
+    descriptors = {usbdesc_carlife, usbdesc_carplay, rndis};
+}
+```
+
+**The OTG `usblauncher` owns the device stack.** It starts `io-usb-dcd` itself, chooses the
+gadget descriptor, and mounts NCM via `startncm.sh` when the gadget appears. Poking the PPS
+object directly puts the node back *behind the owner's back*, leaving the launcher holding
+stale state — so the node returns and nothing else does.
+
+The guard now restarts that launcher after restoring the node, so it redoes its own
+bring-up. Its argv comes from `pidin`, not `/proc`: on QNX `/proc/<pid>/cmdline` is **empty**
+for this process, which is why an earlier version scanned `/proc`, matched nothing, and
+silently did nothing.
+
+Two further differences worth knowing, both showing MH2P as the later design:
+
+| | MHI2Q (ours) | MH2P |
+|---|---|---|
+| OTG launcher binds to | `-n /dev/io-usb/otg` | `-n /dev/io-usb/otg_dev` |
+| port mode at connector insertion | not set | explicit `start_usblauncher_otg_port_device_mode.sh` |
+| connector IDs handled | `0x4040`, `0x2530` | `0x4040`, `0x2530`, `0x4940`, via one shared function |
+
+MH2P setting the port mode on insertion is what our unit lacks: MHI2Q depends on that being
+done elsewhere, and when it was not redone, nothing else would.
+
+Still unproven: whether node + launcher restart together are sufficient. That needs the
+failure to recur, which cannot be summoned on demand.
 
 ## Where I was wrong
 

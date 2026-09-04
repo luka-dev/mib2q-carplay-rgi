@@ -226,8 +226,28 @@ export SPATIAL_103_EXTRA_INDEX=64
 # each retry of that loop, so the system heals itself on the next attempt; cleanup may
 # not run at all when SI kills dio on a startup timeout.
 if ! ls /dev/io-usb/otg_dev >/dev/null 2>&1; then
-    echo "[supervisor] USB device stack gone - asking the OTG manager to restart it" >> "$WLOG"
+    echo "[supervisor] USB device stack gone - restarting it" >> "$WLOG"
     /etc/scripts/start_otg_stack_device_mode.sh >> "$WLOG" 2>&1
+
+    # The node alone is not enough. /etc/usblauncher_otg.lua declares
+    #     Device_Stack = { cmd = '/etc/scripts/start_usb_device_stack.sh';
+    #                      path = '/dev/io-usb/otg_dev'; descriptors = {carlife, carplay, rndis} }
+    # so the OTG usblauncher *owns* the device stack: it starts io-usb-dcd, picks the gadget
+    # descriptor, and mounts NCM through startncm.sh when the gadget appears. Restoring the
+    # node behind its back leaves it holding stale state -- which is why, the first time this
+    # guard ran, otg_dev came back and CarPlay still did not connect.
+    #
+    # Restarting it makes it redo that bring-up. Its argv is read from pidin rather than
+    # /proc: on QNX /proc/<pid>/cmdline is empty for this process, and an earlier version of
+    # this guard scanned /proc, found nothing and silently did nothing at all.
+    OTG_ARGV=$(pidin -F "%A" 2>/dev/null | grep usblauncher_otg.lua | grep -v grep | head -1)
+    OTG_PID=$(pidin -F "%a %A" 2>/dev/null | grep usblauncher_otg.lua | grep -v grep | head -1 | cut -d' ' -f2)
+    if [ -n "$OTG_ARGV" ] && [ -n "$OTG_PID" ]; then
+        echo "[supervisor] restarting OTG usblauncher pid=$OTG_PID" >> "$WLOG"
+        kill "$OTG_PID" 2>/dev/null
+        # full path: usblauncher is not on PATH here
+        ( cd / && eval "/mnt/app/armle/bin/${OTG_ARGV#usblauncher }" >/dev/null 2>&1 & ) 2>/dev/null
+    fi
 fi
 
 exec "$DIODIR/dio_manager" "$@"
