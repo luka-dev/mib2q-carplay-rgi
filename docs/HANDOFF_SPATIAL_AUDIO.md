@@ -18,8 +18,11 @@ disassembler**, and it is labelled which. Full history in `docs/reference/AUDIO.
 > both directions inside one type-103 session with no dropout or new underrun.
 > APAP fields 2/8 are `spf=1024`, not a per-packet index; each changed inline
 > cookie selects AAC or APAC and decoded geometry/layout selects processing.
-> The new `ambient-lite` rear renderer and opt-in LR4/80 Hz LFE assist are
-> host/QNX verified but still require their own stationary acoustic A/B.
+> The `ambient-lite`, clean-room 1024/256 STFT `ambient-hq`, and clean-room
+> time-domain `hsr-td` rear renderers, plus the opt-in LR4/80 Hz LFE assist, are
+> host/QNX verified. Startup remains deliberately on `ambient-lite`; both
+> challengers still require a stationary acoustic A/B and real on-unit Krait
+> timing. QEMU icount is not a cycle measurement.
 
 ---
 
@@ -27,8 +30,8 @@ disassembler**, and it is labelled which. Full history in `docs/reference/AUDIO.
 
 The implementation described here supersedes the earlier capture-only status
 retained below for live-test history. PCM6 and cookie-driven AAC/APAC switching
-are vehicle-confirmed. The stereo ambience/LFE canary is implemented and built,
-but its acoustic tuning is not yet vehicle-confirmed.
+are vehicle-confirmed. All three stereo upmix backends and the LFE adapter are
+implemented, but their acoustic tuning is not yet vehicle-confirmed.
 
 The type-103 path is now complete through the Audi PCM boundary:
 
@@ -63,6 +66,8 @@ User-facing startup policy is:
 | `SPATIAL_103_EXTRA_INDEX=23` | advertise AAC-LC/48 kHz/stereo beside APAC 5.1 |
 | `AUDIO_STEREO_UPMIX=off` | exact compatibility output `L,R,0,0,0,0` |
 | `AUDIO_STEREO_UPMIX=ambient-lite` | bounded six-band rear ambience renderer |
+| `AUDIO_STEREO_UPMIX=ambient-hq` | clean-room 1024/256 STFT primary/ambient renderer; selectable comparison profile |
+| `AUDIO_STEREO_UPMIX=hsr-td` | clean-room six-band time-domain covariance/projector renderer; current deployed A/B profile |
 | `AUDIO_STEREO_SURROUND=0.18` | checked-in rear input gain |
 | `AUDIO_STEREO_LFE=off/assist` | no LFE, or `0.178 * LR4_LP80((L+R)/2)` with paired 0.94 fronts |
 
@@ -78,16 +83,90 @@ unknown `libairplay.so` builds still fail closed. K1004 must receive its own ind
 profile because its private offsets differ.
 
 Current bench gates pass: the full APAC port suite, 3,980-frame capture
-integration, six-packet APAP/decode test, native reorder, stereo DSP, stale-SETUP
-AAC<->APAC dispatch in both directions, ASan/UBSan, and QNX builds of both shared
-objects. Both QNX objects have no emutls, exceptions, RTTI, STL/libstdc++
+integration, six-packet APAP/decode test, native reorder, lite/HQ/HSR-TD stereo DSP,
+the stale-SETUP AAC<->APAC render-policy harness in both directions,
+ASan/UBSan, and QNX builds.
+Both QNX shared objects have no emutls, exceptions, RTTI, STL/libstdc++
 dependency, or hook-owned ELF constructor. The main hook has no `DT_NEEDED`
-entry for `libcarplay_apac.so`. The verified 2026-09-04 local artifacts are:
+entry for `libcarplay_apac.so`. These hashes identify the earlier
+`ambient-lite` vehicle-candidate artifacts; they predate the HQ translation
+unit and must not be used to claim a deployed HQ build:
 
 ```text
 libcarplay_hook.so d1773dab89a7726f5b64ff9e25dd86492a689442077e089814a1267a339506eb 462429 bytes
 libcarplay_apac.so a6a7bc8c3f17dfe170765b04a461259a407269de47dde6fe0a2b3f6b2695044f 678911 bytes
 ```
+
+The fresh HQ-capable working-tree build is distinct and is **not** evidence
+that HQ has been deployed or selected in the vehicle:
+
+```text
+libcarplay_hook.so ee821ef4d34ea0f0babaa667467a601d18799a7b52d617d60d2bb0f1a16aea31 517849 bytes
+libcarplay_apac.so a6a7bc8c3f17dfe170765b04a461259a407269de47dde6fe0a2b3f6b2695044f 678911 bytes
+hook/audio/stereo_upmix.c 2bd8913d1ed4e18ad423af02e95db5cf0187212f617ecd09f0e82f053e398ae9
+```
+
+At measurement time the HQ source was an uncommitted candidate and startup
+still selected lite. Choosing HQ remains opt-in and requires a `dio_manager` /
+CarPlay child restart because the environment is parsed once.
+
+The newer HSR-TD-capable GCC 8.5 working-tree build is also not evidence of a
+vehicle deployment:
+
+```text
+libcarplay_hook.so 8037fee483227824f21aebcd41bc2f1d156dca02e322558a4b86f05589bd6b26 519809 bytes
+libcarplay_apac.so a6a7bc8c3f17dfe170765b04a461259a407269de47dde6fe0a2b3f6b2695044f 678911 bytes
+hook/audio/stereo_upmix.c 3314cec5210d0958146521db21231c33c06be58bbe64685e3c0386c98d5df6df
+```
+
+Its ELF comment identifies GCC 8.5.0; the full hook guards pass with no emutls,
+constructor expansion, exception/RTTI/STL/libstdc++ dependency, or hard APAC
+link. Build it explicitly with `QNX_TOOLCHAIN_VARIANT=8.5
+bash scripts/build_hook.sh`.
+
+The HQ source is a causal `N=1024`, `H=256` sqrt-Hann STFT with 24
+Bark-like covariance bands and an exact 1024-frame/21.333 ms rear latency. It
+subtracts a confidence-weighted principal image,
+`A=X-s*(1-lambda2/lambda1)*v*(v^H X)`, protects attacks with a smoothed spectral-
+flux mask, limits the rear passband to 120 Hz--7 kHz, and then uses the shared
+Schroeder/linked-limiter adapter. Its stable eigenvector construction selects
+one of two equivalent forms according to the larger covariance diagonal; the
+channel-swap test caught and removed the ill-conditioned fixed-left residue in
+the first implementation. The final shared delay-allpass snaps output and
+feedback below `1e-20` to exact zero, preventing an inaudible binary32 denormal
+tail on unknown FPSCR settings. Full equations and thresholds are in
+[`STEREO_TO_5_1_UPMIX_DESIGN.md`](STEREO_TO_5_1_UPMIX_DESIGN.md).
+
+The retained pre-HSR-TD QNX ARMv7 measurements are: state/runtime `59432/55304` bytes,
+208-byte process frame, 72-byte FFT helper frame, 8180-byte object text and a
+72904-byte unstripped object. On the current arm64 host a 1024-frame call
+measures mean/p99 `144015/162042 ns`. QEMU
+`-icount shift=0` measures mean/p99
+`4034828/4035856` estimated retired ARM instructions. That last row is
+not elapsed time, cache cost, IPC, or Krait cycles and does not close the real
+on-unit p99 `<5 ms` gate. The denormal snap costs about 1.44% more estimated
+QEMU instructions than the preceding stable-eigen build while leaving both
+normal-level PCM checksums unchanged. The final retained stereo-fold render has Ls/Rs
+peak `-40.398/-43.864 dBFS` and RMS `-68.918/-71.926 dBFS`; swapping the input
+swaps the RMS to `-71.927/-68.918`, so this very quiet residual follows the
+source image rather than a fixed side. On the ordinary AAC capture
+`spatial_aac.wav`, HQ Ls/Rs RMS is instead `-37.827/-37.436 dBFS`, versus
+`-39.803/-40.183 dBFS` for lite. The separation is content-selective; neither
+row establishes a universal quality or loudness advantage, and HQ still needs
+to be heard in the car.
+
+HSR-TD uses the same six analysis bands but tracks real per-band covariance
+and refreshes a principal projector every eight samples. It preserves positive
+coherent material in dry L/R and sends the unexplained residual directly to
+Ls/Rs without FFT, artificial decorrelation, or block-fill latency. GCC 8.5
+QNX/QEMU icount is mean/p99 `1089350/1091467` estimated retired instructions
+per 1024 frames, versus `3947842/3949085` for HQ in the same build. Nine tuning
+genres plus 24 held-out tracks show better HSR-TD rear waveform correlation
+and SI-SDR, while lite retains better envelope, interchannel-error, energy, and
+held-out fold-back figures. The shared LFE assist follows low-frequency stereo
+bass through `0.178 * LR4_LP80((L+R)/2)`; it cannot reconstruct discrete LFE
+lost in the fold-down. This mixed result keeps HSR-TD opt-in. Exact results and limitations are in
+[`../tools/stereo-upmix-render/bench/results/2026-09-04-hsr-td.md`](../tools/stereo-upmix-render/bench/results/2026-09-04-hsr-td.md).
 
 The decoder/render implementation passed its bench gates, and its PCM6 path later
 passed the vehicle acceptance test after the CSD-width and SAD declaration fixes:
@@ -1495,24 +1574,90 @@ index-22 Speex fallback and risk-ordered tests. The complete coexistence proof i
 in [`CINEMO_AAC_THREAD_SAFETY_AUDIT.md`](CINEMO_AAC_THREAD_SAFETY_AUDIT.md), and
 the retained corpus is documented in
 [`captures/aac_route_20260903/README.md`](../captures/aac_route_20260903/README.md).
-The checked-in startup is `[65,23]` with `AUDIO_SPATIAL=1`. Its new
-`ambient-lite`/LFE-assist stereo tuning is bench-complete but still needs a
-stationary acoustic A/B; exact rollback is `AUDIO_STEREO_UPMIX=off` plus a
-`dio_manager`/CarPlay process restart.
+The checked-in startup is `[65,23]` with `AUDIO_SPATIAL=1`. `ambient-lite`,
+`ambient-hq`, and `hsr-td` are implemented and selectable with host and QEMU
+instruction measurements.  The current deployed A/B policy selects `hsr-td`,
+rear gain `0.18`, and LFE assist; it still needs subjective vehicle comparison
+and real on-unit Krait p99 measurement. Exact rollback
+is `AUDIO_STEREO_UPMIX=off` plus a `dio_manager`/CarPlay process restart.
 
-### Known pre-existing PCM-sink locking debt
+### Phone-lock/background ownership fix (vehicle-confirmed)
 
-This is not a blocker for the current canary, but it must not be mistaken for a
-new upmixer fault. `snd_pcm_plugin_write` holds `spa_pcm_sink.lock` while calling
-the real MU1316 `libasound`. That call re-enters our interposed
-`snd_pcm_write_internal`, which tries to lock and then unconditionally unlock
-the same mutex. The target QNX default mutex is error-checking: the nested lock
-returns `EDEADLK`; because that result is ignored, the nested unlock releases
-the outer ownership, and the final outer unlock returns `EPERM`. Therefore this
-does not deadlock the audio thread, but exclusion against concurrent
-close/parameter changes is temporarily lost.
+A live 2026-09-04 trace found the next lifecycle failure.  On phone lock/app
+background, iOS tears down stock type 100 first.  Stock closed the only QSA
+handle at `00:11:43.135`, while type 103 kept decoding until `00:11:50.460`.
+The PCM ring filled to 24000 frames and stock feedback became null; iOS then
+sent rate zero, flush and type-103 teardown.  The unit still ran
+`ambient-lite`, so this is not an `ambient-hq` regression.
 
-This path predates the stereo DSP and accepted vehicle APAC/AAC playback shows
-it is not presently manifesting as a rollout blocker. Repair it separately by
-never holding `spa_pcm_sink.lock` across a call into `libasound`; do not fold that
-lifecycle change into the first acoustic A/B of the upmixer.
+The hook now temporarily retains the already configured QSA handle and lets the
+existing APAP receiver thread drain 768-frame periods until type 100 reopens or
+type 103 ends.  It also retains the exact last measured stock clock-only
+feedback plist per session and reuses it only across a null-response gap.  No
+new thread or simultaneous second device handle is introduced.
+
+That ownership change made the old PCM-sink locking debt release-critical, so
+it is fixed in the same implementation: a separate I/O mutex serializes real
+QSA writes/close, while `spa_pcm_sink.lock` is released before entering
+`libasound` and can safely be re-entered by `snd_pcm_write_internal`.  The
+fragment-rate setup-log flood is also reduced to one invariant readback per
+handle.  Host suites and the QNX ARMv7 build pass.  Repeated vehicle lock,
+background and foreground transitions then kept type 103 alive: cached
+feedback continued, detached writes remained full, and iOS sent no fatal
+rate-zero/flush/teardown sequence.  A later explicit AAC-to-APAC switch exposed
+one local 512/768-frame read with a 256-frame zero tail; the whole-period
+follow-up replaces such a period entirely from realtime fallback.
+
+A fresh lock/unlock run held the short-period, QSA short/zero-write and
+device-underrun counters at zero, yet a brief transition interruption remained.
+Static analysis tied it to stock's close-only QSA flush plus the subsequent
+close/open/params/prepare hand-back.  The deployed experimental build defers that
+flush, keeps the retained handle running, and gives the same handle back to
+stock while skipping only compatible duplicate params/prepare calls; real
+setup continues to validate the device.  The first vehicle run kept one handle
+through lock, unlock and a second lock and was initially reported audibly excellent.  A
+single zero write followed two explicit iOS buffered flushes and QSA status 4;
+the built local refinement now prepares that non-running state immediately and
+skips prepare only for a still-running device.  Evidence and the exact gate are in
+[`BUFFERED_BACKGROUND_LIFECYCLE.md`](BUFFERED_BACKGROUND_LIFECYCLE.md).
+
+A later incident caused a full CarPlay connection restart and a new
+`dio_manager` PID.  The old process did not leave crash evidence: it stopped
+APAP with `stop=1`, closed the detached QSA handle after 3434 full writes with
+zero failures, processed teardown with final `kConnectionErr`, and produced no
+new core.  The fast physical handoff therefore remains experimental pending a
+clean repeated run.  Separate next/previous measurements in the replacement
+process found a definite SETUP metadata bug: negotiated AAC-LC index 23 was
+given APAC's 21,168,000 receiver buffer because the helper only classified
+indices 40/42 as AAC.  The deployed/read-back `d0bdb723...` candidate classifies
+22/23/40/42 as the recovered 5,000,000 AAC family, retains 21,168,000 for APAC,
+prepares a reclaimed QSA handle when status is not RUNNING, and removes a false
+write-warning flood. A fresh SETUP=23 then returned the corrected 5,000,000
+value. During the same long detached run, system slog revealed one hidden
+`STOP -> prepare -> GO` recovery at 98% CPU although every plugin write returned
+full. The APAP/QSA thread was priority 10 against stock audio priority 18 and an
+eight-fragment/128-ms device queue. Deployed candidate `6aee7e03...` raises the
+existing thread to `SCHED_RR` 18 and adds direct detached recovery/status
+telemetry; no new thread or codec/PCM change was introduced. Exact timing,
+hashes, staged `hsr-td-active` policy and the remaining live gate are recorded
+in the lifecycle document.
+
+The first priority-18 vehicle run passed 16,384 detached periods (262.144
+seconds) with QSA `RUNNING`, full writes, `underruns=0` and `recoveries=0`, past
+the previous 144-second stop. Two brief reported freezes had no APAP/PCM/QSA or
+deva discontinuity and overlapped full slog extraction on a 94--100%-busy unit;
+that diagnostic activity is only a plausible disturbance, so future live
+monitoring keeps full slog collection out of active playback.
+
+The later automatic AAC-to-APAC change did expose a real but non-QSA stall:
+iOS issued `FLUSHBUFFERED`, changed cookie and produced four seconds of APAC,
+then sent no more decodable APAP for approximately 45.3 seconds while the
+device remained `RUNNING`.  The 5,000,000 value is correct for index 23 in
+isolation but not for this persistent mixed `[65,23]` offer, whose codec changes
+do not receive a new SETUP.  The deployed `9a6a73bd...` hook takes the maximum
+receiver-buffer requirement across the offer and therefore restores
+21,168,000 for that mixed session.  This is supported by the earlier
+21,168,000-byte run that played APAC continuously for more than three minutes
+after the same switch; one fresh live transition remains the acceptance gate.
+The exact sequence window, timestamps and readback hashes are in the lifecycle
+document.

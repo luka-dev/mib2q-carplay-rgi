@@ -5,7 +5,9 @@
  * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 
+#include "audio/audio_hook.h"
 #include "audio/spatial_downmix.h"
+#include "audio/pcm_period.h"
 #include "audio/stereo_upmix.h"
 
 #include <assert.h>
@@ -13,11 +15,71 @@
 #include <stdio.h>
 #include <string.h>
 
-enum { TEST_FRAMES = SPA_STEREO_UPMIX_MAX_FRAMES };
+enum {
+    TEST_TRACK_FRAMES = SPA_STEREO_UPMIX_MAX_FRAMES * 2
+};
 
-static int16_t g_stereo[TEST_FRAMES * 2];
-static int16_t g_first_stereo_render[TEST_FRAMES * 6];
-static int16_t g_second_stereo_render[TEST_FRAMES * 6];
+static int16_t g_stereo[TEST_TRACK_FRAMES * 2];
+static int16_t g_first_stereo_render[TEST_TRACK_FRAMES * 6];
+static int16_t g_second_stereo_render[TEST_TRACK_FRAMES * 6];
+static struct spa_stereo_upmix g_upmix;
+
+static void assert_buffered_receiver_sizes(void)
+{
+    assert(spa_type103_audio_buffer_size_for_index(22) == 5000000);
+    assert(spa_type103_audio_buffer_size_for_index(23) == 5000000);
+    assert(spa_type103_audio_buffer_size_for_index(40) == 5000000);
+    assert(spa_type103_audio_buffer_size_for_index(42) == 5000000);
+    assert(spa_type103_audio_buffer_size_for_index(64) == 21168000);
+    assert(spa_type103_audio_buffer_size_for_index(65) == 21168000);
+    assert(spa_type103_audio_buffer_size_for_index(66) == 21168000);
+
+    /* A type-103 SETUP is performed once even though iOS changes between the
+     * two advertised codecs per track.  The selected AAC index must therefore
+     * inherit APAC's larger requirement when 65 is also in the offer. */
+    assert(spa_type103_audio_buffer_size_for_offer(23, 65, 23) == 21168000);
+    assert(spa_type103_audio_buffer_size_for_offer(65, 65, 23) == 21168000);
+    assert(spa_type103_audio_buffer_size_for_offer(23, 23, -1) == 5000000);
+}
+
+static void assert_whole_period_policy(void)
+{
+    const size_t codec_frames = 1024;
+    const size_t qsa_frames = 768;
+    size_t fill = 0;
+    size_t take;
+
+    assert(spa_pcm_whole_period_frames(0, qsa_frames) == 0);
+    assert(spa_pcm_whole_period_frames(256, qsa_frames) == 0);
+    assert(spa_pcm_whole_period_frames(512, qsa_frames) == 0);
+    assert(spa_pcm_whole_period_frames(767, qsa_frames) == 0);
+    assert(spa_pcm_whole_period_frames(768, qsa_frames) == qsa_frames);
+    assert(spa_pcm_whole_period_frames(1024, qsa_frames) == qsa_frames);
+    assert(spa_pcm_whole_period_frames(1024, 0) == 0);
+
+    /* Model the actual codec/sink granularity.  A 256- or 512-frame
+     * remainder must survive a fallback period; it must never be consumed as
+     * the prefix of a partly silent fragment. */
+    fill += codec_frames;
+    take = spa_pcm_whole_period_frames(fill, qsa_frames);
+    assert(take == qsa_frames);
+    fill -= take;
+    assert(fill == 256);
+
+    take = spa_pcm_whole_period_frames(fill, qsa_frames);
+    assert(take == 0);
+    assert(fill == 256);
+
+    fill += codec_frames;
+    take = spa_pcm_whole_period_frames(fill, qsa_frames);
+    assert(take == qsa_frames);
+    fill -= take;
+    assert(fill == 512);
+
+    take = spa_pcm_whole_period_frames(fill, qsa_frames);
+    assert(take == 0);
+    assert(fill == 512);
+}
 
 static enum spa_decoded_pcm_action render_cookie_pcm(
     struct spa_stereo_upmix *upmix, int codec_is_apac, uint32_t channels,
@@ -47,7 +109,7 @@ static void fill_stereo(void)
     uint32_t right_noise = UINT32_C(0x9abcdef0);
     size_t frame;
 
-    for (frame = 0; frame < TEST_FRAMES; frame++) {
+    for (frame = 0; frame < TEST_TRACK_FRAMES; frame++) {
         int32_t left;
         int32_t right;
 
@@ -60,13 +122,14 @@ static void fill_stereo(void)
     }
 }
 
-static void assert_stereo_synthesis_present(const int16_t *output)
+static void assert_stereo_synthesis_present(const int16_t *output,
+                                            size_t frames)
 {
     int have_lfe = 0;
     int have_rear = 0;
     size_t frame;
 
-    for (frame = 0; frame < TEST_FRAMES; frame++) {
+    for (frame = 0; frame < frames; frame++) {
         const int16_t *sample = output + frame * 6;
         assert(sample[SPA_STEREO_UPMIX_CHANNEL_C] == 0);
         if (sample[SPA_STEREO_UPMIX_CHANNEL_LFE] != 0) have_lfe = 1;
@@ -76,6 +139,25 @@ static void assert_stereo_synthesis_present(const int16_t *output)
     }
     assert(have_lfe);
     assert(have_rear);
+}
+
+static void render_stereo_track(struct spa_stereo_upmix *upmix,
+                                int16_t *output)
+{
+    size_t offset = 0;
+
+    while (offset < TEST_TRACK_FRAMES) {
+        size_t frames = TEST_TRACK_FRAMES - offset;
+
+        if (frames > SPA_STEREO_UPMIX_MAX_FRAMES)
+            frames = SPA_STEREO_UPMIX_MAX_FRAMES;
+        assert(render_cookie_pcm(
+                   upmix, 0, 2, 0, g_stereo + offset * 2, frames,
+                   output + offset * 6) ==
+               SPA_DECODED_PCM_ACTION_STEREO_UPMIX);
+        offset += frames;
+    }
+    assert_stereo_synthesis_present(output, TEST_TRACK_FRAMES);
 }
 
 static void assert_native_reorder(struct spa_stereo_upmix *upmix)
@@ -90,17 +172,17 @@ static void assert_native_reorder(struct spa_stereo_upmix *upmix)
     assert(memcmp(output, declared_order, sizeof(output)) == 0);
 }
 
-int main(void)
+static void run_switch_sequence(enum spa_stereo_upmix_backend backend)
 {
     static const int setup_indices[2] = { 65, 23 };
     struct spa_stereo_upmix_config config;
-    struct spa_stereo_upmix upmix;
     size_t sequence;
 
-    fill_stereo();
     spa_stereo_upmix_default_config(&config);
     spa_stereo_upmix_config_set_lfe(&config, 1);
-    assert(spa_stereo_upmix_init(&upmix, &config) == SPA_STEREO_UPMIX_OK);
+    config.backend = backend;
+    assert(spa_stereo_upmix_init(&g_upmix, &config) ==
+           SPA_STEREO_UPMIX_OK);
 
     for (sequence = 0;
          sequence < sizeof(setup_indices) / sizeof(setup_indices[0]);
@@ -111,27 +193,37 @@ int main(void)
         /* Exercise both orders: SETUP=65 begins with AAC, SETUP=23 begins
          * with APAC. Neither stale SETUP value may influence the action. */
         if (setup_indices[sequence] == 65) {
-            assert(render_cookie_pcm(&upmix, 0, 2, 0, g_stereo,
-                                     TEST_FRAMES, stereo_output) ==
-                   SPA_DECODED_PCM_ACTION_STEREO_UPMIX);
-            assert_stereo_synthesis_present(stereo_output);
-            assert(spa_stereo_upmix_reset(&upmix) == SPA_STEREO_UPMIX_OK);
-            assert_native_reorder(&upmix);
+            render_stereo_track(&g_upmix, stereo_output);
+            assert(spa_stereo_upmix_reset(&g_upmix) ==
+                   SPA_STEREO_UPMIX_OK);
+            assert_native_reorder(&g_upmix);
         } else {
-            assert_native_reorder(&upmix);
-            assert(spa_stereo_upmix_reset(&upmix) == SPA_STEREO_UPMIX_OK);
-            assert(render_cookie_pcm(&upmix, 0, 2, 0, g_stereo,
-                                     TEST_FRAMES, stereo_output) ==
-                   SPA_DECODED_PCM_ACTION_STEREO_UPMIX);
-            assert_stereo_synthesis_present(stereo_output);
+            assert_native_reorder(&g_upmix);
+            assert(spa_stereo_upmix_reset(&g_upmix) ==
+                   SPA_STEREO_UPMIX_OK);
+            render_stereo_track(&g_upmix, stereo_output);
         }
-        assert(spa_stereo_upmix_reset(&upmix) == SPA_STEREO_UPMIX_OK);
+        assert(spa_stereo_upmix_reset(&g_upmix) == SPA_STEREO_UPMIX_OK);
     }
 
     /* Every cookie boundary reset must make the first AAC block independent
      * of which APAC/AAC track preceded it. */
     assert(memcmp(g_first_stereo_render, g_second_stereo_render,
                   sizeof(g_first_stereo_render)) == 0);
-    puts("buffered_pcm_switch_test: OK (SETUP 65/23, AAC <-> APAC)");
+}
+
+int main(void)
+{
+    assert_buffered_receiver_sizes();
+    assert_whole_period_policy();
+    fill_stereo();
+    run_switch_sequence(SPA_STEREO_UPMIX_AMBIENT_LITE);
+    run_switch_sequence(SPA_STEREO_UPMIX_AMBIENT_HQ);
+    run_switch_sequence(SPA_STEREO_UPMIX_HSR_TD);
+    run_switch_sequence(SPA_STEREO_UPMIX_HSR_TD_ACTIVE);
+    run_switch_sequence(SPA_STEREO_UPMIX_MUSIC_STAGE);
+    puts("buffered_pcm_switch_test: OK "
+         "(receiver sizes, whole QSA periods, SETUP 65/23, "
+         "AAC <-> APAC, lite/HQ/HSR-TD/HSR-TD-active/music-stage)");
     return 0;
 }

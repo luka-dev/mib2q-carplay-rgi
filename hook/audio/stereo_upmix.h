@@ -23,6 +23,21 @@ enum {
     SPA_STEREO_UPMIX_MAX_FRAMES = 1024,
     SPA_STEREO_UPMIX_SAMPLE_RATE = 48000,
 
+    /* ambient-hq: causal 75%-overlap STFT.  The synchronous streaming API
+     * returns one frame for every input frame, so the rear field has one
+     * complete FFT frame of fixed latency.  Dry fronts and LFE are not
+     * delayed. */
+    SPA_STEREO_UPMIX_HQ_FFT_SIZE = 1024,
+    SPA_STEREO_UPMIX_HQ_HOP_SIZE = 256,
+    SPA_STEREO_UPMIX_HQ_BINS = 513,
+    SPA_STEREO_UPMIX_HQ_BANDS = 24,
+    SPA_STEREO_UPMIX_HQ_LATENCY_FRAMES = 1024,
+
+    /* hsr-td: a clean-room, causal time-domain spatial-field decoder.  The
+     * expensive covariance eigensystem is refreshed at a 6 kHz control rate;
+     * audio filtering and residual rendering still run for every sample. */
+    SPA_STEREO_UPMIX_TD_CONTROL_STRIDE = 8,
+
     /* Q15 gains.  32768 is unity and is intentionally representable here. */
     /* Paired profiles: legacy/no-LFE ~= 0.997; LFE-enabled ~= 0.94. */
     SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT = 32670,
@@ -47,7 +62,10 @@ enum spa_stereo_upmix_backend {
     SPA_STEREO_UPMIX_AMBIENT_LITE = 1,
     SPA_STEREO_UPMIX_AMBIENT_HQ = 2,
     SPA_STEREO_UPMIX_PIONEER_RER = 3,
-    SPA_STEREO_UPMIX_CUPGAN = 4
+    SPA_STEREO_UPMIX_CUPGAN = 4,
+    SPA_STEREO_UPMIX_HSR_TD = 5,
+    SPA_STEREO_UPMIX_HSR_TD_ACTIVE = 6,
+    SPA_STEREO_UPMIX_MUSIC_STAGE = 7
 };
 
 enum spa_stereo_upmix_status {
@@ -100,6 +118,54 @@ struct spa_stereo_upmix_runtime {
     uint16_t _rear_delay_pos[SPA_STEREO_UPMIX_INPUT_CHANNELS]
                             [SPA_STEREO_UPMIX_PHASE_STAGES];
     float _limiter_gain;
+
+    /* ambient-hq tables and caller-owned streaming state.  Keeping all FFT,
+     * covariance and overlap-add storage here guarantees that processing does
+     * not allocate or borrow the optional APAC decoder's C++ FFT. */
+    float _hq_analysis_window[SPA_STEREO_UPMIX_HQ_FFT_SIZE];
+    float _hq_synthesis_window[SPA_STEREO_UPMIX_HQ_FFT_SIZE];
+    float _hq_twiddle_re[SPA_STEREO_UPMIX_HQ_FFT_SIZE / 2];
+    float _hq_twiddle_im[SPA_STEREO_UPMIX_HQ_FFT_SIZE / 2];
+    float _hq_input[SPA_STEREO_UPMIX_INPUT_CHANNELS]
+                   [SPA_STEREO_UPMIX_HQ_FFT_SIZE];
+    float _hq_ola[SPA_STEREO_UPMIX_INPUT_CHANNELS]
+                 [SPA_STEREO_UPMIX_HQ_FFT_SIZE];
+    float _hq_fft_re[SPA_STEREO_UPMIX_INPUT_CHANNELS]
+                    [SPA_STEREO_UPMIX_HQ_FFT_SIZE];
+    float _hq_fft_im[SPA_STEREO_UPMIX_INPUT_CHANNELS]
+                    [SPA_STEREO_UPMIX_HQ_FFT_SIZE];
+    float _hq_cov_l[SPA_STEREO_UPMIX_HQ_BANDS];
+    float _hq_cov_r[SPA_STEREO_UPMIX_HQ_BANDS];
+    float _hq_cov_re[SPA_STEREO_UPMIX_HQ_BANDS];
+    float _hq_cov_im[SPA_STEREO_UPMIX_HQ_BANDS];
+    float _hq_previous_magnitude[SPA_STEREO_UPMIX_HQ_BINS];
+    float _hq_mask[SPA_STEREO_UPMIX_HQ_BANDS];
+    float _hq_band_accumulator[SPA_STEREO_UPMIX_HQ_BANDS][6];
+    float _hq_band_parameters[SPA_STEREO_UPMIX_HQ_BANDS][6];
+    float _hq_frequency_weight[SPA_STEREO_UPMIX_HQ_BINS];
+    uint8_t _hq_bin_band[SPA_STEREO_UPMIX_HQ_BINS];
+    uint16_t _hq_input_position;
+    uint16_t _hq_hop_fill;
+    uint32_t _hq_frames_seen;
+
+    /* hsr-td owns a second complementary six-band bank so changing backend
+     * never aliases its statistics with ambient-lite.  Each band's smoothed
+     * real covariance estimates one coherent rank-one component.  The two
+     * saved vector entries and direct coefficient describe its projector;
+     * the unclaimed residual is the spatial/diffuse rear field. */
+    float _td_split[SPA_STEREO_UPMIX_INPUT_CHANNELS]
+                   [SPA_STEREO_UPMIX_CROSSOVERS];
+    float _td_power_l[SPA_STEREO_UPMIX_BANDS];
+    float _td_power_r[SPA_STEREO_UPMIX_BANDS];
+    float _td_cross[SPA_STEREO_UPMIX_BANDS];
+    float _td_vector_l[SPA_STEREO_UPMIX_BANDS];
+    float _td_vector_r[SPA_STEREO_UPMIX_BANDS];
+    float _td_direct[SPA_STEREO_UPMIX_BANDS];
+    float _td_active_input_power;
+    float _td_active_residual_power;
+    float _td_active_confidence;
+    float _td_active_amount;
+    uint8_t _td_control_phase;
 };
 
 struct spa_stereo_upmix {
@@ -126,8 +192,9 @@ void spa_stereo_upmix_default_config(struct spa_stereo_upmix_config *config);
 void spa_stereo_upmix_config_set_lfe(
     struct spa_stereo_upmix_config *config, int enabled);
 
-/* Only OFF and AMBIENT_LITE are implemented.  Reserved backends return false
- * rather than silently changing the requested algorithm. */
+/* OFF, AMBIENT_LITE, AMBIENT_HQ, HSR_TD, HSR_TD_ACTIVE and MUSIC_STAGE are
+ * implemented. Reserved backends return false rather than silently changing
+ * the requested algorithm. */
 int spa_stereo_upmix_backend_supported(enum spa_stereo_upmix_backend backend);
 
 /* Initialise/reset caller-owned state.  Reset preserves the configuration and

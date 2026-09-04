@@ -43,6 +43,12 @@ Run from the repository root:
 ./scripts/build_renderers.sh
 ```
 
+The hook can also be built with the independently guarded QNX GCC 8.5 image:
+
+```sh
+QNX_TOOLCHAIN_VARIANT=8.5 ./scripts/build_hook.sh
+```
+
 Canonical outputs:
 
 ```text
@@ -73,9 +79,9 @@ To replace only the native hook and restart `dio_manager` over ssh:
 ./scripts/deploy_over_ssh.sh
 ```
 
-The deploy helper stages both native audio artifacts through `.new` files and does not accumulate
-stale backup copies. Java deployment is deliberately not automated by that script because restarting
-the Java stack on a live HU is unsafe.
+The deploy helper overwrites both native audio artifacts directly, syncs them, and restarts
+`dio_manager`; it does not accumulate stale backup copies. Java deployment is deliberately not
+automated by that script because restarting the Java stack on a live HU is unsafe.
 
 ## Current design documents
 
@@ -89,12 +95,13 @@ the Java stack on a live HU is unsafe.
 - [`docs/AAC_BUFFERED_PATH_PLAN.md`](docs/AAC_BUFFERED_PATH_PLAN.md) — measured index-23 framing/cookie, exact Cinemo ABI and the implemented ordinary-content AAC path.
 - [`docs/CINEMO_AAC_THREAD_SAFETY_AUDIT.md`](docs/CINEMO_AAC_THREAD_SAFETY_AUDIT.md) — MHI2Q codec-object, class-registry, callback and OMX coexistence proof; FDK-AAC is rollback only.
 - [`docs/DYNAMIC_BUFFERED_CODEC_SWITCH.md`](docs/DYNAMIC_BUFFERED_CODEC_SWITCH.md) — iOS in-session APAC/AAC selection, packet-boundary receiver state machine and decisive vehicle test.
+- [`docs/BUFFERED_BACKGROUND_LIFECYCLE.md`](docs/BUFFERED_BACKGROUND_LIFECYCLE.md) — measured phone-lock/app-background ownership loss, same-live-handle handoff, detached-QSA scheduler priority, and the mixed `[65,23]` buffer contract needed for in-session AAC/APAC changes.
 - [`deploy/deva-ctrl-qc/BUILD_CHAIN.md`](deploy/deva-ctrl-qc/BUILD_CHAIN.md) — vehicle-confirmed deva fix and exact deployable build chain.
 - [`docs/ROUTER_INPUT_WIDTH_AUDIT.md`](docs/ROUTER_INPUT_WIDTH_AUDIT.md) — historical root cause of the now-fixed MPL5 render-width defect.
 - [`docs/MC_SELECTION_AUDIT.md`](docs/MC_SELECTION_AUDIT.md) — connection-162 MC selection and its `Sound_System` coding source.
 - [`docs/SHARC_INPUT_OUTPUT_MATRIX.md`](docs/SHARC_INPUT_OUTPUT_MATRIX.md) — recovered A07 8×8 SHARC input mixer, selection logic, coefficient addresses and the remaining physical-output boundary.
-- [`docs/STEREO_TO_5_1_UPMIX_DESIGN.md`](docs/STEREO_TO_5_1_UPMIX_DESIGN.md) — amplifier-aware stereo-to-5.1 design for index 23, including bounded LR4/80 Hz LFE assist, the recovered Pioneer CarPlay 2-to-5 engine, headroom proof and vehicle A/B gates.
-- [`tools/stereo-upmix-render/`](tools/stereo-upmix-render/README.md) — host WAV renderer for auditioning the exact hook `off`/`ambient-lite`/LFE-assist PCM2-to-PCM6 implementation before a vehicle build.
+- [`docs/STEREO_TO_5_1_UPMIX_DESIGN.md`](docs/STEREO_TO_5_1_UPMIX_DESIGN.md) — amplifier-aware stereo-to-5.1 design for index 23, including the implemented `ambient-lite`, clean-room STFT `ambient-hq`, and clean-room time-domain `hsr-td` renderers, bounded LR4/80 Hz LFE assist, the recovered Pioneer oracle, measured cost and vehicle gates.
+- [`tools/stereo-upmix-render/`](tools/stereo-upmix-render/README.md) — host WAV renderer, benchmark, and controlled nine-genre plus 24-track held-out 5.1 fold-down evaluation for the exact hook `off`/`ambient-lite`/`ambient-hq`/`hsr-td`/LFE-assist PCM2-to-PCM6 implementation. Vehicle startup now selects `hsr-td` for the requested stationary A/B; subjective acceptance and real MHI2Q Krait timing remain open, and QEMU instruction counts are not Krait cycles.
 - [`docs/MOST_SOURCE_BLOCKWIDTH_AUDIT.md`](docs/MOST_SOURCE_BLOCKWIDTH_AUDIT.md) — connection-162 source allocation and actual MOST Connect BlockWidth.
 - [`docs/CONNECT_BLOCKWIDTH_VALIDATION_AUDIT.md`](docs/CONNECT_BLOCKWIDTH_VALIDATION_AUDIT.md) — amplifier Connect validation and exact HU BlockWidth constant sites.
 

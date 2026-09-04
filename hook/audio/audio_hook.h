@@ -62,7 +62,8 @@
  * buffered stream by itself.  The code default is off; deployment policy may
  * opt in explicitly.
  *
- * AUDIO_STEREO_UPMIX: off | ambient-lite
+ * AUDIO_STEREO_UPMIX: off | ambient-lite | ambient-hq | hsr-td |
+ *                      hsr-td-active | music-stage
  * AUDIO_STEREO_SURROUND: rear input gain, 0.0 .. 0.25 (default 0.18)
  * AUDIO_STEREO_LFE: off | assist (code default off). `assist` synthesizes only an
  * 80 Hz LR4 low-passed mono bass feed and selects its paired front headroom. */
@@ -122,6 +123,38 @@
 #define SPA_BUFFERED_AAC_MASK        0x400000   /* bit 22: AAC-LC/44100/2; valid type-103 codec family */
 #define SPA_BUFFERED_BROAD_MASK      0x1440800  /* old failed probe: mixed bits 11,18,22,24 */
 
+/* APReceiverAudioSessionBufferedCreate's single-format defaults.  AAC-LC and
+ * AAC-ELD map to compression types 4/8 and get the smaller receiver buffer;
+ * APAC remains compression type 0.  Our advertised [65,23] stream is different:
+ * iOS changes codec inside the already-created type-103 connection, so its one
+ * immutable buffer size must cover the largest format in the offer. */
+#define SPA_103_AUDIO_BUFFER_SIZE_AAC   5000000
+#define SPA_103_AUDIO_BUFFER_SIZE_OTHER 21168000
+
+static inline int spa_type103_audio_buffer_size_for_index(int64_t formatIndex)
+{
+    return formatIndex == SPA_AAC_LC_44K_STEREO ||
+           formatIndex == SPA_AAC_LC_48K_STEREO ||
+           formatIndex == SPA_AAC_LC_48K_5_1_2 ||
+           formatIndex == SPA_AAC_ELD_48K_5_1_2 ?
+           SPA_103_AUDIO_BUFFER_SIZE_AAC : SPA_103_AUDIO_BUFFER_SIZE_OTHER;
+}
+
+static inline int spa_type103_audio_buffer_size_for_offer(int64_t selectedIndex,
+                                                           int primaryIndex,
+                                                           int extraIndex)
+{
+    int size = spa_type103_audio_buffer_size_for_index(selectedIndex);
+
+    if (primaryIndex >= 0 &&
+        spa_type103_audio_buffer_size_for_index(primaryIndex) > size)
+        size = spa_type103_audio_buffer_size_for_index(primaryIndex);
+    if (extraIndex >= 0 &&
+        spa_type103_audio_buffer_size_for_index(extraIndex) > size)
+        size = spa_type103_audio_buffer_size_for_index(extraIndex);
+    return size;
+}
+
 /* Registered by the framework from hook_module_table (hook/main.c).  The
  * AirPlay SETUP/ /info/TearDown work this module needs is declared as seam
  * callbacks in that def and implemented statically in audio_hook.c; nothing
@@ -139,15 +172,18 @@ extern const hook_module_def_t audio_module_def;
  * of its own samples, and the instant it is false stock type-100 behaviour
  * resumes unchanged. That fallback is the whole safety story of this path.
  *
- * spa_buffered_pcm6_read() writes `frames` * 6 interleaved S16 samples at most and returns the
- * number of frames actually written; a short return is an underrun and the caller decides whether
- * to pad with silence or hold.  Both are safe to call from any thread. */
+ * spa_buffered_pcm6_read() writes exactly `frames` * 6 interleaved S16 samples
+ * and returns `frames`, or writes nothing and returns zero.  A decoded prefix
+ * followed by a synthesized zero tail is forbidden: the caller can use its
+ * realtime fallback for the whole indivisible QSA period.  Both calls are safe
+ * from any thread. */
 int spa_buffered_pcm6_active(void);
 size_t spa_buffered_pcm6_read(int16_t *out, size_t frames);
 
 /* Generic rail used by the sink: 6 channels for 5.1 and for Atmos
- * downmix/drop, 8 only for explicit passthrough. The read returns zero if the
- * caller's expected channel count no longer matches the active stream. */
+ * downmix/drop, 8 only for explicit passthrough. The read is all-or-zero and
+ * also returns zero if the caller's expected channel count no longer matches
+ * the active stream. */
 int spa_buffered_pcm_active(void);
 unsigned spa_buffered_pcm_channels(void);
 size_t spa_buffered_pcm_read(int16_t *out, size_t frames, unsigned channels);

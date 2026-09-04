@@ -2,9 +2,12 @@
 
 Date: 2026-09-04
 
-Status: `ambient-lite` plus an opt-in LR4/80 Hz LFE assist are implemented and
-host/QNX verified. The checked-in vehicle policy explicitly selects this canary;
-it still requires a stationary listening A/B. The HQ, Pioneer-oracle and CUpGAN
+Status: `ambient-lite`, `ambient-hq`, the clean-room time-domain `hsr-td`, and
+the opt-in LR4/80 Hz LFE assist are implemented and host/QNX verified. The
+checked-in and deployed vehicle policy now selects `hsr-td`, rear gain `0.18`,
+and LFE assist for the requested stationary A/B.  Offline renders and
+ARMv7/QEMU instruction measurements exist, but subjective vehicle acceptance
+and real on-unit Krait timing are still open. The Pioneer oracle and CUpGAN
 tiers remain candidates, not implemented claims.
 
 Target path: buffered CarPlay stereo decoded inside `dio_manager` (production
@@ -22,21 +25,22 @@ must bypass it bit-exactly.
 There is no justified claim that one algorithm is the universal "best" stereo
 upmixer. Stereo does not uniquely determine the missing channels, and the final
 SHARC bus-to-speaker processing is not fully visible. The implementation is
-therefore split into four measured candidates:
+therefore split into five measured candidates:
 
 | tier | candidate | purpose |
 | --- | --- | --- |
 | safe canary | six-band, panning-aware time-domain PAE | low-risk vehicle bring-up and fallback |
-| deterministic production candidate | direction-aware STFT primary/ambient decomposition | best controllable quality/CPU trade-off presently available in source form |
+| deterministic HQ candidate | direction-aware STFT primary/ambient decomposition | implemented; pending vehicle A/B and real Krait timing |
+| deterministic time-domain challenger | six-band covariance/projector residual (`hsr-td`) | implemented; no FFT/block latency, pending vehicle A/B and real Krait timing |
 | recovered OEM challenger | Pioneer's CarPlay rear-field generator | production automotive reference/oracle; requires a clean-room ARMv7 port |
 | ML challenger | CUpGAN ambience extractor | strongest directly relevant 2026 automotive research candidate; requires weights/training and ARM benchmarking |
 
-The current front-runner to build is a deterministic hybrid: use the STFT PAE
-to decide which time-frequency energy is genuinely diffuse, then render only
-that residual through bounded Pioneer-style all-pass/delay decorrelation. Keep
-the exact Pioneer RER network as an OEM comparator, not an assumed winner. The
-winner is selected only after the common SoundAmp render and blind A/B described
-below.
+The implemented HQ challenger is the deterministic hybrid: the STFT PAE decides
+which time-frequency energy is not the coherent primary image, then renders
+that residual through the same bounded Pioneer-style all-pass/delay adapter as
+the canary. Keep the exact Pioneer RER network as an OEM comparator, not an
+assumed winner. The winner is selected only after the common SoundAmp render
+and blind A/B described below.
 
 All four candidates use the same amplifier-aware adapter. The initial active
 profile places bounded synthesized signals only in `LFE/Ls/Rs`:
@@ -77,8 +81,8 @@ tests/stereo_upmix_test.c
 tools/stereo-upmix-render/stereo_upmix_render.c
 ```
 
-It implements the six-band time-domain candidate described below, not the
-unbuilt STFT or ML tiers. The graph is six complementary IIR bands at
+`ambient-lite` implements the six-band time-domain candidate described below,
+not the separate HQ STFT or ML tiers. Its graph is six complementary IIR bands at
 approximately `220/500/1000/2000/5000 Hz`, smoothed-power amplitude-pan
 removal, distinct per-band phase all-passes, then two clean-room Schroeder
 all-pass sections per rear. Their delay/coefficient sets are
@@ -95,12 +99,14 @@ off:                       L,       R,       0, 0,          0,          0
 native 5.1:                bypasses this module entirely
 ```
 
-The state is caller-owned and 8120 bytes on QNX/ARMv7. Processing is C99,
-fixed-memory and single-owner: no allocation, mutex, logging, thread, FFT or
-`libm` call. The QNX ARMv7 object reports a 128-byte process stack frame and
-undefined references only to `memcpy`/`memset`; its text is 4284 bytes. One call
-accepts at most 1024 stereo frames and first stages all input, so exact or
-partial input/output overlap is safe.
+Processing is C99, fixed-memory and single-owner: no allocation, mutex, logging,
+thread or sample-path `libm` call. The `ambient-lite` branch itself performs no
+FFT; the caller-owned public state is now 59624 bytes because the same object
+also contains all fixed HQ FFT/WOLA and HSR-TD covariance storage. One call accepts at most 1024
+stereo frames and first stages all input, so exact or partial input/output
+overlap is safe. Current shared object/stack measurements are recorded with the
+HQ implementation below; the earlier 8120-byte/4284-text/128-byte-frame figures
+describe the pre-HQ translation unit and are no longer current.
 
 Integration is after the common decoder and before PCM ring statistics/push.
 It is selected only for a decoder that reports two channels at 48 kHz, a
@@ -124,15 +130,15 @@ Runtime controls are parsed once and do not themselves enable Spatial or alter
 the advertised formats:
 
 ```text
-AUDIO_STEREO_UPMIX=off|ambient-lite
+AUDIO_STEREO_UPMIX=off|ambient-lite|ambient-hq|hsr-td
 AUDIO_STEREO_SURROUND=0.0..0.25
 AUDIO_STEREO_LFE=off|assist
 ```
 
-Unknown upmix values and the reserved `ambient-hq`, `pioneer-rer` and `cupgan`
-names are logged and fail to exact `off`; an absent or invalid LFE value fails to
-LFE `off`. There is no silent substitution. The checked-in
-`carplay_startup.sh` explicitly selects `ambient-lite`, rear `0.18`, and LFE
+Unknown upmix values and the reserved `pioneer-rer` and `cupgan` names are
+logged and fail to exact `off`; an absent or invalid LFE value fails to LFE
+`off`. There is no silent substitution. The checked-in
+`carplay_startup.sh` explicitly selects `hsr-td`, rear `0.18`, and LFE
 `assist`. These values are read once by `dio_manager`; changing them requires a
 service/process restart. `AUDIO_STEREO_UPMIX=off` is the one-variable exact
 rollback. None of these controls enables Spatial by itself, and the SAD, CSD,
@@ -380,8 +386,11 @@ Source: [Liang et al., "ImmersiveFlow," arXiv:2601.12950](https://arxiv.org/abs/
 - **DAM HSR: real but proprietary.** DAM and an IRCAM Forum 2026 presentation
   describe a time-domain, no-FFT, five-sample-latency stereo renderer. Public
   material does not expose enough coefficients, source, neutral third-party
-  tests, or an ARMv7/QNX benchmark to reproduce or rank it. It is a licensing or
-  black-box A/B candidate, not a clean-room algorithm specification. Source:
+  tests, or an ARMv7/QNX benchmark to reproduce or rank the product. It remains
+  a licensing or black-box A/B candidate. The implemented `hsr-td` below is an
+  independent algorithm in the same broad time-domain class; it contains no DAM
+  code or coefficients and does not claim product/output parity. Sources:
+  [DAM HSR](https://www.dam-audio.com/research/hsr-high-space-resolution),
   [IRCAM Forum presentation](https://forum.ircam.fr/article/on-the-use-of-an-hsr-as-an-upmix-solution-for-stereo-reproduction-on-multi-speaker-systems/).
 - **"MaestroNet PCA-PAD": not verified.** No primary publication or product
   document matching that name and upmix description was located. The name also
@@ -426,69 +435,277 @@ ordinary stereo-to-surround target needs a worst absolute row sum of about 3.71,
 costing roughly 11.4 dB of headroom. Do not pre-invert the complete amplifier
 matrix.
 
-## Production candidate: direction-aware STFT PAE
+## Implemented HQ candidate: direction-aware STFT PAE
 
-The quality-first deterministic design operates per time-frequency region,
-instead of applying one decision to a complete 1024-frame AAC block:
+`ambient-hq` is now a clean-room deterministic implementation, not an alias for
+`ambient-lite` or a transcription of Pioneer's coefficients. It operates on
+time-frequency regions while leaving the dry fronts, zero center, optional LFE
+assist and native-5.1 bypass exactly as described above.
 
-```text
-STFT: sqrt-Hann, N=1024, hop=256, causal streaming overlap-add
-statistics: 24 Bark-like bands, smoothed over time
-for each band:
-    estimate direct-source pan from L/R level and phase
-    estimate inter-channel coherence and confidence
-    extract a soft ambient residual A_L/A_R
-    reduce the ambient mask on spectral transients
-```
-
-The generalized mid/side model estimates the amplitude-pan vector before
-forming the residual. Consequently, a stable source remains primary whether it
-is centered, partially panned, hard-left, or hard-right. A broadband `L-R`
-extractor cannot provide that property. Coherence is a confidence term rather
-than the only decision variable.
-
-A complementary covariance check can be formed from the smoothed 2x2 spectral
-matrix:
+The causal WOLA geometry is fixed:
 
 ```text
-R = [[P_L, C], [conj(C), P_R]]
-trace = P_L + P_R
-delta = sqrt((P_L - P_R)^2 + 4*abs(C)^2)
-diffuseness = 1 - delta / (trace + epsilon)
+N = 1024, H = 256, four overlaps, Fs = 48000
+w[n] = sin(pi * (n + 1/2) / N)                 # periodic sqrt-Hann
+ws[n] = w[n] / sum(j=0..3, w[n mod H + jH]^2) # synthesis window
+rear latency = N = 1024 frames = 21.333 ms
 ```
 
-A rank-one source, including a hard-panned one, has diffuseness near zero;
-uncorrelated equal-power material approaches one. This value must drive a soft,
-smoothed mask. Hard bin assignment creates musical noise and source motion.
+The inverse FFT is normalized by `1/N`; multiplying its result by `ws` makes
+the four `w*ws` products sum to unity. A ring schedules each completed frame
+onto its original sample positions and emits it exactly 1024 input frames
+later. The first 1024 Ls/Rs frames after init/reset are therefore digital zero.
+Dry L/R and the LR4 LFE path are not delayed. Tables are built by bounded
+double-precision recurrences at init/reset; the sample path calls no `libm`.
 
-Initial rear passband is 120 Hz to 7 kHz, but the vehicle canary should start
-more conservatively at roughly 220 Hz to 5 kHz. Use frequency-dependent phase
-rotation or separate stable all-pass networks to decorrelate Ls and Rs. The
-STFT already delays the rear path, so do not add the earlier proposed 10-15 ms
-bulk delay. Protect attacks with a spectral-flux gate with fast attack and
-roughly 150-300 ms release, then apply a linked/bounded surround limiter.
+Two forward and two inverse full complex 1024-point FFTs run per hop. Positive
+bins are accumulated into 24 Bark-like control bands with boundaries:
 
-Kraft and Zoelzer report that reducing their 2048-sample design to 1024 was only
-barely distinguishable and that aggregating control into 24 Bark bands produced
-no obvious artifacts in their tests. Our renderer needs only two input FFTs and
-two rear inverse FFTs because the original fronts bypass the STFT.
+```text
+0,100,200,300,400,510,630,770,920,1080,1270,1480,
+1720,2000,2320,2700,3150,3700,4400,5300,6400,7700,
+9500,12000,24001 Hz
+```
 
-Source: [Kraft and Zoelzer, "Stereo Signal Separation and Upmixing by Mid-Side
-Decomposition in the Frequency-Domain," DAFx-15](https://www.dafx.de/paper-archive/2015/DAFx-15_submission_9.pdf).
+For each band, one shared EMA coefficient updates every element of its
+Hermitian covariance, so a positive-semidefinite instantaneous matrix remains
+positive semidefinite after smoothing. The coefficient is `0.20` when the
+trace rises and `0.021` when it falls, approximately 24 ms attack and 251 ms
+release at this hop rate:
 
-### Estimated MHI2Q cost and hard gate
+```text
+R = [[P_L, C], [conj(C), P_R]], C = sum(X_L * conj(X_R))
+T = P_L + P_R
+D = min(T, sqrt((P_L-P_R)^2 + 4*abs(C)^2))
+lambda1 = (T+D)/2
+lambda2 = max(0,(T-D)/2)
+```
 
-The existing QNX/ARMv7 measurement gives approximately 75,800 instructions per
-`ComplexFFT(512)`. Four transforms over four 256-frame hops imply about 1.21
-million FFT instructions per 1024-frame AAC packet. Including masks, statistics
-and overlap-add gives a provisional total of 1.4-1.8 million instructions, or
-roughly 4-8% of one 1.7 GHz Cortex-A15 core under the same IPC assumptions used
-by the APAC benchmark. This is an estimate, not a target measurement.
+The `D<=T` clamp contains round-off from the self-contained two-Newton-step
+positive square root. Power decisions use `1e-16`; division denominators add
+`1e-20`. `gamma` is clamped to `[0,1]`, `cosPhi` to `[-1,1]`, and a band below
+the power threshold has no direct subtraction and closes its mask. These are
+numerical guards, not tunable acoustic gates.
 
-Shipping gate: an ARMv7/QNX benchmark must show p99 below 5 ms per 1024 source
-frames, with no allocation, lock, logging, or new thread in the audio callback.
-The fail-safe result for low confidence or deadline pressure is less rear
-ambience, never a modified front signal.
+Let `v` be the normalized principal eigenvector, with its left component real
+and non-negative. The implementation constructs it without an angle, selecting
+between two algebraically equivalent forms so the small component is never
+obtained by subtracting two nearly equal diagonal powers:
+
+```text
+if P_L >= P_R:
+    v = normalize([lambda1-P_R, conj(C)])
+else:
+    v = normalize([abs(C), (lambda1-P_L)*conj(C)/abs(C)])
+```
+
+When `abs(C)<=1e-16` it selects the higher-power axis. Direct confidence is
+limited to coherent, positive-phase material, except for an effectively
+one-sided source:
+
+```text
+gamma = abs(C) / sqrt(P_L*P_R)
+cosPhi = Re(C) / abs(C)
+edge = abs(P_L-P_R) / T
+s = max(gamma*smoothstep(cosPhi,0.50,0.90),
+        smoothstep(edge,0.96,0.995))
+wDirect = 1 - lambda2/lambda1
+A = X - s*wDirect*v*(v^H*X)
+```
+
+Thus mono, an ordinary fixed positive amplitude pan and a genuinely hard-panned
+source cancel from the rear estimate; coherent anti-phase material deliberately
+does not. The first implementation additionally multiplied `A` by a diffuseness
+gate. That was removed after it was measured to suppress legitimate quiet room
+energy twice: the projector above is the separation, so the residual is not
+gated a second time.
+
+The remaining spectral mask is only an attack protector. Per-bin positive
+magnitude flux is summed by band,
+`F=sum(max(0,M-M_previous))/sum(M)`, then:
+
+```text
+gTransient = 1 - 0.85*smoothstep(F,0.20,0.60)
+target = T > 1e-16 ? gTransient : 0
+mask += (target < mask ? 0.35 : 0.035) * (target-mask)
+```
+
+Those mask coefficients are approximately 12 ms close and 150 ms open. A
+frequency mask is zero through 120 Hz, rises smoothly to unity at 220 Hz,
+stays unity through 5 kHz, falls smoothly to zero at 7 kHz and remains zero
+above. The two inverse results retain the residual's L/R image, then enter the
+same unequal two-stage Schroeder all-pass networks and linked limiter as
+`ambient-lite`. No bulk delay is added after the STFT.
+
+The shared limiter takes the larger absolute rear sample. Above unity it
+reduces the linked gain immediately to `1/peak`; otherwise it recovers by
+`gain += 0.0005*(1-gain)` per sample, approximately 41.7 ms. Both outputs are
+then bounded to unity before the configured Q15 rear gain. Thus the HQ-specific
+mask cannot bypass the same output bound used by lite.
+
+The final review also snaps both the shared delay-allpass output and feedback
+to exact zero when `abs(x)<1e-20`. This terminates inaudible binary32 denormal
+tails on an MHI2Q whose FPSCR flush mode is not assumed. It applies to lite and
+HQ, changes no normal-level benchmark PCM checksum, and adds no allocation or
+new scheduling mechanism.
+
+The branch choice above matters in S16 output: always using the second form is
+ill-conditioned when `P_L` dominates, and an earlier build left a false loud
+left residual. A channel-swap regression now proves the stable branch swaps
+the output energy rather than retaining a fixed-left leak.
+
+The implementation is C99, fixed-memory and single-owner. On the retained
+pre-HSR-TD QNX 4.9 ARMv7 measurement,
+`sizeof(struct spa_stereo_upmix)=59432`, its runtime member was 55304 bytes, the
+complete `spa_stereo_upmix_process_s16` frame was 208 bytes, the FFT helper
+frame was 72 bytes, and `stereo_upmix.o` had 8180 bytes of text (72904-byte
+unstripped object). Current combined-object GCC 8.5 sizes are recorded in the
+HSR-TD section below.
+There is no render-time heap allocation, new thread, lock, logging, environment
+lookup or filesystem operation.
+
+Source basis: [Kraft and Zoelzer, "Stereo Signal Separation and Upmixing by
+Mid-Side Decomposition in the Frequency-Domain," DAFx-15](https://www.dafx.de/paper-archive/2015/DAFx-15_submission_9.pdf).
+
+### Measured cost and remaining shipping gate
+
+The fixed 1024-frame host benchmark on the current arm64 Mac, 128 measured
+blocks after eight warm-ups, reports mean `144015 ns` and p99 `162042 ns`;
+the p99 is 0.760% of the 21.333 ms audio duration. This is useful only as a
+same-host regression measurement.
+
+The shipping-flags QNX/ARMv7 binary was also booted under single-thread QEMU TCG
+with `-icount shift=0`. Calibration of exact two- and four-instruction loops
+agreed to 0.999502. The 128 calls measured mean `4,034,828` and p99
+`4,035,856` estimated retired ARM instructions per 1024 frames. The host and
+QNX output checksums were respectively `0x2cd85256da3bd0be` and
+`0x845172f60b9a95bb`; they are optimizer/build regression values, not a
+cross-target bit-exact promise.
+
+The complete percentile rows, toolchain details and measured source hash are
+retained in
+[`tools/stereo-upmix-render/bench/results/2026-09-04-post-mask-fix.md`](../tools/stereo-upmix-render/bench/results/2026-09-04-post-mask-fix.md).
+
+The QEMU result supersedes the earlier 1.4-1.8-million estimate: this
+implementation deliberately uses four complete complex-1024 transforms per
+hop rather than a real-FFT wrapper around complex-512. Crucially, QEMU icount
+is target instruction retirement, **not** Krait cycles, cache behavior, IPC or
+wall time. It cannot prove the p99 `<5 ms` on-unit gate. Startup remains on
+`ambient-lite` until a real MHI2Q timing run and stationary acoustic A/B pass.
+The denormal snap raised QEMU's estimated instruction mean and p99 by about
+1.44% versus the preceding stable-eigen build; that is an instruction delta,
+not a claim about Krait cycles or elapsed time. Normal-level host and QNX PCM
+checksums were unchanged.
+
+The post-stable-eigenvector retained-file render is
+`build/upmix-audition/session6_ambient_hq_lfe_5_1.wav`. With rear gain 0.18 and
+the same LFE-assist adapter, Ls/Rs peak at `-40.398/-43.864 dBFS` and have RMS
+`-68.918/-71.926 dBFS`. Swapping the stereo input swaps the measured rear RMS
+to `-71.927/-68.918 dBFS`; the residual therefore follows source image rather
+than a fixed implementation side. The rears in this particular fold are very
+quiet, and that is a measurement rather than a quality claim. Do not add
+automatic energy equality before listening: stereo does not retain a uniquely
+recoverable native surround image, and normalization would manufacture energy
+on the opposite side.
+
+That extreme subtlety is content-dependent, not a fixed output level. On the
+current ordinary AAC capture `spatial_aac.wav`, HQ Ls/Rs RMS is
+`-37.827/-37.436 dBFS`, versus `-39.803/-40.183 dBFS` for `ambient-lite`.
+This capture is nearly balanced while the highly coherent fold preserves its
+source-relative asymmetry. Neither result proves that HQ is universally better
+or louder; both must be judged in the stationary vehicle A/B.
+
+Final host regression passes cover strict compilation, exact zero mono,
+positive static-pan and hard-pan rejection, anti-phase passband survival,
+independent-field decorrelation, fixed 1024-frame latency, arbitrary callback
+chunking, reset/tail removal, saturation and recovered SoundAmp row bounds.
+ASan/UBSan pass for both the DSP and AAC<->APAC switch harness. The complete
+hook audio suite, 3980-frame APAC integration (`3977` authenticated/reference-
+identical APAC packets), the geometry-selected render-policy harness in both
+SETUP-65/23 orders for lite, HQ, and HSR-TD, card install test, shipping-flags QNX
+object build and QEMU benchmark all pass. The policy harness supplies decoded
+geometry directly; it does not instantiate Cinemo/APAC or exercise the live
+alternate-decoder retry, which is separately vehicle-confirmed and unchanged.
+
+## Implemented time-domain challenger: `hsr-td`
+
+`hsr-td` is a clean-room time-domain spatial-field decoder in the broad class
+described by DAM's public HSR material. It is not a reconstruction of DAM
+Upmix: no proprietary code, coefficient, binary, or measured product output was
+used, and coefficient/output parity is not claimed.
+
+The signal path reuses the complementary `220/500/1000/2000/5000 Hz` six-band
+split. Each band tracks a real covariance matrix with one common EMA
+coefficient for all entries, preserving its positive-semidefinite form:
+
+```text
+R = [[P_L, C], [C, P_R]]
+alpha = 0.020 on attack, 0.0026 on release
+lambda1, lambda2 = eigenvalues(R)
+v = normalized principal eigenvector
+rho = C / sqrt(P_L*P_R)
+s = max(smoothstep(rho,0.45,0.92),
+        smoothstep(abs(P_L-P_R)/(P_L+P_R),0.96,0.997))
+d = s * (1 - lambda2/lambda1)
+A = X - d*v*(v^T*X)
+```
+
+The covariance updates run per sample; the eigenvector/projector parameters are
+refreshed every eight samples (6 kHz control rate). The selected attack/release
+coefficients have about 1 ms and 8 ms state time constants at 48 kHz. They and the
+unchanged `0.45..0.92` correlation knee are compile-time-only macros so an
+environment typo cannot weaken dialogue rejection. A sweep rejected wider
+correlation knees because they leaked more near-coherent center material.
+
+Positive coherent mono and stable amplitude pans remain in dry L/R. Anti-phase
+or unexplained spatial energy survives into the weighted rear residual. Unlike
+lite/HQ, HSR-TD does not pass that residual through the long Schroeder
+all-passes: it retains the input residual image and uses only the shared linked
+limiter and Q15 output gain. It performs no FFT, allocation, lookahead, block
+scheduling, logging, lock, thread creation, or sample-path `libm` call. Output
+begins in the current frame; the IIR analysis still has its ordinary causal
+filter response, so this is a no-block-latency statement rather than a
+zero-phase claim.
+
+Regression covers immediate output, exact mono and positive fixed/moving-pan
+rear rejection, diffuse-to-dialogue tail cleanup, near-coherent center
+rejection with simultaneous anti-phase survival, exact L/R-swap equivariance,
+arbitrary callback chunking, reset, saturation, overlap safety, recovered
+SoundAmp row bounds, and fresh state across AAC/APAC cookie transitions. After
+a diffuse-to-mono transition the selected release reduces the following 80 ms
+rear tail from -48.07 to -61.92 dB, while exact mono remains digital zero.
+
+With the QNX 6.5 ARMv7 GCC 8.5 build, 128 measured 1024-frame calls under
+calibrated QEMU `-icount` report mean/p99 `1,089,350/1,091,467` estimated
+retired instructions, versus `3,947,842/3,949,085` for `ambient-hq` built in
+the same run. The means are about `51.06/185.06` million estimated instructions
+per audio second, making HSR-TD 3.62x lighter by this one measure. These are not
+Krait cycles, cache behavior, IPC, or wall time. The current GCC 8.5 layout is
+`sizeof(state/runtime)=59624/55496`, process stack usage is 216 bytes, and the
+unstripped object is 100632 bytes with 9706 bytes of text.
+
+A reproducible open-multitrack evaluation creates controlled 5.1 fixtures in
+nine development genres, folds them to stereo, and compares all three backends
+to the known fixture. Another 24 deterministically selected MUSDB tracks are
+held out from tuning. At rear gain 0.18 the development rear waveform
+correlations are `0.264/0.085/0.151` for HSR-TD/lite/HQ and the held-out values
+are `0.395/-0.010/0.101`. Held-out SI-SDR is
+`-8.20/-14.98/-12.86 dB`; fold-back SNR is `33.82/34.66/32.42 dB`. HSR-TD
+therefore improves waveform/scale agreement, while lite still wins envelope,
+interchannel-correlation error, energy restraint, and fold-back SNR.
+
+The shared LFE assist is also scored independently. On the nine development
+fixtures its reference-envelope correlation/SI-SDR/energy ratio are
+`0.816/4.22 dB/1.232`; on the 24 held-out fixtures they are
+`0.603/1.13 dB/0.769`. The recovered visible SoundAmp bus peak is at most
+`0.620` and `0.503` respectively. Because discrete LFE is omitted from the
+stereo fold, this measures bass-following behavior, not recovery of the
+original LFE. The fixtures are not artist-authored 5.1 masters, stereo
+fold-down is non-invertible, and decorrelation invalidates waveform-only
+ranking. This is regression/comparative evidence, not a quality verdict.
+
+Exact commands, percentiles, hashes, corpus limitations and aggregate results:
+[`2026-09-04-hsr-td.md`](../tools/stereo-upmix-render/bench/results/2026-09-04-hsr-td.md).
 
 ## Low-cost canary: six-band panning-aware PAE
 
@@ -670,7 +887,8 @@ Implemented runtime gate:
 ```text
 AUDIO_STEREO_UPMIX=off            exact L,R,0,0,0,0 compatibility behavior
 AUDIO_STEREO_UPMIX=ambient-lite   six-band time-domain canary
-AUDIO_STEREO_UPMIX=ambient-hq     reserved; logs unsupported and uses off
+AUDIO_STEREO_UPMIX=ambient-hq     implemented 1024/256 STFT PAE candidate
+AUDIO_STEREO_UPMIX=hsr-td         clean-room six-band time-domain covariance candidate
 AUDIO_STEREO_UPMIX=pioneer-rer    reserved; logs unsupported and uses off
 AUDIO_STEREO_UPMIX=cupgan         reserved; logs unsupported and uses off
 AUDIO_STEREO_SURROUND=0.18        bounded initial tuning value
@@ -683,14 +901,16 @@ the current canary into `ambient-lite` plus `assist`. `AUDIO_STEREO_UPMIX=off`
 forces exact `L,R,0,0,0,0` regardless of the LFE variable. Controls are parsed
 once, so a rollback takes effect after restarting `dio_manager`/the CarPlay
 service. A codec transition must not change PCM6 geometry, SAD, CSD or the
-amplifier connection.
+amplifier connection. Although `ambient-hq` and `hsr-td` are selectable,
+startup deliberately does not select either until the vehicle A/B and real
+Krait timing gate pass.
 
 ## Offline proof before deployment
 
-The host renderer in `tools/stereo-upmix-render/` now runs `off` and
-`ambient-lite` against any 48 kHz/S16 stereo WAV and writes generated
-`L,R,C,LFE,Ls,Rs` PCM6. It is also the common shell into which `ambient-hq`, the
-recovered Pioneer rear oracle and any future CUpGAN backend should be added.
+The host renderer in `tools/stereo-upmix-render/` runs `off`, `ambient-lite`,
+`ambient-hq`, and `hsr-td` against any 48 kHz/S16 stereo WAV and writes generated
+`L,R,C,LFE,Ls,Rs` PCM6. It remains the common shell into which the recovered
+Pioneer rear oracle and any future CUpGAN backend should be added.
 The remaining oracle work should write both:
 
 1. generated `L,R,C,LFE,Ls,Rs` PCM6;
@@ -747,7 +967,9 @@ Use one stationary session and the same tracks for:
 2. `ambient-lite`, rear 0.18, LFE off;
 3. `ambient-lite`, rear 0.18, LFE assist;
 4. repeat step 3 with bass-heavy material and a slow 20-160 Hz sweep;
-5. only if clean, compare the future HQ/Pioneer candidates at matched levels.
+5. only if clean, compare implemented `hsr-td`, HQ, and future Pioneer
+   candidates at matched predicted rear-bus levels; record real on-unit p99
+   callback timing for each.
 
 `pioneer-rer` enters this sequence only after the host oracle is reproducible,
 the clean-room result nulls against it, and the same realtime gate is met.

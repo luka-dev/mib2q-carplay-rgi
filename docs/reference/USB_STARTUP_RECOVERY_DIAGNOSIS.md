@@ -2,8 +2,10 @@
 
 > **Correction (2026-09-04):** the state-12 comparison in `verifyPortReset` is
 > real but is not the controlling CarPlay branch: CarPlay is app ID 0 and uses
-> special new-connector cleanup. That cleanup can itself issue the terminal
-> `start_stack::none` after retries are exhausted. See
+> special new-connector cleanup. Final session cleanup actually enqueues a
+> `SwitchPort(direction=0)` job whose service handler issues the terminal
+> `start_stack::none`; `OnJobCleanup` is a different, one-shot connector-init
+> job. See
 > [`SI_RAPID_REPLUG_RACE_RE.md`](SI_RAPID_REPLUG_RACE_RE.md).
 
 > Deployment status (2026-08-04): the experimental shell-driven automatic reset

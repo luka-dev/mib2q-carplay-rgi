@@ -106,12 +106,15 @@ widened, and written successfully. Expect these lines in order for the first ind
 audio sink: captured mpl5_dio_ent playback handle=<ptr>
 audio sink: params source=2ch target=6ch format=<S16LE> result=0 why=0
 audio sink: setup actual=6ch/<bytes>-byte fragment -> stock=2ch/<bytes>-byte fragment
-audio sink: writes=<n> buffered=<n> underrunFrames=<n> source=2ch target=6ch ringRead=<n>/<n>
+audio sink: writes=<n> buffered=<n> underrunFrames=<n> shortRingFallbacks=<n> avoidedSilenceFrames=<n> lastReady=<n> source=2ch target=6ch ringRead=<n>/<n>
 ```
 
 `buffered` must increase after the decoder enters `running`, and `ringRead` must become non-zero.
-An occasional startup underrun is diagnostic; an `underrunFrames` counter that continuously races
-up means the producer, timing, or sink cadence is not stable. If the decoder is running but no
+`underrunFrames` must remain zero: the bridge now forbids partial buffered periods and never
+zero-pads their tails.  A `shortRingFallbacks` increment is acceptable at a lock or codec-switch
+boundary when `avoidedSilenceFrames` records the missing tail and all QSA/device underrun counters
+remain zero.  A counter that continuously races upward still means the producer, timing, or sink
+cadence is not stable. If the decoder is running but no
 `audio sink: captured` line appears, the remaining fault is the QSA handle/name or call seam rather
 than APAC.
 

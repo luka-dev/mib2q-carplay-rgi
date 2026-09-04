@@ -107,6 +107,15 @@ Quality is unaffected. Over 8192 writes: `zeroWrites=0 shortWrites=0 devUnderrun
 ringRead=768/768 odd=0`, and `underrunFrames` sits at 256 -- one 5.3 ms gap at start-up that
 does not grow between samples, so it is priming rather than a leak.
 
+Follow-up on 2026-09-04: a longer lock/codec-switch trace reproduced the same
+shape as one 512/768-frame buffered read with a 256-frame zero tail, while QSA
+still reported `devUnderruns=0`.  The subsequent whole-period candidate forbids
+that construction: an insufficient ring uses the realtime fallback for all
+768 frames and records `shortRingFallbacks/avoidedSilenceFrames` instead.
+That candidate passes host, sanitizer and QNX builds but remains explicitly
+pending a vehicle retest; the historical measurement above is not rewritten as
+vehicle-fixed.
+
 Note on height channels: a 7.1.4 test track's "TopSide" announcements come from behind and
 below, which is expected rather than a defect. The transport is 5.1 and carries no height
 channels, and the amplifier declares positions 7 and 8 as BCL/BCR -- rear, not height, with no

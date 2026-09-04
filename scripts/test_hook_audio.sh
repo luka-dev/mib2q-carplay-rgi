@@ -6,7 +6,7 @@
 #
 # spatial_downmix_test    the 5.1.2 fold and the 5.1 channel permutation
 # stereo_upmix_test       deterministic PCM2->PCM6 ambience renderer, resets and bounds
-# buffered_pcm_switch_test cookie-resolved AAC/APAC dispatch with stale SETUP indices
+# buffered_pcm_switch_test geometry-selected AAC/APAC render policy with stale SETUP indices
 # apac_type103_test       the whole type-103 render path end to end: APAP framing, decrypt,
 #                         the TLV split, APAC decode and the reorder, checked against the PCM
 #                         Apple's own decoder produced for the same six packets

@@ -344,7 +344,7 @@ static int write_wav_header(FILE *stream, uint32_t frames)
 static void usage(const char *program)
 {
     fprintf(stderr,
-            "usage: %s [--mode off|ambient-lite] "
+            "usage: %s [--mode off|ambient-lite|ambient-hq|hsr-td|hsr-td-active|music-stage] "
             "[--lfe off|assist] [--surround 0.0..0.25] "
             "INPUT.wav OUTPUT.wav\n",
             program);
@@ -360,7 +360,36 @@ static int parse_mode(const char *text, enum spa_stereo_upmix_backend *backend)
         *backend = SPA_STEREO_UPMIX_AMBIENT_LITE;
         return 1;
     }
+    if (strcmp(text, "ambient-hq") == 0) {
+        *backend = SPA_STEREO_UPMIX_AMBIENT_HQ;
+        return 1;
+    }
+    if (strcmp(text, "hsr-td") == 0) {
+        *backend = SPA_STEREO_UPMIX_HSR_TD;
+        return 1;
+    }
+    if (strcmp(text, "hsr-td-active") == 0) {
+        *backend = SPA_STEREO_UPMIX_HSR_TD_ACTIVE;
+        return 1;
+    }
+    if (strcmp(text, "music-stage") == 0) {
+        *backend = SPA_STEREO_UPMIX_MUSIC_STAGE;
+        return 1;
+    }
     return 0;
+}
+
+static const char *backend_mode_name(enum spa_stereo_upmix_backend backend)
+{
+    switch (backend) {
+    case SPA_STEREO_UPMIX_OFF:          return "off";
+    case SPA_STEREO_UPMIX_AMBIENT_LITE: return "ambient-lite";
+    case SPA_STEREO_UPMIX_AMBIENT_HQ:   return "ambient-hq";
+    case SPA_STEREO_UPMIX_HSR_TD:       return "hsr-td";
+    case SPA_STEREO_UPMIX_HSR_TD_ACTIVE:return "hsr-td-active";
+    case SPA_STEREO_UPMIX_MUSIC_STAGE:  return "music-stage";
+    default:                            return "unsupported";
+    }
 }
 
 static int parse_lfe_mode(const char *text, enum cli_lfe_mode *mode)
@@ -409,14 +438,16 @@ static int parse_options(int argc, char **argv, struct options *options)
         }
         if (strcmp(argument, "--mode") == 0) {
             if (++index >= argc || !parse_mode(argv[index], &options->backend)) {
-                fprintf(stderr, "error: --mode must be off or ambient-lite\n");
+                fprintf(stderr,
+                        "error: --mode must be off, ambient-lite, ambient-hq, hsr-td, hsr-td-active or music-stage\n");
                 return 0;
             }
             continue;
         }
         if (strncmp(argument, "--mode=", 7) == 0) {
             if (!parse_mode(argument + 7, &options->backend)) {
-                fprintf(stderr, "error: --mode must be off or ambient-lite\n");
+                fprintf(stderr,
+                        "error: --mode must be off, ambient-lite, ambient-hq, hsr-td, hsr-td-active or music-stage\n");
                 return 0;
             }
             continue;
@@ -510,7 +541,11 @@ static void make_upmix_config(const struct options *options,
 static int render(FILE *input_file, FILE *output_file, uint32_t total_frames,
                   const struct spa_stereo_upmix_config *config)
 {
-    struct spa_stereo_upmix state;
+    /* HQ deliberately carries its complete FFT/WOLA working set in the
+     * caller-owned state.  Keep it out of the host thread's stack too, so the
+     * audition tool exercises the same fixed-memory ownership model without
+     * making its stack size depend on the selected backend. */
+    static struct spa_stereo_upmix state;
     uint8_t input_bytes[SPA_STEREO_UPMIX_MAX_FRAMES *
                         WAV_INPUT_BLOCK_ALIGN];
     uint8_t output_bytes[SPA_STEREO_UPMIX_MAX_FRAMES *
@@ -624,8 +659,7 @@ done:
         return 1;
     }
 
-    mode_name = options.backend == SPA_STEREO_UPMIX_OFF
-                    ? "off" : "ambient-lite";
+    mode_name = backend_mode_name(options.backend);
     lfe_name = config.lfe_enabled ? "assist" : "off";
     effective_lfe_gain_q15 = config.lfe_enabled ? config.lfe_gain_q15 : 0;
     fprintf(stderr,

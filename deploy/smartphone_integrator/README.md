@@ -33,12 +33,30 @@ AAC-LC/48 kHz/stereo index 23 on the buffered stream. APAP packets carry no
 format index: the decoder that accepts each changed inline cookie and its PCM
 geometry select the render action. Native APAC 5.1 keeps its measured
 six-channel reorder; decoded stereo uses the fixed PCM6 route with
-`AUDIO_STEREO_UPMIX=ambient-lite`, rear gain `0.18`, and the explicitly enabled
+`AUDIO_STEREO_UPMIX=hsr-td`, rear gain `0.18`, and the explicitly enabled
 `AUDIO_STEREO_LFE=assist` LR4/80 Hz bass feed. The exact compatibility rollback
 is `AUDIO_STEREO_UPMIX=off`, followed by a `dio_manager`/CarPlay child restart
 because these variables are parsed once at process start. See
 [`../../docs/STEREO_TO_5_1_UPMIX_DESIGN.md`](../../docs/STEREO_TO_5_1_UPMIX_DESIGN.md)
 for the signal equations, SoundAmp row bounds and required stationary A/B.
+
+`AUDIO_STEREO_UPMIX=ambient-hq` selects the implemented clean-room 1024/256
+STFT primary/ambient renderer without changing the SAD, codec choice or fixed
+PCM6 device contract. It adds exactly 1024 frames (21.333 ms at 48 kHz) to the
+synthetic Ls/Rs only; dry L/R, optional LFE and native APAC 5.1 remain
+undelayed. This remains an available comparison profile, not the checked-in
+startup policy.
+Its host timing and QEMU retired-instruction count are regression measurements;
+QEMU does not measure Krait cycles, cache/IPC behavior or realtime deadline
+margin.
+
+`AUDIO_STEREO_UPMIX=hsr-td` selects the clean-room six-band time-domain
+covariance/projector candidate. It has no FFT, artificial decorrelator, or
+block-fill latency; dry L/R, optional LFE and native APAC 5.1 retain the same
+contracts. A GCC 8.5 ARMv7/QNX build and calibrated QEMU instruction run pass.
+The checked-in and deployed policy now selects this backend for its stationary
+vehicle A/B; that deployment is not yet a subjective quality acceptance or a
+real on-unit p99 measurement.
 
 Lifecycle semantics:
 

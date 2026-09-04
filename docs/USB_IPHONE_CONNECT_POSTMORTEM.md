@@ -48,7 +48,7 @@ The launcher is started **once**, gated on a flag in `/tmp`. The flag is removed
 a RAM disk. So the state survives every replug and clears only on reboot, which is exactly
 what was observed.
 
-## The fix that shipped
+## The startup guard that was tested, then rolled back
 
 The platform already carries the recovery, so the guard just calls it —
 `deploy/smartphone_integrator/carplay_startup.sh`:

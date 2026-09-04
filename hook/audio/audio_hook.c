@@ -19,6 +19,7 @@
 #include "audio_hook.h"
 #include "apac_codec_loader.h"
 #include "apap_crypto.h"
+#include "pcm_period.h"
 #include "spatial_downmix.h"
 #include "stereo_upmix.h"
 #include "../framework/logging.h"
@@ -34,6 +35,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <poll.h>
+#include <sched.h>
 #include <time.h>
 #include <sys/asoundlib.h>
 
@@ -109,16 +111,24 @@ static enum spa_stereo_upmix_backend spa_parse_stereo_upmix(void)
         return SPA_STEREO_UPMIX_OFF;
     if (!strcasecmp(value, "ambient-lite") || !strcasecmp(value, "lite"))
         return SPA_STEREO_UPMIX_AMBIENT_LITE;
+    if (!strcasecmp(value, "ambient-hq") || !strcasecmp(value, "hq"))
+        return SPA_STEREO_UPMIX_AMBIENT_HQ;
+    if (!strcasecmp(value, "hsr-td") || !strcasecmp(value, "hsr"))
+        return SPA_STEREO_UPMIX_HSR_TD;
+    if (!strcasecmp(value, "hsr-td-active") ||
+        !strcasecmp(value, "hsr-active"))
+        return SPA_STEREO_UPMIX_HSR_TD_ACTIVE;
+    if (!strcasecmp(value, "music-stage") || !strcasecmp(value, "stage"))
+        return SPA_STEREO_UPMIX_MUSIC_STAGE;
 
-    if (!strcasecmp(value, "ambient-hq") ||
-        !strcasecmp(value, "pioneer-rer") ||
+    if (!strcasecmp(value, "pioneer-rer") ||
         !strcasecmp(value, "cupgan")) {
         LOG_ERROR(LOG_MODULE,
                   "audio config: %s='%s' names a reserved backend; using off",
                   SPA_AUDIO_STEREO_UPMIX_ENV, value);
     } else {
         LOG_ERROR(LOG_MODULE,
-                  "audio config: invalid %s='%s'; expected off/ambient-lite; using off",
+                  "audio config: invalid %s='%s'; expected off/ambient-lite/ambient-hq/hsr-td/hsr-td-active/music-stage; using off",
                   SPA_AUDIO_STEREO_UPMIX_ENV, value);
     }
     return SPA_STEREO_UPMIX_OFF;
@@ -393,6 +403,7 @@ typedef void *(*cf_dictget_t)(const void *, const void *);
 typedef int64_t (*cf_dictgeti_t)(const void *, const void *, int32_t *);
 typedef int   (*cf_strgetc_t)(const void *, char *, size_t);
 typedef int   (*cf_plwrite_t)(const void *, const char *, FILE *);
+typedef const void *(*cf_retain_t)(const void *);
 typedef void  (*cf_rel_t)(const void *);
 
 static cf_str_t      cfa_str;
@@ -410,6 +421,7 @@ static cf_dictget_t  cfa_dictget;
 static cf_dictgeti_t cfa_dictgeti;
 static cf_strgetc_t  cfa_strgetc;
 static cf_plwrite_t  cfa_plwrite;
+static cf_retain_t   cfa_retain;
 static cf_rel_t      cfa_rel;
 static void         *cfa_arr_cb, *cfa_dk_cb, *cfa_dv_cb;
 static void         *cfa_bool_true;
@@ -423,6 +435,16 @@ static int spa103_private_image_compatible(void);
 static pthread_mutex_t spa_contract_lock = PTHREAD_MUTEX_INITIALIZER;
 static void            *spa_mainbuffered_session;
 static uint32_t         spa_contract_sequence;
+
+/* updateFeedback belongs to the stock realtime stream, but iOS deliberately
+ * tears that stream down when the phone/app leaves the foreground while the
+ * buffered media hose is still playing.  Retain the last measured clock-only
+ * response for that short ownership gap.  The live object is exactly
+ * {streams:[{type:100,sr:<measured>}]}; caching it avoids inventing a sample
+ * rate or depending on an unverified CFLite floating-point constructor. */
+static pthread_mutex_t spa_feedback_lock = PTHREAD_MUTEX_INITIALIZER;
+static void            *spa_feedback_session;
+static const void      *spa_feedback_response;
 
 static void spa_set_mainbuffered_contract(void *session, int enabled, uint32_t sequence)
 {
@@ -461,6 +483,7 @@ static int spa_cf_resolve(void)
     cfa_dictgeti = (cf_dictgeti_t) dlsym(RTLD_DEFAULT, "CFDictionaryGetInt64");
     cfa_strgetc  = (cf_strgetc_t)  dlsym(RTLD_DEFAULT, "CFStringGetCString");
     cfa_plwrite  = (cf_plwrite_t)  dlsym(RTLD_DEFAULT, "CFPropertyListWriteToANSIFile");
+    cfa_retain   = (cf_retain_t)   dlsym(RTLD_DEFAULT, "CFRetain");
     cfa_rel      = (cf_rel_t)      dlsym(RTLD_DEFAULT, "CFRelease");
     cfa_arr_cb   = dlsym(RTLD_DEFAULT, "kCFLArrayCallBacksCFLTypes");
     cfa_dk_cb    = dlsym(RTLD_DEFAULT, "kCFLDictionaryKeyCallBacksCFLTypes");
@@ -468,11 +491,87 @@ static int spa_cf_resolve(void)
 
     cfa_ready = (cfa_str && cfa_equal && cfa_dictm && cfa_arrm && cfa_arrapp && cfa_arrcount &&
                  cfa_arridx && cfa_dictset && cfa_dictseti && cfa_dictsetc && cfa_dictget &&
-                 cfa_dictgeti &&
-                 cfa_rel && cfa_arr_cb && cfa_dk_cb && cfa_dv_cb) ? 1 : 0;
+                 cfa_dictgeti && cfa_retain && cfa_rel && cfa_arr_cb && cfa_dk_cb &&
+                 cfa_dv_cb) ? 1 : 0;
     if (!cfa_ready)
         LOG_ERROR(LOG_MODULE, "probe103: CFLite symbol resolution FAILED — probe disabled");
     return cfa_ready;
+}
+
+static int spa_feedback_has_realtime_clock(const void *response)
+{
+    void *streamsKey = 0, *typeKey = 0, *srKey = 0, *streams;
+    long i, count;
+    int found = 0;
+
+    if (!response || !spa_cf_resolve()) return 0;
+    streamsKey = cfa_str(0, "streams", SPA_CFENC_UTF8);
+    typeKey = cfa_str(0, "type", SPA_CFENC_UTF8);
+    srKey = cfa_str(0, "sr", SPA_CFENC_UTF8);
+    if (!streamsKey || !typeKey || !srKey) goto done;
+    streams = cfa_dictget(response, streamsKey);
+    count = streams ? cfa_arrcount(streams) : 0;
+    for (i = 0; i < count; i++) {
+        void *desc = cfa_arridx(streams, i);
+        int32_t err = 0;
+        int64_t type;
+        if (!desc) continue;
+        type = cfa_dictgeti(desc, typeKey, &err);
+        if (!err && type == 100 && cfa_dictget(desc, srKey)) {
+            found = 1;
+            break;
+        }
+    }
+
+done:
+    if (srKey) cfa_rel(srKey);
+    if (typeKey) cfa_rel(typeKey);
+    if (streamsKey) cfa_rel(streamsKey);
+    return found;
+}
+
+static void spa_feedback_cache(void *session, const void *response)
+{
+    const void *retained;
+    const void *old;
+
+    if (!session || !response || !spa_feedback_has_realtime_clock(response)) return;
+    retained = cfa_retain(response);
+    if (!retained) return;
+    pthread_mutex_lock(&spa_feedback_lock);
+    old = spa_feedback_response;
+    spa_feedback_session = session;
+    spa_feedback_response = retained;
+    pthread_mutex_unlock(&spa_feedback_lock);
+    if (old) cfa_rel(old);
+}
+
+/* Caller owns the returned reference, exactly as if stock had populated
+ * responseOut itself. */
+static void *spa_feedback_copy_cached(void *session)
+{
+    const void *response = 0;
+
+    pthread_mutex_lock(&spa_feedback_lock);
+    if (session && spa_feedback_session == session && spa_feedback_response)
+        response = cfa_retain(spa_feedback_response);
+    pthread_mutex_unlock(&spa_feedback_lock);
+    return (void *)response;
+}
+
+static void spa_feedback_forget(void *session, int anySession)
+{
+    const void *old = 0;
+
+    pthread_mutex_lock(&spa_feedback_lock);
+    if (spa_feedback_response &&
+        (anySession || (session && spa_feedback_session == session))) {
+        old = spa_feedback_response;
+        spa_feedback_response = 0;
+        spa_feedback_session = 0;
+    }
+    pthread_mutex_unlock(&spa_feedback_lock);
+    if (old) cfa_rel(old);
 }
 
 /* Type-103 is armed only by the startup environment, before AirTunesServer_EnsureCreated. */
@@ -824,8 +923,6 @@ static void spa_note_setup_result(int has103, int result, void *response, uint32
  */
 #define SPA_103_STREAM_TYPE       103
 #define SPA_103_PREFERRED_PORT   (-6032) /* -6030 main screen, -6031 alt screen */
-#define SPA_103_AUDIO_BUFFER_SIZE_AAC   5000000 /* receiver default for compression types 4/8 */
-#define SPA_103_AUDIO_BUFFER_SIZE_OTHER 21168000 /* receiver default for type 0, including APAC */
 #define SPA_103_CAPTURE_LIMIT    (2u * 1024u * 1024u)
 /* Dormant compatibility branch in the capture thread; fresh setup never creates this listener. */
 #define SPA_103_CONTROL_CAPTURE_LIMIT (512u * 1024u)
@@ -1224,6 +1321,9 @@ static const char *spa_stereo_upmix_backend_name(enum spa_stereo_upmix_backend b
     case SPA_STEREO_UPMIX_AMBIENT_HQ:   return "ambient-hq";
     case SPA_STEREO_UPMIX_PIONEER_RER:  return "pioneer-rer";
     case SPA_STEREO_UPMIX_CUPGAN:       return "cupgan";
+    case SPA_STEREO_UPMIX_HSR_TD:       return "hsr-td";
+    case SPA_STEREO_UPMIX_HSR_TD_ACTIVE:return "hsr-td-active";
+    case SPA_STEREO_UPMIX_MUSIC_STAGE:  return "music-stage";
     default:                            return "?";
     }
 }
@@ -1319,7 +1419,7 @@ static void spa103_render_start(int64_t formatIndex, int haveKey)
     spa_stereo_upmix_config_set_lfe(
         &upmixConfig,
         config->stereoLfeAssist &&
-        upmixConfig.backend == SPA_STEREO_UPMIX_AMBIENT_LITE);
+        upmixConfig.backend != SPA_STEREO_UPMIX_OFF);
     /* OFF is an exact compatibility bypass, including the front samples. */
     if (upmixConfig.backend == SPA_STEREO_UPMIX_OFF) {
         upmixConfig.front_gain_q15 = 32768u;
@@ -2121,6 +2221,7 @@ unsigned spa_buffered_pcm_channels(void)
 size_t spa_buffered_pcm_read(int16_t *out, size_t frames, unsigned channels)
 {
     size_t done = 0;
+    size_t take = 0;
 
     if (!out || !frames) return 0;
     pthread_mutex_lock(&spa103_render.lock);
@@ -2132,10 +2233,15 @@ size_t spa_buffered_pcm_read(int16_t *out, size_t frames, unsigned channels)
     if (spa103_render.state == SPA_103_RENDER_RUNNING && spa103_render.playing &&
         spa103_render.primed && spa103_render.ring &&
         channels == spa103_render.outputChannels) {
-        while (done < frames && spa103_render.fill) {
+        /* QSA consumes one indivisible period.  Leaving a 1024/768 cadence
+         * remainder (normally 256 or 512 frames) queued is preferable to the
+         * old [decoded prefix + zero tail] fragment, which produced the
+         * measured 5.3 ms transition glitch. */
+        take = spa_pcm_whole_period_frames(spa103_render.fill, frames);
+        while (done < take) {
             size_t run = spa103_ring_frames() - spa103_render.head;
             if (run > spa103_render.fill) run = spa103_render.fill;
-            if (run > frames - done) run = frames - done;
+            if (run > take - done) run = take - done;
             memcpy(out + done * channels,
                    spa103_render.ring + spa103_render.head * channels,
                    run * channels * sizeof(int16_t));
@@ -2180,20 +2286,41 @@ typedef int (*spa_snd_open_name_t)(snd_pcm_t **, char *, int);
 typedef int (*spa_snd_params_t)(snd_pcm_t *, snd_pcm_channel_params_t *);
 typedef int (*spa_snd_setup_t)(snd_pcm_t *, snd_pcm_channel_setup_t *);
 typedef ssize_t (*spa_snd_write_t)(snd_pcm_t *, const void *, size_t);
+typedef int (*spa_snd_prepare_t)(snd_pcm_t *, int);
+typedef int (*spa_snd_flush_t)(snd_pcm_t *, int);
 typedef int (*spa_snd_close_t)(snd_pcm_t *);
+
+enum {
+    SPA_PCM_RECLAIM_NONE = 0,
+    SPA_PCM_RECLAIM_OPEN,
+    SPA_PCM_RECLAIM_PARAMS
+};
 
 typedef struct {
     pthread_mutex_t lock;
+    pthread_mutex_t ioLock;         /* serializes real QSA I/O without blocking write_internal */
     snd_pcm_t *handle;
     int sourceFormat;
     unsigned sourceChannels;
     unsigned outputChannels;
     int expandedParams;
+    int detached;                   /* type-100 released it; type-103 temporarily owns it */
+    int closeFlushSuppressed;       /* stock flush was deferred until close decides ownership */
+    int closeFlushChannel;
+    int detachedNeedsPrepare;       /* legacy fallback when close's flush could not be skipped */
+    int reclaimStage;               /* same live handle is moving back to stock type-100 */
     int16_t *scratch;
     size_t scratchBytes;
     uint64_t writes;
+    uint64_t setupCalls;            /* snd_pcm_plugin_setup is polled at the fragment rate */
+    uint64_t detachedWrites;
+    uint64_t detachedZeroWrites;
+    uint64_t detachedRecoveries;   /* prepare calls while detached after rendering began */
     uint64_t bufferedWrites;
-    uint64_t underrunFrames;
+    uint64_t underrunFrames;        /* defensive: must remain zero with whole-period reads */
+    uint64_t shortRingFallbacks;    /* whole periods sent from realtime instead of zero-padded */
+    uint64_t avoidedSilenceFrames;  /* missing tails the old bridge would have zero-padded */
+    size_t   lastShortRingFrames;
     /* What the device actually accepted.  `writes` counts our calls, not their
      * success, and QSA masks a failing snd_pcm_write_internal as zero bytes
      * written -- measured in the QNX harness, where every fragment after the
@@ -2207,11 +2334,188 @@ typedef struct {
     size_t   lastOddSize;
     int      deviceStatus;           /* SND_PCM_STATUS_* from the device, -1 = never asked */
     uint64_t deviceUnderruns;
+    uint64_t suppressedFlushes;
+    uint64_t reclaimedOpens;
+    uint64_t skippedReclaimParams;
+    uint64_t skippedReclaimPrepares;
 } spa_pcm_sink_t;
 
 static spa_pcm_sink_t spa_pcm_sink = {
-    .lock = PTHREAD_MUTEX_INITIALIZER
+    .lock = PTHREAD_MUTEX_INITIALIZER,
+    .ioLock = PTHREAD_MUTEX_INITIALIZER
 };
+
+static void spa_pcm_sink_close_detached(const char *reason)
+{
+    static spa_snd_close_t realClose;
+    snd_pcm_t *handle = 0;
+    uint64_t writes = 0, zeroWrites = 0;
+    int result = 0;
+
+    pthread_mutex_lock(&spa_pcm_sink.ioLock);
+    pthread_mutex_lock(&spa_pcm_sink.lock);
+    if (spa_pcm_sink.detached) {
+        handle = spa_pcm_sink.handle;
+        writes = spa_pcm_sink.detachedWrites;
+        zeroWrites = spa_pcm_sink.detachedZeroWrites;
+        spa_pcm_sink.handle = 0;
+        spa_pcm_sink.detached = 0;
+        spa_pcm_sink.expandedParams = 0;
+        spa_pcm_sink.closeFlushSuppressed = 0;
+        spa_pcm_sink.detachedNeedsPrepare = 0;
+        spa_pcm_sink.reclaimStage = SPA_PCM_RECLAIM_NONE;
+        spa_pcm_sink.sourceChannels = 0;
+        spa_pcm_sink.outputChannels = 0;
+    }
+    pthread_mutex_unlock(&spa_pcm_sink.lock);
+    if (!handle) {
+        pthread_mutex_unlock(&spa_pcm_sink.ioLock);
+        return;
+    }
+
+    if (!realClose) realClose = (spa_snd_close_t)dlsym(RTLD_NEXT, "snd_pcm_close");
+    result = realClose ? realClose(handle) : -1;
+    pthread_mutex_unlock(&spa_pcm_sink.ioLock);
+    LOG_WARN(LOG_MODULE,
+             "audio sink: closed detached %s handle=%p reason=%s writes=%llu zero=%llu result=%d",
+             SPA_PCM_SINK_NAME, handle, reason ? reason : "?",
+             (unsigned long long)writes, (unsigned long long)zeroWrites, result);
+}
+
+static size_t spa_buffered_pcm_pending(unsigned channels)
+{
+    size_t pending = 0;
+
+    pthread_mutex_lock(&spa103_render.lock);
+    /* The detached owner asks whether a full period exists before it calls
+     * read().  Let that path cross the same initial-prime threshold itself;
+     * otherwise a session whose type-100 owner disappeared early could reach
+     * the cushion yet wait forever because only read() used to set primed. */
+    if (!spa103_render.primed && spa103_render.fill >= spa103_prime_frames())
+        spa103_render.primed = 1;
+    if (spa103_render.state == SPA_103_RENDER_RUNNING && spa103_render.playing &&
+        spa103_render.primed &&
+        spa103_render.ring && channels == spa103_render.outputChannels)
+        pending = spa103_render.fill;
+    pthread_mutex_unlock(&spa103_render.lock);
+    return pending;
+}
+
+/* When iOS backgrounds the phone/app it tears down the otherwise-silent
+ * realtime type-100 stream several seconds before buffered type-103.  The
+ * existing QSA handle is already configured and prepared for PCM6, so let the
+ * APAP receiver thread temporarily drive it instead of adding another thread
+ * or racing a second handle against the same device.  QSA's blocking write is
+ * the render clock; 1024-frame APAP packets are re-fragmented through the
+ * existing ring into the device's measured 768-frame periods. */
+static void spa_pcm_sink_drain_detached(void)
+{
+    static spa_snd_write_t realWrite;
+    static spa_snd_prepare_t realPrepare;
+    static int (*realStatus)(snd_pcm_t *, snd_pcm_channel_status_t *);
+
+    for (;;) {
+        snd_pcm_t *handle;
+        unsigned channels;
+        size_t bytes, got;
+        ssize_t written;
+        int firstWrite, needsPrepare, logWrite, probeStatus;
+        int statusResult = -1;
+        snd_pcm_channel_status_t status;
+
+        pthread_mutex_lock(&spa_pcm_sink.ioLock);
+        pthread_mutex_lock(&spa_pcm_sink.lock);
+        if (!spa_pcm_sink.detached || !spa_pcm_sink.handle ||
+            !spa_pcm_sink.expandedParams) {
+            pthread_mutex_unlock(&spa_pcm_sink.lock);
+            pthread_mutex_unlock(&spa_pcm_sink.ioLock);
+            return;
+        }
+        handle = spa_pcm_sink.handle;
+        channels = spa_pcm_sink.outputChannels;
+        bytes = (size_t)SPA_PCM_SINK_PERIOD_FRAMES * channels * sizeof(int16_t);
+        if (!channels || spa_pcm_sink.scratchBytes < bytes ||
+            spa_buffered_pcm_pending(channels) < SPA_PCM_SINK_PERIOD_FRAMES) {
+            pthread_mutex_unlock(&spa_pcm_sink.lock);
+            pthread_mutex_unlock(&spa_pcm_sink.ioLock);
+            return;
+        }
+        firstWrite = spa_pcm_sink.detachedWrites == 0;
+        needsPrepare = firstWrite && spa_pcm_sink.detachedNeedsPrepare;
+        probeStatus = ((spa_pcm_sink.detachedWrites + 1u) % 256u) == 0;
+        pthread_mutex_unlock(&spa_pcm_sink.lock);
+        /* Normally our flush interposer keeps this exact handle running across
+         * CQNXSoundIF's close.  Retain the prepare fallback for the race where
+         * type-103 became active between stock's flush and close: that flush was
+         * real, so the first detached write still has to restart QSA. */
+        if (needsPrepare) {
+            int prepareResult;
+            if (!realPrepare)
+                realPrepare = (spa_snd_prepare_t)dlsym(RTLD_NEXT,
+                                                       "snd_pcm_plugin_prepare");
+            prepareResult = realPrepare ?
+                realPrepare(handle, SND_PCM_CHANNEL_PLAYBACK) : -1;
+            if (prepareResult != 0) {
+                LOG_ERROR(LOG_MODULE,
+                          "audio sink: detached prepare failed handle=%p result=%d",
+                          handle, prepareResult);
+                pthread_mutex_unlock(&spa_pcm_sink.ioLock);
+                return;
+            }
+        }
+        got = spa_buffered_pcm_read(spa_pcm_sink.scratch,
+                                    SPA_PCM_SINK_PERIOD_FRAMES, channels);
+        if (got != SPA_PCM_SINK_PERIOD_FRAMES) {
+            pthread_mutex_unlock(&spa_pcm_sink.ioLock);
+            return;
+        }
+        if (!realWrite)
+            realWrite = (spa_snd_write_t)dlsym(RTLD_NEXT, "snd_pcm_plugin_write");
+        written = realWrite ? realWrite(handle, spa_pcm_sink.scratch, bytes) : -1;
+        if (written == 0) {
+            if (!realPrepare)
+                realPrepare = (spa_snd_prepare_t)dlsym(RTLD_NEXT,
+                                                       "snd_pcm_plugin_prepare");
+            if (realPrepare &&
+                realPrepare(handle, SND_PCM_CHANNEL_PLAYBACK) == 0)
+                written = realWrite(handle, spa_pcm_sink.scratch, bytes);
+        }
+        memset(&status, 0, sizeof(status));
+        status.channel = SND_PCM_CHANNEL_PLAYBACK;
+        if (probeStatus) {
+            if (!realStatus)
+                realStatus = (int (*)(snd_pcm_t *, snd_pcm_channel_status_t *))
+                             dlsym(RTLD_NEXT, "snd_pcm_plugin_status");
+            if (realStatus) statusResult = realStatus(handle, &status);
+        }
+        pthread_mutex_lock(&spa_pcm_sink.lock);
+        spa_pcm_sink.detachedWrites++;
+        if (firstWrite) spa_pcm_sink.detachedNeedsPrepare = 0;
+        if (written == 0) spa_pcm_sink.detachedZeroWrites++;
+        if (statusResult == 0) {
+            spa_pcm_sink.deviceStatus = status.status;
+            spa_pcm_sink.deviceUnderruns = (uint64_t)status.underrun;
+        }
+        logWrite = spa_pcm_sink.detachedWrites == 1 ||
+                   (spa_pcm_sink.detachedWrites % 1024u) == 0 ||
+                   written != (ssize_t)bytes;
+        if (logWrite)
+            LOG_WARN(LOG_MODULE,
+                     "audio sink: detached writes=%llu zero=%llu recoveries=%llu "
+                     "last=%lld expected=%u status=%d underruns=%llu handoff=%s",
+                     (unsigned long long)spa_pcm_sink.detachedWrites,
+                     (unsigned long long)spa_pcm_sink.detachedZeroWrites,
+                     (unsigned long long)spa_pcm_sink.detachedRecoveries,
+                     (long long)written, (unsigned)bytes,
+                     spa_pcm_sink.deviceStatus,
+                     (unsigned long long)spa_pcm_sink.deviceUnderruns,
+                     needsPrepare ? "prepared" : "continuous");
+        pthread_mutex_unlock(&spa_pcm_sink.lock);
+        pthread_mutex_unlock(&spa_pcm_sink.ioLock);
+
+        if (written != (ssize_t)bytes) return;
+    }
+}
 
 static unsigned spa_audio_requested_output_channels(void)
 {
@@ -2299,24 +2603,97 @@ int _ZN3dio11CQNXSoundIFINS_16ObjectLockPolicyILNS_6CMutex10en_mutex_tE2ELNS_14e
     return spa_create_metadata_common(real, "locked", self, ch, bits, rate, enc, codec);
 }
 
+static void spa_pcm_sink_reset_stock_counters_locked(void)
+{
+    spa_pcm_sink.writes = 0;
+    spa_pcm_sink.setupCalls = 0;
+    spa_pcm_sink.bufferedWrites = 0;
+    spa_pcm_sink.underrunFrames = 0;
+    spa_pcm_sink.shortRingFallbacks = 0;
+    spa_pcm_sink.avoidedSilenceFrames = 0;
+    spa_pcm_sink.lastShortRingFrames = 0;
+    spa_pcm_sink.shortWrites = 0;
+    spa_pcm_sink.zeroWrites = 0;
+    spa_pcm_sink.lastWriteResult = 0;
+    spa_pcm_sink.oddSizeWrites = 0;
+    spa_pcm_sink.lastOddSize = 0;
+    spa_pcm_sink.deviceStatus = -1;
+    spa_pcm_sink.deviceUnderruns = 0;
+}
+
 int snd_pcm_open_name(snd_pcm_t **handle, char *name, int mode)
 {
     static spa_snd_open_name_t real;
+    snd_pcm_t *reclaimedHandle = 0;
+    uint64_t detachedWrites = 0, detachedZeroWrites = 0;
+    int sinkPlayback;
     int result;
 
     if (!real) real = (spa_snd_open_name_t)dlsym(RTLD_NEXT, "snd_pcm_open_name");
     if (!real) return -1;
+
+    sinkPlayback = handle && name && !strcmp(name, SPA_PCM_SINK_NAME) &&
+                   (mode & SND_PCM_OPEN_PLAYBACK);
+    if (sinkPlayback) {
+        int candidate;
+
+        /* Stock creates a new CQNXSoundIF object on foregrounding, but the
+         * previous object's QSA handle is still valid and is being clocked by
+         * the buffered receiver.  Hand that same pointer to the new object.
+         * ioLock makes the ownership change land between complete 768-frame
+         * writes, so the ring has exactly one consumer throughout. */
+        pthread_mutex_lock(&spa_pcm_sink.ioLock);
+        pthread_mutex_lock(&spa_pcm_sink.lock);
+        candidate = spa_pcm_sink.detached && spa_pcm_sink.handle &&
+                    spa_pcm_sink.expandedParams;
+        pthread_mutex_unlock(&spa_pcm_sink.lock);
+        if (candidate && spa_buffered_pcm_active()) {
+            pthread_mutex_lock(&spa_pcm_sink.lock);
+            if (spa_pcm_sink.detached && spa_pcm_sink.handle &&
+                spa_pcm_sink.expandedParams) {
+                reclaimedHandle = spa_pcm_sink.handle;
+                detachedWrites = spa_pcm_sink.detachedWrites;
+                detachedZeroWrites = spa_pcm_sink.detachedZeroWrites;
+                spa_pcm_sink.detached = 0;
+                spa_pcm_sink.detachedNeedsPrepare = 0;
+                spa_pcm_sink.reclaimStage = SPA_PCM_RECLAIM_OPEN;
+                spa_pcm_sink.reclaimedOpens++;
+                spa_pcm_sink_reset_stock_counters_locked();
+                *handle = reclaimedHandle;
+            }
+            pthread_mutex_unlock(&spa_pcm_sink.lock);
+        }
+        pthread_mutex_unlock(&spa_pcm_sink.ioLock);
+        if (reclaimedHandle) {
+            LOG_WARN(LOG_MODULE,
+                     "audio sink: reclaimed live %s handle=%p for stock type-100 "
+                     "without close/open; detachedWrites=%llu zero=%llu",
+                     SPA_PCM_SINK_NAME, reclaimedHandle,
+                     (unsigned long long)detachedWrites,
+                     (unsigned long long)detachedZeroWrites);
+            return 0;
+        }
+        spa_pcm_sink_close_detached("stock type-100 reopened");
+    }
     result = real(handle, name, mode);
-    if (result == 0 && handle && *handle && name &&
-        !strcmp(name, SPA_PCM_SINK_NAME) && (mode & SND_PCM_OPEN_PLAYBACK)) {
+    if (result == 0 && handle && *handle && sinkPlayback) {
         pthread_mutex_lock(&spa_pcm_sink.lock);
         spa_pcm_sink.handle = *handle;
         spa_pcm_sink.sourceChannels = 0;
         spa_pcm_sink.outputChannels = 0;
         spa_pcm_sink.expandedParams = 0;
-        spa_pcm_sink.writes = 0;
-        spa_pcm_sink.bufferedWrites = 0;
-        spa_pcm_sink.underrunFrames = 0;
+        spa_pcm_sink.detached = 0;
+        spa_pcm_sink.closeFlushSuppressed = 0;
+        spa_pcm_sink.closeFlushChannel = 0;
+        spa_pcm_sink.detachedNeedsPrepare = 0;
+        spa_pcm_sink.reclaimStage = SPA_PCM_RECLAIM_NONE;
+        spa_pcm_sink_reset_stock_counters_locked();
+        spa_pcm_sink.detachedWrites = 0;
+        spa_pcm_sink.detachedZeroWrites = 0;
+        spa_pcm_sink.suppressedFlushes = 0;
+        spa_pcm_sink.reclaimedOpens = 0;
+        spa_pcm_sink.skippedReclaimParams = 0;
+        spa_pcm_sink.skippedReclaimPrepares = 0;
         pthread_mutex_unlock(&spa_pcm_sink.lock);
         LOG_INFO(LOG_MODULE, "audio sink: captured %s playback handle=%p",
                  SPA_PCM_SINK_NAME, *handle);
@@ -2375,9 +2752,9 @@ int snd_pcm_plugin_params(snd_pcm_t *handle, snd_pcm_channel_params_t *params)
 {
     static spa_snd_params_t real;
     snd_pcm_channel_params_t adjusted;
-    unsigned outputChannels;
+    unsigned outputChannels, existingOutputChannels = 0;
     size_t sourceFrameBytes, outputFrameBytes;
-    int isSink, result, renegotiated;
+    int isSink, reclaimOpen = 0, result, renegotiated;
 
     if (!real) real = (spa_snd_params_t)dlsym(RTLD_NEXT, "snd_pcm_plugin_params");
     if (!real) return -1;
@@ -2385,8 +2762,59 @@ int snd_pcm_plugin_params(snd_pcm_t *handle, snd_pcm_channel_params_t *params)
     outputChannels = spa_audio_requested_output_channels();
     pthread_mutex_lock(&spa_pcm_sink.lock);
     isSink = handle && handle == spa_pcm_sink.handle;
-    if (isSink) spa_pcm_sink.expandedParams = 0;
+    if (isSink) {
+        reclaimOpen = spa_pcm_sink.reclaimStage == SPA_PCM_RECLAIM_OPEN &&
+                      spa_pcm_sink.expandedParams;
+        existingOutputChannels = spa_pcm_sink.outputChannels;
+        if (!reclaimOpen) spa_pcm_sink.expandedParams = 0;
+    }
     pthread_mutex_unlock(&spa_pcm_sink.lock);
+
+    /* A reclaimed handle is already configured to this physical PCM6 geometry.
+     * Reapplying plugin_params tears down the QSA queue even when every value is
+     * identical.  Validate every stock-facing field whose type is known here,
+     * update only the logical source geometry used by our write translation,
+     * and let the following real plugin_setup report the live device state. */
+    if (reclaimOpen) {
+        int compatible = params && outputChannels &&
+                         outputChannels == existingOutputChannels &&
+                         params->channel == SND_PCM_CHANNEL_PLAYBACK &&
+                         params->mode == SND_PCM_MODE_BLOCK &&
+                         params->format.format == SND_PCM_SFMT_S16_LE &&
+                         params->format.rate == SPA_SR &&
+                         params->format.voices >= 1 &&
+                         params->format.voices <= SPA_PCM_5_1_2_CHANNELS;
+
+        pthread_mutex_lock(&spa_pcm_sink.lock);
+        if (compatible && handle == spa_pcm_sink.handle &&
+            spa_pcm_sink.reclaimStage == SPA_PCM_RECLAIM_OPEN &&
+            spa_pcm_sink.expandedParams &&
+            spa_pcm_sink.outputChannels == outputChannels) {
+            spa_pcm_sink.sourceFormat = params->format.format;
+            spa_pcm_sink.sourceChannels = (unsigned)params->format.voices;
+            spa_pcm_sink.reclaimStage = SPA_PCM_RECLAIM_PARAMS;
+            spa_pcm_sink.skippedReclaimParams++;
+            params->why_failed = 0;
+        } else {
+            compatible = 0;
+            if (handle == spa_pcm_sink.handle) {
+                spa_pcm_sink.reclaimStage = SPA_PCM_RECLAIM_NONE;
+                spa_pcm_sink.expandedParams = 0;
+            }
+        }
+        pthread_mutex_unlock(&spa_pcm_sink.lock);
+        if (compatible) {
+            LOG_WARN(LOG_MODULE,
+                     "audio sink: reclaimed params kept live handle=%p "
+                     "source=%dch target=%uch rate=%d format=%d frag=%d",
+                     handle, (int)params->format.voices, outputChannels,
+                     (int)params->format.rate, params->format.format,
+                     (int)params->buf.block.frag_size);
+            return 0;
+        }
+        LOG_WARN(LOG_MODULE,
+                 "audio sink: reclaimed handle geometry changed; applying real params");
+    }
     if (!isSink || !params || !outputChannels ||
         params->channel != SND_PCM_CHANNEL_PLAYBACK ||
         params->mode != SND_PCM_MODE_BLOCK ||
@@ -2513,12 +2941,82 @@ int snd_pcm_plugin_params(snd_pcm_t *handle, snd_pcm_channel_params_t *params)
     return result;
 }
 
+int snd_pcm_plugin_prepare(snd_pcm_t *handle, int channel)
+{
+    static spa_snd_prepare_t real;
+    static int (*realStatus)(snd_pcm_t *, snd_pcm_channel_status_t *);
+    snd_pcm_channel_status_t status;
+    int reclaimPrepare = 0, detachedRecovery = 0, statusResult = -1, skip = 0;
+
+    if (!real)
+        real = (spa_snd_prepare_t)dlsym(RTLD_NEXT, "snd_pcm_plugin_prepare");
+    if (!real) return -1;
+
+    pthread_mutex_lock(&spa_pcm_sink.lock);
+    reclaimPrepare = handle && handle == spa_pcm_sink.handle &&
+                     channel == SND_PCM_CHANNEL_PLAYBACK &&
+                     spa_pcm_sink.reclaimStage == SPA_PCM_RECLAIM_PARAMS &&
+                     spa_pcm_sink.expandedParams;
+    detachedRecovery = handle && handle == spa_pcm_sink.handle &&
+                       channel == SND_PCM_CHANNEL_PLAYBACK &&
+                       spa_pcm_sink.detached && spa_pcm_sink.expandedParams &&
+                       spa_pcm_sink.detachedWrites != 0;
+    if (detachedRecovery) spa_pcm_sink.detachedRecoveries++;
+    pthread_mutex_unlock(&spa_pcm_sink.lock);
+
+    if (detachedRecovery)
+        LOG_WARN(LOG_MODULE,
+                 "audio sink: QSA requested prepare during detached playback -- "
+                 "device underrun recovery=%llu",
+                 (unsigned long long)spa_pcm_sink.detachedRecoveries);
+
+    /* An iOS FLUSHBUFFERED can intentionally leave the detached QSA stream in
+     * UNDERRUN before type-100 returns.  Reusing the handle is still correct,
+     * but skipping prepare in that state only makes the first write return 0
+     * and pushes the same prepare into CQNXSoundIF's recovery path.  Skip only
+     * when the device itself says it is still running. */
+    memset(&status, 0, sizeof(status));
+    status.channel = channel;
+    if (reclaimPrepare) {
+        if (!realStatus)
+            realStatus = (int (*)(snd_pcm_t *, snd_pcm_channel_status_t *))
+                         dlsym(RTLD_NEXT, "snd_pcm_plugin_status");
+        if (realStatus) statusResult = realStatus(handle, &status);
+
+        pthread_mutex_lock(&spa_pcm_sink.lock);
+        if (handle == spa_pcm_sink.handle &&
+            spa_pcm_sink.reclaimStage == SPA_PCM_RECLAIM_PARAMS &&
+            spa_pcm_sink.expandedParams) {
+            spa_pcm_sink.reclaimStage = SPA_PCM_RECLAIM_NONE;
+            if (statusResult == 0 && status.status == SND_PCM_STATUS_RUNNING) {
+                spa_pcm_sink.skippedReclaimPrepares++;
+                skip = 1;
+            }
+        }
+        pthread_mutex_unlock(&spa_pcm_sink.lock);
+    }
+
+    if (skip) {
+        LOG_WARN(LOG_MODULE,
+                 "audio sink: reclaimed prepare kept live handle=%p channel=%d",
+                 handle, channel);
+        return 0;
+    }
+    if (reclaimPrepare)
+        LOG_WARN(LOG_MODULE,
+                 "audio sink: reclaimed handle requires real prepare statusResult=%d "
+                 "status=%d underruns=%u",
+                 statusResult, statusResult == 0 ? status.status : -1,
+                 statusResult == 0 ? (unsigned)status.underrun : 0u);
+    return real(handle, channel);
+}
+
 int snd_pcm_plugin_setup(snd_pcm_t *handle, snd_pcm_channel_setup_t *setup)
 {
     static spa_snd_setup_t real;
     snd_pcm_channel_setup_t actual;
     unsigned sourceChannels, outputChannels;
-    int translate, result;
+    int translate, result, logSetup;
 
     if (!real) real = (spa_snd_setup_t)dlsym(RTLD_NEXT, "snd_pcm_plugin_setup");
     if (!real) return -1;
@@ -2586,11 +3084,21 @@ int snd_pcm_plugin_setup(snd_pcm_t *handle, snd_pcm_channel_setup_t *setup)
             (uint32_t)(((size_t)actual.buf.block.max_frag_size / actualFrameBytes) *
                        stockFrameBytes);
     }
-    LOG_INFO(LOG_MODULE,
-             "audio sink: setup actual=%uch/%dHz/%d-byte fragment -> "
-             "stock=%uch/%d-byte fragment",
-             outputChannels, (int)actual.format.rate, actual.buf.block.frag_size,
-             sourceChannels, setup->buf.block.frag_size);
+    /* CQNXSoundIF asks for setup before essentially every fragment.  This used
+     * to emit the same INFO line about 62 times a second, exhausting all three
+     * diagnostic log generations in minutes and hiding the later lock/resume
+     * control sequence.  The validated geometry is invariant for this handle;
+     * log its first successful readback and keep the write-side health counter
+     * as the periodic signal. */
+    pthread_mutex_lock(&spa_pcm_sink.lock);
+    logSetup = handle == spa_pcm_sink.handle && ++spa_pcm_sink.setupCalls == 1;
+    pthread_mutex_unlock(&spa_pcm_sink.lock);
+    if (logSetup)
+        LOG_INFO(LOG_MODULE,
+                 "audio sink: setup actual=%uch/%dHz/%d-byte fragment -> "
+                 "stock=%uch/%d-byte fragment",
+                 outputChannels, (int)actual.format.rate, actual.buf.block.frag_size,
+                 sourceChannels, setup->buf.block.frag_size);
     return 0;
 }
 
@@ -2688,12 +3196,14 @@ ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, size_t size)
     if (!real) real = (spa_snd_write_t)dlsym(RTLD_NEXT, "snd_pcm_plugin_write");
     if (!real) return -1;
 
+    pthread_mutex_lock(&spa_pcm_sink.ioLock);
     pthread_mutex_lock(&spa_pcm_sink.lock);
     useBridge = handle && handle == spa_pcm_sink.handle && spa_pcm_sink.expandedParams;
     sourceChannels = spa_pcm_sink.sourceChannels;
     outputChannels = spa_pcm_sink.outputChannels;
     if (!useBridge || !buffer || !sourceChannels || !outputChannels) {
         pthread_mutex_unlock(&spa_pcm_sink.lock);
+        pthread_mutex_unlock(&spa_pcm_sink.ioLock);
         return real(handle, buffer, size);
     }
 
@@ -2701,11 +3211,13 @@ ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, size_t size)
     outputFrameBytes = outputChannels * sizeof(int16_t);
     if (size == 0 || size % sourceFrameBytes != 0) {
         pthread_mutex_unlock(&spa_pcm_sink.lock);
+        pthread_mutex_unlock(&spa_pcm_sink.ioLock);
         return real(handle, buffer, size);
     }
     frames = size / sourceFrameBytes;
     if (frames > SPA_PCM_SINK_MAX_WRITE / outputFrameBytes) {
         pthread_mutex_unlock(&spa_pcm_sink.lock);
+        pthread_mutex_unlock(&spa_pcm_sink.ioLock);
         LOG_ERROR(LOG_MODULE,
                   "audio sink: refusing oversized expanded write size=%u frames=%u",
                   (unsigned)size, (unsigned)frames);
@@ -2723,6 +3235,7 @@ ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, size_t size)
         int16_t *replacement = (int16_t *)realloc(spa_pcm_sink.scratch, outputBytes);
         if (!replacement) {
             pthread_mutex_unlock(&spa_pcm_sink.lock);
+            pthread_mutex_unlock(&spa_pcm_sink.ioLock);
             return real(handle, buffer, size);
         }
         spa_pcm_sink.scratch = replacement;
@@ -2734,10 +3247,18 @@ ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, size_t size)
         bufferedFrames = spa_buffered_pcm_read(spa_pcm_sink.scratch, frames,
                                                outputChannels);
         if (bufferedFrames == 0) {
+            size_t readyFrames = spa_buffered_pcm_pending(outputChannels);
+
+            if (readyFrames && readyFrames < frames) {
+                spa_pcm_sink.shortRingFallbacks++;
+                spa_pcm_sink.avoidedSilenceFrames += frames - readyFrames;
+                spa_pcm_sink.lastShortRingFrames = readyFrames;
+            }
             /* Nothing decoded is ready -- the ring is still filling its start
-             * cushion, or it ran dry.  Play the phone's own realtime stereo
-             * widened instead: that is real audio.  Filling the whole fragment
-             * with zeroes here is what made a not-yet-primed session silent. */
+             * cushion, is paused, or has less than one whole QSA period.  Play
+             * the phone's own realtime stereo widened for the ENTIRE fragment:
+             * that is real audio, and retaining a short decoded remainder for
+             * the next period avoids an abrupt zero tail. */
             spa_pcm_expand_fallback((const int16_t *)buffer, frames, sourceChannels,
                                     spa_pcm_sink.scratch, outputChannels);
         } else {
@@ -2758,19 +3279,34 @@ ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, size_t size)
         spa_tap_write(SPA_TAP_IN_PATH, &takenIn, spa_pcm_sink.scratch,
                       frames * outputChannels * sizeof(int16_t));
     }
+    /* libasound reaches snd_pcm_write_internal through its PLT.  That
+     * interposer needs the state mutex to identify this handle, so never carry
+     * the state lock into the real plugin write.  ioLock keeps scratch and the
+     * handle stable until the call returns. */
+    pthread_mutex_unlock(&spa_pcm_sink.lock);
     /* QSA widens S16 to the device's native S32 itself, and the QNX harness
      * measured that widening to be exactly a left shift by 16 with channel order
      * intact -- so there is nothing for this path to improve on. */
     written = real(handle, spa_pcm_sink.scratch, outputBytes);
+    pthread_mutex_lock(&spa_pcm_sink.lock);
     spa_pcm_sink.lastWriteResult = (int64_t)written;
-    if (written == 0) spa_pcm_sink.zeroWrites++;
-    else if (written > 0 && (size_t)written < outputBytes) spa_pcm_sink.shortWrites++;
-    if (spa_pcm_sink.zeroWrites == 1 || spa_pcm_sink.shortWrites == 1)
-        LOG_WARN(LOG_MODULE,
-                 "audio sink: device did not take the whole fragment (%d of %u bytes) "
-                 "at write %llu -- the stock caller will rewrite this buffer",
-                 (int)written, (unsigned)outputBytes,
-                 (unsigned long long)spa_pcm_sink.writes);
+    {
+        int firstBadWrite = 0;
+
+        if (written == 0) {
+            spa_pcm_sink.zeroWrites++;
+            firstBadWrite = spa_pcm_sink.zeroWrites == 1;
+        } else if (written > 0 && (size_t)written < outputBytes) {
+            spa_pcm_sink.shortWrites++;
+            firstBadWrite = spa_pcm_sink.shortWrites == 1;
+        }
+        if (firstBadWrite)
+            LOG_WARN(LOG_MODULE,
+                     "audio sink: device did not take the whole fragment (%d of %u bytes) "
+                     "at write %llu -- the stock caller will rewrite this buffer",
+                     (int)written, (unsigned)outputBytes,
+                     (unsigned long long)spa_pcm_sink.writes);
+    }
     if (spa_pcm_sink.writes == 1 || (spa_pcm_sink.writes % 1024u) == 0) {
         static int (*real_status)(snd_pcm_t *, snd_pcm_channel_status_t *);
         snd_pcm_channel_status_t st;
@@ -2787,45 +3323,145 @@ ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, size_t size)
         }
         LOG_WARN(LOG_MODULE,
                  "audio sink: writes=%llu buffered=%llu underrunFrames=%llu "
+                 "shortRingFallbacks=%llu avoidedSilenceFrames=%llu lastReady=%u "
                  "zeroWrites=%llu shortWrites=%llu last=%lld "
                  "source=%uch target=%uch ringRead=%u/%u "
-                 "odd=%llu lastOdd=%u devStatus=%d devUnderruns=%llu",
+                     "odd=%llu lastOdd=%u devStatus=%d devUnderruns=%llu "
+                     "handoffFlush=%llu reclaim=%llu/%llu/%llu",
                  (unsigned long long)spa_pcm_sink.writes,
                  (unsigned long long)spa_pcm_sink.bufferedWrites,
                  (unsigned long long)spa_pcm_sink.underrunFrames,
+                 (unsigned long long)spa_pcm_sink.shortRingFallbacks,
+                 (unsigned long long)spa_pcm_sink.avoidedSilenceFrames,
+                 (unsigned)spa_pcm_sink.lastShortRingFrames,
                  (unsigned long long)spa_pcm_sink.zeroWrites,
                  (unsigned long long)spa_pcm_sink.shortWrites,
                  (long long)spa_pcm_sink.lastWriteResult,
                  sourceChannels, outputChannels,
                  (unsigned)bufferedFrames, (unsigned)frames,
                  (unsigned long long)spa_pcm_sink.oddSizeWrites,
-                 (unsigned)spa_pcm_sink.lastOddSize,
-                 spa_pcm_sink.deviceStatus,
-                 (unsigned long long)spa_pcm_sink.deviceUnderruns);
+                     (unsigned)spa_pcm_sink.lastOddSize,
+                     spa_pcm_sink.deviceStatus,
+                     (unsigned long long)spa_pcm_sink.deviceUnderruns,
+                     (unsigned long long)spa_pcm_sink.suppressedFlushes,
+                     (unsigned long long)spa_pcm_sink.reclaimedOpens,
+                     (unsigned long long)spa_pcm_sink.skippedReclaimParams,
+                     (unsigned long long)spa_pcm_sink.skippedReclaimPrepares);
     }
     pthread_mutex_unlock(&spa_pcm_sink.lock);
+    pthread_mutex_unlock(&spa_pcm_sink.ioLock);
 
     if (written < 0) return written;
     if ((size_t)written >= outputBytes) return (ssize_t)size;
     return (ssize_t)(((size_t)written / outputFrameBytes) * sourceFrameBytes);
 }
 
+int snd_pcm_plugin_flush(snd_pcm_t *handle, int channel)
+{
+    static spa_snd_flush_t real;
+    int candidate, suppress = 0;
+
+    if (!real) real = (spa_snd_flush_t)dlsym(RTLD_NEXT, "snd_pcm_plugin_flush");
+    if (!real) return -1;
+
+    /* Static audit of the accepted stock libairplay.so (sha256
+     * 01c116b1674215daa0602d556a6d9b2eb48c2113ca294ea1f5d58787e3f656f2):
+     * its only flush xrefs are 0x47744 and 0x48a94, each immediately followed
+     * by snd_pcm_close at 0x4774c/0x48a9c.  Suppress only that playback flush
+     * for our live expanded sink while type-103 can inherit it. */
+    pthread_mutex_lock(&spa_pcm_sink.ioLock);
+    pthread_mutex_lock(&spa_pcm_sink.lock);
+    candidate = handle && handle == spa_pcm_sink.handle &&
+                channel == SND_PCM_CHANNEL_PLAYBACK &&
+                spa_pcm_sink.expandedParams && !spa_pcm_sink.detached;
+    pthread_mutex_unlock(&spa_pcm_sink.lock);
+    if (candidate && spa_buffered_pcm_active()) {
+        pthread_mutex_lock(&spa_pcm_sink.lock);
+        if (handle == spa_pcm_sink.handle && spa_pcm_sink.expandedParams &&
+            !spa_pcm_sink.detached) {
+            spa_pcm_sink.closeFlushSuppressed = 1;
+            spa_pcm_sink.closeFlushChannel = channel;
+            spa_pcm_sink.suppressedFlushes++;
+            suppress = 1;
+        }
+        pthread_mutex_unlock(&spa_pcm_sink.lock);
+    }
+    if (!suppress) {
+        int result = real(handle, channel);
+        pthread_mutex_unlock(&spa_pcm_sink.ioLock);
+        return result;
+    }
+    pthread_mutex_unlock(&spa_pcm_sink.ioLock);
+    LOG_WARN(LOG_MODULE,
+             "audio sink: deferred close-adjacent flush handle=%p channel=%d "
+             "for continuous type-103 handoff",
+             handle, channel);
+    return 0;
+}
+
 int snd_pcm_close(snd_pcm_t *handle)
 {
     static spa_snd_close_t real;
-    int isSink, result;
+    static spa_snd_flush_t realFlush;
+    int isSink, keepForBuffered, result;
+    int restoreFlush = 0, restoreFlushChannel = 0, continuous = 0;
 
     if (!real) real = (spa_snd_close_t)dlsym(RTLD_NEXT, "snd_pcm_close");
     if (!real) return -1;
+    pthread_mutex_lock(&spa_pcm_sink.ioLock);
     pthread_mutex_lock(&spa_pcm_sink.lock);
     isSink = handle && handle == spa_pcm_sink.handle;
     pthread_mutex_unlock(&spa_pcm_sink.lock);
+    keepForBuffered = isSink && spa_buffered_pcm_active();
+    if (keepForBuffered) {
+        pthread_mutex_lock(&spa_pcm_sink.lock);
+        if (handle == spa_pcm_sink.handle && spa_pcm_sink.expandedParams) {
+            continuous = spa_pcm_sink.closeFlushSuppressed;
+            spa_pcm_sink.detached = 1;
+            spa_pcm_sink.detachedNeedsPrepare = !continuous;
+            spa_pcm_sink.closeFlushSuppressed = 0;
+            spa_pcm_sink.reclaimStage = SPA_PCM_RECLAIM_NONE;
+            spa_pcm_sink.detachedWrites = 0;
+            spa_pcm_sink.detachedZeroWrites = 0;
+            pthread_mutex_unlock(&spa_pcm_sink.lock);
+            LOG_WARN(LOG_MODULE,
+                     "audio sink: retained %s handle=%p for active buffered type-103 "
+                     "handoff=%s",
+                     SPA_PCM_SINK_NAME, handle,
+                     continuous ? "continuous" : "prepare-required");
+            pthread_mutex_unlock(&spa_pcm_sink.ioLock);
+            return 0;
+        }
+        pthread_mutex_unlock(&spa_pcm_sink.lock);
+    }
+
+    /* If type-103 vanished in the few instructions between the intercepted
+     * flush and close, restore the deferred operation before honoring the real
+     * close.  This keeps the non-handoff path byte-for-byte stock in effect. */
+    if (isSink) {
+        pthread_mutex_lock(&spa_pcm_sink.lock);
+        if (handle == spa_pcm_sink.handle && spa_pcm_sink.closeFlushSuppressed) {
+            restoreFlush = 1;
+            restoreFlushChannel = spa_pcm_sink.closeFlushChannel;
+            spa_pcm_sink.closeFlushSuppressed = 0;
+        }
+        pthread_mutex_unlock(&spa_pcm_sink.lock);
+    }
+    if (restoreFlush) {
+        if (!realFlush)
+            realFlush = (spa_snd_flush_t)dlsym(RTLD_NEXT,
+                                               "snd_pcm_plugin_flush");
+        if (realFlush) (void)realFlush(handle, restoreFlushChannel);
+    }
     result = real(handle);
     if (isSink) {
         pthread_mutex_lock(&spa_pcm_sink.lock);
         if (handle == spa_pcm_sink.handle) {
             spa_pcm_sink.handle = 0;
+            spa_pcm_sink.detached = 0;
             spa_pcm_sink.expandedParams = 0;
+            spa_pcm_sink.detachedNeedsPrepare = 0;
+            spa_pcm_sink.reclaimStage = SPA_PCM_RECLAIM_NONE;
             spa_pcm_sink.sourceChannels = 0;
             spa_pcm_sink.outputChannels = 0;
         }
@@ -2833,6 +3469,7 @@ int snd_pcm_close(snd_pcm_t *handle)
         LOG_INFO(LOG_MODULE, "audio sink: released %s handle=%p result=%d",
                  SPA_PCM_SINK_NAME, handle, result);
     }
+    pthread_mutex_unlock(&spa_pcm_sink.ioLock);
     return result;
 }
 
@@ -3746,15 +4383,14 @@ static int spa103_response_set_i64(void *responseDesc, const char *name, int64_t
 static int spa103_audio_buffer_size(const void *requestStream)
 {
     int64_t formatIndex = 0;
+    int primaryIndex = spa_probe103_index();
+    int extraIndex = spa_probe103_extra_index(primaryIndex);
 
-    /* AirPlaySupport maps index 40 to 'aac ' -> compression type 4 and index 42 to 'aace' -> type 8.
-     * APReceiverAudioSessionBufferedCreate uses 5,000,000 for both types 4 and 8. APAC indices 65/66
-     * and the Dolby probe indices stay type 0 and use 21,168,000. */
-    if (spa_cf_get_i64(requestStream, "audioFormatIndex", &formatIndex) &&
-        (formatIndex == SPA_AAC_LC_48K_5_1_2 ||
-         formatIndex == SPA_AAC_ELD_48K_5_1_2))
-        return SPA_103_AUDIO_BUFFER_SIZE_AAC;
-    return SPA_103_AUDIO_BUFFER_SIZE_OTHER;
+    if (!spa_cf_get_i64(requestStream, "audioFormatIndex", &formatIndex))
+        return SPA_103_AUDIO_BUFFER_SIZE_OTHER;
+    return spa_type103_audio_buffer_size_for_offer(formatIndex,
+                                                    primaryIndex,
+                                                    extraIndex);
 }
 
 static size_t spa103_write_capture(int fd, const uint8_t *data, size_t size)
@@ -3815,6 +4451,35 @@ static void *spa103_thread_main(void *opaque)
     int fd = -1, captureFd = -1, accepted = 0, closeListen = 0;
     int prefixLogged = 0;
     free(arg);
+
+    /* This thread becomes the physical QSA writer after stock type-100 is
+     * backgrounded.  Leaving it at QNX's default priority 10 allowed a >128 ms
+     * scheduling stall under a 98% CPU spike to drain all eight 16-ms QSA
+     * fragments; libasound then hid the underrun behind STOP/prepare/GO while
+     * still returning a full write.  It is an existing receiver thread, not a
+     * new render thread, and priority 18 matches the stock AirPlay audio
+     * receiver on this image. */
+    if (!isControl) {
+        struct sched_param sched;
+        unsigned priority = spa_env_uint("AUDIO_BUFFERED_THREAD_PRIO",
+                                         spa_env_uint("AUDIO_RECEIVER_THREAD_PRIO", 18u));
+        int result;
+
+        if (priority < 1u) priority = 1u;
+        if (priority > 63u) priority = 63u;
+        memset(&sched, 0, sizeof(sched));
+        sched.sched_priority = (int)priority;
+        result = pthread_setschedparam(pthread_self(), SCHED_RR, &sched);
+        if (result == 0)
+            LOG_INFO(LOG_MODULE,
+                     "buffer103: APAP receiver/QSA writer priority=%u policy=SCHED_RR",
+                     priority);
+        else
+            LOG_ERROR(LOG_MODULE,
+                      "buffer103: cannot raise APAP receiver/QSA writer priority to %u "
+                      "result=%d; underrun protection is reduced",
+                      priority, result);
+    }
 
     while (!spa103_receiver.stop) {
         fd = -1;
@@ -3928,8 +4593,10 @@ static void *spa103_thread_main(void *opaque)
                         struct timespec pace = { 0, SPA_103_APAP_FRAME_NS };
                         apapFrames++;
 
-                        if (frame && frameLength)
+                        if (frame && frameLength) {
                             spa103_render_frame(frame, frameLength);
+                            spa_pcm_sink_drain_detached();
+                        }
 
                         /* Apple's buffered hose queues 32 packages and then suspends network
                          * reads until playback consumes one.  Real consumption is the
@@ -3995,6 +4662,10 @@ static void spa103_stop_receiver(void *session, int anySession)
     if (!spa103_receiver.session ||
         (!anySession && spa103_receiver.session != session)) {
         pthread_mutex_unlock(&spa103_lock);
+        if (anySession) {
+            spa_pcm_sink_close_detached("buffered receiver absent");
+            spa_feedback_forget(0, 1);
+        }
         return;
     }
     generation = spa103_receiver.generation;
@@ -4020,6 +4691,9 @@ static void spa103_stop_receiver(void *session, int anySession)
     if (created && !pthread_equal(thread, pthread_self())) pthread_join(thread, 0);
     if (controlCreated && !pthread_equal(controlThread, pthread_self()))
         pthread_join(controlThread, 0);
+
+    /* The APAP thread is now unable to issue another detached write. */
+    spa_pcm_sink_close_detached("buffered receiver stopped");
 
     pthread_mutex_lock(&spa103_lock);
     if (spa103_receiver.generation == generation) {
@@ -4047,6 +4721,7 @@ static void spa103_stop_receiver(void *session, int anySession)
         pthread_cond_broadcast(&spa103_cond);
     }
     pthread_mutex_unlock(&spa103_lock);
+    spa_feedback_forget(session, anySession);
     /* No stale decoder, ring or key survives into the next CarPlay generation. */
     spa103_render_stop();
 }
@@ -4525,6 +5200,35 @@ int AirPlayReceiverSessionControl(void *session, uint32_t flags, const void *com
     }
 
     result = real(session, flags, command, qualifier, params, responseOut);
+
+    /* A live trace of phone-lock/backgrounding establishes the exact gap:
+     * type-100 TearDown closes its QSA stream, then four updateFeedback calls
+     * return NULL while type-103 continues sending, and iOS finally sends
+     * SETRATEANCHORTIME(0)+FLUSHBUFFERED+type-103 TearDown about eight seconds
+     * later.  Preserve the last stock measured-clock response only for the
+     * same still-active buffered session.  This is not fabricated telemetry:
+     * the retained plist is the immediately preceding stock response, with
+     * its measured `sr` double unchanged. */
+    if (result == 0 && responseOut &&
+        strcmp(commandText, "updateFeedback") == 0 &&
+        !spa_env_on("AUDIO_FEEDBACK_BLANK") &&
+        spa103_is_active_for_session(session)) {
+        if (*responseOut) {
+            spa_feedback_cache(session, *responseOut);
+        } else {
+            *responseOut = spa_feedback_copy_cached(session);
+            if (*responseOut)
+                LOG_WARN(LOG_MODULE,
+                         "buffer103: updateFeedback reused the last measured type-100 clock "
+                         "while the realtime stream is absent session=%p",
+                         session);
+            else
+                LOG_ERROR(LOG_MODULE,
+                          "buffer103: updateFeedback has no stock response and no cached "
+                          "clock for active type-103 session=%p",
+                          session);
+        }
+    }
 
     /* Blanking the feedback's stream list is how the phone was told nothing about our buffer.
      * The failing session shows what that costs: a flush boundary armed at 00:44:31 took until

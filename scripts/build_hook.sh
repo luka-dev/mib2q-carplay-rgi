@@ -2,16 +2,20 @@
 # Build the CarPlay LD_PRELOAD hook (libcarplay_hook.so) for QNX/ARMv7 in Docker.
 #
 # Replaces the old VM-SSH recipe (root@192.168.64.16 + stock ntoarmv7-gcc 4.4.2).
-# Now uses the self-contained image `qnx65-armv7-toolchain` (Tools/qnx-65-sdp-docker,
-# GCC 4.9.4).  No VM required.  The hook links only SDP system libraries,
-# so no BSP import stubs are needed.
+# Now uses a self-contained `qnx65-armv7-toolchain` image
+# (Tools/qnx-65-sdp-docker).  `latest` retains the existing default; the
+# independently guarded GCC 8.5 build is selected with
+# QNX_TOOLCHAIN_VARIANT=8.5.  No VM required.  The hook links only SDP system
+# libraries, so no BSP import stubs are needed.
 #
-#   ./scripts/build_hook.sh                        # default (LOG=1)
+#   ./scripts/build_hook.sh                        # default image (LOG=1)
+#   QNX_TOOLCHAIN_VARIANT=8.5 ./scripts/build_hook.sh
 #   LOG=0 ./scripts/build_hook.sh                  # logging disabled
 #   LOG_RGD_PACKET_RAW=1 ./scripts/build_hook.sh   # raw RGD logging (needs LOG=1)
 #
-# NOTE: this is GCC 4.9.4, not the stock QNX 4.4.2.  The hook uses no __thread
-# (verified) so the emutls trap does not apply; the build asserts emutls==0 below.
+# NOTE: these are not the stock QNX 4.4.2 compiler.  The hook uses no __thread
+# (verified) so the emutls trap does not apply; every variant still runs the
+# same emutls/runtime/constructor/link guards below.
 #
 # THE APAC DECODER.  It ships as optional build/libcarplay_apac.so and is
 # dlopen'd only for an enabled buffered Spatial stream.  The main LD_PRELOAD
@@ -35,7 +39,12 @@ set -e
 
 [ "$#" -eq 0 ] || { echo "usage: ./scripts/build_hook.sh"; exit 2; }
 
-IMG=qnx65-armv7-toolchain:latest
+QNX_TOOLCHAIN_VARIANT="${QNX_TOOLCHAIN_VARIANT:-latest}"
+case "$QNX_TOOLCHAIN_VARIANT" in
+  latest|4.9|8.5) ;;
+  *) echo "Invalid QNX_TOOLCHAIN_VARIANT=$QNX_TOOLCHAIN_VARIANT (latest|4.9|8.5)"; exit 1 ;;
+esac
+IMG="qnx65-armv7-toolchain:$QNX_TOOLCHAIN_VARIANT"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 OUT="$PROJECT_DIR/build/libcarplay_hook.so"

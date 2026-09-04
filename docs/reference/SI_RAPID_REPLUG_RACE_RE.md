@@ -14,10 +14,11 @@ For CarPlay on the new `0x0424:0x2530` media connector, SI does this:
 2. While retries remain, SI runs its normal device-stack restart job:
    `start_stack::none`, a 5,000 ms delay, then `start_stack::device,2`.
 3. When the retries are exhausted, SI enters final cleanup.
-4. New-connector cleanup resets the media-connector switch and, if the OTG
-   device stack exists, writes `start_stack::none`.
-5. That cleanup job has no matching device-stack start. SI now waits for a new
-   device/connector event.
+4. Final CarPlay cleanup enqueues `SwitchPort(direction=0)` for the new
+   connector. Its service handler runs the cleanup script and writes
+   `start_stack::none`.
+5. The direction-zero path has no matching device-stack start. SI completes
+   cleanup and waits for a new device/connector event.
 
 If the phone has already been reinserted, the event capable of starting the new
 session may already be over. The internal `0x2530` hub remains present, so the
@@ -45,15 +46,18 @@ Relevant functions in the ARM image:
 | `0x186B00` | `CSIStateRunning_OnEventAppState` | consumes setup retries for state 14, then selects retry or final cleanup |
 | `0x1800B0` | `MediaConnectorHandler_Prepare` | a CarPlay retry on connector type 2 enqueues the restart-device-stack job |
 | `0x193544` | `MediaConnectionService_OnJobRestartDeviceStack` | stop command, configured 5 s delay, CarPlay device-start command |
-| `0x17FC48` | `MediaConnectorHandler_Cleanup` | final CarPlay cleanup on connector type 2 enqueues the cleanup job |
-| `0x19409C` | `MediaConnectionService_OnJobCleanup` | new-connector branch resets the switch and stops a running device stack |
+| `0x17FC48` | `MediaConnectorHandler_Cleanup` | final CarPlay cleanup on connector type 2 enqueues `SwitchPort(direction=0)` |
+| `0x12B588` | `MediaConnectionJobProxy_EnqueueSwitchPort` | stores upstream port/device, direction, serial, flags, and reset time in the job |
+| `0x19461C` | `MediaConnectionService_OnJobSwitchPort` | direction 0 executes cleanup and stops the stack; direction 1 activates/switches and starts it |
 | `0x193264` | stop-command writer | writes configured `start_stack::none` |
 | `0x1933FC` | start-command writer | writes `start_stack::device,2` for CarPlay |
-| `0x19B8F0` | switch-reset command builder | builds `reset switch 250 0` in this cleanup path |
+| `0x19409C` | `MediaConnectionService_OnJobCleanup` | one-shot connector-initialization cleanup; not the final CarPlay session path |
 
-The `OnJobCleanup` new-connector branch calls the stop-command writer at
-`0x1941A0`. There is no call to the start-command writer anywhere in that
-function. The start occurs only in the separate retry job.
+The final session path reaches the stop-command writer at `0x1946F8`. The
+direction-one half of the same handler reaches the start-command writer at
+`0x19492C`, but final error cleanup supplies direction zero. The earlier
+`OnJobCleanup` conclusion confused two distinct job classes; its only producer
+is the one-shot connector classification path at `0x16AB48`.
 
 ### Why `verifyPortReset` is not the CarPlay root cause
 
@@ -114,9 +118,10 @@ The production settings make overlapping generations plausible:
 
 An insertion inside the removal/NCM-cleanup window can belong to the new
 generation while old-generation work is still queued. After the retry budget is
-spent, final new-connector cleanup resets the switch and stops the OTG stack.
-The stock policy assumes another detection event will rebuild it; a phone that
-is already physically present does not guarantee such an event.
+spent, final new-connector cleanup sends a direction-zero switch job and stops
+the OTG stack. The stock policy assumes another detection event will rebuild
+it; a phone that is already physically present does not guarantee such an
+event.
 
 This also explains why the stock behavior can look like SI "stopped trying": it
 did. The setup retry counter is finite. After the last retry, the state machine
@@ -139,8 +144,9 @@ the recovery policy is materially the same:
 |---|---|
 | `0xBCEE8` | `SI_VerifyPortResetForAppState`; the assignment still tests state 12 only |
 | `0xB4554` | CarPlay retry enqueues a restart-device-stack job |
-| `0xB5238` | final connector cleanup selects soft cleanup or a recovery job |
-| `0xCB008` | new-connector cleanup resets the switch and writes the stop-stack command when the stack was running |
+| `0xB5238` | final connector cleanup selects soft cleanup or a switch-port job |
+| `0xCAD2C` | `MediaConnectionService_OnJobSwitchPort`; direction zero cleans/stops and direction one activates/switches/starts |
+| `0xCB008` | one-shot connector-initialization cleanup, not final CarPlay session cleanup |
 | `0xC8F90` | writes the configured OTG stop command |
 
 MH2p's `usblauncher.lua` is improved at connector insertion: it calls an
@@ -174,22 +180,26 @@ same retry counter, and reach the same terminal `start_stack::none` cleanup.
 Do not restore the wrapper that killed/relaunched the OTG `usblauncher`, and do
 not patch `verifyPortReset` from state 12 to state 14 for CarPlay.
 
-The least invasive correction should be developed in two stages:
+Two independent, reversible candidates now exist under
+`deploy/usb_replug_recovery`:
 
-1. Add a connection-generation fence to NCM teardown so an old `stopncm.sh`
-   cannot destroy a `carplay0` created by a newer `startncm.sh`.
-2. Change final CarPlay/new-connector recovery from terminal stop-only cleanup
-   to an SI-owned reset followed by a delayed `start_stack::device,2` when the
-   phone/topology still requires CarPlay.
+1. A connection-generation fence passes `busno/devno/iface` from
+   `usblauncher_otg.lua` into `startncm.sh` and `stopncm.sh`. A shared lock
+   serializes the old delayed teardown with the new mount, and teardown acts
+   only if the requested USB generation is still current.
+2. An experimental one-instruction SI patch changes the final switch direction
+   only when cleanup is an error and the app flag is CarPlay. It reuses SI's
+   stock direction-one activate/switch/start path; normal removal and CarLife
+   retain direction zero.
 
 Increasing `maxSetupRetries` is useful only as a diagnostic. It makes SI execute
 more proper stop/delay/start cycles, but it does not remove either race and can
 turn a permanent hardware/role-swap failure into a long restart storm.
 
-Before another live test, the offline work should produce two independent,
-reversible artifacts: an NCM generation-fence patch and a narrowly scoped SI
-patch or interposition for the final new-connector cleanup. Test them one at a
-time; otherwise a successful reconnect will not identify which race was fixed.
+The SI patch is statically scoped and byte-for-byte reversible but is not yet a
+proven fix. Test the NCM fence alone first. Only if the dead session remains
+should the SI image be tested; otherwise a successful reconnect will not
+identify which race was fixed.
 
 The existing `/mnt/app/root/rc.local` from `Patches/wifi_fix` is a usable
 persistent launch point for passive logging or a carefully latched monitor. Its

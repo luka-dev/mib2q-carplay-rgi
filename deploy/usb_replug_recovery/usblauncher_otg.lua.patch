@@ -1,0 +1,12 @@
+--- usblauncher_otg.lua.stock
++++ usblauncher_otg.lua
+@@ -260 +260 @@
+-                return ("/etc/scripts/startncm.sh " .. Device_Stack.path .. " " .. interface .. " " .. iopkt_instance)
++                return ("/etc/scripts/startncm.sh " .. Device_Stack.path .. " " .. interface .. " " .. iopkt_instance .. " $(busno) $(devno) $(iface)")
+@@ -265 +265,5 @@
+-          return "/etc/scripts/stopncm.sh"
++          if not posix.stat("/tmp/carlife_active") then
++              return "/etc/scripts/stopncm.sh carplay0 $(busno) $(devno) $(iface)"
++          else
++              return "/etc/scripts/stopncm.sh"
++          end
