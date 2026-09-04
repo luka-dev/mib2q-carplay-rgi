@@ -3,7 +3,7 @@
 Reverse-engineering handoff. Everything below is either **verified on hardware** or **verified in a
 disassembler**, and it is labelled which. Full history in `docs/reference/AUDIO.md` §9–§27.
 
-> **Latest audio status, 2026-09-03:** discrete 5.1 now works end to end in the
+> **Latest audio status, 2026-09-04:** discrete 5.1 now works end to end in the
 > vehicle. Two final declaration/feedback defects were corrected. The SAD header
 > had declared two active channels while six PCM slots were present; it now
 > declares the six-channel geometry. The hook had also blanked `updateFeedback`,
@@ -13,29 +13,35 @@ disassembler**, and it is labelled which. Full history in `docs/reference/AUDIO.
 > MOST, sink-selection, or SHARC hypotheses retained below as investigation
 > history.
 >
-> One content-selection issue remains: the type-103 entry advertises only APAC
-> 5.1 index 65, so stereo catalogue items have no format in the buffered list.
-> The iOS 27 enumeration proves APAC stereo index 64 exists, but its sender use
-> is feature-gated. Full table, stream-selection boundary, confidence and safe
-> `/info` choices: [`APAC_FORMAT_INDEX_AUDIT.md`](APAC_FORMAT_INDEX_AUDIT.md).
+> Ordinary catalogue playback is also closed: the deployed policy advertises
+> APAC/5.1 index 65 plus AAC-LC/48 kHz/stereo index 23. The vehicle switches in
+> both directions inside one type-103 session with no dropout or new underrun.
+> APAP fields 2/8 are `spf=1024`, not a per-packet index; each changed inline
+> cookie selects AAC or APAC and decoded geometry/layout selects processing.
+> The new `ambient-lite` rear renderer and opt-in LR4/80 Hz LFE assist are
+> host/QNX verified but still require their own stationary acoustic A/B.
 
 ---
 
 ## Latest source status — decoder/render implementation
 
-The implementation described here supersedes the earlier capture-only status retained below for
-live-test history. The PCM6 path is now vehicle-confirmed; later uncommitted advertisement
-experiments in the working tree are not part of that accepted build.
+The implementation described here supersedes the earlier capture-only status
+retained below for live-test history. PCM6 and cookie-driven AAC/APAC switching
+are vehicle-confirmed. The stereo ambience/LFE canary is implemented and built,
+but its acoustic tuning is not yet vehicle-confirmed.
 
 The type-103 path is now complete through the Audi PCM boundary:
 
-1. APAP BE32 framing, ChaCha20-Poly1305 authentication, extension TLV/cookie selection;
-2. APAC decode through an optional, versioned `libcarplay_apac.so` (ABI v1);
-3. index 65 normalization from cookie order `C L R Ls Rs LFE` to PCM6
-   `L R C LFE Ls Rs`;
-4. index 66 validation against CoreAudio Atmos 5.1.2 tag `0x00c20008`, followed by selectable
-   `downmix`, `drop`, or 8-channel `passthrough`;
-5. a bounded PCM ring drained at stock timing by interposing `snd_pcm_plugin_params/write` on the
+1. APAP BE32 framing, ChaCha20-Poly1305 authentication and extension TLV/cookie extraction;
+2. APAC decode through optional versioned `libcarplay_apac.so` (ABI v1), plus
+   Cinemo AAC-LC decode in the hook for ordinary index-23 content;
+3. cookie-driven codec replacement: the current decoder and then its alternate
+   are tried; only the accepting decoder plus PCM geometry/layout is authoritative;
+4. APAC 5.1 normalization from decoder order `C L R Ls Rs LFE` to PCM6
+   `L R C LFE Ls Rs`, and stereo rendering into the same fixed PCM6 rail;
+5. an explicitly experimental SETUP=66-only PCM8/5.1.2 policy. Its native order
+   is unmeasured and it is not reachable from the shipping `[65,23]` setup;
+6. a bounded PCM ring drained at stock timing by interposing `snd_pcm_plugin_params/write` on the
    existing `mpl5_dio_ent` handle. The hook does not open a competing PCM device. A stereo
    type-100 stream is expanded to the configured output frame width and remains the immediate
    fallback until decoded type 103 is running; underruns are padded with silence.
@@ -54,6 +60,11 @@ User-facing startup policy is:
 | `AUDIO_SPATIAL_ATMOS_MODE=downmix` | PCM8 -> PCM6 with heights folded into surrounds at -6 dB |
 | `AUDIO_SPATIAL_ATMOS_MODE=drop` | PCM8 -> PCM6 with height channels discarded |
 | `AUDIO_SPATIAL_ATMOS_MODE=passthrough` | PCM8; requires a real 8ch HU PCM path and patched amp |
+| `SPATIAL_103_EXTRA_INDEX=23` | advertise AAC-LC/48 kHz/stereo beside APAC 5.1 |
+| `AUDIO_STEREO_UPMIX=off` | exact compatibility output `L,R,0,0,0,0` |
+| `AUDIO_STEREO_UPMIX=ambient-lite` | bounded six-band rear ambience renderer |
+| `AUDIO_STEREO_SURROUND=0.18` | checked-in rear input gain |
+| `AUDIO_STEREO_LFE=off/assist` | no LFE, or `0.178 * LR4_LP80((L+R)/2)` with paired 0.94 fronts |
 
 `AUDIO_SPATAIL` is accepted only as a warned compatibility alias for the typo. Old `SPATIAL_*`
 variables are read only when none of the new boolean controls is present, for migration of an older
@@ -66,20 +77,17 @@ now lives in a `spa103_private_profile_t` table. The first profile is named `MHI
 unknown `libairplay.so` builds still fail closed. K1004 must receive its own independently verified
 profile because its private offsets differ.
 
-Bench gates passed after this change: the full APAC port suite, 3,980-frame capture integration,
-the six-packet end-to-end APAP/decode test, downmix/drop/reorder tests, and the QNX builds of both
-shared objects. Both QNX objects have no emutls, exceptions, RTTI, STL/libstdc++ dependency, or
-hook-owned ELF constructor. The main hook has no `DT_NEEDED` entry for `libcarplay_apac.so`.
-The verified local artifacts are `libcarplay_hook.so` SHA-256
-`1312072cb931192fde3dc0027168f77e8a3eaac66cb1da4aab0268a348da3a29` (427,891 bytes)
-and `libcarplay_apac.so` SHA-256
-`a6a7bc8c3f17dfe170765b04a461259a407269de47dde6fe0a2b3f6b2695044f` (678,911 bytes).
-Both hashes have moved since the type-103 work landed, for reasons that are not
-it: the hook when the AirPlay SETUP/`/info`/TearDown interpositions were lifted
-out of the altScreen module into `hook/framework/airplay_seams.c`, and the codec
-by 40 bytes of DWARF when file headers were added — `scripts/apac_flags.sh`
-builds with `-g`, so adding four lines to a file shifts every line number under
-it. No decoder code changed.
+Current bench gates pass: the full APAC port suite, 3,980-frame capture
+integration, six-packet APAP/decode test, native reorder, stereo DSP, stale-SETUP
+AAC<->APAC dispatch in both directions, ASan/UBSan, and QNX builds of both shared
+objects. Both QNX objects have no emutls, exceptions, RTTI, STL/libstdc++
+dependency, or hook-owned ELF constructor. The main hook has no `DT_NEEDED`
+entry for `libcarplay_apac.so`. The verified 2026-09-04 local artifacts are:
+
+```text
+libcarplay_hook.so d1773dab89a7726f5b64ff9e25dd86492a689442077e089814a1267a339506eb 462429 bytes
+libcarplay_apac.so a6a7bc8c3f17dfe170765b04a461259a407269de47dde6fe0a2b3f6b2695044f 678911 bytes
+```
 
 The decoder/render implementation passed its bench gates, and its PCM6 path later
 passed the vehicle acceptance test after the CSD-width and SAD declaration fixes:
@@ -516,12 +524,13 @@ described below.
 
 ---
 
-## 6. The modern buffered path (statically complete, HU implementation pending)
+## 6. The modern buffered path (historical discovery; implementation complete)
 
-The implementation-ready static contract is now separated into
+The original implementation-ready static contract is separated into
 [`PIONEER_TYPE103_STATIC_SPEC.md`](PIONEER_TYPE103_STATIC_SPEC.md). It is the authoritative source
 for exact SETUP/APAP/security/TLV/cookie/lifecycle/downmix details and for the new ARMv7 AAC/Cinemo
-route. This handoff retains the investigation history and hardware evidence.
+route. This section retains the investigation history and hardware evidence; the
+completed receiver state is summarized at the top of this handoff.
 
 iOS 27 carries a **second, buffered CarPlay audio stream** where APAC spatial formats live:
 `audioOutputFormatsExtended` → `"bufferStream"` → stream type **103** → audio type `"media"`. Its
@@ -557,12 +566,10 @@ eight PCM channels and deliberately downmixed to six before it reaches the HU de
 iOS normally accepts multiple indices in one extended array. Its APAC list builder appends optional
 64 followed by 65/66/67/76/77/68/92. However, index 64 is guarded by the
 `bufferedAPACStereo` setting, whose static default is false; the test phone's runtime override is
-unknown. The smallest APAC-only negotiation experiment is `[64,65]`, leaving legacy `0x400000`
-unchanged. It is not yet playable: current `spa103_render_start` accepts only 65/66 and fails closed
-on 64. The ungated buffered-stereo alternative is `[22,65]`, but index 22 is AAC-LC rather than
-APAC and must not be offered until the HU has verified type-103 codec dispatch. An uncommitted
-working-tree change currently allows 22 as an extra advertised index but does not add that decoder;
-do not deploy it as a stereo fix. See
+unknown. At this stage the smallest APAC-only negotiation experiment was `[64,65]`, leaving legacy
+`0x400000` unchanged, but the phone did not select 64. The later vehicle-selected solution is
+`[65,23]`: index 23 is AAC-LC/48 kHz stereo, the Cinemo bridge decodes it, and inline-cookie-driven
+switching works in both directions. Index 22 remains unsuitable without a 44.1-to-48 kHz resampler. See
 [`APAC_FORMAT_INDEX_AUDIT.md`](APAC_FORMAT_INDEX_AUDIT.md) for the full 0–94 enumeration and the
 type-100/type-103 fallback analysis.
 
@@ -1446,16 +1453,16 @@ seconds. Order:
 
 ---
 
-## Buffered AAC-LC handoff — MHI2Q, 2026-09-03
+## Buffered AAC-LC closure — MHI2Q, updated 2026-09-04
 
-The older type-103 milestone ordering above has been completed for APAC: control
-methods, authenticated APAP transport, feedback, six-channel SAD metadata and the
-APAC decoder now work on the vehicle. Do not restart that investigation.
+The older type-103 milestone ordering above is complete. Control methods,
+authenticated APAP transport, stock clock feedback, six-channel SAD metadata,
+APAC decoding and AAC-LC ordinary-content decoding now work on the vehicle. Do
+not restart those investigations.
 
-The remaining ordinary-content path is AAC-LC. Vehicle tests established index 23
-as `AAC-LC/48000/stereo`; its APAP time scale is `0xBB80` and its magic cookie is
-a separate 39-byte object. Index 22/44100 is only a fallback, so the production
-path needs no resampler.
+Vehicle tests established index 23 as `AAC-LC/48000/stereo`; its APAP time scale
+is `0xBB80` and its magic cookie is a separate 39-byte object. Index 22/44100 is
+only a fallback, so the production path needs no resampler.
 
 Static analysis of the actual MHI2Q Cinemo SDK/plugin, iOS APAP producer and a
 working ARMv7 donor recovered the exact ABI and lifecycle. The stationary capture
@@ -1467,27 +1474,45 @@ The final Cinemo concurrency risk is also closed statically. `dio_manager` has n
 stock public audio-codec factory user; the SDK/AAC/PCM objects are private per
 request; the shared class registry is mutex-protected/reference-counted; AAC makes
 no OMX call; and its application callback is synchronous on the caller's stack.
-Create one decoder lazily after stock plugin configuration, own every call on the
-existing APAP receiver thread, and never call Cinemo from the preload constructor
-or ELF destructor. FDK-AAC remains an isolated rollback only if a stationary
-runtime canary reveals a real vendor/CPU problem.
+The implementation creates a decoder lazily on the existing APAP receiver thread
+after stock initialization and never calls Cinemo from the preload constructor or
+ELF destructor. FDK-AAC remains an isolated rollback only if future runtime/CPU
+measurements expose a vendor problem.
 
-The earlier `[65,23]` run selected 23 initially and did not visibly return to 65
-for the item called Atmos. Do not promote that observation to a session-wide
-protocol rule. iOS 27 has an explicit active buffered-format change path, and its
-selector chooses 65 when the current source ASBD has six channels. The APAP packet
-then carries its own index and complete cookie. Our receiver now follows those
-packet fields and rebuilds APAC/AAC in place; the remaining proof is one stationary
-Atmos -> stereo -> Atmos run with boundary logs. Full addresses and the corrected
-decoder-ownership order are in
+The earlier `[65,23]` trace appeared not to return to 65 because the receiver
+misread APAP fields 2/8 as a format index. Independent AAC/23 and APAC/65 sessions
+prove both fields carry `spf=1024`. A packet carries the complete changed cookie,
+not a format index; the receiver tries the current decoder and then its alternate,
+and decoded geometry/layout selects stereo upmix or native APAC 5.1 reorder. The
+vehicle has now switched AAC -> APAC and APAC -> AAC in one type-103 session with
+continuous playback and no new underrun. Full addresses and the state machine are in
 [`DYNAMIC_BUFFERED_CODEC_SWITCH.md`](DYNAMIC_BUFFERED_CODEC_SWITCH.md).
 
-Continue from [`AAC_BUFFERED_PATH_PLAN.md`](AAC_BUFFERED_PATH_PLAN.md), which
-contains target hashes, function addresses, exact `CinemoMediaType` fields,
+[`AAC_BUFFERED_PATH_PLAN.md`](AAC_BUFFERED_PATH_PLAN.md) contains target hashes,
+function addresses, exact `CinemoMediaType` fields,
 `Write(..., 1, 0, 1)`, callback/thread restrictions, cookie parsing, the optional
 index-22 Speex fallback and risk-ordered tests. The complete coexistence proof is
 in [`CINEMO_AAC_THREAD_SAFETY_AUDIT.md`](CINEMO_AAC_THREAD_SAFETY_AUDIT.md), and
 the retained corpus is documented in
 [`captures/aac_route_20260903/README.md`](../captures/aac_route_20260903/README.md).
-This analysis changed no hook or deployed binary. Safe startup remains
-`AUDIO_SPATIAL=0`.
+The checked-in startup is `[65,23]` with `AUDIO_SPATIAL=1`. Its new
+`ambient-lite`/LFE-assist stereo tuning is bench-complete but still needs a
+stationary acoustic A/B; exact rollback is `AUDIO_STEREO_UPMIX=off` plus a
+`dio_manager`/CarPlay process restart.
+
+### Known pre-existing PCM-sink locking debt
+
+This is not a blocker for the current canary, but it must not be mistaken for a
+new upmixer fault. `snd_pcm_plugin_write` holds `spa_pcm_sink.lock` while calling
+the real MU1316 `libasound`. That call re-enters our interposed
+`snd_pcm_write_internal`, which tries to lock and then unconditionally unlock
+the same mutex. The target QNX default mutex is error-checking: the nested lock
+returns `EDEADLK`; because that result is ignored, the nested unlock releases
+the outer ownership, and the final outer unlock returns `EPERM`. Therefore this
+does not deadlock the audio thread, but exclusion against concurrent
+close/parameter changes is temporarily lost.
+
+This path predates the stereo DSP and accepted vehicle APAC/AAC playback shows
+it is not presently manifesting as a rollout blocker. Repair it separately by
+never holding `spa_pcm_sink.lock` across a call into `libasound`; do not fold that
+lifecycle change into the first acoustic A/B of the upmixer.

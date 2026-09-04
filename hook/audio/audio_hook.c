@@ -1,21 +1,18 @@
 /*
- * audio_hook.c — CarPlay discrete 5.1 PCM: widen the AirPlay audio-format negotiation to 6 channels.
- * See audio_hook.h and docs/reference/AUDIO.md (sections 5-10).
+ * audio_hook.c — CarPlay buffered APAC/AAC receive and fixed-width PCM rendering
+ * for the MHI2Q six-channel DIO media rail. See audio_hook.h and
+ * docs/AUDIO_5_1_STATE.md for the accepted vehicle path.
  *
- * The whole libairplay format pipeline is 64-bit clean (verified in IDA): SETUP reads `audioFormat`
- * via CFDictionaryGetInt64, stores the full u64 at stream+0x10, and both the SETUP validation
- * (AirPlayReceiverSessionSetup@0x2770c) and the stream build (_UpdateStreams -> ToPCM ->) call
- * AirPlayAudioFormatToASBD(u64) with the format INTACT — no truncation anywhere. The only thing that
- * blocks 5.1 is that ASBD's format->ASBD table is exact-match and rejects any high bit
- * (`if (HIDWORD(a1)) return -6735`). Both callers reach ASBD through the .plt/GOT, so a single
- * LD_PRELOAD interposer on AirPlayAudioFormatToASBD (same mechanism altscreen already uses for
- * AirPlayReceiverSessionSetup) removes the rejection AND supplies the 6ch ASBD everywhere.
+ * The canonical AUDIO_SPATIAL policy advertises buffered APAC/5.1 index 65 plus
+ * AAC-LC/stereo index 23. A changed inline APAP cookie selects the decoder;
+ * decoded geometry/layout then selects either the measured native-5.1 reorder
+ * or the optional stereo ambience/LFE renderer. The QSA, SAD, CSD and MOST
+ * contracts remain fixed at PCM6/48 kHz/S16 for the session.
  *
- * Two hooks, nothing else:
- *   1. AudioSessionGetSupportedOutputFormats — OR-in the 5.1 bit so the phone offers/selects it.
- *   2. AirPlayAudioFormatToASBD               — emit a 48000/16/6ch ASBD for our format.
- * OFF by default: only when env SPATIAL_5_1 is truthy (value-checked). The mixer/dio side must
- * provision mpl5_dio_ent for 6 voices -> six_channel_speakerp (B&O firmware agent's dependency).
+ * The earlier realtime-format interposers and SPATIAL_* controls are retained as
+ * migration/debug paths. The checked-in deployment uses AUDIO_SPATIAL=1; the
+ * already vehicle-confirmed deva/mixer provisioning must be present before it is
+ * armed.
  *
  * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
@@ -1048,16 +1045,18 @@ static int64_t spa103_media_time_to_rtp(int64_t mediaValue, int64_t mediaScale);
 
 /* ---- decode / render ------------------------------------------------------------------------
  *
- * Stage j: the APAP receiver stops being a capture drain and becomes a decoder.  Per frame:
+ * The APAP receiver decodes every buffered frame using the codec selected by
+ * the inline magic cookie:
  *
  *   BE32-inclusive framing -> ChaCha20-Poly1305 open -> TLV split -> APAC/AAC decode
- *   -> S16 -> native 5.1 reorder / 5.1.2 fold / stereo upmix -> bounded PCM6 ring
+ *   -> S16 -> native 5.1 reorder / experimental 5.1.2 policy / stereo upmix
+ *   -> bounded PCM6 ring
  *
- * The ring is where the existing PCM6/DIO5 rail collects it: while type 103 is carrying media
- * the type-100 read path hands out these samples instead of its own (the interposition itself
- * is the remaining on-car step, see PORT_STATUS.md stage j).  spa_buffered_pcm6_read() is that
- * seam, and nothing in this file drains the ring, so with no consumer attached the behaviour is
- * exactly what it was before: paced at one packet per 1024/48k, oldest dropped.
+ * The ring is where the existing PCM6/DIO5 rail collects it: while type 103 is
+ * carrying media the type-100 read path hands out these samples instead of its
+ * own. That seam is vehicle-proven for APAC 5.1 and AAC stereo in both switch
+ * directions. Nothing in this file drains the ring, so with no consumer attached
+ * it stays paced at one packet per 1024/48k and drops the oldest data.
  *
  * Failure policy.  A frame that will not authenticate or decode is counted and dropped; it does
  * not stop the receiver, because the drain has to keep the phone's session alive whatever the
@@ -1189,7 +1188,8 @@ typedef struct {
     uint32_t sourceChannels;
     uint32_t outputChannels;
     uint32_t channelLayoutTag;
-    int64_t formatIndex;
+    int64_t formatIndex;           /* SETUP index; cookie-driven track switches need not change it */
+    enum spa_decoded_pcm_kind decodedPcmKind;
     int64_t ignoredFormatIndex;    /* last announcement we had no decoder for, to log it once */
     int atmosMode;
     struct spa_stereo_upmix stereoUpmix;
@@ -1228,14 +1228,14 @@ static const char *spa_stereo_upmix_backend_name(enum spa_stereo_upmix_backend b
     }
 }
 
-/* These are the negotiated formats whose decoder output is ordinary stereo.
- * Index 22 is useful only once its decoder/resampler reports 48 kHz below;
- * until then the existing geometry check rejects it before this predicate. */
-static int spa103_is_stereo_media_index(int64_t index)
+static const char *spa103_decoded_pcm_kind_name(enum spa_decoded_pcm_kind kind)
 {
-    return index == SPA_AAC_LC_44K_STEREO ||
-           index == SPA_AAC_LC_48K_STEREO ||
-           index == SPA_APAC_48K_STEREO;
+    switch (kind) {
+    case SPA_DECODED_PCM_STEREO:       return "stereo";
+    case SPA_DECODED_PCM_APAC_5_1:     return "APAC-5.1";
+    case SPA_DECODED_PCM_APAC_5_1_2:   return "APAC-5.1.2";
+    default:                           return "other";
+    }
 }
 
 static const spa_apac_codec_api_t *spa103_alternate_codec(const spa_apac_codec_api_t *current);
@@ -1309,6 +1309,7 @@ static void spa103_render_start(int64_t formatIndex, int haveKey)
     spa103_render.outputChannels = outputChannels;
     spa103_render.channelLayoutTag = 0;
     spa103_render.formatIndex = formatIndex;
+    spa103_render.decodedPcmKind = SPA_DECODED_PCM_OTHER;
     spa103_render.probeFraming = 0;
     spa103_render.atmosMode = config->atmosMode;
 
@@ -1827,12 +1828,14 @@ static void spa103_render_frame(const uint8_t *packet, size_t length)
         uint8_t *cookie = 0;
         size_t cookieSize = 0;
         spa_apac_stream_info_t info;
+        enum spa_decoded_pcm_kind decodedPcmKind = SPA_DECODED_PCM_OTHER;
         uint32_t channels = 0, frameLength = 0, sampleRate = 0;
         const char *codecName;
 
         /* A new decoder/cookie is a discontinuity even when its index happens
          * to stay the same.  Never let rear-filter history cross it. */
         (void)spa_stereo_upmix_reset(&spa103_render.stereoUpmix);
+        spa103_render.decodedPcmKind = SPA_DECODED_PCM_OTHER;
         pthread_mutex_unlock(&spa103_render.lock);
         /* Every packet carries the cookie for the format it is in, so a track that changes
          * codec brings its own configuration and there is nothing to wait for.  Fall back to
@@ -1909,22 +1912,25 @@ static void spa103_render_frame(const uint8_t *packet, size_t length)
         memset(&info, 0, sizeof(info));
         if (rc == SPA_APAC_OK)
             rc = spa103_render.codec->getInfo(spa103_render.decoder, &info);
-        /* A track that is not natively spatial arrives as APAC with a narrower layout -- the
-         * sender's own preferred list for the buffered path starts at stereo AAC-LC, so this is
-         * ordinary content, not an error.  Refusing it destroyed the decoder, so nothing played
-         * and the phone skipped the item; that is why only natively-Atmos tracks worked.  Take
+        if (rc == SPA_APAC_OK)
+            decodedPcmKind = spa_classify_decoded_pcm(
+                spa103_render.codec == spa103_render.apacCodec,
+                channels, sampleRate, info.channelLayoutTag);
+        /* A track that is not natively spatial may decode to a narrower layout,
+         * including AAC-LC stereo. The sender's preferred buffered list starts
+         * there, so this is ordinary content, not an error. Refusing it destroyed
+         * the decoder, so nothing played and the phone skipped the item; that is
+         * why only natively-Atmos tracks worked. Take
          * anything from mono up to our output width and widen it below. */
         {
-            int narrower = channels >= 1 && channels < spa103_render.outputChannels;
+            int narrower = channels >= 1 && channels < SPA_PCM_5_1_CHANNELS;
+            int nativeSpatial =
+                decodedPcmKind == SPA_DECODED_PCM_APAC_5_1 ||
+                (decodedPcmKind == SPA_DECODED_PCM_APAC_5_1_2 &&
+                 spa103_render.formatIndex == SPA_APAC_48K_5_1_2);
             if (rc != SPA_APAC_OK ||
                 frameLength != SPA_103_RENDER_FRAMES || sampleRate != SPA_SR ||
-                (!narrower &&
-                 ((spa103_render.formatIndex == SPA_APAC_48K_5_1 &&
-                   (channels != SPA_PCM_5_1_CHANNELS ||
-                    info.channelLayoutTag != 0x007c0006u)) ||
-                  (spa103_render.formatIndex == SPA_APAC_48K_5_1_2 &&
-                   (channels != SPA_PCM_5_1_2_CHANNELS ||
-                    info.channelLayoutTag != 0x00c20008u))))) {
+                (!narrower && !nativeSpatial)) {
             if (spa103_render.decoder) {
                 spa103_render.codec->destroy(spa103_render.decoder);
                 spa103_render.decoder = 0;
@@ -1936,11 +1942,13 @@ static void spa103_render_frame(const uint8_t *packet, size_t length)
             pthread_mutex_unlock(&spa103_render.lock);
             LOG_ERROR(LOG_MODULE,
                       "buffer103: %s decoder setup rejected status=%d cookie=%u bytes "
-                      "index=%lld geometry=%uHz/%uch/%u layout=%#x; capture continues",
+                      "setupIndex=%lld geometry=%uHz/%uch/%u layout=%#x kind=%s; "
+                      "capture continues",
                       codecName, rc, (unsigned)cookieSize,
                       (long long)spa103_render.formatIndex,
                       (unsigned)sampleRate, (unsigned)channels, (unsigned)frameLength,
-                      (unsigned)info.channelLayoutTag);
+                      (unsigned)info.channelLayoutTag,
+                      spa103_decoded_pcm_kind_name(decodedPcmKind));
             return;
             }
         }
@@ -1950,13 +1958,15 @@ static void spa103_render_frame(const uint8_t *packet, size_t length)
         spa103_render.sampleRate = sampleRate;
         spa103_render.sourceChannels = channels;
         spa103_render.channelLayoutTag = info.channelLayoutTag;
+        spa103_render.decodedPcmKind = decodedPcmKind;
         spa103_render.state = SPA_103_RENDER_RUNNING;
         LOG_INFO(LOG_MODULE,
-                 "buffer103: %s decoder up index=%lld id=%lld %u Hz %u ch "
-                 "%u frames/packet%s",
+                 "buffer103: %s decoder up setupIndex=%lld id=%lld %u Hz %u ch "
+                 "%u frames/packet kind=%s%s",
                  codecName, (long long)spa103_render.formatIndex,
                  (long long)spa103_render.cookieId, (unsigned)sampleRate,
                  (unsigned)channels, (unsigned)frameLength,
+                 spa103_decoded_pcm_kind_name(decodedPcmKind),
                  channels < spa103_render.outputChannels ? " -- widened to the sink width" : "");
     }
 
@@ -1986,23 +1996,21 @@ static void spa103_render_frame(const uint8_t *packet, size_t length)
          * bounded, chronological blocks into a separate PCM8-sized buffer. */
         while (at < frames) {
             const int16_t *src = decoded + at * dch;
+            enum spa_decoded_pcm_action action = spa_select_decoded_pcm_action(
+                spa103_render.decodedPcmKind, dch, out,
+                spa103_render.sampleRate);
             size_t run = frames - at;
 
             if (run > SPA_STEREO_UPMIX_MAX_FRAMES)
                 run = SPA_STEREO_UPMIX_MAX_FRAMES;
 
-            if (spa103_render.formatIndex == SPA_APAC_48K_5_1 &&
-                dch == SPA_PCM_5_1_CHANNELS &&
-                out >= SPA_PCM_5_1_CHANNELS) {
+            if (action == SPA_DECODED_PCM_ACTION_REORDER_5_1) {
                 if (out == SPA_PCM_5_1_CHANNELS)
                     spa_reorder_5_1_decoder_to_declared_s16(src, run,
                                                             rendered);
                 else
                     spa103_reorder_5_1_s16(src, rendered, out, run);
-            } else if (dch == SPA_STEREO_UPMIX_INPUT_CHANNELS &&
-                out == SPA_STEREO_UPMIX_OUTPUT_CHANNELS &&
-                spa103_render.sampleRate == SPA_STEREO_UPMIX_SAMPLE_RATE &&
-                spa103_is_stereo_media_index(spa103_render.formatIndex)) {
+            } else if (action == SPA_DECODED_PCM_ACTION_STEREO_UPMIX) {
                 rc = spa_stereo_upmix_process_s16(
                     &spa103_render.stereoUpmix, src, run, rendered, run);
                 if (rc != SPA_STEREO_UPMIX_OK) {
@@ -2016,11 +2024,16 @@ static void spa103_render_frame(const uint8_t *packet, size_t length)
                 }
             } else if (dch < out) {
                 spa103_widen_s16(src, dch, rendered, out, run);
-            } else if (dch == SPA_PCM_5_1_2_CHANNELS &&
+            } else if (spa103_render.decodedPcmKind ==
+                           SPA_DECODED_PCM_APAC_5_1_2 &&
+                       spa103_render.formatIndex == SPA_APAC_48K_5_1_2 &&
+                       dch == SPA_PCM_5_1_2_CHANNELS &&
                        out == SPA_PCM_5_1_CHANNELS) {
-                /* The output ring stays six-wide even if a session changes to
-                 * index 66 after SETUP.  Passthrough cannot fit that ring, so
-                 * its safe runtime fallback is the explicit height drop. */
+                /* The legacy experimental SETUP=66 path may still keep a
+                 * six-wide output ring. Passthrough cannot fit that ring, so
+                 * its configured fallback is the explicit height drop. The
+                 * decoder's native PCM8 order remains unmeasured; never enter
+                 * this branch from a stale 65/23 SETUP hint. */
                 if (spa103_render.atmosMode == SPA_ATMOS_DOWNMIX)
                     spa_downmix_5_1_2_s16(src, run, rendered);
                 else
@@ -4463,10 +4476,10 @@ static void spa_capture_server_info(void *info)
  * boundary before changing any semantics: old libairplay's request processors call this exported
  * entry through the PLT, so one interposer captures the exact command and its generated response.
  *
- * While the hook-owned type-103 stream is active, stock's {type:100,sr:48000} feedback is stale.
- * Apple's current receiver returns {streams:[]} for this command, including with buffered media,
- * so replace only that array for the owning session.  Every other command and the pre/post-103
- * type-100 fallback response stays stock. SPATIAL_103 gates logs and plist files. */
+ * Vehicle measurement proved the stock {type:100,sr:<measured>} response is the
+ * sender's only clock reference even while buffered media is active. Preserve it.
+ * The old empty-list rewrite remains only behind explicit AUDIO_FEEDBACK_BLANK=1
+ * for reproducing that failure; SPATIAL_103 gates logs and plist files. */
 typedef int (*fn_session_control_t)(void *, uint32_t, const void *, const void *,
                                     const void *, void **);
 

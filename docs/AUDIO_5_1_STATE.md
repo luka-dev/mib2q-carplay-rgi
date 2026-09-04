@@ -7,6 +7,13 @@ and the hook blanked `updateFeedback`, removing the sender's clock reference. Bo
 are corrected and vehicle-confirmed (§19). The historical fault-localisation below
 is retained to prevent those closed paths from being rediscovered.
 
+Ordinary buffered content is also vehicle-confirmed through AAC-LC/48 kHz/stereo
+index 23 beside APAC 5.1 index 65. Codec changes are selected by the changed
+inline cookie, not APAP fields 2/8; both switch directions play continuously
+(§20). The current source additionally enables the bounded `ambient-lite`
+rear-field/LFE-assist canary for stereo. That DSP profile is host/QNX verified
+but has not yet had its separate stationary acoustic A/B (§21).
+
 > ## Localised on 2026-09-02: the CarPlay stack is not at fault
 >
 > A standalone player wrote a known-good six-channel file straight into
@@ -197,7 +204,7 @@ same PLT/GOT interposition used for `SessionSetup`. Keep this as a plan B only.
 
 ---
 
-## 8. The measurement gap — the most important section
+## 8. The measurement gap — historical, superseded by §§11–21
 
 `frag=1920->9216` in the hook log is `params->buf.block.frag_size` -> `adjusted.buf.block.frag_size`:
 **our request**, not what the device granted. The 3x-slow bug was declared fixed on the
@@ -206,10 +213,10 @@ strength of that line.
 Worse, our own `snd_pcm_plugin_setup` interposer edits the copy it returns to the caller,
 so deva's true negotiated geometry has **never been observed on the car**.
 
-The hook already contains honest instrumentation for all of this. None of it has ever run
-in the vehicle: the unit carries an older hook with `AUDIO_SPATIAL=0`, and the dynamic deva
-build was staged on 2026-08-31 and, per its own README, is not active until `io-audio`
-reloads — which needs a reboot that has not happened.
+At that stage the hook already contained honest instrumentation, but none had run
+in the vehicle: the unit carried an older hook with `AUDIO_SPATIAL=0`, and the
+dynamic deva build had only been staged. This paragraph is retained as experiment
+history; the later reboot, measurements and accepted fixes are recorded below.
 
 | Log line | Answers |
 |---|---|
@@ -317,8 +324,8 @@ connection id 162. Brief: `docs/CODEX_PROMPT_DIO_MEDIA_SINK.md`.
 unambiguous answer: it plays arbitrary audio into an arbitrary device with no CarPlay in the
 loop. Reach for it first next time.
 
-`AUDIO_SPATIAL` is back to `0` on the unit and in this repo, so CarPlay runs its clean stock
-stereo until the virtual channel is fixed.
+At that point `AUDIO_SPATIAL` was back to `0` on the unit and in the repo. This
+state is superseded by the accepted fixes and current `[65,23]` policy in §§19–21.
 
 ---
 
@@ -628,15 +635,11 @@ After both corrections, discrete 5.1 CarPlay plays correctly end to end. This
 accepts and closes the earlier byte transport, CSD topology, AFE slot packing, MOST
 allocation, amplifier sink selection and SHARC matrix audits as clean boundaries.
 
-The remaining symptom is content selection, not six-channel rendering. The
-buffered type-103 `/info` entry currently offers only extended index 65
-(`APAC/48000/5.1`), so stereo catalogue items have no selectable format inside that
-buffered list. The iOS 27 enumeration corrects an old note: index 64 is
-`APAC/48000/stereo`. It is feature-gated by `bufferedAPACStereo`; a standard
-ungated buffered-stereo candidate is index 22 (AAC-LC), which the current APAC-only
-HU path is not yet proven to decode. Exact indices, legacy-bit semantics, stream
-selection, confidence and the bounded, negotiation-only `[64,65]` experiment are
-documented in
+At this intermediate stage the remaining symptom was content selection: the
+type-103 entry offered only index 65, so ordinary stereo had no selectable format.
+The iOS enumeration then exposed the stereo candidates. Section 20 supersedes this
+state: index 23 was selected, the AAC bridge landed, and `[65,23]` now switches on
+the vehicle in both directions. The original enumeration evidence remains in
 [`APAC_FORMAT_INDEX_AUDIT.md`](APAC_FORMAT_INDEX_AUDIT.md).
 
 ---
@@ -660,9 +663,11 @@ The subsequent vehicle capture closes the framing boundary directly. It retained
 601 raw AUs (376..1322 bytes), plus the complete 39-byte MPEG-4 descriptor chain.
 Tag 5 contains ASC `11 90`; adding ADTS headers without stripping or changing an
 AU byte produces 12.821333 seconds and exactly `601 * 1024` frames of standard-
-decoded 48 kHz stereo PCM. The inline APAP TLVs repeat the format index, cookie ID
-and complete cookie with every media item, so track configuration does not depend
-on SETMAGICCOOKIE ordering.
+decoded 48 kHz stereo PCM. The inline APAP TLVs repeat the cookie ID and complete
+cookie with every media item, so track configuration does not depend on
+SETMAGICCOOKIE ordering. A later two-session vehicle comparison corrected the
+field map: APAP fields 2 and 8 both carry `spf=1024` for AAC/23 and APAC/65;
+neither is an `APAudioFormatIndex`.
 
 The remaining Cinemo coexistence concern is also closed statically. `dio_manager`
 does not import `CinemoCreateAudioCodec`; it shares only stock Config/Metapool/iAP
@@ -674,25 +679,28 @@ One decoder can therefore be owned by the existing APAP receiver thread after
 stock initialization; no new thread or callback wait is required. Real-time CPU
 margin remains a bounded stationary canary, not a static discovery question.
 
-An early `[65,23]` run selected 23 initially and did not visibly return to 65 for
-the item called Atmos. Static analysis has now found the missing renegotiation
-mechanism: iOS's active buffered engine reselects a transport when the source ASBD
-changes, selects index 65 for six channels, and schedules the change inside the
-existing SBAR/APAP hose. The old run did not record the source ASBD or the packet's
-field-2 index, so it cannot prove that the item entered this path as multichannel.
+The apparently session-constant format in the early `[65,23]` run was an
+instrumentation error: it read `spf` as an index. iOS's active buffered engine
+does reselect transport when the source ASBD changes, but the receiver observes
+that change through the new inline cookie, not a packet index. It tries the
+current decoder and then its alternate; the successful decoder plus decoded
+channels/rate/layout selects stereo upmix or APAC 5.1 reorder. The unmeasured
+APAC PCM8/5.1.2 policy additionally requires the explicit legacy SETUP=66 gate.
 
-The receiver now dispatches on each packet's format index and inline cookie. One
-stationary Atmos -> stereo -> Atmos run remains to show that Apple Music exposes
-the chosen items as six-channel/stereo at this boundary. See
+This cookie-driven APAC <-> AAC switching has now played in both directions on
+the vehicle inside one type-103 session with no dropout or new underrun. Host
+regression also pins SETUP independently at 65 and 23 and verifies both action
+orders, native reorder and fresh upmix state after every cookie boundary. See
 [`DYNAMIC_BUFFERED_CODEC_SWITCH.md`](DYNAMIC_BUFFERED_CODEC_SWITCH.md).
 
 The exact framing/cookie confidence ledger, C ABI, callback/thread restrictions,
 index-22 resampler fallback and ordered risk gates are in
 [`AAC_BUFFERED_PATH_PLAN.md`](AAC_BUFFERED_PATH_PLAN.md). The Cinemo object,
 registry, callback and OMX proof is in
-[`CINEMO_AAC_THREAD_SAFETY_AUDIT.md`](CINEMO_AAC_THREAD_SAFETY_AUDIT.md). This
-audit changed no hook, firmware or deployed binary. The safe default remains
-`AUDIO_SPATIAL=0`.
+[`CINEMO_AAC_THREAD_SAFETY_AUDIT.md`](CINEMO_AAC_THREAD_SAFETY_AUDIT.md). The
+checked-in supervisor now uses the accepted `[65,23]` advertisement with
+`AUDIO_SPATIAL=1`; stereo DSP remains independently reversible through
+`AUDIO_STEREO_UPMIX=off`.
 
 ---
 
@@ -719,8 +727,8 @@ writes SHARC control `0x10` from `0x6EAA0`: bank 0 sends float `2.0`, while bank
 called a Symphoria switch without the missing SHARC program or runtime evidence.
 On sink `0x26`, changing only ASAD keeps the value at `5.0`.
 
-Consequently AAC stereo widened as `L,R,0,0,0,0` is valid PCM, but announcing
-`ASAD=0xfc` does not preserve the fact that its source was stereo. A separate-start
+Consequently the exact compatibility/off baseline `L,R,0,0,0,0` is valid PCM,
+but announcing `ASAD=0xfc` does not preserve the fact that its source was stereo. A separate-start
 `0xfc` versus `0xc0` A/B test can isolate allocation-aware behavior, but neither
 case enters the true bank-0/control-`2.0` mode on sink `0x26`. That mode requires
 a different stereo sink or a raw-bank-2 connection, which changes the MOST
@@ -732,24 +740,29 @@ reconfiguration at a codec boundary. Full audit:
 
 The resulting head-unit upmix design is recorded separately in
 [`STEREO_TO_5_1_UPMIX_DESIGN.md`](STEREO_TO_5_1_UPMIX_DESIGN.md). Its first
-profile leaves C/LFE zero, preserves the source fronts, and injects only bounded,
-decorrelated ambience into Ls/Rs after accounting for the bank-1 +6 dB surround
-gain. The design also records Pioneer's independently verified CarPlay
+profile leaves C zero, injects bounded decorrelated ambience into Ls/Rs, and has
+an explicitly gated `0.178 * LR4_LP80((L+R)/2)` bass assist. Enabling that
+assist pairs it with a `0.940` front trim after accounting for every recovered
+LFE leak and the bank-1 +6 dB surround gain. The design also records Pioneer's independently verified CarPlay
 stereo-to-5.0 engine as a host oracle/clean-room rear-generator candidate; its
 explicit center is deliberately not mapped because bank 1 already derives the
 same mid signal.
 
-The six-band `ambient-lite` canary is now implemented after the common decoder
-and before the PCM6 ring. It is fixed-memory C99 on the existing receiver thread,
-resets at every stream/flush/rate/cookie/format boundary, and leaves native APAC
-5.1 on its byte-identical reorder path. The old backwards stereo widening was
-also replaced by bounded forward chunks, closing its latent overflow when Cinemo
-returns more than one 1024-frame callback. Host suites, ASan/UBSan and the full
-QNX ARMv7 build pass. The checked-in vehicle policy remains
-`AUDIO_STEREO_UPMIX=off`; `ambient-lite` has not yet passed the stationary car
-A/B and must not be described as the final quality winner. Exact implementation,
-metrics, center/LFE rationale and the host WAV renderer are in the linked design
-document.
+The six-band `ambient-lite` canary and its LR4/80 Hz LFE assist are now
+implemented after the common decoder and before the PCM6 ring. They are
+fixed-memory C99 on the existing receiver thread, reset at every
+stream/flush/rate/cookie/format boundary, and leave native APAC 5.1 on its
+byte-identical reorder path. The old backwards stereo widening was also replaced
+by bounded forward chunks, closing its latent overflow when Cinemo returns more
+than one 1024-frame callback. Host suites, ASan/UBSan and the full QNX ARMv7
+build pass. The checked-in vehicle policy explicitly selects
+`AUDIO_STEREO_UPMIX=ambient-lite`, rear `0.18`, and
+`AUDIO_STEREO_LFE=assist`; exact rollback is `AUDIO_STEREO_UPMIX=off` followed
+by a `dio_manager`/CarPlay service restart. This is still a canary: the physical
+sub polarity/crossover, the narrow Center-bus true-peak margin and codec-switch
+clicks need a stationary car A/B. It must not be described as the final quality
+winner. Exact implementation, metrics, center/LFE rationale and the host WAV
+renderer are in the linked design document.
 
 ---
 

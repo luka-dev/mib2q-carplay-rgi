@@ -160,29 +160,31 @@ The stock response never mentions our type-103 stream -- the phone is fed clock 
 the realtime type-100 stream only, and that is enough. Synthesising an entry for the buffered
 stream was the fallback plan and proved unnecessary.
 
-**Still open:** on connecting, the phone skips a few tracks before settling on one it plays.
+**Closed 2026-09-04:** advertising `[65,23]`, decoding AAC-LC through Cinemo and
+selecting the decoder from each changed inline cookie now plays ordinary and
+spatial tracks in both directions inside one type-103 session.
 
 
 ---
 
 ## Why non-spatial tracks are skipped, and what each candidate did (2026-09-03)
 
-With `AUDIO_SPATIAL=1` the phone skips ordinary tracks and plays only natively-Atmos ones. It
+With the then-current `[65]` advertisement the phone skipped ordinary tracks and played only natively-Atmos ones. It
 is not declining to upmix: advertising `audioOutputFormatsExtended:[65]` leaves a non-spatial
 item with no usable stereo representation. There is no observed fallback to realtime type 100.
 
-An early `[65,23]` test selected 23 initially and did not visibly return to APAC 65 for the item
-called Atmos. A later iOS static pass shows that this is not a session-wide protocol rule: the
-active buffered engine has a transport-format-change path and its selector chooses 65 when the
-source ASBD actually has six channels. That old test did not log the source ASBD or packet field 2,
-so it remains evidence about that playback, not proof that switching is impossible.
+An early `[65,23]` test appeared to select 23 for the whole session because the
+receiver misread APAP fields 2/8 as a format index. Independent AAC/23 and
+APAC/65 captures showed both fields carry `spf=1024`. The format changes through
+the inline cookie; cookie-driven switching has since worked in both directions
+on the vehicle without a reconnect, rythmic dropout, or new underrun.
 
 Four alternative indices were tried on the car, and the results are worth keeping because
 several of them look right on paper:
 
 | index | what it is | outcome |
 |---|---|---|
-| 23 | AAC-LC/48000/stereo | **selected and preferred** -- the APAP time scale was 0xBB80 (48000), and the stream carried a separate 39-byte cookie. Nothing decoded it, so playback was silent. No sample-rate conversion is needed. |
+| 23 | AAC-LC/48000/stereo | **selected and preferred** -- the APAP time scale was 0xBB80 (48000), and the stream carried a separate 39-byte cookie. The first probe was silent before the Cinemo bridge existed; the current bridge decodes it and needs no sample-rate conversion. |
 | 22 | AAC-LC/44100/stereo | **selected in the earlier test** -- skipping stopped, the phone asked for 22 and the APAP time scale was 0xAC44 (44100). It is now only a fallback because it also needs 44.1 -> 48 resampling. |
 | 64 | APAC/48000/stereo | **never selected** -- advertised as `[65,64]`, the phone still requested 65. iOS gates it behind `bufferedAPACStereo`, whose static default is false. |
 | 11 | PCM | not offered at all: `APAudioFormatGetBufferedPassthroughSupportedFormats` returns zero unless the device is an APM speaker, so bit 11 never reaches a CarPlay session. |
@@ -192,8 +194,8 @@ Index 23 is the correct production candidate because it matches every HU media e
 48 kHz and therefore needs an AAC decoder but no resampler. The unit has Cinemo's
 `libNmeAudioAAC.so`, and `dio_manager` already links `libNmeSDK.so`.
 
-Until that exists the honest states are: `AUDIO_SPATIAL=0` and everything plays in stereo, or
-`AUDIO_SPATIAL=1` with `[65]` and spatial becomes an Atmos-only mode.
+That bridge now exists. The checked-in state is `AUDIO_SPATIAL=1` with `[65,23]`:
+APAC handles spatial masters and Cinemo AAC-LC handles ordinary stereo content.
 
 
 ### Does iOS upmix stereo into the spatial stream? No.
@@ -227,7 +229,7 @@ packet, reports it, and decodes nothing.
 
 The APAP extension TLVs come first, and they carry more than expected:
 
-    02 01 17                        format index, 0x17 = 23
+    02 02 04 00                     samples per frame, 0x0400 = 1024 (not an index)
     11 08 0e ae 55 37 e8 3c 74 18   magic cookie id
     12 27 03 80 80 80 22 ...        the cookie itself, all 39 bytes, inline
 

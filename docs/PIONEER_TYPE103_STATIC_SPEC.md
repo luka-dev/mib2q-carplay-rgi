@@ -2,6 +2,15 @@
 
 Дата фиксации: 2026-08-29.
 
+> **Обновление 2026-09-04:** протокольная статическая часть ниже остаётся
+> справочной, но её выводы о недоступности AAC и ещё не реализованном тракте
+> superseded. Машина выбрала AAC-LC/48 kHz/stereo index 23; Cinemo bridge теперь
+> декодирует его, а `[65,23]` переключается APAC <-> AAC в обе стороны внутри
+> одной type-103 сессии. APAP не несёт per-packet format index: поля 2/8 равны
+> `spf=1024`, codec выбирает изменившийся inline cookie. Текущее состояние:
+> [`DYNAMIC_BUFFERED_CODEC_SWITCH.md`](DYNAMIC_BUFFERED_CODEC_SWITCH.md) и
+> [`AAC_BUFFERED_PATH_PLAN.md`](AAC_BUFFERED_PATH_PLAN.md).
+
 ## Итог
 
 Статический контракт buffered-потока CarPlay type 103 восстановлен достаточно полно, чтобы больше

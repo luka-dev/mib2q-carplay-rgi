@@ -28,6 +28,18 @@ Do not overwrite `/etc/scripts/carplay_cleanup.sh`: the custom cleanup calls tha
 stock script only for Audi's mdnsd/PPS cleanup. Renderers are persistent services;
 an explicit supervisor stop, not ordinary dio churn, owns their final teardown.
 
+The checked-in audio policy advertises APAC/48 kHz/5.1 index 65 plus
+AAC-LC/48 kHz/stereo index 23 on the buffered stream. APAP packets carry no
+format index: the decoder that accepts each changed inline cookie and its PCM
+geometry select the render action. Native APAC 5.1 keeps its measured
+six-channel reorder; decoded stereo uses the fixed PCM6 route with
+`AUDIO_STEREO_UPMIX=ambient-lite`, rear gain `0.18`, and the explicitly enabled
+`AUDIO_STEREO_LFE=assist` LR4/80 Hz bass feed. The exact compatibility rollback
+is `AUDIO_STEREO_UPMIX=off`, followed by a `dio_manager`/CarPlay child restart
+because these variables are parsed once at process start. See
+[`../../docs/STEREO_TO_5_1_UPMIX_DESIGN.md`](../../docs/STEREO_TO_5_1_UPMIX_DESIGN.md)
+for the signal equations, SoundAmp row bounds and required stationary A/B.
+
 Lifecycle semantics:
 
 - **PF ports (deploy prerequisite, no runtime logic):** altScreen needs carplay0 TCP 6031 and

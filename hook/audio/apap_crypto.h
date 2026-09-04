@@ -43,25 +43,20 @@ enum {
     SPA_APAP_AAD_EXTENSION = 1  /* header[0:12] */
 };
 
-/* TLV field ids this path acts on.  The others are parsed and skipped. */
+/* Observed TLV field ids. Fields 2 and 8 both carried samples-per-frame
+ * (1024) in independent AAC/23 and APAC/65 sessions; neither is a format
+ * index. They are deliberately skipped. */
 enum {
     SPA_APAP_TLV_END = 0,
-    /* Measured on the car: an index-23 packet opens `02 01 17`, field 2, one byte, 0x17 = 23,
-     * the negotiated format index -- followed by field 17 with the cookie id and field 18 with
-     * the whole cookie inline.  Field 8 was the earlier reading and is kept because a stream
-     * that uses it costs nothing to accept. */
-    /* Observed carrying samples-per-frame (1024 for AAC-LC), not a format index. Parsed
-     * and skipped; see the note in spa_apap_parse_extension. */
     SPA_APAP_TLV_FRAME_LENGTH = 2,
-    SPA_APAP_TLV_AUDIO_FORMAT_INDEX = 8,
+    SPA_APAP_TLV_FRAME_LENGTH_ALT = 8,
     SPA_APAP_TLV_MAGIC_COOKIE_ID = 17,
     SPA_APAP_TLV_MAGIC_COOKIE = 18
 };
 
-/* What a decoded packet's TLV prefix said.  Fields absent from the packet keep
- * their `has*` flag clear.  The measured AAC stream repeated index/id/cookie;
- * retaining explicit presence flags also supports senders which repeat them
- * only at a format boundary and rely on receiver state between boundaries. */
+/* What a decoded packet's TLV prefix said. The formatIndex pair is retained as
+ * an internal compatibility field but the parser deliberately never populates
+ * it: codec changes are identified by cookie, not fields 2/8. */
 typedef struct {
     int hasFormatIndex;
     int hasMagicCookieId;

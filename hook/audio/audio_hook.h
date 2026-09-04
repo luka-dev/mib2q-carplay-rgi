@@ -22,8 +22,10 @@
  * on CARSessionConfiguration, injectable from the existing altscreen SessionSetup wrapper via
  * spa_augment_setup_response() below; discrete 5.1 PCM does not depend on it.
  *
- * OFF by default: enabled only when env SPATIAL_5_1 is truthy (value-checked). The 6-voice mixer side
- * (B&O agent) must be ready before arming, else the 6ch open has nowhere to land.
+ * Runtime-gated: canonical deployments use AUDIO_SPATIAL/AUDIO_SPATIAL_ATMOS;
+ * the checked-in policy enables AUDIO_SPATIAL. SPATIAL_5_1 is read only as a
+ * migration fallback when none of the canonical controls is present. The
+ * six-voice mixer/deva side must be ready before arming.
  *
  * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
@@ -77,8 +79,9 @@
  *      broader 0x1440800 transport-family mask makes wired iOS retain both PCM and AAC families and
  *      reject the whole CarPlay audio-format object before either stream is set up. The extended
  *      canonical policy selects 65 (APAC/5.1) or 66 (APAC/5.1.2). An explicit secondary index 23
- *      adds AAC-LC/48k/stereo; iOS may switch between 65 and 23 inside the same buffered session,
- *      and the receiver follows the index/cookie carried by each APAP boundary packet. Legacy
+ *      adds AAC-LC/48k/stereo; iOS may switch between the two codecs inside the same buffered
+ *      session. APAP carries no per-packet format index: a changed inline magic cookie selects
+ *      the decoder, and the successful decoder's geometry/layout selects PCM processing. Legacy
  *      debug variables retain the older AAC/DD+ probe indices only when no AUDIO_SPATIAL controls
  *      are present.
  *   2. the control-SETUP response's `enabledFeatures` gains the token "mainBuffered", without which
@@ -101,11 +104,11 @@
 #define SPA_AAC_ELD_48K_5_1_2 42     /* APAudioFormatIndex; AAC-ELD/48000/5.1.2 */
 #define SPA_DDP_48K_5_1      50      /* APAudioFormatIndex; DDPLUS/48000/5.1 */
 #define SPA_DDP_48K_9_1_6    53      /* APAudioFormatIndex; DDPLUS/48000/9.1.6 */
-#define SPA_APAC_48K_STEREO 64      /* APAudioFormatIndex; APAC/48000/stereo.  Same codec and
-                                     * sample rate as 5.1, so the existing decoder handles it and
-                                     * the sink widening covers the channel difference.  iOS gates
-                                     * it behind bufferedAPACStereo, whose static default is
-                                     * false, so the phone may simply never offer it. */
+#define SPA_APAC_48K_STEREO 64      /* APAudioFormatIndex; APAC/48000/stereo. Same codec/rate as
+                                     * 5.1; after cookie acceptance its 2ch geometry selects the
+                                     * common stereo renderer before the PCM6 ring. iOS gates it
+                                     * behind bufferedAPACStereo, whose static default is false, so
+                                     * the phone may simply never offer it. */
 #define SPA_APAC_48K_5_1    65      /* APAudioFormatIndex; APAC/48000/5.1 */
 #define SPA_APAC_48K_5_1_2  66      /* APAudioFormatIndex; APAC/48000/5.1.2 */
 #define SPA_ALAC_48K_24_STEREO 21   /* APAudioFormatIndex; ALAC/48000/24/stereo -- lossless and
@@ -127,12 +130,14 @@
  * the hook may inspect files, initialise logging or create a writer thread. */
 extern const hook_module_def_t audio_module_def;
 
-/* ---- the decoded type-103 PCM6 rail (stage j) -----------------------------------------------
- * While a type-103 stream is carrying APAC media the receiver decodes it, reorders it into the
- * declared CarPlay order (L R C LFE Ls Rs) and queues it here.  These two calls are the seam the
- * type-100 read path takes over through: when spa_buffered_pcm6_active() is true it serves
- * spa_buffered_pcm6_read() instead of its own samples, and the instant it is false stock type-100
- * behaviour resumes unchanged.  That fallback is the whole safety story of this path.
+/* ---- the decoded type-103 PCM6 rail ----------------------------------------------------------
+ * While type 103 carries buffered media, the receiver follows the inline cookie,
+ * decodes APAC 5.1 or AAC stereo, applies the corresponding reorder/upmix action
+ * and queues declared CarPlay order (L R C LFE Ls Rs) here. These two calls are
+ * the seam the type-100 read path takes over through: when
+ * spa_buffered_pcm6_active() is true it serves spa_buffered_pcm6_read() instead
+ * of its own samples, and the instant it is false stock type-100 behaviour
+ * resumes unchanged. That fallback is the whole safety story of this path.
  *
  * spa_buffered_pcm6_read() writes `frames` * 6 interleaved S16 samples at most and returns the
  * number of frames actually written; a short return is an underrun and the caller decides whether

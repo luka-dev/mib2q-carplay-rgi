@@ -50,8 +50,34 @@
 
 enum {
     SPA_PCM_5_1_CHANNELS = 6,
-    SPA_PCM_5_1_2_CHANNELS = 8
+    SPA_PCM_5_1_2_CHANNELS = 8,
+    SPA_APAC_5_1_LAYOUT_TAG = 0x007c0006,
+    SPA_APAC_5_1_2_LAYOUT_TAG = 0x00c20008
 };
+
+/* The negotiated SETUP index is not a per-track discriminator: iOS changes
+ * between AAC stereo and APAC spatial content inside one type-103 session and
+ * the successful magic-cookie decoder is the source of truth. */
+enum spa_decoded_pcm_kind {
+    SPA_DECODED_PCM_OTHER = 0,
+    SPA_DECODED_PCM_STEREO,
+    SPA_DECODED_PCM_APAC_5_1,
+    SPA_DECODED_PCM_APAC_5_1_2
+};
+
+enum spa_decoded_pcm_action {
+    SPA_DECODED_PCM_ACTION_GENERIC = 0,
+    SPA_DECODED_PCM_ACTION_STEREO_UPMIX,
+    SPA_DECODED_PCM_ACTION_REORDER_5_1
+};
+
+enum spa_decoded_pcm_kind spa_classify_decoded_pcm(int codec_is_apac,
+                                                    uint32_t channels,
+                                                    uint32_t sample_rate,
+                                                    uint32_t channel_layout_tag);
+enum spa_decoded_pcm_action spa_select_decoded_pcm_action(
+    enum spa_decoded_pcm_kind kind, uint32_t source_channels,
+    uint32_t output_channels, uint32_t sample_rate);
 
 /* Permute interleaved S16 5.1 from the decoder's native order
  * (C L R Ls Rs LFE) into the declared CarPlay order (L R C LFE Ls Rs).

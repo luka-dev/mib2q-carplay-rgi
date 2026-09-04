@@ -175,7 +175,7 @@ echo "[supervisor] exec dio_manager pid=$DIO_PID with private LD_PRELOAD" >> "$W
 
 export LD_PRELOAD="$H/libcarplay_hook.so"
 
-# altScreen — cluster second display (stream 111). Plain flag, like SPATIAL_5_1 below.
+# altScreen — cluster second display (stream 111). Plain flag, like AUDIO_SPATIAL below.
 # We advertise a fabricated second display; iOS 27+ (per-display capability model) accepts it,
 # but iOS <= 26 has a single-zoom-for-the-whole-car model and can reject it, which then breaks the
 # BASE CarPlay connection too (docs/reference/IOS26_VS_IOS27_BONJOUR.md).
@@ -211,8 +211,9 @@ export AUDIO_STEREO_LFE=assist
 export AUDIO_SPATIAL_CODEC_LIB="$H/libcarplay_apac.so"
 # Second advertised APAudioFormatIndex for the buffered stream.  23 = AAC-LC/48k/stereo and
 # needs no resampler on MHI2Q.  With primary 65, iOS can change transport inside one type-103
-# session as the source ASBD changes between six-channel and stereo; each APAP boundary packet
-# announces the selected index and cookie.  Empty keeps the established single-format mode.
-# First stationary dual-codec test: set 23, never 22.
+# session as the source ASBD changes between six-channel and stereo. APAP does not announce a
+# per-packet index; each changed inline cookie selects AAC or APAC, then decoded geometry/layout
+# selects stereo upmix or the measured native 5.1 reorder. Empty keeps single-format advertising.
+# Use 23, never 22: every HU media endpoint is 48 kHz and 23 needs no resampler.
 export SPATIAL_103_EXTRA_INDEX=23
 exec "$DIODIR/dio_manager" "$@"

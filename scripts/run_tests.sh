@@ -20,6 +20,12 @@ cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
     tests/stereo_upmix_test.c hook/audio/stereo_upmix.c -o "$OUT/upmix"
 "$OUT/upmix"
 
+printf '%-32s ' buffered_pcm_switch_test
+cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
+    tests/buffered_pcm_switch_test.c hook/audio/spatial_downmix.c \
+    hook/audio/stereo_upmix.c -o "$OUT/switch"
+"$OUT/switch"
+
 printf '%-32s ' apac_integration_test
 c++ -std=c++11 -O2 -w -fno-exceptions -fno-rtti \
     -Iapac_decoder/include -Ihook -Ihook/audio -x c++ \

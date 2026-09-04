@@ -13,6 +13,37 @@ static int16_t spa_saturate_s16(int32_t value)
     return (int16_t)value;
 }
 
+enum spa_decoded_pcm_kind spa_classify_decoded_pcm(int codec_is_apac,
+                                                    uint32_t channels,
+                                                    uint32_t sample_rate,
+                                                    uint32_t channel_layout_tag)
+{
+    if (sample_rate != 48000u) return SPA_DECODED_PCM_OTHER;
+    if (channels == 2u) return SPA_DECODED_PCM_STEREO;
+    if (!codec_is_apac) return SPA_DECODED_PCM_OTHER;
+    if (channels == SPA_PCM_5_1_CHANNELS &&
+        channel_layout_tag == SPA_APAC_5_1_LAYOUT_TAG)
+        return SPA_DECODED_PCM_APAC_5_1;
+    if (channels == SPA_PCM_5_1_2_CHANNELS &&
+        channel_layout_tag == SPA_APAC_5_1_2_LAYOUT_TAG)
+        return SPA_DECODED_PCM_APAC_5_1_2;
+    return SPA_DECODED_PCM_OTHER;
+}
+
+enum spa_decoded_pcm_action spa_select_decoded_pcm_action(
+    enum spa_decoded_pcm_kind kind, uint32_t source_channels,
+    uint32_t output_channels, uint32_t sample_rate)
+{
+    if (kind == SPA_DECODED_PCM_STEREO && source_channels == 2u &&
+        output_channels == SPA_PCM_5_1_CHANNELS && sample_rate == 48000u)
+        return SPA_DECODED_PCM_ACTION_STEREO_UPMIX;
+    if (kind == SPA_DECODED_PCM_APAC_5_1 &&
+        source_channels == SPA_PCM_5_1_CHANNELS &&
+        output_channels >= SPA_PCM_5_1_CHANNELS)
+        return SPA_DECODED_PCM_ACTION_REORDER_5_1;
+    return SPA_DECODED_PCM_ACTION_GENERIC;
+}
+
 size_t spa_reorder_5_1_decoder_to_declared_s16(const int16_t *input, size_t frames,
                                                int16_t *output)
 {

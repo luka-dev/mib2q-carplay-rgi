@@ -104,6 +104,65 @@ static void test_reorder_then_downmix(void)
     assert(memcmp(folded, expected, sizeof(expected)) == 0);
 }
 
+static void test_cookie_resolved_pcm_kind(void)
+{
+    static const int setup_indices[2] = { 65, 23 };
+    size_t setup;
+
+    /* The classifier deliberately has no negotiated-index argument.  SETUP can
+     * remain 65 while an AAC cookie resolves to stereo, or remain 23 while an
+     * APAC cookie resolves to native 5.1. */
+    assert(spa_classify_decoded_pcm(0, 2, 48000, 0) ==
+           SPA_DECODED_PCM_STEREO);
+    assert(spa_classify_decoded_pcm(1, 2, 48000, 0x12345678) ==
+           SPA_DECODED_PCM_STEREO);
+    assert(spa_classify_decoded_pcm(1, 6, 48000,
+                                    SPA_APAC_5_1_LAYOUT_TAG) ==
+           SPA_DECODED_PCM_APAC_5_1);
+    assert(spa_classify_decoded_pcm(1, 8, 48000,
+                                    SPA_APAC_5_1_2_LAYOUT_TAG) ==
+           SPA_DECODED_PCM_APAC_5_1_2);
+
+    assert(spa_classify_decoded_pcm(0, 6, 48000,
+                                    SPA_APAC_5_1_LAYOUT_TAG) ==
+           SPA_DECODED_PCM_OTHER);
+    assert(spa_classify_decoded_pcm(1, 6, 48000, 0) ==
+           SPA_DECODED_PCM_OTHER);
+    assert(spa_classify_decoded_pcm(1, 8, 44100,
+                                    SPA_APAC_5_1_2_LAYOUT_TAG) ==
+           SPA_DECODED_PCM_OTHER);
+
+    /* Both switch directions use the same cookie-resolved decisions.  The
+     * loop's SETUP value is intentionally absent from the classifier/action
+     * calls: it may stay stale for the lifetime of the type-103 session. */
+    for (setup = 0; setup < sizeof(setup_indices) / sizeof(setup_indices[0]);
+         setup++) {
+        enum spa_decoded_pcm_kind kind;
+        assert(setup_indices[setup] == 65 || setup_indices[setup] == 23);
+
+        kind = spa_classify_decoded_pcm(0, 2, 48000, 0);
+        assert(spa_select_decoded_pcm_action(kind, 2, 6, 48000) ==
+               SPA_DECODED_PCM_ACTION_STEREO_UPMIX);
+
+        kind = spa_classify_decoded_pcm(1, 6, 48000,
+                                        SPA_APAC_5_1_LAYOUT_TAG);
+        assert(spa_select_decoded_pcm_action(kind, 6, 6, 48000) ==
+               SPA_DECODED_PCM_ACTION_REORDER_5_1);
+
+        kind = spa_classify_decoded_pcm(1, 8, 48000,
+                                        SPA_APAC_5_1_2_LAYOUT_TAG);
+        assert(spa_select_decoded_pcm_action(kind, 8, 6, 48000) ==
+               SPA_DECODED_PCM_ACTION_GENERIC);
+    }
+
+    assert(spa_select_decoded_pcm_action(SPA_DECODED_PCM_STEREO,
+                                         2, 8, 48000) ==
+           SPA_DECODED_PCM_ACTION_GENERIC);
+    assert(spa_select_decoded_pcm_action(SPA_DECODED_PCM_STEREO,
+                                         2, 6, 44100) ==
+           SPA_DECODED_PCM_ACTION_GENERIC);
+}
+
 int main(void)
 {
     int16_t sink = 0;
@@ -121,5 +180,6 @@ int main(void)
     test_reorder();
     test_reorder_in_place();
     test_reorder_then_downmix();
+    test_cookie_resolved_pcm_kind();
     return 0;
 }

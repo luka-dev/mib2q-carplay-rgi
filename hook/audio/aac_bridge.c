@@ -3,14 +3,14 @@
  * Why this exists.  iOS does not upmix stereo into the spatial format, so a receiver that
  * advertises only APAC gets Atmos tracks and nothing else -- the phone skips what it cannot
  * deliver.  Index 23 carries ordinary content as AAC-LC at 48000 Hz, which needs no resampler
- * because every HU media endpoint is 48 kHz.  iOS has an in-session transport-format-change
- * path; the APAP packet announces the selected index and cookie at each boundary, so this
- * adapter can alternate with APAC without recreating the type-103 session.  Full reasoning:
+ * because every HU media endpoint is 48 kHz. iOS has an in-session transport-format-change
+ * path; APAP carries a changed inline cookie (not a per-packet format index), so this adapter
+ * can alternate with APAC without recreating the type-103 session. Full reasoning:
  * docs/DYNAMIC_BUFFERED_CODEC_SWITCH.md.
  *
- * It presents the same function table as the APAC port (spa_apac_codec_api_t) so the render
- * path holds one pointer and dispatches on the negotiated index, leaving the APAC branch
- * untouched.
+ * It presents the same function table as the APAC port (spa_apac_codec_api_t). The render path
+ * tries the current API and then its alternate; the cookie-accepting decoder plus returned PCM
+ * geometry/layout selects stereo upmix or native APAC processing.
  *
  * Unlike the APAC port this is not a separate library: libNmeSDK.so is already in
  * dio_manager's DT_NEEDED and exports every entry point by name, so plain dlsym reaches them
@@ -351,10 +351,11 @@ static int spa_aac_get_info(const struct spa_aac_decoder *d, spa_apac_stream_inf
     return SPA_APAC_OK;
 }
 
-/* The one exported symbol.  Same table shape as the APAC port so the render path holds a
- * single pointer and dispatches on the negotiated index; the handle is this file's own type,
- * cast through the table's opaque one.  Nothing else here is exported, because the hook is
- * LD_PRELOAD'd and a name shared with the APAC library would interpose on it globally. */
+/* The one exported symbol. Same table shape as the APAC port so the render path
+ * can retain whichever API accepts the current inline cookie, then dispatch on
+ * decoded geometry/layout. The handle is this file's own type, cast through the
+ * table's opaque one. Nothing else here is exported, because the hook is
+ * LD_PRELOAD'd and a name shared with the APAC library would interpose globally. */
 const spa_apac_codec_api_t *spa_aac_codec_api(void)
 {
     static spa_apac_codec_api_t api;

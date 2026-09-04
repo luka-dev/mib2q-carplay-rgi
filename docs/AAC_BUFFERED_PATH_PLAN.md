@@ -1,11 +1,12 @@
-# MHI2Q buffered AAC-LC path: static contract and implementation plan
+# MHI2Q buffered AAC-LC path: static contract and implementation record
 
 Date: 2026-09-03
 
 Scope: MHI2Q MU1316, CarPlay buffered stream type 103, AAC-LC indices 23 and 22
 
-Status: live framing/cookie capture and static ABI/thread audit complete; decoder and packet-driven
-APAC/AAC dispatch implemented; stationary transition test pending
+Status: live framing/cookie capture and static ABI/thread audit complete;
+cookie-driven APAC/AAC dispatch implemented and confirmed in both directions on
+the vehicle. The stereo ambience/LFE profile has a separate stationary A/B gate.
 
 ## Result
 
@@ -35,15 +36,16 @@ guessing:
   shared plugin registry, no OMX calls and a fully synchronous callback chain. One decoder may be
   owned by the existing APAP receiver thread; no extra thread or callback wait is needed.
 
-The earlier `[65,23]` run selected 23 initially and did not visibly return to 65 for the item called
-Atmos. A later static pass changes the interpretation: iOS has an explicit in-session buffered
-transport-format-change path, and its selector chooses index 65 when the source ASBD has six
-channels. The old run did not log that source ASBD or the packet's one-byte field-2 index, so it
-cannot distinguish an item presented to AirPlay as stereo from a receiver which missed the change.
+The earlier `[65,23]` run appeared not to return to 65 because fields 2/8 were
+misread as a format index. Independent AAC/23 and APAC/65 sessions both carried
+`1024` there: they are `spf`, not an `APAudioFormatIndex`. SETUP's index remains
+only an initial hint. A changed inline cookie is tried against the current codec
+and then the alternate; the successful codec plus decoded geometry/layout is
+authoritative.
 
-The decoder now retains both APAC and AAC dispatches and treats each APAP packet's format index and
-inline cookie as authoritative. The complete mechanism, exact iOS addresses, receiver state machine
-and one decisive stationary test are in
+The decoder now retains both APIs, and the vehicle has played APAC -> AAC and
+AAC -> APAC inside one session without dropout or new underrun. The complete
+mechanism, exact iOS addresses and receiver state machine are in
 [`DYNAMIC_BUFFERED_CODEC_SWITCH.md`](DYNAMIC_BUFFERED_CODEC_SWITCH.md).
 
 ## Exact target and provenance
@@ -353,26 +355,27 @@ output frames, not a fixed packet size. Reset both the PCM FIFO and resampler me
 stationary deadline/CPU test shows comfortable headroom. None of this code belongs in the index-23
 production path.
 
-## 6. Coding plan
+## 6. Implemented receiver sequence
 
-The first coding pass should follow this order:
+The landed implementation follows this order:
 
-1. Add an AAC bridge with the same lifecycle shape as `apac_bridge.h`: create/get-info/decode-S16/
+1. The AAC bridge has the same lifecycle shape as `apac_bridge.h`: create/get-info/decode-S16/
    reset/destroy. Resolve all six Cinemo wrappers from `RTLD_DEFAULT`; do not import target-private
    addresses or initialize a second Cinemo configuration.
-2. Parse and validate the selected cookie by codec family. For AAC, extract the actual ASC from raw
+2. Parse and validate each changed cookie with the current decoder and then its alternate. For AAC, extract the actual ASC from raw
    ASC or a validated descriptor wrapper. Keep the ASC allocation alive for the entire decoder
-   session. Reject APAC `dapa` and any geometry not matching the negotiated index.
+   session. The wrong codec rejects the cookie; decoded rate/channels/layout, not the stale SETUP index, validate the result.
 3. Build the exact input/output `CinemoMediaType` structures above and initialize one decoder for
    the stream generation. Check every return value and actual callback format.
-4. Add a decoder-kind dispatch at the render boundary: 65/66 continue through the untouched APAC
-   bridge; 23 goes to AAC-LC; 22 exists only behind an explicit fallback gate. Unsupported indices
-   remain fail-closed.
+4. At the render boundary, classify the successful codec and decoded PCM: 48 kHz stereo enters the
+   stereo renderer; APAC 5.1 with tag `0x007c0006` enters the measured reorder. The unmeasured
+   PCM8/5.1.2 path remains reachable only through the pre-existing SETUP=66 experiment.
 5. Feed each authenticated APAP media item to Cinemo as one AU using `(1, 0, 1)`. Collect zero or
    more callback chunks in the bounded private FIFO, enforce frame alignment, and emit complete
    stereo frames only.
-6. Widen PCM2 to PCM6 as `L,R,0,0,0,0`, run the existing privacy-preserving level counters, and push
-   into the established 48 kHz render ring. Do not change the APAC channel reorder/downmix paths.
+6. Render PCM2 into the established PCM6 ring. `AUDIO_STEREO_UPMIX=off` is exact
+   `L,R,0,0,0,0`; the checked-in `ambient-lite` canary emits trimmed L/R, zero C, bounded LR4/80 Hz
+   LFE assist and decorrelated Ls/Rs. Native APAC 5.1 never enters this module.
 7. On `FLUSHBUFFERED`, stop accepting callbacks for the old generation, call `Flush`, empty the AAC
    FIFO and shared PCM queued before the flush boundary, and resume with the same ASC. On cookie or
    format change, flush/release/recreate. Use `Drain` only for orderly EOS, not for a discontinuity.
@@ -383,15 +386,20 @@ The first coding pass should follow this order:
    duration, bad callback formats, stale-generation callbacks and FIFO overruns. Do not retain or
    log playable PCM in a production build.
 
-This code makes both decoders coexist in the receiver. Static analysis now proves that iOS can
-choose both within one session when the source ASBD changes channel count; whether the chosen Apple
-Music items expose that change is the remaining vehicle measurement.
+Both decoders now coexist in the receiver. The vehicle has switched ordinary AAC-LC and spatial
+APAC in both directions inside one session with continuous playback and no new underrun. Only the
+new stereo ambience/LFE acoustic profile still needs its separate stationary A/B.
 
-## 7. Ordered validation and risk
+## 7. Historical rollout ladder and completed gate
+
+This table preserves the risk order used to land the decoder. Gates 0–7 describe
+the staged rollout state at the time; gate 8 is the accepted vehicle closure.
+The only current open validation is the separate stereo ambience/LFE acoustic
+A/B in the upmix design document.
 
 | Gate | Test | Risk to current vehicle state | Drive? |
 |---:|---|---|---|
-| 0 | Keep the current known-good bundle and `AUDIO_SPATIAL=0`; record hashes before any test. | none | no |
+| 0 | Keep the then-known-good bundle and `AUDIO_SPATIAL=0`; record hashes before any test. | none | no |
 | 1 | **Complete:** retained cookie and 601-AU corpus prove the descriptor chain, ASC `11 90`, one raw AU per APAP item and standard decode to exactly `601 * 1024` frames. | none | no |
 | 2 | Host tests with fake Cinemo functions: raw/descriptor-chain cookie parsing, zero/multiple callbacks, malformed geometry, slow/failed synchronous `Write`, flush, stale generation and FIFO bounds. Run the existing APAC tests unchanged. | none | no |
 | 3 | Integrate the wrapper behind a disabled gate and keep `AUDIO_SPATIAL=0`; verify ordinary CarPlay and existing APAC host/bench regressions. A separate-process Cinemo probe is not the relevant coexistence test because it has a different registry. | low | no |
@@ -399,7 +407,7 @@ Music items expose that change is the remaining vehicle measurement.
 | 5 | Before and after that decoder lifetime, replay stock local audio. This checks the only remaining runtime concern despite the absence of shared codec/OMX state. | low-medium | no |
 | 6 | In a fresh stationary session advertise index 23 only. Play ordinary material; require clean auth/AU/decode/PCM/ring counters, audible L/R, zero-filled extra slots, and correct pause/seek/flush/cookie replacement. | medium, one LD_PRELOAD generation; rollback is the known bundle/env switch | no |
 | 7 | In a separate session advertise `[65]` and replay the proven Atmos case. APAC hashes, channel order, feedback and six-channel counters must remain unchanged. | low-medium regression test | no |
-| 8 | Only after both decoders pass separately, advertise `[65,23]` and play verified Atmos -> stereo -> Atmos. Require packet field 2 and the receiver log to alternate 65 -> 23 -> 65, with a matching decoder rebuild and clean counters. | medium | no |
+| 8 | **Complete:** advertise `[65,23]` and switch ordinary AAC-LC and spatial APAC in both directions. Require changed cookies, matching decoder rebuilds, continuous playback and clean counters; fields 2/8 must remain ignored `spf=1024`. | medium | no |
 
 No decoder/framing/resampling gate requires a moving vehicle. A drive is optional only for final
 subjective acoustic acceptance after stationary counters and speaker tests pass. Do not combine the
@@ -422,7 +430,8 @@ first Cinemo coexistence experiment with a drive.
 | AAC route shares an OMX component with stock playback | refuted | no `OMX_*` imports/relocations or dynamic symbol lookup |
 | real-time CPU margin/vendor runtime behavior | unmeasured | bounded stationary in-process canary |
 | iOS can switch the buffered transport within one session | high/direct | active-engine transport-change branch plus timed SBAR receiver path |
-| the tested Music items will produce 65 -> 23 -> 65 | unmeasured | old run lacked source-ASBD and per-packet field-2 logs |
+| cookie-driven AAC/APAC switching works in both directions | high/measured | accepted vehicle run, no dropout/new underrun |
+| decoded PCM action is independent of stale SETUP index | high/host-tested | SETUP 65/23 switch regression, native reorder and fresh stereo DSP state |
 
 No static discovery item remains. The framing, cookie, ABI, ownership/thread contract and dynamic
 sender mechanism are closed. Everything after this point is bounded validation, not another

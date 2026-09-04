@@ -6,6 +6,7 @@
 #
 # spatial_downmix_test    the 5.1.2 fold and the 5.1 channel permutation
 # stereo_upmix_test       deterministic PCM2->PCM6 ambience renderer, resets and bounds
+# buffered_pcm_switch_test cookie-resolved AAC/APAC dispatch with stale SETUP indices
 # apac_type103_test       the whole type-103 render path end to end: APAP framing, decrypt,
 #                         the TLV split, APAC decode and the reorder, checked against the PCM
 #                         Apple's own decoder produced for the same six packets
@@ -36,6 +37,11 @@ echo "OK  downmix matrix, saturation, in-place, reorder"
 echo "=== stereo_upmix_test ==="
 $CC $CFLAGS tests/stereo_upmix_test.c hook/audio/stereo_upmix.c -o "$OUT/stereo_upmix_test"
 "$OUT/stereo_upmix_test"
+
+echo "=== buffered_pcm_switch_test ==="
+$CC $CFLAGS tests/buffered_pcm_switch_test.c hook/audio/spatial_downmix.c \
+    hook/audio/stereo_upmix.c -o "$OUT/buffered_pcm_switch_test"
+"$OUT/buffered_pcm_switch_test"
 
 echo "=== apac_type103_test ==="
 rm -rf "$OUT/obj"; mkdir -p "$OUT/obj"

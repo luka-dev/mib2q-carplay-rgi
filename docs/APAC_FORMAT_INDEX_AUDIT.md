@@ -1,7 +1,9 @@
 # iOS 27 extended audio-format indices and CarPlay buffered-stream selection
 
-**Status:** static audit complete, 2026-09-03. This audit itself modified no
-target binary, hook, or deployed configuration.
+**Status:** static audit complete, 2026-09-03; vehicle/implementation correction
+added 2026-09-04. The original audit itself modified no target binary, hook, or
+deployed configuration. Its `[64,65]` proposal is retained as history and is
+superseded by the accepted cookie-driven `[65,23]` implementation in §7.
 
 This audit corrects one statement in the older spatial-audio handoff: APAC has a
 stereo format. It is extended format index **64**. The spatial formats begin at
@@ -14,7 +16,7 @@ override on the test phone is not recoverable from the static shared cache.
 
 ## 1. Result
 
-The current buffered CarPlay entry is:
+The buffered CarPlay entry at the time of this audit was:
 
 ```text
 type: 103
@@ -56,14 +58,14 @@ audioOutputFormatsExtended: [22, 65]
 
 Here stereo is buffered AAC-LC at 44.1 kHz and 5.1 is APAC at 48 kHz. This matches
 the shape of Apple's receiver-side list builder: ordinary AAC/ALAC stereo formats
-and spatial APAC formats coexist in one list. It is **not safe for the current HU
-implementation**, because its type-103 data path dispatches APAC to the APAC
-decoder and does not have a verified AAC type-103 decoder dispatch. Adding 22
-could therefore make iOS send a codec that this path cannot decode.
+and spatial APAC formats coexist in one list. It was **not safe for the
+then-current HU implementation**, because its type-103 data path dispatched only
+to the APAC decoder and had no AAC type-103 decoder. Adding 22 could therefore
+make iOS send a codec that path could not decode.
 
-For the current APAC-only implementation, `[64,65]` is the only narrowly scoped
-negotiation test worth making. It is not yet a playable repository configuration:
-`spa103_render_start` currently accepts only indices 65 and 66 and classifies 64
+For the then-current APAC-only implementation, `[64,65]` was the only narrowly scoped
+negotiation test worth making. It was not yet a playable repository configuration:
+`spa103_render_start` at that time accepted only indices 65 and 66 and classified 64
 as `unsupported-format`. Keep the working realtime type-100 entry intact. If the
 phone does not select 64, the static result predicts that its
 `bufferedAPACStereo` override is off; metadata alone then cannot guarantee both
@@ -361,7 +363,7 @@ Changing the buffered entry's `audioType` is not a valid fix. The iOS table for
 type 103 contains only `media`; using another value makes it unrecognized rather
 than reserving type 100 for stereo.
 
-## 6. Confidence and safe next action
+## 6. Confidence and historical safe action
 
 | Finding | Confidence | Basis |
 |---|---|---|
@@ -371,17 +373,18 @@ than reserving type 100 for stereo.
 | Multi-index extended arrays are normal | high | Apple list builders and array iteration |
 | `[64,65]` is a syntactically and semantically valid sender offer | high | direct list-builder order and selector cases |
 | This phone will actually choose 64 | medium/conditional | guarded by `bufferedAPACStereo`; static default is false and runtime override is unknown |
-| The current HU will render index 64 | low/refuted for current code | `spa103_render_start` accepts only 65/66 and fails closed for 64 |
+| The current HU will render index 64 | unmeasured on vehicle | current cookie/geometry classifier would send decoded APAC stereo to the common upmixer, but iOS has not selected 64 |
 | `[22,65]` supplies buffered stereo independent of the APAC-stereo flag | high | direct stereo selection order and receiver-list builder |
-| The current HU can render index 22 on type 103 | low/unproved | current implemented decoder path is APAC; no verified AAC dispatch |
+| The current HU can render index 22 on type 103 | refuted without a resampler | the AAC bridge can identify/decode 44.1 kHz, but the fixed 48 kHz render validation rejects it |
 | The sender will fall back from an active type 103 to type 100 per item | low/refuted at the inspected layer | format-selection error is returned without an endpoint switch |
 
-Safe vehicle order, if a further test is wanted:
+The following was the safe vehicle order proposed before index 23 and the AAC
+bridge were measured. It is retained only as experiment history:
 
 1. Preserve the complete known-good type-100 entry and all current feedback/SAD
    fixes.
 2. For a negotiation-only trace, change only the extended array from `[65]` to
-   `[64,65]`; do not change the legacy `0x400000` mask. Current render code will
+   `[64,65]`; do not change the legacy `0x400000` mask. The then-current render code would
    reject 64 cleanly, so this step cannot be an audible acceptance test.
 3. Confirm the selected index and codec before enabling rendering. If iOS selects
    64, add and bench an explicit index-64 APAC stereo path; do not assume the
@@ -393,30 +396,38 @@ This audit authorizes no deployed change. It establishes the exact metadata
 choices and their limits so the next vehicle action is a single-field test rather
 than another format-index guess.
 
-### Working-tree warning found during this audit
+### Superseded working-tree warning found during this audit
 
-At audit time the working tree contains an uncommitted change that permits index
+At audit time the working tree contained an uncommitted change that permitted index
 22 as `SPATIAL_103_EXTRA_INDEX`. That change only alters advertisement. The same
 tree's `spa103_render_start` rejects every format except APAC 65/66, so index 22
 will become `unsupported-format`; it does not add AAC decode. Do not deploy that
 advertisement as a stereo fix without a real type-103 AAC dispatch and tests.
 
-## 7. Vehicle correction: index 23 and session-wide selection — 2026-09-03
+## 7. Vehicle correction: index 23 and cookie-driven switching — 2026-09-04
 
-Later vehicle measurements supersede the safe-action proposal above:
+Later vehicle measurements and the completed receiver supersede the safe-action
+proposal above:
 
 * index 64 was not selected, consistent with `bufferedAPACStereo` being false;
 * index 23 was selected as AAC-LC/48000/stereo, with APAP time scale `0xBB80`
   and a separate 39-byte magic cookie;
-* `[65,23]` selected 23 once for the entire buffered session. It did not switch
-  back to 65 for an Atmos track.
+* an early `[65,23]` trace appeared to select 23 for the entire session only
+  because the receiver misread APAP field 2 as a format index;
+* independent AAC/23 and APAC/65 sessions both carry `1024` in fields 2 and 8:
+  this is SETUP `spf`, and APAP carries no per-packet format index;
+* the changed inline magic cookie selects AAC or APAC, and decoded
+  channels/rate/layout selects stereo upmix or the measured APAC 5.1 reorder;
+* the vehicle has now switched APAC -> AAC and AAC -> APAC inside one type-103
+  session with continuous playback and no new underrun.
 
-Therefore index 23, not 22, is the AAC implementation target and requires no
-resampler. The static selector can re-evaluate candidate descriptions, but that
-does not establish observable per-track renegotiation of an active stream. The
-vehicle result is authoritative for this phone/build.
+Therefore index 23, not 22, is the AAC production format and requires no
+resampler. SETUP's index is only the initial decoder hint; it may stay stale
+across a track change. The vehicle result is authoritative for this phone/build.
 
-The decoder branches should remain format-index keyed—65 for APAC spatial and 23
-for AAC stereo—but advertising both is not currently an automatic content switch.
-The complete MHI2Q implementation and validation plan is
-[`AAC_BUFFERED_PATH_PLAN.md`](AAC_BUFFERED_PATH_PLAN.md).
+Decoder branches must not be format-index keyed. The receiver tries the current
+codec and then its alternate against each changed cookie, retains only the one
+that accepts it, and classifies the resulting PCM. The complete implementation
+record is [`AAC_BUFFERED_PATH_PLAN.md`](AAC_BUFFERED_PATH_PLAN.md); the exact
+state machine and vehicle evidence are in
+[`DYNAMIC_BUFFERED_CODEC_SWITCH.md`](DYNAMIC_BUFFERED_CODEC_SWITCH.md).

@@ -233,7 +233,8 @@ There are 21 changed cells between bank 0 and bank 1 in each reachable profile.
 The full fallback plus all eight stored profiles and all three banks remain in
 [`SHARC_INPUT_OUTPUT_MATRICES.csv`](SHARC_INPUT_OUTPUT_MATRICES.csv).
 
-For the hook's AAC output `L,R,0,0,0,0`, profile-0 bank 1 therefore produces:
+For the hook's exact compatibility/off output `L,R,0,0,0,0`, profile-0 bank 1
+therefore produces:
 
 ```text
 L -> Bus L -2 dB and Bus C -6 dB
@@ -261,10 +262,12 @@ The relevant arrays live in the constant A07 block copied from `0x102438`:
 | `0x102CD6` | exact-`0xc0` adjustment for input rows 5..8 under its additional mode flag | `-9..+9 dB` |
 | `0x102C8A` | exact-`0xc0` adjustment for odd cells of the 20-element vector | all `0.0 dB` |
 
-These branches prove ASAD-aware calibration, but not a direct Symphoria enable. For
-actual stereo PCM, input rows 5..8 are digital zero, so the only non-zero
-ASAD-dependent table cannot create surround content from L/R. No other direct
-ASAD consumer exists in the V850 image. The separate numeric SHARC control
+These branches prove ASAD-aware calibration, but not a direct Symphoria enable.
+For the compatibility/off stereo PCM, input rows 5..8 are digital zero, so the
+only non-zero ASAD-dependent table cannot create surround content from L/R. The
+checked-in head-unit canary now supplies its own bounded LFE/Ls/Rs before this
+matrix; those channels are renderer output, not content created by ASAD. No other
+direct ASAD consumer exists in the V850 image. The separate numeric SHARC control
 `0x10` follows the normalized bank, not ASAD independently.
 
 ## Consequence for APAC/AAC switching
@@ -272,15 +275,18 @@ ASAD consumer exists in the V850 image. The separate numeric SHARC control
 The fixed six-slot PCM container remains correct:
 
 ```text
-index 65 APAC 5.1 -> L,R,C,LFE,Ls,Rs
-index 23 AAC 2.0  -> L,R,0,0,0,0
+APAC 5.1              -> measured L,R,C,LFE,Ls,Rs reorder
+AAC stereo, upmix off -> L,R,0,0,0,0
+AAC stereo, canary    -> 0.940L,0.940R,0,0.178*LP80(mid),bounded Ls,bounded Rs
 ```
 
-What is not semantically equivalent is announcing `ASAD=0xfc` for the second
+What is not semantically equivalent is announcing `ASAD=0xfc` for either stereo
 line. It tells the far side that all six positions are active, so the amplifier
-cannot learn from the header that the decoded source was stereo. The current
-hook therefore preserves valid audio and the known-good six-channel transport,
-but it does not preserve stock stereo source metadata.
+cannot learn from the header that the decoded source was stereo. With the canary,
+LFE/Ls/Rs really are populated while C is intentionally zero because bank 1
+derives the mid/centre bus. The hook preserves valid audio and the known-good
+six-channel transport, but it deliberately does not preserve stock stereo source
+metadata.
 
 Changing to `ASAD=0xc0` for index 23 would reach the amplifier's live ASAD
 logic if the head unit actually emitted it. On sink `0x26` it would still use
@@ -320,7 +326,7 @@ or runtime state. It must not be claimed from the fold-down matrix above.
 - [`SHARC_INPUT_OUTPUT_MATRIX.md`](SHARC_INPUT_OUTPUT_MATRIX.md) — original
   8x8 extraction and orientation proof.
 - [`DYNAMIC_BUFFERED_CODEC_SWITCH.md`](DYNAMIC_BUFFERED_CODEC_SWITCH.md) —
-  APAP index switching and head-unit SAD update lifetime.
+  cookie-driven APAP codec switching and head-unit SAD update lifetime.
 - [`SAD_HEADER.md`](SAD_HEADER.md) — the repaired HU-side speaker allocation.
 - [`MC_SELECTION_AUDIT.md`](MC_SELECTION_AUDIT.md) — why connection 162 selects
   the external-amplifier multichannel pair.
