@@ -1,6 +1,6 @@
 # Discrete 5.1 CarPlay audio — everything known, and what is still open
 
-Status as of 2026-09-03. Discrete 5.1 CarPlay now works end to end in the vehicle.
+Status as of 2026-09-04. Discrete 5.1 CarPlay now works end to end in the vehicle.
 The last two faults were both declaration/control mismatches rather than PCM
 corruption: the SAD header announced two active channels over six populated slots,
 and the hook blanked `updateFeedback`, removing the sender's clock reference. Both
@@ -729,6 +729,27 @@ one fixed `PCM6/48 kHz/S16` stream with `ASAD=0xfc` for the whole buffered sessi
 only the APAC/AAC decoder changes between tracks. There is no live amplifier/SAD
 reconfiguration at a codec boundary. Full audit:
 [`AMP_STEREO_5_1_MATRIX_DIFF.md`](AMP_STEREO_5_1_MATRIX_DIFF.md).
+
+The resulting head-unit upmix design is recorded separately in
+[`STEREO_TO_5_1_UPMIX_DESIGN.md`](STEREO_TO_5_1_UPMIX_DESIGN.md). Its first
+profile leaves C/LFE zero, preserves the source fronts, and injects only bounded,
+decorrelated ambience into Ls/Rs after accounting for the bank-1 +6 dB surround
+gain. The design also records Pioneer's independently verified CarPlay
+stereo-to-5.0 engine as a host oracle/clean-room rear-generator candidate; its
+explicit center is deliberately not mapped because bank 1 already derives the
+same mid signal.
+
+The six-band `ambient-lite` canary is now implemented after the common decoder
+and before the PCM6 ring. It is fixed-memory C99 on the existing receiver thread,
+resets at every stream/flush/rate/cookie/format boundary, and leaves native APAC
+5.1 on its byte-identical reorder path. The old backwards stereo widening was
+also replaced by bounded forward chunks, closing its latent overflow when Cinemo
+returns more than one 1024-frame callback. Host suites, ASan/UBSan and the full
+QNX ARMv7 build pass. The checked-in vehicle policy remains
+`AUDIO_STEREO_UPMIX=off`; `ambient-lite` has not yet passed the stationary car
+A/B and must not be described as the final quality winner. Exact implementation,
+metrics, center/LFE rationale and the host WAV renderer are in the linked design
+document.
 
 ---
 

@@ -67,7 +67,7 @@ static struct {
 
 struct spa_aac_decoder {
     void     *codec;
-    uint8_t   asc[8];
+    uint8_t  *asc;                 /* heap, handed to the codec: IT frees this, we must not */
     uint32_t  ascLength;
     uint32_t  channels;
     uint32_t  sampleRate;
@@ -75,6 +75,42 @@ struct spa_aac_decoder {
     uint32_t  fifoFrames;
     int       formatBad;           /* a callback reported something other than S16/48k/2ch */
 };
+
+/* dio_manager loads Cinemo for iAP, transport and VFS only: its core dump carries no
+ * libNmeAudioAAC at all, and the SDK's class factory answers CinemoErrorInterface (23) while it
+ * knows no class implementing INmeAudioCodec.  The factory learns its classes from a plugin
+ * directory, which nothing in dio_manager ever sets.  Setting it ourselves makes the AAC plugin
+ * loadable -- verified end to end with tools/cinemo-probe, which goes from 23 to a clean 0.
+ *
+ * Done lazily and only after a create has actually failed, so a firmware that already
+ * configures its own directory is left completely alone.
+ */
+static void aac_register_plugin_directory(void)
+{
+    typedef int32_t (*cinemo_cfg_t)(void **);
+    typedef int32_t (*cinemo_setdir_t)(void *, const char *);
+    static int attempted = 0;
+    cinemo_cfg_t     mkcfg;
+    cinemo_setdir_t  setdir;
+    const char      *dir;
+    void            *cfg = 0;
+    int32_t          rc;
+
+    if (attempted) return;
+    attempted = 1;
+
+    mkcfg  = (cinemo_cfg_t)dlsym(RTLD_DEFAULT, "CinemoCreateConfig");
+    setdir = (cinemo_setdir_t)dlsym(RTLD_DEFAULT, "ICinemoConfig_SetPluginDirectory");
+    if (!mkcfg || !setdir) return;
+    dir = getenv("AUDIO_CINEMO_PLUGIN_DIR");
+    if (!dir || !*dir) dir = "/mnt/app/armle/usr/lib/cinemo";
+
+    rc = mkcfg(&cfg);
+    if (rc != 0 || !cfg) return;
+    /* The Config is deliberately never released: it owns the class registry the codec needs
+     * for as long as this process decodes anything. */
+    (void)setdir(cfg, dir);    /* this file has no logger; the caller reports the outcome */
+}
 
 static int aac_resolve(void)
 {
@@ -190,19 +226,26 @@ static int spa_aac_create(const uint8_t *cookie, size_t cookieLength,
     d = (struct spa_aac_decoder *)calloc(1, sizeof(*d));
     if (!d) return SPA_APAC_ERR_NO_MEMORY;
 
-    if (!aac_extract_asc(cookie, cookieLength, d->asc, sizeof(d->asc), &d->ascLength)) {
+    /* The codec takes ownership of the header pointer and frees it when it is released, so
+     * this must be its own allocation.  Pointing it at a field inside the handle aborted
+     * dio_manager with "free malloc object that is not allocated" -- verified both ways with
+     * tools/cinemo-probe. */
+    d->asc = (uint8_t *)malloc(8);
+    if (!d->asc) { free(d); return SPA_APAC_ERR_NO_MEMORY; }
+    if (!aac_extract_asc(cookie, cookieLength, d->asc, 8, &d->ascLength)) {
+        free(d->asc);
         free(d);
         return SPA_APAC_ERR_COOKIE;
     }
-    if (d->ascLength < 2) { free(d); return SPA_APAC_ERR_COOKIE; }
+    if (d->ascLength < 2) { free(d->asc); free(d); return SPA_APAC_ERR_COOKIE; }
 
     /* AudioSpecificConfig: 5 bits object type, 4 bits sampling index, 4 bits channel config. */
     aot        = (uint32_t)(d->asc[0] >> 3);
     freqIndex  = (uint32_t)(((d->asc[0] & 0x07) << 1) | (d->asc[1] >> 7));
     chanConfig = (uint32_t)((d->asc[1] >> 3) & 0x0f);
-    if (aot != 2) { free(d); return SPA_APAC_ERR_CONFIG; }      /* AAC-LC only */
-    if (!chanConfig || chanConfig > AAC_MAX_CHANNELS) { free(d); return SPA_APAC_ERR_CHANNELS; }
-    if (!kRates[freqIndex]) { free(d); return SPA_APAC_ERR_CONFIG; }
+    if (aot != 2) { free(d->asc); free(d); return SPA_APAC_ERR_CONFIG; }      /* AAC-LC only */
+    if (!chanConfig || chanConfig > AAC_MAX_CHANNELS) { free(d->asc); free(d); return SPA_APAC_ERR_CHANNELS; }
+    if (!kRates[freqIndex]) { free(d->asc); free(d); return SPA_APAC_ERR_CONFIG; }
     d->channels   = chanConfig;
     d->sampleRate = kRates[freqIndex];
 
@@ -211,7 +254,7 @@ static int spa_aac_create(const uint8_t *cookie, size_t cookieLength,
     cmt_set32(input, CMT_MEDIA_TYPE, CMT_MEDIA_AUDIO_ES);
     cmt_set32(input, CMT_SUBTYPE,    CMT_SUB_AAC_LC);
     cmt_set32(input, CMT_HEADER_TYPE, CMT_HDR_ASC);
-    cmt_setp (input, CMT_HEADER_DATA, d->asc);       /* the handle owns it for the codec's life */
+    cmt_setp (input, CMT_HEADER_DATA, d->asc);       /* ownership passes to the codec below */
     cmt_set32(input, CMT_HEADER_SIZE, d->ascLength);
     /* Rate and channels stay zero on the input: the ASC carries them, as in the donor. */
     cmt_set32(output, CMT_MEDIA_TYPE,    CMT_MEDIA_PCM);
@@ -221,13 +264,27 @@ static int spa_aac_create(const uint8_t *cookie, size_t cookieLength,
     cmt_set32(output, CMT_CHANNELS,      d->channels);
 
     rc = g_cinemo.create(&d->codec);
-    if (rc != 0 || !d->codec) { free(d); return SPA_APAC_ERR_INIT; }
+    if (rc != 0 || !d->codec) { free(d->asc); free(d); return SPA_APAC_ERR_INIT; }
     rc = g_cinemo.initialize(d->codec, d, (void *)aac_decoded_callback, input, output);
     if (rc != 0) {
+        /* One retry: the usual first failure here is an empty class registry, which the
+         * plugin directory fixes.  A second failure is a real one. */
         g_cinemo.release(d->codec);
+        d->codec = 0;
+        aac_register_plugin_directory();
+        rc = g_cinemo.create(&d->codec);
+        if (rc == 0 && d->codec)
+            rc = g_cinemo.initialize(d->codec, d, (void *)aac_decoded_callback, input, output);
+    }
+    if (rc != 0) {
+        /* Initialize failing means the codec never took the header, so it is still ours.  A
+         * successful Initialize hands it over for good: from here on the codec frees it. */
+        if (d->codec) g_cinemo.release(d->codec);
+        free(d->asc);
         free(d);
         return SPA_APAC_ERR_INIT;
     }
+    d->asc = 0;                    /* ownership transferred; nulled so nothing here frees it */
 
     if (channels)    *channels = d->channels;
     if (frameLength) *frameLength = SPA_APAC_FRAME_LENGTH;

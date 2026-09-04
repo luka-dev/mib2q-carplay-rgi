@@ -1,0 +1,650 @@
+/*
+ * Host-side audition tool for hook/audio/stereo_upmix.c.
+ *
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+
+#include "stereo_upmix.h"
+
+#include <errno.h>
+#include <limits.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+
+enum {
+    WAV_FORMAT_PCM = 0x0001,
+    WAV_FORMAT_EXTENSIBLE = 0xfffe,
+    WAV_INPUT_CHANNELS = 2,
+    WAV_OUTPUT_CHANNELS = 6,
+    WAV_SAMPLE_RATE = 48000,
+    WAV_BITS_PER_SAMPLE = 16,
+    WAV_INPUT_BLOCK_ALIGN = WAV_INPUT_CHANNELS * (WAV_BITS_PER_SAMPLE / 8),
+    WAV_OUTPUT_BLOCK_ALIGN = WAV_OUTPUT_CHANNELS * (WAV_BITS_PER_SAMPLE / 8),
+    WAV_OUTPUT_FMT_SIZE = 40,
+    WAV_OUTPUT_HEADER_SIZE = 68,
+
+    /* FL | FR | FC | LFE | SL | SR. */
+    WAV_OUTPUT_CHANNEL_MASK = 0x0000060f
+};
+
+struct wav_input {
+    uint16_t format_tag;
+    uint16_t channels;
+    uint32_t sample_rate;
+    uint32_t byte_rate;
+    uint16_t block_align;
+    uint16_t bits_per_sample;
+    uint16_t valid_bits_per_sample;
+    uint32_t channel_mask;
+    uint32_t data_bytes;
+    fpos_t data_position;
+};
+
+enum cli_lfe_mode {
+    CLI_LFE_OFF = 0,
+    CLI_LFE_ASSIST = 1
+};
+
+struct options {
+    const char *input_path;
+    const char *output_path;
+    enum spa_stereo_upmix_backend backend;
+    enum cli_lfe_mode lfe_mode;
+    double surround_gain;
+};
+
+static uint16_t load_u16le(const uint8_t *bytes)
+{
+    return (uint16_t)((uint16_t)bytes[0] |
+                      ((uint16_t)bytes[1] << 8));
+}
+
+static uint32_t load_u32le(const uint8_t *bytes)
+{
+    return (uint32_t)bytes[0] |
+           ((uint32_t)bytes[1] << 8) |
+           ((uint32_t)bytes[2] << 16) |
+           ((uint32_t)bytes[3] << 24);
+}
+
+static void store_u16le(uint8_t *bytes, uint16_t value)
+{
+    bytes[0] = (uint8_t)value;
+    bytes[1] = (uint8_t)(value >> 8);
+}
+
+static void store_u32le(uint8_t *bytes, uint32_t value)
+{
+    bytes[0] = (uint8_t)value;
+    bytes[1] = (uint8_t)(value >> 8);
+    bytes[2] = (uint8_t)(value >> 16);
+    bytes[3] = (uint8_t)(value >> 24);
+}
+
+static int read_exact(FILE *stream, void *buffer, size_t bytes)
+{
+    return bytes == 0 || fread(buffer, 1, bytes, stream) == bytes;
+}
+
+static int write_exact(FILE *stream, const void *buffer, size_t bytes)
+{
+    return bytes == 0 || fwrite(buffer, 1, bytes, stream) == bytes;
+}
+
+static int skip_bytes(FILE *stream, uint64_t bytes)
+{
+    while (bytes != 0) {
+        long step = bytes > (uint64_t)LONG_MAX ? LONG_MAX : (long)bytes;
+
+        if (fseek(stream, step, SEEK_CUR) != 0) return 0;
+        bytes -= (uint64_t)step;
+    }
+    return 1;
+}
+
+static int guid_is_pcm(const uint8_t *guid)
+{
+    static const uint8_t pcm_guid[16] = {
+        0x01, 0x00, 0x00, 0x00,
+        0x00, 0x00,
+        0x10, 0x00,
+        0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71
+    };
+
+    return memcmp(guid, pcm_guid, sizeof(pcm_guid)) == 0;
+}
+
+static int parse_fmt_chunk(FILE *stream, uint32_t chunk_size,
+                           struct wav_input *input)
+{
+    uint8_t bytes[40];
+    size_t wanted;
+
+    if (chunk_size < 16) {
+        fprintf(stderr, "error: WAV fmt chunk is only %u bytes\n",
+                (unsigned)chunk_size);
+        return 0;
+    }
+
+    memset(bytes, 0, sizeof(bytes));
+    wanted = chunk_size < sizeof(bytes) ? (size_t)chunk_size : sizeof(bytes);
+    if (!read_exact(stream, bytes, wanted)) {
+        fprintf(stderr, "error: truncated WAV fmt chunk\n");
+        return 0;
+    }
+    if (!skip_bytes(stream, (uint64_t)chunk_size - wanted)) {
+        fprintf(stderr, "error: cannot skip WAV fmt extension\n");
+        return 0;
+    }
+
+    input->format_tag = load_u16le(bytes + 0);
+    input->channels = load_u16le(bytes + 2);
+    input->sample_rate = load_u32le(bytes + 4);
+    input->byte_rate = load_u32le(bytes + 8);
+    input->block_align = load_u16le(bytes + 12);
+    input->bits_per_sample = load_u16le(bytes + 14);
+    input->valid_bits_per_sample = input->bits_per_sample;
+    input->channel_mask = 0;
+
+    if (input->format_tag == WAV_FORMAT_EXTENSIBLE) {
+        uint16_t extension_size;
+
+        if (chunk_size < 40) {
+            fprintf(stderr,
+                    "error: truncated WAVE_FORMAT_EXTENSIBLE fmt chunk\n");
+            return 0;
+        }
+        extension_size = load_u16le(bytes + 16);
+        if (extension_size < 22 || !guid_is_pcm(bytes + 24)) {
+            fprintf(stderr,
+                    "error: WAVE_FORMAT_EXTENSIBLE input is not PCM\n");
+            return 0;
+        }
+        input->valid_bits_per_sample = load_u16le(bytes + 18);
+        input->channel_mask = load_u32le(bytes + 20);
+    } else if (input->format_tag != WAV_FORMAT_PCM) {
+        fprintf(stderr, "error: WAV format 0x%04x is not integer PCM\n",
+                input->format_tag);
+        return 0;
+    }
+
+    return 1;
+}
+
+static int parse_wav(FILE *stream, struct wav_input *input)
+{
+    uint8_t riff[12];
+    uint64_t remaining;
+    int have_fmt = 0;
+    int have_data = 0;
+
+    memset(input, 0, sizeof(*input));
+    if (!read_exact(stream, riff, sizeof(riff))) {
+        fprintf(stderr, "error: input is shorter than a WAV header\n");
+        return 0;
+    }
+    if (memcmp(riff, "RIFF", 4) != 0 || memcmp(riff + 8, "WAVE", 4) != 0) {
+        fprintf(stderr, "error: input is not a little-endian RIFF/WAVE file\n");
+        return 0;
+    }
+    if (load_u32le(riff + 4) < 4) {
+        fprintf(stderr, "error: invalid RIFF size\n");
+        return 0;
+    }
+    remaining = (uint64_t)load_u32le(riff + 4) - 4;
+
+    while (remaining >= 8) {
+        uint8_t header[8];
+        uint32_t chunk_size;
+        uint64_t padded_size;
+
+        if (!read_exact(stream, header, sizeof(header))) {
+            fprintf(stderr, "error: truncated WAV chunk header\n");
+            return 0;
+        }
+        remaining -= 8;
+        chunk_size = load_u32le(header + 4);
+        padded_size = (uint64_t)chunk_size + (chunk_size & 1u);
+        if (padded_size > remaining) {
+            fprintf(stderr, "error: WAV chunk exceeds declared RIFF size\n");
+            return 0;
+        }
+
+        if (memcmp(header, "fmt ", 4) == 0 && !have_fmt) {
+            if (!parse_fmt_chunk(stream, chunk_size, input)) return 0;
+            if ((chunk_size & 1u) != 0 && !skip_bytes(stream, 1)) {
+                fprintf(stderr, "error: truncated WAV chunk padding\n");
+                return 0;
+            }
+            have_fmt = 1;
+        } else if (memcmp(header, "data", 4) == 0 && !have_data) {
+            if (fgetpos(stream, &input->data_position) != 0) {
+                fprintf(stderr, "error: cannot record WAV data position\n");
+                return 0;
+            }
+            input->data_bytes = chunk_size;
+            have_data = 1;
+
+            /* The normal fmt-before-data case can begin streaming now. */
+            if (have_fmt) break;
+            if (!skip_bytes(stream, padded_size)) {
+                fprintf(stderr, "error: cannot skip WAV data before fmt\n");
+                return 0;
+            }
+        } else if (!skip_bytes(stream, padded_size)) {
+            fprintf(stderr, "error: cannot skip WAV chunk\n");
+            return 0;
+        }
+
+        remaining -= padded_size;
+        if (have_fmt && have_data) break;
+    }
+
+    if (!have_fmt || !have_data) {
+        fprintf(stderr, "error: WAV is missing its %s chunk\n",
+                !have_fmt ? "fmt" : "data");
+        return 0;
+    }
+    if (fsetpos(stream, &input->data_position) != 0) {
+        fprintf(stderr, "error: cannot seek to WAV sample data\n");
+        return 0;
+    }
+    return 1;
+}
+
+static int validate_wav(const struct wav_input *input, uint32_t *frames)
+{
+    uint64_t expected_byte_rate;
+    uint64_t output_bytes;
+
+    if (input->channels != WAV_INPUT_CHANNELS ||
+        input->sample_rate != WAV_SAMPLE_RATE ||
+        input->bits_per_sample != WAV_BITS_PER_SAMPLE ||
+        input->valid_bits_per_sample != WAV_BITS_PER_SAMPLE) {
+        fprintf(stderr,
+                "error: input must be 48 kHz, 16-bit, stereo PCM "
+                "(got %u Hz, %u/%u bits, %u channels)\n",
+                (unsigned)input->sample_rate,
+                (unsigned)input->valid_bits_per_sample,
+                (unsigned)input->bits_per_sample,
+                (unsigned)input->channels);
+        return 0;
+    }
+    expected_byte_rate = (uint64_t)WAV_SAMPLE_RATE * WAV_INPUT_BLOCK_ALIGN;
+    if (input->block_align != WAV_INPUT_BLOCK_ALIGN ||
+        input->byte_rate != expected_byte_rate) {
+        fprintf(stderr,
+                "error: malformed stereo PCM geometry "
+                "(block_align=%u byte_rate=%u)\n",
+                (unsigned)input->block_align,
+                (unsigned)input->byte_rate);
+        return 0;
+    }
+    if (input->format_tag == WAV_FORMAT_EXTENSIBLE &&
+        input->channel_mask != 0 && input->channel_mask != 0x00000003u) {
+        fprintf(stderr,
+                "error: extensible stereo channel mask 0x%08x is not FL|FR\n",
+                (unsigned)input->channel_mask);
+        return 0;
+    }
+    if ((input->data_bytes % WAV_INPUT_BLOCK_ALIGN) != 0) {
+        fprintf(stderr, "error: WAV data ends in a partial stereo frame\n");
+        return 0;
+    }
+
+    *frames = input->data_bytes / WAV_INPUT_BLOCK_ALIGN;
+    output_bytes = (uint64_t)*frames * WAV_OUTPUT_BLOCK_ALIGN;
+    if (output_bytes > UINT32_MAX - 60u) {
+        fprintf(stderr,
+                "error: output is too large for a canonical RIFF/WAVE file\n");
+        return 0;
+    }
+    return 1;
+}
+
+static int write_wav_header(FILE *stream, uint32_t frames)
+{
+    uint8_t header[WAV_OUTPUT_HEADER_SIZE];
+    uint32_t data_bytes = frames * WAV_OUTPUT_BLOCK_ALIGN;
+
+    memset(header, 0, sizeof(header));
+    memcpy(header + 0, "RIFF", 4);
+    store_u32le(header + 4, data_bytes + 60u);
+    memcpy(header + 8, "WAVE", 4);
+    memcpy(header + 12, "fmt ", 4);
+    store_u32le(header + 16, WAV_OUTPUT_FMT_SIZE);
+    store_u16le(header + 20, WAV_FORMAT_EXTENSIBLE);
+    store_u16le(header + 22, WAV_OUTPUT_CHANNELS);
+    store_u32le(header + 24, WAV_SAMPLE_RATE);
+    store_u32le(header + 28, WAV_SAMPLE_RATE * WAV_OUTPUT_BLOCK_ALIGN);
+    store_u16le(header + 32, WAV_OUTPUT_BLOCK_ALIGN);
+    store_u16le(header + 34, WAV_BITS_PER_SAMPLE);
+    store_u16le(header + 36, 22); /* cbSize */
+    store_u16le(header + 38, WAV_BITS_PER_SAMPLE);
+    store_u32le(header + 40, WAV_OUTPUT_CHANNEL_MASK);
+    store_u32le(header + 44, WAV_FORMAT_PCM); /* PCM sub-format GUID */
+    store_u16le(header + 48, 0x0000);
+    store_u16le(header + 50, 0x0010);
+    header[52] = 0x80;
+    header[53] = 0x00;
+    header[54] = 0x00;
+    header[55] = 0xaa;
+    header[56] = 0x00;
+    header[57] = 0x38;
+    header[58] = 0x9b;
+    header[59] = 0x71;
+    memcpy(header + 60, "data", 4);
+    store_u32le(header + 64, data_bytes);
+    return write_exact(stream, header, sizeof(header));
+}
+
+static void usage(const char *program)
+{
+    fprintf(stderr,
+            "usage: %s [--mode off|ambient-lite] "
+            "[--lfe off|assist] [--surround 0.0..0.25] "
+            "INPUT.wav OUTPUT.wav\n",
+            program);
+}
+
+static int parse_mode(const char *text, enum spa_stereo_upmix_backend *backend)
+{
+    if (strcmp(text, "off") == 0) {
+        *backend = SPA_STEREO_UPMIX_OFF;
+        return 1;
+    }
+    if (strcmp(text, "ambient-lite") == 0) {
+        *backend = SPA_STEREO_UPMIX_AMBIENT_LITE;
+        return 1;
+    }
+    return 0;
+}
+
+static int parse_lfe_mode(const char *text, enum cli_lfe_mode *mode)
+{
+    if (strcmp(text, "off") == 0) {
+        *mode = CLI_LFE_OFF;
+        return 1;
+    }
+    if (strcmp(text, "assist") == 0) {
+        *mode = CLI_LFE_ASSIST;
+        return 1;
+    }
+    return 0;
+}
+
+static int parse_gain(const char *text, double *gain)
+{
+    char *end = NULL;
+    double parsed;
+
+    errno = 0;
+    parsed = strtod(text, &end);
+    if (errno != 0 || end == text || *end != '\0' ||
+        parsed < 0.0 || parsed > 0.25) return 0;
+    *gain = parsed;
+    return 1;
+}
+
+static int parse_options(int argc, char **argv, struct options *options)
+{
+    int index;
+
+    options->input_path = NULL;
+    options->output_path = NULL;
+    options->backend = SPA_STEREO_UPMIX_AMBIENT_LITE;
+    options->lfe_mode = CLI_LFE_OFF;
+    options->surround_gain =
+        (double)SPA_STEREO_UPMIX_REAR_Q15_DEFAULT / 32768.0;
+
+    for (index = 1; index < argc; index++) {
+        const char *argument = argv[index];
+
+        if (strcmp(argument, "--help") == 0 || strcmp(argument, "-h") == 0) {
+            usage(argv[0]);
+            exit(0);
+        }
+        if (strcmp(argument, "--mode") == 0) {
+            if (++index >= argc || !parse_mode(argv[index], &options->backend)) {
+                fprintf(stderr, "error: --mode must be off or ambient-lite\n");
+                return 0;
+            }
+            continue;
+        }
+        if (strncmp(argument, "--mode=", 7) == 0) {
+            if (!parse_mode(argument + 7, &options->backend)) {
+                fprintf(stderr, "error: --mode must be off or ambient-lite\n");
+                return 0;
+            }
+            continue;
+        }
+        if (strcmp(argument, "--lfe") == 0) {
+            if (++index >= argc ||
+                !parse_lfe_mode(argv[index], &options->lfe_mode)) {
+                fprintf(stderr, "error: --lfe must be off or assist\n");
+                return 0;
+            }
+            continue;
+        }
+        if (strncmp(argument, "--lfe=", 6) == 0) {
+            if (!parse_lfe_mode(argument + 6, &options->lfe_mode)) {
+                fprintf(stderr, "error: --lfe must be off or assist\n");
+                return 0;
+            }
+            continue;
+        }
+        if (strcmp(argument, "--surround") == 0) {
+            if (++index >= argc ||
+                !parse_gain(argv[index], &options->surround_gain)) {
+                fprintf(stderr,
+                        "error: --surround must be between 0.0 and 0.25\n");
+                return 0;
+            }
+            continue;
+        }
+        if (strncmp(argument, "--surround=", 11) == 0) {
+            if (!parse_gain(argument + 11, &options->surround_gain)) {
+                fprintf(stderr,
+                        "error: --surround must be between 0.0 and 0.25\n");
+                return 0;
+            }
+            continue;
+        }
+        if (argument[0] == '-') {
+            fprintf(stderr, "error: unknown option: %s\n", argument);
+            return 0;
+        }
+        if (!options->input_path)
+            options->input_path = argument;
+        else if (!options->output_path)
+            options->output_path = argument;
+        else {
+            fprintf(stderr, "error: unexpected argument: %s\n", argument);
+            return 0;
+        }
+    }
+
+    if (!options->input_path || !options->output_path) {
+        usage(argv[0]);
+        return 0;
+    }
+    return 1;
+}
+
+static int paths_are_same_file(const char *left, const char *right)
+{
+    struct stat left_stat;
+    struct stat right_stat;
+
+    if (strcmp(left, right) == 0) return 1;
+    if (stat(left, &left_stat) != 0 || stat(right, &right_stat) != 0) return 0;
+    return left_stat.st_dev == right_stat.st_dev &&
+           left_stat.st_ino == right_stat.st_ino;
+}
+
+static void make_upmix_config(const struct options *options,
+                              struct spa_stereo_upmix_config *config)
+{
+    spa_stereo_upmix_default_config(config);
+    config->backend = options->backend;
+    config->rear_gain_q15 =
+        (uint32_t)(options->surround_gain * 32768.0 + 0.5);
+    spa_stereo_upmix_config_set_lfe(
+        config, options->backend != SPA_STEREO_UPMIX_OFF &&
+                options->lfe_mode == CLI_LFE_ASSIST);
+
+    /* OFF is the bit-exact compatibility path.  Make the public config match
+     * the module's effective OFF behaviour so diagnostics cannot imply a trim
+     * or synthesized channel that is not actually rendered. */
+    if (config->backend == SPA_STEREO_UPMIX_OFF) {
+        config->front_gain_q15 = 32768u;
+        config->rear_gain_q15 = 0;
+        config->lfe_gain_q15 = 0;
+        config->lfe_enabled = 0;
+    }
+}
+
+static int render(FILE *input_file, FILE *output_file, uint32_t total_frames,
+                  const struct spa_stereo_upmix_config *config)
+{
+    struct spa_stereo_upmix state;
+    uint8_t input_bytes[SPA_STEREO_UPMIX_MAX_FRAMES *
+                        WAV_INPUT_BLOCK_ALIGN];
+    uint8_t output_bytes[SPA_STEREO_UPMIX_MAX_FRAMES *
+                         WAV_OUTPUT_BLOCK_ALIGN];
+    int16_t pcm2[SPA_STEREO_UPMIX_MAX_FRAMES * WAV_INPUT_CHANNELS];
+    int16_t pcm6[SPA_STEREO_UPMIX_MAX_FRAMES * WAV_OUTPUT_CHANNELS];
+    uint32_t remaining = total_frames;
+    int status;
+
+    status = spa_stereo_upmix_init(&state, config);
+    if (status != SPA_STEREO_UPMIX_OK) {
+        fprintf(stderr, "error: upmixer initialisation failed (%d)\n", status);
+        return 0;
+    }
+    if (!write_wav_header(output_file, total_frames)) {
+        fprintf(stderr, "error: cannot write output WAV header\n");
+        return 0;
+    }
+
+    memset(input_bytes, 0, sizeof(input_bytes));
+    while (remaining != 0) {
+        size_t frames = remaining > SPA_STEREO_UPMIX_MAX_FRAMES
+                            ? SPA_STEREO_UPMIX_MAX_FRAMES
+                            : (size_t)remaining;
+        size_t input_sample_count = frames * WAV_INPUT_CHANNELS;
+        size_t output_sample_count = frames * WAV_OUTPUT_CHANNELS;
+        size_t sample;
+
+        if (!read_exact(input_file, input_bytes,
+                        frames * WAV_INPUT_BLOCK_ALIGN)) {
+            fprintf(stderr, "error: WAV data is truncated\n");
+            return 0;
+        }
+        for (sample = 0; sample < input_sample_count; sample++)
+            pcm2[sample] = (int16_t)load_u16le(input_bytes + sample * 2);
+
+        status = spa_stereo_upmix_process_s16(&state, pcm2, frames, pcm6,
+                                              frames);
+        if (status != SPA_STEREO_UPMIX_OK) {
+            fprintf(stderr, "error: upmixer failed (%d)\n", status);
+            return 0;
+        }
+
+        for (sample = 0; sample < output_sample_count; sample++)
+            store_u16le(output_bytes + sample * 2, (uint16_t)pcm6[sample]);
+        if (!write_exact(output_file, output_bytes,
+                         frames * WAV_OUTPUT_BLOCK_ALIGN)) {
+            fprintf(stderr, "error: cannot write output WAV samples\n");
+            return 0;
+        }
+        remaining -= (uint32_t)frames;
+    }
+
+    return 1;
+}
+
+int main(int argc, char **argv)
+{
+    struct options options;
+    struct wav_input input;
+    struct spa_stereo_upmix_config config;
+    FILE *input_file = NULL;
+    FILE *output_file = NULL;
+    uint32_t frames = 0;
+    int success = 0;
+    int output_created = 0;
+    const char *mode_name;
+    const char *lfe_name;
+    uint32_t effective_lfe_gain_q15;
+
+    if (!parse_options(argc, argv, &options)) return 2;
+    make_upmix_config(&options, &config);
+    if (paths_are_same_file(options.input_path, options.output_path)) {
+        fprintf(stderr, "error: input and output resolve to the same file\n");
+        return 2;
+    }
+
+    input_file = fopen(options.input_path, "rb");
+    if (!input_file) {
+        fprintf(stderr, "error: cannot open %s: %s\n",
+                options.input_path, strerror(errno));
+        goto done;
+    }
+    if (!parse_wav(input_file, &input) || !validate_wav(&input, &frames))
+        goto done;
+
+    output_file = fopen(options.output_path, "wb");
+    if (!output_file) {
+        fprintf(stderr, "error: cannot create %s: %s\n",
+                options.output_path, strerror(errno));
+        goto done;
+    }
+    output_created = 1;
+    if (!render(input_file, output_file, frames, &config)) goto done;
+    if (fclose(output_file) != 0) {
+        output_file = NULL;
+        fprintf(stderr, "error: cannot finish %s: %s\n",
+                options.output_path, strerror(errno));
+        goto done;
+    }
+    output_file = NULL;
+    success = 1;
+
+done:
+    if (output_file && fclose(output_file) != 0)
+        fprintf(stderr, "warning: failed to close partial output\n");
+    if (input_file && fclose(input_file) != 0)
+        fprintf(stderr, "warning: failed to close input\n");
+    if (!success) {
+        if (output_created) (void)remove(options.output_path);
+        return 1;
+    }
+
+    mode_name = options.backend == SPA_STEREO_UPMIX_OFF
+                    ? "off" : "ambient-lite";
+    lfe_name = config.lfe_enabled ? "assist" : "off";
+    effective_lfe_gain_q15 = config.lfe_enabled ? config.lfe_gain_q15 : 0;
+    fprintf(stderr,
+            "rendered %u frames (%.3f s): PCM2 -> PCM6 "
+            "L,R,C,LFE,Ls,Rs\n"
+            "mode=%s surround=%.5f (q15=%u) "
+            "front=%.5f (q15=%u) lfe=%s gain=%.5f (q15=%u)%s\n%s\n",
+            (unsigned)frames, (double)frames / WAV_SAMPLE_RATE,
+            mode_name,
+            (double)config.rear_gain_q15 / 32768.0,
+            (unsigned)config.rear_gain_q15,
+            (double)config.front_gain_q15 / 32768.0,
+            (unsigned)config.front_gain_q15,
+            lfe_name,
+            (double)effective_lfe_gain_q15 / 32768.0,
+            (unsigned)effective_lfe_gain_q15,
+            options.backend == SPA_STEREO_UPMIX_OFF &&
+                    options.lfe_mode == CLI_LFE_ASSIST
+                ? " (forced off by mode=off)" : "",
+            options.output_path);
+    return 0;
+}

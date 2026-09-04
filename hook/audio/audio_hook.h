@@ -55,6 +55,19 @@
 #define SPA_AUDIO_ATMOS_ENV           "AUDIO_SPATIAL_ATMOS"
 #define SPA_AUDIO_ATMOS_MODE_ENV      "AUDIO_SPATIAL_ATMOS_MODE"
 
+/* Optional stereo-to-5.1 ambience renderer.  This is deliberately independent
+ * of the transport policy above: setting it must never advertise or enable a
+ * buffered stream by itself.  The code default is off; deployment policy may
+ * opt in explicitly.
+ *
+ * AUDIO_STEREO_UPMIX: off | ambient-lite
+ * AUDIO_STEREO_SURROUND: rear input gain, 0.0 .. 0.25 (default 0.18)
+ * AUDIO_STEREO_LFE: off | assist (code default off). `assist` synthesizes only an
+ * 80 Hz LR4 low-passed mono bass feed and selects its paired front headroom. */
+#define SPA_AUDIO_STEREO_UPMIX_ENV    "AUDIO_STEREO_UPMIX"
+#define SPA_AUDIO_STEREO_SURROUND_ENV "AUDIO_STEREO_SURROUND"
+#define SPA_AUDIO_STEREO_LFE_ENV      "AUDIO_STEREO_LFE"
+
 /* ---- type-103 buffered-media negotiation probe (AUDIO.md §26, docs/HANDOFF_SPATIAL_AUDIO.md) -----
  * iOS 27 reaches multichannel over CarPlay through a SECOND, buffered stream, not the realtime one.
  * Two accessory-controlled prerequisites, both metadata:

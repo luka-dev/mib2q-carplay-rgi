@@ -400,12 +400,17 @@ int spa_apap_parse_extension(const uint8_t *plaintext, size_t length,
         if (fieldLength > length || at + (size_t)fieldLength > length) return 0;
         end = at + (size_t)fieldLength;
 
-        if ((fieldId == SPA_APAP_TLV_AUDIO_FORMAT_INDEX ||
-             fieldId == SPA_APAP_TLV_AUDIO_FORMAT_INDEX_ALT) &&
-            fieldLength >= 1 && fieldLength <= 8) {
-            state->formatIndex = spa_be_bytes(plaintext + at, (size_t)fieldLength);
-            state->hasFormatIndex = 1;
-        } else if (fieldId == SPA_APAP_TLV_MAGIC_COOKIE && fieldLength) {
+        /* Neither field 2 nor field 8 carries an APAudioFormatIndex.  Two sessions settle it:
+         * one negotiated AAC-LC stereo (index 23), the other APAC 5.1 (index 65), and BOTH
+         * announced 1024 here -- which is the "spf", samples per frame, from the same SETUP
+         * dictionary.  A field that reads the same in two different formats is not naming the
+         * format.  Reading it as one overwrote the negotiated index on the first packet and
+         * muted every track in both sessions.
+         *
+         * The format comes from the SETUP response and is confirmed by the magic cookie; a real
+         * format change shows up as a new cookie id, which is tracked separately.  These two
+         * fields are parsed and skipped. */
+        if (fieldId == SPA_APAP_TLV_MAGIC_COOKIE && fieldLength) {
             state->magicCookie = plaintext + at;
             state->magicCookieLength = (size_t)fieldLength;
         } else if (fieldId == SPA_APAP_TLV_MAGIC_COOKIE_ID && fieldLength <= 8) {

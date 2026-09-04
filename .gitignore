@@ -35,3 +35,8 @@ __pycache__/
 *.id2
 *.nam
 *.til
+
+# Clang diagnostic artifacts and scratch downloads, never part of a build.
+/stereo_upmix.plist
+/stereo_upmix_render.plist
+tmp/

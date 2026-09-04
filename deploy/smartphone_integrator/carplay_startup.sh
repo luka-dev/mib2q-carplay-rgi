@@ -197,59 +197,22 @@ export ALTSCREEN_ADVERT_DISPLAYS=1
 # drop       discards Ltm/Rtm and sends PCM6
 # passthrough sends PCM8 and requires BOTH an 8ch HU PCM patch and a patched amp;
 #             the current six-channel Audi patch is not sufficient.
-export AUDIO_SPATIAL=0
+export AUDIO_SPATIAL=1
 export AUDIO_SPATIAL_ATMOS=0
 export AUDIO_SPATIAL_ATMOS_MODE=downmix
+# Ordinary buffered stereo stays on the same fixed PCM6 route.  ambient-lite
+# keeps C at zero, derives decorrelated Ls/Rs, and the explicitly selected LFE
+# assist adds LR4-low-passed mono bass.  Its paired 0.94 front gain is required
+# by the recovered SoundAmp matrix headroom proof.  Roll back atomically with
+# AUDIO_STEREO_UPMIX=off; OFF is exact L,R,0,0,0,0 and ignores the LFE setting.
+export AUDIO_STEREO_UPMIX=ambient-lite
+export AUDIO_STEREO_SURROUND=0.18
+export AUDIO_STEREO_LFE=assist
 export AUDIO_SPATIAL_CODEC_LIB="$H/libcarplay_apac.so"
 # Second advertised APAudioFormatIndex for the buffered stream.  23 = AAC-LC/48k/stereo and
 # needs no resampler on MHI2Q.  With primary 65, iOS can change transport inside one type-103
 # session as the source ASBD changes between six-channel and stereo; each APAP boundary packet
 # announces the selected index and cookie.  Empty keeps the established single-format mode.
 # First stationary dual-codec test: set 23, never 22.
-export SPATIAL_103_EXTRA_INDEX=
-# --- the USB device stack must exist before dio starts ------------------------------
-#
-# A fast unplug/replug can leave io-usb-dcd dead.  Nothing restarts it: the OTG
-# usblauncher keeps running against a stack that is gone, and /etc/usblauncher.lua only
-# starts things when the media connector (0x0424:0x2530) is *inserted*, gated on a flag
-# in /tmp that is cleared only when the hub is removed -- and the hub is soldered in.
-# So the state survives every replug and only a reboot clears /tmp.
-#
-# The damage downstream is silent: startncm.sh mounts NCM on the missing
-# /dev/io-usb/otg_dev, carplay0 comes up with no carrier, iAP2 never starts, dio misses
-# its startup budget, and smartphone_integrator restarts it forever at TIMEOUT_STARTUP.
-# Seen once as ~500 consecutive dumps, unrecoverable without a reboot.
-#
-# The platform already ships the recovery -- it writes start_stack::device,2 to the PPS
-# object the OTG manager listens on -- so just call it.  Verified on the car: with
-# otg_dev missing this brought io-usb-dcd back and recreated the node.
-#
-# Here rather than in carplay_cleanup.sh because this runs on *every* launch, including
-# each retry of that loop, so the system heals itself on the next attempt; cleanup may
-# not run at all when SI kills dio on a startup timeout.
-if ! ls /dev/io-usb/otg_dev >/dev/null 2>&1; then
-    echo "[supervisor] USB device stack gone - restarting it" >> "$WLOG"
-    /etc/scripts/start_otg_stack_device_mode.sh >> "$WLOG" 2>&1
-
-    # The node alone is not enough. /etc/usblauncher_otg.lua declares
-    #     Device_Stack = { cmd = '/etc/scripts/start_usb_device_stack.sh';
-    #                      path = '/dev/io-usb/otg_dev'; descriptors = {carlife, carplay, rndis} }
-    # so the OTG usblauncher *owns* the device stack: it starts io-usb-dcd, picks the gadget
-    # descriptor, and mounts NCM through startncm.sh when the gadget appears. Restoring the
-    # node behind its back leaves it holding stale state -- which is why, the first time this
-    # guard ran, otg_dev came back and CarPlay still did not connect.
-    #
-    # Restarting it makes it redo that bring-up. Its argv is read from pidin rather than
-    # /proc: on QNX /proc/<pid>/cmdline is empty for this process, and an earlier version of
-    # this guard scanned /proc, found nothing and silently did nothing at all.
-    OTG_ARGV=$(pidin -F "%A" 2>/dev/null | grep usblauncher_otg.lua | grep -v grep | head -1)
-    OTG_PID=$(pidin -F "%a %A" 2>/dev/null | grep usblauncher_otg.lua | grep -v grep | head -1 | cut -d' ' -f2)
-    if [ -n "$OTG_ARGV" ] && [ -n "$OTG_PID" ]; then
-        echo "[supervisor] restarting OTG usblauncher pid=$OTG_PID" >> "$WLOG"
-        kill "$OTG_PID" 2>/dev/null
-        # full path: usblauncher is not on PATH here
-        ( cd / && eval "/mnt/app/armle/bin/${OTG_ARGV#usblauncher }" >/dev/null 2>&1 & ) 2>/dev/null
-    fi
-fi
-
+export SPATIAL_103_EXTRA_INDEX=23
 exec "$DIODIR/dio_manager" "$@"

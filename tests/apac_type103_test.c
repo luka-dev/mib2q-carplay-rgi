@@ -136,17 +136,19 @@ static size_t seal_frame(unsigned char *out, uint32_t sequence, int variant,
 }
 
 /* The ULEB128 TLV prefix an extension packet carries in front of its audio. */
-static size_t build_extension(unsigned char *out, uint8_t formatIndex, uint64_t cookieId,
+static size_t build_extension(unsigned char *out, uint16_t samplesPerFrame, uint64_t cookieId,
                               const unsigned char *cookie, size_t cookieLength,
                               const unsigned char *audio, size_t audioLength)
 {
     size_t at = 0;
     int i;
 
-    /* Exact vehicle shape: field 2, one-byte extended-format index. */
-    out[at++] = SPA_APAP_TLV_AUDIO_FORMAT_INDEX_ALT;
-    out[at++] = 1;
-    out[at++] = formatIndex;
+    /* Exact vehicle semantics: field 2 is samples per frame, not the extended
+     * format index.  Both AAC-LC/23 and APAC/65 carried 1024 here. */
+    out[at++] = SPA_APAP_TLV_FRAME_LENGTH;
+    out[at++] = 2;
+    out[at++] = (unsigned char)(samplesPerFrame >> 8);
+    out[at++] = (unsigned char)samplesPerFrame;
 
     out[at++] = SPA_APAP_TLV_MAGIC_COOKIE_ID;
     out[at++] = 8;
@@ -228,8 +230,9 @@ static void replay(spa_apac_decoder_t *decoder, size_t chunk, const char *what)
                         printf("FAIL %s: frame %zu TLV did not parse\n", what, g_gotFrames);
                         exit(1);
                     }
-                    /* The TLV state has to survive the split, not just the parse. */
-                    assert(ext.hasFormatIndex && ext.formatIndex == 65);
+                    /* Field 2 must not overwrite the format negotiated by
+                     * SETUP.  The remaining TLV state survives the split. */
+                    assert(!ext.hasFormatIndex);
                     assert(ext.hasMagicCookieId &&
                            ext.magicCookieId == 0x60100d08f9d19abbull);
                     assert(ext.magicCookieLength == g_fixtureCookieBytes);
@@ -440,7 +443,8 @@ int main(int argc, char **argv)
                 memcpy(plaintext, g_blob + at, packetBytes);
                 plainLength = packetBytes;
             } else {
-                plainLength = build_extension(plaintext, 65, 0x60100d08f9d19abbull,
+                plainLength = build_extension(plaintext, FRAME_SAMPLES,
+                                              0x60100d08f9d19abbull,
                                               cookie, cookieBytes,
                                               g_blob + at, packetBytes);
             }

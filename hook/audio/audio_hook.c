@@ -23,6 +23,7 @@
 #include "apac_codec_loader.h"
 #include "apap_crypto.h"
 #include "spatial_downmix.h"
+#include "stereo_upmix.h"
 #include "../framework/logging.h"
 
 #include <dlfcn.h>
@@ -76,6 +77,9 @@ typedef struct {
     int buffered;
     int atmos;
     int atmosMode;
+    enum spa_stereo_upmix_backend stereoUpmixBackend;
+    uint32_t stereoSurroundQ15;
+    int stereoLfeAssist;
 } spa_audio_config_t;
 
 static spa_audio_config_t spa_audio_config_value;
@@ -99,6 +103,62 @@ static int spa_parse_bool(const char *name, int *present)
     return 0;
 }
 
+static enum spa_stereo_upmix_backend spa_parse_stereo_upmix(void)
+{
+    const char *value = getenv(SPA_AUDIO_STEREO_UPMIX_ENV);
+
+    if (!value || !value[0] || !strcasecmp(value, "off") ||
+        !strcasecmp(value, "0") || !strcasecmp(value, "false"))
+        return SPA_STEREO_UPMIX_OFF;
+    if (!strcasecmp(value, "ambient-lite") || !strcasecmp(value, "lite"))
+        return SPA_STEREO_UPMIX_AMBIENT_LITE;
+
+    if (!strcasecmp(value, "ambient-hq") ||
+        !strcasecmp(value, "pioneer-rer") ||
+        !strcasecmp(value, "cupgan")) {
+        LOG_ERROR(LOG_MODULE,
+                  "audio config: %s='%s' names a reserved backend; using off",
+                  SPA_AUDIO_STEREO_UPMIX_ENV, value);
+    } else {
+        LOG_ERROR(LOG_MODULE,
+                  "audio config: invalid %s='%s'; expected off/ambient-lite; using off",
+                  SPA_AUDIO_STEREO_UPMIX_ENV, value);
+    }
+    return SPA_STEREO_UPMIX_OFF;
+}
+
+static uint32_t spa_parse_stereo_surround_q15(void)
+{
+    const char *value = getenv(SPA_AUDIO_STEREO_SURROUND_ENV);
+    char *end = 0;
+    double gain;
+
+    if (!value || !value[0]) return SPA_STEREO_UPMIX_REAR_Q15_DEFAULT;
+    errno = 0;
+    gain = strtod(value, &end);
+    if (errno || end == value || *end || gain != gain ||
+        gain < 0.0 || gain > 0.25) {
+        LOG_ERROR(LOG_MODULE,
+                  "audio config: invalid %s='%s'; expected 0.0..0.25; using 0.18",
+                  SPA_AUDIO_STEREO_SURROUND_ENV, value);
+        return SPA_STEREO_UPMIX_REAR_Q15_DEFAULT;
+    }
+    return (uint32_t)(gain * 32768.0 + 0.5);
+}
+
+static int spa_parse_stereo_lfe(void)
+{
+    const char *value = getenv(SPA_AUDIO_STEREO_LFE_ENV);
+
+    if (!value || !value[0] || !strcasecmp(value, "off")) return 0;
+    if (!strcasecmp(value, "assist")) return 1;
+
+    LOG_ERROR(LOG_MODULE,
+              "audio config: invalid %s='%s'; expected off/assist; using off",
+              SPA_AUDIO_STEREO_LFE_ENV, value);
+    return 0;
+}
+
 static void spa_audio_config_init_once(void)
 {
     const char *modeValue;
@@ -111,6 +171,9 @@ static void spa_audio_config_init_once(void)
     spa_audio_config_value.usesNewControls =
         spatialPresent || typoPresent || atmosPresent;
     spa_audio_config_value.atmosMode = SPA_ATMOS_DOWNMIX;
+    spa_audio_config_value.stereoUpmixBackend = spa_parse_stereo_upmix();
+    spa_audio_config_value.stereoSurroundQ15 = spa_parse_stereo_surround_q15();
+    spa_audio_config_value.stereoLfeAssist = spa_parse_stereo_lfe();
 
     if (spa_audio_config_value.usesNewControls) {
         if (!spatialPresent && typoPresent) {
@@ -987,8 +1050,8 @@ static int64_t spa103_media_time_to_rtp(int64_t mediaValue, int64_t mediaScale);
  *
  * Stage j: the APAP receiver stops being a capture drain and becomes a decoder.  Per frame:
  *
- *   BE32-inclusive framing -> ChaCha20-Poly1305 open -> TLV split -> APAC decode (float32)
- *   -> S16 -> spa_reorder_5_1_decoder_to_declared_s16 -> bounded PCM6 ring
+ *   BE32-inclusive framing -> ChaCha20-Poly1305 open -> TLV split -> APAC/AAC decode
+ *   -> S16 -> native 5.1 reorder / 5.1.2 fold / stereo upmix -> bounded PCM6 ring
  *
  * The ring is where the existing PCM6/DIO5 rail collects it: while type 103 is carrying media
  * the type-100 read path hands out these samples instead of its own (the interposition itself
@@ -996,12 +1059,10 @@ static int64_t spa103_media_time_to_rtp(int64_t mediaValue, int64_t mediaScale);
  * seam, and nothing in this file drains the ring, so with no consumer attached the behaviour is
  * exactly what it was before: paced at one packet per 1024/48k, oldest dropped.
  *
- * Failure policy.  A frame that will not authenticate or will not decode is counted and
- * dropped; it does not stop the receiver, because the capture/drain has to keep the phone's
- * session alive whatever the codec does.  A format this rail cannot carry - anything but index
- * 65 - disables decoding for the whole stream with its own distinct status and is logged once.
- * Index 66 lands there deliberately: its eight-channel native order has never been measured, and
- * guessing a permutation would produce plausible, wrong audio.
+ * Failure policy.  A frame that will not authenticate or decode is counted and dropped; it does
+ * not stop the receiver, because the drain has to keep the phone's session alive whatever the
+ * codec does.  Unsupported formats retain a distinct status.  Native 5.1 remains on its measured
+ * reorder; ordinary stereo stays on fixed PCM6 geometry and may add only bounded Ls/Rs ambience.
  */
 #define SPA_103_RENDER_MAX_CHANNELS SPA_PCM_5_1_2_CHANNELS
 #define SPA_103_RENDER_FRAMES     1024u
@@ -1103,6 +1164,7 @@ typedef struct {
     uint64_t authFailed;
     uint64_t tlvFailed;
     uint64_t decodeFailed;
+    uint64_t upmixFailed;
     uint64_t flushDiscarded;
     uint64_t formatAnnouncements;
     uint64_t formatSwitches;
@@ -1128,7 +1190,9 @@ typedef struct {
     uint32_t outputChannels;
     uint32_t channelLayoutTag;
     int64_t formatIndex;
+    int64_t ignoredFormatIndex;    /* last announcement we had no decoder for, to log it once */
     int atmosMode;
+    struct spa_stereo_upmix stereoUpmix;
 } spa103_render_t;
 
 static spa103_render_t spa103_render = {
@@ -1152,6 +1216,30 @@ static const char *spa103_render_state_name(int state)
     }
 }
 
+static const char *spa_stereo_upmix_backend_name(enum spa_stereo_upmix_backend backend)
+{
+    switch (backend) {
+    case SPA_STEREO_UPMIX_OFF:          return "off";
+    case SPA_STEREO_UPMIX_AMBIENT_LITE: return "ambient-lite";
+    case SPA_STEREO_UPMIX_AMBIENT_HQ:   return "ambient-hq";
+    case SPA_STEREO_UPMIX_PIONEER_RER:  return "pioneer-rer";
+    case SPA_STEREO_UPMIX_CUPGAN:       return "cupgan";
+    default:                            return "?";
+    }
+}
+
+/* These are the negotiated formats whose decoder output is ordinary stereo.
+ * Index 22 is useful only once its decoder/resampler reports 48 kHz below;
+ * until then the existing geometry check rejects it before this predicate. */
+static int spa103_is_stereo_media_index(int64_t index)
+{
+    return index == SPA_AAC_LC_44K_STEREO ||
+           index == SPA_AAC_LC_48K_STEREO ||
+           index == SPA_APAC_48K_STEREO;
+}
+
+static const spa_apac_codec_api_t *spa103_alternate_codec(const spa_apac_codec_api_t *current);
+
 static const spa_apac_codec_api_t *spa103_codec_for_index(int64_t index);
 
 /* Called with the receiver lock NOT held. */
@@ -1159,11 +1247,15 @@ static void spa103_render_start(int64_t formatIndex, int haveKey)
 {
     const spa_audio_config_t *config = spa_audio_config();
     const char *codecPath = 0;
+    struct spa_stereo_upmix_config upmixConfig;
+    enum spa_stereo_upmix_backend activeUpmixBackend;
+    uint32_t activeFrontGainQ15, activeRearGainQ15, activeLfeGainQ15;
+    int activeLfeAssist;
     uint32_t outputChannels =
         formatIndex == SPA_APAC_48K_5_1_2 &&
         config->atmosMode == SPA_ATMOS_PASSTHROUGH ?
         SPA_PCM_5_1_2_CHANNELS : SPA_PCM_5_1_CHANNELS;
-    int state;
+    int state, upmixStatus;
 
     pthread_mutex_lock(&spa103_render.lock);
     if (spa103_render.decoder && spa103_render.codec) {
@@ -1195,6 +1287,7 @@ static void spa103_render_start(int64_t formatIndex, int haveKey)
     spa103_render.authFailed = 0;
     spa103_render.tlvFailed = 0;
     spa103_render.decodeFailed = 0;
+    spa103_render.upmixFailed = 0;
     spa103_render.flushDiscarded = 0;
     spa103_render.formatAnnouncements = 0;
     spa103_render.formatSwitches = 0;
@@ -1219,6 +1312,35 @@ static void spa103_render_start(int64_t formatIndex, int haveKey)
     spa103_render.probeFraming = 0;
     spa103_render.atmosMode = config->atmosMode;
 
+    spa_stereo_upmix_default_config(&upmixConfig);
+    upmixConfig.backend = config->stereoUpmixBackend;
+    upmixConfig.rear_gain_q15 = config->stereoSurroundQ15;
+    spa_stereo_upmix_config_set_lfe(
+        &upmixConfig,
+        config->stereoLfeAssist &&
+        upmixConfig.backend == SPA_STEREO_UPMIX_AMBIENT_LITE);
+    /* OFF is an exact compatibility bypass, including the front samples. */
+    if (upmixConfig.backend == SPA_STEREO_UPMIX_OFF) {
+        upmixConfig.front_gain_q15 = 32768u;
+        upmixConfig.rear_gain_q15 = 0;
+    }
+    upmixStatus = spa_stereo_upmix_init(&spa103_render.stereoUpmix,
+                                        &upmixConfig);
+    if (upmixStatus != SPA_STEREO_UPMIX_OK) {
+        upmixConfig.backend = SPA_STEREO_UPMIX_OFF;
+        spa_stereo_upmix_config_set_lfe(&upmixConfig, 0);
+        upmixConfig.front_gain_q15 = 32768u;
+        upmixConfig.rear_gain_q15 = 0;
+        (void)spa_stereo_upmix_init(&spa103_render.stereoUpmix,
+                                    &upmixConfig);
+    }
+    activeUpmixBackend = spa103_render.stereoUpmix.config.backend;
+    activeFrontGainQ15 = spa103_render.stereoUpmix.config.front_gain_q15;
+    activeRearGainQ15 = spa103_render.stereoUpmix.config.rear_gain_q15;
+    activeLfeAssist = spa103_render.stereoUpmix.config.lfe_enabled != 0;
+    activeLfeGainQ15 = activeLfeAssist ?
+        spa103_render.stereoUpmix.config.lfe_gain_q15 : 0;
+
     if (!spa103_render.ring)
         state = SPA_103_RENDER_NO_MEMORY;
     else if (formatIndex != SPA_AAC_LC_44K_STEREO &&
@@ -1237,11 +1359,21 @@ static void spa103_render_start(int64_t formatIndex, int haveKey)
     pthread_mutex_unlock(&spa103_render.lock);
 
     LOG_INFO(LOG_MODULE,
-             "buffer103: render %s formatIndex=%lld key=%s output=%uch atmosMode=%s",
+             "buffer103: render %s formatIndex=%lld key=%s output=%uch atmosMode=%s "
+             "stereoUpmix=%s frontGainQ15=%u rearGainQ15=%u "
+             "stereoLfe=%s lfeGainQ15=%u",
              spa103_render_state_name(state), (long long)formatIndex,
              haveKey ? "yes" : "no", (unsigned)outputChannels,
              config->atmosMode == SPA_ATMOS_DOWNMIX ? "downmix" :
-             config->atmosMode == SPA_ATMOS_DROP ? "drop" : "passthrough");
+             config->atmosMode == SPA_ATMOS_DROP ? "drop" : "passthrough",
+             spa_stereo_upmix_backend_name(activeUpmixBackend),
+             (unsigned)activeFrontGainQ15, (unsigned)activeRearGainQ15,
+             activeLfeAssist ? "assist" : "off",
+             (unsigned)activeLfeGainQ15);
+    if (upmixStatus != SPA_STEREO_UPMIX_OK)
+        LOG_ERROR(LOG_MODULE,
+                  "buffer103: stereo upmix init failed status=%d; exact L/R widening retained",
+                  upmixStatus);
     if (state == SPA_103_RENDER_NO_DECODER)
         LOG_ERROR(LOG_MODULE,
                   "buffer103: optional APAC codec unavailable/rejected at %s; capture continues",
@@ -1261,6 +1393,7 @@ static void spa103_render_stop(void)
         spa103_render.codec->destroy(spa103_render.decoder);
         spa103_render.decoder = 0;
     }
+    (void)spa_stereo_upmix_reset(&spa103_render.stereoUpmix);
     free(spa103_render.ring);
     spa103_render.ring = 0;
     spa103_render.head = 0;
@@ -1315,6 +1448,8 @@ static uint32_t spa103_apap_sequence(const uint8_t *packet)
 static void spa103_render_set_rate(int64_t rate)
 {
     pthread_mutex_lock(&spa103_render.lock);
+    if (spa103_render.playing && rate != 1)
+        (void)spa_stereo_upmix_reset(&spa103_render.stereoUpmix);
     spa103_render.playing = rate == 1;
     pthread_mutex_unlock(&spa103_render.lock);
 }
@@ -1328,6 +1463,7 @@ static void spa103_render_flush(int haveUntilSequence, uint32_t untilSequence,
     pthread_mutex_lock(&spa103_render.lock);
     if (spa103_render.decoder && spa103_render.codec)
         spa103_render.codec->reset(spa103_render.decoder);
+    (void)spa_stereo_upmix_reset(&spa103_render.stereoUpmix);
     spa103_render.head = 0;
     spa103_render.fill = 0;
     spa103_render.primed = 0;
@@ -1491,6 +1627,18 @@ static void spa103_pcm_stats_locked(const int16_t *pcm, size_t frames)
  * cannot be decoded is counted and dropped, never fatal to the receiver. */
 /* Which decoder serves an index.  APAC comes from the optional library that was dlopen'd at
  * stream start; AAC-LC is compiled in.  Returning 0 means we cannot play that index. */
+/* The two codecs the buffered path can hold.  A cookie names its format only implicitly, so
+ * when one codec rejects it the other is tried: an AAC cookie is an MPEG-4 ES_Descriptor and an
+ * APAC one is not, and each create() already validates what it is handed. */
+static const spa_apac_codec_api_t *spa103_alternate_codec(const spa_apac_codec_api_t *current)
+{
+    extern const spa_apac_codec_api_t *spa_aac_codec_api(void);
+    const spa_apac_codec_api_t *aac = spa_aac_codec_api();
+    if (current == spa103_render.apacCodec) return aac;
+    if (current == aac)                     return spa103_render.apacCodec;
+    return 0;
+}
+
 static const spa_apac_codec_api_t *spa103_codec_for_index(int64_t index)
 {
     extern const spa_apac_codec_api_t *spa_aac_codec_api(void);
@@ -1502,10 +1650,58 @@ static const spa_apac_codec_api_t *spa103_codec_for_index(int64_t index)
     return 0;
 }
 
+/* Plain geometry adapter used by the OFF path and as the audible fail-safe if
+ * the optional ambience renderer ever rejects a block.  Mono is duplicated to
+ * the two fronts; all other absent channels are digital zero. */
+static void spa103_widen_s16(const int16_t *input, unsigned inputChannels,
+                             int16_t *output, unsigned outputChannels,
+                             size_t frames)
+{
+    size_t frame;
+
+    for (frame = 0; frame < frames; frame++) {
+        const int16_t *src = input + frame * inputChannels;
+        int16_t *dst = output + frame * outputChannels;
+        unsigned channel;
+
+        for (channel = 0; channel < outputChannels; channel++) {
+            if (channel < inputChannels)
+                dst[channel] = src[channel];
+            else if (inputChannels == 1 && channel == 1)
+                dst[channel] = src[0];
+            else
+                dst[channel] = 0;
+        }
+    }
+}
+
+/* APAC index 65 is decoded as C,L,R,Ls,Rs,LFE.  Normalise it directly into
+ * the ring stride so the rare 8-wide passthrough session can also switch back
+ * to 65 without exposing decoder order in its first six positions. */
+static void spa103_reorder_5_1_s16(const int16_t *input, int16_t *output,
+                                   unsigned outputChannels, size_t frames)
+{
+    static const unsigned kFromDeclared[SPA_PCM_5_1_CHANNELS] = {
+        1, 2, 0, 5, 3, 4
+    };
+    size_t frame;
+
+    for (frame = 0; frame < frames; frame++) {
+        const int16_t *src = input + frame * SPA_PCM_5_1_CHANNELS;
+        int16_t *dst = output + frame * outputChannels;
+        unsigned channel;
+
+        for (channel = 0; channel < outputChannels; channel++)
+            dst[channel] = channel < SPA_PCM_5_1_CHANNELS ?
+                           src[kFromDeclared[channel]] : 0;
+    }
+}
+
 static void spa103_render_frame(const uint8_t *packet, size_t length)
 {
     static uint8_t plaintext[SPA_103_APAP_MAX_FRAME];
     static int16_t decoded[SPA_103_RENDER_MAX_SAMPLES];
+    static int16_t rendered[SPA_103_RENDER_MAX_SAMPLES];
     uint8_t key[SPA_APAP_KEY_SIZE];
     spa_apap_extension_t ext;
     const uint8_t *audio = 0;
@@ -1607,17 +1803,36 @@ static void spa103_render_frame(const uint8_t *packet, size_t length)
      * connection and may land after the first APAP frame. */
     pthread_mutex_lock(&spa103_render.lock);
     if (ext.hasFormatIndex) spa103_render.formatAnnouncements++;
+    /* An announcement we have no decoder for is never a reason to tear down one that is
+     * working.  A misparsed or simply unsupported field would otherwise silence the rest of
+     * the stream -- which is exactly what field 2 did before it stopped being read as an
+     * index.  Drop the announcement and keep decoding. */
+    if (ext.hasFormatIndex && spa103_render.decoder &&
+        (int64_t)ext.formatIndex != spa103_render.formatIndex &&
+        !spa103_codec_for_index((int64_t)ext.formatIndex)) {
+        if (spa103_render.ignoredFormatIndex != (int64_t)ext.formatIndex) {
+            spa103_render.ignoredFormatIndex = (int64_t)ext.formatIndex;
+            LOG_WARN(LOG_MODULE,
+                     "buffer103: ignoring unsupported format announcement %llu; staying on %lld",
+                     (unsigned long long)ext.formatIndex,
+                     (long long)spa103_render.formatIndex);
+        }
+        ext.hasFormatIndex = 0;
+    }
     if (!spa103_render.decoder ||
         (ext.hasFormatIndex && (int64_t)ext.formatIndex != spa103_render.formatIndex) ||
         (ext.hasMagicCookieId && spa103_render.haveCookieId &&
          spa103_render.cookieId != (int64_t)ext.magicCookieId) ||
         spa103_render.cookieGeneration != spa103_receiver.cookieGeneration) {
-        uint8_t *cookie;
+        uint8_t *cookie = 0;
         size_t cookieSize = 0;
         spa_apac_stream_info_t info;
         uint32_t channels = 0, frameLength = 0, sampleRate = 0;
         const char *codecName;
 
+        /* A new decoder/cookie is a discontinuity even when its index happens
+         * to stay the same.  Never let rear-filter history cross it. */
+        (void)spa_stereo_upmix_reset(&spa103_render.stereoUpmix);
         pthread_mutex_unlock(&spa103_render.lock);
         /* Every packet carries the cookie for the format it is in, so a track that changes
          * codec brings its own configuration and there is nothing to wait for.  Fall back to
@@ -1665,6 +1880,29 @@ static void spa103_render_frame(const uint8_t *packet, size_t length)
         }
         rc = spa103_render.codec->create(cookie, cookieSize, &spa103_render.decoder,
                                          &channels, &frameLength, &sampleRate);
+        /* Apple changes codec inside one type-103 session -- stereo AAC-LC for ordinary tracks,
+         * APAC for spatial ones -- and announces it only by sending a different magic cookie.
+         * Nothing in the stream names the format: the SETUP index stays at whatever was
+         * negotiated, so pinning the codec to it fed the Atmos cookie to the AAC decoder and
+         * played silence for the rest of the session.  Let the cookie pick its own decoder. */
+        if (rc != SPA_APAC_OK) {
+            const spa_apac_codec_api_t *alt = spa103_alternate_codec(spa103_render.codec);
+            if (alt) {
+                spa_apac_decoder_t *other = 0;
+                uint32_t altChannels = 0, altFrameLength = 0, altSampleRate = 0;
+                int altRc = alt->create(cookie, cookieSize, &other,
+                                        &altChannels, &altFrameLength, &altSampleRate);
+                if (altRc == SPA_APAC_OK) {
+                    if (spa103_render.decoder)
+                        spa103_render.codec->destroy(spa103_render.decoder);
+                    spa103_render.decoder = other;
+                    spa103_render.codec   = alt;
+                    channels = altChannels; frameLength = altFrameLength; sampleRate = altSampleRate;
+                    rc = SPA_APAC_OK;
+                    spa103_render.formatSwitches++;
+                }
+            }
+        }
         codecName = spa103_render.codec == spa103_render.apacCodec ? "APAC" : "AAC-LC";
         spa103_render.cookieGeneration = spa103_receiver.cookieGeneration;
         free(cookie);
@@ -1731,32 +1969,74 @@ static void spa103_render_frame(const uint8_t *packet, size_t length)
     }
     if (frames) {
         unsigned dch = spa103_render.decoderChannels;
-        if (dch && dch < spa103_render.outputChannels) {
-            /* Widen in place, walking backwards so the growing frames never overwrite a source
-             * that has not been read yet.  Mono goes to both fronts, anything else keeps its
-             * channels in order and leaves the rest silent -- the amplifier does the spreading. */
-            size_t f = frames;
-            unsigned out = spa103_render.outputChannels, c;
-            while (f--) {
-                const int16_t *src = decoded + f * dch;
-                int16_t *dst = decoded + f * out;
-                int16_t tmp[SPA_103_RENDER_MAX_CHANNELS];
-                for (c = 0; c < dch && c < SPA_103_RENDER_MAX_CHANNELS; c++) tmp[c] = src[c];
-                for (c = 0; c < out; c++)
-                    dst[c] = c < dch ? tmp[c] : (dch == 1 && c == 1 ? tmp[0] : 0);
-            }
-        } else if (spa103_render.formatIndex == SPA_APAC_48K_5_1) {
-            /* Measured APAC cookie order C L R Ls Rs LFE -> DIO declared order. */
-            spa_reorder_5_1_decoder_to_declared_s16(decoded, frames, decoded);
-        } else if (spa103_render.atmosMode == SPA_ATMOS_DOWNMIX) {
-            /* Atmos tag 0x00c20008 is already L R C LFE Ls Rs Ltm Rtm. */
-            spa_downmix_5_1_2_s16(decoded, frames, decoded);
-        } else if (spa103_render.atmosMode == SPA_ATMOS_DROP) {
-            spa_drop_5_1_2_s16(decoded, frames, decoded);
+        unsigned out = spa103_render.outputChannels;
+        size_t at = 0;
+
+        if (!dch || dch > SPA_103_RENDER_MAX_CHANNELS ||
+            !out || out > SPA_103_RENDER_MAX_CHANNELS ||
+            frames > SPA_103_RENDER_MAX_SAMPLES / dch) {
+            spa103_render.decodeFailed++;
+            pthread_mutex_unlock(&spa103_render.lock);
+            return;
         }
-        spa103_pcm_stats_locked(decoded, frames);
-        spa103_ring_push_locked(decoded, frames);
-        spa103_render.framesIn += frames;
+
+        /* Cinemo may release several AAC callbacks for one access unit (up to
+         * 4096 stereo frames).  The former backwards in-place widening then
+         * wrote beyond decoded[8192].  Keep decoded as the source and render
+         * bounded, chronological blocks into a separate PCM8-sized buffer. */
+        while (at < frames) {
+            const int16_t *src = decoded + at * dch;
+            size_t run = frames - at;
+
+            if (run > SPA_STEREO_UPMIX_MAX_FRAMES)
+                run = SPA_STEREO_UPMIX_MAX_FRAMES;
+
+            if (spa103_render.formatIndex == SPA_APAC_48K_5_1 &&
+                dch == SPA_PCM_5_1_CHANNELS &&
+                out >= SPA_PCM_5_1_CHANNELS) {
+                if (out == SPA_PCM_5_1_CHANNELS)
+                    spa_reorder_5_1_decoder_to_declared_s16(src, run,
+                                                            rendered);
+                else
+                    spa103_reorder_5_1_s16(src, rendered, out, run);
+            } else if (dch == SPA_STEREO_UPMIX_INPUT_CHANNELS &&
+                out == SPA_STEREO_UPMIX_OUTPUT_CHANNELS &&
+                spa103_render.sampleRate == SPA_STEREO_UPMIX_SAMPLE_RATE &&
+                spa103_is_stereo_media_index(spa103_render.formatIndex)) {
+                rc = spa_stereo_upmix_process_s16(
+                    &spa103_render.stereoUpmix, src, run, rendered, run);
+                if (rc != SPA_STEREO_UPMIX_OK) {
+                    spa103_render.upmixFailed++;
+                    if (spa103_render.upmixFailed == 1)
+                        LOG_ERROR(LOG_MODULE,
+                                  "buffer103: stereo upmix failed status=%d; "
+                                  "falling back to exact L/R widening",
+                                  rc);
+                    spa103_widen_s16(src, dch, rendered, out, run);
+                }
+            } else if (dch < out) {
+                spa103_widen_s16(src, dch, rendered, out, run);
+            } else if (dch == SPA_PCM_5_1_2_CHANNELS &&
+                       out == SPA_PCM_5_1_CHANNELS) {
+                /* The output ring stays six-wide even if a session changes to
+                 * index 66 after SETUP.  Passthrough cannot fit that ring, so
+                 * its safe runtime fallback is the explicit height drop. */
+                if (spa103_render.atmosMode == SPA_ATMOS_DOWNMIX)
+                    spa_downmix_5_1_2_s16(src, run, rendered);
+                else
+                    spa_drop_5_1_2_s16(src, run, rendered);
+            } else if (dch == out) {
+                memcpy(rendered, src,
+                       run * out * sizeof(*rendered));
+            } else {
+                spa103_widen_s16(src, dch, rendered, out, run);
+            }
+
+            spa103_pcm_stats_locked(rendered, run);
+            spa103_ring_push_locked(rendered, run);
+            spa103_render.framesIn += run;
+            at += run;
+        }
     }
     pthread_mutex_unlock(&spa103_render.lock);
 }

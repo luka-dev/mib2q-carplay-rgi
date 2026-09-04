@@ -1,5 +1,11 @@
 # CarPlay USB startup-recovery diagnosis
 
+> **Correction (2026-09-04):** the state-12 comparison in `verifyPortReset` is
+> real but is not the controlling CarPlay branch: CarPlay is app ID 0 and uses
+> special new-connector cleanup. That cleanup can itself issue the terminal
+> `start_stack::none` after retries are exhausted. See
+> [`SI_RAPID_REPLUG_RACE_RE.md`](SI_RAPID_REPLUG_RACE_RE.md).
+
 > Deployment status (2026-08-04): the experimental shell-driven automatic reset
 > was rolled back after the targeted reset failed to recover the wedged phone/OTG
 > path. Production scripts use the simpler renderer supervisor from `afa498d`.

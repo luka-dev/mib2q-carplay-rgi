@@ -50,7 +50,9 @@ enum {
      * the negotiated format index -- followed by field 17 with the cookie id and field 18 with
      * the whole cookie inline.  Field 8 was the earlier reading and is kept because a stream
      * that uses it costs nothing to accept. */
-    SPA_APAP_TLV_AUDIO_FORMAT_INDEX_ALT = 2,
+    /* Observed carrying samples-per-frame (1024 for AAC-LC), not a format index. Parsed
+     * and skipped; see the note in spa_apap_parse_extension. */
+    SPA_APAP_TLV_FRAME_LENGTH = 2,
     SPA_APAP_TLV_AUDIO_FORMAT_INDEX = 8,
     SPA_APAP_TLV_MAGIC_COOKIE_ID = 17,
     SPA_APAP_TLV_MAGIC_COOKIE = 18
