@@ -1119,6 +1119,7 @@ typedef struct {
     int statsHavePrevious;
     uint32_t sampleRate;
     unsigned decoderChannels;       /* what the cookie asked the decoder to produce */
+    const spa_apac_codec_api_t *apacCodec;  /* the dlopen'd APAC port, kept across a switch */
     int probeFraming;               /* negotiated a codec we cannot decode: open one packet,
                                      * report how it is framed, decode nothing */
     uint32_t sourceChannels;
@@ -1149,6 +1150,8 @@ static const char *spa103_render_state_name(int state)
     }
 }
 
+static const spa_apac_codec_api_t *spa103_codec_for_index(int64_t index);
+
 /* Called with the receiver lock NOT held. */
 static void spa103_render_start(int64_t formatIndex, int haveKey)
 {
@@ -1168,13 +1171,10 @@ static void spa103_render_start(int64_t formatIndex, int haveKey)
     /* Two decoders, chosen by the negotiated index.  APAC comes from the optional library that
      * is dlopen'd; AAC-LC is compiled in, because libNmeSDK is already in dio_manager's
      * DT_NEEDED and exports every Cinemo entry point by name. */
-    if (formatIndex == SPA_AAC_LC_44K_STEREO || formatIndex == SPA_AAC_LC_48K_STEREO) {
-        extern const spa_apac_codec_api_t *spa_aac_codec_api(void);
-        spa103_render.codec = spa_aac_codec_api();
+    spa103_render.apacCodec = spa_apac_runtime_load(&codecPath);
+    spa103_render.codec = spa103_codec_for_index(formatIndex);
+    if (spa103_render.codec && spa103_render.codec != spa103_render.apacCodec)
         codecPath = "built-in (Cinemo AAC-LC)";
-    } else {
-        spa103_render.codec = spa_apac_runtime_load(&codecPath);
-    }
     free(spa103_render.ring);
     spa103_render.ring = (int16_t *)malloc((size_t)spa103_ring_frames() *
                                            outputChannels * sizeof(int16_t));
@@ -1474,6 +1474,19 @@ static void spa103_pcm_stats_locked(const int16_t *pcm, size_t frames)
 
 /* One whole APAP packet (the bytes after the BE32 length prefix).  Returns nothing: a frame that
  * cannot be decoded is counted and dropped, never fatal to the receiver. */
+/* Which decoder serves an index.  APAC comes from the optional library that was dlopen'd at
+ * stream start; AAC-LC is compiled in.  Returning 0 means we cannot play that index. */
+static const spa_apac_codec_api_t *spa103_codec_for_index(int64_t index)
+{
+    extern const spa_apac_codec_api_t *spa_aac_codec_api(void);
+    if (index == SPA_AAC_LC_44K_STEREO || index == SPA_AAC_LC_48K_STEREO)
+        return spa_aac_codec_api();
+    if (index == SPA_APAC_48K_STEREO || index == SPA_APAC_48K_5_1 ||
+        index == SPA_APAC_48K_5_1_2)
+        return spa103_render.apacCodec;
+    return 0;
+}
+
 static void spa103_render_frame(const uint8_t *packet, size_t length)
 {
     static uint8_t plaintext[SPA_103_APAP_MAX_FRAME];
@@ -1579,6 +1592,7 @@ static void spa103_render_frame(const uint8_t *packet, size_t length)
      * connection and may land after the first APAP frame. */
     pthread_mutex_lock(&spa103_render.lock);
     if (!spa103_render.decoder ||
+        (ext.hasFormatIndex && (int64_t)ext.formatIndex != spa103_render.formatIndex) ||
         (ext.hasMagicCookieId && spa103_render.haveCookieId &&
          spa103_render.cookieId != (int64_t)ext.magicCookieId) ||
         spa103_render.cookieGeneration != spa103_receiver.cookieGeneration) {
@@ -1588,11 +1602,37 @@ static void spa103_render_frame(const uint8_t *packet, size_t length)
         uint32_t channels = 0, frameLength = 0, sampleRate = 0;
 
         pthread_mutex_unlock(&spa103_render.lock);
-        cookie = spa103_copy_cookie(ext.hasMagicCookieId, (int64_t)ext.magicCookieId,
-                                    &cookieSize);
+        /* Every packet carries the cookie for the format it is in, so a track that changes
+         * codec brings its own configuration and there is nothing to wait for.  Fall back to
+         * the stored one only for a stream that does not repeat it. */
+        if (ext.magicCookie && ext.magicCookieLength) {
+            cookie = (uint8_t *)malloc(ext.magicCookieLength);
+            if (cookie) {
+                memcpy(cookie, ext.magicCookie, ext.magicCookieLength);
+                cookieSize = ext.magicCookieLength;
+            }
+        }
+        if (!cookie)
+            cookie = spa103_copy_cookie(ext.hasMagicCookieId, (int64_t)ext.magicCookieId,
+                                        &cookieSize);
         if (!cookie) return;    /* no cookie yet; the next frame tries again */
 
         pthread_mutex_lock(&spa103_render.lock);
+        if (ext.hasFormatIndex && (int64_t)ext.formatIndex != spa103_render.formatIndex) {
+            const spa_apac_codec_api_t *next = spa103_codec_for_index((int64_t)ext.formatIndex);
+            LOG_WARN(LOG_MODULE,
+                     "buffer103: stream switched format index %lld -> %llu; %s",
+                     (long long)spa103_render.formatIndex,
+                     (unsigned long long)ext.formatIndex,
+                     next ? "rebuilding the decoder" : "no decoder for it, muting");
+            spa103_render.formatIndex = (int64_t)ext.formatIndex;
+            spa103_render.codec = next;
+        }
+        if (!spa103_render.codec) {
+            pthread_mutex_unlock(&spa103_render.lock);
+            free(cookie);
+            return;
+        }
         if (spa103_render.decoder && spa103_render.codec) {
             spa103_render.codec->destroy(spa103_render.decoder);
             spa103_render.decoder = 0;

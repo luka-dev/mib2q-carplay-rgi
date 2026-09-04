@@ -400,10 +400,14 @@ int spa_apap_parse_extension(const uint8_t *plaintext, size_t length,
         if (fieldLength > length || at + (size_t)fieldLength > length) return 0;
         end = at + (size_t)fieldLength;
 
-        if (fieldId == SPA_APAP_TLV_AUDIO_FORMAT_INDEX &&
-            (fieldLength == 2 || fieldLength == 4 || fieldLength == 8)) {
+        if ((fieldId == SPA_APAP_TLV_AUDIO_FORMAT_INDEX ||
+             fieldId == SPA_APAP_TLV_AUDIO_FORMAT_INDEX_ALT) &&
+            fieldLength >= 1 && fieldLength <= 8) {
             state->formatIndex = spa_be_bytes(plaintext + at, (size_t)fieldLength);
             state->hasFormatIndex = 1;
+        } else if (fieldId == SPA_APAP_TLV_MAGIC_COOKIE && fieldLength) {
+            state->magicCookie = plaintext + at;
+            state->magicCookieLength = (size_t)fieldLength;
         } else if (fieldId == SPA_APAP_TLV_MAGIC_COOKIE_ID && fieldLength <= 8) {
             state->magicCookieId = spa_be_bytes(plaintext + at, (size_t)fieldLength);
             state->hasMagicCookieId = 1;

@@ -46,8 +46,14 @@ enum {
 /* TLV field ids this path acts on.  The others are parsed and skipped. */
 enum {
     SPA_APAP_TLV_END = 0,
+    /* Measured on the car: an index-23 packet opens `02 01 17`, field 2, one byte, 0x17 = 23,
+     * the negotiated format index -- followed by field 17 with the cookie id and field 18 with
+     * the whole cookie inline.  Field 8 was the earlier reading and is kept because a stream
+     * that uses it costs nothing to accept. */
+    SPA_APAP_TLV_AUDIO_FORMAT_INDEX_ALT = 2,
     SPA_APAP_TLV_AUDIO_FORMAT_INDEX = 8,
-    SPA_APAP_TLV_MAGIC_COOKIE_ID = 17
+    SPA_APAP_TLV_MAGIC_COOKIE_ID = 17,
+    SPA_APAP_TLV_MAGIC_COOKIE = 18
 };
 
 /* What a decoded packet's TLV prefix said.  Fields absent from the packet keep
@@ -58,6 +64,12 @@ typedef struct {
     int hasMagicCookieId;
     uint64_t formatIndex;
     uint64_t magicCookieId;
+    /* The cookie carried by this packet, when it carries one.  It points into the caller's
+     * plaintext buffer and is only valid until the next packet is opened.  Having it per packet
+     * is what makes a mid-session codec change possible without depending on SETMAGICCOOKIE
+     * arriving first, or at all. */
+    const uint8_t *magicCookie;
+    size_t magicCookieLength;
 } spa_apap_extension_t;
 
 /* ChaCha20 keystream XOR, original construction: 8-byte nonce, 64-bit counter.
