@@ -993,7 +993,7 @@ static int64_t spa103_media_time_to_rtp(int64_t mediaValue, int64_t mediaScale);
 #define SPA_103_RING_FRAMES       24000u
 /* Above this the producer paces itself.  With no consumer the ring sits full and every frame
  * pauses, which is the backpressure the capture-only build faked with an unconditional sleep. */
-#define SPA_103_RING_HIGH_FRAMES  (SPA_103_RING_FRAMES / 2u)
+#define SPA_103_RING_HIGH_FRAMES  (spa103_ring_frames() / 2u)
 /* Serving the sink from an almost-empty ring is what the car heard.  The stock
  * type-100 write cadence, not the phone's buffered delivery, decides when a
  * fragment must be handed over; starting at fill=0 meant the first second of
@@ -1002,6 +1002,56 @@ static int64_t spa103_media_time_to_rtp(int64_t mediaValue, int64_t mediaScale);
  * Wait for a cushion before the first serve.  400 ms is 25 fragments of head
  * start and one sixtieth of the 24000-frame ring. */
 #define SPA_103_PRIME_FRAMES      ((SPA_SR * 400u) / 1000u)
+
+/* The three numbers above are a latency/robustness trade the car is the only judge of:
+ * steady-state delay is set by the high-water mark, time-to-first-sound by the prime cushion.
+ * They are tunable at runtime so a value can be tried on the unit without a rebuild, because
+ * guessing them from a desk is how the 400 ms cushion got picked in the first place.
+ *
+ *   AUDIO_RING_MS  ring capacity        default 500
+ *   AUDIO_HIGH_MS  backpressure mark    default 250
+ *   AUDIO_PRIME_MS first-serve cushion  default 400
+ *
+ * Clamped so a typo cannot produce a ring smaller than its own cushion. */
+static unsigned spa103_ms_env(const char *name, unsigned defMs)
+{
+    const char *v = getenv(name);
+    char *end;
+    unsigned long n;
+    if (!v || !*v) return defMs;
+    n = strtoul(v, &end, 0);
+    if (*end || n < 20u || n > 4000u) return defMs;
+    return (unsigned)n;
+}
+
+static unsigned spa103_ring_frames(void)
+{
+    static unsigned cached;
+    if (!cached) cached = (SPA_SR * spa103_ms_env("AUDIO_RING_MS", 500u)) / 1000u;
+    return cached;
+}
+
+static unsigned spa103_high_frames(void)
+{
+    static unsigned cached;
+    if (!cached) {
+        unsigned ring = spa103_ring_frames();
+        cached = (SPA_SR * spa103_ms_env("AUDIO_HIGH_MS", 250u)) / 1000u;
+        if (cached >= ring) cached = ring / 2u;
+    }
+    return cached;
+}
+
+static unsigned spa103_prime_frames(void)
+{
+    static unsigned cached;
+    if (!cached) {
+        unsigned ring = spa103_ring_frames();
+        cached = (SPA_SR * spa103_ms_env("AUDIO_PRIME_MS", 400u)) / 1000u;
+        if (cached >= ring) cached = (ring * 4u) / 5u;
+    }
+    return cached;
+}
 
 enum {
     SPA_103_RENDER_IDLE = 0,        /* not started, or type 103 not active */
@@ -1022,7 +1072,7 @@ typedef struct {
     spa_apac_decoder_t *decoder;
     int64_t cookieId;               /* the cookie the decoder was built from */
     int haveCookieId;
-    int16_t *ring;                  /* SPA_103_RING_FRAMES * 6 samples */
+    int16_t *ring;                  /* spa103_ring_frames() * 6 samples */
     size_t head;                    /* frame index of the oldest buffered frame */
     size_t fill;                    /* frames buffered */
     uint64_t framesIn;
@@ -1092,8 +1142,14 @@ static void spa103_render_start(int64_t formatIndex, int haveKey)
     }
     spa103_render.codec = spa_apac_runtime_load(&codecPath);
     free(spa103_render.ring);
-    spa103_render.ring = (int16_t *)malloc((size_t)SPA_103_RING_FRAMES *
+    spa103_render.ring = (int16_t *)malloc((size_t)spa103_ring_frames() *
                                            outputChannels * sizeof(int16_t));
+    LOG_INFO(LOG_MODULE,
+             "buffer103: ring %u frames (%u ms), backpressure at %u (%u ms), "
+             "first serve after %u (%u ms)",
+             spa103_ring_frames(), spa103_ring_frames() * 1000u / SPA_SR,
+             spa103_high_frames(), spa103_high_frames() * 1000u / SPA_SR,
+             spa103_prime_frames(), spa103_prime_frames() * 1000u / SPA_SR);
     spa103_render.head = 0;
     spa103_render.fill = 0;
     spa103_render.primed = 0;
@@ -1298,22 +1354,22 @@ static void spa103_ring_push_locked(const int16_t *pcm, size_t frames)
     size_t at = 0;
 
     if (!spa103_render.ring || !frames) return;
-    if (frames > SPA_103_RING_FRAMES) {
-        pcm += (frames - SPA_103_RING_FRAMES) * spa103_render.outputChannels;
-        spa103_render.dropped += frames - SPA_103_RING_FRAMES;
-        frames = SPA_103_RING_FRAMES;
+    if (frames > spa103_ring_frames()) {
+        pcm += (frames - spa103_ring_frames()) * spa103_render.outputChannels;
+        spa103_render.dropped += frames - spa103_ring_frames();
+        frames = spa103_ring_frames();
     }
     while (at < frames) {
-        const size_t tail = (spa103_render.head + spa103_render.fill) % SPA_103_RING_FRAMES;
-        size_t run = SPA_103_RING_FRAMES - tail;
+        const size_t tail = (spa103_render.head + spa103_render.fill) % spa103_ring_frames();
+        size_t run = spa103_ring_frames() - tail;
         if (run > frames - at) run = frames - at;
         memcpy(spa103_render.ring + tail * spa103_render.outputChannels,
                pcm + at * spa103_render.outputChannels,
                run * spa103_render.outputChannels * sizeof(int16_t));
-        if (spa103_render.fill + run > SPA_103_RING_FRAMES) {
-            const size_t lost = spa103_render.fill + run - SPA_103_RING_FRAMES;
-            spa103_render.head = (spa103_render.head + lost) % SPA_103_RING_FRAMES;
-            spa103_render.fill = SPA_103_RING_FRAMES;
+        if (spa103_render.fill + run > spa103_ring_frames()) {
+            const size_t lost = spa103_render.fill + run - spa103_ring_frames();
+            spa103_render.head = (spa103_render.head + lost) % spa103_ring_frames();
+            spa103_render.fill = spa103_ring_frames();
             spa103_render.dropped += lost;
         } else {
             spa103_render.fill += run;
@@ -1529,7 +1585,7 @@ static int spa103_render_backpressure(void)
 
     pthread_mutex_lock(&spa103_render.lock);
     paced = spa103_render.state != SPA_103_RENDER_RUNNING || !spa103_render.playing ||
-            spa103_render.fill >= SPA_103_RING_HIGH_FRAMES;
+            spa103_render.fill >= spa103_high_frames();
     pthread_mutex_unlock(&spa103_render.lock);
     return paced;
 }
@@ -1593,19 +1649,19 @@ size_t spa_buffered_pcm_read(int16_t *out, size_t frames, unsigned channels)
     /* Returning 0 here is deliberate: the sink then expands the phone's own
      * realtime stereo for this fragment, which is real audio.  Padding silence
      * instead is what made the gap audible. */
-    if (!spa103_render.primed && spa103_render.fill >= SPA_103_PRIME_FRAMES)
+    if (!spa103_render.primed && spa103_render.fill >= spa103_prime_frames())
         spa103_render.primed = 1;
     if (spa103_render.state == SPA_103_RENDER_RUNNING && spa103_render.playing &&
         spa103_render.primed && spa103_render.ring &&
         channels == spa103_render.outputChannels) {
         while (done < frames && spa103_render.fill) {
-            size_t run = SPA_103_RING_FRAMES - spa103_render.head;
+            size_t run = spa103_ring_frames() - spa103_render.head;
             if (run > spa103_render.fill) run = spa103_render.fill;
             if (run > frames - done) run = frames - done;
             memcpy(out + done * channels,
                    spa103_render.ring + spa103_render.head * channels,
                    run * channels * sizeof(int16_t));
-            spa103_render.head = (spa103_render.head + run) % SPA_103_RING_FRAMES;
+            spa103_render.head = (spa103_render.head + run) % spa103_ring_frames();
             spa103_render.fill -= run;
             done += run;
         }
