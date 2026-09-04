@@ -19,6 +19,7 @@
 #include "audio_hook.h"
 #include "apac_codec_loader.h"
 #include "apap_crypto.h"
+#include "feedback_clock.h"
 #include "pcm_period.h"
 #include "spatial_downmix.h"
 #include "stereo_upmix.h"
@@ -398,6 +399,7 @@ typedef long  (*cf_arrcount_t)(const void *);
 typedef void *(*cf_arridx_t)(const void *, long);
 typedef void  (*cf_dictset_t)(void *, const void *, const void *);
 typedef void  (*cf_dictseti_t)(void *, const void *, int64_t);
+typedef int   (*cf_dictsetd_t)(void *, const void *, double);
 typedef int   (*cf_dictsetc_t)(void *, const void *, const char *, int);
 typedef void *(*cf_dictget_t)(const void *, const void *);
 typedef int64_t (*cf_dictgeti_t)(const void *, const void *, int32_t *);
@@ -416,6 +418,7 @@ static cf_arrcount_t cfa_arrcount;
 static cf_arridx_t   cfa_arridx;
 static cf_dictset_t  cfa_dictset;
 static cf_dictseti_t cfa_dictseti;
+static cf_dictsetd_t cfa_dictsetd;
 static cf_dictsetc_t cfa_dictsetc;
 static cf_dictget_t  cfa_dictget;
 static cf_dictgeti_t cfa_dictgeti;
@@ -427,6 +430,7 @@ static void         *cfa_arr_cb, *cfa_dk_cb, *cfa_dv_cb;
 static void         *cfa_bool_true;
 static int           cfa_ready = -1;
 static int spa103_private_image_compatible(void);
+static int spa_pcm_sink_detached_feedback_rate(double *rateHz, int *measured);
 
 /* AirPlaySender validates enabledFeatures against /info after control SETUP. In particular,
  * negotiated mainBuffered requires a top-level mainBufferedInfo key and rejects the entire CarPlay
@@ -438,10 +442,16 @@ static uint32_t         spa_contract_sequence;
 
 /* updateFeedback belongs to the stock realtime stream, but iOS deliberately
  * tears that stream down when the phone/app leaves the foreground while the
- * buffered media hose is still playing.  Retain the last measured clock-only
- * response for that short ownership gap.  The live object is exactly
- * {streams:[{type:100,sr:<measured>}]}; caching it avoids inventing a sample
- * rate or depending on an unverified CFLite floating-point constructor. */
+ * buffered media hose is still playing.  Retain the last stock clock as a
+ * compatibility fallback.  The detached writer normally publishes the same
+ * observed shape, {streams:[{type:100,sr:<rate>}]}, using either the 48-kHz
+ * contract during measurement warmup or its own measured QSA cadence.
+ *
+ * The accepted MHI2Q libairplay.so (sha256 01c116b...) exports
+ * CFDictionarySetDouble at 0x56ad0.  Its ARM body consumes the double in r2/r3,
+ * passes kCFNumberFloat64Type (13) to CFNumberCreate, then inserts that object
+ * with CFDictionarySetValue.  This is the recovered constructor contract used
+ * below; no opaque object layout is dereferenced. */
 static pthread_mutex_t spa_feedback_lock = PTHREAD_MUTEX_INITIALIZER;
 static void            *spa_feedback_session;
 static const void      *spa_feedback_response;
@@ -478,6 +488,7 @@ static int spa_cf_resolve(void)
     cfa_arridx   = (cf_arridx_t)   dlsym(RTLD_DEFAULT, "CFArrayGetValueAtIndex");
     cfa_dictset  = (cf_dictset_t)  dlsym(RTLD_DEFAULT, "CFDictionarySetValue");
     cfa_dictseti = (cf_dictseti_t) dlsym(RTLD_DEFAULT, "CFDictionarySetInt64");
+    cfa_dictsetd = (cf_dictsetd_t) dlsym(RTLD_DEFAULT, "CFDictionarySetDouble");
     cfa_dictsetc = (cf_dictsetc_t) dlsym(RTLD_DEFAULT, "CFDictionarySetCString");
     cfa_dictget  = (cf_dictget_t)  dlsym(RTLD_DEFAULT, "CFDictionaryGetValue");
     cfa_dictgeti = (cf_dictgeti_t) dlsym(RTLD_DEFAULT, "CFDictionaryGetInt64");
@@ -490,7 +501,7 @@ static int spa_cf_resolve(void)
     cfa_dv_cb    = dlsym(RTLD_DEFAULT, "kCFLDictionaryValueCallBacksCFLTypes");
 
     cfa_ready = (cfa_str && cfa_equal && cfa_dictm && cfa_arrm && cfa_arrapp && cfa_arrcount &&
-                 cfa_arridx && cfa_dictset && cfa_dictseti && cfa_dictsetc && cfa_dictget &&
+                 cfa_arridx && cfa_dictset && cfa_dictseti && cfa_dictsetd && cfa_dictsetc && cfa_dictget &&
                  cfa_dictgeti && cfa_retain && cfa_rel && cfa_arr_cb && cfa_dk_cb &&
                  cfa_dv_cb) ? 1 : 0;
     if (!cfa_ready)
@@ -528,6 +539,47 @@ done:
     if (typeKey) cfa_rel(typeKey);
     if (streamsKey) cfa_rel(streamsKey);
     return found;
+}
+
+/* Build the exact two-field clock descriptor observed in every captured stock
+ * response.  Fresh containers avoid mutating a retained stock plist that a
+ * concurrent control caller may still own. */
+static void *spa_feedback_create_realtime_clock(double rateHz)
+{
+    void *response = 0, *streams = 0, *stream = 0;
+    void *streamsKey = 0, *typeKey = 0, *srKey = 0;
+
+    if (!spa_cf_resolve() || rateHz <= 0.0 || rateHz != rateHz) return 0;
+    response = cfa_dictm(0, 0, cfa_dk_cb, cfa_dv_cb);
+    streams = cfa_arrm(0, 0, cfa_arr_cb);
+    stream = cfa_dictm(0, 0, cfa_dk_cb, cfa_dv_cb);
+    streamsKey = cfa_str(0, "streams", SPA_CFENC_UTF8);
+    typeKey = cfa_str(0, "type", SPA_CFENC_UTF8);
+    srKey = cfa_str(0, "sr", SPA_CFENC_UTF8);
+    if (!response || !streams || !stream || !streamsKey || !typeKey || !srKey)
+        goto fail;
+
+    cfa_dictseti(stream, typeKey, 100);
+    if (cfa_dictsetd(stream, srKey, rateHz) != 0) goto fail;
+    cfa_arrapp(streams, stream);
+    cfa_dictset(response, streamsKey, streams);
+    if (!spa_feedback_has_realtime_clock(response)) goto fail;
+
+    cfa_rel(srKey);
+    cfa_rel(typeKey);
+    cfa_rel(streamsKey);
+    cfa_rel(stream);
+    cfa_rel(streams);
+    return response;
+
+fail:
+    if (srKey) cfa_rel(srKey);
+    if (typeKey) cfa_rel(typeKey);
+    if (streamsKey) cfa_rel(streamsKey);
+    if (stream) cfa_rel(stream);
+    if (streams) cfa_rel(streams);
+    if (response) cfa_rel(response);
+    return 0;
 }
 
 static void spa_feedback_cache(void *session, const void *response)
@@ -2316,6 +2368,8 @@ typedef struct {
     uint64_t detachedWrites;
     uint64_t detachedZeroWrites;
     uint64_t detachedRecoveries;   /* prepare calls while detached after rendering began */
+    uint64_t detachedClockDiscontinuities;
+    spa_feedback_clock_t detachedClock;
     uint64_t bufferedWrites;
     uint64_t underrunFrames;        /* defensive: must remain zero with whole-period reads */
     uint64_t shortRingFallbacks;    /* whole periods sent from realtime instead of zero-padded */
@@ -2345,6 +2399,44 @@ static spa_pcm_sink_t spa_pcm_sink = {
     .ioLock = PTHREAD_MUTEX_INITIALIZER
 };
 
+static uint64_t spa_monotonic_ns(void)
+{
+    struct timespec now;
+
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) return 0;
+    return (uint64_t)now.tv_sec * UINT64_C(1000000000) +
+           (uint64_t)now.tv_nsec;
+}
+
+static void spa_pcm_sink_reset_detached_clock_locked(void)
+{
+    spa_feedback_clock_reset(&spa_pcm_sink.detachedClock);
+    spa_pcm_sink.detachedClockDiscontinuities = 0;
+}
+
+/* During the first ~20 seconds the nominal 48-kHz contract is a much safer
+ * bootstrap than the last stock sample: the vehicle trace caught a transient
+ * 48080.23-Hz response immediately before type-100 disappeared, and the old
+ * cache replayed it for 276 seconds.  Once the detached writer has a clean
+ * 1024-period window, publish the measured blocking-write cadence instead. */
+static int spa_pcm_sink_detached_feedback_rate(double *rateHz, int *measured)
+{
+    int active = 0, valid = 0;
+    double rate = 0.0;
+
+    pthread_mutex_lock(&spa_pcm_sink.lock);
+    if (spa_pcm_sink.detached && spa_pcm_sink.handle &&
+        spa_pcm_sink.expandedParams) {
+        active = 1;
+        rate = spa_feedback_clock_get(&spa_pcm_sink.detachedClock, &valid);
+        if (!valid) rate = (double)SPA_SR;
+    }
+    pthread_mutex_unlock(&spa_pcm_sink.lock);
+    if (rateHz) *rateHz = rate;
+    if (measured) *measured = valid;
+    return active;
+}
+
 static void spa_pcm_sink_close_detached(const char *reason)
 {
     static spa_snd_close_t realClose;
@@ -2366,6 +2458,7 @@ static void spa_pcm_sink_close_detached(const char *reason)
         spa_pcm_sink.reclaimStage = SPA_PCM_RECLAIM_NONE;
         spa_pcm_sink.sourceChannels = 0;
         spa_pcm_sink.outputChannels = 0;
+        spa_pcm_sink_reset_detached_clock_locked();
     }
     pthread_mutex_unlock(&spa_pcm_sink.lock);
     if (!handle) {
@@ -2420,7 +2513,10 @@ static void spa_pcm_sink_drain_detached(void)
         size_t bytes, got;
         ssize_t written;
         int firstWrite, needsPrepare, logWrite, probeStatus;
+        int autoRecovery = 0, clockEvent, clockValid;
         int statusResult = -1;
+        uint64_t writeNs;
+        double clockRate;
         snd_pcm_channel_status_t status;
 
         pthread_mutex_lock(&spa_pcm_sink.ioLock);
@@ -2473,13 +2569,19 @@ static void spa_pcm_sink_drain_detached(void)
             realWrite = (spa_snd_write_t)dlsym(RTLD_NEXT, "snd_pcm_plugin_write");
         written = realWrite ? realWrite(handle, spa_pcm_sink.scratch, bytes) : -1;
         if (written == 0) {
+            int prepareResult = -1;
+
             if (!realPrepare)
                 realPrepare = (spa_snd_prepare_t)dlsym(RTLD_NEXT,
                                                        "snd_pcm_plugin_prepare");
-            if (realPrepare &&
-                realPrepare(handle, SND_PCM_CHANNEL_PLAYBACK) == 0)
+            if (realPrepare)
+                prepareResult = realPrepare(handle, SND_PCM_CHANNEL_PLAYBACK);
+            if (prepareResult == 0) {
+                autoRecovery = 1;
                 written = realWrite(handle, spa_pcm_sink.scratch, bytes);
+            }
         }
+        writeNs = spa_monotonic_ns();
         memset(&status, 0, sizeof(status));
         status.channel = SND_PCM_CHANNEL_PLAYBACK;
         if (probeStatus) {
@@ -2491,24 +2593,55 @@ static void spa_pcm_sink_drain_detached(void)
         pthread_mutex_lock(&spa_pcm_sink.lock);
         spa_pcm_sink.detachedWrites++;
         if (firstWrite) spa_pcm_sink.detachedNeedsPrepare = 0;
+        if (autoRecovery) spa_pcm_sink.detachedRecoveries++;
         if (written == 0) spa_pcm_sink.detachedZeroWrites++;
+        if (written == (ssize_t)bytes) {
+            clockEvent = spa_feedback_clock_note_write(
+                &spa_pcm_sink.detachedClock, writeNs,
+                SPA_PCM_SINK_PERIOD_FRAMES, autoRecovery);
+        } else {
+            /* A short/failed write did not consume a whole period.  Invalidate
+             * the clock, but do not count that write as warmup #1. */
+            spa_feedback_clock_reset(&spa_pcm_sink.detachedClock);
+            clockEvent = -1;
+        }
+        if (clockEvent < 0) spa_pcm_sink.detachedClockDiscontinuities++;
+        clockRate = spa_feedback_clock_get(&spa_pcm_sink.detachedClock,
+                                           &clockValid);
         if (statusResult == 0) {
             spa_pcm_sink.deviceStatus = status.status;
             spa_pcm_sink.deviceUnderruns = (uint64_t)status.underrun;
         }
         logWrite = spa_pcm_sink.detachedWrites == 1 ||
                    (spa_pcm_sink.detachedWrites % 1024u) == 0 ||
-                   written != (ssize_t)bytes;
+                   written != (ssize_t)bytes || autoRecovery || clockEvent < 0;
+        if (autoRecovery)
+            LOG_WARN(LOG_MODULE,
+                     "audio sink: detached write returned zero; prepare+retry "
+                     "recovery=%llu retry=%lld expected=%u",
+                     (unsigned long long)spa_pcm_sink.detachedRecoveries,
+                     (long long)written, (unsigned)bytes);
+        if (clockEvent > 0)
+            LOG_INFO(LOG_MODULE,
+                     "audio sink: detached QSA clock measured %.6f Hz over %u writes",
+                     clockRate, (unsigned)SPA_FEEDBACK_CLOCK_WINDOW_WRITES);
+        else if (clockEvent < 0 && !autoRecovery)
+            LOG_WARN(LOG_MODULE,
+                     "audio sink: detached QSA clock window reset discontinuities=%llu",
+                     (unsigned long long)spa_pcm_sink.detachedClockDiscontinuities);
         if (logWrite)
             LOG_WARN(LOG_MODULE,
                      "audio sink: detached writes=%llu zero=%llu recoveries=%llu "
-                     "last=%lld expected=%u status=%d underruns=%llu handoff=%s",
+                     "last=%lld expected=%u status=%d underruns=%llu "
+                     "clock=%.6f/%s clockResets=%llu handoff=%s",
                      (unsigned long long)spa_pcm_sink.detachedWrites,
                      (unsigned long long)spa_pcm_sink.detachedZeroWrites,
                      (unsigned long long)spa_pcm_sink.detachedRecoveries,
                      (long long)written, (unsigned)bytes,
                      spa_pcm_sink.deviceStatus,
                      (unsigned long long)spa_pcm_sink.deviceUnderruns,
+                     clockRate, clockValid ? "measured" : "warming",
+                     (unsigned long long)spa_pcm_sink.detachedClockDiscontinuities,
                      needsPrepare ? "prepared" : "continuous");
         pthread_mutex_unlock(&spa_pcm_sink.lock);
         pthread_mutex_unlock(&spa_pcm_sink.ioLock);
@@ -2690,6 +2823,8 @@ int snd_pcm_open_name(snd_pcm_t **handle, char *name, int mode)
         spa_pcm_sink_reset_stock_counters_locked();
         spa_pcm_sink.detachedWrites = 0;
         spa_pcm_sink.detachedZeroWrites = 0;
+        spa_pcm_sink.detachedRecoveries = 0;
+        spa_pcm_sink_reset_detached_clock_locked();
         spa_pcm_sink.suppressedFlushes = 0;
         spa_pcm_sink.reclaimedOpens = 0;
         spa_pcm_sink.skippedReclaimParams = 0;
@@ -3423,6 +3558,8 @@ int snd_pcm_close(snd_pcm_t *handle)
             spa_pcm_sink.reclaimStage = SPA_PCM_RECLAIM_NONE;
             spa_pcm_sink.detachedWrites = 0;
             spa_pcm_sink.detachedZeroWrites = 0;
+            spa_pcm_sink.detachedRecoveries = 0;
+            spa_pcm_sink_reset_detached_clock_locked();
             pthread_mutex_unlock(&spa_pcm_sink.lock);
             LOG_WARN(LOG_MODULE,
                      "audio sink: retained %s handle=%p for active buffered type-103 "
@@ -3464,6 +3601,7 @@ int snd_pcm_close(snd_pcm_t *handle)
             spa_pcm_sink.reclaimStage = SPA_PCM_RECLAIM_NONE;
             spa_pcm_sink.sourceChannels = 0;
             spa_pcm_sink.outputChannels = 0;
+            spa_pcm_sink_reset_detached_clock_locked();
         }
         pthread_mutex_unlock(&spa_pcm_sink.lock);
         LOG_INFO(LOG_MODULE, "audio sink: released %s handle=%p result=%d",
@@ -5202,13 +5340,14 @@ int AirPlayReceiverSessionControl(void *session, uint32_t flags, const void *com
     result = real(session, flags, command, qualifier, params, responseOut);
 
     /* A live trace of phone-lock/backgrounding establishes the exact gap:
-     * type-100 TearDown closes its QSA stream, then four updateFeedback calls
-     * return NULL while type-103 continues sending, and iOS finally sends
-     * SETRATEANCHORTIME(0)+FLUSHBUFFERED+type-103 TearDown about eight seconds
-     * later.  Preserve the last stock measured-clock response only for the
-     * same still-active buffered session.  This is not fabricated telemetry:
-     * the retained plist is the immediately preceding stock response, with
-     * its measured `sr` double unchanged. */
+     * type-100 TearDown closes its QSA stream while type-103 and its retained
+     * QSA handle continue playing.  Stock then returns NULL here.  Do not
+     * replay its final sample-rate forever: a track-switch trace captured
+     * 48082.29 -> 48080.23 Hz during the handoff and the old cache advertised
+     * that transient for 276 seconds.  Publish the retained sink's nominal
+     * contract during measurement warmup, then its measured blocking-write
+     * cadence.  The cached stock response remains a fail-safe only when the
+     * detached QSA ownership state is unavailable. */
     if (result == 0 && responseOut &&
         strcmp(commandText, "updateFeedback") == 0 &&
         !spa_env_on("AUDIO_FEEDBACK_BLANK") &&
@@ -5216,13 +5355,25 @@ int AirPlayReceiverSessionControl(void *session, uint32_t flags, const void *com
         if (*responseOut) {
             spa_feedback_cache(session, *responseOut);
         } else {
-            *responseOut = spa_feedback_copy_cached(session);
-            if (*responseOut)
+            double rateHz = 0.0;
+            int measured = 0;
+
+            if (spa_pcm_sink_detached_feedback_rate(&rateHz, &measured))
+                *responseOut = spa_feedback_create_realtime_clock(rateHz);
+            if (*responseOut) {
                 LOG_WARN(LOG_MODULE,
-                         "buffer103: updateFeedback reused the last measured type-100 clock "
-                         "while the realtime stream is absent session=%p",
-                         session);
-            else
+                         "buffer103: updateFeedback published detached QSA clock "
+                         "sr=%.6f source=%s session=%p",
+                         rateHz, measured ? "measured" : "nominal-warmup", session);
+            } else {
+                *responseOut = spa_feedback_copy_cached(session);
+                if (*responseOut)
+                    LOG_WARN(LOG_MODULE,
+                             "buffer103: updateFeedback fell back to the last stock clock "
+                             "while detached QSA rate is unavailable session=%p",
+                             session);
+            }
+            if (!*responseOut)
                 LOG_ERROR(LOG_MODULE,
                           "buffer103: updateFeedback has no stock response and no cached "
                           "clock for active type-103 session=%p",

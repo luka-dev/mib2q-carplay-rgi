@@ -916,6 +916,20 @@ in place under `music-stage` with continuous PCM/QSA counters and no recovery,
 underrun or short-ring fallback.  The reverse AAC-to-APAC transition is still
 the final mixed-buffer acceptance direction.
 
+The following long session also kept every QSA write complete and all device,
+ring and recovery counters at zero, but exposed a feedback-clock hazard after
+a rapid eight-FLUSH/item-change storm.  Stock briefly measured 48080.2266 Hz;
+type 100 then disappeared and the preceding hook replayed that transient for
+about 276 seconds instead of following the retained QSA sink.  The replacement
+emits the nominal 48000-Hz contract during a 256-write warmup,
+then measures 1024 successful detached 768-frame QSA periods against
+`CLOCK_MONOTONIC`.  Gaps, recovery, short writes and implausible windows
+invalidate the result.  Host tests and the QNX ARMv7 build pass; candidate
+hook hash is `8ef70b59...`.  It is now deployed with byte-identical readback
+and mapped in the new `dio_manager`, but has not yet completed the live handoff
+test and therefore is not called a vehicle fix.  Full timing, ABI evidence and
+deployment distinction are in the lifecycle document.
+
 ---
 
 ## Sources

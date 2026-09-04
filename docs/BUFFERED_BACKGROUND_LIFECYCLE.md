@@ -481,7 +481,7 @@ until playback stops; live monitoring uses only the small hook counters.
    audio sink: deferred close-adjacent flush ...
    audio sink: retained mpl5_dio_ent ... handoff=continuous
    audio sink: detached writes=1 ... handoff=continuous
-   buffer103: updateFeedback reused the last measured type-100 clock ...
+   buffer103: updateFeedback published detached QSA clock ...
    audio sink: reclaimed live ... without close/open
    audio sink: reclaimed params kept live ...
    audio sink: reclaimed prepare kept live ...
@@ -560,3 +560,69 @@ exact 196,608-frame intervals, stock and detached QSA writes remained complete,
 zero through the captured window.  This closes the APAC-to-AAC direction; the
 longer AAC-to-APAC direction remains the decisive repetition of the former
 45-second stall.
+
+## Late-song discontinuity: do not freeze a handoff sample-rate transient
+
+The next `music-stage` run is captured under
+`captures/mhi2q_music_stage_mixed_buffer_20260904/late_underrun_check/`.
+It ran from `02:08:10` until orderly connection teardown at `02:21:32`.
+The PCM/QSA path itself remained clean: every observed write was 9216 bytes,
+device status stayed `RUNNING`, and `devUnderruns`, `recoveries`, `zeroWrites`,
+`shortWrites`, and `shortRingFallbacks` all stayed zero.  A filtered
+`sloginfo -m 13103 -t` capture and the full slog taken after playback stopped
+contain no hidden `STOP -> prepare -> GO` in the retained `02:17:12`--`02:21:32`
+window.  The only STOP is the expected final teardown.
+
+The audible-shaped discontinuities were controls from iOS rather than short
+device writes.  One `rate=0`/`FLUSHBUFFERED` interval left 44.396 seconds
+between decoded PCM windows.  Later, `02:15:17`--`02:15:27` contains eight
+FLUSH requests, new RTP anchors and cover-art changes from image 6 through 12.
+Suppressing those controls would be wrong: a real seek or item change must
+discard old compressed and decoded data.
+
+The captured feedback plists exposed a separate late-song risk.  Before the
+first detached interval, stock measured `sr=48005.39453125`; the hook replayed
+that value while type 100 was absent.  After the rapid control/item storm,
+stock briefly returned `48082.29296875` and then `48080.2265625`.  Type 100
+closed at `02:15:30`, so the old implementation froze `48080.2265625` into
+every response until it returned at `02:20:06` and stock again reported
+`48000`.  That is +0.167% for about 276 seconds, an implied timeline error of
+roughly 0.46 seconds.  It is a measured and time-compatible cause candidate,
+not yet a proved cause of the user's late-song symptom.
+
+The local, **not deployed**, follow-up removes that unbounded replay:
+
+* the first 256 successful detached QSA writes are discarded as queue/handoff
+  warmup;
+* 1024 subsequent 768-frame writes measure the sink using `CLOCK_MONOTONIC`
+  (a 16.384-second measurement window, about 20.48 seconds after handoff);
+* until the first clean window, feedback publishes the fixed sink contract
+  `48000`, not the last stock transient;
+* a write gap over 100 ms, a short/failed write or a recovery invalidates the
+  measurement and returns to nominal warmup;
+* each detached response is a fresh verified stock-shape plist,
+  `{streams:[{type:100,sr:<nominal-or-measured>}]}`;
+* the previously hidden `write==0 -> prepare -> retry` path now increments and
+  logs `detachedRecoveries`, even when the retry accepts all 9216 bytes.
+
+No CFLite ABI was guessed.  The accepted MHI2Q `libairplay.so`
+(`01c116b1674215daa0602d556a6d9b2eb48c2113ca294ea1f5d58787e3f656f2`)
+exports `CFDictionarySetDouble` at `0x56ad0`; its ARM body takes the double in
+`r2/r3`, creates `kCFNumberFloat64Type` (13), and inserts it into the mutable
+dictionary.  The new pure clock regression covers warmup, exact 48-kHz
+measurement, long-gap reset, recovery reset, an implausible-rate window and an
+invalid timestamp.  All host audio tests and the QNX ARMv7 build pass.
+Candidate artifacts are:
+
+```text
+libcarplay_hook.so  sha256 8ef70b59a7b1ebe9c8cf6a78939349e2963c4d0c4215a95a66f821ac31229a6e
+libcarplay_apac.so  sha256 a6a7bc8c3f17dfe170765b04a461259a407269de47dde6fe0a2b3f6b2695044f
+```
+
+The candidate was deployed on the user's explicit request after the static and
+host/QNX checks.  SCP readback is byte-identical to the artifacts above, the
+startup profile remains `music-stage` / surround `0.20` / LFE `assist` /
+buffered priority 18, and new `dio_manager` PID `213557292` maps both
+`libcarplay_hook.so` and `libcarplay_apac.so`.  Deployment proves installation,
+not the clock hypothesis: it still needs a full foreground/background or
+type-100 handoff before being described as vehicle-tested.

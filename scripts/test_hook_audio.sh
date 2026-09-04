@@ -43,6 +43,10 @@ $CC $CFLAGS tests/buffered_pcm_switch_test.c hook/audio/spatial_downmix.c \
     hook/audio/stereo_upmix.c -o "$OUT/buffered_pcm_switch_test"
 "$OUT/buffered_pcm_switch_test"
 
+echo "=== feedback_clock_test ==="
+$CC $CFLAGS tests/feedback_clock_test.c -o "$OUT/feedback_clock_test"
+"$OUT/feedback_clock_test"
+
 echo "=== apac_type103_test ==="
 rm -rf "$OUT/obj"; mkdir -p "$OUT/obj"
 for f in "$ROOT"/apac_decoder/src/*.cpp "$ROOT"/hook/audio/apac_bridge.cpp; do
