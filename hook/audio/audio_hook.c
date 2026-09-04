@@ -914,6 +914,9 @@ typedef struct {
     uint32_t sequence;
     spa103_magic_cookie_t magicCookies[SPA_103_MAX_MAGIC_COOKIES];
     size_t magicCookieCount;
+    /* Bumped whenever a stored cookie's CONTENT changes.  The id stays the same across a track
+     * change, so it cannot be what tells the decoder to reconfigure. */
+    uint32_t cookieGeneration;
     int64_t rate;
     spa103_transport_time_t anchor;
     spa103_transport_time_t firstAudible;
@@ -1072,6 +1075,7 @@ typedef struct {
     spa_apac_decoder_t *decoder;
     int64_t cookieId;               /* the cookie the decoder was built from */
     int haveCookieId;
+    uint32_t cookieGeneration;      /* ...and which revision of its bytes */
     int16_t *ring;                  /* spa103_ring_frames() * 6 samples */
     size_t head;                    /* frame index of the oldest buffered frame */
     size_t fill;                    /* frames buffered */
@@ -1493,7 +1497,8 @@ static void spa103_render_frame(const uint8_t *packet, size_t length)
     pthread_mutex_lock(&spa103_render.lock);
     if (!spa103_render.decoder ||
         (ext.hasMagicCookieId && spa103_render.haveCookieId &&
-         spa103_render.cookieId != (int64_t)ext.magicCookieId)) {
+         spa103_render.cookieId != (int64_t)ext.magicCookieId) ||
+        spa103_render.cookieGeneration != spa103_receiver.cookieGeneration) {
         uint8_t *cookie;
         size_t cookieSize = 0;
         spa_apac_stream_info_t info;
@@ -1511,6 +1516,7 @@ static void spa103_render_frame(const uint8_t *packet, size_t length)
         }
         rc = spa103_render.codec->create(cookie, cookieSize, &spa103_render.decoder,
                                          &channels, &frameLength, &sampleRate);
+        spa103_render.cookieGeneration = spa103_receiver.cookieGeneration;
         free(cookie);
         memset(&info, 0, sizeof(info));
         if (rc == SPA_APAC_OK)
@@ -2409,7 +2415,14 @@ static int spa103_store_magic_cookie(int64_t id, uint8_t *bytes, size_t size)
     }
     sequence = spa103_receiver.sequence;
     for (i = 0; i < spa103_receiver.magicCookieCount; i++) {
-        if (spa103_receiver.magicCookies[i].id == id) {
+        spa103_magic_cookie_t *slot = &spa103_receiver.magicCookies[i];
+        if (slot->id != id) continue;
+        /* Same id, same bytes: a genuine duplicate, still ignored -- the phone re-sends these
+         * routinely.  Same id, different bytes: a new track's decoder configuration.  Dropping
+         * that leaves the decoder built for the previous track, which is silence on everything
+         * but whatever played first. */
+        if (slot->size == size && bytes && slot->bytes &&
+            memcmp(slot->bytes, bytes, size) == 0) {
             pthread_mutex_unlock(&spa103_lock);
             free(bytes);
             LOG_INFO(LOG_MODULE,
@@ -2417,6 +2430,17 @@ static int spa103_store_magic_cookie(int64_t id, uint8_t *bytes, size_t size)
                      (long long)id, (unsigned)sequence);
             return 0;
         }
+        free(slot->bytes);
+        slot->bytes = bytes;
+        slot->size = size;
+        spa103_receiver.cookieGeneration++;
+        sequence = spa103_receiver.sequence;
+        pthread_mutex_unlock(&spa103_lock);
+        LOG_WARN(LOG_MODULE,
+                 "buffer103: SETMAGICCOOKIE id=%lld replaced, %u bytes, generation %u "
+                 "-- the decoder will be rebuilt",
+                 (long long)id, (unsigned)size, (unsigned)spa103_receiver.cookieGeneration);
+        return 1;
     }
     if (spa103_receiver.magicCookieCount < SPA_103_MAX_MAGIC_COOKIES) {
         spa103_magic_cookie_t *slot =
