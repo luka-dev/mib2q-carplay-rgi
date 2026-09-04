@@ -4,7 +4,7 @@ Date: 2026-09-03
 
 Scope: MHI2Q MU1316, CarPlay buffered stream type 103, AAC-LC indices 23 and 22
 
-Status: static analysis and plan only; no hook, firmware, or deployed binary changed
+Status: live framing/cookie capture and static ABI/thread audit complete; decoder implementation pending
 
 ## Result
 
@@ -24,10 +24,15 @@ guessing:
 * `CinemoCreateAudioCodec` and `NmeCreateCodecAAC` allocate a new wrapper and a new AAC codec object
   for each call. There is no codec-object singleton.
 * The target plugin expects a raw MPEG-4 `AudioSpecificConfig` at `CinemoMediaType.header_data`. It
-  starts reading object type at bit zero; a 39-byte `esds` wrapper must not be passed there intact.
-* For index 23 the standard AAC-LC/stereo/48 kHz ASC is `11 90`; the donor-compatible padded form is
-  `11 90 00 00`. This value was calculated from the ISO bit fields and matches the target parser,
-  but the live cookie still has to be captured and parsed before production code may use it.
+  starts reading object type at bit zero; the 39-byte descriptor chain must not be passed intact.
+* The captured 39-byte MPEG-4 descriptor chain contains a two-byte ASC `11 90`, proving
+  AAC-LC/stereo/48 kHz. Its descriptor lengths use the long `80 80 80 xx` representation, so the
+  parser must walk tags and lengths rather than assume a fixed ASC offset.
+* A captured 12.821333-second run contains 601 raw AUs, 376..1322 bytes each. Adding only ADTS
+  headers lets a standard decoder produce exactly `601 * 1024` frames of 48 kHz stereo PCM.
+* The final Cinemo concurrency audit found independent decoder/output objects, a mutex-protected
+  shared plugin registry, no OMX calls and a fully synchronous callback chain. One decoder may be
+  owned by the existing APAP receiver thread; no extra thread or callback wait is needed.
 
 One policy limitation is now measured, not hypothetical: iOS chooses the buffered format **once for
 the session**. Advertising `[65,23]` made it choose 23 for all content; it did not switch back to APAC
@@ -110,32 +115,31 @@ The MH2p adapter's `CAudioDecoder::decode` at `0xb2874` forwards the one compres
 from `AudioConverterFillComplexBuffer` directly to Cinemo `Write` at `0xb28a0`. It does not prepend
 a transport header.
 
-Together these are strong static evidence that index 23 supplies **one raw AAC-LC access unit per
-APAP media item**. This remains high confidence rather than a live-proven fact because the index-23
-APAP capture from the vehicle has not been copied into the repository.
+Together these were strong static evidence that index 23 supplies **one raw AAC-LC access unit per
+APAP media item**. The vehicle capture in `captures/aac_route_20260903` now proves it directly.
 
-### Minimal capture that settles it
+### Measured vehicle capture
 
-No drive is needed. In one short stationary index-23 session, preserve:
+The hook authenticated and opened index-23 media items before any decoder was introduced. It
+retained each AU as a four-byte little-endian length followed by the exact compressed payload:
 
-1. the type-103 SETUP request and selected `audioFormatIndex=23`;
-2. the exact 32-byte `shk` locally (never commit it or print it in documentation);
-3. `/tmp/spatial_apap_<sequence>.bin` for two to five seconds;
-4. `/tmp/spatial_magiccookie_<sequence>_<id>.bin`, expected to be the measured 39 bytes;
-5. the log lines pairing TLV 17's cookie ID with that file.
+| Measurement | Result |
+|---|---:|
+| selected format | index 23 |
+| access units | 601 |
+| AU payload range | 376..1322 bytes |
+| compressed payload bytes | 423276 |
+| AAC duration | 12.821333 seconds |
+| first observed AU | `21 4e aa fb ...` |
+| decoded output | 48000 Hz, stereo, S16, exactly `601 * 1024` frames |
 
-Use `tools/pioneer_apap_decrypt.py --output-dir` on the host. It already validates the inclusive
-BE32 records, both legal AAD variants and Poly1305 before emitting plaintext. Classify each media
-item after any extension TLVs:
+There is no `0xfff` ADTS or `0x2b7` LOAS sync. `tools/aac_es_to_adts.py` adds an ADTS header from the
+captured ASC without removing or changing any AU byte; the resulting stream decodes normally. This
+settles both boundaries: one APAP media item is one raw AAC-LC AU, and that complete AU is the input
+to Cinemo `Write`.
 
-* ADTS: 12-bit `0xfff` sync, normally `ff f1` or `ff f9`, with a self-contained 7/9-byte header and
-  frame length;
-* LOAS/LATM: 11-bit `0x2b7` sync, normally beginning `56 e?`;
-* raw access unit: no stable transport sync and the APAP media-item boundary is the AU boundary.
-
-The decisive positive test is not only the absence of a sync word: extract the ASC from the cookie,
-submit each authenticated media item to Cinemo, and obtain 1024 interleaved stereo frames per AAC-LC
-AU without stripping any bytes. If bytes have to be removed, record the exact rule before coding.
+The retained `shk` is not documented. The derived AU corpus, ADTS wrapper, decoded WAV and cookie
+are sufficient for offline implementation and regression testing.
 
 ## 2. Magic cookie contract
 
@@ -174,18 +178,26 @@ For the two relevant formats, independently calculated ASC prefixes are:
 | 23 | AAC-LC / 48000 / 2 | `11 90` | `11 90 00 00` |
 | 22 | AAC-LC / 44100 / 2 | `12 10` | `12 10 00 00` |
 
-### What remains inferred
+### Measured cookie structure
 
-The measured length of 39 bytes is exactly the common size of a full `esds` box containing an
-ES descriptor, decoder-config descriptor, a two-byte decoder-specific-info/ASC field and an
-SL-config descriptor. That is a strong structural clue, **not a byte-level finding**: the actual
-39 bytes are not in the repository, so their tags, bitrate fields and ASC have not been observed.
+The retained cookie is a 39-byte MPEG-4 descriptor chain, not an APAC `dapa` atom:
 
-The future parser must consequently fail closed and must not hard-code byte offset 34 merely because
-it is common. It should accept either:
+```text
+03 80 80 80 22 00 00 00
+04 80 80 80 14 40 14 00 18 00 00 01 f4 00 00 01 f4 00
+05 80 80 80 02 11 90
+06 80 80 80 01 02
+```
+
+Tag `0x03` contains the ES descriptor, tag `0x04` its decoder configuration, tag `0x05` the
+two-byte decoder-specific information/ASC `11 90`, and tag `0x06` the SL configuration. Lengths are
+encoded in legal long form (`80 80 80 xx`). A fixed byte offset happens to work for this one cookie
+but is not a valid parser.
+
+The implementation must fail closed and accept either:
 
 * a directly validated raw ASC; or
-* a size-checked `esds`/descriptor chain whose variable-length MPEG-4 descriptor lengths are parsed,
+* a size-checked MPEG-4 descriptor chain whose variable-length lengths are parsed,
   containing exactly one decoder-specific-info tag `0x05` under the decoder-config descriptor.
 
 The extracted ASC must decode to object type 2, the negotiated rate, two channels and a 1024-sample
@@ -268,38 +280,43 @@ channels. AAC-LC normally produces 1024 frames per AU. Target decode code can co
 and can issue zero or multiple callbacks, so the adapter must accumulate callback data in a bounded
 FIFO and not assume a single synchronous callback solely from that nominal frame size.
 
-The MH2p adapter waits up to 100 ms for its callback; that value is set at `0xb348a`. It is evidence
-for a bounded wait, not permission to block the APAP receiver indefinitely.
+The final MHI2Q call-chain audit proves that this callback is synchronous for AAC plus `NmeEncodePCM`.
+It can occur zero or multiple times during one `Write`, but cannot arrive later on a Cinemo worker
+thread because neither plugin creates one. The MH2p adapter's 100 ms condition-variable wait at
+`0xb348a` is unnecessary here and must not be copied.
 
 ## 4. Thread and coexistence decision
 
-Static analysis supports independent decoder **objects**, but it does not prove unlimited or
-race-free coexistence with Cinemo's stock media pipeline:
+The static coexistence risk is closed in
+[`CINEMO_AAC_THREAD_SAFETY_AUDIT.md`](CINEMO_AAC_THREAD_SAFETY_AUDIT.md):
 
-* the SDK wrapper and AAC plugin allocate one new object per factory call;
-* no per-process AAC decoder singleton was found;
-* the plugin registry/class factory is global;
-* `libNmeAudioAAC.so` links `libOmxCore.so`, so an underlying shared OMX resource or teardown race
-  cannot be excluded statically.
+* `dio_manager` imports Cinemo Config/Metapool/iAP helpers but not `CinemoCreateAudioCodec`; no
+  stock public audio-codec object exists in this process;
+* wrapper, AAC decoder and PCM output objects are newly allocated per factory request;
+* the global class/plugin registry serializes initialize/load/register/lookup and reference-counts
+  loaded modules;
+* despite its `DT_NEEDED`, the AAC plugin has no `OMX_*` import or relocation and performs no
+  dynamic name lookup; this software path never obtains an OMX component;
+* AAC decode, PCM pass-through and the application callback form one direct call chain ending at
+  `libNmeSDK.so:0x4e710` before `Write` returns.
 
 Use exactly one AAC decoder per type-103 stream generation. The existing APAP receiver thread can
 own all `Create`/`Initialize`/`Write`/`Flush`/`Release` calls; no new hook thread is required. Calls
 on one Cinemo instance must be serialized.
 
-The decoded callback may run inline or on a Cinemo/OMX thread. It may only validate the generation
-and output format, copy into a bounded decoder-owned PCM FIFO, update counters, and signal a
-condition variable. It must not call Cinemo again, write QSA, or take socket/QSA locks.
+The decoded callback runs inline. It may validate the generation/output format, copy into a bounded
+decoder-owned PCM FIFO and update counters. It must not call Cinemo recursively, write QSA, or take
+socket/QSA/shared-render locks.
 
 In particular, do not hold `spa103_render.lock`, the APAP socket lock, or the QSA sink lock across
-`Initialize`, `Write`, callback wait, `Flush` or `Release`. The current APAC path can decode while
-holding its render lock because its decoder is synchronous; copying that locking shape into the
-callback-based Cinemo path risks immediate self-deadlock. Snapshot the session generation/state,
-operate under an AAC-private mutex, then revalidate the generation before putting PCM in the shared
-ring.
+`Initialize`, `Write`, `Flush` or `Release`. Snapshot the session generation/state, execute Cinemo
+under AAC-private ownership, then move complete PCM frames into the shared ring after `Write`
+returns. This avoids reentrant lock inversion while keeping the direct callback cheap.
 
-On timeout, malformed callback format, FIFO overflow or Cinemo error, count and drop/mute that AU.
-Do not feed compressed bytes or unvalidated PCM into DIO5, and do not tear down `dio_manager` from a
-decoder callback.
+On malformed callback format, FIFO overflow or Cinemo error, count and drop/mute that AU. Do not
+feed compressed bytes or unvalidated PCM into DIO5, and do not tear down `dio_manager` from a decoder
+callback. Do not invoke Cinemo from the preload constructor or an ELF destructor; initialization and
+controlled release belong to the active stream lifetime.
 
 ## 5. Resampling decision
 
@@ -361,11 +378,12 @@ The first coding pass should follow this order:
 7. On `FLUSHBUFFERED`, stop accepting callbacks for the old generation, call `Flush`, empty the AAC
    FIFO and shared PCM queued before the flush boundary, and resume with the same ASC. On cookie or
    format change, flush/release/recreate. Use `Drain` only for orderly EOS, not for a discontinuity.
-8. Teardown prevents new callbacks, waits only for bounded in-flight work, releases the Cinemo
-   interface exactly once, then frees ASC/FIFO/mutex state. It must be idempotent.
-9. Add bounded counters: AU/bytes in, callbacks, PCM frames, `Write` errors, timeouts, bad callback
-   formats, stale-generation callbacks and FIFO overruns. Do not retain or log playable PCM in a
-   production build.
+8. Teardown runs on the owner thread, prevents another `Write`, releases the Cinemo interface
+   exactly once, then frees ASC/FIFO state. Do not rely on an ELF destructor, whose order relative
+   to Cinemo's global class-factory teardown is undefined. Normal teardown must be idempotent.
+9. Add bounded counters: AU/bytes in, callbacks, PCM frames, `Write` errors and maximum/slow `Write`
+   duration, bad callback formats, stale-generation callbacks and FIFO overruns. Do not retain or
+   log playable PCM in a production build.
 
 This code makes both decoders coexist in the receiver. It does not claim that iOS will choose both
 within one session; that is a separate, currently negative vehicle measurement.
@@ -375,11 +393,11 @@ within one session; that is a separate, currently negative vehicle measurement.
 | Gate | Test | Risk to current vehicle state | Drive? |
 |---:|---|---|---|
 | 0 | Keep the current known-good bundle and `AUDIO_SPATIAL=0`; record hashes before any test. | none | no |
-| 1 | Copy/decrypt the already observed index-23 cookie/APAP capture, or make the short stationary capture described above. Prove raw/ADTS/LATM and parse the exact 39 bytes. | none offline; low for one reversible session capture | no |
-| 2 | Host tests with fake Cinemo functions: raw/`esds` cookie parsing, zero/multiple callbacks, malformed geometry, timeout, flush, stale generation and FIFO bounds. Run the existing APAC tests unchanged. | none | no |
-| 3 | With CarPlay and stock local media stopped, run a standalone ARM/QNX probe in a separate process against the real MHI2Q libraries and captured AUs. Require 48 kHz/2ch/S16, 1024 frames/AU and a valid WAV/hash. Repeat create/decode/flush/release. | low, process-local and non-persistent | no |
-| 4 | While stock local Cinemo playback is active, repeat a bounded separate-process AAC probe and watch `dio_manager`, Cinemo and OMX logs. This is the first test of shared runtime capacity. | medium; stop immediately on stock playback or OMX disturbance | no |
-| 5 | Integrate the wrapper but leave `AUDIO_SPATIAL=0`; verify ordinary CarPlay and APAC unit/bench regressions before advertising AAC. | low | no |
+| 1 | **Complete:** retained cookie and 601-AU corpus prove the descriptor chain, ASC `11 90`, one raw AU per APAP item and standard decode to exactly `601 * 1024` frames. | none | no |
+| 2 | Host tests with fake Cinemo functions: raw/descriptor-chain cookie parsing, zero/multiple callbacks, malformed geometry, slow/failed synchronous `Write`, flush, stale generation and FIFO bounds. Run the existing APAC tests unchanged. | none | no |
+| 3 | Integrate the wrapper behind a disabled gate and keep `AUDIO_SPATIAL=0`; verify ordinary CarPlay and existing APAC host/bench regressions. A separate-process Cinemo probe is not the relevant coexistence test because it has a different registry. | low | no |
+| 4 | With stock local playback stopped, run one bounded in-process create/decode/flush/release canary on the existing APAP thread. Require 48 kHz/2ch/S16, sane callback/frame counts and no process fault. | low-medium; reversible hook generation | no |
+| 5 | Before and after that decoder lifetime, replay stock local audio. This checks the only remaining runtime concern despite the absence of shared codec/OMX state. | low-medium | no |
 | 6 | In a fresh stationary session advertise index 23 only. Play ordinary material; require clean auth/AU/decode/PCM/ring counters, audible L/R, zero-filled extra slots, and correct pause/seek/flush/cookie replacement. | medium, one LD_PRELOAD generation; rollback is the known bundle/env switch | no |
 | 7 | In a separate session advertise `[65]` and replay the proven Atmos case. APAC hashes, channel order, feedback and six-channel counters must remain unchanged. | low-medium regression test | no |
 | 8 | Only after both decoders pass separately, repeat `[65,23]` to document selection. Current evidence predicts 23 for the whole session; success here means universal stereo, not automatic spatial switching. | medium | no |
@@ -395,15 +413,18 @@ first Cinemo coexistence experiment with a drive.
 | index 23 is AAC-LC/48000/stereo and is selected by the tested phone | high/measured | iOS enumeration plus vehicle SETUP/APAP scale |
 | index 23 removes the need for 44.1-to-48 resampling | high | selected 48000 format and fixed 48 kHz HU endpoint |
 | APAP itself copies codec bytes without adding ADTS/LATM | high/direct | iOS encode/decode media callbacks |
-| payload is one raw AAC-LC AU per APAP media item | high/static, not yet live-proven | iOS byte copy + donor Write boundary + target `AUDIO_ES` raw path |
+| payload is one raw AAC-LC AU per APAP media item | high/measured | 601 authenticated AUs; ADTS wrapping without stripping decodes the full corpus |
 | 39-byte index-23 cookie differs from APAC cookie | high/measured | distinct live length and ID; APAC cookies are `dapa` atom chains |
-| 39-byte cookie is a full `esds` wrapper | medium/inferred | exact characteristic length; bytes have not been retained |
+| 39-byte cookie is an MPEG-4 ES/DecoderConfig/DecSpecificInfo/SL descriptor chain | high/measured | retained bytes and parsed nested tags/long-form lengths |
 | Cinemo `header_data` must be raw ASC | high/direct | target bit parser begins at header bit zero |
-| index-23 ASC is `11 90` | high for standard AAC-LC geometry; capture still gates production | direct ISO field calculation and target parser |
+| index-23 ASC is `11 90` | high/measured | retained tag-5 payload plus successful standard decode at 48000 Hz stereo |
 | separate codec instances are structurally supported | high/direct | fresh SDK wrapper and fresh AAC object per factory call |
-| concurrent use cannot disturb stock Cinemo/OMX | unknown until runtime | global registry and `libOmxCore` remain shared |
+| one receiver-thread instance is structurally safe beside stock Cinemo state | high/direct | no stock codec factory user; locked registry; fresh objects; synchronous callback |
+| AAC route shares an OMX component with stock playback | refuted | no `OMX_*` imports/relocations or dynamic symbol lookup |
+| real-time CPU margin/vendor runtime behavior | unmeasured | bounded stationary in-process canary |
 | `[65,23]` switches codec per track | refuted | vehicle selected 23 once for the session |
 
-The only discovery item that should precede coding is the exact index-23 capture: framing and the
-39-byte cookie bytes. Everything after that is implementation and bounded validation, not another
-firmware-wide search.
+No discovery item remains before coding. The framing, cookie, ABI and ownership/thread contract are
+all closed. Everything after this point is implementation and bounded validation, not another
+firmware-wide search. The detailed concurrency evidence and FDK rollback boundary are in
+[`CINEMO_AAC_THREAD_SAFETY_AUDIT.md`](CINEMO_AAC_THREAD_SAFETY_AUDIT.md).

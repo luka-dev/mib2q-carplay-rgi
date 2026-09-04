@@ -1458,10 +1458,19 @@ a separate 39-byte object. Index 22/44100 is only a fallback, so the production
 path needs no resampler.
 
 Static analysis of the actual MHI2Q Cinemo SDK/plugin, iOS APAP producer and a
-working ARMv7 donor recovered the exact ABI and lifecycle. The one remaining
-discovery gate is a short stationary index-23 capture containing the authenticated
-APAP records and exact cookie bytes. That capture must prove the AU framing and
-extract the raw ASC before implementation. No drive is required.
+working ARMv7 donor recovered the exact ABI and lifecycle. The stationary capture
+is now complete: 601 APAP media items are 601 raw AAC-LC AUs, the 39-byte MPEG-4
+descriptor chain contains ASC `11 90`, and adding ADTS headers without changing AU
+payloads yields exactly `601 * 1024` frames of standard-decoded 48 kHz stereo PCM.
+
+The final Cinemo concurrency risk is also closed statically. `dio_manager` has no
+stock public audio-codec factory user; the SDK/AAC/PCM objects are private per
+request; the shared class registry is mutex-protected/reference-counted; AAC makes
+no OMX call; and its application callback is synchronous on the caller's stack.
+Create one decoder lazily after stock plugin configuration, own every call on the
+existing APAP receiver thread, and never call Cinemo from the preload constructor
+or ELF destructor. FDK-AAC remains an isolated rollback only if a stationary
+runtime canary reveals a real vendor/CPU problem.
 
 Important policy limit: `[65,23]` selected 23 for the whole session, not per
 track. Retaining both decoder dispatches is correct engineering, but it does not
@@ -1470,5 +1479,9 @@ make iOS alternate automatically between APAC spatial and AAC stereo.
 Continue from [`AAC_BUFFERED_PATH_PLAN.md`](AAC_BUFFERED_PATH_PLAN.md), which
 contains target hashes, function addresses, exact `CinemoMediaType` fields,
 `Write(..., 1, 0, 1)`, callback/thread restrictions, cookie parsing, the optional
-index-22 Speex fallback and risk-ordered tests. This analysis changed no hook or
-deployed binary. Safe startup remains `AUDIO_SPATIAL=0`.
+index-22 Speex fallback and risk-ordered tests. The complete coexistence proof is
+in [`CINEMO_AAC_THREAD_SAFETY_AUDIT.md`](CINEMO_AAC_THREAD_SAFETY_AUDIT.md), and
+the retained corpus is documented in
+[`captures/aac_route_20260903/README.md`](../captures/aac_route_20260903/README.md).
+This analysis changed no hook or deployed binary. Safe startup remains
+`AUDIO_SPATIAL=0`.

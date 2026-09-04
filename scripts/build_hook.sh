@@ -94,7 +94,7 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
         framework/airplay_seams.c \
         routeguidance/rgd_tlv.c routeguidance/rgd_hook.c coverart/coverart_hook.c \
         altscreen/altscreen_av.c altscreen/altscreen_hook.c audio/spatial_downmix.c \
-        audio/apap_crypto.c audio/apac_codec_loader.c audio/audio_hook.c main.c"
+        audio/apap_crypto.c audio/apac_codec_loader.c audio/aac_bridge.c audio/audio_hook.c main.c"
   $CC -shared -fPIC -O2 -std=gnu99 -fdata-sections -ffunction-sections '"$CFLAGS_EXTRA"' \
       -I. -I/src/apac_decoder/include $SRCS \
       -o /src/build/libcarplay_hook.so -Wl,--gc-sections -lz -lsocket -lm

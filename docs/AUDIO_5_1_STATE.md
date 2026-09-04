@@ -656,11 +656,23 @@ The working MH2p adapter proves one AAC access unit per `Write` call with traili
 arguments `(1, pts=0, 1)`. MH2p is an ABI oracle only; the implementation target
 and all library hashes in the plan are MHI2Q.
 
-Two facts deliberately remain separate. APAP copies the sender's compressed
-sample bytes verbatim and the target decoder's elementary-stream path does not
-add framing, which strongly indicates one raw AAC AU per APAP media item. The
-exact index-23 APAP bytes and 39-byte cookie were not retained, so a short
-stationary capture must still prove raw/ADTS/LOAS and extract the ASC before code.
+The subsequent vehicle capture closes the framing boundary directly. It retained
+601 raw AUs (376..1322 bytes), plus the complete 39-byte MPEG-4 descriptor chain.
+Tag 5 contains ASC `11 90`; adding ADTS headers without stripping or changing an
+AU byte produces 12.821333 seconds and exactly `601 * 1024` frames of standard-
+decoded 48 kHz stereo PCM. The inline APAP TLVs repeat the format index, cookie ID
+and complete cookie with every media item, so track configuration does not depend
+on SETMAGICCOOKIE ordering.
+
+The remaining Cinemo coexistence concern is also closed statically. `dio_manager`
+does not import `CinemoCreateAudioCodec`; it shares only stock Config/Metapool/iAP
+state. The SDK creates a fresh wrapper, AAC decoder and PCM output object, while
+the shared class/plugin registry is mutex-protected and reference-counted. The AAC
+plugin has no OMX imports or relocations despite its nominal dependency, and the
+complete AAC-to-application callback chain is synchronous on the calling thread.
+One decoder can therefore be owned by the existing APAP receiver thread after
+stock initialization; no new thread or callback wait is required. Real-time CPU
+margin remains a bounded stationary canary, not a static discovery question.
 
 The phone also falsified the earlier per-track-switching assumption. Advertising
 `[65,23]` selected 23 once for the whole session; an Atmos item did not switch
@@ -671,8 +683,11 @@ requires a separately proved renegotiation mechanism.
 
 The exact framing/cookie confidence ledger, C ABI, callback/thread restrictions,
 index-22 resampler fallback and ordered risk gates are in
-[`AAC_BUFFERED_PATH_PLAN.md`](AAC_BUFFERED_PATH_PLAN.md). This pass changed no
-hook, firmware or deployed binary. The safe default remains `AUDIO_SPATIAL=0`.
+[`AAC_BUFFERED_PATH_PLAN.md`](AAC_BUFFERED_PATH_PLAN.md). The Cinemo object,
+registry, callback and OMX proof is in
+[`CINEMO_AAC_THREAD_SAFETY_AUDIT.md`](CINEMO_AAC_THREAD_SAFETY_AUDIT.md). This
+audit changed no hook, firmware or deployed binary. The safe default remains
+`AUDIO_SPATIAL=0`.
 
 ---
 

@@ -1165,7 +1165,16 @@ static void spa103_render_start(int64_t formatIndex, int haveKey)
         spa103_render.codec->destroy(spa103_render.decoder);
         spa103_render.decoder = 0;
     }
-    spa103_render.codec = spa_apac_runtime_load(&codecPath);
+    /* Two decoders, chosen by the negotiated index.  APAC comes from the optional library that
+     * is dlopen'd; AAC-LC is compiled in, because libNmeSDK is already in dio_manager's
+     * DT_NEEDED and exports every Cinemo entry point by name. */
+    if (formatIndex == SPA_AAC_LC_44K_STEREO || formatIndex == SPA_AAC_LC_48K_STEREO) {
+        extern const spa_apac_codec_api_t *spa_aac_codec_api(void);
+        spa103_render.codec = spa_aac_codec_api();
+        codecPath = "built-in (Cinemo AAC-LC)";
+    } else {
+        spa103_render.codec = spa_apac_runtime_load(&codecPath);
+    }
     free(spa103_render.ring);
     spa103_render.ring = (int16_t *)malloc((size_t)spa103_ring_frames() *
                                            outputChannels * sizeof(int16_t));
@@ -1208,15 +1217,9 @@ static void spa103_render_start(int64_t formatIndex, int haveKey)
 
     if (!spa103_render.ring)
         state = SPA_103_RENDER_NO_MEMORY;
-    else if (formatIndex == SPA_AAC_LC_44K_STEREO ||
-             formatIndex == SPA_AAC_LC_48K_STEREO) {
-        /* No AAC decoder yet.  Let one packet through far enough to be authenticated and
-         * opened, so its framing can be reported -- ADTS starts 0xFF 0xF?, a raw access unit
-         * does not -- then stop.  Nothing is decoded and nothing reaches the sink. */
-        spa103_render.probeFraming = 1;
-        state = SPA_103_RENDER_WAITING;
-    }
-    else if (formatIndex != SPA_APAC_48K_STEREO &&
+    else if (formatIndex != SPA_AAC_LC_44K_STEREO &&
+             formatIndex != SPA_AAC_LC_48K_STEREO &&
+             formatIndex != SPA_APAC_48K_STEREO &&
              formatIndex != SPA_APAC_48K_5_1 &&
              formatIndex != SPA_APAC_48K_5_1_2)
         state = SPA_103_RENDER_UNSUPPORTED_FORMAT;
