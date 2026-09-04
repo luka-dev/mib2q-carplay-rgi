@@ -153,9 +153,11 @@ With `AUDIO_SPATIAL=1` the phone skips ordinary tracks and plays only natively-A
 is not declining to upmix: advertising `audioOutputFormatsExtended:[65]` leaves a non-spatial
 item with no usable stereo representation. There is no observed fallback to realtime type 100.
 
-A later vehicle test corrects the earlier per-track interpretation: the phone selected one
-buffered format for the whole session. With `[65,23]` it selected 23 for everything and did not
-return to APAC 65 for an Atmos item.
+An early `[65,23]` test selected 23 initially and did not visibly return to APAC 65 for the item
+called Atmos. A later iOS static pass shows that this is not a session-wide protocol rule: the
+active buffered engine has a transport-format-change path and its selector chooses 65 when the
+source ASBD actually has six channels. That old test did not log the source ASBD or packet field 2,
+so it remains evidence about that playback, not proof that switching is impossible.
 
 Four alternative indices were tried on the car, and the results are worth keeping because
 several of them look right on paper:
@@ -190,9 +192,10 @@ converted anything. The spatial rendering heard on the phone itself is a local p
 and is not applied before transmission.
 
 So there is no configuration under which iOS delivers an ordinary track as APAC 5.1. Non-spatial
-content needs a stereo codec, which makes an AAC-LC decoder necessary. It does not solve automatic
-mode selection: the measured phone chose index 23 once for the session, so `[65,23]` currently
-means buffered stereo for that session, not per-track spatial switching.
+content needs a stereo codec, which makes an AAC-LC decoder necessary. Dynamic APAC/AAC selection
+is possible inside the same buffered session, but only when iOS presents a changed source ASBD.
+The exact selector and receiver state machine are documented in
+[`DYNAMIC_BUFFERED_CODEC_SWITCH.md`](DYNAMIC_BUFFERED_CODEC_SWITCH.md).
 
 Exact MHI2Q framing evidence, Cinemo ABI, cookie parser boundary, threading rules and the ordered
 no-drive validation plan are recorded in

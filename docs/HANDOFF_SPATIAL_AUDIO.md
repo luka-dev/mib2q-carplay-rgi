@@ -1472,9 +1472,15 @@ existing APAP receiver thread, and never call Cinemo from the preload constructo
 or ELF destructor. FDK-AAC remains an isolated rollback only if a stationary
 runtime canary reveals a real vendor/CPU problem.
 
-Important policy limit: `[65,23]` selected 23 for the whole session, not per
-track. Retaining both decoder dispatches is correct engineering, but it does not
-make iOS alternate automatically between APAC spatial and AAC stereo.
+The earlier `[65,23]` run selected 23 initially and did not visibly return to 65
+for the item called Atmos. Do not promote that observation to a session-wide
+protocol rule. iOS 27 has an explicit active buffered-format change path, and its
+selector chooses 65 when the current source ASBD has six channels. The APAP packet
+then carries its own index and complete cookie. Our receiver now follows those
+packet fields and rebuilds APAC/AAC in place; the remaining proof is one stationary
+Atmos -> stereo -> Atmos run with boundary logs. Full addresses and the corrected
+decoder-ownership order are in
+[`DYNAMIC_BUFFERED_CODEC_SWITCH.md`](DYNAMIC_BUFFERED_CODEC_SWITCH.md).
 
 Continue from [`AAC_BUFFERED_PATH_PLAN.md`](AAC_BUFFERED_PATH_PLAN.md), which
 contains target hashes, function addresses, exact `CinemoMediaType` fields,

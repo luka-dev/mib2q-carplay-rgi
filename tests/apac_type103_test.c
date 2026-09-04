@@ -57,6 +57,8 @@ static const unsigned char kTestKey[SPA_APAP_KEY_SIZE] = {
 
 static unsigned char *g_blob;
 static size_t g_blobBytes;
+static const unsigned char *g_fixtureCookie;
+static size_t g_fixtureCookieBytes;
 
 static uint32_t rd32(size_t at)
 {
@@ -91,7 +93,7 @@ static size_t seal_frame(unsigned char *out, uint32_t sequence, int variant,
     unsigned char nonce[SPA_APAP_NONCE_SIZE];
     unsigned char polyKey[64];
     unsigned char zeros[64];
-    unsigned char mac[512];
+    unsigned char mac[MAX_FRAME];
     unsigned char *body = out + 4 + SPA_APAP_HEADER_SIZE;
     const unsigned char *aad;
     size_t aadLength, macAt = 0, pad;
@@ -134,20 +136,28 @@ static size_t seal_frame(unsigned char *out, uint32_t sequence, int variant,
 }
 
 /* The ULEB128 TLV prefix an extension packet carries in front of its audio. */
-static size_t build_extension(unsigned char *out, uint64_t formatIndex, uint64_t cookieId,
+static size_t build_extension(unsigned char *out, uint8_t formatIndex, uint64_t cookieId,
+                              const unsigned char *cookie, size_t cookieLength,
                               const unsigned char *audio, size_t audioLength)
 {
     size_t at = 0;
     int i;
 
-    out[at++] = SPA_APAP_TLV_AUDIO_FORMAT_INDEX;
-    out[at++] = 2;
-    out[at++] = (unsigned char)(formatIndex >> 8);
-    out[at++] = (unsigned char)formatIndex;
+    /* Exact vehicle shape: field 2, one-byte extended-format index. */
+    out[at++] = SPA_APAP_TLV_AUDIO_FORMAT_INDEX_ALT;
+    out[at++] = 1;
+    out[at++] = formatIndex;
 
     out[at++] = SPA_APAP_TLV_MAGIC_COOKIE_ID;
     out[at++] = 8;
     for (i = 0; i < 8; i++) out[at++] = (unsigned char)(cookieId >> (56 - 8 * i));
+
+    /* The same packet carries its decoder configuration.  The fixture cookie is small enough
+     * for a one-byte ULEB128 length, as were the APAC and AAC cookies captured on the car. */
+    assert(cookie && cookieLength && cookieLength < 0x80);
+    out[at++] = SPA_APAP_TLV_MAGIC_COOKIE;
+    out[at++] = (unsigned char)cookieLength;
+    memcpy(out + at, cookie, cookieLength); at += cookieLength;
 
     /* A field this path does not act on, present so the skip is exercised. */
     out[at++] = 11;                 /* soundcheck_three_words */
@@ -219,9 +229,12 @@ static void replay(spa_apac_decoder_t *decoder, size_t chunk, const char *what)
                         exit(1);
                     }
                     /* The TLV state has to survive the split, not just the parse. */
-                    assert(ext.hasFormatIndex && ext.formatIndex == 1024);
+                    assert(ext.hasFormatIndex && ext.formatIndex == 65);
                     assert(ext.hasMagicCookieId &&
                            ext.magicCookieId == 0x60100d08f9d19abbull);
+                    assert(ext.magicCookieLength == g_fixtureCookieBytes);
+                    assert(memcmp(ext.magicCookie, g_fixtureCookie,
+                                  g_fixtureCookieBytes) == 0);
                 } else {
                     audio = plaintext;
                     audioLength = plainLength;
@@ -394,6 +407,8 @@ int main(int argc, char **argv)
     refFrameLength = rd32(16);
     cookieBytes    = rd32(20);
     cookie = g_blob + 24;
+    g_fixtureCookie = cookie;
+    g_fixtureCookieBytes = cookieBytes;
     assert(refChannels == CHANNELS && refFrameLength == FRAME_SAMPLES);
     assert(numPackets && numPackets <= MAX_PACKETS);
 
@@ -425,7 +440,8 @@ int main(int argc, char **argv)
                 memcpy(plaintext, g_blob + at, packetBytes);
                 plainLength = packetBytes;
             } else {
-                plainLength = build_extension(plaintext, 1024, 0x60100d08f9d19abbull,
+                plainLength = build_extension(plaintext, 65, 0x60100d08f9d19abbull,
+                                              cookie, cookieBytes,
                                               g_blob + at, packetBytes);
             }
             g_streamBytes += seal_frame(g_stream + g_streamBytes, 100 + i,

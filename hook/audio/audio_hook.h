@@ -63,8 +63,11 @@
  *      AAC-LC/44.1 compatibility bit required by iOS's buffered-engine repackager; advertising the
  *      broader 0x1440800 transport-family mask makes wired iOS retain both PCM and AAC families and
  *      reject the whole CarPlay audio-format object before either stream is set up. The extended
- *      canonical policy selects 65 (APAC/5.1) or 66 (APAC/5.1.2). Legacy debug variables retain
- *      the older AAC/DD+ probe indices only when no AUDIO_SPATIAL controls are present.
+ *      canonical policy selects 65 (APAC/5.1) or 66 (APAC/5.1.2). An explicit secondary index 23
+ *      adds AAC-LC/48k/stereo; iOS may switch between 65 and 23 inside the same buffered session,
+ *      and the receiver follows the index/cookie carried by each APAP boundary packet. Legacy
+ *      debug variables retain the older AAC/DD+ probe indices only when no AUDIO_SPATIAL controls
+ *      are present.
  *   2. the control-SETUP response's `enabledFeatures` gains the token "mainBuffered", without which
  *      AirPlaySender never sets SupportsBufferedAudio and never opens `bufferStream`.
  * The hook supplies SETUP, control methods and APAP receive/decrypt, then loads the optional APAC

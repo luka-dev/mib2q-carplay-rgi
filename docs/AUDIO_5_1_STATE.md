@@ -674,12 +674,17 @@ One decoder can therefore be owned by the existing APAP receiver thread after
 stock initialization; no new thread or callback wait is required. Real-time CPU
 margin remains a bounded stationary canary, not a static discovery question.
 
-The phone also falsified the earlier per-track-switching assumption. Advertising
-`[65,23]` selected 23 once for the whole session; an Atmos item did not switch
-back to APAC 65. The decoder should still retain separate APAC and AAC dispatches,
-but current honest operating modes are type 100 stereo, type 103 `[65]` spatial
-only, and—after AAC decode—type 103 `[23]` buffered stereo. Automatic switching
-requires a separately proved renegotiation mechanism.
+An early `[65,23]` run selected 23 initially and did not visibly return to 65 for
+the item called Atmos. Static analysis has now found the missing renegotiation
+mechanism: iOS's active buffered engine reselects a transport when the source ASBD
+changes, selects index 65 for six channels, and schedules the change inside the
+existing SBAR/APAP hose. The old run did not record the source ASBD or the packet's
+field-2 index, so it cannot prove that the item entered this path as multichannel.
+
+The receiver now dispatches on each packet's format index and inline cookie. One
+stationary Atmos -> stereo -> Atmos run remains to show that Apple Music exposes
+the chosen items as six-channel/stereo at this boundary. See
+[`DYNAMIC_BUFFERED_CODEC_SWITCH.md`](DYNAMIC_BUFFERED_CODEC_SWITCH.md).
 
 The exact framing/cookie confidence ledger, C ABI, callback/thread restrictions,
 index-22 resampler fallback and ordered risk gates are in
@@ -709,3 +714,4 @@ audit changed no hook, firmware or deployed binary. The safe default remains
 * `docs/AFE_TDM_MOST_SLOT_AUDIT.md` — byte-unit slot offsets, LPASS packing, grouped frame layout, and the independent SAD/ASAD declaration.
 * `docs/APAC_FORMAT_INDEX_AUDIT.md` — complete iOS 27 format-index enumeration, APAC stereo index 64, legacy-mask semantics, and buffered/realtime selection boundary.
 * `docs/AAC_BUFFERED_PATH_PLAN.md` — MHI2Q AAC-LC framing, Cinemo ABI, cookie contract, thread model and safe implementation plan.
+* `docs/DYNAMIC_BUFFERED_CODEC_SWITCH.md` — active iOS format reselection, APAP boundary contract and receiver switch state machine.

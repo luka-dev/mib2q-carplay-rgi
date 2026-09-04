@@ -1104,6 +1104,8 @@ typedef struct {
     uint64_t tlvFailed;
     uint64_t decodeFailed;
     uint64_t flushDiscarded;
+    uint64_t formatAnnouncements;
+    uint64_t formatSwitches;
     int playing;
     int primed;                      /* ring reached the start cushion at least once */
     int flushPending;
@@ -1194,6 +1196,8 @@ static void spa103_render_start(int64_t formatIndex, int haveKey)
     spa103_render.tlvFailed = 0;
     spa103_render.decodeFailed = 0;
     spa103_render.flushDiscarded = 0;
+    spa103_render.formatAnnouncements = 0;
+    spa103_render.formatSwitches = 0;
     spa103_render.playing = 1;
     spa103_render.flushPending = 0;
     spa103_render.haveFlushUntilSequence = 0;
@@ -1246,7 +1250,13 @@ static void spa103_render_start(int64_t formatIndex, int haveKey)
 
 static void spa103_render_stop(void)
 {
+    uint64_t formatAnnouncements, formatSwitches;
+    int64_t finalFormatIndex;
+
     pthread_mutex_lock(&spa103_render.lock);
+    formatAnnouncements = spa103_render.formatAnnouncements;
+    formatSwitches = spa103_render.formatSwitches;
+    finalFormatIndex = spa103_render.formatIndex;
     if (spa103_render.decoder && spa103_render.codec) {
         spa103_render.codec->destroy(spa103_render.decoder);
         spa103_render.decoder = 0;
@@ -1260,6 +1270,11 @@ static void spa103_render_stop(void)
     spa103_render.flushPending = 0;
     spa103_render.state = SPA_103_RENDER_IDLE;
     pthread_mutex_unlock(&spa103_render.lock);
+    LOG_INFO(LOG_MODULE,
+             "buffer103: render stopped finalFormatIndex=%lld formatAnnouncements=%llu "
+             "formatSwitches=%llu",
+             (long long)finalFormatIndex, (unsigned long long)formatAnnouncements,
+             (unsigned long long)formatSwitches);
 }
 
 /* Signed modular comparison on the wire's wrapping counters. */
@@ -1591,6 +1606,7 @@ static void spa103_render_frame(const uint8_t *packet, size_t length)
      * than at SETUP is not laziness: SETMAGICCOOKIE arrives asynchronously on the RTSP control
      * connection and may land after the first APAP frame. */
     pthread_mutex_lock(&spa103_render.lock);
+    if (ext.hasFormatIndex) spa103_render.formatAnnouncements++;
     if (!spa103_render.decoder ||
         (ext.hasFormatIndex && (int64_t)ext.formatIndex != spa103_render.formatIndex) ||
         (ext.hasMagicCookieId && spa103_render.haveCookieId &&
@@ -1600,6 +1616,7 @@ static void spa103_render_frame(const uint8_t *packet, size_t length)
         size_t cookieSize = 0;
         spa_apac_stream_info_t info;
         uint32_t channels = 0, frameLength = 0, sampleRate = 0;
+        const char *codecName;
 
         pthread_mutex_unlock(&spa103_render.lock);
         /* Every packet carries the cookie for the format it is in, so a track that changes
@@ -1620,11 +1637,20 @@ static void spa103_render_frame(const uint8_t *packet, size_t length)
         pthread_mutex_lock(&spa103_render.lock);
         if (ext.hasFormatIndex && (int64_t)ext.formatIndex != spa103_render.formatIndex) {
             const spa_apac_codec_api_t *next = spa103_codec_for_index((int64_t)ext.formatIndex);
+            const spa_apac_codec_api_t *previous = spa103_render.codec;
             LOG_WARN(LOG_MODULE,
                      "buffer103: stream switched format index %lld -> %llu; %s",
                      (long long)spa103_render.formatIndex,
                      (unsigned long long)ext.formatIndex,
                      next ? "rebuilding the decoder" : "no decoder for it, muting");
+            /* The decoder handle belongs to the API which created it.  Destroy it before
+             * publishing the next API: AAC and APAC intentionally share one opaque interface,
+             * but their handle layouts and destructors are unrelated. */
+            if (spa103_render.decoder && previous) {
+                previous->destroy(spa103_render.decoder);
+                spa103_render.decoder = 0;
+            }
+            spa103_render.formatSwitches++;
             spa103_render.formatIndex = (int64_t)ext.formatIndex;
             spa103_render.codec = next;
         }
@@ -1639,6 +1665,7 @@ static void spa103_render_frame(const uint8_t *packet, size_t length)
         }
         rc = spa103_render.codec->create(cookie, cookieSize, &spa103_render.decoder,
                                          &channels, &frameLength, &sampleRate);
+        codecName = spa103_render.codec == spa103_render.apacCodec ? "APAC" : "AAC-LC";
         spa103_render.cookieGeneration = spa103_receiver.cookieGeneration;
         free(cookie);
         memset(&info, 0, sizeof(info));
@@ -1670,9 +1697,10 @@ static void spa103_render_frame(const uint8_t *packet, size_t length)
                 spa103_render.state = SPA_103_RENDER_COOKIE_FAILED;
             pthread_mutex_unlock(&spa103_render.lock);
             LOG_ERROR(LOG_MODULE,
-                      "buffer103: APAC decoder setup rejected status=%d cookie=%u bytes "
+                      "buffer103: %s decoder setup rejected status=%d cookie=%u bytes "
                       "index=%lld geometry=%uHz/%uch/%u layout=%#x; capture continues",
-                      rc, (unsigned)cookieSize, (long long)spa103_render.formatIndex,
+                      codecName, rc, (unsigned)cookieSize,
+                      (long long)spa103_render.formatIndex,
                       (unsigned)sampleRate, (unsigned)channels, (unsigned)frameLength,
                       (unsigned)info.channelLayoutTag);
             return;
@@ -1686,7 +1714,9 @@ static void spa103_render_frame(const uint8_t *packet, size_t length)
         spa103_render.channelLayoutTag = info.channelLayoutTag;
         spa103_render.state = SPA_103_RENDER_RUNNING;
         LOG_INFO(LOG_MODULE,
-                 "buffer103: APAC decoder up id=%lld %u Hz %u ch %u frames/packet%s",
+                 "buffer103: %s decoder up index=%lld id=%lld %u Hz %u ch "
+                 "%u frames/packet%s",
+                 codecName, (long long)spa103_render.formatIndex,
                  (long long)spa103_render.cookieId, (unsigned)sampleRate,
                  (unsigned)channels, (unsigned)frameLength,
                  channels < spa103_render.outputChannels ? " -- widened to the sink width" : "");

@@ -57,8 +57,9 @@ enum {
 };
 
 /* What a decoded packet's TLV prefix said.  Fields absent from the packet keep
- * their `has*` flag clear; a stream sends the format index and cookie id once
- * and then relies on the receiver remembering them. */
+ * their `has*` flag clear.  The measured AAC stream repeated index/id/cookie;
+ * retaining explicit presence flags also supports senders which repeat them
+ * only at a format boundary and rely on receiver state between boundaries. */
 typedef struct {
     int hasFormatIndex;
     int hasMagicCookieId;

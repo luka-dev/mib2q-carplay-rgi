@@ -88,6 +88,7 @@ the Java stack on a live HU is unsafe.
 - [`docs/AUDIO_5_1_STATE.md`](docs/AUDIO_5_1_STATE.md) — current audio evidence and closed hypotheses.
 - [`docs/AAC_BUFFERED_PATH_PLAN.md`](docs/AAC_BUFFERED_PATH_PLAN.md) — measured index-23 framing/cookie, exact Cinemo ABI and the ordinary-content AAC implementation plan.
 - [`docs/CINEMO_AAC_THREAD_SAFETY_AUDIT.md`](docs/CINEMO_AAC_THREAD_SAFETY_AUDIT.md) — MHI2Q codec-object, class-registry, callback and OMX coexistence proof; FDK-AAC is rollback only.
+- [`docs/DYNAMIC_BUFFERED_CODEC_SWITCH.md`](docs/DYNAMIC_BUFFERED_CODEC_SWITCH.md) — iOS in-session APAC/AAC selection, packet-boundary receiver state machine and decisive vehicle test.
 - [`deploy/deva-ctrl-qc/BUILD_CHAIN.md`](deploy/deva-ctrl-qc/BUILD_CHAIN.md) — vehicle-confirmed deva fix and exact deployable build chain.
 - [`docs/ROUTER_INPUT_WIDTH_AUDIT.md`](docs/ROUTER_INPUT_WIDTH_AUDIT.md) — historical root cause of the now-fixed MPL5 render-width defect.
 - [`docs/MC_SELECTION_AUDIT.md`](docs/MC_SELECTION_AUDIT.md) — connection-162 MC selection and its `Sound_System` coding source.

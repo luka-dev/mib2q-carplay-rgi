@@ -4,7 +4,8 @@ Date: 2026-09-03
 
 Scope: MHI2Q MU1316, CarPlay buffered stream type 103, AAC-LC indices 23 and 22
 
-Status: live framing/cookie capture and static ABI/thread audit complete; decoder implementation pending
+Status: live framing/cookie capture and static ABI/thread audit complete; decoder and packet-driven
+APAC/AAC dispatch implemented; stationary transition test pending
 
 ## Result
 
@@ -34,19 +35,16 @@ guessing:
   shared plugin registry, no OMX calls and a fully synchronous callback chain. One decoder may be
   owned by the existing APAP receiver thread; no extra thread or callback wait is needed.
 
-One policy limitation is now measured, not hypothetical: iOS chooses the buffered format **once for
-the session**. Advertising `[65,23]` made it choose 23 for all content; it did not switch back to APAC
-65 for an Atmos item. The decoder implementation must retain both APAC and AAC dispatches, but that
-does not by itself create automatic per-track spatial/stereo switching. Until a separate
-renegotiation mechanism is proved, the honest modes remain:
+The earlier `[65,23]` run selected 23 initially and did not visibly return to 65 for the item called
+Atmos. A later static pass changes the interpretation: iOS has an explicit in-session buffered
+transport-format-change path, and its selector chooses index 65 when the source ASBD has six
+channels. The old run did not log that source ASBD or the packet's one-byte field-2 index, so it
+cannot distinguish an item presented to AirPlay as stereo from a receiver which missed the change.
 
-* type 100 / `AUDIO_SPATIAL=0`: universal stereo, current safe default;
-* type 103 / `[65]`: discrete APAC 5.1 for spatial material, ordinary items skipped;
-* type 103 / `[23]` (after the decoder exists): expected universal buffered stereo, including an
-  expected stereo rendering of an Atmos item, but not discrete spatial playback. Selection is
-  measured; audible decode is not yet measured.
-
-This limitation supersedes the earlier claim that the format was selected per track.
+The decoder now retains both APAC and AAC dispatches and treats each APAP packet's format index and
+inline cookie as authoritative. The complete mechanism, exact iOS addresses, receiver state machine
+and one decisive stationary test are in
+[`DYNAMIC_BUFFERED_CODEC_SWITCH.md`](DYNAMIC_BUFFERED_CODEC_SWITCH.md).
 
 ## Exact target and provenance
 
@@ -385,8 +383,9 @@ The first coding pass should follow this order:
    duration, bad callback formats, stale-generation callbacks and FIFO overruns. Do not retain or
    log playable PCM in a production build.
 
-This code makes both decoders coexist in the receiver. It does not claim that iOS will choose both
-within one session; that is a separate, currently negative vehicle measurement.
+This code makes both decoders coexist in the receiver. Static analysis now proves that iOS can
+choose both within one session when the source ASBD changes channel count; whether the chosen Apple
+Music items expose that change is the remaining vehicle measurement.
 
 ## 7. Ordered validation and risk
 
@@ -400,7 +399,7 @@ within one session; that is a separate, currently negative vehicle measurement.
 | 5 | Before and after that decoder lifetime, replay stock local audio. This checks the only remaining runtime concern despite the absence of shared codec/OMX state. | low-medium | no |
 | 6 | In a fresh stationary session advertise index 23 only. Play ordinary material; require clean auth/AU/decode/PCM/ring counters, audible L/R, zero-filled extra slots, and correct pause/seek/flush/cookie replacement. | medium, one LD_PRELOAD generation; rollback is the known bundle/env switch | no |
 | 7 | In a separate session advertise `[65]` and replay the proven Atmos case. APAC hashes, channel order, feedback and six-channel counters must remain unchanged. | low-medium regression test | no |
-| 8 | Only after both decoders pass separately, repeat `[65,23]` to document selection. Current evidence predicts 23 for the whole session; success here means universal stereo, not automatic spatial switching. | medium | no |
+| 8 | Only after both decoders pass separately, advertise `[65,23]` and play verified Atmos -> stereo -> Atmos. Require packet field 2 and the receiver log to alternate 65 -> 23 -> 65, with a matching decoder rebuild and clean counters. | medium | no |
 
 No decoder/framing/resampling gate requires a moving vehicle. A drive is optional only for final
 subjective acoustic acceptance after stationary counters and speaker tests pass. Do not combine the
@@ -422,9 +421,12 @@ first Cinemo coexistence experiment with a drive.
 | one receiver-thread instance is structurally safe beside stock Cinemo state | high/direct | no stock codec factory user; locked registry; fresh objects; synchronous callback |
 | AAC route shares an OMX component with stock playback | refuted | no `OMX_*` imports/relocations or dynamic symbol lookup |
 | real-time CPU margin/vendor runtime behavior | unmeasured | bounded stationary in-process canary |
-| `[65,23]` switches codec per track | refuted | vehicle selected 23 once for the session |
+| iOS can switch the buffered transport within one session | high/direct | active-engine transport-change branch plus timed SBAR receiver path |
+| the tested Music items will produce 65 -> 23 -> 65 | unmeasured | old run lacked source-ASBD and per-packet field-2 logs |
 
-No discovery item remains before coding. The framing, cookie, ABI and ownership/thread contract are
-all closed. Everything after this point is implementation and bounded validation, not another
-firmware-wide search. The detailed concurrency evidence and FDK rollback boundary are in
+No static discovery item remains. The framing, cookie, ABI, ownership/thread contract and dynamic
+sender mechanism are closed. Everything after this point is bounded validation, not another
+firmware-wide search. The dynamic state machine is in
+[`DYNAMIC_BUFFERED_CODEC_SWITCH.md`](DYNAMIC_BUFFERED_CODEC_SWITCH.md); the detailed concurrency
+evidence and FDK rollback boundary are in
 [`CINEMO_AAC_THREAD_SAFETY_AUDIT.md`](CINEMO_AAC_THREAD_SAFETY_AUDIT.md).

@@ -201,9 +201,11 @@ export AUDIO_SPATIAL=0
 export AUDIO_SPATIAL_ATMOS=0
 export AUDIO_SPATIAL_ATMOS_MODE=downmix
 export AUDIO_SPATIAL_CODEC_LIB="$H/libcarplay_apac.so"
-# Second advertised APAudioFormatIndex for the buffered stream.  22 = AAC-LC/44.1/stereo,
-# which the sender's own buffered set carries unconditionally and reaches for first, so a
-# non-spatial track has a format it can arrive in instead of being skipped.  Empty = off.
+# Second advertised APAudioFormatIndex for the buffered stream.  23 = AAC-LC/48k/stereo and
+# needs no resampler on MHI2Q.  With primary 65, iOS can change transport inside one type-103
+# session as the source ASBD changes between six-channel and stereo; each APAP boundary packet
+# announces the selected index and cookie.  Empty keeps the established single-format mode.
+# First stationary dual-codec test: set 23, never 22.
 export SPATIAL_103_EXTRA_INDEX=
 # --- the USB device stack must exist before dio starts ------------------------------
 #

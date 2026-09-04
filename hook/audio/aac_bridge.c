@@ -1,10 +1,12 @@
 /* aac_bridge.c — AAC-LC decoding for the buffered type-103 stream, via Cinemo.
  *
- * Why this exists.  iOS chooses one format per session for the buffered stream and never
- * upmixes stereo into the spatial one, so a receiver that advertises only APAC gets Atmos
- * tracks and nothing else -- the phone skips what it cannot deliver.  Advertising index 23
- * alongside 65 makes ordinary content arrive as AAC-LC at 48000 Hz, which needs no resampler
- * because every HU media endpoint is 48 kHz.  Full reasoning: docs/AAC_BUFFERED_PATH_PLAN.md.
+ * Why this exists.  iOS does not upmix stereo into the spatial format, so a receiver that
+ * advertises only APAC gets Atmos tracks and nothing else -- the phone skips what it cannot
+ * deliver.  Index 23 carries ordinary content as AAC-LC at 48000 Hz, which needs no resampler
+ * because every HU media endpoint is 48 kHz.  iOS has an in-session transport-format-change
+ * path; the APAP packet announces the selected index and cookie at each boundary, so this
+ * adapter can alternate with APAC without recreating the type-103 session.  Full reasoning:
+ * docs/DYNAMIC_BUFFERED_CODEC_SWITCH.md.
  *
  * It presents the same function table as the APAC port (spa_apac_codec_api_t) so the render
  * path holds one pointer and dispatches on the negotiated index, leaving the APAC branch
