@@ -143,3 +143,31 @@ the realtime type-100 stream only, and that is enough. Synthesising an entry for
 stream was the fallback plan and proved unnecessary.
 
 **Still open:** on connecting, the phone skips a few tracks before settling on one it plays.
+
+
+---
+
+## Why non-spatial tracks are skipped, and what each candidate did (2026-09-03)
+
+With `AUDIO_SPATIAL=1` the phone skips ordinary tracks and plays only natively-Atmos ones. It
+is not declining to upmix: advertising `audioOutputFormatsExtended:[65]` leaves a non-spatial
+item with no format it can arrive in, so the sender's per-item format choice fails and it moves
+on. The choice is made per track inside an already-selected type 103, and the researched sender
+code has no fallback to the realtime type 100.
+
+Three second indices were tried on the car, and the results are worth keeping because two of
+them look right on paper:
+
+| index | what it is | outcome |
+|---|---|---|
+| 22 | AAC-LC/44100/stereo | **selected** -- skipping stopped, the phone asked for 22 and the APAP header carried 0xAC44 (44100). Nothing decoded it, so playback ran silent. |
+| 64 | APAC/48000/stereo | **never selected** -- advertised as `[65,64]`, the phone still requested 65. iOS gates it behind `bufferedAPACStereo`, whose static default is false. |
+| 11 | PCM | not offered at all: `APAudioFormatGetBufferedPassthroughSupportedFormats` returns zero unless the device is an APM speaker, so bit 11 never reaches a CarPlay session. |
+
+So the negotiation half of the AAC route is proven -- the phone will send ordinary content as
+AAC-LC/44.1 over the buffered stream when index 22 is advertised. Playing it needs an AAC-LC
+decoder and 44.1 -> 48 resampling, since every HU media endpoint is 48 kHz only. The unit has
+Cinemo's `libNmeAudioAAC.so` and `dio_manager` already links `libNmeSDK.so`.
+
+Until that exists the honest states are: `AUDIO_SPATIAL=0` and everything plays in stereo, or
+`AUDIO_SPATIAL=1` with `[65]` and spatial becomes an Atmos-only mode.
