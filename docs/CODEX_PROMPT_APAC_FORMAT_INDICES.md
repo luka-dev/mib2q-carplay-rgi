@@ -1,62 +1,63 @@
-# Task: which audioOutputFormatsExtended index is APAC stereo?
+# Task: why does the phone skip stereo tracks instead of sending them on the realtime stream?
 
-## Where this comes from
+## The original question is already answered — from our own notes
 
-Discrete 5.1 CarPlay audio now works end to end: six channels reach the speakers, all
-counters clean. Two defects were fixed today and both were the same shape -- announcing
-something other than what is actually there. The SAD header declared two channels while six
-slots were sent (`docs/SAD_HEADER.md`), and the `updateFeedback` response was blanked, which
-removed the sender's clock reference and collapsed delivery to about one packet a second.
+The first version of this brief asked which extended index is APAC stereo. There is none.
+`docs/HANDOFF_SPATIAL_AUDIO.md` already records the enumeration iOS 27 uses, and every APAC
+index is multichannel:
 
-One symptom remains, and it is a third instance of the same shape. With `AUDIO_SPATIAL=1`
-the phone skips every stereo track and only plays natively-Atmos ones. The hook's own /info
-injection says why:
+    65 APAC/48000/5.1     67 APAC/48000/7.1      76 APAC/48000/5.1.4
+    66 APAC/48000/5.1.2   68 APAC/48000/7.1.4    77 APAC/48000/7.1.2
+                                                  92 APAC/48000/9.1.6
 
-    probe103: /info audioFormats += {type:103, audioType:media,
-                                     audioOutputFormats:0x400000,
-                                     audioOutputFormatsExtended:[65]}
+and it calls them "CarPlay spatial-master formats". So the buffered type-103 path is
+spatial-only by design, stereo is meant to travel on the realtime type-100 stream, and adding
+an index is not the fix.
 
-For the buffered type-103 media stream we advertise exactly one format, index 65 = APAC 5.1.
-A stereo track has no format it can be delivered in, so the phone skips it. It is not
-refusing to upmix; we left it nothing to use.
+## The symptom that remains
 
-## The question
+With `AUDIO_SPATIAL=1` the phone skips every stereo track on connect and only plays natively
+Atmos ones. It is not declining to upmix -- it appears to route all media to type 103, where
+a stereo track has no representable format, and gives up on it rather than falling back.
 
-**Which extended format index is APAC stereo (and, if they exist, other non-5.1 APAC
-variants), on the iOS side?**
+Our /info injection is:
 
-Known so far, from our own work: 65 = APAC 48 kHz 5.1, 66 = APAC 48 kHz 5.1.2. Those come
-from `docs/reference/AUDIO.md` and the format-index probing behind
-`hook/audio/audio_hook.c` (`SPA_APAC_48K_5_1`).
+    {type:103, audioType:"media", audioOutputFormats:0x400000,
+     audioOutputFormatsExtended:[65]}
 
-You have the iOS side available -- the dyld shared cache under `Refferences/ios27_dsc/`,
-which previous work used for AirPlay and CarKit RE. Answer from the enumeration itself
-rather than from inference:
+added alongside the existing entries, which already include the realtime stream. Our own notes
+flag the ambiguity: `audioType: "media"` appears on the realtime stream too, so both entries
+claim media and only the `bufferStream` key distinguishes the buffered one.
 
-1. **The full extended-format enumeration** as iOS defines it: index -> codec, sample rate,
-   channel layout. Name the symbol or table you read it from.
-2. **Which indices are APAC** and which of those are stereo or otherwise below 5.1.
-3. **What `audioOutputFormats` bits mean** beside the extended list -- we currently set
-   `0x400000` (bit 22) for this entry. Is the legacy bitmask expected to be consistent with
-   the extended list, and if so which bit pairs with each APAC index?
-4. **Whether advertising several extended indices at once is the normal shape**, or whether a
-   receiver is expected to publish one entry per format. If Apple's own receivers list
-   several, say how they order them.
+## What to determine, from the iOS side
 
-## Constraints and what would make this useful
+`Refferences/ios27_dsc/24A5418b__iPhone18,1` is the dyld shared cache; previous work read
+`APCarPlayAudioFormatsCreate` @0x25107B82C and `APAudioFormatIndexToAPAudioFormat` out of it.
 
-Static analysis only; do not modify anything. A wrong index here means the phone either
-refuses the stream or sends something the decoder cannot parse, and the unit is currently in
-a good state that took a long time to reach -- so state your confidence per index, and say
-plainly which parts are read from the enumeration and which are inferred.
+1. **How the sender chooses between a type-100 and a type-103 entry for a given track.** Is it
+   per-session, or re-evaluated per item? What happens when the item has no format representable
+   in the chosen stream's extended list?
+2. **Whether a fallback to type 100 exists at all**, and what the receiver must advertise for it
+   to be taken. Specifically: does the presence of a type-103 entry claiming `audioType: media`
+   suppress the realtime entry for media, and would a different `audioType` on the buffered entry
+   (or the `bufferStream` key alone) leave both usable?
+3. **What Apple's own receivers advertise** when they support both stereo and spatial -- one
+   entry or two, which `audioType` on each, and whether the legacy `audioOutputFormats` mask on
+   the buffered entry participates in the choice. Ours is `0x400000` = AAC-LC/44.1/stereo, a
+   compatibility value that must be nonzero; does the sender ever try to use it literally?
+4. If the skipping is instead the sender declining content it cannot render spatially -- i.e.
+   expected behaviour for a receiver that advertises a spatial buffered stream -- say so
+   plainly. That would mean the fix is on our side: advertise 103 only when we want
+   spatial-only playback, and treat `AUDIO_SPATIAL=1` as a mode rather than an enhancement.
 
-If the enumeration shows that the buffered type-103 path is inherently spatial-only and
-stereo content is expected to go via the realtime type-100 stream instead, that is an equally
-good answer: it would mean the fix is to keep the realtime path usable alongside 103 rather
-than to add an index.
+## Constraints
+
+Static analysis only. The unit is currently in a good state -- discrete 5.1 plays, all counters
+clean -- and it took a long time to get there, so separate what you read from what you infer and
+say which changes you would trust on a car.
 
 ## Deliverable
 
-The index numbers with their layouts, the matching legacy bits, and a recommendation for what
-`audioOutputFormatsExtended` and `audioOutputFormats` should contain for a receiver that wants
-both stereo and 5.1 over the buffered stream.
+What decides the stream for a given item, whether a stereo track can reach the realtime stream
+while a type-103 entry is advertised, and the smallest /info shape that lets both stereo and
+spatial play.
