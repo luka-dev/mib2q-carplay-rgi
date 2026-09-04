@@ -1100,6 +1100,7 @@ typedef struct {
     int16_t statsPrevious[SPA_103_RENDER_MAX_CHANNELS];
     int statsHavePrevious;
     uint32_t sampleRate;
+    unsigned decoderChannels;       /* what the cookie asked the decoder to produce */
     uint32_t sourceChannels;
     uint32_t outputChannels;
     uint32_t channelLayoutTag;
@@ -1521,14 +1522,22 @@ static void spa103_render_frame(const uint8_t *packet, size_t length)
         memset(&info, 0, sizeof(info));
         if (rc == SPA_APAC_OK)
             rc = spa103_render.codec->getInfo(spa103_render.decoder, &info);
-        if (rc != SPA_APAC_OK ||
-            frameLength != SPA_103_RENDER_FRAMES || sampleRate != SPA_SR ||
-            (spa103_render.formatIndex == SPA_APAC_48K_5_1 &&
-             (channels != SPA_PCM_5_1_CHANNELS ||
-              info.channelLayoutTag != 0x007c0006u)) ||
-            (spa103_render.formatIndex == SPA_APAC_48K_5_1_2 &&
-             (channels != SPA_PCM_5_1_2_CHANNELS ||
-              info.channelLayoutTag != 0x00c20008u))) {
+        /* A track that is not natively spatial arrives as APAC with a narrower layout -- the
+         * sender's own preferred list for the buffered path starts at stereo AAC-LC, so this is
+         * ordinary content, not an error.  Refusing it destroyed the decoder, so nothing played
+         * and the phone skipped the item; that is why only natively-Atmos tracks worked.  Take
+         * anything from mono up to our output width and widen it below. */
+        {
+            int narrower = channels >= 1 && channels < spa103_render.outputChannels;
+            if (rc != SPA_APAC_OK ||
+                frameLength != SPA_103_RENDER_FRAMES || sampleRate != SPA_SR ||
+                (!narrower &&
+                 ((spa103_render.formatIndex == SPA_APAC_48K_5_1 &&
+                   (channels != SPA_PCM_5_1_CHANNELS ||
+                    info.channelLayoutTag != 0x007c0006u)) ||
+                  (spa103_render.formatIndex == SPA_APAC_48K_5_1_2 &&
+                   (channels != SPA_PCM_5_1_2_CHANNELS ||
+                    info.channelLayoutTag != 0x00c20008u))))) {
             if (spa103_render.decoder) {
                 spa103_render.codec->destroy(spa103_render.decoder);
                 spa103_render.decoder = 0;
@@ -1545,7 +1554,9 @@ static void spa103_render_frame(const uint8_t *packet, size_t length)
                       (unsigned)sampleRate, (unsigned)channels, (unsigned)frameLength,
                       (unsigned)info.channelLayoutTag);
             return;
+            }
         }
+        spa103_render.decoderChannels = channels;
         spa103_render.cookieId = (int64_t)ext.magicCookieId;
         spa103_render.haveCookieId = ext.hasMagicCookieId;
         spa103_render.sampleRate = sampleRate;
@@ -1553,9 +1564,10 @@ static void spa103_render_frame(const uint8_t *packet, size_t length)
         spa103_render.channelLayoutTag = info.channelLayoutTag;
         spa103_render.state = SPA_103_RENDER_RUNNING;
         LOG_INFO(LOG_MODULE,
-                 "buffer103: APAC decoder up id=%lld %u Hz %u ch %u frames/packet",
+                 "buffer103: APAC decoder up id=%lld %u Hz %u ch %u frames/packet%s",
                  (long long)spa103_render.cookieId, (unsigned)sampleRate,
-                 (unsigned)channels, (unsigned)frameLength);
+                 (unsigned)channels, (unsigned)frameLength,
+                 channels < spa103_render.outputChannels ? " -- widened to the sink width" : "");
     }
 
     rc = spa103_render.codec->decodeS16(spa103_render.decoder, audio, audioLength,
@@ -1566,7 +1578,22 @@ static void spa103_render_frame(const uint8_t *packet, size_t length)
         return;
     }
     if (frames) {
-        if (spa103_render.formatIndex == SPA_APAC_48K_5_1) {
+        unsigned dch = spa103_render.decoderChannels;
+        if (dch && dch < spa103_render.outputChannels) {
+            /* Widen in place, walking backwards so the growing frames never overwrite a source
+             * that has not been read yet.  Mono goes to both fronts, anything else keeps its
+             * channels in order and leaves the rest silent -- the amplifier does the spreading. */
+            size_t f = frames;
+            unsigned out = spa103_render.outputChannels, c;
+            while (f--) {
+                const int16_t *src = decoded + f * dch;
+                int16_t *dst = decoded + f * out;
+                int16_t tmp[SPA_103_RENDER_MAX_CHANNELS];
+                for (c = 0; c < dch && c < SPA_103_RENDER_MAX_CHANNELS; c++) tmp[c] = src[c];
+                for (c = 0; c < out; c++)
+                    dst[c] = c < dch ? tmp[c] : (dch == 1 && c == 1 ? tmp[0] : 0);
+            }
+        } else if (spa103_render.formatIndex == SPA_APAC_48K_5_1) {
             /* Measured APAC cookie order C L R Ls Rs LFE -> DIO declared order. */
             spa_reorder_5_1_decoder_to_declared_s16(decoded, frames, decoded);
         } else if (spa103_render.atmosMode == SPA_ATMOS_DOWNMIX) {
