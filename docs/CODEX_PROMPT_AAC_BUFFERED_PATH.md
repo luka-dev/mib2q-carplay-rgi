@@ -11,7 +11,9 @@ The cause is settled, and three candidate second formats were tried on the car:
 | index | what it is | outcome |
 |--:|---|---|
 | 65 | APAC/48000/5.1 | works; the only thing we can currently decode |
-| 22 | AAC-LC/44100/stereo | **the phone selects it and sends it** -- skipping stops, the APAP header carries 0xAC44 -- but nothing decodes it, so playback runs silent |
+| 22 | AAC-LC/44100/stereo | selected and sent, APAP header carries 0xAC44; would need a resampler |
+| 23 | AAC-LC/48000/stereo | **selected and sent at the sink's own rate** -- APAP header carries 0xBB80, and its magic cookie is a separate 39-byte blob with its own id. This is the route. |
+| 21 | ALAC/48000/24/stereo | breaks the negotiation outright: the /info entry goes out and no stream setup follows at all, playback hangs |
 | 64 | APAC/48000/stereo | **never selected**: iOS gates it behind `bufferedAPACStereo`, static default false |
 | 11 | PCM | not offered: `APAudioFormatGetBufferedPassthroughSupportedFormats` returns zero unless the device is an APM speaker |
 
@@ -21,8 +23,9 @@ ordinary content arrive at all, and it needs decoding on our side.
 
 ## What has to be built
 
-An AAC-LC decode path for the type-103 receiver, alongside the existing APAC one, plus
-resampling: the stream is **44100 Hz** and every HU media endpoint is **48 kHz only**.
+An AAC-LC decode path for the type-103 receiver, alongside the existing APAC one. **No
+resampler is needed** -- see the index table below: advertising index 23 instead of 22 gets the
+stream at 48000 Hz, which is exactly what the HU media endpoints want.
 
 The pieces on the unit:
 
