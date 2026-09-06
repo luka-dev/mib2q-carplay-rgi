@@ -57,6 +57,19 @@ BAND_EDGES_HZ = np.asarray(
     dtype=np.float32,
 )
 
+# Match the deterministic Object Focus presence curve used by hssr_dsp.c.
+# The curve prevents an EDM routing target from teaching the network to move
+# sub-bass or ultrasonic-only material merely because it is stereo-wide.
+OBJECT_FOCUS_PRESENCE = np.asarray(
+    [
+        0.00, 0.00, 0.00, 0.00, 0.00, 0.05, 0.10, 0.20,
+        0.35, 0.50, 0.70, 0.85, 1.00, 1.00, 1.00, 1.00,
+        1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00,
+        1.00, 0.95, 0.75, 0.50, 0.30, 0.15, 0.05, 0.00,
+    ],
+    dtype=np.float32,
+)
+
 
 def parse_args() -> argparse.Namespace:
     root = pathlib.Path(__file__).resolve().parents[2]
@@ -71,8 +84,39 @@ def parse_args() -> argparse.Namespace:
         type=pathlib.Path,
         default=root / "build/hssr",
     )
+    parser.add_argument(
+        "--cache-root",
+        type=pathlib.Path,
+        help=(
+            "reuse a prepared MUSDB feature cache; defaults to OUTPUT/cache. "
+            "Targets are upgraded at load time, so classic and edm-v2 runs "
+            "can safely share the same cache"
+        ),
+    )
+    parser.add_argument(
+        "--routing-target",
+        choices=("classic", "edm-v2"),
+        default="classic",
+        help="rear-routing supervision profile (model dimensions are unchanged)",
+    )
+    parser.add_argument(
+        "--init-checkpoint",
+        type=pathlib.Path,
+        help="warm-start from an existing HSSR development checkpoint",
+    )
+    parser.add_argument(
+        "--extra-cache-root",
+        type=pathlib.Path,
+        action="append",
+        default=[],
+        help=(
+            "append a prepared direct-surround supervision cache containing "
+            "train/*.npz and validation/*.npz; may be repeated"
+        ),
+    )
     parser.add_argument("--epochs", type=int, default=18)
     parser.add_argument("--batch-size", type=int, default=16)
+    parser.add_argument("--learning-rate", type=float, default=1.5e-3)
     parser.add_argument("--seed", type=int, default=0x48535352)
     parser.add_argument("--max-train-tracks", type=int, default=0)
     parser.add_argument("--max-test-tracks", type=int, default=0)
@@ -380,6 +424,108 @@ def make_targets(stem_specs: np.ndarray) -> np.ndarray:
     return np.nan_to_num(result, nan=0.0, posinf=1.0, neginf=0.0)
 
 
+def smoothstep(values: np.ndarray, low: float, high: float) -> np.ndarray:
+    normalized = np.clip((values - low) / (high - low), 0.0, 1.0)
+    return normalized * normalized * (3.0 - 2.0 * normalized)
+
+
+def apply_edm_v2_routing_targets(
+    features: np.ndarray, targets: np.ndarray
+) -> np.ndarray:
+    """Teach rearability for spatially distinct EDM percussion/synth objects.
+
+    MUSDB exposes only vocals/bass/drums/other.  In dense electronic music a
+    synth chop, shaker, or impact is consequently often labelled ``drums`` and
+    the original target suppresses it, even when its authored stereo geometry
+    makes it a safe rear object.  This target upgrade deliberately leaves the
+    six semantic labels intact and changes only rear suitability/steering.
+
+    The target remains conservative: it requires a wide scene plus local ILD
+    or coherent IPD evidence, applies the production presence curve, and keeps
+    lead/bass protection.  It therefore teaches the existing output head what
+    the DSP rescue currently has to infer by hand, without changing the model
+    dimensions or target inference cost.
+    """
+    result = targets.copy()
+    per_feature_band = features[:, :BANDS * 9].reshape(-1, BANDS, 9)
+    per_target_band = result[:, :BANDS * 8].reshape(-1, BANDS, 8)
+
+    classes = per_target_band[:, :, :CLASSES]
+    lead = classes[:, :, 0]
+    bass = classes[:, :, 1]
+    drums = classes[:, :, 2]
+    foreground = classes[:, :, 3]
+    background = classes[:, :, 4]
+    effects = classes[:, :, 5]
+
+    ild = per_feature_band[:, :, 2]
+    coherence = np.clip(per_feature_band[:, :, 3], 0.0, 1.0)
+    sin_ipd = np.abs(per_feature_band[:, :, 5])
+    flux = np.clip(per_feature_band[:, :, 6], 0.0, 1.0)
+    scene_side_ratio = np.clip(features[:, BANDS * 9 + 64 + 3], 0.0, 1.0)
+
+    scene_width = smoothstep(scene_side_ratio[:, None], 0.025, 0.16)
+    ild_object = smoothstep(np.abs(np.tanh(0.5 * ild)), 0.025, 0.40)
+    ipd_object = (
+        smoothstep(sin_ipd, 0.12, 0.70)
+        * smoothstep(coherence, 0.30, 0.90)
+        * 0.60
+    )
+    spatial_object = np.maximum(ild_object, ipd_object)
+    transient_support = 0.35 + 0.65 * smoothstep(flux, 0.02, 0.35)
+    route_class = np.clip(
+        drums + 0.35 * foreground + background + effects
+        - 0.25 * lead - 0.35 * bass,
+        0.0,
+        1.0,
+    )
+    class_support = smoothstep(route_class, 0.10, 0.55)
+    protection = np.power(1.0 - lead, 1.5) * np.power(1.0 - bass, 1.8)
+    candidate = np.clip(
+        0.82
+        * scene_width
+        * OBJECT_FOCUS_PRESENCE[None, :]
+        * spatial_object
+        * transient_support
+        * class_support
+        * protection,
+        0.0,
+        0.85,
+    )
+
+    old_rear = per_target_band[:, :, 6].copy()
+    new_rear = np.maximum(old_rear, candidate)
+    extra_fraction = np.clip(
+        (new_rear - old_rear) / (new_rear + 1.0e-8), 0.0, 1.0
+    )
+    measured_pan = np.tanh(0.5 * ild)
+    per_target_band[:, :, 6] = new_rear
+    per_target_band[:, :, 7] = np.clip(
+        (1.0 - extra_fraction) * per_target_band[:, :, 7]
+        + extra_fraction * measured_pan,
+        -1.0,
+        1.0,
+    )
+
+    energy = np.exp(np.clip(per_feature_band[:, :, 0], -30.0, 30.0))
+    global_rear = np.sum(new_rear * energy, axis=1) / (
+        np.sum(energy, axis=1) + 1.0e-8
+    )
+    result[:, BANDS * 8 + 4] = np.maximum(
+        result[:, BANDS * 8 + 4], global_rear
+    )
+    if result.shape[0] > 1:
+        result[1:, BANDS * 8 + 5] = np.minimum(
+            result[1:, BANDS * 8 + 5],
+            np.clip(
+                1.0 - np.mean(np.abs(np.diff(new_rear, axis=0)), axis=1),
+                0.0,
+                1.0,
+            ),
+        )
+    return np.nan_to_num(result, nan=0.0, posinf=1.0, neginf=0.0)
+
+
 def cache_track(path: pathlib.Path, cache_path: pathlib.Path) -> None:
     streams = decode_stem_container(path)
     specs = np.stack([stft(stream) for stream in streams], axis=0)
@@ -428,7 +574,8 @@ def split_train_validation(
 
 class SequenceDataset(Dataset):
     def __init__(self, files: list[pathlib.Path], mean: np.ndarray,
-                 inv_std: np.ndarray, sequence: int = SEQUENCE):
+                 inv_std: np.ndarray, sequence: int = SEQUENCE,
+                 routing_target: str = "classic"):
         self.tracks = []
         self.index = []
         self.mean = mean.astype(np.float32)
@@ -438,6 +585,8 @@ class SequenceDataset(Dataset):
             with np.load(path) as data:
                 features = data["features"].astype(np.float32)
                 targets = data["targets"].astype(np.float32)
+            if routing_target == "edm-v2":
+                targets = apply_edm_v2_routing_targets(features, targets)
             self.tracks.append((features, targets))
             if features.shape[0] <= sequence:
                 self.index.append((track_index, 0))
@@ -487,9 +636,14 @@ def loss_components(prediction: torch.Tensor,
         target_band[..., :6] * torch.log_softmax(pred_band[..., :6], dim=-1),
         dim=-1,
     ).mean()
-    rear_loss = nn.functional.binary_cross_entropy_with_logits(
-        pred_band[..., 6], target_band[..., 6]
+    rear_element_loss = nn.functional.binary_cross_entropy_with_logits(
+        pred_band[..., 6], target_band[..., 6], reduction="none"
     )
+    # Rear-positive TF regions are rare compared with protected/empty bands.
+    # Without weighting, predicting a very small rearability everywhere is a
+    # deceptively good optimum (and exactly what the original EDM trace showed).
+    rear_weight = 1.0 + 3.0 * target_band[..., 6].detach()
+    rear_loss = torch.mean(rear_element_loss * rear_weight)
     pan_weight = target_band[..., 6].detach()
     pan_loss = torch.sum(
         (torch.tanh(pred_band[..., 7]) - target_band[..., 7]) ** 2
@@ -627,11 +781,21 @@ def main() -> int:
     train_sources, validation_sources = split_train_validation(
         train_sources, args.seed
     )
-    train_files = prepare_split(train_sources, args.output / "cache/train")
+    cache_root = args.cache_root or (args.output / "cache")
+    train_files = prepare_split(train_sources, cache_root / "train")
     validation_files = prepare_split(
-        validation_sources, args.output / "cache/train"
+        validation_sources, cache_root / "train"
     )
-    test_files = prepare_split(test_sources, args.output / "cache/test")
+    test_files = prepare_split(test_sources, cache_root / "test")
+    extra_train_files: list[pathlib.Path] = []
+    extra_validation_files: list[pathlib.Path] = []
+    for extra_root in args.extra_cache_root:
+        train_extra = sorted((extra_root / "train").glob("*.npz"))
+        validation_extra = sorted((extra_root / "validation").glob("*.npz"))
+        if not train_extra:
+            raise RuntimeError(f"no training caches found under {extra_root}")
+        extra_train_files.extend(train_extra)
+        extra_validation_files.extend(validation_extra)
     mean, inv_std = compute_normalization(train_files)
     np.savez(args.output / "normalization.npz", mean=mean, inv_std=inv_std)
     if args.prepare_only:
@@ -641,9 +805,21 @@ def main() -> int:
         )
         return 0
 
-    train_dataset = SequenceDataset(train_files, mean, inv_std)
-    validation_dataset = SequenceDataset(validation_files, mean, inv_std)
-    test_dataset = SequenceDataset(test_files, mean, inv_std)
+    train_dataset = SequenceDataset(
+        train_files + extra_train_files,
+        mean,
+        inv_std,
+        routing_target=args.routing_target,
+    )
+    validation_dataset = SequenceDataset(
+        validation_files + extra_validation_files,
+        mean,
+        inv_std,
+        routing_target=args.routing_target,
+    )
+    test_dataset = SequenceDataset(
+        test_files, mean, inv_std, routing_target=args.routing_target
+    )
     generator = torch.Generator().manual_seed(args.seed)
     train_loader = DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True,
@@ -658,7 +834,18 @@ def main() -> int:
     )
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
     model = HssrNetwork().to(device)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=1.5e-3, weight_decay=1e-4)
+    if args.init_checkpoint is not None:
+        # This is an explicitly supplied, locally generated development
+        # checkpoint.  It also contains NumPy normalization arrays, which are
+        # intentionally rejected by PyTorch 2.6's weights-only loader.
+        checkpoint_data = torch.load(
+            args.init_checkpoint, map_location="cpu", weights_only=False
+        )
+        model.load_state_dict(checkpoint_data["state_dict"])
+        print(f"warm-start {args.init_checkpoint}", flush=True)
+    optimizer = torch.optim.AdamW(
+        model.parameters(), lr=args.learning_rate, weight_decay=1e-4
+    )
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=max(args.epochs, 1), eta_min=1.0e-4
     )
@@ -670,6 +857,8 @@ def main() -> int:
     print(
         f"train device={device} tracks={len(train_files)} "
         f"validation={len(validation_files)} heldout={len(test_files)} "
+        f"extra_train={len(extra_train_files)} "
+        f"extra_validation={len(extra_validation_files)} "
         f"chunks={len(train_dataset)}",
         flush=True,
     )
@@ -724,9 +913,21 @@ def main() -> int:
         "validation_tracks": [path.name for path in validation_sources],
         "heldout_tracks": [path.name for path in test_sources],
         "feature_count": FEATURES,
+        "routing_target": args.routing_target,
+        "cache_root": str(cache_root.resolve()),
+        "init_checkpoint": (
+            str(args.init_checkpoint.resolve())
+            if args.init_checkpoint is not None else None
+        ),
+        "extra_cache_roots": [
+            str(path.resolve()) for path in args.extra_cache_root
+        ],
+        "extra_train_cache_count": len(extra_train_files),
+        "extra_validation_cache_count": len(extra_validation_files),
         "hidden_size": HIDDEN,
         "output_count": OUTPUTS,
         "control_rate_hz": SAMPLE_RATE / (HOP_SIZE * CONTROL_HOPS),
+        "learning_rate": args.learning_rate,
         "elapsed_seconds": time.time() - started,
         "history": history,
         "best_validation_total": best_loss,

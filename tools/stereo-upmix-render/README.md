@@ -363,3 +363,55 @@ The generated input for objective scoring is always the exact canonical fold
 of the same six-channel excerpt. A separately mixed stereo file is retained
 for listening when one is available, but is not mistaken for a sample-exact
 reference input.
+
+## Archive.org direct-surround training supervision
+
+`prepare_archive_surround_training_pool.py` searches Archive audio metadata,
+filters known Creative Commons licenses, remotely verifies the actual channel
+count with `ffprobe`, and downloads a bounded/resumable pool. Discovery and
+download are intentionally separate so false uploader license claims and
+copyrighted DVD extracts can be removed before any training use:
+
+```sh
+python3 tools/stereo-upmix-render/prepare_archive_surround_training_pool.py \
+  --output "$PWD/build/reference-audio/archive-surround-training-pool" \
+  --include-noncommercial --discover-only
+
+python3 tools/stereo-upmix-render/prepare_archive_surround_training_pool.py \
+  --output "$PWD/build/reference-audio/archive-surround-training-pool" \
+  --reuse-catalog --include-noncommercial \
+  --max-download-gib 8 --max-files-per-item 24 \
+  --allow-identifier REVIEWED_ARCHIVE_IDENTIFIER
+```
+
+An Archive.org Creative Commons field is uploader supplied and does not prove
+the underlying recording rights. `NoDerivatives` material is always rejected;
+all other identifiers still require provenance review. Keep NC/SA-derived
+checkpoints development-only.
+
+The supervision builder takes several deterministic excerpts per downloaded
+file, creates the exact canonical stereo fold, preserves soft semantic labels
+from a frozen HSSR teacher, and replaces its spatial controls with targets
+measured from the authored SL/SR channels:
+
+```sh
+build/hssr-train-venv/bin/python \
+  tools/stereo-upmix-render/prepare_hssr_surround_supervision.py \
+  --source-manifest \
+    "$PWD/build/reference-audio/archive-surround-training-pool/manifest.json" \
+  --teacher-checkpoint "$PWD/build/hssr-edm-v2/hssr_development.pt" \
+  --output "$PWD/build/hssr-archive-supervision-lite"
+
+build/hssr-train-venv/bin/python \
+  tools/stereo-upmix-render/train_hssr.py \
+  --output "$PWD/build/hssr-surround-v4" \
+  --cache-root "$PWD/build/hssr/cache" \
+  --routing-target edm-v2 \
+  --init-checkpoint "$PWD/build/hssr-edm-v2/hssr_development.pt" \
+  --extra-cache-root "$PWD/build/hssr-archive-supervision-lite" \
+  --learning-rate 2e-4
+```
+
+`edm-v2` changes training targets and positive-example weighting only. The
+runtime remains the same 368→160→160→264 causal network, 451,464 parameters
+and 469,760-byte exported binary, so target CPU, RAM and latency do not grow.
