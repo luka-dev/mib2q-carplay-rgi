@@ -15,7 +15,11 @@ import soundfile as sf
 from scipy import signal
 
 
-BACKENDS = ("hsr-td", "hsr-td-active", "music-stage", "ambient-lite", "ambient-hq")
+BACKENDS = (
+    "hsr-td", "hsr-td-active", "music-stage", "hssr-neon", "hssr-active",
+    "hssr-object", "hssr-object-v2", "hssr-object-focus",
+    "ambient-lite", "ambient-hq",
+)
 SQRT_HALF = math.sqrt(0.5)
 MAX_LAG = 2048
 
@@ -114,7 +118,8 @@ def fold_down(surround: np.ndarray) -> np.ndarray:
 
 
 def score(
-    reference: np.ndarray, stereo: np.ndarray, prediction: np.ndarray
+    reference: np.ndarray, stereo: np.ndarray, prediction: np.ndarray,
+    front_gain: float,
 ) -> dict[str, object]:
     frame_count = min(reference.shape[0], stereo.shape[0], prediction.shape[0])
     reference = reference[:frame_count]
@@ -164,6 +169,18 @@ def score(
         for bus in (bus_l, bus_r, bus_c, bus_lfe, bus_ls, bus_rs)
     )
 
+    scaled_stereo = stereo * front_gain
+    predicted_front = prediction[:, 0:2]
+    front_lag = stereo_best_lag(scaled_stereo, predicted_front)
+    aligned_front_target, aligned_front = align(
+        scaled_stereo, predicted_front, front_lag
+    )
+    predicted_fold = fold_down(prediction)
+    fold_lag = stereo_best_lag(scaled_stereo, predicted_fold)
+    aligned_fold_target, aligned_fold = align(
+        scaled_stereo, predicted_fold, fold_lag
+    )
+
     return {
         "rear_best_lag_frames": lag,
         "rear_waveform_correlation": pearson(aligned_target, aligned_prediction),
@@ -180,8 +197,12 @@ def score(
             interchannel_correlation(aligned_prediction)
             - interchannel_correlation(aligned_target)
         ),
-        "front_preservation_snr_db": raw_snr(stereo, prediction[:, 0:2]),
-        "foldback_snr_db": raw_snr(stereo, fold_down(prediction)),
+        "front_best_lag_frames": front_lag,
+        "front_preservation_snr_db": raw_snr(
+            aligned_front_target, aligned_front
+        ),
+        "foldback_best_lag_frames": fold_lag,
+        "foldback_snr_db": raw_snr(aligned_fold_target, aligned_fold),
         "lfe_reference_active": lfe_reference_active,
         "lfe_best_lag_frames": lfe_lag if lfe_reference_active else None,
         "lfe_envelope_correlation": (
@@ -215,6 +236,7 @@ def render(
     backend: str,
     lfe: str,
     surround_gain: float,
+    hssr_model: Path | None,
 ) -> None:
     command = [
         str(renderer),
@@ -224,9 +246,13 @@ def render(
         lfe,
         "--surround",
         f"{surround_gain:.6f}",
-        str(stereo),
-        str(output),
     ]
+    if backend in ("hssr-neon", "hssr-active", "hssr-object",
+                   "hssr-object-v2", "hssr-object-focus"):
+        if hssr_model is None:
+            raise RuntimeError(f"{backend} requires --hssr-model")
+        command.extend(["--model", str(hssr_model)])
+    command.extend([str(stereo), str(output)])
     completed = subprocess.run(command, text=True, capture_output=True)
     if completed.returncode:
         raise RuntimeError(
@@ -265,7 +291,11 @@ def markdown_report(
     surround_gain: float,
 ) -> str:
     controlled_items = [
-        item for item in manifest["items"] if item["dataset"] != "Xiph.org test media"
+        item
+        for item in manifest["items"]
+        if item.get(
+            "include_in_aggregate", item["dataset"] != "Xiph.org test media"
+        )
     ]
     controlled_ids = {item["id"] for item in controlled_items}
     controlled_rows = [row for row in rows if row["id"] in controlled_ids]
@@ -273,6 +303,8 @@ def markdown_report(
     for group, label in (
         ("genre-development", "Development/tuning song-fixture aggregate"),
         ("held-out", "Held-out validation song-fixture aggregate"),
+        ("authored-music", "Authored-music aggregate"),
+        ("apple-public-preview", "Apple public-preview aggregate"),
     ):
         group_rows = [
             row for row in controlled_rows if row.get("evaluation_group") == group
@@ -284,15 +316,58 @@ def markdown_report(
             ("controlled", "Controlled song-fixture aggregate", controlled_rows)
         )
 
+    corpus_kind = manifest.get("corpus_kind")
+    if corpus_kind == "apple-public-preview-authored-surround":
+        report_title = "# Apple public-preview stereo-to-5.1 evaluation"
+        corpus_intro = [
+            "This corpus uses official Apple public AAC previews as the stereo inputs.",
+            "Each preview is waveform-aligned to a publicly downloadable publisher-authored",
+            "5.0/Atmos sample of the exact same recording. The stereo and surround editions",
+            "may be separately mastered, so waveform metrics are comparative rather than",
+            "a claim that Apple supplied the surround reference.",
+        ]
+        lfe_intro = (
+            "Only the Atmos trumpet reference contains authored LFE; "
+            f"the candidate LFE output is `{lfe}`."
+        )
+    elif corpus_kind == "archive-authored-surround":
+        report_title = "# Archive.org six-channel music evaluation"
+        corpus_intro = [
+            "Every source was verified as a real six-channel stream with ffprobe.",
+            "The evaluator uses a deterministic rear-active excerpt and its exact canonical",
+            "stereo fold-down. This makes the channel reference exact even when a separately",
+            "mixed stereo edition is unavailable. Source licenses remain recorded per item.",
+        ]
+        lfe_intro = (
+            "Authored LFE is omitted from the canonical stereo fold; "
+            f"the candidate LFE output is `{lfe}`."
+        )
+    elif corpus_kind == "authored-surround":
+        report_title = "# HSR-TD controlled 5.1 fold-down evaluation"
+        corpus_intro = [
+            "This corpus contains publisher-authored 5.0/Atmos music excerpts.",
+            "The technical EBU channel-identification item is reported per-track but excluded",
+            "from the music aggregate. Every evaluated stereo input is the documented canonical",
+            "fold-down of its exact surround reference; separately mastered publisher stereo",
+            "files are retained in the dataset but are not used for objective scoring.",
+        ]
+        lfe_intro = f"LFE is omitted from that fold and the candidate LFE output is `{lfe}`."
+    else:
+        report_title = "# HSR-TD controlled 5.1 fold-down evaluation"
+        corpus_intro = [
+            "The main corpus contains controlled 5.1 fixtures rendered from open multitrack",
+            "stems, not artist-authored surround masters. An optional Xiph.org row is a real",
+            "authored film master and is kept out of the song-fixture aggregates. Development",
+            "fixtures used for tuning and held-out fixtures used only for validation are reported",
+            "separately. Every stereo input is the documented fold-down of its reference.",
+        ]
+        lfe_intro = f"LFE is omitted from that fold and the candidate LFE output is `{lfe}`."
+
     lines = [
-        "# HSR-TD controlled 5.1 fold-down evaluation",
+        report_title,
         "",
-        "The main corpus contains controlled 5.1 fixtures rendered from open multitrack",
-        "stems, not artist-authored surround masters. An optional Xiph.org row is a real",
-        "authored film master and is kept out of the song-fixture aggregates. Development",
-        "fixtures used for tuning and held-out fixtures used only for validation are reported",
-        "separately. Every stereo input is the documented fold-down of its reference.",
-        f"LFE is omitted from that fold and the candidate LFE output is `{lfe}`.",
+        *corpus_intro,
+        lfe_intro,
         "The digital center is not scored because the MHI hook deliberately leaves C at zero",
         "for the vehicle SoundAmp to derive.",
         "",
@@ -322,13 +397,23 @@ def markdown_report(
             )
 
         if lfe == "assist":
+            if corpus_kind == "apple-public-preview-authored-surround":
+                lfe_explanation = [
+                    "Only the Atmos trumpet item has authored reference LFE.",
+                    "Its score measures whether restrained bass assist follows that channel;",
+                    "the other five items contribute only to the SoundAmp peak statistics.",
+                ]
+            else:
+                lfe_explanation = [
+                    "LFE is absent from the stereo fold-down as a discrete channel, so these",
+                    "figures measure how well restrained bass assist follows the reference bass",
+                    "envelope; they are not evidence that the original LFE was recovered.",
+                ]
             lines += [
                 "",
                 f"### {label.removesuffix(' aggregate')} LFE aggregate",
                 "",
-                "LFE is absent from the stereo fold-down as a discrete channel, so these",
-                "figures measure how well restrained bass assist follows the reference bass",
-                "envelope; they are not evidence that the original LFE was recovered.",
+                *lfe_explanation,
                 "",
                 "| backend | LFE envelope corr | LFE SI-SDR dB | LFE energy ratio | SoundAmp bus peak mean/max |",
                 "|---|---:|---:|---:|---:|",
@@ -407,6 +492,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--lfe", choices=("off", "assist"), default="off")
     parser.add_argument("--surround", type=float, default=0.18)
+    parser.add_argument("--hssr-model", type=Path)
     return parser.parse_args()
 
 
@@ -415,6 +501,10 @@ def main() -> int:
     if not 0.0 <= args.surround <= 0.25:
         raise RuntimeError("--surround must be between 0.0 and 0.25")
     backends = tuple(args.backends)
+    if ({"hssr-neon", "hssr-active", "hssr-object", "hssr-object-v2",
+         "hssr-object-focus"} &
+            set(backends)) and args.hssr_model is None:
+        raise RuntimeError("--hssr-model is required for HSSR backends")
     manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
     args.output.mkdir(parents=True, exist_ok=True)
     rows: list[dict[str, object]] = []
@@ -434,9 +524,12 @@ def main() -> int:
                 backend,
                 args.lfe,
                 args.surround,
+                args.hssr_model.resolve() if args.hssr_model else None,
             )
             prediction = read_audio(render_path, 6)
-            metrics = score(reference, stereo, prediction)
+            front_gain = 30802.0 / 32768.0 if args.lfe == "assist" \
+                else 32670.0 / 32768.0
+            metrics = score(reference, stereo, prediction, front_gain)
             rows.append(
                 {
                     "id": item["id"],
@@ -462,9 +555,16 @@ def main() -> int:
             "backends": list(backends),
             "sample_rate": 48_000,
             "surround_gain": args.surround,
+            "front_gain": (
+                30802.0 / 32768.0 if args.lfe == "assist"
+                else 32670.0 / 32768.0
+            ),
             "lfe": args.lfe,
             "maximum_alignment_lag_frames": MAX_LAG,
             "center_scored": False,
+            "hssr_model": (
+                str(args.hssr_model.resolve()) if args.hssr_model else None
+            ),
         },
         "results": rows,
     }

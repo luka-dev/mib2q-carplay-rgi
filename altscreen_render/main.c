@@ -354,6 +354,34 @@ static int listen_socket(void) {
     return fd;
 }
 
+/* Socket-side arrival pacing.  screen_egl_present.c already reports the interval
+ * between DECODED frames; that measurement cannot tell a jittery producer from a
+ * jittery decoder.  Sampling the same statistic here, the instant a frame leaves
+ * the loopback socket, splits the two: matching numbers mean the hook/phone
+ * delivers unevenly, a smooth socket with a jittery present means we add it. */
+static void socket_pace_sample(void) {
+    static unsigned long long last_ms;
+    static unsigned long long sum_ms, max_ms;
+    static unsigned long samples, frames;
+    unsigned long long now = decode_now_ms();
+    if (now == 0) return;
+    if (last_ms != 0 && now > last_ms) {
+        unsigned long long d = now - last_ms;
+        sum_ms += d;
+        if (d > max_ms) max_ms = d;
+        samples++;
+    }
+    last_ms = now;
+    if (++frames % 600 == 0) {
+        fprintf(stderr,
+                "altscreen_render: %lu frames off the socket; arrival avg=%lu max=%lu ms\n",
+                frames,
+                samples ? (unsigned long)(sum_ms / samples) : 0UL,
+                (unsigned long)max_ms);
+        sum_ms = 0; max_ms = 0; samples = 0;
+    }
+}
+
 /* Serve one connected client until it disconnects or a protocol error. */
 static void serve_client(int cfd, uint32_t generation, int *video_signaled) {
     int one = 1;
@@ -373,6 +401,7 @@ static void serve_client(int cfd, uint32_t generation, int *video_signaled) {
     for (;;) {
         int r = av_read_frame(cfd, &buf, &cap, &len);
         if (r == 0) {
+            if (len > 0) socket_pace_sample();
             if (len > 0 && decode_queue_frame(generation, buf, len) != 0) {
                 fprintf(stderr,
                         "altscreen_render: decode queue rejected generation %u frame\n",

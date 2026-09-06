@@ -10,6 +10,7 @@ cc -O2 -g -std=gnu99 -Wall -Wextra -Werror \
    -fdata-sections -ffunction-sections \
    -I"$ROOT/hook/audio" \
    "$HERE/stereo_upmix_bench.c" "$ROOT/hook/audio/stereo_upmix.c" \
+   "$ROOT/hook/audio/hssr_dsp.c" "$ROOT/hook/audio/hssr_neon.c" -lm \
    -o "$OUT"
 
 echo "$OUT"

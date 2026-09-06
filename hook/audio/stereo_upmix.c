@@ -222,13 +222,14 @@ static int16_t spa_upmix_scale_s16_q15(int16_t sample, uint32_t gain_q15)
 }
 
 static int16_t spa_upmix_transfer_front(int16_t front, int16_t rear,
+                                        uint32_t transfer_q15,
                                         uint32_t front_limit_q15)
 {
-    /* A conventional stereo fold-down returns each surround at -3 dB.  Pull
-     * that exact contribution out of the matching dry front, so active mode
-     * redistributes accepted ambience instead of merely duplicating it. */
+    /* Normal transfer uses the conventional -3 dB surround fold coefficient.
+     * Assertive HSSR profiles pass stronger, matrix-aware coefficients so a
+     * selected component no longer remains perceptually anchored to front. */
     int32_t adjusted = (int32_t)front -
-        (int32_t)spa_upmix_scale_s16_q15(rear, UINT32_C(23170));
+        (int32_t)spa_upmix_scale_s16_q15(rear, transfer_q15);
     int32_t limit = (int32_t)front_limit_q15;
 
     if (adjusted > limit) adjusted = limit;
@@ -1159,6 +1160,13 @@ static int spa_upmix_config_valid(const struct spa_stereo_upmix_config *config)
         config->lfe_gain_q15 > SPA_STEREO_UPMIX_LFE_Q15_MAX ||
         config->lfe_enabled > 1u)
         return SPA_STEREO_UPMIX_ERROR_CONFIG;
+    if ((config->backend == SPA_STEREO_UPMIX_HSSR_NEON ||
+         config->backend == SPA_STEREO_UPMIX_HSSR_ACTIVE ||
+         config->backend == SPA_STEREO_UPMIX_HSSR_OBJECT ||
+         config->backend == SPA_STEREO_UPMIX_HSSR_OBJECT_V2 ||
+         config->backend == SPA_STEREO_UPMIX_HSSR_OBJECT_FOCUS) &&
+        !spa_hssr_model_ready(config->hssr_model))
+        return SPA_STEREO_UPMIX_ERROR_CONFIG;
 
     /* Recovered SoundAmp centre row:
      *   Cbus = 0.501187*L + 0.501187*R + 0.316228*LFE.
@@ -1200,6 +1208,7 @@ void spa_stereo_upmix_default_config(struct spa_stereo_upmix_config *config)
     config->lfe_gain_q15 = SPA_STEREO_UPMIX_LFE_Q15_DEFAULT;
     config->lfe_enabled = 0;
     config->backend = SPA_STEREO_UPMIX_AMBIENT_LITE;
+    config->hssr_model = NULL;
 }
 
 void spa_stereo_upmix_config_set_lfe(
@@ -1212,6 +1221,13 @@ void spa_stereo_upmix_config_set_lfe(
         : SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT;
 }
 
+void spa_stereo_upmix_config_set_hssr_model(
+    struct spa_stereo_upmix_config *config,
+    const struct spa_hssr_model *model)
+{
+    if (config) config->hssr_model = model;
+}
+
 int spa_stereo_upmix_backend_supported(enum spa_stereo_upmix_backend backend)
 {
     return backend == SPA_STEREO_UPMIX_OFF ||
@@ -1219,7 +1235,12 @@ int spa_stereo_upmix_backend_supported(enum spa_stereo_upmix_backend backend)
            backend == SPA_STEREO_UPMIX_AMBIENT_HQ ||
            backend == SPA_STEREO_UPMIX_HSR_TD ||
            backend == SPA_STEREO_UPMIX_HSR_TD_ACTIVE ||
-           backend == SPA_STEREO_UPMIX_MUSIC_STAGE;
+           backend == SPA_STEREO_UPMIX_MUSIC_STAGE ||
+           backend == SPA_STEREO_UPMIX_HSSR_NEON ||
+           backend == SPA_STEREO_UPMIX_HSSR_ACTIVE ||
+           backend == SPA_STEREO_UPMIX_HSSR_OBJECT ||
+           backend == SPA_STEREO_UPMIX_HSSR_OBJECT_V2 ||
+           backend == SPA_STEREO_UPMIX_HSSR_OBJECT_FOCUS;
 }
 
 int spa_stereo_upmix_init(struct spa_stereo_upmix *state,
@@ -1237,6 +1258,19 @@ int spa_stereo_upmix_init(struct spa_stereo_upmix *state,
     state->config = saved;
     if (saved.backend == SPA_STEREO_UPMIX_AMBIENT_HQ)
         spa_upmix_hq_prepare(&state->_runtime);
+    if (saved.backend == SPA_STEREO_UPMIX_HSSR_NEON ||
+        saved.backend == SPA_STEREO_UPMIX_HSSR_ACTIVE ||
+        saved.backend == SPA_STEREO_UPMIX_HSSR_OBJECT ||
+        saved.backend == SPA_STEREO_UPMIX_HSSR_OBJECT_V2 ||
+        saved.backend == SPA_STEREO_UPMIX_HSSR_OBJECT_FOCUS) {
+        spa_hssr_dsp_prepare(&state->_runtime._hssr);
+        spa_hssr_dsp_set_profile(
+            &state->_runtime._hssr,
+            saved.backend == SPA_STEREO_UPMIX_HSSR_OBJECT_FOCUS ? 4u :
+            saved.backend == SPA_STEREO_UPMIX_HSSR_OBJECT_V2 ? 3u :
+            saved.backend == SPA_STEREO_UPMIX_HSSR_OBJECT ? 2u :
+            saved.backend == SPA_STEREO_UPMIX_HSSR_ACTIVE ? 1u : 0u);
+    }
     state->_runtime._limiter_gain = 1.0f;
     state->_initialized = SPA_STEREO_UPMIX_MAGIC;
     return SPA_STEREO_UPMIX_OK;
@@ -1252,6 +1286,19 @@ int spa_stereo_upmix_reset(struct spa_stereo_upmix *state)
     memset(state->_input_scratch, 0, sizeof(state->_input_scratch));
     if (state->config.backend == SPA_STEREO_UPMIX_AMBIENT_HQ)
         spa_upmix_hq_prepare(&state->_runtime);
+    if (state->config.backend == SPA_STEREO_UPMIX_HSSR_NEON ||
+        state->config.backend == SPA_STEREO_UPMIX_HSSR_ACTIVE ||
+        state->config.backend == SPA_STEREO_UPMIX_HSSR_OBJECT ||
+        state->config.backend == SPA_STEREO_UPMIX_HSSR_OBJECT_V2 ||
+        state->config.backend == SPA_STEREO_UPMIX_HSSR_OBJECT_FOCUS) {
+        spa_hssr_dsp_prepare(&state->_runtime._hssr);
+        spa_hssr_dsp_set_profile(
+            &state->_runtime._hssr,
+            state->config.backend == SPA_STEREO_UPMIX_HSSR_OBJECT_FOCUS ? 4u :
+            state->config.backend == SPA_STEREO_UPMIX_HSSR_OBJECT_V2 ? 3u :
+            state->config.backend == SPA_STEREO_UPMIX_HSSR_OBJECT ? 2u :
+            state->config.backend == SPA_STEREO_UPMIX_HSSR_ACTIVE ? 1u : 0u);
+    }
     state->_runtime._limiter_gain = 1.0f;
     return SPA_STEREO_UPMIX_OK;
 }
@@ -1298,10 +1345,17 @@ int spa_stereo_upmix_process_s16(struct spa_stereo_upmix *state,
         const int16_t input_r = state->_input_scratch[frame * 2 + 1];
         int16_t *output = pcm6 + frame * SPA_STEREO_UPMIX_OUTPUT_CHANNELS;
         int16_t lfe = 0;
+        int16_t render_l = input_l;
+        int16_t render_r = input_r;
         float rear_l = 0.0f;
         float rear_r = 0.0f;
 
         if (state->config.backend != SPA_STEREO_UPMIX_OFF &&
+            state->config.backend != SPA_STEREO_UPMIX_HSSR_NEON &&
+            state->config.backend != SPA_STEREO_UPMIX_HSSR_ACTIVE &&
+            state->config.backend != SPA_STEREO_UPMIX_HSSR_OBJECT &&
+            state->config.backend != SPA_STEREO_UPMIX_HSSR_OBJECT_V2 &&
+            state->config.backend != SPA_STEREO_UPMIX_HSSR_OBJECT_FOCUS &&
             state->config.lfe_enabled) {
             /* The sum is promoted before scaling, so INT16_MIN+INT16_MIN
              * cannot overflow and mid remains exactly bounded by [-1,1). */
@@ -1417,6 +1471,27 @@ int spa_stereo_upmix_process_s16(struct spa_stereo_upmix *state,
 
             spa_upmix_music_stage_process_sample(
                 state, normalized_l, normalized_r, &rear_l, &rear_r);
+        } else if (state->config.backend == SPA_STEREO_UPMIX_HSSR_NEON ||
+                   state->config.backend == SPA_STEREO_UPMIX_HSSR_ACTIVE ||
+                   state->config.backend == SPA_STEREO_UPMIX_HSSR_OBJECT ||
+                   state->config.backend == SPA_STEREO_UPMIX_HSSR_OBJECT_V2 ||
+                   state->config.backend == SPA_STEREO_UPMIX_HSSR_OBJECT_FOCUS) {
+            int hssr_status = spa_hssr_dsp_process_sample(
+                &state->_runtime._hssr, state->config.hssr_model,
+                input_l, input_r, &render_l, &render_r, &rear_l, &rear_r);
+
+            if (hssr_status != SPA_HSSR_OK)
+                return SPA_STEREO_UPMIX_ERROR_CONFIG;
+            if (state->config.lfe_enabled) {
+                double mid = ((double)render_l + (double)render_r) *
+                             (1.0 / 65536.0);
+                double bass = spa_upmix_lfe_biquad(
+                    mid, state->_runtime._lfe_biquad_state[0]);
+                bass = spa_upmix_lfe_biquad(
+                    bass, state->_runtime._lfe_biquad_state[1]);
+                lfe = spa_upmix_lfe_to_s16(
+                    bass, state->config.lfe_gain_q15);
+            }
         }
 
         if (state->config.backend == SPA_STEREO_UPMIX_AMBIENT_LITE ||
@@ -1446,7 +1521,12 @@ int spa_stereo_upmix_process_s16(struct spa_stereo_upmix *state,
             state->config.backend == SPA_STEREO_UPMIX_AMBIENT_HQ ||
             state->config.backend == SPA_STEREO_UPMIX_HSR_TD ||
             state->config.backend == SPA_STEREO_UPMIX_HSR_TD_ACTIVE ||
-            state->config.backend == SPA_STEREO_UPMIX_MUSIC_STAGE) {
+            state->config.backend == SPA_STEREO_UPMIX_MUSIC_STAGE ||
+            state->config.backend == SPA_STEREO_UPMIX_HSSR_NEON ||
+            state->config.backend == SPA_STEREO_UPMIX_HSSR_ACTIVE ||
+            state->config.backend == SPA_STEREO_UPMIX_HSSR_OBJECT ||
+            state->config.backend == SPA_STEREO_UPMIX_HSSR_OBJECT_V2 ||
+            state->config.backend == SPA_STEREO_UPMIX_HSSR_OBJECT_FOCUS) {
             /* Linked limiter: instantaneous attack, about 42 ms release. */
             {
                 float peak_l = spa_upmix_absf(rear_l);
@@ -1474,9 +1554,9 @@ int spa_stereo_upmix_process_s16(struct spa_stereo_upmix *state,
             lfe = 0;
         } else {
             int16_t front_l = spa_upmix_scale_s16_q15(
-                input_l, state->config.front_gain_q15);
+                render_l, state->config.front_gain_q15);
             int16_t front_r = spa_upmix_scale_s16_q15(
-                input_r, state->config.front_gain_q15);
+                render_r, state->config.front_gain_q15);
             int16_t output_rear_l = spa_upmix_rear_to_s16(
                 rear_l, state->config.rear_gain_q15);
             int16_t output_rear_r = spa_upmix_rear_to_s16(
@@ -1484,12 +1564,29 @@ int spa_stereo_upmix_process_s16(struct spa_stereo_upmix *state,
 
             if (state->config.backend ==
                     SPA_STEREO_UPMIX_HSR_TD_ACTIVE ||
-                state->config.backend == SPA_STEREO_UPMIX_MUSIC_STAGE) {
+                state->config.backend == SPA_STEREO_UPMIX_MUSIC_STAGE ||
+                state->config.backend == SPA_STEREO_UPMIX_HSSR_NEON ||
+                state->config.backend == SPA_STEREO_UPMIX_HSSR_ACTIVE ||
+                state->config.backend == SPA_STEREO_UPMIX_HSSR_OBJECT ||
+                state->config.backend == SPA_STEREO_UPMIX_HSSR_OBJECT_V2 ||
+                state->config.backend == SPA_STEREO_UPMIX_HSSR_OBJECT_FOCUS) {
+                uint32_t transfer_q15 =
+                    state->config.backend == SPA_STEREO_UPMIX_HSSR_OBJECT_FOCUS
+                    ? UINT32_C(81920)  /* 2.50: hard rear-object relocation */
+                    : state->config.backend == SPA_STEREO_UPMIX_HSSR_OBJECT ||
+                      state->config.backend == SPA_STEREO_UPMIX_HSSR_OBJECT_V2
+                    ? UINT32_C(65536)  /* 2.00: isolated-object relocation */
+                    : state->config.backend == SPA_STEREO_UPMIX_HSSR_ACTIVE
+                    ? UINT32_C(57344)  /* 1.75: perceptual relocation */
+                    : UINT32_C(23170); /* sqrt(0.5): fold-compatible */
+
                 front_l = spa_upmix_transfer_front(
                     front_l, output_rear_l,
+                    transfer_q15,
                     state->config.front_gain_q15);
                 front_r = spa_upmix_transfer_front(
                     front_r, output_rear_r,
+                    transfer_q15,
                     state->config.front_gain_q15);
             }
             output[SPA_STEREO_UPMIX_CHANNEL_L] = front_l;

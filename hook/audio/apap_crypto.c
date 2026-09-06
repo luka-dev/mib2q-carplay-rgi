@@ -378,6 +378,70 @@ static uint64_t spa_be_bytes(const uint8_t *p, size_t n)
     return v;
 }
 
+static int spa_parse_media_time(const uint8_t *p, size_t length,
+                                spa_apap_media_time_t *time)
+{
+    uint64_t rawValue;
+    uint32_t rawScale;
+
+    if (length != 12 || !time) return 0;
+    rawValue = spa_be_bytes(p, 8);
+    rawScale = (uint32_t)spa_be_bytes(p + 8, 4);
+    /* Spell out two's-complement sign extension instead of relying on the
+     * implementation-defined unsigned-to-signed overflow conversion in the
+     * old QNX compiler. */
+    time->value = (rawValue & (UINT64_C(1) << 63)) ?
+                  -1 - (int64_t)(UINT64_MAX - rawValue) : (int64_t)rawValue;
+    time->timescale = (rawScale & 0x80000000u) ?
+                      -1 - (int32_t)(UINT32_MAX - rawScale) : (int32_t)rawScale;
+    time->present = 1;
+    return 1;
+}
+
+static size_t spa_media_time_to_frames(const spa_apap_media_time_t *time,
+                                       uint32_t sampleRate, size_t limit)
+{
+    uint64_t value, scale, whole, remainder, frames, extra;
+
+    if (!time || !time->present || time->value <= 0 ||
+        time->timescale <= 0 || !sampleRate || !limit)
+        return 0;
+
+    value = (uint64_t)time->value;
+    scale = (uint32_t)time->timescale;
+    whole = value / scale;
+    remainder = value % scale;
+
+    /* Compute quotient and remainder separately: value * sampleRate can
+     * overflow uint64_t for a hostile CMTime even though the useful result is
+     * bounded to one decoded access unit. */
+    if (whole > (uint64_t)limit / sampleRate) return limit;
+    frames = whole * sampleRate;
+    if (frames >= limit) return limit;
+
+    extra = (remainder * sampleRate) / scale;
+    if (extra >= (uint64_t)limit - frames) return limit;
+    return (size_t)(frames + extra);
+}
+
+void spa_apap_trim_window(const spa_apap_extension_t *state,
+                          uint32_t sampleRate, size_t decodedFrames,
+                          size_t *startFrame, size_t *frameCount)
+{
+    size_t start = 0, count = decodedFrames, end = 0;
+
+    if (state) {
+        start = spa_media_time_to_frames(&state->trimAtStart,
+                                         sampleRate, decodedFrames);
+        count = decodedFrames - start;
+        end = spa_media_time_to_frames(&state->trimAtEnd,
+                                       sampleRate, count);
+        count -= end;
+    }
+    if (startFrame) *startFrame = start;
+    if (frameCount) *frameCount = count;
+}
+
 int spa_apap_parse_extension(const uint8_t *plaintext, size_t length,
                              spa_apap_extension_t *state,
                              const uint8_t **audio, size_t *audioLength)
@@ -410,7 +474,15 @@ int spa_apap_parse_extension(const uint8_t *plaintext, size_t length,
          * The format comes from the SETUP response and is confirmed by the magic cookie; a real
          * format change shows up as a new cookie id, which is tracked separately.  These two
          * fields are parsed and skipped. */
-        if (fieldId == SPA_APAP_TLV_MAGIC_COOKIE && fieldLength) {
+        if (fieldId == SPA_APAP_TLV_TRIM_AT_START) {
+            if (!spa_parse_media_time(plaintext + at, (size_t)fieldLength,
+                                      &state->trimAtStart))
+                return 0;
+        } else if (fieldId == SPA_APAP_TLV_TRIM_AT_END) {
+            if (!spa_parse_media_time(plaintext + at, (size_t)fieldLength,
+                                      &state->trimAtEnd))
+                return 0;
+        } else if (fieldId == SPA_APAP_TLV_MAGIC_COOKIE && fieldLength) {
             state->magicCookie = plaintext + at;
             state->magicCookieLength = (size_t)fieldLength;
         } else if (fieldId == SPA_APAP_TLV_MAGIC_COOKIE_ID && fieldLength <= 8) {

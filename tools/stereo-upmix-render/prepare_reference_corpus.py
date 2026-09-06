@@ -13,9 +13,9 @@ import argparse
 import hashlib
 import json
 import math
+import struct
 import subprocess
 import sys
-import wave
 from pathlib import Path
 
 import numpy as np
@@ -123,13 +123,37 @@ def run_ffmpeg_5_1(
 def write_pcm16(path: Path, samples: np.ndarray) -> None:
     if samples.ndim != 2:
         raise ValueError("audio must have shape [frames, channels]")
+    channels = samples.shape[1]
+    channel_masks = {2: 0x00000003, 6: 0x0000060F}
+    if channels not in channel_masks:
+        raise ValueError(f"no WAVE channel mask for {channels} channels")
     quantized = np.clip(np.rint(samples * 32767.0), -32768, 32767).astype("<i2")
     path.parent.mkdir(parents=True, exist_ok=True)
-    with wave.open(str(path), "wb") as output:
-        output.setnchannels(samples.shape[1])
-        output.setsampwidth(2)
-        output.setframerate(SAMPLE_RATE)
-        output.writeframes(quantized.tobytes())
+    payload = quantized.tobytes()
+    block_align = channels * 2
+    riff_size = 60 + len(payload)
+    if riff_size > 0xFFFFFFFF:
+        raise ValueError("audio is too large for RIFF/WAVE")
+
+    # WAVE_FORMAT_EXTENSIBLE with the PCM subtype makes channel order explicit
+    # to both test tools and media players.
+    pcm_guid = bytes.fromhex("0100000000001000800000aa00389b71")
+    header = b"".join(
+        (
+            b"RIFF",
+            struct.pack("<I", riff_size),
+            b"WAVEfmt ",
+            struct.pack("<IHHIIHHHHI", 40, 0xFFFE, channels, SAMPLE_RATE,
+                        SAMPLE_RATE * block_align, block_align, 16, 22, 16,
+                        channel_masks[channels]),
+            pcm_guid,
+            b"data",
+            struct.pack("<I", len(payload)),
+        )
+    )
+    with path.open("wb") as output:
+        output.write(header)
+        output.write(payload)
 
 
 def lowpass_lfe(signal: np.ndarray) -> np.ndarray:

@@ -200,16 +200,16 @@ export ALTSCREEN_ADVERT_DISPLAYS=1
 export AUDIO_SPATIAL=1
 export AUDIO_SPATIAL_ATMOS=0
 export AUDIO_SPATIAL_ATMOS_MODE=downmix
-# Ordinary buffered stereo stays on the same fixed PCM6 route. music-stage
-# keeps C at zero, protects the centered source, promotes the HSR residual and
-# admits stable off-centre sources into matching Ls/Rs. It redistributes that
-# energy from the dry fronts instead of merely duplicating it. The explicitly
-# selected LFE assist adds LR4-low-passed mono bass. Its paired 0.94 front gain
-# is required by the recovered SoundAmp matrix headroom proof.
+# Ordinary buffered stereo stays on the same fixed PCM6 route.  Runtime has
+# only an on/off switch; scripts/build_hook.sh selects the actual renderer with
+# UPMIX_PROFILE (checked-in default: hssr-object-focus).  The explicitly
+# selected LFE assist adds LR4-low-passed mono bass.
+# Native APAC multichannel bypasses the stereo upmixer.
 # Roll back atomically with AUDIO_STEREO_UPMIX=off; OFF is exact L,R,0,0,0,0
 # and ignores the LFE setting.
-export AUDIO_STEREO_UPMIX=music-stage
-export AUDIO_STEREO_SURROUND=0.20
+export AUDIO_STEREO_UPMIX=on
+export AUDIO_HSSR_MODEL="$H/hssr_model.bin"
+export AUDIO_STEREO_SURROUND=0.25
 export AUDIO_STEREO_LFE=assist
 export AUDIO_BUFFERED_THREAD_PRIO=18
 export AUDIO_SPATIAL_CODEC_LIB="$H/libcarplay_apac.so"

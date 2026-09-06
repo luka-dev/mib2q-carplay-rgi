@@ -10,7 +10,9 @@
 #
 #   ./scripts/build_hook.sh                        # default image (LOG=1)
 #   QNX_TOOLCHAIN_VARIANT=8.5 ./scripts/build_hook.sh
-#   LOG=0 ./scripts/build_hook.sh                  # logging disabled
+#   UPMIX_PROFILE=hssr-object-v2 ./scripts/build_hook.sh # compiled profile
+#   LOG=0 ./scripts/build_hook.sh                  # pre-prod: logs/captures disabled
+#   LOG=0 AUDIO_STATE_TRACE=1 ./scripts/build_hook.sh # compact lifecycle trace only
 #   LOG_RGD_PACKET_RAW=1 ./scripts/build_hook.sh   # raw RGD logging (needs LOG=1)
 #
 # NOTE: these are not the stock QNX 4.4.2 compiler.  The hook uses no __thread
@@ -53,12 +55,35 @@ mkdir -p "$(dirname "$OUT")"
 
 LOG="${LOG:-1}"
 LOG_RGD_PACKET_RAW="${LOG_RGD_PACKET_RAW:-0}"
+AUDIO_STATE_TRACE="${AUDIO_STATE_TRACE:-0}"
+UPMIX_PROFILE="${UPMIX_PROFILE:-hssr-object-focus}"
 [[ "$LOG" == "0" || "$LOG" == "1" ]] || { echo "Invalid LOG=$LOG (0|1)"; exit 1; }
 [[ "$LOG_RGD_PACKET_RAW" == "0" || "$LOG_RGD_PACKET_RAW" == "1" ]] || { echo "Invalid LOG_RGD_PACKET_RAW"; exit 1; }
+[[ "$AUDIO_STATE_TRACE" == "0" || "$AUDIO_STATE_TRACE" == "1" ]] || { echo "Invalid AUDIO_STATE_TRACE=$AUDIO_STATE_TRACE (0|1)"; exit 1; }
 [[ "$LOG_RGD_PACKET_RAW" == "1" && "$LOG" != "1" ]] && { echo "LOG_RGD_PACKET_RAW=1 requires LOG=1"; exit 1; }
 
-CFLAGS_EXTRA="-D__QNX__"
-[ "$LOG" == "0" ] && CFLAGS_EXTRA="$CFLAGS_EXTRA -DENABLE_LOGGING=0" && echo "Logging DISABLED"
+case "$UPMIX_PROFILE" in
+  ambient-lite)       UPMIX_BACKEND=SPA_STEREO_UPMIX_AMBIENT_LITE ;;
+  ambient-hq)         UPMIX_BACKEND=SPA_STEREO_UPMIX_AMBIENT_HQ ;;
+  hsr-td)             UPMIX_BACKEND=SPA_STEREO_UPMIX_HSR_TD ;;
+  hsr-td-active)      UPMIX_BACKEND=SPA_STEREO_UPMIX_HSR_TD_ACTIVE ;;
+  music-stage)        UPMIX_BACKEND=SPA_STEREO_UPMIX_MUSIC_STAGE ;;
+  hssr-neon)          UPMIX_BACKEND=SPA_STEREO_UPMIX_HSSR_NEON ;;
+  hssr-active)        UPMIX_BACKEND=SPA_STEREO_UPMIX_HSSR_ACTIVE ;;
+  hssr-object)        UPMIX_BACKEND=SPA_STEREO_UPMIX_HSSR_OBJECT ;;
+  hssr-object-v2)     UPMIX_BACKEND=SPA_STEREO_UPMIX_HSSR_OBJECT_V2 ;;
+  hssr-object-focus)  UPMIX_BACKEND=SPA_STEREO_UPMIX_HSSR_OBJECT_FOCUS ;;
+  *)
+    echo "Invalid UPMIX_PROFILE=$UPMIX_PROFILE"
+    echo "Expected ambient-lite|ambient-hq|hsr-td|hsr-td-active|music-stage|hssr-neon|hssr-active|hssr-object|hssr-object-v2|hssr-object-focus"
+    exit 1
+    ;;
+esac
+
+CFLAGS_EXTRA="-D__QNX__ -mfpu=neon -mfloat-abi=softfp -DSPA_AUDIO_STEREO_UPMIX_COMPILED_BACKEND=$UPMIX_BACKEND"
+echo "Compiled stereo upmix profile: $UPMIX_PROFILE"
+[ "$LOG" == "0" ] && CFLAGS_EXTRA="$CFLAGS_EXTRA -DENABLE_LOGGING=0" && echo "Logging and diagnostic captures DISABLED"
+[ "$AUDIO_STATE_TRACE" == "1" ] && CFLAGS_EXTRA="$CFLAGS_EXTRA -DENABLE_STATE_TRACE=1" && echo "Compact lifecycle trace ENABLED"
 [ "$LOG_RGD_PACKET_RAW" == "1" ] && CFLAGS_EXTRA="$CFLAGS_EXTRA -DRGD_TRACE_RAW_FULL=1" && echo "RGD raw packet logging ENABLED"
 
 if ! docker image inspect "$IMG" >/dev/null 2>&1; then
@@ -99,18 +124,20 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
       -Wl,--gc-sections -Wl,-soname,libcarplay_apac.so -lm
 
   cd /src/hook
-  SRCS="framework/logging.c framework/bus.c framework/iap2_protocol.c framework/hook_framework.c \
+  SRCS="framework/logging.c framework/state_trace.c framework/bus.c framework/iap2_protocol.c framework/hook_framework.c \
         framework/airplay_seams.c \
         routeguidance/rgd_tlv.c routeguidance/rgd_hook.c coverart/coverart_hook.c \
         altscreen/altscreen_av.c altscreen/altscreen_hook.c audio/spatial_downmix.c \
-        audio/stereo_upmix.c \
-        audio/apap_crypto.c audio/apac_codec_loader.c audio/aac_bridge.c audio/audio_hook.c main.c"
+        audio/stereo_upmix.c audio/hssr_dsp.c audio/hssr_neon.c \
+        audio/apap_crypto.c audio/apap_lifecycle.c audio/apac_codec_loader.c \
+        audio/aac_bridge.c audio/audio_hook.c main.c"
   $CC -shared -fPIC -O2 -std=gnu99 -fdata-sections -ffunction-sections '"$CFLAGS_EXTRA"' \
       -I. -I/src/apac_decoder/include $SRCS \
       -o /src/build/libcarplay_hook.so -Wl,--gc-sections -lz -lsocket -lm
 
   fail() { echo "REJECTED: $*"; exit 1; }
   SO=/src/build/libcarplay_hook.so
+  TRACE_ENABLED='"$AUDIO_STATE_TRACE"'
 
   # 1. emutls trap: the hook must never carry thread-local emutls (QNX 6.5 crash).
   n=$($NM $SO 2>/dev/null | grep -ci emutls || true)
@@ -131,6 +158,12 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
   [ "$n" = "0" ] || fail "the hook has a hard dependency on libcarplay_apac"
   n=$($NM -D $SO | grep -cE " T snd_pcm_(open_name|plugin_params|plugin_setup|plugin_write|close)$" || true)
   [ "$n" = "5" ] || fail "QSA bridge exports=$n (expected open/params/setup/write/close)"
+  n=$($NM -D $SO | grep -cE " T HID(RemotePlaybackFillReport|DevicePostReport)$" || true)
+  if [ "$TRACE_ENABLED" = "1" ]; then
+      [ "$n" = "2" ] || fail "state-trace HID seam exports=$n (expected 2)"
+  else
+      [ "$n" = "0" ] || fail "quiet build unexpectedly exports $n state-trace HID seams"
+  fi
 
   # 6. ldqnx must run compiler bookkeeping only.  Module constructors used to
   # reach LOG_INFO -> pthread_create while the QNX loader lock was still held,
@@ -161,6 +194,12 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
   echo "  built build/libcarplay_apac.so (ABI v1, emutls=0 exceptions=0 rtti=0 stl=0 libstdc++=0)"
   echo "  built build/libcarplay_hook.so (APAC=dlopen, emutls=0 init_array=compiler-only)"
 '
+
+if [ "$AUDIO_STATE_TRACE" = "1" ]; then
+    strings "$OUT" | grep -q "IAP_NOW_PLAYING_START" || {
+        echo "REJECTED: compact state-trace markers missing"; exit 1;
+    }
+fi
 
 echo ""
 echo "Compiled: $OUT"

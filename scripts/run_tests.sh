@@ -17,14 +17,140 @@ cc -std=c99 -O2 -Wall -Wextra -Werror -Ihook \
 
 printf '%-32s ' stereo_upmix_test
 cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
-    tests/stereo_upmix_test.c hook/audio/stereo_upmix.c -o "$OUT/upmix"
+    tests/stereo_upmix_test.c hook/audio/stereo_upmix.c \
+    hook/audio/hssr_dsp.c hook/audio/hssr_neon.c -lm -o "$OUT/upmix"
 "$OUT/upmix"
+
+printf '%-32s ' hssr_neon_test
+cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
+    tests/hssr_neon_test.c hook/audio/hssr_neon.c -o "$OUT/hssr_neon"
+"$OUT/hssr_neon"
 
 printf '%-32s ' buffered_pcm_switch_test
 cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
     tests/buffered_pcm_switch_test.c hook/audio/spatial_downmix.c \
-    hook/audio/stereo_upmix.c -o "$OUT/switch"
+    hook/audio/stereo_upmix.c hook/audio/hssr_dsp.c hook/audio/hssr_neon.c \
+    -lm -o "$OUT/switch"
 "$OUT/switch"
+
+printf '%-32s ' apap_lifecycle_test
+cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
+    tests/apap_lifecycle_test.c hook/audio/apap_lifecycle.c \
+    -o "$OUT/apap_lifecycle"
+"$OUT/apap_lifecycle"
+
+printf '%-32s ' state_trace_test
+cc -std=c99 -O2 -Wall -Wextra -Werror -Ihook \
+    -DENABLE_LOGGING=0 -DENABLE_STATE_TRACE=1 \
+    tests/state_trace_test.c hook/framework/state_trace.c \
+    hook/framework/iap2_protocol.c -o "$OUT/state_trace"
+"$OUT/state_trace" && echo OK
+
+printf '%-32s ' state_trace_logger_test
+cc -std=c99 -O2 -Wall -Wextra -Werror -Ihook \
+    -DENABLE_LOGGING=0 -DENABLE_STATE_TRACE=1 \
+    tests/state_trace_logger_test.c hook/framework/logging.c \
+    -lpthread -ldl -o "$OUT/state_trace_logger"
+"$OUT/state_trace_logger" && echo OK
+
+printf '%-32s ' state_trace_analyzer_test
+trace_summary=$(python3 tools/analyze_carplay_state_trace.py \
+    tests/fixtures/state_trace_sample.log)
+printf '%s\n' "$trace_summary" | grep -q \
+    'buffered_pre_rate_qsa_writes: 0'
+printf '%s\n' "$trace_summary" | grep -q \
+    'compressed_queue_failures: 0'
+printf '%s\n' "$trace_summary" | grep -q \
+    'flush_applied_events: 0'
+printf '%s\n' "$trace_summary" | grep -q \
+    'pid 4242 generation 0: Pre-Identify process events only'
+printf '%s\n' "$trace_summary" | grep -q \
+    'pid 4242 generation 1: The traced transport/render path and Pioneer media-route declaration completed through QSA.'
+printf '%s\n' "$trace_summary" | grep -q \
+    'pid 4242 generation 2: No outbound 0x5000 was constructed'
+printf '%s\n' "$trace_summary" | grep -q \
+    'pid 4343 generation 1: No outbound 0x5000 was constructed'
+printf '%s\n' "$trace_summary" | grep -q \
+    'pid 4242 generation 3: Stock type 100 released the Pioneer Media route while type 103 kept rendering'
+printf '%s\n' "$trace_summary" | grep -q \
+    'pid 4242 generation 4: The traced transport/render path and Pioneer media-route declaration completed through QSA.'
+printf '%s\n' "$trace_summary" | grep -q \
+    'route_reacquire_missing: 1'
+printf '%s\n' "$trace_summary" | grep -q \
+    'hid_report_posts: 1'
+printf '%s\n' "$trace_summary" | grep -q \
+    "now_playing_retry_actions: \['queued'\]"
+printf '%s\n' "$trace_summary" | grep -q \
+    "'upmix': 'hssr-neon'"
+printf '%s\n' "$trace_summary" | grep -q \
+    "qsa_open_actions: \['cold_buffered'\]"
+printf '%s\n' "$trace_summary" | grep -q \
+    "audio_route_actions: \['request'\]"
+printf '%s\n' "$trace_summary" | grep -q \
+    'qsa_cold_bootstrap_failures: 0'
+printf '%s\n' "$trace_summary" | grep -q \
+    'buffered_packet_anomalies:'
+printf '%s\n' "$trace_summary" | grep -q \
+    "'zero-pcm': 1"
+printf '%s\n' "$trace_summary" | grep -q \
+    'buffered_sequence_gaps: 1'
+printf '%s\n' "$trace_summary" | grep -q \
+    'apap_max_gap_ms: 141'
+printf '%s\n' "$trace_summary" | grep -q \
+    'qsa_ring_wait_max_ms: 143'
+printf '%s\n' "$trace_summary" | grep -q \
+    'qsa_cadence_max_gap_ms: 146'
+printf '%s\n' "$trace_summary" | grep -q \
+    'qsa_device_underruns: 1'
+printf '%s\n' "$trace_summary" | grep -q \
+    'audio_health_decision: QSA device underrun counter advanced'
+printf '%s\n' "$trace_summary" | grep -q \
+    'flush_restart_sequence_gaps: 1'
+printf '%s\n' "$trace_summary" | grep -q \
+    'flush_restart_anchors: 2'
+printf '%s\n' "$trace_summary" | grep -q \
+    'flush_boundaries_crossed: 1'
+printf '%s\n' "$trace_summary" | grep -q \
+    'flush_discarded_packets_total: 497'
+printf '%s\n' "$trace_summary" | grep -q \
+    'flush_restart_apap_gaps: 1'
+printf '%s\n' "$trace_summary" | grep -q \
+    'flush_restart_qsa_gaps: 1'
+printf '%s\n' "$trace_summary" | grep -q \
+    'flush_restart_qsa_write_anomalies: 1'
+printf '%s\n' "$trace_summary" | grep -q \
+    'qsa_queue_prefill_clock_resets: 1'
+printf '%s\n' "$trace_summary" | grep -q \
+    'qsa_buffered_silence_periods: 1'
+printf '%s\n' "$trace_summary" | grep -q \
+    'flush_restart_buffered_silences: 1'
+printf '%s\n' "$trace_summary" | grep -q \
+    'steady_buffered_silences: 0'
+printf '%s\n' "$trace_summary" | grep -q \
+    'steady_qsa_gaps: 0'
+printf '%s\n' "$trace_summary" | grep -q \
+    'audio_health_decision: All recorded buffered/QSA anomalies followed FLUSHBUFFERED within 2000 ms'
+lifecycle_summary=$(python3 tools/analyze_carplay_state_trace.py \
+    tests/fixtures/state_trace_lifecycle_sample.log)
+printf '%s\n' "$lifecycle_summary" | grep -q \
+    'buffered_initial_rates: \[0\]'
+printf '%s\n' "$lifecycle_summary" | grep -q \
+    'buffered_pre_rate_qsa_writes: 1'
+printf '%s\n' "$lifecycle_summary" | grep -q \
+    'compressed_queue_max_packets: 10'
+printf '%s\n' "$lifecycle_summary" | grep -q \
+    'compressed_queue_max_bytes: 400'
+printf '%s\n' "$lifecycle_summary" | grep -q \
+    'compressed_queue_backpressure_events: 1'
+printf '%s\n' "$lifecycle_summary" | grep -q \
+    'compressed_queue_failures: 1'
+printf '%s\n' "$lifecycle_summary" | grep -q \
+    'flush_applied_events: 1'
+printf '%s\n' "$lifecycle_summary" | grep -q \
+    'flush_removed_compressed_packets: 2'
+printf '%s\n' "$lifecycle_summary" | grep -q \
+    'flush_removed_pcm_frames: 1024'
+echo OK
 
 printf '%-32s ' apac_integration_test
 c++ -std=c++11 -O2 -w -fno-exceptions -fno-rtti \

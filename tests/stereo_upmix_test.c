@@ -23,6 +23,12 @@ enum {
 static int16_t g_input[TEST_LONG_FRAMES * SPA_STEREO_UPMIX_INPUT_CHANNELS];
 static int16_t g_output_a[TEST_LONG_FRAMES * SPA_STEREO_UPMIX_OUTPUT_CHANNELS];
 static int16_t g_output_b[TEST_LONG_FRAMES * SPA_STEREO_UPMIX_OUTPUT_CHANNELS];
+static union {
+    float align;
+    uint8_t bytes[SPA_HSSR_MODEL_PAYLOAD_BYTES];
+} g_hssr_payload;
+static struct spa_hssr_model g_hssr_model;
+static int g_hssr_model_ready;
 
 /* Individual DSP states below are static as well.  The HQ state deliberately
  * owns its FFT/WOLA storage, so placing several instances on main's stack
@@ -71,6 +77,29 @@ static int16_t test_q15_scale(int16_t sample, uint32_t gain_q15)
     return (int16_t)(-((product + INT64_C(16384)) / INT64_C(32768)));
 }
 
+static const struct spa_hssr_model *test_hssr_model(void)
+{
+    float *floats;
+    unsigned i;
+
+    if (g_hssr_model_ready) return &g_hssr_model;
+    memset(&g_hssr_payload, 0, sizeof(g_hssr_payload));
+    floats = (float *)(void *)(g_hssr_payload.bytes +
+                               SPA_HSSR_WEIGHT_BYTES);
+    for (i = 0; i < SPA_HSSR_FEATURES; ++i)
+        floats[SPA_HSSR_FEATURES + i] = 1.0f;
+    for (i = SPA_HSSR_FEATURES * 2;
+         i < SPA_HSSR_FEATURES * 2 +
+             SPA_HSSR_GATE_ROWS * 4 + SPA_HSSR_OUTPUTS;
+         ++i)
+        floats[i] = 1.0f / 127.0f;
+    assert(spa_hssr_model_view_payload(
+               &g_hssr_model, g_hssr_payload.bytes,
+               sizeof(g_hssr_payload.bytes), 0) == SPA_HSSR_OK);
+    g_hssr_model_ready = 1;
+    return &g_hssr_model;
+}
+
 static void test_init(struct spa_stereo_upmix *state,
                       enum spa_stereo_upmix_backend backend,
                       uint32_t front_gain_q15,
@@ -81,6 +110,12 @@ static void test_init(struct spa_stereo_upmix *state,
     spa_stereo_upmix_default_config(&config);
     spa_stereo_upmix_config_set_lfe(&config, 0);
     config.backend = backend;
+    if (backend == SPA_STEREO_UPMIX_HSSR_NEON ||
+        backend == SPA_STEREO_UPMIX_HSSR_ACTIVE ||
+        backend == SPA_STEREO_UPMIX_HSSR_OBJECT ||
+        backend == SPA_STEREO_UPMIX_HSSR_OBJECT_V2 ||
+        backend == SPA_STEREO_UPMIX_HSSR_OBJECT_FOCUS)
+        spa_stereo_upmix_config_set_hssr_model(&config, test_hssr_model());
     config.front_gain_q15 = front_gain_q15;
     config.rear_gain_q15 = rear_gain_q15;
     assert(spa_stereo_upmix_init(state, &config) == SPA_STEREO_UPMIX_OK);
@@ -95,6 +130,12 @@ static void test_init_lfe(struct spa_stereo_upmix *state,
     spa_stereo_upmix_default_config(&config);
     spa_stereo_upmix_config_set_lfe(&config, 1);
     config.backend = backend;
+    if (backend == SPA_STEREO_UPMIX_HSSR_NEON ||
+        backend == SPA_STEREO_UPMIX_HSSR_ACTIVE ||
+        backend == SPA_STEREO_UPMIX_HSSR_OBJECT ||
+        backend == SPA_STEREO_UPMIX_HSSR_OBJECT_V2 ||
+        backend == SPA_STEREO_UPMIX_HSSR_OBJECT_FOCUS)
+        spa_stereo_upmix_config_set_hssr_model(&config, test_hssr_model());
     config.rear_gain_q15 = rear_gain_q15;
     assert(spa_stereo_upmix_init(state, &config) == SPA_STEREO_UPMIX_OK);
 }
@@ -172,6 +213,7 @@ static void test_default_and_validation(void)
     assert(config.lfe_gain_q15 == SPA_STEREO_UPMIX_LFE_Q15_DEFAULT);
     assert(config.lfe_enabled == 0);
     assert(config.backend == SPA_STEREO_UPMIX_AMBIENT_LITE);
+    assert(config.hssr_model == NULL);
 
     spa_stereo_upmix_config_set_lfe(&config, 0);
     assert(config.lfe_enabled == 0);
@@ -191,6 +233,16 @@ static void test_default_and_validation(void)
                SPA_STEREO_UPMIX_HSR_TD_ACTIVE));
     assert(spa_stereo_upmix_backend_supported(
                SPA_STEREO_UPMIX_MUSIC_STAGE));
+    assert(spa_stereo_upmix_backend_supported(
+               SPA_STEREO_UPMIX_HSSR_NEON));
+    assert(spa_stereo_upmix_backend_supported(
+               SPA_STEREO_UPMIX_HSSR_ACTIVE));
+    assert(spa_stereo_upmix_backend_supported(
+               SPA_STEREO_UPMIX_HSSR_OBJECT));
+    assert(spa_stereo_upmix_backend_supported(
+               SPA_STEREO_UPMIX_HSSR_OBJECT_V2));
+    assert(spa_stereo_upmix_backend_supported(
+               SPA_STEREO_UPMIX_HSSR_OBJECT_FOCUS));
     assert(!spa_stereo_upmix_backend_supported(SPA_STEREO_UPMIX_PIONEER_RER));
     assert(!spa_stereo_upmix_backend_supported(SPA_STEREO_UPMIX_CUPGAN));
 
@@ -203,6 +255,20 @@ static void test_default_and_validation(void)
 
     config.backend = SPA_STEREO_UPMIX_AMBIENT_HQ;
     assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
+    config.backend = SPA_STEREO_UPMIX_HSSR_NEON;
+    assert(spa_stereo_upmix_init(&state, &config) ==
+           SPA_STEREO_UPMIX_ERROR_CONFIG);
+    spa_stereo_upmix_config_set_hssr_model(&config, test_hssr_model());
+    assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
+    config.backend = SPA_STEREO_UPMIX_HSSR_ACTIVE;
+    assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
+    config.backend = SPA_STEREO_UPMIX_HSSR_OBJECT;
+    assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
+    config.backend = SPA_STEREO_UPMIX_HSSR_OBJECT_V2;
+    assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
+    config.backend = SPA_STEREO_UPMIX_HSSR_OBJECT_FOCUS;
+    assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
+    spa_stereo_upmix_config_set_hssr_model(&config, NULL);
     config.backend = SPA_STEREO_UPMIX_AMBIENT_LITE;
     config.sample_rate_hz = 44100;
     assert(spa_stereo_upmix_init(&state, &config) ==
@@ -1796,6 +1862,443 @@ static void test_music_stage_panned_source_and_guards(void)
     assert(memcmp(g_output_a, g_output_b, sizeof(g_output_a)) == 0);
 }
 
+static void test_hssr_latency_fold_and_chunking(void)
+{
+    static struct spa_stereo_upmix reference;
+    static struct spa_stereo_upmix chunked;
+    uint32_t seed_l = UINT32_C(0x48535352);
+    uint32_t seed_r = UINT32_C(0x4e454f4e);
+    double rear_energy = 0.0;
+    size_t frame;
+
+    for (frame = 0; frame < TEST_LONG_FRAMES; ++frame) {
+        g_input[frame * 2] = test_noise_sample(&seed_l);
+        g_input[frame * 2 + 1] = test_noise_sample(&seed_r);
+    }
+    test_init(&reference, SPA_STEREO_UPMIX_HSSR_NEON,
+              SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT,
+              SPA_STEREO_UPMIX_REAR_Q15_DEFAULT);
+    test_init(&chunked, SPA_STEREO_UPMIX_HSSR_NEON,
+              SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT,
+              SPA_STEREO_UPMIX_REAR_Q15_DEFAULT);
+    test_process_fixed_blocks(&reference, g_input, TEST_LONG_FRAMES,
+                              g_output_a, 1024);
+    test_process_blocks(&chunked, g_input, TEST_LONG_FRAMES, g_output_b, 3);
+    assert(memcmp(g_output_a, g_output_b, sizeof(g_output_a)) == 0);
+    assert(reference._runtime._hssr.network.inference_count ==
+           (TEST_LONG_FRAMES - SPA_HSSR_FFT_SIZE + SPA_HSSR_HOP_SIZE) /
+           (SPA_HSSR_HOP_SIZE * SPA_HSSR_CONTROL_HOPS));
+
+    for (frame = 0; frame < TEST_LONG_FRAMES; ++frame) {
+        const int16_t *output = g_output_a + frame * 6;
+
+        assert(output[SPA_STEREO_UPMIX_CHANNEL_C] == 0);
+        assert(output[SPA_STEREO_UPMIX_CHANNEL_LFE] == 0);
+        if (frame < SPA_HSSR_LATENCY_FRAMES) {
+            assert(output[SPA_STEREO_UPMIX_CHANNEL_L] == 0);
+            assert(output[SPA_STEREO_UPMIX_CHANNEL_R] == 0);
+            assert(output[SPA_STEREO_UPMIX_CHANNEL_LS] == 0);
+            assert(output[SPA_STEREO_UPMIX_CHANNEL_RS] == 0);
+        } else {
+            size_t source = frame - SPA_HSSR_LATENCY_FRAMES;
+            int16_t expected_l = test_q15_scale(
+                g_input[source * 2], SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT);
+            int16_t expected_r = test_q15_scale(
+                g_input[source * 2 + 1], SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT);
+            int32_t folded_l = output[SPA_STEREO_UPMIX_CHANNEL_L] +
+                test_q15_scale(output[SPA_STEREO_UPMIX_CHANNEL_LS],
+                               UINT32_C(23170));
+            int32_t folded_r = output[SPA_STEREO_UPMIX_CHANNEL_R] +
+                test_q15_scale(output[SPA_STEREO_UPMIX_CHANNEL_RS],
+                               UINT32_C(23170));
+
+            assert(folded_l == expected_l);
+            assert(folded_r == expected_r);
+            if (frame >= 2048) {
+                double rear_l = output[SPA_STEREO_UPMIX_CHANNEL_LS];
+                double rear_r = output[SPA_STEREO_UPMIX_CHANNEL_RS];
+                rear_energy += rear_l * rear_l + rear_r * rear_r;
+            }
+        }
+    }
+    assert(rear_energy > 1.0e9);
+
+    assert(spa_stereo_upmix_reset(&chunked) == SPA_STEREO_UPMIX_OK);
+    test_process_fixed_blocks(&chunked, g_input, TEST_LONG_FRAMES,
+                              g_output_b, 257);
+    assert(memcmp(g_output_a, g_output_b, sizeof(g_output_a)) == 0);
+}
+
+static void test_hssr_active_relocation(void)
+{
+    static struct spa_stereo_upmix safe;
+    static struct spa_stereo_upmix active;
+    uint32_t seed_l = UINT32_C(0x41435449);
+    uint32_t seed_r = UINT32_C(0x56454853);
+    double safe_rear_energy = 0.0;
+    double active_rear_energy = 0.0;
+    double safe_front_change = 0.0;
+    double active_front_change = 0.0;
+    size_t frame;
+
+    for (frame = 0; frame < TEST_LONG_FRAMES; ++frame) {
+        g_input[frame * 2] = test_noise_sample(&seed_l);
+        g_input[frame * 2 + 1] = test_noise_sample(&seed_r);
+    }
+    test_init(&safe, SPA_STEREO_UPMIX_HSSR_NEON,
+              SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT,
+              SPA_STEREO_UPMIX_REAR_Q15_MAX);
+    test_init(&active, SPA_STEREO_UPMIX_HSSR_ACTIVE,
+              SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT,
+              SPA_STEREO_UPMIX_REAR_Q15_MAX);
+    test_process_fixed_blocks(&safe, g_input, TEST_LONG_FRAMES,
+                              g_output_a, 1024);
+    test_process_blocks(&active, g_input, TEST_LONG_FRAMES,
+                        g_output_b, 3);
+
+    assert(active._runtime._hssr.active_profile == 1u);
+    assert(active._runtime._hssr.network.inference_count ==
+           safe._runtime._hssr.network.inference_count);
+    for (frame = 0; frame < TEST_LONG_FRAMES; ++frame) {
+        const int16_t *safe_out = g_output_a + frame * 6;
+        const int16_t *active_out = g_output_b + frame * 6;
+
+        assert(active_out[SPA_STEREO_UPMIX_CHANNEL_C] == 0);
+        assert(active_out[SPA_STEREO_UPMIX_CHANNEL_LFE] == 0);
+        if (frame >= SPA_HSSR_LATENCY_FRAMES) {
+            size_t source = frame - SPA_HSSR_LATENCY_FRAMES;
+            int16_t dry_l = test_q15_scale(
+                g_input[source * 2], SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT);
+            int16_t dry_r = test_q15_scale(
+                g_input[source * 2 + 1], SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT);
+            int32_t expected_l = (int32_t)dry_l -
+                (int32_t)test_q15_scale(
+                    active_out[SPA_STEREO_UPMIX_CHANNEL_LS],
+                    UINT32_C(57344));
+            int32_t expected_r = (int32_t)dry_r -
+                (int32_t)test_q15_scale(
+                    active_out[SPA_STEREO_UPMIX_CHANNEL_RS],
+                    UINT32_C(57344));
+            double safe_dl = (double)dry_l -
+                safe_out[SPA_STEREO_UPMIX_CHANNEL_L];
+            double safe_dr = (double)dry_r -
+                safe_out[SPA_STEREO_UPMIX_CHANNEL_R];
+            double active_dl = (double)dry_l -
+                active_out[SPA_STEREO_UPMIX_CHANNEL_L];
+            double active_dr = (double)dry_r -
+                active_out[SPA_STEREO_UPMIX_CHANNEL_R];
+
+            if (expected_l > (int32_t)SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT)
+                expected_l = SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT;
+            if (expected_l < -(int32_t)SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT)
+                expected_l = -(int32_t)SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT;
+            if (expected_r > (int32_t)SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT)
+                expected_r = SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT;
+            if (expected_r < -(int32_t)SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT)
+                expected_r = -(int32_t)SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT;
+            assert(active_out[SPA_STEREO_UPMIX_CHANNEL_L] == expected_l);
+            assert(active_out[SPA_STEREO_UPMIX_CHANNEL_R] == expected_r);
+
+            safe_rear_energy +=
+                (double)safe_out[SPA_STEREO_UPMIX_CHANNEL_LS] *
+                    safe_out[SPA_STEREO_UPMIX_CHANNEL_LS] +
+                (double)safe_out[SPA_STEREO_UPMIX_CHANNEL_RS] *
+                    safe_out[SPA_STEREO_UPMIX_CHANNEL_RS];
+            active_rear_energy +=
+                (double)active_out[SPA_STEREO_UPMIX_CHANNEL_LS] *
+                    active_out[SPA_STEREO_UPMIX_CHANNEL_LS] +
+                (double)active_out[SPA_STEREO_UPMIX_CHANNEL_RS] *
+                    active_out[SPA_STEREO_UPMIX_CHANNEL_RS];
+            safe_front_change += safe_dl * safe_dl + safe_dr * safe_dr;
+            active_front_change +=
+                active_dl * active_dl + active_dr * active_dr;
+        }
+    }
+    /* The zero-weight fixture emits equal class probabilities, so Active may
+     * conservatively route less rear than the safe profile.  It must still
+     * produce a real candidate and relocate that candidate much more strongly
+     * instead of rewarding an ambiguous classifier output. */
+    assert(safe_rear_energy > 1.0e9);
+    assert(active_rear_energy > 1.0e9);
+    assert(active_front_change * safe_rear_energy >
+           safe_front_change * active_rear_energy * 4.0);
+
+    assert(spa_stereo_upmix_reset(&active) == SPA_STEREO_UPMIX_OK);
+    assert(active._runtime._hssr.active_profile == 1u);
+}
+
+static void test_hssr_object_selective_relocation(void)
+{
+    static struct spa_stereo_upmix object;
+    uint32_t seed_l = UINT32_C(0x4f424a45);
+    uint32_t seed_r = UINT32_C(0x43545252);
+    double rear_energy = 0.0;
+    float minimum_mask = 1.0f;
+    float maximum_mask = 0.0f;
+    size_t frame;
+    unsigned bin;
+
+    for (frame = 0; frame < TEST_LONG_FRAMES; ++frame) {
+        g_input[frame * 2] = test_noise_sample(&seed_l);
+        g_input[frame * 2 + 1] = test_noise_sample(&seed_r);
+    }
+    test_init(&object, SPA_STEREO_UPMIX_HSSR_OBJECT,
+              SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT,
+              SPA_STEREO_UPMIX_REAR_Q15_MAX);
+    test_process_blocks(&object, g_input, TEST_LONG_FRAMES, g_output_a, 17);
+
+    assert(object._runtime._hssr.active_profile == 2u);
+    for (frame = SPA_HSSR_LATENCY_FRAMES;
+         frame < TEST_LONG_FRAMES; ++frame) {
+        size_t source = frame - SPA_HSSR_LATENCY_FRAMES;
+        const int16_t *output = g_output_a + frame * 6;
+        int16_t dry_l = test_q15_scale(
+            g_input[source * 2], SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT);
+        int16_t dry_r = test_q15_scale(
+            g_input[source * 2 + 1], SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT);
+        int32_t expected_l = (int32_t)dry_l -
+            (int32_t)test_q15_scale(
+                output[SPA_STEREO_UPMIX_CHANNEL_LS], UINT32_C(65536));
+        int32_t expected_r = (int32_t)dry_r -
+            (int32_t)test_q15_scale(
+                output[SPA_STEREO_UPMIX_CHANNEL_RS], UINT32_C(65536));
+
+        if (expected_l > (int32_t)SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT)
+            expected_l = SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT;
+        if (expected_l < -(int32_t)SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT)
+            expected_l = -(int32_t)SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT;
+        if (expected_r > (int32_t)SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT)
+            expected_r = SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT;
+        if (expected_r < -(int32_t)SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT)
+            expected_r = -(int32_t)SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT;
+        assert(output[SPA_STEREO_UPMIX_CHANNEL_L] == expected_l);
+        assert(output[SPA_STEREO_UPMIX_CHANNEL_R] == expected_r);
+        assert(output[SPA_STEREO_UPMIX_CHANNEL_C] == 0);
+        assert(output[SPA_STEREO_UPMIX_CHANNEL_LFE] == 0);
+        rear_energy +=
+            (double)output[SPA_STEREO_UPMIX_CHANNEL_LS] *
+                output[SPA_STEREO_UPMIX_CHANNEL_LS] +
+            (double)output[SPA_STEREO_UPMIX_CHANNEL_RS] *
+                output[SPA_STEREO_UPMIX_CHANNEL_RS];
+    }
+    for (bin = 0; bin < SPA_HSSR_BINS; ++bin) {
+        float mask = object._runtime._hssr.bin_mask[bin];
+
+        assert(mask >= 0.0f && mask <= 1.0f);
+        if (mask < minimum_mask) minimum_mask = mask;
+        if (mask > maximum_mask) maximum_mask = mask;
+    }
+    assert(rear_energy > 1.0e8);
+    assert(maximum_mask > minimum_mask + 0.01f);
+
+    assert(spa_stereo_upmix_reset(&object) == SPA_STEREO_UPMIX_OK);
+    assert(object._runtime._hssr.active_profile == 2u);
+}
+
+static void test_hssr_object_v2_persistent_projection(void)
+{
+    static struct spa_stereo_upmix object;
+    uint32_t seed = UINT32_C(0x4f324f42);
+    double rear_l_energy = 0.0;
+    double rear_r_energy = 0.0;
+    double mono_rear_energy = 0.0;
+    float maximum_mask = 0.0f;
+    size_t frame;
+    unsigned bin;
+
+    /* Coherent 2:1 material is the identifiable stereo case: V2 must create
+     * one persistent left-half-plane object and keep its original amplitude
+     * ratio through the rank-one projection. */
+    for (frame = 0; frame < TEST_LONG_FRAMES; ++frame) {
+        int16_t right = (int16_t)(test_noise_sample(&seed) / 2);
+
+        g_input[frame * 2] = (int16_t)((int32_t)right * 2);
+        g_input[frame * 2 + 1] = right;
+    }
+    test_init(&object, SPA_STEREO_UPMIX_HSSR_OBJECT_V2,
+              SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT,
+              SPA_STEREO_UPMIX_REAR_Q15_MAX);
+    test_process_blocks(&object, g_input, TEST_LONG_FRAMES, g_output_a, 23);
+
+    assert(object._runtime._hssr.active_profile == 3u);
+    assert(object._runtime._hssr.object_slot[0].confidence > 0.05f);
+    assert(object._runtime._hssr.object_slot[0].pan > 0.10f);
+    assert(object._runtime._hssr.object_slot[0].hold_hops > 0u);
+    assert(object._runtime._hssr.object_slot[1].confidence <
+           object._runtime._hssr.object_slot[0].confidence * 0.10f);
+
+    for (frame = 4096; frame < TEST_LONG_FRAMES; ++frame) {
+        size_t source = frame - SPA_HSSR_LATENCY_FRAMES;
+        const int16_t *output = g_output_a + frame * 6;
+        int16_t dry_l = test_q15_scale(
+            g_input[source * 2], SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT);
+        int16_t dry_r = test_q15_scale(
+            g_input[source * 2 + 1], SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT);
+        int32_t expected_l = (int32_t)dry_l -
+            (int32_t)test_q15_scale(
+                output[SPA_STEREO_UPMIX_CHANNEL_LS], UINT32_C(65536));
+        int32_t expected_r = (int32_t)dry_r -
+            (int32_t)test_q15_scale(
+                output[SPA_STEREO_UPMIX_CHANNEL_RS], UINT32_C(65536));
+
+        if (expected_l > (int32_t)SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT)
+            expected_l = SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT;
+        if (expected_l < -(int32_t)SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT)
+            expected_l = -(int32_t)SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT;
+        if (expected_r > (int32_t)SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT)
+            expected_r = SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT;
+        if (expected_r < -(int32_t)SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT)
+            expected_r = -(int32_t)SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT;
+        assert(output[SPA_STEREO_UPMIX_CHANNEL_L] == expected_l);
+        assert(output[SPA_STEREO_UPMIX_CHANNEL_R] == expected_r);
+        assert(output[SPA_STEREO_UPMIX_CHANNEL_C] == 0);
+        rear_l_energy +=
+            (double)output[SPA_STEREO_UPMIX_CHANNEL_LS] *
+                output[SPA_STEREO_UPMIX_CHANNEL_LS];
+        rear_r_energy +=
+            (double)output[SPA_STEREO_UPMIX_CHANNEL_RS] *
+                output[SPA_STEREO_UPMIX_CHANNEL_RS];
+    }
+    assert(rear_l_energy > 1.0e9);
+    assert(rear_l_energy > rear_r_energy * 3.50);
+    assert(rear_l_energy < rear_r_energy * 4.50);
+    for (bin = 0; bin < SPA_HSSR_BINS; ++bin) {
+        assert(object._runtime._hssr.bin_mask[bin] >= 0.0f);
+        assert(object._runtime._hssr.bin_mask[bin] <= 1.0f);
+        if (object._runtime._hssr.bin_mask[bin] > maximum_mask)
+            maximum_mask = object._runtime._hssr.bin_mask[bin];
+    }
+    assert(maximum_mask > 0.05f);
+
+    /* An exact mono source has no half-plane object.  Reset removes the old
+     * slot and V2 must not invent common-mode rear energy from it. */
+    for (frame = 0; frame < TEST_LONG_FRAMES; ++frame) {
+        int16_t mono = test_noise_sample(&seed);
+
+        g_input[frame * 2] = mono;
+        g_input[frame * 2 + 1] = mono;
+    }
+    assert(spa_stereo_upmix_reset(&object) == SPA_STEREO_UPMIX_OK);
+    assert(object._runtime._hssr.active_profile == 3u);
+    assert(object._runtime._hssr.object_slot[0].confidence == 0.0f);
+    assert(object._runtime._hssr.object_slot[1].confidence == 0.0f);
+    test_process_blocks(&object, g_input, TEST_LONG_FRAMES, g_output_b, 37);
+    for (frame = 4096; frame < TEST_LONG_FRAMES; ++frame) {
+        const int16_t *output = g_output_b + frame * 6;
+
+        mono_rear_energy +=
+            (double)output[SPA_STEREO_UPMIX_CHANNEL_LS] *
+                output[SPA_STEREO_UPMIX_CHANNEL_LS] +
+            (double)output[SPA_STEREO_UPMIX_CHANNEL_RS] *
+                output[SPA_STEREO_UPMIX_CHANNEL_RS];
+    }
+    assert(mono_rear_energy < 1.0e4);
+}
+
+static void test_hssr_object_focus_hard_steering(void)
+{
+    static struct spa_stereo_upmix v2;
+    static struct spa_stereo_upmix focus;
+    uint32_t seed = UINT32_C(0x53484b52);
+    double v2_l_energy = 0.0;
+    double v2_r_energy = 0.0;
+    double focus_l_energy = 0.0;
+    double focus_r_energy = 0.0;
+    double mono_rear_energy = 0.0;
+    size_t frame;
+
+    /* A coherent 2:1 source is deliberately only moderately panned.  V2 must
+     * preserve that image, while Focus must extract through the same source
+     * vector and then render it as a discrete rear-left object. */
+    for (frame = 0; frame < TEST_LONG_FRAMES; ++frame) {
+        int16_t right = (int16_t)(test_noise_sample(&seed) / 2);
+
+        g_input[frame * 2] = (int16_t)((int32_t)right * 2);
+        g_input[frame * 2 + 1] = right;
+    }
+    test_init(&v2, SPA_STEREO_UPMIX_HSSR_OBJECT_V2,
+              SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT,
+              SPA_STEREO_UPMIX_REAR_Q15_MAX);
+    test_init(&focus, SPA_STEREO_UPMIX_HSSR_OBJECT_FOCUS,
+              SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT,
+              SPA_STEREO_UPMIX_REAR_Q15_MAX);
+    test_process_blocks(&v2, g_input, TEST_LONG_FRAMES, g_output_a, 19);
+    test_process_blocks(&focus, g_input, TEST_LONG_FRAMES, g_output_b, 29);
+
+    assert(focus._runtime._hssr.active_profile == 4u);
+    assert(focus._runtime._hssr.object_slot[0].confidence > 0.05f);
+    assert(focus._runtime._hssr.object_slot[0].hold_hops > 0u);
+    for (frame = 4096; frame < TEST_LONG_FRAMES; ++frame) {
+        size_t source = frame - SPA_HSSR_LATENCY_FRAMES;
+        const int16_t *v2_output = g_output_a + frame * 6;
+        const int16_t *focus_output = g_output_b + frame * 6;
+        int16_t dry_l = test_q15_scale(
+            g_input[source * 2], SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT);
+        int16_t dry_r = test_q15_scale(
+            g_input[source * 2 + 1], SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT);
+        int32_t expected_l = (int32_t)dry_l -
+            (int32_t)test_q15_scale(
+                focus_output[SPA_STEREO_UPMIX_CHANNEL_LS],
+                UINT32_C(81920));
+        int32_t expected_r = (int32_t)dry_r -
+            (int32_t)test_q15_scale(
+                focus_output[SPA_STEREO_UPMIX_CHANNEL_RS],
+                UINT32_C(81920));
+
+        if (expected_l > (int32_t)SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT)
+            expected_l = SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT;
+        if (expected_l < -(int32_t)SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT)
+            expected_l = -(int32_t)SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT;
+        if (expected_r > (int32_t)SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT)
+            expected_r = SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT;
+        if (expected_r < -(int32_t)SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT)
+            expected_r = -(int32_t)SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT;
+        assert(focus_output[SPA_STEREO_UPMIX_CHANNEL_L] == expected_l);
+        assert(focus_output[SPA_STEREO_UPMIX_CHANNEL_R] == expected_r);
+
+        v2_l_energy +=
+            (double)v2_output[SPA_STEREO_UPMIX_CHANNEL_LS] *
+                v2_output[SPA_STEREO_UPMIX_CHANNEL_LS];
+        v2_r_energy +=
+            (double)v2_output[SPA_STEREO_UPMIX_CHANNEL_RS] *
+                v2_output[SPA_STEREO_UPMIX_CHANNEL_RS];
+        focus_l_energy +=
+            (double)focus_output[SPA_STEREO_UPMIX_CHANNEL_LS] *
+                focus_output[SPA_STEREO_UPMIX_CHANNEL_LS];
+        focus_r_energy +=
+            (double)focus_output[SPA_STEREO_UPMIX_CHANNEL_RS] *
+                focus_output[SPA_STEREO_UPMIX_CHANNEL_RS];
+    }
+    assert(v2_l_energy > v2_r_energy * 3.50);
+    assert(focus_l_energy > focus_r_energy * 25.0);
+    assert(focus_l_energy * v2_r_energy >
+           focus_r_energy * v2_l_energy * 5.0);
+    assert(focus_l_energy + focus_r_energy >
+           0.50 * (v2_l_energy + v2_r_energy));
+
+    /* The aggressive renderer may move an identifiable object, but it must
+     * not invent a rear side for exact common-mode material. */
+    for (frame = 0; frame < TEST_LONG_FRAMES; ++frame) {
+        int16_t mono = test_noise_sample(&seed);
+
+        g_input[frame * 2] = mono;
+        g_input[frame * 2 + 1] = mono;
+    }
+    assert(spa_stereo_upmix_reset(&focus) == SPA_STEREO_UPMIX_OK);
+    assert(focus._runtime._hssr.active_profile == 4u);
+    test_process_blocks(&focus, g_input, TEST_LONG_FRAMES, g_output_b, 41);
+    for (frame = 4096; frame < TEST_LONG_FRAMES; ++frame) {
+        const int16_t *output = g_output_b + frame * 6;
+
+        mono_rear_energy +=
+            (double)output[SPA_STEREO_UPMIX_CHANNEL_LS] *
+                output[SPA_STEREO_UPMIX_CHANNEL_LS] +
+            (double)output[SPA_STEREO_UPMIX_CHANNEL_RS] *
+                output[SPA_STEREO_UPMIX_CHANNEL_RS];
+    }
+    assert(mono_rear_energy < 1.0e4);
+}
+
 int main(void)
 {
     test_default_and_validation();
@@ -1829,6 +2332,21 @@ int main(void)
     test_music_stage_panned_source_and_guards();
     test_backend_saturation_and_soundamp_headroom(
         SPA_STEREO_UPMIX_MUSIC_STAGE);
+    test_hssr_latency_fold_and_chunking();
+    test_backend_saturation_and_soundamp_headroom(
+        SPA_STEREO_UPMIX_HSSR_NEON);
+    test_hssr_active_relocation();
+    test_backend_saturation_and_soundamp_headroom(
+        SPA_STEREO_UPMIX_HSSR_ACTIVE);
+    test_hssr_object_selective_relocation();
+    test_backend_saturation_and_soundamp_headroom(
+        SPA_STEREO_UPMIX_HSSR_OBJECT);
+    test_hssr_object_v2_persistent_projection();
+    test_backend_saturation_and_soundamp_headroom(
+        SPA_STEREO_UPMIX_HSSR_OBJECT_V2);
+    test_hssr_object_focus_hard_steering();
+    test_backend_saturation_and_soundamp_headroom(
+        SPA_STEREO_UPMIX_HSSR_OBJECT_FOCUS);
     puts("stereo_upmix_test: OK");
     return 0;
 }

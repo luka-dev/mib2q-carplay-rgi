@@ -1,0 +1,160 @@
+{
+  "schema_version": 1,
+  "model_id": "audi-a5-f5-sportback-9vs-3d-off",
+  "description": "Audi A5/S5 F5 Sportback B&O 9VS host model; Symphoria/3D disabled",
+  "sample_rate": 48000,
+  "vehicle": {
+    "platform": "Audi A5/S5 F5 Sportback",
+    "pr_code": "9VS",
+    "amplifier_part_number": "8W0035465",
+    "amplifier_software": "0420",
+    "amplifier_hardware": "H11",
+    "amplifier_variant": "EV_AMPMst16C2Gen2ALPI",
+    "firmware_sound_program_tag": "PRG_RU_SOUND_B8LI_9VD_RE_V5N_22_04_2009"
+  },
+  "operating_state": {
+    "symphoria_3d_enabled": false,
+    "bass_control": "neutral-unmodelled",
+    "mid_control": "neutral-unmodelled",
+    "treble_control": "neutral-unmodelled",
+    "surround_control": "runtime-value-not-yet-captured",
+    "sound_focus": "runtime-value-not-yet-captured"
+  },
+  "input_channels": ["L", "R", "C", "LFE", "Ls", "Rs", "Ch7", "Ch8"],
+  "logical_buses": ["Bus_L", "Bus_R", "Bus_C", "Bus_LFE", "Bus_Ls", "Bus_Rs", "Bus_7", "Bus_8"],
+  "matrix": {
+    "profile": 0,
+    "bank": 1,
+    "bank_role": "5.1",
+    "sink": "0x26 Entertainment_5.1_SAD",
+    "storage_order": "rows_are_inputs_columns_are_outputs",
+    "stored_floor_db": -100.0,
+    "effective_floor_db": -99.0,
+    "gain_db": [
+      [-2, -100, -6, -100, -100, -100, -100, -100],
+      [-100, -2, -6, -100, -100, -100, -100, -100],
+      [-8, -8, -3, -100, -100, -100, -100, -100],
+      [-8, -8, -10, 3, -14, -14, -100, -100],
+      [-3, -100, -100, -100, 6, -100, -100, -100],
+      [-100, -3, -100, -100, -100, 6, -100, -100],
+      [-3, -100, -100, -100, 9, -100, -100, -100],
+      [-100, -3, -100, -100, -100, 9, -100, -100]
+    ],
+    "provenance": {
+      "image_sha256": "8776fdb84d05571cf4addf42655bc875da7c47cc35166e3cee6c60bc5841fe4b",
+      "image_region": "AD301A07 at V850 CodeFlash offset 0x100000",
+      "matrix_offset": "0x101BB4",
+      "sharc_parameter_range": "0xC022A..0xC0269",
+      "documentation": "docs/SHARC_INPUT_OUTPUT_MATRIX.md"
+    }
+  },
+  "physical_output_graph": {
+    "amplified_channel_count": 16,
+    "speaker_count": 19,
+    "connector": "J525/T38",
+    "vehicle_applicability": "Audi A5/S5 F5 Coupe and Sportback, up to September 2019",
+    "status": "speaker_circuits_proven_logical_bus_binding_inferred",
+    "proof_boundary": {
+      "proven": [
+        "The T38 pin pairs below and their connected loudspeaker designations",
+        "There are 16 amplified electrical output circuits feeding 19 loudspeakers",
+        "R14/R15, R16/R17, R20/R103 and R22/R104 share electrical output pairs",
+        "R211 uses two electrical output pairs"
+      ],
+      "not_proven": [
+        "The internal SHARC/V850 output-channel index assigned to each T38 circuit",
+        "The logical-bus fan-out gains, factory delay, polarity, crossover and EQ per circuit",
+        "Speaker acoustic coordinates, directivity and cabin transfer functions"
+      ]
+    },
+    "output_circuits": [
+      {"id": "t38_3_15_center_2", "pins": [3, 15], "speaker_ids": ["R219"], "zone": "front_center", "topology": "single", "inferred_amplifier_channel": 3},
+      {"id": "t38_4_5_rear_left_door", "pins": [4, 5], "speaker_ids": ["R14", "R15"], "zone": "rear_left", "topology": "shared_pair_passive_distribution_unknown", "inferred_amplifier_channel": 13},
+      {"id": "t38_6_18_center", "pins": [6, 18], "speaker_ids": ["R208"], "zone": "front_center", "topology": "single", "inferred_amplifier_channel": 4},
+      {"id": "t38_7_8_front_left_bass", "pins": [7, 8], "speaker_ids": ["R21"], "zone": "front_left", "topology": "single", "inferred_amplifier_channel": 11},
+      {"id": "t38_9_10_front_right_bass", "pins": [9, 10], "speaker_ids": ["R23"], "zone": "front_right", "topology": "single", "inferred_amplifier_channel": 12},
+      {"id": "t38_11_12_front_left_mid_treble", "pins": [11, 12], "speaker_ids": ["R20", "R103"], "zone": "front_left", "topology": "shared_pair_passive_distribution_unknown", "inferred_amplifier_channel": 1},
+      {"id": "t38_13_14_front_right_mid_treble", "pins": [13, 14], "speaker_ids": ["R22", "R104"], "zone": "front_right", "topology": "shared_pair_passive_distribution_unknown", "inferred_amplifier_channel": 2},
+      {"id": "t38_16_17_rear_right_door", "pins": [16, 17], "speaker_ids": ["R16", "R17"], "zone": "rear_right", "topology": "shared_pair_passive_distribution_unknown", "inferred_amplifier_channel": 14},
+      {"id": "t38_19_20_subwoofer_a", "pins": [19, 20], "speaker_ids": ["R211"], "zone": "subwoofer", "topology": "dual_pair_winding_a", "inferred_amplifier_channel": 15},
+      {"id": "t38_21_22_subwoofer_b", "pins": [21, 22], "speaker_ids": ["R211"], "zone": "subwoofer", "topology": "dual_pair_winding_b", "inferred_amplifier_channel": 16},
+      {"id": "t38_23_31_front_left_treble_2", "pins": [23, 31], "speaker_ids": ["R220"], "zone": "front_left", "topology": "single", "inferred_amplifier_channel": 5},
+      {"id": "t38_24_32_front_right_treble_2", "pins": [24, 32], "speaker_ids": ["R221"], "zone": "front_right", "topology": "single", "inferred_amplifier_channel": 6},
+      {"id": "t38_25_33_front_left_midrange_2", "pins": [25, 33], "speaker_ids": ["R276"], "zone": "front_left", "topology": "single", "inferred_amplifier_channel": 7},
+      {"id": "t38_26_34_front_right_midrange_2", "pins": [26, 34], "speaker_ids": ["R277"], "zone": "front_right", "topology": "single", "inferred_amplifier_channel": 8},
+      {"id": "t38_27_35_left_effect", "pins": [27, 35], "speaker_ids": ["R209"], "zone": "rear_left", "topology": "single", "inferred_amplifier_channel": 9},
+      {"id": "t38_28_36_right_effect", "pins": [28, 36], "speaker_ids": ["R210"], "zone": "rear_right", "topology": "single", "inferred_amplifier_channel": 10}
+    ],
+    "inferred_internal_channel_numbering": {
+      "status": "cross_generation_architectural_inference_not_directly_proven_for_this_mib2_amplifier",
+      "v850_service_groups": [[1, 2, 4, 3], [5, 6, 8, 7], [9, 10, 12, 11], [13, 14], [16, 15]],
+      "strong_matches": "Channels 3/4 centre, 9/10 effect L/R, 11/12 front bass L/R, 13/14 rear L/R, 15/16 subwoofer pair are consistent with the V850 grouping and Audi's published later-generation J525 convention.",
+      "weaker_matches": "Channels 1/2 and 5..8 are assigned by remaining stereo-pair topology; channels 15/16 winding order is arbitrary.",
+      "public_reference": "https://static.nhtsa.gov/odi/tsbs/2021/MC-10189329-0001.pdf"
+    },
+    "documentation": {
+      "current_flow_document": "/Users/luka/Documents/Audi/S5_B9_2018_by_category/S5_B9_2018_4_Electrical_MIB2_Wiring.pdf",
+      "system_pages": "PDF 540-548, Current Flow Diagram No. 45/1-45/9, Bang & Olufsen sound system (9VS), from July 2016",
+      "connector_page": "PDF 1694, J525 T38 connector assignment for Coupe/Sportback up to September 2019"
+    }
+  },
+  "documentary_bus_fanout": {
+    "status": "architectural_inference_not_firmware_proven",
+    "purpose": "Create a deterministic 16-circuit topology render without pretending to know OEM per-output calibration",
+    "normalization": "equal_power_per_logical_bus",
+    "warning": "Circuit assignment by semantic zone is a high-confidence architecture inference. The equal-power gains are a test normalization, not recovered Audi calibration.",
+    "routes": {
+      "Bus_L": ["t38_7_8_front_left_bass", "t38_11_12_front_left_mid_treble", "t38_23_31_front_left_treble_2", "t38_25_33_front_left_midrange_2"],
+      "Bus_R": ["t38_9_10_front_right_bass", "t38_13_14_front_right_mid_treble", "t38_24_32_front_right_treble_2", "t38_26_34_front_right_midrange_2"],
+      "Bus_C": ["t38_3_15_center_2", "t38_6_18_center"],
+      "Bus_LFE": ["t38_19_20_subwoofer_a", "t38_21_22_subwoofer_b"],
+      "Bus_Ls": ["t38_4_5_rear_left_door", "t38_27_35_left_effect"],
+      "Bus_Rs": ["t38_16_17_rear_right_door", "t38_28_36_right_effect"],
+      "Bus_7": [],
+      "Bus_8": []
+    }
+  },
+  "static_tuning_catalog": {
+    "status": "recovered_values_channel_assignment_unresolved",
+    "crossover_frequency_values_hz": [336, 48, 48, 240, 240, 480, 336, 336, 336, 336, 336, 336, 336, 336, 576, 576, 384, 384, 96, 96, 192, 192, 144, 144, 288, 288, 288, 96, 144, 96, 144, 96, 96],
+    "reconstructed_eq_biquad_count": 23,
+    "per_channel_gain_selector_count": 16,
+    "documentation": "docs/AMP_AUDIO_DSP_TUNING.md",
+    "application_rule": "Do not apply these values until their output-circuit assignments and filter roles are proven."
+  },
+  "layout_coordinate_system": {
+    "kind": "schematic-normalized-not-acoustic",
+    "x": "left=-1, centre=0, right=+1",
+    "y": "rear=-1, centre=0, front=+1",
+    "z": "floor=0, roof=1",
+    "warning": "Coordinates only draw the service-manual topology. They are not measured metres, delays, azimuths, elevations or driver aim angles."
+  },
+  "speakers": [
+    {"id": "R220", "name": "Front left treble 2", "zone": "front", "side": "left", "location": "A-pillar, top left", "schematic_xyz": [-0.82, 0.82, 0.88], "orientation": null},
+    {"id": "R276", "name": "Front left mid-range 2", "zone": "front", "side": "left", "location": "dash panel, left", "schematic_xyz": [-0.62, 0.93, 0.68], "orientation": null},
+    {"id": "R21", "name": "Front left bass", "zone": "front", "side": "left", "location": "front left door, bottom", "schematic_xyz": [-0.95, 0.48, 0.20], "orientation": null},
+    {"id": "R103", "name": "Front left mid-range", "zone": "front", "side": "left", "location": "front left door, centre", "schematic_xyz": [-0.95, 0.48, 0.48], "orientation": null},
+    {"id": "R20", "name": "Front left treble", "zone": "front", "side": "left", "location": "left A-pillar, bottom", "schematic_xyz": [-0.84, 0.75, 0.66], "orientation": null},
+    {"id": "R14", "name": "Rear left treble", "zone": "rear", "side": "left", "location": "rear left side trim/door, top", "schematic_xyz": [-0.95, -0.40, 0.62], "orientation": null},
+    {"id": "R15", "name": "Rear left bass", "zone": "rear", "side": "left", "location": "rear left side trim centre/door bottom", "schematic_xyz": [-0.95, -0.40, 0.25], "orientation": null},
+    {"id": "R209", "name": "Left effect", "zone": "rear-effect", "side": "left", "location": "rear shelf/D-pillar/side trim, left", "schematic_xyz": [-0.76, -0.92, 0.72], "orientation": null},
+    {"id": "R208", "name": "Centre", "zone": "front", "side": "centre", "location": "dash panel, centre", "schematic_xyz": [0.0, 0.98, 0.67], "orientation": null},
+    {"id": "R219", "name": "Centre 2", "zone": "front", "side": "centre", "location": "dash panel, centre", "schematic_xyz": [0.0, 0.94, 0.78], "orientation": null},
+    {"id": "R211", "name": "Subwoofer", "zone": "rear", "side": "right", "location": "Sportback luggage compartment recess, right", "schematic_xyz": [0.78, -0.90, 0.18], "orientation": null},
+    {"id": "R210", "name": "Right effect", "zone": "rear-effect", "side": "right", "location": "rear shelf/D-pillar/side trim, right", "schematic_xyz": [0.76, -0.92, 0.72], "orientation": null},
+    {"id": "R17", "name": "Rear right bass", "zone": "rear", "side": "right", "location": "rear right side trim centre/door bottom", "schematic_xyz": [0.95, -0.40, 0.25], "orientation": null},
+    {"id": "R16", "name": "Rear right treble", "zone": "rear", "side": "right", "location": "rear right side trim/door, top", "schematic_xyz": [0.95, -0.40, 0.62], "orientation": null},
+    {"id": "R22", "name": "Front right treble", "zone": "front", "side": "right", "location": "right A-pillar, bottom", "schematic_xyz": [0.84, 0.75, 0.66], "orientation": null},
+    {"id": "R104", "name": "Front right mid-range", "zone": "front", "side": "right", "location": "front right door, centre", "schematic_xyz": [0.95, 0.48, 0.48], "orientation": null},
+    {"id": "R23", "name": "Front right bass", "zone": "front", "side": "right", "location": "front right door, bottom", "schematic_xyz": [0.95, 0.48, 0.20], "orientation": null},
+    {"id": "R277", "name": "Front right mid-range 2", "zone": "front", "side": "right", "location": "dash panel, right", "schematic_xyz": [0.62, 0.93, 0.68], "orientation": null},
+    {"id": "R221", "name": "Front right treble 2", "zone": "front", "side": "right", "location": "A-pillar, top right", "schematic_xyz": [0.82, 0.82, 0.88], "orientation": null}
+  ],
+  "speaker_layout_provenance": {
+    "document": "/Users/luka/Documents/Audi/Audi A5 (2016 - 2019) [F5,F53,F57,F5A] - Repair manuals/D4B8067F819-Communication.pdf",
+    "pdf_pages": "31-33",
+    "manual_pages": "27-29",
+    "edition": "09.2021",
+    "geometry_status": "service-manual locations verified; acoustic coordinates, aim, polarity, delay and bus binding unmeasured"
+  }
+}

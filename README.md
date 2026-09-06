@@ -49,6 +49,14 @@ The hook can also be built with the independently guarded QNX GCC 8.5 image:
 QNX_TOOLCHAIN_VARIANT=8.5 ./scripts/build_hook.sh
 ```
 
+The vehicle has one runtime stereo-upmix toggle:
+`AUDIO_STEREO_UPMIX=on|off`.  Choose the enabled implementation when building;
+the default is `hssr-object-focus`:
+
+```sh
+UPMIX_PROFILE=hssr-object-focus QNX_TOOLCHAIN_VARIANT=8.5 ./scripts/build_hook.sh
+```
+
 Canonical outputs:
 
 ```text
@@ -79,9 +87,42 @@ To replace only the native hook and restart `dio_manager` over ssh:
 ./scripts/deploy_over_ssh.sh
 ```
 
-The deploy helper overwrites both native audio artifacts directly, syncs them, and restarts
-`dio_manager`; it does not accumulate stale backup copies. Java deployment is deliberately not
-automated by that script because restarting the Java stack on a live HU is unsafe.
+The deploy helper stages both native audio artifacts as `.new`, atomically
+renames them over the live paths, syncs, and restarts `dio_manager`; it does
+not accumulate stale backup copies.  Staging is required because QNX refuses a
+direct scp overwrite while a shared object is mapped.  Java deployment is
+deliberately not automated by that script because restarting the Java stack on
+a live HU is unsafe.
+
+For a quiet pre-production native artifact, build and deploy with:
+
+```sh
+LOG=0 ./scripts/build_hook.sh
+./scripts/deploy_over_ssh.sh
+```
+
+`LOG=0` compiles out the logger thread and all `LOG_*` calls.  It also compiles
+out the historical audio probe captures (APAP, RTCP, setup/control plists,
+magic cookies, elementary streams and PCM taps); negotiation, decoding,
+rendering and feedback-clock behavior are unchanged.
+
+For the narrow startup/metadata discriminator, keep the ordinary quiet build
+but enable only the compact state ledger:
+
+```sh
+LOG=0 AUDIO_STATE_TRACE=1 ./scripts/build_hook.sh
+./scripts/deploy_over_ssh.sh
+./scripts/carplay_state_trace.sh clear
+# reproduce once, then:
+./scripts/carplay_state_trace.sh pull
+```
+
+This writes `/tmp/carplay_state_trace.log` without payload dumps. Events are
+grouped by both `dio_manager` PID and physical-Identify generation, include a
+bounded HID Play/Next/touch delivery seam, and cover iAP2, AirPlay, decoder and
+QSA lifecycle boundaries. The pull
+helper stores and classifies it by process and physical iAP2 generation; see the Now
+Playing state-machine audit below for the exact event and decision tables.
 
 ## Current design documents
 
@@ -96,6 +137,8 @@ automated by that script because restarting the Java stack on a live HU is unsaf
 - [`docs/CINEMO_AAC_THREAD_SAFETY_AUDIT.md`](docs/CINEMO_AAC_THREAD_SAFETY_AUDIT.md) — MHI2Q codec-object, class-registry, callback and OMX coexistence proof; FDK-AAC is rollback only.
 - [`docs/DYNAMIC_BUFFERED_CODEC_SWITCH.md`](docs/DYNAMIC_BUFFERED_CODEC_SWITCH.md) — iOS in-session APAC/AAC selection, packet-boundary receiver state machine and decisive vehicle test.
 - [`docs/BUFFERED_BACKGROUND_LIFECYCLE.md`](docs/BUFFERED_BACKGROUND_LIFECYCLE.md) — measured phone-lock/app-background ownership loss, same-live-handle handoff, detached-QSA scheduler priority, and the mixed `[65,23]` buffer contract needed for in-session AAC/APAC changes.
+- [`docs/reference/IOS_26_1_BUFFERED_AUDIO_LIFECYCLE_AUDIT.md`](docs/reference/IOS_26_1_BUFFERED_AUDIO_LIFECYCLE_AUDIT.md) — exact iOS 26.1/Pioneer type-103 lifecycle contract and its implemented repair: stopped SETUP queue, lossless ordered `rate=0→1`, exact sequence/RTP FLUSH across compressed and PCM queues, concurrency hardening, tests and the remaining on-unit anchor gate.
+- [`docs/reference/NOW_PLAYING_STARTUP_STATE_MACHINE_AUDIT.md`](docs/reference/NOW_PLAYING_STARTUP_STATE_MACHINE_AUDIT.md) — exact Pioneer/iOS 27 Now Playing, XPC and AirPlay routing-context state machines for blank-on-connect and stale-metadata failures, plus the passive discriminator required before any retry/rebind change.
 - [`deploy/deva-ctrl-qc/BUILD_CHAIN.md`](deploy/deva-ctrl-qc/BUILD_CHAIN.md) — vehicle-confirmed deva fix and exact deployable build chain.
 - [`docs/ROUTER_INPUT_WIDTH_AUDIT.md`](docs/ROUTER_INPUT_WIDTH_AUDIT.md) — historical root cause of the now-fixed MPL5 render-width defect.
 - [`docs/MC_SELECTION_AUDIT.md`](docs/MC_SELECTION_AUDIT.md) — connection-162 MC selection and its `Sound_System` coding source.

@@ -14,6 +14,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "hssr_dsp.h"
+
 enum {
     SPA_STEREO_UPMIX_INPUT_CHANNELS = 2,
     SPA_STEREO_UPMIX_OUTPUT_CHANNELS = 6,
@@ -65,7 +67,12 @@ enum spa_stereo_upmix_backend {
     SPA_STEREO_UPMIX_CUPGAN = 4,
     SPA_STEREO_UPMIX_HSR_TD = 5,
     SPA_STEREO_UPMIX_HSR_TD_ACTIVE = 6,
-    SPA_STEREO_UPMIX_MUSIC_STAGE = 7
+    SPA_STEREO_UPMIX_MUSIC_STAGE = 7,
+    SPA_STEREO_UPMIX_HSSR_NEON = 8,
+    SPA_STEREO_UPMIX_HSSR_ACTIVE = 9,
+    SPA_STEREO_UPMIX_HSSR_OBJECT = 10,
+    SPA_STEREO_UPMIX_HSSR_OBJECT_V2 = 11,
+    SPA_STEREO_UPMIX_HSSR_OBJECT_FOCUS = 12
 };
 
 enum spa_stereo_upmix_status {
@@ -86,6 +93,7 @@ struct spa_stereo_upmix_config {
     uint32_t lfe_gain_q15;
     uint32_t lfe_enabled;
     enum spa_stereo_upmix_backend backend;
+    const struct spa_hssr_model *hssr_model;
 };
 
 /* Runtime details are public only so callers can embed the complete state and
@@ -166,6 +174,11 @@ struct spa_stereo_upmix_runtime {
     float _td_active_confidence;
     float _td_active_amount;
     uint8_t _td_control_phase;
+
+    /* hssr-neon: 512/128 spectral analysis and synthesis plus the quantized
+     * semantic controller state.  Weights remain in the shared model blob and
+     * are never copied into each stream instance. */
+    struct spa_hssr_dsp _hssr;
 };
 
 struct spa_stereo_upmix {
@@ -192,9 +205,17 @@ void spa_stereo_upmix_default_config(struct spa_stereo_upmix_config *config);
 void spa_stereo_upmix_config_set_lfe(
     struct spa_stereo_upmix_config *config, int enabled);
 
-/* OFF, AMBIENT_LITE, AMBIENT_HQ, HSR_TD, HSR_TD_ACTIVE and MUSIC_STAGE are
- * implemented. Reserved backends return false rather than silently changing
- * the requested algorithm. */
+/* Attach a validated HSSR model before selecting HSSR_NEON.  The caller owns
+ * the model and must keep it alive for the lifetime of the upmix state. */
+void spa_stereo_upmix_config_set_hssr_model(
+    struct spa_stereo_upmix_config *config,
+    const struct spa_hssr_model *model);
+
+/* OFF, AMBIENT_LITE, AMBIENT_HQ, HSR_TD, HSR_TD_ACTIVE, MUSIC_STAGE,
+ * HSSR_NEON, HSSR_ACTIVE, HSSR_OBJECT, HSSR_OBJECT_V2 and
+ * HSSR_OBJECT_FOCUS are implemented.  All HSSR profiles additionally require
+ * a validated model. Reserved backends return false rather than silently
+ * changing the requested algorithm. */
 int spa_stereo_upmix_backend_supported(enum spa_stereo_upmix_backend backend);
 
 /* Initialise/reset caller-owned state.  Reset preserves the configuration and

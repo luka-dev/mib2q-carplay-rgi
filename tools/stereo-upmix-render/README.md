@@ -24,7 +24,8 @@ Build from the repository root:
 cc -std=c99 -O2 -Wall -Wextra -Werror \
   -Ihook/audio \
   tools/stereo-upmix-render/stereo_upmix_render.c \
-  hook/audio/stereo_upmix.c \
+  hook/audio/stereo_upmix.c hook/audio/hssr_dsp.c hook/audio/hssr_neon.c \
+  -lm \
   -o /tmp/stereo_upmix_render
 ```
 
@@ -57,6 +58,97 @@ Render the time-domain HSR candidate:
 It is inspired only by the public high-level time-domain/no-FFT HSR concept;
 it contains no DAM Audio source or coefficients and does not claim output
 parity with the proprietary product.
+
+Render the development HSSR semantic-routing candidate:
+
+```sh
+/tmp/stereo_upmix_render \
+  --mode hssr-neon --model "$PWD/build/hssr/hssr_model.bin" \
+  --lfe assist --surround 0.20 \
+  input_stereo_48k_s16.wav output_hssr_5_1.wav
+```
+
+HSSR uses a 512-point/128-hop spectral front end and a 2x160 quantized GRU
+controller at 93.75 Hz. The model selects stable semantic regions while DSP
+performs the waveform routing; it is not a waveform stem separator. Both front
+and rear paths have the same 512-frame delay, and the routed rear contribution
+is subtracted from the corresponding front so the canonical stereo fold-back
+is preserved before limiting. Digital C remains exactly zero.
+
+For the assertive vehicle profile, use the same model and rear headroom limit:
+
+```sh
+/tmp/stereo_upmix_render \
+  --mode hssr-active --model "$PWD/build/hssr/hssr_model.bin" \
+  --lfe assist --surround 0.25 \
+  input_stereo_48k_s16.wav output_hssr_active_5_1.wav
+```
+
+`hssr-active` increases only semantic background/FX/spatial-percussion masks
+and uses stronger matrix-aware front subtraction. Lead and low-end posteriors
+receive steeper vetoes. Unlike conservative `hssr-neon`, exact canonical
+stereo fold-back is intentionally not a contract for selected active objects.
+
+To audition the object-selective vehicle profile at the same bounded rear
+gain:
+
+```sh
+/tmp/stereo_upmix_render \
+  --mode hssr-object --model "$PWD/build/hssr/hssr_model.bin" \
+  --lfe assist --surround 0.25 \
+  input_stereo_48k_s16.wav output_hssr_object_5_1.wav
+```
+
+`hssr-object` adds a temporally smoothed fine-bin candidate mask inside each
+semantic band. Stable spectral peaks and matching pan components receive up to
+`+4.1 dB` fine-bin makeup, the broad inter-peak bed is reduced, and a second
+class-gated stage gives rearable background/FX/instrument bands up to `+3.2 dB`.
+Selected rear material uses `2.0 x` front subtraction. The hard rear limit
+remains `0.25`; this makes accepted objects louder without raising the maximum
+SoundAmp input bound.
+
+The persistent-object revision is independently selectable, so V1 remains a
+one-line rollback:
+
+```sh
+/tmp/stereo_upmix_render \
+  --mode hssr-object-v2 --model "$PWD/build/hssr/hssr_model.bin" \
+  --lfe assist --surround 0.25 \
+  input_stereo_48k_s16.wav output_hssr_object_v2_5_1.wav
+```
+
+`hssr-object-v2` keeps one coherent object slot in each stereo half-plane,
+requires every selected ridge to match a held slot, and applies a rank-one
+intensity-pan projection before rendering.  Slots hold for about 250 ms and
+fine masks release over about 220 ms.  Only a quiet diffuse residual remains
+outside accepted slots; exact centred mono cannot acquire an object slot.
+
+Render the vehicle Object Focus profile with:
+
+```sh
+/tmp/stereo_upmix_render \
+  --mode hssr-object-focus --model "$PWD/build/hssr/hssr_model.bin" \
+  --lfe assist --surround 0.25 \
+  input_stereo_48k_s16.wav output_hssr_object_focus_5_1.wav
+```
+
+Object Focus projects through V2's measured source vector and only then
+hard-steers the accepted object toward SL or SR.  Opposite-side crossfeed is
+about -18 dB or lower, presence/transient objects receive an object-only
+0.8-11 kHz emphasis, and the diffuse bed is reduced.  The rear rail remains
+bounded at `0.25`; its stronger `2.5 x` front transfer intentionally favours
+rear localization over stereo fold-back fidelity.
+
+The training/export tool consumes local MUSDB stem containers and writes only
+under ignored `build/`:
+
+```sh
+build/hssr-train-venv/bin/python \
+  tools/stereo-upmix-render/train_hssr.py --output build/hssr
+```
+
+MUSDB-derived weights are development-only and must not be shipped
+commercially without licensing clearance or retraining on cleared stems.
 
 The first 1024 HQ output frames intentionally have silent Ls/Rs while its
 causal analysis window fills. L/R and the optional LFE are not delayed. The
@@ -184,3 +276,90 @@ requires SciPy and SoundFile. These fixtures are controlled spatial renders,
 not artist-authored 5.1 masters. Stereo fold-down is non-invertible, and
 waveform metrics penalize useful decorrelation, so the report is a regression
 and comparative test rather than a listening-test substitute.
+
+## Public authored-surround corpus
+
+`prepare_authored_corpus.py` converts the locally downloaded Pavlik Records
+stereo/5.0 pairs, Dolby Atmos sample, and EBU 5.1 channel-identification file
+to deterministic 48 kHz/16-bit evaluator fixtures. It selects a 30-second
+window using the geometric mean of programme and rear power, keeps the EBU
+18-second test whole, inserts a silent LFE channel for 5.0 sources, and uses
+the fixed `FL FR FC LFE SL SR` order.
+
+Each item contains the authored `reference_5_1.wav`, its exact canonical
+`fold_down_stereo.wav`, and a resampled `publisher_stereo.wav` when the source
+provides a separately mastered stereo version:
+
+```sh
+python3 tools/stereo-upmix-render/prepare_authored_corpus.py \
+  --source-manifest "$PWD/build/reference-audio/public-authored/manifest.json" \
+  --output "$PWD/build/reference-audio/public-authored-corpus"
+
+python3 tools/stereo-upmix-render/evaluate_reference_corpus.py \
+  --renderer "$PWD/build/stereo_upmix_render" \
+  --manifest "$PWD/build/reference-audio/public-authored-corpus/manifest.json" \
+  --output "$PWD/build/reference-audio/public-authored-eval" \
+  --lfe assist --surround 0.20 \
+  --backends hsr-td hsr-td-active music-stage ambient-hq
+```
+
+Add HSSR to an evaluation with
+`--backends ... hssr-neon --hssr-model build/hssr/hssr_model.bin`.
+
+The source recordings and generated fixtures stay under ignored `build/` and
+must not be committed or redistributed.
+
+## Apple rock/rap/dubstep stress corpus
+
+`prepare_apple_genre_stress_corpus.py` downloads the current official 30-second
+Apple previews for four rock, four rap and four dubstep tracks. These are
+stereo-only stress inputs: there is no authored-surround reference and the
+result must not be reported as an Atmos-accuracy score.
+
+```sh
+python3 tools/stereo-upmix-render/prepare_apple_genre_stress_corpus.py \
+  --preview-root "$PWD/build/reference-audio/apple-public-previews/genre-stress" \
+  --output "$PWD/build/reference-audio/apple-genre-stress-corpus"
+
+python3 tools/stereo-upmix-render/evaluate_stereo_stress_corpus.py \
+  --renderer /tmp/stereo_upmix_render \
+  --manifest "$PWD/build/reference-audio/apple-genre-stress-corpus/manifest.json" \
+  --output "$PWD/build/reference-audio/apple-genre-stress-eval" \
+  --lfe assist --surround 0.25 \
+  --hssr-model "$PWD/build/hssr/hssr_model.bin" \
+  --backends hssr-object-v2 hssr-object-focus
+```
+
+The evaluator reports rear activity, local SL/SR balance, front and canonical
+fold-down preservation, clipping and the predicted visible SoundAmp bus peak.
+These are comparative safety/activity metrics; listening remains decisive.
+
+## Archive.org six-channel stress corpus
+
+The local source manifest under
+`build/reference-audio/archive-surround-sources/manifest.json` records seven
+downloaded sources that were verified by `ffprobe` as real six-channel audio:
+three Kelly Industries DTS demos, NIN `Ghosts 19`, one Warsaw live track, and
+two CC0 `wakaranai` tracks that also provide separately mixed stereo editions.
+The manifest records each source URL, checksum and license status. Material
+without an explicit license is local-evaluation-only.
+
+```sh
+python3 tools/stereo-upmix-render/prepare_authored_corpus.py \
+  --source-manifest "$PWD/build/reference-audio/archive-surround-sources/manifest.json" \
+  --output "$PWD/build/reference-audio/archive-surround-corpus" \
+  --excerpt-duration 30 --excerpt-hop 1
+
+python3 tools/stereo-upmix-render/evaluate_reference_corpus.py \
+  --renderer /tmp/stereo_upmix_render \
+  --manifest "$PWD/build/reference-audio/archive-surround-corpus/manifest.json" \
+  --output "$PWD/build/reference-audio/archive-surround-eval" \
+  --lfe assist --surround 0.25 \
+  --hssr-model "$PWD/build/hssr/hssr_model.bin" \
+  --backends hssr-object-v2 hssr-object-focus
+```
+
+The generated input for objective scoring is always the exact canonical fold
+of the same six-channel excerpt. A separately mixed stereo file is retained
+for listening when one is available, but is not mistaken for a sample-exact
+reference input.

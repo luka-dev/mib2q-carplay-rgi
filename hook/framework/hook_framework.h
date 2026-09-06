@@ -126,6 +126,11 @@ struct hook_context {
     bool identify_accepted;
     bool auth_done;
     bool session_active;
+#if ENABLE_STATE_TRACE
+    /* Stable across every iAP2/AirPlay/QSA marker for one physical Identify
+     * cycle.  Unlike inject.generation, this does not advance per link frame. */
+    uint32_t lifecycle_generation;
+#endif
 
     /* Component info */
     uint16_t rgd_component_id;

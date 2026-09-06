@@ -77,6 +77,13 @@ static void put_be32(unsigned char *p, uint32_t v)
     p[3] = (unsigned char)v;
 }
 
+static void put_be64(unsigned char *p, uint64_t v)
+{
+    int i;
+    for (i = 0; i < 8; i++)
+        p[i] = (unsigned char)(v >> (56 - 8 * i));
+}
+
 static void poly1305_lengths(unsigned char *out, size_t aadLength, size_t ctLength)
 {
     int i;
@@ -268,6 +275,192 @@ static void replay(spa_apac_decoder_t *decoder, size_t chunk, const char *what)
     }
 }
 
+static uint32_t trim_random(uint32_t *state)
+{
+    *state = *state * 1664525u + 1013904223u;
+    return *state;
+}
+
+/* Independent reference for the bounded values generated below.  The product
+ * is deliberately kept below UINT64_MAX, so this simple expression is not the
+ * same quotient/remainder implementation as production. */
+static size_t reference_trim_frames(int present, uint64_t value, uint32_t scale,
+                                    uint32_t sampleRate, size_t limit)
+{
+    uint64_t frames;
+
+    if (!present || !value || !scale || !sampleRate || !limit) return 0;
+    frames = (value * sampleRate) / scale;
+    return frames > limit ? limit : (size_t)frames;
+}
+
+static void test_trim_properties(void)
+{
+    static const uint32_t rates[] = { 8000, 44100, 48000, 96000, 192000 };
+    spa_apap_extension_t ext;
+    uint32_t randomState = 0x41c64e6du;
+    unsigned i;
+
+    for (i = 0; i < 100000; i++) {
+        uint64_t startValue = trim_random(&randomState) % 1000001u;
+        uint64_t endValue = trim_random(&randomState) % 1000001u;
+        uint32_t startScale = trim_random(&randomState) % 192000u + 1u;
+        uint32_t endScale = trim_random(&randomState) % 192000u + 1u;
+        uint32_t rate = rates[trim_random(&randomState) %
+                              (sizeof(rates) / sizeof(rates[0]))];
+        size_t decoded = trim_random(&randomState) % 8193u;
+        int haveStart = (int)(trim_random(&randomState) & 1u);
+        int haveEnd = (int)(trim_random(&randomState) & 1u);
+        size_t expectedStart, expectedEnd, expectedCount;
+        size_t start = SIZE_MAX, count = SIZE_MAX;
+
+        memset(&ext, 0, sizeof(ext));
+        ext.trimAtStart.present = haveStart;
+        ext.trimAtStart.value = (int64_t)startValue;
+        ext.trimAtStart.timescale = (int32_t)startScale;
+        ext.trimAtEnd.present = haveEnd;
+        ext.trimAtEnd.value = (int64_t)endValue;
+        ext.trimAtEnd.timescale = (int32_t)endScale;
+
+        expectedStart = reference_trim_frames(haveStart, startValue,
+                                              startScale, rate, decoded);
+        expectedCount = decoded - expectedStart;
+        expectedEnd = reference_trim_frames(haveEnd, endValue,
+                                            endScale, rate, expectedCount);
+        expectedCount -= expectedEnd;
+
+        spa_apap_trim_window(&ext, rate, decoded, &start, &count);
+        assert(start == expectedStart);
+        assert(count == expectedCount);
+        assert(start <= decoded && count <= decoded - start);
+    }
+}
+
+static void test_extension_parser_fuzz(void)
+{
+    unsigned char bytes[64];
+    uint32_t randomState = 0xc001d00du;
+    unsigned iteration;
+
+    /* Deterministic malformed-input sweep.  A successful parse must return a
+     * suffix of the same input; failures only have to stay memory-safe. */
+    for (iteration = 0; iteration < 50000; iteration++) {
+        spa_apap_extension_t ext;
+        const unsigned char *audio = 0;
+        size_t audioLength = SIZE_MAX;
+        size_t length = trim_random(&randomState) % (sizeof(bytes) + 1u);
+        size_t i;
+        int parsed;
+
+        for (i = 0; i < length; i++)
+            bytes[i] = (unsigned char)trim_random(&randomState);
+        memset(&ext, 0, sizeof(ext));
+        parsed = spa_apap_parse_extension(bytes, length, &ext,
+                                          &audio, &audioLength);
+        if (parsed) {
+            assert(audio >= bytes && audio <= bytes + length);
+            assert(audioLength == (size_t)(bytes + length - audio));
+        }
+    }
+}
+
+/* Fields 4/5 use Apple's compact CMTime wire form: BE64 signed value followed
+ * by BE32 signed timescale.  Exercise parsing, floor conversion, clamping, and
+ * the exact decoded-PCM slice consumed by audio_hook.c. */
+static void test_trim_tlvs(void)
+{
+    unsigned char plain[64];
+    spa_apap_extension_t ext;
+    const unsigned char *audio = 0;
+    size_t audioLength = 0, start = 0, count = 0, at = 0;
+
+    plain[at++] = SPA_APAP_TLV_TRIM_AT_START;
+    plain[at++] = 12;
+    put_be64(plain + at, 480); at += 8;
+    put_be32(plain + at, 48000); at += 4;  /* 10 ms = 480 frames */
+    plain[at++] = SPA_APAP_TLV_TRIM_AT_END;
+    plain[at++] = 12;
+    put_be64(plain + at, 1); at += 8;
+    put_be32(plain + at, 1000); at += 4;   /* 1 ms = 48 frames */
+    plain[at++] = SPA_APAP_TLV_END;
+    plain[at++] = 0xaa;
+    plain[at++] = 0xbb;
+
+    memset(&ext, 0, sizeof(ext));
+    assert(spa_apap_parse_extension(plain, at, &ext, &audio, &audioLength));
+    assert(ext.trimAtStart.present && ext.trimAtStart.value == 480 &&
+           ext.trimAtStart.timescale == 48000);
+    assert(ext.trimAtEnd.present && ext.trimAtEnd.value == 1 &&
+           ext.trimAtEnd.timescale == 1000);
+    assert(audioLength == 2 && audio[0] == 0xaa && audio[1] == 0xbb);
+    spa_apap_trim_window(&ext, 48000, 1024, &start, &count);
+    assert(start == 480 && count == 496);
+
+    /* Rescaling is against decoded PCM rate, with the receiver's floor rule. */
+    ext.trimAtStart.value = 441;
+    ext.trimAtStart.timescale = 44100;
+    ext.trimAtEnd.value = 1;
+    ext.trimAtEnd.timescale = 1000;
+    spa_apap_trim_window(&ext, 48000, 1024, &start, &count);
+    assert(start == 480 && count == 496);
+    spa_apap_trim_window(&ext, 44100, 1024, &start, &count);
+    assert(start == 441 && count == 539); /* end floor(44.1) = 44 */
+
+    /* Either side may consume the rest of the AU, but never exceed it. */
+    ext.trimAtStart.value = 10;
+    ext.trimAtStart.timescale = 1;
+    ext.trimAtEnd.present = 0;
+    spa_apap_trim_window(&ext, 48000, 1024, &start, &count);
+    assert(start == 1024 && count == 0);
+    ext.trimAtStart.present = 0;
+    ext.trimAtEnd.present = 1;
+    ext.trimAtEnd.value = INT64_MAX;
+    ext.trimAtEnd.timescale = 1;
+    spa_apap_trim_window(&ext, 48000, 1024, &start, &count);
+    assert(start == 0 && count == 0);
+
+    /* Invalid CMTime values are safe no-ops, as are absent fields. */
+    ext.trimAtStart.present = 1;
+    ext.trimAtStart.value = -1;
+    ext.trimAtStart.timescale = 48000;
+    ext.trimAtEnd.value = 1;
+    ext.trimAtEnd.timescale = 0;
+    spa_apap_trim_window(&ext, 48000, 1024, &start, &count);
+    assert(start == 0 && count == 1024);
+    spa_apap_trim_window(0, 48000, 1024, &start, &count);
+    assert(start == 0 && count == 1024);
+
+    /* Signed wire decoding matters: -1 is not a gigantic unsigned trim. */
+    at = 0;
+    plain[at++] = SPA_APAP_TLV_TRIM_AT_START;
+    plain[at++] = 12;
+    put_be64(plain + at, UINT64_MAX); at += 8;
+    put_be32(plain + at, 48000); at += 4;
+    plain[at++] = SPA_APAP_TLV_END;
+    memset(&ext, 0, sizeof(ext));
+    assert(spa_apap_parse_extension(plain, at, &ext, &audio, &audioLength));
+    assert(ext.trimAtStart.present && ext.trimAtStart.value == -1 &&
+           ext.trimAtStart.timescale == 48000);
+    spa_apap_trim_window(&ext, 48000, 1024, &start, &count);
+    assert(start == 0 && count == 1024);
+
+    /* Known trim fields have an exact 12-byte shape; silently skipping a
+     * damaged one would make a gapless boundary audibly wrong. */
+    {
+        static const unsigned char shortTrim[] = {
+            SPA_APAP_TLV_TRIM_AT_START, 11,
+            0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1,
+            SPA_APAP_TLV_END
+        };
+        memset(&ext, 0, sizeof(ext));
+        assert(!spa_apap_parse_extension(shortTrim, sizeof(shortTrim), &ext,
+                                         &audio, &audioLength));
+    }
+
+    test_trim_properties();
+    test_extension_parser_fuzz();
+}
+
 /* Nothing that has been tampered with may open. */
 static void test_rejections(const unsigned char *goodFrame, size_t goodLength)
 {
@@ -382,7 +575,7 @@ int main(int argc, char **argv)
     spa_apac_decoder_t *decoder = 0;
     uint32_t channels = 0, frameLength = 0, sampleRate = 0;
     const unsigned char *cookie;
-    const float *ref;
+    const unsigned char *ref;
     uint32_t numPackets, refChannels, refFrameLength, cookieBytes;
     size_t lengthsAt, packetsAt, pcmAt, payload = 0;
     size_t firstFrameLength = 0;
@@ -420,7 +613,10 @@ int main(int argc, char **argv)
     packetsAt = lengthsAt + 4 * numPackets;
     pcmAt = packetsAt + payload;
     assert(pcmAt + (size_t)numPackets * CHANNELS * FRAME_SAMPLES * 4 == g_blobBytes);
-    ref = (const float *)(const void *)(g_blob + pcmAt);
+    /* The packed fixture does not promise that its float32 section is
+     * naturally aligned.  Keep it byte-addressed and copy each value out;
+     * directly casting this pointer was undefined behavior on strict hosts. */
+    ref = g_blob + pcmAt;
 
     /* The receiver builds its decoder from the SETMAGICCOOKIE payload, so the test does too. */
     if (spa_apac_create(cookie, cookieBytes, &decoder,
@@ -476,12 +672,16 @@ int main(int argc, char **argv)
                 for (s = 0; s < CHANNELS * FRAME_SAMPLES; s++) {
                     const uint32_t frame = s / CHANNELS;
                     const uint32_t ch = s % CHANNELS;
-                    const float expect =
-                        ref[(size_t)i * CHANNELS * FRAME_SAMPLES +
-                            (size_t)frame * CHANNELS + kDeclaredFromDecoder[ch]];
+                    const size_t refSample =
+                        (size_t)i * CHANNELS * FRAME_SAMPLES +
+                        (size_t)frame * CHANNELS + kDeclaredFromDecoder[ch];
+                    float expect;
                     const double got = g_got[i][s] / 32768.0;
-                    const double diff = got - expect;
-                    const double mag = diff < 0 ? -diff : diff;
+                    double diff;
+                    double mag;
+                    memcpy(&expect, ref + refSample * sizeof(expect), sizeof(expect));
+                    diff = got - expect;
+                    mag = diff < 0 ? -diff : diff;
                     if (mag > worst) worst = mag;
                     if (mag * 32768.0 < 1e-9) identical++;
                     compared++;
@@ -498,11 +698,14 @@ int main(int argc, char **argv)
         }
     }
 
+    test_trim_tlvs();
     test_rejections(g_stream + 4, firstFrameLength);
 
     spa_apac_destroy(decoder);
     printf("OK  %u packets sealed and reopened at %zu split sizes, %ld samples within one LSB "
-           "of the library (worst %.3f LSB, %.1f%% exact), both AAD variants, 18 rejections\n",
+           "of the library (worst %.3f LSB, %.1f%% exact), both AAD variants, "
+           "TLV 4/5 trim (100000 arithmetic properties, 50000 parser fuzz cases), "
+           "18 rejections\n",
            numPackets, sizeof(chunks) / sizeof(chunks[0]), compared, worst * 32768.0,
            100.0 * (double)identical / (double)compared);
     free(g_blob);

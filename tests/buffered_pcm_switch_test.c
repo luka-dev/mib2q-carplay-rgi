@@ -6,6 +6,7 @@
  */
 
 #include "audio/audio_hook.h"
+#include "audio/media_route.h"
 #include "audio/spatial_downmix.h"
 #include "audio/pcm_period.h"
 #include "audio/stereo_upmix.h"
@@ -79,6 +80,88 @@ static void assert_whole_period_policy(void)
     take = spa_pcm_whole_period_frames(fill, qsa_frames);
     assert(take == 0);
     assert(fill == 512);
+}
+
+static void assert_detached_render_pump_policy(void)
+{
+    const size_t codec_frames = 1024;
+    const size_t qsa_frames = 768;
+    const size_t high_frames = 12000;
+    size_t fill = 19200;
+    size_t iteration;
+
+    assert(!spa_pcm_prime_ready(0, 19200));
+    assert(!spa_pcm_prime_ready(19199, 19200));
+    assert(spa_pcm_prime_ready(19200, 19200));
+    assert(spa_pcm_prime_ready(7680, 7680));
+    assert(!spa_pcm_prime_ready(7679, 7680));
+    assert(!spa_pcm_prime_ready(19200, 0));
+
+    assert(spa_pcm_pump_should_read_source(0, high_frames, qsa_frames,
+                                            high_frames));
+    assert(spa_pcm_pump_should_read_source(1, 0, qsa_frames,
+                                            high_frames));
+    assert(spa_pcm_pump_should_read_source(1, qsa_frames - 1,
+                                            qsa_frames, high_frames));
+    assert(spa_pcm_pump_should_read_source(1, high_frames - 1,
+                                            qsa_frames, high_frames));
+    assert(!spa_pcm_pump_should_read_source(1, high_frames,
+                                             qsa_frames, high_frames));
+    assert(!spa_pcm_pump_should_read_source(1, high_frames + 1024,
+                                             qsa_frames, high_frames));
+
+    assert(spa_pcm_pump_poll_timeout_ms(0, high_frames, qsa_frames, 100) == 100);
+    assert(spa_pcm_pump_poll_timeout_ms(1, qsa_frames - 1,
+                                        qsa_frames, 100) == 100);
+    assert(spa_pcm_pump_poll_timeout_ms(1, qsa_frames,
+                                        qsa_frames, 100) == 0);
+
+    assert(spa_pcm_source_should_pace(1, 0, 0));
+    assert(!spa_pcm_source_should_pace(1, 0, 1));
+    assert(!spa_pcm_source_should_pace(1, 1, 0));
+    assert(!spa_pcm_source_should_pace(0, 0, 0));
+
+    /* Never splice the independent realtime rail into a buffered item. */
+    assert(spa_pcm_period_source(0, 0) == SPA_PCM_PERIOD_FROM_REALTIME);
+    assert(spa_pcm_period_source(0, qsa_frames) ==
+           SPA_PCM_PERIOD_FROM_REALTIME);
+    assert(spa_pcm_period_source(1, 0) == SPA_PCM_PERIOD_FROM_SILENCE);
+    assert(spa_pcm_period_source(1, qsa_frames - 1) ==
+           SPA_PCM_PERIOD_FROM_BUFFERED);
+    assert(spa_pcm_period_source(1, qsa_frames) ==
+           SPA_PCM_PERIOD_FROM_BUFFERED);
+
+    /* Model a permanently-ready source.  Unlike drain-to-empty, one source
+     * packet plus at most one sink period per iteration converges to a narrow
+     * sawtooth around 250 ms and never consumes the reserve. */
+    for (iteration = 0; iteration < 1000; iteration++) {
+        if (spa_pcm_pump_should_read_source(1, fill, qsa_frames,
+                                            high_frames))
+            fill += codec_frames;
+        if (fill >= qsa_frames)
+            fill -= qsa_frames;
+        assert(fill <= 19200);
+        if (iteration > 32) {
+            assert(fill >= high_frames - qsa_frames);
+            assert(fill < high_frames + codec_frames);
+        }
+    }
+}
+
+static void assert_media_route_reacquire_policy(void)
+{
+    const uint64_t close_ns = UINT64_C(1000000000);
+    const uint64_t deadline = close_ns + SPA_MEDIA_ROUTE_REACQUIRE_DELAY_NS;
+
+    /* A retained type-103 owner must not race stock's close-adjacent
+     * audioTornDown callback, and a stock reopen/owned route cancels it. */
+    assert(!spa_media_route_reacquire_due(1, 0, deadline, close_ns));
+    assert(!spa_media_route_reacquire_due(
+        1, 0, deadline, deadline - UINT64_C(1)));
+    assert(spa_media_route_reacquire_due(1, 0, deadline, deadline));
+    assert(!spa_media_route_reacquire_due(0, 0, deadline, deadline));
+    assert(!spa_media_route_reacquire_due(1, 1, deadline, deadline));
+    assert(!spa_media_route_reacquire_due(1, 0, 0, deadline));
 }
 
 static enum spa_decoded_pcm_action render_cookie_pcm(
@@ -216,6 +299,8 @@ int main(void)
 {
     assert_buffered_receiver_sizes();
     assert_whole_period_policy();
+    assert_detached_render_pump_policy();
+    assert_media_route_reacquire_policy();
     fill_stereo();
     run_switch_sequence(SPA_STEREO_UPMIX_AMBIENT_LITE);
     run_switch_sequence(SPA_STEREO_UPMIX_AMBIENT_HQ);
@@ -223,7 +308,8 @@ int main(void)
     run_switch_sequence(SPA_STEREO_UPMIX_HSR_TD_ACTIVE);
     run_switch_sequence(SPA_STEREO_UPMIX_MUSIC_STAGE);
     puts("buffered_pcm_switch_test: OK "
-         "(receiver sizes, whole QSA periods, SETUP 65/23, "
+         "(receiver sizes, whole QSA periods, detached reserve pump, fast flush drain, "
+         "single-owner gap policy, SETUP 65/23, "
          "AAC <-> APAC, lite/HQ/HSR-TD/HSR-TD-active/music-stage)");
     return 0;
 }

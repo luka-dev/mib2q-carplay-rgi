@@ -56,20 +56,39 @@
 #define SPA_AUDIO_TYPO_ENV            "AUDIO_SPATAIL"
 #define SPA_AUDIO_ATMOS_ENV           "AUDIO_SPATIAL_ATMOS"
 #define SPA_AUDIO_ATMOS_MODE_ENV      "AUDIO_SPATIAL_ATMOS_MODE"
+/* Default-on recovery for a buffered stream which is the first media stream
+ * after connection. Set AUDIO_COLD_CONNECT=0 only as a rollback switch. */
+#define SPA_AUDIO_COLD_CONNECT_ENV     "AUDIO_COLD_CONNECT"
 
 /* Optional stereo-to-5.1 ambience renderer.  This is deliberately independent
  * of the transport policy above: setting it must never advertise or enable a
  * buffered stream by itself.  The code default is off; deployment policy may
  * opt in explicitly.
  *
- * AUDIO_STEREO_UPMIX: off | ambient-lite | ambient-hq | hsr-td |
- *                      hsr-td-active | music-stage
- * AUDIO_STEREO_SURROUND: rear input gain, 0.0 .. 0.25 (default 0.18)
+ * AUDIO_STEREO_UPMIX: off | on.  The enabled backend is selected at build
+ * time with UPMIX_PROFILE; the checked-in default is hssr-object-focus.
+ * AUDIO_STEREO_SURROUND: rear input gain, 0.0 .. 0.25 (default 0.18).
+ * hssr-active keeps this bounded gain but applies a stronger selective
+ * semantic mask and matrix-aware front transfer.
+ * hssr-object further isolates stable spectral/pan candidates inside each
+ * semantic band, applies up to +3.2 dB class-gated object makeup, and transfers
+ * them more decisively toward the rear without raising the 0.25 hard limit.
+ * hssr-object-v2 adds two persistent half-plane object slots, spatial
+ * projection and a 250 ms hold so an accepted instrument remains a coherent
+ * rear image instead of a sequence of unrelated spectral peaks.
+ * hssr-object-focus extracts through the same persistent source vector, then
+ * hard-steers accepted presence/transient objects to one rear side with very
+ * low crossfeed and a quieter diffuse bed.
  * AUDIO_STEREO_LFE: off | assist (code default off). `assist` synthesizes only an
- * 80 Hz LR4 low-passed mono bass feed and selects its paired front headroom. */
+ * 80 Hz LR4 low-passed mono bass feed and selects its paired front headroom.
+ * AUDIO_HSSR_MODEL: development model blob path.  The default is next to the
+ * hook; invalid/missing models make any HSSR profile fall back to
+ * music-stage. */
 #define SPA_AUDIO_STEREO_UPMIX_ENV    "AUDIO_STEREO_UPMIX"
 #define SPA_AUDIO_STEREO_SURROUND_ENV "AUDIO_STEREO_SURROUND"
 #define SPA_AUDIO_STEREO_LFE_ENV      "AUDIO_STEREO_LFE"
+#define SPA_AUDIO_HSSR_MODEL_ENV       "AUDIO_HSSR_MODEL"
+#define SPA_AUDIO_HSSR_MODEL_DEFAULT   "/mnt/app/root/hooks/hssr_model.bin"
 
 /* ---- type-103 buffered-media negotiation probe (AUDIO.md §26, docs/HANDOFF_SPATIAL_AUDIO.md) -----
  * iOS 27 reaches multichannel over CarPlay through a SECOND, buffered stream, not the realtime one.

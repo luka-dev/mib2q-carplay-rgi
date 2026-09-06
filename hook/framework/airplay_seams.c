@@ -14,6 +14,7 @@
  */
 
 #include "hook_framework.h"
+#include "state_trace.h"
 
 DEFINE_LOG_MODULE(SEAM);
 
@@ -21,6 +22,55 @@ DEFINE_LOG_MODULE(SEAM);
  * session can be recognised as stale by any module that caches per-session
  * state (altScreen's display advert, the audio capture files). */
 static volatile uint32_t g_setup_sequence;
+#if ENABLE_STATE_TRACE
+static pthread_mutex_t g_airplay_trace_lock = PTHREAD_MUTEX_INITIALIZER;
+static void *g_airplay_trace_session;
+static uint32_t g_airplay_trace_generation;
+static uint32_t g_airplay_trace_setup_ordinal;
+
+static uint32_t seam_trace_note_session(void *session, int *is_new,
+                                        uint32_t *setup_ordinal)
+{
+    uint32_t generation;
+    pthread_mutex_lock(&g_airplay_trace_lock);
+    *is_new = 0;
+    if (session && session != g_airplay_trace_session) {
+        g_airplay_trace_session = session;
+        g_airplay_trace_generation++;
+        if (!g_airplay_trace_generation) g_airplay_trace_generation++;
+        g_airplay_trace_setup_ordinal = 0;
+        *is_new = 1;
+    }
+    *setup_ordinal = ++g_airplay_trace_setup_ordinal;
+    generation = g_airplay_trace_generation;
+    pthread_mutex_unlock(&g_airplay_trace_lock);
+    return generation;
+}
+
+static uint32_t seam_trace_current_session(void *session)
+{
+    uint32_t generation;
+    pthread_mutex_lock(&g_airplay_trace_lock);
+    generation = session && session == g_airplay_trace_session ?
+                 g_airplay_trace_generation : 0;
+    pthread_mutex_unlock(&g_airplay_trace_lock);
+    return generation;
+}
+
+static uint32_t seam_trace_end_session(void *session, int full)
+{
+    uint32_t generation;
+    pthread_mutex_lock(&g_airplay_trace_lock);
+    generation = session && session == g_airplay_trace_session ?
+                 g_airplay_trace_generation : 0;
+    if (full && generation) {
+        g_airplay_trace_session = 0;
+        g_airplay_trace_setup_ordinal = 0;
+    }
+    pthread_mutex_unlock(&g_airplay_trace_lock);
+    return generation;
+}
+#endif
 
 static uint64_t seam_now_ms(void)
 {
@@ -68,6 +118,10 @@ void *AirPlayCopyServerInfo(void *session, void *qualifier, void *macAddr, void 
         static int info_calls;
         LOG_INFO(LOG_MODULE, "/info #%d session=%p qualifier=%p out=%p",
                  ++info_calls, session, qualifier, info);
+        STATE_TRACE("AIRPLAY_INFO",
+                    "air_gen=%u session=%p response=%d call=%d",
+                    (unsigned)seam_trace_current_session(session), session,
+                    info ? 1 : 0, info_calls);
     }
     if (!info) return info;
 
@@ -98,6 +152,10 @@ int AirPlayReceiverSessionSetup(void *session, void *request, void **respOut, in
     hook_setup_ctx_t setup;
     uint64_t beginMs, realDoneMs, doneMs;
     unsigned long realMs, hookMs;
+#if ENABLE_STATE_TRACE
+    uint32_t airplayGeneration, setupOrdinal;
+    int newSession;
+#endif
     size_t i, n;
 
     seam_enter();
@@ -108,6 +166,16 @@ int AirPlayReceiverSessionSetup(void *session, void *request, void **respOut, in
     setup.session = session;
     setup.request = request;
     setup.sequence = __sync_add_and_fetch(&g_setup_sequence, 1);
+#if ENABLE_STATE_TRACE
+    airplayGeneration = seam_trace_note_session(session, &newSession,
+                                                &setupOrdinal);
+#endif
+    STATE_TRACE("AIRPLAY_SETUP_BEGIN",
+                "setup_seq=%u air_gen=%u setup_ordinal=%u session_edge=%s "
+                "session=%p request=%d",
+                (unsigned)setup.sequence, (unsigned)airplayGeneration,
+                (unsigned)setupOrdinal, newSession ? "new" : "existing",
+                session, request ? 1 : 0);
 
     n = hook_framework_module_count();
     for (i = 0; i < n; i++) {
@@ -139,6 +207,12 @@ int AirPlayReceiverSessionSetup(void *session, void *request, void **respOut, in
     LOG_INFO(LOG_MODULE,
              "STARTUP SETUP timing seq=%u real=%lums hook=%lums total=%lums ret=%d",
              (unsigned)setup.sequence, realMs, hookMs, realMs + hookMs, setup.result);
+    STATE_TRACE("AIRPLAY_SETUP_DONE",
+                "setup_seq=%u air_gen=%u setup_ordinal=%u result=%d "
+                "response=%d real_ms=%lu hook_ms=%lu",
+                (unsigned)setup.sequence, (unsigned)airplayGeneration,
+                (unsigned)setupOrdinal, setup.result,
+                setup.response ? 1 : 0, realMs, hookMs);
     return setup.result;
 }
 
@@ -162,6 +236,12 @@ int AirPlayReceiverSessionTearDown(void *session, void *request, int reason, int
 
     seam_enter();
     if (!real) real = (fn_sess_teardown_t)dlsym(RTLD_NEXT, "AirPlayReceiverSessionTearDown");
+
+    STATE_TRACE("AIRPLAY_TEARDOWN",
+                "air_gen=%u scope=%s session=%p reason=%d request=%d",
+                (unsigned)seam_trace_end_session(session, request == NULL),
+                request ? "stream" : "full", session, reason,
+                request ? 1 : 0);
 
     n = hook_framework_module_count();
     for (i = 0; i < n; i++) {

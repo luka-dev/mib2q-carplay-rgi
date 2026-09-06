@@ -49,10 +49,21 @@ enum {
 enum {
     SPA_APAP_TLV_END = 0,
     SPA_APAP_TLV_FRAME_LENGTH = 2,
+    SPA_APAP_TLV_TRIM_AT_START = 4,
+    SPA_APAP_TLV_TRIM_AT_END = 5,
     SPA_APAP_TLV_FRAME_LENGTH_ALT = 8,
     SPA_APAP_TLV_MAGIC_COOKIE_ID = 17,
     SPA_APAP_TLV_MAGIC_COOKIE = 18
 };
+
+/* A CoreMedia CMTime carried by APAP fields 4/5: signed BE64 value followed
+ * by signed BE32 timescale.  Epoch/flags are not present on this wire format.
+ * Invalid and non-positive values parse successfully but trim zero frames. */
+typedef struct {
+    int present;
+    int64_t value;
+    int32_t timescale;
+} spa_apap_media_time_t;
 
 /* What a decoded packet's TLV prefix said. The formatIndex pair is retained as
  * an internal compatibility field but the parser deliberately never populates
@@ -62,6 +73,8 @@ typedef struct {
     int hasMagicCookieId;
     uint64_t formatIndex;
     uint64_t magicCookieId;
+    spa_apap_media_time_t trimAtStart;
+    spa_apap_media_time_t trimAtEnd;
     /* The cookie carried by this packet, when it carries one.  It points into the caller's
      * plaintext buffer and is only valid until the next packet is opened.  Having it per packet
      * is what makes a mid-session codec change possible without depending on SETMAGICCOOKIE
@@ -139,5 +152,14 @@ int spa_apap_framer_push(spa_apap_framer_t *framer, const uint8_t *data, size_t 
 int spa_apap_parse_extension(const uint8_t *plaintext, size_t length,
                              spa_apap_extension_t *state,
                              const uint8_t **audio, size_t *audioLength);
+
+/* Convert the packet's trim durations to a bounded window in decoded PCM.
+ * Conversion matches the reference receiver: floor(value * sampleRate /
+ * timescale), independently for each field.  Arithmetic saturates at the
+ * decoded access unit, so malformed/extreme durations cannot walk outside it.
+ * The returned window is [*startFrame, *startFrame + *frameCount). */
+void spa_apap_trim_window(const spa_apap_extension_t *state,
+                          uint32_t sampleRate, size_t decodedFrames,
+                          size_t *startFrame, size_t *frameCount);
 
 #endif /* APAP_CRYPTO_H */

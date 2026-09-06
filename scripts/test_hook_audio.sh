@@ -7,6 +7,7 @@
 # spatial_downmix_test    the 5.1.2 fold and the 5.1 channel permutation
 # stereo_upmix_test       deterministic PCM2->PCM6 ambience renderer, resets and bounds
 # buffered_pcm_switch_test geometry-selected AAC/APAC render policy with stale SETUP indices
+# apap_lifecycle_test stopped APAP ownership, ordered resume and exact FLUSH ranges
 # apac_type103_test       the whole type-103 render path end to end: APAP framing, decrypt,
 #                         the TLV split, APAC decode and the reorder, checked against the PCM
 #                         Apple's own decoder produced for the same six packets
@@ -35,17 +36,28 @@ $CC $CFLAGS tests/spatial_downmix_test.c hook/audio/spatial_downmix.c -o "$OUT/s
 echo "OK  downmix matrix, saturation, in-place, reorder"
 
 echo "=== stereo_upmix_test ==="
-$CC $CFLAGS tests/stereo_upmix_test.c hook/audio/stereo_upmix.c -o "$OUT/stereo_upmix_test"
+$CC $CFLAGS tests/stereo_upmix_test.c hook/audio/stereo_upmix.c \
+    hook/audio/hssr_dsp.c hook/audio/hssr_neon.c -lm -o "$OUT/stereo_upmix_test"
 "$OUT/stereo_upmix_test"
+
+echo "=== hssr_neon_test ==="
+$CC $CFLAGS tests/hssr_neon_test.c hook/audio/hssr_neon.c -o "$OUT/hssr_neon_test"
+"$OUT/hssr_neon_test"
 
 echo "=== buffered_pcm_switch_test ==="
 $CC $CFLAGS tests/buffered_pcm_switch_test.c hook/audio/spatial_downmix.c \
-    hook/audio/stereo_upmix.c -o "$OUT/buffered_pcm_switch_test"
+    hook/audio/stereo_upmix.c hook/audio/hssr_dsp.c hook/audio/hssr_neon.c \
+    -lm -o "$OUT/buffered_pcm_switch_test"
 "$OUT/buffered_pcm_switch_test"
 
 echo "=== feedback_clock_test ==="
 $CC $CFLAGS tests/feedback_clock_test.c -o "$OUT/feedback_clock_test"
 "$OUT/feedback_clock_test"
+
+echo "=== apap_lifecycle_test ==="
+$CC $CFLAGS tests/apap_lifecycle_test.c hook/audio/apap_lifecycle.c \
+    -o "$OUT/apap_lifecycle_test"
+"$OUT/apap_lifecycle_test"
 
 echo "=== apac_type103_test ==="
 rm -rf "$OUT/obj"; mkdir -p "$OUT/obj"

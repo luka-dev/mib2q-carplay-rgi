@@ -300,9 +300,34 @@ Extension body — последовательность `ULEB128 id`, `ULEB128 l
 | 5 | trim end | media time: signed BE64 value + signed BE32 scale |
 | 7 | SoundCheck records | N записей по 5 x BE32 |
 | 8 | `audioFormatIndex` | BE integer длиной 2/4/8 |
+| 10 | **не распознаётся этой Pioneer-сборкой** | уходит в общий unknown-field skip |
 | 11 | SoundCheck parameters | 3 x BE32 |
 | 12 | `soundCheckMediaKind` | 1 byte |
 | 17 | `magicCookieID` | 0..8 bytes, BE integer |
+
+Поля 4/5 здесь не только распознаются. `_BufferedAudioThread` (`sub_123F00 @ 0x123f00`)
+после вызова `APAPDecodeExtension @ 0x124a48` переводит их длительности в целое число
+сэмплов текущей частоты: field 4 в `trimAtStartSamples` (`0x124ab0`,
+`0x124c34..0x124c6c`), field 5 в `trimAtEndSamples` (`0x124ab8..0x124b00`).
+`_BufferedAudioUpdateStateUsingAPAPExtensionInfo` (`sub_126160 @ 0x126160`) декодирует AU,
+а затем в `0x12642c..0x126488` сдвигает начало PCM на `trimAtStartSamples` и уменьшает
+длину на сумму start/end trim. Если trim покрывает весь AU, выходная длина становится нулевой.
+Округление выполняется вниз отдельно для каждого пакета; накопителя дробного остатка нет.
+
+Field 10 отсутствует в switch `APAPDecodeExtension`: общий путь `0x109bbc..0x109bc4`
+просто пропускает его payload. Пустой APAP-пакет всё равно ставится в обычную очередь
+(`0x124694..0x1246c4`), но `_AudioDecoderDecodeFrame` (`sub_123940 @ 0x123940`)
+для пакета только с 24-байтовым crypto overhead возвращает success и 0 байт PCM
+(`0x12394c..0x1239b0`). В этой Pioneer-реализации `TransitionID` не означает reset,
+flush или rebuild декодера.
+
+Статус Audi hook на 2026-09-06: TLV 4/5 реализованы в `apap_crypto.c` и применяются
+после полного `decodeS16`, до channel reorder, stereo upmix и PCM ring. Положительный
+CMTime переводится как `floor(value * decodedRate / timescale)` с overflow-safe
+арифметикой и ограничением окном текущего AU; whole-AU trim даёт ноль PCM без ложной
+ошибки декодера. TLV 10 и `FLUSHBUFFERED` этим изменением не затронуты. Host-проверка
+включает 100000 сравнений с независимой формулой, 50000 malformed-parser cases,
+ASan/UBSan и QNX ARM cross-build.
 
 Поля 8 и 17 — state changes. Они применяются строго перед следующим соответствующим audio packet и
 сбрасывают/rebuild converter. Cookie хранится словарём `cookieID -> retained CFData`; отсутствие

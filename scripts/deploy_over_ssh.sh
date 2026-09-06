@@ -14,22 +14,29 @@ HOOK="${1:-${PROJECT_DIR}/build/libcarplay_hook.so}"
 APAC="${2:-${PROJECT_DIR}/build/libcarplay_apac.so}"
 DST="/mnt/app/root/hooks/libcarplay_hook.so"
 APAC_DST="/mnt/app/root/hooks/libcarplay_apac.so"
+STAGE="${DST}.new"
+APAC_STAGE="${APAC_DST}.new"
 
 [ -f "$HOOK" ] || { echo "missing hook: $HOOK (run ./scripts/build_hook.sh first)"; exit 1; }
 [ -f "$APAC" ] || { echo "missing APAC codec: $APAC (run ./scripts/build_hook.sh first)"; exit 1; }
 echo "Deploying hook $(ls -la "$HOOK" | awk '{print $5}') bytes -> $DST"
 echo "Deploying codec $(ls -la "$APAC" | awk '{print $5}') bytes -> $APAC_DST"
 
-# 1. Straight overwrite. dio_manager is killed two lines down and re-execs from
-# the new file, so there is nothing to stage through: the rename dance only ever
-# protected a process we are about to end anyway. No on-device backup either --
-# the hook is reproducible with scripts/build_hook.sh.
+# 1. Stage and rename. QNX rejects a direct scp overwrite while dio_manager has
+# the shared object mapped (ETXTBSY surfaces only as "dest open: Failure"). A
+# new inode can be copied and atomically renamed over the live pathname; the
+# current process retains its mapped inode until step 2, and its replacement
+# opens the new one. No backup copies accumulate: each deploy reuses `.new` and
+# the hook remains reproducible with scripts/build_hook.sh.
 sshpass -p "$PASS" ssh $OPTS "$DEV" 'mount -uw /mnt/app; echo rw'
-sshpass -p "$PASS" scp $OPTS "$HOOK" "$DEV:$DST"
-sshpass -p "$PASS" scp $OPTS "$APAC" "$DEV:$APAC_DST"
-sshpass -p "$PASS" ssh $OPTS "$DEV" 'chmod 755 '"$DST $APAC_DST"'; sync; ls -la '"$DST $APAC_DST"
+sshpass -p "$PASS" scp $OPTS "$HOOK" "$DEV:$STAGE"
+sshpass -p "$PASS" scp $OPTS "$APAC" "$DEV:$APAC_STAGE"
+sshpass -p "$PASS" ssh $OPTS "$DEV" \
+    'chmod 755 '"$STAGE $APAC_STAGE"' && mv '"$STAGE $DST"' && mv '"$APAC_STAGE $APAC_DST"'; sync; ls -la '"$DST $APAC_DST"
 
 # 2. kill dio_manager so it respawns with the new hook on next CarPlay connect
 sshpass -p "$PASS" ssh $OPTS "$DEV" 'for p in /proc/[0-9]*; do c=$(tr "\0" " " < $p/cmdline 2>/dev/null); case "$c" in *dio_manager*) pid=${p#/proc/}; echo "killing dio_manager pid=$pid"; kill $pid 2>/dev/null;; esac; done; echo done'
 
-echo "Deployed. Reconnect the iPhone (CarPlay), then: tail -f /tmp/carplay_hook.log"
+echo "Deployed. Reconnect the iPhone (CarPlay)."
+echo "Normal build: tail -f /tmp/carplay_hook.log"
+echo "State-trace build: ./scripts/carplay_state_trace.sh tail"

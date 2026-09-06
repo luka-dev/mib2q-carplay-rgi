@@ -191,6 +191,42 @@ size_t iap2_build_tlv_str(uint8_t* out, size_t out_max, uint16_t tlv_id, const c
     return tlv_len;
 }
 
+size_t iap2_build_pioneer_now_playing_start(uint8_t* out, size_t out_max) {
+    static const uint16_t media_attributes[] = {
+        0x00, 0x01, 0x04, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0c,
+        0x10, 0x12, 0x15, 0x16, 0x17, 0x18, 0x1a, 0x1b
+    };
+    const size_t group_size = 4u + 17u * 4u;
+    size_t offset = 0;
+    size_t i;
+
+    if (!out || out_max < group_size * 2u) return 0;
+
+    /* NmeIAP2_StartNowPlayingUpdates @ libNmeVfs.so:0xD907C builds
+     * NmeIAP2MessageGroup id 0 from the sparse media list above. AddNull
+     * serializes every requested attribute as a four-byte empty TLV. */
+    write_be16(out + offset, (uint16_t)group_size);
+    write_be16(out + offset + 2u, 0u);
+    offset += 4u;
+    for (i = 0; i < sizeof(media_attributes) / sizeof(media_attributes[0]); i++) {
+        write_be16(out + offset, 4u);
+        write_be16(out + offset + 2u, media_attributes[i]);
+        offset += 4u;
+    }
+
+    /* Group id 1 is the stock playback request, attributes 0..16. */
+    write_be16(out + offset, (uint16_t)group_size);
+    write_be16(out + offset + 2u, 1u);
+    offset += 4u;
+    for (i = 0; i <= 0x10u; i++) {
+        write_be16(out + offset, 4u);
+        write_be16(out + offset + 2u, (uint16_t)i);
+        offset += 4u;
+    }
+
+    return offset;
+}
+
 /* iAP2 link-layer checksum: negated 8-bit sum.
  * Apple's iAP2 USB Host transport (R12+) uses this exclusively. */
 uint8_t iap2_cksum_neg(const uint8_t* buf, size_t len) {

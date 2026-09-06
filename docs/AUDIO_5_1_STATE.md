@@ -930,6 +930,138 @@ and mapped in the new `dio_manager`, but has not yet completed the live handoff
 test and therefore is not called a vehicle fix.  Full timing, ABI evidence and
 deployment distinction are in the lifecycle document.
 
+That diagnostic artifact has since been replaced by the `LOG=0` pre-production
+build `7ff56c94...`.  The quiet build compiles out the logger thread and all
+audio probe file writers while retaining identical receive/decode/render and
+feedback-clock logic.  SCP readback matched, the verbose marker was removed,
+and the live `dio_manager` mapped the quiet hook and unchanged APAC library;
+no hook log or probe file was created after startup.  This is the current unit
+state, still awaiting the same audible full-song/handoff validation.
+
+The later compact cold-start A/B closes that QSA-only assumption. Type 103 was
+decoding APAC/6 and the hook-owned `mpl5_dio_ent` handle completed 10,861 full
+writes with no write, ring, decoder or device failure, yet the vehicle was
+silent. Opening Music caused stock type-100 SETUP to reclaim the same handle;
+its first period still came from the type-103 ring and sound began immediately.
+Static analysis shows why: before QSA, stock `AudioStreamPrepare @ 0x4A9D0`
+calls exported `CDIOManager::s_audioTypeCallback(kAudioTypeMedia)`, waits for
+the HMI audio-availability ACK, and only then opens the sink. The callback
+publishes `CAirPlayServiceEvent_UpdateMainAudioType`; its Pioneer handler maps
+Media to DSI main-audio type 2 and calls
+`CDSICarplayImpl::updateMainAudioType(type=2, add=true)`. Direct QSA skipped
+that media-route/focus declaration. The cold path now invokes that exact
+fully-recovered callback, hands ownership to a later stock type 100, and uses
+the exact exported torn-down callback only if type 103 still owns the route.
+This revision is host/QNX verified. Its fresh cold vehicle acceptance is
+recorded below; full instructions, hashes and trace evidence are in
+[`reference/NOW_PLAYING_STARTUP_STATE_MACHINE_AUDIT.md`](reference/NOW_PLAYING_STARTUP_STATE_MACHINE_AUDIT.md).
+
+## Cold-connect media-route acceptance (2026-09-05)
+
+The last cold-start requirement is now vehicle-confirmed. A fresh connection
+started playback automatically without opening Apple Music. The generation had
+type 103/110/111 only, so stock type 100 did not heal the session. The hook
+issued the exact Pioneer `s_audioTypeCallback(kAudioTypeMedia)` declaration,
+then cold-opened `mpl5_dio_ent` as six-channel/48 kHz. The retained trace reached
+2,560 complete QSA periods with no short/zero write, recovery, ring wait, decode
+failure, drop or device underrun. Evidence and analyzer output:
+`captures/state-trace/20260905-131355/`; deployed hook SHA-256:
+`7e8869875293f02952669186f7c4f183986003c4f42e7f5622ecc3db31a31754`.
+
+## Remaining route-ownership edge found (local fix, not deployed)
+
+The next failed media-start occurrence was captured before unplugging the
+phone, with its successful replug as a control. In the failed generation stock
+type 100 opened QSA and type 103 decoded AAC to PCM6 correctly. When type 100
+later stopped, the hook retained the live QSA handle and completed 17,061 full
+detached writes, but stock emitted its audio-torn-down notification and no hook
+Media-route request followed. Replugging created a type-103-only generation;
+the cold route request ran and the user confirmed sound.
+
+This is the missing inverse transition in the ownership machine: `hook ->
+stock` existed, while `stock -> hook` did not. The local repair schedules the
+exact Pioneer Media-route callback 50 ms after a retained stock close, cancels
+it if stock reopens, retries resolution failure after one second, and releases
+the route on final buffered teardown. It uses the existing APAP receiver/QSA
+writer and adds neither a thread nor a second handle. Full timestamps, static
+`AudioStreamStop` order, captures and validation are in
+[`reference/NOW_PLAYING_STARTUP_STATE_MACHINE_AUDIT.md`](reference/NOW_PLAYING_STARTUP_STATE_MACHINE_AUDIT.md).
+Host tests and the QNX build pass; vehicle acceptance is still pending.
+
+## AAC reserve pump and repeated-seek drain (deployed)
+
+A live interruption is retained in
+`captures/state-trace/20260905-live-aac-stutter-followup/`. AAC decoding stayed
+clean, but the detached writer had reduced the 400-ms startup ring to the
+0/256/512-frame granularity remainder. At the reported event iOS explicitly
+sent `FLUSHBUFFERED`; the next APAP interval was 612 ms and the next QSA write
+was 1167 ms later with hidden prepare/retry. This separates two causes: an
+ordinary jitter gap is exposed by drain-to-empty, while a real item/seek flush
+must discard old PCM and cannot be made fully gapless if iOS sends no new media.
+
+The deployed reserve correction makes the existing APAP thread a one-QSA-period render
+pump and holds the software ring near the 12,000-frame/250-ms high-water mark.
+It also separates cold prime (400 ms) from post-flush re-prime (7,680 frames,
+160 ms, matching the ten granted QSA fragments). No decoder, PCM geometry,
+thread, QSA handle, SAD or upmix algorithm changes. Host audio tests, the full
+regression suite, QNX ARMv7 build and diff check pass. The reserve behavior is
+vehicle-confirmed: the retained ring stayed near 11--13k frames for more than
+six minutes with no decode failure, QSA cadence gap, ring wait, recovery, short
+write or device underrun. Implementation and the precise limit of the 612-ms sender gap
+are documented in `docs/BUFFERED_BACKGROUND_LIFECYCLE.md`. The trace-enabled,
+compact hook is installed on the unit (readback verified), 559540 bytes, SHA-256
+`084e9730be045befea369c629678dccce18dd9ddfa70f2cd8a7abb93c6d5808d`;
+APAC remains `a6a7bc8c...`.
+
+The same vehicle run isolated repeated-seek lag to a different policy: while a
+`FLUSHBUFFERED` boundary was pending, the receiver discarded each stale AAC
+packet with the normal 21.33-ms realtime producer sleep. Several seeks could
+therefore extend the invalid sequence range faster than it was drained, while
+PCM stayed empty even though APAP delivery, AAC decoding and QSA remained
+healthy. The installed hook now authenticates/decrypts and discards only that
+explicitly invalid range without pacing, restores normal pacing at the first
+post-boundary record, and traces the crossing plus discarded-packet count. It
+adds no thread and does not change the working APAC, upmix or QSA paths. A fresh
+multi-seek audible/trace run is the remaining acceptance test.
+
+The subsequent B-metadata/C-audio report exposed a separate unsafe bridge
+policy: whenever active type 103 lacked a complete period, the hook substituted
+the independent type-100 PCM timeline. Empty-ring substitutions were not even
+included in the old fallback counter. A host/QNX-verified local candidate now
+keeps a single owner: buffered PCM or one whole silent QSA period, never
+type-100 content under type-103 ownership, with `QSA_BUFFERED_SILENCE`
+telemetry. It is not yet deployed, and the reboot removed the uncollected
+`/tmp` trace, so this remains a code-proved hazard rather than a
+vehicle-confirmed cause of that exact B-to-C event.
+
+## Type-103 stopped queue and exact FLUSH lifecycle (local, not deployed)
+
+The exact iOS 26.1/Pioneer audit then proved two independent receiver defects:
+the renderer started in `playing=1` before iOS's first rate-one command, and it
+destroyed every authenticated AU received during `rate=0` even when no flush
+occurred. One retained handoff accounts exactly for 30 lost AUs / 30,720 frames
+/ about 640 ms. The old full-ring treatment of every bounded flush was also a
+real semantic mismatch.
+
+The local repair replaces the duplicate play booleans with one lifecycle
+object initialized stopped. The existing APAP/QSA thread retains validated raw
+records under rate zero and drains them once, in order, under rate one. Its
+memory bound is the SETUP `audioBufferSize` plus one complete record, after
+which TCP backpressure applies. Authenticated sequence/RTP tags now follow
+decoded PCM, so compressed records, in-flight ownership and the PCM ring all
+obey the same inclusive wrapping FLUSH range. Until-only flush remains a
+decoder/upmix-resetting prefix; bounded from/until preserves outside data.
+Stop/generation and cookie-generation reads were synchronized at the same time.
+No thread, QSA handle, decoder, format, upmix, SAD or CSD behavior changed.
+
+The full host suite, a dedicated ASan/UBSan lifecycle regression and the QNX
+ARMv7 quiet trace build pass. The candidate is intentionally not installed.
+Vehicle acceptance must first show no buffered QSA write before rate one,
+lossless queue drain across a no-flush pause, and exact seek/AutoMix flush
+counts. Anchor-to-QSA timestamp scheduling remains an open measurement, not an
+implemented speculative change. Full evidence and test gates are in
+[`reference/IOS_26_1_BUFFERED_AUDIO_LIFECYCLE_AUDIT.md`](reference/IOS_26_1_BUFFERED_AUDIO_LIFECYCLE_AUDIT.md).
+
 ---
 
 ## Sources
@@ -952,4 +1084,5 @@ deployment distinction are in the lifecycle document.
 * `docs/AAC_BUFFERED_PATH_PLAN.md` — MHI2Q AAC-LC framing, Cinemo ABI, cookie contract, thread model and safe implementation plan.
 * `docs/DYNAMIC_BUFFERED_CODEC_SWITCH.md` — active iOS format reselection, APAP boundary contract and receiver switch state machine.
 * `docs/AMP_STEREO_5_1_MATRIX_DIFF.md` — live amplifier ASAD handling, exact stereo/5.1 matrix differences and bank-dependent SHARC mode control.
-* `docs/BUFFERED_BACKGROUND_LIFECYCLE.md` — measured type-100/type-103 ownership split on phone lock, implemented QSA/feedback handoff, and pending stationary validation.
+* `docs/BUFFERED_BACKGROUND_LIFECYCLE.md` — measured type-100/type-103 ownership split, QSA/feedback handoff, and vehicle-confirmed cold media-route activation.
+* `docs/reference/IOS_26_1_BUFFERED_AUDIO_LIFECYCLE_AUDIT.md` — exact iOS/Pioneer lifecycle contract, implemented stopped queue/exact FLUSH repair and remaining vehicle gates.

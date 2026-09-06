@@ -1,10 +1,9 @@
 /*
  * Fixed-memory benchmark for the shipping stereo upmix backends.
  *
- * Host runs measure wall time.  QNX runs under the companion QEMU -icount
- * runner calibrate ClockCycles() against exact ARM instruction loops and
- * report instruction estimates.  Neither kind of result is a Krait cycle
- * measurement.
+ * Host and live-QNX runs measure monotonic wall time.  QNX runs under the
+ * companion QEMU -icount runner explicitly switch to ClockCycles(), calibrate
+ * it against exact ARM instruction loops, and report instruction estimates.
  *
  * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
@@ -55,14 +54,22 @@ struct icount_calibration {
 };
 
 #if defined(__QNX__)
+static int g_use_qemu_icount_clock;
+
 static uint64_t bench_now(void)
 {
-    return (uint64_t)ClockCycles();
+    struct timespec value;
+
+    if (g_use_qemu_icount_clock) return (uint64_t)ClockCycles();
+    if (clock_gettime(CLOCK_MONOTONIC, &value) != 0) return 0;
+    return (uint64_t)value.tv_sec * UINT64_C(1000000000) +
+           (uint64_t)value.tv_nsec;
 }
 
 static const char *bench_clock_name(void)
 {
-    return "ClockCycles ticks";
+    return g_use_qemu_icount_clock ? "ClockCycles ticks" :
+                                     "CLOCK_MONOTONIC nanoseconds";
 }
 #elif defined(__APPLE__)
 static uint64_t bench_now(void)
@@ -286,6 +293,30 @@ static int parse_backend(const char *text,
         *backend = SPA_STEREO_UPMIX_MUSIC_STAGE;
         return 1;
     }
+    if (strcmp(text, "hssr-neon") == 0 || strcmp(text, "hssr") == 0) {
+        *backend = SPA_STEREO_UPMIX_HSSR_NEON;
+        return 1;
+    }
+    if (strcmp(text, "hssr-active") == 0 ||
+        strcmp(text, "hssr-neon-active") == 0) {
+        *backend = SPA_STEREO_UPMIX_HSSR_ACTIVE;
+        return 1;
+    }
+    if (strcmp(text, "hssr-object") == 0 ||
+        strcmp(text, "hssr-neon-object") == 0) {
+        *backend = SPA_STEREO_UPMIX_HSSR_OBJECT;
+        return 1;
+    }
+    if (strcmp(text, "hssr-object-v2") == 0 ||
+        strcmp(text, "hssr-neon-object-v2") == 0) {
+        *backend = SPA_STEREO_UPMIX_HSSR_OBJECT_V2;
+        return 1;
+    }
+    if (strcmp(text, "hssr-object-focus") == 0 ||
+        strcmp(text, "hssr-object-v3") == 0) {
+        *backend = SPA_STEREO_UPMIX_HSSR_OBJECT_FOCUS;
+        return 1;
+    }
     return 0;
 }
 
@@ -294,13 +325,20 @@ static const char *backend_name(enum spa_stereo_upmix_backend backend)
     if (backend == SPA_STEREO_UPMIX_HSR_TD) return "hsr-td";
     if (backend == SPA_STEREO_UPMIX_HSR_TD_ACTIVE) return "hsr-td-active";
     if (backend == SPA_STEREO_UPMIX_MUSIC_STAGE) return "music-stage";
+    if (backend == SPA_STEREO_UPMIX_HSSR_NEON) return "hssr-neon";
+    if (backend == SPA_STEREO_UPMIX_HSSR_ACTIVE) return "hssr-active";
+    if (backend == SPA_STEREO_UPMIX_HSSR_OBJECT) return "hssr-object";
+    if (backend == SPA_STEREO_UPMIX_HSSR_OBJECT_V2) return "hssr-object-v2";
+    if (backend == SPA_STEREO_UPMIX_HSSR_OBJECT_FOCUS)
+        return "hssr-object-focus";
     return "ambient-hq";
 }
 
 static void print_usage(const char *program)
 {
     fprintf(stderr,
-            "usage: %s [--backend ambient-hq|hsr-td|hsr-td-active|music-stage] "
+            "usage: %s [--backend ambient-hq|hsr-td|hsr-td-active|music-stage|hssr-neon|hssr-active|hssr-object|hssr-object-v2|hssr-object-focus] "
+            "[--model HSSR.bin] "
             "[--blocks 1..%u] [--warmup 1..%u] "
             "[--qemu-icount]\n",
             program, (unsigned)BENCH_MAX_BLOCKS,
@@ -358,6 +396,7 @@ static void print_icount_stats(const struct bench_stats *statistics,
 int main(int argc, char **argv)
 {
     struct spa_stereo_upmix_config config;
+    struct spa_hssr_model hssr_model;
     struct bench_stats statistics;
     struct icount_calibration calibration;
     size_t blocks = BENCH_DEFAULT_BLOCKS;
@@ -366,10 +405,12 @@ int main(int argc, char **argv)
     uint32_t random_state = UINT32_C(0x4d484932);
     uint64_t checksum = UINT64_C(14695981039346656037);
     int qemu_icount = 0;
+    const char *model_path = NULL;
     size_t index;
     int argument;
 
     memset(&calibration, 0, sizeof(calibration));
+    memset(&hssr_model, 0, sizeof(hssr_model));
     for (argument = 1; argument < argc; argument++) {
         if (strcmp(argv[argument], "--backend") == 0 &&
             argument + 1 < argc) {
@@ -392,11 +433,18 @@ int main(int argc, char **argv)
             }
         } else if (strcmp(argv[argument], "--qemu-icount") == 0) {
             qemu_icount = 1;
+        } else if (strcmp(argv[argument], "--model") == 0 &&
+                   argument + 1 < argc) {
+            model_path = argv[++argument];
         } else {
             print_usage(argv[0]);
             return 2;
         }
     }
+
+#if defined(__QNX__)
+    g_use_qemu_icount_clock = qemu_icount;
+#endif
 
 #if !defined(__QNX__)
     if (qemu_icount) {
@@ -409,8 +457,26 @@ int main(int argc, char **argv)
     spa_stereo_upmix_default_config(&config);
     config.backend = backend;
     spa_stereo_upmix_config_set_lfe(&config, 1);
+    if (backend == SPA_STEREO_UPMIX_HSSR_NEON ||
+        backend == SPA_STEREO_UPMIX_HSSR_ACTIVE ||
+        backend == SPA_STEREO_UPMIX_HSSR_OBJECT ||
+        backend == SPA_STEREO_UPMIX_HSSR_OBJECT_V2 ||
+        backend == SPA_STEREO_UPMIX_HSSR_OBJECT_FOCUS) {
+        if (!model_path) {
+            fprintf(stderr, "error: selected HSSR backend requires --model HSSR.bin\n");
+            return 2;
+        }
+        if (spa_hssr_model_load_file(&hssr_model, model_path) !=
+                SPA_HSSR_OK) {
+            fprintf(stderr, "error: failed to load HSSR model %s\n",
+                    model_path);
+            return 1;
+        }
+        spa_stereo_upmix_config_set_hssr_model(&config, &hssr_model);
+    }
     if (spa_stereo_upmix_init(&g_state, &config) != SPA_STEREO_UPMIX_OK) {
         fprintf(stderr, "error: %s init failed\n", backend_name(backend));
+        spa_hssr_model_unload(&hssr_model);
         return 1;
     }
 
@@ -430,6 +496,7 @@ int main(int argc, char **argv)
         fprintf(stderr,
                 "error: ClockCycles did not validate as QEMU -icount; "
                 "refusing to label ticks as instructions\n");
+        spa_hssr_model_unload(&hssr_model);
         return 1;
     }
 
@@ -440,6 +507,7 @@ int main(int argc, char **argv)
                 BENCH_FRAMES) != SPA_STEREO_UPMIX_OK) {
             fprintf(stderr, "error: %s warmup failed\n",
                     backend_name(backend));
+            spa_hssr_model_unload(&hssr_model);
             return 1;
         }
     }
@@ -458,6 +526,7 @@ int main(int argc, char **argv)
             fprintf(stderr, "error: %s process failed at block %lu "
                     "with status %d\n", backend_name(backend),
                     (unsigned long)index, status);
+            spa_hssr_model_unload(&hssr_model);
             return 1;
         }
         g_elapsed[index] = after - before;
@@ -473,5 +542,6 @@ int main(int argc, char **argv)
     g_checksum_sink = checksum;
     printf("checksum_fnv1a64_le=0x%016llx\n",
            (unsigned long long)g_checksum_sink);
+    spa_hssr_model_unload(&hssr_model);
     return 0;
 }

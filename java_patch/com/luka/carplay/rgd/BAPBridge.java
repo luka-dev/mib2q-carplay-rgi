@@ -1371,10 +1371,20 @@ public class BAPBridge {
         return out.toString();
     }
 
+    /** Past an hour, plain minutes stop being readable at a glance -- a long trip showed
+     *  "905 min". Split into hours and minutes, keeping the bare "45 min" form below the hour
+     *  so short trips read exactly as before. StringBuffer, not String.format: this runs on
+     *  Foundation Profile 1.1. */
     private static String formatRemainingForText(long seconds) {
         if (seconds < 0L) return "";
         long minutes = (seconds + 59L) / 60L;
-        return String.valueOf(minutes) + " min";
+        if (minutes < 60L) return String.valueOf(minutes) + " min";
+        long rest = minutes % 60L;
+        StringBuffer out = new StringBuffer();
+        out.append(minutes / 60L).append(" h ");
+        if (rest < 10L) out.append('0');
+        out.append(rest).append(" min");
+        return out.toString();
     }
 
     /** Advance the renderer handshake without waiting. Called by the presentation worker. */

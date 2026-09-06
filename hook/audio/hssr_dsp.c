@@ -1,0 +1,1171 @@
+/*
+ * Copyright (c) 2026 LuKa (@LuKa_dev)
+ */
+#include "hssr_dsp.h"
+
+#include <math.h>
+#include <string.h>
+
+#ifndef SPA_HSSR_SEMANTIC_MAKEUP
+#define SPA_HSSR_SEMANTIC_MAKEUP 6.0f
+#endif
+
+#ifndef SPA_HSSR_ACTIVE_SEMANTIC_MAKEUP
+#define SPA_HSSR_ACTIVE_SEMANTIC_MAKEUP 16.0f
+#endif
+
+enum {
+    SPA_HSSR_LEFT = 0,
+    SPA_HSSR_RIGHT = 1
+};
+
+static const uint16_t kHssrBandEdgeHz[SPA_HSSR_BANDS + 1] = {
+    0, 60, 90, 125, 170, 220, 280, 350,
+    440, 550, 680, 830, 1000, 1200, 1450, 1750,
+    2100, 2500, 3000, 3600, 4300, 5100, 6000, 7000,
+    8200, 9600, 11200, 13000, 15000, 17500, 20000, 22000,
+    24001
+};
+
+/* Object Focus never raises a complete rear band.  This curve is consulted
+ * only after a coherent object has passed the semantic, pan and slot guards.
+ * It favours guitar/keys and the presence/transient range carried especially
+ * well by the rear-door tweeters, while rejecting bass and ultrasonic hiss. */
+static const float kHssrObjectFocusPresence[SPA_HSSR_BANDS] = {
+    0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.05f, 0.10f, 0.20f,
+    0.35f, 0.50f, 0.70f, 0.85f, 1.00f, 1.00f, 1.00f, 1.00f,
+    1.00f, 1.00f, 1.00f, 1.00f, 1.00f, 1.00f, 1.00f, 1.00f,
+    1.00f, 0.95f, 0.75f, 0.50f, 0.30f, 0.15f, 0.05f, 0.00f
+};
+
+struct spa_hssr_band_accumulator {
+    float pl;
+    float pr;
+    float cross_re;
+    float cross_im;
+    float mid;
+    float side;
+    float magnitude;
+    float log_magnitude;
+    float flux;
+    uint16_t bins;
+};
+
+static float spa_hssr_dsp_bound(float value, float low, float high)
+{
+    if (value < low) return low;
+    if (value > high) return high;
+    return value;
+}
+
+static float spa_hssr_dsp_finite(float value)
+{
+    uint32_t bits;
+
+    memcpy(&bits, &value, sizeof(bits));
+    if ((bits & UINT32_C(0x7f800000)) == UINT32_C(0x7f800000))
+        return 0.0f;
+    return value;
+}
+
+static float spa_hssr_dsp_sigmoid(float value)
+{
+    float square;
+    float tanh_value;
+
+    value = spa_hssr_dsp_bound(value * 0.5f, -3.0f, 3.0f);
+    square = value * value;
+    tanh_value = value * (27.0f + square) / (27.0f + 9.0f * square);
+    return 0.5f * (tanh_value + 1.0f);
+}
+
+static float spa_hssr_dsp_smoothstep(float value, float low, float high)
+{
+    float normalized;
+
+    if (value <= low) return 0.0f;
+    if (value >= high) return 1.0f;
+    normalized = (value - low) / (high - low);
+    return normalized * normalized * (3.0f - 2.0f * normalized);
+}
+
+static float spa_hssr_dsp_tanh(float value)
+{
+    float square;
+
+    value = spa_hssr_dsp_bound(value, -3.0f, 3.0f);
+    square = value * value;
+    return value * (27.0f + square) / (27.0f + 9.0f * square);
+}
+
+static void spa_hssr_fft(struct spa_hssr_dsp *state,
+                         unsigned channel, int inverse)
+{
+    float *real = state->fft_re[channel];
+    float *imaginary = state->fft_im[channel];
+    unsigned index;
+    unsigned reversed = 0;
+    unsigned length;
+
+    for (index = 1; index < SPA_HSSR_FFT_SIZE; ++index) {
+        unsigned bit = SPA_HSSR_FFT_SIZE >> 1;
+
+        while (reversed & bit) {
+            reversed ^= bit;
+            bit >>= 1;
+        }
+        reversed ^= bit;
+        if (index < reversed) {
+            float temporary = real[index];
+            real[index] = real[reversed];
+            real[reversed] = temporary;
+            temporary = imaginary[index];
+            imaginary[index] = imaginary[reversed];
+            imaginary[reversed] = temporary;
+        }
+    }
+
+    for (length = 2; length <= SPA_HSSR_FFT_SIZE; length <<= 1) {
+        unsigned half = length >> 1;
+        unsigned stride = SPA_HSSR_FFT_SIZE / length;
+        unsigned base;
+
+        for (base = 0; base < SPA_HSSR_FFT_SIZE; base += length) {
+            unsigned offset;
+
+            for (offset = 0; offset < half; ++offset) {
+                unsigned twiddle = offset * stride;
+                float wr = state->twiddle_re[twiddle];
+                float wi = state->twiddle_im[twiddle];
+                unsigned even = base + offset;
+                unsigned odd = even + half;
+                float odd_re;
+                float odd_im;
+                float even_re;
+                float even_im;
+
+                if (inverse) wi = -wi;
+                odd_re = wr * real[odd] - wi * imaginary[odd];
+                odd_im = wr * imaginary[odd] + wi * real[odd];
+                even_re = real[even];
+                even_im = imaginary[even];
+                real[even] = even_re + odd_re;
+                imaginary[even] = even_im + odd_im;
+                real[odd] = even_re - odd_re;
+                imaginary[odd] = even_im - odd_im;
+            }
+        }
+    }
+
+    if (inverse) {
+        const float scale = 1.0f / (float)SPA_HSSR_FFT_SIZE;
+
+        for (index = 0; index < SPA_HSSR_FFT_SIZE; ++index) {
+            real[index] = spa_hssr_dsp_finite(real[index] * scale);
+            imaginary[index] = spa_hssr_dsp_finite(
+                imaginary[index] * scale);
+        }
+    }
+}
+
+void spa_hssr_dsp_prepare(struct spa_hssr_dsp *state)
+{
+    const double window_step_re = 0.99998117528260114266;
+    const double window_step_im = 0.00613588464915447536;
+    const double window_start_re = 0.99999529380957617151;
+    const double window_start_im = 0.00306795676296597627;
+    const double fft_step_re = 0.99992470183914454092;
+    const double fft_step_im = -0.01227153828571992608;
+    double re;
+    double im;
+    unsigned sample;
+    unsigned phase;
+
+    if (!state) return;
+    memset(state, 0, sizeof(*state));
+
+    re = window_start_re;
+    im = window_start_im;
+    for (sample = 0; sample < SPA_HSSR_FFT_SIZE; ++sample) {
+        double next_re;
+        double next_im;
+
+        state->analysis_window[sample] = (float)im;
+        next_re = re * window_step_re - im * window_step_im;
+        next_im = im * window_step_re + re * window_step_im;
+        re = next_re;
+        im = next_im;
+    }
+    for (phase = 0; phase < SPA_HSSR_HOP_SIZE; ++phase) {
+        float normalization = 0.0f;
+        unsigned overlap;
+
+        for (overlap = 0; overlap < 4; ++overlap) {
+            float window = state->analysis_window[
+                phase + overlap * SPA_HSSR_HOP_SIZE];
+            normalization += window * window;
+        }
+        for (overlap = 0; overlap < 4; ++overlap) {
+            unsigned index = phase + overlap * SPA_HSSR_HOP_SIZE;
+            state->synthesis_window[index] =
+                state->analysis_window[index] / normalization;
+        }
+    }
+
+    re = 1.0;
+    im = 0.0;
+    for (sample = 0; sample < SPA_HSSR_FFT_SIZE / 2; ++sample) {
+        double next_re;
+        double next_im;
+
+        state->twiddle_re[sample] = (float)re;
+        state->twiddle_im[sample] = (float)im;
+        next_re = re * fft_step_re - im * fft_step_im;
+        next_im = im * fft_step_re + re * fft_step_im;
+        re = next_re;
+        im = next_im;
+    }
+
+    for (sample = 0; sample < SPA_HSSR_BINS; ++sample) {
+        unsigned frequency_hz =
+            (sample * 48000u + SPA_HSSR_FFT_SIZE / 2) /
+            SPA_HSSR_FFT_SIZE;
+        unsigned band = 0;
+
+        while (band + 1 < SPA_HSSR_BANDS &&
+               frequency_hz >= kHssrBandEdgeHz[band + 1])
+            ++band;
+        state->bin_band[sample] = (uint8_t)band;
+    }
+}
+
+void spa_hssr_dsp_reset(struct spa_hssr_dsp *state)
+{
+    spa_hssr_dsp_prepare(state);
+}
+
+void spa_hssr_dsp_set_active(struct spa_hssr_dsp *state, int active)
+{
+    if (state) state->active_profile = active ? 1u : 0u;
+}
+
+void spa_hssr_dsp_set_profile(struct spa_hssr_dsp *state, unsigned profile)
+{
+    if (!state) return;
+    state->active_profile = (uint8_t)(profile <= 4u ? profile : 0u);
+}
+
+static void spa_hssr_extract_features(
+    struct spa_hssr_dsp *state,
+    const struct spa_hssr_band_accumulator bands[SPA_HSSR_BANDS])
+{
+    const float epsilon = 1.0e-8f;
+    float total_energy = 0.0f;
+    float total_mid = 0.0f;
+    float total_side = 0.0f;
+    float weighted_coherence = 0.0f;
+    float weighted_flux = 0.0f;
+    float weighted_harmonic = 0.0f;
+    float weighted_diffuse = 0.0f;
+    float weighted_pan = 0.0f;
+    float weighted_frequency = 0.0f;
+    float sub120 = 0.0f;
+    float low250 = 0.0f;
+    float transient_bands = 0.0f;
+    float pan_entropy = 0.0f;
+    float peak = 0.0f;
+    float sample_energy = 0.0f;
+    float log_total;
+    float crest;
+    unsigned band;
+    unsigned sample;
+
+    for (band = 0; band < SPA_HSSR_BANDS; ++band)
+        total_energy += bands[band].pl + bands[band].pr;
+    if (total_energy < epsilon) total_energy = epsilon;
+
+    for (band = 0; band < SPA_HSSR_BANDS; ++band) {
+        const struct spa_hssr_band_accumulator *value = &bands[band];
+        float energy = value->pl + value->pr;
+        float cross_abs = sqrtf(value->cross_re * value->cross_re +
+                                value->cross_im * value->cross_im);
+        float coherence = spa_hssr_dsp_bound(
+            cross_abs / sqrtf(value->pl * value->pr + epsilon),
+            0.0f, 1.0f);
+        float cosine = spa_hssr_dsp_bound(
+            value->cross_re / (cross_abs + epsilon), -1.0f, 1.0f);
+        float sine = spa_hssr_dsp_bound(
+            value->cross_im / (cross_abs + epsilon), -1.0f, 1.0f);
+        float flatness;
+        float tonality;
+        float flux = spa_hssr_dsp_bound(
+            value->flux / (value->magnitude + epsilon), 0.0f, 4.0f);
+        float tail;
+        float left_amplitude = sqrtf(value->pl + epsilon);
+        float right_amplitude = sqrtf(value->pr + epsilon);
+        float pan = (left_amplitude - right_amplitude) /
+                    (left_amplitude + right_amplitude);
+        float probability = energy / total_energy;
+        float centre_frequency = 0.5f *
+            ((float)kHssrBandEdgeHz[band] +
+             (float)kHssrBandEdgeHz[band + 1]);
+        unsigned base = band * 9;
+
+        if (value->bins) {
+            float arithmetic = value->magnitude / (float)value->bins;
+            float geometric = expf(value->log_magnitude /
+                                   (float)value->bins);
+            flatness = geometric / (arithmetic + epsilon);
+        } else {
+            /* NumPy training accumulator leaves empty FFT bands at zero
+             * flatness.  The value is constant for this fixed geometry, but
+             * matching it avoids a clipped six-sigma normalization offset. */
+            flatness = 0.0f;
+        }
+        flatness = spa_hssr_dsp_bound(flatness, 0.0f, 1.0f);
+        tonality = 1.0f - flatness;
+        tail = spa_hssr_dsp_bound(
+            state->band_slow_energy[band] /
+            (energy + state->band_slow_energy[band] + epsilon),
+            0.0f, 1.0f) * (1.0f - spa_hssr_dsp_bound(flux, 0.0f, 1.0f));
+
+        state->features[base + 0] = logf(energy + epsilon);
+        state->features[base + 1] = logf(
+            (value->side + epsilon) / (value->mid + epsilon));
+        state->features[base + 2] = 0.5f * logf(
+            (value->pl + epsilon) / (value->pr + epsilon));
+        state->features[base + 3] = coherence;
+        state->features[base + 4] = cosine;
+        state->features[base + 5] = sine;
+        state->features[base + 6] = flux;
+        state->features[base + 7] = tonality;
+        state->features[base + 8] = tail;
+
+        total_mid += value->mid;
+        total_side += value->side;
+        weighted_coherence += coherence * energy;
+        weighted_flux += flux * energy;
+        weighted_harmonic += tonality * energy;
+        weighted_diffuse += (1.0f - coherence) * energy;
+        weighted_pan += pan * energy;
+        weighted_frequency += probability * centre_frequency;
+        if (band <= 2) sub120 += energy;
+        if (band >= 3 && band <= 5) low250 += energy;
+        if (flux > 0.20f) transient_bands += 1.0f;
+        if (probability > epsilon)
+            pan_entropy -= probability * logf(probability);
+    }
+
+    /* 64 contiguous four-bin log-magnitude shape values.  Nyquist is
+     * intentionally excluded, matching train_hssr.py. */
+    for (band = 0; band < SPA_HSSR_SHAPE_BANDS; ++band) {
+        float sum = 0.0f;
+        unsigned offset;
+
+        for (offset = 0; offset < 4; ++offset) {
+            unsigned bin = band * 4 + offset;
+            float left_re = state->fft_re[SPA_HSSR_LEFT][bin];
+            float left_im = state->fft_im[SPA_HSSR_LEFT][bin];
+            float right_re = state->fft_re[SPA_HSSR_RIGHT][bin];
+            float right_im = state->fft_im[SPA_HSSR_RIGHT][bin];
+            float magnitude = sqrtf(0.5f *
+                (left_re * left_re + left_im * left_im +
+                 right_re * right_re + right_im * right_im));
+            sum += logf(magnitude + epsilon);
+        }
+        state->features[SPA_HSSR_BANDS * 9 + band] = 0.25f * sum;
+    }
+
+    for (sample = 0; sample < SPA_HSSR_FFT_SIZE; ++sample) {
+        unsigned history = (state->input_position + sample) &
+                           (SPA_HSSR_FFT_SIZE - 1);
+        float left = state->input[SPA_HSSR_LEFT][history];
+        float right = state->input[SPA_HSSR_RIGHT][history];
+        float left_abs = left < 0.0f ? -left : left;
+        float right_abs = right < 0.0f ? -right : right;
+
+        if (left_abs > peak) peak = left_abs;
+        if (right_abs > peak) peak = right_abs;
+        sample_energy += left * left + right * right;
+    }
+    crest = peak / sqrtf(sample_energy /
+                         (2.0f * SPA_HSSR_FFT_SIZE) + epsilon);
+    log_total = logf(total_energy);
+    {
+        unsigned base = SPA_HSSR_BANDS * 9 + SPA_HSSR_SHAPE_BANDS;
+
+        state->features[base + 0] = log_total;
+        state->features[base + 1] = crest;
+        state->features[base + 2] = total_mid /
+            (total_mid + total_side + epsilon);
+        state->features[base + 3] = total_side /
+            (total_mid + total_side + epsilon);
+        state->features[base + 4] = weighted_coherence / total_energy;
+        state->features[base + 5] = sub120 / total_energy;
+        state->features[base + 6] = low250 / total_energy;
+        state->features[base + 7] = weighted_frequency / 24000.0f;
+        state->features[base + 8] = weighted_flux / total_energy;
+        state->features[base + 9] = transient_bands / SPA_HSSR_BANDS;
+        state->features[base + 10] = weighted_harmonic / total_energy;
+        state->features[base + 11] = weighted_diffuse / total_energy;
+        state->features[base + 12] = weighted_pan / total_energy;
+        state->features[base + 13] = pan_entropy / logf(32.0f);
+        state->features[base + 14] = 0.0f;
+        state->features[base + 15] = state->current_log_delta;
+    }
+
+    for (sample = 0; sample < SPA_HSSR_FEATURES; ++sample)
+        state->features[sample] = spa_hssr_dsp_finite(
+            state->features[sample]);
+}
+
+static void spa_hssr_update_controls(struct spa_hssr_dsp *state)
+{
+    float global_safety = spa_hssr_dsp_sigmoid(
+        state->control[SPA_HSSR_BANDS * 8 + 7]);
+    unsigned band;
+
+    state->scene_confidence = spa_hssr_dsp_sigmoid(
+        state->control[SPA_HSSR_BANDS * 8 + 3]);
+    state->rear_activity_target = spa_hssr_dsp_sigmoid(
+        state->control[SPA_HSSR_BANDS * 8 + 4]);
+    state->scene_stability = spa_hssr_dsp_sigmoid(
+        state->control[SPA_HSSR_BANDS * 8 + 5]);
+    state->fx_present = spa_hssr_dsp_sigmoid(
+        state->control[SPA_HSSR_BANDS * 8 + 6]);
+
+    for (band = 0; band < SPA_HSSR_BANDS; ++band) {
+        const float *raw = &state->control[band * 8];
+        float maximum = raw[0];
+        float probabilities[6];
+        float denominator = 0.0f;
+        float target;
+        float pan;
+        float alpha;
+        float lead_keep;
+        float bass_keep;
+        float object_boost_target = 0.0f;
+        float focus_rescue_target = 0.0f;
+        unsigned class_index;
+
+        for (class_index = 1; class_index < 6; ++class_index)
+            if (raw[class_index] > maximum) maximum = raw[class_index];
+        for (class_index = 0; class_index < 6; ++class_index) {
+            probabilities[class_index] = expf(
+                spa_hssr_dsp_bound(raw[class_index] - maximum,
+                                   -12.0f, 0.0f));
+            denominator += probabilities[class_index];
+        }
+        for (class_index = 0; class_index < 6; ++class_index)
+            probabilities[class_index] /= denominator;
+
+        target = spa_hssr_dsp_sigmoid(raw[6]);
+        if (state->active_profile >= 3u) {
+            /* The development network's rearability posterior is compressed:
+             * real positives cluster around 0.25 while its negative floor is
+             * near 0.13.  Expand that useful interval before the semantic and
+             * spatial guards.  This is profile-local, so V1 remains a direct
+             * rollback and future calibrated weights can remove it. */
+            target = spa_hssr_dsp_smoothstep(target, 0.12f, 0.36f);
+        }
+        /* Rearability is learned, but false positives are much more audible
+         * on lead vocal than false negatives on backing material.  Apply a
+         * steep semantic veto before makeup; this permits an audible rear
+         * level without lifting the model's low-confidence vocal floor. */
+        if (state->active_profile) {
+            float background_fx = probabilities[4] + probabilities[5];
+            float semantic_focus = spa_hssr_dsp_smoothstep(
+                background_fx + 0.20f * probabilities[2] -
+                    0.40f * probabilities[0] -
+                    0.20f * probabilities[1],
+                0.05f, 0.55f);
+
+            /* Active is intentionally selective rather than a global rear
+             * boost.  A fourth-power lead veto and cubic low-end veto make
+             * the extra gain collapse rapidly on vocals, bass and kick.
+             * Background/FX posteriors get the largest lift; spatial drums
+             * remain eligible for secondary-percussion events. */
+            lead_keep = 1.0f - probabilities[0];
+            bass_keep = 1.0f - 0.85f * probabilities[1];
+            if (state->active_profile >= 3u) {
+                /* Spatially separated material is allowed to survive a
+                 * confused vocal posterior; a centred lead still receives a
+                 * steep fourth-power veto and cannot acquire an object slot. */
+                float vocal_risk = probabilities[0] *
+                    (1.0f - 0.80f * state->band_spatiality[band]);
+
+                lead_keep = 1.0f - 0.92f * vocal_risk;
+                target *= lead_keep * lead_keep * lead_keep * lead_keep;
+            } else {
+                target *= lead_keep * lead_keep * lead_keep * lead_keep *
+                          lead_keep * lead_keep * lead_keep * lead_keep;
+            }
+            target *= bass_keep * bass_keep * bass_keep * bass_keep *
+                      bass_keep;
+            target *= 1.0f - 0.35f * probabilities[2];
+            target *= 1.0f - 0.10f * probabilities[3];
+            target *= 1.0f + 0.85f * background_fx;
+            target *= 0.72f + 0.28f * semantic_focus;
+            target *= 0.70f + 0.30f * global_safety;
+            target *= SPA_HSSR_ACTIVE_SEMANTIC_MAKEUP;
+            if (state->active_profile >= 2u) {
+                float objectness = background_fx +
+                    0.25f * probabilities[3] +
+                    0.15f * probabilities[2] -
+                    0.75f * probabilities[0] -
+                    0.35f * probabilities[1];
+
+                /* Unlike a global rear-gain lift, this post-mask makeup is
+                 * available only to rearable material.  V1/V2 stop at 1.45
+                 * (+3.23 dB); Focus reaches 1.80 only in its presence range. */
+                float maximum_boost = state->active_profile == 4u
+                    ? 0.45f + 0.35f * kHssrObjectFocusPresence[band]
+                    : 0.45f;
+
+                object_boost_target = maximum_boost *
+                    spa_hssr_dsp_smoothstep(objectness, 0.05f, 0.50f);
+            }
+            if (state->active_profile == 4u) {
+                const unsigned global_base =
+                    SPA_HSSR_BANDS * 9 + SPA_HSSR_SHAPE_BANDS;
+                float scene_width = spa_hssr_dsp_smoothstep(
+                    state->features[global_base + 3], 0.035f, 0.16f);
+                float transient_objectness =
+                    probabilities[2] +
+                    0.35f * probabilities[3] +
+                    probabilities[4] + probabilities[5] -
+                    0.25f * probabilities[0] -
+                    0.35f * probabilities[1];
+
+                /* Dense electronic masters are commonly misclassified by
+                 * the four-stem teacher as drums/low instead of background
+                 * or FX.  Their learned rearability then falls below the
+                 * calibrated 0.12 floor and the ordinary semantic path goes
+                 * silent (Bangarang/Centipede are representative cases).
+                 *
+                 * Rescue only the mid/high presence bands of a measurably
+                 * wide scene.  The object tracker still requires directed
+                 * ILD, ridge/transient evidence and a persistent half-plane
+                 * slot, so exact mono, centred dry vocal and sub cannot enter
+                 * through this path. */
+                focus_rescue_target =
+                    0.65f * scene_width *
+                    kHssrObjectFocusPresence[band] *
+                    spa_hssr_dsp_smoothstep(
+                        transient_objectness, 0.12f, 0.52f) *
+                    (1.0f - 0.55f * probabilities[0]) *
+                    (1.0f - 0.70f * probabilities[1]);
+                focus_rescue_target = spa_hssr_dsp_bound(
+                    focus_rescue_target, 0.0f, 0.65f);
+            }
+        } else {
+            lead_keep = 1.0f - probabilities[0];
+            bass_keep = 1.0f - 0.75f * probabilities[1];
+            target *= lead_keep * lead_keep * lead_keep;
+            target *= bass_keep * bass_keep;
+            target *= 1.0f - 0.65f * probabilities[2]; /* main drums */
+            target *= 1.0f - 0.25f * probabilities[3]; /* foreground */
+            target *= 0.70f + 0.30f * global_safety;
+            target *= SPA_HSSR_SEMANTIC_MAKEUP;
+        }
+        if (kHssrBandEdgeHz[band + 1] <= 125)
+            target = 0.0f;
+        else if (kHssrBandEdgeHz[band] < 220)
+            target *= ((float)kHssrBandEdgeHz[band + 1] - 125.0f) /
+                      (220.0f - 125.0f);
+        if (kHssrBandEdgeHz[band] >= 20000)
+            target *= 0.25f;
+        else if (kHssrBandEdgeHz[band] >= 15000)
+            target *= 0.65f;
+        target = spa_hssr_dsp_bound(target, 0.0f, 1.0f);
+
+        alpha = target > state->band_mask[band]
+            ? (state->active_profile ? 0.35f : 0.25f)
+            : (state->active_profile ? 0.035f : 0.08f);
+        state->band_mask[band] += alpha *
+            (target - state->band_mask[band]);
+        pan = spa_hssr_dsp_bound(
+            spa_hssr_dsp_tanh(raw[7]), -0.85f, 0.85f);
+        state->band_pan[band] += (state->active_profile ? 0.28f : 0.20f) *
+            (pan - state->band_pan[band]);
+        alpha = object_boost_target > state->band_object_boost[band]
+            ? 0.35f : 0.04f;
+        state->band_object_boost[band] += alpha *
+            (object_boost_target - state->band_object_boost[band]);
+        alpha = focus_rescue_target > state->band_focus_rescue[band]
+            ? 0.40f : 0.025f;
+        state->band_focus_rescue[band] += alpha *
+            (focus_rescue_target - state->band_focus_rescue[band]);
+    }
+}
+
+static void spa_hssr_update_spatial_bands(
+    struct spa_hssr_dsp *state,
+    const struct spa_hssr_band_accumulator bands[SPA_HSSR_BANDS])
+{
+    const float epsilon = 1.0e-8f;
+    unsigned band;
+
+    for (band = 0; band < SPA_HSSR_BANDS; ++band) {
+        float amplitude_l = sqrtf(bands[band].pl + epsilon);
+        float amplitude_r = sqrtf(bands[band].pr + epsilon);
+        float cross_abs = sqrtf(
+            bands[band].cross_re * bands[band].cross_re +
+            bands[band].cross_im * bands[band].cross_im);
+        float coherence = spa_hssr_dsp_bound(
+            cross_abs / sqrtf(bands[band].pl * bands[band].pr + epsilon),
+            0.0f, 1.0f);
+        float pan = (amplitude_l - amplitude_r) /
+            (amplitude_l + amplitude_r + epsilon);
+
+        state->band_spatiality[band] = spa_hssr_dsp_smoothstep(
+            fabsf(pan), 0.035f, 0.50f);
+        state->band_diffuse[band] = 1.0f - coherence;
+    }
+}
+
+static void spa_hssr_update_object_slots(
+    struct spa_hssr_dsp *state,
+    const struct spa_hssr_band_accumulator bands[SPA_HSSR_BANDS])
+{
+    const float epsilon = 1.0e-8f;
+    float band_target[SPA_HSSR_OBJECT_SLOTS][SPA_HSSR_BANDS];
+    float weighted_pan[SPA_HSSR_OBJECT_SLOTS] = { 0.0f, 0.0f };
+    float candidate_energy[SPA_HSSR_OBJECT_SLOTS] = { 0.0f, 0.0f };
+    float pan_weight[SPA_HSSR_OBJECT_SLOTS] = { 0.0f, 0.0f };
+    float peak_candidate[SPA_HSSR_OBJECT_SLOTS] = { 0.0f, 0.0f };
+    float total_energy = 0.0f;
+    unsigned band;
+    unsigned slot_index;
+
+    memset(band_target, 0, sizeof(band_target));
+    for (band = 0; band < SPA_HSSR_BANDS; ++band)
+        total_energy += bands[band].pl + bands[band].pr;
+    if (total_energy < epsilon) total_energy = epsilon;
+
+    for (band = 0; band < SPA_HSSR_BANDS; ++band) {
+        float energy = bands[band].pl + bands[band].pr;
+        float amplitude_l = sqrtf(bands[band].pl + epsilon);
+        float amplitude_r = sqrtf(bands[band].pr + epsilon);
+        float pan = (amplitude_l - amplitude_r) /
+            (amplitude_l + amplitude_r + epsilon);
+        float cross_abs = sqrtf(
+            bands[band].cross_re * bands[band].cross_re +
+            bands[band].cross_im * bands[band].cross_im);
+        float coherence = spa_hssr_dsp_bound(
+            cross_abs / sqrtf(bands[band].pl * bands[band].pr + epsilon),
+            0.0f, 1.0f);
+        float semantic = spa_hssr_dsp_bound(
+            state->band_mask[band] *
+                (1.0f + state->band_object_boost[band]),
+            0.0f, 1.0f);
+
+        if (state->active_profile == 4u &&
+            state->band_focus_rescue[band] > semantic)
+            semantic = state->band_focus_rescue[band];
+
+        if (kHssrBandEdgeHz[band + 1] <= 125) continue;
+        for (slot_index = 0; slot_index < SPA_HSSR_OBJECT_SLOTS;
+             ++slot_index) {
+            float directed_pan = slot_index == 0u ? pan : -pan;
+            float spatial = spa_hssr_dsp_smoothstep(
+                directed_pan,
+                state->active_profile == 4u ? 0.025f : 0.035f,
+                state->active_profile == 4u ? 0.40f : 0.48f);
+            float candidate = semantic * spatial *
+                (0.55f + 0.45f * coherence);
+            if (state->active_profile == 4u) {
+                float flux_ratio = bands[band].flux /
+                    (bands[band].magnitude + epsilon);
+                float transient = spa_hssr_dsp_smoothstep(
+                    flux_ratio, 0.015f, 0.30f);
+                float presence = kHssrObjectFocusPresence[band];
+
+                candidate *= 1.0f + 0.45f * presence *
+                    (0.35f + 0.65f * transient);
+            }
+            float weighted = candidate * energy;
+
+            band_target[slot_index][band] = candidate;
+            candidate_energy[slot_index] += weighted;
+            weighted_pan[slot_index] += weighted * pan;
+            pan_weight[slot_index] += weighted;
+            if (candidate > peak_candidate[slot_index])
+                peak_candidate[slot_index] = candidate;
+        }
+    }
+
+    for (slot_index = 0; slot_index < SPA_HSSR_OBJECT_SLOTS;
+         ++slot_index) {
+        struct spa_hssr_object_slot *slot =
+            &state->object_slot[slot_index];
+        float energy_share = candidate_energy[slot_index] / total_energy;
+        float target_confidence = spa_hssr_dsp_smoothstep(
+                energy_share,
+                state->active_profile == 4u ? 0.0008f : 0.0015f,
+                state->active_profile == 4u ? 0.040f : 0.055f) *
+            spa_hssr_dsp_smoothstep(peak_candidate[slot_index],
+                state->active_profile == 4u ? 0.018f : 0.025f,
+                state->active_profile == 4u ? 0.24f : 0.30f);
+        float confidence_alpha;
+
+        target_confidence *= 0.70f + 0.30f * state->scene_confidence;
+        target_confidence *= 0.75f + 0.25f * state->scene_stability;
+        if (target_confidence > 0.12f) {
+            /* 94 hops at 48 kHz/128 is almost exactly 250 ms. */
+            slot->hold_hops = 94u;
+        } else if (slot->hold_hops != 0u) {
+            --slot->hold_hops;
+            if (target_confidence < 0.65f * slot->confidence)
+                target_confidence = 0.65f * slot->confidence;
+        }
+
+        confidence_alpha = target_confidence > slot->confidence
+            ? (state->active_profile == 4u ? 0.26f : 0.18f)
+            : (state->active_profile == 4u ? 0.018f : 0.012f);
+        slot->confidence += confidence_alpha *
+            (target_confidence - slot->confidence);
+        slot->confidence = spa_hssr_dsp_bound(slot->confidence, 0.0f, 1.0f);
+
+        if (pan_weight[slot_index] > epsilon) {
+            float target_pan = weighted_pan[slot_index] /
+                pan_weight[slot_index];
+
+            if (slot_index == 0u)
+                target_pan = spa_hssr_dsp_bound(target_pan, 0.05f, 0.92f);
+            else
+                target_pan = spa_hssr_dsp_bound(target_pan, -0.92f, -0.05f);
+            if (slot->confidence < 0.03f)
+                slot->pan = target_pan;
+            else
+                slot->pan += 0.055f * (target_pan - slot->pan);
+        }
+
+        for (band = 0; band < SPA_HSSR_BANDS; ++band) {
+            float target = band_target[slot_index][band] *
+                slot->confidence;
+            float alpha = target > slot->band_weight[band]
+                ? (state->active_profile == 4u ? 0.34f : 0.24f)
+                : (state->active_profile == 4u ? 0.020f : 0.012f);
+
+            slot->band_weight[band] += alpha *
+                (target - slot->band_weight[band]);
+            slot->band_weight[band] = spa_hssr_dsp_bound(
+                slot->band_weight[band], 0.0f, 1.0f);
+        }
+    }
+}
+
+static void spa_hssr_run_hop(struct spa_hssr_dsp *state,
+                             const struct spa_hssr_model *model)
+{
+    struct spa_hssr_band_accumulator bands[SPA_HSSR_BANDS];
+    unsigned channel;
+    unsigned sample;
+    unsigned bin;
+    unsigned band;
+    int full_frame = state->frames_seen >= SPA_HSSR_FFT_SIZE;
+
+    memset(bands, 0, sizeof(bands));
+    for (channel = 0; channel < 2; ++channel) {
+        for (sample = 0; sample < SPA_HSSR_FFT_SIZE; ++sample) {
+            unsigned history = (state->input_position + sample) &
+                               (SPA_HSSR_FFT_SIZE - 1);
+            state->fft_re[channel][sample] =
+                state->input[channel][history] * state->analysis_window[sample];
+            state->fft_im[channel][sample] = 0.0f;
+        }
+        spa_hssr_fft(state, channel, 0);
+    }
+
+    for (bin = 0; bin < SPA_HSSR_BINS; ++bin) {
+        float left_re = state->fft_re[SPA_HSSR_LEFT][bin];
+        float left_im = state->fft_im[SPA_HSSR_LEFT][bin];
+        float right_re = state->fft_re[SPA_HSSR_RIGHT][bin];
+        float right_im = state->fft_im[SPA_HSSR_RIGHT][bin];
+        float pl = left_re * left_re + left_im * left_im;
+        float pr = right_re * right_re + right_im * right_im;
+        float magnitude = sqrtf(0.5f * (pl + pr));
+        float previous = full_frame ? state->previous_magnitude[bin] : 0.0f;
+        struct spa_hssr_band_accumulator *value;
+
+        band = state->bin_band[bin];
+        value = &bands[band];
+        value->pl += pl;
+        value->pr += pr;
+        value->cross_re += left_re * right_re + left_im * right_im;
+        value->cross_im += left_im * right_re - left_re * right_im;
+        value->mid += 0.25f *
+            ((left_re + right_re) * (left_re + right_re) +
+             (left_im + right_im) * (left_im + right_im));
+        value->side += 0.25f *
+            ((left_re - right_re) * (left_re - right_re) +
+             (left_im - right_im) * (left_im - right_im));
+        value->magnitude += magnitude;
+        value->log_magnitude += logf(magnitude + 1.0e-8f);
+        if (magnitude > previous) value->flux += magnitude - previous;
+        value->bins++;
+        if (full_frame) state->previous_magnitude[bin] = magnitude;
+    }
+    spa_hssr_update_spatial_bands(state, bands);
+
+    /* Object mode refines each broad semantic band into temporally stable
+     * spectral candidates.  Strong local peaks and bins whose measured pan
+     * agrees with the tracked semantic pan are retained; the inter-peak bed
+     * is attenuated.  This is deliberately a soft mask with a slow release,
+     * not a binary TF gate, so WOLA reconstruction does not turn the extra
+     * isolation into musical noise. */
+    if (state->active_profile == 2u) {
+        const float epsilon = 1.0e-8f;
+
+        for (bin = 0; bin < SPA_HSSR_BINS; ++bin) {
+            float left_re = state->fft_re[SPA_HSSR_LEFT][bin];
+            float left_im = state->fft_im[SPA_HSSR_LEFT][bin];
+            float right_re = state->fft_re[SPA_HSSR_RIGHT][bin];
+            float right_im = state->fft_im[SPA_HSSR_RIGHT][bin];
+            float pl = left_re * left_re + left_im * left_im;
+            float pr = right_re * right_re + right_im * right_im;
+            float magnitude = sqrtf(0.5f * (pl + pr));
+            float amplitude_l = sqrtf(pl + epsilon);
+            float amplitude_r = sqrtf(pr + epsilon);
+            float instant_pan = (amplitude_l - amplitude_r) /
+                (amplitude_l + amplitude_r + epsilon);
+            float average;
+            float contrast;
+            float peak_gate;
+            float spatial_gate;
+            float pan_match;
+            float candidate;
+            float target;
+            float alpha;
+
+            band = state->bin_band[bin];
+            average = bands[band].bins
+                ? bands[band].magnitude / (float)bands[band].bins
+                : 0.0f;
+            contrast = magnitude / (average + epsilon);
+            peak_gate = spa_hssr_dsp_smoothstep(contrast, 0.85f, 1.80f);
+            spatial_gate = spa_hssr_dsp_smoothstep(
+                fabsf(instant_pan), 0.08f, 0.55f);
+            pan_match = 1.0f - spa_hssr_dsp_smoothstep(
+                fabsf(instant_pan - state->band_pan[band]), 0.45f, 1.25f);
+            candidate = spatial_gate * (0.35f + 0.65f * pan_match);
+            if (peak_gate > candidate) candidate = peak_gate;
+
+            /* Selected bins receive up to +4.1 dB relative makeup while the
+             * low-contrast bed is about 14 dB below the semantic band mask. */
+            target = spa_hssr_dsp_bound(
+                state->band_mask[band] * (0.20f + 1.40f * candidate),
+                0.0f, 1.0f);
+            alpha = target > state->bin_mask[bin] ? 0.45f : 0.06f;
+            state->bin_mask[bin] += alpha *
+                (target - state->bin_mask[bin]);
+        }
+    }
+
+    /* These temporal features are updated on every STFT hop.  Inference runs
+     * only every fourth hop, but train_hssr.py constructs the slow tail and
+     * log-energy delta at the full 375 Hz analysis rate before subsampling. */
+    if (full_frame) {
+        const float epsilon = 1.0e-8f;
+        float total_energy = 0.0f;
+        float log_total;
+
+        for (band = 0; band < SPA_HSSR_BANDS; ++band) {
+            float energy = bands[band].pl + bands[band].pr;
+
+            total_energy += energy;
+            state->band_slow_energy[band] += 0.08f *
+                (energy - state->band_slow_energy[band]);
+        }
+        log_total = logf(total_energy + epsilon);
+        state->current_log_delta = state->frames_seen > SPA_HSSR_HOP_SIZE
+            ? fabsf(log_total - state->previous_log_total) : 0.0f;
+        state->previous_log_total = log_total;
+    }
+
+    if (full_frame) state->control_hop++;
+    if (full_frame && state->control_hop == SPA_HSSR_CONTROL_HOPS) {
+        state->control_hop = 0;
+        spa_hssr_extract_features(state, bands);
+        if (spa_hssr_infer(model, &state->network,
+                           state->features, state->control) == SPA_HSSR_OK) {
+            spa_hssr_update_controls(state);
+        } else {
+            state->inference_failures++;
+            for (band = 0; band < SPA_HSSR_BANDS; ++band) {
+                state->band_mask[band] *= 0.75f;
+                state->band_focus_rescue[band] *= 0.75f;
+            }
+        }
+    }
+
+    if (state->active_profile >= 3u) {
+        const float epsilon = 1.0e-8f;
+
+        spa_hssr_update_object_slots(state, bands);
+        for (bin = 0; bin < SPA_HSSR_BINS; ++bin) {
+            float left_re = state->fft_re[SPA_HSSR_LEFT][bin];
+            float left_im = state->fft_im[SPA_HSSR_LEFT][bin];
+            float right_re = state->fft_re[SPA_HSSR_RIGHT][bin];
+            float right_im = state->fft_im[SPA_HSSR_RIGHT][bin];
+            float pl = left_re * left_re + left_im * left_im;
+            float pr = right_re * right_re + right_im * right_im;
+            float magnitude = sqrtf(0.5f * (pl + pr));
+            float amplitude_l = sqrtf(pl + epsilon);
+            float amplitude_r = sqrtf(pr + epsilon);
+            float instant_pan = (amplitude_l - amplitude_r) /
+                (amplitude_l + amplitude_r + epsilon);
+            float average;
+            float contrast;
+            float ridge_gate;
+            float best_score = 0.0f;
+            float best_pan = state->bin_object_pan[bin];
+            float object_target;
+            float ambience_target;
+            float focus_presence;
+            float focus_transient;
+            float alpha;
+            unsigned slot_index;
+
+            band = state->bin_band[bin];
+            average = bands[band].bins
+                ? bands[band].magnitude / (float)bands[band].bins
+                : 0.0f;
+            contrast = magnitude / (average + epsilon);
+            ridge_gate = spa_hssr_dsp_smoothstep(
+                contrast, 0.70f, 1.65f);
+            focus_presence = 0.0f;
+            focus_transient = 0.0f;
+            if (state->active_profile == 4u) {
+                focus_presence = kHssrObjectFocusPresence[band];
+                focus_transient = spa_hssr_dsp_smoothstep(
+                    bands[band].flux /
+                        (bands[band].magnitude + epsilon),
+                    0.015f, 0.30f);
+            }
+
+            for (slot_index = 0; slot_index < SPA_HSSR_OBJECT_SLOTS;
+                 ++slot_index) {
+                const struct spa_hssr_object_slot *slot =
+                    &state->object_slot[slot_index];
+                float pan_match = 1.0f - spa_hssr_dsp_smoothstep(
+                    fabsf(instant_pan - slot->pan), 0.12f, 0.52f);
+                float score = slot->band_weight[band] * pan_match;
+
+                if (score > best_score) {
+                    best_score = score;
+                    best_pan = slot->pan;
+                }
+            }
+
+            /* A ridge is useful only after it agrees with a persistent
+             * spatial slot.  This removes V1's max(peak, spatial) loophole,
+             * through which unrelated centred harmonics could be selected. */
+            object_target = (state->active_profile == 4u ? 2.10f : 1.75f) *
+                best_score *
+                (state->active_profile == 4u
+                    ? 0.18f + 0.82f * ridge_gate
+                    : 0.34f + 0.66f * ridge_gate);
+            object_target *= 1.15f +
+                0.35f * state->rear_activity_target;
+            if (state->active_profile == 4u)
+                object_target *= 1.0f + 0.40f * focus_presence *
+                    (0.30f + 0.70f * focus_transient);
+            object_target = spa_hssr_dsp_bound(object_target, 0.0f, 1.0f);
+            alpha = object_target > state->bin_mask[bin]
+                ? (state->active_profile == 4u ? 0.50f : 0.30f)
+                : (state->active_profile == 4u ? 0.020f : 0.012f);
+            state->bin_mask[bin] += alpha *
+                (object_target - state->bin_mask[bin]);
+
+            if (best_score > 0.01f)
+                state->bin_object_pan[bin] += 0.18f *
+                    (best_pan - state->bin_object_pan[bin]);
+
+            /* Keep only a quiet decorrelated safety bed when no coherent
+             * object is accepted.  It preserves some envelopment without
+             * competing with the explicit slot image. */
+            ambience_target =
+                (state->active_profile == 4u ? 0.018f : 0.045f) *
+                state->band_mask[band] *
+                state->band_diffuse[band] * (1.0f - best_score);
+            ambience_target = spa_hssr_dsp_bound(
+                ambience_target, 0.0f,
+                state->active_profile == 4u ? 0.04f : 0.08f);
+            alpha = ambience_target > state->bin_ambience_mask[bin]
+                ? 0.10f : 0.015f;
+            state->bin_ambience_mask[bin] += alpha *
+                (ambience_target - state->bin_ambience_mask[bin]);
+        }
+    }
+
+    for (bin = 0; bin < SPA_HSSR_BINS; ++bin) {
+        float left_re = state->fft_re[SPA_HSSR_LEFT][bin];
+        float left_im = state->fft_im[SPA_HSSR_LEFT][bin];
+        float right_re = state->fft_re[SPA_HSSR_RIGHT][bin];
+        float right_im = state->fft_im[SPA_HSSR_RIGHT][bin];
+        float mid_re = 0.5f * (left_re + right_re);
+        float mid_im = 0.5f * (left_im + right_im);
+        float mask;
+        float pan;
+        float gain_l;
+        float gain_r;
+
+        band = state->bin_band[bin];
+        mask = state->active_profile >= 2u
+            ? state->bin_mask[bin] : state->band_mask[band];
+        if (state->active_profile >= 2u)
+            mask *= 1.0f + state->band_object_boost[band];
+        if (state->active_profile >= 3u) {
+            float source_l;
+            float source_r;
+            float source_scale;
+            float steering_l;
+            float steering_r;
+            float steering_scale;
+            float projected_re;
+            float projected_im;
+            float side_re = 0.5f * (left_re - right_re);
+            float side_im = 0.5f * (left_im - right_im);
+            float ambience = state->bin_ambience_mask[bin];
+
+            mask = spa_hssr_dsp_bound(mask, 0.0f,
+                state->active_profile == 4u ? 1.45f : 1.20f);
+            pan = spa_hssr_dsp_bound(
+                state->bin_object_pan[bin], -0.95f, 0.95f);
+            /* Extract with the measured source vector.  Focus changes only
+             * the output steering vector: changing the projection vector too
+             * would admit unrelated material from the desired rear side. */
+            source_l = 1.0f + pan;
+            source_r = 1.0f - pan;
+            source_scale = sqrtf(2.0f /
+                (source_l * source_l + source_r * source_r + 1.0e-8f));
+            source_l *= source_scale;
+            source_r *= source_scale;
+            if (state->active_profile == 4u) {
+                float magnitude = fabsf(pan);
+                float focused = 0.78f + 0.17f *
+                    spa_hssr_dsp_smoothstep(magnitude, 0.05f, 0.92f);
+
+                pan = pan < 0.0f ? -focused : focused;
+            }
+            steering_l = 1.0f + pan;
+            steering_r = 1.0f - pan;
+            steering_scale = sqrtf(2.0f /
+                (steering_l * steering_l + steering_r * steering_r +
+                 1.0e-8f));
+            steering_l *= steering_scale;
+            steering_r *= steering_scale;
+
+            /* Rank-one intensity-pan projection.  For a source matching the
+             * tracked steering vector this reconstructs its original stereo
+             * image; material at a different pan is attenuated before the
+             * source-aware front transfer in stereo_upmix.c. */
+            projected_re = 0.5f *
+                (source_l * left_re + source_r * right_re);
+            projected_im = 0.5f *
+                (source_l * left_im + source_r * right_im);
+            state->fft_re[SPA_HSSR_LEFT][bin] =
+                mask * steering_l * projected_re + ambience * side_re;
+            state->fft_im[SPA_HSSR_LEFT][bin] =
+                mask * steering_l * projected_im + ambience * side_im;
+            state->fft_re[SPA_HSSR_RIGHT][bin] =
+                mask * steering_r * projected_re - ambience * side_re;
+            state->fft_im[SPA_HSSR_RIGHT][bin] =
+                mask * steering_r * projected_im - ambience * side_im;
+            continue;
+        }
+        pan = state->active_profile == 2u
+            ? spa_hssr_dsp_bound(1.18f * state->band_pan[band],
+                                 -0.95f, 0.95f)
+            : state->band_pan[band];
+        gain_l = sqrtf(1.0f + pan);
+        gain_r = sqrtf(1.0f - pan);
+        if (state->active_profile == 2u) {
+            state->fft_re[SPA_HSSR_LEFT][bin] = mask * gain_l *
+                (0.95f * left_re + 0.05f * mid_re);
+            state->fft_im[SPA_HSSR_LEFT][bin] = mask * gain_l *
+                (0.95f * left_im + 0.05f * mid_im);
+            state->fft_re[SPA_HSSR_RIGHT][bin] = mask * gain_r *
+                (0.95f * right_re + 0.05f * mid_re);
+            state->fft_im[SPA_HSSR_RIGHT][bin] = mask * gain_r *
+                (0.95f * right_im + 0.05f * mid_im);
+        } else {
+            state->fft_re[SPA_HSSR_LEFT][bin] = mask * gain_l *
+                (0.85f * left_re + 0.15f * mid_re);
+            state->fft_im[SPA_HSSR_LEFT][bin] = mask * gain_l *
+                (0.85f * left_im + 0.15f * mid_im);
+            state->fft_re[SPA_HSSR_RIGHT][bin] = mask * gain_r *
+                (0.85f * right_re + 0.15f * mid_re);
+            state->fft_im[SPA_HSSR_RIGHT][bin] = mask * gain_r *
+                (0.85f * right_im + 0.15f * mid_im);
+        }
+    }
+
+    for (channel = 0; channel < 2; ++channel) {
+        state->fft_im[channel][0] = 0.0f;
+        state->fft_im[channel][SPA_HSSR_FFT_SIZE / 2] = 0.0f;
+        for (bin = 1; bin < SPA_HSSR_FFT_SIZE / 2; ++bin) {
+            unsigned mirror = SPA_HSSR_FFT_SIZE - bin;
+            state->fft_re[channel][mirror] = state->fft_re[channel][bin];
+            state->fft_im[channel][mirror] = -state->fft_im[channel][bin];
+        }
+        spa_hssr_fft(state, channel, 1);
+    }
+
+    for (sample = 0; sample < SPA_HSSR_FFT_SIZE; ++sample) {
+        unsigned output = (state->input_position + sample) &
+                          (SPA_HSSR_FFT_SIZE - 1);
+
+        for (channel = 0; channel < 2; ++channel) {
+            float addition = state->fft_re[channel][sample] *
+                             state->synthesis_window[sample];
+            state->ola[channel][output] = spa_hssr_dsp_finite(
+                state->ola[channel][output] + addition);
+        }
+    }
+}
+
+int spa_hssr_dsp_process_sample(
+    struct spa_hssr_dsp *state, const struct spa_hssr_model *model,
+    int16_t input_l, int16_t input_r,
+    int16_t *front_l, int16_t *front_r,
+    float *rear_l, float *rear_r)
+{
+    unsigned position;
+    int ready;
+
+    if (!state || !model || !front_l || !front_r || !rear_l || !rear_r)
+        return SPA_HSSR_ERROR_ARGUMENT;
+    if (!spa_hssr_model_ready(model)) return SPA_HSSR_ERROR_NOT_READY;
+
+    position = state->input_position;
+    ready = state->frames_seen >= SPA_HSSR_LATENCY_FRAMES;
+    *front_l = ready ? state->front_delay[SPA_HSSR_LEFT][position] : 0;
+    *front_r = ready ? state->front_delay[SPA_HSSR_RIGHT][position] : 0;
+    *rear_l = ready ? state->ola[SPA_HSSR_LEFT][position] : 0.0f;
+    *rear_r = ready ? state->ola[SPA_HSSR_RIGHT][position] : 0.0f;
+    state->ola[SPA_HSSR_LEFT][position] = 0.0f;
+    state->ola[SPA_HSSR_RIGHT][position] = 0.0f;
+    state->front_delay[SPA_HSSR_LEFT][position] = input_l;
+    state->front_delay[SPA_HSSR_RIGHT][position] = input_r;
+    state->input[SPA_HSSR_LEFT][position] =
+        (float)input_l * (1.0f / 32768.0f);
+    state->input[SPA_HSSR_RIGHT][position] =
+        (float)input_r * (1.0f / 32768.0f);
+    if (state->frames_seen != UINT32_MAX) state->frames_seen++;
+
+    state->input_position = (uint16_t)((position + 1) &
+                            (SPA_HSSR_FFT_SIZE - 1));
+    state->hop_fill++;
+    if (state->hop_fill == SPA_HSSR_HOP_SIZE) {
+        state->hop_fill = 0;
+        spa_hssr_run_hop(state, model);
+    }
+    *rear_l = spa_hssr_dsp_bound(
+        spa_hssr_dsp_finite(*rear_l), -2.0f, 2.0f);
+    *rear_r = spa_hssr_dsp_bound(
+        spa_hssr_dsp_finite(*rear_r), -2.0f, 2.0f);
+    return SPA_HSSR_OK;
+}

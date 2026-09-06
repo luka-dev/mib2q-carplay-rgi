@@ -626,3 +626,322 @@ buffered priority 18, and new `dio_manager` PID `213557292` maps both
 `libcarplay_hook.so` and `libcarplay_apac.so`.  Deployment proves installation,
 not the clock hypothesis: it still needs a full foreground/background or
 type-100 handoff before being described as vehicle-tested.
+
+The diagnostic build was then superseded by a quiet pre-production build on
+the user's request.  `LOG=0` now compiles out both the logger and the old audio
+probe file writers; a string/symbol audit of the resulting ELF found neither
+logging symbols nor any APAP/RTCP/plist/cookie/elementary-stream/PCM-capture
+path.  This changes observability only, not the buffered receive/decode/render
+or feedback-clock code.  The first direct overwrite attempt demonstrated that
+QNX refuses an scp open of a currently mapped shared object.  The deployment
+helper now stages `.new`, atomically renames it over the live path, and only
+then restarts `dio_manager`, so the old process retains its mapped inode and
+the replacement opens the new one.
+
+Final pre-production deployment state:
+
+```text
+libcarplay_hook.so  401541 bytes
+sha256 7ff56c945dda3e98e5397276197ec129909984a92afdb9a65eedd79a756fc49f
+
+libcarplay_apac.so  678911 bytes
+sha256 a6a7bc8c3f17dfe170765b04a461259a407269de47dde6fe0a2b3f6b2695044f
+```
+
+Both hashes matched SCP readback.  `/mnt/app/carplay_verbose` was removed,
+new `dio_manager` PID `2396296` mapped both libraries, and after startup there
+was no `/tmp/carplay_hook.log` or audio probe-capture file.  The active profile
+remains `music-stage` / `0.20` / `assist` / priority 18.  Live audible testing
+is still required; this verifies quiet installation, not the causal hypothesis.
+
+## Post-quiet-build startup / stale-metadata incident
+
+The subsequent report is a different boundary from the PCM/QSA continuity
+work above: immediately after phone connection, iOS can appear to play while
+the HU has neither audio nor track metadata, and CarPlay Play/Next do not
+recover it until Apple Music is opened on the phone. In another occurrence,
+audible content advanced while the old metadata remained displayed.
+
+The exact Pioneer and iOS 27 state machines are audited in
+[`reference/NOW_PLAYING_STARTUP_STATE_MACHINE_AUDIT.md`](reference/NOW_PLAYING_STARTUP_STATE_MACHINE_AUDIT.md).
+
+The 2026-09-05 cold vehicle A/B then falsified direct QSA as a complete
+bootstrap. Type 103 decoded normally and the hook completed 10,861 full writes
+through its cold-opened `mpl5_dio_ent` handle, but remained inaudible. Opening
+Music introduced stock type-100 SETUP; stock reclaimed that exact handle and
+sound began from the existing type-103 ring. The missing upper boundary is the
+stock `AudioStreamPrepare` audio-type declaration, not another PCM consumer:
+`CDIOManager::s_audioTypeCallback(kAudioTypeMedia)` publishes
+`CAirPlayServiceEvent_UpdateMainAudioType`, whose handler calls
+`CDSICarplayImpl::updateMainAudioType(type=2, add=true)`. The cold path now
+queues that exact exported callback before QSA, transfers route ownership to a
+later stock type 100, and queues the exact exported audio-torn-down callback
+only when the hook still owns the route. Full addresses, instructions and the
+new vehicle-test requirement are recorded in the audit linked above.
+
+The earlier passive-only trace and direct-QSA bootstrap are now superseded by
+the completed bounded A/B. The final trace build retains the nominal 48-kHz
+feedback fallback and direct PCM6 bootstrap, but additionally issues the exact
+Pioneer Media declaration before opening QSA. `AUDIO_COLD_CONNECT=0` disables
+the whole bounded path.
+
+The required fresh cold-connect test passed. With no manual Music launch and no
+type-100 stream in the generation, the hook queued the Pioneer Media
+declaration, cold-opened six-channel `mpl5_dio_ent`, and playback became audible
+automatically. The retained run reached 2,560 complete periods with no short
+write, recovery, ring wait or device underrun. Trace:
+`captures/state-trace/20260905-131355/`. The installed/read-back hook hash is
+`7e8869875293f02952669186f7c4f183986003c4f42e7f5622ecc3db31a31754`;
+the profile is `hssr-neon` / rear `0.25` / LFE `assist`. This closes the startup
+ownership boundary: type 103 can now establish both PCM delivery and the HU
+media route. Full implementation, static ABI evidence and trace interpretation
+are in
+[`reference/NOW_PLAYING_STARTUP_STATE_MACHINE_AUDIT.md`](reference/NOW_PLAYING_STARTUP_STATE_MACHINE_AUDIT.md).
+
+## Stock-to-detached route reacquisition
+
+The next vehicle failure completed the missing half of that model. A generation
+that began with stock type 100 successfully opened QSA, then added AAC type
+103. When type 100 stopped, the QSA close was retained and type 103 continued
+for 17,061 full detached writes, but stock's `audioTornDown` removed the Media
+route and the hook did not take it back. The user heard no media; unplug/replug
+then produced a type-103-only generation whose cold route request was audible.
+The captures are `20260905-media-start-failed-live` and
+`20260905-media-start-replug-success` under `captures/state-trace/`.
+
+The local fix schedules a route request 50 ms after
+`QSA_CLOSE action=retain_for_buffered`. This follows the synchronous stock
+teardown callback without sleeping or creating a worker: the existing APAP
+thread checks the deadline before its next detached writes. A stock reopen
+cancels the pending request and takes ownership normally. Final type-103
+teardown releases the route only when the hook owns it. Analyzer telemetry now
+flags an unmatched retained-close edge as `route_reacquire_missing`. Host tests
+and the QNX build pass; this inverse transition is not yet vehicle-accepted.
+
+## AAC late stutter: drain-to-empty and explicit flush are separate cases
+
+The live report on 2026-09-05 was retained twice without restarting or clearing
+the unit:
+
+- `captures/state-trace/20260905-live-aac-stutter-now/`
+- `captures/state-trace/20260905-live-aac-stutter-followup/`
+
+The trace proves that AAC itself was healthy: `decode_fail=0`, authenticated
+sequence was continuous before the item boundary, every QSA retry accepted the
+full 9216-byte period, and the QSA device's exported underrun counter remained
+zero.  It also proves that the software cushion was not persistent.  Although
+the renderer waited for 19,200 frames (400 ms) at cold start, the detached
+`spa_pcm_sink_drain_detached()` loop immediately wrote every complete 768-frame
+period and left only the normal 1024-to-768 remainder: 0, 256, or 512 frames.
+Every later APAP or scheduler delay was therefore exposed directly to the
+device's queue.
+
+One reported interruption was an explicit item/seek transition, not a random
+decoder stall:
+
+```text
+04:11:45.926  FLUSHBUFFERED ... until_seq=1878632
+04:11:46.006  ring_fill=0 primed=0
+04:11:46.205  authenticated sequence jumps to the requested boundary
+04:11:46.817  next APAP record; measured APAP interval=612 ms
+04:11:47.103  first resumed QSA write; cadence gap=1167 ms, prepare+retry
+```
+
+Clearing the decoded ring here is required: retaining it would play PCM from
+the previous item after iOS explicitly invalidated that range.  The receiver
+also cannot synthesize the approximately 0.9 seconds between the flush and the
+first new compressed audio.  What it can remove is the receiver's additional
+full 400-ms cold-prime wait after valid new-item packets return.
+
+The local, **not yet deployed**, correction has two parts and adds no thread or
+QSA handle:
+
+1. The existing nonblocking APAP receiver is now a combined source/render
+   pump.  Above the configured 12,000-frame high-water mark (250 ms), it stops
+   reading TCP and submits exactly one 768-frame QSA period.  Below that mark it
+   opportunistically completes at most one APAP record and still submits at
+   most one period.  With no source record ready, the blocking QSA write clocks
+   playback from the reserve.  Consecutive BE32 header/body reads are completed
+   before that write when both framing phases are already queued, so one codec
+   packet cannot accidentally schedule two device periods.
+2. Cold start still requires `AUDIO_PRIME_MS=400` by default.  An explicit
+   `FLUSHBUFFERED` instead uses `AUDIO_REPRIME_MS=160`, rounded to whole
+   768-frame periods.  The default 7,680 frames equal the ten fragments the
+   live QSA setup grants for `mpl5_dio_ent`; this restarts only after enough
+   new-item PCM exists to refill `START_FULL`, while still discarding every
+   invalid old-item frame.
+
+The host trace analyzer now reports `flush_restart_*` and `steady_*` counts
+separately.  A sequence/APAP/QSA anomaly within two seconds of an explicit
+`FLUSHBUFFERED` is labelled as an item/seek restart; it no longer contaminates
+the steady-stream underrun diagnosis.  The raw totals remain in the report, so
+this classification does not hide the event or weaken the evidence.
+
+Expected limits are deliberately explicit.  The persistent 250-ms software
+reserve, in addition to QSA's device queue, should absorb the previously
+observed 100--267 ms steady-stream scheduling gaps.  It cannot make a sender
+that supplies no new-item media for 612--900 ms gapless; that part of a real
+flush remains sender-controlled.  Vehicle acceptance must therefore check two
+different outcomes: unchanged-track gaps should no longer make `ring_fill`
+collapse to 0/256/512, while an intentional `FLUSHBUFFERED` may remain audible
+but must resume with `prime_target=7680`, no decode failure, and no extra
+400-ms receiver delay.
+
+Local verification:
+
+```text
+bash scripts/test_hook_audio.sh  PASS
+bash scripts/run_tests.sh        PASS
+bash scripts/build_hook.sh       PASS (QNX 6.5 ARMv7)
+git diff --check                 PASS
+```
+
+Current compact-trace deployment (SCP readback verified on 2026-09-05):
+
+```text
+build/libcarplay_hook.so  559372 bytes
+sha256 9bfca669f3d22469a11b85c2427b5db1327ae0cc9cc09d58436d4e6e75e5ec35
+
+build/libcarplay_apac.so  678911 bytes
+sha256 a6a7bc8c3f17dfe170765b04a461259a407269de47dde6fe0a2b3f6b2695044f
+```
+
+The unit retains `hssr-object` / rear `0.25` / LFE `assist`, priority 18, and
+the 469760-byte model blob.  No `dio_manager` process was live during the
+atomic replacement, so the next CarPlay generation will map the new inode.
+The compact trace was cleared after readback verification; the next connection
+is therefore the acceptance run for both the reserve pump and 160-ms re-prime.
+
+## Vehicle result and repeated-seek fast drain (2026-09-05)
+
+The first deployment accepted the reserve part of the change.  In
+`captures/state-trace/20260905-154606/`, both detached and stock-owned playback
+hold the decoded ring around 10,752--12,800 frames instead of draining it to
+the 0/256/512-frame codec remainder.  Across more than six minutes of AAC/APAC
+playback there is no QSA cadence gap, ring wait, short write, recovery, decode
+failure or device underrun.  The seven `QSA_WRITE_ANOMALY` records at
+`00:02:59.185--.186` are the initial synchronous fill of the eight-fragment QSA
+queue: every result is the full 9,216 bytes, `auto_recovery=0`, and `gap_ms=0`.
+The analyzer now reports these separately as queue-prefill clock resets rather
+than as operational write failures.
+
+Repeated AAC seeks exposed a separate receiver delay.  While stock type 100
+owned QSA, `spa103_render_backpressure()` remained true after
+`SETRATEANCHORTIME rate=0` and `FLUSHBUFFERED`.  The APAP thread therefore slept
+one 1024/48000-second codec interval after every authenticated packet even when
+that packet was at or before the inclusive flush boundary and could never be
+rendered.  A stale queue of 500 packets consequently cost about 10.67 seconds
+to discard, and another seek could move `until_seq` forward before the receiver
+reached it.  The vehicle sequence at `00:06:35`, `00:06:41`, and `00:06:44`
+shows exactly this shape: each flush empties PCM immediately, input records keep
+arriving without APAP transport gaps, yet `ring_fill` remains zero while the
+old sequence range is retired.  AAC decode and QSA are not the bottleneck.
+
+The deployed correction bypasses the 21.33-ms producer sleep only while an
+explicit flush boundary is pending.  Packets are still authenticated and
+decrypted, but stale records are discarded as fast as the existing socket/APAP
+thread receives them.  Crossing `until_seq` clears the exception immediately,
+restores normal backpressure pacing, and emits
+`BUFFERED_FLUSH_BOUNDARY sequence=... discarded=...`.  Discarded packets no
+longer seed the sequence-continuity baseline, so the first valid packet after a
+seek is not misreported as transport loss.  Rate-zero operation without an
+active flush remains paced; no new thread, QSA handle, decoder path or buffer
+size was introduced.
+
+Host audio tests, the full regression suite, QNX ARMv7 build and diff check all
+pass.  The compact-trace artifact was atomically installed and verified by SCP
+readback:
+
+```text
+build/libcarplay_hook.so  559540 bytes
+sha256 084e9730be045befea369c629678dccce18dd9ddfa70f2cd8a7abb93c6d5808d
+
+build/libcarplay_apac.so  678911 bytes
+sha256 a6a7bc8c3f17dfe170765b04a461259a407269de47dde6fe0a2b3f6b2695044f
+```
+
+The active `hssr-object` / rear `0.25` / LFE `assist` profile was not changed.
+The trace was cleared after deployment.  Remaining acceptance is deliberately
+narrow: perform several seeks in quick succession and verify prompt audio plus
+one boundary record per completed flush chain.  This change cannot remove a
+real interval in which iOS sends no post-boundary media; it removes only the
+receiver-created real-time draining of already-invalid queued AAC.
+
+## Cross-rail contamination at an empty buffered period
+
+The later report "metadata and about one second of item B, then audio from item
+C" is not safely classifiable as an underrun.  Now Playing (`0x5001`), realtime
+type 100, and buffered type 103 have separate queues and clocks.  Inspection of
+the bridge found a violated ownership invariant: once the type-103 decoder was
+RUNNING, any `spa_buffered_pcm_read()==0` caused the stock type-100 PCM buffer to
+be widened and written instead.  This occurs throughout `rate=0`, a flush
+re-prime, and any genuinely empty ring.  Nothing proves that the type-100
+buffer names the same item or media position as type 103, so this policy can
+put one item's PCM under another item's iAP2 metadata.
+
+The old telemetry substantially undercounted this case.  `shortRingFallbacks`
+incremented only when 1--767 decoded frames remained; a completely empty ring
+could substitute type 100 for many periods while leaving that counter
+unchanged.  Capture `20260905-154606` records its one visible short fallback at
+the `00:04:55` AAC-to-APAC transition, but cannot count the preceding zero-fill
+fallback periods.  This is static proof of the unsafe seam, not proof that the
+reported B-to-C episode was this exact occurrence; the machine reboot erased
+the `/tmp` trace before that report could be retained.
+
+The local candidate enforces one media owner per QSA period.  While type 103 is
+active, a complete 768-frame buffered period is written; if none is available,
+QSA receives a complete silent period.  Realtime type-100 PCM is used only
+before or after buffered ownership.  Whole-period silence can produce a clean
+gap if the sender genuinely starves, but it cannot splice the wrong track and
+cannot recreate the old periodic decoded-prefix/zero-tail buzz.  New
+`QSA_BUFFERED_SILENCE` milestones record cumulative periods/frames and the
+ready-frame count, so a future trace distinguishes a sender/decoder shortage
+from a QSA underrun without replaying an unrelated rail.
+
+This candidate passes the host audio and full regression suites and builds for
+QNX.  It is intentionally **not yet installed**: the persistent file still
+contains the preceding fast-FLUSH artifact, and the post-reboot session should
+first establish that artifact's multi-seek result unless the two changes are
+explicitly combined for the next run.
+
+## Exact stopped-queue lifecycle repair (2026-09-06, not deployed)
+
+The exact iOS 26.1/Pioneer comparison in
+`reference/IOS_26_1_BUFFERED_AUDIO_LIFECYCLE_AUDIT.md` supersedes the older
+sentence above that rate-zero operation could continue draining at real time.
+That policy destroyed valid media in the measured no-flush handoff: 30 APAP
+AUs / 30,720 frames / about 640 ms were received and then discarded solely
+because `rate=0`.
+
+The current working tree now has one lifecycle state instead of independent
+receiver and renderer booleans:
+
+1. Type-103 SETUP initializes presentation stopped.
+2. The APAP thread continues framing, authentication and TLV validation while
+   stopped, then stores the complete encrypted record in FIFO order.
+3. `rate=1` lets that same APAP thread decode from the head. A rate edge racing
+   decode requeues the record at the head; it is not consumed twice or lost.
+4. Queue memory is bounded by the response `audioBufferSize` plus one complete
+   record. At the limit the data socket is no longer read, so TCP supplies the
+   backpressure; no new thread was added.
+5. Both compressed records and decoded PCM carry authenticated APAP sequence
+   and RTP ownership. Bounded `from...until` FLUSH removes only that interval;
+   until-only FLUSH removes the inclusive prefix and resets decoder/upmix.
+6. A FLUSH may mark one decoder-owned packet for deletion but cannot free it
+   until the APAP thread returns ownership. Stop/generation and cookie
+   generation reads are now synchronized under their actual mutexes.
+
+Deterministic verification passes the complete host audio suite, a dedicated
+ASan/UBSan lifecycle test, and the QNX ARMv7 quiet trace build. The trace adds
+compressed packet/byte depth, rate-gate edges, FLUSH removal counts and queue
+failure counters. The built but not deployed hook is:
+
+```text
+build/libcarplay_hook.so
+sha256 cccda67b5d6e491c6328c4a776c219eaf968e0ef0c24f3d6c17bcae3af73207c
+```
+
+Vehicle acceptance must prove no buffered QSA write before the first rate one,
+lossless drain after a rate-zero interval with no flush, and exact removal on a
+seek/AutoMix flush chain. Only if a transition fault survives those gates does
+the still-open anchor-to-QSA timestamp scheduler become the next change.

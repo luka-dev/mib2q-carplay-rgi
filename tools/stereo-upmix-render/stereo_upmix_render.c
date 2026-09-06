@@ -54,6 +54,7 @@ struct options {
     enum spa_stereo_upmix_backend backend;
     enum cli_lfe_mode lfe_mode;
     double surround_gain;
+    const char *model_path;
 };
 
 static uint16_t load_u16le(const uint8_t *bytes)
@@ -344,7 +345,8 @@ static int write_wav_header(FILE *stream, uint32_t frames)
 static void usage(const char *program)
 {
     fprintf(stderr,
-            "usage: %s [--mode off|ambient-lite|ambient-hq|hsr-td|hsr-td-active|music-stage] "
+            "usage: %s [--mode off|ambient-lite|ambient-hq|hsr-td|hsr-td-active|music-stage|hssr-neon|hssr-active|hssr-object|hssr-object-v2|hssr-object-focus] "
+            "[--model HSSR.bin] "
             "[--lfe off|assist] [--surround 0.0..0.25] "
             "INPUT.wav OUTPUT.wav\n",
             program);
@@ -376,6 +378,30 @@ static int parse_mode(const char *text, enum spa_stereo_upmix_backend *backend)
         *backend = SPA_STEREO_UPMIX_MUSIC_STAGE;
         return 1;
     }
+    if (strcmp(text, "hssr-neon") == 0) {
+        *backend = SPA_STEREO_UPMIX_HSSR_NEON;
+        return 1;
+    }
+    if (strcmp(text, "hssr-active") == 0 ||
+        strcmp(text, "hssr-neon-active") == 0) {
+        *backend = SPA_STEREO_UPMIX_HSSR_ACTIVE;
+        return 1;
+    }
+    if (strcmp(text, "hssr-object") == 0 ||
+        strcmp(text, "hssr-neon-object") == 0) {
+        *backend = SPA_STEREO_UPMIX_HSSR_OBJECT;
+        return 1;
+    }
+    if (strcmp(text, "hssr-object-v2") == 0 ||
+        strcmp(text, "hssr-neon-object-v2") == 0) {
+        *backend = SPA_STEREO_UPMIX_HSSR_OBJECT_V2;
+        return 1;
+    }
+    if (strcmp(text, "hssr-object-focus") == 0 ||
+        strcmp(text, "hssr-object-v3") == 0) {
+        *backend = SPA_STEREO_UPMIX_HSSR_OBJECT_FOCUS;
+        return 1;
+    }
     return 0;
 }
 
@@ -388,6 +414,11 @@ static const char *backend_mode_name(enum spa_stereo_upmix_backend backend)
     case SPA_STEREO_UPMIX_HSR_TD:       return "hsr-td";
     case SPA_STEREO_UPMIX_HSR_TD_ACTIVE:return "hsr-td-active";
     case SPA_STEREO_UPMIX_MUSIC_STAGE:  return "music-stage";
+    case SPA_STEREO_UPMIX_HSSR_NEON:    return "hssr-neon";
+    case SPA_STEREO_UPMIX_HSSR_ACTIVE:  return "hssr-active";
+    case SPA_STEREO_UPMIX_HSSR_OBJECT:  return "hssr-object";
+    case SPA_STEREO_UPMIX_HSSR_OBJECT_V2:return "hssr-object-v2";
+    case SPA_STEREO_UPMIX_HSSR_OBJECT_FOCUS:return "hssr-object-focus";
     default:                            return "unsupported";
     }
 }
@@ -428,6 +459,7 @@ static int parse_options(int argc, char **argv, struct options *options)
     options->lfe_mode = CLI_LFE_OFF;
     options->surround_gain =
         (double)SPA_STEREO_UPMIX_REAR_Q15_DEFAULT / 32768.0;
+    options->model_path = NULL;
 
     for (index = 1; index < argc; index++) {
         const char *argument = argv[index];
@@ -439,7 +471,7 @@ static int parse_options(int argc, char **argv, struct options *options)
         if (strcmp(argument, "--mode") == 0) {
             if (++index >= argc || !parse_mode(argv[index], &options->backend)) {
                 fprintf(stderr,
-                        "error: --mode must be off, ambient-lite, ambient-hq, hsr-td, hsr-td-active or music-stage\n");
+                        "error: invalid --mode (see --help; hssr-object-focus is the current vehicle profile)\n");
                 return 0;
             }
             continue;
@@ -447,9 +479,25 @@ static int parse_options(int argc, char **argv, struct options *options)
         if (strncmp(argument, "--mode=", 7) == 0) {
             if (!parse_mode(argument + 7, &options->backend)) {
                 fprintf(stderr,
-                        "error: --mode must be off, ambient-lite, ambient-hq, hsr-td, hsr-td-active or music-stage\n");
+                        "error: invalid --mode (see --help; hssr-object-focus is the current vehicle profile)\n");
                 return 0;
             }
+            continue;
+        }
+        if (strcmp(argument, "--model") == 0) {
+            if (++index >= argc || !argv[index][0]) {
+                fprintf(stderr, "error: --model requires a path\n");
+                return 0;
+            }
+            options->model_path = argv[index];
+            continue;
+        }
+        if (strncmp(argument, "--model=", 8) == 0) {
+            if (!argument[8]) {
+                fprintf(stderr, "error: --model requires a path\n");
+                return 0;
+            }
+            options->model_path = argument + 8;
             continue;
         }
         if (strcmp(argument, "--lfe") == 0) {
@@ -615,9 +663,31 @@ int main(int argc, char **argv)
     const char *mode_name;
     const char *lfe_name;
     uint32_t effective_lfe_gain_q15;
+    struct spa_hssr_model hssr_model;
 
+    memset(&hssr_model, 0, sizeof(hssr_model));
     if (!parse_options(argc, argv, &options)) return 2;
     make_upmix_config(&options, &config);
+    if (options.backend == SPA_STEREO_UPMIX_HSSR_NEON ||
+        options.backend == SPA_STEREO_UPMIX_HSSR_ACTIVE ||
+        options.backend == SPA_STEREO_UPMIX_HSSR_OBJECT ||
+        options.backend == SPA_STEREO_UPMIX_HSSR_OBJECT_V2 ||
+        options.backend == SPA_STEREO_UPMIX_HSSR_OBJECT_FOCUS) {
+        int model_status;
+
+        if (!options.model_path) {
+            fprintf(stderr, "error: selected HSSR mode requires --model HSSR.bin\n");
+            return 2;
+        }
+        model_status = spa_hssr_model_load_file(
+            &hssr_model, options.model_path);
+        if (model_status != SPA_HSSR_OK) {
+            fprintf(stderr, "error: cannot load HSSR model %s (status=%d)\n",
+                    options.model_path, model_status);
+            return 2;
+        }
+        spa_stereo_upmix_config_set_hssr_model(&config, &hssr_model);
+    }
     if (paths_are_same_file(options.input_path, options.output_path)) {
         fprintf(stderr, "error: input and output resolve to the same file\n");
         return 2;
@@ -656,6 +726,7 @@ done:
         fprintf(stderr, "warning: failed to close input\n");
     if (!success) {
         if (output_created) (void)remove(options.output_path);
+        spa_hssr_model_unload(&hssr_model);
         return 1;
     }
 
@@ -680,5 +751,6 @@ done:
                     options.lfe_mode == CLI_LFE_ASSIST
                 ? " (forced off by mode=off)" : "",
             options.output_path);
+    spa_hssr_model_unload(&hssr_model);
     return 0;
 }

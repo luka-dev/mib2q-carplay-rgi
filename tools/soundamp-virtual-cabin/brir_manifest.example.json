@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "sample_rate": 48000,
+  "domain": "most_inputs",
+  "description": "Replace paths with end-to-end 3D-Off responses measured at one listening position. Each WAV is stereo: left ear, right ear.",
+  "channels": ["L", "R", "C", "LFE", "Ls", "Rs"],
+  "responses": {
+    "L": {"file": "responses/L.wav", "gain_db": 0.0},
+    "R": {"file": "responses/R.wav", "gain_db": 0.0},
+    "C": {"file": "responses/C.wav", "gain_db": 0.0},
+    "LFE": {"file": "responses/LFE.wav", "gain_db": 0.0},
+    "Ls": {"file": "responses/Ls.wav", "gain_db": 0.0},
+    "Rs": {"file": "responses/Rs.wav", "gain_db": 0.0}
+  },
+  "capture": {
+    "seat": "driver",
+    "symphoria_3d_enabled": false,
+    "surround_control": "record-the-real-value-here",
+    "sound_focus": "record-the-real-value-here",
+    "bass_mid_treble": "neutral",
+    "microphone_and_equalization": "record-calibration-here"
+  }
+}
