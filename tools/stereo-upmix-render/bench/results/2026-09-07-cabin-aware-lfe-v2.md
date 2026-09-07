@@ -13,9 +13,17 @@ waveform path remains sample-rate and shares the existing 512-frame HSSR
 latency. The learned controls use a separate sample-indexed 512-frame ring, so
 they are aligned and callback-size invariant.
 
-The LFE ceiling is Q15 `8192` (`0.25`) and the paired front gain is Q15 `30100`
-(`0.91858`). A per-sample feasible-interval limiter covers all recovered J525
-profile-0/bank-1 logical bus equations and limits them to `0.985` full scale.
+The first vehicle build used an LFE ceiling of Q15 `8192` (`0.25`). Listening
+showed both excessive bass and audible LFE contribution outside the subwoofer.
+That second observation matches the recovered J525 matrix: one unit of digital
+LFE contributes `0.398107` to each front bus, `0.316228` to centre, `0.199526`
+to each rear bus and `1.412538` to the sub bus. This is amplifier routing, not
+a PCM channel-index error.
+
+The calibrated V2 ceiling is therefore Q15 `4096` (`0.125`, exactly -6.02 dB)
+and the paired front gain is Q15 `31392` (`0.95801`). A per-sample
+feasible-interval limiter covers all recovered J525 profile-0/bank-1 logical
+bus equations and limits them to `0.985` full scale.
 
 ## Objective audio regression
 
@@ -25,26 +33,27 @@ rendered with a saved pre-replacement binary; the current result uses the exact
 shipping C implementation.
 
 ```text
-                              fixed baseline       LFE V2       change
-mean LFE energy fraction        0.3619%             0.4482%      +23.9%
-mean LFE/front level           -22.542 dB          -21.772 dB    +0.770 dB
-mean LFE sample peak           -22.319 dBFS        -20.718 dBFS  +1.601 dB
-maximum LFE sample peak        -15.437 dBFS        -14.108 dBFS  +1.329 dB
-maximum recovered J525 bus      -0.272 dBFS         -0.483 dBFS  +0.212 dB headroom
+                              initial V2        calibrated V2      change
+mean LFE energy fraction        0.4482%             0.1036%         -76.9%
+mean LFE/front level           -21.772 dB          -28.176 dB       -6.404 dB
+mean LFE sample peak           -20.718 dBFS        -26.739 dBFS     -6.021 dB
+maximum LFE sample peak        -14.108 dBFS        -20.128 dBFS     -6.019 dB
+maximum recovered J525 bus      -0.483 dBFS         -0.239 dBFS     -0.244 dB headroom
 clipped samples                  0                   0
-front preservation SNR           8.727 dB             8.527 dB    -0.200 dB
-fold-back SNR                   11.615 dB            11.414 dB    -0.201 dB
+front preservation SNR           8.527 dB             8.892 dB      +0.365 dB
+fold-back SNR                   11.414 dB            11.779 dB      +0.365 dB
 ```
 
-The rear waveform correlation is unchanged; the small rear-energy-fraction
-change comes from the paired front trim, not a rear-routing change.
+The rear waveform itself is unchanged. Its energy fraction changes only
+because the paired front level rises and LFE energy falls; HSSR separation and
+rear gain are untouched.
 
 Controlled one-second S16 tests after settling:
 
 ```text
-40 Hz, L=R:   LFE RMS 0.135107
-40 Hz, L=-R:  LFE RMS 0.135107 (fixed baseline: 0)
-500 Hz, L=R:  LFE RMS 0.000131 (60.3 dB below 40 Hz)
+40 Hz, L=R:   LFE RMS approximately 0.06755
+40 Hz, L=-R:  LFE RMS approximately 0.06755 (fixed baseline: 0)
+500 Hz, L=R:  remains approximately 60.3 dB below 40 Hz
 ```
 
 ## Cost
@@ -79,5 +88,7 @@ a vehicle timing claim.
 - QNX GCC 8.5 shipping hook build and standalone ARMv7 benchmark: pass;
 - 100/100 music renders: zero clipped samples.
 
-The remaining release gate is a stationary vehicle A/B for sub polarity,
-crossover integration and perceived driver-seat level.
+The initial stationary vehicle check found the excessive level and exposed the
+audible consequence of the recovered cross-bus LFE matrix. The remaining gate
+is a repeat vehicle A/B of the calibrated Q15 `4096` build for sub level,
+polarity and crossover integration.

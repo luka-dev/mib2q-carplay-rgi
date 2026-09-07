@@ -23,11 +23,11 @@ enum {
 
     /* Q15 gains.  32768 is unity and is intentionally representable here. */
     SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT = 32670,
-    SPA_STEREO_UPMIX_FRONT_Q15_LFE_DEFAULT = 30100,
+    SPA_STEREO_UPMIX_FRONT_Q15_LFE_DEFAULT = 31392,
     SPA_STEREO_UPMIX_REAR_Q15_DEFAULT = 5898,
     SPA_STEREO_UPMIX_REAR_Q15_MAX = 8192,
-    SPA_STEREO_UPMIX_LFE_Q15_DEFAULT = 8192,
-    SPA_STEREO_UPMIX_LFE_Q15_MAX = 8192
+    SPA_STEREO_UPMIX_LFE_Q15_DEFAULT = 4096,
+    SPA_STEREO_UPMIX_LFE_Q15_MAX = 4096
 };
 
 enum spa_stereo_upmix_output_channel {
@@ -108,7 +108,7 @@ struct spa_stereo_upmix {
  * after attaching its validated model. */
 void spa_stereo_upmix_default_config(struct spa_stereo_upmix_config *config);
 
-/* Select the paired safe front default: ~=0.919 with LFE V2 and ~=0.997
+/* Select the paired safe front default: ~=0.958 with LFE V2 and ~=0.997
  * without it.  The LFE gain itself is preserved across disable/enable. */
 void spa_stereo_upmix_config_set_lfe(
     struct spa_stereo_upmix_config *config, int enabled);

@@ -20,13 +20,15 @@ L, R, C, LFE, Ls, Rs
 - `assist` is Cabin-Aware LFE V2 only. There is no legacy implementation or
   runtime fallback.
 - V2 combines per-side LR4 low-pass branches at 55 Hz (body) and 95 Hz
-  (punch), capped at Q15 `8192` (`0.25`).
+  (punch), capped at Q15 `4096` (`0.125`). The recovered J525 matrix also
+  distributes LFE into its front, centre and rear logical buses, so the lower
+  cap avoids audible double bass outside the subwoofer.
 - Low-band correlation continuously selects a normalized `L+R` or `L-R` fold,
   so coherent anti-phase bass is preserved instead of disappearing.
 - The V11 low-band bass/drum posteriors and a sample-domain transient envelope
   steer the body/punch blend and bounded dynamics. They do not delay or replace
   the sample-domain waveform path.
-- Enabling LFE selects the paired front gain Q15 `30100` (about `0.919`).
+- Enabling LFE selects the paired front gain Q15 `31392` (about `0.958`).
 - A per-sample feasible-interval limiter applies the exact recovered J525
   profile-0/bank-1 gains to `L/R/LFE/Ls/Rs` and keeps every known logical bus
   within `0.985` full scale. The static centre-row worst case remains below

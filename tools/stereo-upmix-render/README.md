@@ -11,8 +11,10 @@ WAV in `L,R,C,LFE,Ls,Rs` order.  It has 512 frames of matched front/rear/LFE
 latency, keeps digital C at zero, caps each rear at Q15 `8192` (`0.25`), and can
 add Cabin-Aware LFE V2. V2 combines phase-safe 55/95 Hz LR4 body/punch paths,
 the existing HSSR bass/drum posteriors and a limiter over all six recovered
-J525 logical buses. Its cap is Q15 `8192` (`0.25`) and its paired front gain is
-Q15 `30100` (about `0.919`). There is no legacy LFE mode or fallback. The
+J525 logical buses. Vehicle listening showed that the recovered SoundAmp
+matrix distributes LFE into the front, centre and rear buses, so its calibrated
+cap is Q15 `4096` (`0.125`, -6 dB from the first V2 build) and its paired front
+gain is Q15 `31392` (about `0.958`). There is no legacy LFE mode or fallback. The
 semantic controller requires a
 validated HSSR model; the selected V11 separation-supervised model is:
 

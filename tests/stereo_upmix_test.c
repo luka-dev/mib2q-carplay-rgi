@@ -523,7 +523,7 @@ static void test_lfe_v2_phase_frequency_and_cabin_bounds(void)
         if (sample > low_peak) low_peak = sample;
     }
     assert(low_energy > UINT64_C(10000000000));
-    assert(low_peak > 5500);
+    assert(low_peak > 2750);
     assert_cabin_buses_bounded(g_output_a, TEST_FRAMES);
 
     fill_sine(40.0f, 1);

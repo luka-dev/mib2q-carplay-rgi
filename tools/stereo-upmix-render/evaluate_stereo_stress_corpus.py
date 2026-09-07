@@ -358,7 +358,7 @@ def main() -> int:
 
     args.output.mkdir(parents=True, exist_ok=True)
     rows: list[dict[str, object]] = []
-    front_gain = 30100.0 / 32768.0 if args.lfe == "assist" else 32670.0 / 32768.0
+    front_gain = 31392.0 / 32768.0 if args.lfe == "assist" else 32670.0 / 32768.0
     hssr_model = args.hssr_model.resolve() if args.hssr_model else None
 
     for item in manifest["items"]:
