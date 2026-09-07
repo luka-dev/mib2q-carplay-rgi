@@ -25,6 +25,25 @@ static inline int spa_pcm_prime_ready(size_t available, size_t target)
     return target != 0 && available >= target;
 }
 
+/* Rate-zero packets are retained compressed and may already fill the FIFO
+ * when SETRATE=1 arrives.  Draining that FIFO used to stop at the steady-state
+ * high-water mark even before the initial prime target was reached.  With the
+ * production defaults (250 ms high-water, 400 ms cold prime) that made QSA
+ * bootstrap mathematically unreachable: no sink existed to consume PCM, and
+ * queued decode refused to produce the remaining cushion.  Before the first
+ * prime, the effective decode limit must therefore be at least prime_target;
+ * afterwards the ordinary high-water policy resumes. */
+static inline int spa_pcm_queue_should_decode(size_t available,
+                                               size_t high_water,
+                                               size_t prime_target,
+                                               int primed)
+{
+    size_t limit = high_water;
+
+    if (!primed && prime_target > limit) limit = prime_target;
+    return !limit || available < limit;
+}
+
 /* The detached APAP receiver is both the source pump and the QSA render
  * clock.  Keep reading while the software cushion is below its high-water
  * mark, but never stop below one writable QSA period (important when someone

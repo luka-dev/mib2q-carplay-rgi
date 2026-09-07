@@ -848,3 +848,36 @@ type-103 teardown still emits exactly one matching release.
 close without either a hook route request or a stock reopen. The actual failed
 trace is classified accordingly. Host tests and the QNX build pass. This
 repair has **not yet been deployed or vehicle-accepted**.
+
+## 2026-09-06 cold regression: queued decode stopped below its own prime
+
+The first vehicle run after the exact stopped-queue lifecycle deployment
+reproduced cold silence while the iPhone UI still reported advancing playback.
+The ordinary diagnostic build retained enough evidence to separate that event
+from a MediaRemote/autoplay failure:
+
+- type-103 SETUP selected AAC-LC index 23 for `com.apple.Music`;
+- SETRATE selected rate one and `updateFeedback` continuously returned the
+  nominal 48-kHz descriptor;
+- the APAP capture contains 33 complete authenticated records, sequence
+  `9482929..9482961`, with media time advancing by exactly 1024 at timescale
+  48000; every record has audio and none carries trim fields 4/5;
+- no cold Media-route request or QSA open followed.
+
+The defect was local and deterministic. Packets accumulated while rate was
+zero. After rate one, `spa103_render_drain_one_queued()` stopped decoding when
+the PCM ring reached the steady-state high-water mark, 250 ms / 12,000 frames.
+Cold QSA bootstrap, however, exposes pending PCM only after the initial prime,
+400 ms / 19,200 frames. Thus the new FIFO path enforced `high < prime` and
+made its own bootstrap condition unreachable. The earlier direct decode path
+did not have this unconditional queued-drain guard, which explains why the
+same 250/400-ms configuration had previously passed on the vehicle.
+
+The local repair makes the pre-prime FIFO decode limit
+`max(high_water, prime_target)`, then restores ordinary high-water behavior
+after priming. It also retries cold bootstrap while a primed/high-water queue
+is waiting, so a transient first open failure no longer requires another
+decoded packet to progress. A host regression uses the production 1024-frame
+codec, 12,000-frame high-water and 19,200-frame prime values and proves that
+queued decode reaches 19,456 frames before stopping. Vehicle acceptance of
+this repair is pending.

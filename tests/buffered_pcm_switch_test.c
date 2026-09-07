@@ -97,6 +97,30 @@ static void assert_detached_render_pump_policy(void)
     assert(!spa_pcm_prime_ready(7679, 7680));
     assert(!spa_pcm_prime_ready(19200, 0));
 
+    /* The production cold-start values deliberately have prime > high.  A
+     * SETRATE=1 FIFO drain must cross 250 ms and reach the 400-ms bootstrap
+     * target before steady-state high-water backpressure can stop it. */
+    assert(spa_pcm_queue_should_decode(0, high_frames, 19200, 0));
+    assert(spa_pcm_queue_should_decode(high_frames, high_frames, 19200, 0));
+    assert(spa_pcm_queue_should_decode(19199, high_frames, 19200, 0));
+    assert(!spa_pcm_queue_should_decode(19200, high_frames, 19200, 0));
+    assert(spa_pcm_queue_should_decode(high_frames - 1, high_frames,
+                                       19200, 1));
+    assert(!spa_pcm_queue_should_decode(high_frames, high_frames, 19200, 1));
+    assert(spa_pcm_queue_should_decode(0, 0, 0, 0));
+
+    {
+        size_t queued_fill = 0;
+        while (spa_pcm_queue_should_decode(queued_fill, high_frames,
+                                           19200, 0))
+            queued_fill += codec_frames;
+        assert(queued_fill >= 19200);
+        assert(queued_fill < 19200 + codec_frames);
+        assert(spa_pcm_prime_ready(queued_fill, 19200));
+        assert(!spa_pcm_queue_should_decode(queued_fill, high_frames,
+                                            19200, 1));
+    }
+
     assert(spa_pcm_pump_should_read_source(0, high_frames, qsa_frames,
                                             high_frames));
     assert(spa_pcm_pump_should_read_source(1, 0, qsa_frames,

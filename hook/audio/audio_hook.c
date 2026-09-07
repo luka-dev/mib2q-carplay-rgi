@@ -3020,10 +3020,15 @@ static int spa103_render_drain_one_queued(void)
 {
     const uint8_t *packet;
     size_t length = 0;
+    size_t primeTarget;
     int result;
 
     pthread_mutex_lock(&spa103_render.lock);
-    if (spa103_render.fill >= spa103_high_frames()) {
+    primeTarget = spa103_render.primeTargetFrames;
+    if (!primeTarget) primeTarget = spa103_prime_frames();
+    if (!spa_pcm_queue_should_decode(spa103_render.fill,
+                                     spa103_high_frames(), primeTarget,
+                                     spa103_render.primed)) {
         pthread_mutex_unlock(&spa103_render.lock);
         return 0;
     }
@@ -6443,8 +6448,12 @@ static void *spa103_thread_main(void *opaque)
                     continue;
                 }
                 /* Preserve packet order while decoded PCM is at high water.
-                 * A detached owner consumes one blocking QSA period; a stock
+                 * Retry cold bootstrap here too: a transient first open
+                 * failure must not require another decoded packet to make
+                 * progress once the ring is already at its decode limit.  A
+                 * detached owner consumes one blocking QSA period; a stock
                  * owner drains asynchronously, so yield briefly. */
+                (void)spa_pcm_sink_bootstrap_buffered();
                 detached = spa_pcm_sink_detached_pending(&pumpPending);
                 if (detached)
                     spa_pcm_sink_write_one_detached_period();

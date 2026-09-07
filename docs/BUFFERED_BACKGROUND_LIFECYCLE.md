@@ -945,3 +945,23 @@ Vehicle acceptance must prove no buffered QSA write before the first rate one,
 lossless drain after a rate-zero interval with no flush, and exact removal on a
 seek/AutoMix flush chain. Only if a transition fault survives those gates does
 the still-open anchor-to-QSA timestamp scheduler become the next change.
+
+## Cold FIFO prime/high-water deadlock found on the vehicle (2026-09-06)
+
+The first deployed lifecycle run exposed one integration error in the new
+rate-zero FIFO. The phone negotiated AAC-LC index 23, selected rate one and
+continued to show advancing playback. Its captured APAP socket nevertheless
+stopped after the normal initial burst: 33 authenticated, consecutive
+1024-frame records with no trim. No Media-route request or QSA open occurred.
+
+The queued decoder stopped at the 250-ms steady high-water threshold while
+`spa_buffered_pcm_pending()` deliberately withheld cold playback until the
+400-ms initial-prime threshold. With no QSA owner yet, nothing could lower the
+ring fill, so both sides waited forever. This is a receiver state-machine bug,
+not evidence that iOS failed to autoplay the media application.
+
+Queued decode now uses the prime target as its minimum pre-prime watermark and
+returns to the configured high-water mark after priming. The receiver also
+retries QSA bootstrap at the watermark without waiting for another decoded
+record. The exact 250/400-ms production relationship is regression-tested;
+vehicle confirmation remains pending.
