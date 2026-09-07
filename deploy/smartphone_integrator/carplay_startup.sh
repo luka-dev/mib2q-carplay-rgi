@@ -200,10 +200,9 @@ export ALTSCREEN_ADVERT_DISPLAYS=1
 export AUDIO_SPATIAL=1
 export AUDIO_SPATIAL_ATMOS=0
 export AUDIO_SPATIAL_ATMOS_MODE=downmix
-# Ordinary buffered stereo stays on the same fixed PCM6 route.  Runtime has
-# only an on/off switch; scripts/build_hook.sh selects the actual renderer with
-# UPMIX_PROFILE (checked-in default: hssr-object-focus).  The explicitly
-# selected LFE assist adds LR4-low-passed mono bass.
+# Ordinary buffered stereo stays on the same fixed PCM6 route.  ON always uses
+# the sole HSSR Universal renderer.  The explicitly selected LFE assist adds
+# LR4-low-passed mono bass.
 # Native APAC multichannel bypasses the stereo upmixer.
 # Roll back atomically with AUDIO_STEREO_UPMIX=off; OFF is exact L,R,0,0,0,0
 # and ignores the LFE setting.
@@ -211,13 +210,20 @@ export AUDIO_STEREO_UPMIX=on
 export AUDIO_HSSR_MODEL="$H/hssr_model.bin"
 export AUDIO_STEREO_SURROUND=0.25
 export AUDIO_STEREO_LFE=assist
+# Match Pioneer's per-item SoundCheck gain for both AAC and APAC.  Apple's
+# metadata remains authoritative; local RMS estimation and the sample-peak
+# safety guard stay opt-in until a vehicle loudness/peak A/B justifies them.
+export AUDIO_SOUNDCHECK=1
+export AUDIO_SOUNDCHECK_FALLBACK=off
+export AUDIO_SOUNDCHECK_LIMITER=off
 export AUDIO_BUFFERED_THREAD_PRIO=18
 export AUDIO_SPATIAL_CODEC_LIB="$H/libcarplay_apac.so"
 # Second advertised APAudioFormatIndex for the buffered stream.  23 = AAC-LC/48k/stereo and
 # needs no resampler on MHI2Q.  With primary 65, iOS can change transport inside one type-103
-# session as the source ASBD changes between six-channel and stereo. APAP does not announce a
-# per-packet index; each changed inline cookie selects AAC or APAC, then decoded geometry/layout
-# selects stereo upmix or the measured native 5.1 reorder. Empty keeps single-format advertising.
+# session as the source ASBD changes between six-channel and stereo. APAP TLV 2 announces the
+# per-packet index, while each changed inline cookie confirms and selects AAC or APAC; decoded
+# geometry/layout selects stereo upmix or the measured native 5.1 reorder. Empty keeps
+# single-format advertising.
 # Use 23, never 22: every HU media endpoint is 48 kHz and 23 needs no resampler.
 export SPATIAL_103_EXTRA_INDEX=23
 exec "$DIODIR/dio_manager" "$@"

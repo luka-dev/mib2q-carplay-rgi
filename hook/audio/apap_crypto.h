@@ -43,17 +43,24 @@ enum {
     SPA_APAP_AAD_EXTENSION = 1  /* header[0:12] */
 };
 
-/* Observed TLV field ids. Fields 2 and 8 both carried samples-per-frame
- * (1024) in independent AAC/23 and APAC/65 sessions; neither is a format
- * index. They are deliberately skipped. */
+/* APAP extension ids emitted by iOS's buffered-audio sender.  The identities
+ * of 2 and 8 are settled by two authenticated vehicle captures: field 2 is
+ * 23 for AAC-LC and 65 for APAC, while field 8 is 1024 in both. */
 enum {
     SPA_APAP_TLV_END = 0,
-    SPA_APAP_TLV_FRAME_LENGTH = 2,
+    SPA_APAP_TLV_FORMAT_INDEX = 2,
     SPA_APAP_TLV_TRIM_AT_START = 4,
     SPA_APAP_TLV_TRIM_AT_END = 5,
-    SPA_APAP_TLV_FRAME_LENGTH_ALT = 8,
+    SPA_APAP_TLV_SOUNDCHECK_INFO = 7,
+    SPA_APAP_TLV_SAMPLES_PER_FRAME = 8,
+    SPA_APAP_TLV_TRANSITION_ID = 10,
+    SPA_APAP_TLV_LOUDNESS_PARAMETERS = 11,
+    SPA_APAP_TLV_MEDIA_KIND = 12,
     SPA_APAP_TLV_MAGIC_COOKIE_ID = 17,
-    SPA_APAP_TLV_MAGIC_COOKIE = 18
+    SPA_APAP_TLV_MAGIC_COOKIE = 18,
+    SPA_APAP_TLV_SBUF_TRACER = 19,
+    SPA_APAP_TLV_SOURCE_FORMAT_INDEX = 20,
+    SPA_APAP_TLV_SBUF_TRACER_EXTENDED = 21
 };
 
 /* A CoreMedia CMTime carried by APAP fields 4/5: signed BE64 value followed
@@ -65,22 +72,39 @@ typedef struct {
     int32_t timescale;
 } spa_apap_media_time_t;
 
-/* What a decoded packet's TLV prefix said. The formatIndex pair is retained as
- * an internal compatibility field but the parser deliberately never populates
- * it: codec changes are identified by cookie, not fields 2/8. */
+/* What a decoded packet's TLV prefix said.  Pointers refer into the caller's
+ * plaintext buffer and remain valid only while that buffer does. */
 typedef struct {
     int hasFormatIndex;
+    int hasSamplesPerFrame;
+    int hasTransitionId;
+    int hasLoudnessParameters;
+    int hasMediaKind;
     int hasMagicCookieId;
+    int hasSourceFormatIndex;
     uint64_t formatIndex;
+    uint64_t samplesPerFrame;
+    uint64_t transitionId;
+    float loudnessParameters[3];
+    uint8_t mediaKind;
     uint64_t magicCookieId;
+    uint64_t sourceFormatIndex;
     spa_apap_media_time_t trimAtStart;
     spa_apap_media_time_t trimAtEnd;
+    const uint8_t *soundCheckInfo;
+    size_t soundCheckInfoLength;
+    size_t soundCheckRecordCount;
     /* The cookie carried by this packet, when it carries one.  It points into the caller's
      * plaintext buffer and is only valid until the next packet is opened.  Having it per packet
      * is what makes a mid-session codec change possible without depending on SETMAGICCOOKIE
      * arriving first, or at all. */
     const uint8_t *magicCookie;
     size_t magicCookieLength;
+    int hasSbufTracer;
+    int hasSbufTracerExtended;
+    size_t sbufTracerLength;
+    size_t sbufTracerExtendedLength;
+    size_t unknownFieldCount;
 } spa_apap_extension_t;
 
 /* ChaCha20 keystream XOR, original construction: 8-byte nonce, 64-bit counter.

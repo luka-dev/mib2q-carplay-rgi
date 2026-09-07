@@ -59,6 +59,11 @@ $CC $CFLAGS tests/apap_lifecycle_test.c hook/audio/apap_lifecycle.c \
     -o "$OUT/apap_lifecycle_test"
 "$OUT/apap_lifecycle_test"
 
+echo "=== soundcheck_test ==="
+$CC $CFLAGS tests/soundcheck_test.c hook/audio/soundcheck.c -lm \
+    -o "$OUT/soundcheck_test"
+"$OUT/soundcheck_test"
+
 echo "=== apac_type103_test ==="
 rm -rf "$OUT/obj"; mkdir -p "$OUT/obj"
 for f in "$ROOT"/apac_decoder/src/*.cpp "$ROOT"/hook/audio/apac_bridge.cpp; do

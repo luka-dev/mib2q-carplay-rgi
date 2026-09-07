@@ -50,12 +50,8 @@ QNX_TOOLCHAIN_VARIANT=8.5 ./scripts/build_hook.sh
 ```
 
 The vehicle has one runtime stereo-upmix toggle:
-`AUDIO_STEREO_UPMIX=on|off`.  Choose the enabled implementation when building;
-the default is `hssr-object-focus`:
-
-```sh
-UPMIX_PROFILE=hssr-object-focus QNX_TOOLCHAIN_VARIANT=8.5 ./scripts/build_hook.sh
-```
+`AUDIO_STEREO_UPMIX=on|off`.  ON always selects the sole HSSR Universal
+renderer; OFF is exact `L,R,0,0,0,0`.  There is no build-time profile selector.
 
 Canonical outputs:
 
@@ -63,6 +59,7 @@ Canonical outputs:
 build/carplay_hook.jar
 build/libcarplay_hook.so
 build/libcarplay_apac.so
+build/hssr-selection-v11/hssr_model.bin
 build/maneuver_render
 build/altscreen_render
 ```
@@ -143,8 +140,8 @@ Playing state-machine audit below for the exact event and decision tables.
 - [`docs/ROUTER_INPUT_WIDTH_AUDIT.md`](docs/ROUTER_INPUT_WIDTH_AUDIT.md) — historical root cause of the now-fixed MPL5 render-width defect.
 - [`docs/MC_SELECTION_AUDIT.md`](docs/MC_SELECTION_AUDIT.md) — connection-162 MC selection and its `Sound_System` coding source.
 - [`docs/SHARC_INPUT_OUTPUT_MATRIX.md`](docs/SHARC_INPUT_OUTPUT_MATRIX.md) — recovered A07 8×8 SHARC input mixer, selection logic, coefficient addresses and the remaining physical-output boundary.
-- [`docs/STEREO_TO_5_1_UPMIX_DESIGN.md`](docs/STEREO_TO_5_1_UPMIX_DESIGN.md) — amplifier-aware stereo-to-5.1 design for index 23, including the implemented `ambient-lite`, clean-room STFT `ambient-hq`, and clean-room time-domain `hsr-td` renderers, bounded LR4/80 Hz LFE assist, the recovered Pioneer oracle, measured cost and vehicle gates.
-- [`tools/stereo-upmix-render/`](tools/stereo-upmix-render/README.md) — host WAV renderer, benchmark, and controlled nine-genre plus 24-track held-out 5.1 fold-down evaluation for the exact hook `off`/`ambient-lite`/`ambient-hq`/`hsr-td`/LFE-assist PCM2-to-PCM6 implementation. Vehicle startup now selects `hsr-td` for the requested stationary A/B; subjective acceptance and real MHI2Q Krait timing remain open, and QEMU instruction counts are not Krait cycles.
+- [`docs/STEREO_TO_5_1_UPMIX_DESIGN.md`](docs/STEREO_TO_5_1_UPMIX_DESIGN.md) — amplifier-aware HSSR Universal design, fixed PCM6/LFE bounds, model policy and verification gates.
+- [`tools/stereo-upmix-render/`](tools/stereo-upmix-render/README.md) — host WAV renderer, authored/stereo-stress evaluation, teacher-stem routing checks and performance benchmarks for the exact shipping Universal DSP.
 - [`docs/MOST_SOURCE_BLOCKWIDTH_AUDIT.md`](docs/MOST_SOURCE_BLOCKWIDTH_AUDIT.md) — connection-162 source allocation and actual MOST Connect BlockWidth.
 - [`docs/CONNECT_BLOCKWIDTH_VALIDATION_AUDIT.md`](docs/CONNECT_BLOCKWIDTH_VALIDATION_AUDIT.md) — amplifier Connect validation and exact HU BlockWidth constant sites.
 

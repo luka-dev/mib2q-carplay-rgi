@@ -16,13 +16,11 @@ disassembler**, and it is labelled which. Full history in `docs/reference/AUDIO.
 > Ordinary catalogue playback is also closed: the deployed policy advertises
 > APAC/5.1 index 65 plus AAC-LC/48 kHz/stereo index 23. The vehicle switches in
 > both directions inside one type-103 session with no dropout or new underrun.
-> APAP fields 2/8 are `spf=1024`, not a per-packet index; each changed inline
-> cookie selects AAC or APAC and decoded geometry/layout selects processing.
-> The `ambient-lite`, clean-room 1024/256 STFT `ambient-hq`, and clean-room
-> time-domain `hsr-td` rear renderers, plus the opt-in LR4/80 Hz LFE assist, are
-> host/QNX verified. Startup remains deliberately on `ambient-lite`; both
-> challengers still require a stationary acoustic A/B and real on-unit Krait
-> timing. QEMU icount is not a cycle measurement.
+> APAP ID 2 is the per-packet index (23/65), ID 8 is `spf=1024`; each changed
+> inline cookie confirms AAC or APAC and decoded geometry/layout selects processing.
+> The current source retains one stereo renderer: HSSR Universal with the V11
+> separation-supervised model, rear gain `0.25`, and LR4/80 Hz LFE assist. `off` remains the
+> exact safety bypass. Old profile notes below are dated investigation history.
 
 ---
 
@@ -30,8 +28,8 @@ disassembler**, and it is labelled which. Full history in `docs/reference/AUDIO.
 
 The implementation described here supersedes the earlier capture-only status
 retained below for live-test history. PCM6 and cookie-driven AAC/APAC switching
-are vehicle-confirmed. All three stereo upmix backends and the LFE adapter are
-implemented, but their acoustic tuning is not yet vehicle-confirmed.
+are vehicle-confirmed. HSSR Universal and the LFE adapter are implemented;
+stationary vehicle listening remains the final perceptual gate.
 
 The type-103 path is now complete through the Audi PCM boundary:
 
@@ -64,11 +62,9 @@ User-facing startup policy is:
 | `AUDIO_SPATIAL_ATMOS_MODE=drop` | PCM8 -> PCM6 with height channels discarded |
 | `AUDIO_SPATIAL_ATMOS_MODE=passthrough` | PCM8; requires a real 8ch HU PCM path and patched amp |
 | `SPATIAL_103_EXTRA_INDEX=23` | advertise AAC-LC/48 kHz/stereo beside APAC 5.1 |
-| `AUDIO_STEREO_UPMIX=off` | exact compatibility output `L,R,0,0,0,0` |
-| `AUDIO_STEREO_UPMIX=ambient-lite` | bounded six-band rear ambience renderer |
-| `AUDIO_STEREO_UPMIX=ambient-hq` | clean-room 1024/256 STFT primary/ambient renderer; selectable comparison profile |
-| `AUDIO_STEREO_UPMIX=hsr-td` | clean-room six-band time-domain covariance/projector renderer; current deployed A/B profile |
-| `AUDIO_STEREO_SURROUND=0.18` | checked-in rear input gain |
+| `AUDIO_STEREO_UPMIX=off/on` | exact `L,R,0,0,0,0` bypass, or the sole HSSR Universal renderer |
+| `AUDIO_HSSR_MODEL=/mnt/app/root/hooks/hssr_model.bin` | validated Universal model; invalid/missing model leaves upmix off |
+| `AUDIO_STEREO_SURROUND=0.25` | checked-in rear input gain |
 | `AUDIO_STEREO_LFE=off/assist` | no LFE, or `0.178 * LR4_LP80((L+R)/2)` with paired 0.94 fronts |
 
 `AUDIO_SPATAIL` is accepted only as a warned compatibility alias for the typo. Old `SPATIAL_*`
@@ -83,7 +79,7 @@ unknown `libairplay.so` builds still fail closed. K1004 must receive its own ind
 profile because its private offsets differ.
 
 Current bench gates pass: the full APAC port suite, 3,980-frame capture
-integration, six-packet APAP/decode test, native reorder, lite/HQ/HSR-TD stereo DSP,
+integration, six-packet APAP/decode test, native reorder, Universal stereo DSP,
 the stale-SETUP AAC<->APAC render-policy harness in both directions,
 ASan/UBSan, and QNX builds.
 Both QNX shared objects have no emutls, exceptions, RTTI, STL/libstdc++
@@ -1558,10 +1554,9 @@ after stock initialization and never calls Cinemo from the preload constructor o
 ELF destructor. FDK-AAC remains an isolated rollback only if future runtime/CPU
 measurements expose a vendor problem.
 
-The earlier `[65,23]` trace appeared not to return to 65 because the receiver
-misread APAP fields 2/8 as a format index. Independent AAC/23 and APAC/65 sessions
-prove both fields carry `spf=1024`. A packet carries the complete changed cookie,
-not a format index; the receiver tries the current decoder and then its alternate,
+Independent authenticated AAC/23 and APAC/65 sessions prove APAP ID 2 is the
+per-packet index and ID 8 is `spf=1024`. A packet also carries the complete changed
+cookie; the receiver tries the announced decoder and then its alternate,
 and decoded geometry/layout selects stereo upmix or native APAC 5.1 reorder. The
 vehicle has now switched AAC -> APAC and APAC -> AAC in one type-103 session with
 continuous playback and no new underrun. Full addresses and the state machine are in

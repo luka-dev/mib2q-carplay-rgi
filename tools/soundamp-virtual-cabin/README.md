@@ -51,23 +51,23 @@ cc -std=c99 -O2 -Wall -Wextra -Werror \
   -lm -o build/stereo_upmix_render
 
 build/stereo_upmix_render \
-  --mode hssr-object --model build/hssr/hssr_model.bin \
+  --mode hssr-universal --model build/hssr-selection-v11/hssr_model.bin \
   --lfe assist --surround 0.25 \
-  input-stereo.wav build/hssr-object.wav
+  input-stereo.wav build/hssr-universal.wav
 ```
 
 Then apply the exact amplifier input matrix:
 
 ```sh
 python3 tools/soundamp-virtual-cabin/soundamp_virtual_cabin.py matrix \
-  build/hssr-object.wav build/hssr-object-j525-buses.wav
+  build/hssr-universal.wav build/hssr-universal-j525-buses.wav
 ```
 
 This creates:
 
 - an eight-channel PCM file ordered as
   `Bus_L Bus_R Bus_C Bus_LFE Bus_Ls Bus_Rs Bus_7 Bus_8`;
-- `build/hssr-object-j525-buses.wav.report.json`, containing pre-clipping peak,
+- `build/hssr-universal-j525-buses.wav.report.json`, containing pre-clipping peak,
   RMS, rear energy fraction, rear/front ratio and per-bus clipping counts.
 
 The eight-channel WAV has channel mask zero on purpose: Bus 7/8 have no honest
@@ -77,7 +77,7 @@ standard speaker label in the current 5.1 target.
 
 ```sh
 python3 tools/soundamp-virtual-cabin/soundamp_virtual_cabin.py circuits \
-  build/hssr-object.wav build/hssr-object-j525-circuits.wav
+  build/hssr-universal.wav build/hssr-universal-j525-circuits.wav
 ```
 
 This applies two deliberately separate layers:
@@ -144,7 +144,7 @@ renderer does **not** apply the matrix a second time:
 
 ```sh
 python3 tools/soundamp-virtual-cabin/soundamp_virtual_cabin.py binaural \
-  build/hssr-object.wav build/hssr-object-driver-headphones.wav \
+  build/hssr-universal.wav build/hssr-universal-driver-headphones.wav \
   --brir-manifest build/cabin-driver/responses/brir.json \
   --gain-db -6
 ```
@@ -159,8 +159,7 @@ then convolves all eight logical buses.
 
 ## What the documentary model can and cannot validate
 
-It can compare `music-stage`, `hsr-td-active`, `hssr-active` and
-`hssr-object` under the same exact input matrix, expose rear-bus level and
+It can inspect `hssr-universal` under the exact input matrix, expose rear-bus level and
 headroom, and produce a repeatable headphone audition once measured responses
 exist.
 

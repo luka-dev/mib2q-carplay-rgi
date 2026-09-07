@@ -65,30 +65,27 @@
  * buffered stream by itself.  The code default is off; deployment policy may
  * opt in explicitly.
  *
- * AUDIO_STEREO_UPMIX: off | on.  The enabled backend is selected at build
- * time with UPMIX_PROFILE; the checked-in default is hssr-object-focus.
+ * AUDIO_STEREO_UPMIX: off | on.  ON always selects HSSR Universal.
  * AUDIO_STEREO_SURROUND: rear input gain, 0.0 .. 0.25 (default 0.18).
- * hssr-active keeps this bounded gain but applies a stronger selective
- * semantic mask and matrix-aware front transfer.
- * hssr-object further isolates stable spectral/pan candidates inside each
- * semantic band, applies up to +3.2 dB class-gated object makeup, and transfers
- * them more decisively toward the rear without raising the 0.25 hard limit.
- * hssr-object-v2 adds two persistent half-plane object slots, spatial
- * projection and a 250 ms hold so an accepted instrument remains a coherent
- * rear image instead of a sequence of unrelated spectral peaks.
- * hssr-object-focus extracts through the same persistent source vector, then
- * hard-steers accepted presence/transient objects to one rear side with very
- * low crossfeed and a quieter diffuse bed.
+ * HSSR Universal uses persistent half-plane object routing and a bounded,
+ * phase-distinct mid/high fallback so difficult or nearly mono masters retain
+ * rear activity instead of collapsing to silence.
  * AUDIO_STEREO_LFE: off | assist (code default off). `assist` synthesizes only an
  * 80 Hz LR4 low-passed mono bass feed and selects its paired front headroom.
- * AUDIO_HSSR_MODEL: development model blob path.  The default is next to the
- * hook; invalid/missing models make any HSSR profile fall back to
- * music-stage. */
+ * AUDIO_HSSR_MODEL: model blob path.  The default is next to the hook; an
+ * invalid or missing model leaves stereo upmix safely OFF. */
 #define SPA_AUDIO_STEREO_UPMIX_ENV    "AUDIO_STEREO_UPMIX"
 #define SPA_AUDIO_STEREO_SURROUND_ENV "AUDIO_STEREO_SURROUND"
 #define SPA_AUDIO_STEREO_LFE_ENV      "AUDIO_STEREO_LFE"
 #define SPA_AUDIO_HSSR_MODEL_ENV       "AUDIO_HSSR_MODEL"
 #define SPA_AUDIO_HSSR_MODEL_DEFAULT   "/mnt/app/root/hooks/hssr_model.bin"
+
+/* Buffered-stream loudness policy.  Apple's/Pioneer's SoundCheck metadata is
+ * enabled by default.  The local RMS substitute and sample-peak limiter are
+ * explicit laboratory/safety options, not replacements for that metadata. */
+#define SPA_AUDIO_SOUNDCHECK_ENV          "AUDIO_SOUNDCHECK"
+#define SPA_AUDIO_SOUNDCHECK_FALLBACK_ENV "AUDIO_SOUNDCHECK_FALLBACK"
+#define SPA_AUDIO_SOUNDCHECK_LIMITER_ENV  "AUDIO_SOUNDCHECK_LIMITER"
 
 /* ---- type-103 buffered-media negotiation probe (AUDIO.md §26, docs/HANDOFF_SPATIAL_AUDIO.md) -----
  * iOS 27 reaches multichannel over CarPlay through a SECOND, buffered stream, not the realtime one.
@@ -100,8 +97,8 @@
  *      reject the whole CarPlay audio-format object before either stream is set up. The extended
  *      canonical policy selects 65 (APAC/5.1) or 66 (APAC/5.1.2). An explicit secondary index 23
  *      adds AAC-LC/48k/stereo; iOS may switch between the two codecs inside the same buffered
- *      session. APAP carries no per-packet format index: a changed inline magic cookie selects
- *      the decoder, and the successful decoder's geometry/layout selects PCM processing. Legacy
+ *      session. APAP field 2 announces the per-packet format index, but a changed inline magic
+ *      cookie remains the decoder authority; successful decoded geometry/layout selects PCM processing. Legacy
  *      debug variables retain the older AAC/DD+ probe indices only when no AUDIO_SPATIAL controls
  *      are present.
  *   2. the control-SETUP response's `enabledFeatures` gains the token "mainBuffered", without which

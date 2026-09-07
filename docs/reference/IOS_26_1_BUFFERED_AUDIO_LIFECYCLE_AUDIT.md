@@ -81,12 +81,13 @@ means the difference exists but has no causal vehicle measurement.
 | Stage | iOS 26.1 / Pioneer contract | Current hook | Verdict |
 |---|---|---|---|
 | Capability negotiation | `audioOutputFormatsExtended` is an array; multiple buffered formats are normal. Buffered APAC stereo index 64 is disabled unless `bufferedAPACStereo` override is enabled. | Advertises AAC stereo plus APAC spatial and `mainBufferedInfo`. | Compatible and vehicle-proved. |
-| Type-103 SETUP | APAP transport, 1024 frames/AU, `shk`, optional dynamic stream ID; receiver returns data port and buffer size. | Opens listener, installs control dispatcher before publishing the response, copies the 32-byte key and returns port/buffer/stream ID. | Compatible. Validation is fail-open for several descriptive fields; see hardening notes. |
+| Type-103 SETUP | APAP transport, 1024 frames/AU, `shk`, optional dynamic stream ID; receiver returns data port and buffer size. | Validates the fixed-48k/APAP/key/media contract before replacing a live receiver, then opens listener, installs control dispatcher and returns port/buffer/stream ID. | **Hardened; QNX build and CFLite accessor ABI verified, vehicle acceptance pending.** |
 | Initial presentation state | Sender fills the hose, waits for readiness/startup delay, then issues GETANCHOR/SETRATE/SETRATEANCHORTIME. Receiver must not present while rate is zero. | Receiver and renderer now share one lifecycle gate initialized to stopped; incoming authenticated AU records are queued, not presented. | **Repaired; host/QNX verified, vehicle acceptance pending.** |
 | APAP record framing | 15-byte signed media-time header plus 24-bit sequence, followed by protected extension/audio. | Same framing, bounded record reads and authenticated header use. | Compatible and fixture-tested. |
 | Magic cookie / codec epoch | Cookie may change inside one type-103 stream; AAC/APAC selection follows the new cookie/format state. | Stores cookies by ID/content generation, rebuilds decoder, and has cookie-driven AAC/APAC fallback. | Compatible and vehicle-proved in both directions. |
 | TLV 4/5 trim | Signed BE64 value + signed BE32 timescale; decode full AU, then remove whole PCM frames from start/end. | Current working tree parses exact 12-byte fields and applies bounded floor conversion after decode and before reorder/upmix/ring. | **Compatible; host and sanitizer tested.** |
 | TLV 10 TransitionID | Apple reconstructs an ordered empty sample buffer. Pioneer does not recognize field 10; its empty packet yields zero PCM without reset/flush. | Authenticates, counts and drops a state-only packet. | Audio-equivalent to Pioneer. Do not invent a reset. |
+| TLV 11/12 SoundCheck | SETUP media-kind target plus MainLoudnessParameters select one bounded per-item gain. | Uses the recovered Pioneer calculation before trim/reorder/upmix; optional local fallback/limiter default off. | **Compatible calculation; host/capture/QNX verified, listening acceptance pending.** |
 | `rate=1` | Enables presentation at an anchor. | Enables ring consumption. | Basic gate works after the command, but anchor is not used for scheduling. |
 | `rate=0` | Stops presentation. Pioneer retains queued packets unless a separate flush removes them. | Stops QSA consumption, continues authenticating/parsing and stores complete APAP records in a bounded FIFO. | **Repaired; ordered host regression passes.** |
 | Until-only flush | Drop queued media through the inclusive upper sequence/time boundary and reset presentation/converter state. | Prunes compressed and tagged-PCM queues through the modular upper boundary, resets decoder/upmix and reprimes. | Compatible and range-tested. |
@@ -212,6 +213,37 @@ the packet safely held in flight, and the PCM ring. A bounded range retains
 outside records and converter state. An until-only prefix resets decoder/upmix
 and sequence baseline. Both select the existing 160 ms post-flush reprime.
 
+### QSA queue boundary: measured and repaired 2026-09-06
+
+The APAP and decoded-PCM checks above did not cover periods already accepted by
+`snd_pcm_plugin_write`. A live rapid-song-selection trace preserved in
+`captures/state-trace/20260906-song-change-215036/` made that boundary visible:
+
+- each until-only prefix flush removed 11,264--12,032 decoded frames;
+- after the 160 ms software-ring reprime, the first new detached write returned
+  zero 272--427 ms after the flush and required `prepare+retry`;
+- eight such recoveries followed eight rapid selections, while the reported
+  QSA device underrun counter remained zero;
+- there were no decode failures or APAP sequence gaps explaining the audible
+  old-song tail.
+
+Therefore the old compressed records and decoded ring were already correct,
+but old PCM resident in QSA/deva could continue rendering until starvation
+stopped the device. `spa103_render_flush` now propagates every prefix timeline
+reset synchronously to the tracked expanded QSA handle: after releasing the
+render mutex it takes the QSA I/O lock, calls the real
+`snd_pcm_plugin_flush(PLAYBACK)` followed by the real
+`snd_pcm_plugin_prepare(PLAYBACK)`, resets the feedback-clock window, and only
+then acknowledges the control request. The new trace event is
+`QSA_TIMELINE_FLUSH action=flush_prepare`. The existing first-zero recovery is
+retained as a failure fallback.
+
+This is intentionally not done for a lone bounded `from..until` request. Once
+PCM has crossed into QSA it has no APAP sequence/RTP tags, so that queue cannot
+selectively remove only the bounded interval. The vehicle sends a following
+prefix reset for the inspected song/seek cases; that second operation performs
+the full device flush. No render or `io-audio` thread was added.
+
 Bounded flushes do occur in the vehicle. Retained examples include:
 
 ```text
@@ -311,11 +343,14 @@ Neither mutex is held across blocking QSA or socket I/O. `FLUSH` may mark one
 compressed packet in flight, but never frees it until the APAP thread returns
 ownership, so teardown and control cannot race a decoder pointer.
 
-SETUP also accepts a missing/unsupported `audioFormatIndex` and does not reject
-missing/false `packetFormatAPAP`, unexpected `spf`, or a false dynamic-stream
-claim. The current exact iPhone sends valid fields and the key length is checked,
-so this is fail-open input validation rather than the cause of the saved
-vehicle symptom. A negative SETUP test should cover each malformed field.
+The current working tree now rejects a missing/unsupported fixed-48k
+`audioFormatIndex`, a missing or non-32-byte key, false/missing
+`packetFormatAPAP` or `isMedia`, non-1024 `spf`, wrong audio type/mode, mismatched
+legacy `audioFormat`, and a mismatched compression type. It performs this gate
+before stopping a live receiver. `supportsDynamicStreamID=false` remains a valid
+legacy shape and simply omits the returned stream ID. The target CFLite boolean
+conversion is statically verified in `CFGetInt64 @ 0x57af0`; vehicle acceptance
+of the stricter gate is still pending.
 
 ## Verification of the repaired working tree
 

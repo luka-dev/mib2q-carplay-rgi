@@ -6,8 +6,8 @@
 > справочной, но её выводы о недоступности AAC и ещё не реализованном тракте
 > superseded. Машина выбрала AAC-LC/48 kHz/stereo index 23; Cinemo bridge теперь
 > декодирует его, а `[65,23]` переключается APAC <-> AAC в обе стороны внутри
-> одной type-103 сессии. APAP не несёт per-packet format index: поля 2/8 равны
-> `spf=1024`, codec выбирает изменившийся inline cookie. Текущее состояние:
+> одной type-103 сессии. APAP ID 2 несёт per-packet format index (23/65), ID 8
+> несёт `spf=1024`; изменившийся inline cookie остаётся авторитетом выбора codec. Текущее состояние:
 > [`DYNAMIC_BUFFERED_CODEC_SWITCH.md`](DYNAMIC_BUFFERED_CODEC_SWITCH.md) и
 > [`AAC_BUFFERED_PATH_PLAN.md`](AAC_BUFFERED_PATH_PLAN.md).
 
@@ -295,15 +295,19 @@ Extension body — последовательность `ULEB128 id`, `ULEB128 l
 
 | id | смысл | payload |
 |---:|---|---|
-| 2 | распознаётся/stored, но buffered consumer его не читает | оставить unknown, не приписывать семантику |
+| 2 | transport `audioFormatIndex` в iOS sender | BE integer 1..8 bytes; AAC capture=`23`, APAC capture=`65` |
 | 4 | trim start | media time: signed BE64 value + signed BE32 scale |
 | 5 | trim end | media time: signed BE64 value + signed BE32 scale |
 | 7 | SoundCheck records | N записей по 5 x BE32 |
-| 8 | `audioFormatIndex` | BE integer длиной 2/4/8 |
-| 10 | **не распознаётся этой Pioneer-сборкой** | уходит в общий unknown-field skip |
+| 8 | samples per frame (`spf`) | BE integer; обе capture=`1024` |
+| 10 | `TransitionID` в iOS sender | BE integer; Pioneer 1.030010 пропускает как unknown |
 | 11 | SoundCheck parameters | 3 x BE32 |
 | 12 | `soundCheckMediaKind` | 1 byte |
 | 17 | `magicCookieID` | 0..8 bytes, BE integer |
+| 18 | inline `magicCookie` | codec configuration bytes |
+| 19 | `SbufTracer` | opaque sender diagnostic payload |
+| 20 | source/content format index | BE integer; AAC=`73`, APAC=`35` в сохранённых capture |
+| 21 | extended `SbufTracer` | opaque sender diagnostic payload |
 
 Поля 4/5 здесь не только распознаются. `_BufferedAudioThread` (`sub_123F00 @ 0x123f00`)
 после вызова `APAPDecodeExtension @ 0x124a48` переводит их длительности в целое число
@@ -329,7 +333,7 @@ CMTime переводится как `floor(value * decodedRate / timescale)` с
 включает 100000 сравнений с независимой формулой, 50000 malformed-parser cases,
 ASan/UBSan и QNX ARM cross-build.
 
-Поля 8 и 17 — state changes. Они применяются строго перед следующим соответствующим audio packet и
+Поля 2 и 17 — state changes. Они применяются строго перед следующим соответствующим audio packet и
 сбрасывают/rebuild converter. Cookie хранится словарём `cookieID -> retained CFData`; отсутствие
 выбранного ID является ошибкой session, а не поводом продолжить со старым cookie.
 

@@ -15,11 +15,7 @@ import soundfile as sf
 from scipy import signal
 
 
-BACKENDS = (
-    "hsr-td", "hsr-td-active", "music-stage", "hssr-neon", "hssr-active",
-    "hssr-object", "hssr-object-v2", "hssr-object-focus",
-    "ambient-lite", "ambient-hq",
-)
+BACKENDS = ("hssr-universal",)
 SQRT_HALF = math.sqrt(0.5)
 MAX_LAG = 2048
 
@@ -247,8 +243,7 @@ def render(
         "--surround",
         f"{surround_gain:.6f}",
     ]
-    if backend in ("hssr-neon", "hssr-active", "hssr-object",
-                   "hssr-object-v2", "hssr-object-focus"):
+    if backend == "hssr-universal":
         if hssr_model is None:
             raise RuntimeError(f"{backend} requires --hssr-model")
         command.extend(["--model", str(hssr_model)])
@@ -343,7 +338,7 @@ def markdown_report(
             f"the candidate LFE output is `{lfe}`."
         )
     elif corpus_kind == "authored-surround":
-        report_title = "# HSR-TD controlled 5.1 fold-down evaluation"
+        report_title = "# HSSR Universal authored 5.1 fold-down evaluation"
         corpus_intro = [
             "This corpus contains publisher-authored 5.0/Atmos music excerpts.",
             "The technical EBU channel-identification item is reported per-track but excluded",
@@ -353,7 +348,7 @@ def markdown_report(
         ]
         lfe_intro = f"LFE is omitted from that fold and the candidate LFE output is `{lfe}`."
     else:
-        report_title = "# HSR-TD controlled 5.1 fold-down evaluation"
+        report_title = "# HSSR Universal controlled 5.1 fold-down evaluation"
         corpus_intro = [
             "The main corpus contains controlled 5.1 fixtures rendered from open multitrack",
             "stems, not artist-authored surround masters. An optional Xiph.org row is a real",
@@ -371,7 +366,7 @@ def markdown_report(
         "The digital center is not scored because the MHI hook deliberately leaves C at zero",
         "for the vehicle SoundAmp to derive.",
         "",
-        f"All backends use rear gain `{surround_gain:.3f}` and LFE `{lfe}`. Higher envelope correlation,",
+        f"All rendered configurations use rear gain `{surround_gain:.3f}` and LFE `{lfe}`. Higher envelope correlation,",
         "waveform correlation, SI-SDR, front SNR, and fold-back SNR are better; lower",
         "rear L/R correlation error is better. Energy ratio is descriptive, not a score.",
         "",
@@ -470,7 +465,7 @@ def markdown_report(
         "",
         "A stereo fold-down is non-invertible: no upmixer can recover source channels",
         "uniquely. These measurements are regression and comparative evidence only.",
-        "Waveform metrics also penalize intentional decorrelation in the ambience backends.",
+        "Waveform metrics also penalize intentional decorrelation in a spatial renderer.",
         "Listening tests and on-vehicle measurements remain required.",
         "",
         f"Controlled song entries: {len(controlled_ids)}; total entries: {len(manifest['items'])}; backend renders: {len(rows)}.",
@@ -493,6 +488,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--lfe", choices=("off", "assist"), default="off")
     parser.add_argument("--surround", type=float, default=0.18)
     parser.add_argument("--hssr-model", type=Path)
+    parser.add_argument(
+        "--discard-renders",
+        action="store_true",
+        help="delete generated 5.1 WAVs after scoring to conserve disk space",
+    )
     return parser.parse_args()
 
 
@@ -501,10 +501,8 @@ def main() -> int:
     if not 0.0 <= args.surround <= 0.25:
         raise RuntimeError("--surround must be between 0.0 and 0.25")
     backends = tuple(args.backends)
-    if ({"hssr-neon", "hssr-active", "hssr-object", "hssr-object-v2",
-         "hssr-object-focus"} &
-            set(backends)) and args.hssr_model is None:
-        raise RuntimeError("--hssr-model is required for HSSR backends")
+    if "hssr-universal" in backends and args.hssr_model is None:
+        raise RuntimeError("--hssr-model is required for hssr-universal")
     manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
     args.output.mkdir(parents=True, exist_ok=True)
     rows: list[dict[str, object]] = []
@@ -530,6 +528,8 @@ def main() -> int:
             front_gain = 30802.0 / 32768.0 if args.lfe == "assist" \
                 else 32670.0 / 32768.0
             metrics = score(reference, stereo, prediction, front_gain)
+            if args.discard_renders:
+                render_path.unlink()
             rows.append(
                 {
                     "id": item["id"],
@@ -565,6 +565,7 @@ def main() -> int:
             "hssr_model": (
                 str(args.hssr_model.resolve()) if args.hssr_model else None
             ),
+            "renders_retained": not args.discard_renders,
         },
         "results": rows,
     }

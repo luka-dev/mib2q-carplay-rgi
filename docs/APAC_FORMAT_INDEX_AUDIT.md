@@ -412,10 +412,9 @@ proposal above:
 * index 64 was not selected, consistent with `bufferedAPACStereo` being false;
 * index 23 was selected as AAC-LC/48000/stereo, with APAP time scale `0xBB80`
   and a separate 39-byte magic cookie;
-* an early `[65,23]` trace appeared to select 23 for the entire session only
-  because the receiver misread APAP field 2 as a format index;
-* independent AAC/23 and APAC/65 sessions both carry `1024` in fields 2 and 8:
-  this is SETUP `spf`, and APAP carries no per-packet format index;
+* independent authenticated sessions carry field `2=23,8=1024` for AAC and
+  field `2=65,8=1024` for APAC; field 2 is the per-packet format index and
+  field 8 is SETUP `spf`;
 * the changed inline magic cookie selects AAC or APAC, and decoded
   channels/rate/layout selects stereo upmix or the measured APAC 5.1 reorder;
 * the vehicle has now switched APAC -> AAC and AAC -> APAC inside one type-103

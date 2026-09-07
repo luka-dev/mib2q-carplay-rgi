@@ -34,9 +34,9 @@ JARS_DIR=$APP_ROOT/eso/hmi/lsd/jars
 CFG=$SYS_ROOT/etc/eso/production/smartphone_integrator.json
 LOG=${LOG:-/tmp/carplay_install.log}
 
-# Installed under $HOOKS_DIR, mode 755. Order is irrelevant; the list is the
-# same one deploy/smartphone_integrator/README.md documents.
-HOOK_FILES="libcarplay_hook.so libcarplay_apac.so maneuver_render altscreen_render
+# Installed under $HOOKS_DIR. Executables/libraries use 755; the model uses
+# 644. Order is irrelevant; the list matches the deployment README.
+HOOK_FILES="libcarplay_hook.so libcarplay_apac.so hssr_model.bin maneuver_render altscreen_render
             flag_atlas.rgba carplay_startup.sh carplay_processes.sh carplay_cleanup.sh"
 
 # No `dirname` either - see the note in custom.sh. ${0%/*} strips the last
@@ -126,7 +126,11 @@ for f in $HOOK_FILES; do
     # Set the modes explicitly. cp gives whatever the umask and the source
     # filesystem happen to produce - and on the M.I.B. path the source is a
     # FAT32 card, which carries no Unix modes at all.
-    chmod 755 "$HOOKS_DIR/$f" || die "chmod $f failed"
+    if [ "$f" = hssr_model.bin ]; then
+        chmod 644 "$HOOKS_DIR/$f" || die "chmod $f failed"
+    else
+        chmod 755 "$HOOKS_DIR/$f" || die "chmod $f failed"
+    fi
     say "ok: $HOOKS_DIR/$f"
 done
 

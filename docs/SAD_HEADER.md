@@ -182,11 +182,10 @@ With the then-current `[65]` advertisement the phone skipped ordinary tracks and
 is not declining to upmix: advertising `audioOutputFormatsExtended:[65]` leaves a non-spatial
 item with no usable stereo representation. There is no observed fallback to realtime type 100.
 
-An early `[65,23]` test appeared to select 23 for the whole session because the
-receiver misread APAP fields 2/8 as a format index. Independent AAC/23 and
-APAC/65 captures showed both fields carry `spf=1024`. The format changes through
-the inline cookie; cookie-driven switching has since worked in both directions
-on the vehicle without a reconnect, rythmic dropout, or new underrun.
+Authenticated AAC/23 and APAC/65 captures show that APAP field 2 is the active
+format index while field 8 is `spf=1024`. The format hint and inline cookie change
+together; cookie-confirmed switching has worked in both directions on the
+vehicle without a reconnect, rhythmic dropout, or new underrun.
 
 Four alternative indices were tried on the car, and the results are worth keeping because
 several of them look right on paper:

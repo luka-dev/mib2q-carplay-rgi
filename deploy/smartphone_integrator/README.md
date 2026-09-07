@@ -20,7 +20,7 @@ Install these executable files under `/mnt/app/root/hooks`:
 - `carplay_processes.sh`
 - `libcarplay_hook.so`
 - `libcarplay_apac.so`
-- `hssr_model.bin` (only when selecting the development `hssr-neon` profile)
+- `hssr_model.bin` (required when stereo upmix is enabled)
 - `maneuver_render`
 - `altscreen_render`
 - `flag_atlas.rgba`
@@ -35,73 +35,22 @@ format index: the decoder that accepts each changed inline cookie and its PCM
 geometry select the render action. Native APAC 5.1 keeps its measured
 six-channel reorder; decoded stereo uses the fixed PCM6 route with
 `AUDIO_STEREO_UPMIX=on`, rear gain `0.25`, and the explicitly enabled
-`AUDIO_STEREO_LFE=assist` LR4/80 Hz bass feed. The renderer is compiled into
-the hook with `UPMIX_PROFILE`; its checked-in default is `hssr-object-focus`.
+`AUDIO_STEREO_LFE=assist` LR4/80 Hz bass feed. ON always selects the sole
+`hssr-universal` renderer; there is no build-time profile selector.
 The exact compatibility rollback is `AUDIO_STEREO_UPMIX=off`, followed by a
 `dio_manager`/CarPlay child restart because the toggle is parsed once at
 process start. See
 [`../../docs/STEREO_TO_5_1_UPMIX_DESIGN.md`](../../docs/STEREO_TO_5_1_UPMIX_DESIGN.md)
 for the signal equations, SoundAmp row bounds and required stationary A/B.
 
-`UPMIX_PROFILE=ambient-hq ./scripts/build_hook.sh` selects the implemented clean-room 1024/256
-STFT primary/ambient renderer without changing the SAD, codec choice or fixed
-PCM6 device contract. It adds exactly 1024 frames (21.333 ms at 48 kHz) to the
-synthetic Ls/Rs only; dry L/R, optional LFE and native APAC 5.1 remain
-undelayed. This remains an available comparison profile, not the checked-in
-startup policy.
-Its host timing and QEMU retired-instruction count are regression measurements;
-QEMU does not measure Krait cycles, cache/IPC behavior or realtime deadline
-margin.
-
-`UPMIX_PROFILE=hsr-td ./scripts/build_hook.sh` selects the clean-room six-band time-domain
-covariance/projector candidate. It has no FFT, artificial decorrelator, or
-block-fill latency; dry L/R, optional LFE and native APAC 5.1 retain the same
-contracts. A GCC 8.5 ARMv7/QNX build and calibrated QEMU instruction run pass.
-It remains selectable for comparison at build time.
-
-`UPMIX_PROFILE=hssr-neon ./scripts/build_hook.sh` selects the development semantic router. It
-loads `AUDIO_HSSR_MODEL`, defaulting to
-`/mnt/app/root/hooks/hssr_model.bin`; a missing, corrupt, or dimension-mismatched
-model is rejected and the stream safely falls back to `music-stage`. HSSR uses
-a 512/128 STFT plus a quantized 2x160 GRU controller and delays fronts, rears,
-and LFE together by 512 frames. Native APAC multichannel audio still bypasses
-the stereo upmixer. MUSDB-trained model blobs are evaluation-only and must be
-retrained on commercially cleared stems before release.
-
-The build profile `hssr-active` uses the same model, latency and bounded
-`0.25` rear rail, but gives confident background/FX and spatial-percussion
-regions a stronger semantic mask. It also subtracts `1.75 x` the generated
-rear sample from the matching front instead of the fold-compatible `-3 dB`
-coefficient, so selected material can localize behind the listener through the
-known SoundAmp matrix. This deliberately sacrifices exact stereo fold-back for
-the selected component; switching back to `hssr-neon` restores the conservative
-fold-compatible policy.
-
-The build profile `hssr-object` remains the V1 assertive listening profile.
-It keeps the same model, 512-frame latency, `0.25` rear bound, zero digital C,
-and LFE contract. A soft per-bin mask retains stable spectral peaks and bins
-whose measured pan agrees with the semantic band, suppressing the broad
-inter-peak bed without binary musical-noise gating. Selected bins receive up
-to `+4.1 dB` fine-bin makeup; a class-gated post-mask stage gives rearable
-background/FX/instrument bands up to another `+3.2 dB`. They retain more of
-their original L/R distinction and use `2.0 x` front subtraction.
-`hssr-active` remains the immediate less-assertive rollback without changing
-the model or PCM route.
-
-The build profile `hssr-object-v2` is the persistent-object V2 profile.
-It replaces V1's independent peak selection with two held spatial slots, a
-strict ridge-to-slot match and a rank-one coherent-source projection.  The
-rear gain remains capped at `0.25`, latency remains 512 frames, and digital C
-remains identically zero.  Set `hssr-object` to compare/rollback V1 or
-`hssr-active` to remove the object tracker while retaining semantic routing.
-
-The checked-in `hssr-object-focus` profile keeps V2's persistent extraction
-vector but hard-steers accepted objects after extraction.  Its opposite rear
-crossfeed is at least about -18 dB, its object-only presence emphasis covers
-roughly 0.8-11 kHz, and its diffuse safety bed is quieter.  It keeps the same
-512-frame latency, `0.25` rear rail and zero digital center; a `2.5 x` front
-transfer makes an accepted instrument localize behind the listener.  Runtime
-still exposes only `AUDIO_STEREO_UPMIX=on|off`.
+Universal loads `AUDIO_HSSR_MODEL`, defaulting to
+`/mnt/app/root/hooks/hssr_model.bin`. A missing, corrupt, or dimension-mismatched
+model leaves stereo upmix safely off. Its 512/128 STFT and quantized 2x160 GRU
+controller delay fronts, rears and LFE together by 512 frames. Persistent
+half-plane objects are source-projected and hard-steered; a bounded,
+phase-distinct mid/high coverage path prevents dead rears while semantic
+vocal/bass gates protect the front image. The rear rail remains capped at
+`0.25`, digital C remains zero, and native APAC multichannel bypasses upmix.
 
 Lifecycle semantics:
 

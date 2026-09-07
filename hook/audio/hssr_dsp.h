@@ -23,9 +23,8 @@ enum {
 };
 
 struct spa_hssr_object_slot {
-    /* Positive pan is left, matching the feature extractor.  V2 deliberately
-     * keeps one persistent coherent object per rear half-plane; this is the
-     * useful, identifiable case for two-channel input. */
+    /* Positive pan is left.  Universal keeps one persistent coherent object
+     * per rear half-plane, the identifiable case for two-channel input. */
     float pan;
     float confidence;
     float band_weight[SPA_HSSR_BANDS];
@@ -45,6 +44,7 @@ struct spa_hssr_dsp {
     float previous_magnitude[SPA_HSSR_BINS];
     float bin_mask[SPA_HSSR_BINS];
     float bin_ambience_mask[SPA_HSSR_BINS];
+    float bin_universal_mask[SPA_HSSR_BINS];
     float bin_object_pan[SPA_HSSR_BINS];
     float band_slow_energy[SPA_HSSR_BANDS];
     float band_mask[SPA_HSSR_BANDS];
@@ -53,19 +53,20 @@ struct spa_hssr_dsp {
     float band_diffuse[SPA_HSSR_BANDS];
     float band_object_boost[SPA_HSSR_BANDS];
     float band_focus_rescue[SPA_HSSR_BANDS];
+    float band_universal_safety[SPA_HSSR_BANDS];
     struct spa_hssr_object_slot object_slot[SPA_HSSR_OBJECT_SLOTS];
     float scene_confidence;
     float scene_stability;
     float rear_activity_target;
     float fx_present;
+    float universal_input_power;
+    float universal_rear_power;
+    float universal_makeup;
     float previous_log_total;
     float current_log_delta;
     float features[SPA_HSSR_FEATURES];
     float control[SPA_HSSR_OUTPUTS];
     uint8_t bin_band[SPA_HSSR_BINS];
-    /* 0 = conservative, 1 = active, 2 = object-selective V1,
-     * 3 = persistent two-slot Object V2, 4 = hard-steered Object Focus. */
-    uint8_t active_profile;
     uint16_t input_position;
     uint16_t hop_fill;
     uint8_t control_hop;
@@ -76,11 +77,6 @@ struct spa_hssr_dsp {
 
 void spa_hssr_dsp_prepare(struct spa_hssr_dsp *state);
 void spa_hssr_dsp_reset(struct spa_hssr_dsp *state);
-
-/* Active keeps the same model and realtime topology but uses a more assertive
- * background/FX routing policy.  Set it immediately after prepare/reset. */
-void spa_hssr_dsp_set_active(struct spa_hssr_dsp *state, int active);
-void spa_hssr_dsp_set_profile(struct spa_hssr_dsp *state, unsigned profile);
 
 /* One input frame in, one delayed front/rear frame out.  The returned fronts
  * are exact delayed S16 input samples.  Rear is normalized float. */

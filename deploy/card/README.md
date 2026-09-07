@@ -23,6 +23,7 @@ cp deploy/card/custom.sh "$CARD/mod/custom.sh"
 cp deploy/card/install.sh deploy/card/uninstall.sh "$CARD/mod/carplay/"
 
 cp build/libcarplay_hook.so build/libcarplay_apac.so \
+   build/hssr-selection-v11/hssr_model.bin \
    build/maneuver_render build/altscreen_render build/carplay_hook.jar \
    "$CARD/mod/carplay/bin/"
 cp maneuver_render/resources/flag_atlas.rgba "$CARD/mod/carplay/bin/"
@@ -36,6 +37,8 @@ cp deploy/smartphone_integrator/carplay_startup.sh \
 
 `install.sh` checks every one of those files is present before it changes anything,
 so a half-copied card stops at the first line of the log rather than half-installing.
+Before copying, the selected model must have SHA-256
+`ab01463e9359f013c4b40f311d630bd20af48d761ad361563cb5246f6bd686ae`.
 
 ## 3. Run it
 
@@ -48,7 +51,7 @@ script again.
 
 | Payload | Destination |
 |---|---|
-| `libcarplay_hook.so`, `libcarplay_apac.so` | `/mnt/app/root/hooks/` |
+| `libcarplay_hook.so`, `libcarplay_apac.so`, `hssr_model.bin` | `/mnt/app/root/hooks/` |
 | `maneuver_render`, `altscreen_render`, `flag_atlas.rgba` | `/mnt/app/root/hooks/` |
 | `carplay_startup.sh`, `carplay_processes.sh`, `carplay_cleanup.sh` | `/mnt/app/root/hooks/` |
 | `carplay_hook.jar` | `/mnt/app/eso/hmi/lsd/jars/` |

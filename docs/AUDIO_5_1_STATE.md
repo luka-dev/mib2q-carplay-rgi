@@ -1,6 +1,6 @@
 # Discrete 5.1 CarPlay audio — everything known, and what is still open
 
-Status as of 2026-09-04. Discrete 5.1 CarPlay now works end to end in the vehicle.
+Status as of 2026-09-06. Discrete 5.1 CarPlay works end to end in the vehicle.
 The last two faults were both declaration/control mismatches rather than PCM
 corruption: the SAD header announced two active channels over six populated slots,
 and the hook blanked `updateFeedback`, removing the sender's clock reference. Both
@@ -10,12 +10,10 @@ is retained to prevent those closed paths from being rediscovered.
 Ordinary buffered content is also vehicle-confirmed through AAC-LC/48 kHz/stereo
 index 23 beside APAC 5.1 index 65. Codec changes are selected by the changed
 inline cookie, not APAP fields 2/8; both switch directions play continuously
-(§20). The current source additionally implements the bounded `ambient-lite`
-rear-field/LFE-assist canary, a clean-room STFT `ambient-hq`, and a clean-room
-time-domain `hsr-td` candidate for stereo. All are host/QNX verified.  The
-checked-in and deployed policy now selects `hsr-td`, rear gain `0.18`, and LFE
-assist for its stationary vehicle A/B; this is not yet a subjective quality
-acceptance or a real on-unit Krait timing result (§21).
+(§20). The current source retains only HSSR Universal for stereo-to-PCM6,
+with rear gain `0.25` and LR4/80 Hz LFE assist. `off` remains the exact
+`L,R,0,0,0,0` safety bypass. Superseded profile discussions below are retained
+as dated investigation history, not selectable current implementations.
 
 > ## Localised on 2026-09-02: the CarPlay stack is not at fault
 >
@@ -668,9 +666,10 @@ Tag 5 contains ASC `11 90`; adding ADTS headers without stripping or changing an
 AU byte produces 12.821333 seconds and exactly `601 * 1024` frames of standard-
 decoded 48 kHz stereo PCM. The inline APAP TLVs repeat the cookie ID and complete
 cookie with every media item, so track configuration does not depend on
-SETMAGICCOOKIE ordering. A later two-session vehicle comparison corrected the
-field map: APAP fields 2 and 8 both carry `spf=1024` for AAC/23 and APAC/65;
-neither is an `APAudioFormatIndex`.
+SETMAGICCOOKIE ordering. A later byte-level two-session comparison corrected the
+field map: APAP field 2 is the active `APAudioFormatIndex` (`23` for AAC, `65`
+for APAC), while field 8 is `spf=1024` in both. The iOS APAP encoder confirms
+the same ownership.
 
 The remaining Cinemo coexistence concern is also closed statically. `dio_manager`
 does not import `CinemoCreateAudioCodec`; it shares only stock Config/Metapool/iAP
@@ -1062,6 +1061,25 @@ counts. Anchor-to-QSA timestamp scheduling remains an open measurement, not an
 implemented speculative change. Full evidence and test gates are in
 [`reference/IOS_26_1_BUFFERED_AUDIO_LIFECYCLE_AUDIT.md`](reference/IOS_26_1_BUFFERED_AUDIO_LIFECYCLE_AUDIT.md).
 
+## APAP metadata and SoundCheck closure (local, not yet vehicle-accepted)
+
+The complete retained AAC/APAC field map is now parsed. A byte recheck corrected
+an earlier documentation error: TLV 2 is the active transport index (23/65),
+while TLV 8 is `spf=1024`. The decoder still treats the inline cookie and
+returned PCM geometry as authoritative, so an unsupported announcement cannot
+tear down working audio. TLV 10/19/20/21 are bounded telemetry; legacy TLV 7 is
+shape-validated and counted; trim 4/5 remains active.
+
+The type-103 SETUP `soundCheckMediaKind={"1":-16}` and APAP 11/12 tuple now feed
+the exact recovered Pioneer MainLoudnessParameters calculation. The retained
+AAC tuple produces -9 dB and the retained APAC tuples +1 dB. Gain precedes trim,
+reorder and stereo upmix, with a 20 ms item-change ramp. The new SETUP gate also
+rejects formats, framing, key, rate geometry or compression type that this fixed
+48-kHz rail cannot render. Host, real-capture integration, ASan/UBSan and QNX
+ARM builds pass; no unit deployment or listening acceptance is claimed here.
+Full map, formula, policy switches and limits are in
+[`APAP_IGNORED_FIELDS_AND_SOUNDCHECK.md`](APAP_IGNORED_FIELDS_AND_SOUNDCHECK.md).
+
 ---
 
 ## Sources
@@ -1083,6 +1101,7 @@ implemented speculative change. Full evidence and test gates are in
 * `docs/APAC_FORMAT_INDEX_AUDIT.md` — complete iOS 27 format-index enumeration, APAC stereo index 64, legacy-mask semantics, and buffered/realtime selection boundary.
 * `docs/AAC_BUFFERED_PATH_PLAN.md` — MHI2Q AAC-LC framing, Cinemo ABI, cookie contract, thread model and safe implementation plan.
 * `docs/DYNAMIC_BUFFERED_CODEC_SWITCH.md` — active iOS format reselection, APAP boundary contract and receiver switch state machine.
+* `docs/APAP_IGNORED_FIELDS_AND_SOUNDCHECK.md` — corrected APAP field map, Pioneer SoundCheck gain, SETUP validation and optional safety policies.
 * `docs/AMP_STEREO_5_1_MATRIX_DIFF.md` — live amplifier ASAD handling, exact stereo/5.1 matrix differences and bank-dependent SHARC mode control.
 * `docs/BUFFERED_BACKGROUND_LIFECYCLE.md` — measured type-100/type-103 ownership split, QSA/feedback handoff, and vehicle-confirmed cold media-route activation.
 * `docs/reference/IOS_26_1_BUFFERED_AUDIO_LIFECYCLE_AUDIT.md` — exact iOS/Pioneer lifecycle contract, implemented stopped queue/exact FLUSH repair and remaining vehicle gates.

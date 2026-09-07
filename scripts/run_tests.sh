@@ -39,6 +39,12 @@ cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
     -o "$OUT/apap_lifecycle"
 "$OUT/apap_lifecycle"
 
+printf '%-32s ' soundcheck_test
+cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
+    tests/soundcheck_test.c hook/audio/soundcheck.c -lm \
+    -o "$OUT/soundcheck"
+"$OUT/soundcheck"
+
 printf '%-32s ' state_trace_test
 cc -std=c99 -O2 -Wall -Wextra -Werror -Ihook \
     -DENABLE_LOGGING=0 -DENABLE_STATE_TRACE=1 \
@@ -81,7 +87,7 @@ printf '%s\n' "$trace_summary" | grep -q \
 printf '%s\n' "$trace_summary" | grep -q \
     "now_playing_retry_actions: \['queued'\]"
 printf '%s\n' "$trace_summary" | grep -q \
-    "'upmix': 'hssr-neon'"
+    "'upmix': 'hssr-universal'"
 printf '%s\n' "$trace_summary" | grep -q \
     "qsa_open_actions: \['cold_buffered'\]"
 printf '%s\n' "$trace_summary" | grep -q \

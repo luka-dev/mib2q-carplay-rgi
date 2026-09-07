@@ -7,7 +7,7 @@
 09:00:00.050 [WRN] [STATE] ST ev=6 mono_ms=1050 pid=4242 gen=1 name=IAP_NOW_PLAYING_UPDATE dir=in msg=0x5001 payload_bytes=30 payload_hash=87654321 media_groups=1 media_attrs=5 playback_groups=1 playback_attrs=3 unknown_groups=0
 09:00:00.060 [WRN] [STATE] ST ev=7 mono_ms=1060 pid=4242 gen=1 name=AIRPLAY_SETUP_BEGIN setup_seq=1 air_gen=1 setup_ordinal=1 session_edge=new session=0x1 request=1
 09:00:00.070 [WRN] [STATE] ST ev=8 mono_ms=1070 pid=4242 gen=1 name=AUDIO_SETUP_STREAM phase=request setup_seq=1 ordinal=0 type=103 format_index=23 format=-1 sample_rate=-1 spf=1024 stream_id=9 data_port=-1 buffer_size=-1
-09:00:00.072 [WRN] [STATE] ST ev=9 mono_ms=1072 pid=4242 gen=1 name=BUFFERED_RENDER_START setup_index=23 state=waiting-for-cookie key=1 output_channels=6 upmix=hssr-neon rear_q15=8192 lfe=1
+09:00:00.072 [WRN] [STATE] ST ev=9 mono_ms=1072 pid=4242 gen=1 name=BUFFERED_RENDER_START setup_index=23 state=waiting-for-cookie key=1 output_channels=6 upmix=hssr-universal rear_q15=8192 lfe=1
 09:00:00.075 [WRN] [STATE] ST ev=10 mono_ms=1075 pid=4242 gen=1 name=IAP_NOW_PLAYING_RETRY action=queued generation=1 attempt=1 payload_bytes=144
 09:00:00.078 [WRN] [STATE] ST ev=11 mono_ms=1078 pid=4242 gen=1 name=AUDIO_ROUTE action=request owner=cold_buffered audio_type=1 result=queued symbol=_ZN3dio11CDIOManager19s_audioTypeCallbackEiPv
 09:00:00.080 [WRN] [STATE] ST ev=11 mono_ms=1080 pid=4242 gen=1 name=QSA_OPEN sink=mpl5_dio_ent action=cold_buffered result=0 handle_valid=1 handle=0x2 mode=0x1

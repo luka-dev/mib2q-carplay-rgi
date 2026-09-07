@@ -378,6 +378,18 @@ static uint64_t spa_be_bytes(const uint8_t *p, size_t n)
     return v;
 }
 
+static float spa_be_float(const uint8_t *p)
+{
+    uint32_t bits = ((uint32_t)p[0] << 24) |
+                    ((uint32_t)p[1] << 16) |
+                    ((uint32_t)p[2] << 8) |
+                    (uint32_t)p[3];
+    float value;
+
+    memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
 static int spa_parse_media_time(const uint8_t *p, size_t length,
                                 spa_apap_media_time_t *time)
 {
@@ -464,17 +476,11 @@ int spa_apap_parse_extension(const uint8_t *plaintext, size_t length,
         if (fieldLength > length || at + (size_t)fieldLength > length) return 0;
         end = at + (size_t)fieldLength;
 
-        /* Neither field 2 nor field 8 carries an APAudioFormatIndex.  Two sessions settle it:
-         * one negotiated AAC-LC stereo (index 23), the other APAC 5.1 (index 65), and BOTH
-         * announced 1024 here -- which is the "spf", samples per frame, from the same SETUP
-         * dictionary.  A field that reads the same in two different formats is not naming the
-         * format.  Reading it as one overwrote the negotiated index on the first packet and
-         * muted every track in both sessions.
-         *
-         * The format comes from the SETUP response and is confirmed by the magic cookie; a real
-         * format change shows up as a new cookie id, which is tracked separately.  These two
-         * fields are parsed and skipped. */
-        if (fieldId == SPA_APAP_TLV_TRIM_AT_START) {
+        if (fieldId == SPA_APAP_TLV_FORMAT_INDEX) {
+            if (!fieldLength || fieldLength > 8) return 0;
+            state->formatIndex = spa_be_bytes(plaintext + at, (size_t)fieldLength);
+            state->hasFormatIndex = 1;
+        } else if (fieldId == SPA_APAP_TLV_TRIM_AT_START) {
             if (!spa_parse_media_time(plaintext + at, (size_t)fieldLength,
                                       &state->trimAtStart))
                 return 0;
@@ -482,12 +488,48 @@ int spa_apap_parse_extension(const uint8_t *plaintext, size_t length,
             if (!spa_parse_media_time(plaintext + at, (size_t)fieldLength,
                                       &state->trimAtEnd))
                 return 0;
+        } else if (fieldId == SPA_APAP_TLV_SOUNDCHECK_INFO) {
+            if (fieldLength % 20) return 0;
+            state->soundCheckInfo = plaintext + at;
+            state->soundCheckInfoLength = (size_t)fieldLength;
+            state->soundCheckRecordCount = (size_t)fieldLength / 20u;
+        } else if (fieldId == SPA_APAP_TLV_SAMPLES_PER_FRAME) {
+            if (!fieldLength || fieldLength > 8) return 0;
+            state->samplesPerFrame = spa_be_bytes(plaintext + at, (size_t)fieldLength);
+            state->hasSamplesPerFrame = 1;
+        } else if (fieldId == SPA_APAP_TLV_TRANSITION_ID) {
+            if (!fieldLength || fieldLength > 8) return 0;
+            state->transitionId = spa_be_bytes(plaintext + at, (size_t)fieldLength);
+            state->hasTransitionId = 1;
+        } else if (fieldId == SPA_APAP_TLV_LOUDNESS_PARAMETERS) {
+            if (fieldLength != 12) return 0;
+            state->loudnessParameters[0] = spa_be_float(plaintext + at);
+            state->loudnessParameters[1] = spa_be_float(plaintext + at + 4);
+            state->loudnessParameters[2] = spa_be_float(plaintext + at + 8);
+            state->hasLoudnessParameters = 1;
+        } else if (fieldId == SPA_APAP_TLV_MEDIA_KIND) {
+            if (fieldLength != 1) return 0;
+            state->mediaKind = plaintext[at];
+            state->hasMediaKind = 1;
         } else if (fieldId == SPA_APAP_TLV_MAGIC_COOKIE && fieldLength) {
             state->magicCookie = plaintext + at;
             state->magicCookieLength = (size_t)fieldLength;
         } else if (fieldId == SPA_APAP_TLV_MAGIC_COOKIE_ID && fieldLength <= 8) {
             state->magicCookieId = spa_be_bytes(plaintext + at, (size_t)fieldLength);
             state->hasMagicCookieId = 1;
+        } else if (fieldId == SPA_APAP_TLV_SBUF_TRACER) {
+            state->hasSbufTracer = 1;
+            state->sbufTracerLength = (size_t)fieldLength;
+        } else if (fieldId == SPA_APAP_TLV_SOURCE_FORMAT_INDEX) {
+            if (!fieldLength || fieldLength > 8) return 0;
+            state->sourceFormatIndex = spa_be_bytes(plaintext + at,
+                                                     (size_t)fieldLength);
+            state->hasSourceFormatIndex = 1;
+        } else if (fieldId == SPA_APAP_TLV_SBUF_TRACER_EXTENDED) {
+            state->hasSbufTracerExtended = 1;
+            state->sbufTracerExtendedLength = (size_t)fieldLength;
+        } else {
+            state->unknownFieldCount++;
         }
         at = end;
     }

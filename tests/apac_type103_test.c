@@ -143,16 +143,19 @@ static size_t seal_frame(unsigned char *out, uint32_t sequence, int variant,
 }
 
 /* The ULEB128 TLV prefix an extension packet carries in front of its audio. */
-static size_t build_extension(unsigned char *out, uint16_t samplesPerFrame, uint64_t cookieId,
+static size_t build_extension(unsigned char *out, uint8_t formatIndex,
+                              uint16_t samplesPerFrame, uint64_t cookieId,
                               const unsigned char *cookie, size_t cookieLength,
                               const unsigned char *audio, size_t audioLength)
 {
     size_t at = 0;
     int i;
 
-    /* Exact vehicle semantics: field 2 is samples per frame, not the extended
-     * format index.  Both AAC-LC/23 and APAC/65 carried 1024 here. */
-    out[at++] = SPA_APAP_TLV_FRAME_LENGTH;
+    out[at++] = SPA_APAP_TLV_FORMAT_INDEX;
+    out[at++] = 1;
+    out[at++] = formatIndex;
+
+    out[at++] = SPA_APAP_TLV_SAMPLES_PER_FRAME;
     out[at++] = 2;
     out[at++] = (unsigned char)(samplesPerFrame >> 8);
     out[at++] = (unsigned char)samplesPerFrame;
@@ -168,10 +171,17 @@ static size_t build_extension(unsigned char *out, uint16_t samplesPerFrame, uint
     out[at++] = (unsigned char)cookieLength;
     memcpy(out + at, cookie, cookieLength); at += cookieLength;
 
-    /* A field this path does not act on, present so the skip is exercised. */
-    out[at++] = 11;                 /* soundcheck_three_words */
+    out[at++] = SPA_APAP_TLV_LOUDNESS_PARAMETERS;
     out[at++] = 12;
-    memset(out + at, 0x5a, 12); at += 12;
+    put_be32(out + at, 0xc0d00000u); at += 4; /* -6.5 dB */
+    put_be32(out + at, 0xbf800000u); at += 4; /* -1.0 dB */
+    put_be32(out + at, 0x3f780000u); at += 4; /*  0.96875 */
+    out[at++] = SPA_APAP_TLV_MEDIA_KIND;
+    out[at++] = 1;
+    out[at++] = 1;
+    out[at++] = SPA_APAP_TLV_SOURCE_FORMAT_INDEX;
+    out[at++] = 1;
+    out[at++] = 73;
 
     out[at++] = SPA_APAP_TLV_END;
     memcpy(out + at, audio, audioLength);
@@ -237,9 +247,13 @@ static void replay(spa_apac_decoder_t *decoder, size_t chunk, const char *what)
                         printf("FAIL %s: frame %zu TLV did not parse\n", what, g_gotFrames);
                         exit(1);
                     }
-                    /* Field 2 must not overwrite the format negotiated by
-                     * SETUP.  The remaining TLV state survives the split. */
-                    assert(!ext.hasFormatIndex);
+                    assert(ext.hasFormatIndex && ext.formatIndex == 65);
+                    assert(ext.hasSamplesPerFrame &&
+                           ext.samplesPerFrame == FRAME_SAMPLES);
+                    assert(ext.hasLoudnessParameters && ext.hasMediaKind &&
+                           ext.mediaKind == 1);
+                    assert(ext.hasSourceFormatIndex &&
+                           ext.sourceFormatIndex == 73);
                     assert(ext.hasMagicCookieId &&
                            ext.magicCookieId == 0x60100d08f9d19abbull);
                     assert(ext.magicCookieLength == g_fixtureCookieBytes);
@@ -361,6 +375,68 @@ static void test_extension_parser_fuzz(void)
             assert(audio >= bytes && audio <= bytes + length);
             assert(audioLength == (size_t)(bytes + length - audio));
         }
+    }
+}
+
+static void test_extension_metadata(void)
+{
+    unsigned char plain[160];
+    spa_apap_extension_t ext;
+    const unsigned char *audio = 0;
+    size_t audioLength = 0, at = 0;
+
+    plain[at++] = SPA_APAP_TLV_FORMAT_INDEX;
+    plain[at++] = 1; plain[at++] = 23;
+    plain[at++] = SPA_APAP_TLV_SAMPLES_PER_FRAME;
+    plain[at++] = 2; plain[at++] = 4; plain[at++] = 0;
+    plain[at++] = SPA_APAP_TLV_TRANSITION_ID;
+    plain[at++] = 3; plain[at++] = 1; plain[at++] = 2; plain[at++] = 3;
+    plain[at++] = SPA_APAP_TLV_SOUNDCHECK_INFO;
+    plain[at++] = 20; memset(plain + at, 0x11, 20); at += 20;
+    plain[at++] = SPA_APAP_TLV_LOUDNESS_PARAMETERS;
+    plain[at++] = 12;
+    put_be32(plain + at, 0xc0d00000u); at += 4;
+    put_be32(plain + at, 0xbf800000u); at += 4;
+    put_be32(plain + at, 0x3f780000u); at += 4;
+    plain[at++] = SPA_APAP_TLV_MEDIA_KIND;
+    plain[at++] = 1; plain[at++] = 1;
+    plain[at++] = SPA_APAP_TLV_SBUF_TRACER;
+    plain[at++] = 3; plain[at++] = 'a'; plain[at++] = 'b'; plain[at++] = 'c';
+    plain[at++] = SPA_APAP_TLV_SOURCE_FORMAT_INDEX;
+    plain[at++] = 1; plain[at++] = 73;
+    plain[at++] = SPA_APAP_TLV_SBUF_TRACER_EXTENDED;
+    plain[at++] = 2; plain[at++] = 0; plain[at++] = 1;
+    plain[at++] = 99; plain[at++] = 1; plain[at++] = 0xee;
+    plain[at++] = SPA_APAP_TLV_END;
+    plain[at++] = 0xaa;
+
+    memset(&ext, 0, sizeof(ext));
+    assert(spa_apap_parse_extension(plain, at, &ext, &audio, &audioLength));
+    assert(ext.hasFormatIndex && ext.formatIndex == 23);
+    assert(ext.hasSamplesPerFrame && ext.samplesPerFrame == 1024);
+    assert(ext.hasTransitionId && ext.transitionId == 0x010203);
+    assert(ext.soundCheckRecordCount == 1 && ext.soundCheckInfoLength == 20);
+    assert(ext.hasLoudnessParameters && ext.loudnessParameters[0] == -6.5f &&
+           ext.loudnessParameters[1] == -1.0f &&
+           ext.loudnessParameters[2] == 0.96875f);
+    assert(ext.hasMediaKind && ext.mediaKind == 1);
+    assert(ext.hasSbufTracer && ext.sbufTracerLength == 3);
+    assert(ext.hasSourceFormatIndex && ext.sourceFormatIndex == 73);
+    assert(ext.hasSbufTracerExtended && ext.sbufTracerExtendedLength == 2);
+    assert(ext.unknownFieldCount == 1);
+    assert(audioLength == 1 && audio[0] == 0xaa);
+
+    /* Known fields fail closed on an impossible shape. */
+    {
+        static const unsigned char malformedLoudness[] = {
+            SPA_APAP_TLV_LOUDNESS_PARAMETERS, 11,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            SPA_APAP_TLV_END
+        };
+        memset(&ext, 0, sizeof(ext));
+        assert(!spa_apap_parse_extension(malformedLoudness,
+                                         sizeof(malformedLoudness),
+                                         &ext, &audio, &audioLength));
     }
 }
 
@@ -639,7 +715,7 @@ int main(int argc, char **argv)
                 memcpy(plaintext, g_blob + at, packetBytes);
                 plainLength = packetBytes;
             } else {
-                plainLength = build_extension(plaintext, FRAME_SAMPLES,
+                plainLength = build_extension(plaintext, 65, FRAME_SAMPLES,
                                               0x60100d08f9d19abbull,
                                               cookie, cookieBytes,
                                               g_blob + at, packetBytes);
@@ -699,6 +775,7 @@ int main(int argc, char **argv)
     }
 
     test_trim_tlvs();
+    test_extension_metadata();
     test_rejections(g_stream + 4, firstFrameLength);
 
     spa_apac_destroy(decoder);

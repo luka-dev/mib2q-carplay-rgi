@@ -95,9 +95,18 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--routing-target",
-        choices=("classic", "edm-v2"),
+        choices=("classic", "edm-v2", "universal-v5"),
         default="classic",
         help="rear-routing supervision profile (model dimensions are unchanged)",
+    )
+    parser.add_argument(
+        "--loss-profile",
+        choices=("balanced", "selection-v11"),
+        default="balanced",
+        help=(
+            "selection-v11 applies an asymmetric vocal/bass false-positive "
+            "penalty while retaining stronger positive-mask weighting"
+        ),
     )
     parser.add_argument(
         "--init-checkpoint",
@@ -115,6 +124,12 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument("--epochs", type=int, default=18)
+    parser.add_argument(
+        "--early-stopping-patience",
+        type=int,
+        default=0,
+        help="stop after this many non-improving validation epochs (0 disables)",
+    )
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--learning-rate", type=float, default=1.5e-3)
     parser.add_argument("--seed", type=int, default=0x48535352)
@@ -526,6 +541,77 @@ def apply_edm_v2_routing_targets(
     return np.nan_to_num(result, nan=0.0, posinf=1.0, neginf=0.0)
 
 
+def apply_universal_v5_routing_targets(
+    features: np.ndarray, targets: np.ndarray
+) -> np.ndarray:
+    """Teach an automatic best-safe-object policy with nonzero coverage.
+
+    The high-quality path remains the EDM/spatial target.  Universal adds a
+    lower-confidence target for energetic mid/high TF regions when no clean
+    lateral object exists.  Lead vocal and bass/kick remain strongly vetoed;
+    the production renderer treats this target as a phase-distinct fallback,
+    not as a claim that a studio-quality stem was recovered.
+    """
+    result = apply_edm_v2_routing_targets(features, targets)
+    per_feature_band = features[:, :BANDS * 9].reshape(-1, BANDS, 9)
+    per_target_band = result[:, :BANDS * 8].reshape(-1, BANDS, 8)
+    classes = per_target_band[:, :, :CLASSES]
+    lead = classes[:, :, 0]
+    bass = classes[:, :, 1]
+    drums = classes[:, :, 2]
+    foreground = classes[:, :, 3]
+    background = classes[:, :, 4]
+    effects = classes[:, :, 5]
+
+    log_energy = per_feature_band[:, :, 0]
+    relative_log_energy = log_energy - np.max(log_energy, axis=1, keepdims=True)
+    active = smoothstep(relative_log_energy, -7.0, -2.0)
+    flux = np.clip(per_feature_band[:, :, 6], 0.0, 1.0)
+    tail = np.clip(per_feature_band[:, :, 8], 0.0, 1.0)
+    semantic = np.clip(
+        background + effects + 0.35 * foreground + 0.20 * drums,
+        0.0,
+        1.0,
+    )
+    protection = np.power(1.0 - lead, 2.5) * np.power(1.0 - bass, 2.2)
+    texture = 0.55 + 0.25 * smoothstep(flux, 0.02, 0.35) + 0.20 * tail
+    fallback = np.clip(
+        0.24
+        * OBJECT_FOCUS_PRESENCE[None, :]
+        * active
+        * (0.35 + 0.65 * semantic)
+        * protection
+        * texture,
+        0.0,
+        0.30,
+    )
+
+    old_rear = per_target_band[:, :, 6].copy()
+    new_rear = np.maximum(old_rear, fallback)
+    per_target_band[:, :, 6] = new_rear
+
+    # The fallback has no trustworthy authored pan.  Keep measured/teacher pan
+    # where one exists; otherwise the deterministic renderer chooses a stable
+    # frequency-alternating rear side and applies conjugate phase rotation.
+    energy = np.exp(np.clip(log_energy, -30.0, 30.0))
+    global_rear = np.sum(new_rear * energy, axis=1) / (
+        np.sum(energy, axis=1) + 1.0e-8
+    )
+    result[:, BANDS * 8 + 4] = np.maximum(
+        result[:, BANDS * 8 + 4], global_rear
+    )
+    if result.shape[0] > 1:
+        result[1:, BANDS * 8 + 5] = np.minimum(
+            result[1:, BANDS * 8 + 5],
+            np.clip(
+                1.0 - np.mean(np.abs(np.diff(new_rear, axis=0)), axis=1),
+                0.0,
+                1.0,
+            ),
+        )
+    return np.nan_to_num(result, nan=0.0, posinf=1.0, neginf=0.0)
+
+
 def cache_track(path: pathlib.Path, cache_path: pathlib.Path) -> None:
     streams = decode_stem_container(path)
     specs = np.stack([stft(stream) for stream in streams], axis=0)
@@ -585,8 +671,14 @@ class SequenceDataset(Dataset):
             with np.load(path) as data:
                 features = data["features"].astype(np.float32)
                 targets = data["targets"].astype(np.float32)
-            if routing_target == "edm-v2":
+                routing_locked = (
+                    bool(data["routing_locked"])
+                    if "routing_locked" in data else False
+                )
+            if routing_target == "edm-v2" and not routing_locked:
                 targets = apply_edm_v2_routing_targets(features, targets)
+            elif routing_target == "universal-v5" and not routing_locked:
+                targets = apply_universal_v5_routing_targets(features, targets)
             self.tracks.append((features, targets))
             if features.shape[0] <= sequence:
                 self.index.append((track_index, 0))
@@ -624,8 +716,11 @@ class HssrNetwork(nn.Module):
         return self.head(x)
 
 
-def loss_components(prediction: torch.Tensor,
-                    target: torch.Tensor) -> dict[str, torch.Tensor]:
+def loss_components(
+    prediction: torch.Tensor,
+    target: torch.Tensor,
+    loss_profile: str = "balanced",
+) -> dict[str, torch.Tensor]:
     pred_band = prediction[..., :BANDS * 8].reshape(
         *prediction.shape[:-1], BANDS, 8
     )
@@ -642,9 +737,22 @@ def loss_components(prediction: torch.Tensor,
     # Rear-positive TF regions are rare compared with protected/empty bands.
     # Without weighting, predicting a very small rearability everywhere is a
     # deceptively good optimum (and exactly what the original EDM trace showed).
-    rear_weight = 1.0 + 3.0 * target_band[..., 6].detach()
+    rear_target = target_band[..., 6].detach()
+    if loss_profile == "selection-v11":
+        # A vocal false positive is far more objectionable than a missed rear
+        # object.  Counterfactual mixtures make that boundary observable; the
+        # asymmetric term makes the controller actually respect it.  Positive
+        # masks remain strongly weighted so the trivial all-front solution is
+        # not competitive.
+        vocal_veto = target_band[..., 0].detach() * (1.0 - rear_target)
+        bass_veto = target_band[..., 1].detach() * (1.0 - rear_target)
+        rear_weight = (
+            1.0 + 4.0 * rear_target + 5.0 * vocal_veto + 2.0 * bass_veto
+        )
+    else:
+        rear_weight = 1.0 + 3.0 * rear_target
     rear_loss = torch.mean(rear_element_loss * rear_weight)
-    pan_weight = target_band[..., 6].detach()
+    pan_weight = rear_target
     pan_loss = torch.sum(
         (torch.tanh(pred_band[..., 7]) - target_band[..., 7]) ** 2
         * pan_weight
@@ -656,8 +764,12 @@ def loss_components(prediction: torch.Tensor,
     smooth_loss = torch.mean(
         torch.abs(predicted_rear[:, 1:] - predicted_rear[:, :-1])
     )
-    total = class_loss + 2.0 * rear_loss + 0.5 * pan_loss + \
-            0.5 * global_loss + 0.05 * smooth_loss
+    if loss_profile == "selection-v11":
+        total = class_loss + 2.4 * rear_loss + 0.5 * pan_loss + \
+                0.5 * global_loss + 0.08 * smooth_loss
+    else:
+        total = class_loss + 2.0 * rear_loss + 0.5 * pan_loss + \
+                0.5 * global_loss + 0.05 * smooth_loss
     return {
         "total": total,
         "class": class_loss,
@@ -683,15 +795,19 @@ def compute_normalization(files: list[pathlib.Path]) -> tuple[np.ndarray, np.nda
     return mean.astype(np.float32), (1.0 / np.sqrt(variance)).astype(np.float32)
 
 
-def evaluate(model: HssrNetwork, loader: DataLoader,
-             device: torch.device) -> dict[str, float]:
+def evaluate(
+    model: HssrNetwork,
+    loader: DataLoader,
+    device: torch.device,
+    loss_profile: str = "balanced",
+) -> dict[str, float]:
     sums: dict[str, float] = {}
     batches = 0
     model.eval()
     with torch.no_grad():
         for features, targets in loader:
             values = loss_components(
-                model(features.to(device)), targets.to(device)
+                model(features.to(device)), targets.to(device), loss_profile
             )
             for name, value in values.items():
                 sums[name] = sums.get(name, 0.0) + float(value.cpu())
@@ -852,6 +968,7 @@ def main() -> int:
     best_loss = float("inf")
     best_state = None
     history = []
+    non_improving_epochs = 0
     started = time.time()
 
     print(
@@ -869,7 +986,7 @@ def main() -> int:
         for features, targets in train_loader:
             optimizer.zero_grad(set_to_none=True)
             values = loss_components(
-                model(features.to(device)), targets.to(device)
+                model(features.to(device)), targets.to(device), args.loss_profile
             )
             values["total"].backward()
             nn.utils.clip_grad_norm_(model.parameters(), 2.0)
@@ -877,7 +994,9 @@ def main() -> int:
             train_total += float(values["total"].detach().cpu())
             batches += 1
         scheduler.step()
-        validation = evaluate(model, validation_loader, device)
+        validation = evaluate(
+            model, validation_loader, device, args.loss_profile
+        )
         record = {
             "epoch": epoch,
             "train_total": train_total / max(batches, 1),
@@ -892,11 +1011,24 @@ def main() -> int:
                 name: value.detach().cpu().clone()
                 for name, value in model.state_dict().items()
             }
+            non_improving_epochs = 0
+        else:
+            non_improving_epochs += 1
+            if (
+                args.early_stopping_patience > 0
+                and non_improving_epochs >= args.early_stopping_patience
+            ):
+                print(
+                    f"early-stop epoch={epoch} best={best_loss:.8f} "
+                    f"patience={args.early_stopping_patience}",
+                    flush=True,
+                )
+                break
 
     if best_state is None:
         raise RuntimeError("training produced no checkpoint")
     model.load_state_dict(best_state)
-    heldout = evaluate(model, test_loader, device)
+    heldout = evaluate(model, test_loader, device, args.loss_profile)
     model.cpu()
     checkpoint = args.output / "hssr_development.pt"
     torch.save(
@@ -914,6 +1046,7 @@ def main() -> int:
         "heldout_tracks": [path.name for path in test_sources],
         "feature_count": FEATURES,
         "routing_target": args.routing_target,
+        "loss_profile": args.loss_profile,
         "cache_root": str(cache_root.resolve()),
         "init_checkpoint": (
             str(args.init_checkpoint.resolve())
@@ -927,7 +1060,12 @@ def main() -> int:
         "hidden_size": HIDDEN,
         "output_count": OUTPUTS,
         "control_rate_hz": SAMPLE_RATE / (HOP_SIZE * CONTROL_HOPS),
+        "epochs": args.epochs,
+        "epochs_completed": len(history),
+        "early_stopping_patience": args.early_stopping_patience,
+        "batch_size": args.batch_size,
         "learning_rate": args.learning_rate,
+        "seed": args.seed,
         "elapsed_seconds": time.time() - started,
         "history": history,
         "best_validation_total": best_loss,

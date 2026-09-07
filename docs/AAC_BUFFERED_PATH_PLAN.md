@@ -374,8 +374,8 @@ The landed implementation follows this order:
    more callback chunks in the bounded private FIFO, enforce frame alignment, and emit complete
    stereo frames only.
 6. Render PCM2 into the established PCM6 ring. `AUDIO_STEREO_UPMIX=off` is exact
-   `L,R,0,0,0,0`; the checked-in `ambient-lite` canary emits trimmed L/R, zero C, bounded LR4/80 Hz
-   LFE assist and decorrelated Ls/Rs. Native APAC 5.1 never enters this module.
+   `L,R,0,0,0,0`; `on` selects HSSR Universal with zero digital C, bounded
+   LR4/80 Hz LFE assist and Ls/Rs. Native APAC 5.1 never enters this module.
 7. On `FLUSHBUFFERED`, stop accepting callbacks for the old generation, call `Flush`, empty the AAC
    FIFO and shared PCM queued before the flush boundary, and resume with the same ASC. On cookie or
    format change, flush/release/recreate. Use `Drain` only for orderly EOS, not for a discontinuity.

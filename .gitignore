@@ -8,6 +8,12 @@
 # tree carries the directory and nothing else.
 /build/*
 !/build/.gitkeep
+# HSSR Universal cannot be reproduced on a clean checkout without its selected
+# runtime weights.  Keep only the shipping V11 binary; training checkpoints and
+# all other build output remain ignored.
+!/build/hssr-selection-v11/
+/build/hssr-selection-v11/*
+!/build/hssr-selection-v11/hssr_model.bin
 /local_logs/
 /log/
 tools/loader_preview/loader_preview

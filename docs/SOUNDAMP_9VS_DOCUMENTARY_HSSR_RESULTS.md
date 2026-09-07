@@ -1,69 +1,53 @@
-# HSSR through the documentary Audi 9VS topology
+# HSSR Universal V11 through the documentary Audi 9VS topology
 
-Date: 2026-09-06. Symphoria/3D is off.
+Date: 2026-09-07. Symphoria/3D is off.
 
-The test applies the exact recovered J525 profile-0/bank-1 input matrix and
-then expands its logical buses to the sixteen documented T38 speaker circuits.
-The second stage is an explicitly inferred equal-power fan-out; it is not Audi
-per-speaker calibration. See
+This is the current Universal-only regression. Each input is the final V11
+`hssr-universal` render at rear gain `0.25` with LR4/80 Hz LFE assist. The
+Virtual Cabin applies the exact recovered J525 profile-0/bank-1 input matrix
+and then expands its logical buses to the sixteen documented T38 amplifier
+circuits.
+
+The second stage is an explicitly inferred equal-power fan-out, not recovered
+Audi per-speaker calibration. See
 [`SOUNDAMP_9VS_VIRTUAL_CABIN_EVIDENCE.md`](SOUNDAMP_9VS_VIRTUAL_CABIN_EVIDENCE.md)
 for the proof boundary.
 
-## Ten-track held-out set
+## Public authored-surround corpus
 
-These are the retained `hssr-object-heldout-eval-v4` renders.
+| Track | Rear circuit energy excluding subwoofer | Rear/front energy | Maximum pre-clip peak | Clipped samples |
+|---|---:|---:|---:|---:|
+| Dohnanyi, piano and orchestra | 22.45% | -5.38 dB | -10.67 dBFS | 0 |
+| Credo, voices and string quartet | 15.23% | -7.46 dB | -7.70 dBFS | 0 |
+| Winterreigen, solo piano | 35.24% | -2.64 dB | -16.28 dBFS | 0 |
+| Schumann, violin and orchestra | 28.23% | -4.05 dB | -9.74 dBFS | 0 |
+| Baroque cello concerto | 22.34% | -5.41 dB | -7.29 dBFS | 0 |
+| Atmos trumpet and orchestra | 13.05% | -8.24 dB | -7.18 dBFS | 0 |
+| **Arithmetic mean** | **22.76%** | **-5.53 dB** | — | **0** |
 
-| Track | HSSR Active rear fraction | HSSR Object rear fraction | Object delta |
-|---|---:|---:|---:|
-| authored-sintel-5-1 | 8.172% | 6.766% | -1.407 pp |
-| liznelson-rainfall | 2.865% | 1.526% | -1.338 pp |
-| music-delta---80s-rock | 3.014% | 3.172% | +0.158 pp |
-| music-delta---beatles | 1.207% | 1.279% | +0.072 pp |
-| music-delta---britpop | 5.373% | 4.706% | -0.667 pp |
-| music-delta---country1 | 0.978% | 0.654% | -0.324 pp |
-| music-delta---disco | 0.633% | 0.488% | -0.145 pp |
-| music-delta---gospel | 0.198% | 0.201% | +0.003 pp |
-| music-delta---grunge | 2.638% | 2.573% | -0.065 pp |
-| phoenix-scotchmorris | 15.108% | 11.968% | -3.140 pp |
-| **Arithmetic mean** | **4.019%** | **3.333%** | **-0.686 pp** |
+The separate EBU spoken channel-identification fixture produces 0.25% rear
+energy, -25.95 dB rear/front and a -15.30 dBFS peak. It is a routing check and
+is excluded from the music aggregate.
 
-Mean rear/front electrical energy is `-16.468 dB` for Active and `-17.259 dB`
-for Object. There are no pre-clipping samples in either condition. Object is
-quieter in aggregate rear energy on seven of ten tracks even though its
-fine-bin selection can make one accepted guitar or effect easier to identify.
-This is consistent with the vehicle report: object selectivity improved, but
-the rear bed can still feel sparse.
+## What this establishes
 
-## Six aligned Apple public-preview renders
+- The recovered J525 input matrix does not mute or unexpectedly attenuate the
+  generated `Ls/Rs` buses.
+- In the documentary topology, `Bus_Ls` reaches the rear-left door circuit and
+  R209 effect circuit; `Bus_Rs` reaches the rear-right door circuit and R210.
+- Universal V11 produces material-dependent rear activity rather than a fixed
+  ambience copy. The tested music spans roughly 13.0% to 35.2% rear electrical
+  energy after the known matrix.
+- All seven renders retain substantial electrical headroom and have zero
+  pre-clipping samples.
 
-On this smaller, differently distributed set, Object is more active:
+This still cannot predict the driver's perceived rear level. OEM per-circuit
+gain, delay, crossover, EQ, polarity, loudspeaker directivity and cabin transfer
+functions remain unbound. A measured driver-head BRIR is required before the
+binaural mode can represent the real car instead of only its documented
+electrical topology.
 
-| Condition | Mean rear fraction | Mean rear/front energy |
-|---|---:|---:|
-| HSSR Active | 18.788% | -6.616 dB |
-| HSSR Object | 20.361% | -6.126 dB |
+Generated 16-channel WAVs and complete per-circuit JSON reports are under the
+ignored directory:
 
-This corpus-dependent reversal is important. A single global rear-gain change
-will not reliably produce both stronger isolation and stable activity across
-genres. The likely next algorithmic target is the acceptance/hold policy for
-semantic objects, not an invented cabin EQ.
-
-## Interpretation
-
-- The documented physical fan-out does not reveal a hidden extra upmix stage
-  with Symphoria/3D off. `Bus_Ls` drives the rear-left door circuit and R209;
-  `Bus_Rs` drives the rear-right door circuit and R210 in the documentary
-  architecture.
-- HSSR already supplies enough rear energy on some wide/orchestral material,
-  while several dense/pop mixes remain below 1–3% rear electrical energy.
-- The subjective request for "more isolated instrument behind" cannot be
-  solved honestly by assigning the recovered but unbound OEM EQ/crossover
-  catalog to speakers. That would manufacture calibration data.
-- A safe next profile change should increase object persistence and makeup only
-  after semantic acceptance, while retaining the existing lead/bass veto and
-  matrix peak guard.
-
-Generated reports and 16-channel circuit WAVs are under the ignored directory:
-
-- `build/soundamp-virtual-cabin/documentary-circuits/`
-- `build/soundamp-virtual-cabin/heldout-v4-circuits/`
+- `build/soundamp-virtual-cabin/hssr-selection-v11-public-authored/`

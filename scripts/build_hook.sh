@@ -10,7 +10,6 @@
 #
 #   ./scripts/build_hook.sh                        # default image (LOG=1)
 #   QNX_TOOLCHAIN_VARIANT=8.5 ./scripts/build_hook.sh
-#   UPMIX_PROFILE=hssr-object-v2 ./scripts/build_hook.sh # compiled profile
 #   LOG=0 ./scripts/build_hook.sh                  # pre-prod: logs/captures disabled
 #   LOG=0 AUDIO_STATE_TRACE=1 ./scripts/build_hook.sh # compact lifecycle trace only
 #   LOG_RGD_PACKET_RAW=1 ./scripts/build_hook.sh   # raw RGD logging (needs LOG=1)
@@ -56,32 +55,13 @@ mkdir -p "$(dirname "$OUT")"
 LOG="${LOG:-1}"
 LOG_RGD_PACKET_RAW="${LOG_RGD_PACKET_RAW:-0}"
 AUDIO_STATE_TRACE="${AUDIO_STATE_TRACE:-0}"
-UPMIX_PROFILE="${UPMIX_PROFILE:-hssr-object-focus}"
 [[ "$LOG" == "0" || "$LOG" == "1" ]] || { echo "Invalid LOG=$LOG (0|1)"; exit 1; }
 [[ "$LOG_RGD_PACKET_RAW" == "0" || "$LOG_RGD_PACKET_RAW" == "1" ]] || { echo "Invalid LOG_RGD_PACKET_RAW"; exit 1; }
 [[ "$AUDIO_STATE_TRACE" == "0" || "$AUDIO_STATE_TRACE" == "1" ]] || { echo "Invalid AUDIO_STATE_TRACE=$AUDIO_STATE_TRACE (0|1)"; exit 1; }
 [[ "$LOG_RGD_PACKET_RAW" == "1" && "$LOG" != "1" ]] && { echo "LOG_RGD_PACKET_RAW=1 requires LOG=1"; exit 1; }
 
-case "$UPMIX_PROFILE" in
-  ambient-lite)       UPMIX_BACKEND=SPA_STEREO_UPMIX_AMBIENT_LITE ;;
-  ambient-hq)         UPMIX_BACKEND=SPA_STEREO_UPMIX_AMBIENT_HQ ;;
-  hsr-td)             UPMIX_BACKEND=SPA_STEREO_UPMIX_HSR_TD ;;
-  hsr-td-active)      UPMIX_BACKEND=SPA_STEREO_UPMIX_HSR_TD_ACTIVE ;;
-  music-stage)        UPMIX_BACKEND=SPA_STEREO_UPMIX_MUSIC_STAGE ;;
-  hssr-neon)          UPMIX_BACKEND=SPA_STEREO_UPMIX_HSSR_NEON ;;
-  hssr-active)        UPMIX_BACKEND=SPA_STEREO_UPMIX_HSSR_ACTIVE ;;
-  hssr-object)        UPMIX_BACKEND=SPA_STEREO_UPMIX_HSSR_OBJECT ;;
-  hssr-object-v2)     UPMIX_BACKEND=SPA_STEREO_UPMIX_HSSR_OBJECT_V2 ;;
-  hssr-object-focus)  UPMIX_BACKEND=SPA_STEREO_UPMIX_HSSR_OBJECT_FOCUS ;;
-  *)
-    echo "Invalid UPMIX_PROFILE=$UPMIX_PROFILE"
-    echo "Expected ambient-lite|ambient-hq|hsr-td|hsr-td-active|music-stage|hssr-neon|hssr-active|hssr-object|hssr-object-v2|hssr-object-focus"
-    exit 1
-    ;;
-esac
-
-CFLAGS_EXTRA="-D__QNX__ -mfpu=neon -mfloat-abi=softfp -DSPA_AUDIO_STEREO_UPMIX_COMPILED_BACKEND=$UPMIX_BACKEND"
-echo "Compiled stereo upmix profile: $UPMIX_PROFILE"
+CFLAGS_EXTRA="-D__QNX__ -mfpu=neon -mfloat-abi=softfp"
+echo "Stereo upmix renderer: hssr-universal"
 [ "$LOG" == "0" ] && CFLAGS_EXTRA="$CFLAGS_EXTRA -DENABLE_LOGGING=0" && echo "Logging and diagnostic captures DISABLED"
 [ "$AUDIO_STATE_TRACE" == "1" ] && CFLAGS_EXTRA="$CFLAGS_EXTRA -DENABLE_STATE_TRACE=1" && echo "Compact lifecycle trace ENABLED"
 [ "$LOG_RGD_PACKET_RAW" == "1" ] && CFLAGS_EXTRA="$CFLAGS_EXTRA -DRGD_TRACE_RAW_FULL=1" && echo "RGD raw packet logging ENABLED"
@@ -129,7 +109,7 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
         routeguidance/rgd_tlv.c routeguidance/rgd_hook.c coverart/coverart_hook.c \
         altscreen/altscreen_av.c altscreen/altscreen_hook.c audio/spatial_downmix.c \
         audio/stereo_upmix.c audio/hssr_dsp.c audio/hssr_neon.c \
-        audio/apap_crypto.c audio/apap_lifecycle.c audio/apac_codec_loader.c \
+        audio/apap_crypto.c audio/apap_lifecycle.c audio/soundcheck.c audio/apac_codec_loader.c \
         audio/aac_bridge.c audio/audio_hook.c main.c"
   $CC -shared -fPIC -O2 -std=gnu99 -fdata-sections -ffunction-sections '"$CFLAGS_EXTRA"' \
       -I. -I/src/apac_decoder/include $SRCS \

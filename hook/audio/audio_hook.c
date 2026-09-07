@@ -22,6 +22,7 @@
 #include "apap_lifecycle.h"
 #include "feedback_clock.h"
 #include "pcm_period.h"
+#include "soundcheck.h"
 #include "spatial_downmix.h"
 #include "stereo_upmix.h"
 #include "media_route.h"
@@ -64,14 +65,8 @@ DEFINE_LOG_MODULE(audio);
 #define SPA_BITS      16
 #define SPA_CHANNELS  6
 
-/* Vehicle runtime exposes one stereo-upmix switch.  The implementation is a
- * build decision, so a misspelled environment profile can never select a
- * different renderer on the head unit.  Host tools still expose every backend
- * for controlled A/B evaluation. */
-#ifndef SPA_AUDIO_STEREO_UPMIX_COMPILED_BACKEND
-#define SPA_AUDIO_STEREO_UPMIX_COMPILED_BACKEND \
-    SPA_STEREO_UPMIX_HSSR_OBJECT_FOCUS
-#endif
+/* Vehicle runtime exposes one stereo-upmix switch.  ON always means the sole
+ * production HSSR Universal renderer; OFF is the exact safety bypass. */
 
 /* ---- gating -------------------------------------------------------------------------------- */
 
@@ -107,6 +102,7 @@ typedef struct {
     enum spa_stereo_upmix_backend stereoUpmixBackend;
     uint32_t stereoSurroundQ15;
     int stereoLfeAssist;
+    spa_soundcheck_config_t soundCheck;
 } spa_audio_config_t;
 
 static spa_audio_config_t spa_audio_config_value;
@@ -133,24 +129,14 @@ static int spa_parse_bool(const char *name, int *present)
 static enum spa_stereo_upmix_backend spa_parse_stereo_upmix(void)
 {
     const char *value = getenv(SPA_AUDIO_STEREO_UPMIX_ENV);
-    enum spa_stereo_upmix_backend compiled =
-        (enum spa_stereo_upmix_backend)
-            SPA_AUDIO_STEREO_UPMIX_COMPILED_BACKEND;
 
     if (!value || !value[0] || !strcasecmp(value, "off") ||
         !strcasecmp(value, "0") || !strcasecmp(value, "false") ||
         !strcasecmp(value, "no"))
         return SPA_STEREO_UPMIX_OFF;
     if (!strcasecmp(value, "on") || !strcasecmp(value, "1") ||
-        !strcasecmp(value, "true") || !strcasecmp(value, "yes")) {
-        if (compiled != SPA_STEREO_UPMIX_OFF &&
-            spa_stereo_upmix_backend_supported(compiled))
-            return compiled;
-        LOG_ERROR(LOG_MODULE,
-                  "audio config: compiled stereo upmix backend=%d is unsupported; using off",
-                  (int)compiled);
-        return SPA_STEREO_UPMIX_OFF;
-    }
+        !strcasecmp(value, "true") || !strcasecmp(value, "yes"))
+        return SPA_STEREO_UPMIX_HSSR_UNIVERSAL;
 
     LOG_ERROR(LOG_MODULE,
               "audio config: invalid %s='%s'; expected on/off; using off",
@@ -190,6 +176,30 @@ static int spa_parse_stereo_lfe(void)
     return 0;
 }
 
+static int spa_parse_soundcheck_fallback(void)
+{
+    const char *value = getenv(SPA_AUDIO_SOUNDCHECK_FALLBACK_ENV);
+    if (!value || !value[0] || !strcasecmp(value, "off"))
+        return SPA_SOUNDCHECK_FALLBACK_OFF;
+    if (!strcasecmp(value, "rms")) return SPA_SOUNDCHECK_FALLBACK_RMS;
+    LOG_ERROR(LOG_MODULE,
+              "audio config: invalid %s='%s'; expected off/rms; using off",
+              SPA_AUDIO_SOUNDCHECK_FALLBACK_ENV, value);
+    return SPA_SOUNDCHECK_FALLBACK_OFF;
+}
+
+static int spa_parse_soundcheck_limiter(void)
+{
+    const char *value = getenv(SPA_AUDIO_SOUNDCHECK_LIMITER_ENV);
+    if (!value || !value[0] || !strcasecmp(value, "off"))
+        return SPA_SOUNDCHECK_LIMITER_OFF;
+    if (!strcasecmp(value, "peak")) return SPA_SOUNDCHECK_LIMITER_SAMPLE_PEAK;
+    LOG_ERROR(LOG_MODULE,
+              "audio config: invalid %s='%s'; expected off/peak; using off",
+              SPA_AUDIO_SOUNDCHECK_LIMITER_ENV, value);
+    return SPA_SOUNDCHECK_LIMITER_OFF;
+}
+
 static void spa_audio_config_init_once(void)
 {
     const char *modeValue;
@@ -205,6 +215,16 @@ static void spa_audio_config_init_once(void)
     spa_audio_config_value.stereoUpmixBackend = spa_parse_stereo_upmix();
     spa_audio_config_value.stereoSurroundQ15 = spa_parse_stereo_surround_q15();
     spa_audio_config_value.stereoLfeAssist = spa_parse_stereo_lfe();
+    spa_soundcheck_default_config(&spa_audio_config_value.soundCheck);
+    {
+        int present = 0;
+        int enabled = spa_parse_bool(SPA_AUDIO_SOUNDCHECK_ENV, &present);
+        if (present) spa_audio_config_value.soundCheck.enabled = enabled;
+    }
+    spa_audio_config_value.soundCheck.fallbackMode =
+        spa_parse_soundcheck_fallback();
+    spa_audio_config_value.soundCheck.limiterMode =
+        spa_parse_soundcheck_limiter();
 
     if (spa_audio_config_value.usesNewControls) {
         if (!spatialPresent && typoPresent) {
@@ -803,6 +823,137 @@ static int spa_cf_get_i64(const void *dict, const char *name, int64_t *value)
     return err == 0;
 }
 
+static int spa_cf_get_string(const void *dict, const char *name,
+                             char *buffer, size_t capacity)
+{
+    void *key, *value;
+    int result = 0;
+
+    if (!dict || !name || !buffer || !capacity || !cfa_strgetc) return 0;
+    key = cfa_str(0, name, SPA_CFENC_UTF8);
+    if (!key) return 0;
+    value = cfa_dictget(dict, key);
+    if (value) result = cfa_strgetc(value, buffer, capacity) != 0;
+    cfa_rel(key);
+    return result;
+}
+
+/* SETUP carries a dictionary mapping media-kind numbers (as strings) to a
+ * signed target dB.  Do not dereference CFLite objects: use only the recovered
+ * dictionary/string/int accessor ABI. */
+static int spa103_read_soundcheck_target(const void *streamDesc,
+                                         uint8_t *mediaKind, int *targetDb)
+{
+    void *outerKey, *targets;
+    unsigned kind;
+
+    if (!streamDesc || !mediaKind || !targetDb) return 0;
+    outerKey = cfa_str(0, "soundCheckMediaKind", SPA_CFENC_UTF8);
+    if (!outerKey) return 0;
+    targets = cfa_dictget(streamDesc, outerKey);
+    cfa_rel(outerKey);
+    if (!targets) return 0;
+
+    for (kind = 0; kind <= 255; kind++) {
+        char name[4];
+        void *key;
+        int32_t err = 0;
+        int64_t value;
+
+        snprintf(name, sizeof(name), "%u", kind);
+        key = cfa_str(0, name, SPA_CFENC_UTF8);
+        if (!key) continue;
+        if (!cfa_dictget(targets, key)) {
+            cfa_rel(key);
+            continue;
+        }
+        value = cfa_dictgeti(targets, key, &err);
+        cfa_rel(key);
+        if (!err && value >= -128 && value <= 127) {
+            *mediaKind = (uint8_t)kind;
+            *targetDb = (int)value;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int spa103_index_supported_on_fixed_48k(int64_t index)
+{
+    return index == SPA_AAC_LC_48K_STEREO ||
+           index == SPA_APAC_48K_STEREO ||
+           index == SPA_APAC_48K_5_1 ||
+           index == SPA_APAC_48K_5_1_2;
+}
+
+static int spa103_validate_setup_stream(const void *streamDesc,
+                                        int64_t formatIndex, int haveKey)
+{
+    int64_t value = -1;
+    char text[32] = { 0 };
+
+    if (!spa103_index_supported_on_fixed_48k(formatIndex)) {
+        LOG_ERROR(LOG_MODULE,
+                  "buffer103: rejecting SETUP index=%lld: fixed 48-kHz rail supports 23/64/65/66",
+                  (long long)formatIndex);
+        return 0;
+    }
+    if (!haveKey) {
+        LOG_ERROR(LOG_MODULE, "buffer103: rejecting SETUP without a 32-byte shk");
+        return 0;
+    }
+    if (!spa_cf_get_i64(streamDesc, "packetFormatAPAP", &value) || !value) {
+        LOG_ERROR(LOG_MODULE,
+                  "buffer103: rejecting SETUP without packetFormatAPAP=true");
+        return 0;
+    }
+    value = -1;
+    if (!spa_cf_get_i64(streamDesc, "spf", &value) ||
+        value != 1024) {
+        LOG_ERROR(LOG_MODULE,
+                  "buffer103: rejecting SETUP spf=%lld; only %u is implemented",
+                  (long long)value, 1024u);
+        return 0;
+    }
+    if (!spa_cf_get_i64(streamDesc, "isMedia", &value) || !value) {
+        LOG_ERROR(LOG_MODULE, "buffer103: rejecting SETUP without isMedia=true");
+        return 0;
+    }
+    if (!spa_cf_get_string(streamDesc, "audioType", text, sizeof(text)) ||
+        strcmp(text, "media")) {
+        LOG_ERROR(LOG_MODULE,
+                  "buffer103: rejecting SETUP audioType='%s'",
+                  text[0] ? text : "<absent>");
+        return 0;
+    }
+    if (spa_cf_get_string(streamDesc, "audioMode", text, sizeof(text)) &&
+        strcmp(text, "default")) {
+        LOG_ERROR(LOG_MODULE,
+                  "buffer103: rejecting unsupported audioMode='%s'", text);
+        return 0;
+    }
+    value = -1;
+    if (!spa_cf_get_i64(streamDesc, "audioFormat", &value) ||
+        value != (formatIndex == SPA_AAC_LC_48K_STEREO ?
+                  INT64_C(0x800000) : 0)) {
+        LOG_ERROR(LOG_MODULE,
+                  "buffer103: rejecting SETUP index=%lld audioFormat=%#llx",
+                  (long long)formatIndex, (unsigned long long)value);
+        return 0;
+    }
+    if (spa_cf_get_i64(streamDesc, "ct", &value)) {
+        int64_t expected = formatIndex == SPA_AAC_LC_48K_STEREO ? 4 : 0;
+        if (value != expected) {
+            LOG_ERROR(LOG_MODULE,
+                      "buffer103: rejecting SETUP index=%lld ct=%lld expected=%lld",
+                      (long long)formatIndex, (long long)value,
+                      (long long)expected);
+            return 0;
+        }
+    }
+    return 1;
+}
+
 static void *spa_find_setup_stream(const void *request, int64_t wantedType)
 {
     void *kStreams, *streams, *found = 0;
@@ -1275,6 +1426,9 @@ typedef struct {
     uint8_t shk[SPA_APAP_KEY_SIZE];
     int haveKey;
     int64_t formatIndex;
+    int haveSoundCheckTarget;
+    uint8_t soundCheckMediaKind;
+    int8_t soundCheckTargetDb;
 } spa103_receiver_t;
 
 typedef struct {
@@ -1477,6 +1631,11 @@ typedef struct {
     uint64_t upmixFailed;
     uint64_t formatAnnouncements;
     uint64_t formatSwitches;
+    uint64_t samplesPerFrameMismatches;
+    uint64_t transitionAnnouncements;
+    uint64_t sourceFormatAnnouncements;
+    uint64_t tracerAnnouncements;
+    uint64_t unknownExtensionFields;
     spa_apap_lifecycle_t lifecycle; /* rate, paused compressed queue and FLUSH window */
     int primed;                      /* ring reached the start cushion at least once */
     size_t primeTargetFrames;        /* cold 400 ms; post-FLUSH START_FULL depth */
@@ -1494,11 +1653,20 @@ typedef struct {
     uint32_t sourceChannels;
     uint32_t outputChannels;
     uint32_t channelLayoutTag;
-    int64_t formatIndex;           /* SETUP index; cookie-driven track switches need not change it */
+    int64_t formatIndex;           /* active TLV-2 index, corrected by cookie/PCM geometry */
     enum spa_decoded_pcm_kind decodedPcmKind;
     int64_t ignoredFormatIndex;    /* last announcement we had no decoder for, to log it once */
+    uint64_t lastTransitionId;
+    int haveLastTransitionId;
+    uint64_t lastSourceFormatIndex;
+    int haveLastSourceFormatIndex;
+    uint8_t extensionMediaKind;
+    int haveExtensionMediaKind;
+    float extensionLoudness[3];
+    int haveExtensionLoudness;
     int atmosMode;
     struct spa_stereo_upmix stereoUpmix;
+    spa_soundcheck_state_t soundCheck;
 } spa103_render_t;
 
 static spa103_render_t spa103_render = {
@@ -1524,7 +1692,7 @@ static void spa_hssr_model_init_once(void)
                  (unsigned)spa_hssr_model_value.payload_crc32);
     } else {
         LOG_ERROR(LOG_MODULE,
-                  "HSSR: model rejected path=%s status=%d; profile will use music-stage",
+                  "HSSR: model rejected path=%s status=%d; stereo upmix will stay off",
                   path, spa_hssr_model_status);
     }
 }
@@ -1555,20 +1723,9 @@ static const char *spa103_render_state_name(int state)
 static const char *spa_stereo_upmix_backend_name(enum spa_stereo_upmix_backend backend)
 {
     switch (backend) {
-    case SPA_STEREO_UPMIX_OFF:          return "off";
-    case SPA_STEREO_UPMIX_AMBIENT_LITE: return "ambient-lite";
-    case SPA_STEREO_UPMIX_AMBIENT_HQ:   return "ambient-hq";
-    case SPA_STEREO_UPMIX_PIONEER_RER:  return "pioneer-rer";
-    case SPA_STEREO_UPMIX_CUPGAN:       return "cupgan";
-    case SPA_STEREO_UPMIX_HSR_TD:       return "hsr-td";
-    case SPA_STEREO_UPMIX_HSR_TD_ACTIVE:return "hsr-td-active";
-    case SPA_STEREO_UPMIX_MUSIC_STAGE:  return "music-stage";
-    case SPA_STEREO_UPMIX_HSSR_NEON:    return "hssr-neon";
-    case SPA_STEREO_UPMIX_HSSR_ACTIVE:  return "hssr-active";
-    case SPA_STEREO_UPMIX_HSSR_OBJECT:  return "hssr-object";
-    case SPA_STEREO_UPMIX_HSSR_OBJECT_V2:return "hssr-object-v2";
-    case SPA_STEREO_UPMIX_HSSR_OBJECT_FOCUS:return "hssr-object-focus";
-    default:                            return "?";
+    case SPA_STEREO_UPMIX_OFF:           return "off";
+    case SPA_STEREO_UPMIX_HSSR_UNIVERSAL:return "hssr-universal";
+    default:                             return "?";
     }
 }
 
@@ -1588,7 +1745,10 @@ static const spa_apac_codec_api_t *spa103_codec_for_index(int64_t index);
 
 /* Called with the receiver lock NOT held. */
 static void spa103_render_start(int64_t formatIndex, int haveKey,
-                                size_t compressedBufferBytes)
+                                size_t compressedBufferBytes,
+                                int haveSoundCheckTarget,
+                                uint8_t soundCheckMediaKind,
+                                int soundCheckTargetDb)
 {
     const spa_audio_config_t *config = spa_audio_config();
     const char *codecPath = 0;
@@ -1652,6 +1812,11 @@ static void spa103_render_start(int64_t formatIndex, int haveKey,
     spa103_render.upmixFailed = 0;
     spa103_render.formatAnnouncements = 0;
     spa103_render.formatSwitches = 0;
+    spa103_render.samplesPerFrameMismatches = 0;
+    spa103_render.transitionAnnouncements = 0;
+    spa103_render.sourceFormatAnnouncements = 0;
+    spa103_render.tracerAnnouncements = 0;
+    spa103_render.unknownExtensionFields = 0;
     spa103_render.statsFrames = 0;
     memset(spa103_render.statsAbs, 0, sizeof(spa103_render.statsAbs));
     memset(spa103_render.statsZeroCrossings, 0,
@@ -1667,24 +1832,28 @@ static void spa103_render_start(int64_t formatIndex, int haveKey,
     spa103_render.channelLayoutTag = 0;
     spa103_render.formatIndex = formatIndex;
     spa103_render.decodedPcmKind = SPA_DECODED_PCM_OTHER;
+    spa103_render.ignoredFormatIndex = -1;
+    spa103_render.haveLastTransitionId = 0;
+    spa103_render.haveLastSourceFormatIndex = 0;
+    spa103_render.haveExtensionMediaKind = 0;
+    spa103_render.haveExtensionLoudness = 0;
     spa103_render.probeFraming = 0;
     spa103_render.atmosMode = config->atmosMode;
+    spa_soundcheck_init(&spa103_render.soundCheck, &config->soundCheck,
+                        haveSoundCheckTarget, soundCheckMediaKind,
+                        soundCheckTargetDb);
 
     spa_stereo_upmix_default_config(&upmixConfig);
     upmixConfig.backend = config->stereoUpmixBackend;
     upmixConfig.rear_gain_q15 = config->stereoSurroundQ15;
-    if (upmixConfig.backend == SPA_STEREO_UPMIX_HSSR_NEON ||
-        upmixConfig.backend == SPA_STEREO_UPMIX_HSSR_ACTIVE ||
-        upmixConfig.backend == SPA_STEREO_UPMIX_HSSR_OBJECT ||
-        upmixConfig.backend == SPA_STEREO_UPMIX_HSSR_OBJECT_V2 ||
-        upmixConfig.backend == SPA_STEREO_UPMIX_HSSR_OBJECT_FOCUS) {
+    if (upmixConfig.backend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL) {
         const struct spa_hssr_model *hssrModel = spa_hssr_runtime_model();
 
         if (hssrModel) {
             spa_stereo_upmix_config_set_hssr_model(
                 &upmixConfig, hssrModel);
         } else {
-            upmixConfig.backend = SPA_STEREO_UPMIX_MUSIC_STAGE;
+            upmixConfig.backend = SPA_STEREO_UPMIX_OFF;
         }
     }
     spa_stereo_upmix_config_set_lfe(
@@ -1734,7 +1903,8 @@ static void spa103_render_start(int64_t formatIndex, int haveKey,
     LOG_INFO(LOG_MODULE,
              "buffer103: render %s formatIndex=%lld key=%s output=%uch atmosMode=%s "
              "stereoUpmix=%s frontGainQ15=%u rearGainQ15=%u "
-             "stereoLfe=%s lfeGainQ15=%u compressedQueueLimit=%u initialRate=0",
+             "stereoLfe=%s lfeGainQ15=%u soundCheck=%s target=%s%ddB/kind%u "
+             "fallback=%d limiter=%d compressedQueueLimit=%u initialRate=0",
              spa103_render_state_name(state), (long long)formatIndex,
              haveKey ? "yes" : "no", (unsigned)outputChannels,
              config->atmosMode == SPA_ATMOS_DOWNMIX ? "downmix" :
@@ -1743,19 +1913,29 @@ static void spa103_render_start(int64_t formatIndex, int haveKey,
              (unsigned)activeFrontGainQ15, (unsigned)activeRearGainQ15,
              activeLfeAssist ? "assist" : "off",
              (unsigned)activeLfeGainQ15,
+             config->soundCheck.enabled ? "on" : "off",
+             haveSoundCheckTarget ? "" : "absent/",
+             soundCheckTargetDb, (unsigned)soundCheckMediaKind,
+             config->soundCheck.fallbackMode,
+             config->soundCheck.limiterMode,
              (unsigned)compressedBufferBytes);
     STATE_TRACE("BUFFERED_RENDER_START",
                 "setup_index=%lld state=%s key=%d output_channels=%u "
-                "upmix=%s rear_q15=%u lfe=%d initial_rate=0 "
+                "upmix=%s rear_q15=%u lfe=%d soundcheck=%d "
+                "soundcheck_target_present=%d soundcheck_target_db=%d "
+                "soundcheck_media_kind=%u initial_rate=0 "
                 "compressed_limit=%u",
                 (long long)formatIndex, spa103_render_state_name(state),
                 haveKey ? 1 : 0, (unsigned)outputChannels,
                 spa_stereo_upmix_backend_name(activeUpmixBackend),
                 (unsigned)activeRearGainQ15, activeLfeAssist ? 1 : 0,
+                config->soundCheck.enabled ? 1 : 0,
+                haveSoundCheckTarget ? 1 : 0, soundCheckTargetDb,
+                (unsigned)soundCheckMediaKind,
                 (unsigned)compressedBufferBytes);
     if (upmixStatus != SPA_STEREO_UPMIX_OK)
         LOG_ERROR(LOG_MODULE,
-                  "buffer103: stereo upmix init failed status=%d; exact L/R widening retained",
+                  "buffer103: stereo upmix init failed status=%d; exact L/R passthrough retained",
                   upmixStatus);
     if (state == SPA_103_RENDER_NO_DECODER)
         LOG_ERROR(LOG_MODULE,
@@ -1769,6 +1949,9 @@ static void spa103_render_stop(void)
     uint64_t framesIn, framesOut, dropped, authFailed, tlvFailed;
     uint64_t decodeCalls, decodeFailed, zeroFrameDecodes;
     uint64_t stateOnlyPackets, sequenceGaps, upmixFailed;
+    uint64_t spfMismatches, transitions, sourceFormats, tracers, unknownFields;
+    uint64_t soundCheckUpdates, soundCheckRejected, legacySoundCheck;
+    uint64_t fallbackUpdates, limitedFrames;
     uint64_t flushDropped, queueAllocationFailures;
     size_t compressedPackets, compressedBytes;
     int64_t finalFormatIndex;
@@ -1787,6 +1970,16 @@ static void spa103_render_stop(void)
     stateOnlyPackets = spa103_render.stateOnlyPackets;
     sequenceGaps = spa103_render.sequenceGaps;
     upmixFailed = spa103_render.upmixFailed;
+    spfMismatches = spa103_render.samplesPerFrameMismatches;
+    transitions = spa103_render.transitionAnnouncements;
+    sourceFormats = spa103_render.sourceFormatAnnouncements;
+    tracers = spa103_render.tracerAnnouncements;
+    unknownFields = spa103_render.unknownExtensionFields;
+    soundCheckUpdates = spa103_render.soundCheck.metadataUpdates;
+    soundCheckRejected = spa103_render.soundCheck.metadataRejected;
+    legacySoundCheck = spa103_render.soundCheck.legacyRecords;
+    fallbackUpdates = spa103_render.soundCheck.fallbackUpdates;
+    limitedFrames = spa103_render.soundCheck.limitedFrames;
     flushDropped = spa103_render.lifecycle.total_flush_dropped;
     queueAllocationFailures = spa103_render.lifecycle.allocation_failures;
     compressedPackets = spa103_render.lifecycle.queued_packets;
@@ -1812,9 +2005,14 @@ static void spa103_render_stop(void)
     pthread_mutex_unlock(&spa103_render.lock);
     LOG_INFO(LOG_MODULE,
              "buffer103: render stopped finalFormatIndex=%lld formatAnnouncements=%llu "
-             "formatSwitches=%llu queued=%u/%uB flushDropped=%llu queueAllocFail=%llu",
+             "formatSwitches=%llu soundCheck=%llu/%llu fallback=%llu limited=%llu "
+             "queued=%u/%uB flushDropped=%llu queueAllocFail=%llu",
              (long long)finalFormatIndex, (unsigned long long)formatAnnouncements,
              (unsigned long long)formatSwitches,
+             (unsigned long long)soundCheckUpdates,
+             (unsigned long long)soundCheckRejected,
+             (unsigned long long)fallbackUpdates,
+             (unsigned long long)limitedFrames,
              (unsigned)compressedPackets, (unsigned)compressedBytes,
              (unsigned long long)flushDropped,
              (unsigned long long)queueAllocationFailures);
@@ -1823,6 +2021,10 @@ static void spa103_render_stop(void)
                 "frames_in=%llu frames_out=%llu dropped=%llu auth_fail=%llu "
                 "tlv_fail=%llu decode_calls=%llu decode_fail=%llu zero_pcm=%llu "
                 "state_only=%llu sequence_gaps=%llu upmix_fail=%llu "
+                "spf_mismatch=%llu transitions=%llu source_formats=%llu "
+                "tracers=%llu unknown_tlvs=%llu soundcheck_updates=%llu "
+                "soundcheck_rejected=%llu legacy_soundcheck_records=%llu "
+                "fallback_updates=%llu limited_frames=%llu "
                 "queued_packets=%u queued_bytes=%u flush_dropped=%llu "
                 "queue_alloc_fail=%llu",
                 (long long)finalFormatIndex,
@@ -1839,6 +2041,16 @@ static void spa103_render_stop(void)
                 (unsigned long long)stateOnlyPackets,
                 (unsigned long long)sequenceGaps,
                 (unsigned long long)upmixFailed,
+                (unsigned long long)spfMismatches,
+                (unsigned long long)transitions,
+                (unsigned long long)sourceFormats,
+                (unsigned long long)tracers,
+                (unsigned long long)unknownFields,
+                (unsigned long long)soundCheckUpdates,
+                (unsigned long long)soundCheckRejected,
+                (unsigned long long)legacySoundCheck,
+                (unsigned long long)fallbackUpdates,
+                (unsigned long long)limitedFrames,
                 (unsigned)compressedPackets, (unsigned)compressedBytes,
                 (unsigned long long)flushDropped,
                 (unsigned long long)queueAllocationFailures);
@@ -2168,6 +2380,11 @@ static size_t spa103_ring_prune_locked(const spa_apap_flush_range_t *range)
     return oldFill - kept;
 }
 
+/* Defined beside the QSA ownership state below.  A prefix FLUSH is a new
+ * media timeline, so pruning the software queues is not enough: periods which
+ * were already accepted by QSA must be discarded as well. */
+static void spa_pcm_sink_flush_buffered_timeline(void);
+
 /* Pioneer treats FLUSHBUFFERED as an inclusive range over both its compressed
  * packet queue and decoded output.  An until-only request is a prefix reset;
  * a bounded from..until request prunes just that interval and retains decoder
@@ -2184,6 +2401,11 @@ static void spa103_render_flush(const spa_apap_flush_range_t *range)
     spa_apap_lifecycle_begin_flush(&spa103_render.lifecycle, range,
                                    &removedPackets, &removedBytes);
     removedFrames = spa103_ring_prune_locked(range);
+    /* The next authenticated packet reasserts its item loudness. Preserve the
+     * audible gain itself so a seek cannot jump to unity between packets. */
+    spa_soundcheck_discontinuity(&spa103_render.soundCheck);
+    spa103_render.haveExtensionMediaKind = 0;
+    spa103_render.haveExtensionLoudness = 0;
     if (prefixReset) {
         if (spa103_render.decoder && spa103_render.codec)
             spa103_render.codec->reset(spa103_render.decoder);
@@ -2195,6 +2417,10 @@ static void spa103_render_flush(const spa_apap_flush_range_t *range)
     queuedPackets = spa103_render.lifecycle.queued_packets;
     queuedBytes = spa103_render.lifecycle.queued_bytes;
     pthread_mutex_unlock(&spa103_render.lock);
+    /* Keep the global lock order ioLock -> sink.lock -> render.lock.  In
+     * particular, never enter QSA while holding render.lock: a concurrent
+     * stock/detached write may already own ioLock and be reading this ring. */
+    if (prefixReset) spa_pcm_sink_flush_buffered_timeline();
     LOG_WARN(LOG_MODULE,
              "buffer103: flush %s removed compressed=%u/%uB PCM=%u; "
              "queued=%u/%uB restart after %u frames (%u ms)",
@@ -2401,6 +2627,21 @@ static const spa_apac_codec_api_t *spa103_codec_for_index(int64_t index)
     return 0;
 }
 
+static int64_t spa103_verified_index(const spa_apac_codec_api_t *codec,
+                                     uint32_t channels, uint32_t sampleRate)
+{
+    if (codec == spa103_render.apacCodec && sampleRate == SPA_SR) {
+        if (channels == 2) return SPA_APAC_48K_STEREO;
+        if (channels == 6) return SPA_APAC_48K_5_1;
+        if (channels == 8) return SPA_APAC_48K_5_1_2;
+    } else if (codec && sampleRate == SPA_SR && channels == 2) {
+        return SPA_AAC_LC_48K_STEREO;
+    } else if (codec && sampleRate == 44100 && channels == 2) {
+        return SPA_AAC_LC_44K_STEREO;
+    }
+    return -1;
+}
+
 /* Plain geometry adapter used by the OFF path and as the audible fail-safe if
  * the optional ambience renderer ever rejects a block.  Mono is duplicated to
  * the two fronts; all other absent channels are digital zero. */
@@ -2461,6 +2702,69 @@ static uint32_t spa103_cookie_generation_snapshot(void)
     generation = spa103_receiver.cookieGeneration;
     pthread_mutex_unlock(&spa103_lock);
     return generation;
+}
+
+/* Apply metadata state before deciding whether the packet also carries audio.
+ * State-only transition packets therefore remain observable without inventing
+ * a decoder reset (the Pioneer build also treats field 10 as informational). */
+static void spa103_observe_extension_locked(const spa_apap_extension_t *ext)
+{
+    if (!ext) return;
+    if (ext->hasFormatIndex) spa103_render.formatAnnouncements++;
+    if (ext->hasSamplesPerFrame &&
+        ext->samplesPerFrame != SPA_103_RENDER_FRAMES)
+        spa103_render.samplesPerFrameMismatches++;
+    if (ext->hasTransitionId) {
+        if (!spa103_render.haveLastTransitionId ||
+            spa103_render.lastTransitionId != ext->transitionId) {
+            spa103_render.transitionAnnouncements++;
+            spa103_render.lastTransitionId = ext->transitionId;
+            spa103_render.haveLastTransitionId = 1;
+            STATE_TRACE("BUFFERED_TRANSITION",
+                        "transition_id=%llu",
+                        (unsigned long long)ext->transitionId);
+        }
+    }
+    if (ext->hasSourceFormatIndex) {
+        if (!spa103_render.haveLastSourceFormatIndex ||
+            spa103_render.lastSourceFormatIndex != ext->sourceFormatIndex) {
+            spa103_render.sourceFormatAnnouncements++;
+            spa103_render.lastSourceFormatIndex = ext->sourceFormatIndex;
+            spa103_render.haveLastSourceFormatIndex = 1;
+            STATE_TRACE("BUFFERED_SOURCE_FORMAT",
+                        "source_index=%llu transport_index=%lld",
+                        (unsigned long long)ext->sourceFormatIndex,
+                        (long long)spa103_render.formatIndex);
+        }
+    }
+    if (ext->hasSbufTracer) spa103_render.tracerAnnouncements++;
+    if (ext->hasSbufTracerExtended) spa103_render.tracerAnnouncements++;
+    spa103_render.unknownExtensionFields += ext->unknownFieldCount;
+
+    if (ext->soundCheckRecordCount)
+        spa_soundcheck_note_legacy(&spa103_render.soundCheck,
+                                   ext->soundCheckRecordCount);
+    if (ext->hasMediaKind) {
+        spa103_render.extensionMediaKind = ext->mediaKind;
+        spa103_render.haveExtensionMediaKind = 1;
+    }
+    if (ext->hasLoudnessParameters) {
+        memcpy(spa103_render.extensionLoudness, ext->loudnessParameters,
+               sizeof(spa103_render.extensionLoudness));
+        spa103_render.haveExtensionLoudness = 1;
+    }
+    if (spa103_render.haveExtensionMediaKind &&
+        spa103_render.haveExtensionLoudness &&
+        spa_soundcheck_update_main(&spa103_render.soundCheck,
+                                   spa103_render.extensionMediaKind,
+                                   spa103_render.extensionLoudness)) {
+        STATE_TRACE("BUFFERED_SOUNDCHECK",
+                    "kind=%u target_db=%d gain_milli=%u updates=%llu",
+                    (unsigned)spa103_render.extensionMediaKind,
+                    (int)spa103_render.soundCheck.setupTargetDb,
+                    (unsigned)(spa103_render.soundCheck.targetGain * 1000.0f + 0.5f),
+                    (unsigned long long)spa103_render.soundCheck.metadataUpdates);
+    }
 }
 
 static int spa103_render_frame(const uint8_t *packet, size_t length,
@@ -2527,6 +2831,7 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
     }
     if (!audioLength) {
         pthread_mutex_lock(&spa103_render.lock);
+        spa103_observe_extension_locked(&ext);
         spa103_render.stateOnlyPackets++;
         pthread_mutex_unlock(&spa103_render.lock);
         return SPA103_RENDER_FRAME_CONSUMED;
@@ -2598,13 +2903,19 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
         pthread_mutex_unlock(&spa103_render.lock);
         return SPA103_RENDER_FRAME_RETRY;
     }
-    if (ext.hasFormatIndex) spa103_render.formatAnnouncements++;
+    if (!spa103_render.decoder ||
+        (ext.hasMagicCookieId && spa103_render.haveCookieId &&
+         spa103_render.cookieId != (int64_t)ext.magicCookieId) ||
+        spa103_render.cookieGeneration != cookieGeneration) {
+        spa_soundcheck_discontinuity(&spa103_render.soundCheck);
+        spa103_render.haveExtensionMediaKind = 0;
+        spa103_render.haveExtensionLoudness = 0;
+    }
+    spa103_observe_extension_locked(&ext);
     /* An announcement we have no decoder for is never a reason to tear down one that is
-     * working.  A misparsed or simply unsupported field would otherwise silence the rest of
-     * the stream -- which is exactly what field 2 did before it stopped being read as an
-     * index.  Drop the announcement and keep decoding. */
-    if (ext.hasFormatIndex && spa103_render.decoder &&
-        (int64_t)ext.formatIndex != spa103_render.formatIndex &&
+     * working. TLV 2 is a real index, but the authenticated inline cookie remains the decoder
+     * authority. Drop an unsupported hint and keep decoding. */
+    if (ext.hasFormatIndex &&
         !spa103_codec_for_index((int64_t)ext.formatIndex)) {
         if (spa103_render.ignoredFormatIndex != (int64_t)ext.formatIndex) {
             spa103_render.ignoredFormatIndex = (int64_t)ext.formatIndex;
@@ -2616,7 +2927,6 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
         ext.hasFormatIndex = 0;
     }
     if (!spa103_render.decoder ||
-        (ext.hasFormatIndex && (int64_t)ext.formatIndex != spa103_render.formatIndex) ||
         (ext.hasMagicCookieId && spa103_render.haveCookieId &&
          spa103_render.cookieId != (int64_t)ext.magicCookieId) ||
         spa103_render.cookieGeneration != cookieGeneration) {
@@ -2625,6 +2935,7 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
         spa_apac_stream_info_t info;
         enum spa_decoded_pcm_kind decodedPcmKind = SPA_DECODED_PCM_OTHER;
         uint32_t channels = 0, frameLength = 0, sampleRate = 0;
+        int64_t verifiedIndex = -1;
         const char *codecName;
 
         /* A new decoder/cookie is a discontinuity even when its index happens
@@ -2688,10 +2999,9 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
         rc = spa103_render.codec->create(cookie, cookieSize, &spa103_render.decoder,
                                          &channels, &frameLength, &sampleRate);
         /* Apple changes codec inside one type-103 session -- stereo AAC-LC for ordinary tracks,
-         * APAC for spatial ones -- and announces it only by sending a different magic cookie.
-         * Nothing in the stream names the format: the SETUP index stays at whatever was
-         * negotiated, so pinning the codec to it fed the Atmos cookie to the AAC decoder and
-         * played silence for the rest of the session.  Let the cookie pick its own decoder. */
+         * APAC for spatial ones. TLV 2 announces the transport index, but the inline cookie is
+         * still authoritative: if the announced decoder rejects it, try the alternate and retain
+         * only the API which accepted the cookie. */
         if (rc != SPA_APAC_OK) {
             const spa_apac_codec_api_t *alt = spa103_alternate_codec(spa103_render.codec);
             if (alt) {
@@ -2720,6 +3030,9 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
             decodedPcmKind = spa_classify_decoded_pcm(
                 spa103_render.codec == spa103_render.apacCodec,
                 channels, sampleRate, info.channelLayoutTag);
+        if (rc == SPA_APAC_OK)
+            verifiedIndex = spa103_verified_index(spa103_render.codec,
+                                                  channels, sampleRate);
         /* A track that is not natively spatial may decode to a narrower layout,
          * including AAC-LC stereo. The sender's preferred buffered list starts
          * there, so this is ordinary content, not an error. Refusing it destroyed
@@ -2763,6 +3076,18 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
                         spa103_decoded_pcm_kind_name(decodedPcmKind));
             return SPA103_RENDER_FRAME_CONSUMED;
             }
+        }
+        if (verifiedIndex >= 0 && verifiedIndex != spa103_render.formatIndex) {
+            LOG_WARN(LOG_MODULE,
+                     "buffer103: cookie/geometry corrected active index %lld -> %lld",
+                     (long long)spa103_render.formatIndex,
+                     (long long)verifiedIndex);
+            STATE_TRACE("BUFFERED_FORMAT_VERIFIED",
+                        "announced_index=%lld verified_index=%lld",
+                        (long long)spa103_render.formatIndex,
+                        (long long)verifiedIndex);
+            spa103_render.formatIndex = verifiedIndex;
+            spa103_render.formatSwitches++;
         }
         spa103_render.decoderChannels = channels;
         spa103_render.cookieId = (int64_t)ext.magicCookieId;
@@ -2821,6 +3146,12 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
                                         SPA_APAC_ERR_OUTPUT_SPACE);
             return SPA103_RENDER_FRAME_CONSUMED;
         }
+
+        /* Observe source PCM before channel synthesis.  In particular, an
+         * optional metadata-free fallback must measure the stereo programme,
+         * not a six-wide buffer containing synthesized/zero channels. */
+        spa_soundcheck_observe_s16(&spa103_render.soundCheck, decoded,
+                                   frames, dch);
 
         /* APAP fields 4/5 are CMTime durations, not decoder commands.  Match
          * Pioneer: decode the complete compressed access unit first, then
@@ -2884,6 +3215,14 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
                 spa103_widen_s16(src, dch, rendered, out, run);
             }
 
+            /* MainLoudnessParameters is a programme gain, not an HSSR input
+             * feature. Apply it uniformly after reorder/upmix so AAC gain does
+             * not shift the model's absolute log-energy features or alter its
+             * semantic/object masks. */
+            spa_soundcheck_apply_s16(&spa103_render.soundCheck, rendered,
+                                     run, out);
+            spa_soundcheck_limit_s16(&spa103_render.soundCheck, rendered,
+                                     run, out);
             spa103_pcm_stats_locked(rendered, run);
             spa103_ring_push_locked(rendered, run, packetSequence, packetRTP);
             spa103_render.framesIn += run;
@@ -2947,6 +3286,7 @@ static int spa103_queue_frame(const uint8_t *packet, size_t length,
         spa103_apap_media_value(packet), spa103_apap_media_scale(packet));
     pthread_mutex_lock(&spa103_render.lock);
     if (!audioLength) {
+        spa103_observe_extension_locked(&ext);
         result = spa_apap_lifecycle_observe(&spa103_render.lifecycle,
                                             sequence, rtp, &crossed) ?
                  SPA_APAP_ENQUEUE_DROPPED_FLUSH : SPA_APAP_ENQUEUE_QUEUED;
@@ -3257,6 +3597,8 @@ typedef struct {
     uint64_t detachedWrites;
     uint64_t detachedZeroWrites;
     uint64_t detachedRecoveries;   /* prepare calls while detached after rendering began */
+    uint64_t timelineFlushes;      /* prefix FLUSHes propagated into the live QSA queue */
+    uint64_t timelineFlushFailures;
     uint64_t detachedClockDiscontinuities;
     spa_feedback_clock_t detachedClock;
     uint64_t bufferedWrites;
@@ -3467,6 +3809,98 @@ static void spa_pcm_sink_reset_detached_clock_locked(void)
 {
     spa_feedback_clock_reset(&spa_pcm_sink.detachedClock);
     spa_pcm_sink.detachedClockDiscontinuities = 0;
+}
+
+/* Drop periods from the previous buffered timeline which have already crossed
+ * the software ring boundary.  The live trace proved that an until-only
+ * FLUSHBUFFERED used to clear both APAP queues, wait for the 160-ms re-prime,
+ * and only then recover QSA after its first zero write.  During that interval
+ * QSA could still render the old song.  Serialize with every open/write/close,
+ * bypass our close-adjacent flush interposer, and leave the same handle
+ * prepared for the first complete period of the new timeline.
+ *
+ * A bounded from..until FLUSH deliberately does not use this operation: QSA
+ * periods do not retain APAP sequence/RTP tags, so they cannot be pruned
+ * selectively without also discarding valid samples outside the interval. */
+static void spa_pcm_sink_flush_buffered_timeline(void)
+{
+    static spa_snd_flush_t realFlush;
+    static spa_snd_prepare_t realPrepare;
+    snd_pcm_t *handle = 0;
+    int detached = 0;
+    int flushResult = -1;
+    int prepareResult = -1;
+    uint64_t flushes = 0;
+    uint64_t failures = 0;
+
+    pthread_mutex_lock(&spa_pcm_sink.ioLock);
+    pthread_mutex_lock(&spa_pcm_sink.lock);
+    if (spa_pcm_sink.handle && spa_pcm_sink.expandedParams) {
+        handle = spa_pcm_sink.handle;
+        detached = spa_pcm_sink.detached;
+    }
+    pthread_mutex_unlock(&spa_pcm_sink.lock);
+
+    if (!handle) {
+        pthread_mutex_unlock(&spa_pcm_sink.ioLock);
+        STATE_TRACE("QSA_TIMELINE_FLUSH",
+                    "action=skip reason=no_expanded_handle");
+        return;
+    }
+
+    if (!realFlush)
+        realFlush = (spa_snd_flush_t)dlsym(RTLD_NEXT,
+                                           "snd_pcm_plugin_flush");
+    if (!realPrepare)
+        realPrepare = (spa_snd_prepare_t)dlsym(RTLD_NEXT,
+                                               "snd_pcm_plugin_prepare");
+    if (realFlush)
+        flushResult = realFlush(handle, SND_PCM_CHANNEL_PLAYBACK);
+    if (flushResult == 0 && realPrepare)
+        prepareResult = realPrepare(handle, SND_PCM_CHANNEL_PLAYBACK);
+
+    pthread_mutex_lock(&spa_pcm_sink.lock);
+    if (spa_pcm_sink.handle == handle && spa_pcm_sink.expandedParams) {
+        /* A timeline discontinuity invalidates the detached feedback window
+         * even when stock type-100 currently owns the shared QSA handle. */
+        spa_feedback_clock_reset(&spa_pcm_sink.detachedClock);
+        spa_pcm_sink.detachedClockDiscontinuities++;
+#if ENABLE_STATE_TRACE
+        spa_pcm_sink.detachedRingWaitReported = 0;
+#endif
+        if (flushResult == 0 && prepareResult == 0) {
+            flushes = ++spa_pcm_sink.timelineFlushes;
+            spa_pcm_sink.detachedNeedsPrepare = 0;
+        } else {
+            failures = ++spa_pcm_sink.timelineFlushFailures;
+        }
+    }
+    pthread_mutex_unlock(&spa_pcm_sink.lock);
+    pthread_mutex_unlock(&spa_pcm_sink.ioLock);
+
+    if (flushResult == 0 && prepareResult == 0) {
+        LOG_WARN(LOG_MODULE,
+                 "audio sink: flushed previous buffered timeline handle=%p "
+                 "owner=%s flushes=%llu",
+                 handle, detached ? "detached" : "stock",
+                 (unsigned long long)flushes);
+        STATE_TRACE("QSA_TIMELINE_FLUSH",
+                    "action=flush_prepare owner=%s flush_result=%d "
+                    "prepare_result=%d flushes=%llu",
+                    detached ? "detached" : "stock", flushResult,
+                    prepareResult, (unsigned long long)flushes);
+    } else {
+        LOG_ERROR(LOG_MODULE,
+                  "audio sink: buffered timeline flush failed handle=%p "
+                  "owner=%s flush=%d prepare=%d failures=%llu",
+                  handle, detached ? "detached" : "stock", flushResult,
+                  prepareResult, (unsigned long long)failures);
+        STATE_TRACE("QSA_TIMELINE_FLUSH",
+                    "action=failed owner=%s flush_result=%d "
+                    "prepare_result=%d failures=%llu",
+                    detached ? "detached" : "stock", flushResult,
+                    prepareResult, (unsigned long long)failures);
+    }
 }
 
 /* During the first ~20 seconds the nominal 48-kHz contract is a much safer
@@ -6749,6 +7183,9 @@ static void spa103_stop_receiver(void *session, int anySession)
         memset(spa103_receiver.shk, 0, sizeof(spa103_receiver.shk));
         spa103_receiver.haveKey = 0;
         spa103_receiver.formatIndex = 0;
+        spa103_receiver.haveSoundCheckTarget = 0;
+        spa103_receiver.soundCheckMediaKind = 0;
+        spa103_receiver.soundCheckTargetDb = 0;
         spa103_clear_magic_cookies_locked();
         pthread_cond_broadcast(&spa103_cond);
     }
@@ -6769,6 +7206,9 @@ static int spa_setup_buffered_receiver(void *session, void *request, void *respo
     int haveKey = 0;
     uint64_t streamID = 0;
     int64_t supportsDynamicStreamID = 0;
+    int haveSoundCheckTarget = 0;
+    uint8_t soundCheckMediaKind = 0;
+    int soundCheckTargetDb = 0;
     uint32_t generation = 0;
     int audioBufferSize, family, port = 0;
     int sock = -1, err = -6728;
@@ -6781,6 +7221,12 @@ static int spa_setup_buffered_receiver(void *session, void *request, void *respo
     audioBufferSize = spa103_audio_buffer_size(streamDesc);
     haveKey = spa103_read_shk(streamDesc, shk);
     if (!spa_cf_get_i64(streamDesc, "audioFormatIndex", &formatIndex)) formatIndex = 0;
+    haveSoundCheckTarget = spa103_read_soundcheck_target(
+        streamDesc, &soundCheckMediaKind, &soundCheckTargetDb);
+    if (!spa103_validate_setup_stream(streamDesc, formatIndex, haveKey)) {
+        memset(shk, 0, sizeof(shk));
+        return -6714;
+    }
 
     spa103_stop_receiver(0, 1);
     pthread_mutex_lock(&spa103_lock);
@@ -6808,9 +7254,14 @@ static int spa_setup_buffered_receiver(void *session, void *request, void *respo
     memcpy(spa103_receiver.shk, shk, sizeof(spa103_receiver.shk));
     spa103_receiver.haveKey = haveKey;
     spa103_receiver.formatIndex = formatIndex;
+    spa103_receiver.haveSoundCheckTarget = haveSoundCheckTarget;
+    spa103_receiver.soundCheckMediaKind = soundCheckMediaKind;
+    spa103_receiver.soundCheckTargetDb = (int8_t)soundCheckTargetDb;
     pthread_mutex_unlock(&spa103_lock);
     memset(shk, 0, sizeof(shk));
-    spa103_render_start(formatIndex, haveKey, (size_t)audioBufferSize);
+    spa103_render_start(formatIndex, haveKey, (size_t)audioBufferSize,
+                        haveSoundCheckTarget, soundCheckMediaKind,
+                        soundCheckTargetDb);
 
     family = *(const uint8_t *)((const char *)session + profile->sessionFamilyOffset);
     err = spa103_srv_sockopen(family, 1 /* SOCK_STREAM */, 6 /* IPPROTO_TCP */,

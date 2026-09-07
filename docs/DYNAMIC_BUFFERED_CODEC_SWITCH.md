@@ -101,19 +101,22 @@ hoseSBAR_handleFormatChangeForAudioSession
 That path schedules the audio-session change at the stream time. It is evidence for a format change
 inside an existing SBAR/APAP hose, not an RTSP teardown/re-SETUP cycle.
 
-### APAP makes the packet self-configuring, but carries no format index
+### APAP makes the packet self-configuring and announces its format
 
-Two authenticated vehicle sessions settled the ambiguous fields: one negotiated
-AAC-LC stereo/index 23 and one APAC 5.1/index 65, yet fields 2 and 8 both carried
-`1024`. That is the SETUP `spf` (samples per frame), not an
-`APAudioFormatIndex`. Reading either as an index overwrote the negotiated value
-and muted the stream.
+Two authenticated vehicle sessions settle the formerly ambiguous fields. In the
+AAC-LC stereo session field 2 is `23`; in the APAC 5.1 session it is `65`.
+Field 8 is `1024` in both. The iOS encoder at `0x2510637b0` independently emits
+its transport format member as ID 2 and its samples-per-frame member as ID 8.
+Thus ID 2 is `APAudioFormatIndex` and ID 8 is SETUP `spf`.
 
 Field 17 carries the magic-cookie ID and field 18 carries the complete inline
 cookie. Thus a boundary packet still brings everything required to construct
 and identify its decoder without depending on `SETMAGICCOOKIE` ordering: AAC's
 MPEG-4 descriptor and APAC's GlobalConfig are mutually rejected by the wrong
-decoder and accepted by the right one. Fields 2/8 are parsed and skipped.
+decoder and accepted by the right one. The hook records ID 2 as a dispatch hint,
+but does not let an unsupported or inconsistent announcement destroy a working
+decoder: the cookie remains the authority and decoded geometry remains the PCM
+action selector.
 
 ## SAD speaker allocation: exact values and update lifetime
 
@@ -246,9 +249,9 @@ Cinemo AAC object, or the reverse. The order is now:
 4. try `create` with the current API, then the alternate API;
 5. retain only the API whose decoder accepted the inline cookie.
 
-The host APAP integration test uses the vehicle's field-2/field-17/field-18
-shape, verifies that field 2 does not populate a format index, and checks the
-inline cookie byte-for-byte. `buffered_pcm_switch_test` then holds simulated
+The host APAP integration test uses the vehicle's field-2/field-8/field-17/field-18
+shape, verifies index 65 and `spf=1024`, and checks the inline cookie
+byte-for-byte. `buffered_pcm_switch_test` then holds simulated
 SETUP at both 65 and 23 while exercising AAC -> APAC and APAC -> AAC: stereo
 must select the upmixer with nonzero LFE/rears, APAC 5.1 must select the measured
 reorder, and every cookie reset must equal a fresh DSP state. The QNX build still
@@ -259,16 +262,18 @@ recognize its declared tag for diagnostics, but general 65/23 switching cannot
 select the 8-to-6 fold. Only the pre-existing experimental SETUP=66 path may do
 so; the checked-in `[65,23]` policy cannot enter it.
 
-## Vehicle closure and the earlier misleading observation
+## Vehicle closure and corrected field ownership
 
-The earlier run treated field 2 as index 23 and therefore appeared never to
-return to 65. That interpretation is superseded: the value was samples per
-frame, and the SETUP index is not a track-by-track trace.
+The earlier documentation that labelled both fields 2 and 8 as `spf=1024` was
+based on a summary bug, not the authenticated bytes. Re-reading both streams
+shows `2=23,8=1024` for AAC and `2=65,8=1024` for APAC. The successful vehicle
+switching result remains valid because the inline-cookie fallback had already
+selected the accepting decoder even while ID 2 was ignored.
 
 After the cookie-driven correction, the vehicle played ordinary AAC-LC stereo
 and spatial APAC in both directions inside one type-103 session, without a
 dropout or new underrun. This closes codec switching. The next stationary test
-is narrower: listen to the new `ambient-lite` LFE-off/assist profiles and verify
+is narrower: listen to HSSR Universal with LFE off/assist and verify
 an Atmos -> stereo -> Atmos sequence has no DSP-tail click while native 5.1
 speaker placement remains unchanged.
 
@@ -279,7 +284,7 @@ speaker placement remains unchanged.
 | iOS has an in-session buffered transport-format change path | high | active-engine and timed SBAR code/strings |
 | a six-channel source selects index 65 when it is advertised | high | direct ASBD channel load, branch, literal 65 and membership test |
 | stereo can select index 23 | high | static candidate chain plus vehicle-selected index 23 |
-| APAP carries no per-packet format index; fields 2/8 are `spf=1024` | high | independent authenticated AAC/23 and APAC/65 vehicle sessions |
+| APAP ID 2 is the per-packet format index; ID 8 is `spf=1024` | high | independent authenticated AAC/23 and APAC/65 captures plus iOS encoder stores |
 | inline cookie identifies and configures the active decoder | high | mutually validating cookie formats, implementation and host tests |
 | the HU switches APAC/AAC in both directions without reconnect/dropout | high | accepted vehicle run plus clean counters |
 | decoded PCM dispatch is independent of stale SETUP index | high statically | classifier/action regression for SETUP 65 and 23, both orders |

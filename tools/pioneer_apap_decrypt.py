@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import struct
 import sys
 from collections import Counter
 from pathlib import Path
@@ -32,14 +33,19 @@ APAP_FIXED_HEADER_SIZE = 15
 SECURITY_OVERHEAD = 16 + 8
 
 APAP_EXTENSION_NAMES = {
-    2: "receiver_flag_unknown",
+    2: "audio_format_index",
     4: "trim_start_media_time",
     5: "trim_end_media_time",
     7: "soundcheck_five_word_records",
-    8: "audio_format_index",
+    8: "samples_per_frame",
+    10: "transition_id",
     11: "soundcheck_three_words",
     12: "soundcheck_media_kind",
     17: "magic_cookie_id",
+    18: "magic_cookie",
+    19: "sbuf_tracer",
+    20: "source_audio_format_index",
+    21: "sbuf_tracer_extended",
 }
 
 
@@ -72,10 +78,11 @@ def read_uleb128(data: bytes, offset: int) -> tuple[int, int]:
 
 def decode_extension_value(field_id: int, payload: bytes) -> dict[str, object]:
     decoded: dict[str, object] = {"payload_hex": payload.hex()}
-    if field_id == 8:
-        if len(payload) not in (2, 4, 8):
+    if field_id in (2, 8, 10, 17, 20):
+        minimum = 0 if field_id == 17 else 1
+        if not minimum <= len(payload) <= 8:
             raise ValueError(
-                f"audio_format_index field must be 2, 4, or 8 bytes, got {len(payload)}"
+                f"integer field {field_id} must be 1..8 bytes, got {len(payload)}"
             )
         decoded["value"] = int.from_bytes(payload, "big")
     elif field_id == 12:
@@ -83,16 +90,6 @@ def decode_extension_value(field_id: int, payload: bytes) -> dict[str, object]:
             raise ValueError(
                 f"soundcheck_media_kind field must be 1 byte, got {len(payload)}"
             )
-        decoded["value"] = int.from_bytes(payload, "big")
-    elif field_id == 17:
-        if len(payload) > 8:
-            raise ValueError(
-                f"magic_cookie_id field must be 0..8 bytes, got {len(payload)}"
-            )
-        decoded["value"] = int.from_bytes(payload, "big")
-    elif field_id == 2:
-        # The donor stores field 2, but its buffered consumer never reads it.
-        # Preserve it without inventing a semantic interpretation.
         decoded["value"] = int.from_bytes(payload, "big")
     elif field_id in (4, 5):
         if len(payload) != 12:
@@ -124,14 +121,15 @@ def decode_extension_value(field_id: int, payload: bytes) -> dict[str, object]:
             int.from_bytes(payload[pos : pos + 4], "big")
             for pos in range(0, 12, 4)
         ]
+        decoded["floats"] = list(struct.unpack(">fff", payload))
     return decoded
 
 
 def parse_extension(plaintext: bytes) -> dict[str, object]:
     """Decode Pioneer's APAP ULEB128 TLV extension body.
 
-    Field 2 is deliberately left named as unknown: the donor recognizes and
-    stores it, but its buffered consumer does not read it.
+    Field identities follow the iOS encoder and are cross-checked against AAC
+    (format 23) and APAC (format 65) authenticated vehicle captures.
     """
 
     fields: list[dict[str, object]] = []

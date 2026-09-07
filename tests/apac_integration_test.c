@@ -104,6 +104,8 @@ int main(void)
     uint32_t channels = 0, frameLength = 0, sampleRate = 0;
     unsigned long frames = 0, opened = 0, audioPackets = 0, decodedPackets = 0;
     unsigned long matched = 0, aadAudio = 0, aadExtension = 0;
+    unsigned long formatFields = 0, spfFields = 0, loudnessFields = 0;
+    unsigned long mediaKindFields = 0, sourceFormatFields = 0, tracerFields = 0;
     int16_t *decoded;
 
     memset(&codecApi, 0, sizeof(codecApi));
@@ -155,8 +157,28 @@ int main(void)
 
         memset(&state, 0, sizeof(state));
         if (!spa_apap_parse_extension(plaintext, plaintextLength, &state,
-                                      &audio, &audioLength) || !audioLength)
+                                      &audio, &audioLength))
             continue;
+        if (state.hasFormatIndex) {
+            assert(state.formatIndex == 65);
+            formatFields++;
+        }
+        if (state.hasSamplesPerFrame) {
+            assert(state.samplesPerFrame == 1024);
+            spfFields++;
+        }
+        if (state.hasLoudnessParameters) loudnessFields++;
+        if (state.hasMediaKind) {
+            assert(state.mediaKind == 1);
+            mediaKindFields++;
+        }
+        if (state.hasSourceFormatIndex) {
+            assert(state.sourceFormatIndex == 35);
+            sourceFormatFields++;
+        }
+        if (state.hasSbufTracer) tracerFields++;
+        if (state.hasSbufTracerExtended) tracerFields++;
+        if (!audioLength) continue;
         audioPackets++;
 
         /* The APAC packet the hook extracts must be byte-identical to the one
@@ -209,6 +231,9 @@ int main(void)
     assert(frames > 3000);
     assert(opened == frames);
     assert(audioPackets > 3000);
+    assert(formatFields > 3000 && spfFields == formatFields);
+    assert(loudnessFields == formatFields && mediaKindFields == formatFields);
+    assert(sourceFormatFields > 3000 && tracerFields > 0);
     assert(matched > 3000);
     assert(decodedPackets == 64);
 

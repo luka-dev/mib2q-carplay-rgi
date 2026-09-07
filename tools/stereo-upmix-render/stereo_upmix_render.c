@@ -345,7 +345,7 @@ static int write_wav_header(FILE *stream, uint32_t frames)
 static void usage(const char *program)
 {
     fprintf(stderr,
-            "usage: %s [--mode off|ambient-lite|ambient-hq|hsr-td|hsr-td-active|music-stage|hssr-neon|hssr-active|hssr-object|hssr-object-v2|hssr-object-focus] "
+            "usage: %s [--mode off|hssr-universal] "
             "[--model HSSR.bin] "
             "[--lfe off|assist] [--surround 0.0..0.25] "
             "INPUT.wav OUTPUT.wav\n",
@@ -358,48 +358,8 @@ static int parse_mode(const char *text, enum spa_stereo_upmix_backend *backend)
         *backend = SPA_STEREO_UPMIX_OFF;
         return 1;
     }
-    if (strcmp(text, "ambient-lite") == 0) {
-        *backend = SPA_STEREO_UPMIX_AMBIENT_LITE;
-        return 1;
-    }
-    if (strcmp(text, "ambient-hq") == 0) {
-        *backend = SPA_STEREO_UPMIX_AMBIENT_HQ;
-        return 1;
-    }
-    if (strcmp(text, "hsr-td") == 0) {
-        *backend = SPA_STEREO_UPMIX_HSR_TD;
-        return 1;
-    }
-    if (strcmp(text, "hsr-td-active") == 0) {
-        *backend = SPA_STEREO_UPMIX_HSR_TD_ACTIVE;
-        return 1;
-    }
-    if (strcmp(text, "music-stage") == 0) {
-        *backend = SPA_STEREO_UPMIX_MUSIC_STAGE;
-        return 1;
-    }
-    if (strcmp(text, "hssr-neon") == 0) {
-        *backend = SPA_STEREO_UPMIX_HSSR_NEON;
-        return 1;
-    }
-    if (strcmp(text, "hssr-active") == 0 ||
-        strcmp(text, "hssr-neon-active") == 0) {
-        *backend = SPA_STEREO_UPMIX_HSSR_ACTIVE;
-        return 1;
-    }
-    if (strcmp(text, "hssr-object") == 0 ||
-        strcmp(text, "hssr-neon-object") == 0) {
-        *backend = SPA_STEREO_UPMIX_HSSR_OBJECT;
-        return 1;
-    }
-    if (strcmp(text, "hssr-object-v2") == 0 ||
-        strcmp(text, "hssr-neon-object-v2") == 0) {
-        *backend = SPA_STEREO_UPMIX_HSSR_OBJECT_V2;
-        return 1;
-    }
-    if (strcmp(text, "hssr-object-focus") == 0 ||
-        strcmp(text, "hssr-object-v3") == 0) {
-        *backend = SPA_STEREO_UPMIX_HSSR_OBJECT_FOCUS;
+    if (strcmp(text, "hssr-universal") == 0) {
+        *backend = SPA_STEREO_UPMIX_HSSR_UNIVERSAL;
         return 1;
     }
     return 0;
@@ -408,18 +368,9 @@ static int parse_mode(const char *text, enum spa_stereo_upmix_backend *backend)
 static const char *backend_mode_name(enum spa_stereo_upmix_backend backend)
 {
     switch (backend) {
-    case SPA_STEREO_UPMIX_OFF:          return "off";
-    case SPA_STEREO_UPMIX_AMBIENT_LITE: return "ambient-lite";
-    case SPA_STEREO_UPMIX_AMBIENT_HQ:   return "ambient-hq";
-    case SPA_STEREO_UPMIX_HSR_TD:       return "hsr-td";
-    case SPA_STEREO_UPMIX_HSR_TD_ACTIVE:return "hsr-td-active";
-    case SPA_STEREO_UPMIX_MUSIC_STAGE:  return "music-stage";
-    case SPA_STEREO_UPMIX_HSSR_NEON:    return "hssr-neon";
-    case SPA_STEREO_UPMIX_HSSR_ACTIVE:  return "hssr-active";
-    case SPA_STEREO_UPMIX_HSSR_OBJECT:  return "hssr-object";
-    case SPA_STEREO_UPMIX_HSSR_OBJECT_V2:return "hssr-object-v2";
-    case SPA_STEREO_UPMIX_HSSR_OBJECT_FOCUS:return "hssr-object-focus";
-    default:                            return "unsupported";
+    case SPA_STEREO_UPMIX_OFF:           return "off";
+    case SPA_STEREO_UPMIX_HSSR_UNIVERSAL:return "hssr-universal";
+    default:                             return "unsupported";
     }
 }
 
@@ -455,7 +406,7 @@ static int parse_options(int argc, char **argv, struct options *options)
 
     options->input_path = NULL;
     options->output_path = NULL;
-    options->backend = SPA_STEREO_UPMIX_AMBIENT_LITE;
+    options->backend = SPA_STEREO_UPMIX_HSSR_UNIVERSAL;
     options->lfe_mode = CLI_LFE_OFF;
     options->surround_gain =
         (double)SPA_STEREO_UPMIX_REAR_Q15_DEFAULT / 32768.0;
@@ -471,7 +422,7 @@ static int parse_options(int argc, char **argv, struct options *options)
         if (strcmp(argument, "--mode") == 0) {
             if (++index >= argc || !parse_mode(argv[index], &options->backend)) {
                 fprintf(stderr,
-                        "error: invalid --mode (see --help; hssr-object-focus is the current vehicle profile)\n");
+                        "error: invalid --mode (see --help; hssr-universal is the current vehicle profile)\n");
                 return 0;
             }
             continue;
@@ -479,7 +430,7 @@ static int parse_options(int argc, char **argv, struct options *options)
         if (strncmp(argument, "--mode=", 7) == 0) {
             if (!parse_mode(argument + 7, &options->backend)) {
                 fprintf(stderr,
-                        "error: invalid --mode (see --help; hssr-object-focus is the current vehicle profile)\n");
+                        "error: invalid --mode (see --help; hssr-universal is the current vehicle profile)\n");
                 return 0;
             }
             continue;
@@ -589,10 +540,7 @@ static void make_upmix_config(const struct options *options,
 static int render(FILE *input_file, FILE *output_file, uint32_t total_frames,
                   const struct spa_stereo_upmix_config *config)
 {
-    /* HQ deliberately carries its complete FFT/WOLA working set in the
-     * caller-owned state.  Keep it out of the host thread's stack too, so the
-     * audition tool exercises the same fixed-memory ownership model without
-     * making its stack size depend on the selected backend. */
+    /* Keep the complete FFT/WOLA state out of the host thread stack. */
     static struct spa_stereo_upmix state;
     uint8_t input_bytes[SPA_STEREO_UPMIX_MAX_FRAMES *
                         WAV_INPUT_BLOCK_ALIGN];
@@ -668,11 +616,7 @@ int main(int argc, char **argv)
     memset(&hssr_model, 0, sizeof(hssr_model));
     if (!parse_options(argc, argv, &options)) return 2;
     make_upmix_config(&options, &config);
-    if (options.backend == SPA_STEREO_UPMIX_HSSR_NEON ||
-        options.backend == SPA_STEREO_UPMIX_HSSR_ACTIVE ||
-        options.backend == SPA_STEREO_UPMIX_HSSR_OBJECT ||
-        options.backend == SPA_STEREO_UPMIX_HSSR_OBJECT_V2 ||
-        options.backend == SPA_STEREO_UPMIX_HSSR_OBJECT_FOCUS) {
+    if (options.backend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL) {
         int model_status;
 
         if (!options.model_path) {

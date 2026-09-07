@@ -21,15 +21,8 @@ import soundfile as sf
 from scipy import signal
 
 
-BACKENDS = (
-    "hsr-td", "hsr-td-active", "music-stage", "hssr-neon", "hssr-active",
-    "hssr-object", "hssr-object-v2", "hssr-object-focus",
-    "ambient-lite", "ambient-hq",
-)
-HSSR_BACKENDS = {
-    "hssr-neon", "hssr-active", "hssr-object", "hssr-object-v2",
-    "hssr-object-focus",
-}
+BACKENDS = ("hssr-universal",)
+HSSR_BACKENDS = {"hssr-universal"}
 SQRT_HALF = math.sqrt(0.5)
 MAX_LAG = 2048
 BLOCK_FRAMES = 960  # 20 ms at 48 kHz.
@@ -242,7 +235,7 @@ def markdown_report(
     surround_gain: float,
 ) -> str:
     lines = [
-        "# Apple public-preview stereo upmix stress test",
+        "# Stereo upmix stress test",
         "",
         "This corpus has no authored surround reference. The metrics below compare rear",
         "activity, SL/SR distinction, stereo compatibility and the visible SoundAmp",
@@ -257,7 +250,8 @@ def markdown_report(
         "",
     ]
 
-    for group in ("rock", "rap", "dubstep", "all"):
+    groups = tuple(dict.fromkeys(str(item["group"]) for item in manifest["items"]))
+    for group in (*groups, "all"):
         group_rows = rows if group == "all" else [row for row in rows if row["group"] == group]
         lines += [
             f"## {group}",
@@ -321,11 +315,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument(
         "--backends", nargs="+", choices=BACKENDS,
-        default=("hssr-object-v2", "hssr-object-focus"),
+        default=BACKENDS,
     )
     parser.add_argument("--lfe", choices=("off", "assist"), default="assist")
     parser.add_argument("--surround", type=float, default=0.25)
     parser.add_argument("--hssr-model", type=Path)
+    parser.add_argument(
+        "--discard-renders",
+        action="store_true",
+        help="delete generated 5.1 WAVs after scoring to conserve disk space",
+    )
     return parser.parse_args()
 
 
@@ -341,8 +340,12 @@ def main() -> int:
             raise RuntimeError("--hssr-model must name an existing model for HSSR")
 
     manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
-    if manifest.get("corpus_kind") != "apple-public-preview-stereo-upmix-stress":
-        raise RuntimeError("manifest is not a stereo-only Apple stress corpus")
+    corpus_kind = manifest.get("corpus_kind")
+    if corpus_kind not in {
+        "apple-public-preview-stereo-upmix-stress",
+        "private-local-stereo-upmix-stress",
+    }:
+        raise RuntimeError("manifest is not a supported stereo-only stress corpus")
 
     args.output.mkdir(parents=True, exist_ok=True)
     rows: list[dict[str, object]] = []
@@ -361,6 +364,8 @@ def main() -> int:
             )
             output = read_audio(render_path, 6)
             metrics = score(stereo, output, front_gain)
+            if args.discard_renders:
+                render_path.unlink()
             rows.append(
                 {
                     "id": item["id"],
@@ -393,6 +398,7 @@ def main() -> int:
             "lfe": args.lfe,
             "maximum_alignment_lag_frames": MAX_LAG,
             "hssr_model": str(hssr_model) if hssr_model else None,
+            "renders_retained": not args.discard_renders,
         },
         "results": rows,
     }

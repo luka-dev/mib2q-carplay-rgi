@@ -277,44 +277,8 @@ static int parse_count(const char *text, size_t maximum, size_t *result)
 static int parse_backend(const char *text,
                          enum spa_stereo_upmix_backend *backend)
 {
-    if (strcmp(text, "ambient-hq") == 0) {
-        *backend = SPA_STEREO_UPMIX_AMBIENT_HQ;
-        return 1;
-    }
-    if (strcmp(text, "hsr-td") == 0) {
-        *backend = SPA_STEREO_UPMIX_HSR_TD;
-        return 1;
-    }
-    if (strcmp(text, "hsr-td-active") == 0) {
-        *backend = SPA_STEREO_UPMIX_HSR_TD_ACTIVE;
-        return 1;
-    }
-    if (strcmp(text, "music-stage") == 0) {
-        *backend = SPA_STEREO_UPMIX_MUSIC_STAGE;
-        return 1;
-    }
-    if (strcmp(text, "hssr-neon") == 0 || strcmp(text, "hssr") == 0) {
-        *backend = SPA_STEREO_UPMIX_HSSR_NEON;
-        return 1;
-    }
-    if (strcmp(text, "hssr-active") == 0 ||
-        strcmp(text, "hssr-neon-active") == 0) {
-        *backend = SPA_STEREO_UPMIX_HSSR_ACTIVE;
-        return 1;
-    }
-    if (strcmp(text, "hssr-object") == 0 ||
-        strcmp(text, "hssr-neon-object") == 0) {
-        *backend = SPA_STEREO_UPMIX_HSSR_OBJECT;
-        return 1;
-    }
-    if (strcmp(text, "hssr-object-v2") == 0 ||
-        strcmp(text, "hssr-neon-object-v2") == 0) {
-        *backend = SPA_STEREO_UPMIX_HSSR_OBJECT_V2;
-        return 1;
-    }
-    if (strcmp(text, "hssr-object-focus") == 0 ||
-        strcmp(text, "hssr-object-v3") == 0) {
-        *backend = SPA_STEREO_UPMIX_HSSR_OBJECT_FOCUS;
+    if (strcmp(text, "hssr-universal") == 0) {
+        *backend = SPA_STEREO_UPMIX_HSSR_UNIVERSAL;
         return 1;
     }
     return 0;
@@ -322,22 +286,15 @@ static int parse_backend(const char *text,
 
 static const char *backend_name(enum spa_stereo_upmix_backend backend)
 {
-    if (backend == SPA_STEREO_UPMIX_HSR_TD) return "hsr-td";
-    if (backend == SPA_STEREO_UPMIX_HSR_TD_ACTIVE) return "hsr-td-active";
-    if (backend == SPA_STEREO_UPMIX_MUSIC_STAGE) return "music-stage";
-    if (backend == SPA_STEREO_UPMIX_HSSR_NEON) return "hssr-neon";
-    if (backend == SPA_STEREO_UPMIX_HSSR_ACTIVE) return "hssr-active";
-    if (backend == SPA_STEREO_UPMIX_HSSR_OBJECT) return "hssr-object";
-    if (backend == SPA_STEREO_UPMIX_HSSR_OBJECT_V2) return "hssr-object-v2";
-    if (backend == SPA_STEREO_UPMIX_HSSR_OBJECT_FOCUS)
-        return "hssr-object-focus";
-    return "ambient-hq";
+    if (backend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL)
+        return "hssr-universal";
+    return "unsupported";
 }
 
 static void print_usage(const char *program)
 {
     fprintf(stderr,
-            "usage: %s [--backend ambient-hq|hsr-td|hsr-td-active|music-stage|hssr-neon|hssr-active|hssr-object|hssr-object-v2|hssr-object-focus] "
+            "usage: %s [--backend hssr-universal] "
             "[--model HSSR.bin] "
             "[--blocks 1..%u] [--warmup 1..%u] "
             "[--qemu-icount]\n",
@@ -401,7 +358,7 @@ int main(int argc, char **argv)
     struct icount_calibration calibration;
     size_t blocks = BENCH_DEFAULT_BLOCKS;
     size_t warmup_blocks = BENCH_DEFAULT_WARMUP_BLOCKS;
-    enum spa_stereo_upmix_backend backend = SPA_STEREO_UPMIX_AMBIENT_HQ;
+    enum spa_stereo_upmix_backend backend = SPA_STEREO_UPMIX_HSSR_UNIVERSAL;
     uint32_t random_state = UINT32_C(0x4d484932);
     uint64_t checksum = UINT64_C(14695981039346656037);
     int qemu_icount = 0;
@@ -457,11 +414,7 @@ int main(int argc, char **argv)
     spa_stereo_upmix_default_config(&config);
     config.backend = backend;
     spa_stereo_upmix_config_set_lfe(&config, 1);
-    if (backend == SPA_STEREO_UPMIX_HSSR_NEON ||
-        backend == SPA_STEREO_UPMIX_HSSR_ACTIVE ||
-        backend == SPA_STEREO_UPMIX_HSSR_OBJECT ||
-        backend == SPA_STEREO_UPMIX_HSSR_OBJECT_V2 ||
-        backend == SPA_STEREO_UPMIX_HSSR_OBJECT_FOCUS) {
+    if (backend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL) {
         if (!model_path) {
             fprintf(stderr, "error: selected HSSR backend requires --model HSSR.bin\n");
             return 2;

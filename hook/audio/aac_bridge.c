@@ -4,7 +4,7 @@
  * advertises only APAC gets Atmos tracks and nothing else -- the phone skips what it cannot
  * deliver.  Index 23 carries ordinary content as AAC-LC at 48000 Hz, which needs no resampler
  * because every HU media endpoint is 48 kHz. iOS has an in-session transport-format-change
- * path; APAP carries a changed inline cookie (not a per-packet format index), so this adapter
+ * path; APAP carries both a per-packet format hint and a changed inline cookie, so this adapter
  * can alternate with APAC without recreating the type-103 session. Full reasoning:
  * docs/DYNAMIC_BUFFERED_CODEC_SWITCH.md.
  *
