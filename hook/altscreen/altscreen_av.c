@@ -11,6 +11,7 @@
 
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>  /* TCP_NODELAY on the renderer link */
 #include <arpa/inet.h>
 #include <sys/time.h>
 #include <fcntl.h>
@@ -112,8 +113,17 @@ static void av_connect_locked(void)
      * EAGAIN for a bounded total instead of tearing down a healthy stream. */
     struct timeval tv; tv.tv_sec = 0; tv.tv_usec = 500000;   /* 500 ms */
     int sndbuf = 512 * 1024;
+    int nodelay = 1;
     setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
     setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf));
+    /* Every frame is written as two records, [u32 BE len] then the access unit.
+     * With Nagle on, the 4-byte header ships at once and leaves data unacked, so
+     * the access unit -- one sub-MSS segment on loopback -- is held until that
+     * header is acknowledged.  The renderer never writes back on this socket, so
+     * nothing piggybacks the ACK and it waits out the delayed-ACK timer.  That
+     * timer is 200 ms, which is exactly the arrival gap the renderer reports
+     * (max 140-204 ms) while decode and present stay under 3 ms. */
+    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay));
     struct sockaddr_in sa;
     memset(&sa, 0, sizeof(sa));
     sa.sin_family = AF_INET;

@@ -1333,6 +1333,34 @@ static uint64_t alt_now_ms(void)
     return ((uint64_t)tv.tv_sec * 1000ULL) + ((uint64_t)tv.tv_usec / 1000ULL);
 }
 
+/* Arrival pacing at the FIRST hop -- the socket iOS itself writes the 111 stream
+ * into.  altscreen_render reports the same statistic after its own socket and
+ * again after decode; comparing the three localises a delivery gap to the phone,
+ * to the hook->renderer link, or to our decoder, instead of guessing. */
+static void alt_recv_pace_sample(void)
+{
+    static uint64_t last_ms, sum_ms, max_ms;
+    static unsigned long samples, frames;
+    uint64_t now = alt_now_ms();
+    if (now == 0) return;
+    if (last_ms != 0 && now > last_ms) {
+        uint64_t d = now - last_ms;
+        sum_ms += d;
+        if (d > max_ms) max_ms = d;
+        samples++;
+    }
+    last_ms = now;
+    if (++frames % 600 == 0) {
+        /* WARN, not INFO: the live log threshold drops INFO, which is why the
+         * first attempt at this measurement produced nothing at all. */
+        LOG_WARN(LOG_MODULE, "alt recv: %lu frames off the phone socket; arrival avg=%lu max=%lu ms",
+                 frames,
+                 samples ? (unsigned long)(sum_ms / samples) : 0UL,
+                 (unsigned long)max_ms);
+        sum_ms = 0; max_ms = 0; samples = 0;
+    }
+}
+
 static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
 {
     uint8_t  aesctx[512] __attribute__((aligned(16)));
@@ -1415,6 +1443,7 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
                      avccHex, (bodySize > hn) ? "..." : "");
         } else if (opcode == 0) {                         /* encrypted AVCC video access unit */
             int is_idr;
+            alt_recv_pace_sample();
             if (aes_ready) aes_ctr_update(aesctx, body, bodySize, body);
             is_idr = avcc_has_nal_type(body, bodySize, ls, 5);
             /* Re-check ownership here: the header/body read above can block in poll for
