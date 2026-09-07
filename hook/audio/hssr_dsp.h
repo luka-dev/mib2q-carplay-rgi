@@ -22,6 +22,21 @@ enum {
     SPA_HSSR_LATENCY_FRAMES = 512
 };
 
+/* Optional off-audio-thread control-network provider.  Analysis, masks, FFT and
+ * synthesis always remain in the calling audio thread.  A provider only owns
+ * the recurrent GRU state and moves feature/control vectors through bounded,
+ * non-blocking mailboxes. */
+struct spa_hssr_control_provider {
+    void *context;
+    int (*submit)(void *context, uint32_t generation, uint32_t sequence,
+                  const float features[SPA_HSSR_FEATURES]);
+    int (*receive)(void *context, uint32_t generation,
+                   uint32_t maximum_sequence,
+                   float control[SPA_HSSR_OUTPUTS],
+                   uint32_t *sequence);
+    void (*reset)(void *context, uint32_t generation);
+};
+
 struct spa_hssr_object_slot {
     /* Positive pan is left.  Universal keeps one persistent coherent object
      * per rear half-plane, the identifiable case for two-channel input. */
@@ -59,6 +74,8 @@ struct spa_hssr_dsp {
     float scene_stability;
     float rear_activity_target;
     float fx_present;
+    float lfe_bass_confidence;
+    float lfe_drum_confidence;
     float universal_input_power;
     float universal_rear_power;
     float universal_makeup;
@@ -66,12 +83,17 @@ struct spa_hssr_dsp {
     float current_log_delta;
     float features[SPA_HSSR_FEATURES];
     float control[SPA_HSSR_OUTPUTS];
+    float lfe_semantic_delay[2][SPA_HSSR_FFT_SIZE];
     uint8_t bin_band[SPA_HSSR_BINS];
     uint16_t input_position;
     uint16_t hop_fill;
     uint8_t control_hop;
     uint32_t frames_seen;
     uint32_t inference_failures;
+    uint32_t control_generation;
+    uint32_t control_sequence;
+    uint32_t applied_control_sequence;
+    uint32_t control_deadlines_missed;
     struct spa_hssr_state network;
 };
 
@@ -85,5 +107,14 @@ int spa_hssr_dsp_process_sample(
     int16_t input_l, int16_t input_r,
     int16_t *front_l, int16_t *front_r,
     float *rear_l, float *rear_r);
+
+/* Block entry point used by the production upmixer.  The four output arrays
+ * contain one sample per input frame.  Work is advanced in chunks ending on
+ * STFT hop boundaries; the controller is synchronous when provider is NULL. */
+int spa_hssr_dsp_process_block(
+    struct spa_hssr_dsp *state, const struct spa_hssr_model *model,
+    const struct spa_hssr_control_provider *provider,
+    const int16_t *pcm2, size_t frames,
+    int16_t *front2, float *rear2, float *lfe_control2);
 
 #endif /* HSSR_DSP_H */

@@ -11,7 +11,7 @@ Ordinary buffered content is also vehicle-confirmed through AAC-LC/48 kHz/stereo
 index 23 beside APAC 5.1 index 65. Codec changes are selected by the changed
 inline cookie, not APAP fields 2/8; both switch directions play continuously
 (§20). The current source retains only HSSR Universal for stereo-to-PCM6,
-with rear gain `0.25` and LR4/80 Hz LFE assist. `off` remains the exact
+with rear gain `0.25` and Cabin-Aware LFE V2. `off` remains the exact
 `L,R,0,0,0,0` safety bypass. Superseded profile discussions below are retained
 as dated investigation history, not selectable current implementations.
 
@@ -742,24 +742,26 @@ reconfiguration at a codec boundary. Full audit:
 
 The resulting head-unit upmix design is recorded separately in
 [`STEREO_TO_5_1_UPMIX_DESIGN.md`](STEREO_TO_5_1_UPMIX_DESIGN.md). Its first
-profile leaves C zero, injects bounded decorrelated ambience into Ls/Rs, and has
-an explicitly gated `0.178 * LR4_LP80((L+R)/2)` bass assist. Enabling that
-assist pairs it with a `0.940` front trim after accounting for every recovered
-LFE leak and the bank-1 +6 dB surround gain. The design also records Pioneer's independently verified CarPlay
+profile leaves C zero, injects bounded ambience into Ls/Rs, and uses the sole
+Cabin-Aware LFE V2 path: phase-safe LR4 55/95 Hz body/punch branches, V11 bass/
+drum steering, a Q15 `8192` ceiling, and a `0.919` paired front trim. Its
+per-sample limiter accounts for every recovered J525 bus gain, including LFE
+leak and the bank-1 +6 dB surround gain. The design also records Pioneer's independently verified CarPlay
 stereo-to-5.0 engine as a host oracle/clean-room rear-generator candidate; its
 explicit center is deliberately not mapped because bank 1 already derives the
 same mid signal.
 
-The six-band `ambient-lite`, the 1024/256 STFT `ambient-hq`, the six-band
-covariance/projector `hsr-td`, and their shared LR4/80 Hz LFE adapter are
-implemented after the common decoder and before the PCM6 ring. All renderers
-are fixed-memory C99 on the existing receiver thread,
-reset at every stream/flush/rate/cookie/format boundary, and leave native APAC
-5.1 on its byte-identical reorder path. The old backwards stereo widening was
+The retained `hssr-universal` renderer and its Cabin-Aware LFE V2 adapter are
+implemented after the common decoder and before the PCM6 ring. Analysis,
+masking and synthesis remain fixed-memory C99 on the existing receiver thread;
+only its quantized GRU controller runs on a persistent lock-free worker.
+Generation-tagged results are rejected after every stream/flush/rate/cookie/
+format boundary, and native APAC 5.1 remains on its byte-identical reorder
+path. The old backwards stereo widening was
 also replaced by bounded forward chunks, closing its latent overflow when
 Cinemo returns more than one 1024-frame callback. Host suites, ASan/UBSan and
 QNX ARMv7 builds pass. The checked-in vehicle policy now explicitly selects
-`AUDIO_STEREO_UPMIX=hsr-td`, rear `0.18`, and
+`AUDIO_STEREO_UPMIX=on`, rear `0.25`, and
 `AUDIO_STEREO_LFE=assist`; exact rollback is `AUDIO_STEREO_UPMIX=off` followed
 by a `dio_manager`/CarPlay service restart. This remains an A/B candidate: the physical
 sub polarity/crossover, the narrow Center-bus true-peak margin and codec-switch

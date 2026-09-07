@@ -5,17 +5,46 @@
 #include "stereo_upmix.h"
 
 #include <limits.h>
+#include <math.h>
 #include <string.h>
 
 #define SPA_STEREO_UPMIX_MAGIC UINT32_C(0x5355504d) /* "SUPM" */
 
-/* 48 kHz, 80 Hz, Q=1/sqrt(2) Butterworth low-pass.  Cascading this section
- * twice is a 4th-order Linkwitz-Riley crossover. */
-static const double kLfeB0 = 0.000027213807988313326;
-static const double kLfeB1 = 0.000054427615976626652;
-static const double kLfeB2 = 0.000027213807988313326;
-static const double kLfeA1 = -1.9851906578962613;
-static const double kLfeA2 = 0.98529951312821462;
+struct spa_upmix_biquad_coefficients {
+    float b0;
+    float b1;
+    float b2;
+    float a1;
+    float a2;
+};
+
+/* Cabin-Aware LFE V2 uses two LR4 branches.  Each coefficient set is one
+ * 48-kHz, Q=1/sqrt(2) Butterworth section, cascaded twice below. */
+static const struct spa_upmix_biquad_coefficients kLfeLow55 = {
+    1.28924511212793801e-05,
+    2.57849022425587602e-05,
+    1.28924511212793801e-05,
+    -1.98981848055469990,
+    0.989870050359185072
+};
+static const struct spa_upmix_biquad_coefficients kLfeLow95 = {
+    3.83227647783784264e-05,
+    7.66455295567568528e-05,
+    3.83227647783784264e-05,
+    -1.98241403570328911,
+    0.982567326762402549
+};
+
+/* Recovered A07/profile-0/bank-1 SoundAmp gains. */
+static const float kCabinFront = 0.794328f;
+static const float kCabinCentreFront = 0.501187f;
+static const float kCabinFrontRear = 0.707946f;
+static const float kCabinRear = 1.995262f;
+static const float kCabinFrontLfeReciprocal = 2.51188751f;
+static const float kCabinCentreLfeReciprocal = 3.16227532f;
+static const float kCabinLfeReciprocal = 0.70794556f;
+static const float kCabinRearLfeReciprocal = 5.01187815f;
+static const float kCabinSampleLimit = 32275.0f; /* 0.985 FS + rounding margin */
 
 static float spa_upmix_absf(float value)
 {
@@ -29,11 +58,14 @@ static float spa_upmix_bound(float value, float limit)
     return value;
 }
 
-static double spa_upmix_bound_double(double value, double limit)
+static float spa_upmix_smoothstep(float value, float low, float high)
 {
-    if (value > limit) return limit;
-    if (value < -limit) return -limit;
-    return value;
+    float normalized;
+
+    if (value <= low) return 0.0f;
+    if (value >= high) return 1.0f;
+    normalized = (value - low) / (high - low);
+    return normalized * normalized * (3.0f - 2.0f * normalized);
 }
 
 static int16_t spa_upmix_scale_s16_q15(int16_t sample, uint32_t gain_q15)
@@ -75,35 +107,198 @@ static int16_t spa_upmix_rear_to_s16(float normalized, uint32_t gain_q15)
     return (int16_t)rounded;
 }
 
-static int16_t spa_upmix_lfe_to_s16(double normalized, uint32_t gain_q15)
+static int16_t spa_upmix_lfe_to_s16(float normalized, uint32_t gain_q15)
 {
-    double scaled;
+    float scaled;
     int32_t rounded;
 
-    normalized = spa_upmix_bound_double(normalized, 1.0);
-    scaled = normalized * (double)gain_q15;
-    if (scaled >= (double)gain_q15) return (int16_t)gain_q15;
-    if (scaled <= -(double)gain_q15)
+    normalized = spa_upmix_bound(normalized, 1.0f);
+    scaled = normalized * (float)gain_q15;
+    if (scaled >= (float)gain_q15) return (int16_t)gain_q15;
+    if (scaled <= -(float)gain_q15)
         return (int16_t)(-(int32_t)gain_q15);
-    rounded = scaled >= 0.0 ? (int32_t)(scaled + 0.5)
-                            : (int32_t)(scaled - 0.5);
+    rounded = scaled >= 0.0f ? (int32_t)(scaled + 0.5f)
+                             : (int32_t)(scaled - 0.5f);
     return (int16_t)rounded;
 }
 
-static double spa_upmix_lfe_biquad(double input, double state[2])
+static float spa_upmix_lfe_biquad(
+    float input, float state[2],
+    const struct spa_upmix_biquad_coefficients *coefficients)
 {
-    double output = kLfeB0 * input + state[0];
-    double next_z1;
-    double next_z2;
+    float output = coefficients->b0 * input + state[0];
+    float next_z1;
+    float next_z2;
 
-    output = spa_upmix_bound_double(output, 4.0);
-    next_z1 = kLfeB1 * input - kLfeA1 * output + state[1];
-    next_z2 = kLfeB2 * input - kLfeA2 * output;
-    if (next_z1 > -1.0e-24 && next_z1 < 1.0e-24) next_z1 = 0.0;
-    if (next_z2 > -1.0e-24 && next_z2 < 1.0e-24) next_z2 = 0.0;
-    state[0] = spa_upmix_bound_double(next_z1, 4.0);
-    state[1] = spa_upmix_bound_double(next_z2, 4.0);
+    output = spa_upmix_bound(output, 4.0f);
+    next_z1 = coefficients->b1 * input - coefficients->a1 * output +
+              state[1];
+    next_z2 = coefficients->b2 * input - coefficients->a2 * output;
+    if (next_z1 > -1.0e-20f && next_z1 < 1.0e-20f) next_z1 = 0.0f;
+    if (next_z2 > -1.0e-20f && next_z2 < 1.0e-20f) next_z2 = 0.0f;
+    state[0] = spa_upmix_bound(next_z1, 4.0f);
+    state[1] = spa_upmix_bound(next_z2, 4.0f);
     return output;
+}
+
+static float spa_upmix_lfe_lr4(
+    float input, float state[2][2],
+    const struct spa_upmix_biquad_coefficients *coefficients)
+{
+    float output = spa_upmix_lfe_biquad(
+        input, state[0], coefficients);
+
+    return spa_upmix_lfe_biquad(output, state[1], coefficients);
+}
+
+static int16_t spa_upmix_lfe_v2(
+    struct spa_stereo_upmix *state, int16_t render_l, int16_t render_r,
+    float bass_confidence, float drum_confidence)
+{
+    const float normalized_l = (float)render_l * (1.0f / 32768.0f);
+    const float normalized_r = (float)render_r * (1.0f / 32768.0f);
+    float low55_l = spa_upmix_lfe_lr4(
+        normalized_l, state->_runtime._lfe_low55_state[0], &kLfeLow55);
+    float low55_r = spa_upmix_lfe_lr4(
+        normalized_r, state->_runtime._lfe_low55_state[1], &kLfeLow55);
+    float low95_l = spa_upmix_lfe_lr4(
+        normalized_l, state->_runtime._lfe_low95_state[0], &kLfeLow95);
+    float low95_r = spa_upmix_lfe_lr4(
+        normalized_r, state->_runtime._lfe_low95_state[1], &kLfeLow95);
+    const float power_alpha = 0.00075f;
+    float target_polarity;
+    float polarity_alpha;
+    float normalization;
+    float body;
+    float punch;
+    float magnitude;
+    float transient_ratio;
+    float transient;
+    float punch_control;
+    float body_weight;
+    float target_gain;
+    float gain_alpha;
+    float shaped;
+
+    state->_runtime._lfe_power_l += power_alpha *
+        (low95_l * low95_l - state->_runtime._lfe_power_l);
+    state->_runtime._lfe_power_r += power_alpha *
+        (low95_r * low95_r - state->_runtime._lfe_power_r);
+    state->_runtime._lfe_cross += power_alpha *
+        (low95_l * low95_r - state->_runtime._lfe_cross);
+    /* Preserve coherent anti-phase bass instead of cancelling it in a mono
+     * sum. Correlation is a slow control signal, so its square root runs at
+     * 1.5 kHz while the continuous polarity move remains sample-rate. */
+    if ((state->_runtime._lfe_correlation_tick++ & 31u) == 0u) {
+        float denominator = sqrtf(state->_runtime._lfe_power_l *
+            state->_runtime._lfe_power_r + 1.0e-20f);
+        float correlation = denominator > 1.0e-10f
+            ? state->_runtime._lfe_cross / denominator : 1.0f;
+        float anti_phase;
+
+        correlation = spa_upmix_bound(correlation, 1.0f);
+        anti_phase = spa_upmix_smoothstep(
+            -correlation, 0.20f, 0.75f);
+        state->_runtime._lfe_target_polarity = 1.0f - 2.0f * anti_phase;
+    }
+    target_polarity = state->_runtime._lfe_target_polarity;
+    polarity_alpha = target_polarity < state->_runtime._lfe_polarity
+        ? 0.0018f : 0.00045f;
+    state->_runtime._lfe_polarity += polarity_alpha *
+        (target_polarity - state->_runtime._lfe_polarity);
+    normalization = 0.70710678118654752440f -
+        0.20710678118654752440f *
+        spa_upmix_absf(state->_runtime._lfe_polarity);
+    body = normalization * (low55_l +
+        state->_runtime._lfe_polarity * low55_r);
+    punch = normalization * (low95_l +
+        state->_runtime._lfe_polarity * low95_r);
+
+    magnitude = fabsf(low95_l) > fabsf(low95_r)
+        ? fabsf(low95_l) : fabsf(low95_r);
+    state->_runtime._lfe_fast_envelope +=
+        (magnitude > state->_runtime._lfe_fast_envelope ? 0.080f : 0.003f) *
+        (magnitude - state->_runtime._lfe_fast_envelope);
+    state->_runtime._lfe_slow_envelope +=
+        (magnitude > state->_runtime._lfe_slow_envelope ? 0.0010f : 0.0002f) *
+        (magnitude - state->_runtime._lfe_slow_envelope);
+    transient_ratio = state->_runtime._lfe_fast_envelope /
+        (state->_runtime._lfe_slow_envelope + 1.0e-8f);
+    transient = spa_upmix_smoothstep(transient_ratio, 1.15f, 2.20f);
+    bass_confidence = spa_upmix_bound(bass_confidence, 1.0f);
+    if (bass_confidence < 0.0f) bass_confidence = 0.0f;
+    drum_confidence = spa_upmix_bound(drum_confidence, 1.0f);
+    if (drum_confidence < 0.0f) drum_confidence = 0.0f;
+    punch_control = drum_confidence > transient
+        ? drum_confidence : transient;
+    body_weight = spa_upmix_bound(
+        0.42f + 0.22f * bass_confidence - 0.24f * punch_control,
+        0.68f);
+    if (body_weight < 0.18f) body_weight = 0.18f;
+    shaped = body_weight * body + (1.0f - body_weight) * punch;
+
+    target_gain = 0.96f + 0.08f * bass_confidence +
+        0.08f * drum_confidence + 0.08f * transient;
+    if (target_gain > 1.10f) target_gain = 1.10f;
+    gain_alpha = target_gain > state->_runtime._lfe_dynamic_gain
+        ? 0.0040f : 0.0005f;
+    state->_runtime._lfe_dynamic_gain += gain_alpha *
+        (target_gain - state->_runtime._lfe_dynamic_gain);
+
+    return spa_upmix_lfe_to_s16(
+        shaped * state->_runtime._lfe_dynamic_gain,
+        state->config.lfe_gain_q15);
+}
+
+static void spa_upmix_lfe_intersect(
+    float base, float reciprocal_coefficient,
+    float *minimum, float *maximum)
+{
+    float low = (-kCabinSampleLimit - base) * reciprocal_coefficient;
+    float high = (kCabinSampleLimit - base) * reciprocal_coefficient;
+
+    if (low > *minimum) *minimum = low;
+    if (high < *maximum) *maximum = high;
+}
+
+static int16_t spa_upmix_lfe_cabin_limit(
+    int16_t candidate, int16_t front_l, int16_t front_r,
+    int16_t rear_l, int16_t rear_r)
+{
+    float minimum = -32768.0f;
+    float maximum = 32767.0f;
+    float limited = (float)candidate;
+    int32_t rounded;
+
+    spa_upmix_lfe_intersect(
+        kCabinFront * (float)front_l +
+            kCabinFrontRear * (float)rear_l,
+        kCabinFrontLfeReciprocal, &minimum, &maximum);
+    spa_upmix_lfe_intersect(
+        kCabinFront * (float)front_r +
+            kCabinFrontRear * (float)rear_r,
+        kCabinFrontLfeReciprocal, &minimum, &maximum);
+    spa_upmix_lfe_intersect(
+        kCabinCentreFront * ((float)front_l + (float)front_r),
+        kCabinCentreLfeReciprocal, &minimum, &maximum);
+    spa_upmix_lfe_intersect(
+        0.0f, kCabinLfeReciprocal, &minimum, &maximum);
+    spa_upmix_lfe_intersect(
+        kCabinRear * (float)rear_l,
+        kCabinRearLfeReciprocal, &minimum, &maximum);
+    spa_upmix_lfe_intersect(
+        kCabinRear * (float)rear_r,
+        kCabinRearLfeReciprocal, &minimum, &maximum);
+
+    if (minimum > maximum) return 0;
+    if (limited < minimum) limited = minimum;
+    if (limited > maximum) limited = maximum;
+    rounded = (int32_t)limited;
+    if ((float)rounded > maximum) rounded--;
+    if ((float)rounded < minimum) rounded++;
+    if (rounded > INT16_MAX) rounded = INT16_MAX;
+    if (rounded < INT16_MIN) rounded = INT16_MIN;
+    return (int16_t)rounded;
 }
 
 static int spa_upmix_config_valid(const struct spa_stereo_upmix_config *config)
@@ -121,6 +316,11 @@ static int spa_upmix_config_valid(const struct spa_stereo_upmix_config *config)
         return SPA_STEREO_UPMIX_ERROR_CONFIG;
     if (config->backend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL &&
         !spa_hssr_model_ready(config->hssr_model))
+        return SPA_STEREO_UPMIX_ERROR_CONFIG;
+    if (config->hssr_control_provider &&
+        (!config->hssr_control_provider->submit ||
+         !config->hssr_control_provider->receive ||
+         !config->hssr_control_provider->reset))
         return SPA_STEREO_UPMIX_ERROR_CONFIG;
 
     /* Recovered SoundAmp centre row:
@@ -161,6 +361,7 @@ void spa_stereo_upmix_default_config(struct spa_stereo_upmix_config *config)
     config->lfe_enabled = 0;
     config->backend = SPA_STEREO_UPMIX_OFF;
     config->hssr_model = NULL;
+    config->hssr_control_provider = NULL;
 }
 
 void spa_stereo_upmix_config_set_lfe(
@@ -178,6 +379,13 @@ void spa_stereo_upmix_config_set_hssr_model(
     const struct spa_hssr_model *model)
 {
     if (config) config->hssr_model = model;
+}
+
+void spa_stereo_upmix_config_set_hssr_control_provider(
+    struct spa_stereo_upmix_config *config,
+    const struct spa_hssr_control_provider *provider)
+{
+    if (config) config->hssr_control_provider = provider;
 }
 
 int spa_stereo_upmix_backend_supported(enum spa_stereo_upmix_backend backend)
@@ -198,8 +406,16 @@ int spa_stereo_upmix_init(struct spa_stereo_upmix *state,
     saved = *config;
     memset(state, 0, sizeof(*state));
     state->config = saved;
-    if (saved.backend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL)
+    if (saved.backend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL) {
         spa_hssr_dsp_prepare(&state->_runtime._hssr);
+        state->_runtime._hssr.control_generation = 1u;
+        if (saved.hssr_control_provider)
+            saved.hssr_control_provider->reset(
+                saved.hssr_control_provider->context, 1u);
+    }
+    state->_runtime._lfe_polarity = 1.0f;
+    state->_runtime._lfe_target_polarity = 1.0f;
+    state->_runtime._lfe_dynamic_gain = 0.96f;
     state->_runtime._limiter_gain = 1.0f;
     state->_initialized = SPA_STEREO_UPMIX_MAGIC;
     return SPA_STEREO_UPMIX_OK;
@@ -207,13 +423,31 @@ int spa_stereo_upmix_init(struct spa_stereo_upmix *state,
 
 int spa_stereo_upmix_reset(struct spa_stereo_upmix *state)
 {
+    uint32_t generation;
+
     if (!state) return SPA_STEREO_UPMIX_ERROR_ARGUMENT;
     if (state->_initialized != SPA_STEREO_UPMIX_MAGIC)
         return SPA_STEREO_UPMIX_ERROR_NOT_INITIALIZED;
+    generation = state->_runtime._hssr.control_generation + 1u;
+    if (!generation) generation++;
     memset(&state->_runtime, 0, sizeof(state->_runtime));
     memset(state->_input_scratch, 0, sizeof(state->_input_scratch));
-    if (state->config.backend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL)
+    memset(state->_hssr_front_scratch, 0,
+           sizeof(state->_hssr_front_scratch));
+    memset(state->_hssr_rear_scratch, 0,
+           sizeof(state->_hssr_rear_scratch));
+    memset(state->_hssr_lfe_control_scratch, 0,
+           sizeof(state->_hssr_lfe_control_scratch));
+    if (state->config.backend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL) {
         spa_hssr_dsp_prepare(&state->_runtime._hssr);
+        state->_runtime._hssr.control_generation = generation;
+        if (state->config.hssr_control_provider)
+            state->config.hssr_control_provider->reset(
+                state->config.hssr_control_provider->context, generation);
+    }
+    state->_runtime._lfe_polarity = 1.0f;
+    state->_runtime._lfe_target_polarity = 1.0f;
+    state->_runtime._lfe_dynamic_gain = 0.96f;
     state->_runtime._limiter_gain = 1.0f;
     return SPA_STEREO_UPMIX_OK;
 }
@@ -250,6 +484,18 @@ int spa_stereo_upmix_process_s16(struct spa_stereo_upmix *state,
         return SPA_STEREO_UPMIX_ERROR_STATE_OVERLAP;
     memcpy(state->_input_scratch, pcm2, input_bytes);
 
+    if (state->config.backend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL) {
+        int hssr_status = spa_hssr_dsp_process_block(
+            &state->_runtime._hssr, state->config.hssr_model,
+            state->config.hssr_control_provider,
+            state->_input_scratch, frames,
+            state->_hssr_front_scratch, state->_hssr_rear_scratch,
+            state->_hssr_lfe_control_scratch);
+
+        if (hssr_status != SPA_HSSR_OK)
+            return SPA_STEREO_UPMIX_ERROR_CONFIG;
+    }
+
     for (frame = 0; frame < frames; frame++) {
         const int16_t input_l = state->_input_scratch[frame * 2];
         const int16_t input_r = state->_input_scratch[frame * 2 + 1];
@@ -263,30 +509,22 @@ int spa_stereo_upmix_process_s16(struct spa_stereo_upmix *state,
             output[SPA_STEREO_UPMIX_CHANNEL_LS] = 0;
             output[SPA_STEREO_UPMIX_CHANNEL_RS] = 0;
         } else {
-            int16_t render_l = input_l;
-            int16_t render_r = input_r;
+            int16_t render_l = state->_hssr_front_scratch[frame * 2];
+            int16_t render_r = state->_hssr_front_scratch[frame * 2 + 1];
+            int16_t lfe_candidate = 0;
             int16_t lfe = 0;
-            float rear_l = 0.0f;
-            float rear_r = 0.0f;
-            int hssr_status = spa_hssr_dsp_process_sample(
-                &state->_runtime._hssr, state->config.hssr_model,
-                input_l, input_r, &render_l, &render_r, &rear_l, &rear_r);
+            float rear_l = state->_hssr_rear_scratch[frame * 2];
+            float rear_r = state->_hssr_rear_scratch[frame * 2 + 1];
             int16_t front_l;
             int16_t front_r;
             int16_t output_rear_l;
             int16_t output_rear_r;
 
-            if (hssr_status != SPA_HSSR_OK)
-                return SPA_STEREO_UPMIX_ERROR_CONFIG;
             if (state->config.lfe_enabled) {
-                double mid = ((double)render_l + (double)render_r) *
-                             (1.0 / 65536.0);
-                double bass = spa_upmix_lfe_biquad(
-                    mid, state->_runtime._lfe_biquad_state[0]);
-                bass = spa_upmix_lfe_biquad(
-                    bass, state->_runtime._lfe_biquad_state[1]);
-                lfe = spa_upmix_lfe_to_s16(
-                    bass, state->config.lfe_gain_q15);
+                lfe_candidate = spa_upmix_lfe_v2(
+                    state, render_l, render_r,
+                    state->_hssr_lfe_control_scratch[frame * 2],
+                    state->_hssr_lfe_control_scratch[frame * 2 + 1]);
             }
 
             /* Linked limiter: instantaneous attack, about 42 ms release. */
@@ -323,6 +561,10 @@ int spa_stereo_upmix_process_s16(struct spa_stereo_upmix *state,
             front_r = spa_upmix_transfer_front(
                 front_r, output_rear_r, UINT32_C(81920),
                 state->config.front_gain_q15);
+            if (state->config.lfe_enabled)
+                lfe = spa_upmix_lfe_cabin_limit(
+                    lfe_candidate, front_l, front_r,
+                    output_rear_l, output_rear_r);
 
             output[SPA_STEREO_UPMIX_CHANNEL_L] = front_l;
             output[SPA_STEREO_UPMIX_CHANNEL_R] = front_r;

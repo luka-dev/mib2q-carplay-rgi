@@ -35,7 +35,7 @@ format index: the decoder that accepts each changed inline cookie and its PCM
 geometry select the render action. Native APAC 5.1 keeps its measured
 six-channel reorder; decoded stereo uses the fixed PCM6 route with
 `AUDIO_STEREO_UPMIX=on`, rear gain `0.25`, and the explicitly enabled
-`AUDIO_STEREO_LFE=assist` LR4/80 Hz bass feed. ON always selects the sole
+`AUDIO_STEREO_LFE=assist` Cabin-Aware LFE V2 feed. ON always selects the sole
 `hssr-universal` renderer; there is no build-time profile selector.
 The exact compatibility rollback is `AUDIO_STEREO_UPMIX=off`, followed by a
 `dio_manager`/CarPlay child restart because the toggle is parsed once at

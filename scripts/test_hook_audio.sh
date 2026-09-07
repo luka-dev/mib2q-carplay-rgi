@@ -6,6 +6,7 @@
 #
 # spatial_downmix_test    the 5.1.2 fold and the 5.1 channel permutation
 # stereo_upmix_test       deterministic PCM2->PCM6 ambience renderer, resets and bounds
+# hssr_control_worker_test lock-free mailbox, completion and generation rejection
 # buffered_pcm_switch_test geometry-selected AAC/APAC render policy with stale SETUP indices
 # apap_lifecycle_test stopped APAP ownership, ordered resume and exact FLUSH ranges
 # apac_type103_test       the whole type-103 render path end to end: APAP framing, decrypt,
@@ -43,6 +44,12 @@ $CC $CFLAGS tests/stereo_upmix_test.c hook/audio/stereo_upmix.c \
 echo "=== hssr_neon_test ==="
 $CC $CFLAGS tests/hssr_neon_test.c hook/audio/hssr_neon.c -o "$OUT/hssr_neon_test"
 "$OUT/hssr_neon_test"
+
+echo "=== hssr_control_worker_test ==="
+$CC $CFLAGS tests/hssr_control_worker_test.c \
+    hook/audio/hssr_control_worker.c hook/audio/hssr_neon.c \
+    -lpthread -o "$OUT/hssr_control_worker_test"
+"$OUT/hssr_control_worker_test"
 
 echo "=== buffered_pcm_switch_test ==="
 $CC $CFLAGS tests/buffered_pcm_switch_test.c hook/audio/spatial_downmix.c \

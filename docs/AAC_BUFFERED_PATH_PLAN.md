@@ -375,7 +375,7 @@ The landed implementation follows this order:
    stereo frames only.
 6. Render PCM2 into the established PCM6 ring. `AUDIO_STEREO_UPMIX=off` is exact
    `L,R,0,0,0,0`; `on` selects HSSR Universal with zero digital C, bounded
-   LR4/80 Hz LFE assist and Ls/Rs. Native APAC 5.1 never enters this module.
+   Cabin-Aware LFE V2 and Ls/Rs. Native APAC 5.1 never enters this module.
 7. On `FLUSHBUFFERED`, stop accepting callbacks for the old generation, call `Flush`, empty the AAC
    FIFO and shared PCM queued before the flush boundary, and resume with the same ASC. On cookie or
    format change, flush/release/recreate. Use `Drain` only for orderly EOS, not for a discontinuity.

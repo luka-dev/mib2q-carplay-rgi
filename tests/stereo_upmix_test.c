@@ -3,6 +3,7 @@
 #include "audio/stereo_upmix.h"
 
 #include <assert.h>
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -16,12 +17,53 @@ static int16_t g_input[TEST_FRAMES * SPA_STEREO_UPMIX_INPUT_CHANNELS];
 static int16_t g_output_a[TEST_FRAMES * TEST_CHANNELS];
 static int16_t g_output_b[TEST_FRAMES * TEST_CHANNELS];
 static int16_t g_overlap[TEST_FRAMES * TEST_CHANNELS];
+static int16_t g_front_a[TEST_FRAMES * 2];
+static int16_t g_front_b[TEST_FRAMES * 2];
+static float g_rear_a[TEST_FRAMES * 2];
+static float g_rear_b[TEST_FRAMES * 2];
+static float g_lfe_control[TEST_FRAMES * 2];
 static union {
     float align;
     uint8_t bytes[SPA_HSSR_MODEL_PAYLOAD_BYTES];
 } g_model_payload;
 static struct spa_hssr_model g_model;
 static int g_model_ready;
+
+struct reset_probe {
+    uint32_t resets;
+    uint32_t generation;
+};
+
+static int reset_probe_submit(
+    void *context, uint32_t generation, uint32_t sequence,
+    const float features[SPA_HSSR_FEATURES])
+{
+    (void)context;
+    (void)generation;
+    (void)sequence;
+    (void)features;
+    return 1;
+}
+
+static int reset_probe_receive(
+    void *context, uint32_t generation, uint32_t maximum_sequence,
+    float control[SPA_HSSR_OUTPUTS], uint32_t *sequence)
+{
+    (void)context;
+    (void)generation;
+    (void)maximum_sequence;
+    (void)control;
+    (void)sequence;
+    return 0;
+}
+
+static void reset_probe_reset(void *context, uint32_t generation)
+{
+    struct reset_probe *probe = (struct reset_probe *)context;
+
+    probe->resets++;
+    probe->generation = generation;
+}
 
 static uint32_t test_prng(uint32_t *state)
 {
@@ -67,6 +109,60 @@ static void fill_stereo(uint32_t seed, int mono)
 
         g_input[frame * 2] = (int16_t)(left / 2);
         g_input[frame * 2 + 1] = (int16_t)(right / 2);
+    }
+}
+
+static void fill_sine(float frequency_hz, int anti_phase)
+{
+    const double phase_step = 6.28318530717958647693 *
+        (double)frequency_hz / (double)SPA_STEREO_UPMIX_SAMPLE_RATE;
+    size_t frame;
+
+    for (frame = 0; frame < TEST_FRAMES; ++frame) {
+        int16_t sample = (int16_t)lrint(32700.0 *
+            sin(phase_step * (double)frame));
+
+        g_input[frame * 2] = sample;
+        g_input[frame * 2 + 1] = anti_phase ? (int16_t)-sample : sample;
+    }
+}
+
+static uint64_t channel_energy(
+    const int16_t *pcm6, unsigned channel, size_t first_frame)
+{
+    uint64_t energy = 0;
+    size_t frame;
+
+    for (frame = first_frame; frame < TEST_FRAMES; ++frame) {
+        int64_t sample = pcm6[frame * TEST_CHANNELS + channel];
+
+        energy += (uint64_t)(sample * sample);
+    }
+    return energy;
+}
+
+static void assert_cabin_buses_bounded(
+    const int16_t *pcm6, size_t frames)
+{
+    const double limit = 32275.01;
+    size_t frame;
+
+    for (frame = 0; frame < frames; ++frame) {
+        const int16_t *sample = pcm6 + frame * TEST_CHANNELS;
+        double buses[6];
+        unsigned bus;
+
+        buses[0] = 0.794328 * sample[0] + 0.398107 * sample[3] +
+                   0.707946 * sample[4];
+        buses[1] = 0.794328 * sample[1] + 0.398107 * sample[3] +
+                   0.707946 * sample[5];
+        buses[2] = 0.501187 * (sample[0] + sample[1]) +
+                   0.316228 * sample[3];
+        buses[3] = 1.412538 * sample[3];
+        buses[4] = 0.199526 * sample[3] + 1.995262 * sample[4];
+        buses[5] = 0.199526 * sample[3] + 1.995262 * sample[5];
+        for (bus = 0; bus < 6; ++bus)
+            assert(fabs(buses[bus]) <= limit);
     }
 }
 
@@ -136,6 +232,7 @@ static void test_default_validation_and_fail_closed(void)
     assert(config.lfe_enabled == 0);
     assert(config.backend == SPA_STEREO_UPMIX_OFF);
     assert(config.hssr_model == NULL);
+    assert(config.hssr_control_provider == NULL);
     assert(spa_stereo_upmix_backend_supported(SPA_STEREO_UPMIX_OFF));
     assert(spa_stereo_upmix_backend_supported(
                SPA_STEREO_UPMIX_HSSR_UNIVERSAL));
@@ -191,6 +288,85 @@ static void test_default_validation_and_fail_closed(void)
                &state, input, 1, (int16_t *)(void *)&state, 1) ==
            SPA_STEREO_UPMIX_ERROR_STATE_OVERLAP);
     assert(memcmp(&state, &before, sizeof(state)) == 0);
+}
+
+static void test_hssr_block_matches_sample_entry(void)
+{
+    static struct spa_hssr_dsp block_state;
+    static struct spa_hssr_dsp sample_state;
+    static const size_t pattern[] = { 1, 127, 3, 509, 128, 17, 1024 };
+    const struct spa_hssr_model *model = test_model();
+    size_t offset = 0;
+    size_t pattern_index = 0;
+    size_t frame;
+
+    fill_stereo(UINT32_C(0x424c4f43), 0);
+    spa_hssr_dsp_prepare(&block_state);
+    spa_hssr_dsp_prepare(&sample_state);
+    while (offset < TEST_FRAMES) {
+        size_t count = pattern[pattern_index %
+            (sizeof(pattern) / sizeof(pattern[0]))];
+
+        if (count > TEST_FRAMES - offset) count = TEST_FRAMES - offset;
+        assert(spa_hssr_dsp_process_block(
+                   &block_state, model, NULL, g_input + offset * 2,
+                   count, g_front_a + offset * 2,
+                   g_rear_a + offset * 2,
+                   g_lfe_control + offset * 2) == SPA_HSSR_OK);
+        offset += count;
+        pattern_index++;
+    }
+    for (frame = 0; frame < TEST_FRAMES; ++frame) {
+        assert(spa_hssr_dsp_process_sample(
+                   &sample_state, model,
+                   g_input[frame * 2], g_input[frame * 2 + 1],
+                   &g_front_b[frame * 2], &g_front_b[frame * 2 + 1],
+                   &g_rear_b[frame * 2], &g_rear_b[frame * 2 + 1]) ==
+               SPA_HSSR_OK);
+    }
+    assert(memcmp(g_front_a, g_front_b, sizeof(g_front_a)) == 0);
+    assert(memcmp(g_rear_a, g_rear_b, sizeof(g_rear_a)) == 0);
+}
+
+static void test_reset_advances_control_generation(void)
+{
+    static struct spa_stereo_upmix state;
+    struct spa_stereo_upmix_config config;
+    struct reset_probe probe;
+    struct spa_hssr_control_provider provider;
+
+    memset(&probe, 0, sizeof(probe));
+    provider.context = &probe;
+    provider.submit = reset_probe_submit;
+    provider.receive = reset_probe_receive;
+    provider.reset = reset_probe_reset;
+    make_universal_config(&config, 0);
+    spa_stereo_upmix_config_set_hssr_control_provider(&config, &provider);
+    assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
+    assert(probe.resets == 1u && probe.generation == 1u);
+    assert(state._runtime._hssr.control_generation == 1u);
+    fill_stereo(UINT32_C(0x4c415445), 0);
+    assert(spa_stereo_upmix_process_s16(
+               &state, g_input, SPA_STEREO_UPMIX_MAX_FRAMES,
+               g_output_a, SPA_STEREO_UPMIX_MAX_FRAMES) ==
+           SPA_STEREO_UPMIX_OK);
+    assert(spa_stereo_upmix_process_s16(
+               &state, g_input + SPA_STEREO_UPMIX_MAX_FRAMES * 2,
+               SPA_STEREO_UPMIX_MAX_FRAMES,
+               g_output_a + SPA_STEREO_UPMIX_MAX_FRAMES * TEST_CHANNELS,
+               SPA_STEREO_UPMIX_MAX_FRAMES) == SPA_STEREO_UPMIX_OK);
+    assert(spa_stereo_upmix_process_s16(
+               &state, g_input + SPA_STEREO_UPMIX_MAX_FRAMES * 4,
+               SPA_STEREO_UPMIX_MAX_FRAMES,
+               g_output_a + SPA_STEREO_UPMIX_MAX_FRAMES * 2 * TEST_CHANNELS,
+               SPA_STEREO_UPMIX_MAX_FRAMES) == SPA_STEREO_UPMIX_OK);
+    assert(state._runtime._hssr.control_deadlines_missed >= 3u);
+    assert(state._runtime._hssr.inference_failures > 0u);
+    assert(spa_stereo_upmix_reset(&state) == SPA_STEREO_UPMIX_OK);
+    assert(probe.resets == 2u && probe.generation == 2u);
+    assert(state._runtime._hssr.control_generation == 2u);
+    assert(spa_stereo_upmix_reset(&state) == SPA_STEREO_UPMIX_OK);
+    assert(probe.resets == 3u && probe.generation == 3u);
 }
 
 static void test_off_is_exact_and_overlap_safe(void)
@@ -322,12 +498,60 @@ static void test_universal_overlap_and_signal_derived_fallback(void)
         assert(g_output_a[frame] == 0);
 }
 
+static void test_lfe_v2_phase_frequency_and_cabin_bounds(void)
+{
+    static struct spa_stereo_upmix state;
+    struct spa_stereo_upmix_config config;
+    uint64_t low_energy;
+    uint64_t anti_energy;
+    uint64_t high_energy;
+    int32_t low_peak = 0;
+    size_t frame;
+
+    make_universal_config(&config, 1);
+
+    fill_sine(40.0f, 0);
+    assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
+    process_blocks(&state, g_input, g_output_a);
+    low_energy = channel_energy(
+        g_output_a, SPA_STEREO_UPMIX_CHANNEL_LFE, 4096);
+    for (frame = 4096; frame < TEST_FRAMES; ++frame) {
+        int32_t sample = g_output_a[frame * TEST_CHANNELS +
+                                    SPA_STEREO_UPMIX_CHANNEL_LFE];
+
+        if (sample < 0) sample = -sample;
+        if (sample > low_peak) low_peak = sample;
+    }
+    assert(low_energy > UINT64_C(10000000000));
+    assert(low_peak > 5500);
+    assert_cabin_buses_bounded(g_output_a, TEST_FRAMES);
+
+    fill_sine(40.0f, 1);
+    assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
+    process_blocks(&state, g_input, g_output_b);
+    anti_energy = channel_energy(
+        g_output_b, SPA_STEREO_UPMIX_CHANNEL_LFE, 4096);
+    assert(anti_energy > low_energy / 2u);
+    assert_cabin_buses_bounded(g_output_b, TEST_FRAMES);
+
+    fill_sine(500.0f, 0);
+    assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
+    process_blocks(&state, g_input, g_output_b);
+    high_energy = channel_energy(
+        g_output_b, SPA_STEREO_UPMIX_CHANNEL_LFE, 4096);
+    assert(high_energy * 1000u < low_energy);
+    assert_cabin_buses_bounded(g_output_b, TEST_FRAMES);
+}
+
 int main(void)
 {
     test_default_validation_and_fail_closed();
+    test_hssr_block_matches_sample_entry();
+    test_reset_advances_control_generation();
     test_off_is_exact_and_overlap_safe();
     test_universal_latency_chunking_reset_and_lfe();
     test_universal_overlap_and_signal_derived_fallback();
-    puts("stereo_upmix_test: OK (off + hssr-universal only)");
+    test_lfe_v2_phase_frequency_and_cabin_bounds();
+    puts("stereo_upmix_test: OK (off + hssr-universal/LFE-V2 only)");
     return 0;
 }

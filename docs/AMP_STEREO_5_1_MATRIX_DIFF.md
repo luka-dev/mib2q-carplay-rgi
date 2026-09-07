@@ -277,7 +277,7 @@ The fixed six-slot PCM container remains correct:
 ```text
 APAC 5.1              -> measured L,R,C,LFE,Ls,Rs reorder
 AAC stereo, upmix off -> L,R,0,0,0,0
-AAC stereo, canary    -> 0.940L,0.940R,0,0.178*LP80(mid),bounded Ls,bounded Rs
+AAC stereo, canary    -> 0.919L,0.919R,0,LFE-V2(phase-safe LP55/LP95),bounded Ls,bounded Rs
 ```
 
 What is not semantically equivalent is announcing `ASAD=0xfc` for either stereo

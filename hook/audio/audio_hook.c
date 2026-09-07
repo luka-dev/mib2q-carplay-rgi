@@ -21,6 +21,7 @@
 #include "apap_crypto.h"
 #include "apap_lifecycle.h"
 #include "feedback_clock.h"
+#include "hssr_control_worker.h"
 #include "pcm_period.h"
 #include "soundcheck.h"
 #include "spatial_downmix.h"
@@ -1666,6 +1667,7 @@ typedef struct {
     int haveExtensionLoudness;
     int atmosMode;
     struct spa_stereo_upmix stereoUpmix;
+    struct spa_hssr_control_worker hssrControlWorker;
     spa_soundcheck_state_t soundCheck;
 } spa103_render_t;
 
@@ -1761,6 +1763,11 @@ static void spa103_render_start(int64_t formatIndex, int haveKey,
         config->atmosMode == SPA_ATMOS_PASSTHROUGH ?
         SPA_PCM_5_1_2_CHANNELS : SPA_PCM_5_1_CHANNELS;
     int state, upmixStatus;
+    int hssrWorkerStatus = SPA_HSSR_ERROR_NOT_READY;
+
+    /* SETUP owns one complete render generation.  The preceding receiver is
+     * already stopped, so retire its controller before publishing a new one. */
+    spa_hssr_control_worker_stop(&spa103_render.hssrControlWorker);
 
     pthread_mutex_lock(&spa103_render.lock);
     if (spa103_render.decoder && spa103_render.codec) {
@@ -1852,6 +1859,13 @@ static void spa103_render_start(int64_t formatIndex, int haveKey,
         if (hssrModel) {
             spa_stereo_upmix_config_set_hssr_model(
                 &upmixConfig, hssrModel);
+            hssrWorkerStatus = spa_hssr_control_worker_start(
+                &spa103_render.hssrControlWorker, hssrModel, 1u, 17);
+            if (hssrWorkerStatus == SPA_HSSR_OK)
+                spa_stereo_upmix_config_set_hssr_control_provider(
+                    &upmixConfig,
+                    spa_hssr_control_worker_provider(
+                        &spa103_render.hssrControlWorker));
         } else {
             upmixConfig.backend = SPA_STEREO_UPMIX_OFF;
         }
@@ -1868,6 +1882,7 @@ static void spa103_render_start(int64_t formatIndex, int haveKey,
     upmixStatus = spa_stereo_upmix_init(&spa103_render.stereoUpmix,
                                         &upmixConfig);
     if (upmixStatus != SPA_STEREO_UPMIX_OK) {
+        spa_hssr_control_worker_stop(&spa103_render.hssrControlWorker);
         upmixConfig.backend = SPA_STEREO_UPMIX_OFF;
         spa_stereo_upmix_config_set_lfe(&upmixConfig, 0);
         upmixConfig.front_gain_q15 = 32768u;
@@ -1903,7 +1918,8 @@ static void spa103_render_start(int64_t formatIndex, int haveKey,
     LOG_INFO(LOG_MODULE,
              "buffer103: render %s formatIndex=%lld key=%s output=%uch atmosMode=%s "
              "stereoUpmix=%s frontGainQ15=%u rearGainQ15=%u "
-             "stereoLfe=%s lfeGainQ15=%u soundCheck=%s target=%s%ddB/kind%u "
+             "hssrController=%s stereoLfe=%s lfeGainQ15=%u "
+             "soundCheck=%s target=%s%ddB/kind%u "
              "fallback=%d limiter=%d compressedQueueLimit=%u initialRate=0",
              spa103_render_state_name(state), (long long)formatIndex,
              haveKey ? "yes" : "no", (unsigned)outputChannels,
@@ -1911,6 +1927,10 @@ static void spa103_render_start(int64_t formatIndex, int haveKey,
              config->atmosMode == SPA_ATMOS_DROP ? "drop" : "passthrough",
              spa_stereo_upmix_backend_name(activeUpmixBackend),
              (unsigned)activeFrontGainQ15, (unsigned)activeRearGainQ15,
+             activeUpmixBackend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL
+                 ? (hssrWorkerStatus == SPA_HSSR_OK
+                     ? "async" : "sync-fallback")
+                 : "off",
              activeLfeAssist ? "assist" : "off",
              (unsigned)activeLfeGainQ15,
              config->soundCheck.enabled ? "on" : "off",
@@ -1955,6 +1975,7 @@ static void spa103_render_stop(void)
     uint64_t flushDropped, queueAllocationFailures;
     size_t compressedPackets, compressedBytes;
     int64_t finalFormatIndex;
+    struct spa_hssr_control_worker_stats hssrWorkerStats;
 
     pthread_mutex_lock(&spa103_render.lock);
     formatAnnouncements = spa103_render.formatAnnouncements;
@@ -2003,10 +2024,14 @@ static void spa103_render_stop(void)
     spa103_render.primeTargetFrames = 0;
     spa103_render.state = SPA_103_RENDER_IDLE;
     pthread_mutex_unlock(&spa103_render.lock);
+    spa_hssr_control_worker_stop(&spa103_render.hssrControlWorker);
+    spa_hssr_control_worker_get_stats(
+        &spa103_render.hssrControlWorker, &hssrWorkerStats);
     LOG_INFO(LOG_MODULE,
              "buffer103: render stopped finalFormatIndex=%lld formatAnnouncements=%llu "
              "formatSwitches=%llu soundCheck=%llu/%llu fallback=%llu limited=%llu "
-             "queued=%u/%uB flushDropped=%llu queueAllocFail=%llu",
+             "queued=%u/%uB flushDropped=%llu queueAllocFail=%llu "
+             "hssrWorker=%u/%u busy=%u stale=%u resets=%u",
              (long long)finalFormatIndex, (unsigned long long)formatAnnouncements,
              (unsigned long long)formatSwitches,
              (unsigned long long)soundCheckUpdates,
@@ -2015,7 +2040,12 @@ static void spa103_render_stop(void)
              (unsigned long long)limitedFrames,
              (unsigned)compressedPackets, (unsigned)compressedBytes,
              (unsigned long long)flushDropped,
-             (unsigned long long)queueAllocationFailures);
+             (unsigned long long)queueAllocationFailures,
+             (unsigned)hssrWorkerStats.completed,
+             (unsigned)hssrWorkerStats.submitted,
+             (unsigned)hssrWorkerStats.busy,
+             (unsigned)hssrWorkerStats.stale_discarded,
+             (unsigned)hssrWorkerStats.resets);
     STATE_TRACE("BUFFERED_RENDER_STOP",
                 "final_index=%lld format_announcements=%llu format_switches=%llu "
                 "frames_in=%llu frames_out=%llu dropped=%llu auth_fail=%llu "
@@ -2026,7 +2056,9 @@ static void spa103_render_stop(void)
                 "soundcheck_rejected=%llu legacy_soundcheck_records=%llu "
                 "fallback_updates=%llu limited_frames=%llu "
                 "queued_packets=%u queued_bytes=%u flush_dropped=%llu "
-                "queue_alloc_fail=%llu",
+                "queue_alloc_fail=%llu hssr_submitted=%u "
+                "hssr_completed=%u hssr_busy=%u hssr_stale=%u "
+                "hssr_resets=%u",
                 (long long)finalFormatIndex,
                 (unsigned long long)formatAnnouncements,
                 (unsigned long long)formatSwitches,
@@ -2053,7 +2085,12 @@ static void spa103_render_stop(void)
                 (unsigned long long)limitedFrames,
                 (unsigned)compressedPackets, (unsigned)compressedBytes,
                 (unsigned long long)flushDropped,
-                (unsigned long long)queueAllocationFailures);
+                (unsigned long long)queueAllocationFailures,
+                (unsigned)hssrWorkerStats.submitted,
+                (unsigned)hssrWorkerStats.completed,
+                (unsigned)hssrWorkerStats.busy,
+                (unsigned)hssrWorkerStats.stale_discarded,
+                (unsigned)hssrWorkerStats.resets);
 }
 
 static uint32_t spa103_apap_sequence(const uint8_t *packet);

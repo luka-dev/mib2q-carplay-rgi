@@ -145,7 +145,9 @@ def score(stereo: np.ndarray, output: np.ndarray, front_gain: float) -> dict[str
     front_power = float(np.sum(front * front))
     lfe_power = float(np.sum(lfe * lfe))
     rear_power = float(np.sum(rear * rear))
-    rear_fraction = rear_power / (front_power + lfe_power + rear_power + 1e-30)
+    total_power = front_power + lfe_power + rear_power + 1e-30
+    rear_fraction = rear_power / total_power
+    lfe_fraction = lfe_power / total_power
 
     scaled_stereo = front_gain * stereo
     front_lag = stereo_best_lag(scaled_stereo, front)
@@ -168,6 +170,11 @@ def score(stereo: np.ndarray, output: np.ndarray, front_gain: float) -> dict[str
     return {
         "rear_energy_fraction": rear_fraction,
         "rear_front_db": level_db(rms(rear), rms(front)),
+        "lfe_energy_fraction": lfe_fraction,
+        "lfe_front_db": level_db(rms(lfe), rms(front)),
+        "lfe_peak_dbfs": 20.0 * math.log10(
+            max(float(np.max(np.abs(lfe))), 1e-30)
+        ),
         "rear_lr_waveform_correlation": correlation(rear[:, 0], rear[:, 1]),
         "rear_block_balance_median_db": median_balance,
         "rear_block_balance_p90_db": p90_balance,
@@ -256,14 +263,16 @@ def markdown_report(
         lines += [
             f"## {group}",
             "",
-            "| backend | rear energy % | rear/front dB | rear L/R corr | block balance median/P90 dB | blocks >3 dB % | front SNR dB | fold SNR dB | SoundAmp peak max dBFS |",
-            "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+            "| backend | rear energy % | rear/front dB | LFE energy % | LFE/front dB | rear L/R corr | block balance median/P90 dB | blocks >3 dB % | front SNR dB | fold SNR dB | SoundAmp peak max dBFS |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
         ]
         for backend in backends:
             lines.append(
                 f"| {backend} "
                 f"| {100.0 * mean(group_rows, backend, 'rear_energy_fraction'):.2f} "
                 f"| {mean(group_rows, backend, 'rear_front_db'):.2f} "
+                f"| {100.0 * mean(group_rows, backend, 'lfe_energy_fraction'):.2f} "
+                f"| {mean(group_rows, backend, 'lfe_front_db'):.2f} "
                 f"| {mean(group_rows, backend, 'rear_lr_waveform_correlation'):.3f} "
                 f"| {mean(group_rows, backend, 'rear_block_balance_median_db'):.2f}/"
                 f"{mean(group_rows, backend, 'rear_block_balance_p90_db'):.2f} "
@@ -349,7 +358,7 @@ def main() -> int:
 
     args.output.mkdir(parents=True, exist_ok=True)
     rows: list[dict[str, object]] = []
-    front_gain = 30802.0 / 32768.0 if args.lfe == "assist" else 32670.0 / 32768.0
+    front_gain = 30100.0 / 32768.0 if args.lfe == "assist" else 32670.0 / 32768.0
     hssr_model = args.hssr_model.resolve() if args.hssr_model else None
 
     for item in manifest["items"]:

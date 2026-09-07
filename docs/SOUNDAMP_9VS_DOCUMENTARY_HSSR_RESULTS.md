@@ -1,53 +1,54 @@
-# HSSR Universal V11 through the documentary Audi 9VS topology
+# HSSR Universal V11 + Cabin-Aware LFE V2 through the Audi 9VS topology
 
 Date: 2026-09-07. Symphoria/3D is off.
 
-This is the current Universal-only regression. Each input is the final V11
-`hssr-universal` render at rear gain `0.25` with LR4/80 Hz LFE assist. The
-Virtual Cabin applies the exact recovered J525 profile-0/bank-1 input matrix
-and then expands its logical buses to the sixteen documented T38 amplifier
-circuits.
+This is the current Universal-only electrical regression. Each input uses the
+V11 `hssr-universal` renderer at rear gain `0.25` with Cabin-Aware LFE V2. The
+first Virtual Cabin stage is exact: it applies the recovered J525
+profile-0/bank-1 matrix to `L,R,C,LFE,Ls,Rs`.
 
-The second stage is an explicitly inferred equal-power fan-out, not recovered
-Audi per-speaker calibration. See
+The later logical-bus-to-sixteen-circuit fan-out remains an inferred
+equal-power visualization, not recovered Audi per-speaker calibration. See
 [`SOUNDAMP_9VS_VIRTUAL_CABIN_EVIDENCE.md`](SOUNDAMP_9VS_VIRTUAL_CABIN_EVIDENCE.md)
-for the proof boundary.
+for that proof boundary.
 
-## Public authored-surround corpus
+## 100-excerpt music stress corpus
 
-| Track | Rear circuit energy excluding subwoofer | Rear/front energy | Maximum pre-clip peak | Clipped samples |
-|---|---:|---:|---:|---:|
-| Dohnanyi, piano and orchestra | 22.45% | -5.38 dB | -10.67 dBFS | 0 |
-| Credo, voices and string quartet | 15.23% | -7.46 dB | -7.70 dBFS | 0 |
-| Winterreigen, solo piano | 35.24% | -2.64 dB | -16.28 dBFS | 0 |
-| Schumann, violin and orchestra | 28.23% | -4.05 dB | -9.74 dBFS | 0 |
-| Baroque cello concerto | 22.34% | -5.41 dB | -7.29 dBFS | 0 |
-| Atmos trumpet and orchestra | 13.05% | -8.24 dB | -7.18 dBFS | 0 |
-| **Arithmetic mean** | **22.76%** | **-5.53 dB** | — | **0** |
+The current regression uses 50 locally supplied songs, two deterministic
+10-second excerpts per song. It has no authored surround reference, so these
+numbers measure LFE activity, stereo compatibility and exact J525 electrical
+headroom—not studio-object recovery.
 
-The separate EBU spoken channel-identification fixture produces 0.25% rear
-energy, -25.95 dB rear/front and a -15.30 dBFS peak. It is a routing check and
-is excluded from the music aggregate.
+| Path | mean LFE energy | mean LFE/front | mean/max LFE peak | maximum J525 bus | clipped samples |
+|---|---:|---:|---:|---:|---:|
+| Removed fixed assist baseline | 0.362% | -22.54 dB | -22.32/-15.44 dBFS | -0.27 dBFS | 0 |
+| **Cabin-Aware LFE V2** | **0.448%** | **-21.77 dB** | **-20.72/-14.11 dBFS** | **-0.48 dBFS** | **0** |
 
-## What this establishes
+V2 raises mean LFE energy by 23.9%, mean LFE/front level by 0.77 dB and
+mean LFE peak by 1.60 dB. Despite that increase, the worst recovered J525 bus
+gains 0.21 dB of headroom because the limiter solves the allowed LFE interval
+from the current front/rear samples instead of relying on a fixed scalar cap.
+The paired front trim costs about 0.20 dB in the corpus front/fold SNR checks.
 
-- The recovered J525 input matrix does not mute or unexpectedly attenuate the
-  generated `Ls/Rs` buses.
-- In the documentary topology, `Bus_Ls` reaches the rear-left door circuit and
-  R209 effect circuit; `Bus_Rs` reaches the rear-right door circuit and R210.
-- Universal V11 produces material-dependent rear activity rather than a fixed
-  ambience copy. The tested music spans roughly 13.0% to 35.2% rear electrical
-  energy after the known matrix.
-- All seven renders retain substantial electrical headroom and have zero
-  pre-clipping samples.
+## Controlled invariants
 
-This still cannot predict the driver's perceived rear level. OEM per-circuit
-gain, delay, crossover, EQ, polarity, loudspeaker directivity and cabin transfer
-functions remain unbound. A measured driver-head BRIR is required before the
-binaural mode can represent the real car instead of only its documented
-electrical topology.
+- A full-level 40 Hz coherent tone produces LFE RMS `0.135107`.
+- The same tone with exact `L=-R` produces the same RMS `0.135107`; the removed
+  mono-sum path produced digital zero.
+- A 500 Hz tone produces LFE RMS `0.000131`, about 60.3 dB below 40 Hz.
+- Unit tests recompute all six J525 logical buses per sample and require each
+  to remain below `0.985` full scale.
+- Arbitrary callback chunking and reset/re-render remain byte-identical.
 
-Generated 16-channel WAVs and complete per-circuit JSON reports are under the
-ignored directory:
+The current implementation contains no legacy LFE mode or runtime fallback.
+`AUDIO_STEREO_LFE=assist` always means V2; `off` remains the explicit no-LFE
+safety choice.
 
-- `build/soundamp-virtual-cabin/hssr-selection-v11-public-authored/`
+These electrical checks still cannot predict the driver's perceived subwoofer
+level. OEM per-circuit gain, delay, crossover, EQ, polarity, loudspeaker
+directivity and cabin transfer functions remain unbound. A stationary vehicle
+A/B is the final perceptual gate.
+
+Complete machine-readable results are generated under the ignored directory
+`build/lfe-v2-eval/`. The reproducible implementation and performance record is
+[`../tools/stereo-upmix-render/bench/results/2026-09-07-cabin-aware-lfe-v2.md`](../tools/stereo-upmix-render/bench/results/2026-09-07-cabin-aware-lfe-v2.md).

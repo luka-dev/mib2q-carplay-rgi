@@ -2,8 +2,8 @@
  * HSSR Universal stereo upmixer for the fixed MHI2Q PCM6 rail.
  *
  * The output order is always L, R, C, LFE, Ls, Rs.  C is deliberately zero
- * because the Audi amplifier already derives its centre.  Universal can feed
- * a small, explicitly bounded 80 Hz bass-assist signal into LFE.
+ * because the Audi amplifier already derives its centre. Universal can feed
+ * only the phase-safe, semantic and recovered-matrix-bounded LFE V2 path.
  *
  * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
@@ -23,11 +23,11 @@ enum {
 
     /* Q15 gains.  32768 is unity and is intentionally representable here. */
     SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT = 32670,
-    SPA_STEREO_UPMIX_FRONT_Q15_LFE_DEFAULT = 30802,
+    SPA_STEREO_UPMIX_FRONT_Q15_LFE_DEFAULT = 30100,
     SPA_STEREO_UPMIX_REAR_Q15_DEFAULT = 5898,
     SPA_STEREO_UPMIX_REAR_Q15_MAX = 8192,
-    SPA_STEREO_UPMIX_LFE_Q15_DEFAULT = 5833,
-    SPA_STEREO_UPMIX_LFE_Q15_MAX = 5833
+    SPA_STEREO_UPMIX_LFE_Q15_DEFAULT = 8192,
+    SPA_STEREO_UPMIX_LFE_Q15_MAX = 8192
 };
 
 enum spa_stereo_upmix_output_channel {
@@ -64,15 +64,26 @@ struct spa_stereo_upmix_config {
     uint32_t lfe_enabled;
     enum spa_stereo_upmix_backend backend;
     const struct spa_hssr_model *hssr_model;
+    const struct spa_hssr_control_provider *hssr_control_provider;
 };
 
 /* Runtime details are public only so callers can embed the complete state and
  * the realtime path never has to allocate.  Callers must not inspect or alter
  * fields whose names start with an underscore. */
 struct spa_stereo_upmix_runtime {
-    /* Two identical 2nd-order Butterworth sections form a 4th-order
-     * Linkwitz-Riley low-pass at 80 Hz. */
-    double _lfe_biquad_state[2][2];
+    /* Cabin-aware LFE V2: LR4 body/punch filters per stereo side, low-band
+     * correlation, phase-safe fold and smoothed semantic dynamics. */
+    float _lfe_low55_state[2][2][2];
+    float _lfe_low95_state[2][2][2];
+    float _lfe_power_l;
+    float _lfe_power_r;
+    float _lfe_cross;
+    float _lfe_polarity;
+    float _lfe_target_polarity;
+    float _lfe_fast_envelope;
+    float _lfe_slow_envelope;
+    float _lfe_dynamic_gain;
+    uint32_t _lfe_correlation_tick;
     float _limiter_gain;
     struct spa_hssr_dsp _hssr;
 };
@@ -86,13 +97,18 @@ struct spa_stereo_upmix {
      * This makes widening safe even when the PCM2 and PCM6 ranges overlap. */
     int16_t _input_scratch[SPA_STEREO_UPMIX_MAX_FRAMES *
                            SPA_STEREO_UPMIX_INPUT_CHANNELS];
+    int16_t _hssr_front_scratch[SPA_STEREO_UPMIX_MAX_FRAMES *
+                                SPA_STEREO_UPMIX_INPUT_CHANNELS];
+    float _hssr_rear_scratch[SPA_STEREO_UPMIX_MAX_FRAMES *
+                             SPA_STEREO_UPMIX_INPUT_CHANNELS];
+    float _hssr_lfe_control_scratch[SPA_STEREO_UPMIX_MAX_FRAMES * 2];
 };
 
 /* The reusable default is the exact OFF bypass.  Production selects Universal
  * after attaching its validated model. */
 void spa_stereo_upmix_default_config(struct spa_stereo_upmix_config *config);
 
-/* Select the paired safe front default: ~=0.94 with bass assist and ~=0.997
+/* Select the paired safe front default: ~=0.919 with LFE V2 and ~=0.997
  * without it.  The LFE gain itself is preserved across disable/enable. */
 void spa_stereo_upmix_config_set_lfe(
     struct spa_stereo_upmix_config *config, int enabled);
@@ -101,6 +117,12 @@ void spa_stereo_upmix_config_set_lfe(
 void spa_stereo_upmix_config_set_hssr_model(
     struct spa_stereo_upmix_config *config,
     const struct spa_hssr_model *model);
+
+/* Attach a hook-owned asynchronous controller.  NULL retains the exact
+ * synchronous renderer used by tools and deterministic regression tests. */
+void spa_stereo_upmix_config_set_hssr_control_provider(
+    struct spa_stereo_upmix_config *config,
+    const struct spa_hssr_control_provider *provider);
 
 /* Only the exact OFF bypass and the single production Universal renderer are
  * supported.  Universal requires a validated model. */

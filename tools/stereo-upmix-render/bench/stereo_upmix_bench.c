@@ -13,6 +13,7 @@
 #endif
 
 #include "stereo_upmix.h"
+#include "hssr_control_worker.h"
 
 #include <errno.h>
 #include <stdint.h>
@@ -31,6 +32,7 @@ enum {
 /* Keep every large object out of the small dio_manager receiver stack.  The
  * benchmark, like the hook, performs no allocation in the render loop. */
 static struct spa_stereo_upmix g_state;
+static struct spa_hssr_control_worker g_control_worker;
 static int16_t g_pcm2[BENCH_FRAMES * SPA_STEREO_UPMIX_INPUT_CHANNELS];
 static int16_t g_pcm6[BENCH_FRAMES * SPA_STEREO_UPMIX_OUTPUT_CHANNELS];
 static uint64_t g_elapsed[BENCH_MAX_BLOCKS];
@@ -216,6 +218,13 @@ static uint64_t checksum_output(uint64_t checksum)
     return checksum;
 }
 
+static void wait_one_audio_period(int async_controller)
+{
+    const struct timespec period = { 0, 21333333 };
+
+    if (async_controller) (void)nanosleep(&period, NULL);
+}
+
 static void sort_elapsed(size_t count)
 {
     size_t index;
@@ -297,7 +306,7 @@ static void print_usage(const char *program)
             "usage: %s [--backend hssr-universal] "
             "[--model HSSR.bin] "
             "[--blocks 1..%u] [--warmup 1..%u] "
-            "[--qemu-icount]\n",
+            "[--async-controller] [--realtime-pacing] [--qemu-icount]\n",
             program, (unsigned)BENCH_MAX_BLOCKS,
             (unsigned)BENCH_MAX_BLOCKS);
 }
@@ -362,6 +371,8 @@ int main(int argc, char **argv)
     uint32_t random_state = UINT32_C(0x4d484932);
     uint64_t checksum = UINT64_C(14695981039346656037);
     int qemu_icount = 0;
+    int async_controller = 0;
+    int realtime_pacing = 0;
     const char *model_path = NULL;
     size_t index;
     int argument;
@@ -390,6 +401,11 @@ int main(int argc, char **argv)
             }
         } else if (strcmp(argv[argument], "--qemu-icount") == 0) {
             qemu_icount = 1;
+        } else if (strcmp(argv[argument], "--async-controller") == 0) {
+            async_controller = 1;
+            realtime_pacing = 1;
+        } else if (strcmp(argv[argument], "--realtime-pacing") == 0) {
+            realtime_pacing = 1;
         } else if (strcmp(argv[argument], "--model") == 0 &&
                    argument + 1 < argc) {
             model_path = argv[++argument];
@@ -426,16 +442,38 @@ int main(int argc, char **argv)
             return 1;
         }
         spa_stereo_upmix_config_set_hssr_model(&config, &hssr_model);
+        if (async_controller) {
+            if (spa_hssr_control_worker_start(
+                    &g_control_worker, &hssr_model, 1u,
+#if defined(__QNX__)
+                    17
+#else
+                    0
+#endif
+                    ) != SPA_HSSR_OK) {
+                fprintf(stderr, "error: HSSR control worker failed\n");
+                spa_hssr_model_unload(&hssr_model);
+                return 1;
+            }
+            spa_stereo_upmix_config_set_hssr_control_provider(
+                &config,
+                spa_hssr_control_worker_provider(&g_control_worker));
+        }
     }
     if (spa_stereo_upmix_init(&g_state, &config) != SPA_STEREO_UPMIX_OK) {
         fprintf(stderr, "error: %s init failed\n", backend_name(backend));
+        if (async_controller)
+            spa_hssr_control_worker_stop(&g_control_worker);
         spa_hssr_model_unload(&hssr_model);
         return 1;
     }
 
-    printf("stereo_upmix_bench backend=%s frames_per_call=%u "
+    printf("stereo_upmix_bench backend=%s controller=%s pacing=%s "
+           "frames_per_call=%u "
            "warmup=%lu blocks=%lu\n",
-           backend_name(backend), (unsigned)BENCH_FRAMES,
+           backend_name(backend),
+           async_controller ? "async" : "sync",
+           realtime_pacing ? "realtime" : "none", (unsigned)BENCH_FRAMES,
            (unsigned long)warmup_blocks,
            (unsigned long)blocks);
     printf("sizeof_state=%lu sizeof_runtime=%lu static_pcm_bytes=%lu\n",
@@ -449,6 +487,8 @@ int main(int argc, char **argv)
         fprintf(stderr,
                 "error: ClockCycles did not validate as QEMU -icount; "
                 "refusing to label ticks as instructions\n");
+        if (async_controller)
+            spa_hssr_control_worker_stop(&g_control_worker);
         spa_hssr_model_unload(&hssr_model);
         return 1;
     }
@@ -460,9 +500,12 @@ int main(int argc, char **argv)
                 BENCH_FRAMES) != SPA_STEREO_UPMIX_OK) {
             fprintf(stderr, "error: %s warmup failed\n",
                     backend_name(backend));
+            if (async_controller)
+                spa_hssr_control_worker_stop(&g_control_worker);
             spa_hssr_model_unload(&hssr_model);
             return 1;
         }
+        wait_one_audio_period(realtime_pacing);
     }
 
     for (index = 0; index < blocks; index++) {
@@ -479,11 +522,14 @@ int main(int argc, char **argv)
             fprintf(stderr, "error: %s process failed at block %lu "
                     "with status %d\n", backend_name(backend),
                     (unsigned long)index, status);
+            if (async_controller)
+                spa_hssr_control_worker_stop(&g_control_worker);
             spa_hssr_model_unload(&hssr_model);
             return 1;
         }
         g_elapsed[index] = after - before;
         checksum = checksum_output(checksum);
+        wait_one_audio_period(realtime_pacing);
     }
 
     statistics = summarize(blocks);
@@ -495,6 +541,19 @@ int main(int argc, char **argv)
     g_checksum_sink = checksum;
     printf("checksum_fnv1a64_le=0x%016llx\n",
            (unsigned long long)g_checksum_sink);
+    if (async_controller) {
+        struct spa_hssr_control_worker_stats worker_stats;
+
+        spa_hssr_control_worker_stop(&g_control_worker);
+        spa_hssr_control_worker_get_stats(&g_control_worker, &worker_stats);
+        printf("controller_jobs submitted=%u completed=%u busy=%u "
+               "stale=%u resets=%u\n",
+               (unsigned)worker_stats.submitted,
+               (unsigned)worker_stats.completed,
+               (unsigned)worker_stats.busy,
+               (unsigned)worker_stats.stale_discarded,
+               (unsigned)worker_stats.resets);
+    }
     spa_hssr_model_unload(&hssr_model);
     return 0;
 }

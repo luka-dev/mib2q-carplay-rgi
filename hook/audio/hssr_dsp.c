@@ -418,6 +418,9 @@ static void spa_hssr_update_controls(struct spa_hssr_dsp *state)
 {
     float global_safety = spa_hssr_dsp_sigmoid(
         state->control[SPA_HSSR_BANDS * 8 + 7]);
+    float lfe_bass_sum = 0.0f;
+    float lfe_drum_sum = 0.0f;
+    float lfe_weight = 0.0f;
     unsigned band;
 
     state->scene_confidence = spa_hssr_dsp_sigmoid(
@@ -454,6 +457,17 @@ static void spa_hssr_update_controls(struct spa_hssr_dsp *state)
         }
         for (class_index = 0; class_index < 6; ++class_index)
             probabilities[class_index] /= denominator;
+
+        /* Reuse the trained low-band stem posteriors for LFE V2.  Weighting
+         * by the measured 0..125 Hz energy prevents an empty band from
+         * steering the body/punch blend. */
+        if (band < 3u) {
+            float weight = state->band_slow_energy[band] + 1.0e-12f;
+
+            lfe_bass_sum += weight * probabilities[1];
+            lfe_drum_sum += weight * probabilities[2];
+            lfe_weight += weight;
+        }
 
         target = spa_hssr_dsp_sigmoid(raw[6]);
         /* The network's rearability posterior is compressed: real positives
@@ -582,6 +596,22 @@ static void spa_hssr_update_controls(struct spa_hssr_dsp *state)
             ? 0.45f : 0.12f;
         state->band_universal_safety[band] += alpha *
             (universal_safety_target - state->band_universal_safety[band]);
+    }
+
+    {
+        float bass_target = lfe_weight > 1.0e-11f
+            ? lfe_bass_sum / lfe_weight : 0.0f;
+        float drum_target = lfe_weight > 1.0e-11f
+            ? lfe_drum_sum / lfe_weight : 0.0f;
+        float bass_alpha = bass_target > state->lfe_bass_confidence
+            ? 0.30f : 0.06f;
+        float drum_alpha = drum_target > state->lfe_drum_confidence
+            ? 0.30f : 0.06f;
+
+        state->lfe_bass_confidence += bass_alpha *
+            (bass_target - state->lfe_bass_confidence);
+        state->lfe_drum_confidence += drum_alpha *
+            (drum_target - state->lfe_drum_confidence);
     }
 }
 
@@ -734,17 +764,19 @@ static void spa_hssr_update_object_slots(
     }
 }
 
-static void spa_hssr_run_hop(struct spa_hssr_dsp *state,
-                             const struct spa_hssr_model *model)
+/* Stage 1: window, FFT and feature-state analysis.  It is deliberately kept
+ * on the audio thread because later masks consume this exact spectrum. */
+static int spa_hssr_analyze_hop(
+    struct spa_hssr_dsp *state,
+    struct spa_hssr_band_accumulator bands[SPA_HSSR_BANDS])
 {
-    struct spa_hssr_band_accumulator bands[SPA_HSSR_BANDS];
     unsigned channel;
     unsigned sample;
     unsigned bin;
     unsigned band;
     int full_frame = state->frames_seen >= SPA_HSSR_FFT_SIZE;
 
-    memset(bands, 0, sizeof(bands));
+    memset(bands, 0, sizeof(*bands) * SPA_HSSR_BANDS);
     for (channel = 0; channel < 2; ++channel) {
         for (sample = 0; sample < SPA_HSSR_FFT_SIZE; ++sample) {
             unsigned history = (state->input_position + sample) &
@@ -808,21 +840,105 @@ static void spa_hssr_run_hop(struct spa_hssr_dsp *state,
         state->previous_log_total = log_total;
     }
 
+    return full_frame;
+}
+
+static void spa_hssr_control_failsafe(struct spa_hssr_dsp *state)
+{
+    unsigned band;
+
+    state->inference_failures++;
+    for (band = 0; band < SPA_HSSR_BANDS; ++band) {
+        state->band_mask[band] *= 0.75f;
+        state->band_focus_rescue[band] *= 0.75f;
+    }
+}
+
+/* Stage 2: extract the compact feature vector and update learned controls.
+ * A production provider submits the GRU work without waiting.  Results are
+ * accepted only from this generation and at least one control period old,
+ * making normal output independent of worker scheduling. */
+static void spa_hssr_run_control(
+    struct spa_hssr_dsp *state, const struct spa_hssr_model *model,
+    const struct spa_hssr_control_provider *provider,
+    const struct spa_hssr_band_accumulator bands[SPA_HSSR_BANDS],
+    int full_frame)
+{
+    int deadline_missed = 0;
+
     if (full_frame) state->control_hop++;
-    if (full_frame && state->control_hop == SPA_HSSR_CONTROL_HOPS) {
-        state->control_hop = 0;
-        spa_hssr_extract_features(state, bands);
+    if (!full_frame || state->control_hop != SPA_HSSR_CONTROL_HOPS) return;
+
+    state->control_hop = 0;
+    spa_hssr_extract_features(state, bands);
+    state->control_sequence++;
+    if (!state->control_sequence) {
+        state->control_sequence = 1u;
+        state->applied_control_sequence = 0;
+        state->control_deadlines_missed = 0;
+        if (provider) {
+            state->control_generation++;
+            if (!state->control_generation)
+                state->control_generation = 1u;
+            provider->reset(provider->context,
+                            state->control_generation);
+        }
+    }
+
+    if (!provider) {
         if (spa_hssr_infer(model, &state->network,
                            state->features, state->control) == SPA_HSSR_OK) {
             spa_hssr_update_controls(state);
         } else {
-            state->inference_failures++;
-            for (band = 0; band < SPA_HSSR_BANDS; ++band) {
-                state->band_mask[band] *= 0.75f;
-                state->band_focus_rescue[band] *= 0.75f;
-            }
+            spa_hssr_control_failsafe(state);
+        }
+        return;
+    }
+
+    if (provider->receive && state->control_sequence > 1u) {
+        uint32_t result_sequence = 0;
+
+        if (provider->receive(provider->context,
+                              state->control_generation,
+                              state->control_sequence - 1u,
+                              state->control,
+                              &result_sequence) > 0 &&
+            result_sequence > state->applied_control_sequence &&
+            result_sequence < state->control_sequence) {
+            state->applied_control_sequence = result_sequence;
+            state->control_deadlines_missed = 0;
+            spa_hssr_update_controls(state);
+        } else {
+            deadline_missed = 1;
         }
     }
+
+    if (!provider->submit ||
+        provider->submit(provider->context,
+                         state->control_generation,
+                         state->control_sequence,
+                         state->features) <= 0) {
+        deadline_missed = 1;
+    }
+    if (deadline_missed) {
+        state->control_deadlines_missed++;
+        /* One late period is harmless: keep the preceding stable mask.
+         * Repeated lateness decays toward a quiet, bounded rear image. */
+        if (state->control_deadlines_missed >= 3u)
+            spa_hssr_control_failsafe(state);
+    }
+}
+
+/* Stage 3: deterministic mask construction, spectral routing and overlap-add
+ * synthesis.  Like analysis, it never leaves the audio thread. */
+static void spa_hssr_render_hop(
+    struct spa_hssr_dsp *state,
+    const struct spa_hssr_band_accumulator bands[SPA_HSSR_BANDS])
+{
+    unsigned channel;
+    unsigned sample;
+    unsigned bin;
+    unsigned band;
 
     {
         const float epsilon = 1.0e-8f;
@@ -1077,18 +1193,26 @@ static void spa_hssr_run_hop(struct spa_hssr_dsp *state,
     }
 }
 
-int spa_hssr_dsp_process_sample(
+static void spa_hssr_run_hop(
     struct spa_hssr_dsp *state, const struct spa_hssr_model *model,
+    const struct spa_hssr_control_provider *provider)
+{
+    struct spa_hssr_band_accumulator bands[SPA_HSSR_BANDS];
+    int full_frame = spa_hssr_analyze_hop(state, bands);
+
+    spa_hssr_run_control(state, model, provider, bands, full_frame);
+    spa_hssr_render_hop(state, bands);
+}
+
+static void spa_hssr_dsp_process_frame(
+    struct spa_hssr_dsp *state, const struct spa_hssr_model *model,
+    const struct spa_hssr_control_provider *provider,
     int16_t input_l, int16_t input_r,
-    int16_t *front_l, int16_t *front_r,
-    float *rear_l, float *rear_r)
+    int16_t *front_l, int16_t *front_r, float *rear_l, float *rear_r,
+    float *lfe_bass, float *lfe_drums)
 {
     unsigned position;
     int ready;
-
-    if (!state || !model || !front_l || !front_r || !rear_l || !rear_r)
-        return SPA_HSSR_ERROR_ARGUMENT;
-    if (!spa_hssr_model_ready(model)) return SPA_HSSR_ERROR_NOT_READY;
 
     position = state->input_position;
     ready = state->frames_seen >= SPA_HSSR_LATENCY_FRAMES;
@@ -1096,6 +1220,8 @@ int spa_hssr_dsp_process_sample(
     *front_r = ready ? state->front_delay[SPA_HSSR_RIGHT][position] : 0;
     *rear_l = ready ? state->ola[SPA_HSSR_LEFT][position] : 0.0f;
     *rear_r = ready ? state->ola[SPA_HSSR_RIGHT][position] : 0.0f;
+    *lfe_bass = ready ? state->lfe_semantic_delay[0][position] : 0.0f;
+    *lfe_drums = ready ? state->lfe_semantic_delay[1][position] : 0.0f;
     if (ready) {
         const float power_alpha = 0.0005f;
         float normalized_l = (float)input_l * (1.0f / 32768.0f);
@@ -1126,6 +1252,8 @@ int spa_hssr_dsp_process_sample(
     state->ola[SPA_HSSR_RIGHT][position] = 0.0f;
     state->front_delay[SPA_HSSR_LEFT][position] = input_l;
     state->front_delay[SPA_HSSR_RIGHT][position] = input_r;
+    state->lfe_semantic_delay[0][position] = state->lfe_bass_confidence;
+    state->lfe_semantic_delay[1][position] = state->lfe_drum_confidence;
     state->input[SPA_HSSR_LEFT][position] =
         (float)input_l * (1.0f / 32768.0f);
     state->input[SPA_HSSR_RIGHT][position] =
@@ -1137,11 +1265,67 @@ int spa_hssr_dsp_process_sample(
     state->hop_fill++;
     if (state->hop_fill == SPA_HSSR_HOP_SIZE) {
         state->hop_fill = 0;
-        spa_hssr_run_hop(state, model);
+        spa_hssr_run_hop(state, model, provider);
     }
     *rear_l = spa_hssr_dsp_bound(
         spa_hssr_dsp_finite(*rear_l), -2.0f, 2.0f);
     *rear_r = spa_hssr_dsp_bound(
         spa_hssr_dsp_finite(*rear_r), -2.0f, 2.0f);
+}
+
+int spa_hssr_dsp_process_sample(
+    struct spa_hssr_dsp *state, const struct spa_hssr_model *model,
+    int16_t input_l, int16_t input_r,
+    int16_t *front_l, int16_t *front_r,
+    float *rear_l, float *rear_r)
+{
+    float lfe_bass;
+    float lfe_drums;
+
+    if (!state || !model || !front_l || !front_r || !rear_l || !rear_r)
+        return SPA_HSSR_ERROR_ARGUMENT;
+    if (!spa_hssr_model_ready(model)) return SPA_HSSR_ERROR_NOT_READY;
+
+    spa_hssr_dsp_process_frame(state, model, NULL, input_l, input_r,
+                               front_l, front_r, rear_l, rear_r,
+                               &lfe_bass, &lfe_drums);
+    return SPA_HSSR_OK;
+}
+
+int spa_hssr_dsp_process_block(
+    struct spa_hssr_dsp *state, const struct spa_hssr_model *model,
+    const struct spa_hssr_control_provider *provider,
+    const int16_t *pcm2, size_t frames,
+    int16_t *front2, float *rear2, float *lfe_control2)
+{
+    size_t offset = 0;
+
+    if (!state || !model || (!pcm2 && frames) ||
+        (!front2 && frames) || (!rear2 && frames) ||
+        (!lfe_control2 && frames))
+        return SPA_HSSR_ERROR_ARGUMENT;
+    if (!spa_hssr_model_ready(model)) return SPA_HSSR_ERROR_NOT_READY;
+    if (provider && (!provider->submit || !provider->receive ||
+                     !provider->reset))
+        return SPA_HSSR_ERROR_ARGUMENT;
+
+    while (offset < frames) {
+        size_t chunk = SPA_HSSR_HOP_SIZE - state->hop_fill;
+        size_t index;
+
+        if (chunk > frames - offset) chunk = frames - offset;
+        for (index = 0; index < chunk; ++index) {
+            size_t frame = offset + index;
+
+            spa_hssr_dsp_process_frame(
+                state, model, provider,
+                pcm2[frame * 2u], pcm2[frame * 2u + 1u],
+                &front2[frame * 2u], &front2[frame * 2u + 1u],
+                &rear2[frame * 2u], &rear2[frame * 2u + 1u],
+                &lfe_control2[frame * 2u],
+                &lfe_control2[frame * 2u + 1u]);
+        }
+        offset += chunk;
+    }
     return SPA_HSSR_OK;
 }

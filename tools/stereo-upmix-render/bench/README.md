@@ -3,12 +3,18 @@
 The benchmark calls the same `spa_stereo_upmix_process_s16()` used by the hook
 with 1024-frame blocks, LFE assist enabled, and the single Universal backend.
 It reports caller-owned state size, host wall time and a rolling checksum.
+Pass `--async-controller` to measure the production split where only the GRU
+runs on its persistent worker.  That mode paces calls at the real 1024-frame
+period outside the timed region so controller-deadline statistics are valid.
+Use `--realtime-pacing` on the synchronous run for a cache/scheduling-fair
+latency comparison.
 
 ```sh
 tools/stereo-upmix-render/bench/build_host.sh
 build/stereo-upmix-bench/host/stereo_upmix_bench \
   --backend hssr-universal \
-  --model build/hssr-selection-v11/hssr_model.bin
+  --model build/hssr-selection-v11/hssr_model.bin \
+  --async-controller
 ```
 
 Cross-build with the same ARMv7/QNX flags as the hook:

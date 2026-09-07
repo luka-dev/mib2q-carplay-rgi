@@ -26,6 +26,12 @@ cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
     tests/hssr_neon_test.c hook/audio/hssr_neon.c -o "$OUT/hssr_neon"
 "$OUT/hssr_neon"
 
+printf '%-32s ' hssr_control_worker_test
+cc -std=gnu99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
+    tests/hssr_control_worker_test.c hook/audio/hssr_control_worker.c \
+    hook/audio/hssr_neon.c -lpthread -o "$OUT/hssr_control_worker"
+"$OUT/hssr_control_worker"
+
 printf '%-32s ' buffered_pcm_switch_test
 cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
     tests/buffered_pcm_switch_test.c hook/audio/spatial_downmix.c \

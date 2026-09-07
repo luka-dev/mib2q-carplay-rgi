@@ -525,7 +525,7 @@ def main() -> int:
                 args.hssr_model.resolve() if args.hssr_model else None,
             )
             prediction = read_audio(render_path, 6)
-            front_gain = 30802.0 / 32768.0 if args.lfe == "assist" \
+            front_gain = 30100.0 / 32768.0 if args.lfe == "assist" \
                 else 32670.0 / 32768.0
             metrics = score(reference, stereo, prediction, front_gain)
             if args.discard_renders:
@@ -556,7 +556,7 @@ def main() -> int:
             "sample_rate": 48_000,
             "surround_gain": args.surround,
             "front_gain": (
-                30802.0 / 32768.0 if args.lfe == "assist"
+                30100.0 / 32768.0 if args.lfe == "assist"
                 else 32670.0 / 32768.0
             ),
             "lfe": args.lfe,
