@@ -39,6 +39,11 @@ cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
     -lm -o "$OUT/switch"
 "$OUT/switch"
 
+printf '%-32s ' aac_fifo_test
+cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
+    tests/aac_fifo_test.c -o "$OUT/aac_fifo"
+"$OUT/aac_fifo"
+
 printf '%-32s ' apap_lifecycle_test
 cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
     tests/apap_lifecycle_test.c hook/audio/apap_lifecycle.c \
@@ -51,12 +56,24 @@ cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
     -o "$OUT/soundcheck"
 "$OUT/soundcheck"
 
+printf '%-32s ' coverart_safety_test
+cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
+    tests/coverart_safety_test.c hook/coverart/jpeg_safety.c \
+    -o "$OUT/coverart_safety"
+"$OUT/coverart_safety"
+
 printf '%-32s ' state_trace_test
 cc -std=c99 -O2 -Wall -Wextra -Werror -Ihook \
     -DENABLE_LOGGING=0 -DENABLE_STATE_TRACE=1 \
     tests/state_trace_test.c hook/framework/state_trace.c \
     hook/framework/iap2_protocol.c -o "$OUT/state_trace"
 "$OUT/state_trace" && echo OK
+
+printf '%-32s ' signal_guard_test
+cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
+    tests/signal_guard_test.c hook/framework/signal_guard.c \
+    -o "$OUT/signal_guard"
+"$OUT/signal_guard"
 
 printf '%-32s ' state_trace_logger_test
 cc -std=c99 -O2 -Wall -Wextra -Werror -Ihook \

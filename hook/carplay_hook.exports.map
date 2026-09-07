@@ -1,0 +1,31 @@
+{
+    global:
+        AirPlayAudioFormatToASBD;
+        AirPlayCopyServerInfo;
+        AirPlayReceiverServerPlatformCopyProperty;
+        AirPlayReceiverSessionControl;
+        AirPlayReceiverSessionSetNightMode;
+        AirPlayReceiverSessionSetup;
+        AirPlayReceiverSessionTearDown;
+        AirTunesServer_EnsureCreated;
+        AudioSessionGetSupportedOutputFormats;
+        CinemoCreateIAP;
+        HIDDevicePostReport;
+        HIDRemotePlaybackFillReport;
+        _ZN12NmeTransport4RecvER8NmeArrayIhE;
+        _ZN12NmeTransport4SendEPKhjPj;
+        _ZN14NmeIAP2Message6DecodeEPKhi;
+        _ZN3dio11CQNXSoundIFINS_16ObjectLockPolicyILNS_6CMutex10en_mutex_tE2ELNS_14en_lock_type_tE0EEEE14createMetadataEjjjNS_15en_encryption_tENS_10en_codec_tE;
+        _ZN3dio11CQNXSoundIFINS_18SingleThreadPolicyEE14createMetadataEjjjNS_15en_encryption_tENS_10en_codec_tE;
+        _ZNK14NmeIAP2Message6EncodeER8NmeArrayIhE;
+        snd_pcm_close;
+        snd_pcm_open_name;
+        snd_pcm_plugin_flush;
+        snd_pcm_plugin_params;
+        snd_pcm_plugin_prepare;
+        snd_pcm_plugin_setup;
+        snd_pcm_plugin_write;
+        snd_pcm_write_internal;
+    local:
+        *;
+};

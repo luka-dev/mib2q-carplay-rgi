@@ -5,6 +5,8 @@
 > CarPlay setup retries; it is not proof that the DCD crashed first. The local
 > startup/launcher guard described below has been rolled back. See
 > [`reference/SI_RAPID_REPLUG_RACE_RE.md`](reference/SI_RAPID_REPLUG_RACE_RE.md).
+> The complete staged treatment and rollback procedure is in
+> [`USB_REPLUG_RECOVERY_RUNBOOK.md`](USB_REPLUG_RECOVERY_RUNBOOK.md).
 
 Session of 2026-09-03. Written because most of what was learned here is negative knowledge,
 the kind that is expensive to re-derive and easy to re-derive wrongly. Four of my own

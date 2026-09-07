@@ -95,7 +95,7 @@ static void seam_enter(void)
  * that capture the finished object. */
 typedef void *(*fn_copyinfo_t)(void *, void *, void *, void *);
 
-void *AirPlayCopyServerInfo(void *session, void *qualifier, void *macAddr, void *outErr)
+HOOK_EXPORT void *AirPlayCopyServerInfo(void *session, void *qualifier, void *macAddr, void *outErr)
 {
     static fn_copyinfo_t real;
     void *info;
@@ -146,7 +146,7 @@ void *AirPlayCopyServerInfo(void *session, void *qualifier, void *macAddr, void 
  * into it when it cannot fulfil the contract it just advertised. */
 typedef int (*fn_sess_setup_t)(void *, void *, void **, int);
 
-int AirPlayReceiverSessionSetup(void *session, void *request, void **respOut, int a4)
+HOOK_EXPORT int AirPlayReceiverSessionSetup(void *session, void *request, void **respOut, int a4)
 {
     static fn_sess_setup_t real;
     hook_setup_ctx_t setup;
@@ -229,7 +229,7 @@ int AirPlayReceiverSessionSetup(void *session, void *request, void **respOut, in
  * per-session reset stays on IAP2_MSG_IDENTIFY_START. */
 typedef int (*fn_sess_teardown_t)(void *, void *, int, int);
 
-int AirPlayReceiverSessionTearDown(void *session, void *request, int reason, int a4)
+HOOK_EXPORT int AirPlayReceiverSessionTearDown(void *session, void *request, int reason, int a4)
 {
     static fn_sess_teardown_t real;
     size_t i, n;

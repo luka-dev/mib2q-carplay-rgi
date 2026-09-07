@@ -104,16 +104,19 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
       -Wl,--gc-sections -Wl,-soname,libcarplay_apac.so -lm
 
   cd /src/hook
-  SRCS="framework/logging.c framework/state_trace.c framework/bus.c framework/iap2_protocol.c framework/hook_framework.c \
+  SRCS="framework/logging.c framework/state_trace.c framework/signal_guard.c framework/bus.c framework/iap2_protocol.c framework/hook_framework.c \
         framework/airplay_seams.c \
-        routeguidance/rgd_tlv.c routeguidance/rgd_hook.c coverart/coverart_hook.c \
+        routeguidance/rgd_tlv.c routeguidance/rgd_hook.c \
+        coverart/jpeg_safety.c coverart/coverart_hook.c \
         altscreen/altscreen_av.c altscreen/altscreen_hook.c audio/spatial_downmix.c \
         audio/stereo_upmix.c audio/hssr_dsp.c audio/hssr_neon.c audio/hssr_control_worker.c \
         audio/apap_crypto.c audio/apap_lifecycle.c audio/soundcheck.c audio/apac_codec_loader.c \
         audio/aac_bridge.c audio/audio_hook.c main.c"
-  $CC -shared -fPIC -O2 -std=gnu99 -fdata-sections -ffunction-sections '"$CFLAGS_EXTRA"' \
+  $CC -shared -fPIC -O2 -std=gnu99 -fvisibility=hidden -fdata-sections -ffunction-sections '"$CFLAGS_EXTRA"' \
       -I. -I/src/apac_decoder/include $SRCS \
-      -o /src/build/libcarplay_hook.so -Wl,--gc-sections -lz -lsocket -lm
+      -o /src/build/libcarplay_hook.so -Wl,--gc-sections \
+      -Wl,--version-script=/src/hook/carplay_hook.exports.map \
+      -lz -lsocket -lm
 
   fail() { echo "REJECTED: $*"; exit 1; }
   SO=/src/build/libcarplay_hook.so
@@ -144,6 +147,31 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
   else
       [ "$n" = "0" ] || fail "quiet build unexpectedly exports $n state-trace HID seams"
   fi
+
+  # The LD_PRELOAD ABI is an exact allowlist.  Hidden-by-default compilation
+  # prevents accidental compiler exports; the version script prevents a missed
+  # annotation from widening it again.  Quiet builds omit the two trace-only HID
+  # seams, while diagnostic builds must expose them.
+  awk "
+      /global:/ { in_global=1; next }
+      /local:/  { in_global=0 }
+      in_global {
+          gsub(/[;[:space:]]/, \"\");
+          if (length) print
+      }
+  " /src/hook/carplay_hook.exports.map | sort > /tmp/hook_exports_expected_all
+  if [ "$TRACE_ENABLED" = "1" ]; then
+      cp /tmp/hook_exports_expected_all /tmp/hook_exports_expected
+  else
+      grep -vE "^HID(DevicePostReport|RemotePlaybackFillReport)$" \
+          /tmp/hook_exports_expected_all > /tmp/hook_exports_expected
+  fi
+  $NM -D --defined-only $SO | awk "NF >= 3 { print \$3 }" | sort \
+      > /tmp/hook_exports_actual
+  if ! diff -u /tmp/hook_exports_expected /tmp/hook_exports_actual; then
+      fail "dynamic export set differs from the interpose allowlist"
+  fi
+  echo "  dynamic exports:$(wc -l < /tmp/hook_exports_actual | tr -d " ") exact interpose symbols"
 
   # 6. ldqnx must run compiler bookkeeping only.  Module constructors used to
   # reach LOG_INFO -> pthread_create while the QNX loader lock was still held,

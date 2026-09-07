@@ -816,7 +816,7 @@ uint16_t hook_get_component_id(void) {
  * retain exactly one hook-owned reference.  This is the stable object whose
  * SendIAP2 method enters Cinemo's normal link state machine; no libairplay or
  * libNmeSDK-internal interposition is assumed here. */
-int CinemoCreateIAP(void* args) {
+HOOK_EXPORT int CinemoCreateIAP(void* args) {
     void* new_iap = NULL;
     void* old_iap = NULL;
     int old_owner_pid = 0;
@@ -859,7 +859,7 @@ int CinemoCreateIAP(void* args) {
     return ret;
 }
 
-int _ZN14NmeIAP2Message6DecodeEPKhi(void* self, const uint8_t* buf, int len) {
+HOOK_EXPORT int _ZN14NmeIAP2Message6DecodeEPKhi(void* self, const uint8_t* buf, int len) {
     if (!g_fw.initialized || (!g_fw.bus_started && !g_fw.bus_disabled))
         hook_framework_init();
     resolve_functions();
@@ -900,7 +900,7 @@ int _ZN14NmeIAP2Message6DecodeEPKhi(void* self, const uint8_t* buf, int len) {
     return ret;
 }
 
-int _ZNK14NmeIAP2Message6EncodeER8NmeArrayIhE(const void* self, void* out_array) {
+HOOK_EXPORT int _ZNK14NmeIAP2Message6EncodeER8NmeArrayIhE(const void* self, void* out_array) {
     if (!g_fw.initialized || (!g_fw.bus_started && !g_fw.bus_disabled))
         hook_framework_init();
     resolve_functions();
@@ -976,7 +976,7 @@ int _ZNK14NmeIAP2Message6EncodeER8NmeArrayIhE(const void* self, void* out_array)
     return ret;
 }
 
-int _ZN12NmeTransport4SendEPKhjPj(void* self, const uint8_t* buf, unsigned int len, unsigned int* sent) {
+HOOK_EXPORT int _ZN12NmeTransport4SendEPKhjPj(void* self, const uint8_t* buf, unsigned int len, unsigned int* sent) {
     iap2_frame_t frame;
     iap2_link_header_t header;
     bool have_frame = false;
@@ -1019,7 +1019,7 @@ int _ZN12NmeTransport4SendEPKhjPj(void* self, const uint8_t* buf, unsigned int l
  * NmeArray<uchar> (data@+0, len@+4 — same layout Encode uses) to the sink.
  * Fail-safe mirrors the Send hook: if the real symbol didn't resolve we return
  * -1 (same behaviour already deployed for Send). */
-int _ZN12NmeTransport4RecvER8NmeArrayIhE(void* self, void* out_array) {
+HOOK_EXPORT int _ZN12NmeTransport4RecvER8NmeArrayIhE(void* self, void* out_array) {
     if (!g_fw.initialized || (!g_fw.bus_started && !g_fw.bus_disabled))
         hook_framework_init();
     resolve_functions();

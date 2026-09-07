@@ -344,7 +344,7 @@ static const char *spa_fmt_desc(uint64_t fmt)
  * phone is allowed to send 6ch. Stereo path untouched. */
 typedef int64_t (*fn_get_formats_t)(int /*streamType*/);
 
-int64_t AudioSessionGetSupportedOutputFormats(int streamType)
+HOOK_EXPORT int64_t AudioSessionGetSupportedOutputFormats(int streamType)
 {
     static fn_get_formats_t real;
     if (!real) real = (fn_get_formats_t)dlsym(RTLD_NEXT, "AudioSessionGetSupportedOutputFormats");
@@ -379,7 +379,7 @@ int64_t AudioSessionGetSupportedOutputFormats(int streamType)
  * The optional 3rd arg (`bits_out`) receives bitsPerChannel when non-NULL (stock's LABEL_24). */
 typedef uint32_t (*fn_fmt_to_asbd_t)(uint64_t /*fmt*/, uint32_t * /*asbd*/, uint32_t * /*bits_out*/);
 
-uint32_t AirPlayAudioFormatToASBD(uint64_t fmt, uint32_t *asbd, uint32_t *bits_out)
+HOOK_EXPORT uint32_t AirPlayAudioFormatToASBD(uint64_t fmt, uint32_t *asbd, uint32_t *bits_out)
 {
     /* PROBE (always): the phone's NEGOTIATED format arrives here during SETUP/_UpdateStreams. This is
      * the decisive line — it says exactly what iOS chose. A bit50/53 here = Dolby Atmos bitstream (we
@@ -1606,6 +1606,7 @@ enum {
 
 typedef struct {
     pthread_mutex_t lock;
+    pthread_cond_t readDone;
     int state;
     const spa_apac_codec_api_t *codec;
     spa_apac_decoder_t *decoder;
@@ -1617,6 +1618,7 @@ typedef struct {
     uint32_t *ringRTP;
     size_t head;                    /* frame index of the oldest buffered frame */
     size_t fill;                    /* frames buffered */
+    size_t reservedReadFrames;      /* copied to QSA scratch, not accepted yet */
     uint64_t framesIn;
     uint64_t framesOut;
     uint64_t dropped;               /* frames overwritten because nothing drained */
@@ -1673,8 +1675,19 @@ typedef struct {
 
 static spa103_render_t spa103_render = {
     .lock = PTHREAD_MUTEX_INITIALIZER,
+    .readDone = PTHREAD_COND_INITIALIZER,
     .state = SPA_103_RENDER_IDLE
 };
+
+/* FLUSH and generation teardown may rewrite/free the ring, so they wait until
+ * the in-flight QSA call commits or releases its reservation.  pthread_cond_wait
+ * releases render.lock while QSA runs; the audio path never enters QSA while
+ * holding this mutex. */
+static void spa103_render_wait_for_read_locked(void)
+{
+    while (spa103_render.reservedReadFrames)
+        pthread_cond_wait(&spa103_render.readDone, &spa103_render.lock);
+}
 
 static struct spa_hssr_model spa_hssr_model_value;
 static pthread_once_t spa_hssr_model_once = PTHREAD_ONCE_INIT;
@@ -1770,6 +1783,7 @@ static void spa103_render_start(int64_t formatIndex, int haveKey,
     spa_hssr_control_worker_stop(&spa103_render.hssrControlWorker);
 
     pthread_mutex_lock(&spa103_render.lock);
+    spa103_render_wait_for_read_locked();
     if (spa103_render.decoder && spa103_render.codec) {
         spa103_render.codec->destroy(spa103_render.decoder);
         spa103_render.decoder = 0;
@@ -1802,6 +1816,7 @@ static void spa103_render_start(int64_t formatIndex, int haveKey,
              spa103_reprime_frames(), spa103_reprime_frames() * 1000u / SPA_SR);
     spa103_render.head = 0;
     spa103_render.fill = 0;
+    spa103_render.reservedReadFrames = 0;
     spa103_render.primed = 0;
     spa103_render.primeTargetFrames = spa103_prime_frames();
     spa103_render.framesIn = 0;
@@ -1978,6 +1993,7 @@ static void spa103_render_stop(void)
     struct spa_hssr_control_worker_stats hssrWorkerStats;
 
     pthread_mutex_lock(&spa103_render.lock);
+    spa103_render_wait_for_read_locked();
     formatAnnouncements = spa103_render.formatAnnouncements;
     formatSwitches = spa103_render.formatSwitches;
     framesIn = spa103_render.framesIn;
@@ -2020,6 +2036,7 @@ static void spa103_render_stop(void)
     spa103_render.ringRTP = 0;
     spa103_render.head = 0;
     spa103_render.fill = 0;
+    spa103_render.reservedReadFrames = 0;
     spa103_render.primed = 0;
     spa103_render.primeTargetFrames = 0;
     spa103_render.state = SPA_103_RENDER_IDLE;
@@ -2435,6 +2452,7 @@ static void spa103_render_flush(const spa_apap_flush_range_t *range)
     if (!range) return;
     prefixReset = !range->have_from_sequence && !range->have_from_rtp;
     pthread_mutex_lock(&spa103_render.lock);
+    spa103_render_wait_for_read_locked();
     spa_apap_lifecycle_begin_flush(&spa103_render.lifecycle, range,
                                    &removedPackets, &removedBytes);
     removedFrames = spa103_ring_prune_locked(range);
@@ -2553,6 +2571,18 @@ static void spa103_ring_push_locked(const int16_t *pcm, size_t frames,
         pcm += (frames - spa103_ring_frames()) * spa103_render.outputChannels;
         spa103_render.dropped += frames - spa103_ring_frames();
         frames = spa103_ring_frames();
+    }
+    /* Normally a full ring keeps the newest audio by overwriting its oldest
+     * frames.  Never overwrite the prefix currently offered to QSA: until the
+     * write returns those frames still belong to the ring.  This branch lasts
+     * for one QSA call and drops only excess new input if the ring is already
+     * completely full. */
+    if (spa103_render.reservedReadFrames &&
+        frames > spa103_ring_frames() - spa103_render.fill) {
+        const size_t keep = spa103_ring_frames() - spa103_render.fill;
+
+        spa103_render.dropped += frames - keep;
+        frames = keep;
     }
     while (at < frames) {
         const size_t tail = (spa103_render.head + spa103_render.fill) % spa103_ring_frames();
@@ -3516,7 +3546,7 @@ unsigned spa_buffered_pcm_channels(void)
     return channels;
 }
 
-size_t spa_buffered_pcm_read(int16_t *out, size_t frames, unsigned channels)
+size_t spa_buffered_pcm_peek(int16_t *out, size_t frames, unsigned channels)
 {
     size_t done = 0;
     size_t take = 0;
@@ -3536,21 +3566,53 @@ size_t spa_buffered_pcm_read(int16_t *out, size_t frames, unsigned channels)
          * old [decoded prefix + zero tail] fragment, which produced the
          * measured 5.3 ms transition glitch. */
         take = spa_pcm_whole_period_frames(spa103_render.fill, frames);
+        if (!spa_pcm_ring_reserve(spa103_render.fill, take,
+                                  &spa103_render.reservedReadFrames))
+            take = 0;
         while (done < take) {
-            size_t run = spa103_ring_frames() - spa103_render.head;
-            if (run > spa103_render.fill) run = spa103_render.fill;
+            size_t source = (spa103_render.head + done) % spa103_ring_frames();
+            size_t run = spa103_ring_frames() - source;
             if (run > take - done) run = take - done;
             memcpy(out + done * channels,
-                   spa103_render.ring + spa103_render.head * channels,
+                   spa103_render.ring + source * channels,
                    run * channels * sizeof(int16_t));
-            spa103_render.head = (spa103_render.head + run) % spa103_ring_frames();
-            spa103_render.fill -= run;
             done += run;
         }
-        spa103_render.framesOut += done;
     }
     pthread_mutex_unlock(&spa103_render.lock);
     return done;
+}
+
+size_t spa_buffered_pcm_commit(size_t accepted_frames, unsigned channels)
+{
+    size_t committed = 0;
+
+    pthread_mutex_lock(&spa103_render.lock);
+    if (spa103_render.reservedReadFrames) {
+        if (spa103_render.ring && channels == spa103_render.outputChannels) {
+            committed = spa_pcm_ring_commit(
+                spa103_ring_frames(), &spa103_render.head,
+                &spa103_render.fill, &spa103_render.reservedReadFrames,
+                accepted_frames);
+            spa103_render.framesOut += committed;
+        } else {
+            (void)spa_pcm_ring_commit(
+                spa103_ring_frames(), &spa103_render.head,
+                &spa103_render.fill, &spa103_render.reservedReadFrames, 0);
+        }
+        pthread_cond_broadcast(&spa103_render.readDone);
+    }
+    pthread_mutex_unlock(&spa103_render.lock);
+    return committed;
+}
+
+size_t spa_buffered_pcm_read(int16_t *out, size_t frames, unsigned channels)
+{
+    size_t offered = spa_buffered_pcm_peek(out, frames, channels);
+
+    if (offered)
+        (void)spa_buffered_pcm_commit(offered, channels);
+    return offered;
 }
 
 size_t spa_buffered_pcm6_read(int16_t *out, size_t frames)
@@ -3619,7 +3681,7 @@ typedef struct {
     int detached;                   /* type-100 released it; type-103 temporarily owns it */
     int closeFlushSuppressed;       /* stock flush was deferred until close decides ownership */
     int closeFlushChannel;
-    int detachedNeedsPrepare;       /* legacy fallback when close's flush could not be skipped */
+    int detachedNeedsPrepare;       /* a successful flush still needs a successful prepare */
     int reclaimStage;               /* same live handle is moving back to stock type-100 */
     int16_t *scratch;
     size_t scratchBytes;
@@ -3909,6 +3971,9 @@ static void spa_pcm_sink_flush_buffered_timeline(void)
             flushes = ++spa_pcm_sink.timelineFlushes;
             spa_pcm_sink.detachedNeedsPrepare = 0;
         } else {
+            if (spa_pcm_prepare_pending_after_flush(flushResult,
+                                                    prepareResult))
+                spa_pcm_sink.detachedNeedsPrepare = 1;
             failures = ++spa_pcm_sink.timelineFlushFailures;
         }
     }
@@ -4082,7 +4147,7 @@ static void spa_pcm_sink_write_one_detached_period(void)
     static int (*realStatus)(snd_pcm_t *, snd_pcm_channel_status_t *);
     snd_pcm_t *handle;
     unsigned channels;
-    size_t bytes, got, pending;
+    size_t bytes, got, pending, acceptedFrames;
     ssize_t written;
     int firstWrite, needsPrepare, logWrite, probeStatus;
     int reacquireMediaRoute = 0;
@@ -4202,7 +4267,7 @@ static void spa_pcm_sink_write_one_detached_period(void)
             return;
         }
         firstWrite = spa_pcm_sink.detachedWrites == 0;
-        needsPrepare = firstWrite && spa_pcm_sink.detachedNeedsPrepare;
+        needsPrepare = spa_pcm_sink.detachedNeedsPrepare;
         probeStatus = ((spa_pcm_sink.detachedWrites + 1u) % 256u) == 0;
         previousWriteNs = spa_pcm_sink.detachedClock.lastWriteNs;
         pthread_mutex_unlock(&spa_pcm_sink.lock);
@@ -4224,8 +4289,16 @@ static void spa_pcm_sink_write_one_detached_period(void)
                 pthread_mutex_unlock(&spa_pcm_sink.ioLock);
                 return;
             }
+            pthread_mutex_lock(&spa_pcm_sink.lock);
+            if (spa_pcm_sink.handle == handle && spa_pcm_sink.detached &&
+                spa_pcm_sink.expandedParams) {
+                spa_pcm_sink.detachedNeedsPrepare = 0;
+                if (spa_pcm_sink.detachedWrites != 0)
+                    spa_pcm_sink.detachedRecoveries++;
+            }
+            pthread_mutex_unlock(&spa_pcm_sink.lock);
         }
-        got = spa_buffered_pcm_read(spa_pcm_sink.scratch,
+        got = spa_buffered_pcm_peek(spa_pcm_sink.scratch,
                                     SPA_PCM_SINK_PERIOD_FRAMES, channels);
         if (got != SPA_PCM_SINK_PERIOD_FRAMES) {
             pthread_mutex_unlock(&spa_pcm_sink.ioLock);
@@ -4247,6 +4320,9 @@ static void spa_pcm_sink_write_one_detached_period(void)
                 written = realWrite(handle, spa_pcm_sink.scratch, bytes);
             }
         }
+        acceptedFrames = spa_pcm_write_accepted_frames(
+            (int64_t)written, channels * sizeof(int16_t), got);
+        (void)spa_buffered_pcm_commit(acceptedFrames, channels);
         writeNs = spa_monotonic_ns();
         if (previousWriteNs && writeNs > previousWriteNs)
             writeGapNs = writeNs - previousWriteNs;
@@ -4261,7 +4337,6 @@ static void spa_pcm_sink_write_one_detached_period(void)
         }
         pthread_mutex_lock(&spa_pcm_sink.lock);
         spa_pcm_sink.detachedWrites++;
-        if (firstWrite) spa_pcm_sink.detachedNeedsPrepare = 0;
         if (autoRecovery) spa_pcm_sink.detachedRecoveries++;
         if (written == 0) spa_pcm_sink.detachedZeroWrites++;
 #if ENABLE_STATE_TRACE
@@ -4437,7 +4512,7 @@ static int spa_create_metadata_common(spa_create_meta_t real, const char *which,
 #define SPA_CREATE_META_SYM_OL \
     "_ZN3dio11CQNXSoundIFINS_16ObjectLockPolicyILNS_6CMutex10en_mutex_tE2ELNS_14en_lock_type_tE0EEEE14createMetadataEjjjNS_15en_encryption_tENS_10en_codec_tE"
 
-int _ZN3dio11CQNXSoundIFINS_18SingleThreadPolicyEE14createMetadataEjjjNS_15en_encryption_tENS_10en_codec_tE(
+HOOK_EXPORT int _ZN3dio11CQNXSoundIFINS_18SingleThreadPolicyEE14createMetadataEjjjNS_15en_encryption_tENS_10en_codec_tE(
         void *self, uint32_t ch, uint32_t bits, uint32_t rate, int enc, int codec)
 {
     static spa_create_meta_t real;
@@ -4446,7 +4521,7 @@ int _ZN3dio11CQNXSoundIFINS_18SingleThreadPolicyEE14createMetadataEjjjNS_15en_en
     return spa_create_metadata_common(real, "single", self, ch, bits, rate, enc, codec);
 }
 
-int _ZN3dio11CQNXSoundIFINS_16ObjectLockPolicyILNS_6CMutex10en_mutex_tE2ELNS_14en_lock_type_tE0EEEE14createMetadataEjjjNS_15en_encryption_tENS_10en_codec_tE(
+HOOK_EXPORT int _ZN3dio11CQNXSoundIFINS_16ObjectLockPolicyILNS_6CMutex10en_mutex_tE2ELNS_14en_lock_type_tE0EEEE14createMetadataEjjjNS_15en_encryption_tENS_10en_codec_tE(
         void *self, uint32_t ch, uint32_t bits, uint32_t rate, int enc, int codec)
 {
     static spa_create_meta_t real;
@@ -4694,7 +4769,7 @@ fail:
     return 0;
 }
 
-int snd_pcm_open_name(snd_pcm_t **handle, char *name, int mode)
+HOOK_EXPORT int snd_pcm_open_name(snd_pcm_t **handle, char *name, int mode)
 {
     static spa_snd_open_name_t real;
     snd_pcm_t *reclaimedHandle = 0;
@@ -4738,7 +4813,6 @@ int snd_pcm_open_name(snd_pcm_t **handle, char *name, int mode)
                 detachedWrites = spa_pcm_sink.detachedWrites;
                 detachedZeroWrites = spa_pcm_sink.detachedZeroWrites;
                 spa_pcm_sink.detached = 0;
-                spa_pcm_sink.detachedNeedsPrepare = 0;
                 spa_pcm_sink.reclaimStage = SPA_PCM_RECLAIM_OPEN;
                 spa_pcm_sink.reclaimedOpens++;
                 spa_pcm_sink_reset_stock_counters_locked();
@@ -4852,7 +4926,7 @@ static int spa_sink_device_supports_voices(snd_pcm_t *handle, unsigned voices)
     return 1;
 }
 
-int snd_pcm_plugin_params(snd_pcm_t *handle, snd_pcm_channel_params_t *params)
+HOOK_EXPORT int snd_pcm_plugin_params(snd_pcm_t *handle, snd_pcm_channel_params_t *params)
 {
     static spa_snd_params_t real;
     snd_pcm_channel_params_t adjusted;
@@ -5075,16 +5149,19 @@ int snd_pcm_plugin_params(snd_pcm_t *handle, snd_pcm_channel_params_t *params)
     return result;
 }
 
-int snd_pcm_plugin_prepare(snd_pcm_t *handle, int channel)
+HOOK_EXPORT int snd_pcm_plugin_prepare(snd_pcm_t *handle, int channel)
 {
     static spa_snd_prepare_t real;
     static int (*realStatus)(snd_pcm_t *, snd_pcm_channel_status_t *);
     snd_pcm_channel_status_t status;
     int reclaimPrepare = 0, detachedRecovery = 0, statusResult = -1, skip = 0;
+    int result;
 
     if (!real)
         real = (spa_snd_prepare_t)dlsym(RTLD_NEXT, "snd_pcm_plugin_prepare");
     if (!real) return -1;
+
+    pthread_mutex_lock(&spa_pcm_sink.ioLock);
 
     pthread_mutex_lock(&spa_pcm_sink.lock);
     reclaimPrepare = handle && handle == spa_pcm_sink.handle &&
@@ -5122,7 +5199,8 @@ int snd_pcm_plugin_prepare(snd_pcm_t *handle, int channel)
             spa_pcm_sink.reclaimStage == SPA_PCM_RECLAIM_PARAMS &&
             spa_pcm_sink.expandedParams) {
             spa_pcm_sink.reclaimStage = SPA_PCM_RECLAIM_NONE;
-            if (statusResult == 0 && status.status == SND_PCM_STATUS_RUNNING) {
+            if (statusResult == 0 && status.status == SND_PCM_STATUS_RUNNING &&
+                !spa_pcm_sink.detachedNeedsPrepare) {
                 spa_pcm_sink.skippedReclaimPrepares++;
                 skip = 1;
             }
@@ -5134,6 +5212,7 @@ int snd_pcm_plugin_prepare(snd_pcm_t *handle, int channel)
         LOG_WARN(LOG_MODULE,
                  "audio sink: reclaimed prepare kept live handle=%p channel=%d",
                  handle, channel);
+        pthread_mutex_unlock(&spa_pcm_sink.ioLock);
         return 0;
     }
     if (reclaimPrepare)
@@ -5142,10 +5221,19 @@ int snd_pcm_plugin_prepare(snd_pcm_t *handle, int channel)
                  "status=%d underruns=%u",
                  statusResult, statusResult == 0 ? status.status : -1,
                  statusResult == 0 ? (unsigned)status.underrun : 0u);
-    return real(handle, channel);
+    result = real(handle, channel);
+    if (result == 0) {
+        pthread_mutex_lock(&spa_pcm_sink.lock);
+        if (handle && handle == spa_pcm_sink.handle &&
+            channel == SND_PCM_CHANNEL_PLAYBACK)
+            spa_pcm_sink.detachedNeedsPrepare = 0;
+        pthread_mutex_unlock(&spa_pcm_sink.lock);
+    }
+    pthread_mutex_unlock(&spa_pcm_sink.ioLock);
+    return result;
 }
 
-int snd_pcm_plugin_setup(snd_pcm_t *handle, snd_pcm_channel_setup_t *setup)
+HOOK_EXPORT int snd_pcm_plugin_setup(snd_pcm_t *handle, snd_pcm_channel_setup_t *setup)
 {
     static spa_snd_setup_t real;
     snd_pcm_channel_setup_t actual;
@@ -5315,7 +5403,7 @@ static void spa_tap_write(const char *path, size_t *taken, const void *buf, size
 
 typedef ssize_t (*spa_snd_write_internal_t)(snd_pcm_t *, const void *, size_t);
 
-ssize_t snd_pcm_write_internal(snd_pcm_t *handle, const void *buffer, size_t size)
+HOOK_EXPORT ssize_t snd_pcm_write_internal(snd_pcm_t *handle, const void *buffer, size_t size)
 {
     static spa_snd_write_internal_t real;
     static size_t taken;
@@ -5332,15 +5420,16 @@ ssize_t snd_pcm_write_internal(snd_pcm_t *handle, const void *buffer, size_t siz
     return real(handle, buffer, size);
 }
 
-ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, size_t size)
+HOOK_EXPORT ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, size_t size)
 {
     static spa_snd_write_t real;
+    static spa_snd_prepare_t realPrepare;
     unsigned sourceChannels, outputChannels;
     size_t sourceFrameBytes, outputFrameBytes, frames, outputBytes;
     size_t bufferedFrames = 0;
     enum spa_pcm_period_source periodSource;
     ssize_t written;
-    int useBridge, bufferedOwnsMedia;
+    int useBridge, bufferedOwnsMedia, needsPrepare;
 #if ENABLE_STATE_TRACE
     int traceFirstSuccessfulWrite = 0;
     int traceQsaHealth = 0;
@@ -5408,11 +5497,39 @@ ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, size_t size)
         spa_pcm_sink.scratchBytes = outputBytes;
     }
 
+    /* FLUSHBUFFERED may have stopped this shared handle while stock still owns
+     * it.  Prepare before peeking buffered PCM so a missing/failing prepare
+     * cannot consume a period which never reached QSA. */
+    needsPrepare = spa_pcm_sink.detachedNeedsPrepare;
+    if (needsPrepare) {
+        int prepareResult;
+
+        pthread_mutex_unlock(&spa_pcm_sink.lock);
+        if (!realPrepare)
+            realPrepare = (spa_snd_prepare_t)dlsym(RTLD_NEXT,
+                                                   "snd_pcm_plugin_prepare");
+        prepareResult = realPrepare ?
+            realPrepare(handle, SND_PCM_CHANNEL_PLAYBACK) : -1;
+        pthread_mutex_lock(&spa_pcm_sink.lock);
+        if (prepareResult != 0 || handle != spa_pcm_sink.handle ||
+            !spa_pcm_sink.expandedParams) {
+            pthread_mutex_unlock(&spa_pcm_sink.lock);
+            pthread_mutex_unlock(&spa_pcm_sink.ioLock);
+            LOG_ERROR(LOG_MODULE,
+                      "audio sink: stock timeline prepare failed handle=%p result=%d",
+                      handle, prepareResult);
+            return -1;
+        }
+        spa_pcm_sink.detachedNeedsPrepare = 0;
+        STATE_TRACE("QSA_TIMELINE_PREPARE",
+                    "owner=stock action=recover result=0");
+    }
+
     /* One locked channel snapshot is also the ownership snapshot.  Avoid two
      * independently timed active/channels reads across a concurrent teardown. */
     bufferedOwnsMedia = spa_buffered_pcm_channels() == outputChannels;
     if (bufferedOwnsMedia)
-        bufferedFrames = spa_buffered_pcm_read(spa_pcm_sink.scratch, frames,
+        bufferedFrames = spa_buffered_pcm_peek(spa_pcm_sink.scratch, frames,
                                                outputChannels);
     periodSource = spa_pcm_period_source(bufferedOwnsMedia, bufferedFrames);
     if (periodSource == SPA_PCM_PERIOD_FROM_SILENCE) {
@@ -5462,6 +5579,12 @@ ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, size_t size)
      * measured that widening to be exactly a left shift by 16 with channel order
      * intact -- so there is nothing for this path to improve on. */
     written = real(handle, spa_pcm_sink.scratch, outputBytes);
+    if (periodSource == SPA_PCM_PERIOD_FROM_BUFFERED) {
+        size_t acceptedFrames = spa_pcm_write_accepted_frames(
+            (int64_t)written, outputFrameBytes, bufferedFrames);
+
+        (void)spa_buffered_pcm_commit(acceptedFrames, outputChannels);
+    }
     pthread_mutex_lock(&spa_pcm_sink.lock);
     spa_pcm_sink.lastWriteResult = (int64_t)written;
 #if ENABLE_STATE_TRACE
@@ -5484,7 +5607,7 @@ ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, size_t size)
         if (firstBadWrite)
             LOG_WARN(LOG_MODULE,
                      "audio sink: device did not take the whole fragment (%d of %u bytes) "
-                     "at write %llu -- the stock caller will rewrite this buffer",
+                     "at write %llu -- any buffered transaction committed only its accepted prefix",
                      (int)written, (unsigned)outputBytes,
                      (unsigned long long)spa_pcm_sink.writes);
     }
@@ -5603,7 +5726,7 @@ ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, size_t size)
     return (ssize_t)(((size_t)written / outputFrameBytes) * sourceFrameBytes);
 }
 
-int snd_pcm_plugin_flush(snd_pcm_t *handle, int channel)
+HOOK_EXPORT int snd_pcm_plugin_flush(snd_pcm_t *handle, int channel)
 {
     static spa_snd_flush_t real;
     int candidate, suppress = 0;
@@ -5658,7 +5781,7 @@ int snd_pcm_plugin_flush(snd_pcm_t *handle, int channel)
     return 0;
 }
 
-int snd_pcm_close(snd_pcm_t *handle)
+HOOK_EXPORT int snd_pcm_close(snd_pcm_t *handle)
 {
     static spa_snd_close_t real;
     static spa_snd_flush_t realFlush;
@@ -6599,7 +6722,7 @@ done:
  */
 typedef int (*spa_air_tunes_ensure_created_t)(void);
 
-int AirTunesServer_EnsureCreated(void)
+HOOK_EXPORT int AirTunesServer_EnsureCreated(void)
 {
     static spa_air_tunes_ensure_created_t real_ensure_created;
     int err;
@@ -7443,7 +7566,7 @@ static void spa_teardown_buffered_receiver(void *session, void *request)
  * enough — no copy, no reallocation of the caller's object. */
 typedef void *(*fn_copyprop_t)(void *, int, const void *, const void *, int32_t *);
 
-void *AirPlayReceiverServerPlatformCopyProperty(void *server, int sessionID, const void *property,
+HOOK_EXPORT void *AirPlayReceiverServerPlatformCopyProperty(void *server, int sessionID, const void *property,
                                                 const void *qualifier, int32_t *outErr)
 {
     static fn_copyprop_t real;
@@ -7685,7 +7808,7 @@ static void spa_capture_server_info(void *info)
 typedef int (*fn_session_control_t)(void *, uint32_t, const void *, const void *,
                                     const void *, void **);
 
-int AirPlayReceiverSessionControl(void *session, uint32_t flags, const void *command,
+HOOK_EXPORT int AirPlayReceiverSessionControl(void *session, uint32_t flags, const void *command,
                                   const void *qualifier, const void *params, void **responseOut)
 {
     static fn_session_control_t real;

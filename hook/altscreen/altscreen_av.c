@@ -19,12 +19,15 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 DEFINE_LOG_MODULE(altscreen_av);
 
-#ifndef MSG_NOSIGNAL
-#define MSG_NOSIGNAL 0
-#endif
+/* QNX 6.5 exposes MSG_NOSIGNAL in its headers but io-pkt returns ENOSYS when
+ * it is passed to send(). bus_init() ignores SIGPIPE process-wide, so socket
+ * sends in this hook must use flags=0. */
+#define ALTAV_SEND_FLAGS 0
+typedef char altav_send_flags_must_be_zero[(ALTAV_SEND_FLAGS == 0) ? 1 : -1];
 
 /* Bounded per-record send stall.  Lowered from 8000: a receiver stuck here holds g_lock,
  * and a teardown/reap that joins it inherits this as latency on the RTSP path.  The
@@ -167,17 +170,20 @@ static int av_send_all_locked(const void *data, uint32_t len)
 {
     const uint8_t *p = (const uint8_t *)data;
     uint32_t off = 0;
-    struct timeval started, now;
-    gettimeofday(&started, NULL);
+    struct timespec started, now;
+
+    if (clock_gettime(CLOCK_MONOTONIC, &started) != 0)
+        return -1;
     while (off < len) {
-        ssize_t n = send(g_fd, p + off, len - off, MSG_NOSIGNAL);
+        ssize_t n = send(g_fd, p + off, len - off, ALTAV_SEND_FLAGS);
         if (n > 0) { off += (uint32_t)n; continue; }
         if (n < 0 && errno == EINTR) continue;
         if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
             long elapsed_ms;
-            gettimeofday(&now, NULL);
+            if (clock_gettime(CLOCK_MONOTONIC, &now) != 0)
+                return -1;
             elapsed_ms = (long)(now.tv_sec - started.tv_sec) * 1000L +
-                         (long)(now.tv_usec - started.tv_usec) / 1000L;
+                         (long)(now.tv_nsec - started.tv_nsec) / 1000000L;
             if (elapsed_ms < AV_SEND_STALL_LIMIT_MS) continue;
         }
         LOG_ERROR(LOG_MODULE,

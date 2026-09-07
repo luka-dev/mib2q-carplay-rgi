@@ -57,6 +57,10 @@ $CC $CFLAGS tests/buffered_pcm_switch_test.c hook/audio/spatial_downmix.c \
     -lm -o "$OUT/buffered_pcm_switch_test"
 "$OUT/buffered_pcm_switch_test"
 
+echo "=== aac_fifo_test ==="
+$CC $CFLAGS tests/aac_fifo_test.c -o "$OUT/aac_fifo_test"
+"$OUT/aac_fifo_test"
+
 echo "=== feedback_clock_test ==="
 $CC $CFLAGS tests/feedback_clock_test.c -o "$OUT/feedback_clock_test"
 "$OUT/feedback_clock_test"
@@ -70,6 +74,11 @@ echo "=== soundcheck_test ==="
 $CC $CFLAGS tests/soundcheck_test.c hook/audio/soundcheck.c -lm \
     -o "$OUT/soundcheck_test"
 "$OUT/soundcheck_test"
+
+echo "=== coverart_safety_test ==="
+$CC $CFLAGS tests/coverart_safety_test.c hook/coverart/jpeg_safety.c \
+    -o "$OUT/coverart_safety_test"
+"$OUT/coverart_safety_test"
 
 echo "=== apac_type103_test ==="
 rm -rf "$OUT/obj"; mkdir -p "$OUT/obj"

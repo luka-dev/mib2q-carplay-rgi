@@ -368,7 +368,7 @@ typedef int (*state_trace_hid_remote_fill_t)(uint8_t *, uint32_t, int,
                                               const uint8_t *);
 typedef int (*state_trace_hid_post_t)(void *, const void *, size_t);
 
-int HIDRemotePlaybackFillReport(uint8_t *report, uint32_t usage, int asserted,
+HOOK_EXPORT int HIDRemotePlaybackFillReport(uint8_t *report, uint32_t usage, int asserted,
                                 const uint8_t *descriptor_bits)
 {
     static state_trace_hid_remote_fill_t real;
@@ -394,7 +394,7 @@ int HIDRemotePlaybackFillReport(uint8_t *report, uint32_t usage, int asserted,
     return result;
 }
 
-int HIDDevicePostReport(void *hid_device, const void *report, size_t report_len)
+HOOK_EXPORT int HIDDevicePostReport(void *hid_device, const void *report, size_t report_len)
 {
     static state_trace_hid_post_t real;
     uint32_t ordinal;

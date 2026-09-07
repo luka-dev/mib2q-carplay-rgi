@@ -13,11 +13,67 @@
 #define PCM_PERIOD_H
 
 #include <stddef.h>
+#include <stdint.h>
 
 static inline size_t spa_pcm_whole_period_frames(size_t available,
                                                   size_t requested)
 {
     return requested && available >= requested ? requested : 0;
+}
+
+/* A successful flush stops the playback channel.  If its paired prepare was
+ * unavailable or failed, the next writer must prepare before it consumes any
+ * buffered PCM.  A failed flush does not prove that the handle was stopped. */
+static inline int spa_pcm_prepare_pending_after_flush(int flush_result,
+                                                       int prepare_result)
+{
+    return flush_result == 0 && prepare_result != 0;
+}
+
+/* A buffered period is only offered to QSA here; ownership changes after the
+ * device reports how many complete interleaved frames it accepted. */
+static inline size_t spa_pcm_write_accepted_frames(int64_t written_bytes,
+                                                   size_t frame_bytes,
+                                                   size_t offered_frames)
+{
+    size_t accepted;
+
+    if (written_bytes <= 0 || !frame_bytes || !offered_frames)
+        return 0;
+    accepted = (size_t)written_bytes / frame_bytes;
+    return accepted < offered_frames ? accepted : offered_frames;
+}
+
+static inline int spa_pcm_ring_reserve(size_t fill, size_t requested,
+                                       size_t *reserved)
+{
+    if (!reserved || *reserved || !requested || fill < requested)
+        return 0;
+    *reserved = requested;
+    return 1;
+}
+
+/* Commit only the accepted prefix and release the rest of the reservation.
+ * A zero/error therefore leaves the full period at the ring head; a short
+ * write leaves its exact whole-frame tail for the caller's retry. */
+static inline size_t spa_pcm_ring_commit(size_t capacity,
+                                         size_t *head, size_t *fill,
+                                         size_t *reserved,
+                                         size_t accepted_frames)
+{
+    size_t accepted;
+
+    if (!head || !fill || !reserved)
+        return 0;
+    accepted = accepted_frames;
+    if (accepted > *reserved) accepted = *reserved;
+    if (accepted > *fill) accepted = *fill;
+    if (!capacity) accepted = 0;
+    if (accepted)
+        *head = (*head + accepted) % capacity;
+    *fill -= accepted;
+    *reserved = 0;
+    return accepted;
 }
 
 static inline int spa_pcm_prime_ready(size_t available, size_t target)

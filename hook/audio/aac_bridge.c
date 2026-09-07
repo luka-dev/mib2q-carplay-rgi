@@ -20,6 +20,7 @@
  * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 #include "apac_bridge.h"
+#include "aac_fifo.h"
 
 #include <dlfcn.h>
 #include <stdlib.h>
@@ -73,6 +74,8 @@ struct spa_aac_decoder {
     uint32_t  sampleRate;
     int16_t   fifo[AAC_FIFO_FRAMES * AAC_MAX_CHANNELS];
     uint32_t  fifoFrames;
+    uint32_t  fifoCapacityFrames; /* current caller's output budget, capped by storage */
+    int       fifoOverflow;       /* fail/recover; never report a truncated AU as success */
     int       formatBad;           /* a callback reported something other than S16/48k/2ch */
 };
 
@@ -183,7 +186,7 @@ static int32_t aac_decoded_callback(void *context, const void *pcm, uint32_t pcm
 {
     struct spa_aac_decoder *d = (struct spa_aac_decoder *)context;
     const uint8_t *fmt = (const uint8_t *)format;
-    uint32_t frames, room;
+    uint32_t frames;
 
     (void)pts; (void)flags;
     if (!d || !pcm || !pcmBytes) return 0;
@@ -198,9 +201,12 @@ static int32_t aac_decoded_callback(void *context, const void *pcm, uint32_t pcm
             return 0;
         }
     }
-    frames = pcmBytes / (d->channels * (uint32_t)sizeof(int16_t));
-    room = AAC_FIFO_FRAMES - d->fifoFrames;
-    if (frames > room) frames = room;         /* bounded: drop the tail rather than overrun */
+    if (!spa_aac_fifo_callback_frames(pcmBytes, d->channels, &frames) ||
+        !spa_aac_fifo_can_append(d->fifoFrames, frames,
+                                 d->fifoCapacityFrames)) {
+        d->fifoOverflow = 1;
+        return 0;
+    }
     if (!frames) return 0;
     memcpy(d->fifo + (size_t)d->fifoFrames * d->channels, pcm,
            (size_t)frames * d->channels * sizeof(int16_t));
@@ -297,10 +303,16 @@ static int spa_aac_decode_s16(struct spa_aac_decoder *d, const uint8_t *packet, 
                         int16_t *out, size_t outCapacity, uint32_t *framesOut)
 {
     uint32_t frames, samples;
+    size_t capacityFrames;
+    int32_t writeResult;
 
     if (!d || !out || !framesOut) return SPA_APAC_ERR_ARGS;
     *framesOut = 0;
     d->fifoFrames = 0;
+    d->fifoOverflow = 0;
+    capacityFrames = outCapacity / d->channels;
+    d->fifoCapacityFrames = capacityFrames > AAC_FIFO_FRAMES ?
+                            AAC_FIFO_FRAMES : (uint32_t)capacityFrames;
 
     if (!length) {                                   /* the flush path, as APAC treats it */
         if (g_cinemo.flush) g_cinemo.flush(d->codec);
@@ -310,8 +322,16 @@ static int spa_aac_decode_s16(struct spa_aac_decoder *d, const uint8_t *packet, 
 
     /* The donor's argument shape, kept literally: (AU, bytes, 1, pts=0, 1).  Timing comes from
      * the receiver's own ring clock, so no PTS is invented here. */
-    if (g_cinemo.write(d->codec, packet, (uint32_t)length, 1, 0, 1) != 0)
-        return SPA_APAC_ERR_DECODE;
+    writeResult = g_cinemo.write(d->codec, packet, (uint32_t)length, 1, 0, 1);
+    if (d->fifoOverflow) {
+        /* Write consumed the compressed AU but its PCM cannot be represented
+         * intact.  Flush Cinemo so the next packet starts from an explicit
+         * recovery boundary instead of continuing after hidden sample loss. */
+        if (g_cinemo.flush) (void)g_cinemo.flush(d->codec);
+        d->fifoFrames = 0;
+        return SPA_APAC_ERR_OUTPUT_SPACE;
+    }
+    if (writeResult != 0) return SPA_APAC_ERR_DECODE;
     if (d->formatBad) return SPA_APAC_ERR_CONFIG;
 
     frames = d->fifoFrames;
@@ -327,6 +347,8 @@ static void spa_aac_reset(struct spa_aac_decoder *d)
     if (!d || !d->codec) return;
     if (g_cinemo.flush) g_cinemo.flush(d->codec);
     d->fifoFrames = 0;
+    d->fifoCapacityFrames = AAC_FIFO_FRAMES;
+    d->fifoOverflow = 0;
     d->formatBad = 0;
 }
 

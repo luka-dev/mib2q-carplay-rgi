@@ -205,4 +205,12 @@ int spa_buffered_pcm_active(void);
 unsigned spa_buffered_pcm_channels(void);
 size_t spa_buffered_pcm_read(int16_t *out, size_t frames, unsigned channels);
 
+/* Transactional sink API. `peek` copies one whole period without consuming it;
+ * `commit` advances only the prefix QSA accepted and releases the unwritten
+ * tail. There may be only one outstanding peek; the QSA bridge serializes it
+ * with its existing ioLock. The immediate `read` above remains for callers
+ * which do not need device-acceptance tracking. */
+size_t spa_buffered_pcm_peek(int16_t *out, size_t frames, unsigned channels);
+size_t spa_buffered_pcm_commit(size_t accepted_frames, unsigned channels);
+
 #endif /* AUDIO_HOOK_H */

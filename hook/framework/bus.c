@@ -25,6 +25,7 @@
  */
 
 #include "bus.h"
+#include "signal_guard.h"
 #include "logging.h"
 
 #include <arpa/inet.h>
@@ -718,9 +719,10 @@ static void* timer_main(void* arg) {
  * handler.  If the fault landed while any thread held g_log.lock (we log
  * constantly), the handler DEADLOCKED — the process hung instead of
  * dumping a core, which an external watchdog then SIGKILLs, masking the
- * very crash we were chasing.  Now: one write(2) of a fixed string
- * (write/signal/raise are all async-signal-safe), then restore default
- * and re-raise so the core still drops. */
+ * very crash we were chasing.  Now: one write(2) of a fixed string, then
+ * restore and re-raise into dio_manager's exact previous disposition. */
+static spa_signal_guard_t g_signal_guard;
+
 static void bus_crash_handler(int sig) {
     const char* msg;
     switch (sig) {
@@ -734,29 +736,51 @@ static void bus_crash_handler(int sig) {
     size_t n = 0;                       /* inline (strlen is not async-signal-safe) */
     while (msg[n]) n++;
     (void)write(STDERR_FILENO, msg, n);
-    signal(sig, SIG_DFL);               /* chain: default action (core dump) re-raised */
-    raise(sig);
+    spa_signal_guard_chain(&g_signal_guard, sig);
+}
+
+static int bus_install_signal_policy(void)
+{
+    static const int fatalSignals[] = {
+        SIGSEGV, SIGBUS, SIGABRT, SIGILL, SIGFPE
+    };
+    struct sigaction action;
+    unsigned i;
+
+    memset(&action, 0, sizeof(action));
+    action.sa_handler = SIG_IGN;
+    sigemptyset(&action.sa_mask);
+    if (spa_signal_guard_install(&g_signal_guard, SIGPIPE, &action) != 0)
+        return -1;
+
+    memset(&action, 0, sizeof(action));
+    action.sa_handler = bus_crash_handler;
+    sigemptyset(&action.sa_mask);
+    for (i = 0; i < sizeof(fatalSignals) / sizeof(fatalSignals[0]); ++i) {
+        if (spa_signal_guard_install(&g_signal_guard, fatalSignals[i],
+                                     &action) != 0) {
+            spa_signal_guard_restore(&g_signal_guard);
+            return -1;
+        }
+    }
+    return 0;
 }
 
 hook_result_t bus_init(void) {
     if (g_connector_up || g_writer_up || g_timer_up) return HOOK_ERR_BUSY;
 
-    /* A peer reset during initial sync must not terminate dio_manager.
-     * write_all() also uses MSG_NOSIGNAL where the platform exposes it,
-     * but ignoring SIGPIPE covers QNX/libsocket variants too. */
-    signal(SIGPIPE, SIG_IGN);
-
-    /* Diagnostic: mark FATAL FAULT signals before re-raising (the handler is
-     * async-signal-safe).  ONLY fault signals — we must NOT hijack the host
-     * process's control signals (SIGTERM/INT/QUIT/HUP/USR1/USR2): those belong
-     * to dio_manager's own supervisor/shutdown logic, not to an injected lib.
-     * SIGKILL cannot be caught; if the process dies with none of these firing
-     * → external SIGKILL (procmgr / watchdog). */
-    signal(SIGSEGV, bus_crash_handler);
-    signal(SIGBUS,  bus_crash_handler);
-    signal(SIGABRT, bus_crash_handler);
-    signal(SIGILL,  bus_crash_handler);
-    signal(SIGFPE,  bus_crash_handler);
+    /* A peer reset during initial sync must not terminate dio_manager. Every
+     * hook socket uses flags=0 because QNX io-pkt rejects MSG_NOSIGNAL, so the
+     * reversible policy ignores SIGPIPE while the bus is active. Diagnostic
+     * fault handlers chain to dio_manager's
+     * exact previous disposition.  ONLY fault signals — we must NOT hijack the
+     * host process's control signals (SIGTERM/INT/QUIT/HUP/USR1/USR2): those
+     * belong to dio_manager's own supervisor/shutdown logic, not to an injected
+     * library.  SIGKILL cannot be caught. */
+    if (bus_install_signal_policy() != 0) {
+        LOG_ERROR(LOG_MODULE, "failed to install reversible signal policy errno=%d", errno);
+        return HOOK_ERR_INIT;
+    }
 
     /* Do NOT memset g_types here: lazy module registration calls bus_on()
      * before bus_init runs.  BSS zero-init already guarantees clean state. */
@@ -773,6 +797,7 @@ hook_result_t bus_init(void) {
     if (pthread_create(&g_connector_tid, NULL, connector_main, NULL) != 0) {
         LOG_ERROR(LOG_MODULE, "connector pthread_create failed");
         g_connector_up = false;
+        spa_signal_guard_restore(&g_signal_guard);
         return HOOK_ERR_INIT;
     }
     g_connector_created = true;
@@ -789,6 +814,7 @@ hook_result_t bus_init(void) {
         pthread_mutex_unlock(&g_lock);
         pthread_join(g_connector_tid, NULL);
         g_connector_created = false;
+        spa_signal_guard_restore(&g_signal_guard);
         return HOOK_ERR_INIT;
     }
     g_writer_created = true;
@@ -882,6 +908,8 @@ void bus_shutdown(void) {
         g_types[i].has_last = false;
     }
     pthread_mutex_unlock(&g_lock);
+
+    spa_signal_guard_restore(&g_signal_guard);
 
     LOG_INFO(LOG_MODULE, "bus shutdown complete pid=%d owner=%d", (int)getpid(), g_bus_owner_pid);
 }

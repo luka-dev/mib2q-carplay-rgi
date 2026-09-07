@@ -3,6 +3,14 @@
 These are offline, reversible candidates for the two independently verified
 failure paths. Nothing in this directory deploys to the head unit by itself.
 
+The complete Russian deployment, live A/B, diagnosis, acceptance, and rollback
+recipe is in
+[`../../docs/USB_REPLUG_RECOVERY_RUNBOOK.md`](../../docs/USB_REPLUG_RECOVERY_RUNBOOK.md).
+
+A self-contained exact-version bundle with ready `payload/`, exact `stock/`, a
+SHA-256 manifest, guarded host installers and its own documentation is in
+[`bundle_mu1316_p5087/`](bundle_mu1316_p5087/README.md).
+
 ## 1. NCM generation fence
 
 Install `startncm.sh` and `stopncm.sh` together with the small

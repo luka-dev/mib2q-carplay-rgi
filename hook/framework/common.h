@@ -27,6 +27,16 @@
 #include <pthread.h>
 #include <time.h>
 
+/* The hook is built with -fvisibility=hidden.  Only genuine LD_PRELOAD
+ * boundaries carry this marker, and the linker version script applies a
+ * second exact-name allowlist.  Internal helpers therefore cannot accidentally
+ * preempt a same-named symbol in dio_manager or one of its libraries. */
+#if defined(__GNUC__)
+#define HOOK_EXPORT __attribute__((visibility("default")))
+#else
+#define HOOK_EXPORT
+#endif
+
 #ifdef __QNX__
 #include <sys/neutrino.h>
 #endif

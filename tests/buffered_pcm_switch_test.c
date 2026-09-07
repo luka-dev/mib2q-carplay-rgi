@@ -83,6 +83,12 @@ static void assert_whole_period_policy(void)
     assert(spa_pcm_whole_period_frames(1024, qsa_frames) == qsa_frames);
     assert(spa_pcm_whole_period_frames(1024, 0) == 0);
 
+    assert(!spa_pcm_prepare_pending_after_flush(-1, -1));
+    assert(!spa_pcm_prepare_pending_after_flush(-1, 0));
+    assert(!spa_pcm_prepare_pending_after_flush(0, 0));
+    assert(spa_pcm_prepare_pending_after_flush(0, -1));
+    assert(spa_pcm_prepare_pending_after_flush(0, 7));
+
     /* Model the actual codec/sink granularity.  A 256- or 512-frame
      * remainder must survive a fallback period; it must never be consumed as
      * the prefix of a partly silent fragment. */
@@ -179,6 +185,40 @@ static void assert_detached_render_pump_policy(void)
            SPA_PCM_PERIOD_FROM_BUFFERED);
     assert(spa_pcm_period_source(1, qsa_frames) ==
            SPA_PCM_PERIOD_FROM_BUFFERED);
+
+    {
+        const size_t frame_bytes = 6 * sizeof(int16_t);
+        size_t head = 900, ring_fill = qsa_frames * 2, reserved = 0;
+        size_t accepted;
+
+        assert(spa_pcm_ring_reserve(ring_fill, qsa_frames, &reserved));
+        accepted = spa_pcm_write_accepted_frames(0, frame_bytes, reserved);
+        assert(spa_pcm_ring_commit(1024, &head, &ring_fill, &reserved,
+                                   accepted) == 0);
+        assert(head == 900 && ring_fill == qsa_frames * 2 && reserved == 0);
+
+        /* A retry sees the same head.  A half-period write consumes only that
+         * prefix and leaves the exact unwritten frames queued. */
+        assert(spa_pcm_ring_reserve(ring_fill, qsa_frames, &reserved));
+        accepted = spa_pcm_write_accepted_frames(
+            (int64_t)(qsa_frames / 2 * frame_bytes), frame_bytes, reserved);
+        assert(spa_pcm_ring_commit(1024, &head, &ring_fill, &reserved,
+                                   accepted) == qsa_frames / 2);
+        assert(head == 260);
+        assert(ring_fill == qsa_frames + qsa_frames / 2);
+        assert(reserved == 0);
+
+        assert(spa_pcm_ring_reserve(ring_fill, qsa_frames, &reserved));
+        accepted = spa_pcm_write_accepted_frames(
+            (int64_t)(qsa_frames * frame_bytes), frame_bytes, reserved);
+        assert(spa_pcm_ring_commit(1024, &head, &ring_fill, &reserved,
+                                   accepted) == qsa_frames);
+        assert(head == 4 && ring_fill == qsa_frames / 2 && reserved == 0);
+
+        assert(spa_pcm_write_accepted_frames(-1, frame_bytes, qsa_frames) == 0);
+        assert(spa_pcm_write_accepted_frames((int64_t)frame_bytes - 1,
+                                             frame_bytes, qsa_frames) == 0);
+    }
 
     /* Model a permanently-ready source.  Unlike drain-to-empty, one source
      * packet plus at most one sink period per iteration converges to a narrow

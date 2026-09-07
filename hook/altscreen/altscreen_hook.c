@@ -1040,6 +1040,7 @@ typedef struct {
     int         settingUp;
     int         closing;
     uint32_t    generation;
+    uint32_t    avGeneration; /* global transport-owner generation for exact lookup */
     int         inUse;
     uint8_t     key[16];     /* self-contained receiver: AES-CTR key ...  */
     uint8_t     iv[16];      /* ... + iv (derived in alt_setup)           */
@@ -1052,16 +1053,8 @@ typedef struct {
     int listenSock;
 } altthread_arg_t;
 #define ALT_MAX_SESSIONS 4
-/* R2: bounded wait for a concurrent teardown to finish clearing this session's slot
- * before a new SETUP gives up. Fast-replug pointer reuse can otherwise hit a slot
- * mid-close and fail the whole control SETUP. */
-#define ALT_SETUP_CLOSE_WAIT_MS 500
-/* A SETUP/TEARDOWN must never block forever in pthread_join.  The receiver
- * checks stop every 60 ms and renderer forwarding has a 1000 ms stall cap;
- * 1800 ms covers both while staying far below AirPlay's control-SETUP timeout. */
-#define ALT_REAP_WAIT_MS 1800
-/* The setup transaction contains one bounded old-receiver reap.  TearDown must
- * not wait forever if a stock CF/socket primitive nevertheless wedges. */
+/* TearDown may wait for an in-progress SETUP to stop touching stock session
+ * fields. Receiver collection itself is always deferred until threadExited. */
 #define ALT_TEARDOWN_SETUP_WAIT_MS 2500
 static altslot_t alt_slots[ALT_MAX_SESSIONS];
 /* Monotonic transport-owner generation, assigned per successfully-created receiver
@@ -1069,33 +1062,46 @@ static altslot_t alt_slots[ALT_MAX_SESSIONS];
  * later receiver on any slot supersedes every earlier one as the single altav owner. */
 static uint32_t g_alt_gen_counter = 0;
 
-static altslot_t *alt_slot_get(void *session)   /* find or alloc (caller holds alt_lock) */
+static int alt_slot_is_current_locked(const altslot_t *slot)
 {
-    int i, free_i = -1;
-    for (i = 0; i < ALT_MAX_SESSIONS; i++) {
-        if (alt_slots[i].inUse && alt_slots[i].session == session) return &alt_slots[i];
-        if (!alt_slots[i].inUse && free_i < 0) free_i = i;
-    }
-    if (free_i < 0) return NULL;
-    memset(&alt_slots[free_i], 0, sizeof(altslot_t));
-    alt_slots[free_i].session = session;
-    alt_slots[free_i].altSock = -1;
-    alt_slots[free_i].inUse = 1;
-    return &alt_slots[free_i];
+    return slot && g_alt_session && slot->session == g_alt_session &&
+           slot->avGeneration != 0 &&
+           slot->avGeneration == g_alt_session_gen;
 }
-static altslot_t *alt_slot_find(void *session)
+
+/* SETUP never reuses a live receiver slot.  It retires the old generation and
+ * allocates another slot, so the RTSP thread is not held for up to 1.8 seconds
+ * while the old receiver leaves a stock/socket call. */
+static altslot_t *alt_slot_alloc(void *session) /* caller holds alt_lock */
 {
     int i;
-    for (i = 0; i < ALT_MAX_SESSIONS; i++)
-        if (alt_slots[i].inUse && alt_slots[i].session == session) return &alt_slots[i];
+    for (i = 0; i < ALT_MAX_SESSIONS; i++) {
+        if (!alt_slots[i].inUse) {
+            memset(&alt_slots[i], 0, sizeof(alt_slots[i]));
+            alt_slots[i].session = session;
+            alt_slots[i].altSock = -1;
+            alt_slots[i].inUse = 1;
+            return &alt_slots[i];
+        }
+    }
+    return NULL;
+}
+
+static altslot_t *alt_slot_find_generation(void *session, uint32_t avGeneration)
+{
+    int i;
+    for (i = 0; i < ALT_MAX_SESSIONS; i++) {
+        altslot_t *slot = &alt_slots[i];
+        if (slot->inUse && slot->session == session &&
+            slot->avGeneration == avGeneration)
+            return slot;
+    }
     return NULL;
 }
 
 static void alt_deadline_after_ms(struct timespec *deadline, long ms);
 
-/* Claim and reap exactly one receiver generation.  A live generation is asked
- * to stop and its listener is closed; collection is allowed only after the
- * bounded terminal-flag wait below, then join runs outside alt_lock. */
+/* pthread_cond_timedwait uses an absolute CLOCK_REALTIME deadline on QNX 6.5. */
 static void alt_deadline_after_ms(struct timespec *deadline, long ms)
 {
     clock_gettime(CLOCK_REALTIME, deadline);
@@ -1107,65 +1113,27 @@ static void alt_deadline_after_ms(struct timespec *deadline, long ms)
     }
 }
 
-static int alt_reap_thread(altslot_t *slot, int requestStop)
+/* Collect only a receiver which has already published threadExited.  There is
+ * no wait here: SETUP/TEARDOWN merely set stop and close the listener; a later
+ * GC pass performs this guaranteed-fast join. */
+static int alt_reap_exited_thread(altslot_t *slot)
 {
     pthread_t thread;
     uint32_t generation;
-    int listener = -1;
-    int wait_rc = 0;
-    struct timespec deadline;
 
     if (!slot) return 0;
-    alt_deadline_after_ms(&deadline, ALT_REAP_WAIT_MS);
     pthread_mutex_lock(&alt_lock);
-    while (slot->threadReaping && wait_rc != ETIMEDOUT)
-        wait_rc = pthread_cond_timedwait(&alt_cond, &alt_lock, &deadline);
-    if (slot->threadReaping) {
-        pthread_mutex_unlock(&alt_lock);
-        LOG_WARN(LOG_MODULE, "alt: reap owner wait timed out session=%p", slot->session);
-        return -1;
-    }
     if (!slot->threadCreated) {
-        if (requestStop) {
-            slot->stop = 1;
-            listener = slot->altSock;
-            slot->altSock = -1;
-        }
         pthread_mutex_unlock(&alt_lock);
-        if (listener >= 0) close(listener);
         return 0;
     }
-    if (!requestStop && !slot->threadExited) {
+    if (!slot->threadExited || slot->threadReaping) {
         pthread_mutex_unlock(&alt_lock);
         return -1;
     }
-    if (requestStop) slot->stop = 1;
-    listener = slot->altSock;
-    slot->altSock = -1;
     slot->threadReaping = 1;
     thread = slot->thread;
     generation = slot->generation;
-    pthread_mutex_unlock(&alt_lock);
-
-    if (listener >= 0) close(listener);
-
-    /* pthread_join itself has no portable timeout on QNX 6.5.  Wait for the
-     * receiver's terminal flag first; once set, join can only collect a thread
-     * that is already at its final unlock/return. */
-    pthread_mutex_lock(&alt_lock);
-    wait_rc = 0;
-    while (slot->generation == generation && slot->threadCreated &&
-           !slot->threadExited && wait_rc != ETIMEDOUT)
-        wait_rc = pthread_cond_timedwait(&alt_cond, &alt_lock, &deadline);
-    if (slot->generation == generation && slot->threadCreated && !slot->threadExited) {
-        slot->threadReaping = 0;
-        pthread_cond_broadcast(&alt_cond);
-        pthread_mutex_unlock(&alt_lock);
-        LOG_WARN(LOG_MODULE,
-                 "alt: receiver stop timed out after %d ms session=%p gen=%u; cleanup deferred",
-                 ALT_REAP_WAIT_MS, slot->session, (unsigned)generation);
-        return -1;
-    }
     pthread_mutex_unlock(&alt_lock);
 
     pthread_join(thread, NULL);
@@ -1181,11 +1149,11 @@ static int alt_reap_thread(altslot_t *slot, int requestStop)
     return 0;
 }
 
-/* Reclaim slots whose receiver has already EXITED (a superseded different-slot stream on
+/* Reclaim slots whose receiver has already EXITED (a superseded stream on
  * fast reconnect) but whose stock TearDown never arrived.  Without this a few missed
  * teardowns fill all ALT_MAX_SESSIONS and every later SETUP fails with -6728.  Caller must
- * NOT hold alt_lock.  Only a fully-idle exited slot that is neither the current session nor
- * mid-lifecycle is reclaimed. */
+ * NOT hold alt_lock.  Exact transport generation, not the possibly-reused
+ * session pointer, identifies the current slot. */
 static void alt_gc_exited_slots(void)
 {
     int i;
@@ -1195,14 +1163,14 @@ static void alt_gc_exited_slots(void)
         pthread_mutex_lock(&alt_lock);
         if (slot->inUse && slot->threadCreated && slot->threadExited &&
             !slot->threadReaping && !slot->settingUp &&
-            slot->session != g_alt_session)
+            !alt_slot_is_current_locked(slot))
             eligible = 1;
         pthread_mutex_unlock(&alt_lock);
         if (!eligible) continue;
-        alt_reap_thread(slot, 1);   /* join the already-exited thread (fast) */
+        alt_reap_exited_thread(slot);
         pthread_mutex_lock(&alt_lock);
         if (slot->inUse && !slot->threadCreated && !slot->settingUp &&
-            slot->session != g_alt_session) {
+            !alt_slot_is_current_locked(slot)) {
             LOG_INFO(LOG_MODULE, "alt: reclaimed orphaned exited slot session=%p", slot->session);
             memset(slot, 0, sizeof(*slot));
         }
@@ -1601,6 +1569,8 @@ static int alt_setup(void *session, void *streamDesc, void *responseParams)
     altslot_t *slot;
     void  *server;
     int    err = -6719, family, port = 0, sock = -1, started = 0;
+    int    retiredListeners[ALT_MAX_SESSIONS];
+    int    retiredCount = 0;
     int    applyQos = 0;
     int64_t connID;
     uint8_t key[16], iv[16];
@@ -1608,50 +1578,49 @@ static int alt_setup(void *session, void *streamDesc, void *responseParams)
     altthread_arg_t *threadArg = NULL;
     uint32_t av_gen = 0;   /* transport-owner generation for THIS receiver (claimed on success) */
 
+    int i;
+
     alt_gc_exited_slots();   /* reclaim orphaned exited slots so a fresh slot is available */
+
+    /* Pointer reuse is normal on a fast reconnect.  Retire every older slot
+     * carrying this address, but never wait for its receiver.  Closing the
+     * listening socket plus stop makes it leave asynchronously; the exact
+     * avGeneration guard prevents it from targeting the new session. */
     pthread_mutex_lock(&alt_lock);
-    slot = alt_slot_get(session);
-    /* R2: a concurrent teardown of THIS session's slot (possible on a fast replug when
-     * dio frees the old session and the new one reuses its address) must NOT fail the
-     * whole control SETUP — the interpose propagates our error as ret=arc.  Wait,
-     * bounded, for teardown to finish clearing the slot, then re-acquire it fresh. */
-    if (slot && slot->closing) {
-        int waited_ms = 0;
-        while (slot->closing && waited_ms < ALT_SETUP_CLOSE_WAIT_MS) {
-            struct timespec ts;
-            clock_gettime(CLOCK_REALTIME, &ts);
-            ts.tv_nsec += 50 * 1000000L;
-            if (ts.tv_nsec >= 1000000000L) { ts.tv_sec++; ts.tv_nsec -= 1000000000L; }
-            pthread_cond_timedwait(&alt_cond, &alt_lock, &ts);
-            waited_ms += 50;
+    for (i = 0; i < ALT_MAX_SESSIONS; ++i) {
+        altslot_t *old = &alt_slots[i];
+        if (!old->inUse || old->session != session) continue;
+        old->closing = 1;
+        old->stop = 1;
+        if (old->altSock >= 0) {
+            retiredListeners[retiredCount++] = old->altSock;
+            old->altSock = -1;
         }
-        slot = alt_slot_get(session);   /* teardown may have freed+reallocated the slot */
+        if (alt_slot_is_current_locked(old)) {
+            g_alt_session = NULL;
+            g_alt_session_gen = 0;
+        }
+        if (!old->threadCreated && !old->settingUp &&
+            !old->threadReaping)
+            memset(old, 0, sizeof(*old));
     }
-    if (slot && (slot->closing || slot->settingUp)) {
-        pthread_mutex_unlock(&alt_lock);
-        LOG_WARN(LOG_MODULE, "alt_setup: slot busy (closing/settingUp) after wait — deferring");
-        return -6719;
-    }
-    if (slot) slot->settingUp = 1; /* reserve lifecycle across old-thread reap */
     pthread_mutex_unlock(&alt_lock);
-    if (!slot) return -6728;
-    /* A live receiver from a prior session/SETUP must NOT fail this SETUP.  The
-     * interpose propagates alt_setup's error as the WHOLE control SETUP result
-     * (ret=arc in AirPlayReceiverSessionSetup), so returning -6719 for a lingering
-     * thread after a fast replug killed the entire CarPlay session — it only came
-     * up on the retry once the old thread finally exited.  Force-stop and join the
-     * stale generation, then set up a fresh stream.  alt_reap_thread(,1) also
-     * handles the not-created and already-exited cases and never returns the -1
-     * "still live" refusal, so this replaces the old reap(,0) + hard bail. */
-    if (alt_reap_thread(slot, 1) != 0) goto fail;
+    for (i = 0; i < retiredCount; ++i) close(retiredListeners[i]);
+
+    /* A receiver which was already terminal can now be joined without any
+     * wait.  A still-running one keeps its old slot until a future GC pass. */
+    alt_gc_exited_slots();
 
     pthread_mutex_lock(&alt_lock);
-    if (slot->closing || !slot->inUse || slot->session != session) {
-        pthread_mutex_unlock(&alt_lock);
-        goto fail;
-    }
-    slot->stop = 0;
+    slot = alt_slot_alloc(session);
+    if (slot) slot->settingUp = 1;
     pthread_mutex_unlock(&alt_lock);
+    if (!slot) {
+        LOG_ERROR(LOG_MODULE,
+                  "alt_setup: all %d receiver slots are still retiring; refusing without blocking",
+                  ALT_MAX_SESSIONS);
+        return -6728;
+    }
     LOG_INFO(LOG_MODULE, "alt_setup: begin session=%p streamDesc=%p (OFF aes=%d fam=%d srv=%d)",
              session, streamDesc, OFF_AESKEY, OFF_FAMILY, OFF_SERVER);
 
@@ -1717,6 +1686,7 @@ static int alt_setup(void *session, void *streamDesc, void *responseParams)
     if (slot->generation == 0) slot->generation = 1;
     av_gen = ++g_alt_gen_counter;
     if (av_gen == 0) av_gen = ++g_alt_gen_counter;   /* 0 = unclaimed sentinel; never assign it */
+    slot->avGeneration = av_gen;
     slot->altSock = sock;
     slot->threadExited = 0;
     threadArg->slot = slot;
@@ -1738,11 +1708,11 @@ static int alt_setup(void *session, void *streamDesc, void *responseParams)
         goto fail;
     }
     if (cf_rel) { cf_rel(rdesc); rdesc = NULL; }
-    /* Commit the SETUP atomically with respect to Java/BAP/dio session commands.  Until
+    /* Commit the SETUP atomically with respect to Java/BAP/dio session commands. Until
      * the response descriptor exists and the monotonic transport claim succeeds,
-     * g_alt_session must continue to name the previous committed session: publishing it
-     * before this point allowed a gen=0 command to run while the new control SETUP was
-     * still being built.  Hold alt_lock across claim+publication.  No altav path holds
+     * no command may target this new session. Publishing it before this point allowed a
+     * gen=0 command to run while the new control SETUP was still being built. Hold
+     * alt_lock across claim+publication. No altav path holds
      * g_lock while acquiring alt_lock, so the alt_lock -> g_lock order cannot deadlock.
      * A slower older SETUP whose claim is rejected still returns its already-built
      * response, but it never becomes the command target; its receiver observes that it
@@ -1774,25 +1744,27 @@ static int alt_setup(void *session, void *streamDesc, void *responseParams)
 fail:
     if (rdesc && cf_rel) cf_rel(rdesc);
     if (threadArg) free(threadArg);
-    if (started) alt_reap_thread(slot, 1);
-    if (sock >= 0) close(sock);
+    if (sock >= 0) { close(sock); sock = -1; }
     pthread_mutex_lock(&alt_lock);
-    if (g_alt_session == session) { g_alt_session = NULL; g_alt_session_gen = 0; }   /* defensive (only set on success) */
-    /* If bounded reap timed out, the receiver still owns this slot/key/iv.
-     * Keep it stopped+closing and let alt_gc_exited_slots collect it after its
-     * terminal flag; clearing it here would be a slot UAF on fast reconnect. */
+    if (g_alt_session == session && g_alt_session_gen == slot->avGeneration) {
+        g_alt_session = NULL;
+        g_alt_session_gen = 0;
+    }
+    /* A started receiver owns the slot until it publishes threadExited.  Stop
+     * it and defer collection; failure must not add a synchronous join to the
+     * RTSP SETUP path. */
     if (!slot->threadCreated) {
-        slot->altSock = -1;
-        slot->stop = 0;
-        memset(slot->key, 0, sizeof(slot->key));
-        memset(slot->iv, 0, sizeof(slot->iv));
+        memset(slot, 0, sizeof(*slot));
     } else {
         slot->stop = 1;
         slot->closing = 1;
+        sock = slot->altSock;
+        slot->altSock = -1;
     }
-    slot->settingUp = 0;
+    if (slot->inUse) slot->settingUp = 0;
     pthread_cond_broadcast(&alt_cond);
     pthread_mutex_unlock(&alt_lock);
+    if (sock >= 0) close(sock);
     LOG_ERROR(LOG_MODULE, "alt-screen setup failed err=%d", err);
     return err;
 }
@@ -1934,16 +1906,18 @@ static void alt_on_setup_response(hook_setup_ctx_t *setup)
 /* TearDown seam (module def's on_teardown).  A non-NULL request is a per-stream
  * teardown; only stop our receiver when that request actually contains type
  * 111 — stock also calls this entry for unrelated streams while altScreen
- * remains live.  A NULL request tears down the full session, so the receiver
- * must be joined before stock frees the session fields used by the thread.
- * The framework runs every module here before calling stock, for exactly that
- * reason. */
+ * remains live. A receiver never dereferences the stock session pointer; only
+ * an in-progress SETUP does, so TearDown waits for that bounded transaction but
+ * leaves receiver joins to exited-slot GC. */
 static void alt_on_teardown(void *session, void *request, int reason)
 {
     int requestHas111 = 0;
     int tearDownAlt = (request == NULL);
-    int reapRc = 0;
     int setupTimedOut = 0;
+    int listeners[ALT_MAX_SESSIONS];
+    int listenerCount = 0;
+    int haveSlot = 0;
+    int i;
 
     if (request && alt_resolve() == 1) {
         requestHas111 = (alt_find_111(request) != NULL);
@@ -1955,75 +1929,80 @@ static void alt_on_teardown(void *session, void *request, int reason)
              session, request, reason, requestHas111,
              tearDownAlt ? "stop-alt" : "preserve-alt");
 
-    altslot_t *slot;
     pthread_mutex_lock(&alt_lock);
-    slot = alt_slot_find(session);
-    if (slot && tearDownAlt) {
+    if (tearDownAlt) {
         struct timespec setupDeadline;
         int waitRc = 0;
-        slot->closing = 1;
+
+        for (i = 0; i < ALT_MAX_SESSIONS; ++i) {
+            altslot_t *slot = &alt_slots[i];
+            if (!slot->inUse || slot->session != session) continue;
+            haveSlot = 1;
+            slot->closing = 1;
+            slot->stop = 1;
+        }
         alt_deadline_after_ms(&setupDeadline, ALT_TEARDOWN_SETUP_WAIT_MS);
-        while (slot->settingUp && waitRc != ETIMEDOUT)
+        for (;;) {
+            int setupActive = 0;
+            for (i = 0; i < ALT_MAX_SESSIONS; ++i) {
+                if (alt_slots[i].inUse && alt_slots[i].session == session &&
+                    alt_slots[i].settingUp) {
+                    setupActive = 1;
+                    break;
+                }
+            }
+            if (!setupActive || waitRc == ETIMEDOUT) {
+                setupTimedOut = setupActive;
+                break;
+            }
             waitRc = pthread_cond_timedwait(&alt_cond, &alt_lock,
                                             &setupDeadline);
-        if (slot->settingUp) {
-            setupTimedOut = 1;
-            slot->stop = 1;
+        }
+        if (setupTimedOut) {
             LOG_WARN(LOG_MODULE,
                      "altScreen TearDown: setup still active after %d ms; revoking generation and deferring slot GC",
                      ALT_TEARDOWN_SETUP_WAIT_MS);
         }
-        /* Revoke command-channel ownership before asking the receiver to stop.
-         * Even if bounded reap is deferred, it cannot send a command through a
-         * stock session that TearDown is about to free. */
+
+        /* Revoke command ownership and wake every generation sharing this
+         * possibly-reused session address. */
         if (g_alt_session == session) {
             g_alt_session = NULL;
             g_alt_session_gen = 0;
         }
-    }
-    pthread_mutex_unlock(&alt_lock);
-    if (tearDownAlt) advert_clear_for_session(session);
-    if (slot && tearDownAlt && !setupTimedOut) {
-        /* Stop the self-contained receiver: the reaper sets stop, closes the
-         * listener to wake pre-connect accept, and joins outside alt_lock.  An
-         * already-exited receiver follows the identical single-owner path. */
-        reapRc = alt_reap_thread(slot, 1);
-        pthread_mutex_lock(&alt_lock);
-        if (slot->altSock >= 0) {
-            int ls = slot->altSock;
-            slot->altSock = -1;
-            pthread_mutex_unlock(&alt_lock);
-            close(ls);
-            pthread_mutex_lock(&alt_lock);
-        }
-        if (reapRc == 0 && !slot->threadCreated) {
-            memset(slot, 0, sizeof(*slot));
-        } else {
-            /* The thread owns the slot until it publishes threadExited.  GC at
-             * the next SETUP will join and clear it without blocking teardown. */
-            slot->closing = 1;
-            slot->stop = 1;
+        for (i = 0; i < ALT_MAX_SESSIONS; ++i) {
+            altslot_t *slot = &alt_slots[i];
+            if (!slot->inUse || slot->session != session) continue;
+            if (slot->altSock >= 0) {
+                listeners[listenerCount++] = slot->altSock;
+                slot->altSock = -1;
+            }
+            if (!slot->threadCreated && !slot->settingUp &&
+                !slot->threadReaping)
+                memset(slot, 0, sizeof(*slot));
         }
         pthread_cond_broadcast(&alt_cond);
-        pthread_mutex_unlock(&alt_lock);
-        if (reapRc == 0)
-            LOG_INFO(LOG_MODULE, "altScreen torn down for session=%p", session);
-        else
+    }
+    pthread_mutex_unlock(&alt_lock);
+    for (i = 0; i < listenerCount; ++i) close(listeners[i]);
+    if (tearDownAlt) advert_clear_for_session(session);
+    if (haveSlot && tearDownAlt) {
+        alt_gc_exited_slots();
+        if (setupTimedOut)
             LOG_WARN(LOG_MODULE,
-                     "altScreen teardown deferred receiver cleanup session=%p", session);
-    } else if (slot && tearDownAlt) {
-        /* The setup owner will observe closing, unwind its transaction and
-         * publish settingUp=0.  Do not race it by touching thread/listener
-         * fields here; the next SETUP's GC collects the terminal slot. */
-        LOG_WARN(LOG_MODULE,
-                 "altScreen teardown proceeding with setup cleanup deferred session=%p",
-                 session);
-    } else if (slot) {
+                     "altScreen teardown proceeding with setup cleanup deferred session=%p",
+                     session);
+        else
+            LOG_INFO(LOG_MODULE,
+                     "altScreen torn down; receiver cleanup is asynchronous session=%p",
+                     session);
+    } else if (tearDownAlt) {
+        LOG_INFO(LOG_MODULE, "altScreen teardown had no receiver session=%p", session);
+    } else if (haveSlot) {
         LOG_INFO(LOG_MODULE,
                  "per-stream TEARDOWN has no 111 - preserving altScreen session=%p",
                  session);
     }
-
 }
 
 /* MUST match the cluster display uuid advertised in build_cluster_dict() (#1b). */
@@ -2110,8 +2089,10 @@ static uint32_t alt_generation_for_session(void *session)
     uint32_t gen = 0;
     pthread_mutex_lock(&alt_lock);
     if (g_alt_session && (!session || g_alt_session == session)) {
-        altslot_t *s = alt_slot_find(g_alt_session);
-        if (s && s->threadCreated && !s->threadExited)
+        altslot_t *s = alt_slot_find_generation(g_alt_session,
+                                                g_alt_session_gen);
+        if (s && s->threadCreated && !s->threadExited &&
+            !s->closing && !s->stop)
             gen = g_alt_session_gen;
     }
     pthread_mutex_unlock(&alt_lock);
@@ -2144,8 +2125,10 @@ static int alt_send_locked_for_gen(uint32_t gen, void *cmd, void *completion, vo
      * this avoids sess_sendcmd on a stale pointer (use-after-free). */
     if (sess_sendcmd && cf_ret && cf_rel && g_alt_session &&
         (gen == 0 || g_alt_session_gen == gen)) {
-        altslot_t *s = alt_slot_find(g_alt_session);
-        if (s && s->threadCreated && !s->threadExited) {
+        altslot_t *s = alt_slot_find_generation(g_alt_session,
+                                                g_alt_session_gen);
+        if (s && s->threadCreated && !s->threadExited &&
+            !s->closing && !s->stop) {
             sess = g_alt_session;
             cf_ret(sess);
         }
@@ -2434,7 +2417,7 @@ static int alt_send_cluster_night_mode(uint32_t gen, int night, const char *reas
  * also retained and replayed at the first stream-111 IDR, after
  * g_alt_session becomes valid. */
 typedef int (*fn_sess_set_night_t)(void *, int, void *, void *);
-int AirPlayReceiverSessionSetNightMode(void *session, int night,
+HOOK_EXPORT int AirPlayReceiverSessionSetNightMode(void *session, int night,
                                        void *completion, void *context)
 {
     static fn_sess_set_night_t real;

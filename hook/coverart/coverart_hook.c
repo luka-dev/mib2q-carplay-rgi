@@ -15,6 +15,15 @@
 #include "../framework/logging.h"
 #include "../framework/bus.h"
 #include "coverart_hook.h"
+#include "jpeg_safety.h"
+
+#ifndef COVERART_MAX_DIMENSION
+#define COVERART_MAX_DIMENSION 4096
+#endif
+
+/* stb's own axis cap prevents oversized allocations inside header parsing;
+ * the stricter total-pixel budget below protects wide-but-valid images. */
+#define STBI_MAX_DIMENSIONS COVERART_MAX_DIMENSION
 
 /* stb_image for JPEG/PNG decoding.
  * STBI_NO_THREAD_LOCALS: stb defaults its globals (g_failure_reason, load flags)
@@ -62,6 +71,10 @@ DEFINE_LOG_MODULE(COVERART);
 
 #ifndef COVERART_MAX_BYTES
 #define COVERART_MAX_BYTES 800000
+#endif
+
+#ifndef COVERART_MAX_PIXELS
+#define COVERART_MAX_PIXELS (8u * 1024u * 1024u)
 #endif
 
 /* Debug: dump raw JPEG for analysis (set to path to enable, NULL to disable) */
@@ -176,113 +189,6 @@ static void* my_memmem(const void* haystack, size_t haystacklen,
         }
     }
     return NULL;
-}
-
-/*
- * Parse EXIF orientation from JPEG data.
- * Returns: 1=normal, 2=flip-h, 3=rotate-180, 4=flip-v,
- *          5=transpose, 6=rotate-90-cw, 7=transverse, 8=rotate-90-ccw
- *          0=not found or error
- */
-static int get_jpeg_orientation(const uint8_t* data, size_t len) {
-    if (!data || len < 12) return 0;
-    if (data[0] != 0xFF || data[1] != 0xD8) return 0;  /* Not JPEG */
-
-    size_t pos = 2;
-    while (pos + 4 < len) {
-        if (data[pos] != 0xFF) {
-            pos++;
-            continue;
-        }
-
-        uint8_t marker = data[pos + 1];
-
-        /* Skip padding FF bytes */
-        if (marker == 0xFF) {
-            pos++;
-            continue;
-        }
-
-        /* End markers */
-        if (marker == 0xD9 || marker == 0xDA) break;
-
-        /* Markers without length (RST, SOI, EOI) */
-        if ((marker >= 0xD0 && marker <= 0xD7) || marker == 0xD8 || marker == 0x01) {
-            pos += 2;
-            continue;
-        }
-
-        /* Get segment length */
-        if (pos + 4 > len) break;
-        uint16_t seg_len = (data[pos + 2] << 8) | data[pos + 3];
-        if (seg_len < 2 || pos + 2 + seg_len > len) break;
-
-        /* APP1 marker (EXIF) */
-        if (marker == 0xE1 && seg_len >= 8) {
-            const uint8_t* seg = data + pos + 4;
-            size_t seg_size = seg_len - 2;
-
-            /* Check for "Exif\0\0" header */
-            if (seg_size >= 6 && memcmp(seg, "Exif\0\0", 6) == 0) {
-                const uint8_t* tiff = seg + 6;
-                size_t tiff_size = seg_size - 6;
-
-                if (tiff_size < 8) break;
-
-                /* Check byte order (II=little, MM=big) */
-                int little_endian = (tiff[0] == 'I' && tiff[1] == 'I');
-                int big_endian = (tiff[0] == 'M' && tiff[1] == 'M');
-                if (!little_endian && !big_endian) break;
-
-                /* Get IFD0 offset */
-                uint32_t ifd_offset;
-                if (little_endian) {
-                    ifd_offset = tiff[4] | (tiff[5] << 8) | (tiff[6] << 16) | (tiff[7] << 24);
-                } else {
-                    ifd_offset = (tiff[4] << 24) | (tiff[5] << 16) | (tiff[6] << 8) | tiff[7];
-                }
-
-                if (ifd_offset + 2 > tiff_size) break;
-
-                /* Get number of IFD entries */
-                uint16_t num_entries;
-                if (little_endian) {
-                    num_entries = tiff[ifd_offset] | (tiff[ifd_offset + 1] << 8);
-                } else {
-                    num_entries = (tiff[ifd_offset] << 8) | tiff[ifd_offset + 1];
-                }
-
-                /* Search for orientation tag (0x0112) */
-                size_t entry_offset = ifd_offset + 2;
-                for (int i = 0; i < num_entries && entry_offset + 12 <= tiff_size; i++) {
-                    const uint8_t* entry = tiff + entry_offset;
-                    uint16_t tag;
-                    if (little_endian) {
-                        tag = entry[0] | (entry[1] << 8);
-                    } else {
-                        tag = (entry[0] << 8) | entry[1];
-                    }
-
-                    if (tag == 0x0112) {  /* Orientation tag */
-                        uint16_t value;
-                        if (little_endian) {
-                            value = entry[8] | (entry[9] << 8);
-                        } else {
-                            value = (entry[8] << 8) | entry[9];
-                        }
-                        LOG_DEBUG(LOG_MODULE, "EXIF orientation: %d", value);
-                        return (value >= 1 && value <= 8) ? value : 0;
-                    }
-
-                    entry_offset += 12;
-                }
-            }
-        }
-
-        pos += 2 + seg_len;
-    }
-
-    return 0;  /* Not found */
 }
 
 /* Nearest-neighbor resize RGB with optional vertical flip */
@@ -604,6 +510,15 @@ static int save_artwork(const uint8_t* data, size_t len) {
 #endif
 
     int src_w = 0, src_h = 0, channels = 0;
+    if (!stbi_info_from_memory(data, (int)len, &src_w, &src_h, &channels) ||
+        !coverart_image_dimensions_safe(src_w, src_h,
+                                        COVERART_MAX_DIMENSION,
+                                        COVERART_MAX_PIXELS)) {
+        LOG_WARN(LOG_MODULE,
+                 "Image dimensions rejected before decode (%dx%d, %d ch, %zu bytes)",
+                 src_w, src_h, channels, len);
+        return 0;
+    }
     uint8_t* rgb = stbi_load_from_memory(data, (int)len, &src_w, &src_h, &channels, 3);
 
     if (!rgb || src_w <= 0 || src_h <= 0) {
@@ -613,7 +528,8 @@ static int save_artwork(const uint8_t* data, size_t len) {
     }
 
     /* Check EXIF orientation */
-    int orientation = get_jpeg_orientation(data, len);
+    int orientation = is_jpeg(data, len) ?
+                      coverart_jpeg_orientation(data, len) : 0;
 
     /*
      * IMPORTANT: Do not apply a default vertical flip.
@@ -819,11 +735,24 @@ static void stream_reassemble_locked(StreamState* st,
     *out_buf = NULL;
     *out_len = 0;
 
-    /* Append to raw buffer */
+    /* Append to raw buffer.  Use subtraction-form bounds because `len` comes
+     * from the transport ABI and must not be able to wrap raw_len + len. */
+    if (len > STREAM_BUF_MAX || st->raw_len > STREAM_BUF_MAX - len) {
+        st->raw_len = 0;
+        return;
+    }
     if (st->raw_len + len > st->raw_cap) {
-        size_t new_cap = st->raw_cap ? st->raw_cap * 2 : 65536;
-        while (new_cap < st->raw_len + len) new_cap *= 2;
-        if (new_cap > STREAM_BUF_MAX) { st->raw_len = 0; return; }
+        const size_t need = st->raw_len + len;
+        size_t new_cap = st->raw_cap ? st->raw_cap : 65536;
+
+        while (new_cap < need) {
+            if (new_cap > STREAM_BUF_MAX / 2) {
+                new_cap = STREAM_BUF_MAX;
+                break;
+            }
+            new_cap *= 2;
+        }
+        if (new_cap < need) { st->raw_len = 0; return; }
         uint8_t* tmp = realloc(st->raw_buf, new_cap);
         if (!tmp) { st->raw_len = 0; return; }
         st->raw_buf = tmp;
@@ -887,6 +816,15 @@ static void stream_reassemble_locked(StreamState* st,
 
             /* Append if target session */
             if (st->target_session == (int)session_id) {
+                if (payload_len > COVERART_MAX_JPEG ||
+                    st->jpeg_len > COVERART_MAX_JPEG - payload_len) {
+                    free(st->jpeg_buf);
+                    st->jpeg_buf = NULL;
+                    st->jpeg_len = 0;
+                    st->jpeg_cap = 0;
+                    st->target_session = -1;
+                    break;
+                }
                 if (st->jpeg_len + payload_len > st->jpeg_cap) {
                     size_t need = st->jpeg_len + payload_len;
                     /* Hard cap: malformed stream w/o EOI marker would otherwise
@@ -899,9 +837,15 @@ static void stream_reassemble_locked(StreamState* st,
                         st->target_session = -1;
                         break;
                     }
-                    size_t new_cap = st->jpeg_cap ? st->jpeg_cap * 2 : 65536;
-                    while (new_cap < need) new_cap *= 2;
-                    if (new_cap > COVERART_MAX_JPEG) new_cap = COVERART_MAX_JPEG;
+                    size_t new_cap = st->jpeg_cap ? st->jpeg_cap : 65536;
+                    while (new_cap < need) {
+                        if (new_cap > COVERART_MAX_JPEG / 2) {
+                            new_cap = COVERART_MAX_JPEG;
+                            break;
+                        }
+                        new_cap *= 2;
+                    }
+                    if (new_cap < need) break;
                     uint8_t* tmp = realloc(st->jpeg_buf, new_cap);
                     if (!tmp) break;
                     st->jpeg_buf = tmp;
