@@ -130,6 +130,15 @@ public class BAPBridge {
      * keeps onShutdown from reopening the RG gate when CarPlay nav merely ends mid-session. */
     private volatile boolean takeoverEngaged = false;
     private boolean nativeStopAttempted = false;
+    /* Our rgActive forge is an overlay on shared HMI state, not our own flag: the whole
+     * navigation app reads DSIResponseContainer.isRgActive() (StartRouteGuidanceSequences,
+     * RgStopGuidanceGeneralCommand, RGStartGuidanceCalculatedRoute, ClusterViewMode ...).
+     * Remember what the DSI last reported so releasing the overlay restores that value
+     * instead of guessing -- a stale forged "true" sends the stock "start route guidance"
+     * sequence down the add-stopover/replace-destination-on-active-route branch of a route
+     * the nav core no longer guides, and it aborts on every attempt until the next reboot. */
+    private boolean rgActiveForced = false;
+    private boolean rgActiveSaved = false;
     /* A route-absent result is definite for connect-time takeover, but a stock route may
      * still be started later in the same CarPlay session.  Re-check that result once when
      * CarPlay RGI itself activates; a successfully issued stop remains session-final. */
@@ -520,7 +529,19 @@ public class BAPBridge {
 
         try {
             DSIResponseContainer container = csRef.getDSIResponseContainer();
-            if (container != null) container.setRgActive(active);
+            if (container != null) {
+                if (active) {
+                    if (!rgActiveForced) {
+                        rgActiveSaved = container.isRgActive();
+                        rgActiveForced = true;
+                    }
+                    container.setRgActive(true);
+                } else if (rgActiveForced) {
+                    rgActiveForced = false;
+                    container.setRgActive(rgActiveSaved);
+                    Log.i(TAG, "rgActive overlay released (restored " + rgActiveSaved + ")");
+                }
+            }
         } catch (Exception e) {
         }
 
@@ -575,6 +596,10 @@ public class BAPBridge {
     public void disengageTakeover() {
         try {
             takeoverEngaged = false;
+            /* Last chance to hand the container back its DSI value: onShutdown may never have
+             * run (CarPlay yanked without a route ever starting), and a leaked forge outlives
+             * the phone -- native route guidance then aborts until the head unit reboots. */
+            forceClusterRouteInfoState(false);
             nativeStopAttempted = false;
             nativeStopWasRouteAbsent = false;
             nativeAbortIssued = false;
@@ -708,7 +733,10 @@ public class BAPBridge {
         try { sendDistanceToManeuverRaw(0, false, 0); } catch (Throwable t) { }
         try { sendExitView(); } catch (Throwable t) { }
         try { appConnectorNavi.updateManeuverState(0); } catch (Throwable t) { }
-        try { stopCustomRenderer(true); } catch (Throwable t) { }
+        try { stopCustomRenderer(); } catch (Throwable t) { }
+        /* Release the rgActive overlay here, not inside stopCustomRenderer: a throw in the
+         * renderer teardown must not leave shared HMI state forged. */
+        forceClusterRouteInfoState(false);
         forceGfxAvailable(false);
         bapSessionStarted = false;
         rendererPrimed = false;
@@ -787,10 +815,8 @@ public class BAPBridge {
              * gated until phone disconnect, but let stock update the lower bar. */
             com.luka.carplay.core.AltScreenNavStatusGate.setCurrentPositionInfoBlocked(false);
 
-            /* Decide before stopping the custom renderer: stop used to clear rgActive
-             * unconditionally, making the nativeHasRoute=true branch below ineffective. */
-            boolean nativeHasRoute = nativeNavigationHasRoute();
-            stopCustomRenderer(!nativeHasRoute);
+            stopCustomRenderer();
+            forceClusterRouteInfoState(false);
             /* CarPlay session ending — release the renderer listen socket
              * (port :19800).  stopCustomRenderer keeps it bound for fast
              * route restarts within a session; full session shutdown
@@ -808,44 +834,15 @@ public class BAPBridge {
             if (!takeoverEngaged)
                 com.luka.carplay.core.AltScreenNavStatusGate.setRouteGuidanceBlocked(false);
 
-            /*
-             * Tear down our cluster RG-state override CONDITIONALLY.
-             *
-             * forceClusterRouteInfoState(false) sets
-             * dsiResponseContainer.rgActive=false.  Stock cluster firmware's
-             * RgStopGuidanceGeneralCommand.execute() short-circuits with
-             * commandFinished() when rgActive==false AND
-             * rgRouteCalculationState==0 — which means the user's
-             * "Cancel Map Guidance" button on the MMI map silently does
-             * nothing if we leave rgActive=false here while native nav
-             * still has an active internal route.
-             *
-             * Decision: only clear our override if native nav has NO route.
-             * If native nav has a route (persisted through our session),
-             * leave rgActive=true so its own Cancel command can run.  Native
-             * nav drives rgActive itself — it'll go back to false naturally
-             * when the user cancels or arrives.
-             */
-            if (nativeHasRoute) {
-                Log.i(TAG, "Shutdown: native nav has active route — leaving rgActive=true so its Cancel still works");
-            }
+            /* The cluster RG-state override is always dropped above: forceClusterRouteInfoState
+             * restores the value the DSI last reported, so a native route that really is
+             * guiding keeps rgActive=true (its "Cancel Map Guidance" still reaches
+             * RgStopGuidanceGeneralCommand) while an idle nav core gets its honest false back. */
             forceGfxAvailable(false);
 
             Log.i(TAG, "Shutdown (full teardown)");
         } catch (Exception e) {
             Log.e(TAG, "onShutdown error", e);
-        }
-    }
-
-    private boolean nativeNavigationHasRoute() {
-        try {
-            de.audi.tghu.navi.app.Navigation navi =
-                de.audi.tghu.navi.app.Navigation.getInstance();
-            if (navi == null) return false;
-            de.audi.tghu.navi.app.routeguidance.IRouteManager rm = navi.getRouteManager();
-            return rm != null && rm.getRoute() != null;
-        } catch (Throwable t) {
-            return false;
         }
     }
 
@@ -2016,14 +2013,13 @@ public class BAPBridge {
         notifyPresentationStateChanged("renderer-send-failures");
     }
 
-    private synchronized void stopCustomRenderer(boolean clearRouteInfo) {
+    private synchronized void stopCustomRenderer() {
         try {
             /* Blank the popup (CMD_CLEAR) so no stale maneuver frame lingers, then deactivate the
              * cluster context + stop feeding.  Do NOT kill the renderer (always-on framework
              * service) and keep the server socket + link up for the next route in this session. */
             if (rendererClient != null) rendererClient.sendClear();
             forceGfxAvailable(false);
-            if (clearRouteInfo) forceClusterRouteInfoState(false);
             customRendererStarted = false;
             rendererPrimed = false;
             Log.i(TAG, "CR: stopped (renderer blanked; stays up; server socket persists)");

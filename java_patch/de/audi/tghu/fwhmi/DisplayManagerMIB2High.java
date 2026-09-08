@@ -180,6 +180,16 @@ public class DisplayManagerMIB2High extends DisplayManager implements IDisplayLi
         } else {
             this.defineContextsForG24();
         }
+
+        /* One-shot platform fingerprint.  The CarPlay cluster context is composed from the stock
+         * KDK backings 101/102, and configureDM() only creates those when sysConst(541)==2 -- so a
+         * cluster that is neither G24 nor "KDK via displayables" gets a ctx that references planes
+         * nobody created, and the cluster keeps showing the stock KDK maneuver (displayable 20).
+         * WARN level on purpose: this has to reach /tmp/carplay_java.log without carplay_verbose. */
+        com.luka.carplay.framework.Log.w("DisplayManager",
+            "cluster platform: kombiType=" + this.framework.getKombiType()
+            + " sysConst(541)=" + this.framework.getSysConst(SYSCONST_KOMBI_VARIANT)
+            + " carplayCtx=" + (this.dc[CTX_CARPLAY_NAV] != null));
     }
 
     /** G24 has no separate KDK layer, so every stock context gets a "+79" twin with the KDK
