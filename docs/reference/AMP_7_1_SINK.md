@@ -80,9 +80,11 @@ The later matrix audit corrected two of these earlier findings. A07 contains eig
 sets of three 8×8 routing matrices at `0x101BB4`; `FUN_000C23C0` reads the selector at
 `gp-0x4592`/`gp-0x456A`, chooses a bank from the active `SinkNr`, and
 `FUN_000A9040` writes the resulting coefficients to SHARC parameters
-`0xC022A..0xC0269`. The available image still contains no SHARC instruction image, so the
-downstream eight-bus-to-physical-speaker binding remains unavailable. See
-[`../SHARC_INPUT_OUTPUT_MATRIX.md`](../SHARC_INPUT_OUTPUT_MATRIX.md).
+`0xC022A..0xC0269`. The CodeFlash also contains the complete SHARC SPI
+boot/application stream, but its ISA/VISA payload has not yet been semantically
+disassembled, so the downstream eight-bus-to-physical-speaker binding remains
+unrecovered. See [`../SHARC_INPUT_OUTPUT_MATRIX.md`](../SHARC_INPUT_OUTPUT_MATRIX.md)
+and [`../SHARC_APPLICATION_EXTRACTION.md`](../SHARC_APPLICATION_EXTRACTION.md).
 
 ## Update: the branch reopens conditionally (2026-08-31)
 
@@ -126,12 +128,12 @@ those height speakers already play today, driven by Symphoria from the bed. The 
 
 ## Consequence for the CarPlay plan
 
-Unchanged: 5.1 is the target. The full 5.1.2 chain is seven serial steps — working type-103 receiver,
-a decodable 5.1.2 format, deva 6->8 including a mixer-topology node that does not exist, an 8-channel
-MOST allocation from a stack we cannot find, the V850 two bytes plus CRC, a chip-off read and matrix
-patch of the SHARC boot flash, and the Symphoria bypass. Four of those are open research or hardware
-access. The 5.1 path needs only the first, which is the actual project and is no longer blocked now
-that the five-second teardown is fixed.
+Unchanged: 5.1 is the target. The full 5.1.2 chain still requires a working type-103 receiver,
+a decodable 5.1.2 format, deva 6->8 including a mixer-topology node that does not exist, an
+8-channel MOST allocation, the V850 two bytes plus CRC, a SHARC routing patch, and the
+Symphoria bypass. The SHARC loader has now been extracted from CodeFlash, eliminating the
+previous chip-off prerequisite, but its downstream graph remains to be disassembled. The 5.1
+path needs only the first item and is no longer blocked now that the five-second teardown is fixed.
 
 So the amp plan is well-scoped and worth keeping, and it should sit behind working 5.1 audio.
 5.1.2 content still gets folded to 5.1 in the meantime.

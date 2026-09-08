@@ -71,8 +71,8 @@
  * phase-distinct mid/high fallback so difficult or nearly mono masters retain
  * rear activity instead of collapsing to silence.
  * AUDIO_STEREO_LFE: off | assist (code default off). `assist` selects only
- * Cabin-Aware LFE V2: phase-safe 55/95 Hz LR4 body/punch branches, HSSR bass/
- * drum steering, paired front headroom and a recovered-J525-matrix limiter.
+ * Cabin-Aware LFE V2: a phase-safe 48-Hz LR4 sub-band, HSSR bass/drum level
+ * steering, paired front headroom and a recovered-J525-matrix limiter.
  * AUDIO_HSSR_MODEL: model blob path.  The default is next to the hook; an
  * invalid or missing model leaves stereo upmix safely OFF. */
 #define SPA_AUDIO_STEREO_UPMIX_ENV    "AUDIO_STEREO_UPMIX"

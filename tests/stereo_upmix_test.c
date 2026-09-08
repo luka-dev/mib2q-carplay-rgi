@@ -504,6 +504,7 @@ static void test_lfe_v2_phase_frequency_and_cabin_bounds(void)
     struct spa_stereo_upmix_config config;
     uint64_t low_energy;
     uint64_t anti_energy;
+    uint64_t crossover_energy;
     uint64_t high_energy;
     int32_t low_peak = 0;
     size_t frame;
@@ -532,6 +533,16 @@ static void test_lfe_v2_phase_frequency_and_cabin_bounds(void)
     anti_energy = channel_energy(
         g_output_b, SPA_STEREO_UPMIX_CHANNEL_LFE, 4096);
     assert(anti_energy > low_energy / 2u);
+    assert_cabin_buses_bounded(g_output_b, TEST_FRAMES);
+
+    /* The retired 95-Hz punch branch would fail this guard.  The shipping
+     * path stays below the conservative 48-Hz SoundAmp sub-band boundary. */
+    fill_sine(96.0f, 0);
+    assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
+    process_blocks(&state, g_input, g_output_b);
+    crossover_energy = channel_energy(
+        g_output_b, SPA_STEREO_UPMIX_CHANNEL_LFE, 4096);
+    assert(crossover_energy * 50u < low_energy);
     assert_cabin_buses_bounded(g_output_b, TEST_FRAMES);
 
     fill_sine(500.0f, 0);

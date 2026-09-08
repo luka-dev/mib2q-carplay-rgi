@@ -3,6 +3,11 @@
 Date: 2026-09-02  
 Scope: static analysis of amplifier `8W0035465`, SW 0420, V850 CodeFlash. No binary was modified.
 
+> **Application correction, 2026-09-08:** the same CodeFlash also embeds the
+> complete SHARC SPI boot/application stream at `0x041014..0x068777`. The
+> checked extraction, hashes, loader proof and reproduction command are in
+> [`SHARC_APPLICATION_EXTRACTION.md`](SHARC_APPLICATION_EXTRACTION.md).
+
 ## Result
 
 The amplifier image does contain the SHARC input mixer matrix. It is not SHARC
@@ -191,14 +196,16 @@ This is the logical source-to-eight-bus mixer, not the final mapping to the ampl
 
 None is an 8×16 source-routing matrix. No second matrix-shaped coefficient region exists
 in A07. The final bus-to-speaker split (crossovers, duplicated drivers and physical
-channel binding) is therefore still inside the unavailable SHARC application or must be
-observed through its runtime control/readback path.
+channel binding) is therefore expected inside the now-extracted SHARC application or
+must be observed through its runtime control/readback path. The application is available;
+its SHARC ISA/VISA payload has not yet been semantically disassembled.
 
-The decisive next measurement is to map and invoke the existing row-read message handler,
-or capture the V850→SHARC writes to `0xC022A..0xC0269`, during an active `0x26`
-connection. If they match profile 0/bank 1 (or the equally non-muting profile 1/fallback),
-then the one-hot silence occurs before this matrix receives source positions 3..6 or after
-its logical buses, not in this matrix.
+The next static step is to map the extracted loader blocks to their declared SHARC
+addresses and recover the eight-bus-to-16-output graph. The decisive runtime measurement
+remains invoking the existing row-read handler or capturing V850→SHARC writes to
+`0xC022A..0xC0269` during an active `0x26` connection. If they match profile 0/bank 1
+(or the equally non-muting profile 1/fallback), the one-hot silence occurs before this
+matrix receives source positions 3..6 or after its logical buses, not in this matrix.
 
 ## Corrected earlier assumptions
 
@@ -207,7 +214,9 @@ RequestDownload/reflash path. It does not DMA A07 or B01 wholesale into SHARC. R
 audio code reads A07 directly and sends individual parameter groups to SHARC. Earlier
 notes calling that chain a monolithic DSP-image DMA, claiming the profile selector is
 not consumed by DSP service code, or claiming A07 contains no routing matrix are
-superseded by this audit.
+superseded by this audit. Separately, `FUN_000A75CA -> FUN_000E33AC` sends the embedded
+SHARC loader at `0x041014` with exact length `0x27764`; this application path must not be
+conflated with either A07/B01 or the UDS reflash chain.
 
 ## Provenance
 
@@ -222,3 +231,5 @@ superseded by this audit.
   `HandleUdsRequestDownloadProgramming` (`0xA334C`).
 - Head-unit selection audit: [`MC_SELECTION_AUDIT.md`](MC_SELECTION_AUDIT.md)
 - Vehicle and rendering state: [`AUDIO_5_1_STATE.md`](AUDIO_5_1_STATE.md)
+- SHARC loader/application extraction:
+  [`SHARC_APPLICATION_EXTRACTION.md`](SHARC_APPLICATION_EXTRACTION.md)

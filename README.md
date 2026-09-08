@@ -141,6 +141,7 @@ Playing state-machine audit below for the exact event and decision tables.
 - [`docs/ROUTER_INPUT_WIDTH_AUDIT.md`](docs/ROUTER_INPUT_WIDTH_AUDIT.md) — historical root cause of the now-fixed MPL5 render-width defect.
 - [`docs/MC_SELECTION_AUDIT.md`](docs/MC_SELECTION_AUDIT.md) — connection-162 MC selection and its `Sound_System` coding source.
 - [`docs/SHARC_INPUT_OUTPUT_MATRIX.md`](docs/SHARC_INPUT_OUTPUT_MATRIX.md) — recovered A07 8×8 SHARC input mixer, selection logic, coefficient addresses and the remaining physical-output boundary.
+- [`docs/SHARC_APPLICATION_EXTRACTION.md`](docs/SHARC_APPLICATION_EXTRACTION.md) — checked extraction of the embedded J525 ADSP-2148x SPI boot/application stream, hashes and loader-block validation.
 - [`docs/STEREO_TO_5_1_UPMIX_DESIGN.md`](docs/STEREO_TO_5_1_UPMIX_DESIGN.md) — amplifier-aware HSSR Universal design, fixed PCM6/LFE bounds, model policy and verification gates.
 - [`tools/stereo-upmix-render/`](tools/stereo-upmix-render/README.md) — host WAV renderer, authored/stereo-stress evaluation, teacher-stem routing checks and performance benchmarks for the exact shipping Universal DSP.
 - [`docs/MOST_SOURCE_BLOCKWIDTH_AUDIT.md`](docs/MOST_SOURCE_BLOCKWIDTH_AUDIT.md) — connection-162 source allocation and actual MOST Connect BlockWidth.

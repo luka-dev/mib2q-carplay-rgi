@@ -7,9 +7,15 @@ Two HU-side pieces, no amp-side change. Full RE in `docs/reference/AUDIO.md` §9
 > the car by the three-step mirror build in
 > [`../deva-ctrl-qc/BUILD_CHAIN.md`](../deva-ctrl-qc/BUILD_CHAIN.md). The unit now
 > attaches MPL5 as six-channel and the former 62.5 Hz corruption is gone. A
-> subsequent one-hot test found L/R audible but C/LFE/Ls/Rs silent. The HU already
-> selects `DIO_MEDIA_MC + DTCP51`; the remaining boundary is the amplifier SHARC
-> matrix. See [`../../docs/MC_SELECTION_AUDIT.md`](../../docs/MC_SELECTION_AUDIT.md).
+> subsequent one-hot test initially found L/R audible but C/LFE/Ls/Rs silent.
+> The later SAD-header fix restored all six channels and was vehicle-confirmed;
+> the amplifier's logical 8×8 matrix was also recovered and does not mute those
+> inputs. See [`../../docs/AUDIO_5_1_STATE.md`](../../docs/AUDIO_5_1_STATE.md).
+>
+> **SHARC update, 2026-09-08:** the complete amplifier SPI boot/application
+> stream is embedded in CodeFlash and has been extracted and validated. It is
+> not an external-flash blocker. See
+> [`../../docs/SHARC_APPLICATION_EXTRACTION.md`](../../docs/SHARC_APPLICATION_EXTRACTION.md).
 
 ## Current chain
 ```
@@ -51,11 +57,13 @@ maps the replacement. Exact order and rollback are in
 - Restore stock `deva-ctrl-qc.so` from the firmware image → reboot. The mirror driver also serves
   stereo correctly through QSA channel conversion, so the driver revert is only for full cleanup.
 
-## Still to implement and confirm
+## Optional amplifier research
 
-- Obtain the external SHARC source-to-output matrix or a proven runtime readback.
-- Explain why protected 5.1 source positions 3..6 do not reach physical outputs.
-- Preserve the vehicle-confirmed stereo and six-channel rendering behavior.
+- Disassemble the extracted SHARC application to recover the source-to-output
+  graph, or obtain a proven runtime readback. See
+  [`../../docs/SHARC_APPLICATION_EXTRACTION.md`](../../docs/SHARC_APPLICATION_EXTRACTION.md).
+- Preserve the vehicle-confirmed stereo and six-channel rendering behavior in
+  any future amplifier-side experiment.
 
 This README began as historical bundle documentation. Use
 `deploy/deva-ctrl-qc/BUILD_CHAIN.md` as the authority for the vehicle-confirmed driver.

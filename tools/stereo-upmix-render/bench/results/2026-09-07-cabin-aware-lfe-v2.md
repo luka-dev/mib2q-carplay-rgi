@@ -1,5 +1,11 @@
 # Cabin-Aware LFE V2 — 2026-09-07
 
+> **Superseded frequency topology, 2026-09-08:** the sole production path now
+> uses one 48-Hz LR4 sub-band and has no 95-Hz punch branch. This file remains
+> the calibration record for the Q15 `4096` ceiling and `0.958` front trim.
+> Current measurements:
+> [`2026-09-08-lfe-lp48.md`](2026-09-08-lfe-lp48.md).
+
 ## Replacement scope
 
 The fixed mono-sum LR4 assist was removed from the working tree. `assist` now

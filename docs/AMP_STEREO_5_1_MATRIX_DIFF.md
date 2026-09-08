@@ -112,7 +112,8 @@ The exact table is:
 
 This is the strongest static evidence for a real stereo-versus-multichannel
 DSP operating mode. It is still only a numeric SHARC control `0x10`; the
-unavailable SHARC program is what gives values 2 and 5 their meaning.
+now-extracted SHARC program must be disassembled to give values 2 and 5 their
+meaning. See [`SHARC_APPLICATION_EXTRACTION.md`](SHARC_APPLICATION_EXTRACTION.md).
 
 The other groups scheduled with a bank refresh do not reveal a named upmixer:
 
@@ -277,7 +278,7 @@ The fixed six-slot PCM container remains correct:
 ```text
 APAC 5.1              -> measured L,R,C,LFE,Ls,Rs reorder
 AAC stereo, upmix off -> L,R,0,0,0,0
-AAC stereo, canary    -> 0.919L,0.919R,0,LFE-V2(phase-safe LP55/LP95),bounded Ls,bounded Rs
+AAC stereo, canary    -> 0.958L,0.958R,0,LFE-V2(phase-safe LP48),bounded Ls,bounded Rs
 ```
 
 What is not semantically equivalent is announcing `ASAD=0xfc` for either stereo
@@ -318,8 +319,9 @@ change. It should not be conflated with updating the SAD header.
 The recovered 8x8 table maps source positions to eight logical SHARC buses. It
 does not contain the final bus-to-16-amplifier-output mapping, and no second
 8x16 routing matrix is present in A07/B01. Any richer stereo expansion after
-Bus L/R, including Symphoria, remains inside the unavailable SHARC application
-or runtime state. It must not be claimed from the fold-down matrix above.
+Bus L/R, including Symphoria, remains inside the extracted but not yet
+semantically disassembled SHARC application or runtime state. It must not be
+claimed from the fold-down matrix above.
 
 ## Related records
 

@@ -18,21 +18,15 @@ struct spa_upmix_biquad_coefficients {
     float a2;
 };
 
-/* Cabin-Aware LFE V2 uses two LR4 branches.  Each coefficient set is one
- * 48-kHz, Q=1/sqrt(2) Butterworth section, cascaded twice below. */
-static const struct spa_upmix_biquad_coefficients kLfeLow55 = {
-    1.28924511212793801e-05,
-    2.57849022425587602e-05,
-    1.28924511212793801e-05,
-    -1.98981848055469990,
-    0.989870050359185072
-};
-static const struct spa_upmix_biquad_coefficients kLfeLow95 = {
-    3.83227647783784264e-05,
-    7.66455295567568528e-05,
-    3.83227647783784264e-05,
-    -1.98241403570328911,
-    0.982567326762402549
+/* Cabin-Aware LFE V2 deliberately stays below the conservative 48-Hz
+ * SoundAmp sub-band boundary.  This is one 48-kHz, Q=1/sqrt(2) Butterworth
+ * section cascaded twice below for an LR4 (-24 dB/octave) low-pass. */
+static const struct spa_upmix_biquad_coefficients kLfeLow48 = {
+    9.82591682048203443e-06,
+    1.96518336409640689e-05,
+    9.82591682048203443e-06,
+    -1.99111429220165359,
+    0.991153595868935477
 };
 
 /* Recovered A07/profile-0/bank-1 SoundAmp gains. */
@@ -157,35 +151,27 @@ static int16_t spa_upmix_lfe_v2(
 {
     const float normalized_l = (float)render_l * (1.0f / 32768.0f);
     const float normalized_r = (float)render_r * (1.0f / 32768.0f);
-    float low55_l = spa_upmix_lfe_lr4(
-        normalized_l, state->_runtime._lfe_low55_state[0], &kLfeLow55);
-    float low55_r = spa_upmix_lfe_lr4(
-        normalized_r, state->_runtime._lfe_low55_state[1], &kLfeLow55);
-    float low95_l = spa_upmix_lfe_lr4(
-        normalized_l, state->_runtime._lfe_low95_state[0], &kLfeLow95);
-    float low95_r = spa_upmix_lfe_lr4(
-        normalized_r, state->_runtime._lfe_low95_state[1], &kLfeLow95);
+    float low48_l = spa_upmix_lfe_lr4(
+        normalized_l, state->_runtime._lfe_low48_state[0], &kLfeLow48);
+    float low48_r = spa_upmix_lfe_lr4(
+        normalized_r, state->_runtime._lfe_low48_state[1], &kLfeLow48);
     const float power_alpha = 0.00075f;
     float target_polarity;
     float polarity_alpha;
     float normalization;
-    float body;
-    float punch;
+    float sub_band;
     float magnitude;
     float transient_ratio;
     float transient;
-    float punch_control;
-    float body_weight;
     float target_gain;
     float gain_alpha;
-    float shaped;
 
     state->_runtime._lfe_power_l += power_alpha *
-        (low95_l * low95_l - state->_runtime._lfe_power_l);
+        (low48_l * low48_l - state->_runtime._lfe_power_l);
     state->_runtime._lfe_power_r += power_alpha *
-        (low95_r * low95_r - state->_runtime._lfe_power_r);
+        (low48_r * low48_r - state->_runtime._lfe_power_r);
     state->_runtime._lfe_cross += power_alpha *
-        (low95_l * low95_r - state->_runtime._lfe_cross);
+        (low48_l * low48_r - state->_runtime._lfe_cross);
     /* Preserve coherent anti-phase bass instead of cancelling it in a mono
      * sum. Correlation is a slow control signal, so its square root runs at
      * 1.5 kHz while the continuous polarity move remains sample-rate. */
@@ -209,13 +195,11 @@ static int16_t spa_upmix_lfe_v2(
     normalization = 0.70710678118654752440f -
         0.20710678118654752440f *
         spa_upmix_absf(state->_runtime._lfe_polarity);
-    body = normalization * (low55_l +
-        state->_runtime._lfe_polarity * low55_r);
-    punch = normalization * (low95_l +
-        state->_runtime._lfe_polarity * low95_r);
+    sub_band = normalization * (low48_l +
+        state->_runtime._lfe_polarity * low48_r);
 
-    magnitude = fabsf(low95_l) > fabsf(low95_r)
-        ? fabsf(low95_l) : fabsf(low95_r);
+    magnitude = fabsf(low48_l) > fabsf(low48_r)
+        ? fabsf(low48_l) : fabsf(low48_r);
     state->_runtime._lfe_fast_envelope +=
         (magnitude > state->_runtime._lfe_fast_envelope ? 0.080f : 0.003f) *
         (magnitude - state->_runtime._lfe_fast_envelope);
@@ -229,14 +213,6 @@ static int16_t spa_upmix_lfe_v2(
     if (bass_confidence < 0.0f) bass_confidence = 0.0f;
     drum_confidence = spa_upmix_bound(drum_confidence, 1.0f);
     if (drum_confidence < 0.0f) drum_confidence = 0.0f;
-    punch_control = drum_confidence > transient
-        ? drum_confidence : transient;
-    body_weight = spa_upmix_bound(
-        0.42f + 0.22f * bass_confidence - 0.24f * punch_control,
-        0.68f);
-    if (body_weight < 0.18f) body_weight = 0.18f;
-    shaped = body_weight * body + (1.0f - body_weight) * punch;
-
     target_gain = 0.96f + 0.08f * bass_confidence +
         0.08f * drum_confidence + 0.08f * transient;
     if (target_gain > 1.10f) target_gain = 1.10f;
@@ -246,7 +222,7 @@ static int16_t spa_upmix_lfe_v2(
         (target_gain - state->_runtime._lfe_dynamic_gain);
 
     return spa_upmix_lfe_to_s16(
-        shaped * state->_runtime._lfe_dynamic_gain,
+        sub_band * state->_runtime._lfe_dynamic_gain,
         state->config.lfe_gain_q15);
 }
 

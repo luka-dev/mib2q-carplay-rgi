@@ -19,15 +19,19 @@ L, R, C, LFE, Ls, Rs
 - Rear gain is bounded to `0.0..0.25`; deployment selects `0.25`.
 - `assist` is Cabin-Aware LFE V2 only. There is no legacy implementation or
   runtime fallback.
-- V2 combines per-side LR4 low-pass branches at 55 Hz (body) and 95 Hz
-  (punch), capped at Q15 `4096` (`0.125`). The recovered J525 matrix also
-  distributes LFE into its front, centre and rear logical buses, so the lower
-  cap avoids audible double bass outside the subwoofer.
+- V2 applies one per-side LR4 low-pass at 48 Hz (`-24 dB/octave`), capped at
+  Q15 `4096` (`0.125`). The earlier 95-Hz punch branch was removed. The B01
+  crossover catalog contains a paired 48-Hz candidate for the conservative
+  sub-band boundary and the next low-frequency bank at 96 Hz; exact physical
+  binding remains inferred pending SHARC disassembly. The recovered J525 matrix
+  also distributes LFE into its front, centre and rear logical buses, so
+  restricting both bandwidth and level avoids audible double bass outside the
+  subwoofer.
 - Low-band correlation continuously selects a normalized `L+R` or `L-R` fold,
   so coherent anti-phase bass is preserved instead of disappearing.
 - The V11 low-band bass/drum posteriors and a sample-domain transient envelope
-  steer the body/punch blend and bounded dynamics. They do not delay or replace
-  the sample-domain waveform path.
+  steer bounded LFE dynamics. They do not delay or replace the sample-domain
+  waveform path.
 - Enabling LFE selects the paired front gain Q15 `31392` (about `0.958`).
 - A per-sample feasible-interval limiter applies the exact recovered J525
   profile-0/bank-1 gains to `L/R/LFE/Ls/Rs` and keeps every known logical bus
@@ -110,7 +114,7 @@ all builds contain Universal only.
 
 The unit tests cover exact OFF passthrough, fail-closed model handling, latency,
 block/sample and chunk/reset determinism, overlapping input/output, bounded
-C/LFE/rears, V2 anti-phase preservation, high-frequency rejection, all-six-bus
+C/LFE/rears, V2 anti-phase preservation, 96-Hz/high-frequency rejection, all-six-bus
 Cabin bounds, signal-derived fallback, worker mailbox/generation rejection, and
 AAC/APAC cookie switches.  The public-authored corpus has
 seven fixtures (five authored stereo/5.0 pairs, one E-AC3 JOC Atmos/LFE sample,
@@ -130,4 +134,6 @@ See
 for selectivity, corpus scores and timing.  Objective tests guard safety and
 regression.  The block/worker split, deadline evidence and sync parity are in
 [`../tools/stereo-upmix-render/bench/results/2026-09-07-hssr-async-refactor.md`](../tools/stereo-upmix-render/bench/results/2026-09-07-hssr-async-refactor.md).
+The 48-Hz LFE bandwidth change and its held-out A/B are in
+[`../tools/stereo-upmix-render/bench/results/2026-09-08-lfe-lp48.md`](../tools/stereo-upmix-render/bench/results/2026-09-08-lfe-lp48.md).
 Stationary vehicle A/B remains the final listening check.

@@ -1,5 +1,10 @@
 # Task: what selects the multichannel amplifier connection, and does this car take it?
 
+> **Historical prompt correction, 2026-09-08:** the amplifier CodeFlash does
+> contain the SHARC SPI boot/application stream at `0x041014..0x068777`.
+> References below to a missing external SHARC flash are superseded by
+> [`SHARC_APPLICATION_EXTRACTION.md`](SHARC_APPLICATION_EXTRACTION.md).
+
 ## Where we are
 
 The six-voice rendering defect is **fixed and confirmed on the car**: `mpl5_dio_ent`'s caps
@@ -46,9 +51,8 @@ question.
    the measurement exactly, and it would be the thing to change.
 4. If the multichannel pair is genuinely selected unconditionally for this amplifier, say so
    plainly. Then the remaining suspect is the SHARC source-to-output matrix inside the
-   amplifier, which `Firmwares/SoundAmp/AMP_ENTERTAINMENT_7_1_MOST.md` already notes is absent
-   from the V850 image and needs the external SHARC flash — and that is a hardware step, not a
-   static one, so say that rather than guessing at it.
+   amplifier. Its application is now extracted from the V850 image; recovering its downstream
+   routing is a SHARC disassembly task rather than an external-flash hardware prerequisite.
 
 ## Constraints
 

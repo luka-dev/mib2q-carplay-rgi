@@ -71,10 +71,9 @@ struct spa_stereo_upmix_config {
  * the realtime path never has to allocate.  Callers must not inspect or alter
  * fields whose names start with an underscore. */
 struct spa_stereo_upmix_runtime {
-    /* Cabin-aware LFE V2: LR4 body/punch filters per stereo side, low-band
+    /* Cabin-aware LFE V2: one 48-Hz LR4 filter per stereo side, low-band
      * correlation, phase-safe fold and smoothed semantic dynamics. */
-    float _lfe_low55_state[2][2][2];
-    float _lfe_low95_state[2][2][2];
+    float _lfe_low48_state[2][2][2];
     float _lfe_power_l;
     float _lfe_power_r;
     float _lfe_cross;

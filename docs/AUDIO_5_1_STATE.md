@@ -726,7 +726,9 @@ also to Bus C at -6 dB per side; it has no direct L/R-to-surround route.
 There is nevertheless a second, proven DSP-mode difference. A bank refresh
 writes SHARC control `0x10` from `0x6EAA0`: bank 0 sends float `2.0`, while banks
 1 and 2 send float `5.0`. The image supplies no semantic name, so this cannot be
-called a Symphoria switch without the missing SHARC program or runtime evidence.
+called a Symphoria switch until the extracted SHARC program is semantically
+disassembled or runtime evidence identifies it. The extraction is documented in
+[`SHARC_APPLICATION_EXTRACTION.md`](SHARC_APPLICATION_EXTRACTION.md).
 On sink `0x26`, changing only ASAD keeps the value at `5.0`.
 
 Consequently the exact compatibility/off baseline `L,R,0,0,0,0` is valid PCM,
@@ -743,8 +745,8 @@ reconfiguration at a codec boundary. Full audit:
 The resulting head-unit upmix design is recorded separately in
 [`STEREO_TO_5_1_UPMIX_DESIGN.md`](STEREO_TO_5_1_UPMIX_DESIGN.md). Its first
 profile leaves C zero, injects bounded ambience into Ls/Rs, and uses the sole
-Cabin-Aware LFE V2 path: phase-safe LR4 55/95 Hz body/punch branches, V11 bass/
-drum steering, a Q15 `8192` ceiling, and a `0.919` paired front trim. Its
+Cabin-Aware LFE V2 path: a phase-safe 48-Hz LR4 sub-band, V11 bass/drum
+steering, a Q15 `4096` ceiling, and a `0.958` paired front trim. Its
 per-sample limiter accounts for every recovered J525 bus gain, including LFE
 leak and the bank-1 +6 dB surround gain. The design also records Pioneer's independently verified CarPlay
 stereo-to-5.0 engine as a host oracle/clean-room rear-generator candidate; its
@@ -1096,6 +1098,7 @@ Full map, formula, policy switches and limits are in
 * `docs/ROUTER_INPUT_WIDTH_AUDIT.md` — runtime MPL1/MPL5 CSD width root cause, now fixed and confirmed.
 * `docs/MC_SELECTION_AUDIT.md` — connection-162 MC selector, EEPROM/basic-coding origin, and SHARC boundary.
 * `docs/SHARC_INPUT_OUTPUT_MATRIX.md` — recovered 8×8 SHARC input mixer and the remaining physical-output boundary.
+* `docs/SHARC_APPLICATION_EXTRACTION.md` — embedded ADSP-2148x loader/application extraction, hashes and exact block-format proof.
 * `docs/MOST_SOURCE_BLOCKWIDTH_AUDIT.md` — DIO MC source allocation, Connect BlockWidth, and the next data-plane measurement.
 * `docs/CONNECT_BLOCKWIDTH_VALIDATION_AUDIT.md` — amplifier width acceptance, HU literal/table sites, and CSD/MOST packing boundary.
 * `docs/CSD_ACDB_CHANNEL_AUDIT.md` — CSD client/service limits, dev-78 ACDB channel/slot records, and COPP topology selection.

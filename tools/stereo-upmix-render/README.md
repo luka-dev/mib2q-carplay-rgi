@@ -9,7 +9,7 @@ their history remains in Git.
 Universal accepts 48 kHz, signed 16-bit stereo WAV and writes extensible 5.1
 WAV in `L,R,C,LFE,Ls,Rs` order.  It has 512 frames of matched front/rear/LFE
 latency, keeps digital C at zero, caps each rear at Q15 `8192` (`0.25`), and can
-add Cabin-Aware LFE V2. V2 combines phase-safe 55/95 Hz LR4 body/punch paths,
+add Cabin-Aware LFE V2. V2 uses one phase-safe 48-Hz LR4 sub-band per side,
 the existing HSSR bass/drum posteriors and a limiter over all six recovered
 J525 logical buses. Vehicle listening showed that the recovered SoundAmp
 matrix distributes LFE into the front, centre and rear buses, so its calibrated

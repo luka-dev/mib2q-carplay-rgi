@@ -65,7 +65,7 @@ User-facing startup policy is:
 | `AUDIO_STEREO_UPMIX=off/on` | exact `L,R,0,0,0,0` bypass, or the sole HSSR Universal renderer |
 | `AUDIO_HSSR_MODEL=/mnt/app/root/hooks/hssr_model.bin` | validated Universal model; invalid/missing model leaves upmix off |
 | `AUDIO_STEREO_SURROUND=0.25` | checked-in rear input gain |
-| `AUDIO_STEREO_LFE=off/assist` | no LFE, or the sole Cabin-Aware LFE V2 path (55/95 Hz, phase-safe, V11-steered, Q15 0.25) with paired 0.919 fronts |
+| `AUDIO_STEREO_LFE=off/assist` | no LFE, or the sole Cabin-Aware LFE V2 path (48-Hz LR4, phase-safe, V11-steered, Q15 0.125) with paired 0.958 fronts |
 
 `AUDIO_SPATAIL` is accepted only as a warned compatibility alias for the typo. Old `SPATIAL_*`
 variables are read only when none of the new boolean controls is present, for migration of an older
