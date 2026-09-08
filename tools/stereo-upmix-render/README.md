@@ -8,8 +8,10 @@ their history remains in Git.
 
 Universal accepts 48 kHz, signed 16-bit stereo WAV and writes extensible 5.1
 WAV in `L,R,C,LFE,Ls,Rs` order.  It has 512 frames of matched front/rear/LFE
-latency, keeps digital C at zero, caps each rear at Q15 `8192` (`0.25`), and can
-add Cabin-Aware LFE V2. V2 uses one phase-safe 48-Hz LR4 sub-band per side,
+latency, keeps digital C at zero, applies a fixed +3 dB high shelf with a 4-kHz
+midpoint only to separated Ls/Rs, caps each rear at Q15 `8192` (`0.25`), and can
+add Cabin-Aware LFE V2. The rear shelf precedes the linked limiter and does not
+alter the object-transfer signal subtracted from dry L/R. V2 uses one phase-safe 48-Hz LR4 sub-band per side,
 the existing HSSR bass/drum posteriors and a limiter over all six recovered
 J525 logical buses. Vehicle listening showed that the recovered SoundAmp
 matrix distributes LFE into the front, centre and rear buses, so its calibrated
@@ -66,6 +68,8 @@ Teacher-stem selectivity is measured separately by
 `evaluate_hssr_teacher_stem_routing.py`.  The final model and performance
 decision is recorded in
 [`bench/results/2026-09-07-hssr-selection-v11.md`](bench/results/2026-09-07-hssr-selection-v11.md).
+The rear-presence shelf response, held-out A/B and ARM/QNX cost are recorded in
+[`bench/results/2026-09-08-rear-high-shelf.md`](bench/results/2026-09-08-rear-high-shelf.md).
 
 These measurements can reject regressions, clipping, dead rears and excessive
 vocal/bass leakage.  They cannot prove that stereo inversion recovered the

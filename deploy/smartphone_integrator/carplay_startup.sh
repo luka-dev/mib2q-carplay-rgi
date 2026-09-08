@@ -201,8 +201,9 @@ export AUDIO_SPATIAL=1
 export AUDIO_SPATIAL_ATMOS=0
 export AUDIO_SPATIAL_ATMOS_MODE=downmix
 # Ordinary buffered stereo stays on the same fixed PCM6 route.  ON always uses
-# the sole HSSR Universal renderer.  The explicitly selected LFE assist adds
-# only the phase-safe 48-Hz LR4 sub-band.
+# the sole HSSR Universal renderer, including its fixed +3 dB/4-kHz Ls/Rs
+# presence shelf.  The explicitly selected LFE assist adds only the phase-safe
+# 48-Hz LR4 sub-band.
 # Native APAC multichannel bypasses the stereo upmixer.
 # Roll back atomically with AUDIO_STEREO_UPMIX=off; OFF is exact L,R,0,0,0,0
 # and ignores the LFE setting.

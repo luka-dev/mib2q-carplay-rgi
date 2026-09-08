@@ -17,6 +17,11 @@ L, R, C, LFE, Ls, Rs
 - Digital C is always zero because J525 derives its centre from L/R/LFE.
 - Fronts, rears and optional LFE share the HSSR 512-frame latency.
 - Rear gain is bounded to `0.0..0.25`; deployment selects `0.25`.
+- After separation, Ls/Rs alone receive a fixed RBJ high shelf (`S=1`,
+  `+3 dB`, 4-kHz midpoint). It is essentially flat below 1 kHz, reaches
+  `+1.5 dB` at 4 kHz and approaches `+3 dB` above 8 kHz. The shelf runs before
+  the linked rear limiter, while the un-EQ'd object signal remains the source
+  for the existing front transfer. C, LFE and dry-front timbre are not EQ'd.
 - `assist` is Cabin-Aware LFE V2 only. There is no legacy implementation or
   runtime fallback.
 - V2 applies one per-side LR4 low-pass at 48 Hz (`-24 dB/octave`), capped at
@@ -59,6 +64,12 @@ rear channels.  It is frequency-steered and uses a conjugate phase pair so Ls
 and Rs remain distinct.  Vocal and bass posteriors veto this path rapidly;
 upper-percussion transients have a separate presence curve.  This fallback is
 a perceptual coverage bed, not a claim of studio-stem recovery.
+
+The final Ls/Rs-only presence shelf compensates for the rear tweeters sounding
+too subdued in the vehicle. It is an output voicing stage, not another source
+selector: it cannot turn front-only material into a rear object. Keeping the
+front-transfer sidechain pre-EQ preserves the separation decision while the
+existing linked limiter retains instantaneous peak protection.
 
 ## Runtime split
 
@@ -114,7 +125,8 @@ all builds contain Universal only.
 
 The unit tests cover exact OFF passthrough, fail-closed model handling, latency,
 block/sample and chunk/reset determinism, overlapping input/output, bounded
-C/LFE/rears, V2 anti-phase preservation, 96-Hz/high-frequency rejection, all-six-bus
+C/LFE/rears, the exact rear-shelf response, V2 anti-phase preservation,
+96-Hz/high-frequency rejection, all-six-bus
 Cabin bounds, signal-derived fallback, worker mailbox/generation rejection, and
 AAC/APAC cookie switches.  The public-authored corpus has
 seven fixtures (five authored stereo/5.0 pairs, one E-AC3 JOC Atmos/LFE sample,
@@ -136,4 +148,6 @@ regression.  The block/worker split, deadline evidence and sync parity are in
 [`../tools/stereo-upmix-render/bench/results/2026-09-07-hssr-async-refactor.md`](../tools/stereo-upmix-render/bench/results/2026-09-07-hssr-async-refactor.md).
 The 48-Hz LFE bandwidth change and its held-out A/B are in
 [`../tools/stereo-upmix-render/bench/results/2026-09-08-lfe-lp48.md`](../tools/stereo-upmix-render/bench/results/2026-09-08-lfe-lp48.md).
+The Ls/Rs high-shelf change, held-out spectral A/B and ARM/QNX cost are in
+[`../tools/stereo-upmix-render/bench/results/2026-09-08-rear-high-shelf.md`](../tools/stereo-upmix-render/bench/results/2026-09-08-rear-high-shelf.md).
 Stationary vehicle A/B remains the final listening check.

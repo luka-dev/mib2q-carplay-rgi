@@ -17,6 +17,7 @@ cc -std=c99 -O2 -Wall -Wextra -Werror -Ihook \
 
 printf '%-32s ' stereo_upmix_test
 cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
+    -DSPA_STEREO_UPMIX_TESTING \
     tests/stereo_upmix_test.c hook/audio/stereo_upmix.c \
     hook/audio/hssr_dsp.c hook/audio/hssr_neon.c -lm -o "$OUT/upmix"
 "$OUT/upmix"

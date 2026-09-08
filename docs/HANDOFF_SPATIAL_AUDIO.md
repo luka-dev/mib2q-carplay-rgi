@@ -19,8 +19,9 @@ disassembler**, and it is labelled which. Full history in `docs/reference/AUDIO.
 > APAP ID 2 is the per-packet index (23/65), ID 8 is `spf=1024`; each changed
 > inline cookie confirms AAC or APAC and decoded geometry/layout selects processing.
 > The current source retains one stereo renderer: HSSR Universal with the V11
-> separation-supervised model, rear gain `0.25`, and Cabin-Aware LFE V2. `off` remains the
-> exact safety bypass. Old profile notes below are dated investigation history.
+> separation-supervised model, rear gain `0.25`, a fixed Ls/Rs-only +3 dB high
+> shelf at 4 kHz, and Cabin-Aware LFE V2. `off` remains the exact safety bypass.
+> Old profile notes below are dated investigation history.
 
 ---
 
@@ -64,7 +65,7 @@ User-facing startup policy is:
 | `SPATIAL_103_EXTRA_INDEX=23` | advertise AAC-LC/48 kHz/stereo beside APAC 5.1 |
 | `AUDIO_STEREO_UPMIX=off/on` | exact `L,R,0,0,0,0` bypass, or the sole HSSR Universal renderer |
 | `AUDIO_HSSR_MODEL=/mnt/app/root/hooks/hssr_model.bin` | validated Universal model; invalid/missing model leaves upmix off |
-| `AUDIO_STEREO_SURROUND=0.25` | checked-in rear input gain |
+| `AUDIO_STEREO_SURROUND=0.25` | checked-in rear input gain; Universal then applies its fixed Ls/Rs-only +3 dB/4-kHz presence shelf before the rear limiter |
 | `AUDIO_STEREO_LFE=off/assist` | no LFE, or the sole Cabin-Aware LFE V2 path (48-Hz LR4, phase-safe, V11-steered, Q15 0.125) with paired 0.958 fronts |
 
 `AUDIO_SPATAIL` is accepted only as a warned compatibility alias for the typo. Old `SPATIAL_*`

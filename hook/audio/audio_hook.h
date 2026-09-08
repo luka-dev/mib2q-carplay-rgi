@@ -69,7 +69,9 @@
  * AUDIO_STEREO_SURROUND: rear input gain, 0.0 .. 0.25 (default 0.18).
  * HSSR Universal uses persistent half-plane object routing and a bounded,
  * phase-distinct mid/high fallback so difficult or nearly mono masters retain
- * rear activity instead of collapsing to silence.
+ * rear activity instead of collapsing to silence.  Its separated Ls/Rs then
+ * receive a fixed +3 dB high shelf with a 4-kHz midpoint before the linked
+ * rear limiter; the shelf is not applied to dry L/R, C or LFE.
  * AUDIO_STEREO_LFE: off | assist (code default off). `assist` selects only
  * Cabin-Aware LFE V2: a phase-safe 48-Hz LR4 sub-band, HSSR bass/drum level
  * steering, paired front headroom and a recovered-J525-matrix limiter.

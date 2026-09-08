@@ -743,9 +743,10 @@ reconfiguration at a codec boundary. Full audit:
 [`AMP_STEREO_5_1_MATRIX_DIFF.md`](AMP_STEREO_5_1_MATRIX_DIFF.md).
 
 The resulting head-unit upmix design is recorded separately in
-[`STEREO_TO_5_1_UPMIX_DESIGN.md`](STEREO_TO_5_1_UPMIX_DESIGN.md). Its first
-profile leaves C zero, injects bounded ambience into Ls/Rs, and uses the sole
-Cabin-Aware LFE V2 path: a phase-safe 48-Hz LR4 sub-band, V11 bass/drum
+[`STEREO_TO_5_1_UPMIX_DESIGN.md`](STEREO_TO_5_1_UPMIX_DESIGN.md). Its sole
+profile leaves C zero, routes bounded separated objects into Ls/Rs, applies a
+fixed Ls/Rs-only +3 dB high shelf with a 4-kHz midpoint before the linked rear
+limiter, and uses Cabin-Aware LFE V2: a phase-safe 48-Hz LR4 sub-band, V11 bass/drum
 steering, a Q15 `4096` ceiling, and a `0.958` paired front trim. Its
 per-sample limiter accounts for every recovered J525 bus gain, including LFE
 leak and the bank-1 +6 dB surround gain. The design also records Pioneer's independently verified CarPlay
@@ -757,6 +758,9 @@ The retained `hssr-universal` renderer and its Cabin-Aware LFE V2 adapter are
 implemented after the common decoder and before the PCM6 ring. Analysis,
 masking and synthesis remain fixed-memory C99 on the existing receiver thread;
 only its quantized GRU controller runs on a persistent lock-free worker.
+The final rear-presence shelf voices only the already separated Ls/Rs signal;
+the dry-front object-transfer sidechain remains pre-EQ, so this does not create
+a second separation profile or copy full-band front audio into the rears.
 Generation-tagged results are rejected after every stream/flush/rate/cookie/
 format boundary, and native APAC 5.1 remains on its byte-identical reorder
 path. The old backwards stereo widening was

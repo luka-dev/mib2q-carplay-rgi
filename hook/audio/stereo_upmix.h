@@ -83,6 +83,8 @@ struct spa_stereo_upmix_runtime {
     float _lfe_slow_envelope;
     float _lfe_dynamic_gain;
     uint32_t _lfe_correlation_tick;
+    /* Per-side +3 dB / 4-kHz rear-presence shelf, before the linked limiter. */
+    float _rear_high_shelf_state[2][2];
     float _limiter_gain;
     struct spa_hssr_dsp _hssr;
 };
@@ -144,5 +146,10 @@ int spa_stereo_upmix_process_s16(struct spa_stereo_upmix *state,
                                  size_t frames,
                                  int16_t *pcm6,
                                  size_t pcm6_capacity_frames);
+
+#ifdef SPA_STEREO_UPMIX_TESTING
+/* Test-only access to the exact shipping rear shelf. */
+float spa_stereo_upmix_test_rear_high_shelf(float input, float state[2]);
+#endif
 
 #endif /* STEREO_UPMIX_H */

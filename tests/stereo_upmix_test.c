@@ -141,6 +141,39 @@ static uint64_t channel_energy(
     return energy;
 }
 
+static double rear_shelf_gain_db(double frequency_hz)
+{
+    const double phase_step = 6.28318530717958647693 * frequency_hz /
+        (double)SPA_STEREO_UPMIX_SAMPLE_RATE;
+    float state[2] = { 0.0f, 0.0f };
+    double input_energy = 0.0;
+    double output_energy = 0.0;
+    size_t frame;
+
+    for (frame = 0; frame < TEST_FRAMES; ++frame) {
+        float input = (float)(0.25 * sin(phase_step * (double)frame));
+        float output = spa_stereo_upmix_test_rear_high_shelf(input, state);
+
+        if (frame >= 1024) {
+            input_energy += (double)input * input;
+            output_energy += (double)output * output;
+        }
+    }
+    assert(input_energy > 0.0 && output_energy > 0.0);
+    return 10.0 * log10(output_energy / input_energy);
+}
+
+static void test_rear_high_shelf_response(void)
+{
+    double low_db = rear_shelf_gain_db(1000.0);
+    double midpoint_db = rear_shelf_gain_db(4000.0);
+    double high_db = rear_shelf_gain_db(12000.0);
+
+    assert(low_db >= 0.0 && low_db < 0.03);
+    assert(midpoint_db > 1.48 && midpoint_db < 1.52);
+    assert(high_db > 2.96 && high_db < 3.02);
+}
+
 static void assert_cabin_buses_bounded(
     const int16_t *pcm6, size_t frames)
 {
@@ -558,11 +591,12 @@ int main(void)
 {
     test_default_validation_and_fail_closed();
     test_hssr_block_matches_sample_entry();
+    test_rear_high_shelf_response();
     test_reset_advances_control_generation();
     test_off_is_exact_and_overlap_safe();
     test_universal_latency_chunking_reset_and_lfe();
     test_universal_overlap_and_signal_derived_fallback();
     test_lfe_v2_phase_frequency_and_cabin_bounds();
-    puts("stereo_upmix_test: OK (off + hssr-universal/LFE-V2 only)");
+    puts("stereo_upmix_test: OK (Universal + rear shelf + LFE V2)");
     return 0;
 }

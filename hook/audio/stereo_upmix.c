@@ -29,6 +29,18 @@ static const struct spa_upmix_biquad_coefficients kLfeLow48 = {
     0.991153595868935477
 };
 
+/* Rear-presence shelf for the fixed 48-kHz rail.  This is an RBJ high shelf
+ * with S=1, +3 dB and a 4-kHz midpoint: effectively flat below 1 kHz,
+ * +1.5 dB at 4 kHz and asymptotically +3 dB.  It is applied only to the
+ * separated Ls/Rs objects, before their linked limiter. */
+static const struct spa_upmix_biquad_coefficients kRearHighShelf4k3dB = {
+    1.327279882166f,
+    -1.771448848238f,
+    0.671953838362f,
+    -1.220826978259f,
+    0.448611850550f
+};
+
 /* Recovered A07/profile-0/bank-1 SoundAmp gains. */
 static const float kCabinFront = 0.794328f;
 static const float kCabinCentreFront = 0.501187f;
@@ -116,7 +128,7 @@ static int16_t spa_upmix_lfe_to_s16(float normalized, uint32_t gain_q15)
     return (int16_t)rounded;
 }
 
-static float spa_upmix_lfe_biquad(
+static float spa_upmix_biquad(
     float input, float state[2],
     const struct spa_upmix_biquad_coefficients *coefficients)
 {
@@ -135,14 +147,21 @@ static float spa_upmix_lfe_biquad(
     return output;
 }
 
+#ifdef SPA_STEREO_UPMIX_TESTING
+float spa_stereo_upmix_test_rear_high_shelf(float input, float state[2])
+{
+    return spa_upmix_biquad(input, state, &kRearHighShelf4k3dB);
+}
+#endif
+
 static float spa_upmix_lfe_lr4(
     float input, float state[2][2],
     const struct spa_upmix_biquad_coefficients *coefficients)
 {
-    float output = spa_upmix_lfe_biquad(
+    float output = spa_upmix_biquad(
         input, state[0], coefficients);
 
-    return spa_upmix_lfe_biquad(output, state[1], coefficients);
+    return spa_upmix_biquad(output, state[1], coefficients);
 }
 
 static int16_t spa_upmix_lfe_v2(
@@ -491,10 +510,14 @@ int spa_stereo_upmix_process_s16(struct spa_stereo_upmix *state,
             int16_t lfe = 0;
             float rear_l = state->_hssr_rear_scratch[frame * 2];
             float rear_r = state->_hssr_rear_scratch[frame * 2 + 1];
+            float transfer_rear_l = rear_l;
+            float transfer_rear_r = rear_r;
             int16_t front_l;
             int16_t front_r;
             int16_t output_rear_l;
             int16_t output_rear_r;
+            int16_t output_transfer_rear_l;
+            int16_t output_transfer_rear_r;
 
             if (state->config.lfe_enabled) {
                 lfe_candidate = spa_upmix_lfe_v2(
@@ -502,6 +525,13 @@ int spa_stereo_upmix_process_s16(struct spa_stereo_upmix *state,
                     state->_hssr_lfe_control_scratch[frame * 2],
                     state->_hssr_lfe_control_scratch[frame * 2 + 1]);
             }
+
+            rear_l = spa_upmix_biquad(
+                rear_l, state->_runtime._rear_high_shelf_state[0],
+                &kRearHighShelf4k3dB);
+            rear_r = spa_upmix_biquad(
+                rear_r, state->_runtime._rear_high_shelf_state[1],
+                &kRearHighShelf4k3dB);
 
             /* Linked limiter: instantaneous attack, about 42 ms release. */
             {
@@ -521,6 +551,12 @@ int spa_stereo_upmix_process_s16(struct spa_stereo_upmix *state,
                     rear_l * state->_runtime._limiter_gain, 1.0f);
                 rear_r = spa_upmix_bound(
                     rear_r * state->_runtime._limiter_gain, 1.0f);
+                /* Speaker-presence EQ must not change the amount of the
+                 * separated object transferred out of the dry fronts. */
+                transfer_rear_l = spa_upmix_bound(
+                    transfer_rear_l * state->_runtime._limiter_gain, 1.0f);
+                transfer_rear_r = spa_upmix_bound(
+                    transfer_rear_r * state->_runtime._limiter_gain, 1.0f);
             }
 
             front_l = spa_upmix_scale_s16_q15(
@@ -531,11 +567,15 @@ int spa_stereo_upmix_process_s16(struct spa_stereo_upmix *state,
                 rear_l, state->config.rear_gain_q15);
             output_rear_r = spa_upmix_rear_to_s16(
                 rear_r, state->config.rear_gain_q15);
+            output_transfer_rear_l = spa_upmix_rear_to_s16(
+                transfer_rear_l, state->config.rear_gain_q15);
+            output_transfer_rear_r = spa_upmix_rear_to_s16(
+                transfer_rear_r, state->config.rear_gain_q15);
             front_l = spa_upmix_transfer_front(
-                front_l, output_rear_l, UINT32_C(81920),
+                front_l, output_transfer_rear_l, UINT32_C(81920),
                 state->config.front_gain_q15);
             front_r = spa_upmix_transfer_front(
-                front_r, output_rear_r, UINT32_C(81920),
+                front_r, output_transfer_rear_r, UINT32_C(81920),
                 state->config.front_gain_q15);
             if (state->config.lfe_enabled)
                 lfe = spa_upmix_lfe_cabin_limit(
