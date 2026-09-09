@@ -116,8 +116,7 @@ free for us to take. Confirmed on the car by the bounded raw-key census in
 
     raw key board=4 code=40 state=1 / state=0     MFW roller press/release
     MFW OK pressed board=4 mapTab=true
-    route-info phase=1 applied view=fullscreen    ETA text
-    time-info type=remaining queued (smallscreen) arrival <-> remaining
+    route-info phase=1 applied view=fullscreen    remaining time + VC ETA clock
 
 Other codes the census caught on the same keyboard, for future use:
 `board=4 code=35/99/100`, `board=1 code=78`.

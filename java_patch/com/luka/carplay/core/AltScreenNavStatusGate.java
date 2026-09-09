@@ -118,7 +118,7 @@ public final class AltScreenNavStatusGate {
         return gate != null && appliedRouteBlocked == blocked && !installScheduled;
     }
 
-    /** FctID 19/21/22/46 ownership follows actual CarPlay RGI, not the
+    /** FctID 19/20/21/22/46 ownership follows actual CarPlay RGI, not the
      * session-long native-RG gate. The wrapper is already installed on
      * NavigationJobs, so changing these volatile policy bits requires no
      * service-field mutation. */

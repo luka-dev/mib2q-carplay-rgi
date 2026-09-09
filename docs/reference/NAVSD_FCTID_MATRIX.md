@@ -40,11 +40,11 @@ The feature set observed on the MHI2Q virtual cockpit most closely matches
 | 16 | `0x10` | CompassInfo | property | All | `updateCompassInfo(angle, symbolic)` | Compass heading and `N/NE/...` indicator | Delegated to stock |
 | 17 | `0x11` | RG_Status | property | All | `updateRGStatus(status)` | Route-guidance active state; starts FctSync | CarPlay-owned for connected session; sent during RGI |
 | 18 | `0x12` | DistanceToNextManeuver | property | All | `updateDistanceToNextManeuver(distance, unit, barOn, bar)` | Next-turn distance plus optional bargraph | CarPlay-owned/gated; actively sent |
-| 19 | `0x13` | CurrentPositionInfo | property | All | `updateCurrentPositionInfo(text)` | Lower-bar current road/direction text | Gated only while CarPlay RGI is active; stock allowed for `CP && !RGI` |
-| 20 | `0x14` | TurnToInfo | property | All | `updateTurnToInfo(turnTo, signPost)` | Turn-to/signpost text overlay | Delegated to stock; not currently sent by CarPlay |
+| 19 | `0x13` | CurrentPositionInfo | property | All | `updateCurrentPositionInfo(text)` | VC lower-bar text | Phase-0 fallback when neither SignPost nor TurnToInfo exists; fullscreen phase 1 shows the absolute ETA clock; smallscreen phase 1 clears it; stock allowed for `CP && !RGI` |
+| 20 | `0x14` | TurnToInfo | property | All | `updateTurnToInfo(turnTo, signPost)` | Turn-to/signpost text overlay | CarPlay-owned during active RGI; phase 0 publishes exactly one source by SignPost → TurnToInfo → CurrentPositionInfo priority; phase 1 uses SignPost for remaining time |
 | 21 | `0x15` | DistanceToDestination | property | All | `updateDistanceToDestination(value, unit, stopover)` | Destination/trip distance | CarPlay-owned/gated during active RGI; cached for instant info-mode refresh |
-| 22 | `0x16` | TimeToDestination | property | All | `updateTimeToDestination(type, format, time)` | ETA or remaining travel time | CarPlay-owned/gated during active RGI; phase selects absolute ETA or remaining time |
-| 23 | `0x17` | ManeuverDescriptor | property | `S/H/MH` | `updateManeuverDescriptor(slots[])` | Up to three maneuver descriptors for VC/HUD | CarPlay-owned/gated; current-only descriptor is sent |
+| 22 | `0x16` | TimeToDestination | property | All | `updateTimeToDestination(type, format, time)` | ETA or remaining travel time | CarPlay-owned/gated during active RGI; always publishes absolute ETA (`timeInfoType=1`) |
+| 23 | `0x17` | ManeuverDescriptor | property | `S/H/MH` | `updateManeuverDescriptor(slots[])` | Up to three maneuver descriptors for VC/HUD | CarPlay-owned/gated; the real current-only descriptor is shown at every distance; approach thresholds affect only bargraph/action timing |
 | 24 | `0x18` | LaneGuidance | array | `S/H/MH` | `updateLaneGuidance(show, lanes[])` | Lane arrows and recommended-lane flags | CarPlay-owned/gated; actively sent |
 | 25 | `0x19` | TMCinfo | property | `S/H` | `updateTMCInfoMessages(messages[])` | Urgent traffic messages | Delegated to stock |
 | 26 | `0x1A` | MagnetFieldZone | property/SetGet | None | no public publisher | Compass calibration region | Registered but not advertised; do not use |
@@ -94,8 +94,8 @@ The feature set observed on the MHI2Q virtual cockpit most closely matches
 
 The bridge always uses type `1`, independent of view and presentation phase.
 If iOS supplies only remaining time, the bridge computes `now + remaining` and
-publishes an absolute ETA. Remaining time is exposed only by the compact
-fullscreen FctID 19 summary.
+publishes an absolute ETA. Remaining time is exposed by the compact FctID 20
+SignPost value selected with the steering-wheel click.
 
 ### FctID 38 — InfoStates
 
@@ -122,16 +122,16 @@ current route.
 | Ownership class | FctIDs | Rule |
 |---|---|---|
 | CarPlay exclusive while takeover/RGI owns them | `17,18,23,24,39,49,55` | Stock writes are dropped by `GatedCombiService`; `BAPBridge` publishes them |
-| CarPlay exclusive only during active RGI | `19,21,22,46` | Stock lower-bar/trip output is allowed again for `CP && !RGI`; CarPlay owns it atomically while RGI is active |
+| CarPlay exclusive only during active RGI | `19,20,21,22,46` | Stock route-text/trip output is allowed again for `CP && !RGI`; CarPlay owns it atomically while RGI is active |
 | Suppressed native-map decorations | `45,47` | Cache stock value, publish hidden/invalid while takeover is active, restore on release |
-| Explicitly left stock-owned | `15,16,20,25,29,30,33,36,38,40,43,44,48,50,53,54,56` | Avoid disturbing native navigation lifecycle and unrelated menus |
+| Explicitly left stock-owned | `15,16,25,29,30,33,36,38,40,43,44,48,50,53,54,56` | Avoid disturbing native navigation lifecycle and unrelated menus |
 | Framework/command plumbing | `1–4,26–28,31,32,34,35,37,41,42,51,52` | Not general-purpose UI setters; method seams are command results rather than status controls |
 
 ## Practical candidates
 
 - **Safe/useful now:** variants of FctID 22; richer FctID 21/46 destination
   data; FctID 25/40 only if CarPlay traffic data is available.
-- **Single-owner interactive presentation:** FctID `19,21,22,46` while
+- **Single-owner interactive presentation:** FctID `19,20,21,22,46` while
   CarPlay RGI is active.
 - **Potentially destructive:** FctID `15,38,43,44,45,54`; these control the
   stock navigation state/map rather than the CarPlay altScreen scene.
@@ -185,10 +185,22 @@ Select.
 
 | View | Phase 0 | Phase 1 |
 |---|---|---|
-| Fullscreen | FctID 19: real maneuver arrow/road; FctID 22: absolute ETA | FctID 19: `ETA <local time> | <total minutes> min`; FctID 22 remains absolute ETA |
-| Smallscreen | FctID 19: real maneuver arrow/road; FctID 22: absolute ETA (`timeInfoType=1`) | No phase toggle; presentation remains phase 0 |
+| Fullscreen | Exactly one: FctID 20 SignPost, else FctID 20 TurnToInfo, else FctID 19 current road; FctID 22: absolute ETA | FctID 20 SignPost: remaining duration (`37 min` / `1 h 05 min`); VC-only FctID 19: `ETA 10:42 PM`; FctID 22 remains absolute ETA |
+| Smallscreen | Exactly one: FctID 20 SignPost, else FctID 20 TurnToInfo, else FctID 19 current road; FctID 22: absolute ETA | FctID 20 SignPost: remaining duration (`37 min` / `1 h 05 min`); FctID 19 is empty; FctID 22 remains absolute ETA |
 
 Every fullscreen/smallscreen View transition resets to phase 0. `BAPBridge` retains
-the last real FctID 19 text plus ETA, remaining time, and destination distance,
-so the serialized presentation worker can republish phase 0 immediately rather
-than waiting for another iOS route-guidance delta.
+the last signpost, turn-to and current-road text plus ETA, remaining time, and
+destination distance, so the serialized presentation worker can republish either
+phase immediately rather than waiting for another iOS route-guidance delta.
+
+The route-text input priority is `SignPost -> TurnToInfo -> CurrentPositionInfo`.
+The bridge keeps all three sources semantic but publishes exactly one in phase 0:
+`mExitInfo` feeds SignPost; only without it does `mAfterRoad` (or maneuver name)
+feed TurnToInfo; only without both does `currentRoad` feed CurrentPositionInfo.
+All lower-priority fields are explicitly cleared to prevent stale VC overlays.
+As in MHI3, occurrences of the turn-to street are removed from SignPost to avoid
+duplicate text. Phase 1 replaces the highest-priority
+SignPost value with remaining travel time and clears TurnToInfo. In fullscreen,
+the VC-only CurrentPositionInfo row simultaneously shows the absolute arrival
+clock; in smallscreen it is explicitly empty. The next click restores both
+original FctID 20 strings and the real current-road FctID 19 value.

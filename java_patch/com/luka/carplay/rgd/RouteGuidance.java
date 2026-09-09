@@ -575,10 +575,11 @@ public class RouteGuidance implements CarplayBus.Listener {
 
     /** Steering-wheel encoder press: toggle phase without touching the HMI/BAP caller thread. */
     private void requestInfoModeToggle() {
-        /* Same phase toggle in both views; only the text differs (BAPBridge picks the short
-         * "ETA 4 min" form in smallscreen). The old smallscreen branch flipped FctID 22's
-         * timeInfoType instead, which the cluster cannot render - it has no remaining-duration
-         * widget - so it only blanked the clock. */
+        /* Same phase toggle in both views: FctID 20 carries remaining travel time.
+         * Fullscreen additionally puts the absolute ETA clock in VC-only FctID 19;
+         * smallscreen clears FctID 19. The old smallscreen branch
+         * flipped FctID 22's timeInfoType instead, which the cluster cannot render -
+         * it has no remaining-duration widget - so it only blanked the clock. */
         synchronized (this) {
             if (!running || !rgActive) {
                 Log.i(TAG, "route-info toggle ignored without active RGI");
@@ -634,7 +635,7 @@ public class RouteGuidance implements CarplayBus.Listener {
         }
     }
 
-    /** Serialized with onFrame/stop; publishes cached FctID 19/22 immediately. */
+    /** Serialized with onFrame/stop; publishes cached FctID 19/20/22 immediately. */
     private synchronized void driveInfoPresentation(int phase) {
         if (!running || bap == null || !rgActive) return;
         bap.refreshInfoPresentation(state, phase);

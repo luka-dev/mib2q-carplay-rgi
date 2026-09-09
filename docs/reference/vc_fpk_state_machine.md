@@ -122,10 +122,10 @@ layer is rendered BEHIND EB GUIDE widget overlays.
 | `BAP_NavSD_DistanceToNextManeuver_BargraphOn`          | 0x2000066 | 18        | Bargraph active    |
 | `BAP_NavSD_DistanceToNextManeuver_Unit`                | 0x2000068 | 18        | Distance unit      |
 | `BAP_NavSD_DistanceToNextManeuver_ValidityInformation` | 0x2000069 | 18        | Validity           |
-| `BAP_NavSD_TurnToInfo_TurnToInfo_text`                 | 0x1000018 | 23        | Turn-to street     |
-| `BAP_NavSD_TurnToInfo_TurnToInfo_available`            | 0x1000017 | 23        | Turn-to visible    |
-| `BAP_NavSD_TurnToInfo_SignPost_text`                   | 0x1000016 | 23        | Signpost text      |
-| `BAP_NavSD_TurnToInfo_SignPost_available`              | 0x1000015 | 23        | Signpost visible   |
+| `BAP_NavSD_TurnToInfo_TurnToInfo_text`                 | 0x1000018 | 20        | Turn-to street     |
+| `BAP_NavSD_TurnToInfo_TurnToInfo_available`            | 0x1000017 | 20        | Turn-to visible    |
+| `BAP_NavSD_TurnToInfo_SignPost_text`                   | 0x1000016 | 20        | Signpost text      |
+| `BAP_NavSD_TurnToInfo_SignPost_available`              | 0x1000015 | 20        | Signpost visible   |
 | `BAP_NavSD_CurrentPositionInfo_PositionInfo_text`      | 0x1000013 | 19        | Current road       |
 | `BAP_NavSD_CurrentPositionInfo_PositionInfo_available` | 0x1000012 | 19        | Road visible       |
 | `BAP_NavSD_DistanceToDestination_Distance`             | 0x4000001 | 21        | Dist to dest       |

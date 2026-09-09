@@ -40,8 +40,8 @@ and its sole transition to phase 1 is the unreachable `requestInfoModeToggle()`
 (`RouteGuidance.java:570-586`). This makes the following phase-1 path dead:
 
 - `BAPBridge.infoPhase` and its phase branches (`BAPBridge.java:82-84,1120-1123,1282-1294,1322-1329`);
-- `buildTripSummary`, `appendSummaryPart`, `formatArrivalForText`, and
-  `formatRemainingForText` (`BAPBridge.java:1385-1425`);
+- phase-1 route text plus `formatArrivalForText` and
+  `formatRemainingForText` (`BAPBridge.java`);
 - `lastDistanceToDestinationM`, which is written and reset but never read
   (`BAPBridge.java:90,638,801,1346`).
 

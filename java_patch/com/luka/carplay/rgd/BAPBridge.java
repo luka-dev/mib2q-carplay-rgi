@@ -4,7 +4,7 @@
  * Translates route guidance state to BAP protocol calls via AppConnectorNavi,
  * and drives maneuver_render via TCP for LVDS video rendering.
  *
- * BAP path: ManeuverDescriptor, distance, street, lane guidance, ETA -> VC/HUD text overlays.
+ * BAP path: ManeuverDescriptor, distance, street, lane guidance, ETA -> VC/HUD navigation data.
  * maneuver_render path: CMD_MANEUVER over TCP -> maneuver_render EGL/GLES2 -> video encoder -> MOST -> VC LVDS.
  *
  *
@@ -75,9 +75,15 @@ public class BAPBridge {
     /* Set only after the complete synchronous BAP start sequence has returned successfully.
      * RouteGuidance combines this with renderer FRAME_READY before exposing context 80. */
     private volatile boolean bapSessionStarted = false;
-    /* CarPlay owns FctID 19/21/22/46 for the whole active RGI interval. */
+    private static final int MAX_CURRENT_POSITION_UTF8_BYTES = 96;
+    private static final int MAX_TURN_TO_UTF8_BYTES = 75;
+    private static final int MAX_SIGN_POST_UTF8_BYTES = 30;
+
+    /* CarPlay owns FctID 19/20/21/22/46 for the whole active RGI interval. */
     private String latchedTurnToText = "";
-    private boolean viewAreaLowerBarPublished = false;
+    private String latchedSignPostText = "";
+    private String latchedCurrentPositionText = "";
+    private boolean routeTextPublished = false;
     /* User-selectable route-info representation. View changes always reset it
      * to 0; only the serialized RouteGuidance presentation worker mutates it. */
     private int infoPhase = 0;
@@ -88,10 +94,8 @@ public class BAPBridge {
     private long lastTimeRemainingSampleSeconds = -1L;
     private int lastDistanceToDestinationM = -1;
 
-    /*
-     * Approach mode: true when distM <= prepareThreshold (showing real maneuver icon),
-     * false when further away (showing FOLLOW_STREET).
-     */
+    /* Approach mode controls only bargraph/blink timing. The real next-maneuver
+     * descriptor remains visible at every distance. */
     private boolean inApproachZone = false;
     /* Track the primary maneuver's slot identity so we know when iOS
      * actually swapped the head of the list vs. just reordered/extended it.
@@ -620,7 +624,9 @@ public class BAPBridge {
             bapSessionStarted = false;
             inApproachZone = false;
             latchedTurnToText = "";
-            viewAreaLowerBarPublished = false;
+            latchedSignPostText = "";
+            latchedCurrentPositionText = "";
+            routeTextPublished = false;
             infoPhase = 0;
             lastEtaSeconds = -1L;
             lastTimeRemainingSeconds = -1L;
@@ -671,8 +677,8 @@ public class BAPBridge {
                 }
             }
 
-            /* FctID 19 is shared with stock outside RGI. Claim it only for the
-             * interval in which this bridge publishes CarPlay lower-bar text. */
+            /* FctIDs 19/20 are shared with stock outside RGI. Claim them only for the
+             * interval in which this bridge publishes CarPlay route text. */
             com.luka.carplay.core.AltScreenNavStatusGate.setCurrentPositionInfoBlocked(true);
             /* Block native route-guidance BAP stream during CarPlay RG. */
             com.luka.carplay.core.AltScreenNavStatusGate.setRouteGuidanceBlocked(true);
@@ -705,12 +711,14 @@ public class BAPBridge {
             Log.i(TAG, "Started (rgType=" + ACTIVE_RGTYPE
                 + ", cr=" + customRendererStarted + ")");
             bapSessionStarted = true;
-            /* Never expose the VC's empty "---" shell while the first iOS
-             * maneuver snapshot is still arriving. */
+            /* Clear stale stock text while the first iOS maneuver snapshot is
+             * still arriving. Never synthesize a textual arrow here: the real
+             * maneuver arrow belongs exclusively to FctID 23/the renderer. */
             try {
-                appConnectorNavi.updateCurrentPositionInfo("\u2191");
+                appConnectorNavi.updateTurnToInfo("", "");
+                appConnectorNavi.updateCurrentPositionInfo("");
             } catch (Throwable t) {
-                Log.w(TAG, "BAP FctID 19 startup fallback failed: " + t);
+                Log.w(TAG, "BAP FctID 19/20 startup fallback failed: " + t);
             }
             return true;
 
@@ -733,6 +741,8 @@ public class BAPBridge {
         try { sendDistanceToManeuverRaw(0, false, 0); } catch (Throwable t) { }
         try { sendExitView(); } catch (Throwable t) { }
         try { appConnectorNavi.updateManeuverState(0); } catch (Throwable t) { }
+        try { appConnectorNavi.updateTurnToInfo("", ""); } catch (Throwable t) { }
+        try { appConnectorNavi.updateCurrentPositionInfo(""); } catch (Throwable t) { }
         try { stopCustomRenderer(); } catch (Throwable t) { }
         /* Release the rgActive overlay here, not inside stopCustomRenderer: a throw in the
          * renderer teardown must not leave shared HMI state forged. */
@@ -741,8 +751,8 @@ public class BAPBridge {
         bapSessionStarted = false;
         rendererPrimed = false;
         crConsecutiveSendFailures = 0;
-        /* Release FctID 19 only after our cleanup transaction has completed,
-         * so stock cannot overwrite the lower bar in the middle of rollback. */
+        /* Release FctIDs 19/20 only after our cleanup transaction has completed,
+         * so stock cannot overwrite route text in the middle of rollback. */
         com.luka.carplay.core.AltScreenNavStatusGate.setCurrentPositionInfoBlocked(false);
         Log.w(TAG, "onStart rollback complete");
     }
@@ -759,7 +769,9 @@ public class BAPBridge {
             stopActionBlinkThread();
             inApproachZone = false;
             latchedTurnToText = "";
-            viewAreaLowerBarPublished = false;
+            latchedSignPostText = "";
+            latchedCurrentPositionText = "";
+            routeTextPublished = false;
             infoPhase = 0;
             lastFirstManeuverIdx = -1;
             lastFirstManeuverVer = -1;
@@ -782,7 +794,9 @@ public class BAPBridge {
              * states too — e.g., disconnect mid-route). */
             stopActionBlinkThread();
             latchedTurnToText = "";
-            viewAreaLowerBarPublished = false;
+            latchedSignPostText = "";
+            latchedCurrentPositionText = "";
+            routeTextPublished = false;
             infoPhase = 0;
             lastEtaSeconds = -1L;
             lastTimeRemainingSeconds = -1L;
@@ -804,6 +818,7 @@ public class BAPBridge {
                 sendDistanceToManeuverRaw(0, false, 0);
                 sendExitView();
                 appConnectorNavi.updateManeuverState(0);
+                appConnectorNavi.updateTurnToInfo("", "");
                 appConnectorNavi.updateCurrentPositionInfo("");
                 sendDistanceToDestinationRaw(0, false);
                 appConnectorNavi.updateTimeToDestination(0, 0, -1);
@@ -811,8 +826,8 @@ public class BAPBridge {
             } catch (Throwable t) {
                 Log.w(TAG, "onShutdown: BAP teardown threw (continuing to cleanup): " + t);
             }
-            /* CarPlay RGI no longer owns FctID 19. Keep the rest of native RG
-             * gated until phone disconnect, but let stock update the lower bar. */
+            /* CarPlay RGI no longer owns FctIDs 19/20. Keep the rest of native RG
+             * gated until phone disconnect, but let stock update route text. */
             com.luka.carplay.core.AltScreenNavStatusGate.setCurrentPositionInfoBlocked(false);
 
             stopCustomRenderer();
@@ -919,10 +934,8 @@ public class BAPBridge {
                 lastFirstManeuverVer = currentFirstVer;
             }
             boolean hasUsableDistance = (distM > 0);
-            /* ARRIVED maneuvers must always show real descriptor, not FOLLOW_STREET.
-             * distM==0 + new list resets inApproachZone → nowApproach would be false
-             * → sendFollowStreet() instead of the destination icon. Treat arrival
-             * types as always in approach zone (MHI3 always sends real descriptor). */
+            /* Treat arrival types as approach state even with distM==0 so their
+             * maneuver-state transition remains Prepare rather than Follow. */
             boolean isArrival = (type0 == ManeuverMapper.MT_ARRIVE_END_OF_NAVIGATION
                 || type0 == ManeuverMapper.MT_ARRIVE_AT_DESTINATION
                 || type0 == ManeuverMapper.MT_ARRIVE_END_OF_DIRECTIONS
@@ -967,11 +980,9 @@ public class BAPBridge {
                     descriptorSent = true;
                 } else if (hasManeuverList) {
                     if (showManeuver) {
-                        if (nowApproach) {
-                            sendManeuvers(s);
-                        } else {
-                            sendFollowStreet();
-                        }
+                        /* Always expose the real next maneuver. Distance affects
+                         * only bargraph/action timing, never icon selection. */
+                        sendManeuvers(s);
                         descriptorSent = true;
                     } else if (shouldClearManeuver) {
                         sendNoSymbol();
@@ -1055,23 +1066,24 @@ public class BAPBridge {
                 }
             }
 
-            /* 4. Persistent CarPlay lower bar (FctID 19).
-             * Phase 0 is always the cached real arrow/road text. Phase 1 replaces it with
-             * the trip summary: the full one in fullscreen, a short "ETA 4 min" in
-             * smallscreen, where the row is narrow. */
-            int lowerBarDirty = RouteGuidance.State.DIRTY_CURRENT_ROAD
+            /* 4. Persistent CarPlay route text (FctIDs 20 then 19).
+             * Phase 0 publishes exactly one field using SignPost -> TurnToInfo ->
+             * CurrentPositionInfo priority, preventing competing VC text layers.
+             * Phase 1 puts remaining travel time in the shared SignPost field. Fullscreen
+             * additionally uses the VC-only CurrentPositionInfo row for the arrival clock. */
+            int routeTextDirty = RouteGuidance.State.DIRTY_CURRENT_ROAD
                 | RouteGuidance.State.DIRTY_MANEUVER_TEXT
                 | RouteGuidance.State.DIRTY_MANEUVER_LIST
                 | RouteGuidance.State.DIRTY_MANEUVER_ICON
                 | RouteGuidance.State.DIRTY_MANEUVER_COUNT;
             if (infoPhase != 0) {
-                lowerBarDirty |= RouteGuidance.State.DIRTY_DIST_DEST
+                routeTextDirty |= RouteGuidance.State.DIRTY_DIST_DEST
                     | RouteGuidance.State.DIRTY_TIME_REMAINING
                     | RouteGuidance.State.DIRTY_ETA;
             }
-            if (!viewAreaLowerBarPublished || (dirty & lowerBarDirty) != 0) {
-                updateLatchedPositionText(s);
-                publishCurrentPositionForMode();
+            if (!routeTextPublished || (dirty & routeTextDirty) != 0) {
+                updateLatchedRouteText(s);
+                publishRouteTextForMode();
             }
 
             /*
@@ -1087,9 +1099,7 @@ public class BAPBridge {
                 } else if (shouldClearManeuver || (hasManeuverList && showManeuver)) {
                     int bapState;
                     if (showManeuver) {
-                        if (!nowApproach) {
-                            bapState = 1;   /* Follow */
-                        } else if (hasUsableDistance && bargraphDenominatorM > 0 && distM <= bargraphDenominatorM) {
+                        if (hasUsableDistance && bargraphDenominatorM > 0 && distM <= bargraphDenominatorM) {
                             bapState = 4;   /* Action */
                         } else {
                             bapState = 2;   /* Prepare */
@@ -1137,8 +1147,8 @@ public class BAPBridge {
             }
 
             /* 8. Time to destination (FctID 22). It always remains the normal
-             * absolute ETA; the user-selectable compact summary is fullscreen
-             * FctID 19 only. */
+             * absolute ETA. The click presentation is carried separately by
+             * FctID 20 (remaining time) and fullscreen FctID 19 (arrival clock). */
             if ((dirty & (RouteGuidance.State.DIRTY_TIME_REMAINING |
                           RouteGuidance.State.DIRTY_ETA)) != 0) {
                 publishTimeToDestinationForMode();
@@ -1154,8 +1164,8 @@ public class BAPBridge {
                 appConnectorNavi.updateDestinationInfo(destInfo);
             }
 
-            /* 10. maneuver_render: CMD_MANEUVER only when icon actually changes,
-             * CMD_BARGRAPH for distance updates, CMD_PERSPECTIVE for approach zone */
+            /* 10. maneuver_render: the real maneuver stays visible at every
+             * distance; approach state controls only CMD_BARGRAPH timing. */
             /* Non-blocking state advance.  READY/FRAME_READY also wakes RouteGuidance when no
              * further iOS RGI delta arrives (the cold-boot case). */
             if (!customRendererStarted && csRef != null) startCustomRenderer();
@@ -1163,15 +1173,12 @@ public class BAPBridge {
             if (rendererClient != null && customRendererStarted) {
                 /* Link-loss → noteRendererSendResult drops the view; the retry above reconnects. */
 
-                /* Approach zone enter/exit -> bargraph + icon mode change */
+                /* Approach zone enter/exit changes only the bargraph. */
                 if (approachChanged) {
                     if (nowApproach) {
                         updateRendererBargraph(s, bargraphDenominatorM);
                     } else {
                         noteRendererSendResult(rendererClient.sendBargraph(0, 0));
-                        /* Exiting approach zone: show ICON_APPROACH (follow street)
-                         * to match BAP's sendFollowStreet(). */
-                        sendRendererFollowStreet();
                     }
                 }
                 /* Check if rendered maneuver actually changed */
@@ -1180,12 +1187,8 @@ public class BAPBridge {
                     | RouteGuidance.State.DIRTY_MANEUVER_LIST
                     | RouteGuidance.State.DIRTY_MANEUVER_COUNT;
                 if ((dirty & crIconMask) != 0) {
-                    if (nowApproach) {
+                    if (showManeuver && hasManeuverList && !explicitClear && !shouldClearManeuver) {
                         iconChanged = updateRendererIfChanged(s, bargraphDenominatorM);
-                    } else if (showManeuver && hasManeuverList && !explicitClear && !shouldClearManeuver) {
-                        /* Outside approach zone: show follow street, mirroring BAP path */
-                        sendRendererFollowStreet();
-                        iconChanged = true;
                     }
                 }
                 /* Distance-only → CMD_BARGRAPH (no push), only in approach zone */
@@ -1224,8 +1227,8 @@ public class BAPBridge {
         if (!initialized || !bapSessionStarted || s == null) return;
         try {
             cacheTravelInfo(s, s.dirtyMask);
-            updateLatchedPositionText(s);
-            publishCurrentPositionForMode();
+            updateLatchedRouteText(s);
+            publishRouteTextForMode();
             publishTimeToDestinationForMode();
             Log.i(TAG, "route-info phase=" + infoPhase + " applied view="
                 + (com.luka.carplay.core.AltScreenModule.isSmallScreenViewArea() ? "smallscreen" : "fullscreen"));
@@ -1234,40 +1237,77 @@ public class BAPBridge {
         }
     }
 
-    /** Refresh only the real FctID 19 position cache; never store the phase-1 summary here. */
-    private void updateLatchedPositionText(RouteGuidance.State s) {
+    /** Refresh only real route-text caches; never store the phase-1 summary here. */
+    private void updateLatchedRouteText(RouteGuidance.State s) {
         int idx = getFirstManeuverIndex(s);
-        String candidate = "";
+        String turnTo = "";
+        String signPost = "";
         if (idx >= 0) {
-            if (s.mExitInfo != null && idx < s.mExitInfo.length
-                    && s.mExitInfo[idx] != null && s.mExitInfo[idx].length() > 0) {
-                candidate = keepLastColonPart(s.mExitInfo[idx]);
-            } else if (s.mAfterRoad != null && idx < s.mAfterRoad.length
+            if (s.mAfterRoad != null && idx < s.mAfterRoad.length
                     && s.mAfterRoad[idx] != null && s.mAfterRoad[idx].length() > 0) {
-                candidate = keepLastColonPart(s.mAfterRoad[idx]);
+                turnTo = keepLastColonPart(s.mAfterRoad[idx]);
             } else if (s.mName != null && idx < s.mName.length
                     && s.mName[idx] != null && s.mName[idx].length() > 0) {
-                candidate = s.mName[idx];
+                turnTo = s.mName[idx];
+            }
+            if (s.mExitInfo != null && idx < s.mExitInfo.length
+                    && s.mExitInfo[idx] != null && s.mExitInfo[idx].length() > 0) {
+                signPost = s.mExitInfo[idx];
             }
         }
-        if (candidate.length() == 0 && s.currentRoad != null) candidate = s.currentRoad;
 
-        String next = directionArrow(s, idx);
-        if (candidate.length() > 0) next += " " + candidate;
-        next = limitUtf8(next, 96);
-        if (next.length() > 0) latchedTurnToText = next;
-        if (latchedTurnToText.length() == 0) latchedTurnToText = "\u2191";
+        turnTo = normalizeRouteText(turnTo);
+        signPost = filterSignPost(signPost, turnTo);
+        String currentPosition = normalizeRouteText(s.currentRoad);
+
+        latchedTurnToText = limitUtf8(turnTo, MAX_TURN_TO_UTF8_BYTES);
+        latchedSignPostText = limitUtf8(signPost, MAX_SIGN_POST_UTF8_BYTES);
+        latchedCurrentPositionText = limitUtf8(
+            currentPosition, MAX_CURRENT_POSITION_UTF8_BYTES);
     }
 
-    private void publishCurrentPositionForMode() {
+    private void publishRouteTextForMode() {
         boolean smallScreen = com.luka.carplay.core.AltScreenModule.isSmallScreenViewArea();
-        String text = infoPhase == 0 ? latchedTurnToText
-            : (smallScreen ? buildShortSummary() : buildTripSummary());
-        if (text == null || text.length() == 0) text = latchedTurnToText;
-        if (text == null || text.length() == 0) text = "\u2191";
-        text = limitUtf8(text, 96);
+        String text;
+        if (infoPhase == 0) {
+            /* Publish one text layer only. Explicitly clear every lower-priority
+             * field so AppConnectorNavi/VC cannot retain a stale competing row. */
+            if (latchedSignPostText.length() > 0) {
+                appConnectorNavi.updateTurnToInfo("", latchedSignPostText);
+                text = "";
+            } else if (latchedTurnToText.length() > 0) {
+                appConnectorNavi.updateTurnToInfo(latchedTurnToText, "");
+                text = "";
+            } else {
+                appConnectorNavi.updateTurnToInfo("", "");
+                text = latchedCurrentPositionText;
+            }
+        } else {
+            /* Put the compact remaining duration on the shared NavSD text path.
+             * The physical HUD firmware may ignore arbitrary strings, but it sees
+             * the same FctID 20 update as the VC and can render it if supported.
+             * CurrentPositionInfo is a separate VC row: use it for the absolute
+             * arrival clock only in fullscreen, where there is room for both;
+             * explicitly hide that row in smallscreen phase 1. */
+            String remaining = formatRemainingForText(currentRemainingSeconds());
+            if (remaining != null && remaining.length() > 0) {
+                appConnectorNavi.updateTurnToInfo(
+                    "", limitUtf8(remaining, MAX_SIGN_POST_UTF8_BYTES));
+            } else {
+                /* No travel estimate yet: retain navigation text rather than
+                 * replacing the priority row with an empty value. */
+                appConnectorNavi.updateTurnToInfo(latchedTurnToText, latchedSignPostText);
+            }
+            text = smallScreen ? "" : formatArrivalForText(currentArrivalSeconds());
+            if (!smallScreen && (text == null || text.length() == 0)) {
+                text = latchedCurrentPositionText;
+            }
+        }
+        /* An empty phase-1 smallscreen value is intentional: only the compact
+         * remaining-duration SignPost should be visible there. */
+        text = limitUtf8(text, MAX_CURRENT_POSITION_UTF8_BYTES);
         appConnectorNavi.updateCurrentPositionInfo(text);
-        viewAreaLowerBarPublished = true;
+        routeTextPublished = true;
     }
 
     private void cacheTravelInfo(RouteGuidance.State s, int dirty) {
@@ -1320,28 +1360,6 @@ public class BAPBridge {
             timeVal = convertUtcToLocalMs(timeVal * 1000L) / 1000L;
         }
         appConnectorNavi.updateTimeToDestination(1, timeFormat, timeVal);
-    }
-
-    private String buildTripSummary() {
-        StringBuffer out = new StringBuffer();
-        appendSummaryPart(out, formatArrivalForText(currentArrivalSeconds()));
-        appendSummaryPart(out, formatRemainingForText(currentRemainingSeconds()));
-        return out.toString();
-    }
-
-    /** Smallscreen phase 1: one short field for a narrow row, e.g. "ETA 4 min".
-     *  Prefers the remaining duration; falls back to the arrival clock, which
-     *  formatArrivalForText already prefixes with "ETA". */
-    private String buildShortSummary() {
-        String remaining = formatRemainingForText(currentRemainingSeconds());
-        if (remaining.length() > 0) return "ETA " + remaining;
-        return formatArrivalForText(currentArrivalSeconds());
-    }
-
-    private static void appendSummaryPart(StringBuffer out, String value) {
-        if (value == null || value.length() == 0) return;
-        if (out.length() > 0) out.append(" | ");
-        out.append(value);
     }
 
     private static String formatArrivalForText(long utcSeconds) {
@@ -2040,9 +2058,8 @@ public class BAPBridge {
             if (idxs == null || idxs.length == 0 || s.maneuverCount == 0) return false;
 
             int maxIdx = (s.mType != null) ? s.mType.length : 0;
-            /* Always show the first valid maneuver in the list (pos=0) — matches HUD.
-             * HUD shows whatever BAP descriptor pos=0 is: FOLLOW_STREET when far,
-             * the actual turn when approach zone updates the list. */
+            /* Always show the first valid maneuver in the list (pos=0), matching
+             * the real BAP descriptor published to the HUD at every distance. */
             int firstIdx = -1;
             for (int i = 0; i < idxs.length; i++) {
                 int idx = idxs[i];
@@ -2109,28 +2126,6 @@ public class BAPBridge {
             Log.w(TAG, "CR update failed: " + e.getClass().getName() + ": " + e.getMessage());
             noteRendererSendResult(false);
             return false;
-        }
-    }
-
-    /**
-     * Send ICON_APPROACH to maneuver_render — mirrors BAP sendFollowStreet().
-     * Shown when maneuver exists but car is outside approach zone.
-     */
-    private void sendRendererFollowStreet() {
-        if (rendererClient == null || !customRendererStarted) return;
-        int icon = RendererMapper.ICON_APPROACH;
-        if (icon == lastCrIcon) return;  /* already showing follow street */
-        lastCrIcon = icon;
-        lastCrDirection = 0;
-        lastCrExitAngle = 0;
-        lastCrDrivingSide = 0;
-        lastCrVer = -1;
-        try {
-            boolean ok = rendererClient.sendManeuver(icon, 0, 0, 0, null, 0, 0, 1);
-            noteRendererSendResult(ok);
-        } catch (Throwable t) {
-            Log.w(TAG, "CR follow street failed: " + t.getMessage());
-            noteRendererSendResult(false);
         }
     }
 
@@ -2379,20 +2374,56 @@ public class BAPBridge {
         }
     }
 
-    /** Pick a compact Unicode arrow matching the current BAP maneuver direction. */
-    private static String directionArrow(RouteGuidance.State s, int idx) {
-        if (idx < 0 || s.mType == null || idx >= s.mType.length) return "\u2191";
-        int[] mapped = ManeuverMapper.map(
-            s.mType[idx], s.mTurnAngle[idx], s.mJunctionType[idx], s.mDrivingSide[idx]);
-        int dir = mapped[1];
-        if (dir == ManeuverMapper.DIR_LEFT)         return "\u2190";
-        if (dir == ManeuverMapper.DIR_SLIGHT_LEFT)  return "\u2196";
-        if (dir == ManeuverMapper.DIR_SHARP_LEFT)   return "\u2199";
-        if (dir == ManeuverMapper.DIR_RIGHT)        return "\u2192";
-        if (dir == ManeuverMapper.DIR_SLIGHT_RIGHT) return "\u2197";
-        if (dir == ManeuverMapper.DIR_SHARP_RIGHT)  return "\u2198";
-        if (dir == ManeuverMapper.DIR_UTURN)        return "\u21B6";
-        return "\u2191";
+    /** Collapse transport whitespace while preserving the user's Unicode text. */
+    private static String normalizeRouteText(String value) {
+        if (value == null || value.length() == 0) return "";
+        StringBuffer out = new StringBuffer(value.length());
+        boolean pendingSpace = false;
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c < 0x20 || Character.isWhitespace(c)) {
+                pendingSpace = out.length() > 0;
+            } else {
+                if (pendingSpace) out.append(' ');
+                out.append(c);
+                pendingSpace = false;
+            }
+        }
+        return out.toString();
+    }
+
+    /** MHI3 parity: remove the turn-to street from signpost text to avoid duplication. */
+    private static String filterSignPost(String rawSignPost, String turnTo) {
+        String filtered = normalizeRouteText(rawSignPost);
+        String needle = normalizeRouteText(turnTo);
+        if (filtered.length() == 0 || needle.length() == 0) return filtered;
+
+        int pos = indexOfIgnoreCase(filtered, needle);
+        while (pos >= 0) {
+            filtered = filtered.substring(0, pos)
+                + filtered.substring(pos + needle.length());
+            filtered = normalizeRouteText(filtered);
+            pos = indexOfIgnoreCase(filtered, needle);
+        }
+
+        int start = 0;
+        int end = filtered.length();
+        while (start < end && isSignPostSeparator(filtered.charAt(start))) start++;
+        while (end > start && isSignPostSeparator(filtered.charAt(end - 1))) end--;
+        return normalizeRouteText(filtered.substring(start, end));
+    }
+
+    private static int indexOfIgnoreCase(String value, String needle) {
+        int last = value.length() - needle.length();
+        for (int i = 0; i <= last; i++) {
+            if (value.regionMatches(true, i, needle, 0, needle.length())) return i;
+        }
+        return -1;
+    }
+
+    private static boolean isSignPostSeparator(char c) {
+        return Character.isWhitespace(c) || c == ':' || c == ';' || c == ','
+            || c == '-' || c == '\u2013' || c == '\u2014' || c == '|' || c == '/';
     }
 
     private static String keepLastColonPart(String v) {
