@@ -117,6 +117,10 @@ def main() -> int:
             raise RuntimeError(f"source does not exist: {source}")
         duration = probe_duration(source)
         title = display_title(source)
+        tagged = subprocess.run(['ffprobe','-v','error','-show_entries',
+            'format_tags=artist,title,album,genre','-of','json',str(source)],
+            check=True,text=True,capture_output=True)
+        tags = {k.lower():v for k,v in json.loads(tagged.stdout).get('format',{}).get('tags',{}).items()}
         base_id = slug(title)
         source_digest = sha256(source)
 
@@ -134,7 +138,8 @@ def main() -> int:
                 {
                     "id": item_id,
                     "group": "private",
-                    "artist": "local file",
+                    "artist": tags.get('artist', 'unknown'),
+                    "source_tags": tags,
                     "title": f"{title} [{start:.1f}s]",
                     "source": str(source),
                     "source_sha256": source_digest,

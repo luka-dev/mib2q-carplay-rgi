@@ -1009,6 +1009,13 @@ static void spa_hssr_render_hop(
             object_target *= 1.0f + 0.40f * focus_presence *
                 (0.30f + 0.70f * focus_transient);
             object_target = spa_hssr_dsp_bound(object_target, 0.0f, 1.0f);
+            if (state->cabin_policy) {
+                /* The tracker/rescue may nominate a spatial candidate, but
+                 * cannot override the learned permission to transfer it. */
+                if (object_target > state->band_mask[band])
+                    object_target = state->band_mask[band];
+                object_target *= state->band_universal_safety[band];
+            }
             alpha = object_target > state->bin_mask[bin]
                 ? 0.50f : 0.020f;
             state->bin_mask[bin] += alpha *
@@ -1064,6 +1071,8 @@ static void spa_hssr_render_hop(
                 universal_target = spa_hssr_dsp_bound(
                     universal_target, 0.0f, 0.55f);
             }
+            /* No synthetic minimum rear activity in the cabin candidate. */
+            if (state->cabin_policy) universal_target = 0.0f;
             alpha = universal_target > state->bin_universal_mask[bin]
                 ? 0.28f : 0.012f;
             state->bin_universal_mask[bin] += alpha *
@@ -1098,7 +1107,8 @@ static void spa_hssr_render_hop(
             float ambience = state->bin_ambience_mask[bin];
             float universal = state->bin_universal_mask[bin];
 
-            mask = spa_hssr_dsp_bound(mask, 0.0f, 1.45f);
+            mask = spa_hssr_dsp_bound(mask, 0.0f,
+                                      state->cabin_policy ? 1.0f : 1.45f);
             pan = spa_hssr_dsp_bound(
                 state->bin_object_pan[bin], -0.95f, 0.95f);
             /* Extract with the measured source vector and hard-steer only the
@@ -1113,6 +1123,11 @@ static void spa_hssr_render_hop(
                 float magnitude = fabsf(pan);
                 float focused = 0.78f + 0.17f *
                     spa_hssr_dsp_smoothstep(magnitude, 0.05f, 0.92f);
+
+                if (state->cabin_policy)
+                    focused = magnitude + (0.85f - magnitude) * 0.35f *
+                        spa_hssr_dsp_smoothstep(mask, 0.10f, 0.60f) *
+                        spa_hssr_dsp_smoothstep(magnitude, 0.05f, 0.35f);
 
                 pan = pan < 0.0f ? -focused : focused;
             }
@@ -1132,6 +1147,28 @@ static void spa_hssr_render_hop(
                 (source_l * left_re + source_r * right_re);
             projected_im = 0.5f *
                 (source_l * left_im + source_r * right_im);
+#ifdef SPA_HSSR_CAPTURE_TRANSFERS
+            if (state->cabin_policy) {
+                const float matrix[8] = {
+                    0.5f * (mask * steering_l * source_l + ambience),
+                    0.5f * (mask * steering_l * source_r - ambience),
+                    0.5f * (mask * steering_r * source_l - ambience),
+                    0.5f * (mask * steering_r * source_r + ambience),
+                    0.5f * mask * source_l * source_l,
+                    0.5f * mask * source_l * source_r,
+                    0.5f * mask * source_r * source_l,
+                    0.5f * mask * source_r * source_r
+                };
+                spa_hssr_capture_transfer(bin, matrix);
+            }
+#endif
+            if (state->cabin_policy) {
+                /* Original source image, BEFORE steering or ambience. */
+                state->source_fft_re[0][bin] = mask * source_l * projected_re;
+                state->source_fft_im[0][bin] = mask * source_l * projected_im;
+                state->source_fft_re[1][bin] = mask * source_r * projected_re;
+                state->source_fft_im[1][bin] = mask * source_r * projected_im;
+            }
             state->fft_re[SPA_HSSR_LEFT][bin] =
                 mask * steering_l * projected_re + ambience * side_re;
             state->fft_im[SPA_HSSR_LEFT][bin] =
@@ -1191,6 +1228,27 @@ static void spa_hssr_render_hop(
                 state->ola[channel][output] + addition);
         }
     }
+    if (state->cabin_policy) {
+        for (channel = 0; channel < 2; ++channel) {
+            memcpy(state->fft_re[channel], state->source_fft_re[channel],
+                   SPA_HSSR_BINS * sizeof(float));
+            memcpy(state->fft_im[channel], state->source_fft_im[channel],
+                   SPA_HSSR_BINS * sizeof(float));
+            state->fft_im[channel][0] = 0.0f;
+            state->fft_im[channel][SPA_HSSR_FFT_SIZE / 2] = 0.0f;
+            for (bin = 1; bin < SPA_HSSR_FFT_SIZE / 2; ++bin) {
+                state->fft_re[channel][SPA_HSSR_FFT_SIZE-bin] = state->fft_re[channel][bin];
+                state->fft_im[channel][SPA_HSSR_FFT_SIZE-bin] = -state->fft_im[channel][bin];
+            }
+            spa_hssr_fft(state, channel, 1);
+            for (sample = 0; sample < SPA_HSSR_FFT_SIZE; ++sample) {
+                unsigned output = (state->input_position + sample) & (SPA_HSSR_FFT_SIZE-1);
+                state->source_ola[channel][output] = spa_hssr_dsp_finite(
+                    state->source_ola[channel][output] +
+                    state->fft_re[channel][sample] * state->synthesis_window[sample]);
+            }
+        }
+    }
 }
 
 static void spa_hssr_run_hop(
@@ -1220,9 +1278,12 @@ static void spa_hssr_dsp_process_frame(
     *front_r = ready ? state->front_delay[SPA_HSSR_RIGHT][position] : 0;
     *rear_l = ready ? state->ola[SPA_HSSR_LEFT][position] : 0.0f;
     *rear_r = ready ? state->ola[SPA_HSSR_RIGHT][position] : 0.0f;
+    state->source_sample[0] = ready ? state->source_ola[0][position] : 0.0f;
+    state->source_sample[1] = ready ? state->source_ola[1][position] : 0.0f;
+    state->source_ola[0][position] = state->source_ola[1][position] = 0.0f;
     *lfe_bass = ready ? state->lfe_semantic_delay[0][position] : 0.0f;
     *lfe_drums = ready ? state->lfe_semantic_delay[1][position] : 0.0f;
-    if (ready) {
+    if (ready && !state->cabin_policy) {
         const float power_alpha = 0.0005f;
         float normalized_l = (float)input_l * (1.0f / 32768.0f);
         float normalized_r = (float)input_r * (1.0f / 32768.0f);
@@ -1298,6 +1359,16 @@ int spa_hssr_dsp_process_block(
     const int16_t *pcm2, size_t frames,
     int16_t *front2, float *rear2, float *lfe_control2)
 {
+    return spa_hssr_dsp_process_block_sources(state, model, provider, pcm2,
+        frames, front2, rear2, lfe_control2, NULL);
+}
+
+int spa_hssr_dsp_process_block_sources(
+    struct spa_hssr_dsp *state, const struct spa_hssr_model *model,
+    const struct spa_hssr_control_provider *provider,
+    const int16_t *pcm2, size_t frames,
+    int16_t *front2, float *rear2, float *lfe_control2, float *source2)
+{
     size_t offset = 0;
 
     if (!state || !model || (!pcm2 && frames) ||
@@ -1324,6 +1395,10 @@ int spa_hssr_dsp_process_block(
                 &rear2[frame * 2u], &rear2[frame * 2u + 1u],
                 &lfe_control2[frame * 2u],
                 &lfe_control2[frame * 2u + 1u]);
+            if (source2) {
+                source2[frame*2] = state->source_sample[0];
+                source2[frame*2+1] = state->source_sample[1];
+            }
         }
         offset += chunk;
     }

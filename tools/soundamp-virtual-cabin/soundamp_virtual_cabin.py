@@ -542,6 +542,7 @@ def render_matrix(
                 "matrix_bank": matrix["bank"],
                 "sink": matrix["sink"],
                 "symphoria_3d_enabled": state["symphoria_3d_enabled"],
+                "operating_state": state,
                 "physical_output_graph_status": physical["status"],
             },
             "limits": [
@@ -617,6 +618,7 @@ def render_documentary_circuits(
                 "physical_output_graph_status": physical["status"],
                 "fanout_status": fanout["status"],
                 "fanout_normalization": fanout["normalization"],
+                "operating_state": config["operating_state"],
             },
             "limits": [
                 "The exact V850-recovered 8x8 input matrix is applied first.",
@@ -965,6 +967,7 @@ def deconvolve_probe(
             "probe_manifest": str(probe_manifest_path.resolve()),
             "seat": "fill-before-use",
             "symphoria_3d_enabled": state["symphoria_3d_enabled"],
+            "state_evidence": "capture settings must be confirmed; model target is not measurement metadata",
             "surround_control": state["surround_control"],
             "sound_focus": state["sound_focus"],
             "bass_mid_treble": "neutral-unless-capture-notes-say-otherwise",
@@ -1066,6 +1069,7 @@ def render_binaural(
                 "id": config["model_id"],
                 "symphoria_3d_enabled": state["symphoria_3d_enabled"],
                 "capture": manifest.get("capture"),
+                "operating_state": state,
             },
             "limits": [
                 "Acoustic validity is determined by the supplied measured responses.",

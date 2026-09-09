@@ -12,6 +12,7 @@ cc -O2 -g -std=gnu99 -Wall -Wextra -Werror \
    "$HERE/stereo_upmix_bench.c" "$ROOT/hook/audio/stereo_upmix.c" \
    "$ROOT/hook/audio/hssr_dsp.c" "$ROOT/hook/audio/hssr_neon.c" \
    "$ROOT/hook/audio/hssr_control_worker.c" -lpthread -lm \
+   "$ROOT/hook/audio/soundcheck.c" \
    -o "$OUT"
 
 echo "$OUT"

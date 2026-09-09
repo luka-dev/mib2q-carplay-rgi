@@ -40,6 +40,7 @@ $CC $CFLAGS -Werror -c \
     tools/stereo-upmix-render/bench/stereo_upmix_bench.c \
     -o "$OUT/stereo_upmix_bench.o"
 $CC $CFLAGS -c hook/audio/stereo_upmix.c -o "$OUT/stereo_upmix.o"
+$CC $CFLAGS -c hook/audio/soundcheck.c -o "$OUT/soundcheck.o"
 $CC $CFLAGS -mfpu=neon -mfloat-abi=softfp -c \
     hook/audio/hssr_dsp.c -o "$OUT/hssr_dsp.o"
 $CC $CFLAGS -mfpu=neon -mfloat-abi=softfp -c \
@@ -48,7 +49,7 @@ $CC $CFLAGS -c hook/audio/hssr_control_worker.c \
     -o "$OUT/hssr_control_worker.o"
 $CC "$OUT/stereo_upmix_bench.o" "$OUT/stereo_upmix.o" \
     "$OUT/hssr_dsp.o" "$OUT/hssr_neon.o" \
-    "$OUT/hssr_control_worker.o" \
+    "$OUT/hssr_control_worker.o" "$OUT/soundcheck.o" \
     -o "$OUT/stereo_upmix_bench" -lm
 
 $READELF -h "$OUT/stereo_upmix_bench" | grep -E "Class:|Machine:"

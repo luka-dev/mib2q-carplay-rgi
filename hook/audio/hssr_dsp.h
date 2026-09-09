@@ -56,6 +56,12 @@ struct spa_hssr_dsp {
     float ola[2][SPA_HSSR_FFT_SIZE];
     float fft_re[2][SPA_HSSR_FFT_SIZE];
     float fft_im[2][SPA_HSSR_FFT_SIZE];
+    /* Opt-in cabin renderer: source image is separate from rear placement. */
+    float source_fft_re[2][SPA_HSSR_FFT_SIZE];
+    float source_fft_im[2][SPA_HSSR_FFT_SIZE];
+    float source_ola[2][SPA_HSSR_FFT_SIZE];
+    float source_sample[2];
+    uint32_t cabin_policy;
     float previous_magnitude[SPA_HSSR_BINS];
     float bin_mask[SPA_HSSR_BINS];
     float bin_ambience_mask[SPA_HSSR_BINS];
@@ -100,6 +106,13 @@ struct spa_hssr_dsp {
 void spa_hssr_dsp_prepare(struct spa_hssr_dsp *state);
 void spa_hssr_dsp_reset(struct spa_hssr_dsp *state);
 
+#ifdef SPA_HSSR_CAPTURE_TRANSFERS
+/* Host-only diagnostic: real, row-major 2x2 matrices, rear then source.
+ * Called once per positive-frequency bin, every hop, only in cabin mode.
+ * Not enabled or linked into the vehicle hook. */
+void spa_hssr_capture_transfer(unsigned bin, const float matrix[8]);
+#endif
+
 /* One input frame in, one delayed front/rear frame out.  The returned fronts
  * are exact delayed S16 input samples.  Rear is normalized float. */
 int spa_hssr_dsp_process_sample(
@@ -116,5 +129,11 @@ int spa_hssr_dsp_process_block(
     const struct spa_hssr_control_provider *provider,
     const int16_t *pcm2, size_t frames,
     int16_t *front2, float *rear2, float *lfe_control2);
+
+int spa_hssr_dsp_process_block_sources(
+    struct spa_hssr_dsp *state, const struct spa_hssr_model *model,
+    const struct spa_hssr_control_provider *provider,
+    const int16_t *pcm2, size_t frames,
+    int16_t *front2, float *rear2, float *lfe_control2, float *source2);
 
 #endif /* HSSR_DSP_H */

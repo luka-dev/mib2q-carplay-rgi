@@ -80,6 +80,11 @@
 #define SPA_AUDIO_STEREO_UPMIX_ENV    "AUDIO_STEREO_UPMIX"
 #define SPA_AUDIO_STEREO_SURROUND_ENV "AUDIO_STEREO_SURROUND"
 #define SPA_AUDIO_STEREO_LFE_ENV      "AUDIO_STEREO_LFE"
+/* Opt-in candidate float synthesis/programme gain/matrix-linked protection.
+ * Default off retains the legacy renderer. This does not select a model. */
+#define SPA_AUDIO_FLOAT_RENDER_ENV   "AUDIO_FLOAT_RENDER"
+#define SPA_AUDIO_CABIN_RENDER_ENV   "AUDIO_CABIN_RENDER"
+#define SPA_AUDIO_QUIET_LFE_ENV      "AUDIO_QUIET_LFE"
 #define SPA_AUDIO_HSSR_MODEL_ENV       "AUDIO_HSSR_MODEL"
 #define SPA_AUDIO_HSSR_MODEL_DEFAULT   "/mnt/app/root/hooks/hssr_model.bin"
 

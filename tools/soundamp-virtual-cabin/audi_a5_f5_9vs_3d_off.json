@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "model_id": "audi-a5-f5-sportback-9vs-3d-off",
-  "description": "Audi A5/S5 F5 Sportback B&O 9VS host model; Symphoria/3D disabled",
+  "description": "Audi A5/S5 F5 Sportback B&O 9VS host model; stock MMI 3D OFF target, not DSP bypass",
   "sample_rate": 48000,
   "vehicle": {
     "platform": "Audi A5/S5 F5 Sportback",
@@ -14,11 +14,16 @@
   },
   "operating_state": {
     "symphoria_3d_enabled": false,
+    "legacy_flag_meaning": "symphoria_3d_enabled=false denotes only the MMI OFF target; it does not disable all spatial DSP",
+    "mmi_3d_mode": "off",
+    "state_evidence": "assumed development target, not live vehicle readback",
+    "effective_processing_gate": "unknown-not-forced-off",
+    "b01_valid": "unknown-not-read-back",
     "bass_control": "neutral-unmodelled",
     "mid_control": "neutral-unmodelled",
     "treble_control": "neutral-unmodelled",
-    "surround_control": "runtime-value-not-yet-captured",
-    "sound_focus": "runtime-value-not-yet-captured"
+    "surround_control": "minimum-assumed-numeric-value-unconfirmed",
+    "sound_focus": "All-assumed-target-not-live-confirmed"
   },
   "input_channels": ["L", "R", "C", "LFE", "Ls", "Rs", "Ch7", "Ch8"],
   "logical_buses": ["Bus_L", "Bus_R", "Bus_C", "Bus_LFE", "Bus_Ls", "Bus_Rs", "Bus_7", "Bus_8"],

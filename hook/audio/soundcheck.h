@@ -101,4 +101,28 @@ void spa_soundcheck_limit_s16(spa_soundcheck_state_t *state,
                               int16_t *samples, size_t frames,
                               unsigned channels);
 
+/* Headroom-preserving equivalents, in S16-scaled float units (32768 = FS).
+ * The same metadata/ramp state is shared: call ONE apply variant per frame.
+ * Keep source observation before synthesis; apply -> limit -> quantize after.
+ * The guard remains opt-in sample-peak protection, not a true-peak limiter. */
+void spa_soundcheck_apply_f32(spa_soundcheck_state_t *state,
+                              float *samples, size_t frames, unsigned channels);
+void spa_soundcheck_limit_f32(spa_soundcheck_state_t *state,
+                              float *samples, size_t frames, unsigned channels);
+
+/* Same single linked detector, additionally watching a known downstream
+ * linear matrix. Row-major coefficients: inputs x monitored outputs.
+ * The matrix is detector-only: output PCM is NOT matrix-transformed here.
+ * NULL/zero selects rail-only protection. No EQ/acoustic safety is implied. */
+void spa_soundcheck_limit_matrix_f32(spa_soundcheck_state_t *state,
+                                     float *samples, size_t frames,
+                                     unsigned channels, const float *matrix,
+                                     unsigned monitored_channels);
+
+/* Final boundary conversion. Input/output ranges must not overlap.
+ * Non-finite values become silence; finite out-of-range values saturate.
+ * Saturation is a last resort, not a substitute for linked protection. */
+void spa_soundcheck_quantize_s16(const float *samples, int16_t *output,
+                                 size_t frames, unsigned channels);
+
 #endif

@@ -3,8 +3,21 @@
 Host-side documentary/static model of the known Audi J525/B&O 9VS signal path
 for evaluating HSSR and authored 5.1 without changing or recording the car.
 
-The checked-in target is the user's current listening state: **Symphoria/3D
-Off**. It deliberately separates facts from the parts that still require a
+Newer research is recorded in
+[`UPMIX_STATIC_READINESS_AND_SOUNDCHECK.md`](../../docs/UPMIX_STATIC_READINESS_AND_SOUNDCHECK.md).
+The new [`digital_stages.py`](digital_stages.py) implements isolated verified
+selectors, split-half pair mixers, explicit gain-row selection and packed
+output-EQ math with caller-supplied coefficients. Ordered execution respects
+reused buffer IDs and rejects unknown stages. These kernels are **not yet
+connected into a complete end-to-end graph**. No identity transfer is invented
+for the unknown complex processor. The equal-power documentary fan-out is
+unchanged; it does not gain OEM-calibration status from these additions.
+
+The checked-in development target is **stock MMI 3D OFF, Focus All, Surround
+minimum**; Focus/Surround remain assumptions, not confirmed live values. The
+legacy `symphoria_3d_enabled=false` JSON field denotes MMI OFF only, not full
+DSP bypass. Reports now carry the full state/evidence annotation. The model
+deliberately separates facts from the parts that still require a
 different missing static artifact or an acoustic measurement:
 
 - proven: 48 kHz, six input positions, V850-selected SHARC profile-0/bank-1
@@ -47,6 +60,7 @@ First create a six-channel render, for example:
 cc -std=c99 -O2 -Wall -Wextra -Werror \
   -Ihook/audio \
   tools/stereo-upmix-render/stereo_upmix_render.c \
+  hook/audio/soundcheck.c \
   hook/audio/stereo_upmix.c hook/audio/hssr_dsp.c hook/audio/hssr_neon.c \
   -lm -o build/stereo_upmix_render
 
@@ -174,9 +188,18 @@ as the sound of the real cabin.
 ```sh
 python3 -m unittest \
   tools/soundamp-virtual-cabin/test_soundamp_virtual_cabin.py
+python3 -m unittest discover -s tools/soundamp-virtual-cabin -p 'test_*.py'
 ```
 
 The tests lock the 3D-Off constraint, 19-speaker inventory, all 16 unique T38
 pin pairs, recovered matrix orientation, 6-to-8 and 6-to-16 renders,
 equal-power documentary fan-out, and the rule that an end-to-end MOST-input
 BRIR must not receive the OEM matrix twice.
+
+Five additional digital-stage tests cover mute versus the matrix floor,
+split-half mixing, explicit OFF-row/gate hypotheses, packed EQ sign/order and
+state continuity, and schedule-local buffer reuse. Supplied five-word EQ
+coefficients are required; OEM design-record conversion and coefficient
+transition timing are still unimplemented. See the
+[float candidate results](../../docs/UPMIX_FLOAT_STAGE1.md) for the first
+upmix integration: a detector using only the proven input matrix.

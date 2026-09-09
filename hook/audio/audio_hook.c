@@ -103,6 +103,9 @@ typedef struct {
     enum spa_stereo_upmix_backend stereoUpmixBackend;
     uint32_t stereoSurroundQ15;
     int stereoLfeAssist;
+    int floatRender;
+    int cabinRender;
+    int quietLfe;
     spa_soundcheck_config_t soundCheck;
 } spa_audio_config_t;
 
@@ -216,6 +219,14 @@ static void spa_audio_config_init_once(void)
     spa_audio_config_value.stereoUpmixBackend = spa_parse_stereo_upmix();
     spa_audio_config_value.stereoSurroundQ15 = spa_parse_stereo_surround_q15();
     spa_audio_config_value.stereoLfeAssist = spa_parse_stereo_lfe();
+    {
+        int present = 0;
+        spa_audio_config_value.floatRender = spa_parse_bool(SPA_AUDIO_FLOAT_RENDER_ENV, &present);
+        spa_audio_config_value.cabinRender = spa_parse_bool(SPA_AUDIO_CABIN_RENDER_ENV, &present);
+        spa_audio_config_value.quietLfe = spa_parse_bool(SPA_AUDIO_QUIET_LFE_ENV, &present);
+        if (spa_audio_config_value.cabinRender || spa_audio_config_value.quietLfe)
+            spa_audio_config_value.floatRender = 1;
+    }
     spa_soundcheck_default_config(&spa_audio_config_value.soundCheck);
     {
         int present = 0;
@@ -1671,6 +1682,8 @@ typedef struct {
     struct spa_stereo_upmix stereoUpmix;
     struct spa_hssr_control_worker hssrControlWorker;
     spa_soundcheck_state_t soundCheck;
+    spa_soundcheck_state_t floatGuard;
+    int floatRender;
 } spa103_render_t;
 
 static spa103_render_t spa103_render = {
@@ -1861,6 +1874,14 @@ static void spa103_render_start(int64_t formatIndex, int haveKey,
     spa103_render.haveExtensionLoudness = 0;
     spa103_render.probeFraming = 0;
     spa103_render.atmosMode = config->atmosMode;
+    spa103_render.floatRender = config->floatRender;
+    {
+        spa_soundcheck_config_t guard;
+        spa_soundcheck_default_config(&guard);
+        guard.enabled = 1; /* Peak safety is independent of metadata normalization. */
+        guard.limiterMode = SPA_SOUNDCHECK_LIMITER_SAMPLE_PEAK;
+        spa_soundcheck_init(&spa103_render.floatGuard, &guard, 0, 0, 0);
+    }
     spa_soundcheck_init(&spa103_render.soundCheck, &config->soundCheck,
                         haveSoundCheckTarget, soundCheckMediaKind,
                         soundCheckTargetDb);
@@ -1868,6 +1889,8 @@ static void spa103_render_start(int64_t formatIndex, int haveKey,
     spa_stereo_upmix_default_config(&upmixConfig);
     upmixConfig.backend = config->stereoUpmixBackend;
     upmixConfig.rear_gain_q15 = config->stereoSurroundQ15;
+    spa_stereo_upmix_config_set_cabin(&upmixConfig, config->cabinRender);
+    spa_stereo_upmix_config_set_quiet_lfe(&upmixConfig, config->quietLfe);
     if (upmixConfig.backend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL) {
         const struct spa_hssr_model *hssrModel = spa_hssr_runtime_model();
 
@@ -1935,7 +1958,7 @@ static void spa103_render_start(int64_t formatIndex, int haveKey,
              "stereoUpmix=%s frontGainQ15=%u rearGainQ15=%u "
              "hssrController=%s stereoLfe=%s lfeGainQ15=%u "
              "soundCheck=%s target=%s%ddB/kind%u "
-             "fallback=%d limiter=%d compressedQueueLimit=%u initialRate=0",
+             "fallback=%d limiter=%d floatRender=%d cabinRender=%d quietLfe=%d compressedQueueLimit=%u initialRate=0",
              spa103_render_state_name(state), (long long)formatIndex,
              haveKey ? "yes" : "no", (unsigned)outputChannels,
              config->atmosMode == SPA_ATMOS_DOWNMIX ? "downmix" :
@@ -1953,10 +1976,13 @@ static void spa103_render_start(int64_t formatIndex, int haveKey,
              soundCheckTargetDb, (unsigned)soundCheckMediaKind,
              config->soundCheck.fallbackMode,
              config->soundCheck.limiterMode,
+             config->floatRender,
+             config->cabinRender,
+             config->quietLfe,
              (unsigned)compressedBufferBytes);
     STATE_TRACE("BUFFERED_RENDER_START",
                 "setup_index=%lld state=%s key=%d output_channels=%u "
-                "upmix=%s rear_q15=%u lfe=%d soundcheck=%d "
+                "upmix=%s rear_q15=%u lfe=%d float_render=%d cabin_render=%d quiet_lfe=%d soundcheck=%d "
                 "soundcheck_target_present=%d soundcheck_target_db=%d "
                 "soundcheck_media_kind=%u initial_rate=0 "
                 "compressed_limit=%u",
@@ -1964,6 +1990,9 @@ static void spa103_render_start(int64_t formatIndex, int haveKey,
                 haveKey ? 1 : 0, (unsigned)outputChannels,
                 spa_stereo_upmix_backend_name(activeUpmixBackend),
                 (unsigned)activeRearGainQ15, activeLfeAssist ? 1 : 0,
+                config->floatRender,
+                config->cabinRender,
+                config->quietLfe,
                 config->soundCheck.enabled ? 1 : 0,
                 haveSoundCheckTarget ? 1 : 0, soundCheckTargetDb,
                 (unsigned)soundCheckMediaKind,
@@ -2016,7 +2045,8 @@ static void spa103_render_stop(void)
     soundCheckRejected = spa103_render.soundCheck.metadataRejected;
     legacySoundCheck = spa103_render.soundCheck.legacyRecords;
     fallbackUpdates = spa103_render.soundCheck.fallbackUpdates;
-    limitedFrames = spa103_render.soundCheck.limitedFrames;
+    limitedFrames = spa103_render.soundCheck.limitedFrames +
+                    spa103_render.floatGuard.limitedFrames;
     flushDropped = spa103_render.lifecycle.total_flush_dropped;
     queueAllocationFailures = spa103_render.lifecycle.allocation_failures;
     compressedPackets = spa103_render.lifecycle.queued_packets;
@@ -2385,8 +2415,10 @@ static void spa103_render_set_rate(int64_t rate)
 
     pthread_mutex_lock(&spa103_render.lock);
     previous = spa_apap_lifecycle_playing(&spa103_render.lifecycle);
-    if (previous && rate != 1)
+    if (previous && rate != 1) {
         (void)spa_stereo_upmix_reset(&spa103_render.stereoUpmix);
+        spa103_render.floatGuard.limiterGain = 1.0f;
+    }
     spa_apap_lifecycle_set_rate(&spa103_render.lifecycle, rate);
     packets = spa103_render.lifecycle.queued_packets;
     bytes = spa103_render.lifecycle.queued_bytes;
@@ -2465,6 +2497,7 @@ static void spa103_render_flush(const spa_apap_flush_range_t *range)
         if (spa103_render.decoder && spa103_render.codec)
             spa103_render.codec->reset(spa103_render.decoder);
         (void)spa_stereo_upmix_reset(&spa103_render.stereoUpmix);
+        spa103_render.floatGuard.limiterGain = 1.0f;
         spa103_render.haveLastSequence = 0;
     }
     spa103_render.primed = 0;
@@ -2840,6 +2873,7 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
     static uint8_t plaintext[SPA_103_APAP_MAX_FRAME];
     static int16_t decoded[SPA_103_RENDER_MAX_SAMPLES];
     static int16_t rendered[SPA_103_RENDER_MAX_SAMPLES];
+    static float renderedFloat[SPA_103_RENDER_MAX_SAMPLES];
     uint8_t key[SPA_APAP_KEY_SIZE];
     spa_apap_extension_t ext;
     const uint8_t *audio = 0;
@@ -3008,6 +3042,7 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
         /* A new decoder/cookie is a discontinuity even when its index happens
          * to stay the same.  Never let rear-filter history cross it. */
         (void)spa_stereo_upmix_reset(&spa103_render.stereoUpmix);
+        spa103_render.floatGuard.limiterGain = 1.0f;
         spa103_render.decodedPcmKind = SPA_DECODED_PCM_OTHER;
         pthread_mutex_unlock(&spa103_render.lock);
         /* Every packet carries the cookie for the format it is in, so a track that changes
@@ -3160,6 +3195,7 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
         spa103_render.cookieId = (int64_t)ext.magicCookieId;
         spa103_render.haveCookieId = ext.hasMagicCookieId;
         spa103_render.sampleRate = sampleRate;
+        spa103_render.floatGuard.config.sampleRate = sampleRate;
         spa103_render.sourceChannels = channels;
         spa103_render.channelLayoutTag = info.channelLayoutTag;
         spa103_render.decodedPcmKind = decodedPcmKind;
@@ -3237,6 +3273,13 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
                 spa103_render.decodedPcmKind, dch, out,
                 spa103_render.sampleRate);
             size_t run = renderFrames - at;
+            int floatReady = 0;
+            /* OFF retains the exact widening/reference path. Experimental
+             * PCM8 height downmix also stays on its separately gated path. */
+            int useFloat = spa103_render.floatRender &&
+                spa103_render.decodedPcmKind != SPA_DECODED_PCM_APAC_5_1_2 &&
+                !(action == SPA_DECODED_PCM_ACTION_STEREO_UPMIX &&
+                  spa103_render.stereoUpmix.config.backend == SPA_STEREO_UPMIX_OFF);
 
             if (run > SPA_STEREO_UPMIX_MAX_FRAMES)
                 run = SPA_STEREO_UPMIX_MAX_FRAMES;
@@ -3248,8 +3291,12 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
                 else
                     spa103_reorder_5_1_s16(src, rendered, out, run);
             } else if (action == SPA_DECODED_PCM_ACTION_STEREO_UPMIX) {
-                rc = spa_stereo_upmix_process_s16(
-                    &spa103_render.stereoUpmix, src, run, rendered, run);
+                rc = useFloat
+                    ? spa_stereo_upmix_process_f32(&spa103_render.stereoUpmix,
+                        src, run, renderedFloat, run)
+                    : spa_stereo_upmix_process_s16(&spa103_render.stereoUpmix,
+                        src, run, rendered, run);
+                floatReady = useFloat && rc == SPA_STEREO_UPMIX_OK;
                 if (rc != SPA_STEREO_UPMIX_OK) {
                     spa103_render.upmixFailed++;
                     if (spa103_render.upmixFailed == 1)
@@ -3286,10 +3333,27 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
              * feature. Apply it uniformly after reorder/upmix so AAC gain does
              * not shift the model's absolute log-energy features or alter its
              * semantic/object masks. */
-            spa_soundcheck_apply_s16(&spa103_render.soundCheck, rendered,
-                                     run, out);
-            spa_soundcheck_limit_s16(&spa103_render.soundCheck, rendered,
-                                     run, out);
+            if (useFloat) {
+                size_t sample;
+                if (!floatReady)
+                    for (sample = 0; sample < run * out; sample++)
+                        renderedFloat[sample] = (float)rendered[sample];
+                spa_soundcheck_apply_f32(&spa103_render.soundCheck,
+                                         renderedFloat, run, out);
+                /* Native APAC has only been reordered, not upmixed. Both
+                 * AAC PCM6 and native APAC PCM6 use the fixed sink bank 1.
+                 * The detector never applies the OEM matrix to output PCM. */
+                spa_soundcheck_limit_matrix_f32(&spa103_render.floatGuard,
+                    renderedFloat, run, out,
+                    out == 6 ? spa_stereo_upmix_input_matrix() : NULL,
+                    out == 6 ? 8 : 0);
+                spa_soundcheck_quantize_s16(renderedFloat, rendered, run, out);
+            } else {
+                spa_soundcheck_apply_s16(&spa103_render.soundCheck, rendered,
+                                         run, out);
+                spa_soundcheck_limit_s16(&spa103_render.soundCheck, rendered,
+                                         run, out);
+            }
             spa103_pcm_stats_locked(rendered, run);
             spa103_ring_push_locked(rendered, run, packetSequence, packetRTP);
             spa103_render.framesIn += run;

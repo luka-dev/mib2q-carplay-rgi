@@ -52,6 +52,22 @@ static const float kCabinLfeReciprocal = 0.70794556f;
 static const float kCabinRearLfeReciprocal = 5.01187815f;
 static const float kCabinSampleLimit = 32275.0f; /* 0.985 FS + rounding margin */
 
+#define CABIN_FLOOR 0.00001122018454f
+static const float kInputMatrix[6][8] = {
+    {0.794328235f, CABIN_FLOOR, 0.501187234f, CABIN_FLOOR, CABIN_FLOOR, CABIN_FLOOR, CABIN_FLOOR, CABIN_FLOOR},
+    {CABIN_FLOOR, 0.794328235f, 0.501187234f, CABIN_FLOOR, CABIN_FLOOR, CABIN_FLOOR, CABIN_FLOOR, CABIN_FLOOR},
+    {0.398107171f, 0.398107171f, 0.707945784f, CABIN_FLOOR, CABIN_FLOOR, CABIN_FLOOR, CABIN_FLOOR, CABIN_FLOOR},
+    {0.398107171f, 0.398107171f, 0.316227766f, 1.412537545f, 0.199526231f, 0.199526231f, CABIN_FLOOR, CABIN_FLOOR},
+    {0.707945784f, CABIN_FLOOR, CABIN_FLOOR, CABIN_FLOOR, 1.995262315f, CABIN_FLOOR, CABIN_FLOOR, CABIN_FLOOR},
+    {CABIN_FLOOR, 0.707945784f, CABIN_FLOOR, CABIN_FLOOR, CABIN_FLOOR, 1.995262315f, CABIN_FLOOR, CABIN_FLOOR}
+};
+#undef CABIN_FLOOR
+
+const float *spa_stereo_upmix_input_matrix(void)
+{
+    return &kInputMatrix[0][0];
+}
+
 static float spa_upmix_absf(float value)
 {
     return value < 0.0f ? -value : value;
@@ -164,7 +180,7 @@ static float spa_upmix_lfe_lr4(
     return spa_upmix_biquad(output, state[1], coefficients);
 }
 
-static int16_t spa_upmix_lfe_v2(
+static float spa_upmix_lfe_v2_normalized(
     struct spa_stereo_upmix *state, int16_t render_l, int16_t render_r,
     float bass_confidence, float drum_confidence)
 {
@@ -174,6 +190,10 @@ static int16_t spa_upmix_lfe_v2(
         normalized_l, state->_runtime._lfe_low48_state[0], &kLfeLow48);
     float low48_r = spa_upmix_lfe_lr4(
         normalized_r, state->_runtime._lfe_low48_state[1], &kLfeLow48);
+    /* Return to a supporting mono-sum, with no phase recovery or adaptive
+     * boost. Effective gain at the default Q15 4096 is 0.0625, not 0.125. */
+    if (state->config.cabin_policy || state->config.quiet_lfe)
+        return 0.25f * (low48_l + low48_r);
     const float power_alpha = 0.00075f;
     float target_polarity;
     float polarity_alpha;
@@ -240,9 +260,7 @@ static int16_t spa_upmix_lfe_v2(
     state->_runtime._lfe_dynamic_gain += gain_alpha *
         (target_gain - state->_runtime._lfe_dynamic_gain);
 
-    return spa_upmix_lfe_to_s16(
-        sub_band * state->_runtime._lfe_dynamic_gain,
-        state->config.lfe_gain_q15);
+    return sub_band * state->_runtime._lfe_dynamic_gain;
 }
 
 static void spa_upmix_lfe_intersect(
@@ -307,7 +325,7 @@ static int spa_upmix_config_valid(const struct spa_stereo_upmix_config *config)
         config->front_gain_q15 > UINT32_C(32768) ||
         config->rear_gain_q15 > SPA_STEREO_UPMIX_REAR_Q15_MAX ||
         config->lfe_gain_q15 > SPA_STEREO_UPMIX_LFE_Q15_MAX ||
-        config->lfe_enabled > 1u)
+        config->lfe_enabled > 1u || config->cabin_policy > 1u || config->quiet_lfe > 1u)
         return SPA_STEREO_UPMIX_ERROR_CONFIG;
     if (config->backend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL &&
         !spa_hssr_model_ready(config->hssr_model))
@@ -320,7 +338,8 @@ static int spa_upmix_config_valid(const struct spa_stereo_upmix_config *config)
 
     /* Recovered SoundAmp centre row:
      * Cbus = 0.501187*L + 0.501187*R + 0.316228*LFE. */
-    if (config->backend != SPA_STEREO_UPMIX_OFF && config->lfe_enabled) {
+    if (config->backend != SPA_STEREO_UPMIX_OFF && config->lfe_enabled &&
+        !config->cabin_policy && !config->quiet_lfe) {
         centre_bus_q15 = UINT64_C(1002375) * config->front_gain_q15 +
                          UINT64_C(316228) * config->lfe_gain_q15;
         if (centre_bus_q15 > UINT64_C(1000000) * UINT64_C(32768))
@@ -354,6 +373,8 @@ void spa_stereo_upmix_default_config(struct spa_stereo_upmix_config *config)
     config->rear_gain_q15 = SPA_STEREO_UPMIX_REAR_Q15_DEFAULT;
     config->lfe_gain_q15 = SPA_STEREO_UPMIX_LFE_Q15_DEFAULT;
     config->lfe_enabled = 0;
+    config->cabin_policy = 0;
+    config->quiet_lfe = 0;
     config->backend = SPA_STEREO_UPMIX_OFF;
     config->hssr_model = NULL;
     config->hssr_control_provider = NULL;
@@ -364,9 +385,25 @@ void spa_stereo_upmix_config_set_lfe(
 {
     if (!config) return;
     config->lfe_enabled = enabled ? 1u : 0u;
-    config->front_gain_q15 = enabled
+    config->front_gain_q15 = enabled && !config->cabin_policy && !config->quiet_lfe
         ? SPA_STEREO_UPMIX_FRONT_Q15_LFE_DEFAULT
         : SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT;
+}
+
+void spa_stereo_upmix_config_set_cabin(
+    struct spa_stereo_upmix_config *config, int enabled)
+{
+    if (!config) return;
+    config->cabin_policy = enabled ? 1u : 0u;
+    spa_stereo_upmix_config_set_lfe(config, config->lfe_enabled);
+}
+
+void spa_stereo_upmix_config_set_quiet_lfe(
+    struct spa_stereo_upmix_config *config, int enabled)
+{
+    if (!config) return;
+    config->quiet_lfe = enabled ? 1u : 0u;
+    spa_stereo_upmix_config_set_lfe(config, config->lfe_enabled);
 }
 
 void spa_stereo_upmix_config_set_hssr_model(
@@ -403,6 +440,7 @@ int spa_stereo_upmix_init(struct spa_stereo_upmix *state,
     state->config = saved;
     if (saved.backend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL) {
         spa_hssr_dsp_prepare(&state->_runtime._hssr);
+        state->_runtime._hssr.cabin_policy = saved.cabin_policy;
         state->_runtime._hssr.control_generation = 1u;
         if (saved.hssr_control_provider)
             saved.hssr_control_provider->reset(
@@ -435,6 +473,7 @@ int spa_stereo_upmix_reset(struct spa_stereo_upmix *state)
            sizeof(state->_hssr_lfe_control_scratch));
     if (state->config.backend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL) {
         spa_hssr_dsp_prepare(&state->_runtime._hssr);
+        state->_runtime._hssr.cabin_policy = state->config.cabin_policy;
         state->_runtime._hssr.control_generation = generation;
         if (state->config.hssr_control_provider)
             state->config.hssr_control_provider->reset(
@@ -447,11 +486,11 @@ int spa_stereo_upmix_reset(struct spa_stereo_upmix *state)
     return SPA_STEREO_UPMIX_OK;
 }
 
-int spa_stereo_upmix_process_s16(struct spa_stereo_upmix *state,
+static int spa_upmix_process(struct spa_stereo_upmix *state,
                                  const int16_t *pcm2,
                                  size_t frames,
-                                 int16_t *pcm6,
-                                 size_t pcm6_capacity_frames)
+                                 void *pcm6,
+                                 size_t pcm6_capacity_frames, int float_output)
 {
     size_t input_bytes;
     size_t output_bytes;
@@ -473,19 +512,20 @@ int spa_stereo_upmix_process_s16(struct spa_stereo_upmix *state,
 
     input_samples = frames * SPA_STEREO_UPMIX_INPUT_CHANNELS;
     input_bytes = input_samples * sizeof(*pcm2);
-    output_bytes = frames * SPA_STEREO_UPMIX_OUTPUT_CHANNELS * sizeof(*pcm6);
+    output_bytes = frames * SPA_STEREO_UPMIX_OUTPUT_CHANNELS *
+        (float_output ? sizeof(float) : sizeof(int16_t));
     if (spa_upmix_ranges_overlap(state, sizeof(*state), pcm2, input_bytes) ||
         spa_upmix_ranges_overlap(state, sizeof(*state), pcm6, output_bytes))
         return SPA_STEREO_UPMIX_ERROR_STATE_OVERLAP;
     memcpy(state->_input_scratch, pcm2, input_bytes);
 
     if (state->config.backend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL) {
-        int hssr_status = spa_hssr_dsp_process_block(
+        int hssr_status = spa_hssr_dsp_process_block_sources(
             &state->_runtime._hssr, state->config.hssr_model,
             state->config.hssr_control_provider,
             state->_input_scratch, frames,
             state->_hssr_front_scratch, state->_hssr_rear_scratch,
-            state->_hssr_lfe_control_scratch);
+            state->_hssr_lfe_control_scratch, state->_hssr_source_scratch);
 
         if (hssr_status != SPA_HSSR_OK)
             return SPA_STEREO_UPMIX_ERROR_CONFIG;
@@ -494,7 +534,45 @@ int spa_stereo_upmix_process_s16(struct spa_stereo_upmix *state,
     for (frame = 0; frame < frames; frame++) {
         const int16_t input_l = state->_input_scratch[frame * 2];
         const int16_t input_r = state->_input_scratch[frame * 2 + 1];
-        int16_t *output = pcm6 + frame * SPA_STEREO_UPMIX_OUTPUT_CHANNELS;
+        int16_t *output = float_output ? NULL : (int16_t *)pcm6 +
+            frame * SPA_STEREO_UPMIX_OUTPUT_CHANNELS;
+
+        if (float_output) {
+            float *out = (float *)pcm6 + frame * SPA_STEREO_UPMIX_OUTPUT_CHANNELS;
+            if (state->config.backend == SPA_STEREO_UPMIX_OFF) {
+                out[0] = (float)input_l;
+                out[1] = (float)input_r;
+                out[2] = out[3] = out[4] = out[5] = 0.0f;
+            } else {
+                int16_t dry_l = state->_hssr_front_scratch[frame * 2];
+                int16_t dry_r = state->_hssr_front_scratch[frame * 2 + 1];
+                float rear_l = state->_hssr_rear_scratch[frame * 2];
+                float rear_r = state->_hssr_rear_scratch[frame * 2 + 1];
+                float rear_gain = (float)state->config.rear_gain_q15;
+                float front_gain = (float)state->config.front_gain_q15 / 32768.0f;
+                /* Preserve V11's transfer policy; presence EQ must not enter
+                 * dry-front subtraction. No per-channel rail clipping. */
+                float transfer_l = state->config.cabin_policy
+                    ? state->_hssr_source_scratch[frame * 2] : 2.5f * rear_l;
+                float transfer_r = state->config.cabin_policy
+                    ? state->_hssr_source_scratch[frame * 2 + 1] : 2.5f * rear_r;
+                out[0] = (float)dry_l * front_gain - transfer_l * rear_gain;
+                out[1] = (float)dry_r * front_gain - transfer_r * rear_gain;
+                out[2] = 0.0f;
+                out[3] = state->config.lfe_enabled
+                    ? spa_upmix_lfe_v2_normalized(state, dry_l, dry_r,
+                        state->_hssr_lfe_control_scratch[frame * 2],
+                        state->_hssr_lfe_control_scratch[frame * 2 + 1]) *
+                        (float)state->config.lfe_gain_q15 : 0.0f;
+                out[4] = (state->config.cabin_policy ? rear_l : spa_upmix_biquad(rear_l,
+                    state->_runtime._rear_high_shelf_state[0],
+                    &kRearHighShelf4k3dB)) * rear_gain;
+                out[5] = (state->config.cabin_policy ? rear_r : spa_upmix_biquad(rear_r,
+                    state->_runtime._rear_high_shelf_state[1],
+                    &kRearHighShelf4k3dB)) * rear_gain;
+            }
+            continue;
+        }
 
         if (state->config.backend == SPA_STEREO_UPMIX_OFF) {
             output[SPA_STEREO_UPMIX_CHANNEL_L] = input_l;
@@ -520,18 +598,24 @@ int spa_stereo_upmix_process_s16(struct spa_stereo_upmix *state,
             int16_t output_transfer_rear_r;
 
             if (state->config.lfe_enabled) {
-                lfe_candidate = spa_upmix_lfe_v2(
+                lfe_candidate = spa_upmix_lfe_to_s16(spa_upmix_lfe_v2_normalized(
                     state, render_l, render_r,
                     state->_hssr_lfe_control_scratch[frame * 2],
-                    state->_hssr_lfe_control_scratch[frame * 2 + 1]);
+                    state->_hssr_lfe_control_scratch[frame * 2 + 1]),
+                    state->config.lfe_gain_q15);
             }
 
-            rear_l = spa_upmix_biquad(
-                rear_l, state->_runtime._rear_high_shelf_state[0],
-                &kRearHighShelf4k3dB);
-            rear_r = spa_upmix_biquad(
-                rear_r, state->_runtime._rear_high_shelf_state[1],
-                &kRearHighShelf4k3dB);
+            if (state->config.cabin_policy) {
+                transfer_rear_l = state->_hssr_source_scratch[frame * 2];
+                transfer_rear_r = state->_hssr_source_scratch[frame * 2 + 1];
+            } else {
+                rear_l = spa_upmix_biquad(
+                    rear_l, state->_runtime._rear_high_shelf_state[0],
+                    &kRearHighShelf4k3dB);
+                rear_r = spa_upmix_biquad(
+                    rear_r, state->_runtime._rear_high_shelf_state[1],
+                    &kRearHighShelf4k3dB);
+            }
 
             /* Linked limiter: instantaneous attack, about 42 ms release. */
             {
@@ -572,10 +656,12 @@ int spa_stereo_upmix_process_s16(struct spa_stereo_upmix *state,
             output_transfer_rear_r = spa_upmix_rear_to_s16(
                 transfer_rear_r, state->config.rear_gain_q15);
             front_l = spa_upmix_transfer_front(
-                front_l, output_transfer_rear_l, UINT32_C(81920),
+                front_l, output_transfer_rear_l,
+                state->config.cabin_policy ? UINT32_C(32768) : UINT32_C(81920),
                 state->config.front_gain_q15);
             front_r = spa_upmix_transfer_front(
-                front_r, output_transfer_rear_r, UINT32_C(81920),
+                front_r, output_transfer_rear_r,
+                state->config.cabin_policy ? UINT32_C(32768) : UINT32_C(81920),
                 state->config.front_gain_q15);
             if (state->config.lfe_enabled)
                 lfe = spa_upmix_lfe_cabin_limit(
@@ -592,4 +678,18 @@ int spa_stereo_upmix_process_s16(struct spa_stereo_upmix *state,
     }
 
     return SPA_STEREO_UPMIX_OK;
+}
+
+int spa_stereo_upmix_process_s16(struct spa_stereo_upmix *state,
+                                 const int16_t *pcm2, size_t frames,
+                                 int16_t *pcm6, size_t pcm6_capacity_frames)
+{
+    return spa_upmix_process(state, pcm2, frames, pcm6, pcm6_capacity_frames, 0);
+}
+
+int spa_stereo_upmix_process_f32(struct spa_stereo_upmix *state,
+                                 const int16_t *pcm2, size_t frames,
+                                 float *pcm6, size_t pcm6_capacity_frames)
+{
+    return spa_upmix_process(state, pcm2, frames, pcm6, pcm6_capacity_frames, 1);
 }

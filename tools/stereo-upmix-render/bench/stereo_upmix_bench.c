@@ -14,6 +14,7 @@
 
 #include "stereo_upmix.h"
 #include "hssr_control_worker.h"
+#include "soundcheck.h"
 
 #include <errno.h>
 #include <stdint.h>
@@ -35,9 +36,29 @@ static struct spa_stereo_upmix g_state;
 static struct spa_hssr_control_worker g_control_worker;
 static int16_t g_pcm2[BENCH_FRAMES * SPA_STEREO_UPMIX_INPUT_CHANNELS];
 static int16_t g_pcm6[BENCH_FRAMES * SPA_STEREO_UPMIX_OUTPUT_CHANNELS];
+static float g_float6[BENCH_FRAMES * SPA_STEREO_UPMIX_OUTPUT_CHANNELS];
+static spa_soundcheck_state_t g_gain, g_guard;
+static int g_float_render;
+static int g_cabin_render;
 static uint64_t g_elapsed[BENCH_MAX_BLOCKS];
 static uint64_t g_sorted[BENCH_MAX_BLOCKS];
 static volatile uint64_t g_checksum_sink;
+
+static int process_audio(void)
+{
+    int status;
+    if (!g_float_render)
+        return spa_stereo_upmix_process_s16(&g_state, g_pcm2,
+            BENCH_FRAMES, g_pcm6, BENCH_FRAMES);
+    status = spa_stereo_upmix_process_f32(&g_state, g_pcm2,
+        BENCH_FRAMES, g_float6, BENCH_FRAMES);
+    if (status != SPA_STEREO_UPMIX_OK) return status;
+    spa_soundcheck_apply_f32(&g_gain, g_float6, BENCH_FRAMES, 6);
+    spa_soundcheck_limit_matrix_f32(&g_guard, g_float6, BENCH_FRAMES,
+        6, spa_stereo_upmix_input_matrix(), 8);
+    spa_soundcheck_quantize_s16(g_float6, g_pcm6, BENCH_FRAMES, 6);
+    return status;
+}
 
 struct bench_stats {
     uint64_t min;
@@ -306,7 +327,7 @@ static void print_usage(const char *program)
             "usage: %s [--backend hssr-universal] "
             "[--model HSSR.bin] "
             "[--blocks 1..%u] [--warmup 1..%u] "
-            "[--async-controller] [--realtime-pacing] [--qemu-icount]\n",
+            "[--async-controller] [--realtime-pacing] [--qemu-icount] [--float-render|--cabin-render]\n",
             program, (unsigned)BENCH_MAX_BLOCKS,
             (unsigned)BENCH_MAX_BLOCKS);
 }
@@ -401,6 +422,10 @@ int main(int argc, char **argv)
             }
         } else if (strcmp(argv[argument], "--qemu-icount") == 0) {
             qemu_icount = 1;
+        } else if (strcmp(argv[argument], "--float-render") == 0) {
+            g_float_render = 1;
+        } else if (strcmp(argv[argument], "--cabin-render") == 0) {
+            g_cabin_render = g_float_render = 1;
         } else if (strcmp(argv[argument], "--async-controller") == 0) {
             async_controller = 1;
             realtime_pacing = 1;
@@ -429,7 +454,19 @@ int main(int argc, char **argv)
 
     spa_stereo_upmix_default_config(&config);
     config.backend = backend;
+    config.rear_gain_q15 = 8192; /* Production synthesis gain 0.25. */
+    spa_stereo_upmix_config_set_cabin(&config, g_cabin_render);
     spa_stereo_upmix_config_set_lfe(&config, 1);
+    {
+        spa_soundcheck_config_t sound_config;
+        spa_soundcheck_default_config(&sound_config);
+        sound_config.enabled = 1;
+        sound_config.limiterMode = SPA_SOUNDCHECK_LIMITER_SAMPLE_PEAK;
+        spa_soundcheck_init(&g_guard, &sound_config, 0, 0, 0);
+        spa_soundcheck_init(&g_gain, &sound_config, 0, 0, 0);
+        /* Exercise non-unity post-synthesis programme gain, including guard. */
+        g_gain.currentGain = g_gain.targetGain = 1.122018454f;
+    }
     if (backend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL) {
         if (!model_path) {
             fprintf(stderr, "error: selected HSSR backend requires --model HSSR.bin\n");
@@ -479,7 +516,8 @@ int main(int argc, char **argv)
     printf("sizeof_state=%lu sizeof_runtime=%lu static_pcm_bytes=%lu\n",
            (unsigned long)sizeof(g_state),
            (unsigned long)sizeof(g_state._runtime),
-           (unsigned long)(sizeof(g_pcm2) + sizeof(g_pcm6)));
+           (unsigned long)(sizeof(g_pcm2) + sizeof(g_pcm6) + sizeof(g_float6)));
+    printf("float_render=%d cabin_render=%d rear_gain=0.25\n", g_float_render, g_cabin_render);
     printf("clock=%s clock_read_overhead=%llu\n", bench_clock_name(),
            (unsigned long long)clock_read_overhead());
 
@@ -495,9 +533,7 @@ int main(int argc, char **argv)
 
     for (index = 0; index < warmup_blocks; index++) {
         make_input(&random_state);
-        if (spa_stereo_upmix_process_s16(
-                &g_state, g_pcm2, BENCH_FRAMES, g_pcm6,
-                BENCH_FRAMES) != SPA_STEREO_UPMIX_OK) {
+        if (process_audio() != SPA_STEREO_UPMIX_OK) {
             fprintf(stderr, "error: %s warmup failed\n",
                     backend_name(backend));
             if (async_controller)
@@ -515,8 +551,7 @@ int main(int argc, char **argv)
 
         make_input(&random_state);
         before = bench_now();
-        status = spa_stereo_upmix_process_s16(
-            &g_state, g_pcm2, BENCH_FRAMES, g_pcm6, BENCH_FRAMES);
+        status = process_audio();
         after = bench_now();
         if (status != SPA_STEREO_UPMIX_OK) {
             fprintf(stderr, "error: %s process failed at block %lu "

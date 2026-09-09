@@ -3,7 +3,7 @@
  *
  * The output order is always L, R, C, LFE, Ls, Rs.  C is deliberately zero
  * because the Audi amplifier already derives its centre. Universal can feed
- * only the phase-safe, semantic and recovered-matrix-bounded LFE V2 path.
+ * the legacy phase-recovered LFE V2 or an opt-in quiet mono bass assist.
  *
  * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
@@ -62,6 +62,8 @@ struct spa_stereo_upmix_config {
     uint32_t rear_gain_q15;
     uint32_t lfe_gain_q15;
     uint32_t lfe_enabled;
+    uint32_t cabin_policy;
+    uint32_t quiet_lfe;
     enum spa_stereo_upmix_backend backend;
     const struct spa_hssr_model *hssr_model;
     const struct spa_hssr_control_provider *hssr_control_provider;
@@ -71,8 +73,8 @@ struct spa_stereo_upmix_config {
  * the realtime path never has to allocate.  Callers must not inspect or alter
  * fields whose names start with an underscore. */
 struct spa_stereo_upmix_runtime {
-    /* Cabin-aware LFE V2: one 48-Hz LR4 filter per stereo side, low-band
-     * correlation, phase-safe fold and smoothed semantic dynamics. */
+    /* Shared 48-Hz LR4 filters. Legacy V2 adds phase recovery/dynamics;
+     * quiet_lfe or cabin_policy uses a fixed half-level mono assist. */
     float _lfe_low48_state[2][2][2];
     float _lfe_power_l;
     float _lfe_power_r;
@@ -83,7 +85,7 @@ struct spa_stereo_upmix_runtime {
     float _lfe_slow_envelope;
     float _lfe_dynamic_gain;
     uint32_t _lfe_correlation_tick;
-    /* Per-side +3 dB / 4-kHz rear-presence shelf, before the linked limiter. */
+    /* Legacy +3 dB / 4-kHz rear shelf, bypassed by cabin_policy. */
     float _rear_high_shelf_state[2][2];
     float _limiter_gain;
     struct spa_hssr_dsp _hssr;
@@ -103,15 +105,24 @@ struct spa_stereo_upmix {
     float _hssr_rear_scratch[SPA_STEREO_UPMIX_MAX_FRAMES *
                              SPA_STEREO_UPMIX_INPUT_CHANNELS];
     float _hssr_lfe_control_scratch[SPA_STEREO_UPMIX_MAX_FRAMES * 2];
+    float _hssr_source_scratch[SPA_STEREO_UPMIX_MAX_FRAMES * 2];
 };
 
 /* The reusable default is the exact OFF bypass.  Production selects Universal
  * after attaching its validated model. */
 void spa_stereo_upmix_default_config(struct spa_stereo_upmix_config *config);
 
-/* Select the paired safe front default: ~=0.958 with LFE V2 and ~=0.997
- * without it.  The LFE gain itself is preserved across disable/enable. */
+/* Legacy front ~=0.958 with LFE V2, otherwise ~=0.997. Quiet/cabin profiles
+ * retain ~=0.997 with assist; the dynamic limiter still bounds output. */
 void spa_stereo_upmix_config_set_lfe(
+    struct spa_stereo_upmix_config *config, int enabled);
+
+/* Experimental source-aligned renderer, quiet fixed mono bass assist. */
+void spa_stereo_upmix_config_set_cabin(
+    struct spa_stereo_upmix_config *config, int enabled);
+
+/* Bass-only change, independent of experimental spatial routing. */
+void spa_stereo_upmix_config_set_quiet_lfe(
     struct spa_stereo_upmix_config *config, int enabled);
 
 /* The caller owns the model and keeps it alive for the upmix state lifetime. */
@@ -146,6 +157,22 @@ int spa_stereo_upmix_process_s16(struct spa_stereo_upmix *state,
                                  size_t frames,
                                  int16_t *pcm6,
                                  size_t pcm6_capacity_frames);
+
+/* Experimental headroom-preserving synthesis for offline evaluation.
+ * Float units are S16 units (32768 = 0 dBFS), NOT normalized [-1,1].
+ * Analysis is identical to the S16 renderer, including its delayed dry front.
+ * Front transfer, rear shelf and LFE synthesis are not quantized or limited
+ * to the output rail here. Apply programme gain and linked peak protection
+ * afterwards, then quantize once. This is not yet the production hook path.
+ * The size/overlap/error contract above also applies to this float output. */
+int spa_stereo_upmix_process_f32(struct spa_stereo_upmix *state,
+                                 const int16_t *pcm2, size_t frames,
+                                 float *pcm6, size_t pcm6_capacity_frames);
+
+/* Profile-0/bank-1 J525 input matrix, first six inputs x eight buses, row-major.
+ * Static storage. Includes the verified -99 dB effective input-matrix floor.
+ * For downstream peak detection only; not an acoustic model or an EQ inverse. */
+const float *spa_stereo_upmix_input_matrix(void);
 
 #ifdef SPA_STEREO_UPMIX_TESTING
 /* Test-only access to the exact shipping rear shelf. */

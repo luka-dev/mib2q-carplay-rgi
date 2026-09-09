@@ -101,7 +101,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--loss-profile",
-        choices=("balanced", "selection-v11"),
+        choices=("balanced", "selection-v11", "cabin-v12"),
         default="balanced",
         help=(
             "selection-v11 applies an asymmetric vocal/bass false-positive "
@@ -113,6 +113,10 @@ def parse_args() -> argparse.Namespace:
         type=pathlib.Path,
         help="warm-start from an existing HSSR development checkpoint",
     )
+    parser.add_argument("--init-model", type=pathlib.Path,
+                        help="warm-start from a validated quantized HSSRNEO1 binary")
+    parser.add_argument("--cache-only", action="store_true",
+                        help="train from explicit extra-cache roots without requiring MUSDB audio")
     parser.add_argument(
         "--extra-cache-root",
         type=pathlib.Path,
@@ -124,6 +128,17 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument("--epochs", type=int, default=18)
+    parser.add_argument('--sequence',type=int,default=SEQUENCE)
+    parser.add_argument('--burn-in',type=int,default=0)
+    parser.add_argument('--control-delay',type=int,default=0,choices=[0,1])
+    parser.add_argument('--runtime-aware',action='store_true')
+    parser.add_argument('--device', choices=['auto','cpu','mps'], default='auto')
+    parser.add_argument('--cpu-threads', type=int, default=0,
+                        help='explicit CPU thread count; 0 preserves PyTorch default')
+    parser.add_argument('--routing-head-only',action='store_true',
+                        help='preserve GRUs and semantic/LFE heads when only two-stem pseudo-labels are available')
+    parser.add_argument('--max-train-batches',type=int,default=0,
+                        help='explicit pilot budget per epoch; 0 uses all chunks')
     parser.add_argument(
         "--early-stopping-patience",
         type=int,
@@ -711,15 +726,34 @@ class HssrNetwork(nn.Module):
         self.head = nn.Linear(HIDDEN, OUTPUTS)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x, _ = self.gru1(x)
-        x, _ = self.gru2(x)
-        return self.head(x)
+        return self.forward_state(x)[0]
+
+    def forward_state(self,x,state=None):
+        if getattr(self,'runtime_aware',False):
+            from hssr_runtime_training import forward
+            return forward(self,x,state)
+        h1,h2=(None,None) if state is None else state
+        x,h1=self.gru1(x,h1)
+        x,h2=self.gru2(x,h2)
+        return self.head(x),(h1,h2)
+
+
+def freeze_except_routing_head(model: HssrNetwork) -> None:
+    """Two-stem labels may tune routing/pan, never overwrite six-stem semantics."""
+    model.gru1.requires_grad_(False)
+    model.gru2.requires_grad_(False)
+    row_mask = model.head.weight.new_zeros(OUTPUTS)
+    row_mask[6:BANDS*8:8] = 1
+    row_mask[7:BANDS*8:8] = 1
+    model.head.weight.register_hook(lambda grad: grad * row_mask[:, None])
+    model.head.bias.register_hook(lambda grad: grad * row_mask)
 
 
 def loss_components(
     prediction: torch.Tensor,
     target: torch.Tensor,
     loss_profile: str = "balanced",
+    runtime_aware: bool = False,
 ) -> dict[str, torch.Tensor]:
     pred_band = prediction[..., :BANDS * 8].reshape(
         *prediction.shape[:-1], BANDS, 8
@@ -731,14 +765,37 @@ def loss_components(
         target_band[..., :6] * torch.log_softmax(pred_band[..., :6], dim=-1),
         dim=-1,
     ).mean()
-    rear_element_loss = nn.functional.binary_cross_entropy_with_logits(
-        pred_band[..., 6], target_band[..., 6], reduction="none"
-    )
+    if loss_profile == "cabin-v12":
+        # Runtime vocal protection also depends on the class posterior (its
+        # object-rescue paths can bypass rearability). Penalizing only rear
+        # false positives therefore does not protect those paths. Add a
+        # numerically stable one-vs-rest vocal classification lesson.
+        vocal_logit = pred_band[..., 0] - torch.logsumexp(pred_band[..., 1:6], dim=-1)
+        # Vocal-negative caches use class mass as an activity/confidence
+        # weight, not a normalized posterior. Zero mass means UNLABELLED,
+        # never an explicit non-vocal lesson. Preserve that CE convention.
+        class_mass = torch.sum(target_band[..., :6], dim=-1).detach()
+        vocal_target = target_band[..., 0].detach() / class_mass.clamp_min(1.0e-8)
+        vocal_error = nn.functional.binary_cross_entropy_with_logits(
+            vocal_logit, vocal_target, reduction="none")
+        class_loss = class_loss + torch.mean(
+            vocal_error * class_mass * (1.0 + 3.0 * vocal_target))
+    if runtime_aware:
+        from hssr_runtime_training import sigmoid as runtime_sigmoid, tanh as runtime_tanh
+        predicted_rear = runtime_sigmoid(pred_band[..., 6])
+        predicted_pan = runtime_tanh(pred_band[..., 7])
+        rear_element_loss = nn.functional.binary_cross_entropy(
+            predicted_rear.clamp(1e-6, 1-1e-6), target_band[..., 6], reduction="none")
+    else:
+        predicted_rear = torch.sigmoid(pred_band[..., 6])
+        predicted_pan = torch.tanh(pred_band[..., 7])
+        rear_element_loss = nn.functional.binary_cross_entropy_with_logits(
+            pred_band[..., 6], target_band[..., 6], reduction="none")
     # Rear-positive TF regions are rare compared with protected/empty bands.
     # Without weighting, predicting a very small rearability everywhere is a
     # deceptively good optimum (and exactly what the original EDM trace showed).
     rear_target = target_band[..., 6].detach()
-    if loss_profile == "selection-v11":
+    if loss_profile in ("selection-v11", "cabin-v12"):
         # A vocal false positive is far more objectionable than a missed rear
         # object.  Counterfactual mixtures make that boundary observable; the
         # asymmetric term makes the controller actually respect it.  Positive
@@ -754,17 +811,16 @@ def loss_components(
     rear_loss = torch.mean(rear_element_loss * rear_weight)
     pan_weight = rear_target
     pan_loss = torch.sum(
-        (torch.tanh(pred_band[..., 7]) - target_band[..., 7]) ** 2
+        (predicted_pan - target_band[..., 7]) ** 2
         * pan_weight
     ) / (torch.sum(pan_weight) + 1.0)
     global_loss = nn.functional.binary_cross_entropy_with_logits(
         prediction[..., BANDS * 8:], target[..., BANDS * 8:]
     )
-    predicted_rear = torch.sigmoid(pred_band[..., 6])
     smooth_loss = torch.mean(
         torch.abs(predicted_rear[:, 1:] - predicted_rear[:, :-1])
     )
-    if loss_profile == "selection-v11":
+    if loss_profile in ("selection-v11", "cabin-v12"):
         total = class_loss + 2.4 * rear_loss + 0.5 * pan_loss + \
                 0.5 * global_loss + 0.08 * smooth_loss
     else:
@@ -806,8 +862,11 @@ def evaluate(
     model.eval()
     with torch.no_grad():
         for features, targets in loader:
+            from hssr_runtime_training import supervised_prediction
+            prediction,target=supervised_prediction(model,features.to(device),targets.to(device),
+                getattr(model,'burn_in',0),getattr(model,'control_delay',0))
             values = loss_components(
-                model(features.to(device)), targets.to(device), loss_profile
+                prediction, target, loss_profile, getattr(model, 'runtime_aware', False)
             )
             for name, value in values.items():
                 sums[name] = sums.get(name, 0.0) + float(value.cpu())
@@ -878,8 +937,50 @@ def export_model(model: HssrNetwork, mean: np.ndarray, inv_std: np.ndarray,
     }
 
 
+def import_model(path: pathlib.Path) -> tuple[HssrNetwork, np.ndarray, np.ndarray]:
+    """Recover trainable row-dequantized weights, not a lost float checkpoint.
+
+    Keeps the exact normalization and biases embedded in the deployed model.
+    Torch inference is not bit-equivalent to the integer-activation C runtime.
+    """
+    raw = path.read_bytes()
+    if len(raw) != 469760:
+        raise ValueError("invalid HSSR model length")
+    header = struct.unpack_from("<16I", raw)
+    expected = (0x52535348, 0x314F454E, 1, 64, FEATURES, HIDDEN, OUTPUTS,
+                449280, 5104, 469696)
+    if header[:10] != expected or any(header[11:]) or zlib.crc32(raw[64:]) & 0xFFFFFFFF != header[10]:
+        raise ValueError("invalid HSSR model header/CRC")
+    floats = np.frombuffer(raw, dtype="<f4", offset=64 + 449280).copy()
+    if not np.isfinite(floats).all() or np.any(floats[FEATURES:FEATURES * 2] <= 0):
+        raise ValueError("invalid HSSR model normalization/floats")
+    model = HssrNetwork()
+    matrices = [model.gru1.weight_ih_l0, model.gru1.weight_hh_l0,
+                model.gru2.weight_ih_l0, model.gru2.weight_hh_l0, model.head.weight]
+    biases = [model.gru1.bias_ih_l0, model.gru1.bias_hh_l0,
+              model.gru2.bias_ih_l0, model.gru2.bias_hh_l0, model.head.bias]
+    byte_offset, float_offset = 64, FEATURES * 2
+    with torch.no_grad():
+        for matrix in matrices:
+            rows, columns = matrix.shape
+            scale = floats[float_offset:float_offset + rows]
+            if np.any(scale <= 0):
+                raise ValueError("invalid HSSR row scales")
+            weights = np.frombuffer(raw, dtype=np.int8, count=rows * columns,
+                                    offset=byte_offset).reshape(rows, columns)
+            matrix.copy_(torch.from_numpy(weights.astype(np.float32) * scale[:, None]))
+            byte_offset += rows * columns
+            float_offset += rows
+        for bias in biases:
+            bias.copy_(torch.from_numpy(floats[float_offset:float_offset + bias.numel()]))
+            float_offset += bias.numel()
+    return model, floats[:FEATURES], floats[FEATURES:FEATURES * 2]
+
+
 def main() -> int:
     args = parse_args()
+    if args.sequence<2 or args.burn_in<0 or args.max_train_batches<0:
+        raise SystemExit('invalid temporal training/budget options')
     random.seed(args.seed)
     np.random.seed(args.seed & 0xFFFFFFFF)
     torch.manual_seed(args.seed)
@@ -891,8 +992,14 @@ def main() -> int:
         train_sources = train_sources[:args.max_train_tracks]
     if args.max_test_tracks:
         test_sources = test_sources[:args.max_test_tracks]
-    if not train_sources or not test_sources:
+    if args.init_model is not None and args.init_checkpoint is not None:
+        raise SystemExit("choose only one warm-start format")
+    if args.cache_only and not args.extra_cache_root:
+        raise SystemExit("--cache-only requires explicit --extra-cache-root")
+    if not args.cache_only and (not train_sources or not test_sources):
         raise SystemExit("MUSDB train/test stem containers were not found")
+    if args.cache_only:
+        train_sources, test_sources = [], []
 
     train_sources, validation_sources = split_train_validation(
         train_sources, args.seed
@@ -912,7 +1019,29 @@ def main() -> int:
             raise RuntimeError(f"no training caches found under {extra_root}")
         extra_train_files.extend(train_extra)
         extra_validation_files.extend(validation_extra)
-    mean, inv_std = compute_normalization(train_files)
+    if args.cache_only:
+        identities = []
+        for files in (extra_train_files, extra_validation_files):
+            source_ids = set()
+            for path in files:
+                with np.load(path) as cache:
+                    if "source_sha256" not in cache:
+                        raise RuntimeError(f"cache-only training needs source provenance: {path}")
+                    source_ids.add(str(cache["source_sha256"].item()))
+            identities.append(source_ids)
+        if identities[0] & identities[1]:
+            raise RuntimeError("source leakage between training and validation caches")
+    warm_model = None
+    checkpoint_data = None
+    if args.init_model is not None:
+        warm_model, mean, inv_std = import_model(args.init_model)
+    elif args.init_checkpoint is not None:
+        checkpoint_data = torch.load(args.init_checkpoint, map_location="cpu", weights_only=False)
+        mean, inv_std = checkpoint_data["mean"], checkpoint_data["inv_std"]
+    else:
+        mean, inv_std = compute_normalization(train_files + extra_train_files)
+    if not train_files + extra_train_files or not validation_files + extra_validation_files:
+        raise SystemExit("nonempty, source-disjoint train and validation caches are required")
     np.savez(args.output / "normalization.npz", mean=mean, inv_std=inv_std)
     if args.prepare_only:
         print(
@@ -926,15 +1055,18 @@ def main() -> int:
         mean,
         inv_std,
         routing_target=args.routing_target,
+        sequence=args.sequence+args.burn_in,
     )
     validation_dataset = SequenceDataset(
         validation_files + extra_validation_files,
         mean,
         inv_std,
         routing_target=args.routing_target,
+        sequence=args.sequence+args.burn_in,
     )
     test_dataset = SequenceDataset(
-        test_files, mean, inv_std, routing_target=args.routing_target
+        test_files, mean, inv_std, routing_target=args.routing_target,
+        sequence=args.sequence+args.burn_in,
     )
     generator = torch.Generator().manual_seed(args.seed)
     train_loader = DataLoader(
@@ -948,28 +1080,47 @@ def main() -> int:
     test_loader = DataLoader(
         test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=0
     )
-    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-    model = HssrNetwork().to(device)
-    if args.init_checkpoint is not None:
+    if args.cpu_threads < 0:
+        raise ValueError('CPU thread count must be nonnegative')
+    if args.cpu_threads:
+        torch.set_num_threads(args.cpu_threads)
+    device = torch.device(("mps" if torch.backends.mps.is_available() else "cpu")
+                          if args.device == 'auto' else args.device)
+    model = (warm_model or HssrNetwork()).to(device)
+    model.runtime_aware=args.runtime_aware
+    model.burn_in=args.burn_in
+    model.control_delay=args.control_delay
+    if checkpoint_data is not None:
         # This is an explicitly supplied, locally generated development
         # checkpoint.  It also contains NumPy normalization arrays, which are
         # intentionally rejected by PyTorch 2.6's weights-only loader.
-        checkpoint_data = torch.load(
-            args.init_checkpoint, map_location="cpu", weights_only=False
-        )
         model.load_state_dict(checkpoint_data["state_dict"])
         print(f"warm-start {args.init_checkpoint}", flush=True)
+    if args.init_model is not None:
+        print(f"warm-start row-dequantized {args.init_model}; normalization preserved", flush=True)
+    if args.routing_head_only:
+        freeze_except_routing_head(model)
     optimizer = torch.optim.AdamW(
-        model.parameters(), lr=args.learning_rate, weight_decay=1e-4
+        (p for p in model.parameters() if p.requires_grad), lr=args.learning_rate,
+        weight_decay=0 if args.routing_head_only else 1e-4
     )
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=max(args.epochs, 1), eta_min=1.0e-4
+        optimizer, T_max=max(args.epochs, 1), eta_min=min(1.0e-4, args.learning_rate * 0.1)
     )
     best_loss = float("inf")
     best_state = None
     history = []
     non_improving_epochs = 0
     started = time.time()
+    baseline_validation = evaluate(model, validation_loader, device, args.loss_profile)
+    best_epoch = 0
+    if args.init_model or args.init_checkpoint:
+        best_loss = baseline_validation["total"]
+        best_state = {
+            name: value.detach().cpu().clone()
+            for name, value in model.state_dict().items()
+        }
+    print(json.dumps({"baseline_validation": baseline_validation}), flush=True)
 
     print(
         f"train device={device} tracks={len(train_files)} "
@@ -984,15 +1135,21 @@ def main() -> int:
         train_total = 0.0
         batches = 0
         for features, targets in train_loader:
+            if args.max_train_batches and batches>=args.max_train_batches: break
             optimizer.zero_grad(set_to_none=True)
+            from hssr_runtime_training import supervised_prediction
+            prediction,target=supervised_prediction(model,features.to(device),targets.to(device),
+                model.burn_in,model.control_delay)
             values = loss_components(
-                model(features.to(device)), targets.to(device), args.loss_profile
+                prediction, target, args.loss_profile, model.runtime_aware
             )
             values["total"].backward()
             nn.utils.clip_grad_norm_(model.parameters(), 2.0)
             optimizer.step()
             train_total += float(values["total"].detach().cpu())
             batches += 1
+            if batches % 16 == 0:
+                print(f'epoch={epoch} train_batches={batches} elapsed={time.time()-started:.1f}s', flush=True)
         scheduler.step()
         validation = evaluate(
             model, validation_loader, device, args.loss_profile
@@ -1007,11 +1164,17 @@ def main() -> int:
         print(json.dumps(record, sort_keys=True), flush=True)
         if validation["total"] < best_loss:
             best_loss = validation["total"]
+            best_epoch = epoch
             best_state = {
                 name: value.detach().cpu().clone()
                 for name, value in model.state_dict().items()
             }
             non_improving_epochs = 0
+            torch.save(
+                {"state_dict": best_state, "mean": mean, "inv_std": inv_std,
+                 "epoch": epoch, "validation": validation},
+                args.output / "best_so_far.pt",
+            )
         else:
             non_improving_epochs += 1
             if (
@@ -1028,7 +1191,7 @@ def main() -> int:
     if best_state is None:
         raise RuntimeError("training produced no checkpoint")
     model.load_state_dict(best_state)
-    heldout = evaluate(model, test_loader, device, args.loss_profile)
+    heldout = evaluate(model, test_loader, device, args.loss_profile) if test_files else None
     model.cpu()
     checkpoint = args.output / "hssr_development.pt"
     torch.save(
@@ -1038,6 +1201,12 @@ def main() -> int:
     export = export_model(model, mean, inv_std, args.output / "hssr_model.bin")
     manifest = {
         "development_only": True,
+        "runtime_aware": args.runtime_aware,
+        "routing_head_only": args.routing_head_only,
+        "sequence": args.sequence, "burn_in": args.burn_in,
+        "control_delay": args.control_delay,
+        "max_train_batches": args.max_train_batches,
+        "device": str(device), "cpu_threads": torch.get_num_threads(),
         "training_license_warning": (
             "MUSDB-derived checkpoint; do not ship commercially without legal clearance"
         ),
@@ -1046,6 +1215,9 @@ def main() -> int:
         "heldout_tracks": [path.name for path in test_sources],
         "feature_count": FEATURES,
         "routing_target": args.routing_target,
+        "cache_only": args.cache_only,
+        "init_model": str(args.init_model.resolve()) if args.init_model else None,
+        "normalization_policy": "preserve warm-start normalization" if args.init_model or args.init_checkpoint else "training-only fitted",
         "loss_profile": args.loss_profile,
         "cache_root": str(cache_root.resolve()),
         "init_checkpoint": (
@@ -1057,6 +1229,9 @@ def main() -> int:
         ],
         "extra_train_cache_count": len(extra_train_files),
         "extra_validation_cache_count": len(extra_validation_files),
+        "extra_source_sha256": {
+            "train": sorted(identities[0]), "validation": sorted(identities[1])
+        } if args.cache_only else None,
         "hidden_size": HIDDEN,
         "output_count": OUTPUTS,
         "control_rate_hz": SAMPLE_RATE / (HOP_SIZE * CONTROL_HOPS),
@@ -1069,6 +1244,8 @@ def main() -> int:
         "elapsed_seconds": time.time() - started,
         "history": history,
         "best_validation_total": best_loss,
+        "best_epoch": best_epoch,
+        "baseline_validation": baseline_validation,
         "heldout": heldout,
         "export": export,
     }

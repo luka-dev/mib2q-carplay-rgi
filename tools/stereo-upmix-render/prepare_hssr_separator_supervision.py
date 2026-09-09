@@ -382,7 +382,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--teacher-root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--require-native-teacher", action="store_true",
+                        help="reject missing/stale teachers and bind cache provenance to native-rate float pairs")
     parser.add_argument("--validation-fraction", type=float, default=0.20)
+    parser.add_argument("--input-gains-db", type=float, nargs="+", default=[0.0],
+                        help="recompute source features at these nonpositive levels; targets remain semantic, not Sound Check gain")
     parser.add_argument(
         "--target-policy",
         choices=("semantic-v9", "selection-v11"),
@@ -428,7 +432,12 @@ def main() -> int:
         raise RuntimeError("--validation-fraction must be in [0, 0.5)")
     if not 0.0 < args.vocal_negative_fraction <= 1.0:
         raise RuntimeError("--vocal-negative-fraction must be in (0, 1]")
+    if (len(set(args.input_gains_db)) != len(args.input_gains_db)
+            or any(not math.isfinite(g) or g < -24 or g > 0 for g in args.input_gains_db)):
+        raise RuntimeError("input gains must be unique finite values in [-24, 0] dB")
     manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+    if args.require_native_teacher and args.output.exists():
+        raise RuntimeError("native teacher caches require a fresh output directory")
     source_ids = [str(item["source_sha256"]) for item in manifest["items"]]
     validation = split_sources(source_ids, args.validation_fraction)
     roformer_sources = {
@@ -459,7 +468,19 @@ def main() -> int:
         item_id = str(item["id"])
         teacher_dir = args.teacher_root / item_id
         if not teacher_dir.is_dir():
+            if args.require_native_teacher:
+                raise RuntimeError(f"missing native teacher: {teacher_dir}")
             continue
+        provenance_hash = "legacy-unverified"
+        if args.require_native_teacher:
+            from prepare_hssr_native_teacher import POLICY, digest, valid_pair
+            provenance_path = teacher_dir / "teacher-provenance.json"
+            identity = json.loads(provenance_path.read_text())["identity"]
+            if (identity["policy"] != POLICY or
+                    identity["source_sha256"] != digest(Path(item["stereo"])) or
+                    not valid_pair(teacher_dir, identity)):
+                raise RuntimeError(f"invalid native teacher provenance: {teacher_dir}")
+            provenance_hash = digest(provenance_path)
         mixture = read_stereo(Path(str(item["stereo"])))
         demucs_paths = locate_demucs_stems(teacher_dir)
         roformer_vocals = locate_roformer_stem(teacher_dir, "Vocals")
@@ -479,6 +500,8 @@ def main() -> int:
             stems["RoVocals"] = read_stereo(roformer_vocals)
             stems["RoInstrumental"] = read_stereo(roformer_instrumental)
         frames = min([len(mixture), *(len(audio) for audio in stems.values())])
+        if args.require_native_teacher and any(len(a) != len(mixture) for a in stems.values()):
+            raise RuntimeError(f"native teacher alignment mismatch: {teacher_dir}")
         mixture = mixture[:frames]
         stems = {name: audio[:frames] for name, audio in stems.items()}
 
@@ -501,33 +524,39 @@ def main() -> int:
             targets: np.ndarray,
             counterfactual: str | None = None,
         ) -> int:
-            features = make_features(audio, spec)[select].astype(np.float32)
             selected_targets = targets[select].astype(np.float32)
-            output = args.output / split / f"{cache_id}.npz"
-            output.parent.mkdir(parents=True, exist_ok=True)
-            np.savez_compressed(
-                output,
-                features=features,
-                targets=selected_targets,
-                routing_locked=np.asarray(
-                    args.target_policy == "selection-v11", dtype=np.bool_
-                ),
-            )
-            row: dict[str, object] = {
-                "id": cache_id,
-                "title": title,
-                "source_sha256": source_id,
-                "split": split,
-                "control_frames": int(len(features)),
-                "roformer_vocal_teacher": roformer_vocals is not None,
-                "demucs_teacher": demucs_paths is not None,
-                "target_policy": args.target_policy,
-                "cache": str(output.resolve()),
-            }
-            if counterfactual is not None:
-                row["counterfactual"] = counterfactual
-            rows.append(row)
-            return len(features)
+            begin, retained = 0, len(selected_targets)
+            if counterfactual == "isolated-vocal-zero-rear":
+                retained = min(retained, max(64, int(round(retained * args.vocal_negative_fraction))))
+                if retained < len(selected_targets):
+                    energy = np.convolve(selected_targets[:, BANDS * 8],
+                                         np.ones(retained, dtype=np.float32), mode="valid")
+                    begin = int(np.argmax(energy))
+            selected_targets = selected_targets[begin:begin + retained]
+            for gain_db in args.input_gains_db:
+                gain = np.float32(10.0 ** (gain_db / 20.0))
+                # Recompute ALL features from scaled waveform/spectrum. Merely
+                # shifting log-energy misses epsilon floors/coherence/crest.
+                features = make_features(audio * gain, spec * gain)[select]
+                features = features[begin:begin + retained].astype(np.float32)
+                level_id = cache_id if gain_db == 0 else f"{cache_id}-level{gain_db:g}db"
+                output = args.output / split / f"{level_id}.npz"
+                output.parent.mkdir(parents=True, exist_ok=True)
+                np.savez_compressed(output, features=features, targets=selected_targets,
+                    routing_locked=np.asarray(args.target_policy == "selection-v11", dtype=np.bool_),
+                    teacher_provenance_sha256=np.asarray(provenance_hash),
+                    source_sha256=np.asarray(source_id), input_gain_db=np.asarray(gain_db))
+                row = {"id": level_id, "title": title, "source_sha256": source_id,
+                       "split": split, "control_frames": int(len(features)),
+                       "roformer_vocal_teacher": roformer_vocals is not None,
+                       "demucs_teacher": demucs_paths is not None,
+                       "target_policy": args.target_policy, "input_gain_db": gain_db,
+                       "teacher_provenance_sha256": provenance_hash,
+                       "cache": str(output.resolve())}
+                if counterfactual is not None:
+                    row["counterfactual"] = counterfactual
+                rows.append(row)
+            return retained
 
         if args.target_policy == "selection-v11":
             targets = selection_v11_targets(
@@ -556,50 +585,9 @@ def main() -> int:
         if args.include_vocal_negatives and "RoVocals" in stems:
             vocal_audio = stems["RoVocals"]
             vocal_spec = stem_specs["RoVocals"]
-            vocal_features = make_features(vocal_audio, vocal_spec)
             vocal_targets = vocal_protection_targets(vocal_spec)
-            vocal_features = vocal_features[select].astype(np.float32)
-            vocal_targets = vocal_targets[select].astype(np.float32)
-            retained = max(
-                64,
-                int(round(len(vocal_features) * args.vocal_negative_fraction)),
-            )
-            retained = min(retained, len(vocal_features))
-            if retained < len(vocal_features):
-                lead_activity = vocal_targets[:, BANDS * 8]
-                window_energy = np.convolve(
-                    lead_activity,
-                    np.ones(retained, dtype=np.float32),
-                    mode="valid",
-                )
-                begin = int(np.argmax(window_energy))
-                vocal_features = vocal_features[begin:begin + retained]
-                vocal_targets = vocal_targets[begin:begin + retained]
-            vocal_output = (
-                args.output / split / f"{item_id}-vocal-negative.npz"
-            )
-            np.savez_compressed(
-                vocal_output,
-                features=vocal_features,
-                targets=vocal_targets,
-                routing_locked=np.asarray(
-                    args.target_policy == "selection-v11", dtype=np.bool_
-                ),
-            )
-            rows.append(
-                {
-                    "id": f"{item_id}-vocal-negative",
-                    "title": f"{item['title']} [isolated vocal protection]",
-                    "source_sha256": source_id,
-                    "split": split,
-                    "control_frames": int(len(vocal_features)),
-                    "roformer_vocal_teacher": True,
-                    "demucs_teacher": demucs_paths is not None,
-                    "target_policy": args.target_policy,
-                    "counterfactual": "isolated-vocal-zero-rear",
-                    "cache": str(vocal_output.resolve()),
-                }
-            )
+            emit_cache(f"{item_id}-vocal-negative", f"{item['title']} [isolated vocal protection]",
+                       vocal_audio, vocal_spec, vocal_targets, "isolated-vocal-zero-rear")
         if args.include_instrumental_positives and "RoInstrumental" in stems:
             instrumental_spec = stem_specs["RoInstrumental"]
             instrumental_targets = selection_v11_targets(
@@ -661,6 +649,9 @@ def main() -> int:
         "isolated_instrumental_positives": args.include_instrumental_positives,
         "counterfactual_mixes": args.counterfactual_mixes,
         "source_manifest": str(args.manifest.resolve()),
+        "source_manifest_sha256": hashlib.sha256(args.manifest.read_bytes()).hexdigest(),
+        "generator_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        "native_teacher_required": args.require_native_teacher,
         "items": rows,
     }
     args.output.mkdir(parents=True, exist_ok=True)

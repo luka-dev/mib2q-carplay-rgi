@@ -84,9 +84,10 @@ int spa_soundcheck_main_gain(int targetDb, const float parameters[3],
 
     /* This is deliberately not C99 roundf(): Pioneer uses floorf(x + .5),
      * which resolves negative half-dB values toward zero. */
-    rounded = (int)floorf(desired + 0.5f);
-    if (rounded > 20) rounded = 20;
-    if (rounded < -128) rounded = -128;
+    /* Bound before integer conversion, including extreme finite metadata. */
+    if (desired > 20.0f) rounded = 20;
+    else if (desired < -128.0f) rounded = -128;
+    else rounded = (int)floorf(desired + 0.5f);
     if (roundedDb) *roundedDb = rounded;
     if (linearGain) *linearGain = spa_soundcheck_db_gain((float)rounded);
     return 1;
@@ -203,9 +204,20 @@ static void spa_soundcheck_update_fallback(spa_soundcheck_state_t *state,
 
 static int16_t spa_soundcheck_s16(float value)
 {
+    if (!spa_soundcheck_finite(value)) return 0;
     if (value >= 32767.0f) return 32767;
     if (value <= -32768.0f) return -32768;
     return (int16_t)(value >= 0.0f ? value + 0.5f : value - 0.5f);
+}
+
+static float spa_soundcheck_next_gain(spa_soundcheck_state_t *state)
+{
+    if (state->rampRemaining) {
+        state->currentGain += state->gainStep;
+        state->rampRemaining--;
+        if (!state->rampRemaining) state->currentGain = state->targetGain;
+    }
+    return state->currentGain;
 }
 
 void spa_soundcheck_observe_s16(spa_soundcheck_state_t *state,
@@ -230,18 +242,99 @@ void spa_soundcheck_apply_s16(spa_soundcheck_state_t *state,
     for (frame = 0; frame < frames; frame++) {
         float gain;
 
-        if (state->rampRemaining) {
-            state->currentGain += state->gainStep;
-            state->rampRemaining--;
-            if (!state->rampRemaining) state->currentGain = state->targetGain;
-        }
-        gain = state->currentGain;
+        gain = spa_soundcheck_next_gain(state);
         if (gain == 1.0f) continue;
         for (channel = 0; channel < channels; channel++) {
             size_t at = frame * channels + channel;
             samples[at] = spa_soundcheck_s16((float)samples[at] * gain);
         }
     }
+}
+
+void spa_soundcheck_apply_f32(spa_soundcheck_state_t *state,
+                              float *samples, size_t frames, unsigned channels)
+{
+    size_t frame, channel;
+    if (!state || !samples || !frames || !channels || !state->config.enabled ||
+        !state->haveAppliedGain) return;
+    for (frame = 0; frame < frames; frame++) {
+        float gain = spa_soundcheck_next_gain(state);
+        if (gain == 1.0f) continue;
+        for (channel = 0; channel < channels; channel++)
+            samples[frame * channels + channel] *= gain;
+    }
+}
+
+void spa_soundcheck_limit_matrix_f32(spa_soundcheck_state_t *state,
+                                     float *samples, size_t frames,
+                                     unsigned channels, const float *matrix,
+                                     unsigned monitored_channels)
+{
+    float ceiling, release_step;
+    size_t frame, channel, bus;
+    if (!state || !samples || !frames || !channels || !state->config.enabled ||
+        state->config.limiterMode != SPA_SOUNDCHECK_LIMITER_SAMPLE_PEAK) return;
+    if ((!matrix && monitored_channels) || (matrix && !monitored_channels)) return;
+    for (channel = 0; channel < channels; channel++)
+        for (bus = 0; bus < monitored_channels; bus++)
+            if (!spa_soundcheck_finite(matrix[channel * monitored_channels + bus])) return;
+    ceiling = 32767.0f * spa_soundcheck_db_gain(state->config.limiterCeilingDbfs);
+    release_step = 1.0f / ((float)state->config.sampleRate *
+        SPA_SOUNDCHECK_LIMITER_RELEASE_MS / 1000.0f);
+    for (frame = 0; frame < frames; frame++) {
+        float peak = 0.0f;
+        float limiter = state->limiterGain;
+        int invalid = 0;
+        for (channel = 0; channel < channels; channel++) {
+            float value = samples[frame * channels + channel];
+            if (!spa_soundcheck_finite(value)) invalid = 1;
+            else if (fabsf(value) > peak) peak = fabsf(value);
+        }
+        for (bus = 0; bus < monitored_channels; bus++) {
+            float value = 0.0f;
+            for (channel = 0; channel < channels; channel++)
+                value += samples[frame * channels + channel] *
+                    matrix[channel * monitored_channels + bus];
+            if (!spa_soundcheck_finite(value)) invalid = 1;
+            else if (fabsf(value) > peak) peak = fabsf(value);
+        }
+        /* Silence the complete linked frame rather than propagate NaN or
+         * alter one channel independently. Do not poison release state. */
+        if (invalid) {
+            for (channel = 0; channel < channels; channel++)
+                samples[frame * channels + channel] = 0.0f;
+            continue;
+        }
+        if (peak > 0.0f && limiter > ceiling / peak) {
+            limiter = ceiling / peak;
+            state->limitedFrames++;
+        } else if (limiter < 1.0f) {
+            limiter += release_step;
+            if (limiter > 1.0f) limiter = 1.0f;
+            if (peak > 0.0f && limiter > ceiling / peak) limiter = ceiling / peak;
+        }
+        state->limiterGain = limiter;
+        for (channel = 0; channel < channels; channel++)
+            samples[frame * channels + channel] *= limiter;
+    }
+}
+
+void spa_soundcheck_limit_f32(spa_soundcheck_state_t *state,
+                              float *samples, size_t frames, unsigned channels)
+{
+    spa_soundcheck_limit_matrix_f32(state, samples, frames, channels, NULL, 0);
+}
+
+void spa_soundcheck_quantize_s16(const float *samples, int16_t *output,
+                                 size_t frames, unsigned channels)
+{
+    size_t frame, channel;
+    if (!samples || !output || !channels) return;
+    for (frame = 0; frame < frames; frame++)
+        for (channel = 0; channel < channels; channel++) {
+            size_t at = frame * channels + channel;
+            output[at] = spa_soundcheck_s16(samples[at]);
+        }
 }
 
 void spa_soundcheck_process_s16(spa_soundcheck_state_t *state,

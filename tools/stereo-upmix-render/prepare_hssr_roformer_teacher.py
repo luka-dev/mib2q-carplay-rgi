@@ -12,6 +12,8 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import hashlib
+import importlib.metadata
 from pathlib import Path
 import time
 
@@ -68,11 +70,12 @@ def main() -> int:
         item for item in items
         if not valid_pair(args.teacher_root / str(item["id"]))
     ]
+    ready_count = len(items) - len(pending)
     if args.limit:
         pending = pending[:args.limit]
 
     print(
-        f"teacher corpus={len(items)} ready={len(items) - len(pending)} "
+        f"teacher corpus={len(items)} ready={ready_count} "
         f"pending={len(pending)}",
         flush=True,
     )
@@ -87,6 +90,9 @@ def main() -> int:
         sample_rate=48_000,
     )
     separator.load_model(args.model)
+    model_path = args.model_dir / args.model
+    model_sha256 = hashlib.sha256(model_path.read_bytes()).hexdigest()
+    print(f"teacher device={separator.torch_device} model_sha256={model_sha256}", flush=True)
 
     started = time.monotonic()
     for index, item in enumerate(pending, start=1):
@@ -119,6 +125,10 @@ def main() -> int:
         "private_audio": True,
         "source_manifest": str(args.manifest.resolve()),
         "model": args.model,
+        "model_sha256": model_sha256,
+        "audio_separator_version": importlib.metadata.version("audio-separator"),
+        "torch_version": importlib.metadata.version("torch"),
+        "device": str(separator.torch_device),
         "sample_rate": 48_000,
         "items": [
             {

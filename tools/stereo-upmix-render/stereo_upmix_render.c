@@ -5,9 +5,11 @@
  */
 
 #include "stereo_upmix.h"
+#include "soundcheck.h"
 
 #include <errno.h>
 #include <limits.h>
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -55,6 +57,13 @@ struct options {
     enum cli_lfe_mode lfe_mode;
     double surround_gain;
     const char *model_path;
+    int float_render;
+    int cabin_render;
+    int quiet_lfe;
+    int have_target;
+    int have_parameters;
+    int soundcheck_target;
+    float soundcheck_parameters[3];
 };
 
 static uint16_t load_u16le(const uint8_t *bytes)
@@ -348,7 +357,15 @@ static void usage(const char *program)
             "usage: %s [--mode off|hssr-universal] "
             "[--model HSSR.bin] "
             "[--lfe off|assist] [--surround 0.0..0.25] "
-            "INPUT.wav OUTPUT.wav\n",
+            "[--float-render|--cabin-render] [--soundcheck-target DB --soundcheck-params P0 P1 P2] "
+            "INPUT.wav OUTPUT.wav\n"
+            "  --float-render: experimental synthesis, linked -1 dBFS rail/matrix guard,\n"
+            "                  one final S16 conversion; not the shipping path.\n"
+            "  --cabin-render: source-aligned transfer, no synthetic rear floor/shelf,\n"
+            "                  restrained mono LFE assist; implies --float-render.\n"
+            "  --quiet-lfe: bass-only quiet assist; implies --float-render.\n"
+            "  Sound Check target/tuple are explicit offline protocol fixtures.\n"
+            "  --surround controls OUR rear gain, not the MMI Surround setting.\n",
             program);
 }
 
@@ -395,7 +412,7 @@ static int parse_gain(const char *text, double *gain)
     errno = 0;
     parsed = strtod(text, &end);
     if (errno != 0 || end == text || *end != '\0' ||
-        parsed < 0.0 || parsed > 0.25) return 0;
+        !isfinite(parsed) || parsed < 0.0 || parsed > 0.25) return 0;
     *gain = parsed;
     return 1;
 }
@@ -411,6 +428,10 @@ static int parse_options(int argc, char **argv, struct options *options)
     options->surround_gain =
         (double)SPA_STEREO_UPMIX_REAR_Q15_DEFAULT / 32768.0;
     options->model_path = NULL;
+    options->float_render = 0;
+    options->cabin_render = 0;
+    options->quiet_lfe = 0;
+    options->have_target = options->have_parameters = 0;
 
     for (index = 1; index < argc; index++) {
         const char *argument = argv[index];
@@ -418,6 +439,49 @@ static int parse_options(int argc, char **argv, struct options *options)
         if (strcmp(argument, "--help") == 0 || strcmp(argument, "-h") == 0) {
             usage(argv[0]);
             exit(0);
+        }
+        if (strcmp(argument, "--float-render") == 0) {
+            options->float_render = 1;
+            continue;
+        }
+        if (strcmp(argument, "--cabin-render") == 0) {
+            options->cabin_render = options->float_render = 1;
+            continue;
+        }
+        if (strcmp(argument, "--quiet-lfe") == 0) {
+            options->quiet_lfe = options->float_render = 1;
+            continue;
+        }
+        if (strcmp(argument, "--soundcheck-target") == 0) {
+            char *end;
+            long value;
+            if (++index >= argc) return 0;
+            errno = 0;
+            value = strtol(argv[index], &end, 10);
+            if (errno || end == argv[index] || *end || value < -128 || value > 127) {
+                fprintf(stderr, "error: Sound Check target must be an integer -128..127\n");
+                return 0;
+            }
+            options->soundcheck_target = (int)value;
+            options->have_target = 1;
+            continue;
+        }
+        if (strcmp(argument, "--soundcheck-params") == 0) {
+            int parameter;
+            for (parameter = 0; parameter < 3; parameter++) {
+                char *end;
+                float value;
+                if (++index >= argc) return 0;
+                errno = 0;
+                value = strtof(argv[index], &end);
+                if (errno || end == argv[index] || *end || !isfinite(value)) {
+                    fprintf(stderr, "error: Sound Check tuple must contain three finite numbers\n");
+                    return 0;
+                }
+                options->soundcheck_parameters[parameter] = value;
+            }
+            options->have_parameters = 1;
+            continue;
         }
         if (strcmp(argument, "--mode") == 0) {
             if (++index >= argc || !parse_mode(argv[index], &options->backend)) {
@@ -501,6 +565,11 @@ static int parse_options(int argc, char **argv, struct options *options)
         usage(argv[0]);
         return 0;
     }
+    if (options->have_target != options->have_parameters ||
+        (options->have_target && !options->float_render)) {
+        fprintf(stderr, "error: target and tuple require each other and --float-render\n");
+        return 0;
+    }
     return 1;
 }
 
@@ -519,6 +588,8 @@ static void make_upmix_config(const struct options *options,
                               struct spa_stereo_upmix_config *config)
 {
     spa_stereo_upmix_default_config(config);
+    spa_stereo_upmix_config_set_cabin(config, options->cabin_render);
+    spa_stereo_upmix_config_set_quiet_lfe(config, options->quiet_lfe);
     config->backend = options->backend;
     config->rear_gain_q15 =
         (uint32_t)(options->surround_gain * 32768.0 + 0.5);
@@ -538,7 +609,8 @@ static void make_upmix_config(const struct options *options,
 }
 
 static int render(FILE *input_file, FILE *output_file, uint32_t total_frames,
-                  const struct spa_stereo_upmix_config *config)
+                  const struct spa_stereo_upmix_config *config,
+                  const struct options *options)
 {
     /* Keep the complete FFT/WOLA state out of the host thread stack. */
     static struct spa_stereo_upmix state;
@@ -548,8 +620,25 @@ static int render(FILE *input_file, FILE *output_file, uint32_t total_frames,
                          WAV_OUTPUT_BLOCK_ALIGN];
     int16_t pcm2[SPA_STEREO_UPMIX_MAX_FRAMES * WAV_INPUT_CHANNELS];
     int16_t pcm6[SPA_STEREO_UPMIX_MAX_FRAMES * WAV_OUTPUT_CHANNELS];
+    float float6[SPA_STEREO_UPMIX_MAX_FRAMES * WAV_OUTPUT_CHANNELS];
+    spa_soundcheck_config_t gain_config;
+    spa_soundcheck_state_t gain_state;
+    float pre_gain_peak = 0.0f, post_gain_peak = 0.0f;
+    float guard_frame_peaks[SPA_STEREO_UPMIX_MAX_FRAMES];
+    float minimum_guard_gain = 1.0f;
+    uint64_t attenuated_frames = 0;
     uint32_t remaining = total_frames;
     int status;
+
+    spa_soundcheck_default_config(&gain_config);
+    gain_config.limiterMode = SPA_SOUNDCHECK_LIMITER_SAMPLE_PEAK;
+    spa_soundcheck_init(&gain_state, &gain_config, options->have_target, 1,
+        options->have_target ? options->soundcheck_target : 0);
+    if (options->have_parameters && !spa_soundcheck_update_main(&gain_state, 1,
+            options->soundcheck_parameters)) {
+        fprintf(stderr, "error: unusable Sound Check fixture\n");
+        return 0;
+    }
 
     status = spa_stereo_upmix_init(&state, config);
     if (status != SPA_STEREO_UPMIX_OK) {
@@ -578,11 +667,46 @@ static int render(FILE *input_file, FILE *output_file, uint32_t total_frames,
         for (sample = 0; sample < input_sample_count; sample++)
             pcm2[sample] = (int16_t)load_u16le(input_bytes + sample * 2);
 
-        status = spa_stereo_upmix_process_s16(&state, pcm2, frames, pcm6,
-                                              frames);
+        status = options->float_render
+            ? spa_stereo_upmix_process_f32(&state, pcm2, frames, float6, frames)
+            : spa_stereo_upmix_process_s16(&state, pcm2, frames, pcm6, frames);
         if (status != SPA_STEREO_UPMIX_OK) {
             fprintf(stderr, "error: upmixer failed (%d)\n", status);
             return 0;
+        }
+
+        if (options->float_render) {
+            for (sample = 0; sample < output_sample_count; sample++)
+                if (fabsf(float6[sample]) > pre_gain_peak)
+                    pre_gain_peak = fabsf(float6[sample]);
+            spa_soundcheck_apply_f32(&gain_state, float6, frames, WAV_OUTPUT_CHANNELS);
+            for (sample = 0; sample < output_sample_count; sample++)
+                if (fabsf(float6[sample]) > post_gain_peak)
+                    post_gain_peak = fabsf(float6[sample]);
+            for (sample = 0; sample < frames; sample++) {
+                unsigned channel;
+                guard_frame_peaks[sample] = 0.0f;
+                for (channel = 0; channel < WAV_OUTPUT_CHANNELS; channel++) {
+                    float value = fabsf(float6[sample * WAV_OUTPUT_CHANNELS + channel]);
+                    if (value > guard_frame_peaks[sample]) guard_frame_peaks[sample] = value;
+                }
+            }
+            spa_soundcheck_limit_matrix_f32(&gain_state, float6, frames,
+                WAV_OUTPUT_CHANNELS, spa_stereo_upmix_input_matrix(), 8);
+            for (sample = 0; sample < frames; sample++) {
+                unsigned channel;
+                float peak = 0.0f;
+                for (channel = 0; channel < WAV_OUTPUT_CHANNELS; channel++) {
+                    float value = fabsf(float6[sample * WAV_OUTPUT_CHANNELS + channel]);
+                    if (value > peak) peak = value;
+                }
+                if (guard_frame_peaks[sample] > 1.0e-10f) {
+                    float gain = peak / guard_frame_peaks[sample];
+                    if (gain < minimum_guard_gain) minimum_guard_gain = gain;
+                    if (gain < 0.9999f) attenuated_frames++;
+                }
+            }
+            spa_soundcheck_quantize_s16(float6, pcm6, frames, WAV_OUTPUT_CHANNELS);
         }
 
         for (sample = 0; sample < output_sample_count; sample++)
@@ -594,6 +718,14 @@ static int render(FILE *input_file, FILE *output_file, uint32_t total_frames,
         }
         remaining -= (uint32_t)frames;
     }
+
+    if (options->float_render)
+        fprintf(stderr, "experimental-float: pre-gain-peak=%.8f FS "
+            "post-gain-peak=%.8f FS gain=%.8f limiter-attacks=%llu "
+            "minimum-guard-gain=%.8f attenuated-frames=%llu total-frames=%u\n",
+            pre_gain_peak / 32768.0f, post_gain_peak / 32768.0f,
+            gain_state.currentGain, (unsigned long long)gain_state.limitedFrames,
+            minimum_guard_gain, (unsigned long long)attenuated_frames, total_frames);
 
     return 1;
 }
@@ -653,7 +785,7 @@ int main(int argc, char **argv)
         goto done;
     }
     output_created = 1;
-    if (!render(input_file, output_file, frames, &config)) goto done;
+    if (!render(input_file, output_file, frames, &config, &options)) goto done;
     if (fclose(output_file) != 0) {
         output_file = NULL;
         fprintf(stderr, "error: cannot finish %s: %s\n",
