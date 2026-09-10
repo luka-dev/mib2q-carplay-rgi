@@ -1,5 +1,10 @@
 # Discrete 5.1 CarPlay audio — everything known, and what is still open
 
+2026-09-10 call/Siri lifecycle update: buffered Media route claims now yield to
+stock main audio from Prepare through Stop. See [call-routing evidence and
+validation](AUDIO_CALL_ROUTING.md). Host-tested; live HU call verification is
+still pending.
+
 Status as of 2026-09-06. Discrete 5.1 CarPlay works end to end in the vehicle.
 The last two faults were both declaration/control mismatches rather than PCM
 corruption: the SAD header announced two active channels over six populated slots,

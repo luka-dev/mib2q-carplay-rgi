@@ -1290,6 +1290,8 @@ typedef struct {
     size_t httpProcessSlotOffset;
     size_t sessionClockOffset;
     size_t sessionFamilyOffset;
+    size_t audioStreamTypeOffset;
+    size_t audioStreamAudioTypeOffset;
     size_t httpMethodPointerOffset;
     size_t httpMethodLengthOffset;
     size_t httpBodyPointerOffset;
@@ -1302,7 +1304,7 @@ static const spa103_private_profile_t spa103_private_profiles[] = {
     {
         "MHI2Q AirPlay 210.81",
         0x0002e9acu, 0x0002f040u, 0x000302e0u, 0x000babccu,
-        0x64u, 5072u, 85u,
+        0x64u, 5072u, 85u, 108u, 112u,
         0x201cu, 0x2020u, 0x209cu, 0x20a8u,
         { 0xf0, 0x45, 0x2d, 0xe9, 0xdc, 0x41, 0x9f, 0xe5,
           0xdc, 0x61, 0x9f, 0xe5 },
@@ -3791,8 +3793,7 @@ typedef struct {
     uint64_t coldOpenAttempts;
     uint64_t coldOpenFailures;
     uint64_t coldOpenRetryAfterNs;
-    uint64_t detachedRouteReacquireAfterNs;
-    int      hookMediaRouteRequested; /* hook owns DSI Media route until stock type-100 takes over */
+    spa_media_route_t route;
     uint64_t coldMediaRouteRequests;
     uint64_t coldMediaRouteFailures;
 } spa_pcm_sink_t;
@@ -3803,6 +3804,90 @@ static spa_pcm_sink_t spa_pcm_sink = {
 };
 
 static int spa_sink_device_supports_voices(snd_pcm_t *handle, unsigned voices);
+static uint64_t spa_monotonic_ns(void);
+
+/* MU1316 libairplay: Prepare @0x4a9d0 reads type/audioType before invoking
+ * s_audioTypeCallback and waiting for HMI. Stop @0x4a2f8 joins the workers and
+ * invokes teardown synchronously. QSA open/close alone cannot bracket those
+ * callbacks. Only read the private object on the fingerprinted firmware above.
+ * Do not classify by audioType alone: alternate 101 has its own independent
+ * route. All main 100 purposes (including default/alert) have stock priority. */
+static int spa_stock_main_audio_type(const void *stream, int32_t *audioType)
+{
+    const spa103_private_profile_t *profile;
+    int32_t streamType;
+    if (!stream || (!spa_enabled() && !spa_audio_config()->buffered)) return 0;
+    profile = spa103_private_profile();
+    if (!profile) return 0;
+    memcpy(&streamType, (const uint8_t *)stream + profile->audioStreamTypeOffset,
+           sizeof(streamType));
+    if (streamType != 100) return 0;
+    memcpy(audioType, (const uint8_t *)stream + profile->audioStreamAudioTypeOffset,
+           sizeof(*audioType));
+    return 1;
+}
+
+static int spa_stock_main_audio_begin(const void *stream, int32_t audioType,
+                                       const char *phase)
+{
+    int added;
+    pthread_mutex_lock(&spa_pcm_sink.ioLock);
+    pthread_mutex_lock(&spa_pcm_sink.lock);
+    added = spa_media_route_stock_begin(&spa_pcm_sink.route, stream);
+    pthread_mutex_unlock(&spa_pcm_sink.lock);
+    STATE_TRACE("AUDIO_ROUTE", "action=stock_begin phase=%s stream=%p audio_type=%d tracked=%d",
+                phase, stream, (int)audioType, added);
+    pthread_mutex_unlock(&spa_pcm_sink.ioLock);
+    if (added < 0)
+        LOG_ERROR(LOG_MODULE, "audio route: main stream tracking full; hook claims disabled");
+    (void)audioType;
+    (void)phase;
+    return added;
+}
+
+static void spa_stock_main_audio_end(const void *stream, const char *phase)
+{
+    int removed, blocked;
+    pthread_mutex_lock(&spa_pcm_sink.ioLock);
+    pthread_mutex_lock(&spa_pcm_sink.lock);
+    removed = spa_media_route_stock_end(&spa_pcm_sink.route, stream, spa_monotonic_ns());
+    blocked = spa_media_route_blocked(&spa_pcm_sink.route);
+    pthread_mutex_unlock(&spa_pcm_sink.lock);
+    STATE_TRACE("AUDIO_ROUTE", "action=stock_end phase=%s stream=%p removed=%d blocked=%d",
+                phase, stream, removed, blocked);
+    pthread_mutex_unlock(&spa_pcm_sink.ioLock);
+    (void)removed;
+    (void)blocked;
+    (void)phase;
+}
+
+HOOK_EXPORT int AudioStreamPrepare(void *stream)
+{
+    static int (*real)(void *);
+    int32_t audioType = 0;
+    int mainAudio, added = 0, result;
+    if (!real) real = (int (*)(void *))dlsym(RTLD_NEXT, "AudioStreamPrepare");
+    if (!real) return -6740;
+    mainAudio = spa_stock_main_audio_type(stream, &audioType);
+    if (mainAudio) added = spa_stock_main_audio_begin(stream, audioType, "prepare");
+    result = real(stream); /* never hold ioLock through HMI ACK / QSA re-entry */
+    if (mainAudio && added == 1 && result != 0)
+        spa_stock_main_audio_end(stream, "prepare_failed");
+    return result;
+}
+
+HOOK_EXPORT void AudioStreamStop(void *stream, unsigned char drain)
+{
+    static void (*real)(void *, unsigned char);
+    int32_t audioType = 0;
+    int mainAudio;
+    if (!real) real = (void (*)(void *, unsigned char))dlsym(RTLD_NEXT, "AudioStreamStop");
+    if (!real) return;
+    mainAudio = spa_stock_main_audio_type(stream, &audioType);
+    if (mainAudio) (void)spa_stock_main_audio_begin(stream, audioType, "stop");
+    real(stream, drain); /* workers and stock tornDown complete before unblocking */
+    if (mainAudio) spa_stock_main_audio_end(stream, "stop_done");
+}
 
 /* Caller holds ioLock, but not lock.  Keeping the main-program callback out of
  * spa_pcm_sink.lock avoids re-entrancy through the active-object dispatcher.
@@ -3815,7 +3900,11 @@ static int spa_pcm_sink_request_hook_media_route(const char *owner,
     int alreadyRequested;
 
     pthread_mutex_lock(&spa_pcm_sink.lock);
-    alreadyRequested = spa_pcm_sink.hookMediaRouteRequested;
+    if (!spa_media_route_can_request(&spa_pcm_sink.route, spa_monotonic_ns())) {
+        pthread_mutex_unlock(&spa_pcm_sink.lock);
+        return 0;
+    }
+    alreadyRequested = spa_pcm_sink.route.hook_owned;
     pthread_mutex_unlock(&spa_pcm_sink.lock);
     if (alreadyRequested) return 1;
 
@@ -3843,8 +3932,8 @@ static int spa_pcm_sink_request_hook_media_route(const char *owner,
 
     callback(SPA_DIO_AUDIO_TYPE_MEDIA, 0);
     pthread_mutex_lock(&spa_pcm_sink.lock);
-    spa_pcm_sink.hookMediaRouteRequested = 1;
-    spa_pcm_sink.detachedRouteReacquireAfterNs = 0;
+    spa_pcm_sink.route.hook_owned = 1;
+    spa_pcm_sink.route.reacquire_after_ns = 0;
     spa_pcm_sink.coldMediaRouteRequests++;
     pthread_mutex_unlock(&spa_pcm_sink.lock);
     STATE_TRACE("AUDIO_ROUTE",
@@ -3859,9 +3948,17 @@ static int spa_pcm_sink_request_hook_media_route(const char *owner,
     return 1;
 }
 
+/* Caller holds ioLock through the callback, so stock cannot begin in between
+ * checking ownership and publishing the global -1 audio type. */
 static void spa_pcm_sink_release_cold_media_route(void)
 {
     static spa_dio_audio_torn_down_callback_t callback;
+    int release;
+
+    pthread_mutex_lock(&spa_pcm_sink.lock);
+    release = spa_media_route_take_release(&spa_pcm_sink.route);
+    pthread_mutex_unlock(&spa_pcm_sink.lock);
+    if (!release) return;
 
     if (!callback)
         callback = (spa_dio_audio_torn_down_callback_t)
@@ -4097,7 +4194,6 @@ static void spa_pcm_sink_close_detached(const char *reason)
     static spa_snd_close_t realClose;
     snd_pcm_t *handle = 0;
     uint64_t writes = 0, zeroWrites = 0;
-    int releaseMediaRoute = 0;
     int result = 0;
 
     pthread_mutex_lock(&spa_pcm_sink.ioLock);
@@ -4116,27 +4212,23 @@ static void spa_pcm_sink_close_detached(const char *reason)
         spa_pcm_sink.outputChannels = 0;
         spa_pcm_sink_reset_detached_clock_locked();
     }
-    if (spa_pcm_sink.hookMediaRouteRequested) {
-        spa_pcm_sink.hookMediaRouteRequested = 0;
-        releaseMediaRoute = 1;
-    }
     if (!spa_pcm_sink.handle) {
         spa_pcm_sink.coldOpenAttempts = 0;
         spa_pcm_sink.coldOpenFailures = 0;
         spa_pcm_sink.coldOpenRetryAfterNs = 0;
-        spa_pcm_sink.detachedRouteReacquireAfterNs = 0;
+        spa_pcm_sink.route.reacquire_after_ns = 0;
     }
     pthread_mutex_unlock(&spa_pcm_sink.lock);
     if (!handle) {
+        spa_pcm_sink_release_cold_media_route();
         pthread_mutex_unlock(&spa_pcm_sink.ioLock);
-        if (releaseMediaRoute) spa_pcm_sink_release_cold_media_route();
         return;
     }
 
     if (!realClose) realClose = (spa_snd_close_t)dlsym(RTLD_NEXT, "snd_pcm_close");
     result = realClose ? realClose(handle) : -1;
+    spa_pcm_sink_release_cold_media_route();
     pthread_mutex_unlock(&spa_pcm_sink.ioLock);
-    if (releaseMediaRoute) spa_pcm_sink_release_cold_media_route();
     LOG_WARN(LOG_MODULE,
              "audio sink: closed detached %s handle=%p reason=%s writes=%llu zero=%llu result=%d",
              SPA_PCM_SINK_NAME, handle, reason ? reason : "?",
@@ -4179,7 +4271,8 @@ static int spa_pcm_sink_detached_pending(size_t *pendingOut)
 
     pthread_mutex_lock(&spa_pcm_sink.lock);
     if (spa_pcm_sink.detached && spa_pcm_sink.handle &&
-        spa_pcm_sink.expandedParams) {
+        spa_pcm_sink.expandedParams &&
+        spa_media_route_can_request(&spa_pcm_sink.route, spa_monotonic_ns())) {
         detached = 1;
         channels = spa_pcm_sink.outputChannels;
     }
@@ -4240,39 +4333,8 @@ static void spa_pcm_sink_write_one_detached_period(void)
         pthread_mutex_lock(&spa_pcm_sink.ioLock);
         pthread_mutex_lock(&spa_pcm_sink.lock);
         if (!spa_pcm_sink.detached || !spa_pcm_sink.handle ||
-            !spa_pcm_sink.expandedParams) {
-            pthread_mutex_unlock(&spa_pcm_sink.lock);
-            pthread_mutex_unlock(&spa_pcm_sink.ioLock);
-            return;
-        }
-        {
-            uint64_t nowNs = spa_monotonic_ns();
-            if (spa_media_route_reacquire_due(
-                    spa_pcm_sink.detached,
-                    spa_pcm_sink.hookMediaRouteRequested,
-                    spa_pcm_sink.detachedRouteReacquireAfterNs, nowNs)) {
-                /* Claim this attempt while ioLock excludes a simultaneous
-                 * stock reopen.  The Pioneer callback stays outside the main
-                 * state lock because its active-object dispatch can re-enter. */
-                spa_pcm_sink.detachedRouteReacquireAfterNs = 0;
-                reacquireMediaRoute = 1;
-            }
-        }
-        pthread_mutex_unlock(&spa_pcm_sink.lock);
-        if (reacquireMediaRoute &&
-            !spa_pcm_sink_request_hook_media_route(
-                "detached_buffered", "stock_type100_torn_down")) {
-            uint64_t nowNs = spa_monotonic_ns();
-            pthread_mutex_lock(&spa_pcm_sink.lock);
-            if (spa_pcm_sink.detached &&
-                !spa_pcm_sink.hookMediaRouteRequested)
-                spa_pcm_sink.detachedRouteReacquireAfterNs =
-                    nowNs + SPA_MEDIA_ROUTE_RETRY_DELAY_NS;
-            pthread_mutex_unlock(&spa_pcm_sink.lock);
-        }
-        pthread_mutex_lock(&spa_pcm_sink.lock);
-        if (!spa_pcm_sink.detached || !spa_pcm_sink.handle ||
-            !spa_pcm_sink.expandedParams) {
+            !spa_pcm_sink.expandedParams ||
+            !spa_media_route_can_request(&spa_pcm_sink.route, spa_monotonic_ns())) {
             pthread_mutex_unlock(&spa_pcm_sink.lock);
             pthread_mutex_unlock(&spa_pcm_sink.ioLock);
             return;
@@ -4302,7 +4364,9 @@ static void spa_pcm_sink_write_one_detached_period(void)
             !spa_pcm_sink.expandedParams || !channels ||
             spa_pcm_sink.outputChannels != channels ||
             spa_pcm_sink.scratchBytes < bytes ||
-            pending < SPA_PCM_SINK_PERIOD_FRAMES) {
+            !spa_media_route_buffered_ready(&spa_pcm_sink.route, pending,
+                                             SPA_PCM_SINK_PERIOD_FRAMES,
+                                             spa_monotonic_ns())) {
 #if ENABLE_STATE_TRACE
             /* A sub-period 1024->768 cadence remainder is normal.  Diagnose
              * starvation only after the 100-ms QSA cadence budget expires;
@@ -4334,7 +4398,22 @@ static void spa_pcm_sink_write_one_detached_period(void)
         needsPrepare = spa_pcm_sink.detachedNeedsPrepare;
         probeStatus = ((spa_pcm_sink.detachedWrites + 1u) % 256u) == 0;
         previousWriteNs = spa_pcm_sink.detachedClock.lastWriteNs;
+        reacquireMediaRoute = !spa_pcm_sink.route.hook_owned;
         pthread_mutex_unlock(&spa_pcm_sink.lock);
+
+        /* A paused 103 receiver remains alive. Claim Media only after the
+         * playing/primed/full-period test above, never merely on a timer.
+         * ioLock excludes a stock main Prepare until this callback is queued. */
+        if (reacquireMediaRoute &&
+            !spa_pcm_sink_request_hook_media_route(
+                "detached_buffered", "stock_main_stopped")) {
+            pthread_mutex_lock(&spa_pcm_sink.lock);
+            spa_pcm_sink.route.reacquire_after_ns =
+                spa_monotonic_ns() + SPA_MEDIA_ROUTE_RETRY_DELAY_NS;
+            pthread_mutex_unlock(&spa_pcm_sink.lock);
+            pthread_mutex_unlock(&spa_pcm_sink.ioLock);
+            return; /* no unowned buffered writes after a failed declaration */
+        }
         /* Normally our flush interposer keeps this exact handle running across
          * CQNXSoundIF's close.  Retain the prepare fallback for the race where
          * type-103 became active between stock's flush and close: that flush was
@@ -4655,6 +4734,12 @@ static int spa_pcm_sink_bootstrap_buffered(void)
 
     pthread_mutex_lock(&spa_pcm_sink.ioLock);
     pthread_mutex_lock(&spa_pcm_sink.lock);
+    if (!spa_media_route_buffered_ready(&spa_pcm_sink.route, pending,
+                                         SPA_PCM_SINK_PERIOD_FRAMES, nowNs)) {
+        pthread_mutex_unlock(&spa_pcm_sink.lock);
+        pthread_mutex_unlock(&spa_pcm_sink.ioLock);
+        return 0;
+    }
     if (spa_pcm_sink.handle) {
         pthread_mutex_unlock(&spa_pcm_sink.lock);
         pthread_mutex_unlock(&spa_pcm_sink.ioLock);
@@ -4857,13 +4942,13 @@ HOOK_EXPORT int snd_pcm_open_name(snd_pcm_t **handle, char *name, int mode)
          * writes, so the ring has exactly one consumer throughout. */
         pthread_mutex_lock(&spa_pcm_sink.ioLock);
         pthread_mutex_lock(&spa_pcm_sink.lock);
-        spa_pcm_sink.detachedRouteReacquireAfterNs = 0;
-        if (spa_pcm_sink.hookMediaRouteRequested) {
+        spa_pcm_sink.route.reacquire_after_ns = 0;
+        if (spa_pcm_sink.route.hook_owned) {
             /* AudioStreamPrepare queued its own kAudioTypeMedia declaration
              * before reaching snd_pcm_open_name.  Stock now owns the matching
              * torn-down callback, whether the hook acquired the prior route
              * during cold bootstrap or after an earlier type-100 close. */
-            spa_pcm_sink.hookMediaRouteRequested = 0;
+            spa_pcm_sink.route.hook_owned = 0;
             routeHandoff = 1;
         }
         candidate = spa_pcm_sink.detached && spa_pcm_sink.handle &&
@@ -4929,7 +5014,7 @@ HOOK_EXPORT int snd_pcm_open_name(snd_pcm_t **handle, char *name, int mode)
         spa_pcm_sink.coldOpenAttempts = 0;
         spa_pcm_sink.coldOpenFailures = 0;
         spa_pcm_sink.coldOpenRetryAfterNs = 0;
-        spa_pcm_sink.detachedRouteReacquireAfterNs = 0;
+        spa_pcm_sink.route.reacquire_after_ns = 0;
         pthread_mutex_unlock(&spa_pcm_sink.lock);
         LOG_INFO(LOG_MODULE, "audio sink: captured %s playback handle=%p",
                  SPA_PCM_SINK_NAME, *handle);
@@ -5870,7 +5955,7 @@ HOOK_EXPORT int snd_pcm_close(snd_pcm_t *handle)
             spa_pcm_sink.detachedWrites = 0;
             spa_pcm_sink.detachedZeroWrites = 0;
             spa_pcm_sink.detachedRecoveries = 0;
-            spa_pcm_sink.detachedRouteReacquireAfterNs =
+            spa_pcm_sink.route.reacquire_after_ns =
                 spa_monotonic_ns() + SPA_MEDIA_ROUTE_REACQUIRE_DELAY_NS;
             spa_pcm_sink_reset_detached_clock_locked();
             pthread_mutex_unlock(&spa_pcm_sink.lock);
@@ -5922,7 +6007,7 @@ HOOK_EXPORT int snd_pcm_close(snd_pcm_t *handle)
             spa_pcm_sink.coldOpenAttempts = 0;
             spa_pcm_sink.coldOpenFailures = 0;
             spa_pcm_sink.coldOpenRetryAfterNs = 0;
-            spa_pcm_sink.detachedRouteReacquireAfterNs = 0;
+            spa_pcm_sink.route.reacquire_after_ns = 0;
         }
         pthread_mutex_unlock(&spa_pcm_sink.lock);
         LOG_INFO(LOG_MODULE, "audio sink: released %s handle=%p result=%d",

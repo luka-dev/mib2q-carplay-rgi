@@ -47,6 +47,11 @@ cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
     -lm -o "$OUT/switch"
 "$OUT/switch"
 
+printf '%-32s ' media_route_test
+cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
+    tests/media_route_test.c -lpthread -o "$OUT/media_route"
+"$OUT/media_route"
+
 printf '%-32s ' aac_fifo_test
 cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
     tests/aac_fifo_test.c -o "$OUT/aac_fifo"

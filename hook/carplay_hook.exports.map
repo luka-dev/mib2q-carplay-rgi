@@ -9,6 +9,8 @@
         AirPlayReceiverSessionTearDown;
         AirTunesServer_EnsureCreated;
         AudioSessionGetSupportedOutputFormats;
+        AudioStreamPrepare;
+        AudioStreamStop;
         CinemoCreateIAP;
         HIDDevicePostReport;
         HIDRemotePlaybackFillReport;

@@ -6,7 +6,6 @@
  */
 
 #include "audio/audio_hook.h"
-#include "audio/media_route.h"
 #include "audio/spatial_downmix.h"
 #include "audio/pcm_period.h"
 #include "audio/stereo_upmix.h"
@@ -237,22 +236,6 @@ static void assert_detached_render_pump_policy(void)
     }
 }
 
-static void assert_media_route_reacquire_policy(void)
-{
-    const uint64_t close_ns = UINT64_C(1000000000);
-    const uint64_t deadline = close_ns + SPA_MEDIA_ROUTE_REACQUIRE_DELAY_NS;
-
-    /* A retained type-103 owner must not race stock's close-adjacent
-     * audioTornDown callback, and a stock reopen/owned route cancels it. */
-    assert(!spa_media_route_reacquire_due(1, 0, deadline, close_ns));
-    assert(!spa_media_route_reacquire_due(
-        1, 0, deadline, deadline - UINT64_C(1)));
-    assert(spa_media_route_reacquire_due(1, 0, deadline, deadline));
-    assert(!spa_media_route_reacquire_due(0, 0, deadline, deadline));
-    assert(!spa_media_route_reacquire_due(1, 1, deadline, deadline));
-    assert(!spa_media_route_reacquire_due(1, 0, 0, deadline));
-}
-
 static enum spa_decoded_pcm_action render_cookie_pcm(
     struct spa_stereo_upmix *upmix, int codec_is_apac, uint32_t channels,
     uint32_t layout_tag, const int16_t *input, size_t frames, int16_t *output)
@@ -390,7 +373,6 @@ int main(void)
     assert_buffered_receiver_sizes();
     assert_whole_period_policy();
     assert_detached_render_pump_policy();
-    assert_media_route_reacquire_policy();
     fill_stereo();
     run_switch_sequence(SPA_STEREO_UPMIX_HSSR_UNIVERSAL);
     puts("buffered_pcm_switch_test: OK "
