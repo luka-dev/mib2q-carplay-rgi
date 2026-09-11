@@ -1,0 +1,154 @@
+{
+  "checks": {
+    "exact_allowlist": true,
+    "text_only": true,
+    "no_hidden_files_or_symlinks": true,
+    "pattern_scan_findings": [],
+    "checksums_match": true,
+    "original_sources_unchanged": true,
+    "archive_matches_folder": true,
+    "zip_metadata_normalized": true,
+    "standard_omx_calls": [
+      "OMX_AllocateBuffer",
+      "OMX_Deinit",
+      "OMX_EmptyThisBuffer",
+      "OMX_FillThisBuffer",
+      "OMX_FreeBuffer",
+      "OMX_FreeHandle",
+      "OMX_GetHandle",
+      "OMX_GetParameter",
+      "OMX_Init",
+      "OMX_SendCommand",
+      "OMX_SetParameter",
+      "OMX_UseBuffer"
+    ],
+    "hardware_output_backend_included": false,
+    "rgi_source_included": false,
+    "tests": {
+      "strict_host_build": "passed",
+      "host_asan_ubsan": "passed",
+      "framed_receive_fragmentation_empty_records": "passed",
+      "two_sessions_capture_exact_bytes": "passed",
+      "oversized_header_partial_body_rejected": "passed",
+      "shutdown_with_idle_connected_client": "passed",
+      "decoder_mock_asan_ubsan": "passed",
+      "decoder_mock_checks": "decoder mock passed: two sessions, config isolation, buffer recycle, rejected/oversized input, output error, release order",
+      "hardware_decode_display": "not tested; no hardware backend supplied"
+    },
+    "preserved_hook_tests": {
+      "helper_c99_asan_ubsan": "passed",
+      "dynamic_interposition": "passed",
+      "concurrent_calls": 256,
+      "original_arguments_status_errno": "preserved",
+      "missing_provider": "passed",
+      "host": "macOS, fictional provider with flat namespace/explicit dependency",
+      "output": [
+        "Dynamic hook: 256 calls, original arguments/status/errno preserved, exact concurrent counters.",
+        "Missing provider: deterministic ENOSYS, no recursive fallback."
+      ]
+    }
+  },
+  "archive": {
+    "path": "output/share/altscreen-renderer-share.zip",
+    "bytes": 22994,
+    "sha256": "84463120b462240df2fbcac8a5819d1c3c467d9ee4cc68802a5b67b5996a309d"
+  },
+  "files": [
+    {
+      "path": "CONTENTS.sha256",
+      "bytes": 1536,
+      "sha256": "f84f504bcf5d4aed0705914a437f7a6afe5a670e576b5ec09dbe7c442cc1e7e1"
+    },
+    {
+      "path": "PUBLIC_SOURCE.md",
+      "bytes": 1328,
+      "sha256": "64695e5d8a15e7ca315ad1dbcec8c146df7506f01ab8607b34f05ca95b325c3c"
+    },
+    {
+      "path": "README.md",
+      "bytes": 3081,
+      "sha256": "911d0477a16c68c062ee502860930141819ccab67b598273ac7f9a9afc5ca90f"
+    },
+    {
+      "path": "altscreen/avcc.c",
+      "bytes": 1026,
+      "sha256": "5cf7378e846fab730985bafa853ec6003673f5c268e8e7feb1c73f8a62661bfc"
+    },
+    {
+      "path": "altscreen/avcc.h",
+      "bytes": 954,
+      "sha256": "04cef64f161a5963d9848d0ef3cb7879238f54b7e019dcf77624df04215ed466"
+    },
+    {
+      "path": "altscreen/frame_io.c",
+      "bytes": 1207,
+      "sha256": "7e22332a9e01255d686818a518825fe30c96048b2e9264de55272fcfee2c067a"
+    },
+    {
+      "path": "altscreen/frame_io.h",
+      "bytes": 951,
+      "sha256": "a07d70f8bd4f2d7ff35af98b2c94b6034971d2ac4f10ba9d935bf3efdd9a33ec"
+    },
+    {
+      "path": "hook/NOTES.md",
+      "bytes": 1817,
+      "sha256": "36fd6023258dbefb2a2e3e87620da84b53652237d419560dfa5232b939931283"
+    },
+    {
+      "path": "hook/interpose_example.c",
+      "bytes": 2240,
+      "sha256": "e9400d603ff7e35a1f7a43b067d038367857a6ba4f42bf418fa4701ff02c436e"
+    },
+    {
+      "path": "hook/interpose_example.h",
+      "bytes": 806,
+      "sha256": "517391a8dee18e332d8f9e0a023959edd25f381167fe47fdd86201ef379bbc22"
+    },
+    {
+      "path": "hook/process_scope.c",
+      "bytes": 1525,
+      "sha256": "dab9fec012d671fe3a91f6f23ef2dcbf895f20aeb498a86c092577257c0c3303"
+    },
+    {
+      "path": "hook/process_scope.h",
+      "bytes": 923,
+      "sha256": "b822f4324140b78e7094b7e10686568475635c596924e2dbe7a8c9ba1a135c0f"
+    },
+    {
+      "path": "renderer/Makefile",
+      "bytes": 334,
+      "sha256": "5416fdd38de86e0f29307dcfcaeb78323804651ffaa8fa485243e21315745741"
+    },
+    {
+      "path": "renderer/README.md",
+      "bytes": 3085,
+      "sha256": "d5aee300cc641c8fe27fd8c0e5a5bf63ce3583c3299af8ebba89b2e15b04017e"
+    },
+    {
+      "path": "renderer/main.c",
+      "bytes": 11546,
+      "sha256": "eb46ef4fba4586f91ce7d6a1110fc8f65360ea34b5e96a5af9712d33a4750599"
+    },
+    {
+      "path": "renderer/output_backend.h",
+      "bytes": 1623,
+      "sha256": "982c50796c2b9532138bf1dcee5a40d624574f0b50a9ceeb3c8264e91c96f08b"
+    },
+    {
+      "path": "renderer/sink.h",
+      "bytes": 662,
+      "sha256": "3f7a5a2bb9b4538e5835155cb9775dccd39c453b2a365c42af6ddeb799968ca1"
+    },
+    {
+      "path": "renderer/sink_capture.c",
+      "bytes": 1110,
+      "sha256": "8c236f6e28a98e6844cf29bdac3f125d5aad58806b6c1b3f777a3bb9420ee0d7"
+    },
+    {
+      "path": "renderer/sink_omx.c",
+      "bytes": 18937,
+      "sha256": "33b12a3c8fd008af95694c0583c5bd035833d964be2504c2359055aec7dca70f"
+    }
+  ],
+  "code_lines": 1200
+}

@@ -46,3 +46,16 @@ __pycache__/
 /stereo_upmix.plist
 /stereo_upmix_render.plist
 tmp/
+
+# Local editor/compiler state, not project data.
+~$*.xlsx
+*.tsbuildinfo
+*.dSYM/
+
+# Share-review sources/reports are retained; compiled test programs are not.
+/output/share-review/**/check_*
+!/output/share-review/**/check_*.c
+!/output/share-review/**/check_*.h
+/output/share-review/**/*.dylib
+/output/share-review/**/video_receiver
+/output/share-review/**/stage/hook/build/

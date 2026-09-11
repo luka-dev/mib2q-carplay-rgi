@@ -1,0 +1,26 @@
+{
+  "macos_shipped_makefile_demo": "passed",
+  "forwarded_calls": 256,
+  "threads": 4,
+  "geometry_and_state_asan_ubsan": "passed",
+  "view_boundaries": "view boundaries passed: geometry/overflow, JSON sizing, coalescing, failure, duplicate/stale ACKs, counter exhaustion",
+  "linux_recipe": "not executed",
+  "hardware_and_protocol": "not tested; no adapter supplied",
+  "tested_inputs": {
+    "hook/interpose_example.c": "e9400d603ff7e35a1f7a43b067d038367857a6ba4f42bf418fa4701ff02c436e",
+    "hook/view_area.h": "84a41a6e8b402299b498457aabaf4975372d5b9d3b1c8a2930911bd3867f48bb",
+    "hook/process_scope.c": "dab9fec012d671fe3a91f6f23ef2dcbf895f20aeb498a86c092577257c0c3303",
+    "hook/Makefile": "e92db661a97b784960dac3e5ceee2e62dbb8c3b86907aeb736e110795536b799",
+    "hook/view_switch.h": "d70ddf71e5124e2f927c1066918ffce8d5104b61ba66e0cba4059c3a8754bd49",
+    "hook/VIEW_AREAS.md": "d13db0147c105f2cb58a6f23b1adc3b42ffca855dc38f0359f99844f0761133d",
+    "hook/view_area.c": "d051100b9bc3a143223a3f994f7e51d6cd7e590034a852453890a5178782ba47",
+    "hook/interpose_example.h": "517391a8dee18e332d8f9e0a023959edd25f381167fe47fdd86201ef379bbc22",
+    "hook/process_scope.h": "b822f4324140b78e7094b7e10686568475635c596924e2dbe7a8c9ba1a135c0f",
+    "hook/view_switch.c": "bb896de36afc349fc4a9b07f55a3d63082651a2b976b5be85c65b8cda4be0652",
+    "hook/NOTES.md": "36fd6023258dbefb2a2e3e87620da84b53652237d419560dfa5232b939931283",
+    "hook/PROCEDURE.md": "39613f40412a770a4dd5261a5c3c9db32a1ce9b0009fdc7d2cd6383811418ed8",
+    "hook/demo/provider.c": "87e3eb6e3dd27bcfb1e32a5b1f869cef01b86dc6d8e6daa2a1e4b829641e91e6",
+    "hook/demo/view_demo.c": "d6bd1b0adcbda9152fbf02ecdb7b01e32147da5a6b09ae0814141255d9d3f8ab",
+    "hook/demo/driver.c": "c3ab8eaa026c51dfffc565bde2679a792eb88f231be8eb934c058aadddede202"
+  }
+}

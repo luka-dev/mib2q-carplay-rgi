@@ -1,0 +1,76 @@
+--- reference_build_v8/de/vw/mib/asl/internal/androidauto/target/RequestHandler.java
++++ NavActiveIgnore/de/vw/mib/asl/internal/androidauto/target/RequestHandler.java
+@@ -65,7 +65,7 @@
+         switch (n) {
+             case 1: {
+                 if (this.properties.getVideoFocusState() == 2) {
+-                    EventGeneric eventGeneric = ServiceManager.mGenericEventFactory.newEvent(6100018);
++                    EventGeneric eventGeneric = ServiceManager.mGenericEventFactory.newEvent(840195328);
+                     this.target.sendSafe(eventGeneric);
+                     this.properties.setVideoFocusState(1);
+                 } else if (this.target.isTraceEnabled()) {
+@@ -76,7 +76,7 @@
+             }
+             case 2: {
+                 if (this.properties.getVideoFocusState() == 1) {
+-                    EventGeneric eventGeneric = ServiceManager.mGenericEventFactory.newEvent(6100019);
++                    EventGeneric eventGeneric = ServiceManager.mGenericEventFactory.newEvent(856972544);
+                     this.target.sendSafe(eventGeneric);
+                     this.properties.setVideoFocusState(2);
+                 } else if (this.target.isTraceEnabled()) {
+@@ -100,7 +100,7 @@
+             if (this.timerHandler.isVideoAvailableTimerStarted()) {
+                 this.timerHandler.stopVideoAvailableTimer();
+             }
+-            ServiceManager.aslPropertyManager.valueChangedBoolean(2910002, this.properties.isVideoStreamAvailable());
++            ServiceManager.aslPropertyManager.valueChangedBoolean(845622272, this.properties.isVideoStreamAvailable());
+         } else {
+             this.properties.setVideoStreamAvailable(false);
+         }
+@@ -110,7 +110,7 @@
+         if (this.target.isTraceEnabled()) {
+             this.target.trace("RequestHandler::videoAvailableTimerExpired");
+         }
+-        ServiceManager.aslPropertyManager.valueChangedBoolean(2910002, false);
++        ServiceManager.aslPropertyManager.valueChangedBoolean(845622272, false);
+     }
+ 
+     public void performAudioFocusRequestNotification(int n) {
+@@ -203,30 +203,14 @@
+             this.target.trace("RequestHandler::performNavFocusRequestNotification - navFocusType = " + n);
+         }
+         switch (n) {
+-            case 1: {
+-                ServiceManager.aslPropertyManager.valueChangedBoolean(2910005, false);
+-                this.properties.setAndroidAutoNavigationActive(false);
+-                if (this.startupHandler.isDeviceConnected() && this.startupHandler.isDSI2Registered()) {
+-                    this.target.getDSIAndroidAuto2().navFocusNotification(1, false);
+-                }
+-                if (this.exboxGuidanceListenerImpl == null) break;
+-                this.exboxGuidanceListenerImpl.setSmartphoneGuidanceInactive();
+-                break;
+-            }
+-            case 2: {
+-                if (this.navigationHandler.isGuidanceActive()) {
+-                    if (this.target.isTraceEnabled()) {
+-                        this.target.trace("RequestHandler::performNavFocusRequestNotification ==> sending stopGuidance() to native navigation...");
+-                    }
+-                    this.navigationHandler.stopGuidance();
+-                }
+-                ServiceManager.aslPropertyManager.valueChangedBoolean(2910005, true);
++            case 1: 
++            case 2: {
++                if (this.navigationHandler.isGuidanceActive() && this.target.isTraceEnabled()) {
++                    this.target.trace("RequestHandler::performNavFocusRequestNotification ==> sending stopGuidance() to native navigation...");
++                }
+                 this.properties.setAndroidAutoNavigationActive(true);
+-                if (this.startupHandler.isDeviceConnected() && this.startupHandler.isDSI2Registered()) {
+-                    this.target.getDSIAndroidAuto2().navFocusNotification(2, false);
+-                }
+-                if (this.exboxGuidanceListenerImpl == null) break;
+-                this.exboxGuidanceListenerImpl.setSmartphoneGuidanceActive();
++                if (!this.startupHandler.isDeviceConnected() || !this.startupHandler.isDSI2Registered()) break;
++                this.target.getDSIAndroidAuto2().navFocusNotification(2, false);
+                 break;
+             }
+             default: {

@@ -1,0 +1,21 @@
+video_receiver: listening on loopback port 58681
+video_capture: session end messages=0 bytes=0 error=0
+video_receiver: decoder generation 1 begin
+video_receiver: record reader ended status=-1
+video_capture: session end messages=3 bytes=32 error=0
+video_capture: session end messages=0 bytes=0 error=0
+video_receiver: decoder generation 2 begin
+video_receiver: record reader ended status=-1
+video_capture: session end messages=2 bytes=24 error=0
+video_capture: session end messages=0 bytes=0 error=0
+video_receiver: decoder generation 3 begin
+video_receiver: record reader ended status=-2
+video_capture: session end messages=0 bytes=0 error=0
+video_capture: session end messages=0 bytes=0 error=0
+video_receiver: decoder generation 4 begin
+video_receiver: record reader ended status=-1
+video_capture: session end messages=0 bytes=0 error=0
+video_capture: session end messages=0 bytes=0 error=0
+video_receiver: decoder generation 5 begin
+video_receiver: record reader ended status=-1
+video_capture: session end messages=0 bytes=0 error=0

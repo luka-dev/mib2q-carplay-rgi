@@ -1,0 +1,24 @@
+--- reference_build_v8/de/vw/mib/asl/internal/navigation/api/impl/ASLNavigationServices.java
++++ NavActiveIgnore/de/vw/mib/asl/internal/navigation/api/impl/ASLNavigationServices.java
+@@ -178,7 +178,7 @@
+     }
+ 
+     private int[] calculateEtaForFinalDest(Route route, RgInfoForNextDestination rgInfoForNextDestination, NavRouteListData[] navRouteListDataArray) {
+-        long l = rgInfoForNextDestination.getTimeToNextDest() * 1000L;
++        long l = rgInfoForNextDestination.getTimeToNextDest() * 0L;
+         if (navRouteListDataArray != null && navRouteListDataArray.length > 1 && route != null) {
+             int n = (int)(route.getIndexOfCurrentDestination() + 1L);
+             if (route.getRoutelist() != null && n < navRouteListDataArray.length) {
+@@ -197,7 +197,11 @@
+     }
+ 
+     public int stopGuidance(int n) {
+-        this.target.stopGuidance(n);
++        this.target.trace("ASLNavigationServices.stopGuidance(" + n + ") received.");
++        new Exception("Stack trace").printStackTrace();
++        if (n != 6) {
++            this.target.stopGuidance(n);
++        }
+         return 1;
+     }
+ }

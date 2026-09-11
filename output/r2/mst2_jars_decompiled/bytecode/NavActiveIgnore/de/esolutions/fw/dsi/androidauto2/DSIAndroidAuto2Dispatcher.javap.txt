@@ -1,0 +1,1045 @@
+Compiled from "DSIAndroidAuto2Dispatcher.java"
+public class de.esolutions.fw.dsi.androidauto2.DSIAndroidAuto2Dispatcher extends de.esolutions.fw.dsi.base.AbstractDispatcher implements de.esolutions.fw.comm.dsi.androidauto2.DSIAndroidAuto2Reply {
+  private de.esolutions.fw.comm.dsi.androidauto2.impl.DSIAndroidAuto2ReplyService service;
+    descriptor: Lde/esolutions/fw/comm/dsi/androidauto2/impl/DSIAndroidAuto2ReplyService;
+
+  static java.lang.Class class$org$dsi$ifc$androidauto2$DSIAndroidAuto2Listener;
+    descriptor: Ljava/lang/Class;
+
+  static java.lang.Class class$java$lang$String;
+    descriptor: Ljava/lang/Class;
+
+  public de.esolutions.fw.dsi.androidauto2.DSIAndroidAuto2Dispatcher(int);
+    descriptor: (I)V
+    Code:
+         0: aload_0
+         1: iload_1
+         2: getstatic     #1                  // Field class$org$dsi$ifc$androidauto2$DSIAndroidAuto2Listener:Ljava/lang/Class;
+         5: ifnonnull     20
+         8: ldc           #2                  // String org.dsi.ifc.androidauto2.DSIAndroidAuto2Listener
+        10: invokestatic  #3                  // Method class$:(Ljava/lang/String;)Ljava/lang/Class;
+        13: dup
+        14: putstatic     #1                  // Field class$org$dsi$ifc$androidauto2$DSIAndroidAuto2Listener:Ljava/lang/Class;
+        17: goto          23
+        20: getstatic     #1                  // Field class$org$dsi$ifc$androidauto2$DSIAndroidAuto2Listener:Ljava/lang/Class;
+        23: invokevirtual #4                  // Method java/lang/Class.getName:()Ljava/lang/String;
+        26: invokespecial #5                  // Method de/esolutions/fw/dsi/base/AbstractDispatcher."<init>":(ILjava/lang/String;)V
+        29: aload_0
+        30: new           #6                  // class de/esolutions/fw/comm/dsi/androidauto2/impl/DSIAndroidAuto2ReplyService
+        33: dup
+        34: aload_0
+        35: invokespecial #7                  // Method de/esolutions/fw/comm/dsi/androidauto2/impl/DSIAndroidAuto2ReplyService."<init>":(Lde/esolutions/fw/comm/dsi/androidauto2/DSIAndroidAuto2Reply;)V
+        38: putfield      #8                  // Field service:Lde/esolutions/fw/comm/dsi/androidauto2/impl/DSIAndroidAuto2ReplyService;
+        41: return
+
+  public de.esolutions.fw.comm.core.IReplyService getService();
+    descriptor: ()Lde/esolutions/fw/comm/core/IReplyService;
+    Code:
+         0: aload_0
+         1: getfield      #8                  // Field service:Lde/esolutions/fw/comm/dsi/androidauto2/impl/DSIAndroidAuto2ReplyService;
+         4: areturn
+
+  public void videoFocusRequestNotification(int, int);
+    descriptor: (II)V
+    Code:
+         0: aload_0
+         1: invokevirtual #9                  // Method getResponseListenerList:()[Ljava/lang/Object;
+         4: astore_3
+         5: aload_3
+         6: ifnull        54
+         9: iconst_0
+        10: istore        4
+        12: iload         4
+        14: aload_3
+        15: arraylength
+        16: if_icmpge     54
+        19: aload_3
+        20: iload         4
+        22: aaload
+        23: checkcast     #10                 // class org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener
+        26: astore        5
+        28: aload         5
+        30: iload_1
+        31: iload_2
+        32: invokeinterface #11,  3           // InterfaceMethod org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener.videoFocusRequestNotification:(II)V
+        37: goto          48
+        40: astore        5
+        42: aload_0
+        43: aload         5
+        45: invokevirtual #13                 // Method traceException:(Ljava/lang/Exception;)V
+        48: iinc          4, 1
+        51: goto          12
+        54: return
+      Exception table:
+         from    to  target type
+            19    37    40   Class java/lang/Exception
+
+  public void videoAvailable(boolean, int);
+    descriptor: (ZI)V
+    Code:
+         0: aload_0
+         1: invokevirtual #9                  // Method getResponseListenerList:()[Ljava/lang/Object;
+         4: astore_3
+         5: aload_3
+         6: ifnull        54
+         9: iconst_0
+        10: istore        4
+        12: iload         4
+        14: aload_3
+        15: arraylength
+        16: if_icmpge     54
+        19: aload_3
+        20: iload         4
+        22: aaload
+        23: checkcast     #10                 // class org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener
+        26: astore        5
+        28: aload         5
+        30: iload_1
+        31: iload_2
+        32: invokeinterface #14,  3           // InterfaceMethod org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener.videoAvailable:(ZI)V
+        37: goto          48
+        40: astore        5
+        42: aload_0
+        43: aload         5
+        45: invokevirtual #13                 // Method traceException:(Ljava/lang/Exception;)V
+        48: iinc          4, 1
+        51: goto          12
+        54: return
+      Exception table:
+         from    to  target type
+            19    37    40   Class java/lang/Exception
+
+  public void audioFocusRequestNotification(int, int);
+    descriptor: (II)V
+    Code:
+         0: aload_0
+         1: invokevirtual #9                  // Method getResponseListenerList:()[Ljava/lang/Object;
+         4: astore_3
+         5: aload_3
+         6: ifnull        54
+         9: iconst_0
+        10: istore        4
+        12: iload         4
+        14: aload_3
+        15: arraylength
+        16: if_icmpge     54
+        19: aload_3
+        20: iload         4
+        22: aaload
+        23: checkcast     #10                 // class org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener
+        26: astore        5
+        28: aload         5
+        30: iload_1
+        31: iload_2
+        32: invokeinterface #15,  3           // InterfaceMethod org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener.audioFocusRequestNotification:(II)V
+        37: goto          48
+        40: astore        5
+        42: aload_0
+        43: aload         5
+        45: invokevirtual #13                 // Method traceException:(Ljava/lang/Exception;)V
+        48: iinc          4, 1
+        51: goto          12
+        54: return
+      Exception table:
+         from    to  target type
+            19    37    40   Class java/lang/Exception
+
+  public void audioAvailable(int, boolean, int);
+    descriptor: (IZI)V
+    Code:
+         0: aload_0
+         1: invokevirtual #9                  // Method getResponseListenerList:()[Ljava/lang/Object;
+         4: astore        4
+         6: aload         4
+         8: ifnull        59
+        11: iconst_0
+        12: istore        5
+        14: iload         5
+        16: aload         4
+        18: arraylength
+        19: if_icmpge     59
+        22: aload         4
+        24: iload         5
+        26: aaload
+        27: checkcast     #10                 // class org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener
+        30: astore        6
+        32: aload         6
+        34: iload_1
+        35: iload_2
+        36: iload_3
+        37: invokeinterface #16,  4           // InterfaceMethod org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener.audioAvailable:(IZI)V
+        42: goto          53
+        45: astore        6
+        47: aload_0
+        48: aload         6
+        50: invokevirtual #13                 // Method traceException:(Ljava/lang/Exception;)V
+        53: iinc          5, 1
+        56: goto          14
+        59: return
+      Exception table:
+         from    to  target type
+            22    42    45   Class java/lang/Exception
+
+  public void voiceSessionNotification(int, int);
+    descriptor: (II)V
+    Code:
+         0: aload_0
+         1: invokevirtual #9                  // Method getResponseListenerList:()[Ljava/lang/Object;
+         4: astore_3
+         5: aload_3
+         6: ifnull        54
+         9: iconst_0
+        10: istore        4
+        12: iload         4
+        14: aload_3
+        15: arraylength
+        16: if_icmpge     54
+        19: aload_3
+        20: iload         4
+        22: aaload
+        23: checkcast     #10                 // class org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener
+        26: astore        5
+        28: aload         5
+        30: iload_1
+        31: iload_2
+        32: invokeinterface #17,  3           // InterfaceMethod org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener.voiceSessionNotification:(II)V
+        37: goto          48
+        40: astore        5
+        42: aload_0
+        43: aload         5
+        45: invokevirtual #13                 // Method traceException:(Ljava/lang/Exception;)V
+        48: iinc          4, 1
+        51: goto          12
+        54: return
+      Exception table:
+         from    to  target type
+            19    37    40   Class java/lang/Exception
+
+  public void microphoneRequestNotification(int, int);
+    descriptor: (II)V
+    Code:
+         0: aload_0
+         1: invokevirtual #9                  // Method getResponseListenerList:()[Ljava/lang/Object;
+         4: astore_3
+         5: aload_3
+         6: ifnull        54
+         9: iconst_0
+        10: istore        4
+        12: iload         4
+        14: aload_3
+        15: arraylength
+        16: if_icmpge     54
+        19: aload_3
+        20: iload         4
+        22: aaload
+        23: checkcast     #10                 // class org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener
+        26: astore        5
+        28: aload         5
+        30: iload_1
+        31: iload_2
+        32: invokeinterface #18,  3           // InterfaceMethod org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener.microphoneRequestNotification:(II)V
+        37: goto          48
+        40: astore        5
+        42: aload_0
+        43: aload         5
+        45: invokevirtual #13                 // Method traceException:(Ljava/lang/Exception;)V
+        48: iinc          4, 1
+        51: goto          12
+        54: return
+      Exception table:
+         from    to  target type
+            19    37    40   Class java/lang/Exception
+
+  public void navFocusRequestNotification(int, int);
+    descriptor: (II)V
+    Code:
+         0: aload_0
+         1: invokevirtual #9                  // Method getResponseListenerList:()[Ljava/lang/Object;
+         4: astore_3
+         5: aload_3
+         6: ifnull        54
+         9: iconst_0
+        10: istore        4
+        12: iload         4
+        14: aload_3
+        15: arraylength
+        16: if_icmpge     54
+        19: aload_3
+        20: iload         4
+        22: aaload
+        23: checkcast     #10                 // class org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener
+        26: astore        5
+        28: aload         5
+        30: iload_1
+        31: iload_2
+        32: invokeinterface #19,  3           // InterfaceMethod org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener.navFocusRequestNotification:(II)V
+        37: goto          48
+        40: astore        5
+        42: aload_0
+        43: aload         5
+        45: invokevirtual #13                 // Method traceException:(Ljava/lang/Exception;)V
+        48: iinc          4, 1
+        51: goto          12
+        54: return
+      Exception table:
+         from    to  target type
+            19    37    40   Class java/lang/Exception
+
+  public void updateCallState(org.dsi.ifc.androidauto2.CallState[], int);
+    descriptor: ([Lorg/dsi/ifc/androidauto2/CallState;I)V
+    Code:
+         0: iload_2
+         1: sipush        128
+         4: iand
+         5: sipush        128
+         8: if_icmpne     76
+        11: iload_2
+        12: sipush        128
+        15: ixor
+        16: istore_2
+        17: aload_0
+        18: iconst_1
+        19: invokevirtual #20                 // Method getUnconfirmedNotificationListenerIterator:(I)Ljava/util/Iterator;
+        22: astore_3
+        23: aload_3
+        24: invokeinterface #21,  1           // InterfaceMethod java/util/Iterator.hasNext:()Z
+        29: ifeq          73
+        32: aload_3
+        33: invokeinterface #22,  1           // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+        38: checkcast     #10                 // class org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener
+        41: astore        4
+        43: aload_0
+        44: iconst_1
+        45: aload         4
+        47: invokevirtual #23                 // Method confirmNotificationListener:(ILorg/dsi/ifc/base/DSIListener;)V
+        50: aload         4
+        52: aload_1
+        53: iload_2
+        54: invokeinterface #24,  3           // InterfaceMethod org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener.updateCallState:([Lorg/dsi/ifc/androidauto2/CallState;I)V
+        59: goto          23
+        62: astore        4
+        64: aload_0
+        65: aload         4
+        67: invokevirtual #13                 // Method traceException:(Ljava/lang/Exception;)V
+        70: goto          23
+        73: goto          125
+        76: aload_0
+        77: iconst_1
+        78: invokevirtual #25                 // Method getNotificationListenerIterator:(I)Ljava/util/Iterator;
+        81: astore_3
+        82: aload_3
+        83: invokeinterface #21,  1           // InterfaceMethod java/util/Iterator.hasNext:()Z
+        88: ifeq          125
+        91: aload_3
+        92: invokeinterface #22,  1           // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+        97: checkcast     #10                 // class org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener
+       100: astore        4
+       102: aload         4
+       104: aload_1
+       105: iload_2
+       106: invokeinterface #24,  3           // InterfaceMethod org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener.updateCallState:([Lorg/dsi/ifc/androidauto2/CallState;I)V
+       111: goto          82
+       114: astore        4
+       116: aload_0
+       117: aload         4
+       119: invokevirtual #13                 // Method traceException:(Ljava/lang/Exception;)V
+       122: goto          82
+       125: return
+      Exception table:
+         from    to  target type
+            32    59    62   Class java/lang/Exception
+            91   111   114   Class java/lang/Exception
+
+  public void updateTelephonyState(org.dsi.ifc.androidauto2.TelephonyState, int);
+    descriptor: (Lorg/dsi/ifc/androidauto2/TelephonyState;I)V
+    Code:
+         0: iload_2
+         1: sipush        128
+         4: iand
+         5: sipush        128
+         8: if_icmpne     76
+        11: iload_2
+        12: sipush        128
+        15: ixor
+        16: istore_2
+        17: aload_0
+        18: iconst_2
+        19: invokevirtual #20                 // Method getUnconfirmedNotificationListenerIterator:(I)Ljava/util/Iterator;
+        22: astore_3
+        23: aload_3
+        24: invokeinterface #21,  1           // InterfaceMethod java/util/Iterator.hasNext:()Z
+        29: ifeq          73
+        32: aload_3
+        33: invokeinterface #22,  1           // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+        38: checkcast     #10                 // class org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener
+        41: astore        4
+        43: aload_0
+        44: iconst_2
+        45: aload         4
+        47: invokevirtual #23                 // Method confirmNotificationListener:(ILorg/dsi/ifc/base/DSIListener;)V
+        50: aload         4
+        52: aload_1
+        53: iload_2
+        54: invokeinterface #26,  3           // InterfaceMethod org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener.updateTelephonyState:(Lorg/dsi/ifc/androidauto2/TelephonyState;I)V
+        59: goto          23
+        62: astore        4
+        64: aload_0
+        65: aload         4
+        67: invokevirtual #13                 // Method traceException:(Ljava/lang/Exception;)V
+        70: goto          23
+        73: goto          125
+        76: aload_0
+        77: iconst_2
+        78: invokevirtual #25                 // Method getNotificationListenerIterator:(I)Ljava/util/Iterator;
+        81: astore_3
+        82: aload_3
+        83: invokeinterface #21,  1           // InterfaceMethod java/util/Iterator.hasNext:()Z
+        88: ifeq          125
+        91: aload_3
+        92: invokeinterface #22,  1           // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+        97: checkcast     #10                 // class org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener
+       100: astore        4
+       102: aload         4
+       104: aload_1
+       105: iload_2
+       106: invokeinterface #26,  3           // InterfaceMethod org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener.updateTelephonyState:(Lorg/dsi/ifc/androidauto2/TelephonyState;I)V
+       111: goto          82
+       114: astore        4
+       116: aload_0
+       117: aload         4
+       119: invokevirtual #13                 // Method traceException:(Ljava/lang/Exception;)V
+       122: goto          82
+       125: return
+      Exception table:
+         from    to  target type
+            32    59    62   Class java/lang/Exception
+            91   111   114   Class java/lang/Exception
+
+  public void updateNowPlayingData(org.dsi.ifc.androidauto2.TrackData, int);
+    descriptor: (Lorg/dsi/ifc/androidauto2/TrackData;I)V
+    Code:
+         0: iload_2
+         1: sipush        128
+         4: iand
+         5: sipush        128
+         8: if_icmpne     76
+        11: iload_2
+        12: sipush        128
+        15: ixor
+        16: istore_2
+        17: aload_0
+        18: iconst_3
+        19: invokevirtual #20                 // Method getUnconfirmedNotificationListenerIterator:(I)Ljava/util/Iterator;
+        22: astore_3
+        23: aload_3
+        24: invokeinterface #21,  1           // InterfaceMethod java/util/Iterator.hasNext:()Z
+        29: ifeq          73
+        32: aload_3
+        33: invokeinterface #22,  1           // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+        38: checkcast     #10                 // class org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener
+        41: astore        4
+        43: aload_0
+        44: iconst_3
+        45: aload         4
+        47: invokevirtual #23                 // Method confirmNotificationListener:(ILorg/dsi/ifc/base/DSIListener;)V
+        50: aload         4
+        52: aload_1
+        53: iload_2
+        54: invokeinterface #27,  3           // InterfaceMethod org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener.updateNowPlayingData:(Lorg/dsi/ifc/androidauto2/TrackData;I)V
+        59: goto          23
+        62: astore        4
+        64: aload_0
+        65: aload         4
+        67: invokevirtual #13                 // Method traceException:(Ljava/lang/Exception;)V
+        70: goto          23
+        73: goto          125
+        76: aload_0
+        77: iconst_3
+        78: invokevirtual #25                 // Method getNotificationListenerIterator:(I)Ljava/util/Iterator;
+        81: astore_3
+        82: aload_3
+        83: invokeinterface #21,  1           // InterfaceMethod java/util/Iterator.hasNext:()Z
+        88: ifeq          125
+        91: aload_3
+        92: invokeinterface #22,  1           // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+        97: checkcast     #10                 // class org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener
+       100: astore        4
+       102: aload         4
+       104: aload_1
+       105: iload_2
+       106: invokeinterface #27,  3           // InterfaceMethod org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener.updateNowPlayingData:(Lorg/dsi/ifc/androidauto2/TrackData;I)V
+       111: goto          82
+       114: astore        4
+       116: aload_0
+       117: aload         4
+       119: invokevirtual #13                 // Method traceException:(Ljava/lang/Exception;)V
+       122: goto          82
+       125: return
+      Exception table:
+         from    to  target type
+            32    59    62   Class java/lang/Exception
+            91   111   114   Class java/lang/Exception
+
+  public void updatePlaybackState(org.dsi.ifc.androidauto2.PlaybackInfo, int);
+    descriptor: (Lorg/dsi/ifc/androidauto2/PlaybackInfo;I)V
+    Code:
+         0: iload_2
+         1: sipush        128
+         4: iand
+         5: sipush        128
+         8: if_icmpne     76
+        11: iload_2
+        12: sipush        128
+        15: ixor
+        16: istore_2
+        17: aload_0
+        18: iconst_4
+        19: invokevirtual #20                 // Method getUnconfirmedNotificationListenerIterator:(I)Ljava/util/Iterator;
+        22: astore_3
+        23: aload_3
+        24: invokeinterface #21,  1           // InterfaceMethod java/util/Iterator.hasNext:()Z
+        29: ifeq          73
+        32: aload_3
+        33: invokeinterface #22,  1           // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+        38: checkcast     #10                 // class org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener
+        41: astore        4
+        43: aload_0
+        44: iconst_4
+        45: aload         4
+        47: invokevirtual #23                 // Method confirmNotificationListener:(ILorg/dsi/ifc/base/DSIListener;)V
+        50: aload         4
+        52: aload_1
+        53: iload_2
+        54: invokeinterface #28,  3           // InterfaceMethod org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener.updatePlaybackState:(Lorg/dsi/ifc/androidauto2/PlaybackInfo;I)V
+        59: goto          23
+        62: astore        4
+        64: aload_0
+        65: aload         4
+        67: invokevirtual #13                 // Method traceException:(Ljava/lang/Exception;)V
+        70: goto          23
+        73: goto          125
+        76: aload_0
+        77: iconst_4
+        78: invokevirtual #25                 // Method getNotificationListenerIterator:(I)Ljava/util/Iterator;
+        81: astore_3
+        82: aload_3
+        83: invokeinterface #21,  1           // InterfaceMethod java/util/Iterator.hasNext:()Z
+        88: ifeq          125
+        91: aload_3
+        92: invokeinterface #22,  1           // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+        97: checkcast     #10                 // class org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener
+       100: astore        4
+       102: aload         4
+       104: aload_1
+       105: iload_2
+       106: invokeinterface #28,  3           // InterfaceMethod org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener.updatePlaybackState:(Lorg/dsi/ifc/androidauto2/PlaybackInfo;I)V
+       111: goto          82
+       114: astore        4
+       116: aload_0
+       117: aload         4
+       119: invokevirtual #13                 // Method traceException:(Ljava/lang/Exception;)V
+       122: goto          82
+       125: return
+      Exception table:
+         from    to  target type
+            32    59    62   Class java/lang/Exception
+            91   111   114   Class java/lang/Exception
+
+  public void updatePlayposition(int, int);
+    descriptor: (II)V
+    Code:
+         0: iload_2
+         1: sipush        128
+         4: iand
+         5: sipush        128
+         8: if_icmpne     76
+        11: iload_2
+        12: sipush        128
+        15: ixor
+        16: istore_2
+        17: aload_0
+        18: iconst_5
+        19: invokevirtual #20                 // Method getUnconfirmedNotificationListenerIterator:(I)Ljava/util/Iterator;
+        22: astore_3
+        23: aload_3
+        24: invokeinterface #21,  1           // InterfaceMethod java/util/Iterator.hasNext:()Z
+        29: ifeq          73
+        32: aload_3
+        33: invokeinterface #22,  1           // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+        38: checkcast     #10                 // class org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener
+        41: astore        4
+        43: aload_0
+        44: iconst_5
+        45: aload         4
+        47: invokevirtual #23                 // Method confirmNotificationListener:(ILorg/dsi/ifc/base/DSIListener;)V
+        50: aload         4
+        52: iload_1
+        53: iload_2
+        54: invokeinterface #29,  3           // InterfaceMethod org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener.updatePlayposition:(II)V
+        59: goto          23
+        62: astore        4
+        64: aload_0
+        65: aload         4
+        67: invokevirtual #13                 // Method traceException:(Ljava/lang/Exception;)V
+        70: goto          23
+        73: goto          125
+        76: aload_0
+        77: iconst_5
+        78: invokevirtual #25                 // Method getNotificationListenerIterator:(I)Ljava/util/Iterator;
+        81: astore_3
+        82: aload_3
+        83: invokeinterface #21,  1           // InterfaceMethod java/util/Iterator.hasNext:()Z
+        88: ifeq          125
+        91: aload_3
+        92: invokeinterface #22,  1           // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+        97: checkcast     #10                 // class org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener
+       100: astore        4
+       102: aload         4
+       104: iload_1
+       105: iload_2
+       106: invokeinterface #29,  3           // InterfaceMethod org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener.updatePlayposition:(II)V
+       111: goto          82
+       114: astore        4
+       116: aload_0
+       117: aload         4
+       119: invokevirtual #13                 // Method traceException:(Ljava/lang/Exception;)V
+       122: goto          82
+       125: return
+      Exception table:
+         from    to  target type
+            32    59    62   Class java/lang/Exception
+            91   111   114   Class java/lang/Exception
+
+  public void updateCoverArtUrl(org.dsi.ifc.global.ResourceLocator, int);
+    descriptor: (Lorg/dsi/ifc/global/ResourceLocator;I)V
+    Code:
+         0: iload_2
+         1: sipush        128
+         4: iand
+         5: sipush        128
+         8: if_icmpne     78
+        11: iload_2
+        12: sipush        128
+        15: ixor
+        16: istore_2
+        17: aload_0
+        18: bipush        6
+        20: invokevirtual #20                 // Method getUnconfirmedNotificationListenerIterator:(I)Ljava/util/Iterator;
+        23: astore_3
+        24: aload_3
+        25: invokeinterface #21,  1           // InterfaceMethod java/util/Iterator.hasNext:()Z
+        30: ifeq          75
+        33: aload_3
+        34: invokeinterface #22,  1           // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+        39: checkcast     #10                 // class org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener
+        42: astore        4
+        44: aload_0
+        45: bipush        6
+        47: aload         4
+        49: invokevirtual #23                 // Method confirmNotificationListener:(ILorg/dsi/ifc/base/DSIListener;)V
+        52: aload         4
+        54: aload_1
+        55: iload_2
+        56: invokeinterface #30,  3           // InterfaceMethod org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener.updateCoverArtUrl:(Lorg/dsi/ifc/global/ResourceLocator;I)V
+        61: goto          24
+        64: astore        4
+        66: aload_0
+        67: aload         4
+        69: invokevirtual #13                 // Method traceException:(Ljava/lang/Exception;)V
+        72: goto          24
+        75: goto          128
+        78: aload_0
+        79: bipush        6
+        81: invokevirtual #25                 // Method getNotificationListenerIterator:(I)Ljava/util/Iterator;
+        84: astore_3
+        85: aload_3
+        86: invokeinterface #21,  1           // InterfaceMethod java/util/Iterator.hasNext:()Z
+        91: ifeq          128
+        94: aload_3
+        95: invokeinterface #22,  1           // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+       100: checkcast     #10                 // class org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener
+       103: astore        4
+       105: aload         4
+       107: aload_1
+       108: iload_2
+       109: invokeinterface #30,  3           // InterfaceMethod org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener.updateCoverArtUrl:(Lorg/dsi/ifc/global/ResourceLocator;I)V
+       114: goto          85
+       117: astore        4
+       119: aload_0
+       120: aload         4
+       122: invokevirtual #13                 // Method traceException:(Ljava/lang/Exception;)V
+       125: goto          85
+       128: return
+      Exception table:
+         from    to  target type
+            33    61    64   Class java/lang/Exception
+            94   114   117   Class java/lang/Exception
+
+  public void updateNavigationNextTurnEvent(java.lang.String, int, int, int, int, int);
+    descriptor: (Ljava/lang/String;IIIII)V
+    Code:
+         0: iload         6
+         2: sipush        128
+         5: iand
+         6: sipush        128
+         9: if_icmpne     91
+        12: iload         6
+        14: sipush        128
+        17: ixor
+        18: istore        6
+        20: aload_0
+        21: bipush        7
+        23: invokevirtual #20                 // Method getUnconfirmedNotificationListenerIterator:(I)Ljava/util/Iterator;
+        26: astore        7
+        28: aload         7
+        30: invokeinterface #21,  1           // InterfaceMethod java/util/Iterator.hasNext:()Z
+        35: ifeq          88
+        38: aload         7
+        40: invokeinterface #22,  1           // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+        45: checkcast     #10                 // class org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener
+        48: astore        8
+        50: aload_0
+        51: bipush        7
+        53: aload         8
+        55: invokevirtual #23                 // Method confirmNotificationListener:(ILorg/dsi/ifc/base/DSIListener;)V
+        58: aload         8
+        60: aload_1
+        61: iload_2
+        62: iload_3
+        63: iload         4
+        65: iload         5
+        67: iload         6
+        69: invokeinterface #31,  7           // InterfaceMethod org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener.updateNavigationNextTurnEvent:(Ljava/lang/String;IIIII)V
+        74: goto          28
+        77: astore        8
+        79: aload_0
+        80: aload         8
+        82: invokevirtual #13                 // Method traceException:(Ljava/lang/Exception;)V
+        85: goto          28
+        88: goto          151
+        91: aload_0
+        92: bipush        7
+        94: invokevirtual #25                 // Method getNotificationListenerIterator:(I)Ljava/util/Iterator;
+        97: astore        7
+        99: aload         7
+       101: invokeinterface #21,  1           // InterfaceMethod java/util/Iterator.hasNext:()Z
+       106: ifeq          151
+       109: aload         7
+       111: invokeinterface #22,  1           // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+       116: checkcast     #10                 // class org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener
+       119: astore        8
+       121: aload         8
+       123: aload_1
+       124: iload_2
+       125: iload_3
+       126: iload         4
+       128: iload         5
+       130: iload         6
+       132: invokeinterface #31,  7           // InterfaceMethod org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener.updateNavigationNextTurnEvent:(Ljava/lang/String;IIIII)V
+       137: goto          99
+       140: astore        8
+       142: aload_0
+       143: aload         8
+       145: invokevirtual #13                 // Method traceException:(Ljava/lang/Exception;)V
+       148: goto          99
+       151: return
+      Exception table:
+         from    to  target type
+            38    74    77   Class java/lang/Exception
+           109   137   140   Class java/lang/Exception
+
+  public void updateNavigationNextTurnDistance(int, int, int);
+    descriptor: (III)V
+    Code:
+         0: iload_3
+         1: sipush        128
+         4: iand
+         5: sipush        128
+         8: if_icmpne     82
+        11: iload_3
+        12: sipush        128
+        15: ixor
+        16: istore_3
+        17: aload_0
+        18: bipush        8
+        20: invokevirtual #20                 // Method getUnconfirmedNotificationListenerIterator:(I)Ljava/util/Iterator;
+        23: astore        4
+        25: aload         4
+        27: invokeinterface #21,  1           // InterfaceMethod java/util/Iterator.hasNext:()Z
+        32: ifeq          79
+        35: aload         4
+        37: invokeinterface #22,  1           // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+        42: checkcast     #10                 // class org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener
+        45: astore        5
+        47: aload_0
+        48: bipush        8
+        50: aload         5
+        52: invokevirtual #23                 // Method confirmNotificationListener:(ILorg/dsi/ifc/base/DSIListener;)V
+        55: aload         5
+        57: iload_1
+        58: iload_2
+        59: iload_3
+        60: invokeinterface #32,  4           // InterfaceMethod org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener.updateNavigationNextTurnDistance:(III)V
+        65: goto          25
+        68: astore        5
+        70: aload_0
+        71: aload         5
+        73: invokevirtual #13                 // Method traceException:(Ljava/lang/Exception;)V
+        76: goto          25
+        79: goto          136
+        82: aload_0
+        83: bipush        8
+        85: invokevirtual #25                 // Method getNotificationListenerIterator:(I)Ljava/util/Iterator;
+        88: astore        4
+        90: aload         4
+        92: invokeinterface #21,  1           // InterfaceMethod java/util/Iterator.hasNext:()Z
+        97: ifeq          136
+       100: aload         4
+       102: invokeinterface #22,  1           // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+       107: checkcast     #10                 // class org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener
+       110: astore        5
+       112: aload         5
+       114: iload_1
+       115: iload_2
+       116: iload_3
+       117: invokeinterface #32,  4           // InterfaceMethod org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener.updateNavigationNextTurnDistance:(III)V
+       122: goto          90
+       125: astore        5
+       127: aload_0
+       128: aload         5
+       130: invokevirtual #13                 // Method traceException:(Ljava/lang/Exception;)V
+       133: goto          90
+       136: return
+      Exception table:
+         from    to  target type
+            35    65    68   Class java/lang/Exception
+           100   122   125   Class java/lang/Exception
+
+  public void setExternalDestination(double, double, java.lang.String, java.lang.String, int);
+    descriptor: (DDLjava/lang/String;Ljava/lang/String;I)V
+    Code:
+         0: getstatic     #33                 // Field java/lang/System.out:Ljava/io/PrintStream;
+         3: new           #34                 // class java/lang/StringBuffer
+         6: dup
+         7: invokespecial #35                 // Method java/lang/StringBuffer."<init>":()V
+        10: ldc           #36                 // String DSIAndroidAuto2Dispatcher.setExternalDestination(
+        12: invokevirtual #37                 // Method java/lang/StringBuffer.append:(Ljava/lang/String;)Ljava/lang/StringBuffer;
+        15: dload_1
+        16: invokevirtual #38                 // Method java/lang/StringBuffer.append:(D)Ljava/lang/StringBuffer;
+        19: ldc           #39                 // String ,
+        21: invokevirtual #37                 // Method java/lang/StringBuffer.append:(Ljava/lang/String;)Ljava/lang/StringBuffer;
+        24: dload_3
+        25: invokevirtual #38                 // Method java/lang/StringBuffer.append:(D)Ljava/lang/StringBuffer;
+        28: ldc           #39                 // String ,
+        30: invokevirtual #37                 // Method java/lang/StringBuffer.append:(Ljava/lang/String;)Ljava/lang/StringBuffer;
+        33: aload         5
+        35: invokevirtual #37                 // Method java/lang/StringBuffer.append:(Ljava/lang/String;)Ljava/lang/StringBuffer;
+        38: ldc           #39                 // String ,
+        40: invokevirtual #37                 // Method java/lang/StringBuffer.append:(Ljava/lang/String;)Ljava/lang/StringBuffer;
+        43: aload         6
+        45: invokevirtual #37                 // Method java/lang/StringBuffer.append:(Ljava/lang/String;)Ljava/lang/StringBuffer;
+        48: ldc           #39                 // String ,
+        50: invokevirtual #37                 // Method java/lang/StringBuffer.append:(Ljava/lang/String;)Ljava/lang/StringBuffer;
+        53: iload         7
+        55: invokevirtual #40                 // Method java/lang/StringBuffer.append:(I)Ljava/lang/StringBuffer;
+        58: ldc           #41                 // String )
+        60: invokevirtual #37                 // Method java/lang/StringBuffer.append:(Ljava/lang/String;)Ljava/lang/StringBuffer;
+        63: invokevirtual #42                 // Method java/lang/StringBuffer.toString:()Ljava/lang/String;
+        66: invokevirtual #43                 // Method java/io/PrintStream.println:(Ljava/lang/String;)V
+        69: new           #12                 // class java/lang/Exception
+        72: dup
+        73: ldc           #44                 // String Stack trace
+        75: invokespecial #45                 // Method java/lang/Exception."<init>":(Ljava/lang/String;)V
+        78: invokevirtual #46                 // Method java/lang/Exception.printStackTrace:()V
+        81: aload_0
+        82: invokevirtual #9                  // Method getResponseListenerList:()[Ljava/lang/Object;
+        85: astore        8
+        87: aload         8
+        89: ifnull        145
+        92: iconst_0
+        93: istore        9
+        95: iload         9
+        97: aload         8
+        99: arraylength
+       100: if_icmpge     145
+       103: aload         8
+       105: iload         9
+       107: aaload
+       108: checkcast     #10                 // class org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener
+       111: astore        10
+       113: aload         10
+       115: dload_1
+       116: dload_3
+       117: aload         5
+       119: aload         6
+       121: iload         7
+       123: invokeinterface #47,  8           // InterfaceMethod org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener.setExternalDestination:(DDLjava/lang/String;Ljava/lang/String;I)V
+       128: goto          139
+       131: astore        10
+       133: aload_0
+       134: aload         10
+       136: invokevirtual #13                 // Method traceException:(Ljava/lang/Exception;)V
+       139: iinc          9, 1
+       142: goto          95
+       145: return
+      Exception table:
+         from    to  target type
+           103   128   131   Class java/lang/Exception
+
+  public void bluetoothPairingRequest(java.lang.String, int);
+    descriptor: (Ljava/lang/String;I)V
+    Code:
+         0: aload_0
+         1: invokevirtual #9                  // Method getResponseListenerList:()[Ljava/lang/Object;
+         4: astore_3
+         5: aload_3
+         6: ifnull        54
+         9: iconst_0
+        10: istore        4
+        12: iload         4
+        14: aload_3
+        15: arraylength
+        16: if_icmpge     54
+        19: aload_3
+        20: iload         4
+        22: aaload
+        23: checkcast     #10                 // class org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener
+        26: astore        5
+        28: aload         5
+        30: aload_1
+        31: iload_2
+        32: invokeinterface #48,  3           // InterfaceMethod org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener.bluetoothPairingRequest:(Ljava/lang/String;I)V
+        37: goto          48
+        40: astore        5
+        42: aload_0
+        43: aload         5
+        45: invokevirtual #13                 // Method traceException:(Ljava/lang/Exception;)V
+        48: iinc          4, 1
+        51: goto          12
+        54: return
+      Exception table:
+         from    to  target type
+            19    37    40   Class java/lang/Exception
+
+  public void asyncException(int, java.lang.String, int);
+    descriptor: (ILjava/lang/String;I)V
+    Code:
+         0: aload_0
+         1: invokevirtual #9                  // Method getResponseListenerList:()[Ljava/lang/Object;
+         4: astore        4
+         6: aload         4
+         8: ifnull        59
+        11: iconst_0
+        12: istore        5
+        14: iload         5
+        16: aload         4
+        18: arraylength
+        19: if_icmpge     59
+        22: aload         4
+        24: iload         5
+        26: aaload
+        27: checkcast     #10                 // class org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener
+        30: astore        6
+        32: aload         6
+        34: iload_1
+        35: aload_2
+        36: iload_3
+        37: invokeinterface #49,  4           // InterfaceMethod org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener.asyncException:(ILjava/lang/String;I)V
+        42: goto          53
+        45: astore        6
+        47: aload_0
+        48: aload         6
+        50: invokevirtual #13                 // Method traceException:(Ljava/lang/Exception;)V
+        53: iinc          5, 1
+        56: goto          14
+        59: return
+      Exception table:
+         from    to  target type
+            22    42    45   Class java/lang/Exception
+
+  public void yyIndication(java.lang.String, java.lang.String);
+    descriptor: (Ljava/lang/String;Ljava/lang/String;)V
+    Code:
+         0: aload_0
+         1: invokevirtual #9                  // Method getResponseListenerList:()[Ljava/lang/Object;
+         4: astore_3
+         5: aload_3
+         6: ifnull        120
+         9: iconst_0
+        10: istore        4
+        12: iload         4
+        14: aload_3
+        15: arraylength
+        16: if_icmpge     120
+        19: aload_3
+        20: iload         4
+        22: aaload
+        23: checkcast     #10                 // class org/dsi/ifc/androidauto2/DSIAndroidAuto2Listener
+        26: astore        5
+        28: aload_0
+        29: invokespecial #50                 // Method java/lang/Object.getClass:()Ljava/lang/Class;
+        32: ldc           #51                 // String yyIndication
+        34: iconst_2
+        35: anewarray     #52                 // class java/lang/Class
+        38: dup
+        39: iconst_0
+        40: getstatic     #53                 // Field class$java$lang$String:Ljava/lang/Class;
+        43: ifnonnull     54
+        46: ldc           #54                 // String java.lang.String
+        48: invokestatic  #3                  // Method class$:(Ljava/lang/String;)Ljava/lang/Class;
+        51: goto          57
+        54: getstatic     #53                 // Field class$java$lang$String:Ljava/lang/Class;
+        57: aastore
+        58: dup
+        59: iconst_1
+        60: getstatic     #53                 // Field class$java$lang$String:Ljava/lang/Class;
+        63: ifnonnull     74
+        66: ldc           #54                 // String java.lang.String
+        68: invokestatic  #3                  // Method class$:(Ljava/lang/String;)Ljava/lang/Class;
+        71: goto          77
+        74: getstatic     #53                 // Field class$java$lang$String:Ljava/lang/Class;
+        77: aastore
+        78: invokevirtual #55                 // Method java/lang/Class.getMethod:(Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;
+        81: astore        6
+        83: aload         6
+        85: aload         5
+        87: iconst_2
+        88: anewarray     #56                 // class java/lang/Object
+        91: dup
+        92: iconst_0
+        93: aload_1
+        94: aastore
+        95: dup
+        96: iconst_1
+        97: aload_2
+        98: aastore
+        99: invokevirtual #57                 // Method java/lang/reflect/Method.invoke:(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;
+       102: pop
+       103: goto          114
+       106: astore        5
+       108: aload_0
+       109: aload         5
+       111: invokevirtual #13                 // Method traceException:(Ljava/lang/Exception;)V
+       114: iinc          4, 1
+       117: goto          12
+       120: return
+      Exception table:
+         from    to  target type
+            19   103   106   Class java/lang/Exception
+
+  static java.lang.Class class$(java.lang.String);
+    descriptor: (Ljava/lang/String;)Ljava/lang/Class;
+    Code:
+         0: aload_0
+         1: invokestatic  #58                 // Method java/lang/Class.forName:(Ljava/lang/String;)Ljava/lang/Class;
+         4: areturn
+         5: astore_1
+         6: new           #60                 // class java/lang/NoClassDefFoundError
+         9: dup
+        10: aload_0
+        11: invokespecial #61                 // Method java/lang/NoClassDefFoundError."<init>":(Ljava/lang/String;)V
+        14: athrow
+      Exception table:
+         from    to  target type
+             0     4     5   Class java/lang/ClassNotFoundException
+}

@@ -1,0 +1,18 @@
+[
+  {
+    "path": "hook/altscreen/altscreen_hook.c",
+    "sha256": "477a7a6e5789b39895e1ed33e066beaf888f9b05a36e23f3e5cd9132dcee2dbe"
+  },
+  {
+    "path": "hook/framework/airplay_seams.c",
+    "sha256": "d35ead2d3e67499a63a580c17c3d8ffe587a512bea374af7489ce59fd2b7c0c7"
+  },
+  {
+    "path": "hook/framework/hook_framework.h",
+    "sha256": "5a93ff999c8821c545493bf07f02b028a4db62def9628569a8e279204328f8cd"
+  },
+  {
+    "path": "output/share-review/public-rgi-baseline/hook/framework/hook_framework.c",
+    "sha256": "d3cae21589be64cf8ec0d518b430c75255ff2d8d50dbd4747829e260fa8fafbe"
+  }
+]

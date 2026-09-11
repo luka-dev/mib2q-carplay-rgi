@@ -1,0 +1,65 @@
+{
+  "checks": {
+    "exact_allowlist": true,
+    "text_only": true,
+    "no_hidden_files_or_symlinks": true,
+    "pattern_scan_findings": [],
+    "checksums_match": true,
+    "original_sources_unchanged": true,
+    "archive_verified_against_folder": true,
+    "zip_metadata_normalized": true,
+    "synthetic_host_checks": "passed: C99 -Wall -Wextra -Werror -pedantic, AddressSanitizer + UndefinedBehaviorSanitizer"
+  },
+  "archive": {
+    "path": "output/share/rgi-altscreen-excerpts.zip",
+    "bytes": 7004,
+    "sha256": "9c6bbc9078141ce1d9c21520c6c14726643c02aaf0647570a70048f5b9d69592"
+  },
+  "files": [
+    {
+      "path": "CONTENTS.sha256",
+      "bytes": 674,
+      "sha256": "82d74414b587ac75c5dfa6c15e6d9e8cb9e66ef6d457225c8a13fc29228f0f53"
+    },
+    {
+      "path": "README.md",
+      "bytes": 1495,
+      "sha256": "33523602bb1c6e3d2f44de0275114ca52567b0344c8df054f22878004601812e"
+    },
+    {
+      "path": "altscreen/avcc.c",
+      "bytes": 1026,
+      "sha256": "5cf7378e846fab730985bafa853ec6003673f5c268e8e7feb1c73f8a62661bfc"
+    },
+    {
+      "path": "altscreen/avcc.h",
+      "bytes": 954,
+      "sha256": "04cef64f161a5963d9848d0ef3cb7879238f54b7e019dcf77624df04215ed466"
+    },
+    {
+      "path": "altscreen/frame_io.c",
+      "bytes": 1207,
+      "sha256": "7e22332a9e01255d686818a518825fe30c96048b2e9264de55272fcfee2c067a"
+    },
+    {
+      "path": "altscreen/frame_io.h",
+      "bytes": 951,
+      "sha256": "a07d70f8bd4f2d7ff35af98b2c94b6034971d2ac4f10ba9d935bf3efdd9a33ec"
+    },
+    {
+      "path": "rgi/maneuver_view.h",
+      "bytes": 1627,
+      "sha256": "bd806efa2c283808abeeea73c2a0edd54ddd0f742ef612befa1a08189c10b2bb"
+    },
+    {
+      "path": "rgi/path_geometry.c",
+      "bytes": 2790,
+      "sha256": "3e6f21379879ea6d1fec463e86d1bc501764d174ef3a292908b6d4364781b5e6"
+    },
+    {
+      "path": "rgi/path_geometry.h",
+      "bytes": 1378,
+      "sha256": "a65a87b69e2db72baf792b4c839cbcfec4cfc9d9d27d1db056d710e216f42020"
+    }
+  ]
+}

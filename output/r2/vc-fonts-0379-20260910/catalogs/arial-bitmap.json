@@ -1,0 +1,3376 @@
+{
+  "sha256": "8308e59073430a99899f5d14bb8028a31fc3fe4c14295b2112391501e7a62273",
+  "chunks": {
+    "PARA": {
+      "offset": 12,
+      "length": 136
+    },
+    "METR": {
+      "offset": 156,
+      "length": 28
+    },
+    "GLYP": {
+      "offset": 192,
+      "length": 1118
+    },
+    "KERH": {
+      "offset": 1318,
+      "length": 7500
+    },
+    "RWFM": {
+      "offset": 8826,
+      "length": 36
+    },
+    "RWD4": {
+      "offset": 8870,
+      "length": 156502
+    }
+  },
+  "codepoint_count": 557,
+  "bitmap_width": 9206,
+  "bitmap_height": 34,
+  "unicode": [
+    {
+      "codepoint": 0,
+      "hex": "U+0000",
+      "char": "\u0000",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 32,
+      "hex": "U+0020",
+      "char": " ",
+      "name": "SPACE"
+    },
+    {
+      "codepoint": 33,
+      "hex": "U+0021",
+      "char": "!",
+      "name": "EXCLAMATION MARK"
+    },
+    {
+      "codepoint": 34,
+      "hex": "U+0022",
+      "char": "\"",
+      "name": "QUOTATION MARK"
+    },
+    {
+      "codepoint": 35,
+      "hex": "U+0023",
+      "char": "#",
+      "name": "NUMBER SIGN"
+    },
+    {
+      "codepoint": 36,
+      "hex": "U+0024",
+      "char": "$",
+      "name": "DOLLAR SIGN"
+    },
+    {
+      "codepoint": 37,
+      "hex": "U+0025",
+      "char": "%",
+      "name": "PERCENT SIGN"
+    },
+    {
+      "codepoint": 38,
+      "hex": "U+0026",
+      "char": "&",
+      "name": "AMPERSAND"
+    },
+    {
+      "codepoint": 39,
+      "hex": "U+0027",
+      "char": "'",
+      "name": "APOSTROPHE"
+    },
+    {
+      "codepoint": 40,
+      "hex": "U+0028",
+      "char": "(",
+      "name": "LEFT PARENTHESIS"
+    },
+    {
+      "codepoint": 41,
+      "hex": "U+0029",
+      "char": ")",
+      "name": "RIGHT PARENTHESIS"
+    },
+    {
+      "codepoint": 42,
+      "hex": "U+002A",
+      "char": "*",
+      "name": "ASTERISK"
+    },
+    {
+      "codepoint": 43,
+      "hex": "U+002B",
+      "char": "+",
+      "name": "PLUS SIGN"
+    },
+    {
+      "codepoint": 44,
+      "hex": "U+002C",
+      "char": ",",
+      "name": "COMMA"
+    },
+    {
+      "codepoint": 45,
+      "hex": "U+002D",
+      "char": "-",
+      "name": "HYPHEN-MINUS"
+    },
+    {
+      "codepoint": 46,
+      "hex": "U+002E",
+      "char": ".",
+      "name": "FULL STOP"
+    },
+    {
+      "codepoint": 47,
+      "hex": "U+002F",
+      "char": "/",
+      "name": "SOLIDUS"
+    },
+    {
+      "codepoint": 48,
+      "hex": "U+0030",
+      "char": "0",
+      "name": "DIGIT ZERO"
+    },
+    {
+      "codepoint": 49,
+      "hex": "U+0031",
+      "char": "1",
+      "name": "DIGIT ONE"
+    },
+    {
+      "codepoint": 50,
+      "hex": "U+0032",
+      "char": "2",
+      "name": "DIGIT TWO"
+    },
+    {
+      "codepoint": 51,
+      "hex": "U+0033",
+      "char": "3",
+      "name": "DIGIT THREE"
+    },
+    {
+      "codepoint": 52,
+      "hex": "U+0034",
+      "char": "4",
+      "name": "DIGIT FOUR"
+    },
+    {
+      "codepoint": 53,
+      "hex": "U+0035",
+      "char": "5",
+      "name": "DIGIT FIVE"
+    },
+    {
+      "codepoint": 54,
+      "hex": "U+0036",
+      "char": "6",
+      "name": "DIGIT SIX"
+    },
+    {
+      "codepoint": 55,
+      "hex": "U+0037",
+      "char": "7",
+      "name": "DIGIT SEVEN"
+    },
+    {
+      "codepoint": 56,
+      "hex": "U+0038",
+      "char": "8",
+      "name": "DIGIT EIGHT"
+    },
+    {
+      "codepoint": 57,
+      "hex": "U+0039",
+      "char": "9",
+      "name": "DIGIT NINE"
+    },
+    {
+      "codepoint": 58,
+      "hex": "U+003A",
+      "char": ":",
+      "name": "COLON"
+    },
+    {
+      "codepoint": 59,
+      "hex": "U+003B",
+      "char": ";",
+      "name": "SEMICOLON"
+    },
+    {
+      "codepoint": 60,
+      "hex": "U+003C",
+      "char": "<",
+      "name": "LESS-THAN SIGN"
+    },
+    {
+      "codepoint": 61,
+      "hex": "U+003D",
+      "char": "=",
+      "name": "EQUALS SIGN"
+    },
+    {
+      "codepoint": 62,
+      "hex": "U+003E",
+      "char": ">",
+      "name": "GREATER-THAN SIGN"
+    },
+    {
+      "codepoint": 63,
+      "hex": "U+003F",
+      "char": "?",
+      "name": "QUESTION MARK"
+    },
+    {
+      "codepoint": 64,
+      "hex": "U+0040",
+      "char": "@",
+      "name": "COMMERCIAL AT"
+    },
+    {
+      "codepoint": 65,
+      "hex": "U+0041",
+      "char": "A",
+      "name": "LATIN CAPITAL LETTER A"
+    },
+    {
+      "codepoint": 66,
+      "hex": "U+0042",
+      "char": "B",
+      "name": "LATIN CAPITAL LETTER B"
+    },
+    {
+      "codepoint": 67,
+      "hex": "U+0043",
+      "char": "C",
+      "name": "LATIN CAPITAL LETTER C"
+    },
+    {
+      "codepoint": 68,
+      "hex": "U+0044",
+      "char": "D",
+      "name": "LATIN CAPITAL LETTER D"
+    },
+    {
+      "codepoint": 69,
+      "hex": "U+0045",
+      "char": "E",
+      "name": "LATIN CAPITAL LETTER E"
+    },
+    {
+      "codepoint": 70,
+      "hex": "U+0046",
+      "char": "F",
+      "name": "LATIN CAPITAL LETTER F"
+    },
+    {
+      "codepoint": 71,
+      "hex": "U+0047",
+      "char": "G",
+      "name": "LATIN CAPITAL LETTER G"
+    },
+    {
+      "codepoint": 72,
+      "hex": "U+0048",
+      "char": "H",
+      "name": "LATIN CAPITAL LETTER H"
+    },
+    {
+      "codepoint": 73,
+      "hex": "U+0049",
+      "char": "I",
+      "name": "LATIN CAPITAL LETTER I"
+    },
+    {
+      "codepoint": 74,
+      "hex": "U+004A",
+      "char": "J",
+      "name": "LATIN CAPITAL LETTER J"
+    },
+    {
+      "codepoint": 75,
+      "hex": "U+004B",
+      "char": "K",
+      "name": "LATIN CAPITAL LETTER K"
+    },
+    {
+      "codepoint": 76,
+      "hex": "U+004C",
+      "char": "L",
+      "name": "LATIN CAPITAL LETTER L"
+    },
+    {
+      "codepoint": 77,
+      "hex": "U+004D",
+      "char": "M",
+      "name": "LATIN CAPITAL LETTER M"
+    },
+    {
+      "codepoint": 78,
+      "hex": "U+004E",
+      "char": "N",
+      "name": "LATIN CAPITAL LETTER N"
+    },
+    {
+      "codepoint": 79,
+      "hex": "U+004F",
+      "char": "O",
+      "name": "LATIN CAPITAL LETTER O"
+    },
+    {
+      "codepoint": 80,
+      "hex": "U+0050",
+      "char": "P",
+      "name": "LATIN CAPITAL LETTER P"
+    },
+    {
+      "codepoint": 81,
+      "hex": "U+0051",
+      "char": "Q",
+      "name": "LATIN CAPITAL LETTER Q"
+    },
+    {
+      "codepoint": 82,
+      "hex": "U+0052",
+      "char": "R",
+      "name": "LATIN CAPITAL LETTER R"
+    },
+    {
+      "codepoint": 83,
+      "hex": "U+0053",
+      "char": "S",
+      "name": "LATIN CAPITAL LETTER S"
+    },
+    {
+      "codepoint": 84,
+      "hex": "U+0054",
+      "char": "T",
+      "name": "LATIN CAPITAL LETTER T"
+    },
+    {
+      "codepoint": 85,
+      "hex": "U+0055",
+      "char": "U",
+      "name": "LATIN CAPITAL LETTER U"
+    },
+    {
+      "codepoint": 86,
+      "hex": "U+0056",
+      "char": "V",
+      "name": "LATIN CAPITAL LETTER V"
+    },
+    {
+      "codepoint": 87,
+      "hex": "U+0057",
+      "char": "W",
+      "name": "LATIN CAPITAL LETTER W"
+    },
+    {
+      "codepoint": 88,
+      "hex": "U+0058",
+      "char": "X",
+      "name": "LATIN CAPITAL LETTER X"
+    },
+    {
+      "codepoint": 89,
+      "hex": "U+0059",
+      "char": "Y",
+      "name": "LATIN CAPITAL LETTER Y"
+    },
+    {
+      "codepoint": 90,
+      "hex": "U+005A",
+      "char": "Z",
+      "name": "LATIN CAPITAL LETTER Z"
+    },
+    {
+      "codepoint": 91,
+      "hex": "U+005B",
+      "char": "[",
+      "name": "LEFT SQUARE BRACKET"
+    },
+    {
+      "codepoint": 92,
+      "hex": "U+005C",
+      "char": "\\",
+      "name": "REVERSE SOLIDUS"
+    },
+    {
+      "codepoint": 93,
+      "hex": "U+005D",
+      "char": "]",
+      "name": "RIGHT SQUARE BRACKET"
+    },
+    {
+      "codepoint": 94,
+      "hex": "U+005E",
+      "char": "^",
+      "name": "CIRCUMFLEX ACCENT"
+    },
+    {
+      "codepoint": 95,
+      "hex": "U+005F",
+      "char": "_",
+      "name": "LOW LINE"
+    },
+    {
+      "codepoint": 96,
+      "hex": "U+0060",
+      "char": "`",
+      "name": "GRAVE ACCENT"
+    },
+    {
+      "codepoint": 97,
+      "hex": "U+0061",
+      "char": "a",
+      "name": "LATIN SMALL LETTER A"
+    },
+    {
+      "codepoint": 98,
+      "hex": "U+0062",
+      "char": "b",
+      "name": "LATIN SMALL LETTER B"
+    },
+    {
+      "codepoint": 99,
+      "hex": "U+0063",
+      "char": "c",
+      "name": "LATIN SMALL LETTER C"
+    },
+    {
+      "codepoint": 100,
+      "hex": "U+0064",
+      "char": "d",
+      "name": "LATIN SMALL LETTER D"
+    },
+    {
+      "codepoint": 101,
+      "hex": "U+0065",
+      "char": "e",
+      "name": "LATIN SMALL LETTER E"
+    },
+    {
+      "codepoint": 102,
+      "hex": "U+0066",
+      "char": "f",
+      "name": "LATIN SMALL LETTER F"
+    },
+    {
+      "codepoint": 103,
+      "hex": "U+0067",
+      "char": "g",
+      "name": "LATIN SMALL LETTER G"
+    },
+    {
+      "codepoint": 104,
+      "hex": "U+0068",
+      "char": "h",
+      "name": "LATIN SMALL LETTER H"
+    },
+    {
+      "codepoint": 105,
+      "hex": "U+0069",
+      "char": "i",
+      "name": "LATIN SMALL LETTER I"
+    },
+    {
+      "codepoint": 106,
+      "hex": "U+006A",
+      "char": "j",
+      "name": "LATIN SMALL LETTER J"
+    },
+    {
+      "codepoint": 107,
+      "hex": "U+006B",
+      "char": "k",
+      "name": "LATIN SMALL LETTER K"
+    },
+    {
+      "codepoint": 108,
+      "hex": "U+006C",
+      "char": "l",
+      "name": "LATIN SMALL LETTER L"
+    },
+    {
+      "codepoint": 109,
+      "hex": "U+006D",
+      "char": "m",
+      "name": "LATIN SMALL LETTER M"
+    },
+    {
+      "codepoint": 110,
+      "hex": "U+006E",
+      "char": "n",
+      "name": "LATIN SMALL LETTER N"
+    },
+    {
+      "codepoint": 111,
+      "hex": "U+006F",
+      "char": "o",
+      "name": "LATIN SMALL LETTER O"
+    },
+    {
+      "codepoint": 112,
+      "hex": "U+0070",
+      "char": "p",
+      "name": "LATIN SMALL LETTER P"
+    },
+    {
+      "codepoint": 113,
+      "hex": "U+0071",
+      "char": "q",
+      "name": "LATIN SMALL LETTER Q"
+    },
+    {
+      "codepoint": 114,
+      "hex": "U+0072",
+      "char": "r",
+      "name": "LATIN SMALL LETTER R"
+    },
+    {
+      "codepoint": 115,
+      "hex": "U+0073",
+      "char": "s",
+      "name": "LATIN SMALL LETTER S"
+    },
+    {
+      "codepoint": 116,
+      "hex": "U+0074",
+      "char": "t",
+      "name": "LATIN SMALL LETTER T"
+    },
+    {
+      "codepoint": 117,
+      "hex": "U+0075",
+      "char": "u",
+      "name": "LATIN SMALL LETTER U"
+    },
+    {
+      "codepoint": 118,
+      "hex": "U+0076",
+      "char": "v",
+      "name": "LATIN SMALL LETTER V"
+    },
+    {
+      "codepoint": 119,
+      "hex": "U+0077",
+      "char": "w",
+      "name": "LATIN SMALL LETTER W"
+    },
+    {
+      "codepoint": 120,
+      "hex": "U+0078",
+      "char": "x",
+      "name": "LATIN SMALL LETTER X"
+    },
+    {
+      "codepoint": 121,
+      "hex": "U+0079",
+      "char": "y",
+      "name": "LATIN SMALL LETTER Y"
+    },
+    {
+      "codepoint": 122,
+      "hex": "U+007A",
+      "char": "z",
+      "name": "LATIN SMALL LETTER Z"
+    },
+    {
+      "codepoint": 123,
+      "hex": "U+007B",
+      "char": "{",
+      "name": "LEFT CURLY BRACKET"
+    },
+    {
+      "codepoint": 124,
+      "hex": "U+007C",
+      "char": "|",
+      "name": "VERTICAL LINE"
+    },
+    {
+      "codepoint": 125,
+      "hex": "U+007D",
+      "char": "}",
+      "name": "RIGHT CURLY BRACKET"
+    },
+    {
+      "codepoint": 126,
+      "hex": "U+007E",
+      "char": "~",
+      "name": "TILDE"
+    },
+    {
+      "codepoint": 160,
+      "hex": "U+00A0",
+      "char": " ",
+      "name": "NO-BREAK SPACE"
+    },
+    {
+      "codepoint": 161,
+      "hex": "U+00A1",
+      "char": "¡",
+      "name": "INVERTED EXCLAMATION MARK"
+    },
+    {
+      "codepoint": 162,
+      "hex": "U+00A2",
+      "char": "¢",
+      "name": "CENT SIGN"
+    },
+    {
+      "codepoint": 163,
+      "hex": "U+00A3",
+      "char": "£",
+      "name": "POUND SIGN"
+    },
+    {
+      "codepoint": 164,
+      "hex": "U+00A4",
+      "char": "¤",
+      "name": "CURRENCY SIGN"
+    },
+    {
+      "codepoint": 165,
+      "hex": "U+00A5",
+      "char": "¥",
+      "name": "YEN SIGN"
+    },
+    {
+      "codepoint": 166,
+      "hex": "U+00A6",
+      "char": "¦",
+      "name": "BROKEN BAR"
+    },
+    {
+      "codepoint": 167,
+      "hex": "U+00A7",
+      "char": "§",
+      "name": "SECTION SIGN"
+    },
+    {
+      "codepoint": 168,
+      "hex": "U+00A8",
+      "char": "¨",
+      "name": "DIAERESIS"
+    },
+    {
+      "codepoint": 169,
+      "hex": "U+00A9",
+      "char": "©",
+      "name": "COPYRIGHT SIGN"
+    },
+    {
+      "codepoint": 170,
+      "hex": "U+00AA",
+      "char": "ª",
+      "name": "FEMININE ORDINAL INDICATOR"
+    },
+    {
+      "codepoint": 171,
+      "hex": "U+00AB",
+      "char": "«",
+      "name": "LEFT-POINTING DOUBLE ANGLE QUOTATION MARK"
+    },
+    {
+      "codepoint": 172,
+      "hex": "U+00AC",
+      "char": "¬",
+      "name": "NOT SIGN"
+    },
+    {
+      "codepoint": 173,
+      "hex": "U+00AD",
+      "char": "­",
+      "name": "SOFT HYPHEN"
+    },
+    {
+      "codepoint": 174,
+      "hex": "U+00AE",
+      "char": "®",
+      "name": "REGISTERED SIGN"
+    },
+    {
+      "codepoint": 175,
+      "hex": "U+00AF",
+      "char": "¯",
+      "name": "MACRON"
+    },
+    {
+      "codepoint": 176,
+      "hex": "U+00B0",
+      "char": "°",
+      "name": "DEGREE SIGN"
+    },
+    {
+      "codepoint": 177,
+      "hex": "U+00B1",
+      "char": "±",
+      "name": "PLUS-MINUS SIGN"
+    },
+    {
+      "codepoint": 178,
+      "hex": "U+00B2",
+      "char": "²",
+      "name": "SUPERSCRIPT TWO"
+    },
+    {
+      "codepoint": 179,
+      "hex": "U+00B3",
+      "char": "³",
+      "name": "SUPERSCRIPT THREE"
+    },
+    {
+      "codepoint": 180,
+      "hex": "U+00B4",
+      "char": "´",
+      "name": "ACUTE ACCENT"
+    },
+    {
+      "codepoint": 181,
+      "hex": "U+00B5",
+      "char": "µ",
+      "name": "MICRO SIGN"
+    },
+    {
+      "codepoint": 182,
+      "hex": "U+00B6",
+      "char": "¶",
+      "name": "PILCROW SIGN"
+    },
+    {
+      "codepoint": 183,
+      "hex": "U+00B7",
+      "char": "·",
+      "name": "MIDDLE DOT"
+    },
+    {
+      "codepoint": 184,
+      "hex": "U+00B8",
+      "char": "¸",
+      "name": "CEDILLA"
+    },
+    {
+      "codepoint": 185,
+      "hex": "U+00B9",
+      "char": "¹",
+      "name": "SUPERSCRIPT ONE"
+    },
+    {
+      "codepoint": 186,
+      "hex": "U+00BA",
+      "char": "º",
+      "name": "MASCULINE ORDINAL INDICATOR"
+    },
+    {
+      "codepoint": 187,
+      "hex": "U+00BB",
+      "char": "»",
+      "name": "RIGHT-POINTING DOUBLE ANGLE QUOTATION MARK"
+    },
+    {
+      "codepoint": 188,
+      "hex": "U+00BC",
+      "char": "¼",
+      "name": "VULGAR FRACTION ONE QUARTER"
+    },
+    {
+      "codepoint": 189,
+      "hex": "U+00BD",
+      "char": "½",
+      "name": "VULGAR FRACTION ONE HALF"
+    },
+    {
+      "codepoint": 190,
+      "hex": "U+00BE",
+      "char": "¾",
+      "name": "VULGAR FRACTION THREE QUARTERS"
+    },
+    {
+      "codepoint": 191,
+      "hex": "U+00BF",
+      "char": "¿",
+      "name": "INVERTED QUESTION MARK"
+    },
+    {
+      "codepoint": 192,
+      "hex": "U+00C0",
+      "char": "À",
+      "name": "LATIN CAPITAL LETTER A WITH GRAVE"
+    },
+    {
+      "codepoint": 193,
+      "hex": "U+00C1",
+      "char": "Á",
+      "name": "LATIN CAPITAL LETTER A WITH ACUTE"
+    },
+    {
+      "codepoint": 194,
+      "hex": "U+00C2",
+      "char": "Â",
+      "name": "LATIN CAPITAL LETTER A WITH CIRCUMFLEX"
+    },
+    {
+      "codepoint": 195,
+      "hex": "U+00C3",
+      "char": "Ã",
+      "name": "LATIN CAPITAL LETTER A WITH TILDE"
+    },
+    {
+      "codepoint": 196,
+      "hex": "U+00C4",
+      "char": "Ä",
+      "name": "LATIN CAPITAL LETTER A WITH DIAERESIS"
+    },
+    {
+      "codepoint": 197,
+      "hex": "U+00C5",
+      "char": "Å",
+      "name": "LATIN CAPITAL LETTER A WITH RING ABOVE"
+    },
+    {
+      "codepoint": 198,
+      "hex": "U+00C6",
+      "char": "Æ",
+      "name": "LATIN CAPITAL LETTER AE"
+    },
+    {
+      "codepoint": 199,
+      "hex": "U+00C7",
+      "char": "Ç",
+      "name": "LATIN CAPITAL LETTER C WITH CEDILLA"
+    },
+    {
+      "codepoint": 200,
+      "hex": "U+00C8",
+      "char": "È",
+      "name": "LATIN CAPITAL LETTER E WITH GRAVE"
+    },
+    {
+      "codepoint": 201,
+      "hex": "U+00C9",
+      "char": "É",
+      "name": "LATIN CAPITAL LETTER E WITH ACUTE"
+    },
+    {
+      "codepoint": 202,
+      "hex": "U+00CA",
+      "char": "Ê",
+      "name": "LATIN CAPITAL LETTER E WITH CIRCUMFLEX"
+    },
+    {
+      "codepoint": 203,
+      "hex": "U+00CB",
+      "char": "Ë",
+      "name": "LATIN CAPITAL LETTER E WITH DIAERESIS"
+    },
+    {
+      "codepoint": 204,
+      "hex": "U+00CC",
+      "char": "Ì",
+      "name": "LATIN CAPITAL LETTER I WITH GRAVE"
+    },
+    {
+      "codepoint": 205,
+      "hex": "U+00CD",
+      "char": "Í",
+      "name": "LATIN CAPITAL LETTER I WITH ACUTE"
+    },
+    {
+      "codepoint": 206,
+      "hex": "U+00CE",
+      "char": "Î",
+      "name": "LATIN CAPITAL LETTER I WITH CIRCUMFLEX"
+    },
+    {
+      "codepoint": 207,
+      "hex": "U+00CF",
+      "char": "Ï",
+      "name": "LATIN CAPITAL LETTER I WITH DIAERESIS"
+    },
+    {
+      "codepoint": 208,
+      "hex": "U+00D0",
+      "char": "Ð",
+      "name": "LATIN CAPITAL LETTER ETH"
+    },
+    {
+      "codepoint": 209,
+      "hex": "U+00D1",
+      "char": "Ñ",
+      "name": "LATIN CAPITAL LETTER N WITH TILDE"
+    },
+    {
+      "codepoint": 210,
+      "hex": "U+00D2",
+      "char": "Ò",
+      "name": "LATIN CAPITAL LETTER O WITH GRAVE"
+    },
+    {
+      "codepoint": 211,
+      "hex": "U+00D3",
+      "char": "Ó",
+      "name": "LATIN CAPITAL LETTER O WITH ACUTE"
+    },
+    {
+      "codepoint": 212,
+      "hex": "U+00D4",
+      "char": "Ô",
+      "name": "LATIN CAPITAL LETTER O WITH CIRCUMFLEX"
+    },
+    {
+      "codepoint": 213,
+      "hex": "U+00D5",
+      "char": "Õ",
+      "name": "LATIN CAPITAL LETTER O WITH TILDE"
+    },
+    {
+      "codepoint": 214,
+      "hex": "U+00D6",
+      "char": "Ö",
+      "name": "LATIN CAPITAL LETTER O WITH DIAERESIS"
+    },
+    {
+      "codepoint": 215,
+      "hex": "U+00D7",
+      "char": "×",
+      "name": "MULTIPLICATION SIGN"
+    },
+    {
+      "codepoint": 216,
+      "hex": "U+00D8",
+      "char": "Ø",
+      "name": "LATIN CAPITAL LETTER O WITH STROKE"
+    },
+    {
+      "codepoint": 217,
+      "hex": "U+00D9",
+      "char": "Ù",
+      "name": "LATIN CAPITAL LETTER U WITH GRAVE"
+    },
+    {
+      "codepoint": 218,
+      "hex": "U+00DA",
+      "char": "Ú",
+      "name": "LATIN CAPITAL LETTER U WITH ACUTE"
+    },
+    {
+      "codepoint": 219,
+      "hex": "U+00DB",
+      "char": "Û",
+      "name": "LATIN CAPITAL LETTER U WITH CIRCUMFLEX"
+    },
+    {
+      "codepoint": 220,
+      "hex": "U+00DC",
+      "char": "Ü",
+      "name": "LATIN CAPITAL LETTER U WITH DIAERESIS"
+    },
+    {
+      "codepoint": 221,
+      "hex": "U+00DD",
+      "char": "Ý",
+      "name": "LATIN CAPITAL LETTER Y WITH ACUTE"
+    },
+    {
+      "codepoint": 222,
+      "hex": "U+00DE",
+      "char": "Þ",
+      "name": "LATIN CAPITAL LETTER THORN"
+    },
+    {
+      "codepoint": 223,
+      "hex": "U+00DF",
+      "char": "ß",
+      "name": "LATIN SMALL LETTER SHARP S"
+    },
+    {
+      "codepoint": 224,
+      "hex": "U+00E0",
+      "char": "à",
+      "name": "LATIN SMALL LETTER A WITH GRAVE"
+    },
+    {
+      "codepoint": 225,
+      "hex": "U+00E1",
+      "char": "á",
+      "name": "LATIN SMALL LETTER A WITH ACUTE"
+    },
+    {
+      "codepoint": 226,
+      "hex": "U+00E2",
+      "char": "â",
+      "name": "LATIN SMALL LETTER A WITH CIRCUMFLEX"
+    },
+    {
+      "codepoint": 227,
+      "hex": "U+00E3",
+      "char": "ã",
+      "name": "LATIN SMALL LETTER A WITH TILDE"
+    },
+    {
+      "codepoint": 228,
+      "hex": "U+00E4",
+      "char": "ä",
+      "name": "LATIN SMALL LETTER A WITH DIAERESIS"
+    },
+    {
+      "codepoint": 229,
+      "hex": "U+00E5",
+      "char": "å",
+      "name": "LATIN SMALL LETTER A WITH RING ABOVE"
+    },
+    {
+      "codepoint": 230,
+      "hex": "U+00E6",
+      "char": "æ",
+      "name": "LATIN SMALL LETTER AE"
+    },
+    {
+      "codepoint": 231,
+      "hex": "U+00E7",
+      "char": "ç",
+      "name": "LATIN SMALL LETTER C WITH CEDILLA"
+    },
+    {
+      "codepoint": 232,
+      "hex": "U+00E8",
+      "char": "è",
+      "name": "LATIN SMALL LETTER E WITH GRAVE"
+    },
+    {
+      "codepoint": 233,
+      "hex": "U+00E9",
+      "char": "é",
+      "name": "LATIN SMALL LETTER E WITH ACUTE"
+    },
+    {
+      "codepoint": 234,
+      "hex": "U+00EA",
+      "char": "ê",
+      "name": "LATIN SMALL LETTER E WITH CIRCUMFLEX"
+    },
+    {
+      "codepoint": 235,
+      "hex": "U+00EB",
+      "char": "ë",
+      "name": "LATIN SMALL LETTER E WITH DIAERESIS"
+    },
+    {
+      "codepoint": 236,
+      "hex": "U+00EC",
+      "char": "ì",
+      "name": "LATIN SMALL LETTER I WITH GRAVE"
+    },
+    {
+      "codepoint": 237,
+      "hex": "U+00ED",
+      "char": "í",
+      "name": "LATIN SMALL LETTER I WITH ACUTE"
+    },
+    {
+      "codepoint": 238,
+      "hex": "U+00EE",
+      "char": "î",
+      "name": "LATIN SMALL LETTER I WITH CIRCUMFLEX"
+    },
+    {
+      "codepoint": 239,
+      "hex": "U+00EF",
+      "char": "ï",
+      "name": "LATIN SMALL LETTER I WITH DIAERESIS"
+    },
+    {
+      "codepoint": 240,
+      "hex": "U+00F0",
+      "char": "ð",
+      "name": "LATIN SMALL LETTER ETH"
+    },
+    {
+      "codepoint": 241,
+      "hex": "U+00F1",
+      "char": "ñ",
+      "name": "LATIN SMALL LETTER N WITH TILDE"
+    },
+    {
+      "codepoint": 242,
+      "hex": "U+00F2",
+      "char": "ò",
+      "name": "LATIN SMALL LETTER O WITH GRAVE"
+    },
+    {
+      "codepoint": 243,
+      "hex": "U+00F3",
+      "char": "ó",
+      "name": "LATIN SMALL LETTER O WITH ACUTE"
+    },
+    {
+      "codepoint": 244,
+      "hex": "U+00F4",
+      "char": "ô",
+      "name": "LATIN SMALL LETTER O WITH CIRCUMFLEX"
+    },
+    {
+      "codepoint": 245,
+      "hex": "U+00F5",
+      "char": "õ",
+      "name": "LATIN SMALL LETTER O WITH TILDE"
+    },
+    {
+      "codepoint": 246,
+      "hex": "U+00F6",
+      "char": "ö",
+      "name": "LATIN SMALL LETTER O WITH DIAERESIS"
+    },
+    {
+      "codepoint": 247,
+      "hex": "U+00F7",
+      "char": "÷",
+      "name": "DIVISION SIGN"
+    },
+    {
+      "codepoint": 248,
+      "hex": "U+00F8",
+      "char": "ø",
+      "name": "LATIN SMALL LETTER O WITH STROKE"
+    },
+    {
+      "codepoint": 249,
+      "hex": "U+00F9",
+      "char": "ù",
+      "name": "LATIN SMALL LETTER U WITH GRAVE"
+    },
+    {
+      "codepoint": 250,
+      "hex": "U+00FA",
+      "char": "ú",
+      "name": "LATIN SMALL LETTER U WITH ACUTE"
+    },
+    {
+      "codepoint": 251,
+      "hex": "U+00FB",
+      "char": "û",
+      "name": "LATIN SMALL LETTER U WITH CIRCUMFLEX"
+    },
+    {
+      "codepoint": 252,
+      "hex": "U+00FC",
+      "char": "ü",
+      "name": "LATIN SMALL LETTER U WITH DIAERESIS"
+    },
+    {
+      "codepoint": 253,
+      "hex": "U+00FD",
+      "char": "ý",
+      "name": "LATIN SMALL LETTER Y WITH ACUTE"
+    },
+    {
+      "codepoint": 254,
+      "hex": "U+00FE",
+      "char": "þ",
+      "name": "LATIN SMALL LETTER THORN"
+    },
+    {
+      "codepoint": 255,
+      "hex": "U+00FF",
+      "char": "ÿ",
+      "name": "LATIN SMALL LETTER Y WITH DIAERESIS"
+    },
+    {
+      "codepoint": 256,
+      "hex": "U+0100",
+      "char": "Ā",
+      "name": "LATIN CAPITAL LETTER A WITH MACRON"
+    },
+    {
+      "codepoint": 257,
+      "hex": "U+0101",
+      "char": "ā",
+      "name": "LATIN SMALL LETTER A WITH MACRON"
+    },
+    {
+      "codepoint": 258,
+      "hex": "U+0102",
+      "char": "Ă",
+      "name": "LATIN CAPITAL LETTER A WITH BREVE"
+    },
+    {
+      "codepoint": 259,
+      "hex": "U+0103",
+      "char": "ă",
+      "name": "LATIN SMALL LETTER A WITH BREVE"
+    },
+    {
+      "codepoint": 260,
+      "hex": "U+0104",
+      "char": "Ą",
+      "name": "LATIN CAPITAL LETTER A WITH OGONEK"
+    },
+    {
+      "codepoint": 261,
+      "hex": "U+0105",
+      "char": "ą",
+      "name": "LATIN SMALL LETTER A WITH OGONEK"
+    },
+    {
+      "codepoint": 262,
+      "hex": "U+0106",
+      "char": "Ć",
+      "name": "LATIN CAPITAL LETTER C WITH ACUTE"
+    },
+    {
+      "codepoint": 263,
+      "hex": "U+0107",
+      "char": "ć",
+      "name": "LATIN SMALL LETTER C WITH ACUTE"
+    },
+    {
+      "codepoint": 264,
+      "hex": "U+0108",
+      "char": "Ĉ",
+      "name": "LATIN CAPITAL LETTER C WITH CIRCUMFLEX"
+    },
+    {
+      "codepoint": 265,
+      "hex": "U+0109",
+      "char": "ĉ",
+      "name": "LATIN SMALL LETTER C WITH CIRCUMFLEX"
+    },
+    {
+      "codepoint": 266,
+      "hex": "U+010A",
+      "char": "Ċ",
+      "name": "LATIN CAPITAL LETTER C WITH DOT ABOVE"
+    },
+    {
+      "codepoint": 267,
+      "hex": "U+010B",
+      "char": "ċ",
+      "name": "LATIN SMALL LETTER C WITH DOT ABOVE"
+    },
+    {
+      "codepoint": 268,
+      "hex": "U+010C",
+      "char": "Č",
+      "name": "LATIN CAPITAL LETTER C WITH CARON"
+    },
+    {
+      "codepoint": 269,
+      "hex": "U+010D",
+      "char": "č",
+      "name": "LATIN SMALL LETTER C WITH CARON"
+    },
+    {
+      "codepoint": 270,
+      "hex": "U+010E",
+      "char": "Ď",
+      "name": "LATIN CAPITAL LETTER D WITH CARON"
+    },
+    {
+      "codepoint": 271,
+      "hex": "U+010F",
+      "char": "ď",
+      "name": "LATIN SMALL LETTER D WITH CARON"
+    },
+    {
+      "codepoint": 272,
+      "hex": "U+0110",
+      "char": "Đ",
+      "name": "LATIN CAPITAL LETTER D WITH STROKE"
+    },
+    {
+      "codepoint": 273,
+      "hex": "U+0111",
+      "char": "đ",
+      "name": "LATIN SMALL LETTER D WITH STROKE"
+    },
+    {
+      "codepoint": 274,
+      "hex": "U+0112",
+      "char": "Ē",
+      "name": "LATIN CAPITAL LETTER E WITH MACRON"
+    },
+    {
+      "codepoint": 275,
+      "hex": "U+0113",
+      "char": "ē",
+      "name": "LATIN SMALL LETTER E WITH MACRON"
+    },
+    {
+      "codepoint": 276,
+      "hex": "U+0114",
+      "char": "Ĕ",
+      "name": "LATIN CAPITAL LETTER E WITH BREVE"
+    },
+    {
+      "codepoint": 277,
+      "hex": "U+0115",
+      "char": "ĕ",
+      "name": "LATIN SMALL LETTER E WITH BREVE"
+    },
+    {
+      "codepoint": 278,
+      "hex": "U+0116",
+      "char": "Ė",
+      "name": "LATIN CAPITAL LETTER E WITH DOT ABOVE"
+    },
+    {
+      "codepoint": 279,
+      "hex": "U+0117",
+      "char": "ė",
+      "name": "LATIN SMALL LETTER E WITH DOT ABOVE"
+    },
+    {
+      "codepoint": 280,
+      "hex": "U+0118",
+      "char": "Ę",
+      "name": "LATIN CAPITAL LETTER E WITH OGONEK"
+    },
+    {
+      "codepoint": 281,
+      "hex": "U+0119",
+      "char": "ę",
+      "name": "LATIN SMALL LETTER E WITH OGONEK"
+    },
+    {
+      "codepoint": 282,
+      "hex": "U+011A",
+      "char": "Ě",
+      "name": "LATIN CAPITAL LETTER E WITH CARON"
+    },
+    {
+      "codepoint": 283,
+      "hex": "U+011B",
+      "char": "ě",
+      "name": "LATIN SMALL LETTER E WITH CARON"
+    },
+    {
+      "codepoint": 284,
+      "hex": "U+011C",
+      "char": "Ĝ",
+      "name": "LATIN CAPITAL LETTER G WITH CIRCUMFLEX"
+    },
+    {
+      "codepoint": 285,
+      "hex": "U+011D",
+      "char": "ĝ",
+      "name": "LATIN SMALL LETTER G WITH CIRCUMFLEX"
+    },
+    {
+      "codepoint": 286,
+      "hex": "U+011E",
+      "char": "Ğ",
+      "name": "LATIN CAPITAL LETTER G WITH BREVE"
+    },
+    {
+      "codepoint": 287,
+      "hex": "U+011F",
+      "char": "ğ",
+      "name": "LATIN SMALL LETTER G WITH BREVE"
+    },
+    {
+      "codepoint": 288,
+      "hex": "U+0120",
+      "char": "Ġ",
+      "name": "LATIN CAPITAL LETTER G WITH DOT ABOVE"
+    },
+    {
+      "codepoint": 289,
+      "hex": "U+0121",
+      "char": "ġ",
+      "name": "LATIN SMALL LETTER G WITH DOT ABOVE"
+    },
+    {
+      "codepoint": 290,
+      "hex": "U+0122",
+      "char": "Ģ",
+      "name": "LATIN CAPITAL LETTER G WITH CEDILLA"
+    },
+    {
+      "codepoint": 291,
+      "hex": "U+0123",
+      "char": "ģ",
+      "name": "LATIN SMALL LETTER G WITH CEDILLA"
+    },
+    {
+      "codepoint": 292,
+      "hex": "U+0124",
+      "char": "Ĥ",
+      "name": "LATIN CAPITAL LETTER H WITH CIRCUMFLEX"
+    },
+    {
+      "codepoint": 293,
+      "hex": "U+0125",
+      "char": "ĥ",
+      "name": "LATIN SMALL LETTER H WITH CIRCUMFLEX"
+    },
+    {
+      "codepoint": 294,
+      "hex": "U+0126",
+      "char": "Ħ",
+      "name": "LATIN CAPITAL LETTER H WITH STROKE"
+    },
+    {
+      "codepoint": 295,
+      "hex": "U+0127",
+      "char": "ħ",
+      "name": "LATIN SMALL LETTER H WITH STROKE"
+    },
+    {
+      "codepoint": 296,
+      "hex": "U+0128",
+      "char": "Ĩ",
+      "name": "LATIN CAPITAL LETTER I WITH TILDE"
+    },
+    {
+      "codepoint": 297,
+      "hex": "U+0129",
+      "char": "ĩ",
+      "name": "LATIN SMALL LETTER I WITH TILDE"
+    },
+    {
+      "codepoint": 298,
+      "hex": "U+012A",
+      "char": "Ī",
+      "name": "LATIN CAPITAL LETTER I WITH MACRON"
+    },
+    {
+      "codepoint": 299,
+      "hex": "U+012B",
+      "char": "ī",
+      "name": "LATIN SMALL LETTER I WITH MACRON"
+    },
+    {
+      "codepoint": 302,
+      "hex": "U+012E",
+      "char": "Į",
+      "name": "LATIN CAPITAL LETTER I WITH OGONEK"
+    },
+    {
+      "codepoint": 303,
+      "hex": "U+012F",
+      "char": "į",
+      "name": "LATIN SMALL LETTER I WITH OGONEK"
+    },
+    {
+      "codepoint": 304,
+      "hex": "U+0130",
+      "char": "İ",
+      "name": "LATIN CAPITAL LETTER I WITH DOT ABOVE"
+    },
+    {
+      "codepoint": 305,
+      "hex": "U+0131",
+      "char": "ı",
+      "name": "LATIN SMALL LETTER DOTLESS I"
+    },
+    {
+      "codepoint": 306,
+      "hex": "U+0132",
+      "char": "Ĳ",
+      "name": "LATIN CAPITAL LIGATURE IJ"
+    },
+    {
+      "codepoint": 307,
+      "hex": "U+0133",
+      "char": "ĳ",
+      "name": "LATIN SMALL LIGATURE IJ"
+    },
+    {
+      "codepoint": 308,
+      "hex": "U+0134",
+      "char": "Ĵ",
+      "name": "LATIN CAPITAL LETTER J WITH CIRCUMFLEX"
+    },
+    {
+      "codepoint": 309,
+      "hex": "U+0135",
+      "char": "ĵ",
+      "name": "LATIN SMALL LETTER J WITH CIRCUMFLEX"
+    },
+    {
+      "codepoint": 310,
+      "hex": "U+0136",
+      "char": "Ķ",
+      "name": "LATIN CAPITAL LETTER K WITH CEDILLA"
+    },
+    {
+      "codepoint": 311,
+      "hex": "U+0137",
+      "char": "ķ",
+      "name": "LATIN SMALL LETTER K WITH CEDILLA"
+    },
+    {
+      "codepoint": 313,
+      "hex": "U+0139",
+      "char": "Ĺ",
+      "name": "LATIN CAPITAL LETTER L WITH ACUTE"
+    },
+    {
+      "codepoint": 314,
+      "hex": "U+013A",
+      "char": "ĺ",
+      "name": "LATIN SMALL LETTER L WITH ACUTE"
+    },
+    {
+      "codepoint": 315,
+      "hex": "U+013B",
+      "char": "Ļ",
+      "name": "LATIN CAPITAL LETTER L WITH CEDILLA"
+    },
+    {
+      "codepoint": 316,
+      "hex": "U+013C",
+      "char": "ļ",
+      "name": "LATIN SMALL LETTER L WITH CEDILLA"
+    },
+    {
+      "codepoint": 317,
+      "hex": "U+013D",
+      "char": "Ľ",
+      "name": "LATIN CAPITAL LETTER L WITH CARON"
+    },
+    {
+      "codepoint": 318,
+      "hex": "U+013E",
+      "char": "ľ",
+      "name": "LATIN SMALL LETTER L WITH CARON"
+    },
+    {
+      "codepoint": 319,
+      "hex": "U+013F",
+      "char": "Ŀ",
+      "name": "LATIN CAPITAL LETTER L WITH MIDDLE DOT"
+    },
+    {
+      "codepoint": 320,
+      "hex": "U+0140",
+      "char": "ŀ",
+      "name": "LATIN SMALL LETTER L WITH MIDDLE DOT"
+    },
+    {
+      "codepoint": 321,
+      "hex": "U+0141",
+      "char": "Ł",
+      "name": "LATIN CAPITAL LETTER L WITH STROKE"
+    },
+    {
+      "codepoint": 322,
+      "hex": "U+0142",
+      "char": "ł",
+      "name": "LATIN SMALL LETTER L WITH STROKE"
+    },
+    {
+      "codepoint": 323,
+      "hex": "U+0143",
+      "char": "Ń",
+      "name": "LATIN CAPITAL LETTER N WITH ACUTE"
+    },
+    {
+      "codepoint": 324,
+      "hex": "U+0144",
+      "char": "ń",
+      "name": "LATIN SMALL LETTER N WITH ACUTE"
+    },
+    {
+      "codepoint": 325,
+      "hex": "U+0145",
+      "char": "Ņ",
+      "name": "LATIN CAPITAL LETTER N WITH CEDILLA"
+    },
+    {
+      "codepoint": 326,
+      "hex": "U+0146",
+      "char": "ņ",
+      "name": "LATIN SMALL LETTER N WITH CEDILLA"
+    },
+    {
+      "codepoint": 327,
+      "hex": "U+0147",
+      "char": "Ň",
+      "name": "LATIN CAPITAL LETTER N WITH CARON"
+    },
+    {
+      "codepoint": 328,
+      "hex": "U+0148",
+      "char": "ň",
+      "name": "LATIN SMALL LETTER N WITH CARON"
+    },
+    {
+      "codepoint": 329,
+      "hex": "U+0149",
+      "char": "ŉ",
+      "name": "LATIN SMALL LETTER N PRECEDED BY APOSTROPHE"
+    },
+    {
+      "codepoint": 332,
+      "hex": "U+014C",
+      "char": "Ō",
+      "name": "LATIN CAPITAL LETTER O WITH MACRON"
+    },
+    {
+      "codepoint": 333,
+      "hex": "U+014D",
+      "char": "ō",
+      "name": "LATIN SMALL LETTER O WITH MACRON"
+    },
+    {
+      "codepoint": 334,
+      "hex": "U+014E",
+      "char": "Ŏ",
+      "name": "LATIN CAPITAL LETTER O WITH BREVE"
+    },
+    {
+      "codepoint": 335,
+      "hex": "U+014F",
+      "char": "ŏ",
+      "name": "LATIN SMALL LETTER O WITH BREVE"
+    },
+    {
+      "codepoint": 336,
+      "hex": "U+0150",
+      "char": "Ő",
+      "name": "LATIN CAPITAL LETTER O WITH DOUBLE ACUTE"
+    },
+    {
+      "codepoint": 337,
+      "hex": "U+0151",
+      "char": "ő",
+      "name": "LATIN SMALL LETTER O WITH DOUBLE ACUTE"
+    },
+    {
+      "codepoint": 338,
+      "hex": "U+0152",
+      "char": "Œ",
+      "name": "LATIN CAPITAL LIGATURE OE"
+    },
+    {
+      "codepoint": 339,
+      "hex": "U+0153",
+      "char": "œ",
+      "name": "LATIN SMALL LIGATURE OE"
+    },
+    {
+      "codepoint": 340,
+      "hex": "U+0154",
+      "char": "Ŕ",
+      "name": "LATIN CAPITAL LETTER R WITH ACUTE"
+    },
+    {
+      "codepoint": 341,
+      "hex": "U+0155",
+      "char": "ŕ",
+      "name": "LATIN SMALL LETTER R WITH ACUTE"
+    },
+    {
+      "codepoint": 342,
+      "hex": "U+0156",
+      "char": "Ŗ",
+      "name": "LATIN CAPITAL LETTER R WITH CEDILLA"
+    },
+    {
+      "codepoint": 343,
+      "hex": "U+0157",
+      "char": "ŗ",
+      "name": "LATIN SMALL LETTER R WITH CEDILLA"
+    },
+    {
+      "codepoint": 344,
+      "hex": "U+0158",
+      "char": "Ř",
+      "name": "LATIN CAPITAL LETTER R WITH CARON"
+    },
+    {
+      "codepoint": 345,
+      "hex": "U+0159",
+      "char": "ř",
+      "name": "LATIN SMALL LETTER R WITH CARON"
+    },
+    {
+      "codepoint": 346,
+      "hex": "U+015A",
+      "char": "Ś",
+      "name": "LATIN CAPITAL LETTER S WITH ACUTE"
+    },
+    {
+      "codepoint": 347,
+      "hex": "U+015B",
+      "char": "ś",
+      "name": "LATIN SMALL LETTER S WITH ACUTE"
+    },
+    {
+      "codepoint": 348,
+      "hex": "U+015C",
+      "char": "Ŝ",
+      "name": "LATIN CAPITAL LETTER S WITH CIRCUMFLEX"
+    },
+    {
+      "codepoint": 349,
+      "hex": "U+015D",
+      "char": "ŝ",
+      "name": "LATIN SMALL LETTER S WITH CIRCUMFLEX"
+    },
+    {
+      "codepoint": 350,
+      "hex": "U+015E",
+      "char": "Ş",
+      "name": "LATIN CAPITAL LETTER S WITH CEDILLA"
+    },
+    {
+      "codepoint": 351,
+      "hex": "U+015F",
+      "char": "ş",
+      "name": "LATIN SMALL LETTER S WITH CEDILLA"
+    },
+    {
+      "codepoint": 352,
+      "hex": "U+0160",
+      "char": "Š",
+      "name": "LATIN CAPITAL LETTER S WITH CARON"
+    },
+    {
+      "codepoint": 353,
+      "hex": "U+0161",
+      "char": "š",
+      "name": "LATIN SMALL LETTER S WITH CARON"
+    },
+    {
+      "codepoint": 354,
+      "hex": "U+0162",
+      "char": "Ţ",
+      "name": "LATIN CAPITAL LETTER T WITH CEDILLA"
+    },
+    {
+      "codepoint": 355,
+      "hex": "U+0163",
+      "char": "ţ",
+      "name": "LATIN SMALL LETTER T WITH CEDILLA"
+    },
+    {
+      "codepoint": 356,
+      "hex": "U+0164",
+      "char": "Ť",
+      "name": "LATIN CAPITAL LETTER T WITH CARON"
+    },
+    {
+      "codepoint": 357,
+      "hex": "U+0165",
+      "char": "ť",
+      "name": "LATIN SMALL LETTER T WITH CARON"
+    },
+    {
+      "codepoint": 358,
+      "hex": "U+0166",
+      "char": "Ŧ",
+      "name": "LATIN CAPITAL LETTER T WITH STROKE"
+    },
+    {
+      "codepoint": 359,
+      "hex": "U+0167",
+      "char": "ŧ",
+      "name": "LATIN SMALL LETTER T WITH STROKE"
+    },
+    {
+      "codepoint": 360,
+      "hex": "U+0168",
+      "char": "Ũ",
+      "name": "LATIN CAPITAL LETTER U WITH TILDE"
+    },
+    {
+      "codepoint": 361,
+      "hex": "U+0169",
+      "char": "ũ",
+      "name": "LATIN SMALL LETTER U WITH TILDE"
+    },
+    {
+      "codepoint": 362,
+      "hex": "U+016A",
+      "char": "Ū",
+      "name": "LATIN CAPITAL LETTER U WITH MACRON"
+    },
+    {
+      "codepoint": 363,
+      "hex": "U+016B",
+      "char": "ū",
+      "name": "LATIN SMALL LETTER U WITH MACRON"
+    },
+    {
+      "codepoint": 364,
+      "hex": "U+016C",
+      "char": "Ŭ",
+      "name": "LATIN CAPITAL LETTER U WITH BREVE"
+    },
+    {
+      "codepoint": 365,
+      "hex": "U+016D",
+      "char": "ŭ",
+      "name": "LATIN SMALL LETTER U WITH BREVE"
+    },
+    {
+      "codepoint": 366,
+      "hex": "U+016E",
+      "char": "Ů",
+      "name": "LATIN CAPITAL LETTER U WITH RING ABOVE"
+    },
+    {
+      "codepoint": 367,
+      "hex": "U+016F",
+      "char": "ů",
+      "name": "LATIN SMALL LETTER U WITH RING ABOVE"
+    },
+    {
+      "codepoint": 368,
+      "hex": "U+0170",
+      "char": "Ű",
+      "name": "LATIN CAPITAL LETTER U WITH DOUBLE ACUTE"
+    },
+    {
+      "codepoint": 369,
+      "hex": "U+0171",
+      "char": "ű",
+      "name": "LATIN SMALL LETTER U WITH DOUBLE ACUTE"
+    },
+    {
+      "codepoint": 370,
+      "hex": "U+0172",
+      "char": "Ų",
+      "name": "LATIN CAPITAL LETTER U WITH OGONEK"
+    },
+    {
+      "codepoint": 371,
+      "hex": "U+0173",
+      "char": "ų",
+      "name": "LATIN SMALL LETTER U WITH OGONEK"
+    },
+    {
+      "codepoint": 372,
+      "hex": "U+0174",
+      "char": "Ŵ",
+      "name": "LATIN CAPITAL LETTER W WITH CIRCUMFLEX"
+    },
+    {
+      "codepoint": 373,
+      "hex": "U+0175",
+      "char": "ŵ",
+      "name": "LATIN SMALL LETTER W WITH CIRCUMFLEX"
+    },
+    {
+      "codepoint": 374,
+      "hex": "U+0176",
+      "char": "Ŷ",
+      "name": "LATIN CAPITAL LETTER Y WITH CIRCUMFLEX"
+    },
+    {
+      "codepoint": 375,
+      "hex": "U+0177",
+      "char": "ŷ",
+      "name": "LATIN SMALL LETTER Y WITH CIRCUMFLEX"
+    },
+    {
+      "codepoint": 376,
+      "hex": "U+0178",
+      "char": "Ÿ",
+      "name": "LATIN CAPITAL LETTER Y WITH DIAERESIS"
+    },
+    {
+      "codepoint": 377,
+      "hex": "U+0179",
+      "char": "Ź",
+      "name": "LATIN CAPITAL LETTER Z WITH ACUTE"
+    },
+    {
+      "codepoint": 378,
+      "hex": "U+017A",
+      "char": "ź",
+      "name": "LATIN SMALL LETTER Z WITH ACUTE"
+    },
+    {
+      "codepoint": 379,
+      "hex": "U+017B",
+      "char": "Ż",
+      "name": "LATIN CAPITAL LETTER Z WITH DOT ABOVE"
+    },
+    {
+      "codepoint": 380,
+      "hex": "U+017C",
+      "char": "ż",
+      "name": "LATIN SMALL LETTER Z WITH DOT ABOVE"
+    },
+    {
+      "codepoint": 381,
+      "hex": "U+017D",
+      "char": "Ž",
+      "name": "LATIN CAPITAL LETTER Z WITH CARON"
+    },
+    {
+      "codepoint": 382,
+      "hex": "U+017E",
+      "char": "ž",
+      "name": "LATIN SMALL LETTER Z WITH CARON"
+    },
+    {
+      "codepoint": 402,
+      "hex": "U+0192",
+      "char": "ƒ",
+      "name": "LATIN SMALL LETTER F WITH HOOK"
+    },
+    {
+      "codepoint": 536,
+      "hex": "U+0218",
+      "char": "Ș",
+      "name": "LATIN CAPITAL LETTER S WITH COMMA BELOW"
+    },
+    {
+      "codepoint": 537,
+      "hex": "U+0219",
+      "char": "ș",
+      "name": "LATIN SMALL LETTER S WITH COMMA BELOW"
+    },
+    {
+      "codepoint": 538,
+      "hex": "U+021A",
+      "char": "Ț",
+      "name": "LATIN CAPITAL LETTER T WITH COMMA BELOW"
+    },
+    {
+      "codepoint": 539,
+      "hex": "U+021B",
+      "char": "ț",
+      "name": "LATIN SMALL LETTER T WITH COMMA BELOW"
+    },
+    {
+      "codepoint": 567,
+      "hex": "U+0237",
+      "char": "ȷ",
+      "name": "LATIN SMALL LETTER DOTLESS J"
+    },
+    {
+      "codepoint": 710,
+      "hex": "U+02C6",
+      "char": "ˆ",
+      "name": "MODIFIER LETTER CIRCUMFLEX ACCENT"
+    },
+    {
+      "codepoint": 711,
+      "hex": "U+02C7",
+      "char": "ˇ",
+      "name": "CARON"
+    },
+    {
+      "codepoint": 713,
+      "hex": "U+02C9",
+      "char": "ˉ",
+      "name": "MODIFIER LETTER MACRON"
+    },
+    {
+      "codepoint": 728,
+      "hex": "U+02D8",
+      "char": "˘",
+      "name": "BREVE"
+    },
+    {
+      "codepoint": 729,
+      "hex": "U+02D9",
+      "char": "˙",
+      "name": "DOT ABOVE"
+    },
+    {
+      "codepoint": 730,
+      "hex": "U+02DA",
+      "char": "˚",
+      "name": "RING ABOVE"
+    },
+    {
+      "codepoint": 731,
+      "hex": "U+02DB",
+      "char": "˛",
+      "name": "OGONEK"
+    },
+    {
+      "codepoint": 732,
+      "hex": "U+02DC",
+      "char": "˜",
+      "name": "SMALL TILDE"
+    },
+    {
+      "codepoint": 733,
+      "hex": "U+02DD",
+      "char": "˝",
+      "name": "DOUBLE ACUTE ACCENT"
+    },
+    {
+      "codepoint": 900,
+      "hex": "U+0384",
+      "char": "΄",
+      "name": "GREEK TONOS"
+    },
+    {
+      "codepoint": 901,
+      "hex": "U+0385",
+      "char": "΅",
+      "name": "GREEK DIALYTIKA TONOS"
+    },
+    {
+      "codepoint": 902,
+      "hex": "U+0386",
+      "char": "Ά",
+      "name": "GREEK CAPITAL LETTER ALPHA WITH TONOS"
+    },
+    {
+      "codepoint": 904,
+      "hex": "U+0388",
+      "char": "Έ",
+      "name": "GREEK CAPITAL LETTER EPSILON WITH TONOS"
+    },
+    {
+      "codepoint": 905,
+      "hex": "U+0389",
+      "char": "Ή",
+      "name": "GREEK CAPITAL LETTER ETA WITH TONOS"
+    },
+    {
+      "codepoint": 906,
+      "hex": "U+038A",
+      "char": "Ί",
+      "name": "GREEK CAPITAL LETTER IOTA WITH TONOS"
+    },
+    {
+      "codepoint": 908,
+      "hex": "U+038C",
+      "char": "Ό",
+      "name": "GREEK CAPITAL LETTER OMICRON WITH TONOS"
+    },
+    {
+      "codepoint": 910,
+      "hex": "U+038E",
+      "char": "Ύ",
+      "name": "GREEK CAPITAL LETTER UPSILON WITH TONOS"
+    },
+    {
+      "codepoint": 911,
+      "hex": "U+038F",
+      "char": "Ώ",
+      "name": "GREEK CAPITAL LETTER OMEGA WITH TONOS"
+    },
+    {
+      "codepoint": 912,
+      "hex": "U+0390",
+      "char": "ΐ",
+      "name": "GREEK SMALL LETTER IOTA WITH DIALYTIKA AND TONOS"
+    },
+    {
+      "codepoint": 913,
+      "hex": "U+0391",
+      "char": "Α",
+      "name": "GREEK CAPITAL LETTER ALPHA"
+    },
+    {
+      "codepoint": 914,
+      "hex": "U+0392",
+      "char": "Β",
+      "name": "GREEK CAPITAL LETTER BETA"
+    },
+    {
+      "codepoint": 915,
+      "hex": "U+0393",
+      "char": "Γ",
+      "name": "GREEK CAPITAL LETTER GAMMA"
+    },
+    {
+      "codepoint": 916,
+      "hex": "U+0394",
+      "char": "Δ",
+      "name": "GREEK CAPITAL LETTER DELTA"
+    },
+    {
+      "codepoint": 917,
+      "hex": "U+0395",
+      "char": "Ε",
+      "name": "GREEK CAPITAL LETTER EPSILON"
+    },
+    {
+      "codepoint": 918,
+      "hex": "U+0396",
+      "char": "Ζ",
+      "name": "GREEK CAPITAL LETTER ZETA"
+    },
+    {
+      "codepoint": 919,
+      "hex": "U+0397",
+      "char": "Η",
+      "name": "GREEK CAPITAL LETTER ETA"
+    },
+    {
+      "codepoint": 920,
+      "hex": "U+0398",
+      "char": "Θ",
+      "name": "GREEK CAPITAL LETTER THETA"
+    },
+    {
+      "codepoint": 921,
+      "hex": "U+0399",
+      "char": "Ι",
+      "name": "GREEK CAPITAL LETTER IOTA"
+    },
+    {
+      "codepoint": 922,
+      "hex": "U+039A",
+      "char": "Κ",
+      "name": "GREEK CAPITAL LETTER KAPPA"
+    },
+    {
+      "codepoint": 923,
+      "hex": "U+039B",
+      "char": "Λ",
+      "name": "GREEK CAPITAL LETTER LAMDA"
+    },
+    {
+      "codepoint": 924,
+      "hex": "U+039C",
+      "char": "Μ",
+      "name": "GREEK CAPITAL LETTER MU"
+    },
+    {
+      "codepoint": 925,
+      "hex": "U+039D",
+      "char": "Ν",
+      "name": "GREEK CAPITAL LETTER NU"
+    },
+    {
+      "codepoint": 926,
+      "hex": "U+039E",
+      "char": "Ξ",
+      "name": "GREEK CAPITAL LETTER XI"
+    },
+    {
+      "codepoint": 927,
+      "hex": "U+039F",
+      "char": "Ο",
+      "name": "GREEK CAPITAL LETTER OMICRON"
+    },
+    {
+      "codepoint": 928,
+      "hex": "U+03A0",
+      "char": "Π",
+      "name": "GREEK CAPITAL LETTER PI"
+    },
+    {
+      "codepoint": 929,
+      "hex": "U+03A1",
+      "char": "Ρ",
+      "name": "GREEK CAPITAL LETTER RHO"
+    },
+    {
+      "codepoint": 931,
+      "hex": "U+03A3",
+      "char": "Σ",
+      "name": "GREEK CAPITAL LETTER SIGMA"
+    },
+    {
+      "codepoint": 932,
+      "hex": "U+03A4",
+      "char": "Τ",
+      "name": "GREEK CAPITAL LETTER TAU"
+    },
+    {
+      "codepoint": 933,
+      "hex": "U+03A5",
+      "char": "Υ",
+      "name": "GREEK CAPITAL LETTER UPSILON"
+    },
+    {
+      "codepoint": 934,
+      "hex": "U+03A6",
+      "char": "Φ",
+      "name": "GREEK CAPITAL LETTER PHI"
+    },
+    {
+      "codepoint": 935,
+      "hex": "U+03A7",
+      "char": "Χ",
+      "name": "GREEK CAPITAL LETTER CHI"
+    },
+    {
+      "codepoint": 936,
+      "hex": "U+03A8",
+      "char": "Ψ",
+      "name": "GREEK CAPITAL LETTER PSI"
+    },
+    {
+      "codepoint": 937,
+      "hex": "U+03A9",
+      "char": "Ω",
+      "name": "GREEK CAPITAL LETTER OMEGA"
+    },
+    {
+      "codepoint": 938,
+      "hex": "U+03AA",
+      "char": "Ϊ",
+      "name": "GREEK CAPITAL LETTER IOTA WITH DIALYTIKA"
+    },
+    {
+      "codepoint": 939,
+      "hex": "U+03AB",
+      "char": "Ϋ",
+      "name": "GREEK CAPITAL LETTER UPSILON WITH DIALYTIKA"
+    },
+    {
+      "codepoint": 940,
+      "hex": "U+03AC",
+      "char": "ά",
+      "name": "GREEK SMALL LETTER ALPHA WITH TONOS"
+    },
+    {
+      "codepoint": 941,
+      "hex": "U+03AD",
+      "char": "έ",
+      "name": "GREEK SMALL LETTER EPSILON WITH TONOS"
+    },
+    {
+      "codepoint": 942,
+      "hex": "U+03AE",
+      "char": "ή",
+      "name": "GREEK SMALL LETTER ETA WITH TONOS"
+    },
+    {
+      "codepoint": 943,
+      "hex": "U+03AF",
+      "char": "ί",
+      "name": "GREEK SMALL LETTER IOTA WITH TONOS"
+    },
+    {
+      "codepoint": 944,
+      "hex": "U+03B0",
+      "char": "ΰ",
+      "name": "GREEK SMALL LETTER UPSILON WITH DIALYTIKA AND TONOS"
+    },
+    {
+      "codepoint": 945,
+      "hex": "U+03B1",
+      "char": "α",
+      "name": "GREEK SMALL LETTER ALPHA"
+    },
+    {
+      "codepoint": 946,
+      "hex": "U+03B2",
+      "char": "β",
+      "name": "GREEK SMALL LETTER BETA"
+    },
+    {
+      "codepoint": 947,
+      "hex": "U+03B3",
+      "char": "γ",
+      "name": "GREEK SMALL LETTER GAMMA"
+    },
+    {
+      "codepoint": 948,
+      "hex": "U+03B4",
+      "char": "δ",
+      "name": "GREEK SMALL LETTER DELTA"
+    },
+    {
+      "codepoint": 949,
+      "hex": "U+03B5",
+      "char": "ε",
+      "name": "GREEK SMALL LETTER EPSILON"
+    },
+    {
+      "codepoint": 950,
+      "hex": "U+03B6",
+      "char": "ζ",
+      "name": "GREEK SMALL LETTER ZETA"
+    },
+    {
+      "codepoint": 951,
+      "hex": "U+03B7",
+      "char": "η",
+      "name": "GREEK SMALL LETTER ETA"
+    },
+    {
+      "codepoint": 952,
+      "hex": "U+03B8",
+      "char": "θ",
+      "name": "GREEK SMALL LETTER THETA"
+    },
+    {
+      "codepoint": 953,
+      "hex": "U+03B9",
+      "char": "ι",
+      "name": "GREEK SMALL LETTER IOTA"
+    },
+    {
+      "codepoint": 954,
+      "hex": "U+03BA",
+      "char": "κ",
+      "name": "GREEK SMALL LETTER KAPPA"
+    },
+    {
+      "codepoint": 955,
+      "hex": "U+03BB",
+      "char": "λ",
+      "name": "GREEK SMALL LETTER LAMDA"
+    },
+    {
+      "codepoint": 956,
+      "hex": "U+03BC",
+      "char": "μ",
+      "name": "GREEK SMALL LETTER MU"
+    },
+    {
+      "codepoint": 957,
+      "hex": "U+03BD",
+      "char": "ν",
+      "name": "GREEK SMALL LETTER NU"
+    },
+    {
+      "codepoint": 958,
+      "hex": "U+03BE",
+      "char": "ξ",
+      "name": "GREEK SMALL LETTER XI"
+    },
+    {
+      "codepoint": 959,
+      "hex": "U+03BF",
+      "char": "ο",
+      "name": "GREEK SMALL LETTER OMICRON"
+    },
+    {
+      "codepoint": 960,
+      "hex": "U+03C0",
+      "char": "π",
+      "name": "GREEK SMALL LETTER PI"
+    },
+    {
+      "codepoint": 961,
+      "hex": "U+03C1",
+      "char": "ρ",
+      "name": "GREEK SMALL LETTER RHO"
+    },
+    {
+      "codepoint": 962,
+      "hex": "U+03C2",
+      "char": "ς",
+      "name": "GREEK SMALL LETTER FINAL SIGMA"
+    },
+    {
+      "codepoint": 963,
+      "hex": "U+03C3",
+      "char": "σ",
+      "name": "GREEK SMALL LETTER SIGMA"
+    },
+    {
+      "codepoint": 964,
+      "hex": "U+03C4",
+      "char": "τ",
+      "name": "GREEK SMALL LETTER TAU"
+    },
+    {
+      "codepoint": 965,
+      "hex": "U+03C5",
+      "char": "υ",
+      "name": "GREEK SMALL LETTER UPSILON"
+    },
+    {
+      "codepoint": 966,
+      "hex": "U+03C6",
+      "char": "φ",
+      "name": "GREEK SMALL LETTER PHI"
+    },
+    {
+      "codepoint": 967,
+      "hex": "U+03C7",
+      "char": "χ",
+      "name": "GREEK SMALL LETTER CHI"
+    },
+    {
+      "codepoint": 968,
+      "hex": "U+03C8",
+      "char": "ψ",
+      "name": "GREEK SMALL LETTER PSI"
+    },
+    {
+      "codepoint": 969,
+      "hex": "U+03C9",
+      "char": "ω",
+      "name": "GREEK SMALL LETTER OMEGA"
+    },
+    {
+      "codepoint": 970,
+      "hex": "U+03CA",
+      "char": "ϊ",
+      "name": "GREEK SMALL LETTER IOTA WITH DIALYTIKA"
+    },
+    {
+      "codepoint": 971,
+      "hex": "U+03CB",
+      "char": "ϋ",
+      "name": "GREEK SMALL LETTER UPSILON WITH DIALYTIKA"
+    },
+    {
+      "codepoint": 972,
+      "hex": "U+03CC",
+      "char": "ό",
+      "name": "GREEK SMALL LETTER OMICRON WITH TONOS"
+    },
+    {
+      "codepoint": 973,
+      "hex": "U+03CD",
+      "char": "ύ",
+      "name": "GREEK SMALL LETTER UPSILON WITH TONOS"
+    },
+    {
+      "codepoint": 974,
+      "hex": "U+03CE",
+      "char": "ώ",
+      "name": "GREEK SMALL LETTER OMEGA WITH TONOS"
+    },
+    {
+      "codepoint": 1025,
+      "hex": "U+0401",
+      "char": "Ё",
+      "name": "CYRILLIC CAPITAL LETTER IO"
+    },
+    {
+      "codepoint": 1026,
+      "hex": "U+0402",
+      "char": "Ђ",
+      "name": "CYRILLIC CAPITAL LETTER DJE"
+    },
+    {
+      "codepoint": 1027,
+      "hex": "U+0403",
+      "char": "Ѓ",
+      "name": "CYRILLIC CAPITAL LETTER GJE"
+    },
+    {
+      "codepoint": 1028,
+      "hex": "U+0404",
+      "char": "Є",
+      "name": "CYRILLIC CAPITAL LETTER UKRAINIAN IE"
+    },
+    {
+      "codepoint": 1029,
+      "hex": "U+0405",
+      "char": "Ѕ",
+      "name": "CYRILLIC CAPITAL LETTER DZE"
+    },
+    {
+      "codepoint": 1030,
+      "hex": "U+0406",
+      "char": "І",
+      "name": "CYRILLIC CAPITAL LETTER BYELORUSSIAN-UKRAINIAN I"
+    },
+    {
+      "codepoint": 1031,
+      "hex": "U+0407",
+      "char": "Ї",
+      "name": "CYRILLIC CAPITAL LETTER YI"
+    },
+    {
+      "codepoint": 1032,
+      "hex": "U+0408",
+      "char": "Ј",
+      "name": "CYRILLIC CAPITAL LETTER JE"
+    },
+    {
+      "codepoint": 1033,
+      "hex": "U+0409",
+      "char": "Љ",
+      "name": "CYRILLIC CAPITAL LETTER LJE"
+    },
+    {
+      "codepoint": 1034,
+      "hex": "U+040A",
+      "char": "Њ",
+      "name": "CYRILLIC CAPITAL LETTER NJE"
+    },
+    {
+      "codepoint": 1035,
+      "hex": "U+040B",
+      "char": "Ћ",
+      "name": "CYRILLIC CAPITAL LETTER TSHE"
+    },
+    {
+      "codepoint": 1036,
+      "hex": "U+040C",
+      "char": "Ќ",
+      "name": "CYRILLIC CAPITAL LETTER KJE"
+    },
+    {
+      "codepoint": 1038,
+      "hex": "U+040E",
+      "char": "Ў",
+      "name": "CYRILLIC CAPITAL LETTER SHORT U"
+    },
+    {
+      "codepoint": 1039,
+      "hex": "U+040F",
+      "char": "Џ",
+      "name": "CYRILLIC CAPITAL LETTER DZHE"
+    },
+    {
+      "codepoint": 1040,
+      "hex": "U+0410",
+      "char": "А",
+      "name": "CYRILLIC CAPITAL LETTER A"
+    },
+    {
+      "codepoint": 1041,
+      "hex": "U+0411",
+      "char": "Б",
+      "name": "CYRILLIC CAPITAL LETTER BE"
+    },
+    {
+      "codepoint": 1042,
+      "hex": "U+0412",
+      "char": "В",
+      "name": "CYRILLIC CAPITAL LETTER VE"
+    },
+    {
+      "codepoint": 1043,
+      "hex": "U+0413",
+      "char": "Г",
+      "name": "CYRILLIC CAPITAL LETTER GHE"
+    },
+    {
+      "codepoint": 1044,
+      "hex": "U+0414",
+      "char": "Д",
+      "name": "CYRILLIC CAPITAL LETTER DE"
+    },
+    {
+      "codepoint": 1045,
+      "hex": "U+0415",
+      "char": "Е",
+      "name": "CYRILLIC CAPITAL LETTER IE"
+    },
+    {
+      "codepoint": 1046,
+      "hex": "U+0416",
+      "char": "Ж",
+      "name": "CYRILLIC CAPITAL LETTER ZHE"
+    },
+    {
+      "codepoint": 1047,
+      "hex": "U+0417",
+      "char": "З",
+      "name": "CYRILLIC CAPITAL LETTER ZE"
+    },
+    {
+      "codepoint": 1048,
+      "hex": "U+0418",
+      "char": "И",
+      "name": "CYRILLIC CAPITAL LETTER I"
+    },
+    {
+      "codepoint": 1049,
+      "hex": "U+0419",
+      "char": "Й",
+      "name": "CYRILLIC CAPITAL LETTER SHORT I"
+    },
+    {
+      "codepoint": 1050,
+      "hex": "U+041A",
+      "char": "К",
+      "name": "CYRILLIC CAPITAL LETTER KA"
+    },
+    {
+      "codepoint": 1051,
+      "hex": "U+041B",
+      "char": "Л",
+      "name": "CYRILLIC CAPITAL LETTER EL"
+    },
+    {
+      "codepoint": 1052,
+      "hex": "U+041C",
+      "char": "М",
+      "name": "CYRILLIC CAPITAL LETTER EM"
+    },
+    {
+      "codepoint": 1053,
+      "hex": "U+041D",
+      "char": "Н",
+      "name": "CYRILLIC CAPITAL LETTER EN"
+    },
+    {
+      "codepoint": 1054,
+      "hex": "U+041E",
+      "char": "О",
+      "name": "CYRILLIC CAPITAL LETTER O"
+    },
+    {
+      "codepoint": 1055,
+      "hex": "U+041F",
+      "char": "П",
+      "name": "CYRILLIC CAPITAL LETTER PE"
+    },
+    {
+      "codepoint": 1056,
+      "hex": "U+0420",
+      "char": "Р",
+      "name": "CYRILLIC CAPITAL LETTER ER"
+    },
+    {
+      "codepoint": 1057,
+      "hex": "U+0421",
+      "char": "С",
+      "name": "CYRILLIC CAPITAL LETTER ES"
+    },
+    {
+      "codepoint": 1058,
+      "hex": "U+0422",
+      "char": "Т",
+      "name": "CYRILLIC CAPITAL LETTER TE"
+    },
+    {
+      "codepoint": 1059,
+      "hex": "U+0423",
+      "char": "У",
+      "name": "CYRILLIC CAPITAL LETTER U"
+    },
+    {
+      "codepoint": 1060,
+      "hex": "U+0424",
+      "char": "Ф",
+      "name": "CYRILLIC CAPITAL LETTER EF"
+    },
+    {
+      "codepoint": 1061,
+      "hex": "U+0425",
+      "char": "Х",
+      "name": "CYRILLIC CAPITAL LETTER HA"
+    },
+    {
+      "codepoint": 1062,
+      "hex": "U+0426",
+      "char": "Ц",
+      "name": "CYRILLIC CAPITAL LETTER TSE"
+    },
+    {
+      "codepoint": 1063,
+      "hex": "U+0427",
+      "char": "Ч",
+      "name": "CYRILLIC CAPITAL LETTER CHE"
+    },
+    {
+      "codepoint": 1064,
+      "hex": "U+0428",
+      "char": "Ш",
+      "name": "CYRILLIC CAPITAL LETTER SHA"
+    },
+    {
+      "codepoint": 1065,
+      "hex": "U+0429",
+      "char": "Щ",
+      "name": "CYRILLIC CAPITAL LETTER SHCHA"
+    },
+    {
+      "codepoint": 1066,
+      "hex": "U+042A",
+      "char": "Ъ",
+      "name": "CYRILLIC CAPITAL LETTER HARD SIGN"
+    },
+    {
+      "codepoint": 1067,
+      "hex": "U+042B",
+      "char": "Ы",
+      "name": "CYRILLIC CAPITAL LETTER YERU"
+    },
+    {
+      "codepoint": 1068,
+      "hex": "U+042C",
+      "char": "Ь",
+      "name": "CYRILLIC CAPITAL LETTER SOFT SIGN"
+    },
+    {
+      "codepoint": 1069,
+      "hex": "U+042D",
+      "char": "Э",
+      "name": "CYRILLIC CAPITAL LETTER E"
+    },
+    {
+      "codepoint": 1070,
+      "hex": "U+042E",
+      "char": "Ю",
+      "name": "CYRILLIC CAPITAL LETTER YU"
+    },
+    {
+      "codepoint": 1071,
+      "hex": "U+042F",
+      "char": "Я",
+      "name": "CYRILLIC CAPITAL LETTER YA"
+    },
+    {
+      "codepoint": 1072,
+      "hex": "U+0430",
+      "char": "а",
+      "name": "CYRILLIC SMALL LETTER A"
+    },
+    {
+      "codepoint": 1073,
+      "hex": "U+0431",
+      "char": "б",
+      "name": "CYRILLIC SMALL LETTER BE"
+    },
+    {
+      "codepoint": 1074,
+      "hex": "U+0432",
+      "char": "в",
+      "name": "CYRILLIC SMALL LETTER VE"
+    },
+    {
+      "codepoint": 1075,
+      "hex": "U+0433",
+      "char": "г",
+      "name": "CYRILLIC SMALL LETTER GHE"
+    },
+    {
+      "codepoint": 1076,
+      "hex": "U+0434",
+      "char": "д",
+      "name": "CYRILLIC SMALL LETTER DE"
+    },
+    {
+      "codepoint": 1077,
+      "hex": "U+0435",
+      "char": "е",
+      "name": "CYRILLIC SMALL LETTER IE"
+    },
+    {
+      "codepoint": 1078,
+      "hex": "U+0436",
+      "char": "ж",
+      "name": "CYRILLIC SMALL LETTER ZHE"
+    },
+    {
+      "codepoint": 1079,
+      "hex": "U+0437",
+      "char": "з",
+      "name": "CYRILLIC SMALL LETTER ZE"
+    },
+    {
+      "codepoint": 1080,
+      "hex": "U+0438",
+      "char": "и",
+      "name": "CYRILLIC SMALL LETTER I"
+    },
+    {
+      "codepoint": 1081,
+      "hex": "U+0439",
+      "char": "й",
+      "name": "CYRILLIC SMALL LETTER SHORT I"
+    },
+    {
+      "codepoint": 1082,
+      "hex": "U+043A",
+      "char": "к",
+      "name": "CYRILLIC SMALL LETTER KA"
+    },
+    {
+      "codepoint": 1083,
+      "hex": "U+043B",
+      "char": "л",
+      "name": "CYRILLIC SMALL LETTER EL"
+    },
+    {
+      "codepoint": 1084,
+      "hex": "U+043C",
+      "char": "м",
+      "name": "CYRILLIC SMALL LETTER EM"
+    },
+    {
+      "codepoint": 1085,
+      "hex": "U+043D",
+      "char": "н",
+      "name": "CYRILLIC SMALL LETTER EN"
+    },
+    {
+      "codepoint": 1086,
+      "hex": "U+043E",
+      "char": "о",
+      "name": "CYRILLIC SMALL LETTER O"
+    },
+    {
+      "codepoint": 1087,
+      "hex": "U+043F",
+      "char": "п",
+      "name": "CYRILLIC SMALL LETTER PE"
+    },
+    {
+      "codepoint": 1088,
+      "hex": "U+0440",
+      "char": "р",
+      "name": "CYRILLIC SMALL LETTER ER"
+    },
+    {
+      "codepoint": 1089,
+      "hex": "U+0441",
+      "char": "с",
+      "name": "CYRILLIC SMALL LETTER ES"
+    },
+    {
+      "codepoint": 1090,
+      "hex": "U+0442",
+      "char": "т",
+      "name": "CYRILLIC SMALL LETTER TE"
+    },
+    {
+      "codepoint": 1091,
+      "hex": "U+0443",
+      "char": "у",
+      "name": "CYRILLIC SMALL LETTER U"
+    },
+    {
+      "codepoint": 1092,
+      "hex": "U+0444",
+      "char": "ф",
+      "name": "CYRILLIC SMALL LETTER EF"
+    },
+    {
+      "codepoint": 1093,
+      "hex": "U+0445",
+      "char": "х",
+      "name": "CYRILLIC SMALL LETTER HA"
+    },
+    {
+      "codepoint": 1094,
+      "hex": "U+0446",
+      "char": "ц",
+      "name": "CYRILLIC SMALL LETTER TSE"
+    },
+    {
+      "codepoint": 1095,
+      "hex": "U+0447",
+      "char": "ч",
+      "name": "CYRILLIC SMALL LETTER CHE"
+    },
+    {
+      "codepoint": 1096,
+      "hex": "U+0448",
+      "char": "ш",
+      "name": "CYRILLIC SMALL LETTER SHA"
+    },
+    {
+      "codepoint": 1097,
+      "hex": "U+0449",
+      "char": "щ",
+      "name": "CYRILLIC SMALL LETTER SHCHA"
+    },
+    {
+      "codepoint": 1098,
+      "hex": "U+044A",
+      "char": "ъ",
+      "name": "CYRILLIC SMALL LETTER HARD SIGN"
+    },
+    {
+      "codepoint": 1099,
+      "hex": "U+044B",
+      "char": "ы",
+      "name": "CYRILLIC SMALL LETTER YERU"
+    },
+    {
+      "codepoint": 1100,
+      "hex": "U+044C",
+      "char": "ь",
+      "name": "CYRILLIC SMALL LETTER SOFT SIGN"
+    },
+    {
+      "codepoint": 1101,
+      "hex": "U+044D",
+      "char": "э",
+      "name": "CYRILLIC SMALL LETTER E"
+    },
+    {
+      "codepoint": 1102,
+      "hex": "U+044E",
+      "char": "ю",
+      "name": "CYRILLIC SMALL LETTER YU"
+    },
+    {
+      "codepoint": 1103,
+      "hex": "U+044F",
+      "char": "я",
+      "name": "CYRILLIC SMALL LETTER YA"
+    },
+    {
+      "codepoint": 1105,
+      "hex": "U+0451",
+      "char": "ё",
+      "name": "CYRILLIC SMALL LETTER IO"
+    },
+    {
+      "codepoint": 1106,
+      "hex": "U+0452",
+      "char": "ђ",
+      "name": "CYRILLIC SMALL LETTER DJE"
+    },
+    {
+      "codepoint": 1107,
+      "hex": "U+0453",
+      "char": "ѓ",
+      "name": "CYRILLIC SMALL LETTER GJE"
+    },
+    {
+      "codepoint": 1108,
+      "hex": "U+0454",
+      "char": "є",
+      "name": "CYRILLIC SMALL LETTER UKRAINIAN IE"
+    },
+    {
+      "codepoint": 1109,
+      "hex": "U+0455",
+      "char": "ѕ",
+      "name": "CYRILLIC SMALL LETTER DZE"
+    },
+    {
+      "codepoint": 1110,
+      "hex": "U+0456",
+      "char": "і",
+      "name": "CYRILLIC SMALL LETTER BYELORUSSIAN-UKRAINIAN I"
+    },
+    {
+      "codepoint": 1111,
+      "hex": "U+0457",
+      "char": "ї",
+      "name": "CYRILLIC SMALL LETTER YI"
+    },
+    {
+      "codepoint": 1112,
+      "hex": "U+0458",
+      "char": "ј",
+      "name": "CYRILLIC SMALL LETTER JE"
+    },
+    {
+      "codepoint": 1113,
+      "hex": "U+0459",
+      "char": "љ",
+      "name": "CYRILLIC SMALL LETTER LJE"
+    },
+    {
+      "codepoint": 1114,
+      "hex": "U+045A",
+      "char": "њ",
+      "name": "CYRILLIC SMALL LETTER NJE"
+    },
+    {
+      "codepoint": 1115,
+      "hex": "U+045B",
+      "char": "ћ",
+      "name": "CYRILLIC SMALL LETTER TSHE"
+    },
+    {
+      "codepoint": 1116,
+      "hex": "U+045C",
+      "char": "ќ",
+      "name": "CYRILLIC SMALL LETTER KJE"
+    },
+    {
+      "codepoint": 1118,
+      "hex": "U+045E",
+      "char": "ў",
+      "name": "CYRILLIC SMALL LETTER SHORT U"
+    },
+    {
+      "codepoint": 1119,
+      "hex": "U+045F",
+      "char": "џ",
+      "name": "CYRILLIC SMALL LETTER DZHE"
+    },
+    {
+      "codepoint": 1168,
+      "hex": "U+0490",
+      "char": "Ґ",
+      "name": "CYRILLIC CAPITAL LETTER GHE WITH UPTURN"
+    },
+    {
+      "codepoint": 1169,
+      "hex": "U+0491",
+      "char": "ґ",
+      "name": "CYRILLIC SMALL LETTER GHE WITH UPTURN"
+    },
+    {
+      "codepoint": 8211,
+      "hex": "U+2013",
+      "char": "–",
+      "name": "EN DASH"
+    },
+    {
+      "codepoint": 8212,
+      "hex": "U+2014",
+      "char": "—",
+      "name": "EM DASH"
+    },
+    {
+      "codepoint": 8213,
+      "hex": "U+2015",
+      "char": "―",
+      "name": "HORIZONTAL BAR"
+    },
+    {
+      "codepoint": 8216,
+      "hex": "U+2018",
+      "char": "‘",
+      "name": "LEFT SINGLE QUOTATION MARK"
+    },
+    {
+      "codepoint": 8217,
+      "hex": "U+2019",
+      "char": "’",
+      "name": "RIGHT SINGLE QUOTATION MARK"
+    },
+    {
+      "codepoint": 8218,
+      "hex": "U+201A",
+      "char": "‚",
+      "name": "SINGLE LOW-9 QUOTATION MARK"
+    },
+    {
+      "codepoint": 8220,
+      "hex": "U+201C",
+      "char": "“",
+      "name": "LEFT DOUBLE QUOTATION MARK"
+    },
+    {
+      "codepoint": 8221,
+      "hex": "U+201D",
+      "char": "”",
+      "name": "RIGHT DOUBLE QUOTATION MARK"
+    },
+    {
+      "codepoint": 8222,
+      "hex": "U+201E",
+      "char": "„",
+      "name": "DOUBLE LOW-9 QUOTATION MARK"
+    },
+    {
+      "codepoint": 8224,
+      "hex": "U+2020",
+      "char": "†",
+      "name": "DAGGER"
+    },
+    {
+      "codepoint": 8225,
+      "hex": "U+2021",
+      "char": "‡",
+      "name": "DOUBLE DAGGER"
+    },
+    {
+      "codepoint": 8226,
+      "hex": "U+2022",
+      "char": "•",
+      "name": "BULLET"
+    },
+    {
+      "codepoint": 8230,
+      "hex": "U+2026",
+      "char": "…",
+      "name": "HORIZONTAL ELLIPSIS"
+    },
+    {
+      "codepoint": 8240,
+      "hex": "U+2030",
+      "char": "‰",
+      "name": "PER MILLE SIGN"
+    },
+    {
+      "codepoint": 8249,
+      "hex": "U+2039",
+      "char": "‹",
+      "name": "SINGLE LEFT-POINTING ANGLE QUOTATION MARK"
+    },
+    {
+      "codepoint": 8250,
+      "hex": "U+203A",
+      "char": "›",
+      "name": "SINGLE RIGHT-POINTING ANGLE QUOTATION MARK"
+    },
+    {
+      "codepoint": 8364,
+      "hex": "U+20AC",
+      "char": "€",
+      "name": "EURO SIGN"
+    },
+    {
+      "codepoint": 8470,
+      "hex": "U+2116",
+      "char": "№",
+      "name": "NUMERO SIGN"
+    },
+    {
+      "codepoint": 8482,
+      "hex": "U+2122",
+      "char": "™",
+      "name": "TRADE MARK SIGN"
+    },
+    {
+      "codepoint": 8486,
+      "hex": "U+2126",
+      "char": "Ω",
+      "name": "OHM SIGN"
+    },
+    {
+      "codepoint": 8710,
+      "hex": "U+2206",
+      "char": "∆",
+      "name": "INCREMENT"
+    },
+    {
+      "codepoint": 8722,
+      "hex": "U+2212",
+      "char": "−",
+      "name": "MINUS SIGN"
+    },
+    {
+      "codepoint": 8729,
+      "hex": "U+2219",
+      "char": "∙",
+      "name": "BULLET OPERATOR"
+    },
+    {
+      "codepoint": 57344,
+      "hex": "U+E000",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 57345,
+      "hex": "U+E001",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 57346,
+      "hex": "U+E002",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 57388,
+      "hex": "U+E02C",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 57390,
+      "hex": "U+E02E",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 57392,
+      "hex": "U+E030",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 57393,
+      "hex": "U+E031",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 57394,
+      "hex": "U+E032",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 57395,
+      "hex": "U+E033",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 57396,
+      "hex": "U+E034",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 57397,
+      "hex": "U+E035",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 57398,
+      "hex": "U+E036",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 57399,
+      "hex": "U+E037",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 57400,
+      "hex": "U+E038",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 57401,
+      "hex": "U+E039",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 57402,
+      "hex": "U+E03A",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 57403,
+      "hex": "U+E03B",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 57404,
+      "hex": "U+E03C",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 57405,
+      "hex": "U+E03D",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 57406,
+      "hex": "U+E03E",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 57407,
+      "hex": "U+E03F",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 58112,
+      "hex": "U+E300",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 58113,
+      "hex": "U+E301",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 58114,
+      "hex": "U+E302",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 58115,
+      "hex": "U+E303",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 58116,
+      "hex": "U+E304",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 58117,
+      "hex": "U+E305",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 58118,
+      "hex": "U+E306",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 58119,
+      "hex": "U+E307",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 58120,
+      "hex": "U+E308",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 58121,
+      "hex": "U+E309",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 58122,
+      "hex": "U+E30A",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 58123,
+      "hex": "U+E30B",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 58124,
+      "hex": "U+E30C",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 58125,
+      "hex": "U+E30D",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 58127,
+      "hex": "U+E30F",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 63185,
+      "hex": "U+F6D1",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 63188,
+      "hex": "U+F6D4",
+      "char": "",
+      "name": "<private-use>"
+    },
+    {
+      "codepoint": 64257,
+      "hex": "U+FB01",
+      "char": "ﬁ",
+      "name": "LATIN SMALL LIGATURE FI"
+    },
+    {
+      "codepoint": 64258,
+      "hex": "U+FB02",
+      "char": "ﬂ",
+      "name": "LATIN SMALL LIGATURE FL"
+    }
+  ]
+}

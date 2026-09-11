@@ -1,0 +1,12 @@
+{
+  "helper_c99_asan_ubsan": "passed",
+  "dynamic_interposition": "passed",
+  "concurrent_calls": 256,
+  "original_arguments_status_errno": "preserved",
+  "missing_provider": "passed",
+  "host": "macOS, fictional provider with flat namespace/explicit dependency",
+  "output": [
+    "Dynamic hook: 256 calls, original arguments/status/errno preserved, exact concurrent counters.",
+    "Missing provider: deterministic ENOSYS, no recursive fallback."
+  ]
+}

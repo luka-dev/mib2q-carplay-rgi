@@ -1,0 +1,2450 @@
+Compiled from "ASLHandler.java"
+public class de.vw.mib.asl.internal.carplay.target.ASLHandler {
+  private de.vw.mib.asl.internal.carplay.common.CarPlayGlobalProperies properties;
+    descriptor: Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+
+  private de.vw.mib.asl.internal.carplay.target.HsmTarget target;
+    descriptor: Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+
+  private de.vw.mib.asl.internal.carplay.speech.SpeechApplicant speechapplicant;
+    descriptor: Lde/vw/mib/asl/internal/carplay/speech/SpeechApplicant;
+
+  private de.vw.mib.asl.internal.carplay.audio.CarPlayAudiohandling audiohandling;
+    descriptor: Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+
+  private de.vw.mib.asl.internal.carplay.common.CarPlayModeHandling modehandling;
+    descriptor: Lde/vw/mib/asl/internal/carplay/common/CarPlayModeHandling;
+
+  private de.vw.mib.asl.internal.carplay.speech.SpeechApplicant speech;
+    descriptor: Lde/vw/mib/asl/internal/carplay/speech/SpeechApplicant;
+
+  public java.lang.String classname;
+    descriptor: Ljava/lang/String;
+
+  int TOUCH_EVENT_RELEASED;
+    descriptor: I
+
+  int TOUCH_EVENT_PRESSED_ONE_FINGER;
+    descriptor: I
+
+  int TOUCH_EVENT_PRESSED_TWO_FINGERS;
+    descriptor: I
+
+  public de.vw.mib.asl.internal.carplay.target.ASLHandler(de.vw.mib.asl.internal.carplay.target.HsmTarget, de.vw.mib.asl.internal.carplay.common.CarPlayGlobalProperies, de.vw.mib.asl.internal.carplay.speech.SpeechApplicant, de.vw.mib.asl.internal.carplay.audio.CarPlayAudiohandling, de.vw.mib.asl.internal.carplay.common.CarPlayModeHandling, de.vw.mib.asl.internal.carplay.speech.SpeechApplicant);
+    descriptor: (Lde/vw/mib/asl/internal/carplay/target/HsmTarget;Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;Lde/vw/mib/asl/internal/carplay/speech/SpeechApplicant;Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;Lde/vw/mib/asl/internal/carplay/common/CarPlayModeHandling;Lde/vw/mib/asl/internal/carplay/speech/SpeechApplicant;)V
+    Code:
+         0: aload_0
+         1: invokespecial #1                  // Method java/lang/Object."<init>":()V
+         4: aload_0
+         5: ldc           #2                  // String ASLController
+         7: putfield      #3                  // Field classname:Ljava/lang/String;
+        10: aload_0
+        11: iconst_0
+        12: putfield      #4                  // Field TOUCH_EVENT_RELEASED:I
+        15: aload_0
+        16: iconst_1
+        17: putfield      #5                  // Field TOUCH_EVENT_PRESSED_ONE_FINGER:I
+        20: aload_0
+        21: iconst_2
+        22: putfield      #6                  // Field TOUCH_EVENT_PRESSED_TWO_FINGERS:I
+        25: aload_0
+        26: aload_1
+        27: putfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        30: aload_0
+        31: aload_2
+        32: putfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        35: aload_0
+        36: aload_3
+        37: putfield      #9                  // Field speechapplicant:Lde/vw/mib/asl/internal/carplay/speech/SpeechApplicant;
+        40: aload_0
+        41: aload         4
+        43: putfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+        46: aload_0
+        47: aload         5
+        49: putfield      #11                 // Field modehandling:Lde/vw/mib/asl/internal/carplay/common/CarPlayModeHandling;
+        52: aload_0
+        53: aload         6
+        55: putfield      #12                 // Field speech:Lde/vw/mib/asl/internal/carplay/speech/SpeechApplicant;
+        58: return
+
+  public void handleAslApiEnterCarPlayCanvas(de.vw.mib.genericevents.EventGeneric);
+    descriptor: (Lde/vw/mib/genericevents/EventGeneric;)V
+    Code:
+         0: aload_1
+         1: iconst_0
+         2: invokevirtual #13                 // Method de/vw/mib/genericevents/EventGeneric.getInt:(I)I
+         5: istore_2
+         6: aload_0
+         7: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        10: iconst_1
+        11: invokevirtual #14                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.setCanvasVisible:(Z)V
+        14: aload_0
+        15: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        18: invokevirtual #15                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getConnectionState:()I
+        21: ifeq          46
+        24: aload_0
+        25: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        28: invokevirtual #15                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getConnectionState:()I
+        31: iconst_1
+        32: if_icmpeq     46
+        35: aload_0
+        36: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        39: invokevirtual #16                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getCurrentScreenSource:()I
+        42: iconst_2
+        43: if_icmpne     47
+        46: return
+        47: iload_2
+        48: bipush        6
+        50: if_icmpne     69
+        53: aload_0
+        54: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        57: invokevirtual #17                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getDSICarPlay:()Lorg/dsi/ifc/carplay/DSICarplay;
+        60: iconst_2
+        61: invokeinterface #18,  2           // InterfaceMethod org/dsi/ifc/carplay/DSICarplay.requestUI:(I)V
+        66: goto          82
+        69: aload_0
+        70: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        73: invokevirtual #17                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getDSICarPlay:()Lorg/dsi/ifc/carplay/DSICarplay;
+        76: iconst_0
+        77: invokeinterface #18,  2           // InterfaceMethod org/dsi/ifc/carplay/DSICarplay.requestUI:(I)V
+        82: return
+
+  public void handleAslApiLeaveCarPlayCanvas();
+    descriptor: ()V
+    Code:
+         0: aload_0
+         1: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+         4: iconst_0
+         5: invokevirtual #14                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.setCanvasVisible:(Z)V
+         8: aload_0
+         9: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        12: invokevirtual #15                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getConnectionState:()I
+        15: ifeq          29
+        18: aload_0
+        19: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        22: invokevirtual #15                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getConnectionState:()I
+        25: iconst_1
+        26: if_icmpne     30
+        29: return
+        30: aload_0
+        31: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        34: invokevirtual #16                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getCurrentScreenSource:()I
+        37: iconst_2
+        38: if_icmpeq     51
+        41: aload_0
+        42: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        45: invokevirtual #19                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isVideoBorrowState:()Z
+        48: ifeq          79
+        51: aload_0
+        52: getfield      #11                 // Field modehandling:Lde/vw/mib/asl/internal/carplay/common/CarPlayModeHandling;
+        55: ldc           #20                 // String Take Screen: Carplay canvas was left
+        57: invokevirtual #21                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayModeHandling.takeScreen:(Ljava/lang/String;)V
+        60: iconst_1
+        61: aload_0
+        62: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        65: invokevirtual #16                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getCurrentScreenSource:()I
+        68: if_icmpeq     79
+        71: aload_0
+        72: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        75: iconst_1
+        76: invokevirtual #22                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.setCurrentScreenSource:(I)V
+        79: return
+
+  public void handleAslApiEV_CARPLAY_SOUND_SET_CONNECTION_ANSWER(int, int);
+    descriptor: (II)V
+    Code:
+         0: aload_0
+         1: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+         4: iload_1
+         5: invokevirtual #23                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getCurrentSoundStatus:(I)I
+         8: istore_3
+         9: iconst_m1
+        10: istore        4
+        12: iconst_m1
+        13: istore        5
+        15: iload_2
+        16: ifne          85
+        19: iload_3
+        20: ifne          85
+        23: aload_0
+        24: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        27: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+        30: ifeq          85
+        33: aload_0
+        34: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        37: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+        40: aload_0
+        41: getfield      #3                  // Field classname:Ljava/lang/String;
+        44: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+        49: ldc           #27                 // String .
+        51: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+        56: new           #28                 // class java/lang/StringBuffer
+        59: dup
+        60: invokespecial #29                 // Method java/lang/StringBuffer."<init>":()V
+        63: ldc           #30                 // String handleAslApiEV_CARPLAY_SOUND_SET_CONNECTION_ANSWER - WARNING! Got an answer out of order from audio management - got a result_ok for not requested connection
+        65: invokevirtual #31                 // Method java/lang/StringBuffer.append:(Ljava/lang/String;)Ljava/lang/StringBuffer;
+        68: iload_1
+        69: invokevirtual #32                 // Method java/lang/StringBuffer.append:(I)Ljava/lang/StringBuffer;
+        72: invokevirtual #33                 // Method java/lang/StringBuffer.toString:()Ljava/lang/String;
+        75: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+        80: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+        85: iload_1
+        86: sipush        151
+        89: if_icmpne     111
+        92: aload_0
+        93: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        96: invokevirtual #35                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getCurrentMainAudioType:()I
+        99: iconst_1
+       100: if_icmpeq     111
+       103: sipush        163
+       106: istore        5
+       108: goto          153
+       111: iload_1
+       112: sipush        163
+       115: if_icmpne     126
+       118: sipush        151
+       121: istore        5
+       123: goto          153
+       126: iload_1
+       127: sipush        152
+       130: if_icmpne     141
+       133: sipush        153
+       136: istore        5
+       138: goto          153
+       141: iload_1
+       142: sipush        153
+       145: if_icmpne     153
+       148: sipush        152
+       151: istore        5
+       153: iload         5
+       155: iconst_m1
+       156: if_icmpeq     170
+       159: aload_0
+       160: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       163: iload         5
+       165: invokevirtual #23                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getCurrentSoundStatus:(I)I
+       168: istore        4
+       170: iload_2
+       171: ifne          429
+       174: aload_0
+       175: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       178: iload_1
+       179: iconst_3
+       180: invokevirtual #36                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.setCurrentSoundStatus:(II)V
+       183: iload         4
+       185: iconst_m1
+       186: if_icmpeq     314
+       189: iload         4
+       191: iconst_3
+       192: if_icmpne     300
+       195: iload_3
+       196: iconst_3
+       197: if_icmpeq     712
+       200: aload_0
+       201: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       204: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+       207: ifeq          272
+       210: aload_0
+       211: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       214: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+       217: aload_0
+       218: getfield      #3                  // Field classname:Ljava/lang/String;
+       221: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       226: ldc           #27                 // String .
+       228: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       233: ldc           #37                 // String handleAslApiEV_CARPLAY_SOUND_SET_CONNECTION_ANSWER - result ok, is pair, pair status = ready, own was not ready (pair:
+       235: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       240: iload_1
+       241: invokeinterface #38,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(I)Lde/vw/mib/log4mib/LogMessage;
+       246: ldc           #39                 // String  and
+       248: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       253: iload         5
+       255: invokeinterface #38,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(I)Lde/vw/mib/log4mib/LogMessage;
+       260: ldc           #40                 // String ) => response
+       262: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       267: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+       272: aload_0
+       273: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       276: iconst_0
+       277: invokevirtual #41                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.setPhoneWaitsForResponseMainAudioType:(Z)V
+       280: aload_0
+       281: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       284: invokevirtual #17                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getDSICarPlay:()Lorg/dsi/ifc/carplay/DSICarplay;
+       287: aload_0
+       288: iload_1
+       289: invokespecial #42                 // Method getAnswerForMainAudioType:(I)I
+       292: invokeinterface #43,  2           // InterfaceMethod org/dsi/ifc/carplay/DSICarplay.responseUpdateMainAudioType:(I)V
+       297: goto          712
+       300: iload         4
+       302: iconst_2
+       303: if_icmpeq     712
+       306: iload         4
+       308: ifne          712
+       311: goto          712
+       314: iload_1
+       315: sipush        154
+       318: if_icmpeq     712
+       321: iload_1
+       322: sipush        155
+       325: if_icmpeq     712
+       328: iload_3
+       329: iconst_3
+       330: if_icmpeq     712
+       333: aload_0
+       334: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       337: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+       340: ifeq          391
+       343: aload_0
+       344: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       347: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+       350: aload_0
+       351: getfield      #3                  // Field classname:Ljava/lang/String;
+       354: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       359: ldc           #27                 // String .
+       361: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       366: ldc           #44                 // String handleAslApiEV_CARPLAY_SOUND_SET_CONNECTION_ANSWER - result ok, no pair, own was not ready (channel:
+       368: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       373: iload_1
+       374: invokeinterface #38,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(I)Lde/vw/mib/log4mib/LogMessage;
+       379: ldc           #40                 // String ) => response
+       381: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       386: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+       391: aload_0
+       392: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       395: invokevirtual #45                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isConnected:()Z
+       398: ifeq          712
+       401: aload_0
+       402: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       405: iconst_0
+       406: invokevirtual #41                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.setPhoneWaitsForResponseMainAudioType:(Z)V
+       409: aload_0
+       410: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       413: invokevirtual #17                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getDSICarPlay:()Lorg/dsi/ifc/carplay/DSICarplay;
+       416: aload_0
+       417: iload_1
+       418: invokespecial #42                 // Method getAnswerForMainAudioType:(I)I
+       421: invokeinterface #43,  2           // InterfaceMethod org/dsi/ifc/carplay/DSICarplay.responseUpdateMainAudioType:(I)V
+       426: goto          712
+       429: aload_0
+       430: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       433: iload_1
+       434: iconst_0
+       435: invokevirtual #36                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.setCurrentSoundStatus:(II)V
+       438: iload         4
+       440: iconst_m1
+       441: if_icmpeq     588
+       444: iload         4
+       446: ifeq          712
+       449: iload         4
+       451: iconst_2
+       452: if_icmpeq     461
+       455: iload         4
+       457: iconst_3
+       458: if_icmpne     712
+       461: aload_0
+       462: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       465: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+       468: ifeq          533
+       471: aload_0
+       472: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       475: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+       478: aload_0
+       479: getfield      #3                  // Field classname:Ljava/lang/String;
+       482: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       487: ldc           #27                 // String .
+       489: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       494: ldc           #46                 // String handleAslApiEV_CARPLAY_SOUND_SET_CONNECTION_ANSWER - result Nok, is pair, pair status = ready|pending (pair:
+       496: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       501: iload_1
+       502: invokeinterface #38,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(I)Lde/vw/mib/log4mib/LogMessage;
+       507: ldc           #39                 // String  and
+       509: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       514: iload         5
+       516: invokeinterface #38,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(I)Lde/vw/mib/log4mib/LogMessage;
+       521: ldc           #47                 // String ) => response & take audio
+       523: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       528: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+       533: aload_0
+       534: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       537: iconst_0
+       538: invokevirtual #41                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.setPhoneWaitsForResponseMainAudioType:(Z)V
+       541: aload_0
+       542: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       545: invokevirtual #17                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getDSICarPlay:()Lorg/dsi/ifc/carplay/DSICarplay;
+       548: aload_0
+       549: iload_1
+       550: invokespecial #42                 // Method getAnswerForMainAudioType:(I)I
+       553: invokeinterface #43,  2           // InterfaceMethod org/dsi/ifc/carplay/DSICarplay.responseUpdateMainAudioType:(I)V
+       558: aload_0
+       559: iload_1
+       560: invokespecial #48                 // Method isValidConnection:(I)Z
+       563: ifeq          712
+       566: aload_0
+       567: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+       570: iload         5
+       572: iconst_0
+       573: invokevirtual #49                 // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.releaseAudioConnection:(IZ)V
+       576: aload_0
+       577: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+       580: ldc           #50                 // String Take Audio: Audio connection could not be established for one out of two requested connections
+       582: invokevirtual #51                 // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.takeMainAudio:(Ljava/lang/String;)V
+       585: goto          712
+       588: iload_1
+       589: sipush        154
+       592: if_icmpeq     712
+       595: iload_1
+       596: sipush        155
+       599: if_icmpeq     712
+       602: aload_0
+       603: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       606: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+       609: ifeq          660
+       612: aload_0
+       613: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       616: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+       619: aload_0
+       620: getfield      #3                  // Field classname:Ljava/lang/String;
+       623: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       628: ldc           #27                 // String .
+       630: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       635: ldc           #52                 // String handleAslApiEV_CARPLAY_SOUND_SET_CONNECTION_ANSWER - result Nok, no pair (channel:
+       637: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       642: iload_1
+       643: invokeinterface #38,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(I)Lde/vw/mib/log4mib/LogMessage;
+       648: ldc           #47                 // String ) => response & take audio
+       650: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       655: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+       660: aload_0
+       661: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       664: invokevirtual #45                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isConnected:()Z
+       667: ifeq          712
+       670: aload_0
+       671: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       674: iconst_0
+       675: invokevirtual #41                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.setPhoneWaitsForResponseMainAudioType:(Z)V
+       678: aload_0
+       679: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       682: invokevirtual #17                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getDSICarPlay:()Lorg/dsi/ifc/carplay/DSICarplay;
+       685: aload_0
+       686: iload_1
+       687: invokespecial #42                 // Method getAnswerForMainAudioType:(I)I
+       690: invokeinterface #43,  2           // InterfaceMethod org/dsi/ifc/carplay/DSICarplay.responseUpdateMainAudioType:(I)V
+       695: aload_0
+       696: iload_1
+       697: invokespecial #48                 // Method isValidConnection:(I)Z
+       700: ifeq          712
+       703: aload_0
+       704: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+       707: ldc           #53                 // String Take Audio: Audio connection could not be established
+       709: invokevirtual #51                 // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.takeMainAudio:(Ljava/lang/String;)V
+       712: iload_1
+       713: sipush        162
+       716: if_icmpne     933
+       719: iload_2
+       720: ifne          933
+       723: aload_0
+       724: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       727: invokevirtual #54                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isActiveEntertainment:()Z
+       730: ifne          790
+       733: aload_0
+       734: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       737: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+       740: ifeq          778
+       743: aload_0
+       744: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       747: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+       750: aload_0
+       751: getfield      #3                  // Field classname:Ljava/lang/String;
+       754: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       759: ldc           #27                 // String .
+       761: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       766: ldc           #55                 // String handleAslApiEV_CARPLAY_SOUND_SET_CONNECTION_ANSWER - got the media connection but we are not active entertainment => release connection!
+       768: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       773: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+       778: aload_0
+       779: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+       782: sipush        162
+       785: iconst_1
+       786: invokevirtual #49                 // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.releaseAudioConnection:(IZ)V
+       789: return
+       790: aload_0
+       791: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       794: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+       797: ifeq          835
+       800: aload_0
+       801: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       804: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+       807: aload_0
+       808: getfield      #3                  // Field classname:Ljava/lang/String;
+       811: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       816: ldc           #27                 // String .
+       818: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       823: ldc           #56                 // String handleAslApiEV_CARPLAY_SOUND_SET_CONNECTION_ANSWER - send ACTIVATED
+       825: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       830: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+       835: aload_0
+       836: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       839: getstatic     #57                 // Field de/vw/mib/asl/framework/internal/framework/ServiceManager.mGenericEventFactory:Lde/vw/mib/genericevents/EventFactory;
+       842: ldc           #58                 // int 1400000
+       844: invokeinterface #59,  2           // InterfaceMethod de/vw/mib/genericevents/EventFactory.newEvent:(I)Lde/vw/mib/genericevents/EventGeneric;
+       849: invokevirtual #60                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.sendSafe:(Lde/vw/mib/genericevents/EventGeneric;)V
+       852: aload_0
+       853: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       856: ldc           #62                 // int 6100023
+       858: aconst_null
+       859: invokevirtual #63                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.triggerObserver:(ILde/vw/mib/genericevents/EventGeneric;)V
+       862: aload_0
+       863: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       866: invokevirtual #45                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isConnected:()Z
+       869: ifeq          911
+       872: aload_0
+       873: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       876: invokevirtual #64                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getCurrentMainAudioSource:()I
+       879: iconst_2
+       880: if_icmpne     911
+       883: aload_0
+       884: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+       887: iconst_0
+       888: invokevirtual #65                 // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.changeVolumeLock:(Z)V
+       891: aload_0
+       892: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       895: invokevirtual #66                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getCurrentMuteState:()Z
+       898: ifeq          919
+       901: aload_0
+       902: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+       905: invokevirtual #67                 // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.releaseUserMute:()V
+       908: goto          919
+       911: aload_0
+       912: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+       915: iconst_1
+       916: invokevirtual #65                 // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.changeVolumeLock:(Z)V
+       919: aload_0
+       920: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+       923: aload_0
+       924: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       927: invokevirtual #68                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getCurrentAudibleState:()Z
+       930: invokevirtual #69                 // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.checkAudibleStatus:(Z)V
+       933: return
+
+  public void handleAslApiEV_CARPLAY_SOUND_RELEASE_CONNECTION_ANSWER(int);
+    descriptor: (I)V
+    Code:
+         0: aload_0
+         1: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+         4: iload_1
+         5: invokevirtual #23                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getCurrentSoundStatus:(I)I
+         8: iconst_2
+         9: if_icmpeq     33
+        12: aload_0
+        13: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        16: iload_1
+        17: invokevirtual #23                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getCurrentSoundStatus:(I)I
+        20: iconst_1
+        21: if_icmpeq     33
+        24: aload_0
+        25: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        28: iload_1
+        29: iconst_0
+        30: invokevirtual #36                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.setCurrentSoundStatus:(II)V
+        33: iload_1
+        34: sipush        152
+        37: if_icmpeq     47
+        40: iload_1
+        41: sipush        153
+        44: if_icmpne     93
+        47: aload_0
+        48: getfield      #9                  // Field speechapplicant:Lde/vw/mib/asl/internal/carplay/speech/SpeechApplicant;
+        51: invokevirtual #70                 // Method de/vw/mib/asl/internal/carplay/speech/SpeechApplicant.isCarplayActive:()Z
+        54: ifeq          93
+        57: aload_0
+        58: getfield      #9                  // Field speechapplicant:Lde/vw/mib/asl/internal/carplay/speech/SpeechApplicant;
+        61: getstatic     #71                 // Field de/vw/mib/dialogactivation/ActivationState.INACTIVE:Lde/vw/mib/dialogactivation/ActivationState;
+        64: invokevirtual #72                 // Method de/vw/mib/asl/internal/carplay/speech/SpeechApplicant.forceChangeState:(Lde/vw/mib/dialogactivation/ActivationState;)V
+        67: aload_0
+        68: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        71: invokevirtual #17                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getDSICarPlay:()Lorg/dsi/ifc/carplay/DSICarplay;
+        74: iconst_1
+        75: invokeinterface #73,  2           // InterfaceMethod org/dsi/ifc/carplay/DSICarplay.requestSIRIAction:(I)V
+        80: aload_0
+        81: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        84: invokevirtual #17                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getDSICarPlay:()Lorg/dsi/ifc/carplay/DSICarplay;
+        87: iconst_2
+        88: invokeinterface #73,  2           // InterfaceMethod org/dsi/ifc/carplay/DSICarplay.requestSIRIAction:(I)V
+        93: aload_0
+        94: iload_1
+        95: invokespecial #48                 // Method isValidConnection:(I)Z
+        98: ifeq          132
+       101: aload_0
+       102: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       105: invokevirtual #74                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isSoundManagementAvailable:()Z
+       108: ifeq          132
+       111: aload_0
+       112: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       115: iload_1
+       116: invokevirtual #23                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getCurrentSoundStatus:(I)I
+       119: iconst_1
+       120: if_icmpeq     132
+       123: aload_0
+       124: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+       127: ldc           #75                 // String Take Audio: audio connection was released
+       129: invokevirtual #51                 // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.takeMainAudio:(Ljava/lang/String;)V
+       132: return
+
+  public void handleAslApiASL_SMARTPHONEINTEGRATION_CONNECTION_ESTABLISHED_CARPLAY();
+    descriptor: ()V
+    Code:
+         0: aload_0
+         1: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+         4: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+         7: ifeq          45
+        10: aload_0
+        11: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        14: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+        17: aload_0
+        18: getfield      #3                  // Field classname:Ljava/lang/String;
+        21: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+        26: ldc           #27                 // String .
+        28: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+        33: ldc           #76                 // String handleAslApiASL_SMARTPHONEINTEGRATION_CONNECTION_ESTABLISHED_CARPLAY
+        35: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+        40: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+        45: aload_0
+        46: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        49: invokevirtual #15                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getConnectionState:()I
+        52: ifne          64
+        55: aload_0
+        56: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        59: iconst_1
+        60: invokevirtual #77                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.setConnectionState:(I)V
+        63: return
+        64: aload_0
+        65: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        68: invokevirtual #15                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getConnectionState:()I
+        71: iconst_2
+        72: if_icmpne     160
+        75: aload_0
+        76: getfield      #9                  // Field speechapplicant:Lde/vw/mib/asl/internal/carplay/speech/SpeechApplicant;
+        79: invokevirtual #78                 // Method de/vw/mib/asl/internal/carplay/speech/SpeechApplicant.isRegistered:()Z
+        82: ifne          137
+        85: aload_0
+        86: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        89: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+        92: ifeq          130
+        95: aload_0
+        96: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        99: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+       102: aload_0
+       103: getfield      #3                  // Field classname:Ljava/lang/String;
+       106: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       111: ldc           #27                 // String .
+       113: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       118: ldc           #79                 // String  call speechapplicant.registerService()
+       120: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       125: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+       130: aload_0
+       131: getfield      #9                  // Field speechapplicant:Lde/vw/mib/asl/internal/carplay/speech/SpeechApplicant;
+       134: invokevirtual #80                 // Method de/vw/mib/asl/internal/carplay/speech/SpeechApplicant.registerService:()V
+       137: aload_0
+       138: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       141: iconst_3
+       142: invokevirtual #77                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.setConnectionState:(I)V
+       145: aload_0
+       146: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+       149: sipush        154
+       152: iconst_0
+       153: invokevirtual #81                 // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.setAudioConnection:(IZ)V
+       156: aload_0
+       157: invokevirtual #82                 // Method sendStartService:()V
+       160: return
+
+  public void handleAslApiASL_SMARTPHONEINTEGRATION_CONNECTION_LOST_CARPLAY();
+    descriptor: ()V
+    Code:
+         0: aload_0
+         1: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+         4: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+         7: ifeq          45
+        10: aload_0
+        11: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        14: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+        17: aload_0
+        18: getfield      #3                  // Field classname:Ljava/lang/String;
+        21: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+        26: ldc           #27                 // String .
+        28: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+        33: ldc           #83                 // String handleAslApiASL_SMARTPHONEINTEGRATION_CONNECTION_LOST_CARPLAY
+        35: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+        40: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+        45: aload_0
+        46: invokevirtual #84                 // Method handleAslApiLeaveCarPlayCanvas:()V
+        49: aload_0
+        50: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        53: invokevirtual #85                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getTimerServer:()Lde/vw/mib/genericevents/TimerServer;
+        56: aload_0
+        57: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        60: invokevirtual #86                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getTargetId:()I
+        63: ldc           #87                 // int 100011
+        65: invokeinterface #88,  3           // InterfaceMethod de/vw/mib/genericevents/TimerServer.isTimerActive:(II)Z
+        70: ifeq          82
+        73: aload_0
+        74: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        77: ldc           #87                 // int 100011
+        79: invokevirtual #89                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.stopTimer:(I)V
+        82: aload_0
+        83: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        86: invokevirtual #85                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getTimerServer:()Lde/vw/mib/genericevents/TimerServer;
+        89: aload_0
+        90: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        93: invokevirtual #86                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getTargetId:()I
+        96: ldc           #90                 // int 100012
+        98: invokeinterface #88,  3           // InterfaceMethod de/vw/mib/genericevents/TimerServer.isTimerActive:(II)Z
+       103: ifeq          115
+       106: aload_0
+       107: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       110: ldc           #90                 // int 100012
+       112: invokevirtual #89                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.stopTimer:(I)V
+       115: aload_0
+       116: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       119: invokevirtual #15                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getConnectionState:()I
+       122: iconst_3
+       123: if_icmpne     137
+       126: aload_0
+       127: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       130: iconst_2
+       131: invokevirtual #77                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.setConnectionState:(I)V
+       134: goto          156
+       137: aload_0
+       138: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       141: invokevirtual #15                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getConnectionState:()I
+       144: iconst_1
+       145: if_icmpne     156
+       148: aload_0
+       149: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       152: iconst_0
+       153: invokevirtual #77                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.setConnectionState:(I)V
+       156: aload_0
+       157: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+       160: iconst_1
+       161: iconst_1
+       162: invokevirtual #91                 // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.releaseAllConnections:(ZZ)V
+       165: aload_0
+       166: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       169: invokevirtual #85                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getTimerServer:()Lde/vw/mib/genericevents/TimerServer;
+       172: aload_0
+       173: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       176: invokevirtual #86                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getTargetId:()I
+       179: ldc           #92                 // int 100010
+       181: invokeinterface #88,  3           // InterfaceMethod de/vw/mib/genericevents/TimerServer.isTimerActive:(II)Z
+       186: ifeq          198
+       189: aload_0
+       190: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       193: ldc           #92                 // int 100010
+       195: invokevirtual #89                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.stopTimer:(I)V
+       198: aload_0
+       199: getfield      #9                  // Field speechapplicant:Lde/vw/mib/asl/internal/carplay/speech/SpeechApplicant;
+       202: iconst_0
+       203: invokevirtual #93                 // Method de/vw/mib/asl/internal/carplay/speech/SpeechApplicant.setWasSiriStart:(Z)V
+       206: aload_0
+       207: getfield      #9                  // Field speechapplicant:Lde/vw/mib/asl/internal/carplay/speech/SpeechApplicant;
+       210: invokevirtual #70                 // Method de/vw/mib/asl/internal/carplay/speech/SpeechApplicant.isCarplayActive:()Z
+       213: ifeq          226
+       216: aload_0
+       217: getfield      #9                  // Field speechapplicant:Lde/vw/mib/asl/internal/carplay/speech/SpeechApplicant;
+       220: getstatic     #71                 // Field de/vw/mib/dialogactivation/ActivationState.INACTIVE:Lde/vw/mib/dialogactivation/ActivationState;
+       223: invokevirtual #72                 // Method de/vw/mib/asl/internal/carplay/speech/SpeechApplicant.forceChangeState:(Lde/vw/mib/dialogactivation/ActivationState;)V
+       226: aload_0
+       227: getfield      #9                  // Field speechapplicant:Lde/vw/mib/asl/internal/carplay/speech/SpeechApplicant;
+       230: invokevirtual #78                 // Method de/vw/mib/asl/internal/carplay/speech/SpeechApplicant.isRegistered:()Z
+       233: ifeq          243
+       236: aload_0
+       237: getfield      #9                  // Field speechapplicant:Lde/vw/mib/asl/internal/carplay/speech/SpeechApplicant;
+       240: invokevirtual #94                 // Method de/vw/mib/asl/internal/carplay/speech/SpeechApplicant.unregister:()V
+       243: aload_0
+       244: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       247: invokevirtual #95                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getActiveNavigation:()I
+       250: iconst_2
+       251: if_icmpne     273
+       254: getstatic     #96                 // Field de/vw/mib/asl/framework/internal/framework/ServiceManager.aslPropertyManager:Lde/vw/mib/asl/ASLPropertyManager;
+       257: ldc           #97                 // int 2910009
+       259: iconst_0
+       260: invokeinterface #98,  3           // InterfaceMethod de/vw/mib/asl/ASLPropertyManager.valueChangedBoolean:(IZ)V
+       265: aload_0
+       266: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       269: iconst_1
+       270: invokevirtual #99                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.setActiveNavigation:(I)V
+       273: aload_0
+       274: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       277: iconst_0
+       278: invokevirtual #100                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.setAudioBorrowState:(Z)V
+       281: aload_0
+       282: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       285: iconst_0
+       286: invokevirtual #101                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.setVideoBorrowState:(Z)V
+       289: aload_0
+       290: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       293: iconst_0
+       294: invokevirtual #102                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.setCurrentMainAudioType:(I)V
+       297: aload_0
+       298: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       301: iconst_0
+       302: invokevirtual #103                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.setTelephonyStateValid:(Z)V
+       305: aload_0
+       306: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       309: invokevirtual #54                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isActiveEntertainment:()Z
+       312: ifeq          337
+       315: aload_0
+       316: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       319: sipush        162
+       322: invokevirtual #23                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getCurrentSoundStatus:(I)I
+       325: iconst_3
+       326: if_icmpne     337
+       329: aload_0
+       330: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+       333: iconst_1
+       334: invokevirtual #65                 // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.changeVolumeLock:(Z)V
+       337: aload_0
+       338: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       341: iconst_1
+       342: invokevirtual #104                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.setAutoplayFirstMediaRequest:(Z)V
+       345: aload_0
+       346: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       349: iconst_0
+       350: invokevirtual #105                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.setDelayBorrowAudio:(Z)V
+       353: aload_0
+       354: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       357: iconst_0
+       358: invokevirtual #41                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.setPhoneWaitsForResponseMainAudioType:(Z)V
+       361: aload_0
+       362: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       365: new           #106                // class java/util/Hashtable
+       368: dup
+       369: invokespecial #107                // Method java/util/Hashtable."<init>":()V
+       372: invokevirtual #108                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.setCurrentCallStates:(Ljava/util/Hashtable;)V
+       375: aload_0
+       376: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       379: invokevirtual #109                // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getClusterService:()Lde/vw/mib/asl/internal/carplay/api/impl/ASLCarplayServicesImpl;
+       382: invokevirtual #110                // Method de/vw/mib/asl/internal/carplay/api/impl/ASLCarplayServicesImpl.sendCallStatesUpdate:()V
+       385: return
+
+  public void handleHmiSimpleTouchEvent(de.vw.mib.genericevents.EventGeneric);
+    descriptor: (Lde/vw/mib/genericevents/EventGeneric;)V
+    Code:
+         0: aload_1
+         1: iconst_0
+         2: invokevirtual #13                 // Method de/vw/mib/genericevents/EventGeneric.getInt:(I)I
+         5: istore_2
+         6: aload_1
+         7: iconst_1
+         8: invokevirtual #13                 // Method de/vw/mib/genericevents/EventGeneric.getInt:(I)I
+        11: istore_3
+        12: aload_1
+        13: iconst_2
+        14: invokevirtual #13                 // Method de/vw/mib/genericevents/EventGeneric.getInt:(I)I
+        17: istore        4
+        19: aload_1
+        20: iconst_3
+        21: invokevirtual #13                 // Method de/vw/mib/genericevents/EventGeneric.getInt:(I)I
+        24: istore        5
+        26: iload         4
+        28: ifne          140
+        31: aload_0
+        32: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        35: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+        38: ifeq          95
+        41: aload_0
+        42: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        45: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+        48: aload_0
+        49: getfield      #3                  // Field classname:Ljava/lang/String;
+        52: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+        57: ldc           #111                // String .handleHmiSimpleTouchEvent (x,y)=(
+        59: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+        64: iload_2
+        65: invokeinterface #38,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(I)Lde/vw/mib/log4mib/LogMessage;
+        70: ldc           #112                // String ,
+        72: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+        77: iload_3
+        78: invokeinterface #38,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(I)Lde/vw/mib/log4mib/LogMessage;
+        83: ldc           #114                // String )
+        85: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+        90: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+        95: aload_0
+        96: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        99: invokevirtual #17                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getDSICarPlay:()Lorg/dsi/ifc/carplay/DSICarplay;
+       102: iconst_1
+       103: iload         5
+       105: ifne          115
+       108: aload_0
+       109: getfield      #5                  // Field TOUCH_EVENT_PRESSED_ONE_FINGER:I
+       112: goto          119
+       115: aload_0
+       116: getfield      #4                  // Field TOUCH_EVENT_RELEASED:I
+       119: iconst_1
+       120: anewarray     #115                // class org/dsi/ifc/carplay/TouchEvent
+       123: dup
+       124: iconst_0
+       125: new           #115                // class org/dsi/ifc/carplay/TouchEvent
+       128: dup
+       129: iload_2
+       130: iload_3
+       131: invokespecial #116                // Method org/dsi/ifc/carplay/TouchEvent."<init>":(II)V
+       134: aastore
+       135: invokeinterface #117,  4          // InterfaceMethod org/dsi/ifc/carplay/DSICarplay.postTouchEvent:(II[Lorg/dsi/ifc/carplay/TouchEvent;)V
+       140: return
+
+  public void handleHmiRotaryEvent(de.vw.mib.genericevents.EventGeneric);
+    descriptor: (Lde/vw/mib/genericevents/EventGeneric;)V
+    Code:
+         0: aload_1
+         1: iconst_0
+         2: invokevirtual #13                 // Method de/vw/mib/genericevents/EventGeneric.getInt:(I)I
+         5: istore_2
+         6: iload_2
+         7: ifne          24
+        10: aload_0
+        11: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        14: invokevirtual #17                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getDSICarPlay:()Lorg/dsi/ifc/carplay/DSICarplay;
+        17: iconst_m1
+        18: invokeinterface #118,  2          // InterfaceMethod org/dsi/ifc/carplay/DSICarplay.postRotaryEvent:(I)V
+        23: return
+        24: iload_2
+        25: iconst_1
+        26: if_icmpne     45
+        29: aload_0
+        30: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        33: invokevirtual #17                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getDSICarPlay:()Lorg/dsi/ifc/carplay/DSICarplay;
+        36: iconst_1
+        37: invokeinterface #118,  2          // InterfaceMethod org/dsi/ifc/carplay/DSICarplay.postRotaryEvent:(I)V
+        42: goto          86
+        45: iload_2
+        46: iconst_2
+        47: if_icmpne     67
+        50: aload_0
+        51: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        54: invokevirtual #17                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getDSICarPlay:()Lorg/dsi/ifc/carplay/DSICarplay;
+        57: iconst_1
+        58: iconst_0
+        59: invokeinterface #119,  3          // InterfaceMethod org/dsi/ifc/carplay/DSICarplay.postButtonEvent:(II)V
+        64: goto          86
+        67: iload_2
+        68: iconst_4
+        69: if_icmpne     86
+        72: aload_0
+        73: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        76: invokevirtual #17                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getDSICarPlay:()Lorg/dsi/ifc/carplay/DSICarplay;
+        79: iconst_1
+        80: iconst_1
+        81: invokeinterface #119,  3          // InterfaceMethod org/dsi/ifc/carplay/DSICarplay.postButtonEvent:(II)V
+        86: return
+
+  public void handleHmiMflEvent(de.vw.mib.genericevents.EventGeneric);
+    descriptor: (Lde/vw/mib/genericevents/EventGeneric;)V
+    Code:
+         0: aload_1
+         1: iconst_0
+         2: invokevirtual #13                 // Method de/vw/mib/genericevents/EventGeneric.getInt:(I)I
+         5: istore_2
+         6: aload_0
+         7: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        10: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+        13: ifeq          50
+        16: aload_0
+        17: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        20: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+        23: aload_0
+        24: getfield      #3                  // Field classname:Ljava/lang/String;
+        27: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+        32: ldc           #120                // String .handleHmiMflEvent(gesture=
+        34: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+        39: iload_2
+        40: invokeinterface #38,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(I)Lde/vw/mib/log4mib/LogMessage;
+        45: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+        50: iload_2
+        51: tableswitch   { // 0 to 14
+                       0: 124
+                       1: 301
+                       2: 142
+                       3: 160
+                       4: 178
+                       5: 301
+                       6: 301
+                       7: 301
+                       8: 196
+                       9: 214
+                      10: 214
+                      11: 232
+                      12: 250
+                      13: 268
+                      14: 286
+                 default: 301
+            }
+       124: aload_0
+       125: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       128: invokevirtual #17                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getDSICarPlay:()Lorg/dsi/ifc/carplay/DSICarplay;
+       131: bipush        9
+       133: iconst_1
+       134: invokeinterface #119,  3          // InterfaceMethod org/dsi/ifc/carplay/DSICarplay.postButtonEvent:(II)V
+       139: goto          301
+       142: aload_0
+       143: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       146: invokevirtual #17                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getDSICarPlay:()Lorg/dsi/ifc/carplay/DSICarplay;
+       149: bipush        10
+       151: iconst_1
+       152: invokeinterface #119,  3          // InterfaceMethod org/dsi/ifc/carplay/DSICarplay.postButtonEvent:(II)V
+       157: goto          301
+       160: aload_0
+       161: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       164: invokevirtual #17                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getDSICarPlay:()Lorg/dsi/ifc/carplay/DSICarplay;
+       167: bipush        10
+       169: iconst_1
+       170: invokeinterface #119,  3          // InterfaceMethod org/dsi/ifc/carplay/DSICarplay.postButtonEvent:(II)V
+       175: goto          301
+       178: aload_0
+       179: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       182: invokevirtual #17                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getDSICarPlay:()Lorg/dsi/ifc/carplay/DSICarplay;
+       185: bipush        9
+       187: iconst_1
+       188: invokeinterface #119,  3          // InterfaceMethod org/dsi/ifc/carplay/DSICarplay.postButtonEvent:(II)V
+       193: goto          301
+       196: aload_0
+       197: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       200: invokevirtual #17                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getDSICarPlay:()Lorg/dsi/ifc/carplay/DSICarplay;
+       203: bipush        20
+       205: iconst_0
+       206: invokeinterface #119,  3          // InterfaceMethod org/dsi/ifc/carplay/DSICarplay.postButtonEvent:(II)V
+       211: goto          301
+       214: aload_0
+       215: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       218: invokevirtual #17                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getDSICarPlay:()Lorg/dsi/ifc/carplay/DSICarplay;
+       221: bipush        20
+       223: iconst_1
+       224: invokeinterface #119,  3          // InterfaceMethod org/dsi/ifc/carplay/DSICarplay.postButtonEvent:(II)V
+       229: goto          301
+       232: aload_0
+       233: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       236: invokevirtual #17                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getDSICarPlay:()Lorg/dsi/ifc/carplay/DSICarplay;
+       239: bipush        15
+       241: iconst_0
+       242: invokeinterface #119,  3          // InterfaceMethod org/dsi/ifc/carplay/DSICarplay.postButtonEvent:(II)V
+       247: goto          301
+       250: aload_0
+       251: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       254: invokevirtual #17                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getDSICarPlay:()Lorg/dsi/ifc/carplay/DSICarplay;
+       257: bipush        15
+       259: iconst_1
+       260: invokeinterface #119,  3          // InterfaceMethod org/dsi/ifc/carplay/DSICarplay.postButtonEvent:(II)V
+       265: goto          301
+       268: aload_0
+       269: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       272: invokevirtual #17                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getDSICarPlay:()Lorg/dsi/ifc/carplay/DSICarplay;
+       275: bipush        9
+       277: iconst_0
+       278: invokeinterface #119,  3          // InterfaceMethod org/dsi/ifc/carplay/DSICarplay.postButtonEvent:(II)V
+       283: goto          301
+       286: aload_0
+       287: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       290: invokevirtual #17                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getDSICarPlay:()Lorg/dsi/ifc/carplay/DSICarplay;
+       293: bipush        10
+       295: iconst_0
+       296: invokeinterface #119,  3          // InterfaceMethod org/dsi/ifc/carplay/DSICarplay.postButtonEvent:(II)V
+       301: return
+
+  public void sendStartService();
+    descriptor: ()V
+    Code:
+         0: aload_0
+         1: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+         4: invokevirtual #121                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getParamconfig:()Lde/vw/mib/asl/internal/carplay/common/CarPlayHMIRequestParameterConfiguration;
+         7: astore_1
+         8: iconst_0
+         9: anewarray     #122                // class java/lang/String
+        12: astore_2
+        13: iconst_0
+        14: istore_3
+        15: getstatic     #123                // Field de/vw/mib/asl/framework/internal/framework/ServiceManager.configManagerDiag:Lde/vw/mib/configuration/ConfigurationManagerDiag;
+        18: invokeinterface #124,  1          // InterfaceMethod de/vw/mib/configuration/ConfigurationManagerDiag.getDriverSide:()I
+        23: iconst_2
+        24: if_icmpne     29
+        27: iconst_1
+        28: istore_3
+        29: getstatic     #123                // Field de/vw/mib/asl/framework/internal/framework/ServiceManager.configManagerDiag:Lde/vw/mib/configuration/ConfigurationManagerDiag;
+        32: invokeinterface #125,  1          // InterfaceMethod de/vw/mib/configuration/ConfigurationManagerDiag.getCarplayCanvasOffsetX:()I
+        37: istore        4
+        39: getstatic     #123                // Field de/vw/mib/asl/framework/internal/framework/ServiceManager.configManagerDiag:Lde/vw/mib/configuration/ConfigurationManagerDiag;
+        42: invokeinterface #126,  1          // InterfaceMethod de/vw/mib/configuration/ConfigurationManagerDiag.getLayoutCarplayCanvasDimensionHeight:()I
+        47: istore        5
+        49: getstatic     #123                // Field de/vw/mib/asl/framework/internal/framework/ServiceManager.configManagerDiag:Lde/vw/mib/configuration/ConfigurationManagerDiag;
+        52: invokeinterface #127,  1          // InterfaceMethod de/vw/mib/configuration/ConfigurationManagerDiag.getLayoutCarplayCanvasDimensionWidth:()I
+        57: istore        6
+        59: bipush        105
+        61: istore        7
+        63: sipush        174
+        66: istore        8
+        68: invokestatic  #128                // Method de/vw/mib/asl/api/smartphoneintegration/ASLSmartphoneIntegrationFactory.getSmartphoneIntegrationApi:()Lde/vw/mib/asl/api/smartphoneintegration/ASLSmartphoneIntegrationAPI;
+        71: astore        9
+        73: aload         9
+        75: ifnull        223
+        78: aload         9
+        80: invokeinterface #129,  1          // InterfaceMethod de/vw/mib/asl/api/smartphoneintegration/ASLSmartphoneIntegrationAPI.getPixelDimensionWidth:()D
+        85: iload         6
+        87: i2d
+        88: dmul
+        89: d2i
+        90: istore        8
+        92: aload         9
+        94: invokeinterface #130,  1          // InterfaceMethod de/vw/mib/asl/api/smartphoneintegration/ASLSmartphoneIntegrationAPI.getPixelDimensionHeight:()D
+        99: iload         5
+       101: i2d
+       102: dmul
+       103: d2i
+       104: istore        7
+       106: aload_0
+       107: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       110: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+       113: ifeq          242
+       116: aload_0
+       117: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       120: new           #28                 // class java/lang/StringBuffer
+       123: dup
+       124: invokespecial #29                 // Method java/lang/StringBuffer."<init>":()V
+       127: ldc           #131                // String ASLHandler::sendStartService( width->
+       129: invokevirtual #31                 // Method java/lang/StringBuffer.append:(Ljava/lang/String;)Ljava/lang/StringBuffer;
+       132: iload         8
+       134: invokevirtual #32                 // Method java/lang/StringBuffer.append:(I)Ljava/lang/StringBuffer;
+       137: ldc           #132                // String =
+       139: invokevirtual #31                 // Method java/lang/StringBuffer.append:(Ljava/lang/String;)Ljava/lang/StringBuffer;
+       142: aload         9
+       144: invokeinterface #129,  1          // InterfaceMethod de/vw/mib/asl/api/smartphoneintegration/ASLSmartphoneIntegrationAPI.getPixelDimensionWidth:()D
+       149: invokevirtual #133                // Method java/lang/StringBuffer.append:(D)Ljava/lang/StringBuffer;
+       152: ldc           #135                // String *
+       154: invokevirtual #31                 // Method java/lang/StringBuffer.append:(Ljava/lang/String;)Ljava/lang/StringBuffer;
+       157: iload         6
+       159: invokevirtual #32                 // Method java/lang/StringBuffer.append:(I)Ljava/lang/StringBuffer;
+       162: invokevirtual #33                 // Method java/lang/StringBuffer.toString:()Ljava/lang/String;
+       165: invokevirtual #136                // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:(Ljava/lang/String;)V
+       168: aload_0
+       169: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       172: new           #28                 // class java/lang/StringBuffer
+       175: dup
+       176: invokespecial #29                 // Method java/lang/StringBuffer."<init>":()V
+       179: ldc           #137                // String ASLHandler::sendStartService( height->
+       181: invokevirtual #31                 // Method java/lang/StringBuffer.append:(Ljava/lang/String;)Ljava/lang/StringBuffer;
+       184: iload         7
+       186: invokevirtual #32                 // Method java/lang/StringBuffer.append:(I)Ljava/lang/StringBuffer;
+       189: ldc           #132                // String =
+       191: invokevirtual #31                 // Method java/lang/StringBuffer.append:(Ljava/lang/String;)Ljava/lang/StringBuffer;
+       194: aload         9
+       196: invokeinterface #130,  1          // InterfaceMethod de/vw/mib/asl/api/smartphoneintegration/ASLSmartphoneIntegrationAPI.getPixelDimensionHeight:()D
+       201: invokevirtual #133                // Method java/lang/StringBuffer.append:(D)Ljava/lang/StringBuffer;
+       204: ldc           #135                // String *
+       206: invokevirtual #31                 // Method java/lang/StringBuffer.append:(Ljava/lang/String;)Ljava/lang/StringBuffer;
+       209: iload         5
+       211: invokevirtual #32                 // Method java/lang/StringBuffer.append:(I)Ljava/lang/StringBuffer;
+       214: invokevirtual #33                 // Method java/lang/StringBuffer.toString:()Ljava/lang/String;
+       217: invokevirtual #136                // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:(Ljava/lang/String;)V
+       220: goto          242
+       223: aload_0
+       224: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       227: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+       230: ifeq          242
+       233: aload_0
+       234: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       237: ldc           #138                // String StartupHandler::startAndroidAutoService2(smartphoneintegrationAPI == null)
+       239: invokevirtual #136                // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:(Ljava/lang/String;)V
+       242: iconst_1
+       243: anewarray     #139                // class generated/de/vw/mib/asl/internal/carplay/transformer/CarPlayCanvasDimensionCollector
+       246: dup
+       247: iconst_0
+       248: new           #139                // class generated/de/vw/mib/asl/internal/carplay/transformer/CarPlayCanvasDimensionCollector
+       251: dup
+       252: invokespecial #140                // Method generated/de/vw/mib/asl/internal/carplay/transformer/CarPlayCanvasDimensionCollector."<init>":()V
+       255: aastore
+       256: astore        10
+       258: aload         10
+       260: iconst_0
+       261: aaload
+       262: iload         5
+       264: putfield      #141                // Field generated/de/vw/mib/asl/internal/carplay/transformer/CarPlayCanvasDimensionCollector.carplay_height:I
+       267: aload         10
+       269: iconst_0
+       270: aaload
+       271: iload         6
+       273: putfield      #142                // Field generated/de/vw/mib/asl/internal/carplay/transformer/CarPlayCanvasDimensionCollector.carplay_width:I
+       276: ldc           #143                // int 2910008
+       278: invokestatic  #144                // Method generated/de/vw/mib/asl/internal/ListManager.getGenericASLList:(I)Lde/vw/mib/asl/internal/list/impl/GenericASLList;
+       281: aload         10
+       283: invokevirtual #145                // Method de/vw/mib/asl/internal/list/impl/GenericASLList.updateList:([Ljava/lang/Object;)V
+       286: aload_1
+       287: iconst_0
+       288: aload_0
+       289: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       292: invokevirtual #146                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isHmiRouteGuidanceActive:()Z
+       295: aload_0
+       296: getfield      #12                 // Field speech:Lde/vw/mib/asl/internal/carplay/speech/SpeechApplicant;
+       299: invokevirtual #147                // Method de/vw/mib/asl/internal/carplay/speech/SpeechApplicant.isOtherSpeechActive:()Lde/vw/mib/dialogactivation/ActivationState;
+       302: getstatic     #148                // Field de/vw/mib/dialogactivation/ActivationState.ACTIVE:Lde/vw/mib/dialogactivation/ActivationState;
+       305: if_acmpne     312
+       308: iconst_1
+       309: goto          313
+       312: iconst_0
+       313: invokevirtual #149                // Method de/vw/mib/asl/internal/carplay/common/CarPlayHMIRequestParameterConfiguration.getCompleteAppStateRequest:(ZZZ)[Lorg/dsi/ifc/carplay/AppStateRequest;
+       316: astore        11
+       318: aload_0
+       319: invokespecial #150                // Method java/lang/Object.getClass:()Ljava/lang/Class;
+       322: pop
+       323: aload_0
+       324: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       327: invokevirtual #17                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getDSICarPlay:()Lorg/dsi/ifc/carplay/DSICarplay;
+       330: new           #151                // class org/dsi/ifc/carplay/ServiceConfiguration
+       333: dup
+       334: aload         11
+       336: aload_1
+       337: iconst_3
+       338: invokevirtual #152                // Method de/vw/mib/asl/internal/carplay/common/CarPlayHMIRequestParameterConfiguration.getRessourceRequest:(I)[Lorg/dsi/ifc/carplay/ResourceRequest;
+       341: iconst_3
+       342: iload         6
+       344: iload         5
+       346: iload         4
+       348: iconst_0
+       349: aload_0
+       350: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       353: invokevirtual #153                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getOemIconTitle:()Ljava/lang/String;
+       356: iload_3
+       357: iload         6
+       359: iload         5
+       361: aload_2
+       362: aload_0
+       363: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       366: invokevirtual #154                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isNightMode:()Z
+       369: iload         7
+       371: iload         8
+       373: aload_0
+       374: invokespecial #155                // Method getInputFeatures:()I
+       377: invokespecial #156                // Method org/dsi/ifc/carplay/ServiceConfiguration."<init>":([Lorg/dsi/ifc/carplay/AppStateRequest;[Lorg/dsi/ifc/carplay/ResourceRequest;IIIIILjava/lang/String;ZII[Ljava/lang/String;ZIII)V
+       380: invokeinterface #157,  2          // InterfaceMethod org/dsi/ifc/carplay/DSICarplay.startService:(Lorg/dsi/ifc/carplay/ServiceConfiguration;)V
+       385: aload_0
+       386: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       389: iconst_1
+       390: invokevirtual #22                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.setCurrentScreenSource:(I)V
+       393: return
+
+  private int getInputFeatures();
+    descriptor: ()I
+    Code:
+         0: invokestatic  #158                // Method de/vw/mib/asl/api/system/ASLSystemFactory.getSystemApi:()Lde/vw/mib/asl/api/system/ASLSystemAPI;
+         3: invokeinterface #159,  1          // InterfaceMethod de/vw/mib/asl/api/system/ASLSystemAPI.getAbtFeatureService:()Lde/vw/mib/asl/api/system/AbtFeatureService;
+         8: invokeinterface #160,  1          // InterfaceMethod de/vw/mib/asl/api/system/AbtFeatureService.getRotaryEncoderType:()I
+        13: iconst_2
+        14: if_icmpne     21
+        17: iconst_5
+        18: goto          22
+        21: iconst_4
+        22: ireturn
+
+  public void handleSoundManagerStatus(de.vw.mib.genericevents.EventGeneric);
+    descriptor: (Lde/vw/mib/genericevents/EventGeneric;)V
+    Code:
+         0: aload_1
+         1: iconst_0
+         2: invokevirtual #13                 // Method de/vw/mib/genericevents/EventGeneric.getInt:(I)I
+         5: istore_2
+         6: iload_2
+         7: ifne          206
+        10: aload_0
+        11: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        14: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+        17: ifeq          55
+        20: aload_0
+        21: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        24: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+        27: aload_0
+        28: getfield      #3                  // Field classname:Ljava/lang/String;
+        31: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+        36: ldc           #161                // String .handle(ASL_SOUND_AUDIOMNGMNT_STATUS)
+        38: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+        43: ldc           #162                // String  ASL_SOUND_AUDIOMNGMNT_UNAVAILABLE
+        45: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+        50: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+        55: aload_0
+        56: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        59: iconst_0
+        60: invokevirtual #163                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.setSoundManagementAvailable:(Z)V
+        63: aload_0
+        64: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        67: invokevirtual #45                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isConnected:()Z
+        70: ifeq          205
+        73: aload_0
+        74: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        77: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+        80: ifeq          118
+        83: aload_0
+        84: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        87: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+        90: aload_0
+        91: getfield      #3                  // Field classname:Ljava/lang/String;
+        94: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+        99: ldc           #161                // String .handle(ASL_SOUND_AUDIOMNGMNT_STATUS)
+       101: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       106: ldc           #164                // String  release all connections but leave EntertainmentManager alone
+       108: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       113: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+       118: aload_0
+       119: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+       122: iconst_1
+       123: iconst_1
+       124: invokevirtual #91                 // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.releaseAllConnections:(ZZ)V
+       127: aload_0
+       128: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       131: sipush        162
+       134: iconst_0
+       135: invokevirtual #36                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.setCurrentSoundStatus:(II)V
+       138: aload_0
+       139: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       142: invokevirtual #64                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getCurrentMainAudioSource:()I
+       145: iconst_2
+       146: if_icmpne     204
+       149: aload_0
+       150: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       153: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+       156: ifeq          194
+       159: aload_0
+       160: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       163: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+       166: aload_0
+       167: getfield      #3                  // Field classname:Ljava/lang/String;
+       170: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       175: ldc           #161                // String .handle(ASL_SOUND_AUDIOMNGMNT_STATUS)
+       177: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       182: ldc           #165                // String  borrow audio
+       184: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       189: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+       194: aload_0
+       195: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+       198: ldc           #166                // String Borrow audio: audio management is not longer available
+       200: invokevirtual #167                // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.borrowMainAudio:(Ljava/lang/String;)V
+       203: return
+       204: return
+       205: return
+       206: iload_2
+       207: iconst_1
+       208: if_icmpne     265
+       211: aload_0
+       212: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       215: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+       218: ifeq          256
+       221: aload_0
+       222: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       225: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+       228: aload_0
+       229: getfield      #3                  // Field classname:Ljava/lang/String;
+       232: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       237: ldc           #161                // String .handle(ASL_SOUND_AUDIOMNGMNT_STATUS)
+       239: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       244: ldc           #168                // String  ASL_SOUND_AUDIOMNGMNT_AVAILABLE
+       246: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       251: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+       256: aload_0
+       257: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       260: iconst_1
+       261: invokevirtual #163                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.setSoundManagementAvailable:(Z)V
+       264: return
+       265: iload_2
+       266: iconst_2
+       267: if_icmpne     453
+       270: aload_0
+       271: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       274: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+       277: ifeq          315
+       280: aload_0
+       281: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       284: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+       287: aload_0
+       288: getfield      #3                  // Field classname:Ljava/lang/String;
+       291: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       296: ldc           #161                // String .handle(ASL_SOUND_AUDIOMNGMNT_STATUS)
+       298: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       303: ldc           #169                // String  ASL_SOUND_AUDIOMNGMNT_AVAILABLE_RESTORE_CONNECTIONS
+       305: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       310: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+       315: aload_0
+       316: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       319: iconst_1
+       320: invokevirtual #163                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.setSoundManagementAvailable:(Z)V
+       323: aload_0
+       324: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       327: invokevirtual #45                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isConnected:()Z
+       330: ifeq          453
+       333: aload_0
+       334: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       337: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+       340: ifeq          378
+       343: aload_0
+       344: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       347: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+       350: aload_0
+       351: getfield      #3                  // Field classname:Ljava/lang/String;
+       354: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       359: ldc           #161                // String .handle(ASL_SOUND_AUDIOMNGMNT_STATUS)
+       361: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       366: ldc           #170                // String  reconnect dio announcement
+       368: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       373: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+       378: aload_0
+       379: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+       382: sipush        154
+       385: iconst_0
+       386: invokevirtual #81                 // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.setAudioConnection:(IZ)V
+       389: aload_0
+       390: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       393: invokevirtual #54                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isActiveEntertainment:()Z
+       396: ifeq          453
+       399: aload_0
+       400: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       403: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+       406: ifeq          444
+       409: aload_0
+       410: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       413: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+       416: aload_0
+       417: getfield      #3                  // Field classname:Ljava/lang/String;
+       420: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       425: ldc           #161                // String .handle(ASL_SOUND_AUDIOMNGMNT_STATUS)
+       427: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       432: ldc           #171                // String  unborrow main audio
+       434: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       439: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+       444: aload_0
+       445: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+       448: ldc           #172                // String Unborrow Audio: audio management is now available again
+       450: invokevirtual #173                // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.unborrowMainAudio:(Ljava/lang/String;)V
+       453: return
+
+  public void handleDayNightMode(de.vw.mib.genericevents.EventGeneric);
+    descriptor: (Lde/vw/mib/genericevents/EventGeneric;)V
+    Code:
+         0: aload_1
+         1: iconst_0
+         2: invokevirtual #174                // Method de/vw/mib/genericevents/EventGeneric.getBoolean:(I)Z
+         5: istore_2
+         6: aload_0
+         7: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        10: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+        13: ifeq          57
+        16: aload_0
+        17: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        20: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+        23: aload_0
+        24: getfield      #3                  // Field classname:Ljava/lang/String;
+        27: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+        32: ldc           #175                // String .handle(DAYNIGHT_MODE)
+        34: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+        39: ldc           #176                // String  new mode: night mode is
+        41: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+        46: iload_2
+        47: invokeinterface #177,  2          // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Z)Lde/vw/mib/log4mib/LogMessage;
+        52: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+        57: aload_0
+        58: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        61: iload_2
+        62: invokevirtual #178                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.setNightMode:(Z)V
+        65: aload_0
+        66: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        69: invokevirtual #45                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isConnected:()Z
+        72: ifeq          88
+        75: aload_0
+        76: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        79: invokevirtual #17                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getDSICarPlay:()Lorg/dsi/ifc/carplay/DSICarplay;
+        82: iload_2
+        83: invokeinterface #179,  2          // InterfaceMethod org/dsi/ifc/carplay/DSICarplay.requestNightMode:(Z)V
+        88: return
+
+  private boolean isValidConnection(int);
+    descriptor: (I)Z
+    Code:
+         0: iload_1
+         1: sipush        151
+         4: if_icmpeq     14
+         7: iload_1
+         8: sipush        163
+        11: if_icmpne     27
+        14: aload_0
+        15: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        18: invokevirtual #35                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getCurrentMainAudioType:()I
+        21: iconst_3
+        22: if_icmpne     27
+        25: iconst_1
+        26: ireturn
+        27: iload_1
+        28: sipush        152
+        31: if_icmpeq     41
+        34: iload_1
+        35: sipush        153
+        38: if_icmpne     54
+        41: aload_0
+        42: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        45: invokevirtual #35                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getCurrentMainAudioType:()I
+        48: iconst_4
+        49: if_icmpne     54
+        52: iconst_1
+        53: ireturn
+        54: iload_1
+        55: aload_0
+        56: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        59: invokevirtual #180                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getRingtoneConnection:()I
+        62: if_icmpne     78
+        65: aload_0
+        66: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        69: invokevirtual #35                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getCurrentMainAudioType:()I
+        72: iconst_1
+        73: if_icmpne     78
+        76: iconst_1
+        77: ireturn
+        78: iload_1
+        79: sipush        162
+        82: if_icmpne     100
+        85: aload_0
+        86: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        89: invokevirtual #35                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getCurrentMainAudioType:()I
+        92: iconst_2
+        93: if_icmpne     100
+        96: iconst_1
+        97: goto          101
+       100: iconst_0
+       101: ireturn
+
+  private int getAnswerForMainAudioType(int);
+    descriptor: (I)I
+    Code:
+         0: iload_1
+         1: sipush        163
+         4: if_icmpne     9
+         7: iconst_3
+         8: ireturn
+         9: iload_1
+        10: sipush        162
+        13: if_icmpne     18
+        16: iconst_2
+        17: ireturn
+        18: iload_1
+        19: sipush        152
+        22: if_icmpeq     32
+        25: iload_1
+        26: sipush        153
+        29: if_icmpne     34
+        32: iconst_4
+        33: ireturn
+        34: iload_1
+        35: aload_0
+        36: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        39: invokevirtual #180                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getRingtoneConnection:()I
+        42: if_icmpne     60
+        45: aload_0
+        46: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        49: invokevirtual #180                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getRingtoneConnection:()I
+        52: sipush        151
+        55: if_icmpeq     60
+        58: iconst_1
+        59: ireturn
+        60: iload_1
+        61: sipush        151
+        64: if_icmpne     97
+        67: aload_0
+        68: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        71: invokevirtual #180                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getRingtoneConnection:()I
+        74: sipush        165
+        77: if_icmpne     97
+        80: aload_0
+        81: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        84: invokevirtual #35                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getCurrentMainAudioType:()I
+        87: iconst_1
+        88: if_icmpne     95
+        91: iconst_1
+        92: goto          96
+        95: iconst_3
+        96: ireturn
+        97: iconst_0
+        98: ireturn
+
+  public void checkDelayedBorrowState(int);
+    descriptor: (I)V
+    Code:
+         0: aload_0
+         1: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+         4: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+         7: ifeq          38
+        10: aload_0
+        11: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        14: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+        17: aload_0
+        18: getfield      #3                  // Field classname:Ljava/lang/String;
+        21: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+        26: ldc           #181                // String .checkDelayedBorrowState - SDS ended
+        28: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+        33: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+        38: aload_0
+        39: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        42: invokevirtual #182                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isDelayBorrowAudio:()Z
+        45: ifeq          235
+        48: aload_0
+        49: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        52: invokevirtual #64                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getCurrentMainAudioSource:()I
+        55: iconst_2
+        56: if_icmpne     235
+        59: aload_0
+        60: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        63: invokevirtual #35                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getCurrentMainAudioType:()I
+        66: iconst_2
+        67: if_icmpne     235
+        70: aload_0
+        71: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        74: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+        77: ifeq          108
+        80: aload_0
+        81: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        84: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+        87: aload_0
+        88: getfield      #3                  // Field classname:Ljava/lang/String;
+        91: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+        96: ldc           #183                // String .checkDelayedBorrowState - SDS warmup ended without sds session => do BORROW now
+        98: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       103: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+       108: aload_0
+       109: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       112: sipush        151
+       115: invokevirtual #23                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getCurrentSoundStatus:(I)I
+       118: ifne          189
+       121: aload_0
+       122: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       125: sipush        163
+       128: invokevirtual #23                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getCurrentSoundStatus:(I)I
+       131: ifne          189
+       134: aload_0
+       135: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       138: sipush        152
+       141: invokevirtual #23                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getCurrentSoundStatus:(I)I
+       144: ifne          189
+       147: aload_0
+       148: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       151: sipush        153
+       154: invokevirtual #23                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getCurrentSoundStatus:(I)I
+       157: ifne          189
+       160: aload_0
+       161: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       164: aload_0
+       165: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       168: invokevirtual #180                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getRingtoneConnection:()I
+       171: invokevirtual #23                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getCurrentSoundStatus:(I)I
+       174: ifne          189
+       177: aload_0
+       178: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+       181: ldc           #184                // String Borrow audio after delay: Audio is not audible but overlain by another audio source
+       183: invokevirtual #167                // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.borrowMainAudio:(Ljava/lang/String;)V
+       186: goto          227
+       189: aload_0
+       190: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       193: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+       196: ifeq          227
+       199: aload_0
+       200: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       203: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+       206: aload_0
+       207: getfield      #3                  // Field classname:Ljava/lang/String;
+       210: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       215: ldc           #185                // String .checkDelayedBorrowState - Dont borrow because there is another own audio connection active
+       217: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       222: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+       227: aload_0
+       228: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       231: iconst_0
+       232: invokevirtual #105                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.setDelayBorrowAudio:(Z)V
+       235: return
+
+  public void handleTaActive();
+    descriptor: ()V
+    Code:
+         0: aload_0
+         1: getfield      #9                  // Field speechapplicant:Lde/vw/mib/asl/internal/carplay/speech/SpeechApplicant;
+         4: invokevirtual #70                 // Method de/vw/mib/asl/internal/carplay/speech/SpeechApplicant.isCarplayActive:()Z
+         7: ifeq          84
+        10: aload_0
+        11: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        14: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+        17: ifeq          48
+        20: aload_0
+        21: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        24: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+        27: aload_0
+        28: getfield      #3                  // Field classname:Ljava/lang/String;
+        31: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+        36: ldc           #186                // String .handleTaActive - cancel running siri session to make the TA hearable
+        38: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+        43: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+        48: aload_0
+        49: getfield      #9                  // Field speechapplicant:Lde/vw/mib/asl/internal/carplay/speech/SpeechApplicant;
+        52: getstatic     #71                 // Field de/vw/mib/dialogactivation/ActivationState.INACTIVE:Lde/vw/mib/dialogactivation/ActivationState;
+        55: invokevirtual #72                 // Method de/vw/mib/asl/internal/carplay/speech/SpeechApplicant.forceChangeState:(Lde/vw/mib/dialogactivation/ActivationState;)V
+        58: aload_0
+        59: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        62: invokevirtual #17                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getDSICarPlay:()Lorg/dsi/ifc/carplay/DSICarplay;
+        65: iconst_1
+        66: invokeinterface #73,  2           // InterfaceMethod org/dsi/ifc/carplay/DSICarplay.requestSIRIAction:(I)V
+        71: aload_0
+        72: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        75: invokevirtual #17                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getDSICarPlay:()Lorg/dsi/ifc/carplay/DSICarplay;
+        78: iconst_2
+        79: invokeinterface #73,  2           // InterfaceMethod org/dsi/ifc/carplay/DSICarplay.requestSIRIAction:(I)V
+        84: return
+
+  public void checkForSync();
+    descriptor: ()V
+    Code:
+         0: aload_0
+         1: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+         4: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+         7: ifeq          38
+        10: aload_0
+        11: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        14: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+        17: aload_0
+        18: getfield      #3                  // Field classname:Ljava/lang/String;
+        21: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+        26: ldc           #187                // String .checkForSync - check video source sync...
+        28: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+        33: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+        38: aload_0
+        39: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        42: invokevirtual #16                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getCurrentScreenSource:()I
+        45: iconst_2
+        46: if_icmpne     240
+        49: aload_0
+        50: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        53: invokevirtual #188                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isCanvasVisible:()Z
+        56: ifne          109
+        59: aload_0
+        60: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        63: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+        66: ifeq          97
+        69: aload_0
+        70: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        73: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+        76: aload_0
+        77: getfield      #3                  // Field classname:Ljava/lang/String;
+        80: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+        85: ldc           #189                // String .checkForSync - async video source found: VideoMode = Device but canvas invisible => TAKE video source to get sync...
+        87: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+        92: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+        97: aload_0
+        98: getfield      #11                 // Field modehandling:Lde/vw/mib/asl/internal/carplay/common/CarPlayModeHandling;
+       101: ldc           #190                // String Take Screen: Watchdog found an async video source - canvas is invisible
+       103: invokevirtual #21                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayModeHandling.takeScreen:(Ljava/lang/String;)V
+       106: goto          635
+       109: aload_0
+       110: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       113: invokevirtual #188                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isCanvasVisible:()Z
+       116: ifeq          179
+       119: aload_0
+       120: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       123: invokevirtual #191                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isCanvasDimed:()Z
+       126: ifeq          179
+       129: aload_0
+       130: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       133: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+       136: ifeq          167
+       139: aload_0
+       140: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       143: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+       146: aload_0
+       147: getfield      #3                  // Field classname:Ljava/lang/String;
+       150: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       155: ldc           #192                // String .checkForSync - async video source found: VideoMode = Device, canvas is visible BUT popup is open => BORROW video source to get sync...
+       157: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       162: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+       167: aload_0
+       168: getfield      #11                 // Field modehandling:Lde/vw/mib/asl/internal/carplay/common/CarPlayModeHandling;
+       171: ldc           #193                // String Borrow Screen: Watchdog found an async video source - canvas is visible but a popup is open
+       173: invokevirtual #194                // Method de/vw/mib/asl/internal/carplay/common/CarPlayModeHandling.borrowScreen:(Ljava/lang/String;)V
+       176: goto          635
+       179: aload_0
+       180: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       183: invokevirtual #188                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isCanvasVisible:()Z
+       186: ifeq          635
+       189: aload_0
+       190: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       193: invokevirtual #191                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isCanvasDimed:()Z
+       196: ifne          635
+       199: aload_0
+       200: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       203: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+       206: ifeq          635
+       209: aload_0
+       210: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       213: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+       216: aload_0
+       217: getfield      #3                  // Field classname:Ljava/lang/String;
+       220: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       225: ldc           #195                // String .checkForSync - video source is in sync.
+       227: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       232: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+       237: goto          635
+       240: aload_0
+       241: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       244: invokevirtual #16                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getCurrentScreenSource:()I
+       247: iconst_1
+       248: if_icmpne     386
+       251: aload_0
+       252: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       255: invokevirtual #188                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isCanvasVisible:()Z
+       258: ifeq          271
+       261: aload_0
+       262: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       265: invokevirtual #191                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isCanvasDimed:()Z
+       268: ifeq          312
+       271: aload_0
+       272: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       275: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+       278: ifeq          635
+       281: aload_0
+       282: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       285: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+       288: aload_0
+       289: getfield      #3                  // Field classname:Ljava/lang/String;
+       292: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       297: ldc           #196                // String .checkForSync -  video source is in sync.
+       299: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       304: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+       309: goto          635
+       312: aload_0
+       313: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       316: invokevirtual #188                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isCanvasVisible:()Z
+       319: ifeq          635
+       322: aload_0
+       323: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       326: invokevirtual #191                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isCanvasDimed:()Z
+       329: ifne          635
+       332: aload_0
+       333: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       336: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+       339: ifeq          370
+       342: aload_0
+       343: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       346: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+       349: aload_0
+       350: getfield      #3                  // Field classname:Ljava/lang/String;
+       353: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       358: ldc           #197                // String .checkForSync - async video source found: VideoMode = HMI but canvas visible and no popup open => REQUEST_UI to get sync...
+       360: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       365: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+       370: aload_0
+       371: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       374: invokevirtual #17                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getDSICarPlay:()Lorg/dsi/ifc/carplay/DSICarplay;
+       377: iconst_0
+       378: invokeinterface #18,  2           // InterfaceMethod org/dsi/ifc/carplay/DSICarplay.requestUI:(I)V
+       383: goto          635
+       386: aload_0
+       387: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       390: invokevirtual #16                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getCurrentScreenSource:()I
+       393: ifne          635
+       396: aload_0
+       397: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       400: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+       403: ifeq          434
+       406: aload_0
+       407: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       410: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+       413: aload_0
+       414: getfield      #3                  // Field classname:Ljava/lang/String;
+       417: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       422: ldc           #198                // String .checkForSync - video source is set to unknown => tell the device the state we are currently in...
+       424: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       429: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+       434: aload_0
+       435: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       438: invokevirtual #188                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isCanvasVisible:()Z
+       441: ifne          494
+       444: aload_0
+       445: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       448: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+       451: ifeq          482
+       454: aload_0
+       455: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       458: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+       461: aload_0
+       462: getfield      #3                  // Field classname:Ljava/lang/String;
+       465: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       470: ldc           #199                // String .checkForSync - canvas is invisible => TAKE video source...
+       472: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       477: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+       482: aload_0
+       483: getfield      #11                 // Field modehandling:Lde/vw/mib/asl/internal/carplay/common/CarPlayModeHandling;
+       486: ldc           #190                // String Take Screen: Watchdog found an async video source - canvas is invisible
+       488: invokevirtual #21                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayModeHandling.takeScreen:(Ljava/lang/String;)V
+       491: goto          635
+       494: aload_0
+       495: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       498: invokevirtual #188                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isCanvasVisible:()Z
+       501: ifeq          564
+       504: aload_0
+       505: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       508: invokevirtual #191                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isCanvasDimed:()Z
+       511: ifeq          564
+       514: aload_0
+       515: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       518: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+       521: ifeq          552
+       524: aload_0
+       525: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       528: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+       531: aload_0
+       532: getfield      #3                  // Field classname:Ljava/lang/String;
+       535: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       540: ldc           #200                // String .checkForSync - canvas is visible but with popup => BORROW video source...
+       542: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       547: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+       552: aload_0
+       553: getfield      #11                 // Field modehandling:Lde/vw/mib/asl/internal/carplay/common/CarPlayModeHandling;
+       556: ldc           #193                // String Borrow Screen: Watchdog found an async video source - canvas is visible but a popup is open
+       558: invokevirtual #194                // Method de/vw/mib/asl/internal/carplay/common/CarPlayModeHandling.borrowScreen:(Ljava/lang/String;)V
+       561: goto          635
+       564: aload_0
+       565: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       568: invokevirtual #188                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isCanvasVisible:()Z
+       571: ifeq          635
+       574: aload_0
+       575: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       578: invokevirtual #191                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isCanvasDimed:()Z
+       581: ifne          635
+       584: aload_0
+       585: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       588: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+       591: ifeq          622
+       594: aload_0
+       595: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       598: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+       601: aload_0
+       602: getfield      #3                  // Field classname:Ljava/lang/String;
+       605: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       610: ldc           #201                // String .checkForSync - canvas is visible without a popup => REQUEST_UI...
+       612: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       617: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+       622: aload_0
+       623: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       626: invokevirtual #17                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getDSICarPlay:()Lorg/dsi/ifc/carplay/DSICarplay;
+       629: iconst_0
+       630: invokeinterface #18,  2           // InterfaceMethod org/dsi/ifc/carplay/DSICarplay.requestUI:(I)V
+       635: aload_0
+       636: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       639: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+       642: ifeq          673
+       645: aload_0
+       646: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       649: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+       652: aload_0
+       653: getfield      #3                  // Field classname:Ljava/lang/String;
+       656: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       661: ldc           #202                // String .checkForSync - check audio source sync...
+       663: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       668: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+       673: aload_0
+       674: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       677: invokevirtual #64                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getCurrentMainAudioSource:()I
+       680: iconst_2
+       681: if_icmpne     1321
+       684: aload_0
+       685: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       688: invokevirtual #74                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isSoundManagementAvailable:()Z
+       691: ifeq          1271
+       694: aload_0
+       695: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       698: invokevirtual #35                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getCurrentMainAudioType:()I
+       701: tableswitch   { // 0 to 4
+                       0: 736
+                       1: 777
+                       2: 882
+                       3: 1043
+                       4: 1157
+                 default: 1268
+            }
+       736: aload_0
+       737: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       740: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+       743: ifeq          1268
+       746: aload_0
+       747: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       750: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+       753: aload_0
+       754: getfield      #3                  // Field classname:Ljava/lang/String;
+       757: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       762: ldc           #203                // String .checkForSync - Source = Device, Type = NONE => Nothing to check.
+       764: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       769: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+       774: goto          1268
+       777: aload_0
+       778: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       781: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+       784: ifeq          815
+       787: aload_0
+       788: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       791: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+       794: aload_0
+       795: getfield      #3                  // Field classname:Ljava/lang/String;
+       798: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       803: ldc           #204                // String .checkForSync - Source = Device, Type = Alert => Check ringtone...
+       805: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       810: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+       815: aload_0
+       816: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+       819: aload_0
+       820: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       823: invokevirtual #180                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getRingtoneConnection:()I
+       826: invokevirtual #205                // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.checkAudioSourceState:(I)Z
+       829: ifne          1268
+       832: aload_0
+       833: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       836: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+       839: ifeq          870
+       842: aload_0
+       843: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       846: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+       849: aload_0
+       850: getfield      #3                  // Field classname:Ljava/lang/String;
+       853: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       858: ldc           #206                // String .checkForSync - async audio source found - ringtone is not set => TAKE audio...
+       860: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       865: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+       870: aload_0
+       871: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+       874: ldc           #207                // String Take Audio: Watchdog found an async audio source - ringtone connection is not set
+       876: invokevirtual #51                 // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.takeMainAudio:(Ljava/lang/String;)V
+       879: goto          1268
+       882: aload_0
+       883: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       886: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+       889: ifeq          920
+       892: aload_0
+       893: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       896: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+       899: aload_0
+       900: getfield      #3                  // Field classname:Ljava/lang/String;
+       903: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       908: ldc           #208                // String .checkForSync - Source = Device, Type = Media => Check media connection and entertainment manager...
+       910: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       915: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+       920: aload_0
+       921: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+       924: sipush        162
+       927: invokevirtual #205                // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.checkAudioSourceState:(I)Z
+       930: ifne          983
+       933: aload_0
+       934: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       937: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+       940: ifeq          971
+       943: aload_0
+       944: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       947: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+       950: aload_0
+       951: getfield      #3                  // Field classname:Ljava/lang/String;
+       954: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       959: ldc           #209                // String .checkForSync - async audio source found - media is not set => TAKE audio...
+       961: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       966: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+       971: aload_0
+       972: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+       975: ldc           #210                // String Take Audio: Watchdog found an async audio source - media connection is not set
+       977: invokevirtual #51                 // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.takeMainAudio:(Ljava/lang/String;)V
+       980: goto          1268
+       983: aload_0
+       984: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       987: invokevirtual #54                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isActiveEntertainment:()Z
+       990: ifne          1268
+       993: aload_0
+       994: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       997: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+      1000: ifeq          1031
+      1003: aload_0
+      1004: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+      1007: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+      1010: aload_0
+      1011: getfield      #3                  // Field classname:Ljava/lang/String;
+      1014: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+      1019: ldc           #211                // String .checkForSync - async audio source found - we are not entertainment source => TAKE audio...
+      1021: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+      1026: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+      1031: aload_0
+      1032: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+      1035: ldc           #212                // String Take Audio: Watchdog found an async audio source - carplay is not the active entertainment source
+      1037: invokevirtual #51                 // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.takeMainAudio:(Ljava/lang/String;)V
+      1040: goto          1268
+      1043: aload_0
+      1044: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+      1047: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+      1050: ifeq          1081
+      1053: aload_0
+      1054: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+      1057: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+      1060: aload_0
+      1061: getfield      #3                  // Field classname:Ljava/lang/String;
+      1064: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+      1069: ldc           #213                // String .checkForSync - Source = Device, Type = Phone => Check phone and phone input...
+      1071: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+      1076: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+      1081: aload_0
+      1082: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+      1085: sipush        151
+      1088: invokevirtual #205                // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.checkAudioSourceState:(I)Z
+      1091: ifeq          1107
+      1094: aload_0
+      1095: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+      1098: sipush        163
+      1101: invokevirtual #205                // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.checkAudioSourceState:(I)Z
+      1104: ifne          1268
+      1107: aload_0
+      1108: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+      1111: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+      1114: ifeq          1145
+      1117: aload_0
+      1118: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+      1121: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+      1124: aload_0
+      1125: getfield      #3                  // Field classname:Ljava/lang/String;
+      1128: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+      1133: ldc           #214                // String .checkForSync - async audio source found - input or output is not set => TAKE audio...
+      1135: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+      1140: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+      1145: aload_0
+      1146: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+      1149: ldc           #215                // String Take Audio: Watchdog found an async audio source - phone connection is not set (in or out)
+      1151: invokevirtual #51                 // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.takeMainAudio:(Ljava/lang/String;)V
+      1154: goto          1268
+      1157: aload_0
+      1158: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+      1161: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+      1164: ifeq          1195
+      1167: aload_0
+      1168: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+      1171: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+      1174: aload_0
+      1175: getfield      #3                  // Field classname:Ljava/lang/String;
+      1178: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+      1183: ldc           #216                // String .checkForSync - Source = Device, Type = Speech => Check speech and speech input...
+      1185: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+      1190: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+      1195: aload_0
+      1196: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+      1199: sipush        152
+      1202: invokevirtual #205                // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.checkAudioSourceState:(I)Z
+      1205: ifeq          1221
+      1208: aload_0
+      1209: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+      1212: sipush        153
+      1215: invokevirtual #205                // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.checkAudioSourceState:(I)Z
+      1218: ifne          1268
+      1221: aload_0
+      1222: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+      1225: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+      1228: ifeq          1259
+      1231: aload_0
+      1232: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+      1235: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+      1238: aload_0
+      1239: getfield      #3                  // Field classname:Ljava/lang/String;
+      1242: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+      1247: ldc           #214                // String .checkForSync - async audio source found - input or output is not set => TAKE audio...
+      1249: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+      1254: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+      1259: aload_0
+      1260: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+      1263: ldc           #217                // String Take Audio: Watchdog found an async audio source - speech connection is not set (in or out)
+      1265: invokevirtual #51                 // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.takeMainAudio:(Ljava/lang/String;)V
+      1268: goto          1486
+      1271: aload_0
+      1272: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+      1275: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+      1278: ifeq          1309
+      1281: aload_0
+      1282: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+      1285: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+      1288: aload_0
+      1289: getfield      #3                  // Field classname:Ljava/lang/String;
+      1292: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+      1297: ldc           #218                // String .checkForSync - audio source = device but sound management not available => BORROW audio...
+      1299: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+      1304: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+      1309: aload_0
+      1310: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+      1313: ldc           #219                // String Borrow audio: audio management is not available (triggered by watchdog)
+      1315: invokevirtual #167                // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.borrowMainAudio:(Ljava/lang/String;)V
+      1318: goto          1486
+      1321: aload_0
+      1322: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+      1325: invokevirtual #64                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getCurrentMainAudioSource:()I
+      1328: iconst_1
+      1329: if_icmpne     1486
+      1332: aload_0
+      1333: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+      1336: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+      1339: ifeq          1370
+      1342: aload_0
+      1343: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+      1346: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+      1349: aload_0
+      1350: getfield      #3                  // Field classname:Ljava/lang/String;
+      1353: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+      1358: ldc           #220                // String .checkForSync - Source = MainUnit => check if all audio connections are released...
+      1360: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+      1365: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+      1370: aload_0
+      1371: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+      1374: aload_0
+      1375: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+      1378: invokevirtual #180                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getRingtoneConnection:()I
+      1381: invokevirtual #205                // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.checkAudioSourceState:(I)Z
+      1384: ifne          1439
+      1387: aload_0
+      1388: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+      1391: sipush        151
+      1394: invokevirtual #205                // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.checkAudioSourceState:(I)Z
+      1397: ifne          1439
+      1400: aload_0
+      1401: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+      1404: sipush        163
+      1407: invokevirtual #205                // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.checkAudioSourceState:(I)Z
+      1410: ifne          1439
+      1413: aload_0
+      1414: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+      1417: sipush        152
+      1420: invokevirtual #205                // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.checkAudioSourceState:(I)Z
+      1423: ifne          1439
+      1426: aload_0
+      1427: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+      1430: sipush        153
+      1433: invokevirtual #205                // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.checkAudioSourceState:(I)Z
+      1436: ifeq          1486
+      1439: aload_0
+      1440: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+      1443: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+      1446: ifeq          1477
+      1449: aload_0
+      1450: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+      1453: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+      1456: aload_0
+      1457: getfield      #3                  // Field classname:Ljava/lang/String;
+      1460: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+      1465: ldc           #221                // String .checkForSync - async audio found - one or more audio connections are still present but not needed => release all of them...
+      1467: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+      1472: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+      1477: aload_0
+      1478: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+      1481: iconst_0
+      1482: iconst_0
+      1483: invokevirtual #91                 // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.releaseAllConnections:(ZZ)V
+      1486: aload_0
+      1487: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+      1490: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+      1493: ifeq          1524
+      1496: aload_0
+      1497: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+      1500: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+      1503: aload_0
+      1504: getfield      #3                  // Field classname:Ljava/lang/String;
+      1507: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+      1512: ldc           #222                // String .checkForSync - all sync tests done.
+      1514: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+      1519: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+      1524: return
+
+  public void executeTeardown();
+    descriptor: ()V
+    Code:
+         0: aload_0
+         1: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+         4: invokevirtual #45                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isConnected:()Z
+         7: ifeq          48
+        10: aload_0
+        11: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        14: invokevirtual #64                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getCurrentMainAudioSource:()I
+        17: iconst_1
+        18: if_icmpeq     48
+        21: aload_0
+        22: getfield      #10                 // Field audiohandling:Lde/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling;
+        25: iconst_0
+        26: aload_0
+        27: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        30: invokevirtual #64                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getCurrentMainAudioSource:()I
+        33: iconst_1
+        34: invokevirtual #223                // Method de/vw/mib/asl/internal/carplay/audio/CarPlayAudiohandling.handleAudioSourceChange:(IIZ)V
+        37: aload_0
+        38: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        41: iconst_0
+        42: invokevirtual #102                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.setCurrentMainAudioType:(I)V
+        45: goto          86
+        48: aload_0
+        49: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        52: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+        55: ifeq          86
+        58: aload_0
+        59: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        62: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+        65: aload_0
+        66: getfield      #3                  // Field classname:Ljava/lang/String;
+        69: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+        74: ldc           #224                // String .executeTeardown - teardown no longer needed
+        76: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+        81: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+        86: return
+
+  public void executeEdgeDelay();
+    descriptor: ()V
+    Code:
+         0: aload_0
+         1: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+         4: invokevirtual #45                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isConnected:()Z
+         7: ifeq          149
+        10: aload_0
+        11: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        14: invokevirtual #225                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isDoEdgeDelayExecution:()Z
+        17: ifeq          108
+        20: aload_0
+        21: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        24: invokevirtual #188                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isCanvasVisible:()Z
+        27: ifne          67
+        30: aload_0
+        31: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        34: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+        37: ifeq          49
+        40: aload_0
+        41: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        44: ldc           #226                // String CARPLAY - trigger ASL_SMARTPHONEINTEGRATION_CARPLAY_TRIGGERED_CONTEXTSWITCH_TO_CARPLAY
+        46: invokevirtual #136                // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:(Ljava/lang/String;)V
+        49: aload_0
+        50: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        53: ldc           #227                // int 6100008
+        55: aconst_null
+        56: invokevirtual #63                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.triggerObserver:(ILde/vw/mib/genericevents/EventGeneric;)V
+        59: aload_0
+        60: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        63: iconst_0
+        64: invokevirtual #101                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.setVideoBorrowState:(Z)V
+        67: aload_0
+        68: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        71: invokevirtual #191                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isCanvasDimed:()Z
+        74: ifeq          187
+        77: aload_0
+        78: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        81: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+        84: ifeq          96
+        87: aload_0
+        88: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        91: ldc           #228                // String CARPLAY - screen requested but a popup is still open -> borrow screen back
+        93: invokevirtual #136                // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:(Ljava/lang/String;)V
+        96: aload_0
+        97: getfield      #11                 // Field modehandling:Lde/vw/mib/asl/internal/carplay/common/CarPlayModeHandling;
+       100: ldc           #229                // String Borrow Screen: Screen was requested but a popup is open (during execution of edge delay)
+       102: invokevirtual #194                // Method de/vw/mib/asl/internal/carplay/common/CarPlayModeHandling.borrowScreen:(Ljava/lang/String;)V
+       105: goto          187
+       108: aload_0
+       109: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       112: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+       115: ifeq          187
+       118: aload_0
+       119: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       122: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+       125: aload_0
+       126: getfield      #3                  // Field classname:Ljava/lang/String;
+       129: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       134: ldc           #230                // String .executeEdgeDelay - execution not requested - switch display source not needed
+       136: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       141: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+       146: goto          187
+       149: aload_0
+       150: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       153: invokevirtual #24                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.isTraceEnabled:()Z
+       156: ifeq          187
+       159: aload_0
+       160: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       163: invokevirtual #25                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.trace:()Lde/vw/mib/log4mib/LogMessage;
+       166: aload_0
+       167: getfield      #3                  // Field classname:Ljava/lang/String;
+       170: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       175: ldc           #231                // String .executeEdgeDelay - disconnected - switch display source no longer needed
+       177: invokeinterface #26,  2           // InterfaceMethod de/vw/mib/log4mib/LogMessage.append:(Ljava/lang/String;)Lde/vw/mib/log4mib/LogMessage;
+       182: invokeinterface #34,  1           // InterfaceMethod de/vw/mib/log4mib/LogMessage.log:()V
+       187: aload_0
+       188: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       191: iconst_0
+       192: invokevirtual #232                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.setDoEdgeDelayExecution:(Z)V
+       195: return
+
+  public void handleAslApiOcuCallState(int);
+    descriptor: (I)V
+    Code:
+         0: aload_0
+         1: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+         4: invokevirtual #45                 // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.isConnected:()Z
+         7: ifeq          136
+        10: iload_1
+        11: ifeq          71
+        14: aload_0
+        15: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        18: invokevirtual #121                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getParamconfig:()Lde/vw/mib/asl/internal/carplay/common/CarPlayHMIRequestParameterConfiguration;
+        21: astore_2
+        22: aload_0
+        23: invokespecial #150                // Method java/lang/Object.getClass:()Ljava/lang/Class;
+        26: pop
+        27: aload_2
+        28: iconst_0
+        29: invokevirtual #152                // Method de/vw/mib/asl/internal/carplay/common/CarPlayHMIRequestParameterConfiguration.getRessourceRequest:(I)[Lorg/dsi/ifc/carplay/ResourceRequest;
+        32: astore_3
+        33: aload_0
+        34: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        37: invokevirtual #121                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getParamconfig:()Lde/vw/mib/asl/internal/carplay/common/CarPlayHMIRequestParameterConfiguration;
+        40: astore        4
+        42: aload_0
+        43: invokespecial #150                // Method java/lang/Object.getClass:()Ljava/lang/Class;
+        46: pop
+        47: aload_0
+        48: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+        51: invokevirtual #17                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getDSICarPlay:()Lorg/dsi/ifc/carplay/DSICarplay;
+        54: aload_3
+        55: aload         4
+        57: iconst_1
+        58: invokevirtual #233                // Method de/vw/mib/asl/internal/carplay/common/CarPlayHMIRequestParameterConfiguration.getAppStateRequest:(I)[Lorg/dsi/ifc/carplay/AppStateRequest;
+        61: ldc           #234                // String OCU call has started
+        63: invokeinterface #235,  4          // InterfaceMethod org/dsi/ifc/carplay/DSICarplay.requestModeChange:([Lorg/dsi/ifc/carplay/ResourceRequest;[Lorg/dsi/ifc/carplay/AppStateRequest;Ljava/lang/String;)V
+        68: goto          136
+        71: aload_0
+        72: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        75: invokevirtual #236                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getOcuCallState:()I
+        78: ifeq          136
+        81: aload_0
+        82: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+        85: invokevirtual #121                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getParamconfig:()Lde/vw/mib/asl/internal/carplay/common/CarPlayHMIRequestParameterConfiguration;
+        88: astore_2
+        89: aload_0
+        90: invokespecial #150                // Method java/lang/Object.getClass:()Ljava/lang/Class;
+        93: pop
+        94: aload_2
+        95: iconst_0
+        96: invokevirtual #152                // Method de/vw/mib/asl/internal/carplay/common/CarPlayHMIRequestParameterConfiguration.getRessourceRequest:(I)[Lorg/dsi/ifc/carplay/ResourceRequest;
+        99: astore_3
+       100: aload_0
+       101: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       104: invokevirtual #121                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.getParamconfig:()Lde/vw/mib/asl/internal/carplay/common/CarPlayHMIRequestParameterConfiguration;
+       107: astore        4
+       109: aload_0
+       110: invokespecial #150                // Method java/lang/Object.getClass:()Ljava/lang/Class;
+       113: pop
+       114: aload_0
+       115: getfield      #7                  // Field target:Lde/vw/mib/asl/internal/carplay/target/HsmTarget;
+       118: invokevirtual #17                 // Method de/vw/mib/asl/internal/carplay/target/HsmTarget.getDSICarPlay:()Lorg/dsi/ifc/carplay/DSICarplay;
+       121: aload_3
+       122: aload         4
+       124: bipush        7
+       126: invokevirtual #233                // Method de/vw/mib/asl/internal/carplay/common/CarPlayHMIRequestParameterConfiguration.getAppStateRequest:(I)[Lorg/dsi/ifc/carplay/AppStateRequest;
+       129: ldc           #237                // String OCU call has stopped
+       131: invokeinterface #235,  4          // InterfaceMethod org/dsi/ifc/carplay/DSICarplay.requestModeChange:([Lorg/dsi/ifc/carplay/ResourceRequest;[Lorg/dsi/ifc/carplay/AppStateRequest;Ljava/lang/String;)V
+       136: aload_0
+       137: getfield      #8                  // Field properties:Lde/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies;
+       140: iload_1
+       141: invokevirtual #238                // Method de/vw/mib/asl/internal/carplay/common/CarPlayGlobalProperies.setOcuCallState:(I)V
+       144: return
+}

@@ -1,0 +1,57 @@
+--- reference_build_v8/de/vw/mib/asl/internal/androidauto/target/NavigationListener.java
++++ NavActiveIgnore/de/vw/mib/asl/internal/androidauto/target/NavigationListener.java
+@@ -4,7 +4,6 @@
+  * Could not load the following classes:
+  *  de.vw.mib.asl.api.navigation.ASLNavigationServices
+  *  de.vw.mib.asl.api.navigation.AbstractASLNavigationServicesListener
+- *  de.vw.mib.asl.framework.internal.framework.ServiceManager
+  *  de.vw.mib.asl.internal.androidauto.target.AndroidAutoGlobalProperties
+  *  de.vw.mib.asl.internal.androidauto.target.AndroidAutoTarget
+  *  de.vw.mib.asl.internal.androidauto.target.StartupHandler
+@@ -13,7 +12,6 @@
+ 
+ import de.vw.mib.asl.api.navigation.ASLNavigationServices;
+ import de.vw.mib.asl.api.navigation.AbstractASLNavigationServicesListener;
+-import de.vw.mib.asl.framework.internal.framework.ServiceManager;
+ import de.vw.mib.asl.internal.androidauto.target.AndroidAutoGlobalProperties;
+ import de.vw.mib.asl.internal.androidauto.target.AndroidAutoTarget;
+ import de.vw.mib.asl.internal.androidauto.target.StartupHandler;
+@@ -38,14 +36,7 @@
+ 
+     public void updateGuidanceActive(boolean bl) {
+         if (this.target.isTraceEnabled()) {
+-            this.target.trace("NavigationHandler::updateGuidanceActive - flag = " + bl);
+-        }
+-        if (bl) {
+-            ServiceManager.aslPropertyManager.valueChangedBoolean(2910005, false);
+-            this.properties.setAndroidAutoNavigationActive(false);
+-            if (this.startupHandler.isDSI2Registered() && this.startupHandler.isDeviceConnected()) {
+-                this.target.getDSIAndroidAuto2().navFocusNotification(1, true);
+-            }
++            this.target.trace("NavigationHandler::updateGuidanceActive (ignored) - flag = " + bl);
+         }
+     }
+ 
+@@ -58,20 +49,12 @@
+ 
+     public void stopGuidance() {
+         if (this.target.isTraceEnabled()) {
+-            this.target.trace("NavigationHandler::stopGuidance");
+-        }
+-        if (this.navServices.isServiceAvailable()) {
+-            this.navServices.stopGuidance(6);
+-        } else {
+-            this.stopGuidancePending = true;
+-            if (this.target.isTraceEnabled()) {
+-                this.target.trace("NavigationListener::stopGuidance() = isServiceAvailable false");
+-            }
++            this.target.trace("NavigationHandler::stopGuidance (ignored)");
+         }
+     }
+ 
+     public boolean isGuidanceActive() {
+-        return this.navServices.isGuidanceActive();
++        return false;
+     }
+ }
+ 

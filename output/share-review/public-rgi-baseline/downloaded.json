@@ -1,0 +1,38 @@
+[
+  {
+    "path": "hook/framework/hook_framework.c",
+    "bytes": 38218,
+    "public_blob_verified": true,
+    "sha256": "d3cae21589be64cf8ec0d518b430c75255ff2d8d50dbd4747829e260fa8fafbe"
+  },
+  {
+    "path": "hook/framework/hook_framework.h",
+    "bytes": 4266,
+    "public_blob_verified": true,
+    "sha256": "f0a6d55ccfcfe7d20f5bd5472183aeaf30b08ddb35b6bb869ff0bedf64ae24a5"
+  },
+  {
+    "path": "hook/framework/common.h",
+    "bytes": 4227,
+    "public_blob_verified": true,
+    "sha256": "d3f879947cff9b389de34030abb32d587fc7b764d00196c4ddf41222bdce7560"
+  },
+  {
+    "path": "hook/framework/logging.c",
+    "bytes": 15786,
+    "public_blob_verified": true,
+    "sha256": "a0dbbd6952479ad8b6ef44bdbc278fb88c17983d957d57d241b581fc76e0a19d"
+  },
+  {
+    "path": "hook/framework/logging.h",
+    "bytes": 5385,
+    "public_blob_verified": true,
+    "sha256": "e54e0d0b3494aa3cc699b0589d8345fba60bc727fdf5a1229af377c9f39eb660"
+  },
+  {
+    "path": "hook/main.c",
+    "bytes": 792,
+    "public_blob_verified": true,
+    "sha256": "c15f84386f8841c4831f3917b622e9747669cb2f23eec4334fa68aea0e8a4147"
+  }
+]

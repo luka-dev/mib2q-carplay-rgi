@@ -1,0 +1,44 @@
+{
+  "profile": "user revision: remove all RGI; add limited hook usefulness based on public baseline",
+  "public_baseline": {
+    "url": "https://github.com/luka-dev/mib2q-carplay-rgi",
+    "commit": "f36790d450392516ed9cbfab9cc06aa13a08bf31"
+  },
+  "sources": {
+    "video": {
+      "path": "hook/altscreen/altscreen_av.c",
+      "sha256": "e3c1ba809835257cb3c9503855576a74b09437cda1380fc157ff39597eb21468"
+    },
+    "frame": {
+      "path": "altscreen_render/frame_io.c",
+      "sha256": "40c4283fb54ce787bb6fc5f0194d72a03bd0e05e1e231abc92e6368412ee3663"
+    },
+    "public_framework": {
+      "path": "output/share-review/public-rgi-baseline/hook/framework/hook_framework.c",
+      "sha256": "d3cae21589be64cf8ec0d518b430c75255ff2d8d50dbd4747829e260fa8fafbe"
+    }
+  },
+  "selection": {
+    "altscreen/avcc.c": "avcc_to_annexb only; static removed; one comment generalized",
+    "altscreen/frame_io.c": "av_read_exact + av_read_frame; renamed; max size passed by caller",
+    "hook/interpose_example.c": "educational adaptation of public next-symbol/lazy-init pattern; fictional API, original status and errno preserved",
+    "hook/process_scope.c": "adapted public process filter; exact basename and explicit UNKNOWN rather than substring/fail-open",
+    "hook/*.h": "standalone example declarations, no production ABI",
+    "notices": "author name and public handle anonymized in the share copy only; year and copyright retained"
+  },
+  "allowlist": [
+    "CONTENTS.sha256",
+    "PUBLIC_SOURCE.md",
+    "README.md",
+    "altscreen/avcc.c",
+    "altscreen/avcc.h",
+    "altscreen/frame_io.c",
+    "altscreen/frame_io.h",
+    "hook/NOTES.md",
+    "hook/interpose_example.c",
+    "hook/interpose_example.h",
+    "hook/process_scope.c",
+    "hook/process_scope.h"
+  ],
+  "original_files_unchanged": true
+}

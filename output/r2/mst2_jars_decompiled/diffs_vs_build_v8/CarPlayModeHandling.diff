@@ -1,0 +1,194 @@
+--- reference_build_v8/de/vw/mib/asl/internal/carplay/common/CarPlayModeHandling.java
++++ NavActiveIgnore/de/vw/mib/asl/internal/carplay/common/CarPlayModeHandling.java
+@@ -162,7 +162,7 @@
+         if ((n2 = this.getMainScreenType(resourceArray)) != this.properties.getCurrentScreenSource()) {
+             if (n2 == 2) {
+                 if (this.properties.getCurrentScreenSource() != 0) {
+-                    if (this.target.getTimerServer().isTimerActive(this.target.getTargetId(), 100012)) {
++                    if (this.target.getTimerServer().isTimerActive(this.target.getTargetId(), -1400504064)) {
+                         this.properties.setDoEdgeDelayExecution(true);
+                     } else {
+                         n = 0;
+@@ -170,7 +170,7 @@
+                             if (this.target.isTraceEnabled()) {
+                                 this.target.trace("CARPLAY - trigger ASL_SMARTPHONEINTEGRATION_CARPLAY_TRIGGERED_CONTEXTSWITCH_TO_CARPLAY");
+                             }
+-                            this.target.triggerObserver(6100008, null);
++                            this.target.triggerObserver(672423168, null);
+                             n = this.properties.isVideoBorrowState() ? 1 : 0;
+                             this.properties.setVideoBorrowState(false);
+                         }
+@@ -186,17 +186,17 @@
+                 }
+             } else if (n2 == 1) {
+                 if (this.properties.getCurrentScreenSource() != 0) {
+-                    if (this.target.getTimerServer().isTimerActive(this.target.getTargetId(), 100012)) {
++                    if (this.target.getTimerServer().isTimerActive(this.target.getTargetId(), -1400504064)) {
+                         if (this.target.isTraceEnabled()) {
+                             this.target.trace("CARPLAY - stop edge delay timer...");
+                         }
+-                        this.target.stopTimer(100012);
++                        this.target.stopTimer(-1400504064);
+                     }
+                     if (this.properties.isCanvasVisible() && !this.properties.isVideoBorrowState()) {
+                         if (this.target.isTraceEnabled()) {
+                             this.target.trace("CARPLAY - trigger ASL_SMARTPHONEINTEGRATION_CARPLAY_TRIGGERED_CONTEXTSWITCH_LEFT_CARPLAY");
+                         }
+-                        this.target.triggerObserver(6100012, null);
++                        this.target.triggerObserver(739532032, null);
+                     } else if (this.properties.isCanvasVisible() && this.target.isTraceEnabled()) {
+                         this.target.trace("CARPLAY - ignore change to hmi because borrow state is active");
+                     }
+@@ -208,51 +208,24 @@
+         }
+         n = this.getNavigationType(appStateArray);
+         int n3 = this.properties.getActiveNavigation();
++        System.out.println("CarPlayModeHandling(" + resourceArray + " (" + n2 + "), " + appStateArray + "(" + n + ")): " + n3);
+         if (n == 2 && n3 != 2) {
+-            if (this.target.isTraceEnabled()) {
+-                this.target.trace("CARPLAY - handledsiCarPlayupdateMode - Active Navigation is now: CARPLAY");
+-            }
+-            ServiceManager.aslPropertyManager.valueChangedBoolean(2910009, true);
+-            this.properties.setActiveNavigation(2);
+-            if (this.navServices.isServiceAvailable()) {
+-                this.navServices.stopGuidance(6);
+-            } else if (this.target.isTraceEnabled()) {
++            this.target.trace("CARPLAY - handledsiCarPlayupdateMode - Active Navigation is now: CARPLAY");
++            if (!this.navServices.isServiceAvailable() && this.target.isTraceEnabled()) {
+                 this.target.trace("CARPLAY - handledsiCarPlayupdateMode - We can not stop hmi navi because service is not ready yet");
+             }
+-            if (this.exboxGuidanceListenerImpl != null) {
+-                this.exboxGuidanceListenerImpl.setSmartphoneGuidanceActive();
+-            }
+         } else if (n == 3 && n3 != 3) {
+-            if (this.target.isTraceEnabled()) {
+-                this.target.trace("CARPLAY - handledsiCarPlayupdateMode - Active Navigation is now: HMI");
+-            }
++            this.target.trace("CARPLAY - handledsiCarPlayupdateMode - Active Navigation is now: HMI");
+             if (n3 == 2) {
+-                ServiceManager.aslPropertyManager.valueChangedBoolean(2910009, false);
++                ServiceManager.aslPropertyManager.valueChangedBoolean(963062784, false);
+             }
+             this.properties.setActiveNavigation(3);
+-            if (!this.properties.isHmiRouteGuidanceActive()) {
+-                CarPlayHMIRequestParameterConfiguration carPlayHMIRequestParameterConfiguration = this.properties.getParamconfig();
+-                this.properties.getParamconfig().getClass();
+-                ResourceRequest[] resourceRequestArray = carPlayHMIRequestParameterConfiguration.getRessourceRequest(0);
+-                CarPlayHMIRequestParameterConfiguration carPlayHMIRequestParameterConfiguration2 = this.properties.getParamconfig();
+-                this.properties.getParamconfig().getClass();
+-                AppStateRequest[] appStateRequestArray = carPlayHMIRequestParameterConfiguration2.getAppStateRequest(2);
+-                this.target.getDSICarPlay().requestModeChange(resourceRequestArray, appStateRequestArray, "User initiated");
+-            }
+-            if (this.exboxGuidanceListenerImpl != null) {
+-                this.exboxGuidanceListenerImpl.setSmartphoneGuidanceInactive();
+-            }
+         } else if (n == 1) {
+-            if (this.target.isTraceEnabled()) {
+-                this.target.trace("CARPLAY - handledsiCarPlayupdateMode - Navigation is now inactive");
+-            }
++            this.target.trace("CARPLAY - handledsiCarPlayupdateMode - Navigation is now inactive");
+             if (n3 == 2) {
+-                ServiceManager.aslPropertyManager.valueChangedBoolean(2910009, false);
++                ServiceManager.aslPropertyManager.valueChangedBoolean(963062784, false);
+             }
+             this.properties.setActiveNavigation(1);
+-            if (this.exboxGuidanceListenerImpl != null) {
+-                this.exboxGuidanceListenerImpl.setSmartphoneGuidanceInactive();
+-            }
+         }
+         int n4 = this.properties.getCurrentMainAudioSource();
+         int n5 = this.getMainAudioSource(resourceArray);
+@@ -261,21 +234,21 @@
+             if (this.target.isTraceEnabled()) {
+                 this.target.trace("CARPLAY - handledsiCarPlayupdateMode - Audio source is no longer device");
+             }
+-            if (this.target.getTimerServer().isTimerActive(this.target.getTargetId(), 100011)) {
+-                this.target.stopTimer(100011);
++            if (this.target.getTimerServer().isTimerActive(this.target.getTargetId(), -1417281280)) {
++                this.target.stopTimer(-1417281280);
+             }
+             if (!this.properties.isAudioBorrowState()) {
+                 this.audiohandling.releaseAllConnections(true, false);
+                 if (this.speechapplicant.isCarplayActive()) {
+                     this.speechapplicant.forceChangeState(ActivationState.INACTIVE);
+                 }
+-                if (this.target.getTimerServer().isTimerActive(this.target.getTargetId(), 100009)) {
++                if (this.target.getTimerServer().isTimerActive(this.target.getTargetId(), -1450835712)) {
+                     if (this.target.isTraceEnabled()) {
+                         this.target.trace("CARPLAY - handledsiCarPlayupdateMode - Detected a audio change to mainunit AND timer is still running => AUTOPLAY");
+                     }
+-                    this.target.stopTimer(100009);
++                    this.target.stopTimer(-1450835712);
+                     if (this.properties.getLastEntertainmentContextForAutoplay() != -1 && this.properties.getLastEntertainmentContextForAutoplay() != 7) {
+-                        EventGeneric eventGeneric = ServiceManager.mGenericEventFactory.newEvent(1400025);
++                        EventGeneric eventGeneric = ServiceManager.mGenericEventFactory.newEvent(-648276736);
+                         eventGeneric.setInt(0, this.properties.getLastEntertainmentContextForAutoplay());
+                         this.target.sendSafe(eventGeneric);
+                     } else if (this.target.isTraceEnabled()) {
+@@ -300,10 +273,10 @@
+         }
+         int n6 = this.getSpeechType(appStateArray);
+         this.properties.setActiveSpeech(n6);
+-        if (this.target.getTimerServer().isTimerActive(this.target.getTargetId(), 100010)) {
+-            this.target.stopTimer(100010);
+-        }
+-        this.target.startTimer(100010, 5000L, false);
++        if (this.target.getTimerServer().isTimerActive(this.target.getTargetId(), -1434058496)) {
++            this.target.stopTimer(-1434058496);
++        }
++        this.target.startTimer(-1434058496, 0L, false);
+     }
+ 
+     public void borrowScreen(String string) {
+@@ -311,10 +284,10 @@
+             this.target.trace("CARPLAY - send BORROW SCREEN request...");
+         }
+         CarPlayHMIRequestParameterConfiguration carPlayHMIRequestParameterConfiguration = this.properties.getParamconfig();
+-        this.properties.getParamconfig().getClass();
++        super.getClass();
+         ResourceRequest[] resourceRequestArray = carPlayHMIRequestParameterConfiguration.getRessourceRequest(9);
+         CarPlayHMIRequestParameterConfiguration carPlayHMIRequestParameterConfiguration2 = this.properties.getParamconfig();
+-        this.properties.getParamconfig().getClass();
++        super.getClass();
+         AppStateRequest[] appStateRequestArray = carPlayHMIRequestParameterConfiguration2.getAppStateRequest(0);
+         this.properties.setVideoBorrowState(true);
+         this.target.getDSICarPlay().requestModeChange(resourceRequestArray, appStateRequestArray, string.equals("") ? "User initiated" : string);
+@@ -325,10 +298,10 @@
+             this.target.trace("CARPLAY - send UNBORROW SCREEN request...");
+         }
+         CarPlayHMIRequestParameterConfiguration carPlayHMIRequestParameterConfiguration = this.properties.getParamconfig();
+-        this.properties.getParamconfig().getClass();
++        super.getClass();
+         ResourceRequest[] resourceRequestArray = carPlayHMIRequestParameterConfiguration.getRessourceRequest(10);
+         CarPlayHMIRequestParameterConfiguration carPlayHMIRequestParameterConfiguration2 = this.properties.getParamconfig();
+-        this.properties.getParamconfig().getClass();
++        super.getClass();
+         AppStateRequest[] appStateRequestArray = carPlayHMIRequestParameterConfiguration2.getAppStateRequest(0);
+         this.properties.setVideoBorrowState(false);
+         this.target.getDSICarPlay().requestModeChange(resourceRequestArray, appStateRequestArray, string.equals("") ? "User initiated" : string);
+@@ -338,7 +311,7 @@
+         if (this.target.isTraceEnabled()) {
+             this.target.trace("CARPLAY - send TAKE SCREEN request...");
+         }
+-        if (this.target.getTimerServer().isTimerActive(this.target.getTargetId(), 100012)) {
++        if (this.target.getTimerServer().isTimerActive(this.target.getTargetId(), -1400504064)) {
+             if (this.target.isTraceEnabled()) {
+                 this.target.trace("CARPLAY - no need for the edge delay timer because it is already running...");
+             }
+@@ -347,13 +320,13 @@
+                 this.target.trace("CARPLAY - starting edge delay timer...");
+             }
+             this.properties.setDoEdgeDelayExecution(false);
+-            this.target.startTimer(100012, 300L, false);
++            this.target.startTimer(-1400504064, 0L, false);
+         }
+         CarPlayHMIRequestParameterConfiguration carPlayHMIRequestParameterConfiguration = this.properties.getParamconfig();
+-        this.properties.getParamconfig().getClass();
++        super.getClass();
+         ResourceRequest[] resourceRequestArray = carPlayHMIRequestParameterConfiguration.getRessourceRequest(1);
+         CarPlayHMIRequestParameterConfiguration carPlayHMIRequestParameterConfiguration2 = this.properties.getParamconfig();
+-        this.properties.getParamconfig().getClass();
++        super.getClass();
+         AppStateRequest[] appStateRequestArray = carPlayHMIRequestParameterConfiguration2.getAppStateRequest(0);
+         this.properties.setVideoBorrowState(false);
+         this.target.getDSICarPlay().requestModeChange(resourceRequestArray, appStateRequestArray, string.equals("") ? "User initiated" : string);

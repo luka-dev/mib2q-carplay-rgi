@@ -1,0 +1,302 @@
+[
+  {
+    "font": "AudiTypeDisplayHigh-Normal",
+    "characters": [
+      {
+        "codepoint": 8226,
+        "hex": "U+2022",
+        "char": "•",
+        "java": "\\u2022",
+        "name": "BULLET",
+        "category": "Po",
+        "glyph_name": "bullet",
+        "glyph_id": 522
+      },
+      {
+        "codepoint": 183,
+        "hex": "U+00B7",
+        "char": "·",
+        "java": "\\u00B7",
+        "name": "MIDDLE DOT",
+        "category": "Po",
+        "glyph_name": "periodcentered",
+        "glyph_id": 527
+      },
+      {
+        "codepoint": 176,
+        "hex": "U+00B0",
+        "char": "°",
+        "java": "\\u00B0",
+        "name": "DEGREE SIGN",
+        "category": "So",
+        "glyph_name": "degree",
+        "glyph_id": 550
+      },
+      {
+        "codepoint": 730,
+        "hex": "U+02DA",
+        "char": "˚",
+        "java": "\\u02DA",
+        "name": "RING ABOVE",
+        "category": "Sk",
+        "glyph_name": "ring",
+        "glyph_id": 274
+      }
+    ]
+  },
+  {
+    "font": "SourceHanSansJP-Regular",
+    "characters": [
+      {
+        "codepoint": 9675,
+        "hex": "U+25CB",
+        "char": "○",
+        "java": "\\u25CB",
+        "name": "WHITE CIRCLE",
+        "category": "So",
+        "glyph_name": "cid01255",
+        "glyph_id": 999
+      },
+      {
+        "codepoint": 9711,
+        "hex": "U+25EF",
+        "char": "◯",
+        "java": "\\u25EF",
+        "name": "LARGE CIRCLE",
+        "category": "So",
+        "glyph_name": "cid01268",
+        "glyph_id": 1012
+      },
+      {
+        "codepoint": 9702,
+        "hex": "U+25E6",
+        "char": "◦",
+        "java": "\\u25E6",
+        "name": "WHITE BULLET",
+        "category": "So",
+        "glyph_name": "cid01267",
+        "glyph_id": 1011
+      },
+      {
+        "codepoint": 9679,
+        "hex": "U+25CF",
+        "char": "●",
+        "java": "\\u25CF",
+        "name": "BLACK CIRCLE",
+        "category": "So",
+        "glyph_name": "cid01258",
+        "glyph_id": 1002
+      },
+      {
+        "codepoint": 9673,
+        "hex": "U+25C9",
+        "char": "◉",
+        "java": "\\u25C9",
+        "name": "FISHEYE",
+        "category": "So",
+        "glyph_name": "cid01253",
+        "glyph_id": 997
+      },
+      {
+        "codepoint": 9678,
+        "hex": "U+25CE",
+        "char": "◎",
+        "java": "\\u25CE",
+        "name": "BULLSEYE",
+        "category": "So",
+        "glyph_name": "cid01257",
+        "glyph_id": 1001
+      },
+      {
+        "codepoint": 10687,
+        "hex": "U+29BF",
+        "char": "⦿",
+        "java": "\\u29BF",
+        "name": "CIRCLED BULLET",
+        "category": "Sm",
+        "glyph_name": "cid01339",
+        "glyph_id": 1083
+      },
+      {
+        "codepoint": 8857,
+        "hex": "U+2299",
+        "char": "⊙",
+        "java": "\\u2299",
+        "name": "CIRCLED DOT OPERATOR",
+        "category": "Sm",
+        "glyph_name": "cid00877",
+        "glyph_id": 621
+      },
+      {
+        "codepoint": 9737,
+        "hex": "U+2609",
+        "char": "☉",
+        "java": "\\u2609",
+        "name": "SUN",
+        "category": "So",
+        "glyph_name": "cid01275",
+        "glyph_id": 1019
+      },
+      {
+        "codepoint": 9676,
+        "hex": "U+25CC",
+        "char": "◌",
+        "java": "\\u25CC",
+        "name": "DOTTED CIRCLE",
+        "category": "So",
+        "glyph_name": "cid01256",
+        "glyph_id": 1000
+      },
+      {
+        "codepoint": 9680,
+        "hex": "U+25D0",
+        "char": "◐",
+        "java": "\\u25D0",
+        "name": "CIRCLE WITH LEFT HALF BLACK",
+        "category": "So",
+        "glyph_name": "cid01259",
+        "glyph_id": 1003
+      },
+      {
+        "codepoint": 9681,
+        "hex": "U+25D1",
+        "char": "◑",
+        "java": "\\u25D1",
+        "name": "CIRCLE WITH RIGHT HALF BLACK",
+        "category": "So",
+        "glyph_name": "cid01260",
+        "glyph_id": 1004
+      },
+      {
+        "codepoint": 9682,
+        "hex": "U+25D2",
+        "char": "◒",
+        "java": "\\u25D2",
+        "name": "CIRCLE WITH LOWER HALF BLACK",
+        "category": "So",
+        "glyph_name": "cid01261",
+        "glyph_id": 1005
+      },
+      {
+        "codepoint": 9683,
+        "hex": "U+25D3",
+        "char": "◓",
+        "java": "\\u25D3",
+        "name": "CIRCLE WITH UPPER HALF BLACK",
+        "category": "So",
+        "glyph_name": "cid01262",
+        "glyph_id": 1006
+      },
+      {
+        "codepoint": 8853,
+        "hex": "U+2295",
+        "char": "⊕",
+        "java": "\\u2295",
+        "name": "CIRCLED PLUS",
+        "category": "Sm",
+        "glyph_name": "cid00873",
+        "glyph_id": 617
+      },
+      {
+        "codepoint": 8854,
+        "hex": "U+2296",
+        "char": "⊖",
+        "java": "\\u2296",
+        "name": "CIRCLED MINUS",
+        "category": "Sm",
+        "glyph_name": "cid00874",
+        "glyph_id": 618
+      },
+      {
+        "codepoint": 8855,
+        "hex": "U+2297",
+        "char": "⊗",
+        "java": "\\u2297",
+        "name": "CIRCLED TIMES",
+        "category": "Sm",
+        "glyph_name": "cid00875",
+        "glyph_id": 619
+      },
+      {
+        "codepoint": 8856,
+        "hex": "U+2298",
+        "char": "⊘",
+        "java": "\\u2298",
+        "name": "CIRCLED DIVISION SLASH",
+        "category": "Sm",
+        "glyph_name": "cid00876",
+        "glyph_id": 620
+      },
+      {
+        "codepoint": 9152,
+        "hex": "U+23C0",
+        "char": "⏀",
+        "java": "\\u23C0",
+        "name": "DENTISTRY SYMBOL LIGHT VERTICAL WITH CIRCLE",
+        "category": "So",
+        "glyph_name": "cid00892",
+        "glyph_id": 636
+      },
+      {
+        "codepoint": 9153,
+        "hex": "U+23C1",
+        "char": "⏁",
+        "java": "\\u23C1",
+        "name": "DENTISTRY SYMBOL LIGHT DOWN AND HORIZONTAL WITH CIRCLE",
+        "category": "So",
+        "glyph_name": "cid00893",
+        "glyph_id": 637
+      },
+      {
+        "codepoint": 9154,
+        "hex": "U+23C2",
+        "char": "⏂",
+        "java": "\\u23C2",
+        "name": "DENTISTRY SYMBOL LIGHT UP AND HORIZONTAL WITH CIRCLE",
+        "category": "So",
+        "glyph_name": "cid00894",
+        "glyph_id": 638
+      },
+      {
+        "codepoint": 9450,
+        "hex": "U+24EA",
+        "char": "⓪",
+        "java": "\\u24EA",
+        "name": "CIRCLED DIGIT ZERO",
+        "category": "No",
+        "glyph_name": "cid01047",
+        "glyph_id": 791
+      },
+      {
+        "codepoint": 9312,
+        "hex": "U+2460",
+        "char": "①",
+        "java": "\\u2460",
+        "name": "CIRCLED DIGIT ONE",
+        "category": "No",
+        "glyph_name": "cid00909",
+        "glyph_id": 653
+      },
+      {
+        "codepoint": 10102,
+        "hex": "U+2776",
+        "char": "❶",
+        "java": "\\u2776",
+        "name": "DINGBAT NEGATIVE CIRCLED DIGIT ONE",
+        "category": "No",
+        "glyph_name": "cid01326",
+        "glyph_id": 1070
+      },
+      {
+        "codepoint": 9417,
+        "hex": "U+24C9",
+        "char": "Ⓣ",
+        "java": "\\u24C9",
+        "name": "CIRCLED LATIN CAPITAL LETTER T",
+        "category": "So",
+        "glyph_name": "cid01014",
+        "glyph_id": 758
+      }
+    ]
+  }
+]
