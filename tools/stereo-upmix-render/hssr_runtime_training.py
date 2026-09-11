@@ -25,7 +25,7 @@ def tanh(x):
 def sigmoid(x):
     return .5*(tanh(.5*x)+1)
 
-def forward(model,x,state=None):
+def forward(model,x,state=None,return_embeddings=False):
     batch=x.shape[0];h=model.gru1.hidden_size
     h1,h2=(x.new_zeros(batch,h),x.new_zeros(batch,h)) if state is None else state
     layers=[model.gru1,model.gru2]
@@ -42,7 +42,7 @@ def forward(model,x,state=None):
             hidden=(1-update)*n+update*hidden
             states.append(hidden);v=activation(hidden,127)
         h1,h2=states
-        outputs.append(F.linear(v,head,model.head.bias))
+        outputs.append(v if return_embeddings else F.linear(v,head,model.head.bias))
     return torch.stack(outputs,dim=1),(h1,h2)
 
 def supervised_prediction(model,features,targets,burn_in=0,delay=0):

@@ -1,7 +1,10 @@
 # V15 full-corpus audit: source clipping correction
 
-2026-09-09. This supersedes the V14 PCM16 corpus for new teacher generation.
-No new student training, checkpoint promotion or car writes.
+2026-09-09 preparation; updated 2026-09-11. This supersedes the V14 PCM16 corpus
+for new teacher generation. All 587 audits are now complete, with semantic review
+still required. User-authorized experimental routing-head training is described in
+[UPMIX_V15_STREAMING_TRAINING.md](UPMIX_V15_STREAMING_TRAINING.md).
+No checkpoint promotion or car writes.
 
 ## Verified preparation defect
 
@@ -41,12 +44,14 @@ Complete report: `build/reference-audio/v15-full-float-source/integrity-audit.js
 The earlier V14 fingerprint attempt contained empty spectral bands; its v2 report
 fixed that numerical check. Neither legacy integer report should admit V14 to new training.
 
-## Active all-core workflow
+## Completed all-core workflow
 
 Owner script: `tools/stereo-upmix-render/complete_float_dataset.py`.
 It owns native base separation and the bounded complete-audit runner, captures
-logs to disk and writes terminal success/failure state. The initial run is ongoing;
-source verification is complete, full teacher/content verification is not yet complete.
+logs to disk and writes terminal success/failure state. The run finished with
+`complete-needs-semantic-review`: 587/587 technically passing audits, all 50 songs.
+This is full diagnostic coverage, not full semantic approval. Specialist WAVs
+are retained for 544 cores; the historical 43-core gap described below remains.
 
 For EVERY one of the 587 cores:
 
