@@ -40,8 +40,8 @@ The feature set observed on the MHI2Q virtual cockpit most closely matches
 | 16 | `0x10` | CompassInfo | property | All | `updateCompassInfo(angle, symbolic)` | Compass heading and `N/NE/...` indicator | Delegated to stock |
 | 17 | `0x11` | RG_Status | property | All | `updateRGStatus(status)` | Route-guidance active state; starts FctSync | CarPlay-owned for connected session; sent during RGI |
 | 18 | `0x12` | DistanceToNextManeuver | property | All | `updateDistanceToNextManeuver(distance, unit, barOn, bar)` | Next-turn distance plus optional bargraph | CarPlay-owned/gated; actively sent |
-| 19 | `0x13` | CurrentPositionInfo | property | All | `updateCurrentPositionInfo(text)` | VC lower-bar text | Phase-0 fallback when neither SignPost nor TurnToInfo exists; fullscreen phase 1 shows the absolute ETA clock; smallscreen phase 1 clears it; stock allowed for `CP && !RGI` |
-| 20 | `0x14` | TurnToInfo | property | All | `updateTurnToInfo(turnTo, signPost)` | Turn-to/signpost text overlay | CarPlay-owned during active RGI; phase 0 publishes exactly one source by SignPost → TurnToInfo → CurrentPositionInfo priority; phase 1 uses SignPost for remaining time |
+| 19 | `0x13` | CurrentPositionInfo | property | All | `updateCurrentPositionInfo(text)` | VC lower-bar text | All CarPlay route text and click summaries; phase 0: bracketed exit/signpost, else next road, else current road; phase 1: compact duration in smallscreen, arrival + duration in fullscreen; stock allowed for `CP && !RGI` |
+| 20 | `0x14` | TurnToInfo | property | All | `updateTurnToInfo(turnTo, signPost)` | Separate turn-to/signpost overlay | Both strings explicitly empty during CarPlay RGI, with stock writes gated; no CarPlay text or ETA sent here |
 | 21 | `0x15` | DistanceToDestination | property | All | `updateDistanceToDestination(value, unit, stopover)` | Destination/trip distance | CarPlay-owned/gated during active RGI; cached for instant info-mode refresh |
 | 22 | `0x16` | TimeToDestination | property | All | `updateTimeToDestination(type, format, time)` | ETA or remaining travel time | CarPlay-owned/gated during active RGI; always publishes absolute ETA (`timeInfoType=1`) |
 | 23 | `0x17` | ManeuverDescriptor | property | `S/H/MH` | `updateManeuverDescriptor(slots[])` | Up to three maneuver descriptors for VC/HUD | CarPlay-owned/gated; the real current-only descriptor is shown at every distance; approach thresholds affect only bargraph/action timing |
@@ -94,8 +94,8 @@ The feature set observed on the MHI2Q virtual cockpit most closely matches
 
 The bridge always uses type `1`, independent of view and presentation phase.
 If iOS supplies only remaining time, the bridge computes `now + remaining` and
-publishes an absolute ETA. Remaining time is exposed by the compact FctID 20
-SignPost value selected with the steering-wheel click.
+publishes an absolute ETA. Remaining time is exposed as text in FctID 19
+CurrentPositionInfo, selected with the steering-wheel click. FctID 20 stays empty.
 
 ### FctID 38 — InfoStates
 
@@ -149,7 +149,7 @@ not all equally safe to drive during CarPlay ownership.
 | 17 | `rg_Status` | `0` inactive, `1` active, `2` suspended, `255` unsupported | Lifecycle control, not cosmetic; do not use as a display toggle. |
 | 18 | `bargraphOnOff`, distance validity | Numeric next-turn distance and bargraph can be enabled independently | Safe. Our patched VC consumer deliberately permits distance and bargraph together. |
 | 21 | `distanceToStopover` | `false` final destination, `true` next stopover | Safe if the CarPlay route exposes a real waypoint distinction. |
-| 22 | `timeInfoType` | `0` remaining time, `1` arrival time, `2` arrival in another time zone, `15` invalid | Safe and the best user-selectable ETA/RTT representation switch. |
+| 22 | `timeInfoType` | `0` remaining time, `1` arrival time, `2` arrival in another time zone, `15` invalid | Keep type `1`: this VC does not render a remaining-duration widget. Click summaries use FctID 19 instead. |
 | 22 | `navigationTimeFormat` | `0` 24-hour, `1` 12-hour | Follow HU locale; this changes formatting, not ETA/RTT semantics. |
 | 23 | `mainElement`, `direction`, `zLevelGuidance`, descriptor slot | Selects maneuver glyph, signed direction/angle, level up/down and current/next maneuver | Safe only when derived from the actual iOS maneuver. |
 | 24 | `laneGuidanceOnOff`, per-lane `guidanceInfo` | Hide/show lanes; `0` not recommended, `1` recommended, `2` best | Safe when sourced from iOS lane guidance. Lane type/markings/description further alter glyphs. |
@@ -185,22 +185,53 @@ Select.
 
 | View | Phase 0 | Phase 1 |
 |---|---|---|
-| Fullscreen | Exactly one: FctID 20 SignPost, else FctID 20 TurnToInfo, else FctID 19 current road; FctID 22: absolute ETA | FctID 20 SignPost: remaining duration (`37 min` / `1 h 05 min`); VC-only FctID 19: `ETA 10:42 PM`; FctID 22 remains absolute ETA |
-| Smallscreen | Exactly one: FctID 20 SignPost, else FctID 20 TurnToInfo, else FctID 19 current road; FctID 22: absolute ETA | FctID 20 SignPost: remaining duration (`37 min` / `1 h 05 min`); FctID 19 is empty; FctID 22 remains absolute ETA |
+| Fullscreen | FctID 19: `‹exit/signpost›`, else next road, else current road; no synthetic arrow | FctID 19: `◌ 10:42 PM` + ` \| ` + `37 min` (or `1 h 05 min`) |
+| Smallscreen | Same FctID 19 route text as fullscreen; no synthetic arrow | FctID 19: `◌ 37 min` (or `◌ 1 h 05 min`) |
 
-Every fullscreen/smallscreen View transition resets to phase 0. `BAPBridge` retains
-the last signpost, turn-to and current-road text plus ETA, remaining time, and
-destination distance, so the serialized presentation worker can republish either
-phase immediately rather than waiting for another iOS route-guidance delta.
+In both views/phases, FctID 20 is `("", "")` and FctID 22 remains absolute ETA.
+Arrival-clock text follows the HU's 12/24-hour setting and local time conversion.
 
-The route-text input priority is `SignPost -> TurnToInfo -> CurrentPositionInfo`.
-The bridge keeps all three sources semantic but publishes exactly one in phase 0:
-`mExitInfo` feeds SignPost; only without it does `mAfterRoad` (or maneuver name)
-feed TurnToInfo; only without both does `currentRoad` feed CurrentPositionInfo.
-All lower-priority fields are explicitly cleared to prevent stale VC overlays.
-As in MHI3, occurrences of the turn-to street are removed from SignPost to avoid
-duplicate text. Phase 1 replaces the highest-priority
-SignPost value with remaining travel time and clears TurnToInfo. In fullscreen,
-the VC-only CurrentPositionInfo row simultaneously shows the absolute arrival
-clock; in smallscreen it is explicitly empty. The next click restores both
-original FctID 20 strings and the real current-road FctID 19 value.
+Every fullscreen/smallscreen View transition resets to phase 0. The serialized
+presentation worker republishes cached route state and travel estimates immediately,
+without waiting for another iOS delta. A second click restores the normal route text.
+
+Input priority is `mExitInfo -> mAfterRoad -> mName -> currentRoad`, after whitespace
+normalization. Exit/signpost text is enclosed in `‹…›`; it retains its full input
+(including any colon prefix and next-road name), because there is no competing text
+row to deduplicate. `mAfterRoad` retains the existing last-colon-part normalization.
+All text uses the 96-byte UTF-8 budget of FctID 19, reserving six bytes for the
+U+2039/U+203A angle quotes (90 bytes remain for exit/signpost content);
+neither multibyte characters nor surrogate pairs are split at the limit.
+
+The user-selected time marker is U+25CC DOTTED CIRCLE (`◌`), replacing the literal
+`ETA` prefix in both views. It is a standalone character, not U+20DD COMBINING
+ENCLOSING CIRCLE and not an emoji sequence. VC 0379's Arabic and JP/KR font files
+contain it, but the five Audi faces do not: actual VC font fallback/display remains
+an on-unit acceptance test. Angle quotes have direct coverage in all five Audi
+faces. See [VC font glyphs](VC_FONT_GLYPHS.md) for extracted-font evidence.
+The user reports that the tested route-text output does not appear on HUD;
+this layout therefore targets the VC, without changing HUD maneuvers/distances.
+That observation is specific to the tested configuration, not proof that every
+HUD text mode is unsupported.
+
+An unknown ETA falls back to normal route text. If neither route text nor an estimate
+exists, active RGI publishes a neutral `…`, including during initial startup. Do not
+use `""` to hide the CurrentPositionInfo widget: on this VC it can expose the native
+circle/`---` placeholder. Teardown still clears the fields and releases stock ownership.
+
+### 2026-09-10 rollback of the separate-text experiment
+
+Commit `3f1ef4a` (2026-09-09) moved text from FctID 19 into FctID 20 and deliberately
+emptied FctID 19 on smallscreen clicks. This removed the nonempty fallback introduced
+in `2308e51` (2026-08-08). The user reported the stock VC placeholder after a click
+and requested the previous all-CurrentPositionInfo presentation, without our arrow
+and with brackets for exit/signpost text. Keep the FctID 20 ownership gate so stock
+cannot reintroduce a second layer; real maneuver descriptors, distance/bargraph logic,
+and stock passthrough outside RGI are unchanged. This rollback does not send text ETA
+to the HUD through SignPost.
+
+Host verification: `bash scripts/test_route_info.sh` builds the shipping Java 1.4
+JAR and runs the actual BAPBridge against a recording stock-service proxy. Covers
+both views/phases, input priority, missing estimates/text, UTF-8/bracket boundaries,
+repeated clicks, FctID 20 clearing, and FctID 22 remaining type 1. Vehicle display
+validation is still required; HU was offline when this rollback was prepared.

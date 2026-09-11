@@ -76,13 +76,16 @@ public class BAPBridge {
      * RouteGuidance combines this with renderer FRAME_READY before exposing context 80. */
     private volatile boolean bapSessionStarted = false;
     private static final int MAX_CURRENT_POSITION_UTF8_BYTES = 96;
-    private static final int MAX_TURN_TO_UTF8_BYTES = 75;
-    private static final int MAX_SIGN_POST_UTF8_BYTES = 30;
+    private static final String ROUTE_TEXT_PENDING = "\u2026";
+    private static final String ROUTE_SIGN_OPEN = "\u2039";
+    private static final String ROUTE_SIGN_CLOSE = "\u203A";
+    private static final int ROUTE_SIGN_FRAME_UTF8_BYTES = 6; // 3 bytes per quote
+    /* U+25CC DOTTED CIRCLE, not a combining mark or an emoji sequence.
+     * Present in VC's supplementary fonts; on-unit fallback still needs testing. */
+    private static final String ROUTE_TIME_PREFIX = "\u25CC ";
 
     /* CarPlay owns FctID 19/20/21/22/46 for the whole active RGI interval. */
-    private String latchedTurnToText = "";
-    private String latchedSignPostText = "";
-    private String latchedCurrentPositionText = "";
+    private String latchedPositionText = "";
     private boolean routeTextPublished = false;
     /* User-selectable route-info representation. View changes always reset it
      * to 0; only the serialized RouteGuidance presentation worker mutates it. */
@@ -623,9 +626,7 @@ public class BAPBridge {
         try {
             bapSessionStarted = false;
             inApproachZone = false;
-            latchedTurnToText = "";
-            latchedSignPostText = "";
-            latchedCurrentPositionText = "";
+            latchedPositionText = "";
             routeTextPublished = false;
             infoPhase = 0;
             lastEtaSeconds = -1L;
@@ -711,12 +712,11 @@ public class BAPBridge {
             Log.i(TAG, "Started (rgType=" + ACTIVE_RGTYPE
                 + ", cr=" + customRendererStarted + ")");
             bapSessionStarted = true;
-            /* Clear stale stock text while the first iOS maneuver snapshot is
-             * still arriving. Never synthesize a textual arrow here: the real
-             * maneuver arrow belongs exclusively to FctID 23/the renderer. */
+            /* Keep the VC's empty "---" shell out while route text is pending.
+             * Clear the separate FctID 20 layer; never synthesize a text arrow. */
             try {
                 appConnectorNavi.updateTurnToInfo("", "");
-                appConnectorNavi.updateCurrentPositionInfo("");
+                appConnectorNavi.updateCurrentPositionInfo(ROUTE_TEXT_PENDING);
             } catch (Throwable t) {
                 Log.w(TAG, "BAP FctID 19/20 startup fallback failed: " + t);
             }
@@ -768,9 +768,7 @@ public class BAPBridge {
              * black screen. BAP teardown happens in onShutdown() on real disconnect. */
             stopActionBlinkThread();
             inApproachZone = false;
-            latchedTurnToText = "";
-            latchedSignPostText = "";
-            latchedCurrentPositionText = "";
+            latchedPositionText = "";
             routeTextPublished = false;
             infoPhase = 0;
             lastFirstManeuverIdx = -1;
@@ -793,9 +791,7 @@ public class BAPBridge {
              * zone exit, but onShutdown can be called from non-approach
              * states too — e.g., disconnect mid-route). */
             stopActionBlinkThread();
-            latchedTurnToText = "";
-            latchedSignPostText = "";
-            latchedCurrentPositionText = "";
+            latchedPositionText = "";
             routeTextPublished = false;
             infoPhase = 0;
             lastEtaSeconds = -1L;
@@ -1066,11 +1062,10 @@ public class BAPBridge {
                 }
             }
 
-            /* 4. Persistent CarPlay route text (FctIDs 20 then 19).
-             * Phase 0 publishes exactly one field using SignPost -> TurnToInfo ->
-             * CurrentPositionInfo priority, preventing competing VC text layers.
-             * Phase 1 puts remaining travel time in the shared SignPost field. Fullscreen
-             * additionally uses the VC-only CurrentPositionInfo row for the arrival clock. */
+            /* 4. All route text lives in CurrentPositionInfo (FctID 19).
+             * Phase 0: angle-quoted exit/signpost, else next road, else current road.
+             * Phase 1: compact ETA duration in smallscreen, arrival + duration
+             * in fullscreen. FctID 20 stays empty in both phases. */
             int routeTextDirty = RouteGuidance.State.DIRTY_CURRENT_ROAD
                 | RouteGuidance.State.DIRTY_MANEUVER_TEXT
                 | RouteGuidance.State.DIRTY_MANEUVER_LIST
@@ -1146,9 +1141,8 @@ public class BAPBridge {
                 sendDistanceToDestinationRaw(s.distDestM, false);
             }
 
-            /* 8. Time to destination (FctID 22). It always remains the normal
-             * absolute ETA. The click presentation is carried separately by
-             * FctID 20 (remaining time) and fullscreen FctID 19 (arrival clock). */
+            /* 8. Time to destination (FctID 22) always remains absolute ETA.
+             * The click presentation is separate text in FctID 19 only. */
             if ((dirty & (RouteGuidance.State.DIRTY_TIME_REMAINING |
                           RouteGuidance.State.DIRTY_ETA)) != 0) {
                 publishTimeToDestinationForMode();
@@ -1243,71 +1237,56 @@ public class BAPBridge {
         String turnTo = "";
         String signPost = "";
         if (idx >= 0) {
-            if (s.mAfterRoad != null && idx < s.mAfterRoad.length
-                    && s.mAfterRoad[idx] != null && s.mAfterRoad[idx].length() > 0) {
-                turnTo = keepLastColonPart(s.mAfterRoad[idx]);
-            } else if (s.mName != null && idx < s.mName.length
-                    && s.mName[idx] != null && s.mName[idx].length() > 0) {
-                turnTo = s.mName[idx];
+            if (s.mAfterRoad != null && idx < s.mAfterRoad.length) {
+                turnTo = normalizeRouteText(keepLastColonPart(s.mAfterRoad[idx]));
             }
-            if (s.mExitInfo != null && idx < s.mExitInfo.length
-                    && s.mExitInfo[idx] != null && s.mExitInfo[idx].length() > 0) {
-                signPost = s.mExitInfo[idx];
+            if (turnTo.length() == 0 && s.mName != null && idx < s.mName.length) {
+                turnTo = normalizeRouteText(s.mName[idx]);
+            }
+            if (s.mExitInfo != null && idx < s.mExitInfo.length) {
+                signPost = normalizeRouteText(s.mExitInfo[idx]);
             }
         }
 
-        turnTo = normalizeRouteText(turnTo);
-        signPost = filterSignPost(signPost, turnTo);
-        String currentPosition = normalizeRouteText(s.currentRoad);
-
-        latchedTurnToText = limitUtf8(turnTo, MAX_TURN_TO_UTF8_BYTES);
-        latchedSignPostText = limitUtf8(signPost, MAX_SIGN_POST_UTF8_BYTES);
-        latchedCurrentPositionText = limitUtf8(
-            currentPosition, MAX_CURRENT_POSITION_UTF8_BYTES);
+        /* One visible field: do not strip the next-road name from the signpost.
+         * Reserve six UTF-8 bytes so a long signpost keeps both angle quotes. */
+        if (signPost.length() > 0) {
+            latchedPositionText = ROUTE_SIGN_OPEN
+                + limitUtf8(signPost, MAX_CURRENT_POSITION_UTF8_BYTES - ROUTE_SIGN_FRAME_UTF8_BYTES)
+                + ROUTE_SIGN_CLOSE;
+        } else {
+            String candidate = turnTo.length() > 0
+                ? turnTo : normalizeRouteText(s.currentRoad);
+            latchedPositionText = limitUtf8(candidate, MAX_CURRENT_POSITION_UTF8_BYTES);
+        }
     }
 
     private void publishRouteTextForMode() {
         boolean smallScreen = com.luka.carplay.core.AltScreenModule.isSmallScreenViewArea();
-        String text;
-        if (infoPhase == 0) {
-            /* Publish one text layer only. Explicitly clear every lower-priority
-             * field so AppConnectorNavi/VC cannot retain a stale competing row. */
-            if (latchedSignPostText.length() > 0) {
-                appConnectorNavi.updateTurnToInfo("", latchedSignPostText);
-                text = "";
-            } else if (latchedTurnToText.length() > 0) {
-                appConnectorNavi.updateTurnToInfo(latchedTurnToText, "");
-                text = "";
-            } else {
-                appConnectorNavi.updateTurnToInfo("", "");
-                text = latchedCurrentPositionText;
-            }
-        } else {
-            /* Put the compact remaining duration on the shared NavSD text path.
-             * The physical HUD firmware may ignore arbitrary strings, but it sees
-             * the same FctID 20 update as the VC and can render it if supported.
-             * CurrentPositionInfo is a separate VC row: use it for the absolute
-             * arrival clock only in fullscreen, where there is room for both;
-             * explicitly hide that row in smallscreen phase 1. */
-            String remaining = formatRemainingForText(currentRemainingSeconds());
-            if (remaining != null && remaining.length() > 0) {
-                appConnectorNavi.updateTurnToInfo(
-                    "", limitUtf8(remaining, MAX_SIGN_POST_UTF8_BYTES));
-            } else {
-                /* No travel estimate yet: retain navigation text rather than
-                 * replacing the priority row with an empty value. */
-                appConnectorNavi.updateTurnToInfo(latchedTurnToText, latchedSignPostText);
-            }
-            text = smallScreen ? "" : formatArrivalForText(currentArrivalSeconds());
-            if (!smallScreen && (text == null || text.length() == 0)) {
-                text = latchedCurrentPositionText;
-            }
-        }
-        /* An empty phase-1 smallscreen value is intentional: only the compact
-         * remaining-duration SignPost should be visible there. */
+        String text = infoPhase == 0 ? latchedPositionText
+            : (smallScreen ? buildShortSummary() : buildTripSummary());
+        if (text == null || text.length() == 0) text = latchedPositionText;
+        if (text == null || text.length() == 0) text = ROUTE_TEXT_PENDING;
         text = limitUtf8(text, MAX_CURRENT_POSITION_UTF8_BYTES);
+        /* Keep the stock text gate for FctID 20, but never use its separate
+         * TurnTo/SignPost layers for our text or ETA. Empty FctID 19 does not
+         * hide the VC row: it exposes the native circle/"---" placeholder. */
+        appConnectorNavi.updateTurnToInfo("", "");
         appConnectorNavi.updateCurrentPositionInfo(text);
         routeTextPublished = true;
+    }
+
+    private String buildTripSummary() {
+        String arrival = formatArrivalForText(currentArrivalSeconds());
+        String remaining = formatRemainingForText(currentRemainingSeconds());
+        if (arrival.length() == 0) return remaining;
+        return remaining.length() == 0 ? arrival : arrival + " | " + remaining;
+    }
+
+    private String buildShortSummary() {
+        String remaining = formatRemainingForText(currentRemainingSeconds());
+        if (remaining.length() > 0) return ROUTE_TIME_PREFIX + remaining;
+        return formatArrivalForText(currentArrivalSeconds());
     }
 
     private void cacheTravelInfo(RouteGuidance.State s, int dirty) {
@@ -1369,7 +1348,7 @@ public class BAPBridge {
         cal.setTimeInMillis(localMs);
         int hour = cal.get(java.util.Calendar.HOUR_OF_DAY);
         int minute = cal.get(java.util.Calendar.MINUTE);
-        StringBuffer out = new StringBuffer("ETA ");
+        StringBuffer out = new StringBuffer(ROUTE_TIME_PREFIX);
         if (getHuNavigationTimeFormat() == 1) {
             boolean pm = hour >= 12;
             int hour12 = hour % 12;
@@ -2367,6 +2346,11 @@ public class BAPBridge {
                     hi = mid - 1;
                 }
             }
+            /* A substring ending between a surrogate pair encodes a replacement
+             * character. Keep the actual Unicode scalar intact at the limit. */
+            if (lo > 0 && lo < s.length()
+                    && s.charAt(lo - 1) >= '\uD800' && s.charAt(lo - 1) <= '\uDBFF'
+                    && s.charAt(lo) >= '\uDC00' && s.charAt(lo) <= '\uDFFF') lo--;
             return s.substring(0, lo);
         } catch (Exception e) {
             if (s.length() <= maxBytes) return s;
@@ -2390,40 +2374,6 @@ public class BAPBridge {
             }
         }
         return out.toString();
-    }
-
-    /** MHI3 parity: remove the turn-to street from signpost text to avoid duplication. */
-    private static String filterSignPost(String rawSignPost, String turnTo) {
-        String filtered = normalizeRouteText(rawSignPost);
-        String needle = normalizeRouteText(turnTo);
-        if (filtered.length() == 0 || needle.length() == 0) return filtered;
-
-        int pos = indexOfIgnoreCase(filtered, needle);
-        while (pos >= 0) {
-            filtered = filtered.substring(0, pos)
-                + filtered.substring(pos + needle.length());
-            filtered = normalizeRouteText(filtered);
-            pos = indexOfIgnoreCase(filtered, needle);
-        }
-
-        int start = 0;
-        int end = filtered.length();
-        while (start < end && isSignPostSeparator(filtered.charAt(start))) start++;
-        while (end > start && isSignPostSeparator(filtered.charAt(end - 1))) end--;
-        return normalizeRouteText(filtered.substring(start, end));
-    }
-
-    private static int indexOfIgnoreCase(String value, String needle) {
-        int last = value.length() - needle.length();
-        for (int i = 0; i <= last; i++) {
-            if (value.regionMatches(true, i, needle, 0, needle.length())) return i;
-        }
-        return -1;
-    }
-
-    private static boolean isSignPostSeparator(char c) {
-        return Character.isWhitespace(c) || c == ':' || c == ';' || c == ','
-            || c == '-' || c == '\u2013' || c == '\u2014' || c == '|' || c == '/';
     }
 
     private static String keepLastColonPart(String v) {

@@ -575,9 +575,9 @@ public class RouteGuidance implements CarplayBus.Listener {
 
     /** Steering-wheel encoder press: toggle phase without touching the HMI/BAP caller thread. */
     private void requestInfoModeToggle() {
-        /* Same phase toggle in both views: FctID 20 carries remaining travel time.
-         * Fullscreen additionally puts the absolute ETA clock in VC-only FctID 19;
-         * smallscreen clears FctID 19. The old smallscreen branch
+        /* Same phase toggle in both views, with all text in FctID 19:
+         * smallscreen shows U+25CC + duration, fullscreen shows arrival + duration.
+         * FctID 20 stays empty. The old smallscreen branch
          * flipped FctID 22's timeInfoType instead, which the cluster cannot render -
          * it has no remaining-duration widget - so it only blanked the clock. */
         synchronized (this) {
