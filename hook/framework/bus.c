@@ -111,9 +111,9 @@ static int         g_ring_count = 0;
 static pthread_mutex_t  g_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t   g_cond = PTHREAD_COND_INITIALIZER;
 static pthread_rwlock_t g_htable_rw = PTHREAD_RWLOCK_INITIALIZER;
-/* Serialises every on-wire frame (header + payload).  Held across both
- * send() calls inside send_frame() so two producers (writer thread and
- * reader thread during sync replay) cannot interleave bytes. */
+/* Serialises frames AND closing/replacing their socket.  When both locks
+ * are needed, acquire g_sock_write before g_lock.  A writer rechecks the
+ * connection generation under these locks before using a captured fd. */
 static pthread_mutex_t  g_sock_write = PTHREAD_MUTEX_INITIALIZER;
 static pthread_t       g_connector_tid;
 static pthread_t       g_writer_tid;
@@ -140,10 +140,9 @@ static int             g_client_fd = -1;    /* protected by g_lock */
  * socket and kills the REAL dio_manager's bus (→ RGI/cover-art churn we chased).  bus_shutdown()
  * is a no-op unless getpid()==g_bus_owner_pid, so only the owning process ever tears the bus down. */
 static volatile int    g_bus_owner_pid = 0;
-/* Bumped every time g_client_fd is set to a NEW connection.  The writer captures
- * (fd,gen) under g_lock and, after an out-of-lock send, only closes g_client_fd
- * when BOTH still match — so it can never close (or be fooled by) a reconnect
- * that reused the same fd number. */
+/* Bumped for every new connection; checked before a queued writer uses its fd.
+ * The connector owns close(). Other threads only shutdown/retire the socket,
+ * leaving its descriptor allocated until the connector has finished reading. */
 static uint32_t        g_client_gen = 0;
 static uint32_t        g_tx_seq = 1;
 
@@ -169,17 +168,14 @@ static void frame_dispose(frame_t* f) {
 }
 
 static hook_result_t frame_dup(frame_t* dst, const frame_t* src) {
-    dst->type  = src->type;
-    dst->flags = src->flags;
-    dst->seq   = src->seq;
-    dst->len   = src->len;
+    uint8_t* payload = NULL;
     if (src->len > 0) {
-        dst->payload = (uint8_t*)malloc(src->len);
-        if (!dst->payload) return HOOK_ERR_MEMORY;
-        memcpy(dst->payload, src->payload, src->len);
-    } else {
-        dst->payload = NULL;
+        payload = (uint8_t*)malloc(src->len);
+        if (!payload) return HOOK_ERR_MEMORY;
+        memcpy(payload, src->payload, src->len);
     }
+    *dst = *src;
+    dst->payload = payload;
     return HOOK_OK;
 }
 
@@ -229,7 +225,16 @@ static int write_all(int fd, const void* buf, size_t len) {
     return 0;
 }
 
-static int send_frame(int fd, const frame_t* f) {
+/* Caller holds g_sock_write and g_lock. */
+static void disconnect_current_nolock(int fd, uint32_t gen) {
+    if (g_client_fd != fd || g_client_gen != gen) return;
+    /* close alone need not wake a recv already blocked in another thread. */
+    shutdown(fd, SHUT_RDWR);
+    g_client_fd = -1;
+    pthread_cond_broadcast(&g_cond);
+}
+
+static int send_frame(int fd, uint32_t gen, bool published, const frame_t* f) {
     uint8_t hdr[BUS_HEADER_SIZE];
     write_be32(hdr + 0, BUS_MAGIC);
     write_be32(hdr + 4, f->seq);
@@ -240,6 +245,16 @@ static int send_frame(int fd, const frame_t* f) {
 
     /* Atomic on-wire: header and payload together, no interleaving. */
     pthread_mutex_lock(&g_sock_write);
+    if (published) {
+        pthread_mutex_lock(&g_lock);
+        bool current = !g_shutdown && g_client_fd == fd && g_client_gen == gen;
+        pthread_mutex_unlock(&g_lock);
+        if (!current) {
+            pthread_mutex_unlock(&g_sock_write);
+            errno = ENOTCONN;
+            return -1;
+        }
+    }
     int rc = 0;
     if (write_all(fd, hdr, sizeof(hdr)) != 0) {
         LOG_WARN(LOG_MODULE, "send header failed fd=%d type=0x%04x len=%u err=%s",
@@ -251,6 +266,14 @@ static int send_frame(int fd, const frame_t* f) {
                      fd, f->type, f->len, strerror(errno));
             rc = -1;
         }
+    }
+    if (rc != 0 && published) {
+        /* Retire before another writer can append bytes to a partial frame. */
+        int saved_errno = errno;
+        pthread_mutex_lock(&g_lock);
+        disconnect_current_nolock(fd, gen);
+        pthread_mutex_unlock(&g_lock);
+        errno = saved_errno;
     }
     pthread_mutex_unlock(&g_sock_write);
     return rc;
@@ -352,10 +375,18 @@ hook_result_t bus_send(uint16_t type, uint8_t flags,
     f.seq = my_seq;
 
     if ((flags & BUS_FLAG_STICKY) || s->sticky) {
-        if (s->has_last) frame_dispose(&s->last);
-        if (frame_dup(&s->last, &f) == HOOK_OK) {
-            s->has_last = true;
+        frame_t cached;
+        if (frame_dup(&cached, &f) != HOOK_OK) {
+            /* Keep the previous valid cache intact; never publish a cache
+             * entry with len > 0 and a NULL payload after allocation fails. */
+            g_tx_seq--;
+            pthread_mutex_unlock(&g_lock);
+            frame_dispose(&f);
+            return HOOK_ERR_MEMORY;
         }
+        if (s->has_last) frame_dispose(&s->last);
+        s->last = cached;
+        s->has_last = true;
     }
 
     hook_result_t enq = q_enqueue_nolock(&f);
@@ -381,7 +412,7 @@ hook_result_t bus_send(uint16_t type, uint8_t flags,
  * without holding it - so concurrent bus_send() from iAP2 or OMX
  * callbacks is not blocked by slow network I/O here.
  * ============================================================ */
-static void send_sync_snapshot(int fd) {
+static int send_sync_snapshot(int fd, uint32_t gen, bool published) {
     frame_t  begin = { EVT_SYNC_BEGIN, 0, 0, 0, NULL };
     frame_t  end   = { EVT_SYNC_END,   0, 0, 0, NULL };
     frame_t* snapshot = NULL;
@@ -414,14 +445,15 @@ static void send_sync_snapshot(int fd) {
     pthread_mutex_unlock(&g_lock);
 
     LOG_INFO(LOG_MODULE, "sending snapshot fd=%d count=%d", fd, snapshot_count);
-    send_frame(fd, &begin);
+    int rc = send_frame(fd, gen, published, &begin);
     for (i = 0; i < snapshot_count; i++) {
-        send_frame(fd, &snapshot[i]);
+        if (rc == 0) rc = send_frame(fd, gen, published, &snapshot[i]);
         frame_dispose(&snapshot[i]);
     }
-    send_frame(fd, &end);
-    LOG_INFO(LOG_MODULE, "snapshot sent fd=%d", fd);
+    if (rc == 0) rc = send_frame(fd, gen, published, &end);
+    LOG_INFO(LOG_MODULE, "snapshot completed fd=%d rc=%d", fd, rc);
     free(snapshot);
+    return rc;
 }
 
 /* ============================================================
@@ -445,23 +477,16 @@ static void* writer_main(void* arg) {
         /* Send on the ORIGINAL socket fd — do NOT dup() it.  On QNX 6.5 io-pkt, send() on a
          * dup'd socket fd returns ENOSYS ("Function not implemented"), which silently kills the
          * whole bus (RGD + coverart never reach Java).  The reference impl sends on g_client_fd
-         * directly; the rare fd-reuse race after a reconnect is bounded by the (fd,gen) recheck
-         * before we close on failure. */
+         * directly. send_frame rechecks (fd,gen) while excluding close/replacement
+         * so a delayed writer cannot send into a reused descriptor. */
         fd  = g_client_fd;
         gen = g_client_gen;
         pthread_mutex_unlock(&g_lock);
 
         if (fd >= 0) {
-            int rc = send_frame(fd, &f);
+            int rc = send_frame(fd, gen, true, &f);
             if (rc != 0) {
                 LOG_WARN(LOG_MODULE, "send failed fd=%d type=0x%04x err=%s", fd, f.type, strerror(errno));
-                pthread_mutex_lock(&g_lock);
-                if (g_client_fd == fd && g_client_gen == gen) {   /* same connection only */
-                    close(g_client_fd);
-                    g_client_fd = -1;
-                    pthread_cond_broadcast(&g_cond);
-                }
-                pthread_mutex_unlock(&g_lock);
             }
         }
 
@@ -525,7 +550,7 @@ static int read_all(int fd, void* buf, size_t len) {
  * BIDIRECTIONAL: the hook now both sends events AND receives commands
  * (CMD_KNOB, CMD_ALT_ZONE, …) that modules register for via bus_on().
  * Returns 0 = ok, -1 = disconnect (framing lost / EOF → reconnect). */
-static int read_frame(int fd) {
+static int read_frame(int fd, uint32_t gen) {
     uint8_t hdr[BUS_HEADER_SIZE];
     if (read_all(fd, hdr, sizeof(hdr)) != 0) return -1;
 
@@ -556,8 +581,7 @@ static int read_frame(int fd) {
     if (type == CMD_SYNC_REQ) {
         LOG_INFO(LOG_MODULE, "sync snapshot requested fd=%d", fd);
         if (payload) free(payload);
-        send_sync_snapshot(fd);
-        return 0;
+        return send_sync_snapshot(fd, gen, true);
     }
 
     /* Dispatch with the handler rwlock held ACROSS the callback so bus_off()
@@ -576,15 +600,27 @@ static int read_frame(int fd) {
     return 0;
 }
 
-static void close_current_fd_if_matches(int fd, const char* reason) {
+static void disconnect_current_fd_if_matches(int fd, uint32_t gen, const char* reason) {
+    (void)reason;
+    pthread_mutex_lock(&g_sock_write);
     pthread_mutex_lock(&g_lock);
-    if (g_client_fd == fd) {
-        LOG_INFO(LOG_MODULE, "closing fd=%d (%s)", fd, reason ? reason : "disconnect");
-        close(g_client_fd);
-        g_client_fd = -1;
-        pthread_cond_broadcast(&g_cond);
+    if (g_client_fd == fd && g_client_gen == gen) {
+        LOG_INFO(LOG_MODULE, "disconnecting fd=%d (%s)", fd, reason ? reason : "disconnect");
+        disconnect_current_nolock(fd, gen);
     }
     pthread_mutex_unlock(&g_lock);
+    pthread_mutex_unlock(&g_sock_write);
+}
+
+/* Connector only, after its last read/dispatch. A blocked recv must finish
+ * before close makes the descriptor available to unrelated open/socket calls. */
+static void release_connection(int fd, uint32_t gen) {
+    pthread_mutex_lock(&g_sock_write);
+    pthread_mutex_lock(&g_lock);
+    disconnect_current_nolock(fd, gen);
+    pthread_mutex_unlock(&g_lock);
+    close(fd);
+    pthread_mutex_unlock(&g_sock_write);
 }
 
 static void* connector_main(void* arg) {
@@ -633,40 +669,54 @@ static void* connector_main(void* arg) {
         pthread_mutex_unlock(&g_lock);
 
         LOG_INFO(LOG_MODULE, "sending direct HELLO fd=%d seq=%u", fd, hello_frame.seq);
-        if (send_frame(fd, &hello_frame) != 0) {
+        if (send_frame(fd, 0, false, &hello_frame) != 0) {
             LOG_WARN(LOG_MODULE, "direct HELLO failed fd=%d err=%s", fd, strerror(errno));
             close(fd);
             continue;
         }
         LOG_INFO(LOG_MODULE, "direct HELLO sent fd=%d", fd);
 
-        send_sync_snapshot(fd);
+        if (send_sync_snapshot(fd, 0, false) != 0) {
+            close(fd);
+            continue;
+        }
 
         /* Replace any stale fd (shouldn't exist but defensive). */
+        uint32_t gen;
+        pthread_mutex_lock(&g_sock_write);
         pthread_mutex_lock(&g_lock);
+        if (g_shutdown) {
+            pthread_mutex_unlock(&g_lock);
+            pthread_mutex_unlock(&g_sock_write);
+            close(fd);
+            break;
+        }
         if (g_client_fd >= 0) {
-            close(g_client_fd);
+            int stale_fd = g_client_fd;
+            disconnect_current_nolock(stale_fd, g_client_gen);
+            close(stale_fd);
         }
         g_client_fd = fd;
-        g_client_gen++;                 /* new connection identity (writer fd-reuse guard) */
+        gen = ++g_client_gen;
         pthread_cond_broadcast(&g_cond);
         pthread_mutex_unlock(&g_lock);
+        pthread_mutex_unlock(&g_sock_write);
 
         while (!g_shutdown) {
             bool still_current;
             pthread_mutex_lock(&g_lock);
-            still_current = (g_client_fd == fd);
+            still_current = (g_client_fd == fd && g_client_gen == gen);
             pthread_mutex_unlock(&g_lock);
             if (!still_current) break;
 
             /* Blocking read+dispatch of inbound frames (bidirectional bus).
              * Wakes on a frame, on EOF (Java gone), or on error (writer thread
              * dropped this fd) → reconnect. */
-            if (read_frame(fd) != 0) {
-                close_current_fd_if_matches(fd, "peer closed / read error");
+            if (read_frame(fd, gen) != 0) {
                 break;
             }
         }
+        release_connection(fd, gen);
 
         if (!g_shutdown) {
             LOG_INFO(LOG_MODULE, "disconnect detected; will reconnect");
@@ -766,6 +816,20 @@ static int bus_install_signal_policy(void)
     return 0;
 }
 
+static void disconnect_for_shutdown(void) {
+    int fd;
+    uint32_t gen;
+    /* Wake a blocked sender first, without freeing its descriptor. Retirement
+     * waits for the frame lock; the connector closes after its last read. */
+    pthread_mutex_lock(&g_lock);
+    fd = g_client_fd;
+    gen = g_client_gen;
+    if (fd >= 0) shutdown(fd, SHUT_RDWR);
+    pthread_cond_broadcast(&g_cond);
+    pthread_mutex_unlock(&g_lock);
+    if (fd >= 0) disconnect_current_fd_if_matches(fd, gen, "shutdown");
+}
+
 hook_result_t bus_init(void) {
     if (g_connector_up || g_writer_up || g_timer_up) return HOOK_ERR_BUSY;
 
@@ -808,10 +872,7 @@ hook_result_t bus_init(void) {
         g_writer_up = false;
         /* unwind the connector we already started (joinable → must join) */
         g_shutdown = true;
-        pthread_mutex_lock(&g_lock);
-        if (g_client_fd >= 0) { shutdown(g_client_fd, SHUT_RDWR); close(g_client_fd); g_client_fd = -1; }
-        pthread_cond_broadcast(&g_cond);
-        pthread_mutex_unlock(&g_lock);
+        disconnect_for_shutdown();
         pthread_join(g_connector_tid, NULL);
         g_connector_created = false;
         spa_signal_guard_restore(&g_signal_guard);
@@ -844,16 +905,9 @@ void bus_shutdown(void) {
 
     g_shutdown = true;
 
-    /* 1. Wake every thread: close the socket (unblocks the connector's recv +
-     *    the writer's send), and broadcast the queue cond. */
-    pthread_mutex_lock(&g_lock);
-    if (g_client_fd >= 0) {
-        shutdown(g_client_fd, SHUT_RDWR);
-        close(g_client_fd);
-        g_client_fd = -1;
-    }
-    pthread_cond_broadcast(&g_cond);
-    pthread_mutex_unlock(&g_lock);
+    /* 1. Shutdown the socket to wake recv/send, then retire it. The connector
+     *    owns close(), and the queue condition wakes an idle writer. */
+    disconnect_for_shutdown();
 
     /* 2. QNX 6.5 has no portable timed pthread_join.  Wait for each thread's
      * terminal flag first, exactly like the stream-111 reaper.  Never enter an

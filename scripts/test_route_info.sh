@@ -17,6 +17,8 @@ trap 'rm -rf "$TEST_DIR"' EXIT
 CLASSPATH="$PATCH_JAR:$STOCK_JAR:$TOOLS_DIR/libs/org.osgi.framework-1.10.0.jar:$TOOLS_DIR/libs/org.osgi.util.tracker-1.5.4.jar"
 "$JDK_DIR/bin/javac" -encoding UTF-8 -cp "$CLASSPATH" -d "$TEST_DIR" \
     "$PROJECT_DIR/tests/RouteInfoPresentationTest.java" \
+    "$PROJECT_DIR/tests/RouteGuidanceDeltaTest.java" \
     "$PROJECT_DIR/tests/RendererMapperDirectionTest.java"
 "$JDK_DIR/bin/java" -cp "$TEST_DIR:$CLASSPATH" RouteInfoPresentationTest
 "$JDK_DIR/bin/java" -cp "$TEST_DIR:$CLASSPATH" RendererMapperDirectionTest
+"$JDK_DIR/bin/java" -cp "$TEST_DIR:$CLASSPATH" RouteGuidanceDeltaTest

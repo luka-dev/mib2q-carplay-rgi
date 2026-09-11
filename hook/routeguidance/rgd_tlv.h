@@ -388,14 +388,16 @@ typedef struct {
  * Parsing Functions
  * ============================================================ */
 
+/* Parse complete iAP2 messages. False rejects the entire malformed delta;
+ * output remains empty (maneuver linked-lane sentinel remains 0xFFFF). */
 /* Parse RouteGuidanceUpdate (0x5201) payload */
-void rgd_parse_update(const uint8_t* buf, size_t len, rgd_update_t* out);
+bool rgd_parse_update(const uint8_t* buf, size_t len, rgd_update_t* out);
 
 /* Parse RouteGuidanceManeuverUpdate (0x5202) payload */
-void rgd_parse_maneuver(const uint8_t* buf, size_t len, rgd_maneuver_t* out);
+bool rgd_parse_maneuver(const uint8_t* buf, size_t len, rgd_maneuver_t* out);
 
 /* Parse RouteGuidanceLaneGuidanceInformation (0x5204) payload */
-void rgd_parse_lane_guidance(const uint8_t* buf, size_t len, rgd_lane_guidance_t* out);
+bool rgd_parse_lane_guidance(const uint8_t* buf, size_t len, rgd_lane_guidance_t* out);
 
 /* ============================================================
  * Building Functions (for Identify patching)

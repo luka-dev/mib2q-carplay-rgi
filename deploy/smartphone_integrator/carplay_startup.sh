@@ -26,10 +26,28 @@ if [ ! -r "$H/carplay_processes.sh" ]; then
 fi
 . "$H/carplay_processes.sh"
 
+supervisor_owns_generation()
+{
+    SG_OWNER=
+    [ -r "$OWNER_FILE" ] && read SG_OWNER < "$OWNER_FILE"
+    [ "$SG_OWNER" = "$MR_DIO_PID" ]
+}
+
+supervisor_dio_alive()
+{
+    [ -d "/proc/$MR_DIO_PID" ]
+}
+
+supervisor_may_start()
+{
+    supervisor_owns_generation && supervisor_dio_alive && [ ! -e "$STOP_FILE" ]
+}
+
 start_renderer()
 {
     SR_NAME=$1
     SR_REASON=$2
+    supervisor_may_start || return 0
     if cp_renderer_running "$SR_NAME"; then
         # An adopted renderer from a previous generation may be alive but wedged
         # (see cp_renderer_healthy). On initial adoption, probe only a readiness
@@ -55,11 +73,16 @@ start_renderer()
         echo "[supervisor] $SR_NAME crash backoff 5s before restart" >> "$WLOG"
         sleep 5
     fi
+    # A replacement can adopt/start the renderer while this monitor sleeps.
+    # Recheck both generation ownership and the registry after every backoff.
+    supervisor_may_start || return 0
+    cp_renderer_running "$SR_NAME" && return 0
     echo "[supervisor] starting $SR_NAME reason=$SR_REASON" >> "$WLOG"
     case "$SR_NAME" in
         maneuver_render)
             (
                 cd "$H" || exit 1
+                supervisor_may_start || exit 0
                 LD_PRELOAD= GRAPHICS_ROOT=/proc/boot exec "$H/maneuver_render" \
                     </dev/null >>/tmp/maneuver_render.log 2>&1
             ) &
@@ -68,6 +91,7 @@ start_renderer()
         altscreen_render)
             (
                 cd "$H" || exit 1
+                supervisor_may_start || exit 0
                 LD_PRELOAD= GRAPHICS_ROOT=/proc/boot exec "$H/altscreen_render" \
                     </dev/null >>/tmp/altscreen_render.log 2>&1
             ) &
@@ -91,6 +115,7 @@ monitor_renderers()
     MR_DIO_PID=$1
     MR_EXPLICIT_STOP=0
     MR_LIVED_TICKS=0
+    supervisor_owns_generation || return 0
     echo "[supervisor] renderer monitor watching dio pid=$MR_DIO_PID" >> "$WLOG"
 
     # Renderer adoption runs HERE, not before the exec, because smartphone_integrator's
@@ -109,10 +134,14 @@ monitor_renderers()
     sleep 1
     start_renderer maneuver_render initial
 
-    while [ -d "/proc/$MR_DIO_PID" ]; do
+    while supervisor_owns_generation && supervisor_dio_alive; do
         if [ -e "$STOP_FILE" ]; then
             echo "[supervisor] monitor observed cleanup request" >> "$WLOG"
             MR_EXPLICIT_STOP=1
+            # Capture before the grace sleep: shared PID files can name the
+            # next generation by the time the old dio has stopped.
+            MR_MANEUVER_PIDS=`cp_renderer_pids maneuver_render`
+            MR_ALTSCREEN_PIDS=`cp_renderer_pids altscreen_render`
             kill -15 "$MR_DIO_PID" 2>/dev/null
             sleep 3
             if [ -d "/proc/$MR_DIO_PID" ]; then
@@ -133,14 +162,14 @@ monitor_renderers()
     done
 
     if [ "$MR_EXPLICIT_STOP" = 1 ]; then
-        # Snapshot once so an explicit stop cannot hit a later replacement.
-        MR_MANEUVER_PIDS=`cp_renderer_pids maneuver_render`
-        MR_ALTSCREEN_PIDS=`cp_renderer_pids altscreen_render`
         echo "[supervisor] explicit stop - stopping renderer snapshot" >> "$WLOG"
         cp_stop_renderer_snapshot "$WLOG" \
             "$MR_MANEUVER_PIDS" "$MR_ALTSCREEN_PIDS"
     else
-        cp_usb_record_generation_result "$MR_DIO_PID" "$MR_LIVED_TICKS"
+        # A late old monitor must not clear/advance the new wrapper's USB state.
+        if supervisor_owns_generation; then
+            cp_usb_record_generation_result "$MR_DIO_PID" "$MR_LIVED_TICKS"
+        fi
         echo "[supervisor] dio_manager pid=$MR_DIO_PID gone - persistent renderers left alive" >> "$WLOG"
     fi
 }

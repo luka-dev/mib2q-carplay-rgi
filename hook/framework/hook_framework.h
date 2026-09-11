@@ -54,7 +54,9 @@ typedef struct {
     /* AirPlayCopyServerInfo: the /info dictionary stock just built. */
     hook_server_info_callback_t on_server_info;
     hook_server_info_callback_t on_server_info_final;
-    /* AirPlayReceiverSessionTearDown, before stock frees the session. */
+    /* AirPlayReceiverSessionTearDown, before stock frees the session.
+     * Full teardown (NULL or absent/empty streams) is normalized to request=NULL;
+     * a non-NULL request always has a nonempty, selective stream list. */
     hook_teardown_callback_t on_teardown;
 } hook_airplay_seams_t;
 

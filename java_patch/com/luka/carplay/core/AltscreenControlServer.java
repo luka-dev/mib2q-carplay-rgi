@@ -36,6 +36,7 @@ final class AltscreenControlServer {
     static final int STYLE_UNKNOWN = 0xFF;
 
     private static final Object LOCK = new Object();
+    private static final Object EVENT_LOCK = new Object();
     private static Thread   thread;
     private static Thread   writerThread;
     private static volatile boolean run;
@@ -193,32 +194,38 @@ final class AltscreenControlServer {
                     if (n < 0) return;
                     off += n;
                 }
-                synchronized (LOCK) {
-                    if (client != c || generation != clientGeneration) return;
-                }
-                int evt = pkt[0] & 0xFF;
-                if (evt == EVT_VIDEO_ON) {
-                    Log.i(TAG, "VIDEO_ON generation=" + generation);
-                    AltScreenModule.setVideoAvailable(true);
-                } else if (evt == EVT_VIDEO_OFF) {
-                    Log.i(TAG, "VIDEO_OFF generation=" + generation);
-                    AltScreenModule.setVideoAvailable(false);
+                synchronized (EVENT_LOCK) {
+                    synchronized (LOCK) {
+                        if (client != c || generation != clientGeneration) return;
+                    }
+                    int evt = pkt[0] & 0xFF;
+                    if (evt == EVT_VIDEO_ON) {
+                        Log.i(TAG, "VIDEO_ON generation=" + generation);
+                        AltScreenModule.setVideoAvailable(true);
+                    } else if (evt == EVT_VIDEO_OFF) {
+                        Log.i(TAG, "VIDEO_OFF generation=" + generation);
+                        AltScreenModule.setVideoAvailable(false);
+                    }
                 }
             }
         } catch (Throwable t) {
         } finally {
-            boolean owned = false;
-            synchronized (LOCK) {
-                if (client == c && generation == clientGeneration) {
-                    client = null;
-                    writePending = false;
-                    owned = true;
-                }
-            }
             try { c.close(); } catch (Throwable t) { }
-            if (owned) {
-                AltScreenModule.setVideoAvailable(false);
-                Log.i(TAG, "altscreen_render disconnected generation=" + generation);
+            /* Check ownership at publication, and order OFF with all ON/OFF
+             * callbacks. An old reader's delayed close cannot hide a new peer. */
+            synchronized (EVENT_LOCK) {
+                boolean owned = false;
+                synchronized (LOCK) {
+                    if (client == c && generation == clientGeneration) {
+                        client = null;
+                        writePending = false;
+                        owned = true;
+                    }
+                }
+                if (owned) {
+                    AltScreenModule.setVideoAvailable(false);
+                    Log.i(TAG, "altscreen_render disconnected generation=" + generation);
+                }
             }
         }
     }

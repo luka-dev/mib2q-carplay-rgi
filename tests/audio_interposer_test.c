@@ -32,6 +32,8 @@ static int poll_pipe[2];
 static unsigned char *image_base;
 static int request_object, response_object, streams_object, desc_object, key_object;
 static int request_refs, response_refs, socket_opens, stock_teardowns;
+static int teardown_empty_array, teardown_stream_type = 103;
+static void *native_teardown_request, *module_teardown_request;
 static pthread_mutex_t fault_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t fault_cond = PTHREAD_COND_INITIALIZER;
 static int delay_at, reached_delay, release_delay;
@@ -286,7 +288,7 @@ static int64_t fake_dict_int(const void *dict, const void *key, int32_t *error)
     const char *name = key;
     *error = 0;
     if (dict == &desc_object) {
-        if (!strcmp(name, "type")) return 103;
+        if (!strcmp(name, "type")) return teardown_stream_type;
         if (!strcmp(name, "audioFormatIndex")) return 65;
         if (!strcmp(name, "spf")) return 1024;
         if (!strcmp(name, "isMedia") || !strcmp(name, "packetFormatAPAP")) return 1;
@@ -295,13 +297,14 @@ static int64_t fake_dict_int(const void *dict, const void *key, int32_t *error)
     *error = -1;
     return 0;
 }
-static long fake_array_count(const void *p) { return p == &streams_object ? 1 : 0; }
+static long fake_array_count(const void *p)
+{ return p == &streams_object && !teardown_empty_array ? 1 : 0; }
 static void *fake_array_index(const void *p, long i)
 { return p == &streams_object && i == 0 ? &desc_object : NULL; }
 static int fake_string_copy(const void *p, char *out, size_t size)
 { snprintf(out, size, "%s", (const char *)p); return 1; }
 static void *fake_typed_get(const void *dict, const void *key, uint32_t type, int32_t *error)
-{ (void)type; *error = 0; return fake_dict_get(dict, key); }
+{ (void)type; if (error) *error = 0; return fake_dict_get(dict, key); }
 static uint32_t fake_type_id(void) { return 1; }
 static long fake_data_length(const void *p) { assert(p == &key_object); return 32; }
 static const uint8_t *fake_data_bytes(const void *p)
@@ -327,6 +330,7 @@ static int native_airplay_teardown(void *session, void *request, int reason, int
 {
     (void)request; (void)reason; (void)extra;
     ++stock_teardowns;
+    native_teardown_request = request;
     free(session); /* deliberately poison the former private fields for ASan */
     return 0;
 }
@@ -637,10 +641,45 @@ static void control_generation_tests(void)
     puts("audio_interposer_test: stale SETUP (32), controls, PCM-wait and QSA-wait generations PASS");
 }
 
+static void teardown_scope_tests(void)
+{
+    int kind;
+    for (kind = 0; kind < 5; ++kind) {
+        void *session = calloc(1, 128);
+        void *request = kind == 0 ? NULL :
+                        kind == 1 ? &response_object : &request_object;
+        int full = kind <= 2;
+        int stop = full || kind == 3;
+        assert(session);
+        teardown_empty_array = kind == 2;
+        teardown_stream_type = kind == 4 ? 100 : 103;
+        spa103_receiver.session = session;
+        spa103_setup_session = session; spa103_setup_valid = 1;
+        spa_mainbuffered_session = session;
+        assert(AirPlayReceiverSessionTearDown(session, request, 0, 0) == 0);
+        assert(native_teardown_request == request);
+        assert(module_teardown_request == (full ? NULL : request));
+        assert((spa103_receiver.session == NULL) == stop);
+        assert((spa103_setup_valid == 0) == stop);
+        assert((spa_mainbuffered_session == NULL) == full);
+        spa103_receiver.session = NULL; spa103_setup_valid = 0;
+        spa_mainbuffered_session = NULL;
+    }
+    teardown_empty_array = 0; teardown_stream_type = 103;
+    puts("audio_interposer_test: NULL/missing/empty/selective TEARDOWN scope PASS");
+}
+
+static void observe_teardown(void *session, void *request, int reason)
+{ (void)session; (void)reason; module_teardown_request = request; }
+static const hook_module_def_t teardown_observer = {
+    .name = "teardown-test-observer", .airplay = { .on_teardown = observe_teardown }
+};
+
 /* Framework dependencies are fake native boundaries, not alternative seams. */
 hook_result_t hook_framework_init(void) { return HOOK_OK; }
-size_t hook_framework_module_count(void) { return 1; }
-const hook_module_def_t *hook_framework_module_at(size_t n) { return n ? NULL : &audio_module_def; }
+size_t hook_framework_module_count(void) { return 2; }
+const hook_module_def_t *hook_framework_module_at(size_t n)
+{ return n == 0 ? &audio_module_def : n == 1 ? &teardown_observer : NULL; }
 hook_result_t hook_inject_message(uint16_t id, const uint8_t *p, size_t n)
 { (void)id; (void)p; (void)n; return HOOK_ERR_NOT_FOUND; }
 
@@ -661,6 +700,10 @@ static void *test_dlsym(void *scope, const char *name)
     SYMBOL("AirPlayReceiverSessionTearDown", native_airplay_teardown);
     SYMBOL("ServerSocketOpen", native_socket_open);
     SYMBOL("CFDictionaryGetTypeID", fake_type_id);
+    SYMBOL("CFStringCreateWithCString", fake_string);
+    SYMBOL("CFArrayGetTypeID", fake_type_id);
+    SYMBOL("CFArrayGetCount", fake_array_count);
+    SYMBOL("CFRelease", fake_release);
     SYMBOL("CFDataGetTypeID", fake_type_id);
     SYMBOL("CFDictionaryGetTypedValue", fake_typed_get);
     SYMBOL("CFDataGetLength", fake_data_length);
@@ -690,6 +733,7 @@ int main(void)
     stale_setup_generations();
     absent_cleanup_generation();
     control_generation_tests();
+    teardown_scope_tests();
     free(spa_pcm_sink.scratch);
     spa_pcm_sink.scratch = NULL; spa_pcm_sink.scratchBytes = 0;
     free(image_base);

@@ -61,14 +61,21 @@ public final class CarplayBus {
 
     private static final CarplayBus INSTANCE = new CarplayBus();
     public static CarplayBus getInstance() { return INSTANCE; }
-    private CarplayBus() {}
+    private CarplayBus() { this(PORT); }
+    /* Package-local endpoint override keeps host lifecycle tests off the HU port. */
+    CarplayBus(int port) { this.port = port; }
+    private final int port;
 
     private final Object lock = new Object();
     private final Object writeLock = new Object();
+    /* Serialize callbacks across reader incarnations without blocking accept
+     * or holding the connection lock while calling a module. */
+    private final Object dispatchLock = new Object();
     private final Listener[] listeners = new Listener[MAX_TYPES];
     private static final int WRITE_QUEUE_CAPACITY = 32;
 
     private volatile boolean running = false;
+    private volatile int lifecycleGeneration;
     private Thread ioThread;
     private Thread writerThread;
     private ServerSocket serverSocket;
@@ -92,31 +99,39 @@ public final class CarplayBus {
     public void start() {
         synchronized (lock) {
             if (running) return;
+            final int lifecycle = ++lifecycleGeneration;
             running = true;
-            ioThread = new Thread(new Runnable() { public void run() { ioLoop(); } }, "carplay-bus");
+            ioThread = new Thread(new Runnable() { public void run() { ioLoop(lifecycle); } }, "carplay-bus");
             ioThread.setDaemon(true);
             ioThread.start();
         }
-        Log.i(TAG, "started (server " + HOST + ":" + PORT + ")");
+        Log.i(TAG, "started (server " + HOST + ":" + port + ")");
     }
 
     public void stop() {
+        Thread t, r, w;
         synchronized (lock) {
             running = false;
+            ++lifecycleGeneration;
             closeConnectionLocked("stop");
             if (serverSocket != null) { try { serverSocket.close(); } catch (IOException e) {} serverSocket = null; }
             lock.notifyAll();                 /* wake the reader thread out of its wait() */
-        }
-        synchronized (writeLock) { clearWriteQueueLocked(); writeLock.notifyAll(); }
-        Thread t, r, w;
-        synchronized (lock) {
+            synchronized (writeLock) { clearWriteQueueLocked(); writeLock.notifyAll(); }
             t = ioThread; ioThread = null;
             r = readerThread; readerThread = null;
             w = writerThread; writerThread = null;
         }
-        if (t != null) { try { t.join(1000); } catch (InterruptedException e) {} }
-        if (r != null) { try { r.join(1000); } catch (InterruptedException e) {} }
-        if (w != null) { try { w.join(1000); } catch (InterruptedException e) {} }
+        joinOther(t); joinOther(r); joinOther(w);
+    }
+
+    private static void joinOther(Thread t) {
+        if (t != null && t != Thread.currentThread()) {
+            try { t.join(1000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        }
+    }
+
+    private boolean isCurrentRun(int lifecycle) {
+        return running && lifecycleGeneration == lifecycle;
     }
 
     private Thread readerThread;   /* dedicated reader — decoupled from accept (see ioLoop) */
@@ -137,22 +152,21 @@ public final class CarplayBus {
 
     /* ---- writer (Java -> hook) ---- */
     public boolean send(int type, int flags, byte[] payload, int len) {
+        if (type < 0 || type >= MAX_TYPES || flags < 0 || flags > 255) return false;
         if (len < 0 || len > MAX_PAYLOAD) return false;
-        if (len > 0 && payload == null) return false;
+        if (len > 0 && (payload == null || len > payload.length)) return false;
 
-        int seq, generation;
+        int generation;
         synchronized (lock) {
-            if (out == null) {
+            if (!running || out == null) {
                 Log.w(TAG, "send dropped (no connection) type=0x" + Integer.toHexString(type));
                 return false;
             }
-            seq = txSeq++;
             generation = connectionGeneration;
         }
 
         byte[] packet = new byte[HEADER_SIZE + len];
         putBE32(packet, 0, MAGIC);
-        putBE32(packet, 4, seq);
         putBE16(packet, 8, type);
         packet[10] = (byte) flags;
         packet[11] = 0;
@@ -162,36 +176,39 @@ public final class CarplayBus {
         /* Never perform a socket write on a stock HMI/BAP callback.  The sole
          * writer owns blocking I/O; connection generations discard commands
          * queued for a preempted hook instance. */
-        synchronized (writeLock) {
-            if (!running) return false;
-            if (writeCount == WRITE_QUEUE_CAPACITY) {
-                PendingWrite dropped = writeQueue[writeHead];
-                writeQueue[writeHead] = null;
-                writeHead = (writeHead + 1) % WRITE_QUEUE_CAPACITY;
-                writeCount--;
-                Log.w(TAG, "writer queue full; dropped oldest type=0x"
-                    + Integer.toHexString(dropped == null ? -1 : dropped.type));
+        synchronized (lock) {
+            if (!running || out == null || generation != connectionGeneration) return false;
+            synchronized (writeLock) {
+                PendingWrite pending = new PendingWrite();
+                putBE32(packet, 4, txSeq++);
+                if (writeCount == WRITE_QUEUE_CAPACITY) {
+                    PendingWrite dropped = writeQueue[writeHead];
+                    writeQueue[writeHead] = null;
+                    writeHead = (writeHead + 1) % WRITE_QUEUE_CAPACITY;
+                    writeCount--;
+                    Log.w(TAG, "writer queue full; dropped oldest type=0x"
+                        + Integer.toHexString(dropped == null ? -1 : dropped.type));
+                }
+                pending.packet = packet;
+                pending.generation = generation;
+                pending.type = type;
+                writeQueue[writeTail] = pending;
+                writeTail = (writeTail + 1) % WRITE_QUEUE_CAPACITY;
+                writeCount++;
+                writeLock.notifyAll();
+                return true;
             }
-            PendingWrite pending = new PendingWrite();
-            pending.packet = packet;
-            pending.generation = generation;
-            pending.type = type;
-            writeQueue[writeTail] = pending;
-            writeTail = (writeTail + 1) % WRITE_QUEUE_CAPACITY;
-            writeCount++;
-            writeLock.notifyAll();
-            return true;
         }
     }
 
-    private void writerLoop() {
+    private void writerLoop(int lifecycle) {
         while (true) {
             PendingWrite pending;
             synchronized (writeLock) {
-                while (running && writeCount == 0) {
+                while (isCurrentRun(lifecycle) && writeCount == 0) {
                     try { writeLock.wait(); } catch (InterruptedException e) { }
                 }
-                if (!running) return;
+                if (!isCurrentRun(lifecycle)) return;
                 pending = writeQueue[writeHead];
                 writeQueue[writeHead] = null;
                 writeHead = (writeHead + 1) % WRITE_QUEUE_CAPACITY;
@@ -199,7 +216,8 @@ public final class CarplayBus {
             }
             OutputStream ownedOut;
             synchronized (lock) {
-                if (pending == null || pending.generation != connectionGeneration || out == null)
+                if (!isCurrentRun(lifecycle) || pending == null ||
+                    pending.generation != connectionGeneration || out == null)
                     continue;
                 ownedOut = out;
             }
@@ -275,8 +293,10 @@ public final class CarplayBus {
             int start = 0, idx = 0;
             for (int i = 0; i <= v.length(); i++) {
                 if (i == v.length() || v.charAt(i) == ',') {
-                    try { out[idx++] = Integer.parseInt(v.substring(start, i).trim()); }
-                    catch (Exception e) { out[idx++] = 0; }
+                    int parsed;
+                    try { parsed = Integer.parseInt(v.substring(start, i).trim()); }
+                    catch (NumberFormatException e) { parsed = 0; }
+                    out[idx++] = parsed;
                     start = i + 1;
                 }
             }
@@ -292,7 +312,7 @@ public final class CarplayBus {
 
     public static Data parseText(byte[] buf, int len) {
         Data d = new Data();
-        if (buf == null || len <= 0) return d;
+        if (buf == null || len <= 0 || len > buf.length) return d;
         String content;
         try { content = new String(buf, 0, len, "UTF-8"); }
         catch (Exception e) { content = new String(buf, 0, len); }
@@ -320,46 +340,55 @@ public final class CarplayBus {
      * the new connect preempts the stale one (acceptOne closes the old socket → the reader's readFully
      * throws → it switches to the new socket).  This makes the bus un-wedgeable no matter how many
      * hook instances connect and die — no reboot needed to recover a stuck connection. */
-    private void ioLoop() {
-        if (!openServerSocket()) {
+    private void ioLoop(final int lifecycle) {
+        if (!openServerSocket(lifecycle)) {
             Log.e(TAG, "bind failed; bus disabled");
-            synchronized (lock) { running = false; }   /* allow a later start() to retry the bind */
+            synchronized (lock) {
+                if (lifecycleGeneration == lifecycle) running = false;
+            }
             return;
         }
-        Thread w = new Thread(new Runnable() { public void run() { writerLoop(); } }, "carplay-bus-writer");
-        w.setDaemon(true);
-        synchronized (lock) { writerThread = w; }
-        w.start();
-        Thread r = new Thread(new Runnable() { public void run() { readerLoop(); } }, "carplay-bus-reader");
-        r.setDaemon(true);
-        synchronized (lock) { readerThread = r; }
-        r.start();
-        while (running) {
-            if (!acceptOne()) { if (running) sleep(200); }
+        synchronized (lock) {
+            if (!isCurrentRun(lifecycle)) return;
+            writerThread = new Thread(new Runnable() { public void run() { writerLoop(lifecycle); } }, "carplay-bus-writer");
+            writerThread.setDaemon(true);
+            writerThread.start();
+            readerThread = new Thread(new Runnable() { public void run() { readerLoop(lifecycle); } }, "carplay-bus-reader");
+            readerThread.setDaemon(true);
+            readerThread.start();
+        }
+        while (isCurrentRun(lifecycle)) {
+            if (!acceptOne(lifecycle)) { if (isCurrentRun(lifecycle)) sleep(200); }
         }
     }
 
-    private boolean openServerSocket() {
-        ServerSocket ss = null;
-        try {
-            ss = new ServerSocket();
-            ss.setReuseAddress(true);
-            ss.bind(new InetSocketAddress(InetAddress.getByName(HOST), PORT));
-            synchronized (lock) { serverSocket = ss; }
-            return true;
-        } catch (IOException e) {
-            if (ss != null) try { ss.close(); } catch (IOException closeError) { }
-            Log.e(TAG, "bind " + HOST + ":" + PORT + " failed: " + e.getMessage());
-            return false;
+    private boolean openServerSocket(int lifecycle) {
+        /* Bind and publication share the lifecycle lock: an obsolete binder
+         * must not briefly occupy the port and make the replacement fail. */
+        synchronized (lock) {
+            if (!isCurrentRun(lifecycle)) return false;
+            ServerSocket ss = null;
+            try {
+                ss = new ServerSocket();
+                ss.setReuseAddress(true);
+                ss.bind(new InetSocketAddress(InetAddress.getByName(HOST), port));
+                serverSocket = ss;
+                return true;
+            } catch (IOException e) {
+                if (ss != null) try { ss.close(); } catch (IOException closeError) { }
+                Log.e(TAG, "bind " + HOST + ":" + port + " failed: " + e.getMessage());
+                return false;
+            }
         }
     }
 
-    private boolean acceptOne() {
+    private boolean acceptOne(int lifecycle) {
         ServerSocket ss;
-        synchronized (lock) { ss = serverSocket; }
+        synchronized (lock) { ss = isCurrentRun(lifecycle) ? serverSocket : null; }
         if (ss == null) return false;
+        Socket s = null;
         try {
-            Socket s = ss.accept();
+            s = ss.accept();
             s.setTcpNoDelay(true);
             /* KEEPALIVE — the proven-working old impl set this and it regressed out (defence in depth;
              * the preempt below is the primary un-wedge mechanism). */
@@ -367,6 +396,9 @@ public final class CarplayBus {
             InputStream iin = s.getInputStream();
             OutputStream oout = s.getOutputStream();
             synchronized (lock) {
+                if (!isCurrentRun(lifecycle) || serverSocket != ss) {
+                    s.close(); return false;
+                }
                 /* A NEW connection PREEMPTS the current one: closing the old socket makes the reader's
                  * blocked readFully() throw → it drops the stale/dead peer and picks up this live one.
                  * Multiple hook instances or a half-open peer can therefore never wedge the bus. */
@@ -379,37 +411,37 @@ public final class CarplayBus {
             Log.i(TAG, "hook connected");
             return true;
         } catch (IOException e) {
-            if (running) Log.w(TAG, "accept failed: " + e.getMessage());
+            if (s != null) try { s.close(); } catch (IOException closeError) { }
+            if (isCurrentRun(lifecycle)) Log.w(TAG, "accept failed: " + e.getMessage());
             return false;
         }
     }
 
     /* Own thread: read the CURRENT socket; on break/preempt, wait for acceptOne to install the next. */
-    private void readerLoop() {
+    private void readerLoop(int lifecycle) {
         byte[] hdr = new byte[HEADER_SIZE];
-        while (running) {
+        while (isCurrentRun(lifecycle)) {
             DataInputStream din;
             Socket owned;
             synchronized (lock) {
-                while (running && (in == null || sock == null)) {
+                while (isCurrentRun(lifecycle) && (in == null || sock == null)) {
                     try { lock.wait(); } catch (InterruptedException e) { /* re-check predicate */ }
                 }
-                if (!running) return;
+                if (!isCurrentRun(lifecycle)) return;
                 din = new DataInputStream(in);
                 owned = sock;
             }
-            while (running) {
+            while (isCurrentRun(lifecycle)) {
                 try {
                     din.readFully(hdr);
                     if (getBE32(hdr, 0) != MAGIC) { Log.w(TAG, "bad magic"); break; }
-                    int seq   = getBE32(hdr, 4);
                     int type  = getBE16(hdr, 8);
                     int flags = hdr[10] & 0xFF;
                     int len   = getBE32(hdr, 12);
                     if (len < 0 || len > MAX_PAYLOAD) { Log.w(TAG, "bad len " + len); break; }
                     byte[] payload = (len > 0) ? new byte[len] : new byte[0];
                     if (len > 0) din.readFully(payload);
-                    dispatch(type, flags, payload, len);
+                    if (!dispatch(lifecycle, owned, type, flags, payload, len)) break;
                 } catch (IOException e) {
                     if (running) Log.i(TAG, "reader closed: " + e.getMessage());
                     break;
@@ -424,15 +456,20 @@ public final class CarplayBus {
         }
     }
 
-    private void dispatch(int type, int flags, byte[] payload, int len) {
-        if (type < 0 || type >= MAX_TYPES) { Log.w(TAG, "rx type 0x" + Integer.toHexString(type) + " oob"); return; }
-        Listener l;
-        synchronized (lock) { l = listeners[type]; }
-        if (l == null) {
-            return;
+    private boolean dispatch(int lifecycle, Socket owned, int type, int flags, byte[] payload, int len) {
+        synchronized (dispatchLock) {
+            Listener l;
+            synchronized (lock) {
+                if (!isCurrentRun(lifecycle) || sock != owned) return false;
+                if (type < 0 || type >= MAX_TYPES) return true;
+                l = listeners[type];
+            }
+            if (l != null) {
+                try { l.onFrame(type, flags, payload, len); }
+                catch (Throwable t) { Log.w(TAG, "listener 0x" + Integer.toHexString(type) + " threw: " + t); }
+            }
+            return true;
         }
-        try { l.onFrame(type, flags, payload, len); }
-        catch (Throwable t) { Log.w(TAG, "listener 0x" + Integer.toHexString(type) + " threw: " + t); }
     }
 
     /* caller holds lock */

@@ -1338,13 +1338,16 @@ static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) 
     rgd_lazy_init();  /* Ensure bus/session state is ready */
 
     if (frame->msgid == IAP2_MSG_ROUTE_GUIDANCE_UPDATE) {
-        rgd_mark_first_response(frame->msgid);
 #if RGD_TRACE_RAW_FULL
         rgd_log_raw_packet("RGD 0x5201 raw", ctx->raw_buf, frame->frame_len);
 #endif
 
         rgd_update_t upd;
-        rgd_parse_update(ctx->raw_buf, frame->frame_len, &upd);
+        if (!rgd_parse_update(ctx->raw_buf, frame->frame_len, &upd)) {
+            LOG_WARN(LOG_MODULE, "Ignored malformed RGD message 0x%04X", frame->msgid);
+            return false; /* Preserve stock dispatch; publish no partial delta. */
+        }
+        rgd_mark_first_response(frame->msgid);
 
         LOG_INFO(LOG_MODULE, "Update: state=%u road=\"%s\" dest=\"%s\"",
                  upd.route_state, upd.current_road, upd.destination);
@@ -1424,13 +1427,16 @@ static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) 
             write_bus_update_partial(&upd);
     }
     else if (frame->msgid == IAP2_MSG_ROUTE_GUIDANCE_MANEUVER) {
-        rgd_mark_first_response(frame->msgid);
 #if RGD_TRACE_RAW_FULL
         rgd_log_raw_packet("RGD 0x5202 raw", ctx->raw_buf, frame->frame_len);
 #endif
 
         rgd_maneuver_t man;
-        rgd_parse_maneuver(ctx->raw_buf, frame->frame_len, &man);
+        if (!rgd_parse_maneuver(ctx->raw_buf, frame->frame_len, &man)) {
+            LOG_WARN(LOG_MODULE, "Ignored malformed RGD message 0x%04X", frame->msgid);
+            return false; /* Preserve stock dispatch; publish no partial delta. */
+        }
+        rgd_mark_first_response(frame->msgid);
 
         LOG_INFO(LOG_MODULE, "Maneuver: idx=%u type=%u desc=\"%s\"",
                  man.index, man.maneuver_type, man.description);
@@ -1438,13 +1444,16 @@ static bool rgd_message_handler(hook_context_t* ctx, const iap2_frame_t* frame) 
         write_bus_maneuver_partial(&man);
     }
     else if (frame->msgid == IAP2_MSG_ROUTE_GUIDANCE_LANE) {
-        rgd_mark_first_response(frame->msgid);
 #if RGD_TRACE_RAW_FULL
         rgd_log_raw_packet("RGD 0x5204 raw", ctx->raw_buf, frame->frame_len);
 #endif
 
         rgd_lane_guidance_t lane;
-        rgd_parse_lane_guidance(ctx->raw_buf, frame->frame_len, &lane);
+        if (!rgd_parse_lane_guidance(ctx->raw_buf, frame->frame_len, &lane)) {
+            LOG_WARN(LOG_MODULE, "Ignored malformed RGD message 0x%04X", frame->msgid);
+            return false; /* Preserve stock dispatch; publish no partial delta. */
+        }
+        rgd_mark_first_response(frame->msgid);
 
         LOG_INFO(LOG_MODULE, "Lane guidance: idx=%u lanes=%u desc=\"%s\"",
                  lane.lane_guidance_index, lane.lane_count, lane.lane_guidance_description);

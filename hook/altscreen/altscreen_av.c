@@ -48,7 +48,7 @@ static uint32_t        g_owner_gen = 0;
  * OMX_BUFFERFLAG_CODECCONFIG, so on every (re)connect we must resend the config BEFORE any frame —
  * otherwise a reconnect mid-stream sends a video frame first, the decoder takes it as config and
  * reports OMX_ErrorFormatNotDetected → black.  (Set via altav_set_config on each avcC.) */
-static uint8_t         g_cfg[512];
+static uint8_t         g_cfg[4096];
 static uint32_t        g_cfg_len = 0;
 
 void altav_init(const char *host, int port)
@@ -63,8 +63,21 @@ void altav_init(const char *host, int port)
     LOG_INFO(LOG_MODULE, "forward target %s:%d", g_host, g_port);
 }
 
-void altav_set_enabled(int on) { g_enabled = on ? 1 : 0; }
-int  altav_is_enabled(void)    { return g_enabled; }
+void altav_set_enabled(int on)
+{
+    pthread_mutex_lock(&g_lock);
+    g_enabled = on ? 1 : 0;
+    if (!g_enabled && g_fd >= 0) { close(g_fd); g_fd = -1; }
+    pthread_mutex_unlock(&g_lock);
+}
+int altav_is_enabled(void)
+{
+    int enabled;
+    pthread_mutex_lock(&g_lock);
+    enabled = g_enabled;
+    pthread_mutex_unlock(&g_lock);
+    return enabled;
+}
 
 /* Make `gen` the transport owner only when it is newer than the committed owner.
  * An accepted claim drops the previous owner's connection and cached config so the
@@ -152,7 +165,9 @@ static void av_connect_locked(void)
                        &socket_error_len) == 0 && socket_error == 0)
             connected = 1;
     }
-    if (connected && fcntl(fd, F_SETFL, original_flags) == 0) {
+    /* Keep O_NONBLOCK: the send loop owns the total deadline and POLLOUT wait.
+     * Restoring blocking mode here lets one send outlive that deadline. */
+    if (connected) {
         g_fd = fd;
         g_need_config = 1;
         LOG_INFO(LOG_MODULE, "connected to %s:%d (fd=%d)", g_host, g_port, fd);
@@ -175,16 +190,25 @@ static int av_send_all_locked(const void *data, uint32_t len)
     if (clock_gettime(CLOCK_MONOTONIC, &started) != 0)
         return -1;
     while (off < len) {
+        long elapsed_ms;
+        struct pollfd pfd;
+        int ready;
+        if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) return -1;
+        elapsed_ms = (long)(now.tv_sec - started.tv_sec) * 1000L +
+                     (long)(now.tv_nsec - started.tv_nsec) / 1000000L;
+        if (elapsed_ms >= AV_SEND_STALL_LIMIT_MS) return -1;
         ssize_t n = send(g_fd, p + off, len - off, ALTAV_SEND_FLAGS);
         if (n > 0) { off += (uint32_t)n; continue; }
         if (n < 0 && errno == EINTR) continue;
         if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-            long elapsed_ms;
-            if (clock_gettime(CLOCK_MONOTONIC, &now) != 0)
-                return -1;
-            elapsed_ms = (long)(now.tv_sec - started.tv_sec) * 1000L +
-                         (long)(now.tv_nsec - started.tv_nsec) / 1000000L;
-            if (elapsed_ms < AV_SEND_STALL_LIMIT_MS) continue;
+            /* The connect socket stays nonblocking. SO_SNDTIMEO therefore
+             * cannot pace retries: wait for writability instead of spinning
+             * for a second with the transport/teardown lock held. */
+            pfd.fd = g_fd; pfd.events = POLLOUT; pfd.revents = 0;
+            ready = poll(&pfd, 1, (int)(AV_SEND_STALL_LIMIT_MS - elapsed_ms));
+            if (ready < 0 && errno == EINTR) continue;
+            if (ready > 0 && (pfd.revents & POLLOUT) &&
+                !(pfd.revents & (POLLERR | POLLHUP | POLLNVAL))) continue;
         }
         LOG_ERROR(LOG_MODULE,
                   "send failed fd=%d off=%u/%u ret=%d errno=%d",
@@ -230,26 +254,17 @@ static int av_send_locked(const uint8_t *buf, uint32_t len)
     return opened;
 }
 
-void altav_forward_frame(uint32_t gen, const uint8_t *avcc_data, uint32_t len)
-{
-    if (!g_enabled || !avcc_data || len == 0) return;
-    pthread_mutex_lock(&g_lock);
-    if (g_owner_gen == gen)
-        (void)av_send_locked(avcc_data, len);
-    pthread_mutex_unlock(&g_lock);
-}
-
 /* Cache the Annex-B SPS/PPS.  Do not create the renderer connection merely for
  * config: the first IDR-safe access unit opens it and atomically replays config
  * first.  A mid-stream codec change is still sent to an existing decoder. */
 void altav_set_config(uint32_t gen, const uint8_t *annexb_cfg, uint32_t len)
 {
-    if (!g_enabled || !annexb_cfg || len == 0 || len > sizeof(g_cfg)) return;
+    if (!annexb_cfg || len == 0 || len > sizeof(g_cfg)) return;
     pthread_mutex_lock(&g_lock);
     if (g_owner_gen == gen) {                 /* a superseded receiver must not replace the new config */
         memcpy(g_cfg, annexb_cfg, len);
         g_cfg_len = len;
-        if (g_fd >= 0)
+        if (g_enabled && g_fd >= 0)
             (void)av_send_locked(g_cfg, g_cfg_len);
     }
     pthread_mutex_unlock(&g_lock);
@@ -258,45 +273,55 @@ void altav_set_config(uint32_t gen, const uint8_t *annexb_cfg, uint32_t len)
 /* Convert AVCC (length_size-byte BE length prefixes) → Annex-B (00 00 00 01
  * start codes).  All arithmetic uses subtraction form so hostile length fields
  * cannot wrap: `nal > inlen - i` never underflows (loop keeps i <= inlen).
- * Lenient like stock (stops at the first malformed NAL, forwarding the clean
- * prefix — never over-reads).  `out == NULL` = measure only.  Returns the exact
+ * Reject the whole access unit if any length is malformed; forwarding a prefix
+ * loses decoder references and conceals the need for a new IDR.
+ * `out == NULL` = measure only. Returns the exact
  * Annex-B byte count (identical for measure and write passes → exact alloc). */
 static uint32_t avcc_to_annexb(const uint8_t *in, uint32_t inlen, uint8_t ls,
-                               uint8_t *out, uint32_t outcap)
+                               uint8_t *out, uint32_t outcap, int *is_idr)
 {
     uint32_t i = 0, o = 0;
-    if (ls < 1 || ls > 4) ls = 4;
+    int idr = 0;
+    if (is_idr) *is_idr = 0;
+    if (ls < 1 || ls > 4) return 0;
     while (inlen - i >= ls) {                            /* i <= inlen invariant */
         uint32_t nal = 0, k;
         for (k = 0; k < ls; k++) nal = (nal << 8) | in[i + k];
         i += ls;                                         /* i <= inlen (checked above) */
-        if (nal == 0 || nal > inlen - i) break;          /* truncated / garbage → stop */
-        if (o > 0xFFFFFFFFu - 4 - nal) break;            /* output size overflow */
+        if (nal == 0 || nal > inlen - i) return 0;
+        if (nal > 0xFFFFFFFFu - 4 || o > 0xFFFFFFFFu - 4 - nal) return 0;
+        if ((in[i] & 0x1f) == 5) idr = 1;
         if (out) {
-            if (o + 4 + nal > outcap) break;             /* never happens on the write pass */
+            if (o + 4 + nal > outcap) return 0;
             out[o] = 0; out[o + 1] = 0; out[o + 2] = 0; out[o + 3] = 1;
             memcpy(out + o + 4, in + i, nal);
         }
         o += 4 + nal;
         i += nal;
     }
+    if (i != inlen) return 0;
+    if (is_idr) *is_idr = idr;
     return o;
 }
 
 int altav_forward_avcc_frame(uint32_t gen, const uint8_t *avcc, uint32_t len, uint8_t ls)
 {
     int result = -1;
-    if (!g_enabled || !avcc || len == 0) return -1;
-    uint32_t need = avcc_to_annexb(avcc, len, ls, NULL, 0);   /* pass 1: exact size */
+    int is_idr = 0;
+    if (!avcc || len == 0) return -1;
+    uint32_t need = avcc_to_annexb(avcc, len, ls, NULL, 0, &is_idr);
     if (!need) return -1;
     uint8_t *ab = (uint8_t *)malloc(need);
     if (!ab) return -1;
-    uint32_t n = avcc_to_annexb(avcc, len, ls, ab, need);     /* pass 2: fill */
+    uint32_t n = avcc_to_annexb(avcc, len, ls, ab, need, NULL);
     if (n) {
         pthread_mutex_lock(&g_lock);
         /* Ownership checked HERE under g_lock, not before the call: a supersede between
          * a caller-side check and this send would otherwise write into the new owner's fd. */
-        if (g_owner_gen == gen)
+        /* Every fresh connection needs config AND an IDR, regardless of which
+         * prior send closed it (including a config-only send or runtime off). */
+        if (g_enabled && g_owner_gen == gen && g_cfg_len &&
+            (g_fd >= 0 || is_idr))
             result = av_send_locked(ab, n);
         pthread_mutex_unlock(&g_lock);
     }

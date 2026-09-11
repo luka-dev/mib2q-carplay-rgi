@@ -34,13 +34,13 @@ int av_sink_open(void) {
     return 0;
 }
 
-void av_sink_frame(const uint8_t *annexb, uint32_t len) {
-    if (!annexb || len == 0) return;
+int av_sink_frame(const uint8_t *annexb, uint32_t len) {
+    if (!annexb || len == 0) return -1;
 #ifdef ALTSCREEN_CAPTURE
     if (g_out) {
         if (fwrite(annexb, 1, len, g_out) != len) {
             fprintf(stderr, "altscreen_render: write error\n");
-            return;
+            return -1;
         }
         fflush(g_out);
     }
@@ -49,6 +49,7 @@ void av_sink_frame(const uint8_t *annexb, uint32_t len) {
     g_msgs++;
     if ((g_msgs & 0x3f) == 0)
         fprintf(stderr, "altscreen_render: %lu msgs, %lu bytes\n", g_msgs, g_bytes);
+    return 0;
 }
 
 void av_sink_set_layout(int mode, int style, int rawSkin) {

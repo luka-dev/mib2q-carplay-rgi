@@ -105,6 +105,8 @@ static decode_item_t  *g_decode_tail;
 static unsigned int    g_decode_items;
 static size_t          g_decode_bytes;
 static uint32_t        g_decode_generation;
+static int             g_decode_client_fd = -1; /* same lock as generation; reader owns close */
+static int             g_decode_failed;
 static volatile uint32_t g_decode_active_generation;
 static int             g_decode_stop;
 static pthread_t       g_decode_thread;
@@ -180,6 +182,23 @@ static int decode_generation_is_current(uint32_t generation) {
     return current;
 }
 
+static void decode_queue_fail(uint32_t generation) {
+    pthread_mutex_lock(&g_decode_lock);
+    if (generation == g_decode_generation && !g_decode_failed) {
+        g_decode_failed = 1;
+        g_decode_active_generation = 0;
+        decode_queue_clear_locked();
+        /* Wake the socket reader without closing/reusing its descriptor.
+         * The hook sees EOF/write failure and requests a new config + IDR. */
+        if (g_decode_client_fd >= 0)
+            shutdown(g_decode_client_fd, SHUT_RDWR);
+        fprintf(stderr,
+                "altscreen_render: decoder lost frame continuity; reconnect generation=%u\n",
+                (unsigned)generation);
+    }
+    pthread_mutex_unlock(&g_decode_lock);
+}
+
 static void *decode_worker_main(void *unused) {
     uint32_t workerGeneration = 0;
     (void)unused;
@@ -215,8 +234,12 @@ static void *decode_worker_main(void *unused) {
             }
         } else if (item->type == DECODE_FRAME) {
             if (item->generation == workerGeneration &&
-                decode_generation_is_current(item->generation))
-                av_sink_frame(item->data, item->len);
+                decode_generation_is_current(item->generation) &&
+                av_sink_frame(item->data, item->len) < 0) {
+                decode_queue_fail(item->generation);
+                av_sink_session_end();
+                workerGeneration = 0;
+            }
         } else if (item->type == DECODE_END) {
             if (item->generation == workerGeneration &&
                 decode_generation_is_current(item->generation)) {
@@ -249,16 +272,20 @@ static int decode_worker_start(void) {
     return result == 0 ? 0 : -1;
 }
 
-static uint32_t decode_queue_begin(void) {
+static uint32_t decode_queue_begin(int client_fd) {
     uint32_t generation;
     pthread_mutex_lock(&g_decode_lock);
     generation = ++g_decode_generation;
     if (generation == 0) generation = ++g_decode_generation;
+    g_decode_failed = 0;
+    g_decode_client_fd = -1;
     /* Nothing pending from the old TCP owner may reach OMX after this point. */
     decode_queue_clear_locked();
     if (!g_decode_worker_busy) g_decode_last_progress_ms = decode_now_ms();
     if (decode_queue_push_locked(DECODE_BEGIN, generation, NULL, 0) != 0)
         generation = 0;
+    else
+        g_decode_client_fd = client_fd;
     pthread_mutex_unlock(&g_decode_lock);
     return generation;
 }
@@ -269,7 +296,7 @@ static int decode_queue_frame(uint32_t generation,
     int workerStuck = 0;
     unsigned long long nowMs;
     pthread_mutex_lock(&g_decode_lock);
-    if (generation != g_decode_generation) result = -1;
+    if (generation != g_decode_generation || g_decode_failed) result = -1;
     else result = decode_queue_push_locked(DECODE_FRAME, generation, data, len);
     nowMs = decode_now_ms();
     if (result == 0 && g_decode_items > 2 && nowMs != 0 &&
@@ -287,8 +314,10 @@ static int decode_queue_frame(uint32_t generation,
 
 static void decode_queue_end(uint32_t generation) {
     pthread_mutex_lock(&g_decode_lock);
-    if (generation == g_decode_generation)
+    if (generation == g_decode_generation) {
+        g_decode_client_fd = -1;
         decode_queue_push_locked(DECODE_END, generation, NULL, 0);
+    }
     pthread_mutex_unlock(&g_decode_lock);
 }
 
@@ -494,7 +523,7 @@ int main(void) {
         }
         g_client_fd = cfd;
         {
-            uint32_t generation = decode_queue_begin();
+            uint32_t generation = decode_queue_begin(cfd);
             if (generation == 0) {
                 fprintf(stderr, "altscreen_render: decoder BEGIN enqueue FAILED\n");
             } else {

@@ -12,6 +12,9 @@
  * nonce and a 64-bit block counter, not RFC 8439's 12-byte nonce and 32-bit
  * counter.  The key is the type-103 SETUP `shk` copied verbatim; there is no
  * HKDF anywhere on this path.
+ * An IETF implementation with four zero bytes prepended to this nonce gives
+ * the same packet result below block counter 2^32; this does not change the
+ * original 64-bit-counter wire primitive used here.
  *
  * Two AAD variants are in use and the packet does not say which:
  *   audio       header[4:12]   (media time scale + 24-bit sequence)

@@ -93,6 +93,45 @@ cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
     -o "$OUT/coverart_safety"
 "$OUT/coverart_safety"
 
+printf '%-32s ' coverart_stream_test
+cc -std=c99 -O2 -Wall -Wextra -Werror -Ihook \
+    tests/coverart_stream_test.c hook/coverart/coverart_stream.c \
+    hook/framework/iap2_protocol.c -o "$OUT/coverart_stream"
+"$OUT/coverart_stream"
+
+printf '%-32s ' coverart_pipeline_test
+cc -std=gnu99 -O1 -Wall -Wextra -Werror \
+    -Wno-unused-parameter -Wno-unused-variable -Wno-unused-but-set-variable \
+    -Ihook "-DCOVERART_DIR=\"$OUT/artwork\"" tests/coverart_pipeline_test.c \
+    hook/coverart/jpeg_safety.c hook/coverart/coverart_stream.c \
+    hook/framework/iap2_protocol.c -lpthread -lz -lm -o "$OUT/coverart_pipeline"
+"$OUT/coverart_pipeline"
+
+printf '%-32s ' altscreen_av_test
+cc -std=gnu99 -O2 -Wall -Wextra -Werror \
+    -Wno-unused-variable -Wno-unused-but-set-variable -Ihook \
+    tests/altscreen_av_test.c -lpthread -o "$OUT/altscreen_av"
+"$OUT/altscreen_av"
+
+printf '%-32s ' altscreen_sink_test
+cc -std=gnu99 -O1 -Wall -Wextra -Werror \
+    -Wno-unused-parameter -Wno-unused-variable -Wno-sign-compare \
+    -Itoolchain/qnx65-abi/include/OMX -Icommon \
+    tests/altscreen_sink_test.c -lpthread -o "$OUT/altscreen_sink"
+"$OUT/altscreen_sink"
+
+printf '%-32s ' altscreen_worker_test
+cc -std=gnu99 -O1 -Wall -Wextra -Werror \
+    tests/altscreen_worker_test.c altscreen_render/frame_io.c \
+    -lpthread -o "$OUT/altscreen_worker"
+"$OUT/altscreen_worker"
+
+printf '%-32s ' rgd_tlv_test
+cc -std=c99 -O1 -Wall -Wextra -Werror -Wno-unused-variable -Wno-unused-function \
+    -DENABLE_LOGGING=0 -Ihook tests/rgd_tlv_test.c hook/routeguidance/rgd_tlv.c \
+    -o "$OUT/rgd_tlv"
+"$OUT/rgd_tlv"
+
 printf '%-32s ' state_trace_test
 cc -std=c99 -O2 -Wall -Wextra -Werror -Ihook \
     -DENABLE_LOGGING=0 -DENABLE_STATE_TRACE=1 \
@@ -105,6 +144,13 @@ cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
     tests/signal_guard_test.c hook/framework/signal_guard.c \
     -o "$OUT/signal_guard"
 "$OUT/signal_guard"
+
+printf '%-32s ' bus_transport_test
+cc -std=gnu99 -O2 -Wall -Wextra -Werror \
+    -Wno-unused-variable -Wno-unused-but-set-variable -Ihook \
+    tests/bus_transport_test.c hook/framework/signal_guard.c \
+    -lpthread -o "$OUT/bus_transport"
+"$OUT/bus_transport"
 
 printf '%-32s ' state_trace_logger_test
 cc -std=c99 -O2 -Wall -Wextra -Werror -Ihook \
@@ -222,3 +268,6 @@ c++ -std=c++11 -O2 -w -fno-exceptions -fno-rtti \
 
 printf '%-32s ' card_install_test
 sh tests/card_install_test.sh
+
+printf '%-32s ' supervisor_lifecycle_test
+sh scripts/test_supervisor_lifecycle.sh

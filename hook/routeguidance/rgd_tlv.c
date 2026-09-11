@@ -227,10 +227,32 @@ static uint8_t rgd_parse_lane_information_value(const uint8_t* val, size_t val_l
     return saw_any ? lane_count : 0;
 }
 
-void rgd_parse_update(const uint8_t* buf, size_t len, rgd_update_t* out) {
-    if (!out) return;
+/* Check the entire delta before any prefix can reach the caches. Unknown TLVs
+ * remain forward-compatible. LaneInformations is the only nested container;
+ * validation has a fixed maximum depth of two. */
+static bool rgd_tlv_sequence_valid(const uint8_t* buf, size_t len, bool lane_message) {
+    size_t off = 0;
+    while (off < len) {
+        if (len - off < 4) return false;
+        uint16_t n = read_be16(buf + off);
+        if (n < 4 || n > len - off) return false;
+        if (lane_message && read_be16(buf + off + 2) == LANE_MSG_TLV_LANE_INFORMATIONS
+            && !rgd_tlv_sequence_valid(buf + off + 4, n - 4, false)) return false;
+        off += n;
+    }
+    return true;
+}
+
+static bool rgd_message_valid(const uint8_t* buf, size_t len, uint16_t msgid) {
+    return buf && len >= 6 && buf[0] == 0x40 && buf[1] == 0x40
+        && read_be16(buf + 2) == len && read_be16(buf + 4) == msgid
+        && rgd_tlv_sequence_valid(buf + 6, len - 6, msgid == 0x5204);
+}
+
+bool rgd_parse_update(const uint8_t* buf, size_t len, rgd_update_t* out) {
+    if (!out) return false;
     memset(out, 0, sizeof(*out));
-    if (!buf || len < 6) return;
+    if (!rgd_message_valid(buf, len, 0x5201)) return false;
 
     size_t off = 6; /* Skip iAP2 header */
     while (off + 4 <= len) {
@@ -430,13 +452,14 @@ void rgd_parse_update(const uint8_t* buf, size_t len, rgd_update_t* out) {
         }
         off += tlv_len;
     }
+    return true;
 }
 
-void rgd_parse_maneuver(const uint8_t* buf, size_t len, rgd_maneuver_t* out) {
-    if (!out) return;
+bool rgd_parse_maneuver(const uint8_t* buf, size_t len, rgd_maneuver_t* out) {
+    if (!out) return false;
     memset(out, 0, sizeof(*out));
     out->linked_lane_guidance_index = 0xFFFF;
-    if (!buf || len < 6) return;
+    if (!rgd_message_valid(buf, len, 0x5202)) return false;
 
     size_t off = 6; /* Skip iAP2 header */
     while (off + 4 <= len) {
@@ -586,12 +609,13 @@ void rgd_parse_maneuver(const uint8_t* buf, size_t len, rgd_maneuver_t* out) {
         out->exit_angle = 1000;
         out->present |= RGD_MAN_EXIT_ANGLE;
     }
+    return true;
 }
 
-void rgd_parse_lane_guidance(const uint8_t* buf, size_t len, rgd_lane_guidance_t* out) {
-    if (!out) return;
+bool rgd_parse_lane_guidance(const uint8_t* buf, size_t len, rgd_lane_guidance_t* out) {
+    if (!out) return false;
     memset(out, 0, sizeof(*out));
-    if (!buf || len < 6) return;
+    if (!rgd_message_valid(buf, len, 0x5204)) return false;
 
     size_t off = 6; /* Skip iAP2 header */
     while (off + 4 <= len) {
@@ -662,6 +686,7 @@ void rgd_parse_lane_guidance(const uint8_t* buf, size_t len, rgd_lane_guidance_t
 
         off += tlv_len;
     }
+    return true;
 }
 
 size_t rgd_build_component_tlv(uint8_t* out, size_t max_len, uint16_t component_id) {

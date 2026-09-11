@@ -76,6 +76,7 @@ typedef struct {
     int                      startFails; /* consecutive _StartDecoder failures; capped to protect OMX pool */
     unsigned long long       retryAfterMs;
     int                      fedConfig; /* first buffer (SPS/PPS) flagged CODECCONFIG */
+    int                      needsIDR;  /* every new decoder/config needs random access */
 
     /* Decisive pipeline diagnostics.  Decoder creation alone proves neither that
      * input was accepted nor that a decoded Screen buffer was posted. */
@@ -518,7 +519,7 @@ static void _Teardown(ScreenSink *me, int destroyPresent) {
     free(me->inBufs);        me->inBufs = NULL;        me->nInBufs = 0;
     free(me->outBufs);       me->outBufs = NULL;       me->nOutBufs = 0;
     free(me->freeIn);        me->freeIn = NULL;
-    me->winReady = 0; me->started = 0; me->fedConfig = 0;
+    me->winReady = 0; me->started = 0; me->fedConfig = 0; me->needsIDR = 1;
     me->stateReached = 0; me->omxError = 0;
     me->inputSubmitted = me->inputReturned = 0;
     me->outputFilled = me->outputPosted = me->outputPostFailed = 0;
@@ -571,6 +572,7 @@ static int _StartDecoder(ScreenSink *me) {
     }
 
     me->started = 1;
+    me->needsIDR = 1;
     me->sessionEverStarted = 1;
     fprintf(stderr, "altscreen_render[qnx]: decoder started %dx%d, native-32m %u Screen window bufs -> EGL GPU RGBA\n",
             me->width, me->height, (unsigned)me->nOutBufs);
@@ -582,7 +584,7 @@ fail:
 }
 
 /* feed one Annex-B buffer to the decoder (blocks for a free input buffer). */
-static void _FeedInput(ScreenSink *me, const uint8_t *data, uint32_t len, OMX_U32 flags) {
+static int _FeedInput(ScreenSink *me, const uint8_t *data, uint32_t len, OMX_U32 flags) {
     OMX_BUFFERHEADERTYPE *b; OMX_U32 idx;
     OMX_ERRORTYPE err;
     uint32_t requestedLen = len;
@@ -597,7 +599,7 @@ static void _FeedInput(ScreenSink *me, const uint8_t *data, uint32_t len, OMX_U3
             break;
         }
     }
-    if (!me->running || me->omxError) { pthread_mutex_unlock(&me->lock); return; }
+    if (!me->running || me->omxError) { pthread_mutex_unlock(&me->lock); return -1; }
     idx = me->freeIn[me->freeInHead % me->nInBufs]; me->freeInHead++;
     pthread_mutex_unlock(&me->lock);
 
@@ -610,7 +612,7 @@ static void _FeedInput(ScreenSink *me, const uint8_t *data, uint32_t len, OMX_U3
         me->freeIn[me->freeInTail % me->nInBufs] = idx; me->freeInTail++;
         pthread_cond_broadcast(&me->cond);
         pthread_mutex_unlock(&me->lock);
-        return;
+        return -1;
     }
     memcpy(b->pBuffer, data, len);
     b->nOffset = 0; b->nFilledLen = len;
@@ -637,6 +639,7 @@ static void _FeedInput(ScreenSink *me, const uint8_t *data, uint32_t len, OMX_U3
         pthread_cond_broadcast(&me->cond);
         pthread_mutex_unlock(&me->lock);
     }
+    return err == OMX_ErrorNone ? 0 : -1;
 }
 
 /* ---- sink API ------------------------------------------------------------- */
@@ -652,9 +655,13 @@ int av_sink_open(void) {
     return _CreateEarlyPresent(&g_ss);
 }
 
-/* Minimal Annex-B scan used only to recognise the cached SPS/PPS message. */
-static int _HasParameterSet(const uint8_t *p, uint32_t len) {
+enum { NAL_PARAMETER_SET = 1, NAL_PICTURE = 2, NAL_IDR = 4 };
+
+/* A picture may contain in-band SPS/PPS as well as AUD/SEI. Recognise the
+ * entire access unit; any parameter set alone does not make it config-only. */
+static unsigned _AnnexBFlags(const uint8_t *p, uint32_t len) {
     uint32_t i;
+    unsigned flags = 0;
     if (!p) return 0;
     for (i = 0; i + 3 < len; ++i) {
         uint32_t start = 0;
@@ -662,9 +669,14 @@ static int _HasParameterSet(const uint8_t *p, uint32_t len) {
             start = i + 3;
         else if (i + 4 < len && p[i] == 0 && p[i + 1] == 0
                  && p[i + 2] == 0 && p[i + 3] == 1) start = i + 4;
-        if (start && ((p[start] & 0x1f) == 7 || (p[start] & 0x1f) == 8)) return 1;
+        if (start) {
+            unsigned type = p[start] & 0x1f;
+            if (type == 7 || type == 8) flags |= NAL_PARAMETER_SET;
+            if (type >= 1 && type <= 5) flags |= NAL_PICTURE;
+            if (type == 5) flags |= NAL_IDR;
+        }
     }
-    return 0;
+    return flags;
 }
 
 /* Recovery is intentionally driven by the TCP/server thread.  FillDone only
@@ -725,14 +737,19 @@ static void _RecoverPresentationIfNeeded(ScreenSink *me) {
     pthread_mutex_unlock(&me->lock);
 }
 
-void av_sink_frame(const uint8_t *annexb, uint32_t len) {
+int av_sink_frame(const uint8_t *annexb, uint32_t len) {
     int isConfig;
+    unsigned nalFlags;
     unsigned long long nowMs;
-    if (!annexb || len == 0) return;
-    isConfig = _HasParameterSet(annexb, len);
-    if (isConfig && len <= sizeof(g_ss.config)) {
+    if (!annexb || len == 0) return -1;
+    nalFlags = _AnnexBFlags(annexb, len);
+    isConfig = (nalFlags & NAL_PARAMETER_SET) && !(nalFlags & NAL_PICTURE);
+    if (isConfig) {
+        if (len > sizeof(g_ss.config)) return -1;
         memcpy(g_ss.config, annexb, len);
         g_ss.configLen = len;
+        g_ss.fedConfig = 0;
+        g_ss.needsIDR = 1;
     }
     _RecoverPresentationIfNeeded(&g_ss);
     if (g_ss.started && g_ss.omxError) {
@@ -744,6 +761,9 @@ void av_sink_frame(const uint8_t *annexb, uint32_t len) {
                 "altscreen_render[qnx]: decoder error latched -> VIDEO_OFF + bounded restart (present=%s)\n",
                 rebuildPresent ? "rebuild" : "keep");
         _Teardown(&g_ss, rebuildPresent);
+        /* Rebuilding on the current P-frame loses its reference chain. End
+         * the transport; the hook already owns bounded ForceKeyFrame retries. */
+        return -1;
     }
     if (!g_ss.started) {
         /* FAIL-SAFE: a repeatedly-failing decoder start must NOT loop — each failed OMX GetHandle can
@@ -752,7 +772,7 @@ void av_sink_frame(const uint8_t *annexb, uint32_t len) {
          * OMX pool and dio stay healthy).  Reset per session in av_sink_session_end. */
         nowMs = _NowMs();
         if (g_ss.startFails >= 3) {
-            if (nowMs == 0 || nowMs < g_ss.retryAfterMs) return;
+            if (nowMs == 0 || nowMs < g_ss.retryAfterMs) return -1;
             fprintf(stderr,
                     "altscreen_render[qnx]: decoder retry cooldown expired; allowing a new bounded attempt set\n");
             g_ss.startFails = 0;
@@ -763,7 +783,7 @@ void av_sink_frame(const uint8_t *annexb, uint32_t len) {
                 fprintf(stderr,
                         "altscreen_render[qnx]: decoder start failed 3x — cooling down 30s to protect the OMX pool / dio\n");
             }
-            return;
+            return -1;
         }
         g_ss.startFails = 0;
         g_ss.retryAfterMs = 0;
@@ -771,14 +791,20 @@ void av_sink_frame(const uint8_t *annexb, uint32_t len) {
     /* Preserve SPS/PPS across a failed decoder-start attempt.  Otherwise the
      * next IDR would be mislabeled CODECCONFIG and the retry could never decode. */
     if (!g_ss.fedConfig) {
-        if (g_ss.configLen == 0) return;
-        _FeedInput(&g_ss, g_ss.config, g_ss.configLen,
-                   OMX_BUFFERFLAG_ENDOFFRAME | OMX_BUFFERFLAG_CODECCONFIG);
-        if (g_ss.omxError) return;
+        if (g_ss.configLen == 0) return -1;
+        if (_FeedInput(&g_ss, g_ss.config, g_ss.configLen,
+                       OMX_BUFFERFLAG_ENDOFFRAME | OMX_BUFFERFLAG_CODECCONFIG) != 0)
+            return -1;
         g_ss.fedConfig = 1;
     }
-    if (!isConfig)
-        _FeedInput(&g_ss, annexb, len, OMX_BUFFERFLAG_ENDOFFRAME);
+    if (!isConfig) {
+        if ((nalFlags & NAL_PICTURE) && g_ss.needsIDR && !(nalFlags & NAL_IDR))
+            return -1;
+        if (_FeedInput(&g_ss, annexb, len, OMX_BUFFERFLAG_ENDOFFRAME) != 0)
+            return -1;
+        if (nalFlags & NAL_IDR) g_ss.needsIDR = 0;
+    }
+    return 0;
 }
 
 int av_sink_video_ready(void) {

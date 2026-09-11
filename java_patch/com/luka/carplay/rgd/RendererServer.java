@@ -42,6 +42,9 @@ public class RendererServer {
     private static final String TAG = "RendererServer";
     private static final String HOST = "127.0.0.1";
     private static final int PORT = 19800;
+    private final int port;
+    public RendererServer() { this(PORT); }
+    RendererServer(int port) { this.port = port; }
     private static final int PKT_SIZE = 48;
     private static final int WRITE_QUEUE_CAPACITY = 32;
 
@@ -72,12 +75,14 @@ public class RendererServer {
     private Thread acceptThread;
     private Thread writerThread;
     private volatile boolean running;
+    private volatile int lifecycleGeneration;
     private volatile boolean rendererReady;
     private volatile boolean frameReady;
     /* True from enqueueing CMD_CLEAR until the renderer processes it and returns
      * EVT_FRAME_CLEARED.  Any older FRAME_READY received in this interval belongs
      * to pre-clear pixels and must not expose ctx80. */
     private volatile boolean clearPending;
+    private int pendingClears; /* queued or sent CLEARs awaiting their ordered ACKs */
 
     /* True once we've successfully accepted at least one renderer
      * connection.  Lets the caller distinguish "still starting up,
@@ -92,6 +97,7 @@ public class RendererServer {
     private static final class PendingWrite {
         byte[] packet;
         int generation;
+        boolean clear;
     }
 
     private final PendingWrite[] writeQueue = new PendingWrite[WRITE_QUEUE_CAPACITY];
@@ -120,24 +126,26 @@ public class RendererServer {
             try {
                 ss = new ServerSocket();
                 ss.setReuseAddress(true);
-                ss.bind(new InetSocketAddress(HOST, PORT));
+                ss.bind(new InetSocketAddress(HOST, port));
                 server = ss;
                 running = true;
-                Log.i(TAG, "listening on " + HOST + ":" + PORT);
+                Log.i(TAG, "listening on " + HOST + ":" + port);
             } catch (IOException e) {
                 if (ss != null) try { ss.close(); } catch (IOException closeError) { }
                 logBindFailure(e);
                 return false;
             }
 
+            final int lifecycle = ++lifecycleGeneration;
+            final ServerSocket ownedServer = server;
             acceptThread = new Thread(new Runnable() {
-                public void run() { acceptLoop(); }
+                public void run() { acceptLoop(ownedServer, lifecycle); }
             }, "RendererServer-Accept");
             acceptThread.setDaemon(true);
             acceptThread.start();
 
             writerThread = new Thread(new Runnable() {
-                public void run() { writerLoop(); }
+                public void run() { writerLoop(lifecycle); }
             }, "RendererServer-Write");
             writerThread.setDaemon(true);
             writerThread.start();
@@ -165,12 +173,12 @@ public class RendererServer {
      * any current socket, so renderer respawn -> new accept -> we
      * automatically pick up the new connection.
      */
-    private void acceptLoop() {
-        ServerSocket ss;
-        synchronized (lock) {
-            ss = server;
-        }
-        while (running && ss != null && !ss.isClosed()) {
+    private boolean isCurrentRun(int lifecycle) {
+        return running && lifecycleGeneration == lifecycle;
+    }
+
+    private void acceptLoop(ServerSocket ss, int lifecycle) {
+        while (isCurrentRun(lifecycle) && ss != null && !ss.isClosed()) {
             try {
                 final Socket s = ss.accept();    /* blocks until renderer connects */
                 try {
@@ -184,6 +192,9 @@ public class RendererServer {
                     final InputStream i = s.getInputStream();
 
                     synchronized (lock) {
+                        if (!isCurrentRun(lifecycle) || server != ss) {
+                            s.close(); break;
+                        }
                         /* Drop any stale socket from a previous renderer instance. */
                         if (sock != null) {
                             try { sock.close(); } catch (Exception e) {}
@@ -231,14 +242,14 @@ public class RendererServer {
 
     /** The only thread allowed to perform the potentially blocking Java socket
      * write. BAP/HMI callers merely enqueue one fixed packet and return. */
-    private void writerLoop() {
+    private void writerLoop(int lifecycle) {
         while (true) {
             PendingWrite pending;
             synchronized (writeLock) {
-                while (running && writeCount == 0) {
+                while (isCurrentRun(lifecycle) && writeCount == 0) {
                     try { writeLock.wait(); } catch (InterruptedException e) { }
                 }
-                if (!running) break;
+                if (!isCurrentRun(lifecycle)) break;
                 pending = writeQueue[writeHead];
                 writeQueue[writeHead] = null;
                 writeHead = (writeHead + 1) % WRITE_QUEUE_CAPACITY;
@@ -247,7 +258,7 @@ public class RendererServer {
 
             OutputStream ownedOut;
             synchronized (lock) {
-                if (out == null || pending == null ||
+                if (!isCurrentRun(lifecycle) || out == null || pending == null ||
                         pending.generation != connectionGeneration) {
                     continue;
                 }
@@ -278,6 +289,8 @@ public class RendererServer {
             writeHead = 0;
             writeTail = 0;
             writeCount = 0;
+            pendingClears = 0;
+            clearPending = false;
             writeLock.notifyAll();
         }
     }
@@ -347,7 +360,8 @@ public class RendererServer {
                 }
             } else if (event == EVT_FRAME_CLEARED) {
                 changed = clearPending || frameReady;
-                clearPending = false;
+                if (pendingClears > 0) --pendingClears;
+                clearPending = pendingClears > 0;
                 frameReady = false;
                 lock.notifyAll();
                 reason = "frame-cleared";
@@ -386,24 +400,25 @@ public class RendererServer {
     public void dispose() {
         /* Do NOT send CMD_SHUTDOWN. The CarPlay supervisor owns the renderer and may preserve it
          * across a fast dio_manager replacement. Close only our sockets. */
+        Thread accept, writer;
         synchronized (lock) {
             running = false;
+            ++lifecycleGeneration;
             everConnected = false;
             closeClientLocked();
             if (server != null) {
                 try { server.close(); } catch (Exception e) {}
                 server = null;
             }
+            clearWriteQueue();
+            accept = acceptThread; acceptThread = null;
+            writer = writerThread; writerThread = null;
         }
-        clearWriteQueue();
-        if (acceptThread != null) {
-            try { acceptThread.join(500); } catch (InterruptedException e) {}
-            acceptThread = null;
+        if (accept != null && accept != Thread.currentThread()) {
+            try { accept.join(500); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
         }
-        synchronized (writeLock) { writeLock.notifyAll(); }
-        if (writerThread != null) {
-            try { writerThread.join(500); } catch (InterruptedException e) {}
-            writerThread = null;
+        if (writer != null && writer != Thread.currentThread()) {
+            try { writer.join(500); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
         }
         notifyStateChanged("disposed");
     }
@@ -549,32 +564,41 @@ public class RendererServer {
     }
 
     private boolean sendPacket(byte[] pkt, boolean beginClear) {
-        int generation;
         synchronized (lock) {
-            if (out == null) return false;
-            generation = connectionGeneration;
-            if (beginClear) {
-                frameReady = false;
-                clearPending = true;
-                lock.notifyAll();
+            if (!running || out == null) return false;
+            synchronized (writeLock) {
+                PendingWrite pending = new PendingWrite();
+                pending.packet = pkt;
+                pending.generation = connectionGeneration;
+                pending.clear = beginClear;
+                if (writeCount == WRITE_QUEUE_CAPACITY) {
+                    /* Ordinary state can be resent; CLEAR is an ordered barrier.
+                     * Losing it can leave Java waiting for an ACK/new first-frame
+                     * event which the renderer will never send. Keep all barriers
+                     * and discard the oldest ordinary command, preserving order. */
+                    int drop = 0;
+                    while (drop < writeCount && writeQueue[(writeHead + drop)
+                            % WRITE_QUEUE_CAPACITY].clear) ++drop;
+                    if (drop == writeCount) return false;
+                    for (int i = drop; i + 1 < writeCount; ++i) {
+                        writeQueue[(writeHead + i) % WRITE_QUEUE_CAPACITY] =
+                            writeQueue[(writeHead + i + 1) % WRITE_QUEUE_CAPACITY];
+                    }
+                    writeTail = (writeTail + WRITE_QUEUE_CAPACITY - 1) % WRITE_QUEUE_CAPACITY;
+                    writeQueue[writeTail] = null;
+                    writeCount--;
+                }
+                if (beginClear) {
+                    frameReady = false;
+                    ++pendingClears;
+                    clearPending = true;
+                    lock.notifyAll();
+                }
+                writeQueue[writeTail] = pending;
+                writeTail = (writeTail + 1) % WRITE_QUEUE_CAPACITY;
+                writeCount++;
+                writeLock.notifyAll();
             }
-        }
-
-        synchronized (writeLock) {
-            PendingWrite pending = new PendingWrite();
-            pending.packet = pkt;
-            pending.generation = generation;
-            if (writeCount == WRITE_QUEUE_CAPACITY) {
-                /* Full state is resent frequently; discard the oldest stale
-                 * command rather than ever blocking a BAP/HMI caller. */
-                writeQueue[writeHead] = null;
-                writeHead = (writeHead + 1) % WRITE_QUEUE_CAPACITY;
-                writeCount--;
-            }
-            writeQueue[writeTail] = pending;
-            writeTail = (writeTail + 1) % WRITE_QUEUE_CAPACITY;
-            writeCount++;
-            writeLock.notifyAll();
         }
         return true;
     }

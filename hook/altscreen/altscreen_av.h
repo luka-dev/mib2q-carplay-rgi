@@ -44,8 +44,6 @@ int  altav_is_enabled(void);
 int  altav_claim(uint32_t gen);
 int  altav_is_owner(uint32_t gen);
 
-/* Forward one already-Annex-B buffer verbatim (used for the SPS/PPS header). */
-void altav_forward_frame(uint32_t gen, const uint8_t *annexb, uint32_t len);
 /* Cache Annex-B SPS/PPS; replayed before the first frame on every connection. */
 void altav_set_config(uint32_t gen, const uint8_t *annexb_cfg, uint32_t len);
 
@@ -54,7 +52,7 @@ void altav_set_config(uint32_t gen, const uint8_t *annexb_cfg, uint32_t len);
 /* Returns 1 when this frame had to open a fresh renderer connection, 0 on the
  * existing connection, and -1 when it could not be delivered (or `gen` is not the
  * owner).  A reconnect means the renderer created a fresh AVC decoder and therefore
- * needs a new IDR. */
+ * accepts only config plus a verified IDR on every fresh connection. */
 int altav_forward_avcc_frame(uint32_t gen, const uint8_t *avcc, uint32_t len, uint8_t length_size);
 
 /* Close the transport ONLY if `gen` is the current owner (a superseded receiver's exit

@@ -18,8 +18,10 @@
 /* Called once at startup.  Returns 0 on success, <0 on fatal init failure. */
 int  av_sink_open(void);
 
-/* One Annex-B payload (start-code framed).  Called from the receive loop. */
-void av_sink_frame(const uint8_t *annexb, uint32_t len);
+/* One Annex-B payload from the decoder worker. Returns 0 when accepted, <0
+ * when decoder continuity was lost. The caller must end this connection so
+ * the hook reconnects with config + a fresh IDR, never another delta frame. */
+int av_sink_frame(const uint8_t *annexb, uint32_t len);
 
 /* True only after the current session has produced and successfully presented
  * at least one decoded frame.  A TCP connection or decoder start is not visual

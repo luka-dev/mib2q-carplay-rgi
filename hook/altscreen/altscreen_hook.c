@@ -34,6 +34,7 @@
 #include "../framework/bus.h"
 #include "altscreen_hook.h"
 #include "altscreen_av.h"
+#include "avcc_config.h"
 
 #include <unistd.h>
 #include <pthread.h>
@@ -1234,42 +1235,6 @@ static int read_exact(int fd, uint8_t *buf, uint32_t n, volatile int *stop)
     return 0;
 }
 
-/* avcC config box → Annex-B SPS/PPS (into out); returns the AVCC NAL length-size (1..4). */
-static uint8_t avcc_config_to_annexb(const uint8_t *a, uint32_t len,
-                                     uint8_t *out, uint32_t outcap, uint32_t *outlen)
-{
-    uint32_t o = 0, i;
-    int n, count;
-    *outlen = 0;
-    if (len < 7) return 4;
-    uint8_t ls = (uint8_t)((a[4] & 3) + 1);
-    i = 5;
-    count = a[i++] & 0x1F;                                 /* numSPS */
-    for (n = 0; n < count && i + 2 <= len; n++) {
-        uint32_t l = ((uint32_t)a[i] << 8) | a[i + 1]; i += 2;
-        if (l == 0 || i + l > len) break;
-        if (o + 4 + l <= outcap) {
-            out[o]=0; out[o+1]=0; out[o+2]=0; out[o+3]=1;
-            memcpy(out + o + 4, a + i, l); o += 4 + l;
-        }
-        i += l;
-    }
-    if (i < len) {
-        count = a[i++];                                   /* numPPS */
-        for (n = 0; n < count && i + 2 <= len; n++) {
-            uint32_t l = ((uint32_t)a[i] << 8) | a[i + 1]; i += 2;
-            if (l == 0 || i + l > len) break;
-            if (o + 4 + l <= outcap) {
-                out[o]=0; out[o+1]=0; out[o+2]=0; out[o+3]=1;
-                memcpy(out + o + 4, a + i, l); o += 4 + l;
-            }
-            i += l;
-        }
-    }
-    *outlen = o;
-    return ls;
-}
-
 /* Return non-zero when any NAL in this AVCC access unit has the requested type.
  * Do not inspect only the first NAL: an IDR access unit may begin with AUD/SEI.
  * Length parsing mirrors avcc_to_annexb and never reads beyond the decrypted body. */
@@ -1296,9 +1261,9 @@ static int avcc_has_nal_type(const uint8_t *a, uint32_t len, uint8_t ls,
 
 static uint64_t alt_now_ms(void)
 {
-    struct timeval tv;
-    if (gettimeofday(&tv, NULL) != 0) return 0;
-    return ((uint64_t)tv.tv_sec * 1000ULL) + ((uint64_t)tv.tv_usec / 1000ULL);
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) return 0;
+    return ((uint64_t)ts.tv_sec * 1000ULL) + ((uint64_t)ts.tv_nsec / 1000000ULL);
 }
 
 /* Arrival pacing at the FIRST hop -- the socket iOS itself writes the 111 stream
@@ -1345,7 +1310,12 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
     int idr_limit_logged = 0;
     uint64_t last_idr_request_ms = 0;
 
-    if (aes_ctr_init) { aes_ctr_init(aesctx, slot->key, slot->iv); aes_ready = 1; }
+    if (!aes_ctr_init || !aes_ctr_update ||
+        aes_ctr_init(aesctx, slot->key, slot->iv) != 0) {
+        LOG_ERROR(LOG_MODULE, "alt recv: AES-CTR initialization failed");
+        return;
+    }
+    aes_ready = 1;
 
     /* A decoder cannot start mid-GOP. Ask iOS for a cluster-targeted IDR over
      * the generic command channel. Retries below are deliberately slow and
@@ -1403,8 +1373,12 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
                 snprintf(avccHex + (hi * 2), sizeof(avccHex) - (hi * 2), "%02x", body[hi]);
             avccHex[hn * 2] = 0;
 
-            ls = avcc_config_to_annexb(body, bodySize, cfg, sizeof(cfg), &clen);
-            if (clen) altav_set_config(av_gen, cfg, clen);   /* cache; replayed before first safe IDR */
+            ls = alt_avcc_config_to_annexb(body, bodySize, cfg, sizeof(cfg), &clen);
+            if (!ls) {
+                LOG_ERROR(LOG_MODULE, "alt recv: invalid or oversized avcC config (%u bytes)", bodySize);
+                break;
+            }
+            altav_set_config(av_gen, cfg, clen);   /* cache; replayed before first safe IDR */
             LOG_INFO(LOG_MODULE,
                      "alt recv: avcC config encoded=%dx%d body=%u lengthSize=%u annexb=%u bytes=%s%s",
                      (int)(cfgWidth + 0.5f), (int)(cfgHeight + 0.5f), bodySize, ls, clen,
@@ -1412,7 +1386,10 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
         } else if (opcode == 0) {                         /* encrypted AVCC video access unit */
             int is_idr;
             alt_recv_pace_sample();
-            if (aes_ready) aes_ctr_update(aesctx, body, bodySize, body);
+            if (aes_ctr_update(aesctx, body, bodySize, body) != 0) {
+                LOG_ERROR(LOG_MODULE, "alt recv: AES-CTR update failed");
+                break;
+            }
             is_idr = avcc_has_nal_type(body, bodySize, ls, 5);
             /* Re-check ownership here: the header/body read above can block in poll for
              * up to 500 ms, during which a reconnect may have superseded us.  The control

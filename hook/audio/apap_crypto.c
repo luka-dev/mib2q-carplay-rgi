@@ -8,8 +8,9 @@
 
 /* ---- ChaCha20, original construction ------------------------------------------------------
  * State words 12 and 13 are a 64-bit little-endian block counter and 14/15 are the 64-bit
- * nonce.  RFC 8439 moves one nonce word into the counter; that variant is NOT what this
- * stream uses and would authenticate nothing.
+ * nonce. RFC 8439 uses word 13 for its first nonce word instead. With four
+ * leading zero nonce bytes it matches this construction below block 2^32
+ * (as in Showcase); retain the original 64-bit counter contract here.
  */
 
 static uint32_t spa_le32(const uint8_t *p)

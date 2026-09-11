@@ -216,10 +216,49 @@ HOOK_EXPORT int AirPlayReceiverSessionSetup(void *session, void *request, void *
     return setup.result;
 }
 
+/* Stock treats NULL, missing streams and an empty streams array alike. Resolve
+ * only the CFLite readers needed here, independently of optional modules. */
+static pthread_once_t seam_teardown_once = PTHREAD_ONCE_INIT;
+static void *(*seam_td_string)(void *, const char *, unsigned);
+static void *(*seam_td_typed_get)(const void *, const void *, uint32_t, int32_t *);
+static uint32_t (*seam_td_array_type)(void);
+static long (*seam_td_count)(const void *);
+static void (*seam_td_release)(const void *);
+
+static void seam_teardown_resolve(void)
+{
+    seam_td_string = (void *(*)(void *, const char *, unsigned))
+        dlsym(RTLD_DEFAULT, "CFStringCreateWithCString");
+    seam_td_typed_get = (void *(*)(const void *, const void *, uint32_t, int32_t *))
+        dlsym(RTLD_DEFAULT, "CFDictionaryGetTypedValue");
+    seam_td_array_type = (uint32_t (*)(void))dlsym(RTLD_DEFAULT, "CFArrayGetTypeID");
+    seam_td_count = (long (*)(const void *))dlsym(RTLD_DEFAULT, "CFArrayGetCount");
+    seam_td_release = (void (*)(const void *))dlsym(RTLD_DEFAULT, "CFRelease");
+}
+
+static int seam_teardown_is_full(void *request)
+{
+    void *key, *streams;
+    int full;
+    if (!request) return 1;
+    pthread_once(&seam_teardown_once, seam_teardown_resolve);
+    if (!seam_td_string || !seam_td_typed_get || !seam_td_array_type ||
+        !seam_td_count || !seam_td_release) {
+        LOG_ERROR(LOG_MODULE, "Cannot classify TEARDOWN: CFLite readers unavailable");
+        return 0;
+    }
+    key = seam_td_string(NULL, "streams", 0x08000100);
+    if (!key) return 0;
+    streams = seam_td_typed_get(request, key, seam_td_array_type(), NULL);
+    full = !streams || seam_td_count(streams) == 0;
+    seam_td_release(key);
+    return full;
+}
+
 /* ── AirPlayReceiverSessionTearDown ─────────────────────────────────────────
- * A non-NULL request is a per-stream teardown and a module must check whether
- * the request names its own stream; a NULL request tears down the whole
- * session.  Every module runs BEFORE stock, because stock frees the session
+ * Normalize full-session requests to NULL for module callbacks; preserve the
+ * original dictionary for stock. Nonempty lists remain selective. Every
+ * module runs BEFORE stock, because stock frees the session
  * fields the modules' receiver threads are still reading.
  *
  * Deliberately NO HOOK_EVENT_DISCONNECT here.  A full AirPlay teardown is an
@@ -233,20 +272,23 @@ HOOK_EXPORT int AirPlayReceiverSessionTearDown(void *session, void *request, int
 {
     static fn_sess_teardown_t real;
     size_t i, n;
+    int full;
 
     seam_enter();
     if (!real) real = (fn_sess_teardown_t)dlsym(RTLD_NEXT, "AirPlayReceiverSessionTearDown");
+    full = seam_teardown_is_full(request);
 
     STATE_TRACE("AIRPLAY_TEARDOWN",
                 "air_gen=%u scope=%s session=%p reason=%d request=%d",
-                (unsigned)seam_trace_end_session(session, request == NULL),
-                request ? "stream" : "full", session, reason,
+                (unsigned)seam_trace_end_session(session, full),
+                full ? "full" : "stream", session, reason,
                 request ? 1 : 0);
 
     n = hook_framework_module_count();
     for (i = 0; i < n; i++) {
         const hook_module_def_t *def = hook_framework_module_at(i);
-        if (def && def->airplay.on_teardown) def->airplay.on_teardown(session, request, reason);
+        if (def && def->airplay.on_teardown)
+            def->airplay.on_teardown(session, full ? NULL : request, reason);
     }
 
     if (!real) return reason;

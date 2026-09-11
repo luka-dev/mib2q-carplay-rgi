@@ -107,7 +107,7 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
   SRCS="framework/logging.c framework/state_trace.c framework/signal_guard.c framework/bus.c framework/iap2_protocol.c framework/hook_framework.c \
         framework/airplay_seams.c \
         routeguidance/rgd_tlv.c routeguidance/rgd_hook.c \
-        coverart/jpeg_safety.c coverart/coverart_hook.c \
+        coverart/jpeg_safety.c coverart/coverart_stream.c coverart/coverart_hook.c \
         altscreen/altscreen_av.c altscreen/altscreen_hook.c audio/spatial_downmix.c \
         audio/stereo_upmix.c audio/hssr_dsp.c audio/hssr_neon.c audio/hssr_control_worker.c \
         audio/apap_crypto.c audio/apap_lifecycle.c audio/soundcheck.c audio/apac_codec_loader.c \
