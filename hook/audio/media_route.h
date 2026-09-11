@@ -22,7 +22,7 @@
  * until AFTER Stop's teardown callback. Track objects, not just the latest
  * audioType: an old media Stop must not unblock a newer phone/Siri Prepare.
  * All access, including the corresponding DIO callback, is serialized by the
- * sink ioLock. Never hold that lock across a stock Prepare/Stop (HMI wait and
+ * dedicated routeLock, never a QSA I/O lock. Never hold it across Prepare/Stop (HMI wait and
  * worker joins re-enter the QSA interposers).
  *
  * Eight concurrent main objects exceeds the stock main-stream capacity. An
@@ -35,7 +35,34 @@ typedef struct {
     int faulted;
     int hook_owned;
     uint64_t reacquire_after_ns;
+    int main_types[SPA_MEDIA_ROUTE_MAX_MAIN_STREAMS];
+    uint64_t epoch;
 } spa_media_route_t;
+
+static inline int spa_media_route_nonmedia(const spa_media_route_t *route)
+{
+    size_t i;
+    if (route->faulted) return 1;
+    for (i = 0; i < SPA_MEDIA_ROUTE_MAX_MAIN_STREAMS; ++i)
+        if (route->main_streams[i] && route->main_types[i] != 1) return 1;
+    return 0;
+}
+
+/* A response obtained across any route transition has ambiguous ownership,
+ * even if a complete telephone call began AND ended during the stock query. */
+static inline int spa_media_route_feedback_allowed(const spa_media_route_t *route,
+                                                    uint64_t epoch, int nonmedia)
+{
+    return !nonmedia && !spa_media_route_nonmedia(route) && route->epoch == epoch;
+}
+
+static inline int spa_media_route_has_media(const spa_media_route_t *route)
+{
+    size_t i;
+    for (i = 0; i < SPA_MEDIA_ROUTE_MAX_MAIN_STREAMS; ++i)
+        if (route->main_streams[i] && route->main_types[i] == 1) return 1;
+    return 0;
+}
 
 static inline int spa_media_route_blocked(const spa_media_route_t *route)
 {
@@ -47,23 +74,36 @@ static inline int spa_media_route_blocked(const spa_media_route_t *route)
 }
 
 /* 1 = newly tracked, 0 = already tracked, -1 = fail-closed overflow. */
-static inline int spa_media_route_stock_begin(spa_media_route_t *route,
-                                               const void *stream)
+static inline int spa_media_route_stock_begin_type(spa_media_route_t *route,
+                                               const void *stream, int audio_type)
 {
     size_t i, empty = SPA_MEDIA_ROUTE_MAX_MAIN_STREAMS;
     if (!stream) return 0;
     route->hook_owned = 0; /* transfer, NOT a global tornDown */
     route->reacquire_after_ns = 0;
     for (i = 0; i < SPA_MEDIA_ROUTE_MAX_MAIN_STREAMS; ++i) {
-        if (route->main_streams[i] == stream) return 0;
+        if (route->main_streams[i] == stream) {
+            if (route->main_types[i] != audio_type) ++route->epoch;
+            route->main_types[i] = audio_type;
+            return 0;
+        }
         if (!route->main_streams[i]) empty = i;
     }
     if (empty == SPA_MEDIA_ROUTE_MAX_MAIN_STREAMS) {
+        if (!route->faulted) ++route->epoch;
         route->faulted = 1;
         return -1;
     }
     route->main_streams[empty] = stream;
+    route->main_types[empty] = audio_type;
+    ++route->epoch;
     return 1;
+}
+
+static inline int spa_media_route_stock_begin(spa_media_route_t *route,
+                                               const void *stream)
+{
+    return spa_media_route_stock_begin_type(route, stream, 1);
 }
 
 static inline int spa_media_route_stock_end(spa_media_route_t *route,
@@ -75,6 +115,7 @@ static inline int spa_media_route_stock_end(spa_media_route_t *route,
     for (i = 0; i < SPA_MEDIA_ROUTE_MAX_MAIN_STREAMS; ++i) {
         if (route->main_streams[i] != stream) continue;
         route->main_streams[i] = NULL;
+        ++route->epoch;
         if (!spa_media_route_blocked(route))
             route->reacquire_after_ns = now_ns + SPA_MEDIA_ROUTE_REACQUIRE_DELAY_NS;
         return 1;
@@ -90,7 +131,7 @@ static inline int spa_media_route_can_request(const spa_media_route_t *route,
             (now_ns && now_ns >= route->reacquire_after_ns));
 }
 
-/* Called immediately before the global tornDown, under the SAME ioLock as
+/* Called immediately before the global tornDown, under the SAME routeLock as
  * stock_begin. Clearing a flag and calling tornDown after unlocking is unsafe. */
 static inline int spa_media_route_take_release(spa_media_route_t *route)
 {

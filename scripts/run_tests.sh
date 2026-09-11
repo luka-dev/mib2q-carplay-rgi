@@ -52,6 +52,24 @@ cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
     tests/media_route_test.c -lpthread -o "$OUT/media_route"
 "$OUT/media_route"
 
+printf '%-32s ' pcm_io_test
+cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
+    tests/pcm_io_test.c -o "$OUT/pcm_io"
+"$OUT/pcm_io"
+
+printf '%-32s ' media_transport_test
+cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
+    tests/media_transport_test.c -o "$OUT/media_transport"
+"$OUT/media_transport"
+
+printf '%-32s ' receiver_wait_test
+cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
+    tests/receiver_wait_test.c -lpthread -o "$OUT/receiver_wait"
+"$OUT/receiver_wait"
+
+printf '%-32s ' audio_interposer_test
+sh scripts/test_audio_interposers.sh
+
 printf '%-32s ' aac_fifo_test
 cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
     tests/aac_fifo_test.c -o "$OUT/aac_fifo"

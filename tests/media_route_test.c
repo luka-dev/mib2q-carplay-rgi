@@ -19,7 +19,7 @@ static int claim(spa_media_route_t *route, size_t playing_pending, uint64_t at)
 
 static void music_call_resume(void)
 {
-    spa_media_route_t route = { { 0 }, 0, 0, 0 };
+    spa_media_route_t route = { 0 };
     uint64_t deadline;
 
     assert(claim(&route, 19200, now)); /* cold 103 */
@@ -51,7 +51,7 @@ static void music_call_resume(void)
 
 static void overlap_and_failures(void)
 {
-    spa_media_route_t route = { { 0 }, 0, 0, 0 };
+    spa_media_route_t route = { 0 };
     int added;
 
     assert(spa_media_route_stock_begin(&route, &media) == 1);
@@ -92,7 +92,7 @@ static void overlap_and_failures(void)
 
 static void capacity_fails_closed(void)
 {
-    spa_media_route_t route = { { 0 }, 0, 0, 0 };
+    spa_media_route_t route = { 0 };
     int streams[SPA_MEDIA_ROUTE_MAX_MAIN_STREAMS + 1];
     size_t i;
     for (i = 0; i < SPA_MEDIA_ROUTE_MAX_MAIN_STREAMS; ++i)
@@ -108,7 +108,8 @@ static void capacity_fails_closed(void)
 
 /* Exercise claim/release vs stock priority with the production lock contract.
  * The lock covers the modeled callback as well as the state transition. */
-static pthread_mutex_t io_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t route_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t pcm_io_lock = PTHREAD_MUTEX_INITIALIZER;
 static spa_media_route_t concurrent_route;
 static int stock_active;
 
@@ -117,14 +118,14 @@ static void *stock_thread(void *unused)
     unsigned i;
     (void)unused;
     for (i = 0; i < 20000; ++i) {
-        assert(!pthread_mutex_lock(&io_lock));
+        assert(!pthread_mutex_lock(&route_lock));
         assert(spa_media_route_stock_begin(&concurrent_route, &phone) == 1);
         stock_active = 1; /* stock Telephony callback */
-        assert(!pthread_mutex_unlock(&io_lock));
-        assert(!pthread_mutex_lock(&io_lock));
+        assert(!pthread_mutex_unlock(&route_lock));
+        assert(!pthread_mutex_lock(&route_lock));
         stock_active = 0; /* stock tornDown callback */
         assert(spa_media_route_stock_end(&concurrent_route, &phone, now));
-        assert(!pthread_mutex_unlock(&io_lock));
+        assert(!pthread_mutex_unlock(&route_lock));
     }
     return NULL;
 }
@@ -134,14 +135,50 @@ static void *buffered_thread(void *unused)
     unsigned i;
     (void)unused;
     for (i = 0; i < 20000; ++i) {
-        assert(!pthread_mutex_lock(&io_lock));
+        assert(!pthread_mutex_lock(&pcm_io_lock));
+        assert(!pthread_mutex_lock(&route_lock));
         if (claim(&concurrent_route, 19200, now + SPA_MEDIA_ROUTE_RETRY_DELAY_NS))
             assert(!stock_active); /* modeled Media callback */
         if (spa_media_route_take_release(&concurrent_route))
             assert(!stock_active); /* modeled global tornDown callback */
-        assert(!pthread_mutex_unlock(&io_lock));
+        assert(!pthread_mutex_unlock(&route_lock));
+        assert(!pthread_mutex_unlock(&pcm_io_lock));
     }
     return NULL;
+}
+
+static void feedback_ownership(void)
+{
+    spa_media_route_t route = { 0 };
+    uint64_t epoch;
+    int nonmedia;
+    assert(!spa_media_route_has_media(&route)); /* cold103: no cacheable stock media */
+    assert(spa_media_route_stock_begin_type(&route, &media, 1) == 1);
+    epoch = route.epoch;
+    assert(spa_media_route_has_media(&route));
+    assert(spa_media_route_feedback_allowed(&route, epoch, 0));
+    assert(spa_media_route_stock_begin_type(&route, &phone, 3) == 1);
+    assert(!spa_media_route_feedback_allowed(&route, epoch, 0));
+    nonmedia = spa_media_route_nonmedia(&route);
+    epoch = route.epoch;
+    /* Telephony never supplies a music clock, regardless of 16/24/48 kHz. */
+    assert(!spa_media_route_feedback_allowed(&route, epoch, nonmedia));
+    assert(spa_media_route_stock_end(&route, &phone, now));
+    assert(!spa_media_route_feedback_allowed(&route, epoch, nonmedia));
+    epoch = route.epoch;
+    /* Even a complete call inside a slow Control query invalidates the response. */
+    assert(spa_media_route_stock_begin_type(&route, &phone, 3) == 1);
+    assert(spa_media_route_stock_end(&route, &phone, now));
+    assert(!spa_media_route_feedback_allowed(&route, epoch, 0));
+    assert(spa_media_route_feedback_allowed(&route, route.epoch, 0));
+    epoch = route.epoch;
+    assert(spa_media_route_stock_begin_type(&route, &media, 4) == 0);
+    assert(!spa_media_route_feedback_allowed(&route, epoch, 0));
+    assert(!spa_media_route_has_media(&route));
+    assert(spa_media_route_nonmedia(&route));
+    assert(spa_media_route_stock_end(&route, &media, now));
+    assert(spa_media_route_stock_begin_type(&route, &siri, 0) == 1);
+    assert(spa_media_route_nonmedia(&route)); /* unknown purpose fails closed */
 }
 
 int main(void)
@@ -150,11 +187,17 @@ int main(void)
     music_call_resume();
     overlap_and_failures();
     capacity_fails_closed();
+    feedback_ownership();
+    /* A stalled media writer cannot delay stock priority publication. */
+    assert(!pthread_mutex_lock(&pcm_io_lock));
+    assert(!pthread_create(&stock, NULL, stock_thread, NULL));
+    assert(!pthread_join(stock, NULL));
+    assert(!pthread_mutex_unlock(&pcm_io_lock));
     assert(!pthread_create(&stock, NULL, stock_thread, NULL));
     assert(!pthread_create(&buffered, NULL, buffered_thread, NULL));
     assert(!pthread_join(stock, NULL));
     assert(!pthread_join(buffered, NULL));
     assert(!spa_media_route_blocked(&concurrent_route));
-    puts("media_route_test: OK (call/Siri priority, paused103, overlap, failure, cold/resume, release race)");
+    puts("media_route_test: OK (call/Siri priority, paused103, overlap, failure, cold/resume, release race, feedback epochs)");
     return 0;
 }
