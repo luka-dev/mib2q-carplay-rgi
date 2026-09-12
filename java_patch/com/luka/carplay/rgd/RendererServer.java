@@ -66,6 +66,9 @@ public class RendererServer {
     /* CMD_MANEUVER flags */
     private static final byte MAN_FLAG_SET_PERSP = 0x01;
     private static final byte MAN_FLAG_BARGRAPH  = 0x02;
+    private static final byte MAN_FLAG_BAP_GEOMETRY = 0x04;
+    private static final byte MAN_FLAG_REFRESH = 0x08;
+    private static final byte MAN_FLAG_SNAP_TO_ROAD = 0x10;
 
     private final Object lock = new Object();
     private final Object writeLock = new Object();
@@ -474,7 +477,7 @@ public class RendererServer {
     /**
      * Send CMD_MANEUVER — push a new maneuver with transition.
      *
-     * @param icon           ICON_* constant (0-7)
+     * @param icon           ICON_* constant (0-9)
      * @param direction      -1=left, 0=center, +1=right
      * @param exitAngle      signed degrees
      * @param drivingSide    0=RHT, 1=LHT
@@ -487,9 +490,45 @@ public class RendererServer {
                                 int drivingSide, int[] junctionAngles,
                                 int bargraphLevel, int bargraphMode,
                                 int perspective) {
+        return sendManeuverPacket(icon, direction, exitAngle, drivingSide, junctionAngles,
+            bargraphLevel, bargraphMode, perspective, false, false, false);
+    }
+
+    /** Angles in half-degrees, with snapping disabled unless explicitly enabled. */
+    public boolean sendBapManeuver(int icon, int direction, int exitAngle,
+                                  int drivingSide, int[] junctionAngles,
+                                  int bargraphLevel, int bargraphMode, int perspective) {
+        return sendBapManeuver(icon, direction, exitAngle, drivingSide, junctionAngles,
+            bargraphLevel, bargraphMode, perspective, false);
+    }
+
+    /** Refresh only the roads of the same maneuver without starting another push. */
+    public boolean sendBapManeuver(int icon, int direction, int exitAngle,
+                                  int drivingSide, int[] junctionAngles,
+                                  int bargraphLevel, int bargraphMode, int perspective, boolean refresh) {
+        return sendBapManeuver(icon, direction, exitAngle, drivingSide, junctionAngles,
+            bargraphLevel, bargraphMode, perspective, refresh, false);
+    }
+
+    /** Raw roundabout roads include the active exit, allowing native snap-to-road. */
+    public boolean sendBapManeuver(int icon, int direction, int exitAngle,
+                                  int drivingSide, int[] junctionAngles,
+                                  int bargraphLevel, int bargraphMode, int perspective,
+                                  boolean refresh, boolean snapToRoad) {
+        return sendManeuverPacket(icon, direction, exitAngle, drivingSide, junctionAngles,
+            bargraphLevel, bargraphMode, perspective, true, refresh, snapToRoad);
+    }
+
+    private boolean sendManeuverPacket(int icon, int direction, int exitAngle,
+                                      int drivingSide, int[] junctionAngles,
+                                      int bargraphLevel, int bargraphMode,
+                                      int perspective, boolean bapGeometry, boolean refresh, boolean snapToRoad) {
         byte[] pkt = new byte[PKT_SIZE];
         pkt[0] = CMD_MANEUVER;
         byte flags = 0;
+        if (bapGeometry) flags |= MAN_FLAG_BAP_GEOMETRY;
+        if (refresh) flags |= MAN_FLAG_REFRESH;
+        if (snapToRoad) flags |= MAN_FLAG_SNAP_TO_ROAD;
         if (bargraphMode > 0)  flags |= MAN_FLAG_BARGRAPH;
         if (perspective >= 0)  flags |= MAN_FLAG_SET_PERSP;
         pkt[1] = flags;

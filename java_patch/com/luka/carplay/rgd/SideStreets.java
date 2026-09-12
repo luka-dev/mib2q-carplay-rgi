@@ -84,7 +84,22 @@ final class SideStreets {
         if (!computesSidestreets(maneuverType, junctionType)) return new int[0];
 
         if (junctionAngles == null || junctionAngles.length == 0) return new int[0];
-        if (exitAngle == EXIT_ANGLE_MISSING) return new int[0];
+        if (exitAngle == EXIT_ANGLE_MISSING || exitAngle == -EXIT_ANGLE_MISSING) return new int[0];
+
+        /* Sentinels are not roads. Zero and a real -1 degree junction remain valid. */
+        int valid = 0;
+        for (int i = 0; i < junctionAngles.length; i++) {
+            if (junctionAngles[i] != EXIT_ANGLE_MISSING && junctionAngles[i] != -EXIT_ANGLE_MISSING) valid++;
+        }
+        if (valid != junctionAngles.length) {
+            int[] filtered = new int[valid];
+            int out = 0;
+            for (int i = 0; i < junctionAngles.length; i++) {
+                int a = junctionAngles[i];
+                if (a != EXIT_ANGLE_MISSING && a != -EXIT_ANGLE_MISSING) filtered[out++] = a;
+            }
+            junctionAngles = filtered;
+        }
 
         /* Unknown junction types: native treats as "no info" and does not compute side streets. */
         if (junctionType != 0 && junctionType != 1) return new int[0];

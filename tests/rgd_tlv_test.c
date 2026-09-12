@@ -32,6 +32,22 @@ int main(void) {
     rgd_parse_maneuver(buf, 16, &m); assert(m.present == 0 && m.linked_lane_guidance_index == 0xFFFF);
     header(buf, 12, 0x5202); rgd_parse_maneuver(buf, 12, &m);
     assert(m.index == 17 && m.present == (RGD_MAN_INDEX | RGD_MAN_EXIT_ANGLE) && m.exit_angle == 1000);
+    /* iOS's signed-16 serializer preserves supplied values. Only an absent
+     * field gets our +1000 default; zero, -1 and both sentinels survive parsing. */
+    {
+        const int16_t angles[] = {-32768, -1001, -1000, -999, -181, -180,
+                                 -1, 0, 1, 180, 181, 999, 1000, 1001, 32767};
+        header(buf, 24, 0x5202);
+        write_be16(buf + 12, 6); write_be16(buf + 14, MAN_TLV_EXIT_ANGLE);
+        write_be16(buf + 18, 6); write_be16(buf + 20, MAN_TLV_JUNCTION_ANGLES);
+        for (size_t j = 0; j < sizeof(angles) / sizeof(angles[0]); ++j) {
+            write_be16(buf + 16, (uint16_t)angles[j]);
+            write_be16(buf + 22, (uint16_t)angles[j]);
+            assert(rgd_parse_maneuver(buf, 24, &m));
+            assert(m.exit_angle == angles[j] && (m.present & RGD_MAN_EXIT_ANGLE));
+            assert(m.junction_angle_count == 1 && m.junction_angles[0] == angles[j]);
+        }
+    }
     /* Nested lane list: valid index/status followed by a malformed child length. */
     header(buf, 25, 0x5204); write_be16(buf + 6, 6); write_be16(buf + 8, LANE_MSG_TLV_LANE_GUIDANCE_INDEX); write_be16(buf + 10, 2);
     write_be16(buf + 12, 13); write_be16(buf + 14, LANE_MSG_TLV_LANE_INFORMATIONS);

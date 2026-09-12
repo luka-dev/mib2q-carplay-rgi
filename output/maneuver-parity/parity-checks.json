@@ -1,0 +1,19 @@
+{
+  "java_rows": 7890,
+  "unique_descriptors": 171,
+  "all_covered_by_original_v850": true,
+  "firmware_results_identical": true,
+  "packet_checks": "single-bend ramps, raw circle angles/roads and gated snap, BAP fallback/side, compatible raw turns, half-degree transport",
+  "capture_cases": 130,
+  "capture_unique_commands": 48,
+  "binary_sha256": "fb7c1dd76786621b4c75df45bd6535d1f29b110eae3602060dfa2b85514ea8fd",
+  "scope": "Original V850 active 3D mode 3, G1952/M2325; renderer macOS OpenGL, no vehicle test",
+  "sources": {
+    "output/maneuver-audit/mcu-chain-output.csv": "90eb2b52b69c5e360e040face0db3c46a24326f6b7808a5b280ef059f03c420d",
+    "output/maneuver-audit/mcu-chain-M-output.csv": "90eb2b52b69c5e360e040face0db3c46a24326f6b7808a5b280ef059f03c420d",
+    "output/maneuver-selection/mcu-new-G-output.csv": "5b72da89b3f84ff3eb1a3cdb2e9b27bdfd30ba977be15fbdc022f6c6887779bc",
+    "output/maneuver-selection/mcu-new-M-output.csv": "5b72da89b3f84ff3eb1a3cdb2e9b27bdfd30ba977be15fbdc022f6c6887779bc",
+    "output/maneuver-audit/8W6919617G_1952-selectors.json": "603cdd0c556258ac037ac1d654b30b8f09e5c86ee1a287226a1f4ee0210eecc5",
+    "output/maneuver-parity/java_mapping.csv": "0a6db16267c71fbcd1dd49cbcc991b59224fbb438e6aa2b9b13ef27a2c1973a3"
+  }
+}

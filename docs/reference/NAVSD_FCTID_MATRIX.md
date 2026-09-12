@@ -147,7 +147,7 @@ not all equally safe to drive during CarPlay ownership.
 |---:|---|---|---|
 | 16 | `direction_Symbolic`, `direction_Angle` | 16 compass sectors or unsupported, plus angle | Stock-owned. `255` does not prove that the VC will hide the compass container. |
 | 17 | `rg_Status` | `0` inactive, `1` active, `2` suspended, `255` unsupported | Lifecycle control, not cosmetic; do not use as a display toggle. |
-| 18 | `bargraphOnOff`, distance validity | Numeric next-turn distance and bargraph can be enabled independently | Safe. Our patched VC consumer deliberately permits distance and bargraph together. |
+| 18 | `bargraphOnOff`, distance validity | Independent fields on the wire; display policy is consumer-specific | CarPlay sends both, but the audited AU491 VC HMI hides distance while `BargraphOn != 0`. The HU `ClusterService` patch does not override that predicate. See [full chain and implementation options](DISTANCE_BARGRAPH_CHAIN.md). |
 | 21 | `distanceToStopover` | `false` final destination, `true` next stopover | Safe if the CarPlay route exposes a real waypoint distinction. |
 | 22 | `timeInfoType` | `0` remaining time, `1` arrival time, `2` arrival in another time zone, `15` invalid | Keep type `1`: this VC does not render a remaining-duration widget. Click summaries use FctID 19 instead. |
 | 22 | `navigationTimeFormat` | `0` 24-hour, `1` 12-hour | Follow HU locale; this changes formatting, not ETA/RTT semantics. |

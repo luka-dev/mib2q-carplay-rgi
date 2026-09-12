@@ -48,15 +48,6 @@ public class BAPBridge {
     private static final int EXITVIEW_NAR = 1;
 
     /*
-     * BAP supports three maneuver slots, but publish only the current one.
-     * Supplying look-ahead maneuvers makes the HUD combine Maneuver_1 and
-     * Maneuver_2 into instructions such as "left, then left again".  The full
-     * iOS maneuverOrder remains cached for renderer/lane-guidance consumers;
-     * this limit applies only to FctID 0x17 ManeuverDescriptor output.
-     */
-    private static final int MAX_BAP_MANEUVERS = 1;
-
-    /*
      * Fixed maneuver thresholds (meters).
      * These are intentionally static (no speed/time conversion at runtime).
      */
@@ -882,7 +873,7 @@ public class BAPBridge {
             boolean hasAnyManeuver = (s.maneuverCount > 0);
             boolean shouldClearManeuver = (s.maneuverCount == 0) && (s.routeState <= 0);
 
-            int firstIdx = (idxs != null && idxs.length > 0) ? idxs[0] : -1;
+            int firstIdx = primaryManeuverIndex(s);
             int type0 = (firstIdx >= 0 && s.mType != null && firstIdx < s.mType.length) ? s.mType[firstIdx] : -1;
             boolean showManeuver = ManeuverMapper.isValidType(type0);
 
@@ -1410,67 +1401,24 @@ public class BAPBridge {
     }
 
     /**
-     * Send only the current (first valid) maneuver from iOS maneuverOrder.
+     * Send only maneuverOrder[0]. Wait if that slot is not yet valid; never skip ahead.
+     * BAP supports three slots, but look-ahead would combine two instructions.
      * AppConnectorNavi resets absent Maneuver_2/Maneuver_3 slots to NO_SYMBOL.
      */
     private void sendManeuvers(RouteGuidance.State s) throws Exception {
         int[] idxs = getManeuverIndexList(s);
         if (idxs == null || idxs.length == 0) {
-            if (s.maneuverCount == 0) {
-                sendNoSymbol();
-            } else {
-            }
+            if (s.maneuverCount == 0) sendNoSymbol();
             return;
         }
 
-        /* Count valid maneuvers */
-        int validCount = 0;
-        int maxIdx = (s.mType != null) ? s.mType.length : 0;
-        for (int i = 0; i < idxs.length && validCount < MAX_BAP_MANEUVERS; i++) {
-            int idx = idxs[i];
-            if (idx < 0 || idx >= maxIdx) continue;
-            if (ManeuverMapper.isValidType(s.mType[idx])) validCount++;
-            else break;
-        }
-
-        if (validCount == 0) {
-            if (s.maneuverCount == 0) {
-                sendNoSymbol();
-            } else {
-            }
-            return;
-        }
-
-        /* Build a one-entry CombiBAPNaviManeuverDescriptor array. START_ROUTE
-         * already maps to FOLLOW_STREET, so no skip is needed; keeping only
-         * pos=0 ensures BAP Maneuver_1 stays aligned with DistanceToNextManeuver. */
-        CombiBAPNaviManeuverDescriptor[] arr = new CombiBAPNaviManeuverDescriptor[validCount];
-        int out = 0;
-        for (int i = 0; i < idxs.length && out < validCount; i++) {
-            int idx = idxs[i];
-            if (idx < 0 || idx >= maxIdx) continue;
-            if (!ManeuverMapper.isValidType(s.mType[idx])) break;
-            int[] mapped = ManeuverMapper.map(
-                s.mType[idx],
-                s.mTurnAngle[idx],
-                s.mJunctionType[idx],
-                s.mDrivingSide[idx]
-            );
-            int zLevel = (s.mZLevel != null && idx < s.mZLevel.length) ? s.mZLevel[idx] : 0;
-            byte[] sideStreets;
-            if (mapped[0] == ManeuverMapper.NO_INFO || mapped[0] == ManeuverMapper.NO_SYMBOL) {
-                sideStreets = new byte[0];
-            } else {
-                sideStreets = SideStreets.calcSideStreetsBytes(
-                    s.mType[idx],
-                    s.mJunctionType[idx],
-                    s.mDrivingSide[idx],
-                    s.mJunctionAngles[idx],
-                    s.mExitAngle[idx]
-                );
-            }
-            arr[out++] = createDescriptor(mapped[0], mapped[1], zLevel, sideStreets);
-        }
+        int idx = primaryManeuverIndex(s);
+        if (idx < 0) return; // wait for the current slot; never borrow the next turn's distance
+        int[] mapped = mapManeuver(s, idx);
+        int z = s.mZLevel != null && idx < s.mZLevel.length ? s.mZLevel[idx] : 0;
+        CombiBAPNaviManeuverDescriptor[] arr = new CombiBAPNaviManeuverDescriptor[] {
+            createDescriptor(mapped[0], mapped[1], z, maneuverSideStreets(s, idx, mapped[0]))
+        };
 
         appConnectorNavi.updateManeuverDescriptor(arr);
     }
@@ -1905,6 +1853,9 @@ public class BAPBridge {
     private int lastCrExitAngle = -9999;
     private int lastCrDrivingSide = -1;
     private int lastCrVer = -1;
+    private int lastCrIdx = -1;
+    private int[] lastCrJunctionAngles;
+    private boolean lastCrSnapToRoad;
 
     /* Link recovery: count consecutive renderer-side TCP send failures.  When the link to the
      * always-on renderer drops (it was re-exec'd by the framework, or lsd's link reset), drop
@@ -2033,52 +1984,25 @@ public class BAPBridge {
         if (rendererClient == null || !customRendererStarted) return false;
 
         try {
-            int[] idxs = getManeuverIndexList(s);
-            if (idxs == null || idxs.length == 0 || s.maneuverCount == 0) return false;
-
-            int maxIdx = (s.mType != null) ? s.mType.length : 0;
-            /* Always show the first valid maneuver in the list (pos=0), matching
-             * the real BAP descriptor published to the HUD at every distance. */
-            int firstIdx = -1;
-            for (int i = 0; i < idxs.length; i++) {
-                int idx = idxs[i];
-                if (idx >= 0 && idx < maxIdx && ManeuverMapper.isValidType(s.mType[idx])) {
-                    firstIdx = idx;
-                    break;
-                }
-            }
-            if (firstIdx < 0) return false;
-
-            int mt = s.mType[firstIdx];
-            int icon = RendererMapper.mapIcon(mt);
-            int direction = RendererMapper.mapDirection(mt, s.mTurnAngle[firstIdx], s.mDrivingSide[firstIdx]);
-            int exitAngle = RendererMapper.mapExitAngle(mt, s.mTurnAngle[firstIdx]);
-            int drivingSide = s.mDrivingSide[firstIdx];
-
-            /* Skip if icon hasn't actually changed.
-             * Slot version (mVer) detects maneuver transitions even when
-             * type/angle are identical (e.g., consecutive left turns).
-             * Exception: ARRIVED — iOS re-sends while parking; ignore version
-             * to avoid re-triggering the animation. */
+            int firstIdx = primaryManeuverIndex(s);
+            if (firstIdx < 0 || s.maneuverCount == 0) return false;
+            int[] bap = mapManeuver(s, firstIdx);
+            RendererMapper.Mapping mapped = RendererMapper.fromBap(bap[0], bap[1],
+                s.mDrivingSide[firstIdx], maneuverSideStreets(s, firstIdx, bap[0]));
+            mapped = RendererMapper.withCarPlayGeometry(mapped, s.mType[firstIdx],
+                s.mTurnAngle[firstIdx], anglePresent(s, firstIdx), s.mJunctionAngles[firstIdx]);
+            int icon = mapped.icon;
+            int direction = mapped.direction;
+            int exitAngle = mapped.exitAngle;
+            int drivingSide = mapped.drivingSide;
+            int[] junctionAngles = mapped.junctionAngles;
             int ver = s.mVer[firstIdx];
-            if (icon == RendererMapper.ICON_ARRIVED) {
-                if (icon == lastCrIcon && direction == lastCrDirection
-                        && exitAngle == lastCrExitAngle && drivingSide == lastCrDrivingSide) {
-                    return false;
-                }
-            } else if (icon == lastCrIcon && direction == lastCrDirection
-                    && exitAngle == lastCrExitAngle && drivingSide == lastCrDrivingSide
-                    && ver == lastCrVer) {
-                return false;
-            }
-            lastCrIcon = icon;
-            lastCrDirection = direction;
-            lastCrExitAngle = exitAngle;
-            lastCrDrivingSide = drivingSide;
-            lastCrVer = ver;
-
-            int[] junctionAngles = (s.mJunctionAngles != null && firstIdx < s.mJunctionAngles.length)
-                ? s.mJunctionAngles[firstIdx] : null;
+            boolean sameGeometry = icon == lastCrIcon && direction == lastCrDirection
+                && exitAngle == lastCrExitAngle && drivingSide == lastCrDrivingSide
+                && mapped.snapToRoad == lastCrSnapToRoad
+                && sameIntArray(junctionAngles, lastCrJunctionAngles);
+            if (sameGeometry && (icon == RendererMapper.ICON_ARRIVED
+                    || (firstIdx == lastCrIdx && ver == lastCrVer))) return false;
 
             /* Bargraph: 0-100 percentage -> 0-16 level.
              * In blink zone, send mode=1 with current level — blink thread
@@ -2096,9 +2020,24 @@ public class BAPBridge {
 
             int perspective = 1;  /* always 3D — 2D/3D switch disabled for now */
 
-            boolean ok = rendererClient.sendManeuver(icon, direction, exitAngle,
+            boolean roadsOnly = icon == lastCrIcon && direction == lastCrDirection
+                && exitAngle == lastCrExitAngle && drivingSide == lastCrDrivingSide
+                && mapped.snapToRoad == lastCrSnapToRoad
+                && firstIdx == lastCrIdx && ver == lastCrVer;
+            boolean ok = rendererClient.sendBapManeuver(icon, direction, exitAngle,
                 drivingSide, junctionAngles, bargraphLevel, bargraphMode,
-                perspective);
+                perspective, roadsOnly, mapped.snapToRoad);
+            // Failed enqueue must remain eligible for retry with the same input.
+            if (ok) {
+                lastCrIcon = icon;
+                lastCrDirection = direction;
+                lastCrExitAngle = exitAngle;
+                lastCrDrivingSide = drivingSide;
+                lastCrVer = ver;
+                lastCrIdx = firstIdx;
+                lastCrJunctionAngles = junctionAngles;
+                lastCrSnapToRoad = mapped.snapToRoad;
+            }
             noteRendererSendResult(ok);
             return ok;
         } catch (Throwable e) {
@@ -2398,6 +2337,38 @@ public class BAPBridge {
             }
         }
         return -1;
+    }
+
+    private static int primaryManeuverIndex(RouteGuidance.State s) {
+        int[] list = getManeuverIndexList(s);
+        if (list == null || list.length == 0 || s.mType == null) return -1;
+        int idx = list[0];
+        return idx >= 0 && idx < s.mType.length && ManeuverMapper.isValidType(s.mType[idx]) ? idx : -1;
+    }
+
+    private static boolean anglePresent(RouteGuidance.State s, int idx) {
+        return (s.mTurnAnglePresent != null && idx < s.mTurnAnglePresent.length && s.mTurnAnglePresent[idx])
+            || s.mTurnAngle[idx] != -1; // compatibility for callers constructing State directly
+    }
+
+    private static int[] mapManeuver(RouteGuidance.State s, int idx) {
+        return ManeuverMapper.map(s.mType[idx], s.mTurnAngle[idx], s.mJunctionType[idx],
+            s.mDrivingSide[idx], anglePresent(s, idx));
+    }
+
+    private static byte[] maneuverSideStreets(RouteGuidance.State s, int idx, int main) {
+        if (main == ManeuverMapper.NO_INFO || main == ManeuverMapper.NO_SYMBOL) return new byte[0];
+        int angle = s.mExitAngle[idx];
+        if (angle == -1 && !anglePresent(s, idx)) angle = 1000;
+        return SideStreets.calcSideStreetsBytes(s.mType[idx], s.mJunctionType[idx], s.mDrivingSide[idx],
+            s.mJunctionAngles[idx], angle);
+    }
+
+    private static boolean sameIntArray(int[] a, int[] b) {
+        if (a == b) return true;
+        if (a == null || b == null || a.length != b.length) return false;
+        for (int i = 0; i < a.length; i++) if (a[i] != b[i]) return false;
+        return true;
     }
 
     private static int[] getManeuverIndexList(RouteGuidance.State s) {

@@ -42,10 +42,10 @@ typedef struct {
  * CMD_MANEUVER payload layout:
  *   [0]      u8   icon (ICON_* constant)
  *   [1]      i8   direction (-1, 0, +1)
- *   [2..3]   i16  exit_angle (big-endian, signed degrees)
+ *   [2..3]   i16  exit_angle (big-endian; degrees, or half-degrees with BAP_GEOMETRY)
  *   [4]      u8   driving_side (0=RHT, 1=LHT)
  *   [5]      u8   junction_count (0..18)
- *   [6..41]  i16  junction_angles[] (big-endian, up to 18)
+ *   [6..41]  i16  junction_angles[] (big-endian, same angle units, up to 18)
  *
  * Optional (when MAN_FLAG_SET_PERSP set):
  *   [43]     u8   perspective (0=flat 2D, 1=perspective 3D)
@@ -57,6 +57,9 @@ typedef struct {
 /* CMD_MANEUVER flags (in cr_cmd_t.flags) */
 #define MAN_FLAG_SET_PERSP    0x01    /* Set perspective after transition: payload[43] = 0 (2D) / 1 (3D) */
 #define MAN_FLAG_BARGRAPH     0x02    /* Bargraph data in payload[44..45] */
+#define MAN_FLAG_REFRESH      0x08    /* replace latest maneuver geometry, preserve transition */
+#define MAN_FLAG_BAP_GEOMETRY 0x04    /* signed half-degrees; no snap unless SNAP_TO_ROAD */
+#define MAN_FLAG_SNAP_TO_ROAD 0x10    /* raw roundabout roads include active exit: allow snap */
 
 #define CR_MAN_ICON(p)          ((p)[0])
 #define CR_MAN_DIRECTION(p)     ((int8_t)(p)[1])

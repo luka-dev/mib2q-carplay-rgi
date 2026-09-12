@@ -5,13 +5,8 @@
  * Receives maneuver commands, handles all animation/transitions internally.
  *
  * macOS: GLFW window for development.
- * QNX:   take over native displayable 20 (DISPLAYABLE_MAP_ROUTE_GUIDANCE,
- *        the slot KOMO RG widget normally uses) by registering our own
- *        screen window with ID="20".  setActiveDisplayable(4, 20) (called
- *        by stock cluster firmware in preContextSwitchHook) wires the MOST
- *        encoder to capture our window for the LVDS stream landing on the
- *        VC's MAP tab.  Native widget process keeps running but is no
- *        longer the source for displayable 20 while we own the cluster.
+ * QNX: own managed displayable 98 in Java-selected cluster contexts.
+ * See protocol.h for DisplayManager routing and ownership.
  *
  * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
@@ -36,6 +31,7 @@
 #include "gl_compat.h"
 #include "render.h"
 #include "protocol.h"
+#include "maneuver_command.h"
 #include "maneuver.h"
 #include "server.h"
 
@@ -140,26 +136,18 @@ static int   g_bargraph_deferred = 0;
 static int   g_bargraph_deferred_level = 0;
 static int   g_bargraph_deferred_mode = 0;
 
-/* Decode CMD_MANEUVER payload into maneuver_state_t */
-static void decode_maneuver(const cr_cmd_t *cmd, maneuver_state_t *out) {
-    const uint8_t *p = cmd->payload;
-    int i, count;
-
-    memset(out, 0, sizeof(*out));
-    out->icon         = CR_MAN_ICON(p);
-    out->direction    = CR_MAN_DIRECTION(p);
-    out->exit_angle   = CR_MAN_EXIT_ANGLE(p);
-    out->driving_side = CR_MAN_DRIVING_SIDE(p);
-
-    count = CR_MAN_JUNC_COUNT(p);
-    if (count > MAX_JUNCTION_ANGLES) count = MAX_JUNCTION_ANGLES;
-    out->junction_angle_count = count;
-    for (i = 0; i < count; i++)
-        out->junction_angles[i] = CR_MAN_JUNC_ANGLE(p, i);
-}
-
 /* Apply a new maneuver to the engine */
 static void engine_apply_maneuver(const maneuver_state_t *state) {
+    if (state->icon == ICON_NONE || g_engine.current.icon == ICON_NONE) {
+        g_engine.current = *state;
+        g_engine.has_current = 1;
+        g_engine.has_next = g_engine.has_pending = 0;
+        g_engine.phase = ENGINE_IDLE;
+        maneuver_set_slide(1.0f);
+        render_invalidate_masks();
+        g_engine.dirty = 1;
+        return;
+    }
     if (g_engine.phase == ENGINE_PUSHING || g_engine.phase == ENGINE_SLIDING_IN) {
         /* Mid-transition: queue into pending slot, don't disturb current animation */
         g_engine.pending = *state;
@@ -178,6 +166,38 @@ static void engine_apply_maneuver(const maneuver_state_t *state) {
     render_invalidate_masks();
     g_engine.dirty = 1;
     fprintf(stderr, "engine: new maneuver icon=%d\n", state->icon);
+}
+
+/* A roads-only update belongs to the latest accepted command. During a push
+ * that is next (or pending), never the outgoing current maneuver. */
+static void engine_refresh_maneuver(const maneuver_state_t *state) {
+    if (state->icon == ICON_NONE || g_engine.current.icon == ICON_NONE) {
+        engine_apply_maneuver(state);
+        return;
+    }
+    if (g_engine.has_pending) g_engine.pending = *state;
+    else if (g_engine.has_next) g_engine.next = *state;
+    else g_engine.current = *state;
+    render_invalidate_masks();
+    g_engine.dirty = 1;
+}
+
+static void engine_apply_presentation(void) {
+    if (g_persp_deferred) {
+        render_set_perspective(g_persp_deferred_value);
+        g_persp_deferred = 0;
+        g_engine.dirty = 1;
+    }
+    if (g_bargraph_deferred) {
+        g_bargraph_level = g_bargraph_deferred_level;
+        g_bargraph_on = g_bargraph_deferred_mode;
+        if (g_bargraph_on == 2) {
+            g_bargraph_blink_vis = 1;
+            g_bargraph_blink_timer = 0;
+        }
+        g_bargraph_deferred = 0;
+        g_engine.dirty = 1;
+    }
 }
 
 /* Advance engine state machine */
@@ -252,31 +272,13 @@ static void engine_tick(void) {
                         g_engine.next.icon);
             } else {
                 g_engine.phase = ENGINE_IDLE;
-                /* Apply deferred perspective when settled */
-                if (g_persp_deferred) {
-                    render_set_perspective(g_persp_deferred_value);
-                    fprintf(stderr, "engine: applied deferred perspective=%s\n",
-                            g_persp_deferred_value ? "3D" : "2D");
-                    g_persp_deferred = 0;
-                    g_engine.dirty = 1;
-                }
-                /* Apply deferred bargraph when settled */
-                if (g_bargraph_deferred) {
-                    g_bargraph_level = g_bargraph_deferred_level;
-                    g_bargraph_on = g_bargraph_deferred_mode;
-                    if (g_bargraph_on == 2) {
-                        g_bargraph_blink_vis = 1;
-                        g_bargraph_blink_timer = 0;
-                    }
-                    g_bargraph_deferred = 0;
-                    g_engine.dirty = 1;
-                }
             }
         }
         break;
     case ENGINE_IDLE:
         break;
     }
+    if (g_engine.phase == ENGINE_IDLE) engine_apply_presentation();
 }
 
 /* ================================================================
@@ -456,8 +458,8 @@ int main(int argc, char **argv) {
 #endif
             switch (cmd.cmd) {
             case CMD_MANEUVER: {
-                decode_maneuver(&cmd, &pending_maneuver);
-                pending_flags = cmd.flags;
+                cr_decode_maneuver(&cmd, &pending_maneuver);
+                pending_flags = cr_merge_maneuver_flags(got_maneuver, pending_flags, cmd.flags);
                 pending_perspective = cmd.payload[43];
                 pending_bargraph_level = cmd.payload[44];
                 pending_bargraph_mode = cmd.payload[45];
@@ -569,23 +571,11 @@ int main(int argc, char **argv) {
                  * whose settle edge normally consumes the deferred presentation
                  * fields.  Apply them here so the first real frame after CLEAR
                  * carries the requested perspective and bargraph as well. */
-                if (g_persp_deferred) {
-                    render_set_perspective(g_persp_deferred_value);
-                    fprintf(stderr, "engine: applied reveal perspective=%s\n",
-                            g_persp_deferred_value ? "3D" : "2D");
-                    g_persp_deferred = 0;
-                }
-                if (g_bargraph_deferred) {
-                    g_bargraph_level = g_bargraph_deferred_level;
-                    g_bargraph_on = g_bargraph_deferred_mode;
-                    if (g_bargraph_on == 2) {
-                        g_bargraph_blink_vis = 1;
-                        g_bargraph_blink_timer = 0;
-                    }
-                    g_bargraph_deferred = 0;
-                }
+                engine_apply_presentation();
                 fprintf(stderr, "engine: reveal from clear icon=%d\n",
                         pending_maneuver.icon);
+            } else if (pending_flags & MAN_FLAG_REFRESH) {
+                engine_refresh_maneuver(&pending_maneuver);
             } else {
                 engine_apply_maneuver(&pending_maneuver);
             }

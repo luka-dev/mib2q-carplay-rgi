@@ -1,0 +1,4 @@
+host/
+renderer/renderer.log
+renderer/*.ppm
+renderer/flag_atlas.rgba

@@ -1,222 +1,148 @@
-/*
- * RendererMapper - Maps iAP2 ManeuverType to maneuver_render ICON_* + direction/exitAngle.
- *
- * ICON constants match maneuver_render/maneuver.h exactly.
- * Direction: -1=left, 0=center, +1=right (matches maneuver_state_t.direction).
- * Exit angle: signed degrees, positive=right, negative=left.
- *
- * Java 1.2 compatible (no generics, no autoboxing, no enhanced for).
- *
+/* CarPlay renderer: BAP semantic fallback with richer compatible geometry.
  * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 package com.luka.carplay.rgd;
 
 public class RendererMapper {
+    public static final int ICON_NONE = 0;
+    public static final int ICON_APPROACH = 1;
+    public static final int ICON_TURN = 2;
+    public static final int ICON_UTURN = 3;
+    public static final int ICON_MERGE = 4; // legacy wire icon; no automatic iOS mapping
+    public static final int ICON_EXIT = 5;
+    public static final int ICON_ROUNDABOUT = 6;
+    public static final int ICON_ARRIVED = 7;
+    public static final int ICON_LANE_CHANGE = 8;
+    public static final int ICON_ROUNDABOUT_EXIT = 9;
 
-    /* ICON_* constants -- must match maneuver_render/maneuver.h */
-    public static final int ICON_NONE        = 0;
-    public static final int ICON_APPROACH    = 1;
-    public static final int ICON_TURN        = 2;
-    public static final int ICON_UTURN       = 3;
-    public static final int ICON_MERGE       = 4;
-    public static final int ICON_EXIT        = 5;
-    public static final int ICON_ROUNDABOUT  = 6;
-    public static final int ICON_ARRIVED     = 7;
+    /** Angles are signed half-degrees, preserving every 22.5-degree BAP bin. */
+    public static final class Mapping {
+        public int icon;
+        public int direction;
+        public int exitAngle;
+        public int drivingSide;
+        public int[] junctionAngles;
+        public boolean snapToRoad;
+    }
 
-    /**
-     * Map iAP2 ManeuverType to maneuver_render ICON_* constant.
-     */
-    public static int mapIcon(int mt) {
-        switch (mt) {
-            /* Approach / follow road */
-            case ManeuverMapper.MT_NO_TURN:
-            case ManeuverMapper.MT_FOLLOW_ROAD:
-            case ManeuverMapper.MT_STRAIGHT_AHEAD:
-            case ManeuverMapper.MT_START_ROUTE:
-            case ManeuverMapper.MT_ENTER_FERRY:
-            case ManeuverMapper.MT_EXIT_FERRY:
-            case ManeuverMapper.MT_CHANGE_FERRY:
-            case ManeuverMapper.MT_CHANGE_HIGHWAY:
-                return ICON_APPROACH;
+    public static int directionAngleHalfDegrees(int direction) {
+        int d = direction & 255;
+        if (d == 128) return 360;
+        return d < 128 ? -(d * 45 / 16) : ((256 - d) * 45 / 16);
+    }
 
-            /* Turn (exit angle from mTurnAngle) */
-            case ManeuverMapper.MT_LEFT_TURN:
-            case ManeuverMapper.MT_RIGHT_TURN:
-            case ManeuverMapper.MT_SLIGHT_LEFT_TURN:
-            case ManeuverMapper.MT_SLIGHT_RIGHT_TURN:
-            case ManeuverMapper.MT_SHARP_LEFT_TURN:
-            case ManeuverMapper.MT_SHARP_RIGHT_TURN:
-            case ManeuverMapper.MT_KEEP_LEFT:
-            case ManeuverMapper.MT_KEEP_RIGHT:
-            case ManeuverMapper.MT_LEFT_TURN_AT_END:
-            case ManeuverMapper.MT_RIGHT_TURN_AT_END:
-                return ICON_TURN;
-
-            /* U-turn */
-            case ManeuverMapper.MT_U_TURN:
-            case ManeuverMapper.MT_START_ROUTE_WITH_U_TURN:
-            case ManeuverMapper.MT_U_TURN_WHEN_POSSIBLE:
-                return ICON_UTURN;
-
-            /* On-ramp / merge */
-            case ManeuverMapper.MT_ON_RAMP:
-                return ICON_MERGE;
-
-            /* Off-ramp / highway exit */
-            case ManeuverMapper.MT_OFF_RAMP:
-            case ManeuverMapper.MT_HIGHWAY_OFF_RAMP_LEFT:
-            case ManeuverMapper.MT_HIGHWAY_OFF_RAMP_RIGHT:
-            case ManeuverMapper.MT_CHANGE_HIGHWAY_LEFT:
-            case ManeuverMapper.MT_CHANGE_HIGHWAY_RIGHT:
-                return ICON_EXIT;
-
-            /* Roundabout */
-            case ManeuverMapper.MT_ENTER_ROUNDABOUT:
-            case ManeuverMapper.MT_EXIT_ROUNDABOUT:
-            case ManeuverMapper.MT_U_TURN_AT_ROUNDABOUT:
-            case ManeuverMapper.MT_ROUNDABOUT_EXIT_1:
-            case ManeuverMapper.MT_ROUNDABOUT_EXIT_2:
-            case ManeuverMapper.MT_ROUNDABOUT_EXIT_3:
-            case ManeuverMapper.MT_ROUNDABOUT_EXIT_4:
-            case ManeuverMapper.MT_ROUNDABOUT_EXIT_5:
-            case ManeuverMapper.MT_ROUNDABOUT_EXIT_6:
-            case ManeuverMapper.MT_ROUNDABOUT_EXIT_7:
-            case ManeuverMapper.MT_ROUNDABOUT_EXIT_8:
-            case ManeuverMapper.MT_ROUNDABOUT_EXIT_9:
-            case ManeuverMapper.MT_ROUNDABOUT_EXIT_10:
-            case ManeuverMapper.MT_ROUNDABOUT_EXIT_11:
-            case ManeuverMapper.MT_ROUNDABOUT_EXIT_12:
-            case ManeuverMapper.MT_ROUNDABOUT_EXIT_13:
-            case ManeuverMapper.MT_ROUNDABOUT_EXIT_14:
-            case ManeuverMapper.MT_ROUNDABOUT_EXIT_15:
-            case ManeuverMapper.MT_ROUNDABOUT_EXIT_16:
-            case ManeuverMapper.MT_ROUNDABOUT_EXIT_17:
-            case ManeuverMapper.MT_ROUNDABOUT_EXIT_18:
-            case ManeuverMapper.MT_ROUNDABOUT_EXIT_19:
-                return ICON_ROUNDABOUT;
-
-            /* Arrived */
-            case ManeuverMapper.MT_ARRIVE_END_OF_NAVIGATION:
-            case ManeuverMapper.MT_ARRIVE_AT_DESTINATION:
-            case ManeuverMapper.MT_ARRIVE_END_OF_DIRECTIONS:
-            case ManeuverMapper.MT_ARRIVE_DESTINATION_LEFT:
-            case ManeuverMapper.MT_ARRIVE_DESTINATION_RIGHT:
-                return ICON_ARRIVED;
-
+    public static Mapping fromBap(int main, int direction, int drivingSide, byte[] streets) {
+        Mapping out = new Mapping();
+        out.drivingSide = drivingSide == ManeuverMapper.DRIVING_SIDE_LEFT ? 1 : 0;
+        out.exitAngle = directionAngleHalfDegrees(direction);
+        switch (main) {
+            case ManeuverMapper.FOLLOW_STREET: out.icon = ICON_APPROACH; break;
+            case ManeuverMapper.TURN: out.icon = ICON_TURN; break;
+            case ManeuverMapper.UTURN:
+                out.icon = ICON_UTURN;
+                out.direction = direction == ManeuverMapper.DIR_LEFT ? -1 : 1;
+                out.exitAngle = out.direction * 360;
+                break;
+            case ManeuverMapper.EXIT_LEFT:
+            case ManeuverMapper.EXIT_RIGHT:
+                out.icon = ICON_EXIT;
+                out.direction = main == ManeuverMapper.EXIT_LEFT ? -1 : 1;
+                out.exitAngle = 0;
+                break;
+            case ManeuverMapper.CHANGE_LANE:
+                out.icon = ICON_LANE_CHANGE;
+                out.direction = direction == ManeuverMapper.DIR_LEFT ? -1 : 1;
+                out.exitAngle = 0;
+                break;
+            case ManeuverMapper.ROUNDABOUT_TRS_LEFT:
+            case ManeuverMapper.ROUNDABOUT_TRS_RIGHT:
+                out.icon = ICON_ROUNDABOUT;
+                out.drivingSide = main == ManeuverMapper.ROUNDABOUT_TRS_LEFT ? 1 : 0;
+                break;
+            case ManeuverMapper.EXIT_ROUNDABOUT_TRS_LEFT:
+            case ManeuverMapper.EXIT_ROUNDABOUT_TRS_RIGHT:
+                out.icon = ICON_ROUNDABOUT_EXIT;
+                out.drivingSide = main == ManeuverMapper.EXIT_ROUNDABOUT_TRS_LEFT ? 1 : 0;
+                out.direction = out.drivingSide == 1 ? -1 : 1;
+                out.exitAngle = out.direction * 90; // fixed diagonal exit, as HUD s112/s113
+                break;
+            case ManeuverMapper.ARRIVED:
+                out.icon = ICON_ARRIVED;
+                out.direction = direction == ManeuverMapper.DIR_LEFT ? -1
+                    : direction == ManeuverMapper.DIR_RIGHT ? 1 : 0;
+                out.exitAngle = 0;
+                break;
             default:
-                return ICON_NONE;
+                out.icon = ICON_NONE;
+                out.exitAngle = 0;
+                break;
         }
+        int count = streets == null || out.icon == ICON_NONE ? 0 : streets.length;
+        if (count > 18) count = 18;
+        out.junctionAngles = new int[count];
+        for (int i = 0; i < count; i++) out.junctionAngles[i] = directionAngleHalfDegrees(streets[i] & 255);
+        return out;
     }
 
-    /**
-     * Map iAP2 ManeuverType to maneuver_render direction (-1=left, 0=center, +1=right).
-     * For ICON_TURN the direction is implicit from exit_angle; this returns 0.
-     * For ICON_MERGE/EXIT/ARRIVED, direction encodes left/right.
-     */
-    public static int mapDirection(int mt, int turnAngle, int drivingSide) {
-        switch (mt) {
-            /* Use the signed iAP2 exit angle when present. If it is absent,
-             * mirror the BAP mapping's traffic-side fallback. */
-            case ManeuverMapper.MT_U_TURN:
-            case ManeuverMapper.MT_START_ROUTE_WITH_U_TURN:
-            case ManeuverMapper.MT_U_TURN_WHEN_POSSIBLE:
-                if (hasDirectionalAngle(turnAngle)) {
-                    return (turnAngle < 0) ? -1 : 1;
-                }
-                return (drivingSide == ManeuverMapper.DRIVING_SIDE_LEFT) ? 1 : -1;
-
-            /* Generic ramps: signed iOS angle wins; traffic side is fallback. */
-            case ManeuverMapper.MT_ON_RAMP:
-                return rampDirection(turnAngle, drivingSide);
-
-            /* Highway exit / lane change */
-            case ManeuverMapper.MT_CHANGE_HIGHWAY_LEFT:
-                return -1;
-            case ManeuverMapper.MT_CHANGE_HIGHWAY_RIGHT:
-                return 1;
-
-            /* Arrived with side */
-            case ManeuverMapper.MT_ARRIVE_DESTINATION_LEFT:
-                return -1;
-            case ManeuverMapper.MT_ARRIVE_DESTINATION_RIGHT:
-                return 1;
-
-            /* Off-ramp: direction hint for rendering */
-            case ManeuverMapper.MT_HIGHWAY_OFF_RAMP_LEFT:
-                return -1;
-            case ManeuverMapper.MT_HIGHWAY_OFF_RAMP_RIGHT:
-                return 1;
-            case ManeuverMapper.MT_OFF_RAMP:
-                return rampDirection(turnAngle, drivingSide);
-
-            default:
-                return 0;
+    /** Keep the renderer's full circles and continuous turn geometry. BAP has a
+     * finite icon catalogue; that does not limit our procedural path builder.
+     * A missing/invalid angle or a side conflicting with the resolved maneuver
+     * still uses the BAP/type fallback. Angles here remain in half-degrees. */
+    public static Mapping withCarPlayGeometry(Mapping out, int mt, int angle,
+                                              boolean present, int[] roads) {
+        boolean valid = present && angle >= -180 && angle <= 180;
+        boolean ramp = mt == ManeuverMapper.MT_OFF_RAMP || mt == ManeuverMapper.MT_ON_RAMP
+            || mt == ManeuverMapper.MT_HIGHWAY_OFF_RAMP_LEFT
+            || mt == ManeuverMapper.MT_HIGHWAY_OFF_RAMP_RIGHT;
+        if (out.icon != ICON_NONE && (mt == ManeuverMapper.MT_ENTER_ROUNDABOUT
+                || mt == ManeuverMapper.MT_EXIT_ROUNDABOUT
+                || (mt >= ManeuverMapper.MT_ROUNDABOUT_EXIT_1
+                    && mt <= ManeuverMapper.MT_ROUNDABOUT_EXIT_19))) {
+            out.icon = ICON_ROUNDABOUT;
+            out.direction = 0;
+            out.exitAngle = valid ? angle * 2 : 0;
+            // Only actual angles may snap. Missing fallback and typed U-turn
+            // must not be redirected to a neighbouring exit.
+            out.snapToRoad = valid;
+        } else if (out.icon == ICON_TURN && !ramp && valid) {
+            boolean generic = mt == ManeuverMapper.MT_START_ROUTE
+                || mt == ManeuverMapper.MT_EXIT_FERRY || mt == ManeuverMapper.MT_CHANGE_HIGHWAY;
+            if (generic || (out.exitAngle < 0 && angle < 0) || (out.exitAngle > 0 && angle > 0))
+                out.exitAngle = angle * 2;
         }
+        if (out.icon == ICON_APPROACH || out.icon == ICON_TURN || out.icon == ICON_ROUNDABOUT)
+            out.junctionAngles = rawRoads(roads);
+        return out;
     }
 
-    /**
-     * Get exit angle for maneuver_render. For ICON_TURN this is the raw turnAngle.
-     * For off-ramps without a real angle, use a default slight angle.
-     * For roundabouts, the turnAngle from iOS is the exit angle.
-     */
-    /** Pipeline sentinel: the hook supplies 1000 when iAP2 omits the exit angle. */
-    private static final int ANGLE_UNKNOWN = 1000;
-
-    private static boolean hasDirectionalAngle(int turnAngle) {
-        return turnAngle != 0 && turnAngle != ANGLE_UNKNOWN
-            && turnAngle != -ANGLE_UNKNOWN;
-    }
-
-    private static int rampDirection(int turnAngle, int drivingSide) {
-        if (hasDirectionalAngle(turnAngle)) return (turnAngle < 0) ? -1 : 1;
-        return (drivingSide == ManeuverMapper.DRIVING_SIDE_LEFT) ? -1 : 1;
-    }
-
-    /** Default angles for maneuver types when iOS doesn't provide one. */
-    private static int defaultAngle(int mt) {
-        switch (mt) {
-            case ManeuverMapper.MT_LEFT_TURN:
-            case ManeuverMapper.MT_LEFT_TURN_AT_END:
-                return -90;
-            case ManeuverMapper.MT_RIGHT_TURN:
-            case ManeuverMapper.MT_RIGHT_TURN_AT_END:
-                return 90;
-            case ManeuverMapper.MT_SLIGHT_LEFT_TURN:
-            case ManeuverMapper.MT_KEEP_LEFT:
-                return -45;
-            case ManeuverMapper.MT_SLIGHT_RIGHT_TURN:
-            case ManeuverMapper.MT_KEEP_RIGHT:
-                return 45;
-            case ManeuverMapper.MT_SHARP_LEFT_TURN:
-                return -135;
-            case ManeuverMapper.MT_SHARP_RIGHT_TURN:
-                return 135;
-            case ManeuverMapper.MT_U_TURN:
-            case ManeuverMapper.MT_START_ROUTE_WITH_U_TURN:
-            case ManeuverMapper.MT_U_TURN_WHEN_POSSIBLE:
-                return -180;
-            case ManeuverMapper.MT_U_TURN_AT_ROUNDABOUT:
-                /* The maneuver type itself supplies the missing geometry. */
-                return 180;
-            default:
-                return 0;
+    /** BAP removes the active exit and quantizes/limits side streets. The
+     * procedural renderer needs the original roads, including that exit for
+     * roundabout snap. Keep valid signed angles, not missing-value sentinels. */
+    private static int[] rawRoads(int[] roads) {
+        int count = 0;
+        if (roads != null) {
+            for (int i = 0; i < roads.length && count < 18; i++)
+                if (roads[i] >= -180 && roads[i] <= 180) count++;
         }
+        int[] out = new int[count];
+        int n = 0;
+        if (roads != null) {
+            for (int i = 0; i < roads.length && n < count; i++)
+                if (roads[i] >= -180 && roads[i] <= 180) out[n++] = roads[i] * 2;
+        }
+        return out;
     }
 
-    public static int mapExitAngle(int mt, int turnAngle) {
-        /* Pipeline sentinel 1000 = no angle data — use the maneuver default. */
-        if (turnAngle == ANGLE_UNKNOWN || turnAngle == -ANGLE_UNKNOWN) {
-            turnAngle = defaultAngle(mt);
-        }
-        switch (mt) {
-            case ManeuverMapper.MT_OFF_RAMP:
-                return (turnAngle != 0) ? turnAngle : 30;
-            case ManeuverMapper.MT_HIGHWAY_OFF_RAMP_LEFT:
-                return (turnAngle != 0) ? turnAngle : -30;
-            case ManeuverMapper.MT_HIGHWAY_OFF_RAMP_RIGHT:
-                return (turnAngle != 0) ? turnAngle : 30;
-            default:
-                return turnAngle;
-        }
+    private static Mapping legacy(int mt, int angle, int side) {
+        int junction = mt == ManeuverMapper.MT_EXIT_ROUNDABOUT
+            || mt == ManeuverMapper.MT_U_TURN_AT_ROUNDABOUT
+            || (mt >= ManeuverMapper.MT_ROUNDABOUT_EXIT_1 && mt <= ManeuverMapper.MT_ROUNDABOUT_EXIT_19) ? 1 : 0;
+        int[] bap = ManeuverMapper.map(mt, angle, junction, side);
+        return withCarPlayGeometry(fromBap(bap[0], bap[1], side, null), mt, angle, angle != -1, null);
     }
+
+    /** Compatibility helpers use degrees; the bridge uses fromBap() with exact half-degrees. */
+    public static int mapIcon(int mt) { return legacy(mt, 1000, 0).icon; }
+    public static int mapDirection(int mt, int angle, int side) { return legacy(mt, angle, side).direction; }
+    public static int mapExitAngle(int mt, int angle) { return legacy(mt, angle, 0).exitAngle / 2; }
 }

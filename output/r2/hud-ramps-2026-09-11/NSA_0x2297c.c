@@ -1,0 +1,8 @@
+BOOL __fastcall sub_2297C(int a1, int a2)
+{
+  MEMORY[0x115AD4] = 129;
+  MEMORY[0x115AD8] = a1;
+  MEMORY[0x115ADC] = a2;
+  MEMORY[0x115AE0] = 0;
+  return MEMORY[0x1782104](MEMORY[0x115ACC], MEMORY[0x115AD0], 1137364) != 0;
+}

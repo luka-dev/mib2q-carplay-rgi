@@ -59,21 +59,11 @@ public final class RendererMapperDirectionTest {
     }
 
     private static void testGenericRamp(int maneuverType) {
-        expect("renderer ramp signed left overrides RHT", -1,
-            RendererMapper.mapDirection(maneuverType, -35,
-                ManeuverMapper.DRIVING_SIDE_RIGHT));
-        expect("renderer ramp signed right overrides LHT", 1,
-            RendererMapper.mapDirection(maneuverType, 35,
-                ManeuverMapper.DRIVING_SIDE_LEFT));
-        expect("renderer ramp RHT missing fallback", 1,
-            RendererMapper.mapDirection(maneuverType, 1000,
-                ManeuverMapper.DRIVING_SIDE_RIGHT));
-        expect("renderer ramp LHT negative sentinel fallback", -1,
-            RendererMapper.mapDirection(maneuverType, -1000,
-                ManeuverMapper.DRIVING_SIDE_LEFT));
-        expect("renderer ramp zero fallback", -1,
-            RendererMapper.mapDirection(maneuverType, 0,
-                ManeuverMapper.DRIVING_SIDE_LEFT));
+        // Both ramp types use one slight bend. Direction is carried by angle.
+        expect("renderer ramp family", RendererMapper.ICON_TURN, RendererMapper.mapIcon(maneuverType));
+        expect("renderer ramp left angle", -45, RendererMapper.mapExitAngle(maneuverType, -35));
+        expect("renderer ramp right angle", 45, RendererMapper.mapExitAngle(maneuverType, 35));
+        expect("renderer ramp RHT missing", 45, RendererMapper.mapExitAngle(maneuverType, 1000));
 
         int[] left = ManeuverMapper.map(maneuverType, -35,
             ManeuverMapper.JUNCTION_SINGLE_INTERSECTION,
@@ -91,26 +81,56 @@ public final class RendererMapperDirectionTest {
             ManeuverMapper.JUNCTION_SINGLE_INTERSECTION,
             ManeuverMapper.DRIVING_SIDE_RIGHT);
 
-        expect("BAP ramp signed left direction", ManeuverMapper.DIR_SLIGHT_LEFT, left[1]);
-        expect("BAP ramp signed right direction", ManeuverMapper.DIR_SLIGHT_RIGHT, right[1]);
-        expect("BAP ramp RHT missing direction", ManeuverMapper.DIR_SLIGHT_RIGHT,
+        int leftDir = ManeuverMapper.DIR_SLIGHT_LEFT;
+        int rightDir = ManeuverMapper.DIR_SLIGHT_RIGHT;
+        expect("BAP ramp signed left direction", leftDir, left[1]);
+        expect("BAP ramp signed right direction", rightDir, right[1]);
+        expect("BAP ramp RHT missing direction", rightDir,
             fallbackRight[1]);
-        expect("BAP ramp LHT zero direction", ManeuverMapper.DIR_SLIGHT_LEFT,
+        expect("BAP ramp LHT zero direction", leftDir,
             fallbackLeft[1]);
-        expect("BAP ramp negative sentinel direction", ManeuverMapper.DIR_SLIGHT_RIGHT,
+        expect("BAP ramp negative sentinel direction", rightDir,
             fallbackNegative[1]);
 
-        if (maneuverType == ManeuverMapper.MT_OFF_RAMP) {
-            expect("BAP off-ramp signed left element", ManeuverMapper.EXIT_LEFT, left[0]);
-            expect("BAP off-ramp signed right element", ManeuverMapper.EXIT_RIGHT, right[0]);
-            expect("BAP off-ramp RHT missing element", ManeuverMapper.EXIT_RIGHT,
-                fallbackRight[0]);
-            expect("BAP off-ramp LHT zero element", ManeuverMapper.EXIT_LEFT,
-                fallbackLeft[0]);
-        } else {
-            expect("BAP on-ramp left element", ManeuverMapper.TURN, left[0]);
-            expect("BAP on-ramp right element", ManeuverMapper.TURN, right[0]);
+        for (int[] result : new int[][]{left, right, fallbackRight, fallbackLeft, fallbackNegative})
+            expect("BAP ramp uses single TURN", ManeuverMapper.TURN, result[0]);
+    }
+
+    private static void testHudIconSelection() {
+        int[] angles = {-1000, -180, -135, -90, -45, -1, 0, 45, 90, 135, 180, 1000};
+        int[] ramps = {ManeuverMapper.MT_OFF_RAMP, ManeuverMapper.MT_HIGHWAY_OFF_RAMP_LEFT,
+            ManeuverMapper.MT_HIGHWAY_OFF_RAMP_RIGHT};
+        for (int mt : ramps) for (int side = 0; side < 2; side++) for (int angle : angles) {
+            int[] result = ManeuverMapper.map(mt, angle, 0, side);
+            expect("single bend ramp family", ManeuverMapper.TURN, result[0]);
+            if (mt == ManeuverMapper.MT_HIGHWAY_OFF_RAMP_LEFT)
+                expect("explicit left ramp", ManeuverMapper.DIR_SLIGHT_LEFT, result[1]);
+            if (mt == ManeuverMapper.MT_HIGHWAY_OFF_RAMP_RIGHT)
+                expect("explicit right ramp", ManeuverMapper.DIR_SLIGHT_RIGHT, result[1]);
+            if (result[1] != 32 && result[1] != 224) throw new AssertionError("ramp must be slight");
         }
+        int[] generic = {ManeuverMapper.MT_START_ROUTE, ManeuverMapper.MT_EXIT_FERRY,
+            ManeuverMapper.MT_CHANGE_HIGHWAY};
+        int[] heading = {-181, -1000, -135, -113, -112, -68, -67, -23, -22, -1,
+            0, 22, 23, 67, 68, 112, 113, 135, 181, 1000};
+        // Protocol expectations: single TURN uses 7 valid direction values;
+        // Sentinels must not fabricate a turn; other out-of-range values retain
+        // the previous signed left/right fallback.
+        int[] expected = {64, 0, 96, 96, 64, 64, 32, 32, 0, 0,
+            0, 0, 224, 224, 192, 192, 160, 160, 192, 0};
+        for (int mt : generic) for (int i = 0; i < heading.length; i++) {
+            int[] result = ManeuverMapper.map(mt, heading[i], 0, 0);
+            expect("generic TURN family", ManeuverMapper.TURN, result[0]);
+            expect("generic quantized heading " + heading[i], expected[i], result[1]);
+        }
+        expect("left end-of-road slight", 32, ManeuverMapper.map(20, -45, 0, 0)[1]);
+        expect("left end-of-road sharp", 96, ManeuverMapper.map(20, -135, 0, 1)[1]);
+        expect("left end-of-road missing", 64, ManeuverMapper.map(20, -1, 0, 0)[1]);
+        expect("left type wins conflicting angle", 64, ManeuverMapper.map(20, 45, 0, 0)[1]);
+        expect("right end-of-road slight", 224, ManeuverMapper.map(21, 45, 0, 1)[1]);
+        expect("right end-of-road sharp", 160, ManeuverMapper.map(21, 135, 0, 0)[1]);
+        expect("right end-of-road missing", 192, ManeuverMapper.map(21, 1000, 0, 0)[1]);
+        expect("right type wins conflicting angle", 192, ManeuverMapper.map(21, -45, 0, 0)[1]);
     }
 
     private static void testMissingRoundaboutAngle() {
@@ -137,6 +157,34 @@ public final class RendererMapperDirectionTest {
             RendererMapper.mapExitAngle(ManeuverMapper.MT_ROUNDABOUT_EXIT_5, -67));
     }
 
+    private static void testAllManeuverSafetySentinels() {
+        // Unknown geometry must use the same categorical/traffic-side fallback
+        // as zero; neither sentinel's sign is a direction. Cover every type,
+        // both traffic sides and every supported/unknown junction category.
+        for (int mt = 0; mt <= 53; mt++) {
+            for (int side = 0; side < 2; side++) {
+                for (int junction = -1; junction <= 1; junction++) {
+                    int[] fallback = ManeuverMapper.map(mt, 0, junction, side);
+                    for (int angle : new int[]{-1000, 1000, -1}) {
+                        int[] actual = ManeuverMapper.map(mt, angle, junction, side);
+                        String label = "sentinel mt=" + mt + " angle=" + angle
+                            + " side=" + side + " junction=" + junction;
+                        expect(label + " main", fallback[0], actual[0]);
+                        expect(label + " direction", fallback[1], actual[1]);
+                    }
+                }
+            }
+        }
+        for (int mt : new int[]{11, 16, 51}) {
+            for (int angle : new int[]{Integer.MIN_VALUE, -32768, -1001, -999, -181,
+                    181, 999, 1001, 32767, Integer.MAX_VALUE}) {
+                expect("legacy out-of-range signed fallback",
+                    angle < 0 ? ManeuverMapper.DIR_LEFT : ManeuverMapper.DIR_RIGHT,
+                    ManeuverMapper.map(mt, angle, 0, 0)[1]);
+            }
+        }
+    }
+
     public static void main(String[] args) {
         testType(ManeuverMapper.MT_U_TURN);
         testType(ManeuverMapper.MT_START_ROUTE_WITH_U_TURN);
@@ -144,6 +192,8 @@ public final class RendererMapperDirectionTest {
         testGenericRamp(ManeuverMapper.MT_OFF_RAMP);
         testGenericRamp(ManeuverMapper.MT_ON_RAMP);
         testMissingRoundaboutAngle();
+        testHudIconSelection();
+        testAllManeuverSafetySentinels();
         System.out.println("RendererMapperDirectionTest: PASS");
     }
 }

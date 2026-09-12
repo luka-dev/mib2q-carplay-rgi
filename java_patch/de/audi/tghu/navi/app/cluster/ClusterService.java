@@ -374,11 +374,11 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
                 metricsmodelapp.setMetric(this.distanceToManeuver);
             }
 
-            /* FctID 18: distance number and bargraph are INDEPENDENT records in the BAP spec and
-             * must be able to render together.  Stock gated the distance-valid status on
-             * !showBargraph, making them mutually exclusive (distance vanished whenever the
-             * bargraph was active).  Drop the !showBargraph term so the number stays valid
-             * alongside the bargraph.  (Model 65 bargraph value is set independently below.) */
+            /* Keep this HU Java distance model valid alongside model 65 during CarPlay.
+             * This does not control the VC firmware's distance-widget visibility:
+             * CarPlay sends FctID 18 directly through BAPBridge/AppConnectorNavi, and
+             * the audited AU491 HMI independently hides distance when BargraphOn != 0.
+             * See docs/reference/DISTANCE_BARGRAPH_CHAIN.md. */
             if (flag && i > 0 && (!this.showBargraph || com.luka.carplay.core.AltScreenModule.isConnected())) {
                 Util.setModelStatus(metricsmodelapp, MODEL_STATUS_VALID);
             } else {

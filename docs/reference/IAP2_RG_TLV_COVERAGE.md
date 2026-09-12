@@ -151,6 +151,13 @@ MANEUVER_CACHE_SIZE=32 maneuvers; BAP/HUD renders only the current one (pos 0) b
 
 ## Angle sentinels — three of them, and they are not interchangeable
 
+**2026-09-11 correction:** see [verification against iOS 23B85/24A5418b](IOS_MANEUVER_ANGLE_SENTINELS.md).
+The hook synthesizes **+1000**, not both signs. `-1000` remains a defensive mapper
+case. iOS 27's serializer omits a missing value and otherwise preserves signed16;
+`-1` can also be a real wire angle. Keep the legacy unset-slot safeguard, but do
+not infer absence from the protocol number alone. Current icon choices supersede
+the historical table above: [54-type selection](CARPLAY_HUD_ICON_SELECTION.md).
+
 Fixed 2026-08-30 (ported from `Patches/mib2q-carplay-rgi-old`, which had it and this tree did not).
 
 An angle reaching `ManeuverMapper` can be absent for three different reasons, each with its own
@@ -159,10 +166,10 @@ value, and code that only knows some of them misrenders:
 | value | origin | meaning |
 |---|---|---|
 | `0` | wire | iOS sent an angle of zero, i.e. straight |
-| `±1000` | our C hook | iAP2 omitted the angle field; hook's "no angle" convention (`rgd_hook.c`) |
+| `+1000` / defensive `-1000` | receiver pipeline | `rgd_tlv.c` supplies +1000 for an omitted field; mapper also guards -1000 |
 | `-1` | Java | the `RouteGuidance.State` slot was never filled |
 
-The `-1` case is easy to miss because it is not a wire value at all. `RouteGuidance.State` resets
+The `-1` case is easy to miss because it also represents a Java slot default. `RouteGuidance.State` resets
 `mTurnAngle[i] = -1` (`RouteGuidance.java:224`) and parses `turn_angle` with `-1` as the
 missing-field default (`:998`); note `mExitAngle[i]` resets to `1000` instead, so the two fields do
 **not** share a default.

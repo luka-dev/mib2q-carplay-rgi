@@ -1,0 +1,10 @@
+{
+  "source_sha256": "0146bfb0ac3584f3f6fe19f2d38a97c65f3bbd4bbed63d2d43c51db24bf4dc63",
+  "code_file_offset": "0xe2000",
+  "code_size": "0x17ce4",
+  "code_link_address": "0x10000",
+  "data_file_offset": "0xf9ce4",
+  "data_link_address": "0x28000",
+  "synthetic_bss_size": "0xff4c",
+  "note": "Research ELF wrapper, original bytes; code/data addresses from program header at .text+0x64. BSS allowance is analysis-only, not verified size."
+}

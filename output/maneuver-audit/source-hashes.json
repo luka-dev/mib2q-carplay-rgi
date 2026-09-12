@@ -1,0 +1,17 @@
+{
+  "java_patch/com/luka/carplay/rgd/ManeuverMapper.java": "a88cdf0623118f66e04519ede03b9f3399ed82d685c7dae8e96637a4d52d2b80",
+  "java_patch/com/luka/carplay/rgd/RendererMapper.java": "6c06774d44be0625ee5afb6f7151ec40357c3173e1afab7500c41e918b656734",
+  "java_patch/com/luka/carplay/rgd/SideStreets.java": "e2ad32983ac0c3274c8e5b4857769d78ba0d0c8579233debb17d60a45b5fcd80",
+  "java_patch/com/luka/carplay/rgd/BAPBridge.java": "87c010a2e721e324af8d72d4eb346b475210a2c215e174ba912e7f9831c83f18",
+  "java_patch/com/luka/carplay/rgd/RendererServer.java": "9d913506ec8851465304763683839522179ce95f240841ac1774b85fdf4745e6",
+  "java_patch/com/luka/carplay/rgd/RouteGuidance.java": "d0f8edde037cc059a6328e7f62be8b508a52eb2be7607476474a46c59e415809",
+  "hook/routeguidance/rgd_tlv.c": "ea7d0d2924ba9fa74967bcdbe6764c19b311d5764ba4986d2d425f4659e6e560",
+  "hook/routeguidance/rgd_hook.c": "2aa7f4f3d469b84f78bc4e0f12a92a3dd8a8545e718ad45416bb6329a2e7b731",
+  "maneuver_render/maneuver.c": "6dc6d3b88e4786a52d149368cef1f2bed12810f837ebfa63c713edd6cfcc435e",
+  "maneuver_render/main.c": "bd4b34976a94cf811dcf03aa4fed0430f4752488bb47de66e2442e6e455cb443",
+  "maneuver_render/protocol.h": "408ec1bce94d9503c04dd154dc4599928f8ff5d26286c7363093e1c58629fe40",
+  "maneuver_render/maneuver.h": "590fca0f6ec990a434ce4f5637a267bd3da4341666d6326f18fe3418a12d807a",
+  "maneuver_render/render.c": "28954131c0b60b01ff917a366f09a243b0be3c280d3805ec1f9890910577042a",
+  "maneuver_render/route_path.c": "ece568ca25925c37f06b0b6f8f784c67d7884c3651405036feffe282920955ec",
+  "maneuver_render/platform_macos.c": "6577340dc774dc44b541078da992a81848431ccdeebd78fefe39e1de94f68ec5"
+}

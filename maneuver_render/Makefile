@@ -37,10 +37,10 @@ endif
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
-$(TARGET): $(RENDERER_SRC) | $(BUILD_DIR)
+$(TARGET): $(RENDERER_SRC) $(wildcard *.h) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(INCLUDES) $(RENDERER_SRC) -o $@ $(LDFLAGS)
 
-$(HARNESS): $(HARNESS_SRC) | $(BUILD_DIR)
+$(HARNESS): $(HARNESS_SRC) $(wildcard *.h) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(INCLUDES) $(HARNESS_SRC) -o $@ $(HARNESS_LDFLAGS)
 
 clean:

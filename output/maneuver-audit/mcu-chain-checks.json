@@ -1,0 +1,21 @@
+{
+  "cases_per_firmware": 829,
+  "firmware_results_identical": true,
+  "coverage": {
+    "java_mapping.csv": {
+      "rows": 7890,
+      "unique_descriptors": 169
+    },
+    "ramp_mapping.csv": {
+      "rows": 216,
+      "unique_descriptors": 12
+    }
+  },
+  "scope": "Original V850 importer, converter, model transfer and field packer; forced active 3D mode 3; BAP cache accessor is the sole substituted function; slots 2/3 empty; no hardware/CAN capture.",
+  "regressions_checked": 12,
+  "sha256": {
+    "mcu-chain-input.csv": "9da892ddb717233c6ab1024653f33fd26970b551fa672859c2a518815a5b10c7",
+    "mcu-chain-output.csv": "90eb2b52b69c5e360e040face0db3c46a24326f6b7808a5b280ef059f03c420d",
+    "mcu-chain-M-output.csv": "90eb2b52b69c5e360e040face0db3c46a24326f6b7808a5b280ef059f03c420d"
+  }
+}

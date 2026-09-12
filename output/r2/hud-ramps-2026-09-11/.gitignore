@@ -1,0 +1,12 @@
+# Local research wrappers/databases, not firmware deliverables.
+*.elf
+*.id0
+*.id1
+*.id2
+*.nam
+*.til
+*.i64
+*.idb
+# Exploratory cache predates the corrected GP; use mcu-verified evidence.
+/mcu-linked/
+/mcu-jarl-candidates.json

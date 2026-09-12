@@ -146,6 +146,8 @@ public class RouteGuidance implements CarplayBus.Listener {
         /* Maneuvers */
         public int[] mType = new int[MAX_MANEUVERS];
         public int[] mTurnAngle = new int[MAX_MANEUVERS];
+        /* Distinguish a received -1 degree value from the legacy empty-slot -1. */
+        public boolean[] mTurnAnglePresent = new boolean[MAX_MANEUVERS];
         /* Z-LevelGuidance: 0=none, 1=up, 2=down, -1=unknown */
         public int[] mZLevel = new int[MAX_MANEUVERS];
         public int[] mJunctionType = new int[MAX_MANEUVERS];
@@ -224,6 +226,7 @@ public class RouteGuidance implements CarplayBus.Listener {
             for (int i = 0; i < MAX_MANEUVERS; i++) {
                 mType[i] = -1;
                 mTurnAngle[i] = -1;
+                mTurnAnglePresent[i] = false;
                 mZLevel[i] = -1;
                 mJunctionType[i] = -1;
                 mDrivingSide[i] = -1;
@@ -998,9 +1001,11 @@ public class RouteGuidance implements CarplayBus.Listener {
                 }
             }
             if (d.has(p + "turn_angle")) {
-                int v = d.num(p + "turn_angle", -1);
-                if (v != state.mTurnAngle[i]) {
+                int v = d.num(p + "turn_angle", 1000);
+                if (v != state.mTurnAngle[i] || v != state.mExitAngle[i]
+                        || !state.mTurnAnglePresent[i]) {
                     state.mTurnAngle[i] = v;
+                    state.mTurnAnglePresent[i] = true;
                     /*
                      * Our C hook currently publishes the iAP2 "exit angle" field under the
                      * legacy key name "turn_angle". Keep an explicit copy so side-streets
@@ -1080,8 +1085,11 @@ public class RouteGuidance implements CarplayBus.Listener {
             }
             if (d.has(p + "exit_angle")) {
                 int v = d.num(p + "exit_angle", 1000);
-                if (v != state.mExitAngle[i]) {
+                if (v != state.mExitAngle[i] || v != state.mTurnAngle[i]
+                        || !state.mTurnAnglePresent[i]) {
                     state.mExitAngle[i] = v;
+                    state.mTurnAngle[i] = v;
+                    state.mTurnAnglePresent[i] = true;
                     state.markManeuverDirty(i, State.MAN_DIR_ICON);
                 }
             }

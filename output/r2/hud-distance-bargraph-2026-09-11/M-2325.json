@@ -1,0 +1,1032 @@
+{
+  "firmware": "8W6919617M_2325",
+  "sha256": {
+    "FD_61FLASHDATA.bin": "8a71ffd31fdfc17131507e0d259bd216751ec2c7918468b8e18ba58787198fc1",
+    "FD_62FLASHDATA.bin": "81a31aa257ef322d3333f2e10770d3edb32179abff75e0bd904689503007449b"
+  },
+  "cases_passed": 108,
+  "original_firmware_modified": false,
+  "scope": "original ARM scene walker; surface submissions captured; BAP packet producer not executed",
+  "examples": [
+    {
+      "group": 9,
+      "distance": "150",
+      "packet_hex": "ff ff ff ff ff ff ff ff 03 04 02 00 00 00 ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff f1 0f 15 ff 08 ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff",
+      "glyph_rects": [
+        [
+          80,
+          79,
+          15,
+          23
+        ],
+        [
+          95,
+          79,
+          15,
+          23
+        ],
+        [
+          110,
+          79,
+          15,
+          23
+        ]
+      ],
+      "unit_rects": [
+        [
+          127,
+          89,
+          17,
+          12
+        ]
+      ],
+      "bar_rects": [
+        [
+          159,
+          121,
+          11,
+          4
+        ],
+        [
+          159,
+          55,
+          11,
+          4
+        ],
+        [
+          159,
+          103,
+          11,
+          4
+        ],
+        [
+          159,
+          36,
+          11,
+          5
+        ],
+        [
+          159,
+          79,
+          11,
+          4
+        ],
+        [
+          159,
+          127,
+          11,
+          4
+        ],
+        [
+          159,
+          61,
+          11,
+          4
+        ],
+        [
+          159,
+          109,
+          11,
+          4
+        ],
+        [
+          159,
+          43,
+          11,
+          4
+        ],
+        [
+          159,
+          85,
+          11,
+          4
+        ],
+        [
+          159,
+          91,
+          11,
+          4
+        ],
+        [
+          159,
+          67,
+          11,
+          4
+        ],
+        [
+          159,
+          115,
+          11,
+          4
+        ],
+        [
+          159,
+          49,
+          11,
+          4
+        ],
+        [
+          159,
+          97,
+          11,
+          4
+        ],
+        [
+          159,
+          73,
+          11,
+          4
+        ]
+      ]
+    },
+    {
+      "group": 14,
+      "distance": "150",
+      "packet_hex": "ff ff ff ff ff ff ff ff 03 04 40 00 00 00 ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff f1 0f 15 ff 08 ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff",
+      "glyph_rects": [
+        [
+          80,
+          79,
+          15,
+          23
+        ],
+        [
+          95,
+          79,
+          15,
+          23
+        ],
+        [
+          110,
+          79,
+          15,
+          23
+        ]
+      ],
+      "unit_rects": [
+        [
+          127,
+          89,
+          17,
+          12
+        ]
+      ],
+      "bar_rects": [
+        [
+          159,
+          121,
+          11,
+          4
+        ],
+        [
+          159,
+          55,
+          11,
+          4
+        ],
+        [
+          159,
+          103,
+          11,
+          4
+        ],
+        [
+          159,
+          36,
+          11,
+          5
+        ],
+        [
+          159,
+          79,
+          11,
+          4
+        ],
+        [
+          159,
+          127,
+          11,
+          4
+        ],
+        [
+          159,
+          61,
+          11,
+          4
+        ],
+        [
+          159,
+          109,
+          11,
+          4
+        ],
+        [
+          159,
+          43,
+          11,
+          4
+        ],
+        [
+          159,
+          85,
+          11,
+          4
+        ],
+        [
+          159,
+          91,
+          11,
+          4
+        ],
+        [
+          159,
+          67,
+          11,
+          4
+        ],
+        [
+          159,
+          115,
+          11,
+          4
+        ],
+        [
+          159,
+          49,
+          11,
+          4
+        ],
+        [
+          159,
+          97,
+          11,
+          4
+        ],
+        [
+          159,
+          73,
+          11,
+          4
+        ]
+      ]
+    }
+  ],
+  "results": [
+    {
+      "numeric_group": 9,
+      "presentation": "valid",
+      "bar_state": 0,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "valid",
+      "bar_state": 1,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "valid",
+      "bar_state": 2,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "valid",
+      "bar_state": 3,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "valid",
+      "bar_state": 4,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "valid",
+      "bar_state": 5,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "valid",
+      "bar_state": 6,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "valid",
+      "bar_state": 7,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "valid",
+      "bar_state": 8,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "valid",
+      "bar_state": 9,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "valid",
+      "bar_state": 10,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "valid",
+      "bar_state": 11,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "valid",
+      "bar_state": 12,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "valid",
+      "bar_state": 13,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "valid",
+      "bar_state": 14,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "valid",
+      "bar_state": 15,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "valid",
+      "bar_state": 16,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "valid",
+      "bar_state": 17,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 0
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "blank_digits",
+      "bar_state": 0,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "blank_digits",
+      "bar_state": 1,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "blank_digits",
+      "bar_state": 2,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "blank_digits",
+      "bar_state": 3,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "blank_digits",
+      "bar_state": 4,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "blank_digits",
+      "bar_state": 5,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "blank_digits",
+      "bar_state": 6,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "blank_digits",
+      "bar_state": 7,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "blank_digits",
+      "bar_state": 8,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "blank_digits",
+      "bar_state": 9,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "blank_digits",
+      "bar_state": 10,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "blank_digits",
+      "bar_state": 11,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "blank_digits",
+      "bar_state": 12,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "blank_digits",
+      "bar_state": 13,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "blank_digits",
+      "bar_state": 14,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "blank_digits",
+      "bar_state": 15,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "blank_digits",
+      "bar_state": 16,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "blank_digits",
+      "bar_state": 17,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 0
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "group_off",
+      "bar_state": 0,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "group_off",
+      "bar_state": 1,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "group_off",
+      "bar_state": 2,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "group_off",
+      "bar_state": 3,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "group_off",
+      "bar_state": 4,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "group_off",
+      "bar_state": 5,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "group_off",
+      "bar_state": 6,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "group_off",
+      "bar_state": 7,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "group_off",
+      "bar_state": 8,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "group_off",
+      "bar_state": 9,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "group_off",
+      "bar_state": 10,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "group_off",
+      "bar_state": 11,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "group_off",
+      "bar_state": 12,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "group_off",
+      "bar_state": 13,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "group_off",
+      "bar_state": 14,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "group_off",
+      "bar_state": 15,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "group_off",
+      "bar_state": 16,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 9,
+      "presentation": "group_off",
+      "bar_state": 17,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 0
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "valid",
+      "bar_state": 0,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "valid",
+      "bar_state": 1,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "valid",
+      "bar_state": 2,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "valid",
+      "bar_state": 3,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "valid",
+      "bar_state": 4,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "valid",
+      "bar_state": 5,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "valid",
+      "bar_state": 6,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "valid",
+      "bar_state": 7,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "valid",
+      "bar_state": 8,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "valid",
+      "bar_state": 9,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "valid",
+      "bar_state": 10,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "valid",
+      "bar_state": 11,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "valid",
+      "bar_state": 12,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "valid",
+      "bar_state": 13,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "valid",
+      "bar_state": 14,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "valid",
+      "bar_state": 15,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "valid",
+      "bar_state": 16,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "valid",
+      "bar_state": 17,
+      "numeric_glyphs": 3,
+      "bar_surfaces": 0
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "blank_digits",
+      "bar_state": 0,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "blank_digits",
+      "bar_state": 1,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "blank_digits",
+      "bar_state": 2,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "blank_digits",
+      "bar_state": 3,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "blank_digits",
+      "bar_state": 4,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "blank_digits",
+      "bar_state": 5,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "blank_digits",
+      "bar_state": 6,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "blank_digits",
+      "bar_state": 7,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "blank_digits",
+      "bar_state": 8,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "blank_digits",
+      "bar_state": 9,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "blank_digits",
+      "bar_state": 10,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "blank_digits",
+      "bar_state": 11,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "blank_digits",
+      "bar_state": 12,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "blank_digits",
+      "bar_state": 13,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "blank_digits",
+      "bar_state": 14,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "blank_digits",
+      "bar_state": 15,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "blank_digits",
+      "bar_state": 16,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "blank_digits",
+      "bar_state": 17,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 0
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "group_off",
+      "bar_state": 0,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "group_off",
+      "bar_state": 1,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "group_off",
+      "bar_state": 2,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "group_off",
+      "bar_state": 3,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "group_off",
+      "bar_state": 4,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "group_off",
+      "bar_state": 5,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "group_off",
+      "bar_state": 6,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "group_off",
+      "bar_state": 7,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "group_off",
+      "bar_state": 8,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "group_off",
+      "bar_state": 9,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "group_off",
+      "bar_state": 10,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "group_off",
+      "bar_state": 11,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "group_off",
+      "bar_state": 12,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "group_off",
+      "bar_state": 13,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "group_off",
+      "bar_state": 14,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "group_off",
+      "bar_state": 15,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "group_off",
+      "bar_state": 16,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 16
+    },
+    {
+      "numeric_group": 14,
+      "presentation": "group_off",
+      "bar_state": 17,
+      "numeric_glyphs": 0,
+      "bar_surfaces": 0
+    }
+  ]
+}

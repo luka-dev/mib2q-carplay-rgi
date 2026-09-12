@@ -759,13 +759,13 @@ static float maneuver_elevation(const maneuver_state_t *s) {
     if (!s) return 0.0f;
     switch (s->icon) {
     case ICON_ROUNDABOUT: {
-        int a = s->exit_angle;
+        float a = s->exit_angle;
         if (a < 0) a = -a;
         if (a > 150) return ELEV_LIFT;
         return 0.0f;
     }
     case ICON_TURN: {
-        int a = s->exit_angle;
+        float a = s->exit_angle;
         if (a < 0) a = -a;
         if (a > 150) return ELEV_LIFT;
         return 0.0f;
@@ -1066,12 +1066,12 @@ typedef struct {
 } rab_snap_t;
 
 static rab_snap_t snap_roundabout_exit(float exit_angle_deg,
-                                       const int *junction_angles,
-                                       int junction_angle_count) {
+                                       const float *junction_angles,
+                                       int junction_angle_count, int bap_geometry) {
     rab_snap_t r;
     r.snapped_deg = exit_angle_deg;
     r.snapped_idx = -1;
-    if (junction_angle_count > 0) {
+    if (!bap_geometry && junction_angle_count > 0) {
         int best = 0;
         float best_diff = SNAP_SENTINEL;
         int i;
@@ -1108,11 +1108,47 @@ static void roundabout_arc_range(float entry_rad, float exit_rad, int driving_si
  * Route path building (standalone, no mask rendering)
  * ================================================================ */
 
+typedef struct {
+    float cx, cy, r, start, end, heading, x0, y0, tip_x, tip_y;
+} roundabout_departure_t;
+
+static roundabout_departure_t roundabout_departure(int driving_side) {
+    roundabout_departure_t d;
+    float sign = driving_side == 1 ? -1.0f : 1.0f;
+    d.r = RAB_RING_R;
+    d.cx = -sign * d.r;
+    d.cy = -0.12f;
+    d.start = driving_side == 1 ? (float)M_PI : 0.0f;
+    d.end = driving_side == 1 ? (float)M_PI * 0.75f : (float)M_PI * 0.25f;
+    d.heading = d.end;
+    d.x0 = d.cx + d.r * cosf(d.end);
+    d.y0 = d.cy + d.r * sinf(d.end);
+    d.tip_x = d.x0 + 0.38f * cosf(d.heading);
+    d.tip_y = d.y0 + 0.38f * sinf(d.heading);
+    return d;
+}
+
+static void build_roundabout_departure(int side, route_path_t *path) {
+    roundabout_departure_t d = roundabout_departure(side);
+    rpath_clear(path);
+    rpath_add_line(path, 0, SHAFT_BOT, 0, d.cy);
+    rpath_add_arc(path, d.cx, d.cy, d.r, d.start, d.end);
+    rpath_add_line(path, d.x0, d.y0, d.tip_x, d.tip_y);
+    rpath_fillet_junctions(path, JOINT_R);
+    rpath_set_arrow(path, d.tip_x, d.tip_y, d.heading);
+}
+
 /* Build route path for a single maneuver -- raw segments only.
  * No rpath_extend, no rpath_densify, no rpath_extrude.
  * Sets arrow position. Used by draw_* functions and for path chaining. */
 void maneuver_build_route(const maneuver_state_t *state, route_path_t *path) {
     switch (state->icon) {
+    case ICON_NONE:
+        rpath_clear(path);
+        break;
+    case ICON_ROUNDABOUT_EXIT:
+        build_roundabout_departure(state->driving_side, path);
+        break;
     case ICON_APPROACH: {
         float straight_end = ARRIVE_ROAD_TOP - HEAD_SZ;
         rpath_clear(path);
@@ -1153,7 +1189,7 @@ void maneuver_build_route(const maneuver_state_t *state, route_path_t *path) {
         float ring_r = RAB_RING_R;
         float entry_rad = (float)(-M_PI * 0.5);
         rab_snap_t snap = snap_roundabout_exit((float)state->exit_angle,
-            state->junction_angles, state->junction_angle_count);
+            state->junction_angles, state->junction_angle_count, state->bap_geometry);
         float ext = BLUE_LEN - ring_r;
         float entry_pt_x = ring_r * cosf(entry_rad);
         float entry_pt_y = ring_r * sinf(entry_rad);
@@ -1181,6 +1217,7 @@ void maneuver_build_route(const maneuver_state_t *state, route_path_t *path) {
         rpath_set_arrow(path, 0, BLUE_LEN, (float)(M_PI * 0.5));
         break;
     }
+    case ICON_LANE_CHANGE:
     case ICON_EXIT: {
         float sign = (state->direction < 0) ? -1.0f : 1.0f;
         float shift = sign * LANE_SHIFT;
@@ -1204,6 +1241,11 @@ void maneuver_build_route(const maneuver_state_t *state, route_path_t *path) {
 maneuver_exit_t maneuver_get_exit(const maneuver_state_t *state) {
     maneuver_exit_t ex = {0, 0, (float)(M_PI * 0.5)};
     switch (state->icon) {
+    case ICON_ROUNDABOUT_EXIT: {
+        roundabout_departure_t d = roundabout_departure(state->driving_side);
+        ex.x = d.tip_x; ex.y = d.tip_y; ex.heading = d.heading;
+        break;
+    }
     case ICON_APPROACH: {
         ex.x = 0; ex.y = ARRIVE_ROAD_TOP - HEAD_SZ;
         ex.heading = (float)(M_PI * 0.5);
@@ -1227,7 +1269,7 @@ maneuver_exit_t maneuver_get_exit(const maneuver_state_t *state) {
     case ICON_ROUNDABOUT: {
         float ring_r = RAB_RING_R;
         rab_snap_t snap = snap_roundabout_exit((float)state->exit_angle,
-            state->junction_angles, state->junction_angle_count);
+            state->junction_angles, state->junction_angle_count, state->bap_geometry);
         float ext = BLUE_LEN - ring_r;
         ex.x = (ring_r + ext) * cosf(snap.exit_rad);
         ex.y = (ring_r + ext) * sinf(snap.exit_rad);
@@ -1238,6 +1280,7 @@ maneuver_exit_t maneuver_get_exit(const maneuver_state_t *state) {
         ex.x = 0; ex.y = BLUE_LEN;
         ex.heading = (float)(M_PI * 0.5);
         break;
+    case ICON_LANE_CHANGE:
     case ICON_EXIT: {
         float sign = (state->direction < 0) ? -1.0f : 1.0f;
         ex.x = sign * LANE_SHIFT;
@@ -1334,6 +1377,10 @@ void maneuver_get_transition_mask_bounds(float *out_abs_x, float *out_abs_y) {
         { .icon = ICON_ROUNDABOUT, .exit_angle = 0, .driving_side = 1 },
         { .icon = ICON_ROUNDABOUT, .exit_angle = -90, .driving_side = 1 },
         { .icon = ICON_ROUNDABOUT, .exit_angle = 180, .driving_side = 1 },
+        { .icon = ICON_LANE_CHANGE, .direction = -1 },
+        { .icon = ICON_LANE_CHANGE, .direction = 1 },
+        { .icon = ICON_ROUNDABOUT_EXIT, .driving_side = 0 },
+        { .icon = ICON_ROUNDABOUT_EXIT, .driving_side = 1 },
         { .icon = ICON_ARRIVED },
     };
     float max_abs_x = local_half_w;
@@ -1441,7 +1488,7 @@ static int angle_near_fixed(float deg, float eps) {
 }
 
 /* Helper: check if angle overlaps forward, entry, or any angle in a list. */
-static int angle_near_any(float deg, const int *angles, int count, float eps) {
+static int angle_near_any(float deg, const float *angles, int count, float eps) {
     if (angle_near_fixed(deg, eps)) return 1;
     int i;
     for (i = 0; i < count; i++) {
@@ -1454,7 +1501,7 @@ static int angle_near_any(float deg, const int *angles, int count, float eps) {
  * draw_approach -- approach junction (arrow stops at center)
  * ---------------------------------------------------------------- */
 
-static void draw_approach_outline(const int *side_angles, int side_count) {
+static void draw_approach_outline(const float *side_angles, int side_count) {
     int i;
     draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - FADE_LEN, 1.0f, FADE_OUTLINE);
     draw_fading_road(0, SIDE_TOP, 0, SIDE_TOP + FADE_LEN, 1.0f, FADE_OUTLINE);
@@ -1477,7 +1524,7 @@ static void draw_approach_outline(const int *side_angles, int side_count) {
         render_disc(0, 0, OL_T * 0.5f, JOINT_SEG, WHITE);
 }
 
-static void draw_approach_fill(const int *side_angles, int side_count) {
+static void draw_approach_fill(const float *side_angles, int side_count) {
     int i;
     draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - FADE_LEN, 1.0f, FADE_GREY);
     draw_fading_road(0, SIDE_TOP, 0, SIDE_TOP + FADE_LEN, 1.0f, FADE_GREY);
@@ -1500,7 +1547,7 @@ static void draw_approach_fill(const int *side_angles, int side_count) {
         render_disc(0, 0, SIDE_T * 0.5f, JOINT_SEG, SIDE);
 }
 
-static void draw_approach(const int *side_angles, int side_count) {
+static void draw_approach(const float *side_angles, int side_count) {
     render_set_raised(0);
 
     render_begin_outline_mask();
@@ -1525,7 +1572,7 @@ static void draw_approach(const int *side_angles, int side_count) {
 }
 
 /* Check if junction angles include a forward road (~0° ± 30°) */
-static int has_forward_road(const int *side_angles, int side_count) {
+static int has_forward_road(const float *side_angles, int side_count) {
     int i;
     if (side_count == 0) return 0;  /* no junction data = T-junction */
     for (i = 0; i < side_count; i++) {
@@ -1539,7 +1586,7 @@ static int has_forward_road(const int *side_angles, int side_count) {
  * ---------------------------------------------------------------- */
 
 static void draw_turn_outline(float angle_deg, float angle_rad,
-                               const int *side_angles, int side_count,
+                               const float *side_angles, int side_count,
                                int active_has_own_stub,
                                float stub_x, float stub_y,
                                float fade_x, float fade_y) {
@@ -1574,7 +1621,7 @@ static void draw_turn_outline(float angle_deg, float angle_rad,
 }
 
 static void draw_turn_fill(float angle_deg, float angle_rad,
-                             const int *side_angles, int side_count,
+                             const float *side_angles, int side_count,
                              int active_has_own_stub,
                              float stub_x, float stub_y,
                              float fade_x, float fade_y) {
@@ -1608,7 +1655,7 @@ static void draw_turn_fill(float angle_deg, float angle_rad,
     (void)angle_deg; (void)angle_rad;
 }
 
-static void draw_turn(float angle_deg, const int *side_angles, int side_count) {
+static void draw_turn(float angle_deg, const float *side_angles, int side_count) {
     float angle_rad = angle_deg * (float)M_PI / 180.0f;
     float end_x = BLUE_LEN * sinf(angle_rad);
     float end_y = BLUE_LEN * cosf(angle_rad);
@@ -1712,14 +1759,14 @@ static void draw_uturn(int go_left) {
  * ---------------------------------------------------------------- */
 
 static void draw_roundabout(float exit_angle_deg, int driving_side,
-                            const int *junction_angles, int junction_angle_count) {
+                            const float *junction_angles, int junction_angle_count, int bap_geometry) {
     float cx = 0.0f, cy = 0.0f;
     float ring_r = RAB_RING_R;
     float ring_ol = OL_T;
 
     float entry_rad = (float)(-M_PI * 0.5);
 
-    rab_snap_t snap = snap_roundabout_exit(exit_angle_deg, junction_angles, junction_angle_count);
+    rab_snap_t snap = snap_roundabout_exit(exit_angle_deg, junction_angles, junction_angle_count, bap_geometry);
     float exit_rad = snap.exit_rad;
     int snapped_idx = snap.snapped_idx;
 
@@ -1941,7 +1988,7 @@ static void draw_arrived(int dir) {
  * draw_exit -- outline/fill/route passes
  * ---------------------------------------------------------------- */
 
-static void draw_exit(int go_left) {
+static void draw_exit(int go_left, int through_road) {
     float sign = go_left ? -1.0f : 1.0f;
     float shift = sign * LANE_SHIFT;
     float bend_lo = BEND_LO;
@@ -1952,9 +1999,9 @@ static void draw_exit(int go_left) {
     render_begin_outline_mask();
     /* Outline -- white, OL_T */
     draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - FADE_LEN, 1.0f, FADE_OUTLINE);
-    draw_fading_road(0, SIDE_TOP, 0, SIDE_TOP + FADE_LEN, 1.0f, FADE_OUTLINE);
+    if (through_road) draw_fading_road(0, SIDE_TOP, 0, SIDE_TOP + FADE_LEN, 1.0f, FADE_OUTLINE);
     draw_fading_road(shift, SIDE_TOP, shift, SIDE_TOP + FADE_LEN, 1.0f, FADE_OUTLINE);
-    render_thick_line(0, SHAFT_BOT, 0, SIDE_TOP, OL_T, WHITE);
+    if (through_road) render_thick_line(0, SHAFT_BOT, 0, SIDE_TOP, OL_T, WHITE);
     render_thick_line(0, SHAFT_BOT, 0, bend_lo, OL_T, WHITE);
     render_thick_line(0, bend_lo, shift, bend_hi, OL_T, WHITE);
     render_disc(0, bend_lo, OL_T * 0.5f, JOINT_SEG, WHITE);
@@ -1962,9 +2009,9 @@ static void draw_exit(int go_left) {
     render_thick_line(shift, bend_hi, shift, SIDE_TOP, OL_T, WHITE);
     /* Fill -- grey, SIDE_T (overwrites interior) */
     draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - FADE_LEN, 1.0f, FADE_GREY);
-    draw_fading_road(0, SIDE_TOP, 0, SIDE_TOP + FADE_LEN, 1.0f, FADE_GREY);
+    if (through_road) draw_fading_road(0, SIDE_TOP, 0, SIDE_TOP + FADE_LEN, 1.0f, FADE_GREY);
     draw_fading_road(shift, SIDE_TOP, shift, SIDE_TOP + FADE_LEN, 1.0f, FADE_GREY);
-    render_thick_line(0, SHAFT_BOT, 0, SIDE_TOP, SIDE_T, SIDE);
+    if (through_road) render_thick_line(0, SHAFT_BOT, 0, SIDE_TOP, SIDE_T, SIDE);
     render_thick_line(0, SHAFT_BOT, 0, bend_lo, SIDE_T, SIDE);
     render_thick_line(0, bend_lo, shift, bend_hi, SIDE_T, SIDE);
     render_disc(0, bend_lo, SIDE_T * 0.5f, JOINT_SEG, SIDE);
@@ -2043,11 +2090,45 @@ static void draw_merge(int go_right) {
     }
 }
 
+/* Separate exit-from-roundabout stage: only the local departure arc is shown. */
+static void draw_roundabout_departure(int side) {
+    roundabout_departure_t d = roundabout_departure(side);
+    int pass;
+    render_set_raised(0);
+    render_begin_outline_mask();
+    for (pass = 0; pass < 2; pass++) {
+        float width = pass ? SIDE_T : OL_T;
+        float color[] = { WHITE };
+        if (pass) { float side[] = { SIDE }; memcpy(color, side, sizeof(color)); }
+        render_thick_line(0, SHAFT_BOT, 0, d.cy, width, color[0], color[1], color[2], color[3]);
+        render_arc(d.cx, d.cy, d.r, width, 0, (float)M_PI, RAB_RING_SEG, color[0], color[1], color[2], color[3]);
+        render_thick_line(d.x0, d.y0,
+            d.tip_x + 0.05f * cosf(d.heading), d.tip_y + 0.05f * sinf(d.heading), width, color[0], color[1], color[2], color[3]);
+    }
+    render_end_outline_mask();
+    build_roundabout_departure(side, &g_route_path);
+    rpath_extend(&g_route_path);
+    rpath_densify(&g_route_path);
+    compute_slide_params();
+    route_extrude_body();
+    if (!g_masks_only_mode) {
+        render_composite();
+        route_draw_with_fade();
+    }
+}
+
 /* ================================================================
  * Main dispatch
  * ================================================================ */
 
 void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state) {
+    if (s->icon == ICON_NONE && next_state == NULL) {
+        g_flag_active = 0;
+        render_begin_outline_mask();
+        render_end_outline_mask();
+        render_composite();
+        return;
+    }
     /* Track whether flag animation is active — also during push TO arrived */
     g_flag_active = (s->icon == ICON_ARRIVED)
                  || (next_state != NULL && next_state->icon == ICON_ARRIVED);
@@ -2187,8 +2268,10 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
                 draw_uturn(_go); \
             } break; \
             case ICON_MERGE: draw_merge((st)->direction > 0); break; \
-            case ICON_EXIT: draw_exit((st)->direction < 0); break; \
-            case ICON_ROUNDABOUT: draw_roundabout((float)(st)->exit_angle, (st)->driving_side, (st)->junction_angles, (st)->junction_angle_count); break; \
+            case ICON_EXIT: draw_exit((st)->direction < 0, 1); break; \
+            case ICON_LANE_CHANGE: draw_exit((st)->direction < 0, 0); break; \
+            case ICON_ROUNDABOUT_EXIT: draw_roundabout_departure((st)->driving_side); break; \
+            case ICON_ROUNDABOUT: draw_roundabout((float)(st)->exit_angle, (st)->driving_side, (st)->junction_angles, (st)->junction_angle_count, (st)->bap_geometry); break; \
             case ICON_ARRIVED: draw_arrived((st)->direction); break; \
             default: break; \
         } \
@@ -2436,6 +2519,8 @@ const char *maneuver_icon_name(int icon) {
         case ICON_UTURN:       return "UTURN";
         case ICON_MERGE:       return "MERGE";
         case ICON_EXIT: return "EXIT";
+        case ICON_LANE_CHANGE: return "LANE_CHANGE";
+        case ICON_ROUNDABOUT_EXIT: return "ROUNDABOUT_EXIT";
         case ICON_ROUNDABOUT:  return "ROUNDABOUT";
         case ICON_ARRIVED:     return "ARRIVED";
         default:               return "UNKNOWN";

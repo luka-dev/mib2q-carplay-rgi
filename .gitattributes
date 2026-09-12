@@ -1,0 +1,9 @@
+# Keep captured audit evidence byte-for-byte, including CSV line endings.
+/output/maneuver-audit/*.csv -text whitespace=cr-at-eol
+/output/maneuver-parity/*.csv -text whitespace=cr-at-eol
+/output/maneuver-selection/*.csv -text whitespace=cr-at-eol
+
+# Decompiler/disassembler exports preserve the tools' original formatting.
+/output/ios-sentinel/*.asm -text -whitespace
+/output/r2/hud-ramps-2026-09-11/*.c -text -whitespace
+/output/r2/hud-ramps-2026-09-11/mcu-verified/*.c -text -whitespace

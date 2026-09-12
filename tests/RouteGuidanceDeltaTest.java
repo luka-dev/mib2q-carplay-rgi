@@ -33,6 +33,18 @@ public final class RouteGuidanceDeltaTest {
         check(state.mType[0] == -1, "source resume resurrected old icon");
         feed(parse, rg, "maneuver_list:s:bad,2,,2147483648\n");
         check(state.maneuverOrder.length == 4 && state.maneuverOrder[1] == 2, "malformed numeric list aborted delta");
+        check(!state.mTurnAnglePresent[0], "clear must reset angle presence");
+        feed(parse, rg, "m0_turn_angle:n:-1\n");
+        check(state.mTurnAnglePresent[0] && state.mTurnAngle[0] == -1 && state.mExitAngle[0] == -1,
+            "real -1 degree angle lost against the empty-slot default");
+        feed(parse, rg, "m0_exit_angle:n:67\n");
+        check(state.mTurnAngle[0] == 67 && state.mExitAngle[0] == 67, "exit-only delta not shared");
+        feed(parse, rg, "m0_turn_angle:n:-45\nm0_exit_angle:n:90\n");
+        check(state.mTurnAngle[0] == 90 && state.mExitAngle[0] == 90, "explicit exit alias must win");
+        feed(parse, rg, "m0_turn_angle:n:bad\n");
+        check(state.mTurnAngle[0] == 1000 && state.mExitAngle[0] == 1000, "invalid angle must be safe");
+        feed(parse, rg, "source_supports_rg:n:0\n");
+        check(!state.mTurnAnglePresent[0] && state.mExitAngle[0] == 1000, "angle survives source reset");
         System.out.println("RouteGuidanceDeltaTest: metadata, transient zero, reroute, empty list, source clear/resume and malformed list PASS");
     }
 }

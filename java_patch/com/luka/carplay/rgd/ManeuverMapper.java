@@ -145,13 +145,22 @@ public class ManeuverMapper {
      * Maps iAP2 ManeuverType to BAP mainElement and direction.
      *
      * @param maneuverType iOS accNav ManeuverType (0-53)
-     * @param turnAngle    JunctionElementExitAngle (signed). In MHI3 this is used for end-of-road / ramps.
+     * @param turnAngle    JunctionElementExitAngle (signed). Used for simple turn geometry;
+     *                    for ramps only the sign chooses a side when the type has no side.
      *                    For roundabout exits 1..19 it is quantized to nearest 22.5deg and mapped to a 0..240 code.
      * @param junctionType Junction type (0=intersection, 1=roundabout)
      * @param drivingSide  Driving side (0=RHT, 1=LHT)
      * @return int[2] = { mainElement, direction }
      */
     public static int[] map(int maneuverType, int turnAngle, int junctionType, int drivingSide) {
+        /* Legacy callers use -1 for an unfilled State slot. */
+        return map(maneuverType, turnAngle, junctionType, drivingSide, turnAngle != -1);
+    }
+
+    /** Presence-aware entry point: a received -1 degree value is real geometry. */
+    public static int[] map(int maneuverType, int turnAngle, int junctionType, int drivingSide,
+                            boolean anglePresent) {
+        if (!anglePresent) turnAngle = 1000;
         int mainElement;
         int direction;
 
@@ -312,25 +321,10 @@ public class ManeuverMapper {
                 break;
 
             case MT_OFF_RAMP:
-                /*
-                 * BAP EXIT_RIGHT/EXIT_LEFT renders a highway off-ramp icon.
-                 * iOS's JunctionElementExitAngle (arrives here as turnAngle -- the hook
-                 * writes both m*_turn_angle and m*_exit_angle from man->exit_angle) is
-                 * signed, so it drives BOTH side and sharpness.  drivingSide is only the
-                 * missing-angle fallback for the side.  We no longer hardcode SLIGHT: a
-                 * sharp ramp now gets a fuller arrow instead of a shallow keep-arrow.
-                 */
-                if (rampGoesLeft(turnAngle, drivingSide)) {
-                    mainElement = EXIT_LEFT;
-                    direction = rampDirection(turnAngle, true);
-                } else {
-                    mainElement = EXIT_RIGHT;
-                    direction = rampDirection(turnAngle, false);
-                }
-                break;
-
             case MT_ON_RAMP:
-                /* On-ramp: slight merge direction, not coarsened to 90-degree. */
+                /* A single departure/merge bend, shared with the renderer.
+                 * Even base EXIT s33/s36 adds a second bend back to straight;
+                 * CarPlay's one angle does not describe that extra geometry. */
                 mainElement = TURN;
                 if (rampGoesLeft(turnAngle, drivingSide)) {
                     direction = DIR_SLIGHT_LEFT;
@@ -340,14 +334,14 @@ public class ManeuverMapper {
                 break;
 
             case MT_HIGHWAY_OFF_RAMP_LEFT:
-                /* Side is explicit in the type; sharpness still comes from the exit angle. */
-                mainElement = EXIT_LEFT;
-                direction = rampDirection(turnAngle, true);
+                /* Explicit side wins even if the supplied angle conflicts. */
+                mainElement = TURN;
+                direction = DIR_SLIGHT_LEFT;
                 break;
 
             case MT_HIGHWAY_OFF_RAMP_RIGHT:
-                mainElement = EXIT_RIGHT;
-                direction = rampDirection(turnAngle, false);
+                mainElement = TURN;
+                direction = DIR_SLIGHT_RIGHT;
                 break;
 
             case MT_ARRIVE_DESTINATION_LEFT:
@@ -389,28 +383,15 @@ public class ManeuverMapper {
     }
 
     private static boolean hasDirectionalTurnAngle(int turnAngle) {
-        /* 0 and ±1000 are the hook's "no angle" sentinels; -1 is the unset State-slot default. */
-        return turnAngle != 0 && turnAngle != 1000 && turnAngle != -1000 && turnAngle != -1;
+        /* Zero is a real straight angle, so it cannot choose a left/right side.
+         * +1000 is the hook's missing-field default; preserve -1000 defensively.
+         * The legacy -1 slot default is resolved by map() before this helper. */
+        return turnAngle != 0 && turnAngle != 1000 && turnAngle != -1000;
     }
 
     private static boolean rampGoesLeft(int turnAngle, int drivingSide) {
         if (hasDirectionalTurnAngle(turnAngle)) return turnAngle < 0;
         return drivingSide == DRIVING_SIDE_LEFT;
-    }
-
-    /**
-     * Direction for a ramp/off-ramp from the iAP2 JunctionElementExitAngle (passed in as
-     * exitAngle; the hook mirrors it into m*_turn_angle).  ±1000 or 0 = no angle -> keep the
-     * gentle SLIGHT default (a ramp with unknown geometry reads as a shallow peel).  With a
-     * real angle we defer to the same slight/normal/sharp bucketing MHI3 used for end-of-road
-     * turns, so a sharp ramp stops rendering as a shallow keep-arrow.
-     */
-    private static int rampDirection(int exitAngle, boolean goesLeft) {
-        boolean absent = (exitAngle == 0 || exitAngle == 1000 || exitAngle == -1000 || exitAngle == -1);
-        if (goesLeft) {
-            return absent ? DIR_SLIGHT_LEFT : dirFromEndOfRoadAngleLeft(exitAngle);
-        }
-        return absent ? DIR_SLIGHT_RIGHT : dirFromEndOfRoadAngleRight(exitAngle);
     }
 
     private static int applyDsiNavBapDirectionOverride(int maneuverType, int dir) {
@@ -424,10 +405,9 @@ public class ManeuverMapper {
             || (maneuverType >= MT_ROUNDABOUT_EXIT_1 && maneuverType <= MT_ROUNDABOUT_EXIT_19)) {
             return dir;
         }
-        /* Skip override for ramp/keep/slight/sharp - these need fine direction on MHI2 VC.
-         * EXIT_RIGHT/EXIT_LEFT mainElement already encodes the ramp semantics;
-         * coarsening SLIGHT->full 90-degree defeats the point of the distinct icon.
-         * SHARP_LEFT/RIGHT must also be preserved — MHI3 keeps them as-is. */
+        /* Preserve the chosen ramp/turn variants. TURN supports slight/normal/sharp
+         * directions in the HUD LUT; ramps use a single slight TURN. End-of-road
+         * types carry one actual junction turn, so retain its available angle. */
         if (maneuverType == MT_OFF_RAMP
             || maneuverType == MT_ON_RAMP
             || maneuverType == MT_HIGHWAY_OFF_RAMP_LEFT
@@ -437,7 +417,9 @@ public class ManeuverMapper {
             || maneuverType == MT_SLIGHT_LEFT_TURN
             || maneuverType == MT_SLIGHT_RIGHT_TURN
             || maneuverType == MT_SHARP_LEFT_TURN
-            || maneuverType == MT_SHARP_RIGHT_TURN) {
+            || maneuverType == MT_SHARP_RIGHT_TURN
+            || maneuverType == MT_LEFT_TURN_AT_END
+            || maneuverType == MT_RIGHT_TURN_AT_END) {
             return dir;
         }
 
@@ -455,7 +437,8 @@ public class ManeuverMapper {
      * Table extracted from MHI3 tbt_renderer init (unk_530F68 + unk_531010).
      */
     public static int directionFromAngle16(int angle) {
-        /* rgd_tlv uses +/-1000 when JunctionElementExitAngle is absent.  Do not
+        /* rgd_tlv supplies +1000 when JunctionElementExitAngle is absent;
+         * retain the defensive -1000 check as well. Do not
          * clamp that sentinel to +/-180: that fabricated a U-turn at an otherwise
          * valid roundabout exit.  With no geometry, straight/generic is the only
          * direction that does not invent a turn. */
@@ -485,14 +468,25 @@ public class ManeuverMapper {
     /**
      * Derive direction from turnAngle for generic maneuver types
      * (START_ROUTE, EXIT_FERRY, CHANGE_HIGHWAY).
-     * MHI3 sub_2B97D0 maps angle -> 8-direction, then the override
-     * coarsens to straight/left/right. We do the coarse mapping directly.
+     * Select the closest supported TURN direction, at 45-degree intervals.
+     * A generic maneuver has no explicit left/right category to override the
+     * actual angle. Do not turn every small nonzero heading change into 90 degrees.
      */
     private static int directionFromTurnAngle(int turnAngle) {
+        /* Safety sentinels must be handled before signed direction/quantization.
+         * DIR_STRAIGHT is the legacy generic fallback, not the meaning of 1000. */
         if (turnAngle == 1000 || turnAngle == -1000) return DIR_STRAIGHT;
-        if (turnAngle == 0 || turnAngle == -1) return DIR_STRAIGHT;  /* -1 = unset State-slot default */
-        if (turnAngle < 0) return DIR_LEFT;
-        return DIR_RIGHT;
+        if (turnAngle == 0) return DIR_STRAIGHT;
+        /* Icon selection refines only ordinary junction geometry. Preserve the
+         * previous signed fallback outside that range; iOS's serializer accepts
+         * signed 16-bit numbers without imposing a +/-180 range here. */
+        if (turnAngle < -180) return DIR_LEFT;
+        if (turnAngle > 180) return DIR_RIGHT;
+        int magnitude = (turnAngle < 0) ? -turnAngle : turnAngle;
+        if (magnitude <= 22) return DIR_STRAIGHT;
+        if (magnitude <= 67) return (turnAngle < 0) ? DIR_SLIGHT_LEFT : DIR_SLIGHT_RIGHT;
+        if (magnitude <= 112) return (turnAngle < 0) ? DIR_LEFT : DIR_RIGHT;
+        return (turnAngle < 0) ? DIR_SHARP_LEFT : DIR_SHARP_RIGHT;
     }
 
     private static int dirFromEndOfRoadAngleLeft(int exitAngle) {
@@ -504,7 +498,8 @@ public class ManeuverMapper {
          *   - [-112..-68] => LEFT (default)
          *   - < -112      => SHARP_LEFT
          */
-        if (exitAngle != 0 && exitAngle < 0 && exitAngle >= -180) {
+        /* Missing legacy -1 has already been normalized; a received -1 is valid. */
+        if (exitAngle < 0 && exitAngle >= -180) {
             if (exitAngle >= -67) return DIR_SLIGHT_LEFT;
             if (exitAngle < -112) return DIR_SHARP_LEFT;
         }
