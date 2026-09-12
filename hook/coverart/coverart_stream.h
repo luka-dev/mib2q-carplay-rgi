@@ -22,6 +22,16 @@ typedef struct {
     size_t len;
 } coverart_packet_t;
 
+/* Metadata-only receive diagnostics; never retain media or control contents. */
+typedef struct {
+    uint32_t packets, gaps, old_packets, bad_checksum;
+    uint32_t setups, rejected_setups, starts, completed;
+    uint64_t setup_prefix;
+    uint16_t setup_len;
+    uint16_t setup_type;
+    uint8_t control, seq, session, session_kind, file, op;
+} coverart_stream_stats_t;
+
 typedef struct {
     uint8_t *raw;
     size_t raw_len;
@@ -33,11 +43,13 @@ typedef struct {
     /* 0 unknown, 1 control, 2 file transfer, 3 external accessory. */
     uint8_t session_kind[256];
     int confirmed;
+    coverart_stream_stats_t stats;
 } coverart_stream_t;
 
 /* Returns the newest complete image in this delivery, malloc-owned by caller.
  * Partial successors remain buffered. Completion is the file opcode, never a
- * byte pattern inside the image. Size 0 in Setup means unknown length. */
+ * byte pattern inside the image. Setup may be size-only (8 bytes) or include
+ * a type (10+ bytes). Size 0 in Setup means unknown length. */
 void coverart_stream_feed(coverart_stream_t *s, const uint8_t *bytes, size_t len,
                          uint8_t **image, size_t *image_len);
 /* Identify resets transfers and sequencing but keeps negotiated session IDs. */

@@ -698,9 +698,37 @@ static void handle_recv_stream(const uint8_t* buf, size_t len) {
     pthread_mutex_lock(&recv_mutex);
     uint8_t* process_buf = NULL;
     size_t process_len = 0;
+    coverart_stream_stats_t previous = g_recv_stream.stats;
     coverart_stream_feed(&g_recv_stream, buf, len, &process_buf, &process_len);
     int confirmed = g_recv_stream.confirmed;
     uint32_t generation = recv_generation;
+
+    /* Bounded metadata-only diagnostics, emitted through the asynchronous
+     * logger. No image/control payload capture or receive-thread file I/O. */
+    static uint32_t stats_generation;
+    static unsigned stats_reports;
+    const coverart_stream_stats_t *stats = &g_recv_stream.stats;
+    if (stats_generation != generation) {
+        stats_generation = generation; stats_reports = 0;
+    }
+    if (stats_reports < 64 &&
+        (stats->setups != previous.setups || stats->starts != previous.starts ||
+         stats->completed != previous.completed ||
+         (stats->packets != previous.packets &&
+          (stats->packets <= 12 || (stats->packets >> 7) != (previous.packets >> 7))))) {
+        ++stats_reports;
+        LOG_INFO(LOG_MODULE,
+                 "RX packets=%u ctrl=%02x seq=%u next=%u session=%u kind=%u file=%u op=%02x "
+                 "setup=%u len=%u prefix=%016llx type=%u rejected=%u start=%u complete=%u gaps=%u old=%u checksum=%u pending=%u",
+                 (unsigned)stats->packets, stats->control, stats->seq, g_recv_stream.next_seq,
+                 stats->session, stats->session_kind, stats->file, stats->op,
+                 (unsigned)stats->setups, stats->setup_len,
+                 (unsigned long long)stats->setup_prefix, stats->setup_type,
+                 (unsigned)stats->rejected_setups,
+                 (unsigned)stats->starts, (unsigned)stats->completed,
+                 (unsigned)stats->gaps, (unsigned)stats->old_packets,
+                 (unsigned)stats->bad_checksum, (unsigned)g_recv_stream.pending_bytes);
+    }
 
     static int seam_confirmed = 0; /* guarded by recv_mutex */
     if (confirmed && !seam_confirmed) {

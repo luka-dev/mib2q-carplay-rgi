@@ -41,6 +41,16 @@ static void config_parser_tests(void)
     memcpy(broken, avcc, sizeof(avcc)); broken[13] = 0;
     broken[12] = 0;
     assert(!alt_avcc_config_to_annexb(broken, sizeof(broken), out, sizeof(out), &len));
+
+    /* A header-only screen-state packet may precede or follow real avcC.
+     * State packets must leave the previously parsed bytes untouched. */
+    assert(alt_video_config_to_annexb(NULL, 0, out, sizeof(out), &len) == 0 && !len);
+    assert(alt_video_config_to_annexb(avcc, sizeof(avcc), out, sizeof(out), &len) == 4);
+    assert(alt_video_config_to_annexb(NULL, 0, out, sizeof(out), &len) == 0);
+    assert(!len && !memcmp(out, expected, sizeof(expected)));
+    assert(alt_video_config_to_annexb(broken, sizeof(broken), out, sizeof(out), &len) == -1);
+    assert(!len);
+    assert(alt_video_config_to_annexb(avcc, sizeof(avcc), out, sizeof(out), &len) == 4);
 }
 
 static void read_all(int fd, uint8_t *p, size_t len)

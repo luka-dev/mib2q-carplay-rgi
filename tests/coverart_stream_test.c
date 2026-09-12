@@ -86,7 +86,7 @@ static void fragmented_and_batched(void)
 static void file_identity_and_lifecycle(void)
 {
     size_t n = setup(wire, 1, 1, 600, 2);
-    n += setup(wire + n, 2, 2, 600, 7); /* app icon, even if JPEG */
+    n += setup(wire + n, 2, 2, 600, 7); /* non-artwork file, even if JPEG */
     n += data(wire + n, 3, 1, 0x80, jpg, 300);
     n += data(wire + n, 4, 2, 0xc0, newer, 600);
     n += data(wire + n, 5, 1, 0x40, jpg + 300, 300);
@@ -133,6 +133,46 @@ static void checksums_order_and_wrap(void)
     wire[8] ^= 1; feed(wire, n); expect(jpg, 600); reset();
 }
 
+static void size_only_setup(void)
+{
+    uint8_t payload[12] = {128, 4};
+    uint8_t not_image[600];
+    size_t n, len;
+    write_be64(payload + 2, 600);
+    n = packet(wire, 1, 2, 0x40, payload, 10);
+    n += data(wire + n, 2, 128, 0x80, jpg, 300);
+    n += data(wire + n, 3, 128, 0x40, jpg + 300, 300);
+    feed(wire, n); expect(jpg, 600); reset();
+    /* Unknown size is legal; completion still requires a last-data opcode. */
+    write_be64(payload + 2, 0);
+    n = packet(wire, 1, 2, 0x40, payload, 10);
+    n += data(wire + n, 2, 128, 0x80, jpg, 600);
+    feed(wire, n); assert(!image);
+    n = data(wire, 3, 128, 0x40, NULL, 0);
+    feed(wire, n); expect(jpg, 600); reset();
+    /* A short size or half a type is malformed, not a legacy fallback. */
+    for (len = 0; len <= 9; ++len) {
+        if (len == 8) continue;
+        n = packet(wire, 1, 2, 0x40, payload, len + 2);
+        n += data(wire + n, 2, 128, 0xc0, jpg, 600);
+        feed(wire, n); assert(!image); reset();
+    }
+    write_be64(payload + 2, 599);
+    n = packet(wire, 1, 2, 0x40, payload, 10);
+    n += data(wire + n, 2, 128, 0xc0, jpg, 600);
+    feed(wire, n); assert(!image); reset();
+    write_be64(payload + 2, COVERART_STREAM_MAX_FILE + 1);
+    n = packet(wire, 1, 2, 0x40, payload, 10);
+    n += data(wire + n, 2, 128, 0xc0, jpg, 600);
+    feed(wire, n); assert(!image && !stream.files[128].data); reset();
+    /* Size-only does not accept arbitrary data that merely contains a JPEG. */
+    write_be64(payload + 2, 600);
+    memcpy(not_image, jpg, sizeof(not_image)); not_image[0] = 0;
+    n = packet(wire, 1, 2, 0x40, payload, 10);
+    n += data(wire + n, 2, 128, 0xc0, not_image, sizeof(not_image));
+    feed(wire, n); assert(!image); reset();
+}
+
 static void negotiated_sessions(void)
 {
     uint8_t lsp[16] = {1, 8, 0xff, 0xff, 0, 100, 0, 20, 5, 3, 2, 0, 1, 7, 1, 1};
@@ -176,7 +216,7 @@ int main(void)
     jpg[598] = 255; jpg[599] = 217;
     memcpy(newer, jpg, 600); newer[200] = 0x22;
     fragmented_and_batched(); file_identity_and_lifecycle();
-    checksums_order_and_wrap(); negotiated_sessions(); bounds_and_noise();
+    checksums_order_and_wrap(); size_only_setup(); negotiated_sessions(); bounds_and_noise();
     puts("coverart_stream_test: fragmentation, batch, file IDs, completion, checksum, reorder/wrap, reset and bounds PASS");
     return 0;
 }

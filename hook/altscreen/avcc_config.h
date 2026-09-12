@@ -35,4 +35,19 @@ static inline uint8_t alt_avcc_config_to_annexb(const uint8_t *a, uint32_t len,
     *outlen = o;
     return ls;
 }
+
+/* VideoConfig also carries header-only screen-state notifications.
+ * Return 0 to keep the current decoder configuration, -1 for malformed avcC,
+ * or the new NAL length size. As in Apple's receiver, parse any nonempty body:
+ * live iOS can attach valid avcC even when the ClearScreen flag is set. */
+static inline int alt_video_config_to_annexb(const uint8_t *body,
+                                            uint32_t len, uint8_t *out,
+                                            uint32_t cap, uint32_t *outlen)
+{
+    uint8_t ls;
+    *outlen = 0;
+    if (!len) return 0;
+    ls = alt_avcc_config_to_annexb(body, len, out, cap, outlen);
+    return ls ? (int)ls : -1;
+}
 #endif

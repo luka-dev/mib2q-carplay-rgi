@@ -31,6 +31,7 @@ void coverart_stream_reset(coverart_stream_t *s)
     transfers_clear(s);
     s->raw_len = 0;
     s->confirmed = 0;
+    memset(&s->stats, 0, sizeof(s->stats));
 }
 
 void coverart_stream_dispose(coverart_stream_t *s)
@@ -73,14 +74,30 @@ static void file_payload(coverart_stream_t *s, uint8_t session,
     uint8_t *data;
     if (len < 2 || (s->session_kind[session] && s->session_kind[session] != 2)) return;
     f = &s->files[p[0]];
+    s->stats.file = p[0]; s->stats.op = p[1];
     op = p[1]; p += 2; len -= 2;
     if (f->session != session) file_clear(f);
     f->session = session;
-    if (op == 4) { /* Setup: uint64 size, uint16 metadata type, extra metadata. */
+    if (op == 4) { /* Setup: uint64 size, optionally uint16 type + metadata. */
         file_clear(f);
         f->session = session;
         f->kind = 2; /* reject data after malformed/non-artwork Setup */
-        if (len < 10 || read_be16(p + 8) != FILE_ARTWORK) return;
+        ++s->stats.setups;
+        s->stats.setup_len = (uint16_t)len;
+        s->stats.setup_prefix = 0;
+        {
+            size_t i;
+            for (i = 0; i < len && i < 8; ++i)
+                s->stats.setup_prefix = (s->stats.setup_prefix << 8) | p[i];
+        }
+        s->stats.setup_type = len >= 10 ? read_be16(p + 8) : 0xffff;
+        /* The live iPhone sends size-only Setup (8 bytes). Typed Setup is an
+         * extension, not a prerequisite for an image transfer. Reject partial
+         * size/type fields, and reject a known non-artwork type when present. */
+        if (len < 8 || len == 9 || (len >= 10 && s->stats.setup_type != FILE_ARTWORK)) {
+            ++s->stats.rejected_setups;
+            return;
+        }
         f->expected = read_be64(p);
         if (f->expected > COVERART_STREAM_MAX_FILE) return;
         f->kind = 1;
@@ -93,6 +110,7 @@ static void file_payload(coverart_stream_t *s, uint8_t session,
     if (op != 0 && op != 0x40 && op != 0x80 && op != 0xc0) return;
     if (f->kind == 2) return;
     if (op & 0x80) {
+        ++s->stats.starts;
         free(f->data); f->data = NULL; f->len = f->cap = 0; f->started = 0;
         make_file_room(s);
         f->started = 1;
@@ -116,8 +134,8 @@ static void file_payload(coverart_stream_t *s, uint8_t session,
     }
     if (len) memcpy(f->data + f->len, p, len);
     f->len = need;
-    /* Legacy senders may start a file without Setup. Only accept an image at
-     * offset zero, allowing its signature to be split across data packets. */
+    /* Size-only Setup and transfers without Setup carry no type. Only accept
+     * an image at offset zero; its signature may span data packets. */
     if (f->len >= 8 && !image_signature(f->data, f->len)) {
         file_clear(f);
         return;
@@ -129,6 +147,7 @@ static void file_payload(coverart_stream_t *s, uint8_t session,
             *image = f->data; *image_len = f->len;
             f->data = NULL;
             s->last_image_order = f->order; s->have_image_order = 1;
+            ++s->stats.completed;
         }
         file_clear(f);
     }
@@ -146,6 +165,9 @@ static void link_packet(coverart_stream_t *s, const uint8_t *p, size_t len,
 {
     uint8_t delta, seq = p[5], control = p[4];
     coverart_packet_t *held;
+    ++s->stats.packets;
+    s->stats.control = control; s->stats.seq = seq; s->stats.session = p[7];
+    s->stats.session_kind = s->session_kind[p[7]];
     if (control & 0x90) { /* SYN or RST establishes a new link generation. */
         if (s->have_seq && control == 0xc0 && s->next_seq == (uint8_t)(seq + 1)) return;
         transfers_clear(s);
@@ -167,8 +189,9 @@ static void link_packet(coverart_stream_t *s, const uint8_t *p, size_t len,
     if (control != 0x40 || len <= LINK_HEADER + 1) return;
     if (!s->have_seq) { s->have_seq = 1; s->next_seq = seq; }
     delta = (uint8_t)(seq - s->next_seq);
-    if (delta >= 128) return; /* duplicate/old packet, including sequence wrap */
+    if (delta >= 128) { ++s->stats.old_packets; return; } /* duplicate/old, including wrap */
     if (delta) {
+        ++s->stats.gaps;
         held = &s->pending[seq];
         if (held->data) return;
         if (len > COVERART_STREAM_MAX_PENDING - s->pending_bytes) {
@@ -211,7 +234,11 @@ void coverart_stream_feed(coverart_stream_t *s, const uint8_t *bytes, size_t len
         while (s->raw_len - off >= LINK_HEADER) {
             const uint8_t *p = s->raw + off;
             size_t n;
-            if (p[0] != 0xff || p[1] != 0x5a || iap2_cksum_neg(p, LINK_HEADER)) {
+            if (p[0] != 0xff || p[1] != 0x5a) {
+                ++off; continue;
+            }
+            if (iap2_cksum_neg(p, LINK_HEADER)) {
+                ++s->stats.bad_checksum;
                 ++off; continue;
             }
             n = read_be16(p + 2);
@@ -220,6 +247,8 @@ void coverart_stream_feed(coverart_stream_t *s, const uint8_t *bytes, size_t len
             if (n == LINK_HEADER || !iap2_cksum_neg(p + LINK_HEADER, n - LINK_HEADER)) {
                 s->confirmed = 1;
                 link_packet(s, p, n, image, image_len);
+            } else {
+                ++s->stats.bad_checksum;
             }
             off += n;
         }

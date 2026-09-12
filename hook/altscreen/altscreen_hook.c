@@ -1373,11 +1373,19 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
                 snprintf(avccHex + (hi * 2), sizeof(avccHex) - (hi * 2), "%02x", body[hi]);
             avccHex[hn * 2] = 0;
 
-            ls = alt_avcc_config_to_annexb(body, bodySize, cfg, sizeof(cfg), &clen);
-            if (!ls) {
+            int config_ls = alt_video_config_to_annexb(body, bodySize,
+                                                       cfg, sizeof(cfg), &clen);
+            if (config_ls == 0) {
+                LOG_INFO(LOG_MODULE,
+                         "alt recv: screen-state config flags=0x%02x body=%u; keeping avcC",
+                         hdr[6], bodySize);
+                continue;
+            }
+            if (config_ls < 0) {
                 LOG_ERROR(LOG_MODULE, "alt recv: invalid or oversized avcC config (%u bytes)", bodySize);
                 break;
             }
+            ls = (uint8_t)config_ls;
             altav_set_config(av_gen, cfg, clen);   /* cache; replayed before first safe IDR */
             LOG_INFO(LOG_MODULE,
                      "alt recv: avcC config encoded=%dx%d body=%u lengthSize=%u annexb=%u bytes=%s%s",
