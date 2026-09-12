@@ -71,6 +71,27 @@ public final class ClusterLayerController {
     private static boolean popupRevealPending;
     private static String lastAppliedSignature;
     private static int popupRevealGeneration;
+    private static volatile ViewportListener viewportListener;
+
+    public interface ViewportListener {
+        void onManeuverViewportChanged();
+    }
+
+    public static void setViewportListener(ViewportListener listener) { viewportListener = listener; }
+    public static void clearViewportListener(ViewportListener listener) {
+        if (viewportListener == listener) viewportListener = null;
+    }
+
+    /** Source pixels actually visible on VC, in the renderer's 328x181 frame.
+     * Use the same stage selection and crop as applyNow(), without moving the plane. */
+    public static int[] maneuverViewport() {
+        boolean popup = !com.luka.carplay.core.AltScreenModule.isSmallScreenViewArea();
+        synchronized (LOCK) {
+            Geometry g = lastGeometry;
+            return popup ? new int[]{g.popupCropX, g.popupCropY, g.popupCropW, g.popupCropH}
+                : new int[]{g.inTubeCropX, g.inTubeCropY, g.inTubeCropW, g.inTubeCropH};
+        }
+    }
 
     private ClusterLayerController() {}
 
@@ -154,6 +175,11 @@ public final class ClusterLayerController {
             haveLayout = true;
         }
         if (changed) {
+            ViewportListener listener = viewportListener;
+            if (listener != null) {
+                try { listener.onManeuverViewportChanged(); }
+                catch (Throwable t) { Log.w("ClusterLayers", "viewport listener failed: " + t); }
+            }
             Log.i("ClusterLayers", "layout=" + geometry.layoutName
                 + " inTube=(" + geometry.inTubeX + "," + geometry.inTubeY + ") crop=("
                 + geometry.inTubeCropX + "," + geometry.inTubeCropY + ","

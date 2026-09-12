@@ -140,6 +140,7 @@ static int   g_bargraph_deferred_mode = 0;
 static void engine_apply_maneuver(const maneuver_state_t *state) {
     if (state->icon == ICON_NONE || g_engine.current.icon == ICON_NONE) {
         g_engine.current = *state;
+        maneuver_select_bargraph(state);
         g_engine.has_current = 1;
         g_engine.has_next = g_engine.has_pending = 0;
         g_engine.phase = ENGINE_IDLE;
@@ -159,6 +160,7 @@ static void engine_apply_maneuver(const maneuver_state_t *state) {
 
     /* IDLE: store as next, start push */
     g_engine.next = *state;
+    maneuver_select_bargraph(state);
     g_engine.has_next = 1;
     g_bargraph_on = 0;
     maneuver_start_push();
@@ -176,8 +178,11 @@ static void engine_refresh_maneuver(const maneuver_state_t *state) {
         return;
     }
     if (g_engine.has_pending) g_engine.pending = *state;
-    else if (g_engine.has_next) g_engine.next = *state;
-    else g_engine.current = *state;
+    else {
+        if (g_engine.has_next) g_engine.next = *state;
+        else g_engine.current = *state;
+        maneuver_select_bargraph(state);
+    }
     render_invalidate_masks();
     g_engine.dirty = 1;
 }
@@ -208,6 +213,7 @@ static void engine_apply_presentation(void) {
 static void clear_maneuver(void) {
     memset(&g_engine.current, 0, sizeof(g_engine.current));
     g_engine.current.icon = ICON_APPROACH;
+    render_set_bargraph_tip(NULL,0);
     g_engine.has_current = 1;
     g_engine.has_next    = 0;
     g_engine.has_pending = 0;
@@ -244,6 +250,7 @@ static void engine_tick(void) {
             if (g_engine.has_pending) {
                 /* Promote pending -> next, immediately start new push */
                 g_engine.next = g_engine.pending;
+                maneuver_select_bargraph(&g_engine.next);
                 g_engine.has_next = 1;
                 g_engine.has_pending = 0;
                 maneuver_start_push();
@@ -262,6 +269,7 @@ static void engine_tick(void) {
             if (g_engine.has_pending) {
                 /* Promote pending -> next, start push */
                 g_engine.next = g_engine.pending;
+                maneuver_select_bargraph(&g_engine.next);
                 g_engine.has_next = 1;
                 g_engine.has_pending = 0;
                 maneuver_start_push();
@@ -472,6 +480,13 @@ int main(int argc, char **argv) {
                 screenshot_label[16] = '\0';
                 break;
             }
+            case CMD_VISIBLE_AREA:
+                if (render_set_visible_area((cmd.payload[0] << 8) | cmd.payload[1],
+                        (cmd.payload[2] << 8) | cmd.payload[3],
+                        (cmd.payload[4] << 8) | cmd.payload[5],
+                        (cmd.payload[6] << 8) | cmd.payload[7]))
+                    g_engine.dirty = 1;
+                break;
             case CMD_PERSPECTIVE: {
                 int persp = cmd.payload[0] ? 1 : 0;
                 render_set_perspective(persp);
@@ -560,6 +575,7 @@ int main(int argc, char **argv) {
                  * state.  Replace it directly: the global alpha is the sole
                  * CLEAR->visible transition, with no duplicate route push. */
                 g_engine.current = pending_maneuver;
+                maneuver_select_bargraph(&pending_maneuver);
                 g_engine.has_current = 1;
                 g_engine.has_next = 0;
                 g_engine.has_pending = 0;

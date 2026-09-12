@@ -24,6 +24,7 @@
 #define CMD_BARGRAPH     0x06    /* Bargraph: payload[0]=level(0-16), payload[1]=on/off */
 #define CMD_CLEAR        0x07    /* Blank the popup (CarPlay/route off) — drop maneuver+bargraph,
                                   * render fully transparent.  Keeps the link; renderer stays alive. */
+#define CMD_VISIBLE_AREA 0x08   /* payload: x,y,w,h as four BE u16; source pixels, top-left origin */
 
 /* Renderer -> Java events (high bit set to distinguish from commands) */
 #define EVT_HEARTBEAT    0x80    /* Renderer alive, sent every 1 s; empty payload */
@@ -93,7 +94,8 @@ typedef struct {
 #define CR_DEFAULT_HEIGHT   181 /* 180px content + 1px ECC annotation row */
 #define CR_TARGET_FPS       30
 
-/* Popup crop geometry within the 328x180 content area (for debug grid only) */
+/* Big-screen popup crop within the 328x180 content area (excludes ECC row).
+ * Also the safe default until Java sends the active stage's visible area. */
 #define CR_POPUP_X      59
 #define CR_POPUP_Y      27
 #define CR_POPUP_W      210

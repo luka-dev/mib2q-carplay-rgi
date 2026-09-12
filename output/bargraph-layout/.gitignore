@@ -1,0 +1,4 @@
+host/
+*.log
+frames/*.ppm
+frames/flag_atlas.rgba

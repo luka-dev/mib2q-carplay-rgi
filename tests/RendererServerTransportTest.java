@@ -32,11 +32,16 @@ public final class RendererServerTransportTest {
         byte[] ready = new byte[48]; ready[0] = (byte)0x81;
         peer.getOutputStream().write(ready); ready(server);
         Socket owned = (Socket)get(server, "sock");
+        check(server.sendVisibleArea(59, 27, 210, 153), "visible-area command");
         check(server.sendClear(), "clear 1");
         check(server.sendManeuver(3, -1, -90, 0, new int[] {-45, 90}, 8, 1, 1), "maneuver");
         check(server.sendClear(), "clear 2");
         DataInputStream in = new DataInputStream(peer.getInputStream());
-        byte[] one = new byte[48], maneuver = new byte[48], two = new byte[48];
+        byte[] viewport = new byte[48], one = new byte[48], maneuver = new byte[48], two = new byte[48];
+        in.readFully(viewport);
+        check(viewport[0] == 8 && viewport[2] == 0 && viewport[3] == 59
+            && viewport[5] == 27 && (viewport[7] & 255) == 210 && (viewport[9] & 255) == 153,
+            "visible area uses four BE u16 in its own 48-byte command");
         in.readFully(one); in.readFully(maneuver); in.readFully(two);
         check(one[0] == 7 && two[0] == 7 && maneuver[0] == 1, "48-byte command ordering");
         check(maneuver[3] == -1 && maneuver[4] == -1 && (maneuver[5] & 255) == 166, "signed BE16 direction/angle");

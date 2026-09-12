@@ -1237,6 +1237,28 @@ void maneuver_build_route(const maneuver_state_t *state, route_path_t *path) {
     }
 }
 
+void maneuver_build_settled_mesh(const maneuver_state_t *state, route_mesh_t *mesh) {
+    route_path_t path;
+    float end;
+    maneuver_build_route(state,&path);
+    rpath_extend(&path);
+    rpath_densify(&path);
+    if (state->icon==ICON_ARRIVED) {
+        path.tip_blend=1.0f;
+        path.bulb_radius=ARRIVE_INNER_R-OL_W;
+    }
+    end=path.total_length>1e-6f ? (path.total_length-ROUTE_EXTEND)/path.total_length : 0;
+    rpath_extrude_preview(&path,mesh,SHAFT_T,ROUTE_BASE_Y,ROUTE_TOP_Y,end,
+                          maneuver_elevation(state));
+}
+
+void maneuver_select_bargraph(const maneuver_state_t *state) {
+    /* Separate scratch storage: never replace the route currently being animated. */
+    static route_mesh_t preview;
+    maneuver_build_settled_mesh(state,&preview);
+    render_set_bargraph_tip(preview.verts+6*preview.arrow_first,preview.arrow_count);
+}
+
 /* Get exit point and heading for a maneuver (for chaining). */
 maneuver_exit_t maneuver_get_exit(const maneuver_state_t *state) {
     maneuver_exit_t ex = {0, 0, (float)(M_PI * 0.5)};

@@ -61,6 +61,7 @@ public class RendererServer {
     /* Command IDs used by this always-on client protocol. */
     private static final byte CMD_MANEUVER    = 0x01;
     private static final byte CMD_BARGRAPH    = 0x06;
+    private static final byte CMD_VISIBLE_AREA = 0x08;
     private static final byte CMD_CLEAR       = 0x07;
 
     /* CMD_MANEUVER flags */
@@ -96,6 +97,8 @@ public class RendererServer {
     private long lastBindFailureLogMs;
     private int suppressedBindFailures;
     private int connectionGeneration;
+    private boolean haveVisibleArea;
+    private int visibleX, visibleY, visibleW, visibleH;
 
     private static final class PendingWrite {
         byte[] packet;
@@ -288,6 +291,7 @@ public class RendererServer {
 
     private void clearWriteQueue() {
         synchronized (writeLock) {
+            haveVisibleArea = false;
             for (int i = 0; i < WRITE_QUEUE_CAPACITY; i++) writeQueue[i] = null;
             writeHead = 0;
             writeTail = 0;
@@ -593,6 +597,27 @@ public class RendererServer {
         return sendPacket(pkt, true);
     }
 
+    /** Stage/layout updates are independent of the current maneuver and distance.
+     * Cache only a successful enqueue; reconnect always replays the visible area. */
+    public boolean sendVisibleArea(int x, int y, int w, int h) {
+        synchronized (lock) {
+            if (haveVisibleArea && visibleX == x && visibleY == y && visibleW == w && visibleH == h)
+                return true;
+            byte[] pkt = new byte[PKT_SIZE];
+            pkt[0] = CMD_VISIBLE_AREA;
+            int[] values = new int[]{x, y, w, h};
+            for (int i = 0; i < 4; i++) {
+                if (values[i] < 0 || values[i] > 65535) return false;
+                pkt[2 + 2*i] = (byte)(values[i] >>> 8);
+                pkt[3 + 2*i] = (byte)values[i];
+            }
+            if (!sendPacket(pkt)) return false;
+            visibleX = x; visibleY = y; visibleW = w; visibleH = h;
+            haveVisibleArea = true;
+            return true;
+        }
+    }
+
     /**
      * Non-blocking send.  Returns false if no current connection or
      * write failed — BAPBridge uses the bool for crash-recovery counter
@@ -610,14 +635,30 @@ public class RendererServer {
                 pending.packet = pkt;
                 pending.generation = connectionGeneration;
                 pending.clear = beginClear;
+                // Retain only the newest crop, including across CLEAR barriers:
+                // CLEAR hides content but never changes the physical viewport.
+                if (pkt[0] == CMD_VISIBLE_AREA) {
+                    for (int n = 0; n < writeCount; n++) {
+                        if (writeQueue[(writeHead + n) % WRITE_QUEUE_CAPACITY].packet[0] != CMD_VISIBLE_AREA)
+                            continue;
+                        for (int i = n; i + 1 < writeCount; i++)
+                            writeQueue[(writeHead + i) % WRITE_QUEUE_CAPACITY] =
+                                writeQueue[(writeHead + i + 1) % WRITE_QUEUE_CAPACITY];
+                        writeTail = (writeTail + WRITE_QUEUE_CAPACITY - 1) % WRITE_QUEUE_CAPACITY;
+                        writeQueue[writeTail] = null;
+                        writeCount--;
+                        break;
+                    }
+                }
                 if (writeCount == WRITE_QUEUE_CAPACITY) {
                     /* Ordinary state can be resent; CLEAR is an ordered barrier.
                      * Losing it can leave Java waiting for an ACK/new first-frame
                      * event which the renderer will never send. Keep all barriers
-                     * and discard the oldest ordinary command, preserving order. */
+                     * and the one cached viewport command, and discard the oldest ordinary command, preserving order. */
                     int drop = 0;
-                    while (drop < writeCount && writeQueue[(writeHead + drop)
-                            % WRITE_QUEUE_CAPACITY].clear) ++drop;
+                    while (drop < writeCount && (writeQueue[(writeHead + drop)
+                            % WRITE_QUEUE_CAPACITY].clear || writeQueue[(writeHead + drop)
+                            % WRITE_QUEUE_CAPACITY].packet[0] == CMD_VISIBLE_AREA)) ++drop;
                     if (drop == writeCount) return false;
                     for (int i = drop; i + 1 < writeCount; ++i) {
                         writeQueue[(writeHead + i) % WRITE_QUEUE_CAPACITY] =

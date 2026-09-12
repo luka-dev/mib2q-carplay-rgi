@@ -47,10 +47,12 @@ typedef struct {
 } route_path_t;
 
 #define RMESH_MAX_VERTS 7200
+#define RPATH_ARROW_VERTS 24
 
 typedef struct {
     float verts[RMESH_MAX_VERTS * 6];  /* pos(3) + normal(3) */
     int vert_count;
+    int arrow_first, arrow_count; /* only the exit arrow prism; excludes shaft/bulb */
     int valid;
 } route_mesh_t;
 
@@ -68,6 +70,10 @@ void rpath_set_arrow(route_path_t *p, float x, float y, float angle_rad);
 void rpath_extrude(const route_path_t *p, route_mesh_t *m,
                    float width, float base_y, float top_y,
                    float t0, float t1);
+/* Standalone preview, preserving the live transition's elevation/ramp state. */
+void rpath_extrude_preview(const route_path_t *p, route_mesh_t *m,
+                           float width, float base_y, float top_y,
+                           float t1, float elevation);
 void rpath_extrude_partial(const route_path_t *p, route_mesh_t *m,
                            float width, float base_y, float top_y,
                            float t0, float t1,

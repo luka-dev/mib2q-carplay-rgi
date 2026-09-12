@@ -54,6 +54,10 @@ maneuver_exit_t maneuver_get_exit(const maneuver_state_t *state);
 /* Build route path segments for a maneuver (no extend/densify/extrude).
  * Used for path chaining during transitions. */
 void maneuver_build_route(const maneuver_state_t *state, route_path_t *path);
+/* Final standalone geometry; does not advance or modify the live animation. */
+void maneuver_build_settled_mesh(const maneuver_state_t *state, route_mesh_t *mesh);
+/* Select the overlay for an incoming maneuver before its transition starts. */
+void maneuver_select_bargraph(const maneuver_state_t *state);
 
 /* Conservative world-space bounds needed to render any two-maneuver transition masks. */
 void maneuver_get_transition_mask_bounds(float *out_abs_x, float *out_abs_y);

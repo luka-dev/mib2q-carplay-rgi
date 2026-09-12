@@ -98,6 +98,11 @@ float render_get_global_alpha(void);
 /* Draw bargraph overlay (2D screen-space, call after 3D scene).
  * level: 0-16 (0=empty, 16=full). */
 void render_bargraph(int level, float alpha);
+/* Source-pixel viewport (same rectangle the VC crops). Returns 1 if changed. */
+int render_set_visible_area(int x, int y, int w, int h);
+/* Cache the incoming maneuver's final arrowhead; animated meshes never submit here. */
+void render_set_bargraph_tip(const float *verts, int count);
+int render_get_bargraph_side(void); /* 0=left, 1=right; fixed between layout events */
 
 /* ================================================================
  * Single-FBO painter's algorithm mask rendering API

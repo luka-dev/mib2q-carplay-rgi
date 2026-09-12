@@ -54,6 +54,7 @@ public class RouteGuidance implements CarplayBus.Listener {
     private boolean presentationWake;
     private boolean presentationDrivePending;
     private boolean infoPresentationRefreshPending;
+    private boolean rendererViewportRefreshPending;
     /* Guarded by presentationLock. View always writes phase 0; the steering-
      * wheel encoder press toggles it. The worker is the sole BAP publisher. */
     private int desiredInfoPhase;
@@ -71,6 +72,18 @@ public class RouteGuidance implements CarplayBus.Listener {
         new com.luka.carplay.core.AltScreenModule.InfoModeListener() {
             public void onInfoModeToggle() {
                 requestInfoModeToggle();
+            }
+        };
+
+    private final com.luka.carplay.cluster.ClusterLayerController.ViewportListener viewportListener =
+        new com.luka.carplay.cluster.ClusterLayerController.ViewportListener() {
+            public void onManeuverViewportChanged() {
+                synchronized (presentationLock) {
+                    if (!running) return;
+                    rendererViewportRefreshPending = true;
+                    presentationWake = true;
+                    presentationLock.notifyAll();
+                }
             }
         };
 
@@ -302,6 +315,7 @@ public class RouteGuidance implements CarplayBus.Listener {
         bap.setPresentationListener(bapPresentationListener);
         com.luka.carplay.core.AltScreenModule.setViewAreaModeListener(viewAreaModeListener);
         com.luka.carplay.core.AltScreenModule.setInfoModeListener(infoModeListener);
+        com.luka.carplay.cluster.ClusterLayerController.setViewportListener(viewportListener);
 
         Log.i(TAG, "Initialized");
         return true;
@@ -324,6 +338,7 @@ public class RouteGuidance implements CarplayBus.Listener {
          * stale RouteGuidance instance. Re-register both session inputs here. */
         com.luka.carplay.core.AltScreenModule.setViewAreaModeListener(viewAreaModeListener);
         com.luka.carplay.core.AltScreenModule.setInfoModeListener(infoModeListener);
+        com.luka.carplay.cluster.ClusterLayerController.setViewportListener(viewportListener);
         if (bap != null) bap.setPresentationListener(bapPresentationListener);
         final int generation;
         synchronized (presentationLock) {
@@ -331,6 +346,7 @@ public class RouteGuidance implements CarplayBus.Listener {
             presentationWake = false;
             presentationDrivePending = false;
             infoPresentationRefreshPending = false;
+            rendererViewportRefreshPending = false;
             desiredInfoPhase = 0;
             presentationThread = new Thread(new Runnable() {
                 public void run() { presentationLoop(generation); }
@@ -368,6 +384,7 @@ public class RouteGuidance implements CarplayBus.Listener {
             presentationWake = true;
             presentationDrivePending = false;
             infoPresentationRefreshPending = false;
+            rendererViewportRefreshPending = false;
             desiredInfoPhase = 0;
             presentationLock.notifyAll();
             worker = presentationThread;
@@ -387,6 +404,7 @@ public class RouteGuidance implements CarplayBus.Listener {
         }
         com.luka.carplay.core.AltScreenModule.clearViewAreaModeListener(viewAreaModeListener);
         com.luka.carplay.core.AltScreenModule.clearInfoModeListener(infoModeListener);
+        com.luka.carplay.cluster.ClusterLayerController.clearViewportListener(viewportListener);
         if (worker != null && worker != Thread.currentThread()) {
             try { worker.join(1000L); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
         }
@@ -569,6 +587,7 @@ public class RouteGuidance implements CarplayBus.Listener {
             if (!running) return;
             desiredInfoPhase = 0;
             infoPresentationRefreshPending = true;
+            rendererViewportRefreshPending = true;
             presentationWake = true;
             presentationLock.notifyAll();
         }
@@ -604,6 +623,7 @@ public class RouteGuidance implements CarplayBus.Listener {
     private void presentationLoop(int generation) {
         while (true) {
             boolean drivePresentation;
+            boolean refreshViewport;
             int infoPhase = -1;
             synchronized (presentationLock) {
                 while (running && generation == presentationGeneration && !presentationWake) {
@@ -614,6 +634,8 @@ public class RouteGuidance implements CarplayBus.Listener {
                 presentationWake = false;
                 drivePresentation = presentationDrivePending;
                 presentationDrivePending = false;
+                refreshViewport = rendererViewportRefreshPending;
+                rendererViewportRefreshPending = false;
                 if (infoPresentationRefreshPending) {
                     infoPhase = desiredInfoPhase;
                     infoPresentationRefreshPending = false;
@@ -621,8 +643,9 @@ public class RouteGuidance implements CarplayBus.Listener {
             }
 
             if (infoPhase >= 0) driveInfoPresentation(infoPhase);
+            boolean retryViewport = refreshViewport && !driveRendererViewport();
             boolean retry = drivePresentation && driveCachedPresentation();
-            if (retry) {
+            if (retry || retryViewport) {
                 synchronized (presentationLock) {
                     if (!running || generation != presentationGeneration) return;
                     if (!presentationWake) {
@@ -630,12 +653,19 @@ public class RouteGuidance implements CarplayBus.Listener {
                         catch (InterruptedException e) { Thread.currentThread().interrupt(); return; }
                     }
                     if (running && generation == presentationGeneration) {
-                        presentationDrivePending = true;
+                        presentationDrivePending |= retry;
+                        rendererViewportRefreshPending |= retryViewport;
                         presentationWake = true;
                     }
                 }
             }
         }
+    }
+
+    /** Serialized with maneuver updates; retries backpressure without replaying BAP. */
+    private synchronized boolean driveRendererViewport() {
+        if (!running || bap == null || !rgActive) return true;
+        return bap.refreshRendererViewport();
     }
 
     /** Serialized with onFrame/stop; publishes cached FctID 19/20/22 immediately. */

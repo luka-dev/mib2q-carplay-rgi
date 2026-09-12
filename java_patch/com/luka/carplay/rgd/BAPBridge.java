@@ -1156,6 +1156,7 @@ public class BAPBridge {
             if (!customRendererStarted && csRef != null) startCustomRenderer();
 
             if (rendererClient != null && customRendererStarted) {
+                refreshRendererViewport();
                 /* Link-loss → noteRendererSendResult drops the view; the retry above reconnects. */
 
                 /* Approach zone enter/exit changes only the bargraph. */
@@ -1894,6 +1895,7 @@ public class BAPBridge {
             }
             if (customRendererStarted) return true;
             if (!rendererClient.isReady()) return false;
+            if (!refreshRendererViewport()) return false;
 
             /* Paint a deterministic frame, but do not expose displayable 98 until the peer
              * acknowledges eglSwapBuffers with FRAME_READY. */
@@ -1976,10 +1978,16 @@ public class BAPBridge {
         }
     }
 
-    /**
-     * Push maneuver to maneuver_render ONLY if the rendered icon actually changed.
-     * Returns true if CMD_MANEUVER was sent, false if suppressed (same icon).
-     */
+    /** Refresh the screen-space overlay without changing the maneuver or blink state. */
+    public boolean refreshRendererViewport() {
+        if (rendererClient == null || !rendererClient.isReady()) return true;
+        int[] area = com.luka.carplay.cluster.ClusterLayerController.maneuverViewport();
+        // A cached viewport is not a new successful write. Do not let this
+        // frequent no-op reset the maneuver/bargraph transport failure count.
+        return rendererClient.sendVisibleArea(area[0], area[1], area[2], area[3]);
+    }
+
+    /** Send only changed maneuver geometry; viewport changes use their own command. */
     private boolean updateRendererIfChanged(RouteGuidance.State s, int bargraphDenominatorM) {
         if (rendererClient == null || !customRendererStarted) return false;
 

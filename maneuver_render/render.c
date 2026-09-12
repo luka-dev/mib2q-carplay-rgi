@@ -25,11 +25,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <time.h>
 
 #include "gl_compat.h"
 #include "render.h"
 #include "protocol.h"
 #include "maneuver.h"
+#include "bargraph_layout.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -194,6 +196,21 @@ static render_material_t g_active_material = RENDER_MAT_GENERIC_SOLID;
 
 /* Stored MVPs for composite pass */
 static float g_mvp_current[16];    /* perspective-blended MVP (for 3D composite) */
+static cr_rect_animation_t g_visible_area = {
+    {CR_POPUP_X, CR_POPUP_Y, CR_POPUP_W, CR_POPUP_H},
+    {CR_POPUP_X, CR_POPUP_Y, CR_POPUP_W, CR_POPUP_H},
+    {CR_POPUP_X, CR_POPUP_Y, CR_POPUP_W, CR_POPUP_H}, 0, 0};
+static cr_bargraph_layout_t g_bargraph_layout;
+static int g_bargraph_side = 1;
+static float g_bargraph_tip[RPATH_ARROW_VERTS*6];
+static int g_bargraph_tip_count;
+static void update_bargraph_side(void);
+
+static double overlay_now(void) {
+    struct timespec t;
+    clock_gettime(CLOCK_MONOTONIC,&t);
+    return (double)t.tv_sec+(double)t.tv_nsec/1000000000.0;
+}
 static float g_mvp_ortho_2d[16];   /* pure orthographic for mask rendering */
 
 /* ================================================================
@@ -879,6 +896,7 @@ void render_set_viewport(int fb_width, int fb_height) {
     g_fb_h = g_ss_h;
 
     /* Resize SSAA texture + depth to match new supersample resolution */
+    update_bargraph_side();
     if (g_ss_tex) {
         glBindTexture(GL_TEXTURE_2D, g_ss_tex);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, g_ss_w, g_ss_h, 0,
@@ -905,32 +923,14 @@ void render_set_viewport(int fb_width, int fb_height) {
     fbos_resize(g_fb_w, g_fb_h);
 }
 
-static void sync_camera_uniforms(void) {
-    /* Animate g_persp_t toward target with ease-in-out */
-    {
-        float target = (float)g_perspective;
-        float diff = target - g_persp_t;
-        if (fabsf(diff) < 0.001f) {
-            g_persp_t = target;
-        } else {
-            g_persp_t += (diff > 0 ? 1.0f : -1.0f) * PERSP_ANIM_SPEED;
-            if ((diff > 0 && g_persp_t > target) ||
-                (diff < 0 && g_persp_t < target))
-                g_persp_t = target;
-        }
-    }
-
-    /* Quintic ease-in-out (smootherstep) */
-    float t = g_persp_t;
-    float ts = t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f);
-
-    float aspect = (float)g_fb_w / (float)g_fb_h;
-    float cam_cos = cosf(g_cam_rot);
-    float cam_sin = sinf(g_cam_rot);
-    float eye_x = g_cam_pan_x + cam_cos * CAM_EYE_X - cam_sin * CAM_EYE_Z;
-    float eye_z = g_cam_pan_z + cam_sin * CAM_EYE_X + cam_cos * CAM_EYE_Z;
-    float ctr_x = g_cam_pan_x + cam_cos * CAM_CTR_X - cam_sin * CAM_CTR_Z;
-    float ctr_z = g_cam_pan_z + cam_sin * CAM_CTR_X + cam_cos * CAM_CTR_Z;
+static void build_camera_mvp(float *mvp, float aspect, float pan_x, float pan_z,
+                              float rotation, float ts) {
+    float cam_cos = cosf(rotation);
+    float cam_sin = sinf(rotation);
+    float eye_x = pan_x + cam_cos * CAM_EYE_X - cam_sin * CAM_EYE_Z;
+    float eye_z = pan_z + cam_sin * CAM_EYE_X + cam_cos * CAM_EYE_Z;
+    float ctr_x = pan_x + cam_cos * CAM_CTR_X - cam_sin * CAM_CTR_Z;
+    float ctr_z = pan_z + cam_sin * CAM_CTR_X + cam_cos * CAM_CTR_Z;
 
     /* Compute both MVPs and lerp */
     float mvp_persp[16], mvp_ortho[16];
@@ -956,8 +956,8 @@ static void sync_camera_uniforms(void) {
         view[1]  = -cam_sin;
         view[8]  =  cam_sin;
         view[9]  =  cam_cos;
-        view[12] = -cam_cos * g_cam_pan_x - cam_sin * g_cam_pan_z;
-        view[13] =  cam_sin * g_cam_pan_x - cam_cos * g_cam_pan_z;
+        view[12] = -cam_cos * pan_x - cam_sin * pan_z;
+        view[13] =  cam_sin * pan_x - cam_cos * pan_z;
         view[6]  =  1.0f;
         view[14] = -5.0f;
         view[15] =  1.0f;
@@ -968,8 +968,63 @@ static void sync_camera_uniforms(void) {
     {
         int i;
         for (i = 0; i < 16; i++)
-            g_mvp_current[i] = mvp_ortho[i] + ts * (mvp_persp[i] - mvp_ortho[i]);
+            mvp[i] = mvp_ortho[i] + ts * (mvp_persp[i] - mvp_ortho[i]);
     }
+
+    /* Shift projection to center maneuver in popup crop area.
+     * Full offset in 2D (flat view), reduced in 3D (perspective extends upward).
+     * ts = perspective blend: 0.0=ortho, 1.0=perspective. */
+    {
+        const float content_h = (float)(CR_DEFAULT_HEIGHT - 1);
+        const float popup_cy = CR_POPUP_Y + CR_POPUP_H * 0.5f;     /* 103.5 */
+        const float content_cy = content_h * 0.5f;                   /* 90 */
+        const float full_offset = -(popup_cy - content_cy) / content_cy; /* -0.15 */
+        /* 2D: full offset (centers junction in popup crop).
+         * 3D: half offset (compromise — centers between junction and road top). */
+        /* 2D: full offset (-0.15). 3D: adjustable extra offset. */
+        const float offset_y = full_offset + ts * g_3d_offset_adjust;
+        int c;
+        for (c = 0; c < 4; c++) {
+            mvp[c*4 + 1] += mvp[c*4 + 3] * offset_y;
+        }
+    }
+
+}
+
+static void update_bargraph_side(void) {
+    cr_bargraph_layout_t target;
+    float mvp[16];
+    /* Final crop, camera and perspective: never the moving transition pose. */
+    cr_bargraph_begin(&target,g_visible_area.target);
+    build_camera_mvp(mvp,(float)g_fb_w/g_fb_h,0,0,0,(float)g_perspective);
+    cr_bargraph_mesh(&target,mvp,g_bargraph_tip,g_bargraph_tip_count);
+    g_bargraph_side=cr_bargraph_side(&target);
+}
+
+static void sync_camera_uniforms(void) {
+    /* Animate g_persp_t toward target with ease-in-out */
+    {
+        float target = (float)g_perspective;
+        float diff = target - g_persp_t;
+        if (fabsf(diff) < 0.001f) {
+            g_persp_t = target;
+        } else {
+            g_persp_t += (diff > 0 ? 1.0f : -1.0f) * PERSP_ANIM_SPEED;
+            if ((diff > 0 && g_persp_t > target) ||
+                (diff < 0 && g_persp_t < target))
+                g_persp_t = target;
+        }
+    }
+
+    /* Quintic ease-in-out (smootherstep) */
+    float t = g_persp_t;
+    float ts = t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f);
+
+    float cam_cos=cosf(g_cam_rot), cam_sin=sinf(g_cam_rot);
+    float eye_x=g_cam_pan_x+cam_cos*CAM_EYE_X-cam_sin*CAM_EYE_Z;
+    float eye_z=g_cam_pan_z+cam_sin*CAM_EYE_X+cam_cos*CAM_EYE_Z;
+    build_camera_mvp(g_mvp_current,(float)g_fb_w/g_fb_h,
+                     g_cam_pan_x,g_cam_pan_z,g_cam_rot,ts);
 
     /* Pure 2D orthographic MVP for mask rendering.
      * Same top-down view as ortho mode but with no perspective blend. */
@@ -989,24 +1044,6 @@ static void sync_camera_uniforms(void) {
         /* mask_scale: maps world (x,z) -> mask UV (0..1).
          * UV = world_coord * scale + 0.5 */
         glUniform2f(g_uni_mask_scale, 0.5f / g_mask_half_w, 0.5f / g_mask_half_h);
-    }
-
-    /* Shift projection to center maneuver in popup crop area.
-     * Full offset in 2D (flat view), reduced in 3D (perspective extends upward).
-     * ts = perspective blend: 0.0=ortho, 1.0=perspective. */
-    {
-        const float content_h = (float)(CR_DEFAULT_HEIGHT - 1);
-        const float popup_cy = CR_POPUP_Y + CR_POPUP_H * 0.5f;     /* 103.5 */
-        const float content_cy = content_h * 0.5f;                   /* 90 */
-        const float full_offset = -(popup_cy - content_cy) / content_cy; /* -0.15 */
-        /* 2D: full offset (centers junction in popup crop).
-         * 3D: half offset (compromise — centers between junction and road top). */
-        /* 2D: full offset (-0.15). 3D: adjustable extra offset. */
-        const float offset_y = full_offset + ts * g_3d_offset_adjust;
-        int c;
-        for (c = 0; c < 4; c++) {
-            g_mvp_current[c*4 + 1] += g_mvp_current[c*4 + 3] * offset_y;
-        }
     }
 
     glUniformMatrix4fv(g_uni_mvp, 1, GL_FALSE, g_mvp_current);
@@ -1052,6 +1089,9 @@ static void sync_camera_uniforms(void) {
 }
 
 void render_begin_frame(void) {
+    double now=overlay_now();
+    cr_rect_animate(&g_visible_area,now);
+    cr_bargraph_begin(&g_bargraph_layout,g_visible_area.current);
     /* Render into 2x supersample FBO */
     glBindFramebuffer(GL_FRAMEBUFFER, g_ss_fbo);
     glViewport(0, 0, g_ss_w, g_ss_h);
@@ -1072,39 +1112,57 @@ float render_get_global_alpha(void) {
     return g_global_alpha;
 }
 
-void render_bargraph(int level, float alpha) {
-    /* 16 bars, full height, shifted down by half a cell as top padding.
-     * Original proportions: 7px bar, 2px gap, 14px wide. Scale against the
-     * active output size so the overlay stays pixel-correct on the widget. */
-    const int   N_BARS = 16;
-    const float MARGIN = 10.0f;           /* px from edge */
-    const float design_w = 14.0f;
-    const float design_h = 7.0f;
-    const float design_gap = 2.0f;
-    const float design_total_h = N_BARS * design_h + (N_BARS - 1) * design_gap;
-    float fb_w = (g_win_w > 0) ? (float)g_win_w : (float)CR_DEFAULT_WIDTH;
-    float fb_h = (g_win_h > 0) ? (float)g_win_h : (float)CR_DEFAULT_HEIGHT;
-    float px = 2.0f / fb_w;
-    float py = 2.0f / fb_h;
-    float available_h = fb_h - 2.0f * MARGIN;
-    float scale;
-    float bar_w;
-    float bar_h;
-    float gap;
-    float bar_x;
+int render_set_visible_area(int x, int y, int w, int h) {
+    int changed=cr_rect_retarget(&g_visible_area,cr_visible_area(x,y,w,h),overlay_now());
+    if (changed) update_bargraph_side();
+    return changed;
+}
 
-    if (available_h < 1.0f)
-        available_h = 1.0f;
-    scale = available_h / design_total_h;
-    bar_w = design_w * scale * px;
-    bar_h = design_h * scale * py;
-    gap   = design_gap * scale * py;
-    /* Bargraph at sidescreen right edge (cropped in popup — acceptable). */
-    bar_x = 1.0f - MARGIN * px - bar_w;
+void render_set_bargraph_tip(const float *verts, int count) {
+    if (!verts || count<0) count=0;
+    if (count>RPATH_ARROW_VERTS) count=RPATH_ARROW_VERTS;
+    g_bargraph_tip_count=count;
+    if (count) memcpy(g_bargraph_tip,verts,count*6*sizeof(float));
+    update_bargraph_side();
+}
 
-    float total_h = N_BARS * bar_h + (N_BARS - 1) * gap;
-    float top_pad = (bar_h + gap) * 0.5f;  /* half a cell padding from top */
-    float base_y  = -total_h * 0.5f - top_pad;
+int render_get_bargraph_side(void) {
+    return g_bargraph_side;
+}
+
+static void bargraph_quad(float x, float y, float w, float h) {
+    cr_rect_t visible=g_bargraph_layout.visible;
+    float right=fminf(x+w,-1+2*(visible.x+visible.w)/CR_DEFAULT_WIDTH);
+    float top=fminf(y+h,1-2*visible.y/CR_DEFAULT_HEIGHT);
+    x=fmaxf(x,-1+2*visible.x/CR_DEFAULT_WIDTH);
+    y=fmaxf(y,1-2*(visible.y+visible.h)/CR_DEFAULT_HEIGHT);
+    w=right-x; h=top-y;
+    if (w<=0 || h<=0) return;
+    vb_v(x,   y,   0, 0,0,1);
+    vb_v(x+w, y,   0, 0,0,1);
+    vb_v(x+w, y+h, 0, 0,0,1);
+    vb_v(x,   y,   0, 0,0,1);
+    vb_v(x+w, y+h, 0, 0,0,1);
+    vb_v(x,   y+h, 0, 0,0,1);
+}
+
+static void bargraph_flush(void) {
+    glVertexAttribPointer(g_attr_pos,  3, GL_FLOAT, GL_FALSE, 24, g_vbuf);
+    glVertexAttribPointer(g_attr_norm, 3, GL_FLOAT, GL_FALSE, 24, g_vbuf + 3);
+    glEnableVertexAttribArray(g_attr_pos);
+    glEnableVertexAttribArray(g_attr_norm);
+    glDrawArrays(GL_TRIANGLES, 0, g_vcount);
+}
+
+static void draw_bargraph_column(int level, float alpha, cr_rect_t bounds) {
+    const int N_BARS = 16;
+    const float px=2.0f/CR_DEFAULT_WIDTH, py=2.0f/CR_DEFAULT_HEIGHT;
+    float bar_w,bar_h,gap,bar_x,base_y;
+    bar_w=bounds.w*px;
+    bar_h=g_bargraph_layout.bar_h*py;
+    gap=g_bargraph_layout.gap*py;
+    bar_x=-1+bounds.x*px;
+    base_y=1-(bounds.y+bounds.h)*py;
     float identity[16];
     int i;
 
@@ -1118,6 +1176,26 @@ void render_bargraph(int level, float alpha) {
     glUniformMatrix4fv(g_uni_mvp, 1, GL_FALSE, identity);
     glUniform1f(g_uni_zbias, 0.0f);
 
+    /* Subtle per-segment drop shadow: source-pixel offset, three feather bands.
+     * Batch each band for all 16 bars. Shares the column's fade/blink opacity. */
+    {
+        const float feather[3]={2.0f,1.0f,0.25f};
+        const float opacity[3]={0.045f,0.09f,0.14f};
+        float scale=fminf(1.0f,bounds.w/14.0f);
+        int layer;
+        for (layer=0;layer<3;layer++) {
+            float f=feather[layer]*scale;
+            glUniform4f(g_uni_color,0,0,0,alpha*opacity[layer]);
+            vb_reset();
+            for (i=0;i<N_BARS;i++) {
+                float y=base_y+i*(bar_h+gap);
+                bargraph_quad(bar_x+(0.75f*scale-f)*px,y-(scale+f)*py,
+                              bar_w+2*f*px,bar_h+2*f*py);
+            }
+            bargraph_flush();
+        }
+    }
+
     /* level 0 = 0 bars blue, level 16 = 16 bars blue.
      * Bars drawn bottom (i=0) to top (i=15).
      * Top bars blue, bottom bars grey — fills from top down. */
@@ -1129,21 +1207,18 @@ void render_bargraph(int level, float alpha) {
         else                 { r = 100.0f/255.0f; g = 100.0f/255.0f; b = 100.0f/255.0f; }
         glUniform4f(g_uni_color, r, g, b, alpha);
         vb_reset();
-        vb_v(bar_x,         y,         0, 0,0,1);
-        vb_v(bar_x + bar_w, y,         0, 0,0,1);
-        vb_v(bar_x + bar_w, y + bar_h, 0, 0,0,1);
-        vb_v(bar_x,         y,         0, 0,0,1);
-        vb_v(bar_x + bar_w, y + bar_h, 0, 0,0,1);
-        vb_v(bar_x,         y + bar_h, 0, 0,0,1);
-        glVertexAttribPointer(g_attr_pos,  3, GL_FLOAT, GL_FALSE, 24, g_vbuf);
-        glVertexAttribPointer(g_attr_norm, 3, GL_FLOAT, GL_FALSE, 24, g_vbuf + 3);
-        glEnableVertexAttribArray(g_attr_pos);
-        glEnableVertexAttribArray(g_attr_norm);
-        glDrawArrays(GL_TRIANGLES, 0, g_vcount);
+        bargraph_quad(bar_x,y,bar_w,bar_h);
+        bargraph_flush();
     }
 
     glEnable(GL_DEPTH_TEST);
     glUniform1f(g_uni_tex_mode, 0.0f);
+}
+
+void render_bargraph(int level, float alpha) {
+    /* Side changes are atomic: exactly one column, always at full overlay alpha.
+     * Only the visible-area rectangle animates between split/big stage. */
+    draw_bargraph_column(level,alpha,g_bargraph_layout.bars[g_bargraph_side]);
 }
 
 /* Debug grid: draw colored checkerboard over the full 328x180 content area.
@@ -1276,10 +1351,11 @@ void render_end_frame(void) {
 
 void render_set_perspective(int enabled) {
     g_perspective = enabled;
+    update_bargraph_side();
 }
 
 int render_is_animating(void) {
-    return (fabsf(g_persp_t - (float)g_perspective) > 0.001f);
+    return fabsf(g_persp_t - (float)g_perspective) > 0.001f || g_visible_area.active;
 }
 
 void render_set_raised(int raised) {

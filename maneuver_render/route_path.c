@@ -291,6 +291,7 @@ void rpath_extrude_partial(const route_path_t *p, route_mesh_t *m,
                            float t0, float t1,
                            int cap_start, int cap_end, int tip_end) {
     m->vert_count = 0;
+    m->arrow_first = m->arrow_count = 0;
     m->valid = 0;
     if (p->pt_count < 2) return;
     if (t0 < 0.0f) t0 = 0.0f;
@@ -655,6 +656,7 @@ void rpath_extrude_partial(const route_path_t *p, route_mesh_t *m,
 
         /* Arrow prism (scales down with blend) */
         if (blend < 1.0f) {
+            m->arrow_first = m->vert_count;
             float s = 1.0f - blend;
             float arrow_size = width * 1.3f * s;
             float tip_x = ax + arrow_size * cosf(a_dir);
@@ -695,6 +697,7 @@ void rpath_extrude_partial(const route_path_t *p, route_mesh_t *m,
             mesh_v(m, bl_x,  tip_base, bl_z,  0, -1, 0);
             mesh_v(m, tip_x, tip_base, tip_z, 0, -1, 0);
             mesh_v(m, br_x,  tip_base, br_z,  0, -1, 0);
+            m->arrow_count = m->vert_count - m->arrow_first;
         }
 
         /* Bulb disc (scales up with blend) */
@@ -729,6 +732,17 @@ void rpath_extrude(const route_path_t *p, route_mesh_t *m,
                    float t0, float t1) {
     rpath_extrude_partial(p, m, width, base_y, top_y,
                           t0, t1, 1, 1, 1);
+}
+
+void rpath_extrude_preview(const route_path_t *p, route_mesh_t *m,
+                           float width, float base_y, float top_y,
+                           float t1, float elevation) {
+    float restart=g_ramp_restart, first=g_ramp_lift_current, next=g_ramp_lift_next;
+    rpath_set_ramp_restart(-1.0f);
+    rpath_set_elevation(elevation,elevation);
+    rpath_extrude(p,m,width,base_y,top_y,0.0f,t1);
+    rpath_set_ramp_restart(restart);
+    rpath_set_elevation(first,next);
 }
 
 /* ================================================================
