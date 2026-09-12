@@ -65,6 +65,8 @@ def main():
         expected_roads = [degrees(v) for v in bytes.fromhex(streets)]
         if icon in (1, 2, 6):
             expected_roads = [int(v) for v in r['junction_angles'].split(';') if v and -180 <= int(v) <= 180][:18]
+        if icon == 2 and mt in (8, 22, 23) and 0 not in expected_roads:
+            expected_roads = expected_roads[:17] + [0]
         assert decoded_roads == expected_roads
         selector = int(result['selector'])
         assert bool(b[1] & 16) == (raw_circle and -180 <= raw <= 180), (r, "snap policy")

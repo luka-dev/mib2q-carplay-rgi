@@ -73,6 +73,24 @@ public final class ManeuverParityTest {
         b=packet(a,19,90,1,0); check((b[1]&16)==0 && b[2]==6 && angle(b,4)==360,"typed circle U-turn stays 180 degrees");
         b=packet(a,52,-30,0,0); check(b[2]==8 && b[3]==-1,"left lane-change family");
         b=packet(a,23,135,0,0); check(b[2]==2 && b[3]==0 && angle(b,4)==90,"right single-bend off-ramp");
+        int[][] rampRoads={null,new int[0],new int[]{-1000,1000},new int[]{-90,35,90},new int[]{0,35}};
+        int[][] rampExpected={new int[]{0},new int[]{0},new int[]{0},new int[]{-180,70,180,0},new int[]{0,70}};
+        for(int mt:new int[]{8,22,23}) for(int c=0;c<rampRoads.length;c++) {
+            a.reset();RouteGuidance.State ramp=a.state(mt,35,0,0,0,rampRoads[c]);
+            check(send(a,ramp),"off-ramp with incomplete road data");b=a.pendingPacket();
+            check(b[7]==rampExpected[c].length,"continuing highway retained, zero not duplicated");
+            for(int i=0;i<rampExpected[c].length;i++)
+                check(angle(b,8+2*i)==rampExpected[c][i],"raw branches plus continuing highway");
+            check(angle(b,4)==(mt==22?-90:90),"road correction keeps single-bend ramp");
+        }
+        for(int mt:new int[]{1,9,13,50}) {
+            a.reset();check(send(a,a.state(mt,-45,0,0,0,null)),"non-off-ramp packet");
+            check(a.pendingPacket()[7]==0,"do not invent a through-road for ordinary turns/merges");
+        }
+        int[] crowded=new int[18];for(int i=0;i<crowded.length;i++)crowded[i]=40+i;
+        a.reset();check(send(a,a.state(8,30,0,0,0,crowded)),"bounded highway roads");b=a.pendingPacket();
+        check(b[7]==18 && angle(b,42)==0,"reserve final wire slot for continuing highway");
+        for(int i=0;i<17;i++)check(angle(b,8+2*i)==2*crowded[i],"keep original branch order");
         b=packet(a,1,-90,-1,0); check(b[2]==0 && b[7]==0,"NO_INFO must be empty in renderer");
         b=packet(a,28,-67,1,0);
         check((b[1]&4)!=0 && angle(b,4)==-134 && (b[1]&16)!=0,"raw circle exit retains exact degrees and enables snap");

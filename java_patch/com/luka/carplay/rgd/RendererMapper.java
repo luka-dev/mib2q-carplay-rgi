@@ -112,6 +112,23 @@ public class RendererMapper {
         }
         if (out.icon == ICON_APPROACH || out.icon == ICON_TURN || out.icon == ICON_ROUNDABOUT)
             out.junctionAngles = rawRoads(roads);
+        // EXIT used to supply the continuing main road through its geometry.
+        // A single-bend TURN needs that road explicitly, just as the HUD's
+        // fixed OFF_RAMP side street 0. Keep the richer CarPlay roads as well.
+        if (out.icon == ICON_TURN && (mt == ManeuverMapper.MT_OFF_RAMP
+                || mt == ManeuverMapper.MT_HIGHWAY_OFF_RAMP_LEFT
+                || mt == ManeuverMapper.MT_HIGHWAY_OFF_RAMP_RIGHT))
+            out.junctionAngles = withForwardRoad(out.junctionAngles);
+        return out;
+    }
+
+    private static int[] withForwardRoad(int[] roads) {
+        for (int i = 0; i < roads.length; i++) if (roads[i] == 0) return roads;
+        // Reserve one of the wire's 18 slots for the continuing main road.
+        int count = roads.length < 18 ? roads.length : 17;
+        int[] out = new int[count + 1];
+        System.arraycopy(roads, 0, out, 0, count);
+        out[count] = 0;
         return out;
     }
 

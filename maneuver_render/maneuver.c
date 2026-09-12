@@ -1572,9 +1572,11 @@ static void draw_approach(const float *side_angles, int side_count) {
 }
 
 /* Check if junction angles include a forward road (~0° ± 30°) */
-static int has_forward_road(const float *side_angles, int side_count) {
+static int has_forward_road(float exit_angle, const float *side_angles, int side_count) {
     int i;
-    if (side_count == 0) return 0;  /* no junction data = T-junction */
+    /* The active straight exit is itself a road, even when iOS does not list
+     * it among junction branches. Match the active-stub deduplication below. */
+    if (fabsf(exit_angle) < ANGLE_DEDUP) return 1;
     for (i = 0; i < side_count; i++) {
         if (side_angles[i] > -30 && side_angles[i] < 30) return 1;
     }
@@ -1591,7 +1593,7 @@ static void draw_turn_outline(float angle_deg, float angle_rad,
                                float stub_x, float stub_y,
                                float fade_x, float fade_y) {
     int i;
-    int fwd = has_forward_road(side_angles, side_count);
+    int fwd = has_forward_road(angle_deg, side_angles, side_count);
     if (fwd)
         draw_fading_road(0, SIDE_TOP, 0, SIDE_TOP + FADE_LEN, 1.0f, FADE_OUTLINE);
     draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - FADE_LEN, 1.0f, FADE_OUTLINE);
@@ -1626,7 +1628,7 @@ static void draw_turn_fill(float angle_deg, float angle_rad,
                              float stub_x, float stub_y,
                              float fade_x, float fade_y) {
     int i;
-    int fwd = has_forward_road(side_angles, side_count);
+    int fwd = has_forward_road(angle_deg, side_angles, side_count);
     if (fwd)
         draw_fading_road(0, SIDE_TOP, 0, SIDE_TOP + FADE_LEN, 1.0f, FADE_GREY);
     draw_fading_road(0, SHAFT_BOT, 0, SHAFT_BOT - FADE_LEN, 1.0f, FADE_GREY);
