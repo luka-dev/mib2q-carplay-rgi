@@ -35,7 +35,7 @@
  *   Anchored to ROUTE_EXTEND (maneuver entry) so the ramp is identical on
  *   standalone and combined paths — no visual jump at commit.
  * - Pre-extension (0.35..0.50): flat at 1x nominal height. */
-#define HEIGHT_ENTRY_DIST  0.50f   /* maneuver entry = ROUTE_EXTEND from path start */
+#define HEIGHT_ENTRY_DIST  RPATH_ANIMATION_EXTENSION   /* maneuver entry = ROUTE_EXTEND from path start */
 #define HEIGHT_RAMP_DIST   1.5f    /* fixed distance over which ramp reaches max */
 /* Per-maneuver elevation lifts (world units added to base+top).
  * On combined paths, first/second can differ. Standalone: use first. */
@@ -163,6 +163,7 @@ void rpath_densify(route_path_t *p) {
  * ================================================================ */
 
 static int g_mesh_overflow_warned = 0;
+static float g_mesh_path_dist = 0; /* extrusion-local tag for caps/joins */
 
 static void mesh_v(route_mesh_t *m, float x, float y, float z,
                    float nx, float ny, float nz) {
@@ -176,7 +177,14 @@ static void mesh_v(route_mesh_t *m, float x, float y, float z,
     int idx = m->vert_count * 6;
     m->verts[idx]   = x;  m->verts[idx+1] = y;  m->verts[idx+2] = z;
     m->verts[idx+3] = nx; m->verts[idx+4] = ny; m->verts[idx+5] = nz;
+    m->path_dist[m->vert_count] = g_mesh_path_dist;
     m->vert_count++;
+}
+
+static void mesh_path_v(route_mesh_t *m, float x, float y, float z,
+                        float nx, float ny, float nz, float distance) {
+    g_mesh_path_dist=distance;
+    mesh_v(m,x,y,z,nx,ny,nz);
 }
 
 /* Push a quad (2 triangles) with flat normal */
@@ -291,8 +299,13 @@ void rpath_extrude_partial(const route_path_t *p, route_mesh_t *m,
                            float t0, float t1,
                            int cap_start, int cap_end, int tip_end) {
     m->vert_count = 0;
-    m->arrow_first = m->arrow_count = 0;
+    m->contact_count = 0;
+    m->contact_thickness = top_y-base_y;
     m->valid = 0;
+    g_mesh_path_dist=0;
+    m->progress_count=0;
+    m->progress_start=HEIGHT_ENTRY_DIST;
+    m->progress_end=p->total_length-HEIGHT_ENTRY_DIST+width*RPATH_ARROW_LENGTH_FACTOR;
     if (p->pt_count < 2) return;
     if (t0 < 0.0f) t0 = 0.0f;
     if (t1 > 1.0f) t1 = 1.0f;
@@ -435,6 +448,16 @@ void rpath_extrude_partial(const route_path_t *p, route_mesh_t *m,
         }
     }
 
+    {
+        int j;
+        m->progress_count=n_pts;
+        for(j=0;j<n_pts;j++) {
+            cr_route_progress_point_t *point=&m->progress_points[j];
+            point->d=start_dist+e_dist[j];
+            point->x=epx[j]; point->y=e_top[j]; point->z=epy[j];
+        }
+    }
+
     /* Pre-compute per-segment direction and perpendicular */
     int i;
     float dir_x[RPATH_MAX_PTS], dir_y[RPATH_MAX_PTS];   /* unit direction */
@@ -560,28 +583,28 @@ void rpath_extrude_partial(const route_path_t *p, route_mesh_t *m,
         float snx = perp_x[i] / hw, snz = perp_y[i] / hw;
 
         /* Top face */
-        mesh_v(m, l0x, ty0, z_l0, 0,1,0);
-        mesh_v(m, r0x, ty0, z_r0, 0,1,0);
-        mesh_v(m, r1x, ty1, z_r1, 0,1,0);
-        mesh_v(m, l0x, ty0, z_l0, 0,1,0);
-        mesh_v(m, r1x, ty1, z_r1, 0,1,0);
-        mesh_v(m, l1x, ty1, z_l1, 0,1,0);
+        mesh_path_v(m, l0x, ty0, z_l0, 0,1,0, start_dist+e_dist[i]);
+        mesh_path_v(m, r0x, ty0, z_r0, 0,1,0, start_dist+e_dist[i]);
+        mesh_path_v(m, r1x, ty1, z_r1, 0,1,0, start_dist+e_dist[i+1]);
+        mesh_path_v(m, l0x, ty0, z_l0, 0,1,0, start_dist+e_dist[i]);
+        mesh_path_v(m, r1x, ty1, z_r1, 0,1,0, start_dist+e_dist[i+1]);
+        mesh_path_v(m, l1x, ty1, z_l1, 0,1,0, start_dist+e_dist[i+1]);
 
         /* Left wall */
-        mesh_v(m, l0x, by0, z_l0, snx,0,snz);
-        mesh_v(m, l1x, by1, z_l1, snx,0,snz);
-        mesh_v(m, l1x, ty1, z_l1, snx,0,snz);
-        mesh_v(m, l0x, by0, z_l0, snx,0,snz);
-        mesh_v(m, l1x, ty1, z_l1, snx,0,snz);
-        mesh_v(m, l0x, ty0, z_l0, snx,0,snz);
+        mesh_path_v(m, l0x, by0, z_l0, snx,0,snz, start_dist+e_dist[i]);
+        mesh_path_v(m, l1x, by1, z_l1, snx,0,snz, start_dist+e_dist[i+1]);
+        mesh_path_v(m, l1x, ty1, z_l1, snx,0,snz, start_dist+e_dist[i+1]);
+        mesh_path_v(m, l0x, by0, z_l0, snx,0,snz, start_dist+e_dist[i]);
+        mesh_path_v(m, l1x, ty1, z_l1, snx,0,snz, start_dist+e_dist[i+1]);
+        mesh_path_v(m, l0x, ty0, z_l0, snx,0,snz, start_dist+e_dist[i]);
 
         /* Right wall */
-        mesh_v(m, r0x, ty0, z_r0, -snx,0,-snz);
-        mesh_v(m, r1x, ty1, z_r1, -snx,0,-snz);
-        mesh_v(m, r1x, by1, z_r1, -snx,0,-snz);
-        mesh_v(m, r0x, ty0, z_r0, -snx,0,-snz);
-        mesh_v(m, r1x, by1, z_r1, -snx,0,-snz);
-        mesh_v(m, r0x, by0, z_r0, -snx,0,-snz);
+        mesh_path_v(m, r0x, ty0, z_r0, -snx,0,-snz, start_dist+e_dist[i]);
+        mesh_path_v(m, r1x, ty1, z_r1, -snx,0,-snz, start_dist+e_dist[i+1]);
+        mesh_path_v(m, r1x, by1, z_r1, -snx,0,-snz, start_dist+e_dist[i+1]);
+        mesh_path_v(m, r0x, ty0, z_r0, -snx,0,-snz, start_dist+e_dist[i]);
+        mesh_path_v(m, r1x, by1, z_r1, -snx,0,-snz, start_dist+e_dist[i+1]);
+        mesh_path_v(m, r0x, by0, z_r0, -snx,0,-snz, start_dist+e_dist[i]);
     }
 
     /* Rounded outer join for hard corners only.
@@ -589,6 +612,7 @@ void rpath_extrude_partial(const route_path_t *p, route_mesh_t *m,
     for (i = 1; i < n_pts - 1; i++) {
         int seg_prev = i - 1, seg_next = i;
         if (!hard_corner[i]) continue;
+        g_mesh_path_dist=start_dist+e_dist[i];
 
         if (corner_cross[i] > 0.0f) {
             emit_round_join(m,
@@ -611,6 +635,7 @@ void rpath_extrude_partial(const route_path_t *p, route_mesh_t *m,
 
     /* Front cap (at path start — tail) */
     if (cap_start) {
+        g_mesh_path_dist=start_dist;
         float fnx = -dir_x[0], fnz = -dir_y[0];
         mesh_quad(m,
                   lx[0], e_base[0], ly[0],
@@ -622,6 +647,7 @@ void rpath_extrude_partial(const route_path_t *p, route_mesh_t *m,
 
     /* Back cap (at path end — head) */
     if (cap_end) {
+        g_mesh_path_dist=target_dist;
         int li = n_pts - 1;
         float fnx = dir_x[n_pts - 2], fnz = dir_y[n_pts - 2];
         mesh_quad(m,
@@ -635,6 +661,7 @@ void rpath_extrude_partial(const route_path_t *p, route_mesh_t *m,
     /* Tip: blend between arrow prism (blend=0) and bulb disc (blend=1).
      * Uses head-vertex height for full elevation at the tip. */
     if (tip_end) {
+        g_mesh_path_dist=target_dist;
         float blend = p->tip_blend;
         if (blend < 0.0f) blend = 0.0f;
         if (blend > 1.0f) blend = 1.0f;
@@ -654,11 +681,21 @@ void rpath_extrude_partial(const route_path_t *p, route_mesh_t *m,
             a_dir = atan2f(dir_y[n_pts - 2], dir_x[n_pts - 2]);
         }
 
+        /* Continue the metric through the head. Keep the same distance tags
+         * as the arrow vertices/bulb so arrival reaches the complete tip. */
+        if(m->progress_count<CR_ROUTE_PROGRESS_POINTS) {
+            float length=width*RPATH_ARROW_LENGTH_FACTOR;
+            cr_route_progress_point_t *point=&m->progress_points[m->progress_count++];
+            point->d=target_dist+length;
+            point->x=ax+length*cosf(a_dir); point->y=tip_top;
+            point->z=az+length*sinf(a_dir);
+        }
+
         /* Arrow prism (scales down with blend) */
         if (blend < 1.0f) {
-            m->arrow_first = m->vert_count;
+            int arrow_first = m->vert_count;
             float s = 1.0f - blend;
-            float arrow_size = width * 1.3f * s;
+            float arrow_size = width * RPATH_ARROW_LENGTH_FACTOR * s;
             float tip_x = ax + arrow_size * cosf(a_dir);
             float tip_z = az + arrow_size * sinf(a_dir);
             float perp_ax = -sinf(a_dir) * hw * 1.536f * s;
@@ -697,11 +734,18 @@ void rpath_extrude_partial(const route_path_t *p, route_mesh_t *m,
             mesh_v(m, bl_x,  tip_base, bl_z,  0, -1, 0);
             mesh_v(m, tip_x, tip_base, tip_z, 0, -1, 0);
             mesh_v(m, br_x,  tip_base, br_z,  0, -1, 0);
-            m->arrow_count = m->vert_count - m->arrow_first;
+            {
+                int vi;
+                for(vi=arrow_first;vi<m->vert_count;vi++) {
+                    float d=(m->verts[vi*6]-ax)*cosf(a_dir)+(m->verts[vi*6+2]-az)*sinf(a_dir);
+                    m->path_dist[vi]=target_dist+d;
+                }
+            }
         }
 
         /* Bulb disc (scales up with blend) */
         if (blend > 0.0f) {
+            g_mesh_path_dist=m->progress_end;
             float bul_r = p->bulb_radius * blend;
             int segs = 16, i_b;
             for (i_b = 0; i_b < segs; i_b++) {
@@ -725,6 +769,13 @@ void rpath_extrude_partial(const route_path_t *p, route_mesh_t *m,
     }
 
     m->valid = 1;
+    m->contact_count=cr_contact_build(m->verts,m->vert_count,top_y-base_y,
+                                      m->contact_verts,CR_CONTACT_MAX_VERTS);
+    if(m->contact_count<0) {
+        static int warned;
+        if(!warned) { fprintf(stderr,"route contact shadow: output limit reached\n");warned=1; }
+        m->contact_count=0;
+    }
 }
 
 void rpath_extrude(const route_path_t *p, route_mesh_t *m,
@@ -732,17 +783,6 @@ void rpath_extrude(const route_path_t *p, route_mesh_t *m,
                    float t0, float t1) {
     rpath_extrude_partial(p, m, width, base_y, top_y,
                           t0, t1, 1, 1, 1);
-}
-
-void rpath_extrude_preview(const route_path_t *p, route_mesh_t *m,
-                           float width, float base_y, float top_y,
-                           float t1, float elevation) {
-    float restart=g_ramp_restart, first=g_ramp_lift_current, next=g_ramp_lift_next;
-    rpath_set_ramp_restart(-1.0f);
-    rpath_set_elevation(elevation,elevation);
-    rpath_extrude(p,m,width,base_y,top_y,0.0f,t1);
-    rpath_set_ramp_restart(restart);
-    rpath_set_elevation(first,next);
 }
 
 /* ================================================================
@@ -814,6 +854,7 @@ void rpath_draw(const route_mesh_t *m,
     if (!m->valid || m->vert_count == 0) return;
 
     render_set_material(RENDER_MAT_ROUTE_ACTIVE);
+    const cr_route_progress_map_t *projected=render_prepare_route_progress(m->progress_points,m->progress_count);
 
     /* Draw in batches that fit the render.c vertex buffer (MAX_VERTS=1200) */
     int drawn = 0;
@@ -827,10 +868,16 @@ void rpath_draw(const route_mesh_t *m,
         int i;
         for (i = 0; i < batch; i++) {
             int idx = (drawn + i) * 6;
-            vb_v(m->verts[idx], m->verts[idx+1], m->verts[idx+2],
-                 m->verts[idx+3], m->verts[idx+4], m->verts[idx+5]);
+            float length=m->progress_end-m->progress_start;
+            float progress=projected ? cr_route_progress_at(projected,m->path_dist[drawn+i]) :
+                (length>1e-6f ? (m->path_dist[drawn+i]-m->progress_start)/length : 1.0f);
+            /* Do not clamp vertices: clipping the extension in the fragment
+             * shader keeps interpolation exact across the visible entry. */
+            vb_route_v(m->verts[idx], m->verts[idx+1], m->verts[idx+2],
+                 m->verts[idx+3], m->verts[idx+4], m->verts[idx+5],progress);
         }
         vb_flush(r, g, b, a);
         drawn += batch;
     }
+    render_contact_shadow(m->contact_verts,m->contact_count,a,m->contact_thickness);
 }

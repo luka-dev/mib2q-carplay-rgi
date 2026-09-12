@@ -1,0 +1,152 @@
+{
+  "cases": [
+    {
+      "case": 0,
+      "mt": "2",
+      "brightness": [
+        17.283970320711493,
+        18.78241083861115,
+        19.924482324933745,
+        20.53124438530297,
+        21.040650406504064
+      ],
+      "changed_pixels": 17577
+    },
+    {
+      "case": 1,
+      "mt": "8",
+      "brightness": [
+        18.554214110856577,
+        19.839839363517946,
+        20.875680782015003,
+        21.595531262633067,
+        22.07019634595517
+      ],
+      "changed_pixels": 16128
+    },
+    {
+      "case": 2,
+      "mt": "48",
+      "brightness": [
+        19.983087128868526,
+        21.234893657638235,
+        22.167793817095628,
+        22.937563165341597,
+        23.746374309392266
+      ],
+      "changed_pixels": 17297
+    },
+    {
+      "case": 3,
+      "mt": "28",
+      "brightness": [
+        19.47988534788663,
+        20.86938530296905,
+        21.85552261599964,
+        22.6457547275749,
+        23.108220477923012
+      ],
+      "changed_pixels": 17067
+    },
+    {
+      "case": 4,
+      "mt": "28",
+      "brightness": [
+        19.952228753986436,
+        21.961773738939048,
+        23.22430153168935,
+        23.9753262138975,
+        24.76836707766249
+      ],
+      "changed_pixels": 23563
+    },
+    {
+      "case": 5,
+      "mt": "4",
+      "brightness": [
+        21.37713498854602,
+        23.04087078336253,
+        24.28875404258186,
+        24.929694167452723,
+        25.943778634954857
+      ],
+      "changed_pixels": 21430
+    }
+  ],
+  "fill_frames": 70,
+  "blink_frames": 34,
+  "transition_frames": 44,
+  "fast_retarget_frames": 55,
+  "blink_off_maneuver_frames": 44,
+  "two_color_endpoints": true,
+  "ordering": "latest phase survives transition",
+  "level_only_arrow": true,
+  "invalid_state_quiet": true,
+  "no_local_blink": true,
+  "clear": true,
+  "reconnect": true,
+  "first_steps": [
+    {
+      "view": "split",
+      "lit_shaft_pixels": [
+        0,
+        23,
+        45,
+        67,
+        88,
+        110,
+        131
+      ],
+      "increments": [
+        23,
+        22,
+        22,
+        21,
+        22,
+        21
+      ]
+    },
+    {
+      "view": "big",
+      "lit_shaft_pixels": [
+        0,
+        23,
+        45,
+        67,
+        88,
+        110,
+        131
+      ],
+      "increments": [
+        23,
+        22,
+        22,
+        21,
+        22,
+        21
+      ]
+    }
+  ],
+  "sources": {
+    "maneuver_render/platform_qnx.c": "65b24a7ad3a35e40b763b76ef6691876c8a6e9de4f4e478f66ba63a5d6e2a1c2",
+    "maneuver_render/render.c": "ae2393e53d02a71514d593fde315d9f7fee822bee65b6e433633cf34289535ca",
+    "maneuver_render/server.c": "d4c13af586a11fe34bfdda7ad7a68ca2db0cb680eab75d138bd858170aae45e9",
+    "maneuver_render/main.c": "272732cbec6225db49744452bc59bdec851415974f6ae3df82587f3e0b4c82dd",
+    "maneuver_render/test_harness.c": "2f002655ca8f0e2b699caa5e2eaf3219ce04385b298588ce9e606b3d30f125ce",
+    "maneuver_render/route_path.c": "ed2c210945b25495d40987dd8a9006b5aa80a4830a8bb6e70773d569a6cb75dd",
+    "maneuver_render/platform_macos.c": "6577340dc774dc44b541078da992a81848431ccdeebd78fefe39e1de94f68ec5",
+    "maneuver_render/maneuver.c": "1622a50835725e72999142c13d0cc4d53908a7e69574562d776cd2a17bef9900",
+    "maneuver_render/maneuver_command.h": "2f404437d91192422793a78744009420305b47e953111c76944d2abad085d530",
+    "maneuver_render/protocol.h": "d774768d533a977c3ab413764d6472fb8b66dd709cd8658cc8b5a8151cd1b09c",
+    "maneuver_render/contact_shadow.h": "4885cb715380aad7fb71adaab7cbedcd9776e76971a6641de11d6cb98f02cb3a",
+    "maneuver_render/route_path.h": "0341565e5513a8bc2cbef6f79cc81fd9ed912c817d4466c70f2911542733cde1",
+    "maneuver_render/visible_area.h": "ac0363b9d9311256cb2835fbfff34d52bf30124c9d21850e18d4d08b7d56e9cd",
+    "maneuver_render/maneuver.h": "b4d7380238871c13ddb7e3f641d12c71fe6f3f3ddc425cd1dba64abaace03e6a",
+    "maneuver_render/arrow_progress.h": "f7d9a619215464faabc09ca4072f1e13aad6e394b48926b32a2e478526ed5cb1",
+    "maneuver_render/route_progress.h": "a4b1763a1d5cb88dd0da35ac091dd487d411b3c3788393e89ef4a1cd0877db45",
+    "maneuver_render/server.h": "2198bc07f0441482ec1a011df61405c9f4949a1390ed1d8201d8dc57e00dd6c2",
+    "maneuver_render/platform.h": "1afa68572c409b162502012ba6bf6f468ee4c6f3e45096e9155ce854f7a518ba",
+    "maneuver_render/gl_compat.h": "b235785c4eb44482391f736fabb4375c8c952b8471d364502a47cc622e1c1344",
+    "maneuver_render/render.h": "d31d1bb14b1ff789feeb8b978c0921d7142832f47e64279ea685576f5162e704"
+  }
+}

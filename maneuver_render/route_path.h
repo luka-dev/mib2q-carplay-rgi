@@ -13,13 +13,17 @@
 
 #ifndef CR_ROUTE_PATH_H
 #define CR_ROUTE_PATH_H
+#include "route_progress.h"
+#include "contact_shadow.h"
 
 /* Segment types */
 #define RSEG_LINE  0
 #define RSEG_ARC   1
 
 #define RPATH_MAX_SEGS  48
-#define RPATH_MAX_PTS  480
+#define RPATH_MAX_PTS  (CR_ROUTE_PROGRESS_POINTS - 1)
+#define RPATH_ANIMATION_EXTENSION 0.5f
+#define RPATH_ARROW_LENGTH_FACTOR 1.3f
 
 typedef struct {
     int type;
@@ -46,13 +50,18 @@ typedef struct {
     float bulb_radius;       /* target bulb radius when tip_blend > 0 */
 } route_path_t;
 
-#define RMESH_MAX_VERTS 7200
-#define RPATH_ARROW_VERTS 24
+#define RMESH_MAX_VERTS CR_CONTACT_MAX_SOURCE_VERTS
 
 typedef struct {
     float verts[RMESH_MAX_VERTS * 6];  /* pos(3) + normal(3) */
+    float path_dist[RMESH_MAX_VERTS]; /* distance along the source path; no spatial lookup */
+    float progress_start, progress_end;
+    cr_route_progress_point_t progress_points[CR_ROUTE_PROGRESS_POINTS];
+    int progress_count;
     int vert_count;
-    int arrow_first, arrow_count; /* only the exit arrow prism; excludes shaft/bulb */
+    float contact_verts[CR_CONTACT_MAX_VERTS * 6];
+    int contact_count;
+    float contact_thickness;
     int valid;
 } route_mesh_t;
 
@@ -70,10 +79,6 @@ void rpath_set_arrow(route_path_t *p, float x, float y, float angle_rad);
 void rpath_extrude(const route_path_t *p, route_mesh_t *m,
                    float width, float base_y, float top_y,
                    float t0, float t1);
-/* Standalone preview, preserving the live transition's elevation/ramp state. */
-void rpath_extrude_preview(const route_path_t *p, route_mesh_t *m,
-                           float width, float base_y, float top_y,
-                           float t1, float elevation);
 void rpath_extrude_partial(const route_path_t *p, route_mesh_t *m,
                            float width, float base_y, float top_y,
                            float t0, float t1,

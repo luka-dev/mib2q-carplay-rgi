@@ -11,3 +11,6 @@ cc -O1 -g -std=c99 -Wall -Wextra -DPLATFORM_MACOS -I/opt/homebrew/include \
     maneuver_render/render.c maneuver_render/server.c maneuver_render/platform_macos.c \
     -L/opt/homebrew/lib -lglfw -framework OpenGL -lm -o "$TEST_DIR/maneuver_parity_test"
 "$TEST_DIR/maneuver_parity_test"
+cc -O1 -g -std=c99 -Wall -Wextra -fsanitize=address,undefined \
+    -fno-omit-frame-pointer tests/renderer_peer_loss_test.c -o "$TEST_DIR/renderer_peer_loss_test"
+"$TEST_DIR/renderer_peer_loss_test"

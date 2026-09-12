@@ -103,6 +103,7 @@ public class BAPBridge {
     private int lastDistM = 0;
     private boolean lastBarOn = false;
     private int lastBar = 0;
+    private int lastProgressState = RendererServer.PROGRESS_OFF;
     private Thread actionBlinkThread;
     private boolean actionBlinkThreadRunning = false;
     /* Monotonically increases on every start/stop.  Each spawned blink
@@ -294,7 +295,8 @@ public class BAPBridge {
             actionBlinkFull = !actionBlinkFull;
 
             try {
-                sendDistanceToManeuverRaw(blinkDistM, true, bargraph);
+                sendDistanceToManeuverRaw(blinkDistM, true, bargraph,
+                    bargraph==100 ? RendererServer.PROGRESS_BLINK_HIGH : RendererServer.PROGRESS_BLINK_LOW);
             } catch (Exception e) {
                 Log.e(TAG, "Action blink tick failed", e);
             }
@@ -306,12 +308,22 @@ public class BAPBridge {
      * Send distance to maneuver through AppConnectorNavi using native formatter rules.
      */
     private void sendDistanceToManeuverRaw(int meters, boolean bargraphOn, int bargraph) throws Exception {
+        sendDistanceToManeuverRaw(meters,bargraphOn,bargraph,
+            bargraphOn ? RendererServer.PROGRESS_FILL : RendererServer.PROGRESS_OFF);
+    }
+
+    /* Serialize snapshot + BAP emission + VC enqueue with the action-blink worker.
+     * Lock order stays this -> distanceToManeuverLock -> renderer queue. */
+    private synchronized void sendDistanceToManeuverRaw(int meters, boolean bargraphOn, int bargraph,
+                                           int progressState) throws Exception {
+        if(meters<=0 || !bargraphOn) progressState=RendererServer.PROGRESS_OFF;
         synchronized (distanceToManeuverLock) {
             if (meters > 0) {
                 hasLastDistM = true;
                 lastDistM = meters;
                 lastBarOn = bargraphOn;
                 lastBar = bargraph;
+                lastProgressState = progressState;
             } else {
                 hasLastDistM = false;
                 lastDistM = 0;
@@ -335,11 +347,32 @@ public class BAPBridge {
                 int crLevel = bargraphOn ? (bargraph * 16) / 100 : 0;
                 if (crLevel > 16) crLevel = 16;
                 int crMode = bargraphOn ? 1 : 0;
-                noteRendererSendResult(rendererClient.sendBargraph(crLevel, crMode));
+                noteRendererSendResult(rendererClient.sendProgress(crLevel, crMode, progressState));
             } catch (Throwable t) {
                 noteRendererSendResult(false);
                 /* BAP already sent; renderer will resync on next tick */
             }
+        }
+    }
+
+    /** Replay the same HUD phase atomically; a blink tick cannot overtake the cache read. */
+    private synchronized void replayDistanceToManeuver() throws Exception {
+        boolean haveCached;
+        int cachedDistM;
+        boolean cachedBarOn;
+        int cachedBar;
+        int cachedProgress;
+        synchronized (distanceToManeuverLock) {
+            haveCached = hasLastDistM;
+            cachedDistM = lastDistM;
+            cachedBarOn = lastBarOn;
+            cachedBar = lastBar;
+            cachedProgress = lastProgressState;
+        }
+        if (haveCached) {
+            sendDistanceToManeuverRaw(cachedDistM, cachedBarOn, cachedBar, cachedProgress);
+        } else {
+            sendDistanceToManeuverRaw(0, false, 0);
         }
     }
 
@@ -1007,21 +1040,7 @@ public class BAPBridge {
                     && hasManeuverList
                     && hasAnyManeuver;
                 if (transientNoDistance) {
-                    boolean haveCached;
-                    int cachedDistM;
-                    boolean cachedBarOn;
-                    int cachedBar;
-                    synchronized (distanceToManeuverLock) {
-                        haveCached = hasLastDistM;
-                        cachedDistM = lastDistM;
-                        cachedBarOn = lastBarOn;
-                        cachedBar = lastBar;
-                    }
-                    if (haveCached) {
-                        sendDistanceToManeuverRaw(cachedDistM, cachedBarOn, cachedBar);
-                    } else {
-                        sendDistanceToManeuverRaw(0, false, 0);
-                    }
+                    replayDistanceToManeuver();
                 } else if (distM <= 0 || shouldClearManeuver) {
                     resetActionBlinkState();
                     sendDistanceToManeuverRaw(0, false, 0);
@@ -1164,7 +1183,7 @@ public class BAPBridge {
                     if (nowApproach) {
                         updateRendererBargraph(s, bargraphDenominatorM);
                     } else {
-                        noteRendererSendResult(rendererClient.sendBargraph(0, 0));
+                        noteRendererSendResult(rendererClient.sendProgress(0, 0, RendererServer.PROGRESS_OFF));
                     }
                 }
                 /* Check if rendered maneuver actually changed */
@@ -1988,7 +2007,7 @@ public class BAPBridge {
     }
 
     /** Send only changed maneuver geometry; viewport changes use their own command. */
-    private boolean updateRendererIfChanged(RouteGuidance.State s, int bargraphDenominatorM) {
+    private synchronized boolean updateRendererIfChanged(RouteGuidance.State s, int bargraphDenominatorM) {
         if (rendererClient == null || !customRendererStarted) return false;
 
         try {
@@ -2026,15 +2045,28 @@ public class BAPBridge {
                 bargraphMode = 1;
             }
 
+            int progressState=bargraphMode>0 ? RendererServer.PROGRESS_FILL : RendererServer.PROGRESS_OFF;
+            if(bargraphMode>0 && (distM*100)/bargraphDenominatorM < BARGRAPH_BLINK_PERCENT) {
+                synchronized(distanceToManeuverLock) {
+                    if(hasLastDistM && lastDistM==distM && lastBarOn
+                            && (lastProgressState==RendererServer.PROGRESS_BLINK_LOW
+                                || lastProgressState==RendererServer.PROGRESS_BLINK_HIGH)) {
+                        progressState=lastProgressState;
+                        bargraphLevel=(lastBar*16)/100;
+                    }
+                }
+            }
+
             int perspective = 1;  /* always 3D — 2D/3D switch disabled for now */
 
             boolean roadsOnly = icon == lastCrIcon && direction == lastCrDirection
                 && exitAngle == lastCrExitAngle && drivingSide == lastCrDrivingSide
                 && mapped.snapToRoad == lastCrSnapToRoad
                 && firstIdx == lastCrIdx && ver == lastCrVer;
-            boolean ok = rendererClient.sendBapManeuver(icon, direction, exitAngle,
+            boolean ok = rendererClient.sendBapProgressManeuver(icon, direction, exitAngle,
                 drivingSide, junctionAngles, bargraphLevel, bargraphMode,
-                perspective, roadsOnly, mapped.snapToRoad);
+                perspective, roadsOnly, mapped.snapToRoad,
+                progressState);
             // Failed enqueue must remain eligible for retry with the same input.
             if (ok) {
                 lastCrIcon = icon;
@@ -2078,7 +2110,8 @@ public class BAPBridge {
             }
             bargraphMode = 1;
         }
-        noteRendererSendResult(rendererClient.sendBargraph(bargraphLevel, bargraphMode));
+        noteRendererSendResult(rendererClient.sendProgress(bargraphLevel, bargraphMode,
+            bargraphMode>0 ? RendererServer.PROGRESS_FILL : RendererServer.PROGRESS_OFF));
     }
 
     /**

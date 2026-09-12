@@ -145,6 +145,24 @@ public final class ManeuverParityTest {
         b=a.pendingPacket();check((b[1]&4)==0 && angle(b,4)==-67 && angle(b,8)==-1,"legacy degrees unchanged");
         a.reset();check(a.renderer.sendBapManeuver(6,0,-135,1,new int[22],16,2,1),"BAP packet send");
         b=a.pendingPacket();check(b[1]==7 && b[7]==18 && b[45]==1 && b[46]==16 && b[47]==2,"BAP flags/count/presentation packing");
+        for(int state=0;state<=3;state++) {
+            int level=state==3?16:0, mode=state==0?0:1;
+            a.reset(); check(a.renderer.sendProgress(level,mode,state),"progress send");
+            b=latest(a); check(b.length==48 && b[0]==6 && b[1]==32 && b[2]==level && b[3]==mode && b[4]==state,
+                "progress extension packing");
+            a.reset(); check(a.renderer.sendBapProgressManeuver(6,0,-135,1,new int[22],level,mode,1,true,true,state),"progress maneuver");
+            b=a.pendingPacket(); check((b[1]&32)!=0 && (b[1]&2)!=0 && b[7]==18 && b[44]==state && b[46]==level && b[47]==mode,
+                "inline progress overwrote geometry or omitted off");
+        }
+        a.reset();check(a.renderer.sendBargraph(0,1),"legacy empty"); b=latest(a);
+        check(b[1]==0 && b[4]==0,"legacy sender must stay unmarked");
+        a.reset();RouteGuidance.State blinking=a.state(2,90,0,0,0,new int[]{-90,0,90});
+        blinking.distManeuverM=10;
+        a.set(a.bridge,"hasLastDistM",Boolean.TRUE);a.set(a.bridge,"lastDistM",Integer.valueOf(10));
+        a.set(a.bridge,"lastBarOn",Boolean.TRUE);a.set(a.bridge,"lastBar",Integer.valueOf(0));
+        a.set(a.bridge,"lastProgressState",Integer.valueOf(RendererServer.PROGRESS_BLINK_LOW));
+        check(((Boolean)a.sendRenderer.invoke(a.bridge,blinking,Integer.valueOf(100))).booleanValue(),"blink snapshot send");
+        b=a.pendingPacket();check(b[44]==2 && b[46]==0 && b[47]==1,"maneuver snapshot lost current HUD phase");
         System.out.println("ManeuverParityTest: PASS ("+checks+" checks)");
     }
 }

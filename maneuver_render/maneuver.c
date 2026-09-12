@@ -162,7 +162,7 @@ static float g_last_combined_rot = 0.0f;
 static int   g_camera_prepared_this_frame = 0;
 #define ROUTE_SPEED_PEAK 0.045f         /* peak animation speed (NDC/frame on straight) */
 #define ROUTE_SPEED_MIN  0.010f         /* minimum speed on sharpest turns */
-#define ROUTE_EXTEND     0.5f           /* extension length beyond viewport */
+#define ROUTE_EXTEND     RPATH_ANIMATION_EXTENSION           /* extension length beyond viewport */
 #define ROUTE_TAIL_FADE_DIST 0.35f      /* only the pre-extension section that is normally off-screen */
 #define ROUTE_TAIL_FADE_SLICES 24
 #define TRANSITION_PAD   0.15f          /* minimum clear road between maneuver road zones */
@@ -1235,28 +1235,6 @@ void maneuver_build_route(const maneuver_state_t *state, route_path_t *path) {
         break;
     }
     }
-}
-
-void maneuver_build_settled_mesh(const maneuver_state_t *state, route_mesh_t *mesh) {
-    route_path_t path;
-    float end;
-    maneuver_build_route(state,&path);
-    rpath_extend(&path);
-    rpath_densify(&path);
-    if (state->icon==ICON_ARRIVED) {
-        path.tip_blend=1.0f;
-        path.bulb_radius=ARRIVE_INNER_R-OL_W;
-    }
-    end=path.total_length>1e-6f ? (path.total_length-ROUTE_EXTEND)/path.total_length : 0;
-    rpath_extrude_preview(&path,mesh,SHAFT_T,ROUTE_BASE_Y,ROUTE_TOP_Y,end,
-                          maneuver_elevation(state));
-}
-
-void maneuver_select_bargraph(const maneuver_state_t *state) {
-    /* Separate scratch storage: never replace the route currently being animated. */
-    static route_mesh_t preview;
-    maneuver_build_settled_mesh(state,&preview);
-    render_set_bargraph_tip(preview.verts+6*preview.arrow_first,preview.arrow_count);
 }
 
 /* Get exit point and heading for a maneuver (for chaining). */

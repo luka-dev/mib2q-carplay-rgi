@@ -31,7 +31,7 @@
 #include "render.h"
 #include "protocol.h"
 #include "maneuver.h"
-#include "bargraph_layout.h"
+#include "visible_area.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -154,6 +154,13 @@ static void mat4_lookAt(float *m,
 static GLuint g_program = 0;
 static GLint  g_attr_pos   = -1;
 static GLint  g_attr_norm  = -1;
+static GLint g_attr_progress=-1, g_uni_progress=-1;
+static GLint g_uni_contact_thickness=-1;
+static float g_progress_fill=0, g_progress_path_weight=0, g_progress_glow=0;
+void render_set_route_progress(float fill, float path_weight, float glow) {
+    g_progress_fill=cr_route_progress_front(fill);
+    g_progress_path_weight=path_weight; g_progress_glow=glow;
+}
 static GLint  g_uni_color  = -1;
 static GLint  g_uni_mvp    = -1;
 static GLint  g_uni_light  = -1;
@@ -200,13 +207,15 @@ static cr_rect_animation_t g_visible_area = {
     {CR_POPUP_X, CR_POPUP_Y, CR_POPUP_W, CR_POPUP_H},
     {CR_POPUP_X, CR_POPUP_Y, CR_POPUP_W, CR_POPUP_H},
     {CR_POPUP_X, CR_POPUP_Y, CR_POPUP_W, CR_POPUP_H}, 0, 0};
-static cr_bargraph_layout_t g_bargraph_layout;
-static int g_bargraph_side = 1;
-static float g_bargraph_tip[RPATH_ARROW_VERTS*6];
-static int g_bargraph_tip_count;
-static void update_bargraph_side(void);
 
-static double overlay_now(void) {
+const cr_route_progress_map_t *render_prepare_route_progress(const cr_route_progress_point_t *points, int count) {
+    static cr_route_progress_map_t projected;
+    if(g_progress_path_weight<=0) return NULL;
+    return cr_route_progress_project(&projected,points,count,g_mvp_current,g_visible_area.current)
+        ? &projected : NULL;
+}
+
+static double viewport_now(void) {
     struct timespec t;
     clock_gettime(CLOCK_MONOTONIC,&t);
     return (double)t.tv_sec+(double)t.tv_nsec/1000000000.0;
@@ -272,7 +281,7 @@ static const material_preset_t k_material_presets[RENDER_MAT_COUNT] = {
         { 0.12f, 96.0f }                       /* stronger grain texture */
     },
     [RENDER_MAT_ROUTE_ACTIVE] = {
-        { 0.35f, 0.67f, 0.90f, 1.0f },   /* soft blue, matches bargraph */
+        { 0.35f, 0.67f, 0.90f, 1.0f },   /* soft blue route material */
         { 0.10f, 0.68f, 0.50f,  6.0f },   /* broad spec lobe (power 6 — visible at N·H=0.82) */
         { 0.22f, 3.0f, 0.40f, 12.0f },    /* clearcoat candy gloss (power 12, wide enough for camera angle) */
         { 0.0f, 0.0f }
@@ -291,11 +300,14 @@ static const lighting_state_t k_lighting_state = {
 static const char *k_vert_src =
     "attribute vec3 a_pos;\n"
     "attribute vec3 a_normal;\n"
+    "attribute float a_progress;\n"
     "uniform mat4 u_mvp;\n"
     "uniform float u_z_bias;\n"
     "uniform float u_tex_mode;\n"
     "varying vec3 v_normal;\n"
     "varying vec3 v_world_pos;\n"
+    "varying float v_progress;\n"
+    "varying float v_progress_w;\n"
     "void main() {\n"
     "  if (u_tex_mode > 0.5 && u_tex_mode < 1.5) {\n"
     "    gl_Position = vec4(a_pos.xy, 0.0, 1.0);\n"
@@ -304,11 +316,17 @@ static const char *k_vert_src =
     "    gl_Position.z -= u_z_bias;\n"
     "  }\n"
     "  v_normal = a_normal;\n"
+    /* GLES2 has no noperspective qualifier. Cancel perspective interpolation
+     * so equal projected lengths stay equal inside long shaft triangles too. */
+    "  v_progress = a_progress * gl_Position.w;\n"
+    "  v_progress_w = gl_Position.w;\n"
     "  v_world_pos = a_pos;\n"
     "}\n";
 
 static const char *k_frag_src_body =
     "uniform vec4 u_color;\n"
+    "uniform vec4 u_progress;\n"
+    "uniform float u_contact_thickness;\n"
     "uniform vec3 u_light_dir;\n"
     "uniform vec3 u_light_key_color;\n"
     "uniform vec3 u_light_fill_color;\n"
@@ -326,7 +344,24 @@ static const char *k_frag_src_body =
     "uniform float u_global_alpha;\n"
     "varying vec3 v_normal;\n"
     "varying vec3 v_world_pos;\n"
+    "varying float v_progress;\n"
+    "varying float v_progress_w;\n"
     "vec4 shade_surface(vec4 base, float alpha) {\n"
+    /* Applied to the actual route mesh only. Keep normal lighting, depth,
+     * shadows and alpha; crossings carry their own arc-length coordinates. */
+    "  if (u_progress.w > 0.0) {\n"
+    "    vec3 quiet = vec3(0.30, 0.43, 0.54);\n"
+    "    vec3 ice = vec3(0.32, 0.77, 1.0);\n"
+    "    float f = u_progress.x;\n"
+    "    float filled = 0.0;\n"
+    "    if (u_progress.y > 0.0) {\n"
+    "      filled = 1.0 - smoothstep(f-0.055, f+0.055, v_progress/v_progress_w);\n"
+    "      if (f <= -0.055) filled = 0.0;\n"
+    "      else if (f >= 1.055) filled = 1.0;\n"
+    "    }\n"
+    "    vec3 tint = mix(quiet,ice,filled*u_progress.y+u_progress.z);\n"
+    "    base.rgb = mix(base.rgb,tint,u_progress.w);\n"
+    "  }\n"
     "  vec3 N = normalize(v_normal);\n"
     "  vec3 L = normalize(u_light_dir);\n"
     "  vec3 fill_dir = normalize(vec3(-L.x * 0.55, 0.45, -L.z * 0.55));\n"
@@ -425,6 +460,15 @@ static const char *k_frag_src_body =
     "    gl_FragColor.a *= u_global_alpha;\n"
     "    return;\n"
     "  }\n"
+    /* tex_mode 10: contact AO on lower route faces; two-color tint stays intact. */
+    "  if (u_tex_mode > 9.5 && u_tex_mode < 10.5) {\n"
+    "    float width = max(0.001, v_normal.z);\n"
+    "    float edge = 1.0 - smoothstep(0.0, 1.0, abs(v_normal.x) / width);\n"
+    "    float gap = 1.0 - smoothstep(0.06, 0.14, max(0.0, v_normal.y-u_contact_thickness));\n"
+    "    float onset = smoothstep(0.0, 0.15, v_normal.z);\n"
+    "    gl_FragColor = vec4(0.0, 0.0, 0.0, 0.42 * edge * gap * onset * u_color.a * u_global_alpha);\n"
+    "    return;\n"
+    "  }\n"
     /* tex_mode 9: route shadow (mask offset + darken) */
     "  if (u_tex_mode > 8.5 && u_tex_mode < 9.5) {\n"
     "    vec2 uv = vec2(v_world_pos.x * u_mask_scale.x + 0.5,\n"
@@ -448,16 +492,26 @@ static const char *k_frag_src_body =
 
 #define MAX_VERTS 1200
 static float g_vbuf[MAX_VERTS * 6];
+static float g_vprogress[MAX_VERTS];
+static int g_route_batch=0;
 static int g_vcount;
 
-void vb_reset(void) { g_vcount = 0; }
+void vb_reset(void) { g_vcount = 0; g_route_batch=0; }
 
 void vb_v(float x, float y, float z, float nx, float ny, float nz) {
     if (g_vcount >= MAX_VERTS) return;
     int i = g_vcount * 6;
     g_vbuf[i] = x; g_vbuf[i+1] = y; g_vbuf[i+2] = z;
     g_vbuf[i+3] = nx; g_vbuf[i+4] = ny; g_vbuf[i+5] = nz;
+    g_vprogress[g_vcount]=0;
     g_vcount++;
+}
+
+void vb_route_v(float x,float y,float z,float nx,float ny,float nz,float progress) {
+    if(g_vcount>=MAX_VERTS) return;
+    vb_v(x,y,z,nx,ny,nz);
+    g_vprogress[g_vcount-1]=progress;
+    g_route_batch=1;
 }
 
 /* Push a quad as 2 triangles with flat normal */
@@ -501,7 +555,42 @@ void vb_flush(float r, float g, float b, float a) {
     glVertexAttribPointer(g_attr_norm, 3, GL_FLOAT, GL_FALSE, 24, g_vbuf + 3);
     glEnableVertexAttribArray(g_attr_pos);
     glEnableVertexAttribArray(g_attr_norm);
+    glUniform4f(g_uni_progress,g_progress_fill,g_progress_path_weight,g_progress_glow,
+                g_route_batch ? 1.0f : 0.0f);
+    if(g_route_batch) {
+        glVertexAttribPointer(g_attr_progress,1,GL_FLOAT,GL_FALSE,0,g_vprogress);
+        glEnableVertexAttribArray(g_attr_progress);
+    }
     glDrawArrays(GL_TRIANGLES, 0, g_vcount);
+    glDisableVertexAttribArray(g_attr_progress);
+    glVertexAttrib1f(g_attr_progress,0);
+    /* Direct mask/sprite/composite draws bypass vb_flush. */
+    glUniform4f(g_uni_progress,0,0,0,0);
+}
+
+/* Multiplicative contact AO preserves framebuffer alpha and only darkens the
+ * lower mesh surfaces. Depth testing keeps the upper arrow clean. */
+void render_contact_shadow(const float *verts,int count,float alpha,float thickness) {
+    int drawn=0;
+    if(count<=0 || alpha<=0)return;
+    glUniform1f(g_uni_tex_mode,10.0f);
+    glUniform1f(g_uni_contact_thickness,thickness);
+    glUniform4f(g_uni_progress,0,0,0,0);
+    glUniform4f(g_uni_color,0,0,0,alpha);
+    glUniform1f(g_uni_zbias,g_z_bias);
+    glDepthMask(GL_FALSE);
+    glBlendFuncSeparate(GL_ZERO,GL_ONE_MINUS_SRC_ALPHA,GL_ZERO,GL_ONE);
+    while(drawn<count) {
+        int batch=count-drawn;
+        if(batch>MAX_VERTS)batch=MAX_VERTS;
+        glVertexAttribPointer(g_attr_pos,3,GL_FLOAT,GL_FALSE,24,verts+drawn*6);
+        glVertexAttribPointer(g_attr_norm,3,GL_FLOAT,GL_FALSE,24,verts+drawn*6+3);
+        glDrawArrays(GL_TRIANGLES,0,batch);
+        drawn+=batch;
+    }
+    glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
+    glDepthMask(GL_TRUE);
+    glUniform1f(g_uni_tex_mode,0.0f);
 }
 
 /* ================================================================
@@ -543,6 +632,10 @@ static int build_program(void) {
     g_program = glCreateProgram();
     glAttachShader(g_program, vs);
     glAttachShader(g_program, fs);
+    /* GL 2.1 requires array 0 to remain the position stream. */
+    glBindAttribLocation(g_program,0,"a_pos");
+    glBindAttribLocation(g_program,1,"a_normal");
+    glBindAttribLocation(g_program,2,"a_progress");
     glLinkProgram(g_program);
 
     GLint ok = 0;
@@ -562,6 +655,9 @@ static int build_program(void) {
 
     g_attr_pos  = glGetAttribLocation(g_program, "a_pos");
     g_attr_norm = glGetAttribLocation(g_program, "a_normal");
+    g_attr_progress=glGetAttribLocation(g_program,"a_progress");
+    g_uni_progress=glGetUniformLocation(g_program,"u_progress");
+    g_uni_contact_thickness=glGetUniformLocation(g_program,"u_contact_thickness");
     g_uni_color = glGetUniformLocation(g_program, "u_color");
     g_uni_mvp   = glGetUniformLocation(g_program, "u_mvp");
     g_uni_light = glGetUniformLocation(g_program, "u_light_dir");
@@ -896,7 +992,6 @@ void render_set_viewport(int fb_width, int fb_height) {
     g_fb_h = g_ss_h;
 
     /* Resize SSAA texture + depth to match new supersample resolution */
-    update_bargraph_side();
     if (g_ss_tex) {
         glBindTexture(GL_TEXTURE_2D, g_ss_tex);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, g_ss_w, g_ss_h, 0,
@@ -991,16 +1086,6 @@ static void build_camera_mvp(float *mvp, float aspect, float pan_x, float pan_z,
 
 }
 
-static void update_bargraph_side(void) {
-    cr_bargraph_layout_t target;
-    float mvp[16];
-    /* Final crop, camera and perspective: never the moving transition pose. */
-    cr_bargraph_begin(&target,g_visible_area.target);
-    build_camera_mvp(mvp,(float)g_fb_w/g_fb_h,0,0,0,(float)g_perspective);
-    cr_bargraph_mesh(&target,mvp,g_bargraph_tip,g_bargraph_tip_count);
-    g_bargraph_side=cr_bargraph_side(&target);
-}
-
 static void sync_camera_uniforms(void) {
     /* Animate g_persp_t toward target with ease-in-out */
     {
@@ -1089,9 +1174,8 @@ static void sync_camera_uniforms(void) {
 }
 
 void render_begin_frame(void) {
-    double now=overlay_now();
+    double now=viewport_now();
     cr_rect_animate(&g_visible_area,now);
-    cr_bargraph_begin(&g_bargraph_layout,g_visible_area.current);
     /* Render into 2x supersample FBO */
     glBindFramebuffer(GL_FRAMEBUFFER, g_ss_fbo);
     glViewport(0, 0, g_ss_w, g_ss_h);
@@ -1113,112 +1197,8 @@ float render_get_global_alpha(void) {
 }
 
 int render_set_visible_area(int x, int y, int w, int h) {
-    int changed=cr_rect_retarget(&g_visible_area,cr_visible_area(x,y,w,h),overlay_now());
-    if (changed) update_bargraph_side();
+    int changed=cr_rect_retarget(&g_visible_area,cr_visible_area(x,y,w,h),viewport_now());
     return changed;
-}
-
-void render_set_bargraph_tip(const float *verts, int count) {
-    if (!verts || count<0) count=0;
-    if (count>RPATH_ARROW_VERTS) count=RPATH_ARROW_VERTS;
-    g_bargraph_tip_count=count;
-    if (count) memcpy(g_bargraph_tip,verts,count*6*sizeof(float));
-    update_bargraph_side();
-}
-
-int render_get_bargraph_side(void) {
-    return g_bargraph_side;
-}
-
-static void bargraph_quad(float x, float y, float w, float h) {
-    cr_rect_t visible=g_bargraph_layout.visible;
-    float right=fminf(x+w,-1+2*(visible.x+visible.w)/CR_DEFAULT_WIDTH);
-    float top=fminf(y+h,1-2*visible.y/CR_DEFAULT_HEIGHT);
-    x=fmaxf(x,-1+2*visible.x/CR_DEFAULT_WIDTH);
-    y=fmaxf(y,1-2*(visible.y+visible.h)/CR_DEFAULT_HEIGHT);
-    w=right-x; h=top-y;
-    if (w<=0 || h<=0) return;
-    vb_v(x,   y,   0, 0,0,1);
-    vb_v(x+w, y,   0, 0,0,1);
-    vb_v(x+w, y+h, 0, 0,0,1);
-    vb_v(x,   y,   0, 0,0,1);
-    vb_v(x+w, y+h, 0, 0,0,1);
-    vb_v(x,   y+h, 0, 0,0,1);
-}
-
-static void bargraph_flush(void) {
-    glVertexAttribPointer(g_attr_pos,  3, GL_FLOAT, GL_FALSE, 24, g_vbuf);
-    glVertexAttribPointer(g_attr_norm, 3, GL_FLOAT, GL_FALSE, 24, g_vbuf + 3);
-    glEnableVertexAttribArray(g_attr_pos);
-    glEnableVertexAttribArray(g_attr_norm);
-    glDrawArrays(GL_TRIANGLES, 0, g_vcount);
-}
-
-static void draw_bargraph_column(int level, float alpha, cr_rect_t bounds) {
-    const int N_BARS = 16;
-    const float px=2.0f/CR_DEFAULT_WIDTH, py=2.0f/CR_DEFAULT_HEIGHT;
-    float bar_w,bar_h,gap,bar_x,base_y;
-    bar_w=bounds.w*px;
-    bar_h=g_bargraph_layout.bar_h*py;
-    gap=g_bargraph_layout.gap*py;
-    bar_x=-1+bounds.x*px;
-    base_y=1-(bounds.y+bounds.h)*py;
-    float identity[16];
-    int i;
-
-    memset(identity, 0, sizeof(identity));
-    identity[0] = identity[5] = identity[10] = identity[15] = 1.0f;
-
-    glDisable(GL_DEPTH_TEST);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glUniform1f(g_uni_tex_mode, 3.0f);
-    glUniformMatrix4fv(g_uni_mvp, 1, GL_FALSE, identity);
-    glUniform1f(g_uni_zbias, 0.0f);
-
-    /* Subtle per-segment drop shadow: source-pixel offset, three feather bands.
-     * Batch each band for all 16 bars. Shares the column's fade/blink opacity. */
-    {
-        const float feather[3]={2.0f,1.0f,0.25f};
-        const float opacity[3]={0.045f,0.09f,0.14f};
-        float scale=fminf(1.0f,bounds.w/14.0f);
-        int layer;
-        for (layer=0;layer<3;layer++) {
-            float f=feather[layer]*scale;
-            glUniform4f(g_uni_color,0,0,0,alpha*opacity[layer]);
-            vb_reset();
-            for (i=0;i<N_BARS;i++) {
-                float y=base_y+i*(bar_h+gap);
-                bargraph_quad(bar_x+(0.75f*scale-f)*px,y-(scale+f)*py,
-                              bar_w+2*f*px,bar_h+2*f*py);
-            }
-            bargraph_flush();
-        }
-    }
-
-    /* level 0 = 0 bars blue, level 16 = 16 bars blue.
-     * Bars drawn bottom (i=0) to top (i=15).
-     * Top bars blue, bottom bars grey — fills from top down. */
-    for (i = 0; i < N_BARS; i++) {
-        float y = base_y + i * (bar_h + gap);
-        float r, g, b;
-        int bar_idx = N_BARS - 1 - i;  /* top bar = idx 0 */
-        if (bar_idx < level) { r = 90.0f/255.0f; g = 170.0f/255.0f; b = 230.0f/255.0f; }
-        else                 { r = 100.0f/255.0f; g = 100.0f/255.0f; b = 100.0f/255.0f; }
-        glUniform4f(g_uni_color, r, g, b, alpha);
-        vb_reset();
-        bargraph_quad(bar_x,y,bar_w,bar_h);
-        bargraph_flush();
-    }
-
-    glEnable(GL_DEPTH_TEST);
-    glUniform1f(g_uni_tex_mode, 0.0f);
-}
-
-void render_bargraph(int level, float alpha) {
-    /* Side changes are atomic: exactly one column, always at full overlay alpha.
-     * Only the visible-area rectangle animates between split/big stage. */
-    draw_bargraph_column(level,alpha,g_bargraph_layout.bars[g_bargraph_side]);
 }
 
 /* Debug grid: draw colored checkerboard over the full 328x180 content area.
@@ -1351,7 +1331,6 @@ void render_end_frame(void) {
 
 void render_set_perspective(int enabled) {
     g_perspective = enabled;
-    update_bargraph_side();
 }
 
 int render_is_animating(void) {

@@ -59,3 +59,7 @@ tmp/
 /output/share-review/**/*.dylib
 /output/share-review/**/video_receiver
 /output/share-review/**/stage/hook/build/
+
+# Isolated renderer experiment: retain evidence, exclude binaries/copied runtime atlas.
+/output/arrow-progress/host/
+/output/arrow-progress/frames/flag_atlas.rgba

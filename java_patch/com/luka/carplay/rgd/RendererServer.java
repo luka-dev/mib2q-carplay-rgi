@@ -523,17 +523,40 @@ public class RendererServer {
             bargraphLevel, bargraphMode, perspective, true, refresh, snapToRoad);
     }
 
+    public static final int PROGRESS_OFF=0, PROGRESS_FILL=1,
+        PROGRESS_BLINK_LOW=2, PROGRESS_BLINK_HIGH=3;
+    private static final int PROGRESS_FLAG=0x20;
+
+    /** Same legacy packet, with an explicit progress snapshot in unused byte 42. */
+    public boolean sendBapProgressManeuver(int icon, int direction, int exitAngle,
+            int drivingSide, int[] junctionAngles, int level, int mode, int perspective,
+            boolean refresh, boolean snapToRoad, int progressState) {
+        return sendManeuverPacket(icon,direction,exitAngle,drivingSide,junctionAngles,
+            level,mode,perspective,true,refresh,snapToRoad,progressState);
+    }
+
+    private boolean sendManeuverPacket(int icon, int direction, int exitAngle,
+            int drivingSide, int[] junctionAngles, int bargraphLevel, int bargraphMode,
+            int perspective, boolean bapGeometry, boolean refresh, boolean snapToRoad) {
+        return sendManeuverPacket(icon,direction,exitAngle,drivingSide,junctionAngles,
+            bargraphLevel,bargraphMode,perspective,bapGeometry,refresh,snapToRoad,-1);
+    }
+
     private boolean sendManeuverPacket(int icon, int direction, int exitAngle,
                                       int drivingSide, int[] junctionAngles,
                                       int bargraphLevel, int bargraphMode,
-                                      int perspective, boolean bapGeometry, boolean refresh, boolean snapToRoad) {
+                                      int perspective, boolean bapGeometry, boolean refresh, boolean snapToRoad, int progressState) {
         byte[] pkt = new byte[PKT_SIZE];
         pkt[0] = CMD_MANEUVER;
         byte flags = 0;
         if (bapGeometry) flags |= MAN_FLAG_BAP_GEOMETRY;
         if (refresh) flags |= MAN_FLAG_REFRESH;
         if (snapToRoad) flags |= MAN_FLAG_SNAP_TO_ROAD;
-        if (bargraphMode > 0)  flags |= MAN_FLAG_BARGRAPH;
+        if (bargraphMode > 0 || progressState >= 0) flags |= MAN_FLAG_BARGRAPH;
+        if (progressState >= 0) {
+            flags |= PROGRESS_FLAG;
+            pkt[44]=(byte)progressState;
+        }
         if (perspective >= 0)  flags |= MAN_FLAG_SET_PERSP;
         pkt[1] = flags;
 
@@ -567,7 +590,7 @@ public class RendererServer {
             pkt[45] = (byte) (perspective & 0xFF);
         }
         /* bargraph in payload[44..45] when flag set */
-        if (bargraphMode > 0) {
+        if (bargraphMode > 0 || progressState >= 0) {
             pkt[46] = (byte) (bargraphLevel & 0xFF);
             pkt[47] = (byte) (bargraphMode & 0xFF);
         }
@@ -583,8 +606,14 @@ public class RendererServer {
      * @return true if sent successfully
      */
     public boolean sendBargraph(int level, int mode) {
+        return sendProgress(level,mode,-1);
+    }
+
+    /** Low/high phases preserve the legacy 16/0, mode=1 fields for old receivers. */
+    public boolean sendProgress(int level, int mode, int progressState) {
         byte[] pkt = new byte[PKT_SIZE];
         pkt[0] = CMD_BARGRAPH;
+        if(progressState >= 0) { pkt[1]=(byte)PROGRESS_FLAG; pkt[4]=(byte)progressState; }
         pkt[2] = (byte) (level & 0xFF);   /* payload[0] = level */
         pkt[3] = (byte) (mode & 0xFF);    /* payload[1] = mode */
         return sendPacket(pkt);

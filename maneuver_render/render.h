@@ -9,6 +9,7 @@
 #define CR_RENDER_H
 
 #include <stdint.h>
+#include "route_progress.h"
 
 typedef enum {
     RENDER_MAT_GENERIC_SOLID = 0,
@@ -95,15 +96,8 @@ void render_set_raised(int raised);
 void render_set_global_alpha(float alpha);
 float render_get_global_alpha(void);
 
-/* Draw bargraph overlay (2D screen-space, call after 3D scene).
- * level: 0-16 (0=empty, 16=full). */
-void render_bargraph(int level, float alpha);
 /* Source-pixel viewport (same rectangle the VC crops). Returns 1 if changed. */
 int render_set_visible_area(int x, int y, int w, int h);
-/* Cache the incoming maneuver's final arrowhead; animated meshes never submit here. */
-void render_set_bargraph_tip(const float *verts, int count);
-int render_get_bargraph_side(void); /* 0=left, 1=right; fixed between layout events */
-
 /* ================================================================
  * Single-FBO painter's algorithm mask rendering API
  *
@@ -173,6 +167,12 @@ void render_sprite_flag_ex(float x, float y, float size, int frame, int flip_x);
 
 void vb_reset(void);
 void vb_v(float x, float y, float z, float nx, float ny, float nz);
+void vb_route_v(float x, float y, float z, float nx, float ny, float nz, float progress);
+/* Brightness is path_weight * spatial_fill + glow, applied only to the route. */
+void render_set_route_progress(float fill, float path_weight, float glow);
+/* Preclipped receiver triangles: pos(3), signed edge distance/height gap/onset fade(3). */
+void render_contact_shadow(const float *verts,int count,float alpha,float thickness);
+const cr_route_progress_map_t *render_prepare_route_progress(const cr_route_progress_point_t *points, int count);
 void vb_quad(float x0, float y0, float z0,
              float x1, float y1, float z1,
              float x2, float y2, float z2,

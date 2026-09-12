@@ -1,6 +1,6 @@
 /*
  * Single-thread TCP CLIENT — connects to Java BAPBridge server
- * (127.0.0.1:19800), receives CMD_MANEUVER / CMD_BARGRAPH / etc.
+ * (127.0.0.1:19800), receives CMD_MANEUVER / CMD_PROGRESS / etc.
  *
  * No pthreads — heartbeat is dispatched by the main render loop on
  * its 1 s tick.  Net effect: renderer runs in a single thread, which
@@ -51,9 +51,8 @@ static int g_event_count = 0;
 
 #define RETRY_INTERVAL_SEC 1   /* re-attempt connect every 1 s if Java not up yet */
 
-/* Set when the peer closed the connection (recv returned 0).  Main loop
- * polls this and exits the process — Java only closes the socket on
- * genuine session teardown, so a cleanly-closed peer is our cue to die. */
+/* Any lost peer invalidates the visible frame, including RST/write failure.
+ * Main clears content before accepting fresh state on the reconnected link. */
 static int g_peer_closed = 0;
 
 int cr_server_peer_closed(void) {
@@ -77,11 +76,13 @@ static void clear_event_queue(void) {
     g_event_count = 0;
 }
 
-static void drop_event_peer(const char *reason) {
-    if (reason) fprintf(stderr, "server: event channel reset: %s\n", reason);
+static void drop_peer(const char *reason) {
+    if (reason) fprintf(stderr, "server: peer reset: %s\n", reason);
     if (g_server_fd >= 0) close(g_server_fd);
     g_server_fd = -1;
     g_recv_len = 0;
+    g_peer_closed = 1;
+    g_frame_ready_sent = 0;
     clear_event_queue();
 }
 
@@ -102,7 +103,7 @@ static void flush_event_queue(void) {
         /* A short TCP write cannot be resumed as a fresh 48-byte protocol
          * packet. Reset the connection: Java clears frameReady/clearPending on
          * disconnect, then READY state is replayed on reconnect. */
-        drop_event_peer(k >= 0 ? "short event write" : strerror(errno));
+        drop_peer(k >= 0 ? "short event write" : strerror(errno));
         return;
     }
 }
@@ -114,7 +115,7 @@ static void send_event(uint8_t event_id) {
     if (g_event_count >= EVENT_QUEUE_SIZE) {
         /* Never discard a barrier while pretending the connection stayed
          * valid. A reconnect gives Java a clean, explicitly-not-ready state. */
-        drop_event_peer("event queue full");
+        drop_peer("event queue full");
         return;
     }
 
@@ -215,18 +216,9 @@ void cr_server_poll(void) {
             if (n > 0) {
                 g_recv_len += n;
             } else if (n == 0) {
-                fprintf(stderr, "server: peer closed — requesting exit\n");
-                close(g_server_fd);
-                g_server_fd = -1;
-                g_recv_len = 0;
-                clear_event_queue();
-                g_peer_closed = 1;
-            } else if (errno != EAGAIN && errno != EWOULDBLOCK) {
-                fprintf(stderr, "server: recv error: %s\n", strerror(errno));
-                close(g_server_fd);
-                g_server_fd = -1;
-                g_recv_len = 0;
-                clear_event_queue();
+                drop_peer("peer closed");
+            } else if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+                drop_peer(strerror(errno));
             }
         }
     }

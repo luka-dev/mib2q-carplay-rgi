@@ -5,7 +5,8 @@
  * 2026-04 topology flip the renderer is the TCP client, so the harness
  * matches what Java BAPBridge does in production.
  *
- * Arrow keys cycle through maneuver presets.
+ * Left/right cycle maneuver presets; up/down change remaining progress level.
+ * B cycles explicit off/fill/blink-low/blink-high states (no local blink clock).
  * R = random maneuver, Space = screenshot, Q/ESC = quit.
  *
  * Workflow:
@@ -33,6 +34,7 @@
 
 #include <GLFW/glfw3.h>
 #include "protocol.h"
+#include "arrow_progress.h"
 #include "maneuver.h"   /* ICON_* constants, MAX_JUNCTION_ANGLES */
 
 /* ================================================================
@@ -185,8 +187,8 @@ static const preset_t g_presets[] = {
 
 static int g_preset_idx = 0;
 static int g_perspective = 1;
-static int g_bargraph_on = 0;
-static int g_bargraph_level = 8;
+static int g_progress_state = 0;
+static int g_progress_level = 8;
 
 /* ================================================================
  * Packet encoding
@@ -217,16 +219,17 @@ static void encode_maneuver(const preset_t *p, cr_cmd_t *cmd) {
 static void send_preset(int idx) {
     cr_cmd_t cmd;
     encode_maneuver(&g_presets[idx], &cmd);
-    /* Random bargraph */
-    cmd.flags |= MAN_FLAG_BARGRAPH;
-    g_bargraph_level = rand() % 17;
-    g_bargraph_on = 1 + (rand() % 2);
-    cmd.payload[44] = (uint8_t)g_bargraph_level;
-    cmd.payload[45] = (uint8_t)g_bargraph_on;
+    /* Random explicit arrow progress */
+    cmd.flags |= MAN_FLAG_PROGRESS | CR_PROGRESS_FLAG;
+    g_progress_level = rand() % 17;
+    g_progress_state = rand() % 4;
+    cmd.payload[44] = (uint8_t)g_progress_level;
+    cmd.payload[45] = g_progress_state == CR_PROGRESS_OFF ? 0 : 1;
+    cmd.payload[42] = (uint8_t)g_progress_state;
     if (tcp_send(&cmd, sizeof(cmd)) == 0)
-        fprintf(stderr, "harness: sent [%d/%d] %s bar=%d/%d\n",
+        fprintf(stderr, "harness: sent [%d/%d] %s progress=%d state=%d\n",
                 idx + 1, PRESET_COUNT, g_presets[idx].label,
-                g_bargraph_level, g_bargraph_on);
+                g_progress_level, g_progress_state);
 }
 
 static void send_random_icon(int icon, uint8_t flags) {
@@ -268,17 +271,18 @@ static void send_random_icon(int icon, uint8_t flags) {
         cmd.payload[43] = (uint8_t)g_perspective;
     }
 
-    /* Random bargraph in every maneuver */
-    cmd.flags |= MAN_FLAG_BARGRAPH;
-    g_bargraph_level = rand() % 17;          /* 0..16 */
-    g_bargraph_on = 1 + (rand() % 2);       /* 1=on, 2=blink */
-    cmd.payload[44] = (uint8_t)g_bargraph_level;
-    cmd.payload[45] = (uint8_t)g_bargraph_on;
+    /* Random explicit arrow progress in every maneuver */
+    cmd.flags |= MAN_FLAG_PROGRESS | CR_PROGRESS_FLAG;
+    g_progress_level = rand() % 17;          /* 0..16 */
+    g_progress_state = rand() % 4;       /* off, fill, blink low/high */
+    cmd.payload[44] = (uint8_t)g_progress_level;
+    cmd.payload[45] = g_progress_state == CR_PROGRESS_OFF ? 0 : 1;
+    cmd.payload[42] = (uint8_t)g_progress_state;
 
     if (tcp_send(&cmd, sizeof(cmd)) == 0)
-        fprintf(stderr, "harness: random icon=%d angle=%d dir=%d ds=%d junc=%d bar=%d/%d flags=0x%02x\n",
+        fprintf(stderr, "harness: random icon=%d angle=%d dir=%d ds=%d junc=%d progress=%d state=%d flags=0x%02x\n",
                 icon, exit_angle, dir, driving_side, jcount,
-                g_bargraph_level, g_bargraph_on, cmd.flags);
+                g_progress_level, g_progress_state, cmd.flags);
 }
 
 static void send_random_maneuver(uint8_t flags) {
@@ -314,14 +318,16 @@ static void send_debug_toggle(void) {
     fprintf(stderr, "harness: debug toggle\n");
 }
 
-static void send_bargraph(int level, int on) {
+static void send_progress(int level, int state) {
     cr_cmd_t cmd;
     memset(&cmd, 0, sizeof(cmd));
-    cmd.cmd = CMD_BARGRAPH;
+    cmd.cmd = CMD_PROGRESS;
+    cmd.flags = CR_PROGRESS_FLAG;
     cmd.payload[0] = (uint8_t)level;
-    cmd.payload[1] = (uint8_t)on;
+    cmd.payload[1] = state == CR_PROGRESS_OFF ? 0 : 1;
+    cmd.payload[2] = (uint8_t)state;
     tcp_send(&cmd, sizeof(cmd));
-    fprintf(stderr, "harness: bargraph level=%d on=%d\n", level, on);
+    fprintf(stderr, "harness: progress level=%d state=%d\n", level, state);
 }
 
 static void send_shutdown(void) {
@@ -406,16 +412,16 @@ static void key_callback(GLFWwindow *window, int key, int scancode, int action, 
         send_debug_toggle();
         break;
     case GLFW_KEY_B:
-        g_bargraph_on = (g_bargraph_on + 1) % 3;  /* 0=off, 1=on, 2=blink */
-        send_bargraph(g_bargraph_level, g_bargraph_on);
+        g_progress_state = (g_progress_state + 1) % 4;  /* off, fill, blink low/high */
+        send_progress(g_progress_level, g_progress_state);
         break;
     case GLFW_KEY_UP:
-        if (g_bargraph_level < 16) g_bargraph_level++;
-        send_bargraph(g_bargraph_level, g_bargraph_on);
+        if (g_progress_level < 16) g_progress_level++;
+        send_progress(g_progress_level, g_progress_state);
         break;
     case GLFW_KEY_DOWN:
-        if (g_bargraph_level > 0) g_bargraph_level--;
-        send_bargraph(g_bargraph_level, g_bargraph_on);
+        if (g_progress_level > 0) g_progress_level--;
+        send_progress(g_progress_level, g_progress_state);
         break;
     case GLFW_KEY_SPACE:
         send_screenshot(g_presets[g_preset_idx].label);

@@ -30,6 +30,7 @@
 #define FRAME_TIME_NS  (1000000000L / TARGET_FPS)
 #include "gl_compat.h"
 #include "render.h"
+#include "arrow_progress.h"
 #include "protocol.h"
 #include "maneuver_command.h"
 #include "maneuver.h"
@@ -121,26 +122,14 @@ static int   g_fade_active = 0;
 #define FADE_SPEED 0.125f  /* per-frame step (~0.27s / 8 frames at 30fps) */
 static int   g_cleared = 1;
 
-/* Bargraph overlay */
-static int   g_bargraph_on = 0;     /* 0=off, 1=on, 2=blink */
-static int   g_bargraph_level = 0;  /* 0..16 */
+/* Progress is rendered directly on the route arrow. */
+static cr_arrow_progress_t g_arrow;
 static int   g_persp_deferred = 0;       /* pending perspective change after push */
 static int   g_persp_deferred_value = 1; /* 0=2D, 1=3D */
-static float g_bargraph_alpha = 0.0f;  /* fade in/out */
-#define BARGRAPH_FADE_SPEED 0.06f      /* per-frame (~0.55s at 30fps) */
-static int   g_bargraph_blink_vis = 1;  /* blink phase: 1=show, 0=hide */
-static int   g_bargraph_blink_timer = 0;
-#define BARGRAPH_BLINK_FRAMES (int)(0.6f * TARGET_FPS)  /* 600ms */
-/* Deferred bargraph from maneuver payload -- applied when transition settles */
-static int   g_bargraph_deferred = 0;
-static int   g_bargraph_deferred_level = 0;
-static int   g_bargraph_deferred_mode = 0;
-
 /* Apply a new maneuver to the engine */
 static void engine_apply_maneuver(const maneuver_state_t *state) {
     if (state->icon == ICON_NONE || g_engine.current.icon == ICON_NONE) {
         g_engine.current = *state;
-        maneuver_select_bargraph(state);
         g_engine.has_current = 1;
         g_engine.has_next = g_engine.has_pending = 0;
         g_engine.phase = ENGINE_IDLE;
@@ -160,9 +149,7 @@ static void engine_apply_maneuver(const maneuver_state_t *state) {
 
     /* IDLE: store as next, start push */
     g_engine.next = *state;
-    maneuver_select_bargraph(state);
     g_engine.has_next = 1;
-    g_bargraph_on = 0;
     maneuver_start_push();
     g_engine.phase = ENGINE_PUSHING;
     render_invalidate_masks();
@@ -181,7 +168,6 @@ static void engine_refresh_maneuver(const maneuver_state_t *state) {
     else {
         if (g_engine.has_next) g_engine.next = *state;
         else g_engine.current = *state;
-        maneuver_select_bargraph(state);
     }
     render_invalidate_masks();
     g_engine.dirty = 1;
@@ -191,16 +177,6 @@ static void engine_apply_presentation(void) {
     if (g_persp_deferred) {
         render_set_perspective(g_persp_deferred_value);
         g_persp_deferred = 0;
-        g_engine.dirty = 1;
-    }
-    if (g_bargraph_deferred) {
-        g_bargraph_level = g_bargraph_deferred_level;
-        g_bargraph_on = g_bargraph_deferred_mode;
-        if (g_bargraph_on == 2) {
-            g_bargraph_blink_vis = 1;
-            g_bargraph_blink_timer = 0;
-        }
-        g_bargraph_deferred = 0;
         g_engine.dirty = 1;
     }
 }
@@ -213,19 +189,13 @@ static void engine_apply_presentation(void) {
 static void clear_maneuver(void) {
     memset(&g_engine.current, 0, sizeof(g_engine.current));
     g_engine.current.icon = ICON_APPROACH;
-    render_set_bargraph_tip(NULL,0);
     g_engine.has_current = 1;
     g_engine.has_next    = 0;
     g_engine.has_pending = 0;
     g_engine.phase       = ENGINE_IDLE;
     maneuver_set_slide(1.0f);
     render_invalidate_masks();
-    g_bargraph_on    = 0;
-    g_bargraph_level = 0;
-    g_bargraph_alpha = 0.0f;
-    g_bargraph_deferred = 0;
-    g_bargraph_blink_vis = 1;
-    g_bargraph_blink_timer = 0;
+    cr_progress_reset(&g_arrow);
     g_persp_deferred = 0;
     g_fade_active    = 0;
     g_fade_alpha     = 0.0f;
@@ -250,7 +220,6 @@ static void engine_tick(void) {
             if (g_engine.has_pending) {
                 /* Promote pending -> next, immediately start new push */
                 g_engine.next = g_engine.pending;
-                maneuver_select_bargraph(&g_engine.next);
                 g_engine.has_next = 1;
                 g_engine.has_pending = 0;
                 maneuver_start_push();
@@ -269,7 +238,6 @@ static void engine_tick(void) {
             if (g_engine.has_pending) {
                 /* Promote pending -> next, start push */
                 g_engine.next = g_engine.pending;
-                maneuver_select_bargraph(&g_engine.next);
                 g_engine.has_next = 1;
                 g_engine.has_pending = 0;
                 maneuver_start_push();
@@ -323,8 +291,19 @@ static void save_screenshot(int fb_w, int fb_h, const char *label) {
  * ================================================================ */
 
 int main(int argc, char **argv) {
-    (void)argc;
-    (void)argv;
+    int port=CR_TCP_PORT, arg;
+    for(arg=1;arg<argc;arg++) {
+        if(!strncmp(argv[arg],"--port=",7)) {
+            char *end; long parsed=strtol(argv[arg]+7,&end,10);
+            if(end==argv[arg]+7 || *end || parsed<1 || parsed>65535) {
+                fprintf(stderr,"Invalid renderer port\n"); return 2;
+            }
+            port=(int)parsed;
+        } else {
+            fprintf(stderr,"Usage: %s [--port=1..65535]\n",argv[0]);
+            return 2;
+        }
+    }
 #ifdef SIGPIPE
     signal(SIGPIPE, SIG_IGN);
 #endif
@@ -363,7 +342,7 @@ int main(int argc, char **argv) {
 
     /* Initialize TCP server FIRST so Java can connect while display inits.
      * If server fails, nothing works — exit immediately. */
-    if (cr_server_init(CR_TCP_PORT) < 0) {
+    if (cr_server_init(port) < 0) {
         fprintf(stderr, "maneuver_render: server init failed\n");
         return 1;
     }
@@ -397,7 +376,7 @@ int main(int argc, char **argv) {
     memset(&g_engine, 0, sizeof(g_engine));
     clear_maneuver();
 
-    fprintf(stderr, "maneuver_render: ready, waiting for commands on :%d\n", CR_TCP_PORT);
+    fprintf(stderr, "maneuver_render: ready, waiting for commands on :%d\n", port);
     cr_server_mark_ready();
 
     int dirty = 1;
@@ -455,8 +434,9 @@ int main(int argc, char **argv) {
         maneuver_state_t pending_maneuver;
         uint8_t pending_flags = 0;
         uint8_t pending_perspective = 1;
-        uint8_t pending_bargraph_level = 0;
-        uint8_t pending_bargraph_mode = 0;
+        int got_progress=0, progress_level=0, progress_mode=0;
+        int progress_state=CR_PROGRESS_OFF;
+        double progress_now=(double)t_start.tv_sec+t_start.tv_nsec*1e-9;
         int got_screenshot = 0;
         char screenshot_label[17];
 
@@ -469,8 +449,10 @@ int main(int argc, char **argv) {
                 cr_decode_maneuver(&cmd, &pending_maneuver);
                 pending_flags = cr_merge_maneuver_flags(got_maneuver, pending_flags, cmd.flags);
                 pending_perspective = cmd.payload[43];
-                pending_bargraph_level = cmd.payload[44];
-                pending_bargraph_mode = cmd.payload[45];
+                got_progress=1;
+                progress_level=(cmd.flags & MAN_FLAG_PROGRESS) ? cmd.payload[44] : 0;
+                progress_mode=(cmd.flags & MAN_FLAG_PROGRESS) ? cmd.payload[45] : 0;
+                progress_state=cr_progress_decode(cmd.flags,cmd.payload[42],progress_mode);
                 got_maneuver = 1;
                 break;
             }
@@ -516,22 +498,15 @@ int main(int argc, char **argv) {
                 }
                 g_engine.dirty = 1;
                 break;
-            case CMD_BARGRAPH:
-                g_bargraph_level = cmd.payload[0];
-                if (g_bargraph_level > 16) g_bargraph_level = 16;
-                g_bargraph_on = cmd.payload[1];  /* 0=off, 1=on, 2=blink */
-                if (g_bargraph_on > 2) g_bargraph_on = 1;
-                if (g_bargraph_on == 2) {
-                    g_bargraph_blink_vis = 1;
-                    g_bargraph_blink_timer = 0;
-                }
-                g_engine.dirty = 1;
-                fprintf(stderr, "engine: bargraph level=%d on=%d\n",
-                        g_bargraph_level, g_bargraph_on);
+            case CMD_PROGRESS:
+                got_progress=1;
+                progress_level=cmd.payload[0]; progress_mode=cmd.payload[1];
+                progress_state=cr_progress_decode(cmd.flags,cmd.payload[2],progress_mode);
                 break;
             case CMD_CLEAR:
                 /* CLEAR wins over an earlier MANEUVER drained in this same loop. */
                 got_maneuver = 0;
+                got_progress=0;
                 clear_maneuver();
                 announced_first_frame = 0;
                 cr_server_clear_frame_ready();
@@ -551,6 +526,9 @@ int main(int argc, char **argv) {
         /* Apply the latest maneuver (draining to latest) */
         if (got_maneuver) {
             int reveal_from_clear = g_cleared;
+            if (reveal_from_clear) cr_progress_reset(&g_arrow);
+            else if (!(pending_flags & MAN_FLAG_REFRESH))
+                cr_progress_begin_maneuver(&g_arrow,progress_now);
             if (g_cleared) {
                 g_cleared = 0;
                 g_fade_alpha = 0.0f;
@@ -563,19 +541,11 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "engine: deferred perspective=%s\n",
                         g_persp_deferred_value ? "3D" : "2D");
             }
-            if (pending_flags & MAN_FLAG_BARGRAPH) {
-                g_bargraph_deferred = 1;
-                g_bargraph_deferred_level = pending_bargraph_level;
-                if (g_bargraph_deferred_level > 16) g_bargraph_deferred_level = 16;
-                g_bargraph_deferred_mode = pending_bargraph_mode;
-                if (g_bargraph_deferred_mode > 2) g_bargraph_deferred_mode = 1;
-            }
             if (reveal_from_clear) {
                 /* The hidden FOLLOW_STREET is only a deterministic backing
                  * state.  Replace it directly: the global alpha is the sole
                  * CLEAR->visible transition, with no duplicate route push. */
                 g_engine.current = pending_maneuver;
-                maneuver_select_bargraph(&pending_maneuver);
                 g_engine.has_current = 1;
                 g_engine.has_next = 0;
                 g_engine.has_pending = 0;
@@ -586,7 +556,7 @@ int main(int argc, char **argv) {
                 /* This direct reveal deliberately bypasses ENGINE_SLIDING_IN,
                  * whose settle edge normally consumes the deferred presentation
                  * fields.  Apply them here so the first real frame after CLEAR
-                 * carries the requested perspective and bargraph as well. */
+                 * carries the requested perspective as well. */
                 engine_apply_presentation();
                 fprintf(stderr, "engine: reveal from clear icon=%d\n",
                         pending_maneuver.icon);
@@ -596,6 +566,14 @@ int main(int argc, char **argv) {
                 engine_apply_maneuver(&pending_maneuver);
             }
         }
+
+        if(got_progress) {
+            cr_progress_set(&g_arrow,progress_level,progress_state,progress_now);
+            /* TCP order wins, including PROGRESS after MANEUVER in one drain.
+             * Never let the maneuver's deferred snapshot rewind a newer tick. */
+            g_engine.dirty=1;
+        }
+        if(cr_progress_tick(&g_arrow,progress_now)) g_engine.dirty=1;
 
         /* Tick engine state machine */
         engine_tick();
@@ -630,30 +608,6 @@ int main(int argc, char **argv) {
             dirty = 1;
         g_engine.dirty = 0;
 
-        /* Bargraph alpha fade */
-        {
-            float target = (g_bargraph_on > 0) ? 1.0f : 0.0f;
-            if (g_bargraph_alpha < target) {
-                g_bargraph_alpha += BARGRAPH_FADE_SPEED;
-                if (g_bargraph_alpha > target) g_bargraph_alpha = target;
-                dirty = 1;
-            } else if (g_bargraph_alpha > target) {
-                g_bargraph_alpha -= BARGRAPH_FADE_SPEED;
-                if (g_bargraph_alpha < target) g_bargraph_alpha = target;
-                dirty = 1;
-            }
-        }
-
-        /* Bargraph blink tick */
-        if (g_bargraph_on == 2) {
-            g_bargraph_blink_timer++;
-            if (g_bargraph_blink_timer >= BARGRAPH_BLINK_FRAMES) {
-                g_bargraph_blink_timer = 0;
-                g_bargraph_blink_vis = !g_bargraph_blink_vis;
-                dirty = 1;
-            }
-        }
-
         int rendered_this_frame = 0;
         if (dirty) {
             rendered_this_frame = 1;
@@ -669,15 +623,9 @@ int main(int argc, char **argv) {
             clock_gettime(CLOCK_MONOTONIC, &t_after_prep);
 #endif
 
+            render_set_route_progress(g_arrow.fill,g_arrow.path_weight,g_arrow.glow);
             render_begin_frame();
             maneuver_draw(&g_engine.current, next_ptr);
-            if (g_bargraph_alpha > 0.0f) {
-                float ba = g_bargraph_alpha * g_fade_alpha;
-                int bl = g_bargraph_level;
-                if (g_bargraph_on == 2)
-                    bl = g_bargraph_blink_vis ? 16 : 0;  /* blink: full ↔ empty */
-                render_bargraph(bl, ba);
-            }
             render_debug_grid();
             render_end_frame();
 #ifdef CR_DIAG_FRAME_LOG
@@ -757,8 +705,7 @@ int main(int argc, char **argv) {
 #endif /* CR_DIAG_FRAME_LOG */
 
             dirty = render_is_animating() || maneuver_needs_redraw() || g_fade_active
-                 || g_bargraph_on == 2
-                 || (g_bargraph_alpha > 0.0f && g_bargraph_alpha < 1.0f);
+                 || g_arrow.active || g_arrow.tint_active;
         }
 
         /* dmdt focus watchdog: spawn one-shot detached thread to run

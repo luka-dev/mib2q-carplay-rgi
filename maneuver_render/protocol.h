@@ -21,8 +21,8 @@
 #define CMD_SHUTDOWN     0x03    /* Graceful exit */
 #define CMD_PERSPECTIVE  0x04    /* Perspective: payload[0] = 0 (off) / 1 (on) */
 #define CMD_DEBUG        0x05    /* Toggle debug overlay */
-#define CMD_BARGRAPH     0x06    /* Bargraph: payload[0]=level(0-16), payload[1]=on/off */
-#define CMD_CLEAR        0x07    /* Blank the popup (CarPlay/route off) — drop maneuver+bargraph,
+#define CMD_PROGRESS     0x06    /* Arrow progress: payload[0]=remaining level(0-16), [1]=mode, [2]=phase */
+#define CMD_CLEAR        0x07    /* Blank the popup (CarPlay/route off) — drop maneuver+progress,
                                   * render fully transparent.  Keeps the link; renderer stays alive. */
 #define CMD_VISIBLE_AREA 0x08   /* payload: x,y,w,h as four BE u16; source pixels, top-left origin */
 
@@ -48,16 +48,22 @@ typedef struct {
  *   [5]      u8   junction_count (0..18)
  *   [6..41]  i16  junction_angles[] (big-endian, same angle units, up to 18)
  *
+ * Optional progress extension (flags & 0x20):
+ *   MANEUVER [42], PROGRESS [2]: 0=off, 1=fill, 2=blink low, 3=blink high.
+ *   Legacy level/mode retained. Explicit blink phase comes from Java/HUD.
+ *   Unknown state or inconsistent mode shows the quiet (off) arrow.
+ *   Without this extension, mode 1 fills the arrow; all other modes are off.
+ *
  * Optional (when MAN_FLAG_SET_PERSP set):
  *   [43]     u8   perspective (0=flat 2D, 1=perspective 3D)
  *
- * Optional (when MAN_FLAG_BARGRAPH set):
- *   [44]     u8   bargraph_level (0..16)
- *   [45]     u8   bargraph_mode  (0=off, 1=on, 2=blink)
+ * Optional (when MAN_FLAG_PROGRESS set):
+ *   [44]     u8   remaining_level (0..16)
+ *   [45]     u8   progress_mode  (0=off, 1=on; legacy mode 2 has no phase, treated as off)
  */
 /* CMD_MANEUVER flags (in cr_cmd_t.flags) */
 #define MAN_FLAG_SET_PERSP    0x01    /* Set perspective after transition: payload[43] = 0 (2D) / 1 (3D) */
-#define MAN_FLAG_BARGRAPH     0x02    /* Bargraph data in payload[44..45] */
+#define MAN_FLAG_PROGRESS     0x02    /* Progress level/mode in payload[44..45] */
 #define MAN_FLAG_REFRESH      0x08    /* replace latest maneuver geometry, preserve transition */
 #define MAN_FLAG_BAP_GEOMETRY 0x04    /* signed half-degrees; no snap unless SNAP_TO_ROAD */
 #define MAN_FLAG_SNAP_TO_ROAD 0x10    /* raw roundabout roads include active exit: allow snap */

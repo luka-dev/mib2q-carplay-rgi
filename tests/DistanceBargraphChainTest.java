@@ -31,8 +31,10 @@ public final class DistanceBargraphChainTest {
         }
     }
     public static final class Renderer extends RendererServer {
-        int level, mode;
-        public boolean sendBargraph(int level, int mode) { this.level = level; this.mode = mode; return true; }
+        int level, mode, progress;
+        public boolean sendProgress(int level, int mode, int state) {
+            this.level=level; this.mode=mode; this.progress=state; return true;
+        }
     }
     private static void check(boolean ok, String why) { if (!ok) throw new AssertionError(why); }
     private static void set(Object target, String name, Object value) throws Exception {
@@ -73,10 +75,33 @@ public final class DistanceBargraphChainTest {
             check(distance == c[0] * 10 && (bytes[4]&255) == (c[0] > 0 ? 0 : 255),
                     "distance/unit changed: input="+c[0]+" output="+distance+" unit="+(bytes[4]&255));
             check(renderer.mode == on && renderer.level == (on != 0 ? bar * 16 / 100 : 0), "renderer does not match BAP bargraph");
+            check(renderer.progress==(on!=0 ? RendererServer.PROGRESS_FILL : RendererServer.PROGRESS_OFF),
+                    "normal empty/full must not infer blink");
             StringBuilder hex = new StringBuilder();
             for (byte b : bytes) { if (hex.length() > 0) hex.append(' '); hex.append(String.format("%02x", b & 255)); }
             System.out.println("distance="+c[0]+" barOn="+on+" bar="+bar+" Fct18="+hex);
         }
+        Method tick=BAPBridge.class.getDeclaredMethod("sendActionBlinkTick",Integer.TYPE);
+        tick.setAccessible(true);
+        set(bridge,"actionBlinkGeneration",Integer.valueOf(7));
+        set(bridge,"blinkArmed",Boolean.TRUE); set(bridge,"blinkDistM",Integer.valueOf(10));
+        set(bridge,"blinkBargraphDenominatorM",Integer.valueOf(100));
+        set(bridge,"actionBlinkFull",Boolean.TRUE);
+        for(int phase=0;phase<4;phase++) {
+            check(((Boolean)tick.invoke(bridge,Integer.valueOf(7))).booleanValue(),"live blink worker stopped");
+            ByteArrayStream stream=new ByteArrayStream(); capture.last.serialize(stream);
+            byte[] wire=stream.toByteArray(); boolean high=(phase%2)==0;
+            check((wire[6]&255)==(high?100:0) && renderer.level==(high?16:0) && renderer.mode==1,
+                "HUD/renderer phase mismatch");
+            check(renderer.progress==(high?RendererServer.PROGRESS_BLINK_HIGH:RendererServer.PROGRESS_BLINK_LOW),
+                "explicit phase missing");
+        }
+        check(!((Boolean)tick.invoke(bridge,Integer.valueOf(6))).booleanValue(),"orphan worker emitted");
+        check(renderer.progress==RendererServer.PROGRESS_BLINK_LOW,"orphan changed phase");
+        Method replay=BAPBridge.class.getDeclaredMethod("replayDistanceToManeuver");replay.setAccessible(true);
+        renderer.progress=-1;replay.invoke(bridge);
+        check(renderer.progress==RendererServer.PROGRESS_BLINK_LOW && renderer.level==0 && renderer.mode==1,
+            "cached replay reinterpreted low blink as complete fill");
         System.out.println("DistanceBargraphChainTest: stock sender/serializer retain distance validity with bargraph and both blink phases PASS");
     }
 }
