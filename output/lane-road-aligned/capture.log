@@ -1,0 +1,271 @@
+ALPHA 0 crop invalid 0 max_excess 0
+FRAME 0 crop PASS bounds 70.73 52.40 218.29 119.71 camera 0.13 0.00 lanes 3 secondary_width 0.26 hidden_side -1 mesh 357d7038
+EXIT 0 crop lanes 1 glyph_clearance 0.07283
+HEAD 0 crop min -0.11714 max 0.10558
+SAFETY 0 crop reason 0
+GLYPH 0 crop lane 0 hash 3e08fb8c
+GLYPH 0 crop lane 1 hash 21143dbc
+GLYPH 0 crop lane 2 hash fd81f824
+ALPHA 0 wide invalid 0 max_excess 0
+FRAME 0 wide PASS bounds 70.73 52.40 218.29 119.71 camera 0.13 0.00 lanes 3 secondary_width 0.26 hidden_side -1 mesh 357d7038
+EXIT 0 wide lanes 1 glyph_clearance 0.07283
+HEAD 0 wide min -0.11714 max 0.10558
+SAFETY 0 wide reason 0
+GLYPH 0 wide lane 0 hash 3e08fb8c
+GLYPH 0 wide lane 1 hash 21143dbc
+GLYPH 0 wide lane 2 hash fd81f824
+ALPHA 1 crop invalid 0 max_excess 0
+FRAME 1 crop PASS bounds 70.73 53.15 218.56 120.05 camera 0.13 0.00 lanes 3 secondary_width 0.26 hidden_side -1 mesh a7430219
+EXIT 1 crop lanes 2 glyph_clearance 0.03212
+HEAD 1 crop min -0.11706 max 0.10560
+SAFETY 1 crop reason 0
+GLYPH 1 crop lane 1 hash 3e08fb8c
+GLYPH 1 crop lane 2 hash 21143dbc
+GLYPH 1 crop lane 3 hash 684b3ae9
+ALPHA 1 wide invalid 0 max_excess 0
+FRAME 1 wide PASS bounds 25.57 53.15 218.56 120.05 camera 0.13 0.00 lanes 4 secondary_width 0.26 hidden_side -1 mesh a7430219
+EXIT 1 wide lanes 2 glyph_clearance 0.03212
+HEAD 1 wide min -0.11706 max 0.10560
+SAFETY 1 wide reason 0
+GLYPH 1 wide lane 0 hash 4ae27a74
+GLYPH 1 wide lane 1 hash 3e08fb8c
+GLYPH 1 wide lane 2 hash 21143dbc
+GLYPH 1 wide lane 3 hash 684b3ae9
+ALPHA 2 crop invalid 0 max_excess 0
+FRAME 2 crop PASS bounds 67.14 40.77 244.09 114.20 camera 0.21 -0.04 lanes 7 secondary_width 0.14 hidden_side 1 mesh e2f18d9c
+EXIT 2 crop lanes 0 glyph_clearance 0.02752
+HEAD 2 crop min 0.00000 max 0.00000
+SAFETY 2 crop reason 0
+GLYPH 2 crop lane 0 hash 8755c108
+GLYPH 2 crop lane 1 hash 9bfe6da4
+GLYPH 2 crop lane 2 hash 040f2704
+GLYPH 2 crop lane 4 hash f981b484
+GLYPH 2 crop lane 5 hash 0cfbaa3c
+GLYPH 2 crop lane 6 hash de85e318
+GLYPH 2 crop lane 7 hash e828c9a4
+ALPHA 2 wide invalid 0 max_excess 0
+FRAME 2 wide PASS bounds 67.14 40.77 284.56 114.20 camera 0.21 -0.04 lanes 8 secondary_width 0.14 hidden_side 0 mesh e2f18d9c
+EXIT 2 wide lanes 0 glyph_clearance 0.02752
+HEAD 2 wide min 0.00000 max 0.00000
+SAFETY 2 wide reason 0
+GLYPH 2 wide lane 0 hash 8755c108
+GLYPH 2 wide lane 1 hash 9bfe6da4
+GLYPH 2 wide lane 2 hash 040f2704
+GLYPH 2 wide lane 4 hash f981b484
+GLYPH 2 wide lane 5 hash 0cfbaa3c
+GLYPH 2 wide lane 6 hash de85e318
+GLYPH 2 wide lane 7 hash e828c9a4
+ALPHA 3 crop invalid 0 max_excess 0
+FRAME 3 crop PASS bounds 70.73 52.40 218.29 119.71 camera 0.13 0.00 lanes 3 secondary_width 0.26 hidden_side -1 mesh 357d7038
+EXIT 3 crop lanes 1 glyph_clearance 0.07283
+HEAD 3 crop min -0.11714 max 0.10558
+SAFETY 3 crop reason 0
+GLYPH 3 crop lane 4 hash 3e08fb8c
+GLYPH 3 crop lane 5 hash 21143dbc
+GLYPH 3 crop lane 6 hash fd81f824
+ALPHA 3 wide invalid 0 max_excess 0
+FRAME 3 wide PASS bounds 25.57 52.40 218.29 119.71 camera 0.13 0.00 lanes 4 secondary_width 0.26 hidden_side -1 mesh 357d7038
+EXIT 3 wide lanes 1 glyph_clearance 0.07283
+HEAD 3 wide min -0.11714 max 0.10558
+SAFETY 3 wide reason 0
+GLYPH 3 wide lane 3 hash 4ae27a74
+GLYPH 3 wide lane 4 hash 3e08fb8c
+GLYPH 3 wide lane 5 hash 21143dbc
+GLYPH 3 wide lane 6 hash fd81f824
+ALPHA 4 crop invalid 0 max_excess 0
+FRAME 4 crop PASS bounds 72.16 74.07 255.63 119.71 camera -0.13 0.00 lanes 3 secondary_width 0.26 hidden_side 1 mesh 3de7d530
+EXIT 4 crop lanes 1 glyph_clearance 0.07283
+HEAD 4 crop min -0.10469 max 0.12075
+SAFETY 4 crop reason 0
+GLYPH 4 crop lane 1 hash c6fa1f30
+GLYPH 4 crop lane 2 hash 04d31588
+GLYPH 4 crop lane 3 hash 9b650b20
+ALPHA 4 wide invalid 0 max_excess 0
+FRAME 4 wide PASS bounds 72.16 74.07 300.00 119.71 camera -0.13 0.00 lanes 4 secondary_width 0.26 hidden_side 1 mesh 3de7d530
+EXIT 4 wide lanes 1 glyph_clearance 0.07283
+HEAD 4 wide min -0.10469 max 0.12075
+SAFETY 4 wide reason 0
+GLYPH 4 wide lane 1 hash c6fa1f30
+GLYPH 4 wide lane 2 hash 04d31588
+GLYPH 4 wide lane 3 hash 9b650b20
+GLYPH 4 wide lane 4 hash 984dbbc8
+ALPHA 5 crop invalid 0 max_excess 0
+FRAME 5 crop PASS bounds 80.23 47.30 235.22 119.71 camera 0.00 0.00 lanes 4 secondary_width 0.26 hidden_side -1 mesh a5d90a2c
+EXIT 5 crop lanes 2 glyph_clearance 0.05623
+HEAD 5 crop min -0.11771 max 0.10544
+SAFETY 5 crop reason 0
+GLYPH 5 crop lane 2 hash aa7951ac
+GLYPH 5 crop lane 3 hash ded0615f
+GLYPH 5 crop lane 4 hash a54203bd
+ALPHA 5 wide invalid 0 max_excess 0
+FRAME 5 wide PASS bounds 80.23 47.30 235.22 119.71 camera 0.00 0.00 lanes 4 secondary_width 0.26 hidden_side -1 mesh a5d90a2c
+EXIT 5 wide lanes 2 glyph_clearance 0.05623
+HEAD 5 wide min -0.11771 max 0.10544
+SAFETY 5 wide reason 0
+GLYPH 5 wide lane 2 hash aa7951ac
+GLYPH 5 wide lane 3 hash ded0615f
+GLYPH 5 wide lane 4 hash a54203bd
+ALPHA 6 crop invalid 0 max_excess 0
+FRAME 6 crop PASS bounds 150.95 42.71 177.05 83.02 camera 0.00 0.00 lanes 0 secondary_width 0.00 hidden_side 0 mesh ed35b438
+EXIT 6 crop lanes 0 glyph_clearance 1.00000
+HEAD 6 crop min 0.00000 max 0.00000
+SAFETY 6 crop reason 3
+ALPHA 6 wide invalid 0 max_excess 0
+FRAME 6 wide PASS bounds 150.95 42.71 177.05 83.02 camera 0.00 0.00 lanes 0 secondary_width 0.00 hidden_side 0 mesh ed35b438
+EXIT 6 wide lanes 0 glyph_clearance 1.00000
+HEAD 6 wide min 0.00000 max 0.00000
+SAFETY 6 wide reason 3
+ALPHA 7 crop invalid 0 max_excess 0
+FRAME 7 crop PASS bounds 137.72 42.71 255.63 119.71 camera -0.13 0.00 lanes 3 secondary_width 0.26 hidden_side 1 mesh 57388650
+EXIT 7 crop lanes 0 glyph_clearance 0.07283
+HEAD 7 crop min 0.00000 max 0.00000
+SAFETY 7 crop reason 0
+GLYPH 7 crop lane 1 hash c6fa1f30
+GLYPH 7 crop lane 2 hash 04d31588
+GLYPH 7 crop lane 3 hash 9b650b20
+ALPHA 7 wide invalid 0 max_excess 0
+FRAME 7 wide PASS bounds 137.72 42.71 300.00 119.71 camera -0.13 0.00 lanes 4 secondary_width 0.26 hidden_side 1 mesh 57388650
+EXIT 7 wide lanes 0 glyph_clearance 0.07283
+HEAD 7 wide min 0.00000 max 0.00000
+SAFETY 7 wide reason 0
+GLYPH 7 wide lane 1 hash c6fa1f30
+GLYPH 7 wide lane 2 hash 04d31588
+GLYPH 7 wide lane 3 hash 9b650b20
+GLYPH 7 wide lane 4 hash 984dbbc8
+ALPHA 8 crop invalid 0 max_excess 0
+FRAME 8 crop PASS bounds 75.83 67.41 255.63 120.05 camera -0.13 0.00 lanes 3 secondary_width 0.26 hidden_side 1 mesh bf7b6670
+EXIT 8 crop lanes 2 glyph_clearance 0.02200
+HEAD 8 crop min -0.10449 max 0.12155
+SAFETY 8 crop reason 0
+GLYPH 8 crop lane 1 hash 47dc4f12
+GLYPH 8 crop lane 2 hash 04d31588
+GLYPH 8 crop lane 3 hash 9b650b20
+ALPHA 8 wide invalid 0 max_excess 0
+FRAME 8 wide PASS bounds 75.83 67.41 300.00 120.05 camera -0.13 0.00 lanes 4 secondary_width 0.26 hidden_side 1 mesh bf7b6670
+EXIT 8 wide lanes 2 glyph_clearance 0.02200
+HEAD 8 wide min -0.10449 max 0.12155
+SAFETY 8 wide reason 0
+GLYPH 8 wide lane 1 hash 47dc4f12
+GLYPH 8 wide lane 2 hash 04d31588
+GLYPH 8 wide lane 3 hash 9b650b20
+GLYPH 8 wide lane 4 hash 984dbbc8
+ALPHA 9 crop invalid 0 max_excess 0
+FRAME 9 crop PASS bounds 75.83 67.41 234.07 120.05 camera -0.13 0.00 lanes 2 secondary_width 0.26 hidden_side 1 mesh bf7b6670
+EXIT 9 crop lanes 3 glyph_clearance 0.02200
+HEAD 9 crop min -0.10449 max 0.12155
+SAFETY 9 crop reason 0
+GLYPH 9 crop lane 1 hash 47dc4f12
+GLYPH 9 crop lane 2 hash 34c980f0
+ALPHA 9 wide invalid 0 max_excess 0
+FRAME 9 wide PASS bounds 75.83 67.41 300.00 120.05 camera -0.13 0.00 lanes 4 secondary_width 0.26 hidden_side 1 mesh bf7b6670
+EXIT 9 wide lanes 3 glyph_clearance 0.02200
+HEAD 9 wide min -0.10449 max 0.12155
+SAFETY 9 wide reason 0
+GLYPH 9 wide lane 1 hash 47dc4f12
+GLYPH 9 wide lane 2 hash 34c980f0
+GLYPH 9 wide lane 3 hash 9b650b20
+GLYPH 9 wide lane 4 hash 984dbbc8
+ALPHA 10 crop invalid 0 max_excess 0
+FRAME 10 crop PASS bounds 80.14 51.53 255.63 119.71 camera 0.00 0.00 lanes 4 secondary_width 0.26 hidden_side 1 mesh dd2b38de
+EXIT 10 crop lanes 3 glyph_clearance 0.02800
+HEAD 10 crop min -0.10394 max 0.12376
+SAFETY 10 crop reason 0
+GLYPH 10 crop lane 0 hash 068b21c8
+GLYPH 10 crop lane 2 hash 3c07e2cd
+GLYPH 10 crop lane 3 hash bad3c348
+GLYPH 10 crop lane 4 hash 4579cc78
+ALPHA 10 wide invalid 0 max_excess 0
+FRAME 10 wide PASS bounds 80.14 51.53 255.63 119.71 camera 0.00 0.00 lanes 4 secondary_width 0.26 hidden_side 1 mesh dd2b38de
+EXIT 10 wide lanes 3 glyph_clearance 0.02800
+HEAD 10 wide min -0.10394 max 0.12376
+SAFETY 10 wide reason 0
+GLYPH 10 wide lane 0 hash 068b21c8
+GLYPH 10 wide lane 2 hash 3c07e2cd
+GLYPH 10 wide lane 3 hash bad3c348
+GLYPH 10 wide lane 4 hash 4579cc78
+ALPHA 11 crop invalid 0 max_excess 0
+FRAME 11 crop PASS bounds 67.43 38.40 209.47 109.91 camera 0.21 -0.08 lanes 4 secondary_width 0.22 hidden_side 1 mesh b17fa53f
+EXIT 11 crop lanes 3 glyph_clearance 0.02499
+HEAD 11 crop min -0.10339 max 0.12597
+SAFETY 11 crop reason 0
+GLYPH 11 crop lane 0 hash 299c7038
+GLYPH 11 crop lane 1 hash 4ddfa95d
+GLYPH 11 crop lane 3 hash bc79fdca
+GLYPH 11 crop lane 4 hash 0150d0e2
+ALPHA 11 wide invalid 0 max_excess 0
+FRAME 11 wide PASS bounds 67.43 38.40 263.89 109.91 camera 0.21 -0.08 lanes 5 secondary_width 0.22 hidden_side 0 mesh b17fa53f
+EXIT 11 wide lanes 3 glyph_clearance 0.02499
+HEAD 11 wide min -0.10339 max 0.12597
+SAFETY 11 wide reason 0
+GLYPH 11 wide lane 0 hash 299c7038
+GLYPH 11 wide lane 1 hash 4ddfa95d
+GLYPH 11 wide lane 3 hash bc79fdca
+GLYPH 11 wide lane 4 hash 0150d0e2
+ALPHA 12 crop invalid 0 max_excess 0
+FRAME 12 crop PASS bounds 70.73 52.40 218.29 119.71 camera 0.13 0.00 lanes 3 secondary_width 0.26 hidden_side -1 mesh 357d7038
+EXIT 12 crop lanes 1 glyph_clearance 0.07283
+HEAD 12 crop min -0.11714 max 0.10558
+SAFETY 12 crop reason 0
+GLYPH 12 crop lane 0 hash 3e08fb8c
+GLYPH 12 crop lane 1 hash 21143dbc
+GLYPH 12 crop lane 2 hash fd81f824
+GLYPH 12 crop lane 3 hash 3116470f
+ALPHA 12 wide invalid 0 max_excess 0
+FRAME 12 wide PASS bounds 70.73 52.40 218.29 119.71 camera 0.13 0.00 lanes 3 secondary_width 0.26 hidden_side -1 mesh 357d7038
+EXIT 12 wide lanes 1 glyph_clearance 0.07283
+HEAD 12 wide min -0.11714 max 0.10558
+SAFETY 12 wide reason 0
+GLYPH 12 wide lane 0 hash 3e08fb8c
+GLYPH 12 wide lane 1 hash 21143dbc
+GLYPH 12 wide lane 2 hash fd81f824
+GLYPH 12 wide lane 3 hash 3116470f
+ALPHA 13 crop invalid 0 max_excess 0
+FRAME 13 crop PASS bounds 153.71 52.40 218.29 85.53 camera 0.00 0.00 lanes 0 secondary_width 0.00 hidden_side 0 mesh bb3c346b
+EXIT 13 crop lanes 0 glyph_clearance 1.00000
+HEAD 13 crop min 0.00000 max 0.00000
+SAFETY 13 crop reason 7
+ALPHA 13 wide invalid 0 max_excess 0
+FRAME 13 wide PASS bounds 153.71 52.40 218.29 85.53 camera 0.00 0.00 lanes 0 secondary_width 0.00 hidden_side 0 mesh bb3c346b
+EXIT 13 wide lanes 0 glyph_clearance 1.00000
+HEAD 13 wide min 0.00000 max 0.00000
+SAFETY 13 wide reason 7
+ALPHA 14 crop invalid 0 max_excess 0
+FRAME 14 crop PASS bounds 153.71 52.40 218.29 85.53 camera 0.00 0.00 lanes 0 secondary_width 0.00 hidden_side 0 mesh bb3c346b
+EXIT 14 crop lanes 0 glyph_clearance 1.00000
+HEAD 14 crop min 0.00000 max 0.00000
+SAFETY 14 crop reason 7
+ALPHA 14 wide invalid 0 max_excess 0
+FRAME 14 wide PASS bounds 153.71 52.40 218.29 85.53 camera 0.00 0.00 lanes 0 secondary_width 0.00 hidden_side 0 mesh bb3c346b
+EXIT 14 wide lanes 0 glyph_clearance 1.00000
+HEAD 14 wide min 0.00000 max 0.00000
+SAFETY 14 wide reason 7
+ALPHA 15 crop invalid 0 max_excess 0
+FRAME 15 crop PASS bounds 153.71 52.40 218.29 85.53 camera 0.00 0.00 lanes 0 secondary_width 0.00 hidden_side 0 mesh bb3c346b
+EXIT 15 crop lanes 0 glyph_clearance 1.00000
+HEAD 15 crop min 0.00000 max 0.00000
+SAFETY 15 crop reason 1
+ALPHA 15 wide invalid 0 max_excess 0
+FRAME 15 wide PASS bounds 153.71 52.40 218.29 85.53 camera 0.00 0.00 lanes 0 secondary_width 0.00 hidden_side 0 mesh bb3c346b
+EXIT 15 wide lanes 0 glyph_clearance 1.00000
+HEAD 15 wide min 0.00000 max 0.00000
+SAFETY 15 wide reason 1
+ALPHA 16 crop invalid 0 max_excess 0
+FRAME 16 crop PASS bounds 153.71 52.40 218.29 85.53 camera 0.00 0.00 lanes 0 secondary_width 0.00 hidden_side 0 mesh bb3c346b
+EXIT 16 crop lanes 0 glyph_clearance 1.00000
+HEAD 16 crop min 0.00000 max 0.00000
+SAFETY 16 crop reason 2
+ALPHA 16 wide invalid 0 max_excess 0
+FRAME 16 wide PASS bounds 153.71 52.40 218.29 85.53 camera 0.00 0.00 lanes 0 secondary_width 0.00 hidden_side 0 mesh bb3c346b
+EXIT 16 wide lanes 0 glyph_clearance 1.00000
+HEAD 16 wide min 0.00000 max 0.00000
+SAFETY 16 wide reason 2
+ALPHA 17 crop invalid 0 max_excess 0
+FRAME 17 crop PASS bounds 72.16 74.07 174.46 92.07 camera 0.00 0.00 lanes 0 secondary_width 0.00 hidden_side 0 mesh 2be8b3b0
+EXIT 17 crop lanes 0 glyph_clearance 1.00000
+HEAD 17 crop min 0.00000 max 0.00000
+SAFETY 17 crop reason 5
+ALPHA 17 wide invalid 0 max_excess 0
+FRAME 17 wide PASS bounds 72.16 74.07 174.46 92.07 camera 0.00 0.00 lanes 0 secondary_width 0.00 hidden_side 0 mesh 2be8b3b0
+EXIT 17 wide lanes 0 glyph_clearance 1.00000
+HEAD 17 wide min 0.00000 max 0.00000
+SAFETY 17 wide reason 5

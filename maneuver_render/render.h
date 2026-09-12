@@ -70,6 +70,8 @@ void render_set_perspective(int enabled);
 /* Debug grid: colored checkerboard + red popup crop outline. */
 void render_set_debug_grid(int on);
 void render_debug_grid(void);
+/* Draw only the exact current visible-area border (no checkerboard). */
+void render_debug_visible_area(void);
 
 /* Set camera pan offset in maneuver space (shifts entire scene). */
 void render_set_camera_pan(float x, float y);
@@ -82,6 +84,9 @@ void render_set_light_rotation(float angle_rad);
 
 /* Recompute camera-dependent matrices/uniforms for the current frame. */
 void render_sync_camera(void);
+/* Snapshot of the current projection for source-pixel framing diagnostics. */
+void render_get_camera_matrix(float out[16]);
+void render_get_camera_pose(float *x,float *y,float *rotation);
 
 /* Select the shading preset used by subsequent 3D geometry draws. */
 void render_set_material(render_material_t material);
@@ -114,6 +119,14 @@ void render_end_outline_mask(void);
 
 void render_begin_fill_mask(void);      /* resume FBO_ROAD (no clear), ortho 2D */
 void render_end_fill_mask(void);
+/* Fade mask paint sideways from edge to edge+span (negative span = left).
+ * Set span=0 to disable. Applies only to flat mask paint, not route shading. */
+void render_set_mask_side_fade(float edge, float span);
+/* Optional backward road fade in local maneuver coordinates. span=0 disables. */
+void render_set_mask_entry_fade(float start,float span);
+/* Flat-mask alpha rises from 0 to 1 along a unit local direction over span.
+ * span=0 disables; usable for any road end without subdividing its mesh. */
+void render_set_mask_direction_fade(float x,float y,float dx,float dy,float span);
 
 /* Resume masks -- bind without clearing (append content to existing mask) */
 void render_resume_outline_mask(void);

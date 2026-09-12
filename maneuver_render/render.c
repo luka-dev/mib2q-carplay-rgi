@@ -156,6 +156,18 @@ static GLint  g_attr_pos   = -1;
 static GLint  g_attr_norm  = -1;
 static GLint g_attr_progress=-1, g_uni_progress=-1;
 static GLint g_uni_contact_thickness=-1;
+static GLint g_uni_mask_side_fade=-1;
+static GLint g_uni_mask_entry_fade=-1;
+void render_set_mask_direction_fade(float x,float y,float dx,float dy,float span) {
+    glUniform4f(g_uni_mask_entry_fade,dx,dy,-(x*dx+y*dy),span>1e-6f?1.0f/span:0.0f);
+}
+void render_set_mask_entry_fade(float start,float span) {
+    render_set_mask_direction_fade(0,start,0,1,span);
+}
+void render_set_mask_side_fade(float edge,float span) {
+    glUniform3f(g_uni_mask_side_fade,edge,fabsf(span)>1e-6f?1.0f/span:0.0f,
+                fabsf(span)>1e-6f?1.0f:0.0f);
+}
 static float g_progress_fill=0, g_progress_path_weight=0, g_progress_glow=0;
 void render_set_route_progress(float fill, float path_weight, float glow) {
     g_progress_fill=cr_route_progress_front(fill);
@@ -203,6 +215,9 @@ static render_material_t g_active_material = RENDER_MAT_GENERIC_SOLID;
 
 /* Stored MVPs for composite pass */
 static float g_mvp_current[16];    /* perspective-blended MVP (for 3D composite) */
+void render_get_camera_matrix(float out[16]) {
+    if (out) memcpy(out, g_mvp_current, sizeof(g_mvp_current));
+}
 static cr_rect_animation_t g_visible_area = {
     {CR_POPUP_X, CR_POPUP_Y, CR_POPUP_W, CR_POPUP_H},
     {CR_POPUP_X, CR_POPUP_Y, CR_POPUP_W, CR_POPUP_H},
@@ -342,6 +357,8 @@ static const char *k_frag_src_body =
     "uniform vec2 u_resolution;\n"
     "uniform vec2 u_mask_scale;\n"
     "uniform float u_global_alpha;\n"
+    "uniform vec3 u_mask_side_fade;\n"
+    "uniform vec4 u_mask_entry_fade;\n"
     "varying vec3 v_normal;\n"
     "varying vec3 v_world_pos;\n"
     "varying float v_progress;\n"
@@ -436,6 +453,13 @@ static const char *k_frag_src_body =
     /* tex_mode 3: flat mask -- flat color, no lighting */
     "  if (u_tex_mode > 2.5 && u_tex_mode < 3.5) {\n"
     "    gl_FragColor = u_color;\n"
+    "    if (u_mask_entry_fade.w > 0.0)\n"
+    "      gl_FragColor.a *= smoothstep(0.0,1.0,(dot(v_world_pos.xz,u_mask_entry_fade.xy)+u_mask_entry_fade.z)*u_mask_entry_fade.w);\n"
+    "    if (u_mask_side_fade.z > 0.5) {\n"
+    "      float across = (v_world_pos.x-u_mask_side_fade.x)*u_mask_side_fade.y;\n"
+    "      if (across < 0.0 || across >= 1.0) discard;\n"
+    "      gl_FragColor.a *= 1.0-smoothstep(0.05,1.0,across);\n"
+    "    }\n"
     "    return;\n"
     "  }\n"
     /* tex_mode 2: lit 3D blit -- sample mask texture, apply lighting. */
@@ -588,7 +612,7 @@ void render_contact_shadow(const float *verts,int count,float alpha,float thickn
         glDrawArrays(GL_TRIANGLES,0,batch);
         drawn+=batch;
     }
-    glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
+    glBlendFuncSeparate(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA,GL_ONE,GL_ONE_MINUS_SRC_ALPHA);
     glDepthMask(GL_TRUE);
     glUniform1f(g_uni_tex_mode,0.0f);
 }
@@ -657,6 +681,8 @@ static int build_program(void) {
     g_attr_norm = glGetAttribLocation(g_program, "a_normal");
     g_attr_progress=glGetAttribLocation(g_program,"a_progress");
     g_uni_progress=glGetUniformLocation(g_program,"u_progress");
+    g_uni_mask_side_fade=glGetUniformLocation(g_program,"u_mask_side_fade");
+    g_uni_mask_entry_fade=glGetUniformLocation(g_program,"u_mask_entry_fade");
     g_uni_contact_thickness=glGetUniformLocation(g_program,"u_contact_thickness");
     g_uni_color = glGetUniformLocation(g_program, "u_color");
     g_uni_mvp   = glGetUniformLocation(g_program, "u_mvp");
@@ -729,19 +755,20 @@ static const char *k_fxaa_frag =
     "  float rcpDirMin = 1.0 / (min(abs(dir.x), abs(dir.y)) + dirReduce);\n"
     "  dir = clamp(dir * rcpDirMin, vec2(-8.0), vec2(8.0)) * u_rcp;\n"
     "\n"
-    "  vec3 rgbA = 0.5 * (\n"
-    "    texture2D(u_tex, v_uv + dir * (1.0/3.0 - 0.5)).rgb +\n"
-    "    texture2D(u_tex, v_uv + dir * (2.0/3.0 - 0.5)).rgb);\n"
-    "  vec3 rgbB = rgbA * 0.5 + 0.25 * (\n"
-    "    texture2D(u_tex, v_uv + dir * -0.5).rgb +\n"
-    "    texture2D(u_tex, v_uv + dir *  0.5).rgb);\n"
-    "  float lumB = dot(rgbB, luma);\n"
+    /* Filter associated RGBA together. Keeping the center alpha while
+     * averaging neighboring RGB can create color in transparent pixels. */
+    "  vec4 rgbaA = 0.5 * (\n"
+    "    texture2D(u_tex, v_uv + dir * (1.0/3.0 - 0.5)) +\n"
+    "    texture2D(u_tex, v_uv + dir * (2.0/3.0 - 0.5)));\n"
+    "  vec4 rgbaB = rgbaA * 0.5 + 0.25 * (\n"
+    "    texture2D(u_tex, v_uv + dir * -0.5) +\n"
+    "    texture2D(u_tex, v_uv + dir *  0.5));\n"
+    "  float lumB = dot(rgbaB.rgb, luma);\n"
     "\n"
-    "  float alphaM = texture2D(u_tex, v_uv).a;\n"
     "  if (lumB < lumMin || lumB > lumMax)\n"
-    "    gl_FragColor = vec4(rgbA, alphaM);\n"
+    "    gl_FragColor = rgbaA;\n"
     "  else\n"
-    "    gl_FragColor = vec4(rgbB, alphaM);\n"
+    "    gl_FragColor = rgbaB;\n"
     "}\n";
 
 static int build_fxaa_program(void) {
@@ -910,7 +937,7 @@ int render_init(int fb_width, int fb_height) {
     glDisable(GL_DITHER);
     /* MSAA removed — replaced by FXAA post-process for better edge smoothing */
     glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
     /* Save default framebuffer -- may not be 0 on macOS with MSAA */
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &g_default_fbo);
@@ -973,6 +1000,7 @@ int render_init(int fb_width, int fb_height) {
     /* Init tex_mode off */
     glUseProgram(g_program);
     glUniform1f(g_uni_tex_mode, 0.0f);
+    render_set_mask_side_fade(0,0);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, g_fbo_texs[0]);
     glUniform1i(g_uni_tex, 0);
@@ -1182,6 +1210,8 @@ void render_begin_frame(void) {
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glUseProgram(g_program);
+    render_set_mask_side_fade(0,0);
+    render_set_mask_entry_fade(0,0);
     glUniform1f(g_uni_tex_mode, 0.0f);
     glUniform1f(g_uni_global_alpha, g_global_alpha);
     sync_camera_uniforms();
@@ -1209,6 +1239,29 @@ static int g_debug_grid = 0;
 
 void render_set_debug_grid(int on) { g_debug_grid = on; }
 
+void render_debug_visible_area(void) {
+    float identity[16]={0}, rects[4][4];
+    cr_rect_t r=g_visible_area.current;
+    int i;
+    identity[0]=identity[5]=identity[10]=identity[15]=1;
+    rects[0][0]=r.x;rects[0][1]=r.y;rects[0][2]=r.x+r.w;rects[0][3]=r.y+1;
+    rects[1][0]=r.x;rects[1][1]=r.y+r.h-1;rects[1][2]=r.x+r.w;rects[1][3]=r.y+r.h;
+    rects[2][0]=r.x;rects[2][1]=r.y;rects[2][2]=r.x+1;rects[2][3]=r.y+r.h;
+    rects[3][0]=r.x+r.w-1;rects[3][1]=r.y;rects[3][2]=r.x+r.w;rects[3][3]=r.y+r.h;
+    glDisable(GL_DEPTH_TEST);
+    glUniform1f(g_uni_tex_mode,3);
+    glUniformMatrix4fv(g_uni_mvp,1,GL_FALSE,identity);
+    for(i=0;i<4;++i) {
+        float x0=2*rects[i][0]/CR_DEFAULT_WIDTH-1,x1=2*rects[i][2]/CR_DEFAULT_WIDTH-1;
+        float y0=1-2*rects[i][1]/CR_DEFAULT_HEIGHT,y1=1-2*rects[i][3]/CR_DEFAULT_HEIGHT;
+        vb_reset();vb_quad(x0,y0,0,x1,y0,0,x1,y1,0,x0,y1,0,0,0,1);
+        vb_flush(1,.04f,.08f,1);
+    }
+    glUniformMatrix4fv(g_uni_mvp,1,GL_FALSE,g_mvp_current);
+    glUniform1f(g_uni_tex_mode,0);
+    glEnable(GL_DEPTH_TEST);
+}
+
 void render_debug_grid(void) {
     if (!g_debug_grid) return;
 
@@ -1224,7 +1277,7 @@ void render_debug_grid(void) {
 
     glDisable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     glUniform1f(g_uni_tex_mode, 3.0f);
     glUniformMatrix4fv(g_uni_mvp, 1, GL_FALSE, identity);
     glUniform1f(g_uni_zbias, 0.0f);
@@ -1348,6 +1401,9 @@ void render_set_mask_append(int append) {
 void render_set_camera_pan(float x, float y) {
     g_cam_pan_x = x;
     g_cam_pan_z = y;  /* maneuver y -> 3D z */
+}
+void render_get_camera_pose(float *x,float *y,float *rotation) {
+    *x=g_cam_pan_x;*y=g_cam_pan_z;*rotation=g_cam_rot;
 }
 
 void render_set_camera_rotation(float angle_rad) {
@@ -1675,7 +1731,9 @@ void render_composite(void) {
     glEnable(GL_DEPTH_TEST);
     glDepthMask(GL_TRUE);
     glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    /* RGB is associated as it enters the transparent framebuffer. Alpha must
+     * use source-over too, not SRC_ALPHA (which incorrectly squares it). */
+    glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
     /* Layer 1: Road (combined outline+fill via painter's algorithm).
      * tex_mode 7 reads FBO RGB as base color -- white border gets paint-like shading,

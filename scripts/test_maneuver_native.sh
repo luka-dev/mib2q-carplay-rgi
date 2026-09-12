@@ -5,6 +5,9 @@ PROJECT_DIR=$(cd "$(dirname "$0")/.." && pwd)
 TEST_DIR=$(mktemp -d)
 trap 'rm -rf "$TEST_DIR"' EXIT
 cd "$PROJECT_DIR"
+cc -O1 -g -std=c99 -Wall -Wextra -fsanitize=address,undefined \
+    -fno-omit-frame-pointer tests/lane_safety_test.c -o "$TEST_DIR/lane_safety_test"
+"$TEST_DIR/lane_safety_test"
 cc -O1 -g -std=c99 -Wall -Wextra -DPLATFORM_MACOS -I/opt/homebrew/include \
     -fsanitize=address,undefined -fno-omit-frame-pointer \
     tests/maneuver_parity_test.c maneuver_render/route_path.c \

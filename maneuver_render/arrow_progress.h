@@ -7,6 +7,7 @@
 #define CR_PROGRESS_FILL 1
 #define CR_PROGRESS_BLINK_LOW 2
 #define CR_PROGRESS_BLINK_HIGH 3
+#define CR_PROGRESS_RETRACT_SECONDS .40f
 
 typedef struct {
     int state, initialized, active;
@@ -19,6 +20,11 @@ typedef struct {
     double tint_started, tint_last_time;
     float tint_duration;
     int tint_active;
+    /* A route handoff retracts the OLD front. Incoming packets remain queued
+     * until the engine commits the new maneuver, then fill rises from zero. */
+    int handoff, handoff_released, incoming_level, incoming_state;
+    float retract_from;
+    double retract_started;
 } cr_arrow_progress_t;
 
 static inline int cr_progress_decode(int flags, int state, int mode) {
@@ -43,6 +49,9 @@ static inline void cr_progress_reset(cr_arrow_progress_t *p) {
     p->tint_started = p->tint_last_time = 0;
     p->tint_duration = 0;
     p->tint_active = 0;
+    p->handoff = p->handoff_released = 0;
+    p->incoming_level = 16; p->incoming_state = CR_PROGRESS_OFF;
+    p->retract_from = 0; p->retract_started = 0;
 }
 
 static inline int cr_progress_tick_fill(cr_arrow_progress_t *p, double now) {
@@ -88,8 +97,20 @@ static inline int cr_progress_tick_fill(cr_arrow_progress_t *p, double now) {
     return 1;
 }
 
+static inline void cr_progress_set(cr_arrow_progress_t *p, int level, int state, double now);
+
 static inline int cr_progress_tick(cr_arrow_progress_t *p, double now) {
-    int changed = cr_progress_tick_fill(p,now);
+    int changed = 0;
+    if(p->handoff) {
+        if(now>p->last_time) {
+            float t=(float)((now-p->retract_started)/CR_PROGRESS_RETRACT_SECONDS);
+            if(t>1)t=1;
+            float fill=p->retract_from*(1-t*t*(3-2*t));
+            changed=fill!=p->fill;
+            p->fill=fill;
+            p->last_time=now;
+        }
+    } else changed=cr_progress_tick_fill(p,now);
     if (p->tint_active && now > p->tint_last_time) {
         float t = (float)((now-p->tint_started)/p->tint_duration);
         p->tint_last_time = now;
@@ -104,6 +125,17 @@ static inline int cr_progress_tick(cr_arrow_progress_t *p, double now) {
         }
         changed = 1;
     }
+    if(p->handoff && p->handoff_released && p->fill==0) {
+        int level=p->incoming_level,state=p->incoming_state;
+        p->handoff=p->handoff_released=0;
+        /* Seed the normal velocity-preserving filter at zero, including when
+         * coming from blink/off. Its ordinary first-packet snap is unsuitable
+         * here: the new route is already visible at this exact color. */
+        p->state=CR_PROGRESS_FILL;p->initialized=1;p->active=0;
+        p->target=p->velocity=0;p->last_time=now;
+        cr_progress_set(p,level,state,now);
+        changed=1;
+    }
     return changed;
 }
 
@@ -115,23 +147,50 @@ static inline void cr_progress_begin_maneuver(cr_arrow_progress_t *p, double now
     p->velocity = 0;
 }
 
-static inline void cr_progress_tint_target(cr_arrow_progress_t *p, int state, double now) {
-    float path = state == CR_PROGRESS_FILL ? 1.0f : 0.0f;
-    float glow = state == CR_PROGRESS_BLINK_HIGH ? 1.0f : 0.0f;
+static inline void cr_progress_tint_weights(cr_arrow_progress_t *p, float path,
+                                           float glow, float duration, double now) {
     if (path == p->path_target && glow == p->glow_target) return;
     /* Preserve the visible mixture when a phase changes mid-animation.
      * Convex interpolation keeps path_weight + glow <= 1 at every frame. */
     p->path_from = p->path_weight; p->glow_from = p->glow;
     p->path_target = path; p->glow_target = glow;
     p->tint_started = p->tint_last_time = now;
-    p->tint_duration = state == CR_PROGRESS_BLINK_HIGH ? 0.100f : 0.150f;
+    p->tint_duration = duration;
     p->tint_active = p->path_weight != path || p->glow != glow;
+}
+static inline void cr_progress_tint_target(cr_arrow_progress_t *p, int state, double now) {
+    cr_progress_tint_weights(p,state==CR_PROGRESS_FILL?1.0f:0.0f,
+                            state==CR_PROGRESS_BLINK_HIGH?1.0f:0.0f,
+                            state==CR_PROGRESS_BLINK_HIGH?.100f:.150f,now);
+}
+
+/* Call only when route motion actually starts, not when a later maneuver is
+ * queued. Keep spatial brightness constant so its boundary visibly retreats;
+ * any old blink glow fades during the departure, independently of the front. */
+static inline void cr_progress_begin_handoff(cr_arrow_progress_t *p,double now) {
+    if(p->handoff)return;
+    cr_progress_begin_maneuver(p,now);
+    p->handoff=1;p->handoff_released=0;
+    p->incoming_level=16;p->incoming_state=CR_PROGRESS_OFF;
+    p->retract_from=p->fill;p->retract_started=p->last_time=now;p->target=0;
+    cr_progress_tint_weights(p,p->path_weight,0,.150f,now);
+}
+static inline void cr_progress_finish_handoff(cr_arrow_progress_t *p,double now) {
+    if(!p->handoff)return;
+    p->handoff_released=1;
+    /* A very short/interrupted push still completes the retreat continuously.
+     * Normal pushes have already reached zero and release immediately. */
+    cr_progress_tick(p,now);
 }
 
 static inline void cr_progress_set(cr_arrow_progress_t *p, int level, int state, double now) {
     cr_progress_tick(p, now); /* reach the packet timestamp using the OLD target */
     if (level < 0) level = 0;
     if (level > 16) level = 16;
+    if(p->handoff) {
+        p->incoming_level=level;p->incoming_state=state;
+        return;
+    }
     float target = 1.0f - (float)level / 16.0f;
     int previous = p->state;
     p->state = state;

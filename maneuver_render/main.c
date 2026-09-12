@@ -124,15 +124,17 @@ static int   g_cleared = 1;
 
 /* Progress is rendered directly on the route arrow. */
 static cr_arrow_progress_t g_arrow;
+static int g_pending_progress_level=16,g_pending_progress_state=CR_PROGRESS_OFF;
 static int   g_persp_deferred = 0;       /* pending perspective change after push */
 static int   g_persp_deferred_value = 1; /* 0=2D, 1=3D */
 /* Apply a new maneuver to the engine */
-static void engine_apply_maneuver(const maneuver_state_t *state) {
+static void engine_apply_maneuver(const maneuver_state_t *state,double now) {
     if (state->icon == ICON_NONE || g_engine.current.icon == ICON_NONE) {
         g_engine.current = *state;
         g_engine.has_current = 1;
         g_engine.has_next = g_engine.has_pending = 0;
         g_engine.phase = ENGINE_IDLE;
+        cr_progress_reset(&g_arrow);
         maneuver_set_slide(1.0f);
         render_invalidate_masks();
         g_engine.dirty = 1;
@@ -142,6 +144,7 @@ static void engine_apply_maneuver(const maneuver_state_t *state) {
         /* Mid-transition: queue into pending slot, don't disturb current animation */
         g_engine.pending = *state;
         g_engine.has_pending = 1;
+        g_pending_progress_level=16;g_pending_progress_state=CR_PROGRESS_OFF;
         fprintf(stderr, "engine: queued icon=%d (phase=%d)\n",
                 state->icon, g_engine.phase);
         return;
@@ -150,6 +153,7 @@ static void engine_apply_maneuver(const maneuver_state_t *state) {
     /* IDLE: store as next, start push */
     g_engine.next = *state;
     g_engine.has_next = 1;
+    cr_progress_begin_handoff(&g_arrow,now);
     maneuver_start_push();
     g_engine.phase = ENGINE_PUSHING;
     render_invalidate_masks();
@@ -159,9 +163,9 @@ static void engine_apply_maneuver(const maneuver_state_t *state) {
 
 /* A roads-only update belongs to the latest accepted command. During a push
  * that is next (or pending), never the outgoing current maneuver. */
-static void engine_refresh_maneuver(const maneuver_state_t *state) {
+static void engine_refresh_maneuver(const maneuver_state_t *state,double now) {
     if (state->icon == ICON_NONE || g_engine.current.icon == ICON_NONE) {
-        engine_apply_maneuver(state);
+        engine_apply_maneuver(state,now);
         return;
     }
     if (g_engine.has_pending) g_engine.pending = *state;
@@ -171,6 +175,25 @@ static void engine_refresh_maneuver(const maneuver_state_t *state) {
     }
     render_invalidate_masks();
     g_engine.dirty = 1;
+}
+
+/* TCP progress belongs to the latest accepted maneuver. A third queued
+ * maneuver must not overwrite the target of the route currently entering. */
+static void engine_set_progress(int level,int state,double now) {
+    if(g_engine.has_pending) {
+        g_pending_progress_level=level;g_pending_progress_state=state;
+    } else cr_progress_set(&g_arrow,level,state,now);
+    g_engine.dirty=1;
+}
+
+static void engine_promote_pending(double now) {
+    g_engine.next=g_engine.pending;
+    g_engine.has_next=1;g_engine.has_pending=0;
+    cr_progress_begin_handoff(&g_arrow,now);
+    cr_progress_set(&g_arrow,g_pending_progress_level,g_pending_progress_state,now);
+    maneuver_start_push();g_engine.phase=ENGINE_PUSHING;
+    render_invalidate_masks();g_engine.dirty=1;
+    fprintf(stderr,"engine: promoting queued icon=%d\n",g_engine.next.icon);
 }
 
 static void engine_apply_presentation(void) {
@@ -204,7 +227,7 @@ static void clear_maneuver(void) {
     g_engine.dirty   = 1;
 }
 
-static void engine_tick(void) {
+static void engine_tick(double now) {
     switch (g_engine.phase) {
     case ENGINE_PUSHING:
         if (!maneuver_is_pushing()) {
@@ -214,18 +237,13 @@ static void engine_tick(void) {
                 g_engine.has_next = 0;
             }
             maneuver_commit_pushed_state(&g_engine.current);
+            cr_progress_finish_handoff(&g_arrow,now);
             render_invalidate_masks();
             g_engine.dirty = 1;
 
             if (g_engine.has_pending) {
                 /* Promote pending -> next, immediately start new push */
-                g_engine.next = g_engine.pending;
-                g_engine.has_next = 1;
-                g_engine.has_pending = 0;
-                maneuver_start_push();
-                g_engine.phase = ENGINE_PUSHING;
-                fprintf(stderr, "engine: promoting queued icon=%d\n",
-                        g_engine.next.icon);
+                engine_promote_pending(now);
             } else {
                 g_engine.phase = ENGINE_SLIDING_IN;
                 /* Crossfade during push already brought next roads to full alpha,
@@ -237,15 +255,7 @@ static void engine_tick(void) {
         if (!maneuver_is_animating()) {
             if (g_engine.has_pending) {
                 /* Promote pending -> next, start push */
-                g_engine.next = g_engine.pending;
-                g_engine.has_next = 1;
-                g_engine.has_pending = 0;
-                maneuver_start_push();
-                g_engine.phase = ENGINE_PUSHING;
-                render_invalidate_masks();
-                g_engine.dirty = 1;
-                fprintf(stderr, "engine: promoting queued icon=%d\n",
-                        g_engine.next.icon);
+                engine_promote_pending(now);
             } else {
                 g_engine.phase = ENGINE_IDLE;
             }
@@ -527,8 +537,6 @@ int main(int argc, char **argv) {
         if (got_maneuver) {
             int reveal_from_clear = g_cleared;
             if (reveal_from_clear) cr_progress_reset(&g_arrow);
-            else if (!(pending_flags & MAN_FLAG_REFRESH))
-                cr_progress_begin_maneuver(&g_arrow,progress_now);
             if (g_cleared) {
                 g_cleared = 0;
                 g_fade_alpha = 0.0f;
@@ -561,14 +569,14 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "engine: reveal from clear icon=%d\n",
                         pending_maneuver.icon);
             } else if (pending_flags & MAN_FLAG_REFRESH) {
-                engine_refresh_maneuver(&pending_maneuver);
+                engine_refresh_maneuver(&pending_maneuver,progress_now);
             } else {
-                engine_apply_maneuver(&pending_maneuver);
+                engine_apply_maneuver(&pending_maneuver,progress_now);
             }
         }
 
         if(got_progress) {
-            cr_progress_set(&g_arrow,progress_level,progress_state,progress_now);
+            engine_set_progress(progress_level,progress_state,progress_now);
             /* TCP order wins, including PROGRESS after MANEUVER in one drain.
              * Never let the maneuver's deferred snapshot rewind a newer tick. */
             g_engine.dirty=1;
@@ -576,7 +584,7 @@ int main(int argc, char **argv) {
         if(cr_progress_tick(&g_arrow,progress_now)) g_engine.dirty=1;
 
         /* Tick engine state machine */
-        engine_tick();
+        engine_tick(progress_now);
 
         /* Update framebuffer size (HiDPI) */
         int new_w, new_h;

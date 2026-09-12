@@ -269,6 +269,76 @@ static void test_progress_glow(void) {
     puts("arrow glow: two endpoints, phase easing, maneuver fade, interruption and reset PASS");
 }
 
+static void test_progress_handoff(void) {
+    cr_arrow_progress_t p;
+    cr_progress_reset(&p);cr_progress_set(&p,0,CR_PROGRESS_FILL,0);cr_progress_tick(&p,1);
+    cr_progress_begin_handoff(&p,1);
+    assert(p.fill==1 && p.path_weight==1 && p.handoff);
+    cr_progress_set(&p,8,CR_PROGRESS_FILL,1);
+    cr_arrow_progress_t fps30=p,fps60=p;
+    float previous=p.fill;
+    for(int i=1;i<=24;i++) {
+        cr_progress_set(&p,i<12?8:4,CR_PROGRESS_FILL,1+i/60.0);
+        assert(p.fill<=previous && p.path_weight==1 && p.target==0);
+        previous=p.fill;
+    }
+    cr_progress_tick(&p,1.5);assert(p.fill==0 && p.handoff);
+    for(int i=1;i<=6;i++)cr_progress_tick(&fps30,1+i/30.0);
+    for(int i=1;i<=12;i++)cr_progress_tick(&fps60,1+i/60.0);
+    assert(fabsf(fps30.fill-.5f)<1e-5f && fabsf(fps30.fill-fps60.fill)<1e-5f);
+    cr_progress_tick(&p,3);assert(p.fill==0); /* wait for route commit, not a timer */
+    cr_progress_finish_handoff(&p,3);
+    assert(!p.handoff && p.fill==0 && p.target==.75f && p.active);
+    cr_progress_tick(&p,3.1);assert(p.fill>0 && p.fill<.75f && p.velocity>0);
+    float fill=p.fill,velocity=p.velocity;
+    cr_progress_set(&p,2,CR_PROGRESS_FILL,3.1);
+    assert(p.fill==fill && p.velocity==velocity); /* live updates keep momentum */
+    cr_progress_tick(&p,4.2);assert(p.fill==.875f && !p.active);
+
+    /* Even an unusually early commit cannot turn the retreat into a snap. */
+    cr_progress_begin_handoff(&p,5);cr_progress_set(&p,8,CR_PROGRESS_FILL,5);
+    cr_progress_finish_handoff(&p,5.1);
+    assert(p.handoff && p.fill>0);
+    cr_progress_tick(&p,5.41);assert(!p.handoff && p.fill==0 && p.target==.5f);
+    cr_progress_tick(&p,6.5);assert(p.fill==.5f);
+
+    /* Blink fades during departure; the latest incoming phase wins at commit,
+     * and blink->fill must also grow spatially from an empty route. */
+    cr_progress_reset(&p);cr_progress_set(&p,0,CR_PROGRESS_BLINK_HIGH,7);cr_progress_tick(&p,8);
+    cr_progress_begin_handoff(&p,8);cr_progress_set(&p,0,CR_PROGRESS_BLINK_HIGH,8);
+    cr_progress_tick(&p,8.075);assert(fabsf(p.glow-.5f)<1e-4f);
+    cr_progress_set(&p,0,CR_PROGRESS_BLINK_LOW,8.2);assert(p.glow==0);
+    cr_progress_finish_handoff(&p,9);assert(p.state==CR_PROGRESS_BLINK_LOW && p.glow==0);
+    cr_progress_begin_handoff(&p,10);cr_progress_set(&p,4,CR_PROGRESS_FILL,10);
+    cr_progress_finish_handoff(&p,11);assert(p.fill==0 && p.target==.75f && p.active);
+    cr_progress_tick(&p,11.1);assert(p.fill>0 && p.fill<.75f);
+    cr_progress_reset(&p);assert(!p.handoff && !p.active && p.fill==0);
+
+    /* Actual engine ownership: C's queued updates cannot color entering B. */
+    memset(&g_engine,0,sizeof(g_engine));g_engine.has_current=1;
+    g_engine.current.icon=ICON_TURN;g_engine.current.exit_angle=-90;
+    maneuver_set_slide(1);cr_progress_reset(&g_arrow);
+    cr_progress_set(&g_arrow,0,CR_PROGRESS_FILL,20);cr_progress_tick(&g_arrow,21);
+    maneuver_state_t next=g_engine.current;next.exit_angle=45;
+    engine_apply_maneuver(&next,21);engine_set_progress(8,CR_PROGRESS_FILL,21);
+    double started=g_arrow.retract_started;
+    next.exit_angle=90;engine_apply_maneuver(&next,21.1);
+    engine_set_progress(2,CR_PROGRESS_FILL,21.1);
+    engine_set_progress(4,CR_PROGRESS_FILL,21.2);
+    engine_refresh_maneuver(&next,21.2);
+    assert(g_arrow.incoming_level==8 && g_arrow.retract_started==started);
+    assert(g_pending_progress_level==4 && g_engine.has_pending);
+    cr_progress_tick(&g_arrow,22);g_route_animating=0;engine_tick(22);
+    assert(g_engine.current.exit_angle==45 && g_engine.next.exit_angle==90);
+    assert(g_arrow.handoff && g_arrow.incoming_level==4 && !g_engine.has_pending);
+    cr_progress_tick(&g_arrow,23);g_route_animating=0;engine_tick(23);
+    assert(g_engine.current.exit_angle==90 && !g_arrow.handoff && g_arrow.fill==0);
+    cr_progress_tick(&g_arrow,24);assert(g_arrow.fill==.75f);
+    maneuver_set_slide(1);cr_progress_reset(&g_arrow);
+    memset(&g_engine,0,sizeof(g_engine));
+    puts("arrow handoff: retreat, commit gate, refill, FPS invariance and queued target ownership PASS");
+}
+
 static void test_contact_shadow(void) {
     float source[12*6]={0},copy[12*6],out[CR_CONTACT_MAX_VERTS*6];
     const float corners[6][2]={{-1,-1},{1,-1},{1,1},{-1,-1},{1,1},{-1,1}};
@@ -379,6 +449,7 @@ int main(void) {
     test_route_progress_projection();
     test_arrow_progress();
     test_progress_glow();
+    test_progress_handoff();
     test_contact_shadow();
     test_visible_area();
     cr_cmd_t cmd;
@@ -479,23 +550,23 @@ int main(void) {
     s=right;s.icon=ICON_TURN;s.exit_angle=-90;
     g_engine.current=s;g_cleared=0;
     s.junction_angle_count=1;s.junction_angles[0]=90;
-    engine_refresh_maneuver(&s);
+    engine_refresh_maneuver(&s,30);
     assert(g_engine.phase==ENGINE_IDLE && g_engine.current.junction_angle_count==1);
-    s.exit_angle=45;engine_apply_maneuver(&s);
+    s.exit_angle=45;engine_apply_maneuver(&s,30);
     assert(g_engine.phase==ENGINE_PUSHING && g_engine.has_next);
-    s.junction_angles[0]=-90;engine_refresh_maneuver(&s);
+    s.junction_angles[0]=-90;engine_refresh_maneuver(&s,30);
     assert(g_engine.next.junction_angles[0]==-90 && g_engine.current.exit_angle==-90);
     assert(!g_engine.has_pending); /* refresh must not enqueue another maneuver */
-    s.icon=ICON_LANE_CHANGE;engine_apply_maneuver(&s);
+    s.icon=ICON_LANE_CHANGE;engine_apply_maneuver(&s,30);
     assert(g_engine.has_pending);
-    s.direction=-1;engine_refresh_maneuver(&s);
+    s.direction=-1;engine_refresh_maneuver(&s,30);
     assert(g_engine.pending.direction==-1 && g_engine.next.icon==ICON_TURN);
-    s.icon=ICON_NONE;engine_apply_maneuver(&s);
+    s.icon=ICON_NONE;engine_apply_maneuver(&s,30);
     assert(g_engine.phase==ENGINE_IDLE && !g_engine.has_pending && !g_engine.has_next);
     g_persp_deferred=1;g_persp_deferred_value=1;
-    engine_tick();
+    engine_tick(30);
     assert(!g_persp_deferred);
-    s.icon=ICON_TURN;engine_apply_maneuver(&s);
+    s.icon=ICON_TURN;engine_apply_maneuver(&s,30);
     assert(g_engine.phase==ENGINE_IDLE && g_engine.current.icon==ICON_TURN);
     puts("maneuver_parity_test: decoder, half-degree paths, icon families, refresh/coalescing and NONE transitions PASS");
     return 0;

@@ -54,6 +54,19 @@ maneuver_exit_t maneuver_get_exit(const maneuver_state_t *state);
 /* Build route path segments for a maneuver (no extend/densify/extrude).
  * Used for path chaining during transitions. */
 void maneuver_build_route(const maneuver_state_t *state, route_path_t *path);
+/* Optional prebuilt scene source, using the SAME route/camera transition engine.
+ * Paths and masks must share coordinates with settled camera at (0,0).
+ * paint_masks draws only road/route masks, with the supplied rigid transform.
+ * Snapshots must remain immutable throughout a push. NULL restores built-ins. */
+typedef struct {
+    void *context;
+    void (*build_route)(void *context,const maneuver_state_t *state,route_path_t *path);
+    void (*paint_masks)(void *context,const maneuver_state_t *state,
+                        float tx,float ty,float cos_r,float sin_r);
+    float route_base_y,route_top_y;
+    float entry_road_reach,exit_road_reach;
+} maneuver_scene_provider_t;
+void maneuver_set_scene_provider(const maneuver_scene_provider_t *provider);
 /* Conservative world-space bounds needed to render any two-maneuver transition masks. */
 void maneuver_get_transition_mask_bounds(float *out_abs_x, float *out_abs_y);
 

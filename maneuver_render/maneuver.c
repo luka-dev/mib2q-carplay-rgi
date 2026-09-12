@@ -118,6 +118,19 @@ static route_path_t g_route_path;
 static route_path_t g_saved_path;  /* push crossfade: avoids 8KB stack copy */
 static route_mesh_t g_route_mesh;
 static route_mesh_t g_route_tail_mesh;
+static maneuver_scene_provider_t g_scene_provider;
+
+void maneuver_set_scene_provider(const maneuver_scene_provider_t *provider) {
+    if(provider && provider->build_route && provider->paint_masks)g_scene_provider=*provider;
+    else memset(&g_scene_provider,0,sizeof(g_scene_provider));
+    render_invalidate_masks();
+}
+static void build_scene_route(const maneuver_state_t *state,route_path_t *path) {
+    if(g_scene_provider.build_route)g_scene_provider.build_route(g_scene_provider.context,state,path);
+    else maneuver_build_route(state,path);
+}
+static float route_base_y(void) { return g_scene_provider.build_route?g_scene_provider.route_base_y:ROUTE_BASE_Y; }
+static float route_top_y(void) { return g_scene_provider.build_route?g_scene_provider.route_top_y:ROUTE_TOP_Y; }
 
 /* Route animation state -- sliding window */
 static float g_route_slide = 1.0f;     /* slide parameter 0..2 (0=hidden, 1=in position, 2=pushed out) */
@@ -149,6 +162,7 @@ static float g_next_cam_follow_dist = 0.0f;
 static float g_next_cam_release_end_dist = 0.0f;
 static float g_xfade_mid_dist = 0.0f;  /* midpoint between maneuver zones on combined path */
 static float g_man_cam_rot = 0.0f;
+static float g_man_cam_x = 0.0f,g_man_cam_y = 0.0f;
 static float g_cam_settle_start_x = 0.0f;
 static float g_cam_settle_start_y = 0.0f;
 static float g_cam_settle_start_rot = 0.0f;
@@ -631,6 +645,7 @@ static float light_settle_curve(float t) {
 }
 
 static void apply_camera_pose(float pan_x, float pan_y, float rot) {
+    g_man_cam_x=pan_x;g_man_cam_y=pan_y;
     g_man_cam_rot = rot;
     render_set_camera_pan(pan_x, pan_y);
     render_set_camera_rotation(rot);
@@ -756,6 +771,7 @@ static void update_combined_camera(void) {
  * Turn: |exit_angle|>150 means near-U-turn. */
 #define ELEV_LIFT 0.06f
 static float maneuver_elevation(const maneuver_state_t *s) {
+    if(g_scene_provider.build_route)return 0.0f;
     if (!s) return 0.0f;
     switch (s->icon) {
     case ICON_ROUNDABOUT: {
@@ -852,7 +868,7 @@ static void compute_slide_params(void) {
 /* Extrude the full route into g_route_mesh. */
 static void route_extrude_body(void) {
     rpath_extrude(&g_route_path, &g_route_mesh, SHAFT_T,
-                  ROUTE_BASE_Y, ROUTE_TOP_Y, g_t_tail, g_t_head);
+                  route_base_y(), route_top_y(), g_t_tail, g_t_head);
 }
 
 /* Draw the route mesh. */
@@ -862,7 +878,7 @@ static void route_draw_window(float t0, float t1, float alpha,
         return;
 
     rpath_extrude_partial(&g_route_path, &g_route_tail_mesh, SHAFT_T,
-                          ROUTE_BASE_Y, ROUTE_TOP_Y, t0, t1,
+                          route_base_y(), route_top_y(), t0, t1,
                           cap_start, cap_end, tip_end);
     rpath_draw(&g_route_tail_mesh, AC_R, AC_G, AC_B, AC_A * alpha);
 }
@@ -1352,6 +1368,11 @@ static void bounds_include_box(float tx, float ty, float cos_r, float sin_r,
 }
 
 void maneuver_get_transition_mask_bounds(float *out_abs_x, float *out_abs_y) {
+    /* This conservative allocation envelope is computed from built-in sample
+     * states, not the provider's current/next snapshot identities. A viewport
+     * resize must never ask a provider to resolve these synthetic states. */
+    maneuver_scene_provider_t saved_provider=g_scene_provider;
+    memset(&g_scene_provider,0,sizeof(g_scene_provider));
     const float local_half_w = ROAD_LEN + FADE_LEN + OL_T * 0.5f;
     const float local_half_h = ROAD_LEN + FADE_LEN + OL_T * 0.5f;
     const float safety = 1.05f;
@@ -1403,6 +1424,7 @@ void maneuver_get_transition_mask_bounds(float *out_abs_x, float *out_abs_y) {
 
     if (out_abs_x != NULL) *out_abs_x = max_abs_x * safety;
     if (out_abs_y != NULL) *out_abs_y = max_abs_y * safety;
+    g_scene_provider=saved_provider;
 }
 
 /* Road reach past exit/before entry along the connecting heading.
@@ -1410,11 +1432,13 @@ void maneuver_get_transition_mask_bounds(float *out_abs_x, float *out_abs_y) {
  * Entry: how far road mask extends below SHAFT_BOT. */
 static float maneuver_exit_road_reach(const maneuver_state_t *state) {
     (void)state;
+    if(g_scene_provider.build_route)return g_scene_provider.exit_road_reach;
     return (ROAD_LEN - BLUE_LEN) + FADE_LEN;  /* 0.05 + 0.30 = 0.35 */
 }
 
 static float maneuver_entry_road_reach(const maneuver_state_t *state) {
     (void)state;
+    if(g_scene_provider.build_route)return g_scene_provider.entry_road_reach;
     return FADE_LEN;  /* 0.30 */
 }
 
@@ -1429,9 +1453,9 @@ static void compute_combined_transform(const maneuver_state_t *cur_state,
     float ns_rx, ns_ry;
     float tx, ty;
 
-    maneuver_build_route(cur_state, &cur_path);
+    build_scene_route(cur_state, &cur_path);
     rpath_extend(&cur_path);
-    maneuver_build_route(next_state, &next_path);
+    build_scene_route(next_state, &next_path);
     rpath_extend(&next_path);
 
     cur_end = route_path_get_end_pose(&cur_path);
@@ -1448,7 +1472,7 @@ static void compute_combined_transform(const maneuver_state_t *cur_state,
     /* Part A: enforce minimum separation between junction centers.
      * Project center-to-center onto exit heading; if too small, push out. */
     {
-        cur_exit = maneuver_get_exit(cur_state);
+        cur_exit = g_scene_provider.build_route?cur_end:maneuver_get_exit(cur_state);
         float hdx = cosf(cur_exit.heading);
         float hdy = sinf(cur_exit.heading);
         float proj = tx * hdx + ty * hdy;
@@ -2123,6 +2147,20 @@ static void draw_roundabout_departure(int side) {
  * Main dispatch
  * ================================================================ */
 
+static void draw_supplied_scene(const maneuver_state_t *s,float tx,float ty,float cos_r,float sin_r) {
+    /* Providers may use the camera for local layout calculations. Restore the
+     * engine's pose before compositing; road masks never steer the handoff. */
+    float cam_x=g_man_cam_x,cam_y=g_man_cam_y,cam_rot=g_man_cam_rot;
+    g_scene_provider.paint_masks(g_scene_provider.context,s,tx,ty,cos_r,sin_r);
+    apply_camera_pose(cam_x,cam_y,cam_rot);
+    build_scene_route(s,&g_route_path);
+    rpath_extend(&g_route_path);rpath_densify(&g_route_path);
+    compute_slide_params();
+    if(!g_masks_only_mode) {
+        route_extrude_body();render_composite();route_draw_with_fade();
+    }
+}
+
 void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state) {
     if (s->icon == ICON_NONE && next_state == NULL) {
         g_flag_active = 0;
@@ -2261,7 +2299,8 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
 
     /* Dispatch mask + route rendering for a state */
     #define DISPATCH_DRAW(st) do { \
-        switch ((st)->icon) { \
+        if(g_scene_provider.paint_masks)draw_supplied_scene((st),0,0,1,0); \
+        else switch ((st)->icon) { \
             case ICON_APPROACH: draw_approach((st)->junction_angles, (st)->junction_angle_count); break; \
             case ICON_TURN: draw_turn((float)(st)->exit_angle, (st)->junction_angles, (st)->junction_angle_count); break; \
             case ICON_UTURN: { \
@@ -2296,7 +2335,7 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
         route_path_t next_path;
         float rot, cos_r, sin_r;
         float tx, ty;
-        maneuver_build_route(s, &g_route_path);
+        build_scene_route(s, &g_route_path);
 
         /* Measure first maneuver's road length BEFORE extending --
          * use it for speed normalization during the combined handoff. */
@@ -2304,7 +2343,7 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
         g_slug_override = g_route_path.total_length;
         rpath_extend(&g_route_path);
 
-        maneuver_build_route(next_state, &next_path);
+        build_scene_route(next_state, &next_path);
         rpath_densify(&next_path);
         float next_road_len = next_path.total_length;
         rpath_extend(&next_path);
@@ -2434,9 +2473,12 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
              * Save combined route path — DISPATCH_DRAW overwrites g_route_path. */
             g_saved_path = g_route_path;
             g_masks_only_mode = 1;
-            render_push_mask_transform(tx, ty, cos_r, sin_r);
-            DISPATCH_DRAW(next_state);
-            render_pop_mask_transform();
+            if(g_scene_provider.paint_masks)draw_supplied_scene(next_state,tx,ty,cos_r,sin_r);
+            else {
+                render_push_mask_transform(tx, ty, cos_r, sin_r);
+                DISPATCH_DRAW(next_state);
+                render_pop_mask_transform();
+            }
             g_masks_only_mode = 0;
             g_route_path = g_saved_path;
             compute_slide_params();  /* restore g_t_tail/g_t_head for combined path */
