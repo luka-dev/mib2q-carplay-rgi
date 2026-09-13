@@ -970,7 +970,12 @@ public class RouteGuidance implements CarplayBus.Listener {
                 int v = d.num(p + "index", -1);
                 if (v != state.lgIndex[i]) {
                     state.lgIndex[i] = v;
+                    state.lgLaneCount[i] = -1;
                     state.lgLaneComplete[i] = -1;
+                    state.lgLanePositions[i] = null;
+                    state.lgLaneDirections[i] = null;
+                    state.lgLaneStatus[i] = null;
+                    state.lgLaneAngles[i] = null;
                     state.markDirty(State.DIRTY_LANE_GUIDANCE);
                 }
             }

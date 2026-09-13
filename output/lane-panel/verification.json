@@ -1,0 +1,20 @@
+{
+  "captures": 22,
+  "premultiplied_alpha": true,
+  "stage_changes_only_panel": true,
+  "hidden_baselines_checked": 2,
+  "reveal_frames": 60,
+  "camera_reveal_restore": true,
+  "scene_cache_preserved": true,
+  "lane_camera_handoff_frames": 130,
+  "lane_camera_handoff": true,
+  "small_capacity": 5,
+  "wide_capacity": 8,
+  "full_source_width_mask": true,
+  "gpu_mask": [
+    "Lane mask GPU: one lane erases full source width through final row in both stages, uniform vertical feather, premultiplication retained, no opaque background PASS"
+  ],
+  "qnx": [
+    "built build/maneuver_render + build/libmaneuver_scene.a (C ABI, no C++ runtime)"
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "java": [
+    "RouteInfoPresentationTest: PASS (1363 checks)",
+    "RendererMapperDirectionTest: PASS",
+    "RouteGuidanceDeltaTest: metadata, transient zero, reroute, empty list, source clear/resume and malformed list PASS",
+    "DistanceBargraphChainTest: stock sender/serializer retain distance validity with bargraph and both blink phases PASS",
+    "ManeuverParityTest: PASS (1088 checks)",
+    "RendererViewportTest: stage change, wire geometry, coalescing, reconnect and backpressure PASS",
+    "Lane guidance transport: HUD active-event selection, maneuver independence, raw sentinels, incomplete metadata, ownership and hide PASS",
+    "Lane lifecycle: real delta -> HUD/renderer, show/hide/reappear within one maneuver, late cache, prefetch, event switch, zero count, LRU reset, route-only gate, 1083 angle/status cases and safety sentinels PASS"
+  ],
+  "transports": [
+    "CarplayBusTransportTest: malformed lists, 30 restarts, fragmented wire, stale bind/read and outbound bounds PASS",
+    "RendererServerTransportTest: CLEAR ACK ordering, queue overflow, atomic lane hide/reappear under progress pressure, 48-byte wire, stale writer and 30 restarts PASS",
+    "AltscreenControlTransportTest: delayed old disconnect cannot override fresh VIDEO_ON PASS"
+  ],
+  "native": [
+    "20 ordinary curb contours and transition mask allocation isolation PASS",
+    "32 ordinary scenes, 32000 cache hits, immutable snapshots, small/wide parity, native family parity and invalid inputs PASS; peak 220 commands",
+    "Panel camera: always dollies with lanes; 32 maneuvers fit the SMALL safe frame above the fade in both stages; hide restores ordinary pose PASS",
+    "Lane panel: 5/8 capacity, overflow retains best, right tie, order, unknowns, branch colours, 729 geometry combinations and reset PASS",
+    "Lane mask GPU: destination RGB+alpha erased through final source row, feather monotonic, premultiplication retained, no opaque background PASS"
+  ],
+  "wire": [
+    "PASS: real TCP atomic/fragmented commit, same-maneuver updates and rapid show/hide/reappear, independent event switch, hide/reappear during native travel, camera dolly/restore, 5/8 stage roundtrip, malformed/hidden/CLEAR cleanup"
+  ],
+  "qnx": [
+    "built build/maneuver_render + build/libmaneuver_scene.a (C ABI, no C++ runtime)"
+  ]
+}

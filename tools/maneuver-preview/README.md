@@ -2,18 +2,36 @@
 
 Standalone preview of the production C++ scene compiler, native camera motion,
 arrow progress/glow and contact shadow. There is no multilane-road renderer.
-Independent lane data is accepted by production for a future panel below the
-maneuver; the panel is intentionally not implemented yet.
+Independent lane data is drawn in a screen-space row at the bottom of the active
+visible area. The small frame fits five cells; the wide frame fits all eight.
+Arrow size stays constant, and overflow replaces one cell with `…`.
 
 ```sh
 make -C tools/maneuver-preview all test
 build/maneuver-preview/preview --case 14
 python3 tools/maneuver-preview/capture.py
+build/maneuver-preview/preview --lanes 0
+python3 tools/maneuver-preview/capture_lanes.py
+python3 tools/maneuver-preview/test_lane_transport.py
 ```
 
 Left/Right changes the maneuver using the native camera handoff. Up switches
-small/wide visible areas; D toggles the red frame; Space runs fill/blink.
-The preview retains the original 328×181 source and camera scale.
+small/wide visible areas; Down cycles independent lane events; D toggles the red
+frame; Space runs fill/blink; P shows/hides lanes to inspect the camera retreat
+and return. Lane events do not wait for maneuver transitions.
+The source stays 328×181. Lanes always move the camera slightly backward; the
+important arrow must fit the small red frame above the row in both stages.
+Wide lane previews also draw the small safety frame for direct visual review.
+
+The lane review covers eight-lane overflow on either edge, shared directions,
+multiple best lanes, unknown angles, sharp/U-turn arrows, guidance alongside a
+full roundabout and hidden guidance. `output/lane-panel/lane-panel.png` compares
+both frame sizes. GPU checks verify premultiplied alpha and unchanged maneuver
+pixels outside the bottom panel when switching frame sizes. The CPU suite checks window selection,
+sentinels, ordering and all 729 three-direction combinations under ASan/UBSan.
+The row is transparent: underlying scene colour and alpha fade away together.
+`output/lane-panel/lane-camera.gif` shows the camera reveal/restore; GPU tests
+also check a native maneuver handoff with lanes and destination-alpha erasure.
 
 Thirty-two fixtures cover straight, slight, normal and sharp turns, both
 U-turns, full roundabouts in both traffic directions, side roads, exits,

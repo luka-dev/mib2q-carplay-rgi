@@ -30,7 +30,7 @@ endif
 
 RENDERER_SRC = $(RENDERER_COMMON) $(PLATFORM_SRC)
 HARNESS_SRC = test_harness.c
-SCENE_SRC = scene/scene.cpp scene/geometry.cpp scene/layout.cpp
+SCENE_SRC = scene/scene.cpp scene/geometry.cpp scene/layout.cpp scene/lane_panel.cpp
 OBJ_DIR = $(BUILD_DIR)/maneuver-objects
 C_OBJECTS = $(addprefix $(OBJ_DIR)/,$(RENDERER_SRC:.c=.o))
 SCENE_OBJECTS = $(addprefix $(OBJ_DIR)/,$(SCENE_SRC:.cpp=.o))

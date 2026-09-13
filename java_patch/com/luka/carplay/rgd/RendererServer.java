@@ -654,11 +654,13 @@ public class RendererServer {
                 pending.packet = pkt;
                 pending.generation = connectionGeneration;
                 pending.clear = beginClear;
-                // Retain only the newest crop, including across CLEAR barriers:
-                // CLEAR hides content but never changes the physical viewport.
-                if (pkt[0] == CMD_VISIBLE_AREA) {
+                // Keep the latest independent state as a whole queue entry.
+                // In particular, a lane hide must survive progress traffic.
+                // Replacing an older snapshot across CLEAR is safe: the new
+                // snapshot stays after that barrier at its original TCP order.
+                if (pkt[0] == CMD_VISIBLE_AREA || pkt[0] == CMD_LANES_BEGIN) {
                     for (int n = 0; n < writeCount; n++) {
-                        if (writeQueue[(writeHead + n) % WRITE_QUEUE_CAPACITY].packet[0] != CMD_VISIBLE_AREA)
+                        if (writeQueue[(writeHead + n) % WRITE_QUEUE_CAPACITY].packet[0] != pkt[0])
                             continue;
                         for (int i = n; i + 1 < writeCount; i++)
                             writeQueue[(writeHead + i) % WRITE_QUEUE_CAPACITY] =
@@ -673,11 +675,12 @@ public class RendererServer {
                     /* Ordinary state can be resent; CLEAR is an ordered barrier.
                      * Losing it can leave Java waiting for an ACK/new first-frame
                      * event which the renderer will never send. Keep all barriers
-                     * and the one cached viewport command, and discard the oldest ordinary command, preserving order. */
+                     * plus cached viewport/lane snapshots, and discard the oldest ordinary command, preserving order. */
                     int drop = 0;
                     while (drop < writeCount && (writeQueue[(writeHead + drop)
                             % WRITE_QUEUE_CAPACITY].clear || writeQueue[(writeHead + drop)
-                            % WRITE_QUEUE_CAPACITY].packet[0] == CMD_VISIBLE_AREA)) ++drop;
+                            % WRITE_QUEUE_CAPACITY].packet[0] == CMD_VISIBLE_AREA || writeQueue[(writeHead + drop)
+                            % WRITE_QUEUE_CAPACITY].packet[0] == CMD_LANES_BEGIN)) ++drop;
                     if (drop == writeCount) return false;
                     for (int i = drop; i + 1 < writeCount; ++i) {
                         writeQueue[(writeHead + i) % WRITE_QUEUE_CAPACITY] =

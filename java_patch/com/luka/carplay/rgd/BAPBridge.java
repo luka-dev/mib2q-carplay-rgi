@@ -1123,6 +1123,7 @@ public class BAPBridge {
              * 6. Lane guidance (FctID 24)
              */
             int laneRecomputeMask = RouteGuidance.State.DIRTY_LANE_GUIDANCE
+                | RouteGuidance.State.DIRTY_ROUTE_STATE
                 | RouteGuidance.State.DIRTY_MANEUVER_LIST
                 | RouteGuidance.State.DIRTY_MANEUVER_COUNT;
             if ((dirty & laneRecomputeMask) != 0) {
@@ -1136,9 +1137,7 @@ public class BAPBridge {
                  *   - active lane choice (right at the maneuver)
                  *   - hide on exit (showing→0 once past endValidRouteCoordinate)
                  * No `nowApproach` gate — that would override iOS's range. */
-                boolean wantLaneGuidance = !explicitClear
-                    && !shouldClearManeuver
-                    && s.laneGuidanceShowing == 1;
+                boolean wantLaneGuidance = laneGuidanceVisible(s);
                 if (wantLaneGuidance) {
                     sendLaneGuidance(s);
                 } else {
@@ -1189,8 +1188,7 @@ public class BAPBridge {
                 // Lanes have their own active event and visibility, just as
                 // HUD FctID 24. They never refresh or transition the maneuver.
                 if (lastCrLaneGuidance == null || (dirty & laneRecomputeMask) != 0) {
-                    LaneGuidanceSnapshot lanes = rendererLaneGuidance(s,
-                        !explicitClear && !shouldClearManeuver && s.laneGuidanceShowing == 1);
+                    LaneGuidanceSnapshot lanes = rendererLaneGuidance(s, laneGuidanceVisible(s));
                     if (!lanes.same(lastCrLaneGuidance)) {
                         boolean ok = rendererClient.sendLaneGuidance(lanes);
                         lastCrLaneGuidance = ok ? lanes : null;
@@ -1458,6 +1456,10 @@ public class BAPBridge {
      * Lane Guidance (FctID 24)
      * ============================================================ */
 
+    private static boolean laneGuidanceVisible(RouteGuidance.State s) {
+        return s.laneGuidanceShowing == 1 && !(s.maneuverCount == 0 && s.routeState <= 0);
+    }
+
     private static LaneGuidanceSnapshot rendererLaneGuidance(RouteGuidance.State s, boolean showing) {
         if (!showing) return LaneGuidanceSnapshot.HIDDEN;
         int slot = resolveLaneGuidanceManeuverIndex(s); // Same selection as HUD.
@@ -1522,8 +1524,6 @@ public class BAPBridge {
 
     private static boolean hasLaneCacheForSlot(RouteGuidance.State s, int slot) {
         if (slot < 0) return false;
-        if (s.lgLaneDirections == null || slot >= s.lgLaneDirections.length) return false;
-        if (s.lgLaneDirections[slot] == null) return false;
         return laneCacheCountForSlot(s, slot) > 0;
     }
 
@@ -1545,7 +1545,7 @@ public class BAPBridge {
         if (s.mLaneDirections[slot] == null) return false;
         int count = -1;
         if (s.mLaneCount != null && slot < s.mLaneCount.length) count = s.mLaneCount[slot];
-        if (count <= 0) count = s.mLaneDirections[slot].length;
+        if (count < 0) count = s.mLaneDirections[slot].length;
         return count > 0;
     }
 
@@ -1554,6 +1554,7 @@ public class BAPBridge {
         int count = 0;
         if (s.lgLaneCount != null && slot < s.lgLaneCount.length) {
             count = s.lgLaneCount[slot];
+            if (count >= 0) return count; // Explicit zero clears; old arrays are not a fallback.
         }
         if (count <= 0 && s.lgLaneDirections != null && slot < s.lgLaneDirections.length
             && s.lgLaneDirections[slot] != null) {
@@ -1618,6 +1619,7 @@ public class BAPBridge {
         int count = 0;
         if (s.mLaneCount != null && manIdx < s.mLaneCount.length) {
             count = s.mLaneCount[manIdx];
+            if (count >= 0) return count;
         }
         if (count <= 0 && s.mLaneDirections != null && manIdx < s.mLaneDirections.length
             && s.mLaneDirections[manIdx] != null) {
@@ -1683,12 +1685,21 @@ public class BAPBridge {
          * unrelated event data (post-eviction) and m-cache lookup with
          * the same numeric slot would alias into it.
          */
+        // Once the independent lg cache is present, a missing/empty active
+        // event must stay empty. Never substitute a maneuver's old lane data.
+        if (s.laneGuidanceSlot >= 0) return -1;
+        if (s.lgIndex != null) for (int i = 0; i < s.lgIndex.length; i++) {
+            if (s.lgIndex[i] >= 0) return -1;
+        }
         int max = (s.mLaneCount != null) ? s.mLaneCount.length : 0;
         if (activeIdx < max && hasMCacheLaneForSlot(s, activeIdx)
             && !hasLaneCacheForSlot(s, activeIdx)) {
             return activeIdx;
         }
-        if (primary >= 0 && hasMCacheLaneForSlot(s, primary)
+        if (primary >= 0 && s.mLinkedLaneGuidanceIndex != null
+            && primary < s.mLinkedLaneGuidanceIndex.length
+            && s.mLinkedLaneGuidanceIndex[primary] == activeIdx
+            && hasMCacheLaneForSlot(s, primary)
             && !hasLaneCacheForSlot(s, primary)) {
             return primary;
         }
@@ -1726,15 +1737,14 @@ public class BAPBridge {
 
     private static boolean hasLaneAnglesForLane(RouteGuidance.State s, int manIdx, int laneIdx) {
         int[][] lanes = laneAnglesFor(s, manIdx);
-        if (lanes == null || lanes.length == 0) return false;
-        int sel = (laneIdx >= 0 && laneIdx < lanes.length) ? laneIdx : 0;
-        int[] angles = lanes[sel];
+        if (lanes == null || laneIdx < 0 || laneIdx >= lanes.length) return false;
+        int[] angles = lanes[laneIdx];
         return (angles != null && angles.length > 0);
     }
 
     private static boolean shouldEmitLane(RouteGuidance.State s, int manIdx, int laneIdx, short laneDir) {
         int[] dirs = laneDirectionsFor(s, manIdx);
-        if (dirs == null || laneIdx < 0 || laneIdx >= dirs.length) return true;
+        if (dirs == null || laneIdx < 0 || laneIdx >= dirs.length) return laneDir != (short)0xFF;
         int raw = dirs[laneIdx];
 
         if (raw == 1000 && !hasLaneAnglesForLane(s, manIdx, laneIdx)) return false;
@@ -1753,7 +1763,8 @@ public class BAPBridge {
     }
 
     private static int mapRawLaneValueToDirectionCode(int raw, boolean excludeOneNativeKey, int keyToExclude) {
-        if (raw == 1000) return 0xFF;
+        if (raw == 1000 || raw == -1000) return 0xFF; // Safety sentinels, never turn angles.
+        if (raw < -180 || raw > 180) return 0xFF;
 
         int bestCode = 0;
         int bestDiff = 100000;
@@ -1774,11 +1785,11 @@ public class BAPBridge {
         if (manIdx < 0) return (short) 0xFF;
 
         int[][] laneAngles = laneAnglesFor(s, manIdx);
-        if (laneAngles != null && laneAngles.length > 0) {
-            int sel = (laneIdx >= 0 && laneIdx < laneAngles.length) ? laneIdx : 0;
-            int[] angles = laneAngles[sel];
-            if (angles != null && angles.length > 0) {
-                return (short)(mapRawLaneValueToDirectionCode(angles[0]) & 0xFF);
+        if (laneAngles != null && laneIdx >= 0 && laneIdx < laneAngles.length) {
+            int[] angles = laneAngles[laneIdx];
+            if (angles != null) for (int i = 0; i < angles.length; i++) {
+                int direction = mapRawLaneValueToDirectionCode(angles[i]);
+                if (direction != 0xFF) return (short)direction;
             }
         }
         return (short) 0xFF;
@@ -1786,10 +1797,11 @@ public class BAPBridge {
 
     private static short mapLaneDirection(RouteGuidance.State s, int manIdx, int laneIdx) {
         int[] dirs = laneDirectionsFor(s, manIdx);
-        if (dirs == null || laneIdx < 0 || laneIdx >= dirs.length) return (short)0xFF;
+        if (dirs == null || laneIdx < 0 || laneIdx >= dirs.length)
+            return mapLaneDirectionFromSentinel(s, manIdx, laneIdx);
         int raw = dirs[laneIdx];
 
-        if (raw == 1000) {
+        if (raw < -180 || raw > 180) {
             return mapLaneDirectionFromSentinel(s, manIdx, laneIdx);
         }
 
@@ -1799,22 +1811,14 @@ public class BAPBridge {
     private static byte[] mapLaneSideStreets(RouteGuidance.State s, int manIdx, int laneIdx, short laneDirection) {
         if (manIdx < 0) return new byte[0];
         int[][] lanes = laneAnglesFor(s, manIdx);
-        if (lanes == null || lanes.length == 0) return new byte[0];
-        int sel = (laneIdx >= 0 && laneIdx < lanes.length) ? laneIdx : 0;
-        int[] angles = lanes[sel];
+        if (lanes == null || laneIdx < 0 || laneIdx >= lanes.length) return new byte[0];
+        int[] angles = lanes[laneIdx];
         if (angles == null || angles.length == 0) return new byte[0];
 
-        int start = 0;
-        int[] dirs = laneDirectionsFor(s, manIdx);
-        if (dirs != null && laneIdx >= 0 && laneIdx < dirs.length && dirs[laneIdx] == 1000) {
-            start = 1;
-        }
-        if (start >= angles.length) return new byte[0];
-
         int primaryDir = laneDirection & 0xFF;
-        int[] codes = new int[angles.length - start];
+        int[] codes = new int[angles.length];
         int n = 0;
-        for (int i = start; i < angles.length; i++) {
+        for (int i = 0; i < angles.length; i++) {
             int code = mapRawLaneValueToDirectionCode(angles[i]) & 0xFF;
             if (code == 0xFF) continue;
             /* Skip angles that map to the same BAP direction as the primary --
@@ -1848,6 +1852,11 @@ public class BAPBridge {
     }
 
     private static byte mapGuidanceInfo(RouteGuidance.State s, int manIdx, int laneIdx) {
+        int[] primary = laneDirectionsFor(s, manIdx);
+        // A fallback branch can describe the lane, but cannot become a
+        // highlighted recommendation when its authoritative angle is unknown.
+        if (primary == null || laneIdx < 0 || laneIdx >= primary.length
+                || primary[laneIdx] < -180 || primary[laneIdx] > 180) return 0;
         int[] status = laneStatusFor(s, manIdx);
         if (status == null || laneIdx < 0 || laneIdx >= status.length) return 0;
         int v = status[laneIdx];

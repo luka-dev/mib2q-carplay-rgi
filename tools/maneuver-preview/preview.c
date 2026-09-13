@@ -13,6 +13,7 @@
 #include "maneuver.h"
 #include "arrow_progress.h"
 #include "fixtures.h"
+#include "lane_fixtures.h"
 #include "../../maneuver_render/scene/scene.h"
 static cr_scene_info_t capture_info;
 extern float g_3d_offset_adjust;
@@ -107,9 +108,22 @@ static void capture(const char *dir,int c,int compact,int width,int height) {
     fclose(f);free(p);
 }
 int main(int argc,char **argv) {
-    int width,height,c=0,compact=1,dirty=1,frame=0,animate=0,show_frame=1;
+    int width,height,c=0,compact=1,dirty=1,frame=0,animate=0,show_frame=1,show_lanes=1;
     const char *out=argc==3 && !strcmp(argv[1],"--capture")?argv[2]:NULL;
-    const char *handoff_out=(argc==3 || argc==5) && !strcmp(argv[1],"--capture-transition")?argv[2]:NULL;
+    const char *lanes_out=argc==3 && !strcmp(argv[1],"--capture-lanes")?argv[2]:NULL;
+    const char *reveal_out=argc==3 && !strcmp(argv[1],"--capture-lane-reveal")?argv[2]:NULL;
+    int reveal_frame=0;
+    int lane_case=-1;
+    if(argc==3 && !strcmp(argv[1],"--lanes"))lane_case=atoi(argv[2]);
+    if(lanes_out)lane_case=0;
+    if(lane_case>=LANE_CASES || lane_case<-1)return 2;
+    if(lane_case>=0)c=lane_maneuvers[lane_case];
+    if(reveal_out)c=lane_maneuvers[7];
+    cr_lane_panel_t *panel=cr_lane_panel_create();
+    if(!panel)return 2;
+    int lane_handoff=(argc==3 || argc==5) && !strcmp(argv[1],"--capture-lane-transition");
+    const char *handoff_out=(argc==3 || argc==5) && (!strcmp(argv[1],"--capture-transition") || lane_handoff)?argv[2]:NULL;
+    if(lane_handoff)lane_case=0;
     int handoff_current=argc==5?atoi(argv[3]):1,handoff_next=argc==5?atoi(argv[4]):2;
     int handoff_frame=0,handoff_settled_frames=0,handoff_warmup=0;
     double started;
@@ -119,7 +133,7 @@ int main(int argc,char **argv) {
         c=handoff_current;
     }
     if(platform_init(328,181))return 1;
-    if(out || handoff_out) {
+    if(out || handoff_out || lanes_out || reveal_out) {
         glfwHideWindow(glfwGetCurrentContext());
         /* Interactive preview keys must not abort a hidden capture midway. */
         glfwSetKeyCallback(glfwGetCurrentContext(),NULL);
@@ -142,12 +156,17 @@ int main(int argc,char **argv) {
     while(!platform_should_close()) {
         platform_poll();
         double now=glfwGetTime();
-        if(!out && !handoff_out) {
+        if(!out && !handoff_out && !lanes_out && !reveal_out) {
         if(platform_key_tap(CR_KEY_RIGHT))request_case((requested_case()+1)%CASES,compact);
         if(platform_key_tap(CR_KEY_LEFT))request_case((requested_case()+CASES-1)%CASES,compact);
         if(platform_key_tap(CR_KEY_UP)){compact=!compact;dirty=1;}
+        if(platform_key_tap(CR_KEY_DOWN)) {
+            lane_case=(lane_case+1)%LANE_CASES;
+            request_case(lane_maneuvers[lane_case],compact);dirty=1;
+        }
         if(platform_key_tap(CR_KEY_SPACE)){animate=!animate;started=glfwGetTime();}
         if(platform_key_tap(CR_KEY_D))show_frame=!show_frame;
+        if(platform_key_tap(CR_KEY_P))show_lanes=!show_lanes;
         }
         if(tick_engine(compact)){c=current_scene.case_id;dirty=1;}
         if(dirty) {
@@ -155,7 +174,7 @@ int main(int argc,char **argv) {
             /* Vertical lens shift: no change to focal length, tilt or distance. */
             g_3d_offset_adjust=-.16f;
             render_set_visible_area(compact?59:0,compact?27:0,compact?210:328,compact?153:180);
-            snprintf(title,sizeof(title),"Maneuver: %s | %s | L/R case, Up crop, D frame",fixtures[c].name,compact?"210x153":"328x180");
+            snprintf(title,sizeof(title),"%s | %s | Up crop, Down lanes, P on/off",lane_case>=0?lane_names[lane_case]:fixtures[c].name,compact?"210x153":"328x180");
             glfwSetWindowTitle(glfwGetCurrentContext(),title);
             render_set_camera_pan(0,0);render_set_camera_rotation(0);render_set_light_rotation(0);
             prepare_scene(&current_scene,c,compact);
@@ -163,6 +182,15 @@ int main(int argc,char **argv) {
             render_invalidate_masks();
             frame=0;
         }
+        cr_lane_guidance_t lanes={0};
+        if(reveal_out)lane_case=reveal_frame>=12 && reveal_frame<42?7:-1;
+        if(lane_case>=0 && show_lanes)lanes=sample_lanes(lane_case);
+        cr_rect_t panel_visible,panel_target;
+        render_get_visible_area(NULL,&panel_target);
+        cr_lane_panel_update(panel,&lanes,panel_target.w,now);
+        float content_frame[3];
+        cr_lane_panel_framing(panel,current_scene.compiled,engine_phase==1?next_scene.compiled:NULL,content_frame);
+        render_set_content_framing(content_frame[0],content_frame[1],content_frame[2]);
         render_begin_frame();
         {int level=4,state=CR_PROGRESS_FILL;double t=fmod(now-started,8.0);
         /* Synthetic packets use the SAME target filter/handoff as production;
@@ -176,8 +204,17 @@ int main(int argc,char **argv) {
         render_set_route_progress(preview_progress.fill,preview_progress.path_weight,preview_progress.glow);
         maneuver_prepare_frame(&current_scene.maneuver,next);
         maneuver_draw(&current_scene.maneuver,next);}
+        render_get_visible_area(&panel_visible,&panel_target);
+        cr_lane_panel_draw(panel,panel_visible,now);
         if(show_frame)render_debug_visible_area();
+        if(show_frame && lanes.showing && !compact)render_debug_small_area();
         render_end_frame();dirty=0;
+        if(reveal_out) {
+            float x,y,dolly;render_get_content_framing(&x,&y,&dolly);
+            printf("FRAMING %d %.6f %.6f %.6f %u\n",reveal_frame,x,y,dolly,cr_scene_info(current_scene.compiled)->builds);
+            capture(reveal_out,reveal_frame,1,width,height);
+            if(++reveal_frame==60)break;
+        }
         /* Match static captures' initial viewport/progress-map settling before
          * calling this the departure endpoint of a maneuver transition. */
         if(handoff_out && ++handoff_warmup>=12) {
@@ -204,6 +241,15 @@ int main(int argc,char **argv) {
             }
             if(++handoff_frame>900){fprintf(stderr,"Native transition did not settle\n");return 10;}
         }
+        if(lanes_out && ++frame==12) {
+            capture(lanes_out,lane_case,compact,width,height);
+            if(compact){compact=0;dirty=1;}
+            else {
+                compact=1;dirty=1;
+                if(++lane_case==LANE_CASES)break;
+                c=lane_maneuvers[lane_case];
+            }
+        }
         if(out && ++frame==12) {
             capture(out,c,compact,width,height);
             printf("FRAME %d %s %s bounds %.2f %.2f %.2f %.2f camera %.2f %.2f mesh %08x\n",c,compact?"crop":"wide",capture_info.framed?"PASS":"FAIL",capture_info.bounds[0],capture_info.bounds[1],capture_info.bounds[2],capture_info.bounds[3],capture_info.camera_x,capture_info.camera_y,(unsigned)capture_info.mesh_hash);
@@ -217,5 +263,6 @@ int main(int argc,char **argv) {
         double remaining=1.0/30.0-(glfwGetTime()-now);
         if(remaining>0)usleep((unsigned)(remaining*1000000));
     }
+    cr_lane_panel_destroy(panel);
     maneuver_set_scene_provider(NULL);cr_scene_destroy(current_scene.compiled);cr_scene_destroy(next_scene.compiled);render_shutdown();platform_shutdown();return 0;
 }

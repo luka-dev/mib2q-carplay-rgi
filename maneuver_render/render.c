@@ -32,6 +32,7 @@
 #include "protocol.h"
 #include "maneuver.h"
 #include "visible_area.h"
+#include "lane_panel.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -191,6 +192,7 @@ static GLint  g_uni_tex      = -1;
 static GLint  g_uni_resolution = -1;
 static GLint  g_uni_mask_scale = -1;  /* vec2: 1/(2*hw), 1/(2*hh) for mask UV */
 static GLint  g_uni_global_alpha = -1;
+static GLint  g_uni_cutout=-1,g_uni_cutout_feather=-1;
 static float  g_global_alpha = 1.0f;
 
 static int   g_perspective = 1;   /* target: 0=ortho, 1=perspective */
@@ -222,11 +224,16 @@ static cr_rect_animation_t g_visible_area = {
     {CR_POPUP_X, CR_POPUP_Y, CR_POPUP_W, CR_POPUP_H},
     {CR_POPUP_X, CR_POPUP_Y, CR_POPUP_W, CR_POPUP_H},
     {CR_POPUP_X, CR_POPUP_Y, CR_POPUP_W, CR_POPUP_H}, 0, 0};
+static cr_rect_animation_t g_content_offset;
 
 const cr_route_progress_map_t *render_prepare_route_progress(const cr_route_progress_point_t *points, int count) {
     static cr_route_progress_map_t projected;
     if(g_progress_path_weight<=0) return NULL;
-    return cr_route_progress_project(&projected,points,count,g_mvp_current,g_visible_area.current)
+    cr_rect_t visible=g_visible_area.current;
+    /* The row erases the entry below its top edge. Keep the progress origin
+     * at the visible arrow, interpolating with the same camera presentation. */
+    visible.h=fmaxf(1,visible.h-g_content_offset.current.h);
+    return cr_route_progress_project(&projected,points,count,g_mvp_current,visible)
         ? &projected : NULL;
 }
 
@@ -357,6 +364,8 @@ static const char *k_frag_src_body =
     "uniform vec2 u_resolution;\n"
     "uniform vec2 u_mask_scale;\n"
     "uniform float u_global_alpha;\n"
+    "uniform vec4 u_cutout;\n"
+    "uniform vec2 u_cutout_feather;\n"
     "uniform vec3 u_mask_side_fade;\n"
     "uniform vec4 u_mask_entry_fade;\n"
     "varying vec3 v_normal;\n"
@@ -439,6 +448,14 @@ static const char *k_frag_src_body =
     "  return vec4(color, alpha * base.a);\n"
     "}\n"
     "void main() {\n"
+    /* Screen-space destination erase; RGB and alpha use the same multiplier. */
+    "  if (u_tex_mode > 10.5 && u_tex_mode < 11.5) {\n"
+    "    vec2 p=vec2((v_world_pos.x+1.0)*164.0,(1.0-v_world_pos.y)*90.5);\n"
+    "    float a=smoothstep(u_cutout.x-u_cutout_feather.x,u_cutout.x,p.x);\n"
+    "    a*=1.0-smoothstep(u_cutout.z,u_cutout.z+u_cutout_feather.x,p.x);\n"
+    "    a*=smoothstep(u_cutout.y-u_cutout_feather.y,u_cutout.y,p.y);\n"
+    "    gl_FragColor=vec4(0.0,0.0,0.0,a*u_color.a); return;\n"
+    "  }\n"
     /* tex_mode 1: fullscreen blit -- passthrough texture sample */
     "  if (u_tex_mode > 0.5 && u_tex_mode < 1.5) {\n"
     "    vec2 uv = v_world_pos.xy * 0.5 + 0.5;\n"
@@ -704,6 +721,8 @@ static int build_program(void) {
     g_uni_resolution = glGetUniformLocation(g_program, "u_resolution");
     g_uni_mask_scale = glGetUniformLocation(g_program, "u_mask_scale");
     g_uni_global_alpha = glGetUniformLocation(g_program, "u_global_alpha");
+    g_uni_cutout=glGetUniformLocation(g_program,"u_cutout");
+    g_uni_cutout_feather=glGetUniformLocation(g_program,"u_cutout_feather");
 
     glDeleteShader(vs);
     glDeleteShader(fs);
@@ -1049,13 +1068,20 @@ void render_set_viewport(int fb_width, int fb_height) {
 }
 
 static void build_camera_mvp(float *mvp, float aspect, float pan_x, float pan_z,
-                              float rotation, float ts) {
+                              float rotation, float ts,float dolly) {
     float cam_cos = cosf(rotation);
     float cam_sin = sinf(rotation);
     float eye_x = pan_x + cam_cos * CAM_EYE_X - cam_sin * CAM_EYE_Z;
     float eye_z = pan_z + cam_sin * CAM_EYE_X + cam_cos * CAM_EYE_Z;
     float ctr_x = pan_x + cam_cos * CAM_CTR_X - cam_sin * CAM_CTR_Z;
     float ctr_z = pan_z + cam_sin * CAM_CTR_X + cam_cos * CAM_CTR_Z;
+    float distance=1+dolly;
+    float eye_y=CAM_EYE_Y;
+    if(dolly!=0) {
+        eye_x=ctr_x+(eye_x-ctr_x)*distance;
+        eye_z=ctr_z+(eye_z-ctr_z)*distance;
+        eye_y=CAM_CTR_Y+(CAM_EYE_Y-CAM_CTR_Y)*distance;
+    }
 
     /* Compute both MVPs and lerp */
     float mvp_persp[16], mvp_ortho[16];
@@ -1065,14 +1091,14 @@ static void build_camera_mvp(float *mvp, float aspect, float pan_x, float pan_z,
         float fov_rad = CAM_FOV_DEG * (float)M_PI / 180.0f;
         mat4_perspective(proj, fov_rad, aspect, 0.1f, 20.0f);
         mat4_lookAt(view,
-                    eye_x, CAM_EYE_Y, eye_z,
+                    eye_x, eye_y, eye_z,
                     ctr_x, CAM_CTR_Y, ctr_z,
                     0.0f, 1.0f, 0.0f);
         mat4_mul(mvp_persp, proj, view);
     }
     {
         float proj[16], view[16];
-        float hh = 1.0f, hw = hh * aspect;
+        float hh = distance, hw = hh * aspect;
         mat4_ortho(proj, -hw, hw, -hh, hh, 0.1f, 20.0f);
         mat4_zero(view);
         /* Ortho view uses the inverse camera yaw so top-down motion matches
@@ -1121,7 +1147,11 @@ void render_get_layout_matrix(float out[16]) {
 }
 
 void render_build_layout_matrix(float out[16],float aspect) {
-    if(out)build_camera_mvp(out,aspect,0,0,0,1);
+    if(out)build_camera_mvp(out,aspect,0,0,0,1,0);
+}
+
+void render_build_framing_matrix(float out[16],float aspect,float dolly) {
+    if(out)build_camera_mvp(out,aspect,0,0,0,1,dolly);
 }
 
 static void sync_camera_uniforms(void) {
@@ -1146,8 +1176,20 @@ static void sync_camera_uniforms(void) {
     float cam_cos=cosf(g_cam_rot), cam_sin=sinf(g_cam_rot);
     float eye_x=g_cam_pan_x+cam_cos*CAM_EYE_X-cam_sin*CAM_EYE_Z;
     float eye_z=g_cam_pan_z+cam_sin*CAM_EYE_X+cam_cos*CAM_EYE_Z;
+    float eye_y=CAM_EYE_Y;
+    if(g_content_offset.current.w!=0) {
+        float distance=1+g_content_offset.current.w;
+        float ctr_x=g_cam_pan_x+cam_cos*CAM_CTR_X-cam_sin*CAM_CTR_Z;
+        float ctr_z=g_cam_pan_z+cam_sin*CAM_CTR_X+cam_cos*CAM_CTR_Z;
+        eye_x=ctr_x+(eye_x-ctr_x)*distance;eye_z=ctr_z+(eye_z-ctr_z)*distance;
+        eye_y=CAM_CTR_Y+(CAM_EYE_Y-CAM_CTR_Y)*distance;
+    }
     build_camera_mvp(g_mvp_current,(float)g_fb_w/g_fb_h,
-                     g_cam_pan_x,g_cam_pan_z,g_cam_rot,ts);
+                     g_cam_pan_x,g_cam_pan_z,g_cam_rot,ts,g_content_offset.current.w);
+    for(int c=0;c<4;++c) {
+        g_mvp_current[c*4]+=g_mvp_current[c*4+3]*2*g_content_offset.current.x/CR_DEFAULT_WIDTH;
+        g_mvp_current[c*4+1]-=g_mvp_current[c*4+3]*2*g_content_offset.current.y/CR_DEFAULT_HEIGHT;
+    }
 
     /* Pure 2D orthographic MVP for mask rendering.
      * Same top-down view as ortho mode but with no perspective blend. */
@@ -1205,7 +1247,7 @@ static void sync_camera_uniforms(void) {
     /* Camera eye position for specular/rim -- lerp between modes */
     glUniform3f(g_uni_eye,
                 eye_x * ts + 0.0f * (1.0f - ts),
-                CAM_EYE_Y * ts + 5.0f * (1.0f - ts),
+                eye_y * ts + 5.0f * (1.0f - ts),
                 eye_z * ts + 0.0f * (1.0f - ts));
 
     g_z_bias = 0.0f;
@@ -1214,6 +1256,7 @@ static void sync_camera_uniforms(void) {
 void render_begin_frame(void) {
     double now=viewport_now();
     cr_rect_animate(&g_visible_area,now);
+    cr_rect_animate(&g_content_offset,now);
     /* Render into 2x supersample FBO */
     glBindFramebuffer(GL_FRAMEBUFFER, g_ss_fbo);
     glViewport(0, 0, g_ss_w, g_ss_h);
@@ -1241,6 +1284,83 @@ int render_set_visible_area(int x, int y, int w, int h) {
     return changed;
 }
 
+void render_get_visible_area(cr_rect_t *current, cr_rect_t *target) {
+    if(current) *current=g_visible_area.current;
+    if(target) *target=g_visible_area.target;
+}
+
+void render_set_content_framing(float x,float y,float dolly) {
+    cr_rect_t offset={isfinite(x)?x:0,isfinite(y)?y:0,isfinite(dolly)?fminf(.18f,fmaxf(0,dolly)):0,
+                      isfinite(dolly) && dolly>0?CR_LANE_PANEL_HEIGHT:0};
+    cr_rect_retarget(&g_content_offset,offset,viewport_now());
+}
+void render_reset_content_offset(void) {memset(&g_content_offset,0,sizeof(g_content_offset));}
+void render_get_content_framing(float *x,float *y,float *dolly) {
+    if(x)*x=g_content_offset.current.x;
+    if(y)*y=g_content_offset.current.y;
+    if(dolly)*dolly=g_content_offset.current.w;
+}
+
+void render_begin_overlay(cr_rect_t clip) {
+    float identity[16]={0};
+    identity[0]=identity[5]=identity[10]=identity[15]=1;
+    glUseProgram(g_program);
+    render_set_mask_side_fade(0,0);
+    render_set_mask_entry_fade(0,0);
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFuncSeparate(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA,GL_ONE,GL_ONE_MINUS_SRC_ALPHA);
+    glUniform1f(g_uni_tex_mode,3);
+    glUniform1f(g_uni_global_alpha,1);
+    glUniform1f(g_uni_zbias,0);
+    glUniformMatrix4fv(g_uni_mvp,1,GL_FALSE,identity);
+    /* Round inward: even during the frame animation nothing leaks past crop. */
+    int left=(int)ceilf(clip.x*g_ss_w/CR_DEFAULT_WIDTH);
+    int right=(int)floorf((clip.x+clip.w)*g_ss_w/CR_DEFAULT_WIDTH);
+    int bottom=(int)ceilf((CR_DEFAULT_HEIGHT-clip.y-clip.h)*g_ss_h/CR_DEFAULT_HEIGHT);
+    int top=(int)floorf((CR_DEFAULT_HEIGHT-clip.y)*g_ss_h/CR_DEFAULT_HEIGHT);
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(left,bottom,right>left?right-left:0,top>bottom?top-bottom:0);
+}
+
+void render_overlay_mesh(const float *xy,int count,float x,float y,
+                         float r,float g,float b,float a) {
+    int drawn=0;
+    if(!xy || count<=0 || count%3 || a<=0) return;
+    while(drawn<count) {
+        int n=count-drawn;
+        if(n>MAX_VERTS) n=MAX_VERTS-MAX_VERTS%3;
+        vb_reset();
+        for(int i=0;i<n;++i) {
+            int j=2*(drawn+i);
+            vb_v(2*(xy[j]+x)/CR_DEFAULT_WIDTH-1,
+                 1-2*(xy[j+1]+y)/CR_DEFAULT_HEIGHT,0,0,0,1);
+        }
+        vb_flush(r,g,b,a);drawn+=n;
+    }
+}
+
+void render_end_overlay(void) {
+    glDisable(GL_SCISSOR_TEST);
+    glUniformMatrix4fv(g_uni_mvp,1,GL_FALSE,g_mvp_current);
+    glUniform1f(g_uni_global_alpha,g_global_alpha);
+    glUniform1f(g_uni_tex_mode,0);
+    glEnable(GL_DEPTH_TEST);
+}
+
+void render_overlay_cutout(cr_rect_t area,float fx,float fy,float alpha) {
+    if(alpha<=0 || area.w<=0 || area.h<=0)return;
+    float xy[]={area.x-fx,area.y-fy, area.x+area.w+fx,area.y-fy, area.x+area.w+fx,area.y+area.h,
+                area.x-fx,area.y-fy, area.x+area.w+fx,area.y+area.h, area.x-fx,area.y+area.h};
+    glBlendFuncSeparate(GL_ZERO,GL_ONE_MINUS_SRC_ALPHA,GL_ZERO,GL_ONE_MINUS_SRC_ALPHA);
+    glUniform1f(g_uni_tex_mode,11);
+    glUniform4f(g_uni_cutout,area.x,area.y,area.x+area.w,area.y+area.h);
+    glUniform2f(g_uni_cutout_feather,fx,fy);
+    render_overlay_mesh(xy,6,0,0,0,0,0,alpha);
+    glBlendFuncSeparate(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA,GL_ONE,GL_ONE_MINUS_SRC_ALPHA);
+    glUniform1f(g_uni_tex_mode,3);
+}
+
 /* Debug grid: draw colored checkerboard over the full 328x180 content area.
  * Each cell is labeled by position so you can see which cells are visible
  * in sidescreen vs popup modes on the VC.
@@ -1249,9 +1369,8 @@ static int g_debug_grid = 0;
 
 void render_set_debug_grid(int on) { g_debug_grid = on; }
 
-void render_debug_visible_area(void) {
+static void debug_area(cr_rect_t r) {
     float identity[16]={0}, rects[4][4];
-    cr_rect_t r=g_visible_area.current;
     int i;
     identity[0]=identity[5]=identity[10]=identity[15]=1;
     rects[0][0]=r.x;rects[0][1]=r.y;rects[0][2]=r.x+r.w;rects[0][3]=r.y+1;
@@ -1270,6 +1389,12 @@ void render_debug_visible_area(void) {
     glUniformMatrix4fv(g_uni_mvp,1,GL_FALSE,g_mvp_current);
     glUniform1f(g_uni_tex_mode,0);
     glEnable(GL_DEPTH_TEST);
+}
+
+void render_debug_visible_area(void) {debug_area(g_visible_area.current);}
+void render_debug_small_area(void) {
+    cr_rect_t small={CR_POPUP_X,CR_POPUP_Y,CR_POPUP_W,CR_POPUP_H};
+    debug_area(small);
 }
 
 void render_debug_grid(void) {
@@ -1397,7 +1522,7 @@ void render_set_perspective(int enabled) {
 }
 
 int render_is_animating(void) {
-    return fabsf(g_persp_t - (float)g_perspective) > 0.001f || g_visible_area.active;
+    return fabsf(g_persp_t - (float)g_perspective) > 0.001f || g_visible_area.active || g_content_offset.active;
 }
 
 void render_set_raised(int raised) {

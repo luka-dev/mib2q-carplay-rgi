@@ -20,16 +20,16 @@ typedef struct {
     unsigned seen;
     int active, malformed;
 } cr_lane_decoder_t;
-static uint32_t cr_lane_u32(const uint8_t *p) {
+static inline uint32_t cr_lane_u32(const uint8_t *p) {
     return ((uint32_t)p[0]<<24)|((uint32_t)p[1]<<16)|((uint32_t)p[2]<<8)|p[3];
 }
-static uint16_t cr_lane_u16(const uint8_t *p) {return (uint16_t)((p[0]<<8)|p[1]);}
-static void cr_lane_clear(cr_lane_decoder_t *d,cr_lane_guidance_t *out) {
+static inline uint16_t cr_lane_u16(const uint8_t *p) {return (uint16_t)((p[0]<<8)|p[1]);}
+static inline void cr_lane_clear(cr_lane_decoder_t *d,cr_lane_guidance_t *out) {
     memset(d,0,sizeof(*d));memset(out,0,sizeof(*out));out->event_index=-1;
 }
 /* Atomic independent event; no scene, maneuver type, angle or animation input.
  * A malformed committed update clears stale guidance, without touching arrows. */
-static int cr_lane_receive(cr_lane_decoder_t *d,const cr_cmd_t *cmd,cr_lane_guidance_t *out) {
+static inline int cr_lane_receive(cr_lane_decoder_t *d,const cr_cmd_t *cmd,cr_lane_guidance_t *out) {
     const uint8_t *p=cmd->payload;uint32_t token=cr_lane_u32(p);
     if (cmd->cmd==CMD_LANES_BEGIN) {
         memset(d,0,sizeof(*d));d->token=token;d->active=1;

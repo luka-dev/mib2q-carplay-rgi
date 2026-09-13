@@ -9,7 +9,7 @@ cc -O1 -g -std=c99 -Wall -Wextra -fsanitize=address,undefined \
     -fno-omit-frame-pointer tests/lane_guidance_test.c -o "$TEST_DIR/lane_guidance_test"
 "$TEST_DIR/lane_guidance_test"
 SCENE_OBJECTS=()
-for source in scene geometry layout; do
+for source in scene geometry layout lane_panel; do
     c++ -O1 -g -std=c++11 -fno-exceptions -fno-rtti -DPLATFORM_MACOS -I/opt/homebrew/include \
         -fsanitize=address,undefined -fno-omit-frame-pointer \
         -c "maneuver_render/scene/$source.cpp" -o "$TEST_DIR/$source.o"

@@ -12,6 +12,30 @@ struct cr_scene {
     bool ready;
 };
 
+int cr_scene_project_bounds(const cr_scene_t *s,const float *m,float *b,float *exit) {
+    if(!s || !s->ready || !m || !b || !exit || s->input.maneuver.icon==ICON_NONE)return 0;
+    const navigation::Builder &builder=*s->builder;
+    b[0]=b[1]=exit[0]=exit[1]=1e6f;b[2]=b[3]=exit[2]=exit[3]=-1e6f;
+    for(int i=0;i<builder.mesh.vert_count;++i) {
+        const float *v=builder.mesh.verts+i*6;
+        bool head=builder.mesh.path_dist[i]>=builder.path.total_length-.06f;
+        if(v[2]<-.38f && !head)continue;
+        float x=v[0]-builder.camera_x,z=v[2]-builder.camera_y;
+        float w=m[3]*x+m[7]*v[1]+m[11]*z+m[15];
+        if(!std::isfinite(w) || w<=1e-6f)return 0;
+        float sx=(1+(m[0]*x+m[4]*v[1]+m[8]*z+m[12])/w)*164;
+        float sy=(1-(m[1]*x+m[5]*v[1]+m[9]*z+m[13])/w)*90.5f;
+        if(!std::isfinite(sx) || !std::isfinite(sy))return 0;
+        b[0]=std::fmin(b[0],sx);b[1]=std::fmin(b[1],sy);
+        b[2]=std::fmax(b[2],sx);b[3]=std::fmax(b[3],sy);
+        if(head) {
+            exit[0]=std::fmin(exit[0],sx);exit[1]=std::fmin(exit[1],sy);
+            exit[2]=std::fmax(exit[2],sx);exit[3]=std::fmax(exit[3],sy);
+        }
+    }
+    return b[0]<=b[2] && exit[0]<=exit[2];
+}
+
 namespace {
 bool same_maneuver(const maneuver_state_t &a, const maneuver_state_t &b) {
     return a.icon == b.icon && a.exit_angle == b.exit_angle && a.direction == b.direction &&

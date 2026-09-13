@@ -52,6 +52,9 @@ int cr_scene_prepare(cr_scene_t *scene, const cr_scene_input_t *input, const cr_
 const route_path_t *cr_scene_route(const cr_scene_t *scene);
 const cr_scene_info_t *cr_scene_info(const cr_scene_t *scene);
 int cr_scene_is_native(const cr_scene_t *scene);
+/* Reproject retained importance/head vertices without rebuilding a scene. */
+int cr_scene_project_bounds(const cr_scene_t *scene,const float matrix[16],
+                            float important[4],float exit_bounds[4]);
 /* Replay prepared pavement only; the native maneuver engine owns route/camera. */
 void cr_scene_paint(cr_scene_t *scene, float tx, float ty, float cos_r, float sin_r);
 

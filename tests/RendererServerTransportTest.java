@@ -87,8 +87,37 @@ public final class RendererServerTransportTest {
             check(get(server, "server") == null && !server.isConnected(), "disposed server retained socket");
         }
     }
+    private static void laneQueue() throws Exception {
+        RendererServer server=new RendererServer(0);
+        set(server,"running",Boolean.TRUE);set(server,"sock",new Socket());
+        set(server,"out",new ByteArrayOutputStream());
+        LaneGuidanceSnapshot shown=LaneGuidanceSnapshot.copy(73,true,true,1,
+            new int[]{0},new int[]{45},new int[]{2},new int[][]{{0,45}});
+        check(server.sendLaneGuidance(shown),"show lane enqueue");
+        check(server.sendClear(),"lane queue CLEAR barrier");
+        check(server.sendLaneGuidance(LaneGuidanceSnapshot.HIDDEN),"hide enqueue");
+        for(int i=0;i<80;i++)check(server.sendProgress(i%17,1,RendererServer.PROGRESS_FILL),"lane queue progress pressure");
+        Object[] q=(Object[])get(server,"writeQueue");
+        int head=((Integer)get(server,"writeHead")).intValue(),n=((Integer)get(server,"writeCount")).intValue();
+        int lanes=0,clears=0;
+        for(int i=0;i<n;i++) {
+            Object entry=q[(head+i)%q.length];Field f=entry.getClass().getDeclaredField("packet");f.setAccessible(true);
+            byte[] b=(byte[])f.get(entry);
+            if(b[0]==7)clears++;
+            if(b[0]==12) {
+                lanes++;check(clears==1 && b.length==96 && b[8]==0 && b[48]==14,"hide lost, split or crossed CLEAR");
+            }
+        }
+        check(lanes==1 && clears==1,"queue pressure lost lane state/barrier");
+        check(server.sendLaneGuidance(shown),"reappearance under queue pressure");
+        head=((Integer)get(server,"writeHead")).intValue();n=((Integer)get(server,"writeCount")).intValue();
+        Object tail=q[(head+n-1)%q.length];Field f=tail.getClass().getDeclaredField("packet");f.setAccessible(true);
+        byte[] b=(byte[])f.get(tail);
+        check(b[0]==12 && b.length==144 && b[8]==1 && b[48]==13 && b[96]==14,"latest atomic lane state lost");
+        server.dispose();
+    }
     public static void main(String[] args) throws Exception {
-        Log.setLevel(-1); multipleClears(); queueOverflow(); restart();
-        System.out.println("RendererServerTransportTest: CLEAR ACK ordering, queue overflow, 48-byte wire, stale writer and 30 restarts PASS");
+        Log.setLevel(-1); multipleClears(); queueOverflow(); laneQueue(); restart();
+        System.out.println("RendererServerTransportTest: CLEAR ACK ordering, queue overflow, atomic lane hide/reappear under progress pressure, 48-byte wire, stale writer and 30 restarts PASS");
     }
 }

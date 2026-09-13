@@ -37,6 +37,7 @@
 #include "server.h"
 #include "scene/scene.h"
 #include "lane_guidance.h"
+#include "lane_panel.h"
 
 #define WINDOW_W CR_DEFAULT_WIDTH
 #define WINDOW_H CR_DEFAULT_HEIGHT
@@ -87,9 +88,10 @@ typedef struct {
 } cr_engine_t;
 
 static cr_engine_t g_engine;
-// Separate future panel input. Never passed into route geometry or animation.
+// Independent panel input. Never passed into route geometry or animation.
 static cr_lane_guidance_t g_lane_guidance;
 static cr_lane_decoder_t g_lane_decoder;
+static cr_lane_panel_t *g_lane_panel;
 
 static cr_scene_t *engine_scene(const maneuver_state_t *m) {
     if(m==&g_engine.current)return g_engine.current_scene;
@@ -260,6 +262,8 @@ static void engine_apply_presentation(void) {
  * fades the deterministic scene back in. */
 static void clear_maneuver(void) {
     cr_lane_clear(&g_lane_decoder, &g_lane_guidance);
+    cr_lane_panel_clear(g_lane_panel);
+    render_reset_content_offset();
     memset(&g_engine.current, 0, sizeof(g_engine.current));
     g_engine.current.icon = ICON_APPROACH;
     g_engine.has_current = 1;
@@ -441,6 +445,8 @@ int main(int argc, char **argv) {
     /* Engine always has a deterministic hidden FOLLOW_STREET frame. */
     memset(&g_engine, 0, sizeof(g_engine));
     g_engine.current_scene=cr_scene_create();g_engine.next_scene=cr_scene_create();
+    g_lane_panel=cr_lane_panel_create();
+    if(!g_lane_panel)fprintf(stderr,"lanes: panel allocation failed\n");
     if(!g_engine.current_scene || !g_engine.next_scene) {
         fprintf(stderr,"scene: allocation failed; retaining ordinary renderer\n");
         cr_scene_destroy(g_engine.current_scene);cr_scene_destroy(g_engine.next_scene);
@@ -518,10 +524,12 @@ int main(int argc, char **argv) {
             stat_cmds_received++;
 #endif
             if (cmd.cmd == CMD_LANES_BEGIN || cmd.cmd == CMD_LANES_LANE || cmd.cmd == CMD_LANES_COMMIT) {
-                if (cr_lane_receive(&g_lane_decoder, &cmd, &g_lane_guidance))
-                    fprintf(stderr, "lanes: event=%d showing=%d count=%d complete=%d (panel pending)\n",
+                if (cr_lane_receive(&g_lane_decoder, &cmd, &g_lane_guidance)) {
+                    g_engine.dirty=1;
+                    fprintf(stderr, "lanes: event=%d showing=%d count=%d complete=%d\n",
                         (int)g_lane_guidance.event_index, g_lane_guidance.showing,
                         g_lane_guidance.count, g_lane_guidance.complete);
+                }
                 continue;
             }
             switch (cmd.cmd) {
@@ -680,7 +688,16 @@ int main(int argc, char **argv) {
         }
 
         /* Render if needed */
+        cr_rect_t panel_target;
+        render_get_visible_area(NULL,&panel_target);
+        if(cr_lane_panel_update(g_lane_panel,&g_lane_guidance,panel_target.w,progress_now))
+            g_engine.dirty=1;
+        float content_frame[3];
+        cr_lane_panel_framing(g_lane_panel,g_engine.current_scene,
+                             g_engine.has_next?g_engine.next_scene:NULL,content_frame);
+        render_set_content_framing(content_frame[0],content_frame[1],content_frame[2]);
         if (g_engine.dirty || render_is_animating() || maneuver_needs_redraw() || got_screenshot
+            || cr_lane_panel_animating(g_lane_panel,progress_now)
 #ifdef CR_DEBUG_GRID
             || 1  /* always render when grid is compiled in */
 #endif
@@ -706,6 +723,9 @@ int main(int argc, char **argv) {
             render_set_route_progress(g_arrow.fill,g_arrow.path_weight,g_arrow.glow);
             render_begin_frame();
             maneuver_draw(&g_engine.current, next_ptr);
+            cr_rect_t panel_visible;
+            render_get_visible_area(&panel_visible,NULL);
+            cr_lane_panel_draw(g_lane_panel,panel_visible,progress_now);
             render_debug_grid();
             render_end_frame();
 #ifdef CR_DIAG_FRAME_LOG
@@ -785,6 +805,7 @@ int main(int argc, char **argv) {
 #endif /* CR_DIAG_FRAME_LOG */
 
             dirty = render_is_animating() || maneuver_needs_redraw() || g_fade_active
+                 || cr_lane_panel_animating(g_lane_panel,progress_now)
                  || g_arrow.active || g_arrow.tint_active;
         }
 
@@ -921,6 +942,7 @@ int main(int argc, char **argv) {
     cr_server_shutdown();
     maneuver_set_scene_provider(NULL);
     cr_scene_destroy(g_engine.current_scene);cr_scene_destroy(g_engine.next_scene);
+    cr_lane_panel_destroy(g_lane_panel);
     render_shutdown();
     platform_shutdown();
     g_renderer_running = 0;

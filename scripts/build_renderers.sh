@@ -58,7 +58,7 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
   gen_stub libEGL.so.1     "\begl[A-Z][A-Za-z0-9]+" $MR_SRCS
   gen_stub libGLESv2.so.1  "\bgl[A-Z][A-Za-z0-9]+"  $MR_SRCS
   SCENE_OBJECTS=""
-  for source in scene/scene.cpp scene/geometry.cpp scene/layout.cpp; do
+  for source in scene/scene.cpp scene/geometry.cpp scene/layout.cpp scene/lane_panel.cpp; do
     object=/src/build/maneuver-scene-qnx/$(basename "$source" .cpp).o
     $CXX -O2 -std=c++11 -Wall -Wextra -fno-exceptions -fno-rtti \
         -D__QNX__ -DPLATFORM_QNX -fdata-sections -ffunction-sections $GRID \
