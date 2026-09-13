@@ -660,6 +660,8 @@ static void write_lane_data_keys(bus_text_builder_t* b, unsigned idx, const rgd_
 
     snprintf(key, sizeof(key), "lg%u_lane_count", idx);
     bus_text_int(b, key, lane->lane_count);
+    snprintf(key, sizeof(key), "lg%u_lane_complete", idx);
+    bus_text_int(b, key, lane->lane_complete);
 
     {
         char buf[128];
@@ -729,6 +731,8 @@ static void write_lane_clear_keys(bus_text_builder_t* b, unsigned idx) {
     bus_text_int(b, key, -1);
     snprintf(key, sizeof(key), "lg%u_lane_count", idx);
     bus_text_int(b, key, -1);
+    snprintf(key, sizeof(key), "lg%u_lane_complete", idx);
+    bus_text_int(b, key, 0);
     snprintf(key, sizeof(key), "lg%u_lane_positions", idx);
     bus_text_str(b, key, "");
     snprintf(key, sizeof(key), "lg%u_lane_directions", idx);

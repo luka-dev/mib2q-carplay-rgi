@@ -45,6 +45,9 @@ public final class RouteGuidanceDeltaTest {
         check(state.mTurnAngle[0] == 1000 && state.mExitAngle[0] == 1000, "invalid angle must be safe");
         feed(parse, rg, "source_supports_rg:n:0\n");
         check(!state.mTurnAnglePresent[0] && state.mExitAngle[0] == 1000, "angle survives source reset");
+        feed(parse,rg,"lg3_index:n:42\nlg3_lane_count:n:2\nlg3_lane_complete:n:1\n");
+        check(state.lgLaneComplete[3]==1,"native completeness bit lost");
+        feed(parse,rg,"lg3_lane_complete:n:0\n");check(state.lgLaneComplete[3]==0,"truncation flag stale");
         System.out.println("RouteGuidanceDeltaTest: metadata, transient zero, reroute, empty list, source clear/resume and malformed list PASS");
     }
 }

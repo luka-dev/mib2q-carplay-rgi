@@ -73,6 +73,8 @@ typedef struct {
     /* Optional per-state routing. A declined scene uses the full built-in
      * family, including side roads, roundabouts, arrival flag and elevation. */
     int (*handles)(void *context,const maneuver_state_t *state);
+    /* Scene-specific overlap lift, shared by framing and the native mesh engine. */
+    float (*elevation)(void *context,const maneuver_state_t *state);
 } maneuver_scene_provider_t;
 void maneuver_set_scene_provider(const maneuver_scene_provider_t *provider);
 /* Conservative world-space bounds needed to render any two-maneuver transition masks. */

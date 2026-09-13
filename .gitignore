@@ -63,3 +63,10 @@ tmp/
 # Isolated renderer experiment: retain evidence, exclude binaries/copied runtime atlas.
 /output/arrow-progress/host/
 /output/arrow-progress/frames/flag_atlas.rgba
+
+# Intermediate ordinary-maneuver visual QA; keep the review sheet/GIFs/manifest.
+output/maneuver-preview/*-source.png
+output/maneuver-preview/*-native.png
+output/maneuver-preview/*.ppm
+output/maneuver-preview/*.log
+output/maneuver-preview/transition/

@@ -32,6 +32,18 @@
 #define EVT_FRAME_READY  0x82    /* At least one maneuver frame has been swapped */
 #define EVT_FRAME_CLEARED 0x83   /* CMD_CLEAR processed; later FRAME_READY belongs to new content */
 
+/* Independent lane guidance; 0x09..0x0b are retired scene-road commands.
+ * BEGIN: token u32 [0..3], count [4], complete [5], showing [6], event i32 [8..11].
+ * LANE: token [0..3], record [4], position u16 [5..6], status [7], angle count [8],
+ *       primary i16 [9..10], up to 16 signed-degree angles [11..42].
+ * COMMIT: token [0..3]. All integers are big-endian.
+ * No MANEUVER record in this transaction. Unknown angles (including +/-1000),
+ * missing status/position (255/65535) and incomplete lists remain explicit.
+ */
+#define CMD_LANES_BEGIN  0x0c
+#define CMD_LANES_LANE   0x0d
+#define CMD_LANES_COMMIT 0x0e
+
 /* 48-byte command packet */
 typedef struct {
     uint8_t  cmd;               /* CMD_* */

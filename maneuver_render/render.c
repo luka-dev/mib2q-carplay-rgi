@@ -367,7 +367,9 @@ static const char *k_frag_src_body =
     /* Applied to the actual route mesh only. Keep normal lighting, depth,
      * shadows and alpha; crossings carry their own arc-length coordinates. */
     "  if (u_progress.w > 0.0) {\n"
-    "    vec3 quiet = vec3(0.30, 0.43, 0.54);\n"
+    /* Bright white resting arrow; compensate for the existing cool lighting.
+     * Keep the established HUD-blue fill/blink endpoint unchanged. */
+    "    vec3 quiet = vec3(1.000000, 0.980392, 0.909804);\n"
     "    vec3 ice = vec3(0.32, 0.77, 1.0);\n"
     "    float f = u_progress.x;\n"
     "    float filled = 0.0;\n"

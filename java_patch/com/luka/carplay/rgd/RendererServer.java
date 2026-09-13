@@ -60,13 +60,17 @@ public class RendererServer {
 
     /* Command IDs used by this always-on client protocol. */
     private static final byte CMD_MANEUVER    = 0x01;
-    private static final byte CMD_BARGRAPH    = 0x06;
+    private static final byte CMD_PROGRESS    = 0x06;
     private static final byte CMD_VISIBLE_AREA = 0x08;
     private static final byte CMD_CLEAR       = 0x07;
+    private static final byte CMD_LANES_BEGIN = 0x0c;
+    private static final byte CMD_LANES_LANE = 0x0d;
+    private static final byte CMD_LANES_COMMIT = 0x0e;
+    private int laneToken;
 
     /* CMD_MANEUVER flags */
     private static final byte MAN_FLAG_SET_PERSP = 0x01;
-    private static final byte MAN_FLAG_BARGRAPH  = 0x02;
+    private static final byte MAN_FLAG_PROGRESS  = 0x02;
     private static final byte MAN_FLAG_BAP_GEOMETRY = 0x04;
     private static final byte MAN_FLAG_REFRESH = 0x08;
     private static final byte MAN_FLAG_SNAP_TO_ROAD = 0x10;
@@ -486,41 +490,16 @@ public class RendererServer {
      * @param exitAngle      signed degrees
      * @param drivingSide    0=RHT, 1=LHT
      * @param junctionAngles signed degree array (may be null)
-     * @param bargraphLevel  0-16 (0=empty, 16=full)
-     * @param bargraphMode   0=off, 1=on, 2=blink
+     * @param remainingLevel  remaining segments 0-16 (16=far, 0=at maneuver)
+     * @param progressMode   legacy progress mode; blink phases use sendBapProgressManeuver
      * @param perspective    0=2D, 1=3D after transition (-1=don't change)
      */
     public boolean sendManeuver(int icon, int direction, int exitAngle,
                                 int drivingSide, int[] junctionAngles,
-                                int bargraphLevel, int bargraphMode,
+                                int remainingLevel, int progressMode,
                                 int perspective) {
         return sendManeuverPacket(icon, direction, exitAngle, drivingSide, junctionAngles,
-            bargraphLevel, bargraphMode, perspective, false, false, false);
-    }
-
-    /** Angles in half-degrees, with snapping disabled unless explicitly enabled. */
-    public boolean sendBapManeuver(int icon, int direction, int exitAngle,
-                                  int drivingSide, int[] junctionAngles,
-                                  int bargraphLevel, int bargraphMode, int perspective) {
-        return sendBapManeuver(icon, direction, exitAngle, drivingSide, junctionAngles,
-            bargraphLevel, bargraphMode, perspective, false);
-    }
-
-    /** Refresh only the roads of the same maneuver without starting another push. */
-    public boolean sendBapManeuver(int icon, int direction, int exitAngle,
-                                  int drivingSide, int[] junctionAngles,
-                                  int bargraphLevel, int bargraphMode, int perspective, boolean refresh) {
-        return sendBapManeuver(icon, direction, exitAngle, drivingSide, junctionAngles,
-            bargraphLevel, bargraphMode, perspective, refresh, false);
-    }
-
-    /** Raw roundabout roads include the active exit, allowing native snap-to-road. */
-    public boolean sendBapManeuver(int icon, int direction, int exitAngle,
-                                  int drivingSide, int[] junctionAngles,
-                                  int bargraphLevel, int bargraphMode, int perspective,
-                                  boolean refresh, boolean snapToRoad) {
-        return sendManeuverPacket(icon, direction, exitAngle, drivingSide, junctionAngles,
-            bargraphLevel, bargraphMode, perspective, true, refresh, snapToRoad);
+            remainingLevel, progressMode, perspective, false, false, false, -1);
     }
 
     public static final int PROGRESS_OFF=0, PROGRESS_FILL=1,
@@ -535,16 +514,39 @@ public class RendererServer {
             level,mode,perspective,true,refresh,snapToRoad,progressState);
     }
 
-    private boolean sendManeuverPacket(int icon, int direction, int exitAngle,
-            int drivingSide, int[] junctionAngles, int bargraphLevel, int bargraphMode,
-            int perspective, boolean bapGeometry, boolean refresh, boolean snapToRoad) {
-        return sendManeuverPacket(icon,direction,exitAngle,drivingSide,junctionAngles,
-            bargraphLevel,bargraphMode,perspective,bapGeometry,refresh,snapToRoad,-1);
+    /** Raw lane guidance is an independent snapshot, never maneuver geometry. */
+    boolean sendLaneGuidance(LaneGuidanceSnapshot lanes) {
+        synchronized (lock) {
+            if (++laneToken == 0) ++laneToken;
+            return sendPacket(lanePacket(lanes, laneToken));
+        }
     }
+    static byte[] lanePacket(LaneGuidanceSnapshot lanes, int token) {
+        byte[] batch = new byte[(lanes.count + 2) * PKT_SIZE];
+        batch[0] = CMD_LANES_BEGIN; putLaneInt(batch, 2, token);
+        batch[6] = (byte)lanes.count; batch[7] = (byte)(lanes.complete ? 1 : 0);
+        batch[8] = (byte)(lanes.showing ? 1 : 0); putLaneInt(batch, 10, lanes.eventIndex);
+        for (int i = 0; i < lanes.count; ++i) {
+            int p = (i + 1) * PKT_SIZE;
+            batch[p] = CMD_LANES_LANE; putLaneInt(batch, p + 2, token);
+            batch[p + 6] = (byte)i; putLaneShort(batch, p + 7, lanes.positions[i]);
+            batch[p + 9] = (byte)lanes.status[i]; batch[p + 10] = (byte)lanes.angles[i].length;
+            putLaneShort(batch, p + 11, lanes.primary[i]);
+            for (int j = 0; j < lanes.angles[i].length; ++j)
+                putLaneShort(batch, p + 13 + j * 2, lanes.angles[i][j]);
+        }
+        int end = (lanes.count + 1) * PKT_SIZE;
+        batch[end] = CMD_LANES_COMMIT; putLaneInt(batch, end + 2, token);
+        return batch; // One writer queue entry: records cannot interleave.
+    }
+    private static void putLaneInt(byte[] b, int p, int v) {
+        b[p]=(byte)(v>>>24); b[p+1]=(byte)(v>>>16); b[p+2]=(byte)(v>>>8); b[p+3]=(byte)v;
+    }
+    private static void putLaneShort(byte[] b, int p, int v) { b[p]=(byte)(v>>>8); b[p+1]=(byte)v; }
 
     private boolean sendManeuverPacket(int icon, int direction, int exitAngle,
                                       int drivingSide, int[] junctionAngles,
-                                      int bargraphLevel, int bargraphMode,
+                                      int remainingLevel, int progressMode,
                                       int perspective, boolean bapGeometry, boolean refresh, boolean snapToRoad, int progressState) {
         byte[] pkt = new byte[PKT_SIZE];
         pkt[0] = CMD_MANEUVER;
@@ -552,7 +554,7 @@ public class RendererServer {
         if (bapGeometry) flags |= MAN_FLAG_BAP_GEOMETRY;
         if (refresh) flags |= MAN_FLAG_REFRESH;
         if (snapToRoad) flags |= MAN_FLAG_SNAP_TO_ROAD;
-        if (bargraphMode > 0 || progressState >= 0) flags |= MAN_FLAG_BARGRAPH;
+        if (progressMode > 0 || progressState >= 0) flags |= MAN_FLAG_PROGRESS;
         if (progressState >= 0) {
             flags |= PROGRESS_FLAG;
             pkt[44]=(byte)progressState;
@@ -573,13 +575,12 @@ public class RendererServer {
         int jCount = 0;
         if (junctionAngles != null) {
             jCount = junctionAngles.length;
-            if (jCount > 18) jCount = 18;  /* max 18: payload[6..41], keeps [42..45] for persp/bargraph */
+            if (jCount > 18) jCount = 18;  /* max 18: payload[6..41], keeps [42..45] for phase/perspective/progress */
         }
         pkt[7] = (byte) (jCount & 0xFF);
-        /* payload[6..45]: junction_angles (big-endian i16 each) */
+        /* payload[6..41]: junction_angles (big-endian i16 each) */
         for (int i = 0; i < jCount; i++) {
             int off = 8 + i * 2;
-            if (off + 1 >= PKT_SIZE) break;
             int a = junctionAngles[i];
             pkt[off]     = (byte) ((a >> 8) & 0xFF);
             pkt[off + 1] = (byte) (a & 0xFF);
@@ -589,30 +590,19 @@ public class RendererServer {
         if (perspective >= 0) {
             pkt[45] = (byte) (perspective & 0xFF);
         }
-        /* bargraph in payload[44..45] when flag set */
-        if (bargraphMode > 0 || progressState >= 0) {
-            pkt[46] = (byte) (bargraphLevel & 0xFF);
-            pkt[47] = (byte) (bargraphMode & 0xFF);
+        /* remaining progress in payload[44..45] when flag set */
+        if (progressMode > 0 || progressState >= 0) {
+            pkt[46] = (byte) (remainingLevel & 0xFF);
+            pkt[47] = (byte) (progressMode & 0xFF);
         }
 
         return sendPacket(pkt);
     }
 
-    /**
-     * Send standalone CMD_BARGRAPH update.
-     *
-     * @param level 0-16
-     * @param mode  0=off, 1=on, 2=blink
-     * @return true if sent successfully
-     */
-    public boolean sendBargraph(int level, int mode) {
-        return sendProgress(level,mode,-1);
-    }
-
-    /** Low/high phases preserve the legacy 16/0, mode=1 fields for old receivers. */
+    /** Arrow progress; state -1 preserves legacy unmarked packets for old clients. */
     public boolean sendProgress(int level, int mode, int progressState) {
         byte[] pkt = new byte[PKT_SIZE];
-        pkt[0] = CMD_BARGRAPH;
+        pkt[0] = CMD_PROGRESS;
         if(progressState >= 0) { pkt[1]=(byte)PROGRESS_FLAG; pkt[4]=(byte)progressState; }
         pkt[2] = (byte) (level & 0xFF);   /* payload[0] = level */
         pkt[3] = (byte) (mode & 0xFF);    /* payload[1] = mode */

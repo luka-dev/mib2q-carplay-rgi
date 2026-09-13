@@ -35,6 +35,8 @@
 #include "maneuver_command.h"
 #include "maneuver.h"
 #include "server.h"
+#include "scene/scene.h"
+#include "lane_guidance.h"
 
 #define WINDOW_W CR_DEFAULT_WIDTH
 #define WINDOW_H CR_DEFAULT_HEIGHT
@@ -76,6 +78,7 @@ typedef struct {
     maneuver_state_t current;
     maneuver_state_t next;
     maneuver_state_t pending;
+    cr_scene_t *current_scene, *next_scene;
     int              has_current;   /* invariant: 1 after clear_maneuver() initializes FOLLOW_STREET */
     int              has_next;
     int              has_pending;   /* queued during PUSHING */
@@ -84,6 +87,49 @@ typedef struct {
 } cr_engine_t;
 
 static cr_engine_t g_engine;
+// Separate future panel input. Never passed into route geometry or animation.
+static cr_lane_guidance_t g_lane_guidance;
+static cr_lane_decoder_t g_lane_decoder;
+
+static cr_scene_t *engine_scene(const maneuver_state_t *m) {
+    if(m==&g_engine.current)return g_engine.current_scene;
+    if(m==&g_engine.next)return g_engine.next_scene;
+    return NULL;
+}
+static int scene_handles(void *ctx,const maneuver_state_t *m) {
+    cr_scene_t *s=engine_scene(m);(void)ctx;
+    return s && cr_scene_route(s) && !cr_scene_is_native(s);
+}
+static void scene_route(void *ctx,const maneuver_state_t *m,route_path_t *out) {
+    const route_path_t *p=cr_scene_route(engine_scene(m));(void)ctx;
+    if(p)*out=*p;else memset(out,0,sizeof(*out));
+}
+static float scene_elevation(void *ctx,const maneuver_state_t *m) {
+    const cr_scene_info_t *info=cr_scene_info(engine_scene(m));(void)ctx;
+    return info?info->route_elevation:0;
+}
+static void scene_paint(void *ctx,const maneuver_state_t *m,float x,float y,float c,float s) {
+    (void)ctx;cr_scene_paint(engine_scene(m),x,y,c,s);
+}
+static void prepare_engine_scene(cr_scene_t *scene,const maneuver_state_t *m) {
+    if(!scene)return;
+    cr_scene_input_t in;cr_scene_view_t view;
+    memset(&in,0,sizeof(in));in.maneuver=*m;
+    /* The canonical small composition paints the entire source in both stages. */
+    view.compact=1;render_get_layout_matrix(view.projection);
+    unsigned before=cr_scene_info(scene)->builds;
+    if(!cr_scene_prepare(scene,&in,&view)) {
+        fprintf(stderr,"scene: invalid input; ordinary maneuver fallback\n");return;
+    }
+    const cr_scene_info_t *info=cr_scene_info(scene);
+    if(info->builds!=before)
+        fprintf(stderr,"scene: kind=%d fallback=%d commands=%u\n",
+            info->kind,info->fallback,info->command_count);
+}
+static void prepare_engine_scenes(void) {
+    prepare_engine_scene(g_engine.current_scene,&g_engine.current);
+    if(g_engine.has_next)prepare_engine_scene(g_engine.next_scene,&g_engine.next);
+}
 
 /* eglSwapBuffers on the old Adreno/WFD stack has no timeout. A wedged process
  * still has a live PID, so the external supervisor cannot distinguish it from
@@ -131,6 +177,7 @@ static int   g_persp_deferred_value = 1; /* 0=2D, 1=3D */
 static void engine_apply_maneuver(const maneuver_state_t *state,double now) {
     if (state->icon == ICON_NONE || g_engine.current.icon == ICON_NONE) {
         g_engine.current = *state;
+
         g_engine.has_current = 1;
         g_engine.has_next = g_engine.has_pending = 0;
         g_engine.phase = ENGINE_IDLE;
@@ -143,6 +190,7 @@ static void engine_apply_maneuver(const maneuver_state_t *state,double now) {
     if (g_engine.phase == ENGINE_PUSHING || g_engine.phase == ENGINE_SLIDING_IN) {
         /* Mid-transition: queue into pending slot, don't disturb current animation */
         g_engine.pending = *state;
+
         g_engine.has_pending = 1;
         g_pending_progress_level=16;g_pending_progress_state=CR_PROGRESS_OFF;
         fprintf(stderr, "engine: queued icon=%d (phase=%d)\n",
@@ -152,6 +200,7 @@ static void engine_apply_maneuver(const maneuver_state_t *state,double now) {
 
     /* IDLE: store as next, start push */
     g_engine.next = *state;
+
     g_engine.has_next = 1;
     cr_progress_begin_handoff(&g_arrow,now);
     maneuver_start_push();
@@ -168,10 +217,10 @@ static void engine_refresh_maneuver(const maneuver_state_t *state,double now) {
         engine_apply_maneuver(state,now);
         return;
     }
-    if (g_engine.has_pending) g_engine.pending = *state;
+    if (g_engine.has_pending) {g_engine.pending = *state;}
     else {
-        if (g_engine.has_next) g_engine.next = *state;
-        else g_engine.current = *state;
+        if (g_engine.has_next) {g_engine.next = *state;}
+        else {g_engine.current = *state;}
     }
     render_invalidate_masks();
     g_engine.dirty = 1;
@@ -210,6 +259,7 @@ static void engine_apply_presentation(void) {
  * cleared latch prevent it from earning FRAME_READY.  The next CMD_MANEUVER
  * fades the deterministic scene back in. */
 static void clear_maneuver(void) {
+    cr_lane_clear(&g_lane_decoder, &g_lane_guidance);
     memset(&g_engine.current, 0, sizeof(g_engine.current));
     g_engine.current.icon = ICON_APPROACH;
     g_engine.has_current = 1;
@@ -234,6 +284,8 @@ static void engine_tick(double now) {
             /* Push complete -- commit next as current */
             if (g_engine.has_next) {
                 g_engine.current = g_engine.next;
+                cr_scene_t *old=g_engine.current_scene;
+                g_engine.current_scene=g_engine.next_scene;g_engine.next_scene=old;
                 g_engine.has_next = 0;
             }
             maneuver_commit_pushed_state(&g_engine.current);
@@ -367,6 +419,10 @@ int main(int argc, char **argv) {
     platform_get_framebuffer_size(&fb_w, &fb_h);
     fprintf(stderr, "maneuver_render: framebuffer %dx%d\n", fb_w, fb_h);
 
+    maneuver_scene_provider_t provider={0};
+    provider.handles=scene_handles;provider.build_route=scene_route;
+    provider.paint_masks=scene_paint;provider.elevation=scene_elevation;
+    cr_scene_configure_provider(&provider);maneuver_set_scene_provider(&provider);
     if (render_init(fb_w, fb_h) < 0) {
         fprintf(stderr, "maneuver_render: render init failed\n");
         platform_shutdown();
@@ -384,6 +440,13 @@ int main(int argc, char **argv) {
 #endif
     /* Engine always has a deterministic hidden FOLLOW_STREET frame. */
     memset(&g_engine, 0, sizeof(g_engine));
+    g_engine.current_scene=cr_scene_create();g_engine.next_scene=cr_scene_create();
+    if(!g_engine.current_scene || !g_engine.next_scene) {
+        fprintf(stderr,"scene: allocation failed; retaining ordinary renderer\n");
+        cr_scene_destroy(g_engine.current_scene);cr_scene_destroy(g_engine.next_scene);
+        g_engine.current_scene=g_engine.next_scene=NULL; maneuver_set_scene_provider(NULL);
+    }
+    { extern float g_3d_offset_adjust;g_3d_offset_adjust=-.16f; }
     clear_maneuver();
 
     fprintf(stderr, "maneuver_render: ready, waiting for commands on :%d\n", port);
@@ -454,6 +517,13 @@ int main(int argc, char **argv) {
 #ifdef CR_DIAG_FRAME_LOG
             stat_cmds_received++;
 #endif
+            if (cmd.cmd == CMD_LANES_BEGIN || cmd.cmd == CMD_LANES_LANE || cmd.cmd == CMD_LANES_COMMIT) {
+                if (cr_lane_receive(&g_lane_decoder, &cmd, &g_lane_guidance))
+                    fprintf(stderr, "lanes: event=%d showing=%d count=%d complete=%d (panel pending)\n",
+                        (int)g_lane_guidance.event_index, g_lane_guidance.showing,
+                        g_lane_guidance.count, g_lane_guidance.complete);
+                continue;
+            }
             switch (cmd.cmd) {
             case CMD_MANEUVER: {
                 cr_decode_maneuver(&cmd, &pending_maneuver);
@@ -584,7 +654,9 @@ int main(int argc, char **argv) {
         if(cr_progress_tick(&g_arrow,progress_now)) g_engine.dirty=1;
 
         /* Tick engine state machine */
+        prepare_engine_scenes();
         engine_tick(progress_now);
+        prepare_engine_scenes();
 
         /* Update framebuffer size (HiDPI) */
         int new_w, new_h;
@@ -847,6 +919,8 @@ int main(int argc, char **argv) {
     }
 
     cr_server_shutdown();
+    maneuver_set_scene_provider(NULL);
+    cr_scene_destroy(g_engine.current_scene);cr_scene_destroy(g_engine.next_scene);
     render_shutdown();
     platform_shutdown();
     g_renderer_running = 0;

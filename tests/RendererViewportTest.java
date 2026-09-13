@@ -44,7 +44,7 @@ public final class RendererViewportTest {
             listener.onManeuverViewportChanged();
             check(((Boolean)a.get(rg,"rendererViewportRefreshPending")).booleanValue()
                 && !((Boolean)a.get(rg,"infoPresentationRefreshPending")).booleanValue(),"layout-only change updates crop without resetting route info");
-            for(int i=0;i<40;i++) check(a.renderer.sendBargraph(i%17,1),"ordinary state enqueue");
+            for(int i=0;i<40;i++) check(a.renderer.sendProgress(i%17,1,RendererServer.PROGRESS_FILL),"ordinary state enqueue");
             Object[] q=(Object[])a.get(a.renderer,"writeQueue");
             int n=0;
             for(Object p:q) if(p!=null && ((byte[])a.get(p,"packet"))[0]==8) n++;

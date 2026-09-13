@@ -1169,7 +1169,7 @@ public class BAPBridge {
             }
 
             /* 10. maneuver_render: the real maneuver stays visible at every
-             * distance; approach state controls only CMD_BARGRAPH timing. */
+             * distance; approach state controls only arrow progress timing. */
             /* Non-blocking state advance.  READY/FRAME_READY also wakes RouteGuidance when no
              * further iOS RGI delta arrives (the cold-boot case). */
             if (!customRendererStarted && csRef != null) startCustomRenderer();
@@ -1181,9 +1181,20 @@ public class BAPBridge {
                 /* Approach zone enter/exit changes only the bargraph. */
                 if (approachChanged) {
                     if (nowApproach) {
-                        updateRendererBargraph(s, bargraphDenominatorM);
+                        updateRendererProgress(s, bargraphDenominatorM);
                     } else {
                         noteRendererSendResult(rendererClient.sendProgress(0, 0, RendererServer.PROGRESS_OFF));
+                    }
+                }
+                // Lanes have their own active event and visibility, just as
+                // HUD FctID 24. They never refresh or transition the maneuver.
+                if (lastCrLaneGuidance == null || (dirty & laneRecomputeMask) != 0) {
+                    LaneGuidanceSnapshot lanes = rendererLaneGuidance(s,
+                        !explicitClear && !shouldClearManeuver && s.laneGuidanceShowing == 1);
+                    if (!lanes.same(lastCrLaneGuidance)) {
+                        boolean ok = rendererClient.sendLaneGuidance(lanes);
+                        lastCrLaneGuidance = ok ? lanes : null;
+                        noteRendererSendResult(ok);
                     }
                 }
                 /* Check if rendered maneuver actually changed */
@@ -1196,10 +1207,10 @@ public class BAPBridge {
                         iconChanged = updateRendererIfChanged(s, bargraphDenominatorM);
                     }
                 }
-                /* Distance-only → CMD_BARGRAPH (no push), only in approach zone */
+                /* Distance-only progress (no push), only in approach zone */
                 if (!iconChanged && !approachChanged && inApproachZone
                         && (dirty & RouteGuidance.State.DIRTY_DIST_MAN) != 0) {
-                    updateRendererBargraph(s, bargraphDenominatorM);
+                    updateRendererProgress(s, bargraphDenominatorM);
                 }
             }
 
@@ -1446,6 +1457,16 @@ public class BAPBridge {
     /* ============================================================
      * Lane Guidance (FctID 24)
      * ============================================================ */
+
+    private static LaneGuidanceSnapshot rendererLaneGuidance(RouteGuidance.State s, boolean showing) {
+        if (!showing) return LaneGuidanceSnapshot.HIDDEN;
+        int slot = resolveLaneGuidanceManeuverIndex(s); // Same selection as HUD.
+        boolean complete = slot >= 0 && slot < s.lgLaneComplete.length
+            && lgSlotMatches(s, slot, s.laneGuidanceIndex) && s.lgLaneComplete[slot] == 1;
+        return LaneGuidanceSnapshot.copy(s.laneGuidanceIndex, true, complete,
+            laneCountForManeuver(s, slot), lanePositionsFor(s, slot), laneDirectionsFor(s, slot),
+            laneStatusFor(s, slot), laneAnglesFor(s, slot));
+    }
 
     private void sendLaneGuidance(RouteGuidance.State s) throws Exception {
         int idx = resolveLaneGuidanceManeuverIndex(s);
@@ -1868,6 +1889,7 @@ public class BAPBridge {
     /* Last maneuver state sent to renderer — only send CMD_MANEUVER when these change.
      * lastCrVer tracks the slot version so a new maneuver with identical type/angle
      * still triggers a push animation (e.g., consecutive left turns). */
+    private LaneGuidanceSnapshot lastCrLaneGuidance;
     private int lastCrIcon = -1;
     private int lastCrDirection = -99;
     private int lastCrExitAngle = -9999;
@@ -1919,6 +1941,7 @@ public class BAPBridge {
             /* Paint a deterministic frame, but do not expose displayable 98 until the peer
              * acknowledges eglSwapBuffers with FRAME_READY. */
             if (!rendererPrimed) {
+                lastCrLaneGuidance = null;
                 lastCrIcon = -1;
                 lastCrDirection = -99;
                 lastCrExitAngle = -9999;
@@ -1932,17 +1955,12 @@ public class BAPBridge {
             }
             if (!rendererClient.isFrameReady()) return false;
 
-            /* Readiness is already decided above: the renderer is connected, initialized and
-             * has swapped a frame (isFrameReady()).  The ClusterService "pipeline" call that
-             * used to sit here returned a constant string and could never report a failure, so
-             * the branch that read it was unreachable. */
-
             /* BAP route info state for HUD icons.  onStart() also forces this,
              * but renderer respawn can happen mid-route without onStart(). */
             forceClusterRouteInfoState(true);
 
             /* Set gfxAvailable so VC enters MAP mode for LVDS video.
-             * Must be after our window owns displayable 20 (so the encoder
+             * Must be after our window owns displayable 98 (so the encoder
              * reads our buffer, not whatever native KDK composition lingered
              * on the cluster before). */
             forceGfxAvailable(true);
@@ -1987,6 +2005,7 @@ public class BAPBridge {
             /* Blank the popup (CMD_CLEAR) so no stale maneuver frame lingers, then deactivate the
              * cluster context + stop feeding.  Do NOT kill the renderer (always-on framework
              * service) and keep the server socket + link up for the next route in this session. */
+            lastCrLaneGuidance = null;
             if (rendererClient != null) rendererClient.sendClear();
             forceGfxAvailable(false);
             customRendererStarted = false;
@@ -2014,10 +2033,9 @@ public class BAPBridge {
             int firstIdx = primaryManeuverIndex(s);
             if (firstIdx < 0 || s.maneuverCount == 0) return false;
             int[] bap = mapManeuver(s, firstIdx);
-            RendererMapper.Mapping mapped = RendererMapper.fromBap(bap[0], bap[1],
-                s.mDrivingSide[firstIdx], maneuverSideStreets(s, firstIdx, bap[0]));
-            mapped = RendererMapper.withCarPlayGeometry(mapped, s.mType[firstIdx],
-                s.mTurnAngle[firstIdx], anglePresent(s, firstIdx), s.mJunctionAngles[firstIdx]);
+            RendererMapper.Mapping mapped = RendererMapper.map(bap[0], bap[1],
+                s.mDrivingSide[firstIdx], s.mType[firstIdx], s.mTurnAngle[firstIdx],
+                anglePresent(s, firstIdx), s.mJunctionAngles[firstIdx]);
             int icon = mapped.icon;
             int direction = mapped.direction;
             int exitAngle = mapped.exitAngle;
@@ -2031,28 +2049,27 @@ public class BAPBridge {
             if (sameGeometry && (icon == RendererMapper.ICON_ARRIVED
                     || (firstIdx == lastCrIdx && ver == lastCrVer))) return false;
 
-            /* Bargraph: 0-100 percentage -> 0-16 level.
-             * In blink zone, send mode=1 with current level — blink thread
-             * will override with full/empty toggles synced to BAP emit. */
-            int bargraphLevel = 0;
-            int bargraphMode = 0;
+            /* Remaining distance becomes the arrow's 0..16 progress input.
+             * In the blink zone preserve the last phase already emitted to HUD. */
+            int remainingLevel = 0;
+            int progressMode = 0;
             int distM = s.distManeuverM;
             if (bargraphDenominatorM > 0 && distM > 0 && distM <= bargraphDenominatorM) {
                 int pct = (distM * 100) / bargraphDenominatorM;
                 if (pct < 0) pct = 0;
                 if (pct > 100) pct = 100;
-                bargraphLevel = (pct * 16) / 100;
-                bargraphMode = 1;
+                remainingLevel = (pct * 16) / 100;
+                progressMode = 1;
             }
 
-            int progressState=bargraphMode>0 ? RendererServer.PROGRESS_FILL : RendererServer.PROGRESS_OFF;
-            if(bargraphMode>0 && (distM*100)/bargraphDenominatorM < BARGRAPH_BLINK_PERCENT) {
+            int progressState=progressMode>0 ? RendererServer.PROGRESS_FILL : RendererServer.PROGRESS_OFF;
+            if(progressMode>0 && (distM*100)/bargraphDenominatorM < BARGRAPH_BLINK_PERCENT) {
                 synchronized(distanceToManeuverLock) {
                     if(hasLastDistM && lastDistM==distM && lastBarOn
                             && (lastProgressState==RendererServer.PROGRESS_BLINK_LOW
                                 || lastProgressState==RendererServer.PROGRESS_BLINK_HIGH)) {
                         progressState=lastProgressState;
-                        bargraphLevel=(lastBar*16)/100;
+                        remainingLevel=(lastBar*16)/100;
                     }
                 }
             }
@@ -2064,7 +2081,7 @@ public class BAPBridge {
                 && mapped.snapToRoad == lastCrSnapToRoad
                 && firstIdx == lastCrIdx && ver == lastCrVer;
             boolean ok = rendererClient.sendBapProgressManeuver(icon, direction, exitAngle,
-                drivingSide, junctionAngles, bargraphLevel, bargraphMode,
+                drivingSide, junctionAngles, remainingLevel, progressMode,
                 perspective, roadsOnly, mapped.snapToRoad,
                 progressState);
             // Failed enqueue must remain eligible for retry with the same input.
@@ -2088,30 +2105,28 @@ public class BAPBridge {
     }
 
     /**
-     * Send standalone CMD_BARGRAPH to maneuver_render on distance-only updates.
-     * No push transition — just updates the bargraph level/mode in place.
+     * Update arrow progress on distance-only updates, without a maneuver push.
      */
-    private void updateRendererBargraph(RouteGuidance.State s, int bargraphDenominatorM) {
+    private void updateRendererProgress(RouteGuidance.State s, int bargraphDenominatorM) {
         if (rendererClient == null || !customRendererStarted) return;
 
-        int bargraphLevel = 0;
-        int bargraphMode = 0;
+        int remainingLevel = 0;
+        int progressMode = 0;
         int distM = s.distManeuverM;
         if (bargraphDenominatorM > 0 && distM > 0 && distM <= bargraphDenominatorM) {
             int pct = (distM * 100) / bargraphDenominatorM;
             if (pct < 0) pct = 0;
             if (pct > 100) pct = 100;
-            bargraphLevel = (pct * 16) / 100;
+            remainingLevel = (pct * 16) / 100;
             if (pct < BARGRAPH_BLINK_PERCENT) {
-                /* Blink zone: blink thread controls renderer via sendActionBlinkTick().
-                 * Don't send mode=2 here — it would start maneuver_render's independent
-                 * blink timer which drifts from BAP. Just skip; blink thread syncs both. */
+                /* sendActionBlinkTick() supplies the same explicit phase to HUD
+                 * and renderer. A distance-only update must not overwrite it. */
                 return;
             }
-            bargraphMode = 1;
+            progressMode = 1;
         }
-        noteRendererSendResult(rendererClient.sendProgress(bargraphLevel, bargraphMode,
-            bargraphMode>0 ? RendererServer.PROGRESS_FILL : RendererServer.PROGRESS_OFF));
+        noteRendererSendResult(rendererClient.sendProgress(remainingLevel, progressMode,
+            progressMode>0 ? RendererServer.PROGRESS_FILL : RendererServer.PROGRESS_OFF));
     }
 
     /**

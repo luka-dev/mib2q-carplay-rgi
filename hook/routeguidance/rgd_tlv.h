@@ -271,6 +271,7 @@ typedef struct {
     uint16_t lane_guidance_index;
     rgd_lane_t lanes[MAX_LANE_GUIDANCE];
     uint8_t lane_count;
+    uint8_t lane_complete; /* full, explicit ordered snapshot; no capacity truncation */
     char lane_guidance_description[64];
 } rgd_lane_guidance_t;
 

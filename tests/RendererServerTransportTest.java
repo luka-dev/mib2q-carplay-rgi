@@ -60,7 +60,7 @@ public final class RendererServerTransportTest {
         set(server, "running", Boolean.TRUE); set(server, "lifecycleGeneration", Integer.valueOf(2));
         set(server, "sock", fake); set(server, "out", bytes);
         check(server.sendClear(), "queued CLEAR");
-        for (int i = 0; i < 32; ++i) check(server.sendBargraph(i % 17, 1), "queue fill");
+        for (int i = 0; i < 32; ++i) check(server.sendProgress(i % 17,1,RendererServer.PROGRESS_FILL), "queue fill");
         check(((Integer)get(server, "writeCount")).intValue() == 32, "queue limit");
         check(((Integer)get(server, "pendingClears")).intValue() == 1, "overflow lost CLEAR barrier");
         Object first = ((Object[])get(server, "writeQueue"))[((Integer)get(server, "writeHead")).intValue()];
@@ -73,7 +73,7 @@ public final class RendererServerTransportTest {
         // Replace every ordinary queued command with a CLEAR. With no droppable
         // command left, report backpressure without inventing another pending ACK.
         for (int i = 0; i < 31; ++i) check(server.sendClear(), "fill remaining barriers");
-        check(!server.sendClear() && !server.sendBargraph(1, 1), "barrier-only queue accepted overflow");
+        check(!server.sendClear() && !server.sendProgress(1,1,RendererServer.PROGRESS_FILL), "barrier-only queue accepted overflow");
         check(((Integer)get(server, "pendingClears")).intValue() == 32, "rejected command changed ACK count");
         server.dispose();
     }

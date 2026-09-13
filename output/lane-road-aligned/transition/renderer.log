@@ -1,9 +1,0 @@
-platform_macos: GL 2.1 Metal - 90.5
-render: SSAA 656x362 -> 656x362
-render: FXAA shader OK
-render: FXAA FBO 656x362 tex=2 fbo=2 attr=0
-render: 2 FBOs init 2297x1268 (mask half extents 6.34 x 3.50)
-render: init multi-layer 656x362 (default fbo=0)
-render: flag atlas loaded 1792x128 (14 frames) tex=5 gl_err=0x0
-UNSUPPORTED (log once): POSSIBLE ISSUE: unit 0 GLD_TEXTURE_INDEX_2D is unloadable and bound to sampler type (Float) - using zero texture because texture unloadable
-platform_macos: shutdown

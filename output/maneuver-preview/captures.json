@@ -1,0 +1,556 @@
+{
+  "scope": "Ordinary maneuver renderer; lane-road experiment removed",
+  "binary_sha256": "a9dd60dfdbdc3653de6eb2b24591507adbfb582ee0e6b630bddd795afadbc043",
+  "scene_engine": "C++11 cached scene compiler with C ABI",
+  "captures": [
+    {
+      "case": 0,
+      "area": "crop",
+      "title": "Follow road"
+    },
+    {
+      "case": 0,
+      "area": "wide",
+      "title": "Follow road"
+    },
+    {
+      "case": 1,
+      "area": "crop",
+      "title": "Right turn / side streets"
+    },
+    {
+      "case": 1,
+      "area": "wide",
+      "title": "Right turn / side streets"
+    },
+    {
+      "case": 2,
+      "area": "crop",
+      "title": "Sharp left 160"
+    },
+    {
+      "case": 2,
+      "area": "wide",
+      "title": "Sharp left 160"
+    },
+    {
+      "case": 3,
+      "area": "crop",
+      "title": "Sharp right 160"
+    },
+    {
+      "case": 3,
+      "area": "wide",
+      "title": "Sharp right 160"
+    },
+    {
+      "case": 4,
+      "area": "crop",
+      "title": "U-turn left"
+    },
+    {
+      "case": 4,
+      "area": "wide",
+      "title": "U-turn left"
+    },
+    {
+      "case": 5,
+      "area": "crop",
+      "title": "U-turn right"
+    },
+    {
+      "case": 5,
+      "area": "wide",
+      "title": "U-turn right"
+    },
+    {
+      "case": 6,
+      "area": "crop",
+      "title": "Full roundabout RHT"
+    },
+    {
+      "case": 6,
+      "area": "wide",
+      "title": "Full roundabout RHT"
+    },
+    {
+      "case": 7,
+      "area": "crop",
+      "title": "Full roundabout LHT"
+    },
+    {
+      "case": 7,
+      "area": "wide",
+      "title": "Full roundabout LHT"
+    },
+    {
+      "case": 8,
+      "area": "crop",
+      "title": "Highway exit right"
+    },
+    {
+      "case": 8,
+      "area": "wide",
+      "title": "Highway exit right"
+    },
+    {
+      "case": 9,
+      "area": "crop",
+      "title": "Merge left"
+    },
+    {
+      "case": 9,
+      "area": "wide",
+      "title": "Merge left"
+    },
+    {
+      "case": 10,
+      "area": "crop",
+      "title": "Lane change left"
+    },
+    {
+      "case": 10,
+      "area": "wide",
+      "title": "Lane change left"
+    },
+    {
+      "case": 11,
+      "area": "crop",
+      "title": "Arrival"
+    },
+    {
+      "case": 11,
+      "area": "wide",
+      "title": "Arrival"
+    },
+    {
+      "case": 12,
+      "area": "crop",
+      "title": "Roundabout departure RHT"
+    },
+    {
+      "case": 12,
+      "area": "wide",
+      "title": "Roundabout departure RHT"
+    },
+    {
+      "case": 13,
+      "area": "crop",
+      "title": "Clear"
+    },
+    {
+      "case": 13,
+      "area": "wide",
+      "title": "Clear"
+    },
+    {
+      "case": 14,
+      "area": "crop",
+      "title": "Slight right"
+    },
+    {
+      "case": 14,
+      "area": "wide",
+      "title": "Slight right"
+    },
+    {
+      "case": 15,
+      "area": "crop",
+      "title": "Straight"
+    },
+    {
+      "case": 15,
+      "area": "wide",
+      "title": "Straight"
+    },
+    {
+      "case": 16,
+      "area": "crop",
+      "title": "Slight left"
+    },
+    {
+      "case": 16,
+      "area": "wide",
+      "title": "Slight left"
+    },
+    {
+      "case": 17,
+      "area": "crop",
+      "title": "Left turn"
+    },
+    {
+      "case": 17,
+      "area": "wide",
+      "title": "Left turn"
+    },
+    {
+      "case": 18,
+      "area": "crop",
+      "title": "Right turn"
+    },
+    {
+      "case": 18,
+      "area": "wide",
+      "title": "Right turn"
+    },
+    {
+      "case": 19,
+      "area": "crop",
+      "title": "Sharp left 135"
+    },
+    {
+      "case": 19,
+      "area": "wide",
+      "title": "Sharp left 135"
+    },
+    {
+      "case": 20,
+      "area": "crop",
+      "title": "Sharp right 135"
+    },
+    {
+      "case": 20,
+      "area": "wide",
+      "title": "Sharp right 135"
+    },
+    {
+      "case": 21,
+      "area": "crop",
+      "title": "Follow road / side streets"
+    },
+    {
+      "case": 21,
+      "area": "wide",
+      "title": "Follow road / side streets"
+    },
+    {
+      "case": 22,
+      "area": "crop",
+      "title": "Merge right"
+    },
+    {
+      "case": 22,
+      "area": "wide",
+      "title": "Merge right"
+    },
+    {
+      "case": 23,
+      "area": "crop",
+      "title": "Highway exit left"
+    },
+    {
+      "case": 23,
+      "area": "wide",
+      "title": "Highway exit left"
+    },
+    {
+      "case": 24,
+      "area": "crop",
+      "title": "Lane change right"
+    },
+    {
+      "case": 24,
+      "area": "wide",
+      "title": "Lane change right"
+    },
+    {
+      "case": 25,
+      "area": "crop",
+      "title": "First exit RHT"
+    },
+    {
+      "case": 25,
+      "area": "wide",
+      "title": "First exit RHT"
+    },
+    {
+      "case": 26,
+      "area": "crop",
+      "title": "Straight exit RHT"
+    },
+    {
+      "case": 26,
+      "area": "wide",
+      "title": "Straight exit RHT"
+    },
+    {
+      "case": 27,
+      "area": "crop",
+      "title": "Third exit RHT"
+    },
+    {
+      "case": 27,
+      "area": "wide",
+      "title": "Third exit RHT"
+    },
+    {
+      "case": 28,
+      "area": "crop",
+      "title": "Return RHT"
+    },
+    {
+      "case": 28,
+      "area": "wide",
+      "title": "Return RHT"
+    },
+    {
+      "case": 29,
+      "area": "crop",
+      "title": "Third exit LHT"
+    },
+    {
+      "case": 29,
+      "area": "wide",
+      "title": "Third exit LHT"
+    },
+    {
+      "case": 30,
+      "area": "crop",
+      "title": "Return LHT"
+    },
+    {
+      "case": 30,
+      "area": "wide",
+      "title": "Return LHT"
+    },
+    {
+      "case": 31,
+      "area": "crop",
+      "title": "Roundabout departure LHT"
+    },
+    {
+      "case": 31,
+      "area": "wide",
+      "title": "Roundabout departure LHT"
+    }
+  ],
+  "source_size": [
+    328,
+    181
+  ],
+  "fov_degrees": 40,
+  "arrow_width": 0.14,
+  "accepted_ordinary_baseline_matches": 0,
+  "transitions": [
+    {
+      "current": 14,
+      "next": 16,
+      "frames": 123,
+      "engine": "native joined-route",
+      "exact_endpoints": true,
+      "endpoint_error": [
+        {
+          "max_channel_error": 0,
+          "mean_channel_error": 0.0
+        },
+        {
+          "max_channel_error": 0,
+          "mean_channel_error": 0.0
+        }
+      ],
+      "valid_rgba": true,
+      "scene_rebuilt_during_animation": false,
+      "progress_handoff": "retreat to zero, hold through push, refill on commit",
+      "max_camera_travel": 1.9915612054870422,
+      "max_rotation": 0.785398
+    },
+    {
+      "current": 1,
+      "next": 6,
+      "frames": 116,
+      "engine": "native joined-route",
+      "exact_endpoints": true,
+      "endpoint_error": [
+        {
+          "max_channel_error": 0,
+          "mean_channel_error": 0.0
+        },
+        {
+          "max_channel_error": 0,
+          "mean_channel_error": 0.0
+        }
+      ],
+      "valid_rgba": true,
+      "scene_rebuilt_during_animation": false,
+      "progress_handoff": "retreat to zero, hold through push, refill on commit",
+      "max_camera_travel": 1.970599,
+      "max_rotation": 1.570796
+    },
+    {
+      "current": 2,
+      "next": 3,
+      "frames": 111,
+      "engine": "native joined-route",
+      "exact_endpoints": true,
+      "endpoint_error": [
+        {
+          "max_channel_error": 0,
+          "mean_channel_error": 0.0
+        },
+        {
+          "max_channel_error": 0,
+          "mean_channel_error": 0.0
+        }
+      ],
+      "valid_rgba": true,
+      "scene_rebuilt_during_animation": false,
+      "progress_handoff": "retreat to zero, hold through push, refill on commit",
+      "max_camera_travel": 1.9588320223030866,
+      "max_rotation": 3.490658
+    },
+    {
+      "current": 4,
+      "next": 5,
+      "frames": 148,
+      "engine": "native joined-route",
+      "exact_endpoints": true,
+      "endpoint_error": [
+        {
+          "max_channel_error": 0,
+          "mean_channel_error": 0.0
+        },
+        {
+          "max_channel_error": 0,
+          "mean_channel_error": 0.0
+        }
+      ],
+      "valid_rgba": true,
+      "scene_rebuilt_during_animation": false,
+      "progress_handoff": "retreat to zero, hold through push, refill on commit",
+      "max_camera_travel": 1.6785336883613626,
+      "max_rotation": 3.141593
+    },
+    {
+      "current": 6,
+      "next": 7,
+      "frames": 110,
+      "engine": "native joined-route",
+      "exact_endpoints": true,
+      "endpoint_error": [
+        {
+          "max_channel_error": 0,
+          "mean_channel_error": 0.0
+        },
+        {
+          "max_channel_error": 0,
+          "mean_channel_error": 0.0
+        }
+      ],
+      "valid_rgba": true,
+      "scene_rebuilt_during_animation": false,
+      "progress_handoff": "retreat to zero, hold through push, refill on commit",
+      "max_camera_travel": 1.9536497693911261,
+      "max_rotation": 2.356194
+    },
+    {
+      "current": 25,
+      "next": 28,
+      "frames": 139,
+      "engine": "native joined-route",
+      "exact_endpoints": true,
+      "endpoint_error": [
+        {
+          "max_channel_error": 0,
+          "mean_channel_error": 0.0
+        },
+        {
+          "max_channel_error": 0,
+          "mean_channel_error": 0.0
+        }
+      ],
+      "valid_rgba": true,
+      "scene_rebuilt_during_animation": false,
+      "progress_handoff": "retreat to zero, hold through push, refill on commit",
+      "max_camera_travel": 2.037996,
+      "max_rotation": 1.570796
+    },
+    {
+      "current": 12,
+      "next": 31,
+      "frames": 121,
+      "engine": "native joined-route",
+      "exact_endpoints": true,
+      "endpoint_error": [
+        {
+          "max_channel_error": 0,
+          "mean_channel_error": 0.0
+        },
+        {
+          "max_channel_error": 0,
+          "mean_channel_error": 0.0
+        }
+      ],
+      "valid_rgba": true,
+      "scene_rebuilt_during_animation": false,
+      "progress_handoff": "retreat to zero, hold through push, refill on commit",
+      "max_camera_travel": 1.8802676585427938,
+      "max_rotation": 0.785398
+    },
+    {
+      "current": 8,
+      "next": 9,
+      "frames": 98,
+      "engine": "native joined-route",
+      "exact_endpoints": true,
+      "endpoint_error": [
+        {
+          "max_channel_error": 0,
+          "mean_channel_error": 0.0
+        },
+        {
+          "max_channel_error": 0,
+          "mean_channel_error": 0.0
+        }
+      ],
+      "valid_rgba": true,
+      "scene_rebuilt_during_animation": false,
+      "progress_handoff": "retreat to zero, hold through push, refill on commit",
+      "max_camera_travel": 2.019734726219263,
+      "max_rotation": 0.0
+    },
+    {
+      "current": 10,
+      "next": 24,
+      "frames": 97,
+      "engine": "native joined-route",
+      "exact_endpoints": true,
+      "endpoint_error": [
+        {
+          "max_channel_error": 0,
+          "mean_channel_error": 0.0
+        },
+        {
+          "max_channel_error": 0,
+          "mean_channel_error": 0.0
+        }
+      ],
+      "valid_rgba": true,
+      "scene_rebuilt_during_animation": false,
+      "progress_handoff": "retreat to zero, hold through push, refill on commit",
+      "max_camera_travel": 2.047367294464039,
+      "max_rotation": 0.0
+    },
+    {
+      "current": 14,
+      "next": 1,
+      "frames": 122,
+      "engine": "native joined-route",
+      "exact_endpoints": true,
+      "endpoint_error": [
+        {
+          "max_channel_error": 0,
+          "mean_channel_error": 0.0
+        },
+        {
+          "max_channel_error": 0,
+          "mean_channel_error": 0.0
+        }
+      ],
+      "valid_rgba": true,
+      "scene_rebuilt_during_animation": false,
+      "progress_handoff": "retreat to zero, hold through push, refill on commit",
+      "max_camera_travel": 1.9879986443783104,
+      "max_rotation": 0.785398
+    }
+  ]
+}

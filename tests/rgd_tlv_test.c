@@ -56,6 +56,26 @@ int main(void) {
     rgd_parse_lane_guidance(buf, 25, &l); assert(l.present == 0 && !l.lane_count);
     header(buf, 21, 0x5204); write_be16(buf + 12, 9);
     rgd_parse_lane_guidance(buf, 21, &l); assert(l.lane_count == 1 && l.lanes[0].status == 1);
+    assert(!l.lane_complete); // Implicit index cannot prove a physical road edge.
+    {
+        uint8_t full[512]={0};size_t off=12;
+        write_be16(full+6,6);write_be16(full+8,LANE_MSG_TLV_LANE_GUIDANCE_INDEX);write_be16(full+10,7);
+        for(int lane=0;lane<9;++lane) {
+            write_be16(full+off,21);write_be16(full+off+2,LANE_MSG_TLV_LANE_INFORMATIONS);
+            write_be16(full+off+4,6);write_be16(full+off+6,LANE_INFO_TLV_INDEX);write_be16(full+off+8,lane);
+            write_be16(full+off+10,5);write_be16(full+off+12,LANE_INFO_TLV_STATUS);full[off+14]=2;
+            write_be16(full+off+15,6);write_be16(full+off+17,LANE_INFO_TLV_ANGLES);write_be16(full+off+19,(uint16_t)-1000);
+            off+=21;header(full,off,0x5204);assert(rgd_parse_lane_guidance(full,off,&l));
+            assert(l.lane_complete==(lane<8));assert(l.lane_count==(lane<8?lane+1:8));
+            assert(l.lanes[0].direction==-1000);
+        }
+        /* An overflowing angle vector is incomplete even though its stored prefix is valid. */
+        off=12;write_be16(full+off,53);write_be16(full+off+19,0);
+        write_be16(full+off+15,38);
+        for(int a=0;a<17;++a)write_be16(full+off+19+a*2,45);
+        header(full,65,0x5204);assert(rgd_parse_lane_guidance(full,65,&l));
+        assert(l.lane_count==1 && l.lanes[0].angle_count==16 && !l.lane_complete);
+    }
     /* Header length/type, every short read, and deterministic malformed/random payloads. */
     for (i = 0; i < 120000; ++i) {
         n = random_u32() % sizeof(buf);

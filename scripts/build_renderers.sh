@@ -65,6 +65,7 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
         -I. -I../common -I"$ABI_INCLUDE" -c "$source" -o "$object"
     SCENE_OBJECTS="$SCENE_OBJECTS $object"
   done
+  rm -f /src/build/libmaneuver_scene.a
   $AR rcs /src/build/libmaneuver_scene.a $SCENE_OBJECTS
   $CC -O2 -std=gnu99 -Wall -D__QNX__ -DPLATFORM_QNX -fdata-sections -ffunction-sections $GRID \
       -I. -I../common -I"$ABI_INCLUDE" $MR_SRCS $SCENE_OBJECTS \

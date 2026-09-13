@@ -135,7 +135,7 @@ The current signed U-turn implementation is correct:
   maneuver renderer;
 - accNav 19 remains on the roundabout path.
 
-`RendererMapper.mapExitAngle()` still supplies `-180` for a missing U-turn
+The historical `RendererMapper.mapExitAngle()` adapter supplied `-180` for a missing U-turn
 angle, but this cannot reverse an LHT U-turn: native `ICON_UTURN` rendering uses
 the explicit `direction` first and only falls back to `driving_side`
 (`maneuver_render/maneuver.c:1132-1135` and `2182-2185`); it does not use
@@ -143,3 +143,7 @@ the explicit `direction` first and only falls back to `driving_side`
 
 No functional change to the signed U-turn mapping is required after the iOS
 26.6 audit.
+
+The old renderer helper API was removed during the
+[2026-09-13 Java transport cleanup](RENDERER_JAVA_TRANSPORT_AUDIT.md).
+Its required semantic fallbacks remain in the single `RendererMapper.map` path.

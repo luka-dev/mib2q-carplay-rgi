@@ -1,0 +1,74 @@
+[
+  {
+    "key": "aluminium",
+    "title": "Aluminium / white",
+    "shader_base": "#9B9787",
+    "shader_active": "#FFF6E0",
+    "host_face_base_and_active": [
+      {
+        "rgb": [
+          151,
+          151,
+          150
+        ],
+        "relative_luminance": 0.3091
+      },
+      {
+        "rgb": [
+          237,
+          233,
+          230
+        ],
+        "relative_luminance": 0.82
+      }
+    ]
+  },
+  {
+    "key": "red",
+    "title": "Deep red / progressive red",
+    "shader_base": "#B0151C",
+    "shader_active": "#E60024",
+    "host_face_base_and_active": [
+      {
+        "rgb": [
+          191,
+          32,
+          50
+        ],
+        "relative_luminance": 0.1234
+      },
+      {
+        "rgb": [
+          248,
+          10,
+          59
+        ],
+        "relative_luminance": 0.2049
+      }
+    ]
+  },
+  {
+    "key": "sport",
+    "title": "Progressive red / white",
+    "shader_base": "#E60024",
+    "shader_active": "#FFF6E0",
+    "host_face_base_and_active": [
+      {
+        "rgb": [
+          248,
+          10,
+          59
+        ],
+        "relative_luminance": 0.2049
+      },
+      {
+        "rgb": [
+          237,
+          233,
+          230
+        ],
+        "relative_luminance": 0.82
+      }
+    ]
+  }
+]

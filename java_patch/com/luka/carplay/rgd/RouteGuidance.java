@@ -201,6 +201,7 @@ public class RouteGuidance implements CarplayBus.Listener {
         public int[] lgIndex = new int[MAX_MANEUVERS];
         public int[][] lgLanePositions = new int[MAX_MANEUVERS][];
         public int[] lgLaneCount = new int[MAX_MANEUVERS];
+        public int[] lgLaneComplete = new int[MAX_MANEUVERS];
         public int[][] lgLaneDirections = new int[MAX_MANEUVERS][];
         public int[][] lgLaneStatus = new int[MAX_MANEUVERS][];
         public int[][][] lgLaneAngles = new int[MAX_MANEUVERS][][];
@@ -260,6 +261,7 @@ public class RouteGuidance implements CarplayBus.Listener {
                 lgIndex[i] = -1;
                 lgLanePositions[i] = null;
                 lgLaneCount[i] = -1;
+                lgLaneComplete[i] = -1;
                 lgLaneDirections[i] = null;
                 lgLaneStatus[i] = null;
                 lgLaneAngles[i] = null;
@@ -968,6 +970,7 @@ public class RouteGuidance implements CarplayBus.Listener {
                 int v = d.num(p + "index", -1);
                 if (v != state.lgIndex[i]) {
                     state.lgIndex[i] = v;
+                    state.lgLaneComplete[i] = -1;
                     state.markDirty(State.DIRTY_LANE_GUIDANCE);
                 }
             }
@@ -976,6 +979,12 @@ public class RouteGuidance implements CarplayBus.Listener {
                 if (v != state.lgLaneCount[i]) {
                     state.lgLaneCount[i] = v;
                     state.markDirty(State.DIRTY_LANE_GUIDANCE);
+                }
+            }
+            if (d.has(p + "lane_complete")) {
+                int v=d.num(p+"lane_complete",-1);
+                if(v!=state.lgLaneComplete[i]) {
+                    state.lgLaneComplete[i]=v;state.markDirty(State.DIRTY_LANE_GUIDANCE);
                 }
             }
             if (d.has(p + "lane_positions")) {

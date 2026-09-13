@@ -3,7 +3,9 @@
  */
 package com.luka.carplay.rgd;
 
-public class RendererMapper {
+public final class RendererMapper {
+    private static final int[] NO_ROADS = new int[0];
+    private RendererMapper() { }
     public static final int ICON_NONE = 0;
     public static final int ICON_APPROACH = 1;
     public static final int ICON_TURN = 2;
@@ -31,7 +33,15 @@ public class RendererMapper {
         return d < 128 ? -(d * 45 / 16) : ((256 - d) * 45 / 16);
     }
 
-    public static Mapping fromBap(int main, int direction, int drivingSide, byte[] streets) {
+    /** Resolve the shared HUD semantics once, adding only raw geometry used by
+     * the procedural renderer. No BAP side-street round trip or lane input. */
+    public static Mapping map(int main, int direction, int drivingSide, int maneuverType,
+                              int angle, boolean anglePresent, int[] roads) {
+        return withCarPlayGeometry(fromBap(main, direction, drivingSide),
+            maneuverType, angle, anglePresent, roads);
+    }
+
+    private static Mapping fromBap(int main, int direction, int drivingSide) {
         Mapping out = new Mapping();
         out.drivingSide = drivingSide == ManeuverMapper.DRIVING_SIDE_LEFT ? 1 : 0;
         out.exitAngle = directionAngleHalfDegrees(direction);
@@ -77,10 +87,7 @@ public class RendererMapper {
                 out.exitAngle = 0;
                 break;
         }
-        int count = streets == null || out.icon == ICON_NONE ? 0 : streets.length;
-        if (count > 18) count = 18;
-        out.junctionAngles = new int[count];
-        for (int i = 0; i < count; i++) out.junctionAngles[i] = directionAngleHalfDegrees(streets[i] & 255);
+        out.junctionAngles = NO_ROADS;
         return out;
     }
 
@@ -88,7 +95,7 @@ public class RendererMapper {
      * finite icon catalogue; that does not limit our procedural path builder.
      * A missing/invalid angle or a side conflicting with the resolved maneuver
      * still uses the BAP/type fallback. Angles here remain in half-degrees. */
-    public static Mapping withCarPlayGeometry(Mapping out, int mt, int angle,
+    private static Mapping withCarPlayGeometry(Mapping out, int mt, int angle,
                                               boolean present, int[] roads) {
         boolean valid = present && angle >= -180 && angle <= 180;
         boolean ramp = mt == ManeuverMapper.MT_OFF_RAMP || mt == ManeuverMapper.MT_ON_RAMP
@@ -150,16 +157,4 @@ public class RendererMapper {
         return out;
     }
 
-    private static Mapping legacy(int mt, int angle, int side) {
-        int junction = mt == ManeuverMapper.MT_EXIT_ROUNDABOUT
-            || mt == ManeuverMapper.MT_U_TURN_AT_ROUNDABOUT
-            || (mt >= ManeuverMapper.MT_ROUNDABOUT_EXIT_1 && mt <= ManeuverMapper.MT_ROUNDABOUT_EXIT_19) ? 1 : 0;
-        int[] bap = ManeuverMapper.map(mt, angle, junction, side);
-        return withCarPlayGeometry(fromBap(bap[0], bap[1], side, null), mt, angle, angle != -1, null);
-    }
-
-    /** Compatibility helpers use degrees; the bridge uses fromBap() with exact half-degrees. */
-    public static int mapIcon(int mt) { return legacy(mt, 1000, 0).icon; }
-    public static int mapDirection(int mt, int angle, int side) { return legacy(mt, angle, side).direction; }
-    public static int mapExitAngle(int mt, int angle) { return legacy(mt, angle, 0).exitAngle / 2; }
 }

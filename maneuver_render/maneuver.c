@@ -796,7 +796,9 @@ float maneuver_builtin_elevation(const maneuver_state_t *s) {
 }
 
 static float maneuver_elevation(const maneuver_state_t *s) {
-    return scene_supplied(s)?0.0f:maneuver_builtin_elevation(s);
+    if (scene_supplied(s))
+        return g_scene_provider.elevation ? g_scene_provider.elevation(g_scene_provider.context,s) : 0.0f;
+    return maneuver_builtin_elevation(s);
 }
 
 void maneuver_prepare_frame(const maneuver_state_t *s, const maneuver_state_t *next_state) {

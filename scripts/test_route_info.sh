@@ -22,6 +22,7 @@ CLASSPATH="$PATCH_JAR:$STOCK_JAR:$TOOLS_DIR/libs/org.osgi.framework-1.10.0.jar:$
     "$PROJECT_DIR/tests/ManeuverChainAudit.java" \
     "$PROJECT_DIR/tests/ManeuverParityTest.java" \
     "$PROJECT_DIR/tests/RendererViewportTest.java" \
+    "$PROJECT_DIR/tests/LaneGuidanceTransportTest.java" \
     "$PROJECT_DIR/tests/RendererMapperDirectionTest.java"
 "$JDK_DIR/bin/java" -cp "$TEST_DIR:$CLASSPATH" RouteInfoPresentationTest
 "$JDK_DIR/bin/java" -cp "$TEST_DIR:$CLASSPATH" RendererMapperDirectionTest
@@ -33,3 +34,5 @@ CLASSPATH="$PATCH_JAR:$STOCK_JAR:$TOOLS_DIR/libs/org.osgi.framework-1.10.0.jar:$
 
 "$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" ManeuverParityTest
 "$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" RendererViewportTest
+
+"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.LaneGuidanceTransportTest "$PROJECT_DIR/build/lane-guidance-wire.bin"

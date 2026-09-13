@@ -6,6 +6,14 @@ import com.luka.carplay.rgd.ManeuverMapper;
 import com.luka.carplay.rgd.RendererMapper;
 
 public final class RendererMapperDirectionTest {
+    private static RendererMapper.Mapping mapping(int type, int angle, int side) {
+        int junction = type == ManeuverMapper.MT_EXIT_ROUNDABOUT
+            || type == ManeuverMapper.MT_U_TURN_AT_ROUNDABOUT
+            || (type >= ManeuverMapper.MT_ROUNDABOUT_EXIT_1 && type <= ManeuverMapper.MT_ROUNDABOUT_EXIT_19) ? 1 : 0;
+        int[] bap = ManeuverMapper.map(type, angle, junction, side);
+        return RendererMapper.map(bap[0], bap[1], side, type, angle, angle != -1, null);
+    }
+
     private static void expect(String name, int expected, int actual) {
         if (expected != actual) {
             throw new AssertionError(name + ": expected " + expected + ", got " + actual);
@@ -14,23 +22,23 @@ public final class RendererMapperDirectionTest {
 
     private static void testType(int maneuverType) {
         expect("renderer signed left", -1,
-            RendererMapper.mapDirection(maneuverType, -180,
-                ManeuverMapper.DRIVING_SIDE_LEFT));
+            mapping(maneuverType, -180,
+                ManeuverMapper.DRIVING_SIDE_LEFT).direction);
         expect("renderer signed right", 1,
-            RendererMapper.mapDirection(maneuverType, 180,
-                ManeuverMapper.DRIVING_SIDE_RIGHT));
+            mapping(maneuverType, 180,
+                ManeuverMapper.DRIVING_SIDE_RIGHT).direction);
         expect("renderer RHT fallback", -1,
-            RendererMapper.mapDirection(maneuverType, 1000,
-                ManeuverMapper.DRIVING_SIDE_RIGHT));
+            mapping(maneuverType, 1000,
+                ManeuverMapper.DRIVING_SIDE_RIGHT).direction);
         expect("renderer LHT fallback", 1,
-            RendererMapper.mapDirection(maneuverType, 1000,
-                ManeuverMapper.DRIVING_SIDE_LEFT));
+            mapping(maneuverType, 1000,
+                ManeuverMapper.DRIVING_SIDE_LEFT).direction);
         expect("renderer negative sentinel fallback", -1,
-            RendererMapper.mapDirection(maneuverType, -1000,
-                ManeuverMapper.DRIVING_SIDE_RIGHT));
+            mapping(maneuverType, -1000,
+                ManeuverMapper.DRIVING_SIDE_RIGHT).direction);
         expect("renderer zero fallback", 1,
-            RendererMapper.mapDirection(maneuverType, 0,
-                ManeuverMapper.DRIVING_SIDE_LEFT));
+            mapping(maneuverType, 0,
+                ManeuverMapper.DRIVING_SIDE_LEFT).direction);
 
         expect("BAP signed left", ManeuverMapper.DIR_LEFT,
             ManeuverMapper.map(maneuverType, -180,
@@ -60,10 +68,10 @@ public final class RendererMapperDirectionTest {
 
     private static void testGenericRamp(int maneuverType) {
         // Both ramp types use one slight bend. Direction is carried by angle.
-        expect("renderer ramp family", RendererMapper.ICON_TURN, RendererMapper.mapIcon(maneuverType));
-        expect("renderer ramp left angle", -45, RendererMapper.mapExitAngle(maneuverType, -35));
-        expect("renderer ramp right angle", 45, RendererMapper.mapExitAngle(maneuverType, 35));
-        expect("renderer ramp RHT missing", 45, RendererMapper.mapExitAngle(maneuverType, 1000));
+        expect("renderer ramp family", RendererMapper.ICON_TURN, mapping(maneuverType, 1000, 0).icon);
+        expect("renderer ramp left angle", -45, (mapping(maneuverType, -35, 0).exitAngle / 2));
+        expect("renderer ramp right angle", 45, (mapping(maneuverType, 35, 0).exitAngle / 2));
+        expect("renderer ramp RHT missing", 45, (mapping(maneuverType, 1000, 0).exitAngle / 2));
 
         int[] left = ManeuverMapper.map(maneuverType, -35,
             ManeuverMapper.JUNCTION_SINGLE_INTERSECTION,
@@ -150,11 +158,11 @@ public final class RendererMapperDirectionTest {
             missingExit[1]);
 
         expect("renderer typed roundabout U-turn missing angle", 180,
-            RendererMapper.mapExitAngle(ManeuverMapper.MT_U_TURN_AT_ROUNDABOUT, 1000));
+            (mapping(ManeuverMapper.MT_U_TURN_AT_ROUNDABOUT, 1000, 0).exitAngle / 2));
         expect("renderer generic roundabout missing angle", 0,
-            RendererMapper.mapExitAngle(ManeuverMapper.MT_ROUNDABOUT_EXIT_5, 1000));
+            (mapping(ManeuverMapper.MT_ROUNDABOUT_EXIT_5, 1000, 0).exitAngle / 2));
         expect("renderer real roundabout angle preserved", -67,
-            RendererMapper.mapExitAngle(ManeuverMapper.MT_ROUNDABOUT_EXIT_5, -67));
+            (mapping(ManeuverMapper.MT_ROUNDABOUT_EXIT_5, -67, 0).exitAngle / 2));
     }
 
     private static void testAllManeuverSafetySentinels() {

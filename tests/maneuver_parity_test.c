@@ -445,6 +445,40 @@ static float max_height(const route_mesh_t *m) {
     return h;
 }
 
+static void test_live_scene_ownership(void) {
+    maneuver_scene_provider_t provider={0};
+    provider.handles=scene_handles;provider.build_route=scene_route;
+    provider.paint_masks=scene_paint;provider.elevation=scene_elevation;
+    cr_scene_configure_provider(&provider);maneuver_set_scene_provider(&provider);
+    memset(&g_engine,0,sizeof(g_engine));
+    g_engine.current_scene=cr_scene_create();g_engine.next_scene=cr_scene_create();
+    assert(g_engine.current_scene && g_engine.next_scene);
+    maneuver_state_t a={0},b={0},c={0};
+    a.icon=ICON_TURN;a.exit_angle=45;a.direction=1;a.bap_geometry=1;
+    b=a;b.exit_angle=160;c.icon=ICON_APPROACH;
+    engine_apply_maneuver(&a,40);prepare_engine_scenes();
+    assert(scene_handles(NULL,&g_engine.current));
+    engine_apply_maneuver(&b,41);prepare_engine_scenes();
+    assert(g_engine.current.exit_angle==45 && g_engine.next.exit_angle==160);
+    assert(!scene_handles(NULL,&g_engine.next));
+    assert(maneuver_builtin_elevation(&g_engine.next)>.05f);
+    cr_scene_t *arriving=g_engine.next_scene;
+    engine_apply_maneuver(&c,41.1);
+    c.icon=ICON_TURN; // Caller storage cannot change the pending snapshot.
+    assert(g_engine.pending.icon==ICON_APPROACH);
+    g_route_animating=0;engine_tick(42);prepare_engine_scenes();
+    assert(g_engine.current_scene==arriving && g_engine.current.exit_angle==160);
+    assert(g_engine.next.icon==ICON_APPROACH && !g_engine.has_pending);
+    c.exit_angle=-45;
+    engine_refresh_maneuver(&c,42.1);prepare_engine_scenes();
+    assert(scene_handles(NULL,&g_engine.next));
+    assert(g_engine.current.exit_angle==160);
+    maneuver_set_scene_provider(NULL);
+    cr_scene_destroy(g_engine.current_scene);cr_scene_destroy(g_engine.next_scene);
+    g_engine.current_scene=g_engine.next_scene=NULL;
+    puts("Live scene ownership: current/next/pending, commit, refresh and immutable maneuvers PASS");
+}
+
 int main(void) {
     test_route_progress_projection();
     test_arrow_progress();
@@ -568,6 +602,7 @@ int main(void) {
     assert(!g_persp_deferred);
     s.icon=ICON_TURN;engine_apply_maneuver(&s,30);
     assert(g_engine.phase==ENGINE_IDLE && g_engine.current.icon==ICON_TURN);
+    test_live_scene_ownership();
     puts("maneuver_parity_test: decoder, half-degree paths, icon families, refresh/coalescing and NONE transitions PASS");
     return 0;
 }
