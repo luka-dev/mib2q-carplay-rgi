@@ -1,14 +1,13 @@
-# Lane-road visual experiment
+# Lane-road scene-engine preview
 
-Standalone host prototype in `experiment/lane-road`, based on `3f87f64`.
-Optional renderer helpers expose the camera matrix, draw the red visible-area
-border and apply a side fade to flat mask paint (disabled by default).
-Lane geometry is host-only; Java, hook and BAP lane transport are unchanged.
-The shared progress handoff runs in both the production main loop and this preview.
-No HU deployment.
-Fixtures are synthetic and explicitly cover the available iAP2 lane fields.
-Rendering uses the existing `render.c`, `route_path.c` and `maneuver.c`, including
-the two-color progress material and contact shading.
+C frontend for the reusable C++11 compiler in `maneuver_render/scene`, on
+`experiment/lane-road`, with visual baseline `d15e6bf`. Fixtures are synthetic;
+live Java/hook lane transport is unchanged. Rendering uses the existing native
+joined-route camera engine, two-color progress material, contact shading and GL
+backend. The shared progress handoff also runs in the production main loop.
+
+See [`docs/SCENE_ENGINE.md`](../../docs/SCENE_ENGINE.md) for the architecture,
+C API, memory bounds, cache semantics, fallback and ARM/QNX build status.
 
 ```sh
 make -C tools/lane-road-preview all test
@@ -53,7 +52,7 @@ surveyed destination-road lane count. Cases 8/9 add two-/three-lane left turns;
 case 1 remains the two-lane right exit. Unknown directions or position gaps do
 not join groups. Cases 10/11 exercise middle/right primary lanes in a three-lane
 left turn. Case 12 adds a shared straight+right lane. Cases 13–17 retain rejected
-input scenarios to exercise the fallback. Thirty-six captures check stage
+input scenarios to exercise the fallback. Sixty-six captures check stage
 invariants, group counts, projected heads, safety decisions and framebuffer RGBA.
 
 Pavement glyphs fit as a complete multi-direction group, with a common stem and
@@ -77,7 +76,7 @@ radius, instead of offsetting the tiny standalone-arrow fillet into a square
 corner. The primary arrow follows its own lane through that bend. Camera and
 mesh still remain identical between small and large stages. The single-lane
 offset fallback trims its outgoing line at the tangent intersection, avoiding
-reversed curbs on short exits. `test_outline.c` covers 48 offset contours,
+reversed curbs on short exits. `test_outline.cpp` covers 48 offset contours,
 positive radii across all primary positions, turn-only termination and shared
 straight+turn continuation under ASan/UBSan.
 
@@ -90,7 +89,7 @@ blending now accumulates alpha separately instead of squaring source alpha;
 FXAA filters alpha with the same samples/weights as RGB. The capture checks
 actual final framebuffer RGBA (`RGB <= A`, allowing 2/255 rounding tolerance),
 not just the flattened review image. Before the fix, case 0 alone had 4,929
-invalid pixels with an excess of 132/255; all 36 current frames have zero.
+invalid pixels with an excess of 132/255; all current frames have zero.
 These are shared renderer changes within this experimental worktree.
 
 The unknown-angle fixture (case 5) has two right-turn lanes: the penultimate
@@ -107,8 +106,11 @@ Unknown/non-turning outer lanes and unsupported lane connectivity are rejected.
 Normal sharp/roundabout rendering is unaffected; only the lane-road overlay is
 declined. Clipping excessive lane/angle counts invalidates completeness.
 
-Rejection displays the independent maneuver with a generic unmarked road, without
-lane glyphs, lane widths/counts or inferred connectivity. Different rejected lane
+Rejection displays the independent maneuver without lane glyphs, widths/counts
+or inferred connectivity. Simple turns use an unmarked road; all richer ordinary
+families delegate to the complete built-in painter. Cases 18–32 add empty-lane
+coverage for branches, sharp turns, U-turns, full circles, merge/exit, lane change,
+arrival and clearing the maneuver. Different rejected lane
 snapshots produce pixel-identical fallback captures for the same maneuver.
 `tests/lane_safety_test.c` exercises 144 mirrored layouts, sentinels, incomplete
 records, action mismatch, unsupported shapes and input immutability, and runs in
@@ -138,7 +140,7 @@ Recommended pavement tint follows the selected exit lane through its bend to
 the road end. Permitted but unrecommended directions and unknown primary angles
 do not gain a tint. This uses the existing flat road material, not arrow fill.
 
-Case navigation now uses the production `maneuver.c` engine itself. An optional
+Case navigation uses the production `maneuver.c` engine itself. An optional
 scene provider supplies the actual lane path and road masks; the existing engine
 joins current and next paths, moves ONE arrow continuously along that path,
 rotates/follows the camera, then settles into the next scene. The rejected
@@ -177,3 +179,18 @@ while the camera settles. Old blink glow fades during departure. A queued third
 maneuver owns a separate pending target in production and cannot recolor the
 second. Geometry refreshes do not restart the retreat. Captures verify monotonic
 retreat, an empty commit frame, continuous refill and exact settled endpoints.
+
+The former geometry monolith is now a fixture/window frontend. Scene preparation
+retains geometry commands; painting replays them. `test_scene.cpp` checks all 33
+fixtures, 33,000 semantic cache hits, stage invariance, ownership, native route
+parity and invalid-input/fallback behavior. Capture additionally verifies that
+no scene is recompiled during the camera's native transition.
+
+The build copies the production `flag_atlas.rgba` next to the preview executable;
+keep it alongside the binary when packaging the app. This exercises the actual
+arrival sprite rather than the missing-texture placeholder.
+
+After the shared-style review, ordinary and lane roads now use the new road
+proportions/shoulders with the original neutral #646464 asphalt. Shared values
+live in `maneuver_render/visual_style.h`; the C++ scene palette derives its lane
+recommendation tint from that base. `unified-style.png` compares both modes.

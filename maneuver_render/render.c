@@ -1114,6 +1114,14 @@ static void build_camera_mvp(float *mvp, float aspect, float pan_x, float pan_z,
 
 }
 
+void render_get_layout_matrix(float out[16]) {
+    render_build_layout_matrix(out,(float)g_fb_w/g_fb_h);
+}
+
+void render_build_layout_matrix(float out[16],float aspect) {
+    if(out)build_camera_mvp(out,aspect,0,0,0,1);
+}
+
 static void sync_camera_uniforms(void) {
     /* Animate g_persp_t toward target with ease-in-out */
     {

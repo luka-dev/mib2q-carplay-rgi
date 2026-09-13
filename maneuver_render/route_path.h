@@ -16,6 +16,10 @@
 #include "route_progress.h"
 #include "contact_shadow.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Segment types */
 #define RSEG_LINE  0
 #define RSEG_ARC   1
@@ -105,5 +109,9 @@ void rpath_set_elevation(float first, float second);
 
 /* Debug overlay -- draws polyline with active window highlighted. */
 void rpath_draw_debug(const route_path_t *p, float t0, float t1);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* CR_ROUTE_PATH_H */

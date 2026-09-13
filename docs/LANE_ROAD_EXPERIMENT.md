@@ -1,7 +1,10 @@
 # Lane-road experiment — 2026-09-12
 
-Status: native visual prototype for review, not a live renderer integration.
-Worktree: `mhi2-carplay-lane-road`; branch: `experiment/lane-road`; base: `3f87f64`.
+Status: C++11 scene compiler integrated into the host preview, cross-compiled for
+QNX/ARM; live lane transport remains pending. Worktree: `mhi2-carplay-lane-road`;
+branch: `experiment/lane-road`; committed visual baseline: `d15e6bf`.
+Current architecture and verification: [SCENE_ENGINE.md](SCENE_ENGINE.md).
+The follow-up sections below retain the visual experiment's history.
 
 User constraints after the initial visual review: preserve the old source size,
 keep every important cue inside the existing small hidden red crop rectangle,
@@ -18,24 +21,16 @@ and must look coherent with lane scenes. Lane data is optional detail, not a
 requirement for rendering a maneuver. Missing, hidden, stale or rejected lanes
 must retain the independent maneuver and its known junction/side-road data.
 
-The production built-in dispatch still supports the complete icon set. However,
-the preview's `draw_fallback` is only an unmarked road following the route; it
-does not reproduce every built-in road, roundabout or destination detail. It
-must not become the production ordinary-maneuver implementation unchanged.
+The reusable compiler now has three outputs: a connected lane road, a simple
+unmarked turn and a complete built-in family. The latter preserves side roads,
+full circles, sharp/U-turn geometry and destination details. The per-state scene
+provider can decline a state so the original painter renders it; built-in
+elevation is retained while lane paths use the shallow overlay profile.
 
-The refactor must preserve full-circle roundabouts, sharp turns, U-turns,
-side-road continuation/fades, destination details and self-overlap shading.
-Use a shared visual style for route material, progress/glow, road/shoulder color,
-fade and apparent scale. Geometry-specific height/clearance must remain possible;
-the preview provider's global zero-elevation rule is not a general replacement
-for built-in maneuver geometry. Both modes keep the fixed source dimensions,
-small-area composition and native joined-route camera transition.
-
-Acceptance covers ordinary-to-ordinary, lanes-to-lanes, lanes-to-ordinary and
-ordinary-to-lanes transitions, plus lanes appearing/disappearing for the same
-maneuver. A lane-only update must not replay maneuver advancement or reset
-progress/blink. Add explicit empty-lane fixtures and the full ordinary icon
-matrix; current safety-rejection fixtures alone do not establish that coverage.
+Cases 18–32 supply explicit empty-lane states. The capture suite also crosses
+between lanes, ordinary junctions and full roundabouts using the native camera
+engine. Lane-only preparation does not invoke animation or progress control;
+production event handling must preserve that distinction when transport is added.
 
 ### Side-street / optional-arrow review follow-up
 
@@ -485,3 +480,13 @@ blink/off and actual engine pending-target ownership. All 36 static captures and
 377 transition frames pass, including visible retreat, empty commit, monotonic
 refill, premultiplied RGBA and exact static endpoints. Refactor/live lane
 integration and the master merge remain pending after the user's stop.
+
+
+Viewport context follow-up: retain the complete physical lane geometry in both
+stages. The user subsequently requested removal of the small-viewport crop and
+reported cut corners during camera travel. Viewport clipping/fading is now
+removed from the road mask entirely: a baked-in projection plane would rotate
+with the moving scene. Only entry/exit distance fades remain. The red small
+frame is a composition guide, while all available source pixels can show road
+context. Camera, main route and glyph geometry remain fixed. See
+`SCENE_ENGINE.md` and the current `output/lane-road-aligned` captures.

@@ -18,6 +18,7 @@
 #include "render.h"
 #include "maneuver.h"
 #include "route_path.h"
+#include "visual_style.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -32,9 +33,9 @@
 #define AC_B 0.902f
 #define AC_A 1.0f
 
-#define SD_R 0.392f   /* #646464 */
-#define SD_G 0.392f
-#define SD_B 0.392f
+#define SD_R CR_STYLE_ASPHALT_R
+#define SD_G CR_STYLE_ASPHALT_G
+#define SD_B CR_STYLE_ASPHALT_B
 #define SD_A 1.0f
 
 /* shorthand for passing color args */
@@ -46,10 +47,10 @@
  * ================================================================ */
 
 /* Road thickness layers */
-#define SHAFT_T    0.14f    /* active blue thickness */
-#define OL_W       0.025f   /* border width per side */
-#define SIDE_T     (SHAFT_T + OL_W * 2)  /* grey = active + border */
-#define OL_T       (SIDE_T  + OL_W * 2)  /* outline = grey + border */
+#define SHAFT_T    CR_STYLE_ARROW_WIDTH
+#define OL_W       CR_STYLE_SHOULDER_WIDTH
+#define SIDE_T     CR_STYLE_ROAD_WIDTH
+#define OL_T       (SIDE_T + OL_W * 2)
 #define HEAD_SZ    (SHAFT_T * 1.3f)      /* arrowhead height */
 
 /* Universal road lengths from junction center (y=0) */
@@ -65,7 +66,7 @@
 /* Joint helpers */
 #define JOINT_R    (SHAFT_T * 0.5f)
 #define JOINT_SEG  32
-#define WHITE  1.0f, 1.0f, 1.0f, 1.0f
+#define WHITE  CR_STYLE_SHOULDER_R, CR_STYLE_SHOULDER_G, CR_STYLE_SHOULDER_B, 1.0f
 
 /* Roundabout */
 #define RAB_RING_R   0.28f   /* roundabout ring radius */
@@ -99,7 +100,7 @@
  *    |X|     road shaft
  */
 #define ARRIVE_CENTER_Y   0.12f       /* shared center of both circles */
-#define ARRIVE_INNER_R    (OL_T * 0.75f)  /* inner circle: wider than road for visibility */
+#define ARRIVE_INNER_R    0.18f       /* destination geometry independent of road stroke */
 #define ARRIVE_OUTER_R    0.28f       /* outer circle: outline ring only */
 #define ARRIVE_ROAD_TOP   ARRIVE_CENTER_Y  /* road extends into inner circle center */
 #define ARRIVE_SEG        24          /* circle segment count */
@@ -110,8 +111,8 @@
 #define FLAG_ANIM_SPEED   0.35f       /* frames per render frame */
 
 /* Route extrusion heights */
-#define ROUTE_BASE_Y  0.03f   /* same as RAISE_BASE in render.c */
-#define ROUTE_TOP_Y   0.06f   /* RAISE_BASE + EXTRUDE_H */
+#define ROUTE_BASE_Y  CR_STYLE_ROUTE_BASE_Y
+#define ROUTE_TOP_Y   CR_STYLE_ROUTE_TOP_Y
 
 /* Cached route mesh -- rebuilt only on maneuver state change */
 static route_path_t g_route_path;
@@ -125,8 +126,12 @@ void maneuver_set_scene_provider(const maneuver_scene_provider_t *provider) {
     else memset(&g_scene_provider,0,sizeof(g_scene_provider));
     render_invalidate_masks();
 }
+static int scene_supplied(const maneuver_state_t *state) {
+    return g_scene_provider.build_route && (!g_scene_provider.handles ||
+        g_scene_provider.handles(g_scene_provider.context,state));
+}
 static void build_scene_route(const maneuver_state_t *state,route_path_t *path) {
-    if(g_scene_provider.build_route)g_scene_provider.build_route(g_scene_provider.context,state,path);
+    if(scene_supplied(state))g_scene_provider.build_route(g_scene_provider.context,state,path);
     else maneuver_build_route(state,path);
 }
 static float route_base_y(void) { return g_scene_provider.build_route?g_scene_provider.route_base_y:ROUTE_BASE_Y; }
@@ -770,8 +775,7 @@ static void update_combined_camera(void) {
  * Roundabout: |exit_angle|>150 means exit stub near entry stub.
  * Turn: |exit_angle|>150 means near-U-turn. */
 #define ELEV_LIFT 0.06f
-static float maneuver_elevation(const maneuver_state_t *s) {
-    if(g_scene_provider.build_route)return 0.0f;
+float maneuver_builtin_elevation(const maneuver_state_t *s) {
     if (!s) return 0.0f;
     switch (s->icon) {
     case ICON_ROUNDABOUT: {
@@ -789,6 +793,10 @@ static float maneuver_elevation(const maneuver_state_t *s) {
     default:
         return 0.0f;
     }
+}
+
+static float maneuver_elevation(const maneuver_state_t *s) {
+    return scene_supplied(s)?0.0f:maneuver_builtin_elevation(s);
 }
 
 void maneuver_prepare_frame(const maneuver_state_t *s, const maneuver_state_t *next_state) {
@@ -952,9 +960,15 @@ static void draw_fading_road(float x0, float y0, float x1, float y1,
         if (alpha < 0.01f) break;
 
         if (mode == FADE_OUTLINE) {
-            /* Full-width white outline -- fill will overwrite interior */
-            render_thick_line(sx, sy, ex, ey,
-                              OL_T, 1.0f, 1.0f, 1.0f, alpha);
+            /* Thin curbs only: translucent asphalt must never reveal a
+             * full-width white backing during the fade. */
+            float nx = -dy / len, ny = dx / len;
+            float offset = (SIDE_T + OL_W) * .5f;
+            for (int side = -1; side <= 1; side += 2) {
+                float ox = nx * offset * side, oy = ny * offset * side;
+                render_thick_line(sx + ox, sy + oy, ex + ox, ey + oy, OL_W,
+                                  CR_STYLE_SHOULDER_R, CR_STYLE_SHOULDER_G, CR_STYLE_SHOULDER_B, alpha);
+            }
         } else {
             /* Grey center fill -- overwrites outline interior (painter's algorithm) */
             render_thick_line(sx, sy, ex, ey,
@@ -1432,13 +1446,13 @@ void maneuver_get_transition_mask_bounds(float *out_abs_x, float *out_abs_y) {
  * Entry: how far road mask extends below SHAFT_BOT. */
 static float maneuver_exit_road_reach(const maneuver_state_t *state) {
     (void)state;
-    if(g_scene_provider.build_route)return g_scene_provider.exit_road_reach;
+    if(scene_supplied(state))return g_scene_provider.exit_road_reach;
     return (ROAD_LEN - BLUE_LEN) + FADE_LEN;  /* 0.05 + 0.30 = 0.35 */
 }
 
 static float maneuver_entry_road_reach(const maneuver_state_t *state) {
     (void)state;
-    if(g_scene_provider.build_route)return g_scene_provider.entry_road_reach;
+    if(scene_supplied(state))return g_scene_provider.entry_road_reach;
     return FADE_LEN;  /* 0.30 */
 }
 
@@ -1472,7 +1486,7 @@ static void compute_combined_transform(const maneuver_state_t *cur_state,
     /* Part A: enforce minimum separation between junction centers.
      * Project center-to-center onto exit heading; if too small, push out. */
     {
-        cur_exit = g_scene_provider.build_route?cur_end:maneuver_get_exit(cur_state);
+        cur_exit = scene_supplied(cur_state)?cur_end:maneuver_get_exit(cur_state);
         float hdx = cosf(cur_exit.heading);
         float hdy = sinf(cur_exit.heading);
         float proj = tx * hdx + ty * hdy;
@@ -2299,7 +2313,7 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
 
     /* Dispatch mask + route rendering for a state */
     #define DISPATCH_DRAW(st) do { \
-        if(g_scene_provider.paint_masks)draw_supplied_scene((st),0,0,1,0); \
+        if(scene_supplied(st))draw_supplied_scene((st),0,0,1,0); \
         else switch ((st)->icon) { \
             case ICON_APPROACH: draw_approach((st)->junction_angles, (st)->junction_angle_count); break; \
             case ICON_TURN: draw_turn((float)(st)->exit_angle, (st)->junction_angles, (st)->junction_angle_count); break; \
@@ -2473,7 +2487,7 @@ void maneuver_draw(const maneuver_state_t *s, const maneuver_state_t *next_state
              * Save combined route path — DISPATCH_DRAW overwrites g_route_path. */
             g_saved_path = g_route_path;
             g_masks_only_mode = 1;
-            if(g_scene_provider.paint_masks)draw_supplied_scene(next_state,tx,ty,cos_r,sin_r);
+            if(scene_supplied(next_state))draw_supplied_scene(next_state,tx,ty,cos_r,sin_r);
             else {
                 render_push_mask_transform(tx, ty, cos_r, sin_r);
                 DISPATCH_DRAW(next_state);

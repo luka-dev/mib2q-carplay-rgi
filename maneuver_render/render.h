@@ -11,6 +11,10 @@
 #include <stdint.h>
 #include "route_progress.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef enum {
     RENDER_MAT_GENERIC_SOLID = 0,
     RENDER_MAT_ROAD_ASPHALT,
@@ -86,6 +90,9 @@ void render_set_light_rotation(float angle_rad);
 void render_sync_camera(void);
 /* Snapshot of the current projection for source-pixel framing diagnostics. */
 void render_get_camera_matrix(float out[16]);
+/* Pure settled projection for scene compilation; does not move the live camera. */
+void render_get_layout_matrix(float out[16]);
+void render_build_layout_matrix(float out[16],float aspect);
 void render_get_camera_pose(float *x,float *y,float *rotation);
 
 /* Select the shading preset used by subsequent 3D geometry draws. */
@@ -192,5 +199,9 @@ void vb_quad(float x0, float y0, float z0,
              float x3, float y3, float z3,
              float nx, float ny, float nz);
 void vb_flush(float r, float g, float b, float a);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* CR_RENDER_H */

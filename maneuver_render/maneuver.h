@@ -16,6 +16,10 @@
 
 #include "route_path.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Renderer icon types */
 #define ICON_NONE        0   /* no icon / not set */
 #define ICON_APPROACH    1   /* approach junction; junction_angles = side streets */
@@ -54,6 +58,7 @@ maneuver_exit_t maneuver_get_exit(const maneuver_state_t *state);
 /* Build route path segments for a maneuver (no extend/densify/extrude).
  * Used for path chaining during transitions. */
 void maneuver_build_route(const maneuver_state_t *state, route_path_t *path);
+float maneuver_builtin_elevation(const maneuver_state_t *state);
 /* Optional prebuilt scene source, using the SAME route/camera transition engine.
  * Paths and masks must share coordinates with settled camera at (0,0).
  * paint_masks draws only road/route masks, with the supplied rigid transform.
@@ -65,6 +70,9 @@ typedef struct {
                         float tx,float ty,float cos_r,float sin_r);
     float route_base_y,route_top_y;
     float entry_road_reach,exit_road_reach;
+    /* Optional per-state routing. A declined scene uses the full built-in
+     * family, including side roads, roundabouts, arrival flag and elevation. */
+    int (*handles)(void *context,const maneuver_state_t *state);
 } maneuver_scene_provider_t;
 void maneuver_set_scene_provider(const maneuver_scene_provider_t *provider);
 /* Conservative world-space bounds needed to render any two-maneuver transition masks. */
@@ -95,5 +103,9 @@ int  maneuver_is_debug(void);         /* 1 if debug overlay active */
 
 /* Get human-readable name for an icon type (for debug overlay). */
 const char *maneuver_icon_name(int icon);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* CR_MANEUVER_H */

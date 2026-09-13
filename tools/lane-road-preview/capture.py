@@ -27,6 +27,21 @@ TITLES = [
     ('Защита: неполный список', 'обычный манёвр · нет подтверждения полного набора'),
     ('Защита: пропуск позиции', 'обычный манёвр · не придумываем отсутствующую полосу'),
     ('Защита: другой манёвр', 'стрелка берётся из манёвра · противоречивые полосы не привязываем'),
+    ('Без полос: прямо', 'обычный манёвр — полноценный режим'),
+    ('Без полос: поворот и боковые дороги', 'ветви независимого манёвра сохраняются'),
+    ('Без полос: резкий левый', 'исходная форма и подъём на пересечении'),
+    ('Без полос: резкий правый', 'исходная форма и подъём на пересечении'),
+    ('Без полос: разворот налево', 'полная геометрия обычного манёвра'),
+    ('Без полос: разворот направо', 'полная геометрия обычного манёвра'),
+    ('Без полос: круг RHT', 'полный круг и боковые дороги'),
+    ('Без полос: круг LHT', 'полный круг и боковые дороги'),
+    ('Без полос: съезд', 'продолжение основной дороги'),
+    ('Без полос: слияние', 'исходное семейство манёвра'),
+    ('Без полос: смена полосы', 'без выдуманной многополосной дороги'),
+    ('Без полос: прибытие', 'кольцо и флаг назначения'),
+    ('Без полос: выезд с круга', 'исходное семейство манёвра'),
+    ('Нет манёвра', 'очистка содержимого'),
+    ('Без полос: плавный правый', 'тот же стиль, без дорожной разметки'),
 ]
 
 def main():
@@ -92,10 +107,27 @@ def main():
         native.paste(im.resize((328,181),Image.Resampling.LANCZOS),(nx,ny+25))
     fd.text((20,886),'Красная рамка: (59,27) 210×153 внутри исходного 328×181. Ширина стрелки и FOV сохранены.',font=body_font,fill='#9bacbb')
     framed.save(OUT/'framing.png');native.save(OUT/'native-size.png')
-    # Same visible lanes/camera/glyphs, different total lane count. The omitted
-    # adjacent continuation lane is identical. Fixed progress must be repeatable.
-    a=Image.open(OUT/'00-crop.png');b=Image.open(OUT/'03-crop.png')
-    assert ImageChops.difference(a,b).getbbox() is None, 'Equivalent scenes changed across captures'
+    def scene_interior(im):
+        scale = im.width / 328
+        return im.crop(tuple(round(v * scale) for v in (67,35,261,172)))
+    # More physical lanes may appear near the distant external edge now. The
+    # primary composition and common context inside the safe crop stay equal.
+    a=scene_interior(Image.open(OUT/'00-crop-source.png'))
+    b=scene_interior(Image.open(OUT/'03-crop-source.png'))
+    assert ImageChops.difference(a,b).getbbox() is None, 'Common lane composition changed'
+    # Both stages render the SAME complete source frame, including pavement
+    # outside the small crop. Ignore only the diagnostic red-frame strokes and their FXAA footprint.
+    for c in (0,1,2,3,4,5,7,8,9,10,11,12):
+        a=Image.open(OUT/f'{c:02d}-crop-source.png')
+        b=Image.open(OUT/f'{c:02d}-wide-source.png')
+        diff=ImageChops.difference(a,b)
+        scale=a.width/328
+        dd=ImageDraw.Draw(diff)
+        for box in ((55,23,63,181),(265,23,273,181),(55,23,273,31),
+                    (55,176,273,181),(0,0,328,3),(0,177,328,181),
+                    (0,0,3,181),(325,0,328,181)):
+            dd.rectangle(tuple(round(v*scale) for v in box), fill=0)
+        assert diff.getbbox() is None, f'Case {c}: source road paint changed with crop'
     frame_results=[]
     for line in (OUT/'capture.log').read_text().splitlines():
         if line.startswith('FRAME '):
@@ -136,7 +168,7 @@ def main():
     assert len(alpha)==2*len(TITLES)
     assert all(a['invalid_pixels']==0 and a['max_excess']<=2 for a in alpha), alpha
     safety=[]
-    expected_reasons={6:3,13:7,14:7,15:1,16:2,17:5}
+    expected_reasons={6:3,13:7,14:7,15:1,16:2,17:5,**{c:1 for c in range(18,len(TITLES))}}
     for line in (OUT/'capture.log').read_text().splitlines():
         if line.startswith('SAFETY '):
             t=line.split();entry=dict(case=int(t[1]),area=t[2],reason=int(t[4]))
@@ -170,7 +202,7 @@ def main():
     # native light settles; both endpoints must exactly match settled scenes.
     transition_dir=OUT/'transition';transition_dir.mkdir(exist_ok=True)
     transitions=[]
-    for current,nxt in ((1,2),(3,11),(5,13)):
+    for current,nxt in ((1,2),(3,11),(5,13),(3,19),(19,3),(19,24),(9,10)):
         for ppm in transition_dir.glob('*.ppm'):ppm.unlink()
         with (transition_dir/'capture.log').open('w') as log, (transition_dir/'renderer.log').open('w') as errors:
             subprocess.run([str(binary),'--capture-transition',str(transition_dir),str(current),str(nxt)],
@@ -190,6 +222,9 @@ def main():
         for line in (transition_dir/'capture.log').read_text().splitlines():
             if line.startswith('TRAVEL '):
                 t=line.split();travel.append(dict(frame=int(t[1]),x=float(t[3]),y=float(t[4]),rotation=float(t[6]),phase=int(t[8]),fill=float(t[10]),handoff=int(t[12])))
+        cache=[tuple(sorted(map(int,line.split()[3:5])))
+               for line in (transition_dir/'capture.log').read_text().splitlines() if line.startswith('CACHE ')]
+        assert len(cache)==len(moving) and len(set(cache[1:]))==1, 'Scene rebuilt during camera animation'
         assert len(travel)==len(moving)
         distance=max((f['x']**2+f['y']**2)**.5 for f in travel)
         rotation=max(abs(f['rotation']) for f in travel)
@@ -203,7 +238,7 @@ def main():
         assert all(b>=a for a,b in zip(arriving,arriving[1:])), 'New fill did not grow continuously'
         assert arriving[-1]==travel[0]['fill']==.75
         transitions.append(dict(current=current,next=nxt,frames=len(moving),engine='native joined-route',
-                                exact_endpoints=True,endpoint_error=endpoint_error,valid_rgba=True,
+                                exact_endpoints=True,endpoint_error=endpoint_error,valid_rgba=True,scene_rebuilt_during_animation=False,
                                 progress_handoff='retreat to zero, hold through push, refill on commit',
                                 max_camera_travel=distance,max_rotation=rotation))
         if current==1:
@@ -216,7 +251,8 @@ def main():
         for ppm in transition_dir.glob('*.ppm'):ppm.unlink()
     manifest=dict(scope='Standalone visual spike; synthetic lane states; real existing renderer shaders/mesh; no live iOS/HUD deployment',
                   binary_sha256=hashlib.sha256(binary.read_bytes()).hexdigest(),
-                  baseline='3f87f64256e79994555c9569aebebb044d8c5952',captures=captures,
+                  baseline='d15e6bf',scene_engine='C++11 cached scene compiler with C ABI',
+                  style='shared new road profile, neutral #646464 asphalt',captures=captures,
                   source_size=[328,181],framebuffer_size=[656,362],fov_degrees=40,arrow_width=.14,
                   framing=frame_results,exits=exits,projected_heads=heads,window_alpha=alpha,safety=safety,glyphs=glyphs,
                   transitions=transitions)

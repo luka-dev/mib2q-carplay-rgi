@@ -1,4 +1,4 @@
-#include "lane_layout.h"
+#include "../../maneuver_render/scene/lane_model.h"
 #include <assert.h>
 #include <stdio.h>
 int main(void) {
