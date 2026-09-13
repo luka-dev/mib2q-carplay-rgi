@@ -639,11 +639,21 @@ public class RendererServer {
 
     /**
      * Non-blocking send.  Returns false if no current connection or
-     * write failed — BAPBridge uses the bool for crash-recovery counter
-     * (3 consecutive false returns trigger a renderer respawn).
+     * queue is full. Accepted maneuvers remain queued until written or the
+     * connection is lost, which wakes the shared RGI snapshot replay.
      */
     private boolean sendPacket(byte[] pkt) {
         return sendPacket(pkt, false);
+    }
+
+    /** writeLock held. Preserve the order of every retained command. */
+    private void removePendingWrite(int offset) {
+        for (int i = offset; i + 1 < writeCount; i++)
+            writeQueue[(writeHead + i) % WRITE_QUEUE_CAPACITY] =
+                writeQueue[(writeHead + i + 1) % WRITE_QUEUE_CAPACITY];
+        writeTail = (writeTail + WRITE_QUEUE_CAPACITY - 1) % WRITE_QUEUE_CAPACITY;
+        writeQueue[writeTail] = null;
+        writeCount--;
     }
 
     private boolean sendPacket(byte[] pkt, boolean beginClear) {
@@ -662,33 +672,36 @@ public class RendererServer {
                     for (int n = 0; n < writeCount; n++) {
                         if (writeQueue[(writeHead + n) % WRITE_QUEUE_CAPACITY].packet[0] != pkt[0])
                             continue;
-                        for (int i = n; i + 1 < writeCount; i++)
-                            writeQueue[(writeHead + i) % WRITE_QUEUE_CAPACITY] =
-                                writeQueue[(writeHead + i + 1) % WRITE_QUEUE_CAPACITY];
-                        writeTail = (writeTail + WRITE_QUEUE_CAPACITY - 1) % WRITE_QUEUE_CAPACITY;
-                        writeQueue[writeTail] = null;
-                        writeCount--;
+                        removePendingWrite(n);
                         break;
                     }
                 }
-                if (writeCount == WRITE_QUEUE_CAPACITY) {
-                    /* Ordinary state can be resent; CLEAR is an ordered barrier.
-                     * Losing it can leave Java waiting for an ACK/new first-frame
-                     * event which the renderer will never send. Keep all barriers
-                     * plus cached viewport/lane snapshots, and discard the oldest ordinary command, preserving order. */
-                    int drop = 0;
-                    while (drop < writeCount && (writeQueue[(writeHead + drop)
-                            % WRITE_QUEUE_CAPACITY].clear || writeQueue[(writeHead + drop)
-                            % WRITE_QUEUE_CAPACITY].packet[0] == CMD_VISIBLE_AREA || writeQueue[(writeHead + drop)
-                            % WRITE_QUEUE_CAPACITY].packet[0] == CMD_LANES_BEGIN)) ++drop;
-                    if (drop == writeCount) return false;
-                    for (int i = drop; i + 1 < writeCount; ++i) {
-                        writeQueue[(writeHead + i) % WRITE_QUEUE_CAPACITY] =
-                            writeQueue[(writeHead + i + 1) % WRITE_QUEUE_CAPACITY];
+                if (pkt[0] == CMD_PROGRESS) {
+                    // Only replace progress belonging to this maneuver. A new
+                    // maneuver embeds its own initial progress; CLEAR is a barrier.
+                    for (int n = writeCount - 1; n >= 0; n--) {
+                        byte command = writeQueue[(writeHead + n) % WRITE_QUEUE_CAPACITY].packet[0];
+                        if (command == CMD_MANEUVER || command == CMD_CLEAR) break;
+                        if (command == CMD_PROGRESS) {
+                            removePendingWrite(n);
+                            break;
+                        }
                     }
-                    writeTail = (writeTail + WRITE_QUEUE_CAPACITY - 1) % WRITE_QUEUE_CAPACITY;
-                    writeQueue[writeTail] = null;
-                    writeCount--;
+                }
+                if (writeCount == WRITE_QUEUE_CAPACITY) {
+                    /* Never discard an accepted maneuver: BAPBridge has already
+                     * cached its identity and cannot detect such a loss. Only
+                     * obsolete progress can yield space; otherwise report backpressure. */
+                    int drop = -1;
+                    boolean superseded = pkt[0] == CMD_MANEUVER
+                        || pkt[0] == CMD_CLEAR || pkt[0] == CMD_PROGRESS;
+                    for (int n = writeCount - 1; n >= 0; n--) {
+                        byte command = writeQueue[(writeHead + n) % WRITE_QUEUE_CAPACITY].packet[0];
+                        if (command == CMD_PROGRESS && superseded) drop = n;
+                        if (command == CMD_MANEUVER || command == CMD_CLEAR) superseded = true;
+                    }
+                    if (drop < 0) return false;
+                    removePendingWrite(drop);
                 }
                 if (beginClear) {
                     frameReady = false;

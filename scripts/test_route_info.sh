@@ -24,6 +24,7 @@ CLASSPATH="$PATCH_JAR:$STOCK_JAR:$TOOLS_DIR/libs/org.osgi.framework-1.10.0.jar:$
     "$PROJECT_DIR/tests/RendererViewportTest.java" \
     "$PROJECT_DIR/tests/LaneGuidanceTransportTest.java" \
     "$PROJECT_DIR/tests/LaneGuidanceLifecycleTest.java" \
+    "$PROJECT_DIR/tests/RgiDeliveryRecoveryTest.java" \
     "$PROJECT_DIR/tests/RendererMapperDirectionTest.java"
 "$JDK_DIR/bin/java" -cp "$TEST_DIR:$CLASSPATH" RouteInfoPresentationTest
 "$JDK_DIR/bin/java" -cp "$TEST_DIR:$CLASSPATH" RendererMapperDirectionTest
@@ -38,3 +39,5 @@ CLASSPATH="$PATCH_JAR:$STOCK_JAR:$TOOLS_DIR/libs/org.osgi.framework-1.10.0.jar:$
 
 "$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.LaneGuidanceTransportTest "$PROJECT_DIR/build/lane-guidance-wire.bin"
 "$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.LaneGuidanceLifecycleTest
+"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.RgiDeliveryRecoveryTest
+python3 "$PROJECT_DIR/tests/test_rgd_native_contract.py"

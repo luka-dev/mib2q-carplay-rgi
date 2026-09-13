@@ -1,0 +1,40 @@
+{
+  "reference": "output/maneuver-parity/java_mapping.csv",
+  "reference_period": "accepted post-b71ecb9 HUD/renderer icon policy",
+  "current_head": "dda63e4",
+  "rows": 7890,
+  "compared_columns": [
+    "bap_main",
+    "bap_direction",
+    "bap_z",
+    "bap_sidestreets",
+    "stock_sidestreets",
+    "stock_fct23_hex"
+  ],
+  "changed_rows": 0,
+  "differences": [],
+  "fresh_07e980d_bridge_comparison": {
+    "rows": 7890,
+    "changed_rows": 0,
+    "shared_helpers": "ManeuverMapper and SideStreets unchanged since b71ecb9; current stock adapter/State/wire classes used in both runs"
+  },
+  "lane_comparison_07e980d": {
+    "cases": 1083,
+    "range_degrees": [
+      -180,
+      180
+    ],
+    "statuses": [
+      0,
+      1,
+      2
+    ],
+    "extra_directions": [
+      0,
+      45,
+      90
+    ],
+    "changed_rows": 0,
+    "scope": "complete valid records, pre-serialization CombiBAPNaviLaneGuidanceData"
+  }
+}

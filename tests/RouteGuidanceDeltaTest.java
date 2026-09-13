@@ -48,6 +48,34 @@ public final class RouteGuidanceDeltaTest {
         feed(parse,rg,"lg3_index:n:42\nlg3_lane_count:n:2\nlg3_lane_complete:n:1\n");
         check(state.lgLaneComplete[3]==1,"native completeness bit lost");
         feed(parse,rg,"lg3_lane_complete:n:0\n");check(state.lgLaneComplete[3]==0,"truncation flag stale");
-        System.out.println("RouteGuidanceDeltaTest: metadata, transient zero, reroute, empty list, source clear/resume and malformed list PASS");
+        feed(parse,rg,"source_supports_rg:n:1\nroute_state:n:1\nmaneuver_count:n:1\nmaneuver_list:s:0\n"
+            +"m0_ver:n:20\nm0_type:n:1\nm0_turn_angle:n:-90\nm0_junction_angles:s:-90,0,90\n"
+            +"m0_distance:n:6000\nm0_name:s:Old instruction\nm0_after_road:s:Old road\n"
+            +"m0_lane_count:n:1\nm0_lane_directions:s:-90\nm0_lane_status:s:2\n");
+        check(state.mJunctionAngles[0].length==3 && state.mDistance[0]==6000
+            && "Old road".equals(state.mAfterRoad[0]),"slot fixture");
+        state.clearDirty();
+        feed(parse,rg,"m0_ver:n:20\nm0_exit_angle:n:-45\n");
+        check(state.mJunctionAngles[0].length==3 && state.mName[0]!=null,"same-slot delta discarded omitted fields");
+        feed(parse,rg,"m0_ver:n:21\nm0_type:n:2\nm0_exit_angle:n:90\n");
+        check(state.mTurnAngle[0]==90 && state.mTurnAnglePresent[0],"new slot lost supplied angle");
+        check(state.mJunctionAngles[0]==null && state.mAfterRoad[0]==null && state.mName[0]==null
+            && state.mDistance[0]==-1 && state.mLaneCount[0]==-1 && state.mLaneDirections[0]==null,
+            "new slot inherited omitted roads, text, distance or maneuver-local lanes");
+        check(state.lgIndex[3]==42 && state.lgLaneCount[3]==2,"maneuver reassignment cleared independent lane event");
+        feed(parse,rg,"m0_ver:n:22\nm0_type:n:2\nm0_exit_angle:n:1000\n");
+        check(state.mExitAngle[0]==1000,"CarPlay positive safety sentinel lost");
+        feed(parse,rg,"m0_exit_angle:n:-1000\n");
+        check(state.mExitAngle[0]==-1000,"CarPlay negative safety sentinel lost");
+        feed(parse,rg,"route_generation:n:100\nroute_state:n:1\nmaneuver_state:n:3\nmaneuver_count:n:1\nmaneuver_list:s:0\n"
+            +"m0_ver:n:2\nm0_type:n:1\nm0_exit_angle:n:-90\nm0_after_road:s:Old route road\n"
+            +"lg3_index:n:73\nlg3_lane_count:n:1\nlane_guidance_showing:n:1\nlane_guidance_slot:n:3\n");
+        state.clearDirty();
+        feed(parse,rg,"route_generation:n:101\nroute_state:n:1\nmaneuver_count:n:1\nmaneuver_list:s:0\n"
+            +"m0_ver:n:2\nm0_type:n:1\nm0_exit_angle:n:-90\n");
+        check(state.maneuverState==-1 && state.mAfterRoad[0]==null && state.lgIndex[3]==-1 && state.laneGuidanceShowing==-1,
+            "new route reused old slot version and inherited route/lane data");
+        check(state.dirtyMask!=0 && state.mVer[0]==2 && state.routeGeneration==101,"new generation failed to publish");
+        System.out.println("RouteGuidanceDeltaTest: delta retention, route lifecycle, slot reuse, generation reset, independent lanes and +/-1000 sentinels PASS");
     }
 }

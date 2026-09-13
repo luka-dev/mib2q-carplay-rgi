@@ -61,7 +61,7 @@ public final class RendererServerTransportTest {
         set(server, "sock", fake); set(server, "out", bytes);
         check(server.sendClear(), "queued CLEAR");
         for (int i = 0; i < 32; ++i) check(server.sendProgress(i % 17,1,RendererServer.PROGRESS_FILL), "queue fill");
-        check(((Integer)get(server, "writeCount")).intValue() == 32, "queue limit");
+        check(((Integer)get(server, "writeCount")).intValue() == 2, "coalesced progress after CLEAR");
         check(((Integer)get(server, "pendingClears")).intValue() == 1, "overflow lost CLEAR barrier");
         Object first = ((Object[])get(server, "writeQueue"))[((Integer)get(server, "writeHead")).intValue()];
         Field packet = first.getClass().getDeclaredField("packet"); packet.setAccessible(true);
@@ -69,12 +69,40 @@ public final class RendererServerTransportTest {
         event(server, fake, 0x82); check(!server.isFrameReady(), "overflow released CLEAR gate");
         Method oldWriter = RendererServer.class.getDeclaredMethod("writerLoop", Integer.TYPE);
         oldWriter.setAccessible(true); oldWriter.invoke(server, Integer.valueOf(1));
-        check(((Integer)get(server, "writeCount")).intValue() == 32 && bytes.size() == 0, "old writer consumed new queue");
+        check(((Integer)get(server, "writeCount")).intValue() == 2 && bytes.size() == 0, "old writer consumed new queue");
         // Replace every ordinary queued command with a CLEAR. With no droppable
         // command left, report backpressure without inventing another pending ACK.
         for (int i = 0; i < 31; ++i) check(server.sendClear(), "fill remaining barriers");
         check(!server.sendClear() && !server.sendProgress(1,1,RendererServer.PROGRESS_FILL), "barrier-only queue accepted overflow");
         check(((Integer)get(server, "pendingClears")).intValue() == 32, "rejected command changed ACK count");
+        server.dispose();
+    }
+    private static void maneuverQueue() throws Exception {
+        RendererServer server = new RendererServer(0);
+        set(server,"running",Boolean.TRUE);set(server,"sock",new Socket());
+        set(server,"out",new ByteArrayOutputStream());
+        check(server.sendManeuver(3,-1,-90,0,null,0,0,1),"old maneuver");
+        for(int i=0;i<80;i++)check(server.sendProgress(i%17,1,RendererServer.PROGRESS_FILL),"old progress");
+        check(server.sendClear(),"transition CLEAR");
+        check(server.sendManeuver(3,1,90,0,null,0,0,1),"new maneuver");
+        for(int i=0;i<80;i++)check(server.sendProgress(i%17,1,RendererServer.PROGRESS_FILL),"new progress");
+        Object[] q=(Object[])get(server,"writeQueue");int head=((Integer)get(server,"writeHead")).intValue();
+        check(((Integer)get(server,"writeCount")).intValue()==5,"progress crossed maneuver/CLEAR boundary");
+        int[] expected={1,6,7,1,6};
+        for(int i=0;i<expected.length;i++) {
+            Field f=q[(head+i)%q.length].getClass().getDeclaredField("packet");f.setAccessible(true);
+            byte[] packet=(byte[])f.get(q[(head+i)%q.length]);
+            check(packet[0]==expected[i],"accepted maneuver/order lost under progress pressure");
+            if(packet[0]==6)check((packet[2]&255)==79%17,"latest progress lost");
+        }
+        Method clear=RendererServer.class.getDeclaredMethod("clearWriteQueue");clear.setAccessible(true);clear.invoke(server);
+        for(int i=0;i<31;i++)check(server.sendManeuver(3,1,90,0,null,0,0,1),"critical queue fill");
+        check(server.sendProgress(9,1,RendererServer.PROGRESS_FILL),"latest state at queue end");
+        check(!server.sendVisibleArea(59,27,210,153),"viewport dropped current progress");
+        check(server.sendManeuver(3,-1,-90,0,null,0,0,1),"new maneuver can supersede old progress");
+        check(!server.sendManeuver(3,1,90,0,null,0,0,1),"full maneuver queue must backpressure");
+        check(!server.sendProgress(9,1,RendererServer.PROGRESS_FILL),"progress evicted accepted maneuver");
+        check(((Integer)get(server,"writeCount")).intValue()==32,"bounded critical queue");
         server.dispose();
     }
     private static void restart() throws Exception {
@@ -117,7 +145,7 @@ public final class RendererServerTransportTest {
         server.dispose();
     }
     public static void main(String[] args) throws Exception {
-        Log.setLevel(-1); multipleClears(); queueOverflow(); laneQueue(); restart();
+        Log.setLevel(-1); multipleClears(); queueOverflow(); maneuverQueue(); laneQueue(); restart();
         System.out.println("RendererServerTransportTest: CLEAR ACK ordering, queue overflow, atomic lane hide/reappear under progress pressure, 48-byte wire, stale writer and 30 restarts PASS");
     }
 }

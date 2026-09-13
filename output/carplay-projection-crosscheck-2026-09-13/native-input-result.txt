@@ -1,0 +1,3 @@
+ACTUAL C -> JAVA, missing angle: angle=1000, exit=1000, HUD roads=[]
+ACTUAL C -> JAVA, known new angle: angle=90, inherited roads=[-90, 0, 90], road=Old road, step=6000
+ACTUAL JAVA -> BAP, same new input: reused-slot sideStreets=[64, 0], fresh-slot sideStreets=[]

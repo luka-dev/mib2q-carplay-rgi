@@ -129,6 +129,7 @@ public class RouteGuidance implements CarplayBus.Listener {
 
         /* Route */
         public int routeState = -1;
+        public long routeGeneration = -1L;
         public int maneuverState = -1;
         public int maneuverCount = 0;
         public int[] maneuverOrder = null;
@@ -148,6 +149,7 @@ public class RouteGuidance implements CarplayBus.Listener {
         /* Time */
         public int etaSeconds = -1;
         public long timeRemainingSeconds = -1;
+        public long timeRemainingSampleSeconds = -1L;
 
         /* Roads */
         public String currentRoad = null;
@@ -212,6 +214,7 @@ public class RouteGuidance implements CarplayBus.Listener {
 
         public void reset() {
             routeState = -1;
+            routeGeneration = -1L;
             maneuverState = -1;
             maneuverCount = 0;
             maneuverOrder = null;
@@ -219,6 +222,7 @@ public class RouteGuidance implements CarplayBus.Listener {
             distManeuverM = -1;
             etaSeconds = -1;
             timeRemainingSeconds = -1;
+            timeRemainingSampleSeconds = -1L;
             currentRoad = null;
             destination = null;
             disconnectReason = null;
@@ -238,26 +242,7 @@ public class RouteGuidance implements CarplayBus.Listener {
          * hard-clear path in parse(). */
         public void clearAllManeuverSlots() {
             for (int i = 0; i < MAX_MANEUVERS; i++) {
-                mType[i] = -1;
-                mTurnAngle[i] = -1;
-                mTurnAnglePresent[i] = false;
-                mZLevel[i] = -1;
-                mJunctionType[i] = -1;
-                mDrivingSide[i] = -1;
-                mDistance[i] = -1;
-                mName[i] = null;
-                mAfterRoad[i] = null;
-                mExitInfo[i] = null;
-                mJunctionAngles[i] = null;
-                mExitAngle[i] = 1000;
-                mVer[i] = -1;
-                mLinkedLaneGuidanceIndex[i] = -1;
-                mLinkedLaneGuidanceSlot[i] = -1;
-                mLanePositions[i] = null;
-                mLaneCount[i] = -1;
-                mLaneDirections[i] = null;
-                mLaneStatus[i] = null;
-                mLaneAngles[i] = null;
+                clearManeuverSlot(i);
                 lgIndex[i] = -1;
                 lgLanePositions[i] = null;
                 lgLaneCount[i] = -1;
@@ -266,6 +251,30 @@ public class RouteGuidance implements CarplayBus.Listener {
                 lgLaneStatus[i] = null;
                 lgLaneAngles[i] = null;
             }
+        }
+
+        /** Reset a reassigned maneuver without touching independent lane events. */
+        public void clearManeuverSlot(int i) {
+            mType[i] = -1;
+            mTurnAngle[i] = -1;
+            mTurnAnglePresent[i] = false;
+            mZLevel[i] = -1;
+            mJunctionType[i] = -1;
+            mDrivingSide[i] = -1;
+            mDistance[i] = -1;
+            mName[i] = null;
+            mAfterRoad[i] = null;
+            mExitInfo[i] = null;
+            mJunctionAngles[i] = null;
+            mExitAngle[i] = 1000;
+            mVer[i] = -1;
+            mLinkedLaneGuidanceIndex[i] = -1;
+            mLinkedLaneGuidanceSlot[i] = -1;
+            mLanePositions[i] = null;
+            mLaneCount[i] = -1;
+            mLaneDirections[i] = null;
+            mLaneStatus[i] = null;
+            mLaneAngles[i] = null;
         }
 
         public void clearDirty() {
@@ -566,8 +575,8 @@ public class RouteGuidance implements CarplayBus.Listener {
                 }
                 com.luka.carplay.core.AltScreenModule.setNavActive(confirmed);
             }
-            state.clearDirty();
-            if (!confirmed) requestPresentationCheck("presentation-not-ready");
+            if (updatePublished) state.clearDirty();
+            if (!confirmed || !updatePublished) requestPresentationCheck("presentation-update-pending");
         }
     }
 
@@ -650,10 +659,13 @@ public class RouteGuidance implements CarplayBus.Listener {
             if (retry || retryViewport) {
                 synchronized (presentationLock) {
                     if (!running || generation != presentationGeneration) return;
-                    if (!presentationWake) {
-                        try { presentationLock.wait(PRESENTATION_RETRY_MS); }
-                        catch (InterruptedException e) { Thread.currentThread().interrupt(); return; }
-                    }
+                    // Coalesce notifications raised by this failed replay. A
+                    // fresh external notification may still wake this bounded wait.
+                    presentationDrivePending |= retry;
+                    rendererViewportRefreshPending |= retryViewport;
+                    presentationWake = false;
+                    try { presentationLock.wait(PRESENTATION_RETRY_MS); }
+                    catch (InterruptedException e) { Thread.currentThread().interrupt(); return; }
                     if (running && generation == presentationGeneration) {
                         presentationDrivePending |= retry;
                         rendererViewportRefreshPending |= retryViewport;
@@ -698,14 +710,14 @@ public class RouteGuidance implements CarplayBus.Listener {
          * displayable 98 contains the real current maneuver before context 80 is exposed. */
         state.markAllDirtyForReplay();
         boolean published = bap.update(state);
-        state.clearDirty();
-        boolean confirmed = published && bap.isPresentationReady();
+        if (published) state.clearDirty();
+        boolean confirmed = bap.isPresentationReady() && (presentationConfirmed || published);
         if (confirmed != presentationConfirmed) {
             presentationConfirmed = confirmed;
             com.luka.carplay.core.AltScreenModule.setNavActive(confirmed);
             if (confirmed) Log.i(TAG, "RG presentation CONFIRMED from cached snapshot");
         }
-        return !confirmed;
+        return !confirmed || !published;
     }
 
     /* ============================================================
@@ -713,8 +725,33 @@ public class RouteGuidance implements CarplayBus.Listener {
      * ============================================================ */
 
     private void parse(CarplayBus.Data d) {
-        state.clearDirty();
-
+        // Dirty means pending publication, not just changed in this frame.
+        // Keep failed HUD/renderer updates across subsequent distance-only deltas.
+        if (d.has("route_generation")) {
+            long generation = d.num64("route_generation", -1L);
+            if (generation >= 0L && generation != state.routeGeneration) {
+                // Native resets can be hidden by debounce and reuse every slot
+                // version. Reset content before applying this generation's fields,
+                // retaining route authority until the source updates it below.
+                state.routeGeneration = generation;
+                state.clearAllManeuverSlots();
+                state.maneuverState = -1;
+                state.maneuverOrder = null;
+                state.maneuverCount = 0;
+                state.distManeuverM = -1;
+                state.distDestM = -1;
+                state.etaSeconds = -1;
+                state.timeRemainingSeconds = -1;
+                state.timeRemainingSampleSeconds = -1L;
+                state.currentRoad = null;
+                state.destination = null;
+                state.laneGuidanceShowing = -1;
+                state.laneGuidanceIndex = -1;
+                state.laneGuidanceSlot = -1;
+                state.laneGuidanceTotal = -1;
+                state.markAllDirtyForReplay();
+            }
+        }
         boolean isRouteUpdateDelta =
             d.has("route_state") ||
             d.has("maneuver_state") ||
@@ -944,6 +981,7 @@ public class RouteGuidance implements CarplayBus.Listener {
             long v = d.num64("time_remaining_seconds", -1);
             if (v != state.timeRemainingSeconds) {
                 state.timeRemainingSeconds = v;
+                state.timeRemainingSampleSeconds = v >= 0L ? BAPBridge.getUtcMillis() / 1000L : -1L;
                 state.markDirty(State.DIRTY_TIME_REMAINING);
             }
         }
@@ -1035,6 +1073,16 @@ public class RouteGuidance implements CarplayBus.Listener {
              * (audit #7).  Predicate-only is also future-proof — new keys are gated automatically. */
             if (!canProcessManeuverIndex(i)) {
                 continue;
+            }
+
+            if (d.has(p + "ver")) {
+                int v = d.num(p + "ver", -1);
+                if (v >= 0 && v != state.mVer[i]) {
+                    state.clearManeuverSlot(i);
+                    state.mVer[i] = v;
+                    state.markManeuverDirty(i, State.MAN_DIR_ICON | State.MAN_DIR_TEXT);
+                    state.markDirty(State.DIRTY_LANE_GUIDANCE);
+                }
             }
 
             if (d.has(p + "type")) {
@@ -1135,15 +1183,6 @@ public class RouteGuidance implements CarplayBus.Listener {
                     state.mTurnAngle[i] = v;
                     state.mTurnAnglePresent[i] = true;
                     state.markManeuverDirty(i, State.MAN_DIR_ICON);
-                }
-            }
-            if (d.has(p + "ver")) {
-                int v = d.num(p + "ver", -1);
-                if (v != state.mVer[i]) {
-                    state.mVer[i] = v;
-                    /* Slot was reassigned to a different iOS maneuver.
-                     * Force full icon+text refresh even if type/angles are identical. */
-                    state.markManeuverDirty(i, State.MAN_DIR_ICON | State.MAN_DIR_TEXT);
                 }
             }
             if (d.has(p + "lane_count")) {

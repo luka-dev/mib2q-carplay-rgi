@@ -96,6 +96,7 @@ public class BAPBridge {
      * mVer changes when the C hook reassigns a slot to a new iAP2 index. */
     private int lastFirstManeuverIdx = -1;
     private int lastFirstManeuverVer = -1;
+    private long lastFirstRouteGeneration = -1L;
     /* Call-for-action blink phase: true=100%, false=0% */
     private boolean actionBlinkFull = true;
     private final Object distanceToManeuverLock = new Object();
@@ -342,7 +343,7 @@ public class BAPBridge {
         /* BAP confirmed emitted → push same state to renderer so HUD bar
          * flips at the same moment as VC.  Derive renderer level/mode from
          * the BAP parameters directly — no shared mutable, no race. */
-        if (rendererClient != null && customRendererStarted) {
+        if (rendererClient != null && customRendererStarted && !rendererManeuverPending) {
             try {
                 int crLevel = bargraphOn ? (bargraph * 16) / 100 : 0;
                 if (crLevel > 16) crLevel = 16;
@@ -659,6 +660,7 @@ public class BAPBridge {
             lastDistanceToDestinationM = -1;
             lastFirstManeuverIdx = -1;
             lastFirstManeuverVer = -1;
+            lastFirstRouteGeneration = -1L;
             resetActionBlinkState();
             synchronized (distanceToManeuverLock) {
                 hasLastDistM = false;
@@ -797,6 +799,7 @@ public class BAPBridge {
             infoPhase = 0;
             lastFirstManeuverIdx = -1;
             lastFirstManeuverVer = -1;
+            lastFirstRouteGeneration = -1L;
         } catch (Exception e) {
             Log.e(TAG, "onStop error", e);
         }
@@ -888,9 +891,20 @@ public class BAPBridge {
     public boolean update(RouteGuidance.State s) {
         if (!initialized || s == null) return false;
 
+        int failureSerial = rendererSendFailureSerial;
         int dirty = s.dirtyMask;
         cacheTravelInfo(s, dirty);
         if (dirty == 0) return false;
+        int crIconMask = RouteGuidance.State.DIRTY_MANEUVER_ICON
+            | RouteGuidance.State.DIRTY_MANEUVER_LIST
+            | RouteGuidance.State.DIRTY_MANEUVER_COUNT;
+        if ((dirty & crIconMask) != 0) {
+            synchronized (this) {
+                // Neither this update nor the blink worker may paint the old
+                // arrow with the next maneuver's progress before it is queued.
+                rendererManeuverPending = true;
+            }
+        }
 
         try {
             /*
@@ -947,11 +961,13 @@ public class BAPBridge {
             int currentFirstVer = (firstIdx >= 0 && s.mVer != null
                     && firstIdx < s.mVer.length) ? s.mVer[firstIdx] : -1;
             boolean primaryChanged = (firstIdx != lastFirstManeuverIdx)
-                || (currentFirstVer != lastFirstManeuverVer);
+                || (currentFirstVer != lastFirstManeuverVer)
+                || s.routeGeneration != lastFirstRouteGeneration;
             if (primaryChanged) {
                 inApproachZone = false;
                 lastFirstManeuverIdx = firstIdx;
                 lastFirstManeuverVer = currentFirstVer;
+                lastFirstRouteGeneration = s.routeGeneration;
             }
             boolean hasUsableDistance = (distM > 0);
             /* Treat arrival types as approach state even with distM==0 so their
@@ -1174,17 +1190,9 @@ public class BAPBridge {
             if (!customRendererStarted && csRef != null) startCustomRenderer();
 
             if (rendererClient != null && customRendererStarted) {
-                refreshRendererViewport();
+                if (!refreshRendererViewport()) noteRendererSendResult(false);
                 /* Link-loss → noteRendererSendResult drops the view; the retry above reconnects. */
 
-                /* Approach zone enter/exit changes only the bargraph. */
-                if (approachChanged) {
-                    if (nowApproach) {
-                        updateRendererProgress(s, bargraphDenominatorM);
-                    } else {
-                        noteRendererSendResult(rendererClient.sendProgress(0, 0, RendererServer.PROGRESS_OFF));
-                    }
-                }
                 // Lanes have their own active event and visibility, just as
                 // HUD FctID 24. They never refresh or transition the maneuver.
                 if (lastCrLaneGuidance == null || (dirty & laneRecomputeMask) != 0) {
@@ -1197,22 +1205,22 @@ public class BAPBridge {
                 }
                 /* Check if rendered maneuver actually changed */
                 boolean iconChanged = false;
-                int crIconMask = RouteGuidance.State.DIRTY_MANEUVER_ICON
-                    | RouteGuidance.State.DIRTY_MANEUVER_LIST
-                    | RouteGuidance.State.DIRTY_MANEUVER_COUNT;
                 if ((dirty & crIconMask) != 0) {
                     if (showManeuver && hasManeuverList && !explicitClear && !shouldClearManeuver) {
                         iconChanged = updateRendererIfChanged(s, bargraphDenominatorM);
                     }
                 }
-                /* Distance-only progress (no push), only in approach zone */
-                if (!iconChanged && !approachChanged && inApproachZone
-                        && (dirty & RouteGuidance.State.DIRTY_DIST_MAN) != 0) {
+                /* Maneuver packets carry initial progress. Replays and distance
+                 * deltas reuse the exact last HUD phase after identity is accepted. */
+                if (!iconChanged && (approachChanged || (dirty &
+                        (crIconMask | RouteGuidance.State.DIRTY_DIST_MAN)) != 0)) {
                     updateRendererProgress(s, bargraphDenominatorM);
                 }
             }
 
-            return true;
+            // Enqueue failure is not a successful publication, even when a
+            // later progress/lane command succeeded. Replay one shared snapshot.
+            return rendererSendFailureSerial == failureSerial;
 
         } catch (Exception e) {
             Log.e(TAG, "update error", e);
@@ -1315,8 +1323,12 @@ public class BAPBridge {
             lastEtaSeconds = s.etaSeconds;
         }
         if ((dirty & RouteGuidance.State.DIRTY_TIME_REMAINING) != 0) {
+            // Preserve source-sample age across retries, reconnect and info-mode
+            // refresh. Directly constructed/legacy states acquire a timestamp once.
+            if (s.timeRemainingSeconds >= 0L && s.timeRemainingSampleSeconds < 0L)
+                s.timeRemainingSampleSeconds = getUtcMillis() / 1000L;
             lastTimeRemainingSeconds = s.timeRemainingSeconds;
-            lastTimeRemainingSampleSeconds = getUtcMillis() / 1000L;
+            lastTimeRemainingSampleSeconds = s.timeRemainingSampleSeconds;
         }
         if ((dirty & RouteGuidance.State.DIRTY_DIST_DEST) != 0) {
             lastDistanceToDestinationM = s.distDestM;
@@ -1904,6 +1916,8 @@ public class BAPBridge {
     private int lastCrExitAngle = -9999;
     private int lastCrDrivingSide = -1;
     private int lastCrVer = -1;
+    private long lastCrRouteGeneration = -1L;
+    private boolean rendererManeuverPending; // guarded by this, also read by blink worker
     private int lastCrIdx = -1;
     private int[] lastCrJunctionAngles;
     private boolean lastCrSnapToRoad;
@@ -1912,6 +1926,7 @@ public class BAPBridge {
      * always-on renderer drops (it was re-exec'd by the framework, or lsd's link reset), drop
      * our view + re-activate on the next update.  We do NOT kill or spawn the process. */
     private int crConsecutiveSendFailures = 0;
+    private volatile int rendererSendFailureSerial;
     private static final int CR_SEND_FAIL_THRESHOLD = 3;
 
     private synchronized boolean startCustomRenderer() {
@@ -1989,15 +2004,20 @@ public class BAPBridge {
      * re-exec'd by the framework, or lsd's link reset), drop our view so the update-path retry
      * reconnects + re-activates.  We do NOT kill or respawn the process — the framework owns it.
      */
-    private void noteRendererSendResult(boolean ok) {
+    private synchronized void noteRendererSendResult(boolean ok) {
         if (ok) {
             crConsecutiveSendFailures = 0;
             return;
         }
+        rendererSendFailureSerial++;
+        notifyPresentationStateChanged("renderer-update-pending");
         crConsecutiveSendFailures++;
         if (!customRendererStarted) return;
         /* Ignore failures before the first successful connect (sock=null naturally fails). */
         if (rendererClient == null || !rendererClient.everConnected()) return;
+        // A live socket with a full queue needs retry, not a disconnect that
+        // would throw away accepted maneuvers and flicker an otherwise valid view.
+        if (rendererClient.isConnected()) return;
         if (crConsecutiveSendFailures < CR_SEND_FAIL_THRESHOLD) return;
 
         Log.w(TAG, "CR: renderer link lost (" + CR_SEND_FAIL_THRESHOLD
@@ -2056,7 +2076,11 @@ public class BAPBridge {
                 && mapped.snapToRoad == lastCrSnapToRoad
                 && sameIntArray(junctionAngles, lastCrJunctionAngles);
             if (sameGeometry && (icon == RendererMapper.ICON_ARRIVED
-                    || (firstIdx == lastCrIdx && ver == lastCrVer))) return false;
+                    || (firstIdx == lastCrIdx && ver == lastCrVer
+                        && s.routeGeneration == lastCrRouteGeneration))) {
+                rendererManeuverPending = false;
+                return false;
+            }
 
             /* Remaining distance becomes the arrow's 0..16 progress input.
              * In the blink zone preserve the last phase already emitted to HUD. */
@@ -2088,7 +2112,8 @@ public class BAPBridge {
             boolean roadsOnly = icon == lastCrIcon && direction == lastCrDirection
                 && exitAngle == lastCrExitAngle && drivingSide == lastCrDrivingSide
                 && mapped.snapToRoad == lastCrSnapToRoad
-                && firstIdx == lastCrIdx && ver == lastCrVer;
+                && firstIdx == lastCrIdx && ver == lastCrVer
+                && s.routeGeneration == lastCrRouteGeneration;
             boolean ok = rendererClient.sendBapProgressManeuver(icon, direction, exitAngle,
                 drivingSide, junctionAngles, remainingLevel, progressMode,
                 perspective, roadsOnly, mapped.snapToRoad,
@@ -2100,9 +2125,11 @@ public class BAPBridge {
                 lastCrExitAngle = exitAngle;
                 lastCrDrivingSide = drivingSide;
                 lastCrVer = ver;
+                lastCrRouteGeneration = s.routeGeneration;
                 lastCrIdx = firstIdx;
                 lastCrJunctionAngles = junctionAngles;
                 lastCrSnapToRoad = mapped.snapToRoad;
+                rendererManeuverPending = false;
             }
             noteRendererSendResult(ok);
             return ok;
@@ -2116,8 +2143,16 @@ public class BAPBridge {
     /**
      * Update arrow progress on distance-only updates, without a maneuver push.
      */
-    private void updateRendererProgress(RouteGuidance.State s, int bargraphDenominatorM) {
-        if (rendererClient == null || !customRendererStarted) return;
+    private synchronized void updateRendererProgress(RouteGuidance.State s, int bargraphDenominatorM) {
+        if (rendererClient == null || !customRendererStarted || rendererManeuverPending) return;
+
+        synchronized (distanceToManeuverLock) {
+            if (hasLastDistM && lastDistM == s.distManeuverM) {
+                noteRendererSendResult(rendererClient.sendProgress(lastBarOn ? (lastBar * 16) / 100 : 0,
+                    lastBarOn ? 1 : 0, lastBarOn ? lastProgressState : RendererServer.PROGRESS_OFF));
+                return;
+            }
+        }
 
         int remainingLevel = 0;
         int progressMode = 0;
@@ -2260,7 +2295,7 @@ public class BAPBridge {
      * Utilities
      * ============================================================ */
 
-    private static long getUtcMillis() {
+    static long getUtcMillis() {
         try {
             IFrameworkAccess fw = CarPlayApp.framework();
             if (fw != null) {

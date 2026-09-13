@@ -93,6 +93,7 @@ static struct {
 	    uint32_t slot_ver[MANEUVER_CACHE_SIZE];        /* assignment version (bumps only on reassignment) */
 	    uint32_t seq_counter;
 	    uint32_t ver_counter;
+    uint64_t route_generation; /* survives slot-version reuse at native route reset */
 	    uint16_t highest_list_index;  /* max iOS index ever seen in maneuver_list */
 	    /*
 	     * Lane guidance is keyed by iOS composedGuidanceEventIndex, not by
@@ -220,6 +221,13 @@ static void rgd_update_cache_merge(const rgd_update_t* upd) {
 }
 
 		static void rgd_maneuver_map_reset(void) {
+            /* Java may never see a debounced route_state=0. A monotonic-clock
+             * generation distinguishes reused slot versions, including a new
+             * hook process while the Java session is still alive. */
+            uint64_t generation = now_monotonic_ms();
+            if (generation <= g_rgd.route_generation)
+                generation = g_rgd.route_generation + 1;
+            g_rgd.route_generation = generation;
 		    g_rgd.current_list_present = false;
 		    g_rgd.current_list_count = 0;
 		    g_rgd.seq_counter = 0;
@@ -996,6 +1004,7 @@ static void write_bus_snapshot_from_cache(int extra_slot, const rgd_maneuver_t* 
         return;
     }
 
+    bus_text_uint(b, "route_generation", g_rgd.route_generation);
     if (present & RGD_UPD_ROUTE_STATE)
         bus_text_int(b, "route_state", upd->route_state);
     if (present & RGD_UPD_MANEUVER_STATE)
@@ -1200,6 +1209,7 @@ void rgd_clear_state(const char* reason) {
         bus_text_builder_t* b = &_b_storage;
         uint8_t scratch[256];
         bus_text_begin_with(b, "routeguidance", scratch, sizeof(scratch));
+        bus_text_uint(b, "route_generation", g_rgd.route_generation);
         bus_text_int(b, "route_state", RGD_STATE_NOT_ACTIVE);
         bus_text_int(b, "maneuver_count", 0);
         if (reason) bus_text_str(b, "disconnect_reason", reason);
