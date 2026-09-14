@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tools'))
 from audit_amp_output_bindings import complex_process_mask, hmi_3d_mode_to_hu_level
 
-JAVA = Path('/Users/luka/Desktop/AUDI_2/Tools/jxe2jar/out/MU1316-combined-vf')
+JAVA = Path('/Users/luka/Desktop/AUDI_2/Tools/jxe2jar/out/MU1316-vf')
 HU = Path('/Users/luka/Desktop/AUDI_2/Firmwares/HU/MHI2Q_US_AUG22_P5087_MU1316/'
           'MHI2Q_US_AUG22_P5087_MU1316/RE/MIBRoot/MIBRoot')
 

@@ -1,40 +1,9 @@
 /*
- * CarPlay Touchpad Input Controller
- *
- * (Class name is legacy — this was originally an on-screen cursor state
- *  machine.  The cursor rendering was dropped after MU1316 turned out
- *  to ghost it through H.264 motion compensation, and the two-finger
- *  PAN/PINCH code was dropped after the log confirmed the Audi MMI
- *  touchpad on this unit only ever emits single-finger events via
- *  updateTouchEvents(TouchEvent[]).  File / class / package kept the
- *  same to minimise ripple through the DSI patch imports.  See memory
- *  `project_cursor_ghost_architectural_block` for the cursor ghost
- *  post-mortem.)
- *
- * Input model — single finger only
- *
- *   One finger  → DPAD ticks.  Accumulate Δx, Δy since the last emit;
- *                 whenever |Δx| or |Δy| crosses the (speed-adaptive)
- *                 threshold, emit a DDS_LEFT/RIGHT/UP/DOWN press+release
- *                 pair through TouchSink.postDpad and subtract the
- *                 threshold from the accumulator.  A long drag emits
- *                 multiple ticks so the user can traverse several list
- *                 items in one gesture.  Axes are independent — a
- *                 diagonal drag emits both X and Y ticks when both
- *                 accumulators cross threshold.
- *
- *   Knob (DDS_SELECT) — stock passthrough: press = focus-confirm in
- *                 whatever CarPlay element the dpad navigated to.  Not
- *                 intercepted by this controller.
- *
- * Multi-finger events are ignored (treated as touch-end).  If the
- * MMI touchpad ever starts reporting them, the DSI patch forwards
- * them here and we simply reset the single-finger state so a spurious
- * two-finger sample can't arm a dpad emission.
- *
- * Java 1.2 compatible: no generics, no lambdas, no java.util.Timer.
- *
- * Copyright (c) 2026 LuKa (@LuKa_dev)
+ * CarPlay touchpad input: try the independent native cursor plane, retaining
+ * the proven single-finger DPAD accumulation as fallback if creation fails.
+ * Input coordinates and click pairing live in HuCursor/PointerState; native cursor_render owns visibility.
+ * Two or more fingers cancel the pointer; they are not interpreted as gestures.
+ * Java 1.4 / Foundation 1.1. Copyright (c) 2026 LuKa (@LuKa_dev).
  */
 package com.luka.carplay.cursor;
 
@@ -117,6 +86,7 @@ public class CursorController {
         resetTouchState();
         this.sink = s;
         if (s != null) warnedDpad = false;
+        else HuCursor.getInstance().uninstall();
     }
 
     /* ============================================================
@@ -124,6 +94,10 @@ public class CursorController {
      * ============================================================ */
 
     public synchronized void onOneFinger(int tpX, int tpY) {
+        if (HuCursor.getInstance().onOneFinger(tpX, tpY)) {
+            resetTouchState();
+            return;
+        }
         long now = System.currentTimeMillis();
 
         if (prevCount != 1) {
@@ -214,6 +188,17 @@ public class CursorController {
     }
 
     public synchronized void onTouchEnd() {
+        HuCursor.getInstance().onTouchEnd();
+        resetTouchState();
+    }
+
+    public synchronized void onStockInput() {
+        HuCursor.getInstance().hideForStockInput();
+        resetTouchState();
+    }
+
+    public synchronized void onRotary() {
+        HuCursor.getInstance().onRotary();
         resetTouchState();
     }
 

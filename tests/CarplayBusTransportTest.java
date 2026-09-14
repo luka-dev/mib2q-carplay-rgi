@@ -80,6 +80,24 @@ public final class CarplayBusTransportTest {
             check(in.readUnsignedShort() == CarplayBus.CMD_ALT_ZOOM, "outbound type");
             check(in.readUnsignedByte() == CarplayBus.FLAG_BINARY, "outbound flags"); in.readByte();
             check(in.readInt() == 1 && in.readByte() == 3, "outbound body");
+            // Use the shipping transport: old stubs accepted 0x130 although both
+            // production dispatch tables stopped at 0x120.
+            check(bus.sendBinary(CarplayBus.CMD_HU_VIDEO_STATUS, new byte[] {1, 2, 3, 4}), "HU video query accepted");
+            check(in.readInt() == CarplayBus.MAGIC, "HU query magic"); in.readInt();
+            check(in.readUnsignedShort() == CarplayBus.CMD_HU_VIDEO_STATUS, "HU query type");
+            check(in.readUnsignedByte() == CarplayBus.FLAG_BINARY, "HU query binary"); in.readByte();
+            check(in.readInt() == 4 && in.readInt() == 0x01020304, "HU query nonce");
+            final CountDownLatch videoStatus = new CountDownLatch(1);
+            bus.on(CarplayBus.EVT_HU_VIDEO_STATUS, new CarplayBus.Listener() {
+                public void onFrame(int type, int flags, byte[] bytes, int len) {
+                    if (flags == 2 && len == 12 && bytes[3] == 4 && bytes[11] == 2) videoStatus.countDown();
+                }
+            });
+            DataOutputStream reply = new DataOutputStream(peer.getOutputStream());
+            reply.writeInt(CarplayBus.MAGIC); reply.writeInt(2);
+            reply.writeShort(CarplayBus.EVT_HU_VIDEO_STATUS); reply.writeByte(2); reply.writeByte(0);
+            reply.writeInt(12); reply.writeInt(0x01020304); reply.writeInt(cycle); reply.writeInt(2); reply.flush();
+            await(videoStatus, "HU status dispatched");
             Thread io = (Thread)get(bus, "ioThread"), reader = (Thread)get(bus, "readerThread"), writer = (Thread)get(bus, "writerThread");
             bus.stop(); peer.close();
             check(!io.isAlive() && !reader.isAlive() && !writer.isAlive(), "old workers still alive");

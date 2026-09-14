@@ -36,7 +36,7 @@ LOG=${LOG:-/tmp/carplay_install.log}
 
 # Installed under $HOOKS_DIR. Executables/libraries use 755; the model uses
 # 644. Order is irrelevant; the list matches the deployment README.
-HOOK_FILES="libcarplay_hook.so libcarplay_apac.so hssr_model.bin maneuver_render altscreen_render
+HOOK_FILES="libcarplay_hook.so libcarplay_apac.so hssr_model.bin maneuver_render altscreen_render cursor_render
             flag_atlas.rgba carplay_startup.sh carplay_processes.sh carplay_cleanup.sh"
 
 # No `dirname` either - see the note in custom.sh. ${0%/*} strips the last

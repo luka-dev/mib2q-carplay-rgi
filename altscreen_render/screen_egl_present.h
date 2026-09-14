@@ -19,8 +19,10 @@ screen_egl_present_t *screen_egl_present_create_output(int width, int height,
 int screen_egl_present_attach_sources(screen_egl_present_t *p,
                                       unsigned int source_count);
 
-/* Loader lifecycle. start is idempotent; stop joins the loader thread and
- * guarantees it no longer draws or posts the output window. */
+/* PRISM compositor lifecycle. start launches the worker or requests a smooth
+ * return to the waiting Apple using its owned last-frame cache. The worker
+ * remains alive during streaming, so transitions finish even with one input
+ * frame. stop joins it and guarantees no further GL reads or window posts. */
 int  screen_egl_present_start_loader(screen_egl_present_t *p);
 void screen_egl_present_stop_loader(screen_egl_present_t *p);
 
@@ -29,9 +31,10 @@ void *screen_egl_present_source_pointer(screen_egl_present_t *p,
 unsigned int screen_egl_present_source_capacity(screen_egl_present_t *p,
                                                  unsigned int index);
 
-/* Draw one decoded 32m buffer through the Adreno external-image sampler into
- * the RGBA cluster window.  The call completes GPU reads before returning, so
- * the caller may safely recycle that exact OMX output buffer. */
+/* Submit one decoded 32m buffer to the compositor's owned RGBA cache. Success
+ * means all source GPU reads finished and the corresponding PRISM frame was
+ * posted. The caller can recycle that exact OMX buffer after return. A wedged
+ * compositor triggers bounded process exit rather than freeing live storage. */
 int screen_egl_present_frame(screen_egl_present_t *p,
                              unsigned int source_index,
                              unsigned int filled_len);

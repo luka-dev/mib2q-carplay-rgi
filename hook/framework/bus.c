@@ -42,15 +42,12 @@ DEFINE_LOG_MODULE(BUS);
  * ============================================================ */
 #define SEND_QUEUE_CAPACITY   256        /* must be a power of two */
 #define BUS_SHUTDOWN_WAIT_MS 2500
-/* Directly-indexed per-type table.  Must cover all currently-assigned
- * event types from bus_protocol.h (highest in use: EVT_DEVICE_STATE
- * = 0x0030).  Sized at 0x40 for modest headroom; type values >=MAX_TYPES
- * are rejected by slot_for(), so future range additions must grow this
- * constant.  Each entry is ~36 bytes; oversize was 36 KB previously. */
-#define MAX_TYPES             0x0120   /* covers EVT 0x00xx + CMD 0x01xx (incl.
-                                        * CMD_KNOB/CMD_ALT_ZONE @ 0x011x).
-                                        * Directly-indexed → keep the top type
-                                        * assignment below this. ~40B/slot. */
+/* Directly-indexed events AND commands, including HU video query 0x0130.
+ * Keep in sync with CarplayBus.MAX_TYPES; test the real dispatcher, not a stub. */
+#define MAX_TYPES             0x0140
+#if CMD_HU_VIDEO_STATUS >= MAX_TYPES
+#error HU video command is outside the bus dispatch table
+#endif
 
 /* ============================================================
  * Internal frame

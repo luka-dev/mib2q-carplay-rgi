@@ -61,6 +61,9 @@ public final class CarPlayApp {
      *  REPLACE mode gates roller/key capture on this (whole-session takeover),
      *  not on cluster-tab focus. */
     public static boolean isActive() { return active; }
+    public static boolean isCurrentSession(int generation) {
+        synchronized (lock) { return active && generation == lifecycleGeneration; }
+    }
 
     /** Bring the transport up ALWAYS-ON, independent of any CarPlay session.
      *  Called from the patched TerminalModeBapCombi.init() (component start / boot),
@@ -84,6 +87,7 @@ public final class CarPlayApp {
             Log.e(TAG, "context is not IContext: " + context);
             return;
         }
+        int generation;
         synchronized (lock) {
             ensureLifecycleWorkerLocked();
             /* ACTIVATING may be repeated for the same TMDevice.  Publishing the
@@ -94,21 +98,28 @@ public final class CarPlayApp {
             desiredContext = (IContext) context;
             serviceChangeGeneration++;
             lifecycleGeneration++;
+            generation = lifecycleGeneration;
             lock.notifyAll();
         }
+        com.luka.carplay.cursor.HuCursor.getInstance().activate(generation);
     }
 
     private static int publishDeactivate() {
+        int generation, cursorGeneration;
         synchronized (lock) {
             ensureLifecycleWorkerLocked();
             if (!active && desiredContext == null) return lifecycleGeneration;
+            cursorGeneration = lifecycleGeneration;
             active = false;                          /* release stock HMI immediately */
             desiredContext = null;
             serviceChangeGeneration++;
             lifecycleGeneration++;
             lock.notifyAll();
-            return lifecycleGeneration;
+            generation = lifecycleGeneration;
         }
+        // No DSI calls here: abandon the old session's click and queue HMI removal.
+        com.luka.carplay.cursor.HuCursor.getInstance().deactivateSession(cursorGeneration);
+        return generation;
     }
 
     public static void onDeactivate() { publishDeactivate(); }
@@ -195,6 +206,7 @@ public final class CarPlayApp {
             FrameworkRef next = new FrameworkRef(context);
             if (!lifecycleCurrent(generation, true, context)) return;
             synchronized (lock) { fwRef = next; }
+            com.luka.carplay.cursor.HuCursor.getInstance().frameworkReady();
 
             Log.i(TAG, "onActivate async apply generation=" + generation
                 + " build=" + BUILD_ID);

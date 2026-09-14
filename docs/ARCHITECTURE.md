@@ -65,7 +65,7 @@ ordered module chain:
 Patched stock classes provide lifecycle seams, cluster contexts, cover-art integration and input
 interception. The right-hand pure OPS popup (`2100008`) has a narrow `SMALL_STAGE` exception: CarPlay
 keeps `Resource.SCREEN`, while every ordinary HMI deactivation and fullscreen camera takeover stays
-stock. They are compiled against `MU1316-combined-final.jar` as Java 1.4 bytecode.
+stock. They are compiled against `MU1316-final.jar` as Java 1.4 bytecode.
 
 ## Cluster composition
 

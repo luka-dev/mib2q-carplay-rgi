@@ -79,6 +79,8 @@
 #define EVT_COVERART            0x0010  /* text: crc:n:<u32> path:s:<path>   */
 #define EVT_RGD_UPDATE          0x0020  /* text: route_state + all fields    */
 #define EVT_DEVICE_STATE        0x0030  /* reserved                          */
+#define EVT_HU_VIDEO_STATUS     0x0031  /* BE32 query nonce, video epoch, phase 0/1/2 */
+#define CMD_HU_VIDEO_STATUS     0x0130  /* BE32 query nonce; no stock state mutation */
 
 /* ============================================================
  * Command types (Java -> Hook)
@@ -109,7 +111,7 @@
 #define CMD_ALT_UICTX           0x0115  /* payload = UTF-8 url string — deep-  */
                                         /* link cluster UI context             */
 /* NOTE: dispatchable inbound types must be < MAX_TYPES in bus.c (grown to      */
-/* cover this 0x11x block).                                                     */
+/* cover the HU video query at 0x0130 as well).                                 */
 
 /* ============================================================
  * Classification helpers (header range checks, optional)

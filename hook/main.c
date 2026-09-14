@@ -15,12 +15,14 @@
 #include "coverart/coverart_hook.h"
 #include "altscreen/altscreen_hook.h"
 #include "audio/audio_hook.h"
+extern const hook_module_def_t hu_startup_module_def;
 
 const hook_module_def_t* const hook_module_table[] = {
     &rgd_module_def,
     &coverart_module_def,
     &altscreen_module_def,
     &audio_module_def,
+    &hu_startup_module_def,
 };
 
 const size_t hook_module_table_count =

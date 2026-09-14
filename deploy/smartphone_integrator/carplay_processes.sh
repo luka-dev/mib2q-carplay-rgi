@@ -18,6 +18,7 @@ unset CP_QNX_PATH
 # then use O(1) /proc checks instead of repeatedly scanning the whole system.
 CP_MANEUVER_PID_FILE=/tmp/carplay_maneuver_render.pid
 CP_ALTSCREEN_PID_FILE=/tmp/carplay_altscreen_render.pid
+CP_CURSOR_PID_FILE=/tmp/carplay_cursor_render.pid
 CP_RENDERER_SCAN_DONE=0
 
 # Guarded recovery state for the one failure class which happens before RTSP:
@@ -160,6 +161,7 @@ cp_cap_all_logs()
 {
     cp_cap_log /tmp/maneuver_render.log
     cp_cap_log /tmp/altscreen_render.log
+    cp_cap_log /tmp/cursor_render.log
     cp_cap_log "${1:-/tmp/carplay_wrapper.log}"
 }
 
@@ -168,6 +170,7 @@ cp_renderer_pid_file()
     case "$1" in
         maneuver_render)  echo "$CP_MANEUVER_PID_FILE" ;;
         altscreen_render) echo "$CP_ALTSCREEN_PID_FILE" ;;
+        cursor_render)    echo "$CP_CURSOR_PID_FILE" ;;
         *) return 1 ;;
     esac
 }
@@ -183,7 +186,7 @@ cp_renderer_record_pid()
 # two more scans immediately in the monitor.
 cp_seed_renderer_pid_files()
 {
-    if [ ! -r "$CP_MANEUVER_PID_FILE" ] || [ ! -r "$CP_ALTSCREEN_PID_FILE" ]; then
+    if [ ! -r "$CP_MANEUVER_PID_FILE" ] || [ ! -r "$CP_ALTSCREEN_PID_FILE" ] || [ ! -r "$CP_CURSOR_PID_FILE" ]; then
         pidin ar 2>/dev/null | (
             while read CP_PID CP_EXE CP_REST; do
                 case "$CP_EXE" in
@@ -195,6 +198,10 @@ cp_seed_renderer_pid_files()
                         [ -r "$CP_ALTSCREEN_PID_FILE" ] ||
                             echo "$CP_PID" > "$CP_ALTSCREEN_PID_FILE"
                         ;;
+                    cursor_render|*"/cursor_render")
+                        [ -r "$CP_CURSOR_PID_FILE" ] ||
+                            echo "$CP_PID" > "$CP_CURSOR_PID_FILE"
+                        ;;
                 esac
             done
         )
@@ -203,7 +210,7 @@ cp_seed_renderer_pid_files()
 }
 
 # Initial-adoption health differs by renderer topology:
-#   - altscreen_render OWNS the :19831 listener, so LISTEN is a valid readiness
+#   - altscreen_render OWNS :19831 and cursor_render OWNS :19840, so LISTEN is a valid readiness
 #     signal and catches a process wedged before serving the hook;
 #   - maneuver_render is a CLIENT of Java RendererServer's :19800 listener.
 #     Java deliberately closes :19800 when RGI is inactive, while the persistent
@@ -218,6 +225,7 @@ cp_renderer_healthy()
     case "$1" in
         maneuver_render)  return 0 ;;
         altscreen_render) CP_HP=19831 ;;
+        cursor_render)   CP_HP=19840 ;;
         *) return 1 ;;
     esac
     CP_NS=`netstat -an 2>/dev/null`
@@ -309,6 +317,7 @@ cp_stop_renderer_snapshot()
     CP_STOP_LOG=$1
     CP_STOP_MANEUVER_PIDS=$2
     CP_STOP_ALTSCREEN_PIDS=$3
+    CP_STOP_CURSOR_PIDS=${4:-}
 
     for CP_PID in $CP_STOP_MANEUVER_PIDS; do
         echo "[carplay] SIGTERM maneuver_render pid=$CP_PID" >> "$CP_STOP_LOG"
@@ -316,6 +325,10 @@ cp_stop_renderer_snapshot()
     done
     for CP_PID in $CP_STOP_ALTSCREEN_PIDS; do
         echo "[carplay] SIGTERM altscreen_render pid=$CP_PID" >> "$CP_STOP_LOG"
+        kill -15 "$CP_PID" 2>/dev/null
+    done
+    for CP_PID in $CP_STOP_CURSOR_PIDS; do
+        echo "[carplay] SIGTERM cursor_render pid=$CP_PID" >> "$CP_STOP_LOG"
         kill -15 "$CP_PID" 2>/dev/null
     done
     # The Qualcomm WFD/EGL teardown path may retain native images for several
@@ -333,6 +346,12 @@ cp_stop_renderer_snapshot()
             kill -9 "$CP_PID" 2>/dev/null
         fi
     done
+    for CP_PID in $CP_STOP_CURSOR_PIDS; do
+        if [ -d "/proc/$CP_PID" ]; then
+            echo "[carplay] SIGKILL residual cursor_render pid=$CP_PID" >> "$CP_STOP_LOG"
+            kill -9 "$CP_PID" 2>/dev/null
+        fi
+    done
 }
 
 cp_stop_renderers()
@@ -345,6 +364,7 @@ cp_stop_renderers()
     # killed those brand-new renderers, breaking the hook TCP link mid-GOP.
     CP_STOP_MANEUVER_PIDS=`cp_renderer_pids maneuver_render`
     CP_STOP_ALTSCREEN_PIDS=`cp_renderer_pids altscreen_render`
+    CP_STOP_CURSOR_PIDS=`cp_renderer_pids cursor_render`
     cp_stop_renderer_snapshot "$CP_STOP_LOG" \
-        "$CP_STOP_MANEUVER_PIDS" "$CP_STOP_ALTSCREEN_PIDS"
+        "$CP_STOP_MANEUVER_PIDS" "$CP_STOP_ALTSCREEN_PIDS" "$CP_STOP_CURSOR_PIDS"
 }

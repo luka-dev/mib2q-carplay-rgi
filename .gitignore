@@ -71,3 +71,7 @@ output/maneuver-preview/*.ppm
 output/maneuver-preview/*.log
 output/maneuver-preview/transition/
 output/lane-panel/raw/
+
+# PRISM host preview/test output.
+tools/loader_preview/.prism-test-*
+tools/loader_preview/prism_preview

@@ -1,0 +1,165 @@
+// callconv: r0 arm32 (r0, r1);
+void sym.CDisplayManager__getDisplayable_int_const_ (int32_t arg1, int32_t arg2) {
+        push (r4, r5, r6, r7, r8, sb, sl, fp, lr) // CDisplayManager::getDisplayable(int const&)
+        sb = [r1 + 0x58] // arg2 // segment.LOAD1
+        r5 = [0x00039c18] // [0x39dec:4]=0x65d30
+        sp -= 0x34
+        (a, b) = compare (sb, 0)
+        r6 = r1       // arg2
+        r5 = pc + r5  // section..got
+        r7 = r0       // arg1
+        r4 = r2
+        je 0x39c4c    // unlikely
+        goto loc_0x00039c30;
+    loc_0x00039c4c:
+        // CODE XREF from CDisplayManager::getDisplayable(int const&) @ 0x39da4(x)
+        sl = [r4]
+        r3 = [0x00039c58] // [0x39df0:4]=0xe14
+        r0 = 0x34     // elf_phdr
+        r8 = var_30h
+        r1 = [r5 + r3]
+        sym.imp.operator_new_unsigned_int__std::nothrow_t_const_ () // sym.imp.operator_new_unsigned_int__std::nothrow_t_const_(0x34, 0x86f, 0x0, 0xe14)
+        r1 = r4
+        sb = r0       // elf_phdr
+        rsym._ZN12CDisplayableC1ERKi () // rsym._ZN12CDisplayableC1ERKi(0x34, 0x0, 0x0, 0xe14)
+        r2 = [0x00039c78] // [0x39df4:4]=0xd4c
+        r1 = sb       // elf_phdr
+        [r8 - 0x10]! = sl
+        r3 = 0
+        r0 = r8 + 4
+        r2 = [r5 + r2]
+        sym.imp.util::SharedPtrDefaultBase::SharedPtrDefaultBase_void__void____void__void___void_ () // sym.imp.util::SharedPtrDefaultBase::SharedPtrDefaultBase_void__void____void__void___void_(0x178024, 0x34, 0x4c8, 0x0)
+        r4 = [r6 + 0x58] // segment.LOAD1
+        (a, b) = compare (r4, 0)
+        je 0x39cd4    // unlikely
+        goto loc_0x00039c98;
+    loc_0x00039cd4:
+        sl = [0x00039cdc] // [0x39df8:4]=0xffff1798
+        fp = [0x00039ce0] // [0x39dfc:4]=0xffff23a4
+        r3 = [0x00039ce4] // [0x39e00:4]=0xffff1824
+        sl = r5 + sl
+        fp = r5 + fp
+        r5 += r3
+        
+    loc_0x00039cec:
+        // CODE XREF from CDisplayManager::getDisplayable(int const&) @ 0x39de8(x)
+        r0 = 0x20
+        sym.imp.malloc () //  void *malloc(0x000a1304)
+        sb = r0 - 0
+        je 0x39dd4    // unlikely
+        goto loc_0x00039cfc;
+        goto loc_0x00039ca8;
+        return r0;
+    loc_0x00039cfc: // orphan
+         r3 = 1
+         [sp] = (byte) r3
+         r3 = [var_20h]
+         sl = var_8h
+         r1 = r8 + 4              // (pstr 0x00010101) "able15realizeCroppingERKi"
+         r0 = sl
+         r5 = sb + 8
+         [var_4h] = r3
+         sym.imp.util::SharedPtrDefaultBase::SharedPtrDefaultBase_util::SharedPtrDefaultBase_const_ () // sym.imp.util::SharedPtrDefaultBase::SharedPtrDefaultBase_util::SharedPtrDefaultBase_const_(0x178008, 0x4, 0x0, 0x464c457f)
+         r2 = (byte) [sp]
+         r1 = sl
+         r0 = r5
+         r3 = 0
+         [var_1ch] = r3
+         [sb] = (byte) r2
+         r2 = [var_4h]
+         [var_14h] = r3
+         [var_18h] = r3
+         [sb + 4] = r2
+         sym.imp.util::SharedPtrDefaultBase::SharedPtrDefaultBase_util::SharedPtrDefaultBase_const_ () // sym.imp.util::SharedPtrDefaultBase::SharedPtrDefaultBase_util::SharedPtrDefaultBase_const_(0x8, 0x178008, 0x464c457f, 0x0)
+         r3 = [var_14h]
+         r0 = sl
+         [sb + 0x14] = r3
+         r3 = [var_18h]
+         [sb + 0x18] = r3
+         r3 = [var_1ch]
+         [sb + 0x1c] = r3
+         sym.imp.util::SharedPtrDefaultBase::_SharedPtrDefaultBase__ () // sym.imp.util::SharedPtrDefaultBase::_SharedPtrDefaultBase__(0x178008, 0x178008, 0x464c457f, 0x0)
+         r1 = sb
+         r2 = r4
+         r0 = r6 + 0x58
+         rsym._ZN3ipl14red_black_treeIiNS_4lessIiEENS_4pairIKiN4util9SharedPtrI12CDisplayableNS5_20SharedPtrDefaultBaseEEEEENS_9Select1stISA_EENS_9allocatorIS9_EEE11insert_nodeEPNS_19red_black_tree_nodeISA_EESI_ () // rsym._ZN3ipl14red_black_treeIiNS_4lessIiEENS_4pairIKiN4util9SharedPtrI12CDisplayableNS5_20SharedPtrDefaultBaseEEEEENS_9Select1stISA_EENS_9allocatorIS9_EEE11insert_nodeEPNS_19red_black_tree_nodeISA_EESI_(0x58, 0x0, 0x0, 0x0)
+         r3 = [r6 + 0x64]
+         r3 += 1
+         [r6 + 0x64] = r3
+
+         return r0;
+    loc_0x00039db4: // orphan
+         // CODE XREF from CDisplayManager::getDisplayable(int const&) @ 0x39d90(x)
+         r1 = r5
+         r0 = r7
+         sym.imp.util::SharedPtrDefaultBase::SharedPtrDefaultBase_util::SharedPtrDefaultBase_const_ () // sym.imp.util::SharedPtrDefaultBase::SharedPtrDefaultBase_util::SharedPtrDefaultBase_const_(0x0, 0x0, 0x0, 0x0)
+         r0 = r7
+         sp += 0x34
+         pop (r4, r5, r6, r7, r8, sb, sl, fp, pc)
+
+    loc_0x00039c98: // orphan
+         r2 = [var_20h]
+         r3 = [r4 + 4]            // "able15realizeCroppingERKi"
+         (a, b) = compare (r2, r3)
+         (>=) 
+    loc_0x00039cc4: // orphan
+         ble 0x39dcc              // unlikely
+
+    loc_0x00039dcc: // orphan
+         r5 = r4 + 8
+         
+    loc_0x00039d88: // orphan
+         // CODE XREF from CDisplayManager::getDisplayable(int const&) @ 0x39dd0(x)
+         r0 = r8 + 4              // (pstr 0x00010101) "able15realizeCroppingERKi"
+         sym.imp.util::SharedPtrDefaultBase::_SharedPtrDefaultBase__ () // sym.imp.util::SharedPtrDefaultBase::_SharedPtrDefaultBase__(0x4, 0x0, 0x0, 0x0)
+         
+         goto loc_0x00039cc8;
+    loc_0x00039cc8: // orphan
+         r3 = [r4 + 0x1c]         // elf_phdr
+         (a, b) = compare (r3, 0)
+         bne 0x39cb4              // likely
+
+    loc_0x00039cb4: // orphan
+         r4 = r3
+         r3 = [r4 + 4]            // "able15realizeCroppingERKi"
+         (a, b) = compare (r2, r3)
+         blt 0x39ca8              // likely
+
+    loc_0x00039ca8: // orphan
+         r3 = [r4 + 0x18]         // loc._btext
+         (a, b) = compare (r3, 0)
+         je 0x39cd4               // unlikely
+
+         goto loc_0x00039c30;
+    loc_0x00039c30: // orphan
+         r2 = [r2]
+
+    loc_0x00039d94: // orphan
+         (>=) 
+    loc_0x00039da8: // orphan
+         (a, b) = compare (sb, 0)
+         addne r5, sb, 8
+         je 0x39c4c               // likely
+
+         goto loc_0x00039d98;
+    loc_0x00039d98: // orphan
+         sb = [sb + 0x1c]         // elf_phdr
+         (a, b) = compare (sb, 0)
+         bne 0x39c34              // likely
+
+    loc_0x00039c34: // orphan
+         r3 = [sb + 4]            // "able15realizeCroppingERKi"
+         (a, b) = compare (r3, r2)
+         ble 0x39d94              // unlikely
+
+         goto loc_0x00039da4;
+    loc_0x00039da4: // orphan
+         
+         goto loc_0x00039c40;
+    loc_0x00039c40: // orphan
+         sb = [sb + 0x18]         // loc._btext
+         (a, b) = compare (sb, 0)
+         bne 0x39c34              // likely
+
+}
+

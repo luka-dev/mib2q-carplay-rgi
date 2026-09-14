@@ -35,7 +35,7 @@ public final class CarplayBus {
     public static final int    MAGIC = 0x43504842;   /* "CPHB" */
     public static final int    HEADER_SIZE = 16;
     public static final int    MAX_PAYLOAD = 128 * 1024;
-    public static final int    MAX_TYPES = 0x0120;
+    public static final int    MAX_TYPES = 0x0140;
 
     /* flags */
     public static final int FLAG_STICKY = 0x01;
@@ -54,6 +54,8 @@ public final class CarplayBus {
     public static final int CMD_ALT_ZOOM       = 0x0110;   /* [i8 signed MapScale step]     */
     public static final int CMD_ALT_ZONE       = 0x0111;   /* [u8 0=full/1=sport/2=classic][u16 LE durationMs] */
     public static final int CMD_ALT_ZONE_ACK   = 0x0112;   /* hook->Java [u8 mode][i32 LE status]       */
+    public static final int EVT_HU_VIDEO_STATUS = 0x0031;
+    public static final int CMD_HU_VIDEO_STATUS = 0x0130;
 
     public interface Listener {
         void onFrame(int type, int flags, byte[] payload, int len);

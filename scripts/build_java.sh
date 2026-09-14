@@ -7,7 +7,7 @@
 # Input:  java_patch/
 # Output: build/carplay_hook.jar
 #
-# Compiles against MU1316-combined-final.jar + OSGi, target 1.4 (jclfoun11 = Foundation 1.1).
+# Compiles against MU1316-final.jar + OSGi, target 1.4 (jclfoun11 = Foundation 1.1).
 set -e
 
 [ "$#" -eq 0 ] || { echo "usage: ./scripts/build_java.sh"; exit 2; }
@@ -18,7 +18,7 @@ TOOLS_DIR="$PROJECT_DIR/../../Tools/jxe2jar"
 JAVA_HOME="$TOOLS_DIR/jvms/zulu8.78.0.19-ca-jdk8.0.412-macosx_aarch64/zulu-8.jdk/Contents/Home"
 JAVAC="$JAVA_HOME/bin/javac"
 JAR="$JAVA_HOME/bin/jar"
-STOCK_JAR="$TOOLS_DIR/out/MU1316-combined-final.jar"
+STOCK_JAR="$TOOLS_DIR/out/MU1316-final.jar"
 OSGI_LIBS="$TOOLS_DIR/libs"
 OSGI_CP="$OSGI_LIBS/org.osgi.framework-1.10.0.jar:$OSGI_LIBS/org.osgi.util.tracker-1.5.4.jar"
 

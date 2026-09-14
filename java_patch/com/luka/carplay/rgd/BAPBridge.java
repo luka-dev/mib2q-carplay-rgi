@@ -26,10 +26,9 @@ import de.audi.atip.metrics.Distance;
 import de.audi.tghu.navi.app.Navigation;
 import de.audi.tghu.navi.app.cluster.BAPDistanceFormatter;
 import de.audi.tghu.navi.app.cluster.ClusterService;
+import de.audi.tghu.navi.app.cluster.ClusterViewMode;
 import de.audi.tghu.navi.app.cluster.KOMOService;
 import de.audi.tghu.navi.app.command.DSIResponseContainer;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 
 public class BAPBridge {
 
@@ -386,13 +385,8 @@ public class BAPBridge {
         if (meters <= 0) return new FormattedDistance(-1, 0);
         try {
             boolean metric = isMetricDistanceUnits();
-            /* BAPDistanceFormatter$BAPDistance is public, but the outer class .class file
-             * lacks the InnerClasses attribute (decompiler artifact), so javac can't
-             * resolve BAPDistanceFormatter.BAPDistance as a type.  Use Object + getValue/getUnit. */
-            Object d = distanceFormatter.formatDistanceToTurn(meters, metric);
-            int v = ((Integer) d.getClass().getMethod("getValue", new Class[0]).invoke(d, new Object[0])).intValue();
-            int u = ((Integer) d.getClass().getMethod("getUnit", new Class[0]).invoke(d, new Object[0])).intValue();
-            return new FormattedDistance(v, u);
+            BAPDistanceFormatter.BAPDistance d = distanceFormatter.formatDistanceToTurn(meters, metric);
+            return new FormattedDistance(d.getValue(), d.getUnit());
         } catch (Throwable t) {
             Log.w(TAG, "formatDistanceToTurn failed, using invalid distance: " + t.getMessage());
             return new FormattedDistance(-1, 0);
@@ -403,10 +397,8 @@ public class BAPBridge {
         if (meters <= 0) return new FormattedDistance(-1, 0);
         try {
             boolean metric = isMetricDistanceUnits();
-            Object d = distanceFormatter.formatDistanceToDestination(meters, metric);
-            int v = ((Integer) d.getClass().getMethod("getValue", new Class[0]).invoke(d, new Object[0])).intValue();
-            int u = ((Integer) d.getClass().getMethod("getUnit", new Class[0]).invoke(d, new Object[0])).intValue();
-            return new FormattedDistance(v, u);
+            BAPDistanceFormatter.BAPDistance d = distanceFormatter.formatDistanceToDestination(meters, metric);
+            return new FormattedDistance(d.getValue(), d.getUnit());
         } catch (Throwable t) {
             Log.w(TAG, "formatDistanceToDestination failed, using invalid distance: " + t.getMessage());
             return new FormattedDistance(-1, 0);
@@ -2174,120 +2166,29 @@ public class BAPBridge {
     }
 
     /**
-     * Force gfxAvailable on ClusterViewMode.
-     * DSIKOMOGfxStreamSink has no native provider on MU1316 (gated by
-     * Util.isClusterMapMOST() which requires SysConst 541==1; FPK cars
-     * have it ==2), so the callback chain
-     *   videoencoderservice -> DSI -> KOMOService.updateGfxState -> ClusterViewMode
-     * never fires. We simulate it directly.
-     *
-     * Strategy 1: komoService.updateGfxState(1, 1) -- mimics DSI notification
-     * Strategy 2: ClusterViewMode.setGFXAvailable(true) -- direct method call
-     * Strategy 3: ClusterViewMode.gfxAvailable field reflection -- last resort
-     *
-     * KOMOService.dataRate is the rate that updateGfxState() passes to
-     * setKOMODataRate(); without a DSI provider firing updateDataRate(),
-     * dataRate is left at 0 -- so updateGfxState(1,1) would synthesise
-     * setKOMODataRate(0) and never raise the MOST pacing hint.  We pre-set
-     * dataRate=2 (full framerate) via reflection, then also explicitly
-     * call csRef.setKOMODataRate(2) as belt-and-suspenders in case the
-     * field write or vtable lookup fails.
+     * Supply the missing graphics-sink notifications on FPK (SysConst 541 == 2).
+     * MU1316 stores dataRate on ClusterViewMode, not KOMOService. The stock
+     * updateDataRate callback updates both that cache and the output rate; it
+     * must precede updateGfxState, which replays the cached rate when enabled.
      */
     private void forceGfxAvailable(boolean available) {
-        int gfxVal = available ? 1 : 0;
         int desiredRate = available ? 2 : 0;
-
-        /* Pre-step: write KOMOService.dataRate so updateGfxState picks it up. */
-        if (komoService != null) {
-            try {
-                Field fRate = null;
-                Class c = komoService.getClass();
-                while (c != null && fRate == null) {
-                    try { fRate = c.getDeclaredField("dataRate"); }
-                    catch (NoSuchFieldException nsf) { c = c.getSuperclass(); }
-                }
-                if (fRate != null) {
-                    fRate.setAccessible(true);
-                    fRate.setInt(komoService, desiredRate);
-                    Log.i(TAG, "KOMO: dataRate=" + desiredRate + " set via reflection");
-                }
-            } catch (Throwable t) {
-                Log.w(TAG, "KOMO: dataRate set failed: " + t.getMessage());
-            }
-        }
-
-        /* Strategy 1: updateGfxState on KOMOService */
         try {
             if (komoService != null) {
-                Method m = komoService.getClass().getMethod(
-                    "updateGfxState", new Class[]{int.class, int.class});
-                m.invoke(komoService, new Object[]{new Integer(gfxVal), new Integer(1)});
-                Log.i(TAG, "KOMO: gfxAvailable=" + available + " via updateGfxState");
+                komoService.updateDataRate(desiredRate, 1);
+                komoService.updateGfxState(available ? 1 : 0, 1);
+            } else if (csRef != null) {
+                // Preserve recovery when the service reference was not acquired.
+                ClusterViewMode viewMode = csRef.getClusterViewMode();
+                viewMode.setDataRate(desiredRate);
+                viewMode.setGFXAvailable(available);
+                csRef.setKOMODataRate(desiredRate);
+            } else {
+                return;
             }
+            Log.i(TAG, "KOMO: gfxAvailable=" + available + " dataRate=" + desiredRate);
         } catch (Throwable t) {
-            Log.w(TAG, "KOMO: updateGfxState failed: " + t.getMessage());
-        }
-
-        /* Belt-and-suspenders: csRef.setKOMODataRate(2|0) hits the FPK-patched
-         * path on ClusterService directly even if Strategy 1 didn't take. */
-        if (csRef != null) {
-            try {
-                Method m = csRef.getClass().getMethod(
-                    "setKOMODataRate", new Class[]{int.class});
-                m.invoke(csRef, new Object[]{new Integer(desiredRate)});
-                Log.i(TAG, "KOMO: setKOMODataRate(" + desiredRate + ") explicit");
-            } catch (Throwable t) {
-                Log.w(TAG, "KOMO: setKOMODataRate(" + desiredRate + ") failed: " + t.getMessage());
-            }
-        }
-
-        /* Strategy 2+3: direct ClusterViewMode access as backup */
-        try {
-            if (csRef != null) {
-                /* Get ClusterViewMode from ClusterService */
-                Object cvm = null;
-                try {
-                    Field fCvm = csRef.getClass().getDeclaredField("clusterViewMode");
-                    fCvm.setAccessible(true);
-                    cvm = fCvm.get(csRef);
-                } catch (Throwable t) {
-                    /* Try superclass if field is inherited */
-                    Class sup = csRef.getClass().getSuperclass();
-                    while (sup != null && cvm == null) {
-                        try {
-                            Field fCvm = sup.getDeclaredField("clusterViewMode");
-                            fCvm.setAccessible(true);
-                            cvm = fCvm.get(csRef);
-                        } catch (NoSuchFieldException nsf) {
-                            sup = sup.getSuperclass();
-                        }
-                    }
-                }
-
-                if (cvm != null) {
-                    /* Strategy 2: setGFXAvailable method */
-                    try {
-                        Method setGfx = cvm.getClass().getMethod(
-                            "setGFXAvailable", new Class[]{boolean.class});
-                        setGfx.invoke(cvm, new Object[]{available ? Boolean.TRUE : Boolean.FALSE});
-                        Log.i(TAG, "KOMO: gfxAvailable=" + available + " via setGFXAvailable");
-                    } catch (Throwable t) {
-                        /* Strategy 3: direct field */
-                        try {
-                            Field fGfx = cvm.getClass().getDeclaredField("gfxAvailable");
-                            fGfx.setAccessible(true);
-                            fGfx.setBoolean(cvm, available);
-                            Log.i(TAG, "KOMO: gfxAvailable=" + available + " via field reflection");
-                        } catch (Throwable t2) {
-                            Log.w(TAG, "KOMO: gfxAvailable field failed: " + t2.getMessage());
-                        }
-                    }
-                } else {
-                    Log.w(TAG, "KOMO: ClusterViewMode not found on ClusterService");
-                }
-            }
-        } catch (Throwable t) {
-            Log.w(TAG, "KOMO: gfxAvailable backup failed: " + t.getMessage());
+            Log.w(TAG, "KOMO: graphics state update failed: " + t.getMessage());
         }
     }
 

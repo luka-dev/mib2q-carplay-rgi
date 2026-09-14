@@ -7,7 +7,7 @@ Replace `children.carplay` in
 The important ownership rule is that `children.carplay.envs` contains **no**
 `LD_PRELOAD`. `carplay_startup.sh` applies the hook only to its direct
 `dio_manager` child. This prevents the hook from loading into `/bin/sh`,
-`maneuver_render`, or `altscreen_render`.
+`maneuver_render`, `altscreen_render`, or `cursor_render`.
 
 Keep `IPL_CONFIG_DIR_DIO_MANAGER=/etc/eso/production` in the child environment.
 The supervisor inherits it and passes it unchanged to `dio_manager`; only the
@@ -23,6 +23,7 @@ Install these executable files under `/mnt/app/root/hooks`:
 - `hssr_model.bin` (required when stereo upmix is enabled)
 - `maneuver_render`
 - `altscreen_render`
+- `cursor_render`
 - `flag_atlas.rgba`
 
 Do not overwrite `/etc/scripts/carplay_cleanup.sh`: the custom cleanup calls that
@@ -64,18 +65,18 @@ Lifecycle semantics:
   wrapper does **no** firewall work — it assumes the port is open, exactly like it assumes the
   child JSON and the hook are installed. Reverted only by an OTA rewriting `fs0p1`; re-run the
   script. See `NCM_AND_FIREWALL_IDEAL_START.md`.
-- if either renderer already exists when CarPlay starts, it is not restarted;
+- if a renderer already exists when CarPlay starts, it is not restarted;
 - renderer PIDs are kept under `/tmp`; one finite `pidin ar` snapshot seeds the
   files when adopting an older running generation, then startup and the monitor
   use constant-time `/proc/<pid>` checks instead of repeatedly scanning every
   process while `dio_manager` initializes;
 - the wrapper `exec`s `dio_manager`, so smartphone_integrator tracks the exact dio
   PID; a monitor shell restarts only a genuinely missing renderer while it lives;
-- every ordinary `dio_manager` exit leaves both renderers alive, so a replacement
+- every ordinary `dio_manager` exit leaves all renderers alive, so a replacement
   inherits the existing EGL/OMX allocations instead of re-entering fragile Qualcomm
   `eglInitialize`; only a missing/crashed renderer is restarted, after a 5 s backoff;
-- initial adoption checks `LISTEN :19831` only for `altscreen_render`, which owns
-  that socket. `maneuver_render` is a client of Java's route-scoped `:19800`
+- initial adoption checks `LISTEN :19831` for `altscreen_render` and `:19840`
+  for `cursor_render`; each owns its listener. `maneuver_render` is a client of Java's route-scoped `:19800`
   listener, so it is preserved by live PID while RGI/Java intentionally has the
   listener closed;
 - cold boot starts `altscreen_render`, gives its EGL initialization a one-second

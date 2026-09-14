@@ -10,7 +10,7 @@ import re, sys
 s = open(sys.argv[1]).read()
 functions = re.findall(r'^\w+\(\)\n\{\n.*?^\}', s, re.M | re.S)
 s = '\n\n'.join(functions)
-s = s.replace('/tmp/maneuver_render.log', '${TEST_DIR}/renderer.log').replace('/tmp/altscreen_render.log', '${TEST_DIR}/renderer.log')
+s = re.sub(r'/tmp/(maneuver|altscreen|cursor)_render.log', '${TEST_DIR}/renderer.log', s)
 open(sys.argv[2], 'w').write(s)
 PY
 . "$TEST_DIR/functions.sh"
@@ -22,7 +22,8 @@ MR_DIO_PID=100
 DIO_PID=100
 printf '#!/bin/sh\nexit 0\n' > "$H/maneuver_render"
 cp "$H/maneuver_render" "$H/altscreen_render"
-chmod +x "$H/maneuver_render" "$H/altscreen_render"
+cp "$H/maneuver_render" "$H/cursor_render"
+chmod +x "$H/maneuver_render" "$H/altscreen_render" "$H/cursor_render"
 supervisor_dio_alive() { [ "$ALIVE" = 1 ]; }
 cp_renderer_running() { [ "$RENDERER_LIVE" = 1 ]; }
 cp_renderer_healthy() { return 0; }
@@ -31,7 +32,7 @@ cp_seed_renderer_pid_files() { :; }
 cp_usb_record_generation_result() { echo recovery >> "$TEST_DIR/recovery"; }
 cp_cap_all_logs() { :; }
 cp_renderer_pids() { echo "$RENDERER_TOKEN"; }
-cp_stop_renderer_snapshot() { echo "$2 $3" >> "$TEST_DIR/stopped"; }
+cp_stop_renderer_snapshot() { echo "$2 $3 $4" >> "$TEST_DIR/stopped"; }
 kill() { echo "$*" >> "$TEST_DIR/kills"; }
 sleep() {
     case "$SCENARIO:$1" in
@@ -43,29 +44,47 @@ sleep() {
         *) : ;;
     esac
 }
+for RENDERER in maneuver_render altscreen_render cursor_render; do
 for SCENARIO in replace death stop adopted; do
     ALIVE=1; RENDERER_LIVE=0; echo 100 > "$OWNER_FILE"; rm -f "$STOP_FILE" "$TEST_DIR/spawns"
-    start_renderer maneuver_render restart || :
+    start_renderer "$RENDERER" restart || :
     wait
     if [ -s "$TEST_DIR/spawns" ]; then
         echo "FAIL: stale/ceased monitor spawned renderer after $SCENARIO during backoff" >&2
         exit 1
     fi
 done
+done
 # Current generation still starts a genuinely missing renderer.
 SCENARIO=current; ALIVE=1; RENDERER_LIVE=0; echo 100 > "$OWNER_FILE"; rm -f "$STOP_FILE"
 start_renderer maneuver_render restart
 wait
 [ "$(cat "$TEST_DIR/spawns")" = maneuver_render ]
+rm -f "$TEST_DIR/spawns"
+start_renderer cursor_render restart
+wait
+[ "$(cat "$TEST_DIR/spawns")" = cursor_render ]
 # Explicit stop snapshots renderer identities before the DIO grace sleep. A
 # replacement during that sleep must not change the killed renderer snapshot.
 SCENARIO=explicit; ALIVE=1; RENDERER_LIVE=1; RENDERER_TOKEN=111
 : > "$STOP_FILE"; echo 100 > "$OWNER_FILE"
 monitor_renderers 100
-[ "$(cat "$TEST_DIR/stopped")" = '111 111' ]
+[ "$(cat "$TEST_DIR/stopped")" = '111 111 111' ]
 # An obsolete monitor must neither adopt renderers nor update USB failure state.
 rm -f "$TEST_DIR/recovery" "$TEST_DIR/spawns"
 SCENARIO=obsolete; ALIVE=1; RENDERER_LIVE=0; echo 200 > "$OWNER_FILE"
 monitor_renderers 100
 [ ! -e "$TEST_DIR/recovery" ] && [ ! -e "$TEST_DIR/spawns" ]
+# Exercise the actual shared registry/cleanup helpers too. kill/sleep remain
+# harmless test functions, so this never addresses a real process.
+. "$ROOT/deploy/smartphone_integrator/carplay_processes.sh"
+CP_CURSOR_PID_FILE=$TEST_DIR/cursor.pid
+cp_renderer_record_pid cursor_render 333
+[ "$(cat "$CP_CURSOR_PID_FILE")" = 333 ]
+SCENARIO=helpers
+rm -f "$TEST_DIR/kills"
+cp_stop_renderer_snapshot "$WLOG" 111 222 333
+[ "$(cat "$TEST_DIR/kills")" = "-15 111
+-15 222
+-15 333" ]
 echo 'Supervisor lifecycle: owner/death/stop/adoption during backoff, stop snapshot and stale monitor PASS'

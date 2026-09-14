@@ -50,7 +50,7 @@ cat > "$CFG" <<'EOF'
 EOF
 cp "$CFG" "$TMP/stock.json"
 
-for f in libcarplay_hook.so libcarplay_apac.so hssr_model.bin maneuver_render altscreen_render \
+for f in libcarplay_hook.so libcarplay_apac.so hssr_model.bin maneuver_render altscreen_render cursor_render \
          flag_atlas.rgba carplay_startup.sh carplay_processes.sh carplay_cleanup.sh \
          carplay_hook.jar; do
     echo "payload $f" > "$PAYLOAD/bin/$f"
@@ -88,7 +88,7 @@ PY
 [ -f "$CFG.orig" ] || fail "no .orig backup"
 cmp -s "$CFG.orig" "$TMP/stock.json" || fail ".orig is not the stock config"
 
-for f in libcarplay_hook.so hssr_model.bin maneuver_render carplay_startup.sh; do
+for f in libcarplay_hook.so hssr_model.bin maneuver_render cursor_render carplay_startup.sh; do
     [ -f "$APP/root/hooks/$f" ] || fail "$f was not installed"
 done
 [ -f "$APP/eso/hmi/lsd/jars/carplay_hook.jar" ] || fail "jar was not installed"
@@ -104,6 +104,7 @@ grep -q "already the carplay child" "$TMP/install.out" \
 run uninstall || fail "uninstall.sh exited $?"
 cmp -s "$CFG" "$TMP/stock.json" || fail "uninstall did not restore the stock config"
 [ -f "$APP/root/hooks/libcarplay_hook.so" ] && fail "uninstall left the hook behind"
+[ -f "$APP/root/hooks/cursor_render" ] && fail "uninstall left cursor_render behind"
 [ -f "$APP/root/hooks/hssr_model.bin" ] && fail "uninstall left the HSSR model behind"
 [ -f "$APP/eso/hmi/lsd/jars/carplay_hook.jar" ] && fail "uninstall left the jar behind"
 

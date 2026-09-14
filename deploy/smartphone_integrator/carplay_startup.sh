@@ -3,14 +3,14 @@
 #
 # The smartphone_integrator child environment deliberately contains NO LD_PRELOAD.
 # This script applies libcarplay_hook.so only to dio_manager, so neither this shell
-# nor either external renderer loads the hook.
+# nor any external renderer loads the hook.
 #
 # Lifecycle:
 #   1. keep an already-running renderer untouched; start only a missing one;
 #   2. fork a renderer monitor, then EXEC dio_manager with the hook and altScreen
 #      gates (exec is mandatory: smartphone_integrator tracks this exact PID);
 #   3. while that PID lives, the monitor restarts a renderer if it exits;
-#   4. ordinary dio exit/replacement leaves both persistent renderers alive;
+#   4. ordinary dio exit/replacement leaves the persistent renderers alive;
 #      only an explicit supervisor stop tears them down.
 
 DIODIR=/mnt/app/eso/bin/apps
@@ -51,7 +51,8 @@ start_renderer()
     if cp_renderer_running "$SR_NAME"; then
         # An adopted renderer from a previous generation may be alive but wedged
         # (see cp_renderer_healthy). On initial adoption, probe only a readiness
-        # signal the renderer actually owns: :19831 for altscreen_render; a live
+        # signal the renderer actually owns: :19831 for altscreen_render and
+        # :19840 for cursor_render; a live
         # PID for maneuver_render, which is a CLIENT of Java's optional :19800.
         # If that renderer-specific check fails, replace the wedged PID.
         # The 2s monitor loop keeps the cheap PID-only check (it restarts exits).
@@ -97,6 +98,15 @@ start_renderer()
             ) &
             cp_renderer_record_pid "$SR_NAME" "$!"
             ;;
+        cursor_render)
+            (
+                cd "$H" || exit 1
+                supervisor_may_start || exit 0
+                LD_PRELOAD= GRAPHICS_ROOT=/proc/boot exec "$H/cursor_render" \
+                    </dev/null >>/tmp/cursor_render.log 2>&1
+            ) &
+            cp_renderer_record_pid "$SR_NAME" "$!"
+            ;;
         *) return 1 ;;
     esac
 }
@@ -133,6 +143,7 @@ monitor_renderers()
     start_renderer altscreen_render initial
     sleep 1
     start_renderer maneuver_render initial
+    start_renderer cursor_render initial
 
     while supervisor_owns_generation && supervisor_dio_alive; do
         if [ -e "$STOP_FILE" ]; then
@@ -142,6 +153,7 @@ monitor_renderers()
             # next generation by the time the old dio has stopped.
             MR_MANEUVER_PIDS=`cp_renderer_pids maneuver_render`
             MR_ALTSCREEN_PIDS=`cp_renderer_pids altscreen_render`
+            MR_CURSOR_PIDS=`cp_renderer_pids cursor_render`
             kill -15 "$MR_DIO_PID" 2>/dev/null
             sleep 3
             if [ -d "/proc/$MR_DIO_PID" ]; then
@@ -152,6 +164,7 @@ monitor_renderers()
         fi
         start_renderer maneuver_render restart
         start_renderer altscreen_render restart
+        start_renderer cursor_render restart
 
         sleep 2
         MR_LIVED_TICKS=`expr "$MR_LIVED_TICKS" + 1`
@@ -164,7 +177,7 @@ monitor_renderers()
     if [ "$MR_EXPLICIT_STOP" = 1 ]; then
         echo "[supervisor] explicit stop - stopping renderer snapshot" >> "$WLOG"
         cp_stop_renderer_snapshot "$WLOG" \
-            "$MR_MANEUVER_PIDS" "$MR_ALTSCREEN_PIDS"
+            "$MR_MANEUVER_PIDS" "$MR_ALTSCREEN_PIDS" "$MR_CURSOR_PIDS"
     else
         # A late old monitor must not clear/advance the new wrapper's USB state.
         if supervisor_owns_generation; then

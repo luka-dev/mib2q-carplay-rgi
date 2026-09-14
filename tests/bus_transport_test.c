@@ -161,9 +161,27 @@ static void reused_descriptor(void) {
     close(pair[1]);
 }
 
+static int hu_query_calls;
+static void hu_query(uint16_t type, uint8_t flags, const uint8_t *p, uint32_t len, void *ctx) {
+    (void)ctx;
+    assert(type == CMD_HU_VIDEO_STATUS && flags == BUS_FLAG_BINARY && len == 4 && read_be32(p) == 1234);
+    ++hu_query_calls;
+}
+static void hu_query_wire(void) {
+    int pair[2]; uint8_t nonce[4]; frame_t f = {0};
+    assert(bus_on(CMD_HU_VIDEO_STATUS, hu_query, NULL) == HOOK_OK);
+    assert(socketpair(AF_UNIX, SOCK_STREAM, 0, pair) == 0);
+    write_be32(nonce, 1234);
+    f.type = CMD_HU_VIDEO_STATUS; f.flags = BUS_FLAG_BINARY; f.payload = nonce; f.len = 4;
+    assert(send_frame(pair[0], 0, false, &f) == 0);
+    assert(read_frame(pair[1], 0) == 0 && hu_query_calls == 1);
+    bus_off(CMD_HU_VIDEO_STATUS); close(pair[0]); close(pair[1]);
+}
+
 int main(void) {
     alarm(15); /* fail a stuck reconnect test instead of hanging the suite */
     signal(SIGPIPE, SIG_IGN);
+    hu_query_wire();
     cache_allocation_failure();
     snapshot_failure();
     reused_descriptor();

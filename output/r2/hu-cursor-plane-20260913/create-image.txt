@@ -1,0 +1,144 @@
+// callconv: r0 arm32 (r0, r1);
+void sym.CDSIDisplaymanagement__createImageDisplayable_CIPtr_dsi__global__ResourceLocator__const__int_ (int32_t arg1, int32_t arg2) {
+        // CDSIDisplaymanagement::createImageDisplayable(CIPtr<dsi::global::Res
+        // ourceLocator> const&, int)
+        push (r4, r5, r6, r7, r8, sb, sl, fp, lr)
+        r5 = [0x0005facc] // [0x5fc98:4]=0x3fe80
+        ip = [0x0005fad0] // [0x5fc9c:4]=0x1020
+        sp -= 0x6c
+        r5 = pc + r5  // section..got
+        r6 = var_34h
+        r4 = 0
+        lr = 1
+        r7 = r1       // arg2
+        ip = [r5 + ip]
+        r8 = r6 + 0x20
+        r3 = r4
+        sb = r0       // arg1
+        sl = r2
+        r1 = lr
+        r2 = r4
+        r0 = r8
+        ip += 8
+        [var_38h] = (byte) r4
+        [var_34h] = ip
+        [var_38h] = (byte) lr
+        [var_50h] = (half) r4
+        [var_54h] = r4
+        [var_58h] = r4
+        sym.imp.osal::MutexOps::init__sync__bool__bool__bool_ () // sym.imp.osal::MutexOps::init__sync__bool__bool__bool_(0x177fc4, 0x1, 0x0, 0x0)
+        r3 = [r7]
+        r2 = 8
+        [var_38h] = (byte) r4
+        (a, b) = compare (r3, r4)
+        [var_50h] = (half) r2
+        [var_3ch] = r4
+        je 0x5fc2c    // unlikely
+        goto loc_0x0005fb40;
+    loc_0x0005fc2c:
+        r0 = r6
+        rsym._ZN4util10DataBufferILi16EED1Ev () // rsym._ZN4util10DataBufferILi16EED1Ev(0x0, 0x0, 0x0, 0x0)
+        sp += 0x6c
+        pop (r4, r5, r6, r7, r8, sb, sl, fp, pc)
+        goto loc_0x0005fb4c;
+        return r0;
+    loc_0x0005fb4c:
+        r2 = [0x0005fb54] // [0x5fca0:4]=0x1070
+        r2 = [r5 + r2]
+        (a, b) = compare (r2, r4)
+        je 0x5fc2c    // likely
+        goto loc_0x0005fb5c;
+    loc_0x0005fb5c:
+        r2 = [r3 + 4] // "able15realizeCroppingERKi"
+        (a, b) = compare (r2, r4)
+        je 0x5fc2c    // unlikely
+        goto loc_0x0005fb68;
+    loc_0x0005fb68:
+        r1 = [r3 + 8]
+        (a, b) = compare (r1, r4)
+        je 0x5fc2c    // likely
+        goto loc_0x0005fb74;
+    loc_0x0005fb74:
+        r3 = [0x0005fb7c] // [0x5fca4:4]=0xdbc
+        r3 = [r5 + r3]
+        (a, b) = compare (r3, r4)
+        je 0x5fc2c    // likely
+        goto loc_0x0005fb84;
+    loc_0x0005fb84:
+        fp = sp + 0xc
+        r0 = fp
+        sym.imp.util::UnicodeString8::utf8___const () // sym.imp.util::UnicodeString8::utf8___const(0x17800c, 0x0, 0x0, 0x0)
+        r1 = fp
+        r0 = r6
+        rsym._ZN4util10DataBufferILi16EEaSERKS1_ () // rsym._ZN4util10DataBufferILi16EEaSERKS1_(0x0, 0x17800c, 0x0, 0x0)
+        r0 = fp
+        rsym._ZN4util10DataBufferILi16EED1Ev () // rsym._ZN4util10DataBufferILi16EED1Ev(0x17800c, 0x17800c, 0x0, 0x0)
+        r0 = r8
+        sym.imp.pthread_mutex_lock () // sym.imp.pthread_mutex_lock(0x0, 0x17800c, 0x0, 0x0)
+        (a, b) = compare (r0, r4)
+        bne 0x5fc3c   // unlikely
+        goto loc_0x0005fbb4;
+    while (/* 0x0005fc3c */) {
+        r3 = (byte) [var_38h]
+        (a, b) = compare (r3, 1)
+        addeq r8, r6, 0xc
+        ldrne r3, [sp, 0x40]
+        ldrne r8, [r3]
+        (a, b) = compare (r4, 0)
+        je 0x5fbe4    // likely
+        // CODE XREF from CDSIDisplaymanagement::createImageDisplayable(CIPtr<dsi::global::ResourceLocator> const&, int) @ 0x5fc78(x)
+        r3 = [0x0005fbec] // [0x5fca8:4]=0xd40
+        r0 = [r5 + r3]
+        ldrsh r3, [r0, 0x38] // (cstr 0x00000062) "\t"
+        (a, b) = compare (r3, 1)
+        ble 0x5fc7c   // unlikely
+        // CODE XREF from CDSIDisplaymanagement::createImageDisplayable(CIPtr<dsi::global::ResourceLocator> const&, int) @ 0x5fc94(x)
+        r4 = var_5ch
+        r1 = r7
+        r0 = r4
+        sym.imp.util::SharedPtrDefaultBase::SharedPtrDefaultBase_util::SharedPtrDefaultBase_const_ () // sym.imp.util::SharedPtrDefaultBase::SharedPtrDefaultBase_util::SharedPtrDefaultBase_const_(0x17805c, 0x0, 0x0, 0x0)
+        r2 = [0x0005fc10] // [0x5fcac:4]=0xf70
+        r1 = sl
+        r3 = sb + 0x54
+        r0 = r4
+        r2 = [r5 + r2]
+        r2 = [r2]
+        rsym._ZN26CDSICreateImageDisplayable4postE5CIPtrIN3dsi6global15ResourceLocatorEEiP11IEventQueueP13IEventHandler () // rsym._ZN26CDSICreateImageDisplayable4postE5CIPtrIN3dsi6global15ResourceLocatorEEiP11IEventQueueP13IEventHandler(0x17805c, 0x0, 0x66400, 0x54)
+        r0 = r4
+        sym.imp.util::SharedPtrDefaultBase::_SharedPtrDefaultBase__ () // sym.imp.util::SharedPtrDefaultBase::_SharedPtrDefaultBase__(0x17805c, 0x0, 0x66400, 0x54)
+        r0 = r6 + 0x20
+        rsym._ZNK4osal5Mutex6unlockEv () // rsym._ZNK4osal5Mutex6unlockEv(0x20, 0x0, 0x0, 0x0)
+        (a, b) = compare (r0, 0)
+        bne 0x5fc4c   // likely
+    }
+    loc_0x0005fc48:
+        goto 0x5fbb4
+            goto loc_0x0005fbb4;
+    loc_0x0005fbb4:
+        // CODE XREF from CDSIDisplaymanagement::createImageDisplayable(CIPtr<dsi::global::ResourceLocator> const&, int) @ 0x5fc48(x)
+        r4 = 1
+        return r0;
+    loc_0x0005fc7c: // orphan
+         r2 = [0x0005fc84]        // [0x5fcbc:4]=0xffff6b4c
+         r1 = 1
+         r3 = sl
+         [sp] = r8
+         r2 = r5 + r2
+         sym.imp.tracing::Channel::logCV_short__char_const__..._ () // sym.imp.tracing::Channel::logCV_short__char_const__..._(0x0, 0x1, 0xffff6b4c, 0x0)
+         
+    loc_0x0005fc4c: // orphan
+         r1 = [0x0005fc54]        // [0x5fcb0:4]=0xffff1a94
+         lr = 0
+         r2 = [0x0005fc5c]        // [0x5fcb4:4]=0xffff1aa8
+         r0 = lr
+         ip = [0x0005fc64]        // [0x5fcb8:4]=0xffff6c5c
+         r1 = r5 + r1
+         r2 = r5 + r2
+         r3 = 0x82                // "\t"
+         ip = r5 + ip
+         stm sp, (ip, lr)
+         sym.imp.ipl::GlobalErrorHandler::doAssert_bool__char_const__char_const__int__char_const__char_const__..._ () // sym.imp.ipl::GlobalErrorHandler::doAssert_bool__char_const__char_const__int__char_const__char_const__..._(0x0, 0xffff1a94, 0xffff1aa8, 0x82)
+         
+         goto loc_0x0005fc48;
+}
+

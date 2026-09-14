@@ -1,40 +1,45 @@
-# AltScreen Startup Loader
+# PRISM startup presentation
 
-Status: the startup loader is supported only for the instrument-cluster
-altScreen renderer (stream 111 / displayable 99).
+Experiment update 2026-09-14: `mhi2-carplay-cursor` imports the committed altScreen
+PRISM implementation from master `95b7709` and shares its GPU scene with the new HU
+cursor process. See [HU startup](reference/HU_STARTUP_LOADER_AND_MENU.md) and
+[cursor ownership/protocol](reference/HU_TOUCH_CURSOR_EXPERIMENT.md).
 
-The attempted main-HU loader for stock stream 110 was removed. It did not
-produce a reliable early image on MU1316 and added unsafe coupling between the
-stock main decoder and the independent cluster decoder.
+## Shared rendering
 
-## Production behavior
+`common/prism_gl.c/.h` owns context-local shader/material/signature resources and
+scene drawing. `common/prism.c/.h` supplies image decoding and layouts;
+`common/prism_baked.h` embeds the shader/assets. `common/prism_handoff.h` is the
+shared reversible critically damped transition. The previous CPU
+`carplay_loader.c/.h` and `loader_assets.h` are removed.
 
-- Stock `libairplay.so` 210.81 owns stream 110 and displayable 59 completely.
-- The hook does not create, adopt or patch a `CScreenRender` for stream 110.
-- No stock-210 GOT slots are rewritten for loader handoff or OMX readiness.
-- Java does not force context 78 or toggle displayable 59 opacity for a loader.
-- Stream 111 is not gated on stock stream 110 readiness.
-- `altscreen_render` retains its early RGBA8888 loader on displayable 99 and
-  replaces it with the first successfully presented decoded cluster frame.
+The shared scene owns no windows, EGL lifecycle, video queues or threads.
+Its callers retain those responsibilities:
 
-This restores the normal stock lifecycle for the main CarPlay screen while
-keeping the already-working, process-local cluster loader.
+- `altscreen_render/screen_egl_present.c`: cluster window 99, PRISM and the
+  owned decoded-frame cache. The existing queue/handoff returns OMX buffers through
+  their proper owner. Cluster layouts retain their safe visible rectangles.
+- `cursor_render/`: independent HU managed window 103 between stock HMI 16 and
+  main video 59. Its native engine owns pointer idle/fade and PRISM animation.
+  HU PRISM uses the full canvas; an alpha aperture reveals the existing video
+  surface without importing or modifying that video.
 
-## Remaining loader implementation
+Stock `libairplay.so` owns stream 110/displayable 59. The hook only observes successful
+main config/render; it creates no HU window and paints no loader/cursor into decoder
+buffers. Stream 111 remains independent of stream 110 readiness. Java coordinates
+HMI/menu, input state and observed readiness; it computes no cursor/loader opacity
+or animation completion.
 
-- `common/carplay_loader.c/.h`: platform-neutral deterministic loader scene.
-- `altscreen_render/screen_egl_present.c`: early RGBA window 99, loader thread,
-  and first-decoded-frame takeover.
-- `scripts/build_renderers.sh`: links the common loader only into
-  `altscreen_render`.
+## Local validation
 
-The hook build intentionally does not link `common/carplay_loader.c` and has no
-`main_loader.c/.h` module.
+- `scripts/build_renderers.sh`: all three ARM executables, no emutls.
+- `make -C altscreen_render hostcheck`: shared GPU scene and platform syntax.
+- `make -C tools/loader_preview check check-bake`: PRISM transition, queue,
+  owned GPU cache and reproducible baked assets.
+- `scripts/test_hu_cursor.sh`: Java input/transport, native engine/session/process,
+  independent fade, protocol v2, GPU premultiplied alpha and stale-buffer cleanup.
+- `scripts/test_hu_startup.sh`: stock class replacement, HMI ownership,
+  native completion/ACK click deadlines, video observer and session isolation.
 
-## Verification
-
-1. With no stream 111 video yet, displayable 99 can show the local loader.
-2. The first decoded and successfully swapped RGBA frame replaces that loader.
-3. Stream 110 starts and tears down exclusively through stock code.
-4. Opening or closing stream 110 does not disconnect, rearm or gate stream 111.
-5. Hook and renderer QNX ARM builds contain no emutls symbols.
+This experiment is built/tested on the host. HU compositor adoption, physical
+layering, transition timing and GPU cost still require a matched hardware deployment.

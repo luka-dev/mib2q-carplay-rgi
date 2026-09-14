@@ -65,8 +65,9 @@ They are still used to publish the real FctID 22 absolute ETA (`BAPBridge.java:1
 > `EXITVIEW_ROW/ASIA`, `AltScreenModule.isClusterActive()` and
 > `RouteGuidance.ROUTE_STATE_ACCEPT_ALL_MANEUVER_IDX`.
 >
-> Still open: the KOMO reflection ladder (below). It is a semantic change and needs an on-car
-> validation pass, not a blind edit.
+> 2026-09-14: the KOMO reflection ladder is now removed in `experiment/hu-touch-cursor`.
+> The actual MU1316 setters pass cache/pacing/reconnect regression tests; on-car validation
+> remains pending. See [the refreshed Java audit](JAVA_DECOMPILE_CROSSCHECK_2026_09_14.md).
 
 The added methods do not control any renderer or stock pipeline:
 
@@ -91,7 +92,13 @@ The four other added `ClusterService` accessors are live and must remain:
 (`BAPBridge.java:551-570`), while the CombiBAP service getter/setter are used by
 `AltScreenNavStatusGate` (`AltScreenNavStatusGate.java:42-65,129-149`).
 
-## Simplify next: replace KOMO reflection with the public stock API
+## Implemented in experiment: KOMO public stock API (2026-09-14)
+
+The findings and proposed changes below describe the pre-fix implementation. The current
+experiment calls `KOMOService.updateDataRate()` before `updateGfxState()`, with direct
+`ClusterViewMode` setters if the service reference was not acquired. Distance formatting also
+uses the recovered public nested type, without reflection. The private cover-art registry
+access remains required.
 
 `BAPBridge.forceGfxAvailable()` currently spans `BAPBridge.java:2231-2347` and tries three
 reflection strategies. Two assumptions are contradicted by authoritative MU1316 stock source:
