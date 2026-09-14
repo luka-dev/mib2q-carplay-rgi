@@ -1,9 +1,10 @@
 # HU CarPlay touchpad cursor experiment — 2026-09-13
 
-Implemented and built locally on `experiment/hu-touch-cursor`, worktree
-`/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay-cursor`, based on master `9720844`.
-Not deployed or visually verified on HU. Canonical master and its prepared release
-bundle are untouched. Test the JAR, cursor_render and supervisor scripts together.
+Originally developed on `experiment/hu-touch-cursor` from `9720844`. Committed as
+`7fce1c4` and integrated with PRISM and RGI into canonical `master` in `7b6cc45`
+on 2026-09-14. Active workspace: `/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay`.
+Not deployed or visually verified on HU. Test the JAR, cursor_render and supervisor
+scripts together.
 The rebuilt hook removes the previous in-DIO cursor prototype; it now only observes
 stock main-video config/render for the [HU loader](HU_STARTUP_LOADER_AND_MENU.md).
 Do not leave that old in-DIO cursor hook installed, or two

@@ -5,7 +5,7 @@
 # Now uses the self-contained image `qnx65-armv7-toolchain` (Tools/qnx-65-sdp-docker,
 # GCC 8.5). No VM required.
 #
-#   ./scripts/build_renderers.sh            # build both renderers
+#   ./scripts/build_renderers.sh            # build all three renderers
 #   ./scripts/build_renderers.sh grid       # maneuver_render with -DCR_DEBUG_GRID
 #
 # Outputs: build/maneuver_render, build/altscreen_render, build/cursor_render.

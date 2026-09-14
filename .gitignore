@@ -76,3 +76,6 @@ output/lane-panel/raw/
 # PRISM host preview/test output.
 tools/loader_preview/.prism-test-*
 tools/loader_preview/prism_preview
+
+# Generated desktop PRISM captures and app bundles.
+/output/loader-preview/

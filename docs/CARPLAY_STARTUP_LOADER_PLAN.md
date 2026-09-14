@@ -1,8 +1,7 @@
 # PRISM startup presentation
 
-Experiment update 2026-09-14: `mhi2-carplay-cursor` imports the committed altScreen
-PRISM implementation from master `95b7709` and shares its GPU scene with the new HU
-cursor process. See [HU startup](reference/HU_STARTUP_LOADER_AND_MENU.md) and
+Integrated into canonical master on 2026-09-14 (`7b6cc45`): the altScreen PRISM
+implementation from `95b7709` shares its GPU scene with the new HU cursor process. See [HU startup](reference/HU_STARTUP_LOADER_AND_MENU.md) and
 [cursor ownership/protocol](reference/HU_TOUCH_CURSOR_EXPERIMENT.md).
 
 ## Shared rendering

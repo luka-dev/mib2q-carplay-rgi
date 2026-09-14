@@ -130,4 +130,5 @@ ASM BasicVerifier.
 реальные startup/context/plane 103, выбор курсором, map/popup start, renderer
 respawn и отключение/возврат к штатной навигации. Ограничения эксперимента
 описаны в [HU_STARTUP_LOADER_AND_MENU.md](HU_STARTUP_LOADER_AND_MENU.md).
-Изменения этого аудита не закоммичены, не отправлены и не установлены на HU.
+Изменения аудита сохранены в `7fce1c4` и объединены в основной `master`
+коммитом `7b6cc45`. На HU они пока не установлены.
