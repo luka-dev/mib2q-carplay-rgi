@@ -502,6 +502,10 @@ static void _Teardown(ScreenSink *me, int destroyPresent) {
         }
     }
     pthread_mutex_unlock(&me->lock);
+    /* All callbacks have released their input images. PRISM owns the last
+     * RGBA frame, so it can start returning while OMX drains and frees buffers. */
+    if (!destroyPresent && me->present)
+        screen_egl_present_start_loader(me->present);
     if (me->decoder) {
         OMX_SendCommand(me->decoder, OMX_CommandStateSet, OMX_StateIdle, NULL);
         _WaitState(me, OMX_StateIdle, kOmxStopWaitMs);
@@ -529,8 +533,6 @@ static void _Teardown(ScreenSink *me, int destroyPresent) {
     me->presentRecoveryAttempts = 0;
     me->presentNeedsFullRebuild = 0;
     me->presentRecoveryAfterMs = 0;
-    if (!destroyPresent && me->present)
-        screen_egl_present_start_loader(me->present);
 }
 
 /* Bring up native 32m OMX output + post-decode EGL external-image conversion. */

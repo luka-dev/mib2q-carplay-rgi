@@ -23,6 +23,11 @@ typedef char GLchar;
 #define GL_LINK_STATUS 0x8b82
 #define GL_TEXTURE0 0x84c0
 #define GL_TEXTURE1 0x84c1
+#define GL_TEXTURE2 0x84c2
+#define GL_TEXTURE3 0x84c3
+#define GL_FRAMEBUFFER 0x8d40
+#define GL_COLOR_ATTACHMENT0 0x8ce0
+#define GL_FRAMEBUFFER_COMPLETE 0x8cd5
 #define GL_TEXTURE_2D 0x0de1
 #define GL_TEXTURE_MIN_FILTER 0x2801
 #define GL_TEXTURE_MAG_FILTER 0x2800
@@ -72,6 +77,13 @@ void glActiveTexture(GLenum texture);
 void glUniform1i(GLint location, GLint value);
 void glUniform1f(GLint location, GLfloat v0);
 void glUniform2f(GLint location, GLfloat v0, GLfloat v1);
+void glUniform4f(GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3);
+void glGenFramebuffers(GLsizei count, GLuint *framebuffers);
+void glDeleteFramebuffers(GLsizei count, const GLuint *framebuffers);
+void glBindFramebuffer(GLenum target, GLuint framebuffer);
+void glFramebufferTexture2D(GLenum target, GLenum attachment, GLenum texture_target, GLuint texture, GLint level);
+GLenum glCheckFramebufferStatus(GLenum target);
+void glDisableVertexAttribArray(GLuint index);
 void glEnableVertexAttribArray(GLuint index);
 void glVertexAttribPointer(GLuint index, GLint size, GLenum type,
                            GLboolean normalized, GLsizei stride,

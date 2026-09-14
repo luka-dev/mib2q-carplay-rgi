@@ -28,11 +28,10 @@ else
   # OMX core + libscreen come from the MHI2Q BSP (unit/VM), NOT the generic SDP;
   # -lOmxCore is the expected OMX IL core name — CONFIRM on-unit if the link fails.
   CC   = /usr/qnx650/host/qnx6/x86/usr/bin/ntoarmv7-gcc
-  # Loader art is now a fragment shader in screen_egl_present.c (baked RGBA in
-  # common/loader_assets.h); the old CPU rasteriser carplay_loader.c is retired.
-  SINK = sink_omx_qnx.c screen_egl_present.c $(COMMON_INC)/cluster_surface.c
+  # PRISM shader and selected artwork are embedded in common/prism_baked.h.
+  SINK = sink_omx_qnx.c screen_egl_present.c $(COMMON_INC)/cluster_surface.c $(COMMON_INC)/prism.c
   CFLAGS = -O2 -std=gnu99 -Wall -D__QNX__ -DPLATFORM_QNX -fdata-sections -ffunction-sections -I$(OMX_INC) -I$(COMMON_INC)
-  LDFLAGS = -Wl,--gc-sections -lscreen -lOmxCore -lEGL -lGLESv2 -lsocket
+  LDFLAGS = -Wl,--gc-sections -lscreen -lOmxCore -lEGL -lGLESv2 -lsocket -lm
   BUILD_TEST = 0
 endif
 
@@ -47,7 +46,7 @@ endif
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
-$(TARGET): $(SRC) | $(BUILD_DIR)
+$(TARGET): $(SRC) prism_queue.h $(COMMON_INC)/prism.h $(COMMON_INC)/prism_handoff.h $(COMMON_INC)/prism_baked.h $(COMMON_INC)/loader_layout.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(SRC) -o $@ $(LDFLAGS)
 
 $(TESTBIN): test_feed.c frame_io.c | $(BUILD_DIR)
@@ -66,7 +65,7 @@ hostcheck:
 	$(CC) -fsyntax-only -std=gnu99 -Wall -D__QNX__ -DPLATFORM_QNX \
 	      -Ihostcheck -I$(COMMON_INC) $(COMMON_INC)/cluster_surface.c
 	$(CC) -fsyntax-only -std=c99 -Wall -Wextra \
-	      -I$(COMMON_INC) $(COMMON_INC)/carplay_loader.c
+	      -I$(COMMON_INC) $(COMMON_INC)/prism.c
 	# The Docker QNX build remains the authoritative Screen/OMX ABI link check.
 
 clean:

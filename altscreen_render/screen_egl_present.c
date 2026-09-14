@@ -21,7 +21,9 @@
  * tiled bytes without YUV->RGBA conversion, producing green/black output.
  */
 #include "screen_egl_present.h"
-#include "loader_assets.h"    /* baked Apple logo + @LuKa_dev signature (raw RGBA) */
+#include "prism.h"
+#include "prism_baked.h"
+#include "prism_queue.h"
 #include "cluster_surface.h"
 #include "loader_layout.h"
 
@@ -100,10 +102,14 @@ struct screen_egl_present {
     GLuint loader_program;
     GLint loader_attr_pos;
     GLint loader_u_ires, loader_u_itime;
-    GLint loader_u_center, loader_u_scale;
-    GLint loader_u_logo, loader_u_sig;
-    GLint loader_u_sigc, loader_u_sigh, loader_u_siga;
-    GLuint logo_texture, sig_texture;
+    GLint loader_u_content, loader_u_view, loader_u_sigrect;
+    GLint loader_u_mix;
+    GLuint material_texture, sig_texture;
+    /* Owned RGBA cache survives OMX teardown and backs the reverse transition. */
+    GLuint stream_texture, stream_fbo;
+    int stream_valid;
+    handoff_t prism_motion;
+    uint64_t prism_epoch_ns, prism_step_ns;
     pthread_t loader_thread;
     volatile int loader_thread_started;
     volatile int loader_stop;
@@ -118,6 +124,8 @@ struct screen_egl_present {
 
     pthread_mutex_t gl_lock;
     int gl_lock_initialized;
+    prism_queue_t queue;
+    int queue_initialized;
 
     unsigned long frames;
     unsigned long failures;
@@ -242,114 +250,46 @@ fail:
     return -1;
 }
 
-/* Apple-boot loader: pure fragment shader (per-pixel AA, true gradients).
- * Black field + Apple logo + HIG activity indicator below it + @LuKa_dev
- * signature in the corner. Composition math mirrors tools/loader_preview. */
+/* The exact same baked scene is rendered by the standalone macOS preview. */
 static int ep_make_loader_program(screen_egl_present_t *p) {
-    static const char *vertex_source =
-        "attribute vec2 a_pos;\n"
-        "void main() { gl_Position=vec4(a_pos,0.0,1.0); }\n";
-    static const char *fragment_source =
-        "precision highp float;\n"
-        "uniform vec2  iRes;\n"
-        "uniform float iTime;\n"
-        "uniform vec2  uCenter;\n"
-        "uniform float uScale;\n"
-        "uniform sampler2D uLogo;\n"
-        "uniform sampler2D uSig;\n"
-        "uniform vec2  uSigC;\n"
-        "uniform vec2  uSigH;\n"
-        "uniform float uSigA;\n"
-        "const float TAU = 6.28318531;\n"
-        "float sdSeg(vec2 p, vec2 a, vec2 b, float rad){\n"
-        "  vec2 pa=p-a, ba=b-a;\n"
-        "  float h=clamp(dot(pa,ba)/dot(ba,ba),0.0,1.0);\n"
-        "  return length(pa-ba*h)-rad;\n"
-        "}\n"
-        "float spinner(vec2 q, float t, float R1, float R2, float wth){\n"
-        "  float aa = 1.4/iRes.y;\n"
-        "  float phase = t/1.1;\n"
-        "  float lum = 0.0;\n"
-        "  for(int k=0;k<12;k++){\n"
-        "    float a = TAU*float(k)/12.0;\n"
-        "    vec2 dir = vec2(sin(a), cos(a));\n"
-        "    float d = sdSeg(q, dir*R1, dir*R2, wth);\n"
-        "    float seg = smoothstep(aa, -aa, d);\n"
-        "    float age = fract(phase - float(k)/12.0);\n"
-        "    lum = max(lum, seg*(0.16 + 0.84*age));\n"
-        "  }\n"
-        "  return lum;\n"
-        "}\n"
-        "void main(){\n"
-        "  float t = iTime;\n"
-        "  vec2 p = (gl_FragCoord.xy - 0.5*iRes)/iRes.y;\n"
-        "  vec2 q = (p - uCenter)/uScale;\n"
-        "  vec3 col = vec3(0.0);\n"
-        "  vec2 lc = vec2(0.0, 0.1125); float lh = 0.115;\n"
-        "  vec2 lp = (q - lc)/lh;\n"
-        "  if(abs(lp.x) < 1.0 && abs(lp.y) < 1.0){\n"
-        "    vec2 uv = vec2(lp.x*0.5 + 0.5, 0.5 - lp.y*0.5);\n"
-        "    col = mix(col, vec3(0.97,0.98,1.0), texture2D(uLogo, uv).a);\n"
-        "  }\n"
-        "  vec2 sq = q - vec2(0.0,-0.1475);\n"
-        "  float lum = 0.0;\n"
-        "  if(abs(sq.x) < 0.050 && abs(sq.y) < 0.050)\n"
-        "    lum = spinner(sq, t, 0.024, 0.040, 0.00375);\n"
-        "  col += vec3(0.93,0.95,1.0) * lum;\n"
-        "  col *= smoothstep(0.0, 0.45, t);\n"
-        "  vec2 sp = (p - uSigC)/uSigH;\n"
-        "  if(abs(sp.x) < 1.0 && abs(sp.y) < 1.0){\n"
-        "    vec2 uv = vec2(sp.x*0.5 + 0.5, 0.5 - sp.y*0.5);\n"
-        "    col = mix(col, vec3(1.0), texture2D(uSig, uv).a * uSigA);\n"
-        "  }\n"
-        "  gl_FragColor = vec4(col, 1.0);\n"
-        "}\n";
-    GLuint vs = 0, fs = 0;
-    GLint ok = 0;
-
-    vs = ep_compile_shader(GL_VERTEX_SHADER, vertex_source, "loader vertex");
-    fs = ep_compile_shader(GL_FRAGMENT_SHADER, fragment_source, "loader SDF");
-    if (!vs || !fs) goto fail;
-    p->loader_program = glCreateProgram();
-    if (!p->loader_program) goto fail;
-    glAttachShader(p->loader_program, vs);
-    glAttachShader(p->loader_program, fs);
+    static const char *vertex_source=
+        "attribute vec2 a_pos;\nvoid main(){gl_Position=vec4(a_pos,0.0,1.0);}";
+    GLuint vs=ep_compile_shader(GL_VERTEX_SHADER,vertex_source,"PRISM vertex");
+    GLuint fs=ep_compile_shader(GL_FRAGMENT_SHADER,PRISM_FRAGMENT_GLES,"PRISM fragment");
+    GLint ok=0;
+    if(!vs || !fs) goto fail;
+    p->loader_program=glCreateProgram();
+    if(!p->loader_program) goto fail;
+    glAttachShader(p->loader_program,vs); glAttachShader(p->loader_program,fs);
     glLinkProgram(p->loader_program);
-    glGetProgramiv(p->loader_program, GL_LINK_STATUS, &ok);
-    if (!ok) {
-        char log[768];
-        GLsizei used = 0;
-        log[0] = '\0';
-        glGetProgramInfoLog(p->loader_program, (GLsizei)sizeof(log) - 1,
-                            &used, log);
-        log[(used >= 0 && used < (GLsizei)sizeof(log))
-                ? used : (GLsizei)sizeof(log) - 1] = '\0';
-        fprintf(stderr,
-                "altscreen_render[egl]: loader program link FAILED: %s\n",
-                log);
+    glGetProgramiv(p->loader_program,GL_LINK_STATUS,&ok);
+    if(!ok) {
+        char log[1024]; GLsizei used=0;
+        glGetProgramInfoLog(p->loader_program,sizeof(log)-1,&used,log);
+        log[used>=0 && used<(GLsizei)sizeof(log)?used:(GLsizei)sizeof(log)-1]=0;
+        fprintf(stderr,"altscreen_render[prism]: link FAILED: %s\n",log);
         goto fail;
     }
-    p->loader_attr_pos = glGetAttribLocation(p->loader_program, "a_pos");
-    p->loader_u_ires   = glGetUniformLocation(p->loader_program, "iRes");
-    p->loader_u_itime  = glGetUniformLocation(p->loader_program, "iTime");
-    p->loader_u_center = glGetUniformLocation(p->loader_program, "uCenter");
-    p->loader_u_scale  = glGetUniformLocation(p->loader_program, "uScale");
-    p->loader_u_logo   = glGetUniformLocation(p->loader_program, "uLogo");
-    p->loader_u_sig    = glGetUniformLocation(p->loader_program, "uSig");
-    p->loader_u_sigc   = glGetUniformLocation(p->loader_program, "uSigC");
-    p->loader_u_sigh   = glGetUniformLocation(p->loader_program, "uSigH");
-    p->loader_u_siga   = glGetUniformLocation(p->loader_program, "uSigA");
-    glDeleteShader(vs);
-    glDeleteShader(fs);
-    return (p->loader_attr_pos >= 0 && p->loader_u_ires >= 0 &&
-            p->loader_u_itime >= 0 && p->loader_u_center >= 0 &&
-            p->loader_u_scale >= 0 && p->loader_u_logo >= 0 &&
-            p->loader_u_sig >= 0 && p->loader_u_sigc >= 0 &&
-            p->loader_u_sigh >= 0 && p->loader_u_siga >= 0) ? 0 : -1;
-
+    p->loader_attr_pos=glGetAttribLocation(p->loader_program,"a_pos");
+    p->loader_u_ires=glGetUniformLocation(p->loader_program,"iRes");
+    p->loader_u_itime=glGetUniformLocation(p->loader_program,"iTime");
+    p->loader_u_content=glGetUniformLocation(p->loader_program,"uContent");
+    p->loader_u_view=glGetUniformLocation(p->loader_program,"uView");
+    p->loader_u_sigrect=glGetUniformLocation(p->loader_program,"uSigRect");
+    p->loader_u_mix=glGetUniformLocation(p->loader_program,"uStreamMix");
+    glUseProgram(p->loader_program);
+    glUniform1i(glGetUniformLocation(p->loader_program,"uSig"),1);
+    glUniform1i(glGetUniformLocation(p->loader_program,"uMaterial"),2);
+    glUniform1i(glGetUniformLocation(p->loader_program,"uStream"),3);
+    glUniform1f(glGetUniformLocation(p->loader_program,"uGuides"),0.0f);
+    glUniform2f(glGetUniformLocation(p->loader_program,"uPixelMM"),
+        PRISM_PHYSICAL_WIDTH_MM/PRISM_WIDTH,PRISM_PHYSICAL_HEIGHT_MM/PRISM_HEIGHT);
+    glDeleteShader(vs); glDeleteShader(fs);
+    return p->loader_attr_pos>=0 && p->loader_u_ires>=0 && p->loader_u_itime>=0 &&
+        p->loader_u_content>=0 && p->loader_u_sigrect>=0 && p->loader_u_mix>=0 ? 0:-1;
 fail:
-    if (vs) glDeleteShader(vs);
-    if (fs) glDeleteShader(fs);
+    if(vs) glDeleteShader(vs);
+    if(fs) glDeleteShader(fs);
     return -1;
 }
 
@@ -369,11 +309,29 @@ static GLuint ep_upload_rgba(const unsigned char *data, int w, int h) {
     return tex;
 }
 
+static GLuint ep_upload_baked(const unsigned char *png,size_t length,int expected_w,int expected_h) {
+    int w=0,h=0;
+    unsigned char *pixels=prism_decode_png(png,length,&w,&h);
+    GLuint texture=0;
+    if(pixels && w==expected_w && h==expected_h) texture=ep_upload_rgba(pixels,w,h);
+    prism_free_image(pixels);
+    return texture;
+}
+
 static int ep_make_loader_textures(screen_egl_present_t *p) {
-    p->logo_texture = ep_upload_rgba(LOADER_LOGO_RGBA, LOADER_LOGO_W, LOADER_LOGO_H);
-    p->sig_texture  = ep_upload_rgba(LOADER_SIG_RGBA,  LOADER_SIG_W,  LOADER_SIG_H);
-    if (!p->logo_texture || !p->sig_texture || glGetError() != GL_NO_ERROR) {
-        fprintf(stderr, "altscreen_render[egl]: loader art upload FAILED\n");
+    p->material_texture=ep_upload_baked(PRISM_MATERIAL_PNG,sizeof(PRISM_MATERIAL_PNG),
+                                       PRISM_MATERIAL_W,PRISM_MATERIAL_H);
+    p->sig_texture=ep_upload_baked(PRISM_SIGNATURE_PNG,sizeof(PRISM_SIGNATURE_PNG),
+                                  PRISM_SIGNATURE_W,PRISM_SIGNATURE_H);
+    p->stream_texture=ep_upload_rgba(NULL,p->width,p->height);
+    if(!p->material_texture || !p->sig_texture || !p->stream_texture) return -1;
+    glGenFramebuffers(1,&p->stream_fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER,p->stream_fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,p->stream_texture,0);
+    GLenum status=glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    glBindFramebuffer(GL_FRAMEBUFFER,0);
+    if(!p->stream_fbo || status!=GL_FRAMEBUFFER_COMPLETE || glGetError()!=GL_NO_ERROR) {
+        fprintf(stderr,"altscreen_render[prism]: embedded assets/cache setup FAILED (0x%x)\n",(unsigned)status);
         return -1;
     }
     return 0;
@@ -698,6 +656,8 @@ screen_egl_present_t *screen_egl_present_create_output(int width, int height,
     p->egl_context = EGL_NO_CONTEXT;
     if (pthread_mutex_init(&p->gl_lock, NULL) != 0) goto fail;
     p->gl_lock_initialized = 1;
+    if (prism_queue_init(&p->queue) != 0) goto fail;
+    p->queue_initialized = 1;
 
     memset(&cfg, 0, sizeof(cfg));
     cfg.id = EP_DISPLAYABLE_ID;
@@ -777,141 +737,177 @@ static uint64_t ep_monotonic_ns(void) {
     return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
 }
 
-static int ep_loader_should_stop(screen_egl_present_t *p) {
-    int stop;
-    pthread_mutex_lock(&p->gl_lock);
-    stop = p->loader_stop;
-    pthread_mutex_unlock(&p->gl_lock);
-    return stop;
+/* Call with gl_lock held; one EGL owner advances and renders both states. */
+static void ep_prism_advance(screen_egl_present_t *p,uint64_t now) {
+    if(!p->prism_epoch_ns) p->prism_epoch_ns=now;
+    if(p->prism_step_ns && now>p->prism_step_ns)
+        handoff_step(&p->prism_motion,(double)(now-p->prism_step_ns)/1e9);
+    p->prism_step_ns=now;
 }
 
-static int ep_loader_frame(screen_egl_present_t *p, uint64_t elapsed_ms) {
-    static const GLfloat positions[] = {
-        -1.0f, -1.0f,  1.0f, -1.0f,
-        -1.0f,  1.0f,  1.0f,  1.0f
-    };
-    GLenum gl_error = GL_NO_ERROR;
-    int ok = -1;
-    int viewMode = (p && p->loader_view_area_mode &&
-                    *p->loader_view_area_mode == 1) ? 1 : 0;
-    int layoutStyle = (p && p->loader_layout_style &&
-                       *p->loader_layout_style == LOADER_STYLE_CLASSIC)
-        ? LOADER_STYLE_CLASSIC : LOADER_STYLE_SPORT;
-    const loader_layout_t *layout = carplay_loader_layout(viewMode, layoutStyle);
-    float sx = layout->view_x;
-    float sy = layout->view_y;
-    float sw = layout->view_w;
-    float sh = layout->view_h;
-    float content_left = sx + layout->pad_left;
-    float content_right = sx + sw - layout->pad_right;
-    float content_top = sy + layout->pad_top;
-    float content_bottom = sy + sh - layout->pad_bottom;
-    float t = (float)elapsed_ms / 1000.0f;
-    float W = (float)p->width, H = (float)p->height, aspect = W / H;
-    float cx_p, cy_p, sigAspect, ph, pw, pad_x, pad_bottom;
-    float rcx, rcy, rhw, rhh, sf;
-
-    if (!p || !p->logo_texture || !p->sig_texture) return -1;
-    cx_p = (((content_left + content_right)*0.5f)/W - 0.5f) * aspect;
-    cy_p = 0.5f - ((content_top + content_bottom)*0.5f)/H;
-    sigAspect = (float)LOADER_SIG_W / (float)LOADER_SIG_H;
-    ph = sh*0.055f;
-    pw = ph*sigAspect;
-    pad_x = sh*0.045f;
-    pad_bottom = sh*0.045f;
-    rcx = content_left + pad_x + layout->signature_x_offset + pw*0.5f;
-    rcy = (content_bottom - pad_bottom) - ph*0.5f; /* top-down px */
-    rhw = pw*0.5f; rhh = ph*0.5f;
-    sf = (t - 0.3f)/0.6f; sf = sf < 0.0f ? 0.0f : (sf > 1.0f ? 1.0f : sf);
-
-    pthread_mutex_lock(&p->gl_lock);
-    if (p->loader_stop) {
-        pthread_mutex_unlock(&p->gl_lock);
-        return 1;
-    }
-    if (!eglMakeCurrent(p->egl_display, p->egl_surface, p->egl_surface,
-                        p->egl_context)) goto out;
-
-    glViewport(0, 0, p->width, p->height);
+static void ep_prism_draw(screen_egl_present_t *p,uint64_t now) {
+    static const GLfloat positions[]={-1,-1,1,-1,-1,1,1,1};
+    int view=p->loader_view_area_mode && *p->loader_view_area_mode==1;
+    int style=p->loader_layout_style && *p->loader_layout_style==LOADER_STYLE_CLASSIC;
+    prism_layout_t layout=prism_layout(view,style,PRISM_SIGNATURE_W,PRISM_SIGNATURE_H);
+    float *c=layout.content,*v=layout.view,*r=layout.signature;
+    ep_prism_advance(p,now);
+    glBindFramebuffer(GL_FRAMEBUFFER,0);
+    glViewport(0,0,p->width,p->height);
     glDisable(GL_BLEND);
     glUseProgram(p->loader_program);
-    glUniform2f(p->loader_u_ires, W, H);
-    glUniform1f(p->loader_u_itime, t);
-    glUniform2f(p->loader_u_center, cx_p, cy_p);
-    glUniform1f(p->loader_u_scale, 1.0f);
-    glUniform2f(p->loader_u_sigc, (rcx/W - 0.5f)*aspect, 0.5f - rcy/H);
-    glUniform2f(p->loader_u_sigh, (rhw/W)*aspect, rhh/H);
-    glUniform1f(p->loader_u_siga, 0.55f*sf);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, p->logo_texture);
-    glUniform1i(p->loader_u_logo, 0);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, p->sig_texture);
-    glUniform1i(p->loader_u_sig, 1);
+    glUniform2f(p->loader_u_ires,(float)p->width,(float)p->height);
+    glUniform1f(p->loader_u_itime,(float)((double)(now-p->prism_epoch_ns)/1e9));
+    glUniform4f(p->loader_u_content,c[0],c[1],c[2],c[3]);
+    glUniform4f(p->loader_u_view,v[0],v[1],v[2],v[3]);
+    glUniform4f(p->loader_u_sigrect,r[0],r[1],r[2],r[3]);
+    glUniform1f(p->loader_u_mix,p->stream_valid?(float)p->prism_motion.position:0.0f);
+    glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D,p->sig_texture);
+    glActiveTexture(GL_TEXTURE2); glBindTexture(GL_TEXTURE_2D,p->material_texture);
+    glActiveTexture(GL_TEXTURE3); glBindTexture(GL_TEXTURE_2D,p->stream_texture);
+    glDisableVertexAttribArray((GLuint)p->attr_uv);
     glEnableVertexAttribArray((GLuint)p->loader_attr_pos);
-    glVertexAttribPointer((GLuint)p->loader_attr_pos, 2, GL_FLOAT, GL_FALSE, 0,
-                          positions);
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    glVertexAttribPointer((GLuint)p->loader_attr_pos,2,GL_FLOAT,GL_FALSE,0,positions);
+    glDrawArrays(GL_TRIANGLE_STRIP,0,4);
+}
+
+/* Called only on the compositor with a current context and gl_lock held.
+ * The OMX callback waits until this read and the subsequent post complete. */
+static int ep_cache_frame(screen_egl_present_t *p,unsigned int source_index) {
+    static const GLfloat positions[]={-1,-1,1,-1,-1,1,1,1};
+    /* Store top-down source rows at v=0; PRISM applies the final display flip. */
+    static const GLfloat texcoords[]={0,0,1,0,0,1,1,1};
+    GLenum gl_error;
+    /* The EGLImage objects are created before OMX ever writes these buffers.
+     * Adreno 320 updates luma through the persistent binding, but on this old
+     * driver the UV plane/cache state can remain from image creation (solid
+     * green output). Re-target the same image after FillBufferDone so both
+     * planes are acquired for this frame. No allocation is created here. */
+    (void)eglWaitNative(EGL_CORE_NATIVE_ENGINE);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_EXTERNAL_OES, p->textures[source_index]);
+    p->image_target_texture(GL_TEXTURE_EXTERNAL_OES,
+                            (GLeglImageOES)p->images[source_index]);
     gl_error = glGetError();
-    if (gl_error != GL_NO_ERROR ||
-        !eglSwapBuffers(p->egl_display, p->egl_surface)) goto out;
+    if (gl_error != GL_NO_ERROR) return -1;
 
+    glBindFramebuffer(GL_FRAMEBUFFER,p->stream_fbo);
+    glViewport(0, 0, p->width, p->height);
+    glDisable(GL_BLEND);
+    glUseProgram(p->program);
+    glUniform1i(p->uniform_tex, 0);
+    glEnableVertexAttribArray((GLuint)p->attr_pos);
+    glEnableVertexAttribArray((GLuint)p->attr_uv);
+    glVertexAttribPointer((GLuint)p->attr_pos, 2, GL_FLOAT, GL_FALSE, 0,
+                          positions);
+    glVertexAttribPointer((GLuint)p->attr_uv, 2, GL_FLOAT, GL_FALSE, 0,
+                          texcoords);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    gl_error=glGetError();
+    if(gl_error!=GL_NO_ERROR) {
+        glFinish(); glBindFramebuffer(GL_FRAMEBUFFER,0); p->stream_valid=0; return -1;
+    }
+    /* glFinish is the source lifetime barrier, including on draw failure. */
+    glFinish();
+    gl_error=glGetError();
+    glBindFramebuffer(GL_FRAMEBUFFER,0);
+    if(gl_error!=GL_NO_ERROR) { p->stream_valid=0; return -1; }
+    p->stream_valid=1;
+    return 0;
+}
+
+static int ep_loader_frame(screen_egl_present_t *p) {
+    GLenum gl_error=GL_NO_ERROR;
+    unsigned int source=0;
+    uint64_t arrival=0,now,swap_begin;
+    int ok=-1,has_frame,reset;
+    pthread_mutex_lock(&p->gl_lock);
+    if(p->loader_stop) { pthread_mutex_unlock(&p->gl_lock); return 1; }
+    has_frame=prism_queue_take(&p->queue,&source,&arrival,&reset);
+    now=ep_monotonic_ns();
+    ep_prism_advance(p,now);
+    if(reset) p->prism_motion.target=0;
+    if(!eglMakeCurrent(p->egl_display,p->egl_surface,p->egl_surface,p->egl_context)) goto out;
+    if(has_frame) {
+        if(ep_cache_frame(p,source)!=0) goto out;
+        p->prism_motion.target=1;
+        if(arrival && p->pace_last_entry_ns && arrival>p->pace_last_entry_ns) {
+            uint64_t d=arrival-p->pace_last_entry_ns;
+            p->pace_arrival_sum_ns+=d;
+            if(d>p->pace_arrival_max_ns) p->pace_arrival_max_ns=d;
+            p->pace_samples++;
+        }
+        p->pace_last_entry_ns=arrival;
+    }
+    ep_prism_draw(p,ep_monotonic_ns());
+    gl_error=glGetError();
+    if(gl_error!=GL_NO_ERROR) goto out;
+    swap_begin=ep_monotonic_ns();
+    if(!eglSwapBuffers(p->egl_display,p->egl_surface)) goto out;
     p->loader_frames++;
-    if (!p->loader_first_logged) {
-        p->loader_first_logged = 1;
-        fprintf(stderr,
-                "altscreen_render[loader]: RGBA window 99 visible %dx%d @30fps\n",
-                p->width, p->height);
+    if(!p->loader_first_logged) {
+        p->loader_first_logged=1;
+        fprintf(stderr,"altscreen_render[prism]: embedded RGBA window99 %dx%d @30fps\n",p->width,p->height);
     }
-    ok = 0;
-
+    if(has_frame) {
+        uint64_t swap_end=ep_monotonic_ns();
+        uint64_t d=swap_end>swap_begin?swap_end-swap_begin:0;
+        p->pace_swap_sum_ns+=d;
+        if(d>p->pace_swap_max_ns) p->pace_swap_max_ns=d;
+        p->frames++;
+        if(!p->first_success_logged) {
+            p->first_success_logged=1;
+            fprintf(stderr,"altscreen_render[egl]: VISIBLE PATH OK: Qcom 32m -> owned RGBA cache -> PRISM swap (%dx%d src=%u)\n",p->width,p->height,source);
+        } else if(p->frames%600==0) {
+            unsigned long n=p->pace_samples;
+            fprintf(stderr,"altscreen_render[egl]: %lu decoded frames posted; arrival avg/max=%.2f/%.2f ms, swap avg/max=%.2f/%.2f ms (interval=%d)\n",
+                p->frames,n?(double)p->pace_arrival_sum_ns/n/1e6:0,(double)p->pace_arrival_max_ns/1e6,
+                (double)p->pace_swap_sum_ns/600/1e6,(double)p->pace_swap_max_ns/1e6,EP_SWAP_INTERVAL);
+            p->pace_arrival_sum_ns=p->pace_arrival_max_ns=0;
+            p->pace_swap_sum_ns=p->pace_swap_max_ns=0; p->pace_samples=0;
+        }
+    }
+    ok=0;
 out:
-    if (ok != 0) {
-        p->loader_failures++;
-        if (p->loader_failures <= 3)
-            fprintf(stderr,
-                    "altscreen_render[loader]: frame FAILED #%lu egl=0x%x gl=0x%x\n",
-                    p->loader_failures, (unsigned)eglGetError(),
-                    (unsigned)gl_error);
+    if(ok!=0) {
+        if(++p->loader_failures<=3 || p->loader_failures%120==0)
+            fprintf(stderr,"altscreen_render[prism]: frame FAILED #%lu egl=0x%x gl=0x%x\n",
+                p->loader_failures,(unsigned)eglGetError(),(unsigned)gl_error);
+        if(has_frame) p->failures++;
     }
-    eglMakeCurrent(p->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE,
-                   EGL_NO_CONTEXT);
+    eglMakeCurrent(p->egl_display,EGL_NO_SURFACE,EGL_NO_SURFACE,EGL_NO_CONTEXT);
     pthread_mutex_unlock(&p->gl_lock);
+    if(has_frame) prism_queue_complete(&p->queue,ok);
     return ok;
 }
 
-/* Cadence rides eglSwapBuffers alone: at EP_SWAP_INTERVAL each ep_loader_frame()
- * blocks in the swap for exactly two 60 Hz scans, i.e. the loader's 30 fps.  The
- * software deadline that used to sit here quantised posts onto a 33.33 ms grid
- * unrelated to scanout, so loader frames lived 2 or 3 scans and beat against the
- * 30 Hz LVDS capture exactly like the video path did — and with interval 2 it
- * would additionally stack a second full period on top of the swap and halve the
- * rate.  See maneuver_render/main.c:838, which pins the same rule as NEVER. */
+/* One persistent compositor, including when the stream sends no new frames.
+ * eglSwapBuffers at interval 2 is the sole 30-Hz pacer. Decoder callbacks wait
+ * for their copy/post; they never perform a second swap or advance animation. */
 static void *ep_loader_thread_main(void *context) {
-    screen_egl_present_t *p = (screen_egl_present_t *)context;
-    uint64_t started = ep_monotonic_ns();
-
-    while (!ep_loader_should_stop(p)) {
-        uint64_t now = ep_monotonic_ns();
-        uint64_t elapsed_ms = (started != 0 && now >= started)
-            ? (now - started) / 1000000ULL : 0;
-
-        if (ep_loader_frame(p, elapsed_ms) == 1) break;
+    screen_egl_present_t *p=(screen_egl_present_t *)context;
+    for(;;) {
+        int rc=ep_loader_frame(p);
+        if(rc==1) break;
+        if(rc<0) { /* Avoid spinning only while output recovery is needed. */
+            struct timespec retry={0,10000000L}; nanosleep(&retry,NULL);
+        } else if(p->prism_motion.position==1.0 && p->prism_motion.target==1) {
+            while(!p->loader_stop && !prism_queue_idle(&p->queue)) {}
+        }
     }
-    __sync_synchronize();
-    p->loader_exited = 1;
-    __sync_synchronize();
+    __sync_synchronize(); p->loader_exited=1; __sync_synchronize();
     return NULL;
 }
 
 int screen_egl_present_start_loader(screen_egl_present_t *p) {
     int result;
     if (!p || !p->gl_lock_initialized) return -1;
+    prism_queue_loader(&p->queue);
+    if (p->loader_thread_started) return 0;
     pthread_mutex_lock(&p->gl_lock);
-    if (p->loader_thread_started) {
-        pthread_mutex_unlock(&p->gl_lock);
-        return 0;
-    }
+    p->prism_motion.target=0;
+    if(!p->stream_valid) p->prism_motion=(handoff_t){0,0,0};
+    p->prism_step_ns=ep_monotonic_ns();
     p->loader_stop = 0;
     p->loader_exited = 0;
     p->loader_frames = 0;
@@ -963,7 +959,7 @@ void screen_egl_present_stop_loader(screen_egl_present_t *p) {
     p->loader_thread_started = 0;
     pthread_mutex_unlock(&p->gl_lock);
     fprintf(stderr,
-            "altscreen_render[loader]: stopped for decoded-video takeover\n");
+            "altscreen_render[loader]: compositor stopped\n");
 }
 
 void *screen_egl_present_source_pointer(screen_egl_present_t *p,
@@ -981,127 +977,14 @@ unsigned int screen_egl_present_source_capacity(screen_egl_present_t *p,
 int screen_egl_present_frame(screen_egl_present_t *p,
                              unsigned int source_index,
                              unsigned int filled_len) {
-    static const GLfloat positions[] = {
-        -1.0f, -1.0f,  1.0f, -1.0f,
-        -1.0f,  1.0f,  1.0f,  1.0f
-    };
-    /* Screen native buffers are top-left-origin; flip V for GLES coordinates.
-     * Do not flip S: the first on-unit colour run proved that doing so mirrors
-     * road labels horizontally on the physical cluster. */
-    static const GLfloat texcoords[] = {
-         0.0f, 1.0f,  1.0f, 1.0f,
-         0.0f, 0.0f,  1.0f, 0.0f
-    };
-    GLenum gl_error = GL_NO_ERROR;
-    const char *stage = "validate";
-    int ok = -1;
-    uint64_t entry_ns, swap_begin_ns;
-
-    if (!p || source_index >= p->source_count || filled_len == 0) return -1;
-
-    /* Sampled before the loader join / gl_lock so it measures how fast decoded
-     * frames actually arrive, not how long we then take to show them. */
-    entry_ns = ep_monotonic_ns();
-    if (entry_ns && p->pace_last_entry_ns && entry_ns > p->pace_last_entry_ns) {
-        uint64_t d = entry_ns - p->pace_last_entry_ns;
-        p->pace_arrival_sum_ns += d;
-        if (d > p->pace_arrival_max_ns) p->pace_arrival_max_ns = d;
-        p->pace_samples++;
+    int result;
+    if(!p || source_index>=p->source_count || !filled_len || !p->loader_thread_started) return -1;
+    result=prism_queue_submit(&p->queue,source_index,ep_monotonic_ns(),750);
+    if(result==-2) {
+        fprintf(stderr,"altscreen_render[prism]: decoded-frame post TIMEOUT; exiting without recycling live OMX/GPU storage\n");
+        _exit(86);
     }
-    if (entry_ns) p->pace_last_entry_ns = entry_ns;
-    /* The join is the ownership barrier: after it returns no loader draw can
-     * race this first decoded frame or any subsequent video swap. */
-    screen_egl_present_stop_loader(p);
-    pthread_mutex_lock(&p->gl_lock);
-    stage = "eglMakeCurrent";
-    if (!eglMakeCurrent(p->egl_display, p->egl_surface, p->egl_surface,
-                        p->egl_context)) goto fail;
-
-    /* The EGLImage objects are created before OMX ever writes these buffers.
-     * Adreno 320 updates luma through the persistent binding, but on this old
-     * driver the UV plane/cache state can remain from image creation (solid
-     * green output). Re-target the same image after FillBufferDone so both
-     * planes are acquired for this frame. No allocation is created here. */
-    stage = "refresh external image";
-    (void)eglWaitNative(EGL_CORE_NATIVE_ENGINE);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_EXTERNAL_OES, p->textures[source_index]);
-    p->image_target_texture(GL_TEXTURE_EXTERNAL_OES,
-                            (GLeglImageOES)p->images[source_index]);
-    gl_error = glGetError();
-    if (gl_error != GL_NO_ERROR) goto fail;
-
-    stage = "draw external image";
-    glViewport(0, 0, p->width, p->height);
-    glDisable(GL_BLEND);
-    glUseProgram(p->program);
-    glUniform1i(p->uniform_tex, 0);
-    glEnableVertexAttribArray((GLuint)p->attr_pos);
-    glEnableVertexAttribArray((GLuint)p->attr_uv);
-    glVertexAttribPointer((GLuint)p->attr_pos, 2, GL_FLOAT, GL_FALSE, 0,
-                          positions);
-    glVertexAttribPointer((GLuint)p->attr_uv, 2, GL_FLOAT, GL_FALSE, 0,
-                          texcoords);
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-    glFinish();
-    gl_error = glGetError();
-    if (gl_error != GL_NO_ERROR) goto fail;
-
-    stage = "eglSwapBuffers";
-    swap_begin_ns = ep_monotonic_ns();
-    if (!eglSwapBuffers(p->egl_display, p->egl_surface)) goto fail;
-    {
-        uint64_t swap_end_ns = ep_monotonic_ns();
-        if (swap_begin_ns && swap_end_ns > swap_begin_ns) {
-            uint64_t d = swap_end_ns - swap_begin_ns;
-            p->pace_swap_sum_ns += d;
-            if (d > p->pace_swap_max_ns) p->pace_swap_max_ns = d;
-        }
-    }
-    p->frames++;
-    if (!p->first_success_logged) {
-        p->first_success_logged = 1;
-        fprintf(stderr,
-                "altscreen_render[egl]: VISIBLE PATH OK: Qcom 32m -> EGLImage external sampler -> RGBA8888 swap (%dx%d src=%u)\n",
-                p->width, p->height, source_index);
-    } else if ((p->frames % 600) == 0) {
-        unsigned long n = p->pace_samples;
-        fprintf(stderr,
-                "altscreen_render[egl]: %lu GPU RGBA frames swapped; "
-                "arrival avg=%lu.%02lu max=%lu.%02lu ms, swap avg=%lu.%02lu max=%lu.%02lu ms (interval=%d)\n",
-                p->frames,
-                n ? (unsigned long)(p->pace_arrival_sum_ns / n / 1000000ULL) : 0UL,
-                n ? (unsigned long)(p->pace_arrival_sum_ns / n / 10000ULL % 100ULL) : 0UL,
-                (unsigned long)(p->pace_arrival_max_ns / 1000000ULL),
-                (unsigned long)(p->pace_arrival_max_ns / 10000ULL % 100ULL),
-                n ? (unsigned long)(p->pace_swap_sum_ns / n / 1000000ULL) : 0UL,
-                n ? (unsigned long)(p->pace_swap_sum_ns / n / 10000ULL % 100ULL) : 0UL,
-                (unsigned long)(p->pace_swap_max_ns / 1000000ULL),
-                (unsigned long)(p->pace_swap_max_ns / 10000ULL % 100ULL),
-                EP_SWAP_INTERVAL);
-        p->pace_arrival_sum_ns = 0;
-        p->pace_arrival_max_ns = 0;
-        p->pace_swap_sum_ns = 0;
-        p->pace_swap_max_ns = 0;
-        p->pace_samples = 0;
-    }
-    ok = 0;
-    goto out;
-
-fail:
-    p->failures++;
-    if (p->failures <= 3 || (p->failures % 120) == 0) {
-        fprintf(stderr,
-                "altscreen_render[egl]: presentation FAILED #%lu stage='%s' egl=0x%x gl=0x%x src=%u\n",
-                p->failures, stage, (unsigned)eglGetError(),
-                (unsigned)gl_error, source_index);
-    }
-out:
-    /* Permit the next callback thread to acquire this context cleanly. */
-    eglMakeCurrent(p->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE,
-                   EGL_NO_CONTEXT);
-    pthread_mutex_unlock(&p->gl_lock);
-    return ok;
+    return result;
 }
 
 int screen_egl_present_recover_output(screen_egl_present_t *p) {
@@ -1191,7 +1074,9 @@ void screen_egl_present_destroy(screen_egl_present_t *p) {
     release_wait.tv_nsec = 50L * 1000L * 1000L; /* >=3 frames at 60 Hz */
     while (nanosleep(&release_wait, &release_wait) != 0 && errno == EINTR) {}
     ep_release_sources(p);
-    if (p->logo_texture) glDeleteTextures(1, &p->logo_texture);
+    if(p->stream_fbo) glDeleteFramebuffers(1,&p->stream_fbo);
+    if(p->stream_texture) glDeleteTextures(1,&p->stream_texture);
+    if(p->material_texture) glDeleteTextures(1,&p->material_texture);
     if (p->sig_texture) glDeleteTextures(1, &p->sig_texture);
     if (p->loader_program) glDeleteProgram(p->loader_program);
     if (p->program) glDeleteProgram(p->program);
@@ -1209,6 +1094,7 @@ void screen_egl_present_destroy(screen_egl_present_t *p) {
     if (p->gl_lock_initialized) pthread_mutex_unlock(&p->gl_lock);
 
     if (p->rgba_surface) cluster_surface_destroy(p->rgba_surface);
+    if (p->queue_initialized) prism_queue_destroy(&p->queue);
     if (p->gl_lock_initialized) pthread_mutex_destroy(&p->gl_lock);
     free(p);
 }

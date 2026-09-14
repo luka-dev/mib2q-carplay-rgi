@@ -1,40 +1,48 @@
-# AltScreen Startup Loader
+# AltScreen PRISM startup loader
 
-Status: the startup loader is supported only for the instrument-cluster
-altScreen renderer (stream 111 / displayable 99).
-
-The attempted main-HU loader for stock stream 110 was removed. It did not
-produce a reliable early image on MU1316 and added unsafe coupling between the
-stock main decoder and the independent cluster decoder.
+PRISM is the sole startup scene for the instrument-cluster renderer,
+stream 111 / displayable 99. Its material, signature and shader are compiled
+into `altscreen_render`; no external runtime artwork or font is required.
 
 ## Production behavior
 
-- Stock `libairplay.so` 210.81 owns stream 110 and displayable 59 completely.
-- The hook does not create, adopt or patch a `CScreenRender` for stream 110.
-- No stock-210 GOT slots are rewritten for loader handoff or OMX readiness.
-- Java does not force context 78 or toggle displayable 59 opacity for a loader.
-- Stream 111 is not gated on stock stream 110 readiness.
-- `altscreen_render` retains its early RGBA8888 loader on displayable 99 and
-  replaces it with the first successfully presented decoded cluster frame.
+1. The independent renderer opens its RGBA8888 window before RTSP/OMX video
+   exists and renders the glass Apple from black at swap interval 2.
+2. A decoded Qualcomm 32m frame is read through its refreshed external
+   EGLImage into an owned RGBA cache. The callback waits for GPU read completion
+   and a successful PRISM swap before releasing that exact OMX buffer.
+3. PRISM zooms into the Apple and reveals video across all 1440 × 542 pixels.
+   Its persistent compositor finishes the transition even if the phone sends
+   only one frame. Settled video uses unchanged cache pixels.
+4. Normal decoder teardown requests a reverse transition from the owned last
+   frame to the waiting Apple. The initial contour is not replayed. The cache
+   survives freed/recycled decoder buffers.
+5. A full presenter destruction stops and joins the compositor before releasing
+   its resources. Existing isolated-renderer timeout/restart behavior remains
+   the fallback for a wedged GPU.
 
-This restores the normal stock lifecycle for the main CarPlay screen while
-keeping the already-working, process-local cluster loader.
+The resting loader follows the existing full/compact and Sport/Classic safe
+areas. The stream always covers the complete 292 × 110 mm panel. The selected
+SOFT `@LuKa_dev` signature is 122 × 18 px, approximately 24.74 × 3.65 mm.
 
-## Remaining loader implementation
+## Ownership and scope
 
-- `common/carplay_loader.c/.h`: platform-neutral deterministic loader scene.
-- `altscreen_render/screen_egl_present.c`: early RGBA window 99, loader thread,
-  and first-decoded-frame takeover.
-- `scripts/build_renderers.sh`: links the common loader only into
-  `altscreen_render`.
+Stock `libairplay.so` 210.81 continues to own stream 110 and displayable 59.
+The hook creates no main-HU loader, patches no stock loader/readiness GOT slots,
+and does not gate stream 111 on stock readiness. Java does not force context 78
+or alter displayable 59 opacity for this loader.
 
-The hook build intentionally does not link `common/carplay_loader.c` and has no
-`main_loader.c/.h` module.
+`common/prism_baked.h` holds production assets. Shared motion/layout and the
+memory-only PNG decoder live in `common/prism*`. The production integration is
+`altscreen_render/screen_egl_present.c` and `prism_queue.h`.
+`scripts/build_renderers.sh` links PRISM only into `altscreen_render`.
 
-## Verification
+The macOS demo includes a baked fictional map in its own header; that map is
+absent from the QNX binary. See [PRISM build and verification instructions](../tools/loader_preview/PRISM.md).
 
-1. With no stream 111 video yet, displayable 99 can show the local loader.
-2. The first decoded and successfully swapped RGBA frame replaces that loader.
-3. Stream 110 starts and tears down exclusively through stock code.
-4. Opening or closing stream 110 does not disconnect, rearm or gate stream 111.
-5. Hook and renderer QNX ARM builds contain no emutls symbols.
+## Validation boundary
+
+Host motion, source-lifetime, GPU cache and viewport captures accompany the
+QNX ARM build. Desktop captures preserve the approved appearance. Actual
+Adreno 320 performance, physical-panel appearance, and real stream reconnects
+require an on-unit run; cross-compilation cannot establish those results.
