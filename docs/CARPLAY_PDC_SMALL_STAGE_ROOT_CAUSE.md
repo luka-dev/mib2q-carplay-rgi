@@ -363,72 +363,27 @@ this.dc[78] = new DisplayContext(78, new int[]{16, 59});
 
 `16` — HMI, на котором рисуется partial popup `2100008`; `59` — CarPlay video. Поэтому добавление другого context не отменяет ни `SMALL_STAGE_OMISSION`, ни `hmiDeactivated()`. Исправление OPS-only должно одновременно сохранить screen widget и владельца `Resource.SCREEN`.
 
-Displayable `17` требуется только для отдельной задачи partial 360-camera. Добавление `17` в `78` или новый context `91` не является исправлением закрытия CarPlay при обычном OPS.
+Displayable `17` требуется только для отдельной задачи partial 360-camera. Добавление `17` в `78` или отдельный mixed context не является исправлением закрытия CarPlay при обычном OPS.
 
 ## Проект: CarPlay + partial 360/PDC
 
-Штатный fullscreen VPS/OPS показывает изображение камер не внутри Java-виджета OPS, а отдельным displayable `17`. Полноэкранный parking context имеет композицию:
+Обновлённая проверка от 2026-09-14: [подготовительный разбор и воспроизводимые тесты](reference/CARPLAY_PARTIAL_360_PREFLIGHT.md). Runtime-реализации и HU-проверки этой функции пока нет.
 
-```java
-this.dc[3] = new DisplayContext(3, new int[]{16, 17});
-```
+По решению пользователя от 2026-09-14 задача **отложена**: сохраняем результаты, реализацию и HU-эксперименты начинаем только по отдельной команде.
 
-Здесь `16` — HMI/OPS поверх видео, а `17` — video surface камеры. Обычный CarPlay использует context `78={16,59}`, где `59` — video surface проекции. Поэтому для сохранения CarPlay слева и добавления 360°-камеры под правым partial popup требуется отдельный A5 context:
+Предполагаемая композиция — HMI `16`, camera displayable `17`, CarPlay `59`; целевая область камеры справа `(720,0,304,480)`. Сосуществование двух видео на HU ещё нужно подтвердить. Новый context ID **не выбран**.
 
-```java
-// CarPlay + partial 360/PDC
-this.dc[91] = new DisplayContext(91, new int[]{16, 17, 59});
-```
+Первоначальный пример с `dc[91]` был некорректен: A5-массив имеет длину `82`, на G24 индекс `91` занят вариантом stock context `12+79`. Кроме того, callbacks stock `DisplayManager` передают `context % 79`. Просто добавить строку в таблицу недостаточно.
 
-Порядок элементов является z-order от переднего слоя к заднему:
+Другие уточнения после host/native проверки:
 
-```text
-16  HMI и partial OPS 2100008       сверху
-17  360°/RVC camera video           посередине
-59  CarPlay video                   снизу
-```
+- `switchVPSView(4)` формирует `view=4, mode=9`, но сохраняет popup/screen. OPS-запрос от этого сам не превращается в VPS. Штатный Evo VPS требует fullscreen popup `2100000` и вызывает `108`; отдельное partial-состояние должно учитывать оба действия.
+- Для адресного crop нужен HMI `IDisplayManager.setCropping(17,0,...)`. Одноимённый interapp API игнорирует переданный displayable и использует generic state, которое `activateComponentRVC(17)` не обновляет.
+- `getExtends(17)` может вернуть `null`; cached `int[]` заимствованный. Extents не содержат предыдущие source/destination rectangles и не определяют область Bird View внутри кадра.
+- Контекст может запускать локальный HU capture сам: native различает context-origin и component-origin. При закрытии и fullscreen takeover нужно учитывать владение, а не безусловно останавливать `17`.
+- Штатный OPS overlay/background зависит от типа VPS, view и подключения stock screen `2100001`. Нельзя считать, что запуск камеры автоматически даст подходящий прозрачный фон справа.
 
-Использовать отдельный context `91` безопаснее, чем постоянно менять stock context `78` на `{16,17,59}`. В обычном CarPlay context `78` не должен содержать неактивный camera displayable: иначе возможны чёрный прямоугольник, последний замороженный кадр, постоянное резервирование второй video plane или конфликт аппаратных overlay-плоскостей.
-
-Перед включением context `91` displayable `17` необходимо обрезать до геометрии правого popup:
-
-```text
-destination = (720, 0, 304, 480)
-```
-
-Для этого используется `IDisplayManager.setCropping()`. Source width/height нельзя жёстко считать равными `1024x480`: их нужно получить через `getExtends(17)` или подтвердить по DSI-логу на автомобиле.
-
-Сам context только компонует поверхности и не запускает поток камер. Кадры появляются после штатной активации:
-
-```java
-displayManagerService.activateComponentRVC(17);
-```
-
-Однако parking activation (включая обычный OPS, не только VPS) вызывает `notifyParkingSystemActive()`, после чего parking controller рассылает interapp message `108`. `HighPriorityResourceTracker` интерпретирует его как fullscreen RVC, выставляет `SMARTPHONE_SCREEN_BLOCKED_CHOICE=3` (`CARPLAY_BY_RVC`) и `MURVCActive=true`. Поэтому без дополнительного partial-mode guard CarPlay может быть заблокирован независимо от исправления `SMALL_STAGE`.
-
-Безопасная последовательность включения:
-
-```text
-1. Поднять отдельный guard PARTIAL_360_PDC.
-2. Запросить/активировать VPS camera source и component 17.
-3. Для guard-режима не применять fullscreen CarPlay resource takeover от message 108.
-4. Получить source extents и выставить crop displayable 17 -> (720,0,304,480).
-5. Переключить display context 78 -> 91.
-6. Показать штатный partial OPS popup 2100008 на HMI layer 16.
-```
-
-Последовательность выключения должна быть обратной и не оставлять camera surface в CarPlay context:
-
-```text
-1. Скрыть OPS popup 2100008.
-2. Вернуть display context 91 -> 78.
-3. Деактивировать component 17 и восстановить штатный cropping.
-4. Снять PARTIAL_360_PDC guard и очистить partial-only RVC state.
-```
-
-Подавлять message `108` глобально нельзя. При настоящей задней передаче/fullscreen RVC stock context `3={16,17}`, блокировка CarPlay и полный takeover должны сохраняться как штатная safety-функция. Исключение допустимо только при одновременном наличии CarPlay, popup `2100008` и отдельного `PARTIAL_360_PDC` guard.
-
-Перед финальным включением функции требуется проверка на автомобиле, что MIB2 способен одновременно выделить video planes `17` и `59`. В штатной таблице MU1316 контекста с двумя такими video surfaces нет. Этот раздел фиксирует проект решения; context `91` и запуск partial camera пока не реализованы в `java_patch/`.
+Текущий PDC guard остаётся только для обычного OPS. Полноэкранная камера сохраняет штатный takeover. Матрица переходов, результаты тестов, native fingerprints и следующий ограниченный HU-эксперимент приведены в отдельном документе выше.
 
 ## Следствие для RetroArch context 90
 
