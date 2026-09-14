@@ -1,5 +1,8 @@
 # Java: сверка с обновлённым MU1316
 
+> Update 2026-09-14: HU cursor/startup and the TMDeviceControl replacement are removed.
+> The results below describe the earlier experimental tree.
+
 Дата: 2026-09-14. Рабочее дерево: `mhi2-carplay-cursor`, ветка
 `experiment/hu-touch-cursor`. Проверены все 43 исходника `java_patch/`, включая
 9 полных замен штатных классов; сборка содержит 152 класса Java 1.4 (48.0).
@@ -129,6 +132,6 @@ ASM BasicVerifier.
 На машине после этих исправлений проверок ещё не было. Перед выпуском остаются
 реальные startup/context/plane 103, выбор курсором, map/popup start, renderer
 respawn и отключение/возврат к штатной навигации. Ограничения эксперимента
-описаны в [HU_STARTUP_LOADER_AND_MENU.md](HU_STARTUP_LOADER_AND_MENU.md).
+HU cursor/startup experiment referenced by this historical audit was removed on 2026-09-14.
 Изменения аудита сохранены в `7fce1c4` и объединены в основной `master`
 коммитом `7b6cc45`. На HU они пока не установлены.

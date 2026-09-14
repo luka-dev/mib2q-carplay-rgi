@@ -126,6 +126,17 @@ cc -std=gnu99 -O1 -Wall -Wextra -Werror \
     -lpthread -o "$OUT/altscreen_worker"
 "$OUT/altscreen_worker"
 
+printf '%-32s ' altscreen_timing_test
+cc -std=gnu99 -O1 -Wall -Wextra -Werror tests/altscreen_timing_test.c -o "$OUT/altscreen_timing"
+"$OUT/altscreen_timing"
+
+printf '%-32s ' altscreen_present_test
+if [ "$(uname)" = Darwin ]; then ALT_DEAD_STRIP=-Wl,-dead_strip; else ALT_DEAD_STRIP=-Wl,--gc-sections; fi
+cc -std=gnu99 -O1 -Wall -Wextra -Werror -Wno-unused-function \
+    -ffunction-sections -fdata-sections -Ialtscreen_render/hostcheck -Icommon \
+    tests/altscreen_present_test.c "$ALT_DEAD_STRIP" -lpthread -lm -o "$OUT/altscreen_present"
+"$OUT/altscreen_present"
+
 printf '%-32s ' rgd_tlv_test
 cc -std=c99 -O1 -Wall -Wextra -Werror -Wno-unused-variable -Wno-unused-function \
     -DENABLE_LOGGING=0 -Ihook tests/rgd_tlv_test.c hook/routeguidance/rgd_tlv.c \

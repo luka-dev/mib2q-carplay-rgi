@@ -28,8 +28,8 @@ else
   # OMX core + libscreen come from the MHI2Q BSP (unit/VM), NOT the generic SDP;
   # -lOmxCore is the expected OMX IL core name — CONFIRM on-unit if the link fails.
   CC   = /usr/qnx650/host/qnx6/x86/usr/bin/ntoarmv7-gcc
-  # PRISM shader and selected artwork are embedded in common/prism_baked.h.
-  SINK = sink_omx_qnx.c screen_egl_present.c $(COMMON_INC)/cluster_surface.c $(COMMON_INC)/prism.c $(COMMON_INC)/prism_gl.c
+  # PRISM waiting artwork only; first decoded picture takes over directly.
+  SINK = sink_omx_qnx.c screen_egl_present.c $(COMMON_INC)/cluster_surface.c loader/prism.c
   CFLAGS = -O2 -std=gnu99 -Wall -D__QNX__ -DPLATFORM_QNX -fdata-sections -ffunction-sections -I$(OMX_INC) -I$(COMMON_INC)
   LDFLAGS = -Wl,--gc-sections -lscreen -lOmxCore -lEGL -lGLESv2 -lsocket -lm
   BUILD_TEST = 0
@@ -46,7 +46,7 @@ endif
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
-$(TARGET): $(SRC) prism_queue.h $(COMMON_INC)/prism.h $(COMMON_INC)/prism_gl.h $(COMMON_INC)/prism_handoff.h $(COMMON_INC)/prism_baked.h $(COMMON_INC)/loader_layout.h | $(BUILD_DIR)
+$(TARGET): $(SRC) pipeline_timing.h sink.h loader/prism_baked.h loader/prism.h loader/prism_waiting.h loader/loader_layout.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(SRC) -o $@ $(LDFLAGS)
 
 $(TESTBIN): test_feed.c frame_io.c | $(BUILD_DIR)
@@ -64,8 +64,6 @@ hostcheck:
 	      -Ihostcheck -I$(COMMON_INC) -I. screen_egl_present.c
 	$(CC) -fsyntax-only -std=gnu99 -Wall -D__QNX__ -DPLATFORM_QNX \
 	      -Ihostcheck -I$(COMMON_INC) $(COMMON_INC)/cluster_surface.c
-	$(CC) -fsyntax-only -std=c99 -Wall -Wextra \
-	      -I$(COMMON_INC) $(COMMON_INC)/prism.c $(COMMON_INC)/prism_gl.c
 	# The Docker QNX build remains the authoritative Screen/OMX ABI link check.
 
 clean:

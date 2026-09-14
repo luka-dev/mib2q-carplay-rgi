@@ -34,7 +34,8 @@ int av_sink_open(void) {
     return 0;
 }
 
-int av_sink_frame(const uint8_t *annexb, uint32_t len) {
+int av_sink_frame(const uint8_t *annexb, uint32_t len, uint64_t received_ms) {
+    (void)received_ms;
     if (!annexb || len == 0) return -1;
 #ifdef ALTSCREEN_CAPTURE
     if (g_out) {

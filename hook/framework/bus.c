@@ -42,11 +42,11 @@ DEFINE_LOG_MODULE(BUS);
  * ============================================================ */
 #define SEND_QUEUE_CAPACITY   256        /* must be a power of two */
 #define BUS_SHUTDOWN_WAIT_MS 2500
-/* Directly-indexed events AND commands, including HU video query 0x0130.
- * Keep in sync with CarplayBus.MAX_TYPES; test the real dispatcher, not a stub. */
-#define MAX_TYPES             0x0140
-#if CMD_HU_VIDEO_STATUS >= MAX_TYPES
-#error HU video command is outside the bus dispatch table
+/* Directly indexed events and commands. The highest current command is
+ * CMD_ALT_UICTX (0x0115); keep Java CarplayBus.MAX_TYPES in sync. */
+#define MAX_TYPES             0x0120
+#if CMD_ALT_UICTX >= MAX_TYPES
+#error AltScreen command is outside the bus dispatch table
 #endif
 
 /* ============================================================

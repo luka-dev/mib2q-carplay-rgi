@@ -12,9 +12,10 @@ static int sink_block = 1, sink_release, sink_error = -1;
 static unsigned sink_calls, last_byte;
 
 int av_sink_open(void) { return 0; }
-int av_sink_frame(const uint8_t *bytes, uint32_t len) {
+int av_sink_frame(const uint8_t *bytes, uint32_t len, uint64_t received_ms) {
     int result;
     assert(len == 1);
+    assert(received_ms > 0 && received_ms <= decode_now_ms());
     pthread_mutex_lock(&test_lock);
     ++sink_calls;
     last_byte = bytes[0];

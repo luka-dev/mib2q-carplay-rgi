@@ -50,7 +50,7 @@ cat > "$CFG" <<'EOF'
 EOF
 cp "$CFG" "$TMP/stock.json"
 
-for f in libcarplay_hook.so libcarplay_apac.so hssr_model.bin maneuver_render altscreen_render cursor_render \
+for f in libcarplay_hook.so libcarplay_apac.so hssr_model.bin maneuver_render altscreen_render \
          flag_atlas.rgba carplay_startup.sh carplay_processes.sh carplay_cleanup.sh \
          carplay_hook.jar; do
     echo "payload $f" > "$PAYLOAD/bin/$f"
@@ -65,6 +65,10 @@ run() {
     APP_ROOT="$APP" SYS_ROOT="$SYS" LOG="$TMP/$1.log" SRC_DIR="$PAYLOAD" \
         sh "$PAYLOAD/$1.sh" > "$TMP/$1.out" 2>&1
 }
+
+# Upgrade from an old HU-overlay build must remove the obsolete executable.
+mkdir -p "$APP/root/hooks"
+echo legacy > "$APP/root/hooks/cursor_render"
 
 # ---------------------------------------------------------------- install
 run install || { cat "$TMP/install.out"; fail "install.sh exited $?"; }
@@ -85,10 +89,12 @@ assert c["usb"]["exec"] == "usb_manager", "neighbour above was damaged"
 assert c["bt"]["exec"] == "bt_manager", "neighbour below was damaged"
 PY
 
+[ ! -e "$APP/root/hooks/cursor_render" ] || fail "install retained retired HU renderer"
+
 [ -f "$CFG.orig" ] || fail "no .orig backup"
 cmp -s "$CFG.orig" "$TMP/stock.json" || fail ".orig is not the stock config"
 
-for f in libcarplay_hook.so hssr_model.bin maneuver_render cursor_render carplay_startup.sh; do
+for f in libcarplay_hook.so hssr_model.bin maneuver_render altscreen_render carplay_startup.sh; do
     [ -f "$APP/root/hooks/$f" ] || fail "$f was not installed"
 done
 [ -f "$APP/eso/hmi/lsd/jars/carplay_hook.jar" ] || fail "jar was not installed"
@@ -99,6 +105,9 @@ run install || fail "second install.sh exited $?"
 cmp -s "$CFG" "$TMP/first.json" || fail "second run rewrote the config"
 grep -q "already the carplay child" "$TMP/install.out" \
     || fail "second run did not detect the existing patch"
+
+# Also cover uninstall directly from a legacy installation.
+echo legacy > "$APP/root/hooks/cursor_render"
 
 # ---------------------------------------------------------------- uninstall
 run uninstall || fail "uninstall.sh exited $?"

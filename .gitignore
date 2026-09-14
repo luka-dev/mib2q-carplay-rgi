@@ -16,8 +16,6 @@
 !/build/hssr-selection-v11/hssr_model.bin
 /local_logs/
 /log/
-tools/loader_preview/prism_preview
-tools/loader_preview/.prism-test-*
 
 # Phone-side captures: sysdiagnose tarballs and log archives are hundreds of MB
 # and contain the owner's device logs. Keep them local.

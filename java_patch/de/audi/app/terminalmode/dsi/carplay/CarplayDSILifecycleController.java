@@ -49,8 +49,7 @@ import org.dsi.ifc.carplay.ResourceRequest;
 import org.dsi.ifc.carplay.ServiceConfiguration;
 import org.dsi.ifc.carplay.TelephonyState;
 import org.dsi.ifc.carplay.TouchEvent;
-import com.luka.carplay.cursor.CursorController;
-import com.luka.carplay.cursor.HuCursor;
+import com.luka.carplay.input.TouchpadController;
 import com.luka.carplay.core.SteeringWheelInputModule;
 import org.dsi.ifc.carplay.TrackData;
 import org.dsi.ifc.global.ResourceLocator;
@@ -104,15 +103,15 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
         this.carPlayDsiController.init();
         /* The same component object can be deinit/init'd; deinit clears the singleton sink. */
         ((CarplayDSILifecycleController.TerminalModeDSIKeyEventsController)this.keyEventController)
-            .installCursorTouchSink();
+            .installTouchpadSink();
     }
 
     public void deinit() {
-        /* Remove the touch sink installed at CarPlay start — the CursorController is a
+        /* Remove the touch sink installed at CarPlay start — the TouchpadController is a
          * long-lived singleton, so leaving it set would let post-session touchpad gestures
          * inject into the torn-down DSI proxy (stale-DSI injection) and accumulate across
          * connect cycles. */
-        CursorController.getInstance().setTouchSink(null);
+        TouchpadController.getInstance().setTouchSink(null);
         super.deinit();
         this.carPlayDsiController.deinit();
     }
@@ -200,9 +199,6 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
 
             if (this.this$0.configuration.hasTouchpad()) {
                 b0 |= 8;
-                // Experimental HU pointer emits absolute taps on input 1. Advertise
-                // low-fidelity touchscreen as well as the stock knob/touchpad.
-                if (this.this$0.fw.getKombiType() != 4) b0 |= 2;
             }
 
             if (this.this$0.configuration.hasTouchscreenHigh()) {
@@ -840,22 +836,22 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
 
         private TerminalModeDSIKeyEventsController(CarplayDSILifecycleController carplaydsilifecyclecontroller) {
             this.this$0 = carplaydsilifecyclecontroller;
-            installCursorTouchSink();
+            installTouchpadSink();   /* CarPlay: touchpad -> DPAD ticks via TouchpadController */
         }
 
-        /* Wire CursorController's DPAD output back through the stock DSI bridge's
+        /* Wire TouchpadController's DPAD output back through the stock DSI bridge's
          * postButtonEvent (JS_WEST=5 / JS_EAST=6 / JS_NORTH=7 / JS_SOUTH=8;
          * state 0=press, 1=release) — CarPlay's iOS side moves focus accordingly. */
-        private void installCursorTouchSink() {
+        private void installTouchpadSink() {
             final CarplayDSILifecycleController outer = this.this$0;
-            CursorController.getInstance().setTouchSink(new CursorController.TouchSink() {
+            TouchpadController.getInstance().setTouchSink(new TouchpadController.TouchSink() {
                 public void postDpad(int keyCode) {
                     int id;
                     switch (keyCode) {
-                        case CursorController.KEY_DPAD_LEFT:  id = 5; break;
-                        case CursorController.KEY_DPAD_RIGHT: id = 6; break;
-                        case CursorController.KEY_DPAD_UP:    id = 7; break;
-                        case CursorController.KEY_DPAD_DOWN:  id = 8; break;
+                        case TouchpadController.KEY_DPAD_LEFT:  id = 5; break;
+                        case TouchpadController.KEY_DPAD_RIGHT: id = 6; break;
+                        case TouchpadController.KEY_DPAD_UP:    id = 7; break;
+                        case TouchpadController.KEY_DPAD_DOWN:  id = 8; break;
                         default: return;
                     }
                     try {
@@ -866,20 +862,6 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
                     } catch (Throwable t) { /* never break the DSI flow */ }
                 }
             });
-            try {
-                HuCursor.getInstance().configure(outer.configuration.getWindowResolutionX(),
-                    outer.configuration.getWindowResolutionY(), outer.configuration.getTouchPadResolutionX(),
-                    outer.configuration.getScreenOffsetX(), outer.configuration.getScreenOffsetY(),
-                    outer.configuration.getScreenResolutionX(), outer.configuration.getScreenResolutionY(),
-                    new HuCursor.TouchSink() {
-                        public void postScreenTouch(int count, int x, int y) {
-                            outer.dsiCarplaySafe.postTouchEvent(1, count,
-                                new TouchEvent[] { new TouchEvent(x, y) });
-                        }
-                    });
-            } catch (Throwable t) {
-                com.luka.carplay.framework.Log.w("HuCursor", "configuration unavailable: " + t);
-            }
         }
 
         public void updateKey(Key key, KeyState keystate) {
@@ -893,18 +875,6 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
                 this.this$0.logger.log(
                     1000000, "[%1.updateKey] suppress MFW DDS_SELECT for CarPlay", LOGCLASS);
                 return;
-            }
-
-            if (Key.DDS_SELECT.is(key)) {
-                if (keystate.is(KeyState.PRESSED) || keystate.is(KeyState.RELEASED)) {
-                    if (HuCursor.getInstance().onSelect(keystate.is(KeyState.PRESSED))) return;
-                } else if (HuCursor.getInstance().ownsSelect()) {
-                    // A touch-routed press must not leak a stock LONGPRESSED
-                    // between its synthetic down/up pair.
-                    return;
-                }
-            } else {
-                CursorController.getInstance().onStockInput();
             }
 
             /* Central-console knob press (DDS_SELECT = Dreh-Drück-Steller) must SELECT in the
@@ -942,16 +912,6 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
         }
 
         public void updateTouchEvent(int i, int j, int l1, int k, int l, int i1, int j1) {
-            if (this.getDSITouchInputId(i) == 0) {
-                CursorController c = CursorController.getInstance();
-                if (j == 1) c.onOneFinger(k, l);
-                else {
-                    if (j > 1) c.onStockInput();
-                    c.onTouchEnd();
-                }
-                return;
-            }
-            CursorController.getInstance().onStockInput();
             this.this$0
                 .logger
                 .log(
@@ -1022,11 +982,11 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
 
         public void updateTouchEvents(de.audi.app.terminalmode.keyevents.TouchEvent[] atouchevent) {
             /* CarPlay input override: real touchscreen events follow the stock conversion/sort
-             * path; MMI touchpad single-finger events route through CursorController.
-             * Partition by each event instead of trusting element 0, so a mixed batch can
+             * path; MMI touchpad single-finger events route through TouchpadController as DPAD
+             * ticks. Partition by each event instead of trusting element 0, so a mixed batch can
              * never inject touchpad coordinates into the DSI touchscreen stream (or vice versa).
              * Active-finger count uses getTouchState()!=1 (1 = RELEASED). */
-            CursorController c = CursorController.getInstance();
+            TouchpadController c = TouchpadController.getInstance();
             if (atouchevent == null || atouchevent.length == 0) { c.onTouchEnd(); return; }
 
             ArrayList screen = new ArrayList(atouchevent.length);
@@ -1047,7 +1007,6 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
                 }
             }
             if (!screen.isEmpty()) {
-                c.onStockInput();
                 Collections.sort(screen, new TouchXComparator());
                 this.this$0.dsiCarplaySafe.postTouchEvent(
                     1, screenActive, (TouchEvent[])screen.toArray(new TouchEvent[screen.size()]));
@@ -1056,7 +1015,6 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
                 c.onOneFinger(atouchevent[padFirstActive].getCurrentX(),
                     atouchevent[padFirstActive].getCurrentY());
             } else {
-                if (padActive > 1) c.onStockInput();
                 c.onTouchEnd();
             }
         }
@@ -1069,7 +1027,6 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
         }
 
         public void updateRotary(int i) {
-            if (i != 0) CursorController.getInstance().onRotary();
             this.this$0.logger.log(1000000, "[%1.updateRotary] %2", LOGCLASS, i);
             /* updateRotary = the CENTRAL console MMI knob → must drive the CarPlay Main UI
              * (next/prev). Cluster altScreen zoom comes from the steering-wheel MapScale BAP

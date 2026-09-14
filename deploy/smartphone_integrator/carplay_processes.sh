@@ -18,7 +18,6 @@ unset CP_QNX_PATH
 # then use O(1) /proc checks instead of repeatedly scanning the whole system.
 CP_MANEUVER_PID_FILE=/tmp/carplay_maneuver_render.pid
 CP_ALTSCREEN_PID_FILE=/tmp/carplay_altscreen_render.pid
-CP_CURSOR_PID_FILE=/tmp/carplay_cursor_render.pid
 CP_RENDERER_SCAN_DONE=0
 
 # Guarded recovery state for the one failure class which happens before RTSP:
@@ -161,7 +160,6 @@ cp_cap_all_logs()
 {
     cp_cap_log /tmp/maneuver_render.log
     cp_cap_log /tmp/altscreen_render.log
-    cp_cap_log /tmp/cursor_render.log
     cp_cap_log "${1:-/tmp/carplay_wrapper.log}"
 }
 
@@ -170,7 +168,6 @@ cp_renderer_pid_file()
     case "$1" in
         maneuver_render)  echo "$CP_MANEUVER_PID_FILE" ;;
         altscreen_render) echo "$CP_ALTSCREEN_PID_FILE" ;;
-        cursor_render)    echo "$CP_CURSOR_PID_FILE" ;;
         *) return 1 ;;
     esac
 }
@@ -186,7 +183,7 @@ cp_renderer_record_pid()
 # two more scans immediately in the monitor.
 cp_seed_renderer_pid_files()
 {
-    if [ ! -r "$CP_MANEUVER_PID_FILE" ] || [ ! -r "$CP_ALTSCREEN_PID_FILE" ] || [ ! -r "$CP_CURSOR_PID_FILE" ]; then
+    if [ ! -r "$CP_MANEUVER_PID_FILE" ] || [ ! -r "$CP_ALTSCREEN_PID_FILE" ]; then
         pidin ar 2>/dev/null | (
             while read CP_PID CP_EXE CP_REST; do
                 case "$CP_EXE" in
@@ -198,10 +195,6 @@ cp_seed_renderer_pid_files()
                         [ -r "$CP_ALTSCREEN_PID_FILE" ] ||
                             echo "$CP_PID" > "$CP_ALTSCREEN_PID_FILE"
                         ;;
-                    cursor_render|*"/cursor_render")
-                        [ -r "$CP_CURSOR_PID_FILE" ] ||
-                            echo "$CP_PID" > "$CP_CURSOR_PID_FILE"
-                        ;;
                 esac
             done
         )
@@ -210,7 +203,7 @@ cp_seed_renderer_pid_files()
 }
 
 # Initial-adoption health differs by renderer topology:
-#   - altscreen_render OWNS :19831 and cursor_render OWNS :19840, so LISTEN is a valid readiness
+#   - altscreen_render OWNS :19831, so LISTEN is a valid readiness
 #     signal and catches a process wedged before serving the hook;
 #   - maneuver_render is a CLIENT of Java RendererServer's :19800 listener.
 #     Java deliberately closes :19800 when RGI is inactive, while the persistent
@@ -222,10 +215,23 @@ cp_seed_renderer_pid_files()
 # netstat is a finite kernel-socket snapshot (unlike a blocking /proc walk).
 cp_renderer_healthy()
 {
+    # Identity queries belong only to initial adoption and stop paths, never
+    # the recurring two-second monitor (QNX process inspection is expensive).
+    CP_HEALTH_FILE=`cp_renderer_pid_file "$1"` || return 1
+    CP_HEALTH_PID=
+    if [ -r "$CP_HEALTH_FILE" ]; then
+        read CP_HEALTH_PID < "$CP_HEALTH_FILE"
+        CP_HEALTH_ID=0
+        cp_renderer_identity "$1" "$CP_HEALTH_PID" || CP_HEALTH_ID=$?
+        if [ "$CP_HEALTH_ID" = 1 ]; then
+            cp_forget_renderer_pid "$1" "$CP_HEALTH_PID"
+            return 1
+        fi
+        [ "$CP_HEALTH_ID" != 2 ] || return 0 # Probe unavailable: retain the process.
+    fi
     case "$1" in
         maneuver_render)  return 0 ;;
         altscreen_render) CP_HP=19831 ;;
-        cursor_render)   CP_HP=19840 ;;
         *) return 1 ;;
     esac
     CP_NS=`netstat -an 2>/dev/null`
@@ -242,7 +248,9 @@ cp_kill_renderer()
 {
     CP_KP=`cp_renderer_pids "$1"`
     CP_KILL_GRACE=${2:-4}
+    [ -n "$CP_KP" ] || return 0
     for CP_PID in $CP_KP; do
+        cp_renderer_identity "$1" "$CP_PID" || continue
         echo "[carplay] SIGTERM wedged $1 pid=$CP_PID" >> "${WLOG:-/dev/null}"
         kill -15 "$CP_PID" 2>/dev/null
     done
@@ -251,14 +259,56 @@ cp_kill_renderer()
     # emergency SIGKILL; ordinary dio churn never enters this path anymore.
     sleep "$CP_KILL_GRACE"
     for CP_PID in $CP_KP; do
-        [ -d "/proc/$CP_PID" ] && kill -9 "$CP_PID" 2>/dev/null
+        CP_KILL_ID=0
+        cp_renderer_identity "$1" "$CP_PID" || CP_KILL_ID=$?
+        if [ "$CP_KILL_ID" = 0 ]; then
+            kill -9 "$CP_PID" 2>/dev/null
+        fi
+        # An unavailable query is not proof of exit. Retain its registry entry
+        # so the caller cannot spawn a duplicate after skipping the signal.
+        [ "$CP_KILL_ID" = 2 ] || cp_forget_renderer_pid "$1" "$CP_PID"
     done
-    CP_KF=`cp_renderer_pid_file "$1"` && rm -f "$CP_KF"
 }
 
-# Return success when at least one exact renderer executable is present. Use
-# pidin's finite snapshot: on this unit, iterating every /proc/<pid>/cmdline can
-# block forever on a live process and prevented dio_manager from starting.
+# A targeted finite pidin query verifies identity, rather than trusting PID reuse.
+# QNX 6.5 supports `pidin -p <pid> ar`; no /proc cmdline walks or full-system scan.
+# Return 0=matching executable, 1=gone/different, 2=query unavailable. An unknown
+# identity may be retained for monitoring, but must NEVER be signalled.
+cp_pid_alive()
+{
+    case "$1" in ''|*[!0-9]*|0|1) return 1 ;; esac
+    [ -d "/proc/$1" ]
+}
+
+cp_renderer_identity()
+{
+    cp_pid_alive "$2" || return 1
+    CP_ID_TEXT=`pidin -p "$2" ar 2>/dev/null` || return 2
+    printf '%s\n' "$CP_ID_TEXT" | (
+        while read CP_ID_PID CP_ID_EXE CP_ID_REST; do
+            [ "$CP_ID_PID" = "$2" ] || continue
+            case "$CP_ID_EXE" in
+                "$1"|*"/$1") exit 0 ;;
+                '') exit 2 ;;
+                *) exit 1 ;;
+            esac
+        done
+        exit 2
+    )
+}
+
+cp_forget_renderer_pid()
+{
+    CP_FORGET_FILE=`cp_renderer_pid_file "$1"` || return 0
+    CP_FORGET_PID=
+    [ -r "$CP_FORGET_FILE" ] && read CP_FORGET_PID < "$CP_FORGET_FILE"
+    # A newer monitor may already have published a replacement while we waited.
+    [ "$CP_FORGET_PID" != "$2" ] || rm -f "$CP_FORGET_FILE"
+}
+
+# Cheap liveness check for a recorded renderer. Only the legacy adoption fallback
+# resolves its executable with pidin; never walk /proc/<pid>/cmdline, which blocked
+# dio_manager startup on this unit. Identity is rechecked on adoption and stop.
 cp_renderer_running()
 {
     CP_WANT=$1
@@ -266,7 +316,8 @@ cp_renderer_running()
     if [ -r "$CP_PID_FILE" ]; then
         CP_KNOWN_PID=
         read CP_KNOWN_PID < "$CP_PID_FILE"
-        [ -n "$CP_KNOWN_PID" ] && [ -d "/proc/$CP_KNOWN_PID" ]
+        # Keep the hot loop as cheap as before: no pidin/netstat/socket probes.
+        cp_pid_alive "$CP_KNOWN_PID"
         return $?
     fi
     [ "$CP_RENDERER_SCAN_DONE" = 1 ] && return 1
@@ -293,8 +344,12 @@ cp_renderer_pids()
     if [ -r "$CP_PID_FILE" ]; then
         CP_KNOWN_PID=
         read CP_KNOWN_PID < "$CP_PID_FILE"
-        if [ -n "$CP_KNOWN_PID" ] && [ -d "/proc/$CP_KNOWN_PID" ]; then
+        CP_ID_RESULT=0
+        cp_renderer_identity "$CP_WANT" "$CP_KNOWN_PID" || CP_ID_RESULT=$?
+        if [ "$CP_ID_RESULT" = 0 ]; then
             echo "$CP_KNOWN_PID"
+        elif [ "$CP_ID_RESULT" = 1 ]; then
+            cp_forget_renderer_pid "$CP_WANT" "$CP_KNOWN_PID"
         fi
         return 0
     fi
@@ -317,38 +372,29 @@ cp_stop_renderer_snapshot()
     CP_STOP_LOG=$1
     CP_STOP_MANEUVER_PIDS=$2
     CP_STOP_ALTSCREEN_PIDS=$3
-    CP_STOP_CURSOR_PIDS=${4:-}
 
     for CP_PID in $CP_STOP_MANEUVER_PIDS; do
+        cp_renderer_identity maneuver_render "$CP_PID" || continue
         echo "[carplay] SIGTERM maneuver_render pid=$CP_PID" >> "$CP_STOP_LOG"
         kill -15 "$CP_PID" 2>/dev/null
     done
     for CP_PID in $CP_STOP_ALTSCREEN_PIDS; do
+        cp_renderer_identity altscreen_render "$CP_PID" || continue
         echo "[carplay] SIGTERM altscreen_render pid=$CP_PID" >> "$CP_STOP_LOG"
-        kill -15 "$CP_PID" 2>/dev/null
-    done
-    for CP_PID in $CP_STOP_CURSOR_PIDS; do
-        echo "[carplay] SIGTERM cursor_render pid=$CP_PID" >> "$CP_STOP_LOG"
         kill -15 "$CP_PID" 2>/dev/null
     done
     # The Qualcomm WFD/EGL teardown path may retain native images for several
     # vsyncs.  Match cp_kill_renderer's grace before the emergency SIGKILL.
     sleep 4
     for CP_PID in $CP_STOP_MANEUVER_PIDS; do
-        if [ -d "/proc/$CP_PID" ]; then
+        if cp_renderer_identity maneuver_render "$CP_PID"; then
             echo "[carplay] SIGKILL residual maneuver_render pid=$CP_PID" >> "$CP_STOP_LOG"
             kill -9 "$CP_PID" 2>/dev/null
         fi
     done
     for CP_PID in $CP_STOP_ALTSCREEN_PIDS; do
-        if [ -d "/proc/$CP_PID" ]; then
+        if cp_renderer_identity altscreen_render "$CP_PID"; then
             echo "[carplay] SIGKILL residual altscreen_render pid=$CP_PID" >> "$CP_STOP_LOG"
-            kill -9 "$CP_PID" 2>/dev/null
-        fi
-    done
-    for CP_PID in $CP_STOP_CURSOR_PIDS; do
-        if [ -d "/proc/$CP_PID" ]; then
-            echo "[carplay] SIGKILL residual cursor_render pid=$CP_PID" >> "$CP_STOP_LOG"
             kill -9 "$CP_PID" 2>/dev/null
         fi
     done
@@ -364,7 +410,6 @@ cp_stop_renderers()
     # killed those brand-new renderers, breaking the hook TCP link mid-GOP.
     CP_STOP_MANEUVER_PIDS=`cp_renderer_pids maneuver_render`
     CP_STOP_ALTSCREEN_PIDS=`cp_renderer_pids altscreen_render`
-    CP_STOP_CURSOR_PIDS=`cp_renderer_pids cursor_render`
     cp_stop_renderer_snapshot "$CP_STOP_LOG" \
-        "$CP_STOP_MANEUVER_PIDS" "$CP_STOP_ALTSCREEN_PIDS" "$CP_STOP_CURSOR_PIDS"
+        "$CP_STOP_MANEUVER_PIDS" "$CP_STOP_ALTSCREEN_PIDS"
 }

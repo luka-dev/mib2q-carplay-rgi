@@ -4,6 +4,7 @@
 #include <stddef.h>
 
 typedef unsigned int GLenum;
+typedef unsigned int GLbitfield;
 typedef unsigned int GLuint;
 typedef int GLint;
 typedef int GLsizei;
@@ -23,11 +24,6 @@ typedef char GLchar;
 #define GL_LINK_STATUS 0x8b82
 #define GL_TEXTURE0 0x84c0
 #define GL_TEXTURE1 0x84c1
-#define GL_TEXTURE2 0x84c2
-#define GL_TEXTURE3 0x84c3
-#define GL_FRAMEBUFFER 0x8d40
-#define GL_COLOR_ATTACHMENT0 0x8ce0
-#define GL_FRAMEBUFFER_COMPLETE 0x8cd5
 #define GL_TEXTURE_2D 0x0de1
 #define GL_TEXTURE_MIN_FILTER 0x2801
 #define GL_TEXTURE_MAG_FILTER 0x2800
@@ -41,6 +37,8 @@ typedef char GLchar;
 #define GL_RGBA 0x1908
 #define GL_UNPACK_ALIGNMENT 0x0cf5
 #define GL_TRIANGLE_STRIP 0x0005
+#define GL_TRIANGLES 0x0004
+#define GL_COLOR_BUFFER_BIT 0x00004000
 
 const unsigned char *glGetString(GLenum name);
 GLuint glCreateShader(GLenum type);
@@ -66,23 +64,17 @@ void glPixelStorei(GLenum pname, GLint value);
 void glTexImage2D(GLenum target, GLint level, GLint internal_format,
                   GLsizei width, GLsizei height, GLint border, GLenum format,
                   GLenum type, const void *pixels);
-void glTexSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset,
-                     GLsizei width, GLsizei height, GLenum format, GLenum type,
-                     const void *pixels);
 GLenum glGetError(void);
 void glViewport(GLint x, GLint y, GLsizei width, GLsizei height);
+void glClearColor(GLfloat r, GLfloat g, GLfloat b, GLfloat a);
+void glClear(GLbitfield mask);
 void glDisable(GLenum cap);
 void glUseProgram(GLuint program);
 void glActiveTexture(GLenum texture);
 void glUniform1i(GLint location, GLint value);
 void glUniform1f(GLint location, GLfloat v0);
 void glUniform2f(GLint location, GLfloat v0, GLfloat v1);
-void glUniform4f(GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3);
-void glGenFramebuffers(GLsizei count, GLuint *framebuffers);
-void glDeleteFramebuffers(GLsizei count, const GLuint *framebuffers);
-void glBindFramebuffer(GLenum target, GLuint framebuffer);
-void glFramebufferTexture2D(GLenum target, GLenum attachment, GLenum texture_target, GLuint texture, GLint level);
-GLenum glCheckFramebufferStatus(GLenum target);
+void glUniform4fv(GLint location, GLsizei count, const GLfloat *values);
 void glDisableVertexAttribArray(GLuint index);
 void glEnableVertexAttribArray(GLuint index);
 void glVertexAttribPointer(GLuint index, GLint size, GLenum type,

@@ -36,7 +36,7 @@ LOG=${LOG:-/tmp/carplay_install.log}
 
 # Installed under $HOOKS_DIR. Executables/libraries use 755; the model uses
 # 644. Order is irrelevant; the list matches the deployment README.
-HOOK_FILES="libcarplay_hook.so libcarplay_apac.so hssr_model.bin maneuver_render altscreen_render cursor_render
+HOOK_FILES="libcarplay_hook.so libcarplay_apac.so hssr_model.bin maneuver_render altscreen_render
             flag_atlas.rgba carplay_startup.sh carplay_processes.sh carplay_cleanup.sh"
 
 # No `dirname` either - see the note in custom.sh. ${0%/*} strips the last
@@ -133,6 +133,9 @@ for f in $HOOK_FILES; do
     fi
     say "ok: $HOOKS_DIR/$f"
 done
+
+# Retired HU experiment. Never carry its executable into a new installation.
+rm -f "$HOOKS_DIR/cursor_render" || die "could not remove retired HU renderer"
 
 cp "$BIN_DIR/carplay_hook.jar" "$JARS_DIR/carplay_hook.jar" || die "copy carplay_hook.jar failed"
 chmod 755 "$JARS_DIR/carplay_hook.jar" || die "chmod carplay_hook.jar failed"

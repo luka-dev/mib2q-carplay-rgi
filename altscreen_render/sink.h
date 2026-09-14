@@ -20,8 +20,10 @@ int  av_sink_open(void);
 
 /* One Annex-B payload from the decoder worker. Returns 0 when accepted, <0
  * when decoder continuity was lost. The caller must end this connection so
- * the hook reconnects with config + a fresh IDR, never another delta frame. */
-int av_sink_frame(const uint8_t *annexb, uint32_t len);
+ * the hook reconnects with config + a fresh IDR, never another delta frame.
+ * received_ms is local CLOCK_MONOTONIC at socket receipt, before queue/startup
+ * delays. Zero means unavailable; it never changes decoder order. */
+int av_sink_frame(const uint8_t *annexb, uint32_t len, uint64_t received_ms);
 
 /* True only after the current session has produced and successfully presented
  * at least one decoded frame.  A TCP connection or decoder start is not visual

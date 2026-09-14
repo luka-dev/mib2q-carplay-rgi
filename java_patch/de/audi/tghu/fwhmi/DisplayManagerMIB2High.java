@@ -163,11 +163,7 @@ public class DisplayManagerMIB2High extends DisplayManager implements IDisplayLi
             }
         );
         this.dc[75] = new DisplayContext(75, new int[0]);
-        // Front to back: HMI, our independently managed transparent cursor, CarPlay video.
-        // No stock context includes the cursor. Native Screen adoption creates ID 103;
-        // do NOT call createImageDisplayable for this surface.
-        this.dc[78] = new DisplayContext(78, this.framework.getKombiType() == KOMBI_TYPE_G24
-            ? new int[]{16, 59} : new int[]{16, com.luka.carplay.cursor.CursorWire.DISPLAYABLE, 59});
+        this.dc[78] = new DisplayContext(78, new int[]{16, 59});
 
         /* --- CarPlay cluster: two custom contexts, A5-class only (not G24) ---
          *   z-order = array order (index 0 = front):
@@ -175,9 +171,8 @@ public class DisplayManagerMIB2High extends DisplayManager implements IDisplayLi
          *                                  (101 = 328x180 sport, 102 = 210x153 popup) over base(99)
          *     dc[81] = {99}                no nav: base only
          *   98 = maneuver overlay (maneuver_render, transparent when idle); 99 = base (altscreen_render).
-         *   The earlier ImageDisplayable attempt with 103 failed; 101/102 already exist as the 987
-         *   Image backings, so we reuse those. This differs from native managed-window adoption,
-         *   which cursor_render uses for 103 on HU. Plane geometry lives in ClusterLayerController; the
+         *   Displayable 103 is NOT creatable (unregistered DSI id); 101/102 already exist as the 987
+         *   Image backings, so we reuse those.  Plane geometry lives in ClusterLayerController; the
          *   80<->81 switch is driven by AltScreenModule. */
         if (this.framework.getKombiType() != KOMBI_TYPE_G24) {
             this.dc[CTX_CARPLAY_NAV] = new DisplayContext(CTX_CARPLAY_NAV, new int[]{98, 101, 102, 99});
@@ -235,8 +230,8 @@ public class DisplayManagerMIB2High extends DisplayManager implements IDisplayLi
     protected void configureDM() {
         /* NOTE: our CarPlay cluster backing uses the stock Image displayables 101/102 — created
          * right here (below) because our A5 FPK unit reports sysConst(541)==2 (proven: 101/102
-         * show in dmdt gd). Cursor 103 is registered by the native Screen window;
-         * do not create an ImageDisplayable for it here. */
+         * show in dmdt gd).  A fresh id 103 is NOT creatable (unregistered DSI id), so no
+         * createImageDisplayable here for it. */
         if (this.framework.getSysConst(541) == 2) {
             this.createImageDisplayable(
                 new ResourceLocator(

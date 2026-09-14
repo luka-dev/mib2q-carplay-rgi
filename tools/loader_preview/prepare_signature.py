@@ -6,7 +6,7 @@ The font file is not bundled. Runtime decodes the alpha texture from the compile
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
-HERE = Path(__file__).resolve().parent
+LOADER = Path(__file__).resolve().parents[2] / "altscreen_render" / "loader"
 TEXT = "@LuKa_dev"
 
 
@@ -34,7 +34,7 @@ def render(font_name, weight, width, tracking, height=16):
 
 def main():
     label = render("SFNSRounded.ttf", 500, 100, 0.045, 18)
-    label.save(HERE / "sig_prism_soft.png")
+    label.save(LOADER / "sig_prism_soft.png")
     print(f"SOFT / SF Rounded Medium: {label.width}x{label.height}, native panel coverage")
 
 

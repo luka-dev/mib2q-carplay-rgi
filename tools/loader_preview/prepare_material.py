@@ -10,11 +10,11 @@ import numpy as np
 from PIL import Image
 from scipy.ndimage import distance_transform_edt, gaussian_filter
 
-HERE = Path(__file__).resolve().parent
+LOADER = Path(__file__).resolve().parents[2] / "altscreen_render" / "loader"
 
 
 def main():
-    alpha = np.asarray(Image.open(HERE / "apple_logo.png").convert("RGBA"))[:, :, 3]
+    alpha = np.asarray(Image.open(LOADER / "apple_logo.png").convert("RGBA"))[:, :, 3]
     inside = alpha >= 128
     # Both the leaf and lower-left lobe touch the artwork's canvas boundary.
     # Include the transparent exterior before calculating distance/derivatives;
@@ -32,7 +32,7 @@ def main():
     out[:, :, 1] = np.rint(np.clip(0.5 - dx/norm*0.5, 0, 1)*255)
     out[:, :, 2] = np.rint(np.clip(0.5 - dy/norm*0.5, 0, 1)*255)
     out[:, :, 3] = alpha
-    Image.fromarray(out).save(HERE / "logo_material.png")
+    Image.fromarray(out).save(LOADER / "logo_material.png")
 
 
 if __name__ == "__main__":

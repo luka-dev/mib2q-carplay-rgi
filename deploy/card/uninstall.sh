@@ -22,7 +22,7 @@ JARS_DIR=$APP_ROOT/eso/hmi/lsd/jars
 CFG=$SYS_ROOT/etc/eso/production/smartphone_integrator.json
 LOG=${LOG:-/tmp/carplay_uninstall.log}
 
-HOOK_FILES="libcarplay_hook.so libcarplay_apac.so hssr_model.bin maneuver_render altscreen_render cursor_render
+HOOK_FILES="libcarplay_hook.so libcarplay_apac.so hssr_model.bin maneuver_render altscreen_render
             flag_atlas.rgba carplay_startup.sh carplay_processes.sh carplay_cleanup.sh"
 
 say() {
@@ -54,7 +54,8 @@ fi
 
 say ""
 say "--- removing installed files ---"
-for f in $HOOK_FILES; do
+# Include the retired HU artifact when uninstalling an older installation.
+for f in $HOOK_FILES cursor_render; do
     if [ -f "$HOOKS_DIR/$f" ]; then
         rm -f "$HOOKS_DIR/$f" && say "removed: $HOOKS_DIR/$f"
     fi

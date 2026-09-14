@@ -17,6 +17,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 HERE = Path(__file__).resolve().parent
+LOADER = HERE.parents[1] / "altscreen_render" / "loader"
 WIDTH, HEIGHT, FPS, FRAMES = 1440, 542, 30, 180
 
 
@@ -35,10 +36,10 @@ def main():
     report = {"look": "prism", "type": "soft-medium-18px",
               "fps": FPS, "frames_per_view": FRAMES,
               "size": [WIDTH, HEIGHT], "cases": [],
-              "shader_sha256": hashlib.sha256((HERE / "../../common/prism_baked.h").read_bytes()).hexdigest(),
-              "material_sha256": hashlib.sha256((HERE / "logo_material.png").read_bytes()).hexdigest(),
-              "signature_sha256": hashlib.sha256((HERE / "sig_prism_soft.png").read_bytes()).hexdigest(),
-              "layout_sha256": hashlib.sha256((HERE / "../../common/loader_layout.h").read_bytes()).hexdigest(),
+              "shader_sha256": hashlib.sha256((LOADER / "prism_baked.h").read_bytes()).hexdigest(),
+              "material_sha256": hashlib.sha256((LOADER / "logo_material.png").read_bytes()).hexdigest(),
+              "signature_sha256": hashlib.sha256((LOADER / "sig_prism_soft.png").read_bytes()).hexdigest(),
+              "layout_sha256": hashlib.sha256((LOADER / "loader_layout.h").read_bytes()).hexdigest(),
               "scope": "macOS OpenGL preview; QNX performance not measured"}
     tiles = []
     full_hash = None
@@ -48,8 +49,7 @@ def main():
             key = f"{view}-{style}"
             print(f"Rendering {key}...", flush=True)
             captured = run(str(HERE / "prism_preview"), "--capture", str(raw),
-                           "--frames", str(FRAMES), "--view", view, "--style", style,
-                           "--loader-only")
+                           "--frames", str(FRAMES), "--view", view, "--style", style)
             match = re.search(r"Content: (\d+) (\d+) (\d+) (\d+)", captured.stderr)
             if not match:
                 raise RuntimeError(captured.stderr)

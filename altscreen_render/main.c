@@ -92,6 +92,7 @@ typedef struct decode_item {
     uint8_t *data;
     uint32_t len;
     uint32_t generation;
+    uint64_t received_ms;
     int type;
 } decode_item_t;
 
@@ -165,6 +166,7 @@ static int decode_queue_push_locked(int type, uint32_t generation,
     item->type = type;
     item->generation = generation;
     item->len = len;
+    item->received_ms = decode_now_ms();
     if (g_decode_tail) g_decode_tail->next = item;
     else g_decode_head = item;
     g_decode_tail = item;
@@ -201,6 +203,8 @@ static void decode_queue_fail(uint32_t generation) {
 
 static void *decode_worker_main(void *unused) {
     uint32_t workerGeneration = 0;
+    unsigned long frames = 0;
+    uint64_t ageMax = 0;
     (void)unused;
     for (;;) {
         decode_item_t *item;
@@ -233,9 +237,20 @@ static void *decode_worker_main(void *unused) {
                         (unsigned)workerGeneration);
             }
         } else if (item->type == DECODE_FRAME) {
+            uint64_t now = decode_now_ms();
+            uint64_t age = item->received_ms && now >= item->received_ms
+                ? now - item->received_ms : 0;
+            if (age > ageMax) ageMax = age;
+            if (++frames <= 3 || frames % 600 == 0) {
+                fprintf(stderr,
+                        "altscreen_render: decode intake #%lu age=%llu ms max=%llu ms generation=%u\n",
+                        frames, (unsigned long long)age, (unsigned long long)ageMax,
+                        (unsigned)item->generation);
+                ageMax = 0;
+            }
             if (item->generation == workerGeneration &&
                 decode_generation_is_current(item->generation) &&
-                av_sink_frame(item->data, item->len) < 0) {
+                av_sink_frame(item->data, item->len, item->received_ms) < 0) {
                 decode_queue_fail(item->generation);
                 av_sink_session_end();
                 workerGeneration = 0;

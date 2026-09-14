@@ -32,7 +32,8 @@
 #include "OMX_Video.h"
 
 #include "screen_egl_present.h"
-#include "loader_layout.h"
+#include "pipeline_timing.h"
+#include "loader/loader_layout.h"
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -85,6 +86,8 @@ typedef struct {
     unsigned long            outputFilled;
     unsigned long            outputPosted;
     unsigned long            outputPostFailed;
+    unsigned long            outputSkipped;
+    uint64_t                 newestInputMs; /* protected by lock; QNX is 32-bit */
     int                      presentationHealthy;
     int                      presentConsecutiveFails;
     int                      presentRecoveryPending;
@@ -98,6 +101,7 @@ typedef struct {
 } ScreenSink;
 
 static ScreenSink g_ss;
+static unsigned long long _NowMs(void);
 
 /* Data callbacks dereference OMX/Screen arrays which teardown frees.  Close the
  * callback gate first, then wait for an already-running GPU presentation to
@@ -209,14 +213,29 @@ static int _PresentGpu(ScreenSink *me, OMX_BUFFERHEADERTYPE *b) {
 static OMX_ERRORTYPE _OnFillDone(OMX_HANDLETYPE c, OMX_PTR app, OMX_BUFFERHEADERTYPE *b) {
     ScreenSink *const me = (ScreenSink *)app;
     OMX_ERRORTYPE err;
+    uint64_t pictureMs, newestMs, nowMs;
+    int obsolete;
     if (!_CallbackEnter(me)) return OMX_ErrorNone;
+    pictureMs = b->nTimeStamp > 0 ? (uint64_t)b->nTimeStamp / 1000ULL : 0;
+    pthread_mutex_lock(&me->lock);
+    newestMs = me->newestInputMs;
+    pthread_mutex_unlock(&me->lock);
+    nowMs = _NowMs();
+    obsolete = alt_present_obsolete(pictureMs, newestMs, nowMs);
     me->outputFilled++;
     if (me->outputFilled <= 3 || (me->outputFilled % 600) == 0)
         fprintf(stderr,
-                "altscreen_render[qnx]: FillBufferDone #%lu filled=%u offset=%u flags=0x%x winReady=%d\n",
+                "altscreen_render[qnx]: FillBufferDone #%lu filled=%u offset=%u flags=0x%x winReady=%d age=%llu ms backlog=%llu ms skipped=%lu pts=%llu\n",
                 me->outputFilled, (unsigned)b->nFilledLen, (unsigned)b->nOffset,
-                (unsigned)b->nFlags, me->winReady);
-    _PresentGpu(me, b);
+                (unsigned)b->nFlags, me->winReady,
+                (unsigned long long)(pictureMs && nowMs >= pictureMs ? nowMs-pictureMs : 0),
+                (unsigned long long)(pictureMs && newestMs >= pictureMs ? newestMs-pictureMs : 0),
+                me->outputSkipped, (unsigned long long)pictureMs);
+    /* Keep every compressed picture/reference in OMX. Catch up by recycling
+     * obsolete decoded output without GPU work or a vsync/post rendezvous.
+     * This is not a presentation failure and must not restart the loader. */
+    if (obsolete) me->outputSkipped++;
+    else _PresentGpu(me, b);
     /* The GPU path finishes sampling this exact Screen buffer before returning;
      * only now may it return to the decoder.  winReady drops before teardown. */
     if (me->running && me->winReady) {
@@ -286,8 +305,7 @@ static void _DestroyPresent(ScreenSink *me) {
 
 static int _CreateEarlyPresent(ScreenSink *me) {
     me->present = screen_egl_present_create_output(me->width, me->height,
-                                                   &me->viewAreaMode,
-                                                   &me->layoutStyle);
+                                                   &me->viewAreaMode, &me->layoutStyle);
     if (!me->present) {
         fprintf(stderr,
                 "altscreen_render[qnx]: early RGBA plane-99 setup FAILED\n");
@@ -297,8 +315,6 @@ static int _CreateEarlyPresent(ScreenSink *me) {
     me->presentHeight = me->height;
     me->presentOutCount = 0;
     if (screen_egl_present_start_loader(me->present) != 0) {
-        fprintf(stderr,
-                "altscreen_render[qnx]: early RGBA loader start FAILED\n");
         _DestroyPresent(me);
         return -1;
     }
@@ -502,10 +518,6 @@ static void _Teardown(ScreenSink *me, int destroyPresent) {
         }
     }
     pthread_mutex_unlock(&me->lock);
-    /* All callbacks have released their input images. PRISM owns the last
-     * RGBA frame, so it can start returning while OMX drains and frees buffers. */
-    if (!destroyPresent && me->present)
-        screen_egl_present_start_loader(me->present);
     if (me->decoder) {
         OMX_SendCommand(me->decoder, OMX_CommandStateSet, OMX_StateIdle, NULL);
         _WaitState(me, OMX_StateIdle, kOmxStopWaitMs);
@@ -533,11 +545,18 @@ static void _Teardown(ScreenSink *me, int destroyPresent) {
     me->presentRecoveryAttempts = 0;
     me->presentNeedsFullRebuild = 0;
     me->presentRecoveryAfterMs = 0;
+    me->newestInputMs = 0;
+    me->outputSkipped = 0;
+    if (!destroyPresent && me->present)
+        screen_egl_present_start_loader(me->present);
 }
 
 /* Bring up native 32m OMX output + post-decode EGL external-image conversion. */
 static int _StartDecoder(ScreenSink *me) {
     OMX_U32 i, outCount;
+    uint64_t begin = _NowMs(), sourcesReady;
+    fprintf(stderr, "altscreen_render[qnx]: decoder start begin at %llu ms\n",
+            (unsigned long long)begin);
     pthread_mutex_lock(&me->lock);
     me->callbacksClosing = 0;
     pthread_mutex_unlock(&me->lock);
@@ -550,6 +569,9 @@ static int _StartDecoder(ScreenSink *me) {
 
     outCount = _ReadOutputDefinition(me);
     if (outCount == 0 || _MakePresent(me, outCount) != 0) goto fail;
+    sourcesReady = _NowMs();
+    fprintf(stderr, "altscreen_render[qnx]: native sources ready after %llu ms\n",
+            (unsigned long long)(sourcesReady - begin));
 
     if (OMX_SendCommand(me->decoder, OMX_CommandStateSet, OMX_StateIdle, NULL)) goto fail;
     if (_AllocInput(me)) goto fail;
@@ -576,6 +598,9 @@ static int _StartDecoder(ScreenSink *me) {
     me->started = 1;
     me->needsIDR = 1;
     me->sessionEverStarted = 1;
+    fprintf(stderr, "altscreen_render[qnx]: decoder startup total=%llu ms OMX states/buffers=%llu ms\n",
+            (unsigned long long)(_NowMs() - begin),
+            (unsigned long long)(_NowMs() - sourcesReady));
     fprintf(stderr, "altscreen_render[qnx]: decoder started %dx%d, native-32m %u Screen window bufs -> EGL GPU RGBA\n",
             me->width, me->height, (unsigned)me->nOutBufs);
     return 0;
@@ -586,17 +611,20 @@ fail:
 }
 
 /* feed one Annex-B buffer to the decoder (blocks for a free input buffer). */
-static int _FeedInput(ScreenSink *me, const uint8_t *data, uint32_t len, OMX_U32 flags) {
+static int _FeedInput(ScreenSink *me, const uint8_t *data, uint32_t len, OMX_U32 flags,
+                      uint64_t received_ms) {
     OMX_BUFFERHEADERTYPE *b; OMX_U32 idx;
     OMX_ERRORTYPE err;
     uint32_t requestedLen = len;
+    struct timespec deadline;
+    _AbsTimeoutMs(&deadline, ALT_INPUT_WAIT_MS);
     pthread_mutex_lock(&me->lock);
     while (me->freeInHead == me->freeInTail && me->running && !me->omxError) {
-        struct timespec ts;
-        _AbsTimeoutMs(&ts, 500L);
-        if (pthread_cond_timedwait(&me->cond, &me->lock, &ts) == ETIMEDOUT) {
+        int waited = pthread_cond_timedwait(&me->cond, &me->lock, &deadline);
+        if (waited == ETIMEDOUT && me->freeInHead == me->freeInTail) {
             fprintf(stderr,
-                    "altscreen_render[qnx]: input-buffer wait TIMEOUT; marking decoder unhealthy\n");
+                    "altscreen_render[qnx]: input-buffer wait TIMEOUT (%d ms); marking decoder unhealthy\n",
+                    ALT_INPUT_WAIT_MS);
             me->omxError = 1;
             break;
         }
@@ -619,9 +647,14 @@ static int _FeedInput(ScreenSink *me, const uint8_t *data, uint32_t len, OMX_U32
     memcpy(b->pBuffer, data, len);
     b->nOffset = 0; b->nFilledLen = len;
     b->nFlags = flags;
-    b->nTimeStamp = 0;                            /* decoder-order mode → pts not needed */
+    /* OMX timestamps are microseconds. Preserve socket age through decode;
+     * decoder-order mode still determines ordering, never a wall-clock PTS. */
+    b->nTimeStamp = (OMX_TICKS)(received_ms * 1000ULL);
     err = OMX_EmptyThisBuffer(me->decoder, b);
     if (err == OMX_ErrorNone) {
+        pthread_mutex_lock(&me->lock);
+        if (received_ms > me->newestInputMs) me->newestInputMs = received_ms;
+        pthread_mutex_unlock(&me->lock);
         me->inputSubmitted++;
         if (me->inputSubmitted <= 3 || (me->inputSubmitted % 600) == 0)
             fprintf(stderr,
@@ -647,6 +680,8 @@ static int _FeedInput(ScreenSink *me, const uint8_t *data, uint32_t len, OMX_U32
 /* ---- sink API ------------------------------------------------------------- */
 int av_sink_open(void) {
     const char *ew = getenv("ALTSCREEN_W"), *eh = getenv("ALTSCREEN_H");
+    uint64_t begin = _NowMs();
+    int result;
     memset(&g_ss, 0, sizeof(g_ss));
     pthread_mutex_init(&g_ss.lock, NULL);
     pthread_cond_init(&g_ss.cond, NULL);
@@ -654,7 +689,10 @@ int av_sink_open(void) {
     g_ss.height = eh ? atoi(eh) : 542;            /* qcdisplaycfg_MMX2.xml: "Audi 1440x542 Kombi panel" */
     fprintf(stderr, "altscreen_render[qnx]: sink open (%dx%d, OMX 32m Screen buffer -> EGL GPU RGBA)\n",
             g_ss.width, g_ss.height);
-    return _CreateEarlyPresent(&g_ss);
+    result = _CreateEarlyPresent(&g_ss);
+    fprintf(stderr, "altscreen_render[qnx]: Screen/EGL open took %llu ms result=%d\n",
+            (unsigned long long)(_NowMs() - begin), result);
+    return result;
 }
 
 enum { NAL_PARAMETER_SET = 1, NAL_PICTURE = 2, NAL_IDR = 4 };
@@ -739,7 +777,7 @@ static void _RecoverPresentationIfNeeded(ScreenSink *me) {
     pthread_mutex_unlock(&me->lock);
 }
 
-int av_sink_frame(const uint8_t *annexb, uint32_t len) {
+int av_sink_frame(const uint8_t *annexb, uint32_t len, uint64_t received_ms) {
     int isConfig;
     unsigned nalFlags;
     unsigned long long nowMs;
@@ -795,14 +833,15 @@ int av_sink_frame(const uint8_t *annexb, uint32_t len) {
     if (!g_ss.fedConfig) {
         if (g_ss.configLen == 0) return -1;
         if (_FeedInput(&g_ss, g_ss.config, g_ss.configLen,
-                       OMX_BUFFERFLAG_ENDOFFRAME | OMX_BUFFERFLAG_CODECCONFIG) != 0)
+                       OMX_BUFFERFLAG_ENDOFFRAME | OMX_BUFFERFLAG_CODECCONFIG, 0) != 0)
             return -1;
         g_ss.fedConfig = 1;
     }
     if (!isConfig) {
         if ((nalFlags & NAL_PICTURE) && g_ss.needsIDR && !(nalFlags & NAL_IDR))
             return -1;
-        if (_FeedInput(&g_ss, annexb, len, OMX_BUFFERFLAG_ENDOFFRAME) != 0)
+        if (_FeedInput(&g_ss, annexb, len, OMX_BUFFERFLAG_ENDOFFRAME,
+                       (nalFlags & NAL_PICTURE) ? received_ms : 0) != 0)
             return -1;
         if (nalFlags & NAL_IDR) g_ss.needsIDR = 0;
     }

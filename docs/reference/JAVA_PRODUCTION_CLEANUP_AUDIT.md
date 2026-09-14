@@ -176,7 +176,7 @@ Do not collapse or delete the following just because the implementations are lar
   altScreen loader still needs classic/sport style (`AltScreenModule.java:213-249`);
 - `RgdModule`, `FrameworkRef.ServiceHandle`, and `Module`: they preserve ordered module lifecycle
   and paired OSGi release (`CarPlayApp.java:305-357`, `FrameworkRef.java:40-75`);
-- `AltScreenCombiBAPListener`, `CursorController`, all mapper classes, and lane fallback logic;
+- `AltScreenCombiBAPListener`, `TouchpadController` (formerly `CursorController`), all mapper classes, and lane fallback logic;
 - the cover-art replacement/provider/mux chain. It is live and intentionally preserves the stock
   provider rather than replacing it.
 

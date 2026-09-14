@@ -20,8 +20,6 @@
         _ZN3dio11CQNXSoundIFINS_16ObjectLockPolicyILNS_6CMutex10en_mutex_tE2ELNS_14en_lock_type_tE0EEEE14createMetadataEjjjNS_15en_encryption_tENS_10en_codec_tE;
         _ZN3dio11CQNXSoundIFINS_18SingleThreadPolicyEE14createMetadataEjjjNS_15en_encryption_tENS_10en_codec_tE;
         _ZNK14NmeIAP2Message6EncodeER8NmeArrayIhE;
-        _ZN3dio13CScreenRender6configERKNS_16st_screen_configE;
-        _ZN3dio13CScreenRender6renderEPh;
         snd_pcm_close;
         snd_pcm_open_name;
         snd_pcm_plugin_flush;

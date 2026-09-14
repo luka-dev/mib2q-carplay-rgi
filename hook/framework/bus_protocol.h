@@ -24,7 +24,7 @@
  *     Compatible with the existing text Data parser so migration of
  *     RouteGuidance consumers is mechanical.  No chunking needed - TCP
  *     delivers the whole frame atomically.
- *   - With BUS_FLAG_BINARY: type-specific packed struct.  Used by cursor
+ *   - With BUS_FLAG_BINARY: type-specific packed struct.  Used by binary commands
  *     and any future low-latency binary channel.
  *
  * Sticky state:
@@ -79,16 +79,11 @@
 #define EVT_COVERART            0x0010  /* text: crc:n:<u32> path:s:<path>   */
 #define EVT_RGD_UPDATE          0x0020  /* text: route_state + all fields    */
 #define EVT_DEVICE_STATE        0x0030  /* reserved                          */
-#define EVT_HU_VIDEO_STATUS     0x0031  /* BE32 query nonce, video epoch, phase 0/1/2 */
-#define CMD_HU_VIDEO_STATUS     0x0130  /* BE32 query nonce; no stock state mutation */
 
 /* ============================================================
  * Command types (Java -> Hook)
  *   0x0100 .. 0x01FF : meta / control
- *   0x0300 ..        : reserved for future categories
- * (0x0200 .. 0x02FF was the cursor namespace; removed when the
- *  on-screen cursor feature was dropped - ghost was architectural
- *  on MU1316, see project_cursor_ghost_architectural_block memory.)
+ *   0x0200 ..        : reserved
  * ============================================================ */
 #define CMD_SYNC_REQ            0x0100  /* request sticky-state snapshot     */
 #define CMD_PING                0x0101  /* echo test                         */
@@ -111,7 +106,7 @@
 #define CMD_ALT_UICTX           0x0115  /* payload = UTF-8 url string — deep-  */
                                         /* link cluster UI context             */
 /* NOTE: dispatchable inbound types must be < MAX_TYPES in bus.c (grown to      */
-/* cover the HU video query at 0x0130 as well).                                 */
+/* cover this 0x11x block).                                                     */
 
 /* ============================================================
  * Classification helpers (header range checks, optional)
