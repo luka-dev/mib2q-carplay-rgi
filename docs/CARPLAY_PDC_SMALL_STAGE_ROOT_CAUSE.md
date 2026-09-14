@@ -4,9 +4,66 @@
 Платформа: Audi MHI2Q, MU1316  
 Исходники для анализа: `/Users/luka/Desktop/AUDI_2/Tools/jxe2jar/out/MU1316-combined-vf`
 
-Статус на 2026-09-02: **исправлено и подтверждено на автомобиле**. Первая реализация на машине не сработала — при появлении правого OPS popup CarPlay всё равно закрывался. Вторая реализация закрывает дополнительные пути `SMALL_STAGE_OMISSION` и AP `1002`; после выкладки jar и перезагрузки проекция под правым OPS popup сохраняется.
+Текущий статус, 2026-09-14: **исправлен пропущенный путь через `PARKING_SYSTEM_ACTIVATED (108)`, собран и проверен локально; на HU пока не выгружен**. Пользователь подтвердил симптом: при появлении бокового PDC CarPlay уходит в Main Wizard. Этот же сбой воспроизведён host-тестом со штатным MU1316 tracker; с новым tracker тест проходит. SSH к `100.127.17.86` завершился по таймауту, поэтому подтверждения на автомобиле ещё нет.
+
+Исторический статус на 2026-09-02: было записано подтверждение на автомобиле. Первая реализация на машине не сработала — при появлении правого OPS popup CarPlay всё равно закрывался. Вторая реализация закрывает дополнительные пути `SMALL_STAGE_OMISSION` и AP `1002`; после выкладки jar и перезагрузки сообщалось о сохранении проекции под правым OPS popup. Это не подтверждает все варианты активации парковочной системы.
 
 Подтверждение — наблюдение на автомобиле, а не строка лога: маркер `/mnt/app/carplay_verbose` в тот момент был снят (его убирали при отладке звука), поэтому `Log.i` из `OPS guard` не писался. Маркер возвращён.
+
+## Уточнение 2026-09-14: сообщение 108 приходит и от обычного OPS
+
+Прежнее разделение «pure OPS — только small stage; VPS — сообщение 108» неверно. В актуальном `MU1316-vf` и байткоде `MU1316-final.jar` есть независимая цепочка:
+
+```text
+AbstractParkingSystemOPSComponent.setActive(true, content)
+  -> controller.notifyParkingSystemActive(this, true)
+     -> updateInterappClients(true)
+        -> MsgDistributor.sendMessage(108)
+  -> controller.addPopupRequest(...)
+     -> ParkingPartialPopupHandler.showPopup(2100008)
+        -> PdcSmallStageGuard.showRequested(...)   [до этого исправления guard включался только здесь]
+
+HighPriorityResourceTracker.processMsg(108)
+  -> SWITCH_TO_MAIN_WIZARD_CHOICE переключается для CarPlay
+  -> SMARTPHONE_SCREEN_BLOCKED_CHOICE = 3
+  -> rvcActive = true
+     -> acquireHighPriorityResources(Resource.SCREEN)
+        -> TMState.restrictAccessTo(SCREEN), requester MAINUNIT
+  -> MURVCActive = true
+```
+
+В предыдущем варианте отправка `108` предшествовала включению guard. `MessageDistributorImpl.sendMessage` вызывает `processMsg` слушателей синхронно. Но даже доставка после включения guard не была защищена: штатный `HighPriorityResourceTracker` его не проверяет вообще. Кандидат `carplay-readiness-fix-20260914` содержал все три прежних PDC класса, однако не заменял этот stock tracker. До текущего исправления PDC-код не менялся после `cbc81bb` от 2026-09-01: последующие исправления renderer/lifecycle не удалили его.
+
+Источники в `/Users/luka/Desktop/AUDI_2/Tools/jxe2jar/out/MU1316-vf/`:
+
+- `de/audi/app/earlyfunc/core/parking/ops/AbstractParkingSystemOPSComponent.java`, `setActive`.
+- `de/audi/app/earlyfunc/core/parking/AbstractParkingSystemControllerComponent.java`, `notifyParkingSystemActive`, `updateInterappClients`.
+- `de/audi/atip/msg/MsgDistributor.java`: 107/108 — деактивация/активация **парковочной системы**, не отдельные события камеры.
+- `de/audi/app/terminalmode/interapp/HighPriorityResourceTracker.java`, `processMsg`, подписка на `rvcActive`, `acquireHighPriorityResources`.
+
+`javap -c -p` подтвердил порядок вызовов `setActive` и действия `processMsg` непосредственно в `MU1316-final.jar`. Это подтверждённый пробел реализации и воспроизведённый механизм совпадающего симптома; живой лог последнего эпизода пользователя пока не получен.
+
+Нельзя просто игнорировать все `108` или проверять только видимость `2100008`: этот popup может сосуществовать с VPS. Также нельзя полагаться только на `getCurrentDisplayContent()`: stock controller обновляет его после `activateParkingSystem(newContent)` в некоторых ветках.
+
+## Третья реализация: ранняя классификация парковочного экрана
+
+`ParkingSystemControllerComponentEvo` — полный stock replacement на 92 исходных строки плюс два узких override. `deactivateCurrentlyVisibleParkingSystems(newContent, nextSystems)` вызывается базовым `activateParkingSystem` **до** деактивации старых и активации новых компонентов. Этот override передаёт guard новый `DisplayContent` и уже вычисленный штатным контроллером список компонентов. Исключение разрешено только если список содержит ровно один OPS (`system ID 2`), его popup — partial `2100008`, CarPlay активен и текущий screen — `3200000`.
+
+Любой VPS, PLA, ARA, неизвестный компонент, пустой/некорректный список оставляет штатный takeover. Дополнительный override `notifyParkingSystemActive` отзывает исключение перед самостоятельным уведомлением любого не-OPS компонента: это закрывает активацию камеры/PLA вне обычного обновления content. `deinit` контроллера также отзывает исключение.
+
+`HighPriorityResourceTracker` сохранён как полный MU1316 replacement с Java 1.4 anonymous-классами. В `processMsg(108)` для разрешённого standalone OPS он не переключает Main Wizard и не захватывает SCREEN. После предыдущего RVC снимается только парковочное ограничение; stock реактивная комбинация eCall/clamp-S продолжает удерживать свои ограничения. Для остальных случаев и явной диагностической команды RVC исполняется штатная ветка. Событие `107` не стирает новый parking intent: оно может прийти от старого компонента в середине переключения.
+
+Прежние small-stage и AP-перехваты используют тот же guard. Теперь он требует, чтобы текущим оставался именно защищённый экземпляр CarPlay screen. Поэтому первый HOME не поглощается даже если парковка вообще не присылала AP `1002`. Запоздалый `popupVisible` не может включить защиту после camera takeover. Начальный callback регистрации `hidden` не трактуется как отмена ещё не показанного popup; настоящий hidden/remove/unregister и 3-секундный таймаут восстанавливают small-stage policy.
+
+Проверки:
+
+- `scripts/test_pdc.sh`: реальный shipping tracker, штатные MU1316 reactive properties, `TMState` и команды. Штатный tracker воспроизводит `pure OPS 108 toggled Main Wizard`, новый проходит тот же сценарий. Проверены ранний/повторный `108`, old `107` после нового intent, OPS→VPS→OPS, поздние popup callbacks, HOME, отключение CarPlay, Android Auto, eCall, clamp-S, diagnostic RVC и таймаут отказавшего показа. Тест также читает байткод stock producer и replacement override, проверяя порядок вызовов до рассылки уведомления.
+- `scripts/test_java_transports.sh`: существующие input/transport/lifecycle тесты и новый PDC-тест проходят.
+- `scripts/audit_java_stock.sh`: сборка Java 1.4, все 116 классов проверены на linkage против `MU1316-final.jar` и `MU1316-combined.jar` с настоящей J9 class library; ошибок нет.
+
+Кандидат: `build/releases/carplay-pdc-fix-20260914/carplay_hook.jar`, build ID `8ca2c73-pdc-fix`; манифест содержит SHA-256 JAR и всех Java-исходников. Для этого исправления меняется только JAR. Не заменять им старый readiness release без обновления манифеста того release.
+
+Следующий шаг на доступном HU: установить этот JAR, перезагрузить для загрузки replacement-классов и проверить боковой OPS, HOME, полный RVC/VPS и закрытие парковки. С включённым `carplay_verbose` ожидается строка `OPS 108: keep CarPlay SCREEN; no Main Wizard takeover`; для полного takeover этой строки быть не должно. Факт локального прохождения тестов не считать подтверждением на автомобиле.
 
 ## Краткий вывод
 
@@ -294,7 +351,7 @@ SMALL_STAGE_OMISSION (1) -> SMALL_STAGE_NO_CHANGE (6)
 
 Подавление AP `1002` одноразовое, потому что событие не содержит параметра source. Это позволяет следующему `1002` от HOME или настоящего fullscreen takeover работать штатно, даже если OPS ещё видим. В обеих parking-ветках key handler CarPlay временно выключается, чтобы ввод не проходил под popup. После возврата `BIG_STAGE` штатный `hmiActivated()` снова включает ввод. За пределами одновременного состояния `CarPlay active + popup 2100008 guarded` обе ветки работают штатно.
 
-Собранный JAR проходит Java 1.4 compilation, ZIP integrity, сравнение public/protected ABI двух replacement-классов и host-тесты. Проверка на машине всё ещё обязательна: особенно последовательность `showPopup -> SMALL_STAGE/AP1002 -> popupVisible` и момент возврата `BIG_STAGE`.
+На момент второй реализации собранный JAR прошёл Java 1.4 compilation, ZIP integrity, сравнение public/protected ABI двух replacement-классов и host-тесты. Историческое подтверждение от 2026-09-02 не закрывает повторный сбой от 2026-09-14: теперь требуется проверить также раннюю цепочку `108`, последовательность `showPopup -> SMALL_STAGE/AP1002 -> popupVisible` и момент возврата `BIG_STAGE`.
 
 ### Почему замена display context сама по себе не исправляет обычный OPS
 
@@ -347,7 +404,7 @@ destination = (720, 0, 304, 480)
 displayManagerService.activateComponentRVC(17);
 ```
 
-Однако VPS activation вызывает `notifyParkingSystemActive()`, после чего parking controller рассылает interapp message `108`. `HighPriorityResourceTracker` интерпретирует его как fullscreen RVC, выставляет `SMARTPHONE_SCREEN_BLOCKED_CHOICE=3` (`CARPLAY_BY_RVC`) и `MURVCActive=true`. Поэтому без дополнительного partial-mode guard CarPlay будет заблокирован независимо от исправления `SMALL_STAGE`.
+Однако parking activation (включая обычный OPS, не только VPS) вызывает `notifyParkingSystemActive()`, после чего parking controller рассылает interapp message `108`. `HighPriorityResourceTracker` интерпретирует его как fullscreen RVC, выставляет `SMARTPHONE_SCREEN_BLOCKED_CHOICE=3` (`CARPLAY_BY_RVC`) и `MURVCActive=true`. Поэтому без дополнительного partial-mode guard CarPlay может быть заблокирован независимо от исправления `SMALL_STAGE`.
 
 Безопасная последовательность включения:
 

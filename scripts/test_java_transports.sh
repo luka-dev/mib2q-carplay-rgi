@@ -35,3 +35,6 @@ mkdir -p "$TEST_DIR/lifecycle"
 for scenario in publication during-start replug failure bounce; do
     "$TEST_JDK/bin/java" -cp "$TEST_DIR/lifecycle" com.luka.carplay.core.CarPlayAppLifecycleTest "$scenario"
 done
+
+# Parking resource policy also uses the freshly built shipping JAR.
+bash "$PROJECT_DIR/scripts/test_pdc.sh"

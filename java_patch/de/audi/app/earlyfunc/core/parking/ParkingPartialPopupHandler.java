@@ -179,8 +179,13 @@ public class ParkingPartialPopupHandler implements IParkingPopupHandler, IPartia
     }
 
     public void partialPopupHidden(int popupId, int terminalId) {
+        partialPopupHidden(popupId, terminalId, false);
+    }
+
+    private void partialPopupHidden(int popupId, int terminalId, boolean registration) {
         boolean notifyCanceled = false;
-        PdcSmallStageGuard.popupHidden(popupId, terminalId);
+        if (registration) PdcSmallStageGuard.popupRegisteredHidden(popupId, terminalId);
+        else PdcSmallStageGuard.popupHidden(popupId, terminalId);
         synchronized (this.mutex) {
             this.logChannel.log(
                 1000000,
@@ -223,7 +228,7 @@ public class ParkingPartialPopupHandler implements IParkingPopupHandler, IPartia
         if (isVisible) {
             this.partialPopupVisible(popupId, terminalId);
         } else {
-            this.partialPopupHidden(popupId, terminalId);
+            this.partialPopupHidden(popupId, terminalId, true);
         }
     }
 
