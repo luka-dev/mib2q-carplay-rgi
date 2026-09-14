@@ -27,7 +27,9 @@ int av_sink_frame(const uint8_t *annexb, uint32_t len, uint64_t received_ms);
 
 /* True only after the current session has produced and successfully presented
  * at least one decoded frame.  A TCP connection or decoder start is not visual
- * readiness: Java uses this edge to leave the stock cluster context. */
+ * readiness: Java uses this edge to leave the stock cluster context. Called
+ * by the control thread; the implementation must synchronize the snapshot
+ * with its decode callbacks and suppress readiness during teardown. */
 int  av_sink_video_ready(void);
 
 /* Select the startup-loader geometry.  style: 0=Sport,

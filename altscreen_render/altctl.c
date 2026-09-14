@@ -20,12 +20,10 @@
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
 
-static volatile int g_video_on = 0;   /* set by the main thread (single writer) */
+static int (*g_video_ready)(void);   /* installed before thread creation */
 static volatile int g_run = 0;
 static volatile int g_exited = 1;
 static pthread_t     g_thr;
-
-void altctl_set_video(int on) { g_video_on = on ? 1 : 0; }
 
 static int ctl_connect(void) {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -80,7 +78,9 @@ static void *ctl_loop(void *arg) {
             fprintf(stderr, "altscreen_render: control link to lsd up (:%d)\n", ALTCTL_PORT);
         }
 
-        int state = g_video_on;
+        /* Decode/presentation can complete after the last socket record. Never
+         * require another compressed frame to notice ON/OFF or replay readiness. */
+        int state = g_video_ready && g_video_ready();
         if (state != last_sent) {
             unsigned char pkt[ALTCTL_PKT_SIZE];
             memset(pkt, 0, sizeof(pkt));
@@ -120,8 +120,9 @@ static void *ctl_loop(void *arg) {
     return NULL;
 }
 
-void altctl_start(void) {
+void altctl_start(int (*video_ready)(void)) {
     if (g_run) return;
+    g_video_ready = video_ready;
     g_run = 1;
     g_exited = 0;
     if (pthread_create(&g_thr, NULL, ctl_loop, NULL) != 0) {

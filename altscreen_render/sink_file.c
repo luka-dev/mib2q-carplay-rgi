@@ -16,9 +16,12 @@
 #include "sink.h"
 
 #include <stdio.h>
+#include <pthread.h>
 
 static unsigned long g_bytes;
 static unsigned long g_msgs;
+static pthread_mutex_t g_ready_lock = PTHREAD_MUTEX_INITIALIZER;
+static int g_ready;
 
 #ifdef ALTSCREEN_CAPTURE
 static FILE *g_out;
@@ -48,6 +51,9 @@ int av_sink_frame(const uint8_t *annexb, uint32_t len, uint64_t received_ms) {
 #endif
     g_bytes += len;
     g_msgs++;
+    pthread_mutex_lock(&g_ready_lock);
+    g_ready = 1;
+    pthread_mutex_unlock(&g_ready_lock);
     if ((g_msgs & 0x3f) == 0)
         fprintf(stderr, "altscreen_render: %lu msgs, %lu bytes\n", g_msgs, g_bytes);
     return 0;
@@ -59,9 +65,18 @@ void av_sink_set_layout(int mode, int style, int rawSkin) {
 
 /* The capture backend has no display swap; a successfully written payload is
  * its equivalent readiness edge for desktop protocol tests. */
-int av_sink_video_ready(void) { return g_msgs != 0; }
+int av_sink_video_ready(void) {
+    int ready;
+    pthread_mutex_lock(&g_ready_lock);
+    ready = g_ready;
+    pthread_mutex_unlock(&g_ready_lock);
+    return ready;
+}
 
 void av_sink_session_end(void) {
+    pthread_mutex_lock(&g_ready_lock);
+    g_ready = 0;
+    pthread_mutex_unlock(&g_ready_lock);
     fprintf(stderr, "altscreen_render: session end (%lu msgs, %lu bytes)\n", g_msgs, g_bytes);
 }
 

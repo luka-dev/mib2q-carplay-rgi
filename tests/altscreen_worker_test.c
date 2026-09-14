@@ -30,9 +30,8 @@ void av_sink_session_end(void) { }
 int av_sink_video_ready(void) { return 0; }
 void av_sink_close(void) { }
 void av_sink_set_layout(int m, int s, int raw) { (void)m; (void)s; (void)raw; }
-void altctl_start(void) { }
+void altctl_start(int (*video_ready)(void)) { (void)video_ready; }
 void altctl_stop(void) { }
-void altctl_set_video(int on) { (void)on; }
 
 static void wait_for_calls(unsigned count) {
     pthread_mutex_lock(&test_lock);

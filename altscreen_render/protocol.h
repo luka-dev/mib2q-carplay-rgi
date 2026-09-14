@@ -37,7 +37,7 @@
 #define ALTCTL_PORT       19832
 #define ALTCTL_PKT_SIZE   4
 
-#define ALTEVT_VIDEO_ON   0x81   /* a video client (hook) connected + streaming 111 */
+#define ALTEVT_VIDEO_ON   0x81   /* current stream has a successfully presented picture */
 #define ALTEVT_VIDEO_OFF  0x82   /* the video client disconnected / stream ended */
 #define ALTCMD_VIEW_AREA  0x01   /* Java -> renderer: b1 0=full/1=compact, b2 style, b3 raw preset */
 

@@ -181,29 +181,40 @@ public final class CarPlayApp {
     private static void applyLifecycle(int generation, boolean wantActive,
                                        IContext context) {
         synchronized (lifecycleLock) {
-            if (!lifecycleCurrent(generation, wantActive, context)) return;
-            stopRetry();
+            try {
+                if (!lifecycleCurrent(generation, wantActive, context)) return;
+                stopRetry();
 
-            if (!wantActive) {
-                Log.i(TAG, "onDeactivate async apply generation=" + generation);
+                if (!wantActive) {
+                    Log.i(TAG, "onDeactivate async apply generation=" + generation);
+                    stopModules();
+                    return;
+                }
+
+                /* FrameworkRef construction calls into stock IContext and therefore
+                 * also belongs here, not on ActiveDeviceStateListener. */
+                FrameworkRef next = new FrameworkRef(context);
+                if (!lifecycleCurrent(generation, true, context)) return;
+                synchronized (lock) { fwRef = next; }
+
+                Log.i(TAG, "onActivate async apply generation=" + generation
+                    + " build=" + BUILD_ID);
+                CarplayBus.getInstance().start();        /* idempotent; off stock lifecycle thread */
                 stopModules();
-                return;
-            }
-
-            /* FrameworkRef construction calls into stock IContext and therefore
-             * also belongs here, not on ActiveDeviceStateListener. */
-            FrameworkRef next = new FrameworkRef(context);
-            if (!lifecycleCurrent(generation, true, context)) return;
-            synchronized (lock) { fwRef = next; }
-
-            Log.i(TAG, "onActivate async apply generation=" + generation
-                + " build=" + BUILD_ID);
-            CarplayBus.getInstance().start();        /* idempotent; off stock lifecycle thread */
-            stopModules();
-            if (!lifecycleCurrent(generation, true, context)) return;
-            if (!startPass(generation)
-                    && lifecycleCurrent(generation, true, context)) {
-                startRetry(generation);
+                if (!lifecycleCurrent(generation, true, context)) return;
+                if (!startPass(generation)
+                        && lifecycleCurrent(generation, true, context)) {
+                    startRetry(generation);
+                }
+            } finally {
+                synchronized (lock) {
+                    /* Publish before releasing lifecycleLock: a Navigation worker
+                     * waiting for this activation must not discard its edge in
+                     * a gap between module startup and generation publication.
+                     * External module calls remain outside this smaller lock. */
+                    lifecycleAppliedGeneration = generation;
+                    lock.notifyAll();
+                }
             }
         }
     }
@@ -251,14 +262,6 @@ public final class CarPlayApp {
                 applyLifecycle(generation, wantActive, context);
             } catch (Throwable t) {
                 Log.e(TAG, "lifecycle apply failed generation=" + generation + ": " + t);
-            } finally {
-                synchronized (lock) {
-                    /* If a newer request arrived while external code ran, mark
-                     * only this snapshot applied; the loop immediately observes
-                     * the newer generation and coalesces to its final state. */
-                    lifecycleAppliedGeneration = generation;
-                    lock.notifyAll();
-                }
             }
         }
     }

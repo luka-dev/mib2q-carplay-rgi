@@ -108,7 +108,7 @@ static size_t          g_decode_bytes;
 static uint32_t        g_decode_generation;
 static int             g_decode_client_fd = -1; /* same lock as generation; reader owns close */
 static int             g_decode_failed;
-static volatile uint32_t g_decode_active_generation;
+static uint32_t         g_decode_active_generation; /* g_decode_lock */
 static int             g_decode_stop;
 static pthread_t       g_decode_thread;
 static int             g_decode_thread_started;
@@ -201,6 +201,12 @@ static void decode_queue_fail(uint32_t generation) {
     pthread_mutex_unlock(&g_decode_lock);
 }
 
+static void decode_set_active_generation(uint32_t generation) {
+    pthread_mutex_lock(&g_decode_lock);
+    g_decode_active_generation = generation;
+    pthread_mutex_unlock(&g_decode_lock);
+}
+
 static void *decode_worker_main(void *unused) {
     uint32_t workerGeneration = 0;
     unsigned long frames = 0;
@@ -226,12 +232,10 @@ static void *decode_worker_main(void *unused) {
 
         if (item->type == DECODE_BEGIN) {
             if (decode_generation_is_current(item->generation)) {
-                g_decode_active_generation = 0;
-                __sync_synchronize();
+                decode_set_active_generation(0);
                 av_sink_session_end();
                 workerGeneration = item->generation;
-                __sync_synchronize();
-                g_decode_active_generation = workerGeneration;
+                decode_set_active_generation(workerGeneration);
                 fprintf(stderr,
                         "altscreen_render: decoder generation %u begin\n",
                         (unsigned)workerGeneration);
@@ -258,8 +262,7 @@ static void *decode_worker_main(void *unused) {
         } else if (item->type == DECODE_END) {
             if (item->generation == workerGeneration &&
                 decode_generation_is_current(item->generation)) {
-                g_decode_active_generation = 0;
-                __sync_synchronize();
+                decode_set_active_generation(0);
                 av_sink_session_end();
                 workerGeneration = 0;
             }
@@ -270,8 +273,7 @@ static void *decode_worker_main(void *unused) {
         pthread_mutex_unlock(&g_decode_lock);
         decode_item_free(item);
     }
-    g_decode_active_generation = 0;
-    __sync_synchronize();
+    decode_set_active_generation(0);
     av_sink_session_end();
     g_decode_thread_exited = 1;
     __sync_synchronize();
@@ -336,9 +338,16 @@ static void decode_queue_end(uint32_t generation) {
     pthread_mutex_unlock(&g_decode_lock);
 }
 
-static int decode_video_ready(uint32_t generation) {
-    __sync_synchronize();
-    return g_decode_active_generation == generation && av_sink_video_ready();
+static int decode_video_ready(void) {
+    int ready;
+    pthread_mutex_lock(&g_decode_lock);
+    /* Keep the generation and sink snapshot together. The sink readiness lock
+     * is a leaf here: no sink callback acquires g_decode_lock. An old callback
+     * or queued END must never make a new/unconnected stream appear ready. */
+    ready = !g_decode_stop && !g_decode_failed && g_decode_client_fd >= 0 &&
+        g_decode_active_generation == g_decode_generation && av_sink_video_ready();
+    pthread_mutex_unlock(&g_decode_lock);
+    return ready;
 }
 
 static void decode_worker_stop(void) {
@@ -427,7 +436,7 @@ static void socket_pace_sample(void) {
 }
 
 /* Serve one connected client until it disconnects or a protocol error. */
-static void serve_client(int cfd, uint32_t generation, int *video_signaled) {
+static void serve_client(int cfd, uint32_t generation) {
     int one = 1;
     setsockopt(cfd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
     /* A static/occluded instrument-cluster scene is allowed to stop producing
@@ -452,19 +461,6 @@ static void serve_client(int cfd, uint32_t generation, int *video_signaled) {
                         (unsigned)generation);
                 break;
             }
-            if (decode_video_ready(generation)) {
-                if (!*video_signaled) {
-                    *video_signaled = 1;
-                    altctl_set_video(1);
-                    fprintf(stderr,
-                            "altscreen_render: first decoded RGBA swap -> VIDEO_ON\n");
-                }
-            } else if (*video_signaled) {
-                *video_signaled = 0;
-                altctl_set_video(0);
-                fprintf(stderr,
-                        "altscreen_render: decoded presentation lost -> VIDEO_OFF\n");
-            }
             continue;
         }
         if (r == -2)
@@ -476,6 +472,17 @@ static void serve_client(int cfd, uint32_t generation, int *video_signaled) {
         break;                                   /* -1 disconnect / -2 proto error */
     }
     free(buf);
+}
+
+static void open_runtime_log(const char *path, const char *previous) {
+    /* Keep RAM-backed diagnostics bounded. The hook log already has size-based
+     * rotation; retain one previous renderer generation and truncate the current
+     * file on process start. Reopen in append mode so the supervisor's in-place
+     * truncation also resets where subsequent writes land. */
+    unlink(previous);
+    rename(path, previous);
+    freopen(path, "a", stderr);
+    setvbuf(stderr, NULL, _IONBF, 0);
 }
 
 int main(void) {
@@ -493,14 +500,7 @@ int main(void) {
     if (!getenv("IPL_CONFIG_DIR"))
         putenv("IPL_CONFIG_DIR=/etc/eso/production");
 
-    /* Keep RAM-backed diagnostics bounded. The hook log already has size-based
-     * rotation; retain one previous renderer generation and truncate the current
-     * file on process start. rename() also preserves the supervisor-opened inode,
-     * while freopen gives this process a clean current log. */
-    unlink("/tmp/altscreen_render.log.1");
-    rename("/tmp/altscreen_render.log", "/tmp/altscreen_render.log.1");
-    freopen("/tmp/altscreen_render.log", "w", stderr);
-    setvbuf(stderr, NULL, _IONBF, 0);
+    open_runtime_log("/tmp/altscreen_render.log", "/tmp/altscreen_render.log.1");
 
     {
         pthread_t watchdog;
@@ -526,10 +526,9 @@ int main(void) {
     fprintf(stderr, "altscreen_render: listening on %s:%d\n", ALTAV_HOST, ALTAV_PORT);
 
     /* Control channel to Java/lsd — reports video on/off so Java flips setVideoAvailable(). */
-    altctl_start();
+    altctl_start(decode_video_ready);
 
     while (g_running) {
-        int video_signaled = 0;
         int cfd = accept(lfd, NULL, NULL);
         if (cfd < 0) {
             if (errno == EINTR) continue;        /* signal → re-check g_running */
@@ -544,8 +543,7 @@ int main(void) {
             } else {
                 fprintf(stderr, "altscreen_render: hook connected generation=%u\n",
                         (unsigned)generation);
-                altctl_set_video(0);             /* remain on stock ctx until a real RGBA swap */
-                serve_client(cfd, generation, &video_signaled);
+                serve_client(cfd, generation);
                 decode_queue_end(generation);
             }
         }
@@ -553,7 +551,6 @@ int main(void) {
             g_client_fd = -1;
             close(cfd);
         }
-        altctl_set_video(0);                     /* stream ended → tell Java (Java clears ctx 80/81) */
         fprintf(stderr, "altscreen_render: hook disconnected\n");
     }
 

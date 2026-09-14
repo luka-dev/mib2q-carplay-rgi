@@ -90,6 +90,13 @@ static void presentation_catchup(void) {
     g_ss.newestInputMs = now - 2000;
     _OnFillDone(&component, &g_ss, &output);
     assert(presents == 1 && recycled == 2 && g_ss.presentationHealthy);
+    assert(av_sink_video_ready());
+    /* The control poll must report OFF as soon as teardown starts, before
+     * the last successful presentation is reset or any further input arrives. */
+    g_ss.callbacksClosing = 1;
+    assert(!av_sink_video_ready());
+    g_ss.callbacksClosing = 0;
+    assert(av_sink_video_ready());
     g_ss.newestInputMs = now;
     _OnFillDone(&component, &g_ss, &output);
     assert(presents == 1 && recycled == 3 && g_ss.presentationHealthy);

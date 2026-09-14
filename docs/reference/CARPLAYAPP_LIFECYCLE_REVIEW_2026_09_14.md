@@ -1,5 +1,11 @@
 # CarPlayApp lifecycle review — 2026-09-14
 
+This review describes baseline `630acd9`. The subsequent readiness fix
+closes the publication race below; see the
+[production audit follow-up](PRODUCTION_READINESS_AUDIT_2026_09_14.md).
+The Friday byte-identity comparison applies to the reviewed baseline. The fix
+preserves module order, retries, debounce and the small state-lock boundary.
+
 Review only; no production lifecycle behavior changed in this pass.
 The three-module order, generation checks, always-on transports, reverse-order
 cleanup and retry-until-services-ready are still used. No cursor/loader module

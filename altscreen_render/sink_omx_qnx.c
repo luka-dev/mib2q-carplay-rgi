@@ -595,7 +595,9 @@ static int _StartDecoder(ScreenSink *me) {
         }
     }
 
+    pthread_mutex_lock(&me->lock);
     me->started = 1;
+    pthread_mutex_unlock(&me->lock);
     me->needsIDR = 1;
     me->sessionEverStarted = 1;
     fprintf(stderr, "altscreen_render[qnx]: decoder startup total=%llu ms OMX states/buffers=%llu ms\n",
@@ -851,7 +853,10 @@ int av_sink_frame(const uint8_t *annexb, uint32_t len, uint64_t received_ms) {
 int av_sink_video_ready(void) {
     int ready;
     pthread_mutex_lock(&g_ss.lock);
-    ready = g_ss.started && !g_ss.omxError && g_ss.presentationHealthy;
+    /* The control thread also samples during startup/teardown. Closing is
+     * published before teardown resets fields outside the callback lock. */
+    ready = !g_ss.callbacksClosing && g_ss.started &&
+        !g_ss.omxError && g_ss.presentationHealthy;
     pthread_mutex_unlock(&g_ss.lock);
     return ready;
 }

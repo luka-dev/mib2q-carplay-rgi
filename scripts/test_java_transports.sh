@@ -20,3 +20,18 @@ mkdir -p "$TEST_DIR/altctl"
     "$PROJECT_DIR/tests/stubs/com/luka/carplay/core/AltScreenModule.java" \
     "$PROJECT_DIR/tests/AltscreenControlTransportTest.java"
 "$TEST_JDK/bin/java" -cp "$TEST_DIR/altctl:$PROJECT_DIR/build/carplay_hook.jar" com.luka.carplay.core.AltscreenControlTransportTest
+
+# Exercise the actual lifecycle worker against controllable external modules.
+mkdir -p "$TEST_DIR/lifecycle"
+"$TEST_JDK/bin/javac" -encoding UTF-8 -d "$TEST_DIR/lifecycle" \
+    "$PROJECT_DIR/java_patch/com/luka/carplay/core/CarPlayApp.java" \
+    "$PROJECT_DIR/java_patch/com/luka/carplay/core/Module.java" \
+    "$PROJECT_DIR/tests/CarPlayAppLifecycleTest.java" \
+    "$PROJECT_DIR/tests/stubs/app-lifecycle/com/luka/carplay/core/LifecycleFixtures.java" \
+    "$PROJECT_DIR/tests/stubs/app-lifecycle/com/luka/carplay/bus/CarplayBus.java" \
+    "$PROJECT_DIR/tests/stubs/app-lifecycle/com/luka/carplay/framework/Log.java" \
+    "$PROJECT_DIR/tests/stubs/app-lifecycle/de/audi/app/terminalmode/IContext.java" \
+    "$PROJECT_DIR/tests/stubs/app-lifecycle/de/audi/atip/base/IFrameworkAccess.java"
+for scenario in publication during-start replug failure bounce; do
+    "$TEST_JDK/bin/java" -cp "$TEST_DIR/lifecycle" com.luka.carplay.core.CarPlayAppLifecycleTest "$scenario"
+done
