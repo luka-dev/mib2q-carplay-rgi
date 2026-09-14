@@ -58,7 +58,7 @@ void sym.CContextManager__declareContext_CIPtr_dsi__displaymanagement__DisplayCo
         fp = r8 + fp
         r3 = r8 + r3
         [var_8h] = r3
-        
+
     loc_0x00037244:
         // CODE XREF from CContextManager::declareContext(CIPtr<dsi::displaymanagement::DisplayContext> const&) @ 0x37584(x)
         r0 = 0x20
@@ -81,7 +81,7 @@ void sym.CContextManager__declareContext_CIPtr_dsi__displaymanagement__DisplayCo
     loc_0x00037568:
         sl = r4 + 8
         goto 0x372e0
-        
+
     loc_0x000372e0:
         // CODE XREF from CContextManager::declareContext(CIPtr<dsi::displaymanagement::DisplayContext> const&) @ 0x3756c(x)
         r0 = r6 + 4   // (pstr 0x00010101) "able15realizeCroppingERKi"
@@ -103,7 +103,7 @@ void sym.CContextManager__declareContext_CIPtr_dsi__displaymanagement__DisplayCo
          r2 = fp                  // r13
          r3 = [var_8h]
          sym.imp.ipl::GlobalErrorHandler::doOutOfMem_char_const__int__char_const__char_const__..._ () // sym.imp.ipl::GlobalErrorHandler::doOutOfMem_char_const__int__char_const__char_const__..._(0x0, 0x14a, 0x178000, 0xffff1824)
-         
+
     loc_0x00037254: // orphan
          r3 = 1
          [var_38h] = (byte) r3
@@ -159,7 +159,7 @@ void sym.CContextManager__declareContext_CIPtr_dsi__displaymanagement__DisplayCo
          ip = [ip]
          [sp] = ip
          sym.imp.tracing::Channel::logCV_short__char_const__..._ () // sym.imp.tracing::Channel::logCV_short__char_const__..._(0x0, 0x1, 0xffff221c, 0x656c6261)
-         
+
          goto loc_0x00037308;
     loc_0x00037308: // orphan
          r3 = [0x00037310]        // [0x375bc:4]=0xffff1798
@@ -211,7 +211,7 @@ void sym.CContextManager__declareContext_CIPtr_dsi__displaymanagement__DisplayCo
          r2 = [var_10h]
          r3 = [var_14h]
          sym.imp.ipl::GlobalErrorHandler::doOutOfMem_char_const__int__char_const__char_const__..._ () // sym.imp.ipl::GlobalErrorHandler::doOutOfMem_char_const__int__char_const__char_const__..._(0xffff1798, 0x14a, 0xffff2374, 0xffff1824)
-         
+
          goto loc_0x00037458;
     loc_0x00037458: // orphan
          r3 = [var_8h]            // (pstr 0x00010101) "able15realizeCroppingERKi"
@@ -255,7 +255,7 @@ void sym.CContextManager__declareContext_CIPtr_dsi__displaymanagement__DisplayCo
     loc_0x00037530: // orphan
          r0 = r4
          sym.imp.util::SharedPtrDefaultBase::_SharedPtrDefaultBase__ () // sym.imp.util::SharedPtrDefaultBase::_SharedPtrDefaultBase__(0x0, 0x0, 0x0, 0x0)
-         
+
     loc_0x00037340: // orphan
          // CODE XREF from CContextManager::declareContext(CIPtr<dsi::displaymanagement::DisplayContext> const&) @ 0x37538(x)
          r3 = [r5 + 0x14]
@@ -274,7 +274,7 @@ void sym.CContextManager__declareContext_CIPtr_dsi__displaymanagement__DisplayCo
     loc_0x0003753c: // orphan
          r5 = r3
          r3 = [r3 + 0xc]
-         
+
     loc_0x00037384: // orphan
          // CODE XREF from CContextManager::declareContext(CIPtr<dsi::displaymanagement::DisplayContext> const&) @ 0x37544(x)
          (a, b) = compare (r3, 0)
@@ -330,13 +330,13 @@ void sym.CContextManager__declareContext_CIPtr_dsi__displaymanagement__DisplayCo
          r2 = [var_58h]           // "able15realizeCroppingERKi"
          r3 = [r4 + 4]            // "able15realizeCroppingERKi"
          (a, b) = compare (r2, r3)
-         (>=) 
+         (>=)
     loc_0x00037438: // orphan
          ble 0x37548              // unlikely
 
     loc_0x00037548: // orphan
          sl = r4 + 8
-         
+
     loc_0x000374e8: // orphan
          // CODE XREF from CContextManager::declareContext(CIPtr<dsi::displaymanagement::DisplayContext> const&) @ 0x3754c(x)
          r2 = [var_8h]            // (pstr 0x00010101) "able15realizeCroppingERKi"
@@ -372,6 +372,5 @@ void sym.CContextManager__declareContext_CIPtr_dsi__displaymanagement__DisplayCo
          r2 = [var_68h]
          r3 = [r4 + 4]            // "able15realizeCroppingERKi"
          (a, b) = compare (r2, r3)
-         (>=) 
+         (>=)
 }
-

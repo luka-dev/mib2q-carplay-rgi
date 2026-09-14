@@ -70,7 +70,7 @@ void sym.CDisplayable__CDisplayable_int_const_ (int32_t arg1, int32_t arg2) {
         fp = sb + fp
         r3 = sb + r3
         [sp] = r3
-        
+
     loc_0x0003e72c:
         // CODE XREF from CDisplayable::CDisplayable(int const&) @ 0x3e844(x)
         r0 = 0x20
@@ -123,13 +123,13 @@ void sym.CDisplayable__CDisplayable_int_const_ (int32_t arg1, int32_t arg2) {
          r2 = [var_ech]
          r3 = [r4 + 4]            // "able15realizeCroppingERKi"
          (a, b) = compare (r2, r3)
-         (>=) 
+         (>=)
     loc_0x0003e700: // orphan
          ble 0x3e828              // unlikely
 
     loc_0x0003e828: // orphan
          r7 = r4 + 8
-         
+
     loc_0x0003e7cc: // orphan
          // CODE XREF from CDisplayable::CDisplayable(int const&) @ 0x3e82c(x)
          r0 = r5 + 4              // (pstr 0x00010101) "able15realizeCroppingERKi"
@@ -181,7 +181,7 @@ void sym.CDisplayable__CDisplayable_int_const_ (int32_t arg1, int32_t arg2) {
          r1 = 0x14a
          ldmib sp, (r2, r3)
          sym.imp.ipl::GlobalErrorHandler::doOutOfMem_char_const__int__char_const__char_const__..._ () // sym.imp.ipl::GlobalErrorHandler::doOutOfMem_char_const__int__char_const__char_const__..._(0xffff1798, 0x14a, 0xffff2924, 0xffff1824)
-         
+
          goto loc_0x0003e5ec;
     loc_0x0003e5ec: // orphan
          ip = var_60h
@@ -248,7 +248,7 @@ void sym.CDisplayable__CDisplayable_int_const_ (int32_t arg1, int32_t arg2) {
     loc_0x0003e81c: // orphan
          r7 = r3
          r3 = [r3 + 0x14]
-         
+
     loc_0x0003e804: // orphan
          // CODE XREF from CDisplayable::CDisplayable(int const&) @ 0x3e824(x)
          (a, b) = compare (r3, 0)
@@ -270,7 +270,7 @@ void sym.CDisplayable__CDisplayable_int_const_ (int32_t arg1, int32_t arg2) {
     loc_0x0003e5a4: // orphan
          r3 = [r4 + 4]            // "able15realizeCroppingERKi"
          (a, b) = compare (r5, r3)
-         (>=) 
+         (>=)
     loc_0x0003e5cc: // orphan
          ble 0x3e660              // unlikely
 
@@ -297,4 +297,3 @@ void sym.CDisplayable__CDisplayable_int_const_ (int32_t arg1, int32_t arg2) {
          je 0x3e5dc               // likely
 
 }
-

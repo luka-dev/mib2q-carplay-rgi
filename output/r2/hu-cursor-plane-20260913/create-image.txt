@@ -125,7 +125,7 @@ void sym.CDSIDisplaymanagement__createImageDisplayable_CIPtr_dsi__global__Resour
          [sp] = r8
          r2 = r5 + r2
          sym.imp.tracing::Channel::logCV_short__char_const__..._ () // sym.imp.tracing::Channel::logCV_short__char_const__..._(0x0, 0x1, 0xffff6b4c, 0x0)
-         
+
     loc_0x0005fc4c: // orphan
          r1 = [0x0005fc54]        // [0x5fcb0:4]=0xffff1a94
          lr = 0
@@ -138,7 +138,6 @@ void sym.CDSIDisplaymanagement__createImageDisplayable_CIPtr_dsi__global__Resour
          ip = r5 + ip
          stm sp, (ip, lr)
          sym.imp.ipl::GlobalErrorHandler::doAssert_bool__char_const__char_const__int__char_const__char_const__..._ () // sym.imp.ipl::GlobalErrorHandler::doAssert_bool__char_const__char_const__int__char_const__char_const__..._(0x0, 0xffff1a94, 0xffff1aa8, 0x82)
-         
+
          goto loc_0x0005fc48;
 }
-

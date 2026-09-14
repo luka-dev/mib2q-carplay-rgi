@@ -62,7 +62,7 @@ void sym.CGLRenderer__drawDisplayable_CDisplayable_const__T4_float__const__T4_fl
         fp = r4 + fp
         r3 = r4 + r3
         [var_10h] = r3
-        
+
     loc_0x0006e340:
         // CODE XREF from CGLRenderer::drawDisplayable(CDisplayable const&, T4<float> const&, T4<float> const&, float, CRenderer::BlendMode) @ 0x6e614(x)
         r0 = 0x20
@@ -129,12 +129,12 @@ void sym.CGLRenderer__drawDisplayable_CDisplayable_const__T4_float__const__T4_fl
          r3 = [r7 + 4]            // "able15realizeCroppingERKi"
          r2 = r4 + r2
          sym.imp.tracing::Channel::logCV_short__char_const__..._ () // sym.imp.tracing::Channel::logCV_short__char_const__..._(0x0, 0x4, 0xffff8f40, 0x10101)
-         
+
     loc_0x0006e62c: // orphan
          // CODE XREF from CGLRenderer::drawDisplayable(CDisplayable const&, T4<float> const&, T4<float> const&, float, CRenderer::BlendMode) @ 0x6e64c(x)
          r0 = sb
          sym.imp.util::SharedPtrDefaultBase::_SharedPtrDefaultBase__ () // sym.imp.util::SharedPtrDefaultBase::_SharedPtrDefaultBase__(0x0, 0x0, 0x0, 0x0)
-         
+
     loc_0x0006e408: // orphan
          r3 = [var_6ch]
          (a, b) = compare (r3, 0)
@@ -256,7 +256,7 @@ void sym.CGLRenderer__drawDisplayable_CDisplayable_const__T4_float__const__T4_fl
          rsym._ZN9CWatchdog4exitEv () // rsym._ZN9CWatchdog4exitEv(-1, 0x0, 0x4, 0x0)
          r0 = sb
          sym.imp.util::SharedPtrDefaultBase::_SharedPtrDefaultBase__ () // sym.imp.util::SharedPtrDefaultBase::_SharedPtrDefaultBase__(0x0, 0x0, 0x4, 0x0)
-         
+
          goto loc_0x0006e5e8;
     loc_0x0006e5e8: // orphan
          r0 = r3
@@ -264,7 +264,7 @@ void sym.CGLRenderer__drawDisplayable_CDisplayable_const__T4_float__const__T4_fl
          r2 = 0
          r3 = 0x304
          sym.imp.glBlendFuncSeparate () // sym.imp.glBlendFuncSeparate(0x0, 0x303, 0x0, 0x304)
-         
+
          goto loc_0x0006e470;
     loc_0x0006e470: // orphan
          r0 = 0xbe2
@@ -282,7 +282,7 @@ void sym.CGLRenderer__drawDisplayable_CDisplayable_const__T4_float__const__T4_fl
 
     loc_0x0006e5cc: // orphan
          sl = r5 + 8
-         
+
     loc_0x0006e3e0: // orphan
          // CODE XREF from CGLRenderer::drawDisplayable(CDisplayable const&, T4<float> const&, T4<float> const&, float, CRenderer::BlendMode) @ 0x6e5d0(x)
          r3 = [var_ch]
@@ -327,6 +327,5 @@ void sym.CGLRenderer__drawDisplayable_CDisplayable_const__T4_float__const__T4_fl
          r3 = [r7 + 4]            // "able15realizeCroppingERKi"
          r2 = r4 + r2
          sym.imp.tracing::Channel::logCV_short__char_const__..._ () // sym.imp.tracing::Channel::logCV_short__char_const__..._(0x0, 0x4, 0xffff8f08, 0x10101)
-         
-}
 
+}

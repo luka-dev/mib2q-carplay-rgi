@@ -40,7 +40,7 @@ void sym.CDisplayManager__getDisplayable_int_const_ (int32_t arg1, int32_t arg2)
         sl = r5 + sl
         fp = r5 + fp
         r5 += r3
-        
+
     loc_0x00039cec:
         // CODE XREF from CDisplayManager::getDisplayable(int const&) @ 0x39de8(x)
         r0 = 0x20
@@ -101,18 +101,18 @@ void sym.CDisplayManager__getDisplayable_int_const_ (int32_t arg1, int32_t arg2)
          r2 = [var_20h]
          r3 = [r4 + 4]            // "able15realizeCroppingERKi"
          (a, b) = compare (r2, r3)
-         (>=) 
+         (>=)
     loc_0x00039cc4: // orphan
          ble 0x39dcc              // unlikely
 
     loc_0x00039dcc: // orphan
          r5 = r4 + 8
-         
+
     loc_0x00039d88: // orphan
          // CODE XREF from CDisplayManager::getDisplayable(int const&) @ 0x39dd0(x)
          r0 = r8 + 4              // (pstr 0x00010101) "able15realizeCroppingERKi"
          sym.imp.util::SharedPtrDefaultBase::_SharedPtrDefaultBase__ () // sym.imp.util::SharedPtrDefaultBase::_SharedPtrDefaultBase__(0x4, 0x0, 0x0, 0x0)
-         
+
          goto loc_0x00039cc8;
     loc_0x00039cc8: // orphan
          r3 = [r4 + 0x1c]         // elf_phdr
@@ -135,7 +135,7 @@ void sym.CDisplayManager__getDisplayable_int_const_ (int32_t arg1, int32_t arg2)
          r2 = [r2]
 
     loc_0x00039d94: // orphan
-         (>=) 
+         (>=)
     loc_0x00039da8: // orphan
          (a, b) = compare (sb, 0)
          addne r5, sb, 8
@@ -154,7 +154,7 @@ void sym.CDisplayManager__getDisplayable_int_const_ (int32_t arg1, int32_t arg2)
 
          goto loc_0x00039da4;
     loc_0x00039da4: // orphan
-         
+
          goto loc_0x00039c40;
     loc_0x00039c40: // orphan
          sb = [sb + 0x18]         // loc._btext
@@ -162,4 +162,3 @@ void sym.CDisplayManager__getDisplayable_int_const_ (int32_t arg1, int32_t arg2)
          bne 0x39c34              // likely
 
 }
-

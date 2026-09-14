@@ -636,7 +636,7 @@ void sym.CScreenHandler__evtNewWindow_CNewWindowEvent_ (int32_t arg1, int32_t ar
         sym.imp.tracing::Channel::logCV_short__char_const__..._ () // sym.imp.tracing::Channel::logCV_short__char_const__..._(0x0, 0x4, 0xffff24b0, 0xffffaa90)
         ldrsh r3, [r8, 0x38]
         goto 0x81aa0
-        
+
         goto loc_0x00081aa8;
         return r0;
     loc_0x000823d4: // orphan
@@ -651,7 +651,7 @@ void sym.CScreenHandler__evtNewWindow_CNewWindowEvent_ (int32_t arg1, int32_t ar
          r3 = [r6 + 0xc]
          r2 = r5 + r2
          sym.imp.tracing::Channel::logCV_short__char_const__..._ () // sym.imp.tracing::Channel::logCV_short__char_const__..._(0x0, 0x3, 0xffffa978, 0x0)
-         
+
          goto loc_0x00081abc;
     loc_0x00082b2c: // orphan
          r2 = [0x0008294c]        // [0x8294c:4]=0xffffa6ac
@@ -660,7 +660,7 @@ void sym.CScreenHandler__evtNewWindow_CNewWindowEvent_ (int32_t arg1, int32_t ar
          [sp] = ip
          r2 = r5 + r2
          sym.imp.tracing::Channel::logCV_short__char_const__..._ () // sym.imp.tracing::Channel::logCV_short__char_const__..._(0x0, 0x1, 0xffffa6ac, 0x178000)
-         
+
     loc_0x000824f8: // orphan
          sym.imp.__get_errno_ptr () // sym.imp.__get_errno_ptr(0x0, 0x0, 0x0, 0x0)
          r4 = [r5 + sl]
@@ -707,12 +707,12 @@ void sym.CScreenHandler__evtNewWindow_CNewWindowEvent_ (int32_t arg1, int32_t ar
     loc_0x00082b20: // orphan
          r0 = fp                  // r13
          sym.imp.util::SharedPtrDefaultBase::_SharedPtrDefaultBase__ () // sym.imp.util::SharedPtrDefaultBase::_SharedPtrDefaultBase__(0x178000, 0x0, 0x0, 0x0)
-         
+
     loc_0x000824d4: // orphan
          // CODE XREF from CScreenHandler::evtNewWindow(CNewWindowEvent*) @ 0x82b28(x)
          r0 = [var_2ch]
          sym.imp.util::SharedPtrDefaultBase::_SharedPtrDefaultBase__ () // sym.imp.util::SharedPtrDefaultBase::_SharedPtrDefaultBase__(0x178120, 0x0, 0x0, 0x0)
-         
+
          goto loc_0x000827e0;
     loc_0x000827e0: // orphan
          r0 = [var_100h]
@@ -793,7 +793,7 @@ void sym.CScreenHandler__evtNewWindow_CNewWindowEvent_ (int32_t arg1, int32_t ar
          r2 = [var_30h]
          r3 = [var_34h]
          sym.imp.ipl::GlobalErrorHandler::doOutOfMem_char_const__int__char_const__char_const__..._ () // sym.imp.ipl::GlobalErrorHandler::doOutOfMem_char_const__int__char_const__char_const__..._(0xffff1798, 0x14a, 0xffffaaa8, 0xffff1824)
-         
+
     loc_0x000829b4: // orphan
          // CODE XREF from CScreenHandler::evtNewWindow(CNewWindowEvent*) @ 0x82ddc(x)
          r0 = 0x20
@@ -852,7 +852,7 @@ void sym.CScreenHandler__evtNewWindow_CNewWindowEvent_ (int32_t arg1, int32_t ar
          r3 = [var_148h]
          r2 = r5 + r2
          sym.imp.tracing::Channel::logCV_short__char_const__..._ () // sym.imp.tracing::Channel::logCV_short__char_const__..._(0x0, 0x1, 0xffffa790, 0x0)
-         
+
     loc_0x00082aa4: // orphan
          // CODE XREF from CScreenHandler::evtNewWindow(CNewWindowEvent*) @ 0x82dc4(x)
          r3 = [0x00082948]        // [0x82948:4]=0xe20
@@ -871,7 +871,7 @@ void sym.CScreenHandler__evtNewWindow_CNewWindowEvent_ (int32_t arg1, int32_t ar
          r0 = [var_124h]
          [r1 - 2]! = (byte) r3
          rsym._ZN12CDisplayable10setVisibleERKb () // rsym._ZN12CDisplayable10setVisibleERKb(0x0, 0x17814e, 0x0, 0x0)
-         
+
     loc_0x00082b08: // orphan
          // CODE XREF from CScreenHandler::evtNewWindow(CNewWindowEvent*) @ 0x82d6c(x)
          r1 = [var_24h]
@@ -905,10 +905,10 @@ void sym.CScreenHandler__evtNewWindow_CNewWindowEvent_ (int32_t arg1, int32_t ar
 
          goto loc_0x00082980;
     loc_0x00082980: // orphan
-         (>=) 
+         (>=)
     loc_0x00082d54: // orphan
          ip = r4 + 8
-         
+
     loc_0x00082a64: // orphan
          // CODE XREF from CScreenHandler::evtNewWindow(CNewWindowEvent*) @ 0x82d58(x)
          r0 = r8 + 4              // (pstr 0x00010101) "able15realizeCroppingERKi"
@@ -936,7 +936,7 @@ void sym.CScreenHandler__evtNewWindow_CNewWindowEvent_ (int32_t arg1, int32_t ar
 
     loc_0x000828c4: // orphan
          r4 = r3
-         
+
     loc_0x000828ac: // orphan
          // CODE XREF from CScreenHandler::evtNewWindow(CNewWindowEvent*) @ 0x828c8(x)
          r3 = [r4 + 4]            // "able15realizeCroppingERKi"
@@ -956,7 +956,7 @@ void sym.CScreenHandler__evtNewWindow_CNewWindowEvent_ (int32_t arg1, int32_t ar
          r3 = [var_148h]
          r2 = r5 + r2
          sym.imp.tracing::Channel::logCV_short__char_const__..._ () // sym.imp.tracing::Channel::logCV_short__char_const__..._(0x0, 0x1, 0xffffa7b4, 0x0)
-         
+
     loc_0x00082404: // orphan
          r0 = [r5 + sl]
          ldrsh r3, [r0, 0x38]     // "AvailableEv"
@@ -969,7 +969,7 @@ void sym.CScreenHandler__evtNewWindow_CNewWindowEvent_ (int32_t arg1, int32_t ar
          r3 = [var_148h]
          r2 = r5 + r2
          sym.imp.tracing::Channel::logCV_short__char_const__..._ () // sym.imp.tracing::Channel::logCV_short__char_const__..._(0x0, 0x4, 0xffffa8b4, 0x0)
-         
+
     loc_0x00082414: // orphan
          // CODE XREF from CScreenHandler::evtNewWindow(CNewWindowEvent*) @ 0x82560(x)
          r4 = [r5 + sb]
@@ -1039,7 +1039,7 @@ void sym.CScreenHandler__evtNewWindow_CNewWindowEvent_ (int32_t arg1, int32_t ar
          [var_8h] = r0
          r0 = r4
          sym.imp.tracing::Channel::logCV_short__char_const__..._ () // sym.imp.tracing::Channel::logCV_short__char_const__..._(0x0, 0x4, 0xffff24b0, 0xffffaac4)
-         
+
          goto loc_0x00082448;
     loc_0x00082448: // orphan
          sym.imp.__get_errno_ptr () // sym.imp.__get_errno_ptr(0x0, 0x0, 0x0, 0x0)
@@ -1064,7 +1064,7 @@ void sym.CScreenHandler__evtNewWindow_CNewWindowEvent_ (int32_t arg1, int32_t ar
          [var_8h] = r0
          r0 = r7
          sym.imp.tracing::Channel::logCV_short__char_const__..._ () // sym.imp.tracing::Channel::logCV_short__char_const__..._(0x0, 0x4, 0xffff24b0, 0xffffaac4)
-         
+
          goto loc_0x00081fd0;
     loc_0x00082c10: // orphan
          r0 = r8
@@ -1072,7 +1072,7 @@ void sym.CScreenHandler__evtNewWindow_CNewWindowEvent_ (int32_t arg1, int32_t ar
          r2 = fp                  // r13
          r3 = [var_34h]
          sym.imp.ipl::GlobalErrorHandler::doOutOfMem_char_const__int__char_const__char_const__..._ () // sym.imp.ipl::GlobalErrorHandler::doOutOfMem_char_const__int__char_const__char_const__..._(0x0, 0x14a, 0x178000, 0xffff1824)
-         
+
     loc_0x00082c28: // orphan
          r0 = [var_24h]
          r3 = [r5 + r0]
@@ -1092,7 +1092,7 @@ void sym.CScreenHandler__evtNewWindow_CNewWindowEvent_ (int32_t arg1, int32_t ar
     loc_0x00082de0: // orphan
          r2 = [0x0008297c]        // [0x8297c:4]=0xffff19f4
          r2 = r5 + r2
-         
+
     loc_0x00082d8c: // orphan
          // CODE XREF from CScreenHandler::evtNewWindow(CNewWindowEvent*) @ 0x82de8(x)
          [sp] = r2
@@ -1102,7 +1102,7 @@ void sym.CScreenHandler__evtNewWindow_CNewWindowEvent_ (int32_t arg1, int32_t ar
          r0 = [r5 + sl]
          r2 = r5 + r2
          sym.imp.tracing::Channel::logCV_short__char_const__..._ () // sym.imp.tracing::Channel::logCV_short__char_const__..._(0x464c457f, 0x1, 0xffffa880, 0x0)
-         
+
     loc_0x00082d84: // orphan
          r2 = [0x00082970]        // [0x82970:4]=0xffff1844
          r2 = r5 + r2
@@ -1148,7 +1148,7 @@ void sym.CScreenHandler__evtNewWindow_CNewWindowEvent_ (int32_t arg1, int32_t ar
     loc_0x00082d48: // orphan
          r4 = r3
          r3 = [r3 + 0x14]
-         
+
     loc_0x00082d30: // orphan
          // CODE XREF from CScreenHandler::evtNewWindow(CNewWindowEvent*) @ 0x82d50(x)
          (a, b) = compare (r3, 0)
@@ -1168,7 +1168,7 @@ void sym.CScreenHandler__evtNewWindow_CNewWindowEvent_ (int32_t arg1, int32_t ar
 
          goto loc_0x00082d28;
     loc_0x00082d28: // orphan
-         
+
          goto loc_0x00082c7c;
     loc_0x00082c7c: // orphan
          r3 = [var_c4h]
@@ -1213,7 +1213,7 @@ void sym.CScreenHandler__evtNewWindow_CNewWindowEvent_ (int32_t arg1, int32_t ar
          goto loc_0x00082210;
     loc_0x00082b60: // orphan
          r8 = r4 + 8
-         
+
     loc_0x000820b0: // orphan
          r3 = [r4 + 0x18]         // loc._btext
          (a, b) = compare (r3, 0)
@@ -1235,25 +1235,25 @@ void sym.CScreenHandler__evtNewWindow_CNewWindowEvent_ (int32_t arg1, int32_t ar
          [var_8h] = r0
          r0 = r4
          sym.imp.tracing::Channel::logCV_short__char_const__..._ () // sym.imp.tracing::Channel::logCV_short__char_const__..._(0x0, 0x4, 0xffff24b0, 0xffffaac4)
-         
+
          goto loc_0x00081b60;
     loc_0x00082564: // orphan
          r8 = 0
-         
+
     loc_0x00082b48: // orphan
          r2 = [0x00082950]        // [0x82950:4]=0xffffa6c4
          r1 = 4                   // (pstr 0x00010101) "able15realizeCroppingERKi"
          r3 = [var_148h]
          r2 = r5 + r2
          sym.imp.tracing::Channel::logCV_short__char_const__..._ () // sym.imp.tracing::Channel::logCV_short__char_const__..._(0x0, 0x4, 0xffffa6c4, 0x0)
-         
+
     loc_0x00082b80: // orphan
          r2 = [0x00082958]        // [0x82958:4]=0xffffa588
          r1 = 1
          r3 = r4
          r2 = r5 + r2
          sym.imp.tracing::Channel::logCV_short__char_const__..._ () // sym.imp.tracing::Channel::logCV_short__char_const__..._(0x0, 0x1, 0xffffa588, 0x0)
-         
+
     loc_0x0008256c: // orphan
          ble 0x825b0              // unlikely
 
@@ -1292,7 +1292,7 @@ void sym.CScreenHandler__evtNewWindow_CNewWindowEvent_ (int32_t arg1, int32_t ar
          r3 = [arg_84h]
          r3 -= 1
          [arg_84h] = r3
-         
+
     loc_0x000825f0: // orphan
          r1 = [r1 + 0x1c]         // elf_phdr
          (a, b) = compare (r1, 0)
@@ -1301,10 +1301,10 @@ void sym.CScreenHandler__evtNewWindow_CNewWindowEvent_ (int32_t arg1, int32_t ar
     loc_0x000825c8: // orphan
          r3 = [r1 + 4]            // "able15realizeCroppingERKi"
          (a, b) = compare (r2, r3)
-         (>=) 
+         (>=)
          goto loc_0x000825fc;
     loc_0x000825fc: // orphan
-         
+
          goto loc_0x000825d4;
     loc_0x000825d4: // orphan
          r1 = [r1 + 0x18]         // loc._btext
@@ -1324,7 +1324,7 @@ void sym.CScreenHandler__evtNewWindow_CNewWindowEvent_ (int32_t arg1, int32_t ar
          bne 0x81c90              // likely
 
     loc_0x0008257c: // orphan
-         
+
          goto loc_0x00081c9c;
     loc_0x00082580: // orphan
          ble 0x8263c              // unlikely
@@ -1344,7 +1344,7 @@ void sym.CScreenHandler__evtNewWindow_CNewWindowEvent_ (int32_t arg1, int32_t ar
 
          goto loc_0x00082678;
     loc_0x00082678: // orphan
-         (>=) 
+         (>=)
     loc_0x0008268c: // orphan
          (a, b) = compare (r1, 0)
          je 0x81c4c               // likely
@@ -1363,7 +1363,7 @@ void sym.CScreenHandler__evtNewWindow_CNewWindowEvent_ (int32_t arg1, int32_t ar
          r3 = [arg_74h]
          r3 -= 1
          [arg_74h] = r3
-         
+
     loc_0x0008267c: // orphan
          r1 = [r1 + 0x1c]         // elf_phdr
          (a, b) = compare (r1, 0)
@@ -1376,7 +1376,7 @@ void sym.CScreenHandler__evtNewWindow_CNewWindowEvent_ (int32_t arg1, int32_t ar
 
          goto loc_0x00082688;
     loc_0x00082688: // orphan
-         
+
          goto loc_0x00082660;
     loc_0x00082660: // orphan
          r1 = [r1 + 0x18]         // loc._btext
@@ -1398,7 +1398,7 @@ void sym.CScreenHandler__evtNewWindow_CNewWindowEvent_ (int32_t arg1, int32_t ar
     loc_0x00082590: // orphan
          r1 = arg_78h             // (pstr 0x00010101) "able15realizeCroppingERKi"
          [var_20h] = r1
-         
+
          goto loc_0x00081c68;
     loc_0x0008259c: // orphan
          bls 0x826c8              // likely
@@ -1431,7 +1431,7 @@ void sym.CScreenHandler__evtNewWindow_CNewWindowEvent_ (int32_t arg1, int32_t ar
          r3 = [r7 + 0xac]
          r3 -= 1
          [r7 + 0xac] = r3
-         
+
     loc_0x00082704: // orphan
          r1 = [r1 + 0x14]
          (a, b) = compare (r1, 0)
@@ -1444,7 +1444,7 @@ void sym.CScreenHandler__evtNewWindow_CNewWindowEvent_ (int32_t arg1, int32_t ar
 
          goto loc_0x00082710;
     loc_0x00082710: // orphan
-         
+
          goto loc_0x000826e8;
     loc_0x000826e8: // orphan
          r1 = [r1 + 0x10]
@@ -1464,7 +1464,7 @@ void sym.CScreenHandler__evtNewWindow_CNewWindowEvent_ (int32_t arg1, int32_t ar
          bne 0x81c14              // likely
 
     loc_0x000825ac: // orphan
-         
+
          goto loc_0x00081c20;
     loc_0x00081a94: // orphan
          sl = [0x00081a9c]        // [0x828dc:4]=0xe54
@@ -1482,10 +1482,10 @@ void sym.CScreenHandler__evtNewWindow_CNewWindowEvent_ (int32_t arg1, int32_t ar
          r2 = fp                  // r13
          r3 = [var_1ch]
          sym.imp.ipl::GlobalErrorHandler::doOutOfMem_char_const__int__char_const__char_const__..._ () // sym.imp.ipl::GlobalErrorHandler::doOutOfMem_char_const__int__char_const__char_const__..._(0x0, 0x14a, 0x178000, 0x178130)
-         
+
     loc_0x000823fc: // orphan
          r6 = r4
-         
+
     loc_0x000822b8: // orphan
          r3 = [r4 + 0x10]
          (a, b) = compare (r3, 0)
@@ -1504,4 +1504,3 @@ void sym.CScreenHandler__evtNewWindow_CNewWindowEvent_ (int32_t arg1, int32_t ar
          bne 0x81a14              // likely
 
 }
-
