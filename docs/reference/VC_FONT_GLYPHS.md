@@ -8,6 +8,7 @@ Audited 2026-09-10 from its existing `extracted/` tree, without changing firmwar
 | Purpose | Text | Unicode | Coverage in extracted fonts |
 | --- | --- | --- | --- |
 | SignPost/Exit | `‹Exit 12›` | U+2039 / U+203A | All five Audi faces |
+| Next street / maneuver description when ExitInfo is absent | `● Main Street` | U+25CF BLACK CIRCLE | JP/KR and Chinese; absent from Audi faces |
 | Small-view time | `◌ 37 min` | U+25CC DOTTED CIRCLE | Arabic and JP/KR; absent from Audi faces |
 | Full-view time | `◌ 22:42 \| 37 min` | U+25CC DOTTED CIRCLE | Same; arrival respects HU 12/24-hour setting |
 
@@ -23,6 +24,12 @@ TimeToDestination/FctID 22 stays absolute ETA. See [the field matrix](NAVSD_FCTI
 The 96-byte UTF-8 text budget reserves **6 bytes** for `‹›`, leaving 90 for content.
 Host tests verify exact U+25CC bytes `E2 97 8C`, both views/phases, input fallbacks,
 closing quotes, and UTF-8 boundaries including supplementary characters.
+
+2026-09-13: the user selected `●` for the next-street and maneuver-description
+fallbacks only. The prefix plus space consumes four UTF-8 bytes, leaving 92
+for text. ExitInfo keeps `‹…›`, the current-road fallback stays unprefixed,
+and ETA keeps `◌`. U+25CF font fallback on the actual navigation widget still
+needs vehicle confirmation.
 
 ## Font evidence
 

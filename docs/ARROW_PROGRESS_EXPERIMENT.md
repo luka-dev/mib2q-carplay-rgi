@@ -1,5 +1,12 @@
 # Arrow progress experiment
 
+> Historical implementation record. The approved base is now bright white,
+> and maneuver handoff retracts the outgoing fill before refilling the incoming
+> arrow. Current decisions, shared blink phases versus independent fill animation,
+> and committed status: [RGI/HUD/renderer knowledge](RGI_HUD_RENDERER_KNOWLEDGE.md)
+> and [scene engine](SCENE_ENGINE.md). Old palette/branch/release notes below
+> describe their original experiment, not the current deployment state.
+
 Branch: `experiment/arrow-progress`, isolated from master at `59646e9`.
 
 ## Behavior contract

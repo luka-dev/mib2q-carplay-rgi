@@ -71,6 +71,7 @@ public class BAPBridge {
     private static final String ROUTE_SIGN_OPEN = "\u2039";
     private static final String ROUTE_SIGN_CLOSE = "\u203A";
     private static final int ROUTE_SIGN_FRAME_UTF8_BYTES = 6; // 3 bytes per quote
+    private static final String ROUTE_TURN_PREFIX = "\u25CF "; // filled circle + space
     /* U+25CC DOTTED CIRCLE, not a combining mark or an emoji sequence.
      * Present in VC's supplementary fonts; on-unit fallback still needs testing. */
     private static final String ROUTE_TIME_PREFIX = "\u25CC ";
@@ -1282,10 +1283,10 @@ public class BAPBridge {
             latchedPositionText = ROUTE_SIGN_OPEN
                 + limitUtf8(signPost, MAX_CURRENT_POSITION_UTF8_BYTES - ROUTE_SIGN_FRAME_UTF8_BYTES)
                 + ROUTE_SIGN_CLOSE;
+        } else if (turnTo.length() > 0) {
+            latchedPositionText = limitUtf8(ROUTE_TURN_PREFIX + turnTo, MAX_CURRENT_POSITION_UTF8_BYTES);
         } else {
-            String candidate = turnTo.length() > 0
-                ? turnTo : normalizeRouteText(s.currentRoad);
-            latchedPositionText = limitUtf8(candidate, MAX_CURRENT_POSITION_UTF8_BYTES);
+            latchedPositionText = limitUtf8(normalizeRouteText(s.currentRoad), MAX_CURRENT_POSITION_UTF8_BYTES);
         }
     }
 

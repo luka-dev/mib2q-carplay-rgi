@@ -185,7 +185,7 @@ Select.
 
 | View | Phase 0 | Phase 1 |
 |---|---|---|
-| Fullscreen | FctID 19: `‹exit/signpost›`, else next road, else current road; no synthetic arrow | FctID 19: `◌ 10:42 PM` + ` \| ` + `37 min` (or `1 h 05 min`) |
+| Fullscreen | FctID 19: `‹exit/signpost›`, else `● next road / maneuver description`, else current road; no synthetic arrow | FctID 19: `◌ 10:42 PM` + ` \| ` + `37 min` (or `1 h 05 min`) |
 | Smallscreen | Same FctID 19 route text as fullscreen; no synthetic arrow | FctID 19: `◌ 37 min` (or `◌ 1 h 05 min`) |
 
 In both views/phases, FctID 20 is `("", "")` and FctID 22 remains absolute ETA.
@@ -199,6 +199,10 @@ Input priority is `mExitInfo -> mAfterRoad -> mName -> currentRoad`, after white
 normalization. Exit/signpost text is enclosed in `‹…›`; it retains its full input
 (including any colon prefix and next-road name), because there is no competing text
 row to deduplicate. `mAfterRoad` retains the existing last-colon-part normalization.
+When ExitInfo is absent, a nonempty next-road name or maneuver description is
+prefixed with U+25CF BLACK CIRCLE and a space (`● Main Street`, selected
+2026-09-13). This consumes four of the 96 UTF-8 bytes. Current-road and pending
+fallbacks do not get that prefix; ETA continues to use U+25CC DOTTED CIRCLE.
 All text uses the 96-byte UTF-8 budget of FctID 19, reserving six bytes for the
 U+2039/U+203A angle quotes (90 bytes remain for exit/signpost content);
 neither multibyte characters nor surrogate pairs are split at the limit.

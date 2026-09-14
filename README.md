@@ -124,6 +124,7 @@ Playing state-machine audit below for the exact event and decision tables.
 ## Current design documents
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — current process, Java and cluster architecture.
+- [`docs/RGI_HUD_RENDERER_KNOWLEDGE.md`](docs/RGI_HUD_RENDERER_KNOWLEDGE.md) — consolidated RGI/HUD/renderer handoff: accepted visuals, lane events, sentinels, synchronization, delivery recovery, tests and current deployment status.
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — renderer/runtime deployment.
 - [`docs/USB_REPLUG_RECOVERY_RUNBOOK.md`](docs/USB_REPLUG_RECOVERY_RUNBOOK.md) — full MU1316 rapid-replug diagnosis, independent NCM/SI fixes, live A/B gates and exact rollback.
 - [`docs/archive/JAVA_PATCH_STOCK_AUDIT.md`](docs/archive/JAVA_PATCH_STOCK_AUDIT.md) — patched-versus-stock audit (archived; superseded by JAVA_PRODUCTION_CLEANUP_AUDIT.md).

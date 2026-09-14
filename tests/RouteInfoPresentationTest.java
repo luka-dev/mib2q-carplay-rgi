@@ -115,9 +115,12 @@ public final class RouteInfoPresentationTest {
             equal("unknown ETA retains navigation", "\u2039Exit 12: Main Street\u203A",
                 render(bridge, output, state, small, 1).position);
             state.mExitInfo[0] = " \t\n";
-            equal("next road fallback", "Main Street", render(bridge, output, state, small, 0).position);
+            equal("next road fallback", "\u25CF Main Street", render(bridge, output, state, small, 0).position);
+            state.mAfterRoad[0] = repeat("\u0416", 70);
+            equal("filled-circle prefix shares UTF-8 budget", "\u25CF " + repeat("\u0416", 46),
+                render(bridge, output, state, small, 0).position);
             state.mAfterRoad[0] = " \t";
-            equal("maneuver name fallback", "Maneuver name", render(bridge, output, state, small, 0).position);
+            equal("maneuver name fallback", "\u25CF Maneuver name", render(bridge, output, state, small, 0).position);
             state.mName[0] = null;
             equal("current road fallback", "Current Road", render(bridge, output, state, small, 0).position);
             state.currentRoad = null;

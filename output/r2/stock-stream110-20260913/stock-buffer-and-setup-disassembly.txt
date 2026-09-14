@@ -1,0 +1,410 @@
+            ;-- method.dio::CScreenRender.sharedBuffers_unsigned_char_:
+            ;-- dio::CScreenRender::sharedBuffers(unsigned char**&):
+            0x0008b9e0      400090e5       ldr r0, [r0, 0x40]          ; RELOC 32 _ZN3dio13CScreenRender13sharedBuffersERPPh @ 0x0008b9e0 ; dio::CScreenRender::sharedBuffers(unsigned char**&)
+            0x0008b9e4      30402de9       push {r4, r5, lr}
+            0x0008b9e8      000050e3       cmp r0, 0
+            0x0008b9ec      14d04de2       sub sp, sp, 0x14
+            0x0008b9f0      a4409fe5       ldr r4, [0x0008ba9c]        ; [0x8ba9c:4]=0x2d33c
+            0x0008b9f4      ac350e03       movweq r3, 0xe5ac
+            0x0008b9f8      0150a0e1       mov r5, r1
+            0x0008b9fc      04408fe0       add r4, pc, r4
+            0x0008ba00      ff3f4f03       movteq r3, 0xffff
+            0x0008ba04      0c308d05       streq r3, [sp, 0xc]
+        ,=< 0x0008ba08      0800000a       beq 0x8ba30
+        |   0x0008ba0c      0c108de2       add r1, sp, 0xc
+        |   0x0008ba10      2e3cfeeb       bl rsym._ZN3dio13CScreenRender14CWindowBuffers13getAllBuffersERi
+        |   0x0008ba14      0c309de5       ldr r3, [sp, 0xc]
+        |   0x0008ba18      000053e3       cmp r3, 0
+        |   0x0008ba1c      000085e5       str r0, [r5]
+        |   0x0008ba20      0300a001       moveq r0, r3
+       ,==< 0x0008ba24      0100001a       bne 0x8ba30
+     ..---> 0x0008ba28      14d08de2       add sp, sp, 0x14
+     ::||   0x0008ba2c      3080bde8       pop {r4, r5, pc}
+     ::``-> 0x0008ba30      68509fe5       ldr r5, [0x0008baa0]        ; [0x8baa0:4]=0x10a4
+     ::     0x0008ba34      050094e7       ldr r0, [r4, r5]
+     ::     0x0008ba38      003090e5       ldr r3, [r0]
+     ::     0x0008ba3c      5a0053e3       cmp r3, 0x5a                ; 'Z'
+     :: ,=< 0x0008ba40      0d0000ca       bgt 0x8ba7c
+     :: |   0x0008ba44      010073e3       cmn r3, 1
+     ::,==< 0x0008ba48      0d00000a       beq 0x8ba84
+    .-----> 0x0008ba4c      0cc09de5       ldr ip, [sp, 0xc]
+    :::||   0x0008ba50      5a20a0e3       mov r2, 0x5a                ; 'Z'
+    :::||   0x0008ba54      48109fe5       ldr r1, [0x0008baa4]        ; [0x8baa4:4]=0xffff7958
+    :::||   0x0008ba58      48309fe5       ldr r3, [0x0008baa8]        ; [0x8baa8:4]=0xffff7aa4
+    :::||   0x0008ba5c      04c08de5       str ip, [sp, 4]
+    :::||   0x0008ba60      011084e0       add r1, r4, r1
+    :::||   0x0008ba64      40c09fe5       ldr ip, [0x0008baac]        ; [0x8baac:4]=0xffff7eec
+    :::||   0x0008ba68      033084e0       add r3, r4, r3
+    :::||   0x0008ba6c      050094e7       ldr r0, [r4, r5]
+    :::||   0x0008ba70      0c4084e0       add r4, r4, ip
+    :::||   0x0008ba74      00408de5       str r4, [sp]
+    :::||   0x0008ba78      083ffeeb       bl rsym.LogPrintF
+    :::|`-> 0x0008ba7c      0c009de5       ldr r0, [sp, 0xc]
+    :`====< 0x0008ba80      e8ffffea       b 0x8ba28
+    : :`--> 0x0008ba84      5a10a0e3       mov r1, 0x5a                ; 'Z'
+    : :     0x0008ba88      c23efeeb       bl rsym.__LogCategory_Initialize
+    : :     0x0008ba8c      000050e3       cmp r0, 0
+    `=====< 0x0008ba90      edffff1a       bne 0x8ba4c
+      :     0x0008ba94      0c009de5       ldr r0, [sp, 0xc]
+      `===< 0x0008ba98      e2ffffea       b 0x8ba28
+            0x0008ba9c      3cd30200       andeq sp, r2, ip, lsr r3
+            0x0008baa0      a4100000       andeq r1, r0, r4, lsr 1
+            0x0008baa4      5879ffff       invalid
+            0x0008baa8      a47affff       invalid
+            0x0008baac      ec7effff       invalid
+            ;-- convertColorFormatOMX2Screen(int):
+            0x0008c184      150050e3       cmp r0, 0x15                ; RELOC 32 _Z28convertColorFormatOMX2Screeni @ 0x0008c184 ; convertColorFormatOMX2Screen(int)
+        ,=< 0x0008c188      2400000a       beq 0x8c220
+       ,==< 0x0008c18c      0a0000da       ble 0x8c1bc
+       ||   0x0008c190      270050e3       cmp r0, 0x27                ; '\''
+      ,===< 0x0008c194      2100000a       beq 0x8c220
+     ,====< 0x0008c198      120000ca       bgt 0x8c1e8
+     ||||   0x0008c19c      190050e3       cmp r0, 0x19
+     ||||   0x0008c1a0      1000a003       moveq r0, 0x10
+     ||||   0x0008c1a4      1eff2f01       bxeq lr
+     ||||   0x0008c1a8      1b0050e3       cmp r0, 0x1b
+    ,=====< 0x0008c1ac      1d00000a       beq 0x8c228
+  ..------> 0x0008c1b0      0c0000e3       movw r0, 0xc
+  ::|||||   0x0008c1b4      010040e3       movt r0, 1
+  ::|||||   0x0008c1b8      1eff2fe1       bx lr
+  ::|||`--> 0x0008c1bc      0b0050e3       cmp r0, 0xb
+  ::||| |   0x0008c1c0      0700a003       moveq r0, 7
+  ::||| |   0x0008c1c4      1eff2f01       bxeq lr
+  ::|||,==< 0x0008c1c8      110000da       ble 0x8c214
+  ::|||||   0x0008c1cc      100050e3       cmp r0, 0x10
+  ::|||||   0x0008c1d0      0800a003       moveq r0, 8
+  ::|||||   0x0008c1d4      1eff2f01       bxeq lr
+  ::|||||   0x0008c1d8      130050e3       cmp r0, 0x13
+  ========< 0x0008c1dc      f3ffff1a       bne 0x8c1b0
+  ::|||||   0x0008c1e0      0b00a0e3       mov r0, 0xb
+  ::|||||   0x0008c1e4      1eff2fe1       bx lr
+  ::|`----> 0x0008c1e8      033000e3       movw r3, 3
+  ::| |||   0x0008c1ec      003f47e3       movt r3, 0x7f00
+  ::| |||   0x0008c1f0      030050e1       cmp r0, r3
+  ::|,====< 0x0008c1f4      0900000a       beq 0x8c220
+  ::|||||   0x0008c1f8      053000e3       movw r3, 5
+  ::|||||   0x0008c1fc      003f47e3       movt r3, 0x7f00
+  ::|||||   0x0008c200      030050e1       cmp r0, r3
+  `=======< 0x0008c204      e9ffff1a       bne 0x8c1b0
+   :|||||   0x0008c208      0c0000e3       movw r0, 0xc
+   :|||||   0x0008c20c      020040e3       movt r0, 2
+   :|||||   0x0008c210      1eff2fe1       bx lr
+   :|||`--> 0x0008c214      060050e3       cmp r0, 6
+   `======< 0x0008c218      e4ffff1a       bne 0x8c1b0
+    ||| |   0x0008c21c      1eff2fe1       bx lr
+    |``-`-> 0x0008c220      0c00a0e3       mov r0, 0xc
+    |       0x0008c224      1eff2fe1       bx lr
+    `-----> 0x0008c228      0e00a0e3       mov r0, 0xe
+            0x0008c22c      1eff2fe1       bx lr
+            ;-- method.dio::COMXVideoDecoder.setOutputBuffers__:
+            ;-- dio::COMXVideoDecoder::setOutputBuffers():
+            0x00086c4c      0c3090e5       ldr r3, [r0, 0xc]           ; RELOC 32 _ZN3dio16COMXVideoDecoder16setOutputBuffersEv @ 0x00086c4c ; dio::COMXVideoDecoder::setOutputBuffers()
+            0x00086c50      70402de9       push {r4, r5, r6, lr}
+            0x00086c54      010053e3       cmp r3, 1
+            0x00086c58      a4409fe5       ldr r4, [0x00086d04]        ; [0x86d04:4]=0x320d0
+            0x00086c5c      b0550e13       movwne r5, 0xe5b0
+            0x00086c60      08d04de2       sub sp, sp, 8
+            0x00086c64      ff5f4f13       movtne r5, 0xffff
+            0x00086c68      04408fe0       add r4, pc, r4
+        ,=< 0x00086c6c      0c00001a       bne 0x86ca4
+        |   0x00086c70      3c3090e5       ldr r3, [r0, 0x3c]
+        |   0x00086c74      000053e3       cmp r3, 0
+        |   0x00086c78      c1550e13       movwne r5, 0xe5c1
+        |   0x00086c7c      ff5f4f13       movtne r5, 0xffff
+       ,==< 0x00086c80      0700001a       bne 0x86ca4
+       ||   0x00086c84      3c1080e2       add r1, r0, 0x3c
+       ||   0x00086c88      440090e5       ldr r0, [r0, 0x44]
+       ||   0x00086c8c      8148feeb       bl rsym._ZN3dio13CScreenRender13sharedBuffersERPPh
+       ||   0x00086c90      005050e2       subs r5, r0, 0
+      ,===< 0x00086c94      0200001a       bne 0x86ca4
+   ...----> 0x00086c98      0500a0e1       mov r0, r5
+   :::|||   0x00086c9c      08d08de2       add sp, sp, 8
+   :::|||   0x00086ca0      7080bde8       pop {r4, r5, r6, pc}
+   :::```-> 0x00086ca4      5c609fe5       ldr r6, [0x00086d08]        ; [0x86d08:4]=0x1230
+   :::      0x00086ca8      060094e7       ldr r0, [r4, r6]
+   :::      0x00086cac      003090e5       ldr r3, [r0]
+   :::      0x00086cb0      5a0053e3       cmp r3, 0x5a                ; 'Z'
+   `======< 0x00086cb4      f7ffffca       bgt 0x86c98
+    ::      0x00086cb8      010073e3       cmn r3, 1
+    ::  ,=< 0x00086cbc      0b00000a       beq 0x86cf0
+    :: .--> 0x00086cc0      44109fe5       ldr r1, [0x00086d0c]        ; [0x86d0c:4]=0xffff6894
+    :: :|   0x00086cc4      5a20a0e3       mov r2, 0x5a                ; 'Z'
+    :: :|   0x00086cc8      40309fe5       ldr r3, [0x00086d10]        ; [0x86d10:4]=0xffff7048
+    :: :|   0x00086ccc      40c09fe5       ldr ip, [0x00086d14]        ; [0x86d14:4]=0xffff6184
+    :: :|   0x00086cd0      011084e0       add r1, r4, r1
+    :: :|   0x00086cd4      060094e7       ldr r0, [r4, r6]
+    :: :|   0x00086cd8      033084e0       add r3, r4, r3
+    :: :|   0x00086cdc      04508de5       str r5, [sp, 4]
+    :: :|   0x00086ce0      0c4084e0       add r4, r4, ip
+    :: :|   0x00086ce4      00408de5       str r4, [sp]
+    :: :|   0x00086ce8      6c52feeb       bl rsym.LogPrintF
+    `=====< 0x00086cec      e9ffffea       b 0x86c98
+     : :`-> 0x00086cf0      5a10a0e3       mov r1, 0x5a                ; 'Z'
+     : :    0x00086cf4      2752feeb       bl rsym.__LogCategory_Initialize
+     : :    0x00086cf8      000050e3       cmp r0, 0
+     `====< 0x00086cfc      e5ffff0a       beq 0x86c98
+       `==< 0x00086d00      eeffffea       b 0x86cc0
+            0x00086d04      d0200300       ldrdeq r2, r3, [r3], -r0
+            0x00086d08      30120000       andeq r1, r0, r0, lsr r2
+            0x00086d0c      9468ffff       invalid
+            0x00086d10      4870ffff       invalid
+            0x00086d14      8461ffff       invalid
+            0x00026efc      f0412de9       push {r4, r5, r6, r7, r8, lr}
+            0x00026f00      0060a0e1       mov r6, r0
+            0x00026f04      0170a0e1       mov r7, r1
+            0x00026f08      9acdffeb       bl rsym.CFArrayGetTypeID
+            0x00026f0c      7c409fe5       ldr r4, [0x00026f90]        ; [0x26f90:4]=0x91e20
+            0x00026f10      0030a0e3       mov r3, 0
+            0x00026f14      78509fe5       ldr r5, [0x00026f94]        ; [0x26f94:4]=0xfffe5a70
+            0x00026f18      04408fe0       add r4, pc, r4
+            0x00026f1c      055084e0       add r5, r4, r5
+            0x00026f20      5e1f85e2       add r1, r5, 0x178
+            0x00026f24      0020a0e1       mov r2, r0
+            0x00026f28      0600a0e1       mov r0, r6
+            0x00026f2c      e9cfffeb       bl rsym.CFDictionaryGetTypedValue
+            0x00026f30      008050e2       subs r8, r0, 0
+        ,=< 0x00026f34      0300000a       beq 0x26f48
+        |   0x00026f38      0710a0e1       mov r1, r7
+        |   0x00026f3c      bccbffeb       bl rsym.CFArrayAppendValue
+        |   0x00026f40      0000a0e3       mov r0, 0
+        |   0x00026f44      f081bde8       pop {r4, r5, r6, r7, r8, pc}
+        `-> 0x00026f48      48309fe5       ldr r3, [0x00026f98]        ; [0x26f98:4]=0x11bc
+            0x00026f4c      0810a0e1       mov r1, r8
+            0x00026f50      032094e7       ldr r2, [r4, r3]
+            0x00026f54      e5c6ffeb       bl rsym.CFArrayCreateMutable
+            0x00026f58      004050e2       subs r4, r0, 0
+            0x00026f5c      b8050e03       movweq r0, 0xe5b8
+            0x00026f60      ff0f4f03       movteq r0, 0xffff
+            0x00026f64      f081bd08       popeq {r4, r5, r6, r7, r8, pc}
+            0x00026f68      0710a0e1       mov r1, r7
+            0x00026f6c      b0cbffeb       bl rsym.CFArrayAppendValue
+            0x00026f70      0600a0e1       mov r0, r6
+            0x00026f74      5e1f85e2       add r1, r5, 0x178
+            0x00026f78      0420a0e1       mov r2, r4
+            0x00026f7c      f4cbffeb       bl rsym.CFDictionarySetValue
+            0x00026f80      0400a0e1       mov r0, r4
+            0x00026f84      73c9ffeb       bl rsym.CFRelease
+            0x00026f88      0800a0e1       mov r0, r8
+            0x00026f8c      f081bde8       pop {r4, r5, r6, r7, r8, pc}
+            0x00026f90      201e0900       andeq r1, sb, r0, lsr 28
+            0x00026f94      705afeff       invalid
+            0x00026f98      bc110000       strheq r1, [r0], -ip
+            0x00026f9c      f04f2de9       push {r4, r5, r6, r7, r8, sb, sl, fp, lr}
+            0x00026fa0      4cd04de2       sub sp, sp, 0x4c
+            0x00026fa4      34708de2       add r7, sp, 0x34
+            0x00026fa8      24a08de2       add sl, sp, 0x24
+            0x00026fac      04308ae2       add r3, sl, 4
+            0x00026fb0      004050e2       subs r4, r0, 0
+            0x00026fb4      d4529fe5       ldr r5, [0x00027290]        ; [0x27290:4]=0x91d74
+            0x00026fb8      040087e2       add r0, r7, 4
+            0x00026fbc      1c208de5       str r2, [sp, 0x1c]
+            0x00026fc0      0020a0e3       mov r2, 0
+            0x00026fc4      05508fe0       add r5, pc, r5
+            0x00026fc8      042080e4       str r2, [r0], 4
+            0x00026fcc      042083e4       str r2, [r3], 4
+            0x00026fd0      042080e4       str r2, [r0], 4
+            0x00026fd4      042083e4       str r2, [r3], 4
+            0x00026fd8      14108de5       str r1, [sp, 0x14]
+            0x00026f9c      f04f2de9       push {r4, r5, r6, r7, r8, sb, sl, fp, lr}
+            0x00026fa0      4cd04de2       sub sp, sp, 0x4c
+            0x00026fa4      34708de2       add r7, sp, 0x34
+            0x00026fa8      24a08de2       add sl, sp, 0x24
+            0x00026fac      04308ae2       add r3, sl, 4
+            0x00026fb0      004050e2       subs r4, r0, 0
+            0x00026fb4      d4529fe5       ldr r5, [0x00027290]        ; [0x27290:4]=0x91d74
+            0x00026fb8      040087e2       add r0, r7, 4
+            0x00026fbc      1c208de5       str r2, [sp, 0x1c]
+            0x00026fc0      0020a0e3       mov r2, 0
+            0x00026fc4      05508fe0       add r5, pc, r5
+            0x00026fc8      042080e4       str r2, [r0], 4
+            0x00026fcc      042083e4       str r2, [r3], 4
+            0x00026fd0      042080e4       str r2, [r0], 4
+            0x00026fd4      042083e4       str r2, [r3], 4
+            0x00026fd8      14108de5       str r1, [sp, 0x14]
+            0x00026fdc      002080e5       str r2, [r0]
+            0x00026fe0      002083e5       str r2, [r3]
+            0x00026fe4      44208de5       str r2, [sp, 0x44]
+            0x00026fe8      34208de5       str r2, [sp, 0x34]
+            0x00026fec      24208de5       str r2, [sp, 0x24]
+        ,=< 0x00026ff0      7200000a       beq 0x271c0
+        |   0x00026ff4      103401e3       movw r3, 0x1410             ; '\x10\x14'
+        |   0x00026ff8      0380d4e7       ldrb r8, [r4, r3]
+        |   0x00026ffc      020058e1       cmp r8, r2
+        |   0x00027000      c1650e13       movwne r6, 0xe5c1
+        |   0x00027004      ff6f4f13       movtne r6, 0xffff
+       ,==< 0x00027008      7000001a       bne 0x271d0
+       ||   0x0002700c      80329fe5       ldr r3, [0x00027294]        ; [0x27294:4]=0x108c
+       ||   0x00027010      0800a0e1       mov r0, r8
+       ||   0x00027014      0810a0e1       mov r1, r8
+       ||   0x00027018      032095e7       ldr r2, [r5, r3]
+       ||   0x0002701c      74329fe5       ldr r3, [0x00027298]        ; [0x27298:4]=0x105c
+       ||   0x00027020      033095e7       ldr r3, [r5, r3]
+       ||   0x00027024      32caffeb       bl rsym.CFDictionaryCreateMutable
+       ||   0x00027028      009050e2       subs sb, r0, 0
+       ||   0x0002702c      b8650e03       movweq r6, 0xe5b8
+       ||   0x00027030      ff6f4f03       movteq r6, 0xffff
+      ,===< 0x00027034      6300000a       beq 0x271c8
+      |||   0x00027038      14b401e3       movw fp, 0x1414             ; '\x14\x14'
+      |||   0x0002703c      0110a0e3       mov r1, 1
+      |||   0x00027040      0b0094e7       ldr r0, [r4, fp]
+      |||   0x00027044      32d1ffeb       bl rsym.AirPlayReceiverSessionScreen_UpdateState
+      |||   0x00027048      0b0094e7       ldr r0, [r4, fp]
+      |||   0x0002704c      14109de5       ldr r1, [sp, 0x14]
+      |||   0x00027050      982094e5       ldr r2, [r4, 0x98]
+      |||   0x00027054      efcdffeb       bl rsym.AirPlayReceiverSessionScreen_Setup
+      |||   0x00027058      006050e2       subs r6, r0, 0
+     ,====< 0x0002705c      5000001a       bne 0x271a4
+     ||||   0x00027060      34129fe5       ldr r1, [0x0002729c]        ; [0x2729c:4]=0xfffe5a70
+     ||||   0x00027064      0620a0e1       mov r2, r6
+     ||||   0x00027068      14009de5       ldr r0, [sp, 0x14]
+     ||||   0x0002706c      18108de5       str r1, [sp, 0x18]
+     ||||   0x00027070      011085e0       add r1, r5, r1
+     ||||   0x00027074      661f81e2       add r1, r1, 0x198
+     ||||   0x00027078      bec8ffeb       bl rsym.CFDictionaryGetInt64
+     ||||   0x0002707c      0020a0e1       mov r2, r0
+     ||||   0x00027080      0130a0e1       mov r3, r1
+     ||||   0x00027084      031092e1       orrs r1, r2, r3
+     ||||   0x00027088      c5650e03       movweq r6, 0xe5c5
+     ||||   0x0002708c      ff6f4f03       movteq r6, 0xffff
+    ,=====< 0x00027090      4300000a       beq 0x271a4
+    |||||   0x00027094      720f84e2       add r0, r4, 0x1c8
+    |||||   0x00027098      1010a0e3       mov r1, 0x10
+    |||||   0x0002709c      80048de8       stm sp, {r7, sl}
+    |||||   0x000270a0      89c6ffeb       bl rsym.AirPlay_DeriveAESKeySHA512ForScreen
+    |||||   0x000270a4      0b0094e7       ldr r0, [r4, fp]
+    |||||   0x000270a8      0710a0e1       mov r1, r7
+    |||||   0x000270ac      0a20a0e1       mov r2, sl
+    |||||   0x000270b0      b8c9ffeb       bl rsym.AirPlayReceiverSessionScreen_SetSecurityInfo
+    |||||   0x000270b4      103087e2       add r3, r7, 0x10
+    |||||   0x000270b8      0060a0e1       mov r6, r0
+   .------> 0x000270bc      0180c7e4       strb r8, [r7], 1
+   :|||||   0x000270c0      030057e1       cmp r7, r3
+   `======< 0x000270c4      fcffff1a       bne 0x270bc
+    |||||   0x000270c8      0020a0e3       mov r2, 0
+    |||||   0x000270cc      10308ae2       add r3, sl, 0x10
+   .------> 0x000270d0      0120cae4       strb r2, [sl], 1
+   :|||||   0x000270d4      03005ae1       cmp sl, r3
+   `======< 0x000270d8      fcffff1a       bne 0x270d0
+    |||||   0x000270dc      000056e3       cmp r6, 0
+   ,======< 0x000270e0      2f00001a       bne 0x271a4
+   ||||||   0x000270e4      72380ee3       movw r3, 0xe872
+   ||||||   0x000270e8      5500d4e5       ldrb r0, [r4, 0x55]
+   ||||||   0x000270ec      ff3f4fe3       movt r3, 0xffff
+   ||||||   0x000270f0      00e004e3       movw lr, 0x4000
+   ||||||   0x000270f4      05cb84e2       add ip, r4, 0x1400
+   ||||||   0x000270f8      0110a0e3       mov r1, 1
+   ||||||   0x000270fc      0620a0e3       mov r2, 6
+   ||||||   0x00027100      fdef4fe3       movt lr, 0xfffd
+   ||||||   0x00027104      18c08ce2       add ip, ip, 0x18
+   ||||||   0x00027108      04e08de5       str lr, [sp, 4]
+   ||||||   0x0002710c      08c08de5       str ip, [sp, 8]
+   ||||||   0x00027110      44c08de2       add ip, sp, 0x44
+   ||||||   0x00027114      00c08de5       str ip, [sp]
+   ||||||   0x00027118      5bcaffeb       bl rsym.ServerSocketOpen
+   ||||||   0x0002711c      006050e2       subs r6, r0, 0
+  ,=======< 0x00027120      1f00001a       bne 0x271a4
+  |||||||   0x00027124      0c3094e5       ldr r3, [r4, 0xc]
+  |||||||   0x00027128      c431d3e5       ldrb r3, [r3, 0x1c4]
+  |||||||   0x0002712c      000053e3       cmp r3, 0
+  ========< 0x00027130      4100000a       beq 0x2723c
+  --------> 0x00027134      18309de5       ldr r3, [sp, 0x18]
+  |||||||   0x00027138      6e20a0e3       mov r2, 0x6e                ; 'n'
+  |||||||   0x0002713c      0900a0e1       mov r0, sb
+  |||||||   0x00027140      036085e0       add r6, r5, r3
+  |||||||   0x00027144      0030a0e3       mov r3, 0
+  |||||||   0x00027148      621f86e2       add r1, r6, 0x188
+  |||||||   0x0002714c      8fd1ffeb       bl rsym.CFDictionarySetInt64
+  |||||||   0x00027150      44209de5       ldr r2, [sp, 0x44]
+  |||||||   0x00027154      6d1f86e2       add r1, r6, 0x1b4
+  |||||||   0x00027158      0900a0e1       mov r0, sb
+  |||||||   0x0002715c      c23fa0e1       asr r3, r2, 0x1f
+  |||||||   0x00027160      8ad1ffeb       bl rsym.CFDictionarySetInt64
+  |||||||   0x00027164      1c009de5       ldr r0, [sp, 0x1c]
+  |||||||   0x00027168      0910a0e1       mov r1, sb
+  |||||||   0x0002716c      62ffffeb       bl 0x26efc
+  |||||||   0x00027170      006050e2       subs r6, r0, 0
+  ========< 0x00027174      0a00001a       bne 0x271a4
+  |||||||   0x00027178      20719fe5       ldr r7, [0x000272a0]        ; [0x272a0:4]=0x1080
+  |||||||   0x0002717c      103401e3       movw r3, 0x1410             ; '\x10\x14'
+  |||||||   0x00027180      0120a0e3       mov r2, 1
+  |||||||   0x00027184      0320c4e7       strb r2, [r4, r3]
+  |||||||   0x00027188      070095e7       ldr r0, [r5, r7]
+  |||||||   0x0002718c      003090e5       ldr r3, [r0]
+  |||||||   0x00027190      1e0053e3       cmp r3, 0x1e
+  ========< 0x00027194      2d0000da       ble 0x27250
+  --------> 0x00027198      be32d4e5       ldrb r3, [r4, 0x2be]
+  |||||||   0x0002719c      000053e3       cmp r3, 0
+  ========< 0x000271a0      2100001a       bne 0x2722c
+  ````----> 0x000271a4      0900a0e1       mov r0, sb
+      |||   0x000271a8      eac8ffeb       bl rsym.CFRelease
+      |||   0x000271ac      000056e3       cmp r6, 0
+     ,====< 0x000271b0      0400001a       bne 0x271c8
+  ...-----> 0x000271b4      0600a0e1       mov r0, r6
+  :::||||   0x000271b8      4cd08de2       add sp, sp, 0x4c
+  :::||||   0x000271bc      f08fbde8       pop {r4, r5, r6, r7, r8, sb, sl, fp, pc}
+  :::|||`-> 0x000271c0      ac650ee3       movw r6, 0xe5ac
+  :::|||    0x000271c4      ff6f4fe3       movt r6, 0xffff
+  :::``---> 0x000271c8      0400a0e1       mov r0, r4
+  :::  |    0x000271cc      44fdffeb       bl 0x266e4
+  :::  `--> 0x000271d0      c8709fe5       ldr r7, [0x000272a0]        ; [0x272a0:4]=0x1080
+  :::       0x000271d4      070095e7       ldr r0, [r5, r7]
+  :::       0x000271d8      003090e5       ldr r3, [r0]
+  :::       0x000271dc      5a0053e3       cmp r3, 0x5a                ; 'Z'
+  `=======< 0x000271e0      f3ffffca       bgt 0x271b4
+   ::       0x000271e4      010073e3       cmn r3, 1
+   ::   ,=< 0x000271e8      0300001a       bne 0x271fc
+   ::   |   0x000271ec      5a10a0e3       mov r1, 0x5a                ; 'Z'
+   ::   |   0x000271f0      e8d0ffeb       bl rsym.__LogCategory_Initialize
+   ::   |   0x000271f4      000050e3       cmp r0, 0
+   `======< 0x000271f8      edffff0a       beq 0x271b4
+    :   `-> 0x000271fc      a0109fe5       ldr r1, [0x000272a4]        ; [0x272a4:4]=0xfffe6074
+    :       0x00027200      5a20a0e3       mov r2, 0x5a                ; 'Z'
+    :       0x00027204      9c309fe5       ldr r3, [0x000272a8]        ; [0x272a8:4]=0xfffe6edc
+    :       0x00027208      9cc09fe5       ldr ip, [0x000272ac]        ; [0x272ac:4]=0xfffe6104
+    :       0x0002720c      011085e0       add r1, r5, r1
+    :       0x00027210      070095e7       ldr r0, [r5, r7]
+    :       0x00027214      033085e0       add r3, r5, r3
+    :       0x00027218      04608de5       str r6, [sp, 4]
+    :       0x0002721c      0c5085e0       add r5, r5, ip
+    :       0x00027220      00508de5       str r5, [sp]
+    :       0x00027224      1dd1ffeb       bl rsym.LogPrintF
+    `=====< 0x00027228      e1ffffea       b 0x271b4
+  --------> 0x0002722c      0400a0e1       mov r0, r4
+            0x00027230      c6f3ffeb       bl 0x24150
+            0x00027234      0060a0e1       mov r6, r0
+  ========< 0x00027238      d9ffffea       b 0x271a4
+  --------> 0x0002723c      183401e3       movw r3, 0x1418             ; '\x18\x14'
+            0x00027240      0c10a0e3       mov r1, 0xc
+            0x00027244      030094e7       ldr r0, [r4, r3]
+            0x00027248      b9d1ffeb       bl rsym.SocketSetQoS
+  ========< 0x0002724c      b8ffffea       b 0x27134
+  --------> 0x00027250      010073e3       cmn r3, 1
+        ,=< 0x00027254      0300001a       bne 0x27268
+        |   0x00027258      1e10a0e3       mov r1, 0x1e
+        |   0x0002725c      cdd0ffeb       bl rsym.__LogCategory_Initialize
+        |   0x00027260      000050e3       cmp r0, 0
+  ========< 0x00027264      cbffff0a       beq 0x27198
+        `-> 0x00027268      44c09de5       ldr ip, [sp, 0x44]
+            0x0002726c      1e20a0e3       mov r2, 0x1e
+            0x00027270      2c109fe5       ldr r1, [0x000272a4]        ; [0x272a4:4]=0xfffe6074
+            0x00027274      34309fe5       ldr r3, [0x000272b0]        ; [0x272b0:4]=0xfffe6eb8
+            0x00027278      070095e7       ldr r0, [r5, r7]
+            0x0002727c      011085e0       add r1, r5, r1
+            0x00027280      033085e0       add r3, r5, r3
+            0x00027284      00c08de5       str ip, [sp]
+            0x00027288      04d1ffeb       bl rsym.LogPrintF
+  ========< 0x0002728c      c1ffffea       b 0x27198
+            0x00027290      741d0900       andeq r1, sb, r4, ror sp
+            0x00027294      8c100000       andeq r1, r0, ip, lsl 1
+            0x00027298      5c100000       andeq r1, r0, ip, asr r0
+            0x0002729c      705afeff       invalid
+            0x000272a0      80100000       andeq r1, r0, r0, lsl 1
+            0x000272a4      7460feff       invalid
+            0x000272a8      dc6efeff       invalid
+            0x000272ac      0461feff       invalid
+            0x000272b0      b86efeff       invalid
+            0x000272b4      00000000       andeq r0, r0, r0
+0x000b8bb8  0x00000000 0x00000000 0x0008c8e8 0x0008cb44  ............D...
+0x000b8bc8  0x0008c638 0x0008c97c 0x0008c388 0x0008cbe0  8...|...........
+0x000b8bd8  0x0008ca54 0x0008c2b8 0x0008c230 0xfffffffc  T.......0.......
+0x000b8be8  0x00000000 0x0008c8e0 0x0008cb3c             ........<...
