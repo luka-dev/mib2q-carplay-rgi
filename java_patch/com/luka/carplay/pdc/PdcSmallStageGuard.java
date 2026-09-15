@@ -21,6 +21,7 @@ import com.luka.carplay.core.CarPlayApp;
 import com.luka.carplay.framework.Log;
 import de.audi.atip.hmi.HMIService;
 import de.audi.atip.hmi.view.Screen;
+import de.audi.atip.hmi.view.IScreenManager;
 import de.esolutions.hmi.widgets.audi.base.AbstractScreenWidget;
 import de.audi.app.earlyfunc.core.parking.IParkingSystem;
 import de.audi.app.earlyfunc.core.parking.ParkingPopupIdentifier;
@@ -52,15 +53,33 @@ public final class PdcSmallStageGuard {
      * pair of booleans on the MMI and TerminalMode dispatcher threads. */
     private static volatile int state;
     private static volatile long showRequestedAt;
-    private static boolean suppressNextHmiDeactivation;
     private static boolean pureOpsContent;
     private static AbstractParkingSystemPLAComponent passivePla;
     private static HMIService protectedHmi;
     private static int showGeneration;
+    private static int takeoverGeneration;
     private static AbstractScreenWidget protectedScreen;
     private static int protectedScreenOriginalType = -1;
 
     private PdcSmallStageGuard() {}
+
+    /** Evidence attached to one queued AP 1002, not a persistent exception.
+     * Normal OPS close restores the widget immediately but the AP's 70 ms
+     * debounce may finish afterwards. A takeover revokes it; consecutive pure
+     * OPS show/hide cycles on the same CarPlay screen do not. */
+    public static final class ParkingTransition {
+        private final int generation;
+        private final HMIService hmi;
+        private final AbstractScreenWidget screen;
+        private final AbstractParkingSystemPLAComponent pla;
+
+        private ParkingTransition() {
+            generation = takeoverGeneration;
+            hmi = protectedHmi;
+            screen = protectedScreen;
+            pla = passivePla;
+        }
+    }
 
     public static synchronized void parkingContentChanging(
         DisplayContent content, List systems, HMIService hmiService
@@ -70,10 +89,13 @@ public final class PdcSmallStageGuard {
             + " mode=" + (content == null ? -1 : content.getMode())
             + " systems=" + systemIDs(systems) + " standaloneOPS=" + pureOpsContent);
         if (!pureOpsContent) {
-            reset();
+            if (content != null && content.getPopup() == DSICarParkingSystem.POPUP_NONE
+                && content.getMode() != DSICarParkingSystem.VPSMODE_TRAILERASSIST_ARA
+                && systems != null && systems.isEmpty()) releaseScreen();
+            else reset();
             return;
         }
-        /* Do not re-arm the one-shot AP exception on repeated content updates. */
+        /* Repeated content updates belong to the same parking interval. */
         if (!shouldKeepCarPlayScreen()) showRequested(PURE_OPS_POPUP_ID, hmiService);
     }
 
@@ -140,7 +162,6 @@ public final class PdcSmallStageGuard {
         if (protectedScreen == null) return;
         showRequestedAt = System.currentTimeMillis();
         state = SHOW_REQUESTED;
-        suppressNextHmiDeactivation = true;
         startShowRequestTimeout(++showGeneration);
     }
 
@@ -152,7 +173,7 @@ public final class PdcSmallStageGuard {
 
     public static synchronized void popupHidden(int popupId, int terminalId) {
         if (popupId != PURE_OPS_POPUP_ID || terminalId != MAIN_TERMINAL) return;
-        reset();
+        releaseScreen();
     }
 
     public static synchronized void popupRegisteredHidden(int popupId, int terminalId) {
@@ -171,7 +192,7 @@ public final class PdcSmallStageGuard {
          * DisplayContent. Its independent active notification also revokes the
          * guard in the controller before broadcasting 108. */
         if (passivePla != null && passivePla.isSystemActive()) parkingStopped();
-        if (!pureOpsContent || !isCurrentCarPlayScreen()) {
+        if (!pureOpsContent || !isCurrentCarPlayScreen(protectedHmi, protectedScreen)) {
             if (state != INACTIVE || protectedScreen != null) reset();
             return false;
         }
@@ -189,10 +210,17 @@ public final class PdcSmallStageGuard {
         return false;
     }
 
-    private static boolean isCurrentCarPlayScreen() {
-        if (!CarPlayApp.isActive() || protectedScreen == null || protectedHmi == null) return false;
+    private static boolean isCurrentCarPlayScreen(HMIService hmi, Screen screen) {
+        if (!CarPlayApp.isActive() || screen == null || hmi == null) return false;
         try {
-            return protectedHmi.getRootWindow(MAIN_TERMINAL).getCurrentScreen() == protectedScreen;
+            if (hmi.getRootWindow(MAIN_TERMINAL).getCurrentScreen() != screen) return false;
+            IScreenManager manager = hmi.getScreenManager(MAIN_TERMINAL);
+            /* currentScreen remains CarPlay during a HOME fade-out; a full
+             * popup can also replace only currentConnectedScreen. Partial OPS
+             * changes neither. Unknown/disconnected state follows stock. */
+            return manager != null && manager.getCurrentConnectedScreen() == screen
+                && (!manager.isScreenChangePending()
+                    || manager.getPendingScreenId() == TERMINAL_MODE_SCREEN_ID);
         } catch (Throwable t) {
             return false;
         }
@@ -214,21 +242,26 @@ public final class PdcSmallStageGuard {
         return ids.toString();
     }
 
-    /** AP 1002 has no source parameter.  Consume only the first one belonging
-     * to the opening parking transition; later HOME/RVC takeovers must retain
-     * their stock meaning even while the right-hand popup is still visible.
-     * Also require the original screen to still be current: if parking emitted
-     * no AP 1002, the first later HOME must NOT consume the parking exception. */
-    public static synchronized boolean consumeParkingHmiDeactivation() {
-        if (!suppressNextHmiDeactivation || !shouldKeepCarPlayScreen()) return false;
-        suppressNextHmiDeactivation = false;
-        return true;
+    public static synchronized ParkingTransition captureHmiDeactivation() {
+        return shouldKeepCarPlayScreen() ? new ParkingTransition() : null;
+    }
+
+    public static synchronized boolean isParkingHmiDeactivation(ParkingTransition transition) {
+        if (shouldKeepCarPlayScreen()) return true;
+        return transition != null && transition.generation == takeoverGeneration
+            && (transition.pla == null || !transition.pla.isSystemActive())
+            && isCurrentCarPlayScreen(transition.hmi, transition.screen);
     }
 
     public static synchronized void reset() {
+        takeoverGeneration++;
+        releaseScreen();
+    }
+
+    private static void releaseScreen() {
         state = INACTIVE;
         showRequestedAt = 0L;
-        suppressNextHmiDeactivation = false;
+        showGeneration++;
         restoreProtectedScreen();
     }
 
@@ -259,7 +292,8 @@ public final class PdcSmallStageGuard {
         try {
             Screen screen = hmiService.getRootWindow(MAIN_TERMINAL).getCurrentScreen();
             if (!(screen instanceof AbstractScreenWidget)
-                || screen.getID() != TERMINAL_MODE_SCREEN_ID) {
+                || screen.getID() != TERMINAL_MODE_SCREEN_ID
+                || !isCurrentCarPlayScreen(hmiService, screen)) {
                 Log.w(TAG, "OPS guard: active screen is not TerminalMode 3200000");
                 return;
             }

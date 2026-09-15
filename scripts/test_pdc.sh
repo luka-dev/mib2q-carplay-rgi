@@ -20,8 +20,10 @@ mkdir -p "$TEST_DIR/stubs" "$TEST_DIR/test"
     "$PROJECT_DIR/tests/stubs/pdc/de/audi/atip/hmi/view/Screen.java" \
     "$PROJECT_DIR/tests/stubs/pdc/de/esolutions/hmi/widgets/audi/base/AbstractScreenWidget.java"
 CP="$TEST_DIR/stubs:$PATCH:$STOCK:$LIBS:$ASM"
-"$JDK/bin/javac" -cp "$CP" -d "$TEST_DIR/test" "$PROJECT_DIR/tests/PdcResourcePolicyTest.java"
+"$JDK/bin/javac" -cp "$CP" -d "$TEST_DIR/test" "$PROJECT_DIR/tests/PdcResourcePolicyTest.java" \
+    "$PROJECT_DIR/tests/PdcExternalEventsTest.java"
 "$JDK/bin/java" -cp "$TEST_DIR/test:$CP" PdcResourcePolicyTest
+"$JDK/bin/java" -cp "$TEST_DIR/test:$CP" PdcExternalEventsTest
 # Same scenario with the original tracker must reproduce the reported failure.
 if "$JDK/bin/java" -cp "$TEST_DIR/test:$TEST_DIR/stubs:$STOCK:$PATCH:$LIBS:$ASM" \
     PdcResourcePolicyTest > "$TEST_DIR/stock.log" 2>&1; then

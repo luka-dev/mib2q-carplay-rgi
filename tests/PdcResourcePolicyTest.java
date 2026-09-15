@@ -26,6 +26,7 @@ import de.audi.atip.base.IFrameworkAccess;
 import de.audi.atip.hmi.*;
 import de.audi.atip.hmi.modelaccess.ChoiceModelApp;
 import de.audi.atip.hmi.view.Screen;
+import de.audi.atip.hmi.view.IScreenManager;
 import de.audi.atip.interapp.phone.IEcallState;
 import de.audi.atip.log.LogChannel;
 import de.audi.atip.model.ICoreTerminalModeModelBank;
@@ -160,6 +161,7 @@ public final class PdcResourcePolicyTest {
         final ParkingPartialPopupHandler[] partial = new ParkingPartialPopupHandler[1];
         HMIService hmi = proxy(HMIService.class, (name,args) -> {
             if (name.equals("getRootWindow")) return proxy(IRootWindow.class, (n,a) -> f.current);
+            if (name.equals("getScreenManager")) return f.screenManager;
             if (name.equals("showPartialPopup")) {
                 check((Integer)args[1] == OPS && !f.restricted() && f.wizard.writes == 0,
                     "stock activation hid CarPlay before requesting OPS");
@@ -223,11 +225,14 @@ public final class PdcResourcePolicyTest {
         }
         check(messages.size() == 5 && messages.get(0) == 108,
             "test bypassed stock parking producer");
+        PdcSmallStageGuard.ParkingTransition closing = PdcSmallStageGuard.captureHmiDeactivation();
         activate.invoke(stock.controller, new DisplayContent());
         put(stock.controller, "currentDisplayContent", new DisplayContent());
         check(messages.get(messages.size() - 1) == 107 && !partial[0].isPopupActive()
             && !PdcSmallStageGuard.shouldKeepCarPlayScreen() && f.carplay.getSmallStageType() == 1,
             "stock parking close retained popup/guard");
+        check(closing != null && PdcSmallStageGuard.isParkingHmiDeactivation(closing),
+            "real stock close invalidated its queued parking AP");
         DisplayContent reopen = new DisplayContent(); reopen.popup = 4;
         activate.invoke(stock.controller, reopen);
         check(!f.restricted() && partial[0].isPopupActive() && PdcSmallStageGuard.shouldKeepCarPlayScreen(),
@@ -302,6 +307,14 @@ public final class PdcResourcePolicyTest {
     static class Fixture {
         final AbstractScreenWidget carplay = new AbstractScreenWidget(3200000);
         Screen current = carplay;
+        Screen connected = carplay;
+        int pendingScreenId = -1;
+        final IScreenManager screenManager = proxy(IScreenManager.class, (name,args) -> {
+            if (name.equals("getCurrentConnectedScreen")) return connected;
+            if (name.equals("isScreenChangePending")) return pendingScreenId != -1;
+            if (name.equals("getPendingScreenId")) return pendingScreenId;
+            throw new AssertionError("unexpected screen manager call " + name);
+        });
         final TMState state = new TMState();
         final LoggingPropertyFactory props = LoggingPropertyFactory.create();
         final Property muRvc = props.createProperty("muRvc", Boolean.FALSE);
@@ -310,6 +323,7 @@ public final class PdcResourcePolicyTest {
             new TMDeviceID("fixture", SmartphoneManager.SmartphoneType.CARPLAY)));
         final HMIService hmi = proxy(HMIService.class, (name,args) -> {
             if (name.equals("getRootWindow")) return proxy(IRootWindow.class, (n,a) -> current);
+            if (name.equals("getScreenManager")) return screenManager;
             throw new AssertionError("unexpected HMI call " + name);
         });
         final HighPriorityResourceTracker tracker;
@@ -379,9 +393,9 @@ public final class PdcResourcePolicyTest {
             "setActive", "notifyParkingSystemActive", "addPopupRequest");
         f.visible(); f.tracker.processMsg(108);
         check(f.wizard.writes == 0 && !f.restricted(), "duplicate 108 took SCREEN");
-        check(PdcSmallStageGuard.consumeParkingHmiDeactivation(), "opening AP exception absent");
+        check(PdcSmallStageGuard.isParkingHmiDeactivation(null), "opening AP exception absent");
         f.pure();
-        check(!PdcSmallStageGuard.consumeParkingHmiDeactivation(), "repeat intent rearmed AP exception");
+        check(PdcSmallStageGuard.isParkingHmiDeactivation(null), "repeat parking AP lost protection");
 
         // New target must win before a camera's first 108, even with OPS still visible.
         f.target(4, 2); f.tracker.processMsg(108);
@@ -404,7 +418,7 @@ public final class PdcResourcePolicyTest {
 
         f = new Fixture(); f.pure(); f.visible();
         f.current = new AbstractScreenWidget(1000000);
-        check(!PdcSmallStageGuard.consumeParkingHmiDeactivation(), "HOME consumed unused parking AP");
+        check(!PdcSmallStageGuard.isParkingHmiDeactivation(null), "HOME consumed unused parking AP");
         check(f.carplay.getSmallStageType() == 1, "HOME retained screen override");
         f = new Fixture(); f.current = new AbstractScreenWidget(1000000); f.pure();
         f.tracker.processMsg(108);
@@ -454,9 +468,12 @@ public final class PdcResourcePolicyTest {
         partialPopupCallbackIsolation();
 
         f = new Fixture(); f.pure();
+        PdcSmallStageGuard.ParkingTransition timedOut = PdcSmallStageGuard.captureHmiDeactivation();
         Thread.sleep(3200); // exercise the shipping rejected-show timeout and restoration
         check(!PdcSmallStageGuard.shouldKeepCarPlayScreen() && f.carplay.getSmallStageType() == 1,
             "unconfirmed request pinned screen");
+        check(!PdcSmallStageGuard.isParkingHmiDeactivation(timedOut),
+            "timed-out show left its queued AP exception valid");
         PdcSmallStageGuard.parkingStopped();
         System.out.println("PdcResourcePolicyTest: PASS (stock properties, commands and SCREEN state)");
     }

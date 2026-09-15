@@ -6,6 +6,76 @@
 
 Текущий статус, 2026-09-15: **пользователь повторно сообщил, что установленное исправление не помогло: CarPlay скрылся. Проблема на автомобиле остаётся открытой.** Локально исправлена классификация пассивного PLA и проверена полная активация штатного контроллера; также исправлена изоляция popup callbacks. По журналу выгрузок JAR `6d057db-production` был установлен 2026-09-14, а кандидат `6d057db-pdc-pla1` от 15 сентября не устанавливался. Отдельную ручную замену JAR пользователь пока не подтвердил. В сохранённом production-логе нет INFO-событий PDC, поэтому точная последовательность последнего эпизода на автомобиле не записана. Новых подключений к HU в ходе этого аудита не было.
 
+## Аудит порядка событий AP и жизненного цикла, 2026-09-15
+
+Продолжение после `915c479`: проверенный локальный JAR с исправлениями ниже
+имеет build ID `915c479-pdc-events`. На HU не устанавливался.
+Наличие этих последовательностей в последнем эпизоде пользователя не доказано.
+
+`PdcExternalEventsTest` исполняет настоящий replacement `ExternalEventsListener`,
+штатные reactive properties/`DebounceOperation`, `HMIActivated`, `HMIDeactivated`
+и `TMState`. Физические HMI, клавиши и часы очереди подменены; сама задержка
+и отмена идут через штатный оператор debounce. Проверены следующие дефекты:
+
+- Одноразовое исключение AP 1002 исчерпывалось после первого события OPS.
+  Повторный AP и цикл AP 1002 → 1001 → 1002 отдавали SCREEN головному устройству.
+- OPS успевал закрыться за 70 мс debounce. Его отложенный AP затем скрывал
+  CarPlay и выключал уже восстановленный ввод. Быстрые повторные открытия
+  и закрытия также проверены.
+- Проверки только `RootWindow.currentScreen` не хватало: во время HOME fade-out
+  он ещё равен CarPlay, хотя другой экран уже pending. Полноэкранный popup
+  может заменить только `currentConnectedScreen`, сохранив underlying screen.
+  В обоих случаях прежнее исключение поглощало настоящий уход из CarPlay.
+- `deinit` не отменял подписку и её отложенную работу. Повторная инициализация
+  также могла оставить старый callback; отдельно проверен callback, который
+  уже попал в исполнение до отмены и был вытеснен новым AP.
+- При возврате в CarPlay с уже открытым OPS AP 1001 в small stage не запрашивал
+  SCREEN. Теперь запрашивает, сохраняя ввод за парковочным popup.
+
+Исправление: повторные AP разрешены только при текущем защищённом CarPlay,
+совпадающем connected screen и отсутствии pending перехода на другой экран.
+При приёме AP 1002 сохраняется подтверждение парковочного перехода. После
+нормального hide/DSI `POPUP_NONE` оно может пережить оставшиеся 70 мс очереди;
+виджет при этом восстанавливается немедленно. Camera/PLA, неизвестный content,
+таймаут, unregistration и teardown отзывают подтверждение. Перед исполнением
+повторно проверяются экран, CarPlay, PLA и ограничения SCREEN. Новая подписка
+ставится до регистрации слушателей; при deinit отменяется. Старые lifecycle
+callbacks и AP, вытесненные более новым событием, не исполняют команды.
+
+Проверки включают HOME до первого парковочного AP, HOME после закрытия OPS,
+полноэкранный popup, camera → close, активный PLA, eCall, clamp-S, disconnect,
+small stage без OPS и повторные init/deinit. `PdcResourcePolicyTest` дополнительно
+проверяет подтверждение AP после **настоящего stock controller close**, а также
+его отзыв по настоящему таймауту неудавшегося show. Negative control с исходным
+stock tracker по-прежнему воспроизводит захват Main Wizard.
+
+### Отдельный путь native display
+
+Проверены MU1316 `TerminalModeSMMActions` (выход/вход состояния **3200004**),
+`TerminalModeActionProxyImpl` (AP 1002/1001 с пустыми параметрами),
+`MMICombiStageListener` (viewSize 1/2 → SMALL/BIG), `ScreenManager` и
+`ScreenChangeManager` (pending хранится до завершения fade-out; partial popup
+не заменяет connected screen).
+
+Context **78 = [16 HMI, 59 CarPlay]** сохранён как в stock. Наш перехват
+`DisplayManagerMIB2High.switchContext` защищает terminal **1** для VC;
+он не является защитой HU terminal **0** от PDC. `setOpacity` передаётся stock.
+`DisplayControllerEvo.setOpacityOnBackgroundLayers` может менять opacity 59
+в зависимости от kombi type; `AnimationMIB2High` использует этот путь при смене
+экрана и восстанавливает opacity в конце fade-in. В Sport ветка view-size 57
+меняет фоновые displayables только при подключённом map grid — оснований
+объявлять любое появление OPS причиной opacity=0 нет. Штатный
+`CarplaySmartphoneProperties` также сохраняет запрос `rvc off` после перехода
+MURVCActive true → false.
+
+Эти механизмы проверены по локальному stock-коду, но native compositor не
+исполняется в host-тестах. Глобально закреплять context 78/opacity 100 нельзя:
+это нарушит HOME и полноэкранную камеру. Следующий HU trace должен включать
+build ID, parking intent/108, SMALL/BIG, AP/HMI-команды, current/connected/pending
+screen, фактический context terminal 0 и opacity 59. До этой проверки статус
+**«исправлено на машине» не подтверждён**. Capture/videoencoderservice остаётся
+штатным; эти изменения затрагивают только Java PDC и локальные тесты.
+
 ## Дополнительная проверка штатной цепочки, 2026-09-15
 
 `PdcResourcePolicyTest.stockActivationLifecycle` исполняет настоящий приватный
@@ -30,7 +100,8 @@ in-flight guard. Новый regression test воспроизводит ошиб�
 Граница выводов: `AbstractScreenWidget.setSmallStageType` только меняет поле.
 Само значение `6` не доказывает видимость native plane. Тесты проверяют Java
 SCREEN restriction, Main Wizard choice и запрос popup; они не исполняют GPU,
-MMI compositor, реальный root-window переход и задержанную доставку AP 1002.
+MMI compositor и реальный root-window переход. Отложенный AP теперь отдельно
+проверяется описанным выше host-тестом со штатным debounce.
 Если новый JAR снова не поможет, сначала нужны build ID и trace вокруг запроса:
 DSI popup/mode + список компонентов, решение по 108, SMALL_STAGE/AP 1002,
 `HMIDeactivated`, current screen и фактический display context. По ним можно
