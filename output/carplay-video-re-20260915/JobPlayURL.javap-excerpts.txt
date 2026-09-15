@@ -1,0 +1,332 @@
+  private void setState(int);
+    Code:
+       0: aload_0
+       1: iload_1
+       2: putfield      #60                 // Field de/audi/app/media/content/media/fileplayer/content/JobPlayURL.state:I
+       5: aload_0
+       6: getfield      #45                 // Field de/audi/app/media/content/media/fileplayer/content/JobPlayURL.state:I
+       9: tableswitch   { // 1 to 11
+                     1: 68
+                     2: 590
+                     3: 185
+                     4: 455
+                     5: 490
+                     6: 507
+                     7: 530
+                     8: 416
+                     9: 433
+                    10: 547
+                    11: 564
+               default: 590
+          }
+      68: aload_0
+      69: getfield      #43                 // Field de/audi/app/media/content/media/fileplayer/content/JobPlayURL.logger:Lde/audi/atip/log/LogChannel;
+      72: ldc           #6                  // int 1000000
+      74: ldc           #7                  // String [%1.setState] STATE_STOP_PLAYER
+      76: ldc           #5                  // String JobPlayURL
+      78: invokevirtual #44                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+      81: pop
+      82: aload_0
+      83: invokevirtual #46                 // Method de/audi/app/media/content/media/fileplayer/content/JobPlayURL.getPlayer:()Lde/audi/app/media/content/media/fileplayer/content/IFilePlayer;
+      86: invokeinterface #61,  1           // InterfaceMethod de/audi/app/media/content/media/fileplayer/content/IFilePlayer.getState:()Lde/audi/app/media/content/media/fileplayer/content/IFilePlayerState;
+      91: invokeinterface #62,  1           // InterfaceMethod de/audi/app/media/content/media/fileplayer/content/IFilePlayerState.getPlaybackState:()I
+      96: lookupswitch  { // 3
+                     2: 132
+                     4: 132
+                    11: 132
+               default: 154
+          }
+     132: aload_0
+     133: getfield      #43                 // Field de/audi/app/media/content/media/fileplayer/content/JobPlayURL.logger:Lde/audi/atip/log/LogChannel;
+     136: ldc           #6                  // int 1000000
+     138: ldc           #8                  // String [%1.start] Player ready for new URI.
+     140: ldc           #5                  // String JobPlayURL
+     142: invokevirtual #44                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+     145: pop
+     146: aload_0
+     147: iconst_3
+     148: invokespecial #56                 // Method de/audi/app/media/content/media/fileplayer/content/JobPlayURL.setState:(I)V
+     151: goto          590
+     154: aload_0
+     155: getfield      #43                 // Field de/audi/app/media/content/media/fileplayer/content/JobPlayURL.logger:Lde/audi/atip/log/LogChannel;
+     158: ldc           #6                  // int 1000000
+     160: ldc           #9                  // String [%1.start] Player not ready. Try to stop it.
+     162: ldc           #5                  // String JobPlayURL
+     164: invokevirtual #44                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+     167: pop
+     168: aload_0
+     169: invokevirtual #46                 // Method de/audi/app/media/content/media/fileplayer/content/JobPlayURL.getPlayer:()Lde/audi/app/media/content/media/fileplayer/content/IFilePlayer;
+     172: invokeinterface #63,  1           // InterfaceMethod de/audi/app/media/content/media/fileplayer/content/IFilePlayer.stop:()V
+     177: aload_0
+     178: iconst_2
+     179: invokespecial #56                 // Method de/audi/app/media/content/media/fileplayer/content/JobPlayURL.setState:(I)V
+     182: goto          590
+     185: aload_0
+     186: getfield      #43                 // Field de/audi/app/media/content/media/fileplayer/content/JobPlayURL.logger:Lde/audi/atip/log/LogChannel;
+     189: ldc           #6                  // int 1000000
+     191: ldc           #10                 // String [%1.setState] STATE_PLAYER_STOPPED
+     193: ldc           #5                  // String JobPlayURL
+     195: invokevirtual #44                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+     198: pop
+     199: aload_0
+     200: invokevirtual #46                 // Method de/audi/app/media/content/media/fileplayer/content/JobPlayURL.getPlayer:()Lde/audi/app/media/content/media/fileplayer/content/IFilePlayer;
+     203: invokeinterface #61,  1           // InterfaceMethod de/audi/app/media/content/media/fileplayer/content/IFilePlayer.getState:()Lde/audi/app/media/content/media/fileplayer/content/IFilePlayerState;
+     208: invokeinterface #64,  1           // InterfaceMethod de/audi/app/media/content/media/fileplayer/content/IFilePlayerState.getActiveSlot:()Lde/audi/app/media/source/ISourceSlot;
+     213: invokeinterface #65,  1           // InterfaceMethod de/audi/app/media/source/ISourceSlot.getCapabilities:()Lde/audi/app/media/source/MediaCapabilities;
+     218: invokevirtual #47                 // Method de/audi/app/media/source/MediaCapabilities.isPlaymodes:()Z
+     221: ifeq          394
+     224: aload_0
+     225: invokevirtual #46                 // Method de/audi/app/media/content/media/fileplayer/content/JobPlayURL.getPlayer:()Lde/audi/app/media/content/media/fileplayer/content/IFilePlayer;
+     228: invokeinterface #61,  1           // InterfaceMethod de/audi/app/media/content/media/fileplayer/content/IFilePlayer.getState:()Lde/audi/app/media/content/media/fileplayer/content/IFilePlayerState;
+     233: invokeinterface #66,  1           // InterfaceMethod de/audi/app/media/content/media/fileplayer/content/IFilePlayerState.getPlaybackMode:()I
+     238: istore_2
+     239: aload_0
+     240: getfield      #42                 // Field de/audi/app/media/content/media/fileplayer/content/JobPlayURL.repeat:Z
+     243: ifeq          308
+     246: iload_2
+     247: aload_0
+     248: invokevirtual #46                 // Method de/audi/app/media/content/media/fileplayer/content/JobPlayURL.getPlayer:()Lde/audi/app/media/content/media/fileplayer/content/IFilePlayer;
+     251: invokeinterface #61,  1           // InterfaceMethod de/audi/app/media/content/media/fileplayer/content/IFilePlayer.getState:()Lde/audi/app/media/content/media/fileplayer/content/IFilePlayerState;
+     256: invokeinterface #67,  1           // InterfaceMethod de/audi/app/media/content/media/fileplayer/content/IFilePlayerState.getRepeatPlayMode:()I
+     261: if_icmpeq     308
+     264: aload_0
+     265: getfield      #43                 // Field de/audi/app/media/content/media/fileplayer/content/JobPlayURL.logger:Lde/audi/atip/log/LogChannel;
+     268: ldc           #6                  // int 1000000
+     270: ldc           #11                 // String [%1.setState] File repeat must be activated.
+     272: ldc           #5                  // String JobPlayURL
+     274: invokevirtual #44                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+     277: pop
+     278: aload_0
+     279: invokevirtual #46                 // Method de/audi/app/media/content/media/fileplayer/content/JobPlayURL.getPlayer:()Lde/audi/app/media/content/media/fileplayer/content/IFilePlayer;
+     282: aload_0
+     283: invokevirtual #46                 // Method de/audi/app/media/content/media/fileplayer/content/JobPlayURL.getPlayer:()Lde/audi/app/media/content/media/fileplayer/content/IFilePlayer;
+     286: invokeinterface #61,  1           // InterfaceMethod de/audi/app/media/content/media/fileplayer/content/IFilePlayer.getState:()Lde/audi/app/media/content/media/fileplayer/content/IFilePlayerState;
+     291: invokeinterface #67,  1           // InterfaceMethod de/audi/app/media/content/media/fileplayer/content/IFilePlayerState.getRepeatPlayMode:()I
+     296: invokeinterface #68,  2           // InterfaceMethod de/audi/app/media/content/media/fileplayer/content/IFilePlayer.setPlaybackMode:(I)V
+     301: aload_0
+     302: bipush        8
+     304: invokespecial #56                 // Method de/audi/app/media/content/media/fileplayer/content/JobPlayURL.setState:(I)V
+     307: return
+     308: aload_0
+     309: getfield      #42                 // Field de/audi/app/media/content/media/fileplayer/content/JobPlayURL.repeat:Z
+     312: ifne          377
+     315: iload_2
+     316: aload_0
+     317: invokevirtual #46                 // Method de/audi/app/media/content/media/fileplayer/content/JobPlayURL.getPlayer:()Lde/audi/app/media/content/media/fileplayer/content/IFilePlayer;
+     320: invokeinterface #61,  1           // InterfaceMethod de/audi/app/media/content/media/fileplayer/content/IFilePlayer.getState:()Lde/audi/app/media/content/media/fileplayer/content/IFilePlayerState;
+     325: invokeinterface #69,  1           // InterfaceMethod de/audi/app/media/content/media/fileplayer/content/IFilePlayerState.getNormalPlayMode:()I
+     330: if_icmpeq     377
+     333: aload_0
+     334: getfield      #43                 // Field de/audi/app/media/content/media/fileplayer/content/JobPlayURL.logger:Lde/audi/atip/log/LogChannel;
+     337: ldc           #6                  // int 1000000
+     339: ldc           #12                 // String [%1.setState] File repeat must be disabled.
+     341: ldc           #5                  // String JobPlayURL
+     343: invokevirtual #44                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+     346: pop
+     347: aload_0
+     348: invokevirtual #46                 // Method de/audi/app/media/content/media/fileplayer/content/JobPlayURL.getPlayer:()Lde/audi/app/media/content/media/fileplayer/content/IFilePlayer;
+     351: aload_0
+     352: invokevirtual #46                 // Method de/audi/app/media/content/media/fileplayer/content/JobPlayURL.getPlayer:()Lde/audi/app/media/content/media/fileplayer/content/IFilePlayer;
+     355: invokeinterface #61,  1           // InterfaceMethod de/audi/app/media/content/media/fileplayer/content/IFilePlayer.getState:()Lde/audi/app/media/content/media/fileplayer/content/IFilePlayerState;
+     360: invokeinterface #69,  1           // InterfaceMethod de/audi/app/media/content/media/fileplayer/content/IFilePlayerState.getNormalPlayMode:()I
+     365: invokeinterface #68,  2           // InterfaceMethod de/audi/app/media/content/media/fileplayer/content/IFilePlayer.setPlaybackMode:(I)V
+     370: aload_0
+     371: bipush        8
+     373: invokespecial #56                 // Method de/audi/app/media/content/media/fileplayer/content/JobPlayURL.setState:(I)V
+     376: return
+     377: aload_0
+     378: getfield      #43                 // Field de/audi/app/media/content/media/fileplayer/content/JobPlayURL.logger:Lde/audi/atip/log/LogChannel;
+     381: ldc           #6                  // int 1000000
+     383: ldc           #13                 // String [%1.setState] No playmode change necessary.
+     385: ldc           #5                  // String JobPlayURL
+     387: invokevirtual #44                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+     390: pop
+     391: goto          408
+     394: aload_0
+     395: getfield      #43                 // Field de/audi/app/media/content/media/fileplayer/content/JobPlayURL.logger:Lde/audi/atip/log/LogChannel;
+     398: ldc           #6                  // int 1000000
+     400: ldc           #14                 // String [%1.setState] No playmodes supported.
+     402: ldc           #5                  // String JobPlayURL
+     404: invokevirtual #44                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+     407: pop
+     408: aload_0
+     409: iconst_4
+     410: invokespecial #56                 // Method de/audi/app/media/content/media/fileplayer/content/JobPlayURL.setState:(I)V
+     413: goto          590
+     416: aload_0
+     417: getfield      #43                 // Field de/audi/app/media/content/media/fileplayer/content/JobPlayURL.logger:Lde/audi/atip/log/LogChannel;
+     420: ldc           #6                  // int 1000000
+     422: ldc           #15                 // String [%1.setState] STATE_WAITFOR_PLAYMODE
+     424: ldc           #5                  // String JobPlayURL
+     426: invokevirtual #44                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+     429: pop
+     430: goto          590
+     433: aload_0
+     434: getfield      #43                 // Field de/audi/app/media/content/media/fileplayer/content/JobPlayURL.logger:Lde/audi/atip/log/LogChannel;
+     437: ldc           #6                  // int 1000000
+     439: ldc           #16                 // String [%1.setState] STATE_PLAYMODE_SET
+     441: ldc           #5                  // String JobPlayURL
+     443: invokevirtual #44                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+     446: pop
+     447: aload_0
+     448: iconst_4
+     449: invokespecial #56                 // Method de/audi/app/media/content/media/fileplayer/content/JobPlayURL.setState:(I)V
+     452: goto          590
+     455: aload_0
+     456: getfield      #43                 // Field de/audi/app/media/content/media/fileplayer/content/JobPlayURL.logger:Lde/audi/atip/log/LogChannel;
+     459: ldc           #6                  // int 1000000
+     461: ldc           #17                 // String [%1.setState] STATE_SET_URL
+     463: ldc           #5                  // String JobPlayURL
+     465: invokevirtual #44                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+     468: pop
+     469: aload_0
+     470: invokevirtual #46                 // Method de/audi/app/media/content/media/fileplayer/content/JobPlayURL.getPlayer:()Lde/audi/app/media/content/media/fileplayer/content/IFilePlayer;
+     473: aload_0
+     474: getfield      #41                 // Field de/audi/app/media/content/media/fileplayer/content/JobPlayURL.url:Ljava/lang/String;
+     477: invokeinterface #70,  2           // InterfaceMethod de/audi/app/media/content/media/fileplayer/content/IFilePlayer.setPlaybackURL:(Ljava/lang/String;)V
+     482: aload_0
+     483: iconst_5
+     484: invokespecial #56                 // Method de/audi/app/media/content/media/fileplayer/content/JobPlayURL.setState:(I)V
+     487: goto          590
+     490: aload_0
+     491: getfield      #43                 // Field de/audi/app/media/content/media/fileplayer/content/JobPlayURL.logger:Lde/audi/atip/log/LogChannel;
+     494: ldc           #6                  // int 1000000
+     496: ldc           #18                 // String [%1.setState] STATE_WAITFOR_URL
+     498: ldc           #5                  // String JobPlayURL
+     500: invokevirtual #44                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+     503: pop
+     504: goto          590
+     507: aload_0
+     508: getfield      #43                 // Field de/audi/app/media/content/media/fileplayer/content/JobPlayURL.logger:Lde/audi/atip/log/LogChannel;
+     511: ldc           #6                  // int 1000000
+     513: ldc           #19                 // String [%1.setState] STATE_RECEIVED_URL
+     515: ldc           #5                  // String JobPlayURL
+     517: invokevirtual #44                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+     520: pop
+     521: aload_0
+     522: bipush        7
+     524: invokespecial #56                 // Method de/audi/app/media/content/media/fileplayer/content/JobPlayURL.setState:(I)V
+     527: goto          590
+     530: aload_0
+     531: getfield      #43                 // Field de/audi/app/media/content/media/fileplayer/content/JobPlayURL.logger:Lde/audi/atip/log/LogChannel;
+     534: ldc           #6                  // int 1000000
+     536: ldc           #20                 // String [%1.setState] STATE_WAITFOR_READY_TO_PLAY
+     538: ldc           #5                  // String JobPlayURL
+     540: invokevirtual #44                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+     543: pop
+     544: goto          590
+     547: aload_0
+     548: getfield      #43                 // Field de/audi/app/media/content/media/fileplayer/content/JobPlayURL.logger:Lde/audi/atip/log/LogChannel;
+     551: ldc           #6                  // int 1000000
+     553: ldc           #21                 // String [%1.setState] STATE_WAITFOR_PLAYING
+     555: ldc           #5                  // String JobPlayURL
+     557: invokevirtual #44                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+     560: pop
+     561: goto          590
+     564: aload_0
+     565: getfield      #43                 // Field de/audi/app/media/content/media/fileplayer/content/JobPlayURL.logger:Lde/audi/atip/log/LogChannel;
+     568: ldc           #6                  // int 1000000
+     570: ldc           #22                 // String [%1.setState] STATE_FINISH
+     572: ldc           #5                  // String JobPlayURL
+     574: invokevirtual #44                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+     577: pop
+     578: aload_0
+     579: invokevirtual #48                 // Method de/audi/app/media/content/media/fileplayer/content/JobPlayURL.getExecutionContext:()Lde/audi/app/media/queue/IQueueExecutionContext;
+     582: invokeinterface #71,  1           // InterfaceMethod de/audi/app/media/queue/IQueueExecutionContext.jobFinished:()V
+     587: goto          590
+     590: return
+     591: nop
+
+  public void onPlaybackStateChanged();
+    Code:
+       0: aload_0
+       1: getfield      #43                 // Field de/audi/app/media/content/media/fileplayer/content/JobPlayURL.logger:Lde/audi/atip/log/LogChannel;
+       4: ldc           #3                  // int 100000000
+       6: ldc           #25                 // String [%1.onPlaybackStateChanged]
+       8: ldc           #5                  // String JobPlayURL
+      10: invokevirtual #44                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+      13: pop
+      14: aload_0
+      15: getfield      #45                 // Field de/audi/app/media/content/media/fileplayer/content/JobPlayURL.state:I
+      18: lookupswitch  { // 3
+                     2: 52
+                     7: 76
+                    10: 222
+               default: 235
+          }
+      52: aload_0
+      53: invokevirtual #46                 // Method de/audi/app/media/content/media/fileplayer/content/JobPlayURL.getPlayer:()Lde/audi/app/media/content/media/fileplayer/content/IFilePlayer;
+      56: invokeinterface #61,  1           // InterfaceMethod de/audi/app/media/content/media/fileplayer/content/IFilePlayer.getState:()Lde/audi/app/media/content/media/fileplayer/content/IFilePlayerState;
+      61: invokeinterface #62,  1           // InterfaceMethod de/audi/app/media/content/media/fileplayer/content/IFilePlayerState.getPlaybackState:()I
+      66: iconst_4
+      67: if_icmpne     75
+      70: aload_0
+      71: iconst_3
+      72: invokespecial #56                 // Method de/audi/app/media/content/media/fileplayer/content/JobPlayURL.setState:(I)V
+      75: return
+      76: aload_0
+      77: invokevirtual #46                 // Method de/audi/app/media/content/media/fileplayer/content/JobPlayURL.getPlayer:()Lde/audi/app/media/content/media/fileplayer/content/IFilePlayer;
+      80: invokeinterface #61,  1           // InterfaceMethod de/audi/app/media/content/media/fileplayer/content/IFilePlayer.getState:()Lde/audi/app/media/content/media/fileplayer/content/IFilePlayerState;
+      85: invokeinterface #62,  1           // InterfaceMethod de/audi/app/media/content/media/fileplayer/content/IFilePlayerState.getPlaybackState:()I
+      90: iconst_1
+      91: if_icmpeq     140
+      94: aload_0
+      95: invokevirtual #46                 // Method de/audi/app/media/content/media/fileplayer/content/JobPlayURL.getPlayer:()Lde/audi/app/media/content/media/fileplayer/content/IFilePlayer;
+      98: invokeinterface #61,  1           // InterfaceMethod de/audi/app/media/content/media/fileplayer/content/IFilePlayer.getState:()Lde/audi/app/media/content/media/fileplayer/content/IFilePlayerState;
+     103: invokeinterface #62,  1           // InterfaceMethod de/audi/app/media/content/media/fileplayer/content/IFilePlayerState.getPlaybackState:()I
+     108: bipush        11
+     110: if_icmpne     235
+     113: aload_0
+     114: getfield      #43                 // Field de/audi/app/media/content/media/fileplayer/content/JobPlayURL.logger:Lde/audi/atip/log/LogChannel;
+     117: ldc           #6                  // int 1000000
+     119: ldc           #26                 // String [%1.onPlaybackStateChanged] Error.
+     121: ldc           #5                  // String JobPlayURL
+     123: invokevirtual #44                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+     126: pop
+     127: aload_0
+     128: invokevirtual #49                 // Method de/audi/app/media/content/media/fileplayer/content/JobPlayURL.setSessionPlaybackState:()V
+     131: aload_0
+     132: bipush        11
+     134: invokespecial #56                 // Method de/audi/app/media/content/media/fileplayer/content/JobPlayURL.setState:(I)V
+     137: goto          235
+     140: aload_0
+     141: invokespecial #57                 // Method de/audi/app/media/content/media/fileplayer/content/JobPlayURL.setVideoScaling:()V
+     144: aload_0
+     145: invokevirtual #46                 // Method de/audi/app/media/content/media/fileplayer/content/JobPlayURL.getPlayer:()Lde/audi/app/media/content/media/fileplayer/content/IFilePlayer;
+     148: invokeinterface #61,  1           // InterfaceMethod de/audi/app/media/content/media/fileplayer/content/IFilePlayer.getState:()Lde/audi/app/media/content/media/fileplayer/content/IFilePlayerState;
+     153: invokeinterface #72,  1           // InterfaceMethod de/audi/app/media/content/media/fileplayer/content/IFilePlayerState.getAudioState:()Lde/audi/app/media/audio/AudioState;
+     158: invokevirtual #50                 // Method de/audi/app/media/audio/AudioState.isAudible:()Z
+     161: ifeq          190
+     164: aload_0
+     165: getfield      #43                 // Field de/audi/app/media/content/media/fileplayer/content/JobPlayURL.logger:Lde/audi/atip/log/LogChannel;
+     168: ldc           #6                  // int 1000000
+     170: ldc           #27                 // String [%1.onPlaybackStateChanged] Audible. Resume playback.
+     172: ldc           #5                  // String JobPlayURL
+     174: invokevirtual #44                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+     177: pop
+     178: aload_0
+     179: invokevirtual #46                 // Method de/audi/app/media/content/media/fileplayer/content/JobPlayURL.getPlayer:()Lde/audi/app/media/content/media/fileplayer/content/IFilePlayer;
+     182: invokeinterface #73,  1           // InterfaceMethod de/audi/app/media/content/media/fileplayer/content/IFilePlayer.resume:()V
+     187: goto          213
+     190: aload_0
+     191: getfield      #43                 // Field de/audi/app/media/content/media/fileplayer/content/JobPlayURL.logger:Lde/audi/atip/log/LogChannel;
+     194: ldc           #6                  // int 1000000
+     196: ldc           #28                 // String [%1.onPlaybackStateChanged] Not audible. Pause playback.
+     198: ldc           #5                  // String JobPlayURL
+     200: invokevirtual #44                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+     203: pop
+     204: aload_0
+     205: invokevirtual #46                 // Method de/audi/app/media/content/media/fileplayer/content/JobPlayURL.getPlayer:()Lde/audi/app/media/content/media/fileplayer/content/IFilePlayer;
+     208: invokeinterface #74,  1           // InterfaceMethod de/audi/app/media/content/media/fileplayer/content/IFilePlayer.pause:()V
+     213: aload_0
+     214: bipush        10
+     216: invokespecial #56                 // Method de/audi/app/media/content/media/fileplayer/content/JobPlayURL.setState:(I)V
+     219: goto          235
+     222: aload_0
+     223: invokevirtual #49                 // Method de/audi/app/media/content/media/fileplayer/content/JobPlayURL.setSessionPlaybackState:()V
+     226: aload_0
+     227: bipush        11
+     229: invokespecial #56                 // Method de/audi/app/media/content/media/fileplayer/content/JobPlayURL.setState:(I)V
+     232: goto          235
+     235: return
+

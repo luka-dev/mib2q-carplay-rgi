@@ -41,6 +41,7 @@
 #include <string.h>
 #include <time.h>
 #include <errno.h>
+#include <stddef.h>
 
 #define kOMXDecoderName   "OMX.qcom.video.decoder.avc"
 #define kInPortIndex      0
@@ -71,6 +72,12 @@ typedef struct {
     volatile int             running;
     int                      callbacksClosing;
     unsigned int             callbacksActive;
+    /* Each slot is owned by OMX OR queued/in flight on the presenter, never
+     * both. Capacity equals the finite native output pool; no frame copies. */
+    pthread_t                presentThread;
+    int                      presentThreadStarted, presentStop, presentExited;
+    OMX_U32                 *presentQueue, presentHead, presentCount;
+    unsigned char           *presentOwned;
     int                      omxInitialized;
     int                      started;   /* decoder brought up on first frame */
     int                      sessionEverStarted;
@@ -86,7 +93,6 @@ typedef struct {
     unsigned long            outputFilled;
     unsigned long            outputPosted;
     unsigned long            outputPostFailed;
-    unsigned long            outputSkipped;
     uint64_t                 newestInputMs; /* protected by lock; QNX is 32-bit */
     int                      presentationHealthy;
     int                      presentConsecutiveFails;
@@ -102,11 +108,11 @@ typedef struct {
 
 static ScreenSink g_ss;
 static unsigned long long _NowMs(void);
+static void _AbsTimeoutMs(struct timespec *ts, long ms);
 
 /* Data callbacks dereference OMX/Screen arrays which teardown frees.  Close the
- * callback gate first, then wait for an already-running GPU presentation to
- * leave before changing OMX state or releasing those arrays.  Event callbacks
- * remain enabled because _WaitState depends on them. */
+ * callback gate first, then join the presenter before changing OMX state or
+ * releasing arrays. Event callbacks remain enabled for _WaitState. */
 static int _CallbackEnter(ScreenSink *me) {
     int allowed;
     pthread_mutex_lock(&me->lock);
@@ -165,7 +171,7 @@ static OMX_ERRORTYPE _OnEmptyDone(OMX_HANDLETYPE c, OMX_PTR app, OMX_BUFFERHEADE
 }
 
 /* The OMX output pointer belongs to a tiled Screen WINDOW buffer.  The GPU
- * external-image draw consumes that exact buffer before this callback recycles it. */
+ * external-image draw consumes that exact buffer before the worker recycles it. */
 static int _PresentGpu(ScreenSink *me, OMX_BUFFERHEADERTYPE *b) {
     OMX_U32 i;
     int result;
@@ -210,40 +216,98 @@ static int _PresentGpu(ScreenSink *me, OMX_BUFFERHEADERTYPE *b) {
     return -1;
 }
 
+/* Stock libairplay uses a screenRenderThread command queue. Keep the callback
+ * short here too: even loader handoff / glFinish / swap cannot block EmptyDone
+ * on Qualcomm's component thread. No timer, age cutoff or compressed-frame drop. */
+static void *_PresentThread(void *arg) {
+    ScreenSink *me = (ScreenSink *)arg;
+    pthread_mutex_lock(&me->lock);
+    for (;;) {
+        OMX_U32 slot;
+        OMX_BUFFERHEADERTYPE *b;
+        int recycle;
+        OMX_ERRORTYPE err;
+        while (!me->presentStop && me->presentCount == 0)
+            pthread_cond_wait(&me->cond, &me->lock);
+        if (me->presentStop) break;
+        slot = me->presentQueue[me->presentHead];
+        me->presentHead = (me->presentHead + 1) % me->nOutBufs;
+        --me->presentCount;
+        b = me->outBufs[slot];
+        pthread_mutex_unlock(&me->lock);
+        _PresentGpu(me, b); /* completes all GPU reads, including failure paths */
+        pthread_mutex_lock(&me->lock);
+        recycle = me->running && me->winReady && !me->presentStop;
+        /* Clear before FillThisBuffer: a component may callback synchronously.
+         * Teardown joins this thread before any OMX state/free operation. */
+        me->presentOwned[slot] = 0;
+        pthread_mutex_unlock(&me->lock);
+        if (recycle) {
+            err = OMX_FillThisBuffer(me->decoder, b);
+            if (err != OMX_ErrorNone) {
+                pthread_mutex_lock(&me->lock);
+                me->omxError = 1;
+                pthread_cond_broadcast(&me->cond);
+                pthread_mutex_unlock(&me->lock);
+                fprintf(stderr, "altscreen_render[qnx]: output recycle failed 0x%x\n", (unsigned)err);
+            }
+        }
+        pthread_mutex_lock(&me->lock);
+    }
+    /* Pending buffers never reached GPU. Keep them on the client side for the
+     * normal Idle->Loaded FreeBuffer sequence; never feed old-session frames. */
+    me->presentCount = 0;
+    me->presentExited = 1;
+    pthread_cond_broadcast(&me->cond);
+    pthread_mutex_unlock(&me->lock);
+    return NULL;
+}
+
+static int _StartPresentThread(ScreenSink *me) {
+    if (!me->nOutBufs || me->presentThreadStarted) return -1;
+    me->presentQueue = (OMX_U32 *)calloc(me->nOutBufs, sizeof(OMX_U32));
+    me->presentOwned = (unsigned char *)calloc(me->nOutBufs, 1);
+    if (!me->presentQueue || !me->presentOwned) goto fail;
+    me->presentHead = me->presentCount = 0;
+    me->presentStop = me->presentExited = 0;
+    if (pthread_create(&me->presentThread, NULL, _PresentThread, me) != 0) goto fail;
+    pthread_mutex_lock(&me->lock);
+    me->presentThreadStarted = 1;
+    pthread_mutex_unlock(&me->lock);
+    return 0;
+fail:
+    free(me->presentQueue); me->presentQueue = NULL;
+    free(me->presentOwned); me->presentOwned = NULL;
+    return -1;
+}
+
 static OMX_ERRORTYPE _OnFillDone(OMX_HANDLETYPE c, OMX_PTR app, OMX_BUFFERHEADERTYPE *b) {
     ScreenSink *const me = (ScreenSink *)app;
-    OMX_ERRORTYPE err;
-    uint64_t pictureMs, newestMs, nowMs;
-    int obsolete;
+    OMX_U32 slot;
+    (void)c;
     if (!_CallbackEnter(me)) return OMX_ErrorNone;
-    pictureMs = b->nTimeStamp > 0 ? (uint64_t)b->nTimeStamp / 1000ULL : 0;
     pthread_mutex_lock(&me->lock);
-    newestMs = me->newestInputMs;
-    pthread_mutex_unlock(&me->lock);
-    nowMs = _NowMs();
-    obsolete = alt_present_obsolete(pictureMs, newestMs, nowMs);
-    me->outputFilled++;
-    if (me->outputFilled <= 3 || (me->outputFilled % 600) == 0)
-        fprintf(stderr,
-                "altscreen_render[qnx]: FillBufferDone #%lu filled=%u offset=%u flags=0x%x winReady=%d age=%llu ms backlog=%llu ms skipped=%lu pts=%llu\n",
-                me->outputFilled, (unsigned)b->nFilledLen, (unsigned)b->nOffset,
-                (unsigned)b->nFlags, me->winReady,
-                (unsigned long long)(pictureMs && nowMs >= pictureMs ? nowMs-pictureMs : 0),
-                (unsigned long long)(pictureMs && newestMs >= pictureMs ? newestMs-pictureMs : 0),
-                me->outputSkipped, (unsigned long long)pictureMs);
-    /* Keep every compressed picture/reference in OMX. Catch up by recycling
-     * obsolete decoded output without GPU work or a vsync/post rendezvous.
-     * This is not a presentation failure and must not restart the loader. */
-    if (obsolete) me->outputSkipped++;
-    else _PresentGpu(me, b);
-    /* The GPU path finishes sampling this exact Screen buffer before returning;
-     * only now may it return to the decoder.  winReady drops before teardown. */
-    if (me->running && me->winReady) {
-        err = OMX_FillThisBuffer(c, b);
-        if (err != OMX_ErrorNone)
-            fprintf(stderr, "altscreen_render[qnx]: OMX_FillThisBuffer(recycle) failed 0x%x\n",
-                    (unsigned)err);
+    if (me->running && me->winReady && !me->presentStop && me->presentThreadStarted) {
+        for (slot = 0; slot < me->nOutBufs && me->outBufs[slot] != b; ++slot) {}
+        if (slot == me->nOutBufs || me->presentOwned[slot] || me->presentCount == me->nOutBufs) {
+            /* Never overwrite a queued/live GPU buffer on a broken callback. */
+            me->omxError = 1;
+            fprintf(stderr, "altscreen_render[qnx]: invalid/duplicate output ownership; decoder restart required\n");
+        } else {
+            uint64_t pictureMs = b->nTimeStamp > 0 ? (uint64_t)b->nTimeStamp / 1000ULL : 0;
+            uint64_t nowMs = _NowMs();
+            me->presentOwned[slot] = 1;
+            me->presentQueue[(me->presentHead + me->presentCount) % me->nOutBufs] = slot;
+            ++me->presentCount;
+            ++me->outputFilled;
+            if (me->outputFilled <= 3 || (me->outputFilled % 600) == 0)
+                fprintf(stderr, "altscreen_render[qnx]: FillBufferDone #%lu filled=%u queue=%u posted=%lu age=%llu ms\n",
+                        me->outputFilled, (unsigned)b->nFilledLen, (unsigned)me->presentCount,
+                        me->outputPosted, (unsigned long long)(pictureMs && nowMs >= pictureMs ? nowMs-pictureMs : 0));
+        }
+        pthread_cond_broadcast(&me->cond);
     }
+    pthread_mutex_unlock(&me->lock);
     _CallbackLeave(me);
     return OMX_ErrorNone;
 }
@@ -365,6 +429,7 @@ static int _ConfigurePorts(ScreenSink *me) {
     memset(&pd, 0, sizeof(pd)); pd.nSize = sizeof(pd); pd.nVersion.nVersion = OMX_VERSION;
     pd.nPortIndex = kInPortIndex;
     if (OMX_GetParameter(me->decoder, OMX_IndexParamPortDefinition, &pd)) return -1;
+    pd.format.video.xFramerate = 30u << 16;
     pd.format.video.eCompressionFormat = OMX_VIDEO_CodingAVC;
     pd.format.video.eColorFormat       = OMX_COLOR_FormatUnused;
     if (me->width > 0 && me->height > 0) {
@@ -376,6 +441,7 @@ static int _ConfigurePorts(ScreenSink *me) {
     memset(&pd, 0, sizeof(pd)); pd.nSize = sizeof(pd); pd.nVersion.nVersion = OMX_VERSION;
     pd.nPortIndex = kOutPortIndex;
     if (OMX_GetParameter(me->decoder, OMX_IndexParamPortDefinition, &pd)) return -1;
+    pd.format.video.xFramerate = 30u << 16;
     pd.format.video.eColorFormat = (OMX_COLOR_FORMATTYPE)kQOMX_ColorFmt_32m;
     if (me->width > 0 && me->height > 0) {
         pd.format.video.nFrameWidth  = (OMX_U32)me->width;
@@ -391,16 +457,63 @@ static int _ConfigurePorts(ScreenSink *me) {
                 (unsigned)pd.format.video.eColorFormat);
         return -1;
     }
+    for (OMX_U32 port = kInPortIndex; port <= kOutPortIndex; ++port) {
+        memset(&pd, 0, sizeof(pd)); pd.nSize = sizeof(pd); pd.nVersion.nVersion = OMX_VERSION;
+        pd.nPortIndex = port;
+        if (OMX_GetParameter(me->decoder, OMX_IndexParamPortDefinition, &pd)) return -1;
+        if (pd.format.video.xFramerate != (30u << 16)) {
+            fprintf(stderr, "altscreen_render[qnx]: port %u fps readback mismatch requested=30 actual=0x%x\n",
+                    (unsigned)port, (unsigned)pd.format.video.xFramerate);
+            return -1;
+        }
+    }
+    fprintf(stderr, "altscreen_render[qnx]: input/output xFramerate=30 verified\n");
     return 0;
 }
 
-static void _EnableDecoderOrderMode(ScreenSink *me) {
+/* MU1316 libairplay 0x86ea8 and Qcom extension 0x7f100008: the name says
+ * "config", but OEM uses Get/SetParameter and a 20-byte payload. Word +8 is
+ * preserved from GetParameter; its vendor meaning is intentionally not guessed. */
+typedef struct {
+    OMX_U32 nSize;
+    OMX_VERSIONTYPE nVersion;
+    OMX_U32 vendorWord;
+    OMX_U32 enabled;
+    OMX_U32 mode;
+} DecoderOrderParam;
+typedef char DecoderOrderAbi[(sizeof(DecoderOrderParam) == 20 &&
+    offsetof(DecoderOrderParam, enabled) == 12 &&
+    offsetof(DecoderOrderParam, mode) == 16) ? 1 : -1];
+
+static int _EnableDecoderOrderMode(ScreenSink *me) {
     OMX_INDEXTYPE idx;
-    OMX_CONFIG_BOOLEANTYPE on;
-    if (OMX_GetExtensionIndex(me->decoder, (OMX_STRING)kQOMX_ExtIndex_DisplayPicBuf, &idx) != OMX_ErrorNone) return;
-    memset(&on, 0, sizeof(on)); on.nSize = sizeof(on); on.nVersion.nVersion = OMX_VERSION;
-    on.bEnabled = OMX_TRUE;
-    OMX_SetConfig(me->decoder, idx, &on);
+    DecoderOrderParam on;
+    OMX_ERRORTYPE err;
+    const char *stage = "GetExtensionIndex";
+    err = OMX_GetExtensionIndex(me->decoder, (OMX_STRING)kQOMX_ExtIndex_DisplayPicBuf, &idx);
+    if (err != OMX_ErrorNone) goto fail;
+    memset(&on, 0, sizeof(on)); on.nSize = sizeof(on); on.nVersion.nVersion = 0x101u /* OEM 1.1.0.0 */;
+    stage = "GetParameter";
+    err = OMX_GetParameter(me->decoder, idx, &on);
+    if (err != OMX_ErrorNone) goto fail;
+    on.enabled = 1; on.mode = 1;
+    stage = "SetParameter";
+    err = OMX_SetParameter(me->decoder, idx, &on);
+    if (err != OMX_ErrorNone) goto fail;
+    memset(&on, 0, sizeof(on)); on.nSize = sizeof(on); on.nVersion.nVersion = 0x101u /* OEM 1.1.0.0 */;
+    stage = "readback";
+    err = OMX_GetParameter(me->decoder, idx, &on);
+    if (err != OMX_ErrorNone) goto fail;
+    if (on.enabled != 1 || on.mode != 1) {
+        fprintf(stderr, "altscreen_render[qnx]: decoder order readback mismatch enabled=%u mode=%u\n",
+                (unsigned)on.enabled, (unsigned)on.mode);
+        return -1;
+    }
+    fprintf(stderr, "altscreen_render[qnx]: decoder order enabled (20-byte Get/SetParameter + readback)\n");
+    return 0;
+fail:
+    fprintf(stderr, "altscreen_render[qnx]: decoder order %s failed 0x%x\n", stage, (unsigned)err);
+    return -1;
 }
 
 static OMX_U32 _ReadOutputDefinition(ScreenSink *me) {
@@ -490,34 +603,45 @@ fail:
     return -1;
 }
 
-static void _Teardown(ScreenSink *me, int destroyPresent) {
-    OMX_U32 i;
-    if (!me->decoder && (!destroyPresent || !me->present) && !me->omxInitialized) return;
+static void _DrainCallbacksAndPresenter(ScreenSink *me) {
     pthread_mutex_lock(&me->lock);
     me->running = 0;
     me->winReady = 0;
     me->callbacksClosing = 1;
+    me->presentStop = 1;
     pthread_cond_broadcast(&me->cond);
     {
         struct timespec callbackDeadline;
         int waitRc = 0;
         _AbsTimeoutMs(&callbackDeadline, kCallbackDrainWaitMs);
-        while (me->callbacksActive > 0 && waitRc != ETIMEDOUT)
+        while ((me->callbacksActive > 0 || (me->presentThreadStarted && !me->presentExited)) && waitRc != ETIMEDOUT)
             waitRc = pthread_cond_timedwait(&me->cond, &me->lock,
                                             &callbackDeadline);
-        if (me->callbacksActive > 0) {
+        if (me->callbacksActive > 0 || (me->presentThreadStarted && !me->presentExited)) {
             fprintf(stderr,
-                    "altscreen_render[qnx]: callback drain TIMEOUT active=%u; exiting without freeing live OMX/EGL storage\n",
+                    "altscreen_render[qnx]: callback/presenter drain TIMEOUT active=%u; exiting without freeing live OMX/EGL storage\n",
                     me->callbacksActive);
             pthread_mutex_unlock(&me->lock);
-            /* A GPU callback is wedged inside this renderer. Continuing would
-             * either block forever or free buffers under the callback. Exit the
+            /* A GPU presenter or data callback is wedged inside this renderer. Continuing would
+             * either block forever or free buffers under the worker/callback. Exit the
              * isolated renderer; the persistent supervisor restarts it after
              * backoff, while dio_manager and the HMI remain alive. */
             _exit(86);
         }
     }
     pthread_mutex_unlock(&me->lock);
+    if (me->presentThreadStarted) {
+        pthread_join(me->presentThread, NULL);
+        me->presentThreadStarted = 0;
+    }
+    free(me->presentQueue); me->presentQueue = NULL;
+    free(me->presentOwned); me->presentOwned = NULL;
+}
+
+static void _Teardown(ScreenSink *me, int destroyPresent) {
+    OMX_U32 i;
+    if (!me->decoder && (!destroyPresent || !me->present) && !me->omxInitialized) return;
+    _DrainCallbacksAndPresenter(me);
     if (me->decoder) {
         OMX_SendCommand(me->decoder, OMX_CommandStateSet, OMX_StateIdle, NULL);
         _WaitState(me, OMX_StateIdle, kOmxStopWaitMs);
@@ -546,7 +670,6 @@ static void _Teardown(ScreenSink *me, int destroyPresent) {
     me->presentNeedsFullRebuild = 0;
     me->presentRecoveryAfterMs = 0;
     me->newestInputMs = 0;
-    me->outputSkipped = 0;
     if (!destroyPresent && me->present)
         screen_egl_present_start_loader(me->present);
 }
@@ -564,7 +687,7 @@ static int _StartDecoder(ScreenSink *me) {
     me->omxInitialized = 1;
     if (OMX_GetHandle(&me->decoder, (OMX_STRING)kOMXDecoderName, me, &kCallbacks)) goto fail;
 
-    _EnableDecoderOrderMode(me);
+    if (_EnableDecoderOrderMode(me)) goto fail;
     if (_ConfigurePorts(me)) goto fail;
 
     outCount = _ReadOutputDefinition(me);
@@ -586,6 +709,7 @@ static int _StartDecoder(ScreenSink *me) {
     if (OMX_SendCommand(me->decoder, OMX_CommandStateSet, OMX_StateExecuting, NULL)) goto fail;
     if (_WaitState(me, OMX_StateExecuting, kOmxStartExecWaitMs)) goto fail;
     me->running = 1;
+    if (_StartPresentThread(me)) goto fail;
     for (i = 0; i < me->nOutBufs; ++i) {
         OMX_ERRORTYPE err = OMX_FillThisBuffer(me->decoder, me->outBufs[i]);
         if (err != OMX_ErrorNone) {
@@ -721,7 +845,7 @@ static unsigned _AnnexBFlags(const uint8_t *p, uint32_t len) {
     return flags;
 }
 
-/* Recovery is intentionally driven by the TCP/server thread.  FillDone only
+/* Recovery is intentionally driven by the decode-input worker. The presenter only
  * marks presentation unhealthy; destroying an EGLSurface from that callback
  * would race OMX buffer recycling and teardown. */
 static void _RecoverPresentationIfNeeded(ScreenSink *me) {
@@ -738,7 +862,7 @@ static void _RecoverPresentationIfNeeded(ScreenSink *me) {
         nowMs < me->presentRecoveryAfterMs) pending = 0;
     attempt = me->presentRecoveryAttempts + 1;
     if (pending) {
-        /* Claim this attempt before releasing the state lock.  A FillDone that
+        /* Claim this attempt before releasing the state lock.  A presenter that
          * swaps immediately after recovery is then free to restore healthy=1,
          * and the server must not overwrite that newer result. */
         me->presentRecoveryPending = 0;

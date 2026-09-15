@@ -1,6 +1,13 @@
 # Cluster present cadence — why altscreen_render juddered at a nominal 30 fps
 
-Resolved 2026-08-30. Static reading of our own two renderers plus the QNX/Screen prior art in
+**Correction, 2026-09-15:** this is the historical rationale for interval 2,
+not a verified end-to-end root cause. Binary checks now establish that VC
+capture uses an independent **33 ms timer** at requested 30 FPS. The old claim
+that interval 2 phase-locks capture, and the inference that slow callback arrival
+must mean a slow phone, are incorrect. Keep the applied setting until measured
+A/B evidence warrants a change. See [the updated stock-path audit](../ALTSCREEN_STOCK_30FPS_PATH.md).
+
+Historical investigation, 2026-08-30. Static reading of our own two renderers plus the QNX/Screen prior art in
 `Tools/retroarch-qnx`. Reported symptom: the CarPlay cluster video "lags a bit, the animations do not
 look like 30 fps", while `maneuver_render` on the same panel felt smooth.
 
@@ -21,8 +28,9 @@ downstream capture samples on its own fixed 30 Hz grid, so the two unlocked 30 H
 against each other: periodically the capture took one frame twice and skipped the next. That is the
 judder, and no stage is dropping frames for it to happen.
 
-Interval 2 pins each post to exactly two scans = exactly one capture period, so the capture takes one
-distinct frame per period at any phase.
+Interval 2 was intended to regularize posts on a nominal 60 Hz surface. It does
+not establish one unique frame per capture: the capture timer is independent,
+and 33 ms is not exactly 1/30 second. Actual driver waits also need measurement.
 
 ## The in-tree A/B that settled it
 
@@ -31,8 +39,10 @@ distinct frame per period at any phase.
 | `maneuver_render` | **2** (`platform_qnx.c:345`) | 2 | the swap itself | smooth |
 | `altscreen_render` (before) | **1** (`screen_egl_present.c`) | 2 | frame arrival | juddery |
 
-Same hardware, same panel, same buffer count. The only difference was the interval — which is why the
-fix is the interval and not the buffer count.
+Same hardware, same panel, same RGBA buffer count motivated trying the interval.
+This was not a controlled hardware A/B: one renderer generates its own frames,
+while the other receives/decompresses them and holds an OMX callback during
+presentation. Smooth maneuver animation does not prove those stages are fast.
 
 `maneuver_render/main.c:838` had already written the rule down:
 
@@ -83,11 +93,14 @@ we want a fixed 30 fps that the driver's own interval already produces.
 ## Reading the probe on the next session
 
 ```
-arrival ≈ 33.3   swap ≈ 33.3   → correct; 30 fps end to end
-arrival ≈ 33.3   swap ≈ 16.7   → interval 2 did not take; check the Screen property readback line
-arrival ≫ 33.3                 → the phone is not sending 30; not a present-path problem
-swap max ≈ 66                  → a scan was missed; that is when the items below become real
+arrival ≈ 33.3                 → decoded callbacks enter at roughly 30 Hz
+swap small                    → only the swap call is cheap; glFinish etc. are excluded
+arrival ≫ 33.3                 → sender, receive, decode or synchronous present may contribute
+swap max ≈ 66                  → a long swap occurred; inspect surrounding stages/capture
 ```
+
+Neither pair proves end-to-end FPS or a particular active swap interval.
+Measure complete presenter/callback cost and actual capture cadence separately.
 
 ## Deliberately not done
 

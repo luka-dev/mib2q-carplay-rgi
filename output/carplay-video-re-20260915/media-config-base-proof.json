@@ -1,0 +1,8 @@
+{
+  "r4": "0x6eaf38",
+  "configTableBaseR5": "0x6fa1d8",
+  "r4LoadInstruction": "0x213f8c",
+  "r4AddPCInstruction": "0x213f98",
+  "r5OffsetLoadInstruction": "0x214000",
+  "r5AddInstruction": "0x214008"
+}

@@ -1,8 +1,14 @@
 # CarPlay Video — RE of the capability, the wire key, and the in-motion gate
 
+> **Historical note (2026-08-28). Updated RE: [CarPlay Video transport and screen, 2026-09-14](CARPLAY_VIDEO_TRANSPORT_2026_09_14.md).**
+> The update resolves the writer in AirPlaySender, URL playback over a remote-control
+> session using stream type 130, and mainScreen ownership. Sections 2–3 and 6 below
+> preserve the original questions; they are no longer the current status.
+> Presence-only applies to CarKit's UI capability check, not the complete playback contract.
+
 Sources: `carkitd` + **CarKit** and **CoreMedia** extracted from the iOS 27 (24A5418b)
 dyld_shared_cache; **MediaToolbox**; our stock libairplay 210.81 and the 280.33.8 SDK.
-Status: capability chain PROVEN; transport and the in-motion writer NOT proven.
+Historical status: capability chain PROVEN; transport and the in-motion writer were NOT proven.
 
 ## 1. The capability — proven end to end
 

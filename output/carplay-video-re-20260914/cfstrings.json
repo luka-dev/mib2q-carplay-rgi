@@ -1,0 +1,299 @@
+[
+  {
+    "address": "0x275b04920",
+    "raw_pointer": "0x200000d11d77ff",
+    "string_address": "0x2511d77ff",
+    "value": "videoPlaybackInfo"
+  },
+  {
+    "address": "0x275b05b80",
+    "raw_pointer": "0x200000d11dd3f4",
+    "string_address": "0x2511dd3f4",
+    "value": "videoPlaybackAllowed"
+  },
+  {
+    "address": "0x275b04d80",
+    "raw_pointer": "0x200000d11d8d92",
+    "string_address": "0x2511d8d92",
+    "value": "setVideoPlaybackAllowed"
+  },
+  {
+    "address": "0x275b04da0",
+    "raw_pointer": "0x200000d11d8daa",
+    "string_address": "0x2511d8daa",
+    "value": "videoPlayerBackButtonEvent"
+  },
+  {
+    "address": "0x275afa0e0",
+    "raw_pointer": "0x200000d1194c01",
+    "string_address": "0x251194c01",
+    "value": "type"
+  },
+  {
+    "address": "0x275afa0c0",
+    "raw_pointer": "0x200000d1194bfa",
+    "string_address": "0x251194bfa",
+    "value": "params"
+  },
+  {
+    "address": "0x275b050c0",
+    "raw_pointer": "0x200000d11d98f6",
+    "string_address": "0x2511d98f6",
+    "value": "playbackStatus"
+  },
+  {
+    "address": "0x275b050e0",
+    "raw_pointer": "0x200000d11cbffc",
+    "string_address": "0x2511cbffc",
+    "value": "video"
+  },
+  {
+    "address": "0x275b05100",
+    "raw_pointer": "0x200000d11d9976",
+    "string_address": "0x2511d9976",
+    "value": "changeVideoPlaybackToAudioOnly"
+  },
+  {
+    "address": "0x275afc6c0",
+    "raw_pointer": "0x200000d11a478c",
+    "string_address": "0x2511a478c",
+    "value": "clientTypeUUID"
+  },
+  {
+    "address": "0x275afc6a0",
+    "raw_pointer": "0x200000d11a4781",
+    "string_address": "0x2511a4781",
+    "value": "clientUUID"
+  },
+  {
+    "address": "0x275afc800",
+    "raw_pointer": "0x200000d11a54b4",
+    "string_address": "0x2511a54b4",
+    "value": "channelID"
+  },
+  {
+    "address": "0x275afc820",
+    "raw_pointer": "0x200000d11a54be",
+    "string_address": "0x2511a54be",
+    "value": "controlType"
+  },
+  {
+    "address": "0x275afc720",
+    "raw_pointer": "0x200000d11a47b3",
+    "string_address": "0x2511a47b3",
+    "value": "wantsDedicatedSocket"
+  },
+  {
+    "address": "0x275afc840",
+    "raw_pointer": "0x200000d11a54ca",
+    "string_address": "0x2511a54ca",
+    "value": "sendMessageAsIs"
+  },
+  {
+    "address": "0x275b0acc0",
+    "raw_pointer": "0x200000d1208e59",
+    "string_address": "0x251208e59",
+    "value": "Start-Position"
+  },
+  {
+    "address": "0x275b0ace0",
+    "raw_pointer": "0x200000d1208e68",
+    "string_address": "0x251208e68",
+    "value": "https://%@%@"
+  },
+  {
+    "address": "0x275b0ad00",
+    "raw_pointer": "0x200000d1208ea3",
+    "string_address": "0x251208ea3",
+    "value": "Content-Location"
+  },
+  {
+    "address": "0x275b0ad20",
+    "raw_pointer": "0x200000d1208eb4",
+    "string_address": "0x251208eb4",
+    "value": "Offline-HLS-Content-Location"
+  },
+  {
+    "address": "0x275b0ad40",
+    "raw_pointer": "0x200000d1208ef6",
+    "string_address": "0x251208ef6",
+    "value": "insertPlayQueueItem"
+  },
+  {
+    "address": "0x275afc2c0",
+    "raw_pointer": "0x200000d11a3ba2",
+    "string_address": "0x2511a3ba2",
+    "value": "item"
+  },
+  {
+    "address": "0x275b0ad60",
+    "raw_pointer": "0x200000d1208f0a",
+    "string_address": "0x251208f0a",
+    "value": "itemAfter"
+  },
+  {
+    "address": "0x275b0abe0",
+    "raw_pointer": "0x200000d1208c2e",
+    "string_address": "0x251208c2e",
+    "value": "metadata"
+  },
+  {
+    "address": "0x275afc080",
+    "raw_pointer": "0x200000d11a3a22",
+    "string_address": "0x2511a3a22",
+    "value": "IsTLSEnabled"
+  },
+  {
+    "address": "0x275afbec0",
+    "raw_pointer": "0x200000d11a38d9",
+    "string_address": "0x2511a38d9",
+    "value": "EndpointActivationTime"
+  },
+  {
+    "address": "0x275afbf20",
+    "raw_pointer": "0x200000d11a390a",
+    "string_address": "0x2511a390a",
+    "value": "SupportsTLS_PSK"
+  },
+  {
+    "address": "0x275b06340",
+    "raw_pointer": "0x200000d11deabe",
+    "string_address": "0x2511deabe",
+    "value": "supportsOfflineHLS"
+  },
+  {
+    "address": "0x275b005a0",
+    "raw_pointer": "0x200000d11b96fb",
+    "string_address": "0x2511b96fb",
+    "value": "ExternalPlaybackCapabilities"
+  },
+  {
+    "address": "0x275b066c0",
+    "raw_pointer": "0x200000d11e2166",
+    "string_address": "0x2511e2166",
+    "value": "entity"
+  },
+  {
+    "address": "0x275b06700",
+    "raw_pointer": "0x200000d11e2178",
+    "string_address": "0x2511e2178",
+    "value": "resourceID"
+  },
+  {
+    "address": "0x275b06720",
+    "raw_pointer": "0x200000d11e2183",
+    "string_address": "0x2511e2183",
+    "value": "permanentEntity"
+  },
+  {
+    "address": "0x275b06740",
+    "raw_pointer": "0x200000d11e2193",
+    "string_address": "0x2511e2193",
+    "value": "appStates"
+  },
+  {
+    "address": "0x275b06760",
+    "raw_pointer": "0x200000d11e219d",
+    "string_address": "0x2511e219d",
+    "value": "resources"
+  },
+  {
+    "address": "0x27596f870",
+    "raw_pointer": "0x200000cf3f52f9",
+    "string_address": "0x24f3f52f9",
+    "value": "featuresEx",
+    "got": "0x2680ec1c0",
+    "pointer_chain": [
+      "0x269320588",
+      "0x27596f870"
+    ]
+  },
+  {
+    "address": "0x1ea02c5b8",
+    "raw_pointer": "0x2000000efa57bc",
+    "string_address": "0x18efa57bc",
+    "value": "A6B27562-B43A-4F2D-B75F-82391E250194",
+    "got": "0x2680c54c0",
+    "pointer_chain": [
+      "0x1e0a0e768",
+      "0x1ea02c5b8"
+    ]
+  },
+  {
+    "address": "0x1ea02c538",
+    "raw_pointer": "0x2000000efa573e",
+    "string_address": "0x18efa573e",
+    "value": "clientTypeUUID",
+    "got": "0x2680c54d8",
+    "pointer_chain": [
+      "0x1e0a0e748",
+      "0x1ea02c538"
+    ]
+  },
+  {
+    "address": "0x1ea02c6d8",
+    "raw_pointer": "0x2000000efa5909",
+    "string_address": "0x18efa5909",
+    "value": "sessionType",
+    "got": "0x2680c5508",
+    "pointer_chain": [
+      "0x1e0a0e7b8",
+      "0x1ea02c6d8"
+    ]
+  },
+  {
+    "address": "0x1ea033778",
+    "raw_pointer": "0x2000000efb3980",
+    "string_address": "0x18efb3980",
+    "value": "AirPlayVideoPlaybackAudioOnlyMode",
+    "got": "0x2680c50d8",
+    "pointer_chain": [
+      "0x1e0a12108",
+      "0x1ea033778"
+    ]
+  },
+  {
+    "address": "0x1ea0337b8",
+    "raw_pointer": "0x2000000efb39aa",
+    "string_address": "0x18efb39aa",
+    "value": "Forced",
+    "got": "0x2680c48a8",
+    "pointer_chain": [
+      "0x1e0a12120",
+      "0x1ea0337b8"
+    ]
+  },
+  {
+    "address": "0x1ea033798",
+    "raw_pointer": "0x2000000efb39a2",
+    "string_address": "0x18efb39a2",
+    "value": "Elected",
+    "got": "0x2680c48a0",
+    "pointer_chain": [
+      "0x1e0a12118",
+      "0x1ea033798"
+    ]
+  },
+  {
+    "address": "0x1ea031718",
+    "raw_pointer": "0x2000000efad8b7",
+    "string_address": "0x18efad8b7",
+    "value": "None",
+    "got": "0x2680c48b0",
+    "pointer_chain": [
+      "0x1e0a12110",
+      "0x1ea031718"
+    ]
+  },
+  {
+    "address": "0x1ea02c678",
+    "raw_pointer": "0x2000000efa589a",
+    "string_address": "0x18efa589a",
+    "value": "E3DC3EA6-E6C3-4B30-847C-B7ACFEBEA654",
+    "got": "0x2680c54b8",
+    "pointer_chain": [
+      "0x1e0a0e798",
+      "0x1ea02c678"
+    ]
+  }
+]

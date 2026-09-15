@@ -1,0 +1,1073 @@
+[
+  {
+    "key": "mediaSurvey15",
+    "result": {
+      "metadata": {
+        "path": "/Users/luka/Desktop/AUDI_2/Firmwares/HU/MHI2Q_US_AUG22_P5087_MU1316/extracted/app/eso/bin/apps/media.i64",
+        "module": "media",
+        "arch": "32",
+        "base_address": "0x100000",
+        "image_size": "0x611cd0",
+        "md5": "dcd1313cca0ced4200470a29b510f87d",
+        "sha256": "b18cf3cdccd7288b43c609db2f170d5008a3af3aa57dfb642d12fc78c4d02c59"
+      },
+      "statistics": {
+        "total_functions": 22519,
+        "named_functions": 2226,
+        "library_functions": 0,
+        "unnamed_functions": 20293,
+        "total_strings": 26979,
+        "total_segments": 22
+      },
+      "segments": [
+        {
+          "name": "LOAD",
+          "start": "0x100000",
+          "end": "0x15ed84",
+          "size": "0x5ed84",
+          "permissions": "rx"
+        },
+        {
+          "name": ".init",
+          "start": "0x15ed84",
+          "end": "0x15ed8c",
+          "size": "0x8",
+          "permissions": "rx"
+        },
+        {
+          "name": ".plt",
+          "start": "0x15ed8c",
+          "end": "0x16099c",
+          "size": "0x1c10",
+          "permissions": "rx"
+        },
+        {
+          "name": "LOAD",
+          "start": "0x16099c",
+          "end": "0x1609a0",
+          "size": "0x4",
+          "permissions": "rx"
+        },
+        {
+          "name": ".text",
+          "start": "0x1609a0",
+          "end": "0x5dc1bc",
+          "size": "0x47b81c",
+          "permissions": "rx"
+        },
+        {
+          "name": ".fini",
+          "start": "0x5dc1bc",
+          "end": "0x5dc1c4",
+          "size": "0x8",
+          "permissions": "rx"
+        },
+        {
+          "name": "LOAD",
+          "start": "0x5dc1c4",
+          "end": "0x5dc1c8",
+          "size": "0x4",
+          "permissions": "rx"
+        },
+        {
+          "name": ".rodata",
+          "start": "0x5dc1c8",
+          "end": "0x6bc9c0",
+          "size": "0xe07f8",
+          "permissions": "r"
+        },
+        {
+          "name": ".eh_frame",
+          "start": "0x6bc9c0",
+          "end": "0x6bc9c4",
+          "size": "0x4",
+          "permissions": "r"
+        },
+        {
+          "name": ".init_array",
+          "start": "0x6bd000",
+          "end": "0x6bdaac",
+          "size": "0xaac",
+          "permissions": "rw"
+        }
+      ],
+      "entrypoints": [
+        {
+          "addr": "0x6c24f8",
+          "name": "_ZTVN5media44CIOSAbstractionEvent_ExecuteHIDCommandStatusE",
+          "ordinal": 7087352
+        },
+        {
+          "addr": "0x42812c",
+          "name": "_ZN4util9SharedPtrI10CIPtrArrayI7CIArrayIhEENS_20SharedPtrDefaultBaseEE15bool_like_thingEPPPNS_16SharedPtrStorageE",
+          "ordinal": 4358444
+        },
+        {
+          "addr": "0x6f4740",
+          "name": "_ZN5media27CCoverArtServiceJobListener15s_listenerArrayE",
+          "ordinal": 7292736
+        },
+        {
+          "addr": "0x6c48f8",
+          "name": "_ZTVN5media52CImageCacheManagementEvent_ImageCacheUsageIndicationE",
+          "ordinal": 7096568
+        },
+        {
+          "addr": "0x70c284",
+          "name": "__tracing__channel_Media_Sync_Playlist",
+          "ordinal": 7389828
+        },
+        {
+          "addr": "0x6c6480",
+          "name": "_ZTVN5media30ICoverSyncServiceEventListenerE",
+          "ordinal": 7103616
+        },
+        {
+          "addr": "0x391d78",
+          "name": "_ZN4util9SharedPtrI10CIPtrArrayIN3dsi5media18SearchListEntryExtEENS_20SharedPtrDefaultBaseEE12deleteObjectEPvS8_",
+          "ordinal": 3743096
+        },
+        {
+          "addr": "0x6e9300",
+          "name": "_ZTVN9mediabase18CMediaActiveObjectE",
+          "ordinal": 7246592
+        },
+        {
+          "addr": "0x6de530",
+          "name": "_ZTVN5media4upnp23CCacherJob_SetSelectionE",
+          "ordinal": 7202096
+        },
+        {
+          "addr": "0x6c5a90",
+          "name": "_ZTVN5media28CRecorderEvent_RecorderErrorE",
+          "ordinal": 7101072
+        }
+      ],
+      "_note": "Binary has 22519 functions; xref analysis was limited to the first 10000 for performance."
+    }
+  },
+  {
+    "key": "mediaOutput15_0",
+    "result": {
+      "addr": "0x48ab9c",
+      "code": "int sub_48AB9C()\n{\n  int v0; // r0\n  int v1; // r0\n\n  v0 = sub_213C30(362); /*0x48aba4*/\n  sub_48A9DC(CINEMO_OPTION_VIDEO_VIDEO_WINDOW_CLASS, v0); /*0x48abc0*/\n  v1 = sub_213C30(363); /*0x48abc8*/\n  sub_48A9DC(CINEMO_OPTION_VIDEO_VIDEO_WINDOW_ID, v1); /*0x48abdc*/\n  return 1; /*0x48abe4*/\n}",
+      "refs": [
+        {
+          "addr": "0x213c30",
+          "name": "sub_213C30"
+        },
+        {
+          "addr": "0x48a9dc",
+          "name": "sub_48A9DC"
+        },
+        {
+          "addr": "0x7118cc",
+          "name": "CINEMO_OPTION_VIDEO_VIDEO_WINDOW_CLASS"
+        },
+        {
+          "addr": "0x711480",
+          "name": "CINEMO_OPTION_VIDEO_VIDEO_WINDOW_ID"
+        }
+      ]
+    }
+  },
+  {
+    "key": "mediaNext15_1",
+    "result": {
+      "addr": "0x48ca5c",
+      "code": "int __fastcall sub_48CA5C(_BYTE *a1)\n{\n  int v2; // r4\n\n  if ( word_70C444 <= 1 )\n    tracing::Channel::logCV(\n      (tracing::Channel *)&_tracing__channel_Media_Services_Cinemo_Configure,\n      1,\n      \"[CCinemoConfig] %s : \",\n      \"configure\");\n  if ( *a1 ) /*0x48ca80*/\n    goto LABEL_13; /*0x48ca88*/\n  if ( word_70C444 <= 1 )\n    tracing::Channel::logCV(\n      (tracing::Channel *)&_tracing__channel_Media_Services_Cinemo_Configure,\n      1,\n      \"[CCinemoConfig] %s : \",\n      \"configure\");\n  v2 = sub_48AD74(a1); /*0x48caa4*/\n  if ( v2 ) /*0x48caa8*/\n  {\n    v2 = sub_48A340(a1); /*0x48cac4*/\n    if ( v2 ) /*0x48cac8*/\n    {\n      v2 = sub_48A2A8(a1); /*0x48cad4*/\n      if ( v2 ) /*0x48cad8*/\n      {\n        v2 = sub_48AD40(a1); /*0x48cae4*/\n        if ( v2 ) /*0x48cae8*/\n        {\n          sub_48AFE0(a1); /*0x48caf0*/\n          sub_48AD0C(a1); /*0x48caf8*/\n          sub_48ABF4(a1); /*0x48cb00*/\n          sub_48AB9C(); /*0x48cb08*/\n          sub_48AB70(a1); /*0x48cb10*/\n          sub_48C644(a1); /*0x48cb18*/\n          sub_48AB3C(a1); /*0x48cb20*/\n          sub_48B48C(a1); /*0x48cb28*/\n          sub_48BA70(a1); /*0x48cb30*/\n          sub_48B910(a1); /*0x48cb38*/\n          *a1 = 1; /*0x48cb40*/\nLABEL_13:\n          v2 = 1; /*0x48cb44*/\nLABEL_14:\n          sub_48C6E4(a1); /*0x48cb48*/\n          return v2; /*0x48cb4c*/\n        }\n      }\n    }\n  }\n  if ( *a1 ) /*0x48caac*/\n    goto LABEL_14; /*0x48cab4*/\n  return v2; /*0x48cb54*/\n}",
+      "refs": [
+        {
+          "addr": "0x15f8ec",
+          "name": "_ZN7tracing7Channel5logCVEsPKcz"
+        },
+        {
+          "addr": "0x70c40c",
+          "name": "__tracing__channel_Media_Services_Cinemo_Configure"
+        },
+        {
+          "addr": "0x675714",
+          "name": "aCcinemoconfigS_10",
+          "string": "[CCinemoConfig] %s : "
+        },
+        {
+          "addr": "0x675540",
+          "name": "aConfigure",
+          "string": "configure"
+        },
+        {
+          "addr": "0x70c444",
+          "name": "word_70C444"
+        },
+        {
+          "addr": "0x48ad74",
+          "name": "sub_48AD74"
+        },
+        {
+          "addr": "0x48a340",
+          "name": "sub_48A340"
+        },
+        {
+          "addr": "0x48a2a8",
+          "name": "sub_48A2A8"
+        },
+        {
+          "addr": "0x48ad40",
+          "name": "sub_48AD40"
+        },
+        {
+          "addr": "0x48afe0",
+          "name": "sub_48AFE0"
+        },
+        {
+          "addr": "0x48ad0c",
+          "name": "sub_48AD0C"
+        },
+        {
+          "addr": "0x48abf4",
+          "name": "sub_48ABF4"
+        },
+        {
+          "addr": "0x48ab9c",
+          "name": "sub_48AB9C"
+        },
+        {
+          "addr": "0x48ab70",
+          "name": "sub_48AB70"
+        },
+        {
+          "addr": "0x48c644",
+          "name": "sub_48C644"
+        },
+        {
+          "addr": "0x48ab3c",
+          "name": "sub_48AB3C"
+        },
+        {
+          "addr": "0x48b48c",
+          "name": "sub_48B48C"
+        },
+        {
+          "addr": "0x48ba70",
+          "name": "sub_48BA70"
+        },
+        {
+          "addr": "0x48b910",
+          "name": "sub_48B910"
+        },
+        {
+          "addr": "0x48c6e4",
+          "name": "sub_48C6E4"
+        }
+      ]
+    }
+  },
+  {
+    "key": "mediaConfig15_0",
+    "result": {
+      "addr": "0x213c30",
+      "code": "char *__fastcall sub_213C30(int a1)\n{\n  int v1; // r0\n  char *v3; // [sp+4h] [bp-4h] BYREF\n\n  v1 = sub_213880(a1, 3); /*0x213c40*/\n  v3 = \"\"; /*0x213c50*/\n  if ( !v1 ) /*0x213c58*/\n    return \"\"; /*0x213c58*/\n  sub_586FB4(v1 + 16, &v3); /*0x213c68*/\n  return v3; /*0x213c74*/\n}",
+      "refs": [
+        {
+          "addr": "0x213880",
+          "name": "sub_213880"
+        },
+        {
+          "addr": "0x6a4964",
+          "name": "aCfsbrowsercine_9",
+          "string": "[CFsBrowserCinemo] %s : CinemoCreatePlaylist() returned %s \n"
+        },
+        {
+          "addr": "0x586fb4",
+          "name": "sub_586FB4"
+        }
+      ]
+    }
+  },
+  {
+    "key": "mediaConfig15_1",
+    "result": {
+      "addr": "0x48a9dc",
+      "code": "int __fastcall sub_48A9DC(const char *a1, const char *a2)\n{\n  int v4; // r5\n  const char *v5; // r3\n  const char *v6; // r12\n  const char *v8; // r0\n\n  v4 = media::CCinemoConfig::s_instance; /*0x48a9fc*/\n  if ( media::CCinemoConfig::s_instance )\n  {\n    if ( word_70C444 <= 2 )\n    {\n      if ( a1 ) /*0x48aa20*/\n        v5 = a1; /*0x48aa20*/\n      else\n        v5 = \"<NULL>\"; /*0x48ab14*/\n      if ( a2 ) /*0x48aa2c*/\n        v6 = a2; /*0x48aa2c*/\n      else\n        v6 = \"<NULL>\"; /*0x48ab08*/\n      tracing::Channel::logCV(\n        (tracing::Channel *)&_tracing__channel_Media_Services_Cinemo_Configure,\n        2,\n        \"[CCinemoConfig] %s : szid:'%s', szvalue:'%s'\",\n        \"setOption\",\n        v5,\n        v6);\n      v4 = media::CCinemoConfig::s_instance; /*0x48aa5c*/\n    }\n    if ( !(*(int (__fastcall **)(_DWORD, const char *, const char *))(**(_DWORD **)(v4 + 4) + 20))( /*0x48aa78*/\n            *(_DWORD *)(v4 + 4),\n            a1,\n            a2) )\n      return 1; /*0x48aa84*/\n    if ( word_70C444 > 4 ) /*0x48aa94*/\n      return 0; /*0x48aa94*/\n    v8 = (const char *)sub_48E92C(); /*0x48aaa4*/\n    tracing::Channel::logCV(\n      (tracing::Channel *)&_tracing__channel_Media_Services_Cinemo_Configure,\n      4,\n      \"[CCinemoConfig] %s : Failed with error: %s\\n\",\n      \"setOption\",\n      v8);\n    return 0; /*0x48aac8*/\n  }\n  else\n  {\n    if ( word_70C444 > 4 ) /*0x48aae0*/\n      return 0; /*0x48aaa0*/\n    tracing::Channel::logCV(\n      (tracing::Channel *)&_tracing__channel_Media_Services_Cinemo_Configure,\n      4,\n      \"[CCinemoConfig] %s : Config is not initialized!\",\n      \"setOption\");\n    return 0; /*0x48aafc*/\n  }\n}",
+      "refs": [
+        {
+          "addr": "0x70c460",
+          "name": "_ZN5media13CCinemoConfig10s_instanceE"
+        },
+        {
+          "addr": "0x5f12a8",
+          "name": "aNull_1",
+          "string": "<NULL>"
+        },
+        {
+          "addr": "0x15f8ec",
+          "name": "_ZN7tracing7Channel5logCVEsPKcz"
+        },
+        {
+          "addr": "0x70c40c",
+          "name": "__tracing__channel_Media_Services_Cinemo_Configure"
+        },
+        {
+          "addr": "0x67572c",
+          "name": "aCcinemoconfigS_2",
+          "string": "[CCinemoConfig] %s : szid:'%s', szvalue:'%s'"
+        },
+        {
+          "addr": "0x6754ec",
+          "name": "aSetoption",
+          "string": "setOption"
+        },
+        {
+          "addr": "0x70c444",
+          "name": "word_70C444"
+        },
+        {
+          "addr": "0x48e92c",
+          "name": "sub_48E92C"
+        },
+        {
+          "addr": "0x675614",
+          "name": "aCcinemoconfigS_1",
+          "string": "[CCinemoConfig] %s : Failed with error: %s\n"
+        },
+        {
+          "addr": "0x6756c4",
+          "name": "aCcinemoconfigS",
+          "string": "[CCinemoConfig] %s : Config is not initialized!"
+        }
+      ]
+    }
+  },
+  {
+    "key": "mediaConfigRead15_0",
+    "result": {
+      "addr": "0x213880",
+      "code": "int *__fastcall sub_213880(unsigned int a1, int a2)\n{\n  int *v4; // r6\n  osal::MutexOps *v6; // r0\n  int v7; // r1\n  int v8; // r11\n  unsigned int v9; // r8\n  int v10; // r0\n  unsigned int v11; // r3\n  int v12; // r10\n  int v13; // r1\n  int v14; // r0\n  osal::MutexOps *v15; // r0\n  int v16; // r1\n  int v17; // [sp+Ch] [bp-80h]\n  int *v18; // [sp+10h] [bp-7Ch]\n  char v19[104]; // [sp+24h] [bp-68h] BYREF\n\n  if ( a1 >= 0x18C || !media::CMediaComp::s_initialized ) /*0x2138c0*/\n    return nullptr; /*0x2138a0*/\n  v17 = 8 * a1; /*0x2138cc*/\n  v4 = &dword_6FA1D8[8 * a1]; /*0x2138d4*/\n  if ( !*(_BYTE *)v4 ) /*0x2138dc*/\n  {\n    v6 = (osal::MutexOps *)pthread_mutex_lock((pthread_mutex_t *)media::CMediaComp::s_mutexPtr); /*0x2138f8*/\n    if ( v6 ) /*0x213900*/\n      osal::MutexOps::handleLockError(v6, v7); /*0x213aa0*/\n    if ( !LOBYTE(dword_6FA1D8[8 * a1]) && dword_6FA1D8[v17 + 1] && *(_BYTE *)(media::CMediaComp::s_providerPtr + 4) ) /*0x213938*/\n    {\n      v8 = 4 * a1 + 1; /*0x21394c*/\n      v9 = 1; /*0x213950*/\n      v10 = (*(int (__fastcall **)(_DWORD, _DWORD))(**(_DWORD **)(media::CMediaComp::s_providerPtr + 8) + 20))( /*0x21397c*/\n              *(_DWORD *)(media::CMediaComp::s_providerPtr + 8),\n              *(_DWORD *)dword_6FA1D8[2 * v8]);\n      v11 = dword_6FA1D8[v17 + 1]; /*0x213988*/\n      v18 = &dword_6FA1D8[v17 + 1]; /*0x213998*/\n      v12 = v10; /*0x21399c*/\n      while ( v9 < v11 ) /*0x2139a8*/\n      {\n        if ( !(*(int (__fastcall **)(int, _DWORD))(*(_DWORD *)v12 + 28))( /*0x2139c8*/\n                v12,\n                *(_DWORD *)(dword_6FA1D8[2 * v8] + 4 * v9)) )\n        {\n          if ( word_6FD394 <= a2 ) /*0x213a28*/\n          {\n            sub_2137B8(v19, 100, dword_6FA1D8[2 * v8], dword_6FA1D8[v17 + 1]); /*0x213a48*/\n            if ( a2 >= word_6FD394 ) /*0x213a54*/\n              tracing::Channel::logCV( /*0x213a6c*/\n                (tracing::Channel *)&_tracing__channel_Media_Composition_Media_Comp,\n                a2,\n                \"Unable to find key=%s\",\n                v19);\n          }\n          break; /*0x213a6c*/\n        }\n        v13 = *(_DWORD *)(dword_6FA1D8[2 * v8] + 4 * v9++); /*0x2139d8*/\n        v14 = (*(int (__fastcall **)(int, int))(*(_DWORD *)v12 + 20))(v12, v13); /*0x2139e0*/\n        v11 = *v18; /*0x2139e8*/\n        v12 = v14; /*0x2139f0*/\n        if ( v9 == *v18 ) /*0x2139f4*/\n        {\n          if ( (*(int (__fastcall **)(int))(*(_DWORD *)v14 + 100))(v14) ) /*0x213a00*/\n          {\n            BYTE1(dword_6FA1D8[v17]) = 1; /*0x213ab4*/\n            sub_587900(&dword_6FA1D8[8 * a1 + 4], v12); /*0x213abc*/\n          }\n          v11 = *v18; /*0x213a10*/\n        }\n      }\n    }\n    LOBYTE(dword_6FA1D8[8 * a1]) = 1; /*0x213a70*/\n    v15 = (osal::MutexOps *)pthread_mutex_unlock((pthread_mutex_t *)media::CMediaComp::s_mutexPtr); /*0x213a8c*/\n    if ( v15 ) /*0x213a94*/\n      osal::MutexOps::handleUnlockError(v15, v16); /*0x213a98*/\n  }\n  return v4; /*0x2138ac*/\n}",
+      "refs": [
+        {
+          "addr": "0x6fa1d4",
+          "name": "_ZN5media10CMediaComp13s_initializedE"
+        },
+        {
+          "addr": "0x6fa1d8",
+          "name": "dword_6FA1D8"
+        },
+        {
+          "addr": "0x15f340",
+          "name": "pthread_mutex_lock"
+        },
+        {
+          "addr": "0x6fd358",
+          "name": "_ZN5media10CMediaComp10s_mutexPtrE"
+        },
+        {
+          "addr": "0x15f280",
+          "name": "_ZN4osal8MutexOps15handleLockErrorEi"
+        },
+        {
+          "addr": "0x6fa1d0",
+          "name": "_ZN5media10CMediaComp13s_providerPtrE"
+        },
+        {
+          "addr": "0x2137b8",
+          "name": "sub_2137B8"
+        },
+        {
+          "addr": "0x15f8ec",
+          "name": "_ZN7tracing7Channel5logCVEsPKcz"
+        },
+        {
+          "addr": "0x6fd35c",
+          "name": "__tracing__channel_Media_Composition_Media_Comp"
+        },
+        {
+          "addr": "0x5dd5f8",
+          "name": "aUnableToFindKe",
+          "string": "Unable to find key=%s"
+        },
+        {
+          "addr": "0x6fd394",
+          "name": "word_6FD394"
+        },
+        {
+          "addr": "0x587900",
+          "name": "sub_587900"
+        },
+        {
+          "addr": "0x15ee18",
+          "name": "pthread_mutex_unlock"
+        },
+        {
+          "addr": "0x1600e4",
+          "name": "_ZN4osal8MutexOps17handleUnlockErrorEi"
+        }
+      ]
+    }
+  },
+  {
+    "key": "followupTrace0",
+    "result": {
+      "addr": "0x4a9e1c",
+      "code": "int __fastcall sub_4A9E1C(int a1, int a2)\n{\n  int v3; // r7\n  int v5; // r10\n  const char *v6; // r3\n  const char *v7; // r12\n  const char *v8; // r0\n  const char *v9; // r0\n  _BYTE v10[260]; // [sp+Ch] [bp-250h] BYREF\n  int v11; // [sp+110h] [bp-14Ch]\n\n  v3 = *(_DWORD *)(a1 + 4) + 100; /*0x4a9e30*/\n  if ( sub_4A2D40(v3, v10) )\n  {\n    if ( word_70CF90 > 4 ) /*0x4a9e60*/\n      return 0; /*0x4a9e6c*/\n    v8 = (const char *)sub_48E92C(); /*0x4a9efc*/\n    tracing::Channel::logCV(\n      (tracing::Channel *)&_tracing__channel_Media_Services_Cinemo_PlaybackService,\n      4,\n      \"[CCinemoRequestBase] %s : Failed with GetVideoParams as error: %s\",\n      \"changeVideoOutput\",\n      v8);\n    return 0; /*0x4a9f20*/\n  }\n  else\n  {\n    v5 = v11; /*0x4a9e70*/\n    if ( v11 ) /*0x4a9e78*/\n      v5 = 1; /*0x4a9e78*/\n    if ( v5 != a2 && (v11 = a2, sub_4A3010(v3, v10)) )\n    {\n      if ( word_70CF90 > 4 ) /*0x4a9f38*/\n        return 0; /*0x4a9f38*/\n      v9 = (const char *)sub_48E92C(); /*0x4a9f3c*/\n      tracing::Channel::logCV(\n        (tracing::Channel *)&_tracing__channel_Media_Services_Cinemo_PlaybackService,\n        4,\n        \"[CCinemoRequestBase] %s : Failed with SetVideoParams as error: %s\",\n        \"changeVideoOutput\",\n        v9);\n      return 0; /*0x4a9f60*/\n    }\n    else\n    {\n      if ( word_70CF90 <= 2 )\n      {\n        if ( v5 == a2 ) /*0x4a9eb4*/\n          v6 = \"remains as\"; /*0x4a9f6c*/\n        else\n          v6 = \"changed to\"; /*0x4a9ebc*/\n        if ( a2 ) /*0x4a9ec4*/\n          v7 = \"disabled\"; /*0x4a9f78*/\n        else\n          v7 = \"allowed\"; /*0x4a9ecc*/\n        tracing::Channel::logCV(\n          (tracing::Channel *)&_tracing__channel_Media_Services_Cinemo_PlaybackService,\n          2,\n          \"[CCinemoRequestBase] %s : Video output %s %s\",\n          \"changeVideoOutput\",\n          v6,\n          v7);\n      }\n      return 1; /*0x4a9ef4*/\n    }\n  }\n}",
+      "refs": [
+        {
+          "addr": "0x70cf90",
+          "name": "word_70CF90"
+        },
+        {
+          "addr": "0x48e92c",
+          "name": "sub_48E92C"
+        },
+        {
+          "addr": "0x15f8ec",
+          "name": "_ZN7tracing7Channel5logCVEsPKcz"
+        },
+        {
+          "addr": "0x70cf58",
+          "name": "__tracing__channel_Media_Services_Cinemo_PlaybackService"
+        },
+        {
+          "addr": "0x67d450",
+          "name": "aCcinemorequest_24",
+          "string": "[CCinemoRequestBase] %s : Failed with GetVideoParams as error: %s"
+        },
+        {
+          "addr": "0x67c890",
+          "name": "aChangevideoout",
+          "string": "changeVideoOutput"
+        },
+        {
+          "addr": "0x67d494",
+          "name": "aCcinemorequest_25",
+          "string": "[CCinemoRequestBase] %s : Failed with SetVideoParams as error: %s"
+        },
+        {
+          "addr": "0x67d4d8",
+          "name": "aRemainsAs",
+          "string": "remains as"
+        },
+        {
+          "addr": "0x67d4e4",
+          "name": "aChangedTo",
+          "string": "changed to"
+        },
+        {
+          "addr": "0x646638",
+          "name": "aImportFunction",
+          "string": "Import functionality is disabled"
+        },
+        {
+          "addr": "0x5ee030",
+          "name": "aAllowed",
+          "string": "allowed"
+        },
+        {
+          "addr": "0x67d4f0",
+          "name": "aCcinemorequest_23",
+          "string": "[CCinemoRequestBase] %s : Video output %s %s"
+        },
+        {
+          "addr": "0x4a3010",
+          "name": "sub_4A3010"
+        },
+        {
+          "addr": "0x4a2d40",
+          "name": "sub_4A2D40"
+        }
+      ]
+    }
+  },
+  {
+    "key": "mediaControl15_1",
+    "result": {
+      "addr": "0x4a3010",
+      "code": "int __fastcall sub_4A3010(int a1, int a2)\n{\n  if ( sub_4A16A4() )\n  {\n    if ( sub_4A1690(a1) ) /*0x4a3050*/\n      return (*(int (__fastcall **)(_DWORD, int))(**(_DWORD **)(a1 + 8) + 40))(*(_DWORD *)(a1 + 8), a2); /*0x4a3070*/\n    else\n      return (*(int (__fastcall **)(_DWORD, int))(**(_DWORD **)(a1 + 4) + 40))(*(_DWORD *)(a1 + 4), a2); /*0x4a30ac*/\n  }\n  else\n  {\n    if ( word_70CF90 <= 4 )\n      tracing::Channel::logCV(\n        (tracing::Channel *)&_tracing__channel_Media_Services_Cinemo_PlaybackService,\n        4,\n        \"[CCinemoPlaybackSrcAbst] %s : CinemoPlayer not yet initialized\",\n        \"SetVideoParams\");\n    return 1; /*0x4a3044*/\n  }\n}",
+      "refs": [
+        {
+          "addr": "0x4a1690",
+          "name": "sub_4A1690"
+        },
+        {
+          "addr": "0x15f8ec",
+          "name": "_ZN7tracing7Channel5logCVEsPKcz"
+        },
+        {
+          "addr": "0x70cf58",
+          "name": "__tracing__channel_Media_Services_Cinemo_PlaybackService"
+        },
+        {
+          "addr": "0x67aed0",
+          "name": "aCcinemoplaybac",
+          "string": "[CCinemoPlaybackSrcAbst] %s : CinemoPlayer not yet initialized"
+        },
+        {
+          "addr": "0x67ac60",
+          "name": "aSetvideoparams",
+          "string": "SetVideoParams"
+        },
+        {
+          "addr": "0x70cf90",
+          "name": "word_70CF90"
+        },
+        {
+          "addr": "0x4a16a4",
+          "name": "sub_4A16A4"
+        }
+      ]
+    }
+  },
+  {
+    "key": "mediaControl15_2",
+    "result": {
+      "addr": "0x4a2d40",
+      "code": "int __fastcall sub_4A2D40(int a1, int a2)\n{\n  if ( sub_4A16A4() )\n  {\n    if ( sub_4A1690(a1) ) /*0x4a2d80*/\n      return (*(int (__fastcall **)(_DWORD, int))(**(_DWORD **)(a1 + 8) + 44))(*(_DWORD *)(a1 + 8), a2); /*0x4a2da0*/\n    else\n      return (*(int (__fastcall **)(_DWORD, int))(**(_DWORD **)(a1 + 4) + 44))(*(_DWORD *)(a1 + 4), a2); /*0x4a2ddc*/\n  }\n  else\n  {\n    if ( word_70CF90 <= 4 )\n      tracing::Channel::logCV(\n        (tracing::Channel *)&_tracing__channel_Media_Services_Cinemo_PlaybackService,\n        4,\n        \"[CCinemoPlaybackSrcAbst] %s : CinemoPlayer not yet initialized\",\n        \"GetVideoParams\");\n    return 1; /*0x4a2d74*/\n  }\n}",
+      "refs": [
+        {
+          "addr": "0x4a1690",
+          "name": "sub_4A1690"
+        },
+        {
+          "addr": "0x15f8ec",
+          "name": "_ZN7tracing7Channel5logCVEsPKcz"
+        },
+        {
+          "addr": "0x70cf58",
+          "name": "__tracing__channel_Media_Services_Cinemo_PlaybackService"
+        },
+        {
+          "addr": "0x67aed0",
+          "name": "aCcinemoplaybac",
+          "string": "[CCinemoPlaybackSrcAbst] %s : CinemoPlayer not yet initialized"
+        },
+        {
+          "addr": "0x67ab24",
+          "name": "aGetvideoparams",
+          "string": "GetVideoParams"
+        },
+        {
+          "addr": "0x70cf90",
+          "name": "word_70CF90"
+        },
+        {
+          "addr": "0x4a16a4",
+          "name": "sub_4A16A4"
+        }
+      ]
+    }
+  },
+  {
+    "key": "mediaUrl15_1",
+    "result": {
+      "addr": "0x4abbcc",
+      "code": "int __fastcall sub_4ABBCC(int a1)\n{\n  int v1; // r5\n  int v2; // r6\n  int (__fastcall *v3)(int, union $::__pthread_mutex_s::$30DFB618E49C377A3D62C6584A4CBE95 *, _DWORD); // r9\n  osal::MutexOps *v4; // r0\n  int v5; // r1\n  _BOOL4 v6; // r2\n  union $::__pthread_mutex_s::$30DFB618E49C377A3D62C6584A4CBE95 *p_spins; // r10\n  int v8; // r6\n  const char *v10; // r0\n  osal::MutexOps *v11; // r0\n  int v12; // r1\n  _BOOL4 v13; // r2\n  const char *v14; // r6\n  const char *v15; // r0\n  const char *v16; // [sp+8h] [bp-50h] BYREF\n  char v17; // [sp+Eh] [bp-4Ah]\n  const char **v18; // [sp+14h] [bp-44h] BYREF\n  pthread_mutex_t v19; // [sp+28h] [bp-30h] BYREF\n  _BYTE v20[8]; // [sp+50h] [bp-8h] BYREF\n\n  v1 = *(_DWORD *)(a1 + 4); /*0x4abbd0*/\n  if ( (*(int (__fastcall **)(_DWORD))(**(_DWORD **)(v1 + 92) + 64))(*(_DWORD *)(v1 + 92))\n    && (*(int (__fastcall **)(_DWORD))(**(_DWORD **)(v1 + 92) + 116))(*(_DWORD *)(v1 + 92))\n    && word_70CF90 <= 4 )\n  {\n    v10 = (const char *)((int (*)(void))sub_48E92C)(); /*0x4abcfc*/\n    tracing::Channel::logCV(\n      (tracing::Channel *)&_tracing__channel_Media_Services_Cinemo_PlaybackService,\n      4,\n      \"[CCinemoRequestBase] %s : ICinemoPlaylist::RemoveAll returned error : %s\",\n      \"loadTrack\",\n      v10);\n  }\n  v2 = *(_DWORD *)(v1 + 92); /*0x4abc04*/\n  v3 = *(int (__fastcall **)(int, union $::__pthread_mutex_s::$30DFB618E49C377A3D62C6584A4CBE95 *, _DWORD))(*(_DWORD *)v2 + 100); /*0x4abc18*/\n  util::UnicodeString8::utf8((util::UnicodeString8 *)(&v19.__align + 2)); /*0x4abc1c*/\n  v4 = (osal::MutexOps *)pthread_mutex_lock((pthread_mutex_t *)v20); /*0x4abc24*/\n  v6 = !v4 || !osal::MutexOps::handleLockError(v4, v5); /*0x4abcc0*/\n  if ( (v19.__size[14] & 1) != 0 ) /*0x4abc3c*/\n    p_spins = *(union $::__pthread_mutex_s::$30DFB618E49C377A3D62C6584A4CBE95 **)v19.__spins; /*0x4abc44*/\n  else\n    p_spins = (union $::__pthread_mutex_s::$30DFB618E49C377A3D62C6584A4CBE95 *)&v19.__spins; /*0x4abc3c*/\n  if ( v6 && osal::Mutex::unlock((osal::Mutex *)v20) ) /*0x4abc54*/\n    ipl::GlobalErrorHandler::doAssert( /*0x4abdcc*/\n      nullptr,\n      (bool)\"! release_failed\",\n      \"/home/user/workspace/perforce/TiHaffner_mhd2qc_0605u_main/framework/qnx_arm_mmx_sdk/buildtools/cmake/../../include\"\n      \"/common/ScopeGuard.hxx\",\n      (const char *)0x82,\n      (int)\"~ScopeGuard\",\n      nullptr,\n      v16);\n  v8 = v3(v2, p_spins, 0); /*0x4abc70*/\n  sub_223DA0(&v19.__align + 2); /*0x4abc78*/\n  if ( v8 )\n  {\n    if ( word_70CF90 <= 4 )\n    {\n      v15 = (const char *)sub_48E92C(v8); /*0x4abdd8*/\n      tracing::Channel::logCV(\n        (tracing::Channel *)&_tracing__channel_Media_Services_Cinemo_PlaybackService,\n        4,\n        \"[CCinemoRequestBase] %s : ICinemoPlaylist::AppendTrack returned error : %s\",\n        \"loadTrack\",\n        v15);\n    }\n    return 0; /*0x4abc94*/\n  }\n  else if ( word_70CF90 <= 2 )\n  {\n    util::UnicodeString8::utf8((util::UnicodeString8 *)&v16); /*0x4abd30*/\n    v11 = (osal::MutexOps *)pthread_mutex_lock(&v19); /*0x4abd38*/\n    v13 = !v11 || !osal::MutexOps::handleLockError(v11, v12); /*0x4abe08*/\n    if ( (v17 & 1) != 0 ) /*0x4abd50*/\n      v14 = *v18; /*0x4abd58*/\n    else\n      v14 = (const char *)&v18; /*0x4abd50*/\n    if ( v13 && osal::Mutex::unlock((osal::Mutex *)&v19) ) /*0x4abd68*/\n      ipl::GlobalErrorHandler::doAssert( /*0x4abe40*/\n        nullptr,\n        (bool)\"! release_failed\",\n        \"/home/user/workspace/perforce/TiHaffner_mhd2qc_0605u_main/framework/qnx_arm_mmx_sdk/buildtools/cmake/../../inclu\"\n        \"de/common/ScopeGuard.hxx\",\n        (const char *)0x82,\n        (int)\"~ScopeGuard\",\n        nullptr,\n        v16);\n    tracing::Channel::logCV(\n      (tracing::Channel *)&_tracing__channel_Media_Services_Cinemo_PlaybackService,\n      2,\n      \"[CCinemoRequestBase] %s : playback loaded with track: %s\",\n      \"loadTrack\",\n      v14);\n    sub_223DA0(&v16); /*0x4abd98*/\n    return 1; /*0x4abd9c*/\n  }\n  else\n  {\n    return 1; /*0x4abcb0*/\n  }\n}",
+      "refs": [
+        {
+          "addr": "0x48e92c",
+          "name": "sub_48E92C"
+        },
+        {
+          "addr": "0x15f8ec",
+          "name": "_ZN7tracing7Channel5logCVEsPKcz"
+        },
+        {
+          "addr": "0x70cf58",
+          "name": "__tracing__channel_Media_Services_Cinemo_PlaybackService"
+        },
+        {
+          "addr": "0x67d3d4",
+          "name": "aCcinemorequest_22",
+          "string": "[CCinemoRequestBase] %s : ICinemoPlaylist::RemoveAll returned error : %s"
+        },
+        {
+          "addr": "0x67ca2c",
+          "name": "aLoadtrack_0",
+          "string": "loadTrack"
+        },
+        {
+          "addr": "0x70cf90",
+          "name": "word_70CF90"
+        },
+        {
+          "addr": "0x1607bc",
+          "name": "_ZNK4util14UnicodeString84utf8Ev"
+        },
+        {
+          "addr": "0x15f340",
+          "name": "pthread_mutex_lock"
+        },
+        {
+          "addr": "0x15f280",
+          "name": "_ZN4osal8MutexOps15handleLockErrorEi"
+        },
+        {
+          "addr": "0x15fde4",
+          "name": "_ZN3ipl18GlobalErrorHandler8doAssertEbPKcS2_iS2_S2_z"
+        },
+        {
+          "addr": "0x5e725c",
+          "name": "aReleaseFailed",
+          "string": "! release_failed"
+        },
+        {
+          "addr": "0x5e7270",
+          "name": "aHomeUserWorksp_4",
+          "string": "/home/user/workspace/perforce/TiHaffner_mhd2qc_0605u_main/framework/qnx_arm_mmx_sdk/buildtools/cmake/../../include/common/ScopeGuard.hxx"
+        },
+        {
+          "addr": "0x67c868",
+          "name": "aScopeguard_234",
+          "string": "~ScopeGuard"
+        },
+        {
+          "addr": "0x2054f0",
+          "name": "_ZNK4osal5Mutex6unlockEv"
+        },
+        {
+          "addr": "0x223da0",
+          "name": "sub_223DA0"
+        },
+        {
+          "addr": "0x67dc70",
+          "name": "aCcinemorequest_42",
+          "string": "[CCinemoRequestBase] %s : ICinemoPlaylist::AppendTrack returned error : %s"
+        },
+        {
+          "addr": "0x67dcf8",
+          "name": "aCcinemorequest_44",
+          "string": "[CCinemoRequestBase] %s : playback loaded with track: %s"
+        }
+      ]
+    }
+  },
+  {
+    "key": "mediaUrl15_2",
+    "result": {
+      "addr": "0x4aba00",
+      "code": "int __fastcall sub_4ABA00(int a1, int a2, _QWORD *a3)\n{\n  int v3; // r5\n  unsigned int v5; // r0\n  int v7; // r10\n  int (__fastcall *v8)(int, int, _QWORD *); // r5\n  int v9; // r0\n  int v10; // r10\n  const char *v11; // r0\n  const char *v12; // r0\n  _BYTE v13[40]; // [sp+10h] [bp-54h] BYREF\n  _BYTE v14[44]; // [sp+38h] [bp-2Ch] BYREF\n\n  v3 = *(_DWORD *)(a1 + 4); /*0x4aba04*/\n  v5 = (*(int (__fastcall **)(_DWORD))(**(_DWORD **)(v3 + 92) + 64))(*(_DWORD *)(v3 + 92)); /*0x4aba2c*/\n  if ( v5 )\n  {\n    if ( v5 <= 1 )\n    {\n      v7 = *(_DWORD *)(v3 + 92); /*0x4abab4*/\n      v8 = *(int (__fastcall **)(int, int, _QWORD *))(*(_DWORD *)v7 + 100); /*0x4abac8*/\n      util::UnicodeString8::utf8((util::UnicodeString8 *)v14); /*0x4abacc*/\n      v9 = sub_239C14(v14, 0); /*0x4abad8*/\n      v10 = v8(v7, v9, a3); /*0x4abaec*/\n      sub_223DA0(v14); /*0x4abaf4*/\n      if ( v10 )\n      {\n        if ( word_70CF90 > 4 ) /*0x4abb10*/\n          return 0; /*0x4abb10*/\n        v11 = (const char *)sub_48E92C(v10); /*0x4abb18*/\n        tracing::Channel::logCV(\n          (tracing::Channel *)&_tracing__channel_Media_Services_Cinemo_PlaybackService,\n          4,\n          \"[CCinemoRequestBase] %s : ICinemoPlaylist::AppendTrack returned error : %s\",\n          \"enqueueTrack\",\n          v11);\n        return 0; /*0x4abb3c*/\n      }\n      else\n      {\n        if ( word_70CF90 <= 2 )\n        {\n          util::UnicodeString8::utf8((util::UnicodeString8 *)v13); /*0x4abb68*/\n          v12 = (const char *)sub_239C14(v13, 0); /*0x4abb74*/\n          tracing::Channel::logCV(\n            (tracing::Channel *)&_tracing__channel_Media_Services_Cinemo_PlaybackService,\n            2,\n            \"[CCinemoRequestBase] %s : track %s is enqueued (id=%llu)\",\n            \"enqueueTrack\",\n            v12,\n            *a3);\n          sub_223DA0(v13); /*0x4abba4*/\n        }\n        return 1; /*0x4abb54*/\n      }\n    }\n    else\n    {\n      if ( word_70CF90 > 4 ) /*0x4aba70*/\n        return 0; /*0x4aba70*/\n      tracing::Channel::logCV(\n        (tracing::Channel *)&_tracing__channel_Media_Services_Cinemo_PlaybackService,\n        4,\n        \"[CCinemoRequestBase] %s : too many tracks enqueued!\",\n        \"enqueueTrack\");\n      return 0; /*0x4aba8c*/\n    }\n  }\n  else\n  {\n    if ( word_70CF90 > 4 ) /*0x4aba48*/\n      return 0; /*0x4aba54*/\n    tracing::Channel::logCV(\n      (tracing::Channel *)&_tracing__channel_Media_Services_Cinemo_PlaybackService,\n      4,\n      \"[CCinemoRequestBase] %s : no track playing!\",\n      \"enqueueTrack\");\n    return 0; /*0x4abaac*/\n  }\n}",
+      "refs": [
+        {
+          "addr": "0x1607bc",
+          "name": "_ZNK4util14UnicodeString84utf8Ev"
+        },
+        {
+          "addr": "0x239c14",
+          "name": "sub_239C14"
+        },
+        {
+          "addr": "0x223da0",
+          "name": "sub_223DA0"
+        },
+        {
+          "addr": "0x70cf90",
+          "name": "word_70CF90"
+        },
+        {
+          "addr": "0x48e92c",
+          "name": "sub_48E92C"
+        },
+        {
+          "addr": "0x15f8ec",
+          "name": "_ZN7tracing7Channel5logCVEsPKcz"
+        },
+        {
+          "addr": "0x70cf58",
+          "name": "__tracing__channel_Media_Services_Cinemo_PlaybackService"
+        },
+        {
+          "addr": "0x67dc70",
+          "name": "aCcinemorequest_42",
+          "string": "[CCinemoRequestBase] %s : ICinemoPlaylist::AppendTrack returned error : %s"
+        },
+        {
+          "addr": "0x67c9e0",
+          "name": "aEnqueuetrack_0",
+          "string": "enqueueTrack"
+        },
+        {
+          "addr": "0x67dcbc",
+          "name": "aCcinemorequest_43",
+          "string": "[CCinemoRequestBase] %s : track %s is enqueued (id=%llu)"
+        },
+        {
+          "addr": "0x67dc3c",
+          "name": "aCcinemorequest_40",
+          "string": "[CCinemoRequestBase] %s : too many tracks enqueued!"
+        },
+        {
+          "addr": "0x67dc10",
+          "name": "aCcinemorequest_41",
+          "string": "[CCinemoRequestBase] %s : no track playing!"
+        }
+      ]
+    }
+  },
+  {
+    "key": "mediaUrl15_3",
+    "result": {
+      "addr": "0x4aad74",
+      "code": "int __fastcall sub_4AAD74(int a1)\n{\n  int v1; // r0\n  int v3; // r0\n\n  v1 = sub_4A2BD0(*(_DWORD *)(a1 + 4) + 100); /*0x4aad88*/\n  if ( v1 )\n  {\n    if ( word_70CF90 <= 4 )\n    {\n      v3 = sub_48E92C(v1); /*0x4aadf0*/\n      tracing::Channel::logCV(\n        (tracing::Channel *)&_tracing__channel_Media_Services_Cinemo_PlaybackService,\n        4,\n        \"[CCinemoRequestBase] %s : ICinemoPlayer::PlayTrack returned error : %s\",\n        \"playTrack\",\n        v3);\n    }\n    return 0; /*0x4aadac*/\n  }\n  else\n  {\n    if ( word_70CF90 <= 2 )\n      tracing::Channel::logCV(\n        (tracing::Channel *)&_tracing__channel_Media_Services_Cinemo_PlaybackService,\n        2,\n        \"[CCinemoRequestBase] %s : command requested\",\n        \"playTrack\");\n    return 1; /*0x4aadc8*/\n  }\n}",
+      "refs": [
+        {
+          "addr": "0x4a2bd0",
+          "name": "sub_4A2BD0"
+        },
+        {
+          "addr": "0x48e92c",
+          "name": "sub_48E92C"
+        },
+        {
+          "addr": "0x15f8ec",
+          "name": "_ZN7tracing7Channel5logCVEsPKcz"
+        },
+        {
+          "addr": "0x70cf58",
+          "name": "__tracing__channel_Media_Services_Cinemo_PlaybackService"
+        },
+        {
+          "addr": "0x67da04",
+          "name": "aCcinemorequest_38",
+          "string": "[CCinemoRequestBase] %s : ICinemoPlayer::PlayTrack returned error : %s"
+        },
+        {
+          "addr": "0x67c9c0",
+          "name": "aPlaytrack_2",
+          "string": "playTrack"
+        },
+        {
+          "addr": "0x70cf90",
+          "name": "word_70CF90"
+        },
+        {
+          "addr": "0x67d74c",
+          "name": "aCcinemorequest_6",
+          "string": "[CCinemoRequestBase] %s : command requested"
+        }
+      ]
+    }
+  },
+  {
+    "key": "mediaUrlXrefs15",
+    "result": {
+      "result": [
+        {
+          "addr": "0x4abbcc",
+          "xrefs": [],
+          "more": false,
+          "xref_count": 0,
+          "message": "No cross-references to this address"
+        },
+        {
+          "addr": "0x4aba00",
+          "xrefs": [],
+          "more": false,
+          "xref_count": 0,
+          "message": "No cross-references to this address"
+        },
+        {
+          "addr": "0x4aad74",
+          "xrefs": [],
+          "more": false,
+          "xref_count": 0,
+          "message": "No cross-references to this address"
+        },
+        {
+          "addr": "0x4a3010",
+          "xrefs": [
+            {
+              "addr": "0x4a56b0",
+              "type": "code",
+              "fn": {
+                "addr": "0x4a5608",
+                "name": "sub_4A5608",
+                "size": "0x16c"
+              }
+            },
+            {
+              "addr": "0x4a9e90",
+              "type": "code",
+              "fn": {
+                "addr": "0x4a9e1c",
+                "name": "sub_4A9E1C",
+                "size": "0x164"
+              }
+            },
+            {
+              "addr": "0x4aa08c",
+              "type": "code",
+              "fn": {
+                "addr": "0x4a9fa8",
+                "name": "sub_4A9FA8",
+                "size": "0x20c"
+              }
+            },
+            {
+              "addr": "0x4c0680",
+              "type": "code",
+              "fn": {
+                "addr": "0x4c0604",
+                "name": "sub_4C0604",
+                "size": "0x17c"
+              }
+            },
+            {
+              "addr": "0x4c0718",
+              "type": "code",
+              "fn": {
+                "addr": "0x4c0604",
+                "name": "sub_4C0604",
+                "size": "0x17c"
+              }
+            },
+            {
+              "addr": "0x4c0738",
+              "type": "code",
+              "fn": {
+                "addr": "0x4c0604",
+                "name": "sub_4C0604",
+                "size": "0x17c"
+              }
+            }
+          ],
+          "more": false,
+          "xref_count": 6
+        }
+      ]
+    }
+  },
+  {
+    "key": "urlPolicyDeep15_0",
+    "result": {
+      "addr": "0x32d030",
+      "code": "void __fastcall sub_32D030(_QWORD *a1, _DWORD *a2)\n{\n  int v4; // r7\n  int v5; // r0\n  int v6; // r0\n  const char *v7; // r10\n  osal::MutexOps *v8; // r0\n  int v9; // r1\n  _BOOL4 v10; // r2\n  const char *v11; // r9\n  void (__fastcall *v12)(_QWORD *, int, _BYTE *, int); // r8\n  const char *v13; // [sp+8h] [bp-60h]\n  _BYTE v14[40]; // [sp+Ch] [bp-5Ch] BYREF\n  _BYTE v15[12]; // [sp+34h] [bp-34h] BYREF\n  const char **v16; // [sp+40h] [bp-28h] BYREF\n  _BYTE v17[8]; // [sp+54h] [bp-14h] BYREF\n  _BYTE v18[12]; // [sp+5Ch] [bp-Ch] BYREF\n\n  if ( word_7051A0 <= 2 )\n  {\n    v6 = ((int (*)(void))sub_5BD858)(); /*0x32d08c*/\n    v7 = (const char *)sub_32D244(v6); /*0x32d09c*/\n    if ( *a2 && a2[1] && nullsub_13 )\n    {\n      util::UnicodeString8::utf8((util::UnicodeString8 *)v15); /*0x32d0c8*/\n      v8 = (osal::MutexOps *)pthread_mutex_lock((pthread_mutex_t *)v17); /*0x32d0d0*/\n      v10 = !v8 || !osal::MutexOps::handleLockError(v8, v9); /*0x32d1b4*/\n      if ( (v15[6] & 1) != 0 ) /*0x32d0e8*/\n        v11 = *v16; /*0x32d0f0*/\n      else\n        v11 = (const char *)&v16; /*0x32d0e8*/\n      if ( v10 ) /*0x32d0f8*/\n      {\n        if ( osal::Mutex::unlock((osal::Mutex *)v17) ) /*0x32d100*/\n          ipl::GlobalErrorHandler::doAssert( /*0x32d214*/\n            nullptr,\n            (bool)\"! release_failed\",\n            \"/home/user/workspace/perforce/TiHaffner_mhd2qc_0605u_main/framework/qnx_arm_mmx_sdk/buildtools/cmake/../../i\"\n            \"nclude/common/ScopeGuard.hxx\",\n            (const char *)0x82,\n            (int)\"~ScopeGuard\",\n            nullptr,\n            v13);\n      }\n      tracing::Channel::logCV(\n        (tracing::Channel *)&_tracing__channel_Media_Source_General_Player,\n        2,\n        \"[DSIMediaPlayerImpl] %s : %s url=%s\",\n        \"setPlaybackURL\",\n        v7,\n        v11);\n      sub_223DA0(v15); /*0x32d134*/\n      v4 = sub_32ABE8(a1); /*0x32d140*/\n      if ( v4 ) /*0x32d144*/\n        goto LABEL_3; /*0x32d144*/\n      goto LABEL_16; /*0x32d144*/\n    }\n    tracing::Channel::logCV(\n      (tracing::Channel *)&_tracing__channel_Media_Source_General_Player,\n      2,\n      \"[DSIMediaPlayerImpl] %s : %s url=%s\",\n      \"setPlaybackURL\",\n      v7,\n      \"NULL\");\n  }\n  v4 = sub_32ABE8(a1); /*0x32d064*/\n  if ( v4 ) /*0x32d068*/\n  {\nLABEL_3:\n    v5 = sub_5BD858(a1); /*0x32d06c*/\n    sub_32799C(v4, v5, a2); /*0x32d080*/\n    return; /*0x32d088*/\n  }\nLABEL_16:\n  v12 = *(void (__fastcall **)(_QWORD *, int, _BYTE *, int))(*(_DWORD *)a1 + 400); /*0x32d148*/\n  StringTools::create((StringTools *)v14, \"sourcePtr=NULL for devideID=%lld, mediaID=%lld\", a1[45], a1[46]); /*0x32d174*/\n  CITypesFactory::createString((CITypesFactory *)v18, (const util::UnicodeString8 *)v14); /*0x32d180*/\n  v12(a1, 8303, v18, 23); /*0x32d194*/\n  util::SharedPtrDefaultBase::~SharedPtrDefaultBase((util::SharedPtrDefaultBase *)v18); /*0x32d19c*/\n  util::UnicodeString8::~UnicodeString8((util::UnicodeString8 *)v14); /*0x32d1a4*/\n}",
+      "refs": [
+        {
+          "addr": "0x5bd858",
+          "name": "sub_5BD858"
+        },
+        {
+          "addr": "0x32d244",
+          "name": "sub_32D244"
+        },
+        {
+          "addr": "0x1607bc",
+          "name": "_ZNK4util14UnicodeString84utf8Ev"
+        },
+        {
+          "addr": "0x15f340",
+          "name": "pthread_mutex_lock"
+        },
+        {
+          "addr": "0x15f280",
+          "name": "_ZN4osal8MutexOps15handleLockErrorEi"
+        },
+        {
+          "addr": "0x15fde4",
+          "name": "_ZN3ipl18GlobalErrorHandler8doAssertEbPKcS2_iS2_S2_z"
+        },
+        {
+          "addr": "0x5e725c",
+          "name": "aReleaseFailed",
+          "string": "! release_failed"
+        },
+        {
+          "addr": "0x5e7270",
+          "name": "aHomeUserWorksp_4",
+          "string": "/home/user/workspace/perforce/TiHaffner_mhd2qc_0605u_main/framework/qnx_arm_mmx_sdk/buildtools/cmake/../../include/common/ScopeGuard.hxx"
+        },
+        {
+          "addr": "0x6252d4",
+          "name": "aScopeguard_192",
+          "string": "~ScopeGuard"
+        },
+        {
+          "addr": "0x2054f0",
+          "name": "_ZNK4osal5Mutex6unlockEv"
+        },
+        {
+          "addr": "0x15f8ec",
+          "name": "_ZN7tracing7Channel5logCVEsPKcz"
+        },
+        {
+          "addr": "0x705168",
+          "name": "__tracing__channel_Media_Source_General_Player"
+        },
+        {
+          "addr": "0x62654c",
+          "name": "aDsimediaplayer_59",
+          "string": "[DSIMediaPlayerImpl] %s : %s url=%s"
+        },
+        {
+          "addr": "0x6252b0",
+          "name": "aSetplaybackurl_3",
+          "string": "setPlaybackURL"
+        },
+        {
+          "addr": "0x223da0",
+          "name": "sub_223DA0"
+        },
+        {
+          "addr": "0x32abe8",
+          "name": "sub_32ABE8"
+        },
+        {
+          "addr": "0x223258",
+          "name": "nullsub_13"
+        },
+        {
+          "addr": "0x642a7c",
+          "name": "aANullBNull",
+          "string": "a_ != NULL && b_ != NULL"
+        },
+        {
+          "addr": "0x7051a0",
+          "name": "word_7051A0"
+        },
+        {
+          "addr": "0x32799c",
+          "name": "sub_32799C"
+        },
+        {
+          "addr": "0x56f2b8",
+          "name": "_ZN11StringTools6createEPKcz"
+        },
+        {
+          "addr": "0x6261b4",
+          "name": "aSourceptrNullF",
+          "string": "sourcePtr=NULL for devideID=%lld, mediaID=%lld"
+        },
+        {
+          "addr": "0x15f7f0",
+          "name": "_ZN14CITypesFactory12createStringERKN4util14UnicodeString8E"
+        },
+        {
+          "addr": "0x15f700",
+          "name": "_ZN4util20SharedPtrDefaultBaseD2Ev"
+        },
+        {
+          "addr": "0x1604f8",
+          "name": "_ZN4util14UnicodeString8D1Ev"
+        }
+      ]
+    }
+  },
+  {
+    "key": "filePlayerBridge15_1",
+    "result": {
+      "addr": "0x32799c",
+      "code": "int __fastcall sub_32799C(int a1, int a2, int a3)\n{\n  int v6; // r6\n\n  v6 = sub_581C84(&media::CPlayerEventRequest::s_eventPool, 3); /*0x3279c8*/\n  util::SharedPtrDefaultBase::operator=(v6 + 16, a3); /*0x3279d0*/\n  return sub_3274F8(a1, a2, 23, v6);\n}",
+      "refs": [
+        {
+          "addr": "0x581c84",
+          "name": "sub_581C84"
+        },
+        {
+          "addr": "0x705308",
+          "name": "_ZN5media19CPlayerEventRequest11s_eventPoolE"
+        },
+        {
+          "addr": "0x15f97c",
+          "name": "_ZN4util20SharedPtrDefaultBaseaSERKS0_"
+        },
+        {
+          "addr": "0x3274f8",
+          "name": "sub_3274F8"
+        }
+      ]
+    }
+  },
+  {
+    "key": "filePlayerBridge15_2",
+    "result": {
+      "addr": "0x32abe8",
+      "code": "int __fastcall sub_32ABE8(int a1, int a2)\n{\n  int result; // r0\n  int v4; // r0\n  const char *v5; // r9\n  osal::MutexOps *v6; // r0\n  int v7; // r1\n  _BOOL4 v8; // r3\n  const char *v9; // r5\n  const char *v10; // [sp+8h] [bp-50h] BYREF\n  char v11; // [sp+Eh] [bp-4Ah]\n  const char **v12; // [sp+14h] [bp-44h] BYREF\n  pthread_mutex_t v13[2]; // [sp+28h] [bp-30h] BYREF\n\n  result = sub_438848(*(_DWORD *)(a1 + 376), a2, *(_DWORD *)(a1 + 360), *(_DWORD *)(a1 + 364), *(double *)(a1 + 368)); /*0x32ac08*/\n  if ( result ) /*0x32ac18*/\n    return *(_DWORD *)(result + 40); /*0x32ac18*/\n  if ( word_7051A0 <= 3 )\n  {\n    v4 = sub_5BD858(a1); /*0x32ac48*/\n    v5 = (const char *)sub_32D244(v4); /*0x32ac6c*/\n    StringTools::create( /*0x32ac74*/\n      (StringTools *)(&v13[0].__align + 2),\n      \"sourcePtr=NULL for devideID=%lld, mediaID=%lld\",\n      *(_QWORD *)(a1 + 360),\n      *(_QWORD *)(a1 + 368));\n    util::UnicodeString8::utf8((util::UnicodeString8 *)&v10); /*0x32ac80*/\n    v6 = (osal::MutexOps *)pthread_mutex_lock(v13); /*0x32ac88*/\n    v8 = !v6 || !osal::MutexOps::handleLockError(v6, v7); /*0x32ad38*/\n    if ( (v11 & 1) != 0 ) /*0x32aca0*/\n      v9 = *v12; /*0x32aca8*/\n    else\n      v9 = (const char *)&v12; /*0x32aca0*/\n    if ( v8 ) /*0x32acb0*/\n    {\n      if ( osal::Mutex::unlock((osal::Mutex *)v13) ) /*0x32acb8*/\n        ipl::GlobalErrorHandler::doAssert( /*0x32acf0*/\n          nullptr,\n          (bool)\"! release_failed\",\n          \"/home/user/workspace/perforce/TiHaffner_mhd2qc_0605u_main/framework/qnx_arm_mmx_sdk/buildtools/cmake/../../inc\"\n          \"lude/common/ScopeGuard.hxx\",\n          (const char *)0x82,\n          (int)\"~ScopeGuard\",\n          nullptr,\n          v10);\n    }\n    tracing::Channel::logCV(\n      (tracing::Channel *)&_tracing__channel_Media_Source_General_Player,\n      3,\n      \"[DSIMediaPlayerImpl] %s : %s %s\",\n      \"getPlayer\",\n      v5,\n      v9);\n    sub_223DA0(&v10); /*0x32ad1c*/\n    util::UnicodeString8::~UnicodeString8((util::UnicodeString8 *)(&v13[0].__align + 2)); /*0x32ad24*/\n    return 0; /*0x32ad28*/\n  }\n  return result; /*0x32ac24*/\n}",
+      "refs": [
+        {
+          "addr": "0x438848",
+          "name": "sub_438848"
+        },
+        {
+          "addr": "0x5bd858",
+          "name": "sub_5BD858"
+        },
+        {
+          "addr": "0x32d244",
+          "name": "sub_32D244"
+        },
+        {
+          "addr": "0x56f2b8",
+          "name": "_ZN11StringTools6createEPKcz"
+        },
+        {
+          "addr": "0x6261b4",
+          "name": "aSourceptrNullF",
+          "string": "sourcePtr=NULL for devideID=%lld, mediaID=%lld"
+        },
+        {
+          "addr": "0x1607bc",
+          "name": "_ZNK4util14UnicodeString84utf8Ev"
+        },
+        {
+          "addr": "0x15f340",
+          "name": "pthread_mutex_lock"
+        },
+        {
+          "addr": "0x15f280",
+          "name": "_ZN4osal8MutexOps15handleLockErrorEi"
+        },
+        {
+          "addr": "0x15fde4",
+          "name": "_ZN3ipl18GlobalErrorHandler8doAssertEbPKcS2_iS2_S2_z"
+        },
+        {
+          "addr": "0x5e725c",
+          "name": "aReleaseFailed",
+          "string": "! release_failed"
+        },
+        {
+          "addr": "0x5e7270",
+          "name": "aHomeUserWorksp_4",
+          "string": "/home/user/workspace/perforce/TiHaffner_mhd2qc_0605u_main/framework/qnx_arm_mmx_sdk/buildtools/cmake/../../include/common/ScopeGuard.hxx"
+        },
+        {
+          "addr": "0x6252d4",
+          "name": "aScopeguard_192",
+          "string": "~ScopeGuard"
+        },
+        {
+          "addr": "0x2054f0",
+          "name": "_ZNK4osal5Mutex6unlockEv"
+        },
+        {
+          "addr": "0x15f8ec",
+          "name": "_ZN7tracing7Channel5logCVEsPKcz"
+        },
+        {
+          "addr": "0x705168",
+          "name": "__tracing__channel_Media_Source_General_Player"
+        },
+        {
+          "addr": "0x6261e4",
+          "name": "aDsimediaplayer_43",
+          "string": "[DSIMediaPlayerImpl] %s : %s %s"
+        },
+        {
+          "addr": "0x62527c",
+          "name": "aGetplayer",
+          "string": "getPlayer"
+        },
+        {
+          "addr": "0x223da0",
+          "name": "sub_223DA0"
+        },
+        {
+          "addr": "0x1604f8",
+          "name": "_ZN4util14UnicodeString8D1Ev"
+        },
+        {
+          "addr": "0x7051a0",
+          "name": "word_7051A0"
+        }
+      ]
+    }
+  }
+]

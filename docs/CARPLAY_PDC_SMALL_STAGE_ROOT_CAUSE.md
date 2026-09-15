@@ -4,11 +4,66 @@
 Платформа: Audi MHI2Q, MU1316  
 Исходники для анализа: `/Users/luka/Desktop/AUDI_2/Tools/jxe2jar/out/MU1316-combined-vf`
 
-Текущий статус, 2026-09-14: **исправлен пропущенный путь через `PARKING_SYSTEM_ACTIVATED (108)`, собран и проверен локально; на HU пока не выгружен**. Пользователь подтвердил симптом: при появлении бокового PDC CarPlay уходит в Main Wizard. Этот же сбой воспроизведён host-тестом со штатным MU1316 tracker; с новым tracker тест проходит. SSH к `100.127.17.86` завершился по таймауту, поэтому подтверждения на автомобиле ещё нет.
+Текущий статус, 2026-09-15: **пользователь повторно сообщил, что установленное исправление не помогло: CarPlay скрылся. Проблема на автомобиле остаётся открытой.** Локально исправлена классификация пассивного PLA и проверена полная активация штатного контроллера; также исправлена изоляция popup callbacks. По журналу выгрузок JAR `6d057db-production` был установлен 2026-09-14, а кандидат `6d057db-pdc-pla1` от 15 сентября не устанавливался. Отдельную ручную замену JAR пользователь пока не подтвердил. В сохранённом production-логе нет INFO-событий PDC, поэтому точная последовательность последнего эпизода на автомобиле не записана. Новых подключений к HU в ходе этого аудита не было.
+
+## Дополнительная проверка штатной цепочки, 2026-09-15
+
+`PdcResourcePolicyTest.stockActivationLifecycle` исполняет настоящий приватный
+`AbstractParkingSystemControllerComponent.activateParkingSystem`, replacement
+override, штатные `OPS.setActive`, `OPSViewModeHandler`, `notifyParkingSystemActive`,
+рассылку 108, добавление popup request и `PLAPopinHandler` в idle-состоянии.
+Физические сервисы/HMI и отрисовка сообщений PLA заменены тестовыми границами;
+решение о парковочном состоянии и порядок событий не подменяются. Начальный
+OPS и обновления `4 -> 1 -> 7 -> 17 -> 1` сохраняют SCREEN и не переключают Main Wizard.
+Это расширяет прежний тест, который собирал настоящий список компонентов,
+но затем вручную вызывал guard и tracker.
+
+Найден ещё один независимый дефект в унаследованном `ParkingPartialPopupHandler`:
+любой `partialPopupHidden`, включая registration snapshot, отменял текущий
+видимый popup без сравнения его ID и терминала. Теперь visible/hidden принимаются
+только для main terminal; отмена контроллера выполняется лишь при совпадении
+`visiblePPID`. Начальный hidden snapshot до показа по-прежнему не отменяет
+in-flight guard. Новый regression test воспроизводит ошибку до исправления и
+проверяет, что настоящий matching hidden освобождает guard и отменяет OPS.
+Наличие такого несоответствующего callback в последнем эпизоде HU **не доказано**.
+
+Граница выводов: `AbstractScreenWidget.setSmallStageType` только меняет поле.
+Само значение `6` не доказывает видимость native plane. Тесты проверяют Java
+SCREEN restriction, Main Wizard choice и запрос popup; они не исполняют GPU,
+MMI compositor, реальный root-window переход и задержанную доставку AP 1002.
+Если новый JAR снова не поможет, сначала нужны build ID и trace вокруг запроса:
+DSI popup/mode + список компонентов, решение по 108, SMALL_STAGE/AP 1002,
+`HMIDeactivated`, current screen и фактический display context. По ним можно
+отличить Java takeover от скрытия native plane. Расширять исключение на все
+108, игнорировать HOME или запрещать fullscreen VPS/PLA оснований нет.
 
 Исторический статус на 2026-09-02: было записано подтверждение на автомобиле. Первая реализация на машине не сработала — при появлении правого OPS popup CarPlay всё равно закрывался. Вторая реализация закрывает дополнительные пути `SMALL_STAGE_OMISSION` и AP `1002`; после выкладки jar и перезагрузки сообщалось о сохранении проекции под правым OPS popup. Это не подтверждает все варианты активации парковочной системы.
 
 Подтверждение — наблюдение на автомобиле, а не строка лога: маркер `/mnt/app/carplay_verbose` в тот момент был снят (его убирали при отладке звука), поэтому `Log.i` из `OPS guard` не писался. Маркер возвращён.
+
+## Исправление 2026-09-15: участник списка не обязательно активная автопарковка
+
+Условие предыдущей версии `systems.size() == 1` было неверным. Stock `AbstractParkingSystemPLAComponent.getSupportedDSIPopupIDs()` включает обычные OPS popup `1`, `4`, `7`, `17`. Контроллер добавляет PLA в `parkingSystemsForPopup`, а `getInvolvedParkingSystems()` возвращает его вместе с OPS, с PLA в конце списка. `EarlyFuncEvoApplication` создаёт PLA-компонент вместе с OPS/VPS при наличии parking-компонента. Следовательно, обычный боковой OPS может иметь список **`[OPS=2, PLA=16]`**, даже когда автопарковка выключена.
+
+`AbstractParkingSystemPLAComponent.setActive(true, content)` лишь передаёт содержимое в `popinHandler.updateVpsOpsPopup()`. Фактическое состояние автопарковки читается через `isSystemActive()` и обновляется из `PDCPLAStatus.mode`. Пассивное присутствие PLA в списке нельзя приравнивать к захвату экрана автопарковкой.
+
+Новая классификация:
+
+- Допускаются только DSI `POPUP_OPS (1)`, `OPSAUTOACTIVATION (4)`, `OPSFLANKGUARD (7)`, `OPSOFFROAD (17)` и ровно один OPS с partial popup `2100008`.
+- Допускается один дополнительный настоящий `AbstractParkingSystemPLAComponent`, только если `isSystemActive() == false`.
+- Камера/VPS, ARA, явный `OPSFLANKGUARDPLA (15)`, неизвестные/неполные combined-запросы и trailer-assist mode `12` сохраняют stock takeover. Popup проверяется отдельно от списка: отсутствующий компонент не превращает VPS/ARA-запрос в обычный OPS.
+- При проверках guard заново читается состояние PLA: оно может измениться без нового `DisplayContent`. Существующий перехват `notifyParkingSystemActive(nonOPS, true)` также отзывает защиту перед `108`.
+- Проверки текущего CarPlay screen, HOME, отключения, eCall/clamp-S, скрытия popup и таймаута остаются прежними.
+
+`PdcResourcePolicyTest` теперь использует настоящие MU1316 OPS/PLA/VPS popup-таблицы, `getInvolvedParkingSystems()` и `PLA.setActive()`; подменяется запуск native сервисов. Прежний искусственный pure-OPS fixture использовал popup `3`, который на деле означает `VPSOPS`; он исправлен на `1`.
+
+Тот же новый сценарий запущен против **точного ранее установленного JAR** из `carplay-production-6d057db-20260914-alt1/bin/carplay_hook.jar`: воспроизводится `stock OPS + passive PLA toggled Main Wizard, popup=1`. После исправления сценарий проходит. Старый negative control со штатным tracker также по-прежнему воспроизводит takeover.
+
+Runtime-тесты используют `MU1316-combined.jar`. `MU1316-final.jar` — результат преобразований для декомпиляции: его `NotifyOnAddProperty$2` падает на host с `IllegalAccessError` при обращении к private `sinks`. Это не ошибка shipping JAR; проверка linkage отдельно выполняется против обоих stock JAR с настоящей J9 class library.
+
+Кандидат: `build/releases/carplay-production-6d057db-20260915-pdc1/bin/carplay_hook.jar`, build ID `6d057db-pdc-pla1`. Native-компоненты в комплекте сохраняют уже выгруженный altScreen hotfix `alt1`; для текущего HU достаточно заменить JAR и перезагрузить HMI/HU. При следующей установке создать `/mnt/app/carplay_verbose` **до перезапуска Java**: текущий `Log` считывает маркер только при инициализации, несмотря на устаревший комментарий про переключение без перезагрузки.
+
+Новые INFO-строки содержат `parking intent popup=4 ... systems=2,16(idle) standaloneOPS=true` и решение `OPS 108: keep CarPlay SCREEN; no Main Wizard takeover` либо `parking 108: stock SCREEN/Main Wizard takeover`. На HU проверить боковой OPS, HOME при открытом OPS, закрытие OPS, полную камеру и активную PLA. До этого не считать проблему подтверждённо устранённой на автомобиле.
 
 ## Уточнение 2026-09-14: сообщение 108 приходит и от обычного OPS
 

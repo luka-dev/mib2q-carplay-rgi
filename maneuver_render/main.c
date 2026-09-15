@@ -871,7 +871,7 @@ int main(int argc, char **argv) {
         }
 
         /* Adaptive IDLE pacing (proven approach from the c_render history, commit e26cce5).
-         * ACTIVE 30 FPS pacing rides eglSwapBuffers (QNX: eglSwapInterval(2); macOS below) — NEVER
+         * ACTIVE output pacing rides eglSwapBuffers (QNX: eglSwapInterval(2); macOS below) — NEVER
          * nanosleep, because nanosleep on QNX 6.5 rounds up to the kernel timer tick and won't hold
          * a precise 30 Hz.  But when the loop produced NO frame this iteration (idle: no route / no
          * maneuver) there is no swap to pace it, so an always-on renderer would busy-spin 100% CPU.
@@ -892,7 +892,7 @@ int main(int argc, char **argv) {
 
 #ifndef PLATFORM_QNX
         /* macOS/dev only: GLFW swap interval 0 gives no vsync throttle, so pace ACTIVE frames to
-         * 30 FPS here.  (On QNX the swap itself blocks on eglSwapInterval(2) — no timer rounding.) */
+         * 30 FPS here. QNX requests interval 2 on each surface; MOST capture has its own clock. */
         if (rendered_this_frame) {
             struct timespec t_end;
             clock_gettime(CLOCK_MONOTONIC, &t_end);

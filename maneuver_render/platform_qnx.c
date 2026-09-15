@@ -61,8 +61,7 @@ static int read_env_int(const char *name, int def) {
  * screen context to already exist in the process at eglGetDisplay time.  When
  * maneuver_render ran as a JVM child it inherited the HMI's screen connection so this
  * was masked; standalone / as a framework service there is none → eglGetDisplay SIGSEGVs.
- * altscreen_render never hit this because it creates its cluster_surface first and uses
- * no EGL.  Idempotent (g_cs guard) so create_window_and_egl_surface() can call it too.
+ * altscreen_render also creates its cluster_surface before EGL.  Idempotent (g_cs guard) so create_window_and_egl_surface() can call it too.
  * FORMAT=RGBA8888 (8) matches our EGL config; USAGE=OPENGL_ES2 (0x20) lets the GPU render
  * into it; transparent=1 → the cluster compositor blends us over the KDK bg / stock map.
  */
@@ -104,6 +103,18 @@ static int create_window_and_egl_surface(void) {
         return -1;
     }
 
+    /* MU1316 eglsub-screen has EGL and native Screen interval state. Match the
+     * altscreen path: set native state before EGL snapshots the new window. */
+    {
+        int interval = 2, actual = -1;
+        if (screen_set_window_property_iv(cluster_surface_window(g_cs),
+                SCREEN_PROPERTY_SWAP_INTERVAL, &interval) != 0)
+            fprintf(stderr, "platform_qnx: native swap interval request failed errno=%d\n", errno);
+        else {
+            screen_get_window_property_iv(cluster_surface_window(g_cs), SCREEN_PROPERTY_SWAP_INTERVAL, &actual);
+            fprintf(stderr, "platform_qnx: native swap interval requested=2 readback=%d\n", actual);
+        }
+    }
     g_egl_surface = eglCreateWindowSurface(g_egl_display, g_egl_config, native_window, NULL);
     if (g_egl_surface == EGL_NO_SURFACE) {
         fprintf(stderr, "platform_qnx: eglCreateWindowSurface FAILED err=0x%x\n", eglGetError());
@@ -113,8 +124,21 @@ static int create_window_and_egl_surface(void) {
     if (g_egl_context != EGL_NO_CONTEXT) {
         if (!eglMakeCurrent(g_egl_display, g_egl_surface, g_egl_surface, g_egl_context)) {
             fprintf(stderr, "platform_qnx: eglMakeCurrent FAILED err=0x%x\n", eglGetError());
+            eglDestroySurface(g_egl_display, g_egl_surface);
+            g_egl_surface = EGL_NO_SURFACE;
             return -1;
         }
+    }
+
+    /* Swap interval belongs to the current EGL draw surface. Apply it on
+     * initial creation AND loss/recovery; a recreated surface starts at its
+     * driver default. This is output pacing, not a MOST capture phase lock. */
+    if (!eglSwapInterval(g_egl_display, 2)) {
+        fprintf(stderr, "platform_qnx: eglSwapInterval(2) FAILED err=0x%x\n", eglGetError());
+        eglMakeCurrent(g_egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+        eglDestroySurface(g_egl_display, g_egl_surface);
+        g_egl_surface = EGL_NO_SURFACE;
+        return -1;
     }
 
     /* Context routing is Java's job: DisplayManagerMIB2High.defineContexts() declares
@@ -147,19 +171,8 @@ static void platform_recreate_window(const char *reason) {
         return;
     }
 
-    /* Re-bind EGL to the new window. */
-    {
-        EGLNativeWindowType nw = (EGLNativeWindowType)cluster_surface_window(g_cs);
-        g_egl_surface = eglCreateWindowSurface(g_egl_display, g_egl_config, nw, NULL);
-        if (g_egl_surface == EGL_NO_SURFACE) {
-            fprintf(stderr, "platform_qnx: recreate eglCreateWindowSurface FAILED err=0x%x\n",
-                    eglGetError());
-            return;
-        }
-        if (g_egl_context != EGL_NO_CONTEXT) {
-            eglMakeCurrent(g_egl_display, g_egl_surface, g_egl_surface, g_egl_context);
-        }
-    }
+    /* The same path restores interval 2 and checks context ownership. */
+    if (create_window_and_egl_surface() != 0) return;
 
     fprintf(stderr, "platform_qnx: window recreated OK\n");
 }
@@ -334,19 +347,7 @@ int platform_init(int width, int height) {
      * preContextSwitchHook updates the MOST encoder after our first frame
      * is already queued. */
 
-    /* swap interval = 2 → eglSwapBuffers() blocks until the *second*
-     * vsync after submission.  On the cluster's 60 Hz display this gives
-     * us a hardware-paced 30 FPS, identical to how the native HMI
-     * graphics workers (and CarPlay video pipeline) drive their own
-     * displayables.  No software nanosleep needed in the render loop —
-     * eglSwapBuffers itself paces.
-     *
-     * Was 0 (no vsync wait, software pacing via nanosleep).  That gave
-     * ~21-25 FPS effective on QNX 6.5 due to the kernel's 10 ms timer
-     * tick rounding `nanosleep(31 ms)` up to 40 ms. */
-    eglSwapInterval(g_egl_display, 2);
-
-    fprintf(stderr, "platform_qnx: OK %dx%d (swap interval=2 → 30 FPS vsync)\n", width, height);
+    fprintf(stderr, "platform_qnx: OK %dx%d (swap interval=2 requested; capture cadence independent)\n", width, height);
     return 0;
 }
 

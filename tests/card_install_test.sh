@@ -20,6 +20,10 @@ CFG="$SYS/etc/eso/production/smartphone_integrator.json"
 PAYLOAD="$TMP/carplay"
 
 mkdir -p "$APP/eso/hmi/lsd/jars" "$SYS/etc/eso/production" "$PAYLOAD/bin"
+mkdir -p "$TMP/host-tools"
+printf '#!/bin/sh\nexit 0\n' > "$TMP/host-tools/mount"
+chmod +x "$TMP/host-tools/mount"
+export PATH="$TMP/host-tools:$PATH"
 
 # Fake stock config: the carplay child between two others, so a swallowed
 # neighbour is detectable.
@@ -56,9 +60,10 @@ for f in libcarplay_hook.so libcarplay_apac.so hssr_model.bin maneuver_render al
     echo "payload $f" > "$PAYLOAD/bin/$f"
 done
 cp "$ROOT/deploy/smartphone_integrator/carplay_child.json" "$PAYLOAD/bin/carplay_child.json"
-# The real PF script edits /mnt/system directly; the config edit is what is
-# under test here.
-echo 'echo "pf stub"' > "$PAYLOAD/bin/install_persistent_pf.sh"
+cp "$ROOT/deploy/smartphone_integrator/install_persistent_pf.sh" "$PAYLOAD/bin/"
+for profile in pf.conf pf.ecm0.conf pf.mlan0.conf pf.ppp0.conf; do
+    cp "$ROOT/deploy/smartphone_integrator/pf_stock/$profile" "$SYS/etc/$profile"
+done
 cp "$ROOT/deploy/card/install.sh" "$ROOT/deploy/card/uninstall.sh" "$PAYLOAD/"
 
 run() {
@@ -98,6 +103,12 @@ for f in libcarplay_hook.so hssr_model.bin maneuver_render altscreen_render carp
     [ -f "$APP/root/hooks/$f" ] || fail "$f was not installed"
 done
 [ -f "$APP/eso/hmi/lsd/jars/carplay_hook.jar" ] || fail "jar was not installed"
+for profile in pf.conf pf.ecm0.conf pf.mlan0.conf pf.ppp0.conf; do
+    grep -q 'on carplay0 proto tcp .*6030:6032,' "$SYS/etc/$profile" \
+        || fail "PF profile $profile was not patched"
+    cmp -s "$SYS/etc/$profile.stock" "$ROOT/deploy/smartphone_integrator/pf_stock/$profile" \
+        || fail "PF profile $profile backup changed"
+done
 
 # ---------------------------------------------------------------- idempotent
 cp "$CFG" "$TMP/first.json"
@@ -117,4 +128,12 @@ cmp -s "$CFG" "$TMP/stock.json" || fail "uninstall did not restore the stock con
 [ -f "$APP/root/hooks/hssr_model.bin" ] && fail "uninstall left the HSSR model behind"
 [ -f "$APP/eso/hmi/lsd/jars/carplay_hook.jar" ] && fail "uninstall left the jar behind"
 
-echo "PASS: card install/uninstall"
+# A failed helper used to disappear behind the installer's logging pipeline.
+printf '#!/bin/sh\necho "injected PF failure"\nexit 23\n' > "$PAYLOAD/bin/install_persistent_pf.sh"
+if run install; then fail "installer reported success after PF failure"; fi
+grep -q 'PF profile update failed (exit 23)' "$TMP/install.log" \
+    || fail "installer did not retain PF failure status"
+grep -q 'injected PF failure' "$TMP/install.log" || fail "PF diagnostics were lost"
+if grep -q '=== DONE ===' "$TMP/install.log"; then fail "installer logged false success"; fi
+
+echo "PASS: card install/uninstall, real PF profiles and helper failure propagation"

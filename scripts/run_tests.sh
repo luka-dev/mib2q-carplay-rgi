@@ -113,6 +113,10 @@ cc -std=gnu99 -O2 -Wall -Wextra -Werror \
     tests/altscreen_av_test.c -lpthread -o "$OUT/altscreen_av"
 "$OUT/altscreen_av"
 
+printf '%-32s ' altscreen_pace_trace_test
+cc -std=c99 -O2 -Wall -Wextra -Werror tests/altscreen_pace_trace_test.c -o "$OUT/alt_pace"
+"$OUT/alt_pace"
+
 printf '%-32s ' altscreen_sink_test
 cc -std=gnu99 -O1 -Wall -Wextra -Werror \
     -Wno-unused-parameter -Wno-unused-variable -Wno-sign-compare \
@@ -142,6 +146,12 @@ cc -std=gnu99 -O1 -Wall -Wextra -Werror -Wno-unused-function \
     -ffunction-sections -fdata-sections -Ialtscreen_render/hostcheck -Icommon \
     tests/altscreen_present_test.c "$ALT_DEAD_STRIP" -lpthread -lm -o "$OUT/altscreen_present"
 "$OUT/altscreen_present"
+
+printf '%-32s ' maneuver_surface_test
+cc -std=gnu99 -O1 -Wall -Wextra -Werror -Wno-unused-function \
+    -ffunction-sections -fdata-sections -Imaneuver_render/hostcheck -Ialtscreen_render/hostcheck -Icommon \
+    tests/maneuver_surface_test.c "$ALT_DEAD_STRIP" -lpthread -lm -o "$OUT/maneuver_surface"
+"$OUT/maneuver_surface"
 
 printf '%-32s ' rgd_tlv_test
 cc -std=c99 -O1 -Wall -Wextra -Werror -Wno-unused-variable -Wno-unused-function \
@@ -175,6 +185,13 @@ cc -std=c99 -O2 -Wall -Wextra -Werror -Ihook \
     tests/state_trace_logger_test.c hook/framework/logging.c \
     -lpthread -ldl -o "$OUT/state_trace_logger"
 "$OUT/state_trace_logger" && echo OK
+
+printf '%-32s ' alt_pace_logger_test
+cc -std=c99 -O2 -Wall -Wextra -Werror -Ihook \
+    -DENABLE_LOGGING=0 -DENABLE_ALTSCREEN_PACE_TRACE=1 \
+    tests/state_trace_logger_test.c hook/framework/logging.c \
+    -lpthread -ldl -o "$OUT/alt_pace_logger"
+"$OUT/alt_pace_logger" && echo OK
 
 printf '%-32s ' state_trace_analyzer_test
 trace_summary=$(python3 tools/analyze_carplay_state_trace.py \
@@ -285,6 +302,9 @@ c++ -std=c++11 -O2 -w -fno-exceptions -fno-rtti \
 
 printf '%-32s ' card_install_test
 sh tests/card_install_test.sh
+
+printf '%-32s ' persistent_pf_test
+python3 tests/persistent_pf_test.py
 
 printf '%-32s ' supervisor_lifecycle_test
 sh scripts/test_supervisor_lifecycle.sh

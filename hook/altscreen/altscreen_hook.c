@@ -35,6 +35,9 @@
 #include "altscreen_hook.h"
 #include "altscreen_av.h"
 #include "avcc_config.h"
+#if ENABLE_LOGGING || ENABLE_ALTSCREEN_PACE_TRACE
+#include "pace_trace.h"
+#endif
 
 #include <unistd.h>
 #include <pthread.h>
@@ -1266,33 +1269,32 @@ static uint64_t alt_now_ms(void)
     return ((uint64_t)ts.tv_sec * 1000ULL) + ((uint64_t)ts.tv_nsec / 1000000ULL);
 }
 
-/* Arrival pacing at the FIRST hop -- the socket iOS itself writes the 111 stream
- * into.  altscreen_render reports the same statistic after its own socket and
- * again after decode; comparing the three localises a delivery gap to the phone,
- * to the hook->renderer link, or to our decoder, instead of guessing. */
-static void alt_recv_pace_sample(void)
+#if ENABLE_LOGGING || ENABLE_ALTSCREEN_PACE_TRACE
+static uint64_t alt_pace_now_us(void)
 {
-    static uint64_t last_ms, sum_ms, max_ms;
-    static unsigned long samples, frames;
-    uint64_t now = alt_now_ms();
-    if (now == 0) return;
-    if (last_ms != 0 && now > last_ms) {
-        uint64_t d = now - last_ms;
-        sum_ms += d;
-        if (d > max_ms) max_ms = d;
-        samples++;
-    }
-    last_ms = now;
-    if (++frames % 600 == 0) {
-        /* WARN, not INFO: the live log threshold drops INFO, which is why the
-         * first attempt at this measurement produced nothing at all. */
-        LOG_WARN(LOG_MODULE, "alt recv: %lu frames off the phone socket; arrival avg=%lu max=%lu ms",
-                 frames,
-                 samples ? (unsigned long)(sum_ms / samples) : 0UL,
-                 (unsigned long)max_ms);
-        sum_ms = 0; max_ms = 0; samples = 0;
-    }
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) return 0;
+    return (uint64_t)ts.tv_sec * UINT64_C(1000000) + (uint64_t)ts.tv_nsec / 1000;
 }
+
+static void alt_pace_report(alt_pace_trace_t *s, uint32_t generation)
+{
+    /* Bounded asynchronous writer, one aggregate per 300 video access units.
+     * read includes waiting for network data; work includes decrypt/forward.
+     * Arrival alone cannot distinguish a slow sender from local backpressure. */
+    log_write(LOG_LEVEL_WARN, "altscreen",
+        "111 pace gen=%u n=%u fwd=%u arrival_us=%llu/%llu samples=%u zero=%u "
+        "read_us=%llu/%llu work_us=%llu/%llu pts_us=%llu/%llu pts_n=%u bad=%u",
+        (unsigned)generation, s->frames, s->forwarded,
+        (unsigned long long)alt_pace_mean(&s->arrival), (unsigned long long)s->arrival.max,
+        s->arrival.count, s->arrival.zero,
+        (unsigned long long)alt_pace_mean(&s->read), (unsigned long long)s->read.max,
+        (unsigned long long)alt_pace_mean(&s->work), (unsigned long long)s->work.max,
+        (unsigned long long)alt_pace_mean(&s->pts), (unsigned long long)s->pts.max,
+        s->pts.count, s->pts_invalid);
+    alt_pace_reset_window(s);
+}
+#endif
 
 static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
 {
@@ -1309,6 +1311,10 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
     unsigned int idr_requests = 0;
     int idr_limit_logged = 0;
     uint64_t last_idr_request_ms = 0;
+#if ENABLE_LOGGING || ENABLE_ALTSCREEN_PACE_TRACE
+    alt_pace_trace_t pace;
+    memset(&pace, 0, sizeof(pace));
+#endif
 
     if (!aes_ctr_init || !aes_ctr_update ||
         aes_ctr_init(aesctx, slot->key, slot->iv) != 0) {
@@ -1316,6 +1322,10 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
         return;
     }
     aes_ready = 1;
+#if ENABLE_LOGGING || ENABLE_ALTSCREEN_PACE_TRACE
+    log_write(LOG_LEVEL_WARN, "altscreen", "111 pace begin gen=%u maxFPS=30; times are mean/max microseconds",
+              (unsigned)av_gen);
+#endif
 
     /* A decoder cannot start mid-GOP. Ask iOS for a cluster-targeted IDR over
      * the generic command channel. Retries below are deliberately slow and
@@ -1334,6 +1344,9 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
             LOG_INFO(LOG_MODULE, "alt recv: superseded (gen=%u no longer owner) — exiting", (unsigned)av_gen);
             break;
         }
+#if ENABLE_LOGGING || ENABLE_ALTSCREEN_PACE_TRACE
+        uint64_t read_started_us = alt_pace_now_us();
+#endif
         if (read_exact(fd, hdr, ALT_HDR_SIZE, &slot->stop) != 0) {
             LOG_INFO(LOG_MODULE,
                      "alt recv: header read ended stop=%d errno=%d after %lu frames",
@@ -1393,7 +1406,14 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
                      avccHex, (bodySize > hn) ? "..." : "");
         } else if (opcode == 0) {                         /* encrypted AVCC video access unit */
             int is_idr;
-            alt_recv_pace_sample();
+#if ENABLE_LOGGING || ENABLE_ALTSCREEN_PACE_TRACE
+            uint64_t arrived_us = alt_pace_now_us();
+            uint64_t sender_pts = 0;
+            int pace_forwarded = 0;
+            unsigned pace_i;
+            for (pace_i = 0; pace_i < 8; pace_i++)
+                sender_pts |= (uint64_t)hdr[8 + pace_i] << (8 * pace_i);
+#endif
             if (aes_ctr_update(aesctx, body, bodySize, body) != 0) {
                 LOG_ERROR(LOG_MODULE, "alt recv: AES-CTR update failed");
                 break;
@@ -1436,6 +1456,9 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
              * decoding with a valid random-access picture. */
             if (!renderer_wait_idr) {
                 int forward_rc = altav_forward_avcc_frame(av_gen, body, bodySize, ls);
+#if ENABLE_LOGGING || ENABLE_ALTSCREEN_PACE_TRACE
+                pace_forwarded = forward_rc >= 0;
+#endif
                 if (forward_rc < 0) {
                     renderer_wait_idr = 1;
                     alt_request_cluster_idr(av_gen, "renderer-link-lost");
@@ -1470,6 +1493,16 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
                               idr_requests);
                 }
             }
+#if ENABLE_LOGGING || ENABLE_ALTSCREEN_PACE_TRACE
+            {
+                uint64_t done_us = alt_pace_now_us();
+                alt_pace_record(&pace, arrived_us,
+                    arrived_us >= read_started_us ? arrived_us - read_started_us : 0,
+                    done_us >= arrived_us ? done_us - arrived_us : 0,
+                    sender_pts, pace_forwarded);
+                if (pace.frames >= 300) alt_pace_report(&pace, av_gen);
+            }
+#endif
             if ((nframes & 0xFF) == 0)
                 LOG_INFO(LOG_MODULE,
                          "alt recv: %lu video frames received (last body=%u waitIDR=%d)",
@@ -1478,6 +1511,9 @@ static void alt_recv_loop(altslot_t *slot, int fd, uint32_t av_gen)
         /* opcodes 2/4/5 (keepalive/misc): body already consumed → ignore */
     }
 
+#if ENABLE_LOGGING || ENABLE_ALTSCREEN_PACE_TRACE
+    if (pace.frames) alt_pace_report(&pace, av_gen);
+#endif
     if (aes_ready && aes_ctr_final) aes_ctr_final(aesctx);
     free(body);
 }

@@ -1,0 +1,1541 @@
+  protected void defineContexts();
+    Code:
+       0: aload_0
+       1: getfield      #29                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.framework:Lde/audi/atip/base/IFrameworkAccess;
+       4: invokeinterface #65,  1           // InterfaceMethod de/audi/atip/base/IFrameworkAccess.getKombiType:()I
+       9: iconst_4
+      10: if_icmpne     26
+      13: aload_0
+      14: sipush        158
+      17: anewarray     #3                  // class org/dsi/ifc/displaymanagement/DisplayContext
+      20: putfield      #67                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+      23: goto          35
+      26: aload_0
+      27: bipush        79
+      29: anewarray     #3                  // class org/dsi/ifc/displaymanagement/DisplayContext
+      32: putfield      #67                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+      35: aload_0
+      36: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+      39: iconst_0
+      40: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+      43: dup
+      44: iconst_0
+      45: iconst_1
+      46: newarray       int
+      48: dup
+      49: iconst_0
+      50: bipush        16
+      52: iastore
+      53: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+      56: aastore
+      57: aload_0
+      58: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+      61: iconst_1
+      62: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+      65: dup
+      66: iconst_1
+      67: iconst_2
+      68: newarray       int
+      70: dup
+      71: iconst_0
+      72: bipush        16
+      74: iastore
+      75: dup
+      76: iconst_1
+      77: bipush        26
+      79: iastore
+      80: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+      83: aastore
+      84: aload_0
+      85: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+      88: iconst_2
+      89: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+      92: dup
+      93: iconst_2
+      94: iconst_2
+      95: newarray       int
+      97: dup
+      98: iconst_0
+      99: bipush        16
+     101: iastore
+     102: dup
+     103: iconst_1
+     104: bipush        25
+     106: iastore
+     107: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+     110: aastore
+     111: aload_0
+     112: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+     115: bipush        7
+     117: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+     120: dup
+     121: bipush        7
+     123: iconst_2
+     124: newarray       int
+     126: dup
+     127: iconst_0
+     128: bipush        16
+     130: iastore
+     131: dup
+     132: iconst_1
+     133: bipush        34
+     135: iastore
+     136: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+     139: aastore
+     140: aload_0
+     141: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+     144: iconst_3
+     145: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+     148: dup
+     149: iconst_3
+     150: iconst_2
+     151: newarray       int
+     153: dup
+     154: iconst_0
+     155: bipush        16
+     157: iastore
+     158: dup
+     159: iconst_1
+     160: bipush        17
+     162: iastore
+     163: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+     166: aastore
+     167: aload_0
+     168: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+     171: iconst_4
+     172: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+     175: dup
+     176: iconst_4
+     177: iconst_2
+     178: newarray       int
+     180: dup
+     181: iconst_0
+     182: bipush        16
+     184: iastore
+     185: dup
+     186: iconst_1
+     187: bipush        18
+     189: iastore
+     190: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+     193: aastore
+     194: aload_0
+     195: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+     198: iconst_5
+     199: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+     202: dup
+     203: iconst_5
+     204: iconst_2
+     205: newarray       int
+     207: dup
+     208: iconst_0
+     209: bipush        16
+     211: iastore
+     212: dup
+     213: iconst_1
+     214: iconst_0
+     215: iastore
+     216: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+     219: aastore
+     220: aload_0
+     221: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+     224: bipush        6
+     226: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+     229: dup
+     230: bipush        6
+     232: iconst_2
+     233: newarray       int
+     235: dup
+     236: iconst_0
+     237: bipush        16
+     239: iastore
+     240: dup
+     241: iconst_1
+     242: bipush        27
+     244: iastore
+     245: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+     248: aastore
+     249: aload_0
+     250: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+     253: bipush        8
+     255: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+     258: dup
+     259: bipush        8
+     261: iconst_2
+     262: newarray       int
+     264: dup
+     265: iconst_0
+     266: bipush        16
+     268: iastore
+     269: dup
+     270: iconst_1
+     271: bipush        37
+     273: iastore
+     274: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+     277: aastore
+     278: aload_0
+     279: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+     282: bipush        9
+     284: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+     287: dup
+     288: bipush        9
+     290: iconst_2
+     291: newarray       int
+     293: dup
+     294: iconst_0
+     295: bipush        16
+     297: iastore
+     298: dup
+     299: iconst_1
+     300: bipush        35
+     302: iastore
+     303: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+     306: aastore
+     307: aload_0
+     308: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+     311: bipush        33
+     313: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+     316: dup
+     317: bipush        33
+     319: iconst_2
+     320: newarray       int
+     322: dup
+     323: iconst_0
+     324: bipush        16
+     326: iastore
+     327: dup
+     328: iconst_1
+     329: bipush        38
+     331: iastore
+     332: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+     335: aastore
+     336: aload_0
+     337: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+     340: bipush        10
+     342: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+     345: dup
+     346: bipush        10
+     348: iconst_2
+     349: newarray       int
+     351: dup
+     352: iconst_0
+     353: bipush        16
+     355: iastore
+     356: dup
+     357: iconst_1
+     358: bipush        19
+     360: iastore
+     361: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+     364: aastore
+     365: aload_0
+     366: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+     369: bipush        11
+     371: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+     374: dup
+     375: bipush        11
+     377: iconst_4
+     378: newarray       int
+     380: dup
+     381: iconst_0
+     382: bipush        16
+     384: iastore
+     385: dup
+     386: iconst_1
+     387: bipush        20
+     389: iastore
+     390: dup
+     391: iconst_2
+     392: bipush        21
+     394: iastore
+     395: dup
+     396: iconst_3
+     397: bipush        19
+     399: iastore
+     400: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+     403: aastore
+     404: aload_0
+     405: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+     408: bipush        12
+     410: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+     413: dup
+     414: bipush        12
+     416: iconst_4
+     417: newarray       int
+     419: dup
+     420: iconst_0
+     421: bipush        16
+     423: iastore
+     424: dup
+     425: iconst_1
+     426: bipush        20
+     428: iastore
+     429: dup
+     430: iconst_2
+     431: bipush        22
+     433: iastore
+     434: dup
+     435: iconst_3
+     436: bipush        19
+     438: iastore
+     439: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+     442: aastore
+     443: aload_0
+     444: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+     447: bipush        13
+     449: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+     452: dup
+     453: bipush        13
+     455: iconst_4
+     456: newarray       int
+     458: dup
+     459: iconst_0
+     460: bipush        16
+     462: iastore
+     463: dup
+     464: iconst_1
+     465: bipush        20
+     467: iastore
+     468: dup
+     469: iconst_2
+     470: bipush        23
+     472: iastore
+     473: dup
+     474: iconst_3
+     475: bipush        19
+     477: iastore
+     478: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+     481: aastore
+     482: aload_0
+     483: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+     486: bipush        14
+     488: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+     491: dup
+     492: bipush        14
+     494: iconst_3
+     495: newarray       int
+     497: dup
+     498: iconst_0
+     499: bipush        16
+     501: iastore
+     502: dup
+     503: iconst_1
+     504: bipush        20
+     506: iastore
+     507: dup
+     508: iconst_2
+     509: bipush        19
+     511: iastore
+     512: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+     515: aastore
+     516: aload_0
+     517: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+     520: bipush        15
+     522: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+     525: dup
+     526: bipush        15
+     528: iconst_3
+     529: newarray       int
+     531: dup
+     532: iconst_0
+     533: bipush        16
+     535: iastore
+     536: dup
+     537: iconst_1
+     538: bipush        24
+     540: iastore
+     541: dup
+     542: iconst_2
+     543: bipush        19
+     545: iastore
+     546: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+     549: aastore
+     550: aload_0
+     551: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+     554: bipush        16
+     556: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+     559: dup
+     560: bipush        16
+     562: iconst_2
+     563: newarray       int
+     565: dup
+     566: iconst_0
+     567: bipush        16
+     569: iastore
+     570: dup
+     571: iconst_1
+     572: bipush        39
+     574: iastore
+     575: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+     578: aastore
+     579: aload_0
+     580: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+     583: bipush        17
+     585: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+     588: dup
+     589: bipush        17
+     591: iconst_4
+     592: newarray       int
+     594: dup
+     595: iconst_0
+     596: bipush        16
+     598: iastore
+     599: dup
+     600: iconst_1
+     601: bipush        20
+     603: iastore
+     604: dup
+     605: iconst_2
+     606: bipush        21
+     608: iastore
+     609: dup
+     610: iconst_3
+     611: bipush        39
+     613: iastore
+     614: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+     617: aastore
+     618: aload_0
+     619: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+     622: bipush        18
+     624: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+     627: dup
+     628: bipush        18
+     630: iconst_4
+     631: newarray       int
+     633: dup
+     634: iconst_0
+     635: bipush        16
+     637: iastore
+     638: dup
+     639: iconst_1
+     640: bipush        20
+     642: iastore
+     643: dup
+     644: iconst_2
+     645: bipush        22
+     647: iastore
+     648: dup
+     649: iconst_3
+     650: bipush        39
+     652: iastore
+     653: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+     656: aastore
+     657: aload_0
+     658: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+     661: bipush        19
+     663: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+     666: dup
+     667: bipush        19
+     669: iconst_4
+     670: newarray       int
+     672: dup
+     673: iconst_0
+     674: bipush        16
+     676: iastore
+     677: dup
+     678: iconst_1
+     679: bipush        20
+     681: iastore
+     682: dup
+     683: iconst_2
+     684: bipush        23
+     686: iastore
+     687: dup
+     688: iconst_3
+     689: bipush        39
+     691: iastore
+     692: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+     695: aastore
+     696: aload_0
+     697: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+     700: bipush        20
+     702: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+     705: dup
+     706: bipush        20
+     708: iconst_3
+     709: newarray       int
+     711: dup
+     712: iconst_0
+     713: bipush        16
+     715: iastore
+     716: dup
+     717: iconst_1
+     718: bipush        20
+     720: iastore
+     721: dup
+     722: iconst_2
+     723: bipush        39
+     725: iastore
+     726: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+     729: aastore
+     730: aload_0
+     731: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+     734: bipush        21
+     736: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+     739: dup
+     740: bipush        21
+     742: iconst_3
+     743: newarray       int
+     745: dup
+     746: iconst_0
+     747: bipush        16
+     749: iastore
+     750: dup
+     751: iconst_1
+     752: bipush        24
+     754: iastore
+     755: dup
+     756: iconst_2
+     757: bipush        39
+     759: iastore
+     760: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+     763: aastore
+     764: aload_0
+     765: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+     768: bipush        22
+     770: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+     773: dup
+     774: bipush        22
+     776: iconst_4
+     777: newarray       int
+     779: dup
+     780: iconst_0
+     781: bipush        16
+     783: iastore
+     784: dup
+     785: iconst_1
+     786: bipush        23
+     788: iastore
+     789: dup
+     790: iconst_2
+     791: bipush        20
+     793: iastore
+     794: dup
+     795: iconst_3
+     796: bipush        19
+     798: iastore
+     799: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+     802: aastore
+     803: aload_0
+     804: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+     807: bipush        23
+     809: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+     812: dup
+     813: bipush        23
+     815: iconst_2
+     816: newarray       int
+     818: dup
+     819: iconst_0
+     820: bipush        16
+     822: iastore
+     823: dup
+     824: iconst_1
+     825: bipush        31
+     827: iastore
+     828: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+     831: aastore
+     832: aload_0
+     833: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+     836: bipush        24
+     838: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+     841: dup
+     842: bipush        24
+     844: iconst_2
+     845: newarray       int
+     847: dup
+     848: iconst_0
+     849: bipush        16
+     851: iastore
+     852: dup
+     853: iconst_1
+     854: bipush        41
+     856: iastore
+     857: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+     860: aastore
+     861: aload_0
+     862: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+     865: bipush        25
+     867: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+     870: dup
+     871: bipush        25
+     873: iconst_2
+     874: newarray       int
+     876: dup
+     877: iconst_0
+     878: bipush        16
+     880: iastore
+     881: dup
+     882: iconst_1
+     883: bipush        43
+     885: iastore
+     886: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+     889: aastore
+     890: aload_0
+     891: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+     894: bipush        26
+     896: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+     899: dup
+     900: bipush        26
+     902: iconst_2
+     903: newarray       int
+     905: dup
+     906: iconst_0
+     907: bipush        16
+     909: iastore
+     910: dup
+     911: iconst_1
+     912: bipush        44
+     914: iastore
+     915: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+     918: aastore
+     919: aload_0
+     920: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+     923: bipush        27
+     925: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+     928: dup
+     929: bipush        27
+     931: iconst_3
+     932: newarray       int
+     934: dup
+     935: iconst_0
+     936: bipush        16
+     938: iastore
+     939: dup
+     940: iconst_1
+     941: bipush        19
+     943: iastore
+     944: dup
+     945: iconst_2
+     946: bipush        38
+     948: iastore
+     949: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+     952: aastore
+     953: aload_0
+     954: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+     957: bipush        28
+     959: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+     962: dup
+     963: bipush        28
+     965: iconst_3
+     966: newarray       int
+     968: dup
+     969: iconst_0
+     970: bipush        16
+     972: iastore
+     973: dup
+     974: iconst_1
+     975: bipush        39
+     977: iastore
+     978: dup
+     979: iconst_2
+     980: bipush        38
+     982: iastore
+     983: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+     986: aastore
+     987: aload_0
+     988: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+     991: bipush        29
+     993: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+     996: dup
+     997: bipush        29
+     999: iconst_3
+    1000: newarray       int
+    1002: dup
+    1003: iconst_0
+    1004: bipush        16
+    1006: iastore
+    1007: dup
+    1008: iconst_1
+    1009: bipush        50
+    1011: iastore
+    1012: dup
+    1013: iconst_2
+    1014: bipush        19
+    1016: iastore
+    1017: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    1020: aastore
+    1021: aload_0
+    1022: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    1025: bipush        30
+    1027: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    1030: dup
+    1031: bipush        30
+    1033: iconst_3
+    1034: newarray       int
+    1036: dup
+    1037: iconst_0
+    1038: bipush        16
+    1040: iastore
+    1041: dup
+    1042: iconst_1
+    1043: bipush        50
+    1045: iastore
+    1046: dup
+    1047: iconst_2
+    1048: bipush        39
+    1050: iastore
+    1051: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    1054: aastore
+    1055: aload_0
+    1056: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    1059: bipush        31
+    1061: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    1064: dup
+    1065: bipush        31
+    1067: iconst_2
+    1068: newarray       int
+    1070: dup
+    1071: iconst_0
+    1072: bipush        16
+    1074: iastore
+    1075: dup
+    1076: iconst_1
+    1077: bipush        51
+    1079: iastore
+    1080: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    1083: aastore
+    1084: aload_0
+    1085: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    1088: bipush        32
+    1090: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    1093: dup
+    1094: bipush        32
+    1096: iconst_2
+    1097: newarray       int
+    1099: dup
+    1100: iconst_0
+    1101: bipush        16
+    1103: iastore
+    1104: dup
+    1105: iconst_1
+    1106: bipush        21
+    1108: iastore
+    1109: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    1112: aastore
+    1113: aload_0
+    1114: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    1117: bipush        35
+    1119: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    1122: dup
+    1123: bipush        35
+    1125: iconst_1
+    1126: newarray       int
+    1128: dup
+    1129: iconst_0
+    1130: bipush        36
+    1132: iastore
+    1133: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    1136: aastore
+    1137: aload_0
+    1138: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    1141: bipush        36
+    1143: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    1146: dup
+    1147: bipush        36
+    1149: iconst_2
+    1150: newarray       int
+    1152: dup
+    1153: iconst_0
+    1154: bipush        36
+    1156: iastore
+    1157: dup
+    1158: iconst_1
+    1159: bipush        26
+    1161: iastore
+    1162: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    1165: aastore
+    1166: aload_0
+    1167: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    1170: bipush        37
+    1172: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    1175: dup
+    1176: bipush        37
+    1178: iconst_2
+    1179: newarray       int
+    1181: dup
+    1182: iconst_0
+    1183: bipush        36
+    1185: iastore
+    1186: dup
+    1187: iconst_1
+    1188: bipush        25
+    1190: iastore
+    1191: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    1194: aastore
+    1195: aload_0
+    1196: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    1199: bipush        42
+    1201: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    1204: dup
+    1205: bipush        42
+    1207: iconst_2
+    1208: newarray       int
+    1210: dup
+    1211: iconst_0
+    1212: bipush        36
+    1214: iastore
+    1215: dup
+    1216: iconst_1
+    1217: bipush        34
+    1219: iastore
+    1220: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    1223: aastore
+    1224: aload_0
+    1225: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    1228: bipush        38
+    1230: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    1233: dup
+    1234: bipush        38
+    1236: iconst_2
+    1237: newarray       int
+    1239: dup
+    1240: iconst_0
+    1241: bipush        36
+    1243: iastore
+    1244: dup
+    1245: iconst_1
+    1246: bipush        17
+    1248: iastore
+    1249: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    1252: aastore
+    1253: aload_0
+    1254: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    1257: bipush        39
+    1259: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    1262: dup
+    1263: bipush        39
+    1265: iconst_2
+    1266: newarray       int
+    1268: dup
+    1269: iconst_0
+    1270: bipush        36
+    1272: iastore
+    1273: dup
+    1274: iconst_1
+    1275: bipush        18
+    1277: iastore
+    1278: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    1281: aastore
+    1282: aload_0
+    1283: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    1286: bipush        40
+    1288: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    1291: dup
+    1292: bipush        40
+    1294: iconst_2
+    1295: newarray       int
+    1297: dup
+    1298: iconst_0
+    1299: bipush        36
+    1301: iastore
+    1302: dup
+    1303: iconst_1
+    1304: iconst_0
+    1305: iastore
+    1306: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    1309: aastore
+    1310: aload_0
+    1311: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    1314: bipush        41
+    1316: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    1319: dup
+    1320: bipush        41
+    1322: iconst_2
+    1323: newarray       int
+    1325: dup
+    1326: iconst_0
+    1327: bipush        36
+    1329: iastore
+    1330: dup
+    1331: iconst_1
+    1332: bipush        27
+    1334: iastore
+    1335: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    1338: aastore
+    1339: aload_0
+    1340: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    1343: bipush        43
+    1345: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    1348: dup
+    1349: bipush        43
+    1351: iconst_2
+    1352: newarray       int
+    1354: dup
+    1355: iconst_0
+    1356: bipush        36
+    1358: iastore
+    1359: dup
+    1360: iconst_1
+    1361: bipush        37
+    1363: iastore
+    1364: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    1367: aastore
+    1368: aload_0
+    1369: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    1372: bipush        44
+    1374: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    1377: dup
+    1378: bipush        44
+    1380: iconst_2
+    1381: newarray       int
+    1383: dup
+    1384: iconst_0
+    1385: bipush        36
+    1387: iastore
+    1388: dup
+    1389: iconst_1
+    1390: bipush        35
+    1392: iastore
+    1393: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    1396: aastore
+    1397: aload_0
+    1398: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    1401: bipush        45
+    1403: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    1406: dup
+    1407: bipush        45
+    1409: iconst_2
+    1410: newarray       int
+    1412: dup
+    1413: iconst_0
+    1414: bipush        36
+    1416: iastore
+    1417: dup
+    1418: iconst_1
+    1419: bipush        19
+    1421: iastore
+    1422: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    1425: aastore
+    1426: aload_0
+    1427: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    1430: bipush        46
+    1432: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    1435: dup
+    1436: bipush        46
+    1438: iconst_4
+    1439: newarray       int
+    1441: dup
+    1442: iconst_0
+    1443: bipush        36
+    1445: iastore
+    1446: dup
+    1447: iconst_1
+    1448: bipush        20
+    1450: iastore
+    1451: dup
+    1452: iconst_2
+    1453: bipush        21
+    1455: iastore
+    1456: dup
+    1457: iconst_3
+    1458: bipush        19
+    1460: iastore
+    1461: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    1464: aastore
+    1465: aload_0
+    1466: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    1469: bipush        47
+    1471: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    1474: dup
+    1475: bipush        47
+    1477: iconst_4
+    1478: newarray       int
+    1480: dup
+    1481: iconst_0
+    1482: bipush        36
+    1484: iastore
+    1485: dup
+    1486: iconst_1
+    1487: bipush        20
+    1489: iastore
+    1490: dup
+    1491: iconst_2
+    1492: bipush        22
+    1494: iastore
+    1495: dup
+    1496: iconst_3
+    1497: bipush        19
+    1499: iastore
+    1500: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    1503: aastore
+    1504: aload_0
+    1505: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    1508: bipush        48
+    1510: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    1513: dup
+    1514: bipush        48
+    1516: iconst_4
+    1517: newarray       int
+    1519: dup
+    1520: iconst_0
+    1521: bipush        36
+    1523: iastore
+    1524: dup
+    1525: iconst_1
+    1526: bipush        20
+    1528: iastore
+    1529: dup
+    1530: iconst_2
+    1531: bipush        23
+    1533: iastore
+    1534: dup
+    1535: iconst_3
+    1536: bipush        19
+    1538: iastore
+    1539: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    1542: aastore
+    1543: aload_0
+    1544: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    1547: bipush        49
+    1549: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    1552: dup
+    1553: bipush        49
+    1555: iconst_3
+    1556: newarray       int
+    1558: dup
+    1559: iconst_0
+    1560: bipush        36
+    1562: iastore
+    1563: dup
+    1564: iconst_1
+    1565: bipush        20
+    1567: iastore
+    1568: dup
+    1569: iconst_2
+    1570: bipush        19
+    1572: iastore
+    1573: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    1576: aastore
+    1577: aload_0
+    1578: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    1581: bipush        50
+    1583: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    1586: dup
+    1587: bipush        50
+    1589: iconst_3
+    1590: newarray       int
+    1592: dup
+    1593: iconst_0
+    1594: bipush        36
+    1596: iastore
+    1597: dup
+    1598: iconst_1
+    1599: bipush        24
+    1601: iastore
+    1602: dup
+    1603: iconst_2
+    1604: bipush        19
+    1606: iastore
+    1607: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    1610: aastore
+    1611: aload_0
+    1612: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    1615: bipush        51
+    1617: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    1620: dup
+    1621: bipush        51
+    1623: iconst_2
+    1624: newarray       int
+    1626: dup
+    1627: iconst_0
+    1628: bipush        36
+    1630: iastore
+    1631: dup
+    1632: iconst_1
+    1633: bipush        39
+    1635: iastore
+    1636: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    1639: aastore
+    1640: aload_0
+    1641: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    1644: bipush        52
+    1646: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    1649: dup
+    1650: bipush        52
+    1652: iconst_4
+    1653: newarray       int
+    1655: dup
+    1656: iconst_0
+    1657: bipush        36
+    1659: iastore
+    1660: dup
+    1661: iconst_1
+    1662: bipush        20
+    1664: iastore
+    1665: dup
+    1666: iconst_2
+    1667: bipush        21
+    1669: iastore
+    1670: dup
+    1671: iconst_3
+    1672: bipush        39
+    1674: iastore
+    1675: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    1678: aastore
+    1679: aload_0
+    1680: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    1683: bipush        53
+    1685: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    1688: dup
+    1689: bipush        53
+    1691: iconst_4
+    1692: newarray       int
+    1694: dup
+    1695: iconst_0
+    1696: bipush        36
+    1698: iastore
+    1699: dup
+    1700: iconst_1
+    1701: bipush        20
+    1703: iastore
+    1704: dup
+    1705: iconst_2
+    1706: bipush        22
+    1708: iastore
+    1709: dup
+    1710: iconst_3
+    1711: bipush        39
+    1713: iastore
+    1714: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    1717: aastore
+    1718: aload_0
+    1719: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    1722: bipush        54
+    1724: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    1727: dup
+    1728: bipush        54
+    1730: iconst_4
+    1731: newarray       int
+    1733: dup
+    1734: iconst_0
+    1735: bipush        36
+    1737: iastore
+    1738: dup
+    1739: iconst_1
+    1740: bipush        20
+    1742: iastore
+    1743: dup
+    1744: iconst_2
+    1745: bipush        23
+    1747: iastore
+    1748: dup
+    1749: iconst_3
+    1750: bipush        39
+    1752: iastore
+    1753: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    1756: aastore
+    1757: aload_0
+    1758: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    1761: bipush        55
+    1763: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    1766: dup
+    1767: bipush        55
+    1769: iconst_3
+    1770: newarray       int
+    1772: dup
+    1773: iconst_0
+    1774: bipush        36
+    1776: iastore
+    1777: dup
+    1778: iconst_1
+    1779: bipush        20
+    1781: iastore
+    1782: dup
+    1783: iconst_2
+    1784: bipush        39
+    1786: iastore
+    1787: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    1790: aastore
+    1791: aload_0
+    1792: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    1795: bipush        56
+    1797: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    1800: dup
+    1801: bipush        56
+    1803: iconst_3
+    1804: newarray       int
+    1806: dup
+    1807: iconst_0
+    1808: bipush        36
+    1810: iastore
+    1811: dup
+    1812: iconst_1
+    1813: bipush        24
+    1815: iastore
+    1816: dup
+    1817: iconst_2
+    1818: bipush        39
+    1820: iastore
+    1821: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    1824: aastore
+    1825: aload_0
+    1826: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    1829: bipush        57
+    1831: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    1834: dup
+    1835: bipush        57
+    1837: iconst_2
+    1838: newarray       int
+    1840: dup
+    1841: iconst_0
+    1842: bipush        36
+    1844: iastore
+    1845: dup
+    1846: iconst_1
+    1847: bipush        31
+    1849: iastore
+    1850: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    1853: aastore
+    1854: aload_0
+    1855: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    1858: bipush        58
+    1860: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    1863: dup
+    1864: bipush        58
+    1866: iconst_2
+    1867: newarray       int
+    1869: dup
+    1870: iconst_0
+    1871: bipush        36
+    1873: iastore
+    1874: dup
+    1875: iconst_1
+    1876: bipush        43
+    1878: iastore
+    1879: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    1882: aastore
+    1883: aload_0
+    1884: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    1887: bipush        59
+    1889: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    1892: dup
+    1893: bipush        59
+    1895: iconst_2
+    1896: newarray       int
+    1898: dup
+    1899: iconst_0
+    1900: bipush        36
+    1902: iastore
+    1903: dup
+    1904: iconst_1
+    1905: bipush        44
+    1907: iastore
+    1908: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    1911: aastore
+    1912: aload_0
+    1913: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    1916: bipush        60
+    1918: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    1921: dup
+    1922: bipush        60
+    1924: iconst_3
+    1925: newarray       int
+    1927: dup
+    1928: iconst_0
+    1929: bipush        36
+    1931: iastore
+    1932: dup
+    1933: iconst_1
+    1934: bipush        19
+    1936: iastore
+    1937: dup
+    1938: iconst_2
+    1939: bipush        38
+    1941: iastore
+    1942: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    1945: aastore
+    1946: aload_0
+    1947: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    1950: bipush        61
+    1952: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    1955: dup
+    1956: bipush        61
+    1958: iconst_3
+    1959: newarray       int
+    1961: dup
+    1962: iconst_0
+    1963: bipush        36
+    1965: iastore
+    1966: dup
+    1967: iconst_1
+    1968: bipush        39
+    1970: iastore
+    1971: dup
+    1972: iconst_2
+    1973: bipush        38
+    1975: iastore
+    1976: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    1979: aastore
+    1980: aload_0
+    1981: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    1984: bipush        62
+    1986: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    1989: dup
+    1990: bipush        62
+    1992: iconst_3
+    1993: newarray       int
+    1995: dup
+    1996: iconst_0
+    1997: bipush        36
+    1999: iastore
+    2000: dup
+    2001: iconst_1
+    2002: bipush        50
+    2004: iastore
+    2005: dup
+    2006: iconst_2
+    2007: bipush        19
+    2009: iastore
+    2010: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    2013: aastore
+    2014: aload_0
+    2015: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    2018: bipush        63
+    2020: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    2023: dup
+    2024: bipush        63
+    2026: iconst_3
+    2027: newarray       int
+    2029: dup
+    2030: iconst_0
+    2031: bipush        36
+    2033: iastore
+    2034: dup
+    2035: iconst_1
+    2036: bipush        50
+    2038: iastore
+    2039: dup
+    2040: iconst_2
+    2041: bipush        39
+    2043: iastore
+    2044: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    2047: aastore
+    2048: aload_0
+    2049: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    2052: bipush        64
+    2054: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    2057: dup
+    2058: bipush        64
+    2060: iconst_2
+    2061: newarray       int
+    2063: dup
+    2064: iconst_0
+    2065: bipush        36
+    2067: iastore
+    2068: dup
+    2069: iconst_1
+    2070: bipush        51
+    2072: iastore
+    2073: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    2076: aastore
+    2077: aload_0
+    2078: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    2081: bipush        66
+    2083: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    2086: dup
+    2087: bipush        66
+    2089: iconst_2
+    2090: newarray       int
+    2092: dup
+    2093: iconst_0
+    2094: bipush        36
+    2096: iastore
+    2097: dup
+    2098: iconst_1
+    2099: bipush        21
+    2101: iastore
+    2102: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    2105: aastore
+    2106: aload_0
+    2107: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    2110: bipush        67
+    2112: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    2115: dup
+    2116: bipush        67
+    2118: iconst_1
+    2119: newarray       int
+    2121: dup
+    2122: iconst_0
+    2123: bipush        26
+    2125: iastore
+    2126: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    2129: aastore
+    2130: aload_0
+    2131: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    2134: bipush        68
+    2136: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    2139: dup
+    2140: bipush        68
+    2142: iconst_1
+    2143: newarray       int
+    2145: dup
+    2146: iconst_0
+    2147: bipush        25
+    2149: iastore
+    2150: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    2153: aastore
+    2154: aload_0
+    2155: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    2158: bipush        69
+    2160: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    2163: dup
+    2164: bipush        69
+    2166: iconst_1
+    2167: newarray       int
+    2169: dup
+    2170: iconst_0
+    2171: bipush        34
+    2173: iastore
+    2174: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    2177: aastore
+    2178: aload_0
+    2179: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    2182: bipush        71
+    2184: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    2187: dup
+    2188: bipush        71
+    2190: iconst_1
+    2191: newarray       int
+    2193: dup
+    2194: iconst_0
+    2195: bipush        27
+    2197: iastore
+    2198: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    2201: aastore
+    2202: aload_0
+    2203: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    2206: bipush        72
+    2208: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    2211: dup
+    2212: bipush        72
+    2214: iconst_1
+    2215: newarray       int
+    2217: dup
+    2218: iconst_0
+    2219: bipush        33
+    2221: iastore
+    2222: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    2225: aastore
+    2226: aload_0
+    2227: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    2230: bipush        76
+    2232: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    2235: dup
+    2236: bipush        76
+    2238: iconst_1
+    2239: newarray       int
+    2241: dup
+    2242: iconst_0
+    2243: bipush        58
+    2245: iastore
+    2246: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    2249: aastore
+    2250: aload_0
+    2251: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    2254: bipush        77
+    2256: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    2259: dup
+    2260: bipush        77
+    2262: iconst_4
+    2263: newarray       int
+    2265: dup
+    2266: iconst_0
+    2267: bipush        20
+    2269: iastore
+    2270: dup
+    2271: iconst_1
+    2272: bipush        102
+    2274: iastore
+    2275: dup
+    2276: iconst_2
+    2277: bipush        101
+    2279: iastore
+    2280: dup
+    2281: iconst_3
+    2282: bipush        58
+    2284: iastore
+    2285: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    2288: aastore
+    2289: aload_0
+    2290: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    2293: bipush        73
+    2295: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    2298: dup
+    2299: bipush        73
+    2301: iconst_3
+    2302: newarray       int
+    2304: dup
+    2305: iconst_0
+    2306: bipush        20
+    2308: iastore
+    2309: dup
+    2310: iconst_1
+    2311: bipush        102
+    2313: iastore
+    2314: dup
+    2315: iconst_2
+    2316: bipush        101
+    2318: iastore
+    2319: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    2322: aastore
+    2323: aload_0
+    2324: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    2327: bipush        74
+    2329: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    2332: dup
+    2333: bipush        74
+    2335: iconst_4
+    2336: newarray       int
+    2338: dup
+    2339: iconst_0
+    2340: bipush        20
+    2342: iastore
+    2343: dup
+    2344: iconst_1
+    2345: bipush        102
+    2347: iastore
+    2348: dup
+    2349: iconst_2
+    2350: bipush        101
+    2352: iastore
+    2353: dup
+    2354: iconst_3
+    2355: bipush        33
+    2357: iastore
+    2358: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    2361: aastore
+    2362: aload_0
+    2363: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    2366: bipush        75
+    2368: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    2371: dup
+    2372: bipush        75
+    2374: iconst_0
+    2375: newarray       int
+    2377: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    2380: aastore
+    2381: aload_0
+    2382: getfield      #30                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.dc:[Lorg/dsi/ifc/displaymanagement/DisplayContext;
+    2385: bipush        78
+    2387: new           #66                 // class org/dsi/ifc/displaymanagement/DisplayContext
+    2390: dup
+    2391: bipush        78
+    2393: iconst_2
+    2394: newarray       int
+    2396: dup
+    2397: iconst_0
+    2398: bipush        16
+    2400: iastore
+    2401: dup
+    2402: iconst_1
+    2403: bipush        59
+    2405: iastore
+    2406: invokespecial #47                 // Method org/dsi/ifc/displaymanagement/DisplayContext."<init>":(I[I)V
+    2409: aastore
+    2410: aload_0
+    2411: getfield      #29                 // Field de/audi/tghu/fwhmi/DisplayManagerMIB2High.framework:Lde/audi/atip/base/IFrameworkAccess;
+    2414: invokeinterface #65,  1           // InterfaceMethod de/audi/atip/base/IFrameworkAccess.getKombiType:()I
+    2419: iconst_4
+    2420: if_icmpne     2427
+    2423: aload_0
+    2424: invokespecial #48                 // Method de/audi/tghu/fwhmi/DisplayManagerMIB2High.defineContextsForG24:()V
+    2427: return
+

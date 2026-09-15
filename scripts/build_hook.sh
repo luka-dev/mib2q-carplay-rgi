@@ -12,6 +12,7 @@
 #   QNX_TOOLCHAIN_VARIANT=8.5 ./scripts/build_hook.sh
 #   LOG=0 ./scripts/build_hook.sh                  # pre-prod: logs/captures disabled
 #   LOG=0 AUDIO_STATE_TRACE=1 ./scripts/build_hook.sh # compact lifecycle trace only
+#   LOG=0 ALTSCREEN_PACE_TRACE=1 ./scripts/build_hook.sh # stream-111 timing only
 #   LOG_RGD_PACKET_RAW=1 ./scripts/build_hook.sh   # raw RGD logging (needs LOG=1)
 #
 # NOTE: these are not the stock QNX 4.4.2 compiler.  The hook uses no __thread
@@ -55,15 +56,18 @@ mkdir -p "$(dirname "$OUT")"
 LOG="${LOG:-1}"
 LOG_RGD_PACKET_RAW="${LOG_RGD_PACKET_RAW:-0}"
 AUDIO_STATE_TRACE="${AUDIO_STATE_TRACE:-0}"
+ALTSCREEN_PACE_TRACE="${ALTSCREEN_PACE_TRACE:-0}"
 [[ "$LOG" == "0" || "$LOG" == "1" ]] || { echo "Invalid LOG=$LOG (0|1)"; exit 1; }
 [[ "$LOG_RGD_PACKET_RAW" == "0" || "$LOG_RGD_PACKET_RAW" == "1" ]] || { echo "Invalid LOG_RGD_PACKET_RAW"; exit 1; }
 [[ "$AUDIO_STATE_TRACE" == "0" || "$AUDIO_STATE_TRACE" == "1" ]] || { echo "Invalid AUDIO_STATE_TRACE=$AUDIO_STATE_TRACE (0|1)"; exit 1; }
+[[ "$ALTSCREEN_PACE_TRACE" == "0" || "$ALTSCREEN_PACE_TRACE" == "1" ]] || { echo "Invalid ALTSCREEN_PACE_TRACE=$ALTSCREEN_PACE_TRACE (0|1)"; exit 1; }
 [[ "$LOG_RGD_PACKET_RAW" == "1" && "$LOG" != "1" ]] && { echo "LOG_RGD_PACKET_RAW=1 requires LOG=1"; exit 1; }
 
 CFLAGS_EXTRA="-D__QNX__ -mfpu=neon -mfloat-abi=softfp"
 echo "Stereo upmix renderer: hssr-universal"
 [ "$LOG" == "0" ] && CFLAGS_EXTRA="$CFLAGS_EXTRA -DENABLE_LOGGING=0" && echo "Logging and diagnostic captures DISABLED"
 [ "$AUDIO_STATE_TRACE" == "1" ] && CFLAGS_EXTRA="$CFLAGS_EXTRA -DENABLE_STATE_TRACE=1" && echo "Compact lifecycle trace ENABLED"
+[ "$ALTSCREEN_PACE_TRACE" == "1" ] && CFLAGS_EXTRA="$CFLAGS_EXTRA -DENABLE_ALTSCREEN_PACE_TRACE=1" && echo "Stream-111 pacing trace ENABLED (no media capture)"
 [ "$LOG_RGD_PACKET_RAW" == "1" ] && CFLAGS_EXTRA="$CFLAGS_EXTRA -DRGD_TRACE_RAW_FULL=1" && echo "RGD raw packet logging ENABLED"
 
 if ! docker image inspect "$IMG" >/dev/null 2>&1; then
@@ -206,6 +210,11 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
 if [ "$AUDIO_STATE_TRACE" = "1" ]; then
     strings "$OUT" | grep -q "IAP_NOW_PLAYING_START" || {
         echo "REJECTED: compact state-trace markers missing"; exit 1;
+    }
+fi
+if [ "$ALTSCREEN_PACE_TRACE" = "1" ]; then
+    strings "$OUT" | grep -q "111 pace gen=" || {
+        echo "REJECTED: stream-111 pacing markers missing"; exit 1;
     }
 fi
 

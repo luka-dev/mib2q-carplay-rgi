@@ -1,0 +1,343 @@
+            ;-- CDSIDisplaymanagement::evtStartComponent(CDSIStartComponent*):
+┌ 992: method.CDSIDisplaymanagement.evtStartComponent_CDSIStartComponent_ (int32_t arg1, int32_t arg2);
+│ `- args(r0, r1) vars(13:sp[0x28..0x80])
+│           0x00060480      f04f2de9       push {r4, r5, r6, r7, r8, sb, sl, fp, lr}; RELOC 32 _ZN21CDSIDisplaymanagement17evtStartComponentEP18CDSIStartComponent @ 0x00060480 ; CDSIDisplaymanagement::evtStartComponent(CDSIStartComponent*)
+│           0x00060484      d4539fe5       ldr r5, [0x00060860]        ; [0x60860:4]=0x3f4c0
+│           0x00060488      d4339fe5       ldr r3, [0x00060864]        ; [0x60864:4]=0xcbc
+│           0x0006048c      0180a0e1       mov r8, r1                  ; arg2
+│           0x00060490      05508fe0       add r5, pc, r5
+│           0x00060494      cc139fe5       ldr r1, [0x00060868]        ; [0x60868:4]=0xf58
+│           0x00060498      5cd04de2       sub sp, sp, 0x5c
+│           0x0006049c      0020a0e3       mov r2, 0
+│           0x000604a0      033095e7       ldr r3, [r5, r3]
+│           0x000604a4      40408de2       add r4, sp, 0x40
+│           0x000604a8      0c008de5       str r0, [var_ch]            ; arg1
+│           0x000604ac      0400a0e1       mov r0, r4
+│           0x000604b0      011095e7       ldr r1, [r5, r1]
+│           0x000604b4      58708de2       add r7, sp, 0x58
+│           0x000604b8      006093e5       ldr r6, [r3]
+│           0x000604bc      1834ffeb       bl sym.imp.util::SharedPtrDefaultBase::SharedPtrDefaultBase_void____void__void___void_
+│           0x000604c0      103098e5       ldr r3, [r8, 0x10]
+│           0x000604c4      0410a0e1       mov r1, r4
+│           0x000604c8      283027e5       str r3, [r7, -0x28]!
+│           0x000604cc      040087e2       add r0, r7, 4
+│           0x000604d0      4532ffeb       bl sym.imp.util::SharedPtrDefaultBase::SharedPtrDefaultBase_util::SharedPtrDefaultBase_const_
+│           0x000604d4      0400a0e1       mov r0, r4
+│           0x000604d8      6630ffeb       bl sym.imp.util::SharedPtrDefaultBase::_SharedPtrDefaultBase__
+│           0x000604dc      484096e5       ldr r4, [r6, 0x48]
+│           0x000604e0      000054e3       cmp r4, 0
+│       ┌─< 0x000604e4      0e00000a       beq 0x60524
+│       │   0x000604e8      30209de5       ldr r2, [var_30h]
+│       │   0x000604ec      043094e5       ldr r3, [r4, 4]
+│       │   0x000604f0      020053e1       cmp r3, r2
+│      ┌──< 0x000604f4      060000da       ble 0x60514
+│     ┌───> 0x000604f8      183094e5       ldr r3, [r4, 0x18]
+│     ╎││   0x000604fc      000053e3       cmp r3, 0
+│    ┌────< 0x00060500      0700000a       beq 0x60524
+│   ┌─────> 0x00060504      0340a0e1       mov r4, r3
+│   ╎│╎││   0x00060508      043094e5       ldr r3, [r4, 4]
+│   ╎│╎││   0x0006050c      020053e1       cmp r3, r2
+│   ╎│└───< 0x00060510      f8ffffca       bgt 0x604f8
+│   ╎│┌└──> 0x00060514      670000aa       bge 0x606b8
+│   ╎││ │   0x00060518      1c3094e5       ldr r3, [r4, 0x1c]
+│   ╎││ │   0x0006051c      000053e3       cmp r3, 0
+│   └─────< 0x00060520      f7ffff1a       bne 0x60504
+│    └──└─> 0x00060524      40a39fe5       ldr sl, [0x0006086c]        ; [0x6086c:4]=0xffff1798
+│     │     0x00060528      40b39fe5       ldr fp, [0x00060870]        ; [0x60870:4]=0xffff6c3c ; "<l\xff\xff$\x18\xff\xffH\x10"
+│     │     0x0006052c      40339fe5       ldr r3, [0x00060874]        ; [0x60874:4]=0xffff1824 ; "$\x18\xff\xffH\x10"
+│     │     0x00060530      0aa085e0       add sl, r5, sl
+│     │     0x00060534      0bb085e0       add fp, r5, fp
+│     │     0x00060538      033085e0       add r3, r5, r3
+│     │     0x0006053c      08308de5       str r3, [var_8h]
+│     │     ; CODE XREF from CDSIDisplaymanagement::evtStartComponent(CDSIStartComponent*) @ 0x60760(x)
+│     │ ┌─> 0x00060540      2000a0e3       mov r0, 0x20
+│     │ ╎   0x00060544      852fffeb       bl sym.imp.malloc
+│     │ ╎   0x00060548      009050e2       subs sb, r0, 0
+│     │┌──< 0x0006054c      7e00000a       beq 0x6074c
+│     ││╎   0x00060550      0130a0e3       mov r3, 1
+│     ││╎   0x00060554      1030cde5       strb r3, [var_10h]
+│     ││╎   0x00060558      30309de5       ldr r3, [var_30h]
+│     ││╎   0x0006055c      18b08de2       add fp, sp, 0x18
+│     ││╎   0x00060560      041087e2       add r1, r7, 4
+│     ││╎   0x00060564      0b00a0e1       mov r0, fp
+│     ││╎   0x00060568      08a089e2       add sl, sb, 8
+│     ││╎   0x0006056c      14308de5       str r3, [var_14h]
+│     ││╎   0x00060570      1d32ffeb       bl sym.imp.util::SharedPtrDefaultBase::SharedPtrDefaultBase_util::SharedPtrDefaultBase_const_
+│     ││╎   0x00060574      1020dde5       ldrb r2, [var_10h]
+│     ││╎   0x00060578      0b10a0e1       mov r1, fp
+│     ││╎   0x0006057c      0a00a0e1       mov r0, sl
+│     ││╎   0x00060580      0030a0e3       mov r3, 0
+│     ││╎   0x00060584      2c308de5       str r3, [var_2ch]
+│     ││╎   0x00060588      0020c9e5       strb r2, [sb]
+│     ││╎   0x0006058c      14209de5       ldr r2, [var_14h]
+│     ││╎   0x00060590      24308de5       str r3, [var_24h]
+│     ││╎   0x00060594      28308de5       str r3, [var_28h]
+│     ││╎   0x00060598      042089e5       str r2, [sb, 4]
+│     ││╎   0x0006059c      1232ffeb       bl sym.imp.util::SharedPtrDefaultBase::SharedPtrDefaultBase_util::SharedPtrDefaultBase_const_
+│     ││╎   0x000605a0      24309de5       ldr r3, [var_24h]
+│     ││╎   0x000605a4      0b00a0e1       mov r0, fp
+│     ││╎   0x000605a8      143089e5       str r3, [sb, 0x14]
+│     ││╎   0x000605ac      28309de5       ldr r3, [var_28h]
+│     ││╎   0x000605b0      183089e5       str r3, [sb, 0x18]
+│     ││╎   0x000605b4      2c309de5       ldr r3, [var_2ch]
+│     ││╎   0x000605b8      1c3089e5       str r3, [sb, 0x1c]
+│     ││╎   0x000605bc      2d30ffeb       bl sym.imp.util::SharedPtrDefaultBase::_SharedPtrDefaultBase__
+│     ││╎   0x000605c0      0910a0e1       mov r1, sb
+│     ││╎   0x000605c4      0420a0e1       mov r2, r4
+│     ││╎   0x000605c8      480086e2       add r0, r6, 0x48
+│     ││╎   0x000605cc      0536ffeb       bl rsym._ZN3ipl14red_black_treeIiNS_4lessIiEENS_4pairIKiN4util9SharedPtrI8CDisplayNS5_20SharedPtrDefaultBaseEEEEENS_9Select1stISA_EENS_9allocatorIS9_EEE11insert_nodeEPNS_19red_black_tree_nodeISA_EESI_
+│     ││╎   0x000605d0      543096e5       ldr r3, [r6, 0x54]
+│     ││╎   0x000605d4      013083e2       add r3, r3, 1
+│     ││╎   0x000605d8      543086e5       str r3, [r6, 0x54]
+│     ││╎   ; CODE XREF from CDSIDisplaymanagement::evtStartComponent(CDSIStartComponent*) @ 0x606bc(x)
+│    ┌────> 0x000605dc      040087e2       add r0, r7, 4
+│    ╎││╎   0x000605e0      4c408de2       add r4, sp, 0x4c
+│    ╎││╎   0x000605e4      2330ffeb       bl sym.imp.util::SharedPtrDefaultBase::_SharedPtrDefaultBase__
+│    ╎││╎   0x000605e8      0a10a0e1       mov r1, sl
+│    ╎││╎   0x000605ec      0400a0e1       mov r0, r4
+│    ╎││╎   0x000605f0      fd31ffeb       bl sym.imp.util::SharedPtrDefaultBase::SharedPtrDefaultBase_util::SharedPtrDefaultBase_const_
+│    ╎││╎   0x000605f4      4c309de5       ldr r3, [var_4ch]
+│    ╎││╎   0x000605f8      000053e3       cmp r3, 0
+│   ┌─────< 0x000605fc      5800000a       beq 0x60764
+│   │╎││╎   0x00060600      50309de5       ldr r3, [var_50h]
+│   │╎││╎   0x00060604      000053e3       cmp r3, 0
+│  ┌──────< 0x00060608      5500000a       beq 0x60764
+│  ││╎││╎   0x0006060c      64329fe5       ldr r3, [0x00060878]        ; [0x60878:4]=0x1048 ; "H\x10"
+│  ││╎││╎   0x00060610      033095e7       ldr r3, [r5, r3]
+│  ││╎││╎   0x00060614      000053e3       cmp r3, 0
+│ ┌───────< 0x00060618      5100000a       beq 0x60764
+│ │││╎││╎   0x0006061c      0c6088e2       add r6, r8, 0xc
+│ │││╎││╎   0x00060620      0600a0e1       mov r0, r6
+│ │││╎││╎   0x00060624      8734ffeb       bl rsym._ZN15CASIMostDecoder20isManagedDisplayableERKi
+│ │││╎││╎   0x00060628      000050e3       cmp r0, 0
+│ ────────< 0x0006062c      2300001a       bne 0x606c0
+│ │││╎││╎   0x00060630      44229fe5       ldr r2, [0x0006087c]        ; [0x6087c:4]=0xe38
+│ │││╎││╎   0x00060634      0c3098e5       ldr r3, [r8, 0xc]
+│ │││╎││╎   0x00060638      022095e7       ldr r2, [r5, r2]
+│ │││╎││╎   0x0006063c      001092e5       ldr r1, [r2]
+│ │││╎││╎   0x00060640      010053e1       cmp r3, r1
+│ │││╎││╎   0x00060644      0110a013       movne r1, 1
+│ ────────< 0x00060648      5b00000a       beq 0x607bc
+│ ────────> 0x0006064c      380092e5       ldr r0, [r2, 0x38]
+│ │││╎││╎   0x00060650      382082e2       add r2, r2, 0x38
+│ │││╎││╎   0x00060654      000053e1       cmp r3, r0
+│ ────────< 0x00060658      5500000a       beq 0x607b4
+│ │││╎││╎   0x0006065c      011081e2       add r1, r1, 1
+│ │││╎││╎   0x00060660      070051e3       cmp r1, 7
+│ ────────< 0x00060664      f8ffff1a       bne 0x6064c
+│ ────────> 0x00060668      10229fe5       ldr r2, [0x00060880]        ; [0x60880:4]=0xd40
+│ │││╎││╎   0x0006066c      020095e7       ldr r0, [r5, r2]
+│ │││╎││╎   0x00060670      f823d0e1       ldrsh r2, [r0, 0x38]
+│ │││╎││╎   0x00060674      040052e3       cmp r2, 4
+│ ────────< 0x00060678      6d0000da       ble 0x60834
+│ │││╎││╎   ; CODE XREF from CDSIDisplaymanagement::evtStartComponent(CDSIStartComponent*) @ 0x60844(x)
+│ ────────> 0x0006067c      00329fe5       ldr r3, [0x00060884]        ; [0x60884:4]=0xcf0
+│ │││╎││╎   0x00060680      851200e3       movw r1, 0x285
+│ │││╎││╎   0x00060684      fc219fe5       ldr r2, [0x00060888]        ; [0x60888:4]=0xffff6018
+│ │││╎││╎   0x00060688      036095e7       ldr r6, [r5, r3]
+│ │││╎││╎   0x0006068c      022085e0       add r2, r5, r2
+│ │││╎││╎   0x00060690      000096e5       ldr r0, [r6]
+│ │││╎││╎   0x00060694      1731ffeb       bl rsym._ZN9CWatchdog5enterEiPKc
+│ │││╎││╎   0x00060698      0c309de5       ldr r3, [var_ch]
+│ │││╎││╎   0x0006069c      0c009de5       ldr r0, [var_ch]
+│ │││╎││╎   0x000606a0      03e0a0e3       mov lr, 3
+│ │││╎││╎   0x000606a4      0c1098e5       ldr r1, [r8, 0xc]
+│ │││╎││╎   0x000606a8      00c093e5       ldr ip, [r3]
+│ │││╎││╎   0x000606ac      102098e5       ldr r2, [r8, 0x10]
+│ │││╎││╎   0x000606b0      143098e5       ldr r3, [r8, 0x14]
+│ ────────< 0x000606b4      1a0000ea       b 0x60724
+│ │││╎└───> 0x000606b8      08a084e2       add sl, r4, 8
+│ │││└────< 0x000606bc      c6ffffea       b 0x605dc
+│ ────────> 0x000606c0      c4219fe5       ldr r2, [0x0006088c]        ; [0x6088c:4]=0xd84
+│ │││  │╎   0x000606c4      50309de5       ldr r3, [var_50h]
+│ │││  │╎   0x000606c8      101098e5       ldr r1, [r8, 0x10]
+│ │││  │╎   0x000606cc      022095e7       ldr r2, [r5, r2]
+│ │││  │╎   0x000606d0      18c093e5       ldr ip, [r3, 0x18]
+│ │││  │╎   0x000606d4      143093e5       ldr r3, [r3, 0x14]
+│ │││  │╎   0x000606d8      000092e5       ldr r0, [r2]
+│ │││  │╎   0x000606dc      0c2098e5       ldr r2, [r8, 0xc]
+│ │││  │╎   0x000606e0      100090e5       ldr r0, [r0, 0x10]
+│ │││  │╎   0x000606e4      00c08de5       str ip, [sp]
+│ │││  │╎   0x000606e8      f030ffeb       bl rsym._ZN15CASIMostDecoder10startVideoEiiii
+│ │││  │╎   0x000606ec      90319fe5       ldr r3, [0x00060884]        ; [0x60884:4]=0xcf0
+│ │││  │╎   0x000606f0      7d1200e3       movw r1, 0x27d
+│ │││  │╎   0x000606f4      8c219fe5       ldr r2, [0x00060888]        ; [0x60888:4]=0xffff6018
+│ │││  │╎   0x000606f8      036095e7       ldr r6, [r5, r3]
+│ │││  │╎   0x000606fc      022085e0       add r2, r5, r2
+│ │││  │╎   0x00060700      000096e5       ldr r0, [r6]
+│ │││  │╎   0x00060704      fb30ffeb       bl rsym._ZN9CWatchdog5enterEiPKc
+│ │││  │╎   0x00060708      0c309de5       ldr r3, [var_ch]
+│ │││  │╎   0x0006070c      0c009de5       ldr r0, [var_ch]
+│ │││  │╎   0x00060710      00e0a0e3       mov lr, 0
+│ │││  │╎   0x00060714      0c1098e5       ldr r1, [r8, 0xc]
+│ │││  │╎   0x00060718      00c093e5       ldr ip, [r3]
+│ │││  │╎   0x0006071c      102098e5       ldr r2, [r8, 0x10]
+│ │││  │╎   0x00060720      143098e5       ldr r3, [r8, 0x14]
+│ │││  │╎   ; CODE XREFS from CDSIDisplaymanagement::evtStartComponent(CDSIStartComponent*) @ 0x606b4(x), 0x607b0(x)
+│ ────┌───> 0x00060724      00e08de5       str lr, [sp]
+│ │││ ╎│╎   0x00060728      e8c09ce5       ldr ip, [ip, 0xe8]
+│ │││ ╎│╎   0x0006072c      3cff2fe1       blx ip
+│ │││ ╎│╎   0x00060730      000096e5       ldr r0, [r6]
+│ │││ ╎│╎   0x00060734      0c2fffeb       bl rsym._ZN9CWatchdog4exitEv
+│ │││ ╎│╎   ; CODE XREF from CDSIDisplaymanagement::evtStartComponent(CDSIStartComponent*) @ 0x60830(x)
+│ │││┌────> 0x00060738      0400a0e1       mov r0, r4
+│ │││╎╎│╎   0x0006073c      cd2fffeb       bl sym.imp.util::SharedPtrDefaultBase::_SharedPtrDefaultBase__
+│ │││╎╎│╎   0x00060740      0000a0e3       mov r0, 0
+│ │││╎╎│╎   0x00060744      5cd08de2       add sp, sp, 0x5c
+│ │││╎╎│╎   0x00060748      f08fbde8       pop {r4, r5, r6, r7, r8, sb, sl, fp, pc}
+│ │││╎╎└──> 0x0006074c      0a00a0e1       mov r0, sl
+│ │││╎╎ ╎   0x00060750      4a1100e3       movw r1, 0x14a
+│ │││╎╎ ╎   0x00060754      0b20a0e1       mov r2, fp
+│ │││╎╎ ╎   0x00060758      08309de5       ldr r3, [var_8h]
+│ │││╎╎ ╎   0x0006075c      2734ffeb       bl sym.imp.ipl::GlobalErrorHandler::doOutOfMem_char_const__int__char_const__char_const__..._
+│ │││╎╎ └─< 0x00060760      76ffffea       b 0x60540
+│ └└└─────> 0x00060764      14319fe5       ldr r3, [0x00060880]        ; [0x60880:4]=0xd40
+│    ╎╎     0x00060768      030095e7       ldr r0, [r5, r3]
+│    ╎╎     0x0006076c      f833d0e1       ldrsh r3, [r0, 0x38]
+│    ╎╎     0x00060770      040053e3       cmp r3, 4
+│    ╎╎ ┌─< 0x00060774      330000da       ble 0x60848
+│    ╎╎ │   ; CODE XREF from CDSIDisplaymanagement::evtStartComponent(CDSIStartComponent*) @ 0x6085c(x)
+│    ╎╎┌──> 0x00060778      04319fe5       ldr r3, [0x00060884]        ; [0x60884:4]=0xcf0
+│    ╎╎╎│   0x0006077c      761200e3       movw r1, 0x276
+│    ╎╎╎│   0x00060780      00219fe5       ldr r2, [0x00060888]        ; [0x60888:4]=0xffff6018
+│    ╎╎╎│   0x00060784      036095e7       ldr r6, [r5, r3]
+│    ╎╎╎│   0x00060788      022085e0       add r2, r5, r2
+│    ╎╎╎│   0x0006078c      000096e5       ldr r0, [r6]
+│    ╎╎╎│   0x00060790      d830ffeb       bl rsym._ZN9CWatchdog5enterEiPKc
+│    ╎╎╎│   0x00060794      0c309de5       ldr r3, [var_ch]
+│    ╎╎╎│   0x00060798      0c009de5       ldr r0, [var_ch]
+│    ╎╎╎│   0x0006079c      01e0a0e3       mov lr, 1
+│    ╎╎╎│   0x000607a0      0c1098e5       ldr r1, [r8, 0xc]
+│    ╎╎╎│   0x000607a4      00c093e5       ldr ip, [r3]
+│    ╎╎╎│   0x000607a8      102098e5       ldr r2, [r8, 0x10]
+│    ╎╎╎│   0x000607ac      143098e5       ldr r3, [r8, 0x14]
+│    ╎└───< 0x000607b0      dbffffea       b 0x60724
+│ ────────> 0x000607b4      070051e3       cmp r1, 7
+│ ────────< 0x000607b8      aaffff0a       beq 0x60668
+│ ────────> 0x000607bc      c8309fe5       ldr r3, [0x0006088c]        ; [0x6088c:4]=0xd84
+│    ╎ ╎│   0x000607c0      0610a0e1       mov r1, r6
+│    ╎ ╎│   0x000607c4      0120a0e3       mov r2, 1
+│    ╎ ╎│   0x000607c8      033095e7       ldr r3, [r5, r3]
+│    ╎ ╎│   0x000607cc      003093e5       ldr r3, [r3]
+│    ╎ ╎│   0x000607d0      1c0093e5       ldr r0, [r3, 0x1c]
+│    ╎ ╎│   0x000607d4      772fffeb       bl rsym._ZN17CCaptureInterface14startCapturingERKiNS_14ECaptureOriginE
+│    ╎ ╎│   0x000607d8      a4309fe5       ldr r3, [0x00060884]        ; [0x60884:4]=0xcf0
+│    ╎ ╎│   0x000607dc      a4209fe5       ldr r2, [0x00060888]        ; [0x60888:4]=0xffff6018
+│    ╎ ╎│   0x000607e0      811200e3       movw r1, 0x281
+│    ╎ ╎│   0x000607e4      036095e7       ldr r6, [r5, r3]
+│    ╎ ╎│   0x000607e8      022085e0       add r2, r5, r2
+│    ╎ ╎│   0x000607ec      0070a0e1       mov r7, r0
+│    ╎ ╎│   0x000607f0      000096e5       ldr r0, [r6]
+│    ╎ ╎│   0x000607f4      bf30ffeb       bl rsym._ZN9CWatchdog5enterEiPKc
+│    ╎ ╎│   0x000607f8      0c309de5       ldr r3, [var_ch]
+│    ╎ ╎│   0x000607fc      000057e3       cmp r7, 0
+│    ╎ ╎│   0x00060800      0c1098e5       ldr r1, [r8, 0xc]
+│    ╎ ╎│   0x00060804      0270a003       moveq r7, 2
+│    ╎ ╎│   0x00060808      0070a013       movne r7, 0
+│    ╎ ╎│   0x0006080c      00c093e5       ldr ip, [r3]
+│    ╎ ╎│   0x00060810      102098e5       ldr r2, [r8, 0x10]
+│    ╎ ╎│   0x00060814      143098e5       ldr r3, [r8, 0x14]
+│    ╎ ╎│   0x00060818      e8c09ce5       ldr ip, [ip, 0xe8]
+│    ╎ ╎│   0x0006081c      0c009de5       ldr r0, [var_ch]
+│    ╎ ╎│   0x00060820      00708de5       str r7, [sp]
+│    ╎ ╎│   0x00060824      3cff2fe1       blx ip
+│    ╎ ╎│   0x00060828      000096e5       ldr r0, [r6]
+│    ╎ ╎│   0x0006082c      ce2effeb       bl rsym._ZN9CWatchdog4exitEv
+│    └────< 0x00060830      c0ffffea       b 0x60738
+│ ────────> 0x00060834      54209fe5       ldr r2, [0x00060890]        ; [0x60890:4]=0xffff6c04
+│      ╎│   0x00060838      0410a0e3       mov r1, 4
+│      ╎│   0x0006083c      022085e0       add r2, r5, r2
+│      ╎│   0x00060840      eb2dffeb       bl sym.imp.tracing::Channel::logCV_short__char_const__..._
+│ ────────< 0x00060844      8cffffea       b 0x6067c
+│      ╎└─> 0x00060848      44209fe5       ldr r2, [0x00060894]        ; [0x60894:4]=0xffff6bd0
+│      ╎    0x0006084c      0410a0e3       mov r1, 4
+│      ╎    0x00060850      103098e5       ldr r3, [r8, 0x10]
+│      ╎    0x00060854      022085e0       add r2, r5, r2
+│      ╎    0x00060858      e52dffeb       bl sym.imp.tracing::Channel::logCV_short__char_const__..._
+└      └──< 0x0006085c      c5ffffea       b 0x60778
+            ;-- CCaptureInterface::stopCapturing(CCaptureInterface::ECaptureOrigin):
+┌ 316: method.CCaptureInterface.stopCapturing_CCaptureInterface::ECaptureOrigin_ (int32_t arg1, int32_t arg2);
+│ `- args(r0, r1)
+; arg1 ; CCaptureInterface::stopCapturing(CCaptureInterface::ECaptureO
+; rigin)
+│           0x0005a4ac      083090e5       ldr r3, [r0, 8]               ; RELOC 32 _ZN17CCaptureInterface13stopCapturingENS_14ECaptureOriginE @ 0x0005a4ac
+│           0x0005a4b0      70402de9       push {r4, r5, r6, lr}
+│           0x0005a4b4      000053e3       cmp r3, 0
+│           0x0005a4b8      28419fe5       ldr r4, [0x0005a5e8]        ; [0x5a5e8:4]=0x45490
+│           0x0005a4bc      0050a0e1       mov r5, r0                  ; arg1
+│           0x0005a4c0      04408fe0       add r4, pc, r4
+│       ┌─< 0x0005a4c4      3800000a       beq 0x5a5ac
+│       │   0x0005a4c8      0430d0e5       ldrb r3, [r0, 4]            ; arg1
+│       │   0x0005a4cc      000053e3       cmp r3, 0
+│      ┌──< 0x0005a4d0      0700000a       beq 0x5a4f4
+│      ││   0x0005a4d4      0c3090e5       ldr r3, [r0, 0xc]           ; arg1
+│      ││   0x0005a4d8      010053e1       cmp r3, r1                  ; arg2
+│     ┌───< 0x0005a4dc      0c00000a       beq 0x5a514
+│     │││   0x0005a4e0      04319fe5       ldr r3, [0x0005a5ec]        ; [0x5a5ec:4]=0x1044
+│     │││   0x0005a4e4      030094e7       ldr r0, [r4, r3]
+│     │││   0x0005a4e8      f833d0e1       ldrsh r3, [r0, 0x38]
+│     │││   0x0005a4ec      040053e3       cmp r3, 4
+│    ┌────< 0x0005a4f0      010000da       ble 0x5a4fc
+│    ││││   ; CODE XREF from CCaptureInterface::stopCapturing(CCaptureInterface::ECaptureOrigin) @ 0x5a5d0(x)
+│  ┌┌──└──> 0x0005a4f4      0000a0e3       mov r0, 0
+│  ╎╎││ │   0x0005a4f8      7080bde8       pop {r4, r5, r6, pc}
+│  ╎╎└────> 0x0005a4fc      ec209fe5       ldr r2, [0x0005a5f0]        ; [0x5a5f0:4]=0xffff58f4
+│  ╎╎ │ │   0x0005a500      0410a0e3       mov r1, 4
+│  ╎╎ │ │   0x0005a504      022084e0       add r2, r4, r2
+│  ╎╎ │ │   0x0005a508      5c4cffeb       bl sym.imp.tracing::Channel::logC_short__char_const_
+│  ╎╎ │ │   0x0005a50c      0000a0e3       mov r0, 0
+│  ╎╎ │ │   0x0005a510      7080bde8       pop {r4, r5, r6, pc}
+│  ╎╎ └───> 0x0005a514      d0309fe5       ldr r3, [0x0005a5ec]        ; [0x5a5ec:4]=0x1044
+│  ╎╎   │   0x0005a518      030094e7       ldr r0, [r4, r3]
+│  ╎╎   │   0x0005a51c      f833d0e1       ldrsh r3, [r0, 0x38]
+│  ╎╎   │   0x0005a520      010053e3       cmp r3, 1
+│  ╎╎  ┌──< 0x0005a524      2a0000da       ble 0x5a5d4
+│  ╎╎  ││   ; CODE XREF from CCaptureInterface::stopCapturing(CCaptureInterface::ECaptureOrigin) @ 0x5a5e4(x)
+│  ╎╎ ┌───> 0x0005a528      103095e5       ldr r3, [r5, 0x10]
+│  ╎╎ ╎││   0x0005a52c      000053e3       cmp r3, 0
+│  ╎╎┌────< 0x0005a530      0a00001a       bne 0x5a560
+│  ╎╎│╎││   0x0005a534      b8309fe5       ldr r3, [0x0005a5f4]        ; [0x5a5f4:4]=0xd84
+│  ╎╎│╎││   0x0005a538      0000a0e3       mov r0, 0
+│  ╎╎│╎││   0x0005a53c      b4209fe5       ldr r2, [0x0005a5f8]        ; [0x5a5f8:4]=0xf70
+│  ╎╎│╎││   0x0005a540      033094e7       ldr r3, [r4, r3]
+│  ╎╎│╎││   0x0005a544      022094e7       ldr r2, [r4, r2]
+│  ╎╎│╎││   0x0005a548      003093e5       ldr r3, [r3]
+│  ╎╎│╎││   0x0005a54c      001092e5       ldr r1, [r2]
+│  ╎╎│╎││   0x0005a550      042093e5       ldr r2, [r3, 4]
+│  ╎╎│╎││   0x0005a554      000052e3       cmp r2, 0
+│  ╎╎│╎││   0x0005a558      28208212       addne r2, r2, 0x28
+│  ╎╎│╎││   0x0005a55c      d64dffeb       bl rsym._ZN24CDiagVPSStatusChangedEvt4postEbP11IEventQueueP13IEventHandler
+│  ╎╎└────> 0x0005a560      94309fe5       ldr r3, [0x0005a5fc]        ; [0x5a5fc:4]=0xcf0
+│  ╎╎ ╎││   0x0005a564      9d10a0e3       mov r1, 0x9d
+│  ╎╎ ╎││   0x0005a568      90209fe5       ldr r2, [0x0005a600]        ; [0x5a600:4]=0xffff583c
+│  ╎╎ ╎││   0x0005a56c      036094e7       ldr r6, [r4, r3]
+│  ╎╎ ╎││   0x0005a570      022084e0       add r2, r4, r2
+│  ╎╎ ╎││   0x0005a574      000096e5       ldr r0, [r6]
+│  ╎╎ ╎││   0x0005a578      5e49ffeb       bl rsym._ZN9CWatchdog5enterEiPKc
+│  ╎╎ ╎││   0x0005a57c      083095e5       ldr r3, [r5, 8]
+│  ╎╎ ╎││   0x0005a580      000093e5       ldr r0, [r3]
+│  ╎╎ ╎││   0x0005a584      183093e5       ldr r3, [r3, 0x18]
+│  ╎╎ ╎││   0x0005a588      33ff2fe1       blx r3
+│  ╎╎ ╎││   0x0005a58c      000096e5       ldr r0, [r6]
+│  ╎╎ ╎││   0x0005a590      7547ffeb       bl rsym._ZN9CWatchdog4exitEv
+│  ╎╎ ╎││   0x0005a594      0030a0e3       mov r3, 0
+│  ╎╎ ╎││   0x0005a598      0000a0e3       mov r0, 0
+│  ╎╎ ╎││   0x0005a59c      0430c5e5       strb r3, [r5, 4]
+│  ╎╎ ╎││   0x0005a5a0      0730a0e3       mov r3, 7
+│  ╎╎ ╎││   0x0005a5a4      103085e5       str r3, [r5, 0x10]
+│  ╎╎ ╎││   0x0005a5a8      7080bde8       pop {r4, r5, r6, pc}
+│  ╎╎ ╎│└─> 0x0005a5ac      38309fe5       ldr r3, [0x0005a5ec]        ; [0x5a5ec:4]=0x1044
+│  ╎╎ ╎│    0x0005a5b0      030094e7       ldr r0, [r4, r3]
+│  ╎╎ ╎│    0x0005a5b4      f833d0e1       ldrsh r3, [r0, 0x38]
+│  ╎╎ ╎│    0x0005a5b8      040053e3       cmp r3, 4
+│  └──────< 0x0005a5bc      ccffffca       bgt 0x5a4f4
+│   ╎ ╎│    0x0005a5c0      3c209fe5       ldr r2, [0x0005a604]        ; [0x5a604:4]=0xffff5568
+│   ╎ ╎│    0x0005a5c4      0410a0e3       mov r1, 4
+│   ╎ ╎│    0x0005a5c8      022084e0       add r2, r4, r2
+│   ╎ ╎│    0x0005a5cc      2b4cffeb       bl sym.imp.tracing::Channel::logC_short__char_const_
+│   └─────< 0x0005a5d0      c7ffffea       b 0x5a4f4
+│     ╎└──> 0x0005a5d4      2c209fe5       ldr r2, [0x0005a608]        ; [0x5a608:4]=0xffff5824
+│     ╎     0x0005a5d8      0110a0e3       mov r1, 1
+│     ╎     0x0005a5dc      022084e0       add r2, r4, r2
+│     ╎     0x0005a5e0      264cffeb       bl sym.imp.tracing::Channel::logC_short__char_const_
+└     └───< 0x0005a5e4      cfffffea       b 0x5a528

@@ -1,0 +1,2258 @@
+{
+  "build": "24A5418b",
+  "initialAllowed": {
+    "addr": "0x251080ed8",
+    "asm": {
+      "name": "___carEndpoint_Activate_block_invoke_2",
+      "start_ea": "0x251080ed8",
+      "segment": "__text",
+      "lines": [
+        {
+          "addr": "251082f70",
+          "instruction": "CBZ X21, loc_251082F7C",
+          "label": "loc_251082F70",
+          "refs": [
+            {
+              "addr": "0x251082f7c",
+              "name": "loc_251082F7C"
+            }
+          ]
+        },
+        {
+          "addr": "251082f74",
+          "instruction": "MOV X0, X21"
+        },
+        {
+          "addr": "251082f78",
+          "instruction": "BL 0x258101B70"
+        },
+        {
+          "addr": "251082f7c",
+          "instruction": "LDUR W0, [X29,#var_7C]",
+          "label": "loc_251082F7C"
+        },
+        {
+          "addr": "251082f80",
+          "instruction": "LDUR X8, [X29,#var_D8]"
+        },
+        {
+          "addr": "251082f84",
+          "instruction": "STR W0, [X8,#0x18]"
+        },
+        {
+          "addr": "251082f88",
+          "instruction": "CBNZ W0, loc_251084120",
+          "refs": [
+            {
+              "addr": "0x251084120",
+              "name": "loc_251084120"
+            }
+          ]
+        },
+        {
+          "addr": "251082f8c",
+          "instruction": "LDUR X0, [X29,#var_F8]",
+          "label": "loc_251082F8C"
+        },
+        {
+          "addr": "251082f90",
+          "instruction": "ADRL X1, stru_275B04920",
+          "refs": [
+            {
+              "addr": "0x275b04920",
+              "name": "stru_275B04920"
+            }
+          ]
+        },
+        {
+          "addr": "251082f98",
+          "instruction": "BL 0x258111BB0"
+        },
+        {
+          "addr": "251082f9c",
+          "instruction": "MOV X1, X0"
+        },
+        {
+          "addr": "251082fa0",
+          "instruction": "MOV X0, X22"
+        },
+        {
+          "addr": "251082fa4",
+          "instruction": "BL _carEndpoint_updateVideoPlaybackAllowed; Video in Car audit 2026-09-14: negotiated support gates Boolean permission update, state-change notification and audio-only transition helper. CFString key and endpoint property mapping require resolution; do not infer from old report.",
+          "refs": [
+            {
+              "addr": "0x2511490a0",
+              "name": "_carEndpoint_updateVideoPlaybackAllowed"
+            }
+          ]
+        },
+        {
+          "addr": "251082fa8",
+          "instruction": "LDUR X8, [X29,#var_D8]"
+        },
+        {
+          "addr": "251082fac",
+          "instruction": "STR W0, [X8,#0x18]"
+        },
+        {
+          "addr": "251082fb0",
+          "instruction": "CBNZ W0, loc_2510840F0",
+          "refs": [
+            {
+              "addr": "0x2510840f0",
+              "name": "loc_2510840F0"
+            }
+          ]
+        },
+        {
+          "addr": "251082fb4",
+          "instruction": "MOV X28, X26"
+        },
+        {
+          "addr": "251082fb8",
+          "instruction": "LDRB W8, [X25,#0x44]"
+        },
+        {
+          "addr": "251082fbc",
+          "instruction": "CBZ W8, loc_251082FE0",
+          "refs": [
+            {
+              "addr": "0x251082fe0",
+              "name": "loc_251082FE0"
+            }
+          ]
+        },
+        {
+          "addr": "251082fc0",
+          "instruction": "ADRL X0, aAirplay; \"AirPlay\"",
+          "refs": [
+            {
+              "addr": "0x2511812c5",
+              "name": "aAirplay",
+              "string": "AirPlay"
+            }
+          ]
+        },
+        {
+          "addr": "251082fc8",
+          "instruction": "ADRL X1, aCarplayvideopl; \"CarPlayVideoPlayback_DestinationBanner\"",
+          "refs": [
+            {
+              "addr": "0x2511d7811",
+              "name": "aCarplayvideopl",
+              "string": "CarPlayVideoPlayback_DestinationBanner"
+            }
+          ]
+        },
+        {
+          "addr": "251082fd0",
+          "instruction": "BL 0x258102850"
+        },
+        {
+          "addr": "251082fd4",
+          "instruction": "TBNZ W0, #0, loc_251082FE0",
+          "refs": [
+            {
+              "addr": "0x251082fe0",
+              "name": "loc_251082FE0"
+            }
+          ]
+        },
+        {
+          "addr": "251082fd8",
+          "instruction": "MOV W8, #1"
+        },
+        {
+          "addr": "251082fdc",
+          "instruction": "STRB W8, [X25,#0xDE]"
+        },
+        {
+          "addr": "251082fe0",
+          "instruction": "MOV W19, #0xFFFE004",
+          "label": "loc_251082FE0"
+        },
+        {
+          "addr": "251082fe8",
+          "instruction": "MOV W21, #0xFFE0001"
+        },
+        {
+          "addr": "251082ff0",
+          "instruction": "MOV W22, #0xEF00004"
+        },
+        {
+          "addr": "251082ff8",
+          "instruction": "MOV W20, #0x9000002"
+        },
+        {
+          "addr": "251083000",
+          "instruction": "LDR X0, [X25,#0x290]"
+        },
+        {
+          "addr": "251083004",
+          "instruction": "MOV W1, #0xFFE0001"
+        },
+        {
+          "addr": "25108300c",
+          "instruction": "BL 0x25810FE20"
+        },
+        {
+          "addr": "251083010",
+          "instruction": "LDR X0, [SP,#0x3B0+var_330]"
+        },
+        {
+          "addr": "251083014",
+          "instruction": "BL 0x25810D5C0"
+        },
+        {
+          "addr": "251083018",
+          "instruction": "MOV X26, X0"
+        },
+        {
+          "addr": "25108301c",
+          "instruction": "ADD X8, SP, #0x3B0+var_240"
+        },
+        {
+          "addr": "251083020",
+          "instruction": "STP XZR, X8, [SP,#0x3B0+var_240]"
+        },
+        {
+          "addr": "251083024",
+          "instruction": "STR D9, [SP,#0x3B0+var_230]"
+        },
+        {
+          "addr": "251083028",
+          "instruction": "STR WZR, [SP,#0x3B0+var_228]"
+        },
+        {
+          "addr": "25108302c",
+          "instruction": "ADRP X2, #0x2680C3390@PAGE"
+        },
+        {
+          "addr": "251083030",
+          "instruction": "LDR X2, [X2,#0x2680C3390@PAGEOFF]"
+        },
+        {
+          "addr": "251083034",
+          "instruction": "ADRP X3, #0x2680C3398@PAGE"
+        },
+        {
+          "addr": "251083038",
+          "instruction": "LDR X3, [X3,#0x2680C3398@PAGEOFF]"
+        },
+        {
+          "addr": "25108303c",
+          "instruction": "MOV X0, #0"
+        },
+        {
+          "addr": "251083040",
+          "instruction": "MOV X1, #0"
+        },
+        {
+          "addr": "251083044",
+          "instruction": "BL 0x258102570"
+        },
+        {
+          "addr": "251083048",
+          "instruction": "STR X27, [SP,#0x3B0+var_350]"
+        },
+        {
+          "addr": "25108304c",
+          "instruction": "CBZ X0, loc_2510840F8",
+          "refs": [
+            {
+              "addr": "0x2510840f8",
+              "name": "loc_2510840F8"
+            }
+          ]
+        },
+        {
+          "addr": "251083050",
+          "instruction": "MOV X25, X0"
+        },
+        {
+          "addr": "251083054",
+          "instruction": "ADRP X24, #_gLogCategory_APEndpointCarPlay@PAGE",
+          "refs": [
+            {
+              "addr": "0x26e755490",
+              "name": "_gLogCategory_APEndpointCarPlay"
+            }
+          ]
+        },
+        {
+          "addr": "251083058",
+          "instruction": "LDR W8, [X24,#_gLogCategory_APEndpointCarPlay@PAGEOFF]",
+          "refs": [
+            {
+              "addr": "0x26e755490",
+              "name": "_gLogCategory_APEndpointCarPlay"
+            }
+          ]
+        },
+        {
+          "addr": "25108305c",
+          "instruction": "CMP W8, #0x32 ; '2'"
+        },
+        {
+          "addr": "251083060",
+          "instruction": "B.GT loc_251083080",
+          "refs": [
+            {
+              "addr": "0x251083080",
+              "name": "loc_251083080"
+            }
+          ]
+        },
+        {
+          "addr": "251083064",
+          "instruction": "CMN W8, #1"
+        },
+        {
+          "addr": "251083068",
+          "instruction": "B.NE loc_2510838C8",
+          "refs": [
+            {
+              "addr": "0x2510838c8",
+              "name": "loc_2510838C8"
+            }
+          ]
+        },
+        {
+          "addr": "25108306c",
+          "instruction": "ADRL X0, _gLogCategory_APEndpointCarPlay",
+          "refs": [
+            {
+              "addr": "0x26e755490",
+              "name": "_gLogCategory_APEndpointCarPlay"
+            }
+          ]
+        },
+        {
+          "addr": "251083074",
+          "instruction": "MOV W1, #0x32 ; '2'"
+        },
+        {
+          "addr": "251083078",
+          "instruction": "BL 0x258100DC0"
+        },
+        {
+          "addr": "25108307c",
+          "instruction": "CBNZ W0, loc_2510838C8",
+          "refs": [
+            {
+              "addr": "0x2510838c8",
+              "name": "loc_2510838C8"
+            }
+          ]
+        },
+        {
+          "addr": "251083080",
+          "instruction": "MOV X27, #0",
+          "label": "loc_251083080"
+        },
+        {
+          "addr": "251083084",
+          "instruction": "LDRB W8, [X26,#0x28]",
+          "label": "loc_251083084"
+        },
+        {
+          "addr": "251083088",
+          "instruction": "LDR X0, [X26,#0x298]"
+        },
+        {
+          "addr": "25108308c",
+          "instruction": "LDR X2, [X26,#0x290]"
+        },
+        {
+          "addr": "251083090",
+          "instruction": "ADRL X4, stru_275B05BC0",
+          "refs": [
+            {
+              "addr": "0x275b05bc0",
+              "name": "stru_275B05BC0"
+            }
+          ]
+        },
+        {
+          "addr": "251083098",
+          "instruction": "CBNZ W8, loc_2510830E4",
+          "refs": [
+            {
+              "addr": "0x2510830e4",
+              "name": "loc_2510830E4"
+            }
+          ]
+        },
+        {
+          "addr": "25108309c",
+          "instruction": "ADD W1, W19, #1"
+        },
+        {
+          "addr": "2510830a0",
+          "instruction": "MOV W3, #0xFFE0001"
+        },
+        {
+          "addr": "2510830a8",
+          "instruction": "MOV X5, X25"
+        },
+        {
+          "addr": "2510830ac",
+          "instruction": "MOV X6, X27"
+        },
+        {
+          "addr": "2510830b0",
+          "instruction": "BL _carEndpoint_addEventIntervalToPerformanceDictionaryAndLog",
+          "refs": [
+            {
+              "addr": "0x25108ff70",
+              "name": "_carEndpoint_addEventIntervalToPerformanceDictionaryAndLog"
+            }
+          ]
+        }
+      ],
+      "stack_frame": [
+        {
+          "name": "var_3B0",
+          "offset": "0x0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_3A8",
+          "offset": "0x8",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_3A0",
+          "offset": "0x10",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_390",
+          "offset": "0x20",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_388",
+          "offset": "0x28",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_37C",
+          "offset": "0x34",
+          "size": "0x4",
+          "type": "_DWORD"
+        },
+        {
+          "name": "var_378",
+          "offset": "0x38",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_370",
+          "offset": "0x40",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_368",
+          "offset": "0x48",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_360",
+          "offset": "0x50",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_354",
+          "offset": "0x5c",
+          "size": "0x4",
+          "type": "_DWORD"
+        },
+        {
+          "name": "var_350",
+          "offset": "0x60",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_348",
+          "offset": "0x68",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_340",
+          "offset": "0x70",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_338",
+          "offset": "0x78",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_330",
+          "offset": "0x80",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_328",
+          "offset": "0x88",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_320",
+          "offset": "0x90",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_318",
+          "offset": "0x98",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_310",
+          "offset": "0xa0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_300",
+          "offset": "0xb0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_2F0",
+          "offset": "0xc0",
+          "size": "0x10",
+          "type": "_OWORD"
+        },
+        {
+          "name": "var_2E0",
+          "offset": "0xd0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_2D8",
+          "offset": "0xd8",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_2D0",
+          "offset": "0xe0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_2C8",
+          "offset": "0xe8",
+          "size": "0x4",
+          "type": "_DWORD"
+        },
+        {
+          "name": "var_2C0",
+          "offset": "0xf0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_2B8",
+          "offset": "0xf8",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_2B0",
+          "offset": "0x100",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_2A0",
+          "offset": "0x110",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_290",
+          "offset": "0x120",
+          "size": "0x10",
+          "type": "_OWORD"
+        },
+        {
+          "name": "var_280",
+          "offset": "0x130",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_278",
+          "offset": "0x138",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_270",
+          "offset": "0x140",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_268",
+          "offset": "0x148",
+          "size": "0x1",
+          "type": "_BYTE"
+        },
+        {
+          "name": "var_260",
+          "offset": "0x150",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_258",
+          "offset": "0x158",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_250",
+          "offset": "0x160",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_248",
+          "offset": "0x168",
+          "size": "0x4",
+          "type": "_DWORD"
+        },
+        {
+          "name": "var_240",
+          "offset": "0x170",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_238",
+          "offset": "0x178",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_230",
+          "offset": "0x180",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_228",
+          "offset": "0x188",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_220",
+          "offset": "0x190",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_218",
+          "offset": "0x198",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_210",
+          "offset": "0x1a0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_208",
+          "offset": "0x1a8",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_200",
+          "offset": "0x1b0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_1F8",
+          "offset": "0x1b8",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_1F0",
+          "offset": "0x1c0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_1E8",
+          "offset": "0x1c8",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_1E0",
+          "offset": "0x1d0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_1D8",
+          "offset": "0x1d8",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_1D0",
+          "offset": "0x1e0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_1C8",
+          "offset": "0x1e8",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_1C0",
+          "offset": "0x1f0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_1B8",
+          "offset": "0x1f8",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_1B0",
+          "offset": "0x200",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_1A8",
+          "offset": "0x208",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_1A0",
+          "offset": "0x210",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_198",
+          "offset": "0x218",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_190",
+          "offset": "0x220",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_188",
+          "offset": "0x228",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_180",
+          "offset": "0x230",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_178",
+          "offset": "0x238",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_170",
+          "offset": "0x240",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_168",
+          "offset": "0x248",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_160",
+          "offset": "0x250",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_158",
+          "offset": "0x258",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_150",
+          "offset": "0x260",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_148",
+          "offset": "0x268",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_138",
+          "offset": "0x278",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_130",
+          "offset": "0x280",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_128",
+          "offset": "0x288",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_120",
+          "offset": "0x290",
+          "size": "0x4",
+          "type": "_DWORD"
+        },
+        {
+          "name": "var_118",
+          "offset": "0x298",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_110",
+          "offset": "0x2a0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_108",
+          "offset": "0x2a8",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_100",
+          "offset": "0x2b0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_F8",
+          "offset": "0x2b8",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_F0",
+          "offset": "0x2c0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_E8",
+          "offset": "0x2c8",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_E0",
+          "offset": "0x2d0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_D8",
+          "offset": "0x2d8",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_D0",
+          "offset": "0x2e0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_C8",
+          "offset": "0x2e8",
+          "size": "0x4",
+          "type": "_DWORD"
+        },
+        {
+          "name": "var_C0",
+          "offset": "0x2f0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_B8",
+          "offset": "0x2f8",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_B0",
+          "offset": "0x300",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_A8",
+          "offset": "0x308",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_A0",
+          "offset": "0x310",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_98",
+          "offset": "0x318",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_90",
+          "offset": "0x320",
+          "size": "0x4",
+          "type": "_DWORD"
+        },
+        {
+          "name": "var_89",
+          "offset": "0x327",
+          "size": "0x1",
+          "type": "_BYTE"
+        },
+        {
+          "name": "var_88",
+          "offset": "0x328",
+          "size": "0x8",
+          "type": "__int64"
+        },
+        {
+          "name": "var_7C",
+          "offset": "0x334",
+          "size": "0x4",
+          "type": "_DWORD"
+        },
+        {
+          "name": "var_70",
+          "offset": "0x340",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_60",
+          "offset": "0x350",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_50",
+          "offset": "0x360",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_40",
+          "offset": "0x370",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_30",
+          "offset": "0x380",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_20",
+          "offset": "0x390",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_10",
+          "offset": "0x3a0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_s0",
+          "offset": "0x3b0",
+          "size": "0x8",
+          "type": "_QWORD"
+        }
+      ],
+      "return_type": "__int64",
+      "arguments": [
+        {
+          "name": "arg0",
+          "type": "_QWORD *"
+        }
+      ]
+    },
+    "instruction_count": 70,
+    "total_instructions": null,
+    "cursor": {
+      "next": 1920
+    }
+  },
+  "activationTail": {
+    "addr": "0x251080ed8",
+    "asm": {
+      "name": "___carEndpoint_Activate_block_invoke_2",
+      "start_ea": "0x251080ed8",
+      "segment": "__text",
+      "lines": [
+        {
+          "addr": "2510820c8",
+          "instruction": "MOV W2, #0"
+        },
+        {
+          "addr": "2510820cc",
+          "instruction": "MOV W7, #2"
+        },
+        {
+          "addr": "2510820d0",
+          "instruction": "BL 0x258102860"
+        },
+        {
+          "addr": "2510820d4",
+          "instruction": "MOV X26, X24",
+          "label": "loc_2510820D4"
+        },
+        {
+          "addr": "2510820d8",
+          "instruction": "CBZ X20, loc_2510820E4",
+          "refs": [
+            {
+              "addr": "0x2510820e4",
+              "name": "loc_2510820E4"
+            }
+          ]
+        },
+        {
+          "addr": "2510820dc",
+          "instruction": "MOV X0, X20"
+        },
+        {
+          "addr": "2510820e0",
+          "instruction": "BL 0x258112AA0"
+        },
+        {
+          "addr": "2510820e4",
+          "instruction": "LDUR X8, [X29,#var_D8]",
+          "label": "loc_2510820E4"
+        },
+        {
+          "addr": "2510820e8",
+          "instruction": "LDR W0, [X8,#0x18]"
+        },
+        {
+          "addr": "2510820ec",
+          "instruction": "CBNZ W0, loc_251083FEC",
+          "refs": [
+            {
+              "addr": "0x251083fec",
+              "name": "loc_251083FEC"
+            }
+          ]
+        },
+        {
+          "addr": "2510820f0",
+          "instruction": "LDR X8, [SP,#0x3B0+var_110]",
+          "label": "loc_2510820F0"
+        },
+        {
+          "addr": "2510820f4",
+          "instruction": "LDR X20, [X8,#0x18]"
+        },
+        {
+          "addr": "2510820f8",
+          "instruction": "MOV X0, X20"
+        },
+        {
+          "addr": "2510820fc",
+          "instruction": "BL 0x25810BA60"
+        },
+        {
+          "addr": "251082100",
+          "instruction": "LDR X16, [X0,#0x10]!"
+        },
+        {
+          "addr": "251082104",
+          "instruction": "MOV X17, X0"
+        },
+        {
+          "addr": "251082108",
+          "instruction": "MOVK X17, #0x8354,LSL#48"
+        },
+        {
+          "addr": "25108210c",
+          "instruction": "AUTDA X16, X17"
+        },
+        {
+          "addr": "251082110",
+          "instruction": "LDR X9, [X16,#0x78]!"
+        },
+        {
+          "addr": "251082114",
+          "instruction": "CBZ X9, loc_2510822E0",
+          "refs": [
+            {
+              "addr": "0x2510822e0",
+              "name": "loc_2510822E0"
+            }
+          ]
+        },
+        {
+          "addr": "251082118",
+          "instruction": "MOV X8, X16"
+        },
+        {
+          "addr": "25108211c",
+          "instruction": "MOVK X8, #0x2786,LSL#48"
+        },
+        {
+          "addr": "251082120",
+          "instruction": "MOV X16, X9"
+        },
+        {
+          "addr": "251082124",
+          "instruction": "MOV X17, X8"
+        },
+        {
+          "addr": "251082128",
+          "instruction": "AUTIA X16, X17"
+        },
+        {
+          "addr": "25108212c",
+          "instruction": "MOV X17, X16"
+        },
+        {
+          "addr": "251082130",
+          "instruction": "XPACI X17"
+        },
+        {
+          "addr": "251082134",
+          "instruction": "CMP X16, X17"
+        },
+        {
+          "addr": "251082138",
+          "instruction": "B.EQ loc_251082140",
+          "refs": [
+            {
+              "addr": "0x251082140",
+              "name": "loc_251082140"
+            }
+          ]
+        },
+        {
+          "addr": "25108213c",
+          "instruction": "BRK #0xC470"
+        },
+        {
+          "addr": "251082140",
+          "instruction": "PACIZA X16",
+          "label": "loc_251082140"
+        },
+        {
+          "addr": "251082144",
+          "instruction": "CBZ X16, loc_2510822E0",
+          "refs": [
+            {
+              "addr": "0x2510822e0",
+              "name": "loc_2510822E0"
+            }
+          ]
+        },
+        {
+          "addr": "251082148",
+          "instruction": "MOV X0, X20"
+        },
+        {
+          "addr": "25108214c",
+          "instruction": "MOV X1, X27"
+        },
+        {
+          "addr": "251082150",
+          "instruction": "BLRAA X9, X8"
+        },
+        {
+          "addr": "251082154",
+          "instruction": "LDUR X8, [X29,#var_D8]"
+        },
+        {
+          "addr": "251082158",
+          "instruction": "STR W0, [X8,#0x18]"
+        },
+        {
+          "addr": "25108215c",
+          "instruction": "CBNZ W0, loc_2510822EC",
+          "refs": [
+            {
+              "addr": "0x2510822ec",
+              "name": "loc_2510822EC"
+            }
+          ]
+        },
+        {
+          "addr": "251082160",
+          "instruction": "LDR X21, [X25,#8]"
+        },
+        {
+          "addr": "251082164",
+          "instruction": "MOV X0, X22"
+        },
+        {
+          "addr": "251082168",
+          "instruction": "BL 0x2581081E0"
+        },
+        {
+          "addr": "25108216c",
+          "instruction": "MOV X20, X0"
+        },
+        {
+          "addr": "251082170",
+          "instruction": "MOV X0, X21"
+        },
+        {
+          "addr": "251082174",
+          "instruction": "BL _APEndpointDescriptionGetCMBaseObject",
+          "refs": [
+            {
+              "addr": "0x250f414cc",
+              "name": "_APEndpointDescriptionGetCMBaseObject"
+            }
+          ]
+        },
+        {
+          "addr": "251082178",
+          "instruction": "MOV X21, X0"
+        },
+        {
+          "addr": "25108217c",
+          "instruction": "BL 0x25810BA60"
+        },
+        {
+          "addr": "251082180",
+          "instruction": "LDR X16, [X0,#8]!"
+        },
+        {
+          "addr": "251082184",
+          "instruction": "MOV X17, X0"
+        },
+        {
+          "addr": "251082188",
+          "instruction": "MOVK X17, #0xB911,LSL#48"
+        },
+        {
+          "addr": "25108218c",
+          "instruction": "AUTDA X16, X17"
+        },
+        {
+          "addr": "251082190",
+          "instruction": "LDR X9, [X16,#0x30]!"
+        },
+        {
+          "addr": "251082194",
+          "instruction": "CBZ X9, loc_2510827E8",
+          "refs": [
+            {
+              "addr": "0x2510827e8",
+              "name": "loc_2510827E8"
+            }
+          ]
+        },
+        {
+          "addr": "251082198",
+          "instruction": "MOV X8, X16"
+        },
+        {
+          "addr": "25108219c",
+          "instruction": "MOVK X8, #0x9725,LSL#48"
+        },
+        {
+          "addr": "2510821a0",
+          "instruction": "MOV X16, X9"
+        },
+        {
+          "addr": "2510821a4",
+          "instruction": "MOV X17, X8"
+        },
+        {
+          "addr": "2510821a8",
+          "instruction": "AUTIA X16, X17"
+        },
+        {
+          "addr": "2510821ac",
+          "instruction": "MOV X17, X16"
+        },
+        {
+          "addr": "2510821b0",
+          "instruction": "XPACI X17"
+        },
+        {
+          "addr": "2510821b4",
+          "instruction": "CMP X16, X17"
+        },
+        {
+          "addr": "2510821b8",
+          "instruction": "B.EQ loc_2510821C0",
+          "refs": [
+            {
+              "addr": "0x2510821c0",
+              "name": "loc_2510821C0"
+            }
+          ]
+        },
+        {
+          "addr": "2510821bc",
+          "instruction": "BRK #0xC470"
+        },
+        {
+          "addr": "2510821c0",
+          "instruction": "PACIZA X16",
+          "label": "loc_2510821C0"
+        },
+        {
+          "addr": "2510821c4",
+          "instruction": "CBZ X16, loc_2510827E8",
+          "refs": [
+            {
+              "addr": "0x2510827e8",
+              "name": "loc_2510827E8"
+            }
+          ]
+        },
+        {
+          "addr": "2510821c8",
+          "instruction": "ADRL X10, _kAPEndpointDescriptionProperty_EndpointInfo",
+          "refs": [
+            {
+              "addr": "0x269392420",
+              "name": "_kAPEndpointDescriptionProperty_EndpointInfo"
+            }
+          ]
+        },
+        {
+          "addr": "2510821d0",
+          "instruction": "LDR X1, [X10]",
+          "refs": [
+            {
+              "addr": "0x269392420",
+              "name": "_kAPEndpointDescriptionProperty_EndpointInfo"
+            }
+          ]
+        },
+        {
+          "addr": "2510821d4",
+          "instruction": "SUB X3, X29, #-var_F8"
+        },
+        {
+          "addr": "2510821d8",
+          "instruction": "MOV X0, X21"
+        },
+        {
+          "addr": "2510821dc",
+          "instruction": "MOV X2, X20"
+        },
+        {
+          "addr": "2510821e0",
+          "instruction": "BLRAA X9, X8"
+        },
+        {
+          "addr": "2510821e4",
+          "instruction": "LDUR X8, [X29,#var_D8]"
+        },
+        {
+          "addr": "2510821e8",
+          "instruction": "STR W0, [X8,#0x18]"
+        },
+        {
+          "addr": "2510821ec",
+          "instruction": "CBNZ W0, loc_2510827F4",
+          "refs": [
+            {
+              "addr": "0x2510827f4",
+              "name": "loc_2510827F4"
+            }
+          ]
+        },
+        {
+          "addr": "2510821f0",
+          "instruction": "LDUR X20, [X29,#var_F8]"
+        },
+        {
+          "addr": "2510821f4",
+          "instruction": "MOV X0, X22"
+        },
+        {
+          "addr": "2510821f8",
+          "instruction": "BL 0x25810D5C0"
+        },
+        {
+          "addr": "2510821fc",
+          "instruction": "CBZ X20, loc_251083FD8",
+          "refs": [
+            {
+              "addr": "0x251083fd8",
+              "name": "loc_251083FD8"
+            }
+          ]
+        },
+        {
+          "addr": "251082200",
+          "instruction": "MOV X21, X0"
+        },
+        {
+          "addr": "251082204",
+          "instruction": "ADRL X1, stru_275B05680",
+          "refs": [
+            {
+              "addr": "0x275b05680",
+              "name": "stru_275B05680"
+            }
+          ]
+        },
+        {
+          "addr": "25108220c",
+          "instruction": "MOV X0, X20"
+        },
+        {
+          "addr": "251082210",
+          "instruction": "BL 0x25810CFA0"
+        },
+        {
+          "addr": "251082214",
+          "instruction": "CBNZ W0, loc_25108222C",
+          "refs": [
+            {
+              "addr": "0x25108222c",
+              "name": "loc_25108222C"
+            }
+          ]
+        },
+        {
+          "addr": "251082218",
+          "instruction": "ADRL X1, stru_275B056A0",
+          "refs": [
+            {
+              "addr": "0x275b056a0",
+              "name": "stru_275B056A0"
+            }
+          ]
+        },
+        {
+          "addr": "251082220",
+          "instruction": "MOV X0, X20"
+        },
+        {
+          "addr": "251082224",
+          "instruction": "BL 0x25810CFA0"
+        },
+        {
+          "addr": "251082228",
+          "instruction": "CBZ W0, loc_2510822F4",
+          "refs": [
+            {
+              "addr": "0x2510822f4",
+              "name": "loc_2510822F4"
+            }
+          ]
+        },
+        {
+          "addr": "25108222c",
+          "instruction": "LDRB W8, [X21,#0x47]",
+          "label": "loc_25108222C"
+        },
+        {
+          "addr": "251082230",
+          "instruction": "CBNZ W8, loc_251082348",
+          "refs": [
+            {
+              "addr": "0x251082348",
+              "name": "loc_251082348"
+            }
+          ]
+        },
+        {
+          "addr": "251082234",
+          "instruction": "ADRP X8, #_gLogCategory_APEndpointCarPlay@PAGE",
+          "refs": [
+            {
+              "addr": "0x26e755490",
+              "name": "_gLogCategory_APEndpointCarPlay"
+            }
+          ]
+        },
+        {
+          "addr": "251082238",
+          "instruction": "LDR W8, [X8,#_gLogCategory_APEndpointCarPlay@PAGEOFF]",
+          "refs": [
+            {
+              "addr": "0x26e755490",
+              "name": "_gLogCategory_APEndpointCarPlay"
+            }
+          ]
+        },
+        {
+          "addr": "25108223c",
+          "instruction": "CMP W8, #0x3C ; '<'"
+        },
+        {
+          "addr": "251082240",
+          "instruction": "B.GT loc_251082348",
+          "refs": [
+            {
+              "addr": "0x251082348",
+              "name": "loc_251082348"
+            }
+          ]
+        },
+        {
+          "addr": "251082244",
+          "instruction": "CMN W8, #1"
+        },
+        {
+          "addr": "251082248",
+          "instruction": "B.NE loc_251082268",
+          "refs": [
+            {
+              "addr": "0x251082268",
+              "name": "loc_251082268"
+            }
+          ]
+        },
+        {
+          "addr": "25108224c",
+          "instruction": "ADRL X0, _gLogCategory_APEndpointCarPlay",
+          "refs": [
+            {
+              "addr": "0x26e755490",
+              "name": "_gLogCategory_APEndpointCarPlay"
+            }
+          ]
+        },
+        {
+          "addr": "251082254",
+          "instruction": "MOV W8, #0x2000032"
+        },
+        {
+          "addr": "25108225c",
+          "instruction": "ADD W1, W8, #0xA"
+        },
+        {
+          "addr": "251082260",
+          "instruction": "BL 0x258100DC0"
+        },
+        {
+          "addr": "251082264",
+          "instruction": "CBZ W0, loc_251082348",
+          "refs": [
+            {
+              "addr": "0x251082348",
+              "name": "loc_251082348"
+            }
+          ]
+        },
+        {
+          "addr": "251082268",
+          "instruction": "MOV X0, X22",
+          "label": "loc_251082268"
+        }
+      ],
+      "stack_frame": [
+        {
+          "name": "var_3B0",
+          "offset": "0x0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_3A8",
+          "offset": "0x8",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_3A0",
+          "offset": "0x10",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_390",
+          "offset": "0x20",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_388",
+          "offset": "0x28",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_37C",
+          "offset": "0x34",
+          "size": "0x4",
+          "type": "_DWORD"
+        },
+        {
+          "name": "var_378",
+          "offset": "0x38",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_370",
+          "offset": "0x40",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_368",
+          "offset": "0x48",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_360",
+          "offset": "0x50",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_354",
+          "offset": "0x5c",
+          "size": "0x4",
+          "type": "_DWORD"
+        },
+        {
+          "name": "var_350",
+          "offset": "0x60",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_348",
+          "offset": "0x68",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_340",
+          "offset": "0x70",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_338",
+          "offset": "0x78",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_330",
+          "offset": "0x80",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_328",
+          "offset": "0x88",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_320",
+          "offset": "0x90",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_318",
+          "offset": "0x98",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_310",
+          "offset": "0xa0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_300",
+          "offset": "0xb0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_2F0",
+          "offset": "0xc0",
+          "size": "0x10",
+          "type": "_OWORD"
+        },
+        {
+          "name": "var_2E0",
+          "offset": "0xd0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_2D8",
+          "offset": "0xd8",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_2D0",
+          "offset": "0xe0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_2C8",
+          "offset": "0xe8",
+          "size": "0x4",
+          "type": "_DWORD"
+        },
+        {
+          "name": "var_2C0",
+          "offset": "0xf0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_2B8",
+          "offset": "0xf8",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_2B0",
+          "offset": "0x100",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_2A0",
+          "offset": "0x110",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_290",
+          "offset": "0x120",
+          "size": "0x10",
+          "type": "_OWORD"
+        },
+        {
+          "name": "var_280",
+          "offset": "0x130",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_278",
+          "offset": "0x138",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_270",
+          "offset": "0x140",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_268",
+          "offset": "0x148",
+          "size": "0x1",
+          "type": "_BYTE"
+        },
+        {
+          "name": "var_260",
+          "offset": "0x150",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_258",
+          "offset": "0x158",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_250",
+          "offset": "0x160",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_248",
+          "offset": "0x168",
+          "size": "0x4",
+          "type": "_DWORD"
+        },
+        {
+          "name": "var_240",
+          "offset": "0x170",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_238",
+          "offset": "0x178",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_230",
+          "offset": "0x180",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_228",
+          "offset": "0x188",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_220",
+          "offset": "0x190",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_218",
+          "offset": "0x198",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_210",
+          "offset": "0x1a0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_208",
+          "offset": "0x1a8",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_200",
+          "offset": "0x1b0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_1F8",
+          "offset": "0x1b8",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_1F0",
+          "offset": "0x1c0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_1E8",
+          "offset": "0x1c8",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_1E0",
+          "offset": "0x1d0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_1D8",
+          "offset": "0x1d8",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_1D0",
+          "offset": "0x1e0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_1C8",
+          "offset": "0x1e8",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_1C0",
+          "offset": "0x1f0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_1B8",
+          "offset": "0x1f8",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_1B0",
+          "offset": "0x200",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_1A8",
+          "offset": "0x208",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_1A0",
+          "offset": "0x210",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_198",
+          "offset": "0x218",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_190",
+          "offset": "0x220",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_188",
+          "offset": "0x228",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_180",
+          "offset": "0x230",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_178",
+          "offset": "0x238",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_170",
+          "offset": "0x240",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_168",
+          "offset": "0x248",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_160",
+          "offset": "0x250",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_158",
+          "offset": "0x258",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_150",
+          "offset": "0x260",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_148",
+          "offset": "0x268",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_138",
+          "offset": "0x278",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_130",
+          "offset": "0x280",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_128",
+          "offset": "0x288",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_120",
+          "offset": "0x290",
+          "size": "0x4",
+          "type": "_DWORD"
+        },
+        {
+          "name": "var_118",
+          "offset": "0x298",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_110",
+          "offset": "0x2a0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_108",
+          "offset": "0x2a8",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_100",
+          "offset": "0x2b0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_F8",
+          "offset": "0x2b8",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_F0",
+          "offset": "0x2c0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_E8",
+          "offset": "0x2c8",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_E0",
+          "offset": "0x2d0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_D8",
+          "offset": "0x2d8",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_D0",
+          "offset": "0x2e0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_C8",
+          "offset": "0x2e8",
+          "size": "0x4",
+          "type": "_DWORD"
+        },
+        {
+          "name": "var_C0",
+          "offset": "0x2f0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_B8",
+          "offset": "0x2f8",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_B0",
+          "offset": "0x300",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_A8",
+          "offset": "0x308",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_A0",
+          "offset": "0x310",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_98",
+          "offset": "0x318",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_90",
+          "offset": "0x320",
+          "size": "0x4",
+          "type": "_DWORD"
+        },
+        {
+          "name": "var_89",
+          "offset": "0x327",
+          "size": "0x1",
+          "type": "_BYTE"
+        },
+        {
+          "name": "var_88",
+          "offset": "0x328",
+          "size": "0x8",
+          "type": "__int64"
+        },
+        {
+          "name": "var_7C",
+          "offset": "0x334",
+          "size": "0x4",
+          "type": "_DWORD"
+        },
+        {
+          "name": "var_70",
+          "offset": "0x340",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_60",
+          "offset": "0x350",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_50",
+          "offset": "0x360",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_40",
+          "offset": "0x370",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_30",
+          "offset": "0x380",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_20",
+          "offset": "0x390",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_10",
+          "offset": "0x3a0",
+          "size": "0x8",
+          "type": "_QWORD"
+        },
+        {
+          "name": "var_s0",
+          "offset": "0x3b0",
+          "size": "0x8",
+          "type": "_QWORD"
+        }
+      ],
+      "return_type": "__int64",
+      "arguments": [
+        {
+          "name": "arg0",
+          "type": "_QWORD *"
+        }
+      ]
+    },
+    "instruction_count": 100,
+    "total_instructions": null,
+    "cursor": {
+      "next": 1100
+    }
+  }
+}

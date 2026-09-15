@@ -1,0 +1,1223 @@
+public class de.audi.app.media.content.ContentManager extends de.audi.app.media.AbstractMediaTerminalComponent implements de.audi.atip.sysapp.SpeedThresholdListener,de.audi.app.media.content.IContentManager,de.audi.app.media.content.IContentContext,de.audi.app.media.diagnosis.IDiagnosisCommandProvider,de.audi.app.media.IResetSettingsListener {
+  private static final java.lang.String LOGCLASS;
+
+  private static final int HMI_CONTENT_UNDEFINED;
+
+  private static final int HMI_CONTENT_CDDA;
+
+  private static final int HMI_CONTENT_DATA;
+
+  private static final int HMI_CONTENT_DVDV;
+
+  private static final int HMI_CONTENT_TV;
+
+  private static final int HMI_CONTENT_AV;
+
+  private static final int HMI_CONTENT_AUX_AUDIO;
+
+  private static final int HMI_CONTENT_FILEPLAYER;
+
+  private static final int HMI_CONTENT_ONLINEPLAYER;
+
+  private final de.audi.app.media.content.IContent[] contentList;
+
+  final de.audi.app.media.dsi.media.IMediaDSIPlayerController dsiMediaPlayerController;
+
+  final de.audi.atip.util.NowPlayingScreenController npsController;
+
+  final de.audi.app.media.extension.MediaTerminalExtensionTracker extensionTracker;
+
+  final de.audi.app.media.util.CopyOnWriteArrayList contentListeners;
+
+  private volatile int activeContent;
+
+  private volatile boolean isVehicleMoving;
+
+  public de.audi.app.media.content.ContentManager(de.audi.app.media.IMediaTerminal, de.audi.app.media.dsi.media.IMediaDSIPlayerController, de.audi.app.media.extension.MediaTerminalExtensionTracker);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: aload_2
+       3: aload_3
+       4: new           #152                // class de/audi/app/media/content/ContentManagerParameterFactory
+       7: dup
+       8: invokespecial #131                // Method de/audi/app/media/content/ContentManagerParameterFactory."<init>":()V
+      11: invokespecial #132                // Method de/audi/app/media/content/ContentManager."<init>":(Lde/audi/app/media/IMediaTerminal;Lde/audi/app/media/dsi/media/IMediaDSIPlayerController;Lde/audi/app/media/extension/MediaTerminalExtensionTracker;Lde/audi/app/media/content/ContentManagerParameterFactory;)V
+      14: return
+      15: nop
+
+  de.audi.app.media.content.ContentManager(de.audi.app.media.IMediaTerminal, de.audi.app.media.dsi.media.IMediaDSIPlayerController, de.audi.app.media.extension.MediaTerminalExtensionTracker, de.audi.app.media.content.ContentManagerParameterFactory);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #133                // Method de/audi/app/media/AbstractMediaTerminalComponent."<init>":(Lde/audi/app/media/IMediaTerminal;)V
+       5: aload_0
+       6: bipush        9
+       8: anewarray     #3                  // class de/audi/app/media/content/IContent
+      11: putfield      #153                // Field de/audi/app/media/content/ContentManager.contentList:[Lde/audi/app/media/content/IContent;
+      14: aload_0
+      15: aload_3
+      16: putfield      #154                // Field de/audi/app/media/content/ContentManager.extensionTracker:Lde/audi/app/media/extension/MediaTerminalExtensionTracker;
+      19: aload_0
+      20: aload_2
+      21: putfield      #155                // Field de/audi/app/media/content/ContentManager.dsiMediaPlayerController:Lde/audi/app/media/dsi/media/IMediaDSIPlayerController;
+      24: aload_0
+      25: aload         4
+      27: aload_1
+      28: invokeinterface #156,  1          // InterfaceMethod de/audi/app/media/IMediaTerminal.getFramework:()Lde/audi/atip/base/IFrameworkAccess;
+      33: aload_0
+      34: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+      37: invokeinterface #157,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.hmi:()Lde/audi/atip/log/LogChannel;
+      42: invokevirtual #93                 // Method de/audi/app/media/content/ContentManagerParameterFactory.createNowPlayingScreenController:(Lde/audi/atip/base/IFrameworkAccess;Lde/audi/atip/log/LogChannel;)Lde/audi/atip/util/NowPlayingScreenController;
+      45: putfield      #158                // Field de/audi/app/media/content/ContentManager.npsController:Lde/audi/atip/util/NowPlayingScreenController;
+      48: aload_0
+      49: aload         4
+      51: invokevirtual #95                 // Method de/audi/app/media/content/ContentManagerParameterFactory.createCopyOnWriteArrayList:()Lde/audi/app/media/util/CopyOnWriteArrayList;
+      54: putfield      #159                // Field de/audi/app/media/content/ContentManager.contentListeners:Lde/audi/app/media/util/CopyOnWriteArrayList;
+      57: return
+      58: nop
+      59: nop
+
+  public void init();
+    Code:
+       0: aload_0
+       1: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+       4: invokeinterface #160,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+       9: ldc           #4                  // int 10000000
+      11: ldc           #5                  // String [%1.init]
+      13: ldc           #6                  // String ContentManager
+      15: invokevirtual #97                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+      18: pop
+      19: aload_0
+      20: getfield      #94                 // Field de/audi/app/media/content/ContentManager.npsController:Lde/audi/atip/util/NowPlayingScreenController;
+      23: invokevirtual #98                 // Method de/audi/atip/util/NowPlayingScreenController.init:()V
+      26: aload_0
+      27: ldc           #7                  // int 200573
+      29: invokevirtual #99                 // Method de/audi/app/media/content/ContentManager.getChoiceModel:(I)Lde/audi/atip/hmi/modelaccess/ChoiceModelApp;
+      32: aload_0
+      33: invokevirtual #100                // Method de/audi/app/media/content/ContentManager.getTerminal:()Lde/audi/app/media/IMediaTerminal;
+      36: invokeinterface #161,  1          // InterfaceMethod de/audi/app/media/IMediaTerminal.getConfiguration:()Lde/audi/app/media/configuration/IMediaConfiguration;
+      41: invokeinterface #162,  1          // InterfaceMethod de/audi/app/media/configuration/IMediaConfiguration.isSpeedThresholdEnabledEver:()Z
+      46: ifeq          53
+      49: iconst_1
+      50: goto          54
+      53: iconst_0
+      54: invokeinterface #163,  2          // InterfaceMethod de/audi/atip/hmi/modelaccess/ChoiceModelApp.setValue:(I)V
+      59: aload_0
+      60: iconst_0
+      61: putfield      #164                // Field de/audi/app/media/content/ContentManager.isVehicleMoving:Z
+      64: aload_0
+      65: iconst_m1
+      66: invokespecial #134                // Method de/audi/app/media/content/ContentManager.setActiveContentType:(I)V
+      69: aload_0
+      70: invokevirtual #100                // Method de/audi/app/media/content/ContentManager.getTerminal:()Lde/audi/app/media/IMediaTerminal;
+      73: invokeinterface #165,  1          // InterfaceMethod de/audi/app/media/IMediaTerminal.isFrontTerminal:()Z
+      78: ifeq          126
+      81: aload_0
+      82: invokevirtual #100                // Method de/audi/app/media/content/ContentManager.getTerminal:()Lde/audi/app/media/IMediaTerminal;
+      85: invokeinterface #156,  1          // InterfaceMethod de/audi/app/media/IMediaTerminal.getFramework:()Lde/audi/atip/base/IFrameworkAccess;
+      90: invokeinterface #166,  1          // InterfaceMethod de/audi/atip/base/IFrameworkAccess.getSysApp:()Lde/audi/atip/sysapp/ISysApp;
+      95: aload_0
+      96: iconst_2
+      97: invokeinterface #167,  3          // InterfaceMethod de/audi/atip/sysapp/ISysApp.registerSpeedThresholdListener:(Lde/audi/atip/sysapp/SpeedThresholdListener;I)V
+     102: aload_0
+     103: invokevirtual #100                // Method de/audi/app/media/content/ContentManager.getTerminal:()Lde/audi/app/media/IMediaTerminal;
+     106: invokeinterface #168,  1          // InterfaceMethod de/audi/app/media/IMediaTerminal.getDiagnosisManager:()Lde/audi/app/media/diagnosis/IDiagnosisManager;
+     111: aload_0
+     112: invokevirtual #100                // Method de/audi/app/media/content/ContentManager.getTerminal:()Lde/audi/app/media/IMediaTerminal;
+     115: invokeinterface #169,  1          // InterfaceMethod de/audi/app/media/IMediaTerminal.getTerminalID:()I
+     120: aload_0
+     121: invokeinterface #170,  3          // InterfaceMethod de/audi/app/media/diagnosis/IDiagnosisManager.addCommandProvider:(ILde/audi/app/media/diagnosis/IDiagnosisCommandProvider;)V
+     126: aload_0
+     127: invokevirtual #100                // Method de/audi/app/media/content/ContentManager.getTerminal:()Lde/audi/app/media/IMediaTerminal;
+     130: aload_0
+     131: invokeinterface #171,  2          // InterfaceMethod de/audi/app/media/IMediaTerminal.addResetSettingsListener:(Lde/audi/app/media/IResetSettingsListener;)V
+     136: return
+     137: nop
+     138: nop
+     139: nop
+
+  public void deinit();
+    Code:
+       0: aload_0
+       1: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+       4: invokeinterface #160,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+       9: ldc           #4                  // int 10000000
+      11: ldc           #8                  // String [%1.deinit]
+      13: ldc           #6                  // String ContentManager
+      15: invokevirtual #97                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+      18: pop
+      19: aload_0
+      20: invokevirtual #100                // Method de/audi/app/media/content/ContentManager.getTerminal:()Lde/audi/app/media/IMediaTerminal;
+      23: invokeinterface #165,  1          // InterfaceMethod de/audi/app/media/IMediaTerminal.isFrontTerminal:()Z
+      28: ifeq          51
+      31: aload_0
+      32: invokevirtual #100                // Method de/audi/app/media/content/ContentManager.getTerminal:()Lde/audi/app/media/IMediaTerminal;
+      35: invokeinterface #156,  1          // InterfaceMethod de/audi/app/media/IMediaTerminal.getFramework:()Lde/audi/atip/base/IFrameworkAccess;
+      40: invokeinterface #166,  1          // InterfaceMethod de/audi/atip/base/IFrameworkAccess.getSysApp:()Lde/audi/atip/sysapp/ISysApp;
+      45: aload_0
+      46: invokeinterface #172,  2          // InterfaceMethod de/audi/atip/sysapp/ISysApp.unregisterSpeedThresholdListener:(Lde/audi/atip/sysapp/SpeedThresholdListener;)V
+      51: aload_0
+      52: getfield      #94                 // Field de/audi/app/media/content/ContentManager.npsController:Lde/audi/atip/util/NowPlayingScreenController;
+      55: invokevirtual #102                // Method de/audi/atip/util/NowPlayingScreenController.deinit:()V
+      58: aload_0
+      59: invokespecial #135                // Method de/audi/app/media/content/ContentManager.removeAllContentListener:()V
+      62: iconst_0
+      63: istore_1
+      64: iload_1
+      65: bipush        9
+      67: if_icmpge     103
+      70: aload_0
+      71: getfield      #90                 // Field de/audi/app/media/content/ContentManager.contentList:[Lde/audi/app/media/content/IContent;
+      74: iload_1
+      75: aaload
+      76: ifnull        97
+      79: aload_0
+      80: getfield      #90                 // Field de/audi/app/media/content/ContentManager.contentList:[Lde/audi/app/media/content/IContent;
+      83: iload_1
+      84: aaload
+      85: invokeinterface #173,  1          // InterfaceMethod de/audi/app/media/content/IContent.deinit:()V
+      90: aload_0
+      91: getfield      #90                 // Field de/audi/app/media/content/ContentManager.contentList:[Lde/audi/app/media/content/IContent;
+      94: iload_1
+      95: aconst_null
+      96: aastore
+      97: iinc          1, 1
+     100: goto          64
+     103: return
+
+  public void activateContent(de.audi.app.media.source.IActivationContext);
+    Code:
+       0: aload_1
+       1: invokeinterface #174,  1          // InterfaceMethod de/audi/app/media/source/IActivationContext.getSlot:()Lde/audi/app/media/source/ISourceSlot;
+       6: invokeinterface #175,  1          // InterfaceMethod de/audi/app/media/source/ISourceSlot.getContentType:()I
+      11: istore_2
+      12: aload_0
+      13: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+      16: invokeinterface #160,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+      21: ldc           #9                  // int 1000000
+      23: ldc           #10                 // String [%1.activateContent] [%2] '%3'
+      25: ldc           #6                  // String ContentManager
+      27: iload_2
+      28: invokestatic  #11                 // Method de/audi/app/media/logger/LogUtil.getContentTypeStr:(I)Ljava/lang/String;
+      31: aload_1
+      32: invokevirtual #103                // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)V
+      35: iload_2
+      36: invokestatic  #12                 // Method de/audi/app/media/content/ContentManager.isCTValid:(I)Z
+      39: ifne          62
+      42: aload_0
+      43: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+      46: invokeinterface #160,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+      51: ldc           #13                 // int 100000
+      53: ldc           #14                 // String [%1.activateContent] Invalid content type.
+      55: ldc           #6                  // String ContentManager
+      57: invokevirtual #97                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+      60: pop
+      61: return
+      62: aload_0
+      63: invokevirtual #104                // Method de/audi/app/media/content/ContentManager.deactivateActiveContent:()V
+      66: aload_0
+      67: iload_2
+      68: invokevirtual #105                // Method de/audi/app/media/content/ContentManager.getContent:(I)Lde/audi/app/media/content/IContent;
+      71: astore_3
+      72: aconst_null
+      73: aload_3
+      74: if_acmpne     78
+      77: return
+      78: aload_3
+      79: aload_1
+      80: invokeinterface #176,  2          // InterfaceMethod de/audi/app/media/content/IContent.activate:(Lde/audi/app/media/source/IActivationContext;)V
+      85: aload_0
+      86: iload_2
+      87: invokespecial #134                // Method de/audi/app/media/content/ContentManager.setActiveContentType:(I)V
+      90: aload_3
+      91: aload_0
+      92: getfield      #101                // Field de/audi/app/media/content/ContentManager.isVehicleMoving:Z
+      95: invokeinterface #177,  2          // InterfaceMethod de/audi/app/media/content/IContent.vehicleMoving:(Z)V
+     100: aload_0
+     101: invokespecial #136                // Method de/audi/app/media/content/ContentManager.updateToneMediaSoftkeys:()V
+     104: aload_0
+     105: aload_3
+     106: aload_1
+     107: invokeinterface #174,  1          // InterfaceMethod de/audi/app/media/source/IActivationContext.getSlot:()Lde/audi/app/media/source/ISourceSlot;
+     112: invokespecial #137                // Method de/audi/app/media/content/ContentManager.notifyContentActivated:(Lde/audi/app/media/content/IContent;Lde/audi/app/media/source/ISourceSlot;)V
+     115: return
+
+  public void deactivateActiveContent();
+    Code:
+       0: aload_0
+       1: invokevirtual #106                // Method de/audi/app/media/content/ContentManager.getActiveContentType:()I
+       4: istore_1
+       5: iload_1
+       6: iconst_m1
+       7: if_icmpne     30
+      10: aload_0
+      11: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+      14: invokeinterface #160,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+      19: ldc           #9                  // int 1000000
+      21: ldc           #15                 // String [%1.deactivateActiveContent] No active content.
+      23: ldc           #6                  // String ContentManager
+      25: invokevirtual #97                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+      28: pop
+      29: return
+      30: aload_0
+      31: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+      34: invokeinterface #160,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+      39: ldc           #9                  // int 1000000
+      41: ldc           #16                 // String [%1.deactivateActiveContent] '%2'
+      43: ldc           #6                  // String ContentManager
+      45: iload_1
+      46: invokestatic  #11                 // Method de/audi/app/media/logger/LogUtil.getContentTypeStr:(I)Ljava/lang/String;
+      49: invokevirtual #107                // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;Ljava/lang/Object;)V
+      52: aload_0
+      53: iconst_m1
+      54: invokespecial #134                // Method de/audi/app/media/content/ContentManager.setActiveContentType:(I)V
+      57: aload_0
+      58: iload_1
+      59: invokevirtual #105                // Method de/audi/app/media/content/ContentManager.getContent:(I)Lde/audi/app/media/content/IContent;
+      62: astore_2
+      63: aconst_null
+      64: aload_2
+      65: if_acmpne     88
+      68: aload_0
+      69: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+      72: invokeinterface #160,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+      77: ldc           #13                 // int 100000
+      79: ldc           #17                 // String [%1.deactivateActiveContent] current content is null
+      81: ldc           #6                  // String ContentManager
+      83: invokevirtual #97                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+      86: pop
+      87: return
+      88: aload_0
+      89: aload_2
+      90: invokespecial #138                // Method de/audi/app/media/content/ContentManager.notifyContentDeactivated:(Lde/audi/app/media/content/IContent;)V
+      93: aload_2
+      94: invokeinterface #178,  1          // InterfaceMethod de/audi/app/media/content/IContent.deactivate:()V
+      99: return
+
+  public int getActiveContentType();
+    Code:
+       0: aload_0
+       1: getfield      #108                // Field de/audi/app/media/content/ContentManager.activeContent:I
+       4: ireturn
+       5: nop
+       6: nop
+       7: nop
+
+  private void setActiveContentType(int);
+    Code:
+       0: aload_0
+       1: iload_1
+       2: putfield      #179                // Field de/audi/app/media/content/ContentManager.activeContent:I
+       5: aload_0
+       6: iload_1
+       7: invokespecial #139                // Method de/audi/app/media/content/ContentManager.setHMIContentType:(I)V
+      10: return
+      11: nop
+
+  private void setHMIContentType(int);
+    Code:
+       0: iload_1
+       1: tableswitch   { // 0 to 8
+                     0: 52
+                     1: 57
+                     2: 62
+                     3: 67
+                     4: 72
+                     5: 77
+                     6: 94
+                     7: 82
+                     8: 88
+               default: 94
+          }
+      52: iconst_0
+      53: istore_2
+      54: goto          96
+      57: iconst_1
+      58: istore_2
+      59: goto          96
+      62: iconst_2
+      63: istore_2
+      64: goto          96
+      67: iconst_3
+      68: istore_2
+      69: goto          96
+      72: iconst_4
+      73: istore_2
+      74: goto          96
+      77: iconst_5
+      78: istore_2
+      79: goto          96
+      82: bipush        7
+      84: istore_2
+      85: goto          96
+      88: bipush        8
+      90: istore_2
+      91: goto          96
+      94: iconst_m1
+      95: istore_2
+      96: aload_0
+      97: ldc           #18                 // int 200526
+      99: invokevirtual #99                 // Method de/audi/app/media/content/ContentManager.getChoiceModel:(I)Lde/audi/atip/hmi/modelaccess/ChoiceModelApp;
+     102: iload_2
+     103: invokeinterface #163,  2          // InterfaceMethod de/audi/atip/hmi/modelaccess/ChoiceModelApp.setValue:(I)V
+     108: return
+     109: nop
+     110: nop
+     111: nop
+
+  public de.audi.app.media.content.IContent getActiveContent();
+    Code:
+       0: aload_0
+       1: invokevirtual #106                // Method de/audi/app/media/content/ContentManager.getActiveContentType:()I
+       4: istore_1
+       5: iload_1
+       6: iconst_m1
+       7: if_icmpne     12
+      10: aconst_null
+      11: areturn
+      12: aload_0
+      13: iload_1
+      14: invokevirtual #105                // Method de/audi/app/media/content/ContentManager.getContent:(I)Lde/audi/app/media/content/IContent;
+      17: areturn
+      18: nop
+      19: nop
+
+  public de.audi.app.media.content.IContent getContent(int);
+    Code:
+       0: aload_0
+       1: iload_1
+       2: invokespecial #140                // Method de/audi/app/media/content/ContentManager.lazyInitializeContent:(I)Lde/audi/app/media/content/IContent;
+       5: areturn
+       6: nop
+       7: nop
+
+  public void onResetSettings(int);
+    Code:
+       0: aload_0
+       1: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+       4: invokeinterface #160,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+       9: ldc           #9                  // int 1000000
+      11: ldc           #19                 // String [%1.resetContentSettings]
+      13: ldc           #6                  // String ContentManager
+      15: invokevirtual #97                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+      18: pop
+      19: aload_0
+      20: getfield      #94                 // Field de/audi/app/media/content/ContentManager.npsController:Lde/audi/atip/util/NowPlayingScreenController;
+      23: invokevirtual #109                // Method de/audi/atip/util/NowPlayingScreenController.resetToFactorySettings:()V
+      26: iconst_0
+      27: istore_2
+      28: iload_2
+      29: bipush        9
+      31: if_icmpge     86
+      34: aload_0
+      35: iload_2
+      36: invokevirtual #105                // Method de/audi/app/media/content/ContentManager.getContent:(I)Lde/audi/app/media/content/IContent;
+      39: astore_3
+      40: aload_3
+      41: ifnonnull     47
+      44: goto          80
+      47: aload_0
+      48: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+      51: invokeinterface #160,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+      56: ldc           #4                  // int 10000000
+      58: ldc           #20                 // String [%1.resetContentSettings] Reset content '%2'.
+      60: ldc           #6                  // String ContentManager
+      62: aload_3
+      63: invokeinterface #180,  1          // InterfaceMethod de/audi/app/media/content/IContent.getContentType:()I
+      68: invokestatic  #11                 // Method de/audi/app/media/logger/LogUtil.getContentTypeStr:(I)Ljava/lang/String;
+      71: invokevirtual #107                // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;Ljava/lang/Object;)V
+      74: aload_3
+      75: invokeinterface #181,  1          // InterfaceMethod de/audi/app/media/content/IContent.resetSettings:()V
+      80: iinc          2, 1
+      83: goto          28
+      86: return
+      87: nop
+
+  private de.audi.app.media.content.IContent lazyInitializeContent(int);
+    Code:
+       0: iload_1
+       1: invokestatic  #12                 // Method de/audi/app/media/content/ContentManager.isCTValid:(I)Z
+       4: ifne          9
+       7: aconst_null
+       8: areturn
+       9: aconst_null
+      10: astore_2
+      11: aload_0
+      12: getfield      #91                 // Field de/audi/app/media/content/ContentManager.extensionTracker:Lde/audi/app/media/extension/MediaTerminalExtensionTracker;
+      15: invokevirtual #110                // Method de/audi/app/media/extension/MediaTerminalExtensionTracker.getServices:()Ljava/util/List;
+      18: invokeinterface #182,  1          // InterfaceMethod java/util/List.iterator:()Ljava/util/Iterator;
+      23: astore_3
+      24: aload_3
+      25: invokeinterface #183,  1          // InterfaceMethod java/util/Iterator.hasNext:()Z
+      30: ifeq          84
+      33: aload_3
+      34: invokeinterface #184,  1          // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+      39: checkcast     #21                 // class de/audi/app/media/extension/IMediaTerminalExtension
+      42: astore        4
+      44: aload         4
+      46: invokeinterface #185,  1          // InterfaceMethod de/audi/app/media/extension/IMediaTerminalExtension.getContentProvider:()Lde/audi/app/media/extension/IContentProvider;
+      51: ifnull        81
+      54: aload         4
+      56: invokeinterface #185,  1          // InterfaceMethod de/audi/app/media/extension/IMediaTerminalExtension.getContentProvider:()Lde/audi/app/media/extension/IContentProvider;
+      61: iload_1
+      62: invokeinterface #186,  2          // InterfaceMethod de/audi/app/media/extension/IContentProvider.provideContent:(I)Z
+      67: ifeq          81
+      70: aload         4
+      72: invokeinterface #185,  1          // InterfaceMethod de/audi/app/media/extension/IMediaTerminalExtension.getContentProvider:()Lde/audi/app/media/extension/IContentProvider;
+      77: astore_2
+      78: goto          84
+      81: goto          24
+      84: aload_0
+      85: getfield      #90                 // Field de/audi/app/media/content/ContentManager.contentList:[Lde/audi/app/media/content/IContent;
+      88: dup
+      89: astore_3
+      90: monitorenter
+      91: aload_0
+      92: getfield      #90                 // Field de/audi/app/media/content/ContentManager.contentList:[Lde/audi/app/media/content/IContent;
+      95: iload_1
+      96: aaload
+      97: ifnull        109
+     100: aload_0
+     101: getfield      #90                 // Field de/audi/app/media/content/ContentManager.contentList:[Lde/audi/app/media/content/IContent;
+     104: iload_1
+     105: aaload
+     106: aload_3
+     107: monitorexit
+     108: areturn
+     109: iload_1
+     110: tableswitch   { // 0 to 8
+                     0: 160
+                     1: 231
+                     2: 302
+                     3: 373
+                     4: 486
+                     5: 446
+                     6: 649
+                     7: 559
+                     8: 604
+               default: 649
+          }
+     160: aload_0
+     161: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+     164: invokeinterface #160,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+     169: ldc           #9                  // int 1000000
+     171: ldc           #22                 // String [%1.lazyInitializeContent] CDDA.
+     173: ldc           #6                  // String ContentManager
+     175: invokevirtual #97                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+     178: pop
+     179: aload_2
+     180: ifnonnull     206
+     183: aload_0
+     184: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+     187: invokeinterface #160,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+     192: ldc           #9                  // int 1000000
+     194: ldc           #23                 // String [%1.lazyInitializeContent] No content provider for CDDA.
+     196: ldc           #6                  // String ContentManager
+     198: invokevirtual #97                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+     201: pop
+     202: aconst_null
+     203: aload_3
+     204: monitorexit
+     205: areturn
+     206: aload_0
+     207: getfield      #90                 // Field de/audi/app/media/content/ContentManager.contentList:[Lde/audi/app/media/content/IContent;
+     210: iconst_0
+     211: aload_2
+     212: iconst_0
+     213: aload_0
+     214: aload_0
+     215: invokevirtual #100                // Method de/audi/app/media/content/ContentManager.getTerminal:()Lde/audi/app/media/IMediaTerminal;
+     218: aload_0
+     219: getfield      #92                 // Field de/audi/app/media/content/ContentManager.dsiMediaPlayerController:Lde/audi/app/media/dsi/media/IMediaDSIPlayerController;
+     222: invokeinterface #187,  5          // InterfaceMethod de/audi/app/media/extension/IContentProvider.createContent:(ILde/audi/app/media/content/IContentContext;Lde/audi/app/media/IMediaTerminal;Lde/audi/app/media/dsi/media/IMediaDSIPlayerController;)Lde/audi/app/media/content/IContent;
+     227: aastore
+     228: goto          653
+     231: aload_0
+     232: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+     235: invokeinterface #160,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+     240: ldc           #9                  // int 1000000
+     242: ldc           #24                 // String [%1.lazyInitializeContent] DATA.
+     244: ldc           #6                  // String ContentManager
+     246: invokevirtual #97                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+     249: pop
+     250: aload_2
+     251: ifnonnull     277
+     254: aload_0
+     255: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+     258: invokeinterface #160,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+     263: ldc           #9                  // int 1000000
+     265: ldc           #25                 // String [%1.lazyInitializeContent] No content provider for DATA.
+     267: ldc           #6                  // String ContentManager
+     269: invokevirtual #97                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+     272: pop
+     273: aconst_null
+     274: aload_3
+     275: monitorexit
+     276: areturn
+     277: aload_0
+     278: getfield      #90                 // Field de/audi/app/media/content/ContentManager.contentList:[Lde/audi/app/media/content/IContent;
+     281: iconst_1
+     282: aload_2
+     283: iconst_1
+     284: aload_0
+     285: aload_0
+     286: invokevirtual #100                // Method de/audi/app/media/content/ContentManager.getTerminal:()Lde/audi/app/media/IMediaTerminal;
+     289: aload_0
+     290: getfield      #92                 // Field de/audi/app/media/content/ContentManager.dsiMediaPlayerController:Lde/audi/app/media/dsi/media/IMediaDSIPlayerController;
+     293: invokeinterface #187,  5          // InterfaceMethod de/audi/app/media/extension/IContentProvider.createContent:(ILde/audi/app/media/content/IContentContext;Lde/audi/app/media/IMediaTerminal;Lde/audi/app/media/dsi/media/IMediaDSIPlayerController;)Lde/audi/app/media/content/IContent;
+     298: aastore
+     299: goto          653
+     302: aload_0
+     303: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+     306: invokeinterface #160,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+     311: ldc           #9                  // int 1000000
+     313: ldc           #26                 // String [%1.lazyInitializeContent] DVD VIDEO.
+     315: ldc           #6                  // String ContentManager
+     317: invokevirtual #97                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+     320: pop
+     321: aload_2
+     322: ifnonnull     348
+     325: aload_0
+     326: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+     329: invokeinterface #160,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+     334: ldc           #9                  // int 1000000
+     336: ldc           #27                 // String [%1.lazyInitializeContent] No content provider for DVDV.
+     338: ldc           #6                  // String ContentManager
+     340: invokevirtual #97                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+     343: pop
+     344: aconst_null
+     345: aload_3
+     346: monitorexit
+     347: areturn
+     348: aload_0
+     349: getfield      #90                 // Field de/audi/app/media/content/ContentManager.contentList:[Lde/audi/app/media/content/IContent;
+     352: iconst_2
+     353: aload_2
+     354: iconst_2
+     355: aload_0
+     356: aload_0
+     357: invokevirtual #100                // Method de/audi/app/media/content/ContentManager.getTerminal:()Lde/audi/app/media/IMediaTerminal;
+     360: aload_0
+     361: getfield      #92                 // Field de/audi/app/media/content/ContentManager.dsiMediaPlayerController:Lde/audi/app/media/dsi/media/IMediaDSIPlayerController;
+     364: invokeinterface #187,  5          // InterfaceMethod de/audi/app/media/extension/IContentProvider.createContent:(ILde/audi/app/media/content/IContentContext;Lde/audi/app/media/IMediaTerminal;Lde/audi/app/media/dsi/media/IMediaDSIPlayerController;)Lde/audi/app/media/content/IContent;
+     369: aastore
+     370: goto          653
+     373: aconst_null
+     374: aload_2
+     375: if_acmpne     402
+     378: aload_0
+     379: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+     382: invokeinterface #160,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+     387: sipush        10000
+     390: ldc           #28                 // String [%1.lazyInitializeContent] ContentProvider for TV not available.
+     392: ldc           #6                  // String ContentManager
+     394: invokevirtual #97                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+     397: pop
+     398: aconst_null
+     399: aload_3
+     400: monitorexit
+     401: areturn
+     402: aload_0
+     403: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+     406: invokeinterface #160,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+     411: ldc           #9                  // int 1000000
+     413: ldc           #29                 // String [%1.lazyInitializeContent] TV.
+     415: ldc           #6                  // String ContentManager
+     417: invokevirtual #97                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+     420: pop
+     421: aload_0
+     422: getfield      #90                 // Field de/audi/app/media/content/ContentManager.contentList:[Lde/audi/app/media/content/IContent;
+     425: iconst_3
+     426: aload_2
+     427: iconst_3
+     428: aload_0
+     429: aload_0
+     430: invokevirtual #100                // Method de/audi/app/media/content/ContentManager.getTerminal:()Lde/audi/app/media/IMediaTerminal;
+     433: aload_0
+     434: getfield      #92                 // Field de/audi/app/media/content/ContentManager.dsiMediaPlayerController:Lde/audi/app/media/dsi/media/IMediaDSIPlayerController;
+     437: invokeinterface #187,  5          // InterfaceMethod de/audi/app/media/extension/IContentProvider.createContent:(ILde/audi/app/media/content/IContentContext;Lde/audi/app/media/IMediaTerminal;Lde/audi/app/media/dsi/media/IMediaDSIPlayerController;)Lde/audi/app/media/content/IContent;
+     442: aastore
+     443: goto          653
+     446: aload_0
+     447: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+     450: invokeinterface #160,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+     455: ldc           #9                  // int 1000000
+     457: ldc           #30                 // String [%1.lazyInitializeContent] AUDIOSTREAM.
+     459: ldc           #6                  // String ContentManager
+     461: invokevirtual #97                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+     464: pop
+     465: aload_0
+     466: getfield      #90                 // Field de/audi/app/media/content/ContentManager.contentList:[Lde/audi/app/media/content/IContent;
+     469: iconst_5
+     470: new           #188                // class de/audi/app/media/content/media/auxaudiostream/AudioStreamContent
+     473: dup
+     474: aload_0
+     475: aload_0
+     476: invokevirtual #100                // Method de/audi/app/media/content/ContentManager.getTerminal:()Lde/audi/app/media/IMediaTerminal;
+     479: invokespecial #141                // Method de/audi/app/media/content/media/auxaudiostream/AudioStreamContent."<init>":(Lde/audi/app/media/content/IContentContext;Lde/audi/app/media/IMediaTerminal;)V
+     482: aastore
+     483: goto          653
+     486: aconst_null
+     487: aload_2
+     488: if_acmpne     515
+     491: aload_0
+     492: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+     495: invokeinterface #160,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+     500: sipush        10000
+     503: ldc           #32                 // String [%1.lazyInitializeContent] ContentProvider for AV not available.
+     505: ldc           #6                  // String ContentManager
+     507: invokevirtual #97                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+     510: pop
+     511: aconst_null
+     512: aload_3
+     513: monitorexit
+     514: areturn
+     515: aload_0
+     516: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+     519: invokeinterface #160,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+     524: ldc           #9                  // int 1000000
+     526: ldc           #33                 // String [%1.lazyInitializeContent] AV
+     528: ldc           #6                  // String ContentManager
+     530: invokevirtual #97                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+     533: pop
+     534: aload_0
+     535: getfield      #90                 // Field de/audi/app/media/content/ContentManager.contentList:[Lde/audi/app/media/content/IContent;
+     538: iconst_4
+     539: aload_2
+     540: iconst_4
+     541: aload_0
+     542: aload_0
+     543: invokevirtual #100                // Method de/audi/app/media/content/ContentManager.getTerminal:()Lde/audi/app/media/IMediaTerminal;
+     546: aload_0
+     547: getfield      #92                 // Field de/audi/app/media/content/ContentManager.dsiMediaPlayerController:Lde/audi/app/media/dsi/media/IMediaDSIPlayerController;
+     550: invokeinterface #187,  5          // InterfaceMethod de/audi/app/media/extension/IContentProvider.createContent:(ILde/audi/app/media/content/IContentContext;Lde/audi/app/media/IMediaTerminal;Lde/audi/app/media/dsi/media/IMediaDSIPlayerController;)Lde/audi/app/media/content/IContent;
+     555: aastore
+     556: goto          653
+     559: aload_0
+     560: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+     563: invokeinterface #160,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+     568: ldc           #9                  // int 1000000
+     570: ldc           #34                 // String [%1.lazyInitializeContent] FILEPLAYER.
+     572: ldc           #6                  // String ContentManager
+     574: invokevirtual #97                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+     577: pop
+     578: aload_0
+     579: getfield      #90                 // Field de/audi/app/media/content/ContentManager.contentList:[Lde/audi/app/media/content/IContent;
+     582: bipush        7
+     584: new           #189                // class de/audi/app/media/content/media/fileplayer/content/FilePlayerContent
+     587: dup
+     588: aload_0
+     589: aload_0
+     590: invokevirtual #100                // Method de/audi/app/media/content/ContentManager.getTerminal:()Lde/audi/app/media/IMediaTerminal;
+     593: aload_0
+     594: getfield      #92                 // Field de/audi/app/media/content/ContentManager.dsiMediaPlayerController:Lde/audi/app/media/dsi/media/IMediaDSIPlayerController;
+     597: invokespecial #142                // Method de/audi/app/media/content/media/fileplayer/content/FilePlayerContent."<init>":(Lde/audi/app/media/content/IContentContext;Lde/audi/app/media/IMediaTerminal;Lde/audi/app/media/dsi/media/IMediaDSIPlayerController;)V
+     600: aastore
+     601: goto          653
+     604: aload_0
+     605: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+     608: invokeinterface #160,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+     613: ldc           #9                  // int 1000000
+     615: ldc           #36                 // String [%1.lazyInitializeContent] ONLINEPLAYER.
+     617: ldc           #6                  // String ContentManager
+     619: invokevirtual #97                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+     622: pop
+     623: aload_0
+     624: getfield      #90                 // Field de/audi/app/media/content/ContentManager.contentList:[Lde/audi/app/media/content/IContent;
+     627: bipush        8
+     629: new           #190                // class de/audi/app/media/content/media/online/content/OnlineContent
+     632: dup
+     633: aload_0
+     634: aload_0
+     635: invokevirtual #100                // Method de/audi/app/media/content/ContentManager.getTerminal:()Lde/audi/app/media/IMediaTerminal;
+     638: aload_0
+     639: getfield      #92                 // Field de/audi/app/media/content/ContentManager.dsiMediaPlayerController:Lde/audi/app/media/dsi/media/IMediaDSIPlayerController;
+     642: invokespecial #143                // Method de/audi/app/media/content/media/online/content/OnlineContent."<init>":(Lde/audi/app/media/content/IContentContext;Lde/audi/app/media/IMediaTerminal;Lde/audi/app/media/dsi/media/IMediaDSIPlayerController;)V
+     645: aastore
+     646: goto          653
+     649: aconst_null
+     650: aload_3
+     651: monitorexit
+     652: areturn
+     653: aload_3
+     654: monitorexit
+     655: goto          665
+     658: astore        5
+     660: aload_3
+     661: monitorexit
+     662: aload         5
+     664: athrow
+     665: aload_0
+     666: getfield      #90                 // Field de/audi/app/media/content/ContentManager.contentList:[Lde/audi/app/media/content/IContent;
+     669: iload_1
+     670: aaload
+     671: ifnonnull     706
+     674: new           #191                // class java/lang/IllegalStateException
+     677: dup
+     678: new           #192                // class java/lang/StringBuffer
+     681: dup
+     682: invokespecial #144                // Method java/lang/StringBuffer."<init>":()V
+     685: ldc           #40                 // String No content provider registered for type '
+     687: invokevirtual #111                // Method java/lang/StringBuffer.append:(Ljava/lang/String;)Ljava/lang/StringBuffer;
+     690: iload_1
+     691: invokevirtual #112                // Method java/lang/StringBuffer.append:(I)Ljava/lang/StringBuffer;
+     694: ldc           #41                 // String '.
+     696: invokevirtual #111                // Method java/lang/StringBuffer.append:(Ljava/lang/String;)Ljava/lang/StringBuffer;
+     699: invokevirtual #113                // Method java/lang/StringBuffer.toString:()Ljava/lang/String;
+     702: invokespecial #145                // Method java/lang/IllegalStateException."<init>":(Ljava/lang/String;)V
+     705: athrow
+     706: aload_0
+     707: getfield      #90                 // Field de/audi/app/media/content/ContentManager.contentList:[Lde/audi/app/media/content/IContent;
+     710: iload_1
+     711: aaload
+     712: invokeinterface #193,  1          // InterfaceMethod de/audi/app/media/content/IContent.init:()V
+     717: aload_0
+     718: getfield      #90                 // Field de/audi/app/media/content/ContentManager.contentList:[Lde/audi/app/media/content/IContent;
+     721: iload_1
+     722: aaload
+     723: areturn
+    Exception table:
+       from    to  target type
+          91   108   658   any
+         109   205   658   any
+         206   276   658   any
+         277   347   658   any
+         348   401   658   any
+         402   514   658   any
+         515   652   658   any
+         653   655   658   any
+         658   662   658   any
+
+  private static boolean isCTValid(int);
+    Code:
+       0: iload_0
+       1: iconst_m1
+       2: if_icmple     13
+       5: iload_0
+       6: bipush        9
+       8: if_icmpge     13
+      11: iconst_1
+      12: ireturn
+      13: iconst_0
+      14: ireturn
+      15: nop
+
+  private void updateToneMediaSoftkeys();
+    Code:
+       0: aload_0
+       1: invokevirtual #106                // Method de/audi/app/media/content/ContentManager.getActiveContentType:()I
+       4: istore_1
+       5: iload_1
+       6: tableswitch   { // 3 to 6
+                     3: 36
+                     4: 41
+                     5: 41
+                     6: 41
+               default: 46
+          }
+      36: iconst_3
+      37: istore_2
+      38: goto          48
+      41: iconst_4
+      42: istore_2
+      43: goto          48
+      46: iconst_2
+      47: istore_2
+      48: aload_0
+      49: bipush        27
+      51: invokevirtual #114                // Method de/audi/app/media/content/ContentManager.getSystemModel:(I)Lde/audi/atip/hmi/modelaccess/HMIModelApp;
+      54: checkcast     #42                 // class de/audi/atip/hmi/modelaccess/ChoiceModelApp
+      57: iload_2
+      58: invokeinterface #163,  2          // InterfaceMethod de/audi/atip/hmi/modelaccess/ChoiceModelApp.setValue:(I)V
+      63: return
+
+  public void belowLowerThreshold(int);
+    Code:
+       0: aload_0
+       1: invokevirtual #100                // Method de/audi/app/media/content/ContentManager.getTerminal:()Lde/audi/app/media/IMediaTerminal;
+       4: invokeinterface #194,  1          // InterfaceMethod de/audi/app/media/IMediaTerminal.getDispatcher:()Lde/esolutions/fw/util/commons/job/DispatcherBase;
+       9: new           #195                // class de/audi/app/media/content/ContentManager$1
+      12: dup
+      13: aload_0
+      14: ldc           #44                 // String ContentManager.vehicleMoving(false)
+      16: invokespecial #146                // Method de/audi/app/media/content/ContentManager$1."<init>":(Lde/audi/app/media/content/ContentManager;Ljava/lang/String;)V
+      19: invokevirtual #115                // Method de/esolutions/fw/util/commons/job/DispatcherBase.execute:(Ljava/lang/Object;)Lde/esolutions/fw/util/commons/job/Job;
+      22: pop
+      23: return
+
+  public void exceedsUpperThreshold(int);
+    Code:
+       0: aload_0
+       1: invokevirtual #100                // Method de/audi/app/media/content/ContentManager.getTerminal:()Lde/audi/app/media/IMediaTerminal;
+       4: invokeinterface #194,  1          // InterfaceMethod de/audi/app/media/IMediaTerminal.getDispatcher:()Lde/esolutions/fw/util/commons/job/DispatcherBase;
+       9: new           #196                // class de/audi/app/media/content/ContentManager$2
+      12: dup
+      13: aload_0
+      14: ldc           #46                 // String ContentManager.vehicleMoving(true)
+      16: invokespecial #147                // Method de/audi/app/media/content/ContentManager$2."<init>":(Lde/audi/app/media/content/ContentManager;Ljava/lang/String;)V
+      19: invokevirtual #115                // Method de/esolutions/fw/util/commons/job/DispatcherBase.execute:(Ljava/lang/Object;)Lde/esolutions/fw/util/commons/job/Job;
+      22: pop
+      23: return
+
+  private void setVehicleMoving(boolean);
+    Code:
+       0: aload_0
+       1: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+       4: invokeinterface #160,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+       9: ldc           #9                  // int 1000000
+      11: ldc           #47                 // String [%2.setVehicleMoving] vehicleMoving='%1'.
+      13: iload_1
+      14: ldc           #6                  // String ContentManager
+      16: invokevirtual #116                // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;ZLjava/lang/Object;)Z
+      19: pop
+      20: aload_0
+      21: invokevirtual #100                // Method de/audi/app/media/content/ContentManager.getTerminal:()Lde/audi/app/media/IMediaTerminal;
+      24: invokeinterface #161,  1          // InterfaceMethod de/audi/app/media/IMediaTerminal.getConfiguration:()Lde/audi/app/media/configuration/IMediaConfiguration;
+      29: invokeinterface #197,  1          // InterfaceMethod de/audi/app/media/configuration/IMediaConfiguration.isSpeedThresholdDisabled:()Z
+      34: ifeq          58
+      37: aload_0
+      38: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+      41: invokeinterface #160,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+      46: ldc           #9                  // int 1000000
+      48: ldc           #48                 // String [%2.setVehicleMoving] Disabled. Ignore.
+      50: iload_1
+      51: ldc           #6                  // String ContentManager
+      53: invokevirtual #116                // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;ZLjava/lang/Object;)Z
+      56: pop
+      57: return
+      58: aload_0
+      59: invokevirtual #100                // Method de/audi/app/media/content/ContentManager.getTerminal:()Lde/audi/app/media/IMediaTerminal;
+      62: invokeinterface #161,  1          // InterfaceMethod de/audi/app/media/IMediaTerminal.getConfiguration:()Lde/audi/app/media/configuration/IMediaConfiguration;
+      67: invokeinterface #162,  1          // InterfaceMethod de/audi/app/media/configuration/IMediaConfiguration.isSpeedThresholdEnabledEver:()Z
+      72: ifeq          109
+      75: aload_0
+      76: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+      79: invokeinterface #160,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+      84: ldc           #9                  // int 1000000
+      86: ldc           #49                 // String [%1.setVehicleMoving] Enabled forever.
+      88: ldc           #6                  // String ContentManager
+      90: invokevirtual #97                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+      93: pop
+      94: aload_0
+      95: ldc           #7                  // int 200573
+      97: invokevirtual #99                 // Method de/audi/app/media/content/ContentManager.getChoiceModel:(I)Lde/audi/atip/hmi/modelaccess/ChoiceModelApp;
+     100: iconst_1
+     101: invokeinterface #163,  2          // InterfaceMethod de/audi/atip/hmi/modelaccess/ChoiceModelApp.setValue:(I)V
+     106: goto          129
+     109: aload_0
+     110: ldc           #7                  // int 200573
+     112: invokevirtual #99                 // Method de/audi/app/media/content/ContentManager.getChoiceModel:(I)Lde/audi/atip/hmi/modelaccess/ChoiceModelApp;
+     115: iload_1
+     116: ifeq          123
+     119: iconst_1
+     120: goto          124
+     123: iconst_0
+     124: invokeinterface #163,  2          // InterfaceMethod de/audi/atip/hmi/modelaccess/ChoiceModelApp.setValue:(I)V
+     129: aload_0
+     130: iload_1
+     131: putfield      #164                // Field de/audi/app/media/content/ContentManager.isVehicleMoving:Z
+     134: aload_0
+     135: invokevirtual #106                // Method de/audi/app/media/content/ContentManager.getActiveContentType:()I
+     138: istore_2
+     139: iload_2
+     140: iconst_m1
+     141: if_icmpne     145
+     144: return
+     145: aload_0
+     146: iload_2
+     147: invokevirtual #105                // Method de/audi/app/media/content/ContentManager.getContent:(I)Lde/audi/app/media/content/IContent;
+     150: astore_3
+     151: aload_3
+     152: ifnull        162
+     155: aload_3
+     156: iload_1
+     157: invokeinterface #177,  2          // InterfaceMethod de/audi/app/media/content/IContent.vehicleMoving:(Z)V
+     162: return
+     163: nop
+
+  public void addContentListener(de.audi.app.media.content.IContentListener);
+    Code:
+       0: aload_0
+       1: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+       4: invokeinterface #160,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+       9: ldc           #4                  // int 10000000
+      11: ldc           #50                 // String [%1.addContentListener] '%2'
+      13: ldc           #6                  // String ContentManager
+      15: aload_1
+      16: invokevirtual #107                // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;Ljava/lang/Object;)V
+      19: aload_1
+      20: ifnonnull     31
+      23: new           #198                // class java/lang/IllegalArgumentException
+      26: dup
+      27: invokespecial #148                // Method java/lang/IllegalArgumentException."<init>":()V
+      30: athrow
+      31: aload_0
+      32: getfield      #96                 // Field de/audi/app/media/content/ContentManager.contentListeners:Lde/audi/app/media/util/CopyOnWriteArrayList;
+      35: aload_1
+      36: invokevirtual #117                // Method de/audi/app/media/util/CopyOnWriteArrayList.addIfAbsent:(Ljava/lang/Object;)Z
+      39: pop
+      40: return
+      41: nop
+      42: nop
+      43: nop
+
+  public void removeContentListener(de.audi.app.media.content.IContentListener);
+    Code:
+       0: aload_0
+       1: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+       4: invokeinterface #160,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+       9: ldc           #4                  // int 10000000
+      11: ldc           #52                 // String [%1.removeContentListener] '%2'
+      13: ldc           #6                  // String ContentManager
+      15: aload_1
+      16: invokevirtual #107                // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;Ljava/lang/Object;)V
+      19: aload_0
+      20: getfield      #96                 // Field de/audi/app/media/content/ContentManager.contentListeners:Lde/audi/app/media/util/CopyOnWriteArrayList;
+      23: aload_1
+      24: invokevirtual #118                // Method de/audi/app/media/util/CopyOnWriteArrayList.remove:(Ljava/lang/Object;)Z
+      27: pop
+      28: return
+      29: nop
+      30: nop
+      31: nop
+
+  private void removeAllContentListener();
+    Code:
+       0: aload_0
+       1: getfield      #96                 // Field de/audi/app/media/content/ContentManager.contentListeners:Lde/audi/app/media/util/CopyOnWriteArrayList;
+       4: invokevirtual #119                // Method de/audi/app/media/util/CopyOnWriteArrayList.clear:()V
+       7: return
+
+  private void notifyContentActivated(de.audi.app.media.content.IContent, de.audi.app.media.source.ISourceSlot);
+    Code:
+       0: aload_0
+       1: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+       4: invokeinterface #160,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+       9: ldc           #4                  // int 10000000
+      11: ldc           #53                 // String [%1.notifyContentActivated] '%2'
+      13: ldc           #6                  // String ContentManager
+      15: aload_1
+      16: invokeinterface #180,  1          // InterfaceMethod de/audi/app/media/content/IContent.getContentType:()I
+      21: invokestatic  #11                 // Method de/audi/app/media/logger/LogUtil.getContentTypeStr:(I)Ljava/lang/String;
+      24: invokevirtual #107                // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;Ljava/lang/Object;)V
+      27: aload_0
+      28: getfield      #96                 // Field de/audi/app/media/content/ContentManager.contentListeners:Lde/audi/app/media/util/CopyOnWriteArrayList;
+      31: invokevirtual #120                // Method de/audi/app/media/util/CopyOnWriteArrayList.iterator:()Ljava/util/Iterator;
+      34: astore_3
+      35: aload_3
+      36: invokeinterface #183,  1          // InterfaceMethod java/util/Iterator.hasNext:()Z
+      41: ifeq          89
+      44: aload_3
+      45: invokeinterface #184,  1          // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+      50: checkcast     #54                 // class de/audi/app/media/content/IContentListener
+      53: aload_1
+      54: aload_2
+      55: invokeinterface #199,  3          // InterfaceMethod de/audi/app/media/content/IContentListener.contentActivated:(Lde/audi/app/media/content/IContent;Lde/audi/app/media/source/ISourceSlot;)V
+      60: goto          35
+      63: astore        4
+      65: aload_0
+      66: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+      69: invokeinterface #160,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+      74: ldc           #13                 // int 100000
+      76: ldc           #56                 // String [%1.notifyContentActivated]
+      78: ldc           #6                  // String ContentManager
+      80: aload         4
+      82: invokevirtual #121                // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;Ljava/lang/Throwable;)Z
+      85: pop
+      86: goto          35
+      89: return
+      90: nop
+      91: nop
+    Exception table:
+       from    to  target type
+          44    60    63   Class java/lang/Exception
+
+  private void notifyContentDeactivated(de.audi.app.media.content.IContent);
+    Code:
+       0: aload_0
+       1: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+       4: invokeinterface #160,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+       9: ldc           #4                  // int 10000000
+      11: ldc           #57                 // String [%1.notifyContentDeactivated] '%2'
+      13: ldc           #6                  // String ContentManager
+      15: aload_1
+      16: invokeinterface #180,  1          // InterfaceMethod de/audi/app/media/content/IContent.getContentType:()I
+      21: invokestatic  #11                 // Method de/audi/app/media/logger/LogUtil.getContentTypeStr:(I)Ljava/lang/String;
+      24: invokevirtual #107                // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;Ljava/lang/Object;)V
+      27: aload_0
+      28: getfield      #96                 // Field de/audi/app/media/content/ContentManager.contentListeners:Lde/audi/app/media/util/CopyOnWriteArrayList;
+      31: invokevirtual #120                // Method de/audi/app/media/util/CopyOnWriteArrayList.iterator:()Ljava/util/Iterator;
+      34: astore_2
+      35: aload_2
+      36: invokeinterface #183,  1          // InterfaceMethod java/util/Iterator.hasNext:()Z
+      41: ifeq          86
+      44: aload_2
+      45: invokeinterface #184,  1          // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+      50: checkcast     #54                 // class de/audi/app/media/content/IContentListener
+      53: aload_1
+      54: invokeinterface #200,  2          // InterfaceMethod de/audi/app/media/content/IContentListener.contentDeactivated:(Lde/audi/app/media/content/IContent;)V
+      59: goto          35
+      62: astore_3
+      63: aload_0
+      64: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+      67: invokeinterface #160,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+      72: ldc           #13                 // int 100000
+      74: ldc           #58                 // String [%1.notifyContentDeactivated]
+      76: ldc           #6                  // String ContentManager
+      78: aload_3
+      79: invokevirtual #121                // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;Ljava/lang/Throwable;)Z
+      82: pop
+      83: goto          35
+      86: return
+      87: nop
+    Exception table:
+       from    to  target type
+          44    59    62   Class java/lang/Exception
+
+  public void notifyContentActivationFinished(de.audi.app.media.content.IContent);
+    Code:
+       0: aload_1
+       1: ifnonnull     14
+       4: new           #198                // class java/lang/IllegalArgumentException
+       7: dup
+       8: ldc           #59                 // String Content is null
+      10: invokespecial #149                // Method java/lang/IllegalArgumentException."<init>":(Ljava/lang/String;)V
+      13: athrow
+      14: aload_0
+      15: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+      18: invokeinterface #160,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+      23: ldc           #9                  // int 1000000
+      25: ldc           #60                 // String [%1.notifyContentActivationFinished] '%2'
+      27: ldc           #6                  // String ContentManager
+      29: aload_1
+      30: invokeinterface #180,  1          // InterfaceMethod de/audi/app/media/content/IContent.getContentType:()I
+      35: invokestatic  #11                 // Method de/audi/app/media/logger/LogUtil.getContentTypeStr:(I)Ljava/lang/String;
+      38: invokevirtual #107                // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;Ljava/lang/Object;)V
+      41: aload_0
+      42: invokevirtual #100                // Method de/audi/app/media/content/ContentManager.getTerminal:()Lde/audi/app/media/IMediaTerminal;
+      45: invokeinterface #194,  1          // InterfaceMethod de/audi/app/media/IMediaTerminal.getDispatcher:()Lde/esolutions/fw/util/commons/job/DispatcherBase;
+      50: new           #201                // class de/audi/app/media/content/JobNotifyContentActivationFinished
+      53: dup
+      54: aload_0
+      55: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+      58: aload_0
+      59: getfield      #96                 // Field de/audi/app/media/content/ContentManager.contentListeners:Lde/audi/app/media/util/CopyOnWriteArrayList;
+      62: aload_1
+      63: invokespecial #150                // Method de/audi/app/media/content/JobNotifyContentActivationFinished."<init>":(Lde/audi/app/media/logger/IMediaLogger;Ljava/util/List;Lde/audi/app/media/content/IContent;)V
+      66: invokevirtual #115                // Method de/esolutions/fw/util/commons/job/DispatcherBase.execute:(Ljava/lang/Object;)Lde/esolutions/fw/util/commons/job/Job;
+      69: pop
+      70: return
+      71: nop
+
+  public java.lang.String[] getDiagKeys();
+    Code:
+       0: iconst_3
+       1: anewarray     #62                 // class java/lang/String
+       4: dup
+       5: iconst_0
+       6: ldc           #63                 // String SpeedThresholdOver
+       8: aastore
+       9: dup
+      10: iconst_1
+      11: ldc           #64                 // String SpeedThresholdUnder
+      13: aastore
+      14: dup
+      15: iconst_2
+      16: ldc           #65                 // String browser.reset
+      18: aastore
+      19: areturn
+
+  public void executeDiagCommand(java.lang.String, java.lang.String[]);
+    Code:
+       0: ldc           #63                 // String SpeedThresholdOver
+       2: aload_1
+       3: invokevirtual #122                // Method java/lang/String.equals:(Ljava/lang/Object;)Z
+       6: ifeq          17
+       9: aload_0
+      10: iconst_0
+      11: invokevirtual #123                // Method de/audi/app/media/content/ContentManager.exceedsUpperThreshold:(I)V
+      14: goto          89
+      17: ldc           #64                 // String SpeedThresholdUnder
+      19: aload_1
+      20: invokevirtual #122                // Method java/lang/String.equals:(Ljava/lang/Object;)Z
+      23: ifeq          34
+      26: aload_0
+      27: iconst_0
+      28: invokevirtual #124                // Method de/audi/app/media/content/ContentManager.belowLowerThreshold:(I)V
+      31: goto          89
+      34: ldc           #65                 // String browser.reset
+      36: aload_1
+      37: invokevirtual #122                // Method java/lang/String.equals:(Ljava/lang/Object;)Z
+      40: ifeq          89
+      43: aload_0
+      44: invokevirtual #106                // Method de/audi/app/media/content/ContentManager.getActiveContentType:()I
+      47: iconst_1
+      48: if_icmpne     63
+      51: aload_0
+      52: invokevirtual #125                // Method de/audi/app/media/content/ContentManager.getActiveContent:()Lde/audi/app/media/content/IContent;
+      55: invokeinterface #202,  1          // InterfaceMethod de/audi/app/media/content/IContent.diagResetBrowser:()V
+      60: goto          89
+      63: aload_0
+      64: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+      67: invokeinterface #160,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+      72: sipush        10000
+      75: ldc           #66                 // String [%1.executeDiagCommand] '%2' no browser reset possible CT_DATA must be active
+      77: ldc           #6                  // String ContentManager
+      79: aload_0
+      80: invokevirtual #106                // Method de/audi/app/media/content/ContentManager.getActiveContentType:()I
+      83: invokestatic  #11                 // Method de/audi/app/media/logger/LogUtil.getContentTypeStr:(I)Ljava/lang/String;
+      86: invokevirtual #107                // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;Ljava/lang/Object;)V
+      89: return
+      90: nop
+      91: nop
+
+  public java.lang.String toString();
+    Code:
+       0: new           #203                // class de/esolutions/fw/util/commons/Buffer
+       3: dup
+       4: bipush        20
+       6: invokespecial #151                // Method de/esolutions/fw/util/commons/Buffer."<init>":(I)V
+       9: astore_1
+      10: aload_1
+      11: ldc           #6                  // String ContentManager
+      13: invokevirtual #126                // Method de/esolutions/fw/util/commons/Buffer.append:(Ljava/lang/String;)Lde/esolutions/fw/util/commons/Buffer;
+      16: ldc           #68                 // String @
+      18: invokevirtual #126                // Method de/esolutions/fw/util/commons/Buffer.append:(Ljava/lang/String;)Lde/esolutions/fw/util/commons/Buffer;
+      21: aload_0
+      22: invokevirtual #127                // Method java/lang/Object.hashCode:()I
+      25: invokevirtual #128                // Method de/esolutions/fw/util/commons/Buffer.append:(I)Lde/esolutions/fw/util/commons/Buffer;
+      28: pop
+      29: aload_1
+      30: invokevirtual #129                // Method de/esolutions/fw/util/commons/Buffer.toString:()Ljava/lang/String;
+      33: areturn
+      34: nop
+      35: nop
+
+  static de.audi.app.media.logger.IMediaLogger access$000(de.audi.app.media.content.ContentManager);
+    Code:
+       0: aload_0
+       1: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+       4: areturn
+       5: nop
+       6: nop
+       7: nop
+
+  static void access$100(de.audi.app.media.content.ContentManager, boolean);
+    Code:
+       0: aload_0
+       1: iload_1
+       2: invokespecial #130                // Method de/audi/app/media/content/ContentManager.setVehicleMoving:(Z)V
+       5: return
+       6: nop
+       7: nop
+
+  static de.audi.app.media.logger.IMediaLogger access$200(de.audi.app.media.content.ContentManager);
+    Code:
+       0: aload_0
+       1: getfield      #89                 // Field de/audi/app/media/content/ContentManager.logger:Lde/audi/app/media/logger/IMediaLogger;
+       4: areturn
+       5: nop
+       6: nop
+       7: nop
+}

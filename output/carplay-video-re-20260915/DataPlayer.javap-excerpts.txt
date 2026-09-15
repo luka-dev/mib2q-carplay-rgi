@@ -1,0 +1,106 @@
+  private void enableVideoDisplayable(boolean);
+    Code:
+       0: aload_0
+       1: invokevirtual #158                // Method de/audi/app/media/evo/content/data/DataPlayer.getActiveSlot:()Lde/audi/app/media/source/ISourceSlot;
+       4: astore_2
+       5: aload_2
+       6: ifnonnull     29
+       9: aload_0
+      10: getfield      #136                // Field de/audi/app/media/evo/content/data/DataPlayer.logger:Lde/audi/app/media/logger/IMediaLogger;
+      13: invokeinterface #295,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+      18: ldc           #28                 // int 10000000
+      20: ldc           #29                 // String [%1.enableVideoDisplayable] Not active.
+      22: ldc           #21                 // String DataPlayer
+      24: invokevirtual #151                // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+      27: pop
+      28: return
+      29: iload_1
+      30: ifeq          90
+      33: aload_2
+      34: invokeinterface #313,  1          // InterfaceMethod de/audi/app/media/source/ISourceSlot.getMediaType:()I
+      39: bipush        24
+      41: if_icmpne     49
+      44: bipush        6
+      46: goto          53
+      49: aload_0
+      50: getfield      #164                // Field de/audi/app/media/evo/content/data/DataPlayer.filebasedVideoContext:I
+      53: istore_3
+      54: aload_0
+      55: getfield      #136                // Field de/audi/app/media/evo/content/data/DataPlayer.logger:Lde/audi/app/media/logger/IMediaLogger;
+      58: invokeinterface #295,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+      63: ldc           #28                 // int 10000000
+      65: ldc           #30                 // String [%1.enableVideoDisplayable] Enable video context '%2'.
+      67: ldc           #21                 // String DataPlayer
+      69: iload_3
+      70: i2l
+      71: invokevirtual #176                // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;J)Z
+      74: pop
+      75: aload_0
+      76: ldc           #31                 // int 200663
+      78: invokevirtual #177                // Method de/audi/app/media/evo/content/data/DataPlayer.getChoiceModel:(I)Lde/audi/atip/hmi/modelaccess/ChoiceModelApp;
+      81: iload_3
+      82: invokeinterface #330,  2          // InterfaceMethod de/audi/atip/hmi/modelaccess/ChoiceModelApp.setValue:(I)V
+      87: goto          121
+      90: aload_0
+      91: getfield      #136                // Field de/audi/app/media/evo/content/data/DataPlayer.logger:Lde/audi/app/media/logger/IMediaLogger;
+      94: invokeinterface #295,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.main:()Lde/audi/atip/log/LogChannel;
+      99: ldc           #28                 // int 10000000
+     101: ldc           #32                 // String [%1.enableVideoDisplayable] Disable video context.
+     103: ldc           #21                 // String DataPlayer
+     105: invokevirtual #151                // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+     108: pop
+     109: aload_0
+     110: ldc           #31                 // int 200663
+     112: invokevirtual #177                // Method de/audi/app/media/evo/content/data/DataPlayer.getChoiceModel:(I)Lde/audi/atip/hmi/modelaccess/ChoiceModelApp;
+     115: iconst_0
+     116: invokeinterface #330,  2          // InterfaceMethod de/audi/atip/hmi/modelaccess/ChoiceModelApp.setValue:(I)V
+     121: return
+     122: nop
+     123: nop
+
+  public void vehicleMoving(boolean);
+    Code:
+       0: aload_0
+       1: getfield      #136                // Field de/audi/app/media/evo/content/data/DataPlayer.logger:Lde/audi/app/media/logger/IMediaLogger;
+       4: invokeinterface #332,  1          // InterfaceMethod de/audi/app/media/logger/IMediaLogger.hmi:()Lde/audi/atip/log/LogChannel;
+       9: ldc           #19                 // int 1000000
+      11: ldc           #37                 // String [%2.vehicleMoving] '%1'
+      13: iload_1
+      14: ldc           #21                 // String DataPlayer
+      16: invokevirtual #179                // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;ZLjava/lang/Object;)Z
+      19: pop
+      20: aload_0
+      21: getfield      #139                // Field de/audi/app/media/evo/content/data/DataPlayer.videoMutex:Ljava/lang/Object;
+      24: dup
+      25: astore_2
+      26: monitorenter
+      27: aload_0
+      28: iload_1
+      29: putfield      #320                // Field de/audi/app/media/evo/content/data/DataPlayer.isVehicleMoving:Z
+      32: aload_0
+      33: invokespecial #267                // Method de/audi/app/media/evo/content/data/DataPlayer.isPlayingVideo:()Z
+      36: ifeq          55
+      39: aload_0
+      40: aload_0
+      41: getfield      #167                // Field de/audi/app/media/evo/content/data/DataPlayer.isVehicleMoving:Z
+      44: ifne          51
+      47: iconst_1
+      48: goto          52
+      51: iconst_0
+      52: invokespecial #263                // Method de/audi/app/media/evo/content/data/DataPlayer.enableVideoDisplayable:(Z)V
+      55: aload_2
+      56: monitorexit
+      57: goto          65
+      60: astore_3
+      61: aload_2
+      62: monitorexit
+      63: aload_3
+      64: athrow
+      65: return
+      66: nop
+      67: nop
+    Exception table:
+       from    to  target type
+          27    57    60   any
+          60    63    60   any
+

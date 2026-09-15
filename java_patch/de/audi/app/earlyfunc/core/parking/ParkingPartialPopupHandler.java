@@ -166,6 +166,7 @@ public class ParkingPartialPopupHandler implements IParkingPopupHandler, IPartia
     }
 
     public void partialPopupVisible(int popupId, int terminalId) {
+        if (terminalId != PdcSmallStageGuard.MAIN_TERMINAL) return;
         synchronized (this.mutex) {
             this.logChannel.log(
                 1000000,
@@ -183,17 +184,21 @@ public class ParkingPartialPopupHandler implements IParkingPopupHandler, IPartia
     }
 
     private void partialPopupHidden(int popupId, int terminalId, boolean registration) {
+        if (terminalId != PdcSmallStageGuard.MAIN_TERMINAL) return;
         boolean notifyCanceled = false;
-        if (registration) PdcSmallStageGuard.popupRegisteredHidden(popupId, terminalId);
-        else PdcSmallStageGuard.popupHidden(popupId, terminalId);
         synchronized (this.mutex) {
+            if (registration) PdcSmallStageGuard.popupRegisteredHidden(popupId, terminalId);
+            else PdcSmallStageGuard.popupHidden(popupId, terminalId);
             this.logChannel.log(
                 1000000,
                 "[ParkingPartialPopupHandler#partialPopupHidden] partialPopupID=%1, terminalID=%2",
                 popupId,
                 terminalId
             );
-            if (this.isPopupActive()) {
+            /* A registration snapshot or late hide for a different popup must
+             * not cancel the currently visible parking popup. HMI reports the
+             * popup ID and terminal separately; both must identify this one. */
+            if (this.visiblePPID == popupId && this.isPopupActive()) {
                 this.visiblePPID = -1;
                 this.removeReason = 1;
                 notifyCanceled = true;

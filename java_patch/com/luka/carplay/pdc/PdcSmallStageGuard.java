@@ -2,8 +2,9 @@
  * PdcSmallStageGuard — identifies the right-hand pure OPS popup.
  *
  * ParkingSystemControllerComponentEvo publishes the incoming component list
- * before stock parking activation can send message 108. Only standalone OPS
- * may preserve CarPlay. ParkingPartialPopupHandler confirms the popup request.
+ * before stock parking activation can send message 108. Standalone OPS can
+ * include a registered but idle PLA observer; active PLA/camera/ARA still take
+ * over. ParkingPartialPopupHandler confirms the popup request.
  * This is deliberately earlier than partialPopupVisible(): the MMI
  * compositor may publish SMALL_STAGE or AP_METHOD_HMI_DEACTIVATED while the
  * popup animation is still starting.  While guarded, the current CarPlay
@@ -23,7 +24,9 @@ import de.audi.atip.hmi.view.Screen;
 import de.esolutions.hmi.widgets.audi.base.AbstractScreenWidget;
 import de.audi.app.earlyfunc.core.parking.IParkingSystem;
 import de.audi.app.earlyfunc.core.parking.ParkingPopupIdentifier;
+import de.audi.app.earlyfunc.core.parking.pla.AbstractParkingSystemPLAComponent;
 import org.dsi.ifc.carparkingsystem.DisplayContent;
+import org.dsi.ifc.carparkingsystem.DSICarParkingSystem;
 import java.util.List;
 
 public final class PdcSmallStageGuard {
@@ -51,6 +54,7 @@ public final class PdcSmallStageGuard {
     private static volatile long showRequestedAt;
     private static boolean suppressNextHmiDeactivation;
     private static boolean pureOpsContent;
+    private static AbstractParkingSystemPLAComponent passivePla;
     private static HMIService protectedHmi;
     private static int showGeneration;
     private static AbstractScreenWidget protectedScreen;
@@ -62,6 +66,9 @@ public final class PdcSmallStageGuard {
         DisplayContent content, List systems, HMIService hmiService
     ) {
         pureOpsContent = isPureOpsContent(content, systems);
+        Log.i(TAG, "parking intent popup=" + (content == null ? -1 : content.getPopup())
+            + " mode=" + (content == null ? -1 : content.getMode())
+            + " systems=" + systemIDs(systems) + " standaloneOPS=" + pureOpsContent);
         if (!pureOpsContent) {
             reset();
             return;
@@ -71,16 +78,49 @@ public final class PdcSmallStageGuard {
     }
 
     private static boolean isPureOpsContent(DisplayContent content, List systems) {
+        passivePla = null;
         try {
-            if (content == null || content.getPopup() == 0 || systems == null || systems.size() != 1)
+            if (content == null || systems == null || systems.isEmpty()
+                || content.getMode() == DSICarParkingSystem.VPSMODE_TRAILERASSIST_ARA)
                 return false;
-            Object candidate = systems.get(0);
-            if (!(candidate instanceof IParkingSystem)) return false;
-            IParkingSystem ops = (IParkingSystem)candidate;
-            if (ops.getParkingSystemID() != IParkingSystem.PARKING_SYSTEM_OPS) return false;
+            /* Check DSI intent as well as registered components. Missing camera
+             * or ARA components must not turn a combined request into pure OPS. */
+            switch (content.getPopup()) {
+                case DSICarParkingSystem.POPUP_OPS:
+                case DSICarParkingSystem.POPUP_OPSAUTOACTIVATION:
+                case DSICarParkingSystem.POPUP_OPSFLANKGUARD:
+                case DSICarParkingSystem.POPUP_OPSOFFROAD:
+                    break;
+                default:
+                    return false;
+            }
+            IParkingSystem ops = null;
+            AbstractParkingSystemPLAComponent pla = null;
+            for (int i = 0; i < systems.size(); i++) {
+                Object candidate = systems.get(i);
+                if (!(candidate instanceof IParkingSystem)) return false;
+                IParkingSystem system = (IParkingSystem)candidate;
+                if (system.getParkingSystemID() == IParkingSystem.PARKING_SYSTEM_OPS) {
+                    if (ops != null) return false;
+                    ops = system;
+                } else if (system.getParkingSystemID() == IParkingSystem.PARKING_SYSTEM_PLA
+                           && system instanceof AbstractParkingSystemPLAComponent) {
+                    if (pla != null) return false;
+                    pla = (AbstractParkingSystemPLAComponent)system;
+                    /* Stock registers PLA for ordinary OPS too. setActive(true)
+                     * merely forwards DisplayContent to its popin state machine;
+                     * isSystemActive() tracks actual PDCPLAStatus instead. */
+                    if (pla.isSystemActive()) return false;
+                } else {
+                    return false;
+                }
+            }
+            if (ops == null) return false;
             ParkingPopupIdentifier popup = ops.getHMIPopupID(content.getPopup());
-            return popup != null && popup.getPopupType() == ParkingPopupIdentifier.POPUP_TYPE_PARTIAL
-                && popup.getHmiPopupID() == PURE_OPS_POPUP_ID;
+            if (popup == null || popup.getPopupType() != ParkingPopupIdentifier.POPUP_TYPE_PARTIAL
+                || popup.getHmiPopupID() != PURE_OPS_POPUP_ID) return false;
+            passivePla = pla;
+            return true;
         } catch (Throwable t) {
             Log.w(TAG, "OPS guard: cannot classify parking content: " + t);
             return false;
@@ -89,6 +129,7 @@ public final class PdcSmallStageGuard {
 
     public static synchronized void parkingStopped() {
         pureOpsContent = false;
+        passivePla = null;
         reset();
     }
 
@@ -126,6 +167,10 @@ public final class PdcSmallStageGuard {
     }
 
     public static synchronized boolean shouldKeepCarPlayScreen() {
+        /* PLA status can change during an existing OPS popup, without a new
+         * DisplayContent. Its independent active notification also revokes the
+         * guard in the controller before broadcasting 108. */
+        if (passivePla != null && passivePla.isSystemActive()) parkingStopped();
         if (!pureOpsContent || !isCurrentCarPlayScreen()) {
             if (state != INACTIVE || protectedScreen != null) reset();
             return false;
@@ -151,6 +196,22 @@ public final class PdcSmallStageGuard {
         } catch (Throwable t) {
             return false;
         }
+    }
+
+    private static String systemIDs(List systems) {
+        if (systems == null) return "null";
+        StringBuffer ids = new StringBuffer();
+        try {
+            for (int i = 0; i < systems.size(); i++) {
+                if (i != 0) ids.append(',');
+                Object system = systems.get(i);
+                if (system instanceof IParkingSystem) ids.append(((IParkingSystem)system).getParkingSystemID());
+                else ids.append('?');
+                if (system instanceof AbstractParkingSystemPLAComponent)
+                    ids.append(((AbstractParkingSystemPLAComponent)system).isSystemActive() ? "(active)" : "(idle)");
+            }
+        } catch (Throwable ignored) { ids.append('?'); }
+        return ids.toString();
     }
 
     /** AP 1002 has no source parameter.  Consume only the first one belonging

@@ -31,6 +31,9 @@
 #ifndef ENABLE_STATE_TRACE
 #define ENABLE_STATE_TRACE 0
 #endif
+#ifndef ENABLE_ALTSCREEN_PACE_TRACE
+#define ENABLE_ALTSCREEN_PACE_TRACE 0
+#endif
 
 /* Log levels */
 typedef enum {
@@ -58,6 +61,8 @@ typedef struct {
  * without a rebuild by `touch /mnt/app/carplay_verbose` - see log_init() in logging.c. */
 #if ENABLE_STATE_TRACE && !ENABLE_LOGGING
 #define LOG_DEFAULT_PATH "/tmp/carplay_state_trace.log"
+#elif ENABLE_ALTSCREEN_PACE_TRACE && !ENABLE_LOGGING
+#define LOG_DEFAULT_PATH "/tmp/carplay_alt_pace.log"
 #else
 #define LOG_DEFAULT_PATH "/tmp/carplay_hook.log"
 #endif
@@ -74,7 +79,7 @@ typedef struct {
     .flush_immediate = false \
 }
 
-#if ENABLE_LOGGING || ENABLE_STATE_TRACE
+#if ENABLE_LOGGING || ENABLE_STATE_TRACE || ENABLE_ALTSCREEN_PACE_TRACE
 
 /* Initialize logging system */
 hook_result_t log_init(const log_config_t* config);
@@ -96,7 +101,7 @@ void log_write(log_level_t level, const char* module, const char* fmt, ...)
 void log_hexdump(log_level_t level, const char* module, const char* prefix,
                  const uint8_t* data, size_t len, size_t max_bytes);
 
-#else /* ENABLE_LOGGING == 0 && ENABLE_STATE_TRACE == 0 */
+#else /* All logging and scoped traces disabled. */
 
 /* No-op versions when logging is disabled */
 static inline hook_result_t log_init(const log_config_t* config) {
@@ -113,7 +118,7 @@ static inline void log_hexdump(log_level_t level, const char* module, const char
     (void)level; (void)module; (void)prefix; (void)data; (void)len; (void)max_bytes;
 }
 
-#endif /* ENABLE_LOGGING || ENABLE_STATE_TRACE */
+#endif /* Logging or scoped trace writer. */
 
 #if ENABLE_LOGGING
 

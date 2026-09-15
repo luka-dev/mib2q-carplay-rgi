@@ -1,0 +1,37 @@
+/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tests/PdcResourcePolicyTest.java:25: warning: Unsafe is internal proprietary API and may be removed in a future release
+import sun.misc.Unsafe;
+               ^
+/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tests/PdcResourcePolicyTest.java:40: warning: Unsafe is internal proprietary API and may be removed in a future release
+    static final Unsafe UNSAFE;
+                 ^
+/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tests/PdcResourcePolicyTest.java:43: warning: Unsafe is internal proprietary API and may be removed in a future release
+            Field f = Unsafe.class.getDeclaredField("theUnsafe"); f.setAccessible(true);
+                      ^
+/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tests/PdcResourcePolicyTest.java:44: warning: Unsafe is internal proprietary API and may be removed in a future release
+            UNSAFE = (Unsafe)f.get(null);
+                      ^
+Note: Some input files use unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+4 warnings
+Partial 360 contracts: MU1316-combined
+    A5 unassigned slots (NOT permission to reuse): [34, 65, 70, 79]
+    G24 unassigned slots (NOT permission to reuse): [34, 65, 70, 113, 144, 149]
+  PASS context 91 rejected: outside A5, G24 collision; both stock callback paths use %79
+  PASS cold/cache extents, borrowed array, explicit crop routing and uninitialized guard
+  PASS RVC start/stop do not change generic state; interapp crop can still target 59
+  PASS Bird View 4/9 preserves OPS popup; stock VPS source -> fullscreen popup -> active notification
+  PASS OPS background matrix: system type, topview support, view and actual screen connection
+  PASS stock right OPS bounds 720,0,304,480; background and fullscreen video-context wiring
+Partial 360 preflight: 6 contract groups passed; native coexistence NOT tested
+Partial 360 contracts: MU1316-final
+    A5 unassigned slots (NOT permission to reuse): [34, 65, 70, 79]
+    G24 unassigned slots (NOT permission to reuse): [34, 65, 70, 113, 144, 149]
+  PASS context 91 rejected: outside A5, G24 collision; both stock callback paths use %79
+  PASS cold/cache extents, borrowed array, explicit crop routing and uninitialized guard
+  PASS RVC start/stop do not change generic state; interapp crop can still target 59
+  PASS Bird View 4/9 preserves OPS popup; stock VPS source -> fullscreen popup -> active notification
+  PASS OPS background matrix: system type, topview support, view and actual screen connection
+  PASS stock right OPS bounds 720,0,304,480; background and fullscreen video-context wiring
+Partial 360 preflight: 6 contract groups passed; native coexistence NOT tested
+PdcResourcePolicyTest: PASS (stock properties, commands and SCREEN state)
+PDC regression control: stock takeover reproduced; current guard passes

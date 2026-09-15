@@ -1,0 +1,532 @@
+            ;-- CCaptureInterface::evtSetRVCEnabled(CCapSetRVCEnabledEvt*):
+┌ 344: method.CCaptureInterface.evtSetRVCEnabled_CCapSetRVCEnabledEvt_ (int32_t arg1, int32_t arg2);
+│ `- args(r0, r1) vars(6:sp[0x14..0x2c])
+│           0x00059c70      0530d0e5       ldrb r3, [r0, 5]              ; RELOC 32 _ZN17CCaptureInterface16evtSetRVCEnabledEP20CCapSetRVCEnabledEvt @ 0x00059c70 ; arg1 ; CCaptureInterface::evtSetRVCEnabled(CCapSetRVCEnabledEvt*)
+│           0x00059c74      70402de9       push {r4, r5, r6, lr}
+│           0x00059c78      000053e3       cmp r3, 0
+│           0x00059c7c      44419fe5       ldr r4, [0x00059dc8]        ; [0x59dc8:4]=0x45cc8
+│           0x00059c80      20d04de2       sub sp, sp, 0x20
+│           0x00059c84      0160a0e1       mov r6, r1                  ; arg2
+│           0x00059c88      04408fe0       add r4, pc, r4
+│       ┌─< 0x00059c8c      0200000a       beq 0x59c9c
+│       │   ; CODE XREF from CCaptureInterface::evtSetRVCEnabled(CCapSetRVCEnabledEvt*) @ 0x59d40(x)
+│      ┌──> 0x00059c90      0000a0e3       mov r0, 0
+│      ╎│   0x00059c94      20d08de2       add sp, sp, 0x20
+│      ╎│   0x00059c98      7080bde8       pop {r4, r5, r6, pc}
+│      ╎└─> 0x00059c9c      28319fe5       ldr r3, [0x00059dcc]        ; [0x59dcc:4]=0xcbc
+│      ╎    0x00059ca0      04508de2       add r5, sp, 4
+│      ╎    0x00059ca4      0500a0e1       mov r0, r5
+│      ╎    0x00059ca8      033094e7       ldr r3, [r4, r3]
+│      ╎    0x00059cac      001093e5       ldr r1, [r3]
+│      ╎    0x00059cb0      654fffeb       bl rsym._ZN15CDisplayManager14getMainDisplayEv
+│      ╎    0x00059cb4      04309de5       ldr r3, [var_4h]
+│      ╎    0x00059cb8      000053e3       cmp r3, 0
+│      ╎┌─< 0x00059cbc      3500000a       beq 0x59d98
+│      ╎│   0x00059cc0      08309de5       ldr r3, [var_8h]
+│      ╎│   0x00059cc4      000053e3       cmp r3, 0
+│     ┌───< 0x00059cc8      3200000a       beq 0x59d98
+│     │╎│   0x00059ccc      fc209fe5       ldr r2, [0x00059dd0]        ; [0x59dd0:4]=0x1048
+│     │╎│   0x00059cd0      022094e7       ldr r2, [r4, r2]
+│     │╎│   0x00059cd4      000052e3       cmp r2, 0
+│    ┌────< 0x00059cd8      2e00000a       beq 0x59d98
+│    ││╎│   0x00059cdc      0c20d6e5       ldrb r2, [r6, 0xc]
+│    ││╎│   0x00059ce0      000052e3       cmp r2, 0
+│   ┌─────< 0x00059ce4      1f00001a       bne 0x59d68
+│   │││╎│   0x00059ce8      08c093e5       ldr ip, [r3, 8]
+│   │││╎│   0x00059cec      e0309fe5       ldr r3, [0x00059dd4]        ; [0x59dd4:4]=0xe20
+│   │││╎│   0x00059cf0      033094e7       ldr r3, [r4, r3]
+│   │││╎│   0x00059cf4      000093e5       ldr r0, [r3]
+│   │││╎│   0x00059cf8      383090e5       ldr r3, [r0, 0x38]
+│   │││╎│   0x00059cfc      000053e3       cmp r3, 0
+│  ┌──────< 0x00059d00      0500000a       beq 0x59d1c
+│ ┌───────> 0x00059d04      042093e5       ldr r2, [r3, 4]
+│ ╎││││╎│   0x00059d08      02005ce1       cmp ip, r2
+│ ────────< 0x00059d0c      0c0000aa       bge 0x59d44
+│ ╎││││╎│   0x00059d10      103093e5       ldr r3, [r3, 0x10]
+│ ╎││││╎│   0x00059d14      000053e3       cmp r3, 0
+│ ────────< 0x00059d18      f9ffff1a       bne 0x59d04
+│ ╎││││╎│   ; CODE XREFS from CCaptureInterface::evtSetRVCEnabled(CCapSetRVCEnabledEvt*) @ 0x59d54(x), 0x59d64(x)
+│ ─└──────> 0x00059d1c      00e0e0e3       mvn lr, 0
+│ ╎┌──────> 0x00059d20      14108de2       add r1, sp, 0x14
+│ ╎╎│││╎│   0x00059d24      10208de2       add r2, sp, 0x10
+│ ╎╎│││╎│   0x00059d28      0130a0e3       mov r3, 1
+│ ╎╎│││╎│   0x00059d2c      14e08de5       str lr, [var_14h]
+│ ╎╎│││╎│   0x00059d30      10c08de5       str ip, [var_10h]
+│ ╎╎│││╎│   0x00059d34      1c4affeb       bl rsym._ZN15CContextManager13switchContextERKiS1_b
+│ ╎╎│││╎│   ; CODE XREFS from CCaptureInterface::evtSetRVCEnabled(CCapSetRVCEnabledEvt*) @ 0x59d94(x), 0x59dc4(x)
+│ ────────> 0x00059d38      0500a0e1       mov r0, r5
+│ ╎╎│││╎│   0x00059d3c      4d4affeb       bl sym.imp.util::SharedPtrDefaultBase::_SharedPtrDefaultBase__
+│ ╎╎│││└──< 0x00059d40      d2ffffea       b 0x59c90
+│ ─────┌──< 0x00059d44      030000da       ble 0x59d58
+│ ╎╎│││││   0x00059d48      143093e5       ldr r3, [r3, 0x14]
+│ ╎╎│││││   0x00059d4c      000053e3       cmp r3, 0
+│ └───────< 0x00059d50      ebffff1a       bne 0x59d04
+│ ────────< 0x00059d54      f0ffffea       b 0x59d1c
+│  ╎│││└──> 0x00059d58      000053e3       cmp r3, 0
+│  ╎│││ │   0x00059d5c      08e09315       ldrne lr, [r3, 8]
+│  └──────< 0x00059d60      eeffff1a       bne 0x59d20
+│ ────────< 0x00059d64      ecffffea       b 0x59d1c
+│   └─────> 0x00059d68      64009fe5       ldr r0, [0x00059dd4]        ; [0x59dd4:4]=0xe20
+│    ││ │   0x00059d6c      1c108de2       add r1, sp, 0x1c
+│    ││ │   0x00059d70      08c093e5       ldr ip, [r3, 8]
+│    ││ │   0x00059d74      18208de2       add r2, sp, 0x18
+│    ││ │   0x00059d78      0130a0e3       mov r3, 1
+│    ││ │   0x00059d7c      01e0e0e3       mvn lr, 1
+│    ││ │   0x00059d80      000094e7       ldr r0, [r4, r0]
+│    ││ │   0x00059d84      1ce08de5       str lr, [var_1ch]
+│    ││ │   0x00059d88      18c08de5       str ip, [var_18h]
+│    ││ │   0x00059d8c      000090e5       ldr r0, [r0]
+│    ││ │   0x00059d90      054affeb       bl rsym._ZN15CContextManager13switchContextERKiS1_b
+│ ────────< 0x00059d94      e7ffffea       b 0x59d38
+│    └└─└─> 0x00059d98      38309fe5       ldr r3, [0x00059dd8]        ; [0x59dd8:4]=0x1044
+│           0x00059d9c      030094e7       ldr r0, [r4, r3]
+│           0x00059da0      f833d0e1       ldrsh r3, [r0, 0x38]
+│           0x00059da4      040053e3       cmp r3, 4
+│ ────────< 0x00059da8      e2ffffca       bgt 0x59d38
+│           0x00059dac      28209fe5       ldr r2, [0x00059ddc]        ; [0x59ddc:4]=0xffff5548
+│           0x00059db0      0410a0e3       mov r1, 4
+│           0x00059db4      24309fe5       ldr r3, [0x00059de0]        ; [0x59de0:4]=0xffff54fc
+│           0x00059db8      022084e0       add r2, r4, r2
+│           0x00059dbc      033084e0       add r3, r4, r3
+│           0x00059dc0      8b48ffeb       bl sym.imp.tracing::Channel::logCV_short__char_const__..._
+└ ────────< 0x00059dc4      dbffffea       b 0x59d38
+            ;-- CCaptureInterface::start():
+┌ 1704: method.CCaptureInterface.start__ (int32_t arg1);
+│ `- args(r0) vars(13:sp[0x2c..0x68])
+│           0x0005ab88      083090e5       ldr r3, [r0, 8]               ; RELOC 32 _ZN17CCaptureInterface5startEv @ 0x0005ab88 ; arg1 ; CCaptureInterface::start()
+│           0x0005ab8c      f04f2de9       push {r4, r5, r6, r7, r8, sb, sl, fp, lr}
+│           0x0005ab90      000053e3       cmp r3, 0
+│           0x0005ab94      94469fe5       ldr r4, [0x0005b230]        ; [0x5b230:4]=0x44db0
+│           0x0005ab98      44d04de2       sub sp, sp, 0x44
+│           0x0005ab9c      0060a0e1       mov r6, r0                  ; arg1
+│           0x0005aba0      04408fe0       add r4, pc, r4
+│       ┌─< 0x0005aba4      f900000a       beq 0x5af90
+│       │   0x0005aba8      000093e5       ldr r0, [r3]
+│       │   0x0005abac      0c3093e5       ldr r3, [r3, 0xc]
+│       │   0x0005abb0      33ff2fe1       blx r3
+│       │   0x0005abb4      083096e5       ldr r3, [r6, 8]
+│       │   0x0005abb8      08108de2       add r1, sp, 8
+│       │   0x0005abbc      000093e5       ldr r0, [r3]
+│       │   0x0005abc0      103093e5       ldr r3, [r3, 0x10]
+│       │   0x0005abc4      33ff2fe1       blx r3
+│       │   0x0005abc8      08309de5       ldr r3, [var_8h]
+│       │   0x0005abcc      010053e3       cmp r3, 1
+│      ┌──< 0x0005abd0      6a01000a       beq 0x5b180
+│      ││   0x0005abd4      58269fe5       ldr r2, [0x0005b234]        ; [0x5b234:4]=0xe44
+│      ││   0x0005abd8      025094e7       ldr r5, [r4, r2]
+│      ││   ; CODE XREF from CCaptureInterface::start() @ 0x5b188(x)
+│     ┌───> 0x0005abdc      54769fe5       ldr r7, [0x0005b238]        ; [0x5b238:4]=0xe38
+│     ╎││   0x0005abe0      54a69fe5       ldr sl, [0x0005b23c]        ; [0x5b23c:4]=0xffff5a50
+│     ╎││   0x0005abe4      049095e5       ldr sb, [r5, 4]
+│     ╎││   0x0005abe8      072094e7       ldr r2, [r4, r7]
+│     ╎││   0x0005abec      0a0084e0       add r0, r4, sl
+│     ╎││   0x0005abf0      043082e5       str r3, [r2, 4]
+│     ╎││   0x0005abf4      4546ffeb       bl sym.imp.strlen
+│     ╎││   0x0005abf8      048095e5       ldr r8, [r5, 4]
+│     ╎││   0x0005abfc      000058e3       cmp r8, 0
+│     ╎││   0x0005ac00      00b0a0e1       mov fp, r0
+│    ┌────< 0x0005ac04      5000000a       beq 0x5ad4c
+│    │╎││   0x0005ac08      08c095e5       ldr ip, [r5, 8]
+│    │╎││   0x0005ac0c      00005ce3       cmp ip, 0
+│   ┌─────< 0x0005ac10      3f00000a       beq 0x5ad14
+│  ┌──────> 0x0005ac14      090058e1       cmp r8, sb
+│  ╎││╎││   0x0005ac18      0890a031       movlo sb, r8
+│  ╎││╎││   0x0005ac1c      0b0059e1       cmp sb, fp
+│  ╎││╎││   0x0005ac20      0920a031       movlo r2, sb
+│  ╎││╎││   0x0005ac24      0b20a021       movhs r2, fp
+│  ╎││╎││   0x0005ac28      000052e3       cmp r2, 0
+│ ┌───────< 0x0005ac2c      4700000a       beq 0x5ad50
+│ │╎││╎││   0x0005ac30      0a1084e0       add r1, r4, sl
+│ │╎││╎││   0x0005ac34      080095e5       ldr r0, [r5, 8]
+│ │╎││╎││   0x0005ac38      ec45ffeb       bl sym.imp.strncmp
+│ │╎││╎││   0x0005ac3c      000050e3       cmp r0, 0
+│ ────────< 0x0005ac40      6201000a       beq 0x5b1d0
+│ │╎││╎││   ; CODE XREF from CCaptureInterface::start() @ 0x5b1dc(x)
+│ ────────> 0x0005ac44      048095e5       ldr r8, [r5, 4]
+│ ────────> 0x0005ac48      f0a59fe5       ldr sl, [0x0005b240]        ; [0x5b240:4]=0xffff5a58
+│ │╎││╎││   0x0005ac4c      0a0084e0       add r0, r4, sl
+│ │╎││╎││   0x0005ac50      2e46ffeb       bl sym.imp.strlen
+│ │╎││╎││   0x0005ac54      043095e5       ldr r3, [r5, 4]
+│ │╎││╎││   0x0005ac58      000053e3       cmp r3, 0
+│ │╎││╎││   0x0005ac5c      0090a0e1       mov sb, r0
+│ ────────< 0x0005ac60      df00000a       beq 0x5afe4
+│ │╎││╎││   0x0005ac64      08c095e5       ldr ip, [r5, 8]
+│ │╎││╎││   0x0005ac68      00005ce3       cmp ip, 0
+│ ────────< 0x0005ac6c      ce00000a       beq 0x5afac
+│ ────────> 0x0005ac70      080053e1       cmp r3, r8
+│ │╎││╎││   0x0005ac74      0380a031       movlo r8, r3
+│ │╎││╎││   0x0005ac78      090058e1       cmp r8, sb
+│ │╎││╎││   0x0005ac7c      0820a031       movlo r2, r8
+│ │╎││╎││   0x0005ac80      0920a021       movhs r2, sb
+│ │╎││╎││   0x0005ac84      000052e3       cmp r2, 0
+│ ────────< 0x0005ac88      d600000a       beq 0x5afe8
+│ │╎││╎││   0x0005ac8c      0a1084e0       add r1, r4, sl
+│ │╎││╎││   0x0005ac90      080095e5       ldr r0, [r5, 8]
+│ │╎││╎││   0x0005ac94      d545ffeb       bl sym.imp.strncmp
+│ │╎││╎││   0x0005ac98      000050e3       cmp r0, 0
+│ ────────< 0x0005ac9c      5b01000a       beq 0x5b210
+│ ────────> 0x0005aca0      9c159fe5       ldr r1, [0x0005b244]        ; [0x5b244:4]=0xffff5aac
+│ │╎││╎││   0x0005aca4      0500a0e1       mov r0, r5
+│ │╎││╎││   0x0005aca8      011084e0       add r1, r4, r1
+│ │╎││╎││   0x0005acac      f44affeb       bl sym.imp.ipl::basic_string_char__ipl::char_traits_char___ipl::allocator_char___::compare_char_const__const
+│ │╎││╎││   0x0005acb0      000050e3       cmp r0, 0
+│ │╎││╎││   0x0005acb4      0a20a003       moveq r2, 0xa
+│ ────────< 0x0005acb8      2900000a       beq 0x5ad64
+│ │╎││╎││   0x0005acbc      84159fe5       ldr r1, [0x0005b248]        ; [0x5b248:4]=0xffff5a5c
+│ │╎││╎││   0x0005acc0      0500a0e1       mov r0, r5
+│ │╎││╎││   0x0005acc4      011084e0       add r1, r4, r1
+│ │╎││╎││   0x0005acc8      ed4affeb       bl sym.imp.ipl::basic_string_char__ipl::char_traits_char___ipl::allocator_char___::compare_char_const__const
+│ │╎││╎││   0x0005accc      000050e3       cmp r0, 0
+│ │╎││╎││   0x0005acd0      0920a003       moveq r2, 9
+│ ────────< 0x0005acd4      2200000a       beq 0x5ad64
+│ │╎││╎││   0x0005acd8      6c259fe5       ldr r2, [0x0005b24c]        ; [0x5b24c:4]=0x1044
+│ │╎││╎││   0x0005acdc      023094e7       ldr r3, [r4, r2]
+│ │╎││╎││   0x0005ace0      f833d3e1       ldrsh r3, [r3, 0x38]
+│ │╎││╎││   0x0005ace4      040053e3       cmp r3, 4
+│ ────────< 0x0005ace8      1c0000ca       bgt 0x5ad60
+│ │╎││╎││   0x0005acec      083095e5       ldr r3, [r5, 8]
+│ │╎││╎││   0x0005acf0      000053e3       cmp r3, 0
+│ ────────< 0x0005acf4      4a01000a       beq 0x5b224
+│ │╎││╎││   ; CODE XREF from CCaptureInterface::start() @ 0x5b22c(x)
+│ ────────> 0x0005acf8      020094e7       ldr r0, [r4, r2]
+│ │╎││╎││   0x0005acfc      0410a0e3       mov r1, 4
+│ │╎││╎││   0x0005ad00      48259fe5       ldr r2, [0x0005b250]        ; [0x5b250:4]=0xffff5a68
+│ │╎││╎││   0x0005ad04      022084e0       add r2, r4, r2
+│ │╎││╎││   0x0005ad08      b944ffeb       bl sym.imp.tracing::Channel::logCV_short__char_const__..._
+│ │╎││╎││   0x0005ad0c      0c20a0e3       mov r2, 0xc
+│ ────────< 0x0005ad10      130000ea       b 0x5ad64
+│ │╎└─────> 0x0005ad14      38159fe5       ldr r1, [0x0005b254]        ; [0x5b254:4]=0xffff1638
+│ │╎ │╎││   0x0005ad18      0c00a0e1       mov r0, ip
+│ │╎ │╎││   0x0005ad1c      34259fe5       ldr r2, [0x0005b258]        ; [0x5b258:4]=0xffff1530
+│ │╎ │╎││   0x0005ad20      933200e3       movw r3, 0x293
+│ │╎ │╎││   0x0005ad24      04c08de5       str ip, [var_4h]
+│ │╎ │╎││   0x0005ad28      011084e0       add r1, r4, r1
+│ │╎ │╎││   0x0005ad2c      28c59fe5       ldr ip, [0x0005b25c]        ; [0x5b25c:4]=0xffff5518
+│ │╎ │╎││   0x0005ad30      022084e0       add r2, r4, r2
+│ │╎ │╎││   0x0005ad34      0cc084e0       add ip, r4, ip
+│ │╎ │╎││   0x0005ad38      00c08de5       str ip, [sp]
+│ │╎ │╎││   0x0005ad3c      6045ffeb       bl sym.imp.ipl::GlobalErrorHandler::doAssert_bool__char_const__char_const__int__char_const__char_const__..._
+│ │╎ │╎││   0x0005ad40      048095e5       ldr r8, [r5, 4]
+│ │╎ │╎││   0x0005ad44      000058e3       cmp r8, 0
+│ │└──────< 0x0005ad48      b1ffff1a       bne 0x5ac14
+│ │  └────> 0x0005ad4c      0090a0e3       mov sb, 0
+│ └───────> 0x0005ad50      00005be3       cmp fp, 0
+│ ────────< 0x0005ad54      bbffff1a       bne 0x5ac48
+│     ╎││   0x0005ad58      000059e3       cmp sb, 0
+│ ────────< 0x0005ad5c      b9ffff1a       bne 0x5ac48
+│ ───┌────> 0x0005ad60      0c20a0e3       mov r2, 0xc
+│    ╎╎││   ; CODE XREFS from CCaptureInterface::start() @ 0x5ad10(x), 0x5affc(x), 0x5b220(x)
+│ ─┌┌─────> 0x0005ad64      073094e7       ldr r3, [r4, r7]
+│  ╎╎╎╎││   0x0005ad68      f0a49fe5       ldr sl, [0x0005b260]        ; [0x5b260:4]=0xffff5a80
+│  ╎╎╎╎││   0x0005ad6c      109095e5       ldr sb, [r5, 0x10]
+│  ╎╎╎╎││   0x0005ad70      0a0084e0       add r0, r4, sl
+│  ╎╎╎╎││   0x0005ad74      302083e5       str r2, [r3, 0x30]
+│  ╎╎╎╎││   0x0005ad78      e445ffeb       bl sym.imp.strlen
+│  ╎╎╎╎││   0x0005ad7c      108095e5       ldr r8, [r5, 0x10]
+│  ╎╎╎╎││   0x0005ad80      000058e3       cmp r8, 0
+│  ╎╎╎╎││   0x0005ad84      00b0a0e1       mov fp, r0
+│ ┌───────< 0x0005ad88      4200000a       beq 0x5ae98
+│ │╎╎╎╎││   0x0005ad8c      14c095e5       ldr ip, [r5, 0x14]
+│ │╎╎╎╎││   0x0005ad90      00005ce3       cmp ip, 0
+│ ────────< 0x0005ad94      3100000a       beq 0x5ae60
+│ ────────> 0x0005ad98      090058e1       cmp r8, sb
+│ │╎╎╎╎││   0x0005ad9c      0890a031       movlo sb, r8
+│ │╎╎╎╎││   0x0005ada0      0b0059e1       cmp sb, fp
+│ │╎╎╎╎││   0x0005ada4      0920a031       movlo r2, sb
+│ │╎╎╎╎││   0x0005ada8      0b20a021       movhs r2, fp
+│ │╎╎╎╎││   0x0005adac      000052e3       cmp r2, 0
+│ ────────< 0x0005adb0      3900000a       beq 0x5ae9c
+│ │╎╎╎╎││   0x0005adb4      0a1084e0       add r1, r4, sl
+│ │╎╎╎╎││   0x0005adb8      140095e5       ldr r0, [r5, 0x14]
+│ │╎╎╎╎││   0x0005adbc      8b45ffeb       bl sym.imp.strncmp
+│ │╎╎╎╎││   0x0005adc0      000050e3       cmp r0, 0
+│ ────────< 0x0005adc4      0501000a       beq 0x5b1e0
+│ │╎╎╎╎││   ; CODE XREF from CCaptureInterface::start() @ 0x5b1ec(x)
+│ ────────> 0x0005adc8      108095e5       ldr r8, [r5, 0x10]
+│ ────────> 0x0005adcc      90a49fe5       ldr sl, [0x0005b264]        ; [0x5b264:4]=0xffff5a84
+│ │╎╎╎╎││   0x0005add0      0a0084e0       add r0, r4, sl
+│ │╎╎╎╎││   0x0005add4      cd45ffeb       bl sym.imp.strlen
+│ │╎╎╎╎││   0x0005add8      103095e5       ldr r3, [r5, 0x10]
+│ │╎╎╎╎││   0x0005addc      000053e3       cmp r3, 0
+│ │╎╎╎╎││   0x0005ade0      0090a0e1       mov sb, r0
+│ ────────< 0x0005ade4      9300000a       beq 0x5b038
+│ │╎╎╎╎││   0x0005ade8      14c095e5       ldr ip, [r5, 0x14]
+│ │╎╎╎╎││   0x0005adec      00005ce3       cmp ip, 0
+│ ────────< 0x0005adf0      8200000a       beq 0x5b000
+│ ────────> 0x0005adf4      080053e1       cmp r3, r8
+│ │╎╎╎╎││   0x0005adf8      0380a031       movlo r8, r3
+│ │╎╎╎╎││   0x0005adfc      090058e1       cmp r8, sb
+│ │╎╎╎╎││   0x0005ae00      0820a031       movlo r2, r8
+│ │╎╎╎╎││   0x0005ae04      0920a021       movhs r2, sb
+│ │╎╎╎╎││   0x0005ae08      000052e3       cmp r2, 0
+│ ────────< 0x0005ae0c      8a00000a       beq 0x5b03c
+│ │╎╎╎╎││   0x0005ae10      0a1084e0       add r1, r4, sl
+│ │╎╎╎╎││   0x0005ae14      140095e5       ldr r0, [r5, 0x14]
+│ │╎╎╎╎││   0x0005ae18      7445ffeb       bl sym.imp.strncmp
+│ │╎╎╎╎││   0x0005ae1c      000050e3       cmp r0, 0
+│ ────────< 0x0005ae20      f500000a       beq 0x5b1fc
+│ ────────> 0x0005ae24      20249fe5       ldr r2, [0x0005b24c]        ; [0x5b24c:4]=0x1044
+│ │╎╎╎╎││   0x0005ae28      023094e7       ldr r3, [r4, r2]
+│ │╎╎╎╎││   0x0005ae2c      f833d3e1       ldrsh r3, [r3, 0x38]
+│ │╎╎╎╎││   0x0005ae30      040053e3       cmp r3, 4
+│ ────────< 0x0005ae34      070000ca       bgt 0x5ae58
+│ │╎╎╎╎││   0x0005ae38      143095e5       ldr r3, [r5, 0x14]
+│ │╎╎╎╎││   0x0005ae3c      000053e3       cmp r3, 0
+│ ────────< 0x0005ae40      ea00000a       beq 0x5b1f0
+│ │╎╎╎╎││   ; CODE XREF from CCaptureInterface::start() @ 0x5b1f8(x)
+│ ────────> 0x0005ae44      020094e7       ldr r0, [r4, r2]
+│ │╎╎╎╎││   0x0005ae48      0410a0e3       mov r1, 4
+│ │╎╎╎╎││   0x0005ae4c      14249fe5       ldr r2, [0x0005b268]        ; [0x5b268:4]=0xffff5a8c
+│ │╎╎╎╎││   0x0005ae50      022084e0       add r2, r4, r2
+│ │╎╎╎╎││   0x0005ae54      6644ffeb       bl sym.imp.tracing::Channel::logCV_short__char_const__..._
+│ ────────> 0x0005ae58      00c0a0e3       mov ip, 0
+│ ────────< 0x0005ae5c      130000ea       b 0x5aeb0
+│ ────────> 0x0005ae60      ec139fe5       ldr r1, [0x0005b254]        ; [0x5b254:4]=0xffff1638
+│ │╎╎╎╎││   0x0005ae64      0c00a0e1       mov r0, ip
+│ │╎╎╎╎││   0x0005ae68      e8239fe5       ldr r2, [0x0005b258]        ; [0x5b258:4]=0xffff1530
+│ │╎╎╎╎││   0x0005ae6c      933200e3       movw r3, 0x293
+│ │╎╎╎╎││   0x0005ae70      04c08de5       str ip, [var_4h]
+│ │╎╎╎╎││   0x0005ae74      011084e0       add r1, r4, r1
+│ │╎╎╎╎││   0x0005ae78      dcc39fe5       ldr ip, [0x0005b25c]        ; [0x5b25c:4]=0xffff5518
+│ │╎╎╎╎││   0x0005ae7c      022084e0       add r2, r4, r2
+│ │╎╎╎╎││   0x0005ae80      0cc084e0       add ip, r4, ip
+│ │╎╎╎╎││   0x0005ae84      00c08de5       str ip, [sp]
+│ │╎╎╎╎││   0x0005ae88      0d45ffeb       bl sym.imp.ipl::GlobalErrorHandler::doAssert_bool__char_const__char_const__int__char_const__char_const__..._
+│ │╎╎╎╎││   0x0005ae8c      108095e5       ldr r8, [r5, 0x10]
+│ │╎╎╎╎││   0x0005ae90      000058e3       cmp r8, 0
+│ ────────< 0x0005ae94      bfffff1a       bne 0x5ad98
+│ └───────> 0x0005ae98      0090a0e3       mov sb, 0
+│ ────────> 0x0005ae9c      00005be3       cmp fp, 0
+│ ────────< 0x0005aea0      c9ffff1a       bne 0x5adcc
+│  ╎╎╎╎││   0x0005aea4      000059e3       cmp sb, 0
+│ ────────< 0x0005aea8      c7ffff1a       bne 0x5adcc
+│ ┌───────> 0x0005aeac      02c0a0e3       mov ip, 2
+│ ╎╎╎╎╎││   ; CODE XREFS from CCaptureInterface::start() @ 0x5ae5c(x), 0x5b050(x), 0x5b20c(x)
+│ ────────> 0x0005aeb0      078094e7       ldr r8, [r4, r7]
+│ ╎╎╎╎╎││   0x0005aeb4      181085e2       add r1, r5, 0x18
+│ ╎╎╎╎╎││   0x0005aeb8      3830d5e5       ldrb r3, [r5, 0x38]
+│ ╎╎╎╎╎││   0x0005aebc      1020a0e3       mov r2, 0x10
+│ ╎╎╎╎╎││   0x0005aec0      0c0088e2       add r0, r8, 0xc
+│ ╎╎╎╎╎││   0x0005aec4      34c088e5       str ip, [r8, 0x34]
+│ ╎╎╎╎╎││   0x0005aec8      2e30c8e5       strb r3, [r8, 0x2e]
+│ ╎╎╎╎╎││   0x0005aecc      2c30c8e5       strb r3, [r8, 0x2c]
+│ ╎╎╎╎╎││   0x0005aed0      2d30c8e5       strb r3, [r8, 0x2d]
+│ ╎╎╎╎╎││   0x0005aed4      2f30c8e5       strb r3, [r8, 0x2f]
+│ ╎╎╎╎╎││   0x0005aed8      2d44ffeb       bl sym.imp.memcpy
+│ ╎╎╎╎╎││   0x0005aedc      281085e2       add r1, r5, 0x28
+│ ╎╎╎╎╎││   0x0005aee0      1c0088e2       add r0, r8, 0x1c
+│ ╎╎╎╎╎││   0x0005aee4      1020a0e3       mov r2, 0x10
+│ ╎╎╎╎╎││   0x0005aee8      2944ffeb       bl sym.imp.memcpy
+│ ╎╎╎╎╎││   0x0005aeec      08309de5       ldr r3, [var_8h]
+│ ╎╎╎╎╎││   0x0005aef0      2c508de2       add r5, sp, 0x2c
+│ ╎╎╎╎╎││   0x0005aef4      010053e3       cmp r3, 1
+│ ╎╎╎╎╎││   0x0005aef8      0500a0e1       mov r0, r5
+│ ╎╎╎╎╎││   0x0005aefc      0a30a003       moveq r3, 0xa
+│ ╎╎╎╎╎││   0x0005af00      08308805       streq r3, [r8, 8]
+│ ╎╎╎╎╎││   0x0005af04      8330a003       moveq r3, 0x83
+│ ╎╎╎╎╎││   0x0005af08      30308805       streq r3, [r8, 0x30]
+│ ╎╎╎╎╎││   0x0005af0c      58839fe5       ldr r8, [0x0005b26c]        ; [0x5b26c:4]=0xcbc
+│ ╎╎╎╎╎││   0x0005af10      083094e7       ldr r3, [r4, r8]
+│ ╎╎╎╎╎││   0x0005af14      001093e5       ldr r1, [r3]
+│ ╎╎╎╎╎││   0x0005af18      cb4affeb       bl rsym._ZN15CDisplayManager14getMainDisplayEv
+│ ╎╎╎╎╎││   0x0005af1c      2c309de5       ldr r3, [var_2ch]
+│ ╎╎╎╎╎││   0x0005af20      000053e3       cmp r3, 0
+│ ────────< 0x0005af24      1300000a       beq 0x5af78
+│ ╎╎╎╎╎││   0x0005af28      30109de5       ldr r1, [var_30h]
+│ ╎╎╎╎╎││   0x0005af2c      000051e3       cmp r1, 0
+│ ────────< 0x0005af30      1000000a       beq 0x5af78
+│ ╎╎╎╎╎││   0x0005af34      34339fe5       ldr r3, [0x0005b270]        ; [0x5b270:4]=0x1048
+│ ╎╎╎╎╎││   0x0005af38      033094e7       ldr r3, [r4, r3]
+│ ╎╎╎╎╎││   0x0005af3c      000053e3       cmp r3, 0
+│ ────────< 0x0005af40      0c00000a       beq 0x5af78
+│ ╎╎╎╎╎││   0x0005af44      180091e5       ldr r0, [r1, 0x18]
+│ ╎╎╎╎╎││   0x0005af48      0130a0e3       mov r3, 1
+│ ╎╎╎╎╎││   0x0005af4c      072094e7       ldr r2, [r4, r7]
+│ ╎╎╎╎╎││   0x0005af50      141091e5       ldr r1, [r1, 0x14]
+│ ────────< 0x0005af54      010000ea       b 0x5af60
+│ ────────> 0x0005af58      013083e2       add r3, r3, 1
+│ ╎╎╎╎╎││   0x0005af5c      382082e2       add r2, r2, 0x38
+│ ╎╎╎╎╎││   ; CODE XREF from CCaptureInterface::start() @ 0x5af54(x)
+│ ────────> 0x0005af60      010053e3       cmp r3, 1
+│ ────────< 0x0005af64      fbffff0a       beq 0x5af58
+│ ╎╎╎╎╎││   0x0005af68      060053e3       cmp r3, 6
+│ ╎╎╎╎╎││   0x0005af6c      241082e5       str r1, [r2, 0x24]
+│ ╎╎╎╎╎││   0x0005af70      280082e5       str r0, [r2, 0x28]
+│ ────────< 0x0005af74      f7ffffda       ble 0x5af58
+│ ────────> 0x0005af78      10309de5       ldr r3, [var_10h]
+│ ╎╎╎╎╎││   0x0005af7c      020053e3       cmp r3, 2
+│ ────────< 0x0005af80      3300000a       beq 0x5b054
+│ ╎╎╎╎╎││   ; CODE XREF from CCaptureInterface::start() @ 0x5b17c(x)
+│ ────────> 0x0005af84      0500a0e1       mov r0, r5
+│ ╎╎╎╎╎││   0x0005af88      ba45ffeb       bl sym.imp.util::SharedPtrDefaultBase::_SharedPtrDefaultBase__
+│ ────────< 0x0005af8c      040000ea       b 0x5afa4
+│ ╎╎╎╎╎│└─> 0x0005af90      b4329fe5       ldr r3, [0x0005b24c]        ; [0x5b24c:4]=0x1044
+│ ╎╎╎╎╎│    0x0005af94      030094e7       ldr r0, [r4, r3]
+│ ╎╎╎╎╎│    0x0005af98      f833d0e1       ldrsh r3, [r0, 0x38]
+│ ╎╎╎╎╎│    0x0005af9c      040053e3       cmp r3, 4
+│ ╎╎╎╎╎│┌─< 0x0005afa0      790000da       ble 0x5b18c
+│ ╎╎╎╎╎││   ; CODE XREFS from CCaptureInterface::start() @ 0x5af8c(x), 0x5b19c(x)
+│ ────────> 0x0005afa4      44d08de2       add sp, sp, 0x44
+│ ╎╎╎╎╎││   0x0005afa8      f08fbde8       pop {r4, r5, r6, r7, r8, sb, sl, fp, pc}
+│ ────────> 0x0005afac      a0129fe5       ldr r1, [0x0005b254]        ; [0x5b254:4]=0xffff1638
+│ ╎╎╎╎╎││   0x0005afb0      0c00a0e1       mov r0, ip
+│ ╎╎╎╎╎││   0x0005afb4      9c229fe5       ldr r2, [0x0005b258]        ; [0x5b258:4]=0xffff1530
+│ ╎╎╎╎╎││   0x0005afb8      933200e3       movw r3, 0x293
+│ ╎╎╎╎╎││   0x0005afbc      04c08de5       str ip, [var_4h]
+│ ╎╎╎╎╎││   0x0005afc0      011084e0       add r1, r4, r1
+│ ╎╎╎╎╎││   0x0005afc4      90c29fe5       ldr ip, [0x0005b25c]        ; [0x5b25c:4]=0xffff5518
+│ ╎╎╎╎╎││   0x0005afc8      022084e0       add r2, r4, r2
+│ ╎╎╎╎╎││   0x0005afcc      0cc084e0       add ip, r4, ip
+│ ╎╎╎╎╎││   0x0005afd0      00c08de5       str ip, [sp]
+│ ╎╎╎╎╎││   0x0005afd4      ba44ffeb       bl sym.imp.ipl::GlobalErrorHandler::doAssert_bool__char_const__char_const__int__char_const__char_const__..._
+│ ╎╎╎╎╎││   0x0005afd8      043095e5       ldr r3, [r5, 4]
+│ ╎╎╎╎╎││   0x0005afdc      000053e3       cmp r3, 0
+│ ────────< 0x0005afe0      22ffff1a       bne 0x5ac70
+│ ────────> 0x0005afe4      0080a0e3       mov r8, 0
+│ ────────> 0x0005afe8      000059e3       cmp sb, 0
+│ ────────< 0x0005afec      2bffff1a       bne 0x5aca0
+│ ╎╎╎╎╎││   0x0005aff0      000058e3       cmp r8, 0
+│ ────────< 0x0005aff4      29ffff1a       bne 0x5aca0
+│ ╎╎╎╎╎││   0x0005aff8      0b20a0e3       mov r2, 0xb
+│ ╎└──────< 0x0005affc      58ffffea       b 0x5ad64
+│ ────────> 0x0005b000      4c129fe5       ldr r1, [0x0005b254]        ; [0x5b254:4]=0xffff1638
+│ ╎ ╎╎╎││   0x0005b004      0c00a0e1       mov r0, ip
+│ ╎ ╎╎╎││   0x0005b008      48229fe5       ldr r2, [0x0005b258]        ; [0x5b258:4]=0xffff1530
+│ ╎ ╎╎╎││   0x0005b00c      933200e3       movw r3, 0x293
+│ ╎ ╎╎╎││   0x0005b010      04c08de5       str ip, [var_4h]
+│ ╎ ╎╎╎││   0x0005b014      011084e0       add r1, r4, r1
+│ ╎ ╎╎╎││   0x0005b018      3cc29fe5       ldr ip, [0x0005b25c]        ; [0x5b25c:4]=0xffff5518
+│ ╎ ╎╎╎││   0x0005b01c      022084e0       add r2, r4, r2
+│ ╎ ╎╎╎││   0x0005b020      0cc084e0       add ip, r4, ip
+│ ╎ ╎╎╎││   0x0005b024      00c08de5       str ip, [sp]
+│ ╎ ╎╎╎││   0x0005b028      a544ffeb       bl sym.imp.ipl::GlobalErrorHandler::doAssert_bool__char_const__char_const__int__char_const__char_const__..._
+│ ╎ ╎╎╎││   0x0005b02c      103095e5       ldr r3, [r5, 0x10]
+│ ╎ ╎╎╎││   0x0005b030      000053e3       cmp r3, 0
+│ ────────< 0x0005b034      6effff1a       bne 0x5adf4
+│ ────────> 0x0005b038      0080a0e3       mov r8, 0
+│ ────────> 0x0005b03c      000059e3       cmp sb, 0
+│ ────────< 0x0005b040      77ffff1a       bne 0x5ae24
+│ ╎ ╎╎╎││   0x0005b044      000058e3       cmp r8, 0
+│ ────────< 0x0005b048      75ffff1a       bne 0x5ae24
+│ ╎ ╎╎╎││   0x0005b04c      01c0a0e3       mov ip, 1
+│ ────────< 0x0005b050      96ffffea       b 0x5aeb0
+│ ────────> 0x0005b054      18729fe5       ldr r7, [0x0005b274]        ; [0x5b274:4]=0xd84
+│ ╎ ╎╎╎││   0x0005b058      0030a0e3       mov r3, 0
+│ ╎ ╎╎╎││   0x0005b05c      14a29fe5       ldr sl, [0x0005b278]        ; [0x5b278:4]=0xf70
+│ ╎ ╎╎╎││   0x0005b060      01e0a0e3       mov lr, 1
+│ ╎ ╎╎╎││   0x0005b064      18c09de5       ldr ip, [var_18h]
+│ ╎ ╎╎╎││   0x0005b068      072094e7       ldr r2, [r4, r7]
+│ ╎ ╎╎╎││   0x0005b06c      02005ce3       cmp ip, 2
+│ ╎ ╎╎╎││   0x0005b070      00c0a013       movne ip, 0
+│ ╎ ╎╎╎││   0x0005b074      01c0a003       moveq ip, 1
+│ ╎ ╎╎╎││   0x0005b078      14009de5       ldr r0, [var_14h]
+│ ╎ ╎╎╎││   0x0005b07c      15c0c6e5       strb ip, [r6, 0x15]
+│ ╎ ╎╎╎││   0x0005b080      002092e5       ldr r2, [r2]
+│ ╎ ╎╎╎││   0x0005b084      020050e3       cmp r0, 2
+│ ╎ ╎╎╎││   0x0005b088      0000a013       movne r0, 0
+│ ╎ ╎╎╎││   0x0005b08c      0100a003       moveq r0, 1
+│ ╎ ╎╎╎││   0x0005b090      1cc09de5       ldr ip, [var_1ch]
+│ ╎ ╎╎╎││   0x0005b094      0a1094e7       ldr r1, [r4, sl]
+│ ╎ ╎╎╎││   0x0005b098      042092e5       ldr r2, [r2, 4]
+│ ╎ ╎╎╎││   0x0005b09c      04e0c6e5       strb lr, [r6, 4]
+│ ╎ ╎╎╎││   0x0005b0a0      030052e1       cmp r2, r3
+│ ╎ ╎╎╎││   0x0005b0a4      18c086e5       str ip, [r6, 0x18]
+│ ╎ ╎╎╎││   0x0005b0a8      0c3086e5       str r3, [r6, 0xc]
+│ ╎ ╎╎╎││   0x0005b0ac      28208212       addne r2, r2, 0x28
+│ ╎ ╎╎╎││   0x0005b0b0      103086e5       str r3, [r6, 0x10]
+│ ╎ ╎╎╎││   0x0005b0b4      1400c6e5       strb r0, [r6, 0x14]
+│ ╎ ╎╎╎││   0x0005b0b8      001091e5       ldr r1, [r1]
+│ ╎ ╎╎╎││   0x0005b0bc      9949ffeb       bl rsym._ZN28CDiagTopViewStatusChangedEvt4postEbP11IEventQueueP13IEventHandler
+│ ╎ ╎╎╎││   0x0005b0c0      073094e7       ldr r3, [r4, r7]
+│ ╎ ╎╎╎││   0x0005b0c4      0a2094e7       ldr r2, [r4, sl]
+│ ╎ ╎╎╎││   0x0005b0c8      181096e5       ldr r1, [r6, 0x18]
+│ ╎ ╎╎╎││   0x0005b0cc      003093e5       ldr r3, [r3]
+│ ╎ ╎╎╎││   0x0005b0d0      002092e5       ldr r2, [r2]
+│ ╎ ╎╎╎││   0x0005b0d4      1500d6e5       ldrb r0, [r6, 0x15]
+│ ╎ ╎╎╎││   0x0005b0d8      20608de2       add r6, sp, 0x20
+│ ╎ ╎╎╎││   0x0005b0dc      043093e5       ldr r3, [r3, 4]
+│ ╎ ╎╎╎││   0x0005b0e0      000053e3       cmp r3, 0
+│ ╎ ╎╎╎││   0x0005b0e4      28308312       addne r3, r3, 0x28
+│ ╎ ╎╎╎││   0x0005b0e8      c746ffeb       bl rsym._ZN24CDiagRVCStatusChangedEvt4postEb10cap_norm_tP11IEventQueueP13IEventHandler
+│ ╎ ╎╎╎││   0x0005b0ec      073094e7       ldr r3, [r4, r7]
+│ ╎ ╎╎╎││   0x0005b0f0      0a2094e7       ldr r2, [r4, sl]
+│ ╎ ╎╎╎││   0x0005b0f4      0100a0e3       mov r0, 1
+│ ╎ ╎╎╎││   0x0005b0f8      003093e5       ldr r3, [r3]
+│ ╎ ╎╎╎││   0x0005b0fc      001092e5       ldr r1, [r2]
+│ ╎ ╎╎╎││   0x0005b100      042093e5       ldr r2, [r3, 4]
+│ ╎ ╎╎╎││   0x0005b104      000052e3       cmp r2, 0
+│ ╎ ╎╎╎││   0x0005b108      28208212       addne r2, r2, 0x28
+│ ╎ ╎╎╎││   0x0005b10c      ea4affeb       bl rsym._ZN24CDiagVPSStatusChangedEvt4postEbP11IEventQueueP13IEventHandler
+│ ╎ ╎╎╎││   0x0005b110      083094e7       ldr r3, [r4, r8]
+│ ╎ ╎╎╎││   0x0005b114      0600a0e1       mov r0, r6
+│ ╎ ╎╎╎││   0x0005b118      001093e5       ldr r1, [r3]
+│ ╎ ╎╎╎││   0x0005b11c      4a4affeb       bl rsym._ZN15CDisplayManager14getMainDisplayEv
+│ ╎ ╎╎╎││   0x0005b120      20309de5       ldr r3, [var_20h]
+│ ╎ ╎╎╎││   0x0005b124      000053e3       cmp r3, 0
+│ ╎┌──────< 0x0005b128      1c00000a       beq 0x5b1a0
+│ ╎│╎╎╎││   0x0005b12c      24309de5       ldr r3, [var_24h]
+│ ╎│╎╎╎││   0x0005b130      000053e3       cmp r3, 0
+│ ────────< 0x0005b134      1900000a       beq 0x5b1a0
+│ ╎│╎╎╎││   0x0005b138      30219fe5       ldr r2, [0x0005b270]        ; [0x5b270:4]=0x1048
+│ ╎│╎╎╎││   0x0005b13c      022094e7       ldr r2, [r4, r2]
+│ ╎│╎╎╎││   0x0005b140      000052e3       cmp r2, 0
+│ ────────< 0x0005b144      1500000a       beq 0x5b1a0
+│ ╎│╎╎╎││   0x0005b148      2c019fe5       ldr r0, [0x0005b27c]        ; [0x5b27c:4]=0xe20
+│ ╎│╎╎╎││   0x0005b14c      3c108de2       add r1, sp, 0x3c
+│ ╎│╎╎╎││   0x0005b150      08c093e5       ldr ip, [r3, 8]
+│ ╎│╎╎╎││   0x0005b154      38208de2       add r2, sp, 0x38
+│ ╎│╎╎╎││   0x0005b158      0130a0e3       mov r3, 1
+│ ╎│╎╎╎││   0x0005b15c      01e0e0e3       mvn lr, 1
+│ ╎│╎╎╎││   0x0005b160      000094e7       ldr r0, [r4, r0]
+│ ╎│╎╎╎││   0x0005b164      3ce08de5       str lr, [var_3ch]
+│ ╎│╎╎╎││   0x0005b168      38c08de5       str ip, [var_38h]
+│ ╎│╎╎╎││   0x0005b16c      000090e5       ldr r0, [r0]
+│ ╎│╎╎╎││   0x0005b170      0d45ffeb       bl rsym._ZN15CContextManager13switchContextERKiS1_b
+│ ╎│╎╎╎││   ; CODE XREF from CCaptureInterface::start() @ 0x5b1cc(x)
+│ ────────> 0x0005b174      0600a0e1       mov r0, r6
+│ ╎│╎╎╎││   0x0005b178      3e45ffeb       bl sym.imp.util::SharedPtrDefaultBase::_SharedPtrDefaultBase__
+│ ────────< 0x0005b17c      80ffffea       b 0x5af84
+│ ╎│╎╎╎└──> 0x0005b180      f8209fe5       ldr r2, [0x0005b280]        ; [0x5b280:4]=0x10fc
+│ ╎│╎╎╎ │   0x0005b184      025094e7       ldr r5, [r4, r2]
+│ ╎│╎╎└───< 0x0005b188      93feffea       b 0x5abdc
+│ ╎│╎╎  └─> 0x0005b18c      f0209fe5       ldr r2, [0x0005b284]        ; [0x5b284:4]=0xffff5568
+│ ╎│╎╎      0x0005b190      0410a0e3       mov r1, 4
+│ ╎│╎╎      0x0005b194      022084e0       add r2, r4, r2
+│ ╎│╎╎      0x0005b198      3849ffeb       bl sym.imp.tracing::Channel::logC_short__char_const_
+│ ────────< 0x0005b19c      80ffffea       b 0x5afa4
+│ ─└──────> 0x0005b1a0      a4309fe5       ldr r3, [0x0005b24c]        ; [0x5b24c:4]=0x1044
+│ ╎ ╎╎      0x0005b1a4      030094e7       ldr r0, [r4, r3]
+│ ╎ ╎╎      0x0005b1a8      f833d0e1       ldrsh r3, [r0, 0x38]
+│ ╎ ╎╎      0x0005b1ac      040053e3       cmp r3, 4
+│ ────────< 0x0005b1b0      efffffca       bgt 0x5b174
+│ ╎ ╎╎      0x0005b1b4      cc209fe5       ldr r2, [0x0005b288]        ; [0x5b288:4]=0xffff5548
+│ ╎ ╎╎      0x0005b1b8      0410a0e3       mov r1, 4
+│ ╎ ╎╎      0x0005b1bc      c8309fe5       ldr r3, [0x0005b28c]        ; [0x5b28c:4]=0xffff5510
+│ ╎ ╎╎      0x0005b1c0      022084e0       add r2, r4, r2
+│ ╎ ╎╎      0x0005b1c4      033084e0       add r3, r4, r3
+│ ╎ ╎╎      0x0005b1c8      8943ffeb       bl sym.imp.tracing::Channel::logCV_short__char_const__..._
+│ ────────< 0x0005b1cc      e8ffffea       b 0x5b174
+│ ────────> 0x0005b1d0      09005be1       cmp fp, sb
+│ ────────< 0x0005b1d4      9afeff8a       bhi 0x5ac44
+│ ╎ ╎└────< 0x0005b1d8      e0feff2a       bhs 0x5ad60
+│ ────────< 0x0005b1dc      98feffea       b 0x5ac44
+│ ────────> 0x0005b1e0      09005be1       cmp fp, sb
+│ ────────< 0x0005b1e4      f7feff8a       bhi 0x5adc8
+│ └───────< 0x0005b1e8      2fffff2a       bhs 0x5aeac
+│ ────────< 0x0005b1ec      f5feffea       b 0x5adc8
+│ ────────> 0x0005b1f0      98309fe5       ldr r3, [0x0005b290]        ; [0x5b290:4]=0xd6c
+│   ╎       0x0005b1f4      033094e7       ldr r3, [r4, r3]
+│ ────────< 0x0005b1f8      11ffffea       b 0x5ae44
+│ ────────> 0x0005b1fc      090058e1       cmp r8, sb
+│ ────────< 0x0005b200      07ffff3a       blo 0x5ae24
+│ ────────< 0x0005b204      06ffff8a       bhi 0x5ae24
+│   ╎       0x0005b208      01c0a0e3       mov ip, 1
+│ ────────< 0x0005b20c      27ffffea       b 0x5aeb0
+│ ────────> 0x0005b210      080059e1       cmp sb, r8
+│ ────────< 0x0005b214      a1feff8a       bhi 0x5aca0
+│ ────────< 0x0005b218      a0feff3a       blo 0x5aca0
+│   ╎       0x0005b21c      0b20a0e3       mov r2, 0xb
+│   └─────< 0x0005b220      cffeffea       b 0x5ad64
+│ ────────> 0x0005b224      64309fe5       ldr r3, [0x0005b290]        ; [0x5b290:4]=0xd6c
+│           0x0005b228      033094e7       ldr r3, [r4, r3]
+└ ────────< 0x0005b22c      b1feffea       b 0x5acf8

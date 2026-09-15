@@ -6,7 +6,7 @@
 
 #include "logging.h"
 
-#if ENABLE_LOGGING || ENABLE_STATE_TRACE
+#if ENABLE_LOGGING || ENABLE_STATE_TRACE || ENABLE_ALTSCREEN_PACE_TRACE
 
 /* Maximum tracked dump files for once-only dumps */
 #define MAX_DUMP_FILES 32
@@ -141,7 +141,7 @@ static void* log_writer_main(void* unused) {
         pthread_mutex_lock(&g_log.lock);
         while (!g_log.shutdown && g_log.queue_count == 0)
             pthread_cond_wait(&g_log.cond, &g_log.lock);
-#if ENABLE_STATE_TRACE && !ENABLE_LOGGING
+#if (ENABLE_STATE_TRACE || ENABLE_ALTSCREEN_PACE_TRACE) && !ENABLE_LOGGING
         /* Trace-only shutdown is itself evidence. Drain already-enqueued
          * terminal records before exiting; log_shutdown still caps the wait,
          * so a wedged filesystem cannot become a watchdog hang. */
@@ -246,7 +246,7 @@ void log_shutdown(void) {
     }
 
     g_log.shutdown = true;
-#if !(ENABLE_STATE_TRACE && !ENABLE_LOGGING)
+#if !((ENABLE_STATE_TRACE || ENABLE_ALTSCREEN_PACE_TRACE) && !ENABLE_LOGGING)
     g_log.queue_head = g_log.queue_tail = g_log.queue_count = 0;
 #endif
     pthread_cond_broadcast(&g_log.cond);
@@ -487,4 +487,4 @@ hook_result_t log_dump_file_once(const char* path, const uint8_t* data, size_t l
 
 #endif /* ENABLE_LOGGING */
 
-#endif /* ENABLE_LOGGING || ENABLE_STATE_TRACE */
+#endif /* Logging or scoped trace writer. */

@@ -1,0 +1,29 @@
+  public boolean setPlaybackURL(java.lang.String);
+    Code:
+       0: aload_0
+       1: getfield      #139                // Field de/audi/app/media/dsi/media/MediaDSIPlayerControllerImpl.logger:Lde/audi/atip/log/LogChannel;
+       4: ldc           #16                 // int 1000000
+       6: ldc           #96                 // String [%1.setPlaybackURL] '%2'
+       8: ldc           #18                 // String MediaDSIPlayerControllerImpl
+      10: aload_1
+      11: invokevirtual #151                // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;Ljava/lang/Object;)V
+      14: aload_0
+      15: getfield      #122                // Field de/audi/app/media/dsi/media/MediaDSIPlayerControllerImpl.dsiMediaPlayer:Lorg/dsi/ifc/media/DSIMediaPlayer;
+      18: astore_2
+      19: aload_2
+      20: ifnonnull     39
+      23: aload_0
+      24: getfield      #139                // Field de/audi/app/media/dsi/media/MediaDSIPlayerControllerImpl.logger:Lde/audi/atip/log/LogChannel;
+      27: ldc           #35                 // int 100000
+      29: ldc           #97                 // String [%1.setPlaybackURL] No DSIMediaPlayer service registered. Ignore.
+      31: ldc           #18                 // String MediaDSIPlayerControllerImpl
+      33: invokevirtual #140                // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+      36: pop
+      37: iconst_0
+      38: ireturn
+      39: aload_2
+      40: aload_1
+      41: invokeinterface #247,  2          // InterfaceMethod org/dsi/ifc/media/DSIMediaPlayer.setPlaybackURL:(Ljava/lang/String;)V
+      46: iconst_1
+      47: ireturn
+

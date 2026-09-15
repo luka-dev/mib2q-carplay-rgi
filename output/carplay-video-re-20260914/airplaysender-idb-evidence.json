@@ -1,0 +1,1405 @@
+[
+  {
+    "addr": "0x2511490a0",
+    "code": "__int64 carEndpoint_updateVideoPlaybackAllowed()\n{\n  __int64 v0; // x19\n  __int64 v1; // x20\n  __int64 v2; // x0\n  __int64 v3; // x0\n  __int64 v4; // x21\n  __int64 v5; // x0\n  __int64 v6; // x1\n  __int64 v7; // x2\n  __int64 v8; // x0\n  __int64 v9; // x0\n  __int64 v10; // x19\n  char v12[8]; // [xsp+18h] [xbp-78h] BYREF\n  __int64 v13; // [xsp+20h] [xbp-70h]\n  __int64 (__fastcall *v14)(); // [xsp+28h] [xbp-68h]\n  void *v15; // [xsp+30h] [xbp-60h]\n  __int64 *v16; // [xsp+38h] [xbp-58h]\n  __int64 v17; // [xsp+40h] [xbp-50h]\n  __int64 v18; // [xsp+48h] [xbp-48h] BYREF\n  __int64 *v19; // [xsp+50h] [xbp-40h]\n  __int64 v20; // [xsp+58h] [xbp-38h]\n  int v21; // [xsp+60h] [xbp-30h]\n  char v22; // [xsp+6Fh] [xbp-21h] BYREF\n\n  v2 = OUTLINED_FUNCTION_98(); /*0x2511490b8*/\n  v3 = MEMORY[0x25810D5C0](v2); /*0x2511490bc*/\n  v22 = 0; /*0x2511490c0*/\n  v18 = 0; /*0x2511490c8*/\n  v19 = &v18; /*0x2511490c8*/\n  v20 = 0x2000000000LL; /*0x2511490d4*/\n  v21 = 0; /*0x2511490d8*/\n  if ( *(_BYTE *)(v3 + 68) ) /*0x2511490dc*/\n  {\n    v4 = v3; /*0x2511490e4*/\n    v5 = MEMORY[0x25810D9C0](v0, &stru_275B05B80, &v22); /*0x2511490f8*/\n    if ( !(_DWORD)v5 ) /*0x2511490fc*/\n    {\n      MEMORY[0x25810C360](v5, \"carEndpoint_updateVideoPlaybackAllowed\", 1033, 0); /*0x251149220*/\n      v10 = 4294950576LL; /*0x251149224*/\n      goto LABEL_11; /*0x251149228*/\n    }\n    if ( v22 != *(_BYTE *)(v4 + 221) ) /*0x25114910c*/\n    {\n      *(_BYTE *)(v4 + 221) = v22; /*0x251149110*/\n      if ( gLogCategory_APEndpointCarPlay <= 50 ) /*0x251149120*/\n      {\n        if ( gLogCategory_APEndpointCarPlay != -1 || (v5 = OUTLINED_FUNCTION_20_6(), (_DWORD)v5) ) /*0x25114916c*/\n        {\n          v8 = OUTLINED_FUNCTION_23_5(v5, v6, v7); /*0x25114914c*/\n          OUTLINED_FUNCTION_9_0(v8, \"OSStatus carEndpoint_updateVideoPlaybackAllowed(FigEndpointRef, CFDictionaryRef)\"); /*0x251149160*/\n        }\n      }\n      v9 = OUTLINED_FUNCTION_16(*(_QWORD *)(v4 + 224)); /*0x251149174*/\n      v13 = 0x40000000; /*0x251149180*/\n      v14 = __carEndpoint_updateVideoPlaybackAllowed_block_invoke; /*0x25114919c*/\n      v15 = &unk_269394748; /*0x25114919c*/\n      v16 = &v18; /*0x2511491a4*/\n      v17 = v4; /*0x2511491a4*/\n      MEMORY[0x258101C50](v9, v12); /*0x2511491ac*/\n      carEndpoint_postNotification(v1, *MEMORY[0x2680C4BC8], *((unsigned int *)v19 + 6), 0); /*0x2511491cc*/\n      if ( !v22 ) /*0x2511491d4*/\n        carEndpoint_sendChangeVideoPlaybackToAudioOnlyIfNeeded(v1, v0); /*0x251149208*/\n    }\n  }\n  v10 = 0; /*0x2511491d8*/\nLABEL_11:\n  MEMORY[0x258101C00](&v18, 8); /*0x2511491dc*/\n  return v10; /*0x2511491fc*/\n}",
+    "refs": [
+      {
+        "addr": "0x250f41648",
+        "name": "_OUTLINED_FUNCTION_98"
+      },
+      {
+        "addr": "0x275b05b80",
+        "name": "stru_275B05B80"
+      },
+      {
+        "addr": "0x2511dd409",
+        "name": "aCarendpointUpd_1",
+        "string": "carEndpoint_updateVideoPlaybackAllowed"
+      },
+      {
+        "addr": "0x250f3d540",
+        "name": "_OUTLINED_FUNCTION_23_5"
+      },
+      {
+        "addr": "0x250f36ac8",
+        "name": "_OUTLINED_FUNCTION_9_0"
+      },
+      {
+        "addr": "0x2511dd430",
+        "name": "aOsstatusCarend_52",
+        "string": "OSStatus carEndpoint_updateVideoPlaybackAllowed(FigEndpointRef, CFDictionaryRef)"
+      },
+      {
+        "addr": "0x26e755490",
+        "name": "_gLogCategory_APEndpointCarPlay"
+      },
+      {
+        "addr": "0x250f53930",
+        "name": "_OUTLINED_FUNCTION_20_6"
+      },
+      {
+        "addr": "0x250f413e8",
+        "name": "_OUTLINED_FUNCTION_16"
+      },
+      {
+        "addr": "0x25108ff5c",
+        "name": "___carEndpoint_updateVideoPlaybackAllowed_block_invoke"
+      },
+      {
+        "addr": "0x269394748",
+        "name": "unk_269394748"
+      },
+      {
+        "addr": "0x250f5ee08",
+        "name": "_carEndpoint_postNotification"
+      },
+      {
+        "addr": "0x25114a4ec",
+        "name": "_carEndpoint_sendChangeVideoPlaybackToAudioOnlyIfNeeded"
+      }
+    ]
+  },
+  {
+    "addr": "0x25114a4ec",
+    "code": "__int64 __fastcall carEndpoint_sendChangeVideoPlaybackToAudioOnlyIfNeeded(__int64 a1, __int64 a2)\n{\n  __int64 v4; // x22\n  __int64 v5; // x0\n  __int64 v6; // x20\n  __int64 v7; // x0\n  __int64 v8; // x1\n  __int64 v9; // x2\n  int v10; // w8\n  char v11; // zf\n  char v12; // nf\n  char v13; // vf\n  __int64 v14; // x0\n  __int64 _48; // [xsp+48h] [xbp+8h]\n\n  v4 = MEMORY[0x25810D5C0](); /*0x25114a510*/\n  v5 = MEMORY[0x258111BE0](a2, &stru_275B050C0); /*0x25114a524*/\n  if ( !*(_BYTE *)(v4 + 68) ) /*0x25114a52c*/\n    return 0; /*0x25114a52c*/\n  v6 = v5; /*0x25114a530*/\n  v7 = OUTLINED_FUNCTION_21_8(); /*0x25114a534*/\n  if ( !(v12 ^ v13 | v11) || v10 == -1 && (v7 = OUTLINED_FUNCTION_20_6(v7), !(_DWORD)v7) ) /*0x25114a548*/\n  {\n    if ( !v6 ) /*0x25114a54c*/\n      goto LABEL_10; /*0x25114a54c*/\nLABEL_9:\n    if ( (unsigned int)MEMORY[0x258101B40](&stru_275B050E0, v6) ) /*0x25114a584*/\n      goto LABEL_10; /*0x25114a588*/\n    return 0; /*0x25114a5c8*/\n  }\n  v14 = OUTLINED_FUNCTION_23_5(v7, v8, v9); /*0x25114a55c*/\n  OUTLINED_FUNCTION_9_0( /*0x25114a570*/\n    v14,\n    \"OSStatus carEndpoint_sendChangeVideoPlaybackToAudioOnlyIfNeeded(FigEndpointRef, CFDictionaryRef)\");\n  if ( v6 ) /*0x25114a574*/\n    goto LABEL_9; /*0x25114a574*/\nLABEL_10:\n  if ( ((_48 ^ (2 * _48)) & 0x4000000000000000LL) != 0 ) /*0x25114a5bc*/\n    __break(0xC471u); /*0x25114a5c0*/\n  return carEndpoint_sendCommandInternal(a1, &stru_275B05100, 0, 1, 0); /*0x25114a5dc*/\n}",
+    "refs": [
+      {
+        "addr": "0x275b050c0",
+        "name": "stru_275B050C0"
+      },
+      {
+        "addr": "0x250f3cf14",
+        "name": "_OUTLINED_FUNCTION_21_8"
+      },
+      {
+        "addr": "0x275b050e0",
+        "name": "stru_275B050E0"
+      },
+      {
+        "addr": "0x250f53930",
+        "name": "_OUTLINED_FUNCTION_20_6"
+      },
+      {
+        "addr": "0x250f3d540",
+        "name": "_OUTLINED_FUNCTION_23_5"
+      },
+      {
+        "addr": "0x250f36ac8",
+        "name": "_OUTLINED_FUNCTION_9_0"
+      },
+      {
+        "addr": "0x2511d9905",
+        "name": "aOsstatusCarend_34",
+        "string": "OSStatus carEndpoint_sendChangeVideoPlaybackToAudioOnlyIfNeeded(FigEndpointRef, CFDictionaryRef)"
+      },
+      {
+        "addr": "0x251087b40",
+        "name": "_carEndpoint_sendCommandInternal"
+      },
+      {
+        "addr": "0x275b05100",
+        "name": "stru_275B05100"
+      }
+    ]
+  },
+  {
+    "addr": "0x251148e8c",
+    "code": "__int64 carEndpoint_CreatePlaybackSession()\n{\n  _QWORD *v0; // x19\n  __int64 v1; // x20\n  __int64 v2; // x0\n  __int64 v3; // x21\n  __int64 v4; // x0\n  __int64 v5; // x1\n  __int64 v6; // x2\n  int v7; // w8\n  char v8; // zf\n  char v9; // nf\n  char v10; // vf\n  __int64 v11; // x0\n  __int64 v12; // x21\n  __int64 v13; // x0\n  __int64 v14; // x0\n  __int64 v15; // x0\n  __int64 v16; // x0\n  __int64 v17; // x0\n  __int64 v18; // x0\n  __int64 v19; // x0\n  __int64 v20; // x0\n  __int64 *v21; // x8\n  __int64 v22; // x19\n  __int64 v23; // x0\n  __int64 v25; // x0\n  _BYTE v26[8]; // [xsp+10h] [xbp-130h] BYREF\n  __int64 v27; // [xsp+18h] [xbp-128h]\n  __int64 (__fastcall *v28)(); // [xsp+20h] [xbp-120h]\n  void *v29; // [xsp+28h] [xbp-118h]\n  __int64 *v30; // [xsp+30h] [xbp-110h]\n  _QWORD *v31; // [xsp+38h] [xbp-108h]\n  __int64 *v32; // [xsp+40h] [xbp-100h]\n  __int64 v33; // [xsp+48h] [xbp-F8h]\n  __int64 v34; // [xsp+50h] [xbp-F0h]\n  _BYTE v35[8]; // [xsp+58h] [xbp-E8h] BYREF\n  __int64 v36; // [xsp+60h] [xbp-E0h]\n  __int64 (__fastcall *v37)(); // [xsp+68h] [xbp-D8h]\n  void *v38; // [xsp+70h] [xbp-D0h]\n  _QWORD *v39; // [xsp+78h] [xbp-C8h]\n  __int64 v40; // [xsp+80h] [xbp-C0h]\n  __int64 v41; // [xsp+88h] [xbp-B8h] BYREF\n  __int64 *v42; // [xsp+90h] [xbp-B0h]\n  __int64 v43; // [xsp+98h] [xbp-A8h]\n  __int64 v44; // [xsp+A0h] [xbp-A0h]\n  _QWORD v45[5]; // [xsp+A8h] [xbp-98h] BYREF\n  __int64 v46; // [xsp+D0h] [xbp-70h] BYREF\n  __int64 *v47; // [xsp+D8h] [xbp-68h]\n  __int64 v48; // [xsp+E0h] [xbp-60h]\n  int v49; // [xsp+E8h] [xbp-58h]\n\n  v2 = OUTLINED_FUNCTION_98(); /*0x251148eb0*/\n  v3 = MEMORY[0x25810D5C0](v2); /*0x251148eb8*/\n  v4 = OUTLINED_FUNCTION_21_8(); /*0x251148ebc*/\n  if ( v9 ^ v10 | v8 ) /*0x251148ec0*/\n  {\n    if ( v7 != -1 || (v4 = OUTLINED_FUNCTION_20_6(v4), (_DWORD)v4) ) /*0x251148ed0*/\n    {\n      v11 = OUTLINED_FUNCTION_23_5(v4, v5, v6); /*0x251148ed8*/\n      OUTLINED_FUNCTION_9_0( /*0x251148eec*/\n        v11,\n        \"OSStatus carEndpoint_CreatePlaybackSession(FigEndpointRef, FigEndpointPlaybackSessionRef *)\");\n    }\n  }\n  if ( !*(_BYTE *)(v3 + 222) ) /*0x251148ef0*/\n    return 4294960561LL; /*0x251149070*/\n  v46 = 0; /*0x251148efc*/\n  v47 = &v46; /*0x251148efc*/\n  v48 = 0x2000000000LL; /*0x251148f08*/\n  v49 = 0; /*0x251148f0c*/\n  v12 = MEMORY[0x25810D5C0](v1); /*0x251148f18*/\n  v45[0] = 0; /*0x251148f20*/\n  v45[1] = v45; /*0x251148f20*/\n  v45[2] = 0x2800000000LL; /*0x251148f2c*/\n  v45[3] = 0; /*0x251148f30*/\n  v45[4] = 0; /*0x251148f30*/\n  v41 = 0; /*0x251148f38*/\n  v42 = &v41; /*0x251148f38*/\n  v43 = 0x2000000000LL; /*0x251148f3c*/\n  v44 = 0; /*0x251148f40*/\n  v13 = OUTLINED_FUNCTION_30_4(*(_QWORD *)(v12 + 648)); /*0x251148f48*/\n  v36 = 0x40000000; /*0x251148f54*/\n  v37 = __carEndpoint_createPlaybackSessionInternal_block_invoke; /*0x251148f70*/\n  v38 = &unk_269394AE0; /*0x251148f70*/\n  v39 = v45; /*0x251148f74*/\n  v40 = v12; /*0x251148f74*/\n  MEMORY[0x258101C50](v13, v35); /*0x251148f7c*/\n  v14 = OUTLINED_FUNCTION_5_14(*(_QWORD *)(v12 + 224)); /*0x251148f84*/\n  v27 = 0x40000000; /*0x251148f88*/\n  v28 = __carEndpoint_createPlaybackSessionInternal_block_invoke_2; /*0x251148fa4*/\n  v29 = &unk_269394B08; /*0x251148fa4*/\n  v30 = &v46; /*0x251148fa8*/\n  v31 = v45; /*0x251148fa8*/\n  v32 = &v41; /*0x251148fac*/\n  v33 = v12; /*0x251148fac*/\n  v34 = v1; /*0x251148fb0*/\n  MEMORY[0x258101C50](v14, v26); /*0x251148fb8*/\n  v15 = *((unsigned int *)v47 + 6); /*0x251148fc0*/\n  if ( (_DWORD)v15 ) /*0x251148fc4*/\n  {\n    MEMORY[0x25810C360](v15, \"carEndpoint_createPlaybackSessionInternal\", 8437, 0); /*0x251149088*/\n    v25 = v42[3]; /*0x251149090*/\n    if ( v25 ) /*0x251149094*/\n      MEMORY[0x258101B70](v25); /*0x251149098*/\n  }\n  else\n  {\n    v16 = MEMORY[0x25810D680](v15); /*0x251148fc8*/\n    v17 = OUTLINED_FUNCTION_35_5(v16); /*0x251148fe0*/\n    v18 = MEMORY[0x25810DCB0](v17); /*0x251148fec*/\n    v19 = MEMORY[0x25810D680](v18); /*0x251148ff0*/\n    v20 = OUTLINED_FUNCTION_34_7(v19); /*0x251149008*/\n    MEMORY[0x25810DCB0](v20); /*0x251149014*/\n    v21 = v42; /*0x251149018*/\n    *v0 = v42[3]; /*0x251149020*/\n    v21[3] = 0; /*0x251149024*/\n  }\n  v22 = *((unsigned int *)v47 + 6); /*0x25114902c*/\n  MEMORY[0x258101C00](&v41, 8); /*0x251149038*/\n  v23 = MEMORY[0x258101C00](v45, 8); /*0x251149044*/\n  OUTLINED_FUNCTION_84_0(v23); /*0x251149048*/\n  return v22; /*0x25114906c*/\n}",
+    "refs": [
+      {
+        "addr": "0x250f41648",
+        "name": "_OUTLINED_FUNCTION_98"
+      },
+      {
+        "addr": "0x250f3cf14",
+        "name": "_OUTLINED_FUNCTION_21_8"
+      },
+      {
+        "addr": "0x250f3d540",
+        "name": "_OUTLINED_FUNCTION_23_5"
+      },
+      {
+        "addr": "0x250f36ac8",
+        "name": "_OUTLINED_FUNCTION_9_0"
+      },
+      {
+        "addr": "0x2511de9fe",
+        "name": "aOsstatusCarend_57",
+        "string": "OSStatus carEndpoint_CreatePlaybackSession(FigEndpointRef, FigEndpointPlaybackSessionRef *)"
+      },
+      {
+        "addr": "0x250f53930",
+        "name": "_OUTLINED_FUNCTION_20_6"
+      },
+      {
+        "addr": "0x250f431d4",
+        "name": "_OUTLINED_FUNCTION_30_4"
+      },
+      {
+        "addr": "0x2510916a4",
+        "name": "___carEndpoint_createPlaybackSessionInternal_block_invoke"
+      },
+      {
+        "addr": "0x269394ae0",
+        "name": "unk_269394AE0"
+      },
+      {
+        "addr": "0x250f3770c",
+        "name": "_OUTLINED_FUNCTION_5_14"
+      },
+      {
+        "addr": "0x2510916e4",
+        "name": "___carEndpoint_createPlaybackSessionInternal_block_invoke_2"
+      },
+      {
+        "addr": "0x269394b08",
+        "name": "unk_269394B08"
+      },
+      {
+        "addr": "0x2511deb72",
+        "name": "aCarendpointCre_7",
+        "string": "carEndpoint_createPlaybackSessionInternal"
+      },
+      {
+        "addr": "0x25109463c",
+        "name": "_OUTLINED_FUNCTION_35_5"
+      },
+      {
+        "addr": "0x251094624",
+        "name": "_OUTLINED_FUNCTION_34_7"
+      },
+      {
+        "addr": "0x251094794",
+        "name": "_OUTLINED_FUNCTION_84_0"
+      }
+    ]
+  },
+  {
+    "addr": "0x2510916e4",
+    "code": "__int64 __fastcall __carEndpoint_createPlaybackSessionInternal_block_invoke_2(_QWORD *a1)\n{\n  __int64 v2; // x8\n  __int64 v3; // x22\n  __int64 v4; // x19\n  __int64 v5; // x0\n  __int64 v6; // x21\n  __int64 v7; // x8\n  __int64 CMBaseObject; // x23\n  void (__fastcall *v9)(__int64, __int64, __int64, __int64 *); // x9\n  __int64 v10; // x0\n  __int64 v11; // x22\n  __int64 (__fastcall *v12)(__int64, __int64); // x9\n  _BOOL4 v13; // w8\n  _QWORD *v14; // x8\n  __int64 result; // x0\n  __int64 v16; // [xsp+10h] [xbp-40h] BYREF\n  char v17; // [xsp+1Fh] [xbp-31h] BYREF\n\n  v17 = 0; /*0x251091704*/\n  v16 = 0; /*0x251091708*/\n  v2 = a1[7]; /*0x25109170c*/\n  if ( *(_BYTE *)(v2 + 232) ) /*0x251091710*/\n  {\n    __carEndpoint_createPlaybackSessionInternal_block_invoke_2_cold_1(a1); /*0x2510919cc*/\nLABEL_32:\n    v4 = 0; /*0x2510919dc*/\n    v6 = 0; /*0x2510919e0*/\n    goto LABEL_22; /*0x2510919e4*/\n  }\n  if ( !*(_QWORD *)(v2 + 544) ) /*0x25109171c*/\n  {\n    __carEndpoint_createPlaybackSessionInternal_block_invoke_2_cold_5(a1); /*0x2510919d8*/\n    goto LABEL_32; /*0x2510919d8*/\n  }\n  MEMORY[0x25810D350](); /*0x251091720*/\n  v3 = *MEMORY[0x2680C31A0]; /*0x25109172c*/\n  v4 = MEMORY[0x258102670](*MEMORY[0x2680C31A0], 0, &stru_275B06320); /*0x251091754*/\n  v5 = MEMORY[0x258102570](v3, 0, MEMORY[0x2680C3390], MEMORY[0x2680C3398]); /*0x251091770*/\n  v6 = v5; /*0x251091774*/\n  if ( v5 ) /*0x251091778*/\n  {\n    MEMORY[0x25810FE60]( /*0x251091798*/\n      v5,\n      0x100000F5AFBEC0LL,\n      *(_QWORD *)(*(_QWORD *)(a1[5] + 8LL) + 24LL),\n      *(_QWORD *)(*(_QWORD *)(a1[5] + 8LL) + 32LL));\n    v7 = a1[7]; /*0x25109179c*/\n    if ( *(_QWORD *)(v7 + 320) ) /*0x2510917a0*/\n    {\n      MEMORY[0x2581025C0](v6, 0x100000F5AF9020LL); /*0x2510917b4*/\n      v7 = a1[7]; /*0x2510917b8*/\n    }\n    CMBaseObject = APEndpointDescriptionGetCMBaseObject(*(_QWORD *)(v7 + 8)); /*0x2510917c4*/\n    v9 = *(void (__fastcall **)(__int64, __int64, __int64, __int64 *))(*(_QWORD *)(MEMORY[0x25810BA60]() + 8) + 48LL); /*0x2510917dc*/\n    if ( v9 ) /*0x2510917e0*/\n    {\n      v9(CMBaseObject, 0x100000F5B005A0LL, v3, &v16); /*0x25109182c*/\n      v10 = v16; /*0x251091830*/\n    }\n    else\n    {\n      v10 = 0; /*0x251091838*/\n    }\n    MEMORY[0x25810D9C0](v10, &stru_275B06340, &v17); /*0x251091848*/\n    v11 = *(_QWORD *)(a1[7] + 8LL); /*0x251091850*/\n    v12 = *(__int64 (__fastcall **)(__int64, __int64))(*(_QWORD *)(MEMORY[0x25810BA60](v11) + 16) + 16LL); /*0x25109186c*/\n    if ( v12 ) /*0x251091870*/\n      v13 = v12(v11, 35) != 0; /*0x2510918b4*/\n    else\n      v13 = 0; /*0x2510918bc*/\n    if ( v17 ) /*0x2510918c8*/\n      v13 = 1; /*0x2510918c8*/\n    if ( v13 ) /*0x2510918e8*/\n      v14 = (_QWORD *)MEMORY[0x2680C31E8]; /*0x2510918e8*/\n    else\n      v14 = (_QWORD *)MEMORY[0x2680C31D8]; /*0x2510918e8*/\n    MEMORY[0x2581025C0](v6, 0x100000F5AFBF20LL, *v14); /*0x2510918f4*/\n    *(_DWORD *)(*(_QWORD *)(a1[4] + 8LL) + 24LL) = APEndpointPlaybackSessionRemoteControlCreate( /*0x251091924*/\n                                                     v4,\n                                                     *(_QWORD *)(a1[7] + 296LL),\n                                                     *(_QWORD *)(a1[7] + 32LL),\n                                                     v6,\n                                                     *(_QWORD *)(a1[6] + 8LL) + 24LL);\n    if ( *(_DWORD *)(*(_QWORD *)(a1[4] + 8LL) + 24LL) ) /*0x251091930*/\n    {\n      __carEndpoint_createPlaybackSessionInternal_block_invoke_2_cold_2(); /*0x2510919f4*/\n    }\n    else\n    {\n      if ( gLogCategory_APEndpointCarPlay <= 50 /*0x251091960*/\n        && (gLogCategory_APEndpointCarPlay != -1\n         || (unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointCarPlay, 33554482)) )\n      {\n        __carEndpoint_createPlaybackSessionInternal_block_invoke_2_cold_3(a1, a1 + 6); /*0x2510919c0*/\n      }\n      MEMORY[0x25810D370](*(_QWORD *)(a1[7] + 544LL), *(_QWORD *)(*(_QWORD *)(a1[6] + 8LL) + 24LL)); /*0x251091978*/\n    }\n  }\n  else\n  {\n    __carEndpoint_createPlaybackSessionInternal_block_invoke_2_cold_4(a1); /*0x2510919ec*/\n  }\nLABEL_22:\n  result = v16; /*0x25109197c*/\n  if ( v16 ) /*0x251091980*/\n    result = MEMORY[0x258101B70](); /*0x251091984*/\n  if ( v6 ) /*0x251091988*/\n    result = MEMORY[0x258101B70](v6); /*0x251091990*/\n  if ( v4 ) /*0x251091994*/\n    return MEMORY[0x258101B70](v4); /*0x25109199c*/\n  return result; /*0x2510919b4*/\n}",
+    "refs": [
+      {
+        "addr": "0x25114f16c",
+        "name": "___carEndpoint_createPlaybackSessionInternal_block_invoke_2.cold.1"
+      },
+      {
+        "addr": "0x25114f240",
+        "name": "___carEndpoint_createPlaybackSessionInternal_block_invoke_2.cold.5"
+      },
+      {
+        "addr": "0x275b06320",
+        "name": "stru_275B06320"
+      },
+      {
+        "addr": "0x250f414cc",
+        "name": "_APEndpointDescriptionGetCMBaseObject"
+      },
+      {
+        "addr": "0x275b06340",
+        "name": "stru_275B06340"
+      },
+      {
+        "addr": "0x2510e3fd4",
+        "name": "_APEndpointPlaybackSessionRemoteControlCreate"
+      },
+      {
+        "addr": "0x25114f1a4",
+        "name": "___carEndpoint_createPlaybackSessionInternal_block_invoke_2.cold.2"
+      },
+      {
+        "addr": "0x25114f1cc",
+        "name": "___carEndpoint_createPlaybackSessionInternal_block_invoke_2.cold.3"
+      },
+      {
+        "addr": "0x26e755490",
+        "name": "_gLogCategory_APEndpointCarPlay"
+      },
+      {
+        "addr": "0x25114f210",
+        "name": "___carEndpoint_createPlaybackSessionInternal_block_invoke_2.cold.4"
+      }
+    ]
+  },
+  {
+    "addr": "0x251149370",
+    "code": "__int64 __fastcall carEndpoint_checkAndUpdateVideoOverlayActivation(__int64 a1, int a2, int a3, int a4, int a5)\n{\n  __int64 result; // x0\n  __int64 v11; // x1\n  __int64 v12; // x2\n  __int64 v14; // x0\n  __int64 v15; // x1\n  __int64 v16; // x2\n  __int64 v17; // x0\n  __int64 v18; // x0\n  const char *v19; // x1\n  const char *v20; // x3\n  __int64 v21; // x2\n  __int64 v22; // x0\n  __int64 v23; // x0\n  __int64 _48; // [xsp+48h] [xbp+8h]\n\n  if ( !a1 ) /*0x25114938c*/\n    goto LABEL_16; /*0x25114938c*/\n  result = MEMORY[0x25810D5C0](); /*0x2511493a4*/\n  if ( !*(_BYTE *)(result + 68) ) /*0x2511493ac*/\n    return result; /*0x2511493ac*/\n  result = *(_QWORD *)(result + 48); /*0x2511493b0*/\n  if ( !result ) /*0x2511493b4*/\n  {\n    v14 = OUTLINED_FUNCTION_78_1(); /*0x251149454*/\n    result = MEMORY[0x25810C360](v14); /*0x251149460*/\n    if ( gLogCategory_APEndpointCarPlay > 90 ) /*0x251149470*/\n      return result; /*0x251149470*/\n    if ( gLogCategory_APEndpointCarPlay == -1 ) /*0x251149480*/\n    {\n      v17 = OUTLINED_FUNCTION_23_5(result, v15, v16); /*0x251149484*/\n      result = MEMORY[0x258100DC0](v17, 33554522); /*0x25114948c*/\n      if ( !(_DWORD)result ) /*0x251149490*/\n        return result; /*0x251149490*/\n    }\n    v18 = OUTLINED_FUNCTION_23_5(result, v15, v16); /*0x251149498*/\n    v19 = \"OSStatus carEndpoint_checkAndUpdateVideoOverlayActivation(FigEndpointRef, FigStarkModeEntity, FigStarkModeEnti\" /*0x25114949c*/\n          \"ty, Boolean, Boolean)\";\n    v20 = \"[%{ptr}] CarPlay Video Overlay NOT supported on Bonjour discovery based accessories\"; /*0x2511494a4*/\n    v21 = 33554522; /*0x2511494ac*/\n    return MEMORY[0x258100F00](v18, v19, v21, v20); /*0x2511494f8*/\n  }\n  if ( a2 == a3 && a4 == a5 ) /*0x2511493bc*/\n  {\n    if ( gLogCategory_APEndpointCarPlay > 30 ) /*0x2511494c0*/\n      return result; /*0x2511494c0*/\n    if ( gLogCategory_APEndpointCarPlay == -1 ) /*0x2511494c8*/\n    {\n      v22 = OUTLINED_FUNCTION_23_5(result, v11, v12); /*0x2511494cc*/\n      result = OUTLINED_FUNCTION_76(v22); /*0x2511494d0*/\n      if ( !(_DWORD)result ) /*0x2511494d4*/\n        return result; /*0x2511494d4*/\n    }\n    v23 = OUTLINED_FUNCTION_23_5(result, v11, v12); /*0x2511494dc*/\n    v18 = OUTLINED_FUNCTION_9_9( /*0x2511494f0*/\n            v23,\n            \"OSStatus carEndpoint_checkAndUpdateVideoOverlayActivation(FigEndpointRef, FigStarkModeEntity, FigStarkModeEn\"\n            \"tity, Boolean, Boolean)\");\n    return MEMORY[0x258100F00](v18, v19, v21, v20); /*0x2511494f0*/\n  }\n  result = MEMORY[0x2581025B0](); /*0x2511493cc*/\n  if ( a3 == 1 && a5 ) /*0x2511493d8*/\n  {\n    result = MEMORY[0x25810F330](result, a1); /*0x2511493e0*/\n    if ( (_DWORD)result ) /*0x2511493e4*/\n    {\nLABEL_16:\n      OUTLINED_FUNCTION_78_1(); /*0x251149420*/\n      if ( ((_48 ^ (2 * _48)) & 0x4000000000000000LL) != 0 ) /*0x251149448*/\n        __break(0xC471u); /*0x25114944c*/\n      JUMPOUT(0x25810C360LL); /*0x25810c360*/\n    }\n  }\n  else if ( a2 == 1 ) /*0x2511493f8*/\n  {\n    if ( a4 ) /*0x2511493fc*/\n    {\n      result = MEMORY[0x25810F340](result); /*0x251149400*/\n      if ( (_DWORD)result ) /*0x251149404*/\n        goto LABEL_16; /*0x251149404*/\n    }\n  }\n  return result; /*0x25114941c*/\n}",
+    "refs": [
+      {
+        "addr": "0x251094750",
+        "name": "_OUTLINED_FUNCTION_78_1"
+      },
+      {
+        "addr": "0x26e755490",
+        "name": "_gLogCategory_APEndpointCarPlay"
+      },
+      {
+        "addr": "0x250f3d540",
+        "name": "_OUTLINED_FUNCTION_23_5"
+      },
+      {
+        "addr": "0x2511d7ce2",
+        "name": "aOsstatusCarend_15",
+        "string": "OSStatus carEndpoint_checkAndUpdateVideoOverlayActivation(FigEndpointRef, FigStarkModeEntity, FigStarkModeEntity, Boolean, Boolean)"
+      },
+      {
+        "addr": "0x2511d7d66",
+        "name": "aPtrCarplayVide",
+        "string": "[%{ptr}] CarPlay Video Overlay NOT supported on Bonjour discovery based accessories"
+      },
+      {
+        "addr": "0x250f475a0",
+        "name": "_OUTLINED_FUNCTION_76"
+      },
+      {
+        "addr": "0x250f3d0b8",
+        "name": "_OUTLINED_FUNCTION_9_9"
+      }
+    ]
+  },
+  {
+    "addr": "0x2510e3fd4",
+    "code": "__int64 __fastcall APEndpointPlaybackSessionRemoteControlCreate(\n        __CFString *a1,\n        __int64 a2,\n        __int64 a3,\n        __int64 a4,\n        _QWORD *a5)\n{\n  __int64 v10; // x0\n  __int64 v11; // x0\n  __int64 v12; // x23\n  __CFString *v13; // x0\n  __int64 v14; // x0\n  __int64 v15; // x0\n  __int64 v16; // x0\n  __int64 v17; // x0\n  __int64 v18; // x0\n  __int64 v19; // x0\n  __int64 v20; // x0\n  __int64 v21; // x0\n  __int64 v22; // x23\n  __int64 v24; // [xsp+8h] [xbp-48h] BYREF\n\n  v24 = 0; /*0x2510e3ff4*/\n  if ( !a2 ) /*0x2510e3ffc*/\n    APEndpointPlaybackSessionRemoteControlCreate_cold_12(); /*0x2510e423c*/\n  if ( !a3 ) /*0x2510e4004*/\n    APEndpointPlaybackSessionRemoteControlCreate_cold_11(); /*0x2510e4248*/\n  if ( !a5 ) /*0x2510e400c*/\n    APEndpointPlaybackSessionRemoteControlCreate_cold_10(); /*0x2510e4250*/\n  v10 = MEMORY[0x258111EF0](); /*0x2510e401c*/\n  v11 = MEMORY[0x25810D630](0, &kAPEndpointPlaybackSessionRemoteControlVTable, v10, &v24); /*0x2510e4034*/\n  if ( (_DWORD)v11 ) /*0x2510e4038*/\n  {\n    v22 = v11; /*0x2510e425c*/\n    APEndpointPlaybackSessionRemoteControlCreate_cold_1(); /*0x2510e4260*/\n    goto LABEL_38; /*0x2510e4264*/\n  }\n  v12 = MEMORY[0x25810D5C0](v24); /*0x2510e4044*/\n  if ( a1 ) /*0x2510e4054*/\n    v13 = a1; /*0x2510e4054*/\n  else\n    v13 = &stru_275B0A920; /*0x2510e4054*/\n  *(_QWORD *)(v12 + 8) = v13; /*0x2510e405c*/\n  MEMORY[0x258101B80](); /*0x2510e4060*/\n  *(_QWORD *)(v12 + 40) = MEMORY[0x258101B80](a2); /*0x2510e406c*/\n  *(_QWORD *)(v12 + 24) = MEMORY[0x258101B80](a3); /*0x2510e4078*/\n  *(_BYTE *)(v12 + 112) = 0; /*0x2510e407c*/\n  *(_WORD *)(v12 + 96) = 0; /*0x2510e4080*/\n  v14 = MEMORY[0x25810DD90](); /*0x2510e4084*/\n  *(_QWORD *)(v12 + 88) = v14; /*0x2510e4088*/\n  if ( !v14 ) /*0x2510e408c*/\n  {\n    APEndpointPlaybackSessionRemoteControlCreate_cold_9(); /*0x2510e4268*/\nLABEL_37:\n    v22 = 4294950555LL; /*0x2510e4294*/\n    goto LABEL_38; /*0x2510e4294*/\n  }\n  v15 = MEMORY[0x25810DD90](); /*0x2510e4090*/\n  *(_QWORD *)(v12 + 216) = v15; /*0x2510e4094*/\n  if ( !v15 ) /*0x2510e4098*/\n  {\n    APEndpointPlaybackSessionRemoteControlCreate_cold_8(); /*0x2510e4270*/\n    goto LABEL_37; /*0x2510e4274*/\n  }\n  v16 = MEMORY[0x258102570](*MEMORY[0x2680C31A0], 0, MEMORY[0x2680C3390], MEMORY[0x2680C3398]); /*0x2510e40bc*/\n  *(_QWORD *)(v12 + 208) = v16; /*0x2510e40c0*/\n  if ( !v16 ) /*0x2510e40c4*/\n  {\n    APEndpointPlaybackSessionRemoteControlCreate_cold_7(); /*0x2510e4278*/\n    goto LABEL_37; /*0x2510e427c*/\n  }\n  v17 = MEMORY[0x258100E20](\"APEndpointPlaybackSessionRemoteControl.event\", 0); /*0x2510e40d4*/\n  *(_QWORD *)(v12 + 168) = v17; /*0x2510e40d8*/\n  if ( !v17 ) /*0x2510e40dc*/\n  {\n    APEndpointPlaybackSessionRemoteControlCreate_cold_6(); /*0x2510e4280*/\n    goto LABEL_37; /*0x2510e4284*/\n  }\n  v18 = MEMORY[0x258100E20](\"APEndpointPlaybackSessionRemoteControl.metadata\", 0); /*0x2510e40ec*/\n  *(_QWORD *)(v12 + 128) = v18; /*0x2510e40f0*/\n  if ( !v18 ) /*0x2510e40f4*/\n  {\n    APEndpointPlaybackSessionRemoteControlCreate_cold_5(); /*0x2510e4288*/\n    goto LABEL_37; /*0x2510e428c*/\n  }\n  v19 = MEMORY[0x258100E20](\"APEndpointPlaybackSessionRemoteControl.notification\", 0); /*0x2510e4104*/\n  *(_QWORD *)(v12 + 64) = v19; /*0x2510e4108*/\n  if ( !v19 ) /*0x2510e410c*/\n  {\n    APEndpointPlaybackSessionRemoteControlCreate_cold_4(); /*0x2510e4290*/\n    goto LABEL_37; /*0x2510e4290*/\n  }\n  *(_BYTE *)(v12 + 152) = MEMORY[0x25810D030](a4, 0x100000F5AFBF40LL, 0) != 0; /*0x2510e412c*/\n  *(_BYTE *)(v12 + 224) = MEMORY[0x25810D030](a4, 0x100000F5AFBF20LL, 0) != 0; /*0x2510e414c*/\n  if ( (unsigned int)MEMORY[0x25810CFA0](a4, 0x100000F5AF9020LL) ) /*0x2510e4160*/\n  {\n    v20 = MEMORY[0x2581025B0](a4, 0x100000F5AF9020LL); /*0x2510e4170*/\n    *(_QWORD *)(v12 + 48) = MEMORY[0x258101B80](v20); /*0x2510e4178*/\n  }\n  v21 = APEndpointPlaybackSessionStatsCreate(&stru_275AF92E0, a1, a4, v12 + 160); /*0x2510e4190*/\n  if ( !(_DWORD)v21 ) /*0x2510e4194*/\n  {\n    if ( gLogCategory_APEndpointPlaybackSessionRemoteControl <= 30 /*0x2510e41bc*/\n      && (gLogCategory_APEndpointPlaybackSessionRemoteControl != -1\n       || (unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointPlaybackSessionRemoteControl, 33554462)) )\n    {\n      APEndpointPlaybackSessionRemoteControlCreate_cold_3(&v24, v12 + 8); /*0x2510e4234*/\n    }\n    v22 = 0; /*0x2510e41c4*/\n    *a5 = v24; /*0x2510e41cc*/\n    v24 = 0; /*0x2510e41d0*/\n    goto LABEL_21; /*0x2510e41d0*/\n  }\n  v22 = v21; /*0x2510e42a8*/\n  APEndpointPlaybackSessionRemoteControlCreate_cold_2(); /*0x2510e42ac*/\nLABEL_38:\n  if ( v24 ) /*0x2510e429c*/\n    MEMORY[0x258101B70](); /*0x2510e42a0*/\nLABEL_21:\n  if ( gLogCategory_APEndpointPlaybackSessionRemoteControl <= 30 /*0x2510e41f8*/\n    && (gLogCategory_APEndpointPlaybackSessionRemoteControl != -1\n     || (unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointPlaybackSessionRemoteControl, 33554462)) )\n  {\n    APEndpointPlaybackSessionRemoteControlCreate_cold_13(v22); /*0x2510e4224*/\n  }\n  return v22; /*0x2510e421c*/\n}",
+    "refs": [
+      {
+        "addr": "0x2511799a8",
+        "name": "_APEndpointPlaybackSessionRemoteControlCreate.cold.12"
+      },
+      {
+        "addr": "0x25117998c",
+        "name": "_APEndpointPlaybackSessionRemoteControlCreate.cold.11"
+      },
+      {
+        "addr": "0x251179970",
+        "name": "_APEndpointPlaybackSessionRemoteControlCreate.cold.10"
+      },
+      {
+        "addr": "0x275af3840",
+        "name": "_kAPEndpointPlaybackSessionRemoteControlVTable"
+      },
+      {
+        "addr": "0x251179808",
+        "name": "_APEndpointPlaybackSessionRemoteControlCreate.cold.1"
+      },
+      {
+        "addr": "0x275b0a920",
+        "name": "stru_275B0A920"
+      },
+      {
+        "addr": "0x25117994c",
+        "name": "_APEndpointPlaybackSessionRemoteControlCreate.cold.9"
+      },
+      {
+        "addr": "0x251179928",
+        "name": "_APEndpointPlaybackSessionRemoteControlCreate.cold.8"
+      },
+      {
+        "addr": "0x251179904",
+        "name": "_APEndpointPlaybackSessionRemoteControlCreate.cold.7"
+      },
+      {
+        "addr": "0x251207b9c",
+        "name": "aApendpointplay_21",
+        "string": "APEndpointPlaybackSessionRemoteControl.event"
+      },
+      {
+        "addr": "0x2511798e0",
+        "name": "_APEndpointPlaybackSessionRemoteControlCreate.cold.6"
+      },
+      {
+        "addr": "0x251207bc9",
+        "name": "aApendpointplay_22",
+        "string": "APEndpointPlaybackSessionRemoteControl.metadata"
+      },
+      {
+        "addr": "0x2511798bc",
+        "name": "_APEndpointPlaybackSessionRemoteControlCreate.cold.5"
+      },
+      {
+        "addr": "0x251207bf9",
+        "name": "aApendpointplay_23",
+        "string": "APEndpointPlaybackSessionRemoteControl.notification"
+      },
+      {
+        "addr": "0x251179898",
+        "name": "_APEndpointPlaybackSessionRemoteControlCreate.cold.4"
+      },
+      {
+        "addr": "0x251019f74",
+        "name": "_APEndpointPlaybackSessionStatsCreate"
+      },
+      {
+        "addr": "0x275af92e0",
+        "name": "stru_275AF92E0"
+      },
+      {
+        "addr": "0x251179858",
+        "name": "_APEndpointPlaybackSessionRemoteControlCreate.cold.3"
+      },
+      {
+        "addr": "0x27048ec80",
+        "name": "_gLogCategory_APEndpointPlaybackSessionRemoteControl"
+      },
+      {
+        "addr": "0x251179830",
+        "name": "_APEndpointPlaybackSessionRemoteControlCreate.cold.2"
+      },
+      {
+        "addr": "0x2511799c4",
+        "name": "_APEndpointPlaybackSessionRemoteControlCreate.cold.13"
+      }
+    ]
+  },
+  {
+    "addr": "0x25114ad20",
+    "code": "__int64 __fastcall carEndpoint_handlePlaybackSessionActivationChanged(__int64 a1, __int64 a2, __int64 a3, __int64 a4)\n{\n  __int64 v6; // x21\n  __int64 v7; // x0\n  __int64 v8; // x26\n  __int64 v9; // x27\n  _BOOL8 v10; // x22\n  int v11; // w23\n  __int64 v12; // x0\n  __int64 v13; // x1\n  __int64 v14; // x2\n  int v15; // w8\n  char v16; // zf\n  char v17; // nf\n  char v18; // vf\n  __int64 v19; // x0\n  __int64 v20; // x0\n  __int64 v21; // x0\n  __int64 v22; // x24\n  __int64 v23; // x25\n  int v24; // w0\n  const char *v25; // x4\n  __int64 v26; // x1\n  __int64 v27; // x3\n  __int64 v28; // x0\n  __int64 v29; // x0\n  __int64 v31; // x2\n  __int64 v32; // [xsp+0h] [xbp-110h]\n  _BOOL8 v33; // [xsp+8h] [xbp-108h]\n  char v34[8]; // [xsp+18h] [xbp-F8h] BYREF\n  __int64 v35; // [xsp+20h] [xbp-F0h]\n  __int64 (__fastcall *v36)(); // [xsp+28h] [xbp-E8h]\n  void *v37; // [xsp+30h] [xbp-E0h]\n  __int64 v38; // [xsp+38h] [xbp-D8h]\n  __int64 v39; // [xsp+40h] [xbp-D0h]\n  __int64 v40; // [xsp+48h] [xbp-C8h]\n  _QWORD v41[6]; // [xsp+50h] [xbp-C0h] BYREF\n  __int16 v42; // [xsp+80h] [xbp-90h] BYREF\n  __int64 v43; // [xsp+88h] [xbp-88h] BYREF\n  __int64 *v44; // [xsp+90h] [xbp-80h]\n  __int64 v45; // [xsp+98h] [xbp-78h]\n  int v46; // [xsp+A0h] [xbp-70h]\n  __int64 v47; // [xsp+A8h] [xbp-68h]\n\n  v47 = 0; /*0x25114ad48*/\n  v43 = 0; /*0x25114ad50*/\n  v44 = &v43; /*0x25114ad50*/\n  v45 = 0x2000000000LL; /*0x25114ad5c*/\n  v46 = 0; /*0x25114ad60*/\n  if ( !a2 ) /*0x25114ad64*/\n  {\n    v7 = 0; /*0x25114afb8*/\n    v31 = 1329; /*0x25114afbc*/\nLABEL_29:\n    MEMORY[0x25810C360](v7, \"carEndpoint_handlePlaybackSessionActivationChanged\", v31, 0); /*0x25114afe4*/\n    goto LABEL_23; /*0x25114afec*/\n  }\n  if ( !a4 ) /*0x25114ad6c*/\n  {\n    v7 = 0; /*0x25114afcc*/\n    v31 = 1330; /*0x25114afd0*/\n    goto LABEL_29; /*0x25114afd4*/\n  }\n  v6 = MEMORY[0x25810D5C0](a2); /*0x25114ad7c*/\n  OUTLINED_FUNCTION_75_0(v6); /*0x25114ad8c*/\n  v7 = carEndpoint_copyStateProperty(a2); /*0x25114ad9c*/\n  if ( (_DWORD)v7 ) /*0x25114ada0*/\n  {\n    v31 = 1334; /*0x25114afe0*/\n    goto LABEL_29; /*0x25114afe0*/\n  }\n  v8 = v47; /*0x25114adac*/\n  v9 = *MEMORY[0x2680C31E8]; /*0x25114adb0*/\n  v10 = v47 == *MEMORY[0x2680C31E8]; /*0x25114adb8*/\n  v11 = *(unsigned __int8 *)(v6 + 223); /*0x25114adbc*/\n  if ( v11 == v10 ) /*0x25114adc4*/\n    goto LABEL_23; /*0x25114adc4*/\n  *(_BYTE *)(v6 + 223) = v10; /*0x25114adc8*/\n  v12 = OUTLINED_FUNCTION_21_8(); /*0x25114adcc*/\n  if ( v17 ^ v18 | v16 ) /*0x25114add0*/\n  {\n    if ( v15 != -1 || (v12 = OUTLINED_FUNCTION_20_6(v12), (_DWORD)v12) ) /*0x25114ade0*/\n    {\n      v32 = a2; /*0x25114ade4*/\n      v33 = v10; /*0x25114ade4*/\n      v19 = OUTLINED_FUNCTION_23_5(v12, v13, v14); /*0x25114ade8*/\n      v12 = OUTLINED_FUNCTION_9_0( /*0x25114adfc*/\n              v19,\n              \"void carEndpoint_handlePlaybackSessionActivationChanged(CMNotificationCenterRef, const void *, CFStringRef\"\n              \", const void *, CFTypeRef)\");\n    }\n  }\n  v20 = OUTLINED_FUNCTION_23_5(v12, v13, v14); /*0x25114ae00*/\n  v21 = MEMORY[0x258112560](v20); /*0x25114ae04*/\n  v22 = v21; /*0x25114ae08*/\n  if ( v21 ) /*0x25114ae18*/\n    v23 = v21; /*0x25114ae18*/\n  else\n    v23 = MEMORY[0x2681A4F50]; /*0x25114ae18*/\n  v24 = MEMORY[0x258102A50](v23); /*0x25114ae20*/\n  if ( v8 == v9 ) /*0x25114ae28*/\n  {\n    if ( v24 ) /*0x25114ae2c*/\n    {\n      v42 = 0; /*0x25114ae30*/\n      v25 = \"AP_SIGNPOST_CAR_VIDEOPLAYBACK_INSESSION_BEGIN\"; /*0x25114ae3c*/\n      v26 = v23; /*0x25114ae50*/\n      v27 = 730663116; /*0x25114ae58*/\nLABEL_18:\n      MEMORY[0x258102860](&dword_250F35000, v26, 0, v27, v25, &unk_251210D5A, &v42, 2, v32, v33); /*0x25114ae9c*/\n    }\n  }\n  else if ( v24 ) /*0x25114ae64*/\n  {\n    v42 = 0; /*0x25114ae68*/\n    v25 = \"AP_SIGNPOST_CAR_VIDEOPLAYBACK_INSESSION_END\"; /*0x25114ae7c*/\n    v27 = 730663120; /*0x25114ae8c*/\n    v26 = v23; /*0x25114ae94*/\n    goto LABEL_18; /*0x25114ae94*/\n  }\n  if ( v22 ) /*0x25114aea4*/\n    MEMORY[0x258112AA0](v22); /*0x25114aeac*/\n  v28 = *(_QWORD *)(v6 + 224); /*0x25114aeb0*/\n  v41[0] = MEMORY[0x2681A4A58]; /*0x25114aecc*/\n  v41[1] = 0x40000000; /*0x25114aed8*/\n  v41[2] = __carEndpoint_handlePlaybackSessionActivationChanged_block_invoke; /*0x25114aef4*/\n  v41[3] = &unk_269394968; /*0x25114aef4*/\n  v41[4] = &v43; /*0x25114aefc*/\n  v41[5] = v6; /*0x25114aefc*/\n  MEMORY[0x258101C50](v28, v41); /*0x25114af04*/\n  carEndpoint_checkAndUpdateVideoOverlayActivation(a2, *((_DWORD *)v44 + 6), *((_DWORD *)v44 + 6), v11, v10); /*0x25114af20*/\n  if ( v8 == v9 ) /*0x25114af28*/\n  {\n    MEMORY[0x258101B80](a2); /*0x25114af30*/\n    MEMORY[0x258101B80](a4); /*0x25114af38*/\n    v29 = OUTLINED_FUNCTION_16(*(_QWORD *)(v6 + 224)); /*0x25114af40*/\n    v35 = 0x40000000; /*0x25114af44*/\n    v36 = __carEndpoint_handlePlaybackSessionActivationChanged_block_invoke_2; /*0x25114af60*/\n    v37 = &__block_descriptor_tmp_1146; /*0x25114af60*/\n    v38 = v6; /*0x25114af64*/\n    v39 = a4; /*0x25114af64*/\n    v40 = a2; /*0x25114af68*/\n    MEMORY[0x258100C80](v29, v34); /*0x25114af70*/\n  }\nLABEL_23:\n  if ( v47 ) /*0x25114af78*/\n    MEMORY[0x258101B70](); /*0x25114af7c*/\n  return MEMORY[0x258101C00](&v43, 8); /*0x25114afac*/\n}",
+    "refs": [
+      {
+        "addr": "0x2511de1ce",
+        "name": "aCarendpointHan_9",
+        "string": "carEndpoint_handlePlaybackSessionActivationChanged"
+      },
+      {
+        "addr": "0x250f3cf80",
+        "name": "_OUTLINED_FUNCTION_75_0"
+      },
+      {
+        "addr": "0x251080088",
+        "name": "_carEndpoint_copyStateProperty"
+      },
+      {
+        "addr": "0x250f3cf14",
+        "name": "_OUTLINED_FUNCTION_21_8"
+      },
+      {
+        "addr": "0x250f3d540",
+        "name": "_OUTLINED_FUNCTION_23_5"
+      },
+      {
+        "addr": "0x250f36ac8",
+        "name": "_OUTLINED_FUNCTION_9_0"
+      },
+      {
+        "addr": "0x2511de201",
+        "name": "aVoidCarendpoin_34",
+        "string": "void carEndpoint_handlePlaybackSessionActivationChanged(CMNotificationCenterRef, const void *, CFStringRef, const void *, CFTypeRef)"
+      },
+      {
+        "addr": "0x250f53930",
+        "name": "_OUTLINED_FUNCTION_20_6"
+      },
+      {
+        "addr": "0x2512119b2",
+        "name": "aApSignpostCarV",
+        "string": "AP_SIGNPOST_CAR_VIDEOPLAYBACK_INSESSION_BEGIN"
+      },
+      {
+        "addr": "0x250f35000",
+        "name": "dword_250F35000"
+      },
+      {
+        "addr": "0x251210d5a",
+        "name": "unk_251210D5A"
+      },
+      {
+        "addr": "0x2512119e0",
+        "name": "aApSignpostCarV_0",
+        "string": "AP_SIGNPOST_CAR_VIDEOPLAYBACK_INSESSION_END"
+      },
+      {
+        "addr": "0x251091050",
+        "name": "___carEndpoint_handlePlaybackSessionActivationChanged_block_invoke"
+      },
+      {
+        "addr": "0x269394968",
+        "name": "unk_269394968"
+      },
+      {
+        "addr": "0x251149370",
+        "name": "_carEndpoint_checkAndUpdateVideoOverlayActivation"
+      },
+      {
+        "addr": "0x250f413e8",
+        "name": "_OUTLINED_FUNCTION_16"
+      },
+      {
+        "addr": "0x25114aff0",
+        "name": "___carEndpoint_handlePlaybackSessionActivationChanged_block_invoke_2"
+      },
+      {
+        "addr": "0x269394988",
+        "name": "___block_descriptor_tmp.1146"
+      }
+    ]
+  },
+  {
+    "addr": "0x250f56970",
+    "code": "__int64 __fastcall carEndpoint_CopyProperty(__int64 a1, __int64 a2, __int64 a3, __int64 *a4)\n{\n  __int64 v8; // x23\n  __int64 *v9; // x8\n  __int64 v10; // x0\n  __int64 v11; // x24\n  __int64 CMBaseObject; // x23\n  __int64 (__fastcall *v14)(__int64, __int64, __int64, __int64 *); // x9\n  __int64 v15; // x20\n  __int64 (__fastcall *v16)(__int64, __int64); // x9\n  char v17; // w0\n  __int64 *v18; // x9\n  bool v19; // zf\n  int isEndpointConnected; // w0\n  __int64 v21; // x0\n  __int64 v22; // x0\n  __int64 v23; // x0\n  __int64 v24; // x0\n  __int64 v25; // x0\n  __int64 v26; // x0\n  __int64 v27; // x0\n  __int64 v28; // x0\n  __int64 *v29; // x8\n  __int64 v30; // x0\n  __int64 v31; // x0\n  __int64 v32; // x0\n  __int64 v33; // x0\n  __int64 v34; // x0\n  __int64 v35; // x0\n  __int64 v36; // x0\n  __int64 v37; // x0\n  __int64 v38; // x0\n  __int64 v39; // x0\n  __int64 v40; // x0\n  __int64 v41; // x0\n  __int64 v42; // x0\n  __int64 v43; // x0\n  __int64 v44; // x0\n  __int64 v45; // x0\n  __int64 v46; // x0\n  __int64 v47; // x0\n  __int64 v48; // x0\n  __int64 v49; // x0\n  __int64 v50; // x0\n  __int64 v51; // x0\n  __int64 v52; // x0\n  __int64 v53; // x0\n  __int64 v54; // x0\n  __int64 v55; // x0\n  __int64 v56; // x0\n  __int64 v57; // x0\n  _QWORD *v58; // x8\n  int v59; // w9\n  _QWORD *v60; // x10\n  __int64 v61; // x0\n  __int64 v62; // x0\n  char HasFeature; // w0\n  __int64 v64; // x0\n  __int64 v65; // [xsp+28h] [xbp-48h] BYREF\n\n  if ( gLogCategory_APEndpointCarPlay <= 10\n    && (gLogCategory_APEndpointCarPlay != -1\n     || (unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointCarPlay, 33554442)) )\n  {\n    MEMORY[0x258100F00](\n      &gLogCategory_APEndpointCarPlay,\n      \"OSStatus carEndpoint_CopyProperty(CMBaseObjectRef, CFStringRef, CFAllocatorRef, void *)\",\n      33554442,\n      \"[%{ptr}] Copy property for key: %'@\\n\",\n      a1,\n      a2);\n  }\n  v8 = MEMORY[0x25810D5C0](a1); /*0x250f56a04*/\n  if ( (unsigned int)MEMORY[0x258101B40](a2, *MEMORY[0x2680C5428]) ) /*0x250f56a18*/\n  {\n    v9 = (__int64 *)MEMORY[0x2680C58F8]; /*0x250f56a24*/\nLABEL_7:\n    v10 = *v9; /*0x250f56a28*/\nLABEL_8:\n    v10 = MEMORY[0x258101B80](v10); /*0x250f56a2c*/\nLABEL_9:\n    v11 = 0; /*0x250f56a30*/\n    *a4 = v10; /*0x250f56a34*/\n    return v11; /*0x250f56a34*/\n  }\n  if ( (unsigned int)MEMORY[0x258101B40](a2, *MEMORY[0x2680C5140]) ) /*0x250f56a68*/\n  {\n    CMBaseObject = APEndpointDescriptionGetCMBaseObject(*(_QWORD *)(v8 + 8)); /*0x250f56a78*/\n    v14 = *(__int64 (__fastcall **)(__int64, __int64, __int64, __int64 *))(*(_QWORD *)(MEMORY[0x25810BA60]() + 8) + 48LL); /*0x250f56a90*/\n    if ( v14 ) /*0x250f56a94*/\n    {\n      v11 = v14(CMBaseObject, 0x100000F5B00180LL, a3, a4); /*0x250f56ae4*/\n      if ( !(_DWORD)v11 ) /*0x250f56ae8*/\n        return v11; /*0x250f56ae8*/\n    }\n    else\n    {\n      v11 = 4294954514LL; /*0x250f56af0*/\n    }\n    MEMORY[0x25810C360](v11, \"carEndpoint_copyNonStateProperty\", 7171, 0); /*0x250f56b08*/\n    goto LABEL_17; /*0x250f56b08*/\n  }\n  if ( (unsigned int)MEMORY[0x258101B40](a2, 0x100000F5B08CA0LL) ) /*0x250f56b8c*/\n  {\n    v15 = *(_QWORD *)(v8 + 8); /*0x250f56b94*/\n    v16 = *(__int64 (__fastcall **)(__int64, __int64))(*(_QWORD *)(MEMORY[0x25810BA60](v15) + 16) + 16LL); /*0x250f56bb0*/\n    if ( v16 ) /*0x250f56bb4*/\n    {\n      v17 = v16(v15, 37); /*0x250f56bf0*/\n      v9 = (__int64 *)MEMORY[0x2680C31E8]; /*0x250f56bf8*/\n      v18 = (__int64 *)MEMORY[0x2680C31D8]; /*0x250f56c00*/\n      v19 = v17 == 0; /*0x250f56c04*/\n      goto LABEL_25; /*0x250f56c04*/\n    }\nLABEL_109:\n    v9 = (__int64 *)MEMORY[0x2680C31D8]; /*0x250f57328*/\n    goto LABEL_7; /*0x250f57330*/\n  }\n  if ( (unsigned int)MEMORY[0x258101B40](a2, 0x100000F5AF8F20LL) ) /*0x250f56c20*/\n  {\n    v10 = *(_QWORD *)(v8 + 8); /*0x250f56c28*/\n    if ( !v10 ) /*0x250f56c2c*/\n      goto LABEL_9; /*0x250f56c2c*/\n    goto LABEL_8; /*0x250f56c2c*/\n  }\n  if ( (unsigned int)MEMORY[0x258101B40](a2, *MEMORY[0x2680C5220]) ) /*0x250f56c44*/\n  {\n    v10 = *(_QWORD *)(v8 + 32); /*0x250f56c4c*/\n    if ( !v10 ) /*0x250f56c50*/\n      goto LABEL_9; /*0x250f56c50*/\n    goto LABEL_8; /*0x250f56c50*/\n  }\n  if ( (unsigned int)MEMORY[0x258101B40](a2, *MEMORY[0x2680C5250]) ) /*0x250f56c68*/\n  {\n    isEndpointConnected = carEndpoint_isEndpointConnected(a1); /*0x250f56c74*/\n    v9 = (__int64 *)MEMORY[0x2680C31E8]; /*0x250f56c7c*/\n    v18 = (__int64 *)MEMORY[0x2680C31D8]; /*0x250f56c84*/\n    v19 = isEndpointConnected == 0; /*0x250f56c88*/\nLABEL_25:\n    if ( v19 ) /*0x250f56c08*/\n      v9 = v18; /*0x250f56c08*/\n    goto LABEL_7; /*0x250f56c08*/\n  }\n  if ( (unsigned int)MEMORY[0x258101B40](a2, *MEMORY[0x2680C52D8]) ) /*0x250f56cc0*/\n  {\n    v21 = APEndpointDescriptionGetCMBaseObject(*(_QWORD *)(v8 + 8)); /*0x250f56cd8*/\n    v22 = CMBaseObjectCopyProperty(v21, 0x100000F5AFE0C0LL, 0, a4); /*0x250f56ce8*/\n    v11 = v22; /*0x250f56cec*/\n    if ( (_DWORD)v22 ) /*0x250f56cf0*/\n      carEndpoint_CopyProperty_cold_1(v22); /*0x250f56cf8*/\n    return v11; /*0x250f56cf0*/\n  }\n  if ( (unsigned int)MEMORY[0x258101B40](a2, *MEMORY[0x2680C5300]) ) /*0x250f56d10*/\n  {\n    v23 = APEndpointDescriptionGetCMBaseObject(*(_QWORD *)(v8 + 8)); /*0x250f56d28*/\n    v24 = CMBaseObjectCopyProperty(v23, 0x100000F5AF71E0LL, a3, a4); /*0x250f56d38*/\n    v11 = v24; /*0x250f56d3c*/\n    if ( (_DWORD)v24 ) /*0x250f56d40*/\n      carEndpoint_CopyProperty_cold_2(v24); /*0x250f56d48*/\n    return v11; /*0x250f56d40*/\n  }\n  if ( (unsigned int)MEMORY[0x258101B40](a2, *MEMORY[0x2680C52F0]) )\n  {\n    v25 = APEndpointDescriptionGetCMBaseObject(*(_QWORD *)(v8 + 8)); /*0x250f56d78*/\n    v26 = CMBaseObjectCopyProperty(v25, 0x100000F5AF71C0LL, a3, a4); /*0x250f56d88*/\n    v11 = v26; /*0x250f56d8c*/\n    if ( !*(_QWORD *)(v8 + 48) || (_DWORD)v26 != -12784 ) /*0x250f56da0*/\n    {\n      if ( (_DWORD)v26 ) /*0x250f56da4*/\n        carEndpoint_CopyProperty_cold_3(v26); /*0x250f56dac*/\n      return v11; /*0x250f56da4*/\n    }\nLABEL_18:\n    v11 = carEndpoint_copyStateProperty(a1); /*0x250f56b18*/\n    if ( (_DWORD)v11 == -12784 )\n    {\n      if ( gLogCategory_APEndpointCarPlay <= 30\n        && (gLogCategory_APEndpointCarPlay != -1\n         || (unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointCarPlay, 33554462)) )\n      {\n        MEMORY[0x258100F00](\n          &gLogCategory_APEndpointCarPlay,\n          \"OSStatus carEndpoint_CopyProperty(CMBaseObjectRef, CFStringRef, CFAllocatorRef, void *)\",\n          33554462,\n          \"[%{ptr}] Copy property for unrecognized key: %'@\\n\",\n          a1,\n          a2);\n      }\n      return 4294954512LL; /*0x250f56ca8*/\n    }\n    return v11; /*0x250f56cac*/\n  }\n  if ( (unsigned int)MEMORY[0x258101B40](a2, *MEMORY[0x2680C51E0]) ) /*0x250f56dc4*/\n  {\n    v27 = APEndpointDescriptionGetCMBaseObject(*(_QWORD *)(v8 + 8)); /*0x250f56ddc*/\n    v28 = CMBaseObjectCopyProperty(v27, 0x100000F5AFF2C0LL, a3, a4); /*0x250f56dec*/\n    v11 = v28; /*0x250f56df0*/\n    if ( (_DWORD)v28 ) /*0x250f56df4*/\n      carEndpoint_CopyProperty_cold_4(v28); /*0x250f56dfc*/\n    return v11; /*0x250f56df4*/\n  }\n  if ( (unsigned int)MEMORY[0x258101B40](a2, *MEMORY[0x2680C5418]) ) /*0x250f56e14*/\n  {\n    v29 = (__int64 *)MEMORY[0x2680C58D8]; /*0x250f56e20*/\n    if ( !*(_BYTE *)(v8 + 40) ) /*0x250f56e24*/\n      v29 = (__int64 *)MEMORY[0x2680C58D0]; /*0x250f56e34*/\n    v10 = *v29; /*0x250f56e38*/\n    if ( !*v29 ) /*0x250f56e38*/\n      goto LABEL_9; /*0x250f56e3c*/\n    goto LABEL_8; /*0x250f56e3c*/\n  }\n  if ( (unsigned int)MEMORY[0x258101B40](a2, *MEMORY[0x2680C5310]) ) /*0x250f56e54*/\n  {\n    v10 = *(_QWORD *)(v8 + 24); /*0x250f56e5c*/\n    if ( !v10 ) /*0x250f56e60*/\n    {\n      v10 = *(_QWORD *)(v8 + 16); /*0x250f56e64*/\n      if ( !v10 ) /*0x250f56e68*/\n        goto LABEL_9; /*0x250f56e68*/\n    }\n    goto LABEL_8; /*0x250f56e68*/\n  }\n  if ( (unsigned int)MEMORY[0x258101B40](a2, *MEMORY[0x2680C53C8]) ) /*0x250f56e80*/\n  {\n    v30 = APEndpointDescriptionGetCMBaseObject(*(_QWORD *)(v8 + 8)); /*0x250f56e98*/\n    v31 = CMBaseObjectCopyProperty(v30, 0x100000F5B006E0LL, a3, a4); /*0x250f56ea8*/\n    v11 = v31; /*0x250f56eac*/\n    if ( (_DWORD)v31 ) /*0x250f56eb0*/\n      carEndpoint_CopyProperty_cold_5(v31); /*0x250f56eb8*/\n    return v11; /*0x250f56eb0*/\n  }\n  if ( (unsigned int)MEMORY[0x258101B40](a2, *MEMORY[0x2680C5320]) ) /*0x250f56ed0*/\n  {\n    v32 = APEndpointDescriptionGetCMBaseObject(*(_QWORD *)(v8 + 8)); /*0x250f56ee8*/\n    v33 = CMBaseObjectCopyProperty(v32, 0x100000F5B00240LL, a3, a4); /*0x250f56ef8*/\n    v11 = v33; /*0x250f56efc*/\n    if ( (_DWORD)v33 ) /*0x250f56f00*/\n      carEndpoint_CopyProperty_cold_6(v33); /*0x250f56f08*/\n    return v11; /*0x250f56f00*/\n  }\n  if ( (unsigned int)MEMORY[0x258101B40](a2, *MEMORY[0x2680C5330]) ) /*0x250f56f20*/\n  {\n    v34 = APEndpointDescriptionGetCMBaseObject(*(_QWORD *)(v8 + 8)); /*0x250f56f38*/\n    v35 = CMBaseObjectCopyProperty(v34, 0x100000F5B00260LL, a3, a4); /*0x250f56f48*/\n    v11 = v35; /*0x250f56f4c*/\n    if ( (_DWORD)v35 ) /*0x250f56f50*/\n      carEndpoint_CopyProperty_cold_7(v35); /*0x250f56f58*/\n    return v11; /*0x250f56f50*/\n  }\n  if ( (unsigned int)MEMORY[0x258101B40](a2, *MEMORY[0x2680C5440]) ) /*0x250f56f70*/\n  {\n    v36 = APEndpointDescriptionGetCMBaseObject(*(_QWORD *)(v8 + 8)); /*0x250f56f88*/\n    v37 = CMBaseObjectCopyProperty(v36, 0x100000F5B00280LL, a3, a4); /*0x250f56f98*/\n    v11 = v37; /*0x250f56f9c*/\n    if ( (_DWORD)v37 ) /*0x250f56fa0*/\n      carEndpoint_CopyProperty_cold_8(v37); /*0x250f56fa8*/\n    return v11; /*0x250f56fa0*/\n  }\n  if ( (unsigned int)MEMORY[0x258101B40](a2, *MEMORY[0x2680C5438]) ) /*0x250f56fc0*/\n  {\n    v38 = APEndpointDescriptionGetCMBaseObject(*(_QWORD *)(v8 + 8)); /*0x250f56fd8*/\n    v39 = CMBaseObjectCopyProperty(v38, 0x100000F5B002A0LL, a3, a4); /*0x250f56fe8*/\n    v11 = v39; /*0x250f56fec*/\n    if ( (_DWORD)v39 ) /*0x250f56ff0*/\n      carEndpoint_CopyProperty_cold_9(v39); /*0x250f56ff8*/\n    return v11; /*0x250f56ff0*/\n  }\n  if ( (unsigned int)MEMORY[0x258101B40](a2, *MEMORY[0x2680C50F8]) ) /*0x250f57010*/\n  {\n    v40 = APEndpointDescriptionGetCMBaseObject(*(_QWORD *)(v8 + 8)); /*0x250f57028*/\n    v41 = CMBaseObjectCopyProperty(v40, 0x100000F5B002C0LL, a3, a4); /*0x250f57038*/\n    v11 = v41; /*0x250f5703c*/\n    if ( (_DWORD)v41 ) /*0x250f57040*/\n      carEndpoint_CopyProperty_cold_10(v41); /*0x250f57048*/\n    return v11; /*0x250f57040*/\n  }\n  if ( (unsigned int)MEMORY[0x258101B40](a2, 0x100000F5B08DC0LL) ) /*0x250f57060*/\n  {\n    v42 = carEndpoint_copyPropertyForDisplay(a1, 0x100000F5AFE060LL, a3, a4); /*0x250f57080*/\n    v11 = v42; /*0x250f57084*/\n    if ( (_DWORD)v42 ) /*0x250f57088*/\n      carEndpoint_CopyProperty_cold_11(v42); /*0x250f57090*/\n    return v11; /*0x250f57088*/\n  }\n  if ( (unsigned int)MEMORY[0x258101B40](a2, 0x100000F5B08DE0LL) ) /*0x250f570a8*/\n  {\n    v43 = carEndpoint_copyPropertyForDisplay(a1, 0x100000F5AFE120LL, a3, a4); /*0x250f570c8*/\n    v11 = v43; /*0x250f570cc*/\n    if ( (_DWORD)v43 ) /*0x250f570d0*/\n      carEndpoint_CopyProperty_cold_12(v43); /*0x250f570d8*/\n    return v11; /*0x250f570d0*/\n  }\n  if ( (unsigned int)MEMORY[0x258101B40](a2, 0x100000F5AFF680LL) ) /*0x250f570f0*/\n  {\n    v44 = APEndpointDescriptionGetCMBaseObject(*(_QWORD *)(v8 + 8)); /*0x250f57108*/\n    v45 = CMBaseObjectCopyProperty(v44, 0x100000F5AFF680LL, a3, a4); /*0x250f57118*/\n    v11 = v45; /*0x250f5711c*/\n    if ( (_DWORD)v45 ) /*0x250f57120*/\n      carEndpoint_CopyProperty_cold_13(v45); /*0x250f57128*/\n    return v11; /*0x250f57120*/\n  }\n  if ( (unsigned int)MEMORY[0x258101B40](a2, 0x100000F5AFF700LL) /*0x250f57158*/\n    || (unsigned int)MEMORY[0x258101B40](a2, *MEMORY[0x2680C5400]) )\n  {\n    v46 = APEndpointDescriptionGetCMBaseObject(*(_QWORD *)(v8 + 8)); /*0x250f57170*/\n    v47 = CMBaseObjectCopyProperty(v46, 0x100000F5AFF700LL, a3, a4); /*0x250f57180*/\n    v11 = v47; /*0x250f57184*/\n    if ( (_DWORD)v47 ) /*0x250f57188*/\n      carEndpoint_CopyProperty_cold_14(v47); /*0x250f57190*/\n    return v11; /*0x250f57188*/\n  }\n  if ( (unsigned int)MEMORY[0x258101B40](a2, *MEMORY[0x2680C51A0]) ) /*0x250f571a8*/\n  {\n    v48 = APEndpointDescriptionGetCMBaseObject(*(_QWORD *)(v8 + 8)); /*0x250f571c0*/\n    v49 = CMBaseObjectCopyProperty(v48, 0x100000F5B003E0LL, a3, a4); /*0x250f571d0*/\n    v11 = v49; /*0x250f571d4*/\n    if ( (_DWORD)v49 ) /*0x250f571d8*/\n      carEndpoint_CopyProperty_cold_15(v49); /*0x250f571e0*/\n    return v11; /*0x250f571d8*/\n  }\n  if ( (unsigned int)MEMORY[0x258101B40](a2, *MEMORY[0x2680C53F0]) ) /*0x250f571f8*/\n  {\n    v50 = APEndpointDescriptionGetCMBaseObject(*(_QWORD *)(v8 + 8)); /*0x250f57210*/\n    v51 = CMBaseObjectCopyProperty(v50, 0x100000F5B00380LL, a3, a4); /*0x250f57220*/\n    v11 = v51; /*0x250f57224*/\n    if ( (_DWORD)v51 ) /*0x250f57228*/\n      carEndpoint_CopyProperty_cold_16(v51); /*0x250f57230*/\n    return v11; /*0x250f57228*/\n  }\n  if ( (unsigned int)MEMORY[0x258101B40](a2, 0x100000F5B00600LL) ) /*0x250f57248*/\n  {\n    v52 = APEndpointDescriptionGetCMBaseObject(*(_QWORD *)(v8 + 8)); /*0x250f57260*/\n    v53 = CMBaseObjectCopyProperty(v52, 0x100000F5B00600LL, a3, a4); /*0x250f57270*/\n    v11 = v53; /*0x250f57274*/\n    if ( (_DWORD)v53 ) /*0x250f57278*/\n      carEndpoint_CopyProperty_cold_17(v53); /*0x250f57280*/\n    return v11; /*0x250f57278*/\n  }\n  if ( (unsigned int)MEMORY[0x258101B40](a2, 0x100000F5B08EC0LL) ) /*0x250f57298*/\n  {\n    v9 = (__int64 *)MEMORY[0x2680C31E8]; /*0x250f572a4*/\n    if ( !*(_BYTE *)(v8 + 72) ) /*0x250f572a8*/\n      v9 = (__int64 *)MEMORY[0x2680C31D8]; /*0x250f572b8*/\n    goto LABEL_7; /*0x250f572b8*/\n  }\n  if ( !(unsigned int)MEMORY[0x258101B40](a2, 0x100000F5B08E60LL) )\n  {\n    if ( (unsigned int)MEMORY[0x258101B40](a2, *MEMORY[0x2680C5470]) ) /*0x250f57320*/\n      goto LABEL_109; /*0x250f57324*/\n    if ( (unsigned int)MEMORY[0x258101B40](a2, *MEMORY[0x2680C5398]) ) /*0x250f57344*/\n    {\n      v56 = *(_QWORD *)(v8 + 48); /*0x250f5734c*/\n      if ( v56 ) /*0x250f57350*/\n      {\n        v10 = MEMORY[0x2581025B0](v56, &stru_275B04720); /*0x250f5735c*/\n        if ( !v10 ) /*0x250f57360*/\n          goto LABEL_9; /*0x250f57360*/\n        goto LABEL_8; /*0x250f57360*/\n      }\n      goto LABEL_153; /*0x250f57350*/\n    }\n    if ( (unsigned int)MEMORY[0x258101B40](a2, *MEMORY[0x2680C50F0]) )\n    {\n      if ( *(_BYTE *)(v8 + 222) ) /*0x250f57380*/\n      {\n        v57 = APEndpointDescriptionGetCMBaseObject(*(_QWORD *)(v8 + 8)); /*0x250f57398*/\n        v11 = CMBaseObjectCopyProperty(v57, 0x100000F5AFFAE0LL, a3, a4); /*0x250f573ac*/\n      }\n      else\n      {\n        v11 = 0; /*0x250f57458*/\n        *a4 = MEMORY[0x25810D150](0); /*0x250f5745c*/\n      }\n      if ( gLogCategory_APEndpointCarPlay <= 30\n        && (gLogCategory_APEndpointCarPlay != -1\n         || (unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointCarPlay, 33554462)) )\n      {\n        MEMORY[0x258100F00](\n          &gLogCategory_APEndpointCarPlay,\n          \"OSStatus carEndpoint_copyNonStateProperty(FigEndpointRef, CFStringRef, CFAllocatorRef, void *)\",\n          33554462,\n          \"[%{ptr}] copy %@: %@ err = %#m\",\n          a1,\n          a2,\n          *a4,\n          v11);\n      }\nLABEL_17:\n      if ( (_DWORD)v11 != -12784 ) /*0x250f56b14*/\n        return v11; /*0x250f56b14*/\n      goto LABEL_18; /*0x250f56b14*/\n    }\n    if ( (unsigned int)MEMORY[0x258101B40](a2, *MEMORY[0x2680C50E8]) /*0x250f573dc*/\n      || (unsigned int)MEMORY[0x258101B40](a2, *MEMORY[0x2680C5448]) )\n    {\n      v58 = (_QWORD *)MEMORY[0x2680C31E8]; /*0x250f573e8*/\n      v59 = *(unsigned __int8 *)(v8 + 68); /*0x250f573ec*/\nLABEL_120:\n      v60 = (_QWORD *)MEMORY[0x2680C31D8]; /*0x250f573f0*/\n      goto LABEL_121; /*0x250f573f4*/\n    }\n    if ( (unsigned int)MEMORY[0x258101B40](a2, *MEMORY[0x2680C50D8]) )\n    {\n      if ( !*(_BYTE *)(v8 + 221) ) /*0x250f57500*/\n      {\n        v58 = (_QWORD *)MEMORY[0x2680C48A8]; /*0x250f57548*/\n        goto LABEL_123; /*0x250f5754c*/\n      }\n      v58 = (_QWORD *)MEMORY[0x2680C48A0]; /*0x250f57508*/\n      v59 = *(unsigned __int8 *)(v8 + 220); /*0x250f5750c*/\n      v60 = (_QWORD *)MEMORY[0x2680C48B0]; /*0x250f57514*/\nLABEL_121:\n      if ( !v59 ) /*0x250f573fc*/\n        v58 = v60; /*0x250f573fc*/\nLABEL_123:\n      v61 = MEMORY[0x258101B80](*v58); /*0x250f57400*/\n      *a4 = v61; /*0x250f57408*/\n      if ( gLogCategory_APEndpointCarPlay <= 30 )\n      {\n        if ( gLogCategory_APEndpointCarPlay == -1 ) /*0x250f5741c*/\n        {\n          if ( !(unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointCarPlay, 33554462) ) /*0x250f574d4*/\n            return 0; /*0x250f574d8*/\n          v61 = *a4; /*0x250f57638*/\n        }\n        MEMORY[0x258100F00](\n          &gLogCategory_APEndpointCarPlay,\n          \"OSStatus carEndpoint_copyNonStateProperty(FigEndpointRef, CFStringRef, CFAllocatorRef, void *)\",\n          33554462,\n          \"[%{ptr}] copy %@: %@ err = %#m\",\n          a1,\n          a2,\n          v61,\n          0);\n      }\n      return 0; /*0x250f574e0*/\n    }\n    if ( (unsigned int)MEMORY[0x258101B40](a2, *MEMORY[0x2680C52B0]) ) /*0x250f5752c*/\n    {\n      v58 = (_QWORD *)MEMORY[0x2680C31E8]; /*0x250f57538*/\n      v59 = *(unsigned __int8 *)(v8 + 222); /*0x250f5753c*/\n      goto LABEL_120; /*0x250f57540*/\n    }\n    if ( (unsigned int)MEMORY[0x258101B40](a2, *MEMORY[0x2680C51B0]) )\n    {\n      v62 = APEndpointDescriptionGetCMBaseObject(*(_QWORD *)(v8 + 8)); /*0x250f57578*/\n      if ( (unsigned int)CMBaseObjectCopyProperty(v62, 0x100000F5B005A0LL, a3, a4) ) /*0x250f57588*/\n        carEndpoint_CopyProperty_cold_19(); /*0x250f57644*/\n      if ( a4\n        && gLogCategory_APEndpointCarPlay <= 30\n        && (gLogCategory_APEndpointCarPlay != -1\n         || (unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointCarPlay, 33554462)) )\n      {\n        MEMORY[0x258100F00](\n          &gLogCategory_APEndpointCarPlay,\n          \"OSStatus carEndpoint_copyNonStateProperty(FigEndpointRef, CFStringRef, CFAllocatorRef, void *)\",\n          33554462,\n          \"[%{ptr}] copy %@: %@ err = %#m\",\n          a1,\n          a2,\n          *a4,\n          0);\n      }\n      return 0; /*0x250f575c8*/\n    }\n    if ( (unsigned int)MEMORY[0x258101B40](a2, *MEMORY[0x2680C51A8]) ) /*0x250f575dc*/\n    {\n      if ( *(_BYTE *)(v8 + 222) ) /*0x250f575e4*/\n      {\n        HasFeature = APEndpointDescriptionHasFeature(*(_QWORD *)(v8 + 8), 35); /*0x250f575f4*/\n        v9 = (__int64 *)MEMORY[0x2680C31E8]; /*0x250f575fc*/\n        if ( HasFeature ) /*0x250f5760c*/\n          v9 = (__int64 *)MEMORY[0x2680C31D8]; /*0x250f5760c*/\n      }\n      else\n      {\n        v9 = (__int64 *)MEMORY[0x2680C31E8]; /*0x250f57650*/\n      }\n      goto LABEL_7; /*0x250f5760c*/\n    }\n    if ( (unsigned int)MEMORY[0x258101B40](a2, *MEMORY[0x2680C51B8]) ) /*0x250f57624*/\n    {\nLABEL_153:\n      v11 = 0; /*0x250f5762c*/\n      *a4 = 0; /*0x250f57630*/\n      return v11; /*0x250f57634*/\n    }\n    if ( !(unsigned int)MEMORY[0x258101B40](a2, *MEMORY[0x2680C53B8]) ) /*0x250f5766c*/\n      goto LABEL_18; /*0x250f5766c*/\n    v65 = 0; /*0x250f57670*/\n    if ( (unsigned int)carEndpoint_getSupportedFeatures(a1, &v65) ) /*0x250f5767c*/\n      carEndpoint_CopyProperty_cold_20(); /*0x250f57704*/\n    v64 = MEMORY[0x258102600](a3, 4, &v65); /*0x250f57690*/\n    *a4 = v64; /*0x250f57694*/\n    if ( !v64 ) /*0x250f57698*/\n    {\n      carEndpoint_CopyProperty_cold_21(); /*0x250f5770c*/\n      v11 = 4294950575LL; /*0x250f57710*/\n      goto LABEL_17; /*0x250f57714*/\n    }\n    if ( gLogCategory_APEndpointCarPlay <= 30 )\n    {\n      if ( gLogCategory_APEndpointCarPlay != -1 )\n      {\nLABEL_164:\n        MEMORY[0x258100F00](\n          &gLogCategory_APEndpointCarPlay,\n          \"OSStatus carEndpoint_copyNonStateProperty(FigEndpointRef, CFStringRef, CFAllocatorRef, void *)\",\n          33554462,\n          \"[%{ptr}] copy %@: %@ err = %#m\",\n          a1,\n          a2,\n          v64,\n          0);\n        goto LABEL_165; /*0x250f576f4*/\n      }\n      if ( (unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointCarPlay, 33554462) ) /*0x250f576c0*/\n      {\n        v64 = *a4; /*0x250f576c8*/\n        goto LABEL_164; /*0x250f576c8*/\n      }\n    }\nLABEL_165:\n    v11 = 0; /*0x250f576f8*/\n    goto LABEL_17; /*0x250f576fc*/\n  }\n  v54 = APEndpointDescriptionGetCMBaseObject(*(_QWORD *)(v8 + 8)); /*0x250f572e8*/\n  v55 = CMBaseObjectCopyProperty(v54, 0x100000F5B00360LL, a3, a4); /*0x250f572f8*/\n  v11 = v55; /*0x250f572fc*/\n  if ( (_DWORD)v55 ) /*0x250f57300*/\n    carEndpoint_CopyProperty_cold_18(v55); /*0x250f57308*/\n  return v11; /*0x250f56a54*/\n}",
+    "refs": [
+      {
+        "addr": "0x26e755490",
+        "name": "_gLogCategory_APEndpointCarPlay"
+      },
+      {
+        "addr": "0x2511d6ba2",
+        "name": "aOsstatusCarend",
+        "string": "OSStatus carEndpoint_CopyProperty(CMBaseObjectRef, CFStringRef, CFAllocatorRef, void *)"
+      },
+      {
+        "addr": "0x2511d6bfa",
+        "name": "aPtrCopyPropert_1",
+        "string": "[%{ptr}] Copy property for key: %'@\n"
+      },
+      {
+        "addr": "0x250f414cc",
+        "name": "_APEndpointDescriptionGetCMBaseObject"
+      },
+      {
+        "addr": "0x2511d6c51",
+        "name": "aCarendpointCop_0",
+        "string": "carEndpoint_copyNonStateProperty"
+      },
+      {
+        "addr": "0x251080160",
+        "name": "_carEndpoint_isEndpointConnected"
+      },
+      {
+        "addr": "0x250f45200",
+        "name": "_CMBaseObjectCopyProperty"
+      },
+      {
+        "addr": "0x25114b670",
+        "name": "_carEndpoint_CopyProperty.cold.1"
+      },
+      {
+        "addr": "0x25114b680",
+        "name": "_carEndpoint_CopyProperty.cold.2"
+      },
+      {
+        "addr": "0x25114b690",
+        "name": "_carEndpoint_CopyProperty.cold.3"
+      },
+      {
+        "addr": "0x251080088",
+        "name": "_carEndpoint_copyStateProperty"
+      },
+      {
+        "addr": "0x2511d6c1f",
+        "name": "aPtrCopyPropert_2",
+        "string": "[%{ptr}] Copy property for unrecognized key: %'@\n"
+      },
+      {
+        "addr": "0x25114b6a0",
+        "name": "_carEndpoint_CopyProperty.cold.4"
+      },
+      {
+        "addr": "0x25114b6b0",
+        "name": "_carEndpoint_CopyProperty.cold.5"
+      },
+      {
+        "addr": "0x25114b6c0",
+        "name": "_carEndpoint_CopyProperty.cold.6"
+      },
+      {
+        "addr": "0x25114b6d0",
+        "name": "_carEndpoint_CopyProperty.cold.7"
+      },
+      {
+        "addr": "0x25114b6e0",
+        "name": "_carEndpoint_CopyProperty.cold.8"
+      },
+      {
+        "addr": "0x25114b6f0",
+        "name": "_carEndpoint_CopyProperty.cold.9"
+      },
+      {
+        "addr": "0x25114b700",
+        "name": "_carEndpoint_CopyProperty.cold.10"
+      },
+      {
+        "addr": "0x251080210",
+        "name": "_carEndpoint_copyPropertyForDisplay"
+      },
+      {
+        "addr": "0x25114b710",
+        "name": "_carEndpoint_CopyProperty.cold.11"
+      },
+      {
+        "addr": "0x25114b720",
+        "name": "_carEndpoint_CopyProperty.cold.12"
+      },
+      {
+        "addr": "0x25114b730",
+        "name": "_carEndpoint_CopyProperty.cold.13"
+      },
+      {
+        "addr": "0x25114b740",
+        "name": "_carEndpoint_CopyProperty.cold.14"
+      },
+      {
+        "addr": "0x25114b750",
+        "name": "_carEndpoint_CopyProperty.cold.15"
+      },
+      {
+        "addr": "0x25114b760",
+        "name": "_carEndpoint_CopyProperty.cold.16"
+      },
+      {
+        "addr": "0x25114b770",
+        "name": "_carEndpoint_CopyProperty.cold.17"
+      },
+      {
+        "addr": "0x275b04720",
+        "name": "stru_275B04720"
+      },
+      {
+        "addr": "0x2511d6c72",
+        "name": "aOsstatusCarend_0",
+        "string": "OSStatus carEndpoint_copyNonStateProperty(FigEndpointRef, CFStringRef, CFAllocatorRef, void *)"
+      },
+      {
+        "addr": "0x2511d6cd1",
+        "name": "aPtrCopyErrM",
+        "string": "[%{ptr}] copy %@: %@ err = %#m"
+      },
+      {
+        "addr": "0x25114b790",
+        "name": "_carEndpoint_CopyProperty.cold.19"
+      },
+      {
+        "addr": "0x250f459dc",
+        "name": "_APEndpointDescriptionHasFeature"
+      },
+      {
+        "addr": "0x25114b7a0",
+        "name": "_carEndpoint_CopyProperty.cold.20"
+      },
+      {
+        "addr": "0x251080364",
+        "name": "_carEndpoint_getSupportedFeatures"
+      },
+      {
+        "addr": "0x25114b7b0",
+        "name": "_carEndpoint_CopyProperty.cold.21"
+      },
+      {
+        "addr": "0x25114b780",
+        "name": "_carEndpoint_CopyProperty.cold.18"
+      }
+    ]
+  },
+  {
+    "addr": "0x2510e525c",
+    "code": "__int64 __fastcall session_Play(__int64 a1, __int64 a2, void (__fastcall *a3)(__int64, __int64), __int64 a4)\n{\n  __int64 v8; // x22\n  __int64 v9; // x0\n  __int64 v10; // x24\n  __int64 inserted; // x23\n  __int64 IsPlayingAndPostNotification; // x0\n  __int64 v13; // x24\n  __int64 v14; // x0\n  __int64 v16; // x0\n  _DWORD v17[16]; // [xsp+28h] [xbp-88h] BYREF\n  __int64 v18; // [xsp+68h] [xbp-48h]\n\n  v18 = *MEMORY[0x2681A4A70]; /*0x2510e5298*/\n  v8 = MEMORY[0x25810D5C0](); /*0x2510e52a0*/\n  if ( gLogCategory_APEndpointPlaybackSessionRemoteControl <= 30 /*0x2510e52cc*/\n    && (gLogCategory_APEndpointPlaybackSessionRemoteControl != -1\n     || (unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointPlaybackSessionRemoteControl, 33554462)) )\n  {\n    MEMORY[0x258100F00](&gLogCategory_APEndpointPlaybackSessionRemoteControl); /*0x2510e5300*/\n  }\n  MEMORY[0x25810DDB0](*(_QWORD *)(v8 + 88)); /*0x2510e5308*/\n  if ( *(_BYTE *)(v8 + 112) ) /*0x2510e530c*/\n  {\n    session_Play_cold_1(v17); /*0x2510e54c8*/\n    inserted = v17[0]; /*0x2510e54cc*/\n  }\n  else\n  {\n    if ( !*(_QWORD *)(v8 + 16) ) /*0x2510e5314*/\n    {\n      MEMORY[0x25810E4A0](v17, 64, \"APEndpointPlaybackSessionRemoteControl.%{ptr}\", a1); /*0x2510e5330*/\n      *(_QWORD *)(v8 + 16) = MEMORY[0x258102A60](v17); /*0x2510e533c*/\n    }\n    APEndpointPlaybackSessionStatsUpdateAtPlay(*(_QWORD *)(v8 + 160), a2); /*0x2510e5348*/\n    APMetadataSourceCreateWithNowPlayingAppPID(*MEMORY[0x2680C31A0]); /*0x2510e5360*/\n    v9 = MEMORY[0x25810D5C0](a1); /*0x2510e5368*/\n    if ( *(_QWORD *)(v9 + 56) ) /*0x2510e536c*/\n    {\n      v10 = v9; /*0x2510e5374*/\n      if ( gLogCategory_APEndpointPlaybackSessionRemoteControl <= 30 /*0x2510e539c*/\n        && (gLogCategory_APEndpointPlaybackSessionRemoteControl != -1\n         || (unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointPlaybackSessionRemoteControl, 33554462)) )\n      {\n        session_Play_cold_2(a1); /*0x2510e53a8*/\n      }\n      *(_QWORD *)(v10 + 120) = APMetadataSourceAddEventCallback(*(_QWORD *)(v10 + 56), a1, session_handleMetadataEvent); /*0x2510e53c8*/\n      *(_BYTE *)(v10 + 154) = 0; /*0x2510e53cc*/\n    }\n    if ( *(_QWORD *)(v8 + 56) ) /*0x2510e53d0*/\n      APMetadataSourceStart(); /*0x2510e53d8*/\n    inserted = session_insertPlayQueueItemInternal(a1, a2, 0, a3, a4); /*0x2510e53f4*/\n    *(_BYTE *)(v8 + 96) = 1; /*0x2510e53fc*/\n    IsPlayingAndPostNotification = session_updateIsPlayingAndPostNotification(a1, 1); /*0x2510e5408*/\n    v13 = *(_QWORD *)(v8 + 64); /*0x2510e540c*/\n    v14 = MEMORY[0x25810D680](IsPlayingAndPostNotification); /*0x2510e5410*/\n    MEMORY[0x258111D40](v13, v14, 0x100000F5AFBFE0LL, a1, 0, 0); /*0x2510e5434*/\n  }\n  MEMORY[0x25810DDC0](*(_QWORD *)(v8 + 88)); /*0x2510e543c*/\n  if ( a3 && (_DWORD)inserted ) /*0x2510e5444*/\n    a3(inserted, a4); /*0x2510e5450*/\n  if ( gLogCategory_APEndpointPlaybackSessionRemoteControl <= 30 /*0x2510e5478*/\n    && (gLogCategory_APEndpointPlaybackSessionRemoteControl != -1\n     || (unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointPlaybackSessionRemoteControl, 33554462)) )\n  {\n    session_Play_cold_3(a1); /*0x2510e54bc*/\n  }\n  if ( *MEMORY[0x2681A4A70] == v18 ) /*0x2510e5494*/\n    return inserted; /*0x2510e5498*/\n  v16 = MEMORY[0x2581004B0](); /*0x2510e54d4*/\n  return session_InsertPlayQueueItem(v16); /*0x2510e54b4*/\n}",
+    "refs": [
+      {
+        "addr": "0x27048ec80",
+        "name": "_gLogCategory_APEndpointPlaybackSessionRemoteControl"
+      },
+      {
+        "addr": "0x251179c44",
+        "name": "_session_Play.cold.1"
+      },
+      {
+        "addr": "0x251208a52",
+        "name": "aApendpointplay_24",
+        "string": "APEndpointPlaybackSessionRemoteControl.%{ptr}"
+      },
+      {
+        "addr": "0x25101a0d8",
+        "name": "_APEndpointPlaybackSessionStatsUpdateAtPlay"
+      },
+      {
+        "addr": "0x250fd4c08",
+        "name": "_APMetadataSourceCreateWithNowPlayingAppPID"
+      },
+      {
+        "addr": "0x251179c98",
+        "name": "_session_Play.cold.2"
+      },
+      {
+        "addr": "0x250fd5344",
+        "name": "_APMetadataSourceAddEventCallback"
+      },
+      {
+        "addr": "0x2510e7f34",
+        "name": "_session_handleMetadataEvent"
+      },
+      {
+        "addr": "0x250fd551c",
+        "name": "_APMetadataSourceStart"
+      },
+      {
+        "addr": "0x2510e7520",
+        "name": "_session_insertPlayQueueItemInternal"
+      },
+      {
+        "addr": "0x25117949c",
+        "name": "_session_updateIsPlayingAndPostNotification"
+      },
+      {
+        "addr": "0x251179ccc",
+        "name": "_session_Play.cold.3"
+      },
+      {
+        "addr": "0x2510e54d8",
+        "name": "_session_InsertPlayQueueItem"
+      }
+    ]
+  },
+  {
+    "addr": "0x2510e7520",
+    "code": "__int64 __fastcall session_insertPlayQueueItemInternal(__int64 a1, __int64 a2, __int64 a3, __int64 a4, __int64 a5)\n{\n  __int64 v10; // x19\n  __int64 v11; // x28\n  __int64 v12; // x20\n  __int64 v13; // x21\n  __int64 v14; // x0\n  __int64 v15; // x23\n  __int64 v16; // x0\n  __int64 v17; // x21\n  __int64 v18; // x24\n  __int64 v19; // x0\n  __int64 v20; // x22\n  __int64 v21; // x0\n  __int64 v22; // x23\n  __int64 v23; // x24\n  __int64 CMBaseObject; // x26\n  __int64 (__fastcall *v25)(__int64, __int64, __int64, __int64 *); // x9\n  _BOOL4 v26; // w8\n  __int64 v27; // x0\n  __int64 v28; // x24\n  __int64 (__fastcall *v29)(__int64, __int64, __int64, _BYTE *); // x9\n  _BOOL4 v30; // w24\n  __int64 v31; // x0\n  __int64 v32; // x24\n  __int64 (__fastcall *v33)(__int64, __int64, __int64, _BYTE *); // x9\n  __int64 v34; // x0\n  __int64 v35; // x26\n  __int64 (__fastcall *v36)(__int64, const char *, __int64, _QWORD, _QWORD, __int64, _QWORD *); // x9\n  __int64 v37; // x0\n  __int64 v38; // x24\n  __int64 v39; // x23\n  __int64 v40; // x23\n  __int64 v41; // x0\n  __int64 v42; // x0\n  __CFString *v43; // x1\n  __int64 v44; // x24\n  __int64 v45; // x26\n  __int64 v46; // x27\n  _QWORD *v47; // x25\n  __int64 v48; // x27\n  __int64 v49; // x19\n  void (__fastcall *v50)(__int64, __int64, __int64 (__fastcall *)(), _QWORD *); // x9\n  __int64 v51; // x28\n  _BOOL4 v53; // [xsp+34h] [xbp-ECh]\n  __int64 v54; // [xsp+38h] [xbp-E8h]\n  __int64 v55; // [xsp+40h] [xbp-E0h]\n  __int64 v56; // [xsp+48h] [xbp-D8h]\n  __int64 v57; // [xsp+50h] [xbp-D0h] BYREF\n  __int64 v58; // [xsp+58h] [xbp-C8h] BYREF\n  __int64 v59; // [xsp+60h] [xbp-C0h] BYREF\n  __int64 v60; // [xsp+68h] [xbp-B8h] BYREF\n  _BYTE v61[28]; // [xsp+70h] [xbp-B0h] BYREF\n  __int64 v62; // [xsp+98h] [xbp-88h] BYREF\n  _BYTE v63[28]; // [xsp+A0h] [xbp-80h] BYREF\n  int v64; // [xsp+BCh] [xbp-64h] BYREF\n  _QWORD v65[2]; // [xsp+C0h] [xbp-60h] BYREF\n\n  v10 = MEMORY[0x25810D5C0](); /*0x2510e755c*/\n  v59 = 0; /*0x2510e7560*/\n  v60 = 0; /*0x2510e7560*/\n  v57 = 0; /*0x2510e7564*/\n  v58 = 0; /*0x2510e7564*/\n  if ( *(_BYTE *)(v10 + 112) ) /*0x2510e7568*/\n  {\n    session_insertPlayQueueItemInternal_cold_1(v63); /*0x2510e7ea0*/\nLABEL_104:\n    v12 = 0; /*0x2510e7eb0*/\n    v17 = 0; /*0x2510e7eb4*/\n    v20 = 0; /*0x2510e7eb8*/\n    goto LABEL_105; /*0x2510e7eb8*/\n  }\n  if ( !a2 ) /*0x2510e7570*/\n  {\n    session_insertPlayQueueItemInternal_cold_14(v63); /*0x2510e7eac*/\n    goto LABEL_104; /*0x2510e7eac*/\n  }\n  if ( (unsigned int)session_ensureRemoteControlSessionCreated(a1) ) /*0x2510e7578*/\n    session_insertPlayQueueItemInternal_cold_2(); /*0x2510e7ecc*/\n  if ( gLogCategory_APEndpointPlaybackSessionRemoteControl <= 50 ) /*0x2510e7594*/\n  {\n    if ( gLogCategory_APEndpointPlaybackSessionRemoteControl != -1 /*0x2510e75ac*/\n      || (unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointPlaybackSessionRemoteControl, 33554482) )\n    {\n      session_insertPlayQueueItemInternal_cold_3(a2, a3, a1); /*0x2510e7e94*/\n    }\n    if ( gLogCategory_APEndpointPlaybackSessionRemoteControl <= 30 /*0x2510e7610*/\n      && (gLogCategory_APEndpointPlaybackSessionRemoteControl != -1\n       || (unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointPlaybackSessionRemoteControl, 33554462)) )\n    {\n      MEMORY[0x258100F00](&gLogCategory_APEndpointPlaybackSessionRemoteControl); /*0x2510e75f8*/\n    }\n  }\n  v55 = a4; /*0x2510e7618*/\n  v56 = a5; /*0x2510e7618*/\n  v11 = *MEMORY[0x2680C31A0]; /*0x2510e7624*/\n  v12 = MEMORY[0x25810D9B0](*MEMORY[0x2680C31A0], a2); /*0x2510e7634*/\n  v13 = *MEMORY[0x2680C4E80]; /*0x2510e7640*/\n  v14 = MEMORY[0x2581025B0](a2, *MEMORY[0x2680C4E80]); /*0x2510e764c*/\n  MEMORY[0x25810DB00](v12, &stru_275B0ACC0, v14); /*0x2510e7660*/\n  MEMORY[0x25810D090](v12, v13); /*0x2510e766c*/\n  MEMORY[0x25810D090](v12, *MEMORY[0x2680C4E40]); /*0x2510e7680*/\n  MEMORY[0x25810D090](v12, *MEMORY[0x2680C4E00]); /*0x2510e7694*/\n  v15 = *MEMORY[0x2680C4E20]; /*0x2510e76a0*/\n  if ( !(unsigned int)MEMORY[0x25810CFA0](v12, *MEMORY[0x2680C4E20]) ) /*0x2510e76b0*/\n  {\n    v39 = 0; /*0x2510e7a70*/\n    v17 = 0; /*0x2510e7a74*/\n    v20 = 0; /*0x2510e7a78*/\n    goto LABEL_68; /*0x2510e7a7c*/\n  }\n  v16 = MEMORY[0x2581025B0](v12, v15); /*0x2510e76bc*/\n  v17 = v16; /*0x2510e76c0*/\n  if ( v16 ) /*0x2510e76c4*/\n    MEMORY[0x258101B80](v16); /*0x2510e76cc*/\n  v18 = *MEMORY[0x2680C4E08]; /*0x2510e76d8*/\n  v19 = MEMORY[0x2581025B0](v12, *MEMORY[0x2680C4E08]); /*0x2510e76e4*/\n  v20 = v19; /*0x2510e76e8*/\n  if ( v19 ) /*0x2510e76ec*/\n    MEMORY[0x258101B80](v19); /*0x2510e76f4*/\n  MEMORY[0x25810D090](v12, v15); /*0x2510e7700*/\n  MEMORY[0x25810D090](v12, v18); /*0x2510e770c*/\n  v64 = 0; /*0x2510e7710*/\n  v21 = MEMORY[0x25810D5C0](a1); /*0x2510e7718*/\n  memset(v63, 0, sizeof(v63)); /*0x2510e771c*/\n  v62 = 0; /*0x2510e7728*/\n  v22 = v21 + 232; /*0x2510e7730*/\n  if ( *(_QWORD *)(v21 + 232) ) /*0x2510e7730*/\n  {\n    v64 = 0; /*0x2510e7efc*/\n  }\n  else\n  {\n    v23 = v21; /*0x2510e7738*/\n    if ( *(_BYTE *)(v21 + 224) ) /*0x2510e773c*/\n    {\n      v54 = a3; /*0x2510e7744*/\n      CMBaseObject = APSenderSessionGetCMBaseObject(*(_QWORD *)(v21 + 40)); /*0x2510e7750*/\n      v25 = *(__int64 (__fastcall **)(__int64, __int64, __int64, __int64 *))(*(_QWORD *)(MEMORY[0x25810BA60]() + 8) /*0x2510e7768*/\n                                                                           + 48LL);\n      if ( v25 ) /*0x2510e776c*/\n      {\n        v64 = v25(CMBaseObject, 0x100000F5B01240LL, v11, &v62); /*0x2510e77b8*/\n        if ( !v64 ) /*0x2510e77bc*/\n        {\n          MEMORY[0x25810CF40](v62, 0, 28, v63); /*0x2510e77d0*/\n          v26 = MEMORY[0x25810C190](*(_QWORD *)(v23 + 40), 0x100000F5B00FA0LL, &v64) != 0; /*0x2510e77f0*/\n          if ( v64 ) /*0x2510e77f8*/\n          {\n            session_insertPlayQueueItemInternal_cold_4(); /*0x2510e7f10*/\n            goto LABEL_41; /*0x2510e7f14*/\n          }\n          v53 = v26; /*0x2510e77fc*/\n          v27 = MEMORY[0x25810D5C0](a1); /*0x2510e7804*/\n          *(_QWORD *)v61 = 0; /*0x2510e7808*/\n          if ( !*(_BYTE *)(v27 + 224) ) /*0x2510e7810*/\n            goto LABEL_100; /*0x2510e7810*/\n          v28 = APSenderSessionGetCMBaseObject(*(_QWORD *)(v27 + 40)); /*0x2510e7828*/\n          v29 = *(__int64 (__fastcall **)(__int64, __int64, __int64, _BYTE *))(*(_QWORD *)(MEMORY[0x25810BA60]() + 8) /*0x2510e7840*/\n                                                                             + 48LL);\n          if ( v29 ) /*0x2510e7844*/\n          {\n            LODWORD(v65[0]) = v29(v28, 0x100000F5B00FE0LL, v11, v61); /*0x2510e788c*/\n            if ( !LODWORD(v65[0]) ) /*0x2510e7890*/\n            {\n              if ( !*(_QWORD *)v61 ) /*0x2510e7898*/\n                goto LABEL_100; /*0x2510e7898*/\n              v30 = MEMORY[0x25810C190](*(_QWORD *)v61, &stru_275AF6880, v65) != 0; /*0x2510e78b0*/\n              if ( LODWORD(v65[0]) ) /*0x2510e78b8*/\n                session_insertPlayQueueItemInternal_cold_5(); /*0x2510e7f20*/\nLABEL_27:\n              if ( *(_QWORD *)v61 ) /*0x2510e78c0*/\n                MEMORY[0x258101B70](); /*0x2510e78c4*/\n              if ( v30 ) /*0x2510e78c8*/\n              {\n                v31 = MEMORY[0x25810D5C0](a1); /*0x2510e78d0*/\n                *(_QWORD *)v61 = 0; /*0x2510e78d4*/\n                v65[0] = 0; /*0x2510e78d8*/\n                v32 = APSenderSessionGetCMBaseObject(*(_QWORD *)(v31 + 40)); /*0x2510e78e4*/\n                v33 = *(__int64 (__fastcall **)(__int64, __int64, __int64, _BYTE *))(*(_QWORD *)(MEMORY[0x25810BA60]() /*0x2510e78fc*/\n                                                                                               + 8)\n                                                                                   + 48LL);\n                if ( v33 ) /*0x2510e7900*/\n                {\n                  v34 = v33(v32, 0x100000F5B00FE0LL, v11, v61); /*0x2510e7944*/\n                  if ( !(_DWORD)v34 ) /*0x2510e7948*/\n                  {\n                    v35 = *(_QWORD *)v61; /*0x2510e794c*/\n                    if ( !*(_QWORD *)v61 ) /*0x2510e7950*/\n                      goto LABEL_37; /*0x2510e7950*/\n                    v36 = *(__int64 (__fastcall **)(__int64, const char *, __int64, _QWORD, _QWORD, __int64, _QWORD *))(*(_QWORD *)(MEMORY[0x25810BA60](*(_QWORD *)v61) + 16) + 48LL); /*0x2510e796c*/\n                    if ( v36 ) /*0x2510e7970*/\n                    {\n                      v37 = v36(v35, \"Pair-TLS-PSK\", 12, 0, 0, 16, v65); /*0x2510e79c4*/\n                      if ( !(_DWORD)v37 ) /*0x2510e79c8*/\n                        goto LABEL_35; /*0x2510e79c8*/\n                    }\n                    else\n                    {\n                      v37 = 4294954514LL; /*0x2510e7b70*/\n                    }\n                    session_insertPlayQueueItemInternal_cold_7(v37); /*0x2510e7b74*/\nLABEL_35:\n                    if ( *(_QWORD *)v61 ) /*0x2510e79d0*/\n                      MEMORY[0x258101B70](); /*0x2510e79d4*/\nLABEL_37:\n                    v38 = v65[0]; /*0x2510e79d8*/\n                    if ( v65[0] ) /*0x2510e79dc*/\n                    {\n                      *(_OWORD *)v61 = *(_OWORD *)v63; /*0x2510e79e4*/\n                      *(_OWORD *)&v61[12] = *(_OWORD *)&v63[12]; /*0x2510e79ec*/\n                      v64 = APLocalPlaybackServerMake(v61, v53, v65[0], v22); /*0x2510e7a04*/\n                      if ( v64 ) /*0x2510e7a08*/\n                        session_insertPlayQueueItemInternal_cold_9(); /*0x2510e7f18*/\n                      MEMORY[0x258101B70](v38); /*0x2510e7a10*/\n                      goto LABEL_41; /*0x2510e7a10*/\n                    }\n                    goto LABEL_100; /*0x2510e79dc*/\n                  }\n                }\n                else\n                {\n                  v34 = 4294954514LL; /*0x2510e7b64*/\n                }\n                session_insertPlayQueueItemInternal_cold_8(v34); /*0x2510e7b68*/\n                goto LABEL_35; /*0x2510e7b6c*/\n              }\nLABEL_100:\n              session_insertPlayQueueItemInternal_cold_10(&v64); /*0x2510e7e7c*/\n              goto LABEL_41; /*0x2510e7e84*/\n            }\n          }\n          else\n          {\n            LODWORD(v65[0]) = -12782; /*0x2510e7b54*/\n          }\n          session_insertPlayQueueItemInternal_cold_6(); /*0x2510e7b58*/\n          v30 = 0; /*0x2510e7b5c*/\n          goto LABEL_27; /*0x2510e7b60*/\n        }\n      }\n      else\n      {\n        v64 = -12782; /*0x2510e7b44*/\n      }\n      session_insertPlayQueueItemInternal_cold_11(); /*0x2510e7b48*/\nLABEL_41:\n      a3 = v54; /*0x2510e7a14*/\n      goto LABEL_42; /*0x2510e7a14*/\n    }\n    session_insertPlayQueueItemInternal_cold_12(&v64); /*0x2510e7f08*/\n  }\nLABEL_42:\n  if ( v62 ) /*0x2510e7a1c*/\n    MEMORY[0x258101B70](); /*0x2510e7a20*/\n  if ( v64 ) /*0x2510e7a28*/\n  {\n    if ( gLogCategory_APEndpointPlaybackSessionRemoteControl <= 30 /*0x2510e7b30*/\n      && (gLogCategory_APEndpointPlaybackSessionRemoteControl != -1\n       || (unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointPlaybackSessionRemoteControl, 33554462)) )\n    {\n      MEMORY[0x258100F00]( /*0x2510e7a68*/\n        &gLogCategory_APEndpointPlaybackSessionRemoteControl,\n        \"OSStatus session_insertPlayQueueItemInternal(FigEndpointPlaybackSessionRef, CFDictionaryRef, CFDictionaryRef, Fi\"\n        \"gEndpointPlaybackSessionStandardCompletion, void *)\",\n        33554462,\n        \"[%{ptr}] Not serving local path %'@\\n\",\n        a1,\n        v17);\n    }\n    v39 = 0; /*0x2510e7b38*/\n    goto LABEL_68; /*0x2510e7b3c*/\n  }\n  v40 = *(_QWORD *)(v10 + 232); /*0x2510e7a80*/\n  v41 = MEMORY[0x2581025B0](v12, *MEMORY[0x2680C4EB8]); /*0x2510e7a94*/\n  v42 = APLocalPlaybackServerRegisterPathWithUUIDCreatingHostAndURL(v40, v41, v17, v20, &v59, &v58); /*0x2510e7ab0*/\n  if ( (_DWORD)v42 ) /*0x2510e7ab4*/\n  {\n    session_insertPlayQueueItemInternal_cold_13(v42, v63); /*0x2510e7f2c*/\nLABEL_105:\n    v51 = *(unsigned int *)v63; /*0x2510e7ebc*/\n    if ( *(_DWORD *)v63 ) /*0x2510e7ec0*/\n      APEndpointPlaybackSessionStatsSetLastError(*(_QWORD *)(v10 + 160), *(unsigned int *)v63); /*0x2510e7ee4*/\n    v49 = 0; /*0x2510e7ee8*/\n    v39 = 0; /*0x2510e7eec*/\n    v44 = 0; /*0x2510e7ef0*/\n    if ( v12 ) /*0x2510e7ef4*/\n      goto LABEL_84; /*0x2510e7ef4*/\n    goto LABEL_85; /*0x2510e7ef4*/\n  }\n  v39 = MEMORY[0x258102670](v11, 0, &stru_275B0ACE0); /*0x2510e7ad4*/\n  if ( gLogCategory_APEndpointPlaybackSessionRemoteControl <= 30\n    && (gLogCategory_APEndpointPlaybackSessionRemoteControl != -1\n     || (unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointPlaybackSessionRemoteControl, 33554462)) )\n  {\n    MEMORY[0x258100F00](\n      &gLogCategory_APEndpointPlaybackSessionRemoteControl,\n      \"OSStatus session_insertPlayQueueItemInternal(FigEndpointPlaybackSessionRef, CFDictionaryRef, CFDictionaryRef, FigE\"\n      \"ndpointPlaybackSessionStandardCompletion, void *)\",\n      33554462,\n      \"[%{ptr}] Serving local path %'@ as URL: '%@'\\n\",\n      a1,\n      v17,\n      v39);\n  }\n  if ( (unsigned int)MEMORY[0x25810D060](v12, &stru_275B0AD00, &v57) ) /*0x2510e7ba8*/\n    v43 = &stru_275B0AD20; /*0x2510e7bb8*/\n  else\n    v43 = &stru_275B0AD00; /*0x2510e7bb8*/\n  MEMORY[0x2581025C0](v12, v43, v39); /*0x2510e7bc4*/\n  MEMORY[0x2581025C0](v12, &stru_275AFC080, *MEMORY[0x2680C31E8]); /*0x2510e7be0*/\nLABEL_68:\n  if ( *(_QWORD *)(v10 + 32) ) /*0x2510e7be4*/\n    MEMORY[0x2581025C0](v12, 0x100000F5AFBF80LL); /*0x2510e7bfc*/\n  v44 = MEMORY[0x258102570](v11, 0, MEMORY[0x2680C3390], MEMORY[0x2680C3398]); /*0x2510e7c1c*/\n  MEMORY[0x2581025C0](v44, &stru_275AFA0E0, &stru_275B0AD40); /*0x2510e7c30*/\n  MEMORY[0x25810DB10](v44, *MEMORY[0x2680C4DC0], a2, *MEMORY[0x2680C4DC0]); /*0x2510e7c4c*/\n  MEMORY[0x2581025C0](v44, &stru_275AFC2C0, v12); /*0x2510e7c60*/\n  if ( a3 ) /*0x2510e7c64*/\n    MEMORY[0x2581025C0](v44, &stru_275B0AD60, a3); /*0x2510e7c78*/\n  *(_BYTE *)(v10 + 153) = 1; /*0x2510e7c80*/\n  v45 = *(_QWORD *)(v10 + 136); /*0x2510e7c84*/\n  if ( v45 ) /*0x2510e7c88*/\n  {\n    MEMORY[0x258101B80](*(_QWORD *)(v10 + 136)); /*0x2510e7c90*/\n    v46 = MEMORY[0x258102570](v11, 0, MEMORY[0x2680C3390], MEMORY[0x2680C3398]); /*0x2510e7cb0*/\n    session_findDiffVideoV2Metadata(0, v45, v46); /*0x2510e7cc0*/\n    MEMORY[0x2581025C0](v44, &stru_275B0ABE0, v46); /*0x2510e7cd4*/\n    if ( v46 ) /*0x2510e7cd8*/\n      MEMORY[0x258101B70](v46); /*0x2510e7ce0*/\n  }\n  if ( gLogCategory_APEndpointPlaybackSessionRemoteControl <= 30\n    && (gLogCategory_APEndpointPlaybackSessionRemoteControl != -1\n     || (unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointPlaybackSessionRemoteControl, 33554462)) )\n  {\n    MEMORY[0x258100F00](\n      &gLogCategory_APEndpointPlaybackSessionRemoteControl,\n      \"OSStatus session_insertPlayQueueItemInternal(FigEndpointPlaybackSessionRef, CFDictionaryRef, CFDictionaryRef, FigE\"\n      \"ndpointPlaybackSessionStandardCompletion, void *)\",\n      33554462,\n      \"[%{ptr}] InsertPlayQueueItem params: %@\\n\",\n      a1,\n      v44);\n  }\n  session_createDataFromDictionary(v44, &v60); /*0x2510e7d48*/\n  v47 = (_QWORD *)MEMORY[0x258107F40](16, 1, 3039578158LL); /*0x2510e7d60*/\n  *v47 = v55; /*0x2510e7d68*/\n  v47[1] = v56; /*0x2510e7d68*/\n  v48 = *(_QWORD *)v10; /*0x2510e7d6c*/\n  v49 = v60; /*0x2510e7d70*/\n  v50 = *(void (__fastcall **)(__int64, __int64, __int64 (__fastcall *)(), _QWORD *))(*(_QWORD *)(MEMORY[0x25810BA60](v48) /*0x2510e7d8c*/\n                                                                                                + 16)\n                                                                                    + 8LL);\n  if ( v50 ) /*0x2510e7d90*/\n    v50(v48, v49, session_standardCompletion, v47); /*0x2510e7de0*/\n  if ( v45 ) /*0x2510e7de4*/\n    MEMORY[0x258101B70](v45); /*0x2510e7dec*/\n  v51 = 0; /*0x2510e7df0*/\n  if ( v12 ) /*0x2510e7df4*/\n  {\nLABEL_84:\n    MEMORY[0x258101B70](v12); /*0x2510e7df8*/\n    v49 = v60; /*0x2510e7e00*/\n  }\nLABEL_85:\n  if ( v49 ) /*0x2510e7e04*/\n    MEMORY[0x258101B70](v49); /*0x2510e7e0c*/\n  if ( v44 ) /*0x2510e7e10*/\n    MEMORY[0x258101B70](v44); /*0x2510e7e18*/\n  if ( v59 ) /*0x2510e7e20*/\n    MEMORY[0x258101B70](); /*0x2510e7e24*/\n  if ( v58 ) /*0x2510e7e2c*/\n    MEMORY[0x258101B70](); /*0x2510e7e30*/\n  if ( v39 ) /*0x2510e7e34*/\n    MEMORY[0x258101B70](v39); /*0x2510e7e3c*/\n  if ( v17 ) /*0x2510e7e40*/\n    MEMORY[0x258101B70](v17); /*0x2510e7e48*/\n  if ( v20 ) /*0x2510e7e4c*/\n    MEMORY[0x258101B70](v20); /*0x2510e7e54*/\n  return v51; /*0x2510e7e78*/\n}",
+    "refs": [
+      {
+        "addr": "0x25117a310",
+        "name": "_session_insertPlayQueueItemInternal.cold.1"
+      },
+      {
+        "addr": "0x25117a604",
+        "name": "_session_insertPlayQueueItemInternal.cold.14"
+      },
+      {
+        "addr": "0x25117a358",
+        "name": "_session_insertPlayQueueItemInternal.cold.2"
+      },
+      {
+        "addr": "0x251178b9c",
+        "name": "_session_ensureRemoteControlSessionCreated"
+      },
+      {
+        "addr": "0x25117a368",
+        "name": "_session_insertPlayQueueItemInternal.cold.3"
+      },
+      {
+        "addr": "0x27048ec80",
+        "name": "_gLogCategory_APEndpointPlaybackSessionRemoteControl"
+      },
+      {
+        "addr": "0x275b0acc0",
+        "name": "stru_275B0ACC0"
+      },
+      {
+        "addr": "0x250f5820c",
+        "name": "_APSenderSessionGetCMBaseObject"
+      },
+      {
+        "addr": "0x25117a424",
+        "name": "_session_insertPlayQueueItemInternal.cold.4"
+      },
+      {
+        "addr": "0x275af6880",
+        "name": "stru_275AF6880"
+      },
+      {
+        "addr": "0x25117a448",
+        "name": "_session_insertPlayQueueItemInternal.cold.5"
+      },
+      {
+        "addr": "0x2511cc0e3",
+        "name": "aPairTlsPsk",
+        "string": "Pair-TLS-PSK"
+      },
+      {
+        "addr": "0x25117a498",
+        "name": "_session_insertPlayQueueItemInternal.cold.7"
+      },
+      {
+        "addr": "0x251031d60",
+        "name": "_APLocalPlaybackServerMake"
+      },
+      {
+        "addr": "0x25117a4e8",
+        "name": "_session_insertPlayQueueItemInternal.cold.9"
+      },
+      {
+        "addr": "0x25117a4c0",
+        "name": "_session_insertPlayQueueItemInternal.cold.8"
+      },
+      {
+        "addr": "0x25117a50c",
+        "name": "_session_insertPlayQueueItemInternal.cold.10"
+      },
+      {
+        "addr": "0x25117a470",
+        "name": "_session_insertPlayQueueItemInternal.cold.6"
+      },
+      {
+        "addr": "0x25117a548",
+        "name": "_session_insertPlayQueueItemInternal.cold.11"
+      },
+      {
+        "addr": "0x25117a56c",
+        "name": "_session_insertPlayQueueItemInternal.cold.12"
+      },
+      {
+        "addr": "0x251208d5c",
+        "name": "aOsstatusSessio_14",
+        "string": "OSStatus session_insertPlayQueueItemInternal(FigEndpointPlaybackSessionRef, CFDictionaryRef, CFDictionaryRef, FigEndpointPlaybackSessionStandardCompletion, void *)"
+      },
+      {
+        "addr": "0x251208ed1",
+        "name": "aPtrNotServingL",
+        "string": "[%{ptr}] Not serving local path %'@\n"
+      },
+      {
+        "addr": "0x2510331a0",
+        "name": "_APLocalPlaybackServerRegisterPathWithUUIDCreatingHostAndURL"
+      },
+      {
+        "addr": "0x25117a5a8",
+        "name": "_session_insertPlayQueueItemInternal.cold.13"
+      },
+      {
+        "addr": "0x25101a3fc",
+        "name": "_APEndpointPlaybackSessionStatsSetLastError"
+      },
+      {
+        "addr": "0x275b0ace0",
+        "name": "stru_275B0ACE0"
+      },
+      {
+        "addr": "0x251208e75",
+        "name": "aPtrServingLoca_0",
+        "string": "[%{ptr}] Serving local path %'@ as URL: '%@'\n"
+      },
+      {
+        "addr": "0x275b0ad20",
+        "name": "stru_275B0AD20"
+      },
+      {
+        "addr": "0x275b0ad00",
+        "name": "stru_275B0AD00"
+      },
+      {
+        "addr": "0x275afc080",
+        "name": "stru_275AFC080"
+      },
+      {
+        "addr": "0x275afa0e0",
+        "name": "stru_275AFA0E0"
+      },
+      {
+        "addr": "0x275b0ad40",
+        "name": "stru_275B0AD40"
+      },
+      {
+        "addr": "0x275afc2c0",
+        "name": "stru_275AFC2C0"
+      },
+      {
+        "addr": "0x275b0ad60",
+        "name": "stru_275B0AD60"
+      },
+      {
+        "addr": "0x2510e8950",
+        "name": "_session_findDiffVideoV2Metadata"
+      },
+      {
+        "addr": "0x275b0abe0",
+        "name": "stru_275B0ABE0"
+      },
+      {
+        "addr": "0x251208f14",
+        "name": "aPtrInsertplayq_0",
+        "string": "[%{ptr}] InsertPlayQueueItem params: %@\n"
+      },
+      {
+        "addr": "0x2510e4ef4",
+        "name": "_session_createDataFromDictionary"
+      },
+      {
+        "addr": "0x251179590",
+        "name": "_session_standardCompletion"
+      }
+    ]
+  },
+  {
+    "addr": "0x251178b9c",
+    "code": "__int64 __fastcall session_ensureRemoteControlSessionCreated(__int64 a1)\n{\n  __int64 *v2; // x0\n  __int64 *v3; // x21\n  __int64 v4; // x0\n  __int64 v5; // x19\n  __int64 v6; // x0\n  __int64 v7; // x0\n  __int64 v8; // x0\n  __int64 v9; // x1\n  __int64 v10; // x0\n  __int64 v11; // x0\n  __int64 v12; // x21\n  __int64 (__fastcall *v13)(__int64, __int64 (__fastcall *)(int, int, int, int, int, int, int, int, __int64, __int64, __int64, __int64, __int64, __int64, __int64, __int64, __int64, __int64, __int64, __int64, __int64, __int64, __int64), __int64); // x9\n  __int64 v14; // x22\n  __int64 v15; // x2\n\n  v2 = (__int64 *)MEMORY[0x25810D5C0](); /*0x251178bb8*/\n  if ( *v2 ) /*0x251178bbc*/\n    return 0; /*0x251178d3c*/\n  v3 = v2; /*0x251178bc4*/\n  OUTLINED_FUNCTION_9(v2); /*0x251178bc8*/\n  v4 = MEMORY[0x258102570](0, 0); /*0x251178bd4*/\n  if ( !v4 ) /*0x251178bd8*/\n  {\n    MEMORY[0x25810C360](0, \"session_ensureRemoteControlSessionCreated\", 1776, 0); /*0x251178d50*/\n    return 4294950555LL; /*0x251178d58*/\n  }\n  v5 = v4; /*0x251178bdc*/\n  MEMORY[0x2581025C0](v4, *MEMORY[0x2680C54D8], *MEMORY[0x2680C54C0]); /*0x251178bf8*/\n  v6 = MEMORY[0x25810DAC0](v5, *MEMORY[0x2680C5508], 1); /*0x251178c10*/\n  v7 = OUTLINED_FUNCTION_8_0(v6); /*0x251178c14*/\n  v8 = APEndpointRemoteControlSessionCreate(v7, v3[5], v3[3], v5, 1, v3); /*0x251178c2c*/\n  if ( (_DWORD)v8 ) /*0x251178c30*/\n  {\n    v14 = v8; /*0x251178d5c*/\n    v15 = 1788; /*0x251178d68*/\n  }\n  else\n  {\n    if ( gLogCategory_APEndpointPlaybackSessionRemoteControl <= 50 ) /*0x251178c40*/\n    {\n      if ( gLogCategory_APEndpointPlaybackSessionRemoteControl != -1 /*0x251178c5c*/\n        || (v10 = ((__int64 (*)(void))OUTLINED_FUNCTION_5_43)(), v8 = MEMORY[0x258100DC0](v10, 33554482), (_DWORD)v8) )\n      {\n        v11 = OUTLINED_FUNCTION_5_43(v8, v9); /*0x251178c68*/\n        OUTLINED_FUNCTION_9_0(v11, \"OSStatus session_ensureRemoteControlSessionCreated(FigEndpointPlaybackSessionRef)\"); /*0x251178c7c*/\n      }\n    }\n    v12 = *v3; /*0x251178c80*/\n    v13 = *(__int64 (__fastcall **)(__int64, __int64 (__fastcall *)(int, int, int, int, int, int, int, int, __int64, __int64, __int64, __int64, __int64, __int64, __int64, __int64, __int64, __int64, __int64, __int64, __int64, __int64, __int64), __int64))(*(_QWORD *)(MEMORY[0x25810BA60](v12) + 16) + 16LL); /*0x251178c9c*/\n    if ( v13 ) /*0x251178ca0*/\n    {\n      v14 = v13(v12, session_handleRemoteControlSessionEvent, a1); /*0x251178cf0*/\n      if ( !(_DWORD)v14 ) /*0x251178cf4*/\n        goto LABEL_14; /*0x251178cf4*/\n    }\n    else\n    {\n      v14 = 4294954514LL; /*0x251178cfc*/\n    }\n    v8 = v14; /*0x251178d08*/\n    v15 = 1793; /*0x251178d0c*/\n  }\n  MEMORY[0x25810C360](v8, \"session_ensureRemoteControlSessionCreated\", v15, 0); /*0x251178d14*/\nLABEL_14:\n  MEMORY[0x258101B70](v5); /*0x251178d18*/\n  return v14; /*0x251178d34*/\n}",
+    "refs": [
+      {
+        "addr": "0x250f36ab4",
+        "name": "_OUTLINED_FUNCTION_9"
+      },
+      {
+        "addr": "0x251208649",
+        "name": "aSessionEnsurer",
+        "string": "session_ensureRemoteControlSessionCreated"
+      },
+      {
+        "addr": "0x250f3769c",
+        "name": "_OUTLINED_FUNCTION_8_0"
+      },
+      {
+        "addr": "0x25101c440",
+        "name": "_APEndpointRemoteControlSessionCreate"
+      },
+      {
+        "addr": "0x250f37954",
+        "name": "_OUTLINED_FUNCTION_5_43"
+      },
+      {
+        "addr": "0x250f36ac8",
+        "name": "_OUTLINED_FUNCTION_9_0"
+      },
+      {
+        "addr": "0x251208673",
+        "name": "aOsstatusSessio_12",
+        "string": "OSStatus session_ensureRemoteControlSessionCreated(FigEndpointPlaybackSessionRef)"
+      },
+      {
+        "addr": "0x27048ec80",
+        "name": "_gLogCategory_APEndpointPlaybackSessionRemoteControl"
+      },
+      {
+        "addr": "0x251178d70",
+        "name": "_session_handleRemoteControlSessionEvent"
+      }
+    ]
+  },
+  {
+    "addr": "0x25114aff0",
+    "code": "__int64 __fastcall __carEndpoint_handlePlaybackSessionActivationChanged_block_invoke_2(_QWORD *a1)\n{\n  __int64 v2; // x20\n  __int64 v3; // x0\n  __int64 v4; // x1\n  __int64 v5; // x2\n  __int64 v6; // x3\n  __int64 v7; // x0\n  __int64 v8; // t1\n  __int64 v9; // x0\n  __int64 v10; // x16\n  void (__fastcall *v11)(__int64); // x9\n  __int64 v12; // x0\n  int v13; // w8\n  char v14; // zf\n  char v15; // nf\n  char v16; // vf\n  __int64 v17; // x0\n  __int64 v18; // x8\n  __int64 v19; // x20\n\n  if ( *(_QWORD *)(a1[4] + 544LL) ) /*0x25114b010*/\n  {\n    v2 = MEMORY[0x25810DC50](a1[5]); /*0x25114b020*/\n    v3 = MEMORY[0x25810BA60](); /*0x25114b024*/\n    v8 = *(_QWORD *)(v3 + 8); /*0x25114b028*/\n    v7 = v3 + 8; /*0x25114b028*/\n    if ( *(_QWORD *)(v8 + 48) ) /*0x25114b038*/\n    {\n      v9 = OUTLINED_FUNCTION_95(v7, v4, v5, v6); /*0x25114b044*/\n      if ( v10 ) /*0x25114b068*/\n      {\n        OUTLINED_FUNCTION_68_0(v9); /*0x25114b074*/\n        v11(v2); /*0x25114b080*/\n      }\n    }\n    if ( (unsigned int)MEMORY[0x258111C80](*(_QWORD *)(a1[4] + 544LL), a1[5]) ) /*0x25114b08c*/\n    {\n      *(_BYTE *)(a1[4] + 220LL) = 0; /*0x25114b0b4*/\n      v12 = OUTLINED_FUNCTION_21_8(); /*0x25114b0b8*/\n      if ( v15 ^ v16 | v14 && (v13 != -1 || (unsigned int)OUTLINED_FUNCTION_20_6(v12)) ) /*0x25114b0c8*/\n      {\n        v17 = OUTLINED_FUNCTION_6_32(); /*0x25114b0e4*/\n        OUTLINED_FUNCTION_9_0( /*0x25114b0f8*/\n          v17,\n          \"void carEndpoint_handlePlaybackSessionActivationChanged(CMNotificationCenterRef, const void *, CFStringRef, co\"\n          \"nst void *, CFTypeRef)_block_invoke_2\");\n      }\n      v18 = a1[4]; /*0x25114b0fc*/\n      v19 = *(_QWORD *)(v18 + 552); /*0x25114b100*/\n      *(_QWORD *)(v18 + 552) = 0; /*0x25114b108*/\n      if ( v19 ) /*0x25114b114*/\n        MEMORY[0x258101B70](v19); /*0x25114b11c*/\n    }\n  }\n  MEMORY[0x258101B70](a1[6]); /*0x25114b124*/\n  MEMORY[0x258101B70](a1[5]); /*0x25114b12c*/\n  return 0; /*0x25114b148*/\n}",
+    "refs": [
+      {
+        "addr": "0x250f37ae4",
+        "name": "_OUTLINED_FUNCTION_95"
+      },
+      {
+        "addr": "0x250f36c94",
+        "name": "_OUTLINED_FUNCTION_68_0"
+      },
+      {
+        "addr": "0x250f3cf14",
+        "name": "_OUTLINED_FUNCTION_21_8"
+      },
+      {
+        "addr": "0x250f486d0",
+        "name": "_OUTLINED_FUNCTION_6_32"
+      },
+      {
+        "addr": "0x250f36ac8",
+        "name": "_OUTLINED_FUNCTION_9_0"
+      },
+      {
+        "addr": "0x2511de2b0",
+        "name": "aVoidCarendpoin_35",
+        "string": "void carEndpoint_handlePlaybackSessionActivationChanged(CMNotificationCenterRef, const void *, CFStringRef, const void *, CFTypeRef)_block_invoke_2"
+      },
+      {
+        "addr": "0x250f53930",
+        "name": "_OUTLINED_FUNCTION_20_6"
+      }
+    ]
+  },
+  {
+    "addr": "0x25101c9c8",
+    "code": "__int64 __fastcall apEndpointRemoteControlSession_ensureAndCopyTransportStreams(__int64 a1, __int64 *a2)\n{\n  __int64 v4; // x20\n  __int64 v5; // x20\n  __int64 v6; // x24\n  __int64 v7; // x21\n  __int64 v8; // x24\n  unsigned __int64 v9; // x27\n  __int64 v10; // x1\n  int v12; // w20\n  __int64 v13; // x26\n  int v14; // w25\n  __int64 v15; // x28\n  __int64 v16; // x0\n  __int64 v17; // x23\n  __int64 v18; // x25\n  __int64 v19; // x26\n  __int64 (__fastcall *v20)(__int64, __int64, __int64, __int64 *); // x9\n  unsigned __int64 v21; // x2\n  __int64 v22; // x27\n  __int64 (__fastcall *v23)(__int64, __int64, __int64 *); // x9\n  __int64 v24; // x0\n  __int64 v25; // x28\n  _QWORD *v26; // x20\n  __int64 v27; // x23\n  __int64 (__fastcall *v28)(__int64, __int64, __int64, __int64 *, _QWORD, _QWORD); // x9\n  __int64 v29; // x0\n  unsigned __int64 v30; // x8\n  const char *v31; // x3\n  unsigned __int64 v32; // x8\n  __int64 v33; // x0\n  __int64 v34; // x0\n  __int64 v35; // x27\n  unsigned __int64 v36; // x2\n  __int64 v37; // x25\n  __int64 (__fastcall *v38)(__int64, __int64, __int64 *); // x9\n  __int64 CMBaseObject; // x25\n  __int64 (__fastcall *v40)(__int64, __int64, __int64, __int64 *); // x9\n  __int64 v41; // x26\n  __int64 v42; // x25\n  __int64 v43; // x27\n  __int64 (__fastcall *v44)(__int64, __int64, __int64); // x9\n  __int64 v45; // x25\n  __int64 v46; // x0\n  __int64 v47; // x25\n  __int64 v48; // x0\n  __int64 v49; // x0\n  __int64 v50; // x25\n  __int64 v51; // x24\n  __int64 (__fastcall *v52)(__int64, __int64 (__fastcall *)(), __int64 (__fastcall *)(), __int64); // x9\n  __int64 v53; // x0\n  __int64 v54; // x24\n  __int64 v55; // x0\n  __int64 v56; // x21\n  __int64 v57; // x24\n  __int64 (__fastcall *v58)(__int64, __int64, __int64); // x9\n  __int64 v59; // x24\n  __int64 v60; // x21\n  void (__fastcall *v61)(__int64); // x9\n  __int64 v62; // x21\n  void (__fastcall *v63)(__int64); // x9\n  __int64 v64; // x21\n  void (__fastcall *v65)(__int64); // x9\n  char v66; // w8\n  __int64 v67; // x0\n  __int64 v68; // x1\n  __int64 v69; // x20\n  void (__fastcall *v70)(__int64); // x9\n  __int64 v71; // x0\n  __int64 v72; // x1\n  __int64 v73; // x20\n  void (__fastcall *v74)(__int64); // x9\n  unsigned __int64 v76; // [xsp+28h] [xbp-A8h]\n  int v77; // [xsp+34h] [xbp-9Ch]\n  __int64 v78; // [xsp+38h] [xbp-98h]\n  __int64 v79; // [xsp+48h] [xbp-88h]\n  __int64 v80; // [xsp+50h] [xbp-80h] BYREF\n  __int64 v81; // [xsp+58h] [xbp-78h] BYREF\n  __int64 v82; // [xsp+60h] [xbp-70h] BYREF\n  __int64 v83; // [xsp+68h] [xbp-68h] BYREF\n  __int64 v84; // [xsp+70h] [xbp-60h] BYREF\n  unsigned int v85; // [xsp+7Ch] [xbp-54h] BYREF\n\n  v4 = MEMORY[0x25810D5C0](); /*0x25101c9f8*/\n  MEMORY[0x25810DDB0](*(_QWORD *)(v4 + 128)); /*0x25101ca00*/\n  if ( *(_BYTE *)(v4 + 136) ) /*0x25101ca04*/\n  {\n    MEMORY[0x25810DDC0](*(_QWORD *)(v4 + 128)); /*0x25101ca10*/\n    return 4294949864LL; /*0x25101ca18*/\n  }\n  if ( *(_QWORD *)(v4 + 160) ) /*0x25101ca1c*/\n    v6 = MEMORY[0x258101B80](); /*0x25101ca28*/\n  else\n    v6 = 0; /*0x25101ca30*/\n  if ( *(_QWORD *)(v4 + 168) ) /*0x25101ca34*/\n    v7 = MEMORY[0x258101B80](); /*0x25101ca40*/\n  else\n    v7 = 0; /*0x25101ca48*/\n  MEMORY[0x25810DDC0](*(_QWORD *)(v4 + 128)); /*0x25101ca50*/\n  if ( v6 ) /*0x25101ca54*/\n    goto LABEL_166; /*0x25101ca54*/\n  v85 = 0; /*0x25101ca58*/\n  v8 = MEMORY[0x25810D5C0](a1); /*0x25101ca64*/\n  v84 = 0; /*0x25101ca68*/\n  v9 = atomic_load((unsigned __int64 *)(v8 + 184)); /*0x25101ca70*/\n  v82 = 0; /*0x25101ca74*/\n  v83 = 0; /*0x25101ca74*/\n  v80 = 0; /*0x25101ca78*/\n  v81 = 0; /*0x25101ca78*/\n  if ( (unsigned int)apEndpointRemoteControlSession_isInvalidated(a1) ) /*0x25101ca80*/\n  {\n    v6 = 0; /*0x25101d98c*/\n    v41 = 0; /*0x25101d990*/\n    v25 = 0; /*0x25101d994*/\n    v35 = 0; /*0x25101d998*/\n    v17 = 0; /*0x25101d99c*/\n    v85 = -17432; /*0x25101d9a4*/\n    goto LABEL_143; /*0x25101d9a8*/\n  }\n  if ( atomic_load((unsigned __int64 *)(v8 + 184)) ) /*0x25101ca90*/\n  {\n    v12 = 0; /*0x25101ca98*/\n    v13 = 0; /*0x25101ca9c*/\n    v79 = 0; /*0x25101caa0*/\nLABEL_13:\n    v14 = 1; /*0x25101caa4*/\n    goto LABEL_14; /*0x25101caa4*/\n  }\n  if ( gLogCategory_APEndpointRemoteControlSession <= 50 /*0x25101cd48*/\n    && (gLogCategory_APEndpointRemoteControlSession != -1\n     || (unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointRemoteControlSession, 33554482)) )\n  {\n    apEndpointRemoteControlSession_ensureAndCopyTransportStreams_cold_1(a1); /*0x25101d978*/\n  }\n  v24 = MEMORY[0x258102570](0, 0, MEMORY[0x2680C3390], MEMORY[0x2680C3398]); /*0x25101cd68*/\n  v25 = v24; /*0x25101cd6c*/\n  if ( !v24 ) /*0x25101cd70*/\n  {\n    apEndpointRemoteControlSession_ensureAndCopyTransportStreams_cold_17(&v85); /*0x25101da10*/\n    goto LABEL_106; /*0x25101da14*/\n  }\n  MEMORY[0x2581025C0](v24, &stru_275AFC6C0, *(_QWORD *)(v8 + 40)); /*0x25101cd84*/\n  MEMORY[0x2581025C0](v25, &stru_275AFC6A0, *(_QWORD *)(v8 + 48)); /*0x25101cd98*/\n  MEMORY[0x2581025C0](v25, &stru_275AFC800, *(_QWORD *)v8); /*0x25101cdac*/\n  MEMORY[0x25810D0D0](v25, &stru_275AFC820, *(_QWORD *)(v8 + 56)); /*0x25101cdc0*/\n  v26 = (_QWORD *)MEMORY[0x2680C31E8]; /*0x25101cdcc*/\n  if ( *(_BYTE *)(v8 + 8) ) /*0x25101cdc4*/\n  {\n    MEMORY[0x2581025C0](v25, &stru_275AFC720, *MEMORY[0x2680C31E8]); /*0x25101cde4*/\n    v85 = MEMORY[0x258100ED0](&v80, 8); /*0x25101cdf4*/\n    if ( v85 ) /*0x25101cdf8*/\n    {\n      apEndpointRemoteControlSession_ensureAndCopyTransportStreams_cold_2(); /*0x25101da30*/\n      goto LABEL_106; /*0x25101da34*/\n    }\n    MEMORY[0x25810D0D0](v25, 0x100000F5B01920LL, v80); /*0x25101ce10*/\n  }\n  if ( *(_BYTE *)(v8 + 10) ) /*0x25101ce14*/\n    MEMORY[0x2581025C0](v25, &stru_275AFC840, *v26); /*0x25101ce2c*/\n  if ( (unsigned int)MEMORY[0x258101B40](*(_QWORD *)(v8 + 40), *MEMORY[0x2680C54C0]) ) /*0x25101ce40*/\n  {\n    if ( MEMORY[0x25810C730](&stru_275AFC860, 0) ) /*0x25101ce54*/\n    {\n      MEMORY[0x2581025C0](v25, &stru_275AFC880, *v26); /*0x25101ce6c*/\n      if ( gLogCategory_APEndpointRemoteControlSession <= 50 /*0x25101ce94*/\n        && (gLogCategory_APEndpointRemoteControlSession != -1\n         || (unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointRemoteControlSession, 33554482)) )\n      {\n        apEndpointRemoteControlSession_ensureAndCopyTransportStreams_cold_3(a1); /*0x25101d984*/\n      }\n    }\n  }\n  v27 = *(_QWORD *)(v8 + 16); /*0x25101ce9c*/\n  v28 = *(__int64 (__fastcall **)(__int64, __int64, __int64, __int64 *, _QWORD, _QWORD))(*(_QWORD *)(MEMORY[0x25810BA60](v27) + 16) /*0x25101ceb8*/\n                                                                                       + 40LL);\n  if ( !v28 )\n  {\n    v85 = -12782; /*0x25101cfb8*/\nLABEL_49:\n    if ( gLogCategory_APEndpointRemoteControlSession > 90 /*0x25101d540*/\n      || gLogCategory_APEndpointRemoteControlSession == -1\n      && !(unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointRemoteControlSession, 33554522) )\n    {\n      goto LABEL_106; /*0x25101d544*/\n    }\n    v31 = \"[%{ptr}] Setup stream failed with error: %#m\";\nLABEL_52:\n    MEMORY[0x258100F00]( /*0x25101cff0*/\n      &gLogCategory_APEndpointRemoteControlSession,\n      \"OSStatus apEndpointRemoteControlSession_createTransportStreams(FigEndpointRemoteControlSessionRef, APTransportStre\"\n      \"amRef *, APTransportStreamRef *)\",\n      33554522,\n      v31);\nLABEL_106:\n    v6 = 0; /*0x25101d548*/\n    v41 = 0; /*0x25101d54c*/\n    v35 = 0; /*0x25101d550*/\n    v17 = 0; /*0x25101d554*/\n    goto LABEL_143; /*0x25101d558*/\n  }\n  v85 = v28(v27, 130, v25, &v84, 0, 0); /*0x25101cf0c*/\n  if ( v85 ) /*0x25101cf10*/\n    goto LABEL_49; /*0x25101cf10*/\n  *(_QWORD *)(v8 + 184) = MEMORY[0x25810D030](v84, 0x100000F5AFC700LL, &v85); /*0x25101cf2c*/\n  if ( v85 )\n  {\n    if ( gLogCategory_APEndpointRemoteControlSession > 90 /*0x25101dab8*/\n      || gLogCategory_APEndpointRemoteControlSession == -1\n      && !(unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointRemoteControlSession, 33554522) )\n    {\n      goto LABEL_106; /*0x25101dabc*/\n    }\n    v31 = \"[%{ptr}] Failed to obtain transport token from SETUP response: %#m\";\n    goto LABEL_52; /*0x25101da74*/\n  }\n  v29 = MEMORY[0x25810D030](v84, 0x100000F5B015C0LL, 0); /*0x25101cf4c*/\n  v13 = (int)v29; /*0x25101cf50*/\n  v79 = v25; /*0x25101cf5c*/\n  if ( !*(_BYTE *)(v8 + 8) || !(v29 << 32) )\n  {\n    if ( gLogCategory_APEndpointRemoteControlSession <= 50\n      && (gLogCategory_APEndpointRemoteControlSession != -1\n       || (unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointRemoteControlSession, 33554482)) )\n    {\n      v32 = atomic_load((unsigned __int64 *)(v8 + 184)); /*0x25101d00c*/\n      MEMORY[0x258100F00](\n        &gLogCategory_APEndpointRemoteControlSession,\n        \"OSStatus apEndpointRemoteControlSession_createTransportStreams(FigEndpointRemoteControlSessionRef, APTransportSt\"\n        \"reamRef *, APTransportStreamRef *)\",\n        33554482,\n        \"[%{ptr}] Use shared connection with transport token: %lld\\n\",\n        a1,\n        v32);\n    }\n    v12 = 0; /*0x25101d948*/\n    goto LABEL_13; /*0x25101d94c*/\n  }\n  if ( gLogCategory_APEndpointRemoteControlSession <= 50\n    && (gLogCategory_APEndpointRemoteControlSession != -1\n     || (unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointRemoteControlSession, 33554482)) )\n  {\n    v30 = atomic_load((unsigned __int64 *)(v8 + 184)); /*0x25101cf80*/\n    MEMORY[0x258100F00](\n      &gLogCategory_APEndpointRemoteControlSession,\n      \"OSStatus apEndpointRemoteControlSession_createTransportStreams(FigEndpointRemoteControlSessionRef, APTransportStre\"\n      \"amRef *, APTransportStreamRef *)\",\n      33554482,\n      \"[%{ptr}] Use dedicated socket with remote port: %d, transport token: %lld\\n\",\n      a1,\n      v13,\n      v30);\n  }\n  v14 = 0; /*0x25101d968*/\n  v12 = 1; /*0x25101d96c*/\nLABEL_14:\n  v15 = *MEMORY[0x2680C31A0]; /*0x25101caa8*/\n  v16 = MEMORY[0x258102570](*MEMORY[0x2680C31A0], 0, MEMORY[0x2680C3390], MEMORY[0x2680C3398]); /*0x25101cacc*/\n  v17 = v16; /*0x25101cad0*/\n  if ( !v16 ) /*0x25101cad4*/\n  {\n    apEndpointRemoteControlSession_ensureAndCopyTransportStreams_cold_16(&v85); /*0x25101da04*/\n    goto LABEL_109; /*0x25101da08*/\n  }\n  v77 = v14; /*0x25101cad8*/\n  MEMORY[0x25810DB00](v16, 0x100000F5B01AC0LL, *(_QWORD *)(v8 + 64)); /*0x25101caf0*/\n  MEMORY[0x25810DAD0](v17, 0x100000F5B01B20LL, *(_QWORD *)(v8 + 72)); /*0x25101cb08*/\n  MEMORY[0x25810DAC0](v17, 0x100000F5B01AE0LL, *(unsigned int *)(v8 + 80)); /*0x25101cb20*/\n  MEMORY[0x25810DB00](v17, 0x100000F5B00F80LL, *(_QWORD *)(v8 + 120)); /*0x25101cb38*/\n  v78 = v13; /*0x25101cb40*/\n  if ( v12 ) /*0x25101cb44*/\n  {\n    MEMORY[0x25810DAC0](v17, *MEMORY[0x2680EC6C0], 1919771500); /*0x25101cb60*/\n    v18 = *(_QWORD *)(v8 + 16); /*0x25101cb64*/\n    v19 = MEMORY[0x258110E80]((unsigned __int16)v13); /*0x25101cb70*/\n    v20 = *(__int64 (__fastcall **)(__int64, __int64, __int64, __int64 *))(*(_QWORD *)(MEMORY[0x25810BA60](v18) + 16) /*0x25101cb8c*/\n                                                                         + 64LL);\n    if ( v20 ) /*0x25101cb90*/\n    {\n      v85 = v20(v18, v19, v17, &v83); /*0x25101cbd8*/\n      if ( !v85 ) /*0x25101cbdc*/\n      {\n        if ( gLogCategory_APEndpointRemoteControlSession <= 50 /*0x25101d04c*/\n          && (gLogCategory_APEndpointRemoteControlSession != -1\n           || (unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointRemoteControlSession, 33554482)) )\n        {\n          MEMORY[0x258100F00]( /*0x25101cc20*/\n            &gLogCategory_APEndpointRemoteControlSession,\n            \"OSStatus apEndpointRemoteControlSession_createTransportStreams(FigEndpointRemoteControlSessionRef, APTranspo\"\n            \"rtStreamRef *, APTransportStreamRef *)\",\n            33554482,\n            \"[%{ptr}] Created transport control stream [%{ptr}]\\n\",\n            a1,\n            v83);\n        }\n        v33 = MEMORY[0x258101B80](v83); /*0x25101d058*/\n        v82 = v33; /*0x25101d05c*/\n        if ( gLogCategory_APEndpointRemoteControlSession > 50 ) /*0x25101d068*/\n          goto LABEL_68; /*0x25101d068*/\n        if ( gLogCategory_APEndpointRemoteControlSession == -1 ) /*0x25101d070*/\n        {\n          if ( !(unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointRemoteControlSession, 33554482) ) /*0x25101d1c4*/\n            goto LABEL_68; /*0x25101d1c8*/\n          v33 = v82; /*0x25101da9c*/\n        }\n        MEMORY[0x258100F00]( /*0x25101d098*/\n          &gLogCategory_APEndpointRemoteControlSession,\n          \"OSStatus apEndpointRemoteControlSession_createTransportStreams(FigEndpointRemoteControlSessionRef, APTransport\"\n          \"StreamRef *, APTransportStreamRef *)\",\n          33554482,\n          \"[%{ptr}] Retained transport event stream [%{ptr}]\\n\",\n          a1,\n          v33);\nLABEL_68:\n        CMBaseObject = APSenderSessionGetCMBaseObject(*(_QWORD *)(v8 + 16)); /*0x25101d1cc*/\n        v40 = *(__int64 (__fastcall **)(__int64, __int64, __int64, __int64 *))(*(_QWORD *)(MEMORY[0x25810BA60]() + 8) /*0x25101d1ec*/\n                                                                             + 48LL);\n        if ( v40 ) /*0x25101d1f0*/\n        {\n          v85 = v40(CMBaseObject, 0x100000F5B00FE0LL, v15, &v81); /*0x25101d240*/\n          if ( !v85 ) /*0x25101d244*/\n          {\n            v76 = v9; /*0x25101d248*/\n            v41 = APKeyHolderCoreUtilsEncryptionContextDataStreamCreateWithSeed(v15, v80); /*0x25101d258*/\n            if ( v41 ) /*0x25101d25c*/\n            {\n              v42 = v83; /*0x25101d260*/\n              v43 = v81; /*0x25101d264*/\n              v44 = *(__int64 (__fastcall **)(__int64, __int64, __int64))(*(_QWORD *)(MEMORY[0x25810BA60](v83) + 16) /*0x25101d280*/\n                                                                        + 80LL);\n              if ( v44 ) /*0x25101d284*/\n              {\n                v85 = v44(v42, v43, v41); /*0x25101d2c8*/\n                if ( !v85 ) /*0x25101d2cc*/\n                {\n                  v35 = 0; /*0x25101d2d0*/\n                  goto LABEL_76; /*0x25101d2d4*/\n                }\n              }\n              else\n              {\n                v85 = -12782; /*0x25101d590*/\n              }\n              apEndpointRemoteControlSession_ensureAndCopyTransportStreams_cold_12(); /*0x25101d594*/\n            }\n            else\n            {\n              apEndpointRemoteControlSession_ensureAndCopyTransportStreams_cold_13(&v85); /*0x25101da28*/\n            }\n            v6 = 0; /*0x25101d598*/\nLABEL_116:\n            v35 = 0; /*0x25101d59c*/\n            goto LABEL_117; /*0x25101d59c*/\n          }\n        }\n        else\n        {\n          v85 = -12782; /*0x25101d560*/\n        }\n        apEndpointRemoteControlSession_ensureAndCopyTransportStreams_cold_14(); /*0x25101d564*/\nLABEL_109:\n        v6 = 0; /*0x25101d568*/\n        v41 = 0; /*0x25101d56c*/\n        goto LABEL_116; /*0x25101d570*/\n      }\n    }\n    else\n    {\n      v85 = -12782; /*0x25101d518*/\n    }\n    apEndpointRemoteControlSession_ensureAndCopyTransportStreams_cold_15(); /*0x25101d51c*/\n    goto LABEL_109; /*0x25101d520*/\n  }\n  v76 = v9; /*0x25101cc28*/\n  MEMORY[0x25810D0D0](v17, 0x100000F5AF9E60LL, 1668575852); /*0x25101cc48*/\n  v21 = atomic_load((unsigned __int64 *)(v8 + 184)); /*0x25101cc5c*/\n  MEMORY[0x25810D0D0](v17, 0x100000F5B01B00LL, v21); /*0x25101cc68*/\n  v22 = *(_QWORD *)(v8 + 16); /*0x25101cc6c*/\n  v23 = *(__int64 (__fastcall **)(__int64, __int64, __int64 *))(*(_QWORD *)(MEMORY[0x25810BA60](v22) + 16) + 56LL); /*0x25101cc88*/\n  if ( !v23 ) /*0x25101cc8c*/\n  {\n    v85 = -12782; /*0x25101d528*/\n    goto LABEL_104; /*0x25101d528*/\n  }\n  v85 = v23(v22, v17, &v83); /*0x25101ccd0*/\n  if ( v85 ) /*0x25101ccd4*/\n  {\nLABEL_104:\n    apEndpointRemoteControlSession_ensureAndCopyTransportStreams_cold_6(); /*0x25101d52c*/\n    goto LABEL_109; /*0x25101d530*/\n  }\n  if ( gLogCategory_APEndpointRemoteControlSession <= 50 /*0x25101d0b0*/\n    && (gLogCategory_APEndpointRemoteControlSession != -1\n     || (unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointRemoteControlSession, 33554482)) )\n  {\n    MEMORY[0x258100F00]( /*0x25101cd18*/\n      &gLogCategory_APEndpointRemoteControlSession,\n      \"OSStatus apEndpointRemoteControlSession_createTransportStreams(FigEndpointRemoteControlSessionRef, APTransportStre\"\n      \"amRef *, APTransportStreamRef *)\",\n      33554482,\n      \"[%{ptr}] Created transport control stream [%{ptr}]\\n\",\n      a1,\n      v83);\n  }\n  v34 = MEMORY[0x258102570](v15, 0, MEMORY[0x2680C3390], MEMORY[0x2680C3398]); /*0x25101d0d0*/\n  v35 = v34; /*0x25101d0d4*/\n  if ( !v34 ) /*0x25101d0d8*/\n  {\n    apEndpointRemoteControlSession_ensureAndCopyTransportStreams_cold_5(&v85); /*0x25101da1c*/\n    goto LABEL_112; /*0x25101da20*/\n  }\n  MEMORY[0x25810D0D0](v34, 0x100000F5AF9E60LL, 1702260340); /*0x25101d0ec*/\n  v36 = atomic_load((unsigned __int64 *)(v8 + 184)); /*0x25101d0f4*/\n  MEMORY[0x25810D0D0](v35, 0x100000F5B01B00LL, v36); /*0x25101d100*/\n  v37 = *(_QWORD *)(v8 + 16); /*0x25101d104*/\n  v38 = *(__int64 (__fastcall **)(__int64, __int64, __int64 *))(*(_QWORD *)(MEMORY[0x25810BA60](v37) + 16) + 56LL); /*0x25101d120*/\n  if ( !v38 ) /*0x25101d124*/\n  {\n    v85 = -12782; /*0x25101d578*/\n    goto LABEL_111; /*0x25101d578*/\n  }\n  v85 = v38(v37, v35, &v82); /*0x25101d168*/\n  if ( v85 ) /*0x25101d16c*/\n  {\nLABEL_111:\n    apEndpointRemoteControlSession_ensureAndCopyTransportStreams_cold_4(); /*0x25101d57c*/\nLABEL_112:\n    v6 = 0; /*0x25101d580*/\n    v41 = 0; /*0x25101d584*/\n    goto LABEL_117; /*0x25101d588*/\n  }\n  if ( gLogCategory_APEndpointRemoteControlSession <= 50 /*0x25101d2e8*/\n    && (gLogCategory_APEndpointRemoteControlSession != -1\n     || (unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointRemoteControlSession, 33554482)) )\n  {\n    MEMORY[0x258100F00]( /*0x25101d1ac*/\n      &gLogCategory_APEndpointRemoteControlSession,\n      \"OSStatus apEndpointRemoteControlSession_createTransportStreams(FigEndpointRemoteControlSessionRef, APTransportStre\"\n      \"amRef *, APTransportStreamRef *)\",\n      33554482,\n      \"[%{ptr}] Created transport event stream [%{ptr}]\\n\",\n      a1,\n      v82);\n  }\n  v41 = 0; /*0x25101d2f0*/\nLABEL_76:\n  MEMORY[0x25810DDB0](*(_QWORD *)(v8 + 128)); /*0x25101d2f4*/\n  if ( *(_BYTE *)(v8 + 136) ) /*0x25101d2fc*/\n  {\n    MEMORY[0x25810DDC0](*(_QWORD *)(v8 + 128)); /*0x25101d308*/\n    v6 = 0; /*0x25101d30c*/\n    v85 = -17432; /*0x25101d314*/\nLABEL_117:\n    v25 = v79; /*0x25101d5a0*/\n    goto LABEL_143; /*0x25101d5a4*/\n  }\n  v45 = *(_QWORD *)(v8 + 160); /*0x25101d31c*/\n  v46 = v83; /*0x25101d320*/\n  *(_QWORD *)(v8 + 160) = v83; /*0x25101d324*/\n  if ( v46 ) /*0x25101d328*/\n    MEMORY[0x258101B80](); /*0x25101d32c*/\n  if ( v45 ) /*0x25101d330*/\n    MEMORY[0x258101B70](v45); /*0x25101d338*/\n  v47 = *(_QWORD *)(v8 + 168); /*0x25101d33c*/\n  v48 = v82; /*0x25101d340*/\n  *(_QWORD *)(v8 + 168) = v82; /*0x25101d344*/\n  if ( v48 ) /*0x25101d348*/\n    MEMORY[0x258101B80](); /*0x25101d34c*/\n  if ( v47 ) /*0x25101d350*/\n    MEMORY[0x258101B70](v47); /*0x25101d358*/\n  MEMORY[0x25810DDC0](*(_QWORD *)(v8 + 128)); /*0x25101d360*/\n  v49 = MEMORY[0x25810DBD0](a1); /*0x25101d368*/\n  *(_QWORD *)(v8 + 192) = v49; /*0x25101d36c*/\n  if ( !v49 ) /*0x25101d370*/\n  {\nLABEL_120:\n    v6 = 0; /*0x25101d5b4*/\n    goto LABEL_117; /*0x25101d5b8*/\n  }\n  v50 = v49; /*0x25101d374*/\n  v51 = v82; /*0x25101d378*/\n  v52 = *(__int64 (__fastcall **)(__int64, __int64 (__fastcall *)(), __int64 (__fastcall *)(), __int64))(*(_QWORD *)(MEMORY[0x25810BA60](v82) + 16) + 24LL); /*0x25101d394*/\n  if ( !v52 ) /*0x25101d398*/\n  {\n    v85 = -12782; /*0x25101d5ac*/\n    goto LABEL_119; /*0x25101d5ac*/\n  }\n  v85 = v52( /*0x25101d3f8*/\n          v51,\n          apEndpointRemoteControlSession_handleMessage,\n          apEndpointRemoteControlSession_handleMessageCreatingReply,\n          v50);\n  if ( v85 ) /*0x25101d3fc*/\n  {\nLABEL_119:\n    apEndpointRemoteControlSession_ensureAndCopyTransportStreams_cold_11(); /*0x25101d5b0*/\n    goto LABEL_120; /*0x25101d5b0*/\n  }\n  v53 = MEMORY[0x25810D5C0](a1); /*0x25101d404*/\n  if ( !*(_BYTE *)(v53 + 11) ) /*0x25101d410*/\n  {\n    v25 = v79; /*0x25101d4cc*/\n    if ( (unsigned int)MEMORY[0x25810E1A0]() /*0x25101d500*/\n      && gLogCategory_APEndpointRemoteControlSession <= 60\n      && (gLogCategory_APEndpointRemoteControlSession != -1\n       || (unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointRemoteControlSession, 33554492)) )\n    {\n      apEndpointRemoteControlSession_ensureAndCopyTransportStreams_cold_10(a1); /*0x25101d50c*/\n    }\n    goto LABEL_131; /*0x25101d510*/\n  }\n  if ( v77 ) /*0x25101d418*/\n  {\n    apEndpointRemoteControlSession_ensureAndCopyTransportStreams_cold_9(a1); /*0x25101da7c*/\nLABEL_192:\n    v25 = v79; /*0x25101da94*/\n    goto LABEL_131; /*0x25101da98*/\n  }\n  if ( !v41 ) /*0x25101d41c*/\n  {\n    apEndpointRemoteControlSession_ensureAndCopyTransportStreams_cold_8(a1); /*0x25101da88*/\n    goto LABEL_192; /*0x25101da8c*/\n  }\n  v54 = v53; /*0x25101d420*/\n  v55 = MEMORY[0x258102570](v15, 0, MEMORY[0x2680C3390], MEMORY[0x2680C3398]); /*0x25101d43c*/\n  if ( !v55 ) /*0x25101d440*/\n  {\n    apEndpointRemoteControlSession_ensureAndCopyTransportStreams_cold_7(); /*0x25101da90*/\n    goto LABEL_192; /*0x25101da90*/\n  }\n  v56 = v55; /*0x25101d444*/\n  MEMORY[0x25810D0D0](v55, 0x100000F5B01A60LL, v78); /*0x25101d458*/\n  MEMORY[0x2581025C0](v56, 0x100000F5B01AA0LL, *MEMORY[0x2680C31D8]); /*0x25101d478*/\n  v25 = v79; /*0x25101d484*/\n  if ( gLogCategory_APEndpointRemoteControlSession <= 50 /*0x25101d5cc*/\n    && (gLogCategory_APEndpointRemoteControlSession != -1\n     || (unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointRemoteControlSession, 33554482)) )\n  {\n    MEMORY[0x258100F00]( /*0x25101d4c0*/\n      &gLogCategory_APEndpointRemoteControlSession,\n      \"void apEndpointRemoteControlSession_sendDiagnosticDataForTransportStreamIfNeeded(FigEndpointRemoteControlSessionRe\"\n      \"f, APTransportStreamRef, int64_t, CFStringRef, Boolean)\",\n      33554482,\n      \"[%{ptr}] APSenderSessionBroadcastKeysForDiagnosticsData() with RemotePort = %d, LocalSendsWithReadKey = %d\",\n      a1,\n      v78,\n      0);\n  }\n  v57 = *(_QWORD *)(v54 + 16); /*0x25101d5d4*/\n  v58 = *(__int64 (__fastcall **)(__int64, __int64, __int64))(*(_QWORD *)(MEMORY[0x25810BA60](v57) + 16) + 128LL); /*0x25101d5f0*/\n  if ( !v58 ) /*0x25101d5f4*/\n  {\n    v59 = 4294954514LL; /*0x25101d644*/\n    goto LABEL_126; /*0x25101d644*/\n  }\n  v59 = v58(v57, v41, v56); /*0x25101d638*/\n  if ( (_DWORD)v59 )\n  {\nLABEL_126:\n    if ( gLogCategory_APEndpointRemoteControlSession <= 90\n      && (gLogCategory_APEndpointRemoteControlSession != -1\n       || (unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointRemoteControlSession, 33554522)) )\n    {\n      MEMORY[0x258100F00](\n        &gLogCategory_APEndpointRemoteControlSession,\n        \"void apEndpointRemoteControlSession_sendDiagnosticDataForTransportStreamIfNeeded(FigEndpointRemoteControlSession\"\n        \"Ref, APTransportStreamRef, int64_t, CFStringRef, Boolean)\",\n        33554522,\n        \"[%{ptr}] APSenderSessionBroadcastKeysForDiagnosticsData() failed: %m (encryptionContext = %@, remoteDataPort = %d)\",\n        a1,\n        v59,\n        v41,\n        v78);\n    }\n  }\n  MEMORY[0x258101B70](v56); /*0x25101d6b0*/\nLABEL_131:\n  v60 = v83; /*0x25101d6b8*/\n  v61 = *(void (__fastcall **)(__int64))(*(_QWORD *)(MEMORY[0x25810BA60](v83) + 16) + 8LL); /*0x25101d6d4*/\n  if ( v61 ) /*0x25101d6d8*/\n    v61(v60); /*0x25101d710*/\n  v62 = v82; /*0x25101d714*/\n  v63 = *(void (__fastcall **)(__int64))(*(_QWORD *)(MEMORY[0x25810BA60](v82) + 16) + 8LL); /*0x25101d730*/\n  if ( v63 ) /*0x25101d734*/\n    v63(v62); /*0x25101d76c*/\n  v64 = v83; /*0x25101d770*/\n  v65 = *(void (__fastcall **)(__int64))(*(_QWORD *)(MEMORY[0x25810BA60](v83) + 16) + 16LL); /*0x25101d78c*/\n  if ( v65 ) /*0x25101d790*/\n    v65(v64); /*0x25101d7c8*/\n  if ( v76 ) /*0x25101d7d4*/\n    v66 = 1; /*0x25101d7d4*/\n  else\n    v66 = v12; /*0x25101d7d4*/\n  if ( (v66 & 1) == 0 ) /*0x25101d7d8*/\n    APTransportStreamWaitUntilConnected_0(v82); /*0x25101d7e0*/\n  v7 = v82; /*0x25101d7e4*/\n  v6 = v83; /*0x25101d7e4*/\n  v82 = 0; /*0x25101d7e8*/\n  v83 = 0; /*0x25101d7e8*/\nLABEL_143:\n  if ( v84 ) /*0x25101d7f0*/\n    MEMORY[0x258101B70](v84, v10); /*0x25101d7f4*/\n  if ( v17 ) /*0x25101d7f8*/\n    MEMORY[0x258101B70](v17); /*0x25101d800*/\n  if ( v35 ) /*0x25101d804*/\n    MEMORY[0x258101B70](v35); /*0x25101d80c*/\n  if ( v25 ) /*0x25101d810*/\n    MEMORY[0x258101B70](v25); /*0x25101d818*/\n  if ( v81 ) /*0x25101d820*/\n    MEMORY[0x258101B70](v81, v10); /*0x25101d824*/\n  if ( v41 ) /*0x25101d828*/\n    MEMORY[0x258101B70](v41); /*0x25101d830*/\n  if ( v83 ) /*0x25101d838*/\n  {\n    v67 = MEMORY[0x258110E60](v83, v10); /*0x25101d83c*/\n    if ( v67 ) /*0x25101d840*/\n    {\n      v69 = v67; /*0x25101d844*/\n      v70 = *(void (__fastcall **)(__int64))(*(_QWORD *)(MEMORY[0x25810BA60](v67, v68) + 8) + 24LL); /*0x25101d85c*/\n      if ( v70 ) /*0x25101d860*/\n        v70(v69); /*0x25101d898*/\n    }\n    MEMORY[0x258101B70](v83); /*0x25101d8a0*/\n    v83 = 0; /*0x25101d8a4*/\n  }\n  if ( v82 ) /*0x25101d8ac*/\n  {\n    v71 = MEMORY[0x258110E60](v82, v10); /*0x25101d8b0*/\n    if ( v71 ) /*0x25101d8b4*/\n    {\n      v73 = v71; /*0x25101d8b8*/\n      v74 = *(void (__fastcall **)(__int64))(*(_QWORD *)(MEMORY[0x25810BA60](v71, v72) + 8) + 24LL); /*0x25101d8d0*/\n      if ( v74 ) /*0x25101d8d4*/\n        v74(v73); /*0x25101d90c*/\n    }\n    MEMORY[0x258101B70](v82); /*0x25101d914*/\n  }\n  v5 = v85; /*0x25101d918*/\n  if ( v85 ) /*0x25101d91c*/\n  {\n    MEMORY[0x25810C360](v85, \"apEndpointRemoteControlSession_ensureAndCopyTransportStreams\", 663, 0); /*0x25101d9c0*/\nLABEL_176:\n    if ( v6 ) /*0x25101d9c4*/\n      MEMORY[0x258101B70](v6); /*0x25101d9cc*/\n    goto LABEL_178; /*0x25101d9cc*/\n  }\nLABEL_166:\n  v5 = 0; /*0x25101d920*/\n  if ( !a2 ) /*0x25101d924*/\n    goto LABEL_176; /*0x25101d924*/\n  *a2 = v6; /*0x25101d928*/\nLABEL_178:\n  if ( v7 ) /*0x25101d9d0*/\n    MEMORY[0x258101B70](v7); /*0x25101d9d8*/\n  return v5; /*0x25101d9fc*/\n}",
+    "refs": [
+      {
+        "addr": "0x25101eb78",
+        "name": "_apEndpointRemoteControlSession_isInvalidated"
+      },
+      {
+        "addr": "0x25110d474",
+        "name": "_apEndpointRemoteControlSession_ensureAndCopyTransportStreams.cold.1"
+      },
+      {
+        "addr": "0x27048eba0",
+        "name": "_gLogCategory_APEndpointRemoteControlSession"
+      },
+      {
+        "addr": "0x25110d7ac",
+        "name": "_apEndpointRemoteControlSession_ensureAndCopyTransportStreams.cold.17"
+      },
+      {
+        "addr": "0x275afc6c0",
+        "name": "stru_275AFC6C0"
+      },
+      {
+        "addr": "0x275afc6a0",
+        "name": "stru_275AFC6A0"
+      },
+      {
+        "addr": "0x275afc800",
+        "name": "stru_275AFC800"
+      },
+      {
+        "addr": "0x275afc820",
+        "name": "stru_275AFC820"
+      },
+      {
+        "addr": "0x275afc720",
+        "name": "stru_275AFC720"
+      },
+      {
+        "addr": "0x25110d4a8",
+        "name": "_apEndpointRemoteControlSession_ensureAndCopyTransportStreams.cold.2"
+      },
+      {
+        "addr": "0x275afc840",
+        "name": "stru_275AFC840"
+      },
+      {
+        "addr": "0x275afc880",
+        "name": "stru_275AFC880"
+      },
+      {
+        "addr": "0x25110d4cc",
+        "name": "_apEndpointRemoteControlSession_ensureAndCopyTransportStreams.cold.3"
+      },
+      {
+        "addr": "0x275afc860",
+        "name": "stru_275AFC860"
+      },
+      {
+        "addr": "0x2511a5534",
+        "name": "aPtrSetupStream",
+        "string": "[%{ptr}] Setup stream failed with error: %#m"
+      },
+      {
+        "addr": "0x2511a53c8",
+        "name": "aOsstatusApendp_12",
+        "string": "OSStatus apEndpointRemoteControlSession_createTransportStreams(FigEndpointRemoteControlSessionRef, APTransportStreamRef *, APTransportStreamRef *)"
+      },
+      {
+        "addr": "0x2511a5561",
+        "name": "aPtrFailedToObt",
+        "string": "[%{ptr}] Failed to obtain transport token from SETUP response: %#m"
+      },
+      {
+        "addr": "0x2511a55ef",
+        "name": "aPtrUseSharedCo",
+        "string": "[%{ptr}] Use shared connection with transport token: %lld\n"
+      },
+      {
+        "addr": "0x2511a55a4",
+        "name": "aPtrUseDedicate",
+        "string": "[%{ptr}] Use dedicated socket with remote port: %d, transport token: %lld\n"
+      },
+      {
+        "addr": "0x25110d77c",
+        "name": "_apEndpointRemoteControlSession_ensureAndCopyTransportStreams.cold.16"
+      },
+      {
+        "addr": "0x25118dec5",
+        "name": "aPtrCreatedTran",
+        "string": "[%{ptr}] Created transport control stream [%{ptr}]\n"
+      },
+      {
+        "addr": "0x2511a562a",
+        "name": "aPtrRetainedTra",
+        "string": "[%{ptr}] Retained transport event stream [%{ptr}]\n"
+      },
+      {
+        "addr": "0x250f5820c",
+        "name": "_APSenderSessionGetCMBaseObject"
+      },
+      {
+        "addr": "0x250fd46c0",
+        "name": "_APKeyHolderCoreUtilsEncryptionContextDataStreamCreateWithSeed"
+      },
+      {
+        "addr": "0x25110d6dc",
+        "name": "_apEndpointRemoteControlSession_ensureAndCopyTransportStreams.cold.12"
+      },
+      {
+        "addr": "0x25110d700",
+        "name": "_apEndpointRemoteControlSession_ensureAndCopyTransportStreams.cold.13"
+      },
+      {
+        "addr": "0x25110d734",
+        "name": "_apEndpointRemoteControlSession_ensureAndCopyTransportStreams.cold.14"
+      },
+      {
+        "addr": "0x25110d758",
+        "name": "_apEndpointRemoteControlSession_ensureAndCopyTransportStreams.cold.15"
+      },
+      {
+        "addr": "0x25110d554",
+        "name": "_apEndpointRemoteControlSession_ensureAndCopyTransportStreams.cold.6"
+      },
+      {
+        "addr": "0x25110d524",
+        "name": "_apEndpointRemoteControlSession_ensureAndCopyTransportStreams.cold.5"
+      },
+      {
+        "addr": "0x25110d500",
+        "name": "_apEndpointRemoteControlSession_ensureAndCopyTransportStreams.cold.4"
+      },
+      {
+        "addr": "0x2511a565d",
+        "name": "aPtrCreatedTran_2",
+        "string": "[%{ptr}] Created transport event stream [%{ptr}]\n"
+      },
+      {
+        "addr": "0x25101ec44",
+        "name": "_apEndpointRemoteControlSession_handleMessage"
+      },
+      {
+        "addr": "0x25101ec58",
+        "name": "_apEndpointRemoteControlSession_handleMessageCreatingReply"
+      },
+      {
+        "addr": "0x25110d6b8",
+        "name": "_apEndpointRemoteControlSession_ensureAndCopyTransportStreams.cold.11"
+      },
+      {
+        "addr": "0x25110d684",
+        "name": "_apEndpointRemoteControlSession_ensureAndCopyTransportStreams.cold.10"
+      },
+      {
+        "addr": "0x25110d618",
+        "name": "_apEndpointRemoteControlSession_ensureAndCopyTransportStreams.cold.9"
+      },
+      {
+        "addr": "0x25110d5a4",
+        "name": "_apEndpointRemoteControlSession_ensureAndCopyTransportStreams.cold.8"
+      },
+      {
+        "addr": "0x25110d578",
+        "name": "_apEndpointRemoteControlSession_ensureAndCopyTransportStreams.cold.7"
+      },
+      {
+        "addr": "0x2511a590b",
+        "name": "aVoidApendpoint_8",
+        "string": "void apEndpointRemoteControlSession_sendDiagnosticDataForTransportStreamIfNeeded(FigEndpointRemoteControlSessionRef, APTransportStreamRef, int64_t, CFStringRef, Boolean)"
+      },
+      {
+        "addr": "0x2511a5a9e",
+        "name": "aPtrApsenderses_2",
+        "string": "[%{ptr}] APSenderSessionBroadcastKeysForDiagnosticsData() with RemotePort = %d, LocalSendsWithReadKey = %d"
+      },
+      {
+        "addr": "0x2511a5b09",
+        "name": "aPtrApsenderses_3",
+        "string": "[%{ptr}] APSenderSessionBroadcastKeysForDiagnosticsData() failed: %m (encryptionContext = %@, remoteDataPort = %d)"
+      },
+      {
+        "addr": "0x25101ec6c",
+        "name": "_APTransportStreamWaitUntilConnected_0"
+      },
+      {
+        "addr": "0x2511a538b",
+        "name": "aApendpointremo_13",
+        "string": "apEndpointRemoteControlSession_ensureAndCopyTransportStreams"
+      }
+    ]
+  },
+  {
+    "addr": "0x250f5109c",
+    "code": "__int64 __fastcall carEndpoint_handleEventCreatingReply(__int64 a1, __int64 a2, __int64 a3, void *a4, _QWORD *a5)\n{\n  void *v6; // x21\n  __int64 v9; // x0\n  __int64 v10; // x22\n  __int64 v11; // x0\n  __int64 v12; // x0\n  __int64 v13; // x22\n  __int64 v14; // x24\n  __int64 v15; // x22\n  __int64 v16; // x0\n  __int64 v17; // x0\n  const void *v18; // x23\n  __int64 v19; // x0\n  __int64 v20; // x22\n  __int64 v21; // x0\n  __int64 v22; // x8\n  __int64 v23; // x0\n  __int64 v24; // x0\n  __int64 v25; // x0\n  __int64 v26; // x25\n  __int64 v27; // x0\n  __int64 v28; // x24\n  int v29; // w22\n  __int64 v30; // x0\n  const void *v31; // x25\n  __int64 v32; // x0\n  __int64 v33; // x0\n  __int64 v34; // x0\n  __int64 v35; // x8\n  __int64 restarted; // x0\n  __int64 v37; // x27\n  __int64 v38; // x26\n  __int64 v39; // x0\n  __int64 v40; // x21\n  __int64 v41; // x28\n  __int64 v42; // x0\n  __int64 v43; // x24\n  __n128 v44; // q0\n  __n128 v45; // q8\n  __int64 v46; // x0\n  __int64 v47; // x25\n  int v48; // w8\n  int v49; // w10\n  int v50; // w9\n  __int64 v51; // x28\n  __int64 v52; // x0\n  __int64 v54; // x0\n  __int64 v55; // x8\n  __int64 v56; // x0\n  __int64 v57; // x0\n  __int64 v58; // x0\n  __int64 v59; // x22\n  __int64 v60; // x0\n  __int64 updated; // x0\n  __int64 v62; // x0\n  __int64 v63; // x0\n  __int64 v64; // [xsp+28h] [xbp-228h] BYREF\n  __int64 v65; // [xsp+30h] [xbp-220h] BYREF\n  __int64 v66; // [xsp+38h] [xbp-218h] BYREF\n  __int64 *v67; // [xsp+40h] [xbp-210h]\n  __int64 v68; // [xsp+48h] [xbp-208h]\n  int v69; // [xsp+50h] [xbp-200h]\n  __int64 v70; // [xsp+58h] [xbp-1F8h] BYREF\n  _OWORD v71[2]; // [xsp+60h] [xbp-1F0h] BYREF\n  __int128 v72; // [xsp+80h] [xbp-1D0h] BYREF\n  __int128 v73; // [xsp+90h] [xbp-1C0h]\n  __int128 v74; // [xsp+A0h] [xbp-1B0h]\n  __int128 v75; // [xsp+B0h] [xbp-1A0h]\n  __int64 v76; // [xsp+C0h] [xbp-190h]\n  __int128 v77; // [xsp+D0h] [xbp-180h] BYREF\n  __int128 v78; // [xsp+E0h] [xbp-170h]\n  __int128 v79; // [xsp+F0h] [xbp-160h]\n  __int128 v80; // [xsp+100h] [xbp-150h]\n  __int128 v81; // [xsp+110h] [xbp-140h]\n  __int128 v82; // [xsp+120h] [xbp-130h]\n  __int128 v83; // [xsp+130h] [xbp-120h]\n  __int128 v84; // [xsp+140h] [xbp-110h]\n  __int128 v85; // [xsp+150h] [xbp-100h]\n  __int128 v86; // [xsp+160h] [xbp-F0h]\n  __int128 v87; // [xsp+170h] [xbp-E0h]\n  __int128 v88; // [xsp+180h] [xbp-D0h]\n  __int128 v89; // [xsp+190h] [xbp-C0h]\n  __int128 v90; // [xsp+1A0h] [xbp-B0h]\n  __int128 v91; // [xsp+1B0h] [xbp-A0h]\n  __int128 v92; // [xsp+1C0h] [xbp-90h]\n  __int64 v93; // [xsp+1D8h] [xbp-78h]\n\n  v6 = a4; /*0x250f510c8*/\n  v93 = *MEMORY[0x2681A4A70]; /*0x250f510e0*/\n  v9 = MEMORY[0x25810D5C0](a4); /*0x250f510e8*/\n  v64 = 0; /*0x250f510ec*/\n  v65 = 0; /*0x250f510ec*/\n  if ( !(unsigned int)carEndpoint_isDissociated(v9) )\n  {\n    if ( (_DWORD)a2 != 1668116068 ) /*0x250f5110c*/\n    {\n      if ( gLogCategory_APEndpointCarPlay <= 60 /*0x250f5125c*/\n        && (gLogCategory_APEndpointCarPlay != -1\n         || (unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointCarPlay, 33554492)) )\n      {\n        MEMORY[0x258100F00]( /*0x250f51248*/\n          &gLogCategory_APEndpointCarPlay,\n          \"OSStatus carEndpoint_handleEventCreatingReply(APTransportStreamRef, OSType, CMBlockBufferRef, void *, CMBlockBufferRef *)\",\n          33554492,\n          \"[%{ptr}] ### Unsupported messageType %'C\\n\",\n          v6,\n          a2);\n      }\n      a2 = 0; /*0x250f51264*/\n      v18 = nullptr; /*0x250f51268*/\n      goto LABEL_68; /*0x250f5126c*/\n    }\n    v11 = MEMORY[0x258111D30](0, a3, 0, 0, &v65); /*0x250f51124*/\n    if ( (_DWORD)v11 ) /*0x250f51128*/\n    {\n      v10 = v11; /*0x250f51a94*/\n      carEndpoint_handleEventCreatingReply_cold_1(); /*0x250f51a98*/\n      v18 = nullptr; /*0x250f51a9c*/\n      a2 = 0; /*0x250f51aa0*/\n      goto LABEL_107; /*0x250f51aa4*/\n    }\n    v12 = MEMORY[0x25810D2F0](0, v65, 0, 0, 0); /*0x250f51140*/\n    a2 = v12; /*0x250f51144*/\n    if ( !v12 || (v13 = MEMORY[0x2581019F0](v12), v13 != MEMORY[0x2581025A0]()) ) /*0x250f51160*/\n    {\n      carEndpoint_handleEventCreatingReply_cold_19(); /*0x250f51a50*/\n      v18 = nullptr; /*0x250f51a54*/\n      v6 = nullptr; /*0x250f51a58*/\n      v10 = 4294950576LL; /*0x250f51a5c*/\n      goto LABEL_70; /*0x250f51a60*/\n    }\n    v14 = MEMORY[0x25810D5C0](v6); /*0x250f5116c*/\n    v66 = 0; /*0x250f51174*/\n    v67 = &v66; /*0x250f51174*/\n    v68 = 0x2000000000LL; /*0x250f51180*/\n    v69 = 0; /*0x250f51184*/\n    v15 = MEMORY[0x2581025B0](a2, &stru_275AFA0E0); /*0x250f51198*/\n    v16 = MEMORY[0x2581025A0](); /*0x250f5119c*/\n    v17 = MEMORY[0x25810D050](a2, &stru_275AFA0C0, v16, 0); /*0x250f511b4*/\n    if ( !v15 ) /*0x250f511b8*/\n    {\n      carEndpoint_handleEventCreatingReply_cold_15(v17); /*0x250f51aa8*/\n      v18 = nullptr; /*0x250f51aac*/\n      v10 = 4294950576LL; /*0x250f51ab0*/\n      goto LABEL_52; /*0x250f51ab4*/\n    }\n    v18 = (const void *)v17; /*0x250f511bc*/\n    if ( gLogCategory_APEndpointCarPlay <= 30 /*0x250f5127c*/\n      && (gLogCategory_APEndpointCarPlay != -1\n       || (unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointCarPlay, 33554462)) )\n    {\n      MEMORY[0x258100F00]( /*0x250f51200*/\n        &gLogCategory_APEndpointCarPlay,\n        \"OSStatus carEndpoint_processEventCreatingResponse(FigEndpointRef, CFDictionaryRef, CFDictionaryRef *)\",\n        33554462,\n        \"[%{ptr}] Processing '%@' command\\n\",\n        v6,\n        v15);\n    }\n    if ( (unsigned int)MEMORY[0x258101B40](v15, &stru_275B04C60) )\n    {\n      v19 = MEMORY[0x25810D5C0](v6); /*0x250f5129c*/\n      v20 = v19; /*0x250f512a0*/\n      *(_QWORD *)&v72 = 0; /*0x250f512a8*/\n      *((_QWORD *)&v72 + 1) = &v72; /*0x250f512a8*/\n      v73 = 0x2000000000uLL; /*0x250f512ac*/\n      if ( gLogCategory_APEndpointCarPlay <= 50 )\n      {\n        if ( gLogCategory_APEndpointCarPlay != -1\n          || (v19 = MEMORY[0x258100DC0](&gLogCategory_APEndpointCarPlay, 33554482), (_DWORD)v19) )\n        {\n          v19 = MEMORY[0x258100F00](\n                  &gLogCategory_APEndpointCarPlay,\n                  \"OSStatus carEndpoint_forceKeyFrame(FigEndpointRef, CFDictionaryRef)\",\n                  33554482,\n                  \"[%{ptr}] Force Key Frame, params: %@\",\n                  v6,\n                  v18);\n        }\n      }\n      v33 = MEMORY[0x258101BA0](v19); /*0x250f5152c*/\n      v34 = MEMORY[0x25810D050](v18, &stru_275AFC2A0, v33, 0); /*0x250f51544*/\n      v35 = *(_QWORD *)(v20 + 224); /*0x250f51548*/\n      *(_QWORD *)&v77 = MEMORY[0x2681A4A58]; /*0x250f51564*/\n      *((_QWORD *)&v77 + 1) = 0x40000000; /*0x250f51570*/\n      *(_QWORD *)&v78 = __carEndpoint_forceKeyFrame_block_invoke; /*0x250f5158c*/\n      *((_QWORD *)&v78 + 1) = &unk_269393E08; /*0x250f5158c*/\n      *(_QWORD *)&v79 = &v72; /*0x250f51590*/\n      *((_QWORD *)&v79 + 1) = v34; /*0x250f51590*/\n      *(_QWORD *)&v80 = v6; /*0x250f51594*/\n      *((_QWORD *)&v80 + 1) = v20; /*0x250f51594*/\n      MEMORY[0x258101C50](v35, &v77); /*0x250f515a0*/\n      if ( *(_QWORD *)(*((_QWORD *)&v72 + 1) + 24LL) ) /*0x250f515a8*/\n      {\n        restarted = APEndpointStreamScreenRestartBitstream(); /*0x250f515b0*/\n        v10 = restarted; /*0x250f515b4*/\n        if ( (_DWORD)restarted ) /*0x250f515b8*/\n          carEndpoint_handleEventCreatingReply_cold_2(restarted); /*0x250f51b64*/\n        goto LABEL_47; /*0x250f51b64*/\n      }\n      goto LABEL_111; /*0x250f515ac*/\n    }\n    if ( (unsigned int)MEMORY[0x258101B40](v15, &stru_275B04C80) ) /*0x250f51300*/\n    {\n      v21 = MEMORY[0x25810D5C0](v6); /*0x250f5130c*/\n      *(_QWORD *)&v72 = 0; /*0x250f51314*/\n      *((_QWORD *)&v72 + 1) = &v72; /*0x250f51314*/\n      v73 = 0x2000000000uLL; /*0x250f51318*/\n      v22 = *(_QWORD *)(v21 + 224); /*0x250f51320*/\n      *(_QWORD *)&v77 = MEMORY[0x2681A4A58]; /*0x250f5133c*/\n      *((_QWORD *)&v77 + 1) = 0x40000000; /*0x250f51348*/\n      *(_QWORD *)&v78 = __carEndpoint_sendHIDReport_block_invoke; /*0x250f51364*/\n      *((_QWORD *)&v78 + 1) = &unk_269393E30; /*0x250f51364*/\n      *(_QWORD *)&v79 = &v72; /*0x250f51368*/\n      *((_QWORD *)&v79 + 1) = v21; /*0x250f51368*/\n      MEMORY[0x258101C50](v22, &v77); /*0x250f51374*/\n      v23 = *(_QWORD *)(*((_QWORD *)&v72 + 1) + 24LL); /*0x250f5137c*/\n      if ( v23 ) /*0x250f51380*/\n      {\n        v24 = APHIDClientHandleHIDReport(v23, a2); /*0x250f51388*/\n        v10 = v24; /*0x250f5138c*/\n        if ( (_DWORD)v24 ) /*0x250f51390*/\n          carEndpoint_handleEventCreatingReply_cold_3(v24); /*0x250f51398*/\n        goto LABEL_47; /*0x250f5139c*/\n      }\nLABEL_111:\n      v10 = 0; /*0x250f51af4*/\n      goto LABEL_47; /*0x250f51af8*/\n    }\n    if ( !(unsigned int)MEMORY[0x258101B40](v15, &stru_275B04CA0) ) /*0x250f513b0*/\n    {\n      if ( !(unsigned int)MEMORY[0x258101B40](v15, &stru_275B04CC0) ) /*0x250f518ac*/\n      {\n        if ( (unsigned int)MEMORY[0x258101B40](v15, &stru_275B04CE0) ) /*0x250f519b4*/\n        {\n          updated = carEndpoint_requestSiri(v6, v18); /*0x250f51a48*/\n        }\n        else if ( (unsigned int)MEMORY[0x258101B40](v15, &stru_275B04D00) ) /*0x250f519c8*/\n        {\n          updated = carEndpoint_requestUI(v6, v18); /*0x250f519d8*/\n        }\n        else if ( (unsigned int)MEMORY[0x258101B40](v15, &stru_275B04D20) ) /*0x250f519ec*/\n        {\n          updated = carEndpoint_updateViewArea(v6, v18); /*0x250f519fc*/\n        }\n        else if ( (unsigned int)MEMORY[0x258101B40](v15, &stru_275B04D40) ) /*0x250f51a10*/\n        {\n          updated = carEndpoint_setLimitedUI(v6, v18); /*0x250f51a20*/\n        }\n        else if ( (unsigned int)MEMORY[0x258101B40](v15, &stru_275B04D60) ) /*0x250f51a70*/\n        {\n          updated = carEndpoint_setNightMode(v6, v18); /*0x250f51a80*/\n        }\n        else if ( (unsigned int)MEMORY[0x258101B40](v15, &stru_275B04D80) ) /*0x250f51b0c*/\n        {\n          updated = carEndpoint_updateVideoPlaybackAllowed(v6, v18); /*0x250f51cb8*/\n        }\n        else if ( (unsigned int)MEMORY[0x258101B40](v15, &stru_275B04DA0) ) /*0x250f51b20*/\n        {\n          updated = carEndpoint_handleVideoPlayerBackButtonEvent(v6, v18); /*0x250f51cc8*/\n        }\n        else\n        {\n          if ( !(unsigned int)MEMORY[0x258101B40](v15, &stru_275B04DC0) ) /*0x250f51b3c*/\n          {\n            v62 = carEndpoint_validateRuntimeFeaturesWithAccessory(v6, v15, 0); /*0x250f51b78*/\n            if ( !(_DWORD)v62 ) /*0x250f51b7c*/\n            {\n              if ( gLogCategory_APEndpointCarPlay <= 50 /*0x250f51c24*/\n                && (gLogCategory_APEndpointCarPlay != -1\n                 || (unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointCarPlay, 33554482)) )\n              {\n                MEMORY[0x258100F00]( /*0x250f51bbc*/\n                  &gLogCategory_APEndpointCarPlay,\n                  \"OSStatus carEndpoint_processEventCreatingResponse(FigEndpointRef, CFDictionaryRef, CFDictionaryRef *)\",\n                  33554482,\n                  \"[%{ptr}] Unhandled command '%@' dict '%@', forwarding to clients\\n\",\n                  v6,\n                  v15,\n                  a2);\n              }\n              v63 = *(_QWORD *)(v14 + 224); /*0x250f51c2c*/\n              *(_QWORD *)&v77 = MEMORY[0x2681A4A58]; /*0x250f51c48*/\n              *((_QWORD *)&v77 + 1) = 0x40000000; /*0x250f51c54*/\n              *(_QWORD *)&v78 = __carEndpoint_processEventCreatingResponse_block_invoke; /*0x250f51c70*/\n              *((_QWORD *)&v78 + 1) = &unk_269393DE0; /*0x250f51c70*/\n              *(_QWORD *)&v79 = &v66; /*0x250f51c78*/\n              *((_QWORD *)&v79 + 1) = v14; /*0x250f51c78*/\n              MEMORY[0x258101C50](v63, &v77); /*0x250f51c80*/\n              carEndpoint_postNotification(v6, *MEMORY[0x2680C4C18], *((unsigned int *)v67 + 6)); /*0x250f51ca0*/\n              v18 = nullptr; /*0x250f51ca4*/\n              v10 = 0; /*0x250f51ca8*/\n              goto LABEL_52; /*0x250f51cac*/\n            }\n            goto LABEL_135; /*0x250f51b7c*/\n          }\n          updated = carEndpoint_updateVehicleInformation(v6, v18); /*0x250f51b48*/\n        }\n        v10 = updated; /*0x250f51b4c*/\n        goto LABEL_50; /*0x250f51b50*/\n      }\n      v54 = MEMORY[0x25810D5C0](v6); /*0x250f518b4*/\n      *(_QWORD *)&v72 = 0; /*0x250f518bc*/\n      *((_QWORD *)&v72 + 1) = &v72; /*0x250f518bc*/\n      v73 = 0x2000000000uLL; /*0x250f518c0*/\n      if ( v18 ) /*0x250f518c8*/\n      {\n        v55 = *(_QWORD *)(v54 + 224); /*0x250f518cc*/\n        *(_QWORD *)&v77 = MEMORY[0x2681A4A58]; /*0x250f518e8*/\n        *((_QWORD *)&v77 + 1) = 0x40000000; /*0x250f518f4*/\n        *(_QWORD *)&v78 = __carEndpoint_sendiAPMessage_block_invoke; /*0x250f51910*/\n        *((_QWORD *)&v78 + 1) = &unk_269393E58; /*0x250f51910*/\n        *(_QWORD *)&v79 = &v72; /*0x250f51914*/\n        *((_QWORD *)&v79 + 1) = v54; /*0x250f51914*/\n        v56 = MEMORY[0x258101C50](v55, &v77); /*0x250f51920*/\n        if ( *(_QWORD *)(*((_QWORD *)&v72 + 1) + 24LL) ) /*0x250f51928*/\n        {\n          v57 = MEMORY[0x2581081B0](v56); /*0x250f51930*/\n          v58 = MEMORY[0x25810D050](v18, &stru_275AFA0A0, v57, 0); /*0x250f51948*/\n          if ( v58 ) /*0x250f5194c*/\n          {\n            v59 = v58; /*0x250f51950*/\n            if ( gLogCategory_APEndpointCarPlay <= 30 /*0x250f5197c*/\n              && (gLogCategory_APEndpointCarPlay != -1\n               || (unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointCarPlay, 33554462)) )\n            {\n              carEndpoint_handleEventCreatingReply_cold_10(v6); /*0x250f51a8c*/\n            }\n            v60 = APAccTransportClientEndpointForwardData(*(_QWORD *)(*((_QWORD *)&v72 + 1) + 24LL), v59); /*0x250f51990*/\n            v10 = v60; /*0x250f51994*/\n            if ( (_DWORD)v60 ) /*0x250f51998*/\n              carEndpoint_handleEventCreatingReply_cold_11(v60); /*0x250f519a0*/\n          }\n          else\n          {\n            carEndpoint_handleEventCreatingReply_cold_12(); /*0x250f51ce4*/\n            v10 = 4294954516LL; /*0x250f51ce8*/\n          }\n        }\n        else\n        {\n          v10 = 4294954514LL; /*0x250f51cdc*/\n        }\n      }\n      else\n      {\n        carEndpoint_handleEventCreatingReply_cold_13(v54); /*0x250f51cd0*/\n        v10 = 4294950576LL; /*0x250f51cd4*/\n      }\nLABEL_47:\n      if ( *(_QWORD *)(*((_QWORD *)&v72 + 1) + 24LL) ) /*0x250f515c0*/\n        MEMORY[0x258101B70](); /*0x250f515c8*/\n      MEMORY[0x258101C00](&v72, 8); /*0x250f515d4*/\nLABEL_50:\n      v18 = nullptr; /*0x250f515d8*/\nLABEL_51:\n      if ( !(_DWORD)v10 ) /*0x250f515dc*/\n        goto LABEL_52; /*0x250f515dc*/\n      MEMORY[0x25810C360](v10, \"carEndpoint_processEventCreatingResponse\", 4614, 0); /*0x250f51adc*/\n      if ( !v18 ) /*0x250f51ae0*/\n        goto LABEL_52; /*0x250f51ae0*/\n      MEMORY[0x258101B70](v18); /*0x250f51ae8*/\n      goto LABEL_110; /*0x250f51ae8*/\n    }\n    v25 = MEMORY[0x25810D5C0](v6); /*0x250f513bc*/\n    v76 = 0; /*0x250f513c0*/\n    v75 = 0u; /*0x250f513c8*/\n    v73 = 0u; /*0x250f513cc*/\n    v74 = 0u; /*0x250f513cc*/\n    v72 = 0u; /*0x250f513d0*/\n    v91 = 0u; /*0x250f513d4*/\n    v92 = 0u; /*0x250f513d4*/\n    v89 = 0u; /*0x250f513d8*/\n    v90 = 0u; /*0x250f513d8*/\n    v87 = 0u; /*0x250f513dc*/\n    v88 = 0u; /*0x250f513dc*/\n    v85 = 0u; /*0x250f513e0*/\n    v86 = 0u; /*0x250f513e0*/\n    v83 = 0u; /*0x250f513e4*/\n    v84 = 0u; /*0x250f513e4*/\n    v81 = 0u; /*0x250f513e8*/\n    v82 = 0u; /*0x250f513e8*/\n    v79 = 0u; /*0x250f513ec*/\n    v80 = 0u; /*0x250f513ec*/\n    v77 = 0u; /*0x250f513f0*/\n    v78 = 0u; /*0x250f513f0*/\n    memset(v71, 0, sizeof(v71)); /*0x250f513f4*/\n    v70 = 0; /*0x250f513f8*/\n    if ( v18 ) /*0x250f513fc*/\n    {\n      v26 = v25; /*0x250f51400*/\n      if ( *(_QWORD *)(v25 + 640) ) /*0x250f51404*/\n      {\n        v27 = APStarkModeChangeRequestMakeFromDictionary(v18, 1, &v72); /*0x250f51418*/\n        if ( (_DWORD)v27 ) /*0x250f5141c*/\n        {\n          v10 = v27; /*0x250f51bf0*/\n          carEndpoint_handleEventCreatingReply_cold_4(); /*0x250f51bf4*/\n          v18 = nullptr; /*0x250f51bf8*/\n          v28 = 0; /*0x250f51bfc*/\n        }\n        else\n        {\n          v28 = MEMORY[0x25810CFC0](v18, 0x400000F5B06680LL, 0); /*0x250f51434*/\n          if ( gLogCategory_APEndpointCarPlay <= 50 /*0x250f5145c*/\n            && (gLogCategory_APEndpointCarPlay != -1\n             || (unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointCarPlay, 33554482)) )\n          {\n            carEndpoint_handleEventCreatingReply_cold_5(v28, &v72, &v77, v6); /*0x250f51a38*/\n          }\n          v29 = MEMORY[0x2581121E0](*(_QWORD *)(v26 + 640), &v72, v28, v71, 0); /*0x250f5147c*/\n          v30 = MEMORY[0x258102570](0, 0, MEMORY[0x2680C3390], MEMORY[0x2680C3398]); /*0x250f51498*/\n          v31 = (const void *)v30; /*0x250f5149c*/\n          if ( !v30 ) /*0x250f514a0*/\n          {\n            carEndpoint_handleEventCreatingReply_cold_7(); /*0x250f51c04*/\n            v18 = nullptr; /*0x250f51c08*/\n            v10 = 4294950575LL; /*0x250f51c0c*/\n            goto LABEL_39; /*0x250f51c10*/\n          }\n          MEMORY[0x25810D0D0](v30, &stru_275AFCEE0, v29); /*0x250f514b4*/\n          if ( !v29 ) /*0x250f514b8*/\n          {\n            v32 = APStarkModeCreateDictionaryRepresentation(v71, &v70); /*0x250f514c4*/\n            if ( (_DWORD)v32 ) /*0x250f514c8*/\n            {\n              v10 = v32; /*0x250f51cf0*/\n              carEndpoint_handleEventCreatingReply_cold_6(); /*0x250f51cf4*/\n              v18 = nullptr; /*0x250f51cf8*/\n              goto LABEL_39; /*0x250f51cfc*/\n            }\n            if ( v70 ) /*0x250f514d0*/\n              MEMORY[0x2581025C0](v31, &stru_275AFA0C0); /*0x250f514e0*/\n          }\n          v10 = 0; /*0x250f514e4*/\n          v18 = v31; /*0x250f514e8*/\n        }\n        v31 = nullptr; /*0x250f514ec*/\n      }\n      else\n      {\n        carEndpoint_handleEventCreatingReply_cold_8(); /*0x250f51bd8*/\n        v18 = nullptr; /*0x250f51bdc*/\n        v28 = 0; /*0x250f51be0*/\n        v31 = nullptr; /*0x250f51be4*/\n        v10 = 4294949690LL; /*0x250f51be8*/\n      }\n    }\n    else\n    {\n      carEndpoint_handleEventCreatingReply_cold_9(v25); /*0x250f51bc4*/\n      v28 = 0; /*0x250f51bc8*/\n      v31 = nullptr; /*0x250f51bcc*/\n      v10 = 4294950576LL; /*0x250f51bd0*/\n    }\nLABEL_39:\n    MEMORY[0x258100500](v28); /*0x250f514f0*/\n    if ( v70 ) /*0x250f514fc*/\n      MEMORY[0x258101B70](); /*0x250f51500*/\n    if ( v31 ) /*0x250f51504*/\n      MEMORY[0x258101B70](v31); /*0x250f5150c*/\n    goto LABEL_51; /*0x250f51510*/\n  }\n  v10 = 4294950573LL; /*0x250f510f8*/\n  while ( *MEMORY[0x2681A4A70] != v93 ) /*0x250f51870*/\n  {\n    v62 = MEMORY[0x2581004B0](); /*0x250f51d00*/\nLABEL_135:\n    v10 = v62; /*0x250f51d04*/\n    carEndpoint_handleEventCreatingReply_cold_14(); /*0x250f51d08*/\nLABEL_110:\n    v18 = nullptr; /*0x250f51aec*/\nLABEL_52:\n    MEMORY[0x258101C00](&v66, 8); /*0x250f515e0*/\n    v37 = MEMORY[0x2581025B0](a2, &stru_275AFA0E0); /*0x250f515fc*/\n    v38 = MEMORY[0x258101B30](v65); /*0x250f51608*/\n    v39 = MEMORY[0x25810D5C0](v6); /*0x250f51610*/\n    LODWORD(v72) = 0; /*0x250f51614*/\n    LODWORD(v71[0]) = 0; /*0x250f51618*/\n    LODWORD(v66) = 0; /*0x250f5161c*/\n    if ( *(_QWORD *)(v39 + 208) ) /*0x250f51620*/\n    {\n      v40 = v39; /*0x250f51628*/\n      v41 = *MEMORY[0x2680C31A0]; /*0x250f51634*/\n      v42 = MEMORY[0x258102570](*MEMORY[0x2680C31A0], 0, MEMORY[0x2680C3390], MEMORY[0x2680C3398]); /*0x250f51650*/\n      if ( v42 ) /*0x250f51654*/\n      {\n        v43 = v42; /*0x250f51658*/\n        v44.n128_f64[0] = MEMORY[0x2581024C0](); /*0x250f5165c*/\n        v45 = v44; /*0x250f51660*/\n        v46 = MEMORY[0x258111160](v41, *MEMORY[0x2680C3290]); /*0x250f51674*/\n        v47 = v46; /*0x250f51678*/\n        if ( v46 ) /*0x250f5167c*/\n        {\n          MEMORY[0x258111170](v46, \"Hms\", v45); /*0x250f516a4*/\n          v48 = v72; /*0x250f516a8*/\n          v49 = v71[0]; /*0x250f516ac*/\n          v50 = v66; /*0x250f516b0*/\n        }\n        else\n        {\n          v50 = 0; /*0x250f516b8*/\n          v49 = 0; /*0x250f516bc*/\n          v48 = 0; /*0x250f516c0*/\n        }\n        MEMORY[0x25810AA60]( /*0x250f516f4*/\n          &v77,\n          20,\n          \"%02d:%02d:%02d.%d\",\n          v48,\n          v49,\n          v50,\n          (int)((v45.n128_f64[0] - floor(v45.n128_f64[0])) * 1000000.0));\n        v51 = MEMORY[0x258108220](v41, &v77, 134217984); /*0x250f5170c*/\n        MEMORY[0x25810DB00](v43, &stru_275B05200, v51); /*0x250f51720*/\n        MEMORY[0x25810DB00](v43, &stru_275B05220, v37); /*0x250f51734*/\n        MEMORY[0x25810DAC0](v43, &stru_275B05240, v38); /*0x250f51748*/\n        MEMORY[0x25810DAC0](v43, &stru_275B05260, v10); /*0x250f5175c*/\n        MEMORY[0x25810DDB0](*(_QWORD *)(v40 + 200)); /*0x250f51764*/\n        if ( MEMORY[0x258102500](*(_QWORD *)(v40 + 208)) >= *(unsigned int *)(v40 + 216) ) /*0x250f51778*/\n          MEMORY[0x258102520](*(_QWORD *)(v40 + 208), 0); /*0x250f51784*/\n        MEMORY[0x2581024D0](*(_QWORD *)(v40 + 208), v43); /*0x250f51790*/\n        MEMORY[0x25810DDC0](*(_QWORD *)(v40 + 200)); /*0x250f51798*/\n        if ( v51 ) /*0x250f5179c*/\n          MEMORY[0x258101B70](v51); /*0x250f517a4*/\n        MEMORY[0x258101B70](v43); /*0x250f517ac*/\n        if ( v47 ) /*0x250f517b0*/\n          MEMORY[0x258101B70](v47); /*0x250f517b8*/\n      }\n    }\n    if ( (_DWORD)v10 ) /*0x250f517bc*/\n    {\n      carEndpoint_handleEventCreatingReply_cold_16(v10); /*0x250f51abc*/\nLABEL_107:\n      v6 = nullptr; /*0x250f51ac0*/\n    }\n    else\n    {\n      if ( !v18 ) /*0x250f517c0*/\n      {\nLABEL_68:\n        v6 = nullptr; /*0x250f5180c*/\nLABEL_69:\n        v10 = 0; /*0x250f51810*/\n        *a5 = v64; /*0x250f51818*/\n        v64 = 0; /*0x250f5181c*/\n        goto LABEL_70; /*0x250f5181c*/\n      }\n      v6 = (void *)MEMORY[0x25810D2C0](0, v18, 200, 0, 0); /*0x250f517dc*/\n      if ( v6 ) /*0x250f517e0*/\n      {\n        v52 = MEMORY[0x258111D00](0, v6, 0, 0, &v64); /*0x250f517f8*/\n        if ( (_DWORD)v52 ) /*0x250f517fc*/\n        {\n          v10 = v52; /*0x250f51800*/\n          carEndpoint_handleEventCreatingReply_cold_17(); /*0x250f51804*/\n          goto LABEL_70; /*0x250f51808*/\n        }\n        goto LABEL_69; /*0x250f517fc*/\n      }\n      carEndpoint_handleEventCreatingReply_cold_18(); /*0x250f51b54*/\n      v10 = 4294950575LL; /*0x250f51b58*/\n    }\nLABEL_70:\n    if ( v65 ) /*0x250f51824*/\n      MEMORY[0x258101B70](); /*0x250f51828*/\n    if ( a2 ) /*0x250f5182c*/\n      MEMORY[0x258101B70](a2); /*0x250f51834*/\n    if ( v18 ) /*0x250f51838*/\n      MEMORY[0x258101B70](v18); /*0x250f51840*/\n    if ( v6 ) /*0x250f51844*/\n      MEMORY[0x258101B70](v6); /*0x250f5184c*/\n    if ( v64 ) /*0x250f51854*/\n      MEMORY[0x258101B70](); /*0x250f51858*/\n  }\n  return v10; /*0x250f51898*/\n}",
+    "refs": [
+      {
+        "addr": "0x26e755490",
+        "name": "_gLogCategory_APEndpointCarPlay"
+      },
+      {
+        "addr": "0x2511d8bc7",
+        "name": "aOsstatusCarend_22",
+        "string": "OSStatus carEndpoint_handleEventCreatingReply(APTransportStreamRef, OSType, CMBlockBufferRef, void *, CMBlockBufferRef *)"
+      },
+      {
+        "addr": "0x2511d8c41",
+        "name": "aPtrUnsupported_1",
+        "string": "[%{ptr}] ### Unsupported messageType %'C\n"
+      },
+      {
+        "addr": "0x25114d88c",
+        "name": "_carEndpoint_handleEventCreatingReply.cold.1"
+      },
+      {
+        "addr": "0x25114dbbc",
+        "name": "_carEndpoint_handleEventCreatingReply.cold.19"
+      },
+      {
+        "addr": "0x275afa0e0",
+        "name": "stru_275AFA0E0"
+      },
+      {
+        "addr": "0x275afa0c0",
+        "name": "stru_275AFA0C0"
+      },
+      {
+        "addr": "0x25114db20",
+        "name": "_carEndpoint_handleEventCreatingReply.cold.15"
+      },
+      {
+        "addr": "0x2511d8c94",
+        "name": "aOsstatusCarend_23",
+        "string": "OSStatus carEndpoint_processEventCreatingResponse(FigEndpointRef, CFDictionaryRef, CFDictionaryRef *)"
+      },
+      {
+        "addr": "0x2511d8cfa",
+        "name": "aPtrProcessingC",
+        "string": "[%{ptr}] Processing '%@' command\n"
+      },
+      {
+        "addr": "0x2511d8e20",
+        "name": "aOsstatusCarend_24",
+        "string": "OSStatus carEndpoint_forceKeyFrame(FigEndpointRef, CFDictionaryRef)"
+      },
+      {
+        "addr": "0x2511d8e64",
+        "name": "aPtrForceKeyFra",
+        "string": "[%{ptr}] Force Key Frame, params: %@"
+      },
+      {
+        "addr": "0x275afc2a0",
+        "name": "stru_275AFC2A0"
+      },
+      {
+        "addr": "0x251089c78",
+        "name": "___carEndpoint_forceKeyFrame_block_invoke"
+      },
+      {
+        "addr": "0x269393e08",
+        "name": "unk_269393E08"
+      },
+      {
+        "addr": "0x2510e15d0",
+        "name": "_APEndpointStreamScreenRestartBitstream"
+      },
+      {
+        "addr": "0x25114d8b0",
+        "name": "_carEndpoint_handleEventCreatingReply.cold.2"
+      },
+      {
+        "addr": "0x275b04c60",
+        "name": "stru_275B04C60"
+      },
+      {
+        "addr": "0x250f51f90",
+        "name": "___carEndpoint_sendHIDReport_block_invoke"
+      },
+      {
+        "addr": "0x269393e30",
+        "name": "unk_269393E30"
+      },
+      {
+        "addr": "0x250f50cd4",
+        "name": "_APHIDClientHandleHIDReport"
+      },
+      {
+        "addr": "0x25114d8d8",
+        "name": "_carEndpoint_handleEventCreatingReply.cold.3"
+      },
+      {
+        "addr": "0x275b04c80",
+        "name": "stru_275B04C80"
+      },
+      {
+        "addr": "0x251149d7c",
+        "name": "_carEndpoint_requestSiri"
+      },
+      {
+        "addr": "0x251089000",
+        "name": "_carEndpoint_requestUI"
+      },
+      {
+        "addr": "0x2510891fc",
+        "name": "_carEndpoint_updateViewArea"
+      },
+      {
+        "addr": "0x25108943c",
+        "name": "_carEndpoint_setLimitedUI"
+      },
+      {
+        "addr": "0x2510896c8",
+        "name": "_carEndpoint_setNightMode"
+      },
+      {
+        "addr": "0x2511490a0",
+        "name": "_carEndpoint_updateVideoPlaybackAllowed"
+      },
+      {
+        "addr": "0x25114a1a0",
+        "name": "_carEndpoint_handleVideoPlayerBackButtonEvent"
+      },
+      {
+        "addr": "0x251089abc",
+        "name": "_carEndpoint_validateRuntimeFeaturesWithAccessory"
+      },
+      {
+        "addr": "0x2511d8dde",
+        "name": "aPtrUnhandledCo_2",
+        "string": "[%{ptr}] Unhandled command '%@' dict '%@', forwarding to clients\n"
+      },
+      {
+        "addr": "0x251089c64",
+        "name": "___carEndpoint_processEventCreatingResponse_block_invoke"
+      },
+      {
+        "addr": "0x269393de0",
+        "name": "unk_269393DE0"
+      },
+      {
+        "addr": "0x250f5ee08",
+        "name": "_carEndpoint_postNotification"
+      },
+      {
+        "addr": "0x275b04dc0",
+        "name": "stru_275B04DC0"
+      },
+      {
+        "addr": "0x251089954",
+        "name": "_carEndpoint_updateVehicleInformation"
+      },
+      {
+        "addr": "0x275b04da0",
+        "name": "stru_275B04DA0"
+      },
+      {
+        "addr": "0x275b04d80",
+        "name": "stru_275B04D80"
+      },
+      {
+        "addr": "0x275b04d60",
+        "name": "stru_275B04D60"
+      },
+      {
+        "addr": "0x275b04d40",
+        "name": "stru_275B04D40"
+      },
+      {
+        "addr": "0x275b04d20",
+        "name": "stru_275B04D20"
+      },
+      {
+        "addr": "0x275b04d00",
+        "name": "stru_275B04D00"
+      },
+      {
+        "addr": "0x275b04ce0",
+        "name": "stru_275B04CE0"
+      },
+      {
+        "addr": "0x275b04cc0",
+        "name": "stru_275B04CC0"
+      },
+      {
+        "addr": "0x251089d28",
+        "name": "___carEndpoint_sendiAPMessage_block_invoke"
+      },
+      {
+        "addr": "0x269393e58",
+        "name": "unk_269393E58"
+      },
+      {
+        "addr": "0x275afa0a0",
+        "name": "stru_275AFA0A0"
+      },
+      {
+        "addr": "0x25114da40",
+        "name": "_carEndpoint_handleEventCreatingReply.cold.10"
+      },
+      {
+        "addr": "0x25109632c",
+        "name": "_APAccTransportClientEndpointForwardData"
+      },
+      {
+        "addr": "0x25114da78",
+        "name": "_carEndpoint_handleEventCreatingReply.cold.11"
+      },
+      {
+        "addr": "0x25114daa0",
+        "name": "_carEndpoint_handleEventCreatingReply.cold.12"
+      },
+      {
+        "addr": "0x25114dacc",
+        "name": "_carEndpoint_handleEventCreatingReply.cold.13"
+      },
+      {
+        "addr": "0x2511d8c6b",
+        "name": "aCarendpointPro",
+        "string": "carEndpoint_processEventCreatingResponse"
+      },
+      {
+        "addr": "0x275b04ca0",
+        "name": "stru_275B04CA0"
+      },
+      {
+        "addr": "0x251099bd8",
+        "name": "_APStarkModeChangeRequestMakeFromDictionary"
+      },
+      {
+        "addr": "0x25114d900",
+        "name": "_carEndpoint_handleEventCreatingReply.cold.4"
+      },
+      {
+        "addr": "0x25114d928",
+        "name": "_carEndpoint_handleEventCreatingReply.cold.5"
+      },
+      {
+        "addr": "0x25114d9d4",
+        "name": "_carEndpoint_handleEventCreatingReply.cold.7"
+      },
+      {
+        "addr": "0x275afcee0",
+        "name": "stru_275AFCEE0"
+      },
+      {
+        "addr": "0x251099448",
+        "name": "_APStarkModeCreateDictionaryRepresentation"
+      },
+      {
+        "addr": "0x25114d9ac",
+        "name": "_carEndpoint_handleEventCreatingReply.cold.6"
+      },
+      {
+        "addr": "0x25114d9f8",
+        "name": "_carEndpoint_handleEventCreatingReply.cold.8"
+      },
+      {
+        "addr": "0x25114da1c",
+        "name": "_carEndpoint_handleEventCreatingReply.cold.9"
+      },
+      {
+        "addr": "0x250f51ed0",
+        "name": "_carEndpoint_isDissociated"
+      },
+      {
+        "addr": "0x25114daf8",
+        "name": "_carEndpoint_handleEventCreatingReply.cold.14"
+      },
+      {
+        "addr": "0x2511d9b94",
+        "name": "aHms",
+        "string": "Hms"
+      },
+      {
+        "addr": "0x2511d7f7b",
+        "name": "a02d02d02dD",
+        "string": "%02d:%02d:%02d.%d"
+      },
+      {
+        "addr": "0x275b05200",
+        "name": "stru_275B05200"
+      },
+      {
+        "addr": "0x275b05220",
+        "name": "stru_275B05220"
+      },
+      {
+        "addr": "0x275b05240",
+        "name": "stru_275B05240"
+      },
+      {
+        "addr": "0x275b05260",
+        "name": "stru_275B05260"
+      },
+      {
+        "addr": "0x25114db4c",
+        "name": "_carEndpoint_handleEventCreatingReply.cold.16"
+      },
+      {
+        "addr": "0x25114db70",
+        "name": "_carEndpoint_handleEventCreatingReply.cold.17"
+      },
+      {
+        "addr": "0x25114db94",
+        "name": "_carEndpoint_handleEventCreatingReply.cold.18"
+      }
+    ]
+  }
+]

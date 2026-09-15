@@ -194,6 +194,7 @@ public class HighPriorityResourceTracker
                 Log.i("PDC", "OPS 108: keep CarPlay SCREEN; no Main Wizard takeover");
                 return;
             }
+            Log.i("PDC", "parking 108: stock SCREEN/Main Wizard takeover");
             parkingActivated();
         } else if (i == 107) {
             /* Old components can send 107 while the controller is switching

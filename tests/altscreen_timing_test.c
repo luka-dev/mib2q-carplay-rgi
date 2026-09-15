@@ -19,11 +19,6 @@ int main(void) {
     assert(alt_frame_remaining_ns(second, second + 80000000ULL) == 0);
     assert(alt_frame_remaining_ns(0, 0) == ALT_FRAME_PERIOD_NS);
     assert(ALT_INPUT_WAIT_MS > ALT_LOADER_STOP_WAIT_MS);
-    assert(alt_present_obsolete(1000, 1064, 4000)); /* small OMX pool, old queue */
-    assert(!alt_present_obsolete(1000, 1064, 1100)); /* live cadence preserved */
-    assert(!alt_present_obsolete(1000, 1000, 4000)); /* last static picture */
-    assert(!alt_present_obsolete(0, 4000, 5000)); /* missing timestamp */
-    assert(!alt_present_obsolete(5000, 6000, 4000)); /* invalid clock */
-    puts("altscreen_timing_test: nonblocking/blocking swap pacing and catch-up guards PASS");
+    puts("altscreen_timing_test: nonblocking/blocking loader pacing and input deadline PASS");
     return 0;
 }

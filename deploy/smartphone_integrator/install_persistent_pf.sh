@@ -19,32 +19,64 @@
 #
 # Idempotent. Run once as root on the unit; survives reboots.
 
-mount -uw /mnt/system 2>/dev/null
+# SYS_ROOT also lets the host installer tests use an isolated unit tree.
+SYS_ROOT=${SYS_ROOT:-/mnt/system}
+mount -uw "$SYS_ROOT" 2>/dev/null
 
-rc=1
-for SRC in /mnt/system/etc/pf.conf /mnt/system/etc/pf.ecm0.conf \
-           /mnt/system/etc/pf.mlan0.conf /mnt/system/etc/pf.ppp0.conf; do
-    [ -f "$SRC" ] || continue
-    if grep -q '6030:6032' "$SRC"; then
-        echo "already patched: $SRC"; rc=0; continue
-    fi
-    if ! grep -q 'on carplay0 proto tcp .*6030' "$SRC"; then
-        echo "SKIP (no stock carplay0 6030 rule): $SRC"; continue
-    fi
-    [ -f "$SRC.stock" ] || cp "$SRC" "$SRC.stock" 2>/dev/null
-    # Upgrade pristine/6031-only profiles and shrink the old diagnostic 6033
-    # deployment now that SETMAGICCOOKIE uses the existing RTSP connection.
-    if grep -q '6030:6033' "$SRC"; then
-        sed -i 's/6030:6033/6030:6032/' "$SRC"
-    elif grep -q '6030:6031' "$SRC"; then
-        sed -i 's/6030:6031/6030:6032/' "$SRC"
+# QNX has no sed. Rewrite only the known CarPlay TCP port-list rule using
+# shell builtins; a matching range in a comment or another interface is not
+# evidence that this profile is patched.
+NEW=
+trap '[ -z "$NEW" ] || rm -f "$NEW"' 0
+patch_profile()
+{
+    SRC=$1
+    NEW=$SRC.carplay.$$.new
+    : > "$NEW" || return 1
+    hits=0
+    changed=0
+    while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+            'pass in quick on carplay0 proto tcp from any to any port {'*)
+                token=
+                case "$line" in
+                    *' 6030,'*) token=' 6030,' ;;
+                    *' 6030:6031,'*) token=' 6030:6031,' ;;
+                    *' 6030:6033,'*) token=' 6030:6033,' ;;
+                    *' 6030:6032,'*) hits=$((hits + 1)) ;;
+                esac
+                if [ -n "$token" ]; then
+                    line=${line%%"$token"*}' 6030:6032,'${line#*"$token"}
+                    hits=$((hits + 1))
+                    changed=1
+                fi
+                ;;
+        esac
+        printf '%s\n' "$line" >> "$NEW" || return 1
+    done < "$SRC" || return 1
+    [ "$hits" = 1 ] || {
+        echo "ERROR: expected exactly one supported CarPlay TCP rule in $SRC, found $hits"
+        return 1
+    }
+    if [ "$changed" = 0 ]; then
+        echo "already patched: $SRC"
     else
-        sed -i 's/\(on carplay0 proto tcp .*\)6030\(,\)/\16030:6032\2/' "$SRC"
+        if [ ! -f "$SRC.stock" ]; then
+            cp -p "$SRC" "$SRC.stock" || return 1
+        fi
+        # Keep the source file's owner and mode. Stop on any failed write.
+        cat "$NEW" > "$SRC" || return 1
+        echo "patched $SRC (backup at $SRC.stock)"
     fi
-    if grep -q '6030:6032' "$SRC"; then
-        echo "patched $SRC (backup at $SRC.stock)"; rc=0
-    else
-        echo "SED FAILED: $SRC"
-    fi
+    rm -f "$NEW" || return 1
+    NEW=
+}
+
+seen=0
+for name in pf.conf pf.ecm0.conf pf.mlan0.conf pf.ppp0.conf; do
+    [ -f "$SYS_ROOT/etc/$name" ] || continue
+    seen=$((seen + 1))
+    patch_profile "$SYS_ROOT/etc/$name" || exit 1
 done
-exit $rc
+[ "$seen" -gt 0 ] || { echo "ERROR: no PF profiles found in $SYS_ROOT/etc"; exit 1; }
+exit 0

@@ -1,0 +1,553 @@
+{
+  "build": "iOS 27 24A5418b iPhone18,1",
+  "note": "IDA pseudocode; compiler-outlined helpers can hide arguments. Address comments may label stores after calls. Exact instructions checked in targeted ipsw excerpts. Truncated results flagged.",
+  "records": [
+    {
+      "key": "modeDict",
+      "result": {
+        "addr": "0x251099448",
+        "code": "__int64 __fastcall APStarkModeCreateDictionaryRepresentation(int *a1, __int64 *a2)\n{\n  __int64 v4; // x19\n  int v5; // w22\n  __int64 v6; // x0\n  __int64 v7; // x23\n  __int64 v8; // x22\n  __int64 v9; // x22\n  int v10; // w22\n  int v11; // w24\n  __int64 v12; // x0\n  __int64 v13; // x23\n  __int64 v14; // x9\n  __int64 v15; // x22\n  __int64 v16; // x24\n  int v17; // w22\n  __int64 v18; // x0\n  __int64 v19; // x23\n  __int64 v20; // x22\n  int v21; // w22\n  int v22; // w24\n  __int64 v23; // x0\n  __int64 v24; // x23\n  __int64 v25; // x22\n  __int64 v26; // x24\n  int v27; // w22\n  int v28; // w23\n  __int64 v29; // x0\n  __int64 v30; // x21\n  __int64 v31; // x22\n  __int64 v32; // x23\n  __int64 v34; // [xsp+0h] [xbp-40h] BYREF\n  __int64 v35; // [xsp+8h] [xbp-38h] BYREF\n\n  v34 = 0; /*0x25109946c*/\n  v35 = 0; /*0x25109946c*/\n  v4 = MEMORY[0x258102570](0, 0, MEMORY[0x2680C3390], MEMORY[0x2680C3398]); /*0x25109948c*/\n  if ( !v4 ) /*0x251099490*/\n    APStarkModeCreateDictionaryRepresentation_cold_11(); /*0x2510997e4*/\n  v5 = a1[6]; /*0x251099494*/\n  v6 = MEMORY[0x258102570](0, 0, MEMORY[0x2680C3390], MEMORY[0x2680C3398]); /*0x2510994b0*/\n  if ( !v6 ) /*0x2510994b4*/\n    APStarkModeCreateDictionaryRepresentation_cold_10(); /*0x2510997f4*/\n  v7 = v6; /*0x2510994b8*/\n  if ( v5 == 1 ) /*0x2510994cc*/\n    v8 = 2; /*0x2510994cc*/\n  else\n    v8 = v5 == 2; /*0x2510994cc*/\n  MEMORY[0x25810D0D0](); /*0x2510994dc*/\n  MEMORY[0x25810D0D0](v7, &stru_275B066C0, v8); /*0x2510994f0*/\n  v9 = MEMORY[0x25810CEC0](&v35, v7); /*0x251099500*/\n  MEMORY[0x258101B70](v7); /*0x251099508*/\n  if ( (_DWORD)v9 ) /*0x25109950c*/\n  {\n    APStarkModeCreateDictionaryRepresentation_cold_1(v9); /*0x251099800*/\n  }\n  else\n  {\n    v11 = a1[4]; /*0x251099510*/\n    v10 = a1[5]; /*0x251099510*/\n    v12 = MEMORY[0x258102570](0, 0, MEMORY[0x2680C3390], MEMORY[0x2680C3398]); /*0x25109952c*/\n    if ( v12 ) /*0x251099530*/\n    {\n      v13 = v12; /*0x251099534*/\n      if ( v10 == 11 ) /*0x251099540*/\n        v14 = 2; /*0x251099540*/\n      else\n        v14 = -1; /*0x251099540*/\n      if ( v10 == 10 ) /*0x251099548*/\n        v15 = 1; /*0x251099548*/\n      else\n        v15 = v14; /*0x251099548*/\n      if ( v11 == 1 ) /*0x251099558*/\n        v16 = 2; /*0x251099558*/\n      else\n        v16 = v11 == 2; /*0x251099558*/\n      MEMORY[0x25810D0D0](); /*0x251099568*/\n      MEMORY[0x25810D0D0](v13, &stru_275B066C0, v16); /*0x25109957c*/\n      MEMORY[0x25810D0D0](v13, &stru_275B066E0, v15); /*0x251099590*/\n      v9 = MEMORY[0x25810CEC0](&v35, v13); /*0x2510995a0*/\n      MEMORY[0x258101B70](v13); /*0x2510995a8*/\n      if ( (_DWORD)v9 ) /*0x2510995ac*/\n      {\n        APStarkModeCreateDictionaryRepresentation_cold_2(v9); /*0x25109981c*/\n      }\n      else\n      {\n        v17 = a1[7]; /*0x2510995b0*/\n        v18 = MEMORY[0x258102570](0, 0, MEMORY[0x2680C3390], MEMORY[0x2680C3398]); /*0x2510995cc*/\n        if ( v18 ) /*0x2510995d0*/\n        {\n          v19 = v18; /*0x2510995d4*/\n          if ( v17 == 1 ) /*0x2510995e8*/\n            v20 = 2; /*0x2510995e8*/\n          else\n            v20 = v17 == 2; /*0x2510995e8*/\n          MEMORY[0x25810D0D0](); /*0x2510995f8*/\n          MEMORY[0x25810D0D0](v19, &stru_275B066C0, v20); /*0x25109960c*/\n          v9 = MEMORY[0x25810CEC0](&v35, v19); /*0x25109961c*/\n          MEMORY[0x258101B70](v19); /*0x251099624*/\n          if ( (_DWORD)v9 ) /*0x251099628*/\n          {\n            APStarkModeCreateDictionaryRepresentation_cold_3(v9); /*0x251099838*/\n          }\n          else\n          {\n            v22 = a1[2]; /*0x25109962c*/\n            v21 = a1[3]; /*0x25109962c*/\n            v23 = MEMORY[0x258102570](0, 0, MEMORY[0x2680C3390], MEMORY[0x2680C3398]); /*0x251099648*/\n            if ( v23 ) /*0x25109964c*/\n            {\n              v24 = v23; /*0x251099650*/\n              if ( v21 == 1 ) /*0x251099664*/\n                v25 = 2; /*0x251099664*/\n              else\n                v25 = v21 == 2; /*0x251099664*/\n              if ( v22 == 1 ) /*0x251099674*/\n                v26 = 2; /*0x251099674*/\n              else\n                v26 = v22 == 2; /*0x251099674*/\n              MEMORY[0x25810D0D0](); /*0x251099684*/\n              MEMORY[0x25810D0D0](v24, &stru_275B066C0, v26); /*0x251099698*/\n              MEMORY[0x25810D0D0](v24, &stru_275B06720, v25); /*0x2510996ac*/\n              v9 = MEMORY[0x25810CEC0](&v34, v24); /*0x2510996bc*/\n              MEMORY[0x258101B70](v24); /*0x2510996c4*/\n              if ( (_DWORD)v9 ) /*0x2510996c8*/\n              {\n                APStarkModeCreateDictionaryRepresentation_cold_4(v9); /*0x251099854*/\n              }\n              else\n              {\n                v28 = *a1; /*0x2510996cc*/\n                v27 = a1[1]; /*0x2510996cc*/\n                v29 = MEMORY[0x258102570](0, 0, MEMORY[0x2680C3390], MEMORY[0x2680C3398]); /*0x2510996e8*/\n                if ( v29 ) /*0x2510996ec*/\n                {\n                  v30 = v29; /*0x2510996f0*/\n                  if ( v27 == 1 ) /*0x251099704*/\n                    v31 = 2; /*0x251099704*/\n                  else\n                    v31 = v27 == 2; /*0x251099704*/\n                  if ( v28 == 1 ) /*0x251099714*/\n                    v32 = 2; /*0x251099714*/\n                  else\n                    v32 = v28 == 2; /*0x251099714*/\n                  MEMORY[0x25810D0D0](); /*0x251099724*/\n                  MEMORY[0x25810D0D0](v30, &stru_275B066C0, v32); /*0x251099738*/\n                  MEMORY[0x25810D0D0](v30, &stru_275B06720, v31); /*0x25109974c*/\n                  v9 = MEMORY[0x25810CEC0](&v34, v30); /*0x25109975c*/\n                  MEMORY[0x258101B70](v30); /*0x251099764*/\n                  if ( (_DWORD)v9 ) /*0x251099768*/\n                  {\n                    APStarkModeCreateDictionaryRepresentation_cold_5(v9); /*0x251099870*/\n                  }\n                  else\n                  {\n                    MEMORY[0x2581025C0](v4, &stru_275B06740, v35); /*0x25109977c*/\n                    MEMORY[0x2581025C0](v4, &stru_275B06760, v34); /*0x251099790*/\n                    *a2 = v4; /*0x251099794*/\n                    v4 = 0; /*0x251099798*/\n                  }\n                }\n                else\n                {\n                  v9 = 4294895246LL; /*0x25109985c*/\n                  APStarkModeCreateDictionaryRepresentation_cold_6(); /*0x251099864*/\n                }\n              }\n            }\n            else\n            {\n              v9 = 4294895246LL; /*0x251099840*/\n              APStarkModeCreateDictionaryRepresentation_cold_7(); /*0x251099848*/\n            }\n          }\n        }\n        else\n        {\n          v9 = 4294895246LL; /*0x251099824*/\n          APStarkModeCreateDictionaryRepresentation_cold_8(); /*0x25109982c*/\n        }\n      }\n    }\n    else\n    {\n      v9 = 4294895246LL; /*0x251099808*/\n      APStarkModeCreateDictionaryRepresentation_cold_9(); /*0x251099810*/\n    }\n  }\n  if ( v35 ) /*0x2510997a0*/\n    MEMORY[0x258101B70](); /*0x2510997a4*/\n  if ( v34 ) /*0x2510997ac*/\n    MEMORY[0x258101B70](); /*0x2510997b0*/\n  if ( v4 ) /*0x2510997b4*/\n    MEMORY[0x258101B70](v4); /*0x2510997bc*/\n  return v9; /*0x2510997d8*/\n}",
+        "refs": [
+          {
+            "addr": "0x251151a9c",
+            "name": "_APStarkModeCreateDictionaryRepresentation.cold.11"
+          },
+          {
+            "addr": "0x251151a80",
+            "name": "_APStarkModeCreateDictionaryRepresentation.cold.10"
+          },
+          {
+            "addr": "0x275b066c0",
+            "name": "stru_275B066C0"
+          },
+          {
+            "addr": "0x25115193c",
+            "name": "_APStarkModeCreateDictionaryRepresentation.cold.1"
+          },
+          {
+            "addr": "0x275b066e0",
+            "name": "stru_275B066E0"
+          },
+          {
+            "addr": "0x251151960",
+            "name": "_APStarkModeCreateDictionaryRepresentation.cold.2"
+          },
+          {
+            "addr": "0x251151984",
+            "name": "_APStarkModeCreateDictionaryRepresentation.cold.3"
+          },
+          {
+            "addr": "0x275b06720",
+            "name": "stru_275B06720"
+          },
+          {
+            "addr": "0x2511519a8",
+            "name": "_APStarkModeCreateDictionaryRepresentation.cold.4"
+          },
+          {
+            "addr": "0x2511519cc",
+            "name": "_APStarkModeCreateDictionaryRepresentation.cold.5"
+          },
+          {
+            "addr": "0x275b06740",
+            "name": "stru_275B06740"
+          },
+          {
+            "addr": "0x275b06760",
+            "name": "stru_275B06760"
+          },
+          {
+            "addr": "0x2511519f0",
+            "name": "_APStarkModeCreateDictionaryRepresentation.cold.6"
+          },
+          {
+            "addr": "0x251151a14",
+            "name": "_APStarkModeCreateDictionaryRepresentation.cold.7"
+          },
+          {
+            "addr": "0x251151a38",
+            "name": "_APStarkModeCreateDictionaryRepresentation.cold.8"
+          },
+          {
+            "addr": "0x251151a5c",
+            "name": "_APStarkModeCreateDictionaryRepresentation.cold.9"
+          }
+        ]
+      },
+      "truncated": false
+    },
+    {
+      "key": "takeActionOnModeChanges",
+      "result": {
+        "addr": "0x250f586f8",
+        "code": "__int64 __fastcall carEndpoint_takeActionOnModeChanges(__int64 a1, int *a2)\n{\n  __int64 v4; // x22\n  int v5; // w21\n  __int64 v6; // x0\n  _QWORD v8[7]; // [xsp+0h] [xbp-A0h] BYREF\n  __int64 v9; // [xsp+38h] [xbp-68h] BYREF\n  _QWORD v10[2]; // [xsp+40h] [xbp-60h] BYREF\n  __int128 v11; // [xsp+50h] [xbp-50h]\n  __int128 v12; // [xsp+60h] [xbp-40h]\n\n  v4 = MEMORY[0x25810D5C0](); /*0x250f58720*/\n  v9 = 0; /*0x250f58728*/\n  v10[0] = &v9; /*0x250f58728*/\n  v10[1] = 0x3800000000LL; /*0x250f58734*/\n  v11 = 0u; /*0x250f5873c*/\n  v12 = 0u; /*0x250f5873c*/\n  v5 = *(unsigned __int8 *)(v4 + 223); /*0x250f58740*/\n  v6 = *(_QWORD *)(v4 + 224); /*0x250f58744*/\n  v8[0] = MEMORY[0x2681A4A58]; /*0x250f58760*/\n  v8[1] = 0x40000000; /*0x250f5876c*/\n  v8[2] = __carEndpoint_takeActionOnModeChanges_block_invoke; /*0x250f58788*/\n  v8[3] = &unk_269393C10; /*0x250f58788*/\n  v8[4] = &v9; /*0x250f5878c*/\n  v8[5] = v4; /*0x250f5878c*/\n  v8[6] = a2; /*0x250f58790*/\n  MEMORY[0x258101C50](v6, v8); /*0x250f58798*/\n  if ( *(_BYTE *)(v4 + 65) ) /*0x250f5879c*/\n    carEndpoint_takeActionOnModeChanges_cold_1(v10, a1, a2); /*0x250f587b0*/\n  carEndpoint_checkAndUpdateVideoOverlayActivation(a1, *(_DWORD *)(v10[0] + 24LL), *a2, v5, v5); /*0x250f587cc*/\n  return MEMORY[0x258101C00](&v9, 8); /*0x250f587f0*/\n}",
+        "refs": [
+          {
+            "addr": "0x250f587f4",
+            "name": "___carEndpoint_takeActionOnModeChanges_block_invoke"
+          },
+          {
+            "addr": "0x269393c10",
+            "name": "unk_269393C10"
+          },
+          {
+            "addr": "0x25114d4b4",
+            "name": "_carEndpoint_takeActionOnModeChanges.cold.1"
+          },
+          {
+            "addr": "0x251149370",
+            "name": "_carEndpoint_checkAndUpdateVideoOverlayActivation"
+          }
+        ]
+      },
+      "truncated": false
+    },
+    {
+      "key": "0x251149370",
+      "result": {
+        "addr": "0x251149370",
+        "code": "__int64 __fastcall carEndpoint_checkAndUpdateVideoOverlayActivation(__int64 a1, int a2, int a3, int a4, int a5)\n{\n  __int64 result; // x0\n  __int64 v11; // x1\n  __int64 v12; // x2\n  __int64 v14; // x0\n  __int64 v15; // x1\n  __int64 v16; // x2\n  __int64 v17; // x0\n  __int64 v18; // x0\n  const char *v19; // x1\n  const char *v20; // x3\n  __int64 v21; // x2\n  __int64 v22; // x0\n  __int64 v23; // x0\n  __int64 _48; // [xsp+48h] [xbp+8h]\n\n  if ( !a1 ) /*0x25114938c*/\n    goto LABEL_16; /*0x25114938c*/\n  result = MEMORY[0x25810D5C0](); /*0x2511493a4*/\n  if ( !*(_BYTE *)(result + 68) ) /*0x2511493ac*/\n    return result; /*0x2511493ac*/\n  result = *(_QWORD *)(result + 48); /*0x2511493b0*/\n  if ( !result ) /*0x2511493b4*/\n  {\n    v14 = OUTLINED_FUNCTION_78_1(); /*0x251149454*/\n    result = MEMORY[0x25810C360](v14); /*0x251149460*/\n    if ( gLogCategory_APEndpointCarPlay > 90 ) /*0x251149470*/\n      return result; /*0x251149470*/\n    if ( gLogCategory_APEndpointCarPlay == -1 ) /*0x251149480*/\n    {\n      v17 = OUTLINED_FUNCTION_23_5(result, v15, v16); /*0x251149484*/\n      result = MEMORY[0x258100DC0](v17, 33554522); /*0x25114948c*/\n      if ( !(_DWORD)result ) /*0x251149490*/\n        return result; /*0x251149490*/\n    }\n    v18 = OUTLINED_FUNCTION_23_5(result, v15, v16); /*0x251149498*/\n    v19 = \"OSStatus carEndpoint_checkAndUpdateVideoOverlayActivation(FigEndpointRef, FigStarkModeEntity, FigStarkModeEnti\" /*0x25114949c*/\n          \"ty, Boolean, Boolean)\";\n    v20 = \"[%{ptr}] CarPlay Video Overlay NOT supported on Bonjour discovery based accessories\"; /*0x2511494a4*/\n    v21 = 33554522; /*0x2511494ac*/\n    return MEMORY[0x258100F00](v18, v19, v21, v20); /*0x2511494f8*/\n  }\n  if ( a2 == a3 && a4 == a5 ) /*0x2511493bc*/\n  {\n    if ( gLogCategory_APEndpointCarPlay > 30 ) /*0x2511494c0*/\n      return result; /*0x2511494c0*/\n    if ( gLogCategory_APEndpointCarPlay == -1 ) /*0x2511494c8*/\n    {\n      v22 = OUTLINED_FUNCTION_23_5(result, v11, v12); /*0x2511494cc*/\n      result = OUTLINED_FUNCTION_76(v22); /*0x2511494d0*/\n      if ( !(_DWORD)result ) /*0x2511494d4*/\n        return result; /*0x2511494d4*/\n    }\n    v23 = OUTLINED_FUNCTION_23_5(result, v11, v12); /*0x2511494dc*/\n    v18 = OUTLINED_FUNCTION_9_9( /*0x2511494f0*/\n            v23,\n            \"OSStatus carEndpoint_checkAndUpdateVideoOverlayActivation(FigEndpointRef, FigStarkModeEntity, FigStarkModeEn\"\n            \"tity, Boolean, Boolean)\");\n    return MEMORY[0x258100F00](v18, v19, v21, v20); /*0x2511494f0*/\n  }\n  result = MEMORY[0x2581025B0](); /*0x2511493cc*/\n  if ( a3 == 1 && a5 ) /*0x2511493d8*/\n  {\n    result = MEMORY[0x25810F330](result, a1); /*0x2511493e0*/\n    if ( (_DWORD)result ) /*0x2511493e4*/\n    {\nLABEL_16:\n      OUTLINED_FUNCTION_78_1(); /*0x251149420*/\n      if ( ((_48 ^ (2 * _48)) & 0x4000000000000000LL) != 0 ) /*0x251149448*/\n        __break(0xC471u); /*0x25114944c*/\n      JUMPOUT(0x25810C360LL); /*0x25810c360*/\n    }\n  }\n  else if ( a2 == 1 ) /*0x2511493f8*/\n  {\n    if ( a4 ) /*0x2511493fc*/\n    {\n      result = MEMORY[0x25810F340](result); /*0x251149400*/\n      if ( (_DWORD)result ) /*0x251149404*/\n        goto LABEL_16; /*0x251149404*/\n    }\n  }\n  return result; /*0x25114941c*/\n}",
+        "refs": [
+          {
+            "addr": "0x251094750",
+            "name": "_OUTLINED_FUNCTION_78_1"
+          },
+          {
+            "addr": "0x26e755490",
+            "name": "_gLogCategory_APEndpointCarPlay"
+          },
+          {
+            "addr": "0x250f3d540",
+            "name": "_OUTLINED_FUNCTION_23_5"
+          },
+          {
+            "addr": "0x2511d7ce2",
+            "name": "aOsstatusCarend_15",
+            "string": "OSStatus carEndpoint_checkAndUpdateVideoOverlayActivation(FigEndpointRef, FigStarkModeEntity, FigStarkModeEntity, Boolean, Boolean)"
+          },
+          {
+            "addr": "0x2511d7d66",
+            "name": "aPtrCarplayVide",
+            "string": "[%{ptr}] CarPlay Video Overlay NOT supported on Bonjour discovery based accessories"
+          },
+          {
+            "addr": "0x250f475a0",
+            "name": "_OUTLINED_FUNCTION_76"
+          },
+          {
+            "addr": "0x250f3d0b8",
+            "name": "_OUTLINED_FUNCTION_9_9"
+          }
+        ]
+      },
+      "truncated": false
+    },
+    {
+      "key": "0x25114ad20",
+      "result": {
+        "addr": "0x25114ad20",
+        "code": "__int64 __fastcall carEndpoint_handlePlaybackSessionActivationChanged(__int64 a1, __int64 a2, __int64 a3, __int64 a4)\n{\n  __int64 v6; // x21\n  __int64 v7; // x0\n  __int64 v8; // x26\n  __int64 v9; // x27\n  _BOOL8 v10; // x22\n  int v11; // w23\n  __int64 v12; // x0\n  __int64 v13; // x1\n  __int64 v14; // x2\n  int v15; // w8\n  char v16; // zf\n  char v17; // nf\n  char v18; // vf\n  __int64 v19; // x0\n  __int64 v20; // x0\n  __int64 v21; // x0\n  __int64 v22; // x24\n  __int64 v23; // x25\n  int v24; // w0\n  const char *v25; // x4\n  __int64 v26; // x1\n  __int64 v27; // x3\n  __int64 v28; // x0\n  __int64 v29; // x0\n  __int64 v31; // x2\n  __int64 v32; // [xsp+0h] [xbp-110h]\n  _BOOL8 v33; // [xsp+8h] [xbp-108h]\n  char v34[8]; // [xsp+18h] [xbp-F8h] BYREF\n  __int64 v35; // [xsp+20h] [xbp-F0h]\n  __int64 (__fastcall *v36)(); // [xsp+28h] [xbp-E8h]\n  void *v37; // [xsp+30h] [xbp-E0h]\n  __int64 v38; // [xsp+38h] [xbp-D8h]\n  __int64 v39; // [xsp+40h] [xbp-D0h]\n  __int64 v40; // [xsp+48h] [xbp-C8h]\n  _QWORD v41[6]; // [xsp+50h] [xbp-C0h] BYREF\n  __int16 v42; // [xsp+80h] [xbp-90h] BYREF\n  __int64 v43; // [xsp+88h] [xbp-88h] BYREF\n  __int64 *v44; // [xsp+90h] [xbp-80h]\n  __int64 v45; // [xsp+98h] [xbp-78h]\n  int v46; // [xsp+A0h] [xbp-70h]\n  __int64 v47; // [xsp+A8h] [xbp-68h]\n\n  v47 = 0; /*0x25114ad48*/\n  v43 = 0; /*0x25114ad50*/\n  v44 = &v43; /*0x25114ad50*/\n  v45 = 0x2000000000LL; /*0x25114ad5c*/\n  v46 = 0; /*0x25114ad60*/\n  if ( !a2 ) /*0x25114ad64*/\n  {\n    v7 = 0; /*0x25114afb8*/\n    v31 = 1329; /*0x25114afbc*/\nLABEL_29:\n    MEMORY[0x25810C360](v7, \"carEndpoint_handlePlaybackSessionActivationChanged\", v31, 0); /*0x25114afe4*/\n    goto LABEL_23; /*0x25114afec*/\n  }\n  if ( !a4 ) /*0x25114ad6c*/\n  {\n    v7 = 0; /*0x25114afcc*/\n    v31 = 1330; /*0x25114afd0*/\n    goto LABEL_29; /*0x25114afd4*/\n  }\n  v6 = MEMORY[0x25810D5C0](a2); /*0x25114ad7c*/\n  OUTLINED_FUNCTION_75_0(v6); /*0x25114ad8c*/\n  v7 = carEndpoint_copyStateProperty(a2); /*0x25114ad9c*/\n  if ( (_DWORD)v7 ) /*0x25114ada0*/\n  {\n    v31 = 1334; /*0x25114afe0*/\n    goto LABEL_29; /*0x25114afe0*/\n  }\n  v8 = v47; /*0x25114adac*/\n  v9 = *MEMORY[0x2680C31E8]; /*0x25114adb0*/\n  v10 = v47 == *MEMORY[0x2680C31E8]; /*0x25114adb8*/\n  v11 = *(unsigned __int8 *)(v6 + 223); /*0x25114adbc*/\n  if ( v11 == v10 ) /*0x25114adc4*/\n    goto LABEL_23; /*0x25114adc4*/\n  *(_BYTE *)(v6 + 223) = v10; /*0x25114adc8*/\n  v12 = OUTLINED_FUNCTION_21_8(); /*0x25114adcc*/\n  if ( v17 ^ v18 | v16 ) /*0x25114add0*/\n  {\n    if ( v15 != -1 || (v12 = OUTLINED_FUNCTION_20_6(v12), (_DWORD)v12) ) /*0x25114ade0*/\n    {\n      v32 = a2; /*0x25114ade4*/\n      v33 = v10; /*0x25114ade4*/\n      v19 = OUTLINED_FUNCTION_23_5(v12, v13, v14); /*0x25114ade8*/\n      v12 = OUTLINED_FUNCTION_9_0( /*0x25114adfc*/\n              v19,\n              \"void carEndpoint_handlePlaybackSessionActivationChanged(CMNotificationCenterRef, const void *, CFStringRef\"\n              \", const void *, CFTypeRef)\");\n    }\n  }\n  v20 = OUTLINED_FUNCTION_23_5(v12, v13, v14); /*0x25114ae00*/\n  v21 = MEMORY[0x258112560](v20); /*0x25114ae04*/\n  v22 = v21; /*0x25114ae08*/\n  if ( v21 ) /*0x25114ae18*/\n    v23 = v21; /*0x25114ae18*/\n  else\n    v23 = MEMORY[0x2681A4F50]; /*0x25114ae18*/\n  v24 = MEMORY[0x258102A50](v23); /*0x25114ae20*/\n  if ( v8 == v9 ) /*0x25114ae28*/\n  {\n    if ( v24 ) /*0x25114ae2c*/\n    {\n      v42 = 0; /*0x25114ae30*/\n      v25 = \"AP_SIGNPOST_CAR_VIDEOPLAYBACK_INSESSION_BEGIN\"; /*0x25114ae3c*/\n      v26 = v23; /*0x25114ae50*/\n      v27 = 730663116; /*0x25114ae58*/\nLABEL_18:\n      MEMORY[0x258102860](&dword_250F35000, v26, 0, v27, v25, &unk_251210D5A, &v42, 2, v32, v33); /*0x25114ae9c*/\n    }\n  }\n  else if ( v24 ) /*0x25114ae64*/\n  {\n    v42 = 0; /*0x25114ae68*/\n    v25 = \"AP_SIGNPOST_CAR_VIDEOPLAYBACK_INSESSION_END\"; /*0x25114ae7c*/\n    v27 = 730663120; /*0x25114ae8c*/\n    v26 = v23; /*0x25114ae94*/\n    goto LABEL_18; /*0x25114ae94*/\n  }\n  if ( v22 ) /*0x25114aea4*/\n    MEMORY[0x258112AA0](v22); /*0x25114aeac*/\n  v28 = *(_QWORD *)(v6 + 224); /*0x25114aeb0*/\n  v41[0] = MEMORY[0x2681A4A58]; /*0x25114aecc*/\n  v41[1] = 0x40000000; /*0x25114aed8*/\n  v41[2] = __carEndpoint_handlePlaybackSessionActivationChanged_block_invoke; /*0x25114aef4*/\n  v41[3] = &unk_269394968; /*0x25114aef4*/\n  v41[4] = &v43; /*0x25114aefc*/\n  v41[5] = v6; /*0x25114aefc*/\n  MEMORY[0x258101C50](v28, v41); /*0x25114af04*/\n  carEndpoint_checkAndUpdateVideoOverlayActivation(a2, *((_DWORD *)v44 + 6), *((_DWORD *)v44 + 6), v11, v10); /*0x25114af20*/\n  if ( v8 == v9 ) /*0x25114af28*/\n  {\n    MEMORY[0x258101B80](a2); /*0x25114af30*/\n    MEMORY[0x258101B80](a4); /*0x25114af38*/\n    v29 = OUTLINED_FUNCTION_16(*(_QWORD *)(v6 + 224)); /*0x25114af40*/\n    v35 = 0x40000000; /*0x25114af44*/\n    v36 = __carEndpoint_handlePlaybackSessionActivationChanged_block_invoke_2; /*0x25114af60*/\n    v37 = &__block_descriptor_tmp_1146; /*0x25114af60*/\n    v38 = v6; /*0x25114af64*/\n    v39 = a4; /*0x25114af64*/\n    v40 = a2; /*0x25114af68*/\n    MEMORY[0x258100C80](v29, v34); /*0x25114af70*/\n  }\nLABEL_23:\n  if ( v47 ) /*0x25114af78*/\n    MEMORY[0x258101B70](); /*0x25114af7c*/\n  return MEMORY[0x258101C00](&v43, 8); /*0x25114afac*/\n}",
+        "refs": [
+          {
+            "addr": "0x2511de1ce",
+            "name": "aCarendpointHan_9",
+            "string": "carEndpoint_handlePlaybackSessionActivationChanged"
+          },
+          {
+            "addr": "0x250f3cf80",
+            "name": "_OUTLINED_FUNCTION_75_0"
+          },
+          {
+            "addr": "0x251080088",
+            "name": "_carEndpoint_copyStateProperty"
+          },
+          {
+            "addr": "0x250f3cf14",
+            "name": "_OUTLINED_FUNCTION_21_8"
+          },
+          {
+            "addr": "0x250f3d540",
+            "name": "_OUTLINED_FUNCTION_23_5"
+          },
+          {
+            "addr": "0x250f36ac8",
+            "name": "_OUTLINED_FUNCTION_9_0"
+          },
+          {
+            "addr": "0x2511de201",
+            "name": "aVoidCarendpoin_34",
+            "string": "void carEndpoint_handlePlaybackSessionActivationChanged(CMNotificationCenterRef, const void *, CFStringRef, const void *, CFTypeRef)"
+          },
+          {
+            "addr": "0x250f53930",
+            "name": "_OUTLINED_FUNCTION_20_6"
+          },
+          {
+            "addr": "0x2512119b2",
+            "name": "aApSignpostCarV",
+            "string": "AP_SIGNPOST_CAR_VIDEOPLAYBACK_INSESSION_BEGIN"
+          },
+          {
+            "addr": "0x250f35000",
+            "name": "dword_250F35000"
+          },
+          {
+            "addr": "0x251210d5a",
+            "name": "unk_251210D5A"
+          },
+          {
+            "addr": "0x2512119e0",
+            "name": "aApSignpostCarV_0",
+            "string": "AP_SIGNPOST_CAR_VIDEOPLAYBACK_INSESSION_END"
+          },
+          {
+            "addr": "0x251091050",
+            "name": "___carEndpoint_handlePlaybackSessionActivationChanged_block_invoke"
+          },
+          {
+            "addr": "0x269394968",
+            "name": "unk_269394968"
+          },
+          {
+            "addr": "0x251149370",
+            "name": "_carEndpoint_checkAndUpdateVideoOverlayActivation"
+          },
+          {
+            "addr": "0x250f413e8",
+            "name": "_OUTLINED_FUNCTION_16"
+          },
+          {
+            "addr": "0x25114aff0",
+            "name": "___carEndpoint_handlePlaybackSessionActivationChanged_block_invoke_2"
+          },
+          {
+            "addr": "0x269394988",
+            "name": "___block_descriptor_tmp.1146"
+          }
+        ]
+      },
+      "truncated": false
+    },
+    {
+      "key": "APO_activate",
+      "result": {
+        "addr": "0x250ce044c",
+        "code": "__int64 __fastcall -[APOOverlaysServer activateOverlaySessionOnEndpoint:figEndpoint:](\n        __int64 a1,\n        __int64 a2,\n        __int64 a3,\n        __int64 a4)\n{\n  __int64 v6; // x19\n  __int64 v7; // x0\n  int v8; // w23\n  __int64 v9; // x0\n  __int64 v10; // x0\n  __int64 v11; // x20\n  __int64 v12; // x0\n  __int64 v13; // x22\n  __int64 v14; // x0\n  __int64 v15; // x0\n  __int64 (__fastcall *v16)(__int64, __int64, __int64 *); // x9\n  __int64 v17; // x21\n  __int64 v18; // x21\n  __int64 v19; // x0\n  __int64 v20; // x0\n  __int64 v21; // x0\n  __int64 v22; // x0\n  __int64 v23; // x0\n  __int64 v24; // x20\n  __int64 v25; // x0\n  __int64 v26; // x20\n  __int64 v27; // x0\n  __int64 v28; // x20\n  __int64 v30; // [xsp+28h] [xbp-48h] BYREF\n  _BYTE v31[8]; // [xsp+30h] [xbp-40h] BYREF\n  __int64 v32; // [xsp+38h] [xbp-38h] BYREF\n\n  v6 = MEMORY[0x258100670](); /*0x250ce0474*/\n  v7 = MEMORY[0x25801EB10](a1); /*0x250ce047c*/\n  MEMORY[0x258100CA0](v7); /*0x250ce0480*/\n  v8 = MEMORY[0x2580014F0](); /*0x250ce0490*/\n  v9 = MEMORY[0x2581005C0](); /*0x250ce0494*/\n  if ( v8 ) /*0x250ce0498*/\n  {\n    v10 = MEMORY[0x25810BA50](v9); /*0x250ce049c*/\n    v11 = MEMORY[0x258100CA0](v10); /*0x250ce04a4*/\n    if ( (unsigned int)MEMORY[0x2581006C0](v11, 17) ) /*0x250ce04ac*/\n      -[APOOverlaysServer activateOverlaySessionOnEndpoint:figEndpoint:].cold.4(v6, v11); /*0x250ce04bc*/\nLABEL_17:\n    v22 = MEMORY[0x2581005A0](); /*0x250ce06b4*/\n    return MEMORY[0x258100590](v22); /*0x250ce06b4*/\n  }\n  v12 = MEMORY[0x258102570](0, 0, MEMORY[0x2680C3390], MEMORY[0x2680C3398]); /*0x250ce04dc*/\n  if ( !v12 ) /*0x250ce04e0*/\n  {\n    v25 = MEMORY[0x25810BA50](); /*0x250ce0674*/\n    v26 = MEMORY[0x258100CA0](v25); /*0x250ce067c*/\n    if ( (unsigned int)MEMORY[0x2581006C0](v26, 17) ) /*0x250ce0684*/\n      -[APOOverlaysServer activateOverlaySessionOnEndpoint:figEndpoint:].cold.3(v26); /*0x250ce0690*/\n    goto LABEL_17; /*0x250ce0694*/\n  }\n  v13 = v12; /*0x250ce04e4*/\n  v14 = MEMORY[0x2581025C0](v12, *MEMORY[0x2680C54D8], *MEMORY[0x2680C54B8]); /*0x250ce0500*/\n  if ( !a4 || (v15 = MEMORY[0x25810BA80](v14), v14 = MEMORY[0x25810BA70](a4, v15), !(_DWORD)v14) ) /*0x250ce0518*/\n  {\n    v23 = MEMORY[0x25810BA50](v14); /*0x250ce0650*/\n    v24 = MEMORY[0x258100CA0](v23); /*0x250ce0658*/\n    if ( (unsigned int)MEMORY[0x2581006C0](v24, 17) ) /*0x250ce0660*/\n      -[APOOverlaysServer activateOverlaySessionOnEndpoint:figEndpoint:].cold.2(v24); /*0x250ce066c*/\n    goto LABEL_17; /*0x250ce0670*/\n  }\n  v32 = 0; /*0x250ce051c*/\n  v16 = *(__int64 (__fastcall **)(__int64, __int64, __int64 *))(*(_QWORD *)(MEMORY[0x25810BA60](a4) + 24) + 80LL); /*0x250ce0538*/\n  if ( !v16 ) /*0x250ce053c*/\n  {\n    v17 = 4294954514LL; /*0x250ce0698*/\nLABEL_15:\n    v27 = MEMORY[0x25810BA50](); /*0x250ce069c*/\n    v28 = MEMORY[0x258100CA0](v27); /*0x250ce06a4*/\n    if ( (unsigned int)MEMORY[0x2581006C0](v28, 17) ) /*0x250ce06ac*/\n      -[APOOverlaysServer activateOverlaySessionOnEndpoint:figEndpoint:].cold.1(v17, v28); /*0x250ce06dc*/\n    goto LABEL_17; /*0x250ce06dc*/\n  }\n  v17 = v16(a4, v13, &v32); /*0x250ce0580*/\n  if ( (_DWORD)v17 ) /*0x250ce0584*/\n    goto LABEL_15; /*0x250ce0584*/\n  MEMORY[0x25801FC60](a1); /*0x250ce0590*/\n  MEMORY[0x258101680](v31, a1); /*0x250ce059c*/\n  v18 = MEMORY[0x258100F30](&OBJC_CLASS____TtC21AirPlayOverlaysServer17APOOverlaySession); /*0x250ce05ac*/\n  MEMORY[0x258101660](&v30, v31); /*0x250ce0600*/\n  MEMORY[0x25801FC20](v18); /*0x250ce0614*/\n  v19 = MEMORY[0x25801FC50](a1); /*0x250ce0620*/\n  MEMORY[0x258100CA0](v19); /*0x250ce0624*/\n  v20 = MEMORY[0x25801FBD0](); /*0x250ce0630*/\n  v21 = MEMORY[0x2581005A0](v20); /*0x250ce0634*/\n  MEMORY[0x2581005B0](v21); /*0x250ce0638*/\n  MEMORY[0x258101670](&v30); /*0x250ce0640*/\n  v22 = MEMORY[0x258101670](v31); /*0x250ce0648*/\n  return MEMORY[0x258100590](v22); /*0x250ce06d0*/\n}",
+        "refs": [
+          {
+            "addr": "0x250d074fc",
+            "name": "-[APOOverlaysServer activateOverlaySessionOnEndpoint:figEndpoint:].cold.4"
+          },
+          {
+            "addr": "0x250d074c0",
+            "name": "-[APOOverlaysServer activateOverlaySessionOnEndpoint:figEndpoint:].cold.3"
+          },
+          {
+            "addr": "0x250d07484",
+            "name": "-[APOOverlaysServer activateOverlaySessionOnEndpoint:figEndpoint:].cold.2"
+          },
+          {
+            "addr": "0x250d07440",
+            "name": "-[APOOverlaysServer activateOverlaySessionOnEndpoint:figEndpoint:].cold.1"
+          },
+          {
+            "addr": "0x2714f5910",
+            "name": "_OBJC_CLASS_$__TtC21AirPlayOverlaysServer17APOOverlaySession"
+          }
+        ]
+      },
+      "truncated": false
+    },
+    {
+      "key": "overlay_activate_block",
+      "result": {
+        "addr": "0x24f3a9c18",
+        "code": "void __fastcall __APCarPlayHelperActivateOverlaySession_block_invoke(__int64 a1)\n{\n  __int64 APOOverlaysServerClass; // x0\n  __int64 v3; // x0\n  __int64 _18; // [xsp+18h] [xbp+8h]\n\n  if ( gLogCategory_APBrowserCarSessionHelper <= 50 /*0x24f3a9c54*/\n    && (gLogCategory_APBrowserCarSessionHelper != -1\n     || (unsigned int)MEMORY[0x2500EC700](&gLogCategory_APBrowserCarSessionHelper, 33554482)) )\n  {\n    __APCarPlayHelperActivateOverlaySession_block_invoke_cold_1(a1); /*0x24f3a9c98*/\n  }\n  APOOverlaysServerClass = getAPOOverlaysServerClass(); /*0x24f3a9c5c*/\n  v3 = MEMORY[0x250003230](APOOverlaysServerClass); /*0x24f3a9c60*/\n  MEMORY[0x2500800C0](v3); /*0x24f3a9c68*/\n  MEMORY[0x2500AB8F0](*(_QWORD *)(a1 + 32)); /*0x24f3a9c70*/\n  if ( ((_18 ^ (2 * _18)) & 0x4000000000000000LL) != 0 ) /*0x24f3a9c88*/\n    __break(0xC471u); /*0x24f3a9c8c*/\n  JUMPOUT(0x2500AB8F0LL); /*0x2500ab8f0*/\n}",
+        "refs": [
+          {
+            "addr": "0x24f3e1400",
+            "name": "___APCarPlayHelperActivateOverlaySession_block_invoke.cold.1"
+          },
+          {
+            "addr": "0x2709d8530",
+            "name": "_gLogCategory_APBrowserCarSessionHelper"
+          },
+          {
+            "addr": "0x24f3a9ca0",
+            "name": "_getAPOOverlaysServerClass"
+          }
+        ]
+      },
+      "truncated": false
+    },
+    {
+      "key": "0x24f3a9ab8",
+      "result": {
+        "addr": "0x24f3a9ab8",
+        "code": "__int64 __fastcall APCarPlayHelperActivateOverlaySession(__int64 a1, __int64 a2)\n{\n  __int64 v4; // x0\n  __int64 result; // x0\n\n  if ( !a1 ) /*0x24f3a9acc*/\n    APCarPlayHelperActivateOverlaySession_cold_4(); /*0x24f3a9bf4*/\n  if ( !a2 ) /*0x24f3a9ad4*/\n    APCarPlayHelperActivateOverlaySession_cold_3(); /*0x24f3a9bfc*/\n  if ( carPlayHelperSession_isCarPlayVideoPlaybackNotificationsEnabled_sOnce != -1 ) /*0x24f3a9ae8*/\n    APCarPlayHelperDeactivateOverlaySession_cold_1(); /*0x24f3a9c08*/\n  if ( carPlayHelperSession_isCarPlayVideoPlaybackNotificationsEnabled_sCarPlayVideoPlaybackNotificationsEnabled == 1 ) /*0x24f3a9af8*/\n  {\n    MEMORY[0x2500AB900](a1); /*0x24f3a9b00*/\n    v4 = MEMORY[0x2500AB900](a2); /*0x24f3a9b08*/\n    if ( _MergedGlobals_19 != -1 ) /*0x24f3a9b18*/\n      APCarPlayHelperGetRestrictedModeAuthorizations_cold_1(v4); /*0x24f3a9c10*/\n    MEMORY[0x250080690](qword_2709D89A8); /*0x24f3a9b70*/\n    return 0; /*0x24f3a9b74*/\n  }\n  if ( gLogCategory_APBrowserCarSessionHelper > 60 ) /*0x24f3a9b84*/\n    return 0; /*0x24f3a9bd4*/\n  if ( gLogCategory_APBrowserCarSessionHelper != -1\n    || (result = MEMORY[0x2500EC700](&gLogCategory_APBrowserCarSessionHelper, 33554492), (_DWORD)result) )\n  {\n    MEMORY[0x2500EC3A0](\n      &gLogCategory_APBrowserCarSessionHelper,\n      \"OSStatus APCarPlayHelperActivateOverlaySession(CFStringRef, CFTypeRef)\",\n      33554492,\n      \"Need to enable `%@` FF for activating video overlay session (sessionId: %@, inCarPlayEndpoint: %{ptr})\\n\",\n      CFSTR(\"CarPlayVideoPlayback_Notifications\"),\n      a1,\n      a2);\n    return 0; /*0x24f3a9bc0*/\n  }\n  return result; /*0x24f3a9bd4*/\n}",
+        "refs": [
+          {
+            "addr": "0x24f3e13ec",
+            "name": "_APCarPlayHelperActivateOverlaySession.cold.4"
+          },
+          {
+            "addr": "0x24f3e13d8",
+            "name": "_APCarPlayHelperActivateOverlaySession.cold.3"
+          },
+          {
+            "addr": "0x24f3e13d4",
+            "name": "_APCarPlayHelperDeactivateOverlaySession.cold.1"
+          },
+          {
+            "addr": "0x2709d8820",
+            "name": "_carPlayHelperSession_isCarPlayVideoPlaybackNotificationsEnabled.sOnce"
+          },
+          {
+            "addr": "0x24f3e1364",
+            "name": "_APCarPlayHelperGetRestrictedModeAuthorizations.cold.1"
+          },
+          {
+            "addr": "0x2709d89a0",
+            "name": "__MergedGlobals_19"
+          },
+          {
+            "addr": "0x2709d89a8",
+            "name": "qword_2709D89A8"
+          },
+          {
+            "addr": "0x2709d8828",
+            "name": "_carPlayHelperSession_isCarPlayVideoPlaybackNotificationsEnabled.sCarPlayVideoPlaybackNotificationsEnabled"
+          },
+          {
+            "addr": "0x2709d8530",
+            "name": "_gLogCategory_APBrowserCarSessionHelper"
+          },
+          {
+            "addr": "0x24f413d5a",
+            "name": "aOsstatusApcarp_7",
+            "string": "OSStatus APCarPlayHelperActivateOverlaySession(CFStringRef, CFTypeRef)"
+          },
+          {
+            "addr": "0x24f413da1",
+            "name": "aNeedToEnableFf",
+            "string": "Need to enable `%@` FF for activating video overlay session (sessionId: %@, inCarPlayEndpoint: %{ptr})\n"
+          },
+          {
+            "addr": "0x2759735d0",
+            "name": "cfstr_Carplayvideopl"
+          }
+        ]
+      },
+      "truncated": false
+    },
+    {
+      "key": "featuresProbe0",
+      "result": {
+        "addr": "0x25109c150",
+        "code": "__int64 __fastcall airPlayDescription_hasCarPlayVideoFeatureInternal(__int64 a1)\n{\n  __int64 v2; // x0\n  __int64 v3; // x19\n  __int64 v4; // x20\n  __int64 v6; // [xsp+8h] [xbp-18h] BYREF\n\n  MEMORY[0x25810D5C0](); /*0x25109c168*/\n  v6 = 0; /*0x25109c16c*/\n  v2 = airPlayDescription_copyCarPlayVideoFeaturesInternal(a1, &v6); /*0x25109c178*/\n  if ( (_DWORD)v2 ) /*0x25109c17c*/\n  {\n    MEMORY[0x25810C360](v2, \"airPlayDescription_hasCarPlayVideoFeatureInternal\", 4790, 0); /*0x25109c1c4*/\n    v4 = 0; /*0x25109c1c8*/\n    v3 = v6; /*0x25109c1cc*/\n    if ( !v6 ) /*0x25109c1d0*/\n      return v4; /*0x25109c1d0*/\n    goto LABEL_3; /*0x25109c1d0*/\n  }\n  v3 = v6; /*0x25109c180*/\n  v4 = MEMORY[0x25810C0F0](v6, 70); /*0x25109c190*/\n  if ( v3 ) /*0x25109c194*/\nLABEL_3:\n    MEMORY[0x258101B70](v3); /*0x25109c198*/\n  return v4; /*0x25109c1b0*/\n}",
+        "refs": [
+          {
+            "addr": "0x251154628",
+            "name": "_airPlayDescription_copyCarPlayVideoFeaturesInternal"
+          },
+          {
+            "addr": "0x2511e3b99",
+            "name": "aAirplaydescrip_18",
+            "string": "airPlayDescription_hasCarPlayVideoFeatureInternal"
+          }
+        ]
+      },
+      "truncated": false
+    },
+    {
+      "key": "featuresNext0",
+      "result": {
+        "addr": "0x250f4b5fc",
+        "code": "__int64 __fastcall airPlayDescription_copyVolumeControlTypeEx(__int64 a1, __int64 a2, __int64 *a3)\n{\n  __int64 v6; // x24\n  __int64 v7; // x0\n  __int64 v8; // x23\n  __int64 v9; // x21\n  __int64 v10; // x23\n  __int64 v11; // x0\n  __int64 v12; // x1\n  __int64 v13; // x2\n  __int64 v14; // x3\n  __int64 v15; // x4\n  __int64 v17; // x24\n  __int64 v18; // x0\n  unsigned int v19; // w0\n  __int64 v21; // [xsp+28h] [xbp-38h] BYREF\n\n  v6 = MEMORY[0x25810D5C0](); /*0x250f4b628*/\n  v21 = 0; /*0x250f4b62c*/\n  MEMORY[0x25810D5C0](a1); /*0x250f4b634*/\n  if ( (unsigned int)airPlayDescription_hasFeatureInternal(a1, 32) ) /*0x250f4b640*/\n    v7 = airPlayDescription_copyCarPlayVideoFeaturesInternal(a1, &v21); /*0x250f4b770*/\n  else\n    v7 = airPlayDescription_copyFeaturesInternal(a1, &v21); /*0x250f4b650*/\n  v8 = v7; /*0x250f4b654*/\n  if ( (_DWORD)v7 ) /*0x250f4b658*/\n  {\n    MEMORY[0x25810C360](v7, \"airPlayDescription_copyVolumeControlTypeEx\", 4372, 0); /*0x250f4b820*/\n    v9 = v21; /*0x250f4b824*/\n    goto LABEL_18; /*0x250f4b828*/\n  }\n  v9 = v21; /*0x250f4b65c*/\n  if ( (unsigned int)MEMORY[0x25810C0F0](v21, 75) ) /*0x250f4b668*/\n  {\n    v10 = 4; /*0x250f4b670*/\nLABEL_12:\n    if ( gLogCategory_APEndpointDescriptionAirPlay > 30 /*0x250f4b724*/\n      || gLogCategory_APEndpointDescriptionAirPlay == -1\n      && !(unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointDescriptionAirPlay, 33554462) )\n    {\n      goto LABEL_16; /*0x250f4b728*/\n    }\n    goto LABEL_14; /*0x250f4b728*/\n  }\n  if ( (unsigned int)MEMORY[0x25810C0F0](v9, 74) ) /*0x250f4b680*/\n    v10 = 2; /*0x250f4b688*/\n  else\n    v10 = (unsigned int)MEMORY[0x25810C0F0](v9, 73) != 0; /*0x250f4b6a0*/\n  if ( (unsigned int)MEMORY[0x25810C0F0](v9, 76) ) /*0x250f4b6ac*/\n  {\n    v10 = (unsigned int)v10 | 8; /*0x250f4b6b4*/\n    goto LABEL_12; /*0x250f4b6b8*/\n  }\n  if ( (_DWORD)v10 ) /*0x250f4b6bc*/\n    goto LABEL_12; /*0x250f4b6bc*/\n  v17 = MEMORY[0x25810DA40](*(_QWORD *)(v6 + 24), &stru_275AFA680); /*0x250f4b788*/\n  v18 = MEMORY[0x25810DB70](); /*0x250f4b78c*/\n  v19 = MEMORY[0x258110B20](v18); /*0x250f4b790*/\n  if ( v19 - 1 < 2 || v17 == 0 ) /*0x250f4b79c*/\n    v10 = 4; /*0x250f4b7a4*/\n  else\n    v10 = v19; /*0x250f4b7a4*/\n  if ( gLogCategory_APEndpointDescriptionAirPlay > 30 /*0x250f4b800*/\n    || gLogCategory_APEndpointDescriptionAirPlay == -1\n    && !(unsigned int)MEMORY[0x258100DC0](&gLogCategory_APEndpointDescriptionAirPlay, 33554462) )\n  {\n    goto LABEL_16; /*0x250f4b804*/\n  }\nLABEL_14:\n  MEMORY[0x258100F00](&gLogCategory_APEndpointDescriptionAirPlay); /*0x250f4b704*/\nLABEL_16:\n  v11 = MEMORY[0x25810DB30](a2, v10); /*0x250f4b72c*/\n  *a3 = v11; /*0x250f4b738*/\n  if ( !v11 ) /*0x250f4b73c*/\n    airPlayDescription_copyVolumeControlTypeEx_cold_1(0, v12, v13, v14, v15); /*0x250f4b82c*/\n  v8 = 0; /*0x250f4b740*/\nLABEL_18:\n  if ( v9 ) /*0x250f4b744*/\n    MEMORY[0x258101B70](v9); /*0x250f4b74c*/\n  return v8; /*0x250f4b768*/\n}",
+        "refs": [
+          {
+            "addr": "0x251154628",
+            "name": "_airPlayDescription_copyCarPlayVideoFeaturesInternal"
+          },
+          {
+            "addr": "0x250f38ff0",
+            "name": "_airPlayDescription_copyFeaturesInternal"
+          },
+          {
+            "addr": "0x250f39500",
+            "name": "_airPlayDescription_hasFeatureInternal"
+          },
+          {
+            "addr": "0x2511e3582",
+            "name": "aAirplaydescrip_4",
+            "string": "airPlayDescription_copyVolumeControlTypeEx"
+          },
+          {
+            "addr": "0x27048ed60",
+            "name": "_gLogCategory_APEndpointDescriptionAirPlay"
+          },
+          {
+            "addr": "0x275afa680",
+            "name": "stru_275AFA680"
+          },
+          {
+            "addr": "0x251154df0",
+            "name": "_airPlayDescription_copyVolumeControlTypeEx.cold.1"
+          }
+        ]
+      },
+      "truncated": false
+    },
+    {
+      "key": "0x251154628",
+      "result": {
+        "addr": "0x251154628",
+        "code": "__int64 __fastcall airPlayDescription_copyCarPlayVideoFeaturesInternal(__int64 a1, __int64 *a2)\n{\n  __int64 v3; // x20\n  __int64 v4; // x0\n  __int64 v5; // x0\n  __int64 v6; // x20\n  __int64 v7; // x21\n  __int64 v8; // x0\n  __int64 v9; // x0\n  __int64 v10; // x20\n  __int64 v12; // x0\n  __int64 v13; // x8\n  __int64 v14; // x0\n  unsigned int v15; // [xsp+Ch] [xbp-24h] BYREF\n\n  v15 = -6727; /*0x251154648*/\n  v3 = *(_QWORD *)(MEMORY[0x25810D5C0]() + 24); /*0x251154650*/\n  v4 = MEMORY[0x2581025A0](); /*0x251154654*/\n  v5 = MEMORY[0x25810D050](v3, &stru_275B04920, v4, &v15); /*0x25115466c*/\n  if ( !v5 ) /*0x251154670*/\n    return v15; /*0x251154670*/\n  v6 = v5; /*0x251154674*/\n  if ( v15 ) /*0x25115467c*/\n  {\n    v12 = ((__int64 (*)(void))OUTLINED_FUNCTION_21_9)(); /*0x2511546ec*/\nLABEL_12:\n    MEMORY[0x25810C360](v12); /*0x251154710*/\n    return v15; /*0x251154718*/\n  }\n  v7 = *MEMORY[0x2680EC1C0]; /*0x251154688*/\n  v8 = MEMORY[0x258101BA0](); /*0x25115468c*/\n  v9 = MEMORY[0x25810D050](v6, v7, v8, &v15); /*0x2511546a0*/\n  if ( v15 ) /*0x2511546a8*/\n  {\n    OUTLINED_FUNCTION_21_9(v9); /*0x2511546f8*/\n    v12 = v13; /*0x2511546fc*/\n    goto LABEL_12; /*0x251154704*/\n  }\n  if ( !v9 ) /*0x2511546ac*/\n  {\n    v12 = OUTLINED_FUNCTION_21_9(0); /*0x251154708*/\n    goto LABEL_12; /*0x251154708*/\n  }\n  v10 = MEMORY[0x25810C0B0](v9, &v15); /*0x2511546b8*/\n  if ( v15 ) /*0x2511546c0*/\n  {\n    v14 = OUTLINED_FUNCTION_21_9(v15); /*0x25115471c*/\n    MEMORY[0x25810C360](v14); /*0x251154728*/\n    if ( !v10 ) /*0x25115472c*/\n      return v15; /*0x25115472c*/\n    goto LABEL_7; /*0x25115472c*/\n  }\n  *a2 = v10; /*0x2511546c4*/\n  if ( v10 ) /*0x2511546c8*/\nLABEL_7:\n    MEMORY[0x258101B70](v10); /*0x2511546cc*/\n  return v15; /*0x2511546e8*/\n}",
+        "refs": [
+          {
+            "addr": "0x275b04920",
+            "name": "stru_275B04920"
+          },
+          {
+            "addr": "0x250f3cf24",
+            "name": "_OUTLINED_FUNCTION_21_9"
+          }
+        ]
+      },
+      "truncated": false
+    },
+    {
+      "key": "0x22661ec08",
+      "result": {
+        "addr": "0x22661ec08",
+        "code": "__int64 __fastcall APSFeaturesCreateFromStringRepresentation(__int64 a1, _DWORD *a2)\n{\n  __int64 v4; // x22\n  __int64 v5; // x20\n  __int64 v6; // x0\n  __int64 v7; // x0\n  __int64 v8; // x21\n  __int64 v9; // x22\n  __int64 v11; // x2\n  __int64 v12; // [xsp+10h] [xbp-40h] BYREF\n  __int64 v13; // [xsp+18h] [xbp-38h] BYREF\n\n  v12 = 0; /*0x22661ec2c*/\n  v13 = 0; /*0x22661ec2c*/\n  if ( gLogCategory_APSFeatures <= 30 /*0x22661ec80*/\n    && (gLogCategory_APSFeatures != -1 || (unsigned int)MEMORY[0x228175780](&gLogCategory_APSFeatures, 33554462)) )\n  {\n    MEMORY[0x228175250]( /*0x22661ec68*/\n      &gLogCategory_APSFeatures,\n      \"APSFeaturesRef APSFeaturesCreateFromStringRepresentation(CFStringRef, OSStatus *)\",\n      33554462,\n      \"Creating APSFeatures from string\\n\");\n  }\n  v4 = MEMORY[0x228153510](a1); /*0x22661ec90*/\n  v5 = MEMORY[0x228129880](v4 + 1, 3622483832LL); /*0x22661eca4*/\n  if ( v5 ) /*0x22661eca8*/\n  {\n    if ( (unsigned int)MEMORY[0x2281534F0](a1, v5, v4 + 1, 1536) == 1 ) /*0x22661ecc4*/\n    {\n      v6 = MEMORY[0x228130C60](v5); /*0x22661eccc*/\n      v7 = MEMORY[0x228173C80](v5, v6, &v13, &v12); /*0x22661ece0*/\n      if ( (_DWORD)v7 ) /*0x22661ece4*/\n      {\n        v9 = v7; /*0x22661edd8*/\n        APSLogErrorAt(v7, \"APSFeaturesCreateFromStringRepresentation\", 72, 0); /*0x22661edec*/\n        v8 = 0; /*0x22661edf0*/\n        goto LABEL_11; /*0x22661edf4*/\n      }\n      if ( v13 ) /*0x22661ecec*/\n      {\n        v8 = MEMORY[0x22814AF80](0, v13, v12); /*0x22661ecfc*/\n        if ( v8 ) /*0x22661ed00*/\n        {\n          v9 = 0; /*0x22661ed04*/\n          goto LABEL_11; /*0x22661ed04*/\n        }\n        APSLogErrorAt(0, \"APSFeaturesCreateFromStringRepresentation\", 76, 0); /*0x22661ee2c*/\n        goto LABEL_27; /*0x22661ee2c*/\n      }\n      v11 = 73; /*0x22661ee04*/\n    }\n    else\n    {\n      v11 = 69; /*0x22661edd0*/\n    }\n    APSLogErrorAt(0, \"APSFeaturesCreateFromStringRepresentation\", v11, 0); /*0x22661ee0c*/\n    v8 = 0; /*0x22661ee10*/\n    v9 = 4294960591LL; /*0x22661ee14*/\n    goto LABEL_11; /*0x22661ee18*/\n  }\n  APSLogErrorAt(0, \"APSFeaturesCreateFromStringRepresentation\", 66, 0); /*0x22661edb8*/\n  v8 = 0; /*0x22661edbc*/\nLABEL_27:\n  v9 = 4294960568LL; /*0x22661ee30*/\nLABEL_11:\n  MEMORY[0x228129810](v5); /*0x22661ed08*/\n  MEMORY[0x228129810](v13); /*0x22661ed14*/\n  if ( a2 ) /*0x22661ed18*/\n    *a2 = v9; /*0x22661ed1c*/\n  if ( (_DWORD)v9 )\n  {\n    if ( gLogCategory_APSFeatures <= 90\n      && (gLogCategory_APSFeatures != -1 || (unsigned int)MEMORY[0x228175780](&gLogCategory_APSFeatures, 33554522)) )\n    {\n      MEMORY[0x228175250](\n        &gLogCategory_APSFeatures,\n        \"APSFeaturesRef APSFeaturesCreateFromStringRepresentation(CFStringRef, OSStatus *)\",\n        33554522,\n        \"### APSFeaturesCreateFromStringRepresentation failed, error: %#m\\n\",\n        v9);\n    }\n    if ( v8 ) /*0x22661ed7c*/\n    {\n      MEMORY[0x228130400](v8); /*0x22661ed84*/\n      return 0; /*0x22661ed88*/\n    }\n  }\n  return v8; /*0x22661eda4*/\n}",
+        "refs": [
+          {
+            "addr": "0x26ffe2340",
+            "name": "_gLogCategory_APSFeatures"
+          },
+          {
+            "addr": "0x226710534",
+            "name": "aApsfeaturesref",
+            "string": "APSFeaturesRef APSFeaturesCreateFromStringRepresentation(CFStringRef, OSStatus *)"
+          },
+          {
+            "addr": "0x226710586",
+            "name": "aCreatingApsfea",
+            "string": "Creating APSFeatures from string\n"
+          },
+          {
+            "addr": "0x226641ccc",
+            "name": "_APSLogErrorAt"
+          },
+          {
+            "addr": "0x2267105a8",
+            "name": "aApsfeaturescre_0",
+            "string": "APSFeaturesCreateFromStringRepresentation"
+          },
+          {
+            "addr": "0x2267105d2",
+            "name": "aApsfeaturescre_1",
+            "string": "### APSFeaturesCreateFromStringRepresentation failed, error: %#m\n"
+          }
+        ]
+      },
+      "truncated": false
+    },
+    {
+      "key": "0x2266be888",
+      "result": {
+        "addr": "0x2266be888",
+        "code": "__int64 __fastcall APSFeaturesHasFeature(__int64 a1, __int64 a2)\n{\n  __int64 v2; // x21\n  char v3; // w19\n  __int64 v5; // x0\n  __int64 v7; // x2\n\n  if ( a2 >= 0 ) /*0x2266be8a4*/\n    v2 = a2; /*0x2266be8a4*/\n  else\n    v2 = a2 + 7; /*0x2266be8a4*/\n  if ( !a1 ) /*0x2266be8a8*/\n  {\n    v7 = 154; /*0x2266be8fc*/\nLABEL_10:\n    APSLogErrorAt(0, \"APSFeaturesHasFeature\", v7, 0); /*0x2266be910*/\n    return 0; /*0x2266be914*/\n  }\n  v3 = a2; /*0x2266be8ac*/\n  if ( v2 >> 3 < MEMORY[0x228153380]() ) /*0x2266be8c0*/\n  {\n    v5 = MEMORY[0x228153370](a1); /*0x2266be8c8*/\n    if ( v5 ) /*0x2266be8cc*/\n      return (*(unsigned __int8 *)(v5 + (v2 >> 3)) >> (v3 - (v2 & 0xF8))) & 1; /*0x2266be8f0*/\n    v7 = 160; /*0x2266be90c*/\n    goto LABEL_10; /*0x2266be90c*/\n  }\n  return 0; /*0x2266be8f0*/\n}",
+        "refs": [
+          {
+            "addr": "0x226641ccc",
+            "name": "_APSLogErrorAt"
+          },
+          {
+            "addr": "0x22671066d",
+            "name": "aApsfeatureshas",
+            "string": "APSFeaturesHasFeature"
+          }
+        ]
+      },
+      "truncated": false
+    },
+    {
+      "key": "backButton",
+      "result": {
+        "addr": "0x25114a1a0",
+        "code": "__int64 __fastcall carEndpoint_handleVideoPlayerBackButtonEvent(__int64 a1, __int64 a2)\n{\n  __int64 v2; // x19\n  __int64 v3; // x20\n  __int64 v4; // x0\n  __int64 v5; // x0\n  __int64 v6; // x0\n  __int64 v7; // x1\n  __int64 v8; // x2\n  int v9; // w8\n  char v10; // zf\n  char v11; // nf\n  char v12; // vf\n  __int64 v13; // x0\n  __int64 _28; // [xsp+28h] [xbp+8h]\n\n  v4 = OUTLINED_FUNCTION_98(a1, a2); /*0x25114a1b4*/\n  v5 = MEMORY[0x25810D5C0](v4); /*0x25114a1b8*/\n  if ( !*(_BYTE *)(v5 + 68) ) /*0x25114a1bc*/\n    return 0; /*0x25114a228*/\n  *(_BYTE *)(v5 + 220) = 1; /*0x25114a1c8*/\n  v6 = OUTLINED_FUNCTION_21_8(); /*0x25114a1cc*/\n  if ( v11 ^ v12 | v10 ) /*0x25114a1d0*/\n  {\n    if ( v9 != -1 || (v6 = OUTLINED_FUNCTION_20_6(v6), (_DWORD)v6) ) /*0x25114a1e0*/\n    {\n      v13 = OUTLINED_FUNCTION_23_5(v6, v7, v8); /*0x25114a1e8*/\n      OUTLINED_FUNCTION_9_0( /*0x25114a1fc*/\n        v13,\n        \"OSStatus carEndpoint_handleVideoPlayerBackButtonEvent(FigEndpointRef, CFDictionaryRef)\");\n    }\n  }\n  if ( ((_28 ^ (2 * _28)) & 0x4000000000000000LL) != 0 ) /*0x25114a21c*/\n    __break(0xC471u); /*0x25114a220*/\n  return carEndpoint_sendChangeVideoPlaybackToAudioOnlyIfNeeded(v3, v2); /*0x25114a238*/\n}",
+        "refs": [
+          {
+            "addr": "0x250f41648",
+            "name": "_OUTLINED_FUNCTION_98"
+          },
+          {
+            "addr": "0x250f3cf14",
+            "name": "_OUTLINED_FUNCTION_21_8"
+          },
+          {
+            "addr": "0x250f3d540",
+            "name": "_OUTLINED_FUNCTION_23_5"
+          },
+          {
+            "addr": "0x250f36ac8",
+            "name": "_OUTLINED_FUNCTION_9_0"
+          },
+          {
+            "addr": "0x2511d9857",
+            "name": "aOsstatusCarend_33",
+            "string": "OSStatus carEndpoint_handleVideoPlayerBackButtonEvent(FigEndpointRef, CFDictionaryRef)"
+          },
+          {
+            "addr": "0x250f53930",
+            "name": "_OUTLINED_FUNCTION_20_6"
+          },
+          {
+            "addr": "0x25114a4ec",
+            "name": "_carEndpoint_sendChangeVideoPlaybackToAudioOnlyIfNeeded"
+          }
+        ]
+      },
+      "truncated": false
+    }
+  ],
+  "disassembly": [
+    {
+      "chunk_id": "b8e01e",
+      "wall_time_seconds": 2.359004,
+      "exit_code": 0,
+      "original_token_count": 519,
+      "output": "   • Loading symbol cache file...\n0x2510996cc:  b7 5a 40 29   ldp\tw23, w22, [x21]\n0x2510996d0:  42 81 0b d0   adrp\tx2, 0x2680c3000\n0x2510996d4:  42 c8 41 f9   ldr\tx2, [x2, #0x390] ; _ptr._kCFTypeDictionaryKeyCallBacks\n0x2510996d8:  43 81 0b d0   adrp\tx3, 0x2680c3000\n0x2510996dc:  63 cc 41 f9   ldr\tx3, [x3, #0x398] ; _ptr._kCFTypeDictionaryValueCallBacks\n0x2510996e0:  00 00 80 d2   mov\tx0, #0\n0x2510996e4:  01 00 80 d2   mov\tx1, #0\n0x2510996e8:  a2 a3 c1 95   bl\t_CFDictionaryCreateMutable_stub\n0x2510996ec:  80 0b 00 b4   cbz\tx0, loc_25109985c ; ⤵ 0x170\n0x2510996f0:  f5 03 00 aa   mov\tx21, x0\n0x2510996f4:  df 0a 00 71   cmp\tw22, #0x2\n0x2510996f8:  e8 17 9f 1a   cset\tw8, eq\n0x2510996fc:  df 06 00 71   cmp\tw22, #0x1\n0x251099700:  49 00 80 52   mov\tw9, #0x2\n0x251099704:  36 01 88 9a   csel\tx22, x9, x8, eq\n0x251099708:  ff 0a 00 71   cmp\tw23, #0x2\n0x25109970c:  e8 17 9f 1a   cset\tw8, eq\n0x251099710:  ff 06 00 71   cmp\tw23, #0x1\n0x251099714:  37 01 88 9a   csel\tx23, x9, x8, eq\n0x251099718:  61 53 12 b0   adrp\tx1, 0x275b06000\n0x25109971c:  21 00 1c 91   add\tx1, x1, #0x700 ; _ptr.__NSCFConstantString\n0x251099720:  22 00 80 52   mov\tw2, #0x1\n0x251099724:  6b ce c1 95   bl\t_CFDictionarySetInt64_stub\n0x251099728:  61 53 12 b0   adrp\tx1, 0x275b06000\n0x25109972c:  21 00 1b 91   add\tx1, x1, #0x6c0 ; _ptr.__NSCFConstantString\n0x251099730:  e0 03 15 aa   mov\tx0, x21\n0x251099734:  e2 03 17 aa   mov\tx2, x23\n0x251099738:  66 ce c1 95   bl\t_CFDictionarySetInt64_stub\n0x25109973c:  61 53 12 b0   adrp\tx1, 0x275b06000\n0x251099740:  21 80 1c 91   add\tx1, x1, #0x720 ; _ptr.__NSCFConstantString\n0x251099744:  e0 03 15 aa   mov\tx0, x21\n0x251099748:  e2 03 16 aa   mov\tx2, x22\n0x25109974c:  61 ce c1 95   bl\t_CFDictionarySetInt64_stub\n0x251099750:  e0 03 00 91   mov\tx0, sp\n0x251099754:  e1 03 15 aa   mov\tx1, x21\n0x251099758:  da cd c1 95   bl\t_CFArrayEnsureCreatedAndAppend_stub\n0x25109975c:  f6 03 00 aa   mov\tx22, x0\n0x251099760:  e0 03 15 aa   mov\tx0, x21\n0x251099764:  03 a1 c1 95   bl\t_CFRelease_stub\n0x251099768:  36 08 00 35   cbnz\tw22, loc_25109986c ; ⤵ 0x104\n\n"
+    },
+    {
+      "chunk_id": "8090e9",
+      "wall_time_seconds": 1.137503833,
+      "exit_code": 0,
+      "original_token_count": 363,
+      "output": "   • Loading symbol cache file...\n0x250f39dd0:  49 8c 0b d0   adrp\tx9, 0x2680c3000\n0x250f39dd4:  29 ed 40 f9   ldr\tx9, [x9, #0x1d8] ; _ptr._kCFBooleanFalse\n0x250f39dd8:  1f 1c 00 72   tst\tw0, #0xff\n0x250f39ddc:  ea ff ff 17   b\tloc_250f39d84 ; ⤴ -0x58\n0x250f39de0:  c8 22 0c b0   adrp\tx8, 0x269392000\n0x250f39de4:  08 21 03 91   add\tx8, x8, #0xc8 ; _kAPEndpointDescriptionProperty_SupportsOverlayUI\n0x250f39de8:  01 01 40 f9   ldr\tx1, [x8]\n0x250f39dec:  e0 03 16 aa   mov\tx0, x22\n0x250f39df0:  54 1f c7 95   bl\t_CFEqual_stub\n0x250f39df4:  40 01 00 34   cbz\tw0, loc_250f39e1c ; ⤵ 0x28\n0x250f39df8:  e0 03 14 aa   mov\tx0, x20\n0x250f39dfc:  f1 4d c7 95   bl\t_CMBaseObjectGetDerivedStorage_stub\n0x250f39e00:  e0 03 14 aa   mov\tx0, x20\n0x250f39e04:  01 04 80 52   mov\tw1, #0x20\n0x250f39e08:  be fd ff 97   bl\t_airPlayDescription_hasFeatureInternal\n0x250f39e0c:  a0 01 00 34   cbz\tw0, loc_250f39e40 ; ⤵ 0x34\n0x250f39e10:  e0 03 14 aa   mov\tx0, x20\n0x250f39e14:  cf 88 05 94   bl\t_airPlayDescription_hasCarPlayVideoFeatureInternal\n0x250f39e18:  d6 ff ff 17   b\tloc_250f39d70 ; ⤴ -0xa8\n0x250f39e1c:  ; loc_250f39e1c\n0x250f39e1c:  c8 22 0c 90   adrp\tx8, 0x269391000\n0x250f39e20:  08 e1 3f 91   add\tx8, x8, #0xff8 ; _kAPEndpointDescriptionProperty_SilentPrimary\n0x250f39e24:  01 01 40 f9   ldr\tx1, [x8]\n0x250f39e28:  e0 03 16 aa   mov\tx0, x22\n0x250f39e2c:  45 1f c7 95   bl\t_CFEqual_stub\n0x250f39e30:  e0 00 00 34   cbz\tw0, loc_250f39e4c ; ⤵ 0x1c\n\n"
+    },
+    {
+      "chunk_id": "a30cf1",
+      "wall_time_seconds": 0.933974708,
+      "exit_code": 0,
+      "original_token_count": 66,
+      "output": "   • Loading symbol cache file...\n\n_APSFeaturesHasFeature_stub\n0x25810c0f0:  90 2d e7 d0   adrp\tx16, 0x2266be000\n0x25810c0f4:  10 22 22 91   add\tx16, x16, #0x888 ; _APSFeaturesHasFeature\n0x25810c0f8:  00 02 1f d6   br\tx16\n0x25810c0fc:  20 00 20 d4   brk\t#0x1\n\n"
+    },
+    {
+      "chunk_id": "e59aa8",
+      "wall_time_seconds": 0.869865,
+      "exit_code": 0,
+      "original_token_count": 63,
+      "output": "   • Loading symbol cache file...\n\n_Base64DecodeCopy_stub\n0x228173c80:  70 e6 b1 90   adrp\tx16, 0x18be3f000\n0x228173c84:  10 42 2b 91   add\tx16, x16, #0xad0 ; _Base64DecodeCopy\n0x228173c88:  00 02 1f d6   br\tx16\n0x228173c8c:  20 00 20 d4   brk\t#0x1\n\n"
+    },
+    {
+      "chunk_id": "b1edc2",
+      "wall_time_seconds": 0.903037417,
+      "exit_code": 0,
+      "original_token_count": 61,
+      "output": "   • Loading symbol cache file...\n\n_CFDataCreate_stub\n0x22814af80:  10 28 ac d0   adrp\tx16, 0x18064c000\n0x22814af84:  10 22 36 91   add\tx16, x16, #0xd88 ; _CFDataCreate\n0x22814af88:  00 02 1f d6   br\tx16\n0x22814af8c:  20 00 20 d4   brk\t#0x1\n\n"
+    }
+  ]
+}

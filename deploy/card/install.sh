@@ -222,7 +222,18 @@ fi
 # ramdisk ruleset, so it survives the reboot below. Idempotent on its own.
 say ""
 say "--- PF profiles ---"
-sh "$BIN_DIR/install_persistent_pf.sh" 2>&1 | while IFS= read -r l; do say "$l"; done
+PF_LOG=$LOG.pf
+# A pipeline to the log loop would hide the PF script's exit status on QNX sh.
+if SYS_ROOT="$SYS_ROOT" sh "$BIN_DIR/install_persistent_pf.sh" > "$PF_LOG" 2>&1; then
+    PF_RC=0
+else
+    PF_RC=$?
+fi
+if [ -f "$PF_LOG" ]; then
+    while IFS= read -r l || [ -n "$l" ]; do say "$l"; done < "$PF_LOG"
+    rm -f "$PF_LOG"
+fi
+[ "$PF_RC" = 0 ] || die "PF profile update failed (exit $PF_RC); installation is incomplete"
 
 # ---------------------------------------------------------------- done
 say ""

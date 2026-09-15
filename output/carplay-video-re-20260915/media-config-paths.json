@@ -1,0 +1,24 @@
+[
+  {
+    "configIndex": 362,
+    "entry": "0x6fcf18",
+    "pathArray": "0x6f0938",
+    "path": [
+      "cinemo",
+      "config",
+      "videoConfigs",
+      "windowClass"
+    ]
+  },
+  {
+    "configIndex": 363,
+    "entry": "0x6fcf38",
+    "pathArray": "0x6efd98",
+    "path": [
+      "cinemo",
+      "config",
+      "videoConfigs",
+      "windowId"
+    ]
+  }
+]

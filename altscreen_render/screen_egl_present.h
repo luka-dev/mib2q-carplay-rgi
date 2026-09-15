@@ -32,7 +32,8 @@ unsigned int screen_egl_present_source_capacity(screen_egl_present_t *p,
 /* Stop/join the waiting loader, then draw one decoded 32m buffer directly through
  * the Adreno external-image sampler into
  * the RGBA cluster window.  The call completes GPU reads before returning, so
- * the caller may safely recycle that exact OMX output buffer. */
+ * the presentation worker may safely recycle that exact OMX output buffer.
+ * Never call from the decoder callback; queue its source index to the worker. */
 int screen_egl_present_frame(screen_egl_present_t *p,
                              unsigned int source_index,
                              unsigned int filled_len);

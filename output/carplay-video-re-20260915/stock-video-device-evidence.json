@@ -1,0 +1,1839 @@
+[
+  {
+    "key": "videoDeviceSurvey15",
+    "result": {
+      "metadata": {
+        "path": "/Users/luka/Desktop/AUDI_2/Firmwares/HU/MHI2Q_US_AUG22_P5087_MU1316/extracted/app/armle/usr/lib/cinemo/libNmeVideoDevice.so.i64",
+        "module": "libNmeVideoDevice.so",
+        "arch": "32",
+        "base_address": "0x0",
+        "image_size": "0x55eac",
+        "md5": "68063ae8358e996d2bbbdfc2f55dcd25",
+        "sha256": "e99a67f146d5e323976ec7d3a3e6c7f21a3fea04660dd40b472bc9797a341044"
+      },
+      "statistics": {
+        "total_functions": 1385,
+        "named_functions": 391,
+        "library_functions": 0,
+        "unnamed_functions": 994,
+        "total_strings": 664,
+        "total_segments": 23
+      },
+      "segments": [
+        {
+          "name": "LOAD",
+          "start": "0x0",
+          "end": "0x7854",
+          "size": "0x7854",
+          "permissions": "rx"
+        },
+        {
+          "name": ".init",
+          "start": "0x7854",
+          "end": "0x785c",
+          "size": "0x8",
+          "permissions": "rx"
+        },
+        {
+          "name": ".plt",
+          "start": "0x785c",
+          "end": "0x8038",
+          "size": "0x7dc",
+          "permissions": "rx"
+        },
+        {
+          "name": ".text",
+          "start": "0x8038",
+          "end": "0x431dc",
+          "size": "0x3b1a4",
+          "permissions": "rx"
+        },
+        {
+          "name": ".fini",
+          "start": "0x431dc",
+          "end": "0x431e4",
+          "size": "0x8",
+          "permissions": "rx"
+        },
+        {
+          "name": "LOAD",
+          "start": "0x431e4",
+          "end": "0x431e8",
+          "size": "0x4",
+          "permissions": "rx"
+        },
+        {
+          "name": ".rodata",
+          "start": "0x431e8",
+          "end": "0x4c440",
+          "size": "0x9258",
+          "permissions": "r"
+        },
+        {
+          "name": ".ARM.extab",
+          "start": "0x4c440",
+          "end": "0x4c688",
+          "size": "0x248",
+          "permissions": "r"
+        },
+        {
+          "name": ".ARM.exidx",
+          "start": "0x4c688",
+          "end": "0x4ca28",
+          "size": "0x3a0",
+          "permissions": "r"
+        },
+        {
+          "name": ".eh_frame",
+          "start": "0x4ca28",
+          "end": "0x4ca2c",
+          "size": "0x4",
+          "permissions": "r"
+        },
+        {
+          "name": "LOAD",
+          "start": "0x4ca2c",
+          "end": "0x4ca44",
+          "size": "0x18",
+          "permissions": "rx"
+        },
+        {
+          "name": ".init_array",
+          "start": "0x4da44",
+          "end": "0x4da54",
+          "size": "0x10",
+          "permissions": "rw"
+        },
+        {
+          "name": ".fini_array",
+          "start": "0x4da54",
+          "end": "0x4da58",
+          "size": "0x4",
+          "permissions": "rw"
+        },
+        {
+          "name": ".jcr",
+          "start": "0x4da58",
+          "end": "0x4da5c",
+          "size": "0x4",
+          "permissions": "rw"
+        },
+        {
+          "name": "LOAD",
+          "start": "0x4da5c",
+          "end": "0x4da60",
+          "size": "0x4",
+          "permissions": "rw"
+        },
+        {
+          "name": ".data.rel.ro",
+          "start": "0x4da60",
+          "end": "0x50748",
+          "size": "0x2ce8",
+          "permissions": "rw"
+        },
+        {
+          "name": "LOAD",
+          "start": "0x50748",
+          "end": "0x50858",
+          "size": "0x110",
+          "permissions": "rw"
+        },
+        {
+          "name": ".got",
+          "start": "0x50858",
+          "end": "0x50bec",
+          "size": "0x394",
+          "permissions": "rw"
+        },
+        {
+          "name": ".data",
+          "start": "0x50bec",
+          "end": "0x50bf8",
+          "size": "0xc",
+          "permissions": "rw"
+        },
+        {
+          "name": ".bss",
+          "start": "0x50bf8",
+          "end": "0x55bd0",
+          "size": "0x4fd8",
+          "permissions": "rw"
+        },
+        {
+          "name": ".prgend",
+          "start": "0x55bd0",
+          "end": "0x55bd1",
+          "size": "0x1",
+          "permissions": "---"
+        },
+        {
+          "name": "extern",
+          "start": "0x55bd4",
+          "end": "0x55e88",
+          "size": "0x2b4",
+          "permissions": "---"
+        },
+        {
+          "name": "abs",
+          "start": "0x55e88",
+          "end": "0x55eac",
+          "size": "0x24",
+          "permissions": "---"
+        }
+      ],
+      "entrypoints": [
+        {
+          "addr": "0x4ee28",
+          "name": "_ZTI9NmeThread",
+          "ordinal": 323112
+        },
+        {
+          "addr": "0x44e40",
+          "name": "_ZTS8NmeMutex",
+          "ordinal": 282176
+        },
+        {
+          "addr": "0x4ea70",
+          "name": "_ZTV11NmeAutoLock",
+          "ordinal": 322160
+        },
+        {
+          "addr": "0x4ea80",
+          "name": "_ZTI11NmeAutoLock",
+          "ordinal": 322176
+        },
+        {
+          "addr": "0x11f54",
+          "name": "_ZN9NmeThread12static_entryEPv",
+          "ordinal": 73556
+        },
+        {
+          "addr": "0xa93c",
+          "name": "NmeCreateDeviceConsole",
+          "ordinal": 43324
+        },
+        {
+          "addr": "0x4faf0",
+          "name": "_ZTI14NmeMutexNormal",
+          "ordinal": 326384
+        },
+        {
+          "addr": "0x23980",
+          "name": "NmeModuleInfo",
+          "ordinal": 145792
+        },
+        {
+          "addr": "0x4fae0",
+          "name": "_ZTV14NmeMutexNormal",
+          "ordinal": 326368
+        },
+        {
+          "addr": "0x2349c",
+          "name": "_ZN9NmeSignal6CreateEv",
+          "ordinal": 144540
+        },
+        {
+          "addr": "0x431dc",
+          "name": ".term_proc",
+          "ordinal": 274908
+        },
+        {
+          "addr": "0xb80c",
+          "name": "_ZN8NmeMedia12GetMediaTypeEv",
+          "ordinal": 47116
+        },
+        {
+          "addr": "0x4fafc",
+          "name": "_ZTI8NmeMutex",
+          "ordinal": 326396
+        },
+        {
+          "addr": "0x234bc",
+          "name": "_ZN9NmeThread11wait_threadEv",
+          "ordinal": 144572
+        },
+        {
+          "addr": "0xb6dc",
+          "name": "NmeCreateDeviceNullVideo",
+          "ordinal": 46812
+        },
+        {
+          "addr": "0xbbbc",
+          "name": "_ZThn4_N8NmeMedia6AddRefEv",
+          "ordinal": 48060
+        },
+        {
+          "addr": "0x1836c",
+          "name": "_ZN9NmeRegion5clearEv",
+          "ordinal": 99180
+        },
+        {
+          "addr": "0x4fba8",
+          "name": "_ZTI14NmeConditional",
+          "ordinal": 326568
+        },
+        {
+          "addr": "0x11dfc",
+          "name": "_ZN9NmeThreadD1Ev",
+          "ordinal": 73212
+        },
+        {
+          "addr": "0xbc54",
+          "name": "_ZN11NmeAutoLockD1Ev",
+          "ordinal": 48212
+        },
+        {
+          "addr": "0x4fad8",
+          "name": "_ZTI13NmeAutoUnlock",
+          "ordinal": 326360
+        },
+        {
+          "addr": "0x23868",
+          "name": "_ZN8NmeMutexD0Ev",
+          "ordinal": 145512
+        },
+        {
+          "addr": "0x4fb98",
+          "name": "_ZTV14NmeConditional",
+          "ordinal": 326552
+        },
+        {
+          "addr": "0x2316c",
+          "name": "_ZN14NmeMutexNormal6CreateEv",
+          "ordinal": 143724
+        },
+        {
+          "addr": "0x4fb08",
+          "name": "_ZTV8NmeMutex",
+          "ordinal": 326408
+        },
+        {
+          "addr": "0x237d8",
+          "name": "_ZN14NmeMutexNormalD0Ev",
+          "ordinal": 145368
+        },
+        {
+          "addr": "0x44e18",
+          "name": "_ZTS13NmeAutoUnlock",
+          "ordinal": 282136
+        },
+        {
+          "addr": "0x23750",
+          "name": "_ZN14NmeMutexNormalD1Ev",
+          "ordinal": 145232
+        },
+        {
+          "addr": "0x44e28",
+          "name": "_ZTS14NmeMutexNormal",
+          "ordinal": 282152
+        },
+        {
+          "addr": "0x434c0",
+          "name": "_ZTS9NmeThread",
+          "ordinal": 275648
+        },
+        {
+          "addr": "0x4fac8",
+          "name": "_ZTV13NmeAutoUnlock",
+          "ordinal": 326344
+        },
+        {
+          "addr": "0x43410",
+          "name": "_ZTS11NmeAutoLock",
+          "ordinal": 275472
+        },
+        {
+          "addr": "0x13974",
+          "name": "NmeCreateDeviceSoftVideo",
+          "ordinal": 80244
+        },
+        {
+          "addr": "0x23638",
+          "name": "_ZN14NmeConditionalD0Ev",
+          "ordinal": 144952
+        },
+        {
+          "addr": "0xbbc4",
+          "name": "_ZN8NmeMedia6AddRefEv",
+          "ordinal": 48068
+        },
+        {
+          "addr": "0x11ea4",
+          "name": "_ZN9NmeThreadD0Ev",
+          "ordinal": 73380
+        },
+        {
+          "addr": "0xaccc",
+          "name": "NmeCreateDeviceInputEvent",
+          "ordinal": 44236
+        },
+        {
+          "addr": "0x23368",
+          "name": "_ZN14NmeConditional6CreateEv",
+          "ordinal": 144232
+        },
+        {
+          "addr": "0xf778",
+          "name": "NmeCreateDeviceScreen",
+          "ordinal": 63352
+        },
+        {
+          "addr": "0x4ee18",
+          "name": "_ZTV9NmeThread",
+          "ordinal": 323096
+        },
+        {
+          "addr": "0x44e50",
+          "name": "_ZTS14NmeConditional",
+          "ordinal": 282192
+        },
+        {
+          "addr": "0x232f4",
+          "name": "_ZN14NmeConditional6DeleteEv",
+          "ordinal": 144116
+        },
+        {
+          "addr": "0x23550",
+          "name": "_ZN13NmeAutoUnlockD1Ev",
+          "ordinal": 144720
+        },
+        {
+          "addr": "0x12bd0",
+          "name": "NmeCreateDeviceScreenBlit",
+          "ordinal": 76752
+        },
+        {
+          "addr": "0x238f8",
+          "name": "_ZN8NmeMutexD1Ev",
+          "ordinal": 145656
+        },
+        {
+          "addr": "0xbbcc",
+          "name": "_ZN11NmeAutoLockD0Ev",
+          "ordinal": 48076
+        },
+        {
+          "addr": "0xbbb4",
+          "name": "_ZN8NmeMedia7ReleaseEv",
+          "ordinal": 48052
+        },
+        {
+          "addr": "0xbbac",
+          "name": "_ZThn4_N8NmeMedia7ReleaseEv",
+          "ordinal": 48044
+        },
+        {
+          "addr": "0x235c0",
+          "name": "_ZN13NmeAutoUnlockD0Ev",
+          "ordinal": 144832
+        },
+        {
+          "addr": "0x236c8",
+          "name": "_ZN14NmeConditionalD1Ev",
+          "ordinal": 145096
+        },
+        {
+          "addr": "0x232a0",
+          "name": "_ZN14NmeConditional6signalEv",
+          "ordinal": 144032
+        },
+        {
+          "addr": "0x230f8",
+          "name": "_ZN8NmeMutex6DeleteEv",
+          "ordinal": 143608
+        },
+        {
+          "addr": "0x7854",
+          "name": ".init_proc",
+          "ordinal": 30804
+        },
+        {
+          "addr": "0x50bec",
+          "name": "__data_start",
+          "ordinal": 330732
+        },
+        {
+          "addr": "0x8038",
+          "name": "_btext",
+          "ordinal": 32824
+        }
+      ],
+      "interesting_strings": [
+        {
+          "addr": "0x43278",
+          "string": "./src/NmeBaseClasses/src/NmeThreadSynchronization.h",
+          "xref_count": 200
+        },
+        {
+          "addr": "0x43518",
+          "string": "NmeDeviceScreen",
+          "xref_count": 122
+        },
+        {
+          "addr": "0x455e8",
+          "string": "NmeWindowScreen",
+          "xref_count": 114
+        },
+        {
+          "addr": "0x432ac",
+          "string": "io-nme T%d pthread_mutex_unlock() failed with %d",
+          "xref_count": 97
+        },
+        {
+          "addr": "0x44ef8",
+          "string": "io-nme T%d pthread_mutex_destroy() failed with %d",
+          "xref_count": 85
+        },
+        {
+          "addr": "0x44030",
+          "string": "io-nme T%d pthread_join() failed with %d",
+          "xref_count": 78
+        },
+        {
+          "addr": "0x44fe4",
+          "string": "io-nme T%d pthread_cond_destroy() failed with %d",
+          "xref_count": 47
+        },
+        {
+          "addr": "0x44ca4",
+          "string": "NmeSwapChainPainter",
+          "xref_count": 35
+        },
+        {
+          "addr": "0x44cec",
+          "string": "buffer[%d] %dx%d %p",
+          "xref_count": 31
+        },
+        {
+          "addr": "0x43c24",
+          "string": "io-nme T%d pthread_create() failed with %d",
+          "xref_count": 25
+        },
+        {
+          "addr": "0x44960",
+          "string": "NmeDeviceScreenBlit",
+          "xref_count": 23
+        },
+        {
+          "addr": "0x44f9c",
+          "string": "io-nme T%d pthread_cond_signal() failed with %d",
+          "xref_count": 23
+        },
+        {
+          "addr": "0x44ce0",
+          "string": "buffer%d",
+          "xref_count": 19
+        },
+        {
+          "addr": "0x450c8",
+          "string": "NmeVideoDevice",
+          "xref_count": 17
+        },
+        {
+          "addr": "0x43b10",
+          "string": "display",
+          "xref_count": 15
+        }
+      ],
+      "interesting_functions": [
+        {
+          "addr": "0x7c84",
+          "name": "_Z15NmeLogIsLogging15CINEMO_LOGLEVEL",
+          "size": 12,
+          "xref_count": 179,
+          "callee_count": 0,
+          "type": "thunk"
+        },
+        {
+          "addr": "0x7cc0",
+          "name": "pthread_self",
+          "size": 12,
+          "xref_count": 176,
+          "callee_count": 0,
+          "type": "thunk"
+        },
+        {
+          "addr": "0x7e4c",
+          "name": "slogf",
+          "size": 12,
+          "xref_count": 175,
+          "callee_count": 0,
+          "type": "thunk"
+        },
+        {
+          "addr": "0x7f6c",
+          "name": "_Z13NmeLogDeliver15CINEMO_LOGLEVELPKcS1_z",
+          "size": 12,
+          "xref_count": 160,
+          "callee_count": 0,
+          "type": "thunk"
+        },
+        {
+          "addr": "0x7ef4",
+          "name": "_ZN9NmeStringD1Ev",
+          "size": 12,
+          "xref_count": 125,
+          "callee_count": 0,
+          "type": "thunk"
+        },
+        {
+          "addr": "0x3ace4",
+          "name": "sub_3ACE4",
+          "size": 36,
+          "xref_count": 125,
+          "callee_count": 2,
+          "type": "complex"
+        },
+        {
+          "addr": "0x7ee8",
+          "name": "free",
+          "size": 12,
+          "xref_count": 109,
+          "callee_count": 0,
+          "type": "thunk"
+        },
+        {
+          "addr": "0x7a14",
+          "name": "__get_errno_ptr",
+          "size": 12,
+          "xref_count": 93,
+          "callee_count": 0,
+          "type": "thunk"
+        },
+        {
+          "addr": "0x7a98",
+          "name": "pthread_mutex_lock",
+          "size": 12,
+          "xref_count": 83,
+          "callee_count": 0,
+          "type": "thunk"
+        },
+        {
+          "addr": "0x7924",
+          "name": "nme_pthread_mutex_lock_failed",
+          "size": 12,
+          "xref_count": 79,
+          "callee_count": 0,
+          "type": "thunk"
+        },
+        {
+          "addr": "0x42fa4",
+          "name": "sub_42FA4",
+          "size": 544,
+          "xref_count": 75,
+          "callee_count": 1,
+          "type": "complex"
+        },
+        {
+          "addr": "0x3aab4",
+          "name": "sub_3AAB4",
+          "size": 12,
+          "xref_count": 64,
+          "callee_count": 0,
+          "type": "leaf"
+        },
+        {
+          "addr": "0x7c24",
+          "name": "_ZN9NmeStringC1Ev",
+          "size": 12,
+          "xref_count": 58,
+          "callee_count": 0,
+          "type": "thunk"
+        },
+        {
+          "addr": "0x36270",
+          "name": "nullsub_23",
+          "size": 4,
+          "xref_count": 57,
+          "callee_count": 0,
+          "type": "thunk"
+        },
+        {
+          "addr": "0x3e274",
+          "name": "sub_3E274",
+          "size": 384,
+          "xref_count": 55,
+          "callee_count": 0,
+          "type": "leaf"
+        }
+      ],
+      "imports_by_category": {
+        "crypto": [],
+        "network": [
+          {
+            "addr": "0x55c8c",
+            "name": "_ZNK9NmeString21get_url_parameter_ptrEPKc",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55cbc",
+            "name": "_ZNK9NmeString21get_url_parameter_intEPKci",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55e08",
+            "name": "_ZNK9NmeString22get_url_parameter_uintEPKcj",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55e34",
+            "name": "_ZN9NmeString21set_url_parameter_ptrEPKcPv",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55e50",
+            "name": "_ZNK9NmeString17get_url_parameterEPKc",
+            "module": ".dynsym"
+          }
+        ],
+        "file_io": [
+          {
+            "addr": "0x55c00",
+            "name": "fwrite",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c78",
+            "name": "_ZN6NmeDLL11GetFilenameEPKci",
+            "module": ".dynsym"
+          }
+        ],
+        "process": [
+          {
+            "addr": "0x55be0",
+            "name": "pthread_attr_setschedparam",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55bf4",
+            "name": "pthread_attr_setinheritsched",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55bfc",
+            "name": "pthread_attr_setdetachstate",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c1c",
+            "name": "nme_pthread_mutex_lock_failed",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c34",
+            "name": "pthread_mutex_init",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c3c",
+            "name": "pthread_mutexattr_settype",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c44",
+            "name": "pthread_attr_init",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c4c",
+            "name": "pthread_key_create",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c90",
+            "name": "pthread_attr_setstacksize",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c9c",
+            "name": "pthread_mutex_lock",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55ca4",
+            "name": "pthread_condattr_destroy",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55cec",
+            "name": "pthread_getspecific",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55cf8",
+            "name": "pthread_mutex_destroy",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d08",
+            "name": "pthread_mutexattr_destroy",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d18",
+            "name": "nme_pthread_cond_init_failed",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d1c",
+            "name": "pthread_attr_destroy",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d28",
+            "name": "pthread_create",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d34",
+            "name": "pthread_cond_signal",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d54",
+            "name": "pthread_mutexattr_init",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d58",
+            "name": "pthread_self",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d60",
+            "name": "pthread_cond_timedwait",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d70",
+            "name": "pthread_attr_getstacksize",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d78",
+            "name": "pthread_cond_init",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d80",
+            "name": "nme_pthread_cond_wait_failed",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55dac",
+            "name": "pthread_condattr_init",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55dd0",
+            "name": "pthread_setname_np",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55dd4",
+            "name": "pthread_setschedparam",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55de4",
+            "name": "pthread_cond_broadcast",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55dec",
+            "name": "pthread_mutex_unlock",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55df4",
+            "name": "nme_getthreadid",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55df8",
+            "name": "pthread_key_delete",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55dfc",
+            "name": "pthread_cond_destroy",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55e28",
+            "name": "pthread_cond_wait",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55e2c",
+            "name": "pthread_condattr_setclock",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55e3c",
+            "name": "pthread_attr_getschedparam",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55e40",
+            "name": "pthread_setspecific",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55e4c",
+            "name": "pipe",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55e54",
+            "name": "nme_pthread_cond_timedwait_failed",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55e6c",
+            "name": "nme_pthread_mutex_init_failed",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55e78",
+            "name": "pthread_join",
+            "module": ".dynsym"
+          }
+        ],
+        "registry": [
+          {
+            "addr": "0x55c30",
+            "name": "_ZN9NmeRegion7excludeERK7NmeRect",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c40",
+            "name": "_ZN9NmeRegion7combineERK7NmeRect",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c5c",
+            "name": "_ZN9NmeRegion12exclude_fastEiRK7NmeRect",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55cb0",
+            "name": "_ZN9NmeRegion6rotateEjii",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55da4",
+            "name": "_ZN9NmeRegion4clipERK7NmeRect",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55e00",
+            "name": "_Unwind_GetRegionStart",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55e0c",
+            "name": "_ZN9NmeRegion7combineERKS_",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55e7c",
+            "name": "__register_frame_info",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55e80",
+            "name": "_Jv_RegisterClasses",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55e84",
+            "name": "__deregister_frame_info",
+            "module": ".dynsym"
+          }
+        ],
+        "other": [
+          {
+            "addr": "0x55bd4",
+            "name": "_Z21NmeLookupVideoSubtypej",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55bd8",
+            "name": "__aeabi_unwind_cpp_pr0",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55bdc",
+            "name": "_ZN6NmeDLL6CreateEPKcbb",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55be4",
+            "name": "__div0",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55be8",
+            "name": "_ZTI8NmeMedia",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55bec",
+            "name": "_ZN10NmeUnknown14QueryInterfaceEPPvPKc",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55bf0",
+            "name": "g_zone_key_valid",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55bf8",
+            "name": "clock_gettime",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c04",
+            "name": "_ZN14NmeDeviceClass6CreateER18NmeClassAttributes",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c08",
+            "name": "_ZN10INmeWindow3iidE",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c0c",
+            "name": "_Unwind_Resume_or_Rethrow",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c10",
+            "name": "usleep",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c14",
+            "name": "memcpy",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c18",
+            "name": "mlock",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c20",
+            "name": "_ZTI10NmeUnknown",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c24",
+            "name": "_FSin",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c28",
+            "name": "realloc",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c2c",
+            "name": "_Unwind_VRS_Get",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c38",
+            "name": "__gnu_unwind_frame",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c48",
+            "name": "_ZN14NmeDeviceClass6AddRefEv",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c50",
+            "name": "_ZN14NmeDeviceClassC2Ev",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c54",
+            "name": "_Unwind_RaiseException",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c58",
+            "name": "_ZN15INmeVideoDevice3iidE",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c60",
+            "name": "_ZN6NmeDLL6LookupEPK15NmeDLLFunctionsjPv",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c64",
+            "name": "__cxa_finalize",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c68",
+            "name": "malloc",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c6c",
+            "name": "_ZN10NmeUnknown7ReleaseEv",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c70",
+            "name": "__get_errno_ptr",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c74",
+            "name": "strncmp",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c7c",
+            "name": "_ZN10NmeUnknown6AddRefEv",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c80",
+            "name": "dlsym",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c84",
+            "name": "_ZN10NmeUnknownC2Ev",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c88",
+            "name": "_ZN6NmeDLLD1Ev",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c94",
+            "name": "powf",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55c98",
+            "name": "strlen",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55ca0",
+            "name": "__cxa_atexit",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55ca8",
+            "name": "_ZN10NmeUnknownD2Ev",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55cac",
+            "name": "_ZN14INmeVideoLayer3iidE",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55cb4",
+            "name": "NmeInterlockedExchange",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55cb8",
+            "name": "g_parentid_key_valid",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55cc0",
+            "name": "read",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55cc4",
+            "name": "_ZThn4_N8NmeMedia14QueryInterfaceEPPvPKc",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55cc8",
+            "name": "_ZNK9NmeString4atoiEv",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55ccc",
+            "name": "NmeInterlockedDecrement",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55cd0",
+            "name": "_Unwind_VRS_Set",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55cd4",
+            "name": "select",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55cd8",
+            "name": "g_parentid_key",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55cdc",
+            "name": "_ZN14INmeVideoTasks3iidE",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55ce0",
+            "name": "_Unwind_GetLanguageSpecificData",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55ce4",
+            "name": "dlerror",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55ce8",
+            "name": "getpid",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55cf0",
+            "name": "_Unwind_Resume",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55cf4",
+            "name": "_ZN14NmeDeviceClass14QueryInterfaceEPPvPKc",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55cfc",
+            "name": "mmap",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d00",
+            "name": "memmove",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d04",
+            "name": "__aeabi_uidivmod",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d0c",
+            "name": "munlock",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d10",
+            "name": "_ZN14NmeDeviceClass7ReleaseEv",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d14",
+            "name": "_ZNK9NmeString3cmpEPKc",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d20",
+            "name": "_ZN9NmeStringC1Ev",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d24",
+            "name": "_Unwind_Complete",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d2c",
+            "name": "write",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d30",
+            "name": "_ZN9NmeString6assignERKS_",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d38",
+            "name": "close",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d3c",
+            "name": "fputc",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d40",
+            "name": "_Z15NmeLogIsLogging15CINEMO_LOGLEVEL",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d44",
+            "name": "_Ctype",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d48",
+            "name": "_ZN9NmeString6assignEPKc",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d4c",
+            "name": "_ZN14NmeDeviceClass11IsKeepAliveEv",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d50",
+            "name": "_Unwind_DeleteException",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d5c",
+            "name": "sscanf",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d64",
+            "name": "_Unwind_GetTextRelBase",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d68",
+            "name": "_ZN14NmeDeviceClass22InheritClassAttributesEPS_",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d6c",
+            "name": "_ZN8NmeMediaC2Ev",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d74",
+            "name": "tcsetattr",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d7c",
+            "name": "__aeabi_ldivmod",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d84",
+            "name": "fputs",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d88",
+            "name": "mprotect",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d8c",
+            "name": "tcgetattr",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d90",
+            "name": "g_zone_key",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d94",
+            "name": "_Stderr",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d98",
+            "name": "_ZN10NmeUnknown12GetInterfaceEPPvP14ICinemoUnknown",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55d9c",
+            "name": "_Z23NmeMediaSubtypeToString19CINEMO_MEDIASUBTYPE",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55da0",
+            "name": "_ZN9NmeString6formatEPKcz",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55da8",
+            "name": "memset",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55db0",
+            "name": "_ZN10NmeUnknown11AddRefLocalEv",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55db4",
+            "name": "_ZN8NmeMedia14QueryInterfaceEPPvPKc",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55db8",
+            "name": "munmap",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55dbc",
+            "name": "_ZNK13NmeOptionPrio3getEv",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55dc0",
+            "name": "abort",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55dc4",
+            "name": "memcmp",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55dc8",
+            "name": "sprintf",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55dcc",
+            "name": "SchedCtl",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55dd8",
+            "name": "muldiv32",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55ddc",
+            "name": "slogf",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55de0",
+            "name": "_ZN16INmeVideoPainter3iidE",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55de8",
+            "name": "_Unwind_GetDataRelBase",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55df0",
+            "name": "_ZNK9NmeString4itemEiPKc",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55e04",
+            "name": "strcmp",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55e10",
+            "name": "_Z20NmeLookupVideoFourcc19CINEMO_MEDIASUBTYPE",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55e14",
+            "name": "free",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55e18",
+            "name": "_ZN9NmeStringD1Ev",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55e1c",
+            "name": "_ZNK9NmeString4cmpiEPKc",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55e20",
+            "name": "_ZTI14NmeDeviceClass",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55e24",
+            "name": "_ZN6NmeDLL6DeleteEv",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55e30",
+            "name": "dlopen",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55e38",
+            "name": "signal",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55e44",
+            "name": "_Z13NmeLogDeliver15CINEMO_LOGLEVELPKcS1_z",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55e48",
+            "name": "_ZN9NmeStringC1EPKc",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55e58",
+            "name": "_ZNK9NmeString10item_countEPKc",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55e5c",
+            "name": "dlclose",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55e60",
+            "name": "_ZN14NmeDeviceClassD2Ev",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55e64",
+            "name": "strcpy",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55e68",
+            "name": "_ZN6NmeDLLC1Ev",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55e70",
+            "name": "_ZN9NmeString12strupr_asciiEv",
+            "module": ".dynsym"
+          },
+          {
+            "addr": "0x55e74",
+            "name": "_ZN8NmeMediaD2Ev",
+            "module": ".dynsym"
+          }
+        ]
+      },
+      "call_graph_summary": {
+        "total_edges": 3533,
+        "max_depth_estimate": null,
+        "root_functions": [
+          ".init_proc",
+          "sub_785C",
+          "_ZN10NmeUnknown14QueryInterfaceEPPvPKc",
+          "_ZN14NmeDeviceClass6AddRefEv",
+          "_ZN10NmeUnknown6AddRefEv",
+          "__cxa_atexit",
+          "_ZThn4_N8NmeMedia14QueryInterfaceEPPvPKc",
+          "_ZN14NmeDeviceClass14QueryInterfaceEPPvPKc",
+          "_ZN14NmeDeviceClass7ReleaseEv",
+          "_ZN14NmeDeviceClass11IsKeepAliveEv",
+          "_Unwind_GetTextRelBase",
+          "_ZN14NmeDeviceClass22InheritClassAttributesEPS_",
+          "_ZN10NmeUnknown12GetInterfaceEPPvP14ICinemoUnknown",
+          "_ZN8NmeMedia14QueryInterfaceEPPvPKc",
+          "_Unwind_GetDataRelBase",
+          "_btext",
+          "sub_80B4",
+          "sub_812C",
+          "sub_8174",
+          "sub_81DC",
+          "sub_81E4",
+          "sub_81EC",
+          "sub_81F4",
+          "sub_81FC",
+          "sub_8230",
+          "sub_8244",
+          "sub_824C",
+          "sub_83C0",
+          "sub_8534",
+          "sub_85A0",
+          "sub_860C",
+          "sub_8650",
+          "sub_86A8",
+          "sub_86D8",
+          "sub_88A8",
+          "sub_88E4",
+          "sub_8920",
+          "sub_89C8",
+          "sub_8A2C",
+          "sub_8A34",
+          "sub_8A90",
+          "sub_8AF4",
+          "sub_8B8C",
+          "sub_8DD0",
+          "sub_8E28",
+          "sub_8ED4",
+          "sub_8F80",
+          "sub_8FA4",
+          "sub_92EC",
+          "sub_945C",
+          "sub_9488",
+          "sub_94D4",
+          "sub_9520",
+          "sub_96E0",
+          "sub_97BC",
+          "sub_9898",
+          "sub_98A0",
+          "sub_9940",
+          "sub_9948",
+          "sub_99E0",
+          "sub_9A78",
+          "sub_9A80",
+          "sub_9A88",
+          "sub_9A90",
+          "sub_9B58",
+          "sub_9B60",
+          "sub_9B68",
+          "sub_9B70",
+          "sub_9C30",
+          "sub_9CF0",
+          "sub_9ED8",
+          "sub_9FAC",
+          "sub_A0D0",
+          "sub_A160",
+          "sub_A698",
+          "sub_A6A0",
+          "sub_A6A8",
+          "j__ZN14NmeDeviceClass7ReleaseEv",
+          "sub_A6B4",
+          "sub_A6BC",
+          "sub_A6C4",
+          "j__ZN14NmeDeviceClass6AddRefEv_1",
+          "sub_A6D0",
+          "sub_A6D8",
+          "sub_A6E0",
+          "sub_A6E8",
+          "sub_A754",
+          "sub_A7C0",
+          "sub_A7C8",
+          "sub_A7D0",
+          "sub_A7D8",
+          "sub_A84C",
+          "sub_A8C4",
+          "NmeCreateDeviceConsole",
+          "sub_AA44",
+          "sub_AA60",
+          "sub_AA68",
+          "sub_AA70",
+          "sub_AA78",
+          "sub_AAE4"
+        ],
+        "leaf_functions_count": 800
+      }
+    }
+  },
+  {
+    "key": "videoScreen15_0",
+    "result": {
+      "addr": "0x10098",
+      "code": "int __fastcall sub_10098(int a1, const void *a2)\n{\n  int v3; // r5\n  bool v4; // zf\n  const char *url_parameter_int; // r5\n  int v7; // r6\n  int v8; // r3\n  _DWORD *v9; // r2\n  int v10; // r7\n  int v11; // r0\n  int v12; // r8\n  int v13; // r8\n  int v14; // r8\n  _DWORD *v15; // r0\n  char *v16; // r3\n  char *v17; // r3\n  int v18; // r7\n  int v19; // r8\n  int v20; // r6\n  int v21; // r9\n  int v22; // r0\n  char *v23; // r1\n  int v24; // r3\n  int v25; // [sp+18h] [bp-164h]\n  unsigned int v26; // [sp+24h] [bp-158h]\n  _DWORD dest[37]; // [sp+54h] [bp-128h] BYREF\n  _DWORD v28[3]; // [sp+E8h] [bp-94h] BYREF\n  _DWORD v29[3]; // [sp+F4h] [bp-88h] BYREF\n  _DWORD v30[3]; // [sp+100h] [bp-7Ch] BYREF\n  _DWORD v31[3]; // [sp+10Ch] [bp-70h] BYREF\n  _DWORD v32[3]; // [sp+118h] [bp-64h] BYREF\n  _BYTE v33[12]; // [sp+124h] [bp-58h] BYREF\n  _BYTE v34[12]; // [sp+130h] [bp-4Ch] BYREF\n  _BYTE v35[12]; // [sp+13Ch] [bp-40h] BYREF\n  _BYTE v36[12]; // [sp+148h] [bp-34h] BYREF\n  _BYTE v37[12]; // [sp+154h] [bp-28h] BYREF\n  _BYTE v38[12]; // [sp+160h] [bp-1Ch] BYREF\n  int v39; // [sp+16Ch] [bp-10h] BYREF\n  int v40; // [sp+170h] [bp-Ch] BYREF\n  int v41; // [sp+174h] [bp-8h] BYREF\n\n  memcpy(dest, a2, sizeof(dest)); /*0x100b0*/\n  NmeString::get_url_parameter((NmeString *)v38, (const char *)(*(_DWORD *)(a1 + 28) + 64)); /*0x100d0*/\n  NmeString::assign((NmeString *)(a1 + 404), (const NmeString *)v38); /*0x100dc*/\n  NmeString::~NmeString((NmeString *)v38); /*0x100e4*/\n  if ( *(_DWORD *)(a1 + 404) ) /*0x100e8*/\n    dest[30] = 0; /*0x100fc*/\n  v3 = sub_1CE44(a1, dest); /*0x10104*/\n  if ( v3 ) /*0x10108*/\n    return v3; /*0x10108*/\n  if ( (dest[36] & 4) != 0 ) /*0x10114*/\n    return 20; /*0x10114*/\n  v4 = dest[31] == 2; /*0x1011c*/\n  if ( dest[31] != 2 ) /*0x10120*/\n    v4 = dest[31] == 0; /*0x10120*/\n  if ( !v4 && dest[31] != 3 && dest[31] != 10 ) /*0x10134*/\n    return 20; /*0x10138*/\n  if ( sub_1ACB0(a1) ) /*0x1014c*/\n  {\n    NmeString::get_url_parameter((NmeString *)v37, (const char *)(*(_DWORD *)(a1 + 28) + 64)); /*0x108e8*/\n    if ( NmeString::cmpi((NmeString *)v37, \"child\") ) /*0x108f8*/\n      v24 = 2; /*0x1090c*/\n    else\n      v24 = 1; /*0x10908*/\n    v25 = v24; /*0x10910*/\n    NmeString::~NmeString((NmeString *)v37); /*0x10914*/\n  }\n  else\n  {\n    v25 = 0; /*0x10154*/\n  }\n  ((void (*)(void))sub_1C418)(); /*0x10188*/\n  sub_2073C((NmeString *)v35); /*0x10198*/\n  sub_20614((NmeString *)v34); /*0x101a8*/\n  sub_1C418(v33, *(_DWORD *)(a1 + 28), *(_DWORD *)(*(_DWORD *)(a1 + 28) + 392), \"video-pipeline\"); /*0x101d8*/\n  if ( NmeString::item_count((NmeString *)v36, \", \") > 1u ) /*0x101ec*/\n    v26 = NmeString::item_count((NmeString *)v36, \", \"); /*0x10204*/\n  else\n    v26 = 1; /*0x101f0*/\n  if ( v26 < NmeString::item_count((NmeString *)v35, \", \") ) /*0x10224*/\n    v26 = NmeString::item_count((NmeString *)v35, \", \"); /*0x108c8*/\n  if ( v26 < NmeString::item_count((NmeString *)v34, \", \") ) /*0x10244*/\n    v26 = NmeString::item_count((NmeString *)v34, \", \"); /*0x108b4*/\n  if ( v26 < NmeString::item_count((NmeString *)v33, \", \") ) /*0x10264*/\n    v26 = NmeString::item_count((NmeString *)v33, \", \"); /*0x108a0*/\n  url_parameter_int = (const char *)NmeString::get_url_parameter_int( /*0x10280*/\n                                      (NmeString *)(*(_DWORD *)(a1 + 28) + 64),\n                                      \"hidden\",\n                                      0);\n  if ( url_parameter_int ) /*0x10284*/\n  {\n    if ( dest[31] ) /*0x10290*/\n    {\n      v3 = 20; /*0x10290*/\nLABEL_30:\n      NmeString::~NmeString((NmeString *)v33); /*0x102c8*/\n      NmeString::~NmeString((NmeString *)v34); /*0x102d4*/\n      NmeString::~NmeString((NmeString *)v35); /*0x102dc*/\n      NmeString::~NmeString((NmeString *)v36); /*0x102e4*/\n      return v3; /*0x102e8*/\n    }\nLABEL_27:\n    v3 = sub_E80C(a1, dest); /*0x10298*/\n    if ( !v3 && *(_DWORD *)(a1 + 36) != 9220 ) /*0x102b8*/\n      v3 = sub_D074(*(_DWORD *)(a1 + 28)); /*0x102c4*/\n    goto LABEL_30; /*0x102c4*/\n  }\n  if ( !v26 ) /*0x102f4*/\n    goto LABEL_27; /*0x102f4*/\n  while ( 1 ) /*0x10380*/\n  {\n    NmeString::item((NmeString *)v32, (int)v36, url_parameter_int); /*0x10380*/\n    NmeString::item((NmeString *)v31, (int)v35, url_parameter_int); /*0x10394*/\n    NmeString::item((NmeString *)v30, (int)v34, url_parameter_int); /*0x103a8*/\n    NmeString::item((NmeString *)v29, (int)v33, url_parameter_int); /*0x103bc*/\n    if ( (*(int (__fastcall **)(int *, _DWORD, int))(*(_DWORD *)(a1 + 28) + 656))( /*0x103d4*/\n           &v41,\n           *(_DWORD *)(*(_DWORD *)(a1 + 28) + 516),\n           v25) )\n    {\n      if ( !NmeLogIsLogging(4) ) /*0x10958*/\n        goto LABEL_85; /*0x10958*/\n      goto LABEL_106; /*0x10958*/\n    }\n    v7 = *(_DWORD *)(a1 + 388); /*0x103e0*/\n    v8 = v7 + 1; /*0x103e4*/\n    if ( v7 + 1 < 0 ) /*0x103e8*/\n      goto LABEL_77; /*0x103e8*/\n    if ( v8 > *(_DWORD *)(a1 + 392) ) /*0x103f4*/\n    {\n      v10 = *(_DWORD *)(a1 + 396); /*0x103fc*/\n      v11 = sub_42FA4(v10 + v7, v10); /*0x1040c*/\n      v12 = v10 * v11; /*0x10410*/\n      if ( v10 >= v10 * v11 ) /*0x10418*/\n      {\n        v13 = v7 | (v7 >> 1) | ((v7 | (v7 >> 1)) >> 2); /*0x10420*/\n        v14 = v13 | (v13 >> 4) | ((v13 | (v13 >> 4)) >> 8); /*0x10428*/\n        v12 = (v14 | (v14 >> 16)) + 1; /*0x10430*/\n      }\n      v15 = realloc(*(void **)(a1 + 384), 4 * v12); /*0x1043c*/\n      v9 = v15; /*0x10440*/\n      if ( !v15 ) /*0x10444*/\n      {\nLABEL_77:\n        v3 = 12; /*0x10778*/\n        goto LABEL_78; /*0x10778*/\n      }\n      v7 = *(_DWORD *)(a1 + 388); /*0x10448*/\n      *(_DWORD *)(a1 + 392) = v12; /*0x1044c*/\n      v8 = v7 + 1; /*0x10450*/\n      *(_DWORD *)(a1 + 384) = v15; /*0x10454*/\n    }\n    else\n    {\n      v9 = *(_DWORD **)(a1 + 384); /*0x103f4*/\n    }\n    *(_DWORD *)(a1 + 388) = v8; /*0x10458*/\n    v9[v7] = v41; /*0x10464*/\n    if ( sub_1AC90(a1) ) /*0x10468*/\n      break; /*0x10468*/\nLABEL_41:\n    if ( v31[0] && NmeString::cmp((NmeString *)v31, \".\") ) /*0x10488*/\n    {\n      if ( NmeLogIsLogging(0) ) /*0x10498*/\n        NmeLogDeliver(0, \"NmeDeviceScreen\"); /*0x104d0*/\n      v16 = (char *)v31[0]; /*0x104d4*/\n      if ( !v31[0] ) /*0x104e8*/\n        v16 = \"\"; /*0x104e8*/\n      if ( (*(int (__fastcall **)(int, int, _DWORD, char *))(*(_DWORD *)(a1 + 28) + 704))(v41, 7, v31[1], v16) ) /*0x104f8*/\n      {\n        if ( !NmeLogIsLogging(4) ) /*0x109b4*/\n          goto LABEL_85; /*0x109b4*/\n        goto LABEL_106; /*0x109b4*/\n      }\n    }\n    if ( v30[0] && NmeString::cmp((NmeString *)v30, \".\") ) /*0x10518*/\n    {\n      if ( NmeLogIsLogging(2) ) /*0x10528*/\n        NmeLogDeliver(2, \"NmeDeviceScreen\"); /*0x10560*/\n      v17 = (char *)v30[0]; /*0x10564*/\n      if ( !v30[0] ) /*0x10578*/\n        v17 = \"\"; /*0x10578*/\n      if ( (*(int (__fastcall **)(int, int, _DWORD, char *))(*(_DWORD *)(a1 + 28) + 704))(v41, 20, v30[1], v17) ) /*0x10588*/\n      {\n        if ( !NmeLogIsLogging(4) ) /*0x10a8c*/\n          goto LABEL_85; /*0x10a8c*/\nLABEL_106:\n        _get_errno_ptr(); /*0x10ad0*/\n        v3 = 100; /*0x10adc*/\n        NmeLogDeliver(4, \"NmeDeviceScreen\"); /*0x10af4*/\n        goto LABEL_78; /*0x10af8*/\n      }\n    }\n    if ( v29[0] && NmeString::cmp((NmeString *)v29, \".\") ) /*0x105a8*/\n    {\n      v39 = NmeString::atoi((NmeString *)v29); /*0x105bc*/\n      if ( NmeLogIsLogging(2) ) /*0x105c4*/\n        NmeLogDeliver(2, \"NmeDeviceScreen\"); /*0x1088c*/\n      if ( (*(int (__fastcall **)(int, int, int *))(*(_DWORD *)(a1 + 28) + 708))(v41, 17, &v39) ) /*0x105e4*/\n      {\n        if ( !NmeLogIsLogging(4) ) /*0x10a4c*/\n          goto LABEL_85; /*0x10a4c*/\n        goto LABEL_106; /*0x10a4c*/\n      }\n    }\n    if ( v32[0] && NmeString::cmp((NmeString *)v32, \".\") ) /*0x10604*/\n    {\n      v18 = *(_DWORD *)(a1 + 28); /*0x10614*/\n      v19 = NmeString::atoi((NmeString *)v32); /*0x10624*/\n      if ( *(int *)(v18 + 524) <= 0 ) /*0x10628*/\n      {\nLABEL_86:\n        if ( NmeLogIsLogging(3) ) /*0x10854*/\n          NmeLogDeliver(3, \"NmeDeviceScreen\"); /*0x1099c*/\n        v40 = 0; /*0x10864*/\n      }\n      else\n      {\n        v20 = 0; /*0x1062c*/\n        while ( 1 ) /*0x10654*/\n        {\n          v21 = 4 * v20; /*0x10654*/\n          v22 = *(_DWORD *)(*(_DWORD *)(v18 + 520) + 4 * v20++); /*0x10658*/\n          (*(void (__fastcall **)(int, int, int *))(v18 + 740))(v22, 87, &v39); /*0x10660*/\n          if ( v19 == v39 ) /*0x1066c*/\n            break; /*0x1066c*/\n          if ( v20 >= *(_DWORD *)(v18 + 524) ) /*0x10640*/\n            goto LABEL_86; /*0x10640*/\n        }\n        v40 = *(_DWORD *)(*(_DWORD *)(v18 + 520) + v21); /*0x1067c*/\n        if ( v40 ) /*0x10680*/\n        {\n          if ( NmeLogIsLogging(2) ) /*0x10688*/\n            NmeLogDeliver(2, \"NmeDeviceScreen\"); /*0x106c0*/\n          if ( (*(int (__fastcall **)(int, int, int *))(*(_DWORD *)(a1 + 28) + 712))(v41, 11, &v40) ) /*0x106d8*/\n          {\n            if ( NmeLogIsLogging(4) ) /*0x10ac4*/\n              goto LABEL_106; /*0x10acc*/\nLABEL_85:\n            v3 = 100; /*0x10848*/\n            goto LABEL_78; /*0x1084c*/\n          }\n        }\n      }\n    }\n    if ( v25 == 2 && (dest[13] & 0x400) != 0 && *(_DWORD *)(*(_DWORD *)(a1 + 28) + 304) ) /*0x107d0*/\n    {\n      *(_DWORD *)(a1 + 444) = 1; /*0x107e0*/\n      if ( NmeLogIsLogging(2) ) /*0x107e4*/\n        NmeLogDeliver(2, \"NmeDeviceScreen\"); /*0x10810*/\n      if ( (*(int (__fastcall **)(int, int, int))(*(_DWORD *)(a1 + 28) + 708))(v41, 63, a1 + 444) ) /*0x10828*/\n      {\n        if ( !NmeLogIsLogging(4) ) /*0x1083c*/\n          goto LABEL_85; /*0x10844*/\n        goto LABEL_106; /*0x10844*/\n      }\n    }\n    ++url_parameter_int; /*0x106f4*/\n    NmeString::~NmeString((NmeString *)v29); /*0x106f8*/\n    NmeString::~NmeString((NmeString *)v30); /*0x10700*/\n    NmeString::~NmeString((NmeString *)v31); /*0x10708*/\n    NmeString::~NmeString((NmeString *)v32); /*0x10710*/\n    if ( v26 <= (unsigned int)url_parameter_int ) /*0x1071c*/\n      goto LABEL_27; /*0x1071c*/\n  }\n  NmeString::NmeString((NmeString *)v28); /*0x1072c*/\n  NmeString::format((NmeString *)v28, \"Cinemo%p%d\", a1, url_parameter_int); /*0x10740*/\n  v23 = (char *)v28[0]; /*0x10744*/\n  if ( !v28[0] ) /*0x10758*/\n    v23 = \"\"; /*0x10758*/\n  if ( !(*(int (__fastcall **)(int, char *))(*(_DWORD *)(a1 + 28) + 672))(v41, v23) ) /*0x10760*/\n  {\n    NmeString::~NmeString((NmeString *)v28); /*0x10770*/\n    goto LABEL_41; /*0x10774*/\n  }\n  if ( NmeLogIsLogging(4) ) /*0x109ec*/\n  {\n    _get_errno_ptr(); /*0x10a04*/\n    NmeLogDeliver(4, \"NmeDeviceScreen\"); /*0x10a28*/\n  }\n  v3 = 100; /*0x10a30*/\n  NmeString::~NmeString((NmeString *)v28); /*0x10a34*/\nLABEL_78:\n  NmeString::~NmeString((NmeString *)v29); /*0x1077c*/\n  NmeString::~NmeString((NmeString *)v30); /*0x10788*/\n  NmeString::~NmeString((NmeString *)v31); /*0x10790*/\n  NmeString::~NmeString((NmeString *)v32); /*0x10798*/\n  NmeString::~NmeString((NmeString *)v33); /*0x107a0*/\n  NmeString::~NmeString((NmeString *)v34); /*0x107a8*/\n  NmeString::~NmeString((NmeString *)v35); /*0x107b0*/\n  NmeString::~NmeString((NmeString *)v36); /*0x107b8*/\n  return v3; /*0x10144*/\n}",
+      "refs": [
+        {
+          "addr": "0x790c",
+          "name": "memcpy"
+        },
+        {
+          "addr": "0x7fa8",
+          "name": "_ZNK9NmeString17get_url_parameterEPKc"
+        },
+        {
+          "addr": "0x7c54",
+          "name": "_ZN9NmeString6assignERKS_"
+        },
+        {
+          "addr": "0x7ef4",
+          "name": "_ZN9NmeStringD1Ev"
+        },
+        {
+          "addr": "0x1ce44",
+          "name": "sub_1CE44"
+        },
+        {
+          "addr": "0x7f00",
+          "name": "_ZNK9NmeString4cmpiEPKc"
+        },
+        {
+          "addr": "0x44570",
+          "name": "aChild",
+          "string": "child"
+        },
+        {
+          "addr": "0x1acb0",
+          "name": "sub_1ACB0"
+        },
+        {
+          "addr": "0x1c418",
+          "name": "sub_1C418"
+        },
+        {
+          "addr": "0x2073c",
+          "name": "sub_2073C"
+        },
+        {
+          "addr": "0x20614",
+          "name": "sub_20614"
+        },
+        {
+          "addr": "0x44578",
+          "name": "aVideoPipeline",
+          "string": "video-pipeline"
+        },
+        {
+          "addr": "0x7fc0",
+          "name": "_ZNK9NmeString10item_countEPKc"
+        },
+        {
+          "addr": "0x43b18",
+          "name": "asc_43B18",
+          "string": ", "
+        },
+        {
+          "addr": "0x7aec",
+          "name": "_ZNK9NmeString21get_url_parameter_intEPKci"
+        },
+        {
+          "addr": "0x44588",
+          "name": "aHidden",
+          "string": "hidden"
+        },
+        {
+          "addr": "0xe80c",
+          "name": "sub_E80C"
+        },
+        {
+          "addr": "0xd074",
+          "name": "sub_D074"
+        },
+        {
+          "addr": "0x7e7c",
+          "name": "_ZNK9NmeString4itemEiPKc"
+        },
+        {
+          "addr": "0x7c84",
+          "name": "_Z15NmeLogIsLogging15CINEMO_LOGLEVEL"
+        },
+        {
+          "addr": "0x42fa4",
+          "name": "sub_42FA4"
+        },
+        {
+          "addr": "0x793c",
+          "name": "realloc"
+        },
+        {
+          "addr": "0x1ac90",
+          "name": "sub_1AC90"
+        },
+        {
+          "addr": "0x7f6c",
+          "name": "_Z13NmeLogDeliver15CINEMO_LOGLEVELPKcS1_z"
+        },
+        {
+          "addr": "0x43518",
+          "name": "aNmedevicescree",
+          "string": "NmeDeviceScreen"
+        },
+        {
+          "addr": "0x4c430",
+          "name": "aAlignof",
+          "string": "alignof "
+        },
+        {
+          "addr": "0x7bf4",
+          "name": "_ZNK9NmeString3cmpEPKc"
+        },
+        {
+          "addr": "0x43b1c",
+          "name": "asc_43B1C",
+          "string": "."
+        },
+        {
+          "addr": "0x7a14",
+          "name": "__get_errno_ptr"
+        },
+        {
+          "addr": "0x7b10",
+          "name": "_ZNK9NmeString4atoiEv"
+        },
+        {
+          "addr": "0x7c24",
+          "name": "_ZN9NmeStringC1Ev"
+        },
+        {
+          "addr": "0x7d80",
+          "name": "_ZN9NmeString6formatEPKcz"
+        },
+        {
+          "addr": "0x43a08",
+          "name": "aCinemoPD",
+          "string": "Cinemo%p%d"
+        }
+      ]
+    }
+  },
+  {
+    "key": "videoScreen15_1",
+    "result": {
+      "addr": "0x20614",
+      "code": "NmeString *__fastcall sub_20614(NmeString *this, _DWORD *a2, _DWORD *a3)\n{\n  int v4; // r0\n  int v6; // r12\n  const char *v7; // r5\n  int v8; // r12\n  int v9; // r12\n\n  v4 = a2[8]; /*0x2061c*/\n  if ( v4 == 7 ) /*0x2062c*/\n    goto LABEL_14; /*0x2062c*/\n  if ( v4 != 6 ) /*0x20634*/\n  {\n    if ( (v4 == 2 || v4 == 1) && (!a2[37] || a2[38]) ) /*0x20670*/\n    {\n      v6 = a2[7]; /*0x2067c*/\n      v7 = *(const char **)(v6 + 368); /*0x20690*/\n      NmeString::get_url_parameter(this, (const char *)(v6 + 64)); /*0x20694*/\n      if ( !*(_DWORD *)this ) /*0x20698*/\nLABEL_11:\n        NmeString::assign(this, v7); /*0x206a4*/\n      return this; /*0x20660*/\n    }\n    goto LABEL_5; /*0x20678*/\n  }\n  if ( !a2[37] || a2[38] ) /*0x206c0*/\n  {\nLABEL_14:\n    v8 = a2[7]; /*0x206cc*/\n    v7 = *(const char **)(v8 + 356); /*0x206e0*/\n    NmeString::get_url_parameter(this, (const char *)(v8 + 64)); /*0x206e4*/\n    if ( !*(_DWORD *)this ) /*0x206f0*/\n      goto LABEL_11; /*0x206f0*/\n    return this; /*0x206f8*/\n  }\nLABEL_5:\n  if ( *a3 != 4 ) /*0x20650*/\n  {\n    NmeString::NmeString(this); /*0x20658*/\n    return this; /*0x20658*/\n  }\n  v9 = a2[7]; /*0x206fc*/\n  v7 = *(const char **)(v9 + 380); /*0x20710*/\n  NmeString::get_url_parameter(this, (const char *)(v9 + 64)); /*0x20714*/\n  if ( !*(_DWORD *)this ) /*0x20720*/\n    goto LABEL_11; /*0x20720*/\n  return this; /*0x20660*/\n}",
+      "refs": [
+        {
+          "addr": "0x7fa8",
+          "name": "_ZNK9NmeString17get_url_parameterEPKc"
+        },
+        {
+          "addr": "0x7c90",
+          "name": "_ZN9NmeString6assignEPKc"
+        },
+        {
+          "addr": "0x7c24",
+          "name": "_ZN9NmeStringC1Ev"
+        }
+      ]
+    }
+  },
+  {
+    "key": "stockJava15_2",
+    "result": {
+      "addr": "0x2073c",
+      "code": "NmeString *__fastcall sub_2073C(NmeString *this, _DWORD *a2, _DWORD *a3)\n{\n  int v4; // r0\n  int v6; // r12\n  const char *v7; // r5\n  int v8; // r12\n  int v9; // r12\n\n  v4 = a2[8]; /*0x20744*/\n  if ( v4 == 7 ) /*0x20754*/\n    goto LABEL_14; /*0x20754*/\n  if ( v4 != 6 ) /*0x2075c*/\n  {\n    if ( (v4 == 2 || v4 == 1) && (!a2[37] || a2[38]) ) /*0x20798*/\n    {\n      v6 = a2[7]; /*0x207a4*/\n      v7 = *(const char **)(v6 + 332); /*0x207b8*/\n      NmeString::get_url_parameter(this, (const char *)(v6 + 64)); /*0x207bc*/\n      if ( !*(_DWORD *)this ) /*0x207c0*/\nLABEL_11:\n        NmeString::assign(this, v7); /*0x207cc*/\n      return this; /*0x20788*/\n    }\n    goto LABEL_5; /*0x207a0*/\n  }\n  if ( !a2[37] || a2[38] ) /*0x207e8*/\n  {\nLABEL_14:\n    v8 = a2[7]; /*0x207f4*/\n    v7 = *(const char **)(v8 + 320); /*0x20808*/\n    NmeString::get_url_parameter(this, (const char *)(v8 + 64)); /*0x2080c*/\n    if ( !*(_DWORD *)this ) /*0x20818*/\n      goto LABEL_11; /*0x20818*/\n    return this; /*0x20820*/\n  }\nLABEL_5:\n  if ( *a3 != 4 ) /*0x20778*/\n  {\n    NmeString::NmeString(this); /*0x20780*/\n    return this; /*0x20780*/\n  }\n  v9 = a2[7]; /*0x20824*/\n  v7 = *(const char **)(v9 + 344); /*0x20838*/\n  NmeString::get_url_parameter(this, (const char *)(v9 + 64)); /*0x2083c*/\n  if ( !*(_DWORD *)this ) /*0x20848*/\n    goto LABEL_11; /*0x20848*/\n  return this; /*0x20788*/\n}",
+      "refs": [
+        {
+          "addr": "0x7fa8",
+          "name": "_ZNK9NmeString17get_url_parameterEPKc"
+        },
+        {
+          "addr": "0x7c90",
+          "name": "_ZN9NmeString6assignEPKc"
+        },
+        {
+          "addr": "0x7c24",
+          "name": "_ZN9NmeStringC1Ev"
+        }
+      ]
+    }
+  }
+]

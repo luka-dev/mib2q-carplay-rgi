@@ -1,0 +1,73 @@
+{
+  "jar": "/Users/luka/Desktop/AUDI_2/Tools/jxe2jar/out/MU1316-combined.jar",
+  "sha256": "bbfd4f4adca0f88852e4aa090f2b1da7c692c1b47e9279a0a8625572b5bd05dd",
+  "classes": [
+    {
+      "class": "de.audi.tghu.fwhmi.DisplayManagerMIB2High",
+      "full": "output/carplay-video-re-20260915/DisplayManagerMIB2High.javap.txt",
+      "excerpts": "output/carplay-video-re-20260915/DisplayManagerMIB2High.javap-excerpts.txt",
+      "methods": [
+        "defineContexts"
+      ],
+      "lines": 1541
+    },
+    {
+      "class": "de.audi.app.media.evo.content.data.DataPlayer",
+      "full": "output/carplay-video-re-20260915/DataPlayer.javap.txt",
+      "excerpts": "output/carplay-video-re-20260915/DataPlayer.javap-excerpts.txt",
+      "methods": [
+        "vehicleMoving",
+        "enableVideoDisplayable"
+      ],
+      "lines": 106
+    },
+    {
+      "class": "de.audi.app.media.content.ContentManager",
+      "full": "output/carplay-video-re-20260915/ContentManager.javap.txt",
+      "excerpts": "output/carplay-video-re-20260915/ContentManager.javap-excerpts.txt",
+      "methods": [
+        "init",
+        "setVehicleMoving"
+      ],
+      "lines": 184
+    },
+    {
+      "class": "de.audi.atip.sysapp.GeneralVehicleStateHandler",
+      "full": "output/carplay-video-re-20260915/GeneralVehicleStateHandler.javap.txt",
+      "excerpts": "output/carplay-video-re-20260915/GeneralVehicleStateHandler.javap-excerpts.txt",
+      "methods": [
+        "updateTVVelocityThreshold",
+        "updateVelocityThreshold"
+      ],
+      "lines": 60
+    },
+    {
+      "class": "de.audi.app.media.content.media.fileplayer.content.JobAttachSession",
+      "full": "output/carplay-video-re-20260915/JobAttachSession.javap.txt",
+      "excerpts": "output/carplay-video-re-20260915/JobAttachSession.javap-excerpts.txt",
+      "methods": [
+        "finishJob"
+      ],
+      "lines": 39
+    },
+    {
+      "class": "de.audi.app.media.content.media.fileplayer.content.JobPlayURL",
+      "full": "output/carplay-video-re-20260915/JobPlayURL.javap.txt",
+      "excerpts": "output/carplay-video-re-20260915/JobPlayURL.javap-excerpts.txt",
+      "methods": [
+        "setState",
+        "onPlaybackStateChanged"
+      ],
+      "lines": 332
+    },
+    {
+      "class": "de.audi.app.media.dsi.media.MediaDSIPlayerControllerImpl",
+      "full": "output/carplay-video-re-20260915/MediaDSIPlayerControllerImpl.javap.txt",
+      "excerpts": "output/carplay-video-re-20260915/MediaDSIPlayerControllerImpl.javap-excerpts.txt",
+      "methods": [
+        "setPlaybackURL"
+      ],
+      "lines": 29
+    }
+  ]
+}

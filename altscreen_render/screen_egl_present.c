@@ -51,15 +51,11 @@
 #define EP_QCOM_VIDEO_USAGE         0x484
 #define EP_RGBA_BUFFER_COUNT        2
 
-/* The HU composites this window at 60 Hz; the LVDS capture that feeds the VC
- * samples it at a fixed 30 Hz.  At interval 1 our ~30 fps posts land on
- * arbitrary 60 Hz slots, so a posted frame lives 1, 2 or 3 scans and the 30 Hz
- * capture periodically grabs one frame twice and skips the next — visible
- * judder even though every stage is nominally 30 fps.  Interval 2 pins each
- * post to exactly two scans = exactly one capture period.  maneuver_render
- * reached the same conclusion independently (platform_qnx.c:345, and see
- * maneuver_render/main.c:838 "pacing rides eglSwapBuffers ... NEVER" a timer)
- * and is smooth on this hardware. */
+/* Retain the interval-2 setting shared with maneuver_render for nominal 30 Hz
+ * presentation on a 60 Hz surface. This does not lock the independent VC
+ * capture clock: MU1316 videoencoderservice requests an integer 1000/fps ms
+ * timer (33 ms for 30), and actual capture/post cadence needs measurement.
+ * See docs/ALTSCREEN_STOCK_30FPS_PATH.md. */
 #define EP_SWAP_INTERVAL            2
 
 /* Present in KHR_image headers, but keep the value explicit for the QNX 6.5
@@ -124,16 +120,18 @@ struct screen_egl_present {
     unsigned long failures;
     int first_success_logged;
 
-    /* Cadence probe, reported with the periodic frame log.  arrival = spacing
-     * of decoded frames reaching us (the phone's rate); swap = time spent
-     * inside eglSwapBuffers (the interval block).  Together they say whether a
-     * cadence problem is upstream or ours. */
+    /* Cadence probe: arrival = decoded callback entry spacing, not phone FPS.
+     * Synchronous presentation can delay the next callback. swap measures only
+     * eglSwapBuffers; it excludes loader/lock/context waits, image refresh,
+     * draw and glFinish, so a cheap swap does not exclude a GPU bottleneck. */
     uint64_t pace_last_entry_ns;
     uint64_t pace_arrival_sum_ns;
     uint64_t pace_arrival_max_ns;
     uint64_t pace_swap_sum_ns;
     uint64_t pace_swap_max_ns;
-    unsigned long pace_samples;
+    unsigned long pace_samples, pace_swap_samples;
+    uint64_t pace_work_sum_ns, pace_work_max_ns;
+    unsigned long pace_work_samples;
 };
 
 static int ep_has_extension(const char *extensions, const char *wanted) {
@@ -544,7 +542,7 @@ static int ep_init_egl(screen_egl_present_t *p) {
     }
     if (ep_make_program(p) != 0 || ep_make_loader_program(p) != 0 ||
         ep_make_loader_textures(p) != 0) return -1;
-    eglSwapInterval(p->egl_display, EP_SWAP_INTERVAL);
+    if (!eglSwapInterval(p->egl_display, EP_SWAP_INTERVAL)) goto egl_fail;
     fprintf(stderr,
             "altscreen_render[egl]: live GPU=%s GL=%s EGL=%d.%d pixmap-image+external-image OK\n",
             (const char *)glGetString(GL_RENDERER),
@@ -925,8 +923,8 @@ int screen_egl_present_frame(screen_egl_present_t *p,
 
     if (!p || source_index >= p->source_count || filled_len == 0) return -1;
 
-    /* Sampled before the loader join / gl_lock so it measures how fast decoded
-     * frames actually arrive, not how long we then take to show them. */
+    /* Worker entry spacing includes queue starvation and previous presentation
+     * time. It is not the phone receive rate or the OMX callback interval. */
     entry_ns = ep_monotonic_ns();
     if (entry_ns && p->pace_last_entry_ns && entry_ns > p->pace_last_entry_ns) {
         uint64_t d = entry_ns - p->pace_last_entry_ns;
@@ -980,6 +978,7 @@ int screen_egl_present_frame(screen_egl_present_t *p,
         uint64_t swap_end_ns = ep_monotonic_ns();
         if (swap_begin_ns && swap_end_ns > swap_begin_ns) {
             uint64_t d = swap_end_ns - swap_begin_ns;
+            p->pace_swap_samples++;
             p->pace_swap_sum_ns += d;
             if (d > p->pace_swap_max_ns) p->pace_swap_max_ns = d;
         }
@@ -991,17 +990,17 @@ int screen_egl_present_frame(screen_egl_present_t *p,
                 "altscreen_render[egl]: VISIBLE PATH OK: Qcom 32m -> EGLImage external sampler -> RGBA8888 swap (%dx%d src=%u)\n",
                 p->width, p->height, source_index);
     } else if ((p->frames % 600) == 0) {
-        unsigned long n = p->pace_samples;
+        unsigned long n = p->pace_samples, swaps = p->pace_swap_samples;
         fprintf(stderr,
                 "altscreen_render[egl]: %lu GPU RGBA frames swapped; "
-                "arrival avg=%lu.%02lu max=%lu.%02lu ms, swap avg=%lu.%02lu max=%lu.%02lu ms (interval=%d)\n",
+                "worker-entry avg=%lu.%02lu max=%lu.%02lu ms, swap avg=%lu.%02lu max=%lu.%02lu ms (interval=%d)\n",
                 p->frames,
                 n ? (unsigned long)(p->pace_arrival_sum_ns / n / 1000000ULL) : 0UL,
                 n ? (unsigned long)(p->pace_arrival_sum_ns / n / 10000ULL % 100ULL) : 0UL,
                 (unsigned long)(p->pace_arrival_max_ns / 1000000ULL),
                 (unsigned long)(p->pace_arrival_max_ns / 10000ULL % 100ULL),
-                n ? (unsigned long)(p->pace_swap_sum_ns / n / 1000000ULL) : 0UL,
-                n ? (unsigned long)(p->pace_swap_sum_ns / n / 10000ULL % 100ULL) : 0UL,
+                swaps ? (unsigned long)(p->pace_swap_sum_ns / swaps / 1000000ULL) : 0UL,
+                swaps ? (unsigned long)(p->pace_swap_sum_ns / swaps / 10000ULL % 100ULL) : 0UL,
                 (unsigned long)(p->pace_swap_max_ns / 1000000ULL),
                 (unsigned long)(p->pace_swap_max_ns / 10000ULL % 100ULL),
                 EP_SWAP_INTERVAL);
@@ -1009,7 +1008,7 @@ int screen_egl_present_frame(screen_egl_present_t *p,
         p->pace_arrival_max_ns = 0;
         p->pace_swap_sum_ns = 0;
         p->pace_swap_max_ns = 0;
-        p->pace_samples = 0;
+        p->pace_samples = p->pace_swap_samples = 0;
     }
     ok = 0;
     goto out;
@@ -1023,9 +1022,25 @@ fail:
                 (unsigned)gl_error, source_index);
     }
 out:
-    /* Permit the next callback thread to acquire this context cleanly. */
+    /* Release ownership for output recovery or the reconnect loader. Only the
+     * presenter worker draws video; the OMX callback never binds EGL. */
     eglMakeCurrent(p->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE,
                    EGL_NO_CONTEXT);
+    {
+        uint64_t end_ns = ep_monotonic_ns();
+        if (entry_ns && end_ns >= entry_ns) {
+            uint64_t work = end_ns - entry_ns;
+            p->pace_work_samples++;
+            p->pace_work_sum_ns += work;
+            if (work > p->pace_work_max_ns) p->pace_work_max_ns = work;
+        }
+        if (p->pace_work_samples == 600) {
+            fprintf(stderr, "altscreen_render[egl]: full present incl loader/lock/UV/GPU/swap/unbind avg=%llu us max=%llu us\n",
+                    (unsigned long long)(p->pace_work_sum_ns / p->pace_work_samples / 1000ULL),
+                    (unsigned long long)(p->pace_work_max_ns / 1000ULL));
+            p->pace_work_sum_ns = p->pace_work_max_ns = p->pace_work_samples = 0;
+        }
+    }
     pthread_mutex_unlock(&p->gl_lock);
     return ok;
 }
@@ -1039,7 +1054,7 @@ int screen_egl_present_recover_output(screen_egl_present_t *p) {
     if (!p || !p->rgba_surface || p->egl_display == EGL_NO_DISPLAY ||
         p->egl_context == EGL_NO_CONTEXT) return -1;
 
-    /* A callback that was already presenting finishes before this point.  The
+    /* A worker that was already presenting finishes before this point.  The
      * source buffers are deliberately outside this recovery operation. */
     pthread_mutex_lock(&p->gl_lock);
     was_lost = cluster_surface_lost(p->rgba_surface);
@@ -1059,6 +1074,7 @@ int screen_egl_present_recover_output(screen_egl_present_t *p) {
                 "altscreen_render[egl]: output recovery FAILED recreating managed plane99\n");
         goto out;
     }
+    ep_set_native_swap_interval(p); /* before EGL snapshots the recreated window */
     native_window =
         (EGLNativeWindowType)cluster_surface_window(p->rgba_surface);
     new_surface = eglCreateWindowSurface(p->egl_display, p->egl_config,
@@ -1079,7 +1095,13 @@ int screen_egl_present_recover_output(screen_egl_present_t *p) {
         p->egl_surface = EGL_NO_SURFACE;
         goto out;
     }
-    eglSwapInterval(p->egl_display, EP_SWAP_INTERVAL);
+    if (!eglSwapInterval(p->egl_display, EP_SWAP_INTERVAL)) {
+        fprintf(stderr, "altscreen_render[egl]: recovery swap interval rejected err=0x%x\n", (unsigned)eglGetError());
+        eglMakeCurrent(p->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+        eglDestroySurface(p->egl_display, p->egl_surface);
+        p->egl_surface = EGL_NO_SURFACE;
+        goto out;
+    }
     ep_set_native_swap_interval(p);
     p->first_success_logged = 0;
     fprintf(stderr,

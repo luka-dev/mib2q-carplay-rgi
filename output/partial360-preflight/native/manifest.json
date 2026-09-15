@@ -1,0 +1,171 @@
+{
+  "module": "/Users/luka/Desktop/AUDI_2/Firmwares/HU/MHI2Q_US_AUG22_P5087_MU1316/extracted/app/eso/lib/libdm_modMain.so",
+  "sha256": "bd4c042457d4b3c0b9b5f3bcf8ef1e64a30842435e7bc70b477237acaa5ef6ec",
+  "size": 661228,
+  "scope": "static characterization only; no hardware concurrency/readiness test",
+  "format": "QNX ARM32 LE EABI5 shared ELF; static VA base 0",
+  "capture_table": {
+    "va": "0xa0aa8",
+    "file_offset": "0xa0aa8",
+    "record_bytes": 56,
+    "displayable_ids": [
+      17,
+      27,
+      27,
+      47,
+      48,
+      49,
+      -125
+    ]
+  },
+  "configs": [
+    {
+      "path": "ifs2/ifs_coreservices3/etc/eso/production/displaymanager.json",
+      "sha256": "b86e335ea103b5ce11280b3de99a7a61c19c378add46ea39c7687de0f83fa588",
+      "rvc": {
+        "norm": "AUTO",
+        "deinterlace": "WEAVE",
+        "source": {
+          "x": 0,
+          "y": 48,
+          "w": 702,
+          "h": 384
+        },
+        "target": {
+          "x": 0,
+          "y": 56,
+          "w": 720,
+          "h": 384
+        },
+        "brightness": 0,
+        "contrast": 0,
+        "saturation": 0,
+        "hue": 0
+      },
+      "zfas": {
+        "deinterlace": "BOB",
+        "source": {
+          "x": 0,
+          "y": 0,
+          "w": 1024,
+          "h": 480
+        },
+        "target": {
+          "x": 0,
+          "y": 0,
+          "w": 1024,
+          "h": 480
+        },
+        "brightness": 0,
+        "contrast": 0,
+        "saturation": 0,
+        "hue": 0
+      }
+    },
+    {
+      "path": "system/etc/eso/production/displaymanager.json",
+      "sha256": "b86e335ea103b5ce11280b3de99a7a61c19c378add46ea39c7687de0f83fa588",
+      "rvc": {
+        "norm": "AUTO",
+        "deinterlace": "WEAVE",
+        "source": {
+          "x": 0,
+          "y": 48,
+          "w": 702,
+          "h": 384
+        },
+        "target": {
+          "x": 0,
+          "y": 56,
+          "w": 720,
+          "h": 384
+        },
+        "brightness": 0,
+        "contrast": 0,
+        "saturation": 0,
+        "hue": 0
+      },
+      "zfas": {
+        "deinterlace": "BOB",
+        "source": {
+          "x": 0,
+          "y": 0,
+          "w": 1024,
+          "h": 480
+        },
+        "target": {
+          "x": 0,
+          "y": 0,
+          "w": 1024,
+          "h": 480
+        },
+        "brightness": 0,
+        "contrast": 0,
+        "saturation": 0,
+        "hue": 0
+      }
+    },
+    {
+      "path": "system/etc/eso/presets/displaymanager.json",
+      "sha256": "be03453224eea7a8eab12e2042df14a92586e716183bd7573fac052d9c5ea4f5",
+      "rvc": null,
+      "zfas": null
+    }
+  ],
+  "functions": [
+    {
+      "name": "_ZN17CCaptureInterface11setCroppingERKi2T4IiES3_",
+      "va": "0x59de4",
+      "file_offset": "0x59de4",
+      "size": 360
+    },
+    {
+      "name": "_ZN21CDSIDisplaymanagement14evtSetCroppingEP12CSetCropping",
+      "va": "0x5dab0",
+      "file_offset": "0x5dab0",
+      "size": 584
+    },
+    {
+      "name": "_ZN15CContextManager20preContextSwitchHookERKN4util9SharedPtrINS_14SContextSwitchENS0_20SharedPtrDefaultBaseEEE",
+      "va": "0x358ac",
+      "file_offset": "0x358ac",
+      "size": 1456
+    },
+    {
+      "name": "_ZN15CContextManager21postContextSwitchHookERKN4util9SharedPtrINS_14SContextSwitchENS0_20SharedPtrDefaultBaseEEE",
+      "va": "0x36bb0",
+      "file_offset": "0x36bb0",
+      "size": 1248
+    },
+    {
+      "name": "_ZN17CCaptureInterface18isDisplayableReadyERKi",
+      "va": "0x59900",
+      "file_offset": "0x59900",
+      "size": 136
+    },
+    {
+      "name": "_ZN17CCaptureInterface14startCapturingERKiNS_14ECaptureOriginE",
+      "va": "0x5a60c",
+      "file_offset": "0x5a60c",
+      "size": 696
+    },
+    {
+      "name": "_ZN21CDSIDisplaymanagement17evtStartComponentEP18CDSIStartComponent",
+      "va": "0x60480",
+      "file_offset": "0x60480",
+      "size": 1048
+    },
+    {
+      "name": "_ZN17CCaptureInterface13stopCapturingENS_14ECaptureOriginE",
+      "va": "0x5a4ac",
+      "file_offset": "0x5a4ac",
+      "size": 352
+    },
+    {
+      "name": "_ZN17CCaptureInterface16evtSetRVCEnabledEP20CCapSetRVCEnabledEvt",
+      "va": "0x59c70",
+      "file_offset": "0x59c70",
+      "size": 372
+    }
+  ]
+}

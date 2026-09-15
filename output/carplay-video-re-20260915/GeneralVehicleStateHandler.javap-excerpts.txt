@@ -1,0 +1,60 @@
+  private synchronized void updateVelocityThreshold(java.lang.String, int, boolean, int);
+    Code:
+       0: iload         4
+       2: iconst_1
+       3: if_icmpne     78
+       6: aload_0
+       7: getfield      #57                 // Field de/audi/atip/sysapp/GeneralVehicleStateHandler.lc:Lde/audi/atip/log/LogChannel;
+      10: ldc           #16                 // int 10000000
+      12: ldc           #17                 // String threshold update for %1
+      14: aload_1
+      15: invokevirtual #74                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+      18: pop
+      19: aload_0
+      20: iload_2
+      21: invokespecial #93                 // Method de/audi/atip/sysapp/GeneralVehicleStateHandler.getSpeedManagerList:(I)Ljava/util/List;
+      24: astore        5
+      26: aload_0
+      27: getfield      #66                 // Field de/audi/atip/sysapp/GeneralVehicleStateHandler.currentThresholdValues:[Z
+      30: iload_2
+      31: iload_3
+      32: bastore
+      33: iconst_0
+      34: istore        6
+      36: iload         6
+      38: aload         5
+      40: invokeinterface #123,  1          // InterfaceMethod java/util/List.size:()I
+      45: if_icmpge     75
+      48: aload         5
+      50: iload         6
+      52: invokeinterface #124,  2          // InterfaceMethod java/util/List.get:(I)Ljava/lang/Object;
+      57: checkcast     #15                 // class de/audi/atip/sysapp/GeneralVehicleStateHandler$SpeedHandler
+      60: astore        7
+      62: aload         7
+      64: iload_2
+      65: iload_3
+      66: invokevirtual #71                 // Method de/audi/atip/sysapp/GeneralVehicleStateHandler$SpeedHandler.fireThreshold:(IZ)V
+      69: iinc          6, 1
+      72: goto          36
+      75: goto          91
+      78: aload_0
+      79: getfield      #57                 // Field de/audi/atip/sysapp/GeneralVehicleStateHandler.lc:Lde/audi/atip/log/LogChannel;
+      82: ldc           #16                 // int 10000000
+      84: ldc           #18                 // String invalid threshold update for %1
+      86: aload_1
+      87: invokevirtual #74                 // Method de/audi/atip/log/LogChannel.log:(ILjava/lang/String;Ljava/lang/Object;)Z
+      90: pop
+      91: return
+
+  public void updateTVVelocityThreshold(boolean, int);
+    Code:
+       0: aload_0
+       1: ldc           #26                 // String TVVelocityThreshold
+       3: iconst_2
+       4: iload_1
+       5: iload_2
+       6: invokespecial #97                 // Method de/audi/atip/sysapp/GeneralVehicleStateHandler.updateVelocityThreshold:(Ljava/lang/String;IZI)V
+       9: return
+      10: nop
+      11: nop
+

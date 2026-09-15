@@ -1,0 +1,64 @@
+[
+  {
+    "enum": 0,
+    "tableAddress": "0x26938c080",
+    "variable": "0x1e0a0d158",
+    "string": {
+      "address": "0x1ea027b38",
+      "raw_pointer": "0x2000000efa0462",
+      "string_address": "0x18efa0462",
+      "value": "paused"
+    }
+  },
+  {
+    "enum": 1,
+    "tableAddress": "0x26938c088",
+    "variable": "0x1e0a0d160",
+    "string": {
+      "address": "0x1ea027b58",
+      "raw_pointer": "0x2000000efa0469",
+      "string_address": "0x18efa0469",
+      "value": "loading"
+    }
+  },
+  {
+    "enum": 2,
+    "tableAddress": "0x26938c090",
+    "variable": "0x1e0a0d168",
+    "string": {
+      "address": "0x1ea027b78",
+      "raw_pointer": "0x2000000efa0471",
+      "string_address": "0x18efa0471",
+      "value": "playing"
+    }
+  },
+  {
+    "enum": 3,
+    "tableAddress": "0x26938c098",
+    "variable": "0x1e0a0d150",
+    "string": {
+      "address": "0x1ea027b18",
+      "raw_pointer": "0x2000000efa045a",
+      "string_address": "0x18efa045a",
+      "value": "stopped"
+    }
+  },
+  {
+    "input": "0x2680c5060",
+    "string": {
+      "address": "0x1ea027ab8",
+      "raw_pointer": "0x2000000efa0440",
+      "string_address": "0x18efa0440",
+      "value": "ended"
+    }
+  },
+  {
+    "input": "0x275ae9248",
+    "string": {
+      "address": "0x275ae9248",
+      "raw_pointer": "0x200000d0f1325e",
+      "string_address": "0x250f1325e",
+      "value": "interrupted"
+    }
+  }
+]

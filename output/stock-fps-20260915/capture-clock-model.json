@@ -1,0 +1,19 @@
+{
+  "scope": "Idealized clock model, not measured HU timings; source=30Hz, phase=1ms, 1000 capture ticks",
+  "results": [
+    {
+      "capture": "stock_33_ms",
+      "period_ms": "33",
+      "duration_ms": "32967",
+      "repeats": 10,
+      "skipped_source_ids": 0
+    },
+    {
+      "capture": "ideal_30_hz",
+      "period_ms": "100/3",
+      "duration_ms": "33300",
+      "repeats": 0,
+      "skipped_source_ids": 0
+    }
+  ]
+}

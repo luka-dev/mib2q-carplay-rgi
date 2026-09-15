@@ -2,6 +2,19 @@ import com.luka.carplay.core.CarPlayApp;
 import com.luka.carplay.pdc.PdcSmallStageGuard;
 import de.audi.app.earlyfunc.core.parking.IParkingSystem;
 import de.audi.app.earlyfunc.core.parking.ParkingPopupIdentifier;
+import de.audi.app.earlyfunc.core.parking.AbstractParkingSystemControllerComponent;
+import de.audi.app.earlyfunc.core.parking.ParkingPartialPopupHandler;
+import de.audi.app.earlyfunc.core.parking.IParkingSystemController;
+import de.audi.app.earlyfunc.core.parking.ops.OPSViewModeHandler;
+import de.audi.app.earlyfunc.core.parking.pla.PLAPopinHandler;
+import de.audi.app.earlyfunc.core.parking.pla.IPLAInterappServiceHandler;
+import de.audi.app.car.common.app.ICarApplication;
+import de.audi.atip.msg.MsgDistributor;
+import de.audi.app.earlyfunc.core.parking.pla.IPLAPopinHandler;
+import de.audi.app.earlyfunc.evo.parking.ParkingSystemControllerComponentEvo;
+import de.audi.app.earlyfunc.evo.parking.ParkingSystemPLAComponentEvo;
+import de.audi.app.earlyfunc.evo.parking.ParkingSystemVPSComponentEvo;
+import de.audi.app.earlyfunc.evo.parking.ops.ParkingSystemOPSComponentEvo;
 import de.audi.app.terminalmode.*;
 import de.audi.app.terminalmode.device.*;
 import de.audi.app.terminalmode.diagnosis.*;
@@ -20,6 +33,7 @@ import de.audi.atip.utils.reactive.properties.*;
 import de.audi.tghu.command.*;
 import de.esolutions.hmi.widgets.audi.base.AbstractScreenWidget;
 import org.dsi.ifc.carparkingsystem.DisplayContent;
+import de.esolutions.fw.util.commons.SimpleIntObjectMap;
 import java.lang.reflect.*;
 import java.util.*;
 import sun.misc.Unsafe;
@@ -54,6 +68,191 @@ public final class PdcResourcePolicyTest {
         }));
     }
     static void check(boolean ok, String message) { if (!ok) throw new AssertionError(message); }
+    static void put(Object target, String name, Object value) throws Exception {
+        for (Class<?> type = target.getClass(); type != null; type = type.getSuperclass()) {
+            try {
+                Field f = type.getDeclaredField(name); f.setAccessible(true); f.set(target, value); return;
+            } catch (NoSuchFieldException ignored) { }
+        }
+        throw new AssertionError("missing field " + name);
+    }
+    /** Real component popup tables + real stock controller list assembly. Native
+     * service startup is skipped, not the classification that failed on HU. */
+    static class StockParking {
+        final ParkingSystemControllerComponentEvo controller =
+            (ParkingSystemControllerComponentEvo)UNSAFE.allocateInstance(ParkingSystemControllerComponentEvo.class);
+        final ParkingSystemOPSComponentEvo ops =
+            (ParkingSystemOPSComponentEvo)UNSAFE.allocateInstance(ParkingSystemOPSComponentEvo.class);
+        final ParkingSystemPLAComponentEvo pla =
+            (ParkingSystemPLAComponentEvo)UNSAFE.allocateInstance(ParkingSystemPLAComponentEvo.class);
+        final ParkingSystemVPSComponentEvo vps =
+            (ParkingSystemVPSComponentEvo)UNSAFE.allocateInstance(ParkingSystemVPSComponentEvo.class);
+        StockParking() throws Exception {
+            put(ops, "opsType", 2);
+            SimpleIntObjectMap available = new SimpleIntObjectMap();
+            Map<Integer,List<IParkingSystem>> mappings = new HashMap<>();
+            for (IParkingSystem system : new IParkingSystem[]{ops, vps, pla}) {
+                available.add(system.getParkingSystemID(), system);
+                for (int popup : system.getSupportedDSIPopupIDs()) {
+                    if (!mappings.containsKey(popup)) mappings.put(popup, new ArrayList<>());
+                    mappings.get(popup).add(system);
+                }
+            }
+            put(controller, "availableParkingSystems", available);
+            put(controller, "parkingSystemsForPopup", mappings);
+            put(pla, "logChannel", LOG);
+            put(pla, "popinHandler", proxy(IPLAPopinHandler.class, (name,args) -> {
+                check(name.equals("updateVpsOpsPopup"), "passive PLA attempted " + name); return null;
+            }));
+        }
+        void target(Fixture f, int popup, int mode) {
+            DisplayContent content = new DisplayContent(); content.popup = popup; content.mode = mode;
+            List systems = controller.getInvolvedParkingSystems(content);
+            if (popup == 1 || popup == 4 || popup == 7 || popup == 17) {
+                check(systems.size() == 2 && systems.get(0) == ops && systems.get(1) == pla,
+                    "stock standalone OPS no longer includes passive PLA");
+            }
+            PdcSmallStageGuard.parkingContentChanging(content, systems, f.hmi);
+        }
+    }
+    static void stockParkingClassification() throws Exception {
+        StockParking stock = new StockParking();
+        // Stock PLA.setActive(true) observes OPS content; it does not activate
+        // parking assist. Rejecting every registered PLA caused the HU failure.
+        stock.pla.setActive(true, new DisplayContent());
+        check(!stock.pla.isSystemActive(), "stock passive PLA unexpectedly active");
+        for (int popup : new int[]{1, 4, 7, 17}) {
+            Fixture f = new Fixture(); stock.target(f, popup, 0); f.tracker.processMsg(108);
+            check(f.wizard.writes == 0 && !f.restricted() && f.carplay.getSmallStageType() == 6,
+                "stock OPS + passive PLA toggled Main Wizard, popup=" + popup);
+            f.visible(); f.tracker.processMsg(108);
+            check(f.wizard.writes == 0 && !f.restricted(), "repeated passive PLA/OPS took SCREEN");
+        }
+        // Popup semantics must also reject camera/ARA/explicit PLA when a
+        // component is missing (or its update has not arrived yet).
+        for (int popup : new int[]{0, 2, 3, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 99}) {
+            Fixture f = new Fixture(); stock.target(f, popup, 0); f.tracker.processMsg(108);
+            check(f.restricted() && f.wizard.writes == 1, "non-standalone popup bypassed takeover: " + popup);
+        }
+        Fixture f = new Fixture(); stock.target(f, 1, 12); f.tracker.processMsg(108);
+        check(f.restricted(), "ARA mode bypassed takeover without registered ARA");
+        put(stock.pla, "systemActive", true);
+        f = new Fixture(); stock.target(f, 4, 0); f.tracker.processMsg(108);
+        check(f.restricted(), "active PLA classified as passive");
+        put(stock.pla, "systemActive", false);
+        f = new Fixture(); stock.target(f, 4, 0); f.visible();
+        put(stock.pla, "systemActive", true); f.tracker.processMsg(108);
+        check(f.restricted() && f.carplay.getSmallStageType() == 1,
+            "PLA activated during OPS but retained protection");
+    }
+    /** Skip only physical PLA message/spot rendering, retaining the real idle
+     * popin state machine and its popup-request/suppression operations. */
+    public static class PhysicalPla extends ParkingSystemPLAComponentEvo {
+        public PhysicalPla() { super(null, null); }
+        public void notifyOPSActive(boolean active) { }
+        public void notifyPlaOpsStandaloneVisibleState(boolean visible) { }
+    }
+    static void stockActivationLifecycle() throws Exception {
+        final Fixture f = new Fixture();
+        final StockParking stock = new StockParking();
+        final Map<Integer,Choice> models = new HashMap<>();
+        final List<Integer> messages = new ArrayList<>();
+        final ParkingPartialPopupHandler[] partial = new ParkingPartialPopupHandler[1];
+        HMIService hmi = proxy(HMIService.class, (name,args) -> {
+            if (name.equals("getRootWindow")) return proxy(IRootWindow.class, (n,a) -> f.current);
+            if (name.equals("showPartialPopup")) {
+                check((Integer)args[1] == OPS && !f.restricted() && f.wizard.writes == 0,
+                    "stock activation hid CarPlay before requesting OPS");
+                partial[0].partialPopupVisible((Integer)args[1], (Integer)args[0]);
+                return null;
+            }
+            if (name.equals("removePartialPopup")) {
+                partial[0].partialPopupHidden((Integer)args[1], (Integer)args[0]);
+                return null;
+            }
+            if (name.equals("getChoiceModel")) {
+                int id = (Integer)args[0];
+                if (!models.containsKey(id)) models.put(id, new Choice());
+                return models.get(id).model;
+            }
+            throw new AssertionError("unexpected parking HMI " + name);
+        });
+        IFrameworkAccess framework = proxy(IFrameworkAccess.class, (name,args) -> {
+            if (name.equals("getHMIService") || name.equals("getHmiServiceApp")) return hmi;
+            throw new AssertionError("unexpected parking framework " + name);
+        });
+        ICarApplication app = proxy(ICarApplication.class, (name,args) -> {
+            if (name.equals("getFrameworkAccess")) return framework;
+            throw new AssertionError("unexpected parking application " + name);
+        });
+        PhysicalPla pla = (PhysicalPla)UNSAFE.allocateInstance(PhysicalPla.class);
+        put(pla, "logChannel", LOG); put(pla, "application", app); put(pla, "controller", stock.controller);
+        put(pla, "popinHandler", new PLAPopinHandler(stock.controller, pla, LOG, app,
+            proxy(IPLAInterappServiceHandler.class, (n,a) -> null)));
+        stock.controller.getAvailableParkingSystems().add(16, pla);
+        // Replace only the physical message edge in every real popup mapping.
+        Field mappingsField = AbstractParkingSystemControllerComponent.class.getDeclaredField("parkingSystemsForPopup");
+        mappingsField.setAccessible(true);
+        for (Object value : ((Map)mappingsField.get(stock.controller)).values()) {
+            List list = (List)value;
+            int index = list.indexOf(stock.pla); if (index >= 0) list.set(index, pla);
+        }
+        put(stock.controller, "application", app); put(stock.controller, "logChannel", LOG);
+        put(stock.controller, "currentDisplayContent", new DisplayContent());
+        put(stock.controller, "popupRequests", new Hashtable());
+        put(stock.controller, "opsViewModeHandler", new OPSViewModeHandler(app, LOG));
+        put(stock.controller, "msgDistributor", proxy(MsgDistributor.class, (name,args) -> {
+            if (name.equals("sendMessage")) {
+                int message = (Integer)args[0]; messages.add(message); f.tracker.processMsg(message); return null;
+            }
+            throw new AssertionError("unexpected parking distributor " + name);
+        }));
+        put(stock.ops, "logChannel", LOG); put(stock.ops, "application", app);
+        put(stock.ops, "controller", stock.controller);
+        partial[0] = new ParkingPartialPopupHandler(app, stock.controller, LOG);
+        put(partial[0], "registeredPopupIDs", new ArrayList<>(Arrays.asList(OPS)));
+        put(stock.controller, "partialPopupHandler", partial[0]);
+        Method activate = AbstractParkingSystemControllerComponent.class.getDeclaredMethod("activateParkingSystem", DisplayContent.class);
+        activate.setAccessible(true);
+        for (int popup : new int[]{4, 1, 7, 17, 1}) {
+            DisplayContent content = new DisplayContent(); content.popup = popup;
+            activate.invoke(stock.controller, content);
+            put(stock.controller, "currentDisplayContent", content);
+            check(!f.restricted() && f.wizard.writes == 0 && partial[0].isPopupActive()
+                && PdcSmallStageGuard.shouldKeepCarPlayScreen(), "stock OPS activation/update lost projection");
+        }
+        check(messages.size() == 5 && messages.get(0) == 108,
+            "test bypassed stock parking producer");
+        activate.invoke(stock.controller, new DisplayContent());
+        put(stock.controller, "currentDisplayContent", new DisplayContent());
+        check(messages.get(messages.size() - 1) == 107 && !partial[0].isPopupActive()
+            && !PdcSmallStageGuard.shouldKeepCarPlayScreen() && f.carplay.getSmallStageType() == 1,
+            "stock parking close retained popup/guard");
+        DisplayContent reopen = new DisplayContent(); reopen.popup = 4;
+        activate.invoke(stock.controller, reopen);
+        check(!f.restricted() && partial[0].isPopupActive() && PdcSmallStageGuard.shouldKeepCarPlayScreen(),
+            "stock parking reopen lost CarPlay");
+        System.out.println("PDC stock activation: real controller -> OPS/idle PLA -> 108 -> partial popup PASS");
+    }
+
+    static void partialPopupCallbackIsolation() throws Exception {
+        Fixture f = new Fixture(); f.pure();
+        final int[] canceled = {0};
+        ParkingPartialPopupHandler handler = new ParkingPartialPopupHandler(null,
+            proxy(IParkingSystemController.class, (n,a) -> {
+                if (n.equals("notifyPartialPopupCanceled")) { canceled[0]++; return null; }
+                throw new AssertionError("unexpected callback " + n);
+            }), LOG);
+        handler.partialPopupVisible(OPS, 0);
+        handler.partialPopupListenerRegistered(2100380, 0, false);
+        handler.partialPopupHidden(2100380, 0);
+        handler.partialPopupHidden(OPS, 1);
+        check(canceled[0] == 0 && handler.isPopupActive() && PdcSmallStageGuard.shouldKeepCarPlayScreen(),
+            "unrelated popup/terminal hidden callback canceled live OPS");
+        handler.partialPopupHidden(OPS, 0);
+        check(canceled[0] == 1 && !handler.isPopupActive() && !PdcSmallStageGuard.shouldKeepCarPlayScreen(),
+            "matching OPS hidden callback did not clean up");
+    }
     static void callsBefore(String type, String method, String early, String late) throws Exception {
         ClassNode node = new ClassNode(); new ClassReader(type).accept(node, 0);
         for (MethodNode m : node.methods) if (m.name.equals(method)) {
@@ -74,6 +273,7 @@ public final class PdcResourcePolicyTest {
     static class Choice {
         int value, writes;
         final ChoiceModelApp model = proxy(ChoiceModelApp.class, (name,args) -> {
+            if (name.equals("getID")) return 0;
             if (name.equals("getValue")) return value;
             if (name.equals("setValue")) { value = ((Integer)args[0]); writes++; }
             return null;
@@ -153,7 +353,7 @@ public final class PdcResourcePolicyTest {
                 if (n.equals("getHMIPopupID")) return new ParkingPopupIdentifier(1, OPS);
                 throw new AssertionError("unexpected parking call " + n);
             }));
-            DisplayContent content = new DisplayContent(); content.popup = ids.length == 0 ? 0 : 3;
+            DisplayContent content = new DisplayContent(); content.popup = ids.length == 0 ? 0 : 1;
             PdcSmallStageGuard.parkingContentChanging(content, systems, hmi);
         }
         void pure() { target(2); }
@@ -248,6 +448,10 @@ public final class PdcResourcePolicyTest {
         check(!f.restricted() && f.blocked.value == 0 && Boolean.FALSE.equals(f.muRvc.get()),
             "return to eligible OPS retained camera restriction");
         check(f.wizard.writes == 1, "return to OPS toggled wizard again");
+
+        stockParkingClassification();
+        stockActivationLifecycle();
+        partialPopupCallbackIsolation();
 
         f = new Fixture(); f.pure();
         Thread.sleep(3200); // exercise the shipping rejected-show timeout and restoration

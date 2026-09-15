@@ -1,0 +1,183 @@
+[
+  {
+    "key": "15infoResponse",
+    "result": {
+      "addr": "0x250ef20b8",
+      "code": "void __fastcall -[APRKMediaPlayer _processPlaybackInfoRequestWithDictionary:](__int64 a1)\n{\n  __int64 v2; // x0\n  __int64 v3; // x0\n  __int64 v4; // x0\n  __int64 v5; // x0\n  __int64 _28; // [xsp+28h] [xbp+8h]\n\n  MEMORY[0x258100670](); /*0x250ef20d0*/\n  v2 = MEMORY[0x258020BB0](a1); /*0x250ef20dc*/\n  v3 = MEMORY[0x258100CA0](v2); /*0x250ef20e0*/\n  if ( v3 ) /*0x250ef20e8*/\n  {\n    v4 = MEMORY[0x258021160](&OBJC_CLASS___APRKUtilities); /*0x250ef20f8*/\n    MEMORY[0x258100CA0](v4); /*0x250ef20fc*/\n    v3 = MEMORY[0x258001A30](); /*0x250ef2110*/\n  }\n  v5 = MEMORY[0x2581005A0](v3); /*0x250ef211c*/\n  MEMORY[0x258100590](v5); /*0x250ef2120*/\n  if ( ((_28 ^ (2 * _28)) & 0x4000000000000000LL) != 0 ) /*0x250ef213c*/\n    __break(0xC471u); /*0x250ef2140*/\n  JUMPOUT(0x258100C90LL); /*0x258100c90*/\n}",
+      "refs": [
+        {
+          "addr": "0x2714f66f0",
+          "name": "_OBJC_CLASS_$_APRKUtilities"
+        }
+      ]
+    }
+  },
+  {
+    "key": "15infoFields",
+    "result": {
+      "addr": "0x250eecb08",
+      "code": "__int64 __fastcall -[APRKMediaPlayer _currentPlaybackInfoDictionary](__int64 a1)\n{\n  __int64 v2; // x19\n  __int64 v3; // x0\n  __int64 v4; // x0\n  __int64 v5; // x20\n  __int64 v6; // x0\n  __int64 v7; // x0\n  __int64 v8; // x23\n  __int64 v9; // x0\n  __int64 v10; // x0\n  __int64 v11; // x0\n  __int64 v12; // x0\n  __int64 v13; // x23\n  __int64 v14; // x24\n  __int64 v15; // x0\n  __int64 v16; // x0\n  __int64 v17; // x24\n  __int64 v18; // x0\n  __int64 v19; // x0\n  __int64 v20; // x0\n  __n128 v21; // q0\n  __int64 v22; // x0\n  __int64 v23; // x0\n  __int64 v24; // x0\n  __int64 v25; // x24\n  __int64 v26; // x25\n  __int64 v27; // x0\n  __int64 v28; // x0\n  __int64 v29; // x0\n  __int64 v30; // x26\n  __int64 v31; // x0\n  __int64 v32; // x0\n  __int64 v33; // x26\n  __int64 v34; // x0\n  __int64 v35; // x0\n  __int64 v36; // x0\n  __int64 v37; // x0\n  __int64 v38; // x26\n  __int64 v39; // x0\n  __int64 v40; // x0\n  __int64 v41; // x27\n  __int64 v42; // x0\n  __int64 v43; // x0\n  __int64 v44; // x0\n  __int64 v45; // x0\n  __int64 v46; // x0\n  const char *v47; // x8\n  __int64 v48; // x0\n  __int64 v49; // x28\n  double v50; // d8\n  __int64 v51; // d0\n  const char *v52; // x8\n  __int64 v53; // x0\n  __int64 v54; // x21\n  __int64 v55; // x0\n  __int64 v56; // x0\n  __int64 v57; // x0\n  __int64 v58; // x0\n  __int64 v59; // x0\n  __int64 v60; // x0\n  __int64 v61; // x0\n  __int64 v62; // x0\n  __int64 v63; // x0\n  const char *v65; // [xsp+38h] [xbp-A8h]\n  _QWORD v66[7]; // [xsp+40h] [xbp-A0h] BYREF\n  __int64 v67; // [xsp+78h] [xbp-68h]\n  __int64 vars8; // [xsp+E8h] [xbp+8h]\n\n  v67 = *MEMORY[0x2681A4A70]; /*0x250eecb40*/\n  v2 = MEMORY[0x258100E60](MEMORY[0x2680C2F50]); /*0x250eecb50*/\n  v3 = MEMORY[0x25801DBC0](*(_QWORD *)(a1 + 8)); /*0x250eecb58*/\n  v4 = MEMORY[0x258100CA0](v3); /*0x250eecb5c*/\n  v5 = v4; /*0x250eecb60*/\n  if ( !v4 ) /*0x250eecb64*/\n  {\n    if ( (*(_BYTE *)(a1 + 200) & 1) != 0 ) /*0x250eed03c*/\n      goto LABEL_38; /*0x250eed03c*/\n    v54 = MEMORY[0x2680CF4B8]; /*0x250eed044*/\n    v66[3] = *MEMORY[0x2680CEF80]; /*0x250eed068*/\n    v66[4] = CFSTR(\"Sender requested playbackInfo while AVPlayer on Receiver side did not have a current playerItem.\"); /*0x250eed068*/\n    v55 = MEMORY[0x258001E20](MEMORY[0x2680C2ED8]); /*0x250eed080*/\n    MEMORY[0x258100CA0](v55); /*0x250eed084*/\n    v56 = MEMORY[0x258004E30](v54); /*0x250eed09c*/\n    MEMORY[0x258100CA0](v56); /*0x250eed0a0*/\n    MEMORY[0x2581005D0](); /*0x250eed0a8*/\n    v57 = MEMORY[0x2580212B0](&OBJC_CLASS___APRKUtilities); /*0x250eed0b8*/\n    MEMORY[0x258100CA0](v57); /*0x250eed0bc*/\n    v58 = MEMORY[0x258001A30](v2); /*0x250eed0d4*/\n    goto LABEL_36; /*0x250eed0d8*/\n  }\n  v66[5] = CFSTR(\"uuid\"); /*0x250eecb70*/\n  v6 = MEMORY[0x258001950](v4); /*0x250eecb78*/\n  v66[6] = MEMORY[0x258100CA0](v6); /*0x250eecb84*/\n  v7 = MEMORY[0x258001E20](MEMORY[0x2680C2ED8]); /*0x250eecb9c*/\n  MEMORY[0x258100CA0](v7); /*0x250eecba0*/\n  MEMORY[0x2581005D0](); /*0x250eecba8*/\n  MEMORY[0x258001A30](v2); /*0x250eecbbc*/\n  v8 = MEMORY[0x25800EF30](v5); /*0x250eecbc8*/\n  v9 = MEMORY[0x258001270](MEMORY[0x2680CF688]); /*0x250eecbdc*/\n  MEMORY[0x258100CA0](v9); /*0x250eecbe0*/\n  v10 = MEMORY[0x258001A30](v2); /*0x250eecbfc*/\n  v11 = MEMORY[0x2581005E0](v10); /*0x250eecc00*/\n  if ( v8 == 1 )\n  {\n    v12 = MEMORY[0x25800D7C0](v5); /*0x250eecc10*/\n    v13 = MEMORY[0x258100CA0](v12); /*0x250eecc18*/\n    if ( v13 ) /*0x250eecc1c*/\n    {\n      MEMORY[0x258001A30](v2); /*0x250eecc34*/\n      v14 = MEMORY[0x2680CF688]; /*0x250eecc38*/\n      MEMORY[0x258008FC0](v13); /*0x250eecc40*/\n      v15 = MEMORY[0x258005890](v14); /*0x250eecc48*/\n      MEMORY[0x258100CA0](v15); /*0x250eecc4c*/\n      v16 = MEMORY[0x258001A30](v2); /*0x250eecc68*/\n      MEMORY[0x2581005E0](v16); /*0x250eecc6c*/\n    }\n    MEMORY[0x258001E50](v66, v5); /*0x250eecc78*/\n    v17 = *MEMORY[0x2680C31A0]; /*0x250eecc84*/\n    MEMORY[0x25810D6F0](v66, *MEMORY[0x2680C31A0]); /*0x250eecc90*/\n    v18 = MEMORY[0x258001A30](v2); /*0x250eeccac*/\n    MEMORY[0x2581005F0](v18); /*0x250eeccb0*/\n    if ( (*(_BYTE *)(a1 + 188) & 1) == 0 ) /*0x250eeccb8*/\n    {\n      MEMORY[0x25801DBE0](v66, v5); /*0x250eeccc4*/\n      MEMORY[0x25810D6F0](v66, v17); /*0x250eeccd0*/\n      v19 = MEMORY[0x258001A30](v2); /*0x250eeccec*/\n      MEMORY[0x2581005E0](v19); /*0x250eeccf0*/\n    }\n    v20 = MEMORY[0x25801FA20](*(_QWORD *)(a1 + 8)); /*0x250eeccf8*/\n    v21 = 0u; /*0x250eeccfc*/\n    if ( v20 == 2 ) /*0x250eecd04*/\n      MEMORY[0x25801DCE0](*(_QWORD *)(a1 + 8), (__n128)0LL); /*0x250eecd0c*/\n    if ( (*(_BYTE *)(a1 + 188) & 1) == 0 ) /*0x250eecd14*/\n    {\n      v22 = MEMORY[0x2580073B0](MEMORY[0x2680CF688], v21); /*0x250eecd1c*/\n      MEMORY[0x258100CA0](v22); /*0x250eecd20*/\n      v23 = MEMORY[0x258001A30](v2); /*0x250eecd3c*/\n      MEMORY[0x2581005E0](v23); /*0x250eecd40*/\n    }\n    MEMORY[0x258020D00](a1, v21); /*0x250eecd4c*/\n    v24 = MEMORY[0x258020C50](a1); /*0x250eecd58*/\n    v25 = MEMORY[0x258100CA0](v24); /*0x250eecd60*/\n    if ( v25 ) /*0x250eecd64*/\n      MEMORY[0x258001A30](v2); /*0x250eecd78*/\n    if ( *(_BYTE *)(a1 + 172) == 1 ) /*0x250eecd84*/\n      MEMORY[0x258001A30](v2); /*0x250eecd9c*/\n    v26 = MEMORY[0x2680CF688]; /*0x250eecda0*/\n    MEMORY[0x258021510](v5); /*0x250eecda8*/\n    v27 = MEMORY[0x258001270](v26); /*0x250eecdb4*/\n    MEMORY[0x258100CA0](v27); /*0x250eecdb8*/\n    v28 = MEMORY[0x258001A30](v2); /*0x250eecdd4*/\n    MEMORY[0x2581005F0](v28); /*0x250eecdd8*/\n    v29 = MEMORY[0x258021220](v5); /*0x250eecde0*/\n    if ( MEMORY[0x258100CA0](v29) ) /*0x250eecde4*/\n      MEMORY[0x258001A30](v2); /*0x250eece04*/\n    v30 = MEMORY[0x2680CF688]; /*0x250eece08*/\n    MEMORY[0x258021500](v5); /*0x250eece10*/\n    v31 = MEMORY[0x258001270](v30); /*0x250eece1c*/\n    MEMORY[0x258100CA0](v31); /*0x250eece20*/\n    v32 = MEMORY[0x258001A30](v2); /*0x250eece3c*/\n    MEMORY[0x258100600](v32); /*0x250eece40*/\n    v33 = MEMORY[0x2680CF688]; /*0x250eece44*/\n    MEMORY[0x2580214F0](v5); /*0x250eece4c*/\n    v34 = MEMORY[0x258001270](v33); /*0x250eece58*/\n    MEMORY[0x258100CA0](v34); /*0x250eece5c*/\n    v35 = MEMORY[0x258001A30](v2); /*0x250eece78*/\n    MEMORY[0x258100600](v35); /*0x250eece7c*/\n    v36 = MEMORY[0x258021960](v5); /*0x250eece84*/\n    MEMORY[0x258100CA0](v36); /*0x250eece88*/\n    v37 = MEMORY[0x258020ED0](a1); /*0x250eece98*/\n    v38 = MEMORY[0x258100CA0](v37); /*0x250eecea0*/\n    MEMORY[0x258100610](); /*0x250eecea4*/\n    if ( v38 ) /*0x250eecea8*/\n      MEMORY[0x258001A30](v2); /*0x250eecec0*/\n    v39 = MEMORY[0x258021580](v5); /*0x250eecec8*/\n    MEMORY[0x258100CA0](v39); /*0x250eececc*/\n    v40 = MEMORY[0x258020ED0](a1); /*0x250eecedc*/\n    v41 = MEMORY[0x258100CA0](v40); /*0x250eecee4*/\n    MEMORY[0x258100620](); /*0x250eecee8*/\n    if ( v41 ) /*0x250eeceec*/\n      MEMORY[0x258001A30](v2); /*0x250eecf04*/\n    v42 = MEMORY[0x2580024E0](MEMORY[0x2680CF688]); /*0x250eecf14*/\n    MEMORY[0x258100CA0](v42); /*0x250eecf18*/\n    v43 = MEMORY[0x258001A30](v2); /*0x250eecf34*/\n    MEMORY[0x258100620](v43); /*0x250eecf38*/\n    v44 = *(_QWORD *)(a1 + 208); /*0x250eecf3c*/\n    if ( v44 ) /*0x250eecf40*/\n    {\n      v45 = MEMORY[0x258020BB0](); /*0x250eecf44*/\n      MEMORY[0x258100CA0](v45); /*0x250eecf48*/\n      v46 = MEMORY[0x258001A30](v2); /*0x250eecf64*/\n      v44 = MEMORY[0x258100620](v46); /*0x250eecf68*/\n    }\n    if ( gLogCategory_AirPlayReceiverKit <= 30 )\n    {\n      if ( gLogCategory_AirPlayReceiverKit != -1\n        || (v44 = MEMORY[0x258100DC0](&gLogCategory_AirPlayReceiverKit, 33554462), (_DWORD)v44) )\n      {\n        if ( *(_BYTE *)(a1 + 200) ) /*0x250eecf84*/\n          v47 = \"interstitial\"; /*0x250eecf9c*/\n        else\n          v47 = \"primary\"; /*0x250eecf9c*/\n        v65 = v47; /*0x250eecfa0*/\n        v48 = MEMORY[0x258001950](v5); /*0x250eecfa8*/\n        v49 = MEMORY[0x258100CA0](v48); /*0x250eecfb0*/\n        MEMORY[0x258001E50](v66, v5); /*0x250eecfbc*/\n        v50 = MEMORY[0x25810D700](v66); /*0x250eecfc8*/\n        MEMORY[0x25801DBE0](v66, v5); /*0x250eecfd4*/\n        MEMORY[0x25810D700](v66); /*0x250eecfdc*/\n        if ( *(_BYTE *)(a1 + 172) ) /*0x250eecfe0*/\n          v52 = \"true\"; /*0x250eecff8*/\n        else\n          v52 = \"false\"; /*0x250eecff8*/\n        v53 = MEMORY[0x258100F00](\n                &gLogCategory_AirPlayReceiverKit,\n                \"-[APRKMediaPlayer _currentPlaybackInfoDictionary]\",\n                33554462,\n                \"GetPlaybackInfo for %s item %@, Duration: %f, Position: %f, PlaybackState: %@, isWaitingToSetRateFromSen\"\n                \"derAfterSeek: %s\",\n                v65,\n                v49,\n                *(_QWORD *)&v50,\n                v51,\n                v25,\n                v52);\n        v44 = MEMORY[0x258100620](v53); /*0x250eed030*/\n      }\n    }\n    v59 = MEMORY[0x258100610](v44); /*0x250eed0f4*/\n    v60 = MEMORY[0x258100600](v59); /*0x250eed0f8*/\n    v61 = MEMORY[0x2581005F0](v60); /*0x250eed0fc*/\n    v58 = MEMORY[0x2581005E0](v61); /*0x250eed100*/\nLABEL_36:\n    v11 = MEMORY[0x2581005D0](v58); /*0x250eed104*/\n  }\n  v4 = MEMORY[0x2581005B0](v11); /*0x250eed108*/\nLABEL_38:\n  v62 = MEMORY[0x2581005A0](v4); /*0x250eed10c*/\n  if ( *MEMORY[0x2681A4A70] == v67 ) /*0x250eed124*/\n  {\n    if ( ((vars8 ^ (2 * vars8)) & 0x4000000000000000LL) != 0 ) /*0x250eed154*/\n      __break(0xC471u); /*0x250eed158*/\n    JUMPOUT(0x258100C90LL); /*0x258100c90*/\n  }\n  v63 = MEMORY[0x2581004B0](v62); /*0x250eed160*/\n  return -[APRKMediaPlayer _playerItemForUUID:](v63);\n}",
+      "refs": [
+        {
+          "addr": "0x275ae8ce8",
+          "name": "cfstr_SenderRequeste"
+        },
+        {
+          "addr": "0x2714f66f0",
+          "name": "_OBJC_CLASS_$_APRKUtilities"
+        },
+        {
+          "addr": "0x275ae8c68",
+          "name": "cfstr_Uuid"
+        },
+        {
+          "addr": "0x250f11ded",
+          "name": "aInterstitial",
+          "string": "interstitial"
+        },
+        {
+          "addr": "0x250f11dfa",
+          "name": "aPrimary",
+          "string": "primary"
+        },
+        {
+          "addr": "0x250f11e02",
+          "name": "aTrue",
+          "string": "true"
+        },
+        {
+          "addr": "0x250f11e07",
+          "name": "aFalse",
+          "string": "false"
+        },
+        {
+          "addr": "0x26e753328",
+          "name": "_gLogCategory_AirPlayReceiverKit"
+        },
+        {
+          "addr": "0x250f11d42",
+          "name": "aAprkmediaplaye_3",
+          "string": "-[APRKMediaPlayer _currentPlaybackInfoDictionary]"
+        },
+        {
+          "addr": "0x250f11d74",
+          "name": "aGetplaybackinf",
+          "string": "GetPlaybackInfo for %s item %@, Duration: %f, Position: %f, PlaybackState: %@, isWaitingToSetRateFromSenderAfterSeek: %s"
+        },
+        {
+          "addr": "0x250eed164",
+          "name": "-[APRKMediaPlayer _playerItemForUUID:]"
+        }
+      ]
+    }
+  },
+  {
+    "key": "15stateMessage",
+    "result": {
+      "addr": "0x250ef284c",
+      "code": "__int64 __fastcall -[APRKMediaPlayer _sendUpstreamPlaybackStateMessageWithPlaybackStateString:stoppedBecauseInterrupted:](\n        __int64 result,\n        __int64 a2,\n        __int64 a3)\n{\n  _QWORD *v3; // x20\n  __int64 v4; // x0\n  __int64 v5; // x19\n  __int64 v6; // x0\n  __int64 v7; // x0\n  __int64 v8; // x8\n  __int64 v9; // x0\n  __int64 v10; // x0\n  __int64 v11; // x21\n  __int64 v12; // x0\n  __int64 v13; // x0\n  __int64 v14; // x0\n  __int64 v15; // x0\n  __int64 v16; // x0\n  __int64 v17; // x0\n  __int64 v18; // x0\n  __int64 v19; // [xsp+18h] [xbp-38h]\n\n  v19 = *MEMORY[0x2681A4A70]; /*0x250ef2874*/\n  if ( !a3 ) /*0x250ef2878*/\n    goto LABEL_11; /*0x250ef2878*/\n  v3 = (_QWORD *)result; /*0x250ef2880*/\n  MEMORY[0x258100670](); /*0x250ef288c*/\n  v4 = MEMORY[0x258021170](&OBJC_CLASS___APRKUtilities); /*0x250ef28a0*/\n  v5 = MEMORY[0x258100CA0](v4); /*0x250ef28a8*/\n  v6 = MEMORY[0x258001A30](); /*0x250ef28b8*/\n  v7 = MEMORY[0x2581005C0](v6); /*0x250ef28bc*/\n  v8 = v3[18]; /*0x250ef28c0*/\n  if ( v8 == 3 ) /*0x250ef28c8*/\n  {\n    MEMORY[0x258001A30](v5); /*0x250ef2914*/\n  }\n  else if ( v8 == 2 ) /*0x250ef28d0*/\n  {\n    if ( v3[3] ) /*0x250ef28d4*/\n    {\n      MEMORY[0x2581006B0](v7); /*0x250ef28dc*/\n    }\n    else\n    {\n      v9 = MEMORY[0x25801DBC0](v3[1]); /*0x250ef2920*/\n      MEMORY[0x258100CA0](v9); /*0x250ef2924*/\n      v10 = MEMORY[0x258001950](); /*0x250ef292c*/\n      v11 = MEMORY[0x258100CA0](v10); /*0x250ef2934*/\n      v12 = MEMORY[0x2581005C0](); /*0x250ef2938*/\n      if ( !v11 ) /*0x250ef293c*/\n      {\n        if ( gLogCategory_AirPlayReceiverKit <= 30 ) /*0x250ef29fc*/\n        {\n          if ( gLogCategory_AirPlayReceiverKit != -1 /*0x250ef2a1c*/\n            || (v12 = MEMORY[0x258100DC0](&gLogCategory_AirPlayReceiverKit, 33554462), (_DWORD)v12) )\n          {\n            v12 = -[APRKMediaPlayer _sendUpstreamPlaybackStateMessageWithPlaybackStateString:stoppedBecauseInterrupted:].cold.1(); /*0x250ef2a20*/\n          }\n        }\n        goto LABEL_10; /*0x250ef2a24*/\n      }\n    }\n    v13 = MEMORY[0x258001E20](MEMORY[0x2680C2ED8]); /*0x250ef2960*/\n    MEMORY[0x258100CA0](v13); /*0x250ef2964*/\n    MEMORY[0x258001A30](v5); /*0x250ef297c*/\n    v14 = MEMORY[0x258020BB0](v3); /*0x250ef2984*/\n    MEMORY[0x258100CA0](v14); /*0x250ef2988*/\n    v15 = MEMORY[0x258001A30](v5); /*0x250ef29a0*/\n    v16 = MEMORY[0x2581005D0](v15); /*0x250ef29a4*/\n    v17 = MEMORY[0x2581005C0](v16); /*0x250ef29a8*/\n    MEMORY[0x2581005B0](v17); /*0x250ef29ac*/\n  }\n  v12 = MEMORY[0x258020EB0](v3); /*0x250ef29b8*/\nLABEL_10:\n  result = MEMORY[0x258100590](v12); /*0x250ef29bc*/\nLABEL_11:\n  if ( *MEMORY[0x2681A4A70] != v19 ) /*0x250ef29d4*/\n  {\n    v18 = MEMORY[0x2581004B0](); /*0x250ef2a28*/\n    return -[APRKMediaPlayer _attemptToSetCachedSelectedMediaArrayForItem:](v18); /*0x250ef2a29*/\n  }\n  return result; /*0x250ef29ec*/\n}",
+      "refs": [
+        {
+          "addr": "0x2714f66f0",
+          "name": "_OBJC_CLASS_$_APRKUtilities"
+        },
+        {
+          "addr": "0x250f0be50",
+          "name": "-[APRKMediaPlayer _sendUpstreamPlaybackStateMessageWithPlaybackStateString:stoppedBecauseInterrupted:].cold.1"
+        },
+        {
+          "addr": "0x26e753328",
+          "name": "_gLogCategory_AirPlayReceiverKit"
+        },
+        {
+          "addr": "0x250ef2a2c",
+          "name": "-[APRKMediaPlayer _attemptToSetCachedSelectedMediaArrayForItem:]"
+        }
+      ]
+    }
+  },
+  {
+    "key": "15errorMessage",
+    "result": {
+      "addr": "0x250ef275c",
+      "code": "void __fastcall -[APRKMediaPlayer _sendUpstreamErrorMessageWithError:](__int64 a1)\n{\n  __int64 v2; // x0\n  __int64 v3; // x21\n  __int64 v4; // x0\n  __int64 v5; // x0\n  __int64 v6; // x0\n  __int64 _38; // [xsp+38h] [xbp+8h]\n\n  if ( MEMORY[0x258100670]() ) /*0x250ef2778*/\n  {\n    v2 = MEMORY[0x258021170](&OBJC_CLASS___APRKUtilities); /*0x250ef279c*/\n    v3 = MEMORY[0x258100CA0](v2); /*0x250ef27a4*/\n    v4 = MEMORY[0x2580212B0](&OBJC_CLASS___APRKUtilities); /*0x250ef27b0*/\n    MEMORY[0x258100CA0](v4); /*0x250ef27b4*/\n    v5 = MEMORY[0x258001A30](v3); /*0x250ef27c8*/\n    MEMORY[0x2581005C0](v5); /*0x250ef27cc*/\n    v6 = MEMORY[0x258020EB0](a1); /*0x250ef27d8*/\n    MEMORY[0x2581005B0](v6); /*0x250ef27dc*/\n  }\n  else if ( gLogCategory_AirPlayReceiverKit <= 50 /*0x250ef2814*/\n         && (gLogCategory_AirPlayReceiverKit != -1\n          || (unsigned int)MEMORY[0x258100DC0](&gLogCategory_AirPlayReceiverKit, 33554482, 0)) )\n  {\n    -[APRKMediaPlayer _sendUpstreamErrorMessageWithError:].cold.1(); /*0x250ef2844*/\n  }\n  if ( ((_38 ^ (2 * _38)) & 0x4000000000000000LL) != 0 ) /*0x250ef2838*/\n    __break(0xC471u); /*0x250ef283c*/\n  JUMPOUT(0x258106CA0LL); /*0x258106ca0*/\n}",
+      "refs": [
+        {
+          "addr": "0x2714f66f0",
+          "name": "_OBJC_CLASS_$_APRKUtilities"
+        },
+        {
+          "addr": "0x250f0be30",
+          "name": "-[APRKMediaPlayer _sendUpstreamErrorMessageWithError:].cold.1"
+        },
+        {
+          "addr": "0x26e753328",
+          "name": "_gLogCategory_AirPlayReceiverKit"
+        }
+      ]
+    }
+  },
+  {
+    "key": "followupBranches2",
+    "result": {
+      "addr": "0x250ee9414",
+      "code": "void +[APRKUtilities baseDictionaryForResponseToRequestWithDictionary:]()\n{\n  __int64 v0; // x0\n  __int64 v1; // x19\n  __int64 v2; // x0\n  __int64 v3; // x20\n  __int64 v4; // x0\n  __int64 v5; // x0\n  __int64 v6; // x22\n  __int64 v7; // x0\n  __int64 _28; // [xsp+28h] [xbp+8h]\n\n  v0 = MEMORY[0x258100670](); /*0x250ee9428*/\n  v1 = v0; /*0x250ee942c*/\n  if ( v0 ) /*0x250ee9430*/\n  {\n    v2 = MEMORY[0x258100F30](MEMORY[0x2680C2F50]); /*0x250ee943c*/\n    v3 = MEMORY[0x2580051A0](v2); /*0x250ee9448*/\n    v4 = MEMORY[0x2580019F0](v1); /*0x250ee9458*/\n    if ( MEMORY[0x258100CA0](v4) ) /*0x250ee945c*/\n      MEMORY[0x258001A30](v3); /*0x250ee9478*/\n    MEMORY[0x258001A30](v3); /*0x250ee9490*/\n    v5 = MEMORY[0x2580019F0](v1); /*0x250ee94a0*/\n    v6 = MEMORY[0x258100CA0](v5); /*0x250ee94a8*/\n    v7 = MEMORY[0x2581005B0](); /*0x250ee94ac*/\n    if ( v6 ) /*0x250ee94b0*/\n      v7 = MEMORY[0x258001A30](v3); /*0x250ee94c4*/\n    v0 = MEMORY[0x2581005C0](v7); /*0x250ee94c8*/\n  }\n  MEMORY[0x258100590](v0); /*0x250ee94d4*/\n  if ( ((_28 ^ (2 * _28)) & 0x4000000000000000LL) != 0 ) /*0x250ee94f0*/\n    __break(0xC471u); /*0x250ee94f4*/\n  JUMPOUT(0x258100C90LL); /*0x258100c90*/\n}"
+    }
+  },
+  {
+    "key": "followupBranches3",
+    "result": {
+      "addr": "0x250ee94fc",
+      "code": "void __fastcall +[APRKUtilities baseDictionaryForUpstreamMessageWithType:](__int64 a1, __int64 a2, __int64 a3)\n{\n  __int64 v3; // x19\n  __int64 v4; // x0\n  __int64 v5; // x0\n  __int64 _18; // [xsp+18h] [xbp+8h]\n\n  if ( a3 ) /*0x250ee950c*/\n  {\n    v3 = MEMORY[0x2680C2F50]; /*0x250ee9514*/\n    MEMORY[0x258100670](); /*0x250ee9518*/\n    v4 = MEMORY[0x258100F30](v3); /*0x250ee9524*/\n    MEMORY[0x2580051A0](v4); /*0x250ee952c*/\n    v5 = MEMORY[0x258001A30](); /*0x250ee9540*/\n    MEMORY[0x2581005A0](v5); /*0x250ee9544*/\n  }\n  if ( ((_18 ^ (2 * _18)) & 0x4000000000000000LL) != 0 ) /*0x250ee9564*/\n    __break(0xC471u); /*0x250ee9568*/\n  JUMPOUT(0x258100C90LL); /*0x258100c90*/\n}"
+    }
+  },
+  {
+    "key": "followupBranches4",
+    "result": {
+      "addr": "0x250ee9570",
+      "code": "void +[APRKUtilities dictionaryForError:]()\n{\n  __int64 v0; // x0\n  __int64 v1; // x19\n  __int64 v2; // x20\n  __int64 v3; // x0\n  __int64 v4; // x21\n  __int64 v5; // x0\n  __int64 v6; // x0\n  __int64 v7; // x21\n  __int64 v8; // x0\n  __int64 v9; // x0\n  __int64 _28; // [xsp+28h] [xbp+8h]\n\n  v0 = MEMORY[0x258100670](); /*0x250ee9584*/\n  v1 = v0; /*0x250ee9588*/\n  if ( v0 ) /*0x250ee958c*/\n  {\n    v2 = MEMORY[0x258100E60](MEMORY[0x2680C2F50]); /*0x250ee959c*/\n    v3 = MEMORY[0x258004D70](v1); /*0x250ee95a4*/\n    v4 = MEMORY[0x258100CA0](v3); /*0x250ee95ac*/\n    MEMORY[0x2581005B0](); /*0x250ee95b0*/\n    if ( v4 ) /*0x250ee95b4*/\n    {\n      v5 = MEMORY[0x258004D70](v1); /*0x250ee95bc*/\n      MEMORY[0x258100CA0](v5); /*0x250ee95c0*/\n      v6 = MEMORY[0x258001A30](v2); /*0x250ee95d8*/\n      MEMORY[0x2581005B0](v6); /*0x250ee95dc*/\n    }\n    v7 = MEMORY[0x2680CF688]; /*0x250ee95e4*/\n    MEMORY[0x258004880](v1); /*0x250ee95ec*/\n    v8 = MEMORY[0x2580024E0](v7); /*0x250ee95f8*/\n    MEMORY[0x258100CA0](v8); /*0x250ee95fc*/\n    v9 = MEMORY[0x258001A30](v2); /*0x250ee9614*/\n    v0 = MEMORY[0x2581005B0](v9); /*0x250ee9618*/\n  }\n  MEMORY[0x258100590](v0); /*0x250ee9624*/\n  if ( ((_28 ^ (2 * _28)) & 0x4000000000000000LL) != 0 ) /*0x250ee9640*/\n    __break(0xC471u); /*0x250ee9644*/\n  JUMPOUT(0x258100C90LL); /*0x258100c90*/\n}"
+    }
+  },
+  {
+    "key": "followupTrace2",
+    "result": {
+      "addr": "0x250ef331c",
+      "code": "void __fastcall -[APRKMediaPlayer _figPlaybackStateStringFrom:](__int64 a1, __int64 a2, unsigned __int64 a3)\n{\n  __int64 v3; // x19\n  _QWORD *v4; // x1\n  _QWORD v5[5]; // [xsp+0h] [xbp-60h] BYREF\n  _QWORD v6[5]; // [xsp+28h] [xbp-38h] BYREF\n  __int64 vars8; // [xsp+68h] [xbp+8h]\n\n  v3 = a1; /*0x250ef3330*/\n  if ( (a3 & 0xFFFFFFFFFFFFFFFDLL) != 0 || (*(_BYTE *)(a1 + 172) & 1) == 0 ) /*0x250ef3340*/\n  {\n    if ( a3 || (*(_BYTE *)(a1 + 173) & 1) == 0 ) /*0x250ef338c*/\n    {\n      if ( a3 >= 4 ) /*0x250ef3448*/\n      {\nLABEL_12:\n        if ( ((vars8 ^ (2 * vars8)) & 0x4000000000000000LL) != 0 ) /*0x250ef3438*/\n          __break(0xC471u); /*0x250ef343c*/\n        JUMPOUT(0x258100C90LL); /*0x258100c90*/\n      }\nLABEL_11:\n      MEMORY[0x2581006B0](a1); /*0x250ef341c*/\n      goto LABEL_12; /*0x250ef3420*/\n    }\n    if ( gLogCategory_AirPlayReceiverKit <= 30 /*0x250ef33b8*/\n      && (gLogCategory_AirPlayReceiverKit != -1\n       || (unsigned int)MEMORY[0x258100DC0](&gLogCategory_AirPlayReceiverKit, 33554462)) )\n    {\n      -[APRKMediaPlayer _figPlaybackStateStringFrom:].cold.1(); /*0x250ef3464*/\n    }\n    v4 = v5; /*0x250ef33c0*/\n    v5[0] = MEMORY[0x2681A4A58]; /*0x250ef33d8*/\n    v5[1] = 3221225472LL; /*0x250ef33e4*/\n    v5[2] = __47__APRKMediaPlayer__figPlaybackStateStringFrom___block_invoke_2; /*0x250ef33f8*/\n  }\n  else\n  {\n    v4 = v6; /*0x250ef3344*/\n    v6[0] = MEMORY[0x2681A4A58]; /*0x250ef335c*/\n    v6[1] = 3221225472LL; /*0x250ef3368*/\n    v6[2] = __47__APRKMediaPlayer__figPlaybackStateStringFrom___block_invoke; /*0x250ef337c*/\n  }\n  v4[3] = &unk_26938BD18; /*0x250ef3404*/\n  v4[4] = v3; /*0x250ef3404*/\n  a1 = MEMORY[0x258100C80](MEMORY[0x2681A4958]); /*0x250ef3410*/\n  goto LABEL_11; /*0x250ef3410*/\n}",
+      "refs": [
+        {
+          "addr": "0x250f0bf30",
+          "name": "-[APRKMediaPlayer _figPlaybackStateStringFrom:].cold.1"
+        },
+        {
+          "addr": "0x26e753328",
+          "name": "_gLogCategory_AirPlayReceiverKit"
+        },
+        {
+          "addr": "0x250ef3478",
+          "name": "___47-[APRKMediaPlayer _figPlaybackStateStringFrom:]_block_invoke_2"
+        },
+        {
+          "addr": "0x250ef346c",
+          "name": "___47-[APRKMediaPlayer _figPlaybackStateStringFrom:]_block_invoke"
+        },
+        {
+          "addr": "0x26938bd18",
+          "name": "unk_26938BD18"
+        }
+      ]
+    }
+  },
+  {
+    "key": "followupTrace3",
+    "result": {
+      "addr": "0x250eec904",
+      "code": "__int64 -[APRKMediaPlayer _serializeTimeRanges:]()\n{\n  __int64 v0; // x0\n  __int64 v1; // x0\n  __int64 v2; // x20\n  __int64 v3; // x0\n  __int64 v4; // x23\n  __int64 v5; // x27\n  __int64 v6; // x21\n  __int64 v7; // x0\n  __int64 v8; // x25\n  __int64 v9; // x0\n  __int64 v10; // x0\n  __int64 v11; // x0\n  __int64 v12; // x0\n  __int64 v13; // x0\n  __int64 v15; // [xsp+8h] [xbp-178h]\n  __int128 v16; // [xsp+10h] [xbp-170h] BYREF\n  __int64 v17; // [xsp+20h] [xbp-160h]\n  _OWORD v18[3]; // [xsp+30h] [xbp-150h] BYREF\n  __int128 v19; // [xsp+60h] [xbp-120h]\n  __int128 v20; // [xsp+70h] [xbp-110h]\n  __int128 v21; // [xsp+80h] [xbp-100h]\n  __int128 v22; // [xsp+90h] [xbp-F0h]\n  __int64 v23; // [xsp+120h] [xbp-60h]\n  __int64 vars8; // [xsp+188h] [xbp+8h]\n\n  v23 = *MEMORY[0x2681A4A70]; /*0x250eec934*/\n  v0 = MEMORY[0x258100670](); /*0x250eec938*/\n  if ( v0 ) /*0x250eec940*/\n  {\n    v1 = MEMORY[0x2580011C0](MEMORY[0x2680C2F30]); /*0x250eec94c*/\n    v2 = MEMORY[0x258100CA0](v1); /*0x250eec954*/\n    v19 = 0u; /*0x250eec964*/\n    v20 = 0u; /*0x250eec964*/\n    v21 = 0u; /*0x250eec968*/\n    v22 = 0u; /*0x250eec968*/\n    v15 = MEMORY[0x258100660](); /*0x250eec974*/\n    v3 = MEMORY[0x258001210](); /*0x250eec97c*/\n    if ( v3 ) /*0x250eec980*/\n    {\n      v4 = v3; /*0x250eec984*/\n      v5 = *(_QWORD *)v20; /*0x250eec98c*/\n      do /*0x250eeca9c*/\n      {\n        v6 = 0; /*0x250eec9b0*/\n        do /*0x250eeca80*/\n        {\n          if ( *(_QWORD *)v20 != v5 ) /*0x250eec9c0*/\n            MEMORY[0x258100CB0](v15); /*0x250eec9c8*/\n          v7 = *(_QWORD *)(*((_QWORD *)&v19 + 1) + 8 * v6); /*0x250eec9d0*/\n          memset(v18, 0, sizeof(v18)); /*0x250eec9dc*/\n          if ( v7 ) /*0x250eec9e0*/\n            MEMORY[0x258020B10](v18); /*0x250eec9e8*/\n          v8 = MEMORY[0x258100E60](MEMORY[0x2680C2F50]); /*0x250eec9f4*/\n          v16 = v18[0]; /*0x250eec9fc*/\n          v17 = *(_QWORD *)&v18[1]; /*0x250eeca04*/\n          if ( MEMORY[0x25810D6F0](&v16, 0) ) /*0x250eeca10*/\n          {\n            v9 = MEMORY[0x258001A30](v8); /*0x250eeca28*/\n            MEMORY[0x258100600](v9); /*0x250eeca2c*/\n          }\n          v16 = *(_OWORD *)((char *)&v18[1] + 8); /*0x250eeca34*/\n          v17 = *((_QWORD *)&v18[2] + 1); /*0x250eeca3c*/\n          if ( MEMORY[0x25810D6F0](&v16, 0) ) /*0x250eeca48*/\n          {\n            v10 = MEMORY[0x258001A30](v8); /*0x250eeca60*/\n            MEMORY[0x258100600](v10); /*0x250eeca64*/\n          }\n          v11 = MEMORY[0x2580011B0](v2); /*0x250eeca70*/\n          MEMORY[0x2581005F0](v11); /*0x250eeca74*/\n          ++v6; /*0x250eeca78*/\n          --v4; /*0x250eeca7c*/\n        }\n        while ( v4 ); /*0x250eeca80*/\n        v4 = MEMORY[0x258001210](v15); /*0x250eeca98*/\n      }\n      while ( v4 ); /*0x250eeca9c*/\n    }\n    v0 = MEMORY[0x258100630](); /*0x250eecaa4*/\n  }\n  v12 = MEMORY[0x258100590](v0); /*0x250eecab4*/\n  if ( *MEMORY[0x2681A4A70] == v23 ) /*0x250eecacc*/\n  {\n    if ( ((vars8 ^ (2 * vars8)) & 0x4000000000000000LL) != 0 ) /*0x250eecaf8*/\n      __break(0xC471u); /*0x250eecafc*/\n    JUMPOUT(0x258100C90LL); /*0x258100c90*/\n  }\n  v13 = MEMORY[0x2581004B0](v12); /*0x250eecb04*/\n  return -[APRKMediaPlayer _currentPlaybackInfoDictionary](v13);\n}",
+      "refs": [
+        {
+          "addr": "0x250eecb08",
+          "name": "-[APRKMediaPlayer _currentPlaybackInfoDictionary]"
+        }
+      ]
+    }
+  }
+]
