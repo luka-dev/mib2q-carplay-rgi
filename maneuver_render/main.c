@@ -138,25 +138,66 @@ static void prepare_engine_scenes(void) {
  * a healthy always-on renderer. This watchdog never calls EGL or touches the
  * render state; it only observes loop progress and exits this isolated process
  * before a stuck graphics client can linger indefinitely. */
-static volatile unsigned long g_loop_progress;
+/* A breadcrumb is only read on timeout.  No per-frame logging or graphics
+ * calls from the watchdog: a blocked EGL/Screen client may hold libc locks. */
+typedef enum {
+    WATCH_STARTUP, WATCH_POLL, WATCH_COMMANDS, WATCH_ENGINE, WATCH_LANE_UPDATE,
+    WATCH_LANE_FRAMING, WATCH_PREPARE, WATCH_BEGIN_FRAME,
+    WATCH_SCENE_DRAW, WATCH_LANE_DRAW, WATCH_END_FRAME,
+    WATCH_SCREENSHOT, WATCH_SWAP, WATCH_WINDOW_PROBE,
+    WATCH_HEARTBEAT, WATCH_SLEEP, WATCH_IDLE
+} renderer_watch_stage_t;
+static unsigned long g_loop_progress;
+static int g_watch_stage = WATCH_STARTUP;
 static volatile int g_renderer_running = 1;
 static volatile int g_render_loop_started;
 
+static void watch_stage(renderer_watch_stage_t stage) {
+    __sync_lock_test_and_set(&g_watch_stage, (int)stage);
+}
+
+static const char *watch_stage_name(int stage) {
+    switch (stage) {
+    case WATCH_STARTUP: return "startup";
+    case WATCH_POLL: return "poll";
+    case WATCH_COMMANDS: return "commands";
+    case WATCH_ENGINE: return "engine";
+    case WATCH_LANE_UPDATE: return "lane-update";
+    case WATCH_LANE_FRAMING: return "lane-framing";
+    case WATCH_PREPARE: return "prepare";
+    case WATCH_BEGIN_FRAME: return "begin-frame";
+    case WATCH_SCENE_DRAW: return "scene-draw";
+    case WATCH_LANE_DRAW: return "lane-draw";
+    case WATCH_END_FRAME: return "end-frame";
+    case WATCH_SCREENSHOT: return "screenshot";
+    case WATCH_SWAP: return "egl-swap";
+    case WATCH_WINDOW_PROBE: return "window-probe";
+    case WATCH_HEARTBEAT: return "heartbeat";
+    case WATCH_SLEEP: return "sleep";
+    case WATCH_IDLE: return "idle";
+    default: return "unknown";
+    }
+}
+
 static void *renderer_watchdog_main(void *unused) {
-    unsigned long last = g_loop_progress;
+    unsigned long last = __sync_fetch_and_add(&g_loop_progress, 0);
     int stalledSeconds = 0;
     (void)unused;
     while (g_renderer_running) {
         struct timespec pause = { 1, 0 };
         while (nanosleep(&pause, &pause) != 0 && errno == EINTR) { }
         if (!g_renderer_running) break;
-        if (g_loop_progress != last) {
-            last = g_loop_progress;
+        unsigned long progress = __sync_fetch_and_add(&g_loop_progress, 0);
+        if (progress != last) {
+            last = progress;
             stalledSeconds = 0;
         } else if (++stalledSeconds >= (g_render_loop_started ? 5 : 15)) {
-            static const char msg[] =
-                "maneuver_render: render/EGL progress watchdog TIMEOUT; exiting isolated renderer\n";
+            static const char msg[] = "maneuver_render: progress watchdog TIMEOUT phase=";
+            static const char newline[] = "\n";
+            const char *phase = watch_stage_name(__sync_fetch_and_add(&g_watch_stage, 0));
             (void)write(STDERR_FILENO, msg, sizeof(msg) - 1);
+            (void)write(STDERR_FILENO, phase, strlen(phase));
+            (void)write(STDERR_FILENO, newline, sizeof(newline) - 1);
             _exit(89);
         }
     }
@@ -478,7 +519,8 @@ int main(int argc, char **argv) {
 
     while (running && !platform_should_close()) {
         struct timespec t_start;
-        g_loop_progress++;
+        watch_stage(WATCH_POLL);
+        __sync_fetch_and_add(&g_loop_progress, 1);
         clock_gettime(CLOCK_MONOTONIC, &t_start);
 #ifdef CR_DIAG_FRAME_LOG
         stat_loop_iters++;
@@ -490,6 +532,7 @@ int main(int argc, char **argv) {
         clock_gettime(CLOCK_MONOTONIC, &t_after_pp);
 #endif
 
+        watch_stage(WATCH_POLL);
         cr_server_poll();
 #ifdef CR_DIAG_FRAME_LOG
         struct timespec t_after_sp;
@@ -519,6 +562,7 @@ int main(int argc, char **argv) {
         int got_screenshot = 0;
         char screenshot_label[17];
 
+        watch_stage(WATCH_COMMANDS);
         while (cr_server_read_cmd(&cmd)) {
 #ifdef CR_DIAG_FRAME_LOG
             stat_cmds_received++;
@@ -612,6 +656,7 @@ int main(int argc, char **argv) {
         }
 
         /* Apply the latest maneuver (draining to latest) */
+        watch_stage(WATCH_ENGINE);
         if (got_maneuver) {
             int reveal_from_clear = g_cleared;
             if (reveal_from_clear) cr_progress_reset(&g_arrow);
@@ -690,12 +735,15 @@ int main(int argc, char **argv) {
         /* Render if needed */
         cr_rect_t panel_target;
         render_get_visible_area(NULL,&panel_target);
+        watch_stage(WATCH_LANE_UPDATE);
         if(cr_lane_panel_update(g_lane_panel,&g_lane_guidance,panel_target.w,progress_now))
             g_engine.dirty=1;
         float content_frame[3];
+        watch_stage(WATCH_LANE_FRAMING);
         cr_lane_panel_framing(g_lane_panel,g_engine.current_scene,
                              g_engine.has_next?g_engine.next_scene:NULL,content_frame);
         render_set_content_framing(content_frame[0],content_frame[1],content_frame[2]);
+        watch_stage(WATCH_IDLE);
         if (g_engine.dirty || render_is_animating() || maneuver_needs_redraw() || got_screenshot
             || cr_lane_panel_animating(g_lane_panel,progress_now)
 #ifdef CR_DEBUG_GRID
@@ -714,6 +762,7 @@ int main(int argc, char **argv) {
 #endif
 
             maneuver_state_t *next_ptr = g_engine.has_next ? &g_engine.next : NULL;
+            watch_stage(WATCH_PREPARE);
             maneuver_prepare_frame(&g_engine.current, next_ptr);
 #ifdef CR_DIAG_FRAME_LOG
             struct timespec t_after_prep;
@@ -721,22 +770,31 @@ int main(int argc, char **argv) {
 #endif
 
             render_set_route_progress(g_arrow.fill,g_arrow.path_weight,g_arrow.glow);
+            watch_stage(WATCH_BEGIN_FRAME);
             render_begin_frame();
+            watch_stage(WATCH_SCENE_DRAW);
             maneuver_draw(&g_engine.current, next_ptr);
             cr_rect_t panel_visible;
             render_get_visible_area(&panel_visible,NULL);
+            watch_stage(WATCH_LANE_DRAW);
             cr_lane_panel_draw(g_lane_panel,panel_visible,progress_now);
+            watch_stage(WATCH_IDLE);
             render_debug_grid();
+            watch_stage(WATCH_END_FRAME);
             render_end_frame();
+            watch_stage(WATCH_IDLE);
 #ifdef CR_DIAG_FRAME_LOG
             struct timespec t_after_draw;
             clock_gettime(CLOCK_MONOTONIC, &t_after_draw);
 #endif
 
+            watch_stage(WATCH_SCREENSHOT);
             if (got_screenshot)
                 save_screenshot(fb_w, fb_h, screenshot_label);
 
+            watch_stage(WATCH_SWAP);
             int swap_ok = platform_swap();
+            watch_stage(WATCH_IDLE);
             if (!swap_ok) {
                 /* platform_swap recreated the QNX surface.  Repaint it on the
                  * next iteration even when the engine is otherwise idle.  Also
@@ -843,7 +901,9 @@ int main(int argc, char **argv) {
             static struct timespec health_last = {0, 0};
             if (timespec_elapsed_at_least(&t_start, &health_last, 5, 0)) {
                 health_last = t_start;
+                watch_stage(WATCH_WINDOW_PROBE);
                 platform_check_and_recover_window();
+                watch_stage(WATCH_IDLE);
             }
         }
 
@@ -866,7 +926,9 @@ int main(int argc, char **argv) {
             static struct timespec hb_last = {0, 0};
             if (timespec_elapsed_at_least(&t_start, &hb_last, 1, 0)) {
                 hb_last = t_start;
+                watch_stage(WATCH_HEARTBEAT);
                 cr_server_send_heartbeat();
+                watch_stage(WATCH_IDLE);
             }
         }
 
@@ -887,7 +949,9 @@ int main(int argc, char **argv) {
                          : (idle_frames < TARGET_FPS * 5) ? 100L * 1000000L  /* 1–5 s: 10 Hz */
                          :                                  333L * 1000000L; /* >5 s: 3 Hz  */
             struct timespec ts = { idle_ns / 1000000000L, idle_ns % 1000000000L };
+            watch_stage(WATCH_SLEEP);
             nanosleep(&ts, NULL);
+            watch_stage(WATCH_IDLE);
         }
 
 #ifndef PLATFORM_QNX
@@ -901,7 +965,9 @@ int main(int argc, char **argv) {
             long sleep_ns = FRAME_TIME_NS - elapsed_ns;
             if (sleep_ns > 0) {
                 struct timespec ts = { sleep_ns / 1000000000L, sleep_ns % 1000000000L };
+                watch_stage(WATCH_SLEEP);
                 nanosleep(&ts, NULL);
+                watch_stage(WATCH_IDLE);
             }
         }
 #else
@@ -937,6 +1003,7 @@ int main(int argc, char **argv) {
             }
         }
 #endif /* CR_DIAG_FRAME_LOG */
+        watch_stage(WATCH_IDLE);
     }
 
     cr_server_shutdown();
