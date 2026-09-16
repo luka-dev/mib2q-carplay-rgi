@@ -34,6 +34,8 @@ int screen_egl_present_attach_sources(screen_egl_present_t *p, unsigned int n)
 int screen_egl_present_start_loader(screen_egl_present_t *p)
 { (void)p; assert(0); return -1; }
 void screen_egl_present_stop_loader(screen_egl_present_t *p) { (void)p; assert(0); }
+void screen_egl_present_set_stream_pending(screen_egl_present_t *p, int pending)
+{ (void)p; (void)pending; }
 void *screen_egl_present_source_pointer(screen_egl_present_t *p, unsigned int n)
 { (void)p; (void)n; assert(0); return NULL; }
 unsigned int screen_egl_present_source_capacity(screen_egl_present_t *p, unsigned int n)
@@ -358,13 +360,20 @@ int main(void) {
     assert(av_sink_frame(idr, sizeof(idr), 1000) == 0 && !g_ss.needsIDR);
     assert(submitted_time == 1000000 && g_ss.newestInputMs == 1000);
 
-    /* Mid-stream config must reach OMX even after fedConfig was already set. */
+    /* A repeated avcC must not disturb the decoder after its first IDR. A
+     * genuinely changed codec needs a fresh transport/decoder, never a live
+     * CODECCONFIG submission into Qualcomm's reference chain. */
     before = submissions;
+    assert(av_sink_frame(config, sizeof(config), 1000) == 0);
+    assert(submissions == before && !g_ss.needsIDR);
+    assert(av_sink_frame(next_config, sizeof(next_config), 1000) < 0);
+    assert(submissions == before && !g_ss.needsIDR);
+    /* A new generation receives the new config before its first IDR. */
+    g_ss.configLen = 0; g_ss.fedConfig = 0; g_ss.needsIDR = 1;
     assert(av_sink_frame(next_config, sizeof(next_config), 1000) == 0);
     assert(submissions == before + 1 && submitted_len == sizeof(next_config));
     assert(!memcmp(submitted, next_config, sizeof(next_config)));
     assert(submitted_flags & OMX_BUFFERFLAG_CODECCONFIG);
-    assert(g_ss.needsIDR);
 
     /* Parameter sets + picture is a complete picture, not a config-only record. */
     memcpy(mixed, next_config, sizeof(next_config));

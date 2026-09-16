@@ -254,18 +254,27 @@ static int av_send_locked(const uint8_t *buf, uint32_t len)
     return opened;
 }
 
-/* Cache the Annex-B SPS/PPS.  Do not create the renderer connection merely for
- * config: the first IDR-safe access unit opens it and atomically replays config
- * first.  A mid-stream codec change is still sent to an existing decoder. */
+/* Cache the Annex-B SPS/PPS. The phone can repeat an identical avcC during
+ * startup; feeding it to a running Qualcomm AVC decoder can reset references
+ * immediately after its first picture. A genuine codec change needs a fresh
+ * decoder and IDR, so end the old link rather than reconfigure it in place. */
 void altav_set_config(uint32_t gen, const uint8_t *annexb_cfg, uint32_t len)
 {
     if (!annexb_cfg || len == 0 || len > sizeof(g_cfg)) return;
     pthread_mutex_lock(&g_lock);
     if (g_owner_gen == gen) {                 /* a superseded receiver must not replace the new config */
-        memcpy(g_cfg, annexb_cfg, len);
-        g_cfg_len = len;
-        if (g_enabled && g_fd >= 0)
-            (void)av_send_locked(g_cfg, g_cfg_len);
+        if (g_cfg_len != len || memcmp(g_cfg, annexb_cfg, len) != 0) {
+            int had_link = g_fd >= 0;
+            memcpy(g_cfg, annexb_cfg, len);
+            g_cfg_len = len;
+            if (had_link) {
+                close(g_fd); g_fd = -1;
+                g_need_config = 0;
+                LOG_INFO(LOG_MODULE,
+                         "codec config changed gen=%u; reconnect on next IDR",
+                         (unsigned)gen);
+            }
+        }
     }
     pthread_mutex_unlock(&g_lock);
 }

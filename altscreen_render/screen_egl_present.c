@@ -105,9 +105,11 @@ struct screen_egl_present {
     volatile int loader_thread_started;
     volatile int loader_stop;
     volatile int loader_exited;
+    int loader_stream_pending;
     unsigned long loader_frames;
     unsigned long loader_failures;
     int loader_first_logged;
+    /* A posted waiting picture must exist before the thread can race an IDR. */
     /* Stable process-lifetime word owned by sink_omx_qnx.  The control thread
      * updates it atomically; EGL remains exclusively on the loader thread. */
     volatile int *loader_view_area_mode;
@@ -803,12 +805,20 @@ out:
     return ok;
 }
 
+/* Start on the completed glass silhouette. A cold/reconnect context may show
+ * plane 99 immediately; beginning with the old 0.0s black/outline frames let
+ * a decoded picture appear before the PRISM artwork became visible. The light
+ * within the glass continues moving from this timestamp. */
+#define EP_PRISM_VISIBLE_MS 2700ULL
+
 /* The waiting loader stops completely before the first video draw. Preserve
  * swap-interval pacing; only wait for unused frame time if an invisible QNX
  * window returns early. This wait is outside gl_lock and never applies to video. */
 static void *ep_loader_thread_main(void *context) {
     screen_egl_present_t *p = (screen_egl_present_t *)context;
-    uint64_t started = ep_monotonic_ns();
+    uint64_t now = ep_monotonic_ns();
+    uint64_t offset = EP_PRISM_VISIBLE_MS * 1000000ULL;
+    uint64_t started = now > offset ? now - offset : 0;
 
     while (!ep_loader_should_stop(p)) {
         uint64_t now = ep_monotonic_ns();
@@ -816,7 +826,10 @@ static void *ep_loader_thread_main(void *context) {
             ? (now - started) / 1000000ULL : 0;
 
         if (ep_loader_frame(p, elapsed_ms) == 1) break;
-        uint64_t remaining = alt_frame_remaining_ns(now, ep_monotonic_ns());
+        uint64_t end = ep_monotonic_ns();
+        uint64_t remaining = __sync_fetch_and_add(&p->loader_stream_pending, 0)
+            ? alt_loader_decode_remaining_ns(now, end)
+            : alt_frame_remaining_ns(now, end);
         if (remaining) {
             struct timespec pause = {0, (long)remaining};
             while (nanosleep(&pause, &pause) != 0 && errno == EINTR && !p->loader_stop) {}
@@ -841,6 +854,12 @@ int screen_egl_present_start_loader(screen_egl_present_t *p) {
     p->loader_frames = 0;
     p->loader_failures = 0;
     p->loader_first_logged = 0;
+    pthread_mutex_unlock(&p->gl_lock);
+    /* Post one fully visible waiting frame synchronously. The next phone IDR
+     * can now take over at any time without beating an unstarted loader thread
+     * or exposing an old video buffer from the previous session. */
+    if (ep_loader_frame(p, EP_PRISM_VISIBLE_MS) != 0) return -1;
+    pthread_mutex_lock(&p->gl_lock);
     result = pthread_create(&p->loader_thread, NULL, ep_loader_thread_main, p);
     if (result == 0) p->loader_thread_started = 1;
     else p->loader_exited = 1;
@@ -850,6 +869,10 @@ int screen_egl_present_start_loader(screen_egl_present_t *p) {
                 "altscreen_render[loader]: thread create FAILED rc=%d\n",
                 result);
     return result == 0 ? 0 : -1;
+}
+
+void screen_egl_present_set_stream_pending(screen_egl_present_t *p, int pending) {
+    if (p) __sync_lock_test_and_set(&p->loader_stream_pending, pending ? 1 : 0);
 }
 
 void screen_egl_present_stop_loader(screen_egl_present_t *p) {

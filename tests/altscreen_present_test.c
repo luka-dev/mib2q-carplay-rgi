@@ -14,6 +14,7 @@ static unsigned active_program, draws, finishes, refreshes;
 static int fail_post, fail_interval, native_interval;
 static unsigned recovery_intervals, recovery_destroyed;
 static uint64_t fake_now_ns, finish_delay_ns, swap_delay_ns;
+static float first_loader_time = -1.0f;
 
 static int test_clock_gettime(clockid_t clock_id, struct timespec *now) {
     if (!fake_now_ns) return clock_gettime(clock_id, now);
@@ -62,7 +63,9 @@ void glViewport(GLint x,GLint y,GLsizei w,GLsizei h)
 { assert(x == 0 && y == 0 && w == 1440 && h == 542); }
 void glDisable(GLenum c) { (void)c; }
 void glUniform1i(GLint l,GLint v) { (void)l;(void)v; }
-void glUniform1f(GLint l,GLfloat v) { (void)l;(void)v; }
+void glUniform1f(GLint l,GLfloat v) {
+    if(active_program==11 && l==7 && first_loader_time<0.0f)first_loader_time=v;
+}
 void glUniform2f(GLint l,GLfloat x,GLfloat y) { (void)l;(void)x;(void)y; }
 void glUniform4fv(GLint l,GLsizei count,const GLfloat *v)
 { (void)l;assert(count==1 && v); }
@@ -100,11 +103,13 @@ int main(void) {
     memset(&presenter,0,sizeof(presenter));
     presenter.width=1440; presenter.height=542;
     presenter.program=22; presenter.loader_program=11;
+    presenter.loader_u_itime=7;
     presenter.logo_texture=7; presenter.sig_texture=8;
     presenter.source_count=1; presenter.textures=&texture; presenter.images=&image;
     presenter.image_target_texture=refresh;
     pthread_mutex_init(&presenter.gl_lock,NULL); presenter.gl_lock_initialized=1;
     assert(screen_egl_present_start_loader(&presenter)==0);
+    assert(loader_posts>=1 && first_loader_time>=2.6f);
     assert(screen_egl_present_start_loader(&presenter)==0); /* idempotent */
     wait_for_loader(2);
     assert(screen_egl_present_frame(&presenter,0,1024)==0);

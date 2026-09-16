@@ -76,10 +76,11 @@ static void no_record(int fd)
 
 int main(void)
 {
-    int listener, peer, peer2, calls;
+    int listener, peer, peer2, peer3, calls;
     struct sockaddr_in addr;
     socklen_t addr_len = sizeof(addr);
     uint8_t config[800]; /* valid cache sizes beyond the old 512-byte cutoff */
+    uint8_t changed_config[800];
     const uint8_t idr[] = {0,0,0,2,6,0x33,0,0,0,2,0x65,0x44};
     const uint8_t idr_annexb[] = {0,0,0,1,6,0x33,0,0,0,1,0x65,0x44};
     const uint8_t pframe[] = {0,0,0,2,0x41,0x55};
@@ -110,16 +111,27 @@ int main(void)
     send_fault = EAGAIN; calls = poll_calls;
     assert(altav_forward_avcc_frame(1, pframe, sizeof(pframe), 4) == 0);
     assert(poll_calls == calls + 1); record(peer, p_annexb, sizeof(p_annexb));
+    calls = send_calls;
+    altav_set_config(1, config, sizeof(config));
+    assert(g_fd >= 0 && send_calls == calls); no_record(peer);
     send_fault = EPIPE;
-    altav_set_config(1, config, sizeof(config)); assert(g_fd == -1);
+    assert(altav_forward_avcc_frame(1, pframe, sizeof(pframe), 4) == -1);
+    assert(g_fd == -1);
     assert(altav_forward_avcc_frame(1, pframe, sizeof(pframe), 4) == -1); no_record(listener);
     assert(altav_forward_avcc_frame(1, idr, sizeof(idr), 4) == 1);
     peer2 = accept(listener, NULL, NULL); assert(peer2 >= 0); close(peer);
     record(peer2, config, sizeof(config)); record(peer2, idr_annexb, sizeof(idr_annexb));
+    memcpy(changed_config, config, sizeof(config)); changed_config[5] ^= 0x11;
+    altav_set_config(1, changed_config, sizeof(changed_config)); assert(g_fd == -1);
+    assert(altav_forward_avcc_frame(1, pframe, sizeof(pframe), 4) == -1); no_record(listener);
+    assert(altav_forward_avcc_frame(1, idr, sizeof(idr), 4) == 1);
+    peer3 = accept(listener, NULL, NULL); assert(peer3 >= 0); close(peer2);
+    record(peer3, changed_config, sizeof(changed_config));
+    record(peer3, idr_annexb, sizeof(idr_annexb));
     send_fault = EAGAIN; poll_timeout = 1; calls = send_calls;
     assert(altav_forward_avcc_frame(1, pframe, sizeof(pframe), 4) == -1);
     assert(send_calls == calls + 1 && g_fd == -1); poll_timeout = 0;
-    close(peer2);
+    close(peer3);
     altav_set_enabled(0); assert(!altav_is_enabled());
     assert(altav_forward_avcc_frame(1, idr, sizeof(idr), 4) == -1);
     altav_set_enabled(1); assert(altav_is_enabled());

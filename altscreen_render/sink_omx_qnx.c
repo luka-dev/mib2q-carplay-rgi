@@ -670,8 +670,10 @@ static void _Teardown(ScreenSink *me, int destroyPresent) {
     me->presentNeedsFullRebuild = 0;
     me->presentRecoveryAfterMs = 0;
     me->newestInputMs = 0;
-    if (!destroyPresent && me->present)
+    if (!destroyPresent && me->present) {
+        screen_egl_present_set_stream_pending(me->present, 0);
         screen_egl_present_start_loader(me->present);
+    }
 }
 
 /* Bring up native 32m OMX output + post-decode EGL external-image conversion. */
@@ -680,6 +682,7 @@ static int _StartDecoder(ScreenSink *me) {
     uint64_t begin = _NowMs(), sourcesReady;
     fprintf(stderr, "altscreen_render[qnx]: decoder start begin at %llu ms\n",
             (unsigned long long)begin);
+    screen_egl_present_set_stream_pending(me->present, 1);
     pthread_mutex_lock(&me->lock);
     me->callbacksClosing = 0;
     pthread_mutex_unlock(&me->lock);
@@ -692,6 +695,7 @@ static int _StartDecoder(ScreenSink *me) {
 
     outCount = _ReadOutputDefinition(me);
     if (outCount == 0 || _MakePresent(me, outCount) != 0) goto fail;
+    screen_egl_present_set_stream_pending(me->present, 1);
     sourcesReady = _NowMs();
     fprintf(stderr, "altscreen_render[qnx]: native sources ready after %llu ms\n",
             (unsigned long long)(sourcesReady - begin));
@@ -912,10 +916,20 @@ int av_sink_frame(const uint8_t *annexb, uint32_t len, uint64_t received_ms) {
     isConfig = (nalFlags & NAL_PARAMETER_SET) && !(nalFlags & NAL_PICTURE);
     if (isConfig) {
         if (len > sizeof(g_ss.config)) return -1;
-        memcpy(g_ss.config, annexb, len);
-        g_ss.configLen = len;
-        g_ss.fedConfig = 0;
-        g_ss.needsIDR = 1;
+        if (g_ss.configLen == len && memcmp(g_ss.config, annexb, len) == 0 &&
+            g_ss.fedConfig) {
+            /* Repeated avcC is not a new random-access boundary. Keep the
+             * already-fed codec and IDR state unchanged. */
+        } else if (g_ss.started && g_ss.fedConfig && g_ss.configLen != 0) {
+            fprintf(stderr,
+                    "altscreen_render[qnx]: codec config changed midstream; require fresh decoder/IDR\n");
+            return -1;
+        } else {
+            memcpy(g_ss.config, annexb, len);
+            g_ss.configLen = len;
+            g_ss.fedConfig = 0;
+            g_ss.needsIDR = 1;
+        }
     }
     _RecoverPresentationIfNeeded(&g_ss);
     if (g_ss.started && g_ss.omxError) {
