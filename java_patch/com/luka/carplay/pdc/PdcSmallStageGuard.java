@@ -26,6 +26,7 @@ import de.esolutions.hmi.widgets.audi.base.AbstractScreenWidget;
 import de.audi.app.earlyfunc.core.parking.IParkingSystem;
 import de.audi.app.earlyfunc.core.parking.ParkingPopupIdentifier;
 import de.audi.app.earlyfunc.core.parking.pla.AbstractParkingSystemPLAComponent;
+import de.audi.app.earlyfunc.core.parking.pla.PLAMessageHandler;
 import org.dsi.ifc.carparkingsystem.DisplayContent;
 import org.dsi.ifc.carparkingsystem.DSICarParkingSystem;
 import java.util.List;
@@ -97,6 +98,7 @@ public final class PdcSmallStageGuard {
         }
         /* Repeated content updates belong to the same parking interval. */
         if (!shouldKeepCarPlayScreen()) showRequested(PURE_OPS_POPUP_ID, hmiService);
+        if (shouldKeepCarPlayScreen()) suppressPlaMessagePopup();
     }
 
     private static boolean isPureOpsContent(DisplayContent content, List systems) {
@@ -157,18 +159,25 @@ public final class PdcSmallStageGuard {
 
     public static synchronized void showRequested(int popupId, HMIService hmiService) {
         if (popupId != PURE_OPS_POPUP_ID || !pureOpsContent) return;
-        if (shouldKeepCarPlayScreen()) return;
+        if (shouldKeepCarPlayScreen()) {
+            suppressPlaMessagePopup();
+            return;
+        }
         protectCurrentCarPlayScreen(hmiService);
         if (protectedScreen == null) return;
         showRequestedAt = System.currentTimeMillis();
         state = SHOW_REQUESTED;
+        suppressPlaMessagePopup();
         startShowRequestTimeout(++showGeneration);
     }
 
     public static synchronized void popupVisible(int popupId, int terminalId) {
         if (popupId != PURE_OPS_POPUP_ID || terminalId != MAIN_TERMINAL) return;
         /* A late callback from a previous OPS must not undo a camera takeover. */
-        if (shouldKeepCarPlayScreen()) state = VISIBLE;
+        if (shouldKeepCarPlayScreen()) {
+            state = VISIBLE;
+            suppressPlaMessagePopup();
+        }
     }
 
     public static synchronized void popupHidden(int popupId, int terminalId) {
@@ -208,6 +217,22 @@ public final class PdcSmallStageGuard {
         /* No visible callback arrived: show was rejected or canceled. */
         if (state == SHOW_REQUESTED) reset();
         return false;
+    }
+
+    /** The stock PLA warning banner is a second partial popup, independent of
+     * the right-hand OPS graphic. It would cover the CarPlay status bar while
+     * the pure OPS popup is intentionally kept beside projection. */
+    public static synchronized boolean shouldSuppressPlaMessagePopup() {
+        return shouldKeepCarPlayScreen();
+    }
+
+    private static void suppressPlaMessagePopup() {
+        try {
+            PLAMessageHandler.hideVisibleMessageForSidePdc();
+        } catch (Throwable t) {
+            /* Message cleanup is cosmetic and must never break OPS policy. */
+            Log.w(TAG, "OPS guard: cannot hide PLA message popup: " + t);
+        }
     }
 
     private static boolean isCurrentCarPlayScreen(HMIService hmi, Screen screen) {

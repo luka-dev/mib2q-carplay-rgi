@@ -7,6 +7,7 @@ import de.audi.app.earlyfunc.core.parking.ParkingPartialPopupHandler;
 import de.audi.app.earlyfunc.core.parking.IParkingSystemController;
 import de.audi.app.earlyfunc.core.parking.ops.OPSViewModeHandler;
 import de.audi.app.earlyfunc.core.parking.pla.PLAPopinHandler;
+import de.audi.app.earlyfunc.core.parking.pla.PLAMessageHandler;
 import de.audi.app.earlyfunc.core.parking.pla.IPLAInterappServiceHandler;
 import de.audi.app.car.common.app.ICarApplication;
 import de.audi.atip.msg.MsgDistributor;
@@ -29,6 +30,7 @@ import de.audi.atip.hmi.view.Screen;
 import de.audi.atip.hmi.view.IScreenManager;
 import de.audi.atip.interapp.phone.IEcallState;
 import de.audi.atip.log.LogChannel;
+import de.audi.atip.model.ICoreEarlyAppsModelBank;
 import de.audi.atip.model.ICoreTerminalModeModelBank;
 import de.audi.atip.utils.reactive.properties.*;
 import de.audi.tghu.command.*;
@@ -258,6 +260,64 @@ public final class PdcResourcePolicyTest {
         check(canceled[0] == 1 && !handler.isPopupActive() && !PdcSmallStageGuard.shouldKeepCarPlayScreen(),
             "matching OPS hidden callback did not clean up");
     }
+
+    static void plaMessageBannerPolicy() throws Exception {
+        final List<Integer> shown = new ArrayList<>();
+        final List<Integer> removed = new ArrayList<>();
+        final Map<Integer,Choice> choices = new HashMap<>();
+        HMIService messageHmi = proxy(HMIService.class, (name,args) -> {
+            if (name.equals("showPartialPopup")) {
+                shown.add((Integer)args[1]); return null;
+            }
+            if (name.equals("removePartialPopup")) {
+                removed.add((Integer)args[1]); return null;
+            }
+            if (name.equals("getChoiceModel")) {
+                int id = (Integer)args[0];
+                if (!choices.containsKey(id)) choices.put(id, new Choice());
+                return choices.get(id).model;
+            }
+            throw new AssertionError("unexpected PLA message HMI " + name);
+        });
+        IFrameworkAccess framework = proxy(IFrameworkAccess.class, (name,args) -> {
+            if (name.equals("getHMIService") || name.equals("getHmiServiceApp")) return messageHmi;
+            throw new AssertionError("unexpected PLA message framework " + name);
+        });
+        ICarApplication app = proxy(ICarApplication.class, (name,args) -> {
+            if (name.equals("getFrameworkAccess")) return framework;
+            throw new AssertionError("unexpected PLA message application " + name);
+        });
+        final OPSViewModeHandler opsView = new OPSViewModeHandler(null, LOG);
+        IParkingSystemController controller = proxy(IParkingSystemController.class, (name,args) -> {
+            if (name.equals("getOPSViewModeHandler")) return opsView;
+            throw new AssertionError("unexpected PLA message controller " + name);
+        });
+        PhysicalPla pla = (PhysicalPla)UNSAFE.allocateInstance(PhysicalPla.class);
+        PLAMessageHandler handler = new PLAMessageHandler(app, controller, pla, LOG,
+            2100044, 2100010, 2100036, 2100035, 2100040, 2100038);
+
+        Fixture f = new Fixture();
+        handler.showMessage(7);
+        check(shown.equals(Arrays.asList(2100044)) && removed.isEmpty(),
+            "stock PLA message did not show before side OPS");
+
+        f.pure();
+        check(removed.equals(Arrays.asList(2100044)),
+            "already-visible PLA warning survived side OPS activation");
+        handler.showMessage(8);
+        check(shown.size() == 1 && removed.size() == 1,
+            "PLA warning reappeared over CarPlay + side OPS");
+
+        f.target(4, 2);
+        handler.updateMessage();
+        check(shown.equals(Arrays.asList(2100044, 2100044)),
+            "latest PLA warning was not restored for non-side-OPS parking");
+        check(choices.get(ICoreEarlyAppsModelBank.PARKING_PLA_MESSAGE_ID_CHOICE).value == 8,
+            "suppression lost the latest PLA message ID");
+        handler.deinit();
+        PdcSmallStageGuard.parkingStopped();
+        System.out.println("PDC banner policy: side OPS hides PLA warning; takeover restores stock routing PASS");
+    }
     static void callsBefore(String type, String method, String early, String late) throws Exception {
         ClassNode node = new ClassNode(); new ClassReader(type).accept(node, 0);
         for (MethodNode m : node.methods) if (m.name.equals(method)) {
@@ -466,6 +526,7 @@ public final class PdcResourcePolicyTest {
         stockParkingClassification();
         stockActivationLifecycle();
         partialPopupCallbackIsolation();
+        plaMessageBannerPolicy();
 
         f = new Fixture(); f.pure();
         PdcSmallStageGuard.ParkingTransition timedOut = PdcSmallStageGuard.captureHmiDeactivation();
