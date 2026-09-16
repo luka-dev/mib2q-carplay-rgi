@@ -1728,18 +1728,22 @@ int render_get_flag_frame_count(void) {
 }
 
 void render_sprite_flag_ex(float x, float y, float size, int frame, int flip_x) {
-    /* Vertical billboard quad anchored at pole base.
+    /* Camera-facing billboard quad anchored at pole base.
      * Pole base in sprite UV: u=0.22, v=0.88 (from top).
-     * Quad = full sprite (size*2 x size*2), offset so pole base = (x, 0, y). */
+     * Quad = full sprite (size*2 x size*2), offset so pole base = (x, 0, y).
+     * The handoff camera may rotate 90-180 degrees before ARRIVED commits.
+     * Rotate the quad with that yaw so it never becomes edge-on and disappears. */
     float sprite_w = size * 2.0f;
     float sprite_h = size * 2.0f;
     float pole_u = 0.22f;     /* pole base X fraction in sprite */
     float pole_v_top = 0.88f; /* pole base Y fraction from top */
     float anchor_u = flip_x ? (1.0f - pole_u) : pole_u;
-
-    float fx0 = x - anchor_u * sprite_w;
-    float fx1 = fx0 + sprite_w;
-    float z = y;              /* maneuver y -> world z (depth) */
+    float local_l = -anchor_u * sprite_w;
+    float local_r = local_l + sprite_w;
+    float right_x = cosf(g_cam_rot);
+    float right_z = sinf(g_cam_rot);
+    float up_x = -right_z;
+    float up_z = right_x;
 
     /* 3D (perspective): vertical -- rises in world Y at fixed z.
      * 2D (ortho):       horizontal -- lies flat, extends in +z at ground level.
@@ -1753,15 +1757,21 @@ void render_sprite_flag_ex(float x, float y, float size, int frame, int flip_x) 
     float by_3d = -(1.0f - pole_v_top) * sprite_h;
     float by_2d = flat_h;
     float bot_y = by_3d * t + by_2d * (1.0f - t);
-    float bot_z = z;
-
-    /* Top edge: in 3D rises up in Y, in 2D extends back in Z */
+    /* Top edge: in 3D rises in world Y; in 2D it extends along the
+     * camera-relative screen-up axis on the road plane. */
     float ty_3d = by_3d + sprite_h;
     float ty_2d = flat_h;
     float top_y = ty_3d * t + ty_2d * (1.0f - t);
-    float tz_3d = z;
-    float tz_2d = z + sprite_h;
-    float top_z = tz_3d * t + tz_2d * (1.0f - t);
+    float flat_top = sprite_h * (1.0f - t);
+
+    float lx0 = x + right_x * local_l;
+    float lz0 = y + right_z * local_l;
+    float rx0 = x + right_x * local_r;
+    float rz0 = y + right_z * local_r;
+    float lx1 = lx0 + up_x * flat_top;
+    float lz1 = lz0 + up_z * flat_top;
+    float rx1 = rx0 + up_x * flat_top;
+    float rz1 = rz0 + up_z * flat_top;
 
     glDisable(GL_DEPTH_TEST);
     glUniformMatrix4fv(g_uni_mvp, 1, GL_FALSE, g_mvp_current);
@@ -1783,12 +1793,12 @@ void render_sprite_flag_ex(float x, float y, float size, int frame, int flip_x) 
         glUniform1i(g_flat_tex,0);
 
         vb_reset();
-        vb_v(fx0, bot_y, bot_z,  ul, 1.0f, 0);
-        vb_v(fx1, bot_y, bot_z,  ur, 1.0f, 0);
-        vb_v(fx1, top_y, top_z,  ur, 0.0f, 0);
-        vb_v(fx0, bot_y, bot_z,  ul, 1.0f, 0);
-        vb_v(fx1, top_y, top_z,  ur, 0.0f, 0);
-        vb_v(fx0, top_y, top_z,  ul, 0.0f, 0);
+        vb_v(lx0, bot_y, lz0,  ul, 1.0f, 0);
+        vb_v(rx0, bot_y, rz0,  ur, 1.0f, 0);
+        vb_v(rx1, top_y, rz1,  ur, 0.0f, 0);
+        vb_v(lx0, bot_y, lz0,  ul, 1.0f, 0);
+        vb_v(rx1, top_y, rz1,  ur, 0.0f, 0);
+        vb_v(lx1, top_y, lz1,  ul, 0.0f, 0);
 
         glVertexAttribPointer(g_flat_attr_pos,3,GL_FLOAT,GL_FALSE,24,g_vbuf);
         glVertexAttribPointer(g_flat_attr_uv,3,GL_FLOAT,GL_FALSE,24,g_vbuf+3);
@@ -1799,12 +1809,12 @@ void render_sprite_flag_ex(float x, float y, float size, int frame, int flip_x) 
     } else {
         /* Fallback: magenta quad when atlas not loaded */
         vb_reset();
-        vb_v(fx0, bot_y, bot_z,  0,0,1);
-        vb_v(fx1, bot_y, bot_z,  0,0,1);
-        vb_v(fx1, top_y, top_z,  0,0,1);
-        vb_v(fx0, bot_y, bot_z,  0,0,1);
-        vb_v(fx1, top_y, top_z,  0,0,1);
-        vb_v(fx0, top_y, top_z,  0,0,1);
+        vb_v(lx0, bot_y, lz0,  0,0,1);
+        vb_v(rx0, bot_y, rz0,  0,0,1);
+        vb_v(rx1, top_y, rz1,  0,0,1);
+        vb_v(lx0, bot_y, lz0,  0,0,1);
+        vb_v(rx1, top_y, rz1,  0,0,1);
+        vb_v(lx1, top_y, lz1,  0,0,1);
         render_set_material(RENDER_MAT_GENERIC_SOLID);
         vb_flush(1.0f, 0.0f, 1.0f, 1.0f);
     }
