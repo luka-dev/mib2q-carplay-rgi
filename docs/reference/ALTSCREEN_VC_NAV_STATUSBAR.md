@@ -21,18 +21,20 @@ properties, поэтому существующий route-guidance gate их н�
 
 ## Реализация
 
-`AltScreenModule` владеет этим gate на всём интервале
+`AltScreenModule` владеет initialization gate на всём интервале
 `connected || videoAvailable`. `AltScreenNavStatusGate` устанавливает/переиспользует
-единственный `GatedCombiService`, после чего `setAltScreenTakeover(true)`
-один раз отправляет invalid statuses и блокирует стоковые
-compass/altitude/scale/text до освобождения altScreen. `BAPBridge` не владеет
-виджетами и только переключает отдельный route-guidance gate.
+единственный `GatedCombiService`, после чего `setAltScreenTakeover(true)` переводит
+NAVSD из `INITIALIZING` в ready независимо от готовности штатной карты. Последний
+штатный запрос `show/hideInitializingScreen` сохраняется и восстанавливается после
+освобождения altScreen. Остальные BAP-поля имеют отдельную политику: `BAPBridge`
+переключает route-guidance gate, а scale/altitude скрываются только на время этого
+route-guidance takeover.
 
 Контекст 81 запускается сразу после появления `DisplayManager` и намеренно не
 ждёт stock `CombiBAPServiceNavi`: видеоплоскость 99 от него не зависит. На cold
 boot `ClusterService.setCombiBAPService()` сообщает точный OSGi availability edge
 в `AltScreenNavStatusGate`, и wrapper подключается позже без задержки altScreen.
-При disconnect gate сначала отдаёт накопленные stock values, затем
+При disconnect gate сначала отдаёт накопленное состояние INITIALIZING/ready, затем
 `ClusterService.refreshInitializingScreenAfterCarPlay()` заново вычисляет
 штатный `INITIALIZING/NORMAL` по текущему состоянию Navigation. Глобальный
 `DSIResponseContainer.navstateOfOperation` CarPlay не подменяет.

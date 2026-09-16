@@ -36,7 +36,7 @@ The feature set observed on the MHI2Q virtual cockpit most closely matches
 | 3 | `0x03` | FunctionList | property | All | framework-owned | Runtime availability bitmap | Stock/framework; use as capability truth |
 | 4 | `0x04` | HeartBeat | protocol | All | framework-owned | LSG liveness | Stock/framework |
 | 5–14 | — | Reserved/unknown | — | None | none | No NavSD function in this firmware | Do not use |
-| 15 | `0x0F` | FSG_OperationState | property | All | `showInitializingScreen()` / `hideInitializingScreen()` | Navigation READY/INITIALIZING state | Always delegated to stock; high-risk lifecycle control |
+| 15 | `0x0F` | FSG_OperationState | property | All | `showInitializingScreen()` / `hideInitializingScreen()` | Navigation READY/INITIALIZING state | Session-gated: altScreen ownership forces ready; the latest stock request is deferred and restored on release |
 | 16 | `0x10` | CompassInfo | property | All | `updateCompassInfo(angle, symbolic)` | Compass heading and `N/NE/...` indicator | Delegated to stock |
 | 17 | `0x11` | RG_Status | property | All | `updateRGStatus(status)` | Route-guidance active state; starts FctSync | CarPlay-owned for connected session; sent during RGI |
 | 18 | `0x12` | DistanceToNextManeuver | property | All | `updateDistanceToNextManeuver(distance, unit, barOn, bar)` | Next-turn distance plus optional bargraph | CarPlay-owned/gated; actively sent |
@@ -121,10 +121,11 @@ current route.
 
 | Ownership class | FctIDs | Rule |
 |---|---|---|
+| Session-level altScreen availability | `15` | While plane 99 owns the cluster, defer stock INITIALIZING and hold NAVSD ready; replay and recompute the stock state on release |
 | CarPlay exclusive while takeover/RGI owns them | `17,18,23,24,39,49,55` | Stock writes are dropped by `GatedCombiService`; `BAPBridge` publishes them |
 | CarPlay exclusive only during active RGI | `19,20,21,22,46` | Stock route-text/trip output is allowed again for `CP && !RGI`; CarPlay owns it atomically while RGI is active |
 | Suppressed native-map decorations | `45,47` | Cache stock value, publish hidden/invalid while takeover is active, restore on release |
-| Explicitly left stock-owned | `15,16,25,29,30,33,36,38,40,43,44,48,50,53,54,56` | Avoid disturbing native navigation lifecycle and unrelated menus |
+| Explicitly left stock-owned | `16,25,29,30,33,36,38,40,43,44,48,50,53,54,56` | Avoid disturbing native navigation lifecycle and unrelated menus |
 | Framework/command plumbing | `1–4,26–28,31,32,34,35,37,41,42,51,52` | Not general-purpose UI setters; method seams are command results rather than status controls |
 
 ## Practical candidates
@@ -134,7 +135,9 @@ current route.
 - **Single-owner interactive presentation:** FctID `19,20,21,22,46` while
   CarPlay RGI is active.
 - **Potentially destructive:** FctID `15,38,43,44,45,54`; these control the
-  stock navigation state/map rather than the CarPlay altScreen scene.
+  stock navigation state/map rather than the CarPlay altScreen scene. FctID 15
+  is changed only by the bounded session gate described above, with stock-state
+  replay and recomputation on release.
 - **Not useful for visual customization:** method responses `34,35,41,42,51`
   and framework synchronization `37`.
 

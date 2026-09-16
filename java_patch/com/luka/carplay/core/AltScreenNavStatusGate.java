@@ -1,7 +1,7 @@
 /*
  * AltScreenNavStatusGate - installs the single wrapper that prevents stock
- * route-guidance BAP writes from racing CarPlay RGI.  It deliberately does not
- * alter NAVSD availability, initializing state, compass, scale or map status.
+ * route-guidance BAP writes from racing CarPlay RGI and keeps the independent
+ * altScreen plane visible while stock Navigation is still INITIALIZING.
  *
  * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
@@ -19,7 +19,9 @@ public final class AltScreenNavStatusGate {
 
     private static ClusterService clusterService;
     private static GatedCombiService gate;
+    private static boolean desiredAltScreenActive;
     private static boolean desiredRouteBlocked;
+    private static boolean appliedAltScreenActive;
     private static boolean appliedRouteBlocked;
     private static boolean desiredCurrentPositionBlocked;
     private static boolean installScheduled;
@@ -53,6 +55,9 @@ public final class AltScreenNavStatusGate {
             if (current == null) return;
 
             if (cs != clusterService || gate == null || current != gate) {
+                if (gate != null && clusterService != cs) {
+                    try { gate.setAltScreenTakeover(false); } catch (Throwable t) { }
+                }
                 if (current instanceof GatedCombiService) {
                     gate = (GatedCombiService) current;
                 } else {
@@ -60,12 +65,22 @@ public final class AltScreenNavStatusGate {
                     cs.setCombiBAPListenerCombiService(gate);
                 }
                 clusterService = cs;
-                Log.i(TAG, "native route-guidance gate installed/reused");
+                Log.i(TAG, "native route-guidance/init-state gate installed/reused");
             }
 
+            boolean releasingTakeover = appliedAltScreenActive && !desiredAltScreenActive;
+            gate.setAltScreenTakeover(desiredAltScreenActive);
             gate.setRouteGuidanceBlocked(desiredRouteBlocked);
+            appliedAltScreenActive = desiredAltScreenActive;
             gate.setCurrentPositionInfoBlocked(desiredCurrentPositionBlocked);
             appliedRouteBlocked = desiredRouteBlocked;
+            if (releasingTakeover) {
+                /* A replay handles a state edge seen during takeover.  Recompute as
+                 * well for the no-edge case so stock Navigation receives its exact
+                 * current INITIALIZING/NORMAL state after CarPlay disconnects. */
+                try { cs.refreshInitializingScreenAfterCarPlay(); }
+                catch (Throwable t) { Log.d(TAG, "native init-screen refresh failed: " + t); }
+            }
         } catch (Throwable t) {
         }
     }
@@ -78,10 +93,12 @@ public final class AltScreenNavStatusGate {
             ClusterService cs, CombiBAPServiceNavi incoming) {
         if (incoming == null) {
             if (cs == clusterService && gate != null) {
+                try { gate.setAltScreenTakeover(false); } catch (Throwable t) { }
                 try { gate.setRouteGuidanceBlocked(false); } catch (Throwable t) { }
                 try { gate.setCurrentPositionInfoBlocked(false); } catch (Throwable t) { }
                 clusterService = null;
                 gate = null;
+                appliedAltScreenActive = false;
                 appliedRouteBlocked = false;
             }
             return null;
@@ -94,16 +111,30 @@ public final class AltScreenNavStatusGate {
             next = new GatedCombiService(incoming);
         }
         if (gate != null && gate != next) {
+            try { gate.setAltScreenTakeover(false); } catch (Throwable t) { }
             try { gate.setRouteGuidanceBlocked(false); } catch (Throwable t) { }
         }
         clusterService = cs;
         gate = next;
+        gate.setAltScreenTakeover(desiredAltScreenActive);
         gate.setRouteGuidanceBlocked(desiredRouteBlocked);
         gate.setCurrentPositionInfoBlocked(desiredCurrentPositionBlocked);
+        appliedAltScreenActive = desiredAltScreenActive;
         appliedRouteBlocked = desiredRouteBlocked;
         installScheduled = false;
-        Log.i(TAG, "native route-guidance gate installed on Navigation service edge");
+        Log.i(TAG, "native route-guidance/init-state gate installed on Navigation service edge");
         return gate;
+    }
+
+    /** Presentation ownership follows connected || videoAvailable, independently of
+     * CarPlay route guidance.  A cold-boot stock map must not hold plane 99 behind
+     * NAVSD INITIALIZING. */
+    public static synchronized boolean setAltScreenActive(boolean active) {
+        boolean changed = desiredAltScreenActive != active;
+        desiredAltScreenActive = active;
+        if (gate == null || changed || appliedAltScreenActive != active) scheduleInstallLocked();
+        if (gate == null && active) Log.d(TAG, "init-state gate pending - Navigation service not ready");
+        return gate != null && appliedAltScreenActive == active && !installScheduled;
     }
 
     /** Single owner of the native CombiBAP wrapper for both altScreen and RGI. */
@@ -136,6 +167,7 @@ public final class AltScreenNavStatusGate {
         catch (Throwable t) { }
 
         if (cs != clusterService || current != gate) {
+            appliedAltScreenActive = false;
             appliedRouteBlocked = false;
         }
         if (current == null) {
@@ -146,7 +178,7 @@ public final class AltScreenNavStatusGate {
             CarPlayApp.onNavigationServiceChanged();
             return;
         }
-        if (desiredRouteBlocked) scheduleInstallLocked();
+        if (desiredAltScreenActive || desiredRouteBlocked) scheduleInstallLocked();
         CarPlayApp.onNavigationServiceChanged();
     }
 }

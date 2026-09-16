@@ -28,6 +28,13 @@ import de.audi.atip.interapp.combi.bap.navi.data.EtcStatus;
 public class GatedCombiService implements CombiBAPServiceNavi {
     final CombiBAPServiceNavi real;
     volatile boolean blockRouteGuidance;
+    /* FSG_OperationState is global NAVSD state.  Stock Navigation drives it through
+     * show/hideInitializingScreen while its own map starts.  That INITIALIZING state
+     * also covers the independent CarPlay displayable 99 on the VC, so defer the
+     * stock request for the complete altScreen ownership interval. */
+    private boolean blockInitializingState;
+    private boolean deferredInitializing;
+    private boolean haveDeferredInitializing;
     /* FctIDs 19/20/21/22/46 have different ownership from the rest of route guidance:
      * outside CarPlay RGI the stock navigator may keep driving the current/next-road
      * text, travel information and destination menu; maneuver/lane records remain
@@ -40,6 +47,32 @@ public class GatedCombiService implements CombiBAPServiceNavi {
     private int altitudeValue, altitudeUnit;
 
     public GatedCombiService(CombiBAPServiceNavi r) { this.real = r; }
+
+    /** Keep NAVSD operational while plane 99 owns the cluster.  The latest stock
+     * request is remembered and replayed on release; ClusterService additionally
+     * recomputes the authoritative state in case no edge occurred during takeover. */
+    public synchronized void setAltScreenTakeover(boolean active) {
+        if (blockInitializingState == active) return;
+
+        if (active) {
+            haveDeferredInitializing = false;
+            deferredInitializing = false;
+            blockInitializingState = true;
+            /* Clear an INITIALIZING value that may have been published before the
+             * wrapper was installed.  This is independent of stock map readiness. */
+            try { real.hideInitializingScreen(); } catch (Throwable t) { }
+            return;
+        }
+
+        blockInitializingState = false;
+        if (haveDeferredInitializing) {
+            try {
+                if (deferredInitializing) real.showInitializingScreen();
+                else real.hideInitializingScreen();
+            } catch (Throwable t) { }
+        }
+        haveDeferredInitializing = false;
+    }
 
     /** Route-data ownership. BAPBridge is the only writer while CarPlay RGI is active.
      * Keep stock compass and NAVSD state untouched; hide only scale and altitude. */
@@ -102,9 +135,27 @@ public class GatedCombiService implements CombiBAPServiceNavi {
         if (!blockRouteGuidance) real.updateManeuverState(a);
     }
 
-    /* All other methods: pure delegation */
-    public void showInitializingScreen() { real.showInitializingScreen(); }
-    public void hideInitializingScreen() { real.hideInitializingScreen(); }
+    /* All other methods: pure delegation, except the stock NAVSD initialization
+     * state which must not mask an active altScreen plane. */
+    public synchronized void showInitializingScreen() {
+        if (blockInitializingState) {
+            deferredInitializing = true;
+            haveDeferredInitializing = true;
+            return;
+        }
+        real.showInitializingScreen();
+    }
+    public synchronized void hideInitializingScreen() {
+        if (blockInitializingState) {
+            deferredInitializing = false;
+            haveDeferredInitializing = true;
+            /* Reassert READY in case this callback crossed the takeover edge in
+             * the underlying BAP initialization manager. */
+            real.hideInitializingScreen();
+            return;
+        }
+        real.hideInitializingScreen();
+    }
     public void updateCompassInfo(int a, int b) { real.updateCompassInfo(a, b); }
     public void updateTurnToInfo(String a, String b) {
         if (!blockCurrentPositionInfo) real.updateTurnToInfo(a, b); }

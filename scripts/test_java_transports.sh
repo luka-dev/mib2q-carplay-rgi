@@ -13,6 +13,19 @@ trap 'rm -rf "$TEST_DIR"' EXIT
 "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" TouchpadControllerTest
 "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" com.luka.carplay.bus.CarplayBusTransportTest
 "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" com.luka.carplay.rgd.RendererServerTransportTest
+
+# Stock Navigation may remain INITIALIZING while CarPlay already owns the
+# independent cluster video plane. Verify that takeover forces NAVSD ready and
+# faithfully restores the latest stock request on release.
+STOCK_JAR="$PROJECT_DIR/../../Tools/jxe2jar/out/MU1316-final.jar"
+mkdir -p "$TEST_DIR/nav-init"
+"$TEST_JDK/bin/javac" -encoding UTF-8 \
+    -cp "$PROJECT_DIR/build/carplay_hook.jar:$STOCK_JAR" \
+    -d "$TEST_DIR/nav-init" \
+    "$PROJECT_DIR/tests/GatedCombiServiceInitStateTest.java"
+"$TEST_JDK/bin/java" \
+    -cp "$TEST_DIR/nav-init:$PROJECT_DIR/build/carplay_hook.jar:$STOCK_JAR" \
+    com.luka.carplay.rgd.GatedCombiServiceInitStateTest
 # Isolate the native-HMI callback, while running the actual control-server source.
 mkdir -p "$TEST_DIR/altctl"
 "$TEST_JDK/bin/javac" -encoding UTF-8 -cp "$PROJECT_DIR/build/carplay_hook.jar" -d "$TEST_DIR/altctl" \

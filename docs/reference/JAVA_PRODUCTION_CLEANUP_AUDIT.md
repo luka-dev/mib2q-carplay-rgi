@@ -56,8 +56,8 @@ They are still used to publish the real FctID 22 absolute ETA (`BAPBridge.java:1
 
 ## DONE: fake ClusterService pipeline API (removed)
 
-> `activateCustomRendererPipeline()`, `deactivateCustomRendererPipeline()` and
-> `refreshInitializingScreenAfterCarPlay()` are gone, together with the BAPBridge branch that
+> `activateCustomRendererPipeline()` and `deactivateCustomRendererPipeline()` are gone,
+> together with the BAPBridge branch that
 > read the constant string. That branch was unreachable - the string was never null and never
 > started with "FAILED" - and real readiness (`isFrameReady()`) is still checked immediately
 > above it, so behaviour is unchanged. The dead members listed further down are gone too:
@@ -82,10 +82,11 @@ The added methods do not control any renderer or stock pipeline:
 (`BAPBridge.java:2007-2023`). Remove both `ClusterService` additions and their callers; keep the
 real renderer checks.
 
-`refreshInitializingScreenAfterCarPlay()` is another unused added method
-(`ClusterService.java:1118-1123`): it has no call site. Current policy intentionally leaves stock
-initializing state alone (`AltScreenNavStatusGate.java:1-5`). Remove it and update the stale
-documentation which still describes the old recovery seam.
+The original unused `refreshInitializingScreenAfterCarPlay()` seam was removed with that cleanup.
+It was reintroduced on 2026-09-16 with a real call site after cold-boot testing showed that stock
+NAVSD `INITIALIZING` masks the independent altScreen plane. The new session gate defers only
+`show/hideInitializingScreen`; release replays the latest edge and calls this method to recompute
+the authoritative stock state when no edge occurred during takeover.
 
 The four other added `ClusterService` accessors are live and must remain:
 `getDSIResponseContainer()` and `triggerRefreshRGIValid()` are used by `BAPBridge`
