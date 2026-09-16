@@ -50,8 +50,13 @@ check)
 revert)
     sed 's/^export AUDIO_SPATIAL=1$/export AUDIO_SPATIAL=0/' \
         "$P/deploy/smartphone_integrator/carplay_startup.sh" > "$T.startup"
+    $S "$DEV" 'mount -uw /mnt/app'
+    for f in carplay_monitor.sh carplay_processes.sh; do
+        sshpass -p "$PASS" scp $OPTS $CM "$P/deploy/smartphone_integrator/$f" \
+            "$DEV:/mnt/app/root/hooks/$f.new" >/dev/null
+    done
     sshpass -p "$PASS" scp $OPTS $CM "$T.startup" "$DEV:/mnt/app/root/hooks/carplay_startup.sh.new" >/dev/null
-    $S "$DEV" 'mount -uw /mnt/app; chmod 755 /mnt/app/root/hooks/carplay_startup.sh.new && mv /mnt/app/root/hooks/carplay_startup.sh.new /mnt/app/root/hooks/carplay_startup.sh && sync'
+    $S "$DEV" 'chmod 755 /mnt/app/root/hooks/carplay_startup.sh.new /mnt/app/root/hooks/carplay_monitor.sh.new /mnt/app/root/hooks/carplay_processes.sh.new && mv /mnt/app/root/hooks/carplay_monitor.sh.new /mnt/app/root/hooks/carplay_monitor.sh && mv /mnt/app/root/hooks/carplay_processes.sh.new /mnt/app/root/hooks/carplay_processes.sh && mv /mnt/app/root/hooks/carplay_startup.sh.new /mnt/app/root/hooks/carplay_startup.sh && sync'
     $S "$DEV" 'for p in /proc/[0-9]*; do c=$(tr "\0" " " < $p/cmdline 2>/dev/null); case "$c" in *dio_manager*) kill ${p#/proc/} 2>/dev/null;; esac; done 2>/dev/null; grep "^export AUDIO_SPATIAL=" /mnt/app/root/hooks/carplay_startup.sh'
     rm -f "$T".*
     ;;

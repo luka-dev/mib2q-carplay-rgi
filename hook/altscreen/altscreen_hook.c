@@ -108,31 +108,7 @@ static uint32_t        g_advert_sequence;
 /* Seeded from stock /info's authoritative nightMode, then updated by the
  * dio->libairplay AirPlayReceiverSessionSetNightMode boundary call. */
 static volatile int g_alt_night_mode;
-static volatile int g_control_setup_marked;
 static void advert_apply_night_locked(int night);
-
-/* PID-scoped evidence for the external SI-owned recovery policy.  The marker
- * distinguishes a real pre-RTSP USB/enumeration failure from every later
- * negotiation/video/renderer failure, for which a physical USB reset would be
- * both irrelevant and destructive. /tmp is RAM-backed on the unit. */
-static void mark_control_setup_seen(void)
-{
-    char path[96];
-    int fd;
-    static const char one[] = "1\n";
-    if (__sync_lock_test_and_set(&g_control_setup_marked, 1)) return;
-    snprintf(path, sizeof(path), "/tmp/carplay_control_setup.%d", (int)getpid());
-    fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0600);
-    if (fd < 0) {
-        g_control_setup_marked = 0;
-        LOG_WARN(LOG_MODULE, "control SETUP marker create failed path=%s err=%s",
-                 path, strerror(errno));
-        return;
-    }
-    (void)write(fd, one, sizeof(one) - 1);
-    close(fd);
-    LOG_INFO(LOG_MODULE, "control SETUP reached marker=%s", path);
-}
 
 /* the CFLite array-callbacks constant has moved names across builds; try both */
 static const void *resolve_arr_cb(void)
@@ -1831,13 +1807,6 @@ static void alt_on_setup_response(hook_setup_ctx_t *setup)
     int setupHas111 = 0;
 
     if (alt_enabled < 0) alt_enabled = env_on("ALTSCREEN_HANDLE_ALT") ? 1 : 0;
-
-    /* Any successful RTSP SETUP proves USB+iAP2 reached the AirPlay control
-     * plane. The first one is control SETUP in the real protocol, but marking
-     * here also remains fail-safe if optional altScreen CF symbol resolution is
-     * unavailable: that must never be misclassified as a pre-RTSP USB wedge. */
-    if (ret == 0 && session && request && respOut)
-        mark_control_setup_seen();
 
     if (alt_enabled && ret == 0 && respOut && session && request && alt_resolve() == 1) {
         /* NEGOTIATION — the REAL altScreen gate (VERIFIED against iOS 26.6 AirPlaySender/CarKit disasm):

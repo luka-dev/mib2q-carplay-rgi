@@ -7,18 +7,19 @@ libairplay experiments live under `research/` and `docs/archive/`.
 
 ```text
 smartphone_integrator
-  └─ carplay_startup.sh
-      ├─ maneuver_render       TCP 127.0.0.1:19800
-      ├─ altscreen_render      data :19831, status :19832
-      └─ dio_manager           stock libairplay 210.81 + LD_PRELOAD hook
+  └─ carplay_startup.sh → exec dio_manager   stock libairplay 210.81 + LD_PRELOAD hook
+                            └─ carplay_monitor.sh
+                                ├─ maneuver_render   TCP 127.0.0.1:19800
+                                └─ altscreen_render  data :19831, status :19832
 
 Java patch
   └─ CarplayBus server         TCP 127.0.0.1:19810
 ```
 
-`LD_PRELOAD` is applied only to `dio_manager`. The supervisor and renderers explicitly run without
-it. When `dio_manager` exits, the owner-generation monitor stops the exact renderer generation unless
-a replacement `dio_manager` has already taken ownership.
+`LD_PRELOAD` is applied only to `dio_manager`. The monitor and renderers explicitly run without it.
+The startup shell immediately becomes `dio_manager`; the generation monitor starts one copy of each
+persistent renderer, exits when its dio PID disappears or is superseded, and leaves healthy renderers
+for the next generation to adopt.
 
 ## Native hook
 

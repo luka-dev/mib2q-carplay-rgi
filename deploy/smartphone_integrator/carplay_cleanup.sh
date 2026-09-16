@@ -10,9 +10,9 @@
 #   - it does NOT stop renderers by the shared PID files — those may already name the
 #     replacement generation's renderers.
 # Renderers are process-persistent services and survive ordinary dio replacement;
-# they already clear their session state and accept the next hook/Java connection.
-# Here we only run Audi's stock mdnsd/PPS cleanup. An explicit supervisor stop uses
-# the owner-monitor's exact renderer PID snapshot.
+# they clear their session state and accept the next hook/Java connection. Here
+# we only run Audi's stock mdnsd/PPS cleanup. Renderers exit on their own failure,
+# reboot, or an explicit maintenance action outside this identity-less callback.
 
 WLOG=/tmp/carplay_wrapper.log
 echo "[cleanup] CarPlay cleanup requested (persistent renderers left alive)" >> "$WLOG"

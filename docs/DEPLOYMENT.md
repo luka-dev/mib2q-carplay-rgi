@@ -13,19 +13,21 @@ maneuver_render
 altscreen_render
 flag_atlas.rgba
 carplay_startup.sh
+carplay_monitor.sh
 carplay_processes.sh
 carplay_cleanup.sh
 ```
 
-The wrapper starts missing renderers, preserves healthy ones during a fast `dio_manager` replacement,
-and records an owner generation. Its monitor restarts a renderer only while that exact dio generation
-is alive. On final exit it stops the captured renderer PIDs and exits.
+The startup wrapper atomically records its generation, forks the monitor and immediately
+`exec`s `dio_manager`. The monitor starts missing renderers and preserves healthy ones across
+`dio_manager` replacement. It acts only while its exact generation owns the file; on dio exit it
+leaves the persistent renderers alive and exits.
 
-The custom cleanup first blocks renderer respawn, releases renderer resources and then invokes Audi's
-stock `/etc/scripts/carplay_cleanup.sh` for mdnsd/PPS cleanup. It must not overwrite that stock script.
+The identity-less cleanup invokes only Audi's stock `/etc/scripts/carplay_cleanup.sh` for mdnsd/PPS
+cleanup. It does not touch shared renderer state and must not overwrite that stock script.
 
-Renderer processes must not also be added as `servicemgr external:true` services; dual ownership would
-immediately restart processes that the CarPlay cleanup intentionally stopped.
+Renderer processes must not also be added as `servicemgr external:true` services; the generation
+monitor is their sole runtime owner.
 
 See `deploy/smartphone_integrator/README.md` for installation paths and the exact child JSON replacement.
 

@@ -23,7 +23,7 @@ CFG=$SYS_ROOT/etc/eso/production/smartphone_integrator.json
 LOG=${LOG:-/tmp/carplay_uninstall.log}
 
 HOOK_FILES="libcarplay_hook.so libcarplay_apac.so hssr_model.bin maneuver_render altscreen_render
-            flag_atlas.rgba carplay_startup.sh carplay_processes.sh carplay_cleanup.sh"
+            flag_atlas.rgba carplay_startup.sh carplay_monitor.sh carplay_processes.sh carplay_cleanup.sh"
 
 say() {
     echo "$@"

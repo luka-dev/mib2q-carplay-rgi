@@ -28,6 +28,7 @@ cp build/libcarplay_hook.so build/libcarplay_apac.so \
    "$CARD/mod/carplay/bin/"
 cp maneuver_render/resources/flag_atlas.rgba "$CARD/mod/carplay/bin/"
 cp deploy/smartphone_integrator/carplay_startup.sh \
+   deploy/smartphone_integrator/carplay_monitor.sh \
    deploy/smartphone_integrator/carplay_processes.sh \
    deploy/smartphone_integrator/carplay_cleanup.sh \
    deploy/smartphone_integrator/carplay_child.json \
@@ -53,7 +54,7 @@ script again.
 |---|---|
 | `libcarplay_hook.so`, `libcarplay_apac.so`, `hssr_model.bin` | `/mnt/app/root/hooks/` |
 | `maneuver_render`, `altscreen_render`, `flag_atlas.rgba` | `/mnt/app/root/hooks/` |
-| `carplay_startup.sh`, `carplay_processes.sh`, `carplay_cleanup.sh` | `/mnt/app/root/hooks/` |
+| `carplay_startup.sh`, `carplay_monitor.sh`, `carplay_processes.sh`, `carplay_cleanup.sh` | `/mnt/app/root/hooks/` |
 | `carplay_hook.jar` | `/mnt/app/eso/hmi/lsd/jars/` |
 | `carplay_child.json` | replaces `children.carplay` in `/mnt/system/etc/eso/production/smartphone_integrator.json` |
 | `install_persistent_pf.sh` | widens the carplay0 PF rule to `6030:6032` in all four profiles |

@@ -37,7 +37,7 @@ LOG=${LOG:-/tmp/carplay_install.log}
 # Installed under $HOOKS_DIR. Executables/libraries use 755; the model uses
 # 644. Order is irrelevant; the list matches the deployment README.
 HOOK_FILES="libcarplay_hook.so libcarplay_apac.so hssr_model.bin maneuver_render altscreen_render
-            flag_atlas.rgba carplay_startup.sh carplay_processes.sh carplay_cleanup.sh"
+            flag_atlas.rgba carplay_startup.sh carplay_monitor.sh carplay_processes.sh carplay_cleanup.sh"
 
 # No `dirname` either - see the note in custom.sh. ${0%/*} strips the last
 # /component, but leaves $0 untouched when it has no slash at all, so the
@@ -143,9 +143,9 @@ say "ok: $JARS_DIR/carplay_hook.jar"
 
 # ---------------------------------------------------------------- config
 # The stock carplay child runs dio_manager directly. Ours runs carplay_startup.sh,
-# which starts the renderers and then execs dio_manager with the hook - so the
-# whole child object is replaced, not one key. Line-based, because the unit has
-# no sed and no awk.
+# which forks the renderer monitor and immediately execs dio_manager with the
+# hook - so the whole child object is replaced, not one key. Line-based, because
+# the unit has no sed and no awk.
 say ""
 say "--- smartphone_integrator.json ---"
 

@@ -16,6 +16,7 @@ hook and altScreen variables are added on the final `dio_manager` command.
 Install these executable files under `/mnt/app/root/hooks`:
 
 - `carplay_startup.sh`
+- `carplay_monitor.sh`
 - `carplay_cleanup.sh`
 - `carplay_processes.sh`
 - `libcarplay_hook.so`
@@ -26,8 +27,8 @@ Install these executable files under `/mnt/app/root/hooks`:
 - `flag_atlas.rgba`
 
 Do not overwrite `/etc/scripts/carplay_cleanup.sh`: the custom cleanup calls that
-stock script only for Audi's mdnsd/PPS cleanup. Renderers are persistent services;
-an explicit supervisor stop, not ordinary dio churn, owns their final teardown.
+stock script only for Audi's mdnsd/PPS cleanup. Renderers are persistent services
+and are not tied to an identity-less SI cleanup callback.
 
 The checked-in audio policy advertises APAC/48 kHz/5.1 index 65 plus
 AAC-LC/48 kHz/stereo index 23 on the buffered stream. APAP packets carry no
@@ -64,40 +65,45 @@ Lifecycle semantics:
   wrapper does **no** firewall work — it assumes the port is open, exactly like it assumes the
   child JSON and the hook are installed. Reverted only by an OTA rewriting `fs0p1`; re-run the
   script. See `NCM_AND_FIREWALL_IDEAL_START.md`.
-- if a renderer already exists when CarPlay starts, it is not restarted;
-- renderer PIDs are kept under `/tmp`; one finite `pidin ar` snapshot seeds the
-  files when adopting an older running generation. The recurring two-second
-  monitor uses only numeric PID validation and `/proc/<pid>` existence, without
-  `pidin`, `netstat` or socket probes. Initial adoption and stop paths recheck the
-  exact executable using `pidin -p <pid> ar`; a failed query retains the process
-  and never permits signalling it. TERM/KILL each recheck the captured PID, and
-  cleanup preserves a newer registry entry. These probes run after DIO exec has
-  been initiated, or during explicit stop, without adding work to its startup budget;
-- the wrapper `exec`s `dio_manager`, so smartphone_integrator tracks the exact dio
-  PID; a monitor shell restarts only a genuinely missing renderer while it lives;
-- every ordinary `dio_manager` exit leaves all renderers alive, so a replacement
-  inherits the existing EGL/OMX allocations instead of re-entering fragile Qualcomm
-  `eglInitialize`; only a missing/crashed renderer is restarted, after a 5 s backoff;
-- initial adoption checks `LISTEN :19831` for `altscreen_render`, which owns its listener. `maneuver_render` is a client of Java's route-scoped `:19800`
-  listener, so it is preserved by live PID while RGI/Java intentionally has the
-  listener closed;
-- cold boot starts `altscreen_render`, gives its EGL initialization a one-second
-  head start, then starts `maneuver_render` to avoid simultaneous subdriver loading;
+- `carplay_startup.sh` performs only local file checks, an atomic owner-file
+  publish, a monitor fork and immediate `exec dio_manager`; no `pidin`, network
+  probe, renderer initialization or USB recovery runs in SI's startup path;
+- `carplay_monitor.sh` waits one second so `exec` wins scheduling, then adopts or
+  starts the persistent renderers. A replacement generation atomically replaces
+  the owner PID; obsolete monitors stop acting as soon as they observe it;
+- renderer PIDs are kept under `/tmp`. The healthy recurring path uses only a
+  numeric check and `/proc/<pid>`. A finite `pidin ar` scan runs only for initial
+  adoption or after a missing/stale PID, so a stale registry cannot create a
+  duplicate renderer;
+- initial adoption validates exact executable identity. `altscreen_render` also
+  owns `LISTEN :19831`, which detects a process wedged before serving the hook.
+  `maneuver_render` is a client of Java's optional `:19800`, so its live exact
+  process identity is the only valid non-invasive readiness check;
+- the wrapper `exec`s `dio_manager`, so smartphone_integrator tracks the exact
+  process it started. The monitor never signals dio, touches OTG/USB state, or
+  participates in SI retry policy;
+- every ordinary `dio_manager` exit leaves both renderers alive. Only a genuinely
+  missing renderer is restarted, after a five-second backoff. Cold boot starts
+  `altscreen_render`, then gives its EGL initialization a one-second head start
+  before `maneuver_render` to avoid a dual Qualcomm `eglInitialize` burst;
 - external cleanup is identity-less (smartphone_integrator does not tell it which dio
   generation it runs for), so it does NOT create the global stop marker and does NOT
   stop renderers by the shared PID files — either could damage an already-started
   replacement generation. Cleanup only invokes
-  Audi's `/etc/scripts/carplay_cleanup.sh` for the stock mdnsd/PPS cleanup.
+  Audi's `/etc/scripts/carplay_cleanup.sh` for the stock mdnsd/PPS cleanup;
+- physical USB recovery is deliberately absent from these scripts. Rapid-replug
+  recovery belongs to the matching NCM generation fence and the exact-version
+  `smartphone_integrator` A/B candidate under `deploy/usb_replug_recovery`.
 
-Verify on the unit in `/tmp/carplay_wrapper.log`: `already running - leave untouched`
-or `starting ...`, followed on dio exit by `persistent renderers left alive`.
-`SIGKILL residual` is valid only after an explicit supervisor stop.
+Verify on the unit in `/tmp/carplay_wrapper.log`: startup must log `exec dio_manager`
+before the monitor logs `generation=... active`, followed by `adopted ...` or
+`starting ...`. Ordinary dio exit logs that persistent renderers remain alive.
 
 CarPlay uses `restartDelay: 3000`, `stopTimeout: 8000`; `portResetTime` remains 250 ms.
 The full settling delay is intentional: rapid OTG stop/start cycles can leave the
 iAP2 NCM accessory with only one of its two interfaces enabled. Renderer ownership
-is handled independently by the PID-snapshot cleanup and must not be used as a
-reason to shorten the USB/device-stack delay.
+is independent of USB/device-stack recovery and must not be used as a reason to
+shorten this delay.
 
 ## MU1316 QNX 6.5 compatibility audit
 
@@ -108,13 +114,13 @@ firmware:
   traps, command substitution, background jobs, `read`, and `exec` used here;
 - `kill` is a shell builtin; the scripts use **numeric** signals (`kill -15`, `kill -9`)
   because that form is accepted by every kill implementation. Stock scripts kill by name
-  via `slay -f -s SIGTERM -m name` and, in one spot, `kill -sigkill <pid>`; we kill by the
-  captured PID snapshot instead (slay-by-name would also hit the replacement generation),
-  so only the signal token had to be a universally-accepted numeric one;
+  via `slay -f -s SIGTERM -m name`; the monitor signals only an exact PID whose renderer
+  identity was positively verified, and only when initial altScreen adoption proves it wedged;
 - `pidin ar` supplies a finite process snapshot; no blocking `/proc/*/cmdline`
-  walk and no GNU process utilities are used. The full snapshot is only the
-  compatibility fallback for pre-existing renderers. Targeted `pidin -p <pid> ar`
-  checks identity on adoption/stop; recurring monitor checks use recorded PIDs only;
+  walk and no GNU process utilities are used. The full snapshot is only for
+  adoption after a missing/stale registry entry. Targeted `pidin -p <pid> ar`
+  checks identity before replacing an adopted renderer; recurring monitor checks
+  use recorded PIDs only;
 - `rm -f` and integer `sleep` are stock facilities; the original firmware uses
   `sleep` throughout `startup.sh` and `/etc/scripts`;
 - `/armle/sbin/pfctl`, `/usr/bin/sed`, and `/usr/bin/grep` are stock MU1316
