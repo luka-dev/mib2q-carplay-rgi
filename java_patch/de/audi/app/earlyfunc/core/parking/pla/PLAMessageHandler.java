@@ -15,8 +15,6 @@ import de.audi.atip.model.ICoreEarlyAppsModelBank;
 
 public class PLAMessageHandler implements IPLAMessageHandler {
     private static final int[] SINGLE_LINE_MESSAGES = new int[]{18, 33, 34, 35};
-    private static volatile PLAMessageHandler activeHandler;
-
     private final ICarApplication application;
     private final AbstractParkingSystemPLAComponent plaComponent;
     private final IParkingSystemController controller;
@@ -53,14 +51,12 @@ public class PLAMessageHandler implements IPLAMessageHandler {
         this.opsStandaloneLeftMessagePartialPopupID = l;
         this.opsStandaloneRightMessagePartialPopupID = i1;
         this.startParkOutMessagePartialPopupID = j1;
-        activeHandler = this;
     }
 
     public void init() {
     }
 
     public void deinit() {
-        if (activeHandler == this) activeHandler = null;
     }
 
     public void showMessage(int i) {
@@ -68,7 +64,7 @@ public class PLAMessageHandler implements IPLAMessageHandler {
             this.logChannel.log(1000000, "[PLAMessageHandler#showMessage] messageID='%1'", i);
             this.currentMessageID = i;
 
-            if (PdcSmallStageGuard.shouldSuppressPlaMessagePopup()) {
+            if (PdcSmallStageGuard.shouldSuppressParkingMessagePopup()) {
                 this.hideVisiblePopup();
                 return;
             }
@@ -91,7 +87,7 @@ public class PLAMessageHandler implements IPLAMessageHandler {
                 this.application.getFrameworkAccess().getHmiServiceApp().showPartialPopup(0, j);
                 /* Close the small race between the initial policy check and
                  * an OPS activation on the parking dispatcher. */
-                if (PdcSmallStageGuard.shouldSuppressPlaMessagePopup()) {
+                if (PdcSmallStageGuard.shouldSuppressParkingMessagePopup()) {
                     this.hideVisiblePopup();
                 }
             }
@@ -110,13 +106,6 @@ public class PLAMessageHandler implements IPLAMessageHandler {
 
     public void setPlaOpsStandaloneState(int i) {
         this.plaOpsStandaloneState = i;
-    }
-
-    /** Called by the early OPS guard so a banner already visible before the
-     * DisplayContent update is removed immediately. */
-    public static void hideVisibleMessageForSidePdc() {
-        PLAMessageHandler handler = activeHandler;
-        if (handler != null) handler.hideVisiblePopup();
     }
 
     private void hideVisiblePopup() {

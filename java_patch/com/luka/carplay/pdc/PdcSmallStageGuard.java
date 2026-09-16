@@ -26,7 +26,6 @@ import de.esolutions.hmi.widgets.audi.base.AbstractScreenWidget;
 import de.audi.app.earlyfunc.core.parking.IParkingSystem;
 import de.audi.app.earlyfunc.core.parking.ParkingPopupIdentifier;
 import de.audi.app.earlyfunc.core.parking.pla.AbstractParkingSystemPLAComponent;
-import de.audi.app.earlyfunc.core.parking.pla.PLAMessageHandler;
 import org.dsi.ifc.carparkingsystem.DisplayContent;
 import org.dsi.ifc.carparkingsystem.DSICarParkingSystem;
 import java.util.List;
@@ -45,6 +44,24 @@ public final class PdcSmallStageGuard {
 
     /* A rejected show request must not leave the projection pinned forever. */
     private static final long SHOW_REQUEST_TIMEOUT_MS = 3000L;
+
+    /* Text/instruction popups are separate from the OPS graphic.  Both PLA
+     * and ARA screens use the same lower slot and survive screen changes. */
+    private static final int[] PARKING_MESSAGE_POPUP_IDS = new int[]{
+        2100009, /* ARA texts */
+        2100010, /* PLA texts main */
+        2100035, /* PLA texts OPS left */
+        2100036, /* PLA selection */
+        2100038, /* PLA confirmation */
+        2100040, /* PLA texts OPS right */
+        2100044, /* PLA texts OPS center */
+        2100071  /* ARA texts center */
+    };
+
+    /* A message show may already be queued in FwHMI when the parking intent
+     * arrives.  The source handlers prevent later shows; these short sweeps
+     * remove only commands that crossed that boundary concurrently. */
+    private static final long[] MESSAGE_SWEEP_DELAYS_MS = new long[]{50L, 150L, 300L, 600L};
 
     private static final int INACTIVE = 0;
     private static final int SHOW_REQUESTED = 1;
@@ -98,7 +115,7 @@ public final class PdcSmallStageGuard {
         }
         /* Repeated content updates belong to the same parking interval. */
         if (!shouldKeepCarPlayScreen()) showRequested(PURE_OPS_POPUP_ID, hmiService);
-        if (shouldKeepCarPlayScreen()) suppressPlaMessagePopup();
+        if (shouldKeepCarPlayScreen()) suppressParkingMessagePopups();
     }
 
     private static boolean isPureOpsContent(DisplayContent content, List systems) {
@@ -160,14 +177,14 @@ public final class PdcSmallStageGuard {
     public static synchronized void showRequested(int popupId, HMIService hmiService) {
         if (popupId != PURE_OPS_POPUP_ID || !pureOpsContent) return;
         if (shouldKeepCarPlayScreen()) {
-            suppressPlaMessagePopup();
+            suppressParkingMessagePopups();
             return;
         }
         protectCurrentCarPlayScreen(hmiService);
         if (protectedScreen == null) return;
         showRequestedAt = System.currentTimeMillis();
         state = SHOW_REQUESTED;
-        suppressPlaMessagePopup();
+        suppressParkingMessagePopups();
         startShowRequestTimeout(++showGeneration);
     }
 
@@ -176,7 +193,7 @@ public final class PdcSmallStageGuard {
         /* A late callback from a previous OPS must not undo a camera takeover. */
         if (shouldKeepCarPlayScreen()) {
             state = VISIBLE;
-            suppressPlaMessagePopup();
+            suppressParkingMessagePopups();
         }
     }
 
@@ -219,19 +236,23 @@ public final class PdcSmallStageGuard {
         return false;
     }
 
-    /** The stock PLA warning banner is a second partial popup, independent of
-     * the right-hand OPS graphic. It would cover the CarPlay status bar while
-     * the pure OPS popup is intentionally kept beside projection. */
-    public static synchronized boolean shouldSuppressPlaMessagePopup() {
+    /** Stock parking instruction banners are independent partial popups. */
+    public static synchronized boolean shouldSuppressParkingMessagePopup() {
         return shouldKeepCarPlayScreen();
     }
 
-    private static void suppressPlaMessagePopup() {
-        try {
-            PLAMessageHandler.hideVisibleMessageForSidePdc();
-        } catch (Throwable t) {
-            /* Message cleanup is cosmetic and must never break OPS policy. */
-            Log.w(TAG, "OPS guard: cannot hide PLA message popup: " + t);
+    private static void suppressParkingMessagePopups() {
+        HMIService hmi = protectedHmi;
+        if (hmi == null || !shouldKeepCarPlayScreen()) return;
+        for (int i = 0; i < PARKING_MESSAGE_POPUP_IDS.length; i++) {
+            try {
+                hmi.removePartialPopup(MAIN_TERMINAL, PARKING_MESSAGE_POPUP_IDS[i]);
+            } catch (Throwable t) {
+                /* One unknown/not-yet-instantiated popup must not prevent the
+                 * remaining concrete parking-message IDs from being removed. */
+                Log.w(TAG, "OPS guard: cannot hide parking message popup "
+                    + PARKING_MESSAGE_POPUP_IDS[i] + ": " + t);
+            }
         }
     }
 
@@ -294,7 +315,17 @@ public final class PdcSmallStageGuard {
         Thread timeout = new Thread(new Runnable() {
             public void run() {
                 try {
-                    Thread.sleep(SHOW_REQUEST_TIMEOUT_MS);
+                    long elapsed = 0L;
+                    for (int i = 0; i < MESSAGE_SWEEP_DELAYS_MS.length; i++) {
+                        long delay = MESSAGE_SWEEP_DELAYS_MS[i];
+                        Thread.sleep(delay);
+                        elapsed += delay;
+                        synchronized (PdcSmallStageGuard.class) {
+                            if (generation != showGeneration || state == INACTIVE) return;
+                            suppressParkingMessagePopups();
+                        }
+                    }
+                    Thread.sleep(SHOW_REQUEST_TIMEOUT_MS - elapsed);
                 } catch (InterruptedException e) {
                     return;
                 }
