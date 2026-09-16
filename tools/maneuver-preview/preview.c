@@ -109,31 +109,37 @@ static void capture(const char *dir,int c,int compact,int width,int height) {
 }
 int main(int argc,char **argv) {
     int width,height,c=0,compact=1,dirty=1,frame=0,animate=0,show_frame=1,show_lanes=1;
+    int blink_frame=0;
     const char *out=argc==3 && !strcmp(argv[1],"--capture")?argv[2]:NULL;
     const char *lanes_out=argc==3 && !strcmp(argv[1],"--capture-lanes")?argv[2]:NULL;
     const char *reveal_out=argc==3 && !strcmp(argv[1],"--capture-lane-reveal")?argv[2]:NULL;
+    int blink_with_lanes=argc==3 && !strcmp(argv[1],"--capture-blink-lanes");
+    const char *blink_out=argc==3 && (!strcmp(argv[1],"--capture-blink") || blink_with_lanes)?argv[2]:NULL;
     int reveal_frame=0;
     int lane_case=-1;
     if(argc==3 && !strcmp(argv[1],"--lanes"))lane_case=atoi(argv[2]);
     if(lanes_out)lane_case=0;
+    if(blink_with_lanes)lane_case=0;
     if(lane_case>=LANE_CASES || lane_case<-1)return 2;
     if(lane_case>=0)c=lane_maneuvers[lane_case];
     if(reveal_out)c=lane_maneuvers[7];
     cr_lane_panel_t *panel=cr_lane_panel_create();
     if(!panel)return 2;
     int lane_handoff=(argc==3 || argc==5) && !strcmp(argv[1],"--capture-lane-transition");
-    const char *handoff_out=(argc==3 || argc==5) && (!strcmp(argv[1],"--capture-transition") || lane_handoff)?argv[2]:NULL;
+    int blink_handoff=(argc==3 || argc==5) && !strcmp(argv[1],"--capture-transition-blink");
+    const char *handoff_out=(argc==3 || argc==5) && (!strcmp(argv[1],"--capture-transition") || lane_handoff || blink_handoff)?argv[2]:NULL;
     if(lane_handoff)lane_case=0;
     int handoff_current=argc==5?atoi(argv[3]):1,handoff_next=argc==5?atoi(argv[4]):2;
     int handoff_frame=0,handoff_settled_frames=0,handoff_warmup=0;
     double started;
     if(argc==3 && !strcmp(argv[1],"--case")){c=atoi(argv[2]);if(c<0 || c>=CASES)return 2;}
+    if(blink_out){c=14;show_frame=0;show_lanes=blink_with_lanes;}
     if(handoff_out) {
         if(handoff_current<0 || handoff_current>=CASES || handoff_next<0 || handoff_next>=CASES)return 2;
         c=handoff_current;
     }
     if(platform_init(328,181))return 1;
-    if(out || handoff_out || lanes_out || reveal_out) {
+    if(out || handoff_out || lanes_out || reveal_out || blink_out) {
         glfwHideWindow(glfwGetCurrentContext());
         /* Interactive preview keys must not abort a hidden capture midway. */
         glfwSetKeyCallback(glfwGetCurrentContext(),NULL);
@@ -156,7 +162,7 @@ int main(int argc,char **argv) {
     while(!platform_should_close()) {
         platform_poll();
         double now=glfwGetTime();
-        if(!out && !handoff_out && !lanes_out && !reveal_out) {
+        if(!out && !handoff_out && !lanes_out && !reveal_out && !blink_out) {
         if(platform_key_tap(CR_KEY_RIGHT))request_case((requested_case()+1)%CASES,compact);
         if(platform_key_tap(CR_KEY_LEFT))request_case((requested_case()+CASES-1)%CASES,compact);
         if(platform_key_tap(CR_KEY_UP)){compact=!compact;dirty=1;}
@@ -199,6 +205,17 @@ int main(int argc,char **argv) {
             level=16-(int)fmin(t*4,16);
             if(t>=4)state=fmod(t-4,1.2)<.6?CR_PROGRESS_BLINK_LOW:CR_PROGRESS_BLINK_HIGH;
         }
+        if(blink_out) {
+            static const int states[]={CR_PROGRESS_FILL,CR_PROGRESS_BLINK_HIGH,
+                CR_PROGRESS_BLINK_LOW,CR_PROGRESS_BLINK_HIGH,CR_PROGRESS_OFF,CR_PROGRESS_FILL};
+            int stage=blink_frame<12?0:1+(blink_frame-12)/8;
+            state=states[stage>5?5:stage];level=4;
+        }
+        if(blink_handoff) {
+            state=handoff_frame==0 && handoff_warmup>=5
+                ?CR_PROGRESS_BLINK_HIGH:CR_PROGRESS_FILL;
+            level=4;
+        }
         cr_progress_set(&preview_progress,level,state,now);
         const maneuver_state_t *next=engine_phase==1?&next_scene.maneuver:NULL;
         render_set_route_progress(preview_progress.fill,preview_progress.path_weight,preview_progress.glow);
@@ -215,6 +232,14 @@ int main(int argc,char **argv) {
             capture(reveal_out,reveal_frame,1,width,height);
             if(++reveal_frame==60)break;
         }
+        if(blink_out && blink_frame>=11) {
+            int stage=blink_frame<12?0:1+(blink_frame-12)/8;
+            printf("BLINK %d stage %d fill %.6f path %.6f glow %.6f\n",
+                   blink_frame-11,stage,preview_progress.fill,
+                   preview_progress.path_weight,preview_progress.glow);
+            capture(blink_out,blink_frame-11,1,width,height);
+        }
+        if(blink_out && ++blink_frame==52)break;
         /* Match static captures' initial viewport/progress-map settling before
          * calling this the departure endpoint of a maneuver transition. */
         if(handoff_out && ++handoff_warmup>=12) {
@@ -226,11 +251,15 @@ int main(int argc,char **argv) {
             printf("CACHE %d builds %u %u paints %u %u\n",handoff_frame,a?a->builds:0,b?b->builds:0,a?a->paint_count:0,b?b->paint_count:0);
             float px,py,rot;render_get_camera_pose(&px,&py,&rot);
             printf("TRAVEL %d camera %.6f %.6f rotation %.6f phase %d fill %.6f handoff %d\n",handoff_frame,px,py,rot,engine_phase,preview_progress.fill,preview_progress.handoff);
+            if(blink_handoff)
+                printf("BLINK_TRAVEL %d path %.6f glow %.6f\n",handoff_frame,
+                       preview_progress.path_weight,preview_progress.glow);
             capture(handoff_out,handoff_frame,1,width,height);
             if(handoff_frame==0)request_case(handoff_next,compact);
             else if(handoff_frame==2)request_case((handoff_next+1)%CASES,compact);
             else if(handoff_frame==3)request_case(handoff_next,compact);
-            else if(!engine_phase && !maneuver_needs_redraw() &&
+            else if(!engine_phase && maneuver_is_presentationally_settled() &&
+                    !render_is_animating() &&
                     !preview_progress.handoff && !preview_progress.active && !preview_progress.tint_active) {
                 /* Keep the first fully idle draws too: the native light
                  * settle clears its timer after updating the current frame. */

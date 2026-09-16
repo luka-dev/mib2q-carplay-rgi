@@ -274,6 +274,13 @@ int maneuver_needs_redraw(void) {
         || g_light_settle_active || (g_tip_morph_active && g_tip_morph_t < 1.0f);
 }
 
+int maneuver_is_presentationally_settled(void) {
+    /* ARRIVED intentionally redraws forever for its flag sprite. That loop
+     * cannot gate completion of a route/camera/light/tip transition. */
+    return !g_route_animating && !g_cam_settle_active && !g_light_settle_active
+        && !(g_tip_morph_active && g_tip_morph_t < 1.0f);
+}
+
 void maneuver_set_slide(float t) {
     if (t < 0.0f) t = 0.0f;
     if (t > 2.0f) t = 2.0f;

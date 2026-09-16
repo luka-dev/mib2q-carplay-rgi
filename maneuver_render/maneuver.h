@@ -89,6 +89,7 @@ void maneuver_draw(const maneuver_state_t *state, const maneuver_state_t *next_s
 void maneuver_start_anim(void);       /* reset slide=0, start auto-animation */
 int  maneuver_is_animating(void);     /* 1 while transition animation running (for engine state) */
 int  maneuver_needs_redraw(void);    /* 1 while any animation needs continuous rendering */
+int  maneuver_is_presentationally_settled(void); /* flag may still loop after ARRIVED settles */
 void maneuver_set_slide(float t);     /* set slide manually (stops auto-anim) */
 float maneuver_get_slide(void);       /* get current slide value */
 

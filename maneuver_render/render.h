@@ -19,7 +19,6 @@ extern "C" {
 typedef enum {
     RENDER_MAT_GENERIC_SOLID = 0,
     RENDER_MAT_ROAD_ASPHALT,
-    RENDER_MAT_ROAD_BORDER_PAINT,
     RENDER_MAT_ROUTE_ACTIVE,
     RENDER_MAT_COUNT
 } render_material_t;
@@ -51,10 +50,6 @@ void render_set_viewport(int fb_width, int fb_height);
 /* Thick line segment (rendered as quad). */
 void render_thick_line(float x0, float y0, float x1, float y1, float thickness,
                        float r, float g, float b, float a);
-
-/* Arrowhead triangle. Base at (bx,by), tip extends in direction angle_rad by size. */
-void render_arrowhead(float bx, float by, float angle_rad, float size,
-                      float r, float g, float b, float a);
 
 /* Filled circle. */
 void render_disc(float cx, float cy, float radius, int segments,
@@ -90,8 +85,6 @@ void render_set_light_rotation(float angle_rad);
 
 /* Recompute camera-dependent matrices/uniforms for the current frame. */
 void render_sync_camera(void);
-/* Snapshot of the current projection for source-pixel framing diagnostics. */
-void render_get_camera_matrix(float out[16]);
 /* Pure settled projection for scene compilation; does not move the live camera. */
 void render_get_layout_matrix(float out[16]);
 void render_build_layout_matrix(float out[16],float aspect);
@@ -137,28 +130,18 @@ void render_end_overlay(void);
  * ================================================================ */
 
 /* Mask rendering passes */
-void render_begin_outline_mask(void);   /* bind FBO_OUTLINE, ortho 2D, flat white */
+void render_begin_outline_mask(void);   /* bind ROAD FBO, ortho 2D, flat white */
 void render_end_outline_mask(void);
 
-void render_begin_fill_mask(void);      /* resume FBO_ROAD (no clear), ortho 2D */
-void render_end_fill_mask(void);
-/* Fade mask paint sideways from edge to edge+span (negative span = left).
- * Set span=0 to disable. Applies only to flat mask paint, not route shading. */
-void render_set_mask_side_fade(float edge, float span);
 /* Optional backward road fade in local maneuver coordinates. span=0 disables. */
 void render_set_mask_entry_fade(float start,float span);
 /* Flat-mask alpha rises from 0 to 1 along a unit local direction over span.
  * span=0 disables; usable for any road end without subdividing its mesh. */
 void render_set_mask_direction_fade(float x,float y,float dx,float dy,float span);
 
-/* Resume masks -- bind without clearing (append content to existing mask) */
-void render_resume_outline_mask(void);
-void render_resume_fill_mask(void);
-
 void render_begin_route_mask(void);     /* bind FBO_ROUTE, ortho 2D, flat blue */
-void render_end_route_mask(void);
 
-/* Composite masks -> screen with subtraction, materials, perspective */
+/* Composite masks -> screen with materials and perspective */
 void render_composite(void);
 
 /* Reset depth buffer + z-bias (call between independent composite passes). */
@@ -171,15 +154,8 @@ void render_invalidate_masks(void);
 void render_push_mask_transform(float tx, float ty, float cos_r, float sin_r);
 void render_pop_mask_transform(void);
 
-/* Mask append mode: 1 = begin_mask doesn't clear FBO (draw on top). */
-void render_set_mask_append(int append);
-
 /* Returns 1 if masks need re-rendering */
 int render_masks_dirty(void);
-
-/* Legacy stub pass API -- redirects to outline mask internally */
-void render_begin_stubs(void);
-void render_end_stubs(void);
 
 /* ================================================================
  * Flag sprite API

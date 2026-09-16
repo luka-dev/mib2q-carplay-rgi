@@ -10,6 +10,8 @@ Arrow size stays constant, and overflow replaces one cell with `…`.
 make -C tools/maneuver-preview all test
 build/maneuver-preview/preview --case 14
 python3 tools/maneuver-preview/capture.py
+python3 tools/maneuver-preview/verify_all_transitions.py
+python3 tools/maneuver-preview/verify_blink.py
 build/maneuver-preview/preview --lanes 0
 python3 tools/maneuver-preview/capture_lanes.py
 python3 tools/maneuver-preview/test_lane_transport.py
@@ -42,7 +44,13 @@ are the review artifacts. Raw captures and intermediate frames are ignored.
 The capture suite checks framing, premultiplied alpha, static camera framing,
 exact transition endpoints, unchanged scene caches during travel, and progress
 retreat/empty commit/refill. The accepted arrival flag has its own
-stage-dependent presentation. `--baseline PATH` optionally compares the first
+stage-dependent presentation. The exhaustive handoff check runs every fixture
+once as the outgoing scene and once as the incoming scene; its ARRIVED endpoint
+allows only the flag/tip presentation region to differ from the early static
+sample. The GL blink check
+verifies both palette endpoints, smooth tint changes, unchanged road pixels,
+and glow fading during camera travel before the next arrow refills.
+`--baseline PATH` optionally compares the first
 fifteen fixtures with former lane-preview ordinary cases 18–32.
 That historical parity check requires matching palettes: the approved white
 base intentionally differs from captures made with the former grey-blue base.
