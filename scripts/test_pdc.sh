@@ -14,17 +14,19 @@ ASM="$TOOLS_DIR/tools/uninline/lib/asm-9.7.jar:$TOOLS_DIR/tools/uninline/lib/asm
 TEST_DIR=$(mktemp -d)
 trap 'rm -rf "$TEST_DIR"' EXIT
 mkdir -p "$TEST_DIR/stubs" "$TEST_DIR/test"
-"$JDK/bin/javac" -d "$TEST_DIR/stubs" \
+"$JDK/bin/javac" -cp "$STOCK:$LIBS" -d "$TEST_DIR/stubs" \
     "$PROJECT_DIR/tests/stubs/pdc/com/luka/carplay/core/CarPlayApp.java" \
     "$PROJECT_DIR/tests/stubs/app-lifecycle/com/luka/carplay/framework/Log.java" \
     "$PROJECT_DIR/tests/stubs/pdc/de/audi/atip/hmi/view/Screen.java" \
     "$PROJECT_DIR/tests/stubs/pdc/de/esolutions/hmi/widgets/audi/base/AbstractScreenWidget.java"
 CP="$TEST_DIR/stubs:$PATCH:$STOCK:$LIBS:$ASM"
 "$JDK/bin/javac" -cp "$CP" -d "$TEST_DIR/test" "$PROJECT_DIR/tests/PdcResourcePolicyTest.java" \
-    "$PROJECT_DIR/tests/PdcExternalEventsTest.java" "$PROJECT_DIR/tests/OpsAudioDrawerTest.java"
+    "$PROJECT_DIR/tests/PdcExternalEventsTest.java" "$PROJECT_DIR/tests/OpsAudioDrawerTest.java" \
+    "$PROJECT_DIR/tests/OpsStatusLineTest.java"
 "$JDK/bin/java" -cp "$TEST_DIR/test:$CP" PdcResourcePolicyTest
 "$JDK/bin/java" -cp "$TEST_DIR/test:$CP" PdcExternalEventsTest
 "$JDK/bin/java" -cp "$TEST_DIR/test:$CP" OpsAudioDrawerTest
+"$JDK/bin/java" -cp "$TEST_DIR/test:$CP" OpsStatusLineTest
 # The isolated PDC tests fake CarPlayApp.active. Also run the real lifecycle
 # worker with only external modules/transport substituted, so disconnect does
 # not depend on a later HMI callback to release the presentation policy.
@@ -57,3 +59,12 @@ if ! grep -q 'APS drawer still selected over CarPlay + side OPS' "$TEST_DIR/stoc
     cat "$TEST_DIR/stock-drawer.log"; exit 1
 fi
 echo "PDC stock regression: reproduced APS warning content 6001 over CarPlay"
+
+if "$JDK/bin/java" -cp "$TEST_DIR/test:$TEST_DIR/stubs:$STOCK:$PATCH:$LIBS:$ASM" \
+    OpsStatusLineTest > "$TEST_DIR/stock-statusline.log" 2>&1; then
+    echo "ERROR: unpatched stock footer unexpectedly passed"; exit 1
+fi
+if ! grep -q 'MMI status line 62 remained over CarPlay' "$TEST_DIR/stock-statusline.log"; then
+    cat "$TEST_DIR/stock-statusline.log"; exit 1
+fi
+echo "PDC stock regression: reproduced MMI status line 62 over CarPlay"

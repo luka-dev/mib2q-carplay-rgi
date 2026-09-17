@@ -216,6 +216,12 @@ public final class PdcSmallStageGuard {
         }
     }
 
+    /** A popup manager may still reference the previous TerminalMode screen
+     * during replacement. Only the exact protected screen owns this override. */
+    public static synchronized boolean shouldKeepCarPlayScreen(Screen screen) {
+        return screen != null && screen == protectedScreen && shouldKeepCarPlayScreen();
+    }
+
     public static synchronized boolean shouldKeepCarPlayScreen() {
         /* PLA status can change during an existing OPS popup, without a new
          * DisplayContent. Its independent active notification also revokes the

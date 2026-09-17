@@ -9,9 +9,18 @@ as current blockers. This confirmation is the current acceptance source;
 individual historical fault-injection and NCM/SI A/B recipes below are not a
 newly recorded test run.
 
+Later September 17 report: an alarm coincided with another approximately
+one-second interruption. The owner confirmed that both the CarPlay picture and
+audio disappeared together, and clarified that a session teardown occurred.
+This specific scenario is open; the earlier acceptance does not establish alarm
+stability. The owner confirms restarting HU after the latest `b0653c6`
+deployment. HU is currently offline; the loaded build was not captured directly.
+The teardown initiator/reason and USB/process continuity remain unconfirmed.
+
 Exception clarified by the owner on September 17: keeping CarPlay visible
-beside OPS is fixed, but removing the lower OPS warning strip is **not**.
-The attempted suppression did not remove it on the vehicle.
+beside OPS is fixed. After deploying `b0653c6` and restarting HU, a new photo
+shows the APS warning removed but the black MMI footer with clock/LTE still
+covering the bottom of CarPlay. Complete footer removal remains **open**.
 
 Implemented and accepted feature set: maneuver graphics, lane guidance, HUD,
 altScreen projection and audio. Cover art, metadata and steering-wheel input
@@ -52,16 +61,28 @@ setup/teardown races. Commands: `scripts/test_supervisor_lifecycle.sh`,
 
 ### Remaining work / optional extensions
 
-- OPS lower warning strip (`Check surroundings!`): **candidate ready; HU
-  acceptance pending**. The previous PLA/ARA popup attempt missed the separate
-  APS audio drawer (content 6001/6002). `2e536a6-ops-aps-drawer-r2` masks only APS
-  column 0 in model 538 during protected CarPlay + pure OPS and restores the
-  latest stock request on release. Obsolete PLA/ARA replacements and popup
-  sweeps removed. Stock producer/selector, external events, negative controls
-  and J9 linkage checked locally. Recheck added real lifecycle disconnect
-  without HMI events, reconnect cleanup fencing, and return to an already-open
-  OPS without a new DSI notification. Install and check the actual strip when HU
-  is reachable; no on-car success claimed yet.
+- Alarm-associated session teardown: **confirmed by owner; cause unconfirmed**.
+  On the next reproduction, capture the exact alarm time, teardown scope,
+  `reason`, request stream list and preceding events; correlate USB/NCM and SI,
+  `dio_manager` PID, CarPlay connection state and audio-route transitions.
+  Determine who initiated teardown before attributing it to USB, the sender,
+  the HU audio path or the latest deployment. `b0653c6` was installed
+  without restarting HU/processes; the owner subsequently restarted HU.
+  Its native audio trace is disabled, so a
+  detailed audio reproduction needs a separately prepared trace build. The
+  initial local review found no direct audio-event restart in the renderer
+  monitor. The AirPlay wrapper preserves the original request for stock;
+  selective audio teardown does not request altScreen shutdown unless stream
+  111 is included. This local review does not establish the live teardown cause.
+- OPS lower strip: **APS text removed on HU; status-line follow-up ready for
+  validation**. Model 538 masking in deployed `b0653c6` removes warning content
+  6001/6002. The owner's new photo shows independent system popup **62** still
+  displaying the MMI clock/LTE and black background over CarPlay. Candidate
+  `b0653c6-ops-statusline-r3` hides it through the stock popup manager only for
+  the exact protected front CarPlay screen with pure OPS, including queue
+  replay. Other popups and stock behavior outside that guard remain intact.
+  Source/host checks cover the actual stock manager and a failing stock-first
+  control; Kanzi rendering and complete removal still require on-HU acceptance.
   [Details](docs/CARPLAY_PDC_SMALL_STAGE_ROOT_CAUSE.md).
 - Upmix: ongoing work, separate from the completed base audio path.
 - CarPlay Video: receiver/player integration remains unimplemented; optional
