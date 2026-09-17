@@ -65,6 +65,9 @@ printf '%s\n' "$GEN_APP" >> "$SOURCES_LIST"
     -d "$OUTPUT_DIR" \
     -Xlint:-options \
     @"$SOURCES_LIST"
+# Compact generated metrics/Unicode tables live inside the hook JAR. Ordinary
+# builds never read firmware fonts or invoke the offline generator.
+cp -R "$PROJECT_DIR/java_resources/." "$OUTPUT_DIR/"
 cd "$OUTPUT_DIR"; "$JAR" cf "$OUTPUT_JAR" .; cd "$PROJECT_DIR"
 echo "Output: $OUTPUT_JAR"
 echo "Build ID: $BUILD_ID"

@@ -65,11 +65,9 @@ public class BAPBridge {
     /* Set only after the complete synchronous BAP start sequence has returned successfully.
      * RouteGuidance combines this with renderer FRAME_READY before exposing context 80. */
     private volatile boolean bapSessionStarted = false;
-    private static final int MAX_CURRENT_POSITION_UTF8_BYTES = 96;
     private static final String ROUTE_TEXT_PENDING = "\u2026";
     private static final String ROUTE_SIGN_OPEN = "\u2039";
     private static final String ROUTE_SIGN_CLOSE = "\u203A";
-    private static final int ROUTE_SIGN_FRAME_UTF8_BYTES = 6; // 3 bytes per quote
     private static final String ROUTE_TURN_PREFIX = "\u25CF "; // filled circle + space
     /* U+25CC DOTTED CIRCLE, not a combining mark or an emoji sequence.
      * Present in VC's supplementary fonts; on-unit fallback still needs testing. */
@@ -77,6 +75,14 @@ public class BAPBridge {
 
     /* CarPlay owns FctID 19/20/21/22/46 for the whole active RGI interval. */
     private String latchedPositionText = "";
+    private String positionPrefix = "", positionSuffix = "";
+    private final CurrentPositionScroll positionScroll = new CurrentPositionScroll();
+    private String lastPositionSent;
+    private boolean positionRestart = true;
+    private boolean positionSendFailed;
+    private boolean positionScrollChanged;
+    private int positionManeuverIndex = -1, positionManeuverVersion = -1;
+    private long positionRouteGeneration = -1L;
     private boolean routeTextPublished = false;
     /* User-selectable route-info representation. View changes always reset it
      * to 0; only the serialized RouteGuidance presentation worker mutates it. */
@@ -643,6 +649,7 @@ public class BAPBridge {
 
         try {
             bapSessionStarted = false;
+            clearPositionScroll();
             inApproachZone = false;
             latchedPositionText = "";
             routeTextPublished = false;
@@ -743,6 +750,7 @@ public class BAPBridge {
 
         } catch (Throwable e) {
             bapSessionStarted = false;
+            clearPositionScroll();
             rollbackFailedStart();
             Log.e(TAG, "onStart error: " + e.getClass().getName() + ": " + e.getMessage());
             return false;
@@ -754,6 +762,7 @@ public class BAPBridge {
      * renderer here would make the retry non-idempotent.  The session-long native-RG gate remains
      * shut; engageTakeover/disengageTakeover own that independently. */
     private void rollbackFailedStart() {
+        clearPositionScroll();
         try { appConnectorNavi.updateRGStatus(0); } catch (Throwable t) { }
         try { appConnectorNavi.updateActiveRGType(0); } catch (Throwable t) { }
         try { sendNoSymbol(); } catch (Throwable t) { }
@@ -781,6 +790,7 @@ public class BAPBridge {
 
         try {
             bapSessionStarted = false;
+            clearPositionScroll();
             /* Lightweight stop — reset internal state only.
              * No BAP teardown, no renderer kill. iOS sends transient route_state=0
              * during maneuver transitions; full teardown causes HUD flicker + renderer
@@ -807,6 +817,7 @@ public class BAPBridge {
 
         try {
             bapSessionStarted = false;
+            clearPositionScroll();
             /* Defensive: stop action blink (it's also stopped on approach
              * zone exit, but onShutdown can be called from non-approach
              * states too — e.g., disconnect mid-route). */
@@ -1237,9 +1248,10 @@ public class BAPBridge {
      * State and the explicit output caches survive ordinary delta clearing, so
      * this never waits for the next iOS route-guidance packet.
      */
-    public void refreshInfoPresentation(RouteGuidance.State s, int phase) {
+    public boolean refreshInfoPresentation(RouteGuidance.State s, int phase) {
         infoPhase = (phase == 0) ? 0 : 1;
-        if (!initialized || !bapSessionStarted || s == null) return;
+        positionRestart = true;
+        if (!initialized || !bapSessionStarted || s == null) return false;
         try {
             cacheTravelInfo(s, s.dirtyMask);
             updateLatchedRouteText(s);
@@ -1247,14 +1259,22 @@ public class BAPBridge {
             publishTimeToDestinationForMode();
             Log.i(TAG, "route-info phase=" + infoPhase + " applied view="
                 + (com.luka.carplay.core.AltScreenModule.isSmallScreenViewArea() ? "smallscreen" : "fullscreen"));
+            return true;
         } catch (Throwable t) {
             Log.w(TAG, "route-info refresh failed: " + t);
+            return false;
         }
     }
 
     /** Refresh only real route-text caches; never store the phase-1 summary here. */
     private void updateLatchedRouteText(RouteGuidance.State s) {
         int idx = getFirstManeuverIndex(s);
+        int version = idx >= 0 && s.mVer != null && idx < s.mVer.length ? s.mVer[idx] : -1;
+        if (positionManeuverIndex != idx || positionManeuverVersion != version
+                || positionRouteGeneration != s.routeGeneration) positionRestart = true;
+        positionManeuverIndex = idx;
+        positionManeuverVersion = version;
+        positionRouteGeneration = s.routeGeneration;
         String turnTo = "";
         String signPost = "";
         if (idx >= 0) {
@@ -1269,32 +1289,99 @@ public class BAPBridge {
             }
         }
 
-        /* One visible field: do not strip the next-road name from the signpost.
-         * Reserve six UTF-8 bytes so a long signpost keeps both angle quotes. */
+        /* Preserve the full payload. Decorations are budgeted on EVERY fragment. */
+        positionPrefix = positionSuffix = "";
         if (signPost.length() > 0) {
-            latchedPositionText = ROUTE_SIGN_OPEN
-                + limitUtf8(signPost, MAX_CURRENT_POSITION_UTF8_BYTES - ROUTE_SIGN_FRAME_UTF8_BYTES)
-                + ROUTE_SIGN_CLOSE;
+            latchedPositionText = signPost;
+            positionPrefix = ROUTE_SIGN_OPEN;
+            positionSuffix = ROUTE_SIGN_CLOSE;
         } else if (turnTo.length() > 0) {
-            latchedPositionText = limitUtf8(ROUTE_TURN_PREFIX + turnTo, MAX_CURRENT_POSITION_UTF8_BYTES);
+            latchedPositionText = turnTo;
+            positionPrefix = ROUTE_TURN_PREFIX;
         } else {
-            latchedPositionText = limitUtf8(normalizeRouteText(s.currentRoad), MAX_CURRENT_POSITION_UTF8_BYTES);
+            latchedPositionText = normalizeRouteText(s.currentRoad);
         }
     }
 
     private void publishRouteTextForMode() {
         boolean smallScreen = com.luka.carplay.core.AltScreenModule.isSmallScreenViewArea();
-        String text = infoPhase == 0 ? latchedPositionText
-            : (smallScreen ? buildShortSummary() : buildTripSummary());
-        if (text == null || text.length() == 0) text = latchedPositionText;
-        if (text == null || text.length() == 0) text = ROUTE_TEXT_PENDING;
-        text = limitUtf8(text, MAX_CURRENT_POSITION_UTF8_BYTES);
-        /* Keep the stock text gate for FctID 20, but never use its separate
-         * TurnTo/SignPost layers for our text or ETA. Empty FctID 19 does not
-         * hide the VC row: it exposes the native circle/"---" placeholder. */
-        appConnectorNavi.updateTurnToInfo("", "");
-        appConnectorNavi.updateCurrentPositionInfo(text);
+        String text = infoPhase == 0 ? "" : (smallScreen ? buildShortSummary() : buildTripSummary());
+        String before = "", after = "";
+        if (text.length() == 0) {
+            text = latchedPositionText;
+            before = positionPrefix;
+            after = positionSuffix;
+        } else if (text.startsWith(ROUTE_TIME_PREFIX)) {
+            before = ROUTE_TIME_PREFIX;
+            text = text.substring(before.length());
+        }
+        if (text.length() == 0) text = ROUTE_TEXT_PENDING;
+        boolean changed = positionScroll.configure(text, before, after, positionRestart);
+        positionScrollChanged |= changed;
+        positionRestart = false;
+        if (changed && (positionScroll.missingGlyphs || positionScroll.isFallback())) {
+            Log.w(TAG, "CurrentPosition font coverage=" + !positionScroll.missingGlyphs
+                + " oversized-cluster=" + positionScroll.isFallback());
+        }
+        /* Keep the stock text gate for FctID 20. Timer ticks only write FctID 19. */
+        String frame = positionScroll.current();
+        boolean delivered = false;
+        try {
+            appConnectorNavi.updateTurnToInfo("", "");
+            appConnectorNavi.updateCurrentPositionInfo(frame);
+            delivered = true;
+        } finally {
+            if (!delivered) positionScroll.failed(System.currentTimeMillis());
+        }
+        lastPositionSent = frame;
+        positionScroll.sent(System.currentTimeMillis());
+        positionSendFailed = false;
         routeTextPublished = true;
+    }
+
+    private void clearPositionScroll() {
+        positionScroll.clear();
+        lastPositionSent = null;
+        positionRestart = true;
+        positionSendFailed = false;
+        positionScrollChanged = true;
+        positionManeuverIndex = positionManeuverVersion = -1;
+        positionRouteGeneration = -1L;
+        positionPrefix = positionSuffix = "";
+    }
+
+    /** Called under RouteGuidance's monitor, outside presentationLock. */
+    void suspendPositionScroll() {
+        positionRestart = true;
+        routeTextPublished = false;
+        lastPositionSent = null;
+    }
+
+    long positionScrollWait(long now) {
+        return positionRestart || !bapSessionStarted || !routeTextPublished ? -1L : positionScroll.waitMillis(now);
+    }
+
+    boolean takePositionScrollChange() {
+        boolean changed = positionScrollChanged;
+        positionScrollChanged = false;
+        return changed;
+    }
+
+    /** No FctID 20/22, renderer frame, icon, or BAP sync transaction here. */
+    void tickPositionScroll(long now) {
+        if (positionRestart || !bapSessionStarted || !routeTextPublished) return;
+        String frame = positionScroll.next(now);
+        if (frame == null) return;
+        try {
+            if (!frame.equals(lastPositionSent)) appConnectorNavi.updateCurrentPositionInfo(frame);
+            lastPositionSent = frame;
+            positionScroll.sent(now);
+            positionSendFailed = false;
+        } catch (Throwable t) {
+            positionScroll.failed(now);
+            if (!positionSendFailed) Log.w(TAG, "CurrentPosition scroll retry: " + t);
+            positionSendFailed = true;
+        }
     }
 
     private String buildTripSummary() {

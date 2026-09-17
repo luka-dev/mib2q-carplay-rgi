@@ -117,8 +117,9 @@ public final class RouteInfoPresentationTest {
             state.mExitInfo[0] = " \t\n";
             equal("next road fallback", "\u25CF Main Street", render(bridge, output, state, small, 0).position);
             state.mAfterRoad[0] = repeat("\u0416", 70);
-            equal("filled-circle prefix shares UTF-8 budget", "\u25CF " + repeat("\u0416", 46),
-                render(bridge, output, state, small, 0).position);
+            String wide = render(bridge, output, state, small, 0).position;
+            check("wide Cyrillic fits pixels before wire limit", wide.startsWith("\u25CF ")
+                && wide.length() > 3 && wide.length() < 20);
             state.mAfterRoad[0] = " \t";
             equal("maneuver name fallback", "\u25CF Maneuver name", render(bridge, output, state, small, 0).position);
             state.mName[0] = null;
@@ -133,25 +134,18 @@ public final class RouteInfoPresentationTest {
             state = route();
             state.mExitInfo[0] = "  Exit\n12\t Main  Street  ";
             equal("transport whitespace", "\u2039Exit 12 Main Street\u203A", render(bridge, output, state, small, 0).position);
-            state.mExitInfo[0] = repeat("x", 120);
-            equal("long signpost keeps closing quote", "\u2039" + repeat("x", 90) + "\u203A",
+            String[] longSigns = {repeat("x", 120), repeat("\u0416", 70),
+                repeat("\u9053", 31), repeat("x", 89) + "\uD83D\uDE97z",
+                repeat("x", 86) + "\uD83D\uDE97z"};
+            for (int i = 0; i < longSigns.length; i++) {
+                state.mExitInfo[0] = longSigns[i];
+                String frame = render(bridge, output, state, small, 0).position;
+                check("every long signpost retains both quotes", frame.startsWith("\u2039") && frame.endsWith("\u203A"));
+                check("overflow is fitted in pixels, not only bytes", frame.length() < longSigns[i].length());
+            }
+            state.mExitInfo[0] = "Cafe\u0301";
+            equal("composed accent reaches the firmware font", "\u2039Caf\u00E9\u203A",
                 render(bridge, output, state, small, 0).position);
-            equal("ASCII fills all 96 UTF-8 bytes", Integer.valueOf(96),
-                Integer.valueOf(output.position.getBytes("UTF-8").length));
-            state.mExitInfo[0] = repeat("\u0416", 70);
-            equal("two-byte text quote budget", "\u2039" + repeat("\u0416", 45) + "\u203A",
-                render(bridge, output, state, small, 0).position);
-            state.mExitInfo[0] = repeat("\u9053", 31);
-            equal("three-byte text quote budget", "\u2039" + repeat("\u9053", 30) + "\u203A",
-                render(bridge, output, state, small, 0).position);
-            state.mExitInfo[0] = repeat("x", 89) + "\uD83D\uDE97z";
-            equal("do not split emoji inside quotes", "\u2039" + repeat("x", 89) + "\u203A",
-                render(bridge, output, state, small, 0).position);
-            state.mExitInfo[0] = repeat("x", 86) + "\uD83D\uDE97z";
-            equal("complete emoji fits exact quote budget", "\u2039" + repeat("x", 86) + "\uD83D\uDE97\u203A",
-                render(bridge, output, state, small, 0).position);
-            equal("supplementary character fills all 96 UTF-8 bytes", Integer.valueOf(96),
-                Integer.valueOf(output.position.getBytes("UTF-8").length));
         }
 
         RouteGuidance.State state = route();

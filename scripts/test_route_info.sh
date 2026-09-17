@@ -16,6 +16,10 @@ TEST_DIR=$(mktemp -d)
 trap 'rm -rf "$TEST_DIR"' EXIT
 CLASSPATH="$PATCH_JAR:$STOCK_JAR:$TOOLS_DIR/libs/org.osgi.framework-1.10.0.jar:$TOOLS_DIR/libs/org.osgi.util.tracker-1.5.4.jar"
 "$JDK_DIR/bin/javac" -encoding UTF-8 -cp "$CLASSPATH" -d "$TEST_DIR" \
+    "$PROJECT_DIR/tests/CurrentPositionDeliveryTest.java" \
+    "$PROJECT_DIR/tests/RouteInfoTimeoutTest.java" \
+    "$PROJECT_DIR/tests/CurrentPositionStockChainTest.java" \
+    "$PROJECT_DIR/tests/VCTextScrollTest.java" \
     "$PROJECT_DIR/tests/RouteInfoPresentationTest.java" \
     "$PROJECT_DIR/tests/RouteGuidanceDeltaTest.java" \
     "$PROJECT_DIR/tests/DistanceBargraphChainTest.java" \
@@ -27,6 +31,10 @@ CLASSPATH="$PATCH_JAR:$STOCK_JAR:$TOOLS_DIR/libs/org.osgi.framework-1.10.0.jar:$
     "$PROJECT_DIR/tests/LaneGuidanceLifecycleTest.java" \
     "$PROJECT_DIR/tests/RgiDeliveryRecoveryTest.java" \
     "$PROJECT_DIR/tests/RendererMapperDirectionTest.java"
+# No checkout resources or font files are visible through the working directory.
+# The pure runtime uses only classes and the embedded data in the built JAR.
+(cd "$TEST_DIR" && "$JDK_DIR/bin/java" -cp "$TEST_DIR:$PATCH_JAR" \
+    com.luka.carplay.rgd.VCTextScrollTest ${VC_UNICODE_TEST_DIR:+"$VC_UNICODE_TEST_DIR"})
 "$JDK_DIR/bin/java" -cp "$TEST_DIR:$CLASSPATH" RouteInfoPresentationTest
 "$JDK_DIR/bin/java" -cp "$TEST_DIR:$CLASSPATH" RendererMapperDirectionTest
 "$JDK_DIR/bin/java" -cp "$TEST_DIR:$CLASSPATH" RouteGuidanceDeltaTest
@@ -45,4 +53,9 @@ CLASSPATH="$PATCH_JAR:$STOCK_JAR:$TOOLS_DIR/libs/org.osgi.framework-1.10.0.jar:$
 "$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.LaneGuidanceTransportTest "$PROJECT_DIR/build/lane-guidance-wire.bin"
 "$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.LaneGuidanceLifecycleTest
 "$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.RgiDeliveryRecoveryTest
+"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.CurrentPositionDeliveryTest
+"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.RouteInfoTimeoutTest
+"$JDK_DIR/bin/java" -Xverify:none \
+    -cp "$TEST_DIR:$PATCH_JAR:$TOOLS_DIR/out/MU1316-combined.jar:$TOOLS_DIR/libs/org.osgi.framework-1.10.0.jar:$TOOLS_DIR/libs/org.osgi.util.tracker-1.5.4.jar" \
+    com.luka.carplay.rgd.CurrentPositionStockChainTest
 python3 "$PROJECT_DIR/tests/test_rgd_native_contract.py"

@@ -1,0 +1,33 @@
+{
+  "canonical_sha256": "7f11283d92a1ec869641553789e78acf8e55f08dea778c009513719fedbee1b4",
+  "data_bytes": 33928,
+  "data_sha256": "8b4a8d0b5b006ad2465c846170f2294bdf5696e3ec607cf1356fb8ba66e8ba22",
+  "font_size_px": 27,
+  "format": 2,
+  "inputs": {
+    "AudiTypeDisplay-Normal.ttf": "4e0f6fb1d522df648c7430b3a345f24c7f85af1e3b7ba82a07b55c316f036b5e",
+    "AudiTypeDisplay_Normal_China.lur": "2a394be127f682f9b10f00b9acc5807320cbeaae5c7dd9d10ad111712f7c3818",
+    "AudiTypeDisplay_Normal_EU_Arabic.lur": "8c6843f59c908c3794e6615a880a47f44bc9fce62d165e6328f4a010345b3b5b",
+    "AudiTypeDisplay_Normal_Japanese.lur": "628a9f47232100b62d9e278e61d95cc2bb7ee47482d8770e807865e04bebb722",
+    "AudiTypeDisplay_Normal_Korea.lur": "f0d68135e999dac107b19f39268e28d6cb89d531e6ed5d8d413144bdf90e6263",
+    "DerivedCoreProperties.txt": "24c7fed1195c482faaefd5c1e7eb821c5ee1fb6de07ecdbaa64b56a99da22c08",
+    "DerivedNormalizationProps.txt": "71fd6a206a2c0cdd41feb6b7f656aa31091db45e9cedc926985d718397f9e488",
+    "GraphemeBreakProperty.txt": "d6b51d1d2ae5c33b451b7ed994b48f1f4dc62b2272a5831e7fd418514a6bae89",
+    "GraphemeBreakTest.txt": "e2d134d2c52919bace503ebb6a551c1855fe1a1faec18478c78fff254a1793ec",
+    "LT_Univers440_88perc_Arabic.ttf": "26beb8735551f6ff1bc7c43c70657cdc361365104d21dca185bcc7a4816192c8",
+    "NormalizationTest.txt": "5019ffd530751a741900c849c0e010332f142a3612234639bd200b82138a87db",
+    "SourceHanSansJP-Regular.otf": "cd156d1efe50e67393e31e8d3f607501bed4963a8f5bd43e2818b3986f9d68e6",
+    "SourceHanSansKR-Regular.otf": "c2daeecb5e7734764d2af9ba78edaccfbfdc3b63122296a20dbb5e256bc92794",
+    "UnicodeData.txt": "2e1efc1dcb59c575eedf5ccae60f95229f706ee6d031835247d843c11d96470c",
+    "ZYHei_GB18030_c.ttf": "9f9a43a0ac80ae774929be0a2516be6cdefad047e2c151d62a593edf4d1438f3",
+    "emoji-data.txt": "2cb2bb9455cda83e8481541ecf5b6dfda66a3bb89efa3fa7c5297eccf607b72b"
+  },
+  "runtime_array_bytes": 58224,
+  "table_records": {
+    "advance_ranges": 1531,
+    "compositions": 961,
+    "decompositions": 2081,
+    "unicode_ranges": 2705
+  },
+  "unicode": "17.0.0"
+}

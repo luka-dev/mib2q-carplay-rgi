@@ -58,8 +58,10 @@ public class RouteGuidance implements CarplayBus.Listener {
     /* Guarded by presentationLock. View always writes phase 0; the steering-
      * wheel encoder press toggles it. The worker is the sole BAP publisher. */
     private int desiredInfoPhase;
+    private long infoReturnDeadline;
     private int presentationGeneration;
     private static final long PRESENTATION_RETRY_MS = 500L;
+    private static final long INFO_TIME_HOLD_MS = 20000L;
 
     private final com.luka.carplay.core.AltScreenModule.ViewAreaModeListener viewAreaModeListener =
         new com.luka.carplay.core.AltScreenModule.ViewAreaModeListener() {
@@ -359,6 +361,7 @@ public class RouteGuidance implements CarplayBus.Listener {
             infoPresentationRefreshPending = false;
             rendererViewportRefreshPending = false;
             desiredInfoPhase = 0;
+            infoReturnDeadline = 0L;
             presentationThread = new Thread(new Runnable() {
                 public void run() { presentationLoop(generation); }
             }, "carplay-rgi-presentation");
@@ -397,6 +400,7 @@ public class RouteGuidance implements CarplayBus.Listener {
             infoPresentationRefreshPending = false;
             rendererViewportRefreshPending = false;
             desiredInfoPhase = 0;
+            infoReturnDeadline = 0L;
             presentationLock.notifyAll();
             worker = presentationThread;
             presentationThread = null;
@@ -452,6 +456,7 @@ public class RouteGuidance implements CarplayBus.Listener {
 
         /* Check for disconnect */
         if (state.disconnectReason != null) {
+            resetInfoPresentation();
             if (bap != null) { bap.onStop(); bap.onShutdown(); }
             rgActive = false;
             presentationConfirmed = false;
@@ -514,6 +519,7 @@ public class RouteGuidance implements CarplayBus.Listener {
             /* route_state=0 (NO_ROUTE_SET) is authoritative -- no route means
              * nothing to show, regardless of stale visible_in_app from C hook. */
             if (state.routeState == ROUTE_STATE_NO_ROUTE_SET) wantActive = false;
+            if (!wantActive && routeWantsActive) resetInfoPresentation();
             routeWantsActive = wantActive;
 
             /* Re-check running: a frame captured by the bus dispatcher just before stop()
@@ -560,6 +566,9 @@ public class RouteGuidance implements CarplayBus.Listener {
 
         /* Send only while RG is active to avoid fighting native BAP when inactive */
         if (bap != null) {
+            // Text sent before context 80 was visible must still receive its
+            // complete first hold when a live delta confirms the presentation.
+            if (!presentationConfirmed || !bap.isPresentationReady()) bap.suspendPositionScroll();
             boolean updatePublished = bap.update(state);
             boolean rendererAndBapReady = bap.isPresentationReady();
             /* First entry to ctx 80 requires THIS cached/current RGI update to have completed.
@@ -576,6 +585,7 @@ public class RouteGuidance implements CarplayBus.Listener {
                 com.luka.carplay.core.AltScreenModule.setNavActive(confirmed);
             }
             if (updatePublished) state.clearDirty();
+            if (bap.takePositionScrollChange() || !confirmed) wakePositionScroll();
             if (!confirmed || !updatePublished) requestPresentationCheck("presentation-update-pending");
         }
     }
@@ -597,6 +607,7 @@ public class RouteGuidance implements CarplayBus.Listener {
         synchronized (presentationLock) {
             if (!running) return;
             desiredInfoPhase = 0;
+            infoReturnDeadline = 0L;
             infoPresentationRefreshPending = true;
             rendererViewportRefreshPending = true;
             presentationWake = true;
@@ -607,22 +618,21 @@ public class RouteGuidance implements CarplayBus.Listener {
     }
 
     /** Steering-wheel encoder press: toggle phase without touching the HMI/BAP caller thread. */
-    private void requestInfoModeToggle() {
+    private synchronized void requestInfoModeToggle() {
         /* Same phase toggle in both views, with all text in FctID 19:
          * smallscreen shows U+25CC + duration, fullscreen shows arrival + duration.
          * FctID 20 stays empty. The old smallscreen branch
          * flipped FctID 22's timeInfoType instead, which the cluster cannot render -
          * it has no remaining-duration widget - so it only blanked the clock. */
-        synchronized (this) {
-            if (!running || !rgActive) {
-                Log.i(TAG, "route-info toggle ignored without active RGI");
-                return;
-            }
+        if (!running || !rgActive) {
+            Log.i(TAG, "route-info toggle ignored without active RGI");
+            return;
         }
         int phase;
         synchronized (presentationLock) {
             if (!running) return;
             desiredInfoPhase ^= 1;
+            infoReturnDeadline = 0L;
             phase = desiredInfoPhase;
             infoPresentationRefreshPending = true;
             presentationWake = true;
@@ -631,47 +641,115 @@ public class RouteGuidance implements CarplayBus.Listener {
         Log.i(TAG, "route-info phase=" + phase + " queued");
     }
 
+    /** Called with the route monitor held, before ending its BAP session. */
+    private void resetInfoPresentation() {
+        synchronized (presentationLock) {
+            desiredInfoPhase = 0;
+            infoReturnDeadline = 0L;
+            infoPresentationRefreshPending = false;
+        }
+    }
+
+    /** Called with presentationLock held. No polling while road text is selected. */
+    private long infoReturnWait(long now) {
+        if (desiredInfoPhase != 1 || infoReturnDeadline == 0L) return -1L;
+        long wait = infoReturnDeadline - now;
+        // HU wall-clock correction must not leave Time selected for hours.
+        if (wait > INFO_TIME_HOLD_MS) {
+            infoReturnDeadline = now + INFO_TIME_HOLD_MS;
+            wait = INFO_TIME_HOLD_MS;
+        }
+        return wait > 0L ? wait : 0L;
+    }
+
+    private void wakePositionScroll() {
+        synchronized (presentationLock) {
+            presentationWake = true;
+            presentationLock.notifyAll();
+        }
+    }
+
+    /** No lock inversion: never take RouteGuidance.this inside presentationLock. */
+    private synchronized long drivePositionScroll() {
+        if (!running || bap == null) return -1L;
+        if (!rgActive || !presentationConfirmed || !bap.isPresentationReady()) {
+            bap.suspendPositionScroll();
+            return -1L;
+        }
+        long now = System.currentTimeMillis();
+        bap.tickPositionScroll(now);
+        return bap.positionScrollWait(now);
+    }
+
     private void presentationLoop(int generation) {
+        long retryAt = 0L;
+        long textWait = 0L;
+        boolean retryPresentation = false, retryViewport = false, retryInfo = false;
         while (true) {
-            boolean drivePresentation;
-            boolean refreshViewport;
-            int infoPhase = -1;
             synchronized (presentationLock) {
-                while (running && generation == presentationGeneration && !presentationWake) {
-                    try { presentationLock.wait(); }
-                    catch (InterruptedException e) { Thread.currentThread().interrupt(); return; }
+                if (!running || generation != presentationGeneration) return;
+                long now = System.currentTimeMillis();
+                long retryWait = retryAt == 0L ? -1L : retryAt - now;
+                // Wall-clock changes must not strand recovery for hours.
+                if (retryWait > PRESENTATION_RETRY_MS) retryWait = PRESENTATION_RETRY_MS;
+                long wait = textWait;
+                long infoWait = infoReturnWait(now);
+                if (infoWait >= 0L && (wait < 0L || infoWait < wait)) wait = infoWait;
+                if (retryWait >= 0L && (wait < 0L || retryWait < wait)) wait = retryWait;
+                if (retryAt != 0L && retryWait <= 0L) wait = 0L;
+                if (running && generation == presentationGeneration && !presentationWake && wait != 0L) {
+                    try {
+                        if (wait < 0L) presentationLock.wait();
+                        else presentationLock.wait(wait);
+                    } catch (InterruptedException e) { Thread.currentThread().interrupt(); return; }
                 }
                 if (!running || generation != presentationGeneration) return;
-                presentationWake = false;
-                drivePresentation = presentationDrivePending;
-                presentationDrivePending = false;
-                refreshViewport = rendererViewportRefreshPending;
-                rendererViewportRefreshPending = false;
-                if (infoPresentationRefreshPending) {
-                    infoPhase = desiredInfoPhase;
-                    infoPresentationRefreshPending = false;
-                }
             }
 
-            if (infoPhase >= 0) driveInfoPresentation(infoPhase);
-            boolean retryViewport = refreshViewport && !driveRendererViewport();
-            boolean retry = drivePresentation && driveCachedPresentation();
-            if (retry || retryViewport) {
+            // Never acquire the route monitor while holding presentationLock.
+            // Recheck generation AFTER acquiring it: stop/start may have retired
+            // this worker while it waited for an onFrame publication to finish.
+            synchronized (this) {
+                boolean drivePresentation, refreshViewport;
+                int infoPhase = -1;
                 synchronized (presentationLock) {
                     if (!running || generation != presentationGeneration) return;
-                    // Coalesce notifications raised by this failed replay. A
-                    // fresh external notification may still wake this bounded wait.
-                    presentationDrivePending |= retry;
-                    rendererViewportRefreshPending |= retryViewport;
                     presentationWake = false;
-                    try { presentationLock.wait(PRESENTATION_RETRY_MS); }
-                    catch (InterruptedException e) { Thread.currentThread().interrupt(); return; }
-                    if (running && generation == presentationGeneration) {
-                        presentationDrivePending |= retry;
-                        rendererViewportRefreshPending |= retryViewport;
-                        presentationWake = true;
+                    long now = System.currentTimeMillis();
+                    if (infoReturnWait(now) == 0L) {
+                        desiredInfoPhase = 0;
+                        infoReturnDeadline = 0L;
+                        infoPresentationRefreshPending = true;
                     }
+                    boolean retryDue = retryAt != 0L && (now >= retryAt || retryAt - now > PRESENTATION_RETRY_MS);
+                    drivePresentation = presentationDrivePending || (retryDue && retryPresentation);
+                    presentationDrivePending = false;
+                    refreshViewport = rendererViewportRefreshPending || (retryDue && retryViewport);
+                    rendererViewportRefreshPending = false;
+                    if (infoPresentationRefreshPending || (retryDue && retryInfo)) {
+                        // Read the latest requested mode, including route-end/View
+                        // resets. Never retain a failed old mode in the retry timer.
+                        infoPhase = desiredInfoPhase;
+                        infoPresentationRefreshPending = false;
+                    }
+                    if (retryDue) retryAt = 0L;
                 }
+
+                if (infoPhase >= 0) retryInfo = !driveInfoPresentation(infoPhase);
+                if (refreshViewport) retryViewport = !driveRendererViewport();
+                if (drivePresentation) retryPresentation = driveCachedPresentation();
+                // Apply View/OK/readiness changes before an already-due text step.
+                textWait = drivePositionScroll();
+                if (retryPresentation || retryViewport || retryInfo) {
+                    if (retryAt == 0L) retryAt = System.currentTimeMillis() + PRESENTATION_RETRY_MS;
+                    // A failed replay can notify its own readiness callback. Coalesce
+                    // only that replay request; preserve View/OK and viewport events.
+                    synchronized (presentationLock) {
+                        if (retryPresentation) presentationDrivePending = false;
+                        presentationWake = presentationDrivePending || infoPresentationRefreshPending
+                            || rendererViewportRefreshPending;
+                    }
+                } else retryAt = 0L;
             }
         }
     }
@@ -683,9 +761,18 @@ public class RouteGuidance implements CarplayBus.Listener {
     }
 
     /** Serialized with onFrame/stop; publishes cached FctID 19/20/22 immediately. */
-    private synchronized void driveInfoPresentation(int phase) {
-        if (!running || bap == null || !rgActive) return;
-        bap.refreshInfoPresentation(state, phase);
+    private synchronized boolean driveInfoPresentation(int phase) {
+        if (!running || bap == null || !rgActive) return true;
+        boolean applied = bap.refreshInfoPresentation(state, phase);
+        if (applied && phase == 1) {
+            synchronized (presentationLock) {
+                // Arm once after publication. Deltas/recovery retries do not
+                // extend Time; View or a newer OK request supersedes this one.
+                if (desiredInfoPhase == 1 && !infoPresentationRefreshPending && infoReturnDeadline == 0L)
+                    infoReturnDeadline = System.currentTimeMillis() + INFO_TIME_HOLD_MS;
+            }
+        }
+        return applied;
     }
 
     /** Serialized with onFrame/stop so cached State and BAP are never mutated concurrently. */
@@ -696,6 +783,10 @@ public class RouteGuidance implements CarplayBus.Listener {
             rgActive = bap.onStart();
             if (!rgActive) return true;
         }
+
+        // FRAME_READY can win the race with the worker's first wake. Rebase
+        // hidden text even if the worker never observed an unready renderer.
+        if (!presentationConfirmed || !bap.isPresentationReady()) bap.suspendPositionScroll();
 
         if (!bap.preparePresentation()) {
             if (presentationConfirmed) {
