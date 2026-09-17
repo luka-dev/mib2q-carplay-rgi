@@ -20,6 +20,7 @@ package com.luka.carplay.core;
 
 import com.luka.carplay.bus.CarplayBus;
 import com.luka.carplay.framework.Log;
+import com.luka.carplay.pdc.PdcSmallStageGuard;
 
 import de.audi.app.terminalmode.IContext;
 import de.audi.atip.base.IFrameworkAccess;
@@ -187,6 +188,11 @@ public final class CarPlayApp {
 
                 if (!wantActive) {
                     Log.i(TAG, "onDeactivate async apply generation=" + generation);
+                    // Disconnect need not produce another HMI/parking callback.
+                    // Restore the OPS screen and APS drawer on the lifecycle
+                    // worker, outside the hot device callback/state lock.
+                    try { PdcSmallStageGuard.carPlayDisconnected(); }
+                    catch (Throwable t) { Log.w(TAG, "OPS presentation cleanup: " + t); }
                     stopModules();
                     return;
                 }

@@ -67,6 +67,7 @@ public final class PdcExternalEventsTest {
             final Navigation navigation = (Navigation)PdcResourcePolicyTest.UNSAFE.allocateInstance(Navigation.class);
             final HMIService eventHmi = edge(HMIService.class, (n,a) -> {
                 if (n.equals("getRootWindow")) return edge(IRootWindow.class, (nn,aa) -> current);
+                if (n.equals("getScreenManager")) return screenManager;
                 if (n.equals("getEventDispatcher")) return edge(EventDispatcher.class, (nn,aa) -> null);
                 throw new AssertionError("unexpected HMI " + n);
             });

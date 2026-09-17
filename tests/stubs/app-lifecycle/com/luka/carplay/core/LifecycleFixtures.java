@@ -5,6 +5,13 @@ import de.audi.atip.base.IFrameworkAccess;
 
 /* Only external services/modules are fake; tests compile the real CarPlayApp. */
 abstract class LifecycleTestModule implements Module {
+    private static Object stateLock() {
+        try {
+            java.lang.reflect.Field field = CarPlayApp.class.getDeclaredField("lock");
+            field.setAccessible(true);
+            return field.get(null);
+        } catch (Exception e) { throw new AssertionError(e); }
+    }
     static final Object gate = new Object();
     static final int[] starts = new int[3], stops = new int[3];
     static int blockIndex = -1, entered = -1;
@@ -14,7 +21,7 @@ abstract class LifecycleTestModule implements Module {
     LifecycleTestModule(int i) { index = i; }
     public String name() { return "lifecycle-test-" + index; }
     private void checkLock() {
-        if (Thread.holdsLock(CarPlayAppLifecycleTest.stateLock)) {
+        if (Thread.holdsLock(stateLock())) {
             badLockOrder = true;
             throw new AssertionError("external module called under state lock");
         }

@@ -139,7 +139,7 @@ public class ParkingPartialPopupHandler implements IParkingPopupHandler, IPartia
     }
 
     public void deinitServiceProvider() {
-        PdcSmallStageGuard.reset();
+        PdcSmallStageGuard.parkingStopped();
         this.partialPopupServiceProvider.stopService();
     }
 

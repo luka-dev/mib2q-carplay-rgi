@@ -6,9 +6,7 @@ import de.audi.app.earlyfunc.core.parking.AbstractParkingSystemControllerCompone
 import de.audi.app.earlyfunc.core.parking.ParkingPartialPopupHandler;
 import de.audi.app.earlyfunc.core.parking.IParkingSystemController;
 import de.audi.app.earlyfunc.core.parking.ops.OPSViewModeHandler;
-import de.audi.app.earlyfunc.core.parking.ara.ARAMessageHandler;
 import de.audi.app.earlyfunc.core.parking.pla.PLAPopinHandler;
-import de.audi.app.earlyfunc.core.parking.pla.PLAMessageHandler;
 import de.audi.app.earlyfunc.core.parking.pla.IPLAInterappServiceHandler;
 import de.audi.app.car.common.app.ICarApplication;
 import de.audi.atip.msg.MsgDistributor;
@@ -31,7 +29,6 @@ import de.audi.atip.hmi.view.Screen;
 import de.audi.atip.hmi.view.IScreenManager;
 import de.audi.atip.interapp.phone.IEcallState;
 import de.audi.atip.log.LogChannel;
-import de.audi.atip.model.ICoreEarlyAppsModelBank;
 import de.audi.atip.model.ICoreTerminalModeModelBank;
 import de.audi.atip.utils.reactive.properties.*;
 import de.audi.tghu.command.*;
@@ -159,6 +156,8 @@ public final class PdcResourcePolicyTest {
     static void stockActivationLifecycle() throws Exception {
         final Fixture f = new Fixture();
         final StockParking stock = new StockParking();
+        final OpsAudioDrawerTest.Drawer drawer = new OpsAudioDrawerTest.Drawer();
+        put(stock.controller, "audioDrawerContextService", drawer.service);
         final Map<Integer,Choice> models = new HashMap<>();
         final List<Integer> messages = new ArrayList<>();
         final ParkingPartialPopupHandler[] partial = new ParkingPartialPopupHandler[1];
@@ -225,6 +224,8 @@ public final class PdcResourcePolicyTest {
             put(stock.controller, "currentDisplayContent", content);
             check(!f.restricted() && f.wizard.writes == 0 && partial[0].isPopupActive()
                 && PdcSmallStageGuard.shouldKeepCarPlayScreen(), "stock OPS activation/update lost projection");
+            check(models.get(3915).value == 1 && drawer.selected() == -1 && drawer.apsWrites == 0,
+                "stock parking producer selected APS warning during protected side OPS");
         }
         check(messages.size() == 5 && messages.get(0) == 108,
             "test bypassed stock parking producer");
@@ -234,13 +235,17 @@ public final class PdcResourcePolicyTest {
         check(messages.get(messages.size() - 1) == 107 && !partial[0].isPopupActive()
             && !PdcSmallStageGuard.shouldKeepCarPlayScreen() && f.carplay.getSmallStageType() == 1,
             "stock parking close retained popup/guard");
+        check(models.get(3915).value == 0 && drawer.selected() == -1,
+            "stock parking close did not clear APS request");
         check(closing != null && PdcSmallStageGuard.isParkingHmiDeactivation(closing),
             "real stock close invalidated its queued parking AP");
         DisplayContent reopen = new DisplayContent(); reopen.popup = 4;
         activate.invoke(stock.controller, reopen);
         check(!f.restricted() && partial[0].isPopupActive() && PdcSmallStageGuard.shouldKeepCarPlayScreen(),
             "stock parking reopen lost CarPlay");
-        System.out.println("PDC stock activation: real controller -> OPS/idle PLA -> 108 -> partial popup PASS");
+        PdcSmallStageGuard.parkingStopped();
+        check(drawer.selected() == 6001, "stock producer request was lost instead of visually masked");
+        System.out.println("PDC stock activation: real controller -> APS drawer + OPS/idle PLA -> 108 -> partial popup PASS");
     }
 
     static void partialPopupCallbackIsolation() throws Exception {
@@ -262,64 +267,6 @@ public final class PdcResourcePolicyTest {
             "matching OPS hidden callback did not clean up");
     }
 
-    static void parkingMessageBannerPolicy() throws Exception {
-        Fixture f = new Fixture();
-        IFrameworkAccess framework = proxy(IFrameworkAccess.class, (name,args) -> {
-            if (name.equals("getHMIService") || name.equals("getHmiServiceApp")) return f.hmi;
-            throw new AssertionError("unexpected parking message framework " + name);
-        });
-        ICarApplication app = proxy(ICarApplication.class, (name,args) -> {
-            if (name.equals("getFrameworkAccess")) return framework;
-            throw new AssertionError("unexpected parking message application " + name);
-        });
-        final OPSViewModeHandler opsView = new OPSViewModeHandler(null, LOG);
-        IParkingSystemController controller = proxy(IParkingSystemController.class, (name,args) -> {
-            if (name.equals("getOPSViewModeHandler")) return opsView;
-            throw new AssertionError("unexpected parking message controller " + name);
-        });
-        PhysicalPla pla = (PhysicalPla)UNSAFE.allocateInstance(PhysicalPla.class);
-        PLAMessageHandler plaHandler = new PLAMessageHandler(app, controller, pla, LOG,
-            2100044, 2100010, 2100036, 2100035, 2100040, 2100038);
-        ARAMessageHandler araHandler = new ARAMessageHandler(app, controller, LOG, 2100071, 2100009);
-
-        plaHandler.showMessage(7);
-        araHandler.showMessage(1);
-        check(f.shownPartialPopups.equals(Arrays.asList(2100044, 2100071))
-            && f.visiblePartialPopups.contains(2100044) && f.visiblePartialPopups.contains(2100071),
-            "stock parking messages did not show before side OPS");
-
-        f.pure();
-        check(f.visiblePartialPopups.isEmpty()
-            && f.removedPartialPopups.containsAll(Arrays.asList(2100044, 2100071)),
-            "already-visible parking warning survived side OPS activation");
-        plaHandler.showMessage(8);
-        araHandler.showMessage(2);
-        check(f.shownPartialPopups.size() == 2 && f.visiblePartialPopups.isEmpty(),
-            "parking warning reappeared over CarPlay + side OPS");
-
-        // Model a FwHMI show command that was queued just before the guard and
-        // executes after its immediate removal pass. The shared timeout worker
-        // must remove it without waiting for another DSI message.
-        f.hmi.showPartialPopup(0, 2100010);
-        check(f.visiblePartialPopups.contains(2100010), "queued-show fixture did not become visible");
-        Thread.sleep(250);
-        check(!f.visiblePartialPopups.contains(2100010),
-            "queued parking warning survived delayed guard sweep");
-
-        f.target(4, 2);
-        plaHandler.updateMessage();
-        araHandler.updateMessage();
-        check(f.shownPartialPopups.equals(Arrays.asList(2100044, 2100071, 2100010, 2100044, 2100071))
-            && f.visiblePartialPopups.contains(2100044) && f.visiblePartialPopups.contains(2100071),
-            "latest parking warnings were not restored for non-side-OPS parking");
-        check(f.hmiChoices.get(ICoreEarlyAppsModelBank.PARKING_PLA_MESSAGE_ID_CHOICE).value == 8
-            && f.hmiChoices.get(ICoreEarlyAppsModelBank.PARKING_ARA_MESSAGE_ID_CHOICE).value == 2,
-            "suppression lost a latest parking message ID");
-        plaHandler.deinit();
-        araHandler.deinit();
-        PdcSmallStageGuard.parkingStopped();
-        System.out.println("PDC banner policy: direct sweep + PLA/ARA source guards PASS");
-    }
     static void callsBefore(String type, String method, String early, String late) throws Exception {
         ClassNode node = new ClassNode(); new ClassReader(type).accept(node, 0);
         for (MethodNode m : node.methods) if (m.name.equals(method)) {
@@ -381,28 +328,11 @@ public final class PdcResourcePolicyTest {
         final LoggingPropertyFactory props = LoggingPropertyFactory.create();
         final Property muRvc = props.createProperty("muRvc", Boolean.FALSE);
         final Choice wizard = new Choice(), blocked = new Choice();
-        final List<Integer> shownPartialPopups = Collections.synchronizedList(new ArrayList<>());
-        final List<Integer> removedPartialPopups = Collections.synchronizedList(new ArrayList<>());
-        final Set<Integer> visiblePartialPopups = Collections.synchronizedSet(new HashSet<>());
-        final Map<Integer,Choice> hmiChoices = new HashMap<>();
         final Property device = props.createProperty("device", new TMDevice(
             new TMDeviceID("fixture", SmartphoneManager.SmartphoneType.CARPLAY)));
         final HMIService hmi = proxy(HMIService.class, (name,args) -> {
             if (name.equals("getRootWindow")) return proxy(IRootWindow.class, (n,a) -> current);
             if (name.equals("getScreenManager")) return screenManager;
-            if (name.equals("showPartialPopup")) {
-                Integer id = (Integer)args[1];
-                shownPartialPopups.add(id); visiblePartialPopups.add(id); return null;
-            }
-            if (name.equals("removePartialPopup")) {
-                Integer id = (Integer)args[1];
-                removedPartialPopups.add(id); visiblePartialPopups.remove(id); return null;
-            }
-            if (name.equals("getChoiceModel")) {
-                Integer id = (Integer)args[0];
-                if (!hmiChoices.containsKey(id)) hmiChoices.put(id, new Choice());
-                return hmiChoices.get(id).model;
-            }
             throw new AssertionError("unexpected HMI call " + name);
         });
         final HighPriorityResourceTracker tracker;
@@ -545,7 +475,6 @@ public final class PdcResourcePolicyTest {
         stockParkingClassification();
         stockActivationLifecycle();
         partialPopupCallbackIsolation();
-        parkingMessageBannerPolicy();
 
         f = new Fixture(); f.pure();
         PdcSmallStageGuard.ParkingTransition timedOut = PdcSmallStageGuard.captureHmiDeactivation();

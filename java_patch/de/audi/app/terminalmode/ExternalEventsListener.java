@@ -120,6 +120,13 @@ public class ExternalEventsListener
                                         "<<- [%1.actionProxyCallPerformed] AP_METHOD_HMI_ACTIVATED",
                                         LOGCLASS
                                     );
+                                    if (CarPlayApp.isActive()
+                                        && !ExternalEventsListener.this.stateHandler.getCurrentState()
+                                            .isAccessRestricted(Resource.SCREEN)) {
+                                        PdcSmallStageGuard.carPlayScreenActivated(
+                                            ExternalEventsListener.this.hmiService
+                                        );
+                                    }
                                     if (ExternalEventsListener.this.bigStage) {
                                         ExternalEventsListener.this.hmiActivated();
                                     } else if (CarPlayApp.isActive()
@@ -240,6 +247,14 @@ public class ExternalEventsListener
     }
 
     private void hmiDeactivated() {
+        // SMALL_STAGE can precede AP 1001 when returning to CarPlay with OPS
+        // already open. Keep that valid guard; revoke it for a real takeover
+        // even when an inactive app/restricted SCREEN short-circuited callers.
+        if (!CarPlayApp.isActive()
+            || this.stateHandler.getCurrentState().isAccessRestricted(Resource.SCREEN)
+            || !PdcSmallStageGuard.shouldKeepCarPlayScreen()) {
+            PdcSmallStageGuard.reset();
+        }
         this.context.getKeyEventsHandler().deactivate();
         this.context
             .getCommandListHelper()

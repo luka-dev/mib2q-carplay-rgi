@@ -4,32 +4,145 @@
 Платформа: Audi MHI2Q, MU1316  
 Исходники для анализа: `/Users/luka/Desktop/AUDI_2/Tools/jxe2jar/out/MU1316-combined-vf`
 
-Текущий статус, 2026-09-16: **пользователь подтвердил на автомобиле, что правый OPS popup теперь работает и CarPlay остаётся видимым.** Подтверждение получено фотографией экрана; точный runtime build ID из лога при этом не снимался. Ниже сохранена история предыдущих неудачных кандидатов и причина окончательного исправления.
+Текущий статус, 2026-09-17: **CarPlay остаётся видимым рядом с правым OPS popup — исправлено; для нижней предупреждающей полоски собран новый APS-кандидат, проверка на автомобиле ещё не выполнена.** Сохранение CarPlay пользователь подтвердил фотографией 16 сентября; 17 сентября отдельно уточнил, что попытка убрать нижнюю полоску не удалась. Точный runtime build ID из этих наблюдений не снимался. Ниже сохранена история кандидатов; подтверждение парковочных переходов не означает успешного скрытия полоски.
 
 ## Нижняя строка `Check surroundings!`
 
-Строка не является частью правого OPS popup `2100008`. Её отдельно рисует один
-из нижних parking-message partial popup. Первая реализация перехватывала только
-`PLAMessageHandler` и держала один static `activeHandler`; проверка на автомобиле
-2026-09-16 показала, что строка всё равно остаётся. Значит, одной ссылки на
-предполагаемый PLA producer недостаточно: уже поставленная в очередь команда
-показа и ARA-вариант нижнего слота обходили этот путь.
+**Открыто до проверки на HU:** полоса осталась после прежней попытки
+`efc3020`. Новый кандидат `2e536a6-ops-aps-drawer-r2` воздействует на отдельный
+источник APS; результаты локальной проверки перечислены ниже.
 
-Текущая реализация сохраняет штатный выбор message ID, но закрывает обе цепочки
-источника (`PLAMessageHandler` и `ARAMessageHandler`) только пока guard
-подтверждает CarPlay + боковой pure OPS. Сам guard дополнительно снимает все
-восемь штатных PLA/ARA message popup ID через тот же `HMIService`, который
-защищает активный TerminalMode screen. Короткие повторные снятия выполняются в
-уже существующем worker таймаута show-request и закрывают команду, успевшую
-перейти в очередь FwHMI до активации guard. При камере, активном PLA/ARA или
-закрытии OPS guard выключается; сохранённый `currentMessageID` снова идёт по
-штатному `updateMessage`.
+### Найденный отдельный источник: APS Audio Drawer, 2026-09-17
 
-Host regression проверяет показ PLA и ARA до OPS, немедленное удаление при его
-появлении, отложенную уже queued-команду, подавление повторного DSI message и
-восстановление последних сообщений после
-camera/PLA takeover. Изменение собрано и прошло linkage audit для
-`MU1316-final.jar` и `MU1316-combined.jar`; на автомобиль ещё не выгружалось.
+На новой фотографии видна центральная нижняя плашка с предупреждающим
+треугольником. Поиск точного текста в `lang_data.zip` штатного MU1316 дал
+системные label ID **3261** и **3928** (`Check surroundings!`). Они используются
+в `SystemScreenBag6.aPSAUDIO()` и `aPSAUDIOREDUCED()` соответственно:
+
+- screen/widget **182** и **190**;
+- `EntertainmentDrawerContentController`, content **6001 / 6002**;
+- иконка **925**, заголовок высотой **49**, ширина панели **460–468**;
+- `setFixedColorScheme(4)` и `setHeaderVisible(true)`.
+
+Это отдельное системное содержимое нижнего audio drawer. Цепочка в stock:
+
+```
+AbstractParkingSystemControllerComponent.updateInterappClients(active)
+  -> private updateAudioDrawerContext(active)
+  -> AudioDrawerContext.SOURCE_APS, ACTIVE / APS_ACTIVE_HIGH_PRIO
+  -> highest-priority request column 0
+  -> EntertainmentDrawerContentManager: content 6001 / 6002
+  -> SystemScreenBag6: APS AUDIO / APS AUDIO REDUCED
+```
+
+`updateAudioDrawerContext()` также меняет choice model **3915**. Прежнее
+`removePartialPopup()` для восьми ID `21000xx` эту ветку не затрагивает.
+Предположение, что видимая на фото строка обязательно принадлежит PLA/ARA
+message-popup, было неверным основанием для предыдущей правки. Наличие
+параллельных PLA/ARA сообщений не исключается.
+
+Источники: локальная прошивка
+`Firmwares/HU/MHI2Q_US_AUG22_P5087_MU1316/extracted/app/eso/hmi/lsd/jars/lang_data.zip`
+и `Tools/jxe2jar/out/MU1316-vf/`: `SystemScreenBag6.java:2800,3564`,
+`EntertainmentDrawerContentManager.java:105`,
+`AbstractParkingSystemControllerComponent.java:1221`.
+Тот же текст встречается в phone labels 302185/302245; принадлежность
+системной APS-плашки установлена по её отдельной цепочке, а не только строке.
+
+### Исправление APS drawer
+
+`AudioDrawerContextImpl` заменён минимально: на переднем MU только колонка
+`SOURCE_APS` (**0**) модели **538** проходит через `OpsAudioDrawerPolicy`.
+При защищённом CarPlay + pure OPS в модель передаётся `INACTIVE`; последнее
+штатное значение сохраняется отдельно. Снятие защиты сразу публикует это
+значение, включая `APS_ACTIVE_HIGH_PRIO` или уже полученный `INACTIVE`.
+Поэтому повторные запросы парковочного контроллера не возвращают полоску,
+а HOME, камера, активный PLA/ARA, disconnect, teardown и отклонённый
+show-request не оставляют штатную APS-панель навсегда скрытой.
+
+Фильтр включается существующим `PdcSmallStageGuard` до stock activation,
+который публикует APS ещё до interapp message 108. Он выключается при
+освобождении защищённого экрана. `ExternalEventsListener` дополнительно
+отзывает защиту при настоящем уходе из CarPlay, включая ветки с уже
+неактивным приложением или ограниченным SCREEN. Промежуточный SMALL_STAGE
+при возврате в CarPlay до AP 1001 сохраняет действующую защиту.
+
+Изменяется только визуальная модель audio drawer. Choice **3915**, OPS,
+звуковые ресурсы парктроника и остальные колонки drawer остаются штатными.
+На заднем MU фильтр не устанавливается. Обновления одной модели
+сериализованы без удержания policy-lock при вызове model callbacks;
+повторные и пересекающиеся запросы сохраняют последнее состояние.
+
+### Повторная проверка, ревизия r2
+
+Дополнительные сценарии выявили два пропуска предыдущей проверки:
+
+1. **Disconnect без AP 1002/закрытия popup.** Настоящий lifecycle worker
+   `CarPlayApp` завершался, но APS-фильтр оставался включённым до следующего
+   HMI-события. Теперь worker вызывает `carPlayDisconnected()` и восстанавливает
+   экран/панель вне горячего device callback. Повторная проверка `isActive()`
+   под монитором guard не даёт уже отправленной старой cleanup-команде
+   сбросить OPS новой сессии при быстром переподключении.
+2. **HOME → CarPlay с всё ещё открытым OPS без новой DSI notification.**
+   Прежний тест сам повторно публиковал parking content и тем самым скрывал
+   пропущенный переход. Теперь подтверждённая видимость OPS хранится отдельно
+   от защиты CarPlay screen, а AP 1001 восстанавливает защиту только для
+   актуального pure OPS и разрешённого CarPlay screen. Уже видимый popup не
+   получает таймаут ожидания нового visible callback. Hide, unregistration,
+   hidden registration snapshot и teardown parking service снимают признак
+   видимости; camera/ARA, активный PLA, pending HOME и SCREEN restriction
+   не позволяют повторно включить защиту.
+
+Оба первоначальных сбоя воспроизведены до исправления; логи
+`review-before.log` и `review-return-before.log` сохранены в каталоге кандидата.
+Отдельный детерминированный тест блокирует старую cleanup на мониторе guard,
+публикует новую сессию и проверяет, что запоздалое завершение не снимает её
+защиту (`review-reconnect-before.log` фиксирует сбой до добавления проверки).
+`CarPlayPdcLifecycleTest` исполняет настоящий `CarPlayApp`, guard и drawer
+service; подменены только внешние модули/транспорт и физический HMI.
+
+Также проверен настоящий stock `ListModel`, которым `SystemModelBank`
+создаёт модель 538: все 22 не-APS колонки сохраняют исходные значения.
+Расширены проверки возврата, в том числе OPS, впервые открытый вне CarPlay,
+и удержание защиты после трёх секунд без повторного visible callback.
+
+### Удалённые попытки
+
+Удалены replacement-классы `PLAMessageHandler` и `ARAMessageHandler`,
+список восьми PLA/ARA popup ID и повторные `removePartialPopup()` из worker
+таймаута. Эти пути не управляли обнаруженной APS-плашкой. PLA/ARA message
+handlers снова берутся из stock. Сохранён трёхсекундный таймаут отвергнутого
+показа OPS, нужный для освобождения CarPlay screen.
+
+Прежние host-тесты проверяли только предполагаемые PLA/ARA popup и потому
+не доказывали исчезновение строки на фотографии. Их заменяет проверка
+реального сервиса и штатного выбора APS content.
+
+### Локальная проверка и границы результата
+
+- `scripts/test_pdc.sh`: stock parking controller → `SOURCE_APS` → модель
+  **538** → штатный `EntertainmentDrawerContentManager`. В protected OPS
+  APS content **6001/6002** не выбирается; после снятия фильтра выбирается
+  последнее запрошенное состояние. Проверены повторные/high-priority
+  запросы, телефонный drawer, поздняя инициализация/замена сервиса, rear MU,
+  HOME, pending HOME, камера, PLA, disconnect, deinit, закрытие и таймаут,
+  reentrant/concurrent callbacks, возврат без новой DSI notification,
+  disconnect без HMI-события и гонка cleanup с новым подключением.
+- Два stock-first negative control воспроизводят отдельно захват Main Wizard
+  и выбор APS-предупреждения **6001** поверх CarPlay.
+- `scripts/test_java_transports.sh`: сборка shipping Java 1.4, транспорт,
+  ввод, AltScreen startup, lifecycle и полный PDC regression.
+- `scripts/audit_java_stock.sh`: linkage с `MU1316-final.jar` и
+  `MU1316-combined.jar` + настоящей J9 class library, **0 ошибок**.
+
+Build ID: `2e536a6-ops-aps-drawer-r2`. Артефакт: `build/carplay_hook.jar`;
+логи повторной полной проверки: `build/pdc-aps-20260917/review-java-tests.log`
+и `review-audit.log`; снимок и manifest — в том же каталоге.
+Это локальная проверка Java-цепочки, не подтверждение картинки на автомобиле.
+SSH на `10.173.189.1` при разборе дал timeout; новый JAR пока не установлен,
+HU не перезапускался. Следующий шаг — установка кандидата и проверка
+исчезновения именно нижней `Check surroundings!` при боковом OPS, затем
+возврата штатного отображения при HOME/камере и повторном входе в CarPlay.
 
 ## Аудит порядка событий AP и жизненного цикла, 2026-09-15
 
