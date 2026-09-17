@@ -4,6 +4,8 @@
  * The H.264 DATA path is separate (libairplay hook -> altscreen_render :19831).  This is the
  * CONTROL path: altscreen_render connects here (client) and sends 4-byte events reporting whether
  * the CarPlay 111 cluster video is flowing (0x81 VIDEO_ON / 0x82 VIDEO_OFF).
+ * Its control loop starts after the first PRISM frame is posted, so either valid event also
+ * confirms surface readiness. VIDEO_OFF is a ready waiting surface, not an unready renderer.
  *
  * VIDEO_ON is also a data-plane fallback for the cluster context.  TMDev can publish a transient
  * INVALID while dio restarts and fail to publish a matching activation afterwards even though the
@@ -201,9 +203,11 @@ final class AltscreenControlServer {
                     int evt = pkt[0] & 0xFF;
                     if (evt == EVT_VIDEO_ON) {
                         Log.i(TAG, "VIDEO_ON generation=" + generation);
+                        AltScreenModule.setRendererReady(true);
                         AltScreenModule.setVideoAvailable(true);
                     } else if (evt == EVT_VIDEO_OFF) {
                         Log.i(TAG, "VIDEO_OFF generation=" + generation);
+                        AltScreenModule.setRendererReady(true);
                         AltScreenModule.setVideoAvailable(false);
                     }
                 }
@@ -223,6 +227,7 @@ final class AltscreenControlServer {
                     }
                 }
                 if (owned) {
+                    AltScreenModule.setRendererReady(false);
                     AltScreenModule.setVideoAvailable(false);
                     Log.i(TAG, "altscreen_render disconnected generation=" + generation);
                 }

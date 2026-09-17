@@ -20,11 +20,14 @@ public final class AltscreenControlTransportTest {
         final CountDownLatch closing = new CountDownLatch(1), release = new CountDownLatch(1), closed = new CountDownLatch(1);
         final InputStream input;
         Peer(boolean old) {
+            this(old, 0x81);
+        }
+        Peer(boolean old, final int event) {
             delayedClose = old;
             input = old ? new ByteArrayInputStream(new byte[0]) : new InputStream() {
                 int at;
                 public int read() {
-                    if (at < 4) return at++ == 0 ? 0x81 : 0;
+                    if (at < 4) return at++ == 0 ? event : 0;
                     try { if (!closed.await(3, TimeUnit.SECONDS)) throw new AssertionError("peer tail timeout"); }
                     catch (InterruptedException e) { throw new AssertionError(e); }
                     return -1;
@@ -58,15 +61,23 @@ public final class AltscreenControlTransportTest {
         Peer old = new Peer(true), fresh = new Peer(false);
         Object lock = field("LOCK").get(null);
         field("run").setBoolean(null, true);
+        Peer waiting = new Peer(false, 0x82);
+        synchronized (lock) { field("client").set(null, waiting); field("clientGeneration").setInt(null, 0); }
+        Thread waitingReader = serve(waiting, 0);
+        long deadline = System.currentTimeMillis() + 3000;
+        while (!AltScreenModule.ready && System.currentTimeMillis() < deadline) Thread.sleep(5);
+        check(AltScreenModule.ready && !AltScreenModule.video, "VIDEO_OFF must expose the posted PRISM frame");
+        waiting.close(); waitingReader.join(3000);
+        check(!waitingReader.isAlive() && !AltScreenModule.ready, "current disconnect left stale readiness");
         synchronized (lock) { field("client").set(null, old); field("clientGeneration").setInt(null, 1); }
         Thread oldReader = serve(old, 1); await(old.closing);
         synchronized (lock) { field("client").set(null, fresh); field("clientGeneration").setInt(null, 2); }
         Thread newReader = serve(fresh, 2); await(AltScreenModule.shown);
         old.release.countDown(); oldReader.join(3000);
-        check(!oldReader.isAlive() && AltScreenModule.video, "old disconnect hid new video");
+        check(!oldReader.isAlive() && AltScreenModule.video && AltScreenModule.ready, "old disconnect hid new peer");
         fresh.close(); newReader.join(3000);
-        check(!newReader.isAlive() && !AltScreenModule.video, "current disconnect did not hide video");
+        check(!newReader.isAlive() && !AltScreenModule.video && !AltScreenModule.ready, "current disconnect did not hide video/readiness");
         field("run").setBoolean(null, false);
-        System.out.println("AltscreenControlTransportTest: delayed old disconnect cannot override fresh VIDEO_ON PASS");
+        System.out.println("AltscreenControlTransportTest: PRISM readiness and stale-peer isolation PASS");
     }
 }

@@ -30,14 +30,27 @@ NAVSD из `INITIALIZING` в ready независимо от готовност�
 переключает route-guidance gate, а scale/altitude скрываются только на время этого
 route-guidance takeover.
 
-Контекст 81 запускается сразу после появления `DisplayManager` и намеренно не
-ждёт stock `CombiBAPServiceNavi`: видеоплоскость 99 от него не зависит. На cold
+Ownership intent включается сразу после появления `DisplayManager` и намеренно не
+ждёт stock `CombiBAPServiceNavi`: видеоплоскость 99 от него не зависит. Физический
+переход в 81/80 ждёт первый `VIDEO_OFF` или `VIDEO_ON` от текущего renderer:
+его control loop запускается только после успешной публикации первого PRISM-кадра.
+`VIDEO_OFF` здесь означает готовую заставку без видео. До этого worker сохраняет
+предыдущий контекст; перехват руля и NAVSD gate уже действуют. Disconnect renderer
+сбрасывает readiness, а остановка CarPlay возвращает 74 даже до готовности renderer.
+На cold
 boot `ClusterService.setCombiBAPService()` сообщает точный OSGi availability edge
 в `AltScreenNavStatusGate`, и wrapper подключается позже без задержки altScreen.
 При disconnect gate сначала отдаёт накопленное состояние INITIALIZING/ready, затем
 `ClusterService.refreshInitializingScreenAfterCarPlay()` заново вычисляет
 штатный `INITIALIZING/NORMAL` по текущему состоянию Navigation. Глобальный
 `DSIResponseContainer.navstateOfOperation` CarPlay не подменяет.
+
+Cold boot на HU 2026-09-16: пользователь наблюдал около 1,5 с чёрного экрана;
+`Screen/EGL open` занял 1349 мс, и Java выбрала 81 ещё до подключения renderer.
+Первый запуск OMX отдельно занял 755 мс. Новый порядок исключает выбор пустой
+плоскости во время инициализации EGL, без минимального времени показа заставки.
+Host regression проверяет cold/warm startup, stop до готовности и потерю renderer
+во время bounce; визуальную длительность нужно подтвердить после следующего reboot.
 
 ## Порядок включения maneuver-контекста
 

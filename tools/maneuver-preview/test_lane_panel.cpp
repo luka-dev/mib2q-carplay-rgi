@@ -1,13 +1,28 @@
+#include <cmath>
+#include <cstdlib>
+#include <cassert>
+#include <cstdio>
+#include <cstring>
+#include <initializer_list>
 #include "lane_panel.h"
 #include "lane_fixtures.h"
 #include "fixtures.h"
 #include "render.h"
-#include <cassert>
-#include <cmath>
-#include <cstdio>
-#include <cstring>
-#include <initializer_list>
+#ifdef PLATFORM_QNX
+#include <signal.h>
+#include <unistd.h>
+static void timeout(int) {
+    const char message[]="Lane panel QNX CPU test TIMEOUT\n";
+    (void)write(2,message,sizeof(message)-1);
+    _exit(90);
+}
+#endif
 int main() {
+#ifdef PLATFORM_QNX
+    // Catch target-only math-template recursion without leaving a spinning probe.
+    signal(SIGALRM,timeout);alarm(10);
+    setvbuf(stdout,nullptr,_IONBF,0);
+#endif
     cr_lane_panel_layout_t small,wide;
     cr_lane_guidance_t g=sample_lanes(0),original=g;
     cr_lane_panel_layout(&small,&g,210);cr_lane_panel_layout(&wide,&g,328);

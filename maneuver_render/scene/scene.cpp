@@ -26,11 +26,11 @@ int cr_scene_project_bounds(const cr_scene_t *s,const float *m,float *b,float *e
         float sx=(1+(m[0]*x+m[4]*v[1]+m[8]*z+m[12])/w)*164;
         float sy=(1-(m[1]*x+m[5]*v[1]+m[9]*z+m[13])/w)*90.5f;
         if(!std::isfinite(sx) || !std::isfinite(sy))return 0;
-        b[0]=std::fmin(b[0],sx);b[1]=std::fmin(b[1],sy);
-        b[2]=std::fmax(b[2],sx);b[3]=std::fmax(b[3],sy);
+        b[0]=::fminf(b[0],sx);b[1]=::fminf(b[1],sy);
+        b[2]=::fmaxf(b[2],sx);b[3]=::fmaxf(b[3],sy);
         if(head) {
-            exit[0]=std::fmin(exit[0],sx);exit[1]=std::fmin(exit[1],sy);
-            exit[2]=std::fmax(exit[2],sx);exit[3]=std::fmax(exit[3],sy);
+            exit[0]=::fminf(exit[0],sx);exit[1]=::fminf(exit[1],sy);
+            exit[2]=::fmaxf(exit[2],sx);exit[3]=::fmaxf(exit[3],sy);
         }
     }
     return b[0]<=b[2] && exit[0]<=exit[2];

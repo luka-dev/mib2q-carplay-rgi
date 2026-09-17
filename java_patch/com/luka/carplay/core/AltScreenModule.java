@@ -4,7 +4,8 @@
  * TWO custom contexts: dc[81] = {99} is the plain CarPlay cluster map and dc[80] adds the
  * maneuver popup/backing planes {98,101,102}.  Every new CarPlay session starts in 81.  Context
  * 80 is permitted only after RouteGuidance has published its current RGI state through BAP and
- * maneuver_render has confirmed a rendered frame.  Disconnect restores stock context 74.
+ * maneuver_render has confirmed a rendered frame. Takeover waits for the renderer's first
+ * posted PRISM/video frame; ownership intent still starts immediately. Disconnect restores 74.
  *
  * The CarPlay supervisor keeps both renderers alive for the dio_manager generation, so windows
  * 98/99 exist throughout the session. The only connected-session transition is 81 -> 80 after
@@ -138,6 +139,11 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
      * stream is already decoding; without this fallback the module remains on
      * stock ctx 74 while displayable 99 renders invisibly. */
     private static volatile boolean videoAvailable = false;
+    /* Independent of videoAvailable: VIDEO_OFF still has a posted PRISM frame.
+     * The native control loop starts only after av_sink_open posts that frame.
+     * Keep the existing context until then, rather than selecting an empty 99
+     * during cold Screen/EGL initialization. Guarded by LOCK. */
+    private static boolean rendererReady;
     private static volatile boolean navActive = false;
     private static boolean navHidePending;
     private static int navHideGeneration;
@@ -323,6 +329,16 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
         republish();
     }
 
+    /** Surface readiness from the current renderer control peer, not stream activity. */
+    static void setRendererReady(boolean ready) {
+        synchronized (LOCK) {
+            if (rendererReady == ready) return;
+            rendererReady = ready;
+            LOCK.notifyAll();
+        }
+        Log.i(TAG, "rendererReady=" + ready);
+    }
+
     /** Presentation latch, not merely route intent.  RouteGuidance may set true only after the
      *  current RGI delta has been published through BAP and maneuver_render has confirmed a frame.
      *  The stock KDK-visible hint never drives this latch. */
@@ -448,7 +464,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
             }
             LOCK.notifyAll();
         }
-        Log.i(TAG, "ready (DisplayManager acquired, session reset -> ctx 81)");
+        Log.i(TAG, "ready (DisplayManager acquired, ctx 81 pending renderer frame)");
         return true;
     }
 
@@ -503,7 +519,10 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
             refreshClusterStyleFromStock("context-reconcile");
             int target; IDisplayManager d; boolean reconcileOnly = false;
             synchronized (LOCK) {
-                while (dm == null) {
+                /* Readiness gates only physical takeover. Ownership, input pinning
+                 * and the stock NAVSD bypass remain active from session start.
+                 * A stop must still restore stock if the renderer never came up. */
+                while (dm == null || (isConnected() && !rendererReady)) {
                     try { LOCK.wait(); } catch (InterruptedException e) { /* persistent worker */ }
                 }
                 if (desiredCtx == currentCtx) {
@@ -576,7 +595,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
                     /* Coalesce: if the desired target or the DM changed during the settle, abandon THIS
                      * switch (cluster is on the bounce ctx) and let the loop apply the latest desired. */
                     synchronized (LOCK) {
-                        if (dm != d || desiredCtx != ctx) {
+                        if (dm != d || desiredCtx != ctx || !rendererReady) {
                             currentCtx = -1;
                             Log.i(TAG, "switch(" + ctx + ") superseded during bounce → " + desiredCtx);
                             return;

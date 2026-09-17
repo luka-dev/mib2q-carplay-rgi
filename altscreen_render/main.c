@@ -525,7 +525,8 @@ int main(void) {
     __sync_synchronize();
     fprintf(stderr, "altscreen_render: listening on %s:%d\n", ALTAV_HOST, ALTAV_PORT);
 
-    /* Control channel to Java/lsd — reports video on/off so Java flips setVideoAvailable(). */
+    /* Start only after av_sink_open has posted PRISM. Java treats the first
+     * VIDEO_ON/OFF as surface readiness before selecting cluster plane 99. */
     altctl_start(decode_video_ready);
 
     while (g_running) {

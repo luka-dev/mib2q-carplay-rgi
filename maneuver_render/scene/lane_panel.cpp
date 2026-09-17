@@ -7,6 +7,8 @@
 #include "../lane_panel.h"
 #include "../render.h"
 
+// QNX 6.5 xtgmath float fmin/fmax templates recurse with GCC 8.5.
+// Use the explicit libm float entry points throughout layout, framing and draw.
 namespace {
 constexpr float Pitch=36, Height=CR_LANE_PANEL_HEIGHT, Padding=8, Bottom=0;
 constexpr double FadeSeconds=.25;
@@ -57,7 +59,7 @@ void stroke(Mesh &mesh,const Point *p,int n,float width,float cx) {
                            Point{p[1].x-p[0].x,p[1].y-p[0].y});
         Point after=unit(i+1<n?Point{p[i+1].x-p[i].x,p[i+1].y-p[i].y}:before);
         Point normal=unit({-before.y-after.y,before.x+after.x});
-        float scale=width*.5f/std::fmax(.55f,normal.x*(-after.y)+normal.y*after.x);
+        float scale=width*.5f/::fmaxf(.55f,normal.x*(-after.y)+normal.y*after.x);
         left[i]={cx+p[i].x+normal.x*scale,p[i].y+normal.y*scale};
         right[i]={cx+p[i].x-normal.x*scale,p[i].y-normal.y*scale};
     }
@@ -147,7 +149,7 @@ void cr_lane_panel_layout(cr_lane_panel_layout_t *out,const cr_lane_guidance_t *
             if(bucket(lane.angles[j])!=Unknown)drawable=true;
     }
     if(!drawable)return; // Like HUD: an entirely unknown event is not an active panel.
-    int capacity=(int)std::floor((std::fmin(w,328.f)-Padding-8)/Pitch);
+    int capacity=(int)std::floor((::fminf(w,328.f)-Padding-8)/Pitch);
     if(capacity>CR_LANE_CAPACITY)capacity=CR_LANE_CAPACITY;
     int n=lanes->count,order[CR_LANE_CAPACITY];bool positions=true;
     for(int i=0;i<n;++i) {
@@ -213,7 +215,7 @@ int cr_lane_panel_animating(const cr_lane_panel_t *p,double now) {
 void cr_lane_panel_draw(const cr_lane_panel_t *p,cr_rect_t visible,double now) {
     if(!p || !p->current.count || visible.h<Height+Bottom || visible.w<=0)return;
     float t=(float)((now-p->changed)/FadeSeconds);
-    t=easing(std::fmax(0.f,std::fmin(1.f,t)));
+    t=easing(::fmaxf(0.f,::fminf(1.f,t)));
     float opacity=p->previous.count?1:t;
     float cx=visible.x+visible.w*.5f,top=visible.y+visible.h-Bottom-Height;
     // The VC crop ends at y=180; the source texture has one further row.
@@ -258,16 +260,16 @@ void cr_lane_panel_framing(cr_lane_panel_t *p,const cr_scene_t *current,
                 float box[4],head[4];
                 if(!cr_scene_project_bounds(scenes[i],m,box,head))continue;
                 valid=true;
-                for(int j=0;j<2;++j) {b[j]=std::fmin(b[j],box[j]);b[j+2]=std::fmax(b[j+2],box[j+2]);}
+                for(int j=0;j<2;++j) {b[j]=::fminf(b[j],box[j]);b[j+2]=::fmaxf(b[j+2],box[j+2]);}
             }
             float x=0,y=0,overflow=0;
             if(valid) {
                 float *offsets[]={&x,&y};
                 for(int axis=0;axis<2;++axis) {
                     float lo=safe[axis]-b[axis],hi=safe[axis+2]-b[axis+2];
-                    *offsets[axis]=lo<=hi?std::fmax(lo,std::fmin(0.f,hi)):(lo+hi)*.5f;
-                    *offsets[axis]=std::fmax(-36.f,std::fmin(36.f,*offsets[axis]));
-                    overflow+=std::fmax(0.f,lo-*offsets[axis])+std::fmax(0.f,*offsets[axis]-hi);
+                    *offsets[axis]=lo<=hi?::fmaxf(lo,::fminf(0.f,hi)):(lo+hi)*.5f;
+                    *offsets[axis]=::fmaxf(-36.f,::fminf(36.f,*offsets[axis]));
+                    overflow+=::fmaxf(0.f,lo-*offsets[axis])+::fmaxf(0.f,*offsets[axis]-hi);
                 }
             }
             float cost=overflow*1000+step*10+std::fabs(x)+std::fabs(y)*.2f;
