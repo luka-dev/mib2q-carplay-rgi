@@ -1,5 +1,10 @@
 # CarPlay startup / Now Playing state-machine audit
 
+Update 2026-09-17: the owner confirms connection stability and audio/UI mode
+transitions are closed on the current vehicle setup. Earlier cold-start and
+handoff acceptance notes below are per-revision history; use
+[the current project status](../../TODO.md) for remaining work.
+
 Date: 2026-09-05
 Status: static Pioneer + iOS 27 audit complete; bounded cold-connect recovery
 implemented and deployed in the compact state-trace build; vehicle cold-start

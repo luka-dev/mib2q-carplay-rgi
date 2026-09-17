@@ -1,5 +1,10 @@
 # CarPlay session lifecycle audit (MHI2Q / stock libairplay 210)
 
+Update 2026-09-17: the owner confirms connection/reconnection and mode
+transitions are closed on the current vehicle setup. The August audit and
+fault-replay recipes below are historical; they are not current release
+blockers. See [current status and later fixes](../../TODO.md).
+
 Status: source/log lifecycle audit and remediation completed in the current
 worktree, 2026-08-12. Deployment in scope is stock `dio_manager` and stock
 `libairplay.so` 210.81 with `libcarplay_hook.so`, plus the two external

@@ -1,6 +1,10 @@
 # Buffered audio across iPhone lock / app background
 
-Status: the former stop/teardown failure is vehicle-fixed.  The deployed
+Update 2026-09-17: the owner confirms connection stability and audio/UI mode
+transitions are closed on the current vehicle setup. The dated acceptance
+gates below describe earlier revisions; see [current status](../TODO.md).
+
+Historical status: the former stop/teardown failure is vehicle-fixed.  The deployed
 same-handle/no-flush handoff survived repeated transitions and was initially
 reported audibly excellent on 2026-09-04.  A later complete CarPlay connection
 restart means that fast handoff is not yet release-accepted, although the saved

@@ -1,8 +1,87 @@
 # TODO
 
-## Open
+## Current status — 2026-09-17
 
-### Wife's phone connect loop — mechanism found 2026-08-21/22, root cause OPEN
+The owner confirmed that connection/reconnection stability and transitions
+between music, calls/Siri and the stock/parking UI are **closed** for the current
+vehicle setup. Do not carry older "vehicle validation pending" notes forward
+as current blockers. This confirmation is the current acceptance source;
+individual historical fault-injection and NCM/SI A/B recipes below are not a
+newly recorded test run.
+
+Exception clarified by the owner on September 17: keeping CarPlay visible
+beside OPS is fixed, but removing the lower OPS warning strip is **not**.
+The attempted suppression did not remove it on the vehicle.
+
+Implemented and accepted feature set: maneuver graphics, lane guidance, HUD,
+altScreen projection and audio. Cover art, metadata and steering-wheel input
+are also implemented. The September 17 rebuild uses the repaired GCC 8.5
+toolchain; rebuilding artifacts alone does not change what is installed on HU.
+
+### Closed: connections and recovery
+
+- `13801f2`: generation-scoped native/Java transports, decoder configuration +
+  IDR recovery, stale-worker fencing and supervisor ownership.
+- `8ca2c73`: lifecycle publication and video readiness independent of further
+  input frames, including static scenes and reconnects.
+- `d61e37f`: immediate `exec dio_manager`, asynchronous monitor, persistent
+  renderers, exact process identity and stale-generation ownership checks.
+- Current implementation: [supervisor](deploy/smartphone_integrator/README.md).
+  The [USB runbook](docs/USB_REPLUG_RECOVERY_RUNBOOK.md) preserves the original
+  diagnosis and per-component A/B procedure.
+
+### Closed: mode transitions
+
+- `44c772a`: stock main audio, including calls/Siri, takes priority over buffered
+  media; music can reclaim the route only after the stock owner releases it.
+- `fc9d4a5`: buffered transport and PCM lifecycle hardening.
+- `55e532d`: parking focus transitions and keeping CarPlay visible beside OPS.
+  [PDC history](docs/CARPLAY_PDC_SMALL_STAGE_ROOT_CAUSE.md) already records the
+  owner's on-car confirmation/photo from September 16. This acceptance does
+  not cover the lower warning strip or the suppression attempt in `efc3020`.
+- `BAPBridge.forceGfxAvailable()` now uses the stock KOMO callbacks and a typed
+  `ClusterViewMode` fallback; the old reflection-ladder TODO is complete.
+
+Local recheck on September 17 passed: supervisor lifecycle/PID identity,
+USB generation fencing, PDC resource policy and external events against the
+rebuilt shipping JAR, media-route call/Siri priority, and actual audio-interposer
+setup/teardown races. Commands: `scripts/test_supervisor_lifecycle.sh`,
+`tests/renderer_pid_identity_test.sh`, `scripts/test_usb_replug_recovery.sh`,
+`scripts/test_pdc.sh`, `tests/media_route_test.c` and
+`scripts/test_audio_interposers.sh`. Logs: `build/status-review-20260917/`.
+
+### Remaining work / optional extensions
+
+- OPS lower warning strip (`Check surroundings!`): **candidate ready; HU
+  acceptance pending**. The previous PLA/ARA popup attempt missed the separate
+  APS audio drawer (content 6001/6002). `2e536a6-ops-aps-drawer-r2` masks only APS
+  column 0 in model 538 during protected CarPlay + pure OPS and restores the
+  latest stock request on release. Obsolete PLA/ARA replacements and popup
+  sweeps removed. Stock producer/selector, external events, negative controls
+  and J9 linkage checked locally. Recheck added real lifecycle disconnect
+  without HMI events, reconnect cleanup fencing, and return to an already-open
+  OPS without a new DSI notification. Install and check the actual strip when HU
+  is reachable; no on-car success claimed yet.
+  [Details](docs/CARPLAY_PDC_SMALL_STAGE_ROOT_CAUSE.md).
+- Upmix: ongoing work, separate from the completed base audio path.
+- CarPlay Video: receiver/player integration remains unimplemented; optional
+  next feature. [Research](docs/reference/CARPLAY_VIDEO_MHI2_PLAYER_2026_09_15.md).
+- Partial 360-camera beside CarPlay: deliberately deferred by the owner on
+  September 14; resume only on a separate request.
+  [Preflight](docs/reference/CARPLAY_PARTIAL_360_PREFLIGHT.md).
+- Optional MHI3 parity: decide whether the special `routeState==5`
+  accept-all-maneuvers behavior is useful. This is not a current failure of
+  rerouting or a release blocker.
+- Release housekeeping: refresh the existing SD package/documentation for the
+  chosen release; no new installer implementation is required.
+
+## Historical investigation — August 2026
+
+The snapshot below preserves observations, rejected hypotheses and useful
+capture procedures. Its open questions describe that investigation, not the
+current project's acceptance status above.
+
+### Wife's phone connect loop — mechanism found 2026-08-21/22
 **The head unit was never publishing its Bonjour service, so the phone had
 nothing to connect to. A head-unit reboot fixed it; the phone was innocent.**
 
@@ -93,13 +172,7 @@ Security → Analytics & Improvements → Analytics Data. Read
 `system_logs.logarchive` with `log show --archive`, and
 `crashes_and_spins/accessoryd-packets-*.log.ips` for the raw iAP2 packet trace.
 
-## Other open (tracked elsewhere)
-- On-unit lifecycle validation (5 fault-replay tests + drive) — `docs/reference/CARPLAY_SESSION_LIFECYCLE_AUDIT.md`.
-- Java cleanup: groups 1-3 DONE (fake pipeline API, disabled diagnostics, dead members).
-  **Only the KOMO reflection ladder is left** - `BAPBridge.forceGfxAvailable()`, ~96 lines of
-  three-strategy reflection whose two assumptions stock source contradicts (`KOMOService` has no
-  `dataRate` field; `setKOMODataRate()` is a no-op unless `Util.isClusterMapMOST()`). The public
-  path is `ClusterService.getClusterViewMode()` -> `ClusterViewMode.setDataRate/setGFXAvailable`.
-  Semantic change: validate map/popup start, renderer respawn and RGI stop on the car before
-  release. `docs/reference/JAVA_PRODUCTION_CLEANUP_AUDIT.md`.
-- `routeState==5` accept-all-maneuvers logic not implemented (MHI3 has it) — decide if needed.
+Historical lifecycle test recipes remain in
+`docs/reference/CARPLAY_SESSION_LIFECYCLE_AUDIT.md`; Java cleanup findings are
+preserved in `docs/reference/JAVA_PRODUCTION_CLEANUP_AUDIT.md`. Use the current
+status above when deciding what work remains.

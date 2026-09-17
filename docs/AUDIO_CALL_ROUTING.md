@@ -1,5 +1,10 @@
 # CarPlay call/Siri priority over buffered media
 
+Update 2026-09-17: the owner confirms mode transitions, including music and
+calls/Siri, are closed on the current vehicle setup. The implementation and
+historical validation below are retained; the September 10 live-call note is
+superseded by the [current project status](../TODO.md).
+
 2026-09-10. Implemented and host-tested; **not yet verified with a live HU call**.
 No change to voice codecs, microphone PCM, upmix, LFE or loudness processing.
 

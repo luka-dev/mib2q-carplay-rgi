@@ -1,5 +1,10 @@
 # Production readiness — 2026-09-14
 
+Update 2026-09-17: the owner confirms connection/reconnection and mode
+transitions are closed on the current vehicle setup. Pending deployment and
+validation notes below describe the September 14 snapshot, not today's
+status. See [the current project status](../../TODO.md).
+
 ## Follow-up: all three findings fixed
 
 The follow-up patch closes all three findings below. The original findings
