@@ -3,10 +3,30 @@ import numpy as np
 import torch
 from train_v15_streaming import content_gate, admitted_windows, core_mask, routing_loss, assert_frozen, normalized_inputs
 from train_hssr import HssrNetwork, freeze_except_routing_head
+from train_v15_streaming import vocal_anchor_loss, safe_candidate
 import hssr_runtime_training as runtime
 
 
 class StreamingTests(unittest.TestCase):
+    def test_guarded_selection_rejects_hidden_vocal_regression(self):
+        base=dict(loss=1.,by_level={'0':{'families':{'mixture':1.9,'vocal-negative':.1}}})
+        worse=dict(loss=.8,by_level={'0':{'families':{'mixture':1.4,'vocal-negative':.2}}})
+        self.assertFalse(safe_candidate(worse,base,1.,True))
+        self.assertTrue(safe_candidate(worse,base,1.,False))
+        worse['by_level']['0']['families']['vocal-negative']=.09
+        self.assertTrue(safe_candidate(worse,base,1.,True))
+    def test_anchor_penalizes_vocal_logit_even_near_silence(self):
+        logits=torch.full((2,264),-12.,requires_grad=True);base=logits.detach()-.1
+        mask=torch.ones(2,dtype=torch.bool)
+        loss=vocal_anchor_loss(logits,base,torch.ones(2,32),mask)
+        loss.backward()
+        self.assertGreater(float(logits.grad[:,6:256:8].sum()),0)
+        self.assertEqual(float(vocal_anchor_loss(logits,base,torch.zeros(2,32),mask).detach()),0)
+    def test_mass_weighted_anchor_does_not_amplify_tiny_vocal_residue(self):
+        logits=torch.zeros(2,264);mask=torch.ones(2,dtype=torch.bool)
+        full=vocal_anchor_loss(logits,logits,torch.ones(2,32),mask,True)
+        weak=vocal_anchor_loss(logits,logits,torch.ones(2,32)*.1,mask,True)
+        torch.testing.assert_close(weak,full*.01)
     def test_double_features_become_runtime_float(self):
         x=normalized_inputs(np.array([[20.,-20.,.5]],dtype=np.float64),np.zeros(3),np.ones(3))
         self.assertEqual(x.dtype,torch.float32)

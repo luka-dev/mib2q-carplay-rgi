@@ -33,6 +33,11 @@ class ReviewTests(unittest.TestCase):
         r=self.store.annotate(self.note)
         self.assertFalse(r['training_approved'])
         self.assertEqual(json.loads(self.store.notes.read_text())['stem_sha256'],digest(self.stem))
+    def test_role_annotation_is_bound_and_not_training_approval(self):
+        note=dict(self.note,role='backing',role_confirmed=True,lead_contamination='absent',interval_start=0,interval_end=.1)
+        r=self.store.annotate(note)
+        self.assertTrue(r['rear_permission']['allow']);self.assertFalse(r['training_approved'])
+        with self.assertRaises(ValueError):self.store.annotate(dict(note,interval_end=.2))
     def test_invalid_notes(self):
         for change in [dict(revision='old'),dict(position=1),dict(position=float('nan')),
                        dict(stem='../../elsewhere'),dict(decision='approved'),dict(extra=True)]:

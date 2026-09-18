@@ -13,6 +13,7 @@ from urllib.parse import unquote, urlparse
 import numpy as np
 import soundfile as sf
 from teacher_audit_policy import triage
+from vocal_role_policy import ROLE_FIELDS, POLICY as ROLE_POLICY, validate_role_fields, rear_permission
 
 ROOT=Path(__file__).resolve().parents[2]
 LABELS={'mix':'Оригинал','vocals':'Весь вокал · RoFormer','instrumental':'Инструменты · RoFormer',
@@ -72,7 +73,9 @@ class ReviewStore:
                 if collection!='float':flags.append('Архивный PCM16-набор: возможны срезанные пики при декодировании. Новое обучение использует отдельный FLOAT-набор.')
                 revision=hashlib.sha256(json.dumps(hashes,sort_keys=True).encode()).hexdigest()[:20]
                 key=collection+'--'+ident
-                registry[key]=dict(paths=paths,hashes=hashes,revision=revision,seconds=row['frames']/48000)
+                registry[key]=dict(paths=paths,hashes=hashes,revision=revision,seconds=row['frames']/48000,
+                    core_start=row.get('core_offset_frames',0)/48000,
+                    core_end=(row.get('core_offset_frames',0)+row.get('core_frames',row['frames']))/48000)
                 items.append(dict(id=key,title=row['title']+(' · FLOAT' if collection=='float' else ''),artist=row.get('artist','unknown'),
                     collection=collection,partition=row.get('partition','development'),
                     seconds=row['frames']/48000,start=row.get('core_start_seconds',row.get('excerpt_start_seconds',0)),
@@ -91,7 +94,7 @@ class ReviewStore:
         return dict(items=items,counts=counts,annotations=annotations,
             pipeline=json.loads(pipeline.read_text()) if pipeline.exists() else None,
             full_source_ready=(self.base/'v14-full-source/manifest.json').exists(),
-            training_policy='Все новые данные на карантине до проверки; heldout не обучается.')
+            training_policy='Лид / дабл / вокальный хук — только спереди. Бэк допускается в тыл лишь после отдельной проверки роли и примеси лида. Heldout не обучается.')
 
     def media(self,key,stem,revision):
         with self.lock:entry=self.registry.get(key)
@@ -119,7 +122,7 @@ class ReviewStore:
 
     def annotate(self,value):
         if not isinstance(value,dict):raise ValueError('annotation must be an object')
-        allowed={'id','stem','revision','decision','notes','position'}
+        allowed={'id','stem','revision','decision','notes','position'}|ROLE_FIELDS
         if set(value)-allowed:raise ValueError('unexpected annotation field')
         with self.lock:
             entry=self.registry.get(value.get('id'))
@@ -129,10 +132,14 @@ class ReviewStore:
             if not isinstance(value.get('notes',''),str) or len(value.get('notes',''))>2000:raise ValueError('notes too long')
             position=value.get('position',0)
             if not isinstance(position,(float,int)) or not np.isfinite(position) or not 0<=position<=entry['seconds']:raise ValueError('invalid position')
+            role_fields=validate_role_fields(value,entry)
             for name in ('mix',value['stem']):
                 if digest(entry['paths'][name])!=entry['hashes'][name]:raise ValueError('audio fingerprint mismatch')
             record=dict(value,time=time.time(),stem_sha256=entry['hashes'][value['stem']],
                 source_sha256=entry['hashes']['mix'],reviewer='human-local',training_approved=False)
+            if role_fields:
+                record['role_policy']=ROLE_POLICY
+                record['rear_permission']=rear_permission(record,entry['hashes']['mix'],entry['hashes'][value['stem']])
             with self.notes.open('a') as f:
                 f.write(json.dumps(record,ensure_ascii=False)+'\n');f.flush();os.fsync(f.fileno())
             return record

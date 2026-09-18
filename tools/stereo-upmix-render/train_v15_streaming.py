@@ -25,6 +25,7 @@ from prepare_hssr_separator_supervision import selection_v11_targets
 from prepare_hssr_native_teacher import digest, valid_pair, output_pair, POLICY
 import hssr_runtime_training as runtime
 from disk_budget_guard import DiskBudgetGuard
+from hssr_c_features import c_features
 from run_v14_complete_audit import atomic, ROOT, BASE, HERE
 
 VOICE_KEYS=('lead_singing','harmony_singing','wordless_vocal','processed_vocal','speech')
@@ -89,6 +90,32 @@ def routing_loss(logits, targets, mask):
     return rear_loss+.5*pan_loss
 
 
+def vocal_anchor_loss(logits, baseline_logits, vocal_risk, mask, mass_weighted=False):
+    """Relative-logit penalty stays useful even below sigmoid's negative floor.
+
+    Risk is two-stem vocal energy share, NOT a learned musical-role label.
+    A small margin pushes protected bands slightly below the baseline.
+    """
+    current=logits[:,ROUTING_ROWS].reshape(-1,BANDS,2)[mask]
+    reference=baseline_logits[:,ROUTING_ROWS].reshape(-1,BANDS,2)[mask].detach()
+    risk=vocal_risk[mask].detach().square()
+    rear=F.relu(current[...,0]-reference[...,0]+.05).square()
+    pan=(runtime.tanh(current[...,1])-runtime.tanh(reference[...,1])).square()
+    weighted=(rear+.25*pan)*risk
+    # A conditional mean can over-weight a tiny vocal residue in an otherwise
+    # instrumental chunk. V3 preserves the actual risk mass instead.
+    return weighted.mean() if mass_weighted else weighted.sum()/risk.sum().clamp_min(1.)
+
+
+def safe_candidate(score, baseline, best, guarded):
+    if not score['loss']<best:return False
+    if not guarded:return True
+    # No averaging away a regression at one level or in one case family.
+    return all(score['by_level'][level]['families'][family]<=value
+        for level,values in baseline['by_level'].items()
+        for family,value in values['families'].items())
+
+
 def assert_frozen(model, initial):
     allowed=torch.zeros(264,dtype=torch.bool);allowed[ROUTING_ROWS]=True
     for k,v in model.state_dict().items():
@@ -104,7 +131,11 @@ def main():
     p.add_argument('--epochs',type=int,default=4)
     p.add_argument('--resume',action='store_true')
     p.add_argument('--smoke',action='store_true',help='bounded one train + one validation case; not a full run')
+    p.add_argument('--policy',choices=['v1','guarded-v2','guarded-v3'],default='v1')
+    p.add_argument('--feature-oracle',type=Path,help='required for guarded-v3: actual C PCM-to-feature executable')
     a=p.parse_args()
+    guarded=a.policy!='v1';exact_features=a.policy=='guarded-v3'
+    if exact_features and not a.feature_oracle:raise ValueError('guarded-v3 requires --feature-oracle')
     if a.epochs<1:raise ValueError('epochs must be positive')
     out=a.output.resolve()
     if out.exists() and not a.resume:raise ValueError('use a fresh output directory')
@@ -117,6 +148,7 @@ def main():
     report=json.loads((audit/'dataset-report.json').read_text())
     if not report['technical_audit_complete'] or report['audited']!=len(rows):raise ValueError('incomplete audit')
     bindings=dict(source_sha256=digest(source),audit_sha256=digest(audit/'dataset-report.json'),baseline_sha256=digest(baseline))
+    if exact_features:bindings['feature_oracle_sha256']=digest(a.feature_oracle)
     sources={}
     for r in rows:sources.setdefault(r['source_sha256'],set()).add(r['partition'])
     if any(len(v)!=1 for v in sources.values()):raise ValueError('source partition leakage')
@@ -158,6 +190,16 @@ def main():
             limitations=['AST/CLAP gates are uncalibrated, not semantic purity approval.',
                 'No backing/HH/piano class labels used. No global head or bass-head updates.',
                 'Local experiment only; export/C/listening acceptance still required.'])
+        if guarded:
+            plan.update(policy='experimental-two-stem-routing-guarded-v2',
+                code_sha256={name:digest(HERE/name) for name in ('train_v15_streaming.py','hssr_runtime_training.py')},
+                loss_policy='original routing loss, vocal-negative weight1; plus2*baseline-relative vocal-risk logit/pan anchor',
+                anchor=dict(logit_margin=.05,pan_weight=.25,risk='squared teacher vocal energy fraction'),
+                validation_gains_db=[0,-12],selection='every case family at every validation level must not exceed baseline')
+        if exact_features:
+            plan.update(policy='experimental-two-stem-routing-guarded-v3',features='actual C PCM feature stream, no cache')
+            plan['code_sha256']['hssr_c_features.py']=digest(HERE/'hssr_c_features.py')
+            plan['anchor']['reduction']='mean over admitted frames/bands, preserving squared vocal-risk mass'
         plan_path=out/'admission-plan.json'
         if a.resume and json.loads(plan_path.read_text())!=plan:raise ValueError('resume plan changed')
         if not a.resume:atomic(plan_path,plan)
@@ -184,17 +226,24 @@ def main():
             # Model sees the actual integer PCM domain; FLOAT teachers themselves remain unclipped.
             x=np.clip(np.where(x>=0,np.floor(x*32768+.5),np.ceil(x*32768-.5)),-32768,32767).astype('f4')/32768
             spec=stft(x);select=np.arange(CONTROL_HOPS-1,len(spec),CONTROL_HOPS)
-            features=make_features(x,spec)[select]
+            features=(c_features(a.feature_oracle,baseline,(x*32768).astype('<i2')) if exact_features
+                      else make_features(x,spec)[select])
+            if len(features)!=len(select):raise ValueError('C/target control alignment mismatch')
             if case['mode']=='mixture':
-                targets=selection_v11_targets(stft(v),stft(ins))[select,:BANDS*8].reshape(-1,BANDS,8)[...,[6,7]]
-            else:targets=np.zeros((len(select),BANDS,2),dtype='f4')
+                teacher_bands=selection_v11_targets(stft(v),stft(ins))[select,:BANDS*8].reshape(-1,BANDS,8)
+                targets=teacher_bands[...,[6,7]]
+                risk=teacher_bands[...,0]
+            else:
+                targets=np.zeros((len(select),BANDS,2),dtype='f4')
+                risk=np.ones((len(select),BANDS),dtype='f4')
             mask=core_mask(row,select,case['windows'])
-            return features,targets,mask
+            return features,targets,mask,risk
         def run_case(case,gain_db,training):
-            space();features,targets,mask=arrays(case,gain_db)
+            space();features,targets,mask,risk=arrays(case,gain_db)
             if not mask.any():return None
             inputs=normalized_inputs(features,mean,inv)
             target=torch.from_numpy(targets.astype(np.float32));keep=torch.from_numpy(mask)
+            vocal_risk=torch.from_numpy(risk.astype(np.float32))
             recurrent=None;total=0.;count=0
             for at in range(0,len(inputs),256):
                 space()
@@ -211,21 +260,33 @@ def main():
                 if not torch.isfinite(loss):raise ValueError('nonfinite loss')
                 if training:
                     opt.zero_grad(set_to_none=True)
-                    (loss*(.25 if case['mode']=='vocal-negative' else 1)).backward()
+                    if guarded:
+                        reference=F.linear(embeddings[0],runtime.weight(initial['head.weight']),initial['head.bias'])
+                        anchor=vocal_anchor_loss(prediction[:n],reference[:n],vocal_risk[at+1:at+1+n],active,mass_weighted=exact_features)
+                        objective=loss+2*anchor
+                    else:objective=loss*(.25 if case['mode']=='vocal-negative' else 1)
+                    if not torch.isfinite(objective):raise ValueError('nonfinite training objective')
+                    objective.backward()
                     torch.nn.utils.clip_grad_norm_(model.head.parameters(),1.)
                     opt.step()
                 weight=int(active.sum());total+=float(loss.detach())*weight;count+=weight
             return total/count if count else None
         def validation(epoch):
-            totals={'mixture':[],'vocal-negative':[]}
+            totals={'mixture':[],'vocal-negative':[]};by_level={}
             selected=val[:1] if a.smoke else val
-            for i,c in enumerate(selected):
-                status('validation',epoch=epoch,case=i+1,total_cases=len(selected),current_id=c['id'])
-                with torch.no_grad():value=run_case(c,0,False)
-                if value is not None:totals[c['mode']].append(value)
+            for gain_db in ([0,-12] if guarded else [0]):
+                level_totals={'mixture':[],'vocal-negative':[]}
+                for i,c in enumerate(selected):
+                    status('validation',epoch=epoch,case=i+1,total_cases=len(selected),current_id=c['id'],gain_db=gain_db)
+                    with torch.no_grad():value=run_case(c,gain_db,False)
+                    if value is not None:
+                        totals[c['mode']].append(value);level_totals[c['mode']].append(value)
+                by_level[str(gain_db)]=dict(families={k:float(np.mean(v)) for k,v in level_totals.items() if v})
             means={k:float(np.mean(v)) for k,v in totals.items() if v}
             if not means:raise ValueError('no eligible validation frames')
-            return dict(loss=float(np.mean(list(means.values()))),families=means)
+            result=dict(loss=float(np.mean(list(means.values()))),families=means)
+            if guarded:result['by_level']=by_level
+            return result
         checkpoint=out/'last.pt';history=[];start_epoch=1;start_case=0
         if a.resume:
             saved=torch.load(checkpoint,map_location='cpu',weights_only=False)
@@ -247,12 +308,14 @@ def main():
             if a.smoke:order=order[:1]
             for i in range(start_case,len(order)):
                 c=order[i];gain=(0,-6,-12)[(epoch-1+i)%3]
-                status('training',epoch=epoch,epochs=a.epochs,case=i+1,total_cases=len(order),current_id=c['id'],mode=c['mode'])
+                status('training',epoch=epoch,epochs=a.epochs,case=i+1,total_cases=len(order),current_id=c['id'],mode=c['mode'],gain_db=gain)
                 value=run_case(c,gain,True)
                 if i%10==0 or i+1==len(order):
                     save(epoch,i+1);print(json.dumps(dict(epoch=epoch,case=i+1,cases=len(order),loss=value)),flush=True)
             start_case=0;score=validation(epoch);history.append(dict(epoch=epoch,validation=score))
-            if score['loss']<best:
+            eligible=safe_candidate(score,baseline_score,best,guarded)
+            history[-1]['selected']=eligible
+            if eligible:
                 best=score['loss'];best_state={k:v.detach().clone() for k,v in model.state_dict().items()}
             save(epoch+1,0)
             atomic(out/'history.json',dict(baseline=baseline_score,history=history,best_loss=best))

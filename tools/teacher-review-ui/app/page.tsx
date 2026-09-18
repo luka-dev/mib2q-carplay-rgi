@@ -12,10 +12,11 @@ import {Play,Pause,RefreshCw,Headphones,Check,Volume2} from 'lucide-react';
 import {API,Listening,type Clip,type Mode} from '@/lib/listening';
 import {registerReviewTools} from '@/lib/review-tools';
 
-type Note={id:string;stem:string;revision:string;decision:string;notes:string;position:number};
+type Note={id:string;stem:string;revision:string;decision:string;notes:string;position:number;role?:string;role_confirmed?:boolean;lead_contamination?:string;interval_start?:number;interval_end?:number};
 type Catalog={items:Clip[];counts:Record<string,number>;annotations:Note[];training_policy:string};
 const format=(v:number)=>`${Math.floor(v/60)}:${Math.floor(v%60).toString().padStart(2,'0')}`;
 const choices=[['good','Чисто'],['unsure','Сомневаюсь'],['bad','Ошибка'],['absent','Источника нет']];
+const roles=[['unknown','Не уверен / роль неизвестна'],['lead','Лид-вокал'],['co_lead','Дуэт / второй лид'],['lead_double','Дабл основного вокала'],['vocal_hook','Главный вокальный хук / сэмпл'],['backing','Поддерживающий бэк-вокал'],['vocal_reverb','Реверберация вокала'],['mixed_vocal','Смесь лида и бэка'],['non_vocal','Не вокал']];
 
 export default function Home(){
   const engine=useRef<Listening|null>(null);const generation=useRef(0);
@@ -27,6 +28,9 @@ export default function Home(){
   const [query,setQuery]=useState('');const [busy,setBusy]=useState(false);
   const [error,setError]=useState('');const [notice,setNotice]=useState('');
   const [notes,setNotes]=useState('');const [decision,setDecision]=useState('unsure');
+  const [role,setRole]=useState('unknown');const [roleConfirmed,setRoleConfirmed]=useState(false);
+  const [leadContamination,setLeadContamination]=useState('unknown');
+  const [intervalStart,setIntervalStart]=useState(0);const [intervalEnd,setIntervalEnd]=useState(10);
   const audio=()=>engine.current??=(new Listening());
   const refresh=async()=>{
     try{const r=await fetch(`${API}/api/catalog`);if(!r.ok)throw new Error('API недоступен');
@@ -56,13 +60,19 @@ export default function Home(){
   useEffect(()=>{
     const prior=catalog?.annotations.filter(n=>n.id===clip?.id&&n.stem===stem&&n.revision===clip.revision).at(-1);
     setNotes(prior?.notes??'');setDecision(prior?.decision??'unsure');
-  },[clip?.id,clip?.revision,stem,catalog?.annotations]);
+    setRole(prior?.role??'unknown');setRoleConfirmed(prior?.role_confirmed??false);
+    setLeadContamination(prior?.lead_contamination??'unknown');
+    setIntervalStart(prior?.interval_start!==undefined?prior.interval_start-(clip?.core_offset??0):0);
+    setIntervalEnd(prior?.interval_end!==undefined?prior.interval_end-(clip?.core_offset??0):Math.min(10,clip?.core_seconds??10));
+  },[clip?.id,clip?.revision,clip?.core_offset,clip?.core_seconds,stem,catalog?.annotations]);
   async function toggle(){if(busy||!clip)return;try{if(audio().playing)audio().pause();else await audio().play();setPlaying(audio().playing);}catch(e){setError(String(e));}}
   function changeMode(m:Mode){setMode(m);audio().setMode(m);}
   async function changeStem(s:string){if(busy)return;setBusy(true);setError('');setNotice('');
     try{await audio().selectStem(s);setStem(s);changeMode('solo');}catch(e){setError(String(e));}finally{setBusy(false);}}
   async function save(){if(!clip)return;setError('');
-    const data={id:clip.id,revision:clip.revision,stem,decision,notes,position:audio().position};
+    const data={id:clip.id,revision:clip.revision,stem,decision,notes,position:audio().position,
+      role,role_confirmed:roleConfirmed,lead_contamination:leadContamination,
+      interval_start:clip.core_offset+intervalStart,interval_end:clip.core_offset+intervalEnd};
     try{const r=await fetch(`${API}/api/annotations`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
       if(!r.ok)throw new Error('Оценка не сохранена. Обнови список: результаты могли измениться.');
       const saved=await r.json() as Note;setCatalog(c=>c?{...c,annotations:[...c.annotations,saved]}:c);setNotice('Оценка сохранена локально. Автоматического допуска в обучение нет.');
@@ -88,6 +98,12 @@ export default function Home(){
       {!clip?.specialist&&['Хай-хэт · нужен DrumSep','Бэк-вокал · нужен отдельный учитель','Бас / гитара / пиано · нужен Demucs'].map(s=><button className="stem" key={s} disabled>{s}<small>Ещё не выделено · не имитация фильтром</small></button>)}</div>
       <p className="fine">Бэк-вокал — оценка с остатками и возможными ошибками, не гарантированно чистая гармония. Хэт проверяем на примеси малого, тарелок и вокальных «с». Нулевой остаток суммы не доказывает правильное разделение.</p>
       <div className="review"><h2>Оценка: {selected?.label??'выбери дорожку'}</h2><p className="fine">Есть ли нужный звук? Не попали ли сюда чужие инструменты? В режиме «Оригинал − дорожка» слышно, что именно исчезло.</p><RadioGroup aria-label="Качество выделения" className="review-actions" value={decision} onValueChange={v=>setDecision(String(v))}>{choices.map(([value,label])=><label key={value} style={{display:'flex',alignItems:'center',gap:9,padding:10}}><RadioGroupItem value={value}/>{label}</label>)}</RadioGroup>
+      <h3>Музыкальная роль — отдельно от чистоты дорожки</h3>
+      <p className="fine">Лид, дабл и главный вокальный сэмпл остаются спереди. Имя «backing» не доказывает, что это бэк. Подтверждай только прослушанный интервал в контексте оригинала.</p>
+      <label style={{display:'block',marginTop:12}}>Роль <select aria-label="Музыкальная роль" value={role} onChange={e=>{setRole(e.target.value);setRoleConfirmed(false);}}>{roles.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
+      <label style={{display:'block',marginTop:12}}>Примесь лида в выбранной дорожке <select aria-label="Примесь лид-вокала" value={leadContamination} onChange={e=>{setLeadContamination(e.target.value);setRoleConfirmed(false);}}><option value="unknown">Не проверено / не уверен</option><option value="present">Лид слышен</option><option value="absent">Лид не слышен в этом интервале</option></select></label>
+      <div style={{display:'flex',gap:14,marginTop:12}}><label htmlFor="role-interval-start">Начало, сек. внутри фрагмента<Input id="role-interval-start" aria-label="Начало интервала роли" type="number" min={0} max={clip?.core_seconds??0} step={.1} value={intervalStart} onChange={e=>{setIntervalStart(Number(e.target.value));setRoleConfirmed(false);}}/></label><label htmlFor="role-interval-end">Конец, сек. внутри фрагмента<Input id="role-interval-end" aria-label="Конец интервала роли" type="number" min={0} max={clip?.core_seconds??0} step={.1} value={intervalEnd} onChange={e=>{setIntervalEnd(Number(e.target.value));setRoleConfirmed(false);}}/></label></div>
+      <label style={{display:'flex',gap:10,margin:'14px 0'}}><input aria-label="Роль проверена в оригинале и отдельно" type="checkbox" checked={roleConfirmed} onChange={e=>setRoleConfirmed(e.target.checked)}/>Прослушал этот интервал в оригинале и отдельно; подтверждаю выбранную роль.</label>
       <Textarea aria-label="Что слышно неправильно" value={notes} maxLength={2000} onChange={e=>setNotes(e.target.value)} placeholder="Например: в хэте слышен вокал; бэк-вокал забрал основную мелодию…"/>
       <Button style={{marginTop:14}} onClick={()=>void save()} disabled={!clip||busy}><Check size={17}/>Сохранить оценку с позицией</Button>
       {notice&&<output className="message" style={{display:'block'}}>{notice}</output>}<p className="fine" style={{marginTop:16}}>{catalog?.training_policy} Прослушать несколько примеров полезно, но это не проверка всех {catalog?.counts.full??0} фрагментов.</p></div>

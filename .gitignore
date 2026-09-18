@@ -85,3 +85,6 @@ tools/loader_preview/prism_preview
 # Installer diagnostics copied back to the SD card.
 /install_MoreIncredibleBash/mod/last-carplay-*.log
 /uninstall_MoreIncredibleBash/mod/last-carplay-*.log
+
+# local browser tooling cache
+.playwright-cli/

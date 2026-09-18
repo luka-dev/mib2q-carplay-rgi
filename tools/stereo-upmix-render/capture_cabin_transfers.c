@@ -1,6 +1,7 @@
 /* Host-only mixture-conditioned routing diagnostic, no vehicle I/O. */
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "hssr_dsp.h"
 
 static FILE *transfers;
@@ -20,14 +21,16 @@ int main(int argc, char **argv)
     int16_t pcm[256], front[256];
     float rear[256], source[256], lfe[256];
     size_t count, i;
-    if (argc != 5) {
+    const int stdio_mode = argc == 3 && strcmp(argv[2], "--stdio") == 0;
+    if (argc != 5 && !stdio_mode) {
         fprintf(stderr, "usage: %s MODEL INPUT.s16 TRANSFERS.f32 OUTPUT.f32\n", argv[0]);
+        fprintf(stderr, "       %s MODEL --stdio (PCM stdin, transfers stdout, output stderr)\n", argv[0]);
         return 2;
     }
     if (spa_hssr_model_load_file(&model, argv[1]) != SPA_HSSR_OK) return 3;
-    input = fopen(argv[2], "rb");
-    transfers = fopen(argv[3], "wbx");
-    output = fopen(argv[4], "wbx");
+    input = stdio_mode ? stdin : fopen(argv[2], "rb");
+    transfers = stdio_mode ? stdout : fopen(argv[3], "wbx");
+    output = stdio_mode ? stderr : fopen(argv[4], "wbx");
     if (!input || !transfers || !output) return 3;
     spa_hssr_dsp_prepare(&dsp);
     dsp.cabin_policy = 1;
