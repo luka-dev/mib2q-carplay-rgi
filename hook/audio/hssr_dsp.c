@@ -1512,6 +1512,34 @@ static void spa_hssr_render_hop(
                 state->fft_im[SPA_HSSR_RIGHT][bin] +=
                     universal * fallback_r * rotated_r_im;
             }
+#if defined(SPA_HSSR_CAPTURE_TRANSFERS) && defined(SPA_HSSR_SCENE)
+            if (!state->cabin_policy) {
+                /* Complex 2x2 rear transfer of this bin, universal bed
+                 * included (universal already carries the makeup):
+                 * rear = M * [L, R], M = re/im of LL, LR, RL, RR. */
+                float ubl = 0.0f, ubr = 0.0f, uwr = 0.0f, uwi = 0.0f;
+                float matrix[8];
+                if (universal > 0.0f) {
+                    unsigned rotation = 18u + (bin * 13u) % 47u;
+                    float fallback_pan;
+                    uwr = state->twiddle_re[rotation];
+                    uwi = -state->twiddle_im[rotation];
+                    fallback_pan = 0.72f * spa_hssr_dsp_bound(
+                        3.0f * state->bin_scene_lr[bin], -1.0f, 1.0f);
+                    ubl = 0.5f * universal * sqrtf(1.0f + fallback_pan);
+                    ubr = 0.5f * universal * sqrtf(1.0f - fallback_pan);
+                }
+                matrix[0] = 0.5f * (mask * steering_l * extraction_l + ambience) + ubl * uwr;
+                matrix[1] = ubl * uwi;
+                matrix[2] = 0.5f * (mask * steering_l * extraction_r - ambience) + ubl * uwr;
+                matrix[3] = ubl * uwi;
+                matrix[4] = 0.5f * (mask * steering_r * extraction_l - ambience) + ubr * uwr;
+                matrix[5] = -ubr * uwi;
+                matrix[6] = 0.5f * (mask * steering_r * extraction_r + ambience) + ubr * uwr;
+                matrix[7] = -ubr * uwi;
+                spa_hssr_capture_transfer(bin, matrix);
+            }
+#endif
         }
     }
 
