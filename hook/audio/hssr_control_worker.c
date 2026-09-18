@@ -86,6 +86,23 @@ static int spa_hssr_worker_receive(
     return 1;
 }
 
+static int spa_hssr_worker_receive_guard(void *context,
+                                         float control[SPA_HSSR_OUTPUTS])
+{
+    struct spa_hssr_control_worker *worker =
+        (struct spa_hssr_control_worker *)context;
+    const struct spa_hssr_control_result *result;
+
+    if (!worker || !control || !spa_hssr_atomic_load(&worker->_started))
+        return 0;
+    /* The slot receive() just consumed; the worker cannot reuse it before
+     * the audio thread consumes the other slot as well. */
+    result = &worker->_results[spa_hssr_atomic_load(&worker->_result_consumed) & 1u];
+    if (!result->guard_valid) return 0;
+    memcpy(control, result->guard_control, sizeof(result->guard_control));
+    return 1;
+}
+
 static void spa_hssr_worker_reset(void *context, uint32_t generation)
 {
     struct spa_hssr_control_worker *worker =
@@ -120,6 +137,8 @@ static void *spa_hssr_worker_main(void *opaque)
         (struct spa_hssr_control_worker *)opaque;
     struct spa_hssr_control_job local_job;
     float local_control[SPA_HSSR_OUTPUTS];
+    float local_guard[SPA_HSSR_OUTPUTS];
+    uint32_t local_guard_valid = 0;
     uint32_t active_generation = 0;
     const struct timespec idle = { 0, 250000 };
 
@@ -161,6 +180,12 @@ static void *spa_hssr_worker_main(void *opaque)
             spa_hssr_atomic_increment(&worker->_stale_discarded);
             continue;
         }
+        {
+            const struct spa_hssr_model *guard = worker->_guard_model;
+            local_guard_valid = guard &&
+                spa_hssr_infer(guard, &worker->_guard_network,
+                               local_job.features, local_guard) == SPA_HSSR_OK;
+        }
         if (spa_hssr_atomic_load(&worker->_requested_generation) !=
                 local_job.generation) {
             spa_hssr_atomic_increment(&worker->_stale_discarded);
@@ -180,6 +205,10 @@ static void *spa_hssr_worker_main(void *opaque)
         worker->_results[next & 1u].sequence = local_job.sequence;
         memcpy(worker->_results[next & 1u].control,
                local_control, sizeof(local_control));
+        worker->_results[next & 1u].guard_valid = local_guard_valid;
+        if (local_guard_valid)
+            memcpy(worker->_results[next & 1u].guard_control,
+                   local_guard, sizeof(local_guard));
         spa_hssr_atomic_store(&worker->_result_published, next);
         spa_hssr_atomic_increment(&worker->_completed);
     }
@@ -202,6 +231,7 @@ int spa_hssr_control_worker_start(
     worker->provider.submit = spa_hssr_worker_submit;
     worker->provider.receive = spa_hssr_worker_receive;
     worker->provider.reset = spa_hssr_worker_reset;
+    worker->provider.receive_guard = spa_hssr_worker_receive_guard;
     spa_hssr_atomic_store(&worker->_requested_generation,
                           initial_generation);
     if (pthread_create(&worker->_thread, NULL,
@@ -211,6 +241,16 @@ int spa_hssr_control_worker_start(
     }
     spa_hssr_atomic_store(&worker->_started, 1u);
     return SPA_HSSR_OK;
+}
+
+void spa_hssr_control_worker_set_guard(
+    struct spa_hssr_control_worker *worker,
+    const struct spa_hssr_model *guard)
+{
+    if (!worker) return;
+    if (guard && !spa_hssr_model_ready(guard)) guard = NULL;
+    spa_hssr_state_reset(&worker->_guard_network);
+    worker->_guard_model = guard;
 }
 
 void spa_hssr_control_worker_stop(struct spa_hssr_control_worker *worker)

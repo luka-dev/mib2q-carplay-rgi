@@ -64,6 +64,17 @@ ALTSCREEN_PACE_TRACE="${ALTSCREEN_PACE_TRACE:-0}"
 [[ "$LOG_RGD_PACKET_RAW" == "1" && "$LOG" != "1" ]] && { echo "LOG_RGD_PACKET_RAW=1 requires LOG=1"; exit 1; }
 
 CFLAGS_EXTRA="-D__QNX__ -mfpu=neon -mfloat-abi=softfp"
+UPMIX_SCENE="${UPMIX_SCENE:-0}"
+[[ "$UPMIX_SCENE" == "0" || "$UPMIX_SCENE" == "1" ]] || { echo "Invalid UPMIX_SCENE=$UPMIX_SCENE (0|1)"; exit 1; }
+[ "$UPMIX_SCENE" == "1" ] && CFLAGS_EXTRA="$CFLAGS_EXTRA -DSPA_HSSR_SCENE=1" && echo "Second-scene build ENABLED (rear delay 12 ms, surround cap 0.5)"
+UPMIX_TRUEPAN="${UPMIX_TRUEPAN:-0}"
+[ "$UPMIX_TRUEPAN" == "1" ] && CFLAGS_EXTRA="$CFLAGS_EXTRA -DSPA_HSSR_SCENE_TRUEPAN=1" && echo "Scene objects keep their own pan (SPA_HSSR_SCENE_TRUEPAN)"
+UPMIX_HOLD="${UPMIX_HOLD:-0}"
+[ "$UPMIX_HOLD" == "1" ] && CFLAGS_EXTRA="$CFLAGS_EXTRA -DSPA_HSSR_SCENE_HOLD=1" && echo "Scene object retention ENABLED (slow slot release, calm pan; hold stays 250 ms)"
+UPMIX_COH="${UPMIX_COH:-0}"
+[ "$UPMIX_COH" == "1" ] && CFLAGS_EXTRA="$CFLAGS_EXTRA -DSPA_HSSR_SCENE_COH=1" && echo "Scene coherence weighting + diffuse layer ENABLED"
+UPMIX_SLOTS4="${UPMIX_SLOTS4:-0}"
+[ "$UPMIX_SLOTS4" == "1" ] && CFLAGS_EXTRA="$CFLAGS_EXTRA -DSPA_HSSR_SCENE_SLOTS4=1" && echo "Scene: two object slots per side ENABLED"
 echo "Stereo upmix renderer: hssr-universal"
 [ "$LOG" == "0" ] && CFLAGS_EXTRA="$CFLAGS_EXTRA -DENABLE_LOGGING=0" && echo "Logging and diagnostic captures DISABLED"
 [ "$AUDIO_STATE_TRACE" == "1" ] && CFLAGS_EXTRA="$CFLAGS_EXTRA -DENABLE_STATE_TRACE=1" && echo "Compact lifecycle trace ENABLED"

@@ -151,6 +151,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-train-tracks", type=int, default=0)
     parser.add_argument("--max-test-tracks", type=int, default=0)
     parser.add_argument("--prepare-only", action="store_true")
+    parser.add_argument("--lazy-cache", action="store_true",
+                        help="memory-map float16 .npy twins of each cache (made on first use) instead of loading every track into RAM")
     return parser.parse_args()
 
 
@@ -673,16 +675,43 @@ def split_train_validation(
     return train, validation
 
 
+def lazy_twins(path: pathlib.Path) -> tuple[pathlib.Path, pathlib.Path]:
+    """float16 .npy twins next to a cache npz, written once, then memory-mapped (7 GB NAS)."""
+    feat = path.with_suffix(".features.npy")
+    targ = path.with_suffix(".targets.npy")
+    if not (feat.exists() and targ.exists()):
+        with np.load(path) as data:
+            f = np.clip(data["features"], -6.0e4, 6.0e4).astype(np.float16)
+            g = data["targets"].astype(np.float16)
+        tmp = feat.with_suffix(".tmp.npy"); np.save(tmp, f); os.replace(tmp, feat)
+        tmp = targ.with_suffix(".tmp.npy"); np.save(tmp, g); os.replace(tmp, targ)
+    return feat, targ
+
+
 class SequenceDataset(Dataset):
     def __init__(self, files: list[pathlib.Path], mean: np.ndarray,
                  inv_std: np.ndarray, sequence: int = SEQUENCE,
-                 routing_target: str = "classic"):
+                 routing_target: str = "classic", lazy: bool = False):
         self.tracks = []
         self.index = []
         self.mean = mean.astype(np.float32)
         self.inv_std = inv_std.astype(np.float32)
         self.sequence = sequence
         for track_index, path in enumerate(files):
+            if lazy:
+                if routing_target != "classic":
+                    raise SystemExit("--lazy-cache supports --routing-target classic only")
+                feat, targ = lazy_twins(path)
+                features = np.load(feat, mmap_mode="r")
+                targets = np.load(targ, mmap_mode="r")
+                self.tracks.append((features, targets))
+                if features.shape[0] <= sequence:
+                    self.index.append((track_index, 0))
+                else:
+                    for begin in range(0, features.shape[0] - sequence + 1,
+                                       sequence // 2):
+                        self.index.append((track_index, begin))
+                continue
             with np.load(path) as data:
                 features = data["features"].astype(np.float32)
                 targets = data["targets"].astype(np.float32)
@@ -708,8 +737,8 @@ class SequenceDataset(Dataset):
     def __getitem__(self, item: int) -> tuple[torch.Tensor, torch.Tensor]:
         track_index, begin = self.index[item]
         features, targets = self.tracks[track_index]
-        x = features[begin:begin + self.sequence]
-        y = targets[begin:begin + self.sequence]
+        x = np.asarray(features[begin:begin + self.sequence], dtype=np.float32)
+        y = np.asarray(targets[begin:begin + self.sequence], dtype=np.float32)
         if x.shape[0] < self.sequence:
             pad = self.sequence - x.shape[0]
             x = np.pad(x, ((0, pad), (0, 0)))
@@ -1056,6 +1085,7 @@ def main() -> int:
         inv_std,
         routing_target=args.routing_target,
         sequence=args.sequence+args.burn_in,
+        lazy=args.lazy_cache,
     )
     validation_dataset = SequenceDataset(
         validation_files + extra_validation_files,
@@ -1063,10 +1093,11 @@ def main() -> int:
         inv_std,
         routing_target=args.routing_target,
         sequence=args.sequence+args.burn_in,
+        lazy=args.lazy_cache,
     )
     test_dataset = SequenceDataset(
         test_files, mean, inv_std, routing_target=args.routing_target,
-        sequence=args.sequence+args.burn_in,
+        sequence=args.sequence+args.burn_in, lazy=args.lazy_cache,
     )
     generator = torch.Generator().manual_seed(args.seed)
     train_loader = DataLoader(

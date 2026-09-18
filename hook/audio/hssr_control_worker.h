@@ -21,6 +21,8 @@ struct spa_hssr_control_result {
     uint32_t generation;
     uint32_t sequence;
     float control[SPA_HSSR_OUTPUTS];
+    float guard_control[SPA_HSSR_OUTPUTS];
+    uint32_t guard_valid;
 };
 
 struct spa_hssr_control_worker_stats {
@@ -37,6 +39,8 @@ struct spa_hssr_control_worker {
     pthread_t _thread;
     const struct spa_hssr_model *_model;
     struct spa_hssr_state _network;
+    const struct spa_hssr_model *_guard_model;   /* optional second model, see set_guard */
+    struct spa_hssr_state _guard_network;
     struct spa_hssr_control_provider provider;
     struct spa_hssr_control_job _jobs[2];
     struct spa_hssr_control_result _results[2];
@@ -62,6 +66,10 @@ int spa_hssr_control_worker_start(
     const struct spa_hssr_model *model,
     uint32_t initial_generation, int priority);
 void spa_hssr_control_worker_stop(struct spa_hssr_control_worker *worker);
+/* Optional guard model run after the main one on every job; NULL disables. */
+void spa_hssr_control_worker_set_guard(
+    struct spa_hssr_control_worker *worker,
+    const struct spa_hssr_model *guard);
 const struct spa_hssr_control_provider *spa_hssr_control_worker_provider(
     struct spa_hssr_control_worker *worker);
 void spa_hssr_control_worker_get_stats(

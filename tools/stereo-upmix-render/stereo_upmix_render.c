@@ -5,6 +5,11 @@
  */
 
 #include "stereo_upmix.h"
+#ifdef SPA_HSSR_SCENE
+#define RENDER_SURROUND_MAX 0.5
+#else
+#define RENDER_SURROUND_MAX 0.25
+#endif
 #include "soundcheck.h"
 
 #include <errno.h>
@@ -57,6 +62,7 @@ struct options {
     enum cli_lfe_mode lfe_mode;
     double surround_gain;
     const char *model_path;
+    const char *guard_model_path;
     int float_render;
     int cabin_render;
     int quiet_lfe;
@@ -412,7 +418,7 @@ static int parse_gain(const char *text, double *gain)
     errno = 0;
     parsed = strtod(text, &end);
     if (errno != 0 || end == text || *end != '\0' ||
-        !isfinite(parsed) || parsed < 0.0 || parsed > 0.25) return 0;
+        !isfinite(parsed) || parsed < 0.0 || parsed > RENDER_SURROUND_MAX) return 0;
     *gain = parsed;
     return 1;
 }
@@ -428,6 +434,7 @@ static int parse_options(int argc, char **argv, struct options *options)
     options->surround_gain =
         (double)SPA_STEREO_UPMIX_REAR_Q15_DEFAULT / 32768.0;
     options->model_path = NULL;
+    options->guard_model_path = NULL;
     options->float_render = 0;
     options->cabin_render = 0;
     options->quiet_lfe = 0;
@@ -507,6 +514,14 @@ static int parse_options(int argc, char **argv, struct options *options)
             options->model_path = argv[index];
             continue;
         }
+        if (strcmp(argument, "--guard-model") == 0) {
+            if (++index >= argc || !argv[index][0]) {
+                fprintf(stderr, "error: --guard-model requires a path\n");
+                return 0;
+            }
+            options->guard_model_path = argv[index];
+            continue;
+        }
         if (strncmp(argument, "--model=", 8) == 0) {
             if (!argument[8]) {
                 fprintf(stderr, "error: --model requires a path\n");
@@ -534,7 +549,7 @@ static int parse_options(int argc, char **argv, struct options *options)
             if (++index >= argc ||
                 !parse_gain(argv[index], &options->surround_gain)) {
                 fprintf(stderr,
-                        "error: --surround must be between 0.0 and 0.25\n");
+                        "error: --surround must be between 0.0 and %g\n", RENDER_SURROUND_MAX);
                 return 0;
             }
             continue;
@@ -542,7 +557,7 @@ static int parse_options(int argc, char **argv, struct options *options)
         if (strncmp(argument, "--surround=", 11) == 0) {
             if (!parse_gain(argument + 11, &options->surround_gain)) {
                 fprintf(stderr,
-                        "error: --surround must be between 0.0 and 0.25\n");
+                        "error: --surround must be between 0.0 and %g\n", RENDER_SURROUND_MAX);
                 return 0;
             }
             continue;
@@ -763,6 +778,14 @@ int main(int argc, char **argv)
             return 2;
         }
         spa_stereo_upmix_config_set_hssr_model(&config, &hssr_model);
+        if (options.guard_model_path) {
+            static struct spa_hssr_model hssr_guard;
+            if (spa_hssr_model_load_file(&hssr_guard, options.guard_model_path) != SPA_HSSR_OK) {
+                fprintf(stderr, "error: cannot load guard model %s\n", options.guard_model_path);
+                return 2;
+            }
+            spa_stereo_upmix_config_set_hssr_guard_model(&config, &hssr_guard);
+        }
     }
     if (paths_are_same_file(options.input_path, options.output_path)) {
         fprintf(stderr, "error: input and output resolve to the same file\n");

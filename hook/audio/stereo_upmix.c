@@ -21,13 +21,35 @@ struct spa_upmix_biquad_coefficients {
 /* Cabin-Aware LFE V2 deliberately stays below the conservative 48-Hz
  * SoundAmp sub-band boundary.  This is one 48-kHz, Q=1/sqrt(2) Butterworth
  * section cascaded twice below for an LR4 (-24 dB/octave) low-pass. */
-static const struct spa_upmix_biquad_coefficients kLfeLow48 = {
+#ifdef SPA_HSSR_SCENE
+/* Scene LFE corner 60 Hz: meets the front bass HP (62 Hz record) and stays
+ * under the LFE-bus LP (66 Hz record), closing the 48-62 Hz hole. */
+static const struct spa_upmix_biquad_coefficients kLfeLow = {
+    1.5336008368362254e-05,
+    3.06720167367245081e-05,
+    1.5336008368362254e-05,
+    -1.98889290589965317,
+    0.988954249933126639
+};
+/* Low-mid body stays in front: RBJ low shelf -4 dB @ 500 Hz (S=1) on the
+ * rear BEFORE the transfer, so nothing is removed from the front that the
+ * rear does not play. */
+static const struct spa_upmix_biquad_coefficients kSceneRearLowShelf = {
+    0.989384126553696785,
+    -1.89718730746555098,
+    0.911035970849235044,
+    -1.89624188905203539,
+    0.901365515816446972
+};
+#else
+static const struct spa_upmix_biquad_coefficients kLfeLow = {
     9.82591682048203443e-06,
     1.96518336409640689e-05,
     9.82591682048203443e-06,
     -1.99111429220165359,
     0.991153595868935477
 };
+#endif
 
 /* Rear-presence shelf for the fixed 48-kHz rail.  This is an RBJ high shelf
  * with S=1, +3 dB and a 4-kHz midpoint: effectively flat below 1 kHz,
@@ -187,9 +209,9 @@ static float spa_upmix_lfe_v2_normalized(
     const float normalized_l = (float)render_l * (1.0f / 32768.0f);
     const float normalized_r = (float)render_r * (1.0f / 32768.0f);
     float low48_l = spa_upmix_lfe_lr4(
-        normalized_l, state->_runtime._lfe_low48_state[0], &kLfeLow48);
+        normalized_l, state->_runtime._lfe_low48_state[0], &kLfeLow);
     float low48_r = spa_upmix_lfe_lr4(
-        normalized_r, state->_runtime._lfe_low48_state[1], &kLfeLow48);
+        normalized_r, state->_runtime._lfe_low48_state[1], &kLfeLow);
     /* Return to a supporting mono-sum, with no phase recovery or adaptive
      * boost. Effective gain at the default Q15 4096 is 0.0625, not 0.125. */
     if (state->config.cabin_policy || state->config.quiet_lfe)
@@ -338,6 +360,11 @@ static int spa_upmix_config_valid(const struct spa_stereo_upmix_config *config)
 
     /* Recovered SoundAmp centre row:
      * Cbus = 0.501187*L + 0.501187*R + 0.316228*LFE. */
+#ifdef SPA_HSSR_SCENE
+    /* Static worst-case (full-scale mono + full LFE at once) would refuse
+     * 12288; the per-sample spa_upmix_lfe_cabin_limit is the real guard. */
+    (void)centre_bus_q15;
+#else
     if (config->backend != SPA_STEREO_UPMIX_OFF && config->lfe_enabled &&
         !config->cabin_policy && !config->quiet_lfe) {
         centre_bus_q15 = UINT64_C(1002375) * config->front_gain_q15 +
@@ -345,6 +372,7 @@ static int spa_upmix_config_valid(const struct spa_stereo_upmix_config *config)
         if (centre_bus_q15 > UINT64_C(1000000) * UINT64_C(32768))
             return SPA_STEREO_UPMIX_ERROR_CONFIG;
     }
+#endif
     return SPA_STEREO_UPMIX_OK;
 }
 
@@ -365,6 +393,22 @@ static int spa_upmix_ranges_overlap(const void *left, size_t left_size,
     return left_begin < right_end && right_begin < left_end;
 }
 
+#ifdef SPA_HSSR_SCENE
+/* Rear-only delay: the dry-front transfer keeps using the undelayed rear. */
+static void spa_scene_rear_delay(struct spa_stereo_upmix *state, float *rear_l, float *rear_r)
+{
+    uint32_t pos = state->_runtime._scene_rear_pos;
+    float delayed_l = state->_runtime._scene_rear_delay[0][pos];
+    float delayed_r = state->_runtime._scene_rear_delay[1][pos];
+
+    state->_runtime._scene_rear_delay[0][pos] = *rear_l;
+    state->_runtime._scene_rear_delay[1][pos] = *rear_r;
+    state->_runtime._scene_rear_pos = pos + 1u == SPA_SCENE_REAR_DELAY_FRAMES ? 0u : pos + 1u;
+    *rear_l = delayed_l;
+    *rear_r = delayed_r;
+}
+#endif
+
 void spa_stereo_upmix_default_config(struct spa_stereo_upmix_config *config)
 {
     if (!config) return;
@@ -378,6 +422,7 @@ void spa_stereo_upmix_default_config(struct spa_stereo_upmix_config *config)
     config->backend = SPA_STEREO_UPMIX_OFF;
     config->hssr_model = NULL;
     config->hssr_control_provider = NULL;
+    config->hssr_guard_model = NULL;
 }
 
 void spa_stereo_upmix_config_set_lfe(
@@ -413,6 +458,14 @@ void spa_stereo_upmix_config_set_hssr_model(
     if (config) config->hssr_model = model;
 }
 
+void spa_stereo_upmix_config_set_hssr_guard_model(
+    struct spa_stereo_upmix_config *config,
+    const struct spa_hssr_model *model)
+{
+    if (config) config->hssr_guard_model =
+        model && spa_hssr_model_ready(model) ? model : NULL;
+}
+
 void spa_stereo_upmix_config_set_hssr_control_provider(
     struct spa_stereo_upmix_config *config,
     const struct spa_hssr_control_provider *provider)
@@ -442,6 +495,10 @@ int spa_stereo_upmix_init(struct spa_stereo_upmix *state,
         spa_hssr_dsp_prepare(&state->_runtime._hssr);
         state->_runtime._hssr.cabin_policy = saved.cabin_policy;
         state->_runtime._hssr.control_generation = 1u;
+#ifdef SPA_HSSR_SCENE
+        state->_runtime._hssr.guard_model = saved.hssr_guard_model;
+        spa_hssr_state_reset(&state->_runtime._hssr.guard_network);
+#endif
         if (saved.hssr_control_provider)
             saved.hssr_control_provider->reset(
                 saved.hssr_control_provider->context, 1u);
@@ -549,13 +606,30 @@ static int spa_upmix_process(struct spa_stereo_upmix *state,
                 float rear_l = state->_hssr_rear_scratch[frame * 2];
                 float rear_r = state->_hssr_rear_scratch[frame * 2 + 1];
                 float rear_gain = (float)state->config.rear_gain_q15;
+#ifdef SPA_HSSR_SCENE
+                rear_l = spa_upmix_biquad(rear_l,
+                    state->_runtime._scene_rear_shelf_state[0], &kSceneRearLowShelf);
+                rear_r = spa_upmix_biquad(rear_r,
+                    state->_runtime._scene_rear_shelf_state[1], &kSceneRearLowShelf);
+#endif
                 float front_gain = (float)state->config.front_gain_q15 / 32768.0f;
                 /* Preserve V11's transfer policy; presence EQ must not enter
                  * dry-front subtraction. No per-channel rail clipping. */
+#ifdef SPA_HSSR_SCENE
+                /* Remove the source-aligned object once (2.5 x 0.40 = 1.0),
+                 * never the synthetic ambience/universal bed. */
+                float transfer_l = 2.5f * spa_upmix_biquad(
+                    state->_hssr_source_scratch[frame * 2],
+                    state->_runtime._scene_source_shelf_state[0], &kSceneRearLowShelf);
+                float transfer_r = 2.5f * spa_upmix_biquad(
+                    state->_hssr_source_scratch[frame * 2 + 1],
+                    state->_runtime._scene_source_shelf_state[1], &kSceneRearLowShelf);
+#else
                 float transfer_l = state->config.cabin_policy
                     ? state->_hssr_source_scratch[frame * 2] : 2.5f * rear_l;
                 float transfer_r = state->config.cabin_policy
                     ? state->_hssr_source_scratch[frame * 2 + 1] : 2.5f * rear_r;
+#endif
                 out[0] = (float)dry_l * front_gain - transfer_l * rear_gain;
                 out[1] = (float)dry_r * front_gain - transfer_r * rear_gain;
                 out[2] = 0.0f;
@@ -564,12 +638,17 @@ static int spa_upmix_process(struct spa_stereo_upmix *state,
                         state->_hssr_lfe_control_scratch[frame * 2],
                         state->_hssr_lfe_control_scratch[frame * 2 + 1]) *
                         (float)state->config.lfe_gain_q15 : 0.0f;
-                out[4] = (state->config.cabin_policy ? rear_l : spa_upmix_biquad(rear_l,
-                    state->_runtime._rear_high_shelf_state[0],
-                    &kRearHighShelf4k3dB)) * rear_gain;
-                out[5] = (state->config.cabin_policy ? rear_r : spa_upmix_biquad(rear_r,
-                    state->_runtime._rear_high_shelf_state[1],
-                    &kRearHighShelf4k3dB)) * rear_gain;
+                {
+                    float rear_out_l = state->config.cabin_policy ? rear_l : spa_upmix_biquad(rear_l,
+                        state->_runtime._rear_high_shelf_state[0], &kRearHighShelf4k3dB);
+                    float rear_out_r = state->config.cabin_policy ? rear_r : spa_upmix_biquad(rear_r,
+                        state->_runtime._rear_high_shelf_state[1], &kRearHighShelf4k3dB);
+#ifdef SPA_HSSR_SCENE
+                    spa_scene_rear_delay(state, &rear_out_l, &rear_out_r);
+#endif
+                    out[4] = rear_out_l * rear_gain;
+                    out[5] = rear_out_r * rear_gain;
+                }
             }
             continue;
         }
@@ -597,6 +676,18 @@ static int spa_upmix_process(struct spa_stereo_upmix *state,
             int16_t output_transfer_rear_l;
             int16_t output_transfer_rear_r;
 
+#ifdef SPA_HSSR_SCENE
+            rear_l = spa_upmix_biquad(rear_l,
+                state->_runtime._scene_rear_shelf_state[0], &kSceneRearLowShelf);
+            rear_r = spa_upmix_biquad(rear_r,
+                state->_runtime._scene_rear_shelf_state[1], &kSceneRearLowShelf);
+            /* Subtract the source-aligned object (x2.5 x rear 0.40 = once),
+             * shelved the same way, never the synthetic bed. */
+            transfer_rear_l = spa_upmix_biquad(state->_hssr_source_scratch[frame * 2],
+                state->_runtime._scene_source_shelf_state[0], &kSceneRearLowShelf);
+            transfer_rear_r = spa_upmix_biquad(state->_hssr_source_scratch[frame * 2 + 1],
+                state->_runtime._scene_source_shelf_state[1], &kSceneRearLowShelf);
+#endif
             if (state->config.lfe_enabled) {
                 lfe_candidate = spa_upmix_lfe_to_s16(spa_upmix_lfe_v2_normalized(
                     state, render_l, render_r,
@@ -643,6 +734,9 @@ static int spa_upmix_process(struct spa_stereo_upmix *state,
                     transfer_rear_r * state->_runtime._limiter_gain, 1.0f);
             }
 
+#ifdef SPA_HSSR_SCENE
+            spa_scene_rear_delay(state, &rear_l, &rear_r);
+#endif
             front_l = spa_upmix_scale_s16_q15(
                 render_l, state->config.front_gain_q15);
             front_r = spa_upmix_scale_s16_q15(

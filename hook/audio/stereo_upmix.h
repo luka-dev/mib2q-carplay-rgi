@@ -25,9 +25,22 @@ enum {
     SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT = 32670,
     SPA_STEREO_UPMIX_FRONT_Q15_LFE_DEFAULT = 31392,
     SPA_STEREO_UPMIX_REAR_Q15_DEFAULT = 5898,
+#ifdef SPA_HSSR_SCENE
+    /* Scene build: rear may run up to 0.5 (-6 dB) and is delayed 12 ms so the
+     * front anchors the image (precedence) and the rear reads as a second scene. */
+    SPA_STEREO_UPMIX_REAR_Q15_MAX = 16384,
+    SPA_SCENE_REAR_DELAY_FRAMES = 576,
+    /* The 5.1 bank feeds the subwoofer from PCM LFE only (L/R/C -> Bus_LFE
+     * are -100 dB), so this assist is the whole sub: +9.5 dB over the
+     * production 4096; the MMI Subwoofer knob sits on top.  Rails stay
+     * protected per sample by spa_upmix_lfe_cabin_limit. */
+    SPA_STEREO_UPMIX_LFE_Q15_DEFAULT = 12288,
+    SPA_STEREO_UPMIX_LFE_Q15_MAX = 16384
+#else
     SPA_STEREO_UPMIX_REAR_Q15_MAX = 8192,
     SPA_STEREO_UPMIX_LFE_Q15_DEFAULT = 4096,
     SPA_STEREO_UPMIX_LFE_Q15_MAX = 4096
+#endif
 };
 
 enum spa_stereo_upmix_output_channel {
@@ -67,6 +80,7 @@ struct spa_stereo_upmix_config {
     enum spa_stereo_upmix_backend backend;
     const struct spa_hssr_model *hssr_model;
     const struct spa_hssr_control_provider *hssr_control_provider;
+    const struct spa_hssr_model *hssr_guard_model;   /* scene builds: V11 vocal safety net, optional */
 };
 
 /* Runtime details are public only so callers can embed the complete state and
@@ -88,6 +102,12 @@ struct spa_stereo_upmix_runtime {
     /* Legacy +3 dB / 4-kHz rear shelf, bypassed by cabin_policy. */
     float _rear_high_shelf_state[2][2];
     float _limiter_gain;
+#ifdef SPA_HSSR_SCENE
+    float _scene_rear_delay[2][SPA_SCENE_REAR_DELAY_FRAMES];
+    uint32_t _scene_rear_pos;
+    float _scene_rear_shelf_state[2][2];
+    float _scene_source_shelf_state[2][2];
+#endif
     struct spa_hssr_dsp _hssr;
 };
 
@@ -132,6 +152,9 @@ void spa_stereo_upmix_config_set_hssr_model(
 
 /* Attach a hook-owned asynchronous controller.  NULL retains the exact
  * synchronous renderer used by tools and deterministic regression tests. */
+void spa_stereo_upmix_config_set_hssr_guard_model(
+    struct spa_stereo_upmix_config *config,
+    const struct spa_hssr_model *model);
 void spa_stereo_upmix_config_set_hssr_control_provider(
     struct spa_stereo_upmix_config *config,
     const struct spa_hssr_control_provider *provider);

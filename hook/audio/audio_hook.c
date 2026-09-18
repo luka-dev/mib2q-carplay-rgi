@@ -161,10 +161,17 @@ static uint32_t spa_parse_stereo_surround_q15(void)
     if (!value || !value[0]) return SPA_STEREO_UPMIX_REAR_Q15_DEFAULT;
     errno = 0;
     gain = strtod(value, &end);
+#ifdef SPA_HSSR_SCENE
+    if (errno || end == value || *end || gain != gain ||
+        gain < 0.0 || gain > 0.5) {
+        LOG_ERROR(LOG_MODULE,
+                  "audio config: invalid %s='%s'; expected 0.0..0.5 (scene build); using 0.18",
+#else
     if (errno || end == value || *end || gain != gain ||
         gain < 0.0 || gain > 0.25) {
         LOG_ERROR(LOG_MODULE,
                   "audio config: invalid %s='%s'; expected 0.0..0.25; using 0.18",
+#endif
                   SPA_AUDIO_STEREO_SURROUND_ENV, value);
         return SPA_STEREO_UPMIX_REAR_Q15_DEFAULT;
     }
@@ -1737,6 +1744,46 @@ static void spa_hssr_model_init_once(void)
     }
 }
 
+static struct spa_hssr_model spa_hssr_guard_value;
+static int spa_hssr_guard_status = SPA_HSSR_ERROR_NOT_READY;
+
+static void spa_hssr_guard_init_once(void)
+{
+    /* AUDIO_HSSR_GUARD_MODEL, else hssr_guard.bin beside the main model.
+     * Absent file = no guard (silently), so production stays unchanged. */
+    const char *path = getenv("AUDIO_HSSR_GUARD_MODEL");
+    char derived[512];
+
+    if (!path || !path[0]) {
+        const char *main_path = getenv(SPA_AUDIO_HSSR_MODEL_ENV);
+        const char *slash;
+        size_t dir_length;
+
+        if (!main_path || !main_path[0]) main_path = SPA_AUDIO_HSSR_MODEL_DEFAULT;
+        slash = strrchr(main_path, '/');
+        dir_length = slash ? (size_t)(slash - main_path + 1) : 0u;
+        if (dir_length + sizeof("hssr_guard.bin") > sizeof(derived)) return;
+        memcpy(derived, main_path, dir_length);
+        memcpy(derived + dir_length, "hssr_guard.bin", sizeof("hssr_guard.bin"));
+        path = derived;
+        if (access(path, R_OK) != 0) return;
+    }
+    spa_hssr_guard_status = spa_hssr_model_load_file(&spa_hssr_guard_value, path);
+    if (spa_hssr_guard_status == SPA_HSSR_OK)
+        LOG_WARN(LOG_MODULE, "HSSR: guard model ready path=%s crc=%08x",
+                 path, (unsigned)spa_hssr_guard_value.payload_crc32);
+    else
+        LOG_ERROR(LOG_MODULE, "HSSR: guard model rejected path=%s status=%d",
+                  path, spa_hssr_guard_status);
+}
+
+static const struct spa_hssr_model *spa_hssr_runtime_guard_model(void)
+{
+    static pthread_once_t once = PTHREAD_ONCE_INIT;
+    pthread_once(&once, spa_hssr_guard_init_once);
+    return spa_hssr_guard_status == SPA_HSSR_OK ? &spa_hssr_guard_value : NULL;
+}
+
 static const struct spa_hssr_model *spa_hssr_runtime_model(void)
 {
     pthread_once(&spa_hssr_model_once, spa_hssr_model_init_once);
@@ -1913,6 +1960,13 @@ static void spa103_render_start(uint32_t generation, int64_t formatIndex, int ha
                 &upmixConfig, hssrModel);
             hssrWorkerStatus = spa_hssr_control_worker_start(
                 &spa103_render.hssrControlWorker, hssrModel, 1u, 17);
+            {
+                const struct spa_hssr_model *guard = spa_hssr_runtime_guard_model();
+                spa_stereo_upmix_config_set_hssr_guard_model(&upmixConfig, guard);
+                if (hssrWorkerStatus == SPA_HSSR_OK)
+                    spa_hssr_control_worker_set_guard(
+                        &spa103_render.hssrControlWorker, guard);
+            }
             if (hssrWorkerStatus == SPA_HSSR_OK)
                 spa_stereo_upmix_config_set_hssr_control_provider(
                     &upmixConfig,
