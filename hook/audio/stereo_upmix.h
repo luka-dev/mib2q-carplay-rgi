@@ -25,7 +25,6 @@ enum {
     SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT = 32670,
     SPA_STEREO_UPMIX_FRONT_Q15_LFE_DEFAULT = 31392,
     SPA_STEREO_UPMIX_REAR_Q15_DEFAULT = 5898,
-#ifdef SPA_HSSR_SCENE
     /* Scene build: rear may run up to 0.5 (-6 dB) and is delayed 12 ms so the
      * front anchors the image (precedence) and the rear reads as a second scene. */
     SPA_STEREO_UPMIX_REAR_Q15_MAX = 16384,
@@ -36,11 +35,6 @@ enum {
      * protected per sample by spa_upmix_lfe_cabin_limit. */
     SPA_STEREO_UPMIX_LFE_Q15_DEFAULT = 12288,
     SPA_STEREO_UPMIX_LFE_Q15_MAX = 16384
-#else
-    SPA_STEREO_UPMIX_REAR_Q15_MAX = 8192,
-    SPA_STEREO_UPMIX_LFE_Q15_DEFAULT = 4096,
-    SPA_STEREO_UPMIX_LFE_Q15_MAX = 4096
-#endif
 };
 
 enum spa_stereo_upmix_output_channel {
@@ -102,12 +96,10 @@ struct spa_stereo_upmix_runtime {
     /* Legacy +3 dB / 4-kHz rear shelf, bypassed by cabin_policy. */
     float _rear_high_shelf_state[2][2];
     float _limiter_gain;
-#ifdef SPA_HSSR_SCENE
     float _scene_rear_delay[2][SPA_SCENE_REAR_DELAY_FRAMES];
     uint32_t _scene_rear_pos;
     float _scene_rear_shelf_state[2][2];
     float _scene_source_shelf_state[2][2];
-#endif
     struct spa_hssr_dsp _hssr;
 };
 

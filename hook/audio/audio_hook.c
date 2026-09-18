@@ -161,17 +161,10 @@ static uint32_t spa_parse_stereo_surround_q15(void)
     if (!value || !value[0]) return SPA_STEREO_UPMIX_REAR_Q15_DEFAULT;
     errno = 0;
     gain = strtod(value, &end);
-#ifdef SPA_HSSR_SCENE
     if (errno || end == value || *end || gain != gain ||
         gain < 0.0 || gain > 0.5) {
         LOG_ERROR(LOG_MODULE,
                   "audio config: invalid %s='%s'; expected 0.0..0.5 (scene build); using 0.18",
-#else
-    if (errno || end == value || *end || gain != gain ||
-        gain < 0.0 || gain > 0.25) {
-        LOG_ERROR(LOG_MODULE,
-                  "audio config: invalid %s='%s'; expected 0.0..0.25; using 0.18",
-#endif
                   SPA_AUDIO_STEREO_SURROUND_ENV, value);
         return SPA_STEREO_UPMIX_REAR_Q15_DEFAULT;
     }
@@ -3785,7 +3778,6 @@ size_t spa_buffered_pcm6_read(int16_t *out, size_t frames)
 /* Eight fragments is the floor the RetroArch QNX QSA driver established on this
  * head unit; below it the CSD session cycles instead of absorbing jitter. */
 #define SPA_PCM_SINK_MIN_FRAGS     8
-
 
 typedef int (*spa_snd_open_name_t)(snd_pcm_t **, char *, int);
 typedef int (*spa_snd_params_t)(snd_pcm_t *, snd_pcm_channel_params_t *);

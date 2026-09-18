@@ -5,11 +5,7 @@
  */
 
 #include "stereo_upmix.h"
-#ifdef SPA_HSSR_SCENE
 #define RENDER_SURROUND_MAX 0.5
-#else
-#define RENDER_SURROUND_MAX 0.25
-#endif
 #include "soundcheck.h"
 
 #include <errno.h>

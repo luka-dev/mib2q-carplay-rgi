@@ -289,10 +289,11 @@ static void test_default_validation_and_fail_closed(void)
     config.sample_rate_hz = 44100;
     assert(spa_stereo_upmix_init(&state, &config) ==
            SPA_STEREO_UPMIX_ERROR_CONFIG);
+    /* The static centre-bus worst case is no longer a config error: the
+     * per-sample LFE cabin limit is the rail guard (LFE assist +9.5 dB). */
     make_universal_config(&config, 1);
     config.front_gain_q15 = SPA_STEREO_UPMIX_FRONT_Q15_DEFAULT;
-    assert(spa_stereo_upmix_init(&state, &config) ==
-           SPA_STEREO_UPMIX_ERROR_CONFIG);
+    assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
     make_universal_config(&config, 1);
     config.rear_gain_q15 = SPA_STEREO_UPMIX_REAR_Q15_MAX + 1u;
     assert(spa_stereo_upmix_init(&state, &config) ==
@@ -568,14 +569,14 @@ static void test_lfe_v2_phase_frequency_and_cabin_bounds(void)
     assert(anti_energy > low_energy / 2u);
     assert_cabin_buses_bounded(g_output_b, TEST_FRAMES);
 
-    /* The retired 95-Hz punch branch would fail this guard.  The shipping
-     * path stays below the conservative 48-Hz SoundAmp sub-band boundary. */
+    /* The assist corner is 60 Hz (LR4): 96 Hz sits 1.6 octaves above it,
+     * -16 dB by design; the retired 95-Hz punch branch would pass 96 Hz. */
     fill_sine(96.0f, 0);
     assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
     process_blocks(&state, g_input, g_output_b);
     crossover_energy = channel_energy(
         g_output_b, SPA_STEREO_UPMIX_CHANNEL_LFE, 4096);
-    assert(crossover_energy * 50u < low_energy);
+    assert(crossover_energy * 20u < low_energy);
     assert_cabin_buses_bounded(g_output_b, TEST_FRAMES);
 
     fill_sine(500.0f, 0);

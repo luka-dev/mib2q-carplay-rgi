@@ -4,21 +4,7 @@
 #include "hssr_dsp.h"
 
 #include <math.h>
-#if defined(SPA_HSSR_SCENE_DEBUG) || defined(SPA_HSSR_SCENE_DEBUG_SLOTS)
-#include <stdio.h>
-#endif
 #include <string.h>
-
-#ifdef SPA_HSSR_SCENE
-#define SPA_HSSR_SCENE_ON 1   /* source-aligned transfer path always computed */
-#else
-#define SPA_HSSR_SCENE_ON 0
-#endif
-#ifdef SPA_HSSR_SCENE_TRUEPAN
-#define SPA_HSSR_SCENE_TRUEPAN_ON 1   /* objects keep their own pan behind */
-#else
-#define SPA_HSSR_SCENE_TRUEPAN_ON 0
-#endif
 
 /* Host-only research ablation, never enabled implicitly in a vehicle build. */
 #if (defined(SPA_HSSR_EXPERIMENT_CENTER_NULL) || defined(SPA_HSSR_EXPERIMENT_SIDE_OBJECT)) && !defined(SPA_HSSR_CAPTURE_TRANSFERS)
@@ -468,9 +454,7 @@ static void spa_hssr_update_controls(struct spa_hssr_dsp *state)
         float focus_rescue_target = 0.0f;
         float universal_safety_target = 0.0f;
         unsigned class_index;
-#ifdef SPA_HSSR_SCENE
         float guard_vocal = 0.0f;   /* guard's vocal posterior, keys-discounted */
-#endif
 
         for (class_index = 1; class_index < 6; ++class_index)
             if (raw[class_index] > maximum) maximum = raw[class_index];
@@ -493,7 +477,6 @@ static void spa_hssr_update_controls(struct spa_hssr_dsp *state)
             lfe_drum_sum += weight * probabilities[2];
             lfe_weight += weight;
         }
-#ifdef SPA_HSSR_SCENE
         if (state->guard_valid) {
             /* Hybrid veto: the guard (V11, 'everything harmonic is vocal')
              * keeps protecting a voice the main model misreads, unless the
@@ -522,7 +505,6 @@ static void spa_hssr_update_controls(struct spa_hssr_dsp *state)
          * veto so a hesitant 0.2..0.5 still protects; instruments stay <0.2. */
         if (probabilities[0] < 0.4f) probabilities[0] *= 2.5f;
         else probabilities[0] = 1.0f;
-#endif
 
         target = spa_hssr_dsp_sigmoid(raw[6]);
         /* The network's rearability posterior is compressed: real positives
@@ -549,7 +531,6 @@ static void spa_hssr_update_controls(struct spa_hssr_dsp *state)
                 float vocal_risk = probabilities[0] *
                     (1.0f - 0.80f * state->band_spatiality[band]);
 
-#ifdef SPA_HSSR_SCENE
                 /* A voice the guard hears is a voice even when it is wide:
                  * the spatial escape exists for V11's over-called vocals,
                  * not for a lead the main model misreads as keys. */
@@ -557,7 +538,6 @@ static void spa_hssr_update_controls(struct spa_hssr_dsp *state)
                 /* The main model's learned rearability is high where it
                  * misreads a voice as keys; the guard overrides it too. */
                 target *= (1.0f - 0.95f * guard_vocal) * (1.0f - 0.95f * guard_vocal);
-#endif
                 lead_keep = 1.0f - 0.92f * vocal_risk;
                 target *= lead_keep * lead_keep * lead_keep * lead_keep;
             }
@@ -612,25 +592,17 @@ static void spa_hssr_update_controls(struct spa_hssr_dsp *state)
                         transient_objectness, 0.12f, 0.52f) *
                     (1.0f - 0.55f * probabilities[0]) *
                     (1.0f - 0.70f * probabilities[1]);
-#ifdef SPA_HSSR_SCENE
                 focus_rescue_target *= (1.0f - guard_vocal) * (1.0f - guard_vocal);
-#endif
                 focus_rescue_target = spa_hssr_dsp_bound(
                     focus_rescue_target, 0.0f, 0.65f);
             }
             {
-#ifdef SPA_HSSR_SCENE
                 /* MoisesDB-trained model names guitar explicitly (V11 filed
                  * it under background/fx); rhythm guitar is second-scene
                  * material, so it counts 0.80 instead of 0.35. */
                 float safe_class = probabilities[2] +
                     0.80f * probabilities[3] + probabilities[4] +
                     probabilities[5];
-#else
-                float safe_class = probabilities[2] +
-                    0.35f * probabilities[3] + probabilities[4] +
-                    probabilities[5];
-#endif
                 float vocal_keep = 1.0f - 0.97f * probabilities[0];
                 float low_keep = 1.0f - 0.90f * probabilities[1];
 
@@ -642,19 +614,11 @@ static void spa_hssr_update_controls(struct spa_hssr_dsp *state)
                     vocal_keep * low_keep * low_keep;
             }
         }
-#ifdef SPA_HSSR_SCENE
         if (kHssrBandEdgeHz[band + 1] <= 220)
             target = 0.0f;
         else if (kHssrBandEdgeHz[band] < 350)
             target *= ((float)kHssrBandEdgeHz[band + 1] - 220.0f) /
                       (350.0f - 220.0f);
-#else
-        if (kHssrBandEdgeHz[band + 1] <= 125)
-            target = 0.0f;
-        else if (kHssrBandEdgeHz[band] < 220)
-            target *= ((float)kHssrBandEdgeHz[band + 1] - 125.0f) /
-                      (220.0f - 125.0f);
-#endif
         if (kHssrBandEdgeHz[band] >= 20000)
             target *= 0.25f;
         else if (kHssrBandEdgeHz[band] >= 15000)
@@ -734,10 +698,8 @@ static void spa_hssr_update_object_slots(
     float candidate_energy[SPA_HSSR_OBJECT_SLOTS] = { 0.0f, 0.0f };
     float pan_weight[SPA_HSSR_OBJECT_SLOTS] = { 0.0f, 0.0f };
     float peak_candidate[SPA_HSSR_OBJECT_SLOTS] = { 0.0f, 0.0f };
-#ifdef SPA_HSSR_SCENE_SLOTS4
     float alt_pan[2] = { 0.0f, 0.0f };   /* seed for an idle secondary slot: bands far from the primary, per side */
     float alt_w[2] = { 0.0f, 0.0f };
-#endif
     float total_energy = 0.0f;
     unsigned band;
     unsigned slot_index;
@@ -767,13 +729,9 @@ static void spa_hssr_update_object_slots(
         if (state->band_focus_rescue[band] > semantic)
             semantic = state->band_focus_rescue[band];
 
-#ifdef SPA_HSSR_SCENE
         /* Synth bass reads as keys and rides pan/coherence into the rear
          * (Scars: 34 % of rear energy).  No object below 220 Hz behind. */
         if (kHssrBandEdgeHz[band + 1] <= 220) continue;
-#else
-        if (kHssrBandEdgeHz[band + 1] <= 125) continue;
-#endif
         for (slot_index = 0; slot_index < SPA_HSSR_OBJECT_SLOTS;
              ++slot_index) {
             float directed_pan = (slot_index & 1u) == 0u ? pan : -pan;
@@ -781,7 +739,6 @@ static void spa_hssr_update_object_slots(
                 directed_pan, 0.025f, 0.40f);
             float candidate = semantic * spatial *
                 (0.55f + 0.45f * coherence);
-#ifdef SPA_HSSR_SCENE_SLOTS4
             float pan_share = 1.0f;
             {
                 unsigned sibling = slot_index ^ 2u;
@@ -806,7 +763,6 @@ static void spa_hssr_update_object_slots(
                     if (me->confidence < 0.03f) pan_share = 0.0f;
                 }
             }
-#endif
             {
                 float flux_ratio = bands[band].flux /
                     (bands[band].magnitude + epsilon);
@@ -821,13 +777,8 @@ static void spa_hssr_update_object_slots(
 
             band_target[slot_index][band] = candidate;
             candidate_energy[slot_index] += weighted;
-#ifdef SPA_HSSR_SCENE_SLOTS4
             weighted_pan[slot_index] += weighted * pan_share * pan;
             pan_weight[slot_index] += weighted * pan_share;
-#else
-            weighted_pan[slot_index] += weighted * pan;
-            pan_weight[slot_index] += weighted;
-#endif
             if (candidate > peak_candidate[slot_index])
                 peak_candidate[slot_index] = candidate;
         }
@@ -837,14 +788,10 @@ static void spa_hssr_update_object_slots(
          ++slot_index) {
         struct spa_hssr_object_slot *slot =
             &state->object_slot[slot_index];
-#ifdef SPA_HSSR_SCENE_SLOTS4
         /* Confidence judges the SIDE's object evidence; the split between the
          * two same-side slots only shapes their band weights and pans. */
         float energy_share = (candidate_energy[slot_index] +
             candidate_energy[slot_index ^ 2u]) / total_energy;
-#else
-        float energy_share = candidate_energy[slot_index] / total_energy;
-#endif
         float target_confidence = spa_hssr_dsp_smoothstep(
                 energy_share, 0.0008f, 0.040f) *
             spa_hssr_dsp_smoothstep(peak_candidate[slot_index],
@@ -854,7 +801,6 @@ static void spa_hssr_update_object_slots(
         target_confidence *= 0.70f + 0.30f * state->scene_confidence;
         target_confidence *= 0.75f + 0.25f * state->scene_stability;
         if (target_confidence > 0.12f) {
-#ifdef SPA_HSSR_SCENE_HOLD
             /* Hold stays at the stock 250 ms: the sweep 250..1200 ms changed
              * slot toggling by <=2/min; the slow confidence release and the
              * calm pan below are what keep an object.  Override for tests. */
@@ -862,28 +808,18 @@ static void spa_hssr_update_object_slots(
 #define SPA_HSSR_SCENE_HOLD_HOPS 94u
 #endif
             slot->hold_hops = SPA_HSSR_SCENE_HOLD_HOPS;
-#else
-            /* 94 hops at 48 kHz/128 is almost exactly 250 ms. */
-            slot->hold_hops = 94u;
-#endif
         } else if (slot->hold_hops != 0u) {
             --slot->hold_hops;
             if (target_confidence < 0.65f * slot->confidence)
                 target_confidence = 0.65f * slot->confidence;
         }
 
-#ifdef SPA_HSSR_SCENE_HOLD
         confidence_alpha = target_confidence > slot->confidence
             ? 0.26f : 0.006f;
-#else
-        confidence_alpha = target_confidence > slot->confidence
-            ? 0.26f : 0.018f;
-#endif
         slot->confidence += confidence_alpha *
             (target_confidence - slot->confidence);
         slot->confidence = spa_hssr_dsp_bound(slot->confidence, 0.0f, 1.0f);
 
-#ifdef SPA_HSSR_SCENE_SLOTS4
         if (slot_index >= 2u && slot->confidence < 0.03f &&
             alt_w[slot_index - 2u] > epsilon) {
             float seed = alt_pan[slot_index - 2u] / alt_w[slot_index - 2u];
@@ -891,7 +827,6 @@ static void spa_hssr_update_object_slots(
                 ? spa_hssr_dsp_bound(seed, 0.05f, 0.92f)
                 : spa_hssr_dsp_bound(seed, -0.92f, -0.05f);
         }
-#endif
         if (pan_weight[slot_index] > epsilon) {
             float target_pan = weighted_pan[slot_index] /
                 pan_weight[slot_index];
@@ -903,25 +838,16 @@ static void spa_hssr_update_object_slots(
             if (slot->confidence < 0.03f)
                 slot->pan = target_pan;
             else
-#ifdef SPA_HSSR_SCENE_HOLD
                 /* A confident object keeps its place; only a weak one follows. */
                 slot->pan += (slot->confidence > 0.30f ? 0.020f : 0.055f) *
                     (target_pan - slot->pan);
-#else
-                slot->pan += 0.055f * (target_pan - slot->pan);
-#endif
         }
 
         for (band = 0; band < SPA_HSSR_BANDS; ++band) {
             float target = band_target[slot_index][band] *
                 slot->confidence;
-#ifdef SPA_HSSR_SCENE_HOLD
             float alpha = target > slot->band_weight[band]
                 ? 0.34f : 0.010f;
-#else
-            float alpha = target > slot->band_weight[band]
-                ? 0.34f : 0.020f;
-#endif
 
             slot->band_weight[band] += alpha *
                 (target - slot->band_weight[band]);
@@ -929,14 +855,6 @@ static void spa_hssr_update_object_slots(
                 slot->band_weight[band], 0.0f, 1.0f);
         }
     }
-#ifdef SPA_HSSR_SCENE_DEBUG_SLOTS
-    fprintf(stderr, "SLOT %.3f %.3f %.3f %.3f %.4f %.5f\n",
-        state->object_slot[0].confidence, state->object_slot[0].pan,
-        state->object_slot[1].confidence, state->object_slot[1].pan,
-        state->dbg_mask_sum / (float)SPA_HSSR_BINS,
-        state->dbg_mask_delta / (float)SPA_HSSR_BINS);
-    state->dbg_mask_sum = 0.0f; state->dbg_mask_delta = 0.0f;
-#endif
 }
 
 /* Stage 1: window, FFT and feature-state analysis.  It is deliberately kept
@@ -1063,11 +981,9 @@ static void spa_hssr_run_control(
     if (!provider) {
         if (spa_hssr_infer(model, &state->network,
                            state->features, state->control) == SPA_HSSR_OK) {
-#ifdef SPA_HSSR_SCENE
             state->guard_valid = state->guard_model &&
                 spa_hssr_infer(state->guard_model, &state->guard_network,
                                state->features, state->guard_control) == SPA_HSSR_OK;
-#endif
             spa_hssr_update_controls(state);
         } else {
             spa_hssr_control_failsafe(state);
@@ -1087,10 +1003,8 @@ static void spa_hssr_run_control(
             result_sequence < state->control_sequence) {
             state->applied_control_sequence = result_sequence;
             state->control_deadlines_missed = 0;
-#ifdef SPA_HSSR_SCENE
             state->guard_valid = provider->receive_guard &&
                 provider->receive_guard(provider->context, state->guard_control) > 0;
-#endif
             spa_hssr_update_controls(state);
         } else {
             deadline_missed = 1;
@@ -1193,7 +1107,6 @@ static void spa_hssr_render_hop(
             object_target *= 1.0f + 0.40f * focus_presence *
                 (0.30f + 0.70f * focus_transient);
             object_target = spa_hssr_dsp_bound(object_target, 0.0f, 1.0f);
-#ifdef SPA_HSSR_SCENE_COH
             {
                 /* Inter-channel coherence per bin, ~45 ms (Avendano & Jot
                  * 2004 ambience index; DirAC diffuseness).  A panned object
@@ -1216,66 +1129,6 @@ static void spa_hssr_render_hop(
                 object_target *= 0.50f + 0.50f *
                     spa_hssr_dsp_smoothstep(coh, 0.25f, 0.55f);
             }
-#endif
-#ifdef SPA_HSSR_SCENE_AZIMUTH
-            {
-                /* Continuous azimuth objects (research; adds nothing under the current semantic veto, see q5-scene-ab): measured pan of THIS bin decides relocation
-                 * continuously (a whole panned part moves together, keeping
-                 * its own L/R image).  Wide vocals are not caught by pan, so
-                 * the learned semantic veto (band_mask, vocal fourth-power
-                 * keep) gates it exactly like the slot path. */
-                /* Per-bin smoothed inter-channel statistics (~50 ms): a band
-                 * mixes bins of different pans and reads as 'grey', a bin of
-                 * one panned source reads coherent. */
-                const float ema = 0.22f;
-                float safety = state->band_universal_safety[band];
-                float coherence;
-                float side;
-                float scene_target;
-
-                state->bin_scene_pl[bin] += ema * (pl - state->bin_scene_pl[bin]);
-                state->bin_scene_pr[bin] += ema * (pr - state->bin_scene_pr[bin]);
-                state->bin_scene_cross_re[bin] += ema *
-                    (left_re * right_re + left_im * right_im - state->bin_scene_cross_re[bin]);
-                state->bin_scene_cross_im[bin] += ema *
-                    (left_im * right_re - left_re * right_im - state->bin_scene_cross_im[bin]);
-                coherence = spa_hssr_dsp_bound(
-                    sqrtf(state->bin_scene_cross_re[bin] * state->bin_scene_cross_re[bin] +
-                          state->bin_scene_cross_im[bin] * state->bin_scene_cross_im[bin]) /
-                    sqrtf(state->bin_scene_pl[bin] * state->bin_scene_pr[bin] + 1.0e-12f),
-                    0.0f, 1.0f);
-                {
-                    float sl = sqrtf(state->bin_scene_pl[bin] + 1.0e-12f);
-                    float sr = sqrtf(state->bin_scene_pr[bin] + 1.0e-12f);
-                    state->bin_scene_pan[bin] = (sl - sr) / (sl + sr + 1.0e-9f);
-                }
-                side = spa_hssr_dsp_smoothstep(
-                    fabsf(state->bin_scene_pan[bin]), 0.12f, 0.35f);
-                scene_target = side * safety * focus_presence *
-                    spa_hssr_dsp_smoothstep(coherence, 0.35f, 0.60f) *
-                    (0.55f + 0.45f * ridge_gate);
-                scene_target = spa_hssr_dsp_bound(scene_target, 0.0f, 1.0f);
-#ifdef SPA_HSSR_SCENE_DEBUG
-                {
-                    static double acc[7], wsum; static unsigned long n;
-                    if (bin >= 12 && bin < 200) {
-                        double w = pl + pr;
-                        acc[0] += w * side; acc[1] += w * safety; acc[2] += w * coherence; acc[3] += w * focus_presence;
-                        acc[4] += w * scene_target; acc[5] += w * object_target; acc[6] += w * (scene_target > object_target);
-                        wsum += w; n++;
-                        if (n % 2000000 == 0)
-                            fprintf(stderr, "scene-dbg(energy-weighted) side=%.3f safety=%.3f coh=%.3f focus=%.3f scene=%.3f slot=%.3f scene>slot=%.3f\n",
-                                    acc[0]/wsum, acc[1]/wsum, acc[2]/wsum, acc[3]/wsum, acc[4]/wsum, acc[5]/wsum, acc[6]/wsum);
-                    }
-                }
-#endif
-                if (scene_target > object_target) {
-                    object_target = scene_target;
-                    best_score = scene_target;
-                    best_pan = state->bin_scene_pan[bin];
-                }
-            }
-#endif
             if (state->cabin_policy) {
                 /* The tracker/rescue may nominate a spatial candidate, but
                  * cannot override the learned permission to transfer it. */
@@ -1287,10 +1140,6 @@ static void spa_hssr_render_hop(
                 ? 0.50f : 0.020f;
             state->bin_mask[bin] += alpha *
                 (object_target - state->bin_mask[bin]);
-#ifdef SPA_HSSR_SCENE_DEBUG_SLOTS
-            state->dbg_mask_delta += fabsf(alpha * (object_target - state->bin_mask[bin]) / (alpha > 0.1f ? 1.0f : 1.0f));
-            state->dbg_mask_sum += state->bin_mask[bin];
-#endif
 
             if (best_score > 0.01f)
                 state->bin_object_pan[bin] += 0.18f *
@@ -1342,7 +1191,6 @@ static void spa_hssr_render_hop(
                 universal_target = spa_hssr_dsp_bound(
                     universal_target, 0.0f, 0.55f);
             }
-#ifdef SPA_HSSR_SCENE_COH
             {
                 /* Diffuse layer: what is NOT coherent is room/reverb; it goes
                  * behind through the decorrelated bed, under the semantic
@@ -1354,7 +1202,6 @@ static void spa_hssr_render_hop(
                 if (kHssrBandEdgeHz[band + 1] <= 220) diffuse = 0.0f;
                 if (diffuse > universal_target) universal_target = diffuse;
             }
-#endif
             /* No synthetic minimum rear activity in the cabin candidate. */
             if (state->cabin_policy) universal_target = 0.0f;
             alpha = universal_target > state->bin_universal_mask[bin]
@@ -1392,14 +1239,12 @@ static void spa_hssr_render_hop(
             float side_im = 0.5f * (left_im - right_im);
             float ambience = state->bin_ambience_mask[bin];
             float universal = state->bin_universal_mask[bin];
-#ifdef SPA_HSSR_SCENE
             {
                 float pl = left_re * left_re + left_im * left_im;
                 float pr = right_re * right_re + right_im * right_im;
                 state->bin_scene_lr[bin] += 0.05f *
                     ((pl - pr) / (pl + pr + 1.0e-9f) - state->bin_scene_lr[bin]);
             }
-#endif
 
             mask = spa_hssr_dsp_bound(mask, 0.0f,
                                       state->cabin_policy ? 1.0f : 1.45f);
@@ -1418,7 +1263,7 @@ static void spa_hssr_render_hop(
                 float focused = 0.78f + 0.17f *
                     spa_hssr_dsp_smoothstep(magnitude, 0.05f, 0.92f);
 
-                if (state->cabin_policy || SPA_HSSR_SCENE_TRUEPAN_ON)
+                if (state->cabin_policy)
                     focused = magnitude + (0.85f - magnitude) * 0.35f *
                         spa_hssr_dsp_smoothstep(mask, 0.10f, 0.60f) *
                         spa_hssr_dsp_smoothstep(magnitude, 0.05f, 0.35f);
@@ -1478,7 +1323,7 @@ static void spa_hssr_render_hop(
                 spa_hssr_capture_transfer(bin, matrix);
             }
 #endif
-            if (state->cabin_policy || SPA_HSSR_SCENE_ON) {
+            {
                 /* Original source image, BEFORE steering or ambience.  The
                  * subtraction never exceeds the source itself (mask <= 1). */
                 float source_mask = mask > 1.0f ? 1.0f : mask;
@@ -1503,12 +1348,8 @@ static void spa_hssr_render_hop(
                 unsigned rotation = 18u + (bin * 13u) % 47u;
                 float wr = state->twiddle_re[rotation];
                 float wi = -state->twiddle_im[rotation];
-#ifdef SPA_HSSR_SCENE
                 float fallback_pan = 0.72f * spa_hssr_dsp_bound(
                     3.0f * state->bin_scene_lr[bin], -1.0f, 1.0f);
-#else
-                float fallback_pan = ((band / 3u) & 1u) ? -0.72f : 0.72f;
-#endif
                 float fallback_l = sqrtf(1.0f + fallback_pan);
                 float fallback_r = sqrtf(1.0f - fallback_pan);
                 float rotated_l_re = wr * mid_re - wi * mid_im;
@@ -1526,7 +1367,7 @@ static void spa_hssr_render_hop(
                 state->fft_im[SPA_HSSR_RIGHT][bin] +=
                     universal * fallback_r * rotated_r_im;
             }
-#if defined(SPA_HSSR_CAPTURE_TRANSFERS) && defined(SPA_HSSR_SCENE)
+#ifdef SPA_HSSR_CAPTURE_TRANSFERS
             if (!state->cabin_policy) {
                 /* Complex 2x2 rear transfer of this bin, universal bed
                  * included (universal already carries the makeup):
@@ -1579,7 +1420,7 @@ static void spa_hssr_render_hop(
                 state->ola[channel][output] + addition);
         }
     }
-    if (state->cabin_policy || SPA_HSSR_SCENE_ON) {
+    {
         for (channel = 0; channel < 2; ++channel) {
             memcpy(state->fft_re[channel], state->source_fft_re[channel],
                    SPA_HSSR_BINS * sizeof(float));
@@ -1654,12 +1495,8 @@ static void spa_hssr_dsp_process_frame(
             (state->universal_input_power + 1.0e-8f);
         desired = state->universal_input_power > 1.0e-7f
             ? sqrtf(0.32f / (ratio + 1.0e-8f)) : 1.0f;
-#ifdef SPA_HSSR_SCENE
         /* No forced 32 % rear activity: the bed may only double, never x3.5. */
         desired = spa_hssr_dsp_bound(desired, 1.0f, 1.50f);
-#else
-        desired = spa_hssr_dsp_bound(desired, 1.0f, 3.50f);
-#endif
         makeup_alpha = desired > state->universal_makeup
             ? 0.0020f : 0.00035f;
         state->universal_makeup += makeup_alpha *

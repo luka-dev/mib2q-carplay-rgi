@@ -17,11 +17,7 @@ enum {
     SPA_HSSR_BINS = 257,
     SPA_HSSR_BANDS = 32,
     SPA_HSSR_SHAPE_BANDS = 64,
-#ifdef SPA_HSSR_SCENE_SLOTS4
     SPA_HSSR_OBJECT_SLOTS = 4,   /* two per rear half-plane: 0/2 left, 1/3 right */
-#else
-    SPA_HSSR_OBJECT_SLOTS = 2,
-#endif
     SPA_HSSR_CONTROL_HOPS = 4,
     SPA_HSSR_LATENCY_FRAMES = 512
 };
@@ -69,14 +65,11 @@ struct spa_hssr_dsp {
     float source_ola[2][SPA_HSSR_FFT_SIZE];
     float source_sample[2];
     uint32_t cabin_policy;
-#if defined(SPA_HSSR_SCENE_AZIMUTH) || defined(SPA_HSSR_SCENE_COH)
     /* Research: per-bin smoothed statistics for continuous azimuth relocation. */
-    float bin_scene_pan[SPA_HSSR_BINS];
     float bin_scene_pl[SPA_HSSR_BINS];
     float bin_scene_pr[SPA_HSSR_BINS];
     float bin_scene_cross_re[SPA_HSSR_BINS];
     float bin_scene_cross_im[SPA_HSSR_BINS];
-#endif
     float previous_magnitude[SPA_HSSR_BINS];
     float bin_mask[SPA_HSSR_BINS];
     float bin_ambience_mask[SPA_HSSR_BINS];
@@ -90,15 +83,8 @@ struct spa_hssr_dsp {
     float band_object_boost[SPA_HSSR_BANDS];
     float band_focus_rescue[SPA_HSSR_BANDS];
     float band_universal_safety[SPA_HSSR_BANDS];
-#ifdef SPA_HSSR_SCENE
     float bin_scene_lr[SPA_HSSR_BINS];   /* smoothed (PL-PR)/(PL+PR) per bin */
-#endif
-#ifdef SPA_HSSR_SCENE_DEBUG_SLOTS
-    float dbg_mask_sum, dbg_mask_delta;
-#endif
-#ifdef SPA_HSSR_SCENE_COH
     float bin_scene_coh[SPA_HSSR_BINS];
-#endif
     struct spa_hssr_object_slot object_slot[SPA_HSSR_OBJECT_SLOTS];
     float scene_confidence;
     float scene_stability;
@@ -125,14 +111,12 @@ struct spa_hssr_dsp {
     uint32_t applied_control_sequence;
     uint32_t control_deadlines_missed;
     struct spa_hssr_state network;
-#ifdef SPA_HSSR_SCENE
     /* Guard model (V11): its 'vocal' posterior is a safety net for the
      * MoisesDB-trained main model, which misses some processed leads. */
     const struct spa_hssr_model *guard_model;
     struct spa_hssr_state guard_network;
     float guard_control[SPA_HSSR_OUTPUTS];
     uint32_t guard_valid;
-#endif
 };
 
 void spa_hssr_dsp_prepare(struct spa_hssr_dsp *state);

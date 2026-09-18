@@ -14,6 +14,10 @@
 !/build/hssr-selection-v11/
 /build/hssr-selection-v11/*
 !/build/hssr-selection-v11/hssr_model.bin
+!/build/hssr-q6d-moises-a/
+/build/hssr-q6d-moises-a/*
+!/build/hssr-q6d-moises-a/hssr_model.bin
+!/build/hssr-q6d-moises-a/manifest.json
 /local_logs/
 /log/
 
@@ -77,3 +81,7 @@ tools/loader_preview/prism_preview
 
 # Generated desktop PRISM captures and app bundles.
 /output/loader-preview/
+
+# Installer diagnostics copied back to the SD card.
+/install_MoreIncredibleBash/mod/last-carplay-*.log
+/uninstall_MoreIncredibleBash/mod/last-carplay-*.log
