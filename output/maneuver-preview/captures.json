@@ -1,6 +1,6 @@
 {
   "scope": "Ordinary maneuver renderer; lane-road experiment removed",
-  "binary_sha256": "a9dd60dfdbdc3653de6eb2b24591507adbfb582ee0e6b630bddd795afadbc043",
+  "binary_sha256": "9bf6765deb474bdfcd2610bb217ddcda7709f1fa2618ad7ac4057ff4d0c7de61",
   "scene_engine": "C++11 cached scene compiler with C ABI",
   "captures": [
     {

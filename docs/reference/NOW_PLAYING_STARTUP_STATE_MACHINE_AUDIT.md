@@ -380,6 +380,8 @@ The discriminator is implemented as a build-time-only diagnostic:
 
 ```sh
 LOG=0 AUDIO_STATE_TRACE=1 ./scripts/build_hook.sh
+python3 scripts/package_mib.py
+# Disconnect CarPlay before installation; reboot manually afterwards.
 ./scripts/deploy_over_ssh.sh
 ./scripts/carplay_state_trace.sh clear
 ```

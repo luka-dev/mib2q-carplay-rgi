@@ -9,12 +9,5 @@
   "lane_camera_handoff_frames": 130,
   "lane_camera_handoff": true,
   "small_capacity": 5,
-  "wide_capacity": 8,
-  "full_source_width_mask": true,
-  "gpu_mask": [
-    "Lane mask GPU: one lane erases full source width through final row in both stages, uniform vertical feather, premultiplication retained, no opaque background PASS"
-  ],
-  "qnx": [
-    "built build/maneuver_render + build/libmaneuver_scene.a (C ABI, no C++ runtime)"
-  ]
+  "wide_capacity": 8
 }

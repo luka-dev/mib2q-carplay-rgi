@@ -1,6 +1,6 @@
 # Pristine stock PF rulesets (MHI2Q MU1316)
 
-Untouched originals pulled off the unit before `install_persistent_pf.sh` widened the carplay0 TCP
+Untouched originals pulled off the unit before the original PF installer widened the carplay0 TCP
 rule to `6030:6032` (6031 altScreen, 6032 buffered audio). Kept here so a rollback never depends on on-unit `.stock` copies —
 those were deleted from the unit to avoid clutter.
 
@@ -13,6 +13,8 @@ those were deleted from the unit to avoid clutter.
 
 All four carry the stock single-port rule:
 `pass in quick on carplay0 proto tcp from any to any port { …, 6030, … }`
+
+PF installation now lives inside `install_MoreIncredibleBash/mod/custom.sh`.
 
 ## Why four
 The live ruleset is chosen per external interface. On a car with the LTE modem the active profile is

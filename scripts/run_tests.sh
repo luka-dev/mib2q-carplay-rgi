@@ -301,10 +301,7 @@ c++ -std=c++11 -O2 -w -fno-exceptions -fno-rtti \
 "$OUT/integration"
 
 printf '%-32s ' card_install_test
-sh tests/card_install_test.sh
-
-printf '%-32s ' persistent_pf_test
-python3 tests/persistent_pf_test.py
+python3 tests/card_install_test.py
 
 printf '%-32s ' supervisor_lifecycle_test
 sh scripts/test_supervisor_lifecycle.sh

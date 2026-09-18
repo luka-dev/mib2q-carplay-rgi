@@ -21,6 +21,7 @@ The shipped path always keeps stock `libairplay.so`. Historical alternative impl
 | `common/` | Shared QNX Screen surface code |
 | `deploy/smartphone_integrator/` | Runtime scripts and child-process configuration for the HU |
 | `scripts/` | Host build and deployment entry points |
+| `install_MoreIncredibleBash/`, `uninstall_MoreIncredibleBash/` | M.I.B. SD install/remove entry points |
 | `toolchain/qnx65-abi/` | QNX Screen/OpenMAX ABI headers used only for cross-compilation |
 | `docs/` | Current architecture, deployment and audit documents |
 | `docs/reference/` | Reverse-engineering reference notes |
@@ -75,28 +76,34 @@ The runtime integration lives in [`deploy/smartphone_integrator/`](deploy/smartp
 It starts the two renderers around the lifetime of `dio_manager`, does not restart Java, and performs
 bounded cleanup when `dio_manager` exits.
 
-Whole install from the M.I.B. SD card — runtime files, jar, child config and PF ports:
-see [`deploy/card/README.md`](deploy/card/README.md).
+SD installation/removal scripts live in
+[`install_MoreIncredibleBash/`](install_MoreIncredibleBash/README_CARPLAY.md) and
+[`uninstall_MoreIncredibleBash/`](uninstall_MoreIncredibleBash/README_CARPLAY.md).
+Compiled outputs and the copied runtime/firmware artifacts stay in `build/`.
+One `mod/custom.sh` verifies the package and firmware, refuses an active CarPlay
+session, remounts the partitions, stages runtime files and atomically replaces
+the SI child configuration. It never stops processes or reboots the HU.
 
-To replace only the native hook and restart `dio_manager` over ssh:
-
-```sh
-./scripts/deploy_over_ssh.sh
-```
-
-The deploy helper stages both native audio artifacts as `.new`, atomically
-renames them over the live paths, syncs, and restarts `dio_manager`; it does
-not accumulate stale backup copies.  Staging is required because QNX refuses a
-direct scp overwrite while a shared object is mapped.  Java deployment is
-deliberately not automated by that script because restarting the Java stack on
-a live HU is unsafe.
-
-For a quiet pre-production native artifact, build and deploy with:
+Prepare loose release artifacts without recompiling the existing build or creating a ZIP:
 
 ```sh
-LOG=0 ./scripts/build_hook.sh
-./scripts/deploy_over_ssh.sh
+python3 scripts/package_mib.py
 ```
+
+Copy the selected folder’s contents over the M.I.B. SD1 card root, and place
+the release artifacts in `/build/` on the card. The removal script needs no
+build files. See [the artifact list](docs/RELEASE_ARTIFACTS.md).
+
+Or upload the release allowlist and run the same installer over SSH:
+
+```sh
+./scripts/deploy_over_ssh.sh root@10.173.189.1
+```
+
+Disconnect CarPlay first. Reboot manually after installation. SSH uses your
+keys/agent, or `SSHPASS` with `sshpass`; credentials are not embedded in the script.
+For a quiet production native artifact, use `LOG=0 ./scripts/build_hook.sh`
+before preparing the release artifacts.
 
 `LOG=0` compiles out the logger thread and all `LOG_*` calls.  It also compiles
 out the historical audio probe captures (APAP, RTCP, setup/control plists,
@@ -108,6 +115,7 @@ but enable only the compact state ledger:
 
 ```sh
 LOG=0 AUDIO_STATE_TRACE=1 ./scripts/build_hook.sh
+python3 scripts/package_mib.py
 ./scripts/deploy_over_ssh.sh
 ./scripts/carplay_state_trace.sh clear
 # reproduce once, then:

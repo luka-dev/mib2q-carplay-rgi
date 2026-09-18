@@ -41,7 +41,7 @@ the build chain, not the earlier partial `deva-ctrl-qc.so` stage.
 
 ## Install
 
-Do **not** use the legacy `install_spatial_5_1.sh`: it still stages the intermediate
+The obsolete `install_spatial_5_1.sh` was removed: it staged the intermediate
 `deva-ctrl-qc.so`, not the vehicle-confirmed `deva-ctrl-qc-mirror.so`. Follow
 [`../deva-ctrl-qc/BUILD_CHAIN.md`](../deva-ctrl-qc/BUILD_CHAIN.md) and deploy its final
 mirror output. The hook flag lives in `carplay_startup.sh` and is already on by default.

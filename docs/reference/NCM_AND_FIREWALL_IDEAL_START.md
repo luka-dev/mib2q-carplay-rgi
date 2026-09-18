@@ -1,3 +1,9 @@
+> Installer update (2026-09-17): the standalone `install_persistent_pf.sh` was
+> merged into `install_MoreIncredibleBash/mod/custom.sh`. The current installer
+> widens **all present stock profiles to 6030:6032**, checks idle CarPlay and stages
+> the complete release. The historical findings below explain why PF belongs to
+> installation. See [current instructions](../../install_MoreIncredibleBash/README_CARPLAY.md).
+
 # Ideal NCM start + a firewall that always has the port
 
 Answers three questions, all grounded in `MHI2Q_US_AUG22_P5087_MU1316` boot analysis.
@@ -137,7 +143,8 @@ the class appears, and it is not the bottleneck. The bottleneck is teardown/rest
 
 ## Deploy (nothing here restarts anything)
 
-    ./deploy/smartphone_integrator/install_persistent_pf.sh    # on the unit, as root; idempotent
+    # Current replacement: build/package the release, disconnect CarPlay, then:
+    ./scripts/deploy_over_ssh.sh root@10.173.189.1
 
 Takes effect on next boot (ramdisk /etc rebuild) or immediately if followed by a manual
 `pfctl -ef /etc/pf.conf`. Then the PF code can be removed from the wrapper.

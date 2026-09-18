@@ -9,6 +9,7 @@ Runtime files installed together under `/mnt/app/root/hooks/`:
 ```text
 libcarplay_hook.so
 libcarplay_apac.so
+hssr_model.bin
 maneuver_render
 altscreen_render
 flag_atlas.rgba
@@ -31,13 +32,23 @@ monitor is their sole runtime owner.
 
 See `deploy/smartphone_integrator/README.md` for installation paths and the exact child JSON replacement.
 
-Two ways in:
+Two SD folders share one implementation:
 
-* **SD card, whole install.** `deploy/card/` — the card gets `/mod/custom.sh` plus
-  `/mod/carplay/` (copy commands are in that README), and the unit runs it from
-  *Advanced Settings -> Run Custom Script*. It installs every runtime file, the jar and the
-  `children.carplay` replacement, backs up what it changes as `<file>.orig`, and is idempotent.
-  See `deploy/card/README.md`.
-* **ssh, hook-only iteration.** `scripts/deploy_over_ssh.sh` overwrites
-  `/mnt/app/root/hooks/libcarplay_hook.so` and `libcarplay_apac.so` and restarts only `dio_manager`.
-  It intentionally does not restart or redeploy Java.
+* **Install:** copy `install_MoreIncredibleBash/` contents over the M.I.B. card
+  root and put the release artifact files in `/build/` on the card.
+* **Uninstall:** copy `uninstall_MoreIncredibleBash/` contents over the card root.
+  Removal needs no build files or marker.
+
+Both start at *Advanced Settings → Run Custom Script*. Over SSH,
+`scripts/deploy_over_ssh.sh [root@host] [install|check|uninstall]` selects the
+matching script and uploads only the necessary files.
+
+Both require CarPlay disconnected, check `dio_manager` before writing and again
+before activation, and never stop processes. Runtime files, the exact final SI/DEVA images and PF profiles are
+staged and verified; the SI JSON is published last by a same-partition rename.
+A manual reboot activates the release. This is atomic per file, not a transaction
+across both flash partitions.
+
+See [the installer guide](../install_MoreIncredibleBash/README_CARPLAY.md) for
+artifact preparation, checks, logs, backups and uninstall. Loose release files
+stay in `build/`; [the release allowlist](RELEASE_ARTIFACTS.md) defines what is published later.

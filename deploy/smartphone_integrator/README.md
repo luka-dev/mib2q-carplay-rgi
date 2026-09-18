@@ -57,14 +57,15 @@ Lifecycle semantics:
 
 - **PF ports (deploy prerequisite, no runtime logic):** altScreen needs carplay0 TCP 6031 and
   buffered audio uses TCP 6032 beside stock 6030. `SETMAGICCOOKIE` and buffered controls reuse the
-  existing RTSP connection, so 6033 is not needed. Run `install_persistent_pf.sh` once — it widens
+  existing RTSP connection, so 6033 is not needed. The single
+  [`M.I.B./SSH installer`](../../install_MoreIncredibleBash/mod/custom.sh) widens
   `6030` to `6030:6032` in all four
   `/mnt/system/etc/pf*.conf` profiles (idempotent, `.stock` backup, `mount -uw` first). That is a real
   qnx6 flash partition (`/dev/fs0p1`); boot's `move_etc_to_ramdisk` copies it into the ramdisk
-  `/etc`, so `start_network` loads the selected profile with all four ports and no runtime race. The
+  `/etc`, so `start_network` loads the selected profile with all three ports and no runtime race. The
   wrapper does **no** firewall work — it assumes the port is open, exactly like it assumes the
   child JSON and the hook are installed. Reverted only by an OTA rewriting `fs0p1`; re-run the
-  script. See `NCM_AND_FIREWALL_IDEAL_START.md`.
+  installer. See `NCM_AND_FIREWALL_IDEAL_START.md`.
 - `carplay_startup.sh` performs only local file checks, an atomic owner-file
   publish, a monitor fork and immediate `exec dio_manager`; no `pidin`, network
   probe, renderer initialization or USB recovery runs in SI's startup path;

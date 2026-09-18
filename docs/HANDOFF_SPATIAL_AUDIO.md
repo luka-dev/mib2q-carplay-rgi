@@ -1156,7 +1156,8 @@ external interface:
 ```
 
 Patching only `pf.conf` is insufficient; this car normally loads `pf.ecm0.conf`, and the selection
-can change. `deploy/smartphone_integrator/install_persistent_pf.sh` upgrades stock `6030` or either
+can change. The historical `install_persistent_pf.sh` (now folded into
+`install_MoreIncredibleBash/mod/custom.sh`, whose current range is `6030:6032`) upgraded stock `6030` or either
 previous `6030:6031`/`6030:6032` deployment idempotently. After a reboot, verify the active kernel
 rule with `/mnt/app/armle/sbin/pfctl -sr`: it must report `port 6030:6033`.
 

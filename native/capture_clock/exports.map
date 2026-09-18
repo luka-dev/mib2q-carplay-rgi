@@ -1,0 +1,6 @@
+{
+    global:
+        _ZN4util10TimerGroup10startTimerEj;
+        timer_settime;
+    local: *;
+};

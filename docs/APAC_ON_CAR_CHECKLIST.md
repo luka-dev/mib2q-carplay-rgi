@@ -38,12 +38,12 @@ What "proven on the bench" means, precisely, so the on-car result can be judged 
 
 ## Before deploying
 
-`scripts/deploy_over_ssh.sh` replaces `/mnt/app/root/hooks/libcarplay_hook.so` and
-`libcarplay_apac.so`, then restarts `dio_manager`. It does not deploy `carplay_startup.sh`; the unit
-must already have the current startup file with `AUDIO_SPATIAL`, `AUDIO_SPATIAL_ATMOS`,
-`AUDIO_SPATIAL_ATMOS_MODE`, and `AUDIO_SPATIAL_CODEC_LIB`. Java is not touched, so no full reboot
-is involved — but a `dio_manager` restart still drops any active CarPlay session. TCP 6032 must
-already be admitted by all four persistent PF profiles.
+`scripts/deploy_over_ssh.sh` now installs the complete packaged release through
+`install_MoreIncredibleBash/mod/custom.sh`: native artifacts, runtime scripts,
+Java, SI child configuration and persistent PF rules. Disconnect CarPlay first;
+the installer refuses a running `dio_manager` and never stops it automatically.
+Reboot manually after installation. See the
+[installer guide](../install_MoreIncredibleBash/README_CARPLAY.md).
 
 The profile is set by `scripts/set_spatial_profile.sh`, which edits the exact
 `AUDIO_SPATIAL*` policy exports. For now use only `fallback-stereo`; the former

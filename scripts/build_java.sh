@@ -71,3 +71,16 @@ cp -R "$PROJECT_DIR/java_resources/." "$OUTPUT_DIR/"
 cd "$OUTPUT_DIR"; "$JAR" cf "$OUTPUT_JAR" .; cd "$PROJECT_DIR"
 echo "Output: $OUTPUT_JAR"
 echo "Build ID: $BUILD_ID"
+python3 - "$OUTPUT_JAR" "$BUILD_ID" "$PROJECT_DIR" <<'PY'
+import hashlib, json, pathlib, subprocess, sys
+jar, build_id, root = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+receipt = {
+    "jar": str(jar), "bytes": jar.stat().st_size,
+    "sha256": hashlib.sha256(jar.read_bytes()).hexdigest(), "build_id": build_id,
+    "commit": subprocess.check_output(["git", "-C", root, "rev-parse", "HEAD"], text=True).strip(),
+    "source_dirty": bool(subprocess.check_output([
+        "git", "-C", root, "status", "--porcelain", "--", "java_patch", "java_resources"])),
+    "deployed": False,
+}
+jar.with_name("carplay_hook-build.json").write_text(json.dumps(receipt, indent=2) + "\n")
+PY
