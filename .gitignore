@@ -86,5 +86,3 @@ tools/loader_preview/prism_preview
 /install_MoreIncredibleBash/mod/last-carplay-*.log
 /uninstall_MoreIncredibleBash/mod/last-carplay-*.log
 
-# local browser tooling cache
-.playwright-cli/
