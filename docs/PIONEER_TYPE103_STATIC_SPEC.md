@@ -166,7 +166,7 @@ extended-массива и специально удаляет только lega
 `packetFormatAPAP=true`, `spf=1024`, `shk=<32 bytes>`. Это доказывает negotiation и transport, но не
 делает APAC-декодер доступным на Audi.
 Самодостаточный private live corpus сохранён локально в
-`captures/apac_5_1_live_20260831_0205`: raw APAP, matching SETUP/key, `dapa` cookie и control plists;
+`logs/captures/apac_5_1_live_20260831_0205`: raw APAP, matching SETUP/key, `dapa` cookie и control plists;
 несекретный manifest находится в `docs/captures/APAC_5_1_LIVE_20260831.md`.
 После исключения только оборванного финального 4-byte length prefix все 3980 полных кадров проходят
 ChaCha20-Poly1305 authentication; plaintext APAC corpus содержит 1,148,875 байт.

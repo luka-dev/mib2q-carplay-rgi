@@ -249,9 +249,9 @@ Three authenticated type-103 captures were scanned:
 
 | Capture | Complete authenticated frames | Fields 4/5/10 |
 |---|---:|---|
-| `captures/spatial_live_20260901_s6/spatial_apap_5.bin` | 5698 | absent |
-| `captures/mhi2q_hsr_td_active_prio18_20260904/post_2min_auto_next_incident/spatial_apap_5.bin` | 3393 | absent |
-| `captures/mhi2q_ambient_hq_lock_20260904_0030/spatial/spatial_apap_4.bin` | 2727 | absent |
+| `logs/captures/spatial_live_20260901_s6/spatial_apap_5.bin` | 5698 | absent |
+| `logs/captures/mhi2q_hsr_td_active_prio18_20260904/post_2min_auto_next_incident/spatial_apap_5.bin` | 3393 | absent |
+| `logs/captures/mhi2q_ambient_hq_lock_20260904_0030/spatial/spatial_apap_4.bin` | 2727 | absent |
 
 The second file's complete frames had field counts
 `{2:3393, 8:3393, 11:3393, 12:3393, 17:3393, 18:10, 19:24, 20:3386, 21:24}`.

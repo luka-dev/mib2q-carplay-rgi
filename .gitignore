@@ -19,7 +19,6 @@
 !/build/hssr-q6d-moises-a/hssr_model.bin
 !/build/hssr-q6d-moises-a/manifest.json
 /local_logs/
-/log/
 
 # Phone-side captures: sysdiagnose tarballs and log archives are hundreds of MB
 # and contain the owner's device logs. Keep them local.
@@ -36,7 +35,6 @@ __pycache__/
 
 # Live CarPlay session captures. The SETUP plist carries the 32-byte `shk`
 # session key in plaintext — never commit it. Keep captures local, mode 0600.
-/captures/
 
 # IDA unpacks its database beside the .i64 while a session is open
 *.id0

@@ -977,7 +977,7 @@ issued the exact Pioneer `s_audioTypeCallback(kAudioTypeMedia)` declaration,
 then cold-opened `mpl5_dio_ent` as six-channel/48 kHz. The retained trace reached
 2,560 complete QSA periods with no short/zero write, recovery, ring wait, decode
 failure, drop or device underrun. Evidence and analyzer output:
-`captures/state-trace/20260905-131355/`; deployed hook SHA-256:
+`logs/captures/state-trace/20260905-131355/`; deployed hook SHA-256:
 `7e8869875293f02952669186f7c4f183986003c4f42e7f5622ecc3db31a31754`.
 
 ## Remaining route-ownership edge found (local fix, not deployed)
@@ -1003,7 +1003,7 @@ Host tests and the QNX build pass; vehicle acceptance is still pending.
 ## AAC reserve pump and repeated-seek drain (deployed)
 
 A live interruption is retained in
-`captures/state-trace/20260905-live-aac-stutter-followup/`. AAC decoding stayed
+`logs/captures/state-trace/20260905-live-aac-stutter-followup/`. AAC decoding stayed
 clean, but the detached writer had reduced the 400-ms startup ring to the
 0/256/512-frame granularity remainder. At the reported event iOS explicitly
 sent `FLUSHBUFFERED`; the next APAP interval was 612 ms and the next QSA write
@@ -1100,7 +1100,7 @@ Full map, formula, policy switches and limits are in
 * `tools/qsa-emu/` — the QEMU harness, `HANDOFF.md` and `README.md` carry the traps.
 * `deploy/deva-ctrl-qc/` — `README.md` (caps + dump), `RE_TIMING.md` (the 16 ms timer).
 * `docs/reference/AUDIO.md` — topology, the CarPlay audio path, the Atmos analysis.
-* `captures/broken_5_1_20260901_drive/` — the vehicle capture set.
+* `logs/captures/broken_5_1_20260901_drive/` — the vehicle capture set.
 * `Firmwares/SoundAmp/AMP_ENTERTAINMENT_7_1_MOST.md` — amplifier sinks and channel layout.
 * `docs/DIO_MEDIA_SINK_STATIC_AUDIT.md` — connection 162 to logical/physical MOST sink audit.
 * `docs/DEVICE_TOPOLOGY_AUDIT.md` — virtual PCM to shared CSD device/topology audit.

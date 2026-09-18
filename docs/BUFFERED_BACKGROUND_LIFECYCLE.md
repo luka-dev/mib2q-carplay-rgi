@@ -163,7 +163,7 @@ growing drops.
 ## Whole-period transition polish (vehicle-verified negative for lock gap)
 
 The longer saved trace in
-`captures/mhi2q_ambient_hq_lock_20260904_0030/` isolated one local PCM
+`logs/captures/mhi2q_ambient_hq_lock_20260904_0030/` isolated one local PCM
 shortage.  After iOS deliberately sent `rate=0` plus `FLUSHBUFFERED` while
 changing AAC-LC stereo to APAC-5.1, the stock-owned bridge once read only 512
 of its 768-frame period and zero-padded the remaining 256 frames.  QSA itself
@@ -219,7 +219,7 @@ this particular transition gap.
 ## Physical QSA handoff polish (deployed; connection restart under audit)
 
 The clean trace is retained in
-`captures/mhi2q_hsr_whole_period_lock_20260904/`.  It showed two deterministic
+`logs/captures/mhi2q_hsr_whole_period_lock_20260904/`.  It showed two deterministic
 physical state changes despite perfect ring and write counters:
 
 ```text
@@ -303,7 +303,7 @@ zeroed after deployment.
 ### First vehicle result
 
 The complete snapshot is retained in
-`captures/mhi2q_hsr_seamless_handoff_20260904/`.  Lock used the same
+`logs/captures/mhi2q_hsr_seamless_handoff_20260904/`.  Lock used the same
 `handle=6e0be8` throughout: the close-adjacent flush was deferred at
 `00:58:16.007`, the handle was retained with `handoff=continuous`, and the first
 detached write was a full 9216 bytes.  Unlock at `00:58:24.884` reclaimed
@@ -337,7 +337,7 @@ sha256 c9410850a154e5ea1485125434116eb58f362bafb9eb188a360865a154696d52
 ### Later connection restart: not a demonstrated hook segfault
 
 The subsequent incident snapshot is retained in
-`captures/mhi2q_hsr_seamless_handoff_crash_20260904/`.  The original
+`logs/captures/mhi2q_hsr_seamless_handoff_crash_20260904/`.  The original
 `dio_manager` PID `72769671` disappeared and `smartphone_integrator` started
 PID `85991498`.  Before exit, however, the old process continued to render with
 `fill=512`, `drop=0`, and full detached 9216-byte writes.  At
@@ -411,7 +411,7 @@ load without hiding any write failure.
 ### Hidden detached QSA underrun under scheduler pressure
 
 The correct 5,000,000-byte session is retained in
-`captures/mhi2q_aac_buffer_5m_20260904/underrun/`. From `01:24:35` onward the
+`logs/captures/mhi2q_aac_buffer_5m_20260904/underrun/`. From `01:24:35` onward the
 decoded rail and wrapper appeared healthy: ring fill stayed at 448 frames,
 startup `drop=5440` never increased, every detached write returned the full
 9216 bytes, and `zero=0`. Nevertheless the system slog proves one physical
@@ -506,7 +506,7 @@ silence or a second uncoordinated QSA handle.
 
 The first priority-18 session later produced a different, fully captured
 failure.  The evidence is under
-`captures/mhi2q_hsr_td_active_prio18_20260904/post_2min_auto_next_incident/`.
+`logs/captures/mhi2q_hsr_td_active_prio18_20260904/post_2min_auto_next_incident/`.
 PID `122302538` did not crash or restart, QSA remained `RUNNING`, every device
 write remained complete, and both the direct and deva underrun/recovery counts
 stayed zero.  `updateFeedback` was also sane: 48000 initially and
@@ -555,7 +555,7 @@ that repetition passes, the mixed-buffer diagnosis is a strongly supported
 candidate rather than a claimed final proof.
 
 The first fresh run accepted that contract on the car.  Evidence is in
-`captures/mhi2q_music_stage_mixed_buffer_20260904/good_live/`: SETUP returned
+`logs/captures/mhi2q_music_stage_mixed_buffer_20260904/good_live/`: SETUP returned
 `audioBufferSize=21168000`, the renderer started with `music-stage`, surround
 0.20, LFE assist and `SCHED_RR` priority 18, and iOS changed APAC to AAC inside
 the same type-103 session at `02:00:41.891`.  PCM statistics then continued at
@@ -568,7 +568,7 @@ longer AAC-to-APAC direction remains the decisive repetition of the former
 ## Late-song discontinuity: do not freeze a handoff sample-rate transient
 
 The next `music-stage` run is captured under
-`captures/mhi2q_music_stage_mixed_buffer_20260904/late_underrun_check/`.
+`logs/captures/mhi2q_music_stage_mixed_buffer_20260904/late_underrun_check/`.
 It ran from `02:08:10` until orderly connection teardown at `02:21:32`.
 The PCM/QSA path itself remained clean: every observed write was 9216 bytes,
 device status stayed `RUNNING`, and `devUnderruns`, `recoveries`, `zeroWrites`,
@@ -694,7 +694,7 @@ type-100 stream in the generation, the hook queued the Pioneer Media
 declaration, cold-opened six-channel `mpl5_dio_ent`, and playback became audible
 automatically. The retained run reached 2,560 complete periods with no short
 write, recovery, ring wait or device underrun. Trace:
-`captures/state-trace/20260905-131355/`. The installed/read-back hook hash is
+`logs/captures/state-trace/20260905-131355/`. The installed/read-back hook hash is
 `7e8869875293f02952669186f7c4f183986003c4f42e7f5622ecc3db31a31754`;
 the profile is `hssr-neon` / rear `0.25` / LFE `assist`. This closes the startup
 ownership boundary: type 103 can now establish both PCM delivery and the HU
@@ -711,7 +711,7 @@ for 17,061 full detached writes, but stock's `audioTornDown` removed the Media
 route and the hook did not take it back. The user heard no media; unplug/replug
 then produced a type-103-only generation whose cold route request was audible.
 The captures are `20260905-media-start-failed-live` and
-`20260905-media-start-replug-success` under `captures/state-trace/`.
+`20260905-media-start-replug-success` under `logs/captures/state-trace/`.
 
 The local fix schedules a route request 50 ms after
 `QSA_CLOSE action=retain_for_buffered`. This follows the synchronous stock
@@ -727,8 +727,8 @@ and the QNX build pass; this inverse transition is not yet vehicle-accepted.
 The live report on 2026-09-05 was retained twice without restarting or clearing
 the unit:
 
-- `captures/state-trace/20260905-live-aac-stutter-now/`
-- `captures/state-trace/20260905-live-aac-stutter-followup/`
+- `logs/captures/state-trace/20260905-live-aac-stutter-now/`
+- `logs/captures/state-trace/20260905-live-aac-stutter-followup/`
 
 The trace proves that AAC itself was healthy: `decode_fail=0`, authenticated
 sequence was continuous before the item boundary, every QSA retry accepted the
@@ -819,7 +819,7 @@ is therefore the acceptance run for both the reserve pump and 160-ms re-prime.
 ## Vehicle result and repeated-seek fast drain (2026-09-05)
 
 The first deployment accepted the reserve part of the change.  In
-`captures/state-trace/20260905-154606/`, both detached and stock-owned playback
+`logs/captures/state-trace/20260905-154606/`, both detached and stock-owned playback
 hold the decoded ring around 10,752--12,800 frames instead of draining it to
 the 0/256/512-frame codec remainder.  Across more than six minutes of AAC/APAC
 playback there is no QSA cadence gap, ring wait, short write, recovery, decode

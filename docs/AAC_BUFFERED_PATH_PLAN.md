@@ -116,7 +116,7 @@ from `AudioConverterFillComplexBuffer` directly to Cinemo `Write` at `0xb28a0`. 
 a transport header.
 
 Together these were strong static evidence that index 23 supplies **one raw AAC-LC access unit per
-APAP media item**. The vehicle capture in `captures/aac_route_20260903` now proves it directly.
+APAP media item**. The vehicle capture in `logs/captures/aac_route_20260903` now proves it directly.
 
 ### Measured vehicle capture
 

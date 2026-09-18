@@ -53,7 +53,7 @@ without a discovered channel clamp. Treat that as the starting reference, not as
 ## What to determine, before any code
 
 1. **The framing.** Inside APAP, is an index-23 payload raw AAC-LC access units, ADTS, or
-   something else? The capture in `captures/spatial_silent_20260903/` is APAC, so a fresh
+   something else? The capture in `logs/captures/spatial_silent_20260903/` is APAC, so a fresh
    index-23 capture is needed -- say what to capture and how to recognise the framing.
 2. **The Cinemo contract.** Exact `CinemoCreateAudioCodec` arguments for AAC-LC, what it returns,
    how PCM comes out, and whether it can be driven from a hook thread inside `dio_manager`

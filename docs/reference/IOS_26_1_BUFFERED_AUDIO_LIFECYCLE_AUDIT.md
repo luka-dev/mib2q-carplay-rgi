@@ -117,7 +117,7 @@ spa103_render.playing = 1;
 ```
 
 The retained trace
-`captures/state-trace/20260905-131355/carplay_state_trace.log` shows:
+`logs/captures/state-trace/20260905-131355/carplay_state_trace.log` shows:
 
 ```text
 02:41:30.126  BUFFERED_RENDER_START
@@ -157,7 +157,7 @@ Pioneer separates those operations:
   by the separate flush routine.
 
 The decisive retained trace is
-`captures/state-trace/20260905-live-aac-stutter-followup/carplay_state_trace.log`:
+`logs/captures/state-trace/20260905-live-aac-stutter-followup/carplay_state_trace.log`:
 
 ```text
 04:06:44.142  APAP frame=21, framesIn=19456
@@ -217,7 +217,7 @@ and sequence baseline. Both select the existing 160 ms post-flush reprime.
 
 The APAP and decoded-PCM checks above did not cover periods already accepted by
 `snd_pcm_plugin_write`. A live rapid-song-selection trace preserved in
-`captures/state-trace/20260906-song-change-215036/` made that boundary visible:
+`logs/captures/state-trace/20260906-song-change-215036/` made that boundary visible:
 
 - each until-only prefix flush removed 11,264--12,032 decoded frames;
 - after the 160 ms software-ring reprime, the first new detached write returned

@@ -463,7 +463,7 @@ the result with:
 ```
 
 The helper copies the current file and rotations into a timestamped
-`captures/state-trace/` directory and runs
+`logs/captures/state-trace/` directory and runs
 `tools/analyze_carplay_state_trace.py`. Its boundary result is deliberately
 conservative: raw ACK fields are reported, while a retry/rebind is not selected
 until the observed failure crosses the corresponding line in the decision
@@ -474,7 +474,7 @@ table above.
 The compact trace build was deployed on 2026-09-05 and captured one physical
 CarPlay generation continuously before and after the user opened Apple Music.
 The complete capture is
-`captures/state-trace/20260905-110501/carplay_state_trace.log`.  This is a
+`logs/captures/state-trace/20260905-110501/carplay_state_trace.log`.  This is a
 measurement of one failure/healing cycle, not an inference from the static
 state machines.
 
@@ -644,8 +644,8 @@ phone connection without manually opening Music.
 ## Vehicle A/B: QSA bootstrap alone is silent; stock audio-type routing is required
 
 That decisive cold test was run on 2026-09-05. The complete before/after trace
-is `captures/state-trace/20260905-125527/carplay_state_trace.log`; the cold-only
-snapshot is `captures/state-trace/20260905-125323/carplay_state_trace.log`.
+is `logs/captures/state-trace/20260905-125527/carplay_state_trace.log`; the cold-only
+snapshot is `logs/captures/state-trace/20260905-125323/carplay_state_trace.log`.
 
 Before Music was opened, type 103 was not merely connected: APAC index 65 had
 decoded continuously to six-channel PCM, the hook had opened and configured
@@ -714,7 +714,7 @@ QSA-only activation.
 While index-23 AAC stereo was playing successfully, the user reported rare
 frame-scale noises resembling an underrun on some songs.  The uninterrupted
 compact capture through `00:53:05` is
-`captures/state-trace/20260905-112450/carplay_state_trace.log`.
+`logs/captures/state-trace/20260905-112450/carplay_state_trace.log`.
 
 This capture is negative for every failure the deployed trace can currently
 observe:
@@ -772,7 +772,7 @@ underrun, which is why ring/decode/device counter snapshots are required.
 The fresh cold-connect test passed on 2026-09-05. The user connected the phone
 and did **not** open Apple Music manually; playback started automatically. The
 complete compact trace and analyzer output are in
-`captures/state-trace/20260905-131355/`.
+`logs/captures/state-trace/20260905-131355/`.
 
 This was the intended path, not an accidental recovery through stock type 100:
 
@@ -803,9 +803,9 @@ bootstrap is now vehicle-confirmed.
 ## Vehicle A/B: stock-to-buffered route ownership was one-way
 
 A later cold connection exposed the inverse ownership edge. The failed trace
-is `captures/state-trace/20260905-media-start-failed-live/`; the successful
+is `logs/captures/state-trace/20260905-media-start-failed-live/`; the successful
 unplug/replug control is
-`captures/state-trace/20260905-media-start-replug-success/`.
+`logs/captures/state-trace/20260905-media-start-replug-success/`.
 
 The failed generation (`pid=238407815`, generation 1) was not an iAP, metadata,
 decoder or QSA-start failure:

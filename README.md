@@ -8,7 +8,7 @@ Production implementation for Audi MHI2Q (MU1316, QNX 6.5 ARMv7):
 - one Java patch for cluster context, BAP/RGI, cover art and steering-wheel input.
 
 The shipped path always keeps stock `libairplay.so`. Historical alternative implementations under
-`research/` are not production dependencies or authorities for stock 210 behavior.
+`docs/research/` are not production dependencies or authorities for stock 210 behavior.
 
 ## Repository layout
 
@@ -26,7 +26,9 @@ The shipped path always keeps stock `libairplay.so`. Historical alternative impl
 | `docs/` | Current architecture, deployment and audit documents |
 | `docs/reference/` | Reverse-engineering reference notes |
 | `docs/archive/` | Superseded plans retained for history |
-| `research/` | Historical experiments, disassembly notes and old reports |
+| `docs/research/` | Historical experiments, disassembly notes and old reports |
+| `docs/papers/` | Downloaded papers and reference PDFs (AlbumDB, CUpGAN, Bharitkar, DAFx upmix) |
+| `logs/` | Ignored local evidence: vehicle captures (`captures/`), HU logs, iPhone sysdiagnose, state traces |
 | `assets/` | Screenshots and visual reference material |
 | `build/` | Canonical deployable artifacts |
 
@@ -157,5 +159,5 @@ Playing state-machine audit below for the exact event and decision tables.
 - [`docs/MOST_SOURCE_BLOCKWIDTH_AUDIT.md`](docs/MOST_SOURCE_BLOCKWIDTH_AUDIT.md) — connection-162 source allocation and actual MOST Connect BlockWidth.
 - [`docs/CONNECT_BLOCKWIDTH_VALIDATION_AUDIT.md`](docs/CONNECT_BLOCKWIDTH_VALIDATION_AUDIT.md) — amplifier Connect validation and exact HU BlockWidth constant sites.
 
-Historical altScreen negotiation reports and from-source experiments are under `research/altscreen/`;
+Historical altScreen negotiation reports and from-source experiments are under `docs/research/altscreen/`;
 they are useful research records, not the definition of the shipping architecture.

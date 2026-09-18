@@ -1,0 +1,478 @@
+Proc. of the 18th Int. Conference on Digital Audio Effects (DAFx-15), Trondheim, Norway, Nov 30 - Dec 3, 2015
+
+
+
+   STEREO SIGNAL SEPARATION AND UPMIXING BY MID-SIDE DECOMPOSITION IN
+                         THE FREQUENCY-DOMAIN
+
+                                                     Sebastian Kraft, Udo Zölzer
+                                  Department of Signal Processing and Communications
+                                              Helmut-Schmidt-University
+                                                  Hamburg, Germany
+                                         sebastian.kraft@hsu-hh.de
+
+
+                           ABSTRACT
+An algorithm to estimate the perceived azimuth directions in a
+stereo signal is derived from a typical signal model. These esti-
+mated directions can then be used to separate direct and ambient
+signal components and to remix the original stereo track. The pro-
+cessing is based on the idea of a bandwise mid-side decomposition
+in the frequency-domain which allows an intuitive and easy to un-
+derstand mathematical derivation. An implementation as a stereo
+to five channel upmix is able to deliver a high quality surround ex-
+perience at low computational costs and demonstrates the practical
+applicability of the presented approach.
+
+                      1. INTRODUCTION
+
+The classical stereo format with a left and right speaker was de-
+veloped by Blumlein in the 1930s. Although it allows to create a
+certain spaciousness by placing virtual sound sources on the az-         Figure 1: Exemplary processing steps in a typical stereo to sur-
+imuth angle between both loudspeakers, the result is still far away      round upmix algorithm.
+from a really realistic rendering of sound scenes. The main disad-
+vantages of stereo are:
+   1. Impossibility to produce a real envelopment of the listener        target speaker layout while the ambient signal will be equally re-
+      as rear sound sources are missing. These would be in par-          distributed to all speakers creating a uniform and diffuse sound
+      ticular important for a reproduction of ambient reflections        field. In order to retain the perceived positions of the direct signal
+      to get a realistic impression of the room properties.              sources in the upmix, it is necessary to estimate their azimuth di-
+                                                                         rections from the stereo signal and to incorporate this knowledge
+   2. Phantom source positions are only properly reproduced for          in the calculation of the repanning coefficients.
+      listeners in the sweet spot.                                             Dolby Pro Logic II [2] became quite popular in the 1990s and
+It has long been known that both problems can be solved by adding        was intended to extract five channels from a stereo track. Basically
+speakers in the rear for playback of ambient reflections and more        it is a matrix encoder/decoder system but is also capable to extract
+speakers in the front for a stabilisation of the phantom source im-      decent multi-channel signals from any arbitrary stereo mix. For a
+age. Today, surround sound is widely established in film and ded-        simple and cost effective realization it only requires time domain
+icated distribution media like DVD or Blu-Ray generally offer at         operations like subtraction and addition of the left and right chan-
+least a 5.1 multi-channel sound track. In contrast, the majority         nels with additional phase shifts and VCAs (voltage controlled am-
+of popular music is still exclusively produced and distributed in        plifiers) for simple directional steering.
+stereo and would not benefit from playback on more than two                    Recent algorithms make use of frequency-domain processing
+speakers. Even if more music productions would become avail-             to analyse the signal in discrete frequency bands. Avendano and
+able in multi-channel formats in the next years, there is still a huge   Jot [3] calculate a bandwise inter-channel short-time coherence
+stock of old stereo recordings.                                          from the cross- and autocorrelations between the stereo channels
+     Several approaches were developed in the past to benefit from       which is then the basis for the estimation of a panning and am-
+additional loudspeakers while playing back stereo source mate-           bience index [4]. Faller [5] uses a least squares method to derive
+rial. The most simple ones use time-domain mixing matrices [1]           an algorithm where the error between the extracted signals and a
+together with phase shifting to generate the additional channels.        stereo signal model is minimised. Goodwin [6] examines the left
+More advanced upmixing algorithms usually follow a spatial source        and right stereo signals in a 2D vector space and extracts the di-
+separation approach as depicted in Fig. 1. They try to split the         rect and ambient sound with a principal component analysis. A
+stereo signal into a direct part and a diffuse and more or less un-      similar geometric decomposition is described by Vickers [7] for
+correlated ambient part. The direct signal will be repanned on the       the purpose of center extraction. An enhanced time-domain rever-
+
+
+
+
+                                                                   DAFX-1
+Proc. of the 18th Int. Conference on Digital Audio Effects (DAFx-15), Trondheim, Norway, Nov 30 - Dec 3, 2015
+
+
+beration extraction upmixer was presented by Usher [8] where a
+normalised least mean squares (NLMS) algorithm is used to find a
+filter for the extraction of uncorrelated components. All the above
+algorithms [3–8] and also the one presented in this paper share
+a comparable stereo signal model with similar assumptions about
+the individual signal components.
+     The focus of this contribution is on a simplified mathematical
+description and derivation, which finally leads to a very fast and
+efficient implementation. It is shown that most of the processing
+principles, which are also known from other approaches, can be
+interpreted as a simple generalised mid-side decomposition which
+is performed in sub-bands.
+     In the following section 2, a typical mathematical model to
+describe stereo signals is derived and its connections to mid-side
+decomposition and principal component analysis are highlighted.
+Section 3 describes the extraction of the direct and ambient sig-
+nals as well as the estimation of the direct signal directions. The     Figure 2: The stereo signal model from (6)-(7) visualised as a com-
+upmixing of the separated components to a generic surround sound        plex vector diagram for a single frequency band k.
+setup and other applications are outlined in section 4 before the re-
+sults of an exemplary 2-to-5 upmix implementation are discussed
+                                                                         P
+in section 5. Section 6 will conclude the paper.                        ( ∀j6=u |Dj (b, k)| ≈ 0) . This allows to summarise the time-
+                                                                        frequency representations of the individual sources
+                2. STEREO SIGNAL MODEL                                                              J
+                                                                                                    X
+                                                                            aL (b, k) · D(b, k) =         aLj · Dj (b, k) ≈ aLu · Du (b, k) (5)
+The left and right channels of a stereo signal                                                      j=1
+
+                         " J               #
+                          X                                             into a single source D(b, k) and the panning coefficients to be writ-
+              xL (n) =          aLj · dj (n) + nL (n)            (1)    ten as a matrix aL/R (b, k). Moreover, the left and right ambient
+                          j=1                                           signal in one band k can be expected to have a similar magnitude
+                                                                        but due to different paths and reflections in the room, they likely
+                         " J               #
+                          X
+              xR (n) =          aRj · dj (n) + nR (n)            (2)    have a different phase and can be replaced by:
+                          j=1
+                                                                                NL (b, k) = N (b, k),         NR (b, k) = ejφ · N (b, k).
+are usually described as a weighted sum of J source signals dj (n)
+and additive uncorrelated ambient signals nL (n) and nR (n) in          Combining both steps leads to a simplified signal model
+the left and right channel, respectively. The weightings aLj and
+aRj of the individual sources are called panning coefficients and                  XL (b, k) = aL (b, k) · D(b, k) + N (b, k)               (6)
+                                                                                                                          jφ
+are bound between zero and one. Their squared sum should be                        XR (b, k) = aR (b, k) · D(b, k) + e         · N (b, k)   (7)
+equal to one (a2Lj + a2Rj = 1) to achieve a constant power and
+loudness independent of the actual source position. As the pan-         with a highly reduced number of unknowns. For an improved read-
+ning coefficients are real-valued, this model only covers intensity     ability the indices (b, k) are omitted in the next sections.
+stereophony where the weighted sources in the left and right chan-           Overall, the simplifications in the signal model may seem to
+nels are in phase.                                                      be quite drastic and one can doubt its validity in particular for com-
+     The time-domain signal model can directly be transformed           plex and high density musical recordings. But the intention of the
+into the frequency-domain by a short time fourier transform (STFT)      presented model is not to allow an exact extraction and reproduc-
+                                                                        tion of the original source signals. The idea is to have a generic
+                        " J                    #
+                         X                                              signal model that is able to describe the relation between direc-
+          XL (b, k) =          aLj · Dj (b, k) + NL (b, k)       (3)    tional and diffuse signal components for an arbitrary stereo sig-
+                         j=1                                            nal. The resulting ambient and direct signal components should be
+                        " J
+                         X
+                                               #                        free of artefacts and sound realistic, but for that purpose they do
+         XR (b, k) =           aRj · Dj (b, k) + NR (b, k)       (4)    not necessarily have to be identical to the real signals before the
+                         j=1                                            downmix.
+
+where b and k denote the block and frequency indices. Based             2.1. Interpretation as complex vector diagram
+on the two stereo channels as input, it is impossible to mathe-
+matically retrieve the sources, panning coefficients and ambient        The signals from the model (6)-(7) are complex-valued and can be
+signals as the equation systems (1)-(2), (3)-(4) are highly under-      depicted in form of a vector diagram to visualise their relation in
+determined. However, for a sufficiently high time and frequency         phase and magnitude. In Fig. 2 the weighted direct signal compo-
+resolution it is a common assumption [9] that at a certain time in-     nents DL/R = aL/R · D are in phase with the direct signal D
+stant b and in a frequency band k only a single dominant source         as the coefficients aL/R are only real-valued and do not alter the
+Du is active and the contribution of other sources is close to zero     phase. In contrast the ambient components NL/R are out of phase
+
+
+
+
+                                                                   DAFX-2
+Proc. of the 18th Int. Conference on Digital Audio Effects (DAFx-15), Trondheim, Norway, Nov 30 - Dec 3, 2015
+
+
+                                                                                            3. SIGNAL EXTRACTION
+
+                                                                          3.1. Panning coefficient estimation
+    NL                        NR       NL                      NR
+
+                                                   D
+                                                                          The panning coefficients in (6)-(7) are real-valued which means
+                 D
+                                                                          that they only create amplitude panning and do not introduce a
+                                                       M                  phase difference between XL and XR . Any phase shift between
+             L       R                        -S           S              the left and right channel would be solely caused by an additive
+                                                                          ambient signal with a magnitude |N | > 0 (which is also apparent
+                                                                          from Fig. 2). However, for typical music mixes the amplitude of
+   (a) Left-right (XY) sterophony    (b) Mid-side (MS) stereophony        the ambient signal N is far less than the amplitude of the direct
+                                                                          signal D. This also means that the left and right channels
+Figure 3: Comparison between left-right and mid-side stereo
+recording techniques regarding the capturing of direct and am-
+bient components.                                                                                   |XL | ≈ aL · |D|                    (12)
+                                                                                                    |XR | ≈ aR · |D|                    (13)
+
+with the direct signal. Furthermore, NL and NR have a similar
+amplitude but a phase difference of φ.                                    are sufficiently approximated by the weighted direct signal magni-
+    For an angle φ = π the vector diagram transforms into the             tude and the phase can be neglected in this relation. Rearranging
+signal model from [6] where the direct signal is estimated as the         and solving equations (12)-(13) with the constraint a2L + a2R = 1,
+principal component and the ambient signals are orthogonal to it.         the panning coefficients
+
+
+2.2. Interpretation as mid/side stereophony                                                                   |XL |
+                                                                                              âL     =   p                             (14)
+                                                                                                           |XL |2 + |XR |2
+A stereo signal is typically recorded as a left and right channel
+(XL /XR ) but it can also be represented by a mid and side channel                                            |XR |
+                                                                                              âR     =   p                             (15)
+(XM /XS ). Both variants can be converted into each other                                                  |XL |2 + |XR |2
+
+                      XM = 0.5 · (XL + XR )                         (8)
+                                                                          can be estimated from XL and XR .
+                      XS = 0.5 · (XL − XR )                         (9)
+                                                                              The "stereophonic law of sines" [11]
+                         XL = XM + XS                           (10)
+                         XR = XM − XS                           (11)                          aL − aR    sin θ
+                                                                                                      =          = −Ψ                   (16)
+                                                                                              aL + aR   sin θ0/2
+by sum and difference calculations. The connection between the
+above stereo representations and the signal model (6)-(7) becomes         describes the perceived angle θ of a source if its amplitude is
+apparent in Fig. 3 where two classical stereo recording setups are        weighted by aL/R for playback on a left and right loudspeaker
+depicted in a simple room model.                                          while the angle between the both speakers is defined by θ0 . The
+     One way to record a left-right stereo signal is to use two car-      normalised position index Ψ, ranging from −1 for left and +1 for
+doid microphones in a XY configuration as shown in Fig. 3 a).             right positions, combines the coefficients aL/R in a single value
+The direct sound D emitted from a central sound source will be            (Fig. 4 a)). From (12)-(13) and (16) one can derive estimates for
+recorded with the same intensity and phase by both microphones.           the position index and angle
+The ambient signals NL and NR reach the left and right micro-
+phone with different phase but similar amplitude. This corresponds
+to the signal model from (6)-(7) in the case aL ≡ aR .                                       |XR | − |XL |
+                                                                                       Ψ̂ =                                             (17)
+     To record a mid-side stereo signal, a figure of eight micro-                            |XL | + |XR |
+phone is faced sideways to capture the side signal and a cardoid                                    
+                                                                                                               |XR | − |XL |
+                                                                                                                             
+micropone captures the mid signal. Placed in a room with a sin-                         θ̂ = arcsin sin θ0/2 ·                          (18)
+                                                                                                               |XL | + |XR |
+gle central sound source as shown in Fig. 3 b), the mid microphone
+will nearly exclusively capture the direct signal, whereas the fig-
+ure of eight mostly captures ambient reflections. Therefore, a mid-       based on the magnitudes of the left and right stereo channel. When
+side stereo signal already implies a certain degree of separation be-     plotting the perceived source angle for different values of θ0 and
+tween ambient and direct components. Having a left-right stereo           over the normalised position index Ψ in Fig 4 b), one can see that
+signal pair as input, one can achieve a simple direct-ambience de-        there is a nearly linear relation for the typical stereo setup with
+composition by calculating the mid and side signals with (8)-(9).         θ0 = 60◦ . Hence, the normalised position Ψ nicely matches the
+Indeed, Dolby Pro Logic I and II [2,10], for example, already made        human perception and can be directly used as a linear pan-pot like
+use of this idea and basically obtained the center and ambient sig-       control parameter to describe source positions. Comparing (17)
+nals by sum and difference calculations of the left and right stereo      with the mid-side decomposition mentioned in section 2.2, it ap-
+channels. However, due to pure time-domain processing, their ca-          pears that the position Ψ̂ is the ratio between the side and mid
+pability to separate multiple sources at the same time was limited.       component of an approximately coherent stereo signal.
+
+
+
+
+                                                                     DAFX-3
+Proc. of the 18th Int. Conference on Digital Audio Effects (DAFx-15), Trondheim, Norway, Nov 30 - Dec 3, 2015
+
+
+                         1
+
+                       0.5
+
+
+    Coefficient
+                         0
+
+                      −0.5
+                                                                   Ψ     aL       aR
+                       −1
+                         left                            center                        right
+                                                        Position
+                        (a) Panning coefficients aL/R and position index Ψ
+
+                                     θ0 = 60◦            θ0 = 90◦         θ0 = 120◦
+                        60
+
+                        30
+
+        θ in degree
+                         0
+                       −30
+
+                       −60                                                                          Figure 5: Upmixing of the extracted ambient and direct signals to
+                             -1               -0.5          0            0.5             1
+                                                                                                    a five speaker surround setup.
+                                                     Position index Ψ
+    (b) Mapping between position index Ψ and the perceived angle θ
+    in dependency of the angle between two speakers θ0
+                                                                                                    which is identical to (8)-(9) and shows that the derived direct and
+                                                                                                    ambience separation essentially is a generalised mid-side decom-
+Figure 4: Mapping between panning coefficients, position index
+                                                                                                    position. In contrast to a pure time-domain mid-side conversion,
+and perceived angles.
+                                                                                                    the panning coefficients in each sub-band are incorporated to allow
+                                                                                                    a proper separation of direct signals which were not panned to the
+                                                                                                    center.
+3.2. Direct and ambient signal separation
+The estimated panning coefficients from the previous section can                                                                4. REMIX
+be used to solve the signal model (6)-(7) for
+                                                                                                    Using the separated signal components D̂, N̂L , N̂R and with the
+                                   XL ejφ − XR                                                      knowledge of the panning coefficients âL , âR (or source positions
+                              D̂ =                                                           (19)
+                                   âL ejφ − âR                                                    Ψ̂ and angles θ̂) from the previous section, it is possible to remix
+                                                                                                    the original stereo signal. In the context of upmixing this would
+                                     âL XR − âR XL                                                mean to redistribute the signals to a different loudspeaker arrange-
+                              N̂ =                                                           (20)
+                                        âL ejφ − âR                                               ment. In most cases it is desired to retain the perceived source
+                             N̂L = N̂                           = XL − âL · D̂                     positions as they were placed in the stereo mix. However, it is also
+                                         jφ
+                                                                                                    possible to widen or narrow the stereo panorama or to completely
+                             N̂R = e          · N̂           = XR − âR · D̂                        modify individual source positions. The ambient signal is equally
+                                                                                                    distributed to all loudspeakers to create a diffuse sound field while
+to get an estimate of the direct and ambient signal components.                                     the balance between ambient and direct signal can be modified.
+Currently no method is known to guess the angle φ and therefore,                                         The signal flow for a typical upmix scenario to five speakers
+at the moment it is kept as an adjustable input parameter to influ-                                 is depicted in Fig. 5. The direct signal is played back by the three
+ence the signal separation process. By setting φ = π the resulting                                  front speakers (L, C, R), whereas the corresponding weights for
+left and right ambient signals are out of phase. While this may help                                each front channel are obtained by Vector Base Amplitude Panning
+to increase the perceived spatial depth of the ambient signals, it                                  (VBAP) [12]. The left and right ambient signals are added to the
+also causes unpleasant phase cancellations. Choosing φ in a range                                   four corner speakers (RL, RR, L, R). For a highly diffuse ambient
+φ ∈ [0.5 π, π] leads to less cancellations and for φ = 0.5 π a maxi-                                sound field it is necessary to establish a low correlation between all
+mum decorrelation between both ambient signals can be achieved.                                     ambient loudspeaker signals as pointed out by Kendall [13]. While
+For the application of upmixing with a setup as described in the                                    the left and right ambient signals already have a low correlation if
+next section, an angle φ = 0.6 π yielded the best balance between                                   the angle φ is selected properly (cf. section 3.2), only the front and
+spatial depth and out-of-phase artefacts.                                                           rear ambient signals on each side are fully correlated. In the most
+     The formulas (19)-(20) already show a certain similarity with                                  simple case these could be decorrelated by adding a small delay
+the mid-side decomposition previously described in section 2.2.                                     to the rear channels. More complex approaches in the frequency-
+Indeed, with âL = âR = 1 and a phase φ = π they become                                            domain are for example proposed by [13, 14].
+                                                                                                         Although the focus in this study is on the application of up-
+                                      XL ejπ − XR    XL + XR                                        mixing, the position index Ψ̂ can also be used for general spatial
+                                  D̂ =            =                                          (21)
+                                        ejπ − 1         2                                           source separation applications. First tests gave appealing results
+                                      XR − XL     XL − XR                                           which are comparable to [15]. In combination with the separation
+                                  N̂ = jπ       =                                            (22)
+                                       e −1          2                                              of direct and ambient signals further applications as center channel
+
+
+
+
+                                                                                               DAFX-4
+Proc. of the 18th Int. Conference on Digital Audio Effects (DAFx-15), Trondheim, Norway, Nov 30 - Dec 3, 2015
+
+
+
+
+  Frequency in Hz
+                                                                                      0.2
+                      4000
+
+                                                                               ∆Ψ      0
+                      2000
+                                                                                    −0.2      -40           -20   -12     -6
+
+                              31          32                33   34                     −1          −0.5          0             0.5           1
+                                (a) Left stereo channel XL                                                        Ψ
+
+                                                                           Figure 7: Position index error ∆Ψ influenced by different ambi-
+
+
+  Frequency in Hz
+                      4000                                                 ence/direct power ratios in dB.
+
+                      2000                                                            0.5
+                                                                                     0.25
+                              31          32                33   34            ∆Ψ       0
+                               (b) Right stereo channel XR                          −0.25
+                                                                                               -40          -20   -12      -6
+                                                                                    −0.5
+                                                                                        −1           −0.5          0            0.5            1
+
+
+
+  Frequency in Hz
+                      4000                                                                                         Ψ
+
+                      2000                                                 Figure 8: Position index error ∆Ψ influenced by a second source
+                                                                           with different power ratios (in dB) and fixed Ψ = 0.33.
+                              31          32                33   34
+
+                              (c) Extracted direct signal D̂               directions and the direct/ambience separation in the frequency do-
+                                                                           main with equations (14)-(15) and (19)-(20) only require a few
+                                                                           instructions.
+
+
+    Frequency in Hz
+                      4000                                                      Spectrograms of the extracted signals for a sample song are
+                                                                           shown in Fig. 6. It is apparent that the extracted direct signal in
+                      2000                                                 Fig. 6 c) includes most of the tonal energy from the input signal
+                                                                           shown in Fig. 6 a-b). In contrast, the ambient signal Fig. 6 d) is
+                              31           32               33   34        diffuse and of lower energy. The tonal structure is only barely vis-
+                                                Time in s                  ible. The extracted ambient and direct signals sound realistic and
+                                                                           although in particular the isolated ambient signal is not free of arte-
+                             (d) Extracted ambience signal N̂              facts, they are not audible in the overall mix. This is caused by the
+                                                                           fact that the upmixing process just redistributes signal components
+Figure 6: Spectrograms of the input signal a-b) and the extracted
+                                                                           to more loudspeakers but nothing is removed or added compared
+direct c) and ambient signals d).
+                                                                           to the original stereo signal. Although the positions of the sources
+                                                                           are retained quite well when switching from stereo to surround,
+                                                                           the perceived width of the spatial image tends to narrow a little bit
+extraction [7], stereo speech enhancement [16,17] or the correction        in the upmix.
+of panning errors with non-standard loudspeaker setups [18] could
+be possible.
+                                                                           5.1. Estimated position error analysis
+
+                                   5. DISCUSSION                           The generally proper reproduction of the source positions and pleas-
+                                                                           ing ambient signals are a good indication that the simplifications
+The authors created a stereo to five channel upmixing VST plugin           and assumptions described in the above derivation do not cause
+to test the practical suitability and sound quality of the described       any audible impairments and are valid for typical music mate-
+method. The target speaker layout and signal flow follows the di-          rial. However, it would be interesting to see how a violation of
+agram in Fig. 5. Rendered audio examples can be found on the               these assumptions will influence the accuracy of the estimated po-
+website of the department1 .                                               sitions. For that purpose a direct signal consisting of white noise
+     The algorithm is quite efficient and only utilizes 3.0 % of a sin-    was panned to various positions Ψ ∈ [−1, 1] and ambience was
+gle CPU core on an Intel Core i5-2320 3 GHz processor at a sam-            added using a Large Hall impulse response from a Bricasti M7
+ple rate of 44100 Hz. The size of the STFT blocks is set to 2048           stereo reverb unit. The power ratio between the wet and dry sig-
+samples with a hop size of 512 samples between two consecutive             nal was varied between −40 dB and −6 dB. The resulting error
+transforms. Profiling the code reveals that the main load is caused        ∆Ψ = Ψ̂−Ψ is plotted in Fig. 7 and it can be observed that the po-
+by the 2 FFT and 5 iFFT calculations which are required for a 2-           sition error increases while the ambient signal power is increased.
+to-5 frequency-domain upmix. The actual extraction of the source           The consequence is that in particular extremely panned sources are
+                                                                           estimated too close to the center. The same effect appears when a
+  1 http://www2.hsu-hh.de/ant/webbox/audio/kraft/                          second source is added and the assumption of a single source per
+DAFX15_upmix/                                                              frequency band is violated. In Fig. 8 a white noise source signal
+
+
+
+
+                                                                      DAFX-5
+Proc. of the 18th Int. Conference on Digital Audio Effects (DAFx-15), Trondheim, Norway, Nov 30 - Dec 3, 2015
+
+
+moving from left to right was overlaid with another fixed noise           [3] Carlos Avendano and Jean-Marc Jot, “A frequency-domain
+source at Ψ = 0.33 and different power levels. No ambient signal              approach to multichannel upmix,” Journal of the Audio En-
+was added in this case. The error curve becomes asymmetric as the             gineering Society, vol. 52, no. 7, pp. 740–749, 2004.
+second source shifts the energy towards the right side but it has the     [4] Carlos Avendano and Jean-Marc Jot, “Ambience extraction
+same shape and behaviour as in the previous example. Still the er-            and synthesis from stereo signals for multi-channel audio
+ror increases with a higher power of the disturbing source and with           up-mix,” in IEEE International Conference on Acoustics,
+increased difference between both source positions. Although this             Speech and Signal Processing, 2002.
+is no detailed error analysis and only synthetic signals were used,
+                                                                          [5] Christof Faller, “Multiple-loudspeaker playback of stereo
+the results confirm and visualise what was already perceived in the
+                                                                              signals,” Journal of the Audio Engineering Society, vol. 54,
+upmix application described before.
+                                                                              no. 11, pp. 1051–1064, 2006.
+                                                                          [6] Michael M. Goodwin and Jean-Marc Jot, “Primary-ambient
+5.2. STFT resolution
+                                                                              signal decomposition and vector-based localization for spa-
+The trade-off between time and frequency resolution is an impor-              tial audio coding and enhancement,” in IEEE International
+tant parameter for the algorithm as it is only capable to deal with           Conference on Acoustics, Speech and Signal Processing,
+a single source in a specific time-frequency point (b, k). Different          2007.
+block lengths for the STFT in a range from 256 to 8192 samples            [7] Earl Vickers, “Frequency-Domain Two- to Three-Channel
+were investigated at a sample rate of 44100 Hz. The best sounding             Upmix for Center Channel Derivation and Speech Enhance-
+results are achieved with block lengths of 2048 samples, whereas              ment,” in Proc. of the 127th AES Convention, 2009.
+the difference to 1024 or 4096 samples is only barely audible. First
+                                                                          [8] John Usher and Jacob Benesty, “Enhancement of Spatial
+attempts were made to summarise frequency bins in the STFT into
+                                                                              Sound Quality: A New Reverberation-Extraction Audio Up-
+perceptual bands as done by Faller [5]. No obvious artefacts ap-
+                                                                              mixer,” IEEE Transactions on Audio, Speech and Language
+peared even if the 2048 spectral bins were summarised in only 24
+                                                                              Processing, vol. 15, no. 7, pp. 2141–2150, Sept. 2007.
+Bark bands. This opens a wide field of different methods to reduce
+and interpolate the spectral resolution and it might be in particular     [9] Alexander Jourjine, Scott Rickard, and Özgür Yilmaz,
+interesting to see if this enables us to increase the precision of the        “Blind separation of disjoint orthogonal signals: demixing N
+position estimation by using redundant information.                           sources from 2 mixtures,” in IEEE International Conference
+                                                                              on Acoustics, Speech and Signal Processing, 2000.
+                        6. CONCLUSION                                    [10] Roger Dressler, “Dolby Surround Pro Logic Decoder Princi-
+                                                                              ples Of Operation,” Dolby White paper, 1982.
+In this paper a new algorithm to estimate the perceived azimuth di-      [11] Benjamin B. Bauer, “Phasor analysis of some stereophonic
+rections in a stereo signal was derived from a typical signal model.          phenomena,” IRE Transactions on Audio, vol. 10, no. 1, pp.
+With the estimated directions it is possible to separate the direct           143–146, 1962.
+and ambient signal components and to remix the stereo signal.            [12] Ville Pulkki, “Virtual sound source positioning using vector
+Both, the signal separation and estimation of directions show simi-           base amplitude panning,” Journal of the Audio Engineering
+larity to a classical mid-side decomposition of stereo signals. How-          Society, vol. 45, no. 6, pp. 456–466, 1997.
+ever, in the presented form it is applied in sub-bands with the help
+of a short-time fourier transform and generalised to non-center          [13] Gary S. Kendall, “The Decorrelation of Audio Signals and
+panned signals. This allows to separate multiple sources with the             Its Impact on Spatial Imagery,” Computer Music Journal,
+constraint that only one dominant source is active at a specific time         vol. 19, no. 4, pp. 71–87, 1995.
+instant and frequency band. An implementation as a stereo to five        [14] Marco Fink, Sebastian Kraft, and Udo Zölzer, “Downmix-
+channel upmixing VST plugin demonstrates the applicability and                compatibe conversion from mono to stereo in time- and
+high sound quality of the proposed method at a very low computa-              frequency-domain,” in Proc. of the 18th Int. Conference on
+tional cost.                                                                  Digital Audio Effects, 2015.
+     For future enhancements it would be interesting to further in-      [15] Dan Barry, Bob Lawlor, and Eugene Coyle, “Sound source
+vestigate the influence of the STFT resolution and in particular              separation: Azimuth discriminiation and resynthesis,” in
+the usage of perceptually motivated non-linear resolutions on the             Proc. of the 7th Int. Conference on Digital Audio Effects,
+quality of the separated signals. Another aspect becoming more                2004.
+important with an increasing amount of loudspeakers is a proper
+                                                                         [16] Alexandra Cracuin, Christian Uhle, and Tom Bäckström,
+decorrelation of the ambient signals to achieve a smooth and dif-
+                                                                              “An evaluation of stereo speech enhancement methods for
+fuse ambient sound field. Several approaches are known in the
+                                                                              different audio-visual scenarios,” in Proc. of the 23rd Euro-
+literature but their suitability in the context of the presented upmix
+                                                                              pean Signal Processing Conference (EUSIPCO), 2015.
+algorithm have not been examined by the authors, yet.
+                                                                         [17] Jürgen T. Geiger, Peter Grosche, and Yesenia Lacouture Par-
+                                                                              odi, “Dialog Enhancement of Stereo Sound,” in Proc. of the
+                        7. REFERENCES                                         23rd European Signal Processing Conference (EUSIPCO),
+                                                                              2015.
+ [1] Michael A. Gerzon, “Optimal Reproduction Matrices for
+     Multispeaker Stereo,” in Proc. of the 91st AES Convention,          [18] Alexander Adami, Michael Schoeffler, and Jürgen Herre,
+     1991.                                                                    “Re-Panning of Directional Signals and its Impact on Lo-
+                                                                              calization,” in Proc. of the 23rd European Signal Processing
+ [2] Roger Dressler, “Dolby Surround Pro Logic II decoder prin-               Conference (EUSIPCO), 2015.
+     ciples of operation,” Dolby White paper, 2000.
+
+
+
+
+                                                                    DAFX-6
+

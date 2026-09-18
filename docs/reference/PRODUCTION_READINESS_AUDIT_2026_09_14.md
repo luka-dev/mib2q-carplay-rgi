@@ -153,7 +153,7 @@ Passing suites do not cover the three findings above.
 ## Remaining validation and compatibility boundaries
 
 One capture-driven APAC integration test skipped because the clean archive has
-no private `captures/apac_5_1_live_20260831_0205` recording. APAC fixture tests did
+no private `logs/captures/apac_5_1_live_20260831_0205` recording. APAC fixture tests did
 run. No real HU drive, decoder timestamp propagation, long-running Adreno timing
 or reconnect endurance run was performed for this revision.
 

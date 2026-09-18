@@ -281,7 +281,7 @@ read-only capture on 2026-09-10 provide partial on-unit validation:
 
 - Deployed hook SHA-256:
   `55acdb1d7ecd0f9cecf40e416adcb1a9fa0eb192bed157a17e8662b1349b8a32`.
-- Local private capture: `captures/state-trace/live-20260910-nav.wInRTV/review.md`
+- Local private capture: `logs/captures/state-trace/live-20260910-nav.wInRTV/review.md`
   (capture files remain ignored by Git).
 - About 207 seconds of music, four AAC/APAC format switches and 14 successful
   FLUSH operations; 49 QSA health snapshots reported no device underruns or

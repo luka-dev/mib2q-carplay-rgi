@@ -1,7 +1,7 @@
 # Current architecture
 
 This document describes the shipping MHI2Q implementation. Historical plans and alternative
-libairplay experiments live under `research/` and `docs/archive/`.
+libairplay experiments live under `docs/research/` and `docs/archive/`.
 
 ## Process topology
 

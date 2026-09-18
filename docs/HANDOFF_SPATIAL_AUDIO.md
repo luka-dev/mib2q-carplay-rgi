@@ -222,8 +222,8 @@ visible Spatial Audio session was genuine APAC 5.1, and the installed Cinemo AAC
 used as an APAC decoder or as an AAC bypass for this sender.
 
 A later clean index-65 session is documented in
-[`APAC_5_1_LIVE_20260831.md`](captures/APAC_5_1_LIVE_20260831.md). The private local corpus at
-`captures/apac_5_1_live_20260831_0205` contains the exact 1,320,019-byte HU APAP audio capture,
+[`APAC_5_1_LIVE_20260831.md`](logs/captures/APAC_5_1_LIVE_20260831.md). The private local corpus at
+`logs/captures/apac_5_1_live_20260831_0205` contains the exact 1,320,019-byte HU APAP audio capture,
 matching SETUP/`shk`, 33-byte cookie and control plists. The final four bytes are a dangling
 next-record length prefix written during full teardown; after ignoring only that prefix, all 3,980
 complete frames authenticate successfully and yield 1,148,875 bytes of plaintext APAC packet data.
@@ -1571,7 +1571,7 @@ function addresses, exact `CinemoMediaType` fields,
 index-22 Speex fallback and risk-ordered tests. The complete coexistence proof is
 in [`CINEMO_AAC_THREAD_SAFETY_AUDIT.md`](CINEMO_AAC_THREAD_SAFETY_AUDIT.md), and
 the retained corpus is documented in
-[`captures/aac_route_20260903/README.md`](../captures/aac_route_20260903/README.md).
+[`logs/captures/aac_route_20260903/README.md`](../captures/aac_route_20260903/README.md).
 The checked-in startup is `[65,23]` with `AUDIO_SPATIAL=1`. `ambient-lite`,
 `ambient-hq`, and `hsr-td` are implemented and selectable with host and QEMU
 instruction measurements.  The current deployed A/B policy selects `hsr-td`,

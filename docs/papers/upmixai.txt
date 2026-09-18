@@ -1,0 +1,3222 @@
+Please do not remove this page
+
+
+
+
+Nicholas N Tong , UpmixAI: Automatic Blind
+Stereo-to-Surround Upmixing Using Music Source
+Separation Deep Neural Networks
+Tong, Nicholas N.
+https://scholarship.miami.edu/esploro/outputs/other/Nicholas-N-Tong--UpmixAI-Automatic/991032663037302976/filesAndLinks?index=0
+
+
+
+
+Tong, N. N. (2025). Nicholas N Tong , UpmixAI: Automatic Blind Stereo-to-Surround Upmixing Using Music
+Source Separation Deep Neural Networks.
+https://scholarship.miami.edu/esploro/outputs/other/Nicholas-N-Tong--UpmixAI-Automatic/9910326630
+37302976
+Document Version: PDF
+
+
+
+
+Research:Open
+Downloaded On 2026/09/04 01:25:06 -0400
+
+
+Please do not remove this page
+                     UNIVERSITY OF MIAMI
+
+
+
+
+UPMIXAI: AUTOMATIC BLIND STEREO-TO-SURROUND UPMIXING USING
+      MUSIC SOURCE SEPARATION DEEP NEURAL NETWORKS
+
+
+
+
+                                  By
+
+
+                       Nicholas Neng Jun Tong
+
+
+
+
+               A MASTERS RESEARCH PROJECT
+
+
+
+                        Submitted to the Faculty
+                       of the University of Miami
+               in partial fulfillment of the requirements
+                  for the degree of Master of Science
+
+
+
+
+                        Coral Gables, Florida
+
+                              May 2025
+        © 2025
+Nicholas Neng Jun Tong
+  All Rights Reserved
+                             UNIVERSITY OF MIAMI
+
+
+
+                    A project submitted in partial fulfillment of
+                        the requirements for the degree of
+                                 Master of Science
+
+
+UPMIXAI: AUTOMATIC BLIND STEREO-TO-SURROUND UPMIXING USING
+      MUSIC SOURCE SEPARATION DEEP NEURAL NETWORKS
+
+
+
+                              Nicholas Neng Jun Tong
+
+
+
+Approved:
+
+
+
+
+Tom Collins, Ph.D.                              Christopher L. Bennett, Ph.D.
+Associate Professor, Music                      Associate Professor, Music
+Engineering                                     Engineering
+
+
+
+
+Ching-Hua Chuan, Ph.D.                         Shannon K. de l’Etoile, Ph.D.
+Assistant Professor, Interactive               Associate Dean of Graduate Studies
+Media
+TONG, NICHOLAS NENG JUN                                    (M.S., Music Engineering)
+
+UpmixAI: Automatic Blind Stereo-to-Surround Upmixing                       (May 2025)
+Using Music Source Separation Deep Neural Networks
+
+Abstract of a thesis at the University of Miami.
+
+Thesis supervised by Dr. Tom Collins
+No. of pages in text. (70)
+
+
+
+   Blind stereo-to-surround upmixing aims to convert stereo audio into a multichan-
+
+nel surround mix without access to original multitrack recordings. Traditional up-
+
+mixing approaches rely on Primary-Ambient Extraction (PAE) using digital signal
+
+processing (DSP) techniques, which often suffer from limited generalization and spa-
+
+tial artifacts. This work proposes a deep learning-based alternative, integrating high-
+
+complexity state-of-the-art (SOTA) music source separation (MSS) models to enhance
+
+ambient signal extraction and stereo decorrelation.
+
+   We evaluate the efficacy of SOTA MSS architectures for separating primary and
+
+ambient components for improved spatial and spectral coherence. The selected deep
+
+neural network (DNN) architecture is trained on a custom dataset constructed from
+
+open-source music data and assessed using both objective SDR and SI-SDR metrics
+
+and a controlled participant listening study.
+
+   Experimental results from objective metrics and a controlled listening study show
+
+that MSS models can be effectively adapted for ambient signal extraction, outper-
+
+forming prior deep learning approaches to the separation task and matching tradi-
+
+tional DSP-based upmixing systems. These findings validate our proposed system
+
+as a viable and perceptually effective solution for automatic blind stereo-to-surround
+
+upmixing that utilizes deep learning throughout the entire processing chain.
+I dedicate this work to my family, friends, colleagues, and mentors,
+
+  whose support and encouragement have guided me throughout
+
+                my research and academic journey.
+
+
+
+
+                                 iii
+Acknowledgments
+   This work benefited from the ”Turing” and ”Woodforde” high-performance com-
+puting machines provided by the Academic Collaboration and Research Network
+(ACoRN) and the Music Computing and Psychology Laboratory at the Frost School
+of Music, University of Miami.
+
+                                                  Nicholas Neng Jun Tong
+ University of Miami
+
+ May 2025
+
+
+
+
+                                      iv
+Table of Contents
+
+
+LIST OF FIGURES                                                                       ix
+
+LIST OF TABLES                                                                        xi
+
+CHAPTER 1          INTRODUCTION                                                       1
+
+  1.1   Context and Motivations . . . . . . . . . . . . . . . . . . . . . . . . .      1
+
+  1.2   Problem Identification and Statement . . . . . . . . . . . . . . . . . .      2
+
+  1.3   Research Question and Hypotheses . . . . . . . . . . . . . . . . . . .         3
+
+  1.4   Structure of the Thesis . . . . . . . . . . . . . . . . . . . . . . . . . .   4
+
+CHAPTER 2          LITERATURE REVIEW                                                  6
+
+  2.1   Introduction to Music Source Separation . . . . . . . . . . . . . . . .        6
+
+        2.1.1   Deep Learning Approaches for MSS . . . . . . . . . . . . . . .        7
+
+                2.1.1.1   Spectrogram and Waveform Domain Models . . . . .            8
+
+                2.1.1.2   Hybrid Time- and Frequency-Domain Models . . . .            9
+
+                2.1.1.3   Autoencoders and U-Net Architectures . . . . . . . .        10
+
+                2.1.1.4   Recurrent Neural Network Models . . . . . . . . . .         12
+
+                2.1.1.5   Band-Split and Multi-Band Spectrogram-Based Models 12
+
+                2.1.1.6   Attention Mechanisms . . . . . . . . . . . . . . . . .      13
+
+                                           v
+        2.1.2   Open Source Datasets for MSS . . . . . . . . . . . . . . . . .         14
+
+  2.2   Automatic Stereo-to-Multichannel Upmixing . . . . . . . . . . . . . .          15
+
+        2.2.1   Overview of Multichannel Surround Sound . . . . . . . . . . .          15
+
+        2.2.2   Definition of Upmixing . . . . . . . . . . . . . . . . . . . . . .     16
+
+        2.2.3   Available Solutions on the Consumer Market . . . . . . . . . .         16
+
+        2.2.4   Classical DSP Approaches to Stereo Upmixing . . . . . . . . .          16
+
+                2.2.4.1   Dolby Surround Decoding . . . . . . . . . . . . . . .        17
+
+                2.2.4.2   Primary-Ambient Extraction . . . . . . . . . . . . .         17
+
+                2.2.4.3   Center Channel Derivation . . . . . . . . . . . . . . .      19
+
+        2.2.5   Deep Learning Approaches to Upmixing . . . . . . . . . . . .           20
+
+        2.2.6   Voice-Primary-Ambient Extraction Upmixing . . . . . . . . .            21
+
+  2.3   Summary of Literature Review       . . . . . . . . . . . . . . . . . . . . .   22
+
+CHAPTER 3          METHODOLOGY                                                         24
+
+  3.1   Knowledge Gap and Research Motivation . . . . . . . . . . . . . . . .          24
+
+        3.1.1   Proposed Solution and Hypothesis       . . . . . . . . . . . . . . .   25
+
+  3.2   Experimental Setup . . . . . . . . . . . . . . . . . . . . . . . . . . . .     26
+
+        3.2.1   The Upmixing System Design . . . . . . . . . . . . . . . . . .         26
+
+        3.2.2   Dataset Procurement and Data Preparation . . . . . . . . . .           27
+
+        3.2.3   Model Architecture Selection     . . . . . . . . . . . . . . . . . .   29
+
+        3.2.4   Model Training Parameters . . . . . . . . . . . . . . . . . . .        30
+
+        3.2.5   Hardware and Software Training Resources . . . . . . . . . . .         31
+
+
+
+                                          vi
+CHAPTER 4          EVALUATION AND PERFORMANCE METRICS                                   33
+
+  4.1   Evaluation Test Set . . . . . . . . . . . . . . . . . . . . . . . . . . . .     33
+
+  4.2   Subjective Evaluation via User Listening Study . . . . . . . . . . . .          34
+
+        4.2.1   Participant Demographics and Screening . . . . . . . . . . . .          34
+
+        4.2.2   Ethical Considerations and Participant Consent . . . . . . . .          35
+
+        4.2.3   Stimuli and Systems . . . . . . . . . . . . . . . . . . . . . . .       35
+
+        4.2.4   Study Procedure . . . . . . . . . . . . . . . . . . . . . . . . .       37
+
+        4.2.5   Data Collection . . . . . . . . . . . . . . . . . . . . . . . . . .     37
+
+  4.3   Objective Metric Evaluation . . . . . . . . . . . . . . . . . . . . . . .       38
+
+        4.3.1   Metrics Processing Procedure . . . . . . . . . . . . . . . . . .        39
+
+CHAPTER 5          RESULTS                                                              40
+
+  5.1   Model Training Results . . . . . . . . . . . . . . . . . . . . . . . . . .      40
+
+        5.1.1   Training Loss Curves . . . . . . . . . . . . . . . . . . . . . . .      40
+
+        5.1.2   Resource Utilization Comparison . . . . . . . . . . . . . . . .         41
+
+  5.2   Subjective Listening Study Results . . . . . . . . . . . . . . . . . . .        42
+
+        5.2.1   Overall Ratings Across All Metrics . . . . . . . . . . . . . . .        43
+
+        5.2.2   Overall Envelopment and Immersion . . . . . . . . . . . . . .           46
+
+        5.2.3   Spatial and Temporal Quality . . . . . . . . . . . . . . . . . .        48
+
+        5.2.4   Spectral Quality    . . . . . . . . . . . . . . . . . . . . . . . . .   51
+
+  5.3   Objective Metric Results . . . . . . . . . . . . . . . . . . . . . . . . .      54
+
+CHAPTER 6          CONCLUSION                                                           57
+
+  6.1   Discussion of Limitations . . . . . . . . . . . . . . . . . . . . . . . . .     59
+                                          vii
+       6.1.1   Observation of Objective Metrics and Loss Functions . . . . .         59
+
+       6.1.2   Data Scarcity and Subsequent Performance Ceiling . . . . . .          60
+
+ 6.2   Future Work . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .   61
+
+BIBLIOGRAPHY                                                                         63
+
+ APPENDIX . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .      70
+
+ A     Supplementary Materials . . . . . . . . . . . . . . . . . . . . . . . . .     70
+
+
+
+
+                                         viii
+List of Figures
+
+
+ 1.1   A 5.1 surround sound speaker array. . . . . . . . . . . . . . . . . . . .     2
+
+
+ 2.1   Illustration of extracting individual stems from a mixture. . . . . . .       7
+
+ 2.2   Diagram of the Hybrid Transformer Demucs [1]. . . . . . . . . . . . .        10
+
+ 2.3   Diagram of the U-Net architecture, illustrating its encoder-decoder
+
+       structure with skip connections [2]. . . . . . . . . . . . . . . . . . . .   11
+
+ 2.4   Diagram of the band-split module in [3]. . . . . . . . . . . . . . . . .     12
+
+ 2.5   The Transformer model architecture from [4]. . . . . . . . . . . . . .       13
+
+ 2.6   Stereo signal model for PAE signal components [5]. . . . . . . . . . .       18
+
+ 2.7   Three-channel signal model showing the mixture of primary (P⃗ ) and
+                ⃗ sources that form the L,
+       ambient (A)                      ⃗ C,
+                                           ⃗ R
+                                             ⃗ channels [6]. . . . . . . . .        19
+
+ 2.8   VPA upmixing schema as presented in [7]. . . . . . . . . . . . . . . .       21
+
+ 2.9   VPA upmixing schema as presented in [8]. . . . . . . . . . . . . . . .       22
+
+
+ 3.1   Block diagram of the proposed upmixing schema. . . . . . . . . . . .         26
+
+ 3.2   Diagram illustrating the preparation and generation process of the cus-
+
+       tom Primary-Ambient Extraction Dataset for Music (PAEDB). . . .              28
+
+ 3.3   The framework of the Band-Split RoFormer system as presented in [9]. 29
+
+
+
+                                         ix
+3.4   Preprocessing logic for flattening input STFT feature vectors for the
+
+      MLP, as presented in [10]. . . . . . . . . . . . . . . . . . . . . . . . .     30
+
+
+5.1   Training loss curve for Systems C and D. . . . . . . . . . . . . . . . .       41
+
+5.2   GPU memory allocation over training time for Systems C and D. . .              42
+
+5.3   Boxplot of listener ratings for all metric ratings across upmixing systems. 45
+
+5.4   Boxplot of listener ratings for Overall Envelopment & Immersion across
+
+      upmixing systems. . . . . . . . . . . . . . . . . . . . . . . . . . . . .      48
+
+5.5   Boxplot of listener ratings for Spatial & Temporal Quality across up-
+
+      mixing systems. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .    51
+
+5.6   Boxplot of listener ratings for Spectral Quality across different process-
+
+      ing systems. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .   54
+
+5.7   Boxplot distribution of SDR, SI-SDR, and LSD scores across test samples. 55
+
+
+
+
+                                         x
+List of Tables
+
+
+ 2.1   Dolby Pro Logic II Decoding Matrix from [11]. . . . . . . . . . . . . .        17
+
+
+ 5.1   Overall Combined Mean Ratings Across All Metrics . . . . . . . . . .           43
+
+ 5.2   Friedman Test Across All Metrics . . . . . . . . . . . . . . . . . . . .       43
+
+ 5.3   Nemenyi Post-hoc Test for Overall Envelopment & Immersion . . . .              44
+
+ 5.4   Nemenyi Post-hoc Test for Spatial & Temporal Quality . . . . . . . .           44
+
+ 5.5   Nemenyi Post-hoc Test for Spectral Quality . . . . . . . . . . . . . .         44
+
+ 5.6   Mean Ratings for Overall Envelopment & Immersion . . . . . . . . .             46
+
+ 5.7   Friedman Test for Overall Envelopment & Immersion (Per Stimulus)               46
+
+ 5.8   Nemenyi Post-hoc Test for Stimulus C (Overall Envelopment & Im-
+
+       mersion) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .   47
+
+ 5.9   Nemenyi Post-hoc Test for Stimulus E (Overall Envelopment & Im-
+
+       mersion) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .   47
+
+ 5.10 Mean Ratings for Spatial & Temporal Quality . . . . . . . . . . . . .           49
+
+ 5.11 Friedman Test for Spatial & Temporal Quality (Per Stimulus) . . . .             49
+
+ 5.12 Nemenyi Post-hoc Test for Stimulus C (Spatial & Temporal Quality)               50
+
+ 5.13 Nemenyi Post-hoc Test for Stimulus E (Spatial & Temporal Quality)               50
+
+ 5.14 Mean Ratings for Spectral Quality . . . . . . . . . . . . . . . . . . .         52
+
+
+                                          xi
+5.15 Friedman Test for Spectral Quality (Per Stimulus) . . . . . . . . . . .        52
+
+5.16 Nemenyi Post-hoc Test for Stimulus A (Spectral Quality) . . . . . . .          53
+
+5.17 Nemenyi Post-hoc Test for Stimulus C (Spectral Quality) . . . . . . .          53
+
+5.18 Nemenyi Post-hoc Test for Stimulus E (Spectral Quality) . . . . . . .          53
+
+5.19 Average Objective Metrics Across Methods . . . . . . . . . . . . . . .         55
+
+5.20 One-Way ANOVA Results for Objective Metrics (SDR, SI-SDR, LSD)                 56
+
+5.21 Post-hoc Tukey’s HSD for Significant Objective Metrics (SI-SDR and
+
+     LSD) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .   56
+
+
+
+
+                                        xii
+CHAPTER 1
+
+Introduction
+
+
+1.1     Context and Motivations
+
+   The evolution of audio consumption from mono to stereo, and now to surround
+
+sound, reflects a continuous pursuit of increasingly immersive and realistic listening
+
+experiences [12]. Despite these advancements, a significant gap remains in making
+
+high-quality surround sound content as accessible and widespread as stereo audio.
+
+   The typical workflow for a mixing engineer to create surround sound content
+
+requires access to the isolated stems of a song in order to effectively produce a multi-
+
+channel mix in formats such as 5.1 or 7.1. However, in scenarios where multichannel
+
+output is desired but only the stereo mix is available, a blind upmix of the stereo
+
+content becomes necessary. Without access to the original multitrack recordings or
+
+stems, the process of blind audio upmixing from stereo to multichannel surround
+
+remains a significant challenge. Traditional approaches to upmixing have included
+
+manual mixing to a multichannel format, surround matrix decoding [11], and algo-
+
+rithmic digital signal processing (DSP) techniques that aim to decompose the stereo
+
+signal into separate components based on interchannel correlation [13–16].
+
+
+
+
+                                           1
+                                                                                 2
+
+
+
+
+                       Figure 1.1: A 5.1 surround sound speaker array.
+
+
+
+
+1.2      Problem Identification and Statement
+
+   Among the various approaches to upmixing, one of the most common in blind
+
+scenarios is Primary-Ambient Extraction (PAE), which focuses on decomposing stereo
+
+audio into primary and ambient signal components by analyzing time and frequency
+
+correlations between the stereo channels. The processed output is then spatially
+
+distributed across the surround channels. While effective, algorithmic methods such
+
+as those proposed in [11, 13–16] still exhibit several limitations:
+
+
+   • Lack of Generalization: Traditional methods rely on predefined assumptions
+
+      about signal characteristics, making them less adaptable to diverse musical
+
+      content.
+                                                                                      3
+   • Limited Context Awareness and Artifacts: Processing audio in short, in-
+
+      dependent frames without considering long-term contextual dependencies often
+
+      leads to incoherence and audible artifacts. This includes spectral and phase
+
+      inconsistencies, as well as other distortions that manifest as perceptual discon-
+
+      tinuities in the output.
+
+
+   By framing the upmixing problem as a separation task, deep neural networks
+
+(DNNs) offer a wide range of potential solutions by leveraging advanced techniques
+
+such as autoencoder-based latent space representations, attention mechanisms, and
+
+hybrid time-frequency processing. DNNs have already demonstrated strong efficacy
+
+in the field of music source separation (MSS), successfully isolating musical stems with
+
+high accuracy while preserving temporal and spectral coherence [1,3,9,17–29]. These
+
+innovations enable models to efficiently extract complex audio features and capture
+
+long-term dependencies, making them well-suited to learn the intricate characteristics
+
+of decorrelated ambient signal components from stereo audio.
+
+
+
+1.3      Research Question and Hypotheses
+
+   While DNNs have been successfully applied in MSS and other complex audio
+
+processing tasks, their potential for direct ambient signal extraction in the context
+
+of surround upmixing remains largely unexplored. Existing DNN-based upmixing
+
+approaches still exhibit several key limitations:
+
+
+   • Lack of Research Focus: There is a notable gap in research and published
+
+      work specifically addressing DNN-based PAE for upmixing. Most existing solu-
+                                                                                      4
+      tions continue to rely on traditional DSP techniques, with the majority of DNN
+
+      applications focused on instrument and dialogue separation tasks [7, 8].
+
+
+   • Simplistic Neural Architectures: Existing DNN-based upmixing approaches
+
+      primarily employ basic feature extraction pipelines and shallow network designs,
+
+      lacking the advanced separation capabilities demonstrated by state-of-the-art
+
+      MSS models [10, 30, 31].
+
+
+   Thus, the fundamental research question guiding this thesis is: How can advanced
+
+MSS architectures be adapted for ambient signal extraction to enable a more effective
+
+blind stereo-to-surround upmixing system?
+
+
+
+1.4      Structure of the Thesis
+
+   The remainder of this thesis is organized as follows:
+
+
+   • Chapter 2: Literature Review – Provides an overview of MSS techniques
+
+      and stereo-to-surround upmixing approaches, covering both classical DSP-based
+
+      methods and recent developments in deep learning. Key architectures, datasets,
+
+      and integration strategies relevant to PAE are reviewed in depth.
+
+
+   • Chapter 3: Methodology – Describes the proposed solution, research mo-
+
+      tivation, and experimental design. This includes system architecture design,
+
+      dataset procurement and preparation (PAEDB), model selection and training
+
+      strategy.
+
+
+   • Chapter 4: Evaluation and Performance Metrics – Details the setup and
+
+      execution of the evaluation process, including both the subjective listening study
+                                                                                   5
+  and objective metric assessments. Participant demographics, stimuli selection,
+
+  study design and procedures, and metric computation methods are described.
+
+
+• Chapter 5: Results – Presents and analyzes the experimental results. This
+
+  includes model training curves, computational resource comparison, statistical
+
+  analysis of subjective MUSHRA listening scores across multiple perceptual di-
+
+  mensions, and objective performance results based on SDR, SI-SDR, and LSD
+
+  metrics.
+
+
+• Chapter 6: Conclusion – Summarizes the findings and contributions of the
+
+  thesis, discusses the implications of the results, acknowledges limitations in data
+
+  and methodology, and proposes directions for future research and improvement.
+CHAPTER 2
+
+Literature Review
+
+
+2.1     Introduction to Music Source Separation
+
+   Music Source Separation (MSS) is the process of decomposing a mixed audio
+
+signal into its individual components, often referred to as “stems.” In most music
+
+separation tasks, these stem sources typically include primary musical components
+
+such as vocals, bass, drums, and other instrumental sources [27]. MSS has a broad
+
+range of applications, from rearranging and remixing the original source mixture [32],
+
+speech enhancement [33], vocal removal for instrumental tracks [20], and most relevant
+
+to the thesis, audio upmixing [7,8]. These scenarios share a similar need for modifying
+
+or removing specific elements from the target mixture track, which historically has
+
+proven to be a challenging task due to the complex nature of overlapping frequencies
+
+and highly correlated audio signals [14].
+
+   Historically, source separation has been approached using classical DSP tech-
+
+niques, such as independent component analysis (ICA) with blind source separation
+
+(BSS) [33, 34], non-negative matrix factorization (NMF) [35], and generalized wiener
+
+filtering (GWF) [36]. These methods laid the groundwork for the evolution of more
+
+advanced deep learning approaches explored in Section 2.1.1.
+
+                                            6
+                                                                                      7
+
+
+
+
+            Figure 2.1: Illustration of extracting individual stems from a mixture.
+
+         Source: https://source-separation.github.io/tutorial/landing.html
+
+
+
+
+2.1.1     Deep Learning Approaches for MSS
+
+   Deep learning, a subset of machine learning (ML), focuses on developing deep
+
+neural networks (DNN), which are computational models inspired by the human
+
+brain and consist of multiple hidden layers of interconnected nodes (or “neurons”)
+
+that process data. During training, the model learns complex patterns by adjusting
+
+weights to minimize prediction errors, usually in the form of a unified loss function. A
+
+separate validation dataset is used in tandem and helps the training environment tune
+
+parameters to prevent overfitting. Finally, a smaller test dataset is used to evaluate
+
+the model’s performance on new, unseen data, providing an unbiased measure of its
+
+effectiveness and generalization.
+
+   The rise of ML and deep learning in audio processing has advanced the field
+
+of MSS, overcoming challenges inherent in the classical DSP methods mentioned
+
+earlier. Deep learning models have the ability to learn complex temporal and spectral
+                                                                                     8
+representations of audio signals, enabling better separation performance, especially
+
+in challenging scenarios such as overlapping frequencies that may occur in the source
+
+stems [2, 9, 17, 18].
+
+    The following subsections provide a brief overview of various DNN model archi-
+
+tectures that have defined the state-of-the-art (SOTA) in MSS, organized by the type
+
+of input audio domain they operate within and their unique contributions to the field.
+
+It is important to note that the architectures introduced in this literature review is
+
+not an exhaustive list of all researched and developed architectures, but rather serves
+
+to provide an overview of the state of the field.
+
+
+2.1.1.1    Spectrogram and Waveform Domain Models
+
+    To introduce domain-specific processing, time-frequency domain approaches en-
+
+compass models that transform the audio into the frequency domain, typically using
+
+the short-time Fourier transform (STFT). Time-frequency approaches work on the
+
+same principles of image recognition models by leveraging the spectral representations
+
+of audio as spectrogram images, allowing models to better capture complex and over-
+
+lapping spectral patterns over time frames. Models in this domain separate sources
+
+by applying predicted frequency masks to spectrogram time frames [17, 24].
+
+    While time-frequency approaches excel in capturing high-resolution spectral pat-
+
+terns, they come with inherent trade-offs such as artifacts introduced from time-
+
+frequency transformations, phase reconstruction errors, limited temporal precision,
+
+and high computational costs. Time-domain models operate directly on raw wave-
+
+forms, bypassing the need for spectrogram transformations.
+                                                                                      9
+   One of the earliest influential time-domain models is Wave-U-Net [26], which
+
+adapts the U-Net architecture to one-dimensional waveform processing (see Sec-
+
+tion 2.1.1.3). Wave-U-Net’s use of downsampling and upsampling blocks captures
+
+features at different temporal scales directly from raw audio. By introducing lin-
+
+ear interpolation for upsampling, it avoids aliasing artifacts and achieves competitive
+
+separation quality, laying foundational work for more complex models.
+
+   Demucs [18] further enhances the time-domain approach for music separation by
+
+adopting the U-Net encoder-decoder structure but introduces a bidirectional LSTM
+
+between the encoder and decoder that facilitates multi-scale feature learning for longer
+
+sequences of audio.
+
+
+2.1.1.2   Hybrid Time- and Frequency-Domain Models
+
+   Hybrid models have been introduced with the aim to combine the advantages of
+
+both time-domain and frequency-domain approaches. Improving from time-domain
+
+Demucs, Hybrid Demucs [19] keeps the same U-Net architecture but includes an
+
+additional processing path in the frequency-domain. By optimizing over the signal’s
+
+raw waveform and spectrogram image, this approach has been shown to enhance
+
+separation performance for complex audio signals by leveraging the strengths of both
+
+domains in order to capture detailed temporal and spectral information.
+                                                                                  10
+
+
+
+
+                 Figure 2.2: Diagram of the Hybrid Transformer Demucs [1].
+
+
+
+2.1.1.3   Autoencoders and U-Net Architectures
+
+   The autoencoder is a popular architecture that consists of convolutional encoder
+
+and decoder blocks that aim to reduce the input data into a lower-dimensional rep-
+
+resentation, to then reconstruct the data back into its original dimension from these
+
+learned representations. In audio applications, this involves compressing complex
+
+waveforms and spectrograms to a lower-dimensional feature space, where meaningful
+
+temporal and spectral patterns are extracted, and then reconstructing the audio to
+
+its original resolution while optimizing it for a specific task.
+                                                                                                11
+
+
+
+
+Figure 2.3: Diagram of the U-Net architecture, illustrating its encoder-decoder structure with skip
+
+connections [2].
+
+
+
+    A notable extension of this is the U-Net architecture, first introduced by [2] for
+
+biomedical image segmentation, which builds on the autoencoder structure by incor-
+
+porating skip connections between the encoder and decoder blocks. These connections
+
+help preserve high-resolution features during reconstruction, improving the model’s
+
+ability to retain fine details and spatial coherence.
+
+    The success of autoencoder-like architectures in image processing has also trans-
+
+lated well to audio spectrograms, making them a popular choice for audio related
+
+tasks due to their ability to retain contextual and fine-grained details. Many MSS
+
+models expand on this foundational architecture, integrating enhancements such as
+
+hybrid domain processing [19], attention mechanisms [1, 4, 9], and additional latent
+
+space conditioning [37] to improve separation performance.
+                                                                                  12
+
+
+
+
+                    Figure 2.4: Diagram of the band-split module in [3].
+
+
+
+2.1.1.4   Recurrent Neural Network Models
+
+   While many of the models mentioned above rely on convolutional layers, U-Net
+
+architectures, or a combination of both, some architectures have turned to recurrent
+
+neural networks (RNNs) to better handle the challenge of processing longer sequences
+
+of audio data. Dual-path RNNs (DPRNN) have been proposed as an alternative to
+
+conventional 1-D CNN layers in TasNet to tackle the challenge of long sequence
+
+modeling by chunking input sequences and processing intra- and inter-chunk data
+
+separately [25]. This architecture enhances computational efficiency while preserving
+
+high-quality separation in the time domain.
+
+
+2.1.1.5   Band-Split and Multi-Band Spectrogram-Based Models
+
+   There is a recent emergence of frequency band-splitting techniques that outper-
+
+forms the previous state-of-the-art models. The band-split RNN (BSRNN), intro-
+
+duces a novel frequency-domain method by splitting the spectrogram into subbands
+
+and using a stacked residual RNN to process both intra- and cross-band dependencies,
+
+achieving fine-grained frequency resolution and improving separation performance for
+
+complex music signals [3].
+                                                                                   13
+
+
+
+
+                  Figure 2.5: The Transformer model architecture from [4].
+
+
+
+2.1.1.6   Attention Mechanisms
+
+   Attention mechanisms in machine learning enable models to dynamically focus on
+
+the most relevant parts of input data, improving their ability to capture dependencies
+
+across long sequences. Originally introduced in natural language processing (NLP),
+
+attention plays a crucial role in handling sequential data, where input text is first
+
+tokenized into discrete units before processing. The Transformer is a sequence-based
+
+model that incorporates self-attention and positional encoding mechanisms to main-
+
+tain long-range coherence in generation tasks in NLP [4] and image generation [38].
+
+   This concept extends to audio, where waveforms or spectrograms can be framed
+
+into smaller segments that act as tokens for the transformer-based attention layers to
+                                                                                  14
+maintain long-range context in music generation [39], and more recently, MSS tasks.
+
+Models like Hybrid Transformer Demucs (HTDemucs) and Latent Source Attentive
+
+Frequency Transformation (LaSAFT) integrate transformer layers into their archi-
+
+tectural structures, replacing the biLSTM traditionally used for sequential data pro-
+
+cessing [1, 17]. By incorporating attention mechanisms, transformer-based attention
+
+mechanisms significantly outperform other architectures in capturing and maintaining
+
+long-term contextual information.
+
+   The Band-Split Rotary Position Embedding Transformer (BS-RoFormer), further
+
+demonstrates the efficacy of Transformers in sequential data modeling by combining
+
+them with band-split modules for more accurate and efficient handling of spectral
+
+data in MSS [9].
+
+
+
+2.1.2    Open Source Datasets for MSS
+
+   The development and success of MSS models heavily rely on large-scale datasets
+
+like MUSDB18 [40], widely considered the benchmark for evaluating model perfor-
+
+mance. MUSDB18 contains 150 full-length tracks, totaling approximately 10 hours
+
+of audio across genres, with ground-truth stems for four categories: vocals, drums,
+
+bass, and other. The dataset is divided into 100 training tracks and 50 test tracks,
+
+all in stereo and encoded at a 44.1kHz sampling rate. An uncompressed alternative,
+
+MUSDB18-HQ [41], is also available for models targeting wider bandwidth audio,
+
+offering WAV files that extend to 22kHz content while MUSDB18 only extends to
+
+16kHz. Due to these ground-truth classes, most models trained on MUSDB18 pro-
+
+duce the same four separated outputs.
+                                                                                     15
+   While other datasets, such as MoisesDB [42], expand on these options by including
+
+240 tracks across 45 artists and twelve musical genres with more granular source
+
+categories (e.g., five and six stems), the limited availability of large, open-source
+
+datasets remains a significant challenge in the field of MSS.
+
+   The scarcity of open-source datasets remains a major pain point in the MSS field
+
+of hindered standardization and slow academic progress. Much of the innovation in
+
+source separation is currently driven by private companies with access to proprietary
+
+multitrack data, leading to models that are often not reproducible. For example,
+
+HTDemucs was trained on an additional 800 songs beyond the MUSDB18 dataset [1],
+
+and Spleeter leveraged over 20,000 tracks for training [43]. Furthermore, the legality
+
+of data ownership in many of these cases remains unclear, raising ethical and legal
+
+concerns about the use and distribution of these pre-trained models.
+
+
+
+2.2     Automatic Stereo-to-Multichannel Upmixing
+
+2.2.1     Overview of Multichannel Surround Sound
+
+   Multichannel audio configurations, such as 5.1 and 7.1, are designed to create en-
+
+veloping audio experiences by extending beyond regular stereo audio. These formats
+
+are commonly used in home theaters, cinemas, and gaming environments to recre-
+
+ate spatial soundscapes by distributing audio across multiple channels, including left,
+
+right, center, low-frequency effects (LFE), and surround channels [12]. The accurate
+
+reproduction of these channels is essential for providing listeners with a realistic and
+
+immersive auditory experience.
+                                                                                    16
+2.2.2    Definition of Upmixing
+
+   In the context of audio and music production, upmixing refers to the process of
+
+converting an audio signal from its original format to a larger configuration with more
+
+channels [44]. Conversely, converting an audio signal from a larger format to a smaller
+
+one with fewer channels is known as downmixing. Upmixing can be categorized into
+
+“informed” upmixing, which uses prior information or metadata to guide the con-
+
+struction of the upmixed output [45], and “blind” upmixing which aims to create the
+
+output purely from the input signal without the use of side information [44].
+
+
+
+2.2.3    Available Solutions on the Consumer Market
+
+   There already exists surround upmixing solutions available on the market that
+
+are capable of converting stereo content to surround sound. These solutions include
+
+consumer electronics such as audio/video receivers (AVRs) integrated with Dolby Pro
+
+Logic II [11] designed for home theater setups, and software plugins [46] for use in
+
+digital audio workstations (DAWs).
+
+
+
+2.2.4    Classical DSP Approaches to Stereo Upmixing
+
+   Proposed methods for upmixing stereo audio to multichannel formats have in-
+
+cluded techniques such as the “passive” and “adaptive” surround decoding matrix [11],
+
+primary-ambient extraction (PAE) [10,16,47], mid-side (M-S) decomposition [48], and
+
+center channel derivation [6].
+                                                                                     17
+
+             Matrix    Left    Right    Center     Rear Left      Rear Right
+                                         q               √
+              Left       1       0            1
+                                              2        j 23            j 12
+                                          q                             √
+              Right      0       1            1
+                                              2         k 12          k 23
+
+                      j = +90◦ phase shift, k = −90◦ phase shift.
+
+                  Table 2.1: Dolby Pro Logic II Decoding Matrix from [11].
+
+
+
+2.2.4.1   Dolby Surround Decoding
+
+   Dolby Surround Decoding is based on a predefined processing matrix, where ad-
+
+ditional surround channels are derived from a standard stereo signal through a com-
+
+bination of panning, phase manipulation, difference signals, and filtering techniques.
+
+There are two primary decoding methods: passive and adaptive. Passive decoding
+
+simply applies a fixed matrix to extract surround information as it exists in the stereo
+
+mix, without altering the levels dynamically. Adaptive decoding, on the other hand,
+
+employs gain riding and signal cancellation mechanisms to resolve a dominance vec-
+
+tor, which determines the most prominent directional component of the sound field
+
+for playback. This helps improve separation between channels and enhances spatial
+
+accuracy. Dolby Pro Logic II (DPLII) extends the original Dolby Surround Decoding
+
+method by using a refined matrixing approach that improves channel separation and
+
+stereo width in the surround field. As shown in Table 2.1, the DPLII matrix applies
+
+phase shifts of +90° (j) and -90° (k) to generate the surround channel information [11].
+
+
+2.2.4.2   Primary-Ambient Extraction
+
+   Primary-Ambient Extraction (PAE) is a popular technique used in upmixing that
+
+operates on the assumption that a stereo signal model is comprised of primary and
+                                                                                   18
+ambient components. The primary components of a signal consist of direct and
+
+correlated sounds that are prominently shared between stereo channels. This includes
+
+primary instrument stems and prominent audio signals such as vocals, drums, and
+
+bass. In contrast, the ambient component is comprised of diffuse and decorrelated
+
+signals, such as reverb and delay, which are less common between the two stereo
+
+channels.
+
+   PAE has emerged as a preferred approach for upmixing because it effectively al-
+
+lows for the expansion of the perceived spatial field of stereo audio by routing the
+
+ambient signal to the additional surround channels of a multichannel surround sys-
+
+tem. In a 5.1 surround speaker configuration, this would be the rear left and right
+
+speakers. Various techniques have been developed to achieve this decomposition
+
+of direct and diffuse signals, including methods based on frequency-domain inter-
+
+channel coherence [13], cross- and auto-correlation [14], principal component analysis
+
+(PCA) [15,16], frequency-domain normalized least-mean-square (NLMS) adaptive fil-
+
+tering, and time-domain least-mean-square (LMS) filtering [8, 49].
+
+
+
+
+               Figure 2.6: Stereo signal model for PAE signal components [5].
+                                                                                                19
+
+
+
+
+Figure 2.7: Three-channel signal model showing the mixture of primary (P⃗ ) and ambient ( ⃗
+                                                                                         A) sources
+              ⃗ C,
+that form the L, ⃗ R
+                   ⃗ channels [6].
+
+
+
+
+2.2.4.3    Center Channel Derivation
+
+    Center Channel Derivation or Decomposition (CCD) leverages the psychoacous-
+
+tic phenomenon of the ”phantom center,” where sounds located in the center of a
+
+stereo image are perceived as originating in-between the physical stereo speakers [6].
+
+CCD extends the PAE stereo signal model and works off of the assumption that the
+
+primary-ambient signal components are distributed amongst the three front chan-
+
+nels, where the center channel contains only the primary signal, and the left and
+
+right channels contain a mixture of the corresponding channels primary and ambi-
+
+ent components (see Figure 2.7). With an adapted three-channel primary-ambient
+
+signal model, the CCD algorithm applies vector-based signal decomposition in the
+
+frequency domain to geometrically estimate a dedicated center channel. This ded-
+
+icated center channel mitigates acoustic cross-talk issues inherent in the phantom
+
+center effect, where identical sounds from both speakers create phase cancellations
+
+that can introduce comb-filtering in stereo audio playback. By separating the cen-
+
+ter into a physical channel, CCD reduces cross-talk and improves audio clarity and
+                                                                                    20
+dialogue intelligibility in multichannel audio applications [50]. This algorithm is not
+
+only effective for generating the front channels in a multichannel surround format,
+
+but may also enhance ambient extraction quality for the surround channels in a 5.1
+
+upmix by serving as a preprocessing step to remove correlated primary components
+
+prior to ambient signal extraction (see Section 3.2.1).
+
+
+
+2.2.5    Deep Learning Approaches to Upmixing
+
+   The use of DNNs for upmixing has been explored in prior work that focuses
+
+primarily on achieving PAE through neural networks and applies additional post-
+
+processing to assist in panning and distribution of the signal appropriately [10,30,31,
+
+44].
+
+   One method uses a supervised learning approach to extract ambient components
+
+from mono recordings, modeling primary-ambient separation as a classification prob-
+
+lem over frequency bins [44]. A similar DNN-based approach classifies frequency-
+
+frame bins as either direct or ambient sound using a fully-connected multi-layer
+
+perceptron (MLP) [10]. Another method trains a network on two-to-five channel
+
+surround decoding, optimizing spectral weights to approximate spatial properties of
+
+surround sound for enhanced performance over traditional methods [30]. Another
+
+similar approach implements subband-based upmixing to learn the features of the
+
+center and rear surround channels from the multichannel input [31].
+
+   While these methods focus on blind upmixing through PAE, a unique approach
+
+leverages a variational autoencoder (VAE) to learn the spatial distribution of musical
+
+instruments in a source 5.1 mix, mapping these locations in a latent space [37]. This
+
+model then upmixes the target input stereo audio through style transfer, applying
+                                                                                     21
+the learned spatial locations of instruments onto the stereo input through directional
+
+panning. Although not directly performing source separation task, this paper still
+
+suggests the possibility for ML architectures to possess the ability to capture and
+
+learn complex spatial features of audio in the context of upmixing.
+
+
+
+2.2.6    Voice-Primary-Ambient Extraction Upmixing
+
+   With recent advancements in MSS, emerging research has begun to integrate MSS
+
+architectures (discussed in Section 2.1.1) into upmixing frameworks. In the context of
+
+stereo-to-5.1 upmixing, Voice-Primary-Ambient Extraction (VPA) assigns the output
+
+of a pretrained MSS model as the primary component for the front channels, while
+
+some form of ambient signal extraction is used to generate the surround channels. The
+
+VPA method was first proposed by Samsung Research, using the OpenUnmix vocal
+
+extraction model [27] to isolate vocals in the center channel, assign residual stems to
+
+the left and right channels, and apply the Equal-Levels Ambience Extraction (ELAE)
+
+algorithm [14] to generate ambient signals for the rear channels (see Figure 2.8).
+
+
+
+
+                   Figure 2.8: VPA upmixing schema as presented in [7].
+                                                                                    22
+
+
+
+
+                    Figure 2.9: VPA upmixing schema as presented in [8].
+
+
+
+   Similarly, VanceAI [8] builds upon the VPA method by replacing the vocal ex-
+
+traction model with a more advanced SOTA architecture, such as Demucs [18], to
+
+separate and remix the primary sources. For ambience extraction, it employs a Nor-
+
+malized Least Mean Squares (NLMS) adaptive filter in combination with an Adaptive
+
+Panning (ADP) algorithm (see Figure 2.9). Most notably, this adaptive filtering tech-
+
+nique optimizes a set of weights from the stereo input, which are subsequently refined
+
+using the ADP algorithm. However, the requirement to optimize and fine-tune the
+
+adaptive filter weights makes this method less suitable for real-time applications,
+
+favoring offline processing instead.
+
+
+
+2.3      Summary of Literature Review
+
+   Section 2.1 introduces the field of MSS, defining it as the process of decomposing a
+
+mixed audio signal into its individual components. Various applications are outlined,
+
+from vocal extraction to upmixing, and the section highlights the challenges associated
+
+with separating highly correlated and overlapping audio sources.
+                                                                                   23
+   Section 2.1.1 discusses deep learning approaches for MSS, providing an overview
+
+of key architectures categorized by input domain. Major architectural advancements
+
+that address processing and contextual modeling highlight the shift toward more
+
+sophisticated neural networks capable of overcoming the limitations of classical DSP
+
+methods.
+
+   Section 2.2 reviews stereo-to-multichannel upmixing approaches, covering both
+
+commercial solutions and technical methods. Subsections 2.2.4.2 & 2.2.4.3 emphasize
+
+PAE and CCD as foundational approaches for decomposing stereo signals into the
+
+necessary direct and ambient components that form the basis for many blind upmixing
+
+strategies.
+
+   Subsection 2.2.5 presents deep learning approaches specifically optimized for PAE
+
+and other spatial decomposition tasks. These methods achieve notable improvements
+
+in automatic upmixing with reduced reliance on DSP, and include innovations such
+
+as binary classification of ambient signal frames and spatial modeling via variational
+
+autoencoders for style transfer.
+
+   Finally, Subsection 2.2.6 explores VPA upmixing methods, which leverage pre-
+
+trained MSS models to separate primary stem components alongside DSP-based algo-
+
+rithms for ambient signal extraction. These methods represent a recent trend toward
+
+more efficient, modular, and perceptually coherent upmixing pipelines that directly
+
+leverage high-performance source separation models.
+CHAPTER 3
+
+Methodology
+
+   This chapter outlines the aims and objectives of the thesis, defining the scope of
+
+the problem and positioning the proposed solution within the current state-of-the-
+
+field as reviewed in Chapter 2. It includes an overview of the identified knowledge gap,
+
+research motivation, and objective, followed by a detailed experimental setup for im-
+
+plementing the proposed upmixing solution. This setup covers dataset procurement,
+
+data preparation, training process, and hardware configurations. For reproducibility,
+
+refer to Appendix A for links to the code repository, model weights, datasets, and
+
+audio examples.
+
+
+
+3.1     Knowledge Gap and Research Motivation
+
+   Many approaches discussed in Section 2.2.5 rely on simpler DNN architectures
+
+that lack the advanced feature extraction and separation capabilities of the more
+
+intricate MSS models presented in Section 2.1.1. Although the improved methods in
+
+Section 2.2.6 incorporate more recent MSS models into the upmixing system, they
+
+still rely heavily on DSP-based methods for generating the surround channels.
+
+   As informed by the literature review, a clear knowledge gap exists in the de-
+
+velopment of an automatic blind upmixing system that leverages advanced DNN
+                                     24
+                                                                                    25
+architectures to generate both direct and ambient signal components for the front
+
+and surround channels, respectively. Addressing this gap by investigating the task
+
+of PAE with advanced DNNs expands the field of audio source separation by intro-
+
+ducing ambient signal extraction as a specialized separation task within the context
+
+of music and entertainment audio. In its specific application to stereo-to-surround
+
+upmixing, it also has the potential to significantly improve upon current approaches
+
+by integrating deep learning into all components of the upmixing system.
+
+   This leads to this paper’s central research question: How can advanced MSS
+
+architectures be adapted for ambient signal extraction to enable an enhanced blind
+
+stereo-to-surround upmixing system?
+
+
+
+3.1.1    Proposed Solution and Hypothesis
+
+   Among the various approaches to automatic blind upmixing, the method best
+
+aligned with our proposed system follows the PAE-based VPA framework (explored in
+
+Section 2.2.6) to derive the signal components needed for the final upmix. To evaluate
+
+the effectiveness of SOTA MSS models for this task, selected architectures introduced
+
+in Section 2.1.1 will be trained on a custom dataset of primary and ambient music
+
+audio (see Sections 3.2.2–3.2.5) and compared against reference methods [7,10] using a
+
+controlled subjective listening study (Section 4.2) and objective signal reconstruction
+
+metrics (Section 4.3).
+
+   We hypothesize that utilizing higher-complexity MSS models will improve per-
+
+formance in capturing nuanced audio features for the PAE task, compared to the
+
+approaches discussed in Section 2.2.5, and will offer greater generalizability across
+
+diverse audio content than the DSP-based methods presented in Section 2.2.4.2.
+                                                                                 26
+3.2      Experimental Setup
+
+3.2.1     The Upmixing System Design
+
+   Figure 3.1 details the processing pipeline of the proposed upmixing system, from
+
+the stereo input to the final concatenation of the multichannel output. Notably, our
+
+proposed system further expands upon the VPA upmixing approach by combining
+
+MSS and CCD for generating the front three channels, along with an MSS model
+
+specifically optimized to extract the ambient components used for the surround chan-
+
+nels in the final upmix.
+
+
+
+
+                 Figure 3.1: Block diagram of the proposed upmixing schema.
+
+
+
+   I. Three-Channel Upmix Block
+
+      The Three-Channel Upmix block is responsible for processing the raw stereo
+
+      input signal to separate the left, center, and right components of the stereo
+
+      signal into the front channels. This block employs a combination of MSS and
+
+      the CCD algorithm [6] to perform a two-to-three channel upmix of the primary
+
+      signals components, following a strategy similar to the VPA methods discussed
+
+      in Section 2.2.6.
+                                                                                     27
+  II. Ambient Extraction Block
+
+     The Ambient Extraction block leverages an MSS model optimized to separate
+
+     ambient components from the processed left and right signal outputs of the
+
+     Three-Channel Upmix block. An additional 12-millisecond delay is applied to
+
+     the extracted ambient signal via a zero-padding operation to enhance perceived
+
+     spatial separation between the front and rear channels and to mitigate potential
+
+     phase interference with signals from the front three channels.
+
+
+ III. Additional Filtering Blocks
+
+     A final step applies low-pass and high-pass filtering to generate the low-frequency
+
+     effects (LFE) channel and to remove low-frequency content overlap from the five
+
+     surround channels. This is achieved using a low-pass biquad filter with a cutoff
+
+     frequency of 200 Hz for the LFE channel, and a high-pass biquad filter with a
+
+     cutoff frequency of 150 Hz applied to the remaining channels.
+
+
+
+3.2.2    Dataset Procurement and Data Preparation
+
+   For our training dataset, we utilize the open-source MUSDB18-HQ [41] and Moi-
+
+sesDB [42] MSS datasets, providing a combined total of 390 individual songs sampled
+
+at 44.1 kHz. The combined dataset undergoes verification through an automated
+
+script, which checks for improper labeling, silent tracks, inconsistent track lengths,
+
+and other discrepancies in the audio data, discarding any ambiguous or invalid entries.
+
+Following this initial data procurement and cleaning process, a total of 385 valid song
+
+tracks remain, accumulating to 1,925 individual stereo wave files and approximately
+
+120 hours of audio data
+                                                                                           28
+
+
+
+
+Figure 3.2: Diagram illustrating the preparation and generation process of the custom Primary-
+
+Ambient Extraction Dataset for Music (PAEDB).
+
+
+
+   As shown in Figure 3.2, we construct a custom music dataset specifically for
+
+training tasks involving PAE-based source separation, referred to as PAEDB. Each
+
+entry in PAEDB consists of the original mixture file along with corresponding primary
+
+and ambient stems, extracted using the frequency-domain correlation-based ELAE
+
+method [14], with additional preprocessing of the left and right components using
+
+the CCD algorithm [6] to enhance ambient extraction quality (see Section 2.2.4.3 for
+
+details). To expand the total dataset size, each individual stem from the base 4-stem
+
+dataset (vocals, drums, bass, other, and mixture) is treated as a unique entry. After
+
+generating the corresponding primary and ambient components for each, the target
+
+stem is repurposed as the new mixture file. This process effectively increases the
+
+trainable dataset size by approximately x5. After generating the PAE components
+
+and performing additional validation of the audio data, the final PAEDB consists of
+
+1,809 unique tracks, resulting in 5,427 individual stereo stem files and approximately
+
+550 hours of audio, totaling around 150 gigabytes.
+                                                                                           29
+3.2.3      Model Architecture Selection
+
+
+
+
+        Figure 3.3: The framework of the Band-Split RoFormer system as presented in [9].
+
+
+
+   To evaluate the effectiveness of high-complexity MSS architectures for PAE in
+
+upmixing, we implemented two distinct models trained on the PAEDB dataset. The
+
+first selected model is the Mel-RoFormer, developed by ByteDance Research [9]. This
+
+model employs a Mel-spectrogram transform in a band-split RNN and utilizes hierar-
+
+chical Transformer with Rotary Position Embeddings to model both inner- and inter-
+
+band sequences for multi-band mask estimation. As of this thesis, the Mel-RoFormer
+
+achieves SOTA SDR performance on the MUSDB18-HQ benchmark [41,51], and was
+
+thus chosen as the high-complexity MSS model to be optimized for PAE.
+
+   The second model is a simpler multi-layer perceptron (MLP) architecture origi-
+
+nally proposed in [10]. This model consists of three fully connected linear layers and
+
+operates by flattening the real and imaginary components of the input STFT rep-
+
+resentation into a one-dimensional feature vector. It performs binary classification
+
+of primary and ambient signal frames, applying the softmax predicted probability
+
+(between 0 and 1) as a gain factor to effectively act as a dynamic gate that attenu-
+
+ates primary signals while preserving ambient components. This model serves as a
+
+reference comparison to determine whether a simpler approach is effective at ambient
+
+extraction. Since this architecture was explicitly designed for PAE, this approach pro-
+
+vides a direct reference and evaluation of the deep learning method proposed in [10].
+                                                                                                30
+
+
+
+
+Figure 3.4: Preprocessing logic for flattening input STFT feature vectors for the MLP, as presented
+
+in [10].
+
+
+
+
+3.2.4      Model Training Parameters
+
+    Our training procedure follows a supervised learning training strategy over the pre-
+
+pared PAEDB audio dataset. For simplicity and initial experimentation, the training
+
+parameters are set as follows, using the same configurations reported in the respective
+
+literature for each model. See Section 5.1 for the results of the training runs.
+
+   1. Mel-RoFormer – The optimizer used is AdamW, with a learning rate of 5e-5
+
+       and an EMA momentum of 0.999 for stabilizing parameter updates. Training
+
+       employs a batch size of 3 (effectively doubled to 6 with the dual-GPU setup),
+
+       with gradient accumulation steps set to 1 and mixed precision enabled for im-
+
+       proved computational efficiency. The training run is set for 100 epochs for 4,000
+
+       steps, with a learning rate reduction applied after 2 epochs of no improvement
+
+       in the monitored metric, using a reduction factor of 0.95 to fine-tune the opti-
+
+       mization and prevent overfitting.
+                                                                                   31
+  2. 3-Layer MLP – The model is trained using the AdamW optimizer with a
+
+     learning rate of 1e-3, batch size of 16, and 200 training epochs. Mixed precision
+
+     training is enabled, and learning rate reduction is applied with a patience of
+
+     5 epochs and a reduction factor of 0.95. The network comprises three linear
+
+     layers with ReLU activations, reducing the feature dimensionality through hid-
+
+     den layers of sizes 15 and 10 before outputting a single probability through a
+
+     sigmoid activation, representing the presence of ambient content.
+
+
+   The loss function for training the Mel-RoFormer model combines L1 loss for
+
+waveform reconstruction in the time domain with a weighted multi-resolution STFT
+
+(MRSTFT) loss to maintain fidelity across multiple time-frequency resolutions, fol-
+
+lowing the approach in [9]. In contrast, the MLP model uses only L1 loss applied
+
+to the final softmax layer output, with binary labels assigned as 0 for primary stems
+
+and 1 for ambient stems, consistent with the implementation in [10].
+
+   Data augmentation is applied through random loudness scaling between 0.1 and
+
+1.0 to improve generalization. Additionally, multi-threaded data loading is enabled
+
+using eight parallel processes to optimize training performance.
+
+
+
+3.2.5    Hardware and Software Training Resources
+
+   The training process is conducted on an Ubuntu 22.04.4 LTS (Jammy Jellyfish) op-
+
+erating system using a dual-GPU setup with two NVIDIA A10 GPUs, each equipped
+
+with 23 GB of VRAM, running on CUDA version 12.5.
+
+   The CPUs are dual Intel Xeon Silver 4316 processors, offering a total of 80 cores
+
+(40 physical cores, 2 threads per core) with a maximum clock speed of 3.4 GHz. The
+                                                                                32
+system includes 30 GB of RAM, with approximately 25 GB available during training,
+
+and an additional 8 GB of swap memory.
+
+   Training scripts and model definitions utilize PyTorch Version 2.5.0 with mixed
+
+precision enabled to improve computational efficiency. The dual-GPU setup effec-
+
+tively doubles the batch size by distributing workloads across two instances of the
+
+model mapped to each GPU which enables faster data loading and the ability to
+
+handle larger datasets.
+CHAPTER 4
+
+Evaluation and Performance Metrics
+
+   This chapter presents the evaluation methodology used to assess the perceptual
+
+and objective performance of the proposed upmixing systems. It includes a descrip-
+
+tion of the evaluation dataset, the design and procedure of a controlled user listening
+
+study, and the quantitative analysis using standard signal reconstruction metrics.
+
+Both subjective and objective evaluations are used to compare the trained models
+
+against existing DSP- and DNN-based upmixing methods. See Sections 5.2 and 5.3
+
+for the corresponding results, and Appendix A for the evaluation scripts.
+
+
+
+4.1     Evaluation Test Set
+
+   The evaluation set consists of 12 full-length stereo music tracks sourced from
+
+YouTube, each ranging from 2 to 6 minutes in duration and sampled at 44.1 kHz.
+
+The audio was acquired using a Python-based tool developed for this project [52],
+
+which wraps the pytube Python module [53] to simplify downloading audio content
+
+without needing to use the official YouTube API. The tool extracts the highest-quality
+
+available audio stream (128 kb/s, .m4a format), which is then converted to 44.1 kHz
+
+.wav format using ffmpeg [54].
+
+
+                                          33
+                                                                                     34
+   For the subjective evaluation, a subset of six tracks was manually curated from
+
+the full dataset. These samples were chosen to reflect a diverse range of genres,
+
+production styles, energy levels, and ambient textures, with particular attention to
+
+variation in stereo mixing practices.
+
+   The complete 12-track dataset was used for the objective evaluation to enable
+
+a more comprehensive and statistically robust comparison. All audio content was
+
+used strictly for academic research purposes and is not intended for redistribution or
+
+commercial use.
+
+
+
+4.2     Subjective Evaluation via User Listening Study
+
+   To assess the perceptual quality of the trained models in the context of audio
+
+upmixing, a user listening study was conducted. The study aimed to evaluate spatial
+
+characteristics, immersion, and spectral fidelity of the processed audio excerpts within
+
+a controlled experimental setup.
+
+
+
+4.2.1     Participant Demographics and Screening
+
+   For the user study, 12 participants were recruited to evaluate audio excerpts pro-
+
+cessed by four different upmixing systems (see Section 4.2.3). Prior to the listening
+
+session, participants completed a brief demographic questionnaire, reporting their
+
+age, gender, experience with audio equipment, and self-assessed hearing ability. To
+
+ensure reliable responses, all participants were required to confirm normal hearing or
+
+disclose any known impairments.
+
+   Additionally, a cognitive immersion assessment was included at the end of the
+
+study. It consisted of several questions aimed at gauging participants’ general ten-
+                                                                                 35
+dency to become absorbed in immersive experiences, including their self-reported
+
+awareness and sensitivity to spatial cues in their environment.
+
+
+
+4.2.2    Ethical Considerations and Participant Consent
+
+   The study and its adherence to ethical guidelines were approved by the Institu-
+
+tional Review Board (IRB) at the University of Miami. Participants were informed
+
+about the purpose, procedures, potential risks, and confidentiality measures of the
+
+study through an informed consent form. They were explicitly notified that partici-
+
+pation was voluntary and that they could withdraw at any time without consequence.
+
+To minimize listening fatigue, participants were also permitted to take short breaks
+
+between trials and adjust playback volume for comfort.
+
+
+
+4.2.3    Stimuli and Systems
+
+   Six distinct 1-minute excerpts were selected from a larger test set to capture a
+
+diverse range of audio content. These samples were curated to reflect factors that
+
+would potentially influence the upmixing process such as genre, energy, ambience,
+
+and stereo mixing style. The evaluated stimuli are listed below:
+
+
+   • Stimuli A: Sound & Color – Alabama Shakes (Blues/Soul Rock) – A sparse
+
+     mix with swirling ambient metallophone, reverberant vocals, and dynamic in-
+
+     strumentation [55].
+
+
+   • Stimuli B: Let You Break My Heart Again – Laufey & Philharmonia Orchestra
+
+     (Orchestral Jazz) – A jazz ballad with orchestral arrangement, acoustic guitar,
+
+     and vocals [56].
+                                                                                   36
+   • Stimuli C: Snow Song – Adrianne Lenker (Acoustic Folk) – Acoustic guitar
+
+     with natural room ambiance and spatially panned background vocals [57].
+
+
+   • Stimuli D: Take Five – The Dave Brubeck Quartet (Instrumental Jazz) – A
+
+     classic jazz piece featuring saxophone, piano, bass, and drums, presented in a
+
+     tight spatial mix [58].
+
+
+   • Stimuli E: Money – Pink Floyd (Progressive Rock) – Busy and energetic elec-
+
+     tric guitar solos with highly distorted and reverberant sound effects [59].
+
+
+   • Stimuli F: Prison Break Scene – Guardians of the Galaxy (Cinematic Audio)
+
+     – A film scene with dialogue, sound effects, and an orchestral score [60].
+
+
+   Each stimulus sample was processed through all four upmixing systems and played
+
+back to participants using a calibrated 5.1 surround sound system. To mitigate order
+
+effects and bias, the six stimuli were first randomized to avoid any fixed playback
+
+sequence. Within each stimulus, the presentation order of the four systems was
+
+further shuffled to prevent order bias toward a particular upmixing system. The
+
+evaluated systems are listed below:
+
+
+   • System A: All-channel Stereo (Anchor) — The original stereo mix duplicated
+
+     and played back through the left (L), right (R), back left (Ls), and back right
+
+     (Rs) speaker channels. This serves as a baseline system, similar to those used
+
+     in [8, 37].
+
+
+   • System B: DSP-Based (Reference) — Implements the VPA upmixing method
+
+     from [7], using DSP-based PAE [14] to derive the additional surround channels.
+                                                                                   37
+   • System C: DNN-Based (Our System) — A VPA upmixing method using the
+
+     optimized Mel-RoFormer model [9], trained on the PAEDB dataset to extract
+
+     ambient signals for the surround channels.
+
+
+   • System D: MLP-Based (Reference) — A VPA upmixing method using the
+
+     3-layer MLP model from [10], also trained on the PAEDB dataset.
+
+
+
+4.2.4    Study Procedure
+
+   This study followed a MUSHRA-style test design, in which participants rated each
+
+upmixing condition relative to the others for each stimulus. The listening sessions
+
+were conducted in a controlled environment equipped with a calibrated 5.1 surround
+
+sound speaker array to ensure consistent spatial audio reproduction. Each participant
+
+listened to a total of 24 stimuli, comprising six distinct audio excerpts processed by
+
+each of the four upmixing systems. The full session was designed to last approximately
+
+45 minutes.
+
+
+
+4.2.5    Data Collection
+
+   Each audio excerpt was evaluated using a 7-point labeled Likert scale across three
+
+perceptual dimensions:
+
+
+  1. Overall Envelopment and Immersion (Preference) — Assesses how fully
+
+     the listener perceives being surrounded by and engaged in the sound field.
+
+
+  2. Spatial & Temporal Quality (Realism of Acoustic Space) — Evaluates
+
+     the localization, depth, and timing accuracy of sound sources within the spatial
+
+     mix.
+                                                                                    38
+  3. Spectral Quality (Coherence & Presence of Artifacts) — Measures tim-
+
+      bral fidelity, the presence of distortions, and overall spectral balance.
+
+
+
+4.3      Objective Metric Evaluation
+
+   In addition to the subjective listening study, objective metrics were used to assess
+
+the separation and reconstruction quality of the upmixed audio. These evaluations
+
+are essential for quantifying signal quality and comparing the performance of different
+
+upmixing systems.
+
+   For this analysis, we focus on comparing System C (Mel-RoFormer) and System
+
+D (MLP), using the DSP-generated signals as reference ground truths. Since the
+
+PAEDB dataset was constructed using ELAE [14] (as described in Section 3.2), these
+
+reference signals serve as the baseline for evaluating how accurately each neural net-
+
+work reproduces the target ambient signal. Thus, the following objective metrics are
+
+used to evaluate system performance:
+
+
+   • Signal-to-Distortion Ratio (SDR): Measures the overall quality of the sep-
+
+      arated signals by computing the ratio of target signal energy to distortion,
+
+      including noise, interference, and artifacts. Higher SDR values indicate better
+
+      separation quality.
+
+
+   • Scale-Invariant Signal-to-Distortion Ratio (SI-SDR): A variant of SDR
+
+      that eliminates dependencies on absolute signal amplitude, providing a more
+
+      robust evaluation of separation quality by focusing on distortions relative to
+
+      the target signal.
+                                                                                  39
+   • Log-Spectral Distance (LSD): Assesses spectral fidelity by computing the
+
+     logarithmic distance between the estimated and ground-truth power spectra.
+
+     Lower LSD values indicate more accurate spectral reconstruction.
+
+
+
+4.3.1    Metrics Processing Procedure
+
+   To automate the objective evaluation process, a Python script was developed to
+
+iterate over each corresponding pair of reference and estimated audio files. For each
+
+excerpt, metrics were computed using 45-second analysis windows with a 5-second
+
+hop size, producing a sequence of frame-wise evaluations across the duration of each
+
+track.
+
+   For each excerpt, metric scores were averaged across all analysis windows to yield
+
+a per-track result. An overall mean was then computed across the full 12-track
+
+evaluation set to produce a system-level performance metric.
+CHAPTER 5
+
+Results
+
+   This chapter presents the results of the training process, subjective listening study,
+
+and objective evaluation metrics for the proposed ambient signal extraction methods
+
+in the upmixing systems. The analyses include both statistical and perceptual com-
+
+parisons of Stimuli A–F, each upmixed using Systems A–D. All systems and stimuli
+
+are referred to according to the labeling scheme defined in Section 4.2.3.
+
+
+
+5.1     Model Training Results
+
+   To evaluate the training progress of the Mel-RoFormer and MLP models integrated
+
+into Systems C and D, respectively, we track the training loss and resource utilization
+
+across 100 epochs. All metrics, training graphs, and experiments were logged using
+
+the Weights & Biases experiment tracking API [61].
+
+
+
+5.1.1    Training Loss Curves
+
+   Figure 5.1 shows the training loss convergence for both models over the course of
+
+100 training epochs. System C demonstrates a steady decline in loss, indicating stable
+
+convergence despite the use of a combined L1 and MRSTFT loss, which typically
+
+
+                                          40
+                                                                                    41
+results in higher absolute loss values. In contrast, System D stabilizes much earlier,
+
+suggesting limited capacity to learn complex ambient extraction patterns. Its training
+
+curve is less stable, exhibiting multiple plateaus at local minima before continuing to
+
+descend toward a global minimum – or at least the lowest point observed within the
+
+100 training epochs.
+
+
+
+
+                    Figure 5.1: Training loss curve for Systems C and D.
+
+
+
+
+5.1.2    Resource Utilization Comparison
+
+   To evaluate the computational efficiency of both models, we also compare their
+
+GPU memory allocation over time during training. Figure 5.2 presents the percentage
+
+of allocated GPU memory throughout the training process for Systems C and D.
+
+   System D consistently utilized approximately 27% of the GPU memory, whereas
+
+System C exhibited a utilization range of approximately 17-24%. However, it is
+
+important to note that System C was trained using a lightweight implementation
+
+of the Mel-RoFormer architecture and employed data parallelism across two GPUs,
+
+effectively doubling the actual resource usage depicted in the graph.
+
+   Another significant difference lies in the training duration required to complete
+
+100 epochs. System D completed training in approximately 42.4 hours (≈ 1.77 days),
+                                                                                     42
+whereas System C required approximately 249.5 hours (≈ 10.4 days), nearly six times
+
+longer. This highlights the trade-offs between model complexity and computational
+
+efficiency. While the Mel-RoFormer model achieves superior separation quality, its
+
+significantly longer training time and greater GPU resource demands must be con-
+
+sidered when scaling for real-world applications.
+
+
+
+
+         Figure 5.2: GPU memory allocation over training time for Systems C and D.
+
+
+
+
+5.2     Subjective Listening Study Results
+
+   With the 12 participants that took part in the study, each provided multiple
+
+ratings across all combinations of systems, stimuli, and perceptual metrics, resulting
+
+in a total of 264 observations. The evaluation followed a MUSHRA-style test design,
+
+where participants rated each upmixing condition relative to others for each stimulus.
+
+Given the ordinal nature of the 7-point Likert scale used for rating, a non-parametric
+
+statistical approach was applied. The Friedman test was used to assess the main
+
+effects of the four systems across the perceptual metrics for each of the six evaluated
+
+stimuli. Post-hoc pairwise comparisons were then conducted using the Nemenyi test
+                                                                                     43
+to identify statistically significant differences between systems and to compute average
+
+system rankings.
+
+
+
+5.2.1     Overall Ratings Across All Metrics
+
+   Table 5.1 presents the overall mean ratings aggregated across all perceptual met-
+
+rics. Our proposed system (System C), highlighted in bold, performed second overall
+
+with an aggregated mean rating of 14.45. Table 5.2 summarizes the Friedman test
+
+results conducted separately for each metric. The analysis revealed a statistically
+
+significant effect of System for Overall Envelopment & Immersion (χ2 = 10.816,
+
+p = 0.0128), Spatial & Temporal Quality (χ2 = 9.816, p = 0.0202), and Spectral
+
+Quality (χ2 = 10.500, p = 0.0148). Figure 5.3 illustrates the distribution of listener
+
+ratings across these metrics for each processing system.
+
+                Table 5.1: Overall Combined Mean Ratings Across All Metrics
+
+
+                      System        Total Mean Rating           Rank
+
+                      System B              14.63                1
+
+                      System C              14.45                2
+
+                      System A              12.91                3
+
+                      System D              12.32                4
+
+
+
+                        Table 5.2: Friedman Test Across All Metrics
+
+
+           Perceptual Metric                     Chi-square (χ2 )      p-value
+
+           Overall Envelopment & Immersion             10.816          0.0128
+
+           Spatial & Temporal Quality                   9.816          0.0202
+
+           Spectral Quality                            10.500          0.0148
+                                                                                  44
+   Post-hoc Nemenyi tests (Tables 5.3–5.5) indicated a statistically significant per-
+
+ceived difference between System C and System A for Overall Envelopment & Im-
+
+mersion (p = 0.0181), and between System D and both System B (p = 0.0230) and
+
+System C (p = 0.0449) for Spectral Quality. No statistically significant pairwise
+
+differences were observed for Spatial & Temporal Quality.
+
+          Table 5.3: Nemenyi Post-hoc Test for Overall Envelopment & Immersion
+
+
+                       System A      System B      System C       System D
+           System A       1.000         0.068         0.018          0.585
+           System B                     1.000         0.965          0.636
+           System C                                   1.000          0.345
+           System D                                                  1.000
+
+
+
+             Table 5.4: Nemenyi Post-hoc Test for Spatial & Temporal Quality
+
+
+                       System A      System B      System C       System D
+           System A       1.000         0.068         0.168          0.995
+           System B                     1.000         0.979          0.119
+           System C                                   1.000          0.265
+           System D                                                  1.000
+
+
+
+                  Table 5.5: Nemenyi Post-hoc Test for Spectral Quality
+
+
+                       System A      System B      System C       System D
+           System A       1.000         0.733         0.859          0.265
+           System B                     1.000         0.995          0.023
+           System C                                   1.000          0.045
+           System D                                                  1.000
+                                                                                               45
+   A closer inspection of the boxplot distributions (Figure 5.3) provides additional
+
+insight into the distribution and variance of the data. For both the Overall Envelop-
+
+ment & Immersion and Spatial & Temporal Quality metrics, System C and System
+
+B exhibited higher medians and upper quartiles compared to System A, despite hav-
+
+ing lower mean ratings. This suggests that a subset of listeners consistently rated
+
+these systems highly, indicating a polarized or skewed perception in those conditions.
+
+In contrast, for the Spectral Quality metric, the medians and interquartile ranges
+
+for Systems A–C were nearly identical which indicates comparable performance and
+
+greater agreement among listeners.
+
+   Across all three perceptual metrics, System D consistently received the lowest
+
+ratings, indicating a clear perceptual disadvantage. This was especially evident in
+
+Spectral Quality, although its performance in Spatial & Temporal Quality was com-
+
+parable to that of System A.
+
+
+
+
+     Figure 5.3: Boxplot of listener ratings for all metric ratings across upmixing systems.
+                                                                                         46
+5.2.2       Overall Envelopment and Immersion
+
+   Table 5.6 presents the average ratings for Overall Envelopment & Immersion across
+
+systems. Our proposed system (System C), highlighted in bold, was the highest
+
+ranked for this perceptual metric with a mean rating of 4.84. Table 5.7 summarizes
+
+the Friedman test results conducted per stimulus. The analysis revealed a statistically
+
+significant effect of System for Stimulus C (χ2 = 9.798, p = 0.0204) and Stimulus E
+
+(χ2 = 19.075, p = 0.0003). No statistically significant effects were observed for other
+
+stimuli.
+
+                  Table 5.6: Mean Ratings for Overall Envelopment & Immersion
+
+
+                              System       Mean Rating       Rank
+
+                              System C          4.84           1
+
+                              System B          4.77           2
+
+                              System D          4.26           3
+
+                              System A          3.98           4
+
+
+
+           Table 5.7: Friedman Test for Overall Envelopment & Immersion (Per Stimulus)
+
+
+                          Stimulus       Chi-square (χ2 )   p-value
+
+                          A                   3.990          0.2625
+
+                          B                   0.429          0.9343
+
+                          C                   9.798          0.0204
+
+                          D                   7.740          0.0517
+
+                          E                   19.075         0.0003
+
+                          F                   6.771          0.0796
+                                                                                         47
+   Post-hoc Nemenyi tests (Tables 5.8–5.9) indicated a perceived difference between
+
+System C and System A for Stimulus C (p = 0.0997), and a statistically significant
+
+difference between System D and System C (p = 0.0004) for Stimulus E.
+
+     Table 5.8: Nemenyi Post-hoc Test for Stimulus C (Overall Envelopment & Immersion)
+
+
+                        System A      System B      System C      System D
+            System A       1.000         0.083         0.100         0.733
+            System B                     1.000         1.000         0.535
+            System C                                   1.000         0.585
+            System D                                                 1.000
+
+
+
+     Table 5.9: Nemenyi Post-hoc Test for Stimulus E (Overall Envelopment & Immersion)
+
+
+                        System A      System B      System C      System D
+            System A       1.000         0.685         0.055         0.485
+            System B                     1.000         0.485         0.055
+            System C                                   1.000         0.000
+            System D                                                 1.000
+
+
+
+   When comparing the distributions seen in Figure 5.4, Systems A–C appeared to
+
+perform comparably for Stimuli A and B, with small differences in median ratings
+
+and overlapping interquartile ranges. In contrast, for Stimuli C through F, System B
+
+and System C frequently outperformed System A in both median and upper quartile
+
+ratings, indicating a stronger perceived immersion for certain content types. System D
+
+showed wide variability in ratings for Stimuli A and B, and interestingly, outperformed
+
+all other systems for Stimulus D, which corresponded to the jazz audio sample.
+
+   These variations suggest that immersion perception may be influenced not only by
+
+the upmixing method but also by listener preferences and the inherent characteristics
+                                                                                             48
+of the source material. Factors such as genre familiarity, mixing style, and spatial
+
+content distribution likely played a role in shaping subjective evaluations across differ-
+
+ent stimuli. However, it is difficult to draw definitive conclusions from these patterns
+
+alone, and a deeper investigation into listener bias and content-specific mixing char-
+
+acteristics in the context of upmixing is warranted.
+
+
+
+
+Figure 5.4: Boxplot of listener ratings for Overall Envelopment & Immersion across upmixing sys-
+
+tems.
+
+
+
+
+5.2.3     Spatial and Temporal Quality
+
+   Table 5.10 presents the average ratings for Spatial & Temporal Quality across sys-
+
+tems. Our proposed system (System C), highlighted in bold, ranked second among
+
+the systems with a mean rating of 4.46. Table 5.11 summarizes the Friedman test
+
+results conducted per stimulus. The analysis once again revealed a statistically sig-
+
+nificant effect of System for Stimulus C (χ2 = 13.441, p = 0.0038) and Stimulus E
+                                                                                     49
+(χ2 = 19.890, p = 0.0002). No statistically significant effects were observed for other
+
+stimuli.
+
+                  Table 5.10: Mean Ratings for Spatial & Temporal Quality
+
+
+                            System       Mean Rating       Rank
+
+                            System B          4.64           1
+
+                            System C          4.46           2
+
+                            System D          4.07           3
+
+                            System A          3.88           4
+
+
+
+           Table 5.11: Friedman Test for Spatial & Temporal Quality (Per Stimulus)
+
+
+                        Stimulus       Chi-square (χ2 )   p-value
+
+                        A                   2.301          0.5123
+
+                        B                   4.867          0.1818
+
+                        C                   13.441         0.0038
+
+                        D                   5.292          0.1516
+
+                        E                   19.890         0.0002
+
+                        F                   2.073          0.5574
+
+
+
+   Post-hoc Nemenyi tests (Tables 5.12–5.13) indicated a statistically significant per-
+
+ceived difference between System A and System B for Stimulus C (p = 0.0110), and
+
+between System A and C (p = 0.0045), System D and System C (p = 0.0012) as well
+
+as System D and System B (p = 0.0289) for Stimulus E.
+                                                                                       50
+
+       Table 5.12: Nemenyi Post-hoc Test for Stimulus C (Spatial & Temporal Quality)
+
+
+                        System A      System B      System C      System D
+            System A       1.000         0.011         0.197         0.922
+            System B                     1.000         0.685         0.068
+            System C                                   1.000         0.535
+            System D                                                 1.000
+
+
+
+       Table 5.13: Nemenyi Post-hoc Test for Stimulus E (Spatial & Temporal Quality)
+
+
+                        System A      System B      System C      System D
+            System A       1.000         0.345         0.045         0.685
+            System B                     1.000         0.778         0.029
+            System C                                   1.000         0.001
+            System D                                                 1.000
+
+
+
+   The boxplot distributions (Figure 5.5) show that for Stimuli B through E, both
+
+System B and System C consistently outperformed System A in spatial quality, indi-
+
+cating an advantage in performance for the majority of music-focused audio content.
+
+   However, System A demonstrated an across-the-board advantage only in Stimu-
+
+lus A, which featured the most reverberant and ambient mix among the evaluated
+
+music samples. This stimulus already possessed a spacious acoustic character, and
+
+additional spatialization introduced by the upmixing systems (particularly through
+
+the additional ambient signals in the rear channels) may have disrupted the natural
+
+acoustic realism of the audio mix. This could explain the lower perceived spatial qual-
+
+ity ratings for the upmixed versions, as the evaluation of the realism of the acoustic
+
+space is a key component of this metric. Notably, System A also performed best
+
+for Stimulus A across other metrics (Figures 5.4 and 5.6), suggesting that in certain
+                                                                                              51
+content cases, upmixing may not only be unnecessary but potentially detrimental to
+
+the listening experience.
+
+
+
+
+ Figure 5.5: Boxplot of listener ratings for Spatial & Temporal Quality across upmixing systems.
+
+
+
+
+5.2.4     Spectral Quality
+
+   Table 5.14 presents the average ratings for Spectral Quality across systems. Our
+
+proposed system (System C), highlighted in bold, ranked second with a mean rating
+
+of 5.15. Table 5.15 summarizes the Friedman test results conducted per stimulus. The
+
+analysis revealed a statistically significant effect of System for Stimuli A (χ2 = 14.257,
+
+p = 0.0026), C (χ2 = 11.179, p = 0.0108), and E (χ2 = 16.326, p = 0.0010). No
+
+statistically significant effects were observed for other stimuli.
+                                                                                    52
+
+                       Table 5.14: Mean Ratings for Spectral Quality
+
+
+                            System       Mean Rating       Rank
+
+                            System B          5.22            1
+
+                            System C          5.15            2
+
+                            System A          5.06            3
+
+                            System D          3.99            4
+
+
+
+                Table 5.15: Friedman Test for Spectral Quality (Per Stimulus)
+
+
+                        Stimulus       Chi-square (χ2 )    p-value
+
+                        A                   14.257         0.0026
+
+                        B                   4.316           0.2293
+
+                        C                   11.179         0.0108
+
+                        D                   3.100           0.3765
+
+                        E                   16.326         0.0010
+
+                        F                   2.585           0.4601
+
+
+
+   Post-hoc Nemenyi tests (Tables 5.16–5.18) indicated a statistically significant per-
+
+ceived difference between System D and System A for Stimulus A (p = 0.0028), be-
+
+tween System D and System C for Stimulus E (p = 0.0028), and between System D
+
+and System B for Stimulus E (p = 0.0679). No other pairwise comparisons reached
+
+significance.
+
+   This outcome aligns with the underlying design of System D’s method, which
+
+generates the ambient signal through a binary classification of primary versus ambient
+
+frames throughout the audio signal. This process introduced audible artifacts in the
+
+upmixed output due to the abrupt and sometimes incorrect gating of content. These
+
+artifacts were consistently noticed and remarked upon by participants during the
+                                                                                     53
+listening study, as reflected in the system’s lower ratings in spectral fidelity and
+
+overall tonal consistency.
+
+             Table 5.16: Nemenyi Post-hoc Test for Stimulus A (Spectral Quality)
+
+
+                         System A      System B      System C       System D
+            System A         1.000        0.778         0.389         0.003
+            System B                      1.000         0.922          0.055
+            System C                                    1.000          0.229
+            System D                                                   1.000
+
+
+
+             Table 5.17: Nemenyi Post-hoc Test for Stimulus C (Spectral Quality)
+
+
+                         System A      System B      System C       System D
+            System A         1.000        0.265         0.535          0.922
+            System B                      1.000         0.965          0.068
+            System C                                    1.000          0.197
+            System D                                                   1.000
+
+
+
+             Table 5.18: Nemenyi Post-hoc Test for Stimulus E (Spectral Quality)
+
+
+                         System A      System B      System C       System D
+            System A         1.000        0.859         0.265          0.345
+            System B                      1.000         0.733          0.068
+            System C                                    1.000         0.003
+            System D                                                   1.000
+
+
+
+   The boxplot distributions for Spectral Quality (Figure 5.6) reinforce the statistical
+
+findings in showing that System D consistently received the lowest ratings across all
+
+stimuli. This trend was visually apparent in the lower medians compared to the other
+                                                                                                 54
+systems. Interestingly, written comments from several participants revealed a contra-
+
+dictory perception of System D. These anomalies, although technically degradations
+
+in spectral quality, were sometimes perceived as enhancing certain sound cues and
+
+events. This suggests that spectral artifacts may have subconsciously contributed to
+
+heightened perceptual engagement for some listeners.
+
+
+
+
+ Figure 5.6: Boxplot of listener ratings for Spectral Quality across different processing systems.
+
+
+
+
+5.3      Objective Metric Results
+
+   As outlined in Section 4.3, we employed three standard objective measures to
+
+quantitatively evaluate the upmixing performance of the trained neural networks:
+
+SDR, SI-SDR, and LSD. These metrics were computed across a test set of 12 full-
+
+length music samples, with DSP-generated ambient signals as ground truth references
+
+for comparison.
+                                                                                            55
+
+                    Table 5.19: Average Objective Metrics Across Methods
+
+
+        System                         SDR (dB)       SI-SDR (dB)       LSD (dB)
+        System C (Mel-RoFormer)           2.22             3.44            106.93
+        System D (MLP)                     0.89            -5.29           446.20
+
+
+
+   Table 5.19 presents the average results for System C and System D. System C
+
+consistently outperformed the System D baseline across all metrics. Notably, its
+
+higher SI-SDR and lower LSD scores indicate improved signal fidelity and spectral
+
+consistency in the extracted ambient signals. In contrast, System D exhibited greater
+
+spectral deviation and lower signal-to-distortion ratios, which aligns with subjective
+
+observations of audible artifacts and signal instability.
+
+
+
+
+     Figure 5.7: Boxplot distribution of SDR, SI-SDR, and LSD scores across test samples.
+
+
+
+   Figure 5.7 presents the boxplot distributions and highlights the variance and range
+
+of values for each metric across the test set. This visualization confirms that although
+
+SDR values are relatively close between systems, SI-SDR shows a strong separation
+                                                                                              56
+in favor of System C, whereas System D exhibits extremely high LSD values due to
+
+poorer spectral reconstruction.
+
+   To statistically assess these differences, one-way ANOVAs were conducted for each
+
+of the three objective metrics, as shown in Table 5.20. While the SDR metric showed a
+
+marginal difference between systems, it did not reach statistical significance. However,
+
+both SI-SDR and LSD revealed significant main effects, indicating that system choice
+
+had a substantial influence on distortion and spectral deviation performance.
+
+   Tukey’s HSD post-hoc tests (Table 5.21) confirmed that System C significantly
+
+outperformed the System D baseline in both SI-SDR and LSD metrics. The large
+
+effect observed in SI-SDR highlights System C’s advantage in reducing interference
+
+and reconstruction noise in the predicted ambient signal, while the LSD results reflect
+
+improved spectral preservation. These objective findings are aligned with the percep-
+
+tual results reported in the listening study, reinforcing the superiority of System C’s
+
+approach.
+
+       Table 5.20: One-Way ANOVA Results for Objective Metrics (SDR, SI-SDR, LSD)
+
+            Metric    Factor     Sum of Squares        df   F-value      p-value
+            SDR       System             10.63         1     3.83            0.063
+                     Residual            60.98         22       -              -
+            SI-SDR    System             457.61        1     36.58      0.000004
+                     Residual            275.20        22       -              -
+            LSD       System         6.91 × 105        1     5.09         0.034
+                     Residual        2.98 × 106        22       -              -
+
+
+
+     Table 5.21: Post-hoc Tukey’s HSD for Significant Objective Metrics (SI-SDR and LSD)
+
+      Metric      group1        group2     meandiff     p-adj        lower         upper
+      SI-SDR      System C   System D        -8.7332   0.0000       -11.7276       -5.7387
+      LSD         System C   System D       339.2701   0.0343       27.5541        650.9860
+CHAPTER 6
+
+Conclusion
+
+   To summarize, this thesis investigated the application of DNNs as a solution
+
+for PAE and addressing the limitations of previous DSP algorithms in the context
+
+of stereo-to-surround audio upmixing. By reframing ambient signal extraction as a
+
+source separation task, we aimed to develop a more flexible and effective approach
+
+by utilizing high-complexity MSS architectures presented in recent literature.
+
+   The previous chapters provided a comprehensive review of the SOTA systems
+
+and techniques in the fields of MSS and automatic blind upmixing, identified key
+
+knowledge gaps in the literature, and outlined the guiding research question and pro-
+
+posed methodologies that address the identified research gap. We detailed the design
+
+and implementation of the data procurement and preparation of the custom PAEDB
+
+dataset, the supervised learning strategy and training parameters, and the selected
+
+model architecture for PAE optimization, integrated into the extraction blocks of
+
+the VPA upmixing system. This was followed by a thorough evaluation through a
+
+designed participant listening study and objective performance metrics.
+
+   The experimental results demonstrate that the DNN-based system consistently
+
+outperformed the MLP model in both training efficiency and separation quality. The
+
+training loss curves showed that the DNN model achieved stable convergence, while
+
+                                         57
+                                                                                      58
+the MLP exhibited multiple plateaus and reached an earlier performance ceiling,
+
+indicating the architecture’s limited capacity for learning complex ambient extraction
+
+patterns.
+
+   In terms of computational efficiency, the MLP model trained faster with lower
+
+GPU utilization, while the DNN model required significantly more time and resources
+
+despite employing data parallelization across multiple GPUs.
+
+   The subjective evaluation results revealed significant differences in listener ratings
+
+across systems and perceptual attributes. Non-parametric Friedman tests showed
+
+that the DNN-based system (System C) and the DSP-based system (System B) not
+
+only outperformed the other systems, but also closely matched each other in overall
+
+perceptual quality across stimuli. In contrast, Spectral Quality ratings highlighted
+
+a consistent disadvantage for the MLP-based system (System D), which was rated
+
+significantly lower than the others. Participant feedback attributed this to audible
+
+artifacts introduced by the MLP’s gating mechanism for ambient content. Interest-
+
+ingly, some listeners noted that these same artifacts occasionally enhanced perceived
+
+immersion, suggesting a complex interplay between spectral fidelity and subjective
+
+engagement depending on the listening context.
+
+   The objective evaluation confirmed that SDR differences indicated a modest im-
+
+provement in signal reconstruction quality, with SI-SDR showing a significant advan-
+
+tage for the DNN model in reducing distortion, while LSD revealed greater spectral
+
+mismatch for the MLP model, further supporting the method’s limited coherence in
+
+ambient reconstruction.
+
+   Overall, these results demonstrate that the proposed DNN-based approach, specif-
+
+ically the Mel-RoFormer architecture trained from scratch, effectively learns the com-
+                                                                                    59
+plex structure of DSP-generated ambient signals. Both subjective and objective eval-
+
+uations suggest that this model delivers perceptually coherent and high-quality ambi-
+
+ent signal extraction. Notably, the Mel-RoFormer closely matches the performance of
+
+the traditional DSP algorithm (ELAE method) while maintaining the flexibility and
+
+efficiency of a learned neural architecture. Compared to the simpler MLP method
+
+proposed in [10], the more complex DNN approach provides substantial improvements
+
+in both perceived spatial quality and spectral fidelity, demonstrating the potential of
+
+deep, attention-based architectures for high-fidelity ambience extraction in the con-
+
+text of surround audio upmixing.
+
+
+
+6.1     Discussion of Limitations
+
+6.1.1     Observation of Objective Metrics and Loss Functions
+
+   Although we observed measurable improvements in the DNN model’s performance
+
+across SDR, SI-SDR, and LSD, the absolute values of these metrics remain on the
+
+lower end compared to SOTA MSS models optimized for the music separation task.
+
+This suggests an inherent limitation in relying solely on conventional signal recon-
+
+struction metrics for evaluating ambient signal quality. Ambient components are,
+
+by nature, diffuse, decorrelated, and often stochastic, making them fundamentally
+
+different from structured sources like vocals or drums. To this effect, models trained
+
+to optimize over SDR or SI-SDR metrics may focus on minimizing frame-level recon-
+
+struction error rather than capturing the perceptual and spatial characteristics that
+
+define realistic ambience.
+                                                                                    60
+   Similarly, the chosen L1 and MRSTFT losses may also struggle to guide the model
+
+toward perceptually meaningful solutions in the context of ambient extraction, as they
+
+do not explicitly account for stereo image coherence or spatial diffusion.
+
+   This mismatch between the nature of the task and the evaluation criteria may
+
+lead to suboptimal learning during training, despite achieving a satisfactory percep-
+
+tual outcome. If the objective function fails to align with perceptual relevance, the
+
+network may converge on solutions that technically satisfy the loss function but fail
+
+to produce perceptually convincing results. This could explain why prior work on
+
+ambient extraction has consistently reported poor SDR values, often in the negative
+
+range [30, 31]. To put it simply, even if the generated ambient signals sound spatially
+
+diffuse and perceptually coherent, they do not necessarily align frame-for-frame with
+
+the reference signals, leading to penalization under standard objective metrics.
+
+
+
+6.1.2     Data Scarcity and Subsequent Performance Ceiling
+
+   Another key limitation identified during this investigation was the scarcity of
+
+publicly available datasets for primary ambient signal extraction. While datasets
+
+for speech dereverberation and enhancement exist, they are typically constrained
+
+to speech and residual components, lacking the dry and reverberant music content
+
+required for broader music applications. As a result, we were unable to leverage
+
+large-scale, ground-truth datasets tailored specifically for ambient signal separation.
+
+To address this, we relied on DSP-based ambient extraction methods [14] to generate
+
+the training targets.
+
+   These algorithmically generated signals may inherently introduce a performance
+
+ceiling, as the model can only learn what the DSP algorithm is capable of producing.
+                                                                                     61
+Rather than mitigating the spectral and temporal artifacts introduced by traditional
+
+DSP methods, the model risks replicating these very artifacts. One could argue that
+
+training a DNN to mimic a DSP-based ambient extraction algorithm allows it to
+
+generalize and internalize the rule-based logic within its layers, potentially providing
+
+a strong foundation for future fine-tuning. Nonetheless, the additional computational
+
+and resource costs required for this approach must be carefully justified if the learned
+
+model continues to inherit the limitations and artifacts of the DSP algorithm it was
+
+trained to emulate.
+
+
+
+6.2     Future Work
+
+   These observations underscore the need for alternative evaluation and training
+
+strategies in the context of ambient extraction. Future work should explore objective
+
+metrics that better correlate with spatial perception, such as measures of decorrelation
+
+and diffuseness to more accurately assess ambient signal quality. Without appropriate
+
+metrics, training objectives may fail to capture the nuanced perceptual attributes that
+
+listeners associate with high-quality upmixed ambience.
+
+   In parallel, it is important to move beyond standard L1 and MRSTFT losses,
+
+which primarily penalize waveform and spectral reconstruction errors, and consider
+
+custom loss functions that also better reflect the perceptual properties of ambient
+
+audio. Potential directions include losses based on mid/side processing, inter-channel
+
+correlation, or phase coherence, which could guide the model toward learning spatially
+
+rich and perceptually convincing ambient representations.
+
+   Another future directive would be the procurement and development of a dataset
+
+containing dry and wet music recordings specifically tailored for music dereverber-
+                                                                                    62
+ation and ambient effect extraction. Such a dataset would enable models to learn
+
+directly from real ambient signals, rather than being constrained by DSP-generated
+
+training data. This would address one of the key limitations identified in this study’s
+
+evaluation, where reliance on algorithmically approximated targets introduced a per-
+
+formance ceiling and limited the perceptual realism of the extracted ambience.
+
+   Finally, the model architecture and feature space of current MSS models may not
+
+be inherently optimized for ambient extraction. Future research could explore the
+
+development of custom architectures explicitly designed for this task. One promising
+
+direction is the integration of latent space representations inspired by variational
+
+autoencoders (VAEs), as demonstrated in style-transfer upmixing methods [37], which
+
+have shown the ability to capture spatial instrument placement across channels. Such
+
+representations may provide a more suitable feature space for modeling the diffuse
+
+and spatially distributed nature of ambient signals.
+
+   While this study demonstrated the potential of DNN-based PAE for stereo-to-
+
+surround upmixing, several areas warrant further investigation to refine and advance
+
+the approach. Addressing these challenges may lead to more effective ambient ex-
+
+traction techniques, ultimately improving the perceptual quality and spatial realism
+
+of stereo-to-surround upmixing systems.
+Bibliography
+
+
+[1] Simon Rouard, Francisco Massa, and Alexandre Défossez. Hybrid transformers
+   for music source separation. In ICASSP 2023-2023 IEEE International Confer-
+   ence on Acoustics, Speech and Signal Processing (ICASSP), pages 1–5. IEEE,
+   2023.
+
+[2] Olaf Ronneberger, Philipp Fischer, and Thomas Brox. U-net: Convolutional
+   networks for biomedical image segmentation. In Medical image computing and
+   computer-assisted intervention–MICCAI 2015: 18th international conference,
+   Munich, Germany, October 5-9, 2015, proceedings, part III 18, pages 234–241.
+   Springer, 2015.
+
+[3] Yi Luo and Jianwei Yu. Music source separation with band-split rnn. IEEE/ACM
+   Transactions on Audio, Speech, and Language Processing, 31:1893–1901, 2023.
+
+[4] A Vaswani. Attention is all you need. Advances in Neural Information Processing
+   Systems, 2017.
+
+[5] JianJun He and JianJun He. Linear estimation-based primary ambient extrac-
+   tion. Spatial Audio Reproduction with Primary Ambient Extraction, pages 39–65,
+   2017.
+
+[6] Earl Vickers. Frequency-domain two-to three-channel upmix for center channel
+   derivation and speech enhancement. In Audio Engineering Society Convention
+   127. Audio Engineering Society, 2009.
+
+[7] Ricardo Thaddeus Paez Amaro, Carlos Tejeda Ocampo, Ema Souza Blanes,
+   Sunil Bharitkar, and Luis Madrid Herrera. Deep learning based voice extraction
+   and primary-ambience decomposition for stereo to surround upmixing. In Audio
+   Engineering Society Convention 154. Audio Engineering Society, 2023.
+                                     63
+                                                                                 64
+ [8] Marian Negru, Bogdan Moroşanu, Ana Neacşu, Dragoş Drăghicescu, and Cris-
+    tian Negrescu. Automatic audio upmixing based on source separation and am-
+    bient extraction algorithms. In 2023 International Conference on Speech Tech-
+    nology and Human-Computer Dialogue (SpeD), pages 12–17. IEEE, 2023.
+
+ [9] Wei-Tsung Lu, Ju-Chiang Wang, Qiuqiang Kong, and Yun-Ning Hung. Music
+    source separation with band-split rope transformer. In ICASSP 2024-2024 IEEE
+    International Conference on Acoustics, Speech and Signal Processing (ICASSP),
+    pages 481–485. IEEE, 2024.
+
+[10] Karim M Ibrahim and Mahmoud Allam. Primary-ambient source separation for
+    upmixing to surround sound systems. In 2018 IEEE International Conference on
+    Acoustics, Speech and Signal Processing (ICASSP), pages 431–435. IEEE, 2018.
+
+[11] Roger Dressler. Dolby surround pro logic decoder principles of operation. Dolby
+    White paper, 2000.
+
+[12] Sarvesh Agrawal, Søren Bech, Katrien De Moor, and Søren Forchhammer. Influ-
+    ence of changes in audio spatialization on immersion in audiovisual experiences.
+    Journal of the Audio Engineering Society, 70(10):810–823, 2022.
+
+[13] Carlos Avendano and Jean-Marc Jot. Ambience extraction and synthesis from
+    stereo signals for multi-channel audio up-mix. In 2002 IEEE International Con-
+    ference on Acoustics, Speech, and Signal Processing, volume 2, pages II–1957.
+    IEEE, 2002.
+
+[14] Juha Merimaa, Michael M Goodwin, and Jean-Marc Jot. Correlation-based
+    ambience extraction from stereo recordings. In Audio Engineering Society Con-
+    vention 123. Audio Engineering Society, 2007.
+
+[15] Yong-Hyun Baek, Se-Woon Jeon, Seok-pil Lee, and Young-Cheol Park. Efficient
+    primary-ambient decomposition algorithm for audio upmix. Journal of Broadcast
+    Engineering, 17(6):924–932, 2012.
+
+[16] Karim M Ibrahim and Mahmoud Allam. Primary-ambient extraction in audio
+    signals using adaptive weighting and principal component analysis. In Proc.
+    Sound and Music Computing Conference (SMC), pages 227–232, 2016.
+                                                                                  65
+[17] Woosung Choi, Minseok Kim, Jaehwa Chung, and Soonyoung Jung. Lasaft: La-
+    tent source attentive frequency transformation for conditioned source separation.
+    In ICASSP 2021-2021 IEEE International Conference on Acoustics, Speech and
+    Signal Processing (ICASSP), pages 171–175. IEEE, 2021.
+
+[18] Alexandre Défossez, Nicolas Usunier, Léon Bottou, and Francis Bach. Music
+    source separation in the waveform domain. arXiv preprint arXiv:1911.13254,
+    2019.
+
+[19] Alexandre Défossez. Hybrid spectrogram and waveform source separation. arXiv
+    preprint arXiv:2111.03600, 2021.
+
+[20] Romain Hennequin, Anis Khlif, Felix Voituret, and Manuel Moussallam.
+    Spleeter: a fast and efficient music source separation tool with pre-trained mod-
+    els. Journal of Open Source Software, 5(50):2154, 2020.
+
+[21] Minseok Kim, Woosung Choi, Jaehwa Chung, Daewon Lee, and Soonyoung
+    Jung. Kuielab-mdx-net: A two-stream neural network for music demixing. arXiv
+    preprint arXiv:2111.12203, 2021.
+
+[22] Haohe Liu, Qiuqiang Kong, and Jiafeng Liu.        Cws-presunet: Music source
+    separation with channel-wise subband phase-aware resunet.        arXiv preprint
+    arXiv:2112.04685, 2021.
+
+[23] Yi Luo and Nima Mesgarani. Tasnet: time-domain audio separation network for
+    real-time, single-channel speech separation. In 2018 IEEE International Con-
+    ference on Acoustics, Speech and Signal Processing (ICASSP), pages 696–700.
+    IEEE, 2018.
+
+[24] Yi Luo and Nima Mesgarani. Conv-tasnet: Surpassing ideal time–frequency
+    magnitude masking for speech separation. IEEE/ACM transactions on audio,
+    speech, and language processing, 27(8):1256–1266, 2019.
+
+[25] Yi Luo, Zhuo Chen, and Takuya Yoshioka. Dual-path rnn: efficient long sequence
+    modeling for time-domain single-channel speech separation. In ICASSP 2020-
+    2020 IEEE International Conference on Acoustics, Speech and Signal Processing
+    (ICASSP), pages 46–50. IEEE, 2020.
+                                                                                66
+[26] Daniel Stoller, Sebastian Ewert, and Simon Dixon.      Wave-u-net: A multi-
+    scale neural network for end-to-end audio source separation. arXiv preprint
+    arXiv:1806.03185, 2018.
+
+[27] Fabian-Robert Stöter, Stefan Uhlich, Antoine Liutkus, and Yuki Mitsufuji.
+    Open-unmix-a reference implementation for music source separation. Journal
+    of Open Source Software, 4(41):1667, 2019.
+
+[28] Naoya Takahashi and Yuki Mitsufuji. D3net: Densely connected multidilated
+    densenet for music source separation. arXiv preprint arXiv:2010.01733, 2020.
+
+[29] Weinan Tong, Jiaxu Zhu, Jun Chen, Shiyin Kang, Tao Jiang, Yang Li, Zhiyong
+    Wu, and Helen Meng. Scnet: Sparse compression network for music source
+    separation. In ICASSP 2024-2024 IEEE International Conference on Acoustics,
+    Speech and Signal Processing (ICASSP), pages 1276–1280. IEEE, 2024.
+
+[30] Jeonghwan Choi and Joon-Hyuk Chang. Exploiting deep neural networks for
+    two-to-five channel surround decoder. Journal of the Audio Engineering Society,
+    68(12):938–949, 2021.
+
+[31] Su Yeon Park, Chan Jun Chun, and Hong Kook Kim. Subband-based upmix-
+    ing of stereo to 5.1-channel audio signals using deep neural networks. In 2016
+    International Conference on Information and Communication Technology Con-
+    vergence (ICTC), pages 377–380. IEEE, 2016.
+
+[32] Facebook Research.       Demucs.   https://github.com/facebookresearch/
+    demucs, Accessed: 2024.
+
+[33] Erik Visser and Te-Won Lee. Speech enhancement using blind source separa-
+    tion and two-channel energy based speaker detection. In 2003 IEEE Interna-
+    tional Conference on Acoustics, Speech, and Signal Processing, 2003. Proceed-
+    ings.(ICASSP’03)., volume 1, pages I–I. IEEE, 2003.
+
+[34] A Ramı́rez López, Nobutaka Ono, Ulpu Remes, Kalle Palomäki, and Mikko Ku-
+    rimo. Designing multichannel source separation based on single-channel source
+    separation. In 2015 IEEE International Conference on Acoustics, Speech and
+    Signal Processing (ICASSP), pages 469–473. IEEE, 2015.
+                                                                                    67
+[35] Ye Zhang and Yong Fang. A nmf algorithm for blind separation of uncorre-
+    lated signals. In 2007 International Conference on Wavelet Analysis and Pattern
+    Recognition, volume 3, pages 999–1003. IEEE, 2007.
+
+[36] Antoine Liutkus, Jean-Louis Durrieu, Laurent Daudet, and Gaël Richard. An
+    overview of informed audio source separation. In 2013 14th International Work-
+    shop on Image Analysis for Multimedia Interactive Services (WIAMIS), pages
+    1–4. IEEE, 2013.
+
+[37] Haici Yang, Sanna Wager, Spencer Russell, Mike Luo, Minje Kim, and Wontak
+    Kim. Upmixing via style transfer: a variational autoencoder for disentangling
+    spatial images and musical content. In ICASSP 2022-2022 IEEE International
+    Conference on Acoustics, Speech and Signal Processing (ICASSP), pages 426–
+    430. IEEE, 2022.
+
+[38] Niki Parmar, Ashish Vaswani, Jakob Uszkoreit, Lukasz Kaiser, Noam Shazeer,
+    Alexander Ku, and Dustin Tran. Image transformer. In International conference
+    on machine learning, pages 4055–4064. PMLR, 2018.
+
+[39] Cheng-Zhi Anna Huang, Ashish Vaswani, Jakob Uszkoreit, Noam Shazeer, Ian
+    Simon, Curtis Hawthorne, Andrew M Dai, Matthew D Hoffman, Monica Din-
+    culescu, and Douglas Eck. Music transformer. arXiv preprint arXiv:1809.04281,
+    2018.
+
+[40] Zafar Rafii, Antoine Liutkus, Fabian-Robert Stöter, Stylianos Ioannis Mimilakis,
+    and Rachel Bittner. The MUSDB18 corpus for music separation, December 2017.
+
+[41] Zafar Rafii, Antoine Liutkus, Fabian-Robert Stöter, Stylianos Ioannis Mimilakis,
+    and Rachel Bittner. Musdb18-hq - an uncompressed version of musdb18, August
+    2019.
+
+[42] Igor Pereira, Felipe Araújo, Filip Korzeniowski, and Richard Vogl. Moisesdb: A
+    dataset for source separation beyond 4-stems, 2023.
+
+[43] Laure Prétet, Romain Hennequin, Jimena Royo-Letelier, and Andrea Vaglio.
+    Singing voice separation: A study on training data. In ICASSP 2019-2019 ieee
+    international conference on acoustics, speech and signal processing (icassp), pages
+    506–510. IEEE, 2019.
+                                                                                      68
+[44] Christian Uhle and Christian Paul. A supervised learning approach to ambience
+    extraction from mono recordings for blind upmixing. In Proc. Int. Conf. Digital
+    Audio Effects (DAFx). DAFx Helsinki, 2008.
+
+[45] Jürgen Herre, Kristofer Kjörling, Jeroen Breebaart, Christof Faller, Sascha Disch,
+    Heiko Purnhagen, Jeroen Koppens, Johannes Hilpert, Jonas Rödén, Werner
+    Oomen, et al. Mpeg surround-the iso/mpeg standard for efficient and com-
+    patible multichannel audio coding. Journal of the Audio Engineering Society,
+    56(11):932–955, 2008.
+
+[46] NUGEN Audio. Nugen halo upmix. https://nugenaudio.com/haloupmix/,
+    2015. Accessed: 2024.
+
+[47] Andreas Walther and Christof Faller. Direct-ambient decomposition and upmix
+    of surround signals. In 2011 IEEE Workshop on Applications of Signal Processing
+    to Audio and Acoustics (WASPAA), pages 277–280. IEEE, 2011.
+
+[48] Sebastian Kraft and Udo Zölzer. Stereo signal separation and upmixing by mid-
+    side decomposition in the frequency-domain. In 18th International Conference
+    on Digital Audio Effects (DAFx), 2015.
+
+[49] Roy Irwan and Ronald M Aarts. Two-to-five channel sound processing. Journal
+    of the Audio Engineering Society, 50(11):914–926, 2002.
+
+[50] Earl Vickers. Fixing the phantom center: diffusing acoustical crosstalk. In Audio
+    Engineering Society Convention 127. Audio Engineering Society, 2009.
+
+[51] Papers With Code.       Music source separation on musdb18-hq.           https://
+    paperswithcode.com/sota/music-source-separation-on-musdb18-hq, Ac-
+    cessed: 2024.
+
+[52] Nicholas   Tong.       YTAudioScraper.          https://github.com/nick7ong/
+    YTAudioScraper. Accessed: 2025.
+
+[53] Juan Bindez. pytubefix. https://github.com/JuanBindez/pytubefix. Ac-
+    cessed: 2025.
+
+[54] FFmpeg. https://www.ffmpeg.org/. Accessed: 2025.
+
+[55] Alabama Shakes.       Sound & Color.       https://www.youtube.com/watch?v=
+    bBh71Sl1i2Y, 2015. Accessed: 2025.
+                                                                        69
+[56] Laufey & Philharmonia Orchestra. Let you break my heart again. https:
+    //www.youtube.com/watch?v=NLphEFOyoqM, 2021. Accessed: 2025.
+
+[57] Adrianne Lenker.     Snow song.      https://www.youtube.com/watch?v=
+    fs1sRHUQOgc, 2018. Accessed: 2025.
+
+[58] The Dave Brubeck Quartet. Take five. https://www.youtube.com/watch?v=
+    ryA6eHZNnXY, 1959. Accessed: 2025.
+
+[59] Pink Floyd. Money. https://www.youtube.com/watch?v=2aW7HweAf3o, 1973.
+    Accessed: 2025.
+
+[60] Guardians of the Galaxy. Prison break scene. https://www.youtube.com/
+    watch?v=gOLy6JArNYo, 2014. Accessed: 2025.
+
+[61] Weights & Biases. https://wandb.ai/site/. Accessed: 2024.
+                                                                                      70
+APPENDIX
+
+A       Supplementary Materials
+    To support reproducibility and further research, the following resources are made
+publicly available:
+
+
+
+GitHub Repository
+    The source code is available here: https://github.com/nick7ong/UpmixAI-Thesis
+    • Model Architectures: PyTorch implementations of the Mel-RoFormer [9]
+        and MLP [10] architectures.
+
+    • Data Analysis Scripts: Code for computing objective metrics and analyzing
+        subjective listening test data.
+
+    • Raw Evaluation Data: Complete results from objective metric evaluations
+        and subjective listening studies, including participant responses and statistical
+        analyses.
+
+
+
+Hugging Face Repository
+    Pretrained model weights, datasets, and audio examples are hosted on Hugging
+Face:
+    • Model Checkpoints: Trained weights for Systems C and D discussed in Sec-
+        tions 3.2.3. https://huggingface.co/nick7ong/ambience-extractors
+
+    • Training Dataset (PAEDB): The processed training dataset for Primary-
+        Ambience Extraction separation task. https://huggingface.co/datasets/
+        nick7ong/paedb
+
+    • Test Audio Set: A curated collection of output examples, illustrating separa-
+        tion and upmixing performance across various musical genres and acoustic con-
+        ditions. https://huggingface.co/datasets/nick7ong/upmix-5.1-test-set
+    Source code is released under the MIT License. All resources are intended for
+academic use only.
+
