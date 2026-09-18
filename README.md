@@ -138,6 +138,7 @@ Playing state-machine audit below for the exact event and decision tables.
 - [`docs/archive/JAVA_PATCH_STOCK_AUDIT.md`](docs/archive/JAVA_PATCH_STOCK_AUDIT.md) — patched-versus-stock audit (archived; superseded by JAVA_PRODUCTION_CLEANUP_AUDIT.md).
 - [`docs/reference/ALTSCREEN_VC_NAV_STATUSBAR.md`](docs/reference/ALTSCREEN_VC_NAV_STATUSBAR.md) — VC status-bar findings.
 - [`docs/reference/CLUSTER_PRESENT_CADENCE.md`](docs/reference/CLUSTER_PRESENT_CADENCE.md) — cluster swap-interval doctrine: why a nominally 30 fps chain judders, and the QNX/Screen platform traps behind it.
+- [`docs/UPMIX_TRAINING_DATA_AND_MODELS.md`](docs/UPMIX_TRAINING_DATA_AND_MODELS.md) — provenance of the shipped HSSR control models, the datasets (MoisesDB, MUSDB18, AlbumDB, Amvizo, HiRez, private corpus) and the teacher separators used for labelling.
 - [`docs/HANDOFF_SPATIAL_AUDIO.md`](docs/HANDOFF_SPATIAL_AUDIO.md) — CarPlay discrete 5.1 handoff; §10 has the type-103 five-second-teardown root cause.
 - [`docs/AUDIO_5_1_STATE.md`](docs/AUDIO_5_1_STATE.md) — current audio evidence and closed hypotheses.
 - [`docs/AAC_BUFFERED_PATH_PLAN.md`](docs/AAC_BUFFERED_PATH_PLAN.md) — measured index-23 framing/cookie, exact Cinemo ABI and the implemented ordinary-content AAC path.
