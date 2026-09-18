@@ -642,11 +642,19 @@ static void spa_hssr_update_controls(struct spa_hssr_dsp *state)
                     vocal_keep * low_keep * low_keep;
             }
         }
+#ifdef SPA_HSSR_SCENE
+        if (kHssrBandEdgeHz[band + 1] <= 220)
+            target = 0.0f;
+        else if (kHssrBandEdgeHz[band] < 350)
+            target *= ((float)kHssrBandEdgeHz[band + 1] - 220.0f) /
+                      (350.0f - 220.0f);
+#else
         if (kHssrBandEdgeHz[band + 1] <= 125)
             target = 0.0f;
         else if (kHssrBandEdgeHz[band] < 220)
             target *= ((float)kHssrBandEdgeHz[band + 1] - 125.0f) /
                       (220.0f - 125.0f);
+#endif
         if (kHssrBandEdgeHz[band] >= 20000)
             target *= 0.25f;
         else if (kHssrBandEdgeHz[band] >= 15000)
@@ -759,7 +767,13 @@ static void spa_hssr_update_object_slots(
         if (state->band_focus_rescue[band] > semantic)
             semantic = state->band_focus_rescue[band];
 
+#ifdef SPA_HSSR_SCENE
+        /* Synth bass reads as keys and rides pan/coherence into the rear
+         * (Scars: 34 % of rear energy).  No object below 220 Hz behind. */
+        if (kHssrBandEdgeHz[band + 1] <= 220) continue;
+#else
         if (kHssrBandEdgeHz[band + 1] <= 125) continue;
+#endif
         for (slot_index = 0; slot_index < SPA_HSSR_OBJECT_SLOTS;
              ++slot_index) {
             float directed_pan = (slot_index & 1u) == 0u ? pan : -pan;
