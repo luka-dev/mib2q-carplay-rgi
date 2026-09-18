@@ -36,11 +36,13 @@ World», Fröst «Scars On The Lining») и один приватный трек
 | Demucs v4 `htdemucs_6s` | `5c90dfd2-34c22ccb.th` + `htdemucs_6s.yaml` | Meta AI (MIT); веса через зеркало UVR github.com/TRvlvr/model_repo, оригинал dl.fbaipublicfiles.com/demucs | 6 стемов: vocals, drums, bass, guitar, piano, other |
 | BS-RoFormer | `model_bs_roformer_ep_317_sdr_12.9755.ckpt` | viperx; каталог ZFTurbo Music-Source-Separation-Training / UVR | вокал (заменяет vocals от Demucs) |
 | Mel-Band RoFormer karaoke | `mel_band_roformer_karaoke_aufr33_viperx_sdr_10.1956.ckpt` | aufr33 + viperx; huggingface.co/jarredou/aufr33-viperx-karaoke-melroformer-model | лид против бэков на вокальном стеме |
-| MDX23C DrumSep | `MDX23C-DrumSep-aufr33-jarredou` | aufr33 / jarredou (GitHub releases) | только в ревью учителей V14: kick/snare/toms/hh/ride/crash |
-| MIT AST AudioSet + CLAP | `MIT/ast-finetuned-audioset-10-10-0.4593` | HuggingFace | только аудит содержимого стемов, не разметка |
+| MDX23C DrumSep | `MDX23C-DrumSep-aufr33-jarredou.ckpt` | aufr33 / jarredou, github.com/jarredou/models releases (`aufr33-jarredou_MDX23C_DrumSep_model_v0.1`) | только в ревью учителей V14 (`prepare_specialist_teacher_audit.py`): kick/snare/toms/hh/ride/crash из барабанов Demucs |
+| MIT AST AudioSet | `MIT/ast-finetuned-audioset-10-10-0.4593` (revision `f826b80d…`) | HuggingFace | только аудит содержимого стемов (`audit_teacher_audio_content.py`), не разметка |
+| LAION CLAP | `laion/clap-htsat-unfused` (revision `8fa0f1c6…`) | HuggingFace | тот же аудит: косинусная близость текст–аудио, не калибрована |
 
-Запуск учителей: пакет `audio-separator`, venv py3.12 + torch 2.14 на Mac (MPS); веса в `~/.cache/upmix-teachers/`.
-Скрипт: `tools/stereo-upmix-render/q4_teachers.py`.
+Запуск учителей: пакет `audio-separator` (UVR-совместимый каталог `download_checks.json`), venv py3.12 + torch 2.14 на Mac (MPS); веса в `~/.cache/upmix-teachers/` — там сейчас ровно четыре файла моделей: Demucs (`5c90dfd2-34c22ccb.th` + yaml), BS-RoFormer (ckpt + yaml), Mel-RoFormer karaoke (ckpt + yaml). AST/CLAP тянутся `transformers` из HuggingFace по пиннутым ревизиям.
+Скрипты: `q4_teachers.py` (Q4/Q5/Q6), `prepare_hssr_roformer_teacher.py` и `prepare_hssr_native_teacher.py` (BS-RoFormer для V11), `prepare_hssr_separator_supervision.py` (Demucs → супервизия V11), `prepare_specialist_teacher_audit.py` (DrumSep, ревью V14).
+Ни один из учителей не запускался на MUSDB/MoisesDB для обучения q6d: там целями служат настоящие стемы датасета.
 
 ## 4. Что рассматривалось, но не использовалось
 
