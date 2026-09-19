@@ -245,8 +245,8 @@ does not change. `zoomFactor` in the display description is the static version o
 **State in our hook (`hook/altscreen/altscreen_hook.c`):** `viewAreas` + `updateViewArea` are
 already implemented, but only for zone switching (fullscreen / sportscreen / classicscreen). All
 three declared view areas keep the full 1440×542 visible frame and differ only in the nested
-`safeArea` (fullscreen (270,90) 900×362; sportscreen (90,135) 360×317; classicscreen (540,135)
-360×317); display physical size 292×110 mm. The comment at line ~258 records that a view area
+`safeArea` (fullscreen (270,90) 900×290; sportscreen (90,135) 360×245; classicscreen (540,135)
+360×245 — bottom edge y=380, above the VC's own map bar); display physical size 292×110 mm. The comment at line ~258 records that a view area
 whose visible frame was reduced to the safe region got the 111 stream rejected at activation, so
 zoom-by-view-area needs that rejection understood first (candidates: CarKit
 `CRDisplayScaleInfo.minAcceptableViewAreaSize*` / `isViewAreaPixelSizeAcceptable`, or the initial

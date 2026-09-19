@@ -262,24 +262,30 @@ static int set_i64(void *d, const char *key, int64_t val)
  * physical non-rectangular masks cannot be represented exactly; keep critical
  * UI in the nested safe frame:
  *
- *   fullscreen rectangular safeArea: complete cells D2 through M5
- *              = x 270..1170, y 90..452 = (270,90) 900x362
- *   sportscreen rectangular safeArea (compact Sport layout): B2.5 through E5
- *              = x 90..450, y 135..452 = (90,135) 360x317
+ *   fullscreen rectangular safeArea: cells D2 through M5, cut at y=380
+ *              = x 270..1170, y 90..380 = (270,90) 900x290
+ *   sportscreen rectangular safeArea (compact Sport layout): B2.5 through E5, cut at y=380
+ *              = x 90..450, y 135..380 = (90,135) 360x245
  *   classicscreen uses the same compact dimensions, centered horizontally
- *              = x 540..900, y 135..452 = (540,135) 360x317
+ *              = x 540..900, y 135..380 = (540,135) 360x245
+ *
+ * Bottom edge: the VC draws its own translucent map bar ("10ft ... 100ft N" in
+ * fullscreen, "offroad" in the small stage) from about y=390 down over row 5
+ * and hides row 6 behind the clock/temperature bar.  Maps anchors its bottom
+ * text to the safeArea edge, so with the old y=452 edge that text sat in the
+ * lower half of H5 under the bar (calibration-grid photos, 2026-09-19).
  *
  * The background may render under a physical mask; route focus and critical UI
  * stay inside these nested safe rectangles. */
 #define FULL_SAFE_X     270
 #define FULL_SAFE_Y      90
 #define FULL_SAFE_W     900
-#define FULL_SAFE_H     362
+#define FULL_SAFE_H     290
 
 #define SMALLSCREEN_SAFE_X       90
 #define SMALLSCREEN_SAFE_Y      135
 #define SMALLSCREEN_SAFE_W      360
-#define SMALLSCREEN_SAFE_H      317
+#define SMALLSCREEN_SAFE_H      245
 #define CLASSICSCREEN_SAFE_X    540
 
 /* one rect dict, iOS keys: {originXPixels, originYPixels, widthPixels, heightPixels}
