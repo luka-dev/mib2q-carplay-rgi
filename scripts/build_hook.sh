@@ -251,12 +251,34 @@ echo "Compiled: $APAC_OUT"
 ls -lh "$APAC_OUT"
 
 if [ "$PROT_BUILD" = "1" ]; then
-  echo "=== Stamping both .so for VIN $PROT_VIN (blind, sentinel gate) ==="
+  DEST="$PROJECT_DIR/build/protected_$PROT_VIN"
+  echo "=== Assembling protected build in build/protected_$PROT_VIN/ ==="
+  rm -rf "$DEST"; mkdir -p "$DEST"
+  # Full deployable set (mirrors scripts/package_mib.py). Copy what build/ has;
+  # jar/renderers/models come from build_java.sh / build_renderers.sh - run those
+  # first for a complete package. The two .so are stamped IN this folder, so the
+  # generic build/*.so stay unstamped (inert everywhere).
+  SET="libcarplay_hook.so libcarplay_apac.so maneuver_render altscreen_render \
+       carplay_hook.jar hssr_model.bin hssr_guard.bin flag_atlas.rgba \
+       carplay_startup.sh carplay_monitor.sh carplay_processes.sh carplay_cleanup.sh \
+       carplay_child.json carplay_pf.patch deva-ctrl-qc.so"
+  miss=""
+  for f in $SET; do
+    if [ -f "$PROJECT_DIR/build/$f" ]; then cp -p "$PROJECT_DIR/build/$f" "$DEST/"
+    else miss="$miss $f"; fi
+  done
+  [ -n "$miss" ] && echo "  note: not in build/ (build separately):$miss"
+
+  echo "=== Stamping the two .so in the protected folder for VIN $PROT_VIN ==="
   printf '\x5a' > /tmp/prot_consts.bin
-  PROT_SECRET="$PROT_SECRET" python3 "$PROJECT_DIR/protector/protect.py" "$OUT" \
-      --vin "$PROT_VIN" --mode blind --payload-file /tmp/prot_consts.bin
-  PROT_SECRET="$PROT_SECRET" python3 "$PROJECT_DIR/protector/protect.py" "$APAC_OUT" \
-      --vin "$PROT_VIN" --mode blind --payload-file /tmp/prot_consts.bin
+  for so in libcarplay_hook.so libcarplay_apac.so; do
+    PROT_SECRET="$PROT_SECRET" python3 "$PROJECT_DIR/protector/protect.py" "$DEST/$so" \
+        --vin "$PROT_VIN" --mode blind --payload-file /tmp/prot_consts.bin
+  done
   rm -f /tmp/prot_consts.bin
-  echo "Protected: both .so run ACTIVE only on VIN $PROT_VIN; other cars -> stock."
+  { echo "VIN=$PROT_VIN"; echo "built=$(date -u +%Y-%m-%dT%H:%M:%SZ)"; \
+    echo "stamped=libcarplay_hook.so libcarplay_apac.so (blind sentinel gate)"; \
+    echo "note=other cars -> hook inert (stock CarPlay), apac fail-closed"; } > "$DEST/PROTECTED.txt"
+  ( cd "$DEST" && ls -1 | sed 's/^/  /' )
+  echo "Protected build ready: build/protected_$PROT_VIN/  (ACTIVE only on $PROT_VIN)"
 fi
