@@ -1,0 +1,7 @@
+# build artifacts
+app
+app_*
+app_live
+app_live2
+*.o
+consts.bin
