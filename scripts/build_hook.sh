@@ -291,9 +291,10 @@ if [ "$PROT_BUILD" = "1" ]; then
   done
   rm -f /tmp/prot_consts.bin
   find "$ROOTFS" -name .DS_Store -delete 2>/dev/null || true   # never ship macOS cruft
+  # PROTECTED.txt ships in the folder - keep it neutral, never describe the
+  # protection mechanism (which files are stamped / how the gate works).
   { echo "VIN=$PROT_VIN"; echo "built=$(date -u +%Y-%m-%dT%H:%M:%SZ)"; \
-    echo "stamped=libcarplay_hook.so libcarplay_apac.so (blind sentinel gate)"; \
-    echo "install=run mod/custom.sh (lays carplay/root/ onto /); other cars -> hook inert, apac fail-closed"; } > "$MOD/PROTECTED.txt"
+    echo "install=run mod/custom.sh"; } > "$MOD/PROTECTED.txt"
   echo "Protected rootfs ready under mod/carplay/root/ :"
   ( cd "$ROOTFS" && find . -type f ! -name .DS_Store | sed 's|^\./|  /|' )
   echo "Install on the unit: mod/custom.sh install   (ACTIVE only on $PROT_VIN)"
