@@ -303,3 +303,33 @@ voice feedback, and normal music resume after hangup. A simulated permanently
 stuck writer should yield `BUFFERED_STOP_TIMEOUT quarantined=1`, with no new
 generation until the previous worker truly exits. Native QSA polling cadence
 and underrun recovery remain **vehicle-validation pending**.
+
+## Stock write contract: never return a negative (dio_manager core, 2026-09-19)
+
+`/mnt/ota/system/core/dio_manager.core.gz` from the first CarPlay generation after boot
+(uptime 00:01:44): thread 54 = stock `CAudioOutputThread::thread` (libairplay 210.81
+`+0x4bcb0`) for main audio type 100, SIGSEGV in libc `memset` with `r4 = 0xffffffd1`
+(= -47 = QNX `ECANCELED`). Decompiled chain:
+
+1. `CQNXSoundIF::write` (`+0x484c8` / `+0x471bc`) calls `snd_pcm_plugin_write` and, when
+   the result is below the request, runs status → prepare → second write and returns
+   `write2 + max(write1, 0)`; a negative errno from either write is returned **unchanged**.
+2. `CAudioOutputThread::thread` treats that result as an unsigned byte count:
+   `memcpy(buf, buf + result, v6 - result)` and the next read callback is asked for
+   `v6 - (v6 - result) = result` bytes.
+3. `AirPlayReceiverSessionReadAudio` → `RTPJitterBufferRead(jb, buf + v6 + 47, -47)` →
+   `memset(dst, 0, 0xffffffd1)` runs until the next unmapped page.
+
+libasound itself never returns a negative from `snd_pcm_plugin_write` except `-EINVAL`
+(block-mode size mismatch); native failures surface as `0` with `errno`. Our bridge
+returned `-ECANCELED` when `spa_qsa_cancelled()` was true with nothing written yet
+(type-100 started 0.8 s after the type-103 detached handle was released), and `-EBUSY` /
+`-EIO` / `-EINVAL` / `-ENOMEM` on the other early exits.
+
+Fix: `spa_stock_write_result()` in `audio_hook.c`. Every bridge-path failure is a stock-
+native short write (`0`, stock does status → prepare → rewrite); a deliberately cancelled
+fragment reports itself fully consumed (`size`, errno `ECANCELED`) so the stock timeline
+keeps pacing instead of spinning on its 30 ms select. `tests/audio_interposer_test.c`
+pins both. Core-file recipe (QNX notes `QNT_CORE_STATUS`=8 / `GREG`=9 / `LINK_MAP`=11,
+8-word link-map records) lives in the session scratch `qnxcore.py` and in memory
+`stock_qsa_write_negative_return_crash`.

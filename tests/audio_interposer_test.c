@@ -86,7 +86,7 @@ static int native_params(snd_pcm_t *handle, snd_pcm_channel_params_t *params)
     ++params_calls;
     if (probe_during_params) {
         int writes = native_writes;
-        assert(snd_pcm_plugin_write(handle, source_pcm, sizeof(source_pcm)) == -EBUSY);
+        assert(snd_pcm_plugin_write(handle, source_pcm, sizeof(source_pcm)) == 0); /* EBUSY as stock short write */
         assert(native_writes == writes);
     }
     if (params_failures) { --params_failures; return -EIO; }
@@ -172,7 +172,7 @@ static void qsa_transactions(void)
     snd_pcm_channel_setup_t setup;
     int calls;
     spa_pcm_sink.handle = &media_device;
-    assert(snd_pcm_plugin_write(&media_device, source_pcm, sizeof(source_pcm)) == -EIO);
+    assert(snd_pcm_plugin_write(&media_device, source_pcm, sizeof(source_pcm)) == 0); /* EIO as stock short write */
     allocation_fail = 1;
     assert(snd_pcm_plugin_params(&media_device, &p) == -ENOMEM);
     assert(params_calls == 0 && spa_pcm_sink.paramsState == SPA_PCM_PARAMS_FAILED);
@@ -188,7 +188,7 @@ static void qsa_transactions(void)
     params_failures = 2; p = stereo_params(); calls = native_writes;
     assert(snd_pcm_plugin_params(&media_device, &p) == -EIO);
     assert(device_setup.format.voices == 6); /* both failures leave old device geometry */
-    assert(snd_pcm_plugin_write(&media_device, source_pcm, sizeof(source_pcm)) == -EIO);
+    assert(snd_pcm_plugin_write(&media_device, source_pcm, sizeof(source_pcm)) == 0); /* EIO as stock short write */
     assert(native_writes == calls);
     spa_pcm_sink.detached = 1;
     {
@@ -209,10 +209,10 @@ static void qsa_transactions(void)
     assert(snd_pcm_plugin_write(&media_device, source_pcm, sizeof(source_pcm)) == sizeof(source_pcm));
     readback_bad = 1; p = stereo_params();
     assert(snd_pcm_plugin_params(&media_device, &p) == -EIO);
-    assert(snd_pcm_plugin_write(&media_device, source_pcm, sizeof(source_pcm)) == -EIO);
+    assert(snd_pcm_plugin_write(&media_device, source_pcm, sizeof(source_pcm)) == 0); /* EIO as stock short write */
     readback_bad = 0; nonblock_fail = 1; p = stereo_params();
     assert(snd_pcm_plugin_params(&media_device, &p) == -EIO);
-    assert(snd_pcm_plugin_write(&media_device, source_pcm, sizeof(source_pcm)) == -EIO);
+    assert(snd_pcm_plugin_write(&media_device, source_pcm, sizeof(source_pcm)) == 0); /* EIO as stock short write */
     nonblock_fail = 0;
     calls = params_calls;
     spa_pcm_sink.reclaimStage = SPA_PCM_RECLAIM_OPEN;
@@ -220,7 +220,7 @@ static void qsa_transactions(void)
     assert(params_calls > calls); /* failed state cannot skip fresh params via reclaim */
     readback_bad = 1; memset(&setup, 0, sizeof(setup));
     assert(snd_pcm_plugin_setup(&media_device, &setup) != 0);
-    assert(snd_pcm_plugin_write(&media_device, source_pcm, sizeof(source_pcm)) == -EIO);
+    assert(snd_pcm_plugin_write(&media_device, source_pcm, sizeof(source_pcm)) == 0); /* EIO as stock short write */
     readback_bad = 0; configure_ok();
     memset(&setup, 0, sizeof(setup));
     assert(snd_pcm_plugin_setup(&media_device, &setup) == 0);
@@ -229,6 +229,13 @@ static void qsa_transactions(void)
     assert(snd_pcm_plugin_write(&media_device, source_pcm, sizeof(source_pcm)) == 8);
     assert(errno == ECANCELED); /* two accepted PCM6 frames -> two stereo frames */
     cancelled_write = 0; spa_pcm_sink.transport.stopping = 0;
+    /* dio_manager core 2026-09-19: stock CAudioOutputThread fed our -ECANCELED back as a
+     * byte count and memset(-47) faulted.  A fully cancelled fragment reports itself consumed;
+     * no native write may happen and the caller must never see a negative. */
+    spa_pcm_sink.transport.stopping = 1; errno = 0; calls = native_writes;
+    assert(snd_pcm_plugin_write(&media_device, source_pcm, sizeof(source_pcm)) == (ssize_t)sizeof(source_pcm));
+    assert(errno == ECANCELED && native_writes == calls);
+    spa_pcm_sink.transport.stopping = 0;
     short_error = 1;
     assert(snd_pcm_plugin_write(&media_device, source_pcm, sizeof(source_pcm)) == 8);
     assert(errno == EIO);

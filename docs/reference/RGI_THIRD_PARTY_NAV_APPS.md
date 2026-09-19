@@ -169,3 +169,85 @@ navigating — without it nothing else matters, because the phone reports
 Both would also want `junctionType` + `junctionExitAngle` for roundabouts, `trafficSide`,
 `linkedLaneGuidance` instead of a rendered lane strip, and
 `CPNavigationSession.maneuverState` / `currentRoadNameVariants`.
+
+## Waze altScreen: steering-wheel zoom is dropped inside Waze
+
+Waze 5.24.0.1, decrypted IPA, arm64 (IDA). This is the *video* cluster (our altScreen /
+type-111 stream), separate from the BAP route guidance above.
+
+Waze does ship the cluster scene: `Info.plist` maps
+`CPTemplateApplicationInstrumentClusterSceneSessionRoleApplication` to
+`Waze.CarPlayClusterSceneDelegate` and sets `CPSupportsInstrumentClusterNavigationScene = true`.
+`…didConnectInstrumentClusterController:` (`0x100355b48` → `0x10035592c`) publishes
+`.connected(scene, controller)`; `CarPlayInstrumentClusterDisplayManager` consumes it
+(`0x1009aec50`): reads `contentStyle`, takes `instrumentClusterWindow`, `setDelegate:self`. The
+manager is only created in `registerClusterScene` (`0x1009afe10`) when config item **1006**
+("Instrument cluster enabled", compiled default `"1"`, server-overridable) is true — otherwise it
+logs `cluster - not registering delegate, CARPLAY_INSTRUMENT_CLUSTER_ENABLED is false`.
+
+The delegate implements `instrumentClusterControllerDidZoomIn:` (`0x1009ade98`) and
+`…DidZoomOut:` (`0x1009adf68`). Each (`0x1009addfc` / `0x1009adea4`) sends a stat
+(`clusterZoomIn` / `clusterZoomOut`, `cluster_zoom_in_stat.proto`) and then
+`controlEventSubject.send(.zoom(.in|.out))`. Enum layout: `.zoom(.in)` = `{0,0}`,
+`.zoom(.out)` = `{1,0}`, `.configurationChanged(cfg)` has bit 63 of word 0 set.
+
+`events` (`0x1009ae3a0`) = `configurationStateSubject.map{.configurationChanged}
+.merge(with: controlEventSubject)`, protocol witness slot +24. Its **only** subscriber is
+`CarPlayInstrumentClusterRootCoordinator`: the windowEvents sink (`0x1009b8f88`) calls
+`startCoordinator` (`0x1009b58b8`), which does
+`events.compactMap { word0 < 0 ? word1 : nil }` (`0x1009b5e9c`) — i.e. keeps only the
+`UIUserInterfaceStyle` out of `.configurationChanged` and maps `.zoom` to `nil`. Nothing else
+in the module (all 13 `sink` calls in `0x1009ad000–0x1009bc000` enumerated: config, state,
+window, skin, map state, presentation, rendering state, safe area, style) touches it.
+
+`CarPlayInstrumentClusterMapPresentable` (`0x1009b25b8`) builds one `WazeMapCamera` with
+`mapBoundsStrategy = .trackUserLocation(cameraZoomBehavior: .static(0.000125))` — a hard-coded
+1:8000 scale (float `0x3903126f`; the enum also has `.dynamic` = Waze speed auto-zoom and
+`.manual`, neither used here) plus north lock / centre offset, and only re-issues `WazeMapState`
+on skin change (`0x1009b2bd8`). Compass and speed-limit settings from the HU are dropped by the
+same `compactMap`. The camera's `zoomSubject` is fed solely by `-[WazeMapCamera zoomInAnimated:]` /
+`zoomOutWithAnimated:` (main-screen map controls), never from the cluster module.
+
+So our `changeMapZoomLevel {uuid: cluster, zoomDirection}` (`zoom_on_cmd`,
+`hook/altscreen/altscreen_hook.c`) reaches Waze, is counted as a stat, and is discarded. Apple
+Maps and Google Maps act on the same callback, which is why they zoom. Not fixable from the
+head unit. If the Waze cluster map does not appear at all, that is the server side of flag 1006.
+
+### The other lever: `updateViewArea` (iOS 27 AirPlaySender / CarKit RE)
+
+The phone accepts exactly these HU→phone commands in `carEndpoint_processEventCreatingResponse`
+(AirPlaySender, iOS 27 24A5418b): `forceKeyFrame, hidSendReport, changeModes, iAPSendMessage,
+requestSiri, requestUI, updateViewArea, setLimitedUI, setNightMode, setVideoPlaybackAllowed,
+videoPlayerBackButtonEvent, updateVehicleInformation`; anything else (incl. `changeMapZoomLevel`)
+is "Unhandled command … forwarding to clients" → CarKit/DashBoard → the app's delegate.
+
+`updateViewArea` (`carEndpoint_updateViewArea` 0x2510891fc) is the only command that changes
+what an app draws **without the app's cooperation**: params `uuid` (display), `viewAreaIndex`,
+`adjacentViewAreas`, `animationDurationMillis`. `carEndpoint_validateViewAreaParams` looks the
+`uuid` up in the whole `/info` `displays[]` array (no main-display restriction) and only checks
+`viewAreaIndex < viewAreas.count`. Gate: the setup-response feature list must contain
+`"viewAreas"` (flag byte endpoint+0x45, same family as `altScreen` = +0x3f), and the display
+entry must carry `viewAreas` (array of `{originXPixels, originYPixels, widthPixels, heightPixels,
+safeArea?, viewAreaTransitionControl?, viewAreaSupportsFocusTransfer?, viewAreaStatusBarEdge?}`),
+`initialViewArea` and `adjacentViewAreas`. On success the phone posts
+`kFigEndpointNotification_ViewAreaChanged` → CarKit `-[CARSession
+_sessionUpdatesQueue_handleViewAreaChangeWithPayload:]` → per-screen `CARScreenInfo.currentViewArea`
+(`CARScreenInfo` is built per display with `screenType`, so the altScreen screen carries its own
+`viewAreas`) → SpringBoard re-frames the scenes on that display.
+
+For Waze that means: the cluster window shrinks/grows, the map stays at 1:8000 per point, so the
+visible extent changes; the HU crops the active view area out of the (unchanged) 111 stream and
+scales it to the panel = zoom steps. Scale trap: `CRScreenScaleHeuristics
+getPrimaryDisplayScale:viewAreas:` derives the point scale from pixel/physical size, so a display
+declared with more pixels needs proportionally more physical mm or iOS goes @2x and the extent
+does not change. `zoomFactor` in the display description is the static version of the same lever.
+
+**State in our hook (`hook/altscreen/altscreen_hook.c`):** `viewAreas` + `updateViewArea` are
+already implemented, but only for zone switching (fullscreen / sportscreen / classicscreen). All
+three declared view areas keep the full 1440×542 visible frame and differ only in the nested
+`safeArea` (fullscreen (270,90) 900×362; sportscreen (90,135) 360×317; classicscreen (540,135)
+360×317); display physical size 292×110 mm. The comment at line ~258 records that a view area
+whose visible frame was reduced to the safe region got the 111 stream rejected at activation, so
+zoom-by-view-area needs that rejection understood first (candidates: CarKit
+`CRDisplayScaleInfo.minAcceptableViewAreaSize*` / `isViewAreaPixelSizeAcceptable`, or the initial
+view area having to equal the display).

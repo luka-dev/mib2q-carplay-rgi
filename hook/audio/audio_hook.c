@@ -3779,6 +3779,23 @@ size_t spa_buffered_pcm6_read(int16_t *out, size_t frames)
  * head unit; below it the CSD session cycles instead of absorbing jitter. */
 #define SPA_PCM_SINK_MIN_FRAGS     8
 
+/* The stock consumer cannot take a negative result.  CQNXSoundIF::write
+ * (libairplay 210.81 0x471bc/0x484c8) returns our value unchanged and
+ * CAudioOutputThread::thread (0x4bcb0) treats it as an unsigned byte count:
+ * it memcpy's the "unwritten tail" and asks the jitter buffer for
+ * (v6 - (v6 - result)) = result bytes next.  A -ECANCELED became a -47-byte
+ * RTPJitterBufferRead -> memset(0xffffffd1) -> SIGSEGV (dio_manager core,
+ * 2026-09-19, main audio type 100 right after a type-103 release).  Stock
+ * already handles 0 (status + prepare + rewrite), so every failure is a short
+ * write; a deliberately cancelled fragment is reported fully consumed so the
+ * stock timeline keeps pacing instead of spinning on the 30 ms select. */
+static ssize_t spa_stock_write_result(ssize_t rc, size_t size, int error)
+{
+    if (rc >= 0) return rc;
+    errno = error;
+    return error == ECANCELED ? (ssize_t)size : 0;
+}
+
 typedef int (*spa_snd_open_name_t)(snd_pcm_t **, char *, int);
 typedef int (*spa_snd_params_t)(snd_pcm_t *, snd_pcm_channel_params_t *);
 typedef int (*spa_snd_setup_t)(snd_pcm_t *, snd_pcm_channel_setup_t *);
@@ -3926,6 +3943,12 @@ static int spa_stock_main_audio_begin(const void *stream, int32_t audioType,
     STATE_TRACE("AUDIO_ROUTE", "action=stock_begin phase=%s stream=%p audio_type=%d tracked=%d",
                 phase, stream, (int)audioType, added);
     pthread_mutex_unlock(&spa_pcm_sink.routeLock);
+    /* WARN on purpose: the unit log keeps WARN, and this one line is what
+     * decides which route branch a later type-100 write ran into (media vs
+     * telephony/Siri owning the route).  2026-09-19 core had to be inferred. */
+    if (added == 1)
+        LOG_WARN(LOG_MODULE, "audio route: stock main stream=%p phase=%s audio_type=%d",
+                 stream, phase, (int)audioType);
     if (added < 0)
         LOG_ERROR(LOG_MODULE, "audio route: main stream tracking full; hook claims disabled");
     (void)audioType;
@@ -6025,7 +6048,7 @@ HOOK_EXPORT ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, 
     if (useBridge && spa_pcm_sink.paramsState != SPA_PCM_PARAMS_READY)
         writeError = spa_pcm_sink.paramsState == SPA_PCM_PARAMS_CONFIGURING ? EBUSY : EIO;
     pthread_mutex_unlock(&spa_pcm_sink.lock);
-    if (writeError) { errno = writeError; return -writeError; }
+    if (writeError) return spa_stock_write_result(-writeError, size, writeError);
     if (!useBridge) return real(handle, buffer, size);
 
     spa_pcm_io_lock();
@@ -6033,8 +6056,7 @@ HOOK_EXPORT ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, 
     if (handle != spa_pcm_sink.handle || spa_pcm_sink.paramsState != SPA_PCM_PARAMS_READY) {
         pthread_mutex_unlock(&spa_pcm_sink.lock);
         spa_pcm_io_unlock();
-        errno = EIO;
-        return -EIO;
+        return spa_stock_write_result(-EIO, size, EIO);
     }
     useBridge = handle && handle == spa_pcm_sink.handle && spa_pcm_sink.expandedParams;
     sourceChannels = spa_pcm_sink.sourceChannels;
@@ -6057,8 +6079,7 @@ HOOK_EXPORT ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, 
                                           SPA_PCM_SINK_MAX_WRITE, &outputBytes)) {
         pthread_mutex_unlock(&spa_pcm_sink.lock);
         spa_pcm_io_unlock();
-        errno = EINVAL;
-        return -EINVAL;
+        return spa_stock_write_result(-EINVAL, size, EINVAL);
     }
     sourceFrameBytes = sourceChannels * sizeof(int16_t);
     outputFrameBytes = outputChannels * sizeof(int16_t);
@@ -6073,8 +6094,7 @@ HOOK_EXPORT ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, 
     if (!spa_pcm_sink.scratch || spa_pcm_sink.scratchBytes < outputBytes) {
         pthread_mutex_unlock(&spa_pcm_sink.lock);
         spa_pcm_io_unlock();
-        errno = ENOMEM;
-        return -ENOMEM;
+        return spa_stock_write_result(-ENOMEM, size, ENOMEM);
     }
 
     /* FLUSHBUFFERED may have stopped this shared handle while stock still owns
@@ -6098,7 +6118,7 @@ HOOK_EXPORT ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, 
             LOG_ERROR(LOG_MODULE,
                       "audio sink: stock timeline prepare failed handle=%p result=%d",
                       handle, prepareResult);
-            return -1;
+            return spa_stock_write_result(-EIO, size, EIO);
         }
         spa_pcm_sink.detachedNeedsPrepare = 0;
         STATE_TRACE("QSA_TIMELINE_PREPARE",
@@ -6308,7 +6328,9 @@ HOOK_EXPORT ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, 
 #endif
 
     errno = writeError;
-    if (written < 0) return written;
+    if (written < 0)
+        return spa_stock_write_result(written, size,
+                                      writeError ? writeError : (int)-written);
     if ((size_t)written >= outputBytes) return (ssize_t)size;
     return (ssize_t)(((size_t)written / outputFrameBytes) * sourceFrameBytes);
 }
