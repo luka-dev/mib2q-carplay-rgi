@@ -41,8 +41,14 @@ install)
         if [ -e "$dest" ] && [ ! -e "$dest.carplay-stock" ]; then
             cp -p "$dest" "$dest.carplay-stock" || { echo "FAILED backup $dest"; exit 1; }
         fi
-        cp -p "$f" "$dest" || { echo "FAILED copy $dest"; exit 1; }
-        chmod "$(mode_for "$dest")" "$dest"
+        # atomic replace: stage a sibling on the SAME fs, then rename over $dest.
+        # rename() is atomic, so a running smartphone_integrator / deva-ctrl-qc.so
+        # / .so is never seen half-written, and a crash mid-copy leaves the old
+        # file intact. A plain cp over $dest would not be atomic.
+        tmp=$dest.carplay-new.$$
+        cp -p "$f" "$tmp" || { echo "FAILED copy $tmp"; exit 1; }
+        chmod "$(mode_for "$dest")" "$tmp"
+        mv -f "$tmp" "$dest" || { rm -f "$tmp"; echo "FAILED activate $dest"; exit 1; }
         echo "  $dest"
     done
     rm -f /mnt/app/root/hooks/cursor_render /mnt/app/root/hooks/cursor_render.so   # retired
