@@ -282,10 +282,15 @@ static int set_i64(void *d, const char *key, int64_t val)
 #define FULL_SAFE_W     900
 #define FULL_SAFE_H     290
 
+/* Zone safe areas end at y=390 like fullscreen, but stay 300 px tall: CarPlaySupport's
+ * CPSInstrumentClusterCardLayout treats a safe area narrower than ~498 px (660 px at its
+ * 0.153 mm reference pitch, our pitch 292/1440 mm) as "narrow" and then needs
+ * 0.3*height > ~87 px for the centred card layout; below that it logs "Undefined layout
+ * (0), will not show cluster content" and hides ETA and turn card for third-party apps. */
 #define SMALLSCREEN_SAFE_X       90
-#define SMALLSCREEN_SAFE_Y      135
+#define SMALLSCREEN_SAFE_Y       90
 #define SMALLSCREEN_SAFE_W      360
-#define SMALLSCREEN_SAFE_H      245
+#define SMALLSCREEN_SAFE_H      300
 #define CLASSICSCREEN_SAFE_X    540
 
 /* one rect dict, iOS keys: {originXPixels, originYPixels, widthPixels, heightPixels}
@@ -2528,22 +2533,30 @@ static void alt_kick_viewarea(uint32_t gen)
              alt_zone_name(mode), rc);
 }
 
-/* iOS 26.6 Maps registers this exact URL for its map-based instrument-cluster UI.
- * The normal protocol is Maps -> suggestUI{urls:[...]} -> HU chooses one ->
- * showUI{uuid,url}.  Stock 210 has no altScreen policy layer to make that choice,
- * so choose the Maps URL ourselves: when the 111 stream first becomes decodable,
- * after every accepted view-area switch, and on every RGI edge from Java.
- *
- * The URL follows the confirmed RGI presentation (CMD_ALT_RGI):
- *   RGI off -> Maps draws its own turn card (maneuverLayout) and ETA overlay, so
- *              the cluster still shows guidance while our BAP/KDK path is idle;
- *   RGI on  -> both Maps overlays off; maneuvers and ETA come from BAP/KDK and
- *              would otherwise be drawn twice.
- * Omitting maneuverLayout disables the Maps turn card; ETA is independent and is
- * therefore explicitly disabled.  Same URL for every zone: the overlays do not
- * depend on the safeArea. */
-#define ALT_CLUSTER_URL_RGI_OFF "maps:/car/instrumentcluster/map?maneuverLayout=rightAligned&showETA=yes"
-#define ALT_CLUSTER_URL_RGI_ON  "maps:/car/instrumentcluster/map?showETA=no"
+/* Cluster scene URL (DashBoard -[DBInstrumentClusterURLHandler applySettingsForClusterURL:
+ * toSceneSettings:], iOS 26.6 23G71; same keys in iOS 27 24A5418b):
+ *   path  maps:/car/instrumentcluster                 -> itemType 3 (map + system cards)
+ *         maps:/car/instrumentcluster/map             -> itemType 1 (map only)
+ *         maps:/car/instrumentcluster/instructioncard -> itemType 2 (card only)
+ *   query showETA / showSpeedLimit / showCompass (iOS 27; 26.6 only showETA):
+ *           yes|1 -> enabled(1), no|0 -> disabled(2), user -> userPreference(3),
+ *           anything else -> disabled; key names are case-sensitive, values are not;
+ *           every one defaults to disabled(2) when the key is absent
+ *         maneuverLayout=topAligned|leftAligned|rightAligned -> layoutJustification 1|2|3
+ *         (any other value, e.g. "no", leaves the justification unset = 0)
+ * The app-side CarPlaySupport card controller (CPSInstrumentClusterCardViewController)
+ * draws ETA + turn card for third-party apps in ONE platter: layout 1 = centred column
+ * (turn card top, ETA bottom), 2/3 = 213 px column at the left/right edge of the safe
+ * area (turn card top, ETA bottom).  Apple Maps reads the same scene settings.
+ * The normal protocol is app -> suggestUI{urls:[...]} -> HU chooses -> showUI{uuid,url};
+ * stock 210 has no policy layer, so we choose: when the 111 stream first becomes
+ * decodable, after every accepted view-area switch, and on every RGI edge from Java
+ * (CMD_ALT_RGI is the runtime switch).  Same URL for every zone.
+ *   RGI off -> map + cards (turn card right-aligned, ETA on), so the cluster shows
+ *              guidance while our BAP/KDK path is idle;
+ *   RGI on  -> map, ETA off, no maneuver layout; maneuvers and ETA come from BAP/KDK. */
+#define ALT_CLUSTER_URL_RGI_OFF "maps:/car/instrumentcluster?showETA=yes&maneuverLayout=rightAligned&showSpeedLimit=no"
+#define ALT_CLUSTER_URL_RGI_ON  "maps:/car/instrumentcluster?showETA=no&maneuverLayout=no&showSpeedLimit=no"
 
 static const char *alt_cluster_url(void)
 {

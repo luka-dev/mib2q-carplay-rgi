@@ -272,6 +272,48 @@ is sanitised by intersecting the app list, the session list and the suggested li
 `maneuverLayout=rightAligned` (Maps turn card; omit it to hide the card), `showETA=yes|no`;
 CarPlaySupport's `CPSInstrumentClusterCardViewController` also logs a `mapOnly` flag.
 
-Hook policy (`alt_cluster_url`, `CMD_ALT_RGI 0x0116` from `AltScreenModule.republish`):
-RGI presentation off → `?maneuverLayout=rightAligned&showETA=yes`; on → `?showETA=no`.
-The URL is re-sent at first IDR, after each accepted `updateViewArea` and on each RGI edge.
+Hook policy (`alt_cluster_url`, switched at runtime by `CMD_ALT_RGI 0x0116` from
+`AltScreenModule.republish`): RGI presentation off →
+`maps:/car/instrumentcluster?showETA=yes&maneuverLayout=rightAligned&showSpeedLimit=no`; on →
+`maps:/car/instrumentcluster?showETA=no&maneuverLayout=no&showSpeedLimit=no`. The URL is re-sent
+at first IDR, after each accepted `updateViewArea` and on each RGI edge.
+`maneuverLayout=no` maps to justification 0 (unset).
+
+### What the phone does with the URL (DashBoard + CarPlaySupport, iOS 26.6 23G71, 2026-09-19)
+
+`-[DBInstrumentClusterURLHandler applySettingsForClusterURL:toSceneSettings:]` (DashBoard,
+SpringBoard's CarPlay UI; iOS 26.6 23G71 and iOS 27 24A5418b verified) parses the `showUI` URL for **every** app and writes
+`CRSUIInstrumentClusterSceneSettings`. Key names are compared case-sensitively, values are
+lowercased first. Unknown keys are ignored; an unsupported path is rejected as a whole.
+
+| URL | setting |
+|---|---|
+| `maps:/car/instrumentcluster` | itemType 3 (map + cards, "anyContent") |
+| `maps:/car/instrumentcluster/map` | itemType 1 (map only) |
+| `maps:/car/instrumentcluster/instructioncard` | itemType 2 (card only) |
+| `?showETA=` `yes`\|`1` / `no`\|`0` / `user` | showsETA = CPInstrumentClusterSetting enabled 1 / disabled 2 / userPreference 3; any other value → 2; absent → 2 |
+| `?showSpeedLimit=`, `?showCompass=` (same values) | showsSpeedLimit / showsCompass — **iOS 27 only** (24A5418b); 26.6 ignores them. Absent → disabled |
+| `?maneuverLayout=topAligned` / `leftAligned` / `rightAligned` | layoutJustification 1 / 2 / 3 (value case-insensitive; anything else → 0) |
+| `?mapsPresentation=anycontent|map|instructioncard` | itemType 3 / 1 / 2 (Maps hosted content) |
+
+Third-party apps register `[maps:/car/instrumentcluster, maps:/car/instrumentcluster/map]`
+through `-[CPSNavigator setAppSupportsInstrumentCluster:]` (suggestUI), so the `maps:`
+namespace is shared, not Maps-specific. CarPlay.framework creates the app's cluster window
+only for itemType 1 or 3 (`updateSceneForNewItemTypeSetting`).
+
+The ETA and turn cards for third-party apps are drawn in the app process by
+`CPSInstrumentClusterCardViewController` (CarPlaySupport) in one platter:
+
+- layout 1 (centre): platter centred, width clamp(safeW, 165, 300), turn card on top
+  (0.41 × safe height), ETA at the bottom; 2 / 3: 213 px column at the left / right edge of
+  the safe area, full height, turn card top, ETA bottom. ETA needs safe height > 202 px.
+- Geometry when no layout is requested (`initWithSafeAreaFrame:…physicalPixelWidth:`):
+  scale = 0.153 mm / (physicalWidth / pixelWidth) = 0.7545 for 292 mm × 1440 px; wide
+  branch if safeW ≥ 660 × scale ≈ 498 px → 2 or 3 by safe-area mid vs display mid (equal →
+  2 on LHD); else centre when 0.3 × safeH > 115 × scale ≈ 87 px, otherwise layout 0
+  "Undefined layout (0), will not show cluster content" (platter hidden, ETA included).
+  Our zones must therefore keep safeH ≥ 290 (now 300); fullscreen 900 px is always wide.
+- `mapOnly` (turn cards disabled) is logged by `-[… setShowETA:]`; the itemType 1 → mapOnly
+  plumbing is in the app process but was not located in the extracted 26.6 dylibs
+  (selector refs live in the shared cache). Waze on `/map` showed ETA + road name and no
+  turn card, consistent with mapOnly; the root URL is the fix under test.
