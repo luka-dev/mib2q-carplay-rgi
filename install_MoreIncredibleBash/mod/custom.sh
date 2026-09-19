@@ -1,357 +1,62 @@
 #!/bin/sh
-# M.I.B. SD1: Advanced Settings -> Run Custom Script.
-# The same installer is used by scripts/deploy_over_ssh.sh. QNX 6.5 POSIX sh.
+# M.I.B. -> Advanced Settings -> Run Custom Script. QNX 6.5 POSIX sh.
+# Copy into /mod/ on the M.I.B. SD; resources live in /mod/carplay/root/.
+#
+# Dead-simple installer: lay the carplay/root rootfs tree onto "/". No staging,
+# no CRC, no pf/SI patching - every patched file already sits at its real path
+# under carplay/root/. Upgrade-safe: overwrites any previous version; a stock
+# backup is kept once (first install only) so uninstall restores the original.
 # Copyright (c) 2026 LuKa (@LuKa_dev)
 set -u
-PATH=${PATH:+$PATH:}/proc/boot:/bin:/usr/bin:/usr/sbin:/sbin:/mnt/app/armle/bin:/mnt/app/armle/sbin:/mnt/app/armle/usr/bin:/mnt/app/armle/usr/sbin
+PATH=/proc/boot:/bin:/usr/bin:/usr/sbin:/sbin:/mnt/app/armle/bin:/mnt/app/armle/usr/bin${PATH:+:$PATH}
 export PATH
-LD_LIBRARY_PATH=${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}/lib:/mnt/app/root/lib-target:/eso/lib:/mnt/app/usr/lib:/mnt/app/armle/lib:/mnt/app/armle/lib/dll:/mnt/app/armle/usr/lib
-export LD_LIBRARY_PATH
 unset LD_PRELOAD
 
-case $0 in */*) SELF_DIR=${0%/*} ;; *) SELF_DIR=. ;; esac
-SELF_DIR=$(cd "$SELF_DIR" && pwd) || exit 1
+case $0 in */*) D=${0%/*} ;; *) D=. ;; esac
+D=$(cd "$D" && pwd) || exit 1
+
 # GEM runs on MMX. Forward a manual RCC launch without touching RCC partitions.
-if [ -z "${APP_ROOT:-}" ] && [ ! -d /mnt/app/eso/hmi/lsd ] \
-    && [ -d /net/mmx/mnt/app/eso/hmi/lsd ]; then
-    exec on -f mmx /bin/sh "$SELF_DIR/custom.sh" "$@"
+if [ -z "${ON_MMX:-}" ] && [ ! -d /mnt/app/eso/hmi/lsd ] && [ -d /net/mmx/mnt/app/eso/hmi/lsd ]; then
+    exec on -f mmx env ON_MMX=1 /bin/sh "$D/custom.sh" "$@"
 fi
 
+ROOT=$D/carplay/root
 ACTION=${1:-install}
-case $ACTION in install|uninstall|check) ;; *) echo 'Usage: custom.sh [install|check|uninstall]'; exit 2 ;; esac
-APP_ROOT=${APP_ROOT:-/mnt/app}
-SYS_ROOT=${SYS_ROOT:-/mnt/system}
-HOOKS=$APP_ROOT/root/hooks
-JARS=$APP_ROOT/eso/hmi/lsd/jars
-CFG=$SYS_ROOT/etc/eso/production/smartphone_integrator.json
-PAYLOAD=${CARPLAY_BUILD_DIR:-$SELF_DIR/../build}
-LOG=${LOG:-/tmp/carplay_$ACTION.log}
-WORK=${INSTALL_LOCK_DIR:-/tmp/carplay_install.lock}
-LOCKED=0
-STAGE=
-JAR_STAGE=
-CFG_STAGE=
-BACKUP_STAGE=
-CHANGED=0
-HOOK_FILES='libcarplay_hook.so libcarplay_apac.so hssr_model.bin maneuver_render altscreen_render
-flag_atlas.rgba carplay_startup.sh carplay_monitor.sh carplay_processes.sh carplay_cleanup.sh'
-PROFILES='pf.conf pf.ecm0.conf pf.mlan0.conf pf.ppp0.conf'
-FIRMWARE_FILES='smartphone_integrator deva-ctrl-qc.so'
+[ -d "$ROOT" ] || { echo "no payload tree at $ROOT"; exit 1; }
 
-firmware_path() {
-    case $1 in
-        smartphone_integrator) echo "$APP_ROOT/eso/bin/apps/$1" ;;
-        deva-ctrl-qc.so) echo "$APP_ROOT/armle/lib/dll/$1" ;;
-    esac
-}
-firmware_sum() {
-    # Whole-file POSIX CRC and size for the exact MU1316 stock/final images.
-    case $1:$2 in
-        smartphone_integrator:stock) echo '56251098 802798' ;;
-        smartphone_integrator:patched) echo '996060264 802798' ;;
-        deva-ctrl-qc.so:stock) echo '325683668 694904' ;;
-        deva-ctrl-qc.so:patched) echo '751699153 694904' ;;
-    esac
-}
+mode_for() { case $1 in *.so|*.so.*|*/maneuver_render|*/altscreen_render|*.sh) echo 755 ;; *) echo 644 ;; esac; }
 
-say() { echo "$*"; echo "$*" >> "$LOG"; }
-die() { say "FAILED: $*"; exit 1; }
-cleanup() {
-    result=$?
-    trap - 0
-    [ -z "$STAGE" ] || rm -rf "$STAGE"
-    [ -z "$JAR_STAGE" ] || rm -f "$JAR_STAGE"
-    [ -z "$CFG_STAGE" ] || rm -f "$CFG_STAGE"
-    [ -z "$BACKUP_STAGE" ] || rm -f "$BACKUP_STAGE"
-    for profile in $PROFILES; do rm -f "$SYS_ROOT/etc/$profile.carplay.$$.new"; done
-    for firmware in $FIRMWARE_FILES; do
-        target=$(firmware_path "$firmware")
-        rm -f "$target.carplay.$$.new"
-    done
-    if [ "$result" != 0 ] && [ "$CHANGED" = 1 ]; then
-        say 'Installation is incomplete. Keep CarPlay disconnected and rerun the installer.'
-    fi
-    if [ "$LOCKED" = 1 ]; then
-        [ ! -f "$LOG" ] || cp "$LOG" "$SELF_DIR/last-carplay-$ACTION.log" 2>/dev/null || :
-        rm -rf "$WORK"
-    fi
-    exit "$result"
-}
-trap cleanup 0
-trap 'exit 1' 1 2 15
-mkdir "$WORK" 2>/dev/null || { echo "FAILED: another installer is running ($WORK)"; exit 1; }
-LOCKED=1
-: > "$LOG" || exit 1
-say "=== MHI2Q CarPlay: $ACTION ==="
+echo "custom.sh: CarPlay $ACTION (rootfs -> /)"
+echo "Remounting app and system read-write..."
+mount -uw /mnt/app    2>/dev/null || true
+mount -uw /mnt/system 2>/dev/null || true
 
-require_idle() {
-    # QNX /proc has no Linux cmdline files. pidin ar reports PID + executable.
-    pidin ar > "$WORK/processes" 2>/dev/null || die 'Cannot inspect processes with pidin; stopping.'
-    seen=0
-    while read -r pid exe rest; do
-        case $pid in ''|*[!0-9]*) continue ;; esac
-        [ -n "$exe" ] || die 'Incomplete pidin output; stopping.'
-        seen=$((seen + 1))
-        case $exe in dio_manager|*/dio_manager)
-            die "dio_manager is running (PID $pid). DISCONNECT CarPlay/iPhone, then run again." ;;
-        esac
-        case "$exe $rest" in *carplay_startup.sh*)
-            die 'CarPlay is starting. DISCONNECT CarPlay/iPhone, then run again.' ;;
-        esac
-    done < "$WORK/processes"
-    [ "$seen" -gt 0 ] || die 'Empty/unrecognized pidin output; stopping.'
-}
-
-verify_package() {
-    # POSIX cksum exists in stock MU1316. No M.I.B.-specific hashing executable
-    # is needed over SSH. The host also validates the SHA-256 release manifest.
-    [ -f "$PAYLOAD/CKSUMS" ] || die 'Missing CKSUMS; copy the complete package.'
-    for file in ../mod/custom.sh release.json carplay_child.json carplay_pf.patch patch_si_rearm.py $HOOK_FILES carplay_hook.jar $FIRMWARE_FILES; do
-        [ -s "$PAYLOAD/$file" ] || die "Missing/empty payload: $file"
-        expected=
-        while read -r crc bytes name extra; do
-            [ "$name" = "$file" ] || continue
-            [ -z "$expected" ] && [ -z "$extra" ] || die "Duplicate/invalid checksum: $file"
-            case $crc:$bytes in *[!0-9:]*|:*|*:) die "Invalid checksum: $file" ;; esac
-            expected="$crc $bytes"
-        done < "$PAYLOAD/CKSUMS"
-        [ -n "$expected" ] || die "Missing checksum: $file"
-        actual=$(cksum < "$PAYLOAD/$file") || die "Cannot check $file"
-        set -- $actual
-        [ "$#" = 2 ] && [ "$1 $2" = "$expected" ] || die "Checksum mismatch: $file; copy the complete package again."
-    done
-    say 'Package checksums OK.'
-}
-
-# Strictly the known multiline child layout; preserve every other byte/line.
-count_char() {
-    n=0; rest=$1
-    while :; do case $rest in *"$2"*) rest=${rest#*"$2"}; n=$((n + 1)) ;; *) break ;; esac; done
-    echo "$n"
-}
-prepare_config() {
-    cp -p "$CFG" "$WORK/config.before" || die 'Cannot snapshot SI config.'
-    : > "$WORK/config.new" || die 'Cannot prepare SI config.'
-    state=copy; hits=0; depth=0
-    while IFS= read -r line || [ -n "$line" ]; do
-        if [ "$state" = copy ]; then
-            case $line in
-                *'"carplay"'*:*)
-                    # Only whitespace may surround the opening key/object.
-                    set -f
-                    set -- $line
-                    set +f
-                    compact=
-                    for part do compact=$compact$part; done
-                    [ "$compact" = '"carplay":{' ] || die 'Unsupported carplay child layout.'
-                    hits=$((hits + 1)); state=skip; depth=0 ;;
-                *) printf '%s\n' "$line" >> "$WORK/config.new" || die 'Cannot prepare SI config.'; continue ;;
-            esac
+cd "$ROOT" || exit 1
+case $ACTION in
+install)
+    find . -type f ! -name .DS_Store | while IFS= read -r f; do
+        dest=/${f#./}
+        mkdir -p "${dest%/*}" || { echo "FAILED mkdir ${dest%/*}"; exit 1; }
+        # keep the true stock once: first install only, never overwrite an existing backup
+        if [ -e "$dest" ] && [ ! -e "$dest.carplay-stock" ]; then
+            cp -p "$dest" "$dest.carplay-stock" || { echo "FAILED backup $dest"; exit 1; }
         fi
-        opens=$(count_char "$line" '{'); closes=$(count_char "$line" '}')
-        depth=$((depth + opens - closes))
-        if [ "$depth" -le 0 ]; then
-            [ "$depth" = 0 ] || die 'Unbalanced carplay child.'
-            set -f; set -- $line; set +f
-            [ "$#" = 1 ] || die 'Shared closing line in SI config.'
-            case $1 in '}'|'},') ;; *) die 'Unsupported closing line in SI config.' ;; esac
-            printf '    "carplay": ' >> "$WORK/config.new" || die 'Cannot prepare SI config.'
-            cat "$PAYLOAD/carplay_child.json" >> "$WORK/config.new" || die 'Cannot prepare SI config.'
-            # The fragment has no trailing newline, so the original comma stays
-            # on the closing brace's line and repeated installs are identical.
-            printf '%s\n' "${line##*\}}" >> "$WORK/config.new" || die 'Cannot prepare SI config.'
-            state=copy
-        fi
-    done < "$WORK/config.before"
-    [ "$hits" = 1 ] && [ "$state" = copy ] || die 'Expected exactly one complete carplay child.'
-    old_execs=$(grep -c '"exec"' "$WORK/config.before")
-    new_execs=$(grep -c '"exec"' "$WORK/config.new")
-    [ "$old_execs" = "$new_execs" ] || die 'SI child count changed; stopping.'
-}
-
-prepare_pf() {
-    seen=0
-    for profile in $PROFILES; do
-        src=$SYS_ROOT/etc/$profile
-        [ -f "$src" ] || continue
-        seen=$((seen + 1)); hits=0
-        cp -p "$src" "$WORK/$profile.before" || die "Cannot snapshot $profile"
-        : > "$WORK/$profile.new" || die "Cannot prepare $profile"
-        while IFS= read -r line || [ -n "$line" ]; do
-            case $line in 'pass in quick on carplay0 proto tcp from any to any port {'*)
-                token=
-                case $line in
-                    *' 6030,'*) token=' 6030,' ;;
-                    *' 6030:6031,'*) token=' 6030:6031,' ;;
-                    *' 6030:6033,'*) token=' 6030:6033,' ;;
-                    *' 6030:6032,'*) hits=$((hits + 1)) ;;
-                esac
-                if [ -n "$token" ]; then
-                    line=${line%%"$token"*}' 6030:6032,'${line#*"$token"}
-                    hits=$((hits + 1))
-                fi ;;
-            esac
-            printf '%s\n' "$line" >> "$WORK/$profile.new" || die "Cannot prepare $profile"
-        done < "$WORK/$profile.before"
-        [ "$hits" = 1 ] || die "Expected one supported CarPlay TCP rule in $profile, found $hits"
+        cp -p "$f" "$dest" || { echo "FAILED copy $dest"; exit 1; }
+        chmod "$(mode_for "$dest")" "$dest"
+        echo "  $dest"
     done
-    [ "$seen" -gt 0 ] || die 'No PF profiles found.'
-}
-
-backup_once() {
-    [ ! -e "$2" ] || return 0
-    BACKUP_STAGE=$2.carplay.$$.new
-    cp -p "$1" "$BACKUP_STAGE" && cmp -s "$1" "$BACKUP_STAGE" \
-        && mv -f "$BACKUP_STAGE" "$2" || die "Backup failed: $2"
-    BACKUP_STAGE=
-}
-stage_config() {
-    # $1 source content, $2 current destination, $3 adjacent staging pathname.
-    cp -p "$2" "$3" && cat "$1" > "$3" && cmp -s "$1" "$3" \
-        || die "Staging failed: $2"
-}
-
-prepare_firmware() {
-    for firmware in $FIRMWARE_FILES; do
-        target=$(firmware_path "$firmware")
-        backup=$target.carplay-stock
-        stock=$(firmware_sum "$firmware" stock)
-        patched=$(firmware_sum "$firmware" patched)
-        if [ "$ACTION" = uninstall ] && [ ! -e "$backup" ]; then
-            # A patch already present before our first install is not ours to undo.
-            continue
-        fi
-        [ -f "$target" ] || die "Missing firmware target: $target"
-        actual=$(cksum < "$target") || die "Cannot check $target"
-        [ "$actual" = "$stock" ] || [ "$actual" = "$patched" ] \
-            || die "Unknown firmware image: $target; stopping."
-        if [ -e "$backup" ]; then
-            [ "$(cksum < "$backup")" = "$stock" ] || die "Invalid stock backup: $backup"
-        fi
-        cp -p "$target" "$WORK/$firmware.before" || die "Cannot snapshot $firmware"
-        if [ "$ACTION" = uninstall ]; then
-            cp "$backup" "$WORK/$firmware.new" || die "Cannot prepare $firmware restore"
-        else
-            [ "$(cksum < "$PAYLOAD/$firmware")" = "$patched" ] || die "Wrong final payload: $firmware"
-            cp "$PAYLOAD/$firmware" "$WORK/$firmware.new" || die "Cannot prepare $firmware"
-        fi
+    rm -f /mnt/app/root/hooks/cursor_render /mnt/app/root/hooks/cursor_render.so   # retired
+    sync
+    echo "DONE (install). Reboot the HU to load."
+    ;;
+uninstall)
+    find . -type f ! -name .DS_Store | while IFS= read -r f; do
+        dest=/${f#./}
+        if [ -e "$dest.carplay-stock" ]; then mv -f "$dest.carplay-stock" "$dest"
+        else rm -f "$dest"; fi
     done
-}
-
-require_idle
-[ -f "$CFG" ] || die 'MMX smartphone_integrator.json not found.'
-grep -Fx 'Product = mmx2qc' "$APP_ROOT/version_info.txt" > /dev/null 2>&1 \
-    && grep -Fx 'HMI = HMI_AU_MIB2_HQC_NAR_G22_C10_180803' "$APP_ROOT/version_info.txt" > /dev/null 2>&1 \
-    || die 'Unsupported firmware; requires MHI2Q US AUG22 P5087 / MU1316.'
-command -v cmp > /dev/null 2>&1 || die 'Stock cmp utility is required.'
-if [ "$ACTION" = uninstall ]; then
-    [ -s "$CFG.orig" ] || die 'Stock SI backup missing; installed files were retained.'
-    grep -q 'carplay_startup.sh' "$CFG.orig" && die 'SI backup is not stock; installed files were retained.'
-    cp -p "$CFG" "$WORK/config.before" || die 'Cannot snapshot SI config.'
-    cp "$CFG.orig" "$WORK/config.new" || die 'Cannot read stock SI backup.'
-else
-    verify_package
-    LSD=$APP_ROOT/eso/hmi/lsd/lsd.sh
-    grep -F 'JARS=$(find $BASE_DIR/lsd/jars/' "$LSD" > /dev/null 2>&1 \
-        && grep -F 'BOOTCLASSPATH="$BOOTCLASSPATH:$jar"' "$LSD" > /dev/null 2>&1 \
-        && grep -F -e '-Xbootclasspath:$BOOTCLASSPATH' "$LSD" > /dev/null 2>&1 \
-        || die 'Unsupported LSD JAR loader; stopping.'
-    prepare_config
-    prepare_pf
-fi
-prepare_firmware
-if [ "$ACTION" = check ]; then say 'CHECK OK. No installed files changed.'; exit 0; fi
-
-say 'Remounting MMX app and system read-write...'
-mount -uw "$APP_ROOT" || die 'Cannot remount app read-write.'
-mount -uw "$SYS_ROOT" || die 'Cannot remount system read-write.'
-CFG_STAGE=$CFG.carplay.$$.new
-stage_config "$WORK/config.new" "$CFG" "$CFG_STAGE"
-for firmware in $FIRMWARE_FILES; do
-    [ -f "$WORK/$firmware.new" ] || continue
-    target=$(firmware_path "$firmware")
-    stage_config "$WORK/$firmware.new" "$target" "$target.carplay.$$.new"
-done
-if [ "$ACTION" = install ]; then
-    mkdir -p "$HOOKS" "$JARS" || die 'Cannot create runtime directories.'
-    STAGE=$HOOKS/.carplay-stage.$$
-    mkdir "$STAGE" || die 'Cannot create runtime staging directory.'
-    for f in $HOOK_FILES; do
-        cp "$PAYLOAD/$f" "$STAGE/$f" || die "Cannot stage $f"
-        case $f in hssr_model.bin|flag_atlas.rgba) mode=644 ;; *) mode=755 ;; esac
-        chmod "$mode" "$STAGE/$f" && cmp -s "$PAYLOAD/$f" "$STAGE/$f" || die "Staged copy failed: $f"
-    done
-    JAR_STAGE=$JARS/.carplay_hook.$$.new
-    cp "$PAYLOAD/carplay_hook.jar" "$JAR_STAGE" && chmod 644 "$JAR_STAGE" \
-        && cmp -s "$PAYLOAD/carplay_hook.jar" "$JAR_STAGE" || die 'Cannot stage JAR.'
-    for profile in $PROFILES; do
-        [ -f "$WORK/$profile.new" ] || continue
-        stage_config "$WORK/$profile.new" "$SYS_ROOT/etc/$profile" "$SYS_ROOT/etc/$profile.carplay.$$.new"
-    done
-fi
-
-# A phone can reconnect while files are being copied. Recheck before activation;
-# also refuse to overwrite a configuration changed by another installer.
-require_idle
-cmp -s "$CFG" "$WORK/config.before" || die 'SI config changed during staging; run again.'
-for firmware in $FIRMWARE_FILES; do
-    [ -f "$WORK/$firmware.before" ] || continue
-    target=$(firmware_path "$firmware")
-    cmp -s "$target" "$WORK/$firmware.before" || die "$firmware changed during staging."
-done
-if [ "$ACTION" = install ]; then
-    for profile in $PROFILES; do
-        [ -f "$WORK/$profile.before" ] || continue
-        cmp -s "$SYS_ROOT/etc/$profile" "$WORK/$profile.before" || die "$profile changed during staging."
-    done
-    if ! grep -q 'carplay_startup.sh' "$CFG"; then
-        backup_once "$CFG" "$CFG.orig"
-    elif [ ! -s "$CFG.orig" ]; then
-        say 'Existing custom SI has no stock backup; automatic uninstall will be unavailable.'
-    fi
-    for profile in $PROFILES; do
-        [ -f "$WORK/$profile.new" ] || continue
-        cmp -s "$WORK/$profile.new" "$WORK/$profile.before" && continue
-        backup_once "$SYS_ROOT/etc/$profile" "$SYS_ROOT/etc/$profile.stock"
-    done
-    for firmware in $FIRMWARE_FILES; do
-        target=$(firmware_path "$firmware")
-        cmp -s "$WORK/$firmware.new" "$WORK/$firmware.before" && continue
-        backup_once "$target" "$target.carplay-stock"
-    done
-    CHANGED=1
-    for profile in $PROFILES; do
-        [ -f "$WORK/$profile.new" ] || continue
-        cmp -s "$WORK/$profile.new" "$WORK/$profile.before" && continue
-        mv -f "$SYS_ROOT/etc/$profile.carplay.$$.new" "$SYS_ROOT/etc/$profile" || die "Cannot activate $profile"
-    done
-    for f in $HOOK_FILES; do mv -f "$STAGE/$f" "$HOOKS/$f" || die "Cannot activate $f"; done
-    mv -f "$JAR_STAGE" "$JARS/carplay_hook.jar" || die 'Cannot activate JAR.'
-    JAR_STAGE=
-fi
-for firmware in $FIRMWARE_FILES; do
-    [ -f "$WORK/$firmware.new" ] || continue
-    cmp -s "$WORK/$firmware.new" "$WORK/$firmware.before" && continue
-    target=$(firmware_path "$firmware")
-    CHANGED=1
-    mv -f "$target.carplay.$$.new" "$target" || die "Cannot activate $firmware"
-done
-# Flush dependencies before publishing the new SI child definition.
-sync || die 'Cannot flush runtime writes.'
-require_idle
-cmp -s "$CFG" "$WORK/config.before" || die 'SI config changed before activation; run again.'
-CHANGED=1
-if ! cmp -s "$CFG_STAGE" "$CFG"; then
-    mv -f "$CFG_STAGE" "$CFG" || die 'Cannot atomically replace SI config.'
-    CFG_STAGE=
-fi
-if [ "$ACTION" = uninstall ]; then
-    sync || die 'Cannot flush restored SI config.'
-    for f in $HOOK_FILES; do rm -f "$HOOKS/$f" || die "Cannot remove $f"; done
-    rm -f "$JARS/carplay_hook.jar" || die 'Cannot remove JAR.'
-    say 'Original SI config restored. Persistent PF port widening retained.'
-fi
-rm -f "$HOOKS/cursor_render" || die 'Cannot remove retired cursor renderer.'
-sync || die 'Cannot flush writes.'
-say 'DONE. Reboot the HU manually to load the installed files.'
-say "Log: $LOG"
+    sync
+    echo "DONE (uninstall). Reboot the HU."
+    ;;
+*) echo "usage: custom.sh [install|uninstall]"; exit 2 ;;
+esac
