@@ -290,6 +290,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
     public void onFrame(int type, int flags, byte[] payload, int len) {
         if (type == CarplayBus.EVT_HELLO) {
             sendViewAreaMode("hook-hello");
+            synchronized (LOCK) { sendRgiStateLocked(); }
         } else if (type == CarplayBus.CMD_ALT_ZONE_ACK && payload != null && len >= 5) {
             int mode = payload[0] & 0xff;
             int status = (payload[1] & 0xff)
@@ -304,15 +305,33 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
     /** Recompute desiredCtx from connected/navActive and wake the worker. Caller must NOT hold LOCK. */
     private static void republish() {
         boolean ownCluster;
+        boolean rgi;
+        boolean rgiQueued;
         synchronized (LOCK) {
             ownCluster = connected || videoAvailable;
             desiredCtx = !ownCluster ? CTX_STOCK_CLUSTER : (navActive ? CTX_CLUSTER : CTX_CLUSTER_MAP);
+            rgi = ownCluster && navActive;
+            rgiQueued = sendRgiStateLocked();
             LOCK.notifyAll();
         }
+        Log.i(TAG, "rgi send active=" + rgi + " reason=republish queued=" + rgiQueued);
         /* Stock Navigation can publish NAVSD INITIALIZING while its map is loading.
          * That state masks the independent CarPlay cluster plane, so keep it gated
          * for exactly the same lifetime as our physical context ownership. */
         AltScreenNavStatusGate.setAltScreenActive(ownCluster);
+    }
+
+    /** Mirror the confirmed RGI presentation to the hook, which selects the Maps cluster URL
+     *  from it: Maps' own turn card + ETA while our BAP/KDK presentation is idle, no Maps
+     *  overlays once it is live.  Caller holds LOCK so two publishers cannot deliver edges
+     *  out of order; CarplayBus.send only enqueues (no socket I/O, no callbacks under its
+     *  lock), so holding LOCK across it is safe.  The hook de-duplicates repeats.  Re-sent
+     *  at module-start and on the hook's hello, like the view-area mode, because a
+     *  respawned hook starts at "off" and a session may end without stop(). */
+    private static boolean sendRgiStateLocked() {
+        boolean rgi = (connected || videoAvailable) && navActive;
+        return CarplayBus.getInstance().sendBinary(CarplayBus.CMD_ALT_RGI,
+            new byte[] { (byte) (rgi ? 1 : 0) });
     }
 
     /** Data-plane fallback for transient/incorrect TMDev lifecycle events. */
@@ -449,6 +468,7 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
             acceptVideoFallback = true;
             lifecycleGeneration++;
             desiredCtx = CTX_CLUSTER_MAP;
+            sendRgiStateLocked();   /* navActive is false here: reset the hook's URL state */
         }
         /* Do not wait for the stock Navigation service.  Publish ownership now;
          * prepareCombiBAPService() applies it synchronously if the service arrives later. */

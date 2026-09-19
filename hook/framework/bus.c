@@ -43,9 +43,9 @@ DEFINE_LOG_MODULE(BUS);
 #define SEND_QUEUE_CAPACITY   256        /* must be a power of two */
 #define BUS_SHUTDOWN_WAIT_MS 2500
 /* Directly indexed events and commands. The highest current command is
- * CMD_ALT_UICTX (0x0115); keep Java CarplayBus.MAX_TYPES in sync. */
+ * CMD_ALT_RGI (0x0116); keep Java CarplayBus.MAX_TYPES in sync. */
 #define MAX_TYPES             0x0120
-#if CMD_ALT_UICTX >= MAX_TYPES
+#if CMD_ALT_RGI >= MAX_TYPES
 #error AltScreen command is outside the bus dispatch table
 #endif
 

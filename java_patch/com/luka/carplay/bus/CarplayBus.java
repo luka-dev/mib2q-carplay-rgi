@@ -54,6 +54,7 @@ public final class CarplayBus {
     public static final int CMD_ALT_ZOOM       = 0x0110;   /* [i8 signed MapScale step]     */
     public static final int CMD_ALT_ZONE       = 0x0111;   /* [u8 0=full/1=sport/2=classic][u16 LE durationMs] */
     public static final int CMD_ALT_ZONE_ACK   = 0x0112;   /* hook->Java [u8 mode][i32 LE status]       */
+    public static final int CMD_ALT_RGI        = 0x0116;   /* [u8 0=off 1=on] confirmed RGI presentation */
 
     public interface Listener {
         void onFrame(int type, int flags, byte[] payload, int len);

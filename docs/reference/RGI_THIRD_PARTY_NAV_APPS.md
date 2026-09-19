@@ -251,3 +251,27 @@ whose visible frame was reduced to the safe region got the 111 stream rejected a
 zoom-by-view-area needs that rejection understood first (candidates: CarKit
 `CRDisplayScaleInfo.minAcceptableViewAreaSize*` / `isViewAreaPixelSizeAcceptable`, or the initial
 view area having to equal the display).
+
+## Cluster scene URLs (`showUI`) — iOS 27 24A5418b, 2026-09-19
+
+The HU never sends URLs during activation; the phone does.  AirPlaySender calls
+`_APCarPlay_CRFetchInstrumentClusterURLs` → CarKit `CARInstrumentClusterURLController` →
+CarPlayServices `-[CRSAppHistoryService serviceFetchInstrumentClusterURLs:]` and puts the
+result in the follow-up `/info` request under `altScreenURLs`.  `_appLibraryUpdated:` builds it:
+
+- Maps: `maps:/car/instrumentcluster`, `maps:/car/instrumentcluster/map`,
+  `maps:/car/instrumentcluster/instructioncard`; Now Playing: `nowplaying://`.
+- Third-party apps contribute `carPlayInstrumentClusterURLSchemes` (LaunchServices record).
+  Waze 5.24.0.1 and AMap 16.25.0 declare none in Info.plist.
+
+Selecting the scene is the HU's job: Maps sends `suggestUI{urls}` (stock 210 answers -6714,
+we ignore it), the HU answers with `showUI{uuid,url}` at any time during the session.  CarKit
+handles it in `-[CARSession _sessionUpdatesQueue_handleShowUIWithParameters:]`; `suggestUI`
+is sanitised by intersecting the app list, the session list and the suggested list
+(`_CARHandleSuggestUI`).  Query parameters on the Maps map URL, parsed by Maps.app itself:
+`maneuverLayout=rightAligned` (Maps turn card; omit it to hide the card), `showETA=yes|no`;
+CarPlaySupport's `CPSInstrumentClusterCardViewController` also logs a `mapOnly` flag.
+
+Hook policy (`alt_cluster_url`, `CMD_ALT_RGI 0x0116` from `AltScreenModule.republish`):
+RGI presentation off → `?maneuverLayout=rightAligned&showETA=yes`; on → `?showETA=no`.
+The URL is re-sent at first IDR, after each accepted `updateViewArea` and on each RGI edge.

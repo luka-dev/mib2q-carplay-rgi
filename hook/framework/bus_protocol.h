@@ -105,6 +105,9 @@
                                         /* target 0=ui 1=map; day/night sync   */
 #define CMD_ALT_UICTX           0x0115  /* payload = UTF-8 url string — deep-  */
                                         /* link cluster UI context             */
+#define CMD_ALT_RGI             0x0116  /* binary [u8 0=off 1=on] — Java's     */
+                                        /* confirmed RGI presentation; hook    */
+                                        /* picks the Maps cluster URL (showUI) */
 /* NOTE: dispatchable inbound types must be < MAX_TYPES in bus.c (grown to      */
 /* cover this 0x11x block).                                                     */
 

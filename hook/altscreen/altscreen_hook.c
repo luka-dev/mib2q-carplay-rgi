@@ -2037,6 +2037,8 @@ enum {
     ALT_ZONE_CLASSICSCREEN = 2
 };
 static volatile int g_alt_zone_mode = ALT_ZONE_FULLSCREEN;
+/* Java's confirmed RGI presentation (CMD_ALT_RGI); selects the Maps cluster URL. */
+static volatile int g_alt_rgi_active = 0;
 
 static const char *alt_zone_name(int mode)
 {
@@ -2529,30 +2531,28 @@ static void alt_kick_viewarea(uint32_t gen)
 /* iOS 26.6 Maps registers this exact URL for its map-based instrument-cluster UI.
  * The normal protocol is Maps -> suggestUI{urls:[...]} -> HU chooses one ->
  * showUI{uuid,url}.  Stock 210 has no altScreen policy layer to make that choice,
- * so choose the Maps map URL when the 111 stream first becomes decodable.
+ * so choose the Maps URL ourselves: when the 111 stream first becomes decodable,
+ * after every accepted view-area switch, and on every RGI edge from Java.
  *
- * Use Maps' plain map item in both layouts. ETA and maneuver guidance are
- * supplied by Audi BAP/KDK, so do not request Maps-owned overlays here. */
-static const char *alt_cluster_url_for_mode(int mode)
+ * The URL follows the confirmed RGI presentation (CMD_ALT_RGI):
+ *   RGI off -> Maps draws its own turn card (maneuverLayout) and ETA overlay, so
+ *              the cluster still shows guidance while our BAP/KDK path is idle;
+ *   RGI on  -> both Maps overlays off; maneuvers and ETA come from BAP/KDK and
+ *              would otherwise be drawn twice.
+ * Omitting maneuverLayout disables the Maps turn card; ETA is independent and is
+ * therefore explicitly disabled.  Same URL for every zone: the overlays do not
+ * depend on the safeArea. */
+#define ALT_CLUSTER_URL_RGI_OFF "maps:/car/instrumentcluster/map?maneuverLayout=rightAligned&showETA=yes"
+#define ALT_CLUSTER_URL_RGI_ON  "maps:/car/instrumentcluster/map?showETA=no"
+
+static const char *alt_cluster_url(void)
 {
-    const char *url;
-    if (mode != ALT_ZONE_FULLSCREEN) {
-        url = getenv("ALTSCREEN_CLUSTER_URL_SMALLSCREEN");
-        /* Compatibility with already deployed startup scripts. */
-        if (!url || !*url) url = getenv("ALTSCREEN_CLUSTER_URL_DUO");
-        if (!url || !url[0])
-            url = "maps:/car/instrumentcluster/map";
-    } else {
-        url = getenv("ALTSCREEN_CLUSTER_URL");
-        if (!url || !url[0])
-            url = "maps:/car/instrumentcluster/map";
-    }
-    return url;
+    return g_alt_rgi_active ? ALT_CLUSTER_URL_RGI_ON : ALT_CLUSTER_URL_RGI_OFF;
 }
 
 static int alt_show_ui_for_mode(uint32_t gen, int mode, const char *reason)
 {
-    const char *url = alt_cluster_url_for_mode(mode);
+    const char *url = alt_cluster_url();
     if (!gen) gen = alt_generation_for_session(NULL);
     if (!gen) {
         LOG_INFO(LOG_MODULE,
@@ -2564,8 +2564,8 @@ static int alt_show_ui_for_mode(uint32_t gen, int mode, const char *reason)
     if (!p) return -6728;
     set_str(p, "url", url);
     int rc = alt_ship(gen, "showUI", p);
-    LOG_INFO(LOG_MODULE, "alt: showUI mode=%s reason=%s uuid=%s url=%s rc=%d",
-             mode == ALT_ZONE_FULLSCREEN ? "fullscreen-cards" : alt_zone_name(mode),
+    LOG_INFO(LOG_MODULE, "alt: showUI mode=%s rgi=%d reason=%s uuid=%s url=%s rc=%d",
+             alt_zone_name(mode), (int)g_alt_rgi_active,
              reason ? reason : "?", CLUSTER_DISPLAY_UUID, url, rc);
     return rc;
 }
@@ -2600,13 +2600,29 @@ static void uictx_on_cmd(uint16_t type, uint8_t flags, const uint8_t *payload, u
     alt_ship(0, "changeUIContext", p);   /* Java → current session */
 }
 
+/* Java's confirmed RGI presentation edge.  Cached like the zone mode so a
+ * pre-session edge is applied on the first IDR; a live session re-targets the
+ * Maps scene at once (alt_show_ui_for_mode resolves the current generation). */
+static void rgi_on_cmd(uint16_t type, uint8_t flags, const uint8_t *payload, uint32_t len, void *ctx)
+{
+    (void)type; (void)flags; (void)ctx;
+    if (!payload || len < 1) return;
+    int active = payload[0] ? 1 : 0;
+    if (active == g_alt_rgi_active) return;
+    g_alt_rgi_active = active;
+    int rc = alt_show_ui_for_mode(0, g_alt_zone_mode, "rgi-edge");
+    LOG_WARN(LOG_MODULE, "alt: RGI presentation=%d -> cluster url %s rc=%d",
+             active, alt_cluster_url(), rc);
+}
+
 static void altscreen_init(void)
 {
     bus_on(CMD_ALT_ZOOM, zoom_on_cmd, NULL);
     bus_on(CMD_ALT_ZONE, zone_on_cmd, NULL);
     bus_on(CMD_ALT_APPEARANCE, appearance_on_cmd, NULL);
     bus_on(CMD_ALT_UICTX, uictx_on_cmd, NULL);
-    LOG_INFO(LOG_MODULE, "AltScreen injector loaded (control negotiation + self-contained stream 111; cluster ZOOM/ZONE/APPEARANCE/UICTX registered; NIGHT mirrored from stock /info + SetNightMode)");
+    bus_on(CMD_ALT_RGI, rgi_on_cmd, NULL);
+    LOG_INFO(LOG_MODULE, "AltScreen injector loaded (control negotiation + self-contained stream 111; cluster ZOOM/ZONE/APPEARANCE/UICTX/RGI registered; NIGHT mirrored from stock /info + SetNightMode)");
 }
 
 static void altscreen_shutdown(void)

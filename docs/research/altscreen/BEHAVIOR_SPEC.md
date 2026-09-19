@@ -61,6 +61,8 @@ RGI presentation latch.
 4. `GatedCombiService` blocks stock route-guidance writers, leaves initializing/compass/map
    visibility stock, and hides only MapScale + altitude. Every steering-wheel MapScale SetGet
    is still acknowledged with the hidden status; the last stock scale/altitude is restored on release.
-5. Both layouts request exactly `maps:/car/instrumentcluster/map`: no Maps
-   `maneuverLayout` and no Maps-owned ETA overlay. Arrival time remains available
+5. The Maps cluster URL follows the confirmed RGI presentation (`CMD_ALT_RGI`, same URL
+   for every layout): RGI off → `maps:/car/instrumentcluster/map?maneuverLayout=rightAligned&showETA=yes`
+   (Maps draws its own turn card and ETA); RGI on → `maps:/car/instrumentcluster/map?showETA=no`
+   (BAP/KDK own maneuvers and ETA, no Maps overlays). Arrival time remains available
    independently through NAVSD FctID 22.
