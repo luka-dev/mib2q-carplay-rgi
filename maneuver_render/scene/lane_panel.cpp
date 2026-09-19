@@ -233,7 +233,8 @@ void cr_lane_panel_draw(const cr_lane_panel_t *p,cr_rect_t visible,double now) {
         const Geometry &g=layer?p->mesh:p->old_mesh;
         render_overlay_mesh(g.gray.xy,g.gray.count,cx,top,.60f,.60f,.60f,a);
         render_overlay_mesh(g.blue.xy,g.blue.count,cx,top,0,.75f,.95f,a);
-        render_overlay_mesh(g.dividers.xy,g.dividers.count,cx,top,.95f,.95f,.95f,.50f*a);
+        // Dividers at 50% read as faint dots in the cluster tube (car photo 2026-09-19).
+        render_overlay_mesh(g.dividers.xy,g.dividers.count,cx,top,.95f,.95f,.95f,.90f*a);
     }
     render_end_overlay();
 }
