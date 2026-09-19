@@ -251,34 +251,47 @@ echo "Compiled: $APAC_OUT"
 ls -lh "$APAC_OUT"
 
 if [ "$PROT_BUILD" = "1" ]; then
-  DEST="$PROJECT_DIR/build/protected_$PROT_VIN"
-  echo "=== Assembling protected build in build/protected_$PROT_VIN/ ==="
-  rm -rf "$DEST"; mkdir -p "$DEST"
-  # Full deployable set (mirrors scripts/package_mib.py). Copy what build/ has;
-  # jar/renderers/models come from build_java.sh / build_renderers.sh - run those
-  # first for a complete package. The two .so are stamped IN this folder, so the
-  # generic build/*.so stay unstamped (inert everywhere).
-  SET="libcarplay_hook.so libcarplay_apac.so maneuver_render altscreen_render \
-       carplay_hook.jar hssr_model.bin hssr_guard.bin flag_atlas.rgba \
-       carplay_startup.sh carplay_monitor.sh carplay_processes.sh carplay_cleanup.sh \
-       carplay_child.json carplay_pf.patch deva-ctrl-qc.so"
+  # Lay the protected build as a rootfs ("/") - every file at its real on-unit
+  # path - under install_MoreIncredibleBash/mod/carplay/root/. custom.sh there
+  # copies this tree onto "/". (Temporary home per request.)
+  MOD="$PROJECT_DIR/install_MoreIncredibleBash/mod/carplay"
+  ROOTFS="$MOD/root"
+  echo "=== Assembling protected rootfs in mod/carplay/root/ ==="
+  rm -rf "$ROOTFS"
+  HOOKS="$ROOTFS/mnt/app/root/hooks"
+  JARS="$ROOTFS/mnt/app/eso/hmi/lsd/jars"
+  APPS="$ROOTFS/mnt/app/eso/bin/apps"
+  DLL="$ROOTFS/mnt/app/armle/lib/dll"
+  mkdir -p "$HOOKS" "$JARS" "$APPS" "$DLL"
+
+  # /mnt/app/root/hooks/ - the hook payload
   miss=""
-  for f in $SET; do
-    if [ -f "$PROJECT_DIR/build/$f" ]; then cp -p "$PROJECT_DIR/build/$f" "$DEST/"
-    else miss="$miss $f"; fi
+  for f in libcarplay_hook.so libcarplay_apac.so hssr_model.bin maneuver_render \
+           altscreen_render flag_atlas.rgba carplay_startup.sh carplay_monitor.sh \
+           carplay_processes.sh carplay_cleanup.sh; do
+    if [ -f "$PROJECT_DIR/build/$f" ]; then cp -p "$PROJECT_DIR/build/$f" "$HOOKS/"; else miss="$miss $f"; fi
   done
+  # /mnt/app/eso/hmi/lsd/jars/
+  [ -f "$PROJECT_DIR/build/carplay_hook.jar" ] && cp -p "$PROJECT_DIR/build/carplay_hook.jar" "$JARS/" || miss="$miss carplay_hook.jar"
+  # patched firmware at their real paths (whole-file replacements)
+  [ -f "$PROJECT_DIR/build/smartphone_integrator" ] && cp -p "$PROJECT_DIR/build/smartphone_integrator" "$APPS/"
+  [ -f "$PROJECT_DIR/build/deva-ctrl-qc.so" ] && cp -p "$PROJECT_DIR/build/deva-ctrl-qc.so" "$DLL/"
+  # drop empty dirs we didn't fill
+  rmdir "$APPS" "$DLL" 2>/dev/null || true
   [ -n "$miss" ] && echo "  note: not in build/ (build separately):$miss"
 
-  echo "=== Stamping the two .so in the protected folder for VIN $PROT_VIN ==="
+  echo "=== Stamping the two .so in the rootfs for VIN $PROT_VIN ==="
   printf '\x5a' > /tmp/prot_consts.bin
-  for so in libcarplay_hook.so libcarplay_apac.so; do
-    PROT_SECRET="$PROT_SECRET" python3 "$PROJECT_DIR/protector/protect.py" "$DEST/$so" \
+  for so in "$HOOKS/libcarplay_hook.so" "$HOOKS/libcarplay_apac.so"; do
+    [ -f "$so" ] && PROT_SECRET="$PROT_SECRET" python3 "$PROJECT_DIR/protector/protect.py" "$so" \
         --vin "$PROT_VIN" --mode blind --payload-file /tmp/prot_consts.bin
   done
   rm -f /tmp/prot_consts.bin
+  find "$ROOTFS" -name .DS_Store -delete 2>/dev/null || true   # never ship macOS cruft
   { echo "VIN=$PROT_VIN"; echo "built=$(date -u +%Y-%m-%dT%H:%M:%SZ)"; \
     echo "stamped=libcarplay_hook.so libcarplay_apac.so (blind sentinel gate)"; \
-    echo "note=other cars -> hook inert (stock CarPlay), apac fail-closed"; } > "$DEST/PROTECTED.txt"
-  ( cd "$DEST" && ls -1 | sed 's/^/  /' )
-  echo "Protected build ready: build/protected_$PROT_VIN/  (ACTIVE only on $PROT_VIN)"
+    echo "install=run custom.sh (lays root/ onto /); other cars -> hook inert, apac fail-closed"; } > "$MOD/PROTECTED.txt"
+  echo "Protected rootfs ready under mod/carplay/root/ :"
+  ( cd "$ROOTFS" && find . -type f ! -name .DS_Store | sed 's|^\./|  /|' )
+  echo "Install on the unit: mod/carplay/custom.sh install   (ACTIVE only on $PROT_VIN)"
 fi
