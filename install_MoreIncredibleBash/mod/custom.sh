@@ -74,7 +74,7 @@ install)
         mv -f "$tmp" "$dest" || { echo "FAILED activate $dest"; rm -f "$tmp" "$LIST"; exit 1; }
         echo "  $dest"
     done < "$LIST"
-    rm -f /mnt/app/root/hooks/cursor_render /mnt/app/root/hooks/cursor_render.so   # retired
+    rm -f /mnt/app/root/hooks/cursor_render   # retired renderer from older versions
     rm -f "$LIST"
     sync
     echo "DONE (install). Reboot the HU to load."
