@@ -8,6 +8,9 @@
  * framework through hook_module_def_t; the framework reaches them only through
  * hook_module_table (hook/main.c). */
 #include "hook_framework.h"
+#ifdef CARPLAY_PROT
+#include "carplay_prot.h"
+#endif
 #include "state_trace.h"
 
 #include <fcntl.h>
@@ -127,6 +130,12 @@ static void ensure_fw_lock_init(void) {
  * Cinemo call proves that dio_manager and all dependencies are live. */
 static void init_modules_once(void) {
     size_t i;
+#ifdef CARPLAY_PROT
+    /* VIN gate: on a car this build was not stamped for, register no modules -
+     * the hook is inert and stock CarPlay runs untouched. Fail-open. */
+    if (!carplay_prot_active("/mnt/app/root/hooks/libcarplay_hook.so"))
+        return;
+#endif
     for (i = 0; i < hook_module_table_count; i++) {
         const hook_module_def_t* def = hook_module_table[i];
         if (!def) continue;

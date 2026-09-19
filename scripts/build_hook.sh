@@ -78,6 +78,17 @@ fi
 
 . "$(dirname "$0")/apac_flags.sh"
 
+# Optional protected (VIN-locked) build. Set PROT_VIN (17-char) and PROT_SECRET
+# to bind both .so to one car: on any other VIN the hook stays inert (stock
+# CarPlay) and the APAC codec refuses (fail-closed). Default build is unchanged.
+PROT_BUILD=0
+if [ -n "${PROT_VIN:-}" ]; then
+  [ ${#PROT_VIN} -eq 17 ] || { echo "PROT_VIN must be 17 chars"; exit 1; }
+  [ -n "${PROT_SECRET:-}" ] || { echo "PROT_SECRET must be set for a protected build"; exit 1; }
+  PROT_BUILD=1
+  echo "Protected build: VIN-locked to $PROT_VIN"
+fi
+
 echo "=== CarPlay Hook Build (Docker $IMG) ==="
 
 docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
@@ -91,6 +102,21 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
   OBJ=/tmp/hookobj
   rm -rf $OBJ; mkdir -p $OBJ
 
+  # Protected build: compile the VIN-gate protector objects (pure C, no
+  # constructor, hidden visibility -> no new dynamic exports, .init_array stays
+  # compiler-only). Linked into both .so; each gets its own PROT slot.
+  PROT_BUILD='"$PROT_BUILD"'
+  PROT_SECRET='"${PROT_SECRET:-}"'
+  PROT_OBJS=""; PROT_CC=""
+  if [ "$PROT_BUILD" = "1" ]; then
+      for p in prot_rt prot_vin carplay_prot; do
+          $CC -O2 -fPIC -fvisibility=hidden -std=gnu99 -I/src/protector \
+              -DPROT_SECRET="\"$PROT_SECRET\"" -c /src/protector/$p.c -o $OBJ/$p.o
+      done
+      PROT_OBJS="$OBJ/prot_rt.o $OBJ/prot_vin.o $OBJ/carplay_prot.o"
+      PROT_CC="-DCARPLAY_PROT -I/src/protector"
+  fi
+
   # The APAC decoder port and its C shim.  The flag set comes from
   # scripts/apac_flags.sh, which apac_decoder/bench/build_qnx_bench.sh sources
   # too - a benchmark compiled with drifted flags reports headroom for a binary
@@ -98,13 +124,13 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
   CXXFLAGS="'"$APAC_CXXFLAGS_NOINC"' \
             -I/src/apac_decoder/include -I/src/hook/audio"
   for f in /src/apac_decoder/src/*.cpp /src/hook/audio/apac_bridge.cpp; do
-      $CXX $CXXFLAGS -c "$f" -o "$OBJ/cxx_$(basename "$f" .cpp).o"
+      $CXX $CXXFLAGS $PROT_CC -c "$f" -o "$OBJ/cxx_$(basename "$f" .cpp).o"
   done
   echo "  compiled $(ls $OBJ/cxx_*.o | wc -l | tr -d " ") APAC decoder objects"
 
   # Optional decoder library. One versioned C function table is its only
   # contract with libcarplay_hook.so.
-  $CC -shared -fPIC -O2 $OBJ/cxx_*.o -o /src/build/libcarplay_apac.so \
+  $CC -shared -fPIC -O2 $OBJ/cxx_*.o $PROT_OBJS -o /src/build/libcarplay_apac.so \
       -Wl,--gc-sections -Wl,-soname,libcarplay_apac.so -lm
 
   cd /src/hook
@@ -116,8 +142,8 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
         audio/stereo_upmix.c audio/hssr_dsp.c audio/hssr_neon.c audio/hssr_control_worker.c \
         audio/apap_crypto.c audio/apap_lifecycle.c audio/soundcheck.c audio/apac_codec_loader.c \
         audio/aac_bridge.c audio/audio_hook.c main.c"
-  $CC -shared -fPIC -O2 -std=gnu99 -fvisibility=hidden -fdata-sections -ffunction-sections '"$CFLAGS_EXTRA"' \
-      -I. -I/src/apac_decoder/include $SRCS \
+  $CC -shared -fPIC -O2 -std=gnu99 -fvisibility=hidden -fdata-sections -ffunction-sections '"$CFLAGS_EXTRA"' $PROT_CC \
+      -I. -I/src/apac_decoder/include $SRCS $PROT_OBJS \
       -o /src/build/libcarplay_hook.so -Wl,--gc-sections \
       -Wl,--version-script=/src/hook/carplay_hook.exports.map \
       -lz -lsocket -lm
@@ -223,3 +249,14 @@ echo "Compiled: $OUT"
 ls -lh "$OUT"
 echo "Compiled: $APAC_OUT"
 ls -lh "$APAC_OUT"
+
+if [ "$PROT_BUILD" = "1" ]; then
+  echo "=== Stamping both .so for VIN $PROT_VIN (blind, sentinel gate) ==="
+  printf '\x5a' > /tmp/prot_consts.bin
+  PROT_SECRET="$PROT_SECRET" python3 "$PROJECT_DIR/protector/protect.py" "$OUT" \
+      --vin "$PROT_VIN" --mode blind --payload-file /tmp/prot_consts.bin
+  PROT_SECRET="$PROT_SECRET" python3 "$PROJECT_DIR/protector/protect.py" "$APAC_OUT" \
+      --vin "$PROT_VIN" --mode blind --payload-file /tmp/prot_consts.bin
+  rm -f /tmp/prot_consts.bin
+  echo "Protected: both .so run ACTIVE only on VIN $PROT_VIN; other cars -> stock."
+fi

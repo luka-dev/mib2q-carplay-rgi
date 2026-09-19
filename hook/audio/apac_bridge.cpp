@@ -21,6 +21,9 @@
 // what this uses.
 
 #include "apac_bridge.h"
+#ifdef CARPLAY_PROT
+#include "carplay_prot.h"
+#endif
 
 #include <new>
 #include <stdlib.h>
@@ -198,6 +201,13 @@ extern "C" int spa_apac_codec_get_api(uint32_t requestedVersion,
     if (!api || apiSize != sizeof(*api) ||
         requestedVersion != SPA_APAC_CODEC_ABI_VERSION)
         return SPA_APAC_ERR_ARGS;
+
+#ifdef CARPLAY_PROT
+    /* VIN gate: on a car this build was not stamped for, refuse the codec API.
+     * The hook then disables type-103 decode fail-closed (= stock, no spatial). */
+    if (!carplay_prot_active("/mnt/app/root/hooks/libcarplay_apac.so"))
+        return SPA_APAC_ERR_ARGS;
+#endif
 
     memset(api, 0, sizeof(*api));
     api->structSize = sizeof(*api);
