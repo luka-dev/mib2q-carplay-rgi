@@ -64,26 +64,26 @@ if open("app_prov","rb").read().find(b"\x5a\x66\x07")!=-1:
 print("  ok: constants not present in cleartext")
 PY
 
-echo "== LIVE PATH: production auto-arm reading the real FEC quorum =="
-if [ -f ../FEC/FecContainer.fec ] && [ -f ../FEC/backup/FecContainer.fec ]; then
-  FECVIN=$(grep -ao '\(WAU\|WA1\|TRU\|WVW\|1VW\)[A-HJ-NPR-Z0-9]\{14\}' ../FEC/FecContainer.fec | head -1)
-  $CC -O2 -DPROT_SECRET="\"$SECRET\"" -DPROT_SELF_OVERRIDE='"./app_live"' \
-      -DPROT_FEC_ACTIVE='"../FEC/FecContainer.fec"' \
-      -DPROT_FEC_BACKUP='"../FEC/backup/FecContainer.fec"' \
+echo "== LIVE PATH: production auto-arm reading the real MMX persistence store =="
+STORE=../advanced/MU1316-special/mmx/mnt/persist/var/fw/persistence.sqlite
+if [ -f "$STORE" ]; then
+  MMXVIN=$(grep -ao 'vin","d":"[A-HJ-NPR-Z0-9]\{17\}"' "$STORE" | head -1 | grep -o '[A-HJ-NPR-Z0-9]\{17\}')
+  $CC -O2 -DPROT_SECRET="\"$SECRET\"" -DPROT_APP_SELF='"./app_live"' \
+      -DPROT_MMX_STORE="\"$STORE\"" \
       -o app_live example_app.c prot_rt.c prot_vin.c
-  PROT_SECRET="$SECRET" python3 protect.py app_live --vin "$FECVIN" --mode blind --payload-file consts.bin >/dev/null
-  OUT=$(./app_live); echo "  baked $FECVIN, unit FEC $FECVIN -> $OUT"
+  PROT_SECRET="$SECRET" python3 protect.py app_live --vin "$MMXVIN" --mode blind --payload-file consts.bin >/dev/null
+  OUT=$(./app_live); echo "  baked $MMXVIN, MMX store $MMXVIN -> $OUT"
   [ "$OUT" = "$ACTIVE" ] || { echo "FAIL: live path did not activate on matching VIN"; exit 1; }
   # mismatch: fresh build stamped for a DIFFERENT VIN, must stay inert here
-  $CC -O2 -DPROT_SECRET="\"$SECRET\"" -DPROT_SELF_OVERRIDE='"./app_live2"' \
-      -DPROT_FEC_ACTIVE='"../FEC/FecContainer.fec"' -DPROT_FEC_BACKUP='"../FEC/backup/FecContainer.fec"' \
+  $CC -O2 -DPROT_SECRET="\"$SECRET\"" -DPROT_APP_SELF='"./app_live2"' \
+      -DPROT_MMX_STORE="\"$STORE\"" \
       -o app_live2 example_app.c prot_rt.c prot_vin.c
   PROT_SECRET="$SECRET" python3 protect.py app_live2 --vin 1VWSA7A38LC000001 --mode blind --payload-file consts.bin >/dev/null
-  OUT=$(./app_live2); echo "  baked 1VW..., unit FEC $FECVIN -> $OUT"
+  OUT=$(./app_live2); echo "  baked 1VW..., MMX store $MMXVIN -> $OUT"
   [ "$OUT" = "$INERT" ] || { echo "FAIL: live path activated on wrong VIN"; exit 1; }
-  echo "  ok: live FEC path activates only on the matching VIN"
+  echo "  ok: live MMX path activates only on the matching VIN"
 else
-  echo "  (skipped: ../FEC not present)"
+  echo "  (skipped: MMX persistence store not present)"
 fi
 
 echo

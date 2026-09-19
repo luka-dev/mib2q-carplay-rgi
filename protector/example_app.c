@@ -50,8 +50,12 @@ int main(int argc, char **argv)
     /* test build: VIN + self path from argv, so selftest can drive right/wrong */
     prot_arm(argv[0], argc > 1 ? argv[1] : "", SENTINEL, STOCK, 2);
 #else
-    /* production: live VIN from the FEC quorum + our own image, no arguments */
-    prot_arm_auto(SENTINEL, STOCK, 2);
+    /* production (MMX): live VIN from the persistence store + our own image.
+     * Pass the fixed app install path; /proc/self/exefile is unreliable on QNX. */
+#  ifndef PROT_APP_SELF
+#  define PROT_APP_SELF "/eso/bin/apps/yourapp"
+#  endif
+    prot_arm_path(PROT_APP_SELF, SENTINEL, STOCK, 2);
 #endif
 
     short samples[8] = { 100,100,100,100,100,100,100,100 };

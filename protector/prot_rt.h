@@ -150,6 +150,13 @@ int prot_active(void);                       /* 1 iff armed with the right VIN *
  * Requires linking prot_vin.c. */
 prot_mode_t prot_arm_auto(uint8_t sentinel, const uint8_t *defaults, size_t n);
 
+/* MMX-friendly entry: like prot_arm_auto but you pass this app's known install
+ * path (e.g. "/eso/bin/apps/yourapp") instead of relying on /proc/self/exefile.
+ * On MMX the app image is a fixed read-only mount, so the path is known at build
+ * time and this is the reliable form. Live VIN still read via prot_read_vin. */
+prot_mode_t prot_arm_path(const char *self_path, uint8_t sentinel,
+                          const uint8_t *defaults, size_t n);
+
 /* Best-effort path to this program's own on-disk image (QNX /proc/self/exefile,
  * else Linux /proc/self/exe, else argv0 if you stashed it). Returns 0 on success
  * and fills buf. Used by prot_arm_auto. */

@@ -194,16 +194,30 @@ int prot_self_path(char *buf, size_t cap)
     return -1;
 }
 
+/* Fall back to stock/inert without touching the slot (env failure). */
+static prot_mode_t stock_fallback(const uint8_t *defaults, size_t n)
+{
+    if (n > sizeof g_payload) n = sizeof g_payload;
+    memcpy(g_payload, defaults, n);
+    g_len = n; g_ready = 1; g_mode = PROT_STOCK;
+    return PROT_STOCK;
+}
+
+/* MMX-friendly: explicit install path + live quorum VIN. */
+prot_mode_t prot_arm_path(const char *self_path, uint8_t sentinel,
+                          const uint8_t *defaults, size_t n)
+{
+    char vin[PROT_VIN_LEN + 1];
+    if (!self_path || prot_read_vin(vin) != 0)
+        return stock_fallback(defaults, n);          /* no/disagreeing VIN -> stock */
+    return prot_arm(self_path, vin, sentinel, defaults, n);
+}
+
 /* Production: arm from the live quorum VIN + our own image. Any failure -> STOCK. */
 prot_mode_t prot_arm_auto(uint8_t sentinel, const uint8_t *defaults, size_t n)
 {
-    char self[1024], vin[PROT_VIN_LEN + 1];
-    if (prot_self_path(self, sizeof self) != 0 || prot_read_vin(vin) != 0) {
-        /* can't locate self, or no/disagreeing VIN -> degrade to stock/inert */
-        if (n > sizeof g_payload) n = sizeof g_payload;
-        memcpy(g_payload, defaults, n);
-        g_len = n; g_ready = 1; g_mode = PROT_STOCK;
-        return PROT_STOCK;
-    }
-    return prot_arm(self, vin, sentinel, defaults, n);
+    char self[1024];
+    if (prot_self_path(self, sizeof self) != 0)
+        return stock_fallback(defaults, n);          /* can't locate self -> stock */
+    return prot_arm_path(self, sentinel, defaults, n);
 }

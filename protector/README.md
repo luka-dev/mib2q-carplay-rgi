@@ -32,6 +32,26 @@ checksum, the VIN-keyed math — is stamped in afterward by `protect.py`.
 | `Makefile` | host/QNX build, `make build VIN=…`, `make test` |
 | `selftest.sh` | end-to-end proof incl. the live FEC path |
 
+## Target: MMX (mmx2qc), QNX 6.5 armle-v7
+
+We run from the MMX app image, not the RCC. Established from the firmware
+(`advanced/MU1316-appimg`, `MU1316-system/etc/fstab`, `MU1316-Partition.txt`):
+
+- **OS/arch:** QNX 6.5.0, 32-bit ARM (EABI5), `PRODUCT=mmx2qc`. Our armv7 build
+  applies; the crypto core is validated on real QNX under QEMU (below).
+- **App install path:** `/eso/bin/apps/<app>` (= `/mnt/app/eso/bin/apps/<app>`),
+  mount `ro` but **readable** — so an app can read its own binary for the CRC.
+- **Live VIN:** the MMX app persistence store
+  `/mnt/persist/var/fw/persistence.sqlite` (alias `/var/fw/persistence.sqlite`,
+  `rw`), a JSON KV store. We quorum two records — `/core/vin` and
+  `/core/registeredVin` — and require they agree. `prot_vin.c` reads this by
+  default; verified end-to-end on the real store from this dump (VIN
+  `WAUC4CF55JA099137`).
+- **RCC FEC is NOT reachable locally from MMX** — only over qnet at
+  `/net/rcc/mnt/efs-persist/…`. We deliberately use the MMX-local store instead.
+  (An RCC build that reads the FEC files directly is available with
+  `-DPROT_TARGET_RCC`.)
+
 ## Production flow (VIN provided pre-build)
 
 The VIN is known before the build, so stamping happens inside the build:
@@ -39,31 +59,33 @@ The VIN is known before the build, so stamping happens inside the build:
 ```sh
 # constants = [ sentinel, your real coefficients... ]
 printf '\x5a\x66\x07' > consts.bin
-PROT_SECRET='<ci-secret>' ./build.sh WAUC4CF55JA099137 app consts.bin
-# QNX/RCC:
-CC='qcc -Vgcc_ntoarmv7le' PROT_SECRET='<ci-secret>' ./build.sh WAUC4CF55JA099137 app.armle consts.bin
+CC='qcc -Vgcc_ntoarmv7le' PROT_SECRET='<ci-secret>' ./build.sh WAUC4CF55JA099137 app consts.bin
+# (or the qnx-65-sdp-docker toolchain: arm-unknown-nto-qnx6.5.0eabi-gcc)
 ```
 
-At load the app calls `prot_arm_auto()` — no arguments. It reads the **live VIN on
-the unit** from the FEC quorum (`/mnt/efs-persist/FEC/FecContainer.fec` and the
-`/mnt/efs-system/backup/…` copy; they must agree), checksums its own image, and
-arms. It runs ACTIVE only when the unit's live VIN equals the VIN baked at build.
-Verified end-to-end on the real FEC from this dump: matching VIN → ACTIVE, any
-other VIN → inert.
+At load the app arms once, reading the **live VIN from the MMX store** and
+checksumming its own image. On MMX pass the known install path (more reliable
+than `/proc/self/exefile` on QNX):
 
 ```c
 PROT_DEFINE_SLOT();
 static const uint8_t STOCK[2] = { 1, 0 };
-prot_arm_auto(0x5A, STOCK, 2);        // once at load; live VIN + self image
+prot_arm_path("/eso/bin/apps/yourapp", 0x5A, STOCK, 2);   // live VIN + this image
 ... if (prot_active()) { /* your hook */ } ...
 ```
 
-**Self-path note.** The integrity check reads the program's own on-disk image.
-`prot_arm_auto` finds it via `/proc/self/exefile` (QNX). On a full RCC that
-resolves to the readable ifs path; if your deployment can't expose it that way,
-call `prot_arm(self_path, vin, …)` with the app's known install path instead. (On
-the minimal QEMU BSP used for testing there is no readable file view at all, so
-the file-read path can't be exercised there — see QNX validation below.)
+It runs ACTIVE only when the store's live VIN equals the VIN baked at build.
+Verified end-to-end on the real MMX persistence store: matching VIN → ACTIVE,
+any other VIN → inert.
+
+**Self-path note.** `prot_arm_auto()` (no path arg) finds the image via
+`/proc/self/exefile`; that failed on the minimal QEMU BSP, so on MMX prefer
+`prot_arm_path()` with the fixed `/eso/bin/apps/<app>` path.
+
+**Spoofing note.** `/mnt/persist` is `rw`, so the VIN records are editable on the
+unit. This is consistent with the ceiling below (the VIN is not a secret): editing
+them to a wrong value yields inert/stock, never premium; the quorum only forces an
+attacker to edit both records. It does not turn the VIN into a trust anchor.
 
 ## QNX / armv7 validation
 
