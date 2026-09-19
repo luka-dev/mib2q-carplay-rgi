@@ -39,6 +39,13 @@ mode_for() {
     esac
 }
 
+# A destination is either a STOCK file we replace (keep a one-time backup, restore
+# on uninstall) or a file we fully OWN and add (never back up, remove on uninstall).
+# Only firmware paths replace stock; everything else (hooks/jar/renderers/models)
+# is ours. This avoids ever mistaking our own previously-installed file for stock
+# on an upgrade - which would otherwise get "restored" instead of removed.
+is_replaced() { case $1 in */eso/bin/apps/*|*/armle/lib/dll/*) return 0 ;; *) return 1 ;; esac; }
+
 echo "custom.sh: CarPlay $ACTION (rootfs -> /)"
 echo "Remounting app and system read-write..."
 mount -uw /mnt/app    2>/dev/null || true
@@ -60,8 +67,10 @@ install)
         dest=/${f#./}
         dir=${dest%/*}
         mkdir -p "$dir" || { echo "FAILED mkdir $dir"; rm -f "$LIST"; exit 1; }
-        # keep the true stock once: first install only, never overwrite a backup
-        if [ -e "$dest" ] && [ ! -e "$dest.carplay-stock" ]; then
+        # STOCK replacements only: keep the true stock once (first install; an
+        # existing backup is never overwritten, so an upgrade preserves it). Files
+        # we own are never backed up.
+        if is_replaced "$dest" && [ -e "$dest" ] && [ ! -e "$dest.carplay-stock" ]; then
             cp -p "$dest" "$dest.carplay-stock" || { echo "FAILED backup $dest"; rm -f "$LIST"; exit 1; }
         fi
         # atomic replace: stage a sibling on the SAME fs, then rename over $dest.
@@ -82,10 +91,10 @@ uninstall)
     while IFS= read -r f; do
         case $f in *.DS_Store) continue ;; esac
         dest=/${f#./}
-        if [ -e "$dest.carplay-stock" ]; then
-            mv -f "$dest.carplay-stock" "$dest" || echo "WARN restore $dest"
+        if is_replaced "$dest" && [ -e "$dest.carplay-stock" ]; then
+            mv -f "$dest.carplay-stock" "$dest" || echo "WARN restore $dest"   # stock back
         else
-            rm -f "$dest"
+            rm -f "$dest" "$dest.carplay-stock"                                 # ours -> remove
         fi
     done < "$LIST"
     rm -f "$LIST"
