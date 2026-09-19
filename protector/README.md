@@ -58,6 +58,29 @@ prot_arm_auto(0x5A, STOCK, 2);        // once at load; live VIN + self image
 ... if (prot_active()) { /* your hook */ } ...
 ```
 
+**Self-path note.** The integrity check reads the program's own on-disk image.
+`prot_arm_auto` finds it via `/proc/self/exefile` (QNX). On a full RCC that
+resolves to the readable ifs path; if your deployment can't expose it that way,
+call `prot_arm(self_path, vin, …)` with the app's known install path instead. (On
+the minimal QEMU BSP used for testing there is no readable file view at all, so
+the file-read path can't be exercised there — see QNX validation below.)
+
+## QNX / armv7 validation
+
+Cross-compiled with the QNX 6.5 `armle-v7` toolchain
+(`Tools/qnx-65-sdp-docker`, GCC 8.5.0) and run on real QNX 6.5 under QEMU
+(`tests/qemu-run.sh`). The arch-sensitive core — SHA-256, HMAC-SHA256, CRC32,
+the sha256-CTR keystream, and the unblind roundtrip — is byte-identical to the
+host (`qnx_kat.c`, all known-answer vectors pass on armv7):
+
+```
+CRC ok · SHA ok · HMAC ok · UNBLIND ok (gain=102 off=7) · QNX-KAT-PASS
+```
+
+The end-to-end hook flow (arm → active → math) is proven on the host against the
+real FEC. The self-image read is deployment-specific (see note above); it works
+on the real RCC's readable ifs, not on the stripped QEMU boot image.
+
 ## Use
 
 ```c
