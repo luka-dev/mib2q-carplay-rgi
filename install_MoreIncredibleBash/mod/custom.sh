@@ -24,7 +24,18 @@ ROOT=$D/carplay/root
 ACTION=${1:-install}
 [ -d "$ROOT" ] || { echo "no payload tree at $ROOT"; exit 1; }
 
-mode_for() { case $1 in *.so|*.so.*|*/maneuver_render|*/altscreen_render|*.sh) echo 755 ;; *) echo 644 ;; esac; }
+# Explicit mode per destination - never rely on the tree's bits (protect.py
+# rewrites the .so via python and drops the exec bit; git/macOS may not preserve
+# it either). Matches the old installer: hook files 755, data 644.
+mode_for() {
+    case $1 in
+        *.so|*.so.*)                          echo 755 ;;  # shared libraries
+        */maneuver_render|*/altscreen_render) echo 755 ;;  # renderer executables
+        */eso/bin/apps/*)                     echo 755 ;;  # firmware exec (smartphone_integrator)
+        *.sh)                                 echo 755 ;;  # runtime scripts
+        *)                                    echo 644 ;;  # hssr_model.bin, flag_atlas.rgba, .jar, configs
+    esac
+}
 
 echo "custom.sh: CarPlay $ACTION (rootfs -> /)"
 echo "Remounting app and system read-write..."
