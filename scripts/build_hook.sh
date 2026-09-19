@@ -278,6 +278,9 @@ if [ "$PROT_BUILD" = "1" ]; then
   [ -f "$PROJECT_DIR/build/deva-ctrl-qc.so" ] && cp -p "$PROJECT_DIR/build/deva-ctrl-qc.so" "$DLL/"
   # drop empty dirs we didn't fill
   rmdir "$APPS" "$DLL" 2>/dev/null || true
+  # installer resource (not a "/" file): the SI json child fragment custom.sh
+  # splices into smartphone_integrator.json at install time.
+  [ -f "$PROJECT_DIR/build/carplay_child.json" ] && cp -p "$PROJECT_DIR/build/carplay_child.json" "$MOD/" || miss="$miss carplay_child.json"
   [ -n "$miss" ] && echo "  note: not in build/ (build separately):$miss"
 
   echo "=== Stamping the two .so in the rootfs for VIN $PROT_VIN ==="
