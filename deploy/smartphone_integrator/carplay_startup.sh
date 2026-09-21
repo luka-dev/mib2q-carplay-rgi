@@ -54,7 +54,10 @@ export ALTSCREEN_HANDLE_ALT=1
 export ALTSCREEN_ADVERT_DISPLAYS=1
 
 # Buffered CarPlay audio policy.
-export AUDIO_SPATIAL=0
+# 1 = this unit (external J525 amp, 6-channel MOST route). The internal-amp thread's policy is
+# AUDIO_SPATIAL=0 unless E2P 0xFC reads 02 (docs/AUDIO_5_1_STATE.md); that gate belongs to the
+# installer, not to this unit's startup file.
+export AUDIO_SPATIAL=1
 export AUDIO_SPATIAL_ATMOS=0
 export AUDIO_SPATIAL_ATMOS_MODE=downmix
 export AUDIO_STEREO_UPMIX=on
