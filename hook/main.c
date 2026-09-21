@@ -14,13 +14,23 @@
 #include "routeguidance/rgd_hook.h"
 #include "coverart/coverart_hook.h"
 #include "altscreen/altscreen_hook.h"
+/* HOOK_AUDIO=0 (scripts/build_hook.sh HOOK_AUDIO=0) leaves the type-103 audio
+ * module and its QSA/AirPlay audio interposers out of the build entirely:
+ * stock CarPlay audio, no libcarplay_apac.so. */
+#ifndef HOOK_AUDIO
+#define HOOK_AUDIO 1
+#endif
+#if HOOK_AUDIO
 #include "audio/audio_hook.h"
+#endif
 
 const hook_module_def_t* const hook_module_table[] = {
     &rgd_module_def,
     &coverart_module_def,
     &altscreen_module_def,
+#if HOOK_AUDIO
     &audio_module_def,
+#endif
 };
 
 const size_t hook_module_table_count =

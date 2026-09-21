@@ -57,14 +57,23 @@ LOG="${LOG:-1}"
 LOG_RGD_PACKET_RAW="${LOG_RGD_PACKET_RAW:-0}"
 AUDIO_STATE_TRACE="${AUDIO_STATE_TRACE:-0}"
 ALTSCREEN_PACE_TRACE="${ALTSCREEN_PACE_TRACE:-0}"
+# HOOK_AUDIO=0 builds the hook without the type-103 audio module (stock CarPlay
+# audio; no QSA/AirPlay audio interposers, no libcarplay_apac.so).
+HOOK_AUDIO="${HOOK_AUDIO:-1}"
 [[ "$LOG" == "0" || "$LOG" == "1" ]] || { echo "Invalid LOG=$LOG (0|1)"; exit 1; }
 [[ "$LOG_RGD_PACKET_RAW" == "0" || "$LOG_RGD_PACKET_RAW" == "1" ]] || { echo "Invalid LOG_RGD_PACKET_RAW"; exit 1; }
 [[ "$AUDIO_STATE_TRACE" == "0" || "$AUDIO_STATE_TRACE" == "1" ]] || { echo "Invalid AUDIO_STATE_TRACE=$AUDIO_STATE_TRACE (0|1)"; exit 1; }
 [[ "$ALTSCREEN_PACE_TRACE" == "0" || "$ALTSCREEN_PACE_TRACE" == "1" ]] || { echo "Invalid ALTSCREEN_PACE_TRACE=$ALTSCREEN_PACE_TRACE (0|1)"; exit 1; }
+[[ "$HOOK_AUDIO" == "0" || "$HOOK_AUDIO" == "1" ]] || { echo "Invalid HOOK_AUDIO=$HOOK_AUDIO (0|1)"; exit 1; }
 [[ "$LOG_RGD_PACKET_RAW" == "1" && "$LOG" != "1" ]] && { echo "LOG_RGD_PACKET_RAW=1 requires LOG=1"; exit 1; }
 
 CFLAGS_EXTRA="-D__QNX__ -mfpu=neon -mfloat-abi=softfp"
-echo "Stereo upmix renderer: hssr-universal"
+if [ "$HOOK_AUDIO" == "0" ]; then
+    CFLAGS_EXTRA="$CFLAGS_EXTRA -DHOOK_AUDIO=0"
+    echo "Type-103 audio module EXCLUDED (stock CarPlay audio, no libcarplay_apac.so)"
+else
+    echo "Stereo upmix renderer: hssr-universal"
+fi
 [ "$LOG" == "0" ] && CFLAGS_EXTRA="$CFLAGS_EXTRA -DENABLE_LOGGING=0" && echo "Logging and diagnostic captures DISABLED"
 [ "$AUDIO_STATE_TRACE" == "1" ] && CFLAGS_EXTRA="$CFLAGS_EXTRA -DENABLE_STATE_TRACE=1" && echo "Compact lifecycle trace ENABLED"
 [ "$ALTSCREEN_PACE_TRACE" == "1" ] && CFLAGS_EXTRA="$CFLAGS_EXTRA -DENABLE_ALTSCREEN_PACE_TRACE=1" && echo "Stream-111 pacing trace ENABLED (no media capture)"
@@ -106,6 +115,7 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
   # constructor, hidden visibility -> no new dynamic exports, .init_array stays
   # compiler-only). Linked into both .so; each gets its own PROT slot.
   PROT_BUILD='"$PROT_BUILD"'
+  HOOK_AUDIO='"$HOOK_AUDIO"'
   PROT_SECRET='"${PROT_SECRET:-}"'
   PROT_OBJS=""; PROT_CC=""
   if [ "$PROT_BUILD" = "1" ]; then
@@ -117,6 +127,7 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
       PROT_CC="-DCARPLAY_PROT -I/src/protector"
   fi
 
+  if [ "$HOOK_AUDIO" = "1" ]; then
   # The APAC decoder port and its C shim.  The flag set comes from
   # scripts/apac_flags.sh, which apac_decoder/bench/build_qnx_bench.sh sources
   # too - a benchmark compiled with drifted flags reports headroom for a binary
@@ -132,16 +143,18 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
   # contract with libcarplay_hook.so.
   $CC -shared -fPIC -O2 $OBJ/cxx_*.o $PROT_OBJS -o /src/build/libcarplay_apac.so \
       -Wl,--gc-sections -Wl,-soname,libcarplay_apac.so -lm
+  fi
 
   cd /src/hook
   SRCS="framework/logging.c framework/state_trace.c framework/signal_guard.c framework/bus.c framework/iap2_protocol.c framework/hook_framework.c \
         framework/airplay_seams.c \
         routeguidance/rgd_tlv.c routeguidance/rgd_hook.c \
         coverart/jpeg_safety.c coverart/coverart_stream.c coverart/coverart_hook.c \
-        altscreen/altscreen_av.c altscreen/altscreen_hook.c audio/spatial_downmix.c \
-        audio/stereo_upmix.c audio/hssr_dsp.c audio/hssr_neon.c audio/hssr_control_worker.c \
-        audio/apap_crypto.c audio/apap_lifecycle.c audio/soundcheck.c audio/apac_codec_loader.c \
-        audio/aac_bridge.c audio/audio_hook.c main.c"
+        altscreen/altscreen_av.c altscreen/altscreen_hook.c main.c"
+  AUDIO_SRCS="audio/spatial_downmix.c audio/stereo_upmix.c audio/hssr_dsp.c audio/hssr_neon.c \
+        audio/hssr_control_worker.c audio/apap_crypto.c audio/apap_lifecycle.c audio/soundcheck.c \
+        audio/apac_codec_loader.c audio/aac_bridge.c audio/audio_hook.c"
+  [ "$HOOK_AUDIO" = "1" ] && SRCS="$SRCS $AUDIO_SRCS"
   $CC -shared -fPIC -O2 -std=gnu99 -fvisibility=hidden -fdata-sections -ffunction-sections '"$CFLAGS_EXTRA"' $PROT_CC \
       -I. -I/src/apac_decoder/include $SRCS $PROT_OBJS \
       -o /src/build/libcarplay_hook.so -Wl,--gc-sections \
@@ -170,7 +183,11 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
   n=$($READELF -d $SO | grep -c libcarplay_apac || true)
   [ "$n" = "0" ] || fail "the hook has a hard dependency on libcarplay_apac"
   n=$($NM -D $SO | grep -cE " T snd_pcm_(open_name|plugin_params|plugin_setup|plugin_write|close)$" || true)
-  [ "$n" = "5" ] || fail "QSA bridge exports=$n (expected open/params/setup/write/close)"
+  if [ "$HOOK_AUDIO" = "1" ]; then
+      [ "$n" = "5" ] || fail "QSA bridge exports=$n (expected open/params/setup/write/close)"
+  else
+      [ "$n" = "0" ] || fail "audio-less build still exports $n QSA symbols"
+  fi
   n=$($NM -D $SO | grep -cE " T HID(RemotePlaybackFillReport|DevicePostReport)$" || true)
   if [ "$TRACE_ENABLED" = "1" ]; then
       [ "$n" = "2" ] || fail "state-trace HID seam exports=$n (expected 2)"
@@ -196,6 +213,13 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
       grep -vE "^HID(DevicePostReport|RemotePlaybackFillReport)$" \
           /tmp/hook_exports_expected_all > /tmp/hook_exports_expected
   fi
+  if [ "$HOOK_AUDIO" = "0" ]; then
+      # Every interposer audio_hook.c owns: the QSA bridge, the AirPlay audio
+      # format/stream seams, the /info property rail and the CQNXSoundIF seams.
+      grep -vE "^(snd_pcm_.*|AudioSessionGetSupportedOutputFormats|AirPlayAudioFormatToASBD|AudioStreamPrepare|AudioStreamStop|AirTunesServer_EnsureCreated|AirPlayReceiverServerPlatformCopyProperty|AirPlayReceiverSessionControl|_ZN3dio11CQNXSoundIF.*createMetadata.*)$" \
+          /tmp/hook_exports_expected > /tmp/hook_exports_expected_noaudio
+      mv /tmp/hook_exports_expected_noaudio /tmp/hook_exports_expected
+  fi
   $NM -D --defined-only $SO | awk "NF >= 3 { print \$3 }" | sort \
       > /tmp/hook_exports_actual
   if ! diff -u /tmp/hook_exports_expected /tmp/hook_exports_actual; then
@@ -212,6 +236,11 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
   n=$($NM -an $SO | grep -cE "(rgd|altscreen|audio)_module_(init|fini)" || true)
   [ "$n" = "0" ] || fail "$n eager module constructor/destructor symbols"
 
+  if [ "$HOOK_AUDIO" = "0" ]; then
+      echo "  undefined:$($NM -D --undefined-only $SO | sed "s/^ *//" | awk "\$1 == \"U\" { printf \" %s\", \$2 }" | head -c 400)"
+      echo "  built build/libcarplay_hook.so (AUDIO=excluded, emutls=0 init_array=compiler-only)"
+      exit 0
+  fi
   # Validate the optional decoder independently: dlopen must not reintroduce
   # the QNX emutls/constructor/runtime hazards removed from the main hook.
   APAC_SO=/src/build/libcarplay_apac.so
@@ -247,8 +276,12 @@ fi
 echo ""
 echo "Compiled: $OUT"
 ls -lh "$OUT"
-echo "Compiled: $APAC_OUT"
-ls -lh "$APAC_OUT"
+if [ "$HOOK_AUDIO" = "1" ]; then
+  echo "Compiled: $APAC_OUT"
+  ls -lh "$APAC_OUT"
+else
+  echo "Audio module excluded: no $APAC_OUT (stale copies are not touched)"
+fi
 
 if [ "$PROT_BUILD" = "1" ]; then
   # Lay the protected build as a rootfs ("/") - every file at its real on-unit
