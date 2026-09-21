@@ -2554,9 +2554,11 @@ static void alt_kick_viewarea(uint32_t gen)
  * (CMD_ALT_RGI is the runtime switch).  Same URL for every zone.
  *   RGI off -> map + cards (turn card right-aligned, ETA on), so the cluster shows
  *              guidance while our BAP/KDK path is idle;
- *   RGI on  -> map, ETA off, no maneuver layout; maneuvers and ETA come from BAP/KDK. */
+ *   RGI on  -> /map = itemType 1 (map only): the root URL is "anyContent" and Maps keeps
+ *              drawing its turn card + ETA there even with showETA=no (seen 2026-09-19);
+ *              maneuvers and ETA come from BAP/KDK. */
 #define ALT_CLUSTER_URL_RGI_OFF "maps:/car/instrumentcluster?showETA=yes&maneuverLayout=rightAligned&showSpeedLimit=no"
-#define ALT_CLUSTER_URL_RGI_ON  "maps:/car/instrumentcluster?showETA=no&maneuverLayout=no&showSpeedLimit=no"
+#define ALT_CLUSTER_URL_RGI_ON  "maps:/car/instrumentcluster/map?showETA=no&maneuverLayout=no&showSpeedLimit=no"
 
 static const char *alt_cluster_url(void)
 {
