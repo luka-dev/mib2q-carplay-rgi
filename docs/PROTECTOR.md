@@ -76,6 +76,33 @@ PROTECTED.txt                         neutral marker (VIN, date) - no mechanism
 
 QNX cross-build variant: `QNX_TOOLCHAIN_VARIANT=8.5 PROT_VIN=… PROT_SECRET=… ./scripts/build_hook.sh`.
 
+### Build flags (all `env=value` before the command)
+
+| flag | default | effect |
+|---|---|---|
+| `PROT_VIN` | — | 17-char target VIN. Set it (+`PROT_SECRET`) to make a protected build. |
+| `PROT_SECRET` | — | build secret; keep out of the tree. Required with `PROT_VIN`. |
+| `HOOK_AUDIO` | `1` | `0` = **compile-time** removal of the type-103 audio path: no QSA/AirPlay audio interposers, no `probe103`/`mainBuffered`, and `libcarplay_apac.so` is not built or shipped (stock CarPlay audio). `AUDIO_SPATIAL=0` only disables 103 at runtime; `HOOK_AUDIO=0` takes it out of the binary. |
+| `LOG` | `1` | `1` = logging compiled in; `0` = pre-prod, logging + captures disabled. |
+| `AUDIO_STATE_TRACE` | `0` | `1` = compact lifecycle trace (needs the two trace HID seams). |
+| `ALTSCREEN_PACE_TRACE` | `0` | `1` = stream-111 pacing trace. |
+| `LOG_RGD_PACKET_RAW` | `0` | `1` = raw RGD packet logging (requires `LOG=1`). |
+| `QNX_TOOLCHAIN_VARIANT` | `latest` | `8.5` selects the GCC 8.5 image. |
+
+`AUDIO_SPATIAL` is **not** a build flag — it is a runtime env in
+`carplay_startup.sh` (`AUDIO_SPATIAL=0/1`). With `HOOK_AUDIO=1` it gates 103 at
+runtime; with `HOOK_AUDIO=0` the audio path is gone regardless.
+
+Worked example — the current fleet build (103 out, logs on, spatial off, locked):
+```sh
+# ensure carplay_startup.sh has AUDIO_SPATIAL=0 (runtime belt-and-braces)
+rm -f build/libcarplay_apac.so            # never ship a stale codec in a HOOK_AUDIO=0 build
+HOOK_AUDIO=0 LOG=1 \
+  PROT_VIN=WAUZZZF45HA149423 PROT_SECRET='<secret>' ./scripts/build_hook.sh
+```
+Result: `mod/carplay/root/` has 12 files (no `libcarplay_apac.so`); the hook has
+0 `spa_apac_codec_get_api` / `probe103` / QSA symbols.
+
 > The `carplay/root/` tree, `carplay_child.json` and `PROTECTED.txt` are build
 > artifacts (gitignored). Regenerate them with the build; don't hand-edit.
 
