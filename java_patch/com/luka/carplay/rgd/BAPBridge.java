@@ -2260,6 +2260,16 @@ public class BAPBridge {
      * must precede updateGfxState, which replays the cached rate when enabled.
      */
     private void forceGfxAvailable(boolean available) {
+        /* KOMO gfxAvailable/dataRate gate the stock view modes only on a MOST cluster map
+         * (Util.isClusterMapMOST).  On this FPK cluster (sysConst 541 == 2) the whole chain is a
+         * no-op EXCEPT one side effect: ClusterViewMode.setDataRate -> refreshMapVisibility ->
+         * showKombiMap(viewMode == 3), and viewMode is pinned at COMPASS on FPK, so every rate
+         * change parked the stock kombi map in its hidden context (frozen ~10 fps, roller zoom
+         * swallowed) until the VC re-sent MapViewAndOrientation on a tab switch - visible right
+         * after a disconnect that followed a route (seen 2026-09-21).  Stock itself never calls
+         * refreshMapVisibility on FPK (refreshViewMode returns early). */
+        IFrameworkAccess fw = CarPlayApp.framework();
+        if (fw == null || !de.audi.tghu.navi.app.util.Util.isClusterMapMOST(fw)) return;
         int desiredRate = available ? 2 : 0;
         try {
             if (komoService != null) {
