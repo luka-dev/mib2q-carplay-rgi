@@ -6,14 +6,6 @@
 #include <math.h>
 #include <string.h>
 
-/* Host-only research ablation, never enabled implicitly in a vehicle build. */
-#if (defined(SPA_HSSR_EXPERIMENT_CENTER_NULL) || defined(SPA_HSSR_EXPERIMENT_SIDE_OBJECT)) && !defined(SPA_HSSR_CAPTURE_TRANSFERS)
-#error Experimental extraction requires the host transfer-capture build
-#endif
-#if defined(SPA_HSSR_EXPERIMENT_CENTER_NULL) && defined(SPA_HSSR_EXPERIMENT_SIDE_OBJECT)
-#error Choose one extraction ablation
-#endif
-
 #ifndef SPA_HSSR_UNIVERSAL_SEMANTIC_MAKEUP
 #define SPA_HSSR_UNIVERSAL_SEMANTIC_MAKEUP 16.0f
 #endif
@@ -1247,13 +1239,6 @@ static void spa_hssr_render_hop(
                 object_target *= 0.50f + 0.50f *
                     spa_hssr_dsp_smoothstep(coh, 0.25f, 0.55f);
             }
-            if (state->cabin_policy) {
-                /* The tracker/rescue may nominate a spatial candidate, but
-                 * cannot override the learned permission to transfer it. */
-                if (object_target > state->band_mask[band])
-                    object_target = state->band_mask[band];
-                object_target *= state->band_universal_safety[band];
-            }
             alpha = object_target > state->bin_mask[bin]
                 ? 0.50f : 0.020f;
             state->bin_mask[bin] += alpha *
@@ -1320,8 +1305,6 @@ static void spa_hssr_render_hop(
                 if (kHssrBandEdgeHz[band + 1] <= 220) diffuse = 0.0f;
                 if (diffuse > universal_target) universal_target = diffuse;
             }
-            /* No synthetic minimum rear activity in the cabin candidate. */
-            if (state->cabin_policy) universal_target = 0.0f;
             alpha = universal_target > state->bin_universal_mask[bin]
                 ? 0.28f : 0.012f;
             state->bin_universal_mask[bin] += alpha *
@@ -1367,8 +1350,7 @@ static void spa_hssr_render_hop(
                     ((pl - pr) / (pl + pr + 1.0e-9f) - state->bin_scene_lr[bin]);
             }
 
-            mask = spa_hssr_dsp_bound(mask, 0.0f,
-                                      state->cabin_policy ? 1.0f : 1.45f);
+            mask = spa_hssr_dsp_bound(mask, 0.0f, 1.45f);
             pan = spa_hssr_dsp_bound(
                 state->bin_object_pan[bin], -0.95f, 0.95f);
             /* Extract with the measured source vector and hard-steer only the
@@ -1383,11 +1365,6 @@ static void spa_hssr_render_hop(
                 float magnitude = fabsf(pan);
                 float focused = 0.78f + 0.17f *
                     spa_hssr_dsp_smoothstep(magnitude, 0.05f, 0.92f);
-
-                if (state->cabin_policy)
-                    focused = magnitude + (0.85f - magnitude) * 0.35f *
-                        spa_hssr_dsp_smoothstep(mask, 0.10f, 0.60f) *
-                        spa_hssr_dsp_smoothstep(magnitude, 0.05f, 0.35f);
 
                 pan = pan < 0.0f ? -focused : focused;
             }
@@ -1405,45 +1382,10 @@ static void spa_hssr_render_hop(
              * source-aware front transfer in stereo_upmix.c. */
             extraction_l = source_l;
             extraction_r = source_r;
-#ifdef SPA_HSSR_EXPERIMENT_CENTER_NULL
-            if (state->cabin_policy) {
-                /* Apply a contractive common-mode null BEFORE projection.
-                 * Do not renormalize its lost energy or change controller input.
-                 * Protects exact common-mode sources, NOT arbitrary lead roles. */
-                extraction_l = 0.5f * (source_l - source_r);
-                extraction_r = -extraction_l;
-            }
-#elif defined(SPA_HSSR_EXPERIMENT_SIDE_OBJECT)
-            if (state->cabin_policy) {
-                /* Orthonormal side extraction: object operator norm <= mask,
-                 * without the extra near-centre pan attenuation above.
-                 * Remove only its actual side image from the front, preserving
-                 * the L+R/center feed. Still NOT a semantic lead separator. */
-                source_l = source_l >= source_r ? 1.0f : -1.0f;
-                source_r = -source_l;
-                extraction_l = source_l;
-                extraction_r = source_r;
-            }
-#endif
             projected_re = 0.5f *
                 (extraction_l * left_re + extraction_r * right_re);
             projected_im = 0.5f *
                 (extraction_l * left_im + extraction_r * right_im);
-#ifdef SPA_HSSR_CAPTURE_TRANSFERS
-            if (state->cabin_policy) {
-                const float matrix[8] = {
-                    0.5f * (mask * steering_l * extraction_l + ambience),
-                    0.5f * (mask * steering_l * extraction_r - ambience),
-                    0.5f * (mask * steering_r * extraction_l - ambience),
-                    0.5f * (mask * steering_r * extraction_r + ambience),
-                    0.5f * mask * source_l * extraction_l,
-                    0.5f * mask * source_l * extraction_r,
-                    0.5f * mask * source_r * extraction_l,
-                    0.5f * mask * source_r * extraction_r
-                };
-                spa_hssr_capture_transfer(bin, matrix);
-            }
-#endif
             {
                 /* Original source image, BEFORE steering or ambience.  The
                  * subtraction never exceeds the source itself (mask <= 1). */
@@ -1518,34 +1460,6 @@ static void spa_hssr_render_hop(
                     state->bed_im[1][bin] += universal * fallback_r * rotated_r_im;
                 }
             }
-#ifdef SPA_HSSR_CAPTURE_TRANSFERS
-            if (!state->cabin_policy) {
-                /* Complex 2x2 rear transfer of this bin, universal bed
-                 * included (universal already carries the makeup):
-                 * rear = M * [L, R], M = re/im of LL, LR, RL, RR. */
-                float ubl = 0.0f, ubr = 0.0f, uwr = 0.0f, uwi = 0.0f;
-                float matrix[8];
-                if (universal > 0.0f) {
-                    unsigned rotation = 18u + (bin * 13u) % 47u;
-                    float fallback_pan;
-                    uwr = state->twiddle_re[rotation];
-                    uwi = -state->twiddle_im[rotation];
-                    fallback_pan = 0.72f * spa_hssr_dsp_bound(
-                        3.0f * state->bin_scene_lr[bin], -1.0f, 1.0f);
-                    ubl = 0.5f * universal * sqrtf(1.0f + fallback_pan);
-                    ubr = 0.5f * universal * sqrtf(1.0f - fallback_pan);
-                }
-                matrix[0] = 0.5f * (mask * steering_l * extraction_l + ambience) + ubl * uwr;
-                matrix[1] = ubl * uwi;
-                matrix[2] = 0.5f * (mask * steering_l * extraction_r - ambience) + ubl * uwr;
-                matrix[3] = ubl * uwi;
-                matrix[4] = 0.5f * (mask * steering_r * extraction_l - ambience) + ubr * uwr;
-                matrix[5] = -ubr * uwi;
-                matrix[6] = 0.5f * (mask * steering_r * extraction_r + ambience) + ubr * uwr;
-                matrix[7] = -ubr * uwi;
-                spa_hssr_capture_transfer(bin, matrix);
-            }
-#endif
         }
     }
 
@@ -1628,7 +1542,7 @@ static void spa_hssr_dsp_process_frame(
     state->source_ola[0][position] = state->source_ola[1][position] = 0.0f;
     *lfe_bass = ready ? state->lfe_semantic_delay[0][position] : 0.0f;
     *lfe_drums = ready ? state->lfe_semantic_delay[1][position] : 0.0f;
-    if (ready && !state->cabin_policy) {
+    if (ready) {
         const float power_alpha = 0.0005f;
         float normalized_l = (float)input_l * (1.0f / 32768.0f);
         float normalized_r = (float)input_r * (1.0f / 32768.0f);

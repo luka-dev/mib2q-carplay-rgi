@@ -77,7 +77,7 @@ DEFINE_LOG_MODULE(audio);
 /* ---- gating -------------------------------------------------------------------------------- */
 
 /* value-checked (mirrors the altscreen env_on / getenv-presence-check trap): "0"/"false"/"no"/"off"
- * /empty all mean OFF, so `export SPATIAL_5_1=0` really disables it. */
+ * /empty all mean OFF, so `export AUDIO_COLD_CONNECT=0` really disables it. */
 static int spa_env_on(const char *name)
 {
     const char *v = getenv(name);
@@ -100,7 +100,6 @@ enum {
 };
 
 typedef struct {
-    int usesNewControls;
     int realtimePCM;
     int buffered;
     int atmos;
@@ -115,9 +114,6 @@ typedef struct {
     uint32_t hssrAttackCollapseQ15;   /* 0..32768, default 32768 */
     int realtimeUpmix;                /* AUDIO_REALTIME_UPMIX, default off */
     uint32_t stereoLfeGainQ15;     /* assist level, 1..16384, default 4096 */
-    int floatRender;
-    int cabinRender;
-    int quietLfe;
     spa_soundcheck_config_t soundCheck;
 } spa_audio_config_t;
 
@@ -307,14 +303,11 @@ static int spa_parse_soundcheck_limiter(void)
 static void spa_audio_config_init_once(void)
 {
     const char *modeValue;
-    int spatialPresent, typoPresent, atmosPresent;
-    int spatial = spa_parse_bool(SPA_AUDIO_ENV, &spatialPresent);
-    int typo = spa_parse_bool(SPA_AUDIO_TYPO_ENV, &typoPresent);
-    int atmos = spa_parse_bool(SPA_AUDIO_ATMOS_ENV, &atmosPresent);
+    int present;
+    int spatial = spa_parse_bool(SPA_AUDIO_ENV, &present);
+    int atmos = spa_parse_bool(SPA_AUDIO_ATMOS_ENV, &present);
 
     memset(&spa_audio_config_value, 0, sizeof(spa_audio_config_value));
-    spa_audio_config_value.usesNewControls =
-        spatialPresent || typoPresent || atmosPresent;
     spa_audio_config_value.atmosMode = SPA_ATMOS_DOWNMIX;
     spa_audio_config_value.stereoUpmixBackend = spa_parse_stereo_upmix();
     spa_audio_config_value.stereoSurroundQ15 = spa_parse_stereo_surround_q15();
@@ -334,14 +327,6 @@ static void spa_audio_config_init_once(void)
             spa_parse_bool(SPA_AUDIO_REALTIME_UPMIX_ENV, &present);
     }
     spa_audio_config_value.stereoLfeGainQ15 = spa_parse_stereo_lfe_gain_q15();
-    {
-        int present = 0;
-        spa_audio_config_value.floatRender = spa_parse_bool(SPA_AUDIO_FLOAT_RENDER_ENV, &present);
-        spa_audio_config_value.cabinRender = spa_parse_bool(SPA_AUDIO_CABIN_RENDER_ENV, &present);
-        spa_audio_config_value.quietLfe = spa_parse_bool(SPA_AUDIO_QUIET_LFE_ENV, &present);
-        if (spa_audio_config_value.cabinRender || spa_audio_config_value.quietLfe)
-            spa_audio_config_value.floatRender = 1;
-    }
     spa_soundcheck_default_config(&spa_audio_config_value.soundCheck);
     {
         int present = 0;
@@ -353,30 +338,9 @@ static void spa_audio_config_init_once(void)
     spa_audio_config_value.soundCheck.limiterMode =
         spa_parse_soundcheck_limiter();
 
-    if (spa_audio_config_value.usesNewControls) {
-        if (!spatialPresent && typoPresent) {
-            spatial = typo;
-            LOG_WARN(LOG_MODULE,
-                     "audio config: %s is a deprecated typo alias; use %s",
-                     SPA_AUDIO_TYPO_ENV, SPA_AUDIO_ENV);
-        } else if (spatialPresent && typoPresent && spatial != typo) {
-            LOG_WARN(LOG_MODULE,
-                     "audio config: %s conflicts with typo alias %s; canonical value wins",
-                     SPA_AUDIO_ENV, SPA_AUDIO_TYPO_ENV);
-        }
-        spa_audio_config_value.atmos = atmos;
-        spa_audio_config_value.buffered = spatial || atmos;
-        spa_audio_config_value.realtimePCM = spatial || atmos;
-    } else {
-        /* Migration only: old deployments retain their exact behavior until
-         * carplay_startup.sh is replaced with the canonical variables. */
-        spa_audio_config_value.realtimePCM = spa_env_on("SPATIAL_5_1");
-        spa_audio_config_value.buffered = spa_env_on(SPA_PROBE103_ENV);
-        spa_audio_config_value.atmos =
-            spa_audio_config_value.buffered &&
-            getenv(SPA_103_INDEX_ENV) &&
-            !strcmp(getenv(SPA_103_INDEX_ENV), "66");
-    }
+    spa_audio_config_value.atmos = atmos;
+    spa_audio_config_value.buffered = spatial || atmos;
+    spa_audio_config_value.realtimePCM = spatial || atmos;
 
     modeValue = getenv(SPA_AUDIO_ATMOS_MODE_ENV);
     if (modeValue && modeValue[0]) {
@@ -405,32 +369,12 @@ static int spa_enabled(void)
     return spa_audio_config()->realtimePCM;
 }
 
-/* Runtime tuning of WHICH format bit we advertise, re-read on every call (these run once per stream
- * SETUP, not per frame). The env var is only read at supervisor start, so without this every attempt
- * at a different bit would cost a reboot; with it the loop is
- *     echo 38 > /tmp/spatial_bit ; replug the phone ; read the log.
- * File absent/garbage = defaults. Bit clamped to 32..63: the stock stereo/mono bits live at 2..25
- * (AUDIO.md section 19), so a typo can never disturb the working stereo advert. */
+/* The advertised main-audio PCM bit and channel count are fixed: bit 44 =
+ * PCM/48000/16/5.1 (iOS 27 descriptor table), six channels. */
 static void spa_tune(unsigned *bit, unsigned *channels)
 {
-    unsigned b = 0, c = 0;
-    FILE *f;
-
     *bit = SPA_DEFAULT_BIT;
     *channels = SPA_CHANNELS;
-
-    f = fopen(SPA_TUNE_PATH, "r");
-    if (!f) return;
-    if (fscanf(f, "%u:%u", &b, &c) >= 1) {
-        if (b >= 32 && b <= 63) *bit = b;
-        /* channels == 0 is PROBE-ONLY: advertise the bit, but refuse it if the phone actually picks
-         * it (see ToASBD). Needed because our ASBD always describes 16-bit lpcm — if the phone selects
-         * a bit that means something else on the wire (bit 38 = 8 channels, 47 = 32-bit float,
-         * 40/42 = multichannel AAC), emitting that ASBD would feed the amp full-scale noise instead
-         * of music. */
-        if (c <= 8) *channels = c;
-    }
-    fclose(f);
 }
 
 /*
@@ -517,14 +461,7 @@ HOOK_EXPORT uint32_t AirPlayAudioFormatToASBD(uint64_t fmt, uint32_t *asbd, uint
     {
         unsigned bit, channels;
         spa_tune(&bit, &channels);
-        if (spa_enabled() && fmt == ((uint64_t)1 << bit) && channels == 0) {
-            /* PROBE-ONLY hit: this is the answer we were after — the phone WILL select this bit. Say so
-             * loudly, then fall through to stock (which rejects it with -6735) rather than describing
-             * foreign wire data as 16-bit lpcm and blasting the amp. */
-            LOG_ERROR(LOG_MODULE, "*** PHONE SELECTED bit%u (fmt=%#llx) — probe-only, rejecting to "
-                      "stock. Multichannel IS reachable on this path. ***",
-                      bit, (unsigned long long)fmt);
-        } else if (spa_enabled() && fmt == ((uint64_t)1 << bit) && asbd) {
+        if (spa_enabled() && fmt == ((uint64_t)1 << bit) && asbd) {
             uint32_t bpf = channels * (SPA_BITS / 8);
             asbd[0] = SPA_SR;             /* sampleRate      */
             asbd[1] = 1819304813;         /* 'lpcm'          */
@@ -597,7 +534,6 @@ static cf_plwrite_t  cfa_plwrite;
 static cf_retain_t   cfa_retain;
 static cf_rel_t      cfa_rel;
 static void         *cfa_arr_cb, *cfa_dk_cb, *cfa_dv_cb;
-static void         *cfa_bool_true;
 static int           cfa_ready = -1;
 static int spa103_private_image_compatible(void);
 static int spa_pcm_sink_detached_feedback_rate(double *rateHz, int *measured);
@@ -804,69 +740,17 @@ static int spa_probe103(void)
     return spa_audio_config()->buffered && spa103_private_image_compatible();
 }
 
-static int spa_probe103_dcx(void)
-{
-    return spa_probe103() && spa_env_on(SPA_103_DCX_ENV);
-}
-
-/* Split the two independent pieces of the buffered-audio contract. SPATIAL_103 remains the master
- * kill switch; an absent mode selects the established combined behavior. */
+/* Both halves of the buffered-audio contract (the /info descriptor and the
+ * mainBuffered feature) are advertised together whenever type 103 is armed. */
 static unsigned spa_probe103_mode(void)
 {
-    const spa_audio_config_t *config = spa_audio_config();
-    const char *value;
-    unsigned numeric;
-
-    if (!spa_probe103()) return 0;
-    if (config->usesNewControls) return SPA_103_MODE_BOTH;
-    value = getenv(SPA_103_MODE_ENV);
-    if (!value || !value[0]) return SPA_103_MODE_BOTH;
-    if (!strcmp(value, "info") || !strcmp(value, "1")) numeric = SPA_103_MODE_INFO;
-    else if (!strcmp(value, "feature") || !strcmp(value, "features") || !strcmp(value, "2"))
-        numeric = SPA_103_MODE_FEATURE;
-    else if (!strcmp(value, "both") || !strcmp(value, "3")) numeric = SPA_103_MODE_BOTH;
-    else {
-        numeric = SPA_103_MODE_BOTH;
-        LOG_ERROR(LOG_MODULE,
-                  "probe103: invalid %s value '%s'; expected info/feature/both; using both",
-                  SPA_103_MODE_ENV, value);
-    }
-    return numeric;
+    return spa_probe103() ? SPA_103_MODE_BOTH : 0;
 }
 
-/* audioOutputFormatsExtended is an array of APAudioFormatIndex values. For indices below 64 the
- * mapping is exactly the legacy format bit number (`IndexToAPAudioFormat(i) == 1 << i`). The format
- * tables identify 40 as AAC-LC/48k/5.1.2 and 42 as AAC-ELD/48k/5.1.2. Both have a 32-bit Cinemo
- * decoder path in the target MHI2Q firmware. The same firmware also contains a licensed Dolby
- * Digital Plus core, so indices 50/53 are useful fail-closed probes. Keep established APAC/5.1 as
- * the default, but permit only exact known format indices. This selector changes metadata only;
- * none of these payloads is accepted or played by this hook yet. */
+/* Primary buffered format index: APAC/48k 5.1, or 5.1.2 when Atmos is enabled. */
 static int spa_probe103_index(void)
 {
-    const spa_audio_config_t *config = spa_audio_config();
-    const char *value = getenv(SPA_103_INDEX_ENV);
-    char *end = 0;
-    int index = SPA_APAC_48K_5_1;
-    long candidate;
-
-    if (config->usesNewControls)
-        return config->atmos ? SPA_APAC_48K_5_1_2 : SPA_APAC_48K_5_1;
-    if (!value || !value[0]) return index;
-    candidate = strtol(value, &end, 0);
-    if (end && end != value && !*end &&
-        (candidate == SPA_AAC_LC_48K_5_1_2 || candidate == SPA_AAC_ELD_48K_5_1_2 ||
-         candidate == SPA_DDP_48K_5_1 ||
-         candidate == SPA_DDP_48K_9_1_6 || candidate == SPA_APAC_48K_5_1 ||
-         candidate == SPA_APAC_48K_5_1_2)) {
-        index = (int)candidate;
-    } else {
-        LOG_ERROR(LOG_MODULE,
-                  "probe103: invalid %s value '%s'; allowed indices: %d/%d/%d/%d/%d/%d; using %d",
-                  SPA_103_INDEX_ENV, value, SPA_AAC_LC_48K_5_1_2, SPA_AAC_ELD_48K_5_1_2,
-                  SPA_DDP_48K_5_1, SPA_DDP_48K_9_1_6, SPA_APAC_48K_5_1,
-                  SPA_APAC_48K_5_1_2, index);
-    }
-    return index;
+    return spa_audio_config()->atmos ? SPA_APAC_48K_5_1_2 : SPA_APAC_48K_5_1;
 }
 
 /* Experimental AAC bridge: iOS's spatial gate looks for at least one APAC-family index in the
@@ -912,26 +796,10 @@ static int spa_probe103_extra_index(int primaryIndex)
 /* iOS repackages every bit in the legacy mask into one buffered-engine codec family. On wired
  * CarPlay its local support filter leaves bits 11 (PCM) and 22 (AAC-LC) from the old 0x1440800
  * transport-family mask, then rejects the mixed family with -6705 before endpoint activation.
- * Advertise the single AAC-LC compatibility bit by default. Keep the old mask selectable only to
- * reproduce the negative result without another rebuild. */
+ * Advertise the single AAC-LC compatibility bit. */
 static uint32_t spa_probe103_legacy_mask(void)
 {
-    const char *value = getenv(SPA_103_MASK_ENV);
-    char *end = 0;
-    unsigned long candidate;
-
-    if (!value || !value[0]) return SPA_BUFFERED_AAC_MASK;
-
-    candidate = strtoul(value, &end, 0);
-    if (!end || end == value || *end ||
-        (candidate != SPA_BUFFERED_AAC_MASK && candidate != SPA_BUFFERED_BROAD_MASK)) {
-        LOG_ERROR(LOG_MODULE,
-                  "probe103: invalid %s value '%s'; allowed %#x/%#x; using %#x",
-                  SPA_103_MASK_ENV, value, SPA_BUFFERED_AAC_MASK,
-                  SPA_BUFFERED_BROAD_MASK, SPA_BUFFERED_AAC_MASK);
-        return SPA_BUFFERED_AAC_MASK;
-    }
-    return (uint32_t)candidate;
+    return SPA_BUFFERED_AAC_MASK;
 }
 
 static int spa_cf_get_i64(const void *dict, const char *name, int64_t *value)
@@ -1805,8 +1673,6 @@ typedef struct {
     struct spa_stereo_upmix stereoUpmix;
     struct spa_hssr_control_worker hssrControlWorker;
     spa_soundcheck_state_t soundCheck;
-    spa_soundcheck_state_t floatGuard;
-    int floatRender;
 } spa103_render_t;
 
 static spa103_render_t spa103_render = {
@@ -2039,14 +1905,6 @@ static void spa103_render_start(uint32_t generation, int64_t formatIndex, int ha
     spa103_render.haveExtensionLoudness = 0;
     spa103_render.probeFraming = 0;
     spa103_render.atmosMode = config->atmosMode;
-    spa103_render.floatRender = config->floatRender;
-    {
-        spa_soundcheck_config_t guard;
-        spa_soundcheck_default_config(&guard);
-        guard.enabled = 1; /* Peak safety is independent of metadata normalization. */
-        guard.limiterMode = SPA_SOUNDCHECK_LIMITER_SAMPLE_PEAK;
-        spa_soundcheck_init(&spa103_render.floatGuard, &guard, 0, 0, 0);
-    }
     spa_soundcheck_init(&spa103_render.soundCheck, &config->soundCheck,
                         haveSoundCheckTarget, soundCheckMediaKind,
                         soundCheckTargetDb);
@@ -2060,8 +1918,6 @@ static void spa103_render_start(uint32_t generation, int64_t formatIndex, int ha
     upmixConfig.bed_attack = config->hssrBedAttack;
     upmixConfig.attack_collapse_q15 = config->hssrAttackCollapseQ15;
     upmixConfig.lfe_gain_q15 = config->stereoLfeGainQ15;
-    spa_stereo_upmix_config_set_cabin(&upmixConfig, config->cabinRender);
-    spa_stereo_upmix_config_set_quiet_lfe(&upmixConfig, config->quietLfe);
     if (upmixConfig.backend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL) {
         const struct spa_hssr_model *hssrModel = spa_hssr_runtime_model();
 
@@ -2136,7 +1992,7 @@ static void spa103_render_start(uint32_t generation, int64_t formatIndex, int ha
              "stereoUpmix=%s frontGainQ15=%u rearGainQ15=%u frontBassDb10=%d frontRetentionQ15=%u "
              "hssrController=%s stereoLfe=%s lfeGainQ15=%u "
              "soundCheck=%s target=%s%ddB/kind%u "
-             "fallback=%d limiter=%d floatRender=%d cabinRender=%d quietLfe=%d compressedQueueLimit=%u initialRate=0",
+             "fallback=%d limiter=%d compressedQueueLimit=%u initialRate=0",
              spa103_render_state_name(state), (long long)formatIndex,
              haveKey ? "yes" : "no", (unsigned)outputChannels,
              config->atmosMode == SPA_ATMOS_DOWNMIX ? "downmix" :
@@ -2156,9 +2012,6 @@ static void spa103_render_start(uint32_t generation, int64_t formatIndex, int ha
              soundCheckTargetDb, (unsigned)soundCheckMediaKind,
              config->soundCheck.fallbackMode,
              config->soundCheck.limiterMode,
-             config->floatRender,
-             config->cabinRender,
-             config->quietLfe,
              (unsigned)compressedBufferBytes);
     if (spa103_render.stereoUpmix.config.bed_delays ||
         spa103_render.stereoUpmix.config.bed_attack)
@@ -2168,7 +2021,7 @@ static void spa103_render_start(uint32_t generation, int64_t formatIndex, int ha
                  (unsigned)spa103_render.stereoUpmix.config.attack_collapse_q15);
     STATE_TRACE("BUFFERED_RENDER_START",
                 "setup_index=%lld state=%s key=%d output_channels=%u "
-                "upmix=%s rear_q15=%u lfe=%d float_render=%d cabin_render=%d quiet_lfe=%d soundcheck=%d "
+                "upmix=%s rear_q15=%u lfe=%d soundcheck=%d "
                 "soundcheck_target_present=%d soundcheck_target_db=%d "
                 "soundcheck_media_kind=%u initial_rate=0 "
                 "compressed_limit=%u",
@@ -2176,9 +2029,6 @@ static void spa103_render_start(uint32_t generation, int64_t formatIndex, int ha
                 haveKey ? 1 : 0, (unsigned)outputChannels,
                 spa_stereo_upmix_backend_name(activeUpmixBackend),
                 (unsigned)activeRearGainQ15, activeLfeAssist ? 1 : 0,
-                config->floatRender,
-                config->cabinRender,
-                config->quietLfe,
                 config->soundCheck.enabled ? 1 : 0,
                 haveSoundCheckTarget ? 1 : 0, soundCheckTargetDb,
                 (unsigned)soundCheckMediaKind,
@@ -2233,8 +2083,7 @@ static void spa103_render_stop(void)
     soundCheckRejected = spa103_render.soundCheck.metadataRejected;
     legacySoundCheck = spa103_render.soundCheck.legacyRecords;
     fallbackUpdates = spa103_render.soundCheck.fallbackUpdates;
-    limitedFrames = spa103_render.soundCheck.limitedFrames +
-                    spa103_render.floatGuard.limitedFrames;
+    limitedFrames = spa103_render.soundCheck.limitedFrames;
     flushDropped = spa103_render.lifecycle.total_flush_dropped;
     queueAllocationFailures = spa103_render.lifecycle.allocation_failures;
     compressedPackets = spa103_render.lifecycle.queued_packets;
@@ -2609,7 +2458,6 @@ static int spa103_render_set_rate(uint32_t generation, int64_t rate)
     previous = spa_apap_lifecycle_playing(&spa103_render.lifecycle);
     if (previous && rate != 1) {
         (void)spa_stereo_upmix_reset(&spa103_render.stereoUpmix);
-        spa103_render.floatGuard.limiterGain = 1.0f;
     }
     spa_apap_lifecycle_set_rate(&spa103_render.lifecycle, rate);
     packets = spa103_render.lifecycle.queued_packets;
@@ -2697,7 +2545,6 @@ static int spa103_render_flush(uint32_t generation, const spa_apap_flush_range_t
         if (spa103_render.decoder && spa103_render.codec)
             spa103_render.codec->reset(spa103_render.decoder);
         (void)spa_stereo_upmix_reset(&spa103_render.stereoUpmix);
-        spa103_render.floatGuard.limiterGain = 1.0f;
         spa103_render.haveLastSequence = 0;
     }
     spa103_render.primed = 0;
@@ -3074,7 +2921,6 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
     static uint8_t plaintext[SPA_103_APAP_MAX_FRAME];
     static int16_t decoded[SPA_103_RENDER_MAX_SAMPLES];
     static int16_t rendered[SPA_103_RENDER_MAX_SAMPLES];
-    static float renderedFloat[SPA_103_RENDER_MAX_SAMPLES];
     uint8_t key[SPA_APAP_KEY_SIZE];
     spa_apap_extension_t ext;
     const uint8_t *audio = 0;
@@ -3243,7 +3089,6 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
         /* A new decoder/cookie is a discontinuity even when its index happens
          * to stay the same.  Never let rear-filter history cross it. */
         (void)spa_stereo_upmix_reset(&spa103_render.stereoUpmix);
-        spa103_render.floatGuard.limiterGain = 1.0f;
         spa103_render.decodedPcmKind = SPA_DECODED_PCM_OTHER;
         pthread_mutex_unlock(&spa103_render.lock);
         /* Every packet carries the cookie for the format it is in, so a track that changes
@@ -3396,7 +3241,6 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
         spa103_render.cookieId = (int64_t)ext.magicCookieId;
         spa103_render.haveCookieId = ext.hasMagicCookieId;
         spa103_render.sampleRate = sampleRate;
-        spa103_render.floatGuard.config.sampleRate = sampleRate;
         spa103_render.sourceChannels = channels;
         spa103_render.channelLayoutTag = info.channelLayoutTag;
         spa103_render.decodedPcmKind = decodedPcmKind;
@@ -3474,13 +3318,6 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
                 spa103_render.decodedPcmKind, dch, out,
                 spa103_render.sampleRate);
             size_t run = renderFrames - at;
-            int floatReady = 0;
-            /* OFF retains the exact widening/reference path. Experimental
-             * PCM8 height downmix also stays on its separately gated path. */
-            int useFloat = spa103_render.floatRender &&
-                spa103_render.decodedPcmKind != SPA_DECODED_PCM_APAC_5_1_2 &&
-                !(action == SPA_DECODED_PCM_ACTION_STEREO_UPMIX &&
-                  spa103_render.stereoUpmix.config.backend == SPA_STEREO_UPMIX_OFF);
 
             if (run > SPA_STEREO_UPMIX_MAX_FRAMES)
                 run = SPA_STEREO_UPMIX_MAX_FRAMES;
@@ -3492,12 +3329,8 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
                 else
                     spa103_reorder_5_1_s16(src, rendered, out, run);
             } else if (action == SPA_DECODED_PCM_ACTION_STEREO_UPMIX) {
-                rc = useFloat
-                    ? spa_stereo_upmix_process_f32(&spa103_render.stereoUpmix,
-                        src, run, renderedFloat, run)
-                    : spa_stereo_upmix_process_s16(&spa103_render.stereoUpmix,
-                        src, run, rendered, run);
-                floatReady = useFloat && rc == SPA_STEREO_UPMIX_OK;
+                rc = spa_stereo_upmix_process_s16(&spa103_render.stereoUpmix,
+                                                  src, run, rendered, run);
                 if (rc != SPA_STEREO_UPMIX_OK) {
                     spa103_render.upmixFailed++;
                     if (spa103_render.upmixFailed == 1)
@@ -3534,27 +3367,10 @@ static int spa103_render_frame(const uint8_t *packet, size_t length,
              * feature. Apply it uniformly after reorder/upmix so AAC gain does
              * not shift the model's absolute log-energy features or alter its
              * semantic/object masks. */
-            if (useFloat) {
-                size_t sample;
-                if (!floatReady)
-                    for (sample = 0; sample < run * out; sample++)
-                        renderedFloat[sample] = (float)rendered[sample];
-                spa_soundcheck_apply_f32(&spa103_render.soundCheck,
-                                         renderedFloat, run, out);
-                /* Native APAC has only been reordered, not upmixed. Both
-                 * AAC PCM6 and native APAC PCM6 use the fixed sink bank 1.
-                 * The detector never applies the OEM matrix to output PCM. */
-                spa_soundcheck_limit_matrix_f32(&spa103_render.floatGuard,
-                    renderedFloat, run, out,
-                    out == 6 ? spa_stereo_upmix_input_matrix() : NULL,
-                    out == 6 ? 8 : 0);
-                spa_soundcheck_quantize_s16(renderedFloat, rendered, run, out);
-            } else {
-                spa_soundcheck_apply_s16(&spa103_render.soundCheck, rendered,
-                                         run, out);
-                spa_soundcheck_limit_s16(&spa103_render.soundCheck, rendered,
-                                         run, out);
-            }
+            spa_soundcheck_apply_s16(&spa103_render.soundCheck, rendered,
+                                     run, out);
+            spa_soundcheck_limit_s16(&spa103_render.soundCheck, rendered,
+                                     run, out);
             spa103_pcm_stats_locked(rendered, run);
             spa103_ring_push_locked(rendered, run, packetSequence, packetRTP);
             spa103_render.framesIn += run;
@@ -8800,37 +8616,15 @@ static int spa_augment_setup_response(void *session, void *request, void *respon
 static void spa_augment_server_info(void *session, void *info)
 {
     void *key, *dict;
-    int dcx = 0;
 
     if (!session || !info || !spa_has_mainbuffered_contract(session) || !spa_cf_resolve()) return;
     key = cfa_str(0, "mainBufferedInfo", SPA_CFENC_UTF8);
     dict = cfa_dictm(0, 0, cfa_dk_cb, cfa_dv_cb);
     if (key && dict) {
-        if (spa_probe103_dcx()) {
-            void *dcxKey = cfa_str(0, "DCXEnabled", SPA_CFENC_UTF8);
-            void **trueSlot = (void **)dlsym(RTLD_DEFAULT, "kCFLBooleanTrue");
-
-            /* kCFLBooleanTrue is an exported pointer object on CFLite/ARM32: dlsym returns the
-             * address of that slot, so dereference it exactly once before CFDictionarySetValue. */
-            cfa_bool_true = trueSlot ? *trueSlot : 0;
-            if (dcxKey && cfa_bool_true) {
-                cfa_dictset(dict, dcxKey, cfa_bool_true);
-                dcx = 1;
-            } else {
-                LOG_ERROR(LOG_MODULE,
-                          "probe103: %s enabled but CFLite Boolean unavailable; DCX disabled",
-                          SPA_103_DCX_ENV);
-            }
-            if (dcxKey) cfa_rel(dcxKey);
-        }
         cfa_dictset(info, key, dict);
-        if (dcx)
-            LOG_WARN(LOG_MODULE,
-                     "probe103: /info mainBufferedInfo={DCXEnabled:true} added (probe-only claim)");
-        else
-            LOG_INFO(LOG_MODULE,
-                     "probe103: /info mainBufferedInfo={} added for negotiated mainBuffered "
-                     "(DCXEnabled absent)");
+        LOG_INFO(LOG_MODULE,
+                 "probe103: /info mainBufferedInfo={} added for negotiated mainBuffered "
+                 "(DCXEnabled absent)");
     } else {
         LOG_ERROR(LOG_MODULE,
                   "probe103: failed to build required /info mainBufferedInfo — session will reject");

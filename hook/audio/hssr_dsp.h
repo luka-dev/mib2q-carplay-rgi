@@ -68,12 +68,11 @@ struct spa_hssr_dsp {
     float ola[2][SPA_HSSR_FFT_SIZE];
     float fft_re[2][SPA_HSSR_FFT_SIZE];
     float fft_im[2][SPA_HSSR_FFT_SIZE];
-    /* Opt-in cabin renderer: source image is separate from rear placement. */
+    /* Source image (object before steering), subtracted from the dry front. */
     float source_fft_re[2][SPA_HSSR_FFT_SIZE];
     float source_fft_im[2][SPA_HSSR_FFT_SIZE];
     float source_ola[2][SPA_HSSR_FFT_SIZE];
     float source_sample[2];
-    uint32_t cabin_policy;
     /* Scene bed (ambience + universal) distribution.  All zero keeps the
      * legacy renderer bit-exact; set by stereo_upmix init/reset only. */
     uint32_t bed_delays;
@@ -150,13 +149,6 @@ float spa_hssr_test_attack_step(float energy, float *history, float *weight);
 void spa_hssr_test_mix_bed(struct spa_hssr_dsp *state,
                            float out_re[2][SPA_HSSR_BINS],
                            float out_im[2][SPA_HSSR_BINS]);
-#endif
-
-#ifdef SPA_HSSR_CAPTURE_TRANSFERS
-/* Host-only diagnostic: real, row-major 2x2 matrices, rear then source.
- * Called once per positive-frequency bin, every hop, only in cabin mode.
- * Not enabled or linked into the vehicle hook. */
-void spa_hssr_capture_transfer(unsigned bin, const float matrix[8]);
 #endif
 
 /* One input frame in, one delayed front/rear frame out.  The returned fronts

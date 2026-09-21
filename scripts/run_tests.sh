@@ -22,13 +22,6 @@ cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
     hook/audio/hssr_dsp.c hook/audio/hssr_neon.c -lm -o "$OUT/upmix"
 "$OUT/upmix"
 
-printf '%-32s ' float_render_test
-cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
-    tests/float_render_test.c hook/audio/stereo_upmix.c \
-    hook/audio/hssr_dsp.c hook/audio/hssr_neon.c hook/audio/soundcheck.c \
-    -lm -o "$OUT/float_render"
-"$OUT/float_render"
-
 printf '%-32s ' hssr_neon_test
 cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
     tests/hssr_neon_test.c hook/audio/hssr_neon.c -o "$OUT/hssr_neon"

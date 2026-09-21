@@ -50,15 +50,12 @@ def locate_stem(directory: Path, stem: str, suffix: str) -> Path:
 
 def render(
     renderer: Path, model: Path, backend: str, source: Path, output: Path,
-    float_render: bool = False,
 ) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     command = [
         str(renderer), "--mode", backend, "--lfe", "off",
         "--surround", "0.25", "--model", str(model), str(source), str(output),
     ]
-    if float_render:
-        command.insert(1, "--float-render")
     completed = subprocess.run(command, text=True, capture_output=True)
     if completed.returncode:
         raise RuntimeError(completed.stderr.strip())
@@ -79,7 +76,6 @@ def parse_args() -> argparse.Namespace:
         help="stem family to evaluate (default: demucs)",
     )
     parser.add_argument("--ids", nargs="*")
-    parser.add_argument("--float-render", action="store_true")
     parser.add_argument(
         "--discard-renders",
         action="store_true",
@@ -110,7 +106,7 @@ def main() -> int:
             output_path = args.output / item_id / f"{stem.lower()}.wav"
             render(
                 args.renderer.resolve(), args.model.resolve(), args.backend,
-                source, output_path, args.float_render,
+                source, output_path,
             )
             output = read_audio(output_path, 6)
             if args.discard_renders:
@@ -189,7 +185,6 @@ def main() -> int:
         "renderer_sha256": hashlib.sha256(args.renderer.read_bytes()).hexdigest(),
         "source_manifest": str(args.manifest.resolve()),
         "backend": args.backend,
-        "float_render": args.float_render,
         "teacher": args.teacher,
         "renders_retained": not args.discard_renders,
         "aggregate": aggregate,

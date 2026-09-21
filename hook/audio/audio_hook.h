@@ -37,23 +37,14 @@
 
 #include "../framework/hook_framework.h"
 
-/* Default AirPlayAudioFormat bit: 5.1 PCM (PCM/48000/16/5.1), from the iOS 27 descriptor table.
- * Which bit we actually advertise is RUNTIME-TUNABLE (see SPA_TUNE_PATH) so alternatives can be tried
- * without a reboot — the env var only reads once at supervisor start. See AUDIO.md sections 9-10, 24. */
+/* Advertised main-audio format bit: 5.1 PCM (PCM/48000/16/5.1), from the iOS 27 descriptor table.
+ * See AUDIO.md sections 9-10, 24. */
 #define SPA_DEFAULT_BIT   44u
 #define SPA_FMT_5_1       ((uint64_t)1 << SPA_DEFAULT_BIT)
 
-/* "<bit>" or "<bit>:<channels>", e.g. "44:6" (the default), "38:8", "47:6". Re-read on every call, so
- * the experiment loop is: echo 38 > /tmp/spatial_bit ; replug the phone ; read the log. Absent file =
- * defaults. Bit is clamped to 32..63 so a typo can never disturb the stock stereo/mono bits (2..25). */
-#define SPA_TUNE_PATH     "/tmp/spatial_bit"
-
 /* User-facing audio policy. Values are strict booleans:
- * 1/true/yes/on and 0/false/no/off (case-insensitive).
- * AUDIO_SPATAIL is accepted only as a warned compatibility alias for the
- * historically published typo; new configurations must use AUDIO_SPATIAL. */
+ * 1/true/yes/on and 0/false/no/off (case-insensitive). */
 #define SPA_AUDIO_ENV                 "AUDIO_SPATIAL"
-#define SPA_AUDIO_TYPO_ENV            "AUDIO_SPATAIL"
 #define SPA_AUDIO_ATMOS_ENV           "AUDIO_SPATIAL_ATMOS"
 #define SPA_AUDIO_ATMOS_MODE_ENV      "AUDIO_SPATIAL_ATMOS_MODE"
 /* Default-on recovery for a buffered stream which is the first media stream
@@ -95,11 +86,6 @@
  * Corrected BANK1 also feeds the sub from other channels; this is NOT the
  * whole subwoofer level. */
 #define SPA_AUDIO_STEREO_LFE_GAIN_ENV "AUDIO_STEREO_LFE_GAIN"
-/* Opt-in candidate float synthesis/programme gain/matrix-linked protection.
- * Default off retains the legacy renderer. This does not select a model. */
-#define SPA_AUDIO_FLOAT_RENDER_ENV   "AUDIO_FLOAT_RENDER"
-#define SPA_AUDIO_CABIN_RENDER_ENV   "AUDIO_CABIN_RENDER"
-#define SPA_AUDIO_QUIET_LFE_ENV      "AUDIO_QUIET_LFE"
 #define SPA_AUDIO_HSSR_MODEL_ENV       "AUDIO_HSSR_MODEL"
 #define SPA_AUDIO_HSSR_MODEL_DEFAULT   "/mnt/app/root/hooks/hssr_model.bin"
 
@@ -131,12 +117,7 @@
  * exact-profile fingerprinted and uses the existing RTSP connection, so controlPort/6033 is not
  * needed. Policy variables must be exported before AirTunesServer_EnsureCreated so the dispatcher
  * is installed before the first control connection. */
-#define SPA_PROBE103_ENV   "SPATIAL_103"
-#define SPA_103_INDEX_ENV  "SPATIAL_103_INDEX"
 #define SPA_103_EXTRA_INDEX_ENV "SPATIAL_103_EXTRA_INDEX"
-#define SPA_103_MODE_ENV   "SPATIAL_103_MODE"
-#define SPA_103_DCX_ENV    "SPATIAL_103_DCX"
-#define SPA_103_MASK_ENV   "SPATIAL_103_MASK"
 #define SPA_103_MODE_INFO       1u  /* advertise the type-103 /info descriptor only */
 #define SPA_103_MODE_FEATURE    2u  /* negotiate mainBuffered only (when proposed) */
 #define SPA_103_MODE_BOTH       (SPA_103_MODE_INFO | SPA_103_MODE_FEATURE)
@@ -160,7 +141,6 @@
                                      * 64 map to 1<<index, so this is legacy bit 22, the one the
                                      * buffered sender prefers first for ordinary content. */
 #define SPA_BUFFERED_AAC_MASK        0x400000   /* bit 22: AAC-LC/44100/2; valid type-103 codec family */
-#define SPA_BUFFERED_BROAD_MASK      0x1440800  /* old failed probe: mixed bits 11,18,22,24 */
 
 /* APReceiverAudioSessionBufferedCreate's single-format defaults.  AAC-LC and
  * AAC-ELD map to compression types 4/8 and get the smaller receiver buffer;

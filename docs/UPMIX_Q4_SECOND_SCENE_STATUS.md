@@ -297,3 +297,14 @@ timeline only, 2 -> 6 only, media tracked and no phone/Siri/alert owner. Reset o
 prepare and after any non-upmixed period; deadline guard on stock's audio thread
 (4 periods > 8 ms of 16 -> off until the handle closes). Idle HSSR workers back off
 to 4 ms sleeps. Adds 10.7 ms front latency on that path. Not deployed yet.
+
+## Dead-code cut (2026-09-21)
+
+Removed on Luka's call: the float/cabin/quiet-LFE render candidates and their
+SoundCheck float helpers, tests and evaluation scripts; the CENTER_NULL /
+SIDE_OBJECT / CAPTURE_TRANSFERS `#ifdef` experiments in `hssr_dsp.c`; the
+`SPATIAL_5_1` / `SPATIAL_103*` migration env, the `AUDIO_SPATAIL` alias, the
+`SPATIAL_103_DCX/MODE/MASK/INDEX` knobs and the `/tmp/spatial_bit` tuner.
+The S16 path is byte-identical before and after (chosen scheme, defaults, off).
+`SPATIAL_103_EXTRA_INDEX` stays (the startup script sets it). The old float
+results remain valid history in `UPMIX_FLOAT_STAGE1.md` / `UPMIX_CABIN_V12.md`.

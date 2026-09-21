@@ -15,6 +15,17 @@
 > скрипт, без перезагрузки, проверка по строке `audio upmix scene bed: delays=1 attack=1`
 > в `/tmp/carplay_hook.log` при следующем подключении. Блок ниже описывает состояние ДО этого.**
 >
+> **Чистка мёртвого кода (21.09, день, по слову Luka «режь всё»):** удалены float/cabin/quiet
+> рендер-ветки (`AUDIO_FLOAT_RENDER`/`AUDIO_CABIN_RENDER`/`AUDIO_QUIET_LFE`, `process_f32`,
+> `cabin_policy` в `hssr_dsp.c`, float-хелперы SoundCheck, `float_render_test`, оценочные
+> скрипты float/cabin), `#ifdef`-эксперименты CENTER_NULL/SIDE_OBJECT и CAPTURE_TRANSFERS,
+> миграционная ветка `SPATIAL_5_1`/`SPATIAL_103*`, алиас `AUDIO_SPATAIL`, ручки
+> `SPATIAL_103_DCX/MODE/MASK/INDEX`, тюнер `/tmp/spatial_bit`. −837/+165 строк.
+> Выход S16 при выбранной схеме, при дефолтах и при `--mode off` бит-в-бит равен
+> прежнему (`cmp` на двух треках × 3 режима). Все 10 хост-тестов аудио зелёные;
+> падения в `run_tests.sh` только InstallTest (были и раньше). Упоминания
+> `AUDIO_FLOAT_RENDER` ниже в этом файле — историческая справка.
+>
 > **Realtime-апмикс (21.09, вечер):** HSSR теперь и для стокового realtime media-потока
 > (тип 100, `audioType=media`: Spotify и все без 103) за `AUDIO_REALTIME_UPMIX=on` в скрипте.
 > Отдельный экземпляр DSP и контроллера (`spa_rt_upmix` в `audio_hook.c`), правило периода
