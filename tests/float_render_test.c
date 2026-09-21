@@ -127,9 +127,9 @@ static void test_matrix_guard_and_extremes(void)
 {
     const float *matrix = spa_stereo_upmix_input_matrix();
     const int db[6][8] = {
-        {-2,-99,-6,-99,-99,-99,-99,-99}, {-99,-2,-6,-99,-99,-99,-99,-99},
-        {-8,-8,-3,-99,-99,-99,-99,-99}, {-8,-8,-10,3,-14,-14,-99,-99},
-        {-3,-99,-99,-99,6,-99,-99,-99}, {-99,-3,-99,-99,-99,6,-99,-99}
+        {-2,-99,-8,-8,-3,-99,-3,-99}, {-99,-2,-8,-8,-99,-3,-99,-3},
+        {-6,-6,-3,-10,-99,-99,-99,-99}, {-99,-99,-99,3,-99,-99,-99,-99},
+        {-99,-99,-99,-14,6,-99,9,-99}, {-99,-99,-99,-14,-99,6,-99,9}
     };
     spa_soundcheck_config_t c;
     spa_soundcheck_state_t a, b;
@@ -181,10 +181,11 @@ static void test_synthesis_does_not_clip_before_gain(void)
     upmix._runtime._hssr.frames_seen = SPA_HSSR_LATENCY_FRAMES;
     upmix._runtime._hssr.front_delay[0][0] = 30000;
     upmix._runtime._hssr.ola[0][0] = -1.0f;
+    upmix._runtime._hssr.source_ola[0][0] = -1.0f;
     assert(spa_stereo_upmix_process_f32(&upmix, input, 1, output, 1) == 0);
     assert(output[0] > 32767);
     assert(fabsf(output[0] - (30000.0f * c.front_gain_q15 / 32768.0f +
-                            2.5f * c.rear_gain_q15)) < 0.01f);
+                            2.5f * .989384126553696785f * c.rear_gain_q15)) < 0.01f);
 }
 
 static void test_cabin_source_transfer_and_reset(void)
@@ -203,8 +204,11 @@ static void test_cabin_source_transfer_and_reset(void)
     upmix._runtime._hssr.ola[0][0] = .5f;
     upmix._runtime._hssr.source_ola[0][0] = .1f;
     assert(spa_stereo_upmix_process_f32(&upmix,input,1,output,1)==0);
-    assert(fabsf(output[0]-(24000.0f*c.front_gain_q15/32768-.1f*c.rear_gain_q15))<.01f);
-    assert(fabsf(output[4]-.5f*c.rear_gain_q15)<.01f); /* No shelf. */
+    /* Current scene float path applies the source shelf/2.5 transfer and
+     * the576-frame rear delay, including in this experimental cabin mode. */
+    assert(fabsf(output[0]-(24000.0f*c.front_gain_q15/32768-
+        .1f*2.5f*.989384126553696785f*c.rear_gain_q15))<.01f);
+    assert(output[4]==0.0f);
     assert(spa_stereo_upmix_reset(&upmix)==0);
     assert(upmix._runtime._hssr.cabin_policy==1);
     assert(upmix._runtime._hssr.source_ola[0][0]==0);
@@ -279,6 +283,36 @@ static void test_cabin_bass_is_quiet_fixed_mono(int bass_only)
     assert(anti_power==0); /* No new anti-phase bass synthesis. */
 }
 
+static void test_independent_front_retention(void)
+{
+    struct spa_stereo_upmix_config c;
+    float rendered[3][6];
+    unsigned k,ch;
+    spa_stereo_upmix_default_config(&c);
+    assert(c.front_retention_q15==0);
+    c.backend=SPA_STEREO_UPMIX_HSSR_UNIVERSAL;c.hssr_model=&model;
+    c.rear_gain_q15=13107;
+    for(k=0;k<3;k++) {
+        c.front_retention_q15=k*16384;
+        assert(spa_stereo_upmix_init(&upmix,&c)==0);
+        upmix._runtime._hssr.frames_seen=SPA_HSSR_LATENCY_FRAMES;
+        upmix._runtime._hssr.front_delay[0][0]=20000;
+        upmix._runtime._hssr.front_delay[1][0]=-15000;
+        upmix._runtime._hssr.source_ola[0][0]=.2f;
+        upmix._runtime._hssr.source_ola[1][0]=-.1f;
+        upmix._runtime._scene_rear_delay[0][0]=.3f;
+        upmix._runtime._scene_rear_delay[1][0]=-.2f;
+        assert(spa_stereo_upmix_process_f32(&upmix,input,1,rendered[k],1)==0);
+    }
+    for(ch=0;ch<2;ch++)
+        assert(fabsf(rendered[1][ch]-.5f*(rendered[0][ch]+rendered[2][ch]))<.01f);
+    assert(fabsf(rendered[2][0]-20000.0f*c.front_gain_q15/32768)<.01f);
+    assert(rendered[0][0]<rendered[1][0] && rendered[1][0]<rendered[2][0]);
+    for(ch=2;ch<6;ch++) assert(rendered[0][ch]==rendered[1][ch] && rendered[1][ch]==rendered[2][ch]);
+    c.front_retention_q15=32769;
+    assert(spa_stereo_upmix_init(&upmix,&c)==SPA_STEREO_UPMIX_ERROR_CONFIG);
+}
+
 int main(void)
 {
     initialize_model();
@@ -291,6 +325,7 @@ int main(void)
     test_cabin_tracker_cannot_bypass_learned_veto();
     test_cabin_bass_is_quiet_fixed_mono(0);
     test_cabin_bass_is_quiet_fixed_mono(1);
+    test_independent_front_retention();
     puts("OK: float synthesis, analysis invariance, exact bypass, linked headroom, metadata/FLUSH ramps");
     return 0;
 }

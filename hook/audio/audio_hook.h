@@ -80,6 +80,18 @@
 #define SPA_AUDIO_STEREO_UPMIX_ENV    "AUDIO_STEREO_UPMIX"
 #define SPA_AUDIO_STEREO_SURROUND_ENV "AUDIO_STEREO_SURROUND"
 #define SPA_AUDIO_STEREO_LFE_ENV      "AUDIO_STEREO_LFE"
+#define SPA_AUDIO_STEREO_FRONT_BASS_ENV "AUDIO_STEREO_FRONT_BASS_DB"
+/* Independent experimental front retention0..1, default0 (existing removal).
+ * This does not change the rear synthesis gain or select float rendering. */
+#define SPA_AUDIO_STEREO_FRONT_RETENTION_ENV "AUDIO_STEREO_FRONT_RETENTION"
+/* Scene-bed distribution experiments (plan 2026-09-21); all default off. */
+#define SPA_AUDIO_HSSR_BED_DELAYS_ENV      "AUDIO_HSSR_BED_DELAYS"     /* on/off */
+#define SPA_AUDIO_HSSR_BED_ATTACK_ENV      "AUDIO_HSSR_BED_ATTACK"     /* off|owner|front */
+#define SPA_AUDIO_HSSR_ATTACK_COLLAPSE_ENV "AUDIO_HSSR_ATTACK_COLLAPSE" /* 0..1, default 1 */
+/* AUDIO_STEREO_LFE_GAIN: assist level in dB re4096 (-24..+12; 0=default).
+ * Corrected BANK1 also feeds the sub from other channels; this is NOT the
+ * whole subwoofer level. */
+#define SPA_AUDIO_STEREO_LFE_GAIN_ENV "AUDIO_STEREO_LFE_GAIN"
 /* Opt-in candidate float synthesis/programme gain/matrix-linked protection.
  * Default off retains the legacy renderer. This does not select a model. */
 #define SPA_AUDIO_FLOAT_RENDER_ENV   "AUDIO_FLOAT_RENDER"

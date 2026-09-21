@@ -728,6 +728,22 @@ static void *test_dlsym(void *scope, const char *name)
 }
 int main(void)
 {
+    /* Local environment parser only; no vehicle-side configuration. */
+    {
+        static const char *invalid[] = {"nan", "inf", "-inf", "-0.1", "1.1", "bad", "0.5x"};
+        unsigned i;
+        unsetenv(SPA_AUDIO_STEREO_FRONT_RETENTION_ENV);
+        assert(spa_parse_stereo_front_retention_q15() == 0);
+        setenv(SPA_AUDIO_STEREO_FRONT_RETENTION_ENV, "0.75", 1);
+        assert(spa_parse_stereo_front_retention_q15() == 24576);
+        setenv(SPA_AUDIO_STEREO_FRONT_RETENTION_ENV, "1", 1);
+        assert(spa_parse_stereo_front_retention_q15() == 32768);
+        for (i = 0; i < sizeof(invalid)/sizeof(invalid[0]); ++i) {
+            setenv(SPA_AUDIO_STEREO_FRONT_RETENTION_ENV, invalid[i], 1);
+            assert(spa_parse_stereo_front_retention_q15() == 0);
+        }
+        unsetenv(SPA_AUDIO_STEREO_FRONT_RETENTION_ENV);
+    }
     assert(!setenv("AUDIO_SPATIAL", "1", 1));
     assert(!setenv("AUDIO_STEREO_UPMIX", "off", 1));
     assert(!pipe(poll_pipe));

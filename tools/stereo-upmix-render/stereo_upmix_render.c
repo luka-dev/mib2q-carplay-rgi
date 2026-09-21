@@ -57,6 +57,12 @@ struct options {
     enum spa_stereo_upmix_backend backend;
     enum cli_lfe_mode lfe_mode;
     double surround_gain;
+    double front_bass_db;
+    double front_retention;
+    int bed_delays;
+    int bed_attack;
+    double attack_collapse;
+    double lfe_gain_db;            /* re SPA_STEREO_UPMIX_LFE_Q15_DEFAULT */
     const char *model_path;
     const char *guard_model_path;
     int float_render;
@@ -358,7 +364,8 @@ static void usage(const char *program)
     fprintf(stderr,
             "usage: %s [--mode off|hssr-universal] "
             "[--model HSSR.bin] "
-            "[--lfe off|assist] [--surround 0.0..0.25] "
+            "[--lfe off|assist] [--lfe-gain -24..12] [--surround 0.0..0.5] [--front-bass -12..0] "
+            "[--front-retention 0..1] [--bed-delays] [--bed-attack off|owner|front] [--attack-collapse 0..1] "
             "[--float-render|--cabin-render] [--soundcheck-target DB --soundcheck-params P0 P1 P2] "
             "INPUT.wav OUTPUT.wav\n"
             "  --float-render: experimental synthesis, linked -1 dBFS rail/matrix guard,\n"
@@ -429,6 +436,12 @@ static int parse_options(int argc, char **argv, struct options *options)
     options->lfe_mode = CLI_LFE_OFF;
     options->surround_gain =
         (double)SPA_STEREO_UPMIX_REAR_Q15_DEFAULT / 32768.0;
+    options->front_bass_db = 0.0;
+    options->front_retention = 0.0;
+    options->bed_delays = 0;
+    options->bed_attack = 0;
+    options->attack_collapse = 1.0;
+    options->lfe_gain_db = 0.0;
     options->model_path = NULL;
     options->guard_model_path = NULL;
     options->float_render = 0;
@@ -550,6 +563,60 @@ static int parse_options(int argc, char **argv, struct options *options)
             }
             continue;
         }
+        if (strcmp(argument, "--front-retention") == 0) {
+            char *end;
+            if (++index >= argc) return 0;
+            options->front_retention = strtod(argv[index], &end);
+            if (end == argv[index] || *end || !isfinite(options->front_retention) ||
+                options->front_retention < 0.0 || options->front_retention > 1.0) {
+                fprintf(stderr, "error: --front-retention must be finite 0..1\n");
+                return 0;
+            }
+            continue;
+        }
+        if (strcmp(argument, "--bed-delays") == 0) {
+            options->bed_delays = 1;
+            continue;
+        }
+        if (strcmp(argument, "--bed-attack") == 0) {
+            if (++index >= argc) return 0;
+            if (strcmp(argv[index], "off") == 0) options->bed_attack = 0;
+            else if (strcmp(argv[index], "owner") == 0) options->bed_attack = 1;
+            else if (strcmp(argv[index], "front") == 0) options->bed_attack = 2;
+            else { fprintf(stderr, "error: --bed-attack must be off|owner|front\n"); return 0; }
+            continue;
+        }
+        if (strcmp(argument, "--attack-collapse") == 0) {
+            char *end;
+            if (++index >= argc) return 0;
+            options->attack_collapse = strtod(argv[index], &end);
+            if (end == argv[index] || *end || !isfinite(options->attack_collapse) ||
+                options->attack_collapse < 0.0 || options->attack_collapse > 1.0) {
+                fprintf(stderr, "error: --attack-collapse must be finite 0..1\n");
+                return 0;
+            }
+            continue;
+        }
+        if (strcmp(argument, "--front-bass") == 0) {
+            char *end = NULL;
+            if (++index >= argc) { fprintf(stderr, "error: --front-bass requires dB\n"); return 0; }
+            options->front_bass_db = strtod(argv[index], &end);
+            if (!end || *end || options->front_bass_db > 0.0 || options->front_bass_db < -12.0) {
+                fprintf(stderr, "error: --front-bass must be -12.0..0 dB\n");
+                return 0;
+            }
+            continue;
+        }
+        if (strcmp(argument, "--lfe-gain") == 0) {
+            char *end = NULL;
+            if (++index >= argc) { fprintf(stderr, "error: --lfe-gain requires dB\n"); return 0; }
+            options->lfe_gain_db = strtod(argv[index], &end);
+            if (!end || *end || options->lfe_gain_db > 12.0 || options->lfe_gain_db < -24.0) {
+                fprintf(stderr, "error: --lfe-gain must be -24.0..12.0 dB re the 4096 assist\n");
+                return 0;
+            }
+            continue;
+        }
         if (strncmp(argument, "--surround=", 11) == 0) {
             if (!parse_gain(argument + 11, &options->surround_gain)) {
                 fprintf(stderr,
@@ -604,6 +671,15 @@ static void make_upmix_config(const struct options *options,
     config->backend = options->backend;
     config->rear_gain_q15 =
         (uint32_t)(options->surround_gain * 32768.0 + 0.5);
+    config->front_bass_db10 = (int32_t)lround(options->front_bass_db * 10.0);
+    config->front_retention_q15 = (uint32_t)lround(options->front_retention * 32768.0);
+    config->bed_delays = options->bed_delays ? 1u : 0u;
+    config->bed_attack = (uint32_t)options->bed_attack;
+    config->attack_collapse_q15 = (uint32_t)lround(options->attack_collapse * 32768.0);
+    config->lfe_gain_q15 = (uint32_t)lround(
+        SPA_STEREO_UPMIX_LFE_Q15_DEFAULT * pow(10.0, options->lfe_gain_db / 20.0));
+    if (config->lfe_gain_q15 < 1) config->lfe_gain_q15 = 1;
+    if (config->lfe_gain_q15 > SPA_STEREO_UPMIX_LFE_Q15_MAX) config->lfe_gain_q15 = SPA_STEREO_UPMIX_LFE_Q15_MAX;
     spa_stereo_upmix_config_set_lfe(
         config, options->backend != SPA_STEREO_UPMIX_OFF &&
                 options->lfe_mode == CLI_LFE_ASSIST);
@@ -638,6 +714,9 @@ static int render(FILE *input_file, FILE *output_file, uint32_t total_frames,
     float guard_frame_peaks[SPA_STEREO_UPMIX_MAX_FRAMES];
     float minimum_guard_gain = 1.0f;
     uint64_t attenuated_frames = 0;
+    uint64_t attenuation_run = 0, longest_attenuation_run = 0;
+    uint64_t over3_frames = 0, over6_frames = 0, over10_frames = 0;
+    double attenuation_db_sum = 0.0;
     uint32_t remaining = total_frames;
     int status;
 
@@ -714,8 +793,18 @@ static int render(FILE *input_file, FILE *output_file, uint32_t total_frames,
                 if (guard_frame_peaks[sample] > 1.0e-10f) {
                     float gain = peak / guard_frame_peaks[sample];
                     if (gain < minimum_guard_gain) minimum_guard_gain = gain;
-                    if (gain < 0.9999f) attenuated_frames++;
-                }
+                    if (gain < 0.9999f) {
+                        double reduction_db = -20.0 * log10(fmax((double)gain, 1.0e-12));
+                        attenuated_frames++;
+                        attenuation_run++;
+                        attenuation_db_sum += reduction_db;
+                        if (reduction_db > 3) over3_frames++;
+                        if (reduction_db > 6) over6_frames++;
+                        if (reduction_db > 10) over10_frames++;
+                        if (attenuation_run > longest_attenuation_run)
+                            longest_attenuation_run = attenuation_run;
+                    } else attenuation_run = 0;
+                } else attenuation_run = 0; /* Zero PCM: attenuation not observable. */
             }
             spa_soundcheck_quantize_s16(float6, pcm6, frames, WAV_OUTPUT_CHANNELS);
         }
@@ -733,10 +822,15 @@ static int render(FILE *input_file, FILE *output_file, uint32_t total_frames,
     if (options->float_render)
         fprintf(stderr, "experimental-float: pre-gain-peak=%.8f FS "
             "post-gain-peak=%.8f FS gain=%.8f limiter-attacks=%llu "
-            "minimum-guard-gain=%.8f attenuated-frames=%llu total-frames=%u\n",
+            "minimum-guard-gain=%.8f attenuated-frames=%llu total-frames=%u "
+            "longest-observed-run=%llu reduction-db-sum=%.9f "
+            "over3-frames=%llu over6-frames=%llu over10-frames=%llu\n",
             pre_gain_peak / 32768.0f, post_gain_peak / 32768.0f,
             gain_state.currentGain, (unsigned long long)gain_state.limitedFrames,
-            minimum_guard_gain, (unsigned long long)attenuated_frames, total_frames);
+            minimum_guard_gain, (unsigned long long)attenuated_frames, total_frames,
+            (unsigned long long)longest_attenuation_run, attenuation_db_sum,
+            (unsigned long long)over3_frames, (unsigned long long)over6_frames,
+            (unsigned long long)over10_frames);
 
     return 1;
 }
@@ -826,6 +920,12 @@ done:
     }
 
     mode_name = backend_mode_name(options.backend);
+    fprintf(stderr, "front-retention=%.5f (q15=%u; independent of rear gain)\n",
+            (double)config.front_retention_q15 / 32768.0,
+            (unsigned)config.front_retention_q15);
+    fprintf(stderr, "bed-delays=%u bed-attack=%u attack-collapse=%.5f\n",
+            (unsigned)config.bed_delays, (unsigned)config.bed_attack,
+            (double)config.attack_collapse_q15 / 32768.0);
     lfe_name = config.lfe_enabled ? "assist" : "off";
     effective_lfe_gain_q15 = config.lfe_enabled ? config.lfe_gain_q15 : 0;
     fprintf(stderr,

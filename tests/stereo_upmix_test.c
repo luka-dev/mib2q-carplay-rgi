@@ -6,6 +6,7 @@
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 enum {
@@ -182,20 +183,14 @@ static void assert_cabin_buses_bounded(
 
     for (frame = 0; frame < frames; ++frame) {
         const int16_t *sample = pcm6 + frame * TEST_CHANNELS;
-        double buses[6];
+        const float *matrix = spa_stereo_upmix_input_matrix();
         unsigned bus;
-
-        buses[0] = 0.794328 * sample[0] + 0.398107 * sample[3] +
-                   0.707946 * sample[4];
-        buses[1] = 0.794328 * sample[1] + 0.398107 * sample[3] +
-                   0.707946 * sample[5];
-        buses[2] = 0.501187 * (sample[0] + sample[1]) +
-                   0.316228 * sample[3];
-        buses[3] = 1.412538 * sample[3];
-        buses[4] = 0.199526 * sample[3] + 1.995262 * sample[4];
-        buses[5] = 0.199526 * sample[3] + 1.995262 * sample[5];
-        for (bus = 0; bus < 6; ++bus)
-            assert(fabs(buses[bus]) <= limit);
+        for (bus = 0; bus < 8; ++bus) {
+            double value = 0.0;
+            unsigned ch;
+            for (ch = 0; ch < 6; ++ch) value += matrix[ch * 8 + bus] * (double)sample[ch];
+            assert(fabs(value) <= limit);
+        }
     }
 }
 
@@ -532,6 +527,50 @@ static void test_universal_overlap_and_signal_derived_fallback(void)
         assert(g_output_a[frame] == 0);
 }
 
+/* Front-only bass trim: -3 dB @ 200 Hz shelf on L/R, sub and rear untouched. */
+static void test_front_bass_shelf(void)
+{
+    static struct spa_stereo_upmix state;
+    struct spa_stereo_upmix_config config;
+    uint64_t flat_low, trim_low, flat_high, trim_high, flat_lfe, trim_lfe;
+    double low_db, high_db;
+
+    make_universal_config(&config, 1);
+    config.front_bass_db10 = -30;
+    assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
+
+    fill_sine(60.0f, 0);
+    assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
+    process_blocks(&state, g_input, g_output_a);
+    trim_low = channel_energy(g_output_a, SPA_STEREO_UPMIX_CHANNEL_L, 4096);
+    trim_lfe = channel_energy(g_output_a, SPA_STEREO_UPMIX_CHANNEL_LFE, 4096);
+    config.front_bass_db10 = 0;
+    assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
+    process_blocks(&state, g_input, g_output_b);
+    flat_low = channel_energy(g_output_b, SPA_STEREO_UPMIX_CHANNEL_L, 4096);
+    flat_lfe = channel_energy(g_output_b, SPA_STEREO_UPMIX_CHANNEL_LFE, 4096);
+    low_db = 10.0 * log10((double)trim_low / (double)flat_low);
+    assert(low_db < -2.6 && low_db > -3.4);
+    assert(trim_lfe == flat_lfe); /* LFE comes from the dry mix */
+
+    fill_sine(3000.0f, 0);
+    config.front_bass_db10 = -30;
+    assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
+    process_blocks(&state, g_input, g_output_a);
+    trim_high = channel_energy(g_output_a, SPA_STEREO_UPMIX_CHANNEL_L, 4096);
+    config.front_bass_db10 = 0;
+    assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_OK);
+    process_blocks(&state, g_input, g_output_b);
+    flat_high = channel_energy(g_output_b, SPA_STEREO_UPMIX_CHANNEL_L, 4096);
+    high_db = 10.0 * log10((double)trim_high / (double)flat_high);
+    assert(high_db > -0.2 && high_db < 0.2);
+
+    config.front_bass_db10 = 5;
+    assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_ERROR_CONFIG);
+    config.front_bass_db10 = -130;
+    assert(spa_stereo_upmix_init(&state, &config) == SPA_STEREO_UPMIX_ERROR_CONFIG);
+}
+
 static void test_lfe_v2_phase_frequency_and_cabin_bounds(void)
 {
     static struct spa_stereo_upmix state;
@@ -588,6 +627,161 @@ static void test_lfe_v2_phase_frequency_and_cabin_bounds(void)
     assert_cabin_buses_bounded(g_output_b, TEST_FRAMES);
 }
 
+static void test_corrected_guard_and_transfer_extremes(void)
+{
+    uint32_t seed = 721u;
+    unsigned n, ch;
+    int16_t sample[6], before[6];
+    /* Each newly recovered route must participate, including B7/B8. */
+    const float *m = spa_stereo_upmix_input_matrix();
+    assert(fabsf(m[3] - .398107171f) < 1e-7f); /* L -> sub */
+    assert(fabsf(m[6] - .707945784f) < 1e-7f); /* L -> B7 */
+    assert(fabsf(m[4 * 8 + 6] - 2.818382931f) < 1e-7f);
+    for (n = 0; n < 30000; ++n) {
+        for (ch = 0; ch < 6; ++ch) {
+            seed = seed * 1664525u + 1013904223u;
+            before[ch] = sample[ch] = (int16_t)(seed >> 16);
+        }
+        if (n % 3 == 0) sample[3] = before[3] = 0;
+        spa_stereo_upmix_test_guard_s16(sample, n % 2);
+        assert_cabin_buses_bounded(sample, 1);
+        if (before[3] == 0) assert(sample[3] == 0);
+        assert((int32_t)sample[3] * before[3] >= 0);
+        assert(abs((int)sample[3]) <= abs((int)before[3]));
+    }
+    assert(spa_stereo_upmix_test_transfer(0, 16384, 81920, 31392) == -31392);
+    assert(spa_stereo_upmix_test_transfer(0, -16384, 81920, 31392) == 31392);
+    assert(spa_stereo_upmix_test_transfer(10000, 5000, 0, 31392) == 10000);
+    assert(spa_stereo_upmix_test_transfer(32767, -16384, 81920, 32768) == 32767);
+    assert(spa_stereo_upmix_test_transfer(-32768, 16384, 81920, 32768) == -32768);
+}
+
+static void test_s16_front_retention(void)
+{
+    static struct spa_stereo_upmix state;
+    struct spa_stereo_upmix_config c;
+    int16_t pcm[2] = {0, 0}, result[3][6];
+    unsigned k, ch;
+    make_universal_config(&c, 0);
+    assert(c.front_retention_q15 == 0);
+    for (k = 0; k < 3; ++k) {
+        c.front_retention_q15 = k * 16384;
+        assert(spa_stereo_upmix_init(&state, &c) == 0);
+        state._runtime._hssr.frames_seen = SPA_HSSR_LATENCY_FRAMES;
+        state._runtime._hssr.front_delay[0][0] = 2000;
+        state._runtime._hssr.source_ola[0][0] = .01f;
+        state._runtime._scene_rear_delay[0][0] = .01f;
+        assert(spa_stereo_upmix_process_s16(&state, pcm, 1, result[k], 1) == 0);
+    }
+    assert(result[0][0] < result[1][0] && result[1][0] < result[2][0]);
+    assert(abs(2 * result[1][0] - result[0][0] - result[2][0]) <= 2);
+    assert(abs(result[2][0] - (int)(2000.0*c.front_gain_q15/32768 + .5)) <= 1);
+    for (ch = 2; ch < 6; ++ch)
+        assert(result[0][ch] == result[1][ch] && result[1][ch] == result[2][ch]);
+    c.front_retention_q15 = 32769;
+    assert(spa_stereo_upmix_init(&state, &c) == SPA_STEREO_UPMIX_ERROR_CONFIG);
+}
+
+/* Dolby-probe sequence: steady -> x4 amplitude (+12 dB) -> steady gives
+ * 0, 1, beta, beta^2, beta^3; thresholds +3/+6/+9 dB give 0 / 0.5 / 1. */
+static void test_bed_attack_detector(void)
+{
+    const float beta = 0.9637f;
+    const double rises_db[3] = { 3.0, 6.0, 9.0 };
+    const float expected[3] = { 0.0f, 0.5f, 1.0f };
+    float history = 0.0f, weight = 0.0f, w[5];
+    unsigned k;
+
+    for (k = 0; k < 20; ++k) spa_hssr_test_attack_step(1.0f, &history, &weight);
+    w[0] = spa_hssr_test_attack_step(1.0f, &history, &weight);
+    w[1] = spa_hssr_test_attack_step(16.0f, &history, &weight);
+    w[2] = spa_hssr_test_attack_step(1.0f, &history, &weight);
+    w[3] = spa_hssr_test_attack_step(1.0f, &history, &weight);
+    w[4] = spa_hssr_test_attack_step(1.0f, &history, &weight);
+    assert(w[0] == 0.0f && w[1] == 1.0f);
+    assert(fabsf(w[2] - beta) < 1e-5f);
+    assert(fabsf(w[3] - beta * beta) < 1e-5f);
+    assert(fabsf(w[4] - beta * beta * beta) < 1e-5f);
+    for (k = 0; k < 3; ++k) {
+        float rise = (float)pow(10.0, rises_db[k] / 10.0), value;
+        unsigned n;
+
+        history = 0.0f; weight = 0.0f;
+        for (n = 0; n < 20; ++n) spa_hssr_test_attack_step(1.0f, &history, &weight);
+        value = spa_hssr_test_attack_step(rise, &history, &weight);
+        assert(fabsf(value - expected[k]) < 0.01f);
+    }
+}
+
+/* Bed impulse in one bin: 0.79 undelayed, 0.60 after the band's Ls delay,
+ * -0.14 cross on Rs after the Ls delay, nothing else; ring survives reset. */
+static void test_bed_delay_ring(void)
+{
+    static struct spa_hssr_dsp dsp;
+    static float out_re[2][SPA_HSSR_BINS], out_im[2][SPA_HSSR_BINS];
+    const unsigned bins[2] = { 40, 3 };        /* 3750 Hz: L1/R2; 281 Hz: L9/R7 */
+    const unsigned delay_l[2] = { 1, 9 };
+    unsigned which, hop, bin;
+
+    for (which = 0; which < 2; ++which) {
+        spa_hssr_dsp_prepare(&dsp);
+        dsp.bed_delays = 1;
+        for (hop = 0; hop < 16; ++hop) {
+            memset(dsp.bed_re, 0, sizeof(dsp.bed_re));
+            memset(dsp.bed_im, 0, sizeof(dsp.bed_im));
+            if (hop == 0) dsp.bed_re[0][bins[which]] = 1.0f;
+            spa_hssr_test_mix_bed(&dsp, out_re, out_im);
+            for (bin = 0; bin < SPA_HSSR_BINS; ++bin) {
+                float l = out_re[0][bin], r = out_re[1][bin];
+                float el = 0.0f, er = 0.0f;
+
+                if (bin == bins[which] && hop == 0) el = 0.79f;
+                if (bin == bins[which] && hop == delay_l[which]) { el = 0.60f; er = -0.14f; }
+                assert(fabsf(l - el) < 1e-6f && fabsf(r - er) < 1e-6f);
+                assert(out_im[0][bin] == 0.0f && out_im[1][bin] == 0.0f);
+            }
+        }
+    }
+}
+
+/* Whole renderer with the experiments on: valid, bounded, deterministic after
+ * reset, actually different from the legacy rear, and rejected out of range. */
+static void test_bed_experiments_end_to_end(void)
+{
+    static struct spa_stereo_upmix legacy, experiment;
+    struct spa_stereo_upmix_config config;
+    uint64_t rear_difference = 0;
+    size_t frame;
+
+    fill_stereo(UINT32_C(0x42454421), 0);
+    make_universal_config(&config, 0);
+    assert(spa_stereo_upmix_init(&legacy, &config) == SPA_STEREO_UPMIX_OK);
+    process_blocks(&legacy, g_input, g_output_a);
+    config.bed_delays = 1;
+    config.bed_attack = SPA_HSSR_BED_ATTACK_OWNER;
+    config.front_retention_q15 = 16384;
+    assert(spa_stereo_upmix_init(&experiment, &config) == SPA_STEREO_UPMIX_OK);
+    process_blocks(&experiment, g_input, g_output_b);
+    for (frame = 0; frame < TEST_FRAMES; ++frame) {
+        const int16_t *a = g_output_a + frame * TEST_CHANNELS;
+        const int16_t *b = g_output_b + frame * TEST_CHANNELS;
+        int64_t d = (int64_t)a[4] - b[4];
+
+        assert(b[SPA_STEREO_UPMIX_CHANNEL_C] == 0);
+        assert(b[4] >= -(int32_t)SPA_STEREO_UPMIX_REAR_Q15_MAX && b[4] <= (int32_t)SPA_STEREO_UPMIX_REAR_Q15_MAX);
+        rear_difference += (uint64_t)(d * d);
+    }
+    assert(rear_difference > 0);
+    assert(spa_stereo_upmix_reset(&experiment) == SPA_STEREO_UPMIX_OK);
+    process_blocks(&experiment, g_input, g_overlap);
+    assert(memcmp(g_output_b, g_overlap, sizeof(g_output_b)) == 0);
+    config.bed_attack = 3;
+    assert(spa_stereo_upmix_init(&experiment, &config) == SPA_STEREO_UPMIX_ERROR_CONFIG);
+    config.bed_attack = SPA_HSSR_BED_ATTACK_FRONT;
+    config.attack_collapse_q15 = 32769;
+    assert(spa_stereo_upmix_init(&experiment, &config) == SPA_STEREO_UPMIX_ERROR_CONFIG);
+}
+
 int main(void)
 {
     test_default_validation_and_fail_closed();
@@ -598,6 +792,12 @@ int main(void)
     test_universal_latency_chunking_reset_and_lfe();
     test_universal_overlap_and_signal_derived_fallback();
     test_lfe_v2_phase_frequency_and_cabin_bounds();
+    test_front_bass_shelf();
+    test_corrected_guard_and_transfer_extremes();
+    test_s16_front_retention();
+    test_bed_attack_detector();
+    test_bed_delay_ring();
+    test_bed_experiments_end_to_end();
     puts("stereo_upmix_test: OK (Universal + rear shelf + LFE V2)");
     return 0;
 }

@@ -1,5 +1,14 @@
 # HSSR Universal host renderer
 
+> Sep20 correction: [guard/retention implementation and fresh music sweep](../../docs/UPMIX_GUARD_RETENTION_2026-09-20.md).
+> Current C guards share the corrected6-input×8-bus matrix, including L/R feeds
+> to sub/rear; the older routing/calibration prose below is historical.
+> New `--front-retention 0..1` / `AUDIO_STEREO_FRONT_RETENTION` independently
+> scales source removal (default0;1=no removal). Rear gain is unchanged.
+> S16 linked fallback and transfer overflow fixes intentionally change overload
+> behavior; bit-exactness to the old S16 executable is no longer expected.
+> No new default/deploy. Input-matrix protection does not cover downstream EQ.
+
 This directory exercises the exact stereo upmixer shipped in the hook.  There
 is one production algorithm, `hssr-universal`, plus `off`, the bit-exact
 `L,R,0,0,0,0` safety bypass.  Historical comparison profiles were removed from

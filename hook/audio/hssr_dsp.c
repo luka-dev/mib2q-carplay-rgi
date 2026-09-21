@@ -51,6 +51,21 @@ static const float kHssrPercussionPresence[SPA_HSSR_BANDS] = {
     1.00f, 0.95f, 0.82f, 0.65f, 0.45f, 0.25f, 0.10f, 0.00f
 };
 
+/* Scene-bed decorrelation delays per band in hops (2.667 ms), Ls then Rs.
+ * Shape follows the Dolby residual delay tables (long at low frequencies,
+ * one or two units above 3 kHz); the absolute scale assumes 64-sample Dolby
+ * units, a hypothesis recorded in the plan document. */
+static const uint8_t kHssrBedDelayL[SPA_HSSR_BANDS] = {
+    12, 12, 12, 12, 12,  9, 9, 9, 9, 9,  4, 4, 4, 4,  2, 2, 2, 2,
+     1,  1,  1,  1,  1,  1, 1, 1, 1, 1,  1, 1, 1, 1
+};
+static const uint8_t kHssrBedDelayR[SPA_HSSR_BANDS] = {
+    15, 15, 15, 15, 15,  7, 7, 7, 7, 7,  6, 6, 6, 6,  3, 3, 3, 3,
+     2,  2,  2,  2,  2,  2, 2, 2, 2, 2,  2, 2, 2, 2
+};
+/* Dolby 0.98169 per unit; two units per hop. */
+#define SPA_HSSR_ATTACK_BETA 0.9637f
+
 struct spa_hssr_band_accumulator {
     float pl;
     float pr;
@@ -1029,6 +1044,97 @@ static void spa_hssr_run_control(
 
 /* Stage 3: deterministic mask construction, spectral routing and overlap-add
  * synthesis.  Like analysis, it never leaves the audio thread. */
+/* Dolby-style band attack detector: 0 at <= +3 dB above the slow history,
+ * 1 at >= +9 dB, instantaneous rise, geometric release. */
+static float spa_hssr_attack_step(float energy, float *history, float *weight)
+{
+    float target = 0.0f;
+
+    if (*history <= 0.0f) {
+        *history = energy;
+    } else {
+        float ratio = 0.501187205f * energy / (*history + 1.0e-12f);
+
+        if (ratio > 1.0f)
+            target = spa_hssr_dsp_bound(
+                0.501716673f * 1.44269504f * logf(ratio), 0.0f, 1.0f);
+    }
+    *weight *= SPA_HSSR_ATTACK_BETA;
+    if (target > *weight) *weight = target;
+    *history += (1.0f - SPA_HSSR_ATTACK_BETA) * (energy - *history);
+    return *weight;
+}
+
+/* Distribute the scene bed like a Dolby residual: an undelayed share, a
+ * per-band delayed share and a delayed cross term (0.79 / 0.60 / 0.14: unit
+ * energy for uncorrelated copies).  Attack handling per band:
+ *   OWNER  a hit stays coherent where the band owner is: with an accepted
+ *          second-scene object the delayed copies fade (rear stays one
+ *          source); without an owner the bed row collapses forward (x0.39);
+ *   FRONT  Dolby reference, the whole bed row collapses forward on every hit. */
+static void spa_hssr_mix_bed(struct spa_hssr_dsp *state)
+{
+    const unsigned pos = state->bed_ring_pos & (SPA_HSSR_BED_RING - 1);
+    unsigned bin;
+
+    for (bin = 0; bin < SPA_HSSR_BINS; ++bin) {
+        unsigned band = state->bin_band[bin];
+        float w = state->bed_attack ? state->band_attack_weight[band] : 0.0f;
+        float owner = state->bed_attack == SPA_HSSR_BED_ATTACK_OWNER
+            ? state->band_owner[band] : 0.0f;
+        float row = 1.0f - 0.61f * w * (1.0f - owner);
+        float fade = 1.0f - w * owner;
+        float l_re = state->bed_re[0][bin];
+        float l_im = state->bed_im[0][bin];
+        float r_re = state->bed_re[1][bin];
+        float r_im = state->bed_im[1][bin];
+
+        state->bed_ring_re[0][pos][bin] = l_re;
+        state->bed_ring_im[0][pos][bin] = l_im;
+        state->bed_ring_re[1][pos][bin] = r_re;
+        state->bed_ring_im[1][pos][bin] = r_im;
+        if (state->bed_delays) {
+            unsigned pl = (pos + SPA_HSSR_BED_RING - kHssrBedDelayL[band]) &
+                          (SPA_HSSR_BED_RING - 1);
+            unsigned pr = (pos + SPA_HSSR_BED_RING - kHssrBedDelayR[band]) &
+                          (SPA_HSSR_BED_RING - 1);
+            float d = 0.60f * fade;
+            float x = 0.14f * fade;
+            float dl_re = state->bed_ring_re[0][pl][bin];
+            float dl_im = state->bed_ring_im[0][pl][bin];
+            float dr_re = state->bed_ring_re[1][pr][bin];
+            float dr_im = state->bed_ring_im[1][pr][bin];
+
+            l_re = 0.79f * l_re + d * dl_re - x * dr_re;
+            l_im = 0.79f * l_im + d * dl_im - x * dr_im;
+            r_re = 0.79f * r_re + d * dr_re - x * dl_re;
+            r_im = 0.79f * r_im + d * dr_im - x * dl_im;
+        }
+        state->fft_re[SPA_HSSR_LEFT][bin] += row * l_re;
+        state->fft_im[SPA_HSSR_LEFT][bin] += row * l_im;
+        state->fft_re[SPA_HSSR_RIGHT][bin] += row * r_re;
+        state->fft_im[SPA_HSSR_RIGHT][bin] += row * r_im;
+    }
+    state->bed_ring_pos = pos + 1u;
+}
+
+#ifdef SPA_STEREO_UPMIX_TESTING
+float spa_hssr_test_attack_step(float energy, float *history, float *weight)
+{ return spa_hssr_attack_step(energy, history, weight); }
+void spa_hssr_test_mix_bed(struct spa_hssr_dsp *state,
+                           float out_re[2][SPA_HSSR_BINS],
+                           float out_im[2][SPA_HSSR_BINS])
+{
+    memset(state->fft_re, 0, sizeof(state->fft_re));
+    memset(state->fft_im, 0, sizeof(state->fft_im));
+    spa_hssr_mix_bed(state);
+    memcpy(out_re[0], state->fft_re[0], SPA_HSSR_BINS * sizeof(float));
+    memcpy(out_re[1], state->fft_re[1], SPA_HSSR_BINS * sizeof(float));
+    memcpy(out_im[0], state->fft_im[0], SPA_HSSR_BINS * sizeof(float));
+    memcpy(out_im[1], state->fft_im[1], SPA_HSSR_BINS * sizeof(float));
+}
+#endif
+
 static void spa_hssr_render_hop(
     struct spa_hssr_dsp *state,
     const struct spa_hssr_band_accumulator bands[SPA_HSSR_BANDS])
@@ -1037,6 +1143,16 @@ static void spa_hssr_render_hop(
     unsigned sample;
     unsigned bin;
     unsigned band;
+    const int split = state->bed_delays || state->bed_attack;
+    float band_best[SPA_HSSR_BANDS];
+
+    memset(band_best, 0, sizeof(band_best));
+    if (state->bed_attack) {
+        for (band = 0; band < SPA_HSSR_BANDS; ++band)
+            spa_hssr_attack_step(bands[band].pl + bands[band].pr,
+                                 &state->band_attack_history[band],
+                                 &state->band_attack_weight[band]);
+    }
 
     {
         const float epsilon = 1.0e-8f;
@@ -1097,6 +1213,8 @@ static void spa_hssr_render_hop(
                     best_pan = slot->pan;
                 }
             }
+
+            if (best_score > band_best[band]) band_best[band] = best_score;
 
             /* A ridge is useful only after it agrees with a persistent
              * spatial slot, rejecting unrelated centred harmonics. */
@@ -1210,6 +1328,9 @@ static void spa_hssr_render_hop(
                 (universal_target - state->bin_universal_mask[bin]);
         }
     }
+    for (band = 0; band < SPA_HSSR_BANDS; ++band)
+        state->band_owner[band] = spa_hssr_dsp_smoothstep(
+            band_best[band], 0.040f, 0.28f);
 
     for (bin = 0; bin < SPA_HSSR_BINS; ++bin) {
         float left_re = state->fft_re[SPA_HSSR_LEFT][bin];
@@ -1327,19 +1448,42 @@ static void spa_hssr_render_hop(
                 /* Original source image, BEFORE steering or ambience.  The
                  * subtraction never exceeds the source itself (mask <= 1). */
                 float source_mask = mask > 1.0f ? 1.0f : mask;
+
+                /* With attack handling the front retention lives here per
+                 * band and hop; stereo_upmix.c then transfers the whole
+                 * source.  OWNER: a hit pulls the object to the rear. */
+                if (state->bed_attack == SPA_HSSR_BED_ATTACK_OWNER)
+                    source_mask *= 1.0f - state->front_retention *
+                        (1.0f - state->attack_collapse *
+                         state->band_attack_weight[band] *
+                         state->band_owner[band]);
+                else if (state->bed_attack)
+                    source_mask *= 1.0f - state->front_retention;
                 state->source_fft_re[0][bin] = source_mask * source_l * projected_re;
                 state->source_fft_im[0][bin] = source_mask * source_l * projected_im;
                 state->source_fft_re[1][bin] = source_mask * source_r * projected_re;
                 state->source_fft_im[1][bin] = source_mask * source_r * projected_im;
             }
-            state->fft_re[SPA_HSSR_LEFT][bin] =
-                mask * steering_l * projected_re + ambience * side_re;
-            state->fft_im[SPA_HSSR_LEFT][bin] =
-                mask * steering_l * projected_im + ambience * side_im;
-            state->fft_re[SPA_HSSR_RIGHT][bin] =
-                mask * steering_r * projected_re - ambience * side_re;
-            state->fft_im[SPA_HSSR_RIGHT][bin] =
-                mask * steering_r * projected_im - ambience * side_im;
+            if (!split) {
+                state->fft_re[SPA_HSSR_LEFT][bin] =
+                    mask * steering_l * projected_re + ambience * side_re;
+                state->fft_im[SPA_HSSR_LEFT][bin] =
+                    mask * steering_l * projected_im + ambience * side_im;
+                state->fft_re[SPA_HSSR_RIGHT][bin] =
+                    mask * steering_r * projected_re - ambience * side_re;
+                state->fft_im[SPA_HSSR_RIGHT][bin] =
+                    mask * steering_r * projected_im - ambience * side_im;
+            } else {
+                /* Object only; the bed is distributed by spa_hssr_mix_bed. */
+                state->fft_re[SPA_HSSR_LEFT][bin] = mask * steering_l * projected_re;
+                state->fft_im[SPA_HSSR_LEFT][bin] = mask * steering_l * projected_im;
+                state->fft_re[SPA_HSSR_RIGHT][bin] = mask * steering_r * projected_re;
+                state->fft_im[SPA_HSSR_RIGHT][bin] = mask * steering_r * projected_im;
+                state->bed_re[0][bin] = ambience * side_re;
+                state->bed_im[0][bin] = ambience * side_im;
+                state->bed_re[1][bin] = -ambience * side_re;
+                state->bed_im[1][bin] = -ambience * side_im;
+            }
             if (universal > 0.0f) {
                 /* A bounded conjugate phase pair prevents the fallback from
                  * degenerating into identical SL/SR or x/-x.  Alternating
@@ -1358,14 +1502,21 @@ static void spa_hssr_render_hop(
                 float rotated_r_im = wr * mid_im - wi * mid_re;
 
                 universal *= state->universal_makeup;
-                state->fft_re[SPA_HSSR_LEFT][bin] +=
-                    universal * fallback_l * rotated_l_re;
-                state->fft_im[SPA_HSSR_LEFT][bin] +=
-                    universal * fallback_l * rotated_l_im;
-                state->fft_re[SPA_HSSR_RIGHT][bin] +=
-                    universal * fallback_r * rotated_r_re;
-                state->fft_im[SPA_HSSR_RIGHT][bin] +=
-                    universal * fallback_r * rotated_r_im;
+                if (!split) {
+                    state->fft_re[SPA_HSSR_LEFT][bin] +=
+                        universal * fallback_l * rotated_l_re;
+                    state->fft_im[SPA_HSSR_LEFT][bin] +=
+                        universal * fallback_l * rotated_l_im;
+                    state->fft_re[SPA_HSSR_RIGHT][bin] +=
+                        universal * fallback_r * rotated_r_re;
+                    state->fft_im[SPA_HSSR_RIGHT][bin] +=
+                        universal * fallback_r * rotated_r_im;
+                } else {
+                    state->bed_re[0][bin] += universal * fallback_l * rotated_l_re;
+                    state->bed_im[0][bin] += universal * fallback_l * rotated_l_im;
+                    state->bed_re[1][bin] += universal * fallback_r * rotated_r_re;
+                    state->bed_im[1][bin] += universal * fallback_r * rotated_r_im;
+                }
             }
 #ifdef SPA_HSSR_CAPTURE_TRANSFERS
             if (!state->cabin_policy) {
@@ -1397,6 +1548,8 @@ static void spa_hssr_render_hop(
 #endif
         }
     }
+
+    if (split) spa_hssr_mix_bed(state);
 
     for (channel = 0; channel < 2; ++channel) {
         state->fft_im[channel][0] = 0.0f;

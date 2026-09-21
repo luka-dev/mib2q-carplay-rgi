@@ -10,14 +10,6 @@
 
 #define SPA_STEREO_UPMIX_MAGIC UINT32_C(0x5355504d) /* "SUPM" */
 
-struct spa_upmix_biquad_coefficients {
-    float b0;
-    float b1;
-    float b2;
-    float a1;
-    float a2;
-};
-
 /* Cabin-Aware LFE V2 deliberately stays below the conservative 48-Hz
  * SoundAmp sub-band boundary.  This is one 48-kHz, Q=1/sqrt(2) Butterworth
  * section cascaded twice below for an LR4 (-24 dB/octave) low-pass. */
@@ -53,25 +45,18 @@ static const struct spa_upmix_biquad_coefficients kRearHighShelf4k3dB = {
     0.448611850550f
 };
 
-/* Recovered A07/profile-0/bank-1 SoundAmp gains. */
-static const float kCabinFront = 0.794328f;
-static const float kCabinCentreFront = 0.501187f;
-static const float kCabinFrontRear = 0.707946f;
-static const float kCabinRear = 1.995262f;
-static const float kCabinFrontLfeReciprocal = 2.51188751f;
-static const float kCabinCentreLfeReciprocal = 3.16227532f;
-static const float kCabinLfeReciprocal = 0.70794556f;
-static const float kCabinRearLfeReciprocal = 5.01187815f;
 static const float kCabinSampleLimit = 32275.0f; /* 0.985 FS + rounding margin */
 
+/* A903C/126A07: A07 rows are OUTPUTS. Transpose once here for the detector's
+ * input-major API. One table is shared by the S16 and float guards. */
 #define CABIN_FLOOR 0.00001122018454f
 static const float kInputMatrix[6][8] = {
-    {0.794328235f, CABIN_FLOOR, 0.501187234f, CABIN_FLOOR, CABIN_FLOOR, CABIN_FLOOR, CABIN_FLOOR, CABIN_FLOOR},
-    {CABIN_FLOOR, 0.794328235f, 0.501187234f, CABIN_FLOOR, CABIN_FLOOR, CABIN_FLOOR, CABIN_FLOOR, CABIN_FLOOR},
-    {0.398107171f, 0.398107171f, 0.707945784f, CABIN_FLOOR, CABIN_FLOOR, CABIN_FLOOR, CABIN_FLOOR, CABIN_FLOOR},
-    {0.398107171f, 0.398107171f, 0.316227766f, 1.412537545f, 0.199526231f, 0.199526231f, CABIN_FLOOR, CABIN_FLOOR},
-    {0.707945784f, CABIN_FLOOR, CABIN_FLOOR, CABIN_FLOOR, 1.995262315f, CABIN_FLOOR, CABIN_FLOOR, CABIN_FLOOR},
-    {CABIN_FLOOR, 0.707945784f, CABIN_FLOOR, CABIN_FLOOR, CABIN_FLOOR, 1.995262315f, CABIN_FLOOR, CABIN_FLOOR}
+    {0.794328235f, CABIN_FLOOR, 0.398107171f, 0.398107171f, 0.707945784f, CABIN_FLOOR, 0.707945784f, CABIN_FLOOR},
+    {CABIN_FLOOR, 0.794328235f, 0.398107171f, 0.398107171f, CABIN_FLOOR, 0.707945784f, CABIN_FLOOR, 0.707945784f},
+    {0.501187234f, 0.501187234f, 0.707945784f, 0.316227766f, CABIN_FLOOR, CABIN_FLOOR, CABIN_FLOOR, CABIN_FLOOR},
+    {CABIN_FLOOR, CABIN_FLOOR, CABIN_FLOOR, 1.412537545f, CABIN_FLOOR, CABIN_FLOOR, CABIN_FLOOR, CABIN_FLOOR},
+    {CABIN_FLOOR, CABIN_FLOOR, CABIN_FLOOR, 0.199526231f, 1.995262315f, CABIN_FLOOR, 2.818382931f, CABIN_FLOOR},
+    {CABIN_FLOOR, CABIN_FLOOR, CABIN_FLOOR, 0.199526231f, CABIN_FLOOR, 1.995262315f, CABIN_FLOOR, 2.818382931f}
 };
 #undef CABIN_FLOOR
 
@@ -117,13 +102,25 @@ static int16_t spa_upmix_transfer_front(int16_t front, int16_t rear,
                                         uint32_t transfer_q15,
                                         uint32_t front_limit_q15)
 {
-    int32_t adjusted = (int32_t)front -
-        (int32_t)spa_upmix_scale_s16_q15(rear, transfer_q15);
+    /* Transfer can exceed unity (2.5): do not narrow it to S16 before
+     * subtraction. At max rear, 16384*2.5=40960 must not wrap negative. */
+    int64_t product = (int64_t)rear * transfer_q15;
+    int32_t transfer = product >= 0 ? (int32_t)((product + 16384) / 32768)
+        : -(int32_t)((-product + 16384) / 32768);
+    int32_t adjusted = (int32_t)front - transfer;
     int32_t limit = (int32_t)front_limit_q15;
 
     if (adjusted > limit) adjusted = limit;
     if (adjusted < -limit) adjusted = -limit;
+    if (adjusted > INT16_MAX) adjusted = INT16_MAX;
     return (int16_t)adjusted;
+}
+
+static int16_t spa_upmix_float_to_s16(float value)
+{
+    long rounded = lrintf(spa_upmix_bound(value, 32767.0f));
+    if (rounded < -32768L) rounded = -32768L;
+    return (int16_t)rounded;
 }
 
 static int16_t spa_upmix_rear_to_s16(float normalized, uint32_t gain_q15)
@@ -275,69 +272,109 @@ static float spa_upmix_lfe_v2_normalized(
     return sub_band * state->_runtime._lfe_dynamic_gain;
 }
 
-static void spa_upmix_lfe_intersect(
-    float base, float reciprocal_coefficient,
-    float *minimum, float *maximum)
+/* RBJ low shelf, S = 1, normalized to a0. */
+static void spa_upmix_low_shelf(struct spa_upmix_biquad_coefficients *c,
+                                float corner_hz, float gain_db)
 {
-    float low = (-kCabinSampleLimit - base) * reciprocal_coefficient;
-    float high = (kCabinSampleLimit - base) * reciprocal_coefficient;
+    const float amp = powf(10.0f, gain_db / 40.0f);
+    const float w0 = 6.28318530717958647693f * corner_hz /
+        (float)SPA_STEREO_UPMIX_SAMPLE_RATE;
+    const float cw = cosf(w0);
+    const float alpha = sinf(w0) * 0.5f * sqrtf(2.0f);
+    const float root = 2.0f * sqrtf(amp) * alpha;
+    const float a0 = (amp + 1.0f) + (amp - 1.0f) * cw + root;
 
-    if (low > *minimum) *minimum = low;
-    if (high < *maximum) *maximum = high;
+    c->b0 = amp * ((amp + 1.0f) - (amp - 1.0f) * cw + root) / a0;
+    c->b1 = 2.0f * amp * ((amp - 1.0f) - (amp + 1.0f) * cw) / a0;
+    c->b2 = amp * ((amp + 1.0f) - (amp - 1.0f) * cw - root) / a0;
+    c->a1 = -2.0f * ((amp - 1.0f) + (amp + 1.0f) * cw) / a0;
+    c->a2 = ((amp + 1.0f) + (amp - 1.0f) * cw - root) / a0;
 }
 
-static int16_t spa_upmix_lfe_cabin_limit(
-    int16_t candidate, int16_t front_l, int16_t front_r,
-    int16_t rear_l, int16_t rear_r)
+static void spa_upmix_front_bass_prepare(struct spa_stereo_upmix *state)
 {
-    float minimum = -32768.0f;
-    float maximum = 32767.0f;
-    float limited = (float)candidate;
-    int32_t rounded;
-
-    spa_upmix_lfe_intersect(
-        kCabinFront * (float)front_l +
-            kCabinFrontRear * (float)rear_l,
-        kCabinFrontLfeReciprocal, &minimum, &maximum);
-    spa_upmix_lfe_intersect(
-        kCabinFront * (float)front_r +
-            kCabinFrontRear * (float)rear_r,
-        kCabinFrontLfeReciprocal, &minimum, &maximum);
-    spa_upmix_lfe_intersect(
-        kCabinCentreFront * ((float)front_l + (float)front_r),
-        kCabinCentreLfeReciprocal, &minimum, &maximum);
-    spa_upmix_lfe_intersect(
-        0.0f, kCabinLfeReciprocal, &minimum, &maximum);
-    spa_upmix_lfe_intersect(
-        kCabinRear * (float)rear_l,
-        kCabinRearLfeReciprocal, &minimum, &maximum);
-    spa_upmix_lfe_intersect(
-        kCabinRear * (float)rear_r,
-        kCabinRearLfeReciprocal, &minimum, &maximum);
-
-    if (minimum > maximum) return 0;
-    if (limited < minimum) limited = minimum;
-    if (limited > maximum) limited = maximum;
-    rounded = (int32_t)limited;
-    if ((float)rounded > maximum) rounded--;
-    if ((float)rounded < minimum) rounded++;
-    if (rounded > INT16_MAX) rounded = INT16_MAX;
-    if (rounded < INT16_MIN) rounded = INT16_MIN;
-    return (int16_t)rounded;
+    if (state->config.front_bass_db10)
+        spa_upmix_low_shelf(&state->_runtime._front_bass_shelf,
+                            (float)SPA_STEREO_UPMIX_FRONT_BASS_HZ,
+                            (float)state->config.front_bass_db10 * 0.1f);
 }
+
+/* S16-scale in, S16-scale out; the biquad works in normalized units. */
+static float spa_upmix_front_bass(struct spa_stereo_upmix *state,
+                                  unsigned channel, float value)
+{
+    if (!state->config.front_bass_db10) return value;
+    return 32768.0f * spa_upmix_biquad(value * (1.0f / 32768.0f),
+        state->_runtime._front_bass_state[channel],
+        &state->_runtime._front_bass_shelf);
+}
+
+static void spa_upmix_cabin_guard_s16(int16_t sample[6], int adjust_lfe)
+{
+    unsigned bus, ch;
+    float peak = 0.0f;
+    if (adjust_lfe) {
+        float limited = (float)sample[3];
+        /* Never synthesize extra LFE or reverse its sign to repair overload. */
+        float minimum = limited < 0.0f ? limited : 0.0f;
+        float maximum = limited > 0.0f ? limited : 0.0f;
+        for (bus = 0; bus < 8; ++bus) {
+            float base = 0.0f;
+            float low, high;
+            for (ch = 0; ch < 6; ++ch)
+                if (ch != 3) base += kInputMatrix[ch][bus] * sample[ch];
+            low = (-kCabinSampleLimit - base) / kInputMatrix[3][bus];
+            high = (kCabinSampleLimit - base) / kInputMatrix[3][bus];
+            if (low > minimum) minimum = low;
+            if (high < maximum) maximum = high;
+        }
+        minimum = ceilf(minimum); maximum = floorf(maximum);
+        if (minimum <= maximum) {
+            if (limited < minimum) limited = minimum;
+            if (limited > maximum) limited = maximum;
+            sample[3] = (int16_t)limited;
+        }
+        /* If LFE alone cannot repair it, preserve the candidate for the
+         * linked fallback below. Returning LFE=0 is not a rail guarantee. */
+    }
+    for (ch = 0; ch < 6; ++ch)
+        if (fabsf((float)sample[ch]) > peak) peak = fabsf((float)sample[ch]);
+    for (bus = 0; bus < 8; ++bus) {
+        float value = 0.0f;
+        for (ch = 0; ch < 6; ++ch) value += kInputMatrix[ch][bus] * sample[ch];
+        if (fabsf(value) > peak) peak = fabsf(value);
+    }
+    if (peak > kCabinSampleLimit) {
+        /* Eight S16 units reserve more than the largest row's aggregate
+         * truncation error, including cancellation and float roundoff. */
+        float gain = (kCabinSampleLimit - 8.0f) / peak;
+        for (ch = 0; ch < 6; ++ch) sample[ch] = (int16_t)(sample[ch] * gain);
+    }
+}
+
+#ifdef SPA_STEREO_UPMIX_TESTING
+void spa_stereo_upmix_test_guard_s16(int16_t sample[6], int adjust_lfe)
+{ spa_upmix_cabin_guard_s16(sample, adjust_lfe); }
+int16_t spa_stereo_upmix_test_transfer(int16_t front, int16_t rear,
+                                      uint32_t transfer, uint32_t limit)
+{ return spa_upmix_transfer_front(front, rear, transfer, limit); }
+#endif
 
 static int spa_upmix_config_valid(const struct spa_stereo_upmix_config *config)
 {
-    uint64_t centre_bus_q15;
-
     if (!config) return SPA_STEREO_UPMIX_ERROR_ARGUMENT;
     if (!spa_stereo_upmix_backend_supported(config->backend))
         return SPA_STEREO_UPMIX_ERROR_UNSUPPORTED;
     if (config->sample_rate_hz != SPA_STEREO_UPMIX_SAMPLE_RATE ||
         config->front_gain_q15 > UINT32_C(32768) ||
+        config->front_retention_q15 > UINT32_C(32768) ||
         config->rear_gain_q15 > SPA_STEREO_UPMIX_REAR_Q15_MAX ||
         config->lfe_gain_q15 > SPA_STEREO_UPMIX_LFE_Q15_MAX ||
-        config->lfe_enabled > 1u || config->cabin_policy > 1u || config->quiet_lfe > 1u)
+        config->lfe_enabled > 1u || config->cabin_policy > 1u || config->quiet_lfe > 1u ||
+        config->front_bass_db10 > 0 ||
+        config->front_bass_db10 < SPA_STEREO_UPMIX_FRONT_BASS_DB10_MIN ||
+        config->bed_delays > 1u || config->bed_attack > SPA_HSSR_BED_ATTACK_FRONT ||
+        config->attack_collapse_q15 > UINT32_C(32768))
         return SPA_STEREO_UPMIX_ERROR_CONFIG;
     if (config->backend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL &&
         !spa_hssr_model_ready(config->hssr_model))
@@ -348,11 +385,8 @@ static int spa_upmix_config_valid(const struct spa_stereo_upmix_config *config)
          !config->hssr_control_provider->reset))
         return SPA_STEREO_UPMIX_ERROR_CONFIG;
 
-    /* Recovered SoundAmp centre row:
-     * Cbus = 0.501187*L + 0.501187*R + 0.316228*LFE. */
-    /* Static worst-case (full-scale mono + full LFE at once) would refuse
-     * 12288; the per-sample spa_upmix_lfe_cabin_limit is the real guard. */
-    (void)centre_bus_q15;
+    /* Config bounds are not a matrix-headroom proof. S16 uses the linked
+     * frame guard; float callers must apply post-synthesis protection. */
     return SPA_STEREO_UPMIX_OK;
 }
 
@@ -387,6 +421,15 @@ static void spa_scene_rear_delay(struct spa_stereo_upmix *state, float *rear_l, 
     *rear_r = delayed_r;
 }
 
+static void spa_upmix_apply_bed_config(struct spa_hssr_dsp *hssr,
+                                       const struct spa_stereo_upmix_config *config)
+{
+    hssr->bed_delays = config->bed_delays;
+    hssr->bed_attack = config->bed_attack;
+    hssr->attack_collapse = (float)config->attack_collapse_q15 / 32768.0f;
+    hssr->front_retention = (float)config->front_retention_q15 / 32768.0f;
+}
+
 void spa_stereo_upmix_default_config(struct spa_stereo_upmix_config *config)
 {
     if (!config) return;
@@ -397,6 +440,11 @@ void spa_stereo_upmix_default_config(struct spa_stereo_upmix_config *config)
     config->lfe_enabled = 0;
     config->cabin_policy = 0;
     config->quiet_lfe = 0;
+    config->front_retention_q15 = 0;
+    config->front_bass_db10 = 0;
+    config->bed_delays = 0;
+    config->bed_attack = SPA_HSSR_BED_ATTACK_OFF;
+    config->attack_collapse_q15 = 32768u;
     config->backend = SPA_STEREO_UPMIX_OFF;
     config->hssr_model = NULL;
     config->hssr_control_provider = NULL;
@@ -472,6 +520,7 @@ int spa_stereo_upmix_init(struct spa_stereo_upmix *state,
     if (saved.backend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL) {
         spa_hssr_dsp_prepare(&state->_runtime._hssr);
         state->_runtime._hssr.cabin_policy = saved.cabin_policy;
+        spa_upmix_apply_bed_config(&state->_runtime._hssr, &saved);
         state->_runtime._hssr.control_generation = 1u;
         state->_runtime._hssr.guard_model = saved.hssr_guard_model;
         spa_hssr_state_reset(&state->_runtime._hssr.guard_network);
@@ -483,6 +532,7 @@ int spa_stereo_upmix_init(struct spa_stereo_upmix *state,
     state->_runtime._lfe_target_polarity = 1.0f;
     state->_runtime._lfe_dynamic_gain = 0.96f;
     state->_runtime._limiter_gain = 1.0f;
+    spa_upmix_front_bass_prepare(state);
     state->_initialized = SPA_STEREO_UPMIX_MAGIC;
     return SPA_STEREO_UPMIX_OK;
 }
@@ -507,6 +557,7 @@ int spa_stereo_upmix_reset(struct spa_stereo_upmix *state)
     if (state->config.backend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL) {
         spa_hssr_dsp_prepare(&state->_runtime._hssr);
         state->_runtime._hssr.cabin_policy = state->config.cabin_policy;
+        spa_upmix_apply_bed_config(&state->_runtime._hssr, &state->config);
         state->_runtime._hssr.control_generation = generation;
         if (state->config.hssr_control_provider)
             state->config.hssr_control_provider->reset(
@@ -516,6 +567,7 @@ int spa_stereo_upmix_reset(struct spa_stereo_upmix *state)
     state->_runtime._lfe_target_polarity = 1.0f;
     state->_runtime._lfe_dynamic_gain = 0.96f;
     state->_runtime._limiter_gain = 1.0f;
+    spa_upmix_front_bass_prepare(state);
     return SPA_STEREO_UPMIX_OK;
 }
 
@@ -587,6 +639,9 @@ static int spa_upmix_process(struct spa_stereo_upmix *state,
                 rear_r = spa_upmix_biquad(rear_r,
                     state->_runtime._scene_rear_shelf_state[1], &kSceneRearLowShelf);
                 float front_gain = (float)state->config.front_gain_q15 / 32768.0f;
+                /* With attack handling HSSR already applied the retention per band. */
+                float transfer_amount = state->config.bed_attack ? 1.0f
+                    : 1.0f - (float)state->config.front_retention_q15 / 32768.0f;
                 /* Preserve V11's transfer policy; presence EQ must not enter
                  * dry-front subtraction. No per-channel rail clipping. */
                 /* Remove the source-aligned object once (2.5 x 0.40 = 1.0),
@@ -597,8 +652,10 @@ static int spa_upmix_process(struct spa_stereo_upmix *state,
                 float transfer_r = 2.5f * spa_upmix_biquad(
                     state->_hssr_source_scratch[frame * 2 + 1],
                     state->_runtime._scene_source_shelf_state[1], &kSceneRearLowShelf);
-                out[0] = (float)dry_l * front_gain - transfer_l * rear_gain;
-                out[1] = (float)dry_r * front_gain - transfer_r * rear_gain;
+                out[0] = spa_upmix_front_bass(state, 0,
+                    (float)dry_l * front_gain - transfer_l * rear_gain * transfer_amount);
+                out[1] = spa_upmix_front_bass(state, 1,
+                    (float)dry_r * front_gain - transfer_r * rear_gain * transfer_amount);
                 out[2] = 0.0f;
                 out[3] = state->config.lfe_enabled
                     ? spa_upmix_lfe_v2_normalized(state, dry_l, dry_r,
@@ -640,6 +697,7 @@ static int spa_upmix_process(struct spa_stereo_upmix *state,
             int16_t output_rear_r;
             int16_t output_transfer_rear_l;
             int16_t output_transfer_rear_r;
+            uint32_t retention_q15;
 
             rear_l = spa_upmix_biquad(rear_l,
                 state->_runtime._scene_rear_shelf_state[0], &kSceneRearLowShelf);
@@ -698,6 +756,8 @@ static int spa_upmix_process(struct spa_stereo_upmix *state,
             }
 
             spa_scene_rear_delay(state, &rear_l, &rear_r);
+            /* With attack handling HSSR already applied the retention per band. */
+            retention_q15 = state->config.bed_attack ? 0u : state->config.front_retention_q15;
             front_l = spa_upmix_scale_s16_q15(
                 render_l, state->config.front_gain_q15);
             front_r = spa_upmix_scale_s16_q15(
@@ -712,16 +772,22 @@ static int spa_upmix_process(struct spa_stereo_upmix *state,
                 transfer_rear_r, state->config.rear_gain_q15);
             front_l = spa_upmix_transfer_front(
                 front_l, output_transfer_rear_l,
-                state->config.cabin_policy ? UINT32_C(32768) : UINT32_C(81920),
+                (uint32_t)(((uint64_t)(state->config.cabin_policy ? 32768u : 81920u) *
+                    (32768u - retention_q15) + 16384u) / 32768u),
                 state->config.front_gain_q15);
             front_r = spa_upmix_transfer_front(
                 front_r, output_transfer_rear_r,
-                state->config.cabin_policy ? UINT32_C(32768) : UINT32_C(81920),
+                (uint32_t)(((uint64_t)(state->config.cabin_policy ? 32768u : 81920u) *
+                    (32768u - retention_q15) + 16384u) / 32768u),
                 state->config.front_gain_q15);
+            if (state->config.front_bass_db10) {
+                front_l = spa_upmix_float_to_s16(
+                    spa_upmix_front_bass(state, 0, (float)front_l));
+                front_r = spa_upmix_float_to_s16(
+                    spa_upmix_front_bass(state, 1, (float)front_r));
+            }
             if (state->config.lfe_enabled)
-                lfe = spa_upmix_lfe_cabin_limit(
-                    lfe_candidate, front_l, front_r,
-                    output_rear_l, output_rear_r);
+                lfe = lfe_candidate;
 
             output[SPA_STEREO_UPMIX_CHANNEL_L] = front_l;
             output[SPA_STEREO_UPMIX_CHANNEL_R] = front_r;
@@ -729,6 +795,7 @@ static int spa_upmix_process(struct spa_stereo_upmix *state,
             output[SPA_STEREO_UPMIX_CHANNEL_LFE] = lfe;
             output[SPA_STEREO_UPMIX_CHANNEL_LS] = output_rear_l;
             output[SPA_STEREO_UPMIX_CHANNEL_RS] = output_rear_r;
+            spa_upmix_cabin_guard_s16(output, state->config.lfe_enabled);
         }
     }
 

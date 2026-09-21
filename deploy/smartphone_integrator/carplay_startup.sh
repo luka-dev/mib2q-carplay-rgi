@@ -54,13 +54,17 @@ export ALTSCREEN_HANDLE_ALT=1
 export ALTSCREEN_ADVERT_DISPLAYS=1
 
 # Buffered CarPlay audio policy.
-export AUDIO_SPATIAL=1
+export AUDIO_SPATIAL=0
 export AUDIO_SPATIAL_ATMOS=0
 export AUDIO_SPATIAL_ATMOS_MODE=downmix
 export AUDIO_STEREO_UPMIX=on
 export AUDIO_HSSR_MODEL="$H/hssr_model.bin"
 export AUDIO_STEREO_SURROUND=0.40
 export AUDIO_STEREO_LFE=assist
+# Sub level, dB re the calibrated assist (-24..+12). 0 = 2026-09-07 calibration; the 18.09 build ran at +9.5 and boomed.
+export AUDIO_STEREO_LFE_GAIN=0
+# Front-only bass trim (dB, -12..0): our Bass knob for the 5.1 bank; sub and rear untouched.
+export AUDIO_STEREO_FRONT_BASS_DB=-3
 export AUDIO_SOUNDCHECK=1
 export AUDIO_SOUNDCHECK_FALLBACK=off
 export AUDIO_SOUNDCHECK_LIMITER=off

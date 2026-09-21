@@ -43,6 +43,7 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <errno.h>
+#include <math.h>
 #include <poll.h>
 #include <sched.h>
 #include <time.h>
@@ -107,6 +108,12 @@ typedef struct {
     enum spa_stereo_upmix_backend stereoUpmixBackend;
     uint32_t stereoSurroundQ15;
     int stereoLfeAssist;
+    int32_t stereoFrontBassDb10;   /* tenths of dB, <= 0, 0 = off */
+    uint32_t stereoFrontRetentionQ15; /* experimental0..32768, default0 */
+    uint32_t hssrBedDelays;           /* 0/1 */
+    uint32_t hssrBedAttack;           /* enum spa_hssr_bed_attack */
+    uint32_t hssrAttackCollapseQ15;   /* 0..32768, default 32768 */
+    uint32_t stereoLfeGainQ15;     /* assist level, 1..16384, default 4096 */
     int floatRender;
     int cabinRender;
     int quietLfe;
@@ -171,6 +178,94 @@ static uint32_t spa_parse_stereo_surround_q15(void)
     return (uint32_t)(gain * 32768.0 + 0.5);
 }
 
+static uint32_t spa_parse_stereo_front_retention_q15(void)
+{
+    const char *value = getenv(SPA_AUDIO_STEREO_FRONT_RETENTION_ENV);
+    char *end = 0;
+    double amount;
+    if (!value || !value[0]) return 0;
+    errno = 0;
+    amount = strtod(value, &end);
+    if (errno || end == value || *end || amount != amount || amount < 0.0 || amount > 1.0) {
+        LOG_ERROR(LOG_MODULE, "audio config: invalid %s='%s'; expected0..1; using0",
+                  SPA_AUDIO_STEREO_FRONT_RETENTION_ENV, value);
+        return 0;
+    }
+    return (uint32_t)(amount * 32768.0 + 0.5);
+}
+
+static uint32_t spa_parse_hssr_bed_attack(void)
+{
+    const char *value = getenv(SPA_AUDIO_HSSR_BED_ATTACK_ENV);
+
+    if (!value || !value[0] || !strcasecmp(value, "off") || !strcmp(value, "0"))
+        return SPA_HSSR_BED_ATTACK_OFF;
+    if (!strcasecmp(value, "owner")) return SPA_HSSR_BED_ATTACK_OWNER;
+    if (!strcasecmp(value, "front")) return SPA_HSSR_BED_ATTACK_FRONT;
+    LOG_ERROR(LOG_MODULE, "audio config: invalid %s='%s'; expected off|owner|front; using off",
+              SPA_AUDIO_HSSR_BED_ATTACK_ENV, value);
+    return SPA_HSSR_BED_ATTACK_OFF;
+}
+
+static uint32_t spa_parse_hssr_attack_collapse_q15(void)
+{
+    const char *value = getenv(SPA_AUDIO_HSSR_ATTACK_COLLAPSE_ENV);
+    char *end = 0;
+    double amount;
+
+    if (!value || !value[0]) return 32768u;
+    errno = 0;
+    amount = strtod(value, &end);
+    if (errno || end == value || *end || amount != amount || amount < 0.0 || amount > 1.0) {
+        LOG_ERROR(LOG_MODULE, "audio config: invalid %s='%s'; expected 0..1; using 1",
+                  SPA_AUDIO_HSSR_ATTACK_COLLAPSE_ENV, value);
+        return 32768u;
+    }
+    return (uint32_t)(amount * 32768.0 + 0.5);
+}
+
+/* Front PCM bass trim in dB(-12..0). Corrected BANK1 routes L/R to multiple
+ * groups including sub and rear; this is not equivalent to the MMI Bass UI. */
+static int32_t spa_parse_stereo_front_bass_db10(void)
+{
+    const char *value = getenv(SPA_AUDIO_STEREO_FRONT_BASS_ENV);
+    char *end = 0;
+    double db;
+
+    if (!value || !value[0]) return 0;
+    errno = 0;
+    db = strtod(value, &end);
+    if (errno || end == value || *end || db != db || db > 0.0 || db < -12.0) {
+        LOG_ERROR(LOG_MODULE,
+                  "audio config: invalid %s='%s'; expected -12.0..0; using 0",
+                  SPA_AUDIO_STEREO_FRONT_BASS_ENV, value);
+        return 0;
+    }
+    return (int32_t)(db * 10.0 - 0.5); /* db <= 0: truncation rounds to nearest tenth */
+}
+
+/* Sub level: dB re the calibrated 4096 assist, -24..+12 (16384 = renderer max). */
+static uint32_t spa_parse_stereo_lfe_gain_q15(void)
+{
+    const char *value = getenv(SPA_AUDIO_STEREO_LFE_GAIN_ENV);
+    char *end = 0;
+    double db;
+
+    if (!value || !value[0]) return SPA_STEREO_UPMIX_LFE_Q15_DEFAULT;
+    errno = 0;
+    db = strtod(value, &end);
+    if (errno || end == value || *end || db != db || db > 12.0 || db < -24.0) {
+        LOG_ERROR(LOG_MODULE,
+                  "audio config: invalid %s='%s'; expected -24.0..12.0 dB; using 0",
+                  SPA_AUDIO_STEREO_LFE_GAIN_ENV, value);
+        return SPA_STEREO_UPMIX_LFE_Q15_DEFAULT;
+    }
+    db = SPA_STEREO_UPMIX_LFE_Q15_DEFAULT * pow(10.0, db / 20.0) + 0.5;
+    if (db < 1.0) db = 1.0;
+    if (db > SPA_STEREO_UPMIX_LFE_Q15_MAX) db = SPA_STEREO_UPMIX_LFE_Q15_MAX;
+    return (uint32_t)db;
+}
+
 static int spa_parse_stereo_lfe(void)
 {
     const char *value = getenv(SPA_AUDIO_STEREO_LFE_ENV);
@@ -223,6 +318,16 @@ static void spa_audio_config_init_once(void)
     spa_audio_config_value.stereoUpmixBackend = spa_parse_stereo_upmix();
     spa_audio_config_value.stereoSurroundQ15 = spa_parse_stereo_surround_q15();
     spa_audio_config_value.stereoLfeAssist = spa_parse_stereo_lfe();
+    spa_audio_config_value.stereoFrontBassDb10 = spa_parse_stereo_front_bass_db10();
+    spa_audio_config_value.stereoFrontRetentionQ15 = spa_parse_stereo_front_retention_q15();
+    {
+        int present = 0;
+        spa_audio_config_value.hssrBedDelays =
+            spa_parse_bool(SPA_AUDIO_HSSR_BED_DELAYS_ENV, &present) ? 1u : 0u;
+    }
+    spa_audio_config_value.hssrBedAttack = spa_parse_hssr_bed_attack();
+    spa_audio_config_value.hssrAttackCollapseQ15 = spa_parse_hssr_attack_collapse_q15();
+    spa_audio_config_value.stereoLfeGainQ15 = spa_parse_stereo_lfe_gain_q15();
     {
         int present = 0;
         spa_audio_config_value.floatRender = spa_parse_bool(SPA_AUDIO_FLOAT_RENDER_ENV, &present);
@@ -1943,6 +2048,12 @@ static void spa103_render_start(uint32_t generation, int64_t formatIndex, int ha
     spa_stereo_upmix_default_config(&upmixConfig);
     upmixConfig.backend = config->stereoUpmixBackend;
     upmixConfig.rear_gain_q15 = config->stereoSurroundQ15;
+    upmixConfig.front_bass_db10 = config->stereoFrontBassDb10;
+    upmixConfig.front_retention_q15 = config->stereoFrontRetentionQ15;
+    upmixConfig.bed_delays = config->hssrBedDelays;
+    upmixConfig.bed_attack = config->hssrBedAttack;
+    upmixConfig.attack_collapse_q15 = config->hssrAttackCollapseQ15;
+    upmixConfig.lfe_gain_q15 = config->stereoLfeGainQ15;
     spa_stereo_upmix_config_set_cabin(&upmixConfig, config->cabinRender);
     spa_stereo_upmix_config_set_quiet_lfe(&upmixConfig, config->quietLfe);
     if (upmixConfig.backend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL) {
@@ -2016,7 +2127,7 @@ static void spa103_render_start(uint32_t generation, int64_t formatIndex, int ha
 
     LOG_INFO(LOG_MODULE,
              "buffer103: render %s formatIndex=%lld key=%s output=%uch atmosMode=%s "
-             "stereoUpmix=%s frontGainQ15=%u rearGainQ15=%u "
+             "stereoUpmix=%s frontGainQ15=%u rearGainQ15=%u frontBassDb10=%d frontRetentionQ15=%u "
              "hssrController=%s stereoLfe=%s lfeGainQ15=%u "
              "soundCheck=%s target=%s%ddB/kind%u "
              "fallback=%d limiter=%d floatRender=%d cabinRender=%d quietLfe=%d compressedQueueLimit=%u initialRate=0",
@@ -2026,6 +2137,8 @@ static void spa103_render_start(uint32_t generation, int64_t formatIndex, int ha
              config->atmosMode == SPA_ATMOS_DROP ? "drop" : "passthrough",
              spa_stereo_upmix_backend_name(activeUpmixBackend),
              (unsigned)activeFrontGainQ15, (unsigned)activeRearGainQ15,
+             (int)spa103_render.stereoUpmix.config.front_bass_db10,
+             (unsigned)spa103_render.stereoUpmix.config.front_retention_q15,
              activeUpmixBackend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL
                  ? (hssrWorkerStatus == SPA_HSSR_OK
                      ? "async" : "sync-fallback")
@@ -2041,6 +2154,12 @@ static void spa103_render_start(uint32_t generation, int64_t formatIndex, int ha
              config->cabinRender,
              config->quietLfe,
              (unsigned)compressedBufferBytes);
+    if (spa103_render.stereoUpmix.config.bed_delays ||
+        spa103_render.stereoUpmix.config.bed_attack)
+        LOG_WARN(LOG_MODULE, "audio upmix scene bed: delays=%u attack=%u collapse_q15=%u (experiment)",
+                 (unsigned)spa103_render.stereoUpmix.config.bed_delays,
+                 (unsigned)spa103_render.stereoUpmix.config.bed_attack,
+                 (unsigned)spa103_render.stereoUpmix.config.attack_collapse_q15);
     STATE_TRACE("BUFFERED_RENDER_START",
                 "setup_index=%lld state=%s key=%d output_channels=%u "
                 "upmix=%s rear_q15=%u lfe=%d float_render=%d cabin_render=%d quiet_lfe=%d soundcheck=%d "

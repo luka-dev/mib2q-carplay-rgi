@@ -29,12 +29,13 @@ enum {
      * front anchors the image (precedence) and the rear reads as a second scene. */
     SPA_STEREO_UPMIX_REAR_Q15_MAX = 16384,
     SPA_SCENE_REAR_DELAY_FRAMES = 576,
-    /* The 5.1 bank feeds the subwoofer from PCM LFE only (L/R/C -> Bus_LFE
-     * are -100 dB), so this assist is the whole sub: +9.5 dB over the
-     * production 4096; the MMI Subwoofer knob sits on top.  Rails stay
-     * protected per sample by spa_upmix_lfe_cabin_limit. */
-    SPA_STEREO_UPMIX_LFE_Q15_DEFAULT = 12288,
-    SPA_STEREO_UPMIX_LFE_Q15_MAX = 16384
+    /* Relative assist level, NOT the whole subwoofer feed: corrected BANK1
+     * also feeds its sub bus from L/R/C/Ls/Rs. 0 dB re4096 does not mean off.
+     * The input-matrix guard is not a downstream EQ/acoustic safety model. */
+    SPA_STEREO_UPMIX_LFE_Q15_DEFAULT = 4096,
+    SPA_STEREO_UPMIX_LFE_Q15_MAX = 16384,
+    SPA_STEREO_UPMIX_FRONT_BASS_HZ = 200,
+    SPA_STEREO_UPMIX_FRONT_BASS_DB10_MIN = -120
 };
 
 enum spa_stereo_upmix_output_channel {
@@ -71,6 +72,21 @@ struct spa_stereo_upmix_config {
     uint32_t lfe_enabled;
     uint32_t cabin_policy;
     uint32_t quiet_lfe;
+    /* Experimental independent front retention: 0 = existing source removal,
+     * 32768 = no source removal. Does not change rear synthesis gain. */
+    uint32_t front_retention_q15;
+    /* Front-only bass trim: RBJ low shelf at SPA_STEREO_UPMIX_FRONT_BASS_HZ,
+     * tenths of dB, 0 = off, never above 0. LFE/rear synthesis is unchanged,
+     * but amp sub/rear outputs also receive L/R and can change. Linked safety
+     * attenuation can affect all PCM channels. */
+    int32_t front_bass_db10;
+    /* Scene-bed distribution experiments, see
+     * docs/UPMIX_DOLBY_DISTRIBUTION_PLAN_2026-09-21.md.  All zero keeps the
+     * legacy renderer bit-exact.  With bed_attack the front retention is
+     * applied per band inside HSSR instead of the time-domain transfer. */
+    uint32_t bed_delays;             /* 0/1: per-band delayed bed copies + cross term */
+    uint32_t bed_attack;             /* enum spa_hssr_bed_attack */
+    uint32_t attack_collapse_q15;    /* OWNER: object front share r -> r*(1-c*w) on a hit */
     enum spa_stereo_upmix_backend backend;
     const struct spa_hssr_model *hssr_model;
     const struct spa_hssr_control_provider *hssr_control_provider;
@@ -80,6 +96,14 @@ struct spa_stereo_upmix_config {
 /* Runtime details are public only so callers can embed the complete state and
  * the realtime path never has to allocate.  Callers must not inspect or alter
  * fields whose names start with an underscore. */
+struct spa_upmix_biquad_coefficients {
+    float b0;
+    float b1;
+    float b2;
+    float a1;
+    float a2;
+};
+
 struct spa_stereo_upmix_runtime {
     /* Shared 48-Hz LR4 filters. Legacy V2 adds phase recovery/dynamics;
      * quiet_lfe or cabin_policy uses a fixed half-level mono assist. */
@@ -100,6 +124,8 @@ struct spa_stereo_upmix_runtime {
     uint32_t _scene_rear_pos;
     float _scene_rear_shelf_state[2][2];
     float _scene_source_shelf_state[2][2];
+    struct spa_upmix_biquad_coefficients _front_bass_shelf;
+    float _front_bass_state[2][2];
     struct spa_hssr_dsp _hssr;
 };
 
@@ -192,6 +218,9 @@ const float *spa_stereo_upmix_input_matrix(void);
 #ifdef SPA_STEREO_UPMIX_TESTING
 /* Test-only access to the exact shipping rear shelf. */
 float spa_stereo_upmix_test_rear_high_shelf(float input, float state[2]);
+void spa_stereo_upmix_test_guard_s16(int16_t sample[6], int adjust_lfe);
+int16_t spa_stereo_upmix_test_transfer(int16_t front, int16_t rear,
+                                      uint32_t transfer, uint32_t limit);
 #endif
 
 #endif /* STEREO_UPMIX_H */

@@ -19,7 +19,16 @@ enum {
     SPA_HSSR_SHAPE_BANDS = 64,
     SPA_HSSR_OBJECT_SLOTS = 4,   /* two per rear half-plane: 0/2 left, 1/3 right */
     SPA_HSSR_CONTROL_HOPS = 4,
-    SPA_HSSR_LATENCY_FRAMES = 512
+    SPA_HSSR_LATENCY_FRAMES = 512,
+    /* Scene-bed decorrelation ring in hops (2.667 ms each); power of two. */
+    SPA_HSSR_BED_RING = 16
+};
+
+/* Attack handling of the scene bed (docs/UPMIX_DOLBY_DISTRIBUTION_PLAN_2026-09-21.md). */
+enum spa_hssr_bed_attack {
+    SPA_HSSR_BED_ATTACK_OFF = 0,
+    SPA_HSSR_BED_ATTACK_OWNER = 1,  /* a hit collapses toward the band owner: object -> rear, bed -> front */
+    SPA_HSSR_BED_ATTACK_FRONT = 2   /* Dolby reference: the bed always collapses forward */
 };
 
 /* Optional off-audio-thread control-network provider.  Analysis, masks, FFT and
@@ -65,6 +74,20 @@ struct spa_hssr_dsp {
     float source_ola[2][SPA_HSSR_FFT_SIZE];
     float source_sample[2];
     uint32_t cabin_policy;
+    /* Scene bed (ambience + universal) distribution.  All zero keeps the
+     * legacy renderer bit-exact; set by stereo_upmix init/reset only. */
+    uint32_t bed_delays;
+    uint32_t bed_attack;              /* enum spa_hssr_bed_attack */
+    float attack_collapse;            /* OWNER: object front share r -> r*(1 - c*w) on a hit */
+    float front_retention;            /* r, applied in the STFT domain when bed_attack != OFF */
+    float bed_re[2][SPA_HSSR_BINS];
+    float bed_im[2][SPA_HSSR_BINS];
+    float bed_ring_re[2][SPA_HSSR_BED_RING][SPA_HSSR_BINS];
+    float bed_ring_im[2][SPA_HSSR_BED_RING][SPA_HSSR_BINS];
+    uint32_t bed_ring_pos;
+    float band_attack_history[SPA_HSSR_BANDS];
+    float band_attack_weight[SPA_HSSR_BANDS];
+    float band_owner[SPA_HSSR_BANDS];
     /* Research: per-bin smoothed statistics for continuous azimuth relocation. */
     float bin_scene_pl[SPA_HSSR_BINS];
     float bin_scene_pr[SPA_HSSR_BINS];
@@ -121,6 +144,13 @@ struct spa_hssr_dsp {
 
 void spa_hssr_dsp_prepare(struct spa_hssr_dsp *state);
 void spa_hssr_dsp_reset(struct spa_hssr_dsp *state);
+
+#ifdef SPA_STEREO_UPMIX_TESTING
+float spa_hssr_test_attack_step(float energy, float *history, float *weight);
+void spa_hssr_test_mix_bed(struct spa_hssr_dsp *state,
+                           float out_re[2][SPA_HSSR_BINS],
+                           float out_im[2][SPA_HSSR_BINS]);
+#endif
 
 #ifdef SPA_HSSR_CAPTURE_TRANSFERS
 /* Host-only diagnostic: real, row-major 2x2 matrices, rear then source.
