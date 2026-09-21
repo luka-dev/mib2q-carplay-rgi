@@ -7,6 +7,14 @@
 
 ## Передача следующему агенту — 60-секундный прогон с одним параметром (21.09, утро)
 
+> **ОБНОВЛЕНИЕ 21.09 (день): после прослушивания в наушниках Luka выбрал следующие
+> настройки для машины: retention 0,5 + `AUDIO_HSSR_BED_DELAYS=on` +
+> `AUDIO_HSSR_BED_ATTACK=owner` + `AUDIO_HSSR_ATTACK_COLLAPSE=0.75` (остальное как было).
+> Они уже в `carplay_startup.sh` (коммит) и в сборке `build/bed-experiment-20260921/car-LOG1/`,
+> но **в машину ещё не поставлены**: Luka сказал «деплоить пока не надо». Деплой = 2 .so +
+> скрипт, без перезагрузки, проверка по строке `audio upmix scene bed: delays=1 attack=1`
+> в `/tmp/carplay_hook.log` при следующем подключении. Блок ниже описывает состояние ДО этого.**
+>
 > **РЕШЕНИЕ LUKA 21.09: текущая калибровка на данный момент НОРМ.** Что стоит в
 > машине сейчас: S16, `AUDIO_STEREO_SURROUND=0.40`, `AUDIO_STEREO_FRONT_BASS_DB=-3`,
 > `AUDIO_STEREO_LFE_GAIN=0` (assist), retention 0, float-рендер выключен. Это ровно

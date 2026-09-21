@@ -65,6 +65,14 @@ export AUDIO_STEREO_LFE=assist
 export AUDIO_STEREO_LFE_GAIN=0
 # Front-only bass trim (dB, -12..0): our Bass knob for the 5.1 bank; sub and rear untouched.
 export AUDIO_STEREO_FRONT_BASS_DB=-3
+# Scene-bed experiment 2026-09-21 (docs/UPMIX_DOLBY_DISTRIBUTION_PLAN_2026-09-21.md), chosen by Luka
+# after the headphone A/B: keep half of each second-scene object in front, decorrelate the bed with
+# per-band delays, and gather hits toward the band owner (object -> rear, bed -> front). Any of the
+# three set to off/0 restores the legacy renderer bit-exactly.
+export AUDIO_STEREO_FRONT_RETENTION=0.5
+export AUDIO_HSSR_BED_DELAYS=on
+export AUDIO_HSSR_BED_ATTACK=owner
+export AUDIO_HSSR_ATTACK_COLLAPSE=0.75
 export AUDIO_SOUNDCHECK=1
 export AUDIO_SOUNDCHECK_FALLBACK=off
 export AUDIO_SOUNDCHECK_LIMITER=off

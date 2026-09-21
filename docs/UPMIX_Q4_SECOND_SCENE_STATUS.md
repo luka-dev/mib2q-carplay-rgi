@@ -272,3 +272,17 @@ whole sub: modelled sub 20–60 Hz −4.5 dB re input vs woofers −17 dB. Fix: 
 default back to 4096 and a runtime knob `AUDIO_STEREO_LFE_GAIN` (dB re 4096,
 −24…+12; startup script ships 0). Renderer: `--lfe-gain DB`. The front shelf
 (`AUDIO_STEREO_FRONT_BASS_DB=-3`) stays: it trims 60–250 Hz punch on the woofers.
+
+## Scene-bed distribution, next car settings (2026-09-21)
+
+Luka's decision after the headphone A/B (`output/listen-bed-20260921/`, four 60 s
+cuts, seven variants): the startup script now ships
+`AUDIO_STEREO_FRONT_RETENTION=0.5`, `AUDIO_HSSR_BED_DELAYS=on`,
+`AUDIO_HSSR_BED_ATTACK=owner`, `AUDIO_HSSR_ATTACK_COLLAPSE=0.75` on top of the
+unchanged surround 0.40 / front bass −3 / LFE 0. Mechanisms, numbers and the
+reasoning: `docs/UPMIX_DOLBY_DISTRIBUTION_PLAN_2026-09-21.md` §6. By the PCM6
+metrics this variant lowers Ls/Rs coherence 2–8 kHz from 0.50 to 0.36, keeps the
+lead band of the rear unchanged (−0.18 dB) and costs the front 0.6 dB of mid on
+hits; c = 0.5 is the fallback if the front breathes in the car. Code defaults are
+untouched (all three off). **Not deployed yet** (Luka: hold); the matching build
+is parked in `build/bed-experiment-20260921/car-LOG1/` (hook sha `cbb23556…`).
