@@ -286,3 +286,14 @@ lead band of the rear unchanged (−0.18 dB) and costs the front 0.6 dB of mid o
 hits; c = 0.5 is the fallback if the front breathes in the car. Code defaults are
 untouched (all three off). **Not deployed yet** (Luka: hold); the matching build
 is parked in `build/bed-experiment-20260921/car-LOG1/` (hook sha `cbb23556…`).
+
+## Realtime (type-100) media upmix (2026-09-21)
+
+`AUDIO_REALTIME_UPMIX=on` in the startup script: the stock realtime media PCM
+(Spotify and every app without buffered type 103) now runs through the same HSSR
+renderer on its own DSP state and controller (`spa_rt_upmix`, `audio_hook.c`).
+Period rule in `media_route.h` (`spa_media_route_realtime_upmix_allowed`): realtime
+timeline only, 2 -> 6 only, media tracked and no phone/Siri/alert owner. Reset on
+prepare and after any non-upmixed period; deadline guard on stock's audio thread
+(4 periods > 8 ms of 16 -> off until the handle closes). Idle HSSR workers back off
+to 4 ms sleeps. Adds 10.7 ms front latency on that path. Not deployed yet.

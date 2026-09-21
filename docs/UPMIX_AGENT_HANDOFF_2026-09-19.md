@@ -15,6 +15,15 @@
 > скрипт, без перезагрузки, проверка по строке `audio upmix scene bed: delays=1 attack=1`
 > в `/tmp/carplay_hook.log` при следующем подключении. Блок ниже описывает состояние ДО этого.**
 >
+> **Realtime-апмикс (21.09, вечер):** HSSR теперь и для стокового realtime media-потока
+> (тип 100, `audioType=media`: Spotify и все без 103) за `AUDIO_REALTIME_UPMIX=on` в скрипте.
+> Отдельный экземпляр DSP и контроллера (`spa_rt_upmix` в `audio_hook.c`), правило периода
+> `spa_media_route_realtime_upmix_allowed` (`media_route.h`, тест `media_route_test`):
+> только realtime-период, только 2→6, только media и ни одного звонок/Siri/alert.
+> Защита по времени на аудиопотоке (4 периода > 8 мс → off до закрытия handle, WARN).
+> Простаивающий воркер HSSR теперь спит 4 мс вместо 250 мкс. Подробно:
+> `docs/reference/AUDIOTYPE_DOLBY_AND_PCM_UPMIX.md`. **Не задеплоено.**
+>
 > **РЕШЕНИЕ LUKA 21.09: текущая калибровка на данный момент НОРМ.** Что стоит в
 > машине сейчас: S16, `AUDIO_STEREO_SURROUND=0.40`, `AUDIO_STEREO_FRONT_BASS_DB=-3`,
 > `AUDIO_STEREO_LFE_GAIN=0` (assist), retention 0, float-рендер выключен. Это ровно

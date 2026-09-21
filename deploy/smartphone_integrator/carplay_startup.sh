@@ -76,6 +76,10 @@ export AUDIO_STEREO_FRONT_RETENTION=0.5
 export AUDIO_HSSR_BED_DELAYS=on
 export AUDIO_HSSR_BED_ATTACK=owner
 export AUDIO_HSSR_ATTACK_COLLAPSE=0.75
+# HSSR upmix also for the stock realtime media stream (type 100, audioType=media: Spotify and
+# every app without buffered type 103). Own DSP state and controller; plain L/R while a
+# phone/Siri/alert stream is tracked or while type 103 owns the rail. off = zero rears as before.
+export AUDIO_REALTIME_UPMIX=on
 export AUDIO_SOUNDCHECK=1
 export AUDIO_SOUNDCHECK_FALLBACK=off
 export AUDIO_SOUNDCHECK_LIMITER=off

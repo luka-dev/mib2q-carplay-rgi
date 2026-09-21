@@ -88,6 +88,9 @@
 #define SPA_AUDIO_HSSR_BED_DELAYS_ENV      "AUDIO_HSSR_BED_DELAYS"     /* on/off */
 #define SPA_AUDIO_HSSR_BED_ATTACK_ENV      "AUDIO_HSSR_BED_ATTACK"     /* off|owner|front */
 #define SPA_AUDIO_HSSR_ATTACK_COLLAPSE_ENV "AUDIO_HSSR_ATTACK_COLLAPSE" /* 0..1, default 1 */
+/* HSSR upmix of the stock realtime (type-100) media PCM, e.g. Spotify, which
+ * never gets buffered type 103.  on/off, default off. */
+#define SPA_AUDIO_REALTIME_UPMIX_ENV       "AUDIO_REALTIME_UPMIX"
 /* AUDIO_STEREO_LFE_GAIN: assist level in dB re4096 (-24..+12; 0=default).
  * Corrected BANK1 also feeds the sub from other channels; this is NOT the
  * whole subwoofer level. */

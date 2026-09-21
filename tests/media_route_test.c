@@ -181,6 +181,36 @@ static void feedback_ownership(void)
     assert(spa_media_route_nonmedia(&route)); /* unknown purpose fails closed */
 }
 
+static void realtime_upmix_policy(void)
+{
+    spa_media_route_t route = { 0 };
+    int alert = 0;
+
+    /* nothing tracked yet: plain L/R */
+    assert(!spa_media_route_realtime_upmix_allowed(&route, 1, 2, 6, 1));
+    assert(spa_media_route_stock_begin_type(&route, &media, 1) == 1);
+    assert(spa_media_route_realtime_upmix_allowed(&route, 1, 2, 6, 1));
+    /* never inside a type-103 pause/shortage, never for non-2->6, never unready */
+    assert(!spa_media_route_realtime_upmix_allowed(&route, 0, 2, 6, 1));
+    assert(!spa_media_route_realtime_upmix_allowed(&route, 1, 1, 6, 1));
+    assert(!spa_media_route_realtime_upmix_allowed(&route, 1, 2, 8, 1));
+    assert(!spa_media_route_realtime_upmix_allowed(&route, 1, 2, 6, 0));
+    /* a phone/Siri/alert owner anywhere wins, even beside live media */
+    assert(spa_media_route_stock_begin_type(&route, &phone, 3) == 1);
+    assert(!spa_media_route_realtime_upmix_allowed(&route, 1, 2, 6, 1));
+    assert(spa_media_route_stock_end(&route, &phone, now));
+    assert(spa_media_route_realtime_upmix_allowed(&route, 1, 2, 6, 1));
+    assert(spa_media_route_stock_begin_type(&route, &alert, 0) == 1);
+    assert(!spa_media_route_realtime_upmix_allowed(&route, 1, 2, 6, 1));
+    assert(spa_media_route_stock_end(&route, &alert, now));
+    /* media stopped: back to plain L/R; a faulted table never upmixes */
+    assert(spa_media_route_stock_end(&route, &media, now));
+    assert(!spa_media_route_realtime_upmix_allowed(&route, 1, 2, 6, 1));
+    route.faulted = 1;
+    assert(spa_media_route_stock_begin_type(&route, &media, 1) == 1);
+    assert(!spa_media_route_realtime_upmix_allowed(&route, 1, 2, 6, 1));
+}
+
 int main(void)
 {
     pthread_t stock, buffered;
@@ -188,6 +218,7 @@ int main(void)
     overlap_and_failures();
     capacity_fails_closed();
     feedback_ownership();
+    realtime_upmix_policy();
     /* A stalled media writer cannot delay stock priority publication. */
     assert(!pthread_mutex_lock(&pcm_io_lock));
     assert(!pthread_create(&stock, NULL, stock_thread, NULL));

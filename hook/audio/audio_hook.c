@@ -113,6 +113,7 @@ typedef struct {
     uint32_t hssrBedDelays;           /* 0/1 */
     uint32_t hssrBedAttack;           /* enum spa_hssr_bed_attack */
     uint32_t hssrAttackCollapseQ15;   /* 0..32768, default 32768 */
+    int realtimeUpmix;                /* AUDIO_REALTIME_UPMIX, default off */
     uint32_t stereoLfeGainQ15;     /* assist level, 1..16384, default 4096 */
     int floatRender;
     int cabinRender;
@@ -327,6 +328,11 @@ static void spa_audio_config_init_once(void)
     }
     spa_audio_config_value.hssrBedAttack = spa_parse_hssr_bed_attack();
     spa_audio_config_value.hssrAttackCollapseQ15 = spa_parse_hssr_attack_collapse_q15();
+    {
+        int present = 0;
+        spa_audio_config_value.realtimeUpmix =
+            spa_parse_bool(SPA_AUDIO_REALTIME_UPMIX_ENV, &present);
+    }
     spa_audio_config_value.stereoLfeGainQ15 = spa_parse_stereo_lfe_gain_q15();
     {
         int present = 0;
@@ -4024,6 +4030,177 @@ static spa_pcm_sink_t spa_pcm_sink = {
 static int spa_sink_device_supports_voices(snd_pcm_t *handle, unsigned voices);
 static uint64_t spa_monotonic_ns(void);
 
+/* ---- realtime (type-100) media upmix ----------------------------------------
+ * Stock's own stereo PCM, expanded 2 -> 6 by this file, used to get zero rears
+ * (spa_pcm_expand_fallback).  With AUDIO_REALTIME_UPMIX=on the same HSSR
+ * renderer as the type-103 path runs on it, on its OWN state and controller,
+ * only for periods the realtime timeline really owns and only while every
+ * tracked main stream is media (media_route.h).  It runs on stock's audio
+ * thread, so a deadline guard turns it off for the handle lifetime if a period
+ * ever takes more than half its 16 ms.  Everything here is serialized by the
+ * sink lock; the worker join happens outside it. */
+static void spa_pcm_expand_fallback(const int16_t *input, size_t frames,
+                                    unsigned sourceChannels, int16_t *output,
+                                    unsigned outputChannels);
+#define SPA_RT_UPMIX_BUDGET_NS  UINT64_C(8000000)
+#define SPA_RT_UPMIX_SLOW_LIMIT 4u
+static struct {
+    struct spa_stereo_upmix upmix;
+    struct spa_hssr_control_worker worker;
+    int workerStarted;
+    int ready;               /* upmixer initialized for the current sink geometry */
+    int disabled;            /* deadline guard tripped; sticky until the sink closes */
+    int lastPeriodUpmixed;   /* reset the DSP after any non-upmixed period */
+    uint32_t slowPeriods;
+    uint64_t periods, upmixedPeriods, resets, worstNs;
+} spa_rt_upmix;
+
+static void spa_rt_upmix_reset_locked(void)
+{
+    if (!spa_rt_upmix.ready) return;
+    (void)spa_stereo_upmix_reset(&spa_rt_upmix.upmix);
+    spa_rt_upmix.lastPeriodUpmixed = 0;
+    spa_rt_upmix.resets++;
+}
+
+/* Called from snd_pcm_plugin_params under the I/O lock, sink lock NOT held.
+ * Idempotent: a repeated params on a live handle only resets the DSP. */
+static void spa_rt_upmix_start(snd_pcm_t *handle)
+{
+    const spa_audio_config_t *config = spa_audio_config();
+    struct spa_stereo_upmix_config upmixConfig;
+    const struct spa_hssr_model *model;
+    int status = SPA_STEREO_UPMIX_ERROR_CONFIG, workerStatus = SPA_HSSR_ERROR_NOT_READY;
+    unsigned sourceChannels, outputChannels;
+    int expanded;
+
+    if (!config->realtimeUpmix ||
+        config->stereoUpmixBackend != SPA_STEREO_UPMIX_HSSR_UNIVERSAL)
+        return;
+    pthread_mutex_lock(&spa_pcm_sink.lock);
+    expanded = handle && handle == spa_pcm_sink.handle && spa_pcm_sink.expandedParams &&
+               spa_pcm_sink.paramsState == SPA_PCM_PARAMS_READY;
+    sourceChannels = spa_pcm_sink.sourceChannels;
+    outputChannels = spa_pcm_sink.outputChannels;
+    if (expanded && spa_rt_upmix.ready) {
+        spa_rt_upmix_reset_locked();
+        pthread_mutex_unlock(&spa_pcm_sink.lock);
+        return;
+    }
+    pthread_mutex_unlock(&spa_pcm_sink.lock);
+    if (!expanded || sourceChannels != 2u || outputChannels != SPA_PCM_5_1_CHANNELS) return;
+
+    model = spa_hssr_runtime_model();
+    if (!model) {
+        LOG_WARN(LOG_MODULE, "audio realtime upmix: HSSR model unavailable; rears stay silent");
+        return;
+    }
+    if (!spa_rt_upmix.workerStarted) {
+        workerStatus = spa_hssr_control_worker_start(&spa_rt_upmix.worker, model, 1u, 17);
+        if (workerStatus == SPA_HSSR_OK) {
+            spa_hssr_control_worker_set_guard(&spa_rt_upmix.worker,
+                                              spa_hssr_runtime_guard_model());
+            spa_rt_upmix.workerStarted = 1;
+        }
+    } else {
+        workerStatus = SPA_HSSR_OK;
+    }
+    spa_stereo_upmix_default_config(&upmixConfig);
+    upmixConfig.backend = SPA_STEREO_UPMIX_HSSR_UNIVERSAL;
+    upmixConfig.rear_gain_q15 = config->stereoSurroundQ15;
+    upmixConfig.front_bass_db10 = config->stereoFrontBassDb10;
+    upmixConfig.front_retention_q15 = config->stereoFrontRetentionQ15;
+    upmixConfig.bed_delays = config->hssrBedDelays;
+    upmixConfig.bed_attack = config->hssrBedAttack;
+    upmixConfig.attack_collapse_q15 = config->hssrAttackCollapseQ15;
+    upmixConfig.lfe_gain_q15 = config->stereoLfeGainQ15;
+    spa_stereo_upmix_config_set_hssr_model(&upmixConfig, model);
+    spa_stereo_upmix_config_set_hssr_guard_model(&upmixConfig, spa_hssr_runtime_guard_model());
+    if (workerStatus == SPA_HSSR_OK)
+        spa_stereo_upmix_config_set_hssr_control_provider(
+            &upmixConfig, spa_hssr_control_worker_provider(&spa_rt_upmix.worker));
+    spa_stereo_upmix_config_set_lfe(&upmixConfig, config->stereoLfeAssist);
+    status = spa_stereo_upmix_init(&spa_rt_upmix.upmix, &upmixConfig);
+    pthread_mutex_lock(&spa_pcm_sink.lock);
+    spa_rt_upmix.ready = status == SPA_STEREO_UPMIX_OK &&
+                         handle == spa_pcm_sink.handle && spa_pcm_sink.expandedParams;
+    spa_rt_upmix.disabled = 0;
+    spa_rt_upmix.lastPeriodUpmixed = 0;
+    spa_rt_upmix.slowPeriods = 0;
+    pthread_mutex_unlock(&spa_pcm_sink.lock);
+    LOG_WARN(LOG_MODULE,
+             "audio realtime upmix: %s (init=%d controller=%s period=%u frames, "
+             "surround_q15=%u front_bass_db10=%d retention_q15=%u bed_delays=%u bed_attack=%u)",
+             spa_rt_upmix.ready ? "armed" : "NOT armed", status,
+             workerStatus == SPA_HSSR_OK ? "async" : "sync-fallback",
+             (unsigned)SPA_PCM_SINK_PERIOD_FRAMES, (unsigned)upmixConfig.rear_gain_q15,
+             (int)upmixConfig.front_bass_db10, (unsigned)upmixConfig.front_retention_q15,
+             (unsigned)upmixConfig.bed_delays, (unsigned)upmixConfig.bed_attack);
+}
+
+/* Sink handle really closed (not kept for type 103).  Sink lock NOT held. */
+static void spa_rt_upmix_stop(void)
+{
+    int started;
+
+    pthread_mutex_lock(&spa_pcm_sink.lock);
+    spa_rt_upmix.ready = 0;
+    started = spa_rt_upmix.workerStarted;
+    spa_rt_upmix.workerStarted = 0;
+    if (spa_rt_upmix.periods)
+        LOG_WARN(LOG_MODULE,
+                 "audio realtime upmix: stop periods=%llu upmixed=%llu resets=%llu worst_us=%llu disabled=%d",
+                 (unsigned long long)spa_rt_upmix.periods,
+                 (unsigned long long)spa_rt_upmix.upmixedPeriods,
+                 (unsigned long long)spa_rt_upmix.resets,
+                 (unsigned long long)(spa_rt_upmix.worstNs / 1000u), spa_rt_upmix.disabled);
+    spa_rt_upmix.periods = spa_rt_upmix.upmixedPeriods = spa_rt_upmix.resets = 0;
+    spa_rt_upmix.worstNs = 0;
+    pthread_mutex_unlock(&spa_pcm_sink.lock);
+    if (started) spa_hssr_control_worker_stop(&spa_rt_upmix.worker);
+}
+
+/* Sink lock held.  One realtime period: HSSR when the route allows it, else the
+ * legacy zero-rear expansion.  Returns 1 when the period was upmixed. */
+static int spa_rt_upmix_period_locked(const int16_t *buffer, size_t frames,
+                                      unsigned sourceChannels, unsigned outputChannels)
+{
+    int upmixed = 0;
+
+    spa_rt_upmix.periods++;
+    if (spa_media_route_realtime_upmix_allowed(&spa_pcm_sink.route, 1, sourceChannels,
+                                               outputChannels,
+                                               spa_rt_upmix.ready && !spa_rt_upmix.disabled)) {
+        uint64_t start = spa_monotonic_ns(), elapsed;
+
+        if (!spa_rt_upmix.lastPeriodUpmixed) spa_rt_upmix_reset_locked();
+        upmixed = spa_stereo_upmix_process_s16(&spa_rt_upmix.upmix, buffer, frames,
+                                               spa_pcm_sink.scratch, frames) ==
+                  SPA_STEREO_UPMIX_OK;
+        elapsed = spa_monotonic_ns() - start;
+        if (elapsed > spa_rt_upmix.worstNs) spa_rt_upmix.worstNs = elapsed;
+        if (elapsed > SPA_RT_UPMIX_BUDGET_NS) {
+            if (++spa_rt_upmix.slowPeriods >= SPA_RT_UPMIX_SLOW_LIMIT) {
+                spa_rt_upmix.disabled = 1;
+                LOG_WARN(LOG_MODULE,
+                         "audio realtime upmix: DISABLED, %u consecutive periods over %llu us (worst %llu us)",
+                         (unsigned)spa_rt_upmix.slowPeriods,
+                         (unsigned long long)(SPA_RT_UPMIX_BUDGET_NS / 1000u),
+                         (unsigned long long)(spa_rt_upmix.worstNs / 1000u));
+            }
+        } else {
+            spa_rt_upmix.slowPeriods = 0;
+        }
+    }
+    if (!upmixed)
+        spa_pcm_expand_fallback(buffer, frames, sourceChannels, spa_pcm_sink.scratch,
+                                outputChannels);
+    else
+        spa_rt_upmix.upmixedPeriods++;
+    spa_rt_upmix.lastPeriodUpmixed = upmixed;
+    return upmixed;
+}
+
 /* MU1316 libairplay: Prepare @0x4a9d0 reads type/audioType before invoking
  * s_audioTypeCallback and waiting for HMI. Stop @0x4a2f8 joins the workers and
  * invokes teardown synchronously. QSA open/close alone cannot bracket those
@@ -5818,6 +5995,7 @@ HOOK_EXPORT int snd_pcm_plugin_params(snd_pcm_t *handle, snd_pcm_channel_params_
         spa_pcm_sink.paramsState = result ? SPA_PCM_PARAMS_FAILED : SPA_PCM_PARAMS_READY;
     else result = -ECANCELED;
     pthread_mutex_unlock(&spa_pcm_sink.lock);
+    if (result == 0 && expanded) spa_rt_upmix_start(handle);
     spa_pcm_io_unlock();
     STATE_TRACE("QSA_PARAMS_COMMIT", "result=%d expanded=%d channels=%u writable=%d",
                 result, expanded, channels, result == 0);
@@ -5906,8 +6084,10 @@ HOOK_EXPORT int snd_pcm_plugin_prepare(snd_pcm_t *handle, int channel)
     if (result == 0) {
         pthread_mutex_lock(&spa_pcm_sink.lock);
         if (handle && handle == spa_pcm_sink.handle &&
-            channel == SND_PCM_CHANNEL_PLAYBACK)
+            channel == SND_PCM_CHANNEL_PLAYBACK) {
             spa_pcm_sink.detachedNeedsPrepare = 0;
+            spa_rt_upmix_reset_locked();   /* stock restarted its timeline */
+        }
         pthread_mutex_unlock(&spa_pcm_sink.lock);
     }
     spa_pcm_io_unlock();
@@ -6280,9 +6460,10 @@ HOOK_EXPORT ssize_t snd_pcm_plugin_write(snd_pcm_t *handle, const void *buffer, 
         }
         spa_pcm_sink.bufferedWrites++;
     } else {
-        spa_pcm_expand_fallback((const int16_t *)buffer, frames, sourceChannels,
-                                spa_pcm_sink.scratch, outputChannels);
+        (void)spa_rt_upmix_period_locked((const int16_t *)buffer, frames,
+                                         sourceChannels, outputChannels);
     }
+    if (periodSource != SPA_PCM_PERIOD_FROM_REALTIME) spa_rt_upmix.lastPeriodUpmixed = 0;
     spa_pcm_sink.writes++;
     {
         static size_t takenIn;
@@ -6516,7 +6697,7 @@ HOOK_EXPORT int snd_pcm_close(snd_pcm_t *handle)
     static spa_snd_close_t real;
     static spa_snd_flush_t realFlush;
     int isSink, keepForBuffered, result;
-    int restoreFlush = 0, restoreFlushChannel = 0, continuous = 0;
+    int restoreFlush = 0, restoreFlushChannel = 0, continuous = 0, released = 0;
 
     if (!real) real = (spa_snd_close_t)dlsym(RTLD_NEXT, "snd_pcm_close");
     if (!real) return -1;
@@ -6592,8 +6773,10 @@ HOOK_EXPORT int snd_pcm_close(snd_pcm_t *handle)
             spa_pcm_sink.coldOpenFailures = 0;
             spa_pcm_sink.coldOpenRetryAfterNs = 0;
             spa_pcm_sink.route.reacquire_after_ns = 0;
+            released = 1;
         }
         pthread_mutex_unlock(&spa_pcm_sink.lock);
+        if (released) spa_rt_upmix_stop();
         LOG_INFO(LOG_MODULE, "audio sink: released %s handle=%p result=%d",
                  SPA_PCM_SINK_NAME, handle, result);
         STATE_TRACE("QSA_CLOSE",
@@ -8989,6 +9172,7 @@ static void audio_shutdown(void)
     spa103_setup_valid = 0;
     pthread_mutex_unlock(&spa103_lock);
     spa103_stop_receiver(0, 1, 0);
+    spa_rt_upmix_stop();
 }
 
 static void audio_init(void)
@@ -9006,6 +9190,14 @@ static void audio_init(void)
                  config->buffered, bit, channels,
                  getenv(SPA_APAC_CODEC_PATH_ENV) ?
                  getenv(SPA_APAC_CODEC_PATH_ENV) : SPA_APAC_CODEC_DEFAULT_PATH);
+        if (config->realtimeUpmix &&
+            config->stereoUpmixBackend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL) {
+            /* Load the HSSR models now: the sink params path must not read files. */
+            const struct spa_hssr_model *model = spa_hssr_runtime_model();
+            (void)spa_hssr_runtime_guard_model();
+            LOG_WARN(LOG_MODULE, "audio realtime upmix: enabled, model %s",
+                     model ? "loaded" : "MISSING");
+        }
     }
     else
         LOG_INFO(LOG_MODULE,

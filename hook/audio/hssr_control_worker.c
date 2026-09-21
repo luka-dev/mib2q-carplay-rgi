@@ -140,7 +140,12 @@ static void *spa_hssr_worker_main(void *opaque)
     float local_guard[SPA_HSSR_OUTPUTS];
     uint32_t local_guard_valid = 0;
     uint32_t active_generation = 0;
+    /* Busy: poll every 250 us (jobs arrive every 4 hops = 10.7 ms).  Parked
+     * (no job for ~10 ms, e.g. the realtime upmixer while type 103 plays):
+     * back off to 4 ms so an idle worker costs ~250 wakeups/s, not 4000. */
     const struct timespec idle = { 0, 250000 };
+    const struct timespec parked = { 0, 4000000 };
+    uint32_t idle_polls = 0;
 
     spa_hssr_worker_set_priority(worker->_priority);
     while (!spa_hssr_atomic_load(&worker->_stop)) {
@@ -159,9 +164,11 @@ static void *spa_hssr_worker_main(void *opaque)
         published = spa_hssr_atomic_load(&worker->_job_published);
         consumed = spa_hssr_atomic_load(&worker->_job_consumed);
         if (published == consumed) {
-            (void)nanosleep(&idle, NULL);
+            if (idle_polls < 40u) idle_polls++;
+            (void)nanosleep(idle_polls >= 40u ? &parked : &idle, NULL);
             continue;
         }
+        idle_polls = 0;
 
         next = consumed + 1u;
         memcpy(&local_job, &worker->_jobs[next & 1u],
