@@ -15,6 +15,13 @@
 > скрипт, без перезагрузки, проверка по строке `audio upmix scene bed: delays=1 attack=1`
 > в `/tmp/carplay_hook.log` при следующем подключении. Блок ниже описывает состояние ДО этого.**
 >
+> **Диск (21.09, 13:10):** по слову Luka удалены все WAV из гридов `output/upmix-*-2026092[01]`
+> (report.json / .log / review сохранены, в каждой папке `WAVS_DELETED.txt`), папка прослушивания
+> `output/listen-bed-20260921`, незавершённый retention-грид (24/28) и временные файлы сессии;
+> освобождено 17 ГБ. 60-секундные исходные нарезки в `/private/tmp/upmix-bank1-audit.BR9uxY` (769 МБ)
+> оставлены, это входы всех гридов. Retention-грид 0,5/0,917 НЕ досчитан и не нужен: п. 1 закрыт
+> выбором r = 0,5 после прослушивания.
+>
 > **Чистка мёртвого кода (21.09, день, по слову Luka «режь всё»):** удалены float/cabin/quiet
 > рендер-ветки (`AUDIO_FLOAT_RENDER`/`AUDIO_CABIN_RENDER`/`AUDIO_QUIET_LFE`, `process_f32`,
 > `cabin_policy` в `hssr_dsp.c`, float-хелперы SoundCheck, `float_render_test`, оценочные
