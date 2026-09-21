@@ -358,8 +358,8 @@ public final class AltScreenModule implements Module, CarplayBus.Listener {
         Log.i(TAG, "rendererReady=" + ready);
     }
 
-    /** Presentation latch, not merely route intent.  RouteGuidance may set true only after the
-     *  current RGI delta has been published through BAP and maneuver_render has confirmed a frame.
+    /** Follows RouteGuidance.rgActive == the BAP nav-active message, the same edge on which the
+     *  Kombi animates its KDK slot in; renderer FRAME_READY is deliberately NOT waited for.
      *  The stock KDK-visible hint never drives this latch. */
     public static void setNavActive(boolean active) {
         if (active) {

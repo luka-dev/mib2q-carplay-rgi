@@ -533,12 +533,14 @@ public class RouteGuidance implements CarplayBus.Listener {
                     + " maneuver_count=" + state.maneuverCount
                     + " visible_in_app=" + state.visibleInApp
                     + " source_supports_rg=" + state.sourceSupportsRg);
-                /* Stage 1: own BAP and publish the BAP start sync, but deliberately keep ctx 81.
-                 * Renderer readiness remains non-blocking; the current update or presentation
-                 * worker may expose 80 only after the current peer reports FRAME_READY. */
+                /* ctx 80 (black backing + maneuver plane) and the Maps /map URL follow the BAP
+                 * start itself: that is the edge on which the Kombi animates its KDK slot in, so
+                 * waiting for FRAME_READY only left the slot empty next to Maps' own turn card
+                 * (seen 2026-09-21).  presentationConfirmed still tracks renderer/BAP readiness
+                 * for the text hold and position scroll, but no longer gates the context. */
                 presentationConfirmed = false;
-                com.luka.carplay.core.AltScreenModule.setNavActive(false);
                 rgActive = bap != null && bap.onStart();
+                com.luka.carplay.core.AltScreenModule.setNavActive(rgActive);
                 if (!rgActive) {
                     Log.w(TAG, "RG activation pending: BAP start did not complete; keeping ctx 81");
                     requestPresentationCheck("bap-start-pending");
@@ -580,9 +582,8 @@ public class RouteGuidance implements CarplayBus.Listener {
                 if (confirmed) {
                     Log.i(TAG, "RG presentation CONFIRMED: BAP snapshot published + popup frame ready");
                 } else {
-                    Log.w(TAG, "RG presentation lost: keeping route state, falling back to ctx 81");
+                    Log.w(TAG, "RG presentation lost: keeping route state and ctx 80");
                 }
-                com.luka.carplay.core.AltScreenModule.setNavActive(confirmed);
             }
             if (updatePublished) state.clearDirty();
             if (bap.takePositionScrollChange() || !confirmed) wakePositionScroll();
@@ -782,6 +783,7 @@ public class RouteGuidance implements CarplayBus.Listener {
         if (!rgActive) {
             rgActive = bap.onStart();
             if (!rgActive) return true;
+            com.luka.carplay.core.AltScreenModule.setNavActive(true);
         }
 
         // FRAME_READY can win the race with the worker's first wake. Rebase
@@ -791,8 +793,7 @@ public class RouteGuidance implements CarplayBus.Listener {
         if (!bap.preparePresentation()) {
             if (presentationConfirmed) {
                 presentationConfirmed = false;
-                com.luka.carplay.core.AltScreenModule.setNavActive(false);
-                Log.w(TAG, "RG presentation lost: renderer not ready");
+                Log.w(TAG, "RG presentation lost: renderer not ready; keeping ctx 80");
             }
             return true;
         }
@@ -805,7 +806,6 @@ public class RouteGuidance implements CarplayBus.Listener {
         boolean confirmed = bap.isPresentationReady() && (presentationConfirmed || published);
         if (confirmed != presentationConfirmed) {
             presentationConfirmed = confirmed;
-            com.luka.carplay.core.AltScreenModule.setNavActive(confirmed);
             if (confirmed) Log.i(TAG, "RG presentation CONFIRMED from cached snapshot");
         }
         return !confirmed || !published;
