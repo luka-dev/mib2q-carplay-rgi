@@ -1,0 +1,1206 @@
+{
+  "schema": 1,
+  "source": {
+    "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/docs/B9 S4 B&O speaker data.xlsx",
+    "sha256": "e118a86e50ed9467cabc96c3f9209fa3b669985d4fc955d3972d09722703b586"
+  },
+  "scope": "External B9 S4 upgrade-guide evidence, not user-car identity, firmware calibration, cfg16 mapping or measured cabin impulse responses",
+  "ranges": [
+    {
+      "sheet": "System overview",
+      "range": "A1:H19",
+      "values": [
+        [
+          "Audi B9 series B&O Upgrade Guide",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "Bobby Kinstle",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "Location",
+          "Driver size",
+          "Depth (in)",
+          "frequency range#",
+          "qty",
+          "Impedance",
+          "Rated power*",
+          "Note"
+        ],
+        [
+          "Front door",
+          "4x6\"",
+          4,
+          "58-260",
+          2,
+          8,
+          100,
+          "Amp drives to 45 Hz"
+        ],
+        [
+          "Front door",
+          "4\"",
+          "1.5+0.25\"",
+          "150-4500",
+          2,
+          4,
+          20,
+          null
+        ],
+        [
+          "Lower A Pillar",
+          "1\"",
+          "1\"",
+          "2000-12000",
+          2,
+          4,
+          20,
+          "Wired in parallel to front door mid"
+        ],
+        [
+          "Upper A Pillar",
+          "1.25\"",
+          ".5\"",
+          "2000-7000",
+          2,
+          4,
+          20,
+          "Only on during 3D effect"
+        ],
+        [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "Rear door",
+          "5.25\"",
+          3.25,
+          "160-5000",
+          2,
+          4,
+          40,
+          null
+        ],
+        [
+          "Rear door",
+          "1\"",
+          1.25,
+          "#REF!",
+          2,
+          4,
+          20,
+          "Wired in parallel to rear door woofer"
+        ],
+        [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "Dash",
+          "2.5\"",
+          "2\"",
+          "150-2000",
+          2,
+          4,
+          20,
+          "Only on during 3D effect"
+        ],
+        [
+          "Dash center",
+          "4\"",
+          "2\"",
+          "200-20000",
+          1,
+          4,
+          20,
+          "Same as door midrange"
+        ],
+        [
+          "Dash center",
+          "1\"",
+          "2\"",
+          null,
+          1,
+          4,
+          20,
+          "Hard to isolate, dedicated channel"
+        ],
+        [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "Rear deck",
+          "10\" Subwoofer",
+          "2\"",
+          "30-90",
+          1,
+          "8x2",
+          "50W per coil",
+          "Audible to 25 but rolls off under 40"
+        ],
+        [
+          "Rear deck",
+          "4\"",
+          "2.5\"",
+          "120-5000",
+          2,
+          4,
+          20,
+          "Same as door midrange"
+        ],
+        [
+          "*Rated power is based on the labels I found on back of the speakers in another car.  I have no way to determine actual amp output power but I'm assuming that if I select replacements in the same or greater, power rating then I should be OK",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "#Frequency ranges based on measurements taken with a microphone while playing sweeps.  Some drivers are very hard to isolate from the others like the 3D effect drivers which play at lower volume levels.",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      ],
+      "formulas": [
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "='Front Door Woofer'!F6",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "='Front door Mid'!F5",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "='Dash Speakers'!E5",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "='Dash Speakers'!E4",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "='Rear door'!F7",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "=#REF!",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "='Dash Speakers'!E6",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "='Dash Speakers'!E7",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "='Rear Deck Subwoofer'!E4",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "='Surround speakers'!E4",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ]
+      ]
+    },
+    {
+      "sheet": "Front Door Woofer",
+      "range": "A2:H6",
+      "values": [
+        [
+          "The front door woofer in the B&O system is an 8 ohm 4\"x6\" rear firing woofer rated at 100W.  Actual amp output unknown.  The door woofer has a 8.5\" bolt circle, but an 8\" woofer will just barely not fit under the door shroud unless you grind a couple flats onto the top and bottom edges.",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "The factory door woofer channel is driven to 44Hz. Replacement speaker should be able to play this low, and you may want to add an amp with a low pass filter to the subwoofer. The factory door grill substantially limits the door woofer.  I doubled the number of holes in mine which helped.",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "Installing generous Dynamat under the rear seat will substantially improve the performance of the front door woofers, especially on the S models as road and exhaust noise in the midbass range gets into the car through the rear seat.",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "MFG",
+          "Size",
+          "Depth",
+          "Bolt circle dia",
+          "Impedance",
+          "Freq response",
+          "Rated Power",
+          "Notes"
+        ],
+        [
+          "B&O",
+          "4x6",
+          "4\"",
+          "8.5\"",
+          "8(6.6 DC)",
+          "58-260",
+          100,
+          "Terrible"
+        ]
+      ],
+      "formulas": [
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ]
+      ]
+    },
+    {
+      "sheet": "Front door Mid",
+      "range": "A4:H5",
+      "values": [
+        [
+          "Driver",
+          "Size",
+          "Depth",
+          "Bolt circle dia",
+          "Impedance",
+          "Freq response",
+          "Rated Power",
+          "Notes"
+        ],
+        [
+          "B&O",
+          "4\"",
+          "1.5+0.25\"",
+          "4.5\" (2 holes)",
+          "4(3.6 DC)",
+          "150-4500",
+          20,
+          "Stock"
+        ]
+      ],
+      "formulas": [
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ]
+      ]
+    },
+    {
+      "sheet": "Rear door",
+      "range": "A2:H7",
+      "values": [
+        [
+          "Rear door contains a midrange and a tweeter wired in parallel.  Frequencies below 160Hz are blocked at the amp. Both are 4 Ohm drivers.  Suggest using either just a midrange or a component system.  There are MANY choices.  The factory tweeter is actually pretty good.",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "The rear door is less important and it can't play bass notes anyway so I wouldn't break the bank in this location.  Component sets can get really expensive.  This list is by no means comprehensive.",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "There are numerous 1\" dome tweeters available so I'm not going to make a list.  All of them will requre custom mounting hardware and probably isn't worth the effort.  I do like the Dayton ND25 series for clear details without harshness",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "Woofers",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "Driver",
+          "Size (in)",
+          "Depth (in)",
+          "Bolt circle dia",
+          "Impedance",
+          "Freq response",
+          "Rated Power",
+          "Notes"
+        ],
+        [
+          "Stock Woofer",
+          5.25,
+          3.25,
+          null,
+          4,
+          "160-5000",
+          40,
+          "Cut out driver, use frame to mount new driver"
+        ]
+      ],
+      "formulas": [
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ]
+      ]
+    },
+    {
+      "sheet": "Rear Deck Subwoofer",
+      "range": "A3:G4",
+      "values": [
+        [
+          "Factory sub MFG",
+          "Size",
+          "Depth",
+          "Impedance",
+          "Freq response",
+          "Rated Power",
+          "Notes"
+        ],
+        [
+          "B&O",
+          "10\"",
+          "2\"",
+          "8+8",
+          "30-90",
+          "50W per coil",
+          "Power determined by measuring DC offset. Amp will output 100W per channel into a 4ohm coil*"
+        ]
+      ],
+      "formulas": [
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ]
+      ]
+    },
+    {
+      "sheet": "Dash Speakers",
+      "range": "A1:J8",
+      "values": [
+        [
+          "The Lower A pillar 1\" dome tweeters play from 8Khz to 12.5Khz and are terrible.  Suggest replacing with a standard 1\" bare element tweeter and crossing at 5khz.  Note: this tweeter is wired in parallel to the front door midrange so crossover point depends on which midrange you install",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "NOTE: The center locations are very hard to get access to without breaking little tabs off.  Use care when lifting the grille frame",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "Location",
+          "Driver size",
+          "Bolt Circle Dia",
+          "Depth",
+          "frequency range",
+          "qty",
+          "Impedance",
+          "Rated power",
+          "Used for",
+          "Notes"
+        ],
+        [
+          "Upper A Pillar",
+          "1.25\" (30mm)",
+          null,
+          null,
+          "2000-7000",
+          2,
+          4,
+          20,
+          "3D effect",
+          "Sits on top of side curtain airbag, dangerous to replace"
+        ],
+        [
+          "Lower A Pillar",
+          "1\"",
+          null,
+          null,
+          "2000-12000",
+          2,
+          4,
+          20,
+          "Everything",
+          "Same as rear door tweeter"
+        ],
+        [
+          "Dash",
+          "2.5\"",
+          null,
+          null,
+          "150-2000",
+          2,
+          4,
+          20,
+          "3D effect",
+          "Suggest disabling 3D effect"
+        ],
+        [
+          "Dash center",
+          "4\"",
+          "4.5\"",
+          "2\"",
+          "200-20000",
+          1,
+          4,
+          20,
+          "Everything",
+          "Same as door midrange and rear surround speaker, should be replaced at the same time as the door mids with same type speaker"
+        ],
+        [
+          "Dash center",
+          "1\"",
+          null,
+          "2\"",
+          "3K-20k ?",
+          1,
+          4,
+          20,
+          "Everything",
+          "Both center speakers measured together, no filter cap on this tweeter. Replacing this tweeter only imrpoved center imaging a little bit unlike replacing the midrange"
+        ]
+      ],
+      "formulas": [
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ]
+      ]
+    },
+    {
+      "sheet": "Surround speakers",
+      "range": "A1:I4",
+      "values": [
+        [
+          "The rear deck conceals two full range 4\" speakers that play the rear channel surround in movies and can be enabled for all music with the \"Surround Volume\" control in the MMI",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "Driver",
+          "Driver size",
+          "Bolt Circle Dia",
+          "Depth",
+          "frequency range",
+          "qty",
+          "Impedance",
+          "Rated power",
+          "Notes"
+        ],
+        [
+          "Rear deck",
+          "4\"",
+          "4.5\"",
+          "2.5\"",
+          "120-5000",
+          2,
+          4,
+          20,
+          "Same as door midrange"
+        ]
+      ],
+      "formulas": [
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ]
+      ]
+    },
+    {
+      "sheet": "Amp Wiring Chart",
+      "range": "A1:A2",
+      "values": [
+        [
+          "Audiworld user Jorge GS tracked down the pinout information for the amplifier."
+        ],
+        [
+          "Location of switched power circuit in the trunk - AudiWorld Forums"
+        ]
+      ],
+      "formulas": [
+        [
+          ""
+        ],
+        [
+          ""
+        ]
+      ]
+    },
+    {
+      "sheet": "My Car",
+      "range": "A1:C14",
+      "values": [
+        [
+          "What I've done in my car so far",
+          null,
+          null
+        ],
+        [
+          "Location",
+          "Replacement",
+          "Comments"
+        ],
+        [
+          "Front door woofer",
+          "Aurum Cantus AC-180F1",
+          "Sounds great, but it was such a pain to mount, that I would use the 6.5\" Aurum Cantus woofer next time.  Required heavy modification of the door and grille.  There are adapter rings available now for 6.5\" woofers"
+        ],
+        [
+          "Front door midrange",
+          "Peerless by Tymphany GBS-115N25AL01-04",
+          "One of the best midrange speakers I've ever heard.  12 thumbs up.  Requires a 1/8\" spacer so the dome doesn't touch the back of the grille."
+        ],
+        [
+          "Lower A pillar tweeter",
+          "Dayton Audio ND25FN-4",
+          "Use 8uF capacitor for smooth integration, 9uF for slight brightness, and 10uF for very bright sound signature.  Unbelievable improvement in sound quality. Used factory housings."
+        ],
+        [
+          "Rear door woofer",
+          "Parts Express 6.5\" woofer",
+          "Don't let the price scare you; this is a fantastic woofer.  Back seat sounds perfect now.  Used Metra 82-9101 with minor modification"
+        ],
+        [
+          "Rear door woofer",
+          "Dayton Audio GF180-4",
+          "Better vocals and midbass clarity and less harshness than the $6 woofer.  Crossed at 4K with a 0.15mH inductor for a very smooth blend with the ND25 crossed at 5KHz."
+        ],
+        [
+          "Rear door tweeter",
+          "Dayton Audio ND25FN-4",
+          "Crossed at 5Khz with 8uF capacitor.  Works well with the natural roll off of the PE woofer I used.  Makes a pretty big difference for the front seat passengers when sound focus set to \"all\""
+        ],
+        [
+          "Subwoofer",
+          "Kicker CompC10 DVC 4",
+          "Frequency overlaps front door woofer. Get an amplifier with a low pass filter to at least 70hz and a bass boost no higher than 40Hz"
+        ],
+        [
+          "Sub Amp",
+          "Pioneer GM-D8701",
+          "LPF to 70Hz, DVC sub wiring friendly, 1 ohm stable. Not compatible with speaker level signal from the car.  Needs a converter.  Pioneer tech support was extremel painful. Installed in the space behind the battery under the spare tire with some furniture sliding pads to fill in the gap.  The spare tire holds it down firmly."
+        ],
+        [
+          "Sub signal converter",
+          "AudioContol LC2i",
+          "This isn't really the right product and the signal processing functions should be disabled but it does work and it does provide a turn on signal for your amps. Can be wired into an always on 12V source."
+        ],
+        [
+          "Factory Amp Load",
+          "47ohm 25 watt resistors bolted to a heatsink",
+          "The B&O amp needs a load of no more than 50 ohms on each output or it may shut down the channel.  Many LoC's don't provide this load.  I made this one myself. NOTE: 47ohm is too high and sometimes fails the check on hot afternoons.  Suggest using 24-36 ohms instead"
+        ],
+        [
+          "Rear deck surround",
+          "FaitalPRO 4FE35",
+          "Need to trim the fabric to clear the \"ears\" on the driver. Very clean mids and highs.  This speaker plays a minor role in the sound stage so it doesn't have a huge impact in sound quality, but the rear seat passengers get a big clarity boost. Keep the volume low or it sounds like an echo."
+        ],
+        [
+          "Center Channel",
+          "Peerless by Tymphany GBS-115N25AL01-04 and Dayton ND25FN-4",
+          "Needed to reshape the plastic frame of the midrange extensively and also cut the pocket plastic to make room for the connections.  If you orient the connections towards front and rear, then you don't need to cut the pocket.  Installing the tweeter was pretty simple but it was smaller than the factory housing so I glued it into it's own packing foam and stuffed it in there under significant compression.  Looks terrible but works great.  Not visible under the grill anyway."
+        ]
+      ],
+      "formulas": [
+        [
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          ""
+        ],
+        [
+          "",
+          "",
+          ""
+        ]
+      ]
+    }
+  ],
+  "wiring_image": {
+    "zip_member": "xl/media/image1.png",
+    "sheet": "Amp Wiring Chart",
+    "drawing_member": "xl/drawings/drawing3.xml",
+    "relationship": "rId2",
+    "sha256": "e54f06da314679b862eaa4d00d94862d459480270644dcbbdc5689dda1ce010d",
+    "source_label": "Jorge GS, attributed by workbook; electrical cfg-index correspondence not established"
+  },
+  "caveats": [
+    "System overview D10 contains =#REF!; not repaired or replaced with zero",
+    "Dash Speakers A1 says lower A-pillar8k–12.5kHz whereas E5 says2k–12kHz; disagreement retained",
+    "My Car describes workbook author modifications, not user hardware",
+    "Frequency ranges are author microphone-sweep observations, not exact digital crossover parameters",
+    "Speaker power labels do not prove amp output power",
+    "No B spectral coefficients are inferred from speaker dimensions, impedance or frequency ranges"
+  ]
+}

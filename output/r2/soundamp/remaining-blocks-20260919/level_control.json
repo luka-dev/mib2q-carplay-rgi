@@ -1,0 +1,448 @@
+{
+  "source_sha256": "8776fdb84d05571cf4addf42655bc875da7c47cc35166e3cee6c60bc5841fe4b",
+  "format": "raw V850 LE32, base0; byte/file addresses",
+  "scope": "static control flow and valid request domain; not live values or a complete ramp emulator",
+  "level_word": {
+    "gp_relative": -30712,
+    "count": 4,
+    "stride": 4,
+    "encoding": "signed control level * 2^24; first lane selects common EQ",
+    "init": "AEE20/AEE24/AEE5C initializes all4 to -100*2^24",
+    "writers": [
+      "AF9CE quantized ramp",
+      "AFA0C linear ramp",
+      "AFA92 ramp clamp",
+      "AFAB6 stationary target"
+    ],
+    "source_target_gp_relative": -30720,
+    "periodic_order": [
+      "AEFBC target copy/gates",
+      "AF130 ramp setup",
+      "AF824 ramp step",
+      "AFB14 post-level offset",
+      "AFB9C mute lifecycle",
+      "AFD9C publish controls",
+      "B0064 EQ selector"
+    ],
+    "independence": "B0066 reads pre-offset level; AFB14 separately adds gp-24028 for gain publication"
+  },
+  "normal_source": {
+    "writer": "C68E8..C69EA",
+    "lane_to_source_gp_relative": -15764,
+    "source_count": 18,
+    "active_flags_gp_relative": -15465,
+    "inhibit_gp_relative": -15056,
+    "raw_levels_gp_relative": -15425,
+    "signed_trims_gp_relative": -14992,
+    "cached_target_gp_relative": -14967,
+    "selected_target_gp_relative": -15718,
+    "formula": "if active==A5 and inhibit==0 and raw>0 and trim>-13: min(26,raw-100+trim); else -100",
+    "request_range": [
+      0,
+      126
+    ],
+    "lower_bound": "no lower clamp here; AF03A later replaces target<-100 by -100",
+    "source0_selection": "active[0]==A5 selects0; else descending17..4 loop leaves lowest active4..17; if none, mapping remains unchanged",
+    "request_writer": "C5B64 requires2 payload bytes, validates selector and level<=126; C5CDA stores and C5D20 calls C68E4",
+    "request_selectors": [
+      33,
+      34,
+      35,
+      36,
+      38,
+      42,
+      50
+    ],
+    "request_source_indices": [
+      0,
+      1,
+      2,
+      3,
+      5,
+      9,
+      17
+    ],
+    "request_zero_selector": "sets all7 listed sources, not all18",
+    "trim_writers": {
+      "single_field": "C7870: signed -13..13, or raw80 unchanged",
+      "composite": "C53A0: signed -32..32 for trim, two other fields -9..9; raw80 unchanged independently",
+      "packet_selection": "selector0 has7 records; FF repeats one record for all7; listed source selector has1 record",
+      "packet_lengths": {
+        "single_field": [
+          9,
+          3,
+          3
+        ],
+        "composite": [
+          23,
+          5,
+          5
+        ]
+      },
+      "header_byte1": "not interpreted by these two handlers",
+      "invalid_selector": "returns0 without changing controls; do not treat as successful source update",
+      "validation": "all requested fields validated before stores; invalid value/length takes error path",
+      "post_write": "C7A70 or C56F8 calls C68E4; both schedule1/11; composite also queues49",
+      "sentinel": "80 is leave unchanged, NOT trim -128; actual trim<=-13 mutes in C698C"
+    },
+    "boundary": "raw protocol level is not established as MMI percent; outer service/source meaning and indirect writers remain unproven"
+  },
+  "override": {
+    "mode_gp_relative": -17779,
+    "level_gp_relative": -17778,
+    "level_request_range": [
+      -100,
+      26
+    ],
+    "request_default": -30,
+    "selected_target_writer": "C37B2/C37B6 if mode==A5: lane0=override level; lanes1..3=-100",
+    "normal_copy": "C69C6/C69DC publishes normal targets only when mode!=A5; C368A clears mute bit0 on mode exit",
+    "mode_writer": {
+      "entry": "A1FB4",
+      "inner_function_id": 375,
+      "id_decode": "big-endian bytes19/20; operation byte21; caller length supplied in r7",
+      "gate": "gp-18912 & EF must be0, else error36",
+      "enter": "operation3 AND length1: gp-17867=C0, mode=A5, set gp-18912 bit4; schedule9/28 only on mode change",
+      "exit": "operation0 AND gp-17867==C0: set gp-17867=40, deadline=tick+5000, mode=5A, clear bit4; schedule9/28 only on change",
+      "related_inner_ids": {
+        "379": "override level A21D0",
+        "1063": "override EQ enable A2548"
+      },
+      "boundary": "inner dispatcher IDs, not a ready-to-send MOST/UDS request; transport/auth/UI mode naming not established"
+    },
+    "boundary": "override is a code-path label, not a proven user-visible mode name"
+  },
+  "target_gates": {
+    "writer": "AEFC0..AF078",
+    "flags_gp_relative": -17777,
+    "global_gate_gp_relative": [
+      -30750,
+      -30751
+    ],
+    "all_lanes": "both global bytes must equal5A and flags&3 must equal0, otherwise target=-100",
+    "lane0": "flags&0x3C forces lane0 target=-100",
+    "per_lane": "target<-100 or mapped active flag!=A5 forces target=-100"
+  },
+  "selector": {
+    "thresholds": [
+      12,
+      9,
+      6,
+      3,
+      -3,
+      -10,
+      -12,
+      -16,
+      -22,
+      -28,
+      -33,
+      -38,
+      -44,
+      -50,
+      -60,
+      -60
+    ],
+    "normal_enable_gp_relative": -15406,
+    "override_enable_gp_relative": -17772,
+    "enable_choice": "gp-17779==A5 chooses gp-17772, else gp-15406",
+    "startup": "B675C r8=A5 -> B6946 normal enable=A5, B694A cached enable=A5; B6692 r13=5A -> B69FE override mode=5A and B6A1C override enable=5A; B6A96 cached index=0",
+    "normal_enable_writer": "D455A accepts payload byte A5 or5A; other bytes leave value unchanged",
+    "override_enable_writer": "A254C operation0 setsA5, operation3 uses payload byte23 bit0 (A5/5A)",
+    "commit_gate_gp_relative": -30788,
+    "commit_gate_writers": [
+      "AEEEC setsA5",
+      "AF16A sets5A for specified gp-17777 changes",
+      "AFAD8 setsA5 when lane0 stationary and gp-17777==0"
+    ],
+    "commit": "B00C0: gate==A5 and changed index/enable -> store gp-3E29/gp-3E2A and queue17; otherwise retain prior state",
+    "delivery": "A8B26 sends cached index if cached enable==A5, else0; queue is not delivery proof"
+  },
+  "settled_examples": {
+    "conditions": "trim0, active source, no inhibit/mute, normal mode, EQ enabled, commit and event delivery assumed; raw0 is muted",
+    "boundary": "EQ design gain only; NOT total signal gain including volume attenuation and NOT MMI percentages",
+    "rows": [
+      {
+        "raw_protocol_level": 0,
+        "settled_control_level": -100,
+        "candidate_bank": 15,
+        "bank_55hz_design_gain_db": 20.5
+      },
+      {
+        "raw_protocol_level": 40,
+        "settled_control_level": -60,
+        "candidate_bank": 14,
+        "bank_55hz_design_gain_db": 17.5
+      },
+      {
+        "raw_protocol_level": 50,
+        "settled_control_level": -50,
+        "candidate_bank": 13,
+        "bank_55hz_design_gain_db": 14.0
+      },
+      {
+        "raw_protocol_level": 70,
+        "settled_control_level": -30,
+        "candidate_bank": 10,
+        "bank_55hz_design_gain_db": 6.0
+      },
+      {
+        "raw_protocol_level": 80,
+        "settled_control_level": -20,
+        "candidate_bank": 8,
+        "bank_55hz_design_gain_db": 2.0
+      },
+      {
+        "raw_protocol_level": 85,
+        "settled_control_level": -15,
+        "candidate_bank": 7,
+        "bank_55hz_design_gain_db": 0.0
+      },
+      {
+        "raw_protocol_level": 90,
+        "settled_control_level": -10,
+        "candidate_bank": 5,
+        "bank_55hz_design_gain_db": 0.0
+      },
+      {
+        "raw_protocol_level": 100,
+        "settled_control_level": 0,
+        "candidate_bank": 4,
+        "bank_55hz_design_gain_db": 0.0
+      },
+      {
+        "raw_protocol_level": 112,
+        "settled_control_level": 12,
+        "candidate_bank": 0,
+        "bank_55hz_design_gain_db": 0.0
+      },
+      {
+        "raw_protocol_level": 126,
+        "settled_control_level": 26,
+        "candidate_bank": 0,
+        "bank_55hz_design_gain_db": 0.0
+      }
+    ]
+  },
+  "ranges": {
+    "level_init": {
+      "start": "0xaee1e",
+      "end_exclusive": "0xaef10",
+      "sha256": "17c89e6bfb45de486ad2cfd330508940fcca1ddc3e17874d1db824bd1a268178"
+    },
+    "level_periodic_order": {
+      "start": "0xaef20",
+      "end_exclusive": "0xaef48",
+      "sha256": "edd70bc6237da9ed1e949c421a823c12ff0f7da55e7bf2f58577d16c953e190b"
+    },
+    "level_target_gates": {
+      "start": "0xaefc0",
+      "end_exclusive": "0xaf07a",
+      "sha256": "709ab61b8b6b348b5f1df8e41422258012c0fa3308ad9f2dd6c0f1d11de76209"
+    },
+    "level_ramp_setup": {
+      "start": "0xaf134",
+      "end_exclusive": "0xaf4ac",
+      "sha256": "afba3ce67d3d38069ea14ce9a6f885a29bca2a471c42468f336bf1be5dba75eb"
+    },
+    "level_ramp_step": {
+      "start": "0xaf828",
+      "end_exclusive": "0xafb14",
+      "sha256": "233be7fc0b853a0489b22326bb353fde52e324e095b92ac0f5d5c5d8bbcd7d69"
+    },
+    "level_post_offset": {
+      "start": "0xafb16",
+      "end_exclusive": "0xafb9c",
+      "sha256": "c55ea7f25a29457fe5cb1e7a6a5e7354e43a5084e99cdcfc08a2ba7364eaff0b"
+    },
+    "level_bank_commit": {
+      "start": "0xb0066",
+      "end_exclusive": "0xb00ec",
+      "sha256": "724a9cdb78806ac46f17996fa644177f4006884002e74127fc18481d8b1e4b09"
+    },
+    "level_startup_controls": {
+      "start": "0xb6638",
+      "end_exclusive": "0xb6a9a",
+      "sha256": "01afe87326188911ad62f2cb883d370991073936ec8b2194cffd85bab34e77a2"
+    },
+    "level_normal_target": {
+      "start": "0xc68e8",
+      "end_exclusive": "0xc6a40",
+      "sha256": "dcee12d604ac63bf698f65e3863c53e8e6d4a2e2d98c297b208ad2a00bf9602c"
+    },
+    "level_source_mode": {
+      "start": "0xc35f0",
+      "end_exclusive": "0xc378c",
+      "sha256": "16c6749458796e1ac54ddb1f873e9b3e6fff933df2d626feb5a6f0934c6a29cd"
+    },
+    "level_override_target": {
+      "start": "0xc3790",
+      "end_exclusive": "0xc37c2",
+      "sha256": "b7fd5a87ce161f005232f8f995c71eaf30c910e3c1ea991e4fe37c15def894b5"
+    },
+    "level_override_other_lanes": {
+      "start": "0xc387a",
+      "end_exclusive": "0xc38cc",
+      "sha256": "e6d1b26aa05ba645ed6f8fdfec6b40115c201d467b91f34e58579d072e49d84f"
+    },
+    "level_request_writer": {
+      "start": "0xc5b64",
+      "end_exclusive": "0xc5d3c",
+      "sha256": "b8717790e75a4f9f7b75397a00adfd2efe247abdf0f06b79c9a2219fb1b03834"
+    },
+    "level_override_request": {
+      "start": "0xa21d4",
+      "end_exclusive": "0xa22ac",
+      "sha256": "1d67c1107b30f3c0509a42bc57d651326323f4aebef8d87b803bd0818f15fe50"
+    },
+    "level_override_enable": {
+      "start": "0xa254c",
+      "end_exclusive": "0xa25fc",
+      "sha256": "6e288169296da56676aa2629653ec759135474b18e3b542a7d71f879244f382a"
+    },
+    "level_normal_enable": {
+      "start": "0xd455a",
+      "end_exclusive": "0xd45a8",
+      "sha256": "cb70fa41e3759effddd38d84cd75e9a4068502357ceaa1b88fb3756cfc65f4fc"
+    },
+    "level_trim_request": {
+      "start": "0xc7870",
+      "end_exclusive": "0xc7a8c",
+      "sha256": "2c0af0d5728c9080554b19a4044f558d3cbd17f51d46a9ee318843bd735e6b54"
+    },
+    "level_composite_trim_request": {
+      "start": "0xc53a0",
+      "end_exclusive": "0xc571c",
+      "sha256": "4131e503a04979d336b9b477abed83ed5ea9952f73ead228a43409cb26989b09"
+    },
+    "level_override_mode_request": {
+      "start": "0xa1fb4",
+      "end_exclusive": "0xa21d0",
+      "sha256": "e92b737dad954b150fed2237dac4e8340e33aed547e848e679a98c4ee1db15d2"
+    },
+    "level_b25_writer": {
+      "start": "0xaa568",
+      "end_exclusive": "0xaa59a",
+      "sha256": "13634652ddd2a5103ecd601b28359e77f7c42fda56d2b796df7b0a040ce054ed"
+    },
+    "level_b_event_dispatch": {
+      "start": "0xaa600",
+      "end_exclusive": "0xaa60e",
+      "sha256": "2b38d90c6cc230a1260143fa5b5f2c79e963461f364c16a66a28b9af1b01bbce"
+    },
+    "level_b_control_transport": {
+      "start": "0xac648",
+      "end_exclusive": "0xac6cc",
+      "sha256": "d0655847f54716d24842495dedd1f0ff3c70470305e9e64584e324947f3b701d"
+    },
+    "level_b_all_event_writers": {
+      "start": "0xaa39a",
+      "end_exclusive": "0xaa600",
+      "sha256": "36d875b51a12581aefc0c39b0ac0084d99f4dc6fad0b939d767981956382908b"
+    },
+    "level_b_generic_proxy": {
+      "start": "0xa782e",
+      "end_exclusive": "0xa7850",
+      "sha256": "08e79714dcf8ae35321a79ae0d2ffdf67f9d6ac3093460aaa7124d7909c5920b"
+    },
+    "level_b_generic_request": {
+      "start": "0xd40c8",
+      "end_exclusive": "0xd4180",
+      "sha256": "ab4bd4f8b3cc2a6a6b5173414bdc4519abe15beec4174e7287f7130553b8fa7f"
+    },
+    "coefficient_matrix_writer": {
+      "start": "0xa903c",
+      "end_exclusive": "0xa91c4",
+      "sha256": "d4acf6944eae812b9873ed9c8b53ef6cbe5b5dca1cb5125c125cbe1985d5afbc"
+    },
+    "coefficient_transport": {
+      "start": "0xa8bb4",
+      "end_exclusive": "0xa8d5c",
+      "sha256": "660552bac544577d20f29728f968dc150efc86a445d4f2b8c9455d1759c8ed29"
+    },
+    "outer_main_dispatch": {
+      "start": "0x99774",
+      "end_exclusive": "0x99bd2",
+      "sha256": "90c14b3dde4ea958ea20f545b25853a0ccb90bb8753bec02c67b19da7a99a3a9"
+    },
+    "outer_main_response": {
+      "start": "0x99be0",
+      "end_exclusive": "0x99cd4",
+      "sha256": "60712ae192addc2560476e72ef518fef678ddf12a224b0b68ca4216f3eae5667"
+    },
+    "outer_alt_request": {
+      "start": "0xa2874",
+      "end_exclusive": "0xa2a98",
+      "sha256": "5892ab215463f22200ae4eb60607742ec912be0d61f0fef6bf1c9e209cd24d94"
+    },
+    "outer_alt_dispatch": {
+      "start": "0xd57c8",
+      "end_exclusive": "0xd58ec",
+      "sha256": "0bb06f13a81d1a7553fdcc42a8837c914c14505544589984a243febc70fae84e"
+    },
+    "outer_be_codec": {
+      "start": "0x99cd4",
+      "end_exclusive": "0x99de8",
+      "sha256": "11d01a5b3d52f1942e2204d2e5ad2bcb444bfd515e6bca3647f5b747733f59d8"
+    },
+    "outer_generic_handlers": {
+      "start": "0xd40c8",
+      "end_exclusive": "0xd41dc",
+      "sha256": "5949dcbfab7afef564f304ce213a91def9ecd8216155c0fa875ffc155dc57d06"
+    },
+    "outer_alt_read_handler": {
+      "start": "0xd42dc",
+      "end_exclusive": "0xd433c",
+      "sha256": "beeed9c196d3ae57e9266bfb2abe9addfb2ecb87224b37d19cedc6d7776ea197"
+    },
+    "outer_read_senders": {
+      "start": "0xac6cc",
+      "end_exclusive": "0xac818",
+      "sha256": "7fc366c39b3510682b12b3785ca841fd67cb9438153db0e1c973fa5928e9d726"
+    },
+    "outer_event_dispatch": {
+      "start": "0xa76b0",
+      "end_exclusive": "0xa7d28",
+      "sha256": "292336f80047a56e5e743fbdb0476c55ed68368c60f261ba7d20ea56849f2c58"
+    },
+    "outer_api18_writer": {
+      "start": "0xaa644",
+      "end_exclusive": "0xaa898",
+      "sha256": "3662645be7d043aea99080f355bf72afd8b3f57329ab4e791289631eddb2e22d"
+    },
+    "outer_api18_request": {
+      "start": "0xca4b4",
+      "end_exclusive": "0xca8bc",
+      "sha256": "aa988680b72a42d291edf79f711f2f3f185096d0b1246c6c75ae9d52382bc064"
+    },
+    "outer_api18_init": {
+      "start": "0xb6dd0",
+      "end_exclusive": "0xb6dd8",
+      "sha256": "a132833363d28d28b08ddd316a0a61ca9da1d4568ef34320fa174a6540a02d45"
+    },
+    "outer_event_enqueue": {
+      "start": "0xb5cfc",
+      "end_exclusive": "0xb5d88",
+      "sha256": "19a61050d65c56e0e4c98e8ddb2f77f5cd8a0b6ac94b0638f763419b52bb7e07"
+    },
+    "outer_event_schedule": {
+      "start": "0xc3990",
+      "end_exclusive": "0xc39bc",
+      "sha256": "6f814352bc12ce888f9bea5e25eaac6e196e8323fdd9c7f98a1c0b13b79862f1"
+    },
+    "outer_sync_wrappers": {
+      "start": "0xdd814",
+      "end_exclusive": "0xdd84c",
+      "sha256": "f594e57cf8e5efc84044cbfb6eadadf3a6a5cf0ad27296b9972858179eaa0102"
+    },
+    "outer_sync_kernel": {
+      "start": "0xeaadc",
+      "end_exclusive": "0xeaba4",
+      "sha256": "b576c6399d9794288921d4c1a1deeaf63d0665c52264cdd01c010c919df9cba7"
+    }
+  },
+  "remaining": [
+    "outer request dispatch/service binding, source meanings and indirect/other writers",
+    "external input values and actual event ordering cannot be fixed by this image alone",
+    "physical PCM graph binding, full B parameter loading and wrapper timing remain separate work"
+  ]
+}

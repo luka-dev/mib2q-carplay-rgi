@@ -1,0 +1,301 @@
+{
+  "schema_version": 1,
+  "kind": "upmix-model-readiness",
+  "model": {
+    "version": "bank1-known-electronics-v7",
+    "source_sha256": "8776fdb84d05571cf4addf42655bc875da7c47cc35166e3cee6c60bc5841fe4b",
+    "profile": 0,
+    "bank": 1,
+    "row": 1,
+    "asad": "0xfc",
+    "complex_block": "identity_hypothesis",
+    "complex_scenario": null,
+    "runtime_scenario": null,
+    "upstream_scenario": null,
+    "first_b_scenario": null,
+    "default_auxiliary_audio": {
+      "first_mixer_B": "zero_hypothesis",
+      "second_mixer_B": "zero_hypothesis"
+    },
+    "pre_eq_delays": [
+      [
+        1632,
+        1632,
+        1632,
+        1632,
+        1632,
+        1632,
+        1632,
+        1632
+      ],
+      [
+        87,
+        87,
+        125,
+        204,
+        403,
+        403,
+        367,
+        367
+      ]
+    ],
+    "total_a_path_delay_samples": [
+      1786,
+      1789,
+      6,
+      0,
+      59,
+      66,
+      1999,
+      1999,
+      2035,
+      2035,
+      1757,
+      1774,
+      1719,
+      1719,
+      1836,
+      1836
+    ],
+    "output_pair_a_linear": [
+      1.0,
+      1.5488165616989136,
+      0.7079457640647888,
+      2.951209306716919,
+      0.8912509679794312,
+      1.5488165616989136,
+      0.5623413324356079,
+      2.951209306716919,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      0.3630780577659607,
+      1.0232930183410645,
+      0.9120108485221863,
+      0.9120108485221863
+    ],
+    "output_pair_b_linear": [
+      0.0,
+      0.8128305077552795,
+      0.0,
+      1.9952622652053833,
+      0.0,
+      0.8128305077552795,
+      0.0,
+      1.9952622652053833,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.7585775852203369,
+      0.7413102388381958,
+      0.0,
+      0.0
+    ],
+    "verified_unity_eq_records": 32,
+    "warnings": [
+      "complex block 0xC4D17 modelled as identity (omits conditional 1023-sample delay and adaptive five-band processing)",
+      "upstream processing before input matrix C4AED not numerically emulated",
+      "first mixer B audio assumed zero unless injected; stored B dB=[0, 0, -100, -100, 0, 0, 0, 0, -99, -99]",
+      "second mixer B audio assumed zero unless injected; nonzero B gains exist",
+      "C4B59/C4DDA gains and C4E9A/C4ED3 limiters omitted: runtime not supplied",
+      "static profile/row, ASAD FC, normal selectors; no live MMI state, tone/volume or acoustics",
+      "input-bus EQ packed grouping inferred; physical output names are candidates",
+      "row EQ supported only for verified unity; post EQ binding decoded; float64, not SHARC bit equivalence"
+    ]
+  },
+  "electrical": {
+    "gates": {
+      "model_identified": true,
+      "common_input_scenario_explicit": false,
+      "first_B_scenario_explicit": false,
+      "second_B_scenario_explicit": false,
+      "complex_scenario_explicit": false,
+      "runtime_scenario_explicit": false
+    },
+    "default_auxiliary_audio": {
+      "first_mixer_B": "zero_hypothesis",
+      "second_mixer_B": "zero_hypothesis"
+    },
+    "omissions_or_hypotheses": [
+      "common_input_scenario_explicit",
+      "first_B_scenario_explicit",
+      "second_B_scenario_explicit",
+      "complex_scenario_explicit",
+      "runtime_scenario_explicit"
+    ],
+    "warnings": [
+      "complex block 0xC4D17 modelled as identity (omits conditional 1023-sample delay and adaptive five-band processing)",
+      "upstream processing before input matrix C4AED not numerically emulated",
+      "first mixer B audio assumed zero unless injected; stored B dB=[0, 0, -100, -100, 0, 0, 0, 0, -99, -99]",
+      "second mixer B audio assumed zero unless injected; nonzero B gains exist",
+      "C4B59/C4DDA gains and C4E9A/C4ED3 limiters omitted: runtime not supplied",
+      "static profile/row, ASAD FC, normal selectors; no live MMI state, tone/volume or acoustics",
+      "input-bus EQ packed grouping inferred; physical output names are candidates",
+      "row EQ supported only for verified unity; post EQ binding decoded; float64, not SHARC bit equivalence"
+    ],
+    "live_state_verified": false,
+    "physical_mapping_verified": false,
+    "bit_exact_hardware_model_verified": false,
+    "boundary": "These presence checks are not kernel/schema validation. Explicit scenarios are caller hypotheses, not vehicle readback or physical pinout evidence."
+  },
+  "coverage": {
+    "ready": true,
+    "declared_complete": true,
+    "kind": "synthetic_B_and_EQ_sensitivity_not_state_proof",
+    "missing": [],
+    "unexpected": [],
+    "cells_present": 392,
+    "references": {
+      "grid": {
+        "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/upmix-tuning-grid-20260920/report.json",
+        "sha256": "8281864ecfe7d49e5aef2a8ecd6ef17381f58b8e02568a57c7c52df0da54e005",
+        "valid": true,
+        "reason": "hash matches (content truth not certified)"
+      },
+      "common_input_audit": {
+        "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/r2/soundamp/remaining-blocks-20260919/audit.json",
+        "sha256": "0af04fa89d277cd9e1db07d11ae2fb3a5157bdff90873166288def4433c1a390",
+        "valid": true,
+        "reason": "hash matches (content truth not certified)"
+      },
+      "scenario_0": {
+        "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/r2/soundamp/remaining-blocks-20260919/common-input-bank7-hypothesis.json",
+        "sha256": "957f685205010177d240b60b1e5b3dd718ca2913d8e05a81e206d13b6b5089df",
+        "valid": true,
+        "reason": "hash matches (content truth not certified)"
+      },
+      "scenario_1": {
+        "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/r2/soundamp/remaining-blocks-20260919/common-input-bank10-hypothesis.json",
+        "sha256": "8a6f99f832af485179b014e344dab65da9a6372b5591bf35c1fb11633651fa03",
+        "valid": true,
+        "reason": "hash matches (content truth not certified)"
+      },
+      "extra_report": {
+        "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/upmix-tuning-bass75-20260920/report.json",
+        "sha256": "ae4ef89e811d3859e8517f4fa75e5cf10220f7810908ecd295075cf3afc67ca9",
+        "valid": true,
+        "reason": "hash matches (content truth not certified)"
+      }
+    },
+    "expected_axes": {
+      "tracks": [
+        "Boost Up",
+        "Crazy Train",
+        "Deep Down Low",
+        "Heart-Shaped Box",
+        "The Blue-Eyed Devil",
+        "UP. UP. UP.",
+        "take your vibes and go"
+      ],
+      "eq_scenarios": [
+        "bank7",
+        "bank10"
+      ],
+      "variants": [
+        "dry_bank1",
+        "r75_s30",
+        "r100_s30",
+        "bass1"
+      ],
+      "B_probes": [
+        "B0",
+        "B1_plus",
+        "B1_minus",
+        "B1_delay96",
+        "B2_plus",
+        "B2_minus",
+        "B2_delay96"
+      ]
+    },
+    "expected_cells": 392,
+    "frames_rendered": 576000,
+    "window_source_seconds": [
+      2,
+      10
+    ],
+    "B_definition": "B1=0.25*A ten-bus donor except slots2/3/8/9 zero; B2=0.25*A split16 donor. Separate +/- and delayed96sample tests. Arbitrary stress amplitudes, NOT calibrated bounds or actual B processor/state. Other B path zero; C4D17 identity."
+  },
+  "acoustic": {
+    "gates": {
+      "domain_supported": true,
+      "channels_exact": true,
+      "sample_rate_48000": true,
+      "response_hashes_checked": true,
+      "response_audio_validated": true,
+      "no_duplicate_electronics": true,
+      "capture_fields_present": true,
+      "declared_measured_not_synthetic": false,
+      "manifest_hash_matches": true,
+      "current_manifest_and_IRs_match_report": true,
+      "provenance_files_hash_match": false,
+      "capture_target_matches_evidence": false,
+      "config_order_mapping_evidence": false
+    },
+    "domain": "post_amp_config_outputs",
+    "provenance": {
+      "kind": "synthetic",
+      "description": "test only, not cabin measurement"
+    },
+    "manifest_reference": {
+      "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/upmix-cabin-bridge-20260920/post_amp_config_outputs/manifest.json",
+      "sha256": "7f71c54b57f3e155d17214e9912d85a9c9b29a6515c88086e43af0f4c273a00d",
+      "valid": true,
+      "reason": "hash matches (content truth not certified)"
+    },
+    "evidence_references": {
+      "capture_recording": {
+        "valid": false,
+        "reason": "missing path/hash reference"
+      },
+      "state_record": {
+        "valid": false,
+        "reason": "missing path/hash reference"
+      },
+      "microphone_calibration": {
+        "valid": false,
+        "reason": "missing path/hash reference"
+      }
+    },
+    "response_revalidation": {
+      "valid": true,
+      "reason": "IR hashes and metadata revalidated"
+    },
+    "config_order_mapping_reference": {
+      "valid": false,
+      "reason": "missing path/hash reference"
+    },
+    "evidence_package_complete": false,
+    "hardware_measurement_independently_verified": false,
+    "boundary": "Hash-checked documentation enables review, not automatic proof of hardware truth. Fixed-state IRs do not model arbitrary nonlinear/adaptive state changes or all seats."
+  },
+  "claims": {
+    "conditional_electrical_comparison_available": true,
+    "all_electrical_scenarios_explicit": false,
+    "declared_stress_grid_complete": true,
+    "measured_cabin_evidence_package_ready_for_review": false,
+    "actual_vehicle_state_verified": false,
+    "full_cabin_fidelity_established": false,
+    "subjective_optimality_established": false
+  },
+  "next_steps": [
+    "Close or explicitly bound each missing electrical scenario.",
+    "Compare candidates across complete declared sensitivity grids.",
+    "Obtain independent state and acoustic evidence before claiming real-cabin fidelity."
+  ],
+  "inputs": {
+    "report": {
+      "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/upmix-tuning-grid-20260920/report.json",
+      "sha256": "8281864ecfe7d49e5aef2a8ecd6ef17381f58b8e02568a57c7c52df0da54e005"
+    },
+    "coverage": {
+      "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/upmix-tuning-stress-verified-20260920/report.json",
+      "sha256": "2d4ed89d6700530f86d3c750d4b52a25f4f46c07fdad2b536d55be7d499326b9"
+    },
+    "acoustic_report": {
+      "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/upmix-cabin-bridge-20260920/post_amp_config_outputs/synthetic-output.wav.report.json",
+      "sha256": "028174d0867b7499d19b278402c9b9e12851c3f3132500c44e5d0e79af41e27a"
+    }
+  }
+}

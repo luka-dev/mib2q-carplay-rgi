@@ -50,8 +50,25 @@ class VirtualCabinTests(unittest.TestCase):
         source[0, 0] = 1.0
         buses = cabin.apply_matrix(source, gains)
         self.assertAlmostEqual(buses[0, 0], 10.0 ** (-2.0 / 20.0), places=12)
-        self.assertAlmostEqual(buses[0, 2], 10.0 ** (-6.0 / 20.0), places=12)
+        self.assertAlmostEqual(buses[0, 2], 10.0 ** (-8.0 / 20.0), places=12)
+        self.assertAlmostEqual(buses[0, 3], 10.0 ** (-8.0 / 20.0), places=12)
         self.assertAlmostEqual(buses[0, 1], 10.0 ** (-99.0 / 20.0), places=12)
+
+    def test_all_matrix_columns_match_corrected_electronic_audit(self) -> None:
+        from amp_dsp_chain import AmpChain
+        actual=cabin.apply_matrix(np.eye(8),cabin.linear_matrix(self.config))
+        np.testing.assert_allclose(actual,AmpChain().M8.T,rtol=0,atol=1e-7)
+        # Independent asymmetric impulse: LFE bus receives Ls at-14dB,
+        # while Ls bus receives LFE only at the-99dB floor.
+        self.assertAlmostEqual(actual[4,3],10**(-14/20),places=12)
+        self.assertAlmostEqual(actual[3,4],10**(-99/20),places=12)
+
+    def test_stale_input_row_config_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            self.config['matrix']['storage_order']='rows_are_inputs_columns_are_outputs'
+            path=Path(tmp)/'stale.json';path.write_text(json.dumps(self.config))
+            with self.assertRaises(cabin.CabinError):cabin.load_config(path)
+            with self.assertRaises(cabin.CabinError):cabin.linear_matrix(self.config)
 
     def test_matrix_renderer_writes_eight_bus_wav_and_report(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -74,6 +91,7 @@ class VirtualCabinTests(unittest.TestCase):
                 rendered[0, 4], 0.25 * 10.0 ** (6.0 / 20.0), places=4
             )
             self.assertEqual(report["output_channel_order"][4], "Bus_Ls")
+            self.assertEqual(report['model']['matrix_semantics_version'],2)
             self.assertTrue(cabin.default_report_path(output_path).exists())
 
     def test_documentary_circuit_renderer_preserves_bus_power(self) -> None:
@@ -184,6 +202,7 @@ class VirtualCabinTests(unittest.TestCase):
             self.assertAlmostEqual(rendered[2, 0], 0.125, places=4)
             self.assertAlmostEqual(rendered[4, 1], -0.0625, places=4)
             self.assertEqual(report["brir_domain"], "most_inputs")
+            self.assertIs(report['model']['matrix_applied'],False)
 
 
 if __name__ == "__main__":

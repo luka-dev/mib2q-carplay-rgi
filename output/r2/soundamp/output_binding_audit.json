@@ -1,6 +1,2648 @@
 {
   "source_sha256": "8776fdb84d05571cf4addf42655bc875da7c47cc35166e3cee6c60bc5841fe4b",
   "profile": 0,
+  "known_electronic_stages": {
+    "version": 2,
+    "input_matrix": {
+      "bank": 1,
+      "file_offset": "0x101bf4",
+      "order": "output_rows_input_columns",
+      "orientation_proof": "A903C RAM[8*out+in] -> C022A[8*in+out];126A02/126A07 consume C022A[in*outputs+out]",
+      "control_scenario": "zero coordinate/no matrix correction; ASAD/mode/coordinate alternatives in matrix_control.json",
+      "db": [
+        [
+          -2,
+          -100,
+          -6,
+          -100,
+          -100,
+          -100,
+          -100,
+          -100
+        ],
+        [
+          -100,
+          -2,
+          -6,
+          -100,
+          -100,
+          -100,
+          -100,
+          -100
+        ],
+        [
+          -8,
+          -8,
+          -3,
+          -100,
+          -100,
+          -100,
+          -100,
+          -100
+        ],
+        [
+          -8,
+          -8,
+          -10,
+          3,
+          -14,
+          -14,
+          -100,
+          -100
+        ],
+        [
+          -3,
+          -100,
+          -100,
+          -100,
+          6,
+          -100,
+          -100,
+          -100
+        ],
+        [
+          -100,
+          -3,
+          -100,
+          -100,
+          -100,
+          6,
+          -100,
+          -100
+        ],
+        [
+          -3,
+          -100,
+          -100,
+          -100,
+          9,
+          -100,
+          -100,
+          -100
+        ],
+        [
+          -100,
+          -3,
+          -100,
+          -100,
+          -100,
+          9,
+          -100,
+          -100
+        ]
+      ],
+      "linear": [
+        [
+          0.7943282127380371,
+          1.1220185115234926e-05,
+          0.5011872053146362,
+          1.1220185115234926e-05,
+          1.1220185115234926e-05,
+          1.1220185115234926e-05,
+          1.1220185115234926e-05,
+          1.1220185115234926e-05
+        ],
+        [
+          1.1220185115234926e-05,
+          0.7943282127380371,
+          0.5011872053146362,
+          1.1220185115234926e-05,
+          1.1220185115234926e-05,
+          1.1220185115234926e-05,
+          1.1220185115234926e-05,
+          1.1220185115234926e-05
+        ],
+        [
+          0.3981071710586548,
+          0.3981071710586548,
+          0.7079457640647888,
+          1.1220185115234926e-05,
+          1.1220185115234926e-05,
+          1.1220185115234926e-05,
+          1.1220185115234926e-05,
+          1.1220185115234926e-05
+        ],
+        [
+          0.3981071710586548,
+          0.3981071710586548,
+          0.3162277638912201,
+          1.4125374555587769,
+          0.19952623546123505,
+          0.19952623546123505,
+          1.1220185115234926e-05,
+          1.1220185115234926e-05
+        ],
+        [
+          0.7079457640647888,
+          1.1220185115234926e-05,
+          1.1220185115234926e-05,
+          1.1220185115234926e-05,
+          1.9952622652053833,
+          1.1220185115234926e-05,
+          1.1220185115234926e-05,
+          1.1220185115234926e-05
+        ],
+        [
+          1.1220185115234926e-05,
+          0.7079457640647888,
+          1.1220185115234926e-05,
+          1.1220185115234926e-05,
+          1.1220185115234926e-05,
+          1.9952622652053833,
+          1.1220185115234926e-05,
+          1.1220185115234926e-05
+        ],
+        [
+          0.7079457640647888,
+          1.1220185115234926e-05,
+          1.1220185115234926e-05,
+          1.1220185115234926e-05,
+          2.818382978439331,
+          1.1220185115234926e-05,
+          1.1220185115234926e-05,
+          1.1220185115234926e-05
+        ],
+        [
+          1.1220185115234926e-05,
+          0.7079457640647888,
+          1.1220185115234926e-05,
+          1.1220185115234926e-05,
+          1.1220185115234926e-05,
+          2.818382978439331,
+          1.1220185115234926e-05,
+          1.1220185115234926e-05
+        ]
+      ]
+    },
+    "zeta_table": [
+      0.2686507999897003,
+      0.2679491937160492,
+      1.0,
+      0.7071067690849304,
+      1.0,
+      0.9238795042037964,
+      1.0,
+      0.9659258127212524,
+      0.5,
+      0.3826834261417389,
+      0.8090270161628723,
+      0.7071067690849304,
+      0.30901700258255005,
+      0.258819043636322
+    ],
+    "pre_eq_delays": [
+      {
+        "descriptor": "0xc4af7",
+        "parameter_address": "0xe0144",
+        "writer": "0xa9eca",
+        "file_offset": "0x1002fc",
+        "samples": [
+          1632,
+          1632,
+          1632,
+          1632,
+          1632,
+          1632,
+          1632,
+          1632
+        ]
+      },
+      {
+        "descriptor": "0xc4b0f",
+        "parameter_address": "0xe0178",
+        "writer": "0xa9f5e",
+        "file_offset": "0x10030c",
+        "samples": [
+          87,
+          87,
+          125,
+          204,
+          403,
+          403,
+          367,
+          367
+        ]
+      }
+    ],
+    "row_eq": {
+      "descriptor": "0xc4b27",
+      "writer": "0xac9c4",
+      "parameter_address": "0xe01b4",
+      "counts": [
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2
+      ],
+      "rows": [
+        [
+          {
+            "index": 0,
+            "file_offset": "0x102ef8",
+            "sharc_coefficient_address": "0xe01b4",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 1,
+            "file_offset": "0x102f00",
+            "sharc_coefficient_address": "0xe01b9",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 2,
+            "file_offset": "0x102f08",
+            "sharc_coefficient_address": "0xe01be",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 3,
+            "file_offset": "0x102f10",
+            "sharc_coefficient_address": "0xe01c3",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 4,
+            "file_offset": "0x102f18",
+            "sharc_coefficient_address": "0xe01c8",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 5,
+            "file_offset": "0x102f20",
+            "sharc_coefficient_address": "0xe01cd",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 6,
+            "file_offset": "0x102f28",
+            "sharc_coefficient_address": "0xe01d2",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 7,
+            "file_offset": "0x102f30",
+            "sharc_coefficient_address": "0xe01d7",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 8,
+            "file_offset": "0x102f38",
+            "sharc_coefficient_address": "0xe01dc",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 9,
+            "file_offset": "0x102f40",
+            "sharc_coefficient_address": "0xe01e1",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 10,
+            "file_offset": "0x102f48",
+            "sharc_coefficient_address": "0xe01e6",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 11,
+            "file_offset": "0x102f50",
+            "sharc_coefficient_address": "0xe01eb",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 12,
+            "file_offset": "0x102f58",
+            "sharc_coefficient_address": "0xe01f0",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 13,
+            "file_offset": "0x102f60",
+            "sharc_coefficient_address": "0xe01f5",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 14,
+            "file_offset": "0x102f68",
+            "sharc_coefficient_address": "0xe01fa",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 15,
+            "file_offset": "0x102f70",
+            "sharc_coefficient_address": "0xe01ff",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "file_offset": "0x102f78",
+            "sharc_coefficient_address": "0xe01b4",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 1,
+            "file_offset": "0x102f80",
+            "sharc_coefficient_address": "0xe01b9",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 2,
+            "file_offset": "0x102f88",
+            "sharc_coefficient_address": "0xe01be",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 3,
+            "file_offset": "0x102f90",
+            "sharc_coefficient_address": "0xe01c3",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 4,
+            "file_offset": "0x102f98",
+            "sharc_coefficient_address": "0xe01c8",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 5,
+            "file_offset": "0x102fa0",
+            "sharc_coefficient_address": "0xe01cd",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 6,
+            "file_offset": "0x102fa8",
+            "sharc_coefficient_address": "0xe01d2",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 7,
+            "file_offset": "0x102fb0",
+            "sharc_coefficient_address": "0xe01d7",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 8,
+            "file_offset": "0x102fb8",
+            "sharc_coefficient_address": "0xe01dc",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 9,
+            "file_offset": "0x102fc0",
+            "sharc_coefficient_address": "0xe01e1",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 10,
+            "file_offset": "0x102fc8",
+            "sharc_coefficient_address": "0xe01e6",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 11,
+            "file_offset": "0x102fd0",
+            "sharc_coefficient_address": "0xe01eb",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 12,
+            "file_offset": "0x102fd8",
+            "sharc_coefficient_address": "0xe01f0",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 13,
+            "file_offset": "0x102fe0",
+            "sharc_coefficient_address": "0xe01f5",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 14,
+            "file_offset": "0x102fe8",
+            "sharc_coefficient_address": "0xe01fa",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 15,
+            "file_offset": "0x102ff0",
+            "sharc_coefficient_address": "0xe01ff",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "file_offset": "0x102ff8",
+            "sharc_coefficient_address": "0xe01b4",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 1,
+            "file_offset": "0x103000",
+            "sharc_coefficient_address": "0xe01b9",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 2,
+            "file_offset": "0x103008",
+            "sharc_coefficient_address": "0xe01be",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 3,
+            "file_offset": "0x103010",
+            "sharc_coefficient_address": "0xe01c3",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 4,
+            "file_offset": "0x103018",
+            "sharc_coefficient_address": "0xe01c8",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 5,
+            "file_offset": "0x103020",
+            "sharc_coefficient_address": "0xe01cd",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 6,
+            "file_offset": "0x103028",
+            "sharc_coefficient_address": "0xe01d2",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 7,
+            "file_offset": "0x103030",
+            "sharc_coefficient_address": "0xe01d7",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 8,
+            "file_offset": "0x103038",
+            "sharc_coefficient_address": "0xe01dc",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 9,
+            "file_offset": "0x103040",
+            "sharc_coefficient_address": "0xe01e1",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 10,
+            "file_offset": "0x103048",
+            "sharc_coefficient_address": "0xe01e6",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 11,
+            "file_offset": "0x103050",
+            "sharc_coefficient_address": "0xe01eb",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 12,
+            "file_offset": "0x103058",
+            "sharc_coefficient_address": "0xe01f0",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 13,
+            "file_offset": "0x103060",
+            "sharc_coefficient_address": "0xe01f5",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 14,
+            "file_offset": "0x103068",
+            "sharc_coefficient_address": "0xe01fa",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 15,
+            "file_offset": "0x103070",
+            "sharc_coefficient_address": "0xe01ff",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "file_offset": "0x103078",
+            "sharc_coefficient_address": "0xe01b4",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 1,
+            "file_offset": "0x103080",
+            "sharc_coefficient_address": "0xe01b9",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 2,
+            "file_offset": "0x103088",
+            "sharc_coefficient_address": "0xe01be",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 3,
+            "file_offset": "0x103090",
+            "sharc_coefficient_address": "0xe01c3",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 4,
+            "file_offset": "0x103098",
+            "sharc_coefficient_address": "0xe01c8",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 5,
+            "file_offset": "0x1030a0",
+            "sharc_coefficient_address": "0xe01cd",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 6,
+            "file_offset": "0x1030a8",
+            "sharc_coefficient_address": "0xe01d2",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 7,
+            "file_offset": "0x1030b0",
+            "sharc_coefficient_address": "0xe01d7",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 8,
+            "file_offset": "0x1030b8",
+            "sharc_coefficient_address": "0xe01dc",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 9,
+            "file_offset": "0x1030c0",
+            "sharc_coefficient_address": "0xe01e1",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 10,
+            "file_offset": "0x1030c8",
+            "sharc_coefficient_address": "0xe01e6",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 11,
+            "file_offset": "0x1030d0",
+            "sharc_coefficient_address": "0xe01eb",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 12,
+            "file_offset": "0x1030d8",
+            "sharc_coefficient_address": "0xe01f0",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 13,
+            "file_offset": "0x1030e0",
+            "sharc_coefficient_address": "0xe01f5",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 14,
+            "file_offset": "0x1030e8",
+            "sharc_coefficient_address": "0xe01fa",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 15,
+            "file_offset": "0x1030f0",
+            "sharc_coefficient_address": "0xe01ff",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "file_offset": "0x1030f8",
+            "sharc_coefficient_address": "0xe01b4",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 1,
+            "file_offset": "0x103100",
+            "sharc_coefficient_address": "0xe01b9",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 2,
+            "file_offset": "0x103108",
+            "sharc_coefficient_address": "0xe01be",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 3,
+            "file_offset": "0x103110",
+            "sharc_coefficient_address": "0xe01c3",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 4,
+            "file_offset": "0x103118",
+            "sharc_coefficient_address": "0xe01c8",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 5,
+            "file_offset": "0x103120",
+            "sharc_coefficient_address": "0xe01cd",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 6,
+            "file_offset": "0x103128",
+            "sharc_coefficient_address": "0xe01d2",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 7,
+            "file_offset": "0x103130",
+            "sharc_coefficient_address": "0xe01d7",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 8,
+            "file_offset": "0x103138",
+            "sharc_coefficient_address": "0xe01dc",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 9,
+            "file_offset": "0x103140",
+            "sharc_coefficient_address": "0xe01e1",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 10,
+            "file_offset": "0x103148",
+            "sharc_coefficient_address": "0xe01e6",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 11,
+            "file_offset": "0x103150",
+            "sharc_coefficient_address": "0xe01eb",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 12,
+            "file_offset": "0x103158",
+            "sharc_coefficient_address": "0xe01f0",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 13,
+            "file_offset": "0x103160",
+            "sharc_coefficient_address": "0xe01f5",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 14,
+            "file_offset": "0x103168",
+            "sharc_coefficient_address": "0xe01fa",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 15,
+            "file_offset": "0x103170",
+            "sharc_coefficient_address": "0xe01ff",
+            "frequency_selector": 1000,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6cc84",
+            "cot_value": 15.257052421569824,
+            "frequency_hz_from_cot": 999.9999520738412,
+            "gain_linear": 1.0,
+            "family": "peak"
+          }
+        ]
+      ]
+    },
+    "output_pair_mixer": {
+      "descriptor": "0xc4dfb",
+      "writer": "0xa9ff4",
+      "parameter_address": "0xe453a",
+      "a_file_offset": "0x10032c",
+      "b_file_offset": "0x102408",
+      "polarity_file_offset": "0x10031c",
+      "a_codes": [
+        0,
+        19,
+        -15,
+        47,
+        -5,
+        19,
+        -25,
+        47,
+        0,
+        0,
+        0,
+        0,
+        -44,
+        1,
+        -4,
+        -4
+      ],
+      "b_codes": [
+        -128,
+        -9,
+        -128,
+        30,
+        -128,
+        -9,
+        -128,
+        30,
+        -128,
+        -128,
+        -128,
+        -128,
+        -12,
+        -13,
+        -128,
+        -128
+      ],
+      "a_polarity_codes": [
+        165,
+        165,
+        165,
+        165,
+        165,
+        165,
+        165,
+        165,
+        165,
+        165,
+        165,
+        165,
+        165,
+        165,
+        165,
+        165
+      ],
+      "a_linear": [
+        1.0,
+        1.5488165616989136,
+        0.7079457640647888,
+        2.951209306716919,
+        0.8912509679794312,
+        1.5488165616989136,
+        0.5623413324356079,
+        2.951209306716919,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        0.3630780577659607,
+        1.0232930183410645,
+        0.9120108485221863,
+        0.9120108485221863
+      ],
+      "b_linear": [
+        0.0,
+        0.8128305077552795,
+        0.0,
+        1.9952622652053833,
+        0.0,
+        0.8128305077552795,
+        0.0,
+        1.9952622652053833,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.7585775852203369,
+        0.7413102388381958,
+        0.0,
+        0.0
+      ],
+      "order": "selector_output_order_before_normal_route"
+    },
+    "post_output_eq": [
+      {
+        "descriptor": "0xc4e89",
+        "writer": "0xacd9c",
+        "parameter_address": "0xe4594",
+        "records": [
+          {
+            "index": 0,
+            "file_offset": "0x1031b8",
+            "sharc_coefficient_address": "0xe4594",
+            "frequency_selector": 100,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6be74",
+            "cot_value": 152.78656005859375,
+            "frequency_hz_from_cot": 100.00000238353844,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 1,
+            "file_offset": "0x1031c0",
+            "sharc_coefficient_address": "0xe4599",
+            "frequency_selector": 100,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6be74",
+            "cot_value": 152.78656005859375,
+            "frequency_hz_from_cot": 100.00000238353844,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 2,
+            "file_offset": "0x1031c8",
+            "sharc_coefficient_address": "0xe459e",
+            "frequency_selector": 100,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6be74",
+            "cot_value": 152.78656005859375,
+            "frequency_hz_from_cot": 100.00000238353844,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 3,
+            "file_offset": "0x1031d0",
+            "sharc_coefficient_address": "0xe45a3",
+            "frequency_selector": 100,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6be74",
+            "cot_value": 152.78656005859375,
+            "frequency_hz_from_cot": 100.00000238353844,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 4,
+            "file_offset": "0x1031d8",
+            "sharc_coefficient_address": "0xe45a8",
+            "frequency_selector": 100,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6be74",
+            "cot_value": 152.78656005859375,
+            "frequency_hz_from_cot": 100.00000238353844,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 5,
+            "file_offset": "0x1031e0",
+            "sharc_coefficient_address": "0xe45ad",
+            "frequency_selector": 100,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6be74",
+            "cot_value": 152.78656005859375,
+            "frequency_hz_from_cot": 100.00000238353844,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 6,
+            "file_offset": "0x1031e8",
+            "sharc_coefficient_address": "0xe45b2",
+            "frequency_selector": 100,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6be74",
+            "cot_value": 152.78656005859375,
+            "frequency_hz_from_cot": 100.00000238353844,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 7,
+            "file_offset": "0x1031f0",
+            "sharc_coefficient_address": "0xe45b7",
+            "frequency_selector": 100,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6be74",
+            "cot_value": 152.78656005859375,
+            "frequency_hz_from_cot": 100.00000238353844,
+            "gain_linear": 1.0,
+            "family": "peak"
+          }
+        ],
+        "counts_config_order": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          2,
+          2,
+          2,
+          2
+        ],
+        "packed_source_record_order": [
+          0,
+          1,
+          2,
+          3,
+          6,
+          7,
+          4,
+          5
+        ],
+        "binding_status": "0x126a95 packed counts in SHARC slot order; writer permutes records with 0x6bd2c"
+      },
+      {
+        "descriptor": "0xc4eaa",
+        "writer": "0xacea8",
+        "parameter_address": "0xe463c",
+        "records": [
+          {
+            "index": 0,
+            "file_offset": "0x1031f8",
+            "sharc_coefficient_address": "0xe463c",
+            "frequency_selector": 100,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6be74",
+            "cot_value": 152.78656005859375,
+            "frequency_hz_from_cot": 100.00000238353844,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 1,
+            "file_offset": "0x103200",
+            "sharc_coefficient_address": "0xe4641",
+            "frequency_selector": 100,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6be74",
+            "cot_value": 152.78656005859375,
+            "frequency_hz_from_cot": 100.00000238353844,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 2,
+            "file_offset": "0x103208",
+            "sharc_coefficient_address": "0xe4646",
+            "frequency_selector": 100,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6be74",
+            "cot_value": 152.78656005859375,
+            "frequency_hz_from_cot": 100.00000238353844,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 3,
+            "file_offset": "0x103210",
+            "sharc_coefficient_address": "0xe464b",
+            "frequency_selector": 100,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6be74",
+            "cot_value": 152.78656005859375,
+            "frequency_hz_from_cot": 100.00000238353844,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 4,
+            "file_offset": "0x103218",
+            "sharc_coefficient_address": "0xe4650",
+            "frequency_selector": 100,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6be74",
+            "cot_value": 152.78656005859375,
+            "frequency_hz_from_cot": 100.00000238353844,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 5,
+            "file_offset": "0x103220",
+            "sharc_coefficient_address": "0xe4655",
+            "frequency_selector": 100,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6be74",
+            "cot_value": 152.78656005859375,
+            "frequency_hz_from_cot": 100.00000238353844,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 6,
+            "file_offset": "0x103228",
+            "sharc_coefficient_address": "0xe465a",
+            "frequency_selector": 100,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6be74",
+            "cot_value": 152.78656005859375,
+            "frequency_hz_from_cot": 100.00000238353844,
+            "gain_linear": 1.0,
+            "family": "peak"
+          },
+          {
+            "index": 7,
+            "file_offset": "0x103230",
+            "sharc_coefficient_address": "0xe465f",
+            "frequency_selector": 100,
+            "gain_tenths_db": 0,
+            "q_code": 10,
+            "type_code": 1,
+            "reserved": 0,
+            "lookup_file_offset": "0x6be74",
+            "cot_value": 152.78656005859375,
+            "frequency_hz_from_cot": 100.00000238353844,
+            "gain_linear": 1.0,
+            "family": "peak"
+          }
+        ],
+        "counts_config_order": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          2,
+          2,
+          2,
+          2
+        ],
+        "packed_source_record_order": [
+          0,
+          1,
+          2,
+          3,
+          6,
+          7,
+          4,
+          5
+        ],
+        "binding_status": "0x126a95 packed counts in SHARC slot order; writer permutes records with 0x6bd2c"
+      }
+    ]
+  },
+  "dynamic_stage_research": {
+    "limiters": [
+      {
+        "descriptor": "0xc4e9a",
+        "handler": "0x12823c",
+        "static_writer": "0xacaa0",
+        "records_config_order": [
+          {
+            "config_index": 0,
+            "file_offset": "0x103178",
+            "codes": [
+              -1,
+              150,
+              15
+            ],
+            "threshold_static": 100.0,
+            "attack": 0.9963847994804382,
+            "release": 1.0000191926956177
+          },
+          {
+            "config_index": 1,
+            "file_offset": "0x10317c",
+            "codes": [
+              -1,
+              150,
+              15
+            ],
+            "threshold_static": 100.0,
+            "attack": 0.9963847994804382,
+            "release": 1.0000191926956177
+          },
+          {
+            "config_index": 2,
+            "file_offset": "0x103180",
+            "codes": [
+              -1,
+              150,
+              15
+            ],
+            "threshold_static": 100.0,
+            "attack": 0.9963847994804382,
+            "release": 1.0000191926956177
+          },
+          {
+            "config_index": 3,
+            "file_offset": "0x103184",
+            "codes": [
+              -1,
+              150,
+              15
+            ],
+            "threshold_static": 100.0,
+            "attack": 0.9963847994804382,
+            "release": 1.0000191926956177
+          },
+          {
+            "config_index": 4,
+            "file_offset": "0x103188",
+            "codes": [
+              -1,
+              150,
+              15
+            ],
+            "threshold_static": 100.0,
+            "attack": 0.9963847994804382,
+            "release": 1.0000191926956177
+          },
+          {
+            "config_index": 5,
+            "file_offset": "0x10318c",
+            "codes": [
+              -1,
+              150,
+              15
+            ],
+            "threshold_static": 100.0,
+            "attack": 0.9963847994804382,
+            "release": 1.0000191926956177
+          },
+          {
+            "config_index": 6,
+            "file_offset": "0x103190",
+            "codes": [
+              -1,
+              150,
+              15
+            ],
+            "threshold_static": 100.0,
+            "attack": 0.9963847994804382,
+            "release": 1.0000191926956177
+          },
+          {
+            "config_index": 7,
+            "file_offset": "0x103194",
+            "codes": [
+              -1,
+              150,
+              15
+            ],
+            "threshold_static": 100.0,
+            "attack": 0.9963847994804382,
+            "release": 1.0000191926956177
+          },
+          {
+            "config_index": 8,
+            "file_offset": "0x103198",
+            "codes": [
+              -1,
+              150,
+              15
+            ],
+            "threshold_static": 100.0,
+            "attack": 0.9963847994804382,
+            "release": 1.0000191926956177
+          },
+          {
+            "config_index": 9,
+            "file_offset": "0x10319c",
+            "codes": [
+              -1,
+              150,
+              15
+            ],
+            "threshold_static": 100.0,
+            "attack": 0.9963847994804382,
+            "release": 1.0000191926956177
+          },
+          {
+            "config_index": 10,
+            "file_offset": "0x1031a0",
+            "codes": [
+              -1,
+              150,
+              15
+            ],
+            "threshold_static": 100.0,
+            "attack": 0.9963847994804382,
+            "release": 1.0000191926956177
+          },
+          {
+            "config_index": 11,
+            "file_offset": "0x1031a4",
+            "codes": [
+              -1,
+              150,
+              15
+            ],
+            "threshold_static": 100.0,
+            "attack": 0.9963847994804382,
+            "release": 1.0000191926956177
+          },
+          {
+            "config_index": 12,
+            "file_offset": "0x1031a8",
+            "codes": [
+              100,
+              32,
+              15
+            ],
+            "threshold_static": 1.0,
+            "attack": 0.9992088079452515,
+            "release": 1.0000191926956177
+          },
+          {
+            "config_index": 13,
+            "file_offset": "0x1031ac",
+            "codes": [
+              100,
+              32,
+              15
+            ],
+            "threshold_static": 1.0,
+            "attack": 0.9992088079452515,
+            "release": 1.0000191926956177
+          },
+          {
+            "config_index": 14,
+            "file_offset": "0x1031b0",
+            "codes": [
+              100,
+              32,
+              15
+            ],
+            "threshold_static": 1.0,
+            "attack": 0.9992088079452515,
+            "release": 1.0000191926956177
+          },
+          {
+            "config_index": 15,
+            "file_offset": "0x1031b4",
+            "codes": [
+              100,
+              32,
+              15
+            ],
+            "threshold_static": 1.0,
+            "attack": 0.9992088079452515,
+            "release": 1.0000191926956177
+          }
+        ],
+        "loader_mode": 0,
+        "mode_semantics": "bit0 clear: independent; set: linked; neither bypasses",
+        "loader_initial_slot_order": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "loader_maximum_slot_order": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "loader_minimum_slot_order": [
+          9.999999974752427e-07,
+          9.999999974752427e-07,
+          9.999999974752427e-07,
+          9.999999974752427e-07,
+          9.999999974752427e-07,
+          9.999999974752427e-07,
+          9.999999974752427e-07,
+          9.999999974752427e-07,
+          9.999999974752427e-07,
+          9.999999974752427e-07,
+          9.999999974752427e-07,
+          9.999999974752427e-07,
+          9.999999974752427e-07,
+          9.999999974752427e-07,
+          9.999999974752427e-07,
+          9.999999974752427e-07
+        ],
+        "live_threshold_warning": "static extraction, not live readback"
+      },
+      {
+        "descriptor": "0xc4ed3",
+        "handler": "0x12823c",
+        "static_writer": "0xaa144",
+        "records_config_order": [
+          {
+            "config_index": 0,
+            "file_offset": "0x1002bc",
+            "codes": [
+              80,
+              99,
+              398
+            ],
+            "threshold_static": 0.8899999856948853,
+            "attack": 0.9976043701171875,
+            "release": 1.0004786252975464
+          },
+          {
+            "config_index": 1,
+            "file_offset": "0x1002c0",
+            "codes": [
+              80,
+              99,
+              398
+            ],
+            "threshold_static": 0.8899999856948853,
+            "attack": 0.9976043701171875,
+            "release": 1.0004786252975464
+          },
+          {
+            "config_index": 2,
+            "file_offset": "0x1002c4",
+            "codes": [
+              80,
+              79,
+              599
+            ],
+            "threshold_static": 0.8899999856948853,
+            "attack": 0.9980829954147339,
+            "release": 1.0007197856903076
+          },
+          {
+            "config_index": 3,
+            "file_offset": "0x1002c8",
+            "codes": [
+              80,
+              79,
+              599
+            ],
+            "threshold_static": 0.8899999856948853,
+            "attack": 0.9980829954147339,
+            "release": 1.0007197856903076
+          },
+          {
+            "config_index": 4,
+            "file_offset": "0x1002cc",
+            "codes": [
+              80,
+              99,
+              398
+            ],
+            "threshold_static": 0.8899999856948853,
+            "attack": 0.9976043701171875,
+            "release": 1.0004786252975464
+          },
+          {
+            "config_index": 5,
+            "file_offset": "0x1002d0",
+            "codes": [
+              80,
+              99,
+              398
+            ],
+            "threshold_static": 0.8899999856948853,
+            "attack": 0.9976043701171875,
+            "release": 1.0004786252975464
+          },
+          {
+            "config_index": 6,
+            "file_offset": "0x1002d4",
+            "codes": [
+              90,
+              169,
+              449
+            ],
+            "threshold_static": 0.949999988079071,
+            "attack": 0.9959307909011841,
+            "release": 1.000539779663086
+          },
+          {
+            "config_index": 7,
+            "file_offset": "0x1002d8",
+            "codes": [
+              90,
+              169,
+              449
+            ],
+            "threshold_static": 0.949999988079071,
+            "attack": 0.9959307909011841,
+            "release": 1.000539779663086
+          },
+          {
+            "config_index": 8,
+            "file_offset": "0x1002dc",
+            "codes": [
+              65,
+              59,
+              499
+            ],
+            "threshold_static": 0.8100000023841858,
+            "attack": 0.9985619187355042,
+            "release": 1.00059974193573
+          },
+          {
+            "config_index": 9,
+            "file_offset": "0x1002e0",
+            "codes": [
+              65,
+              59,
+              499
+            ],
+            "threshold_static": 0.8100000023841858,
+            "attack": 0.9985619187355042,
+            "release": 1.00059974193573
+          },
+          {
+            "config_index": 10,
+            "file_offset": "0x1002e4",
+            "codes": [
+              80,
+              99,
+              398
+            ],
+            "threshold_static": 0.8899999856948853,
+            "attack": 0.9976043701171875,
+            "release": 1.0004786252975464
+          },
+          {
+            "config_index": 11,
+            "file_offset": "0x1002e8",
+            "codes": [
+              80,
+              79,
+              599
+            ],
+            "threshold_static": 0.8899999856948853,
+            "attack": 0.9980829954147339,
+            "release": 1.0007197856903076
+          },
+          {
+            "config_index": 12,
+            "file_offset": "0x1002ec",
+            "codes": [
+              35,
+              49,
+              281
+            ],
+            "threshold_static": 0.5899999737739563,
+            "attack": 0.9988014698028564,
+            "release": 1.0003381967544556
+          },
+          {
+            "config_index": 13,
+            "file_offset": "0x1002f0",
+            "codes": [
+              35,
+              49,
+              281
+            ],
+            "threshold_static": 0.5899999737739563,
+            "attack": 0.9988014698028564,
+            "release": 1.0003381967544556
+          },
+          {
+            "config_index": 14,
+            "file_offset": "0x1002f4",
+            "codes": [
+              25,
+              26,
+              299
+            ],
+            "threshold_static": 0.5,
+            "attack": 0.9993526339530945,
+            "release": 1.0003597736358643
+          },
+          {
+            "config_index": 15,
+            "file_offset": "0x1002f8",
+            "codes": [
+              25,
+              26,
+              299
+            ],
+            "threshold_static": 0.5,
+            "attack": 0.9993526339530945,
+            "release": 1.0003597736358643
+          }
+        ],
+        "loader_mode": 0,
+        "mode_semantics": "bit0 clear: independent; set: linked; neither bypasses",
+        "loader_initial_slot_order": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "loader_maximum_slot_order": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "loader_minimum_slot_order": [
+          9.999999974752427e-07,
+          9.999999974752427e-07,
+          9.999999974752427e-07,
+          9.999999974752427e-07,
+          9.999999974752427e-07,
+          9.999999974752427e-07,
+          9.999999974752427e-07,
+          9.999999974752427e-07,
+          9.999999974752427e-07,
+          9.999999974752427e-07,
+          9.999999974752427e-07,
+          9.999999974752427e-07,
+          9.999999974752427e-07,
+          9.999999974752427e-07,
+          9.999999974752427e-07,
+          9.999999974752427e-07
+        ],
+        "live_threshold_warning": "runtime 0xa8548/0xa8710 additionally adjusts threshold by gp-0x41aa, gp-0x3e2b, protection tables and 0x9b070"
+      }
+    ],
+    "smoothed_gains": [
+      {
+        "descriptor": "0xc4b59",
+        "handler": "0x12879c",
+        "channels": 10,
+        "current_address": "0xc040a",
+        "target_address": "0xc0414",
+        "loader_mode": 3,
+        "loader_multiplicative_rates": [
+          1.1659144163131714,
+          0.8576958775520325,
+          1.1659144163131714,
+          0.8576958775520325,
+          1.1659144163131714,
+          0.8576958775520325,
+          1.1659144163131714,
+          0.8576958775520325,
+          1.1659144163131714,
+          0.8576958775520325,
+          1.1659144163131714,
+          0.8576958775520325,
+          1.1659144163131714,
+          0.8576958775520325,
+          1.1659144163131714,
+          0.8576958775520325,
+          1.1659144163131714,
+          0.8576958775520325,
+          1.1659144163131714,
+          0.8576958775520325
+        ],
+        "warning": "loader target/current zero is boot mute, not playback gain"
+      },
+      {
+        "descriptor": "0xc4dda",
+        "handler": "0x12879c",
+        "channels": 10,
+        "current_address": "0xc2030",
+        "target_address": "0xc203a",
+        "loader_mode": 3,
+        "loader_multiplicative_rates": [
+          1.1659144163131714,
+          0.8576958775520325,
+          1.1659144163131714,
+          0.8576958775520325,
+          1.1659144163131714,
+          0.8576958775520325,
+          1.1659144163131714,
+          0.8576958775520325,
+          1.1659144163131714,
+          0.8576958775520325,
+          1.1659144163131714,
+          0.8576958775520325,
+          1.1659144163131714,
+          0.8576958775520325,
+          1.1659144163131714,
+          0.8576958775520325,
+          1.1659144163131714,
+          0.8576958775520325,
+          1.1659144163131714,
+          0.8576958775520325
+        ],
+        "warning": "loader target/current zero is boot mute, not playback gain"
+      },
+      {
+        "descriptor": "0xc4ee3",
+        "handler": "0x12879c",
+        "channels": 16,
+        "current_address": "0xc392a",
+        "target_address": "0xc393a",
+        "loader_mode": 3,
+        "loader_multiplicative_rates": [
+          1.1659144163131714,
+          0.8576958775520325,
+          1.1659144163131714,
+          0.8576958775520325,
+          1.1659144163131714,
+          0.8576958775520325,
+          1.1659144163131714,
+          0.8576958775520325,
+          1.1659144163131714,
+          0.8576958775520325,
+          1.1659144163131714,
+          0.8576958775520325,
+          1.1659144163131714,
+          0.8576958775520325,
+          1.1659144163131714,
+          0.8576958775520325,
+          1.1659144163131714,
+          0.8576958775520325,
+          1.1659144163131714,
+          0.8576958775520325,
+          1.1659144163131714,
+          0.8576958775520325,
+          1.1659144163131714,
+          0.8576958775520325,
+          1.1659144163131714,
+          0.8576958775520325,
+          1.1659144163131714,
+          0.8576958775520325,
+          1.1659144163131714,
+          0.8576958775520325,
+          1.1659144163131714,
+          0.8576958775520325
+        ],
+        "warning": "loader target/current zero is boot mute, not playback gain"
+      }
+    ],
+    "complex_five_band_kernel": {
+      "handler": "0x127852",
+      "stage_bit": 9,
+      "coefficient_address": "0xe07ea",
+      "coefficients": [
+        [
+          [
+            0.9677990674972534,
+            0.016100455075502396,
+            0.016100455075502396
+          ],
+          [
+            0.9677990674972534,
+            -0.9838995337486267,
+            0.9838995337486267
+          ]
+        ],
+        [
+          [
+            0.9366022348403931,
+            0.03169889748096466,
+            0.03169889748096466
+          ],
+          [
+            0.9366022348403931,
+            -0.9683011174201965,
+            0.9683011174201965
+          ]
+        ],
+        [
+          [
+            0.876976490020752,
+            0.06151176989078522,
+            0.06151176989078522
+          ],
+          [
+            0.876976490020752,
+            -0.938488245010376,
+            0.938488245010376
+          ]
+        ],
+        [
+          [
+            0.7673270106315613,
+            0.11633650958538055,
+            0.11633650958538055
+          ],
+          [
+            0.7673270106315613,
+            -0.8836634755134583,
+            0.8836634755134583
+          ]
+        ]
+      ],
+      "format": "4 splits x [LP,HP] x [feedback,b1,b0]; H=(b0+b1*z^-1)/(1-feedback*z^-1)",
+      "split_hz_from_feedback": [
+        250.00016909766137,
+        499.99978147927357,
+        999.9997665704552,
+        1999.9997821574348
+      ],
+      "loader_gains": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "loader_steps": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "warning": "audio kernel only; detector/target generation and runtime coefficients still require reconstruction"
+    },
+    "pre_complex_gain_writer": {
+      "address": "0xa7d2c",
+      "target": "0xc0414",
+      "formula_tenths_db": "clamp(10*s8(gp-0x5e2f)-82 + table1[j][9+s8(gp-0x3e38)] + table2[j][9+s8(gp-0x3e34)] + sub_adjust_if_j3, -1000, 400)",
+      "sub_control": "j3: gp-0x3e30 bit0 clear forces -1000; else add table3[9+s8(gp-0x3e2f)]",
+      "table1_file": "0x1028e8",
+      "table2_file": "0x102a64",
+      "table3_file": "0x102c52",
+      "neutral_indices_are_relative_zero": true,
+      "neutral_table1_tenths_db": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "neutral_table2_tenths_db": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "post_complex_gain_writer": {
+      "address": "0xa7e2a",
+      "target": "0xc203a",
+      "formula_tenths_db": "u8(gp-0x458e), same value on all 10 buses; not recovered live"
+    },
+    "first_b": {
+      "wrapper": "0x124df3",
+      "callback": "0x124f56",
+      "process_call": "0x12de3b",
+      "initialize_call": "0x12dd7d",
+      "parameter_call": "0x131a65",
+      "frames": 512,
+      "input_ids": [
+        24,
+        23,
+        22,
+        97,
+        97
+      ],
+      "output_ids": [
+        20,
+        19,
+        18,
+        17,
+        34,
+        35,
+        40,
+        41
+      ],
+      "warning": "asynchronous double-buffered 5-in/8-out processor, not proven zero"
+    },
+    "second_b": {
+      "source_input_ids": [
+        8,
+        9,
+        10
+      ],
+      "schedule_indices": [
+        21,
+        50
+      ],
+      "boundary_delay": "0xc4cf9",
+      "warning": "no direct music 0..7 edge in this subgraph; zero output also requires silent auxiliary inputs and drained state"
+    }
+  },
   "scope": "static image, not live amplifier readback",
   "v850_config_to_sharc_slot": [
     11,
@@ -311,6 +2953,7 @@
           "lookup_file_offset": "0x6be24",
           "cot_value": 190.98419189453125,
           "frequency_hz_from_cot": 79.9999976891918,
+          "gain_linear": 0.25118863582611084,
           "family": "peak"
         },
         {
@@ -325,6 +2968,7 @@
           "lookup_file_offset": "0x6beec",
           "cot_value": 117.52696990966797,
           "frequency_hz_from_cot": 129.999997838738,
+          "gain_linear": 0.25118863582611084,
           "family": "peak"
         },
         {
@@ -339,6 +2983,7 @@
           "lookup_file_offset": "0x6da44",
           "cot_value": 1.3391623497009277,
           "frequency_hz_from_cot": 9800.0003172818,
+          "gain_linear": 0.7943282127380371,
           "family": "peak"
         },
         {
@@ -353,6 +2998,7 @@
           "lookup_file_offset": "0x6cffc",
           "cot_value": 4.674533843994141,
           "frequency_hz_from_cot": 3219.999902066612,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         },
         {
@@ -367,6 +3013,7 @@
           "lookup_file_offset": "0x6ce14",
           "cot_value": 7.595754146575928,
           "frequency_hz_from_cot": 1999.9999911883883,
+          "gain_linear": 0.5623413324356079,
           "family": "peak"
         },
         {
@@ -381,6 +3028,7 @@
           "lookup_file_offset": "0x6c57c",
           "cot_value": 27.767772674560547,
           "frequency_hz_from_cot": 549.9999809077316,
+          "gain_linear": 0.5623413324356079,
           "family": "peak"
         },
         {
@@ -395,6 +3043,7 @@
           "lookup_file_offset": "0x6d1d4",
           "cot_value": 3.375943422317505,
           "frequency_hz_from_cot": 4400.000000337377,
+          "gain_linear": 0.7079457640647888,
           "family": "peak"
         },
         {
@@ -409,6 +3058,7 @@
           "lookup_file_offset": "0x6c0e0",
           "cot_value": 59.911590576171875,
           "frequency_hz_from_cot": 255.00000480821402,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -423,6 +3073,7 @@
           "lookup_file_offset": "0x6d76c",
           "cot_value": 1.7372987270355225,
           "frequency_hz_from_cot": 7979.999884250546,
+          "gain_linear": 1.4125374555587769,
           "family": "peak"
         },
         {
@@ -437,6 +3088,7 @@
           "lookup_file_offset": "0x6e194",
           "cot_value": 0.7185729146003723,
           "frequency_hz_from_cot": 14479.999808158283,
+          "gain_linear": 0.8912509679794312,
           "family": "peak"
         },
         {
@@ -451,6 +3103,7 @@
           "lookup_file_offset": "0x6cd70",
           "cot_value": 9.574641227722168,
           "frequency_hz_from_cot": 1590.0000557382768,
+          "gain_linear": 0.7079457640647888,
           "family": "peak"
         },
         {
@@ -465,6 +3118,7 @@
           "lookup_file_offset": "0x6c9b4",
           "cot_value": 18.61488151550293,
           "frequency_hz_from_cot": 819.9999669765637,
+          "gain_linear": 0.7943282127380371,
           "family": "peak"
         }
       ],
@@ -482,6 +3136,7 @@
           "lookup_file_offset": "0x6be24",
           "cot_value": 190.98419189453125,
           "frequency_hz_from_cot": 79.9999976891918,
+          "gain_linear": 0.25118863582611084,
           "family": "peak"
         },
         {
@@ -496,6 +3151,7 @@
           "lookup_file_offset": "0x6beec",
           "cot_value": 117.52696990966797,
           "frequency_hz_from_cot": 129.999997838738,
+          "gain_linear": 0.25118863582611084,
           "family": "peak"
         },
         {
@@ -510,6 +3166,7 @@
           "lookup_file_offset": "0x6da44",
           "cot_value": 1.3391623497009277,
           "frequency_hz_from_cot": 9800.0003172818,
+          "gain_linear": 0.7943282127380371,
           "family": "peak"
         },
         {
@@ -524,6 +3181,7 @@
           "lookup_file_offset": "0x6cffc",
           "cot_value": 4.674533843994141,
           "frequency_hz_from_cot": 3219.999902066612,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         },
         {
@@ -538,6 +3196,7 @@
           "lookup_file_offset": "0x6ce14",
           "cot_value": 7.595754146575928,
           "frequency_hz_from_cot": 1999.9999911883883,
+          "gain_linear": 0.5623413324356079,
           "family": "peak"
         },
         {
@@ -552,6 +3211,7 @@
           "lookup_file_offset": "0x6c57c",
           "cot_value": 27.767772674560547,
           "frequency_hz_from_cot": 549.9999809077316,
+          "gain_linear": 0.5623413324356079,
           "family": "peak"
         },
         {
@@ -566,6 +3226,7 @@
           "lookup_file_offset": "0x6d1d4",
           "cot_value": 3.375943422317505,
           "frequency_hz_from_cot": 4400.000000337377,
+          "gain_linear": 0.7079457640647888,
           "family": "peak"
         },
         {
@@ -580,6 +3241,7 @@
           "lookup_file_offset": "0x6c0e0",
           "cot_value": 59.911590576171875,
           "frequency_hz_from_cot": 255.00000480821402,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -594,6 +3256,7 @@
           "lookup_file_offset": "0x6d76c",
           "cot_value": 1.7372987270355225,
           "frequency_hz_from_cot": 7979.999884250546,
+          "gain_linear": 1.4125374555587769,
           "family": "peak"
         },
         {
@@ -608,6 +3271,7 @@
           "lookup_file_offset": "0x6e194",
           "cot_value": 0.7185729146003723,
           "frequency_hz_from_cot": 14479.999808158283,
+          "gain_linear": 0.8912509679794312,
           "family": "peak"
         },
         {
@@ -622,6 +3286,7 @@
           "lookup_file_offset": "0x6cd70",
           "cot_value": 9.574641227722168,
           "frequency_hz_from_cot": 1590.0000557382768,
+          "gain_linear": 0.7079457640647888,
           "family": "peak"
         },
         {
@@ -636,6 +3301,7 @@
           "lookup_file_offset": "0x6c9b4",
           "cot_value": 18.61488151550293,
           "frequency_hz_from_cot": 819.9999669765637,
+          "gain_linear": 0.7943282127380371,
           "family": "peak"
         }
       ],
@@ -680,6 +3346,7 @@
           "lookup_file_offset": "0x6be24",
           "cot_value": 190.98419189453125,
           "frequency_hz_from_cot": 79.9999976891918,
+          "gain_linear": 0.25118863582611084,
           "family": "peak"
         },
         {
@@ -694,6 +3361,7 @@
           "lookup_file_offset": "0x6beec",
           "cot_value": 117.52696990966797,
           "frequency_hz_from_cot": 129.999997838738,
+          "gain_linear": 0.25118863582611084,
           "family": "peak"
         },
         {
@@ -708,6 +3376,7 @@
           "lookup_file_offset": "0x6da44",
           "cot_value": 1.3391623497009277,
           "frequency_hz_from_cot": 9800.0003172818,
+          "gain_linear": 0.7943282127380371,
           "family": "peak"
         },
         {
@@ -722,6 +3391,7 @@
           "lookup_file_offset": "0x6cffc",
           "cot_value": 4.674533843994141,
           "frequency_hz_from_cot": 3219.999902066612,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         },
         {
@@ -736,6 +3406,7 @@
           "lookup_file_offset": "0x6ce14",
           "cot_value": 7.595754146575928,
           "frequency_hz_from_cot": 1999.9999911883883,
+          "gain_linear": 0.5623413324356079,
           "family": "peak"
         },
         {
@@ -750,6 +3421,7 @@
           "lookup_file_offset": "0x6c57c",
           "cot_value": 27.767772674560547,
           "frequency_hz_from_cot": 549.9999809077316,
+          "gain_linear": 0.5623413324356079,
           "family": "peak"
         },
         {
@@ -764,6 +3436,7 @@
           "lookup_file_offset": "0x6d1d4",
           "cot_value": 3.375943422317505,
           "frequency_hz_from_cot": 4400.000000337377,
+          "gain_linear": 0.7079457640647888,
           "family": "peak"
         },
         {
@@ -778,6 +3451,7 @@
           "lookup_file_offset": "0x6c0e0",
           "cot_value": 59.911590576171875,
           "frequency_hz_from_cot": 255.00000480821402,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -792,6 +3466,7 @@
           "lookup_file_offset": "0x6d76c",
           "cot_value": 1.7372987270355225,
           "frequency_hz_from_cot": 7979.999884250546,
+          "gain_linear": 1.4125374555587769,
           "family": "peak"
         },
         {
@@ -806,6 +3481,7 @@
           "lookup_file_offset": "0x6e194",
           "cot_value": 0.7185729146003723,
           "frequency_hz_from_cot": 14479.999808158283,
+          "gain_linear": 0.8912509679794312,
           "family": "peak"
         },
         {
@@ -820,6 +3496,7 @@
           "lookup_file_offset": "0x6cd70",
           "cot_value": 9.574641227722168,
           "frequency_hz_from_cot": 1590.0000557382768,
+          "gain_linear": 0.7079457640647888,
           "family": "peak"
         },
         {
@@ -834,6 +3511,7 @@
           "lookup_file_offset": "0x6c9b4",
           "cot_value": 18.61488151550293,
           "frequency_hz_from_cot": 819.9999669765637,
+          "gain_linear": 0.7943282127380371,
           "family": "peak"
         }
       ],
@@ -851,6 +3529,7 @@
           "lookup_file_offset": "0x6be24",
           "cot_value": 190.98419189453125,
           "frequency_hz_from_cot": 79.9999976891918,
+          "gain_linear": 0.25118863582611084,
           "family": "peak"
         },
         {
@@ -865,6 +3544,7 @@
           "lookup_file_offset": "0x6beec",
           "cot_value": 117.52696990966797,
           "frequency_hz_from_cot": 129.999997838738,
+          "gain_linear": 0.25118863582611084,
           "family": "peak"
         },
         {
@@ -879,6 +3559,7 @@
           "lookup_file_offset": "0x6da44",
           "cot_value": 1.3391623497009277,
           "frequency_hz_from_cot": 9800.0003172818,
+          "gain_linear": 0.7943282127380371,
           "family": "peak"
         },
         {
@@ -893,6 +3574,7 @@
           "lookup_file_offset": "0x6cffc",
           "cot_value": 4.674533843994141,
           "frequency_hz_from_cot": 3219.999902066612,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         },
         {
@@ -907,6 +3589,7 @@
           "lookup_file_offset": "0x6ce14",
           "cot_value": 7.595754146575928,
           "frequency_hz_from_cot": 1999.9999911883883,
+          "gain_linear": 0.5623413324356079,
           "family": "peak"
         },
         {
@@ -921,6 +3604,7 @@
           "lookup_file_offset": "0x6c57c",
           "cot_value": 27.767772674560547,
           "frequency_hz_from_cot": 549.9999809077316,
+          "gain_linear": 0.5623413324356079,
           "family": "peak"
         },
         {
@@ -935,6 +3619,7 @@
           "lookup_file_offset": "0x6d1d4",
           "cot_value": 3.375943422317505,
           "frequency_hz_from_cot": 4400.000000337377,
+          "gain_linear": 0.7079457640647888,
           "family": "peak"
         },
         {
@@ -949,6 +3634,7 @@
           "lookup_file_offset": "0x6c0e0",
           "cot_value": 59.911590576171875,
           "frequency_hz_from_cot": 255.00000480821402,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -963,6 +3649,7 @@
           "lookup_file_offset": "0x6d76c",
           "cot_value": 1.7372987270355225,
           "frequency_hz_from_cot": 7979.999884250546,
+          "gain_linear": 1.4125374555587769,
           "family": "peak"
         },
         {
@@ -977,6 +3664,7 @@
           "lookup_file_offset": "0x6e194",
           "cot_value": 0.7185729146003723,
           "frequency_hz_from_cot": 14479.999808158283,
+          "gain_linear": 0.8912509679794312,
           "family": "peak"
         },
         {
@@ -991,6 +3679,7 @@
           "lookup_file_offset": "0x6cd70",
           "cot_value": 9.574641227722168,
           "frequency_hz_from_cot": 1590.0000557382768,
+          "gain_linear": 0.7079457640647888,
           "family": "peak"
         },
         {
@@ -1005,6 +3694,7 @@
           "lookup_file_offset": "0x6c9b4",
           "cot_value": 18.61488151550293,
           "frequency_hz_from_cot": 819.9999669765637,
+          "gain_linear": 0.7943282127380371,
           "family": "peak"
         }
       ],
@@ -1049,6 +3739,7 @@
           "lookup_file_offset": "0x6ca7c",
           "cot_value": 17.542940139770508,
           "frequency_hz_from_cot": 870.0000027514616,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -1063,6 +3754,7 @@
           "lookup_file_offset": "0x6ca7c",
           "cot_value": 17.542940139770508,
           "frequency_hz_from_cot": 870.0000027514616,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -1077,6 +3769,7 @@
           "lookup_file_offset": "0x6cca4",
           "cot_value": 14.123536109924316,
           "frequency_hz_from_cot": 1080.0000110956612,
+          "gain_linear": 0.4466835856437683,
           "family": "peak"
         },
         {
@@ -1091,6 +3784,7 @@
           "lookup_file_offset": "0x6ce50",
           "cot_value": 7.05948543548584,
           "frequency_hz_from_cot": 2150.000023176976,
+          "gain_linear": 0.5623413324356079,
           "family": "peak"
         },
         {
@@ -1105,6 +3799,7 @@
           "lookup_file_offset": "0x6cd60",
           "cot_value": 9.82349967956543,
           "frequency_hz_from_cot": 1549.9999613207528,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         }
       ],
@@ -1122,6 +3817,7 @@
           "lookup_file_offset": "0x6ca7c",
           "cot_value": 17.542940139770508,
           "frequency_hz_from_cot": 870.0000027514616,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -1136,6 +3832,7 @@
           "lookup_file_offset": "0x6ca7c",
           "cot_value": 17.542940139770508,
           "frequency_hz_from_cot": 870.0000027514616,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -1150,6 +3847,7 @@
           "lookup_file_offset": "0x6cca4",
           "cot_value": 14.123536109924316,
           "frequency_hz_from_cot": 1080.0000110956612,
+          "gain_linear": 0.4466835856437683,
           "family": "peak"
         },
         {
@@ -1164,6 +3862,7 @@
           "lookup_file_offset": "0x6ce50",
           "cot_value": 7.05948543548584,
           "frequency_hz_from_cot": 2150.000023176976,
+          "gain_linear": 0.5623413324356079,
           "family": "peak"
         },
         {
@@ -1178,6 +3877,7 @@
           "lookup_file_offset": "0x6cd60",
           "cot_value": 9.82349967956543,
           "frequency_hz_from_cot": 1549.9999613207528,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         }
       ],
@@ -1221,6 +3921,7 @@
           "lookup_file_offset": "0x6ca7c",
           "cot_value": 17.542940139770508,
           "frequency_hz_from_cot": 870.0000027514616,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -1235,6 +3936,7 @@
           "lookup_file_offset": "0x6ca7c",
           "cot_value": 17.542940139770508,
           "frequency_hz_from_cot": 870.0000027514616,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -1249,6 +3951,7 @@
           "lookup_file_offset": "0x6cca4",
           "cot_value": 14.123536109924316,
           "frequency_hz_from_cot": 1080.0000110956612,
+          "gain_linear": 0.4466835856437683,
           "family": "peak"
         },
         {
@@ -1263,6 +3966,7 @@
           "lookup_file_offset": "0x6ce50",
           "cot_value": 7.05948543548584,
           "frequency_hz_from_cot": 2150.000023176976,
+          "gain_linear": 0.5623413324356079,
           "family": "peak"
         },
         {
@@ -1277,6 +3981,7 @@
           "lookup_file_offset": "0x6cd60",
           "cot_value": 9.82349967956543,
           "frequency_hz_from_cot": 1549.9999613207528,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         }
       ],
@@ -1294,6 +3999,7 @@
           "lookup_file_offset": "0x6ca7c",
           "cot_value": 17.542940139770508,
           "frequency_hz_from_cot": 870.0000027514616,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -1308,6 +4014,7 @@
           "lookup_file_offset": "0x6ca7c",
           "cot_value": 17.542940139770508,
           "frequency_hz_from_cot": 870.0000027514616,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -1322,6 +4029,7 @@
           "lookup_file_offset": "0x6cca4",
           "cot_value": 14.123536109924316,
           "frequency_hz_from_cot": 1080.0000110956612,
+          "gain_linear": 0.4466835856437683,
           "family": "peak"
         },
         {
@@ -1336,6 +4044,7 @@
           "lookup_file_offset": "0x6ce50",
           "cot_value": 7.05948543548584,
           "frequency_hz_from_cot": 2150.000023176976,
+          "gain_linear": 0.5623413324356079,
           "family": "peak"
         },
         {
@@ -1350,6 +4059,7 @@
           "lookup_file_offset": "0x6cd60",
           "cot_value": 9.82349967956543,
           "frequency_hz_from_cot": 1549.9999613207528,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         }
       ],
@@ -1393,6 +4103,7 @@
           "lookup_file_offset": "0x6ccac",
           "cot_value": 13.86587905883789,
           "frequency_hz_from_cot": 1100.0000244922715,
+          "gain_linear": 1.0,
           "family": "lowpass"
         },
         {
@@ -1407,6 +4118,7 @@
           "lookup_file_offset": "0x6c4b4",
           "cot_value": 30.54684066772461,
           "frequency_hz_from_cot": 499.99998886473026,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -1421,6 +4133,7 @@
           "lookup_file_offset": "0x6c964",
           "cot_value": 19.08113670349121,
           "frequency_hz_from_cot": 799.9999993403242,
+          "gain_linear": 0.4466835856437683,
           "family": "peak"
         },
         {
@@ -1435,6 +4148,7 @@
           "lookup_file_offset": "0x6c6e4",
           "cot_value": 23.859277725219727,
           "frequency_hz_from_cot": 639.9999858273466,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         }
       ],
@@ -1452,6 +4166,7 @@
           "lookup_file_offset": "0x6ccac",
           "cot_value": 13.86587905883789,
           "frequency_hz_from_cot": 1100.0000244922715,
+          "gain_linear": 1.0,
           "family": "lowpass"
         },
         {
@@ -1466,6 +4181,7 @@
           "lookup_file_offset": "0x6c4b4",
           "cot_value": 30.54684066772461,
           "frequency_hz_from_cot": 499.99998886473026,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -1480,6 +4196,7 @@
           "lookup_file_offset": "0x6c964",
           "cot_value": 19.08113670349121,
           "frequency_hz_from_cot": 799.9999993403242,
+          "gain_linear": 0.4466835856437683,
           "family": "peak"
         },
         {
@@ -1494,6 +4211,7 @@
           "lookup_file_offset": "0x6c6e4",
           "cot_value": 23.859277725219727,
           "frequency_hz_from_cot": 639.9999858273466,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         }
       ],
@@ -1537,6 +4255,7 @@
           "lookup_file_offset": "0x6ccac",
           "cot_value": 13.86587905883789,
           "frequency_hz_from_cot": 1100.0000244922715,
+          "gain_linear": 1.0,
           "family": "lowpass"
         },
         {
@@ -1551,6 +4270,7 @@
           "lookup_file_offset": "0x6c4b4",
           "cot_value": 30.54684066772461,
           "frequency_hz_from_cot": 499.99998886473026,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -1565,6 +4285,7 @@
           "lookup_file_offset": "0x6c964",
           "cot_value": 19.08113670349121,
           "frequency_hz_from_cot": 799.9999993403242,
+          "gain_linear": 0.4466835856437683,
           "family": "peak"
         },
         {
@@ -1579,6 +4300,7 @@
           "lookup_file_offset": "0x6c6e4",
           "cot_value": 23.859277725219727,
           "frequency_hz_from_cot": 639.9999858273466,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         }
       ],
@@ -1596,6 +4318,7 @@
           "lookup_file_offset": "0x6ccac",
           "cot_value": 13.86587905883789,
           "frequency_hz_from_cot": 1100.0000244922715,
+          "gain_linear": 1.0,
           "family": "lowpass"
         },
         {
@@ -1610,6 +4333,7 @@
           "lookup_file_offset": "0x6c4b4",
           "cot_value": 30.54684066772461,
           "frequency_hz_from_cot": 499.99998886473026,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -1624,6 +4348,7 @@
           "lookup_file_offset": "0x6c964",
           "cot_value": 19.08113670349121,
           "frequency_hz_from_cot": 799.9999993403242,
+          "gain_linear": 0.4466835856437683,
           "family": "peak"
         },
         {
@@ -1638,6 +4363,7 @@
           "lookup_file_offset": "0x6c6e4",
           "cot_value": 23.859277725219727,
           "frequency_hz_from_cot": 639.9999858273466,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         }
       ],
@@ -1681,6 +4407,7 @@
           "lookup_file_offset": "0x6c4b4",
           "cot_value": 30.54684066772461,
           "frequency_hz_from_cot": 499.99998886473026,
+          "gain_linear": 0.5623413324356079,
           "family": "peak"
         },
         {
@@ -1695,6 +4422,7 @@
           "lookup_file_offset": "0x6ce28",
           "cot_value": 7.408331871032715,
           "frequency_hz_from_cot": 2049.99995338115,
+          "gain_linear": 0.5011872053146362,
           "family": "peak"
         },
         {
@@ -1709,6 +4437,7 @@
           "lookup_file_offset": "0x6c644",
           "cot_value": 25.45170021057129,
           "frequency_hz_from_cot": 599.9999851350096,
+          "gain_linear": 0.7943282127380371,
           "family": "peak"
         },
         {
@@ -1723,6 +4452,7 @@
           "lookup_file_offset": "0x6c324",
           "cot_value": 38.18845748901367,
           "frequency_hz_from_cot": 400.00001892913247,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         },
         {
@@ -1737,6 +4467,7 @@
           "lookup_file_offset": "0x6bee0",
           "cot_value": 120.30332946777344,
           "frequency_hz_from_cot": 126.9999984423435,
+          "gain_linear": 0.3981071710586548,
           "family": "peak"
         },
         {
@@ -1751,6 +4482,7 @@
           "lookup_file_offset": "0x6c0cc",
           "cot_value": 61.110042572021484,
           "frequency_hz_from_cot": 250.00000541549952,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -1765,6 +4497,7 @@
           "lookup_file_offset": "0x6c0cc",
           "cot_value": 61.110042572021484,
           "frequency_hz_from_cot": 250.00000541549952,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -1779,6 +4512,7 @@
           "lookup_file_offset": "0x6d1fc",
           "cot_value": 3.296558141708374,
           "frequency_hz_from_cot": 4500.000086557034,
+          "gain_linear": 1.0,
           "family": "lowpass"
         },
         {
@@ -1793,6 +4527,7 @@
           "lookup_file_offset": "0x6d2f4",
           "cot_value": 2.8716087341308594,
           "frequency_hz_from_cot": 5120.000176360559,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         },
         {
@@ -1807,6 +4542,7 @@
           "lookup_file_offset": "0x6d9a0",
           "cot_value": 1.4169340133666992,
           "frequency_hz_from_cot": 9389.999854913387,
+          "gain_linear": 0.3162277638912201,
           "family": "peak"
         }
       ],
@@ -1824,6 +4560,7 @@
           "lookup_file_offset": "0x6c4b4",
           "cot_value": 30.54684066772461,
           "frequency_hz_from_cot": 499.99998886473026,
+          "gain_linear": 0.5623413324356079,
           "family": "peak"
         },
         {
@@ -1838,6 +4575,7 @@
           "lookup_file_offset": "0x6ce28",
           "cot_value": 7.408331871032715,
           "frequency_hz_from_cot": 2049.99995338115,
+          "gain_linear": 0.5011872053146362,
           "family": "peak"
         },
         {
@@ -1852,6 +4590,7 @@
           "lookup_file_offset": "0x6c644",
           "cot_value": 25.45170021057129,
           "frequency_hz_from_cot": 599.9999851350096,
+          "gain_linear": 0.7943282127380371,
           "family": "peak"
         },
         {
@@ -1866,6 +4605,7 @@
           "lookup_file_offset": "0x6c324",
           "cot_value": 38.18845748901367,
           "frequency_hz_from_cot": 400.00001892913247,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         },
         {
@@ -1880,6 +4620,7 @@
           "lookup_file_offset": "0x6bee0",
           "cot_value": 120.30332946777344,
           "frequency_hz_from_cot": 126.9999984423435,
+          "gain_linear": 0.3981071710586548,
           "family": "peak"
         },
         {
@@ -1894,6 +4635,7 @@
           "lookup_file_offset": "0x6c0cc",
           "cot_value": 61.110042572021484,
           "frequency_hz_from_cot": 250.00000541549952,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -1908,6 +4650,7 @@
           "lookup_file_offset": "0x6c0cc",
           "cot_value": 61.110042572021484,
           "frequency_hz_from_cot": 250.00000541549952,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -1922,6 +4665,7 @@
           "lookup_file_offset": "0x6d1fc",
           "cot_value": 3.296558141708374,
           "frequency_hz_from_cot": 4500.000086557034,
+          "gain_linear": 1.0,
           "family": "lowpass"
         },
         {
@@ -1936,6 +4680,7 @@
           "lookup_file_offset": "0x6d2f4",
           "cot_value": 2.8716087341308594,
           "frequency_hz_from_cot": 5120.000176360559,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         },
         {
@@ -1950,6 +4695,7 @@
           "lookup_file_offset": "0x6d9a0",
           "cot_value": 1.4169340133666992,
           "frequency_hz_from_cot": 9389.999854913387,
+          "gain_linear": 0.3162277638912201,
           "family": "peak"
         }
       ],
@@ -1993,6 +4739,7 @@
           "lookup_file_offset": "0x6c4b4",
           "cot_value": 30.54684066772461,
           "frequency_hz_from_cot": 499.99998886473026,
+          "gain_linear": 0.5623413324356079,
           "family": "peak"
         },
         {
@@ -2007,6 +4754,7 @@
           "lookup_file_offset": "0x6ce28",
           "cot_value": 7.408331871032715,
           "frequency_hz_from_cot": 2049.99995338115,
+          "gain_linear": 0.5011872053146362,
           "family": "peak"
         },
         {
@@ -2021,6 +4769,7 @@
           "lookup_file_offset": "0x6c644",
           "cot_value": 25.45170021057129,
           "frequency_hz_from_cot": 599.9999851350096,
+          "gain_linear": 0.7943282127380371,
           "family": "peak"
         },
         {
@@ -2035,6 +4784,7 @@
           "lookup_file_offset": "0x6c324",
           "cot_value": 38.18845748901367,
           "frequency_hz_from_cot": 400.00001892913247,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         },
         {
@@ -2049,6 +4799,7 @@
           "lookup_file_offset": "0x6bee0",
           "cot_value": 120.30332946777344,
           "frequency_hz_from_cot": 126.9999984423435,
+          "gain_linear": 0.3981071710586548,
           "family": "peak"
         },
         {
@@ -2063,6 +4814,7 @@
           "lookup_file_offset": "0x6c0cc",
           "cot_value": 61.110042572021484,
           "frequency_hz_from_cot": 250.00000541549952,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -2077,6 +4829,7 @@
           "lookup_file_offset": "0x6c0cc",
           "cot_value": 61.110042572021484,
           "frequency_hz_from_cot": 250.00000541549952,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -2091,6 +4844,7 @@
           "lookup_file_offset": "0x6d1fc",
           "cot_value": 3.296558141708374,
           "frequency_hz_from_cot": 4500.000086557034,
+          "gain_linear": 1.0,
           "family": "lowpass"
         },
         {
@@ -2105,6 +4859,7 @@
           "lookup_file_offset": "0x6d2f4",
           "cot_value": 2.8716087341308594,
           "frequency_hz_from_cot": 5120.000176360559,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         },
         {
@@ -2119,6 +4874,7 @@
           "lookup_file_offset": "0x6d9a0",
           "cot_value": 1.4169340133666992,
           "frequency_hz_from_cot": 9389.999854913387,
+          "gain_linear": 0.3162277638912201,
           "family": "peak"
         }
       ],
@@ -2136,6 +4892,7 @@
           "lookup_file_offset": "0x6c4b4",
           "cot_value": 30.54684066772461,
           "frequency_hz_from_cot": 499.99998886473026,
+          "gain_linear": 0.5623413324356079,
           "family": "peak"
         },
         {
@@ -2150,6 +4907,7 @@
           "lookup_file_offset": "0x6ce28",
           "cot_value": 7.408331871032715,
           "frequency_hz_from_cot": 2049.99995338115,
+          "gain_linear": 0.5011872053146362,
           "family": "peak"
         },
         {
@@ -2164,6 +4922,7 @@
           "lookup_file_offset": "0x6c644",
           "cot_value": 25.45170021057129,
           "frequency_hz_from_cot": 599.9999851350096,
+          "gain_linear": 0.7943282127380371,
           "family": "peak"
         },
         {
@@ -2178,6 +4937,7 @@
           "lookup_file_offset": "0x6c324",
           "cot_value": 38.18845748901367,
           "frequency_hz_from_cot": 400.00001892913247,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         },
         {
@@ -2192,6 +4952,7 @@
           "lookup_file_offset": "0x6bee0",
           "cot_value": 120.30332946777344,
           "frequency_hz_from_cot": 126.9999984423435,
+          "gain_linear": 0.3981071710586548,
           "family": "peak"
         },
         {
@@ -2206,6 +4967,7 @@
           "lookup_file_offset": "0x6c0cc",
           "cot_value": 61.110042572021484,
           "frequency_hz_from_cot": 250.00000541549952,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -2220,6 +4982,7 @@
           "lookup_file_offset": "0x6c0cc",
           "cot_value": 61.110042572021484,
           "frequency_hz_from_cot": 250.00000541549952,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -2234,6 +4997,7 @@
           "lookup_file_offset": "0x6d1fc",
           "cot_value": 3.296558141708374,
           "frequency_hz_from_cot": 4500.000086557034,
+          "gain_linear": 1.0,
           "family": "lowpass"
         },
         {
@@ -2248,6 +5012,7 @@
           "lookup_file_offset": "0x6d2f4",
           "cot_value": 2.8716087341308594,
           "frequency_hz_from_cot": 5120.000176360559,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         },
         {
@@ -2262,6 +5027,7 @@
           "lookup_file_offset": "0x6d9a0",
           "cot_value": 1.4169340133666992,
           "frequency_hz_from_cot": 9389.999854913387,
+          "gain_linear": 0.3162277638912201,
           "family": "peak"
         }
       ],
@@ -2305,6 +5071,7 @@
           "lookup_file_offset": "0x6ca7c",
           "cot_value": 17.542940139770508,
           "frequency_hz_from_cot": 870.0000027514616,
+          "gain_linear": 0.3162277638912201,
           "family": "peak"
         },
         {
@@ -2319,6 +5086,7 @@
           "lookup_file_offset": "0x6c0cc",
           "cot_value": 61.110042572021484,
           "frequency_hz_from_cot": 250.00000541549952,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         },
         {
@@ -2333,6 +5101,7 @@
           "lookup_file_offset": "0x6c194",
           "cot_value": 50.923038482666016,
           "frequency_hz_from_cot": 299.99998912649716,
+          "gain_linear": 0.7079457640647888,
           "family": "peak"
         },
         {
@@ -2347,6 +5116,7 @@
           "lookup_file_offset": "0x6d7a4",
           "cot_value": 1.701055884361267,
           "frequency_hz_from_cot": 8119.999994779606,
+          "gain_linear": 1.0,
           "family": "peak"
         },
         {
@@ -2361,6 +5131,7 @@
           "lookup_file_offset": "0x6d290",
           "cot_value": 3.030372381210327,
           "frequency_hz_from_cot": 4869.999927885975,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         },
         {
@@ -2375,6 +5146,7 @@
           "lookup_file_offset": "0x6be74",
           "cot_value": 152.78656005859375,
           "frequency_hz_from_cot": 100.00000238353844,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -2389,6 +5161,7 @@
           "lookup_file_offset": "0x6be74",
           "cot_value": 152.78656005859375,
           "frequency_hz_from_cot": 100.00000238353844,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -2403,6 +5176,7 @@
           "lookup_file_offset": "0x6c70c",
           "cot_value": 23.491777420043945,
           "frequency_hz_from_cot": 650.0000247162887,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         },
         {
@@ -2417,6 +5191,7 @@
           "lookup_file_offset": "0x6d7bc",
           "cot_value": 1.685867190361023,
           "frequency_hz_from_cot": 8179.999916912104,
+          "gain_linear": 0.8709635734558105,
           "family": "peak"
         },
         {
@@ -2431,6 +5206,7 @@
           "lookup_file_offset": "0x6cd34",
           "cot_value": 10.57889461517334,
           "frequency_hz_from_cot": 1440.0000511806702,
+          "gain_linear": 0.7943282127380371,
           "family": "peak"
         },
         {
@@ -2445,6 +5221,7 @@
           "lookup_file_offset": "0x6be60",
           "cot_value": 160.82818603515625,
           "frequency_hz_from_cot": 94.99999980114943,
+          "gain_linear": 0.7079457640647888,
           "family": "peak"
         },
         {
@@ -2459,6 +5236,7 @@
           "lookup_file_offset": "0x6c004",
           "cot_value": 76.39000701904297,
           "frequency_hz_from_cot": 200.00000600034312,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         }
       ],
@@ -2476,6 +5254,7 @@
           "lookup_file_offset": "0x6ca7c",
           "cot_value": 17.542940139770508,
           "frequency_hz_from_cot": 870.0000027514616,
+          "gain_linear": 0.3162277638912201,
           "family": "peak"
         },
         {
@@ -2490,6 +5269,7 @@
           "lookup_file_offset": "0x6c0cc",
           "cot_value": 61.110042572021484,
           "frequency_hz_from_cot": 250.00000541549952,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         },
         {
@@ -2504,6 +5284,7 @@
           "lookup_file_offset": "0x6c194",
           "cot_value": 50.923038482666016,
           "frequency_hz_from_cot": 299.99998912649716,
+          "gain_linear": 0.7079457640647888,
           "family": "peak"
         },
         {
@@ -2518,6 +5299,7 @@
           "lookup_file_offset": "0x6d7a4",
           "cot_value": 1.701055884361267,
           "frequency_hz_from_cot": 8119.999994779606,
+          "gain_linear": 1.0,
           "family": "peak"
         },
         {
@@ -2532,6 +5314,7 @@
           "lookup_file_offset": "0x6d290",
           "cot_value": 3.030372381210327,
           "frequency_hz_from_cot": 4869.999927885975,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         },
         {
@@ -2546,6 +5329,7 @@
           "lookup_file_offset": "0x6be74",
           "cot_value": 152.78656005859375,
           "frequency_hz_from_cot": 100.00000238353844,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -2560,6 +5344,7 @@
           "lookup_file_offset": "0x6be74",
           "cot_value": 152.78656005859375,
           "frequency_hz_from_cot": 100.00000238353844,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -2574,6 +5359,7 @@
           "lookup_file_offset": "0x6c70c",
           "cot_value": 23.491777420043945,
           "frequency_hz_from_cot": 650.0000247162887,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         },
         {
@@ -2588,6 +5374,7 @@
           "lookup_file_offset": "0x6d7bc",
           "cot_value": 1.685867190361023,
           "frequency_hz_from_cot": 8179.999916912104,
+          "gain_linear": 0.8709635734558105,
           "family": "peak"
         },
         {
@@ -2602,6 +5389,7 @@
           "lookup_file_offset": "0x6cd34",
           "cot_value": 10.57889461517334,
           "frequency_hz_from_cot": 1440.0000511806702,
+          "gain_linear": 0.7943282127380371,
           "family": "peak"
         },
         {
@@ -2616,6 +5404,7 @@
           "lookup_file_offset": "0x6be60",
           "cot_value": 160.82818603515625,
           "frequency_hz_from_cot": 94.99999980114943,
+          "gain_linear": 0.7079457640647888,
           "family": "peak"
         },
         {
@@ -2630,6 +5419,7 @@
           "lookup_file_offset": "0x6c004",
           "cot_value": 76.39000701904297,
           "frequency_hz_from_cot": 200.00000600034312,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         }
       ],
@@ -2674,6 +5464,7 @@
           "lookup_file_offset": "0x6ca7c",
           "cot_value": 17.542940139770508,
           "frequency_hz_from_cot": 870.0000027514616,
+          "gain_linear": 0.3162277638912201,
           "family": "peak"
         },
         {
@@ -2688,6 +5479,7 @@
           "lookup_file_offset": "0x6c0cc",
           "cot_value": 61.110042572021484,
           "frequency_hz_from_cot": 250.00000541549952,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         },
         {
@@ -2702,6 +5494,7 @@
           "lookup_file_offset": "0x6c194",
           "cot_value": 50.923038482666016,
           "frequency_hz_from_cot": 299.99998912649716,
+          "gain_linear": 0.7079457640647888,
           "family": "peak"
         },
         {
@@ -2716,6 +5509,7 @@
           "lookup_file_offset": "0x6d7a4",
           "cot_value": 1.701055884361267,
           "frequency_hz_from_cot": 8119.999994779606,
+          "gain_linear": 1.0,
           "family": "peak"
         },
         {
@@ -2730,6 +5524,7 @@
           "lookup_file_offset": "0x6d290",
           "cot_value": 3.030372381210327,
           "frequency_hz_from_cot": 4869.999927885975,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         },
         {
@@ -2744,6 +5539,7 @@
           "lookup_file_offset": "0x6be74",
           "cot_value": 152.78656005859375,
           "frequency_hz_from_cot": 100.00000238353844,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -2758,6 +5554,7 @@
           "lookup_file_offset": "0x6be74",
           "cot_value": 152.78656005859375,
           "frequency_hz_from_cot": 100.00000238353844,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -2772,6 +5569,7 @@
           "lookup_file_offset": "0x6c70c",
           "cot_value": 23.491777420043945,
           "frequency_hz_from_cot": 650.0000247162887,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         },
         {
@@ -2786,6 +5584,7 @@
           "lookup_file_offset": "0x6d7bc",
           "cot_value": 1.685867190361023,
           "frequency_hz_from_cot": 8179.999916912104,
+          "gain_linear": 0.8709635734558105,
           "family": "peak"
         },
         {
@@ -2800,6 +5599,7 @@
           "lookup_file_offset": "0x6cd34",
           "cot_value": 10.57889461517334,
           "frequency_hz_from_cot": 1440.0000511806702,
+          "gain_linear": 0.7943282127380371,
           "family": "peak"
         },
         {
@@ -2814,6 +5614,7 @@
           "lookup_file_offset": "0x6be60",
           "cot_value": 160.82818603515625,
           "frequency_hz_from_cot": 94.99999980114943,
+          "gain_linear": 0.7079457640647888,
           "family": "peak"
         },
         {
@@ -2828,6 +5629,7 @@
           "lookup_file_offset": "0x6c004",
           "cot_value": 76.39000701904297,
           "frequency_hz_from_cot": 200.00000600034312,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         }
       ],
@@ -2845,6 +5647,7 @@
           "lookup_file_offset": "0x6ca7c",
           "cot_value": 17.542940139770508,
           "frequency_hz_from_cot": 870.0000027514616,
+          "gain_linear": 0.3162277638912201,
           "family": "peak"
         },
         {
@@ -2859,6 +5662,7 @@
           "lookup_file_offset": "0x6c0cc",
           "cot_value": 61.110042572021484,
           "frequency_hz_from_cot": 250.00000541549952,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         },
         {
@@ -2873,6 +5677,7 @@
           "lookup_file_offset": "0x6c194",
           "cot_value": 50.923038482666016,
           "frequency_hz_from_cot": 299.99998912649716,
+          "gain_linear": 0.7079457640647888,
           "family": "peak"
         },
         {
@@ -2887,6 +5692,7 @@
           "lookup_file_offset": "0x6d7a4",
           "cot_value": 1.701055884361267,
           "frequency_hz_from_cot": 8119.999994779606,
+          "gain_linear": 1.0,
           "family": "peak"
         },
         {
@@ -2901,6 +5707,7 @@
           "lookup_file_offset": "0x6d290",
           "cot_value": 3.030372381210327,
           "frequency_hz_from_cot": 4869.999927885975,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         },
         {
@@ -2915,6 +5722,7 @@
           "lookup_file_offset": "0x6be74",
           "cot_value": 152.78656005859375,
           "frequency_hz_from_cot": 100.00000238353844,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -2929,6 +5737,7 @@
           "lookup_file_offset": "0x6be74",
           "cot_value": 152.78656005859375,
           "frequency_hz_from_cot": 100.00000238353844,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -2943,6 +5752,7 @@
           "lookup_file_offset": "0x6c70c",
           "cot_value": 23.491777420043945,
           "frequency_hz_from_cot": 650.0000247162887,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         },
         {
@@ -2957,6 +5767,7 @@
           "lookup_file_offset": "0x6d7bc",
           "cot_value": 1.685867190361023,
           "frequency_hz_from_cot": 8179.999916912104,
+          "gain_linear": 0.8709635734558105,
           "family": "peak"
         },
         {
@@ -2971,6 +5782,7 @@
           "lookup_file_offset": "0x6cd34",
           "cot_value": 10.57889461517334,
           "frequency_hz_from_cot": 1440.0000511806702,
+          "gain_linear": 0.7943282127380371,
           "family": "peak"
         },
         {
@@ -2985,6 +5797,7 @@
           "lookup_file_offset": "0x6be60",
           "cot_value": 160.82818603515625,
           "frequency_hz_from_cot": 94.99999980114943,
+          "gain_linear": 0.7079457640647888,
           "family": "peak"
         },
         {
@@ -2999,6 +5812,7 @@
           "lookup_file_offset": "0x6c004",
           "cot_value": 76.39000701904297,
           "frequency_hz_from_cot": 200.00000600034312,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         }
       ],
@@ -3043,6 +5857,7 @@
           "lookup_file_offset": "0x6ca54",
           "cot_value": 17.74736785888672,
           "frequency_hz_from_cot": 859.9999550268307,
+          "gain_linear": 0.25118863582611084,
           "family": "peak"
         },
         {
@@ -3057,6 +5872,7 @@
           "lookup_file_offset": "0x6beec",
           "cot_value": 117.52696990966797,
           "frequency_hz_from_cot": 129.999997838738,
+          "gain_linear": 0.25118863582611084,
           "family": "peak"
         },
         {
@@ -3071,6 +5887,7 @@
           "lookup_file_offset": "0x6ce08",
           "cot_value": 7.712747573852539,
           "frequency_hz_from_cot": 1969.9999648582345,
+          "gain_linear": 0.5623413324356079,
           "family": "peak"
         },
         {
@@ -3085,6 +5902,7 @@
           "lookup_file_offset": "0x6ced4",
           "cot_value": 6.106636047363281,
           "frequency_hz_from_cot": 2479.999992754046,
+          "gain_linear": 0.5623413324356079,
           "family": "peak"
         },
         {
@@ -3099,6 +5917,7 @@
           "lookup_file_offset": "0x6caf4",
           "cot_value": 16.95688819885254,
           "frequency_hz_from_cot": 899.9999770586861,
+          "gain_linear": 0.5011872053146362,
           "family": "peak"
         },
         {
@@ -3113,6 +5932,7 @@
           "lookup_file_offset": "0x6d644",
           "cot_value": 1.9499733448028564,
           "frequency_hz_from_cot": 7239.999922286671,
+          "gain_linear": 0.4466835856437683,
           "family": "peak"
         },
         {
@@ -3127,6 +5947,7 @@
           "lookup_file_offset": "0x6c42c",
           "cot_value": 32.77711868286133,
           "frequency_hz_from_cot": 465.99997950422943,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         },
         {
@@ -3141,6 +5962,7 @@
           "lookup_file_offset": "0x6d2b8",
           "cot_value": 2.9650189876556396,
           "frequency_hz_from_cot": 4970.000015788603,
+          "gain_linear": 0.7079457640647888,
           "family": "peak"
         },
         {
@@ -3155,6 +5977,7 @@
           "lookup_file_offset": "0x6cc94",
           "cot_value": 14.66852855682373,
           "frequency_hz_from_cot": 1040.0000471917567,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         },
         {
@@ -3169,6 +5992,7 @@
           "lookup_file_offset": "0x6d010",
           "cot_value": 4.600879669189453,
           "frequency_hz_from_cot": 3269.9999239463696,
+          "gain_linear": 0.7943282127380371,
           "family": "peak"
         },
         {
@@ -3183,6 +6007,7 @@
           "lookup_file_offset": "0x6c8c4",
           "cot_value": 20.08719825744629,
           "frequency_hz_from_cot": 760.0000250934037,
+          "gain_linear": 0.5623413324356079,
           "family": "peak"
         },
         {
@@ -3197,6 +6022,7 @@
           "lookup_file_offset": "0x6c0cc",
           "cot_value": 61.110042572021484,
           "frequency_hz_from_cot": 250.00000541549952,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -3211,6 +6037,7 @@
           "lookup_file_offset": "0x6c0cc",
           "cot_value": 61.110042572021484,
           "frequency_hz_from_cot": 250.00000541549952,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -3225,6 +6052,7 @@
           "lookup_file_offset": "0x6d454",
           "cot_value": 2.4142136573791504,
           "frequency_hz_from_cot": 5999.999787420218,
+          "gain_linear": 1.0,
           "family": "lowpass"
         },
         {
@@ -3239,6 +6067,7 @@
           "lookup_file_offset": "0x6c280",
           "cot_value": 42.55170822143555,
           "frequency_hz_from_cot": 358.99998671732214,
+          "gain_linear": 0.2818382978439331,
           "family": "peak"
         },
         {
@@ -3253,6 +6082,7 @@
           "lookup_file_offset": "0x6cd64",
           "cot_value": 9.760092735290527,
           "frequency_hz_from_cot": 1560.0000018812357,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         },
         {
@@ -3267,6 +6097,7 @@
           "lookup_file_offset": "0x6be74",
           "cot_value": 152.78656005859375,
           "frequency_hz_from_cot": 100.00000238353844,
+          "gain_linear": 0.7943282127380371,
           "family": "peak"
         }
       ],
@@ -3284,6 +6115,7 @@
           "lookup_file_offset": "0x6ca54",
           "cot_value": 17.74736785888672,
           "frequency_hz_from_cot": 859.9999550268307,
+          "gain_linear": 0.25118863582611084,
           "family": "peak"
         },
         {
@@ -3298,6 +6130,7 @@
           "lookup_file_offset": "0x6beec",
           "cot_value": 117.52696990966797,
           "frequency_hz_from_cot": 129.999997838738,
+          "gain_linear": 0.25118863582611084,
           "family": "peak"
         },
         {
@@ -3312,6 +6145,7 @@
           "lookup_file_offset": "0x6ce08",
           "cot_value": 7.712747573852539,
           "frequency_hz_from_cot": 1969.9999648582345,
+          "gain_linear": 0.5623413324356079,
           "family": "peak"
         },
         {
@@ -3326,6 +6160,7 @@
           "lookup_file_offset": "0x6ced4",
           "cot_value": 6.106636047363281,
           "frequency_hz_from_cot": 2479.999992754046,
+          "gain_linear": 0.5623413324356079,
           "family": "peak"
         },
         {
@@ -3340,6 +6175,7 @@
           "lookup_file_offset": "0x6caf4",
           "cot_value": 16.95688819885254,
           "frequency_hz_from_cot": 899.9999770586861,
+          "gain_linear": 0.5011872053146362,
           "family": "peak"
         },
         {
@@ -3354,6 +6190,7 @@
           "lookup_file_offset": "0x6d644",
           "cot_value": 1.9499733448028564,
           "frequency_hz_from_cot": 7239.999922286671,
+          "gain_linear": 0.4466835856437683,
           "family": "peak"
         },
         {
@@ -3368,6 +6205,7 @@
           "lookup_file_offset": "0x6c42c",
           "cot_value": 32.77711868286133,
           "frequency_hz_from_cot": 465.99997950422943,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         },
         {
@@ -3382,6 +6220,7 @@
           "lookup_file_offset": "0x6d2b8",
           "cot_value": 2.9650189876556396,
           "frequency_hz_from_cot": 4970.000015788603,
+          "gain_linear": 0.7079457640647888,
           "family": "peak"
         },
         {
@@ -3396,6 +6235,7 @@
           "lookup_file_offset": "0x6cc94",
           "cot_value": 14.66852855682373,
           "frequency_hz_from_cot": 1040.0000471917567,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         },
         {
@@ -3410,6 +6250,7 @@
           "lookup_file_offset": "0x6d010",
           "cot_value": 4.600879669189453,
           "frequency_hz_from_cot": 3269.9999239463696,
+          "gain_linear": 0.7943282127380371,
           "family": "peak"
         },
         {
@@ -3424,6 +6265,7 @@
           "lookup_file_offset": "0x6c8c4",
           "cot_value": 20.08719825744629,
           "frequency_hz_from_cot": 760.0000250934037,
+          "gain_linear": 0.5623413324356079,
           "family": "peak"
         },
         {
@@ -3438,6 +6280,7 @@
           "lookup_file_offset": "0x6c0cc",
           "cot_value": 61.110042572021484,
           "frequency_hz_from_cot": 250.00000541549952,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -3452,6 +6295,7 @@
           "lookup_file_offset": "0x6c0cc",
           "cot_value": 61.110042572021484,
           "frequency_hz_from_cot": 250.00000541549952,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -3466,6 +6310,7 @@
           "lookup_file_offset": "0x6d454",
           "cot_value": 2.4142136573791504,
           "frequency_hz_from_cot": 5999.999787420218,
+          "gain_linear": 1.0,
           "family": "lowpass"
         },
         {
@@ -3480,6 +6325,7 @@
           "lookup_file_offset": "0x6c280",
           "cot_value": 42.55170822143555,
           "frequency_hz_from_cot": 358.99998671732214,
+          "gain_linear": 0.2818382978439331,
           "family": "peak"
         },
         {
@@ -3494,6 +6340,7 @@
           "lookup_file_offset": "0x6cd64",
           "cot_value": 9.760092735290527,
           "frequency_hz_from_cot": 1560.0000018812357,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         },
         {
@@ -3508,6 +6355,7 @@
           "lookup_file_offset": "0x6be74",
           "cot_value": 152.78656005859375,
           "frequency_hz_from_cot": 100.00000238353844,
+          "gain_linear": 0.7943282127380371,
           "family": "peak"
         }
       ],
@@ -3551,6 +6399,7 @@
           "lookup_file_offset": "0x6ce84",
           "cot_value": 6.651444911956787,
           "frequency_hz_from_cot": 2279.9999880802466,
+          "gain_linear": 0.25118863582611084,
           "family": "peak"
         },
         {
@@ -3565,6 +6414,7 @@
           "lookup_file_offset": "0x6cfb4",
           "cot_value": 4.959447383880615,
           "frequency_hz_from_cot": 3039.999984820559,
+          "gain_linear": 0.25118863582611084,
           "family": "peak"
         },
         {
@@ -3579,6 +6429,7 @@
           "lookup_file_offset": "0x6cdc4",
           "cot_value": 8.448957443237305,
           "frequency_hz_from_cot": 1799.9999781711938,
+          "gain_linear": 0.25118863582611084,
           "family": "peak"
         },
         {
@@ -3593,6 +6444,7 @@
           "lookup_file_offset": "0x6cc84",
           "cot_value": 15.257052421569824,
           "frequency_hz_from_cot": 999.9999520738412,
+          "gain_linear": 0.7943282127380371,
           "family": "peak"
         },
         {
@@ -3607,6 +6459,7 @@
           "lookup_file_offset": "0x6d454",
           "cot_value": 2.4142136573791504,
           "frequency_hz_from_cot": 5999.999787420218,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -3621,6 +6474,7 @@
           "lookup_file_offset": "0x6da94",
           "cot_value": 1.3032253980636597,
           "frequency_hz_from_cot": 9999.999857185287,
+          "gain_linear": 0.7079457640647888,
           "family": "peak"
         }
       ],
@@ -3638,6 +6492,7 @@
           "lookup_file_offset": "0x6ce84",
           "cot_value": 6.651444911956787,
           "frequency_hz_from_cot": 2279.9999880802466,
+          "gain_linear": 0.25118863582611084,
           "family": "peak"
         },
         {
@@ -3652,6 +6507,7 @@
           "lookup_file_offset": "0x6cfb4",
           "cot_value": 4.959447383880615,
           "frequency_hz_from_cot": 3039.999984820559,
+          "gain_linear": 0.25118863582611084,
           "family": "peak"
         },
         {
@@ -3666,6 +6522,7 @@
           "lookup_file_offset": "0x6cdc4",
           "cot_value": 8.448957443237305,
           "frequency_hz_from_cot": 1799.9999781711938,
+          "gain_linear": 0.25118863582611084,
           "family": "peak"
         },
         {
@@ -3680,6 +6537,7 @@
           "lookup_file_offset": "0x6cc84",
           "cot_value": 15.257052421569824,
           "frequency_hz_from_cot": 999.9999520738412,
+          "gain_linear": 0.7943282127380371,
           "family": "peak"
         },
         {
@@ -3694,6 +6552,7 @@
           "lookup_file_offset": "0x6d454",
           "cot_value": 2.4142136573791504,
           "frequency_hz_from_cot": 5999.999787420218,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -3708,6 +6567,7 @@
           "lookup_file_offset": "0x6da94",
           "cot_value": 1.3032253980636597,
           "frequency_hz_from_cot": 9999.999857185287,
+          "gain_linear": 0.7079457640647888,
           "family": "peak"
         }
       ],
@@ -3751,6 +6611,7 @@
           "lookup_file_offset": "0x6c70c",
           "cot_value": 23.491777420043945,
           "frequency_hz_from_cot": 650.0000247162887,
+          "gain_linear": 0.25118863582611084,
           "family": "peak"
         },
         {
@@ -3765,6 +6626,7 @@
           "lookup_file_offset": "0x6bfc8",
           "cot_value": 82.58447265625,
           "frequency_hz_from_cot": 185.00000501797157,
+          "gain_linear": 0.4731512665748596,
           "family": "peak"
         },
         {
@@ -3779,6 +6641,7 @@
           "lookup_file_offset": "0x6c0b8",
           "cot_value": 62.35740661621094,
           "frequency_hz_from_cot": 245.00000562863625,
+          "gain_linear": 0.33496543765068054,
           "family": "peak"
         },
         {
@@ -3793,6 +6656,7 @@
           "lookup_file_offset": "0x6c144",
           "cot_value": 54.56129837036133,
           "frequency_hz_from_cot": 280.0000097512005,
+          "gain_linear": 0.3981071710586548,
           "family": "peak"
         },
         {
@@ -3807,6 +6671,7 @@
           "lookup_file_offset": "0x6c0a4",
           "cot_value": 63.656742095947266,
           "frequency_hz_from_cot": 239.99999648267692,
+          "gain_linear": 1.0,
           "family": "lowpass"
         },
         {
@@ -3821,6 +6686,7 @@
           "lookup_file_offset": "0x6c0a4",
           "cot_value": 63.656742095947266,
           "frequency_hz_from_cot": 239.99999648267692,
+          "gain_linear": 1.0,
           "family": "lowpass"
         },
         {
@@ -3835,6 +6701,7 @@
           "lookup_file_offset": "0x6bddc",
           "cot_value": 246.43211364746094,
           "frequency_hz_from_cot": 61.999998488512105,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -3849,6 +6716,7 @@
           "lookup_file_offset": "0x6bddc",
           "cot_value": 246.43211364746094,
           "frequency_hz_from_cot": 61.999998488512105,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -3863,6 +6731,7 @@
           "lookup_file_offset": "0x6beb8",
           "cot_value": 130.58612060546875,
           "frequency_hz_from_cot": 116.99999829362939,
+          "gain_linear": 0.5956621170043945,
           "family": "peak"
         },
         {
@@ -3877,6 +6746,7 @@
           "lookup_file_offset": "0x6bdfc",
           "cot_value": 218.2681121826172,
           "frequency_hz_from_cot": 69.99999900340696,
+          "gain_linear": 0.6025595664978027,
           "family": "peak"
         },
         {
@@ -3891,6 +6761,7 @@
           "lookup_file_offset": "0x6bf74",
           "cot_value": 93.16029357910156,
           "frequency_hz_from_cot": 163.999995767274,
+          "gain_linear": 0.5956621170043945,
           "family": "peak"
         },
         {
@@ -3905,6 +6776,7 @@
           "lookup_file_offset": "0x6c324",
           "cot_value": 38.18845748901367,
           "frequency_hz_from_cot": 400.00001892913247,
+          "gain_linear": 0.3548133969306946,
           "family": "peak"
         },
         {
@@ -3919,6 +6791,7 @@
           "lookup_file_offset": "0x6bd78",
           "cot_value": 412.9417419433594,
           "frequency_hz_from_cot": 37.00000052781853,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         },
         {
@@ -3933,6 +6806,7 @@
           "lookup_file_offset": "0x6be54",
           "cot_value": 166.07272338867188,
           "frequency_hz_from_cot": 91.99999595839208,
+          "gain_linear": 0.3981071710586548,
           "family": "peak"
         },
         {
@@ -3947,6 +6821,7 @@
           "lookup_file_offset": "0x6bda4",
           "cot_value": 318.308837890625,
           "frequency_hz_from_cot": 48.00000016511032,
+          "gain_linear": 0.6683439016342163,
           "family": "peak"
         },
         {
@@ -3961,6 +6836,7 @@
           "lookup_file_offset": "0x6bf14",
           "cot_value": 109.13175964355469,
           "frequency_hz_from_cot": 140.0000053021384,
+          "gain_linear": 0.7079457640647888,
           "family": "peak"
         },
         {
@@ -3975,6 +6851,7 @@
           "lookup_file_offset": "0x6bd3c",
           "cot_value": 694.4938354492188,
           "frequency_hz_from_cot": 21.999999420723814,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         }
       ],
@@ -3992,6 +6869,7 @@
           "lookup_file_offset": "0x6c70c",
           "cot_value": 23.491777420043945,
           "frequency_hz_from_cot": 650.0000247162887,
+          "gain_linear": 0.25118863582611084,
           "family": "peak"
         },
         {
@@ -4006,6 +6884,7 @@
           "lookup_file_offset": "0x6bfc8",
           "cot_value": 82.58447265625,
           "frequency_hz_from_cot": 185.00000501797157,
+          "gain_linear": 0.4731512665748596,
           "family": "peak"
         },
         {
@@ -4020,6 +6899,7 @@
           "lookup_file_offset": "0x6c0b8",
           "cot_value": 62.35740661621094,
           "frequency_hz_from_cot": 245.00000562863625,
+          "gain_linear": 0.33496543765068054,
           "family": "peak"
         },
         {
@@ -4034,6 +6914,7 @@
           "lookup_file_offset": "0x6c144",
           "cot_value": 54.56129837036133,
           "frequency_hz_from_cot": 280.0000097512005,
+          "gain_linear": 0.3981071710586548,
           "family": "peak"
         },
         {
@@ -4048,6 +6929,7 @@
           "lookup_file_offset": "0x6c0a4",
           "cot_value": 63.656742095947266,
           "frequency_hz_from_cot": 239.99999648267692,
+          "gain_linear": 1.0,
           "family": "lowpass"
         },
         {
@@ -4062,6 +6944,7 @@
           "lookup_file_offset": "0x6c0a4",
           "cot_value": 63.656742095947266,
           "frequency_hz_from_cot": 239.99999648267692,
+          "gain_linear": 1.0,
           "family": "lowpass"
         },
         {
@@ -4076,6 +6959,7 @@
           "lookup_file_offset": "0x6bddc",
           "cot_value": 246.43211364746094,
           "frequency_hz_from_cot": 61.999998488512105,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -4090,6 +6974,7 @@
           "lookup_file_offset": "0x6bddc",
           "cot_value": 246.43211364746094,
           "frequency_hz_from_cot": 61.999998488512105,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -4104,6 +6989,7 @@
           "lookup_file_offset": "0x6beb8",
           "cot_value": 130.58612060546875,
           "frequency_hz_from_cot": 116.99999829362939,
+          "gain_linear": 0.5956621170043945,
           "family": "peak"
         },
         {
@@ -4118,6 +7004,7 @@
           "lookup_file_offset": "0x6bdfc",
           "cot_value": 218.2681121826172,
           "frequency_hz_from_cot": 69.99999900340696,
+          "gain_linear": 0.6025595664978027,
           "family": "peak"
         },
         {
@@ -4132,6 +7019,7 @@
           "lookup_file_offset": "0x6bf74",
           "cot_value": 93.16029357910156,
           "frequency_hz_from_cot": 163.999995767274,
+          "gain_linear": 0.5956621170043945,
           "family": "peak"
         },
         {
@@ -4146,6 +7034,7 @@
           "lookup_file_offset": "0x6c324",
           "cot_value": 38.18845748901367,
           "frequency_hz_from_cot": 400.00001892913247,
+          "gain_linear": 0.3548133969306946,
           "family": "peak"
         },
         {
@@ -4160,6 +7049,7 @@
           "lookup_file_offset": "0x6bd78",
           "cot_value": 412.9417419433594,
           "frequency_hz_from_cot": 37.00000052781853,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         },
         {
@@ -4174,6 +7064,7 @@
           "lookup_file_offset": "0x6be54",
           "cot_value": 166.07272338867188,
           "frequency_hz_from_cot": 91.99999595839208,
+          "gain_linear": 0.3981071710586548,
           "family": "peak"
         },
         {
@@ -4188,6 +7079,7 @@
           "lookup_file_offset": "0x6bda4",
           "cot_value": 318.308837890625,
           "frequency_hz_from_cot": 48.00000016511032,
+          "gain_linear": 0.6683439016342163,
           "family": "peak"
         },
         {
@@ -4202,6 +7094,7 @@
           "lookup_file_offset": "0x6bf14",
           "cot_value": 109.13175964355469,
           "frequency_hz_from_cot": 140.0000053021384,
+          "gain_linear": 0.7079457640647888,
           "family": "peak"
         },
         {
@@ -4216,6 +7109,7 @@
           "lookup_file_offset": "0x6bd3c",
           "cot_value": 694.4938354492188,
           "frequency_hz_from_cot": 21.999999420723814,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         }
       ],
@@ -4259,6 +7153,7 @@
           "lookup_file_offset": "0x6c70c",
           "cot_value": 23.491777420043945,
           "frequency_hz_from_cot": 650.0000247162887,
+          "gain_linear": 0.25118863582611084,
           "family": "peak"
         },
         {
@@ -4273,6 +7168,7 @@
           "lookup_file_offset": "0x6bfc8",
           "cot_value": 82.58447265625,
           "frequency_hz_from_cot": 185.00000501797157,
+          "gain_linear": 0.4731512665748596,
           "family": "peak"
         },
         {
@@ -4287,6 +7183,7 @@
           "lookup_file_offset": "0x6c0b8",
           "cot_value": 62.35740661621094,
           "frequency_hz_from_cot": 245.00000562863625,
+          "gain_linear": 0.33496543765068054,
           "family": "peak"
         },
         {
@@ -4301,6 +7198,7 @@
           "lookup_file_offset": "0x6c144",
           "cot_value": 54.56129837036133,
           "frequency_hz_from_cot": 280.0000097512005,
+          "gain_linear": 0.3981071710586548,
           "family": "peak"
         },
         {
@@ -4315,6 +7213,7 @@
           "lookup_file_offset": "0x6c0a4",
           "cot_value": 63.656742095947266,
           "frequency_hz_from_cot": 239.99999648267692,
+          "gain_linear": 1.0,
           "family": "lowpass"
         },
         {
@@ -4329,6 +7228,7 @@
           "lookup_file_offset": "0x6c0a4",
           "cot_value": 63.656742095947266,
           "frequency_hz_from_cot": 239.99999648267692,
+          "gain_linear": 1.0,
           "family": "lowpass"
         },
         {
@@ -4343,6 +7243,7 @@
           "lookup_file_offset": "0x6bddc",
           "cot_value": 246.43211364746094,
           "frequency_hz_from_cot": 61.999998488512105,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -4357,6 +7258,7 @@
           "lookup_file_offset": "0x6bddc",
           "cot_value": 246.43211364746094,
           "frequency_hz_from_cot": 61.999998488512105,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -4371,6 +7273,7 @@
           "lookup_file_offset": "0x6beb8",
           "cot_value": 130.58612060546875,
           "frequency_hz_from_cot": 116.99999829362939,
+          "gain_linear": 0.5956621170043945,
           "family": "peak"
         },
         {
@@ -4385,6 +7288,7 @@
           "lookup_file_offset": "0x6bdfc",
           "cot_value": 218.2681121826172,
           "frequency_hz_from_cot": 69.99999900340696,
+          "gain_linear": 0.6025595664978027,
           "family": "peak"
         },
         {
@@ -4399,6 +7303,7 @@
           "lookup_file_offset": "0x6bf74",
           "cot_value": 93.16029357910156,
           "frequency_hz_from_cot": 163.999995767274,
+          "gain_linear": 0.5956621170043945,
           "family": "peak"
         },
         {
@@ -4413,6 +7318,7 @@
           "lookup_file_offset": "0x6c324",
           "cot_value": 38.18845748901367,
           "frequency_hz_from_cot": 400.00001892913247,
+          "gain_linear": 0.3548133969306946,
           "family": "peak"
         },
         {
@@ -4427,6 +7333,7 @@
           "lookup_file_offset": "0x6bd78",
           "cot_value": 412.9417419433594,
           "frequency_hz_from_cot": 37.00000052781853,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         },
         {
@@ -4441,6 +7348,7 @@
           "lookup_file_offset": "0x6be54",
           "cot_value": 166.07272338867188,
           "frequency_hz_from_cot": 91.99999595839208,
+          "gain_linear": 0.3981071710586548,
           "family": "peak"
         },
         {
@@ -4455,6 +7363,7 @@
           "lookup_file_offset": "0x6bda4",
           "cot_value": 318.308837890625,
           "frequency_hz_from_cot": 48.00000016511032,
+          "gain_linear": 0.6683439016342163,
           "family": "peak"
         },
         {
@@ -4469,6 +7378,7 @@
           "lookup_file_offset": "0x6bf14",
           "cot_value": 109.13175964355469,
           "frequency_hz_from_cot": 140.0000053021384,
+          "gain_linear": 0.7079457640647888,
           "family": "peak"
         },
         {
@@ -4483,6 +7393,7 @@
           "lookup_file_offset": "0x6bd3c",
           "cot_value": 694.4938354492188,
           "frequency_hz_from_cot": 21.999999420723814,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         }
       ],
@@ -4500,6 +7411,7 @@
           "lookup_file_offset": "0x6c70c",
           "cot_value": 23.491777420043945,
           "frequency_hz_from_cot": 650.0000247162887,
+          "gain_linear": 0.25118863582611084,
           "family": "peak"
         },
         {
@@ -4514,6 +7426,7 @@
           "lookup_file_offset": "0x6bfc8",
           "cot_value": 82.58447265625,
           "frequency_hz_from_cot": 185.00000501797157,
+          "gain_linear": 0.4731512665748596,
           "family": "peak"
         },
         {
@@ -4528,6 +7441,7 @@
           "lookup_file_offset": "0x6c0b8",
           "cot_value": 62.35740661621094,
           "frequency_hz_from_cot": 245.00000562863625,
+          "gain_linear": 0.33496543765068054,
           "family": "peak"
         },
         {
@@ -4542,6 +7456,7 @@
           "lookup_file_offset": "0x6c144",
           "cot_value": 54.56129837036133,
           "frequency_hz_from_cot": 280.0000097512005,
+          "gain_linear": 0.3981071710586548,
           "family": "peak"
         },
         {
@@ -4556,6 +7471,7 @@
           "lookup_file_offset": "0x6c0a4",
           "cot_value": 63.656742095947266,
           "frequency_hz_from_cot": 239.99999648267692,
+          "gain_linear": 1.0,
           "family": "lowpass"
         },
         {
@@ -4570,6 +7486,7 @@
           "lookup_file_offset": "0x6c0a4",
           "cot_value": 63.656742095947266,
           "frequency_hz_from_cot": 239.99999648267692,
+          "gain_linear": 1.0,
           "family": "lowpass"
         },
         {
@@ -4584,6 +7501,7 @@
           "lookup_file_offset": "0x6bddc",
           "cot_value": 246.43211364746094,
           "frequency_hz_from_cot": 61.999998488512105,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -4598,6 +7516,7 @@
           "lookup_file_offset": "0x6bddc",
           "cot_value": 246.43211364746094,
           "frequency_hz_from_cot": 61.999998488512105,
+          "gain_linear": 1.0,
           "family": "highpass"
         },
         {
@@ -4612,6 +7531,7 @@
           "lookup_file_offset": "0x6beb8",
           "cot_value": 130.58612060546875,
           "frequency_hz_from_cot": 116.99999829362939,
+          "gain_linear": 0.5956621170043945,
           "family": "peak"
         },
         {
@@ -4626,6 +7546,7 @@
           "lookup_file_offset": "0x6bdfc",
           "cot_value": 218.2681121826172,
           "frequency_hz_from_cot": 69.99999900340696,
+          "gain_linear": 0.6025595664978027,
           "family": "peak"
         },
         {
@@ -4640,6 +7561,7 @@
           "lookup_file_offset": "0x6bf74",
           "cot_value": 93.16029357910156,
           "frequency_hz_from_cot": 163.999995767274,
+          "gain_linear": 0.5956621170043945,
           "family": "peak"
         },
         {
@@ -4654,6 +7576,7 @@
           "lookup_file_offset": "0x6c324",
           "cot_value": 38.18845748901367,
           "frequency_hz_from_cot": 400.00001892913247,
+          "gain_linear": 0.3548133969306946,
           "family": "peak"
         },
         {
@@ -4668,6 +7591,7 @@
           "lookup_file_offset": "0x6bd78",
           "cot_value": 412.9417419433594,
           "frequency_hz_from_cot": 37.00000052781853,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         },
         {
@@ -4682,6 +7606,7 @@
           "lookup_file_offset": "0x6be54",
           "cot_value": 166.07272338867188,
           "frequency_hz_from_cot": 91.99999595839208,
+          "gain_linear": 0.3981071710586548,
           "family": "peak"
         },
         {
@@ -4696,6 +7621,7 @@
           "lookup_file_offset": "0x6bda4",
           "cot_value": 318.308837890625,
           "frequency_hz_from_cot": 48.00000016511032,
+          "gain_linear": 0.6683439016342163,
           "family": "peak"
         },
         {
@@ -4710,6 +7636,7 @@
           "lookup_file_offset": "0x6bf14",
           "cot_value": 109.13175964355469,
           "frequency_hz_from_cot": 140.0000053021384,
+          "gain_linear": 0.7079457640647888,
           "family": "peak"
         },
         {
@@ -4724,6 +7651,7 @@
           "lookup_file_offset": "0x6bd3c",
           "cot_value": 694.4938354492188,
           "frequency_hz_from_cot": 21.999999420723814,
+          "gain_linear": 0.6309573650360107,
           "family": "peak"
         }
       ],
@@ -4818,6 +7746,7 @@
         "lookup_file_offset": "0x6cc50",
         "cot_value": 15.458577156066895,
         "frequency_hz_from_cot": 986.9999934287258,
+        "gain_linear": 0.8912509679794312,
         "family": "peak"
       },
       {
@@ -4832,6 +7761,7 @@
         "lookup_file_offset": "0x6d5e4",
         "cot_value": 2.027799367904663,
         "frequency_hz_from_cot": 7000.000101873389,
+        "gain_linear": 1.258925437927246,
         "family": "peak"
       },
       {
@@ -4846,6 +7776,7 @@
         "lookup_file_offset": "0x6ce14",
         "cot_value": 7.595754146575928,
         "frequency_hz_from_cot": 1999.9999911883883,
+        "gain_linear": 0.8912509679794312,
         "family": "peak"
       },
       {
@@ -4860,6 +7791,7 @@
         "lookup_file_offset": "0x6c0cc",
         "cot_value": 61.110042572021484,
         "frequency_hz_from_cot": 250.00000541549952,
+        "gain_linear": 1.0592536926269531,
         "family": "peak"
       },
       {
@@ -4874,6 +7806,7 @@
         "lookup_file_offset": "0x6bf00",
         "cot_value": 113.17389678955078,
         "frequency_hz_from_cot": 135.00000760156,
+        "gain_linear": 1.258925437927246,
         "family": "peak"
       },
       {
@@ -4888,6 +7821,7 @@
         "lookup_file_offset": "0x6ccc8",
         "cot_value": 13.033331871032715,
         "frequency_hz_from_cot": 1169.9999847932056,
+        "gain_linear": 0.7943282127380371,
         "family": "peak"
       },
       {
@@ -4902,6 +7836,7 @@
         "lookup_file_offset": "0x6bde4",
         "cot_value": 238.73101806640625,
         "frequency_hz_from_cot": 64.00000008214053,
+        "gain_linear": 1.1220184564590454,
         "family": "peak"
       },
       {
@@ -4916,6 +7851,7 @@
         "lookup_file_offset": "0x6d774",
         "cot_value": 1.7320507764816284,
         "frequency_hz_from_cot": 8000.000118744546,
+        "gain_linear": 0.9772372245788574,
         "family": "other"
       },
       {
@@ -4930,6 +7866,7 @@
         "lookup_file_offset": "0x6be24",
         "cot_value": 190.98419189453125,
         "frequency_hz_from_cot": 79.9999976891918,
+        "gain_linear": 0.9549925923347473,
         "family": "peak"
       },
       {
@@ -4944,6 +7881,7 @@
         "lookup_file_offset": "0x6d2c4",
         "cot_value": 2.9459049701690674,
         "frequency_hz_from_cot": 5000.000054269298,
+        "gain_linear": 1.0,
         "family": "peak"
       }
     ],
@@ -4960,6 +7898,7 @@
         "lookup_file_offset": "0x6cc50",
         "cot_value": 15.458577156066895,
         "frequency_hz_from_cot": 986.9999934287258,
+        "gain_linear": 0.8912509679794312,
         "family": "peak"
       },
       {
@@ -4974,6 +7913,7 @@
         "lookup_file_offset": "0x6d5e4",
         "cot_value": 2.027799367904663,
         "frequency_hz_from_cot": 7000.000101873389,
+        "gain_linear": 1.1220184564590454,
         "family": "peak"
       },
       {
@@ -4988,6 +7928,7 @@
         "lookup_file_offset": "0x6ce14",
         "cot_value": 7.595754146575928,
         "frequency_hz_from_cot": 1999.9999911883883,
+        "gain_linear": 0.8912509679794312,
         "family": "peak"
       },
       {
@@ -5002,6 +7943,7 @@
         "lookup_file_offset": "0x6c0cc",
         "cot_value": 61.110042572021484,
         "frequency_hz_from_cot": 250.00000541549952,
+        "gain_linear": 1.0592536926269531,
         "family": "peak"
       },
       {
@@ -5016,6 +7958,7 @@
         "lookup_file_offset": "0x6bf00",
         "cot_value": 113.17389678955078,
         "frequency_hz_from_cot": 135.00000760156,
+        "gain_linear": 1.258925437927246,
         "family": "peak"
       },
       {
@@ -5030,6 +7973,7 @@
         "lookup_file_offset": "0x6ccc8",
         "cot_value": 13.033331871032715,
         "frequency_hz_from_cot": 1169.9999847932056,
+        "gain_linear": 0.7943282127380371,
         "family": "peak"
       },
       {
@@ -5044,6 +7988,7 @@
         "lookup_file_offset": "0x6bde4",
         "cot_value": 238.73101806640625,
         "frequency_hz_from_cot": 64.00000008214053,
+        "gain_linear": 1.1220184564590454,
         "family": "peak"
       },
       {
@@ -5058,6 +8003,7 @@
         "lookup_file_offset": "0x6d774",
         "cot_value": 1.7320507764816284,
         "frequency_hz_from_cot": 8000.000118744546,
+        "gain_linear": 0.9772372245788574,
         "family": "other"
       },
       {
@@ -5072,6 +8018,7 @@
         "lookup_file_offset": "0x6be24",
         "cot_value": 190.98419189453125,
         "frequency_hz_from_cot": 79.9999976891918,
+        "gain_linear": 0.9549925923347473,
         "family": "peak"
       },
       {
@@ -5086,6 +8033,7 @@
         "lookup_file_offset": "0x6d2c4",
         "cot_value": 2.9459049701690674,
         "frequency_hz_from_cot": 5000.000054269298,
+        "gain_linear": 0.8912509679794312,
         "family": "peak"
       }
     ],
@@ -5102,6 +8050,7 @@
         "lookup_file_offset": "0x6d06c",
         "cot_value": 4.288765907287598,
         "frequency_hz_from_cot": 3500.000152730376,
+        "gain_linear": 0.6309573650360107,
         "family": "peak"
       },
       {
@@ -5116,6 +8065,7 @@
         "lookup_file_offset": "0x6d5e4",
         "cot_value": 2.027799367904663,
         "frequency_hz_from_cot": 7000.000101873389,
+        "gain_linear": 1.1220184564590454,
         "family": "other"
       },
       {
@@ -5130,6 +8080,7 @@
         "lookup_file_offset": "0x6c0c0",
         "cot_value": 61.85240173339844,
         "frequency_hz_from_cot": 247.00000445463283,
+        "gain_linear": 0.6309573650360107,
         "family": "peak"
       },
       {
@@ -5144,6 +8095,7 @@
         "lookup_file_offset": "0x6c870",
         "cot_value": 20.6589412689209,
         "frequency_hz_from_cot": 739.0000274766884,
+        "gain_linear": 0.7943282127380371,
         "family": "peak"
       }
     ],
@@ -5160,6 +8112,7 @@
         "lookup_file_offset": "0x6bd88",
         "cot_value": 372.6545715332031,
         "frequency_hz_from_cot": 41.000001154447254,
+        "gain_linear": 0.7943282127380371,
         "family": "peak"
       },
       {
@@ -5174,6 +8127,7 @@
         "lookup_file_offset": "0x6bdec",
         "cot_value": 231.4966583251953,
         "frequency_hz_from_cot": 66.00000023353424,
+        "gain_linear": 1.0,
         "family": "lowpass"
       },
       {
@@ -5188,6 +8142,7 @@
         "lookup_file_offset": "0x6bdec",
         "cot_value": 231.4966583251953,
         "frequency_hz_from_cot": 66.00000023353424,
+        "gain_linear": 1.0,
         "family": "lowpass"
       },
       {
@@ -5202,6 +8157,7 @@
         "lookup_file_offset": "0x6bd68",
         "cot_value": 462.9954833984375,
         "frequency_hz_from_cot": 32.999999624990345,
+        "gain_linear": 1.0,
         "family": "highpass"
       },
       {
@@ -5216,6 +8172,7 @@
         "lookup_file_offset": "0x6bed0",
         "cot_value": 124.21581268310547,
         "frequency_hz_from_cot": 122.99999606987919,
+        "gain_linear": 0.25118863582611084,
         "family": "peak"
       },
       {
@@ -5230,6 +8187,7 @@
         "lookup_file_offset": "0x6c2d4",
         "cot_value": 40.19927215576172,
         "frequency_hz_from_cot": 380.0000166206452,
+        "gain_linear": 0.25118863582611084,
         "family": "peak"
       },
       {
@@ -5244,6 +8202,7 @@
         "lookup_file_offset": "0x6bdc0",
         "cot_value": 277.7965087890625,
         "frequency_hz_from_cot": 55.000002009022154,
+        "gain_linear": 1.258925437927246,
         "family": "peak"
       },
       {
@@ -5258,6 +8217,7 @@
         "lookup_file_offset": "0x6be94",
         "cot_value": 141.4687042236328,
         "frequency_hz_from_cot": 108.0000000764598,
+        "gain_linear": 0.5623413324356079,
         "family": "peak"
       },
       {
@@ -5272,6 +8232,7 @@
         "lookup_file_offset": "0x6bd48",
         "cot_value": 611.1544189453125,
         "frequency_hz_from_cot": 25.000000699988657,
+        "gain_linear": 0.5623413324356079,
         "family": "peak"
       },
       {
@@ -5286,6 +8247,7 @@
         "lookup_file_offset": "0x6bd90",
         "cot_value": 355.32171630859375,
         "frequency_hz_from_cot": 43.000001116190404,
+        "gain_linear": 0.6683439016342163,
         "family": "peak"
       },
       {
@@ -5300,6 +8262,7 @@
         "lookup_file_offset": "0x6be08",
         "cot_value": 209.29806518554688,
         "frequency_hz_from_cot": 72.99999769401904,
+        "gain_linear": 0.8912509679794312,
         "family": "peak"
       },
       {
@@ -5314,6 +8277,7 @@
         "lookup_file_offset": "0x6c594",
         "cot_value": 27.467859268188477,
         "frequency_hz_from_cot": 555.9999958873091,
+        "gain_linear": 0.4466835856437683,
         "family": "peak"
       },
       {
@@ -5328,6 +8292,7 @@
         "lookup_file_offset": "0x6c054",
         "cot_value": 69.44463348388672,
         "frequency_hz_from_cot": 219.99998893622697,
+        "gain_linear": 0.5623413324356079,
         "family": "peak"
       }
     ],
@@ -5344,6 +8309,7 @@
         "lookup_file_offset": "0x6bf9c",
         "cot_value": 87.80582427978516,
         "frequency_hz_from_cot": 174.00000667976371,
+        "gain_linear": 0.3981071710586548,
         "family": "peak"
       },
       {
@@ -5358,6 +8324,7 @@
         "lookup_file_offset": "0x6bea8",
         "cot_value": 135.2088165283203,
         "frequency_hz_from_cot": 112.9999977202072,
+        "gain_linear": 0.3981071710586548,
         "family": "peak"
       },
       {
@@ -5372,6 +8339,7 @@
         "lookup_file_offset": "0x6bf0c",
         "cot_value": 110.71347045898438,
         "frequency_hz_from_cot": 138.00000122466298,
+        "gain_linear": 0.3981071710586548,
         "family": "peak"
       },
       {
@@ -5386,6 +8354,7 @@
         "lookup_file_offset": "0x6ccfc",
         "cot_value": 11.724604606628418,
         "frequency_hz_from_cot": 1300.0000561001639,
+        "gain_linear": 0.7079457640647888,
         "family": "other"
       },
       {
@@ -5400,6 +8369,7 @@
         "lookup_file_offset": "0x6cd10",
         "cot_value": 11.288216590881348,
         "frequency_hz_from_cot": 1350.000057064371,
+        "gain_linear": 0.6683439016342163,
         "family": "peak"
       },
       {
@@ -5414,6 +8384,7 @@
         "lookup_file_offset": "0x6cf90",
         "cot_value": 5.114759922027588,
         "frequency_hz_from_cot": 2950.000026767491,
+        "gain_linear": 0.5754399299621582,
         "family": "peak"
       },
       {
@@ -5428,6 +8399,7 @@
         "lookup_file_offset": "0x6c324",
         "cot_value": 38.18845748901367,
         "frequency_hz_from_cot": 400.00001892913247,
+        "gain_linear": 0.6309573650360107,
         "family": "peak"
       },
       {
@@ -5442,6 +8414,7 @@
         "lookup_file_offset": "0x6e0d4",
         "cot_value": 0.7673270106315613,
         "frequency_hz_from_cot": 13999.999782157434,
+        "gain_linear": 0.6309573650360107,
         "family": "peak"
       }
     ],
@@ -5458,6 +8431,7 @@
         "lookup_file_offset": "0x6bf9c",
         "cot_value": 87.80582427978516,
         "frequency_hz_from_cot": 174.00000667976371,
+        "gain_linear": 0.3981071710586548,
         "family": "peak"
       },
       {
@@ -5472,6 +8446,7 @@
         "lookup_file_offset": "0x6bea8",
         "cot_value": 135.2088165283203,
         "frequency_hz_from_cot": 112.9999977202072,
+        "gain_linear": 0.3981071710586548,
         "family": "peak"
       },
       {
@@ -5486,6 +8461,7 @@
         "lookup_file_offset": "0x6bf0c",
         "cot_value": 110.71347045898438,
         "frequency_hz_from_cot": 138.00000122466298,
+        "gain_linear": 0.3981071710586548,
         "family": "peak"
       },
       {
@@ -5500,6 +8476,7 @@
         "lookup_file_offset": "0x6ccfc",
         "cot_value": 11.724604606628418,
         "frequency_hz_from_cot": 1300.0000561001639,
+        "gain_linear": 0.7079457640647888,
         "family": "other"
       },
       {
@@ -5514,6 +8491,7 @@
         "lookup_file_offset": "0x6cd10",
         "cot_value": 11.288216590881348,
         "frequency_hz_from_cot": 1350.000057064371,
+        "gain_linear": 0.6683439016342163,
         "family": "peak"
       },
       {
@@ -5528,6 +8506,7 @@
         "lookup_file_offset": "0x6cf90",
         "cot_value": 5.114759922027588,
         "frequency_hz_from_cot": 2950.000026767491,
+        "gain_linear": 0.5754399299621582,
         "family": "peak"
       },
       {
@@ -5542,6 +8521,7 @@
         "lookup_file_offset": "0x6c324",
         "cot_value": 38.18845748901367,
         "frequency_hz_from_cot": 400.00001892913247,
+        "gain_linear": 0.6309573650360107,
         "family": "peak"
       },
       {
@@ -5556,6 +8536,7 @@
         "lookup_file_offset": "0x6e0d4",
         "cot_value": 0.7673270106315613,
         "frequency_hz_from_cot": 13999.999782157434,
+        "gain_linear": 0.6309573650360107,
         "family": "peak"
       }
     ],
@@ -5572,6 +8553,7 @@
         "lookup_file_offset": "0x6c7d4",
         "cot_value": 21.811689376831055,
         "frequency_hz_from_cot": 700.0000153446867,
+        "gain_linear": 0.8912509679794312,
         "family": "other"
       }
     ],
@@ -5588,6 +8570,7 @@
         "lookup_file_offset": "0x6c7d4",
         "cot_value": 21.811689376831055,
         "frequency_hz_from_cot": 700.0000153446867,
+        "gain_linear": 0.8912509679794312,
         "family": "other"
       }
     ]

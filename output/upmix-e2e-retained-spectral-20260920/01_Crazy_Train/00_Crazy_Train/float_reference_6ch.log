@@ -1,0 +1,9 @@
+COMMAND ["/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/build/upmix-e2e-20260920/stereo_upmix_render", "--mode", "hssr-universal", "--model", "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/build/hssr_model.bin", "--guard-model", "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/build/hssr_guard.bin", "--front-retention", "0.0", "--surround", "0.18", "--front-bass", "0.0", "--lfe", "assist", "--lfe-gain", "0.0", "--float-render", "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/upmix-e2e-retained-spectral-20260920/01_Crazy_Train/00_Crazy_Train/source_padded.wav", "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/upmix-e2e-retained-spectral-20260920/01_Crazy_Train/00_Crazy_Train/float_reference_6ch.wav"]
+STDOUT
+
+STDERR
+experimental-float: pre-gain-peak=0.93729311 FS post-gain-peak=0.93729311 FS gain=1.00000000 limiter-attacks=3 minimum-guard-gain=0.95084846 attenuated-frames=238 total-frames=300000 longest-observed-run=238 reduction-db-sum=51.836625723 over3-frames=0 over6-frames=0 over10-frames=0
+front-retention=0.00000 (q15=0; independent of rear gain)
+rendered 300000 frames (6.250 s): PCM2 -> PCM6 L,R,C,LFE,Ls,Rs
+mode=hssr-universal surround=0.17999 (q15=5898) front=0.95801 (q15=31392) lfe=assist gain=0.12500 (q15=4096)
+/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/upmix-e2e-retained-spectral-20260920/01_Crazy_Train/00_Crazy_Train/float_reference_6ch.wav

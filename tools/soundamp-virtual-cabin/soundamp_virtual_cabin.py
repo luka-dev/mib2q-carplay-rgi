@@ -307,6 +307,8 @@ def load_config(path: Path) -> dict[str, object]:
         raise CabinError("config logical_buses must contain eight entries")
     if not isinstance(matrix, dict):
         raise CabinError("config matrix object is missing")
+    if matrix.get("storage_order") != "rows_are_outputs_columns_are_inputs":
+        raise CabinError("matrix orientation must use corrected A07 output rows/input columns; stale configs are rejected")
     gains = matrix.get("gain_db")
     if not isinstance(gains, list) or len(gains) != 8 or any(
         not isinstance(row, list) or len(row) != 8 for row in gains
@@ -385,12 +387,15 @@ def load_config(path: Path) -> dict[str, object]:
 def linear_matrix(config: dict[str, object]) -> np.ndarray:
     matrix = config["matrix"]
     assert isinstance(matrix, dict)
+    if matrix.get("storage_order") != "rows_are_outputs_columns_are_inputs":
+        raise CabinError("matrix orientation must use corrected A07 output rows/input columns")
     gain_db = np.asarray(matrix["gain_db"], dtype=np.float64)
     floor_db = float(matrix["effective_floor_db"])
     return np.power(10.0, np.maximum(gain_db, floor_db) / 20.0)
 
 
 def apply_matrix(samples: np.ndarray, gains: np.ndarray) -> np.ndarray:
+    """Apply output-row/input-column gains; documentary fan-out is separate."""
     samples = np.asarray(samples, dtype=np.float64)
     if samples.ndim != 2 or samples.shape[1] not in (6, 8):
         raise CabinError(f"matrix input must be Nx6 or Nx8, got {samples.shape}")
@@ -398,7 +403,7 @@ def apply_matrix(samples: np.ndarray, gains: np.ndarray) -> np.ndarray:
         padded = np.zeros((samples.shape[0], 8), dtype=np.float64)
         padded[:, :6] = samples
         samples = padded
-    return samples @ gains
+    return samples @ gains.T
 
 
 def documentary_fanout_matrix(config: dict[str, object]) -> tuple[np.ndarray, tuple[str, ...]]:
@@ -538,6 +543,8 @@ def render_matrix(
             "aggregates": matrix_aggregates(bus_metrics),
             "model": {
                 "id": config["model_id"],
+                "matrix_semantics_version": 2,
+                "matrix_storage_order": matrix["storage_order"],
                 "matrix_profile": matrix["profile"],
                 "matrix_bank": matrix["bank"],
                 "sink": matrix["sink"],
@@ -615,6 +622,8 @@ def render_documentary_circuits(
             "aggregates": circuit_aggregates(circuit_metrics, circuits),
             "model": {
                 "id": config["model_id"],
+                "matrix_semantics_version": 2,
+                "matrix_storage_order": config["matrix"]["storage_order"],
                 "physical_output_graph_status": physical["status"],
                 "fanout_status": fanout["status"],
                 "fanout_normalization": fanout["normalization"],
@@ -1067,6 +1076,9 @@ def render_binaural(
             "output_metrics_preclip": output_metrics.report(),
             "model": {
                 "id": config["model_id"],
+                "matrix_semantics_version": 2,
+                "matrix_storage_order": config["matrix"]["storage_order"],
+                "matrix_applied": domain != "most_inputs",
                 "symphoria_3d_enabled": state["symphoria_3d_enabled"],
                 "capture": manifest.get("capture"),
                 "operating_state": state,
@@ -1095,8 +1107,8 @@ def print_matrix(config: dict[str, object]) -> None:
     print(f"model: {config['model_id']}")
     print("Symphoria/3D: OFF")
     print(f"matrix: profile {matrix['profile']}, bank {matrix['bank']} ({matrix['sink']})")
-    print("input ->" + "".join(f"{name:>{width}}" for name in outputs))
-    for name, row in zip(inputs, gains):
+    print("out / in" + "".join(f"{name:>{width}}" for name in inputs))
+    for name, row in zip(outputs, gains):
         print(f"{name:<8}" + "".join(f"{value:>{width}.0f}" for value in row))
 
 

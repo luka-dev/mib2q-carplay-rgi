@@ -1,0 +1,280 @@
+            0x000372b0      9aee031e       cdp p14, 9, c1, c10, c3, 0
+            0x000372b4      1193           str r3, [sp, 0x44]
+        ,=< 0x000372b6      40f37d84       ble.w 0x37bb4
+        |   0x000372ba      dff8b429       ldr.w r2, [0x00037c70]      ; [0x37c70:4]=0x8be9a
+        |   0x000372be      4ff0000b       mov.w fp, 0
+        |   0x000372c2      dff8b039       ldr.w r3, [0x00037c74]      ; [0x37c74:4]=0x8be8c
+        |   0x000372c6      7a44           add r2, pc
+        |   0x000372c8      dff8ac19       ldr.w r1, [0x00037c78]      ; [0x37c78:4]=0x8e400
+        |   0x000372cc      b432           adds r2, 0xb4
+        |   0x000372ce      0f92           str r2, [sp, 0x3c]
+        |   0x000372d0      dff8a829       ldr.w r2, [0x00037c7c]      ; [0x37c7c:4]=0x8df96
+        |   0x000372d4      7b44           add r3, pc
+        |   0x000372d6      cdf82090       str.w sb, [sp, 0x20]
+        |   0x000372da      d946           mov sb, fp
+        |   0x000372dc      7944           add r1, pc
+        |   0x000372de      7a44           add r2, pc
+        |   0x000372e0      03f59e73       add.w r3, r3, 0x13c
+        |   0x000372e4      cdf86cb0       str.w fp, [sp, 0x6c]
+        |   0x000372e8      2091           str r1, [sp, 0x80]
+        |   0x000372ea      2192           str r2, [sp, 0x84]
+        |   0x000372ec      1f93           str r3, [sp, 0x7c]
+        |   0x000372ee      ecf784ef       blx 0x241f8 ; ELF-verified: CFDictionaryGetTypeID
+        |   0x000372f2      089d           ldr r5, [sp, 0x20]
+        |   0x000372f4      4946           mov r1, sb
+        |   0x000372f6      2b46           mov r3, r5
+        |   0x000372f8      0246           mov r2, r0
+        |   0x000372fa      0e98           ldr r0, [sp, 0x38]
+        |   0x000372fc      edf7d6e9       blx 0x246ac ; ELF-verified: CFArrayGetTypedValueAtIndex
+        |   0x00037300      2a68           ldr r2, [r5]
+        |   0x00037302      0446           mov r4, r0
+        |   0x00037304      002a           cmp r2, 0
+       ,==< 0x00037306      40f0c183       bne.w 0x37a8c
+       ||   0x0003730a      0f99           ldr r1, [sp, 0x3c]
+       ||   0x0003730c      eff70eef       blx 0x2712c ; ELF-verified: CFDictionaryGetInt64
+       ||   0x00037310      a0f16403       sub.w r3, r0, 0x64
+       ||   0x00037314      0546           mov r5, r0
+       ||   0x00037316      0a2b           cmp r3, 0xa
+      ,===< 0x00037318      00f28183       bhi.w 0x37a1e
+      |||   0x0003731c      dfe813f0       tbh [pc, r3, lsl 1]
+      |||   0x00037320      b400           lsls r4, r6, 2
+      |||   0x00037322      b400           lsls r4, r6, 2
+      |||   0x00037324      aa02           lsls r2, r5, 0xa
+      |||   0x00037326      7f03           lsls r7, r7, 0xd
+      |||   0x00037328      7f03           lsls r7, r7, 0xd
+      |||   0x0003732a      7f03           lsls r7, r7, 0xd
+      |||   0x0003732c      7f03           lsls r7, r7, 0xd
+      |||   0x0003732e      7f03           lsls r7, r7, 0xd
+      |||   0x00037330      7f03           lsls r7, r7, 0xd
+      |||   0x00037332      7f03           lsls r7, r7, 0xd
+      |||   0x00037334      0b00           movs r3, r1
+      |||   0x00037336      0af5b655       add.w r5, sl, 0x16c0
+      |||   0x0003733a      1435           adds r5, 0x14
+      |||   0x0003733c      2878           ldrb r0, [r5]
+      |||   0x0003733e      0028           cmp r0, 0
+     ,====< 0x00037340      41f01481       bne.w 0x3856c
+     ||||   0x00037344      0146           mov r1, r0
+     ||||   0x00037346      149a           ldr r2, [sp, 0x50]
+     ||||   0x00037348      139b           ldr r3, [sp, 0x4c]
+     ||||   0x0003734a      ecf792ee       blx 0x24070 ; ELF-verified: CFDictionaryCreateMutable
+     ||||   0x0003734e      0646           mov r6, r0
+     ||||   0x00037350      0028           cmp r0, 0
+    ,=====< 0x00037352      01f0bf81       beq.w 0x386d4
+    |||||   0x00037356      0af5b657       add.w r7, sl, 0x16c0
+    |||||   0x0003735a      2146           mov r1, r4
+    |||||   0x0003735c      1837           adds r7, 0x18
+    |||||   0x0003735e      daf8c820       ldr.w r2, [sl, 0xc8]
+    |||||   0x00037362      3868           ldr r0, [r7]
+    |||||   0x00037364      eef73eec       blx 0x25be4 ; ELF-verified: AirPlayReceiverSessionScreen_Setup
+    |||||   0x00037368      8046           mov r8, r0
+    |||||   0x0003736a      0028           cmp r0, 0
+   ,======< 0x0003736c      41f01583       bne.w 0x3899a
+   ||||||   0x00037370      2046           mov r0, r4
+   ||||||   0x00037372      1f99           ldr r1, [sp, 0x7c]
+   ||||||   0x00037374      4246           mov r2, r8
+   ||||||   0x00037376      eff7daee       blx 0x2712c ; ELF-verified: CFDictionaryGetInt64
+   ||||||   0x0003737a      50ea0103       orrs.w r3, r0, r1
+  ,=======< 0x0003737e      01f01883       beq.w 0x389b2
+  |||||||   0x00037382      daf8e4b3       ldr.w fp, [sl, 0x3e4]
+  |||||||   0x00037386      bbf1000f       cmp.w fp, 0
+  ========< 0x0003738a      01f0f880       beq.w 0x3857e
+  |||||||   0x0003738e      cdf80080       str.w r8, [sp]
+  |||||||   0x00037392      0246           mov r2, r0
+  |||||||   0x00037394      cdf80480       str.w r8, [sp, 4]
+  |||||||   0x00037398      69ac           add r4, sp, 0x1a4
+  |||||||   0x0003739a      0b46           mov r3, r1
+  |||||||   0x0003739c      0af57970       add.w r0, sl, 0x3e4
+  |||||||   0x000373a0      0294           str r4, [sp, 8]
+  |||||||   0x000373a2      0c94           str r4, [sp, 0x30]
+  |||||||   0x000373a4      fdf7cefc       bl 0x34d44 ; ELF-verified: internal
+  |||||||   0x000373a8      8046           mov r8, r0
+  |||||||   0x000373aa      0028           cmp r0, 0
+  ========< 0x000373ac      53d1           bne 0x37456
+  |||||||   0x000373ae      3868           ldr r0, [r7]
+  |||||||   0x000373b0      2146           mov r1, r4
+  |||||||   0x000373b2      2022           movs r2, 0x20
+  |||||||   0x000373b4      eef76ceb       blx 0x25a90 ; ELF-verified: AirPlayReceiverSessionScreen_SetChaChaSecurityInfo
+  |||||||   0x000373b8      8046           mov r8, r0
+  |||||||   0x000373ba      0028           cmp r0, 0
+  |||||||   0x000373bc      4bd1           bne 0x37456
+  |||||||   0x000373be      4ff48042       mov.w r2, 0x4000
+  |||||||   0x000373c2      0af5b654       add.w r4, sl, 0x16c0
+  |||||||   0x000373c6      4ef67203       movw r3, 0xe872
+  |||||||   0x000373ca      9af88500       ldrb.w r0, [sl, 0x85]
+  |||||||   0x000373ce      cff6fd72       movt r2, 0xfffd
+  |||||||   0x000373d2      1c34           adds r4, 0x1c
+  |||||||   0x000373d4      0192           str r2, [sp, 4]
+  |||||||   0x000373d6      cff6ff73       movt r3, 0xffff
+  |||||||   0x000373da      44aa           add r2, sp, 0x110
+  |||||||   0x000373dc      0294           str r4, [sp, 8]
+  |||||||   0x000373de      0092           str r2, [sp]
+            0x00035d20      2782           strh r7, [r4, 0x10]
+            0x00035d22      dbf8d803       ldr.w r0, [fp, 0x3d8]
+            0x00035d26      0028           cmp r0, 0
+        ,=< 0x00035d28      03db           blt 0x35d32
+        |   0x00035d2a      edf796ee       blx 0x23a58 ; ELF-verified: close
+        |   0x00035d2e      cbf8d873       str.w r7, [fp, 0x3d8]
+        `-> 0x00035d32      0bf57370       add.w r0, fp, 0x3cc
+            0x00035d36      1c99           ldr r1, [sp, 0x70]
+            0x00035d38      eef7b2ee       blx 0x24aa0 ; ELF-verified: HTTPClientCreateWithSocket
+            0x00035d3c      0446           mov r4, r0
+            0x00035d3e      0028           cmp r0, 0
+        ,=< 0x00035d40      40f01682       bne.w 0x36170
+        |   0x00035d44      dbf8cc03       ldr.w r0, [fp, 0x3cc]
+        |   0x00035d48      4ff0ff33       mov.w r3, -1
+        |   0x00035d4c      dbf8c813       ldr.w r1, [fp, 0x3c8]
+        |   0x00035d50      1c93           str r3, [sp, 0x70]
+        |   0x00035d52      f1f7faeb       blx 0x27548 ; ELF-verified: HTTPClientSetDispatchQueue
+        |   0x00035d56      dff82835       ldr.w r3, [0x00036280]      ; [0x36280:4]=220
+        |   0x00035d5a      dbf8cc03       ldr.w r0, [fp, 0x3cc]
+        |   0x00035d5e      e958           ldr r1, [r5, r3]
+        |   0x00035d60      eef782eb       blx 0x24468 ; ELF-verified: HTTPClientSetLogging
+        |   0x00035d64      dbf8e403       ldr.w r0, [fp, 0x3e4]
+        |   0x00035d68      0028           cmp r0, 0
+       ,==< 0x00035d6a      00f0fe81       beq.w 0x3616a
+       ||   0x00035d6e      dff814a5       ldr.w sl, [0x00036284]      ; [0x36284:4]=0x8ef28
+       ||   0x00035d72      1a23           movs r3, 0x1a
+       ||   0x00035d74      0093           str r3, [sp]
+       ||   0x00035d76      2027           movs r7, 0x20
+       ||   0x00035d78      fa44           add sl, pc
+       ||   0x00035d7a      dff80c35       ldr.w r3, [0x00036288]      ; [0x36288:4]=0x8ef20
+       ||   0x00035d7e      0df1a409       add.w sb, sp, 0xa4
+       ||   0x00035d82      0197           str r7, [sp, 4]
+       ||   0x00035d84      5146           mov r1, sl
+       ||   0x00035d86      cdf80890       str.w sb, [sp, 8]
+       ||   0x00035d8a      0b22           movs r2, 0xb
+       ||   0x00035d8c      7b44           add r3, pc
+       ||   0x00035d8e      f1f75cec       blx 0x27648 ; ELF-verified: PairingSessionDeriveKey
+       ||   0x00035d92      0028           cmp r0, 0
+      ,===< 0x00035d94      40f00882       bne.w 0x361a8
+      |||   0x00035d98      dbf8e403       ldr.w r0, [fp, 0x3e4]
+      |||   0x00035d9c      1b23           movs r3, 0x1b
+      |||   0x00035d9e      0093           str r3, [sp]
+      |||   0x00035da0      5146           mov r1, sl
+      |||   0x00035da2      dff8e834       ldr.w r3, [0x0003628c]      ; [0x3628c:4]=0x8ef16
+      |||   0x00035da6      0df1c40a       add.w sl, sp, 0xc4
+      |||   0x00035daa      0197           str r7, [sp, 4]
+      |||   0x00035dac      0b22           movs r2, 0xb
+      |||   0x00035dae      cdf808a0       str.w sl, [sp, 8]
+      |||   0x00035db2      7b44           add r3, pc
+      |||   0x00035db4      f1f748ec       blx 0x27648 ; ELF-verified: PairingSessionDeriveKey
+      |||   0x00035db8      0028           cmp r0, 0
+     ,====< 0x00035dba      40f0f581       bne.w 0x361a8
+     ||||   0x00035dbe      dff8d014       ldr.w r1, [0x00036290]      ; [0x36290:4]=0x2b0
+     ||||   0x00035dc2      1dab           add r3, sp, 0x74
+     ||||   0x00035dc4      4a46           mov r2, sb
+     ||||   0x00035dc6      1846           mov r0, r3
+     ||||   0x00035dc8      1790           str r0, [sp, 0x5c]
+     ||||   0x00035dca      6d58           ldr r5, [r5, r1]
+     ||||   0x00035dcc      2346           mov r3, r4
+     ||||   0x00035dce      cdf800a0       str.w sl, [sp]
+     ||||   0x00035dd2      0194           str r4, [sp, 4]
+     ||||   0x00035dd4      2946           mov r1, r5
+     ||||   0x00035dd6      f0f7e0ea       blx 0x26398 ; ELF-verified: NetTransportChaCha20Poly1305Configure
+     ||||   0x00035dda      0028           cmp r0, 0
+    ,=====< 0x00035ddc      40f0f081       bne.w 0x361c0
+    |||||   0x00035de0      3946           mov r1, r7
+    |||||   0x00035de2      2246           mov r2, r4
+    |||||   0x00035de4      3b46           mov r3, r7
+    |||||   0x00035de6      4846           mov r0, sb
+    |||||   0x00035de8      f1f766eb       blx 0x274b8 ; ELF-verified: memset_s
+    |||||   0x00035dec      3946           mov r1, r7
+    |||||   0x00035dee      5046           mov r0, sl
+    |||||   0x00035df0      2246           mov r2, r4
+    |||||   0x00035df2      3b46           mov r3, r7
+    |||||   0x00035df4      f1f760eb       blx 0x274b8 ; ELF-verified: memset_s
+    |||||   0x00035df8      1799           ldr r1, [sp, 0x5c]
+    |||||   0x00035dfa      dbf8cc03       ldr.w r0, [fp, 0x3cc]
+    |||||   0x00035dfe      edf796ec       blx 0x2372c ; ELF-verified: HTTPClientSetTransportDelegate
+    |||||   0x00035e02      2b68           ldr r3, [r5]
+    |||||   0x00035e04      1e2b           cmp r3, 0x1e
+   ,======< 0x00035e06      13dc           bgt 0x35e30
+   ||||||   0x00035e08      0133           adds r3, 1
+  ,=======< 0x00035e0a      00f0f181       beq.w 0x361f0
+  |||||||   0x00035e0e      4046           mov r0, r8
+  |||||||   0x00035e10      dbf8dc73       ldr.w r7, [fp, 0x3dc]
+  |||||||   0x00035e14      eef7fcea       blx 0x24410 ; ELF-verified: SockAddrGetPort
+  |||||||   0x00035e18      dff87814       ldr.w r1, [0x00036294]      ; [0x36294:4]=0x90772
+  |||||||   0x00035e1c      dff87834       ldr.w r3, [0x00036298]      ; [0x36298:4]=0x8eebe
+  |||||||   0x00035e20      1e22           movs r2, 0x1e
+  |||||||   0x00035e22      7944           add r1, pc
+  :::::::   0x0003cd4e      04f5ec73       add.w r3, r4, 0x1d8
+  :::::::   0x0003cd52      04f53171       add.w r1, r4, 0x2c4
+  :::::::   0x0003cd56      1a46           mov r2, r3
+  :::::::   0x0003cd58      04f53973       add.w r3, r4, 0x2e4
+  :::::::   0x0003cd5c      9146           mov sb, r2
+  :::::::   0x0003cd5e      1046           mov r0, r2
+  :::::::   0x0003cd60      1a46           mov r2, r3
+  :::::::   0x0003cd62      1693           str r3, [sp, 0x58]
+  :::::::   0x0003cd64      e9f70ee8       blx 0x25d84 ; ELF-verified: chacha20_poly1305_init_64x64
+  :::::::   0x0003cd68      4846           mov r0, sb
+  :::::::   0x0003cd6a      1199           ldr r1, [sp, 0x44]
+  :::::::   0x0003cd6c      8022           movs r2, 0x80
+  :::::::   0x0003cd6e      e6f776eb       blx 0x2345c ; ELF-verified: chacha20_poly1305_add_aad
+  :::::::   0x0003cd72      189b           ldr r3, [sp, 0x60]
+  :::::::   0x0003cd74      4846           mov r0, sb
+  :::::::   0x0003cd76      a26b           ldr r2, [r4, 0x38]
+  :::::::   0x0003cd78      1946           mov r1, r3
+  :::::::   0x0003cd7a      103a           subs r2, 0x10
+  :::::::   0x0003cd7c      eaf702eb       blx 0x27384 ; ELF-verified: chacha20_poly1305_decrypt
+  :::::::   0x0003cd80      a26b           ldr r2, [r4, 0x38]
+  :::::::   0x0003cd82      0146           mov r1, r0
+  :::::::   0x0003cd84      189b           ldr r3, [sp, 0x60]
+  :::::::   0x0003cd86      4846           mov r0, sb
+  :::::::   0x0003cd88      a2f1100e       sub.w lr, r2, 0x10
+  :::::::   0x0003cd8c      189a           ldr r2, [sp, 0x60]
+  :::::::   0x0003cd8e      8946           mov sb, r1
+  :::::::   0x0003cd90      5918           adds r1, r3, r1
+  :::::::   0x0003cd92      7244           add r2, lr
+  :::::::   0x0003cd94      4346           mov r3, r8
+  :::::::   0x0003cd96      e9f7e0ed       blx 0x26958 ; ELF-verified: chacha20_poly1305_verify
+  :::::::   0x0003cd9a      d8f80030       ldr.w r3, [r8]
+  :::::::   0x0003cd9e      4844           add r0, sb
+  :::::::   0x0003cda0      002b           cmp r3, 0
+  :::`====< 0x0003cda2      7ff467ad       bne.w 0x3c874
+  ::: :::   0x0003cda6      a36b           ldr r3, [r4, 0x38]
+  ::: :::   0x0003cda8      103b           subs r3, 0x10
+  ::: :::   0x0003cdaa      9842           cmp r0, r3
+  :::,====< 0x0003cdac      44d1           bne 0x3ce38
+  :::|:::   0x0003cdae      94f8e432       ldrb.w r3, [r4, 0x2e4]
+  :::|:::   0x0003cdb2      a063           str r0, [r4, 0x38]
+  :::|:::   0x0003cdb4      0133           adds r3, 1
+  :::|:::   0x0003cdb6      dbb2           uxtb r3, r3
+  :::|:::   0x0003cdb8      84f8e432       strb.w r3, [r4, 0x2e4]
+  :::|:::   0x0003cdbc      002b           cmp r3, 0
+  ========< 0x0003cdbe      79d1           bne 0x3ceb4
+  :::|:::   0x0003cdc0      169a           ldr r2, [sp, 0x58]
+  :::|:::   0x0003cdc2      04f2eb21       addw r1, r4, 0x2eb
+  :::|:::   0x0003cdc6      ddf81890       ldr.w sb, [sp, 0x18]
+  --------> 0x0003cdca      12f8013f       ldrb r3, [r2, 1]!
+  :::|:::   0x0003cdce      0133           adds r3, 1
+  :::|:::   0x0003cdd0      dbb2           uxtb r3, r3
+  :::|:::   0x0003cdd2      1370           strb r3, [r2]
+  ========< 0x0003cdd4      0bb9           cbnz r3, 0x3cdda
+  :::|:::   0x0003cdd6      8a42           cmp r2, r1
+  ========< 0x0003cdd8      f7d1           bne 0x3cdca
+  --------> 0x0003cdda      cdf81890       str.w sb, [sp, 0x18]
+  ========< 0x0003cdde      ade6           b 0x3cb3c
+  :::|:::   0x0003cde0      3846           mov r0, r7
+  :::|:::   0x0003cde2      3221           movs r1, 0x32               ; '2'
+  :::|:::   0x0003cde4      e8f7e8ea       blx 0x253b8 ; ELF-verified: _LogCategory_Initialize
+  :::|:::   0x0003cde8      0028           cmp r0, 0
+  :::|`===< 0x0003cdea      3ff4ddac       beq.w 0x3c7a8
+  :::| ::   0x0003cdee      429b           ldr r3, [sp, 0x108]
+  :::| `==< 0x0003cdf0      c7e4           b 0x3c782
+  :::|  :   0x0003cdf2      3846           mov r0, r7
+  :::|  :   0x0003cdf4      3c21           movs r1, 0x3c               ; '<'
+  :::|  :   0x0003cdf6      e8f7e0ea       blx 0x253b8 ; ELF-verified: _LogCategory_Initialize
+  :::|  :   0x0003cdfa      0028           cmp r0, 0
+  `=======< 0x0003cdfc      3ff45bae       beq.w 0x3cab6
+   ::|  :   0x0003ce00      94f83c30       ldrb.w r3, [r4, 0x3c]
+   `======< 0x0003ce04      3fe6           b 0x3ca86
+    :|  :   0x0003ce06      354b           ldr r3, [0x0003cedc]        ; [0x3cedc:4]=0x85bf0
+    :|  :   0x0003ce08      7b44           add r3, pc
+    `=====< 0x0003ce0a      8ce5           b 0x3c926
+     |  :   0x0003ce0c      4846           mov r0, sb
+     |  :   0x0003ce0e      3c21           movs r1, 0x3c               ; '<'
+     |  :   0x0003ce10      e8f7d2ea       blx 0x253b8 ; ELF-verified: _LogCategory_Initialize
+     |  :   0x0003ce14      0028           cmp r0, 0
+     |  `=< 0x0003ce16      3ff40bac       beq.w 0x3c630
+     |      0x0003ce1a      d4e90823       ldrd r2, r3, [r4, 0x20]

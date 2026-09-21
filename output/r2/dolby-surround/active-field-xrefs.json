@@ -1,0 +1,92 @@
+[
+  {
+    "address": "0x1800036e9",
+    "field": "0x77c",
+    "asm": "mov dword ptr [rbp + 0x77c], eax",
+    "function": "0x180003590"
+  },
+  {
+    "address": "0x1800036fe",
+    "field": "0x7a8",
+    "asm": "mov dword ptr [rbp + 0x7a8], eax",
+    "function": "0x180003590"
+  },
+  {
+    "address": "0x18000372f",
+    "field": "0x750",
+    "asm": "lea rcx, [rbp + 0x750]",
+    "function": "0x180003590"
+  },
+  {
+    "address": "0x180005c1e",
+    "field": "0x77c",
+    "asm": "mov dword ptr [rdi + 0x77c], r10d",
+    "function": "0x1800056c2"
+  },
+  {
+    "address": "0x180005c33",
+    "field": "0x7a8",
+    "asm": "mov dword ptr [rdi + 0x7a8], r9d",
+    "function": "0x1800056c2"
+  },
+  {
+    "address": "0x180005f21",
+    "field": "0x750",
+    "asm": "lea rcx, [rdi + 0x750]",
+    "function": "0x1800056c2"
+  },
+  {
+    "address": "0x180006dbc",
+    "field": "0x750",
+    "asm": "cmp r12d, dword ptr [r13 + 0x750]",
+    "function": "0x180006da0"
+  },
+  {
+    "address": "0x180006dc5",
+    "field": "0x750",
+    "asm": "mov dword ptr [r13 + 0x750], r12d",
+    "function": "0x180006da0"
+  },
+  {
+    "address": "0x18000850f",
+    "field": "0x77c",
+    "asm": "cmp dword ptr [rbp + 0x77c], 0",
+    "function": "0x180007d10"
+  },
+  {
+    "address": "0x180009604",
+    "field": "0x7a8",
+    "asm": "movss xmm2, dword ptr [rbp + 0x7a8]",
+    "function": "0x180007d10"
+  },
+  {
+    "address": "0x18000a74a",
+    "field": "0x750",
+    "asm": "mov dword ptr [rsp + 0x750], r11d",
+    "function": "0x180007d10"
+  },
+  {
+    "address": "0x18000a78a",
+    "field": "0x750",
+    "asm": "lea r10, [rsp + 0x750]",
+    "function": "0x180007d10"
+  },
+  {
+    "address": "0x18002c7b3",
+    "field": "0x77c",
+    "asm": "cmp dword ptr [r13 + 0x77c], 0",
+    "function": "0x18002c2b0"
+  },
+  {
+    "address": "0x18010ce23",
+    "field": "0x7a8",
+    "asm": "mov rcx, qword ptr [rsp + 0x7a8]",
+    "function": "0x18010cb30"
+  },
+  {
+    "address": "0x18010d638",
+    "field": "0x7a8",
+    "asm": "mov rax, qword ptr [rsp + 0x7a8]",
+    "function": "0x18010cb30"
+  }
+]

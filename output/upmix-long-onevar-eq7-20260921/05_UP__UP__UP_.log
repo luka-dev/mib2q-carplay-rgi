@@ -1,0 +1,10 @@
+COMMAND ["/opt/homebrew/opt/python@3.14/bin/python3.14", "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tools/soundamp-virtual-cabin/audit_upmix_end_to_end.py", "--renderer", "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/build/upmix-e2e-20260920/stereo_upmix_render", "--model", "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/build/hssr_model.bin", "--guard", "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/build/hssr_guard.bin", "--out", "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/upmix-long-onevar-eq7-20260921/05_UP__UP__UP_", "--input", "/private/tmp/upmix-bank1-audit.BR9uxY/UP. UP. UP..wav", "--seconds", "60.0", "--tail-seconds", "4.0", "--input-eq-bank", "7", "--variant", "startup:s16:0.40:-3:0:0", "--variant", "bass0:s16:0.40:0:0:0", "--variant", "surr30:s16:0.30:-3:0:0", "--variant", "retain75:s16:0.40:-3:0:0.75", "--variant", "float:float:0.40:-3:0:0", "--scenario", "full_static_nearest_zero_aux", "--build-provenance", "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/build/upmix-e2e-20260920/build_provenance.json", "--save-output-wavs"]
+STDOUT
+UP. UP. UP. full_static_nearest_zero_aux dry_bank1 done
+UP. UP. UP. full_static_nearest_zero_aux startup done
+UP. UP. UP. full_static_nearest_zero_aux bass0 done
+UP. UP. UP. full_static_nearest_zero_aux surr30 done
+UP. UP. UP. full_static_nearest_zero_aux retain75 done
+UP. UP. UP. full_static_nearest_zero_aux float done
+
+STDERR

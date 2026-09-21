@@ -1,0 +1,1125 @@
+{
+  "collected_utc": "2026-09-21T01:15:30.494365+00:00",
+  "method": "Static strings and PE export inspection; no runtime DSP measurement",
+  "files": [
+    {
+      "file": "DolbyAccess.dll",
+      "source": "C:\\Program Files\\WindowsApps\\DolbyLaboratories.DolbyAccess_3.27.12250.0_x64__rz1tebttyb220\\DolbyAccess.dll",
+      "bytes": 62899712,
+      "sha256": "d72429f95ba9df3900fa52e432ad4d84e31ca40dc4ac614ad3efc0aa91ce7229",
+      "exports": [
+        "DllGetActivationFactory",
+        "DllGetClassObject",
+        "RHBinder__ShimExeMain"
+      ],
+      "strings": [
+        {
+          "offset_hex": "0x10b1ade",
+          "encoding": "ascii",
+          "text": "Tglobal::DAX.IDAXEvent.OnDolbyEnableChangedXglobal::DAX.IDAXEvent.OnActiveProfileChangedpglobal::DAX.IDAXEvent.OnSurroundVirtualizerEnableChangedfglobal::DAX.IDAXEvent.OnDialogEnhancerEnableChangeddglobal::DAX.IDAXEvent.OnVolumeLevelerEnableChangedbglobal::DAX.IDAXEvent.OnBassEnhancerEnableChangedPglobal::DAX.IDAXEvent.OnGEQLevelsChangedZglobal::DAX.IDAXEvent.OnActiveEndpointChanged\\global::DAX.IDAXEvent.OnDefaultEndpointChangedRglobal::DAX.IDAXEvent.OnDeviceModeChangedPglobal::DAX.IDAXEvent.OnAPIStatusChanged"
+        },
+        {
+          "offset_hex": "0x10b1cea",
+          "encoding": "ascii",
+          "text": ".OnDolbyEnableChanged__n2OnActiveProfileChanged__nJOnSurroundVirtualizerEnableChanged__n@OnDialogEnhancerEnableChanged__n>OnVolumeLevelerEnableChanged__n<OnBassEnhancerEnableChanged__n*OnGEQLevelsChanged__n"
+        },
+        {
+          "offset_hex": "0x10b1f9b",
+          "encoding": "ascii",
+          "text": "global::DAX.IDAXEvent_Manager2.OnSurroundVirtualizerValueChangedvglobal::DAX.IDAXEvent_Manager2.OnDialogEnhancerValueChangedtglobal::DAX.IDAXEvent_Manager2.OnVolumeLevelerValueChangednglobal::DAX.IDAXEvent_Manager2.OnSubProfileDirtyChangedpglobal::DAX.IDAXEvent_Manager2.OnAutoSwitchEnableChanged"
+        },
+        {
+          "offset_hex": "0x10b21a6",
+          "encoding": "ascii",
+          "text": "OnIEQChanged__nHOnSurroundVirtualizerValueChanged__n>OnDialogEnhancerValueChanged__n<OnVolumeLevelerValueChanged__n6OnSubProfileDirtyChanged__n8OnAutoSwitchEnableChanged__nJOnEndpointMasterVolumeLevelChanged__n"
+        },
+        {
+          "offset_hex": "0x10b2626",
+          "encoding": "ascii",
+          "text": "$get_DolbyEnable__n$set_DolbyEnable__n(get_ActiveProfile__n(set_ActiveProfile__n@get_SurroundVirtualizerEnable__n@set_SurroundVirtualizerEnable__n6get_DialogEnhancerEnable__n6set_DialogEnhancerEnable__n4get_VolumeLevelerEnable__n4set_VolumeLevelerEnable__n2get_BassEnhancerEnable__n2set_BassEnhancerEnable__n get_GEQLevels__n"
+        },
+        {
+          "offset_hex": "0x10b2a5a",
+          "encoding": "ascii",
+          "text": "ResetIEQ__n>get_SurroundVirtualizerValue__n>set_SurroundVirtualizerValue__n4get_DialogEnhancerValue__n4set_DialogEnhancerValue__n2get_VolumeLevelerValue__n2set_VolumeLevelerValue__n.get_IsShowAutoSwitch__n.get_AutoSwitchEnable__n.set_AutoSwitchEnable__n get_UnlockKey__n(get_TuningVersion__n\"get_TuningDate__n&get_OperatorName__n<get_ContentProcessingParams__n:get_DeviceProcessingParams__n"
+        },
+        {
+          "offset_hex": "0x12290ef",
+          "encoding": "ascii",
+          "text": "\"get_ActiveProfile\"set_ActiveProfile:get_SurroundVirtualizerEnable:set_SurroundVirtualizerEnable0get_DialogEnhancerEnable0set_DialogEnhancerEnable.get_VolumeLevelerEnable.set_VolumeLevelerEnable,get_BassEnhancerEnable,set_BassEnhancerEnable"
+        },
+        {
+          "offset_hex": "0x1229513",
+          "encoding": "ascii",
+          "text": "ResetIEQ8get_SurroundVirtualizerValue@"
+        },
+        {
+          "offset_hex": "0x1229541",
+          "encoding": "ascii",
+          "text": "8set_SurroundVirtualizerValue@"
+        },
+        {
+          "offset_hex": "0x122994a",
+          "encoding": "ascii",
+          "text": "2SurroundVirtualizerEnable"
+        },
+        {
+          "offset_hex": "0x1229a8d",
+          "encoding": "ascii",
+          "text": "0SurroundVirtualizerValue@"
+        },
+        {
+          "offset_hex": "0x1229ca0",
+          "encoding": "ascii",
+          "text": ",OnActiveProfileChangedDOnSurroundVirtualizerEnableChanged:OnDialogEnhancerEnableChanged8OnVolumeLevelerEnableChanged6OnBassEnhancerEnableChanged$OnGEQLevelsChanged.OnActiveEndpointChanged@"
+        },
+        {
+          "offset_hex": "0x1229eee",
+          "encoding": "ascii",
+          "text": "OnIEQChangedBOnSurroundVirtualizerValueChanged8OnDialogEnhancerValueChanged6OnVolumeLevelerValueChanged0OnSubProfileDirtyChanged2OnAutoSwitchEnableChangedDOnEndpointMasterVolumeLevelChanged@"
+        },
+        {
+          "offset_hex": "0x12cd73a",
+          "encoding": "ascii",
+          "text": "6<_surroundVirtualizer>d__30"
+        },
+        {
+          "offset_hex": "0x12cdafe",
+          "encoding": "ascii",
+          "text": "(_surroundVirtualizer"
+        },
+        {
+          "offset_hex": "0x12ce9ea",
+          "encoding": "ascii",
+          "text": " get_PlatformName:get_ShareDeviceLicenseEnabled:get_IsChannelUpmixerAvailable.get_IsInternetConnected&get_IsOfflineRegion"
+        },
+        {
+          "offset_hex": "0x12cee40",
+          "encoding": "ascii",
+          "text": "'2IsChannelUpmixerAvailable"
+        },
+        {
+          "offset_hex": "0x12e8482",
+          "encoding": "ascii",
+          "text": ",PhrtfVirtualizerParams"
+        },
+        {
+          "offset_hex": "0x1304b95",
+          "encoding": "ascii",
+          "text": "*VirtualizerParameters"
+        },
+        {
+          "offset_hex": "0x13056a1",
+          "encoding": "ascii",
+          "text": ",SpeakerVirtualizerMode"
+        },
+        {
+          "offset_hex": "0x13058c7",
+          "encoding": "ascii",
+          "text": "RAdvancedSpeakerVirtualizerRenderingConfig"
+        },
+        {
+          "offset_hex": "0x130635c",
+          "encoding": "ascii",
+          "text": ":LiveUpmixerActiveChannelCount"
+        },
+        {
+          "offset_hex": "0x13070bf",
+          "encoding": "ascii",
+          "text": "0MediaIntelligenceEnabled(VolumeLevelerEnabled,DialogEnchancerEnabled$VirtualBassEnabled(BassEnchancerEnabled2SpeakerVirtualizerEnabled6HeadphoneVirtualizerEnabled"
+        },
+        {
+          "offset_hex": "0x13236b5",
+          "encoding": "ascii",
+          "text": "labelSV2surroundVirtualizerToggle(performanceModeLabel*performanceModeSwitch4performanceModeDescription"
+        },
+        {
+          "offset_hex": "0x1336b10",
+          "encoding": "ascii",
+          "text": "C2get_ChannelUpmixerEnabled2set_ChannelUpmixerEnabled*get_ActiveProfileType@"
+        },
+        {
+          "offset_hex": "0x1336c76",
+          "encoding": "ascii",
+          "text": "$add_ProfileChanged*remove_ProfileChanged4add_ChannelUpmixerSwitched:remove_ChannelUpmixerSwitched*add_ToggleDaxDapEvent0remove_ToggleDaxDapEvent.add_SpatialSoundChanged4remove_SpatialSoundChangedDget_ShouldCombineActiveAndSelected*ChannelUpmixerEnabled"
+        },
+        {
+          "offset_hex": "0x1336e2e",
+          "encoding": "ascii",
+          "text": "C,ChannelUpmixerSwitched"
+        },
+        {
+          "offset_hex": "0x133720f",
+          "encoding": "ascii",
+          "text": ">remove_IsPerformanceModeChanged*get_IsPerformanceMode*set_IsPerformanceModeNadd_IsSurroundVirtualizerEnabledChangedTremove_IsSurroundVirtualizerEnabledChanged@get_IsSurroundVirtualizerEnabled@set_IsSurroundVirtualizerEnabledHadd_IsDialogueEnhancerEnabledChangedNremove_IsDialogueEnhancerEnabledChanged:get_IsDialogueEnhancerEnabled:set_IsDialogueEnhancerEnabledBadd_IsVolumeLevelerEnabledChangedHremove_IsVolumeLevelerEnabledChanged4get_IsVolumeLevelerEnabled4set_IsVolumeLevelerEnabled&get_CustomGainRange@"
+        },
+        {
+          "offset_hex": "0x1337601",
+          "encoding": "ascii",
+          "text": "FIsSurroundVirtualizerEnabledChanged@IsDialogueEnhancerEnabledChanged:IsVolumeLevelerEnabledChanged"
+        },
+        {
+          "offset_hex": "0x1337704",
+          "encoding": "ascii",
+          "text": "*C8IsSurroundVirtualizerEnabled"
+        },
+        {
+          "offset_hex": "0x133afcf",
+          "encoding": "ascii",
+          "text": ")\\<_selectedProfileConfiguration>k__BackingField,_channelUpmixerEnabled"
+        },
+        {
+          "offset_hex": "0x134032a",
+          "encoding": "ascii",
+          "text": ",get_ChannelUpmixerText,set_ChannelUpmixerText<get_EnhancedChannelUpmixerText<set_EnhancedChannelUpmixerText>get_ChannelUpmixerSwitchVisible>set_ChannelUpmixerSwitchVisibleFget_IsExclusiveModeExplainerVisibleFset_IsExclusiveModeExplainerVisible.get_ExclusiveModeButton@"
+        },
+        {
+          "offset_hex": "0x13404da",
+          "encoding": "ascii",
+          "text": "&_channelUpmixerText6_enhancedChannelUpmixerText8_channelUpmixerSwitchVisible>_isExclusiveModeExplaierVisible(_exclusiveModeButton"
+        },
+        {
+          "offset_hex": "0x1340560",
+          "encoding": "ascii",
+          "text": "$ChannelUpmixerText"
+        },
+        {
+          "offset_hex": "0x134057a",
+          "encoding": "ascii",
+          "text": "F4EnhancedChannelUpmixerText"
+        },
+        {
+          "offset_hex": "0x134059d",
+          "encoding": "ascii",
+          "text": "F6ChannelUpmixerSwitchVisible"
+        },
+        {
+          "offset_hex": "0x1346fa5",
+          "encoding": "ascii",
+          "text": "set_CanShow.get_SurroundVirtualizer@"
+        },
+        {
+          "offset_hex": "0x1346fd0",
+          "encoding": "ascii",
+          "text": ".set_SurroundVirtualizer@"
+        },
+        {
+          "offset_hex": "0x1347033",
+          "encoding": "ascii",
+          "text": "@_createSurroundVirtualizerSwitch4_createVolumeLevelerSwitch@"
+        },
+        {
+          "offset_hex": "0x1347087",
+          "encoding": "ascii",
+          "text": "H_updateSurroundVirtualizerVisibilityr<_createSurroundVirtualizerSwitch>g__getIsOnDelegate|18_0r<_createSurroundVirtualizerSwitch>g__setIsOnDelegate|18_1f<_createVolumeLevelerSwitch>g__getIsOnDelegate|19_0f<_createVolumeLevelerSwitch>g__setIsOnDelegate|19_1"
+        },
+        {
+          "offset_hex": "0x13471c4",
+          "encoding": "ascii",
+          "text": "I&SurroundVirtualizer@"
+        },
+        {
+          "offset_hex": "0x143a6c4",
+          "encoding": "ascii",
+          "text": "PerformanceMode:PROPERTY_SURROUND_VIRTUALIZER.PROPERTY_VOLUME_LEVELER4PROPERTY_GRAPHIC_EQUALIZER GraphicEqualizer"
+        },
+        {
+          "offset_hex": "0x143d5ee",
+          "encoding": "ascii",
+          "text": "0SetChannelUpmixerEnabled0GetChannelUpmixerEnabled"
+        },
+        {
+          "offset_hex": "0x143e297",
+          "encoding": "ascii",
+          "text": "@U <><GetChannelUpmixerEnabled>d__10"
+        },
+        {
+          "offset_hex": "0x143e358",
+          "encoding": "ascii",
+          "text": "><SetChannelUpmixerEnabled>d__11"
+        },
+        {
+          "offset_hex": "0x143e411",
+          "encoding": "ascii",
+          "text": "eHDefaultRunTimeParamsUpmixerSupported"
+        },
+        {
+          "offset_hex": "0x143e91c",
+          "encoding": "ascii",
+          "text": "4_basicSystemInfoAggregator>_isSurroundVirtualizerSupported,<_setDaxProfile>b__5_06_getDefaultGamingSubProfile4_setDefaultPerformanceMode(_isGamingOrRetailSku6_isPerformanceModeSupported"
+        },
+        {
+          "offset_hex": "0x1440e75",
+          "encoding": "ascii",
+          "text": ",StereoBypassAdjustment"
+        },
+        {
+          "offset_hex": "0x1442302",
+          "encoding": "ascii",
+          "text": "6remove_ActiveProfileChangedHadd_SurroundVirtualizerEnableChangedNremove_SurroundVirtualizerEnableChanged>add_DialogEnhancerEnableChangedDremove_DialogEnhancerEnableChanged<add_VolumeLevelerEnableChangedBremove_VolumeLevelerEnableChanged:add_BassEnhancerEnableChanged@remove_BassEnhancerEnableChanged(add_GEQLevelsChanged@"
+        },
+        {
+          "offset_hex": "0x1442521",
+          "encoding": "ascii",
+          "text": "'(ActiveProfileChanged@SurroundVirtualizerEnableChanged6DialogEnhancerEnableChanged4VolumeLevelerEnableChanged2BassEnhancerEnableChanged GEQLevelsChanged"
+        },
+        {
+          "offset_hex": "0x14426d5",
+          "encoding": "ascii",
+          "text": "add_IEQChanged\"remove_IEQChangedFadd_SurroundVirtualizerValueChanged@"
+        },
+        {
+          "offset_hex": "0x1442726",
+          "encoding": "ascii",
+          "text": "Lremove_SurroundVirtualizerValueChanged<add_DialogEnhancerValueChangedBremove_DialogEnhancerValueChanged:add_VolumeLevelerValueChanged@remove_VolumeLevelerValueChanged4add_SubProfileDirtyChanged:remove_SubProfileDirtyChanged6add_AutoSwitchEnableChanged<remove_AutoSwitchEnableChanged2add_EndpointVolumeChanged@"
+        },
+        {
+          "offset_hex": "0x14428df",
+          "encoding": "ascii",
+          "text": "IEQChanged>SurroundVirtualizerValueChanged"
+        },
+        {
+          "offset_hex": "0x14442d3",
+          "encoding": "ascii",
+          "text": "<<get_IsHeadphonePlugin>b__61_08<get_GeqMaximumRange>b__63_0,<get_GeqLevels>b__65_0@<get_VolumeLevelerEnable>b__68_0L<get_SurroundVirtualizerEnable>b__71_00<get_DolbyEnable>b__77_0<<get_IsShowAutoProfile>b__81_0<<get_AutoProfileEnable>b__83_0<<get_CurrentPeripheral>b__91_06<get_AudioMirroring>b__96_08<get_IsProfileDirty>b__101_0><get_AudioDirectorMode>b__103_0><get_AudioDirectorMode>b__103_1D<get_ShowNoiseSuppression>b__105_0J<get_NoiseSuppressionVersion>b__107_0L<get_IsNoiseSuppressionEnable>b__109_0F<get_NoiseSuppressionLevel>b__112_0J<get_IsNoiseSuppressionDirty>b__115_0V<get_NoiseSuppressionBypassEnabled>b__117_0><ResetNoiseSuppression>b__119_0j<_getAllDeviceModeData>g__processDeviceModeName|174_0:<_createDaxEndpoints>b__176_0L<_getActiveEndpointFormFactor>b__178_0R<_getActiveEndpointFormFactorOld>b__179_0"
+        },
+        {
+          "offset_hex": "0x1444db7",
+          "encoding": "ascii",
+          "text": "2get_DialogueEnhancerValue2set_DialogueEnhancerValue8<get_GamingSubProfile>b__4_0<<get_VolumeLevelerValue>b__7_0D<get_DialogueEnhancerValue>b__10_0J<get_SurroundVirtualizerValue>b__13_06<get_IsRadarEnabled>b__16_04<get_RadarPosition>b__19_0,<get_RadarSize>b__22_0<<get_RadarTransparency>b__25_06<get_DefaultUITheme>b__28_0,<get_RadarSkin>b__30_0<<_setCustomProfileType>b__34_0"
+        },
+        {
+          "offset_hex": "0x1446b7c",
+          "encoding": "ascii",
+          "text": "band_group_0heightVirtualizerEnabled4surroundVirtualizerEnabled"
+        },
+        {
+          "offset_hex": "0x1451131",
+          "encoding": "ascii",
+          "text": "2get_VirtualizerParameters@"
+        },
+        {
+          "offset_hex": "0x1451153",
+          "encoding": "ascii",
+          "text": "2set_VirtualizerParameters@"
+        },
+        {
+          "offset_hex": "0x14511a2",
+          "encoding": "ascii",
+          "text": "WL<VirtualizerParameters>k__BackingField"
+        },
+        {
+          "offset_hex": "0x145170d",
+          "encoding": "ascii",
+          "text": ".ToVirtualizerParameters"
+        },
+        {
+          "offset_hex": "0x1454b0c",
+          "encoding": "ascii",
+          "text": "VERSION_APP8VERSION_DOLBYAUDIOPROCESSING(DolbyAudioProcessing(VERSION_DOLBYHRTFENC"
+        },
+        {
+          "offset_hex": "0x1469aeb",
+          "encoding": "ascii",
+          "text": "De2get_Virtualizerparameters@"
+        },
+        {
+          "offset_hex": "0x1469b0f",
+          "encoding": "ascii",
+          "text": "2set_Virtualizerparameters@"
+        },
+        {
+          "offset_hex": "0x1469b41",
+          "encoding": "ascii",
+          "text": "L<Virtualizerparameters>k__BackingField"
+        },
+        {
+          "offset_hex": "0x1469b69",
+          "encoding": "ascii",
+          "text": "#Me*Virtualizerparameters@"
+        },
+        {
+          "offset_hex": "0x1469d1f",
+          "encoding": "ascii",
+          "text": "8VirtualizerHeadphoneLateGain"
+        },
+        {
+          "offset_hex": "0x1469d47",
+          "encoding": "ascii",
+          "text": "8VirtualizerFrontSpeakerAngle"
+        },
+        {
+          "offset_hex": "0x1469d6f",
+          "encoding": "ascii",
+          "text": ">VirtualizerSurroundSpeakerAngle"
+        },
+        {
+          "offset_hex": "0x1469d9a",
+          "encoding": "ascii",
+          "text": ":VirtualizerHeightSpeakerAngle"
+        },
+        {
+          "offset_hex": "0x146a1b5",
+          "encoding": "ascii",
+          "text": "$StereoBypassDapDll"
+        },
+        {
+          "offset_hex": "0x146a223",
+          "encoding": "ascii",
+          "text": "4SpeakerVirtualizerStartBin"
+        },
+        {
+          "offset_hex": "0x146a282",
+          "encoding": "ascii",
+          "text": "HMi2AdaptiveVirtualizerSteeringEnable"
+        },
+        {
+          "offset_hex": "0x146a355",
+          "encoding": "ascii",
+          "text": "BSpeakerVirtualizerRenderingConfig"
+        },
+        {
+          "offset_hex": "0x146aaad",
+          "encoding": "ascii",
+          "text": "eLDAP_CP_BYPASS_MODE_SKIP_VIRTUALIZATIONTDAP_CP_BYPASS_MODE_SKIP_CONTENT_PROCESSING<DAP_SPEAKER_VIRTUALIZER_LEGACY"
+        },
+        {
+          "offset_hex": "0x146ab22",
+          "encoding": "ascii",
+          "text": "e@DAP_SPEAKER_VIRTUALIZER_ADVANCED>DAP_SPEAKER_VIRTUALIZER_DEFAULT4DAP_OUTPUT_MODE_DEPRECATED"
+        },
+        {
+          "offset_hex": "0x146bd68",
+          "encoding": "ascii",
+          "text": "EnableUpmixer"
+        },
+        {
+          "offset_hex": "0x1492477",
+          "encoding": "ascii",
+          "text": "DD<<set_ChannelUpmixerEnabled>b__0>d"
+        },
+        {
+          "offset_hex": "0x14924ba",
+          "encoding": "ascii",
+          "text": "><set_ChannelUpmixerEnabled>b__0"
+        },
+        {
+          "offset_hex": "0x158651b",
+          "encoding": "ascii",
+          "text": "T><set_NoiseSuppressionLevel>b__0N<set_NoiseSuppressionBypassEnabled>b__0.<GetEndpointVolume>b__0.<SetEndpointVolume>b__00<SetDefaultEndpoint>b__0><_checkEndpointEntitlement>b__02<_createDaxEndpoints>b__1<<IsDaxProcessingSupported>b__0&<set_GeqLevels>b__0:<set_VolumeLevelerEnable>b__0F<set_SurroundVirtualizerEnable>b__0.<set_ActiveProfile>b__0*<set_DolbyEnable>b__06<IsTunedExternalDevice>b__06<set_AutoProfileEnable>b__06<set_CurrentPeripheral>b__0"
+        },
+        {
+          "offset_hex": "0x1586a3a",
+          "encoding": "ascii",
+          "text": "TD<set_SurroundVirtualizerValue>b__0.<set_RadarPosition>b__0"
+        },
+        {
+          "offset_hex": "0x1587eee",
+          "encoding": "ascii",
+          "text": "InternalSpeaker0HeightVirtualizerEnabled4SurroundVirtualizerEnabled"
+        },
+        {
+          "offset_hex": "0x163bd54",
+          "encoding": "ascii",
+          "text": "user_profile\"personalized_hrtf,phrtf_capture_metadata,virtualizer_parameters.capture_submission_date&phrtf_creation_date.phrtf_algorithm_version"
+        },
+        {
+          "offset_hex": "0x163d30f",
+          "encoding": "ascii",
+          "text": "system_gain\"calibration_boost0process_optimizer_enable0process_optimizer_config.surround_decoder_enable>virtualizer_headphone_late_gain>virtualizer_front_speaker_angleDvirtualizer_surround_speaker_angle@virtualizer_height_speaker_angle"
+        },
+        {
+          "offset_hex": "0x163d70a",
+          "encoding": "ascii",
+          "text": "channel_count*stereo_cp_bypass_mode*stereo_bypass_dap_dll2volume_leveler_drc_enable(eyes_tracking_enable"
+        },
+        {
+          "offset_hex": "0x163d77b",
+          "encoding": "ascii",
+          "text": "e0speaker_virtualizer_mode:speaker_virtualizer_start_bin@volume_leveler_compressor_enable"
+        },
+        {
+          "offset_hex": "0x163d7dd",
+          "encoding": "ascii",
+          "text": "e2output_mode_v2_deprecatedNmi2adaptive_virtualizer_steering_enable"
+        },
+        {
+          "offset_hex": "0x163d829",
+          "encoding": "ascii",
+          "text": "e\"virtual_bass_mode,virtual_bass_src_freqs2virtual_bass_overall_gain.virtual_bass_slope_gain*virtual_bass_subgains,virtual_bass_mix_freqsHspeaker_virtualizer_rendering_configFdynamic_speaker_optimization_amountZdynamic_speaker_optimization_speaker_interval"
+        },
+        {
+          "offset_hex": "0x163dc9b",
+          "encoding": "ascii",
+          "text": "enable_upmixer"
+        },
+        {
+          "offset_hex": "0x1806255",
+          "encoding": "ascii",
+          "text": ":get_SurroundVirtualizerEnable"
+        },
+        {
+          "offset_hex": "0x1806275",
+          "encoding": "ascii",
+          "text": ":set_SurroundVirtualizerEnable"
+        },
+        {
+          "offset_hex": "0x180658b",
+          "encoding": "ascii",
+          "text": "8get_SurroundVirtualizerValue"
+        },
+        {
+          "offset_hex": "0x18065af",
+          "encoding": "ascii",
+          "text": "8set_SurroundVirtualizerValue"
+        },
+        {
+          "offset_hex": "0x1806955",
+          "encoding": "ascii",
+          "text": "DOnSurroundVirtualizerEnableChanged"
+        },
+        {
+          "offset_hex": "0x1806aaf",
+          "encoding": "ascii",
+          "text": "BOnSurroundVirtualizerValueChangeda"
+        },
+        {
+          "offset_hex": "0x1808918",
+          "encoding": "ascii",
+          "text": ":get_IsChannelUpmixerAvailable"
+        },
+        {
+          "offset_hex": "0x180bb7a",
+          "encoding": "ascii",
+          "text": "2get_ChannelUpmixerEnabled"
+        },
+        {
+          "offset_hex": "0x180bb97",
+          "encoding": "ascii",
+          "text": "2set_ChannelUpmixerEnabled"
+        },
+        {
+          "offset_hex": "0x180bd0e",
+          "encoding": "ascii",
+          "text": "4add_ChannelUpmixerSwitched"
+        },
+        {
+          "offset_hex": "0x180bd2c",
+          "encoding": "ascii",
+          "text": ":remove_ChannelUpmixerSwitched"
+        },
+        {
+          "offset_hex": "0x1810929",
+          "encoding": "ascii",
+          "text": "0SetChannelUpmixerEnabledK"
+        },
+        {
+          "offset_hex": "0x1810945",
+          "encoding": "ascii",
+          "text": "0GetChannelUpmixerEnabled"
+        },
+        {
+          "offset_hex": "0x181128c",
+          "encoding": "ascii",
+          "text": ":get_SurroundVirtualizerEnableku"
+        },
+        {
+          "offset_hex": "0x18112ad",
+          "encoding": "ascii",
+          "text": ":set_SurroundVirtualizerEnableKz"
+        },
+        {
+          "offset_hex": "0x1e08a34",
+          "encoding": "utf-16le",
+          "text": "surround_decoder_enable"
+        },
+        {
+          "offset_hex": "0x1e08adc",
+          "encoding": "utf-16le",
+          "text": "virtualizer-front-speaker-angle"
+        },
+        {
+          "offset_hex": "0x1e08b34",
+          "encoding": "utf-16le",
+          "text": "virtualizer_front_speaker_angle"
+        },
+        {
+          "offset_hex": "0x1e08b8c",
+          "encoding": "utf-16le",
+          "text": "virtualizer-height-speaker-angle"
+        },
+        {
+          "offset_hex": "0x1e08be4",
+          "encoding": "utf-16le",
+          "text": "virtualizer_height_speaker_angle"
+        },
+        {
+          "offset_hex": "0x1e08c3c",
+          "encoding": "utf-16le",
+          "text": "virtualizer-surround-speaker-angle"
+        },
+        {
+          "offset_hex": "0x1e08c9c",
+          "encoding": "utf-16le",
+          "text": "virtualizer_surround_speaker_angle"
+        },
+        {
+          "offset_hex": "0x1f22f2c",
+          "encoding": "utf-16le",
+          "text": "C:\\gitlab-runner\\builds\\HFxJvu1k1\\1\\dolby-access\\unified-dolby-access\\Dolby.Common\\AudioConfiguration\\Adjustments\\StereoBypassAdjustment.cs"
+        },
+        {
+          "offset_hex": "0x1f46e34",
+          "encoding": "utf-16le",
+          "text": "IsSurroundVirtualizerEnabled"
+        },
+        {
+          "offset_hex": "0x1f4704c",
+          "encoding": "utf-16le",
+          "text": "SurroundVirtualizer"
+        },
+        {
+          "offset_hex": "0x1f4708c",
+          "encoding": "utf-16le",
+          "text": "surround_virtualizer"
+        },
+        {
+          "offset_hex": "0x1f4c59c",
+          "encoding": "utf-16le",
+          "text": "channelUpmixer/label"
+        },
+        {
+          "offset_hex": "0x1f4c5dc",
+          "encoding": "utf-16le",
+          "text": "channelUpmixer/description"
+        },
+        {
+          "offset_hex": "0x1f4c62c",
+          "encoding": "utf-16le",
+          "text": "EnhancedChannelUpmixerText"
+        },
+        {
+          "offset_hex": "0x1f4c67c",
+          "encoding": "utf-16le",
+          "text": "ChannelUpmixerText"
+        },
+        {
+          "offset_hex": "0x1f61344",
+          "encoding": "utf-16le",
+          "text": "advanced-speaker-virtualizer-start-bin"
+        },
+        {
+          "offset_hex": "0x1f6146c",
+          "encoding": "utf-16le",
+          "text": "output-mode-partial-height-virtualizer-enable"
+        },
+        {
+          "offset_hex": "0x1f6154c",
+          "encoding": "utf-16le",
+          "text": "advanced-speaker-virtualizer-rendering-config"
+        },
+        {
+          "offset_hex": "0x1f61634",
+          "encoding": "utf-16le",
+          "text": "output-mode-partial-surround-virtualizer-enable"
+        },
+        {
+          "offset_hex": "0x1f61c0c",
+          "encoding": "utf-16le",
+          "text": "XML reader must be at <advanced-speaker-virtualizer-rendering-config> element"
+        },
+        {
+          "offset_hex": "0x1f61cbc",
+          "encoding": "utf-16le",
+          "text": "> in <advanced-speaker-virtualizer-rendering-config> is not 8 elements long"
+        },
+        {
+          "offset_hex": "0x1f654a4",
+          "encoding": "utf-16le",
+          "text": "SurroundVirtualizerValue"
+        },
+        {
+          "offset_hex": "0x1f67aac",
+          "encoding": "utf-16le",
+          "text": "SurroundVirtualizerEnable"
+        },
+        {
+          "offset_hex": "0x1f6d0fc",
+          "encoding": "utf-16le",
+          "text": "Channel Upmixer set to "
+        },
+        {
+          "offset_hex": "0x1f6d144",
+          "encoding": "utf-16le",
+          "text": "SetChannelUpmixerEnabled"
+        },
+        {
+          "offset_hex": "0x1f6d2bc",
+          "encoding": "utf-16le",
+          "text": "Channel Upmixer could not be set because it is not available"
+        },
+        {
+          "offset_hex": "0x1fa71bc",
+          "encoding": "utf-16le",
+          "text": "Upmixer visible"
+        },
+        {
+          "offset_hex": "0x1fa71f4",
+          "encoding": "utf-16le",
+          "text": "Upmixer enabled"
+        },
+        {
+          "offset_hex": "0x1faddf4",
+          "encoding": "utf-16le",
+          "text": "ChannelUpmixerEnabled"
+        },
+        {
+          "offset_hex": "0x1fade34",
+          "encoding": "utf-16le",
+          "text": "ChannelUpmixerSwitchVisible"
+        },
+        {
+          "offset_hex": "0x1fbec8c",
+          "encoding": "utf-16le",
+          "text": "DolbyAudioProcessing"
+        }
+      ]
+    },
+    {
+      "file": "DLLs/x64/DolbyAudioProcessing.dll",
+      "source": "C:\\Program Files\\WindowsApps\\DolbyLaboratories.DolbyAccess_3.27.12250.0_x64__rz1tebttyb220\\DLLs\\x64\\DolbyAudioProcessing.dll",
+      "bytes": 4384256,
+      "sha256": "0fada40251880d03c657a357745d362799c93fb6024f733f1c8bf1057f5e4715",
+      "exports": [
+        "DllCanUnloadNow",
+        "DllGetActivationFactory"
+      ],
+      "strings": [
+        {
+          "offset_hex": "0x3fcd58",
+          "encoding": "ascii",
+          "text": "C:\\b\\0\\SampleCodecPack_v2\\DolbyAudioProcessing\\x64\\Release\\DolbyAudioProcessing\\DolbyAudioProcessing.pdb"
+        },
+        {
+          "offset_hex": "0x40e2bc",
+          "encoding": "ascii",
+          "text": "DolbyAudioProcessing.dll"
+        },
+        {
+          "offset_hex": "0x3e4180",
+          "encoding": "utf-16le",
+          "text": "Dolby.DolbyAudioProcessingModule"
+        },
+        {
+          "offset_hex": "0x3e4610",
+          "encoding": "utf-16le",
+          "text": "dolby::oar::AIDEModule::Initialize"
+        },
+        {
+          "offset_hex": "0x3e4660",
+          "encoding": "utf-16le",
+          "text": "C:\\b\\0\\SampleCodecPack_v2\\DolbyAudioProcessing\\src\\AIDEModule.cpp"
+        },
+        {
+          "offset_hex": "0x3e49b0",
+          "encoding": "utf-16le",
+          "text": "dolby::oar::AIDEModule::Process"
+        },
+        {
+          "offset_hex": "0x3e49f0",
+          "encoding": "utf-16le",
+          "text": "dolby::oar::AIDEModule::~AIDEModule"
+        },
+        {
+          "offset_hex": "0x3e4a40",
+          "encoding": "utf-16le",
+          "text": "dolby::oar::AIDEModule::SetParams"
+        },
+        {
+          "offset_hex": "0x3e4cc0",
+          "encoding": "utf-16le",
+          "text": "C:\\b\\0\\SampleCodecPack_v2\\DolbyAudioProcessing\\src\\CrossfadeModule.cpp"
+        },
+        {
+          "offset_hex": "0x3e5040",
+          "encoding": "utf-16le",
+          "text": "dolby::dapvr::CDapVRModule::DecodeMessageTuning"
+        },
+        {
+          "offset_hex": "0x3e50a0",
+          "encoding": "utf-16le",
+          "text": "C:\\b\\0\\SampleCodecPack_v2\\DolbyAudioProcessing\\src\\DAPVRModule.cpp"
+        },
+        {
+          "offset_hex": "0x3e53e0",
+          "encoding": "utf-16le",
+          "text": "dolby::dapvr::CDapVRModule::ApplyRunTimeParams"
+        },
+        {
+          "offset_hex": "0x3e5590",
+          "encoding": "utf-16le",
+          "text": "dap_vr_output_mode_set: processing_mode = %d, nb_output_channels = %d, p_mix_matrix = {%s}"
+        },
+        {
+          "offset_hex": "0x3e5650",
+          "encoding": "utf-16le",
+          "text": "dap_vr_output_mode_set: processing_mode = %d, nb_output_channels = %d, p_mix_matrix = null"
+        },
+        {
+          "offset_hex": "0x3e5890",
+          "encoding": "utf-16le",
+          "text": "dap_vr_surround_decoder_enable_set: %d"
+        },
+        {
+          "offset_hex": "0x3e6290",
+          "encoding": "utf-16le",
+          "text": "dap_vr_virtualizer_front_speaker_angle_set: %d"
+        },
+        {
+          "offset_hex": "0x3e62f0",
+          "encoding": "utf-16le",
+          "text": "dap_vr_virtualizer_surround_speaker_angle_set: %d"
+        },
+        {
+          "offset_hex": "0x3e6360",
+          "encoding": "utf-16le",
+          "text": "dap_vr_virtualizer_height_speaker_angle_set: %d"
+        },
+        {
+          "offset_hex": "0x3e6520",
+          "encoding": "utf-16le",
+          "text": "dap_vr_advanced_speaker_virtualizer_start_bin_set: %d"
+        },
+        {
+          "offset_hex": "0x3e65f0",
+          "encoding": "utf-16le",
+          "text": "dap_vr_mi2adaptive_virtualizer_steering_enable_set: %d"
+        },
+        {
+          "offset_hex": "0x3e6d90",
+          "encoding": "utf-16le",
+          "text": "dap_vr_advanced_speaker_virtualizer_rendering_config_set: steerer_source_distance = %d, far_scale = %d, mid_scale = %d, near_scale = %d, b_near_is_anechoic = %d, lr_render_mode = %d, center_render_mode = %d, remaining_render_mode = %d"
+        },
+        {
+          "offset_hex": "0x3e71e0",
+          "encoding": "utf-16le",
+          "text": "dolby::dapvr::CDapVRModule::ConfigureDapVRInitParams"
+        },
+        {
+          "offset_hex": "0x3e73d0",
+          "encoding": "utf-16le",
+          "text": "dolby::dapvr::CDapVRModule::ConfigureDapVRRealTime"
+        },
+        {
+          "offset_hex": "0x3e75f0",
+          "encoding": "utf-16le",
+          "text": "dolby::dapvr::CDapVRModule::ConfigureHeadphoneTuningDefaults"
+        },
+        {
+          "offset_hex": "0x3e7670",
+          "encoding": "utf-16le",
+          "text": "dolby::dapvr::CDapVRModule::ConfigureInitTime"
+        },
+        {
+          "offset_hex": "0x3e77f0",
+          "encoding": "utf-16le",
+          "text": "dolby::dapvr::CDapVRModule::ConfigureRunTime"
+        },
+        {
+          "offset_hex": "0x3e7940",
+          "encoding": "utf-16le",
+          "text": "dolby::dapvr::CDapVRModule::ConfigureRealTime"
+        },
+        {
+          "offset_hex": "0x3e7a70",
+          "encoding": "utf-16le",
+          "text": "dolby::dapvr::CDapVRModule::SetDefaultHeadphoneTunings"
+        },
+        {
+          "offset_hex": "0x3e7b70",
+          "encoding": "utf-16le",
+          "text": "dolby::dapvr::CDapVRModule::InitializeHeadphoneTuning"
+        },
+        {
+          "offset_hex": "0x3e7dd0",
+          "encoding": "utf-16le",
+          "text": "dolby::dapvr::CDapVRModule::Initialize"
+        },
+        {
+          "offset_hex": "0x3e8000",
+          "encoding": "utf-16le",
+          "text": "dolby::dapvr::CDapVRModule::Prepare"
+        },
+        {
+          "offset_hex": "0x3e8050",
+          "encoding": "utf-16le",
+          "text": "dolby::dapvr::CDapVRModule::Process"
+        },
+        {
+          "offset_hex": "0x3e80a0",
+          "encoding": "utf-16le",
+          "text": "dolby::dapvr::CDapVRModule::~CDapVRModule"
+        },
+        {
+          "offset_hex": "0x3e8100",
+          "encoding": "utf-16le",
+          "text": "dolby::dapvr::CDapVRModule::Uninitialize"
+        },
+        {
+          "offset_hex": "0x3e8160",
+          "encoding": "utf-16le",
+          "text": "dolby::dapvr::CDapVRModule::SetParams"
+        },
+        {
+          "offset_hex": "0x3e8210",
+          "encoding": "utf-16le",
+          "text": "dolby::dapvr::CDapVRModule::SetInitTimeParams"
+        },
+        {
+          "offset_hex": "0x3e8630",
+          "encoding": "utf-16le",
+          "text": "dolby::dapvr::CDapVRModule::SetRunTimeParams"
+        },
+        {
+          "offset_hex": "0x3e8f30",
+          "encoding": "utf-16le",
+          "text": "dolby::CDolbyAudioProcessingModule::RefreshAtmosForMonitorsStatus"
+        },
+        {
+          "offset_hex": "0x3e8fc0",
+          "encoding": "utf-16le",
+          "text": "C:\\b\\0\\SampleCodecPack_v2\\DolbyAudioProcessing\\src\\DefaultDAPModule.cpp"
+        },
+        {
+          "offset_hex": "0x3e90e0",
+          "encoding": "utf-16le",
+          "text": "dolby::CDolbyAudioProcessingModule::Initialize"
+        },
+        {
+          "offset_hex": "0x3e9210",
+          "encoding": "utf-16le",
+          "text": "dolby::CDolbyAudioProcessingModule::SetAPOInitParameters"
+        },
+        {
+          "offset_hex": "0x3e9760",
+          "encoding": "utf-16le",
+          "text": "dolby::CDolbyAudioProcessingModule::GetApoNotificationRegistrationInfo"
+        },
+        {
+          "offset_hex": "0x3e9950",
+          "encoding": "utf-16le",
+          "text": "dolby::CDolbyAudioProcessingModule::HandleNotification"
+        },
+        {
+          "offset_hex": "0x3e9ce0",
+          "encoding": "utf-16le",
+          "text": "dolby::CDolbyAudioProcessingModule::ApplyModuleParams"
+        },
+        {
+          "offset_hex": "0x3ea020",
+          "encoding": "utf-16le",
+          "text": "dolby::CDolbyAudioProcessingModule::ConfigureEncoder"
+        },
+        {
+          "offset_hex": "0x3ea780",
+          "encoding": "utf-16le",
+          "text": "dolby::CDolbyAudioProcessingModule::EnsureAideAndOarModules"
+        },
+        {
+          "offset_hex": "0x3ea9e0",
+          "encoding": "utf-16le",
+          "text": "Failed to configure DAP-VR metadata for static channel config 7.1.4"
+        },
+        {
+          "offset_hex": "0x3eab10",
+          "encoding": "utf-16le",
+          "text": "dolby::CDolbyAudioProcessingModule::GetStereoBypassAllowed"
+        },
+        {
+          "offset_hex": "0x3eabf0",
+          "encoding": "utf-16le",
+          "text": "GetStereoBypassAllowed: %d"
+        },
+        {
+          "offset_hex": "0x3eac30",
+          "encoding": "utf-16le",
+          "text": "dolby::CDolbyAudioProcessingModule::HandleRealTimeParams"
+        },
+        {
+          "offset_hex": "0x3eaeb0",
+          "encoding": "utf-16le",
+          "text": "dolby::CDolbyAudioProcessingModule::GetDefaultHeadphoneTuningResource"
+        },
+        {
+          "offset_hex": "0x3eaf40",
+          "encoding": "utf-16le",
+          "text": "dolby::CDolbyAudioProcessingModule::ConfigureMetadata"
+        },
+        {
+          "offset_hex": "0x3eb080",
+          "encoding": "utf-16le",
+          "text": "dolby::CDolbyAudioProcessingModule::ConfigureStaticChannelMetadata"
+        },
+        {
+          "offset_hex": "0x3eb2a0",
+          "encoding": "utf-16le",
+          "text": "dolby::CDolbyAudioProcessingModule::EncodeAudioData"
+        },
+        {
+          "offset_hex": "0x3eb430",
+          "encoding": "utf-16le",
+          "text": "Invalid configuration: IMS content exists but no stereo bypass objects."
+        },
+        {
+          "offset_hex": "0x3eb4c0",
+          "encoding": "utf-16le",
+          "text": "Failed to mix IMS channels into the appropriate stereo bypass channel"
+        },
+        {
+          "offset_hex": "0x3eb550",
+          "encoding": "utf-16le",
+          "text": "Failed to get OAMDI metadata block for stereo bypass object at index %u, block %u"
+        },
+        {
+          "offset_hex": "0x3eb930",
+          "encoding": "utf-16le",
+          "text": "dolby::CDolbyAudioProcessingModule::Clean"
+        },
+        {
+          "offset_hex": "0x3f5e60",
+          "encoding": "utf-16le",
+          "text": "dolby::oar::OARModule::Initialize"
+        },
+        {
+          "offset_hex": "0x3f5eb0",
+          "encoding": "utf-16le",
+          "text": "C:\\b\\0\\SampleCodecPack_v2\\DolbyAudioProcessing\\src\\OARModule.cpp"
+        },
+        {
+          "offset_hex": "0x3f6030",
+          "encoding": "utf-16le",
+          "text": "dolby::oar::OARModule::Process"
+        },
+        {
+          "offset_hex": "0x3f6070",
+          "encoding": "utf-16le",
+          "text": "dolby::oar::OARModule::~OARModule"
+        },
+        {
+          "offset_hex": "0x3f60f0",
+          "encoding": "utf-16le",
+          "text": "dolby::dap::VlldpModule::Initialize"
+        },
+        {
+          "offset_hex": "0x3f6140",
+          "encoding": "utf-16le",
+          "text": "C:\\b\\0\\SampleCodecPack_v2\\DolbyAudioProcessing\\src\\VlldpModule.cpp"
+        },
+        {
+          "offset_hex": "0x3f64d0",
+          "encoding": "utf-16le",
+          "text": "dolby::dap::VlldpModule::SetInitTimeParams"
+        },
+        {
+          "offset_hex": "0x3f6560",
+          "encoding": "utf-16le",
+          "text": "dolby::dap::VlldpModule::SetRunTimeParams"
+        },
+        {
+          "offset_hex": "0x3f7760",
+          "encoding": "utf-16le",
+          "text": "dolby::dap::VlldpModule::~VlldpModule"
+        },
+        {
+          "offset_hex": "0x3f77b0",
+          "encoding": "utf-16le",
+          "text": "dolby::dap::VlldpModule::Uninitialize"
+        },
+        {
+          "offset_hex": "0x3f7800",
+          "encoding": "utf-16le",
+          "text": "dolby::dap::VlldpModule::SetParams"
+        },
+        {
+          "offset_hex": "0x42c2a4",
+          "encoding": "utf-16le",
+          "text": "DolbyAudioProcessing.dll"
+        }
+      ]
+    },
+    {
+      "file": "DLLs/x64/DolbyHrtfEnc.dll",
+      "source": "C:\\Program Files\\WindowsApps\\DolbyLaboratories.DolbyAccess_3.27.12250.0_x64__rz1tebttyb220\\DLLs\\x64\\DolbyHrtfEnc.dll",
+      "bytes": 155064,
+      "sha256": "3da34330b36a79d6c4e42220190ee8239cad65564911c248ebda59d237bf9f88",
+      "exports": [
+        "DllCanUnloadNow",
+        "DllGetActivationFactory"
+      ],
+      "strings": [
+        {
+          "offset_hex": "0x19050",
+          "encoding": "ascii",
+          "text": "m_StereoBypassMode=%d"
+        },
+        {
+          "offset_hex": "0x195b0",
+          "encoding": "ascii",
+          "text": "StereoBypassMode=%d"
+        },
+        {
+          "offset_hex": "0x195c8",
+          "encoding": "ascii",
+          "text": "CDolbyHrtfEncoderEngine::GetStereoBypassMode"
+        },
+        {
+          "offset_hex": "0x19190",
+          "encoding": "utf-16le",
+          "text": "Dolby.DolbyAudioProcessingModule"
+        },
+        {
+          "offset_hex": "0x193d0",
+          "encoding": "utf-16le",
+          "text": "DolbyAudioProcessing.dll"
+        }
+      ]
+    },
+    {
+      "file": "DLLs/x64/DolbyMatEngine.dll",
+      "source": "C:\\Program Files\\WindowsApps\\DolbyLaboratories.DolbyAccess_3.27.12250.0_x64__rz1tebttyb220\\DLLs\\x64\\DolbyMatEngine.dll",
+      "bytes": 1025024,
+      "sha256": "342cbc58a19afa2b5b58cef408ef91dcc06c68829520286acabb7178eda7f569",
+      "exports": [
+        "DllCanUnloadNow",
+        "DllGetActivationFactory"
+      ],
+      "strings": [
+        {
+          "offset_hex": "0xe4e90",
+          "encoding": "utf-16le",
+          "text": "live_upmixer_set_prop failed with error = %x."
+        },
+        {
+          "offset_hex": "0xe4ef0",
+          "encoding": "utf-16le",
+          "text": "CDolbyMATEngineImpl::ConfigureUpmixer"
+        },
+        {
+          "offset_hex": "0xe4f40",
+          "encoding": "utf-16le",
+          "text": "CDolbyMATEngineImpl::GetUpmixerStatus"
+        },
+        {
+          "offset_hex": "0xe4f90",
+          "encoding": "utf-16le",
+          "text": "live_upmixer_get_prop failed with error = %x."
+        },
+        {
+          "offset_hex": "0xe4ff0",
+          "encoding": "utf-16le",
+          "text": "live_upmixer_get_prop succeeded. Status %u"
+        }
+      ]
+    }
+  ]
+}

@@ -1119,3 +1119,16 @@ Full map, formula, policy switches and limits are in
 * `docs/AMP_STEREO_5_1_MATRIX_DIFF.md` — live amplifier ASAD handling, exact stereo/5.1 matrix differences and bank-dependent SHARC mode control.
 * `docs/BUFFERED_BACKGROUND_LIFECYCLE.md` — measured type-100/type-103 ownership split, QSA/feedback handoff, and vehicle-confirmed cold media-route activation.
 * `docs/reference/IOS_26_1_BUFFERED_AUDIO_LIFECYCLE_AUDIT.md` — exact iOS/Pioneer lifecycle contract, implemented stopped queue/exact FLUSH repair and remaining vehicle gates.
+
+## 21. Cars without B&O (internal amplifier) — 2026-09-19
+
+Static RE, no measurement yet: [`INTERNAL_AMP_MIBROOT_ROUTING.md`](INTERNAL_AMP_MIBROOT_ROUTING.md)
+(RCC MIBRoot connection/resource tables, enums, speakerCoding, DEVICETYPE) and
+[`INTERNAL_AMP_PATH_KNOWLEDGE.md`](INTERNAL_AMP_PATH_KNOWLEDGE.md) (deva/ADSP side, G22 audio table,
+ways to read the coding from a shell). Headline: with `Sound_System`=1 (E2P 0xF1 byte 11, address 0xFC)
+connection 162 lands on `eSRC_ENT_AMP_DIO_MEDIA → eSNK_SPEAKERS`, a stereo BlockWidth-4 source;
+`eSNK_SPEAKERS_MC` is referenced by no resource record and has no connection in the G22 table, so no
+six-channel route to the internal amplifier exists in stock. A PCM6 stream there is at best L/R only
+(our HSSR moves energy out of the fronts, so worse than stock). External branch always selects
+`DTCP51`, also for Bose, whose sink-0x26 profile is unverified. Policy: `AUDIO_SPATIAL=0` unless
+`on -f rcc /usr/apps/modifyE2P r fc 1` yields `02` (output format to be confirmed live once).

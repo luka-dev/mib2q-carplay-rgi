@@ -1,0 +1,9 @@
+COMMAND ["/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/build/upmix-e2e-20260920/stereo_upmix_render", "--mode", "hssr-universal", "--model", "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/build/hssr_model.bin", "--guard-model", "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/build/hssr_guard.bin", "--front-retention", "0.0", "--surround", "0.4", "--front-bass", "-3.0", "--lfe", "assist", "--lfe-gain", "0.0", "--float-render", "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/upmix-long-onevar-eq7-20260921/04_The_Blue-Eyed_Devil/00_The_Blue-Eyed_Devil/source_padded.wav", "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/upmix-long-onevar-eq7-20260921/04_The_Blue-Eyed_Devil/00_The_Blue-Eyed_Devil/float_6ch.wav"]
+STDOUT
+
+STDERR
+experimental-float: pre-gain-peak=1.14493394 FS post-gain-peak=1.14493394 FS gain=1.00000000 limiter-attacks=1625 minimum-guard-gain=0.44843730 attenuated-frames=260568 total-frames=3072000 longest-observed-run=6793 reduction-db-sum=257633.871917904 over3-frames=15491 over6-frames=483 over10-frames=0
+front-retention=0.00000 (q15=0; independent of rear gain)
+rendered 3072000 frames (64.000 s): PCM2 -> PCM6 L,R,C,LFE,Ls,Rs
+mode=hssr-universal surround=0.39999 (q15=13107) front=0.95801 (q15=31392) lfe=assist gain=0.12500 (q15=4096)
+/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/upmix-long-onevar-eq7-20260921/04_The_Blue-Eyed_Devil/00_The_Blue-Eyed_Devil/float_6ch.wav

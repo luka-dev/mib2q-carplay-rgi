@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  <defs>
+    <radialGradient id="pc67y6lh1a" cx="17.098%" cy="0%" r="180.783%" fx="17.098%" fy="0%" gradientTransform="matrix(.45857 .57913 -.41888 1.04828 .093 -.099)">
+      <stop offset="0%" stop-color="#005378"/>
+      <stop offset="37.577%" stop-color="#116786"/>
+      <stop offset="81.535%" stop-color="#3B4375"/>
+      <stop offset="100%" stop-color="#762B5E"/>
+    </radialGradient>
+  </defs>
+  <g fill="none" fill-rule="evenodd">
+    <g fill="url(#pc67y6lh1a)">
+      <path d="M0 0H1920V1080H0z"/>
+    </g>
+  </g>
+</svg>

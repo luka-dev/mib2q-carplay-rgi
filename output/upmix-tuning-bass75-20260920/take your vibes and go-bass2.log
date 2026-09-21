@@ -1,0 +1,5 @@
+experimental-float: pre-gain-peak=1.02766001 FS post-gain-peak=1.02766001 FS gain=1.00000000 limiter-attacks=771 minimum-guard-gain=0.48889941 attenuated-frames=113875 total-frames=2880000 longest-observed-run=3050 reduction-db-sum=159663.514490877 over3-frames=15030 over6-frames=83 over10-frames=0
+front-retention=0.75000 (q15=24576; independent of rear gain)
+rendered 2880000 frames (60.000 s): PCM2 -> PCM6 L,R,C,LFE,Ls,Rs
+mode=hssr-universal surround=0.29999 (q15=9830) front=0.95801 (q15=31392) lfe=assist gain=0.12500 (q15=4096)
+/var/folders/z5/ww412zbd6c5cr7x4dq54tn6w0000gn/T/upmix-bass-oiaw05x5/take your vibes and go-bass2.wav

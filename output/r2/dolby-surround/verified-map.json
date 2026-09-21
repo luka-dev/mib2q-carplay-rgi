@@ -1,0 +1,130 @@
+{
+  "sha256": "0fada40251880d03c657a357745d362799c93fb6024f733f1c8bf1057f5e4715",
+  "image_base": "0x180000000",
+  "format": "PE32+ AMD64 little-endian",
+  "functions": {
+    "surround_boost_set": {
+      "va": "0x180004120",
+      "rva": "0x4120",
+      "file_offset": "0x3520"
+    },
+    "surround_decoder_enable_set": {
+      "va": "0x180004190",
+      "rva": "0x4190",
+      "file_offset": "0x3590"
+    },
+    "commit_parameters": {
+      "va": "0x180003590",
+      "rva": "0x3590",
+      "file_offset": "0x2990"
+    },
+    "decoder_dispatch_excerpt": {
+      "va": "0x18000850f",
+      "rva": "0x850f",
+      "file_offset": "0x790f"
+    },
+    "decoder_process": {
+      "va": "0x1800217c0",
+      "rva": "0x217c0",
+      "file_offset": "0x20bc0"
+    },
+    "pair_analysis": {
+      "va": "0x180031410",
+      "rva": "0x31410",
+      "file_offset": "0x30810"
+    },
+    "band_statistics": {
+      "va": "0x18004d0b0",
+      "rva": "0x4d0b0",
+      "file_offset": "0x4c4b0"
+    },
+    "band_power": {
+      "va": "0x180022640",
+      "rva": "0x22640",
+      "file_offset": "0x21a40"
+    },
+    "direction_index": {
+      "va": "0x18004e1c0",
+      "rva": "0x4e1c0",
+      "file_offset": "0x4d5c0"
+    },
+    "steering_coefficients": {
+      "va": "0x18004e2c0",
+      "rva": "0x4e2c0",
+      "file_offset": "0x4d6c0"
+    },
+    "angle_approximation": {
+      "va": "0x18005b150",
+      "rva": "0x5b150",
+      "file_offset": "0x5a550"
+    },
+    "pair_synthesis": {
+      "va": "0x180031860",
+      "rva": "0x31860",
+      "file_offset": "0x30c60"
+    },
+    "matrix_apply": {
+      "va": "0x18004e510",
+      "rva": "0x4e510",
+      "file_offset": "0x4d910"
+    },
+    "phase_rotate": {
+      "va": "0x18004eb70",
+      "rva": "0x4eb70",
+      "file_offset": "0x4df70"
+    },
+    "residual_mix": {
+      "va": "0x18004d6d0",
+      "rva": "0x4d6d0",
+      "file_offset": "0x4cad0"
+    },
+    "decorrelation_delay": {
+      "va": "0x18005a9f0",
+      "rva": "0x5a9f0",
+      "file_offset": "0x59df0"
+    },
+    "log2_approx": {
+      "va": "0x18003c040",
+      "rva": "0x3c040",
+      "file_offset": "0x3b440"
+    }
+  },
+  "config_headers": [
+    {
+      "va": "0x1802eccc0",
+      "file_offset": "0x2ebcc0",
+      "input_count": 2,
+      "output_count": 6,
+      "gain": 1.1220184564590454,
+      "pair_count": 1,
+      "pair_descriptors": "0x1802eccd8"
+    },
+    {
+      "va": "0x1802eccf0",
+      "file_offset": "0x2ebcf0",
+      "input_count": 2,
+      "output_count": 8,
+      "gain": 1.1220184564590454,
+      "pair_count": 1,
+      "pair_descriptors": "0x1802ecd08"
+    },
+    {
+      "va": "0x1802ecd20",
+      "file_offset": "0x2ebd20",
+      "input_count": 2,
+      "output_count": 8,
+      "gain": 1.1220184564590454,
+      "pair_count": 1,
+      "pair_descriptors": "0x1802ecd38"
+    },
+    {
+      "va": "0x1802ecd50",
+      "file_offset": "0x2ebd50",
+      "input_count": 2,
+      "output_count": 10,
+      "gain": 1.1220184564590454,
+      "pair_count": 1,
+      "pair_descriptors": "0x1802ecd68"
+    }
+  ]
+}

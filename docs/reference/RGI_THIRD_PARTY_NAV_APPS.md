@@ -275,7 +275,7 @@ CarPlaySupport's `CPSInstrumentClusterCardViewController` also logs a `mapOnly` 
 Hook policy (`alt_cluster_url`, switched at runtime by `CMD_ALT_RGI 0x0116` from
 `AltScreenModule.republish`): RGI presentation off →
 `maps:/car/instrumentcluster?showETA=yes&maneuverLayout=rightAligned&showSpeedLimit=no`; on →
-`maps:/car/instrumentcluster?showETA=no&maneuverLayout=no&showSpeedLimit=no`. The URL is re-sent
+`maps:/car/instrumentcluster/map?showETA=no&maneuverLayout=no&showSpeedLimit=no`. The URL is re-sent
 at first IDR, after each accepted `updateViewArea` and on each RGI edge.
 `maneuverLayout=no` maps to justification 0 (unset).
 

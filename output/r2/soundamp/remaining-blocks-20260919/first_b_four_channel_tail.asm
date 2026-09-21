@@ -1,0 +1,128 @@
+0012ede6  1607 ffff ffee  I7=MODIFY(I7,-18)
+0012ede9  713f 813f       R2=I3
+0012edeb  9d08 0176       DM(-10,I6)=R2
+0012eded  717e 813f       R2=I5
+0012edef  6cbf 8d02 1a40  R10=PASS R4 || DM(-15,I6)=R10
+0012edf2  9d08 07f5       DM(-11,I6)=R15
+0012edf4  9d08 0177       DM(-9,I6)=R2
+0012edf6  9d08 02ed       DM(-19,I6)=R5
+0012edf8  9d08 03ef       DM(-17,I6)=R7
+0012edfa  6cbf 8482 1980  R9=PASS R8 || DM(-16,I6)=R9
+0012edfd  6cbf 9582 1bc0  R11=PASS R12 || DM(-14,I6)=R11
+0012ee00  6cbf 9e82 1c90  R12=PASS R9 || DM(-13,I6)=R13
+0012ee03  9d08 036e       DM(-18,I6)=R6
+0012ee05  9d08 0774       DM(-12,I6)=R14
+0012ee07  9c08 0283       R5=DM(+3,I6)
+0012ee09  9c08 0684       R13=DM(+4,I6)
+0012ee0b  9c08 0386       R7=DM(+6,I6)
+0012ee0d  9c08 0305       R6=DM(+5,I6)
+0012ee0f  4dbe 023f       R4=DM(M6,I6)
+0012ee11  9c08 0403       R8=DM(+3,I6)
+0012ee13  9d08 02f8       DM(-8,I6)=R5
+0012ee15  9d08 02fa       DM(-6,I6)=R5
+0012ee17  9d08 06f9       DM(-7,I6)=R13
+0012ee19  9d08 06fb       DM(-5,I6)=R13
+0012ee1b  9d08 03fd       DM(-3,I6)=R7
+0012ee1d  9d08 037c       DM(-4,I6)=R6
+0012ee1f  1804 0013 2e08  CJUMP 0x132e08 (DB); R2=I6, I6=I7
+0012ee22  9ff2            DM(I7,M7)=R2
+0012ee23  9fc0 0012 ee25  DM(I7,M7)=0x12ee25
+0012ee26  6c3e 1202 1c90  R12=PASS R9 || R4=DM(+2,I6)
+0012ee29  9c08 0404       R8=DM(+4,I6)
+0012ee2b  1804 0013 2e08  CJUMP 0x132e08 (DB); R2=I6, I6=I7
+0012ee2e  9ff2            DM(I7,M7)=R2
+0012ee2f  9fc0 0012 ee31  DM(I7,M7)=0x12ee31
+0012ee32  162e ffff fff8  I3=MODIFY(I6,-8)
+0012ee35  70bf 0a82 1c90  R12=PASS R9 || I5=R10
+0012ee38  043f f83f       I7=MODIFY(I7,M7)
+0012ee3a  713f 813f       R2=I3
+0012ee3c  9ff2            DM(I7,M7)=R2
+0012ee3d  9fc4 0002       DM(I7,M7)=2
+0012ee3f  0f8f 014b       R15=0x14b
+0012ee41  5ffe 8580 18af  R8=R10+R15 || DM(I7,M7)=R11
+0012ee44  9a08 0213       R4=DM(+19,I5)
+0012ee46  1804 0012 f411  CJUMP 0x12f411 (DB); R2=I6, I6=I7
+0012ee49  9ff2            DM(I7,M7)=R2
+0012ee4a  9fc0 0012 ee4c  DM(I7,M7)=0x12ee4c
+0012ee4d  703e 07bf       R15=R0
+0012ee4f  c22f            R2=PASS R15
+0012ee50  1607 0000 0004  I7=MODIFY(I7,+4)
+0012ee53  0700 0000 002b  IF EQ JUMP 0x12ee7e
+0012ee56  6a3e 1402 14f0  R4=PASS R15 || R8=DM(+2,I5)
+0012ee59  0f8c 0006       R12=0x6
+0012ee5b  1804 0012 b6a7  CJUMP 0x12b6a7 (DB); R2=I6, I6=I7
+0012ee5e  9ff2            DM(I7,M7)=R2
+0012ee5f  9fc0 0012 ee61  DM(I7,M7)=0x12ee61
+0012ee62  4dfe 0e3f       I12=DM(M7,I6)
+0012ee64  9c08 09f6       I3=DM(-10,I6)
+0012ee66  9c08 0af7       I5=DM(-9,I6)
+0012ee68  9c08 02ed       R5=DM(-19,I6)
+0012ee6a  9c08 036e       R6=DM(-18,I6)
+0012ee6c  9c08 03ef       R7=DM(-17,I6)
+0012ee6e  9c08 04f0       R9=DM(-16,I6)
+0012ee70  9c08 0571       R10=DM(-15,I6)
+0012ee72  9c08 05f2       R11=DM(-14,I6)
+0012ee74  9c08 06f3       R13=DM(-13,I6)
+0012ee76  9c08 0774       R14=DM(-12,I6)
+0012ee78  9c08 07f5       R15=DM(-11,I6)
+0012ee7a  083f 343f       JUMP (M14,I12) (DB)
+0012ee7c  1901            RFRAME
+0012ee7d  0001            NOP
+0012ee7e  9c08 0203       R4=DM(+3,I6)
+0012ee80  0f8e 014c       R14=0x14c
+0012ee82  6c3e 2c02 1c90  R12=PASS R9 || R8=DM(+5,I6)
+0012ee85  1804 0013 2e08  CJUMP 0x132e08 (DB); R2=I6, I6=I7
+0012ee88  9ff2            DM(I7,M7)=R2
+0012ee89  9fc0 0012 ee8b  DM(I7,M7)=0x12ee8b
+0012ee8c  9c08 0204       R4=DM(+4,I6)
+0012ee8e  6c3e 3402 1c90  R12=PASS R9 || R8=DM(+6,I6)
+0012ee91  1804 0013 2e08  CJUMP 0x132e08 (DB); R2=I6, I6=I7
+0012ee94  9ff2            DM(I7,M7)=R2
+0012ee95  9fc0 0012 ee97  DM(I7,M7)=0x12ee97
+0012ee98  043f f802 1c90  R12=PASS R9 || I7=MODIFY(I7,M7)
+0012ee9b  9ffd            DM(I7,M7)=R13
+0012ee9c  9ff5            DM(I7,M7)=R5
+0012ee9d  5ffe 8580 18ae  R8=R10+R14 || DM(I7,M7)=R11
+0012eea0  9a08 0214       R4=DM(+20,I5)
+0012eea2  1804 0012 eb9b  CJUMP 0x12eb9b (DB); R2=I6, I6=I7
+0012eea5  9ff2            DM(I7,M7)=R2
+0012eea6  9fc0 0012 eea8  DM(I7,M7)=0x12eea8
+0012eea9  c220            R2=PASS R0
+0012eeaa  1607 0000 0004  I7=MODIFY(I7,+4)
+0012eead  0700 0000 0012  IF EQ JUMP 0x12eebf
+0012eeb0  6a3e 1402 1400  R4=PASS R0 || R8=DM(+2,I5)
+0012eeb3  0f8c 0006       R12=0x6
+0012eeb5  1804 0012 b6a7  CJUMP 0x12b6a7 (DB); R2=I6, I6=I7
+0012eeb8  9ff2            DM(I7,M7)=R2
+0012eeb9  9fc0 0012 eebb  DM(I7,M7)=0x12eebb
+0012eebc  073e 00ff ffa6  JUMP 0x12ee62
+0012eebf  043f f802 1c90  R12=PASS R9 || I7=MODIFY(I7,M7)
+0012eec2  9ff7            DM(I7,M7)=R7
+0012eec3  9ff6            DM(I7,M7)=R6
+0012eec4  0f82 0178       R2=0x178
+0012eec6  5ffe 8580 18a2  R8=R10+R2 || DM(I7,M7)=R11
+0012eec9  9a08 0215       R4=DM(+21,I5)
+0012eecb  1804 0012 eb9b  CJUMP 0x12eb9b (DB); R2=I6, I6=I7
+0012eece  9ff2            DM(I7,M7)=R2
+0012eecf  9fc0 0012 eed1  DM(I7,M7)=0x12eed1
+0012eed2  c220            R2=PASS R0
+0012eed3  1607 0000 0004  I7=MODIFY(I7,+4)
+0012eed6  0700 0000 0012  IF EQ JUMP 0x12eee8
+0012eed9  6a3e 1402 1400  R4=PASS R0 || R8=DM(+2,I5)
+0012eedc  0f8c 0006       R12=0x6
+0012eede  1804 0012 b6a7  CJUMP 0x12b6a7 (DB); R2=I6, I6=I7
+0012eee1  9ff2            DM(I7,M7)=R2
+0012eee2  9fc0 0012 eee4  DM(I7,M7)=0x12eee4
+0012eee5  073e 00ff ff7d  JUMP 0x12ee62
+0012eee8  043f f802 1890  R8=PASS R9 || I7=MODIFY(I7,M7)
+0012eeeb  aa04 0000 0484  R4=DM(+1156,I5)
+0012eeee  1616 ffff fffa  I4=MODIFY(I6,-6)
+0012eef1  717e 013f       R2=I4
+0012eef3  9ff2            DM(I7,M7)=R2
+0012eef4  0f8c 0004       R12=0x4
+0012eef6  1804 0013 2d0b  CJUMP 0x132d0b (DB); R2=I6, I6=I7
+0012eef9  9ff2            DM(I7,M7)=R2
+0012eefa  9fc0 0012 eefc  DM(I7,M7)=0x12eefc
+0012eefd  073e 04ff ff65  JUMP 0x12ee62 (DB)
+0012ef00  1607 0000 0002  I7=MODIFY(I7,+2)
+0012ef03  70ff 803f       R0=R15

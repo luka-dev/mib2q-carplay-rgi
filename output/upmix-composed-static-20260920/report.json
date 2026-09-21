@@ -1,0 +1,731 @@
+{
+  "kind": "SYNTHETIC all-stage composition, NOT vehicle state or acoustic evidence",
+  "seed": 790,
+  "frames": 4097,
+  "boundary_injection_max_abs_error": 0.0,
+  "readiness": {
+    "schema_version": 1,
+    "kind": "upmix-model-readiness",
+    "model": {
+      "version": "bank1-electronics-v9-explicit-second-B",
+      "source_sha256": "8776fdb84d05571cf4addf42655bc875da7c47cc35166e3cee6c60bc5841fe4b",
+      "profile": 0,
+      "bank": 1,
+      "row": 1,
+      "asad": "0xfc",
+      "complex_block": "full_mode_reference",
+      "complex_scenario": {
+        "model": "c4d17-fixed-full-mode-reference-v3",
+        "profile_index": 0,
+        "sideband": 0,
+        "adaptive_enable": 1,
+        "power_x_db": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "power_y_db": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "power_floor_db": [
+          -200.0,
+          -200.0,
+          -200.0,
+          -200.0,
+          -200.0
+        ],
+        "rounding": "nearest",
+        "initial_fir_float32_sha256": "cc61635da46b2c9974335ea37e0b5fd660a5c8a42a89b271fa7ec2ac4b8b26f6",
+        "profile_parameters_sha256": "ca762274053e969d3f4138e4d00b8202542e9d019aeb6c421bd6e84670874078",
+        "detector_sample_indices": [
+          0,
+          16,
+          32,
+          48
+        ],
+        "supersedes": "v2 omitted stage12 stride16 compaction; v2 adaptive scenario numbers are invalid",
+        "warning": "Explicit zero-state full-mode scenario, not live amp state. Mode2, startup binding call, hardware rounding and upstream auxiliary source excluded."
+      },
+      "runtime_scenario": {
+        "pre_complex_gain": [
+          0.7,
+          0.7,
+          0.7,
+          0.7,
+          0.7,
+          0.7,
+          0.7,
+          0.7,
+          0.7,
+          0.7
+        ],
+        "post_complex_gain": [
+          0.6,
+          0.6,
+          0.6,
+          0.6,
+          0.6,
+          0.6,
+          0.6,
+          0.6,
+          0.6,
+          0.6
+        ],
+        "limiters": [
+          {
+            "threshold": [
+              0.01,
+              0.01,
+              0.01,
+              0.01,
+              0.01,
+              0.01,
+              0.01,
+              0.01,
+              0.01,
+              0.01,
+              0.01,
+              0.01,
+              0.01,
+              0.01,
+              0.01,
+              0.01
+            ],
+            "attack": [
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5
+            ],
+            "release": [
+              1.001,
+              1.001,
+              1.001,
+              1.001,
+              1.001,
+              1.001,
+              1.001,
+              1.001,
+              1.001,
+              1.001,
+              1.001,
+              1.001,
+              1.001,
+              1.001,
+              1.001,
+              1.001
+            ],
+            "minimum": 1e-06,
+            "maximum": 1,
+            "initial": 1,
+            "linked": false
+          },
+          {
+            "threshold": [
+              0.01,
+              0.01,
+              0.01,
+              0.01,
+              0.01,
+              0.01,
+              0.01,
+              0.01,
+              0.01,
+              0.01,
+              0.01,
+              0.01,
+              0.01,
+              0.01,
+              0.01,
+              0.01
+            ],
+            "attack": [
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5
+            ],
+            "release": [
+              1.001,
+              1.001,
+              1.001,
+              1.001,
+              1.001,
+              1.001,
+              1.001,
+              1.001,
+              1.001,
+              1.001,
+              1.001,
+              1.001,
+              1.001,
+              1.001,
+              1.001,
+              1.001
+            ],
+            "minimum": 1e-06,
+            "maximum": 1,
+            "initial": 1,
+            "linked": false
+          }
+        ]
+      },
+      "upstream_scenario": {
+        "profile": 0,
+        "eq_family": "tone",
+        "shared_gains_tenths_db": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "bank_index": 10,
+        "delay_samples": 17,
+        "live_state_proven": false,
+        "graph_input_sources": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          null,
+          null
+        ],
+        "physical_mapping_proven": false,
+        "source_sha256": "8776fdb84d05571cf4addf42655bc875da7c47cc35166e3cee6c60bc5841fe4b",
+        "parameter_sha256": "8d98a1fe5db1a10fed6d26db2a4b16b313d9fa9b6735546b58e881adc45977bd",
+        "boundary": "settled common input for A and B; explicit physical mapping hypothesis, not live state"
+      },
+      "first_b_scenario": {
+        "mode": 5,
+        "label": "SYNTHETIC spectral/controls + retained B01bank1 tails; zero history; on-time wrapper",
+        "input_graph_ports": [
+          24,
+          23,
+          22
+        ],
+        "mixer_b_slots": [
+          0,
+          1,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ],
+        "input_mix_gain": 0.5,
+        "wrapper_delay_samples": 1024,
+        "live_state_proven": false,
+        "parameter_history_sha256": "60deaf336304d012533552f755c12f9b7238e10131e67e4e10bb21ce905d9d3c",
+        "boundary": "caller-supplied parameter/history snapshot; wrapper latency is explicit hypothesis; ready/gate/lifecycle/hardware rounding not emulated",
+        "tail_binding": {
+          "kind": "explicit_effective_first_B_tail_binding",
+          "library_mode": 5,
+          "zero_histories": true,
+          "successful_settled_allocations_assumed": true,
+          "actual_vehicle_state_proven": false,
+          "nested_zero_request": "one addressed history cell, requiring valid backing memory; no allocation or arbitrary-cursor proof",
+          "effective_config_sha256_float64_le": "9dd53c900814c55d7d956b5e18b9c0b7e182484aaa75c7c6cc0f858122fdb09d",
+          "effective_config_sha256_float32_le": "eca6ea5d9d7122d26558e97624ffd971f82a7257690ebf4be86f2d694f3c3c25",
+          "pointers_sha256": "d6138b15f14f418d795f7e6e8ae351dc6c435f29549cf34d6bc4f17669c0cd1a",
+          "nested_requested_records": {
+            "1167": [
+              1.0,
+              96.0,
+              -0.29999998211860657,
+              168.0,
+              0.29999998211860657
+            ],
+            "1168": [
+              1.0,
+              144.0,
+              -0.29999998211860657,
+              96.0,
+              0.29999998211860657
+            ],
+            "1169": [
+              1.0,
+              96.0,
+              -0.25,
+              144.0,
+              0.29999998211860657
+            ],
+            "1170": [
+              1.0,
+              125.0,
+              -0.29999998211860657,
+              72.0,
+              0.29999998211860657
+            ],
+            "two_left": [
+              1.0,
+              67.0,
+              -0.29999998211860657,
+              101.0,
+              0.25
+            ],
+            "two_right": [
+              1.0,
+              67.0,
+              -0.29999998211860657,
+              101.0,
+              0.25
+            ]
+          },
+          "unbound_indirect_pointer_words": [
+            1162,
+            1163,
+            1164,
+            1165
+          ],
+          "evidence": {
+            "source_sha256": "8776fdb84d05571cf4addf42655bc875da7c47cc35166e3cee6c60bc5841fe4b",
+            "loader_sha256": "9169c24f0337c6bfd3646e2538a567bca839b24aa0db5f67b6984943c2286ca7",
+            "ranges": [
+              {
+                "start": "0x12a7f9",
+                "end_exclusive": "0x12ab01",
+                "sha256": "fed3b6b0fa812567c8a37a622266c9c620e22f60341b2e3ae90a13e94505dc8a"
+              },
+              {
+                "start": "0x12ede6",
+                "end_exclusive": "0x12ef05",
+                "sha256": "8537512b7c5577031fbde6886acf6c3e65c1fb239ffb740f3f5fea311693472d"
+              },
+              {
+                "start": "0x132f86",
+                "end_exclusive": "0x1330e6",
+                "sha256": "ed08701324904e0e398247071ec3fa316d3cb115f77dc01aae3fff980dfae018"
+              },
+              {
+                "start": "0x12eb9b",
+                "end_exclusive": "0x12ec7a",
+                "sha256": "2ffa1e19a867f854554b61625c849bbc625c0d98e89e2e08e852c174afe0e553"
+              },
+              {
+                "start": "0x12d10e",
+                "end_exclusive": "0x12d21b",
+                "sha256": "7f52afbe98c74a2d71ae2b390c6f8f37b4c113399aa7a76d6892d0e833cb29b9"
+              },
+              {
+                "start": "0x12b90b",
+                "end_exclusive": "0x12b964",
+                "sha256": "26024e894c7179b1b0320dfb47288c5b85b219b7b1080ee35bcc2aa440abcdf8"
+              },
+              {
+                "start": "0x12dbde",
+                "end_exclusive": "0x12dc24",
+                "sha256": "6adbd8e311da97e64bd9d20634b74493ea2e4d7949554f5711f1c925540bc1b5"
+              },
+              {
+                "start": "0x12f411",
+                "end_exclusive": "0x12f477",
+                "sha256": "25a2806e08e145a5eed36bf078b3b1c769e98bd25043b7cf0ffbe7158fc1b52e"
+              }
+            ],
+            "instruction_pins": {
+              "0x12ee3f": "R15=0x14b",
+              "0x12ee41": "R8=R10+R15 || DM(I7,M7)=R11",
+              "0x12ee80": "R14=0x14c",
+              "0x12eec4": "R2=0x178",
+              "0x12a85d": "R3=0x1a6",
+              "0x12a983": "R2=0x1bc",
+              "0x12aa13": "R2=0x1ef",
+              "0x12aaa8": "R2=0x222",
+              "0x12a9ac": "R2=0x1e8",
+              "0x12a9d5": "R2=0x1eb",
+              "0x12aa3c": "R2=0x21b",
+              "0x12aa65": "R2=0x21e",
+              "0x13300e": "R2=0x267",
+              "0x133035": "R2=0x293",
+              "0x13305c": "R2=0x298",
+              "0x133083": "R2=0x29b",
+              "0x1330aa": "R2=0x2a0",
+              "0x12d12e": "R2=DM(M5,I4)",
+              "0x12d133": "F2=F2+F15 || I5=R4",
+              "0x12b930": "R1=DM(M5,I2)",
+              "0x12b938": "R1=TRUNC F1 || I4=I15",
+              "0x12ec36": "R4=R13+R12 || R15=I4",
+              "0x12ec47": "R8=R13+R2 || DM(M6,I7)=I12",
+              "0x12d157": "COMPU(R4,R0)",
+              "0x12d165": "COMPU(R0,R2) || R1=DM(+5,I5)",
+              "0x12d168": "IF LT R2=M5",
+              "0x12d17c": "R14=R2+1 || M4=R1",
+              "0x12d184": "F12=F13*F2 || R2=DM(M3,I2)",
+              "0x12d18b": "F8=F8*F4 || DM(M3,I2)=R8",
+              "0x12d191": "COMPU(R0,R14) || R11=DM(M4,I4)",
+              "0x12d195": "IF LE R2=M5",
+              "0x12d19d": "COMPU(R15,R1) || DM(M4,I4)=R8",
+              "0x12d1a0": "IF LE R1=M5"
+            },
+            "address_units": "SHARC shortword PCs; object/config offsets are 32-bit words"
+          },
+          "boundary": "spectral branch PCM to8 B outputs; no spectral parameter binding, interpolation, allocation checks, live state or lifecycle"
+        }
+      },
+      "default_auxiliary_audio": {
+        "first_mixer_B": "explicit_mode5_reference",
+        "second_mixer_B": "explicit_aux_graph_reference"
+      },
+      "pre_eq_delays": [
+        [
+          1632,
+          1632,
+          1632,
+          1632,
+          1632,
+          1632,
+          1632,
+          1632
+        ],
+        [
+          87,
+          87,
+          125,
+          204,
+          403,
+          403,
+          367,
+          367
+        ]
+      ],
+      "total_a_path_delay_samples": [
+        2826,
+        2829,
+        1029,
+        1023,
+        1082,
+        1089,
+        3039,
+        3039,
+        3075,
+        3075,
+        2797,
+        2814,
+        2759,
+        2759,
+        2876,
+        2876
+      ],
+      "output_pair_a_linear": [
+        1.0,
+        1.5488165616989136,
+        0.7079457640647888,
+        2.951209306716919,
+        0.8912509679794312,
+        1.5488165616989136,
+        0.5623413324356079,
+        2.951209306716919,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        0.3630780577659607,
+        1.0232930183410645,
+        0.9120108485221863,
+        0.9120108485221863
+      ],
+      "output_pair_b_linear": [
+        0.0,
+        0.8128305077552795,
+        0.0,
+        1.9952622652053833,
+        0.0,
+        0.8128305077552795,
+        0.0,
+        1.9952622652053833,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.7585775852203369,
+        0.7413102388381958,
+        0.0,
+        0.0
+      ],
+      "verified_unity_eq_records": 32,
+      "warnings": [
+        "Explicit zero-state full-mode scenario, not live amp state. Mode2, startup binding call, hardware rounding and upstream auxiliary source excluded.",
+        "common upstream A/B processing uses explicit settled scenario; graph-to-MOST mapping and live EQ bank unproven",
+        "first mixer B uses explicit mode5 snapshot and wrapper-delay hypothesis, not live state",
+        "second mixer B uses explicit auxiliary graph8/9/10 and effective stage/history scenario, not live state",
+        "C4B59/C4DDA steady gains and C4E9A/C4ED3 kernels use explicit caller scenario, not live readback",
+        "static profile/row, ASAD FC, normal selectors; no live MMI state, tone/volume or acoustics",
+        "input-bus EQ packed grouping inferred; physical output names are candidates",
+        "row EQ supported only for verified unity; post EQ binding decoded; float64, not SHARC bit equivalence"
+      ],
+      "second_b_scenario": {
+        "label": "SYNTHETIC aux8/9/10 stages, not live state",
+        "kind": "explicit_second_B_aux_reference",
+        "source_sha256": "8776fdb84d05571cf4addf42655bc875da7c47cc35166e3cee6c60bc5841fe4b",
+        "loader_sha256": "9169c24f0337c6bfd3646e2538a567bca839b24aa0db5f67b6984943c2286ca7",
+        "profile_scope": "global_fixed_calibration_not_profile_specific",
+        "scenario_sha256": "c2bbdf0e2200526008c28c438275e4537f2d9536aa337cd4355c9889d547a1ca",
+        "input_graph_ids": [
+          8,
+          9,
+          10
+        ],
+        "output_B_slot_ports": [
+          27,
+          26,
+          25,
+          24,
+          23,
+          22,
+          21,
+          36,
+          37,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          73
+        ],
+        "block_frames": 64,
+        "initial_history": "explicit caller state, not implicitly zero",
+        "gain_update": "once per64 frames; modes0/2/3 or explicit mode1 previous-target/time/steps; phase preserved across chunks",
+        "delay_lifecycle": "settled integer delays only; no DMA startup/transitions/errors",
+        "side_branch": "nodes29..31 execute but graph60 has no later consumer in21..50",
+        "live_state_proven": false,
+        "physical_input_mapping_proven": false,
+        "warning": "No ten/split16 donor. Fixed effective coefficients, no bit-exact SHARC or control delivery.",
+        "parameter_history_sha256": "7752702a0f8ae4381a39e6acafc9c8bd77239565e9c0be6c8945e55276728c7d"
+      }
+    },
+    "electrical": {
+      "gates": {
+        "model_identified": true,
+        "common_input_scenario_explicit": true,
+        "first_B_scenario_explicit": true,
+        "second_B_scenario_explicit": true,
+        "complex_scenario_explicit": true,
+        "runtime_scenario_explicit": true
+      },
+      "default_auxiliary_audio": {
+        "first_mixer_B": "explicit_mode5_reference",
+        "second_mixer_B": "explicit_aux_graph_reference"
+      },
+      "omissions_or_hypotheses": [],
+      "warnings": [
+        "Explicit zero-state full-mode scenario, not live amp state. Mode2, startup binding call, hardware rounding and upstream auxiliary source excluded.",
+        "common upstream A/B processing uses explicit settled scenario; graph-to-MOST mapping and live EQ bank unproven",
+        "first mixer B uses explicit mode5 snapshot and wrapper-delay hypothesis, not live state",
+        "second mixer B uses explicit auxiliary graph8/9/10 and effective stage/history scenario, not live state",
+        "C4B59/C4DDA steady gains and C4E9A/C4ED3 kernels use explicit caller scenario, not live readback",
+        "static profile/row, ASAD FC, normal selectors; no live MMI state, tone/volume or acoustics",
+        "input-bus EQ packed grouping inferred; physical output names are candidates",
+        "row EQ supported only for verified unity; post EQ binding decoded; float64, not SHARC bit equivalence"
+      ],
+      "live_state_verified": false,
+      "physical_mapping_verified": false,
+      "bit_exact_hardware_model_verified": false,
+      "boundary": "These presence checks are not kernel/schema validation. Explicit scenarios are caller hypotheses, not vehicle readback or physical pinout evidence."
+    },
+    "coverage": null,
+    "acoustic": null,
+    "claims": {
+      "conditional_electrical_comparison_available": true,
+      "all_electrical_scenarios_explicit": true,
+      "declared_stress_grid_complete": false,
+      "measured_cabin_evidence_package_ready_for_review": false,
+      "actual_vehicle_state_verified": false,
+      "full_cabin_fidelity_established": false,
+      "subjective_optimality_established": false
+    },
+    "next_steps": [
+      "Close or explicitly bound each missing electrical scenario.",
+      "Compare candidates across complete declared sensitivity grids.",
+      "Obtain independent state and acoustic evidence before claiming real-cabin fidelity."
+    ]
+  },
+  "input_arrays": {
+    "music6": {
+      "shape": [
+        4097,
+        6
+      ],
+      "sha256_f64_le": "0b9f43b90aa56418cfbcf0a9a54a9f99589a78e16b295b4623593950394fc29b"
+    },
+    "complex_auxiliary": {
+      "shape": [
+        4097
+      ],
+      "sha256_f64_le": "c9f526c189f054374d06cdac3cd5127919e3c76c9fbe9a898ca513c279998ab0"
+    },
+    "second_B_auxiliary": {
+      "shape": [
+        4097,
+        3
+      ],
+      "sha256_f64_le": "5017989c1895ac24fafb67351754610957ace94d17cc2047eadc79fad8366b25"
+    }
+  },
+  "stage_shapes": {
+    "graph_input8": [
+      4097,
+      8
+    ],
+    "common_input8": [
+      4097,
+      8
+    ],
+    "first_b8": [
+      4097,
+      8
+    ],
+    "first_b10": [
+      4097,
+      10
+    ],
+    "bus": [
+      4097,
+      8
+    ],
+    "pre_delay_1": [
+      4097,
+      8
+    ],
+    "pre_delay_2": [
+      4097,
+      8
+    ],
+    "row_eq": [
+      4097,
+      8
+    ],
+    "bus_eq": [
+      4097,
+      8
+    ],
+    "pre_complex_gain": [
+      4097,
+      10
+    ],
+    "complex": [
+      4097,
+      10
+    ],
+    "ten": [
+      4097,
+      10
+    ],
+    "split16": [
+      4097,
+      16
+    ],
+    "second_b16": [
+      4097,
+      16
+    ],
+    "mixed16": [
+      4097,
+      16
+    ],
+    "routed16": [
+      4097,
+      16
+    ],
+    "output_eq": [
+      4097,
+      16
+    ],
+    "post_eq_1": [
+      4097,
+      16
+    ],
+    "limiter_1": [
+      4097,
+      16
+    ],
+    "post_eq_2": [
+      4097,
+      16
+    ],
+    "output_delay": [
+      4097,
+      16
+    ],
+    "limiter_2": [
+      4097,
+      16
+    ],
+    "out": [
+      4097,
+      16
+    ]
+  },
+  "output_sha256_f64_le": "97f83d127a1815eead6bbd4efd6cd9b9736c1b98f315df4f3fb9fd4187943651",
+  "sources": [
+    {
+      "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tools/soundamp-virtual-cabin/test_amp_all_stage_composition.py",
+      "sha256": "62229eeff1da9bc405bc4f8eb6c39685ec4cf694bac599e2b9506ed0a2378b1d"
+    },
+    {
+      "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tools/soundamp-virtual-cabin/amp_b_tail_binding.py",
+      "sha256": "32df0a651aec1f71c476469c2dfac587044cc068f7b349318571a65e0c276a4b"
+    },
+    {
+      "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tools/soundamp-virtual-cabin/amp_b_bound_scenario.py",
+      "sha256": "6fd3e531be029d3dcff0c593f0d070d4eb21754c85cd3414e1913524ec519211"
+    },
+    {
+      "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tools/soundamp-virtual-cabin/amp_dsp_chain.py",
+      "sha256": "37cf3950227aa9656ee8023f97f5d0b6411f4cd6b297462b09b5dd945d08cb4f"
+    },
+    {
+      "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tools/soundamp-virtual-cabin/amp_b_decorrelator.py",
+      "sha256": "9e7c3aaae8a59320b2a012cae6ccf5e5cb09c01bf32d303ddcd75f3882e242ca"
+    },
+    {
+      "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tools/soundamp-virtual-cabin/amp_second_b.py",
+      "sha256": "24a9a8bbb381702784f344407883aadd2a3f1871d56273a1032f93ade0bb92a3"
+    },
+    {
+      "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tools/soundamp-virtual-cabin/amp_second_b_control.py",
+      "sha256": "0a97b6f7ce7e99890ab25e6bed064bde9ff72520278d950d8e1387ffd7228620"
+    },
+    {
+      "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tools/soundamp-virtual-cabin/amp_dynamic.py",
+      "sha256": "32ec0127e24f9552696970bd36b920c3e132fb9a873151d4fdfad8d433571efa"
+    },
+    {
+      "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tools/soundamp-virtual-cabin/amp_complex_path.py",
+      "sha256": "bbfd0edcd17c30fd7cc70e038565ed79324b5e252e36ba0b4690337e9c2dc97a"
+    }
+  ]
+}

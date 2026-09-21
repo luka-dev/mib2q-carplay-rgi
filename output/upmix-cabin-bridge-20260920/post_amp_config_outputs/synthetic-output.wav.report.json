@@ -1,0 +1,268 @@
+{
+  "model": {
+    "version": "bank1-known-electronics-v7",
+    "source_sha256": "8776fdb84d05571cf4addf42655bc875da7c47cc35166e3cee6c60bc5841fe4b",
+    "profile": 0,
+    "bank": 1,
+    "row": 1,
+    "asad": "0xfc",
+    "complex_block": "identity_hypothesis",
+    "complex_scenario": null,
+    "runtime_scenario": null,
+    "upstream_scenario": null,
+    "first_b_scenario": null,
+    "default_auxiliary_audio": {
+      "first_mixer_B": "zero_hypothesis",
+      "second_mixer_B": "zero_hypothesis"
+    },
+    "pre_eq_delays": [
+      [
+        1632,
+        1632,
+        1632,
+        1632,
+        1632,
+        1632,
+        1632,
+        1632
+      ],
+      [
+        87,
+        87,
+        125,
+        204,
+        403,
+        403,
+        367,
+        367
+      ]
+    ],
+    "total_a_path_delay_samples": [
+      1786,
+      1789,
+      6,
+      0,
+      59,
+      66,
+      1999,
+      1999,
+      2035,
+      2035,
+      1757,
+      1774,
+      1719,
+      1719,
+      1836,
+      1836
+    ],
+    "output_pair_a_linear": [
+      1.0,
+      1.5488165616989136,
+      0.7079457640647888,
+      2.951209306716919,
+      0.8912509679794312,
+      1.5488165616989136,
+      0.5623413324356079,
+      2.951209306716919,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      0.3630780577659607,
+      1.0232930183410645,
+      0.9120108485221863,
+      0.9120108485221863
+    ],
+    "output_pair_b_linear": [
+      0.0,
+      0.8128305077552795,
+      0.0,
+      1.9952622652053833,
+      0.0,
+      0.8128305077552795,
+      0.0,
+      1.9952622652053833,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.7585775852203369,
+      0.7413102388381958,
+      0.0,
+      0.0
+    ],
+    "verified_unity_eq_records": 32,
+    "warnings": [
+      "complex block 0xC4D17 modelled as identity (omits conditional 1023-sample delay and adaptive five-band processing)",
+      "upstream processing before input matrix C4AED not numerically emulated",
+      "first mixer B audio assumed zero unless injected; stored B dB=[0, 0, -100, -100, 0, 0, 0, 0, -99, -99]",
+      "second mixer B audio assumed zero unless injected; nonzero B gains exist",
+      "C4B59/C4DDA gains and C4E9A/C4ED3 limiters omitted: runtime not supplied",
+      "static profile/row, ASAD FC, normal selectors; no live MMI state, tone/volume or acoustics",
+      "input-bus EQ packed grouping inferred; physical output names are candidates",
+      "row EQ supported only for verified unity; post EQ binding decoded; float64, not SHARC bit equivalence"
+    ]
+  },
+  "acoustics": {
+    "domain": "post_amp_config_outputs",
+    "channels": [
+      "cfg00",
+      "cfg01",
+      "cfg02",
+      "cfg03",
+      "cfg04",
+      "cfg05",
+      "cfg06",
+      "cfg07",
+      "cfg08",
+      "cfg09",
+      "cfg10",
+      "cfg11",
+      "cfg12",
+      "cfg13",
+      "cfg14",
+      "cfg15"
+    ],
+    "sample_rate": 48000,
+    "provenance": {
+      "kind": "synthetic",
+      "description": "test only, not cabin measurement"
+    },
+    "capture": {
+      "seat": "synthetic",
+      "state": "fixture",
+      "microphone_calibration": "none: synthetic",
+      "level_reference": "arbitrary test units"
+    },
+    "manifest": {
+      "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/upmix-cabin-bridge-20260920/post_amp_config_outputs/manifest.json",
+      "sha256": "7f71c54b57f3e155d17214e9912d85a9c9b29a6515c88086e43af0f4c273a00d"
+    },
+    "responses": {
+      "cfg00": {
+        "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/upmix-cabin-bridge-20260920/post_amp_config_outputs/cfg00.wav",
+        "sha256": "001016e12743dfc24005cde4cdc4b6290887a0a0488329fc64e70d30929a05b8",
+        "frames": 3,
+        "gain_db": 0
+      },
+      "cfg01": {
+        "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/upmix-cabin-bridge-20260920/post_amp_config_outputs/cfg01.wav",
+        "sha256": "ededd9a63caa7c1de516b5ebe78e3bb2796d10c2ecdae64359836079332a96be",
+        "frames": 3,
+        "gain_db": 0
+      },
+      "cfg02": {
+        "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/upmix-cabin-bridge-20260920/post_amp_config_outputs/cfg02.wav",
+        "sha256": "fc0328e23106ca608c1525220434dea7c68ce6045a9e93ad10163833c4b2792f",
+        "frames": 3,
+        "gain_db": 0
+      },
+      "cfg03": {
+        "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/upmix-cabin-bridge-20260920/post_amp_config_outputs/cfg03.wav",
+        "sha256": "2908c94b2914ea19ff305a3c37d91a5bb5866b81f42b0fb2b22b9cfdaad40d57",
+        "frames": 3,
+        "gain_db": 0
+      },
+      "cfg04": {
+        "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/upmix-cabin-bridge-20260920/post_amp_config_outputs/cfg04.wav",
+        "sha256": "0b9af327ef6b8a8fefce2dd3a844e48085ac52f462d3bc4860cb9986af74d932",
+        "frames": 3,
+        "gain_db": 0
+      },
+      "cfg05": {
+        "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/upmix-cabin-bridge-20260920/post_amp_config_outputs/cfg05.wav",
+        "sha256": "a34bbcf474bbf9ef7f7f0d163601c2911499f4f5f9c8a68822743d39cbb7bd82",
+        "frames": 3,
+        "gain_db": 0
+      },
+      "cfg06": {
+        "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/upmix-cabin-bridge-20260920/post_amp_config_outputs/cfg06.wav",
+        "sha256": "23fc96ac7db703a81c7fcd0b14bd6a9f53e3c709ba27556eec17e6632d748dba",
+        "frames": 3,
+        "gain_db": 0
+      },
+      "cfg07": {
+        "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/upmix-cabin-bridge-20260920/post_amp_config_outputs/cfg07.wav",
+        "sha256": "db0c4f360ed0b5875ed7966dec74f4b7720af24f0dd07d0ba3b41be87edfb5da",
+        "frames": 3,
+        "gain_db": 0
+      },
+      "cfg08": {
+        "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/upmix-cabin-bridge-20260920/post_amp_config_outputs/cfg08.wav",
+        "sha256": "203223e0513bffd0127816676ae2ca10ff34035ce5a673906b59a82c2e59280c",
+        "frames": 3,
+        "gain_db": 0
+      },
+      "cfg09": {
+        "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/upmix-cabin-bridge-20260920/post_amp_config_outputs/cfg09.wav",
+        "sha256": "f010371db3a823cd3d7993cfb23d2f260022dcbfea96107d7ea1d82d3424005e",
+        "frames": 3,
+        "gain_db": 0
+      },
+      "cfg10": {
+        "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/upmix-cabin-bridge-20260920/post_amp_config_outputs/cfg10.wav",
+        "sha256": "f6182fa4f28dd3a0a8a5c495303ae19e3791bcdfb88d73fc505b1fd2ada22cce",
+        "frames": 3,
+        "gain_db": 0
+      },
+      "cfg11": {
+        "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/upmix-cabin-bridge-20260920/post_amp_config_outputs/cfg11.wav",
+        "sha256": "dae66e40b1a2900c7782f60cad98a9aaf55aa6c7509b8d804f4669f1c3eda579",
+        "frames": 3,
+        "gain_db": 0
+      },
+      "cfg12": {
+        "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/upmix-cabin-bridge-20260920/post_amp_config_outputs/cfg12.wav",
+        "sha256": "1b040d12496b410e5dc9cd35bedc89f50146a7733483c19fb35f285f20e8cea2",
+        "frames": 3,
+        "gain_db": 0
+      },
+      "cfg13": {
+        "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/upmix-cabin-bridge-20260920/post_amp_config_outputs/cfg13.wav",
+        "sha256": "bbc84c00ad20bc43f3013fc630364e54934dc2f58b9c6d4bb5b0d2fe9933ec8a",
+        "frames": 3,
+        "gain_db": 0
+      },
+      "cfg14": {
+        "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/upmix-cabin-bridge-20260920/post_amp_config_outputs/cfg14.wav",
+        "sha256": "33729233ab19489d5ff3ffd6a29ef19233aacf0985255d41d00f8faa1b3e1dc2",
+        "frames": 3,
+        "gain_db": 0
+      },
+      "cfg15": {
+        "path": "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/upmix-cabin-bridge-20260920/post_amp_config_outputs/cfg15.wav",
+        "sha256": "8831b4d9612997fbcd6d38c86c17d2bcf4ea01ee1ea0dc9b1382a757b1c49d23",
+        "frames": 3,
+        "gain_db": 0
+      }
+    },
+    "response_hashes_verified": true,
+    "responses_validated": true,
+    "hardware_verified": false,
+    "stage_order": [
+      "upmix_pcm",
+      "amp_chain",
+      "measured_brir"
+    ],
+    "boundary": "declared provenance only; no live state, physical mapping or measurement accuracy proof; fixed linear acoustic transfer"
+  },
+  "input_frames": 2048,
+  "output_frames": 6146,
+  "electronic_tail_frames": 4096,
+  "acoustic_tail_frames": 2,
+  "electronic_tail_fully_settled_proven": false,
+  "boundary_inputs": {},
+  "peak_dbfs": -15.129582931400552,
+  "normalization": "none; absolute scale depends on declared IR level reference; not calibrated SPL",
+  "fidelity": "synthetic fixture only",
+  "input": {
+    "path": "output/upmix-cabin-bridge-20260920/post_amp_config_outputs/synthetic-input.wav",
+    "sha256": "b76ba0f450393bb0da8683f5dc4483083b580a7bed731ad51a1ec9818bc681c8"
+  },
+  "output": {
+    "path": "output/upmix-cabin-bridge-20260920/post_amp_config_outputs/synthetic-output.wav",
+    "sha256": "7b738ca6d23f278685cdf23a344f69a5d4973289b3340cd483bfd47ba877f4cb"
+  },
+  "saved_peak_dbfs": -15.129583160287606,
+  "complete": true
+}

@@ -32,7 +32,7 @@
     "bank": 1,
     "bank_role": "5.1",
     "sink": "0x26 Entertainment_5.1_SAD",
-    "storage_order": "rows_are_inputs_columns_are_outputs",
+    "storage_order": "rows_are_outputs_columns_are_inputs",
     "stored_floor_db": -100.0,
     "effective_floor_db": -99.0,
     "gain_db": [
@@ -50,7 +50,8 @@
       "image_region": "AD301A07 at V850 CodeFlash offset 0x100000",
       "matrix_offset": "0x101BB4",
       "sharc_parameter_range": "0xC022A..0xC0269",
-      "documentation": "docs/SHARC_INPUT_OUTPUT_MATRIX.md"
+      "documentation": "docs/SHARC_MATRIX_CONTROL_2026-09-20.md",
+      "orientation_proof": "A903C RAM[8*out+in] -> C022A[8*in+out]; SHARC126A02/126A07 consumes in*8+out"
     }
   },
   "physical_output_graph": {

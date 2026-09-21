@@ -1,0 +1,100 @@
+0012cf4d  717e 813f       R2=I5
+0012cf4f  707e 0abf       I5=R4
+0012cf51  1607 ffff fff6  I7=MODIFY(I7,-10)
+0012cf54  6cbf af02 1e80  R14=PASS R8 || DM(-11,I6)=R14
+0012cf57  6cbf b782 1ce0  R12=PASS R14 || DM(-10,I6)=R15
+0012cf5a  9d08 0177       DM(-9,I6)=R2
+0012cf5c  aa1c 0000 049c  I12=DM(+1180,I5)
+0012cf5f  1616 ffff fff8  I4=MODIFY(I6,-8)
+0012cf62  717e 013f       R2=I4
+0012cf64  1644 0000 0318  I12=MODIFY(I12,+792)
+0012cf67  9d08 0e78       DM(-8,I6)=I12
+0012cf69  1644 0000 0009  I12=MODIFY(I12,+9)
+0012cf6c  9d08 0e79       DM(-7,I6)=I12
+0012cf6e  1644 ffff fffa  I12=MODIFY(I12,-6)
+0012cf71  9d08 0e7a       DM(-6,I6)=I12
+0012cf73  1644 0000 0009  I12=MODIFY(I12,+9)
+0012cf76  9d08 0e7b       DM(-5,I6)=I12
+0012cf78  1644 ffff fffa  I12=MODIFY(I12,-6)
+0012cf7b  9ff2            DM(I7,M7)=R2
+0012cf7c  9d08 0e7c       DM(-4,I6)=I12
+0012cf7e  9fc4 0002       DM(I7,M7)=2
+0012cf80  1644 0000 0009  I12=MODIFY(I12,+9)
+0012cf83  9fc0 40a0 0000  DM(I7,M7)=0x40a00000
+0012cf86  9d08 0e7d       DM(-3,I6)=I12
+0012cf88  9fc4 0000       DM(I7,M7)=0
+0012cf8a  0f88 0007       R8=0x7
+0012cf8c  9a08 022e       R4=DM(+46,I5)
+0012cf8e  1804 0012 b00f  CJUMP 0x12b00f (DB); R2=I6, I6=I7
+0012cf91  9ff2            DM(I7,M7)=R2
+0012cf92  9fc0 0012 cf94  DM(I7,M7)=0x12cf94
+0012cf95  703e 07bf       R15=R0
+0012cf97  c22f            R2=PASS R15
+0012cf98  1607 0000 0004  I7=MODIFY(I7,+4)
+0012cf9b  0700 0000 001b  IF EQ JUMP 0x12cfb6
+0012cf9e  6a3e 3402 14f0  R4=PASS R15 || R8=DM(+6,I5)
+0012cfa1  0f8c 0006       R12=0x6
+0012cfa3  1804 0012 b6a7  CJUMP 0x12b6a7 (DB); R2=I6, I6=I7
+0012cfa6  9ff2            DM(I7,M7)=R2
+0012cfa7  9fc0 0012 cfa9  DM(I7,M7)=0x12cfa9
+0012cfaa  4dfe 0e3f       I12=DM(M7,I6)
+0012cfac  9c08 0af7       I5=DM(-9,I6)
+0012cfae  9c08 0775       R14=DM(-11,I6)
+0012cfb0  9c08 07f6       R15=DM(-10,I6)
+0012cfb2  083f 343f       JUMP (M14,I12) (DB)
+0012cfb4  1901            RFRAME
+0012cfb5  0001            NOP
+0012cfb6  1616 ffff fffa  I4=MODIFY(I6,-6)
+0012cfb9  717e 0102 1ce0  R12=PASS R14 || R2=I4
+0012cfbc  9ff2            DM(I7,M7)=R2
+0012cfbd  9fc4 0002       DM(I7,M7)=2
+0012cfbf  9fc0 40a0 0000  DM(I7,M7)=0x40a00000
+0012cfc2  9fc4 0000       DM(I7,M7)=0
+0012cfc4  9a08 0232       R4=DM(+50,I5)
+0012cfc6  0f88 0007       R8=0x7
+0012cfc8  1804 0012 b00f  CJUMP 0x12b00f (DB); R2=I6, I6=I7
+0012cfcb  9ff2            DM(I7,M7)=R2
+0012cfcc  9fc0 0012 cfce  DM(I7,M7)=0x12cfce
+0012cfcf  c220            R2=PASS R0
+0012cfd0  1607 0000 0004  I7=MODIFY(I7,+4)
+0012cfd3  0700 0000 001b  IF EQ JUMP 0x12cfee
+0012cfd6  6a3e 3402 1400  R4=PASS R0 || R8=DM(+6,I5)
+0012cfd9  0f8c 0006       R12=0x6
+0012cfdb  1804 0012 b6a7  CJUMP 0x12b6a7 (DB); R2=I6, I6=I7
+0012cfde  9ff2            DM(I7,M7)=R2
+0012cfdf  9fc0 0012 cfe1  DM(I7,M7)=0x12cfe1
+0012cfe2  4dfe 0e3f       I12=DM(M7,I6)
+0012cfe4  9c08 0af7       I5=DM(-9,I6)
+0012cfe6  9c08 0775       R14=DM(-11,I6)
+0012cfe8  9c08 07f6       R15=DM(-10,I6)
+0012cfea  083f 343f       JUMP (M14,I12) (DB)
+0012cfec  1901            RFRAME
+0012cfed  0001            NOP
+0012cfee  1616 ffff fffc  I4=MODIFY(I6,-4)
+0012cff1  717e 0102 1ce0  R12=PASS R14 || R2=I4
+0012cff4  9ff2            DM(I7,M7)=R2
+0012cff5  9fc4 0002       DM(I7,M7)=2
+0012cff7  9fc0 40a0 0000  DM(I7,M7)=0x40a00000
+0012cffa  9fc4 0000       DM(I7,M7)=0
+0012cffc  9a08 0233       R4=DM(+51,I5)
+0012cffe  0f88 0007       R8=0x7
+0012d000  1804 0012 b00f  CJUMP 0x12b00f (DB); R2=I6, I6=I7
+0012d003  9ff2            DM(I7,M7)=R2
+0012d004  9fc0 0012 d006  DM(I7,M7)=0x12d006
+0012d007  703e 0202 10f0  R0=PASS R15 || R4=R0
+0012d00a  c224            R2=PASS R4
+0012d00b  0700 04ff ff9f  IF EQ JUMP 0x12cfaa (DB)
+0012d00e  1607 0000 0004  I7=MODIFY(I7,+4)
+0012d011  0001            NOP
+0012d012  9a08 0406       R8=DM(+6,I5)
+0012d014  0f8c 0006       R12=0x6
+0012d016  1804 0012 b6a7  CJUMP 0x12b6a7 (DB); R2=I6, I6=I7
+0012d019  9ff2            DM(I7,M7)=R2
+0012d01a  9fc0 0012 d01c  DM(I7,M7)=0x12d01c
+0012d01d  4dfe 0e3f       I12=DM(M7,I6)
+0012d01f  9c08 0af7       I5=DM(-9,I6)
+0012d021  9c08 0775       R14=DM(-11,I6)
+0012d023  9c08 07f6       R15=DM(-10,I6)
+0012d025  083f 343f       JUMP (M14,I12) (DB)
+0012d027  1901            RFRAME
+0012d028  0001            NOP

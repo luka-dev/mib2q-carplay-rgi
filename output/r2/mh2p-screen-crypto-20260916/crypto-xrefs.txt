@@ -1,0 +1,64 @@
+            ;-- reloc.AirPlayReceiverSessionScreen_SetChaChaSecurityInfo:
+/ 66: sym.AirPlayReceiverSessionScreen_SetChaChaSecurityInfo (int16_t arg1, int16_t arg2, int16_t arg3);
+| `- args(r0, r1, r2)
+|           0x0003b74c      70b5           push {r4, r5, r6, lr}       ; RELOC 32 AirPlayReceiverSessionScreen_SetChaChaSecurityInfo @ 0x0003b74c
+|           0x0003b74e      0446           mov r4, r0                  ; arg1
+|           0x0003b750      10f5ea70       adds.w r0, r0, 0x1d4        ; arg1
+|           0x0003b754      0e46           mov r6, r1                  ; arg2
+|           0x0003b756      1546           mov r5, r2                  ; arg3
+|       ,=< 0x0003b758      05d0           beq 0x3b766
+|       |   0x0003b75a      4ff48c71       mov.w r1, 0x118
+|       |   0x0003b75e      0022           movs r2, 0
+|       |   0x0003b760      0b46           mov r3, r1
+|       |   0x0003b762      ebf7aaee       blx 0x274b8 ; ELF-verified: memset_s
+|       `-> 0x0003b766      b5f12003       subs.w r3, r5, 0x20
+|           0x0003b76a      18bf           it ne
+|           0x0003b76c      0123           movs r3, 1
+|           0x0003b76e      002e           cmp r6, 0
+|           0x0003b770      08bf           it eq
+|           0x0003b772      43f00103       orr r3, r3, 1
+|       ,=< 0x0003b776      43b9           cbnz r3, 0x3b78a
+|       |   0x0003b778      3146           mov r1, r6
+|       |   0x0003b77a      2a46           mov r2, r5
+|       |   0x0003b77c      04f53170       add.w r0, r4, 0x2c4
+|       |   0x0003b780      e8f782ef       blx 0x24688 ; ELF-verified: memcpy
+|       |   0x0003b784      0123           movs r3, 1
+|       |   0x0003b786      84f8d431       strb.w r3, [r4, 0x1d4]
+|       `-> 0x0003b78a      0020           movs r0, 0
+\           0x0003b78c      70bd           pop {r4, r5, r6, pc}
+            0x0003b78e      00bf           nop
+            ;-- reloc.AirPlayReceiverSessionScreen_SetSecurityInfo:
+/ 136: sym.AirPlayReceiverSessionScreen_SetSecurityInfo (int16_t arg1, int16_t arg2, int16_t arg3);
+| `- args(r0, r1, r2) vars(4:sp[0x14..0x20])
+|           0x0003b790      70b5           push {r4, r5, r6, lr}       ; RELOC 32 AirPlayReceiverSessionScreen_SetSecurityInfo @ 0x0003b790
+|           0x0003b792      0446           mov r4, r0                  ; arg1
+|           ; ICOD XREF from dio::CDioManagerComp::getItem(dio::CDioManagerComp::EKey, int) @ 0xbf72c(x)
+|           0x0003b794      90f8d031       ldrb.w r3, [r0, 0x1d0]      ; arg1
+|           0x0003b798      84b0           sub sp, 0x10
+            ;-- reloc.PairingSessionDeriveKey:
+/ 68: sym.PairingSessionDeriveKey (int16_t arg1, int16_t arg2, int16_t arg3, int16_t arg4, int16_t arg_18h, int16_t arg_1ch, int16_t arg_20h);
+| `- args(r0, r1, r2, r3, sp[0x0..0x8]) vars(4:sp[0xc..0x18])
+|           0x00081528      10b5           push {r4, lr}               ; RELOC 32 PairingSessionDeriveKey @ 0x00081528
+|           0x0008152a      84b0           sub sp, 0x10
+|           0x0008152c      846a           ldr r4, [r0, 0x28]          ; arg1
+|           0x0008152e      033c           subs r4, 3
+|           0x00081530      012c           cmp r4, 1
+|       ,=< 0x00081532      15d8           bhi 0x81560
+|       |   0x00081534      90f83840       ldrb.w r4, [r0, 0x38]       ; arg1
+|       |   0x00081538      052c           cmp r4, 5
+|      ,==< 0x0008153a      11d1           bne 0x81560
+|      ||   0x0008153c      1c46           mov r4, r3                  ; arg4
+|      ||   0x0008153e      1346           mov r3, r2                  ; arg3
+|      ||   0x00081540      0a46           mov r2, r1                  ; arg2
+|      ||   0x00081542      0699           ldr r1, [arg_18h]
+|      ||   0x00081544      0094           str r4, [sp]
+|      ||   0x00081546      00f5ab70       add.w r0, r0, 0x156
+|      ||   0x0008154a      0191           str r1, [var_4h]
+|      ||   0x0008154c      0799           ldr r1, [arg_1ch]
+|      ||   0x0008154e      0291           str r1, [var_8h]
+|      ||   0x00081550      0899           ldr r1, [arg_20h]
+|      ||   0x00081552      0391           str r1, [var_ch]
+|      ||   0x00081554      2021           movs r1, 0x20
+|      ||   0x00081556      a2f71aea       blx 0x2398c ; ELF-verified: HKDF_SHA512_compat
+|      ||   0x0008155a      0020           movs r0, 0
+|      ||   0x0008155c      04b0           add sp, 0x10

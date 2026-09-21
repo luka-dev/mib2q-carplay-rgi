@@ -1,0 +1,45 @@
+{
+  "Host": "100.127.113.11",
+  "Source": "C:\\Users\\LuKa\\Desktop\\Dolby",
+  "Directories": [
+    "documents",
+    "evidence"
+  ],
+  "Files": [
+    {
+      "Path": "DolbyAudioProcessing.dll",
+      "Size": 4384256,
+      "SHA256": "0FADA40251880D03C657A357745D362799C93FB6024F733F1C8BF1057F5E4715"
+    },
+    {
+      "Path": "inspect_dolby.py",
+      "Size": 2280,
+      "SHA256": "7DE10E3282C27B3DD7998AD2B46077C11227C01A5272924E1ED8EACB32899CE9"
+    },
+    {
+      "Path": "README.md",
+      "Size": 7564,
+      "SHA256": "6D3DBB18BE8E4D585F3ED57B3CC3E1F812F5210FE9C94697B72E7B5F24E278FC"
+    },
+    {
+      "Path": "SOURCES.md",
+      "Size": 4647,
+      "SHA256": "C8C796988CF496C965D0098E26809476A8AAE75B5AAEF22A03B72D14947B5B79"
+    },
+    {
+      "Path": "documents\\Dolby-PCEE-v4-white-paper.pdf",
+      "Size": 582608,
+      "SHA256": "AC23B8EC4D41C67ECF0977CD9EA6466FBDEE32019D66662653DE8F42D72402CC"
+    },
+    {
+      "Path": "evidence\\binary-findings.json",
+      "Size": 42616,
+      "SHA256": "F451E542179891598C6AA417A191A62C601EE7B63FEB1F3D94B6D3F3635A62E7"
+    },
+    {
+      "Path": "evidence\\file-manifest.json",
+      "Size": 3346,
+      "SHA256": "9EA29D66CA414E2CD5555EC7E87FB30A6C0FF38B915BF9A3D60DB49E69ED0DCB"
+    }
+  ]
+}

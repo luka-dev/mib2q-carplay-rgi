@@ -37,10 +37,23 @@ def compute(c):
     op,cu = (c>>12)&255,(c>>20)&3
     if c & 0x400000:
         mo=(c>>16)&63
+        # ADI rev2.4 table12-10: MR transfer, bit16 is direction.
+        if mo in (0,1):
+            mr={0:'MR0F',1:'MR1F',2:'MR2F',4:'MR0B',5:'MR1B',6:'MR2B'}.get((c>>12)&15)
+            if mr is not None:return f'{mr}=R{n}' if mo else f'R{n}={mr}'
         if mo in (0x18,0x19):
             return (f'F{(c>>12)&15}=F{(c>>6)&3}*F{4+((c>>4)&3)}, '
                     f'F{n}=F{8+((c>>2)&3)}'+('+' if mo==0x18 else '-')+f'F{12+(c&3)}')
+        if mo==0x1d:
+            return (f'F{(c>>12)&15}=F{(c>>6)&3}*F{4+((c>>4)&3)}, '
+                    f'F{n}=ABS F{8+((c>>2)&3)}')
+        if 0x30<=mo<=0x3f:
+            a,b=8+((c>>2)&3),12+(c&3)
+            return (f'F{(c>>12)&15}=F{(c>>6)&3}*F{4+((c>>4)&3)}, '
+                    f'F{n}=F{a}+F{b}, F{mo&15}=F{a}-F{b}')
     elif cu==0:
+        if 0xf0<=op<=0xff:
+            return f'F{n}=F{x}+F{y}, F{op&15}=F{x}-F{y}'
         binary={1:('+','R'),2:('-','R'),0x40:('&','R'),0x41:('|','R'),0x42:('^','R'),0x81:('+','F'),0x82:('-','F')}
         if op in binary:
             s,p=binary[op];return f'{p}{n}={p}{x}{s}{p}{y}'
@@ -54,16 +67,42 @@ def compute(c):
         if op in (0x22,0xa2):
             p='R' if op==0x22 else 'F';return f'{p}{n}=-{p}{x}'
         if op==0x89:return f'F{n}=(F{x}+F{y})/2'
+        if op==0x92:return f'F{n}=ABS(F{x}-F{y})'
+        if op==0xb0:return f'F{n}=ABS F{x}'
+        if op==0xe0:return f'F{n}=F{x} COPYSIGN F{y}'
         if op==0xc4:return f'F{n}=RECIPS F{x}'
+        if op==0xc5:return f'F{n}=RSQRTS F{x}'
+        if op==0xc1:return f'R{n}=LOGB F{x}'
+        if op==0xad:return f'R{n}=MANT F{x}'
+        if op==0xa5:return f'F{n}=RND F{x}'
+        if op==0xbd:return f'F{n}=SCALB F{x} BY R{y}'
         if op in (0x29,0x2a):return f'R{n}=R{x}'+('+' if op==0x29 else '-')+'1'
         if op==0xca:return f'F{n}=FLOAT R{x}'
         if op==0xc9:return f'R{n}=FIX F{x}'
+        if op==0xcd:return f'R{n}=TRUNC F{x}'
+        # ADI rev2.4 tables12-3/4: scaled conversion and fixed-point ABS.
+        if op==0x30:return f'R{n}=ABS R{x}'
+        if op==0xd9:return f'R{n}=FIX F{x} BY R{y}'
+        if op==0xdd:return f'R{n}=TRUNC F{x} BY R{y}'
+        if op==0xda:return f'F{n}=FLOAT R{x} BY R{y}'
     elif cu==1:
         if op==0x30:return f'F{n}=F{x}*F{y}'
-        if op==0x70:return f'R{n}=R{x}*R{y} (SSI)'
-        if op==0x40:return f'R{n}=R{x}*R{y} (UUI)'
+        # ADI rev2.4 tables12-5/7/8: integer multiply/accumulate and SAT.
+        dest=(f'R{n}',f'R{n}','MRF','MRB')[(op>>1)&3]
+        source='MRB' if op&2 else 'MRF'
+        if op in (0x14,0x16):return f'{dest}=0'
+        if op<16:return f'{dest}=SAT {source} ({"S" if op&1 else "U"}{"F" if op&8 else "I"})'
+        if op>=0x40:
+            mod=('S' if op&0x10 else 'U')+('S' if op&0x20 else 'U')+('F' if op&8 else 'I')+('R' if op&1 else '')
+            accum='' if op<0x80 else source+('+' if op<0xc0 else '-')
+            return f'{dest}={accum}R{x}*R{y} ({mod})'
     elif cu==2:
         if op==0:return f'R{n}=LSHIFT R{x} BY R{y}'
+        if op==4:return f'R{n}=ASHIFT R{x} BY R{y}'
+        if op==0x88:return f'R{n}=LEFTZ R{x}'
+        if op==0xc0:return f'R{n}=BSET R{x} BY R{y}'
+        if op==0xc4:return f'R{n}=BCLR R{x} BY R{y}'
+        if op==0xc8:return f'R{n}=BTGL R{x} BY R{y}'
         if op==0xcc:return f'BTST R{x} BY R{y}'
     return f'COMPUTE_UNKNOWN({c:#08x})'
 

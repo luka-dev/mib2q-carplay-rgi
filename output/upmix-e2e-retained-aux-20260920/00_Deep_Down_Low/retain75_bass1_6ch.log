@@ -1,0 +1,9 @@
+COMMAND ["/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/build/upmix-e2e-20260920/stereo_upmix_render", "--mode", "hssr-universal", "--model", "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/build/hssr_model.bin", "--guard-model", "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/build/hssr_guard.bin", "--front-retention", "0.75", "--surround", "0.3", "--front-bass", "-1.0", "--lfe", "assist", "--lfe-gain", "0.0", "--float-render", "output/upmix-e2e-retained-aux-20260920/00_Deep_Down_Low/source_padded.wav", "output/upmix-e2e-retained-aux-20260920/00_Deep_Down_Low/retain75_bass1_6ch.wav"]
+STDOUT
+
+STDERR
+experimental-float: pre-gain-peak=1.02911627 FS post-gain-peak=1.02911627 FS gain=1.00000000 limiter-attacks=203 minimum-guard-gain=0.56804281 attenuated-frames=22436 total-frames=300000 longest-observed-run=3197 reduction-db-sum=15570.218242005 over3-frames=824 over6-frames=0 over10-frames=0
+front-retention=0.75000 (q15=24576; independent of rear gain)
+rendered 300000 frames (6.250 s): PCM2 -> PCM6 L,R,C,LFE,Ls,Rs
+mode=hssr-universal surround=0.29999 (q15=9830) front=0.95801 (q15=31392) lfe=assist gain=0.12500 (q15=4096)
+output/upmix-e2e-retained-aux-20260920/00_Deep_Down_Low/retain75_bass1_6ch.wav

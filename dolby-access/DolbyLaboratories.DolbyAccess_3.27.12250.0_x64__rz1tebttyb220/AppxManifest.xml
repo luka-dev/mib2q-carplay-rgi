@@ -1,0 +1,334 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<Package IgnorableNamespaces="uap uap3 uap4 mp rescap wincap3 build" xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10" xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest" xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10" xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3" xmlns:uap4="http://schemas.microsoft.com/appx/manifest/uap/windows10/4" xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities" xmlns:wincap3="http://schemas.microsoft.com/appx/manifest/foundation/windows10/windowscapabilities/3" xmlns:build="http://schemas.microsoft.com/developer/appx/2015/build">
+  <Identity Name="DolbyLaboratories.DolbyAccess" Publisher="CN=58D26209-1D57-482C-B403-B655571B5C7B" Version="3.27.12250.0" ProcessorArchitecture="x64" />
+  <mp:PhoneIdentity PhoneProductId="cbca35f5-26ac-49da-bee7-8ee09120d79d" PhonePublisherId="d51d79f2-ac93-4778-8021-d592cfa8e054" />
+  <Properties>
+    <DisplayName>Dolby Access</DisplayName>
+    <PublisherDisplayName>Dolby Laboratories</PublisherDisplayName>
+    <Logo>Assets\AppIcons\Store50x50Logo.png</Logo>
+  </Properties>
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.22000.0" MaxVersionTested="10.0.22000.0" />
+    <PackageDependency Name="Microsoft.UI.Xaml.2.8" MinVersion="8.2310.30001.0" Publisher="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US" />
+    <PackageDependency Name="Microsoft.NET.Native.Framework.2.2" MinVersion="2.2.29512.0" Publisher="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US" />
+    <PackageDependency Name="Microsoft.NET.Native.Runtime.2.2" MinVersion="2.2.28604.0" Publisher="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US" />
+    <PackageDependency Name="Microsoft.VCLibs.140.00" MinVersion="14.0.30704.0" Publisher="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US" />
+    <PackageDependency Name="Microsoft.Services.Store.Engagement" MinVersion="10.0.23012.0" Publisher="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US" />
+    <PackageDependency Name="Microsoft.VCLibs.140.00.UWPDesktop" MinVersion="14.0.30704.0" Publisher="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US" />
+  </Dependencies>
+  <Resources>
+    <Resource Language="EN-US" />
+    <Resource Language="DE-DE" />
+    <Resource Language="ES-ES" />
+    <Resource Language="FR-FR" />
+    <Resource Language="IT-IT" />
+    <Resource Language="JA-JP" />
+    <Resource Language="KO-KR" />
+    <Resource Language="NB-NO" />
+    <Resource Language="PT-BR" />
+    <Resource Language="RU-RU" />
+    <Resource Language="UK-UA" />
+    <Resource Language="ZH-CN" />
+    <Resource Language="ZH-TW" />
+    <Resource uap:Scale="100" />
+  </Resources>
+  <Capabilities>
+    <Capability Name="internetClient" />
+    <Capability Name="privateNetworkClientServer" />
+    <uap:Capability Name="userAccountInformation" />
+    <uap3:Capability Name="backgroundMediaPlayback" />
+    <rescap:Capability Name="hevcPlayback" />
+    <rescap:Capability Name="audioDeviceConfiguration" />
+    <uap4:CustomCapability Name="DolbyLabs.dolbyDAX3ApiService_rz1tebttyb220" />
+    <uap4:CustomCapability Name="DolbyLabs.DolbyFusionService_rz1tebttyb220" />
+  </Capabilities>
+  <Applications>
+    <Application Id="App" Executable="DolbyAccess.exe" EntryPoint="DolbyAccess.App">
+      <uap:VisualElements DisplayName="Dolby Access" Square150x150Logo="Assets\AppIcons\Square150x150Logo.png" Square44x44Logo="Assets\AppIcons\Square44x44Logo.png" Description="Dolby Access" BackgroundColor="#0C0C0C">
+        <uap:DefaultTile Wide310x150Logo="Assets\AppIcons\Square310x150Logo.png" Square310x310Logo="Assets\AppIcons\Square310x310Logo.png" Square71x71Logo="Assets\AppIcons\Square71x71Logo.png" />
+        <uap:SplashScreen Image="Assets\SplashScreen.png" BackgroundColor="#0C0C0C" />
+      </uap:VisualElements>
+      <Extensions>
+        <uap4:Extension Category="windows.mediaCodec">
+          <uap4:MediaCodec DisplayName="Dolby Atmos for Headphones" Description="Audio encoder for Dolby Atmos for headphones" Category="audioEncoder" wincap3:ActivatableClassId="Dolby.DolbyAtmosForHeadphonesEncoder" wincap3:Path="DLLs\x64\DolbyHrtfEnc.dll" wincap3:ProcessorArchitecture="x64">
+            <uap4:MediaEncodingProperties>
+              <uap4:InputTypes>
+                <uap4:InputType SubType="00000003-0000-0010-8000-00AA00389B71" />
+              </uap4:InputTypes>
+              <uap4:OutputTypes>
+                <uap4:OutputType SubType="3fe444e2-bda1-4581-a5d4-5f62e8f2ec56" />
+              </uap4:OutputTypes>
+            </uap4:MediaEncodingProperties>
+          </uap4:MediaCodec>
+        </uap4:Extension>
+        <uap4:Extension Category="windows.mediaCodec">
+          <uap4:MediaCodec DisplayName="Dolby Atmos for built-in speakers" Description="Audio encoder for Dolby Atmos for built-in speakers" Category="audioEncoder" wincap3:ActivatableClassId="Dolby.DolbyAtmosForSpeakersEncoder" wincap3:Path="DLLs\x64\DolbyHrtfEnc.dll" wincap3:ProcessorArchitecture="x64">
+            <uap4:MediaEncodingProperties>
+              <uap4:InputTypes>
+                <uap4:InputType SubType="00000003-0000-0010-8000-00AA00389B71" />
+              </uap4:InputTypes>
+              <uap4:OutputTypes>
+                <uap4:OutputType SubType="658c9a86-2e6b-4989-8c11-80249907eda5" />
+              </uap4:OutputTypes>
+            </uap4:MediaEncodingProperties>
+          </uap4:MediaCodec>
+        </uap4:Extension>
+        <uap4:Extension Category="windows.mediaCodec">
+          <uap4:MediaCodec DisplayName="Dolby Audio Processing" Description="Dolby Audio Processing engine" Category="audioEncoder" wincap3:ActivatableClassId="Dolby.DolbyAudioProcessingModule" wincap3:Path="DLLs\x64\DolbyAudioProcessing.dll" wincap3:ProcessorArchitecture="x64">
+            <uap4:MediaEncodingProperties>
+              <uap4:InputTypes>
+                <uap4:InputType SubType="3fe444e2-bda1-4581-a5d4-5f62e8f2ec56" />
+              </uap4:InputTypes>
+              <uap4:OutputTypes>
+                <uap4:OutputType SubType="45602ec1-8477-4758-ae13-bf931fe9af8d" />
+              </uap4:OutputTypes>
+            </uap4:MediaEncodingProperties>
+          </uap4:MediaCodec>
+        </uap4:Extension>
+        <uap4:Extension Category="windows.mediaCodec">
+          <uap4:MediaCodec DisplayName="Dolby Atmos for Home Theater" Description="Audio encoder for Dolby Atmos for Home Theater" Category="audioEncoder" wincap3:ActivatableClassId="Dolby.DolbyMatEncoder" wincap3:Path="DLLs\x64\DolbyMatEnc.dll" wincap3:ProcessorArchitecture="x64">
+            <uap4:MediaEncodingProperties>
+              <uap4:InputTypes>
+                <uap4:InputType SubType="00000003-0000-0010-8000-00AA00389B71" />
+              </uap4:InputTypes>
+              <uap4:OutputTypes>
+                <uap4:OutputType SubType="AACA92BE-029D-4006-ADA0-725B506CF9B2" />
+              </uap4:OutputTypes>
+            </uap4:MediaEncodingProperties>
+          </uap4:MediaCodec>
+        </uap4:Extension>
+        <uap4:Extension Category="windows.mediaCodec">
+          <uap4:MediaCodec DisplayName="Dolby MAT Engine" Description="Dolby MAT encoder engine" Category="audioEncoder" wincap3:ActivatableClassId="Dolby.DolbyMATEngine" wincap3:Path="DLLs\x64\DolbyMatEngine.dll" wincap3:ProcessorArchitecture="x64">
+            <uap4:MediaEncodingProperties>
+              <uap4:InputTypes>
+                <uap4:InputType SubType="AACA92BE-029D-4006-ADA0-725B506CF9B2" />
+              </uap4:InputTypes>
+              <uap4:OutputTypes>
+                <uap4:OutputType SubType="5B3C2C7F-5957-4892-BCC5-022DEE554AE1" />
+              </uap4:OutputTypes>
+            </uap4:MediaEncodingProperties>
+          </uap4:MediaCodec>
+        </uap4:Extension>
+        <Extension EntryPoint="Dolby.SpatialCodecs.UpdateParametersBackgroundTask" Category="windows.backgroundTasks">
+          <BackgroundTasks uap4:SupportsMultipleInstances="true">
+            <Task Type="systemEvent" />
+          </BackgroundTasks>
+        </Extension>
+        <Extension EntryPoint="Dolby.SpatialCodecs.InvalidateLicenseBackgroundTask" Category="windows.backgroundTasks">
+          <BackgroundTasks uap4:SupportsMultipleInstances="true">
+            <Task Type="systemEvent" />
+          </BackgroundTasks>
+        </Extension>
+        <Extension EntryPoint="Dolby.SpatialCodecs.SendReportsBackgroundTask" Category="windows.backgroundTasks">
+          <BackgroundTasks uap4:SupportsMultipleInstances="true">
+            <Task Type="systemEvent" />
+          </BackgroundTasks>
+        </Extension>
+        <uap:Extension Category="windows.appService" EntryPoint="Dolby.SpatialCodecs.SpatialCodecsAppService">
+          <uap3:AppService Name="com.DolbyLaboratories.DolbyAccess." />
+        </uap:Extension>
+        <uap:Extension Category="windows.appService" EntryPoint="Dolby.SpatialCodecs.SpatialCodecsAppService">
+          <uap3:AppService Name="com.DolbyLaboratories.Connect" />
+        </uap:Extension>
+        <Extension EntryPoint="Dolby.SpatialCodecs.UpdateBackgroundTask" Category="windows.updateTask" />
+        <uap:Extension Category="windows.mediaPlayback">
+          <uap:MediaPlayback>
+            <uap:Codec Name="atmosDecodeDDPlus" />
+            <uap:Codec Name="atmosDolbyDigitalPlusDecoder" />
+            <uap:Codec Name="{8F3BBD02-6BBE-4B60-9F8B-406837CE466F}" />
+            <uap:Codec Name="{1459AC38-3875-49BF-BB59-0FE80F4D395D}" />
+            <uap:Codec Name="{A289735D-FA3E-4E35-9D7D-B6F896ACB2E7}" />
+            <uap:Codec Name="{4C81E564-C8EF-4AD9-9F2C-9EF995533790}" />
+          </uap:MediaPlayback>
+        </uap:Extension>
+        <uap:Extension Category="windows.protocol">
+          <uap:Protocol Name="dl-dolbyaccess" ReturnResults="always">
+            <uap:DisplayName>Dolby Access</uap:DisplayName>
+          </uap:Protocol>
+        </uap:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+  <Extensions>
+    <Extension Category="windows.activatableClass.inProcessServer">
+      <InProcessServer>
+        <Path>DAXRPCClient.dll</Path>
+        <ActivatableClass ActivatableClassId="DAX.CDolbyDAX" ThreadingModel="both" />
+      </InProcessServer>
+    </Extension>
+    <Extension Category="windows.activatableClass.inProcessServer">
+      <InProcessServer>
+        <Path>CapxComponent.dll</Path>
+        <ActivatableClass ActivatableClassId="CapxComponent.PropertyStoreProxy" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="CapxComponent.ParamsObject" ThreadingModel="both" />
+      </InProcessServer>
+    </Extension>
+    <Extension Category="windows.activatableClass.inProcessServer">
+      <InProcessServer>
+        <Path>Dolby.Fusion.dll</Path>
+        <ActivatableClass ActivatableClassId="Dolby.Fusion.CDolbyFusion" ThreadingModel="both" />
+      </InProcessServer>
+    </Extension>
+    <Extension Category="windows.activatableClass.inProcessServer">
+      <InProcessServer>
+        <Path>ExtendedHardwareInfoProvider.dll</Path>
+        <ActivatableClass ActivatableClassId="ExtendedHardwareInfoProvider.ExtendedXboxInfoProvider" ThreadingModel="both" />
+      </InProcessServer>
+    </Extension>
+    <Extension Category="windows.activatableClass.inProcessServer">
+      <InProcessServer>
+        <Path>Microsoft.Graphics.Canvas.dll</Path>
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.BorderEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.UnPremultiplyEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.GaussianBlurEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.SpotDiffuseEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.ShadowEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.PointDiffuseEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.BlendEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.ChromaKeyEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.CropEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.GammaTransferEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.SepiaEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.LinearTransferEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.TurbulenceEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.PointSpecularEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.ColorManagementEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.VignetteEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.OpacityMetadataEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.CrossFadeEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.TintEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.DpiCompensationEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.EffectTransferTable3D" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.PixelShaderEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.ExposureEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.HighlightsAndShadowsEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.ConvolveMatrixEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.DiscreteTransferEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.DirectionalBlurEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.OpacityEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.DistantDiffuseEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.SharpenEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.BrightnessEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.Transform3DEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.ColorMatrixEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.SaturationEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.DisplacementMapEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.EdgeDetectionEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.ColorSourceEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.PosterizeEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.ContrastEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.SpotSpecularEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.HueToRgbEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.AlphaMaskEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.ScaleEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.InvertEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.TileEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.GrayscaleEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.TableTransferEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.PremultiplyEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.TableTransfer3DEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.ColorManagementProfile" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.TemperatureAndTintEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.DistantSpecularEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.LuminanceToAlphaEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.Transform2DEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.MorphologyEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.CompositeEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.RgbToHueEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.ArithmeticCompositeEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.EmbossEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.StraightenEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.AtlasEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Effects.HueRotationEffect" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.CanvasBitmap" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.CanvasDevice" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Geometry.CanvasCachedGeometry" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Geometry.CanvasGradientMesh" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Geometry.CanvasStrokeStyle" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Geometry.CanvasPathBuilder" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Geometry.CanvasGeometry" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Brushes.CanvasRadialGradientBrush" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Brushes.CanvasLinearGradientBrush" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Brushes.CanvasImageBrush" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Brushes.CanvasSolidColorBrush" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.CanvasSpriteBatch" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Printing.CanvasPrintDocument" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.CanvasSwapChain" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.CanvasImage" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.CanvasVirtualBitmap" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.CanvasRenderTarget" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Text.CanvasNumberSubstitution" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Text.CanvasTextAnalyzer" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Text.CanvasFontSet" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Text.CanvasTextRenderingParameters" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Text.CanvasTextLayout" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Text.CanvasTypography" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Text.CanvasTextFormat" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.Svg.CanvasSvgDocument" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.CanvasCommandList" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.UI.Xaml.CanvasSwapChainPanel" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.UI.Xaml.CanvasDrawEventArgs" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.UI.Xaml.CanvasAnimatedDrawEventArgs" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.UI.Xaml.CanvasAnimatedControl" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.UI.Xaml.CanvasImageSource" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.UI.Xaml.CanvasAnimatedUpdateEventArgs" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.UI.Xaml.CanvasControl" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.UI.Xaml.CanvasVirtualControl" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.UI.Xaml.CanvasVirtualImageSource" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.UI.Composition.CanvasComposition" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Graphics.Canvas.UI.CanvasCreateResourcesEventArgs" ThreadingModel="both" />
+      </InProcessServer>
+    </Extension>
+    <Extension Category="windows.activatableClass.inProcessServer">
+      <InProcessServer>
+        <Path>DolbyAccess.dll</Path>
+        <ActivatableClass ActivatableClassId="Dolby.SpatialCodecs.UpdateBackgroundTask" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Dolby.SpatialCodecs.Configuration.RequestValidationUtilities" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Dolby.SpatialCodecs.SpatialCodecsAppService" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Dolby.SpatialCodecs.InvalidateLicenseBackgroundTask" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Dolby.SpatialCodecs.UpdateParametersBackgroundTask" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Dolby.SpatialCodecs.SendReportsBackgroundTask" ThreadingModel="both" />
+      </InProcessServer>
+    </Extension>
+    <Extension Category="windows.activatableClass.inProcessServer">
+      <InProcessServer>
+        <Path>Microsoft.Web.WebView2.Core.dll</Path>
+        <ActivatableClass ActivatableClassId="Microsoft.Web.WebView2.Core.CoreWebView2Controller" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Web.WebView2.Core.CoreWebView2EnvironmentOptions" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Web.WebView2.Core.CoreWebView2CompositionController" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Web.WebView2.Core.CoreWebView2ControllerWindowReference" ThreadingModel="both" />
+        <ActivatableClass ActivatableClassId="Microsoft.Web.WebView2.Core.CoreWebView2Environment" ThreadingModel="both" />
+      </InProcessServer>
+    </Extension>
+    <Extension Category="windows.activatableClass.inProcessServer">
+      <InProcessServer>
+        <Path>DoviLicense.dll</Path>
+        <ActivatableClass ActivatableClassId="DoviLicense.DoviLicenseProvider" ThreadingModel="both" />
+      </InProcessServer>
+    </Extension>
+  </Extensions>
+  <build:Metadata>
+    <build:Item Name="TargetFrameworkMoniker" Value=".NETCore,Version=v5.0" />
+    <build:Item Name="VisualStudio" Version="17.0" />
+    <build:Item Name="OperatingSystem" Version="10.0.19041.1 (WinBuild.160101.0800)" />
+    <build:Item Name="Microsoft.Build.AppxPackage.dll" Version="17.8.37259.26410" />
+    <build:Item Name="ProjectGUID" Value="{2CC48AA7-9650-4095-A31D-D02E05115A0C}" />
+    <build:Item Name="ilc.exe" Version="2.2.31116.00 built by: PROJECTNREL" />
+    <build:Item Name="Microsoft.Windows.UI.Xaml.Build.Tasks.dll" Version="0.0.0.0" />
+    <build:Item Name="OptimizingToolset" Value="ilc.exe" />
+    <build:Item Name="UseDotNetNativeSharedAssemblyFrameworkPackage" Value="True" />
+    <build:Item Name="DisableStackTraceMetadata" Value="false" />
+    <build:Item Name="DisableExceptionMessages" Value="false" />
+    <build:Item Name="ShortcutGenericAnalysis" Value="false" />
+    <build:Item Name="GeneratePGD" Value="false" />
+    <build:Item Name="ConsumePGD" Value="false" />
+    <build:Item Name="SingleThreadNUTC" Value="false" />
+    <build:Item Name="Use64BitCompiler" Value="false" />
+    <build:Item Name="OptimizeForSize" Value="false" />
+    <build:Item Name="AlignMethodsAtMinimalBoundaries" Value="false" />
+    <build:Item Name="LargeAddressAware" Value="false" />
+    <build:Item Name="NoLinkerSymbols" Value="false" />
+    <build:Item Name="OutOfProcPDB" Value="false" />
+    <build:Item Name="MakePri.exe" Version="10.0.22000.100 (WinBuild.160101.0800)" />
+  </build:Metadata>
+</Package>

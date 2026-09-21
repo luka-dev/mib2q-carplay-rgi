@@ -1,0 +1,5 @@
+experimental-float: pre-gain-peak=0.99249929 FS post-gain-peak=0.99249929 FS gain=1.00000000 limiter-attacks=4366 minimum-guard-gain=0.49391192 attenuated-frames=281828 total-frames=2880000 longest-observed-run=4330 reduction-db-sum=225139.595499552 over3-frames=12334 over6-frames=35 over10-frames=0
+front-retention=0.75000 (q15=24576; independent of rear gain)
+rendered 2880000 frames (60.000 s): PCM2 -> PCM6 L,R,C,LFE,Ls,Rs
+mode=hssr-universal surround=0.29999 (q15=9830) front=0.95801 (q15=31392) lfe=assist gain=0.24942 (q15=8173)
+/var/folders/z5/ww412zbd6c5cr7x4dq54tn6w0000gn/T/upmix-bass-oiaw05x5/UP. UP. UP.-lfe_plus6.wav

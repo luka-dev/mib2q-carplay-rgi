@@ -40,6 +40,7 @@ def parse_args() -> argparse.Namespace:
         )
     )
     parser.add_argument("image", type=Path, help="CodeFlash_*.bin")
+    parser.add_argument("--output",type=Path,help="derived CSV; default stdout")
     return parser.parse_args()
 
 
@@ -53,9 +54,12 @@ def main() -> int:
         raise SystemExit("AD301A07 signature is missing at file offset 0x100000")
 
     digest = hashlib.sha256(image).hexdigest()
-    print(f"# image_sha256={digest}")
-    print("# gain_db=-100 is clamped to approximately -99 dB by FUN_000a9040")
-    writer = csv.writer(sys.stdout, lineterminator="\n")
+    if args.output and args.output.resolve()==args.image.resolve():
+        raise SystemExit('refusing to overwrite source image')
+    sink=args.output.open('w') if args.output else sys.stdout
+    print(f"# image_sha256={digest}",file=sink)
+    print("# gain_db=-100 is clamped to approximately -99 dB by FUN_000a9040",file=sink)
+    writer = csv.writer(sink, lineterminator="\n")
     writer.writerow(
         (
             "profile",
@@ -82,10 +86,10 @@ def main() -> int:
             matrix_base = profile_base + bank * BANK_MATRIX_SIZE
             for input_index, input_name in enumerate(INPUT_NAMES):
                 for output_index, output_name in enumerate(OUTPUT_NAMES):
-                    file_offset = matrix_base + input_index * CHANNEL_COUNT + output_index
-                    # FUN_000a9040 transposes the row-major V850 table into
-                    # SHARC parameter memory: eight consecutive inputs per output.
-                    sharc_address = SHARC_MATRIX_BASE + output_index * CHANNEL_COUNT + input_index
+                    file_offset = matrix_base + output_index * CHANNEL_COUNT + input_index
+                    # A903C writes RAM[8*out+in] to SHARC[8*in+out].
+                    # 126A02/126A07 consume exactly input*outputs+output.
+                    sharc_address = SHARC_MATRIX_BASE + input_index * CHANNEL_COUNT + output_index
                     writer.writerow(
                         (
                             profile,
@@ -101,6 +105,7 @@ def main() -> int:
                             f"0x{sharc_address:05x}",
                         )
                     )
+    if args.output:sink.close()
     return 0
 
 

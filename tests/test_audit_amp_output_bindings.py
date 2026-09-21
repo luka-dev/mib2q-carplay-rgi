@@ -79,6 +79,23 @@ class ImageAuditTests(unittest.TestCase):
             self.assertAlmostEqual(audit.frequency_lookup(self.data, selector)
                                    ["frequency_hz_from_cot"], selector, places=3)
 
+    def test_dynamic_parameters_and_neutral_channel_trims(self):
+        d = self.result['dynamic_stage_research']
+        self.assertEqual(d['pre_complex_gain_writer']['neutral_table1_tenths_db'], [0]*10)
+        self.assertEqual(d['pre_complex_gain_writer']['neutral_table2_tenths_db'], [0]*10)
+        a, b = d['limiters']
+        self.assertEqual([r['threshold_static'] for r in a['records_config_order']], [100]*12+[1]*4)
+        self.assertEqual(a['loader_mode'], 0)
+        self.assertAlmostEqual(b['records_config_order'][12]['threshold_static'], .59, places=6)
+        self.assertEqual(b['records_config_order'][14]['threshold_static'], .5)
+        self.assertEqual(d['first_b']['frames'], 512)
+        self.assertEqual(d['second_b']['source_input_ids'], [8,9,10])
+
+    def test_post_eq_binds_only_low_frequency_outputs(self):
+        for e in self.result['known_electronic_stages']['post_output_eq']:
+            self.assertEqual(e['counts_config_order'], [0]*12+[2]*4)
+            self.assertEqual(e['packed_source_record_order'], [0,1,2,3,6,7,4,5])
+
     def test_proof_boundary_and_b01_copy(self):
         for channel in self.result["channels"]:
             self.assertEqual(channel["physical_candidate"]["status"],
@@ -93,6 +110,29 @@ class ImageAuditTests(unittest.TestCase):
         self.assertEqual(r['gain_lookup_minus100_db'], 0.0)
         self.assertAlmostEqual(r['gain_lookup_minus99_db'], 10**(-99/20), places=11)
         self.assertEqual(r['ten_bus_pair_gain_rows_db'][1][-4:], [-100,-99,-100,-99])
+
+    def test_known_electronic_stages_are_extracted_with_units_and_order(self):
+        k=self.result['known_electronic_stages']
+        self.assertEqual(k['input_matrix']['file_offset'],'0x101bf4')
+        self.assertAlmostEqual(k['input_matrix']['linear'][0][3],10**(-99/20),places=11)
+        self.assertEqual([d['samples'] for d in k['pre_eq_delays']],
+                         [[1632]*8,[87,87,125,204,403,403,367,367]])
+        m=k['output_pair_mixer']
+        self.assertEqual(m['a_file_offset'],'0x10032c')
+        self.assertEqual(m['a_codes'][3],47)
+        self.assertAlmostEqual(m['a_linear'][3],10**(9.4/20),places=6)
+        self.assertEqual(m['b_linear'][0],0)
+        self.assertAlmostEqual(m['b_linear'][3],10**(6/20),places=6)
+        self.assertEqual(len(k['row_eq']['rows']),5)
+        records=k['row_eq']['rows'][1]+[r for bank in k['post_output_eq'] for r in bank['records']]
+        self.assertEqual(len(records),32)
+        self.assertTrue(all(r['type_code']==1 and r['gain_linear']==1 for r in records))
+
+    def test_profile_one_uses_its_own_matrix_and_mixer(self):
+        k=audit.audit(self.data,profile=1)['known_electronic_stages']
+        self.assertEqual(k['input_matrix']['db'][3][3],4)
+        self.assertEqual(k['output_pair_mixer']['a_codes'][1],20)
+        self.assertEqual(k['output_pair_mixer']['a_file_offset'],'0x10069c')
 
 
 if __name__ == "__main__":

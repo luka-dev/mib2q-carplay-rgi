@@ -1,0 +1,52 @@
+{
+    "CollectedUtc":  "2026-09-21T01:15:30.7402565Z",
+    "Package":  "DolbyLaboratories.DolbyAccess_3.27.12250.0_x64__rz1tebttyb220",
+    "Files":  [
+                  {
+                      "RelativePath":  "DolbyAccess.dll",
+                      "Source":  "C:\\Program Files\\WindowsApps\\DolbyLaboratories.DolbyAccess_3.27.12250.0_x64__rz1tebttyb220\\DolbyAccess.dll",
+                      "Bytes":  62899712,
+                      "Version":  "1.0.0.0",
+                      "Description":  "DolbyAccess",
+                      "SHA256":  "D72429F95BA9DF3900FA52E432AD4D84E31CA40DC4AC614AD3EFC0AA91CE7229"
+                  },
+                  {
+                      "RelativePath":  "DLLs\\x64\\DolbyAudioProcessing.dll",
+                      "Source":  "C:\\Program Files\\WindowsApps\\DolbyLaboratories.DolbyAccess_3.27.12250.0_x64__rz1tebttyb220\\DLLs\\x64\\DolbyAudioProcessing.dll",
+                      "Bytes":  4384256,
+                      "Version":  "7.3.7.rel",
+                      "Description":  "Dolby Audio Processing for Microsoft Spatial Audio",
+                      "SHA256":  "0FADA40251880D03C657A357745D362799C93FB6024F733F1C8BF1057F5E4715"
+                  },
+                  {
+                      "RelativePath":  "DLLs\\x64\\DolbyHrtfEnc.dll",
+                      "Source":  "C:\\Program Files\\WindowsApps\\DolbyLaboratories.DolbyAccess_3.27.12250.0_x64__rz1tebttyb220\\DLLs\\x64\\DolbyHrtfEnc.dll",
+                      "Bytes":  155064,
+                      "Version":  "1.0.2403.20001",
+                      "Description":  "Dolby Atmos for Headphones and Built-in speakers Encoder DLL",
+                      "SHA256":  "3DA34330B36A79D6C4E42220190EE8239CAD65564911C248EBDA59D237BF9F88"
+                  },
+                  {
+                      "RelativePath":  "DLLs\\x64\\DolbyMatEngine.dll",
+                      "Source":  "C:\\Program Files\\WindowsApps\\DolbyLaboratories.DolbyAccess_3.27.12250.0_x64__rz1tebttyb220\\DLLs\\x64\\DolbyMatEngine.dll",
+                      "Bytes":  1025024,
+                      "Version":  "3.1.8.rel",
+                      "Description":  "Dolby MAT Engine for Microsoft Spatial Audio",
+                      "SHA256":  "342CBC58A19AFA2B5B58CEF408EF91DCC06C68829520286ACABB7178EDA7F569"
+                  }
+              ],
+    "AudioProcessModules":  [
+                                {
+                                    "PID":  26432,
+                                    "Name":  "DolbyHrtfEnc.dll",
+                                    "Path":  "C:\\Program Files\\WindowsApps\\DolbyLaboratories.DolbyAccess_3.27.12250.0_x64__rz1tebttyb220\\DLLs\\x64\\DolbyHrtfEnc.dll"
+                                },
+                                {
+                                    "PID":  26432,
+                                    "Name":  "DolbyAudioProcessing.dll",
+                                    "Path":  "C:\\Program Files\\WindowsApps\\DolbyLaboratories.DolbyAccess_3.27.12250.0_x64__rz1tebttyb220\\DLLs\\x64\\DolbyAudioProcessing.dll"
+                                }
+                            ],
+    "LocalDllSHA256":  "0FADA40251880D03C657A357745D362799C93FB6024F733F1C8BF1057F5E4715",
+    "PdfSHA256":  "AC23B8EC4D41C67ECF0977CD9EA6466FBDEE32019D66662653DE8F42D72402CC"
+}

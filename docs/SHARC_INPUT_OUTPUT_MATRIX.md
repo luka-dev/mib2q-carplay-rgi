@@ -3,6 +3,12 @@
 Date: 2026-09-02  
 Scope: static analysis of amplifier `8W0035465`, SW 0420, V850 CodeFlash. No binary was modified.
 
+> **Critical correction Sep20:** [SHARC consumer audit](SHARC_MATRIX_CONTROL_2026-09-20.md)
+> proves RAM/A07 rows are OUTPUTS, columns INPUTS. The input/output interpretation
+> and routing conclusions in this historical text are superseded. The numeric table
+> below is raw RAM order (read row as output, column as input); the linked CSV and
+> extractor have been corrected. Cold-start selection is not proof of live state.
+
 > **Application correction, 2026-09-08:** the same CodeFlash also embeds the
 > complete SHARC SPI boot/application stream at `0x041014..0x068777`. The
 > checked extraction, hashes, loader proof and reproduction command are in

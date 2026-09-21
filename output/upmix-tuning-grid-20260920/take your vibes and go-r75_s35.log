@@ -1,0 +1,5 @@
+experimental-float: pre-gain-peak=1.00897443 FS post-gain-peak=1.00897443 FS gain=1.00000000 limiter-attacks=12154 minimum-guard-gain=0.42945635 attenuated-frames=515802 total-frames=2880000 longest-observed-run=3943 reduction-db-sum=376201.973318309 over3-frames=29224 over6-frames=1407 over10-frames=0
+front-retention=0.75000 (q15=24576; independent of rear gain)
+rendered 2880000 frames (60.000 s): PCM2 -> PCM6 L,R,C,LFE,Ls,Rs
+mode=hssr-universal surround=0.35001 (q15=11469) front=0.95801 (q15=31392) lfe=assist gain=0.12500 (q15=4096)
+/var/folders/z5/ww412zbd6c5cr7x4dq54tn6w0000gn/T/upmix-grid-m_s5go1s/take your vibes and go-r75_s35.wav
