@@ -13,7 +13,7 @@ from unicorn import Uc, UC_ARCH_X86, UC_MODE_64
 from unicorn.x86_const import *
 
 OUT = Path(__file__).resolve().parent
-DLL = OUT.parents[2] / 'Dolby/DolbyAudioProcessing.dll'
+DLL = OUT.parents[2] / 'docs/Dolby/DolbyAudioProcessing.dll'  # OUT.parents[2] = repo root
 EXPECTED = '0fada40251880d03c657a357745d362799c93fb6024f733f1c8bf1057f5e4715'
 
 

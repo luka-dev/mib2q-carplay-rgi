@@ -1,7 +1,7 @@
 # Dolby stereo → surround: синтез, остаток и атаки
 
 Продолжение [FINDINGS.md](FINDINGS.md), 2026-09-20. Исследован
-`Dolby/DolbyAudioProcessing.dll`, PE32+ AMD64, image base `0x180000000`, SHA-256
+`docs/Dolby/DolbyAudioProcessing.dll`, PE32+ AMD64, image base `0x180000000`, SHA-256
 `0fada40251880d03c657a357745d362799c93fb6024f733f1c8bf1057f5e4715`.
 Адреса ниже — VA при этой базе; RVA и файловые смещения в `verified-map.json`.
 

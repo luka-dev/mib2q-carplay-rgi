@@ -11,7 +11,7 @@ import capstone
 
 ROOT = Path(__file__).resolve().parents[3]
 OUT = Path(__file__).resolve().parent
-data = (ROOT / 'Dolby/DolbyAudioProcessing.dll').read_bytes()
+data = (ROOT / 'docs/Dolby/DolbyAudioProcessing.dll').read_bytes()
 pe = struct.unpack_from('<I', data, 0x3c)[0]
 count = struct.unpack_from('<H', data, pe + 6)[0]
 optional_size = struct.unpack_from('<H', data, pe + 20)[0]
