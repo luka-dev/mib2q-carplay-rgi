@@ -47,10 +47,6 @@ public final class ClusterLayerController {
      * 98 and its backing instead — they are what has to follow the map.  Sport = (-476,0),
      * Classic = (0,0) (LayoutMIB2HighQ7 fallback), so Classic is unaffected for free. */
     private static final int LC_SMALL_STAGE_DX = 80, LC_SMALL_STAGE_DY = 81;
-    /* The VC's KDK fade completion is not exported to HU Java.  Prefer the stock
-     * BITFIELD_KDK_FADED_IN-derived opacity, but never strand a valid CarPlay
-     * presentation invisible if that model delta is lost. */
-    private static final long POPUP_REVEAL_FALLBACK_MS = 250L;
     private static final Object LOCK = new Object();
     private static IDisplayManagerKombiControl lastDm;
     private static int lastTerminal;
@@ -66,11 +62,7 @@ public final class ClusterLayerController {
         "fallback-sport");
     private static boolean haveLayout;
     private static boolean errorLogged;
-    private static boolean popupCycleActive;
-    private static boolean popupRevealed;
-    private static boolean popupRevealPending;
     private static String lastAppliedSignature;
-    private static int popupRevealGeneration;
     private static volatile ViewportListener viewportListener;
 
     public interface ViewportListener {
@@ -199,7 +191,6 @@ public final class ClusterLayerController {
                 lastPopup = true;
                 lastStockVisible = false;
                 lastStockOpacity = 0;
-                resetPopupRevealLocked();
             }
             lastDm = dm;
             lastTerminal = terminal;
@@ -271,8 +262,7 @@ public final class ClusterLayerController {
          * correct.  The offset is logged below for diagnosis, never applied. */
         boolean carplayOwnsCluster = com.luka.carplay.core.AltScreenModule.isConnected();
         boolean navActive = com.luka.carplay.core.AltScreenModule.isNavActive();
-        int carplayOpacity = resolveCarPlayOpacity(carplayOwnsCluster, navActive, popup,
-                                                   stockVisible, stockOpacity);
+        int carplayOpacity = resolveCarPlayOpacity(carplayOwnsCluster, navActive);
         try {
             /* 101/102 are shared with the stock KDK renderer.  Restore the last stock model
              * atomically when CarPlay releases terminal 1; otherwise a disconnect can leave
@@ -364,90 +354,11 @@ public final class ClusterLayerController {
         Log.i("ClusterLayers", line);
     }
 
-    /** Resolve one shared opacity for the maneuver and its backing.
-     *
-     * Popup/fullscreen has the stock KDK slide/fade: wait until the stock model
-     * reports FADED_IN, with a bounded fallback if that delta never arrives.
-     * Sport/dual has no popup slide and is intentionally immediate.  Once a
-     * popup has been revealed, keep it visible through the 250 ms removal hold;
-     * a stock fade-out delta must not tear the backing away early. */
-    private static int resolveCarPlayOpacity(boolean owns, boolean navActive, boolean popup,
-                                             boolean stockVisible, int stockOpacity) {
-        int startGeneration = -1;
-        int opacity;
-        boolean synchronizedToStock = false;
-        synchronized (LOCK) {
-            if (!owns || !navActive || !popup) {
-                resetPopupRevealLocked();
-                return (owns && navActive) ? 100 : 0;
-            }
-
-            if (!popupCycleActive) {
-                popupCycleActive = true;
-                popupRevealed = false;
-                popupRevealPending = false;
-                popupRevealGeneration++;
-            }
-
-            /* kdkOpacity is retained by stock when NO_KDK is selected, so the
-             * opacity alone may be a stale 100 from the previous route. */
-            if (!popupRevealed && stockVisible && stockOpacity > 0) {
-                popupRevealed = true;
-                popupRevealPending = false;
-                popupRevealGeneration++;       /* cancel a pending fallback */
-                synchronizedToStock = true;
-            } else if (!popupRevealed && !popupRevealPending) {
-                popupRevealPending = true;
-                startGeneration = ++popupRevealGeneration;
-            }
-            opacity = popupRevealed ? 100 : 0;
-        }
-
-        if (synchronizedToStock)
-            Log.i("ClusterLayers", "popup reveal synchronized to stock KDK opacity");
-        if (startGeneration >= 0) startPopupRevealFallback(startGeneration);
-        return opacity;
-    }
-
-    private static void resetPopupRevealLocked() {
-        if (popupCycleActive || popupRevealPending || popupRevealed) popupRevealGeneration++;
-        popupCycleActive = false;
-        popupRevealed = false;
-        popupRevealPending = false;
-    }
-
-    private static void startPopupRevealFallback(final int generation) {
-        Thread reveal = new Thread(new Runnable() {
-            public void run() {
-                try { Thread.sleep(POPUP_REVEAL_FALLBACK_MS); }
-                catch (InterruptedException e) { Thread.currentThread().interrupt(); return; }
-
-                synchronized (LOCK) {
-                    if (!popupCycleActive || !popupRevealPending
-                            || generation != popupRevealGeneration || popupRevealed) return;
-                    popupRevealPending = false;
-                    popupRevealed = true;
-                }
-                Log.i("ClusterLayers", "popup reveal fallback after "
-                    + POPUP_REVEAL_FALLBACK_MS + "ms");
-                reapply();
-            }
-        }, "carplay-popup-reveal");
-        reveal.setDaemon(true);
-        try {
-            reveal.start();
-        } catch (Throwable t) {
-            boolean apply = false;
-            synchronized (LOCK) {
-                if (popupCycleActive && popupRevealPending
-                        && generation == popupRevealGeneration && !popupRevealed) {
-                    popupRevealPending = false;
-                    popupRevealed = true;
-                    apply = true;
-                }
-            }
-            Log.w("ClusterLayers", "popup reveal worker start failed; revealing immediately: " + t);
-            if (apply) reapply();
-        }
+    /** One shared opacity for the maneuver and its backing.  No HU-side reveal hold: the VC
+     *  itself fades the KDK area in over 200 ms (docs/reference/CLUSTER_KDK_ANIMATION_RU.md), so
+     *  the backing must already be opaque when that fade starts, or the hole opens over the map
+     *  and the black backing pops in afterwards.  Removal keeps AltScreenModule's 250 ms hold. */
+    private static int resolveCarPlayOpacity(boolean owns, boolean navActive) {
+        return (owns && navActive) ? 100 : 0;
     }
 }
