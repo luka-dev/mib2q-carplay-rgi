@@ -62,6 +62,23 @@ iPhone вообще не открывал buffered audio.
 
 ## Музыка, подсказки, звонки и будильник
 
+Значения `audioType` на main-потоке 100 по `AirPlayCommon.h` (SDK) и решение
+правила `spa_media_route_realtime_upmix_allowed` (реализация 21.09):
+
+| audioType | Содержимое | Realtime-апмикс |
+| --- | --- | --- |
+| `media` | музыка, подкасты, аудиокниги, реклама внутри приложения | да (`SPA_DIO_AUDIO_TYPE_MEDIA` = 1) |
+| `telephony` | звонок, FaceTime | нет, блокирует media |
+| `speechRecognition` | Siri | нет, блокирует media |
+| `alert` | сигналы, будильник | нет, блокирует media |
+| `default` | назначение не объявлено | нет, блокирует media |
+| `compatibility` | legacy-режим | нет, блокирует media |
+
+«Блокирует» = пока такой поток отслеживается (Prepare…Stop), даже живой
+media-поток играет L/R с нулевым тылом. Фактический тип виден в логе по строке
+`audio route: stock main stream=… audio_type=N` (WARN, пишется всегда).
+Alternate 101 (подсказки навигации, UI-звуки) в media-sink не попадает.
+
 | Наблюдение | Практический вывод для обработки |
 | --- | --- |
 | Подтверждённый main/media/stereo | Кандидат на HSSR-апмикс |
