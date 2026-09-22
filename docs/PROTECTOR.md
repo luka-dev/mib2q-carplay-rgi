@@ -80,8 +80,6 @@ flowchart TB
 
 `build_hook_protected.sh` and `build_hook.sh` share one compile+verify core, `scripts/build_hook_common.sh`, so the protected `.so` cannot drift from the shipping one. `build_hook.sh` on its own builds without protection and writes to `build/unprotected/`.
 
-> The script still ends by printing `Lay out the install tree: ./scripts/package_protected.sh $VIN` (`build_hook_protected.sh:57`; the same claim is in its header comment at `:3`). That script has been deleted, so ignore the hint.
-
 - **VIN:** the 17-character target VIN, given as argument 1 or as `PROT_VIN` (`build_hook_protected.sh:22-24`).
 - **`PROT_SECRET`:** optional. If it is unset, the script generates a fresh random secret for this build and does not keep it (`:33-37`). The same value feeds both the runtime and the stamp, so a one-off build is self-consistent. Set it explicitly, and keep it out of the tree, only when you want one stable fleet secret across rebuilds, or when you want to verify the result locally (see [Verify a stamped .so](#-verify-a-stamped-so)).
 - **Default builds** (`build_hook.sh`) never define `CARPLAY_PROT`, so they contain no gate code. Protection is opt-in.

@@ -63,10 +63,6 @@ PROT_VIN=<VIN> ./scripts/build_hook_protected.sh             # VIN from the envi
 
 `build_hook_protected.sh` and `build_hook.sh` share one compile+verify core, so the protected `.so` passes exactly the same ABI-safety gates ([[Build System]]) and cannot drift from the shipping one. The protected build writes **binaries only**, to `build/protected_<VIN>/`. You then assemble the install tree by hand from those files plus the runtime assets, following the map in [[Deploy and Release]].
 
-The script's last line still says `./scripts/package_protected.sh $VIN` (`build_hook_protected.sh:57`, and its header comment at `:3`). That script has been deleted, so ignore the hint.
-
-The stamp loop stamps any `libcarplay_apac.so` it finds in the output directory (`build_hook_protected.sh:49-52`), and a `HOOK_AUDIO=0` build leaves an old one in place (`build_hook_common.sh:277`). Before a `HOOK_AUDIO=0` protected build, delete `build/protected_<VIN>/libcarplay_apac.so`, so that a stale codec is neither stamped nor shipped.
-
 ### The two protection inputs
 
 | Input | Default | Effect |
