@@ -22,6 +22,11 @@ cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
     hook/audio/hssr_dsp.c hook/audio/hssr_neon.c -lm -o "$OUT/upmix"
 "$OUT/upmix"
 
+printf '%-32s ' rt_upmix_guard_test
+cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
+    tests/rt_upmix_guard_test.c -o "$OUT/rtguard"
+"$OUT/rtguard"
+
 printf '%-32s ' hssr_neon_test
 cc -std=c99 -O2 -Wall -Wextra -Werror -pedantic -Ihook \
     tests/hssr_neon_test.c hook/audio/hssr_neon.c -o "$OUT/hssr_neon"

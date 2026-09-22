@@ -36,6 +36,9 @@ $CC $CFLAGS tests/spatial_downmix_test.c hook/audio/spatial_downmix.c -o "$OUT/s
 "$OUT/spatial_downmix_test"
 echo "OK  downmix matrix, saturation, in-place, reorder"
 
+echo "=== rt_upmix_guard_test ==="
+$CC $CFLAGS -Ihook tests/rt_upmix_guard_test.c -o "$OUT/rtguard" && "$OUT/rtguard"
+
 echo "=== stereo_upmix_test ==="
 $CC $CFLAGS -DSPA_STEREO_UPMIX_TESTING tests/stereo_upmix_test.c hook/audio/stereo_upmix.c \
     hook/audio/hssr_dsp.c hook/audio/hssr_neon.c -lm -o "$OUT/stereo_upmix_test"

@@ -29,6 +29,7 @@
 #include "spatial_downmix.h"
 #include "stereo_upmix.h"
 #include "media_route.h"
+#include "rt_upmix_guard.h"
 #include "media_transport.h"
 #include "../framework/logging.h"
 #include "../framework/state_trace.h"
@@ -3893,8 +3894,7 @@ static uint64_t spa_monotonic_ns(void);
 static void spa_pcm_expand_fallback(const int16_t *input, size_t frames,
                                     unsigned sourceChannels, int16_t *output,
                                     unsigned outputChannels);
-#define SPA_RT_UPMIX_BUDGET_NS  UINT64_C(8000000)
-#define SPA_RT_UPMIX_SLOW_LIMIT 4u
+/* Deadline policy (budget, warmup grace, backoff) lives in rt_upmix_guard.h. */
 /* One bucket per millisecond of upmix time; the last one is "8 ms or more". */
 #define SPA_RT_UPMIX_HISTOGRAM_BUCKETS 9u
 static struct {
@@ -3902,10 +3902,9 @@ static struct {
     struct spa_hssr_control_worker worker;
     int workerStarted;
     int ready;               /* upmixer initialized for the current sink geometry */
-    int disabled;            /* deadline guard tripped; sticky until the sink closes */
     int lastPeriodUpmixed;   /* reset the DSP after any non-upmixed period */
-    uint32_t slowPeriods;
-    uint64_t periods, upmixedPeriods, resets, worstNs;
+    spa_rt_upmix_guard_t guard;
+    uint64_t periods, upmixedPeriods, resets;
     /* The guard trips on the worst periods, but only the worst was ever
      * reported, so the typical cost was unknown and could only be guessed from
      * an offline instruction count.  Sum and a millisecond histogram of the
@@ -3919,6 +3918,7 @@ static void spa_rt_upmix_reset_locked(void)
     if (!spa_rt_upmix.ready) return;
     (void)spa_stereo_upmix_reset(&spa_rt_upmix.upmix);
     spa_rt_upmix.lastPeriodUpmixed = 0;
+    spa_rt_upmix_guard_cold(&spa_rt_upmix.guard);
     spa_rt_upmix.resets++;
 }
 
@@ -3985,9 +3985,8 @@ static void spa_rt_upmix_start(snd_pcm_t *handle)
     pthread_mutex_lock(&spa_pcm_sink.lock);
     spa_rt_upmix.ready = status == SPA_STEREO_UPMIX_OK &&
                          handle == spa_pcm_sink.handle && spa_pcm_sink.expandedParams;
-    spa_rt_upmix.disabled = 0;
     spa_rt_upmix.lastPeriodUpmixed = 0;
-    spa_rt_upmix.slowPeriods = 0;
+    spa_rt_upmix_guard_arm(&spa_rt_upmix.guard);
     pthread_mutex_unlock(&spa_pcm_sink.lock);
     LOG_WARN(LOG_MODULE,
              "audio realtime upmix: %s (init=%d controller=%s period=%u frames, "
@@ -4011,21 +4010,24 @@ static void spa_rt_upmix_stop(void)
     if (spa_rt_upmix.periods)
         LOG_WARN(LOG_MODULE,
                  "audio realtime upmix: stop periods=%llu upmixed=%llu resets=%llu "
-                 "mean_us=%llu worst_us=%llu ms_hist=%u/%u/%u/%u/%u/%u/%u/%u/%u disabled=%d",
+                 "mean_us=%llu worst_us=%llu cold_us=%llu disables=%u "
+                 "ms_hist=%u/%u/%u/%u/%u/%u/%u/%u/%u disabled=%d",
                  (unsigned long long)spa_rt_upmix.periods,
                  (unsigned long long)spa_rt_upmix.upmixedPeriods,
                  (unsigned long long)spa_rt_upmix.resets,
                  (unsigned long long)(spa_rt_upmix.upmixedPeriods
                      ? spa_rt_upmix.totalNs / spa_rt_upmix.upmixedPeriods / 1000u : 0u),
-                 (unsigned long long)(spa_rt_upmix.worstNs / 1000u),
+                 (unsigned long long)(spa_rt_upmix.guard.worstNs / 1000u),
+                 (unsigned long long)(spa_rt_upmix.guard.coldWorstNs / 1000u),
+                 (unsigned)spa_rt_upmix.guard.disables,
                  spa_rt_upmix.msHistogram[0], spa_rt_upmix.msHistogram[1],
                  spa_rt_upmix.msHistogram[2], spa_rt_upmix.msHistogram[3],
                  spa_rt_upmix.msHistogram[4], spa_rt_upmix.msHistogram[5],
                  spa_rt_upmix.msHistogram[6], spa_rt_upmix.msHistogram[7],
-                 spa_rt_upmix.msHistogram[8], spa_rt_upmix.disabled);
+                 spa_rt_upmix.msHistogram[8], spa_rt_upmix.guard.disabled);
     spa_rt_upmix.periods = spa_rt_upmix.upmixedPeriods = spa_rt_upmix.resets = 0;
-    spa_rt_upmix.worstNs = 0;
     spa_rt_upmix.totalNs = 0;
+    memset(&spa_rt_upmix.guard, 0, sizeof(spa_rt_upmix.guard));
     memset(spa_rt_upmix.msHistogram, 0, sizeof(spa_rt_upmix.msHistogram));
     pthread_mutex_unlock(&spa_pcm_sink.lock);
     if (started) spa_hssr_control_worker_stop(&spa_rt_upmix.worker);
@@ -4039,9 +4041,16 @@ static int spa_rt_upmix_period_locked(const int16_t *buffer, size_t frames,
     int upmixed = 0;
 
     spa_rt_upmix.periods++;
+    /* A disabled upmix waits out its backoff on the fallback path and then
+     * comes back as a cold start, warmup grace included. */
+    if (spa_rt_upmix_guard_retry(&spa_rt_upmix.guard)) {
+        spa_rt_upmix.lastPeriodUpmixed = 0;
+        LOG_WARN(LOG_MODULE, "audio realtime upmix: re-armed after backoff (attempt %u)",
+                 (unsigned)spa_rt_upmix.guard.disables + 1u);
+    }
     if (spa_media_route_realtime_upmix_allowed(&spa_pcm_sink.route, 1, sourceChannels,
                                                outputChannels,
-                                               spa_rt_upmix.ready && !spa_rt_upmix.disabled)) {
+                                               spa_rt_upmix.ready && !spa_rt_upmix.guard.disabled)) {
         uint64_t start = spa_monotonic_ns(), elapsed;
 
         if (!spa_rt_upmix.lastPeriodUpmixed) spa_rt_upmix_reset_locked();
@@ -4049,7 +4058,6 @@ static int spa_rt_upmix_period_locked(const int16_t *buffer, size_t frames,
                                                spa_pcm_sink.scratch, frames) ==
                   SPA_STEREO_UPMIX_OK;
         elapsed = spa_monotonic_ns() - start;
-        if (elapsed > spa_rt_upmix.worstNs) spa_rt_upmix.worstNs = elapsed;
         {
             uint64_t bucket = elapsed / UINT64_C(1000000);
 
@@ -4058,18 +4066,14 @@ static int spa_rt_upmix_period_locked(const int16_t *buffer, size_t frames,
             ++spa_rt_upmix.msHistogram[bucket];
             spa_rt_upmix.totalNs += elapsed;
         }
-        if (elapsed > SPA_RT_UPMIX_BUDGET_NS) {
-            if (++spa_rt_upmix.slowPeriods >= SPA_RT_UPMIX_SLOW_LIMIT) {
-                spa_rt_upmix.disabled = 1;
-                LOG_WARN(LOG_MODULE,
-                         "audio realtime upmix: DISABLED, %u consecutive periods over %llu us (worst %llu us)",
-                         (unsigned)spa_rt_upmix.slowPeriods,
-                         (unsigned long long)(SPA_RT_UPMIX_BUDGET_NS / 1000u),
-                         (unsigned long long)(spa_rt_upmix.worstNs / 1000u));
-            }
-        } else {
-            spa_rt_upmix.slowPeriods = 0;
-        }
+        if (spa_rt_upmix_guard_period(&spa_rt_upmix.guard, elapsed))
+            LOG_WARN(LOG_MODULE,
+                     "audio realtime upmix: DISABLED, %u consecutive periods over %llu us "
+                     "(worst %llu us); retry in %u periods",
+                     (unsigned)spa_rt_upmix.guard.slowPeriods,
+                     (unsigned long long)(SPA_RT_UPMIX_BUDGET_NS / 1000u),
+                     (unsigned long long)(spa_rt_upmix.guard.worstNs / 1000u),
+                     (unsigned)spa_rt_upmix.guard.retryCountdown);
     }
     if (!upmixed)
         spa_pcm_expand_fallback(buffer, frames, sourceChannels, spa_pcm_sink.scratch,
