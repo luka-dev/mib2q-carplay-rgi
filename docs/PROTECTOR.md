@@ -51,13 +51,20 @@ Hybrid deploy model:
 The VIN is provided pre-build; stamping happens inside the build.
 
 ```sh
-PROT_VIN=WAUZZZF45HA149423 PROT_SECRET='<your-build-secret>' ./scripts/build_hook.sh
+./scripts/build_hook_protected.sh WAUZZZF45HA149423          # VIN-locked build
+HOOK_AUDIO=0 LOG=0 ./scripts/build_hook_protected.sh <VIN>   # beta: no audio, no logs
 ```
 
-- `PROT_VIN` — the 17-char target VIN.
-- `PROT_SECRET` — the build secret. Keep it OUT of the tree (a CI/provision
-  secret). The same secret must be used every time for a given fleet, and it is
-  what a wrong-secret rebuild is rejected against.
+`build_hook_protected.sh` is a thin entrypoint over `build_hook.sh` (the build
+itself has one source of truth); the raw `PROT_VIN=<VIN> ./scripts/build_hook.sh`
+form still works.
+
+- `PROT_VIN` — the 17-char target VIN. Setting it makes the build protected.
+- `PROT_SECRET` — optional. When unset, a fresh random secret is generated per
+  build and thrown away (the runtime value and the stamp are threaded from the
+  same value, so a one-off build is self-consistent). Set it explicitly, kept
+  OUT of the tree, only to pin one stable fleet secret across rebuilds — that is
+  also what a wrong-secret rebuild is rejected against.
 - Default build (no `PROT_VIN`) is byte-for-byte unchanged — protection is opt-in.
 
 Output → `install_MoreIncredibleBash/mod/carplay/`:
