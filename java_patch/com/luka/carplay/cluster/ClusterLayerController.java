@@ -50,7 +50,6 @@ public final class ClusterLayerController {
     private static final Object LOCK = new Object();
     private static IDisplayManagerKombiControl lastDm;
     private static int lastTerminal;
-    private static boolean lastPopup;
     private static boolean lastStockVisible;
     private static int lastStockOpacity;
     /* Safe fallback used only before stock CombiMapController publishes its live Layout. */
@@ -188,7 +187,6 @@ public final class ClusterLayerController {
     public static void bind(IDisplayManagerKombiControl dm, int terminal) {
         synchronized (LOCK) {
             if (lastDm != dm) {
-                lastPopup = true;
                 lastStockVisible = false;
                 lastStockOpacity = 0;
             }
@@ -200,31 +198,30 @@ public final class ClusterLayerController {
 
     /**
      * Apply the CarPlay cluster plane geometry for one KDK model update.
-     * @param popup true = popup stage (hint&8 == 0); false = in-tube stage (hint&8 != 0).
-     *               Exact crop and size come from the current Classic/Sport Layout.
-     * Reads the nav-active gate itself; never throws into the HMI thread.
+     * The popup/in-tube stage is NOT taken from the caller's KDK hint: applyNow() derives it from
+     * the single view-size source (AltScreenModule.isSmallScreenViewArea()), so the caller only
+     * forwards the stock KDK visibility/opacity.  Reads the nav-active gate itself; never throws
+     * into the HMI thread.
      */
     public static void apply(IDisplayManagerKombiControl dm, int terminal, Layout layout,
-                             boolean popup, boolean stockVisible, int stockOpacity) {
+                             boolean stockVisible, int stockOpacity) {
         updateLayout(dm, terminal, layout);
         Geometry geometry;
         synchronized (LOCK) {
             lastDm = dm;
             lastTerminal = terminal;
-            lastPopup = popup;
             lastStockVisible = stockVisible;
             lastStockOpacity = stockOpacity;
             haveLayout = true;
             geometry = lastGeometry;
         }
-        applyNow(dm, terminal, geometry, popup, stockVisible, stockOpacity);
+        applyNow(dm, terminal, geometry, stockVisible, stockOpacity);
     }
 
     /** Re-apply the last stock KDK geometry after AltScreenModule changes ctx 80/81. */
     public static void reapply() {
         IDisplayManagerKombiControl dm;
         int terminal;
-        boolean popup;
         boolean stockVisible;
         int stockOpacity;
         Geometry geometry;
@@ -232,16 +229,16 @@ public final class ClusterLayerController {
             if (!haveLayout || lastDm == null) return;
             dm = lastDm;
             terminal = lastTerminal;
-            popup = lastPopup;
             stockVisible = lastStockVisible;
             stockOpacity = lastStockOpacity;
             geometry = lastGeometry;
         }
-        applyNow(dm, terminal, geometry, popup, stockVisible, stockOpacity);
+        applyNow(dm, terminal, geometry, stockVisible, stockOpacity);
     }
 
     private static void applyNow(IDisplayManagerKombiControl dm, int terminal, Geometry geometry,
-                                 boolean popup, boolean stockVisible, int stockOpacity) {
+                                 boolean stockVisible, int stockOpacity) {
+        boolean popup;
         /* The caller's stage is the stock KDK hint BITFIELD_KDK_POSITION_IN_TUBE, and during
          * CarPlay the stock nav sends no KDK model updates at all — so it is a stale cache stuck
          * at its bind() default (popup).  That is why fullscreen always looked right and every

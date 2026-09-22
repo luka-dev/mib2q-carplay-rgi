@@ -75,6 +75,7 @@ public class CombiMapController extends DisplayControllerEvo implements NaviMoKo
     private int kdkPosX = 0;
     private int kdkPosY = 0;
     private int kdkOpacity = 0;
+    private int appliedViewSizeSmall = -1;   // -1 unknown, 0 fullscreen, 1 smallscreen
 
     public IRenderer getRenderer() {
         return null;
@@ -95,7 +96,7 @@ public class CombiMapController extends DisplayControllerEvo implements NaviMoKo
                 com.luka.carplay.cluster.ClusterLayerController.updateLayout(
                     (IDisplayManagerKombiControl)dm, this.kombiTerminal, layout);
             }
-            this.onViewSizeChanged(); /* seed current fullscreen/smallscreen state, not a hardcoded fullscreen */
+            this.syncViewSize(true); /* seed current fullscreen/smallscreen state, not a hardcoded fullscreen */
         }
     }
 
@@ -107,11 +108,17 @@ public class CombiMapController extends DisplayControllerEvo implements NaviMoKo
         logKDK.log(1000000, "CombiMapController#processModelUpdateEvent %1", modelupdateevent);
 
         if (modelupdateevent.getModelId() == ICoreNaviModelBank.NAV_VIEW_SIZE_CHOICE) {
-            this.onViewSizeChanged();
+            this.syncViewSize(false);
         } else if (this.kombiTerminal != 0) {
             /* cluster terminal: on A5 (KDK via displayables) recompute the KDK layout, then switch
              * context; other variants only need the context + frame-rate update. */
             if (this.framework.getSysConst(SYSCONST_KOMBI_VARIANT) == KOMBI_KDK_VIA_DISPLAYABLES) {
+                /* Classic clusters frequently raise NO NAV_VIEW_SIZE_CHOICE when the Audi View
+                 * button is toggled while CarPlay owns the cluster.  A KDK delta still arrives, so
+                 * re-read the choice model here as a backup: syncViewSize() compares against the
+                 * cache and only does work on a real change, so Sport (event always fires) is a
+                 * cheap no-op.  This is the single writer of the view-size cache. */
+                this.syncViewSize(false);
                 this.handleKdk(modelupdateevent);
                 this.switchToTargetContext();
             } else {
@@ -123,21 +130,39 @@ public class CombiMapController extends DisplayControllerEvo implements NaviMoKo
         }
     }
 
-    private void onViewSizeChanged() {
+    /** Read the one authoritative view-size source, NAV_VIEW_SIZE_CHOICE (the Audi View button).
+     *  Not the KDK in-tube hint: that is the maneuver panel's placement, arrives only during
+     *  guidance and from a different producer, so it is not this axis. */
+    private boolean currentViewSizeSmall() {
+        HMIModel model = hmiService.getModel(ICoreNaviModelBank.NAV_VIEW_SIZE_CHOICE);
+        return (model instanceof ChoiceModelGUI) && ((ChoiceModelGUI) model).getValue() == 1;
+    }
+
+    /** Single funnel for the fullscreen/smallscreen axis.  Reads the choice model once, and only on
+     *  a real change (or when forced on connect) publishes it to the altScreen hook + renderer via
+     *  AltScreenModule (the view-size cache and its single writer) and repositions the map plane.
+     *  Both the NAV_VIEW_SIZE_CHOICE event and every KDK update route through here, so the cache is
+     *  fed even on Classic clusters that drop the event during guidance. */
+    private void syncViewSize(boolean force) {
         if (this.kombiTerminal == 0) {
             return;
         }
         IDisplayManager dm = displayManager(hmiService);
         Layout layout = layoutOf(this.terminal);
         if (dm == null || layout == null || hmiService == null) {
-            logKDK.log(100000, "CombiMapController#processModelUpdateEvent environment not fully initialized");
+            logKDK.log(100000, "CombiMapController#syncViewSize environment not fully initialized");
             return;
         }
-        HMIModel model = hmiService.getModel(ICoreNaviModelBank.NAV_VIEW_SIZE_CHOICE);
-        boolean smallStage = (model instanceof ChoiceModelGUI) && ((ChoiceModelGUI) model).getValue() == 1;
+        boolean smallStage = this.currentViewSizeSmall();
+        int now = smallStage ? 1 : 0;
+        if (!force && now == this.appliedViewSizeSmall) {
+            return;   // unchanged: no duplicate read/publish/reposition
+        }
+        this.appliedViewSizeSmall = now;
         /* The Audi View button is the authoritative fullscreen/smallscreen transition.
-         * Publish it to the altScreen hook even while its RTSP session is not up;
-         * both Java and C cache the desired mode for fast reconnect. */
+         * Publish it to the altScreen hook even while its RTSP session is not up; both Java and C
+         * cache the desired mode.  setViewAreaMode() is the single writer of the view-size cache and
+         * fans out to the renderer, the hook bus and ClusterLayerController.reapply(). */
         com.luka.carplay.core.AltScreenModule.setViewAreaMode(
             smallStage
                 ? com.luka.carplay.core.AltScreenModule.VIEWAREA_SMALLSCREEN
@@ -158,6 +183,9 @@ public class CombiMapController extends DisplayControllerEvo implements NaviMoKo
 
         int previousKdk = this.updateVisibleKdk(modelupdateevent);
         Layout layout = this.terminal.getLayout();
+        /* inTube is the STOCK maneuver panel's own placement; it stays local to the stock KDK
+         * renderer below.  It is NOT the CarPlay overlay's stage: that comes from the single
+         * view-size cache (see syncViewSize / ClusterLayerController.applyNow). */
         boolean inTube = (modelupdateevent.getHints() & BITFIELD_KDK_POSITION_IN_TUBE) != 0;
 
         if (this.kombiTerminal != 0) {
@@ -168,11 +196,12 @@ public class CombiMapController extends DisplayControllerEvo implements NaviMoKo
 
         /* CarPlay overlay: 98 is ours; 101/102 are shared stock KDK backings. The controller
          * caches the stock values, overrides them only while CarPlay owns the cluster, and restores
-         * them on release. popup == !inTube. */
+         * them on release.  The popup/in-tube stage is derived inside ClusterLayerController from the
+         * view-size cache, so we forward only the stock KDK visibility/opacity. */
         if (this.kombiTerminal != 0
                 && this.framework.getSysConst(SYSCONST_KOMBI_VARIANT) == KOMBI_KDK_VIA_DISPLAYABLES) {
             com.luka.carplay.cluster.ClusterLayerController.apply(
-                dm, this.kombiTerminal, layout, !inTube,
+                dm, this.kombiTerminal, layout,
                 this.visibleKdk != NO_KDK, this.kdkOpacity);
         }
     }
