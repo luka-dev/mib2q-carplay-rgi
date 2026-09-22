@@ -888,15 +888,14 @@ int main(int argc, char **argv) {
          * for full RE-derived rationale):
          *   1. Our screen_window struct invalidated cross-process — the
          *      probe screen_get_window_property_iv returns ENOENT/EBADF/EINVAL.
-         *   2. displaymanager moved our window out of its managed group
-         *      (m_surfaceSources[20] now points to a foreign window, e.g.
-         *      native nav's libRenderSystem) — our SCREEN_PROPERTY_MANAGER_STRING
-         *      no longer matches "All your base are belong to us!".
+         *   2. displaymanager disowned our managed window (m_surfaceSources[98]
+         *      no longer holds it, e.g. the context switched away) — our
+         *      SCREEN_PROPERTY_MANAGER_STRING no longer matches "All your base
+         *      are belong to us!".  With our own id 98 there is no stock
+         *      collision, so this is rare.
          *
-         * On either signal, the helper tears down our EGL surface, calls
-         * display_create_window again to register a fresh ID="20" with
-         * displaymanager, and recreates the EGL surface.  100 ms backoff
-         * inside the helper prevents flapping. */
+         * On either signal, cluster_surface recreates the managed window (id 98,
+         * 100 ms backoff inside) and platform_recreate_window re-binds EGL. */
         {
             static struct timespec health_last = {0, 0};
             if (timespec_elapsed_at_least(&t_start, &health_last, 5, 0)) {

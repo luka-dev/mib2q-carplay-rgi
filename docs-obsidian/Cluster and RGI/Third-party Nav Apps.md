@@ -37,7 +37,7 @@ The Waze cluster camera is fixed at `.trackUserLocation(.static(1/8000))` with n
 - Java: the MFL roller in `AltScreenModule` sends it (`java_patch/com/luka/carplay/core/AltScreenModule.java:95-101`). The constant is at `java_patch/com/luka/carplay/bus/CarplayBus.java:54`.
 - Hook: `hook/framework/bus_protocol.h:92`, handler `zoom_on_cmd` (`hook/altscreen/altscreen_hook.c:2465-2491`, registered at `:2635`). It expands a signed step (capped at 8) into `changeMapZoomLevel{uuid, zoomDirection}` commands for the cluster UUID. `ALTSCREEN_ZOOM_INVERT` flips the direction.
 
-`CMD_ALT_HID` and `CMD_KNOB` are not defined in `bus_protocol.h`. `CMD_KNOB` survives only in a comment at `hook/framework/bus.c:548`. The cluster display advertises no `primaryInputDevice` (`altscreen_hook.c:508-510`), so all cluster commands are BAP or semantic. `[code]`
+`CMD_ALT_HID` and `CMD_KNOB` are not defined in `bus_protocol.h`. The cluster display advertises no `primaryInputDevice` (`altscreen_hook.c:508-510`), so all cluster commands are BAP or semantic. `[code]`
 
 ## 🔧 The other lever: `updateViewArea`
 
@@ -75,7 +75,7 @@ flowchart TD
 
 `viewAreas` and `updateViewArea` are implemented in `hook/altscreen/altscreen_hook.c`, but only for zone switching (fullscreen / sportscreen / classicscreen via `CMD_ALT_ZONE 0x0111`). `[code]` (`altscreen_hook.c:2016-2025`, `:2269-2291`; `hook/framework/bus_protocol.h:95`)
 
-- All three view areas keep the full 1440×542 visible frame and differ only in the nested `safeArea`. Fullscreen safe area: `(270,90) 900×290`. Sport and classic: `360×300` at `x = 90` and `x = 540` (`altscreen_hook.c:280-293`). The block comment at `:265-270` still says 360×245, but the defines are 300. `[code]`
+- All three view areas keep the full 1440×542 visible frame and differ only in the nested `safeArea`. Fullscreen safe area: `(270,90) 900×290`. Sport and classic: `360×300` at `x = 90` and `x = 540` (`altscreen_hook.c:280-293`). `[code]`
 - A view area whose visible frame was reduced to the safe region got the 111 stream rejected at activation (`altscreen_hook.c:259-262`). Root cause unknown. Candidates are CarKit `minAcceptableViewAreaSize*` / `isViewAreaPixelSizeAcceptable`, or the initial view area having to equal the display. Zoom by view area is blocked on this. `[open]`
 
 <details>

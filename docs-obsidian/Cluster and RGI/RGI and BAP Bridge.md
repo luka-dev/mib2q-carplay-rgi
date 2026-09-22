@@ -44,7 +44,7 @@ sequenceDiagram
 
 The C hook keeps a bounded cache and remaps iOS's ever-growing maneuver indices to local slots. `maneuver_list` carries slot indices, and `maneuverOrder[0]` is the current maneuver. `[code]`
 
-- `MANEUVER_CACHE_SIZE = 32`, `MAX_MANEUVER_LIST = 16`. (`hook/routeguidance/rgd_tlv.h:219`, `:230`) The "8 slots" wording is stale, including the in-code comment at `hook/routeguidance/rgd_hook.c:374`.
+- `MANEUVER_CACHE_SIZE = 32`, `MAX_MANEUVER_LIST = 16`. (`hook/routeguidance/rgd_tlv.h:219`, `:230`)
 - **LRU bug (fixed):** `rgd_slot_for_iap_index()` did not refresh the sequence on an existing-slot lookup, and it had no eviction guard for active slots. The icon or turn text got stuck. Current code touches the LRU sequence on lookup and skips active indices when it evicts. `[code]` (`rgd_hook.c:304`, `:339-385`), `[car]`
 - The current maneuver is `maneuverOrder[0]` only. If that slot is not valid yet, `BAPBridge` waits and never picks the next filled slot, because that would pair the next arrow with the current distance. `[code]` (`BAPBridge.java:1531`)
 

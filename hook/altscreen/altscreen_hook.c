@@ -264,10 +264,10 @@ static int set_i64(void *d, const char *key, int64_t val)
  *
  *   fullscreen rectangular safeArea: cells D2 through M5, cut at y=380
  *              = x 270..1170, y 90..380 = (270,90) 900x290
- *   sportscreen rectangular safeArea (compact Sport layout): B2.5 through E5, cut at y=380
- *              = x 90..450, y 135..380 = (90,135) 360x245
+ *   sportscreen rectangular safeArea (compact Sport layout): B2 through E5, cut at y=390
+ *              = x 90..450, y 90..390 = (90,90) 360x300
  *   classicscreen uses the same compact dimensions, centered horizontally
- *              = x 540..900, y 135..380 = (540,135) 360x245
+ *              = x 540..900, y 90..390 = (540,90) 360x300
  *
  * Bottom edge: the VC draws its own translucent map bar ("10ft ... 100ft N" in
  * fullscreen, "offroad" in the small stage) from about y=390 down over row 5
@@ -282,7 +282,7 @@ static int set_i64(void *d, const char *key, int64_t val)
 #define FULL_SAFE_W     900
 #define FULL_SAFE_H     290
 
-/* Zone safe areas end at y=390 like fullscreen, but stay 300 px tall: CarPlaySupport's
+/* Zone safe areas run y=90..390 (10 px lower than fullscreen's 380) to stay 300 px tall: CarPlaySupport's
  * CPSInstrumentClusterCardLayout treats a safe area narrower than ~498 px (660 px at its
  * 0.153 mm reference pitch, our pitch 292/1440 mm) as "narrow" and then needs
  * 0.3*height > ~87 px for the centred card layout; below that it logs "Undefined layout

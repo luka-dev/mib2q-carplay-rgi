@@ -57,7 +57,7 @@
  * opt in explicitly.
  *
  * AUDIO_STEREO_UPMIX: off | on.  ON always selects HSSR Universal.
- * AUDIO_STEREO_SURROUND: rear input gain, 0.0 .. 0.25 (default 0.18).
+ * AUDIO_STEREO_SURROUND: rear input gain, 0.0 .. 0.5 (default 0.18).
  * HSSR Universal uses persistent half-plane object routing and a bounded,
  * phase-distinct mid/high fallback so difficult or nearly mono masters retain
  * rear activity instead of collapsing to silence.  Its separated Ls/Rs then

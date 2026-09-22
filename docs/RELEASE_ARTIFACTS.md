@@ -101,7 +101,6 @@ If `mod/carplay/root/` is missing, `custom.sh` exits with `no payload tree` (`:3
 
 To remove the mod, copy the contents of `uninstall_MoreIncredibleBash/` over the card instead, replacing `/mod/custom.sh`. Removal needs no build files. It restores every `*.carplay-stock` under `/mnt/app` and `/mnt/system` and deletes a fixed list of owned files (`uninstall_MoreIncredibleBash/mod/custom.sh:22-53`).
 
-> [open] That owned list does not include `/mnt/app/root/hooks/hssr_guard.bin`, so the standalone uninstaller leaves the guard model on the unit.
 
 Both installers run from **GEM → M.I.B. → Advanced Settings → Run Custom Script** with CarPlay disconnected, and both leave the reboot to the owner.
 

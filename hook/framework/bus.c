@@ -545,7 +545,7 @@ static int read_all(int fd, void* buf, size_t len) {
 /* Read one inbound frame from the peer (Java) and dispatch it to the registered
  * handler.  Blocks until a frame arrives, EOF, or error.  Makes the bus
  * BIDIRECTIONAL: the hook now both sends events AND receives commands
- * (CMD_KNOB, CMD_ALT_ZONE, …) that modules register for via bus_on().
+ * (CMD_ALT_ZOOM, CMD_ALT_ZONE, …) that modules register for via bus_on().
  * Returns 0 = ok, -1 = disconnect (framing lost / EOF → reconnect). */
 static int read_frame(int fd, uint32_t gen) {
     uint8_t hdr[BUS_HEADER_SIZE];

@@ -274,6 +274,9 @@ carplay_build_hook() {
     echo "Compiled: $APAC_OUT"
     ls -lh "$APAC_OUT"
   else
-    echo "Audio module excluded: no $APAC_OUT (stale copies are not touched)"
+    # The output dir is per-build; drop a codec left by an earlier audio build so
+    # it cannot ship (or be VIN-stamped) alongside an audio-less hook.
+    rm -f "$APAC_OUT"
+    echo "Audio module excluded: no $APAC_OUT"
   fi
 }

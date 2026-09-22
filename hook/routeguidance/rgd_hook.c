@@ -371,7 +371,7 @@ static int rgd_slot_for_iap_index(uint16_t idx, bool create) {
         }
     }
     if (victim < 0) {
-        /* All slots are in the active list (shouldn't happen with 8 slots
+        /* All slots are in the active list (shouldn't happen with MANEUVER_CACHE_SIZE=32 slots
          * and max 2-3 active maneuvers).  Fall back to true LRU. */
         best = UINT32_MAX;
         for (int s = 0; s < MANEUVER_CACHE_SIZE; s++) {

@@ -983,9 +983,11 @@ public class RouteGuidance implements CarplayBus.Listener {
                      * re-populating (observed at route start).  By preserving slot data we avoid
                      * the race where maneuver_list advances to slots whose data was cleared.
                      *
-                     * Full per-slot clear still happens on:
-                     *   - route_state=0  (genuine route end / reset)
+                     * Full per-slot clear happens only on:
                      *   - source_supports_rg=0  (hard reset)
+                     *   - a new route_generation  (clearAllManeuverSlots)
+                     *   - a disconnect reason
+                     * route_state=0 only resets count and order (see its handler).
                      */
                 }
             }

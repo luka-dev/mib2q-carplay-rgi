@@ -14,7 +14,7 @@ These are three different processes with three different jobs. `[car]`, `[code]`
 | `maneuver_render` | Our procedural 3D arrow on displayable 98 in the cluster (EGL, 328×181) | Java commands over TCP `:19800` (Java is the server); it builds geometry, materials and animation itself |
 | `altscreen_render` | The CarPlay map plane on the cluster (displayable 99) | The type-111 stream; see [[AltScreen Cluster Video]] |
 
-`maneuver_render` does not push pixels to the HUD. `altscreen_render` is neither a BAP sender nor a maneuver engine. The maneuver displayable is 98, not the stock 20 (`maneuver_render/protocol.h:92-108`). Some older comments in `BAPBridge.java:712-721` and `maneuver_render/main.c:897` still say "ID 20". Both renderers belong to the CarPlay supervisor, and Java never spawns one per maneuver (`java_patch/com/luka/carplay/rgd/BAPBridge.java:1987`). `[code]`
+`maneuver_render` does not push pixels to the HUD. `altscreen_render` is neither a BAP sender nor a maneuver engine. The maneuver displayable is 98, not the stock 20 (`maneuver_render/protocol.h:92-108`). Both renderers belong to the CarPlay supervisor, and Java never spawns one per maneuver (`java_patch/com/luka/carplay/rgd/BAPBridge.java:1987`). `[code]`
 
 ## 🔧 The procedural arrow
 

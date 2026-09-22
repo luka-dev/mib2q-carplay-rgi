@@ -710,15 +710,13 @@ public class BAPBridge {
             /* Block native route-guidance BAP stream during CarPlay RG. */
             com.luka.carplay.core.AltScreenNavStatusGate.setRouteGuidanceBlocked(true);
 
-            /* Start renderer FIRST — takes over native displayable 20
-             * (DISPLAYABLE_MAP_ROUTE_GUIDANCE, the KOMO RG widget slot) by
-             * registering our screen window with ID="20" in displaymanager's
-             * m_surfaceSources.  Doing this before we set rgActive/rgiValid
-             * avoids a one-frame KDK flicker. */
+            /* Start renderer FIRST — maneuver_render owns its own managed
+             * displayable 98 (dc[80]={98,...}); bringing it up before we set
+             * rgActive/rgiValid avoids a one-frame KDK flicker. */
             startCustomRenderer();                 /* non-blocking; readiness edges drive completion */
 
-            /* Now safe to set cluster state flags — our window owns
-             * displayable 20, encoder reads it via setActiveDisplayable(4,20). */
+            /* Now safe to set cluster state flags — our window is displayable 98;
+             * ctx 80 makes the encoder read it via setActiveDisplayable(4,98). */
             forceClusterRouteInfoState(true);
 
             /*

@@ -23,6 +23,7 @@ fi
 OWNED="/mnt/app/root/hooks/libcarplay_hook.so
 /mnt/app/root/hooks/libcarplay_apac.so
 /mnt/app/root/hooks/hssr_model.bin
+/mnt/app/root/hooks/hssr_guard.bin
 /mnt/app/root/hooks/maneuver_render
 /mnt/app/root/hooks/altscreen_render
 /mnt/app/root/hooks/flag_atlas.rgba

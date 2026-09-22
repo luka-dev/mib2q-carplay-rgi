@@ -107,7 +107,7 @@ All of these are validated as `0`/`1` in `build_hook_common.sh:54-66`, except th
 
 | Flag | Default | Effect |
 |---|---|---|
-| `HOOK_AUDIO` | `1` | `0` removes the type-103 audio path at compile time (`-DHOOK_AUDIO=0`): the `hook/audio/*` sources and the QSA/AirPlay audio interposers are left out, and `libcarplay_apac.so` is not built. A stale APAC file already in the output directory is left there (`:277`). `AUDIO_SPATIAL=0` only disables type 103 at runtime; `HOOK_AUDIO=0` takes it out of the binary. |
+| `HOOK_AUDIO` | `1` | `0` removes the type-103 audio path at compile time (`-DHOOK_AUDIO=0`): the `hook/audio/*` sources and the QSA/AirPlay audio interposers are left out, and `libcarplay_apac.so` is not built. A codec left in the output directory by an earlier audio build is removed. `AUDIO_SPATIAL=0` only disables type 103 at runtime; `HOOK_AUDIO=0` takes it out of the binary. |
 | `LOG` | `1` | `0` sets `-DENABLE_LOGGING=0`, which turns off logging and diagnostic captures (`:75`). |
 | `AUDIO_STATE_TRACE` | `0` | `1` sets `-DENABLE_STATE_TRACE=1`, a compact lifecycle trace. It exports the two trace HID seams and checks the markers after the build. |
 | `ALTSCREEN_PACE_TRACE` | `0` | `1` sets `-DENABLE_ALTSCREEN_PACE_TRACE=1`, a stream-111 pacing trace. The markers are checked after the build. |

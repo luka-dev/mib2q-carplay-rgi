@@ -101,7 +101,7 @@ It stops no processes and does not reboot.
 
 If `carplay_child.json` is missing from `mod/carplay/`, the JSON patch is skipped with a `WARN` (`:57`) and the hook never loads. If `mod/carplay/root/` is missing, the script exits with `no payload tree` (`:32`).
 
-To uninstall, copy `uninstall_MoreIncredibleBash/` over the card instead. That script needs no payload tree. It renames every `*.carplay-stock` it finds under `/mnt/app` and `/mnt/system` back to the original, which covers the firmware, the SI JSON and the PF profiles. It then deletes the files on its fixed owned list (`uninstall_MoreIncredibleBash/mod/custom.sh:22-53`). [open] That list does not include `/mnt/app/root/hooks/hssr_guard.bin`, so the standalone uninstaller leaves the guard model on the unit. Running `custom.sh uninstall` from the install folder with the payload tree still present does remove it, because that mode walks `root/` (`install_MoreIncredibleBash/mod/custom.sh:140-159`).
+To uninstall, copy `uninstall_MoreIncredibleBash/` over the card instead. That script needs no payload tree. It renames every `*.carplay-stock` it finds under `/mnt/app` and `/mnt/system` back to the original, which covers the firmware, the SI JSON and the PF profiles. It then deletes the files on its fixed owned list (`uninstall_MoreIncredibleBash/mod/custom.sh:22-53`). The list includes `hssr_guard.bin`.
 
 ## 🌐 SSH deploy and its traps
 
