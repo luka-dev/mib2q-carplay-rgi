@@ -1,4 +1,0 @@
-INFO  HudLaneChainAudit.java> HUD_LANE_CHAIN_PASS cases=31 original_steps=369370 substitutions=0 sha256=138351c2f12cd8e45d9f50fd4833775371ec46401b6838f04c24a9a4baaabae2 (GhidraScript)
-INFO  HudLaneChainAudit.java> HUD_LANE_CHAIN_PASS cases=31 original_steps=369370 substitutions=0 sha256=6e59b62c982873a778bf72b749bf6dc113fe3fe14ee4bb3ae3855d0c624f6fe5 (GhidraScript)
-Original ARM graphics: 4300 states per firmware, recorded in selector JSON.
-Original sprite compositor: 31 identical layouts, colour/overflow/empty assertions pass.

@@ -1,1 +1,0 @@
-# WAVs deleted 2026-09-21 to free disk; every file hash and metric remains in report.json / the review dir. Regenerate with the command recorded in the report.

@@ -1,5 +1,0 @@
-experimental-float: pre-gain-peak=0.97302538 FS post-gain-peak=0.97302538 FS gain=1.00000000 limiter-attacks=297 minimum-guard-gain=0.52511054 attenuated-frames=60520 total-frames=2880000 longest-observed-run=6380 reduction-db-sum=57958.364376908 over3-frames=1992 over6-frames=0 over10-frames=0
-front-retention=0.50000 (q15=16384; independent of rear gain)
-rendered 2880000 frames (60.000 s): PCM2 -> PCM6 L,R,C,LFE,Ls,Rs
-mode=hssr-universal surround=0.29999 (q15=9830) front=0.95801 (q15=31392) lfe=assist gain=0.12500 (q15=4096)
-/var/folders/z5/ww412zbd6c5cr7x4dq54tn6w0000gn/T/upmix-grid-m_s5go1s/Crazy Train-r50_s30.wav

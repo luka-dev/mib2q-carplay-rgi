@@ -1,5 +1,0 @@
-QUEUE: accepted maneuver; after 80 progress packets, queued maneuvers=0, duplicate resend=false
-RETRY: real BAP lane hide threw; HUD attempts=1, published=false, update calls=1, dirtyMask=0, retry pending=false, still confirmed=true
-SLOT REUSE: new version=35, inherited angle=45, present=true, roads=[0, 45, 90], road=Old road, step=6000
-NEW ROUTE: reused version=2, inherited angle=45, road=Old road
-TIME REPLAY: without fresh source sample, remaining 480 -> 600 seconds

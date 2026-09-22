@@ -1,5 +1,0 @@
-experimental-float: pre-gain-peak=1.02982354 FS post-gain-peak=1.02982354 FS gain=1.00000000 limiter-attacks=11055 minimum-guard-gain=0.59342313 attenuated-frames=789201 total-frames=2880000 longest-observed-run=5138 reduction-db-sum=296112.028344942 over3-frames=3226 over6-frames=0 over10-frames=0
-front-retention=0.50000 (q15=16384; independent of rear gain)
-rendered 2880000 frames (60.000 s): PCM2 -> PCM6 L,R,C,LFE,Ls,Rs
-mode=hssr-universal surround=0.29999 (q15=9830) front=0.95801 (q15=31392) lfe=assist gain=0.12500 (q15=4096)
-/var/folders/z5/ww412zbd6c5cr7x4dq54tn6w0000gn/T/upmix-grid-m_s5go1s/The Blue-Eyed Devil-r50_s30.wav

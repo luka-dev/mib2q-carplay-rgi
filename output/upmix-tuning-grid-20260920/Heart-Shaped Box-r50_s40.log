@@ -1,5 +1,0 @@
-experimental-float: pre-gain-peak=0.65778667 FS post-gain-peak=0.65778667 FS gain=1.00000000 limiter-attacks=12 minimum-guard-gain=0.82780117 attenuated-frames=1261 total-frames=2880000 longest-observed-run=1207 reduction-db-sum=1107.724055608 over3-frames=0 over6-frames=0 over10-frames=0
-front-retention=0.50000 (q15=16384; independent of rear gain)
-rendered 2880000 frames (60.000 s): PCM2 -> PCM6 L,R,C,LFE,Ls,Rs
-mode=hssr-universal surround=0.39999 (q15=13107) front=0.95801 (q15=31392) lfe=assist gain=0.12500 (q15=4096)
-/var/folders/z5/ww412zbd6c5cr7x4dq54tn6w0000gn/T/upmix-grid-m_s5go1s/Heart-Shaped Box-r50_s40.wav

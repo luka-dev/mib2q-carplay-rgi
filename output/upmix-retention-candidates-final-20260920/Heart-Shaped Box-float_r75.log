@@ -1,5 +1,0 @@
-experimental-float: pre-gain-peak=0.66048896 FS post-gain-peak=0.66048896 FS gain=1.00000000 limiter-attacks=12 minimum-guard-gain=0.79825097 attenuated-frames=1419 total-frames=2880000
-front-retention=0.75000 (q15=24576; independent of rear gain)
-rendered 2880000 frames (60.000 s): PCM2 -> PCM6 L,R,C,LFE,Ls,Rs
-mode=hssr-universal surround=0.39999 (q15=13107) front=0.95801 (q15=31392) lfe=assist gain=0.12500 (q15=4096)
-/var/folders/z5/ww412zbd6c5cr7x4dq54tn6w0000gn/T/upmix-retention-20260920-54n3ep_5/Heart-Shaped Box-float_r75.wav

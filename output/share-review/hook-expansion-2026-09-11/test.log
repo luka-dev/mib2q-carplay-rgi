@@ -1,7 +1,0 @@
-DYLD_INSERT_LIBRARIES="/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/share-review/hook-expansion-2026-09-11/stage/hook/build/libdemo_hook.dylib" DYLD_FORCE_FLAT_NAMESPACE=1 "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/share-review/hook-expansion-2026-09-11/stage/hook/build/demo_driver"
-Dynamic hook: 256 calls, original arguments/status/errno preserved, exact concurrent counters.
-"/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/share-review/hook-expansion-2026-09-11/stage/hook/build/view_demo"
-{"originXPixels":0,"originYPixels":0,"widthPixels":800,"heightPixels":480,"safeArea":{"originXPixels":200,"originYPixels":24,"widthPixels":400,"heightPixels":432}}
-View demo: desired/applied separation, coalescing and stale-session ACK rejection passed.
-
-view boundaries passed: geometry/overflow, JSON sizing, coalescing, failure, duplicate/stale ACKs, counter exhaustion

@@ -1,5 +1,0 @@
-===== CarPlay generation pid=1622142 ppid=979029 =====
-[startup] exec dio_manager pid=1622142 monitor=1642623
-[monitor] generation=1622142 active
-[monitor] starting altscreen_render reason=initial
-[monitor] starting maneuver_render reason=initial

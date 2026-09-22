@@ -1,8 +1,0 @@
-COMMAND ["/opt/homebrew/opt/python@3.14/bin/python3.14", "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/tools/soundamp-virtual-cabin/audit_upmix_end_to_end.py", "--renderer", "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/build/upmix-e2e-20260920/stereo_upmix_render", "--model", "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/build/hssr_model.bin", "--guard", "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/build/hssr_guard.bin", "--out", "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/output/upmix-full-model-check-eq7-20260921/00_Boost_Up", "--input", "/private/tmp/upmix-bank1-audit.BR9uxY/Boost Up.wav", "--seconds", "6.0", "--tail-seconds", "0.25", "--input-eq-bank", "7", "--variant", "zero_trim:s16:0.40:0:0:0", "--variant", "startup:s16:0.40:-3:0:0", "--variant", "retain75_bass1:float:0.30:-1:0:0.75", "--scenario", "full_static_nearest_zero_aux", "--build-provenance", "/Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/build/upmix-e2e-20260920/build_provenance.json", "--save-output-wavs"]
-STDOUT
-Boost Up full_static_nearest_zero_aux dry_bank1 done
-Boost Up full_static_nearest_zero_aux zero_trim done
-Boost Up full_static_nearest_zero_aux startup done
-Boost Up full_static_nearest_zero_aux retain75_bass1 done
-
-STDERR

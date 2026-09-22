@@ -1,5 +1,0 @@
-experimental-float: pre-gain-peak=1.02194870 FS post-gain-peak=1.02194870 FS gain=1.00000000 limiter-attacks=2728 minimum-guard-gain=0.31978655 attenuated-frames=296928 total-frames=2880000 longest-observed-run=4469 reduction-db-sum=386907.797671763 over3-frames=42636 over6-frames=4259 over10-frames=0
-front-retention=0.75000 (q15=24576; independent of rear gain)
-rendered 2880000 frames (60.000 s): PCM2 -> PCM6 L,R,C,LFE,Ls,Rs
-mode=hssr-universal surround=0.29999 (q15=9830) front=0.95801 (q15=31392) lfe=assist gain=0.06265 (q15=2053)
-/var/folders/z5/ww412zbd6c5cr7x4dq54tn6w0000gn/T/upmix-bass-oiaw05x5/Deep Down Low-lfe_minus6.wav

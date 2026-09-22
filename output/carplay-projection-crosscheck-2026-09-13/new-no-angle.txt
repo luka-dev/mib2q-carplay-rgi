@@ -1,8 +1,0 @@
-route_state:n:1
-maneuver_count:n:1
-maneuver_list:s:0
-m0_type:n:2
-m0_turn_angle:n:1000
-m0_exit_angle:n:1000
-m0_junction_type:n:0
-m0_ver:n:35

@@ -53,32 +53,16 @@ tmp/
 *.tsbuildinfo
 *.dSYM/
 
-# Share-review sources/reports are retained; compiled test programs are not.
-/output/share-review/**/check_*
-!/output/share-review/**/check_*.c
-!/output/share-review/**/check_*.h
-/output/share-review/**/*.dylib
-/output/share-review/**/video_receiver
-/output/share-review/**/stage/hook/build/
-
-# Isolated renderer experiment: retain evidence, exclude binaries/copied runtime atlas.
-/output/arrow-progress/host/
-/output/arrow-progress/frames/flag_atlas.rgba
-
-# Intermediate ordinary-maneuver visual QA; keep the review sheet/GIFs/manifest.
-output/maneuver-preview/*-source.png
-output/maneuver-preview/*-native.png
-output/maneuver-preview/*.ppm
-output/maneuver-preview/*.log
-output/maneuver-preview/transition/
-output/lane-panel/raw/
+# Experiment/render/tuning output. Like build/, everything here is tool scratch;
+# the durable knowledge was consolidated into docs/research/. The tree carries the
+# empty directory and nothing else.
+/output/*
+!/output/.gitkeep
 
 # PRISM host preview/test output.
 tools/loader_preview/.prism-test-*
 tools/loader_preview/prism_preview
 
-# Generated desktop PRISM captures and app bundles.
-/output/loader-preview/
 
 # Installer diagnostics copied back to the SD card.
 /install_MoreIncredibleBash/mod/last-carplay-*.log

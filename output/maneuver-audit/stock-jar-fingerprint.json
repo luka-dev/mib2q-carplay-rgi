@@ -1,5 +1,0 @@
-{
-  "path": "/Users/luka/Desktop/AUDI_2/Tools/jxe2jar/out/MU1316-combined-final.jar",
-  "sha256": "6d0ed0ff2c2e3ddca2bf7d6687e327c628a06df3596166a53f1ccd3ae875b3b9",
-  "limitation": "Reconstructed JXE: empty-string processing emits isNativeLittleEndian. Numeric fields verified; raw output is not a CAN capture."
-}

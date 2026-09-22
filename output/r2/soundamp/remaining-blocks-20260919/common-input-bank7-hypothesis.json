@@ -1,8 +1,0 @@
-{
-  "audit_path": "audit.json",
-  "graph_input_sources": [0, 1, 2, 3, 4, 5, null, null],
-  "eq_family": "tone",
-  "shared_gains_tenths_db": [0, 0, 0, 0],
-  "bank_index": 7,
-  "delay_samples": 0
-}

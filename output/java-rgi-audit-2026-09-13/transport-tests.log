@@ -1,7 +1,0 @@
-=== CarPlay Java Patch Build ===
-Compiling 33 files (target 1.4)...
-Output: /Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/build/carplay_hook.jar
-Build ID: MHI2Q-2026-05-16-368-gdda63e4-dirty
-CarplayBusTransportTest: malformed lists, 30 restarts, fragmented wire, stale bind/read and outbound bounds PASS
-RendererServerTransportTest: CLEAR ACK ordering, queue overflow, atomic lane hide/reappear under progress pressure, 48-byte wire, stale writer and 30 restarts PASS
-AltscreenControlTransportTest: delayed old disconnect cannot override fresh VIDEO_ON PASS

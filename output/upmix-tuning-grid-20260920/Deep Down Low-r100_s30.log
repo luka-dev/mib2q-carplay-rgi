@@ -1,5 +1,0 @@
-experimental-float: pre-gain-peak=0.95800781 FS post-gain-peak=0.95800781 FS gain=1.00000000 limiter-attacks=3420 minimum-guard-gain=0.31476158 attenuated-frames=331865 total-frames=2880000 longest-observed-run=4936 reduction-db-sum=411989.093814657 over3-frames=43710 over6-frames=4462 over10-frames=8
-front-retention=1.00000 (q15=32768; independent of rear gain)
-rendered 2880000 frames (60.000 s): PCM2 -> PCM6 L,R,C,LFE,Ls,Rs
-mode=hssr-universal surround=0.29999 (q15=9830) front=0.95801 (q15=31392) lfe=assist gain=0.12500 (q15=4096)
-/var/folders/z5/ww412zbd6c5cr7x4dq54tn6w0000gn/T/upmix-grid-m_s5go1s/Deep Down Low-r100_s30.wav
