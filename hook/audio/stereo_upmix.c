@@ -49,6 +49,12 @@ static const float kCabinSampleLimit = 32275.0f; /* 0.985 FS + rounding margin *
 
 /* A903C/126A07: A07 rows are OUTPUTS. Transpose once here for the detector's
  * input-major API. One table is shared by the S16 and float guards. */
+/* The floor stands in for "this channel does not feed this bus"; it is kept so
+ * the table has no exact zeros, and it is small enough that a bus whose LFE
+ * entry is the floor can never bound the LFE (see the guard). */
+static const float kCabinMatrixFloor = 0.00001122018454f;
+/* Largest bus column sum, rounded up: |bus value| <= this * max |sample|. */
+static const float kCabinMatrixMaxColumnNorm = 3.53f;
 #define CABIN_FLOOR 0.00001122018454f
 static const float kInputMatrix[6][8] = {
     {0.794328235f, CABIN_FLOOR, 0.398107171f, 0.398107171f, 0.707945784f, CABIN_FLOOR, 0.707945784f, CABIN_FLOOR},
@@ -153,7 +159,13 @@ static int16_t spa_upmix_lfe_to_s16(float normalized, uint32_t gain_q15)
     return (int16_t)rounded;
 }
 
-static float spa_upmix_biquad(
+/* Eight of these run per output frame and the body is a dozen operations, so
+ * the call overhead was most of the cost; GCC leaves it out of line because
+ * the caller is already large.  Same arithmetic, same order, same result. */
+#if defined(__GNUC__)
+__attribute__((always_inline))
+#endif
+static inline float spa_upmix_biquad(
     float input, float state[2],
     const struct spa_upmix_biquad_coefficients *coefficients)
 {
@@ -309,6 +321,18 @@ static void spa_upmix_cabin_guard_s16(int16_t sample[6], int adjust_lfe)
 {
     unsigned bus, ch;
     float peak = 0.0f;
+
+    /* Nothing here can bind while every bus row stays below the limit, and
+     * |bus value| <= max column sum * max |sample|.  This is the per-frame hot
+     * spot of the whole renderer, so leave before touching the matrix at all.
+     * Exactly equivalent: the bound also covers the channel peaks, which are
+     * then all below the limit too. */
+    for (ch = 0; ch < 6; ++ch)
+        if (spa_upmix_absf((float)sample[ch]) > peak)
+            peak = spa_upmix_absf((float)sample[ch]);
+    if (peak * kCabinMatrixMaxColumnNorm <= kCabinSampleLimit) return;
+    peak = 0.0f;
+
     if (adjust_lfe) {
         float limited = (float)sample[3];
         /* Never synthesize extra LFE or reverse its sign to repair overload. */
@@ -317,6 +341,11 @@ static void spa_upmix_cabin_guard_s16(int16_t sample[6], int adjust_lfe)
         for (bus = 0; bus < 8; ++bus) {
             float base = 0.0f;
             float low, high;
+
+            /* A floor LFE entry puts both bounds past 1e9 (|base| stays under
+             * 1.2e5), so such a bus can never bound an S16 LFE sample.
+             * Skipping it is exact and removes 14 of the 16 divisions. */
+            if (kInputMatrix[3][bus] <= kCabinMatrixFloor) continue;
             for (ch = 0; ch < 6; ++ch)
                 if (ch != 3) base += kInputMatrix[ch][bus] * sample[ch];
             low = (-kCabinSampleLimit - base) / kInputMatrix[3][bus];

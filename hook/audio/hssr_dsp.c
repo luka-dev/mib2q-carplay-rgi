@@ -146,16 +146,31 @@ static void spa_hssr_fft(struct spa_hssr_dsp *state,
         }
     }
 
-    for (length = 2; length <= SPA_HSSR_FFT_SIZE; length <<= 1) {
+    /* First pass: the only twiddle is (1, 0), so it is pure add/sub.  This is
+     * a quarter of all butterflies and it carried four needless products. */
+    for (index = 0; index < SPA_HSSR_FFT_SIZE; index += 2) {
+        float even_re = real[index];
+        float even_im = imaginary[index];
+        float odd_re = real[index + 1];
+        float odd_im = imaginary[index + 1];
+
+        real[index] = even_re + odd_re;
+        imaginary[index] = even_im + odd_im;
+        real[index + 1] = even_re - odd_re;
+        imaginary[index + 1] = even_im - odd_im;
+    }
+    for (length = 4; length <= SPA_HSSR_FFT_SIZE; length <<= 1) {
         unsigned half = length >> 1;
         unsigned stride = SPA_HSSR_FFT_SIZE / length;
         unsigned base;
 
         for (base = 0; base < SPA_HSSR_FFT_SIZE; base += length) {
             unsigned offset;
+            unsigned twiddle = 0;
 
-            for (offset = 0; offset < half; ++offset) {
-                unsigned twiddle = offset * stride;
+            /* The twiddle index advances by the pass stride, so walk it
+             * instead of multiplying it out once per butterfly. */
+            for (offset = 0; offset < half; ++offset, twiddle += stride) {
                 float wr = state->twiddle_re[twiddle];
                 float wi = twiddle_imaginary[twiddle];
                 unsigned even = base + offset;

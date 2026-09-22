@@ -312,7 +312,7 @@ static void print_usage(const char *program)
             "usage: %s [--backend hssr-universal] "
             "[--model HSSR.bin] "
             "[--blocks 1..%u] [--warmup 1..%u] "
-            "[--async-controller] [--realtime-pacing] [--qemu-icount]\n",
+            "[--scene] [--async-controller] [--realtime-pacing] [--qemu-icount]\n",
             program, (unsigned)BENCH_MAX_BLOCKS,
             (unsigned)BENCH_MAX_BLOCKS);
 }
@@ -378,6 +378,7 @@ int main(int argc, char **argv)
     uint64_t checksum = UINT64_C(14695981039346656037);
     int qemu_icount = 0;
     int async_controller = 0;
+    int scene = 0;
     int realtime_pacing = 0;
     const char *model_path = NULL;
     size_t index;
@@ -407,6 +408,8 @@ int main(int argc, char **argv)
             }
         } else if (strcmp(argv[argument], "--qemu-icount") == 0) {
             qemu_icount = 1;
+        } else if (strcmp(argv[argument], "--scene") == 0) {
+            scene = 1;
         } else if (strcmp(argv[argument], "--async-controller") == 0) {
             async_controller = 1;
             realtime_pacing = 1;
@@ -436,6 +439,16 @@ int main(int argc, char **argv)
     spa_stereo_upmix_default_config(&config);
     config.backend = backend;
     config.rear_gain_q15 = 8192; /* Production synthesis gain 0.25. */
+    if (scene) {
+        /* What the car actually runs (carplay_startup.sh): the split bed with
+         * its delay ring, the owner attack and the tapered front retention.
+         * Without this the benchmark measures a path production never takes. */
+        config.rear_gain_q15 = 13107;       /* AUDIO_STEREO_SURROUND=0.40 */
+        config.front_retention_q15 = 16384; /* 0.5 */
+        config.bed_delays = 1;
+        config.bed_attack = SPA_HSSR_BED_ATTACK_OWNER;
+        config.attack_collapse_q15 = 24576; /* 0.75 */
+    }
     spa_stereo_upmix_config_set_lfe(&config, 1);
     if (backend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL) {
         if (!model_path) {
@@ -475,12 +488,13 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    printf("stereo_upmix_bench backend=%s controller=%s pacing=%s "
+    printf("stereo_upmix_bench backend=%s controller=%s pacing=%s scene=%s "
            "frames_per_call=%u "
            "warmup=%lu blocks=%lu\n",
            backend_name(backend),
            async_controller ? "async" : "sync",
-           realtime_pacing ? "realtime" : "none", (unsigned)BENCH_FRAMES,
+           realtime_pacing ? "realtime" : "none",
+           scene ? "production" : "legacy", (unsigned)BENCH_FRAMES,
            (unsigned long)warmup_blocks,
            (unsigned long)blocks);
     printf("sizeof_state=%lu sizeof_runtime=%lu static_pcm_bytes=%lu\n",
