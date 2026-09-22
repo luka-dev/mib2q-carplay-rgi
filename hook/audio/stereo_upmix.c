@@ -370,7 +370,9 @@ static int spa_upmix_config_valid(const struct spa_stereo_upmix_config *config)
         config->front_bass_db10 > 0 ||
         config->front_bass_db10 < SPA_STEREO_UPMIX_FRONT_BASS_DB10_MIN ||
         config->bed_delays > 1u || config->bed_attack > SPA_HSSR_BED_ATTACK_FRONT ||
-        config->attack_collapse_q15 > UINT32_C(32768))
+        config->attack_collapse_q15 > UINT32_C(32768) ||
+        config->retention_hf_lo_hz > UINT32_C(24000) ||
+        config->retention_hf_hi_hz > UINT32_C(24000))
         return SPA_STEREO_UPMIX_ERROR_CONFIG;
     if (config->backend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL &&
         !spa_hssr_model_ready(config->hssr_model))
@@ -424,6 +426,8 @@ static void spa_upmix_apply_bed_config(struct spa_hssr_dsp *hssr,
     hssr->bed_attack = config->bed_attack;
     hssr->attack_collapse = (float)config->attack_collapse_q15 / 32768.0f;
     hssr->front_retention = (float)config->front_retention_q15 / 32768.0f;
+    hssr->retention_hf_lo_hz = (float)config->retention_hf_lo_hz;
+    hssr->retention_hf_hi_hz = (float)config->retention_hf_hi_hz;
 }
 
 void spa_stereo_upmix_default_config(struct spa_stereo_upmix_config *config)
@@ -439,6 +443,8 @@ void spa_stereo_upmix_default_config(struct spa_stereo_upmix_config *config)
     config->bed_delays = 0;
     config->bed_attack = SPA_HSSR_BED_ATTACK_OFF;
     config->attack_collapse_q15 = 32768u;
+    config->retention_hf_lo_hz = SPA_STEREO_UPMIX_RETENTION_HF_LO_HZ;
+    config->retention_hf_hi_hz = SPA_STEREO_UPMIX_RETENTION_HF_HI_HZ;
     config->backend = SPA_STEREO_UPMIX_OFF;
     config->hssr_model = NULL;
     config->hssr_control_provider = NULL;

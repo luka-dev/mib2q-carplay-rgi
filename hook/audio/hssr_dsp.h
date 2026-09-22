@@ -99,6 +99,13 @@ struct spa_hssr_dsp {
     uint32_t bed_attack;              /* enum spa_hssr_bed_attack */
     float attack_collapse;            /* OWNER: object front share r -> r*(1 - c*w) on a hit */
     float front_retention;            /* r, applied in the STFT domain when bed_attack != OFF */
+    /* Front retention is a MID control: its measured benefit is 500-2000 Hz
+     * front/centre body, while the treble it keeps in the front makes the car
+     * front audibly brighter.  The retention rolls off from lo_hz and is zero
+     * from hi_hz up, so treble objects still leave the front completely.
+     * hi <= lo disables the taper (retention flat over frequency). */
+    float retention_hf_lo_hz;
+    float retention_hf_hi_hz;
     float bed_re[2][SPA_HSSR_BINS];
     float bed_im[2][SPA_HSSR_BINS];
     float bed_ring_re[2][SPA_HSSR_BED_RING][SPA_HSSR_BINS];
@@ -107,6 +114,9 @@ struct spa_hssr_dsp {
     float band_attack_history[SPA_HSSR_BANDS];
     float band_attack_weight[SPA_HSSR_BANDS];
     float band_owner[SPA_HSSR_BANDS];
+    /* Per hop: the whole front-object factor 1 - r(f)*(1 - c*w*owner).  Every
+     * term is per band, so the 257-bin masking loop only loads it. 1 = OFF. */
+    float band_front_keep[SPA_HSSR_BANDS];
     /* Research: per-bin smoothed statistics for continuous azimuth relocation. */
     float previous_magnitude[SPA_HSSR_BINS];
     /* Per-bin state of the two hot loops, interleaved: a bin's ten values sit

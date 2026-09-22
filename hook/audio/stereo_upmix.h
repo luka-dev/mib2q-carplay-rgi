@@ -35,7 +35,12 @@ enum {
     SPA_STEREO_UPMIX_LFE_Q15_DEFAULT = 4096,
     SPA_STEREO_UPMIX_LFE_Q15_MAX = 16384,
     SPA_STEREO_UPMIX_FRONT_BASS_HZ = 200,
-    SPA_STEREO_UPMIX_FRONT_BASS_DB10_MIN = -120
+    SPA_STEREO_UPMIX_FRONT_BASS_DB10_MIN = -120,
+    /* Front retention taper defaults: the retention benefit measured on real
+     * cuts is the 500-2000 Hz front/centre body, so keep it there and let the
+     * treble object leave the front entirely. */
+    SPA_STEREO_UPMIX_RETENTION_HF_LO_HZ = 1000,
+    SPA_STEREO_UPMIX_RETENTION_HF_HI_HZ = 2500
 };
 
 enum spa_stereo_upmix_output_channel {
@@ -85,6 +90,11 @@ struct spa_stereo_upmix_config {
     uint32_t bed_delays;             /* 0/1: per-band delayed bed copies + cross term */
     uint32_t bed_attack;             /* enum spa_hssr_bed_attack */
     uint32_t attack_collapse_q15;    /* OWNER: object front share r -> r*(1-c*w) on a hit */
+    /* Front retention taper, Hz: full retention below lo, none from hi up, so
+     * the front keeps body without keeping treble.  hi <= lo = flat (no
+     * taper).  Ignored unless bed_attack is set. */
+    uint32_t retention_hf_lo_hz;
+    uint32_t retention_hf_hi_hz;
     enum spa_stereo_upmix_backend backend;
     const struct spa_hssr_model *hssr_model;
     const struct spa_hssr_control_provider *hssr_control_provider;

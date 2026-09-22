@@ -1375,9 +1375,27 @@ static void spa_hssr_render_hop(
                 (universal_target - state->bin[bin].universal_mask);
         }
     }
-    for (band = 0; band < SPA_HSSR_BANDS; ++band)
-        state->band_owner[band] = spa_hssr_dsp_smoothstep(
-            band_best[band], 0.040f, 0.28f);
+    for (band = 0; band < SPA_HSSR_BANDS; ++band) {
+        float owner = spa_hssr_dsp_smoothstep(band_best[band], 0.040f, 0.28f);
+        float retention = state->front_retention;
+
+        state->band_owner[band] = owner;
+        /* Retention taper: keep the object in the front only where the body
+         * lives.  Without it, half of a bright object stays in the front and
+         * measures +1.3 dB in the front 2-16 kHz on real cuts. */
+        if (state->retention_hf_hi_hz > state->retention_hf_lo_hz)
+            retention *= 1.0f - spa_hssr_dsp_smoothstep(
+                (float)kHssrBandEdgeHz[band],
+                state->retention_hf_lo_hz, state->retention_hf_hi_hz);
+        if (!state->bed_attack)
+            state->band_front_keep[band] = 1.0f; /* time-domain retention */
+        else if (state->bed_attack == SPA_HSSR_BED_ATTACK_OWNER)
+            state->band_front_keep[band] = 1.0f - retention *
+                (1.0f - state->attack_collapse *
+                 state->band_attack_weight[band] * owner);
+        else
+            state->band_front_keep[band] = 1.0f - retention;
+    }
 
     for (bin = 0; bin < SPA_HSSR_BINS; ++bin) {
         float left_re = state->fft_re[SPA_HSSR_LEFT][bin];
@@ -1458,13 +1476,7 @@ static void spa_hssr_render_hop(
                 /* With attack handling the front retention lives here per
                  * band and hop; stereo_upmix.c then transfers the whole
                  * source.  OWNER: a hit pulls the object to the rear. */
-                if (state->bed_attack == SPA_HSSR_BED_ATTACK_OWNER)
-                    source_mask *= 1.0f - state->front_retention *
-                        (1.0f - state->attack_collapse *
-                         state->band_attack_weight[band] *
-                         state->band_owner[band]);
-                else if (state->bed_attack)
-                    source_mask *= 1.0f - state->front_retention;
+                source_mask *= state->band_front_keep[band];
                 state->source_fft_re[0][bin] = source_mask * source_l * projected_re;
                 state->source_fft_im[0][bin] = source_mask * source_l * projected_im;
                 state->source_fft_re[1][bin] = source_mask * source_r * projected_re;

@@ -782,6 +782,57 @@ static void test_bed_experiments_end_to_end(void)
     assert(spa_stereo_upmix_init(&experiment, &config) == SPA_STEREO_UPMIX_ERROR_CONFIG);
 }
 
+/* The retention taper is a frequency gate on the front object share: body
+ * bands keep it, treble bands give the object up entirely, the rear is
+ * untouched, and hi <= lo restores the flat behaviour.  Band edges from
+ * hssr_dsp.c: band 12 starts at 1000 Hz, band 17 at 2500 Hz. */
+static void test_retention_hf_taper(void)
+{
+    static struct spa_stereo_upmix flat, tapered;
+    struct spa_stereo_upmix_config config;
+    unsigned band;
+    size_t frame;
+    int front_differs = 0;
+
+    fill_stereo(UINT32_C(0x48465441), 0);
+    make_universal_config(&config, 0);
+    config.bed_delays = 1;
+    config.bed_attack = SPA_HSSR_BED_ATTACK_OWNER;
+    config.front_retention_q15 = 16384;
+    config.attack_collapse_q15 = 24576;
+    config.retention_hf_lo_hz = 0;
+    config.retention_hf_hi_hz = 0;
+    assert(spa_stereo_upmix_init(&flat, &config) == SPA_STEREO_UPMIX_OK);
+    process_blocks(&flat, g_input, g_output_a);
+    config.retention_hf_lo_hz = 1000;
+    config.retention_hf_hi_hz = 2500;
+    assert(spa_stereo_upmix_init(&tapered, &config) == SPA_STEREO_UPMIX_OK);
+    process_blocks(&tapered, g_input, g_output_b);
+    for (band = 0; band < SPA_HSSR_BANDS; ++band) {
+        float keep = tapered._runtime._hssr.band_front_keep[band];
+
+        if (band < 12u)
+            assert(keep == flat._runtime._hssr.band_front_keep[band]);
+        else if (band >= 17u)
+            assert(keep == 1.0f);
+        assert(keep >= 0.0f && keep <= 1.0f);
+    }
+    for (frame = 0; frame < TEST_FRAMES; ++frame) {
+        const int16_t *a = g_output_a + frame * TEST_CHANNELS;
+        const int16_t *b = g_output_b + frame * TEST_CHANNELS;
+
+        /* Only the front transfer may change; rear synthesis must not. */
+        assert(a[SPA_STEREO_UPMIX_CHANNEL_LS] == b[SPA_STEREO_UPMIX_CHANNEL_LS]);
+        assert(a[SPA_STEREO_UPMIX_CHANNEL_RS] == b[SPA_STEREO_UPMIX_CHANNEL_RS]);
+        if (a[SPA_STEREO_UPMIX_CHANNEL_L] != b[SPA_STEREO_UPMIX_CHANNEL_L] ||
+            a[SPA_STEREO_UPMIX_CHANNEL_R] != b[SPA_STEREO_UPMIX_CHANNEL_R])
+            front_differs = 1;
+    }
+    assert(front_differs);
+    config.retention_hf_hi_hz = 24001;
+    assert(spa_stereo_upmix_init(&tapered, &config) == SPA_STEREO_UPMIX_ERROR_CONFIG);
+}
+
 int main(void)
 {
     test_default_validation_and_fail_closed();
@@ -798,6 +849,7 @@ int main(void)
     test_bed_attack_detector();
     test_bed_delay_ring();
     test_bed_experiments_end_to_end();
+    test_retention_hf_taper();
     puts("stereo_upmix_test: OK (Universal + rear shelf + LFE V2)");
     return 0;
 }

@@ -61,6 +61,8 @@ struct options {
     int bed_delays;
     int bed_attack;
     double attack_collapse;
+    long retention_hf_lo_hz;
+    long retention_hf_hi_hz;
     double lfe_gain_db;            /* re SPA_STEREO_UPMIX_LFE_Q15_DEFAULT */
     const char *model_path;
     const char *guard_model_path;
@@ -357,7 +359,7 @@ static void usage(const char *program)
             "usage: %s [--mode off|hssr-universal] "
             "[--model HSSR.bin] "
             "[--lfe off|assist] [--lfe-gain -24..12] [--surround 0.0..0.5] [--front-bass -12..0] "
-            "[--front-retention 0..1] [--bed-delays] [--bed-attack off|owner|front] [--attack-collapse 0..1] "
+            "[--front-retention 0..1] [--bed-delays] [--bed-attack off|owner|front] [--attack-collapse 0..1] [--retention-hf LO:HI] "
             "INPUT.wav OUTPUT.wav\n"
             "  --surround controls OUR rear gain, not the MMI Surround setting.\n",
             program);
@@ -426,6 +428,8 @@ static int parse_options(int argc, char **argv, struct options *options)
     options->bed_delays = 0;
     options->bed_attack = 0;
     options->attack_collapse = 1.0;
+    options->retention_hf_lo_hz = SPA_STEREO_UPMIX_RETENTION_HF_LO_HZ;
+    options->retention_hf_hi_hz = SPA_STEREO_UPMIX_RETENTION_HF_HI_HZ;
     options->lfe_gain_db = 0.0;
     options->model_path = NULL;
     options->guard_model_path = NULL;
@@ -535,6 +539,24 @@ static int parse_options(int argc, char **argv, struct options *options)
             }
             continue;
         }
+        if (strcmp(argument, "--retention-hf") == 0) {
+            char *end;
+            long lo, hi;
+            if (++index >= argc) return 0;
+            lo = strtol(argv[index], &end, 10);
+            if (end == argv[index] || *end != ':') {
+                fprintf(stderr, "error: --retention-hf wants LO:HI in Hz\n");
+                return 0;
+            }
+            hi = strtol(end + 1, &end, 10);
+            if (*end || lo < 0 || hi < 0 || lo > 24000 || hi > 24000) {
+                fprintf(stderr, "error: --retention-hf wants 0..24000 Hz\n");
+                return 0;
+            }
+            options->retention_hf_lo_hz = lo;
+            options->retention_hf_hi_hz = hi;
+            continue;
+        }
         if (strcmp(argument, "--front-bass") == 0) {
             char *end = NULL;
             if (++index >= argc) { fprintf(stderr, "error: --front-bass requires dB\n"); return 0; }
@@ -607,6 +629,8 @@ static void make_upmix_config(const struct options *options,
     config->bed_delays = options->bed_delays ? 1u : 0u;
     config->bed_attack = (uint32_t)options->bed_attack;
     config->attack_collapse_q15 = (uint32_t)lround(options->attack_collapse * 32768.0);
+    config->retention_hf_lo_hz = (uint32_t)options->retention_hf_lo_hz;
+    config->retention_hf_hi_hz = (uint32_t)options->retention_hf_hi_hz;
     config->lfe_gain_q15 = (uint32_t)lround(
         SPA_STEREO_UPMIX_LFE_Q15_DEFAULT * pow(10.0, options->lfe_gain_db / 20.0));
     if (config->lfe_gain_q15 < 1) config->lfe_gain_q15 = 1;
@@ -775,9 +799,12 @@ done:
     fprintf(stderr, "front-retention=%.5f (q15=%u; independent of rear gain)\n",
             (double)config.front_retention_q15 / 32768.0,
             (unsigned)config.front_retention_q15);
-    fprintf(stderr, "bed-delays=%u bed-attack=%u attack-collapse=%.5f\n",
+    fprintf(stderr, "bed-delays=%u bed-attack=%u attack-collapse=%.5f "
+            "retention-hf=%u:%u Hz\n",
             (unsigned)config.bed_delays, (unsigned)config.bed_attack,
-            (double)config.attack_collapse_q15 / 32768.0);
+            (double)config.attack_collapse_q15 / 32768.0,
+            (unsigned)config.retention_hf_lo_hz,
+            (unsigned)config.retention_hf_hi_hz);
     lfe_name = config.lfe_enabled ? "assist" : "off";
     effective_lfe_gain_q15 = config.lfe_enabled ? config.lfe_gain_q15 : 0;
     fprintf(stderr,

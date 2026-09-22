@@ -112,6 +112,8 @@ typedef struct {
     uint32_t hssrBedDelays;           /* 0/1 */
     uint32_t hssrBedAttack;           /* enum spa_hssr_bed_attack */
     uint32_t hssrAttackCollapseQ15;   /* 0..32768, default 32768 */
+    uint32_t hssrRetentionHfLoHz;     /* front retention taper, Hz */
+    uint32_t hssrRetentionHfHiHz;
     int realtimeUpmix;                /* AUDIO_REALTIME_UPMIX, default off */
     uint32_t stereoLfeGainQ15;     /* assist level, 1..16384, default 4096 */
     spa_soundcheck_config_t soundCheck;
@@ -221,6 +223,35 @@ static uint32_t spa_parse_hssr_attack_collapse_q15(void)
     return (uint32_t)(amount * 32768.0 + 0.5);
 }
 
+/* "LO:HI" in Hz for the front retention taper.  Retention restores front body
+ * and, ungated, also keeps the object's treble in the front (measured +1.3 dB
+ * in the front 2-16 kHz); the taper bounds it to the body region. */
+static void spa_parse_hssr_retention_hf(uint32_t *lo_hz, uint32_t *hi_hz)
+{
+    const char *value = getenv(SPA_AUDIO_HSSR_RETENTION_HF_ENV);
+    char *end = 0;
+    unsigned long lo;
+    unsigned long hi;
+
+    *lo_hz = SPA_STEREO_UPMIX_RETENTION_HF_LO_HZ;
+    *hi_hz = SPA_STEREO_UPMIX_RETENTION_HF_HI_HZ;
+    if (!value || !value[0]) return;
+    errno = 0;
+    lo = strtoul(value, &end, 10);
+    if (errno || end == value || *end != ':') goto invalid;
+    value = end + 1;
+    errno = 0;
+    hi = strtoul(value, &end, 10);
+    if (errno || end == value || *end || lo > 24000ul || hi > 24000ul) goto invalid;
+    *lo_hz = (uint32_t)lo;
+    *hi_hz = (uint32_t)hi;
+    return;
+invalid:
+    LOG_ERROR(LOG_MODULE, "audio config: invalid %s='%s'; expected LO:HI Hz; using %u:%u",
+              SPA_AUDIO_HSSR_RETENTION_HF_ENV, getenv(SPA_AUDIO_HSSR_RETENTION_HF_ENV),
+              (unsigned)*lo_hz, (unsigned)*hi_hz);
+}
+
 /* Front PCM bass trim in dB(-12..0). Corrected BANK1 routes L/R to multiple
  * groups including sub and rear; this is not equivalent to the MMI Bass UI. */
 static int32_t spa_parse_stereo_front_bass_db10(void)
@@ -321,6 +352,8 @@ static void spa_audio_config_init_once(void)
     }
     spa_audio_config_value.hssrBedAttack = spa_parse_hssr_bed_attack();
     spa_audio_config_value.hssrAttackCollapseQ15 = spa_parse_hssr_attack_collapse_q15();
+    spa_parse_hssr_retention_hf(&spa_audio_config_value.hssrRetentionHfLoHz,
+                                &spa_audio_config_value.hssrRetentionHfHiHz);
     {
         int present = 0;
         spa_audio_config_value.realtimeUpmix =
@@ -1917,6 +1950,8 @@ static void spa103_render_start(uint32_t generation, int64_t formatIndex, int ha
     upmixConfig.bed_delays = config->hssrBedDelays;
     upmixConfig.bed_attack = config->hssrBedAttack;
     upmixConfig.attack_collapse_q15 = config->hssrAttackCollapseQ15;
+    upmixConfig.retention_hf_lo_hz = config->hssrRetentionHfLoHz;
+    upmixConfig.retention_hf_hi_hz = config->hssrRetentionHfHiHz;
     upmixConfig.lfe_gain_q15 = config->stereoLfeGainQ15;
     if (upmixConfig.backend == SPA_STEREO_UPMIX_HSSR_UNIVERSAL) {
         const struct spa_hssr_model *hssrModel = spa_hssr_runtime_model();
@@ -3929,6 +3964,8 @@ static void spa_rt_upmix_start(snd_pcm_t *handle)
     upmixConfig.bed_delays = config->hssrBedDelays;
     upmixConfig.bed_attack = config->hssrBedAttack;
     upmixConfig.attack_collapse_q15 = config->hssrAttackCollapseQ15;
+    upmixConfig.retention_hf_lo_hz = config->hssrRetentionHfLoHz;
+    upmixConfig.retention_hf_hi_hz = config->hssrRetentionHfHiHz;
     upmixConfig.lfe_gain_q15 = config->stereoLfeGainQ15;
     spa_stereo_upmix_config_set_hssr_model(&upmixConfig, model);
     spa_stereo_upmix_config_set_hssr_guard_model(&upmixConfig, spa_hssr_runtime_guard_model());

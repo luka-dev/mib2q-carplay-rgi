@@ -79,6 +79,9 @@
 #define SPA_AUDIO_HSSR_BED_DELAYS_ENV      "AUDIO_HSSR_BED_DELAYS"     /* on/off */
 #define SPA_AUDIO_HSSR_BED_ATTACK_ENV      "AUDIO_HSSR_BED_ATTACK"     /* off|owner|front */
 #define SPA_AUDIO_HSSR_ATTACK_COLLAPSE_ENV "AUDIO_HSSR_ATTACK_COLLAPSE" /* 0..1, default 1 */
+/* Front retention taper in Hz, "LO:HI"; HI <= LO disables it (retention flat
+ * over frequency).  Default SPA_STEREO_UPMIX_RETENTION_HF_{LO,HI}_HZ. */
+#define SPA_AUDIO_HSSR_RETENTION_HF_ENV "AUDIO_HSSR_RETENTION_HF"
 /* HSSR upmix of the stock realtime (type-100) media PCM, e.g. Spotify, which
  * never gets buffered type 103.  on/off, default off. */
 #define SPA_AUDIO_REALTIME_UPMIX_ENV       "AUDIO_REALTIME_UPMIX"
