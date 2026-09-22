@@ -1,0 +1,10 @@
+The 28 rendered WAVs under pcm/ were deleted on 2026-09-22 to reclaim 923 MB.
+
+They were the per-track PCM6 renders of the matched tuning sweep (bass1,
+dry_bank1, r100_s30, r75_s30 over seven cuts). report.json next to this file
+keeps every metric computed from them, including the per-file hashes, and
+docs/UPMIX_TUNING_SWEEP_2026-09-20.md reads from it. The renders themselves are
+reproducible from the hash-pinned renderer and the 60 s cuts named in the report.
+
+Git history still holds the deleted blobs, so this frees the working tree, not
+the clone.
