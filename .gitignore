@@ -90,3 +90,4 @@ install_MoreIncredibleBash/mod/carplay/root/
 install_MoreIncredibleBash/mod/carplay/PROTECTED.txt
 
 install_MoreIncredibleBash/mod/carplay/carplay_child.json
+*.i64
