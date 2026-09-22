@@ -40,8 +40,12 @@ SHA-256 ab01463e9359f013c4b40f311d630bd20af48d761ad361563cb5246f6bd686ae
 
 ## Build and render
 
+`-ffp-contract=off` keeps the host from fusing multiply-add pairs: the
+QNX/ARMv7 build has no FMA, so without it an offline render is not the
+arithmetic the car performs.
+
 ```sh
-cc -std=c99 -O2 -Wall -Wextra -Werror -Ihook/audio \
+cc -std=c99 -O2 -ffp-contract=off -Wall -Wextra -Werror -Ihook/audio \
   tools/stereo-upmix-render/stereo_upmix_render.c \
   hook/audio/soundcheck.c \
   hook/audio/stereo_upmix.c hook/audio/hssr_dsp.c hook/audio/hssr_neon.c \

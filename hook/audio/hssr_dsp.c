@@ -3,6 +3,13 @@
  */
 #include "hssr_dsp.h"
 
+#if defined(__ARM_NEON) || defined(__ARM_NEON__)
+#include <arm_neon.h>
+#define SPA_HSSR_DSP_HAVE_NEON 1
+#else
+#define SPA_HSSR_DSP_HAVE_NEON 0
+#endif
+
 #include <math.h>
 #include <string.h>
 
@@ -128,8 +135,8 @@ static void spa_hssr_fft(struct spa_hssr_dsp *state,
 {
     float *real = state->fft_re[channel];
     float *imaginary = state->fft_im[channel];
-    const float *twiddle_imaginary = inverse
-        ? state->twiddle_im_inverse : state->twiddle_im;
+    const float *twiddle_imaginary_pass = inverse
+        ? state->pass_twiddle_im_inverse : state->pass_twiddle_im;
     unsigned index;
     unsigned length;
 
@@ -161,18 +168,41 @@ static void spa_hssr_fft(struct spa_hssr_dsp *state,
     }
     for (length = 4; length <= SPA_HSSR_FFT_SIZE; length <<= 1) {
         unsigned half = length >> 1;
-        unsigned stride = SPA_HSSR_FFT_SIZE / length;
+        const float *pass_re = state->pass_twiddle_re + (half - 2);
+        const float *pass_im = twiddle_imaginary_pass + (half - 2);
         unsigned base;
 
         for (base = 0; base < SPA_HSSR_FFT_SIZE; base += length) {
-            unsigned offset;
-            unsigned twiddle = 0;
+            unsigned offset = 0;
 
-            /* The twiddle index advances by the pass stride, so walk it
-             * instead of multiplying it out once per butterfly. */
-            for (offset = 0; offset < half; ++offset, twiddle += stride) {
-                float wr = state->twiddle_re[twiddle];
-                float wi = twiddle_imaginary[twiddle];
+#if SPA_HSSR_DSP_HAVE_NEON
+            /* Four butterflies at a time.  Split real/imaginary arrays and the
+             * regrouped twiddles make every operand a contiguous load, and the
+             * products stay separate multiplies and one subtract, exactly as
+             * in the scalar path below. */
+            for (; offset + 4u <= half; offset += 4u) {
+                unsigned even = base + offset;
+                unsigned odd = even + half;
+                float32x4_t wr = vld1q_f32(pass_re + offset);
+                float32x4_t wi = vld1q_f32(pass_im + offset);
+                float32x4_t odd_r = vld1q_f32(real + odd);
+                float32x4_t odd_i = vld1q_f32(imaginary + odd);
+                float32x4_t even_r = vld1q_f32(real + even);
+                float32x4_t even_i = vld1q_f32(imaginary + even);
+                float32x4_t rotated_r = vsubq_f32(vmulq_f32(wr, odd_r),
+                                                  vmulq_f32(wi, odd_i));
+                float32x4_t rotated_i = vaddq_f32(vmulq_f32(wr, odd_i),
+                                                  vmulq_f32(wi, odd_r));
+
+                vst1q_f32(real + even, vaddq_f32(even_r, rotated_r));
+                vst1q_f32(imaginary + even, vaddq_f32(even_i, rotated_i));
+                vst1q_f32(real + odd, vsubq_f32(even_r, rotated_r));
+                vst1q_f32(imaginary + odd, vsubq_f32(even_i, rotated_i));
+            }
+#endif
+            for (; offset < half; ++offset) {
+                float wr = pass_re[offset];
+                float wi = pass_im[offset];
                 unsigned even = base + offset;
                 unsigned odd = even + half;
                 float odd_re = wr * real[odd] - wi * imaginary[odd];
@@ -246,6 +276,23 @@ void spa_hssr_dsp_prepare(struct spa_hssr_dsp *state)
         next_im = im * fft_step_re + re * fft_step_im;
         re = next_re;
         im = next_im;
+    }
+    {
+        unsigned half;
+
+        for (half = 2; half < SPA_HSSR_FFT_SIZE; half <<= 1) {
+            unsigned stride = (SPA_HSSR_FFT_SIZE / 2) / half;
+            unsigned k;
+
+            for (k = 0; k < half; ++k) {
+                state->pass_twiddle_re[half - 2 + k] =
+                    state->twiddle_re[k * stride];
+                state->pass_twiddle_im[half - 2 + k] =
+                    state->twiddle_im[k * stride];
+                state->pass_twiddle_im_inverse[half - 2 + k] =
+                    state->twiddle_im_inverse[k * stride];
+            }
+        }
     }
 
     {

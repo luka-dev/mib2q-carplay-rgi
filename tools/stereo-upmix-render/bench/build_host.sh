@@ -6,7 +6,9 @@ ROOT="$(cd "$HERE/../../.." && pwd)"
 OUT="$ROOT/build/stereo-upmix-bench/host/stereo_upmix_bench"
 
 mkdir -p "$(dirname "$OUT")"
-cc -O2 -g -std=gnu99 -Wall -Wextra -Werror \
+# -ffp-contract=off: the QNX/ARMv7 target has no FMA, so the host must not
+# fuse multiply-add pairs either, or the two disagree in the last bits.
+cc -O2 -g -std=gnu99 -ffp-contract=off -Wall -Wextra -Werror \
    -fdata-sections -ffunction-sections \
    -I"$ROOT/hook/audio" \
    "$HERE/stereo_upmix_bench.c" "$ROOT/hook/audio/stereo_upmix.c" \

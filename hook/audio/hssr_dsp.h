@@ -82,6 +82,13 @@ struct spa_hssr_dsp {
     /* Negated twiddles and a bit-reversal table: the inverse sign and the
      * permutation leave the hot butterfly/reversal loops. */
     float twiddle_im_inverse[SPA_HSSR_FFT_SIZE / 2];
+    /* The same twiddles again, regrouped per butterfly pass so each pass reads
+     * them consecutively instead of with the pass stride: a vector load needs
+     * four neighbours.  Pass with half h starts at h - 2; the halves 2..256
+     * sum to FFT_SIZE - 2.  Identical values, so the arithmetic is unchanged. */
+    float pass_twiddle_re[SPA_HSSR_FFT_SIZE - 2];
+    float pass_twiddle_im[SPA_HSSR_FFT_SIZE - 2];
+    float pass_twiddle_im_inverse[SPA_HSSR_FFT_SIZE - 2];
     uint16_t bit_reverse[SPA_HSSR_FFT_SIZE];
     float input[2][SPA_HSSR_FFT_SIZE];
     int16_t front_delay[2][SPA_HSSR_FFT_SIZE];

@@ -240,7 +240,7 @@ or driver aim angles.
 First create a six-channel render, for example:
 
 ```sh
-cc -std=c99 -O2 -Wall -Wextra -Werror \
+cc -std=c99 -O2 -ffp-contract=off -Wall -Wextra -Werror \
   -Ihook/audio \
   tools/stereo-upmix-render/stereo_upmix_render.c \
   hook/audio/soundcheck.c \

@@ -72,6 +72,33 @@ and go, Heart-Shaped Box) at the deployed settings.
    butterflies carried four needless products, and the twiddle index is an
    accumulator, not a multiply per butterfly.
 
+## Fourth cut: NEON butterflies, bit-identical on the target
+
+The butterfly operands are a split real/imaginary layout, so they vector-load
+directly; the twiddles did not, because a pass reads them with its own stride.
+They are now regrouped once in `spa_hssr_dsp_prepare` into per-pass contiguous
+tables (the pass with half h starts at h - 2, and the halves 2..256 sum to
+FFT_SIZE - 2), which by itself is bit-identical, and the inner loop then does
+four butterflies per iteration with separate multiplies and one subtract, the
+same operations in the same order as the scalar tail that follows it.
+
+| | mean per block | delta |
+|---|---:|---:|
+| after the first three cuts | 6,950,678 | |
+| NEON butterflies | 6,220,931 | −10.5% |
+| **total against the `--scene` baseline** | **6,220,931** | **−22.6%** |
+
+`spa_hssr_fft` itself went from 20,492,854 to 11,680,987 instructions, −43%.
+
+**Bit-exactness.** The bench checksum is unchanged, and the four 60 s cuts
+render `cmp`-identical when the host is built the way the target computes. That
+qualifier matters: ARMv7 with `-mfpu=neon` has no fused multiply-add, while the
+Mac host contracts `wr*re - wi*im` into one FMA by default, so a contracted
+host build disagrees with both its own NEON path and the car (up to 800 LSB on
+a peak, mean about 1 LSB, from tracker decisions flipping on the last bit).
+The host recipes now pass `-ffp-contract=off`, which makes offline renders equal
+to the vehicle arithmetic again; use it for any future comparison.
+
 ## What is left, measured
 
 After the three cuts, of the audio-path instructions: FFT about 31%, `run_hop`
@@ -79,11 +106,17 @@ about 30%, `process_s16` about 15%, biquads about 9%. Inside `run_hop` the
 inlined `spa_hssr_dsp_smoothstep` is 8.9% and `spa_hssr_dsp_bound` 5.8%; inside
 the FFT the butterfly body is about 61% and the bit reversal 8%.
 
+After the NEON pass the shares are `run_hop` 19.9M, `process_s16` plus the LFE
+crossover 14.5M, the FFT 11.7M and the control worker 5.2M. `run_hop` is now the
+biggest and also the flattest: its hottest single source line is 4.5%
+(`smoothstep`), then 2.9% (`bound`), 2.9% (analysis windowing), about 2%
+(`mix_bed`). There is no second 10% cut hiding in it.
+
 Remaining candidates, none of them free:
 
-- **NEON butterflies** (about 31% of the path, the largest single item). Krait
-  NEON is four floats wide but flushes denormals, and the twiddles are strided,
-  so the win needs a restructured pass order. Not guaranteed bit-identical.
+- **The rest of the vectorisable loops**: analysis windowing, the two
+  overlap-add loops, `pack_hermitian`, `mix_bed`, the trivial first FFT pass.
+  Together about 8% of `run_hop`, so a few percent overall, same technique.
 - **Real-input analysis transform.** Two of the four transforms per hop have a
   zero imaginary part; the N/2 trick halves them, but it changes the arithmetic,
   and the earlier cross-channel packing was rejected because small differences
