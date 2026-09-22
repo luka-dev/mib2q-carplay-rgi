@@ -37,7 +37,7 @@ Notes:
 - **PF firewall:** no patch file is installed. custom.sh makes its own scoped
   in-shell edit opening TCP `6030:6032` across the four stock profiles
   (`pf.conf`, `pf.ecm0.conf`, `pf.mlan0.conf`, `pf.ppp0.conf`; stock copies under
-  `deploy/pf/`), so it needs no `patch`/Python/sed on
+  `deploy/pf/stock/`), so it needs no `patch`/Python/sed on
   the HU.
 
 ## Firmware image identities (whole-file replacements)
