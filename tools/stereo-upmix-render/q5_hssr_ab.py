@@ -7,7 +7,7 @@ runs the ISOLATED-STEM PROBE both ways: each stem alone through HSSR and through
 azimuth mapping -> rear power re input power (dB). This is the probe HSSR was judged
 by historically (vocals -22.9 dB mean); lower = safer. Listening only + probe numbers.
 
-  python q5_hssr_ab.py --renderer build/stereo_upmix_render_current --model models/hssr-selection-v11/hssr_model.bin \
+  python q5_hssr_ab.py --renderer build/stereo_upmix_render_current --model models/hssr-selection-v11/hssr_guard.bin \
       --azimuth-out R/q5-azimuth-scene-a --out R/q5-hssr-ab-a --cache R/q3-cache-a --songs 747d5c98 260c431b d028d7c2 --wav ...
 """
 import argparse, json, subprocess, tempfile, time

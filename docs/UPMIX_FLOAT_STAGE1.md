@@ -95,7 +95,7 @@ separate binary path such as `build/stereo_upmix_render_float`. Then:
 ```sh
 python3 tools/stereo-upmix-render/evaluate_float_candidate.py \
   --renderer build/stereo_upmix_render_float \
-  --model models/hssr-selection-v11/hssr_model.bin \
+  --model models/hssr-selection-v11/hssr_guard.bin \
   --manifest build/reference-audio/lfe-lp48-heldout-source/manifest.json \
   --output build/reference-audio/float-candidate-next-evaluation
 ```

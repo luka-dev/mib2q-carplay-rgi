@@ -128,7 +128,7 @@ def build(args):
     sources = {name: ROOT / "deploy/smartphone_integrator" / name for name in RUNTIME}
     sources.update({
         "hssr_model.bin": ROOT / "models/hssr-q6d-moises-a/hssr_model.bin",
-        "hssr_guard.bin": ROOT / "models/hssr-selection-v11/hssr_model.bin",
+        "hssr_guard.bin": ROOT / "models/hssr-selection-v11/hssr_guard.bin",
         "flag_atlas.rgba": ROOT / "maneuver_render/resources/flag_atlas.rgba",
         "smartphone_integrator": ROOT / "deploy/usb_replug_recovery/bundle_mu1316_p5087/payload/smartphone_integrator",
         "deva-ctrl-qc.so": ROOT / "deploy/deva-ctrl-qc/deva-ctrl-qc-mirror.so",

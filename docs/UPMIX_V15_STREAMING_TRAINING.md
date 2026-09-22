@@ -6,7 +6,7 @@ semantic approval or a deployable replacement. No vehicle writes or promotion.
 
 ## Scope and admission
 
-Baseline: `models/hssr-selection-v11/hssr_model.bin`, 368 inputs, two 160-unit GRUs,
+Baseline: `models/hssr-selection-v11/hssr_guard.bin`, 368 inputs, two 160-unit GRUs,
 264 outputs, 451,464 parameters. Both recurrent layers, six semantic class rows
 per band and all global/LFE rows stay frozen. Only rear-selection and pan rows
 are trainable. Two-stem pseudo-targets do not justify learning backing, hi-hat or

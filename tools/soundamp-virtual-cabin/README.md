@@ -248,7 +248,7 @@ cc -std=c99 -O2 -ffp-contract=off -Wall -Wextra -Werror \
   -lm -o build/stereo_upmix_render
 
 build/stereo_upmix_render \
-  --mode hssr-universal --model models/hssr-selection-v11/hssr_model.bin \
+  --mode hssr-universal --model models/hssr-selection-v11/hssr_guard.bin \
   --lfe assist --surround 0.25 \
   input-stereo.wav build/hssr-universal.wav
 ```

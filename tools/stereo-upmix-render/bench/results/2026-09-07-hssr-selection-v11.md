@@ -76,7 +76,7 @@ SPL without OEM output calibration and measured cabin responses.
 
 ## Model identity and training
 
-- Path: `models/hssr-selection-v11/hssr_model.bin`
+- Path: `models/hssr-selection-v11/hssr_guard.bin`
 - SHA-256: `ab01463e9359f013c4b40f311d630bd20af48d761ad361563cb5246f6bd686ae`
 - Payload CRC32: `48a84364`
 - Parameters: 451,464

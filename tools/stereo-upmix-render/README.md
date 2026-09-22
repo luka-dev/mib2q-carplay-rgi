@@ -34,7 +34,7 @@ semantic controller requires a
 validated HSSR model; the selected V11 separation-supervised model is:
 
 ```text
-models/hssr-selection-v11/hssr_model.bin
+models/hssr-selection-v11/hssr_guard.bin
 SHA-256 ab01463e9359f013c4b40f311d630bd20af48d761ad361563cb5246f6bd686ae
 ```
 
@@ -53,7 +53,7 @@ cc -std=c99 -O2 -ffp-contract=off -Wall -Wextra -Werror -Ihook/audio \
 
 build/stereo_upmix_render \
   --mode hssr-universal \
-  --model models/hssr-selection-v11/hssr_model.bin \
+  --model models/hssr-selection-v11/hssr_guard.bin \
   --lfe assist --surround 0.25 input-stereo.wav output-5.1.wav
 ```
 
@@ -73,13 +73,13 @@ python3 tools/stereo-upmix-render/evaluate_reference_corpus.py \
   --manifest build/reference-audio/public-authored-corpus/manifest.json \
   --output build/reference-audio/hssr-universal-eval \
   --lfe assist --surround 0.25 \
-  --hssr-model models/hssr-selection-v11/hssr_model.bin
+  --hssr-model models/hssr-selection-v11/hssr_guard.bin
 
 python3 tools/stereo-upmix-render/evaluate_stereo_stress_corpus.py \
   --renderer build/stereo_upmix_render \
   --manifest build/reference-audio/local-stereo-stress/manifest.json \
   --output build/reference-audio/hssr-universal-stress \
-  --hssr-model models/hssr-selection-v11/hssr_model.bin
+  --hssr-model models/hssr-selection-v11/hssr_guard.bin
 ```
 
 Teacher-stem selectivity is measured separately by
@@ -101,5 +101,5 @@ scripts/run_tests.sh
 tools/stereo-upmix-render/bench/build_host.sh
 build/stereo-upmix-bench/host/stereo_upmix_bench \
   --backend hssr-universal \
-  --model models/hssr-selection-v11/hssr_model.bin
+  --model models/hssr-selection-v11/hssr_guard.bin
 ```

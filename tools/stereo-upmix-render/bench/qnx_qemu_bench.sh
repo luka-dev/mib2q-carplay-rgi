@@ -14,7 +14,7 @@ BACKEND=hssr-universal
 ASYNC_ARG=""
 PACING_ARG=""
 SCENE_ARG=""
-MODEL="${HSSR_MODEL:-$ROOT/models/hssr-selection-v11/hssr_model.bin}"
+MODEL="${HSSR_MODEL:-$ROOT/models/hssr-selection-v11/hssr_guard.bin}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in

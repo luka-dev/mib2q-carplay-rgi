@@ -46,7 +46,7 @@ def main():
             '--include-vocal-negatives','--include-instrumental-positives','--counterfactual-mixes',
             '--input-gains-db',0,-6,-12)
         phase('training-routing-head-pilot')
-        baseline=ROOT/'models/hssr-selection-v11/hssr_model.bin'
+        baseline=ROOT/'models/hssr-selection-v11/hssr_guard.bin'
         run('train_hssr.py','--cache-only','--extra-cache-root',cache,'--init-model',baseline,
             '--output',out,'--runtime-aware','--routing-head-only','--sequence',192,'--burn-in',64,
             '--control-delay',1,'--device','cpu','--cpu-threads',2,'--loss-profile','selection-v11',

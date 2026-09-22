@@ -13,7 +13,7 @@
 # checkpoints dropped into these dirs stay ignored.
 !/models/hssr-selection-v11/
 /models/hssr-selection-v11/*
-!/models/hssr-selection-v11/hssr_model.bin
+!/models/hssr-selection-v11/hssr_guard.bin
 !/models/hssr-q6d-moises-a/
 /models/hssr-q6d-moises-a/*
 !/models/hssr-q6d-moises-a/hssr_model.bin
