@@ -1,0 +1,219 @@
+{
+  "main": {
+    "id": "9deab4268090fe9e",
+    "type": "split",
+    "children": [
+      {
+        "id": "02744877a126afb9",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "11c61c8da921d3ba",
+            "type": "leaf",
+            "state": {
+              "type": "empty",
+              "state": {},
+              "icon": "lucide-file",
+              "title": "New tab"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "7f33f90b3d425731",
+    "type": "split",
+    "children": [
+      {
+        "id": "5c781510d2f67da2",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "64d157d0e07cba24",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "5cf3a9a289065d86",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "2391e2fcbe7423b6",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "f8b417b532d44caf",
+    "type": "split",
+    "children": [
+      {
+        "id": "002814dbb82615ce",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "111948abbb9b3ff1",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks"
+            }
+          },
+          {
+            "id": "9005e1101222e136",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links"
+            }
+          },
+          {
+            "id": "4124139f90951270",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "be5a66f7c1a88e32",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "9db800894c4660a9",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "64d157d0e07cba24",
+  "lastOpenFiles": [
+    "Home.md",
+    "Reference/Record Replay Tooling.md",
+    "Reference/Hook to Java Bus.md",
+    "Audio/Discrete 5.1 Routing.md",
+    "Reference/iOS CarPlay Spatial Wireformat.md",
+    "Cluster and RGI/Phone Tab Gating.md",
+    "Cluster and RGI/Third-party Nav Apps.md",
+    "Audio/Dolby Atmos.md",
+    "Reference",
+    "Landmines.md",
+    "Build and Deploy/RE Artifacts.md",
+    "Cluster and RGI/HUD Renderer.md",
+    "Build and Deploy/VIN Protection.md",
+    "Audio/Virtual Cabin and Amp RE.md",
+    "AltScreen and Video/Reconnect and Lifecycle.md",
+    "Build and Deploy/Deploy and Release.md",
+    "Connect and USB/iOS Version Gate.md",
+    "Cluster and RGI/RGI and BAP Bridge.md",
+    "AltScreen and Video/Cluster Loader.md",
+    "Connect and USB/PF Firewall.md",
+    "Build and Deploy/Build System.md",
+    "AltScreen and Video/Video Pipeline.md",
+    "Connect and USB/USB Replug Recovery.md",
+    "Audio/HSSR Model.md",
+    "Cluster and RGI/Cluster Contexts.md",
+    "Build and Deploy/Build and Deploy MOC.md",
+    "Build and Deploy",
+    "Connect and USB/USB and NCM Connect.md",
+    "Cluster and RGI",
+    "Connect and USB",
+    "AltScreen and Video",
+    "Audio"
+  ]
+}
