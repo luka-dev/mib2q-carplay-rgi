@@ -49,6 +49,20 @@ struct spa_hssr_control_provider {
     int (*receive_guard)(void *context, float control[SPA_HSSR_OUTPUTS]);
 };
 
+/* Interleaved per-bin state; scene_lr is the smoothed (PL-PR)/(PL+PR). */
+struct spa_hssr_bin_state {
+    float scene_pl;
+    float scene_pr;
+    float scene_cross_re;
+    float scene_cross_im;
+    float scene_coh;
+    float scene_lr;
+    float mask;
+    float ambience_mask;
+    float universal_mask;
+    float object_pan;
+};
+
 struct spa_hssr_object_slot {
     /* Positive pan is left.  Universal keeps one persistent coherent object
      * per rear half-plane, the identifiable case for two-channel input. */
@@ -94,15 +108,11 @@ struct spa_hssr_dsp {
     float band_attack_weight[SPA_HSSR_BANDS];
     float band_owner[SPA_HSSR_BANDS];
     /* Research: per-bin smoothed statistics for continuous azimuth relocation. */
-    float bin_scene_pl[SPA_HSSR_BINS];
-    float bin_scene_pr[SPA_HSSR_BINS];
-    float bin_scene_cross_re[SPA_HSSR_BINS];
-    float bin_scene_cross_im[SPA_HSSR_BINS];
     float previous_magnitude[SPA_HSSR_BINS];
-    float bin_mask[SPA_HSSR_BINS];
-    float bin_ambience_mask[SPA_HSSR_BINS];
-    float bin_universal_mask[SPA_HSSR_BINS];
-    float bin_object_pan[SPA_HSSR_BINS];
+    /* Per-bin state of the two hot loops, interleaved: a bin's ten values sit
+     * in one or two cache lines instead of ten separate 1 KB streams, which
+     * matters on a 16 KB L1. Same arithmetic, so the output is bit-identical. */
+    struct spa_hssr_bin_state bin[SPA_HSSR_BINS];
     float band_slow_energy[SPA_HSSR_BANDS];
     float band_mask[SPA_HSSR_BANDS];
     float band_pan[SPA_HSSR_BANDS];
@@ -111,8 +121,6 @@ struct spa_hssr_dsp {
     float band_object_boost[SPA_HSSR_BANDS];
     float band_focus_rescue[SPA_HSSR_BANDS];
     float band_universal_safety[SPA_HSSR_BANDS];
-    float bin_scene_lr[SPA_HSSR_BINS];   /* smoothed (PL-PR)/(PL+PR) per bin */
-    float bin_scene_coh[SPA_HSSR_BINS];
     struct spa_hssr_object_slot object_slot[SPA_HSSR_OBJECT_SLOTS];
     float scene_confidence;
     float scene_stability;

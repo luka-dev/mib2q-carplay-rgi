@@ -11,7 +11,8 @@ from the shared DSP without changing the design.
 | build | estimated retired instructions / 1024-frame block |
 |---|---:|
 | before | 9,711,018 |
-| after | **7,856,061 (-19.1%)** |
+| packed synthesis + transform cleanups + band hoist | 7,856,061 (-19.1%) |
+| + interleaved per-bin state | **7,833,140 (-19.3%)** |
 
 QNX 6.5 ARMv7, GCC 8.5, single-thread TCG, `-icount shift=0`, n=32 blocks after
 4 warmup, `--async-controller` (the production split, as the car runs it).
@@ -62,6 +63,30 @@ The residual 4 LSB is float reassociation plus occasional threshold crossings in
 the int16 rounding and the linked rear limiter; it is bounded and self-clearing
 within the limiter's ~42 ms release. No scene decision changed, which the
 identical band metrics confirm.
+
+## Interleaved per-bin state
+
+The mask and steering loops carried ten separate 1 KB per-bin arrays
+(`bin_scene_pl/pr/cross_re/cross_im/coh/lr`, `bin_mask`, `bin_ambience_mask`,
+`bin_universal_mask`, `bin_object_pan`), so each bin touched ten streams. They
+are now one `struct spa_hssr_bin_state` array, 40 bytes per bin, so a bin's
+state sits in one or two cache lines. `previous_magnitude` and `bin_band` stay
+separate: they belong to the analysis loop, which would otherwise pull the whole
+40-byte record for one field.
+
+The arithmetic is untouched, and the rendered output is **bit-identical** to the
+preceding build on three held-out cuts (`cmp`, not a tolerance). The instruction
+count improved 0.29% from cheaper addressing (one base pointer for ten fields).
+The intended win is cache behaviour on the APQ8064's 16 KB L1 data cache, which
+`-icount` does not model at all, so it can only be confirmed on the car from the
+`worst_us` figure the hook already logs. Total DSP state is 147 KB.
+
+## Measured and rejected: cheaper steering norm
+
+`(1+p)^2 + (1-p)^2` is identically `2 + 2p^2`, so the two squares and the sum in
+the source/steering normalisation are redundant. Implemented and measured:
+**-0.08%**, i.e. nothing, because GCC already eliminated them. Reverted rather
+than perturb the floats for no gain.
 
 ## Car-side expectation
 

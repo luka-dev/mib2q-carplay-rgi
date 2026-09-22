@@ -1248,7 +1248,7 @@ static void spa_hssr_render_hop(
             float contrast;
             float ridge_gate;
             float best_score = 0.0f;
-            float best_pan = state->bin_object_pan[bin];
+            float best_pan = state->bin[bin].object_pan;
             float object_target;
             float ambience_target;
             float universal_target;
@@ -1303,29 +1303,29 @@ static void spa_hssr_render_hop(
                 const float ema = 0.06f;
                 float coh;
 
-                state->bin_scene_pl[bin] += ema * (pl - state->bin_scene_pl[bin]);
-                state->bin_scene_pr[bin] += ema * (pr - state->bin_scene_pr[bin]);
-                state->bin_scene_cross_re[bin] += ema *
-                    (left_re * right_re + left_im * right_im - state->bin_scene_cross_re[bin]);
-                state->bin_scene_cross_im[bin] += ema *
-                    (left_im * right_re - left_re * right_im - state->bin_scene_cross_im[bin]);
+                state->bin[bin].scene_pl += ema * (pl - state->bin[bin].scene_pl);
+                state->bin[bin].scene_pr += ema * (pr - state->bin[bin].scene_pr);
+                state->bin[bin].scene_cross_re += ema *
+                    (left_re * right_re + left_im * right_im - state->bin[bin].scene_cross_re);
+                state->bin[bin].scene_cross_im += ema *
+                    (left_im * right_re - left_re * right_im - state->bin[bin].scene_cross_im);
                 coh = spa_hssr_dsp_bound(
-                    sqrtf((state->bin_scene_cross_re[bin] * state->bin_scene_cross_re[bin] +
-                           state->bin_scene_cross_im[bin] * state->bin_scene_cross_im[bin]) /
-                          (state->bin_scene_pl[bin] * state->bin_scene_pr[bin] + 1.0e-12f)),
+                    sqrtf((state->bin[bin].scene_cross_re * state->bin[bin].scene_cross_re +
+                           state->bin[bin].scene_cross_im * state->bin[bin].scene_cross_im) /
+                          (state->bin[bin].scene_pl * state->bin[bin].scene_pr + 1.0e-12f)),
                     0.0f, 1.0f);
-                state->bin_scene_coh[bin] = coh;
+                state->bin[bin].scene_coh = coh;
                 object_target *= 0.50f + 0.50f *
                     spa_hssr_dsp_smoothstep(coh, 0.25f, 0.55f);
             }
-            alpha = object_target > state->bin_mask[bin]
+            alpha = object_target > state->bin[bin].mask
                 ? 0.50f : 0.020f;
-            state->bin_mask[bin] += alpha *
-                (object_target - state->bin_mask[bin]);
+            state->bin[bin].mask += alpha *
+                (object_target - state->bin[bin].mask);
 
             if (best_score > 0.01f)
-                state->bin_object_pan[bin] += 0.18f *
-                    (best_pan - state->bin_object_pan[bin]);
+                state->bin[bin].object_pan += 0.18f *
+                    (best_pan - state->bin[bin].object_pan);
 
             /* Keep only a quiet decorrelated safety bed when no coherent
              * object is accepted.  It preserves some envelopment without
@@ -1333,10 +1333,10 @@ static void spa_hssr_render_hop(
             ambience_target = band_ambience_scale[band] * (1.0f - best_score);
             ambience_target = spa_hssr_dsp_bound(
                 ambience_target, 0.0f, 0.04f);
-            alpha = ambience_target > state->bin_ambience_mask[bin]
+            alpha = ambience_target > state->bin[bin].ambience_mask
                 ? 0.10f : 0.015f;
-            state->bin_ambience_mask[bin] += alpha *
-                (ambience_target - state->bin_ambience_mask[bin]);
+            state->bin[bin].ambience_mask += alpha *
+                (ambience_target - state->bin[bin].ambience_mask);
 
             /* Universal is the no-dead-rear policy.  Prefer the explicit
              * half-plane object above; only while that path is weak, retain a
@@ -1364,15 +1364,15 @@ static void spa_hssr_render_hop(
                  * behind through the decorrelated bed, under the semantic
                  * veto, never below 220 Hz. */
                 float diffuse = band_diffuse_scale[band] *
-                    (1.0f - spa_hssr_dsp_smoothstep(state->bin_scene_coh[bin], 0.25f, 0.60f)) *
+                    (1.0f - spa_hssr_dsp_smoothstep(state->bin[bin].scene_coh, 0.25f, 0.60f)) *
                     (1.0f - best_score);
 
                 if (diffuse > universal_target) universal_target = diffuse;
             }
-            alpha = universal_target > state->bin_universal_mask[bin]
+            alpha = universal_target > state->bin[bin].universal_mask
                 ? 0.28f : 0.012f;
-            state->bin_universal_mask[bin] += alpha *
-                (universal_target - state->bin_universal_mask[bin]);
+            state->bin[bin].universal_mask += alpha *
+                (universal_target - state->bin[bin].universal_mask);
         }
     }
     for (band = 0; band < SPA_HSSR_BANDS; ++band)
@@ -1390,7 +1390,7 @@ static void spa_hssr_render_hop(
         float pan;
 
         band = state->bin_band[bin];
-        mask = state->bin_mask[bin];
+        mask = state->bin[bin].mask;
         mask *= 1.0f + state->band_object_boost[band];
         {
             float source_l;
@@ -1405,18 +1405,18 @@ static void spa_hssr_render_hop(
             float extraction_r;
             float side_re = 0.5f * (left_re - right_re);
             float side_im = 0.5f * (left_im - right_im);
-            float ambience = state->bin_ambience_mask[bin];
-            float universal = state->bin_universal_mask[bin];
+            float ambience = state->bin[bin].ambience_mask;
+            float universal = state->bin[bin].universal_mask;
             {
                 float pl = left_re * left_re + left_im * left_im;
                 float pr = right_re * right_re + right_im * right_im;
-                state->bin_scene_lr[bin] += 0.05f *
-                    ((pl - pr) / (pl + pr + 1.0e-9f) - state->bin_scene_lr[bin]);
+                state->bin[bin].scene_lr += 0.05f *
+                    ((pl - pr) / (pl + pr + 1.0e-9f) - state->bin[bin].scene_lr);
             }
 
             mask = spa_hssr_dsp_bound(mask, 0.0f, 1.45f);
             pan = spa_hssr_dsp_bound(
-                state->bin_object_pan[bin], -0.95f, 0.95f);
+                state->bin[bin].object_pan, -0.95f, 0.95f);
             /* Extract with the measured source vector and hard-steer only the
              * output vector, keeping unrelated material out of the rear. */
             source_l = 1.0f + pan;
@@ -1499,7 +1499,7 @@ static void spa_hssr_render_hop(
                 float wr = state->twiddle_re[rotation];
                 float wi = -state->twiddle_im[rotation];
                 float fallback_pan = 0.72f * spa_hssr_dsp_bound(
-                    3.0f * state->bin_scene_lr[bin], -1.0f, 1.0f);
+                    3.0f * state->bin[bin].scene_lr, -1.0f, 1.0f);
                 float fallback_l = sqrtf(1.0f + fallback_pan);
                 float fallback_r = sqrtf(1.0f - fallback_pan);
                 float rotated_l_re = wr * mid_re - wi * mid_im;
