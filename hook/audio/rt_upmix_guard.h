@@ -24,11 +24,14 @@
 #define SPA_RT_UPMIX_BUDGET_NS  UINT64_C(10000000)
 #define SPA_RT_UPMIX_SLOW_LIMIT 4u
 #define SPA_RT_UPMIX_WARMUP_PERIODS 16u
-/* Come back after ten seconds and double the wait on every further failure, so
- * a unit that genuinely cannot keep up settles at about one attempt every three
- * minutes instead of flapping. */
+/* Come back after ten seconds, then twenty, then every thirty.  A failed
+ * attempt costs about 320 ms of periods at the limit (the excused warmup plus
+ * the four consecutive overruns it takes to give up again), so even against a
+ * unit that never keeps up the cap spends about one percent of the time
+ * trying, and a transient loses the rears for ten seconds rather than for the
+ * rest of the track.  Periods are 16 ms. */
 #define SPA_RT_UPMIX_RETRY_PERIODS     625u
-#define SPA_RT_UPMIX_RETRY_MAX_PERIODS 10000u
+#define SPA_RT_UPMIX_RETRY_MAX_PERIODS 1875u
 
 typedef struct {
     int disabled;            /* the DSP is skipped while this is set */
