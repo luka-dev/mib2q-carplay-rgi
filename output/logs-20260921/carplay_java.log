@@ -1,0 +1,225 @@
+[CP/W][DisplayManager] cluster platform: kombiType=1 sysConst(541)=2 carplayCtx=true
+[CP/I][ClusterLayers] layout=de.esolutions.hmi.widgets.audi.evo.high.LayoutMIB2HighB9Sport inTube=(984,139) crop=(0,0,328x180) popup=(1091,110) crop=(59,27,210x153) smallStage=(-476,0)
+[CP/I][Bus] started (server 127.0.0.1:19810)
+[CP/I][AltCtl] listening :19832
+[CP/I][App] transport up (bus always-on) build=MHI2Q-2026-05-16-445-gf005bfb
+[CP/I][CoverArt] Started (subscribed to EVT_COVERART)
+[CP/I][App] onActivate async apply generation=1 build=MHI2Q-2026-05-16-445-gf005bfb
+[CP/I][AltScreen] VC style=sport stockSkin=1 reason=module-start resendCompact=false
+[CP/W][Bus] send dropped (no connection) type=0x111
+[CP/I][AltScreen] viewArea send mode=fullscreen reason=module-start queued=false
+[CP/W][Bus] send dropped (no connection) type=0x116
+[CP/I][AltScreen] ready (DisplayManager acquired, ctx 81 pending renderer frame)
+[CP/I][App] started altscreen
+[CP/I][BAPBridge] Initialized successfully (AppConnectorNavi only): de.audi.app.combi.bap.app.navi.AppConnectorNavi
+[CP/I][RouteGuidance] Initialized
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/W][BAPBridge] Pre-gate: PENDING — Navigation.getInstance() is null
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/I][Bus] hook connected
+[CP/I][AltScreen] viewArea send mode=fullscreen reason=hook-hello queued=true
+[CP/I][AltScreen] viewArea ack mode=fullscreen status=-6735
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/I][CoverArt] New cover art: crc=f0cd81e0 artId=-254967328 path=/var/app/icab/tmp/37/coverart.png
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/I][CoverArt] New cover art: crc=41de39a0 artId=1105082784 path=/var/app/icab/tmp/37/coverart.png
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/I][AltCtl] queued layout view=fullscreen style=sport rawSkin=1 reason=renderer-connect
+[CP/I][AltCtl] altscreen_render connected generation=1
+[CP/I][AltCtl] -> layout view=fullscreen style=sport rawSkin=1 generation=1
+[CP/I][AltCtl] VIDEO_OFF generation=1
+[CP/I][AltScreen] rendererReady=true
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/I][ClusterLayers] apply de.esolutions.hmi.widgets.audi.evo.high.LayoutMIB2HighB9Sport style=sport view=full stage=popup backing=102 src=(59,27 210x153) dst=(1091,110) smallStageOffset=(-476,0) [not applied]
+[CP/I][AltScreen] cluster -> ctx 81 (active=true)
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/I][AltCtl] VIDEO_ON generation=1
+[CP/I][AltScreen] videoAvailable=true connected=true
+[CP/I][AltScreen] rgi send active=false reason=republish queued=true
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/W][BAPBridge] ClusterAccess: Navigation.getInstance() returned null
+[CP/W][BAPBridge] ClusterAccess: ClusterService is null
+[CP/W][BAPBridge] Pre-gate: PENDING — RouteManager is null
+[CP/I][BAPBridge] KOMO service acquired
+[CP/I][BAPBridge] ClusterAccess init OK
+[CP/I][BAPBridge] Pre-gate: csRef.setRouteGuidanceAborted() ok
+[CP/I][BAPBridge] Pre-gate: DONE — native route already absent
+[CP/I][AltStatusGate] native route-guidance/init-state gate installed on Navigation service edge
+[CP/I][BAPBridge] REPLACE: takeover engaged (stock nav cancelled, RG gate shut)
+[CP/I][RouteGuidance] Started (subscribed to EVT_RGD_UPDATE, sync=true)
+[CP/I][App] started rgd
+[CP/I][MfwInput] raw MFW OK listener ready (key=40 mapContext=unavailable, using CarPlay RGI state)
+[CP/I][App] started mfw-input
+[CP/I][App] all modules started (3)
+[CP/I][BAPBridge] CR: stopped (renderer blanked; stays up; server socket persists)
+[CP/I][BAPBridge] Shutdown (full teardown)
+[CP/I][RouteGuidance] Stopped
+[CP/I][BAPBridge] REPLACE: takeover disengaged (stock RG gate reopened)
+[CP/I][App] Navigation service changed - rebinding RGD
+[CP/I][BAPBridge] Initialized successfully (AppConnectorNavi only): de.audi.app.combi.bap.app.navi.AppConnectorNavi
+[CP/I][RouteGuidance] Initialized
+[CP/I][BAPBridge] KOMO service acquired
+[CP/I][BAPBridge] ClusterAccess init OK
+[CP/I][BAPBridge] Pre-gate: csRef.setRouteGuidanceAborted() ok
+[CP/I][BAPBridge] Pre-gate: DONE — native route already absent
+[CP/I][BAPBridge] REPLACE: takeover engaged (stock nav cancelled, RG gate shut)
+[CP/I][RouteGuidance] Started (subscribed to EVT_RGD_UPDATE, sync=true)
+[CP/I][App] started rgd
+[CP/I][App] all modules started (3)
+[CP/I][RouteGuidance] RG activate: route_state=1 maneuver_count=18 visible_in_app=1 source_supports_rg=1
+[CP/I][RendererServer] listening on 127.0.0.1:19800
+[CP/I][BAPBridge] Started (rgType=0, cr=false)
+[CP/I][AltScreen] RGI presentation=true -> ctx 80 (map+maneuver)
+[CP/I][AltScreen] rgi send active=true reason=republish queued=true
+[CP/I][BAPBridge] Approach zone ENTER (dist=45m, highway=false, prepThr=1500, barDen=225)
+[CP/I][AltScreen] cluster -> ctx 80 (active=true)
+[CP/I][BAPBridge] Approach zone ENTER (dist=608m, highway=false, prepThr=1500, barDen=225)
+[CP/I][RendererServer] renderer connected from /127.0.0.1:65476
+[CP/I][RendererServer] renderer ready
+[CP/I][RendererServer] renderer frame-ready
+[CP/I][BAPBridge] CR: started
+[CP/I][RouteGuidance] RG presentation CONFIRMED from cached snapshot
+[CP/I][AltCtl] queued layout view=sportscreen style=sport rawSkin=1 reason=view-change
+[CP/I][AltScreen] viewArea send mode=sportscreen reason=NAV_VIEW_SIZE_CHOICE queued=true
+[CP/I][ClusterLayers] apply de.esolutions.hmi.widgets.audi.evo.high.LayoutMIB2HighB9Sport style=sport view=single stage=inTube backing=101 src=(0,0 328x180) dst=(984,139) smallStageOffset=(-476,0) [not applied]
+[CP/I][AltCtl] -> layout view=sportscreen style=sport rawSkin=1 generation=1
+[CP/I][RouteGuidance] viewArea info phase reset=0 queued: smallscreen
+[CP/I][BAPBridge] route-info phase=0 applied view=smallscreen
+[CP/I][AltScreen] viewArea ack mode=sportscreen status=0
+[CP/I][AltCtl] queued layout view=fullscreen style=sport rawSkin=1 reason=view-change
+[CP/I][AltScreen] viewArea send mode=fullscreen reason=NAV_VIEW_SIZE_CHOICE queued=true
+[CP/I][ClusterLayers] apply de.esolutions.hmi.widgets.audi.evo.high.LayoutMIB2HighB9Sport style=sport view=full stage=popup backing=102 src=(59,27 210x153) dst=(1091,110) smallStageOffset=(-476,0) [not applied]
+[CP/I][AltCtl] -> layout view=fullscreen style=sport rawSkin=1 generation=1
+[CP/I][RouteGuidance] viewArea info phase reset=0 queued: fullscreen
+[CP/I][AltScreen] viewArea ack mode=fullscreen status=0
+[CP/I][BAPBridge] route-info phase=0 applied view=fullscreen
+[CP/I][CoverArt] New cover art: crc=4fbb34a artId=83604298 path=/var/app/icab/tmp/37/coverart.png
+[CP/I][CoverArt] New cover art: crc=90669ae9 artId=-1872323863 path=/var/app/icab/tmp/37/coverart.png
+[CP/I][CoverArt] New cover art: crc=9984d26 artId=160976166 path=/var/app/icab/tmp/37/coverart.png
+[CP/I][MfwInput] MFW OK pressed board=4 mapTab=true
+[CP/I][RouteGuidance] route-info phase=1 queued
+[CP/I][BAPBridge] route-info phase=1 applied view=fullscreen
+[CP/I][MfwInput] MFW OK pressed board=4 mapTab=true
+[CP/I][RouteGuidance] route-info phase=0 queued
+[CP/I][BAPBridge] route-info phase=0 applied view=fullscreen
+[CP/I][AltScreen] MFL roller -> altScreen zoom step=-1 queued=true
+[CP/I][AltScreen] MFL roller -> altScreen zoom step=-1 queued=true
+[CP/I][AltScreen] MFL roller -> altScreen zoom step=-1 queued=true
+[CP/I][AltScreen] MFL roller -> altScreen zoom step=-1 queued=true
+[CP/I][AltScreen] MFL roller -> altScreen zoom step=1 queued=true
+[CP/I][AltScreen] MFL roller -> altScreen zoom step=1 queued=true
+[CP/I][AltScreen] MFL roller -> altScreen zoom step=1 queued=true
+[CP/I][AltScreen] MFL roller -> altScreen zoom step=1 queued=true
+[CP/I][AltScreen] MFL roller -> altScreen zoom step=1 queued=true
+[CP/I][AltScreen] MFL roller -> altScreen zoom step=-1 queued=true
+[CP/I][RouteGuidance] RG deactivate: route_state=0 maneuver_count=0 visible_in_app=1 source_supports_rg=1
+[CP/I][BAPBridge] CR: stopped (renderer blanked; stays up; server socket persists)
+[CP/I][BAPBridge] rgActive overlay released (restored false)
+[CP/I][RendererServer] writer thread exiting
+[CP/I][RendererServer] accept thread exiting
+[CP/I][BAPBridge] Shutdown (full teardown)
+[CP/I][AltScreen] RGI presentation=false -> holding ctx 80 for 250ms
+[CP/I][AltScreen] RGI hide hold complete -> ctx 81 (map only)
+[CP/I][AltScreen] rgi send active=false reason=republish queued=true
+[CP/I][AltScreen] cluster -> ctx 81 (active=true)
+[CP/I][RouteGuidance] RG activate: route_state=3 maneuver_count=0 visible_in_app=1 source_supports_rg=1
+[CP/I][RendererServer] listening on 127.0.0.1:19800
+[CP/I][BAPBridge] Started (rgType=0, cr=false)
+[CP/I][AltScreen] RGI presentation=true -> ctx 80 (map+maneuver)
+[CP/I][AltScreen] rgi send active=true reason=republish queued=true
+[CP/I][AltScreen] cluster -> ctx 80 (active=true)
+[CP/I][RendererServer] renderer connected from /127.0.0.1:65453
+[CP/I][RendererServer] renderer ready
+[CP/I][RendererServer] renderer frame-ready
+[CP/I][BAPBridge] CR: started
+[CP/I][RouteGuidance] RG presentation CONFIRMED from cached snapshot
+[CP/I][CoverArt] New cover art: crc=7b14d9cc artId=2064964044 path=/var/app/icab/tmp/37/coverart.png
+[CP/I][AltCtl] queued layout view=sportscreen style=sport rawSkin=1 reason=view-change
+[CP/I][AltScreen] viewArea send mode=sportscreen reason=NAV_VIEW_SIZE_CHOICE queued=true
+[CP/I][ClusterLayers] apply de.esolutions.hmi.widgets.audi.evo.high.LayoutMIB2HighB9Sport style=sport view=single stage=inTube backing=101 src=(0,0 328x180) dst=(984,139) smallStageOffset=(-476,0) [not applied]
+[CP/I][AltCtl] -> layout view=sportscreen style=sport rawSkin=1 generation=1
+[CP/I][RouteGuidance] viewArea info phase reset=0 queued: smallscreen
+[CP/I][BAPBridge] route-info phase=0 applied view=smallscreen
+[CP/I][AltScreen] viewArea ack mode=sportscreen status=0
+[CP/I][MfwInput] MFW OK pressed board=4 mapTab=true
+[CP/I][RouteGuidance] route-info phase=1 queued
+[CP/I][BAPBridge] route-info phase=1 applied view=smallscreen
+[CP/I][MfwInput] MFW OK pressed board=4 mapTab=true
+[CP/I][RouteGuidance] route-info phase=0 queued
+[CP/I][BAPBridge] route-info phase=0 applied view=smallscreen
+[CP/I][BAPBridge] Approach zone ENTER (dist=2995m, highway=true, prepThr=3000, barDen=450)
+[CP/I][BAPBridge] Approach zone ENTER (dist=702m, highway=false, prepThr=1500, barDen=225)
+[CP/I][CoverArt] New cover art: crc=b198ece4 artId=-1315377948 path=/var/app/icab/tmp/37/coverart.png
+[CP/I][CoverArt] New cover art: crc=1fc0e5bd artId=532735421 path=/var/app/icab/tmp/37/coverart.png
+[CP/I][BAPBridge] Approach zone ENTER (dist=2976m, highway=true, prepThr=3000, barDen=450)
+[CP/I][CoverArt] New cover art: crc=fe2e62fe artId=-30514434 path=/var/app/icab/tmp/37/coverart.png
+[CP/I][MfwInput] MFW OK pressed board=4 mapTab=true
+[CP/I][RouteGuidance] route-info phase=1 queued
+[CP/I][BAPBridge] route-info phase=1 applied view=smallscreen
+[CP/I][MfwInput] MFW OK pressed board=4 mapTab=true
+[CP/I][RouteGuidance] route-info phase=0 queued
+[CP/I][BAPBridge] route-info phase=0 applied view=smallscreen
+[CP/I][AltCtl] queued layout view=fullscreen style=sport rawSkin=1 reason=view-change
+[CP/I][AltScreen] viewArea send mode=fullscreen reason=NAV_VIEW_SIZE_CHOICE queued=true
+[CP/I][ClusterLayers] apply de.esolutions.hmi.widgets.audi.evo.high.LayoutMIB2HighB9Sport style=sport view=full stage=popup backing=102 src=(59,27 210x153) dst=(1091,110) smallStageOffset=(-476,0) [not applied]
+[CP/I][AltCtl] -> layout view=fullscreen style=sport rawSkin=1 generation=1
+[CP/I][RouteGuidance] viewArea info phase reset=0 queued: fullscreen
+[CP/I][BAPBridge] route-info phase=0 applied view=fullscreen
+[CP/I][AltScreen] viewArea ack mode=fullscreen status=0
+[CP/I][AltScreen] MFL roller -> altScreen zoom step=-1 queued=true
+[CP/I][MfwInput] MFW OK pressed board=4 mapTab=true
+[CP/I][RouteGuidance] route-info phase=1 queued
+[CP/I][BAPBridge] route-info phase=1 applied view=fullscreen
+[CP/I][MfwInput] MFW OK pressed board=4 mapTab=true
+[CP/I][RouteGuidance] route-info phase=0 queued
+[CP/I][BAPBridge] route-info phase=0 applied view=fullscreen
+[CP/I][AltCtl] queued layout view=sportscreen style=sport rawSkin=1 reason=view-change
+[CP/I][AltScreen] viewArea send mode=sportscreen reason=NAV_VIEW_SIZE_CHOICE queued=true
+[CP/I][ClusterLayers] apply de.esolutions.hmi.widgets.audi.evo.high.LayoutMIB2HighB9Sport style=sport view=single stage=inTube backing=101 src=(0,0 328x180) dst=(984,139) smallStageOffset=(-476,0) [not applied]
+[CP/I][AltCtl] -> layout view=sportscreen style=sport rawSkin=1 generation=1
+[CP/I][RouteGuidance] viewArea info phase reset=0 queued: smallscreen
+[CP/I][BAPBridge] route-info phase=0 applied view=smallscreen
+[CP/I][AltScreen] viewArea ack mode=sportscreen status=0
+[CP/I][CoverArt] New cover art: crc=41de39a0 artId=1105082784 path=/var/app/icab/tmp/37/coverart.png
+[CP/I][CoverArt] New cover art: crc=7fbefb4b artId=2143222603 path=/var/app/icab/tmp/37/coverart.png
+[CP/I][CoverArt] New cover art: crc=2163bc29 artId=560184361 path=/var/app/icab/tmp/37/coverart.png
+[CP/I][BAPBridge] Approach zone ENTER (dist=126m, highway=false, prepThr=1500, barDen=137)
+[CP/I][BAPBridge] Approach zone ENTER (dist=224m, highway=false, prepThr=1500, barDen=225)
+[CP/I][BAPBridge] Approach zone ENTER (dist=421m, highway=false, prepThr=1500, barDen=225)
+[CP/I][BAPBridge] Approach zone ENTER (dist=18m, highway=true, prepThr=3000, barDen=450)
+[CP/I][CoverArt] New cover art: crc=fe2e62fe artId=-30514434 path=/var/app/icab/tmp/37/coverart.png
+[CP/I][CoverArt] New cover art: crc=90669ae9 artId=-1872323863 path=/var/app/icab/tmp/37/coverart.png
+[CP/I][CoverArt] New cover art: crc=7f54bb21 artId=2136259361 path=/var/app/icab/tmp/37/coverart.png
+[CP/I][CoverArt] New cover art: crc=c79db226 artId=-945966554 path=/var/app/icab/tmp/37/coverart.png
