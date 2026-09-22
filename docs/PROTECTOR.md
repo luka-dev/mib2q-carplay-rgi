@@ -53,14 +53,13 @@ The VIN is provided pre-build; stamping happens inside the build.
 ```sh
 ./scripts/build_hook_protected.sh WAUZZZF45HA149423          # stamped binaries -> build/protected_<VIN>/
 HOOK_AUDIO=0 LOG=0 ./scripts/build_hook_protected.sh <VIN>   # beta: no audio, no logs
-./scripts/package_protected.sh WAUZZZF45HA149423             # lay out the install tree
 ```
 
-Builds produce binaries; packaging is a separate step. `build_hook_protected.sh`
-compiles and VIN-stamps the two `.so` into `build/protected_<VIN>/`;
-`package_protected.sh` folds those stamped binaries plus the runtime assets
-(model, firmware, renderers) into the M.I.B. rootfs. `build_hook_protected.sh`
-and `build_hook.sh` share one compile+verify core
+`build_hook_protected.sh` compiles and VIN-stamps the two `.so` into
+`build/protected_<VIN>/` — binaries only. Assemble the install tree by hand from
+there plus the runtime assets (model, firmware, renderers); the source→on-unit
+map is in `docs/RELEASE_ARTIFACTS.md`. `build_hook_protected.sh` and
+`build_hook.sh` share one compile+verify core
 (`scripts/build_hook_common.sh`), so the protected `.so` can never drift from
 the shipping one. `build_hook.sh` itself is unprotected only.
 

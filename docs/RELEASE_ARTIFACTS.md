@@ -1,55 +1,80 @@
 # CarPlay release artifacts — MU1316
 
-Artifacts stay as loose files in `build/`. No ZIP is produced or release uploaded.
-`python3 scripts/package_mib.py` adds runtime/configuration copies and the verified
-SI/DEVA images without recompiling or replacing existing native outputs or JAR.
-`python3 scripts/package_mib.py --check` verifies the prepared file set.
+There is no packaging script anymore: build scripts drop their outputs into a
+`build/` subfolder, and a release is assembled **by hand** from a few source
+folders (`build/`, `models/`, `deploy/`). This doc is the source→destination map
+`package_mib.py` used to encode. custom.sh installs a manually-staged tree.
 
-## Files to attach to a release
+## Where each file comes from, and where it lands on the unit
 
-Use the allowlist in `build/SHA256SUMS`, plus `CKSUMS` and this guide. The
-`../mod/custom.sh` entry refers to `install_MoreIncredibleBash/mod/custom.sh`.
-Do not publish the entire development `build/` tree: it also contains test
-outputs, intermediate builds and vehicle captures.
+The on-unit column is the path under `/` (custom.sh copies `carplay/root/` onto
+`/`, or you place files there yourself).
 
-| Artifact | Purpose / HU target |
-| --- | --- |
-| `libcarplay_hook.so`, `libcarplay_apac.so` | `/mnt/app/root/hooks/` |
-| `maneuver_render`, `altscreen_render`, `flag_atlas.rgba` | `/mnt/app/root/hooks/` |
-| `hssr_model.bin` | Copy of the selected shipping V11 model; `/mnt/app/root/hooks/` |
-| `carplay_startup.sh`, `carplay_monitor.sh`, `carplay_processes.sh`, `carplay_cleanup.sh` | Runtime copies; `/mnt/app/root/hooks/` |
-| `carplay_hook.jar` | `/mnt/app/eso/hmi/lsd/jars/` |
-| `carplay_child.json` | Fragment used to replace only `children.carplay` in SI JSON |
-| `smartphone_integrator` | Verified final re-arm image; `/mnt/app/eso/bin/apps/smartphone_integrator` |
-| `patch_si_rearm.py` | Optional host-side reproduction/reversal tool; Python is not needed on the HU |
-| `deva-ctrl-qc.so` | Final **mirror** driver; `/mnt/app/armle/lib/dll/deva-ctrl-qc.so` |
-| `carplay_pf.patch` | Reference diff for four stock PF profiles, opening TCP `6030:6032` |
-| `release.json`, `CKSUMS`, `SHA256SUMS` | Build identity and integrity checks |
+| File | Source in the repo | On-unit path |
+| --- | --- | --- |
+| `libcarplay_hook.so` | `build/unprotected/` (or `build/protected_<VIN>/`, stamped) | `/mnt/app/root/hooks/` |
+| `libcarplay_apac.so` | `build/unprotected/` (or `build/protected_<VIN>/`); omitted for a `HOOK_AUDIO=0` build | `/mnt/app/root/hooks/` |
+| `maneuver_render` | `build/` (`scripts/build_renderers.sh`) | `/mnt/app/root/hooks/` |
+| `altscreen_render` | `build/` (`scripts/build_renderers.sh`) | `/mnt/app/root/hooks/` |
+| `carplay_hook.jar` | `build/` (`scripts/build_java.sh`) | `/mnt/app/eso/hmi/lsd/jars/` |
+| `hssr_model.bin` | `models/hssr-q6d-moises-a/hssr_model.bin` (q6d, main control model) | `/mnt/app/root/hooks/` |
+| `hssr_guard.bin` | `models/hssr-selection-v11/hssr_guard.bin` (V11 vocal guard) | `/mnt/app/root/hooks/` |
+| `flag_atlas.rgba` | `maneuver_render/resources/flag_atlas.rgba` | `/mnt/app/root/hooks/` |
+| `carplay_startup.sh` | `deploy/smartphone_integrator/` | `/mnt/app/root/hooks/` |
+| `carplay_monitor.sh` | `deploy/smartphone_integrator/` | `/mnt/app/root/hooks/` |
+| `carplay_processes.sh` | `deploy/smartphone_integrator/` | `/mnt/app/root/hooks/` |
+| `carplay_cleanup.sh` | `deploy/smartphone_integrator/` | `/mnt/app/root/hooks/` |
+| `smartphone_integrator` | `deploy/usb_replug_recovery/bundle_mu1316_p5087/payload/smartphone_integrator` | `/mnt/app/eso/bin/apps/smartphone_integrator` (whole-file replace) |
+| `deva-ctrl-qc.so` | `deploy/deva-ctrl-qc/deva-ctrl-qc-mirror.so` (rename to `deva-ctrl-qc.so`) | `/mnt/app/armle/lib/dll/deva-ctrl-qc.so` (whole-file replace) |
+| `carplay_child.json` | `deploy/smartphone_integrator/carplay_child.json` | installer resource (not a `/` file); custom.sh splices only `children.carplay` into the SI JSON |
+| `patch_si_rearm.py` | `deploy/usb_replug_recovery/patch_si_rearm.py` | host-side reproduction/reversal tool; not needed on the HU |
 
-The installer uses its own scoped shell PF edit so it needs no `patch`, Python,
-sed or awk on the HU. SI and DEVA installation accepts only the exact known
-stock/final MU1316 images; unknown versions stop before writes. Their original
-images are backed up as `<target>.carplay-stock` before same-partition rename.
-Existing final patches are preserved without claiming ownership of them.
+Notes:
+- The two `.so`, `maneuver_render`, `altscreen_render` and `carplay_hook.jar` are
+  the compiled outputs — build them first (`build_hook.sh` /
+  `build_hook_protected.sh`, `build_renderers.sh`, `build_java.sh`). Everything
+  else is copied from its canonical home above, unchanged.
+- **PF firewall:** no patch file is installed. custom.sh makes its own scoped
+  in-shell edit opening TCP `6030:6032` across the four stock profiles
+  (`pf.conf`, `pf.ecm0.conf`, `pf.mlan0.conf`, `pf.ppp0.conf`; stock copies under
+  `deploy/smartphone_integrator/pf_stock/`), so it needs no `patch`/Python/sed on
+  the HU.
 
-SI's final SHA-256 is
-`606236a81c7c4dafda6fdd08fe6eb27c43252796784da25d9760a7d552ee2af3`,
-matching the 2026-09-16 HU readback. DEVA's final mirror SHA-256 is
-`398e7213be4e966719eed5ff9736fb9142f11e161033f01263f29db640e06355`;
-the three-step build is documented in `deploy/deva-ctrl-qc/BUILD_CHAIN.md`.
+## Firmware image identities (whole-file replacements)
+
+SI and DEVA installation accepts only the exact known final MU1316 images;
+unknown versions stop before writes. Originals are backed up as
+`<target>.carplay-stock` before same-partition rename.
+
+- `smartphone_integrator` SHA-256
+  `606236a81c7c4dafda6fdd08fe6eb27c43252796784da25d9760a7d552ee2af3`
+  (2026-09-16 HU readback).
+- `deva-ctrl-qc.so` (final mirror) SHA-256
+  `398e7213be4e966719eed5ff9736fb9142f11e161033f01263f29db640e06355`;
+  three-step build in `deploy/deva-ctrl-qc/BUILD_CHAIN.md`.
+
+Model identities: q6d `hssr_model.bin`
+`96abe57d9ee703f2e39c0231de97580c303ce896ce044b7450c14240002b0a0e`,
+V11 guard `hssr_guard.bin`
+`ab01463e9359f013c4b40f311d630bd20af48d761ad361563cb5246f6bd686ae`.
 
 ## SD layout
 
-For installation, copy the contents of `install_MoreIncredibleBash/` over the
-M.I.B. SD root, then put the release artifacts in `/build/` on that card:
+Copy the contents of `install_MoreIncredibleBash/` over the M.I.B. SD root, then
+put the release artifacts in `/build/` on that card:
 
 ```text
 SD1/
   mod/custom.sh
-  build/                       release files listed above
+  build/                       the files listed above
 ```
 
 For removal, copy the contents of `uninstall_MoreIncredibleBash/` over the card
-instead, replacing `/mod/custom.sh`. Removal does not need the build files.
-Both use **GEM → M.I.B. → Advanced Settings → Run Custom Script** with CarPlay
+instead, replacing `/mod/custom.sh`. Removal does not need the build files. Both
+use **GEM → M.I.B. → Advanced Settings → Run Custom Script** with CarPlay
 disconnected. Both leave the reboot to the owner.
+
+For a VIN-locked (protected) release, assemble the same map by hand — the only
+difference is the two `.so` come from `build/protected_<VIN>/` (compiled and
+VIN-stamped by `build_hook_protected.sh`) instead of `build/unprotected/`. See
+`docs/PROTECTOR.md`.
