@@ -124,3 +124,56 @@ Remaining candidates, none of them free:
 - **`smoothstep` divisions.** One division per call on runtime bounds. Cheap in
   instructions, expensive in Krait cycles; replacing them with precomputed
   reciprocals is not bit-identical.
+
+## Fifth cut: the guard matrix in vectors, and what the deadline looks like now
+
+The early-out does almost nothing for the case that actually matters. Measured
+on the rendered PCM6 of the same four cuts, per 768-frame period (one QSA period
+at 48 kHz, 16 ms), the share of frames that must run the whole guard is:
+
+| track | median period | worst period |
+|---|---:|---:|
+| Boost Up | 0.4% | 89.8% |
+| Crazy Train | 10.0% | 70.3% |
+| take your vibes and go | 36.2% | 94.0% |
+| Heart-Shaped Box | 0.0% | 66.3% |
+
+So on the loud passage that trips the realtime guard, 66-94% of frames pay the
+full 8x6 product. `kInputMatrix` is input-major, so one row is the eight bus
+coefficients of one channel: the product is now six scaled row accumulations in
+NEON instead of forty-eight scalar ones, with each product rounded separately
+and the channels accumulated in the same order. The benchmark also compiled
+`stereo_upmix.c` without `-mfpu=neon` while the shipping hook compiles every
+source with it, which is fixed here too.
+
+Measured against the pre-optimization build (48b9851) on the identical
+workload, with the early-out forced off to model a fully loud period:
+
+| | per 1024-frame block | delta |
+|---|---:|---:|
+| before, any frame | 8,039,373 | |
+| now, typical | 6,024,357 | −25.1% |
+| now, loud period (guard always full) | 6,228,611 | −22.5% |
+
+## Against the vehicle deadline
+
+The realtime path gets `SPA_RT_UPMIX_BUDGET_NS` = 8 ms per 768-frame period
+(16 ms of audio) and disables itself after four consecutive periods over it.
+What the car logged on the pre-optimization build, five sessions:
+
+| session | periods | upmixed | worst | disabled |
+|---|---:|---:|---:|---|
+| 1 | 11,625 | 9,463 | 11,079 us | yes |
+| 2 | 575 | 72 | 9,064 us | yes |
+| 3 | 1,662 | 1,662 | 8,057 us | no |
+| 4 | 15,075 | 9,928 | 9,064 us | yes |
+| 5 | 5,902 | 5,902 | 10,071 us | no |
+
+Scaling those by the measured −22.5% of the loud-period case gives 6.2, 7.0,
+7.0, 7.8 and 8.6 ms. Four of the five observed worst cases move under the 8 ms
+line and the largest still grazes it. This is an estimate: it assumes time
+scales with retired instructions, while NEON changes the instruction mix and
+the removed divisions cost more cycles than instructions, so the real margin
+should be better than this. Only the unit settles it, and it already logs
+`worst_us` at every stop.
+

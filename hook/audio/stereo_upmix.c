@@ -4,6 +4,13 @@
 
 #include "stereo_upmix.h"
 
+#if defined(__ARM_NEON) || defined(__ARM_NEON__)
+#include <arm_neon.h>
+#define SPA_UPMIX_HAVE_NEON 1
+#else
+#define SPA_UPMIX_HAVE_NEON 0
+#endif
+
 #include <limits.h>
 #include <math.h>
 #include <string.h>
@@ -364,11 +371,36 @@ static void spa_upmix_cabin_guard_s16(int16_t sample[6], int adjust_lfe)
     }
     for (ch = 0; ch < 6; ++ch)
         if (fabsf((float)sample[ch]) > peak) peak = fabsf((float)sample[ch]);
+#if SPA_UPMIX_HAVE_NEON
+    /* The table is input-major, so one row is the eight bus coefficients of one
+     * channel: the whole 8x6 product is six scaled row accumulations instead of
+     * forty-eight scalar ones.  Each product is rounded on its own and the
+     * channels accumulate in the same order, so the result is the scalar one.
+     * This is the per-frame cost that the early-out cannot remove on loud
+     * material, which is exactly when the realtime deadline is at risk. */
+    {
+        float32x4_t low = vdupq_n_f32(0.0f);
+        float32x4_t high = vdupq_n_f32(0.0f);
+        float bus_value[8];
+
+        for (ch = 0; ch < 6; ++ch) {
+            float32x4_t scale = vdupq_n_f32((float)sample[ch]);
+
+            low = vaddq_f32(low, vmulq_f32(vld1q_f32(&kInputMatrix[ch][0]), scale));
+            high = vaddq_f32(high, vmulq_f32(vld1q_f32(&kInputMatrix[ch][4]), scale));
+        }
+        vst1q_f32(bus_value, low);
+        vst1q_f32(bus_value + 4, high);
+        for (bus = 0; bus < 8; ++bus)
+            if (fabsf(bus_value[bus]) > peak) peak = fabsf(bus_value[bus]);
+    }
+#else
     for (bus = 0; bus < 8; ++bus) {
         float value = 0.0f;
         for (ch = 0; ch < 6; ++ch) value += kInputMatrix[ch][bus] * sample[ch];
         if (fabsf(value) > peak) peak = fabsf(value);
     }
+#endif
     if (peak > kCabinSampleLimit) {
         /* Eight S16 units reserve more than the largest row's aggregate
          * truncation error, including cancellation and float roundoff. */
