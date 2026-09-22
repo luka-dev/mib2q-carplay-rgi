@@ -2321,18 +2321,11 @@ public class BAPBridge {
     }
 
     /**
-     * Returns local timezone offset in seconds for a given UTC epoch.
-     *
-     * JVM default TZ on MHI2Q is UTC, so TimeZone.getDefault() is useless.
-     * Instead: get HU raw offset (no DST) via fw, find a matching Java TZ
-     * with DST support, and use its getOffset() for DST-aware result.
-     * Fallback: HU raw offset (correct except during DST transitions).
-     */
-    /**
-     * Convert UTC epoch millis to local epoch millis using HU's DST-aware offset.
-     * Uses IFrameworkAccess.convertUTCTimeToLocalTime() which internally adds
-     * utcOffsetMilliseconds (timezone + DST from UTCOffset DSI callback).
-     * Always correct regardless of region or DST status.
+     * Convert UTC epoch millis to HU local epoch millis.  The JVM default TZ on
+     * MHI2Q is UTC, so TimeZone.getDefault() cannot be used; instead
+     * IFrameworkAccess.convertUTCTimeToLocalTime() adds the HU's
+     * utcOffsetMilliseconds (timezone + DST from the UTCOffset DSI callback).
+     * Without a framework the input is returned unchanged (UTC).
      */
     private static long convertUtcToLocalMs(long utcMs) {
         try {
