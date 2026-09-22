@@ -177,3 +177,52 @@ the removed divisions cost more cycles than instructions, so the real margin
 should be better than this. Only the unit settles it, and it already logs
 `worst_us` at every stop.
 
+## Sixth cut: the remaining straight loops, and where the free wins end
+
+`run_hop` was the biggest item left, so it was profiled by region rather than by
+line (same plugin, addresses aggregated over source ranges):
+
+| region of `run_hop` | share |
+|---|---:|
+| masking loop (per bin, branchy) | 22.1% |
+| slot loop (per bin, branchy) | 21.0% |
+| inlined helpers: bound, finite, smoothstep, sigmoid | 17.1% |
+| `mix_bed` | 10.9% |
+| rest of `analyze_hop` | 8.2% |
+| Hermitian packing and overlap-add | 7.0% |
+| analysis windowing | 5.0% |
+| object slot update | 4.1% |
+
+Three of those are straight loops over contiguous data once the ring indices are
+handled properly, and all three are now vectorised:
+
+- **analysis windowing**: the ring read is two contiguous runs, not 512 masked
+  indices, so the window multiply and the zeroing of the imaginary half go four
+  at a time.
+- **overlap-add** (both loops): same split, with the infinity/NaN flush of
+  `spa_hssr_dsp_finite` expressed as a vector select on the exponent field.
+- **`mix_bed`**: everything in it is constant within a band and bands are
+  contiguous bin runs, so it now walks the runs, hoists the row, fade, delay
+  positions and cross coefficients per band, and leaves four loads, a few
+  products and four stores per bin.
+
+| | typical block | loud-period block |
+|---|---:|---:|
+| before all of this (48b9851) | 8,039,373 | 8,039,373 |
+| after the cabin guard, biquad and FFT work | 6,024,357 | 6,228,611 |
+| after these three loops | 5,726,857 | 5,931,362 |
+| **total** | **−28.8%** | **−26.2%** |
+
+Checksum `0xe500b91a9b2c337a` and four `cmp`-identical 60 s renders again.
+
+Scaled onto the vehicle log, the five observed worst periods become 8.2, 7.4,
+6.7, 6.7 and 5.9 ms against the 8 ms budget: four sit clear of it and the worst
+still touches it.
+
+**Where the free wins end.** What remains in `run_hop` is the masking loop, the
+slot loop and the helpers they inline, about 60% of it. Those are per-bin with
+data-dependent branches, per-slot decisions and early exits; vectorising them
+means restructuring the decisions themselves, which is exactly the class of
+change that flipped tracker decisions in the rejected analysis-packing
+experiment. Nothing else in the path is a straight loop over contiguous data.
+

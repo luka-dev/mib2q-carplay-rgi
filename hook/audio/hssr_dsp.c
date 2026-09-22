@@ -95,6 +95,64 @@ static float spa_hssr_dsp_finite(float value)
     return value;
 }
 
+/* The three loops below walk whole contiguous runs of bins or samples with no
+ * branches, which is what a vector unit wants.  Each keeps the scalar order of
+ * operations, so the result is identical on a target without fused
+ * multiply-add, and falls back to the same scalar body elsewhere. */
+static void spa_hssr_window_run(float *destination_re, float *destination_im,
+                                const float *input, const float *window,
+                                unsigned count)
+{
+    unsigned i = 0;
+
+#if SPA_HSSR_DSP_HAVE_NEON
+    for (; i + 4u <= count; i += 4u) {
+        vst1q_f32(destination_re + i,
+                  vmulq_f32(vld1q_f32(input + i), vld1q_f32(window + i)));
+        vst1q_f32(destination_im + i, vdupq_n_f32(0.0f));
+    }
+#endif
+    for (; i < count; ++i) {
+        destination_re[i] = input[i] * window[i];
+        destination_im[i] = 0.0f;
+    }
+}
+
+/* out += source * window, with the same infinity/NaN flush as the scalar
+ * spa_hssr_dsp_finite: an exponent field of all ones becomes zero. */
+static void spa_hssr_overlap_run(float *out_a, float *out_b,
+                                 const float *source_a, const float *source_b,
+                                 const float *window, unsigned count)
+{
+    unsigned i = 0;
+
+#if SPA_HSSR_DSP_HAVE_NEON
+    {
+        const uint32x4_t exponent = vdupq_n_u32(UINT32_C(0x7f800000));
+        const float32x4_t zero = vdupq_n_f32(0.0f);
+
+        for (; i + 4u <= count; i += 4u) {
+            float32x4_t w = vld1q_f32(window + i);
+            float32x4_t a = vaddq_f32(vld1q_f32(out_a + i),
+                                      vmulq_f32(vld1q_f32(source_a + i), w));
+            float32x4_t b = vaddq_f32(vld1q_f32(out_b + i),
+                                      vmulq_f32(vld1q_f32(source_b + i), w));
+
+            vst1q_f32(out_a + i, vbslq_f32(
+                vceqq_u32(vandq_u32(vreinterpretq_u32_f32(a), exponent), exponent),
+                zero, a));
+            vst1q_f32(out_b + i, vbslq_f32(
+                vceqq_u32(vandq_u32(vreinterpretq_u32_f32(b), exponent), exponent),
+                zero, b));
+        }
+    }
+#endif
+    for (; i < count; ++i) {
+        out_a[i] = spa_hssr_dsp_finite(out_a[i] + source_a[i] * window[i]);
+        out_b[i] = spa_hssr_dsp_finite(out_b[i] + source_b[i] * window[i]);
+    }
+}
+
 static float spa_hssr_dsp_sigmoid(float value)
 {
     float square;
@@ -938,7 +996,6 @@ static int spa_hssr_analyze_hop(
     struct spa_hssr_dsp *state,
     struct spa_hssr_band_accumulator bands[SPA_HSSR_BANDS])
 {
-    unsigned sample;
     unsigned bin;
     unsigned band;
     int full_frame = state->frames_seen >= SPA_HSSR_FFT_SIZE;
@@ -946,14 +1003,19 @@ static int spa_hssr_analyze_hop(
     memset(bands, 0, sizeof(*bands) * SPA_HSSR_BANDS);
     {
         unsigned channel;
+        /* The ring read is two contiguous runs, not 512 masked indices. */
+        const unsigned start = state->input_position & (SPA_HSSR_FFT_SIZE - 1);
+        const unsigned first = SPA_HSSR_FFT_SIZE - start;
+
         for (channel = 0; channel < 2; ++channel) {
-            for (sample = 0; sample < SPA_HSSR_FFT_SIZE; ++sample) {
-                unsigned history = (state->input_position + sample) &
-                                   (SPA_HSSR_FFT_SIZE - 1);
-                state->fft_re[channel][sample] =
-                    state->input[channel][history] * state->analysis_window[sample];
-                state->fft_im[channel][sample] = 0.0f;
-            }
+            spa_hssr_window_run(state->fft_re[channel], state->fft_im[channel],
+                                state->input[channel] + start,
+                                state->analysis_window, first);
+            spa_hssr_window_run(state->fft_re[channel] + first,
+                                state->fft_im[channel] + first,
+                                state->input[channel],
+                                state->analysis_window + first,
+                                SPA_HSSR_FFT_SIZE - first);
             spa_hssr_fft(state, channel, 0);
         }
     }
@@ -1137,45 +1199,115 @@ static float spa_hssr_attack_step(float energy, float *history, float *weight)
 static void spa_hssr_mix_bed(struct spa_hssr_dsp *state)
 {
     const unsigned pos = state->bed_ring_pos & (SPA_HSSR_BED_RING - 1);
-    unsigned bin;
+    unsigned bin = 0;
 
-    for (bin = 0; bin < SPA_HSSR_BINS; ++bin) {
-        unsigned band = state->bin_band[bin];
-        float w = state->bed_attack ? state->band_attack_weight[band] : 0.0f;
-        float owner = state->bed_attack == SPA_HSSR_BED_ATTACK_OWNER
+    /* Everything here is constant within a band and the bands are contiguous
+     * runs of bins, so walk the runs: the per-bin work becomes four loads, a
+     * few products and four stores with no lookups, which vectorises directly.
+     * Same operations per bin and in the same order as before. */
+    while (bin < SPA_HSSR_BINS) {
+        const unsigned band = state->bin_band[bin];
+        unsigned end = bin;
+        float w;
+        float owner;
+        float row;
+        float fade;
+        float d;
+        float x;
+        unsigned pl;
+        unsigned pr;
+        unsigned i;
+
+        while (end < SPA_HSSR_BINS && state->bin_band[end] == band) ++end;
+        w = state->bed_attack ? state->band_attack_weight[band] : 0.0f;
+        owner = state->bed_attack == SPA_HSSR_BED_ATTACK_OWNER
             ? state->band_owner[band] : 0.0f;
-        float row = 1.0f - 0.61f * w * (1.0f - owner);
-        float fade = 1.0f - w * owner;
-        float l_re = state->bed_re[0][bin];
-        float l_im = state->bed_im[0][bin];
-        float r_re = state->bed_re[1][bin];
-        float r_im = state->bed_im[1][bin];
+        row = 1.0f - 0.61f * w * (1.0f - owner);
+        fade = 1.0f - w * owner;
+        d = 0.60f * fade;
+        x = 0.14f * fade;
+        pl = (pos + SPA_HSSR_BED_RING - kHssrBedDelayL[band]) &
+             (SPA_HSSR_BED_RING - 1);
+        pr = (pos + SPA_HSSR_BED_RING - kHssrBedDelayR[band]) &
+             (SPA_HSSR_BED_RING - 1);
 
-        state->bed_ring_re[0][pos][bin] = l_re;
-        state->bed_ring_im[0][pos][bin] = l_im;
-        state->bed_ring_re[1][pos][bin] = r_re;
-        state->bed_ring_im[1][pos][bin] = r_im;
-        if (state->bed_delays) {
-            unsigned pl = (pos + SPA_HSSR_BED_RING - kHssrBedDelayL[band]) &
-                          (SPA_HSSR_BED_RING - 1);
-            unsigned pr = (pos + SPA_HSSR_BED_RING - kHssrBedDelayR[band]) &
-                          (SPA_HSSR_BED_RING - 1);
-            float d = 0.60f * fade;
-            float x = 0.14f * fade;
-            float dl_re = state->bed_ring_re[0][pl][bin];
-            float dl_im = state->bed_ring_im[0][pl][bin];
-            float dr_re = state->bed_ring_re[1][pr][bin];
-            float dr_im = state->bed_ring_im[1][pr][bin];
-
-            l_re = 0.79f * l_re + d * dl_re - x * dr_re;
-            l_im = 0.79f * l_im + d * dl_im - x * dr_im;
-            r_re = 0.79f * r_re + d * dr_re - x * dl_re;
-            r_im = 0.79f * r_im + d * dr_im - x * dl_im;
+        for (i = bin; i < end; ++i) {
+            state->bed_ring_re[0][pos][i] = state->bed_re[0][i];
+            state->bed_ring_im[0][pos][i] = state->bed_im[0][i];
+            state->bed_ring_re[1][pos][i] = state->bed_re[1][i];
+            state->bed_ring_im[1][pos][i] = state->bed_im[1][i];
         }
-        state->fft_re[SPA_HSSR_LEFT][bin] += row * l_re;
-        state->fft_im[SPA_HSSR_LEFT][bin] += row * l_im;
-        state->fft_re[SPA_HSSR_RIGHT][bin] += row * r_re;
-        state->fft_im[SPA_HSSR_RIGHT][bin] += row * r_im;
+        i = bin;
+#if SPA_HSSR_DSP_HAVE_NEON
+        {
+            const float32x4_t keep = vdupq_n_f32(0.79f);
+            const float32x4_t delayed = vdupq_n_f32(d);
+            const float32x4_t cross = vdupq_n_f32(x);
+            const float32x4_t scale = vdupq_n_f32(row);
+
+            for (; i + 4u <= end; i += 4u) {
+                float32x4_t l_re = vld1q_f32(&state->bed_re[0][i]);
+                float32x4_t l_im = vld1q_f32(&state->bed_im[0][i]);
+                float32x4_t r_re = vld1q_f32(&state->bed_re[1][i]);
+                float32x4_t r_im = vld1q_f32(&state->bed_im[1][i]);
+
+                if (state->bed_delays) {
+                    float32x4_t dl_re = vld1q_f32(&state->bed_ring_re[0][pl][i]);
+                    float32x4_t dl_im = vld1q_f32(&state->bed_ring_im[0][pl][i]);
+                    float32x4_t dr_re = vld1q_f32(&state->bed_ring_re[1][pr][i]);
+                    float32x4_t dr_im = vld1q_f32(&state->bed_ring_im[1][pr][i]);
+
+                    l_re = vsubq_f32(vaddq_f32(vmulq_f32(keep, l_re),
+                                               vmulq_f32(delayed, dl_re)),
+                                     vmulq_f32(cross, dr_re));
+                    l_im = vsubq_f32(vaddq_f32(vmulq_f32(keep, l_im),
+                                               vmulq_f32(delayed, dl_im)),
+                                     vmulq_f32(cross, dr_im));
+                    r_re = vsubq_f32(vaddq_f32(vmulq_f32(keep, r_re),
+                                               vmulq_f32(delayed, dr_re)),
+                                     vmulq_f32(cross, dl_re));
+                    r_im = vsubq_f32(vaddq_f32(vmulq_f32(keep, r_im),
+                                               vmulq_f32(delayed, dr_im)),
+                                     vmulq_f32(cross, dl_im));
+                }
+                vst1q_f32(&state->fft_re[SPA_HSSR_LEFT][i],
+                          vaddq_f32(vld1q_f32(&state->fft_re[SPA_HSSR_LEFT][i]),
+                                    vmulq_f32(scale, l_re)));
+                vst1q_f32(&state->fft_im[SPA_HSSR_LEFT][i],
+                          vaddq_f32(vld1q_f32(&state->fft_im[SPA_HSSR_LEFT][i]),
+                                    vmulq_f32(scale, l_im)));
+                vst1q_f32(&state->fft_re[SPA_HSSR_RIGHT][i],
+                          vaddq_f32(vld1q_f32(&state->fft_re[SPA_HSSR_RIGHT][i]),
+                                    vmulq_f32(scale, r_re)));
+                vst1q_f32(&state->fft_im[SPA_HSSR_RIGHT][i],
+                          vaddq_f32(vld1q_f32(&state->fft_im[SPA_HSSR_RIGHT][i]),
+                                    vmulq_f32(scale, r_im)));
+            }
+        }
+#endif
+        for (; i < end; ++i) {
+            float l_re = state->bed_re[0][i];
+            float l_im = state->bed_im[0][i];
+            float r_re = state->bed_re[1][i];
+            float r_im = state->bed_im[1][i];
+
+            if (state->bed_delays) {
+                float dl_re = state->bed_ring_re[0][pl][i];
+                float dl_im = state->bed_ring_im[0][pl][i];
+                float dr_re = state->bed_ring_re[1][pr][i];
+                float dr_im = state->bed_ring_im[1][pr][i];
+
+                l_re = 0.79f * l_re + d * dl_re - x * dr_re;
+                l_im = 0.79f * l_im + d * dl_im - x * dr_im;
+                r_re = 0.79f * r_re + d * dr_re - x * dl_re;
+                r_im = 0.79f * r_im + d * dr_im - x * dl_im;
+            }
+            state->fft_re[SPA_HSSR_LEFT][i] += row * l_re;
+            state->fft_im[SPA_HSSR_LEFT][i] += row * l_im;
+            state->fft_re[SPA_HSSR_RIGHT][i] += row * r_re;
+            state->fft_im[SPA_HSSR_RIGHT][i] += row * r_im;
+        }
+        bin = end;
     }
     state->bed_ring_pos = pos + 1u;
 }
@@ -1244,7 +1376,6 @@ static void spa_hssr_render_hop(
     struct spa_hssr_dsp *state,
     const struct spa_hssr_band_accumulator bands[SPA_HSSR_BANDS])
 {
-    unsigned sample;
     unsigned bin;
     unsigned band;
     const int split = state->bed_delays || state->bed_attack;
@@ -1611,17 +1742,21 @@ static void spa_hssr_render_hop(
                             state->fft_re[SPA_HSSR_RIGHT],
                             state->fft_im[SPA_HSSR_RIGHT], 1);
     spa_hssr_fft(state, SPA_HSSR_LEFT, 1);
-    for (sample = 0; sample < SPA_HSSR_FFT_SIZE; ++sample) {
-        unsigned output = (state->input_position + sample) &
-                          (SPA_HSSR_FFT_SIZE - 1);
-        float window = state->synthesis_window_scaled[sample];
+    {
+        const unsigned start = state->input_position & (SPA_HSSR_FFT_SIZE - 1);
+        const unsigned first = SPA_HSSR_FFT_SIZE - start;
 
-        state->ola[SPA_HSSR_LEFT][output] = spa_hssr_dsp_finite(
-            state->ola[SPA_HSSR_LEFT][output] +
-            state->fft_re[SPA_HSSR_LEFT][sample] * window);
-        state->ola[SPA_HSSR_RIGHT][output] = spa_hssr_dsp_finite(
-            state->ola[SPA_HSSR_RIGHT][output] +
-            state->fft_im[SPA_HSSR_LEFT][sample] * window);
+        spa_hssr_overlap_run(state->ola[SPA_HSSR_LEFT] + start,
+                             state->ola[SPA_HSSR_RIGHT] + start,
+                             state->fft_re[SPA_HSSR_LEFT],
+                             state->fft_im[SPA_HSSR_LEFT],
+                             state->synthesis_window_scaled, first);
+        spa_hssr_overlap_run(state->ola[SPA_HSSR_LEFT],
+                             state->ola[SPA_HSSR_RIGHT],
+                             state->fft_re[SPA_HSSR_LEFT] + first,
+                             state->fft_im[SPA_HSSR_LEFT] + first,
+                             state->synthesis_window_scaled + first,
+                             SPA_HSSR_FFT_SIZE - first);
     }
     /* Source image, same pairing.  Its spectra live in their own arrays, so the
      * packing has no aliasing to respect. */
@@ -1630,17 +1765,20 @@ static void spa_hssr_render_hop(
                             state->source_fft_re[1],
                             state->source_fft_im[1], 0);
     spa_hssr_fft(state, SPA_HSSR_LEFT, 1);
-    for (sample = 0; sample < SPA_HSSR_FFT_SIZE; ++sample) {
-        unsigned output = (state->input_position + sample) &
-                          (SPA_HSSR_FFT_SIZE - 1);
-        float window = state->synthesis_window_scaled[sample];
+    {
+        const unsigned start = state->input_position & (SPA_HSSR_FFT_SIZE - 1);
+        const unsigned first = SPA_HSSR_FFT_SIZE - start;
 
-        state->source_ola[0][output] = spa_hssr_dsp_finite(
-            state->source_ola[0][output] +
-            state->fft_re[SPA_HSSR_LEFT][sample] * window);
-        state->source_ola[1][output] = spa_hssr_dsp_finite(
-            state->source_ola[1][output] +
-            state->fft_im[SPA_HSSR_LEFT][sample] * window);
+        spa_hssr_overlap_run(state->source_ola[0] + start,
+                             state->source_ola[1] + start,
+                             state->fft_re[SPA_HSSR_LEFT],
+                             state->fft_im[SPA_HSSR_LEFT],
+                             state->synthesis_window_scaled, first);
+        spa_hssr_overlap_run(state->source_ola[0], state->source_ola[1],
+                             state->fft_re[SPA_HSSR_LEFT] + first,
+                             state->fft_im[SPA_HSSR_LEFT] + first,
+                             state->synthesis_window_scaled + first,
+                             SPA_HSSR_FFT_SIZE - first);
     }
 }
 
