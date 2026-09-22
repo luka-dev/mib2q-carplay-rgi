@@ -6,9 +6,9 @@ clean and exonerated.
 
     ./patch_deva.sh                 # stock -> deva-ctrl-qc.so
     ./patch_deva_csd_live.sh        # -> deva-ctrl-qc-csdlive.so
-    ./patch_deva_mirror_mpl1.sh     # -> deva-ctrl-qc-mirror.so     <- deploy this one
+    ./patch_deva_mirror_mpl1.sh     # -> deva-ctrl-qc.so.patched     <- deploy this one
 
-Deploy `deva-ctrl-qc-mirror.so` to `/mnt/app/armle/lib/dll/deva-ctrl-qc.so`. The driver is
+Deploy `deva-ctrl-qc.so.patched` to `/mnt/app/armle/lib/dll/deva-ctrl-qc.so`. The driver is
 mmap'd by a running `io-audio`, so an in-place overwrite is refused: copy to `<path>.new`,
 `chmod 755`, then `mv` over it. It becomes active at the next reboot.
 

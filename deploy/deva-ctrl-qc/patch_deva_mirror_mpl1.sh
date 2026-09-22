@@ -24,7 +24,7 @@
 # Reversible: rerun patch_deva.sh to get back the asymmetric record.
 set -e
 IN="${1:-$(dirname "$0")/deva-ctrl-qc-csdlive.so}"
-OUT="${2:-$(dirname "$0")/deva-ctrl-qc-mirror.so}"
+OUT="${2:-$(dirname "$0")/deva-ctrl-qc.so.patched}"
 [ -f "$IN" ] || { echo "ABORT: missing $IN"; exit 1; }
 
 python3 - "$IN" "$OUT" <<'PY'

@@ -25,7 +25,7 @@
 # substitutes 0x4800 only when channel->voices (+0x10) is 6. Stock mpl5 stereo stays at 0x1800;
 # stock mpl1 6ch was already 0x4800. See RE_TIMING.md.
 set -e
-STOCK="${1:-/Users/luka/Desktop/AUDI_2/Firmwares/HU/MHI2Q_US_AUG22_P5087_MU1316/extracted/app/armle/lib/dll/deva-ctrl-qc.so}"
+STOCK="${1:-$(dirname "$0")/deva-ctrl-qc.so.stock}"
 OUT="$(dirname "$0")/deva-ctrl-qc.so"
 REC=$((0xA6E04))
 NAME_OFF=$((0xA4C54 + 272*4 + 16))   # names VA 0xA5C54 -> file 0xA4C54; verify idx4 == mpl5_dio_ent

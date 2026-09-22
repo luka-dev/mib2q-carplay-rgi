@@ -181,7 +181,7 @@ Do not restore the wrapper that killed/relaunched the OTG `usblauncher`, and do
 not patch `verifyPortReset` from state 12 to state 14 for CarPlay.
 
 Two independent, reversible candidates now exist under
-`deploy/usb_replug_recovery`:
+`deploy/experimental/usb_replug_recovery`:
 
 1. A connection-generation fence passes `busno/devno/iface` from
    `usblauncher_otg.lua` into `startncm.sh` and `stopncm.sh`. A shared lock

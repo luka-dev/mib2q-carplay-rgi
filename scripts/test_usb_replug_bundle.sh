@@ -3,7 +3,7 @@
 set -eu
 
 PROJECT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-BUNDLE_DIR=${PROJECT_DIR}/deploy/usb_replug_recovery/bundle_mu1316_p5087
+BUNDLE_DIR=${PROJECT_DIR}/deploy/experimental/usb_replug_recovery/bundle_mu1316_p5087
 MOCK_SSH=${PROJECT_DIR}/tests/mock_audi_ssh.sh
 TEST_DIR=$(mktemp -d "${TMPDIR:-/tmp}/mhi2-usb-bundle-test.XXXXXX")
 HU_ROOT=${TEST_DIR}/hu

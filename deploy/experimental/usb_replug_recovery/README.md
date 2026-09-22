@@ -82,9 +82,9 @@ create a new loop or touch `dio_manager` ownership.
 Create and reverse a local candidate image:
 
 ```sh
-./deploy/usb_replug_recovery/patch_si_rearm.py check /path/to/stock/smartphone_integrator
-./deploy/usb_replug_recovery/patch_si_rearm.py apply /path/to/stock/smartphone_integrator /tmp/smartphone_integrator.rearm
-./deploy/usb_replug_recovery/patch_si_rearm.py revert /tmp/smartphone_integrator.rearm /tmp/smartphone_integrator.stock
+./deploy/experimental/usb_replug_recovery/patch_si_rearm.py check /path/to/stock/smartphone_integrator
+./deploy/experimental/usb_replug_recovery/patch_si_rearm.py apply /path/to/stock/smartphone_integrator /tmp/smartphone_integrator.rearm
+./deploy/experimental/usb_replug_recovery/patch_si_rearm.py revert /tmp/smartphone_integrator.rearm /tmp/smartphone_integrator.stock
 ```
 
 This SI patch is intentionally marked experimental. It has static verification

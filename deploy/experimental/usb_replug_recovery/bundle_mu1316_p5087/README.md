@@ -36,7 +36,7 @@ bundle_mu1316_p5087/
 ## Локальная проверка
 
 ```sh
-cd /Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/deploy/usb_replug_recovery/bundle_mu1316_p5087
+cd /Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay/deploy/experimental/usb_replug_recovery/bundle_mu1316_p5087
 ./verify_bundle.sh
 ```
 

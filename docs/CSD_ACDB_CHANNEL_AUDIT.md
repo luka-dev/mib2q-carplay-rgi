@@ -355,7 +355,7 @@ modules and the output-media path accept six.
 
 The former `0x10be3` artifact was not a useful graph test because `0x10be3` and
 `0x10314` share RX descriptor `0xc04e981c`; it has been removed. The current prepared
-`deploy/acdb/Speaker_cal.acdb` selects `0x10312` at all four offsets and does choose a
+`docs/acdb/Speaker_cal.acdb` selects `0x10312` at all four offsets and does choose a
 different three-module graph. Its complete module list is statically six-channel-safe.
 It is still an experiment rather than a production fix because the stock database never
 uses it with more than three channels and its public semantic is NULL/NONE COPP.

@@ -94,7 +94,7 @@ Lifecycle semantics:
   Audi's `/etc/scripts/carplay_cleanup.sh` for the stock mdnsd/PPS cleanup;
 - physical USB recovery is deliberately absent from these scripts. Rapid-replug
   recovery belongs to the matching NCM generation fence and the exact-version
-  `smartphone_integrator` A/B candidate under `deploy/usb_replug_recovery`.
+  `smartphone_integrator` A/B candidate under `deploy/experimental/usb_replug_recovery`.
 
 Verify on the unit in `/tmp/carplay_wrapper.log`: startup must log `exec dio_manager`
 before the monitor logs `generation=... active`, followed by `adopted ...` or

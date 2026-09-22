@@ -56,7 +56,7 @@ if [ "${QSA_STOCK_DEVA:-0}" = "1" ]; then
   cp "$FW/app/armle/lib/dll/deva-ctrl-qc.so" "$STAGE/"
   echo ">> using STOCK deva"
 else
-  cp "$ROOT/deploy/deva-ctrl-qc/deva-ctrl-qc.so" "$STAGE/"
+  cp "$ROOT/deploy/deva-ctrl-qc/deva-ctrl-qc.so.patched" "$STAGE/"
   echo ">> using PATCHED deva"
 fi
 cp "$FW/ifs2/ifs_coreservices3/lib/libasound.so.2" "$STAGE/"

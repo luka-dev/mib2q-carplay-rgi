@@ -48,7 +48,7 @@ analysis.
 At the time of this audit, the repository contains one generated calibration:
 
 ```text
-deploy/acdb/Speaker_cal.acdb
+docs/acdb/Speaker_cal.acdb
 SHA-256 c6e23c0eeeaa46ed30e0e15d9a70617f2a2a25fae1f9bcc0114ff640c1e7883f
 ```
 

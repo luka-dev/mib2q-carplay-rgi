@@ -24,10 +24,10 @@ The on-unit column is the path under `/` (custom.sh copies `carplay/root/` onto
 | `carplay_monitor.sh` | `deploy/smartphone_integrator/` | `/mnt/app/root/hooks/` |
 | `carplay_processes.sh` | `deploy/smartphone_integrator/` | `/mnt/app/root/hooks/` |
 | `carplay_cleanup.sh` | `deploy/smartphone_integrator/` | `/mnt/app/root/hooks/` |
-| `smartphone_integrator` | `deploy/usb_replug_recovery/bundle_mu1316_p5087/payload/smartphone_integrator` | `/mnt/app/eso/bin/apps/smartphone_integrator` (whole-file replace) |
-| `deva-ctrl-qc.so` | `deploy/deva-ctrl-qc/deva-ctrl-qc-mirror.so` (rename to `deva-ctrl-qc.so`) | `/mnt/app/armle/lib/dll/deva-ctrl-qc.so` (whole-file replace) |
+| `smartphone_integrator` | `deploy/smartphone_integrator/smartphone_integrator` | `/mnt/app/eso/bin/apps/smartphone_integrator` (whole-file replace) |
+| `deva-ctrl-qc.so` | `deploy/deva-ctrl-qc/deva-ctrl-qc.so.patched` (rename to `deva-ctrl-qc.so`) | `/mnt/app/armle/lib/dll/deva-ctrl-qc.so` (whole-file replace) |
 | `carplay_child.json` | `deploy/smartphone_integrator/carplay_child.json` | installer resource (not a `/` file); custom.sh splices only `children.carplay` into the SI JSON |
-| `patch_si_rearm.py` | `deploy/usb_replug_recovery/patch_si_rearm.py` | host-side reproduction/reversal tool; not needed on the HU |
+| `patch_si_rearm.py` | `deploy/experimental/usb_replug_recovery/patch_si_rearm.py` | host-side reproduction/reversal tool; not needed on the HU |
 
 Notes:
 - The two `.so`, `maneuver_render`, `altscreen_render` and `carplay_hook.jar` are
@@ -37,7 +37,7 @@ Notes:
 - **PF firewall:** no patch file is installed. custom.sh makes its own scoped
   in-shell edit opening TCP `6030:6032` across the four stock profiles
   (`pf.conf`, `pf.ecm0.conf`, `pf.mlan0.conf`, `pf.ppp0.conf`; stock copies under
-  `deploy/smartphone_integrator/pf_stock/`), so it needs no `patch`/Python/sed on
+  `deploy/pf/`), so it needs no `patch`/Python/sed on
   the HU.
 
 ## Firmware image identities (whole-file replacements)

@@ -3,8 +3,8 @@
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-START_NCM="${ROOT}/deploy/usb_replug_recovery/startncm.sh"
-STOP_NCM="${ROOT}/deploy/usb_replug_recovery/stopncm.sh"
+START_NCM="${ROOT}/deploy/experimental/usb_replug_recovery/startncm.sh"
+STOP_NCM="${ROOT}/deploy/experimental/usb_replug_recovery/stopncm.sh"
 IFCONFIG_STUB="${ROOT}/tests/ncm_ifconfig_stub.sh"
 
 TEST_DIR=$(mktemp -d "${TMPDIR:-/tmp}/ncm-fence-test.XXXXXX")

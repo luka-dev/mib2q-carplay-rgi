@@ -69,10 +69,10 @@ SI ждёт событие, которое уже произошло
 | бесконечный внешний reset/relaunch может бороться с SI | не добавлять USB reset loop в `rc.local`; SI остаётся единственным владельцем OTG и `dio_manager` | обязательное ограничение |
 
 Исправления находятся в
-[`deploy/usb_replug_recovery`](../deploy/usb_replug_recovery/README.md).
+[`deploy/experimental/usb_replug_recovery`](../deploy/experimental/usb_replug_recovery/README.md).
 Готовые четыре payload-файла, точные stock-файлы и защищённые host-скрипты
 собраны отдельно в
-[`bundle_mu1316_p5087`](../deploy/usb_replug_recovery/bundle_mu1316_p5087/README.md).
+[`bundle_mu1316_p5087`](../deploy/experimental/usb_replug_recovery/bundle_mu1316_p5087/README.md).
 
 ## Граница применимости и контрольные хеши
 
@@ -122,12 +122,12 @@ Stock MU1316 P5087:
 ```sh
 cd /Users/luka/Desktop/AUDI_2/Patches/mhi2-carplay
 
-sh -n deploy/usb_replug_recovery/startncm.sh
-sh -n deploy/usb_replug_recovery/stopncm.sh
+sh -n deploy/experimental/usb_replug_recovery/startncm.sh
+sh -n deploy/experimental/usb_replug_recovery/stopncm.sh
 sh -n scripts/test_usb_replug_recovery.sh
 ./scripts/test_usb_replug_recovery.sh
 
-python3 -B deploy/usb_replug_recovery/patch_si_rearm.py check \
+python3 -B deploy/experimental/usb_replug_recovery/patch_si_rearm.py check \
   /Users/luka/Desktop/AUDI_2/Firmwares/HU/MU1316-MHI2Q_US_AUG22_P5087-JTB-07426.03.1811930398/advanced/MU1316-appimg/eso/bin/apps/smartphone_integrator
 ```
 
@@ -169,7 +169,7 @@ shasum -a 256 \
   "$WORK_DIR/startncm.hu.stock" \
   "$WORK_DIR/stopncm.hu.stock" \
   "$WORK_DIR/usblauncher_otg.hu.stock"
-python3 -B "$PROJECT_DIR/deploy/usb_replug_recovery/patch_si_rearm.py" \
+python3 -B "$PROJECT_DIR/deploy/experimental/usb_replug_recovery/patch_si_rearm.py" \
   check "$WORK_DIR/smartphone_integrator.hu.stock"
 ```
 
@@ -191,12 +191,12 @@ cp "$FW_SYSTEM/etc/usblauncher_otg.lua" \
 (
   cd "$WORK_DIR" &&
   patch --fuzz=0 -p0 \
-    < "$PROJECT_DIR/deploy/usb_replug_recovery/usblauncher_otg.lua.patch"
+    < "$PROJECT_DIR/deploy/experimental/usb_replug_recovery/usblauncher_otg.lua.patch"
 )
 
 shasum -a 256 \
-  "$PROJECT_DIR/deploy/usb_replug_recovery/startncm.sh" \
-  "$PROJECT_DIR/deploy/usb_replug_recovery/stopncm.sh" \
+  "$PROJECT_DIR/deploy/experimental/usb_replug_recovery/startncm.sh" \
+  "$PROJECT_DIR/deploy/experimental/usb_replug_recovery/stopncm.sh" \
   "$WORK_DIR/usblauncher_otg.lua"
 ```
 
@@ -230,9 +230,9 @@ Backup создаётся только после успешного read-only p
 
 ```sh
 "$SSH" exec 'cat > /mnt/system/etc/scripts/startncm.sh.usb-replug-new' \
-  < "$PROJECT_DIR/deploy/usb_replug_recovery/startncm.sh"
+  < "$PROJECT_DIR/deploy/experimental/usb_replug_recovery/startncm.sh"
 "$SSH" exec 'cat > /mnt/system/etc/scripts/stopncm.sh.usb-replug-new' \
-  < "$PROJECT_DIR/deploy/usb_replug_recovery/stopncm.sh"
+  < "$PROJECT_DIR/deploy/experimental/usb_replug_recovery/stopncm.sh"
 "$SSH" exec 'cat > /mnt/system/etc/usblauncher_otg.lua.usb-replug-new' \
   < "$WORK_DIR/usblauncher_otg.lua"
 
@@ -398,12 +398,12 @@ patched: 2e 33 09 e0    AND R3, R9, LR, LSR #6
 Использовать SI, прочитанный с HU на read-only preflight:
 
 ```sh
-python3 -B "$PROJECT_DIR/deploy/usb_replug_recovery/patch_si_rearm.py" \
+python3 -B "$PROJECT_DIR/deploy/experimental/usb_replug_recovery/patch_si_rearm.py" \
   apply \
   "$WORK_DIR/smartphone_integrator.hu.stock" \
   "$WORK_DIR/smartphone_integrator.rearm"
 
-python3 -B "$PROJECT_DIR/deploy/usb_replug_recovery/patch_si_rearm.py" \
+python3 -B "$PROJECT_DIR/deploy/experimental/usb_replug_recovery/patch_si_rearm.py" \
   check "$WORK_DIR/smartphone_integrator.rearm"
 ```
 
@@ -413,7 +413,7 @@ python3 -B "$PROJECT_DIR/deploy/usb_replug_recovery/patch_si_rearm.py" \
 Обратимость проверить до установки:
 
 ```sh
-python3 -B "$PROJECT_DIR/deploy/usb_replug_recovery/patch_si_rearm.py" \
+python3 -B "$PROJECT_DIR/deploy/experimental/usb_replug_recovery/patch_si_rearm.py" \
   revert \
   "$WORK_DIR/smartphone_integrator.rearm" \
   "$WORK_DIR/smartphone_integrator.reverted"
@@ -441,7 +441,7 @@ cmp \
 "$SSH" exec \
   'cat /mnt/app/eso/bin/apps/smartphone_integrator.usb-replug-new' \
   > "$WORK_DIR/smartphone_integrator.readback"
-python3 -B "$PROJECT_DIR/deploy/usb_replug_recovery/patch_si_rearm.py" \
+python3 -B "$PROJECT_DIR/deploy/experimental/usb_replug_recovery/patch_si_rearm.py" \
   check "$WORK_DIR/smartphone_integrator.readback"
 ```
 
@@ -583,5 +583,5 @@ runtime-бинарник ещё раз читается на Mac и провер
   — ранняя диагностика и исправляющее примечание;
 - [`NCM_AND_FIREWALL_IDEAL_START.md`](reference/NCM_AND_FIREWALL_IDEAL_START.md)
   — нормальный USB/NCM startup flow;
-- [`deploy/usb_replug_recovery/README.md`](../deploy/usb_replug_recovery/README.md)
+- [`deploy/experimental/usb_replug_recovery/README.md`](../deploy/experimental/usb_replug_recovery/README.md)
   — реализация обоих обратимых кандидатов.
