@@ -247,7 +247,7 @@ static int set_i64(void *d, const char *key, int64_t val)
  * initWithDisplayScaleMode:zoomFactor:) where iOS 27 uses zoomFactorByDisplayIndex, but that zoom
  * is looked up from the phone's own CRCarPlayCapabilities store by vehicle UUID - it is NOT derived
  * from these fields.  Where our physical size is actually read is CarKit's display parsing, which
- * has not been decompiled for this field.  See docs/Connect and USB/iOS Version Gate.md. */
+ * has not been decompiled for this field.  See docs/connect-and-usb/IOS_VERSION_GATE.md. */
 #define CLUSTER_PHYS_W  292
 #define CLUSTER_PHYS_H  110
 

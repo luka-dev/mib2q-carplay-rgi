@@ -82,7 +82,7 @@ constant tables and how they were found).
 | `apac_lbr.c` | `apac::lbr` | 3 | 728 | skip |
 | `SC_ComponentModifier.c` | `SC_ComponentModifier` | 1 | 296 | skip |
 
-Port stages are the ones in `docs/Audio/APAC Codec.md`. `skip` is the
+Port stages are the ones in `docs/audio/APAC_CODEC.md`. `skip` is the
 Ambisonics-scene and low-bitrate code the CarPlay 5.1 / 5.1.2 target does not use; `—` is
 container, allocator and plumbing code with no stage of its own.
 `rodata/` holds every constant table as a byte-exact C array and a matching `.bin`.

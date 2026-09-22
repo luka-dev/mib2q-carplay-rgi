@@ -4,7 +4,7 @@ Finite audio only; float64 reference arithmetic, not SHARC bit equivalence.
 Callers must supply signals at the actual stage boundary. In particular a
 ten-bus input is NOT obtained by padding the eight input-matrix buses: the
 unmodelled complex/stateful processor cannot silently become an identity.
-Evidence: docs/Audio/SHARC DSP Blocks.md.
+Evidence: docs/audio/SHARC_DSP_BLOCKS.md.
 """
 from __future__ import annotations
 

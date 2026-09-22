@@ -6,7 +6,7 @@ successfully, and was staged on the unit. A later direct vehicle test proved
 that its six-channel DMA geometry and clock are correct, but audio is still
 broken because the independently created CSD stream remains stereo. The current
 binary is therefore not a complete 5.1 fix. See
-[`../../docs/Audio/QNX Audio Topology.md`](<../../docs/Audio/QNX Audio Topology.md>).
+[`../../docs/audio/QNX_AUDIO_TOPOLOGY.md`](<../../docs/audio/QNX_AUDIO_TOPOLOGY.md>).
 
 ## Observed failure
 

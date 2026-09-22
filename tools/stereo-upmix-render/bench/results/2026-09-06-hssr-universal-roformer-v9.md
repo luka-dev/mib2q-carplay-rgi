@@ -98,7 +98,7 @@ fixture is excluded from that aggregate.
 This validates the known electrical topology, not perceived driver-seat SPL:
 OEM per-output gain/EQ/delay and measured cabin responses remain unavailable.
 Full per-track results and limitations are in
-[`../../../../docs/Audio/Virtual Cabin and Amp RE.md`](<../../../../docs/Audio/Virtual Cabin and Amp RE.md>).
+[`../../../../docs/audio/VIRTUAL_CABIN_AND_AMP_RE.md`](<../../../../docs/audio/VIRTUAL_CABIN_AND_AMP_RE.md>).
 
 ## Expanded private stereo stress regression
 

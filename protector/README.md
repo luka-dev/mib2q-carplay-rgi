@@ -114,7 +114,7 @@ if (prot_unlock(argv[0], vin, buf, sizeof buf, &n) != 0)
     fail_closed();                        // wrong VIN, patched, or unprovisioned
 // buf[0..n] = your feature bits / token / key
 ```
-`vin` must come from the **quorum reader** (`docs/Build and Deploy/VIN Protection.md`), not
+`vin` must come from the **quorum reader** (`docs/build-and-deploy/VIN_PROTECTION.md`), not
 a single source.
 
 ```sh

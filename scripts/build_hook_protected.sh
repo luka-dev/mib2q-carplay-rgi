@@ -1,7 +1,7 @@
 #!/bin/bash
 # Build a VIN-locked (protected) CarPlay hook. Produces stamped BINARIES only,
 # in build/protected_<VIN>/. The install tree is staged by hand under
-# install_MoreIncredibleBash/mod/carplay/root/ (see docs/Build and Deploy/Deploy and Release.md).
+# install_MoreIncredibleBash/mod/carplay/root/ (see docs/build-and-deploy/DEPLOY_AND_RELEASE.md).
 #
 # The hook and APAC codec are bound to one car: on any other VIN the hook stays
 # inert (stock CarPlay) and the codec fails closed. Protection is a compile-time
@@ -55,4 +55,4 @@ rm -f /tmp/prot_consts.bin
 
 echo ""
 echo "Stamped protected binaries: $OUTDIR_REL/"
-echo "Stage them by hand under mod/carplay/root/ (see docs/Build and Deploy/Deploy and Release.md)."
+echo "Stage them by hand under mod/carplay/root/ (see docs/build-and-deploy/DEPLOY_AND_RELEASE.md)."

@@ -9,8 +9,8 @@ Language is C++ (the original is C++ and the class structure is recovered; GCC 4
 image supports C++11). Keep the QNX traps in mind: no `__thread` in an LD_PRELOAD'd `.so`, and the
 build must assert `nm | grep emutls` is empty.
 
-Background and the recovered architecture: [`../docs/Audio/APAC Codec.md`](<../docs/Audio/APAC Codec.md>).
-Symbol list: [`../docs/Sources/reference/apac_symbols_pioneer.txt`](../docs/Sources/reference/apac_symbols_pioneer.txt).
+Background and the recovered architecture: [`../docs/audio/APAC_CODEC.md`](<../docs/audio/APAC_CODEC.md>).
+Symbol list: [`../docs/sources/reference/apac_symbols_pioneer.txt`](../docs/sources/reference/apac_symbols_pioneer.txt).
 
 ## Layout
 

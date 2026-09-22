@@ -7,4 +7,4 @@
   flashable image.
 
 Exact source offsets, SHA-256 values, loader validation and the reproduction
-command are in [`docs/Audio/SHARC DSP Blocks.md`](<../../docs/Audio/SHARC DSP Blocks.md>).
+command are in [`docs/audio/SHARC_DSP_BLOCKS.md`](<../../docs/audio/SHARC_DSP_BLOCKS.md>).

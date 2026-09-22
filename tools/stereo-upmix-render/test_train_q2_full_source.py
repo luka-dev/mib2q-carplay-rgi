@@ -24,7 +24,7 @@ REPO=ROOT.parent.parent
 def fixture(root):
     path,_,_,_=authored_index(root)
     freeze=root/'freeze'
-    seal(ROOT/'release_acceptance_v2.json',REPO/'docs/Sources/UPMIX_RELEASE_ACCEPTANCE_V2.md',freeze)
+    seal(ROOT/'release_acceptance_v2.json',REPO/'docs/sources/UPMIX_RELEASE_ACCEPTANCE_V2.md',freeze)
     return path,freeze
 
 

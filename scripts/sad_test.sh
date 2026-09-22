@@ -6,7 +6,7 @@
 #   ./scripts/sad_test.sh <host> revert    put AUDIO_SPATIAL back to 0
 #
 # Test through CarPlay, not qsa_play: the player sets no SAD metadata and would only show
-# whatever the last session left behind (docs/Audio/Buffered Audio Path.md).
+# whatever the last session left behind (docs/audio/BUFFERED_AUDIO_PATH.md).
 set -e
 DEV="root@${1:?usage: sad_test.sh <host> deploy|check|revert}"; MODE="${2:-check}"
 PASS="harman_f"

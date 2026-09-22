@@ -36,7 +36,7 @@ toolchain; rebuilding artifacts alone does not change what is installed on HU.
 - `d61e37f`: immediate `exec dio_manager`, asynchronous monitor, persistent
   renderers, exact process identity and stale-generation ownership checks.
 - Current implementation: [supervisor](deploy/smartphone_integrator/README.md).
-  The [USB runbook](docs/Sources/USB_REPLUG_RECOVERY_RUNBOOK.md) preserves the original
+  The [USB runbook](docs/sources/USB_REPLUG_RECOVERY_RUNBOOK.md) preserves the original
   diagnosis and per-component A/B procedure.
 
 ### Closed: mode transitions
@@ -45,7 +45,7 @@ toolchain; rebuilding artifacts alone does not change what is installed on HU.
   media; music can reclaim the route only after the stock owner releases it.
 - `fc9d4a5`: buffered transport and PCM lifecycle hardening.
 - `55e532d`: parking focus transitions and keeping CarPlay visible beside OPS.
-  [PDC history](<docs/Cluster and RGI/PDC Small Stage.md>) already records the
+  [PDC history](<docs/cluster-and-rgi/PDC_SMALL_STAGE.md>) already records the
   owner's on-car confirmation/photo from September 16. This acceptance does
   not cover the lower warning strip or the suppression attempt in `efc3020`.
 - `BAPBridge.forceGfxAvailable()` now uses the stock KOMO callbacks and a typed
@@ -83,13 +83,13 @@ setup/teardown races. Commands: `scripts/test_supervisor_lifecycle.sh`,
   replay. Other popups and stock behavior outside that guard remain intact.
   Source/host checks cover the actual stock manager and a failing stock-first
   control; Kanzi rendering and complete removal still require on-HU acceptance.
-  [Details](<docs/Cluster and RGI/PDC Small Stage.md>).
+  [Details](<docs/cluster-and-rgi/PDC_SMALL_STAGE.md>).
 - Upmix: ongoing work, separate from the completed base audio path.
 - CarPlay Video: receiver/player integration remains unimplemented; optional
-  next feature. [Research](<docs/AltScreen and Video/CarPlay Video Playback.md>).
+  next feature. [Research](<docs/altscreen-and-video/CARPLAY_VIDEO_PLAYBACK.md>).
 - Partial 360-camera beside CarPlay: deliberately deferred by the owner on
   September 14; resume only on a separate request.
-  [Preflight](<docs/AltScreen and Video/Partial 360 Camera Preflight.md>).
+  [Preflight](<docs/altscreen-and-video/PARTIAL_360_CAMERA_PREFLIGHT.md>).
 - Optional MHI3 parity: decide whether the special `routeState==5`
   accept-all-maneuvers behavior is useful. This is not a current failure of
   rerouting or a release blocker.
@@ -194,6 +194,6 @@ Security → Analytics & Improvements → Analytics Data. Read
 `crashes_and_spins/accessoryd-packets-*.log.ips` for the raw iAP2 packet trace.
 
 Historical lifecycle test recipes remain in
-`docs/Connect and USB/Session Lifecycle.md`; Java cleanup findings are
-preserved in `docs/Build and Deploy/Production Audits.md`. Use the current
+`docs/connect-and-usb/SESSION_LIFECYCLE.md`; Java cleanup findings are
+preserved in `docs/build-and-deploy/PRODUCTION_AUDITS.md`. Use the current
 status above when deciding what work remains.

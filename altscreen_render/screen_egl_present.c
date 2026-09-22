@@ -55,7 +55,7 @@
  * presentation on a 60 Hz surface. This does not lock the independent VC
  * capture clock: MU1316 videoencoderservice requests an integer 1000/fps ms
  * timer (33 ms for 30), and actual capture/post cadence needs measurement.
- * See docs/AltScreen and Video/AltScreen Frame Rate.md. */
+ * See docs/altscreen-and-video/ALTSCREEN_FRAME_RATE.md. */
 #define EP_SWAP_INTERVAL            2
 
 /* Present in KHR_image headers, but keep the value explicit for the QNX 6.5

@@ -41,7 +41,7 @@ six-channel reorder; decoded stereo uses the fixed PCM6 route with
 The exact compatibility rollback is `AUDIO_STEREO_UPMIX=off`, followed by a
 `dio_manager`/CarPlay child restart because the toggle is parsed once at
 process start. See
-[`../../docs/Audio/Stereo to 5.1 Upmix.md`](<../../docs/Audio/Stereo to 5.1 Upmix.md>)
+[`../../docs/audio/STEREO_TO_5_1_UPMIX.md`](<../../docs/audio/STEREO_TO_5_1_UPMIX.md>)
 for the signal equations, SoundAmp row bounds and required stationary A/B.
 
 Universal loads `AUDIO_HSSR_MODEL`, defaulting to

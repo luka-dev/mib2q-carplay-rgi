@@ -13,21 +13,21 @@ research records, not production dependencies or authorities for stock 210 behav
 
 ## Documentation
 
-All documentation is one Obsidian vault in [`docs/`](docs/Home.md). Start at
-[`docs/Home.md`](docs/Home.md), then the per-domain maps:
+All documentation is one linked Markdown tree in [`docs/`](docs/README.md). Start at
+[`docs/README.md`](docs/README.md), then the per-domain maps:
 
 | Domain | Entry point |
 | --- | --- |
-| Audio (upmix, HSSR model, J525 amp, codecs, 5.1 routing) | [`docs/Audio/Audio MOC.md`](<docs/Audio/Audio MOC.md>) |
-| Cluster and route guidance (contexts, BAP/RGI, HUD renderer) | [`docs/Cluster and RGI/Cluster and RGI MOC.md`](<docs/Cluster and RGI/Cluster and RGI MOC.md>) |
-| AltScreen and video (stream 111, OMX pipeline, loader) | [`docs/AltScreen and Video/AltScreen and Video MOC.md`](<docs/AltScreen and Video/AltScreen and Video MOC.md>) |
-| Connect and USB (NCM, replug recovery, PF, session lifecycle) | [`docs/Connect and USB/Connect and USB MOC.md`](<docs/Connect and USB/Connect and USB MOC.md>) |
-| Build and deploy (toolchain, release map, VIN protection) | [`docs/Build and Deploy/Build and Deploy MOC.md`](<docs/Build and Deploy/Build and Deploy MOC.md>) |
-| Architecture overview | [`docs/Reference/Architecture.md`](docs/Reference/Architecture.md) |
+| Audio (upmix, HSSR model, J525 amp, codecs, 5.1 routing) | [`docs/audio/README.md`](<docs/audio/README.md>) |
+| Cluster and route guidance (contexts, BAP/RGI, HUD renderer) | [`docs/cluster-and-rgi/README.md`](<docs/cluster-and-rgi/README.md>) |
+| AltScreen and video (stream 111, OMX pipeline, loader) | [`docs/altscreen-and-video/README.md`](<docs/altscreen-and-video/README.md>) |
+| Connect and USB (NCM, replug recovery, PF, session lifecycle) | [`docs/connect-and-usb/README.md`](<docs/connect-and-usb/README.md>) |
+| Build and deploy (toolchain, release map, VIN protection) | [`docs/build-and-deploy/README.md`](<docs/build-and-deploy/README.md>) |
+| Architecture overview | [`docs/reference/ARCHITECTURE.md`](docs/reference/ARCHITECTURE.md) |
 
-Read [`docs/Landmines.md`](docs/Landmines.md) before touching a subsystem. Long-form white papers
-are in `docs/Research/`; primary evidence (papers, manuals, data files, decompiled stock Java) is in
-`docs/Sources/`.
+Read [`docs/LANDMINES.md`](docs/LANDMINES.md) before touching a subsystem. Long-form white papers
+are in `docs/research/`; primary evidence (papers, manuals, data files, decompiled stock Java) is in
+`docs/sources/`.
 
 ## Repository layout
 
@@ -47,7 +47,7 @@ are in `docs/Research/`; primary evidence (papers, manuals, data files, decompil
 | `tools/` | Host tools (upmix renderer and benches, QSA emulator, amp model, …) |
 | `assets/` | RE working sets (`soundamp/`, `vc-fonts/`) and visual references |
 | `toolchain/qnx65-abi/` | QNX Screen/OpenMAX ABI headers used only for cross-compilation |
-| `docs/` | The documentation vault |
+| `docs/` | The documentation (GitHub-rendered; also opens as an Obsidian vault) |
 | `build/` | Build outputs (untracked, empty in git) |
 | `logs/` | Ignored local evidence: vehicle captures, HU logs, iPhone sysdiagnose, state traces |
 
@@ -95,7 +95,7 @@ Tests: `./scripts/run_tests.sh`.
 A release is assembled by hand: copy the build outputs, the models and the `deploy/` runtime files
 into `install_MoreIncredibleBash/mod/carplay/root/` at their on-unit paths, then run
 `mod/custom.sh` from the M.I.B. SD card. The source-to-unit map, file modes and hashes are in
-[Deploy and Release](<docs/Build and Deploy/Deploy and Release.md>).
+[Deploy and Release](<docs/build-and-deploy/DEPLOY_AND_RELEASE.md>).
 
 - `custom.sh` copies the `root/` tree onto the unit, replaces the SI `carplay` child by path and
   widens the CarPlay rule in all four PF profiles, keeping a `.carplay-stock` backup of everything
@@ -105,7 +105,7 @@ into `install_MoreIncredibleBash/mod/carplay/root/` at their on-unit paths, then
 - The runtime integration (renderer supervision, environment, spatial/upmix settings) lives in
   [`deploy/smartphone_integrator/`](deploy/smartphone_integrator/README.md); the shipped audio
   calibration is set in `deploy/smartphone_integrator/carplay_startup.sh` and documented in
-  [Stereo to 5.1 Upmix](<docs/Audio/Stereo to 5.1 Upmix.md>).
+  [Stereo to 5.1 Upmix](<docs/audio/STEREO_TO_5_1_UPMIX.md>).
 
 Disconnect CarPlay first and reboot the HU manually after installing. Deploying the Java jar always
 means a full unit restart (it is on j9's boot classpath).

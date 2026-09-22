@@ -558,7 +558,7 @@ fault. The result is complete at that marker; stop QEMU with Ctrl-C afterward.
 
 The complete static recovery, payload diff, id-namespace table, hashes and
 remaining boundary are in
-[`../../docs/Audio/QNX Audio Topology.md`](<../../docs/Audio/QNX Audio Topology.md>).
+[`../../docs/audio/QNX_AUDIO_TOPOLOGY.md`](<../../docs/audio/QNX_AUDIO_TOPOLOGY.md>).
 
 `mpl1_int_ent` and `mpl5_dio_ent` are DEVA input timers. The mixer router maps
 ENT inputs 1 and 5 through the same output 128 (`TDM_OUT_MPL`) to one CSD
@@ -591,7 +591,7 @@ the established submission-order harness remains the default.
 ## Router-input width audit: MPL5 remains stereo at CSD setup
 
 The complete static trace and fix constraints are in
-[`../../docs/Audio/QNX Audio Topology.md`](<../../docs/Audio/QNX Audio Topology.md>).
+[`../../docs/audio/QNX_AUDIO_TOPOLOGY.md`](<../../docs/audio/QNX_AUDIO_TOPOLOGY.md>).
 
 The effective router width is selected when a DEVA timer is attached to the
 shared CSD session. `deva_update_session_info_from_list @0x54848` treats the

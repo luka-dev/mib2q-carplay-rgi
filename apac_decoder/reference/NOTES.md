@@ -221,7 +221,7 @@ broken - with one real exception. `SampleRate`, `FrameLength` and `NumberOfChann
 the bitstream exactly once called at `offset + 2`; `GetProfile` reads its six bits one position
 late and disagrees, so that one genuinely is wrong and should not be trusted. Their bit ranges (`[20:15]` sample-rate index, `[8:1]` channels, mask `0x7e00` for the
 1024-frame test) are exactly the formulas `tools/pioneer_apac_cookie.py` implements, and
-`docs/Audio/Buffered Audio Path.md` already documents the same `+2` correction. At the right
+`docs/audio/BUFFERED_AUDIO_PATH.md` already documents the same `+2` correction. At the right
 offset they return 48000 Hz, 1024 frames and 6 channels, matching `Configure`'s own log line.
 
 `apac_ref` therefore takes the stream geometry from the cookie and only overrides it when

@@ -111,7 +111,7 @@ def main():
         '`isNativeLittleEndian`. Это не запись с CAN. Для исходных sidestreets использовать `bap_sidestreets`; '
         '`descriptor_contract_example` — расчётный пакет из реальных полей bridge с пустыми отсутствующими слотами. '
         'Подробности и выводы: [MANEUVER_HUD_RENDERER_AUDIT.md](MANEUVER_HUD_RENDERER_AUDIT.md).','']
-    (repo/'docs/Cluster and RGI/Maneuver Mapping.md').write_text('\n'.join(lines))
+    (repo/'docs/cluster-and-rgi/MANEUVER_MAPPING.md').write_text('\n'.join(lines))
     inputs=['java_patch/com/luka/carplay/rgd/ManeuverMapper.java','java_patch/com/luka/carplay/rgd/RendererMapper.java',
         'java_patch/com/luka/carplay/rgd/SideStreets.java','java_patch/com/luka/carplay/rgd/BAPBridge.java',
         'java_patch/com/luka/carplay/rgd/RendererServer.java','java_patch/com/luka/carplay/rgd/RouteGuidance.java',

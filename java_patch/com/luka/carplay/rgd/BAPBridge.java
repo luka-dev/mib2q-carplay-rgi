@@ -1447,7 +1447,7 @@ public class BAPBridge {
          * - there is no remaining/duration field anywhere in gtf2.  Sending type 0 therefore
          * does not switch the display, it blanks it (ArrivalTime_visible goes false), which is
          * exactly what the smallscreen OK toggle used to do.  See
-         * docs/Cluster and RGI/KDK Geometry and Animation.md. */
+         * docs/cluster-and-rgi/KDK_GEOMETRY_AND_ANIMATION.md. */
         long timeVal = currentArrivalSeconds();
         /* JVM default TZ is UTC on MHI2. AppConnectorNavi converts a type-1
          * epoch with GregorianCalendar, so shift it to HU local time first. */
@@ -1985,7 +1985,7 @@ public class BAPBridge {
      * maneuver_render is owned by the CarPlay supervisor; Java does not spawn or kill it.
      * The renderer registers cluster displayable 98 via screen_manage_window and connects back
      * to our TCP server. Java only activates the cluster context + gfxAvailable and sends
-     * CMD_MANEUVER packets. See docs/Build and Deploy/Deploy and Release.md.
+     * CMD_MANEUVER packets. See docs/build-and-deploy/DEPLOY_AND_RELEASE.md.
      * ============================================================== */
 
     private volatile boolean customRendererStarted = false;
