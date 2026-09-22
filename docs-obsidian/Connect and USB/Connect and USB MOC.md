@@ -50,8 +50,8 @@ flowchart TB
 Claims are tagged **[car]** confirmed on the unit, **[decompile]** from reverse engineering, **[code]** read from the current repo, **[open]** hypothesis.
 
 - The replug-wedge cause is **[car]**.
-- Code state **[code]**: `carplay_startup.sh` is a thin wrapper with no USB recovery (`deploy/smartphone_integrator/carplay_startup.sh:1-4`, `deploy/smartphone_integrator/README.md:95-97`); the shipping SI image is the re-arm-patched one (SHA `606236a8…`, `docs/RELEASE_ARTIFACTS.md:27,49-51`); the NCM fence is not in the release map.
+- Code state **[code]**: `carplay_startup.sh` is a thin wrapper with no USB recovery (`deploy/smartphone_integrator/carplay_startup.sh:1-4`, `deploy/smartphone_integrator/README.md:95-97`); the shipping SI image is the re-arm-patched one (SHA `606236a8…`, `docs-obsidian/Sources/RELEASE_ARTIFACTS.md:27,49-51`); the NCM fence is not in the release map.
 - The owner confirmed connection and reconnection stability as closed on 2026-09-17 (`TODO.md:5-10`) — an acceptance report, not a recorded A/B of each recovery component.
 - The IPv6 DAD cost is a strong **[open]** hypothesis, never measured HU-side.
 
-Provenance lives in `docs/USB_REPLUG_RECOVERY_RUNBOOK.md`, `docs/USB_IPHONE_CONNECT_POSTMORTEM.md`, and `docs/reference/NCM_AND_FIREWALL_IDEAL_START.md`.
+Provenance lives in `docs-obsidian/Sources/USB_REPLUG_RECOVERY_RUNBOOK.md`, `docs-obsidian/Sources/USB_IPHONE_CONNECT_POSTMORTEM.md`, and `docs-obsidian/Sources/reference/NCM_AND_FIREWALL_IDEAL_START.md`.

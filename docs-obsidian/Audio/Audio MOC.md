@@ -65,4 +65,4 @@ flowchart TB
 
 Throughout these notes, claims are tagged: `[car]` confirmed on the unit, `[model]` static-RE or offline render, `[open]` unverified. The honest headline: discrete 5.1 is `[car]`; the amp DSP is `[model]` static RE; no blind listening or cabin SPL has ever been measured.
 
-Code state is checked against the source tree; every code claim cites `path:line`. Provenance lives in `docs/research/UPMIX.md` and its three companion papers.
+Code state is checked against the source tree; every code claim cites `path:line`. Provenance lives in `docs-obsidian/Research/UPMIX.md` and its three companion papers.

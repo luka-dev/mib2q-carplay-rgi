@@ -6,7 +6,7 @@
 
 ## ⚠️ The failure
 
-CarPlay is working. The phone is unplugged and replugged once, quickly. It never reconnects — through roughly 500 retry cycles over 45 minutes, until a reboot. Observed 2026-09-03. **[car]** Symptom write-up `docs/USB_IPHONE_CONNECT_POSTMORTEM.md`.
+CarPlay is working. The phone is unplugged and replugged once, quickly. It never reconnects — through roughly 500 retry cycles over 45 minutes, until a reboot. Observed 2026-09-03. **[car]** Symptom write-up `docs-obsidian/Sources/USB_IPHONE_CONNECT_POSTMORTEM.md`.
 
 The measured chain **[car]**:
 
@@ -51,8 +51,8 @@ The `si_rearm → running` edge is **[decompile]**: the patch is static-verified
 - `deploy/smartphone_integrator/README.md:70-72` states that no USB recovery runs in SI's startup path; `:95-97` points rapid-replug recovery at the NCM fence and the SI image instead.
 - `carplay_cleanup.sh` only logs and calls Audi's stock `/etc/scripts/carplay_cleanup.sh` (`deploy/smartphone_integrator/carplay_cleanup.sh:17-22`).
 - `carplay_monitor.sh` "never signals dio, touches OTG/USB state, or participates in SI retry policy" (`deploy/smartphone_integrator/README.md:84-85`).
-- The shipping `smartphone_integrator` **is** the re-arm-patched image: `deploy/smartphone_integrator/smartphone_integrator` hashes to `606236a8…`, equal to `PATCHED_SHA256` in `deploy/experimental/usb_replug_recovery/patch_si_rearm.py:15`, and the release map installs it whole-file (`docs/RELEASE_ARTIFACTS.md:27,49-51`, HU readback 2026-09-16).
-- The NCM generation fence (`startncm.sh`, `stopncm.sh`, `usblauncher_otg.lua.patch`) is **not** in the release map (`docs/RELEASE_ARTIFACTS.md:13-29`) — it stays experimental.
+- The shipping `smartphone_integrator` **is** the re-arm-patched image: `deploy/smartphone_integrator/smartphone_integrator` hashes to `606236a8…`, equal to `PATCHED_SHA256` in `deploy/experimental/usb_replug_recovery/patch_si_rearm.py:15`, and the release map installs it whole-file (`docs-obsidian/Sources/RELEASE_ARTIFACTS.md:27,49-51`, HU readback 2026-09-16).
+- The NCM generation fence (`startncm.sh`, `stopncm.sh`, `usblauncher_otg.lua.patch`) is **not** in the release map (`docs-obsidian/Sources/RELEASE_ARTIFACTS.md:13-29`) — it stays experimental.
 - The owner confirmed connection and reconnection as closed on the current car on 2026-09-17 (`TODO.md:5-10`); that acceptance is not a recorded run of either recovery component.
 
 <details>
@@ -76,7 +76,7 @@ What it established still holds as a platform fact. **[car]** With `otg_dev` mis
 
 ## 🔍 The SI stack-restart rule
 
-A dying dio generation is by design — what matters is how it ended. **[decompile]** of stock `smartphone_integrator` (IDA, `smartphone_integrator.i64`); doc `docs/reference/SI_STACK_RESTART_RE.md`.
+A dying dio generation is by design — what matters is how it ended. **[decompile]** of stock `smartphone_integrator` (IDA, `smartphone_integrator.i64`); doc `docs-obsidian/Sources/reference/SI_STACK_RESTART_RE.md`.
 
 `CarPlaySupervisor_RunningState_HandleAppState` @0x186b00, on `STOPPED`, dispatches on the previous state:
 
@@ -92,7 +92,7 @@ Decisive diagnostic: grep HU slog for `[CSIStateRunning]` and read `oldAppState`
 
 ## 🔄 The two recovery components
 
-Both are documented in `deploy/experimental/usb_replug_recovery/README.md`; runbook `docs/USB_REPLUG_RECOVERY_RUNBOOK.md`.
+Both are documented in `deploy/experimental/usb_replug_recovery/README.md`; runbook `docs-obsidian/Sources/USB_REPLUG_RECOVERY_RUNBOOK.md`.
 
 | Component | Mechanism | Code state | Evidence |
 |---|---|---|---|

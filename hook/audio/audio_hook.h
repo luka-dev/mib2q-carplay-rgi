@@ -3,7 +3,7 @@
  *
  * Goal: make the iPhone push discrete 5.1 PCM over wired CarPlay to the B&O amp, by widening the
  * AirPlay audio-format negotiation from the stock stereo ceiling to 6-channel PCM.  See
- * docs/reference/AUDIO.md (sections 5-8) for the full plan.
+ * docs-obsidian/Sources/reference/AUDIO.md (sections 5-8) for the full plan.
  *
  * Strategy = LD_PRELOAD interposition of stock libairplay.so exports (all verified exported, T; both
  * reached via .plt/GOT so intra-library calls are caught too — same mechanism altscreen uses):
@@ -99,7 +99,7 @@
 #define SPA_AUDIO_SOUNDCHECK_FALLBACK_ENV "AUDIO_SOUNDCHECK_FALLBACK"
 #define SPA_AUDIO_SOUNDCHECK_LIMITER_ENV  "AUDIO_SOUNDCHECK_LIMITER"
 
-/* ---- type-103 buffered-media negotiation probe (AUDIO.md §26, docs/HANDOFF_SPATIAL_AUDIO.md) -----
+/* ---- type-103 buffered-media negotiation probe (AUDIO.md §26, docs-obsidian/Sources/HANDOFF_SPATIAL_AUDIO.md) -----
  * iOS 27 reaches multichannel over CarPlay through a SECOND, buffered stream, not the realtime one.
  * Two accessory-controlled prerequisites, both metadata:
  *   1. /info `audioFormats` gains an entry {type:103, audioType:"media",

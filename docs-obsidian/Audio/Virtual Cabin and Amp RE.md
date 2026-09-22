@@ -10,7 +10,7 @@ The Audi B&O amplifier (part `8W0035465`, the "J525") is a **complete 5.1 proces
 
 For the stereo content that is most of what people play, the [[HSSR Model|HSSR upmix]] synthesizes the six channels the Virtual Cabin then renders. The discrete path is in [[Discrete 5.1 Routing]].
 
-> **Honesty.** The amp DSP model is `[model]` — static RE of one firmware image (`CodeFlash_*.bin`, SHA-256 `8776fdb8…`). No live amp state was read back, no arithmetic is bit-exact, no cabin SPL is modelled. Getting six channels *to* the amp is `[car]`-confirmed. Provenance: `docs/research/VIRTUAL_CABIN.md`.
+> **Honesty.** The amp DSP model is `[model]` — static RE of one firmware image (`CodeFlash_*.bin`, SHA-256 `8776fdb8…`). No live amp state was read back, no arithmetic is bit-exact, no cabin SPL is modelled. Getting six channels *to* the amp is `[car]`-confirmed. Provenance: `docs-obsidian/Research/VIRTUAL_CABIN.md`.
 
 ## ⚙️ The machine — two SoCs and an amp
 
@@ -155,4 +155,4 @@ PR 9VS "B&O 3D Advanced" = **19 loudspeakers on 16 amplified T38 circuits**, pro
 - **The amp DSP model is static RE** — no live bank/profile/mode/limiter/gain readback; the complex block C4D17 is not proven off; bus→speaker binding, per-driver EQ, and "3D OFF = level 0" are inferences; nothing is bit-exact. `[model]`
 - **HSSR upmix quality** — a formal stationary-vehicle A/B is still outstanding. `[open]`
 
-Code: `hook/audio/stereo_upmix.{c,h}`, `hook/audio/spatial_downmix.{c,h}`. Amp RE: `docs/SOUNDAMP_FULL_DSP_MODEL.md`, `docs/SHARC_INPUT_OUTPUT_MATRIX.md`, `docs/AMP_STEREO_5_1_MATRIX_DIFF.md`.
+Code: `hook/audio/stereo_upmix.{c,h}`, `hook/audio/spatial_downmix.{c,h}`. Amp RE: `docs-obsidian/Sources/SOUNDAMP_FULL_DSP_MODEL.md`, `docs-obsidian/Sources/SHARC_INPUT_OUTPUT_MATRIX.md`, `docs-obsidian/Sources/AMP_STEREO_5_1_MATRIX_DIFF.md`.

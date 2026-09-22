@@ -1,6 +1,6 @@
 # HSSR Universal host renderer
 
-> Sep20 correction: [guard/retention implementation and fresh music sweep](../../docs/UPMIX_GUARD_RETENTION_2026-09-20.md).
+> Sep20 correction: [guard/retention implementation and fresh music sweep](../../docs-obsidian/Sources/UPMIX_GUARD_RETENTION_2026-09-20.md).
 > Current C guards share the corrected6-input×8-bus matrix, including L/R feeds
 > to sub/rear; the older routing/calibration prose below is historical.
 > New `--front-retention 0..1` / `AUDIO_STEREO_FRONT_RETENTION` independently
@@ -17,7 +17,7 @@ their history remains in Git.
 
 The float/cabin/quiet-LFE render candidates were removed on 2026-09-21 after the
 60 s model grid showed no benefit over the shipping S16 path; their history and
-results stay in Git and in `docs/UPMIX_FLOAT_STAGE1.md` / `docs/UPMIX_CABIN_V12.md`.
+results stay in Git and in `docs-obsidian/Sources/UPMIX_FLOAT_STAGE1.md` / `docs-obsidian/Sources/UPMIX_CABIN_V12.md`.
 
 Universal accepts 48 kHz, signed 16-bit stereo WAV and writes extensible 5.1
 WAV in `L,R,C,LFE,Ls,Rs` order.  It has 512 frames of matched front/rear/LFE

@@ -10,11 +10,11 @@ HSSR = High-Selectivity Semantic Rear-routing. It is a small, causal, quantized 
 
 The honest one-paragraph history: ~15 model generations tried to make a network *separate* music into 12 instrument classes on 240 songs, and it never worked — an independent audit found the trained model equalled "mute plus drums". Separation was abandoned for a genre-agnostic **second scene**: move the not-protected, spatially-wide part of the stereo image behind the listener, delayed so the front still anchors the sound. What ships is that DSP second scene gated by two GRUs: `q6d` (primary, real MoisesDB stems) with `V11` kept as a conservative vocal-protection guard.
 
-Provenance: `docs/research/HSSR_UPMIX_MODEL.md`, `hook/audio/hssr_dsp.{c,h}`, `hook/audio/hssr_neon.{c,h}`. See also [[Stereo to 5.1 Upmix]] and [[Dolby Atmos]].
+Provenance: `docs-obsidian/Research/HSSR_UPMIX_MODEL.md`, `hook/audio/hssr_dsp.{c,h}`, `hook/audio/hssr_neon.{c,h}`. See also [[Stereo to 5.1 Upmix]] and [[Dolby Atmos]].
 
 ## 📚 Why the first approach failed
 
-For roughly fifteen generations (V11…Q2) the model was asked to do supervised source separation over 240 songs. It never reached a regime where separation works. The 2026-09-17 independent audit is the tombstone (`docs/UPMIX_INDEPENDENT_AUDIT_2026-09-17.md`):
+For roughly fifteen generations (V11…Q2) the model was asked to do supervised source separation over 240 songs. It never reached a regime where separation works. The 2026-09-17 independent audit is the tombstone (`docs-obsidian/Sources/UPMIX_INDEPENDENT_AUDIT_2026-09-17.md`):
 
 - The trained model after a full 24,288-update pass equals `MUTE + drums`; "+0.45 dB vs disabled" compares against an empty control, "−0.1 dB vs raw scalar" means it sits at its own initialization.
 - Per-family DEV NMSE: drums 0.44, but lead 0.81, bass 0.81, guitar 0.90, backing 1.06, keys 1.84 — most heads output 13–17 dB below target (MSE shrinkage toward mute).

@@ -48,4 +48,4 @@ flowchart TB
 
 ## 💡 Truth levels
 
-Claims are tagged **[car]** for confirmed on the unit, **[decompile]** for reverse engineering, **[code]** for verified in the current source, and **[open]** for unverified. The stream 111 path from decode to panel is **[car]**: one session ran 13,056 frames in 5 min. The frame rate actually delivered, and what causes it, is still **[open]**. Provenance lives in `docs/ALTSCREEN_*.md` and the memory topic files.
+Claims are tagged **[car]** for confirmed on the unit, **[decompile]** for reverse engineering, **[code]** for verified in the current source, and **[open]** for unverified. The stream 111 path from decode to panel is **[car]**: one session ran 13,056 frames in 5 min. The frame rate actually delivered, and what causes it, is still **[open]**. Provenance lives in `docs-obsidian/Sources/ALTSCREEN_*.md` and the memory topic files.

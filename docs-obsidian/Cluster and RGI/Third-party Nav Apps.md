@@ -108,4 +108,4 @@ The runtime switch is `CMD_ALT_RGI 0x0116`, sent from `AltScreenModule.republish
 - [[AltScreen Cluster Video]]: the type-111 stream these commands act on.
 - [[Cluster Contexts]]: where the cluster video plane lands.
 
-Provenance: `docs/reference/RGI_THIRD_PARTY_NAV_APPS.md`, `MEMORY.md` (Third-party nav apps, zoom vs HID, updateViewArea), `memory/rgi_third_party_maneuvertype.md`, `memory/carplay_updateviewarea_cluster_zoom.md`, `memory/cluster_scene_url_itemtype_layout.md`; source `hook/altscreen/altscreen_hook.c`, `hook/framework/bus_protocol.h`, `java_patch/com/luka/carplay/bus/CarplayBus.java`, `java_patch/com/luka/carplay/core/AltScreenModule.java`.
+Provenance: `docs-obsidian/Sources/reference/RGI_THIRD_PARTY_NAV_APPS.md`, `MEMORY.md` (Third-party nav apps, zoom vs HID, updateViewArea), `memory/rgi_third_party_maneuvertype.md`, `memory/carplay_updateviewarea_cluster_zoom.md`, `memory/cluster_scene_url_itemtype_layout.md`; source `hook/altscreen/altscreen_hook.c`, `hook/framework/bus_protocol.h`, `java_patch/com/luka/carplay/bus/CarplayBus.java`, `java_patch/com/luka/carplay/core/AltScreenModule.java`.

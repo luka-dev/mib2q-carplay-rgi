@@ -26,7 +26,7 @@ While CarPlay owns the phone, hide the stock crossed-out telephone tab in the cl
 tabVisible = (mobileConnectionType == HANDS_FREE_PROFILE) && !carPlayActive
 ```
 
-`mobileConnectionType == 3` is the stock HFP state. The gate was fail-open before the first phone update, so a missing callback could never permanently remove the tab. v1 did not hide the tab. v2 produced two telephone icons and was rolled back. `[car]` (`docs/archive/PHONE_TAB_GATING.md`)
+`mobileConnectionType == 3` is the stock HFP state. The gate was fail-open before the first phone update, so a missing callback could never permanently remove the tab. v1 did not hide the tab. v2 produced two telephone icons and was rolled back. `[car]` (`docs-obsidian/Sources/archive/PHONE_TAB_GATING.md`)
 
 ## ⚠️ The signal traps
 
@@ -90,4 +90,4 @@ Next step, if this is picked up again: find the real publisher of `BAP_Telephone
 - [[Reconnect and Lifecycle]]: `CarPlayApp` activation edges.
 - [[Landmines]]: the DSI, NAD and telMode traps as one-liners.
 
-Provenance: `docs/archive/PHONE_TAB_GATING.md` (its `java_patch_new_replace/...` paths are historical and those trees no longer exist), `MEMORY.md` (Phone tab gating), `memory/phone_tab_gating_findings.md`; removal commit `63e7f35`; consolidation commit `d9c6d02`. The old source pool `Tools/jxe2jar/out/MU1316-combined-vf/` no longer exists; the nearest artifact is `../jxe2jar/out/MU1316-combined.jar` `[open]`. VC binary `hmi_app.elf`.
+Provenance: `docs-obsidian/Sources/archive/PHONE_TAB_GATING.md` (its `java_patch_new_replace/...` paths are historical and those trees no longer exist), `MEMORY.md` (Phone tab gating), `memory/phone_tab_gating_findings.md`; removal commit `63e7f35`; consolidation commit `d9c6d02`. The old source pool `Tools/jxe2jar/out/MU1316-combined-vf/` no longer exists; the nearest artifact is `../jxe2jar/out/MU1316-combined.jar` `[open]`. VC binary `hmi_app.elf`.

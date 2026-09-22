@@ -8,7 +8,7 @@
 
 Two things had to be built: get the **right six PCM channels**, and **synthesize them** for stereo content. The amp (J525 B&O) is a complete 5.1 renderer — the [[Virtual Cabin and Amp RE|Virtual Cabin]] — so the head unit only feeds it `L R C LFE Ls Rs` and lets it do the acoustics: it derives the centre, manages the sub, crosses over every driver, and fans out to 19 speakers.
 
-Provenance is `docs/research/UPMIX.md` (master), with the deep detail in [[HSSR Model]], [[Virtual Cabin and Amp RE]], and [[Dolby Atmos]]. Traps are in [[Landmines]].
+Provenance is `docs-obsidian/Research/UPMIX.md` (master), with the deep detail in [[HSSR Model]], [[Virtual Cabin and Amp RE]], and [[Dolby Atmos]]. Traps are in [[Landmines]].
 
 ```mermaid
 flowchart TB
@@ -49,7 +49,7 @@ flowchart TB
 
 ## ⚙️ Ingest — two CarPlay audio streams
 
-There are two CarPlay audio streams (`docs/reference/AUDIO.md §21`), and which one a track uses decides everything downstream.
+There are two CarPlay audio streams (`docs-obsidian/Sources/reference/AUDIO.md §21`), and which one a track uses decides everything downstream.
 
 | Stream | Advertised as | Codec | On the car |
 |---|---|---|---|
@@ -135,7 +135,7 @@ Before output, an S16 cabin guard predicts each amp bus peak (using a linear cop
 
 ## 📌 The shipped calibration
 
-Luka, 2026-09-21 morning: *current calibration is OK — do not tune* (`docs/research/HSSR_UPMIX_MODEL.md §5`), at retention 0. Later that day he chose the scene-bed variant after a headphone A/B, and that is what `carplay_startup.sh` exports now (commit `3676324`, `carplay_startup.sh:71-78`).
+Luka, 2026-09-21 morning: *current calibration is OK — do not tune* (`docs-obsidian/Research/HSSR_UPMIX_MODEL.md §5`), at retention 0. Later that day he chose the scene-bed variant after a headphone A/B, and that is what `carplay_startup.sh` exports now (commit `3676324`, `carplay_startup.sh:71-78`).
 
 | Parameter | Shipped value | Env flag / source |
 |---|---|---|

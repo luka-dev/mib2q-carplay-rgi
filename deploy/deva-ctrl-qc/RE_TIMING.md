@@ -6,7 +6,7 @@ successfully, and was staged on the unit. A later direct vehicle test proved
 that its six-channel DMA geometry and clock are correct, but audio is still
 broken because the independently created CSD stream remains stereo. The current
 binary is therefore not a complete 5.1 fix. See
-[`../../docs/ROUTER_INPUT_WIDTH_AUDIT.md`](../../docs/ROUTER_INPUT_WIDTH_AUDIT.md).
+[`../../docs/ROUTER_INPUT_WIDTH_AUDIT.md`](../../docs-obsidian/Sources/ROUTER_INPUT_WIDTH_AUDIT.md).
 
 ## Observed failure
 

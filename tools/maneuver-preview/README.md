@@ -55,4 +55,4 @@ fifteen fixtures with former lane-preview ordinary cases 18–32.
 That historical parity check requires matching palettes: the approved white
 base intentionally differs from captures made with the former grey-blue base.
 
-See [scene engine](../../docs/SCENE_ENGINE.md) for the separate lane protocol.
+See [scene engine](../../docs-obsidian/Sources/SCENE_ENGINE.md) for the separate lane protocol.

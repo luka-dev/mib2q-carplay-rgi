@@ -28,7 +28,7 @@ Sentinels that must survive "simplification": `[decompile]`, `[car]`
 - `-1000` = a defensive case. Do not read the sign as a direction.
 - `0` = real straight.
 
-`mTurnAnglePresent` separates a real −1° from a legacy default. The full mapping is in `docs/RGI_HUD_RENDERER_KNOWLEDGE.md`.
+`mTurnAnglePresent` separates a real −1° from a legacy default. The full mapping is in `docs-obsidian/Sources/RGI_HUD_RENDERER_KNOWLEDGE.md`.
 
 ## ⚙️ KOMO / LVDS map pipeline (stock navigation)
 
@@ -127,4 +127,4 @@ The `libPresentationController` ARM32 patches (keep DSIs alive, force `StartDraw
 - [[Cluster Contexts]]: where displayables 98/99 land on the panel.
 - [[Third-party Nav Apps]]: why `ManeuverMapper` gets no maneuverType from some apps.
 
-Provenance: `docs/RGI_HUD_RENDERER_KNOWLEDGE.md`, `MEMORY.md` (VC FPK state machine, LVDS Video Pipeline), `memory/komo_lvds_architecture.md`, `memory/vc_fpk_state_machine.md`, `memory/kss_infostates6_rejection.md`, `memory/bapbridge_architecture.md`, `memory/libpresentationcontroller_patches.md`; source `maneuver_render/`, `java_patch/com/luka/carplay/rgd/{BAPBridge,RendererServer}.java`, `java_patch/de/audi/tghu/navi/app/cluster/ClusterService.java`.
+Provenance: `docs-obsidian/Sources/RGI_HUD_RENDERER_KNOWLEDGE.md`, `MEMORY.md` (VC FPK state machine, LVDS Video Pipeline), `memory/komo_lvds_architecture.md`, `memory/vc_fpk_state_machine.md`, `memory/kss_infostates6_rejection.md`, `memory/bapbridge_architecture.md`, `memory/libpresentationcontroller_patches.md`; source `maneuver_render/`, `java_patch/com/luka/carplay/rgd/{BAPBridge,RendererServer}.java`, `java_patch/de/audi/tghu/navi/app/cluster/ClusterService.java`.

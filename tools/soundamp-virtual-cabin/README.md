@@ -2,46 +2,46 @@
 
 Current relevant Python validation: **704 tests (121 extraction +583 model/cabin)**.
 
-Newest [static full-path extensions and limits](../../docs/UPMIX_STATIC_COMPLETION_2026-09-20.md):
+Newest [static full-path extensions and limits](../../docs-obsidian/Sources/UPMIX_STATIC_COMPLETION_2026-09-20.md):
 opt-in source-derived log/pow + internal FFT table, full target publication and
 mode5 coefficient access schedule. `full_static_nearest_zero_aux` selects the new
 numerical reference; `floor` is a separate explicit FIX hypothesis. Dynamic
 audio transitions and complete pointer alias closure are NOT established.
 
-Previous: [retained first-B spectral binding](../../docs/UPMIX_RETAINED_B_2026-09-20.md).
+Previous: [retained first-B spectral binding](../../docs-obsidian/Sources/UPMIX_RETAINED_B_2026-09-20.md).
 `full_retained_zero_aux` and `full_retained_aux_probe` use real common-header
 coefficients, spatial controls,74-band map and firmware-derived transform tables;
 the level-mask min/max binding bug is fixed. Live state/hardware rounding/cabin
 acoustics remain unverified. Old neutral diagnostic scenarios are preserved.
 
 Practical whole-upmix entry point:
-[C → PCM6 → explicit DSP → paired metrics](../../docs/UPMIX_END_TO_END_2026-09-20.md).
+[C → PCM6 → explicit DSP → paired metrics](../../docs-obsidian/Sources/UPMIX_END_TO_END_2026-09-20.md).
 `audit_upmix_end_to_end.py` performs fresh C renders; the `_batch.py` companion
 adds isolated parallel track runs and verified aggregation. Runtime scenarios
 are separate from test fixtures. Positive model peaks are preserved; unknown
 spectral/live controls remain explicit, not a production preset recommendation.
 
 Latest third-pass closure: [effective first-B tail binding and complete-stage
-synthetic wiring test](../../docs/SHARC_B_TAIL_BINDING_2026-09-20.md),
-[second-B control targets/mode1](../../docs/SHARC_SECOND_B_2026-09-20.md),
-[callback/transition control](../../docs/SHARC_B_WRAPPER_CONTROL_2026-09-20.md),
-and [pointer/smoothing proof boundaries](../../docs/SHARC_B_BINDING_2026-09-20.md).
+synthetic wiring test](../../docs-obsidian/Sources/SHARC_B_TAIL_BINDING_2026-09-20.md),
+[second-B control targets/mode1](../../docs-obsidian/Sources/SHARC_SECOND_B_2026-09-20.md),
+[callback/transition control](../../docs-obsidian/Sources/SHARC_B_WRAPPER_CONTROL_2026-09-20.md),
+and [pointer/smoothing proof boundaries](../../docs-obsidian/Sources/SHARC_B_BINDING_2026-09-20.md).
 See `output/upmix-composed-static-20260920/report.json`: explicit scenarios for
 all electrical stages, not a vehicle preset or measurement. Default v7 unchanged.
 
 Previous static closure: **536 tests pass (121 extraction +415 model/cabin)**.
-[C4D17 v3 correction and calibration composition](../../docs/SHARC_COMPLEX_CALIBRATION_2026-09-20.md)
+[C4D17 v3 correction and calibration composition](../../docs-obsidian/Sources/SHARC_COMPLEX_CALIBRATION_2026-09-20.md)
 fix detector stride16 sampling; corrected adaptive reports exist for both profiles.
-[Second-B aux reference](../../docs/SHARC_SECOND_B_2026-09-20.md) is integrated
-into AmpChain opt-in v9 and the cabin bridge. [Nonzero first-B EQ designer](../../docs/SHARC_B_EQ_DESIGN_2026-09-20.md)
-and [conditional two-bank timing](../../docs/SHARC_B_WRAPPER_TIMING_2026-09-20.md)
+[Second-B aux reference](../../docs-obsidian/Sources/SHARC_SECOND_B_2026-09-20.md) is integrated
+into AmpChain opt-in v9 and the cabin bridge. [Nonzero first-B EQ designer](../../docs-obsidian/Sources/SHARC_B_EQ_DESIGN_2026-09-20.md)
+and [conditional two-bank timing](../../docs-obsidian/Sources/SHARC_B_WRAPPER_TIMING_2026-09-20.md)
 also have executable references. Default v7 metadata/rendering is unchanged.
 No live-state or measured acoustic fidelity claim.
 
-Previous static closure: [B effective-output/scalar bindings](../../docs/SHARC_B_BINDING_2026-09-20.md),
-[C4D17 calibration timing and second-B ancestry](../../docs/SHARC_COMPLEX_TIMING_CLOSURE_2026-09-20.md),
-[electronic/acoustic bridge and legacy matrix repair](../../docs/UPMIX_CABIN_BRIDGE_2026-09-20.md),
-and [machine-readable readiness gates](../../docs/UPMIX_MODEL_READINESS_2026-09-20.md).
+Previous static closure: [B effective-output/scalar bindings](../../docs-obsidian/Sources/SHARC_B_BINDING_2026-09-20.md),
+[C4D17 calibration timing and second-B ancestry](../../docs-obsidian/Sources/SHARC_COMPLEX_TIMING_CLOSURE_2026-09-20.md),
+[electronic/acoustic bridge and legacy matrix repair](../../docs-obsidian/Sources/UPMIX_CABIN_BRIDGE_2026-09-20.md),
+and [machine-readable readiness gates](../../docs-obsidian/Sources/UPMIX_MODEL_READINESS_2026-09-20.md).
 490 relevant Python tests pass (121 extraction +369 all model/cabin tests).
 No complete/live cabin fidelity claim: actual acoustic responses and selected
 state are still absent. The legacy documentary matrix is now corrected too;
@@ -51,8 +51,8 @@ The current conditional electronic model is
 [`amp_dsp_chain.py`](amp_dsp_chain.py), version `bank1-known-electronics-v7`.
 **v7/v8 correct a matrix transpose error in v5/v6**: A07/RAM rows are outputs,
 not inputs. Old speaker-group bass numbers and “sub only LFE” calculations are
-superseded by the [seven-track rerender and controls](../../docs/UPMIX_MATRIX_RERENDER_2026-09-20.md).
-See [proof and coefficient side paths](../../docs/SHARC_MATRIX_CONTROL_2026-09-20.md).
+superseded by the [seven-track rerender and controls](../../docs-obsidian/Sources/UPMIX_MATRIX_RERENDER_2026-09-20.md).
+See [proof and coefficient side paths](../../docs-obsidian/Sources/SHARC_MATRIX_CONTROL_2026-09-20.md).
 It includes the recovered second pair mixer, both pre-EQ delay vectors,
 packed post-EQ binding and the input-matrix floor. Explicit runtime scenarios
 can include the recovered gain/limiter stages; defaults do not guess their
@@ -70,7 +70,7 @@ tail; `amp_b_spectral.py` adds isolated magnitude/normalization and sum/differen
 helpers; the composed reference is described below. These B helpers require explicit
 inputs/parameters and do not replace AmpChain's default B=0 hypothesis. None
 claims the full remaining audio graph. See
-[`SOUNDAMP_FULL_DSP_MODEL.md`](../../docs/SOUNDAMP_FULL_DSP_MODEL.md) for the
+[`SOUNDAMP_FULL_DSP_MODEL.md`](../../docs-obsidian/Sources/SOUNDAMP_FULL_DSP_MODEL.md) for the
 current chain, proof boundaries and tests. `amp_music_report.py` exports the
 model version and assumptions beside every report and aligns analysis windows
 by known path delays. The documentary fan-out and measured-BRIR tools described
@@ -113,7 +113,7 @@ and selector rule are exported as `input_path_profiles`. This path is common
 to A and B:16 banks include a55Hz peak up to+20.5dB even with tone gains zero.
 No live-bank inference. C4A54's delay/TCB path has an independent ring-DMA test.
 `audit_amp_input_scenarios.py AUDIT --output REPORT` renders32 fixed transfer
-scenarios. See [input-path findings](../../docs/SHARC_INPUT_PATH_2026-09-20.md).
+scenarios. See [input-path findings](../../docs-obsidian/Sources/SHARC_INPUT_PATH_2026-09-20.md).
 AmpChain now joins common input to BOTH A/B through explicit `upstream_scenario`
 and optional `first_b_scenario` (mode5 reference, supplied histories and wrapper
 delay). Input mapping is mandatory and labelled unproven. The opt-in model
@@ -126,7 +126,7 @@ Static-only continuation adds `amp_input_control.py`: normal source level,
 override, mute gates and cached EQ-selector commit. gp−77F8 is a smoothed
 control word, not PCM energy; normal EQ enable initializesA5. A bounded
 decoded-V850 interpreter verifies196 target-calculation cases. See
-[level source audit](../../docs/SHARC_LEVEL_CONTROL_2026-09-20.md).
+[level source audit](../../docs-obsidian/Sources/SHARC_LEVEL_CONTROL_2026-09-20.md).
 Trim writers and override-mode dispatcher are now bound. First-B API25 uses
 the unsmoothed target, unlike common EQ; pending/effective B controls have an
 explicit defer branch. `amp_b_control.py` adds signed-side curve interpolation
@@ -143,7 +143,7 @@ explicit zero-other-slot assumptions; nonzero designer remains unsupported.
 434 additional extracted-curve comparisons cover this extension.
 All four B calibration banks and API17 replacement/rebase/effective replay are
 now bound. B calibration bank1..4 is NOT input matrix bank0..2. See
-[configuration audit](../../docs/SHARC_B_CONFIG_2026-09-20.md) and generated
+[configuration audit](../../docs-obsidian/Sources/SHARC_B_CONFIG_2026-09-20.md) and generated
 `b_config_control.json`. Explicit helpers cover normal API17 candidates and
 branch-gain replay; slots are retained and replay25 uses raw effective value.
 `amp_b_mode_control.py` now binds API16/20 pointer writes into effective config.
@@ -158,7 +158,7 @@ they are not silently modelled as inactive filters.
 raw state, both direct stores and ordered call arguments. Indexed controls can
 rebind both modes using effective20; source-store mutates source RAM with CRC.
 No complete FIFO/callee/audio emulator or real-command-delivery claim.
-The [outer request audit](../../docs/SHARC_OUTER_CONTROL_2026-09-20.md) binds A21
+The [outer request audit](../../docs-obsidian/Sources/SHARC_OUTER_CONTROL_2026-09-20.md) binds A21
 raw forwarding and API18's dedicated writer. `api18_request_coordinate` adds only
 the accepted signed−12..12→clamped−9..9 projection, checked against decoded
 instructions for all256 bytes. No full packet/event model or UI label is implied.
@@ -168,14 +168,14 @@ writers with explicit inputs, verified against bounded decoded execution.
 only the old transpose and zeroes only LFE in memory. No fresh upmix or vehicle I/O.
 `audit_amp_midrange.py` decomposes fixed-path per-input powers and signed L/R
 cross terms, checks closure against the v7 music report, and renders float-only
-diagnostic front blends. See [results and stale C guard warning](../../docs/UPMIX_MIDRANGE_ATTRIBUTION_2026-09-20.md).
+diagnostic front blends. See [results and stale C guard warning](../../docs-obsidian/Sources/UPMIX_MIDRANGE_ATTRIBUTION_2026-09-20.md).
 `audit_amp_retention_candidates.py` runs fresh S16/float C candidates on the
-hash-verified seven-track source set. [Corrected C guards and35-render results](../../docs/UPMIX_GUARD_RETENTION_2026-09-20.md)
+hash-verified seven-track source set. [Corrected C guards and35-render results](../../docs-obsidian/Sources/UPMIX_GUARD_RETENTION_2026-09-20.md)
 include downstream peak limits and full-suite installer failures.
 `audit_amp_tuning.py` adds a9-point retention/rear grid, bass/LFE alternatives,
 whole-clip downstream headroom, limiter telemetry, explicit EQ/B sensitivity
 and reread-verified level-matched PCM6 files. See the
-[105-render tuning sweep](../../docs/UPMIX_TUNING_SWEEP_2026-09-20.md).
+[105-render tuning sweep](../../docs-obsidian/Sources/UPMIX_TUNING_SWEEP_2026-09-20.md).
 Next: candidate listening/selectivity evaluation (not a model verdict);
 unbound pointer consumers,
 outermost request semantics, API29, nonzero EQ designer,
@@ -187,7 +187,7 @@ Host-side documentary/static model of the known Audi J525/B&O 9VS signal path
 for evaluating HSSR and authored 5.1 without changing or recording the car.
 
 Newer research is recorded in
-[`UPMIX_STATIC_READINESS_AND_SOUNDCHECK.md`](../../docs/UPMIX_STATIC_READINESS_AND_SOUNDCHECK.md).
+[`UPMIX_STATIC_READINESS_AND_SOUNDCHECK.md`](../../docs-obsidian/Sources/UPMIX_STATIC_READINESS_AND_SOUNDCHECK.md).
 The new [`digital_stages.py`](digital_stages.py) implements isolated verified
 selectors, split-half pair mixers, explicit gain-row selection and packed
 output-EQ math with caller-supplied coefficients. Ordered execution respects
@@ -384,5 +384,5 @@ split-half mixing, explicit OFF-row/gate hypotheses, packed EQ sign/order and
 state continuity, and schedule-local buffer reuse. Supplied five-word EQ
 coefficients are required; OEM design-record conversion and coefficient
 transition timing are still unimplemented. See the
-[float candidate results](../../docs/UPMIX_FLOAT_STAGE1.md) for the first
+[float candidate results](../../docs-obsidian/Sources/UPMIX_FLOAT_STAGE1.md) for the first
 upmix integration: a detector using only the proven input matrix.

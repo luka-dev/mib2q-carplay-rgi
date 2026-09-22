@@ -190,7 +190,7 @@ int main(int argc, char** argv)
     // metadata helper must be called at off + 2.  Called on the sync word itself
     // they read 0x08007c41 instead of 0x7c41800c and report 96000 Hz / 32 ch /
     // frame length 0.  The helpers are correct; the offset is the trap.
-    // docs/PIONEER_TYPE103_STATIC_SPEC.md documents the same +2 correction.
+    // docs-obsidian/Sources/PIONEER_TYPE103_STATIC_SPEC.md documents the same +2 correction.
     uint32_t off = GetCookieOffset(&cookie[0], (uint32_t)cookie.size());
     uint32_t ver = GetVersion(&cookie[0], off);
     uint32_t cfg = off + 2;

@@ -124,7 +124,7 @@ def check():
               '- [Все 54 iAP2 типа, RHT/LHT](MANEUVER_MAPPING_TABLE.md).',
               '- [Измеренные селекторы и дороги](../../output/maneuver-audit/mcu-chain-output.csv).',
               '- [Воспроизводимый декодер по таблицам прошивки](../../tools/hud_mcu_decoder.py).', '']
-    (ROOT / 'docs/reference/HUD_BAP_3D_SELECTORS.md').write_text('\n'.join(lines))
+    (ROOT / 'docs-obsidian/Sources/reference/HUD_BAP_3D_SELECTORS.md').write_text('\n'.join(lines))
     print(json.dumps(report, indent=2))
 
 

@@ -6,7 +6,7 @@
  * because every HU media endpoint is 48 kHz. iOS has an in-session transport-format-change
  * path; APAP carries both a per-packet format hint and a changed inline cookie, so this adapter
  * can alternate with APAC without recreating the type-103 session. Full reasoning:
- * docs/DYNAMIC_BUFFERED_CODEC_SWITCH.md.
+ * docs-obsidian/Sources/DYNAMIC_BUFFERED_CODEC_SWITCH.md.
  *
  * It presents the same function table as the APAC port (spa_apac_codec_api_t). The render path
  * tries the current API and then its alternate; the cookie-accepting decoder plus returned PCM

@@ -36,7 +36,7 @@ toolchain; rebuilding artifacts alone does not change what is installed on HU.
 - `d61e37f`: immediate `exec dio_manager`, asynchronous monitor, persistent
   renderers, exact process identity and stale-generation ownership checks.
 - Current implementation: [supervisor](deploy/smartphone_integrator/README.md).
-  The [USB runbook](docs/USB_REPLUG_RECOVERY_RUNBOOK.md) preserves the original
+  The [USB runbook](docs-obsidian/Sources/USB_REPLUG_RECOVERY_RUNBOOK.md) preserves the original
   diagnosis and per-component A/B procedure.
 
 ### Closed: mode transitions
@@ -45,7 +45,7 @@ toolchain; rebuilding artifacts alone does not change what is installed on HU.
   media; music can reclaim the route only after the stock owner releases it.
 - `fc9d4a5`: buffered transport and PCM lifecycle hardening.
 - `55e532d`: parking focus transitions and keeping CarPlay visible beside OPS.
-  [PDC history](docs/CARPLAY_PDC_SMALL_STAGE_ROOT_CAUSE.md) already records the
+  [PDC history](docs-obsidian/Sources/CARPLAY_PDC_SMALL_STAGE_ROOT_CAUSE.md) already records the
   owner's on-car confirmation/photo from September 16. This acceptance does
   not cover the lower warning strip or the suppression attempt in `efc3020`.
 - `BAPBridge.forceGfxAvailable()` now uses the stock KOMO callbacks and a typed
@@ -83,13 +83,13 @@ setup/teardown races. Commands: `scripts/test_supervisor_lifecycle.sh`,
   replay. Other popups and stock behavior outside that guard remain intact.
   Source/host checks cover the actual stock manager and a failing stock-first
   control; Kanzi rendering and complete removal still require on-HU acceptance.
-  [Details](docs/CARPLAY_PDC_SMALL_STAGE_ROOT_CAUSE.md).
+  [Details](docs-obsidian/Sources/CARPLAY_PDC_SMALL_STAGE_ROOT_CAUSE.md).
 - Upmix: ongoing work, separate from the completed base audio path.
 - CarPlay Video: receiver/player integration remains unimplemented; optional
-  next feature. [Research](docs/reference/CARPLAY_VIDEO_MHI2_PLAYER_2026_09_15.md).
+  next feature. [Research](docs-obsidian/Sources/reference/CARPLAY_VIDEO_MHI2_PLAYER_2026_09_15.md).
 - Partial 360-camera beside CarPlay: deliberately deferred by the owner on
   September 14; resume only on a separate request.
-  [Preflight](docs/reference/CARPLAY_PARTIAL_360_PREFLIGHT.md).
+  [Preflight](docs-obsidian/Sources/reference/CARPLAY_PARTIAL_360_PREFLIGHT.md).
 - Optional MHI3 parity: decide whether the special `routeState==5`
   accept-all-maneuvers behavior is useful. This is not a current failure of
   rerouting or a release blocker.
@@ -194,6 +194,6 @@ Security → Analytics & Improvements → Analytics Data. Read
 `crashes_and_spins/accessoryd-packets-*.log.ips` for the raw iAP2 packet trace.
 
 Historical lifecycle test recipes remain in
-`docs/reference/CARPLAY_SESSION_LIFECYCLE_AUDIT.md`; Java cleanup findings are
-preserved in `docs/reference/JAVA_PRODUCTION_CLEANUP_AUDIT.md`. Use the current
+`docs-obsidian/Sources/reference/CARPLAY_SESSION_LIFECYCLE_AUDIT.md`; Java cleanup findings are
+preserved in `docs-obsidian/Sources/reference/JAVA_PRODUCTION_CLEANUP_AUDIT.md`. Use the current
 status above when deciding what work remains.

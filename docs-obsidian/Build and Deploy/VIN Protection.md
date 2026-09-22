@@ -84,10 +84,10 @@ This protects against cloning and casual patching. It is not cryptographic secre
 
 ---
 
-You can gate the compiled `.so` against a fake store and check three things: the right VIN gives `1`, a wrong VIN gives `0`, and no plaintext VIN leaked (`grep -c <VIN> <the .so>` gives `0`). This needs the same `PROT_SECRET` that the build used, so pin one for a build you intend to verify. The recipe, with `PROT_MMX_STORE` overriding the store path (`prot_vin.c:86-87`), is in `docs/PROTECTOR.md` §6. `docs/PROTECTOR.md` §5 covers adding the protector to a new artifact (slot, gate choke point, compile, stamp); the full API is in `protector/README.md`.
+You can gate the compiled `.so` against a fake store and check three things: the right VIN gives `1`, a wrong VIN gives `0`, and no plaintext VIN leaked (`grep -c <VIN> <the .so>` gives `0`). This needs the same `PROT_SECRET` that the build used, so pin one for a build you intend to verify. The recipe, with `PROT_MMX_STORE` overriding the store path (`prot_vin.c:86-87`), is in `docs-obsidian/Sources/PROTECTOR.md` §6. `docs-obsidian/Sources/PROTECTOR.md` §5 covers adding the protector to a new artifact (slot, gate choke point, compile, stamp); the full API is in `protector/README.md`.
 
 </details>
 
 ---
 
-Provenance: `docs/PROTECTOR.md`, `scripts/build_hook_protected.sh`, `scripts/build_hook_common.sh`, `protector/` (`carplay_prot.{c,h}`, `prot_vin.c`, `protect.py`, `README.md`).
+Provenance: `docs-obsidian/Sources/PROTECTOR.md`, `scripts/build_hook_protected.sh`, `scripts/build_hook_common.sh`, `protector/` (`carplay_prot.{c,h}`, `prot_vin.c`, `protect.py`, `README.md`).

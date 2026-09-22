@@ -63,7 +63,7 @@ Two hard rules: `[car]`, `[code]`
 
 - **Denominator:** the step length `mDistance[idx]` (0x5202 TLV 0x0005), capped at 15% of the prepare threshold. If the step length is unknown (`-1`/`0`, as with Google Maps) or longer than the cap, the cap is used. The old rule "unknown ⇒ `bargraphOn = false`" is gone. `[code]` (`BAPBridge.java:56`, `:2495-2513`; commit `4858fc7`)
 - **HU model:** `ClusterService` keeps the distance model valid alongside the bargraph while CarPlay owns the cluster: `if (flag && i > 0 && (!showBargraph || AltScreenModule.isConnected()))`. `[code]` (`java_patch/de/audi/tghu/navi/app/cluster/ClusterService.java:377-386`) This is the successor of the old "drop `!showBargraph`" fix that was cited at `:353`.
-- **VC display:** whether the VC shows the number and the bar together is not decided by the HU. The audited AU491 `hmi_app.elf` hides the distance on its own when `BargraphOn != 0`. `[decompile]` (`docs/reference/DISTANCE_BARGRAPH_CHAIN.md` §1-2, comment at `ClusterService.java:377-381`) The earlier claim "they show together" is withdrawn. What the installed cluster shows is `[open]`.
+- **VC display:** whether the VC shows the number and the bar together is not decided by the HU. The audited AU491 `hmi_app.elf` hides the distance on its own when `BargraphOn != 0`. `[decompile]` (`docs-obsidian/Sources/reference/DISTANCE_BARGRAPH_CHAIN.md` §1-2, comment at `ClusterService.java:377-381`) The earlier claim "they show together" is withdrawn. What the installed cluster shows is `[open]`.
 
 ## ⚙️ FctID 37: FunctionSync
 
@@ -127,4 +127,4 @@ Route end goes back to ctx 81, not to the stock cluster. Ctx 74 returns only whe
 - [[Third-party Nav Apps]]: why `source_supports_rg` is 0 for Waze.
 - [[Hook to Java Bus]]: the `:19810` framing.
 
-Provenance: `docs/RGI_HUD_RENDERER_KNOWLEDGE.md`, `docs/reference/DISTANCE_BARGRAPH_CHAIN.md`, `MEMORY.md` (BAP Bargraph, Slot Mapping, FSG Sync, BAP FunctionSync, visible_in_app), `memory/bapbridge_architecture.md` (its KOMO dual path is superseded); source `hook/routeguidance/rgd_hook.c`, `hook/routeguidance/rgd_tlv.h`, `java_patch/com/luka/carplay/rgd/{BAPBridge,RouteGuidance,RendererServer}.java`, `java_patch/de/audi/tghu/navi/app/cluster/ClusterService.java`.
+Provenance: `docs-obsidian/Sources/RGI_HUD_RENDERER_KNOWLEDGE.md`, `docs-obsidian/Sources/reference/DISTANCE_BARGRAPH_CHAIN.md`, `MEMORY.md` (BAP Bargraph, Slot Mapping, FSG Sync, BAP FunctionSync, visible_in_app), `memory/bapbridge_architecture.md` (its KOMO dual path is superseded); source `hook/routeguidance/rgd_hook.c`, `hook/routeguidance/rgd_tlv.h`, `java_patch/com/luka/carplay/rgd/{BAPBridge,RouteGuidance,RendererServer}.java`, `java_patch/de/audi/tghu/navi/app/cluster/ClusterService.java`.

@@ -86,7 +86,7 @@ Recorded input was 20–27 fps against `maxFPS=30`, which the hook advertises (`
 | Thermal | `DBThermalMonitor` suggests 15 fps at level 1 and 5 fps at levels 2–3. There is no limit at normal level 0. |
 | Wired branch | A `wired car connection` / `IsConnectedOverUSB && IsCarPlay` branch uses the max fps directly and bypasses the ladder. |
 
-**Conclusion.** In the sampled windows the lower frame count is already present before our decoder. The static evidence does **not** justify changing `maxFPS`, bypassing the queue or thermal limits, or claiming the phone deliberately sends 20 fps. The pace probe is a **build-time** switch, `ALTSCREEN_PACE_TRACE=1` (default `0`, `scripts/build_hook_common.sh:57`). In a `LOG=0` build its output goes to `/tmp/carplay_alt_pace.log` (`hook/framework/logging.h:34-35`, `:64-65`). The live measurement is still **[open]**. See `docs/ALTSCREEN_FRAME_RATE_INVESTIGATION.md`, `docs/ALTSCREEN_STOCK_30FPS_PATH.md` and `docs/ALTSCREEN_30FPS_IMPLEMENTATION.md`.
+**Conclusion.** In the sampled windows the lower frame count is already present before our decoder. The static evidence does **not** justify changing `maxFPS`, bypassing the queue or thermal limits, or claiming the phone deliberately sends 20 fps. The pace probe is a **build-time** switch, `ALTSCREEN_PACE_TRACE=1` (default `0`, `scripts/build_hook_common.sh:57`). In a `LOG=0` build its output goes to `/tmp/carplay_alt_pace.log` (`hook/framework/logging.h:34-35`, `:64-65`). The live measurement is still **[open]**. See `docs-obsidian/Sources/ALTSCREEN_FRAME_RATE_INVESTIGATION.md`, `docs-obsidian/Sources/ALTSCREEN_STOCK_30FPS_PATH.md` and `docs-obsidian/Sources/ALTSCREEN_30FPS_IMPLEMENTATION.md`.
 
 <details>
 <summary>Stock capture cadence and the 33 ms timer</summary>

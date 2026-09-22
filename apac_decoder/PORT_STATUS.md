@@ -30,7 +30,7 @@ Out of scope for the CarPlay 5.1 target: `apac::scene`, `apac::APACAudioSceneDec
 `APACCoreLBRDecoder` was on that list and is **not** droppable: `apac::ChanDecElement::Initialize`
 allocates the core decoder, plants the LBR vtable and calls the LBR `Initialize`, so the object the
 C API drives is the subclass and the frame path runs `APACCoreLBRDecoder::Deserialize`. Same for
-`APACCACDecoder`, which `docs/reference/APAC_DECODER_PORT.md` called droppable "unless tracing shows
+`APACCACDecoder`, which `docs-obsidian/Sources/reference/APAC_DECODER_PORT.md` called droppable "unless tracing shows
 index 65 uses it". Tracing shows it does, on every channel pair of every packet.
 
 ## Where stages 0, a, b, c and d stand

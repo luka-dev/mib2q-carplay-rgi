@@ -261,7 +261,7 @@ def main():
         'python3 tools/build_hud_icon_selection.py --prepare',
         '# Если появились новые BAP descriptors: прогнать их tools/ghidra/HudManeuverChainAudit.java на G/M.',
         'python3 tools/build_hud_icon_selection.py','```','']
-    (ROOT/'docs/reference/CARPLAY_HUD_ICON_SELECTION.md').write_text('\n'.join(lines))
+    (ROOT/'docs-obsidian/Sources/reference/CARPLAY_HUD_ICON_SELECTION.md').write_text('\n'.join(lines))
     print(json.dumps(summary,indent=2))
 
 

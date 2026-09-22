@@ -71,4 +71,4 @@ Claims are tagged:
 
 Status in short: BAP text and HUD and the ctx 80/81 machine are `[car]` and `[code]`. The third-party-app analysis is `[decompile]`. The phone-tab gate was removed from the code in `63e7f35`, and its existence-gate question is still `[open]`.
 
-Provenance: `docs/RGI_HUD_RENDERER_KNOWLEDGE.md`, `docs/reference/RGI_THIRD_PARTY_NAV_APPS.md`, `docs/reference/DISTANCE_BARGRAPH_CHAIN.md`, the project `MEMORY.md`, and `memory/production_full_audit_9295b04.md`. The only Java tree is `java_patch/` (built by `scripts/build_java.sh:25`).
+Provenance: `docs-obsidian/Sources/RGI_HUD_RENDERER_KNOWLEDGE.md`, `docs-obsidian/Sources/reference/RGI_THIRD_PARTY_NAV_APPS.md`, `docs-obsidian/Sources/reference/DISTANCE_BARGRAPH_CHAIN.md`, the project `MEMORY.md`, and `memory/production_full_audit_9295b04.md`. The only Java tree is `java_patch/` (built by `scripts/build_java.sh:25`).

@@ -162,8 +162,8 @@ Every note in the vault, alphabetical:
 
 ## 📌 Provenance
 
-The deep source material lives in the repo: `docs/research/` (the audio white papers),
-`docs/` and `docs/reference/` (the detailed audits), `assets/` (the reverse-engineering
+The deep source material lives in the repo: `docs-obsidian/Sources/research/` (the audio white papers),
+`docs-obsidian/Sources/` and `docs-obsidian/Sources/reference/` (the detailed audits), `assets/` (the reverse-engineering
 working sets), and `memory/` (the distilled notes). This vault synthesizes and links
 them. Every code-state claim was reconciled against the current source on 2026-09-22
 (the code is authoritative); training history, listening verdicts and on-car

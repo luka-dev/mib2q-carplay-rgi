@@ -54,7 +54,7 @@ tmp/
 *.dSYM/
 
 # Experiment/render/tuning output. Like build/, everything here is tool scratch;
-# the durable knowledge was consolidated into docs/research/. The tree carries the
+# the durable knowledge was consolidated into docs-obsidian/Sources/research/. The tree carries the
 # empty directory and nothing else.
 /output/*
 !/output/.gitkeep
@@ -69,7 +69,7 @@ tools/loader_preview/prism_preview
 /uninstall_MoreIncredibleBash/mod/last-carplay-*.log
 
 
-# Hand-staged release payload (docs/RELEASE_ARTIFACTS.md) — never commit binaries.
+# Hand-staged release payload (docs-obsidian/Sources/RELEASE_ARTIFACTS.md) — never commit binaries.
 install_MoreIncredibleBash/mod/carplay/root/
 
 install_MoreIncredibleBash/mod/carplay/carplay_child.json

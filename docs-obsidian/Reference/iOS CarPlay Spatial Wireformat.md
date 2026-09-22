@@ -8,7 +8,7 @@
 
 CarPlay audio was re-litigated for months. The RE below closes it: there are **two** audio streams, "spatial" on the realtime one is **AAC-LC 5.1.2** (a single format bit, 42), Atmos is a *content* tier not a transport, and the realtime multichannel gate is entirely phone-side. Stock 210 libairplay is PCM-only; the multichannel we ship comes from the hook's own buffered type-103 stream. For the surround target that we actually ship see [[Discrete 5.1 Routing]]; for what Atmos means here see [[Dolby Atmos]].
 
-Provenance: `docs/reference/AUDIO.md §9-27`, `memory/carplay_spatial_atmos_wireformat.md`, `memory/apap_no_format_index.md`, `memory/audio_210_pcm_passthrough.md`. Truth tags: **[decompile]** = iOS 27 / libairplay RE, **[car]** = confirmed on the unit, **[code]** = read in the current tree, **[open]** = unverified.
+Provenance: `docs-obsidian/Sources/reference/AUDIO.md §9-27`, `memory/carplay_spatial_atmos_wireformat.md`, `memory/apap_no_format_index.md`, `memory/audio_210_pcm_passthrough.md`. Truth tags: **[decompile]** = iOS 27 / libairplay RE, **[car]** = confirmed on the unit, **[code]** = read in the current tree, **[open]** = unverified.
 
 ---
 
@@ -50,7 +50,7 @@ packet-beta
 Key readings **[decompile]**:
 
 - **Bit 42 is the spatial delta.** `APAudioFormatGetSupportedTransportAudioFormatsForScreenReceiver` returns `0x1440800` (stereo AAC) and, when spatial is allowed, `0x40001440800` — the difference is exactly bit 42 = `AAC_LC/48000/5.1.2`.
-- Bits 39/41 = AAC-LC / AAC-ELD 48k **5.1**; bits 40/42 = AAC-LC / AAC-ELD 48k **5.1.2** (`docs/reference/AUDIO.md:595-596`; 40 and 42 also defined in `hook/audio/audio_hook.h:127-128`).
+- Bits 39/41 = AAC-LC / AAC-ELD 48k **5.1**; bits 40/42 = AAC-LC / AAC-ELD 48k **5.1.2** (`docs-obsidian/Sources/reference/AUDIO.md:595-596`; 40 and 42 also defined in `hook/audio/audio_hook.h:127-128`).
 - Bit 44 = `PCM/48000/16/5.1` — for *buffered* receivers (HomePod-class), never offered to CarPlay realtime. The hook still defines `SPA_DEFAULT_BIT 44u` (`hook/audio/audio_hook.h:40-43`), but only for the retained realtime migration/debug path (`hook/audio/audio_hook.c:12-15`). **[code]**
 - APAC (type 103) indices 64–92 are **extended-only**: `APAudioFormatIndexToAPAudioFormat` returns `1<<index` only below 64, so no APAC index has a legacy mask bit. 64 = APAC stereo, 65 = APAC 5.1. **[decompile]**
 
@@ -114,7 +114,7 @@ flowchart TB
 
 - **Two CarKit capability levers** (`-[CARSessionConfiguration initWithSessionStatusOptions:propertySupplier:]@0x1C2008F7C`): `dolbyAtmosAudioSupported` ← CFString key `DCXEnabled` (a plain Bool we declare, ivar +0x16); `spatialAudioSupported` ← derived by scanning the `audioFormats` array (ivar +0x15), not a flag. **[decompile]**
 - **Amp side is settled at discrete 5.1.** B&O 3D Advanced is already a 5.1 renderer (16 MOST channels, 19 speakers, Symphoria upmix). Today the HU sends stereo and the amp upmixes; the win is to replace a synthetic upmix of a stereo downmix with the phone's real discrete 5.1. 5.1.2 is impossible — no height source over MOST on B9. The early "ideal wire format = PCM 48k/16/6ch (bit 44)" plan is superseded: what ships is buffered APAC 5.1 (index 65) plus AAC-LC stereo (index 23), decoded in the hook to PCM6 (`deploy/smartphone_integrator/README.md:33-40`). **[code]**
-- **Vehicle closure (2026-09-03):** discrete 5.1 now works end to end. Two final faults were both metadata announcing something other than the stream that existed — the SAD header announced 2ch while 6 PCM slots were present (fixed by sending the 6ch SAD/ASAD, `asad=0xfc`), and a blanked `updateFeedback` removed the sender clock reference (fixed by preserving the stock response). **[car]** · `docs/reference/AUDIO.md §27`.
+- **Vehicle closure (2026-09-03):** discrete 5.1 now works end to end. Two final faults were both metadata announcing something other than the stream that existed — the SAD header announced 2ch while 6 PCM slots were present (fixed by sending the 6ch SAD/ASAD, `asad=0xfc`), and a blanked `updateFeedback` removed the sender clock reference (fixed by preserving the stock response). **[car]** · `docs-obsidian/Sources/reference/AUDIO.md §27`.
 
 </details>
 

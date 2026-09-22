@@ -55,7 +55,7 @@ export ALTSCREEN_ADVERT_DISPLAYS=1
 
 # Buffered CarPlay audio policy.
 # 1 = this unit (external J525 amp, 6-channel MOST route). The internal-amp thread's policy is
-# AUDIO_SPATIAL=0 unless E2P 0xFC reads 02 (docs/AUDIO_5_1_STATE.md); that gate belongs to the
+# AUDIO_SPATIAL=0 unless E2P 0xFC reads 02 (docs-obsidian/Sources/AUDIO_5_1_STATE.md); that gate belongs to the
 # installer, not to this unit's startup file.
 export AUDIO_SPATIAL=1
 export AUDIO_SPATIAL_ATMOS=0
@@ -68,7 +68,7 @@ export AUDIO_STEREO_LFE=assist
 export AUDIO_STEREO_LFE_GAIN=0
 # Front-only bass trim (dB, -12..0): our Bass knob for the 5.1 bank; sub and rear untouched.
 export AUDIO_STEREO_FRONT_BASS_DB=-3
-# Scene-bed experiment 2026-09-21 (docs/UPMIX_DOLBY_DISTRIBUTION_PLAN_2026-09-21.md), chosen by Luka
+# Scene-bed experiment 2026-09-21 (docs-obsidian/Sources/UPMIX_DOLBY_DISTRIBUTION_PLAN_2026-09-21.md), chosen by Luka
 # after the headphone A/B: keep half of each second-scene object in front, decorrelate the bed with
 # per-band delays, and gather hits toward the band owner (object -> rear, bed -> front). Any of the
 # three set to off/0 restores the legacy renderer bit-exactly.
@@ -77,7 +77,7 @@ export AUDIO_HSSR_BED_DELAYS=on
 export AUDIO_HSSR_BED_ATTACK=owner
 export AUDIO_HSSR_ATTACK_COLLAPSE=0.75
 # Retention is a MID control: ungated it also keeps the object's treble in the front
-# (measured +1.3 dB in the front 2-16 kHz, docs/UPMIX_DOLBY_DISTRIBUTION_PLAN_2026-09-21.md
+# (measured +1.3 dB in the front 2-16 kHz, docs-obsidian/Sources/UPMIX_DOLBY_DISTRIBUTION_PLAN_2026-09-21.md
 # section 7).  The taper defaults to 1000:2500 Hz in the library, so it needs no export
 # here; AUDIO_HSSR_RETENTION_HF=LO:HI overrides it and HI<=LO restores the flat behaviour.
 # HSSR upmix also for the stock realtime media stream (type 100, audioType=media: Spotify and

@@ -14,7 +14,7 @@
 // OpenSSL-3 stub, the apluser group - is the same as apac_ref and is set up by
 // run.sh and Dockerfile.  See NOTES.md.
 //
-// Symbols used (addresses are in docs/reference/apac_symbols_pioneer.txt):
+// Symbols used (addresses are in docs-obsidian/Sources/reference/apac_symbols_pioneer.txt):
 //
 //   0xb1430  _ZN16TBitstreamReaderIjEC1EPKhj          ctor(const uint8*, uint32)
 //   0xb14e0  _ZN16TBitstreamReaderIjE7GetBitsEj        GetBits(uint32)

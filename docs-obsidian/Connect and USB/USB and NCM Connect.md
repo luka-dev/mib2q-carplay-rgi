@@ -6,9 +6,9 @@
 
 ## 🌐 The stock connect path
 
-The phone never talks to us as a plain USB device. The head unit runs two `usblauncher` instances and a role swap so the phone ends up enumerating the head unit, after which an NCM gadget interface carries iAP2 and CarPlay. **[decompile]** from re-reading the stock chain in `Firmwares/HU/MHI2Q_US_AUG22_P5087_MU1316/extracted`; full write-up `docs/reference/NCM_AND_FIREWALL_IDEAL_START.md`.
+The phone never talks to us as a plain USB device. The head unit runs two `usblauncher` instances and a role swap so the phone ends up enumerating the head unit, after which an NCM gadget interface carries iAP2 and CarPlay. **[decompile]** from re-reading the stock chain in `Firmwares/HU/MHI2Q_US_AUG22_P5087_MU1316/extracted`; full write-up `docs-obsidian/Sources/reference/NCM_AND_FIREWALL_IDEAL_START.md`.
 
-The NCM scripts on the unit are **stock** — the release map ships no `startncm.sh`, `stopncm.sh` or `usblauncher_otg.lua` (`docs/RELEASE_ARTIFACTS.md:13-29`). Modified copies exist only under `deploy/experimental/usb_replug_recovery/`.
+The NCM scripts on the unit are **stock** — the release map ships no `startncm.sh`, `stopncm.sh` or `usblauncher_otg.lua` (`docs-obsidian/Sources/RELEASE_ARTIFACTS.md:13-29`). Modified copies exist only under `deploy/experimental/usb_replug_recovery/`.
 
 ```mermaid
 sequenceDiagram

@@ -2,7 +2,7 @@
  * apap_crypto.h — opening a CarPlay type-103 APAP packet.
  *
  * The wire contract is Pioneer SPHERA 1.030010's, established statically in
- * docs/PIONEER_TYPE103_STATIC_SPEC.md and confirmed against 3980 live frames by
+ * docs-obsidian/Sources/PIONEER_TYPE103_STATIC_SPEC.md and confirmed against 3980 live frames by
  * tools/pioneer_apap_decrypt.py:
  *
  *   frame   = BE32 inclusive length || packet

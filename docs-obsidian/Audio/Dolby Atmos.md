@@ -13,7 +13,7 @@ Two very different "Dolby" questions live here — keep them separate:
 1. **The transport question** — what Atmos *is* on the wire, and why the phone won't send it to us in real time.
 2. **The DSP question** — how Dolby distributes objects to a surround field, and what principles [[HSSR Model|HSSR]] borrowed.
 
-> **Scope & honesty.** This is analysis, **not** a redistribution of anything Dolby. **The Dolby binary, Dolby's own PDF, and our raw RE dumps have been removed from the repo** — Dolby-proprietary material is not kept here; this analysis is the only retained Dolby artifact. Numbers below are results of our *own* reverse-engineering (static disassembly + Unicorn emulation of extracted kernels). Provenance: `docs/research/DOLBY_ATMOS_TEARDOWN.md`.
+> **Scope & honesty.** This is analysis, **not** a redistribution of anything Dolby. **The Dolby binary, Dolby's own PDF, and our raw RE dumps have been removed from the repo** — Dolby-proprietary material is not kept here; this analysis is the only retained Dolby artifact. Numbers below are results of our *own* reverse-engineering (static disassembly + Unicorn emulation of extracted kernels). Provenance: `docs-obsidian/Research/DOLBY_ATMOS_TEARDOWN.md`.
 
 ## ⚙️ Two CarPlay audio streams
 
@@ -114,7 +114,7 @@ All three are implemented behind flags that default off in code and are bit-exac
 | Per-frequency bed delays + delayed cross term (`AUDIO_HSSR_BED_DELAYS`) | only the bed is delayed, via a 16-hop per-bin ring with per-band delays of 1–15 hops, different for Ls and Rs; each side mixes `0.79·now + 0.60·delayed_same − 0.14·delayed_opposite` (unit energy) (`hook/audio/hssr_dsp.c:52-63`, `:1190-1313`); the object stays coherent |
 | Attack "collapse to one point" (`AUDIO_HSSR_BED_ATTACK`, `AUDIO_HSSR_ATTACK_COLLAPSE`) | Dolby's detector constants ported (`0.5017·log2(0.5012·E/H)`, `β = 0.9637` per hop = 0.98169 per unit, two units per hop) (`hssr_dsp.c:65-66`, `:1171-1189`) |
 
-The −0.18 cross term with `1/sqrt(1+0.18²)` scaling was the plan's first form (`docs/UPMIX_DOLBY_DISTRIBUTION_PLAN_2026-09-21.md`); the code ships the 0.79 / 0.60 / 0.14 split above.
+The −0.18 cross term with `1/sqrt(1+0.18²)` scaling was the plan's first form (`docs-obsidian/Sources/UPMIX_DOLBY_DISTRIBUTION_PLAN_2026-09-21.md`); the code ships the 0.79 / 0.60 / 0.14 split above.
 
 Plus a bonus fix: ungated retention kept each bright object's treble in the front (+1.3 dB in the front 2–16 kHz, per `hssr_dsp.c:1576-1578` and `carplay_startup.sh:79-80`). The fix — a frequency-dependent retention taper, library default `1000:2500 Hz` (`hook/audio/stereo_upmix.h:42-43`) — is the analogue of Dolby's front-vs-surround voicing and ships with retention 0.5. See [[HSSR Model]].
 

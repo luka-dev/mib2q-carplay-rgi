@@ -8,7 +8,7 @@
 
 Native decoded APAC 5.1 (from the buffered type-103 path) is reordered byte-identically to `L R C LFE Ls Rs` and **bypasses the upmixer** — it does not touch [[HSSR Model|HSSR]]. Discrete 5.1 CarPlay works end to end in the vehicle `[car]` (2026-09-06). The last two faults were both declaration/control mismatches rather than PCM corruption: the SAD header announced two active channels over six populated slots, and the hook blanked `updateFeedback`, removing the sender's clock reference. Both are corrected and vehicle-confirmed.
 
-Provenance: `docs/AUDIO_5_1_STATE.md`, `docs/research/VIRTUAL_CABIN.md`. See [[Stereo to 5.1 Upmix]] for where discrete vs upmix splits, and [[Virtual Cabin and Amp RE]] for the amp side.
+Provenance: `docs-obsidian/Sources/AUDIO_5_1_STATE.md`, `docs-obsidian/Research/VIRTUAL_CABIN.md`. See [[Stereo to 5.1 Upmix]] for where discrete vs upmix splits, and [[Virtual Cabin and Amp RE]] for the amp side.
 
 ## ⚙️ The path, end to end
 
@@ -104,4 +104,4 @@ This cookie-driven APAC ↔ AAC switching has played in **both directions** on t
 
 **[car] confirmed:** discrete 5.1 end to end (2026-09-06); buffered stereo (AAC-LC index 23) beside APAC 5.1 (index 65); cookie-driven APAC↔AAC switch both directions, no dropout; phone-lock/background lifecycle survives (the QSA handle transfers to the APAP thread during the type-100 release gap).
 
-**[open] / not done:** non-B&O internal 6ch (no route exists — see [[Virtual Cabin and Amp RE]]); the index-66 native channel order is unverified; live HU call/Siri route verification (host-tested only). Historical fault-localisation (byte transport, CSD topology, AFE slot packing, MOST allocation, amp sink selection, SHARC matrix) is retained in `docs/AUDIO_5_1_STATE.md` §§2–18 as closed clean boundaries — do not re-derive.
+**[open] / not done:** non-B&O internal 6ch (no route exists — see [[Virtual Cabin and Amp RE]]); the index-66 native channel order is unverified; live HU call/Siri route verification (host-tested only). Historical fault-localisation (byte transport, CSD topology, AFE slot packing, MOST allocation, amp sink selection, SHARC matrix) is retained in `docs-obsidian/Sources/AUDIO_5_1_STATE.md` §§2–18 as closed clean boundaries — do not re-derive.

@@ -24,7 +24,7 @@ enum {
     SPA_HSSR_BED_RING = 16
 };
 
-/* Attack handling of the scene bed (docs/UPMIX_DOLBY_DISTRIBUTION_PLAN_2026-09-21.md). */
+/* Attack handling of the scene bed (docs-obsidian/Sources/UPMIX_DOLBY_DISTRIBUTION_PLAN_2026-09-21.md). */
 enum spa_hssr_bed_attack {
     SPA_HSSR_BED_ATTACK_OFF = 0,
     SPA_HSSR_BED_ATTACK_OWNER = 1,  /* a hit collapses toward the band owner: object -> rear, bed -> front */

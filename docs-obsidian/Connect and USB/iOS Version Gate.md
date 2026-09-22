@@ -6,7 +6,7 @@
 
 ## 🔍 The observation
 
-Connect failures on the A5 head unit are iOS-version-gated. **[car]** verified both directions 2026-08-23: a phone updated to the iOS 27 beta connects; another phone on old iOS reproduces the failure. Doc `docs/reference/IOS26_VS_IOS27_BONJOUR.md`.
+Connect failures on the A5 head unit are iOS-version-gated. **[car]** verified both directions 2026-08-23: a phone updated to the iOS 27 beta connects; another phone on old iOS reproduces the failure. Doc `docs-obsidian/Sources/reference/IOS26_VS_IOS27_BONJOUR.md`.
 
 The instinct — "iOS 27 fixed a bug" — is backwards. iOS 27 did not gain a repair for the accessory; it gained machinery that happens to tolerate our non-stock advertisement. The head unit's advertisement is the suspect side either way; old iOS simply stops forgiving it.
 

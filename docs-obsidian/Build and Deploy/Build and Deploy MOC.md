@@ -50,4 +50,4 @@ flowchart TB
 
 Deploying files is fine; **restarting the unit is not** — the user is usually in the car, and a jar redeploy takes the whole system down for ~50 s. Copy, report what is staged, and stop. See [[Deploy and Release]] and [[Landmines]].
 
-Provenance lives in `docs/RELEASE_ARTIFACTS.md`, `docs/PROTECTOR.md`, `docs/DEPLOYMENT.md`, the `scripts/build_*.sh` set, and `install_MoreIncredibleBash/mod/custom.sh`.
+Provenance lives in `docs-obsidian/Sources/RELEASE_ARTIFACTS.md`, `docs-obsidian/Sources/PROTECTOR.md`, `docs-obsidian/Sources/DEPLOYMENT.md`, the `scripts/build_*.sh` set, and `install_MoreIncredibleBash/mod/custom.sh`.

@@ -57,4 +57,4 @@ The three large CJK glyph catalogs (`SourceHanSans{JP,KR}`, `ZYHei_GB18030`) —
 
 ---
 
-Provenance: `docs/reference/AMP_SHARC_ARTIFACTS.md`, `docs/reference/VC_FONTS.md`, and the `README.md` inside each `assets/` folder.
+Provenance: `docs-obsidian/Sources/reference/AMP_SHARC_ARTIFACTS.md`, `docs-obsidian/Sources/reference/VC_FONTS.md`, and the `README.md` inside each `assets/` folder.

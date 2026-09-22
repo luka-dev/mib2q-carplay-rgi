@@ -1,7 +1,7 @@
 /*
  * audio_hook.c — CarPlay buffered APAC/AAC receive and fixed-width PCM rendering
  * for the MHI2Q six-channel DIO media rail. See audio_hook.h and
- * docs/AUDIO_5_1_STATE.md for the accepted vehicle path.
+ * docs-obsidian/Sources/AUDIO_5_1_STATE.md for the accepted vehicle path.
  *
  * The canonical AUDIO_SPATIAL policy advertises buffered APAC/5.1 index 65 plus
  * AAC-LC/stereo index 23. A changed inline APAP cookie selects the decoder;
