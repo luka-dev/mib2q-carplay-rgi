@@ -183,9 +183,8 @@ public class CombiMapController extends DisplayControllerEvo implements NaviMoKo
 
         int previousKdk = this.updateVisibleKdk(modelupdateevent);
         Layout layout = this.terminal.getLayout();
-        /* inTube is the STOCK maneuver panel's own placement; it stays local to the stock KDK
-         * renderer below.  It is NOT the CarPlay overlay's stage: that comes from the single
-         * view-size cache (see syncViewSize / ClusterLayerController.applyNow). */
+        /* Keep stock hint8 for native restoration. CarPlay also observes the VC's
+         * Fct54 input before stock's asynchronous model publication. */
         boolean inTube = (modelupdateevent.getHints() & BITFIELD_KDK_POSITION_IN_TUBE) != 0;
 
         if (this.kombiTerminal != 0) {
@@ -194,15 +193,13 @@ public class CombiMapController extends DisplayControllerEvo implements NaviMoKo
             this.applyKdkSingleTerminal(this.visibleKdk, previousKdk, layout);
         }
 
-        /* CarPlay overlay: 98 is ours; 101/102 are shared stock KDK backings. The controller
-         * caches the stock values, overrides them only while CarPlay owns the cluster, and restores
-         * them on release.  The popup/in-tube stage is derived inside ClusterLayerController from the
-         * view-size cache, so we forward only the stock KDK visibility/opacity. */
+        /* Cache the complete native KDK state for restoration; the CarPlay controller
+         * observes the VC visibility and stage independently of stock route availability. */
         if (this.kombiTerminal != 0
                 && this.framework.getSysConst(SYSCONST_KOMBI_VARIANT) == KOMBI_KDK_VIA_DISPLAYABLES) {
             com.luka.carplay.cluster.ClusterLayerController.apply(
                 dm, this.kombiTerminal, layout,
-                this.visibleKdk != NO_KDK, this.kdkOpacity);
+                this.visibleKdk != NO_KDK, this.kdkOpacity, inTube);
         }
     }
 

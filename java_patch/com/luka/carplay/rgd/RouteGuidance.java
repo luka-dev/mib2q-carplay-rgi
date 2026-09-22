@@ -552,8 +552,8 @@ public class RouteGuidance implements CarplayBus.Listener {
                     + " source_supports_rg=" + state.sourceSupportsRg);
                 /* With C hook debounce, transient route_state=0 never reaches
                  * Java — any deactivation here is genuine (source_supports_rg=0,
-                 * visibleInApp=0, or real route end).  Full shutdown. */
-                if (bap != null) { bap.onStop(); bap.onShutdown(); }
+                 * visibleInApp=0, or real route end).  End route; preserve pixels until VC withdraws KDK visibility. */
+                if (bap != null) { bap.onStop(); bap.onRouteEnd(); }
                 rgActive = false;
                 presentationConfirmed = false;
                 /* RGI off -> hide the CarPlay cluster layers (ctx 81 = map only). */

@@ -12,7 +12,7 @@ import de.audi.tghu.navi.app.audio.AudioStateMachine;
 import de.audi.tghu.navi.app.map.MapManager;
 
 /**
- * Narrow interception point for the steering-wheel roller.
+ * Stock BAP boundary for CarPlay KDK composition and the steering-wheel roller.
  *
  * The instrument cluster sends wheel rotation as Navigation BAP MapScale.steps.
  * Stock CombiBAPListener.setMapScale() applies it to mapKombi via
@@ -44,6 +44,19 @@ public final class AltScreenCombiBAPListener extends CombiBAPListener {
             commandListFactory,
             viewSizeManager
         );
+    }
+
+    /** Apply the accepted stock state before its Status acknowledgement. This boundary
+     * also covers internal supplementary visibility changes and initial Status replay,
+     * which bypass the two-argument BAP request setter. */
+    protected void updateMapVisibility() {
+        com.luka.carplay.cluster.ClusterLayerController.onVcVisibility(this.supplementaryMapViewVisible);
+        super.updateMapVisibility();
+    }
+
+    public void setMapPresentation(boolean largeMapView, boolean leftMenu, boolean rightMenu) {
+        com.luka.carplay.cluster.ClusterLayerController.onVcPresentation(largeMapView);
+        super.setMapPresentation(largeMapView, leftMenu, rightMenu);
     }
 
     public void setMapScale(int steps) {

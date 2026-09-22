@@ -771,7 +771,7 @@ public class BAPBridge {
         try { appConnectorNavi.updateManeuverState(0); } catch (Throwable t) { }
         try { appConnectorNavi.updateTurnToInfo("", ""); } catch (Throwable t) { }
         try { appConnectorNavi.updateCurrentPositionInfo(""); } catch (Throwable t) { }
-        try { stopCustomRenderer(); } catch (Throwable t) { }
+        try { stopCustomRenderer(false); } catch (Throwable t) { }
         /* Release the rgActive overlay here, not inside stopCustomRenderer: a throw in the
          * renderer teardown must not leave shared HMI state forged. */
         forceClusterRouteInfoState(false);
@@ -812,7 +812,13 @@ public class BAPBridge {
      * Full shutdown — BAP teardown + renderer socket teardown.
      * Called on actual CarPlay disconnect or stop().
      */
-    public void onShutdown() {
+    public void onShutdown() { shutdown(false); }
+
+    /** Route end preserves the last surface through VC hide and reuses its connection.
+     * Session shutdown always releases them, independently of module stop ordering. */
+    public void onRouteEnd() { shutdown(true); }
+
+    private void shutdown(boolean preserveSurface) {
         if (!initialized) return;
 
         try {
@@ -857,20 +863,20 @@ public class BAPBridge {
              * gated until phone disconnect, but let stock update route text. */
             com.luka.carplay.core.AltScreenNavStatusGate.setCurrentPositionInfoBlocked(false);
 
-            stopCustomRenderer();
+            stopCustomRenderer(preserveSurface);
             forceClusterRouteInfoState(false);
             /* CarPlay session ending — release the renderer listen socket
              * (port :19800).  stopCustomRenderer keeps it bound for fast
              * route restarts within a session; full session shutdown
              * actually closes it. */
-            if (rendererClient != null) {
+            if (rendererClient != null && !preserveSurface) {
                 rendererClient.setStateListener(null);
                 rendererClient.dispose();
                 rendererClient = null;
             }
             rendererPrimed = false;
             /* REPLACE: keep the native RG gate SHUT for the whole connected session.
-             * onShutdown fires when CarPlay navigation ENDS (not on disconnect), so without
+             * This path also runs when navigation ends within a session, so without
              * this guard the gate would reopen mid-session and stock nav RG could reappear on
              * the cluster.  disengageTakeover() (on real disconnect) is the only reopen. */
             if (!takeoverEngaged)
@@ -2109,17 +2115,17 @@ public class BAPBridge {
         notifyPresentationStateChanged("renderer-send-failures");
     }
 
-    private synchronized void stopCustomRenderer() {
+    private synchronized void stopCustomRenderer(boolean preserveSurface) {
         try {
-            /* Blank the popup (CMD_CLEAR) so no stale maneuver frame lingers, then deactivate the
-             * cluster context + stop feeding.  Do NOT kill the renderer (always-on framework
-             * service) and keep the server socket + link up for the next route in this session. */
+            /* Stop feeding, but preserve the final surface while connected: VC controls
+             * its disappearance via Fct44. A route end must not clear pixels during fade-out.
+             * The always-on renderer/link is reused and re-primed on the next route. */
             lastCrLaneGuidance = null;
-            if (rendererClient != null) rendererClient.sendClear();
+            if (rendererClient != null && !preserveSurface) rendererClient.sendClear();
             forceGfxAvailable(false);
             customRendererStarted = false;
             rendererPrimed = false;
-            Log.i(TAG, "CR: stopped (renderer blanked; stays up; server socket persists)");
+            Log.i(TAG, "CR: stopped (preserveSurface=" + preserveSurface + ")");
         } catch (Throwable t) {
             Log.w(TAG, "CR stop failed: " + t.getClass().getName() + ": " + t.getMessage());
         }
@@ -2254,7 +2260,7 @@ public class BAPBridge {
     }
 
     /**
-     * Supply the missing graphics-sink notifications on FPK (SysConst 541 == 2).
+     * Supply graphics-sink notifications only for MOST cluster maps.
      * MU1316 stores dataRate on ClusterViewMode, not KOMOService. The stock
      * updateDataRate callback updates both that cache and the output rate; it
      * must precede updateGfxState, which replays the cached rate when enabled.

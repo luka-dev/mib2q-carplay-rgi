@@ -21,6 +21,7 @@ public final class RendererViewportTest {
         int saved=stage.getInt(null);
         try {
             stage.setInt(null,AltScreenModule.VIEWAREA_FULLSCREEN);
+            ClusterLayerController.onVcPresentation(true);
             int[] area=ClusterLayerController.maneuverViewport();
             check(area[0]==59 && area[1]==27 && area[2]==210 && area[3]==153,"big-stage red frame crop");
             check(a.bridge.refreshRendererViewport(),"initial crop");
@@ -29,6 +30,8 @@ public final class RendererViewportTest {
             check(a.bridge.refreshRendererViewport() && count(a)==1,"unchanged crop suppressed");
 
             stage.setInt(null,AltScreenModule.VIEWAREA_SMALLSCREEN);
+            check(ClusterLayerController.maneuverViewport()[2]==210,"requested View must not move KDK before VC Fct54");
+            ClusterLayerController.onVcPresentation(false);
             RouteGuidance rg=new RouteGuidance();
             a.set(rg,"running",Boolean.TRUE);a.set(rg,"rgActive",Boolean.TRUE);a.set(rg,"bap",a.bridge);
             Method request=RouteGuidance.class.getDeclaredMethod("requestViewAreaRefresh",Integer.TYPE);

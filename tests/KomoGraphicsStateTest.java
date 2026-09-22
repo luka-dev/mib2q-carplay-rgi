@@ -1,4 +1,6 @@
 import com.luka.carplay.framework.Log;
+import com.luka.carplay.core.CarPlayApp;
+import com.luka.carplay.core.FrameworkRef;
 import com.luka.carplay.rgd.BAPBridge;
 import de.audi.atip.base.IFrameworkAccess;
 import de.audi.tghu.navi.app.NavigationEnv;
@@ -9,8 +11,8 @@ import java.lang.reflect.*;
 import java.util.*;
 import sun.misc.Unsafe;
 
-/** Run the real MU1316 KOMOService and ClusterViewMode setters. Only the
- * framework constructors and the outgoing pacing sink are replaced on the host.
+/** FPK must bypass the MOST setters: they hide the stock map after disconnect.
+ * Use real MU1316 service objects and install the framework used by BAPBridge.
  */
 public final class KomoGraphicsStateTest {
     public static final class Service extends ClusterService {
@@ -44,6 +46,10 @@ public final class KomoGraphicsStateTest {
                 if (method.getReturnType() == Boolean.TYPE) return false;
                 throw new AssertionError("Unexpected framework dependency: " + method);
             });
+        FrameworkRef ref = new FrameworkRef(null);
+        set(ref, "fw", fw);
+        Field appRef = CarPlayApp.class.getDeclaredField("fwRef");
+        appRef.setAccessible(true); appRef.set(null, ref);
         NavigationEnv env = (NavigationEnv)unsafe.allocateInstance(NavigationEnv.class);
         set(env, "framework", fw);
         ClusterViewMode view = (ClusterViewMode)unsafe.allocateInstance(ClusterViewMode.class);
@@ -62,14 +68,11 @@ public final class KomoGraphicsStateTest {
             set(bridge, "komoService", fallback ? null : komo);
             for (boolean active : new boolean[]{true, true, false, false, true, false}) {
                 service.rates.clear(); force.invoke(bridge, active);
-                int rate = active ? 2 : 0;
-                check(field(view, "dataRate").getInt(view) == rate, "ClusterViewMode cache is stale");
-                check(field(view, "gfxAvailable").getBoolean(view) == active, "gfx state not updated");
-                check(!service.rates.isEmpty(), "repeated state did not restore pacing");
-                for (int emitted : service.rates)
-                    check(emitted == rate, "cached rate replayed a transient wrong value: " + service.rates);
+                check(field(view, "dataRate").getInt(view) == 0, "FPK dataRate mutated");
+                check(!field(view, "gfxAvailable").getBoolean(view), "FPK gfxAvailable mutated");
+                check(service.rates.isEmpty(), "FPK received MOST pacing updates");
             }
         }
-        System.out.println("KomoGraphicsStateTest: real MU1316 cache/pacing, repeat/reconnect/fallback PASS");
+        System.out.println("KomoGraphicsStateTest: FPK leaves stock graphics state untouched, repeat/fallback PASS");
     }
 }
