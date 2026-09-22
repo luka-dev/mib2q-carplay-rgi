@@ -119,7 +119,7 @@ them as the Audi font's missing-glyph box would give a misleading width.
 ## Offline width examples, not a vehicle acceptance result
 
 Pillow `ImageFont.truetype(..., 27).getlength(text)` with the extracted
-`output/r2/vc-fonts-0379-20260910/fonts/AudiTypeDisplay-Normal.ttf` gives:
+`assets/vc-fonts/fonts/AudiTypeDisplay-Normal.ttf` gives:
 
 Font SHA-256:
 `4e0f6fb1d522df648c7430b3a345f24c7f85af1e3b7ba82a07b55c316f036b5e`.

@@ -159,7 +159,7 @@ bash scripts/audit_java_stock.sh
 ```
 
 Default fonts/lookup paths are the existing
-`output/r2/vc-fonts-0379-20260910/{fonts,lookup-resources}`. `--fonts`, `--lookups`
+`assets/vc-fonts/{fonts,lookup-resources}`. `--fonts`, `--lookups`
 and `--ucd` can override them. FontTools is needed for regeneration; Pillow
 with RAQM is needed only for the independent metric audit. The generated binary
 and manifest are checked in; downloaded UCD files stay in the ignored build

@@ -76,6 +76,6 @@ tables. Range membership is **not glyph coverage**, nor proof of UI font binding
 `--refresh` regenerates a previous audit output. The separate deep bitmap/atlas
 diagnostics are recorded in the local evidence directory, not reproduced by this tool.
 
-Full evidence: `output/r2/vc-fonts-0379-20260910/` (README, JSON catalogs,
+Full evidence: `assets/vc-fonts/` (README, JSON catalogs,
 PNG previews and follow-up scripts). Initially kept local, these resources are
 included in the private repository by the user's subsequent full-sync request.

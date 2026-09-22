@@ -1,0 +1,392 @@
+[
+  {
+    "font": "AudiTypeDisplayHigh-Normal.ttf",
+    "characters": [
+      {
+        "codepoint": 63743,
+        "hex": "U+F8FF",
+        "char": "",
+        "java": "\\uF8FF",
+        "name": "<private-use>",
+        "category": "Co",
+        "glyph_name": "apple",
+        "glyph_id": 656
+      },
+      {
+        "codepoint": 9658,
+        "hex": "U+25BA",
+        "char": "►",
+        "java": "\\u25BA",
+        "name": "BLACK RIGHT-POINTING POINTER",
+        "category": "So",
+        "glyph_name": "uni25BA",
+        "glyph_id": 523
+      },
+      {
+        "codepoint": 9664,
+        "hex": "U+25C0",
+        "char": "◀",
+        "java": "\\u25C0",
+        "name": "BLACK LEFT-POINTING TRIANGLE",
+        "category": "So",
+        "glyph_name": "uni25C0",
+        "glyph_id": 524
+      },
+      {
+        "codepoint": 9670,
+        "hex": "U+25C6",
+        "char": "◆",
+        "java": "\\u25C6",
+        "name": "BLACK DIAMOND",
+        "category": "So",
+        "glyph_name": "uni25C6",
+        "glyph_id": 525
+      },
+      {
+        "codepoint": 9674,
+        "hex": "U+25CA",
+        "char": "◊",
+        "java": "\\u25CA",
+        "name": "LOZENGE",
+        "category": "So",
+        "glyph_name": "lozenge",
+        "glyph_id": 655
+      },
+      {
+        "codepoint": 9642,
+        "hex": "U+25AA",
+        "char": "▪",
+        "java": "\\u25AA",
+        "name": "BLACK SMALL SQUARE",
+        "category": "So",
+        "glyph_name": "uni25AA",
+        "glyph_id": 526
+      }
+    ]
+  },
+  {
+    "font": "SourceHanSansJP-Regular.otf",
+    "characters": [
+      {
+        "codepoint": 9673,
+        "hex": "U+25C9",
+        "char": "◉",
+        "java": "\\u25C9",
+        "name": "FISHEYE",
+        "category": "So",
+        "glyph_name": "cid01253",
+        "glyph_id": 997
+      },
+      {
+        "codepoint": 9678,
+        "hex": "U+25CE",
+        "char": "◎",
+        "java": "\\u25CE",
+        "name": "BULLSEYE",
+        "category": "So",
+        "glyph_name": "cid01257",
+        "glyph_id": 1001
+      },
+      {
+        "codepoint": 9672,
+        "hex": "U+25C8",
+        "char": "◈",
+        "java": "\\u25C8",
+        "name": "WHITE DIAMOND CONTAINING BLACK SMALL DIAMOND",
+        "category": "So",
+        "glyph_name": "cid01252",
+        "glyph_id": 996
+      },
+      {
+        "codepoint": 10070,
+        "hex": "U+2756",
+        "char": "❖",
+        "java": "\\u2756",
+        "name": "BLACK DIAMOND MINUS WHITE X",
+        "category": "So",
+        "glyph_name": "cid01325",
+        "glyph_id": 1069
+      },
+      {
+        "codepoint": 9733,
+        "hex": "U+2605",
+        "char": "★",
+        "java": "\\u2605",
+        "name": "BLACK STAR",
+        "category": "So",
+        "glyph_name": "cid01273",
+        "glyph_id": 1017
+      },
+      {
+        "codepoint": 9734,
+        "hex": "U+2606",
+        "char": "☆",
+        "java": "\\u2606",
+        "name": "WHITE STAR",
+        "category": "So",
+        "glyph_name": "cid01274",
+        "glyph_id": 1018
+      },
+      {
+        "codepoint": 9728,
+        "hex": "U+2600",
+        "char": "☀",
+        "java": "\\u2600",
+        "name": "BLACK SUN WITH RAYS",
+        "category": "So",
+        "glyph_name": "cid01269",
+        "glyph_id": 1013
+      },
+      {
+        "codepoint": 9729,
+        "hex": "U+2601",
+        "char": "☁",
+        "java": "\\u2601",
+        "name": "CLOUD",
+        "category": "So",
+        "glyph_name": "cid01270",
+        "glyph_id": 1014
+      },
+      {
+        "codepoint": 9730,
+        "hex": "U+2602",
+        "char": "☂",
+        "java": "\\u2602",
+        "name": "UMBRELLA",
+        "category": "So",
+        "glyph_name": "cid01271",
+        "glyph_id": 1015
+      },
+      {
+        "codepoint": 9731,
+        "hex": "U+2603",
+        "char": "☃",
+        "java": "\\u2603",
+        "name": "SNOWMAN",
+        "category": "So",
+        "glyph_name": "cid01272",
+        "glyph_id": 1016
+      },
+      {
+        "codepoint": 9742,
+        "hex": "U+260E",
+        "char": "☎",
+        "java": "\\u260E",
+        "name": "BLACK TELEPHONE",
+        "category": "So",
+        "glyph_name": "cid01276",
+        "glyph_id": 1020
+      },
+      {
+        "codepoint": 9743,
+        "hex": "U+260F",
+        "char": "☏",
+        "java": "\\u260F",
+        "name": "WHITE TELEPHONE",
+        "category": "So",
+        "glyph_name": "cid01277",
+        "glyph_id": 1021
+      },
+      {
+        "codepoint": 9756,
+        "hex": "U+261C",
+        "char": "☜",
+        "java": "\\u261C",
+        "name": "WHITE LEFT POINTING INDEX",
+        "category": "So",
+        "glyph_name": "cid01280",
+        "glyph_id": 1024
+      },
+      {
+        "codepoint": 9758,
+        "hex": "U+261E",
+        "char": "☞",
+        "java": "\\u261E",
+        "name": "WHITE RIGHT POINTING INDEX",
+        "category": "So",
+        "glyph_name": "cid01282",
+        "glyph_id": 1026
+      },
+      {
+        "codepoint": 9757,
+        "hex": "U+261D",
+        "char": "☝",
+        "java": "\\u261D",
+        "name": "WHITE UP POINTING INDEX",
+        "category": "So",
+        "glyph_name": "cid01281",
+        "glyph_id": 1025
+      },
+      {
+        "codepoint": 9759,
+        "hex": "U+261F",
+        "char": "☟",
+        "java": "\\u261F",
+        "name": "WHITE DOWN POINTING INDEX",
+        "category": "So",
+        "glyph_name": "cid01283",
+        "glyph_id": 1027
+      },
+      {
+        "codepoint": 9829,
+        "hex": "U+2665",
+        "char": "♥",
+        "java": "\\u2665",
+        "name": "BLACK HEART SUIT",
+        "category": "So",
+        "glyph_name": "cid01293",
+        "glyph_id": 1037
+      },
+      {
+        "codepoint": 9825,
+        "hex": "U+2661",
+        "char": "♡",
+        "java": "\\u2661",
+        "name": "WHITE HEART SUIT",
+        "category": "So",
+        "glyph_name": "cid01289",
+        "glyph_id": 1033
+      },
+      {
+        "codepoint": 9824,
+        "hex": "U+2660",
+        "char": "♠",
+        "java": "\\u2660",
+        "name": "BLACK SPADE SUIT",
+        "category": "So",
+        "glyph_name": "cid01288",
+        "glyph_id": 1032
+      },
+      {
+        "codepoint": 9827,
+        "hex": "U+2663",
+        "char": "♣",
+        "java": "\\u2663",
+        "name": "BLACK CLUB SUIT",
+        "category": "So",
+        "glyph_name": "cid01291",
+        "glyph_id": 1035
+      },
+      {
+        "codepoint": 9834,
+        "hex": "U+266A",
+        "char": "♪",
+        "java": "\\u266A",
+        "name": "EIGHTH NOTE",
+        "category": "So",
+        "glyph_name": "cid01298",
+        "glyph_id": 1042
+      },
+      {
+        "codepoint": 9835,
+        "hex": "U+266B",
+        "char": "♫",
+        "java": "\\u266B",
+        "name": "BEAMED EIGHTH NOTES",
+        "category": "So",
+        "glyph_name": "cid01299",
+        "glyph_id": 1043
+      },
+      {
+        "codepoint": 10003,
+        "hex": "U+2713",
+        "char": "✓",
+        "java": "\\u2713",
+        "name": "CHECK MARK",
+        "category": "So",
+        "glyph_name": "cid01320",
+        "glyph_id": 1064
+      },
+      {
+        "codepoint": 9888,
+        "hex": "U+26A0",
+        "char": "⚠",
+        "java": "\\u26A0",
+        "name": "WARNING SIGN",
+        "category": "So",
+        "glyph_name": "cid01316",
+        "glyph_id": 1060
+      },
+      {
+        "codepoint": 10145,
+        "hex": "U+27A1",
+        "char": "➡",
+        "java": "\\u27A1",
+        "name": "BLACK RIGHTWARDS ARROW",
+        "category": "So",
+        "glyph_name": "cid01336",
+        "glyph_id": 1080
+      },
+      {
+        "codepoint": 8857,
+        "hex": "U+2299",
+        "char": "⊙",
+        "java": "\\u2299",
+        "name": "CIRCLED DOT OPERATOR",
+        "category": "Sm",
+        "glyph_name": "cid00877",
+        "glyph_id": 621
+      },
+      {
+        "codepoint": 8853,
+        "hex": "U+2295",
+        "char": "⊕",
+        "java": "\\u2295",
+        "name": "CIRCLED PLUS",
+        "category": "Sm",
+        "glyph_name": "cid00873",
+        "glyph_id": 617
+      },
+      {
+        "codepoint": 9680,
+        "hex": "U+25D0",
+        "char": "◐",
+        "java": "\\u25D0",
+        "name": "CIRCLE WITH LEFT HALF BLACK",
+        "category": "So",
+        "glyph_name": "cid01259",
+        "glyph_id": 1003
+      },
+      {
+        "codepoint": 9681,
+        "hex": "U+25D1",
+        "char": "◑",
+        "java": "\\u25D1",
+        "name": "CIRCLE WITH RIGHT HALF BLACK",
+        "category": "So",
+        "glyph_name": "cid01260",
+        "glyph_id": 1004
+      },
+      {
+        "codepoint": 10102,
+        "hex": "U+2776",
+        "char": "❶",
+        "java": "\\u2776",
+        "name": "DINGBAT NEGATIVE CIRCLED DIGIT ONE",
+        "category": "No",
+        "glyph_name": "cid01326",
+        "glyph_id": 1070
+      },
+      {
+        "codepoint": 10103,
+        "hex": "U+2777",
+        "char": "❷",
+        "java": "\\u2777",
+        "name": "DINGBAT NEGATIVE CIRCLED DIGIT TWO",
+        "category": "No",
+        "glyph_name": "cid01327",
+        "glyph_id": 1071
+      },
+      {
+        "codepoint": 10104,
+        "hex": "U+2778",
+        "char": "❸",
+        "java": "\\u2778",
+        "name": "DINGBAT NEGATIVE CIRCLED DIGIT THREE",
+        "category": "No",
+        "glyph_name": "cid01328",
+        "glyph_id": 1072
+      }
+    ]
+  }
+]
