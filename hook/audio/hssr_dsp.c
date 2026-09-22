@@ -118,23 +118,24 @@ static float spa_hssr_dsp_tanh(float value)
     return value * (27.0f + square) / (27.0f + 9.0f * square);
 }
 
+/* In-place radix-2 complex FFT, 512 points.  The permutation comes from a
+ * precomputed table and the inverse sign from a negated twiddle table, so
+ * neither the reversal loop nor the butterfly carries a branch.  The inverse
+ * transform does NOT rescale by 1/N: both consumers multiply by
+ * synthesis_window_scaled, which carries that factor. */
 static void spa_hssr_fft(struct spa_hssr_dsp *state,
                          unsigned channel, int inverse)
 {
     float *real = state->fft_re[channel];
     float *imaginary = state->fft_im[channel];
+    const float *twiddle_imaginary = inverse
+        ? state->twiddle_im_inverse : state->twiddle_im;
     unsigned index;
-    unsigned reversed = 0;
     unsigned length;
 
-    for (index = 1; index < SPA_HSSR_FFT_SIZE; ++index) {
-        unsigned bit = SPA_HSSR_FFT_SIZE >> 1;
+    for (index = 0; index < SPA_HSSR_FFT_SIZE; ++index) {
+        unsigned reversed = state->bit_reverse[index];
 
-        while (reversed & bit) {
-            reversed ^= bit;
-            bit >>= 1;
-        }
-        reversed ^= bit;
         if (index < reversed) {
             float temporary = real[index];
             real[index] = real[reversed];
@@ -156,34 +157,19 @@ static void spa_hssr_fft(struct spa_hssr_dsp *state,
             for (offset = 0; offset < half; ++offset) {
                 unsigned twiddle = offset * stride;
                 float wr = state->twiddle_re[twiddle];
-                float wi = state->twiddle_im[twiddle];
+                float wi = twiddle_imaginary[twiddle];
                 unsigned even = base + offset;
                 unsigned odd = even + half;
-                float odd_re;
-                float odd_im;
-                float even_re;
-                float even_im;
+                float odd_re = wr * real[odd] - wi * imaginary[odd];
+                float odd_im = wr * imaginary[odd] + wi * real[odd];
+                float even_re = real[even];
+                float even_im = imaginary[even];
 
-                if (inverse) wi = -wi;
-                odd_re = wr * real[odd] - wi * imaginary[odd];
-                odd_im = wr * imaginary[odd] + wi * real[odd];
-                even_re = real[even];
-                even_im = imaginary[even];
                 real[even] = even_re + odd_re;
                 imaginary[even] = even_im + odd_im;
                 real[odd] = even_re - odd_re;
                 imaginary[odd] = even_im - odd_im;
             }
-        }
-    }
-
-    if (inverse) {
-        const float scale = 1.0f / (float)SPA_HSSR_FFT_SIZE;
-
-        for (index = 0; index < SPA_HSSR_FFT_SIZE; ++index) {
-            real[index] = spa_hssr_dsp_finite(real[index] * scale);
-            imaginary[index] = spa_hssr_dsp_finite(
-                imaginary[index] * scale);
         }
     }
 }
@@ -240,11 +226,31 @@ void spa_hssr_dsp_prepare(struct spa_hssr_dsp *state)
 
         state->twiddle_re[sample] = (float)re;
         state->twiddle_im[sample] = (float)im;
+        state->twiddle_im_inverse[sample] = -(float)im;
         next_re = re * fft_step_re - im * fft_step_im;
         next_im = im * fft_step_re + re * fft_step_im;
         re = next_re;
         im = next_im;
     }
+
+    {
+        unsigned reversed = 0;
+
+        state->bit_reverse[0] = 0;
+        for (sample = 1; sample < SPA_HSSR_FFT_SIZE; ++sample) {
+            unsigned bit = SPA_HSSR_FFT_SIZE >> 1;
+
+            while (reversed & bit) {
+                reversed ^= bit;
+                bit >>= 1;
+            }
+            reversed ^= bit;
+            state->bit_reverse[sample] = (uint16_t)reversed;
+        }
+    }
+    for (sample = 0; sample < SPA_HSSR_FFT_SIZE; ++sample)
+        state->synthesis_window_scaled[sample] =
+            state->synthesis_window[sample] * (1.0f / (float)SPA_HSSR_FFT_SIZE);
 
     for (sample = 0; sample < SPA_HSSR_BINS; ++sample) {
         unsigned frequency_hz =
@@ -870,22 +876,24 @@ static int spa_hssr_analyze_hop(
     struct spa_hssr_dsp *state,
     struct spa_hssr_band_accumulator bands[SPA_HSSR_BANDS])
 {
-    unsigned channel;
     unsigned sample;
     unsigned bin;
     unsigned band;
     int full_frame = state->frames_seen >= SPA_HSSR_FFT_SIZE;
 
     memset(bands, 0, sizeof(*bands) * SPA_HSSR_BANDS);
-    for (channel = 0; channel < 2; ++channel) {
-        for (sample = 0; sample < SPA_HSSR_FFT_SIZE; ++sample) {
-            unsigned history = (state->input_position + sample) &
-                               (SPA_HSSR_FFT_SIZE - 1);
-            state->fft_re[channel][sample] =
-                state->input[channel][history] * state->analysis_window[sample];
-            state->fft_im[channel][sample] = 0.0f;
+    {
+        unsigned channel;
+        for (channel = 0; channel < 2; ++channel) {
+            for (sample = 0; sample < SPA_HSSR_FFT_SIZE; ++sample) {
+                unsigned history = (state->input_position + sample) &
+                                   (SPA_HSSR_FFT_SIZE - 1);
+                state->fft_re[channel][sample] =
+                    state->input[channel][history] * state->analysis_window[sample];
+                state->fft_im[channel][sample] = 0.0f;
+            }
+            spa_hssr_fft(state, channel, 0);
         }
-        spa_hssr_fft(state, channel, 0);
     }
 
     for (bin = 0; bin < SPA_HSSR_BINS; ++bin) {
@@ -1127,16 +1135,64 @@ void spa_hssr_test_mix_bed(struct spa_hssr_dsp *state,
 }
 #endif
 
+/* Build the full complex spectrum Z = A + jB in fft_[re|im][LEFT] from two
+ * Hermitian half-spectra (bins 0..N/2), so one inverse transform yields both
+ * real signals: Re -> A's signal, Im -> B's signal.
+ *   k <= N/2 : Z = (Ar - Bi, Ai + Br)
+ *   k >  N/2 : Z = (Ar' + Bi', Br' - Ai'),  ' = index N-k
+ * When A aliases fft_[re|im][LEFT] the upper half must be written first,
+ * because it reads A at 1..N/2-1 which the lower half then overwrites. */
+static void spa_hssr_pack_hermitian(struct spa_hssr_dsp *state,
+                                    const float *a_re, const float *a_im,
+                                    const float *b_re, const float *b_im,
+                                    int a_aliases_destination)
+{
+    float *zr = state->fft_re[SPA_HSSR_LEFT];
+    float *zi = state->fft_im[SPA_HSSR_LEFT];
+    unsigned bin;
+    unsigned pass;
+
+    for (pass = 0; pass < 2; ++pass) {
+        int upper = a_aliases_destination ? (pass == 0) : (pass == 1);
+
+        if (upper) {
+            for (bin = SPA_HSSR_FFT_SIZE / 2 + 1; bin < SPA_HSSR_FFT_SIZE; ++bin) {
+                unsigned mirror = SPA_HSSR_FFT_SIZE - bin;
+
+                zr[bin] = a_re[mirror] + b_im[mirror];
+                zi[bin] = b_re[mirror] - a_im[mirror];
+            }
+        } else {
+            for (bin = 0; bin <= SPA_HSSR_FFT_SIZE / 2; ++bin) {
+                float ar = a_re[bin];
+                float ai = (bin == 0 || bin == SPA_HSSR_FFT_SIZE / 2)
+                    ? 0.0f : a_im[bin];
+                float br = b_re[bin];
+                float bi = (bin == 0 || bin == SPA_HSSR_FFT_SIZE / 2)
+                    ? 0.0f : b_im[bin];
+
+                zr[bin] = ar - bi;
+                zi[bin] = ai + br;
+            }
+        }
+    }
+}
+
 static void spa_hssr_render_hop(
     struct spa_hssr_dsp *state,
     const struct spa_hssr_band_accumulator bands[SPA_HSSR_BANDS])
 {
-    unsigned channel;
     unsigned sample;
     unsigned bin;
     unsigned band;
     const int split = state->bed_delays || state->bed_attack;
     float band_best[SPA_HSSR_BANDS];
+    float band_inverse_average[SPA_HSSR_BANDS];
+    float band_transient[SPA_HSSR_BANDS];
+    float band_content_floor[SPA_HSSR_BANDS];
+    float band_motion_support[SPA_HSSR_BANDS];
+    float band_ambience_scale[SPA_HSSR_BANDS];
+    float band_diffuse_scale[SPA_HSSR_BANDS];
 
     memset(band_best, 0, sizeof(band_best));
     if (state->bed_attack) {
@@ -1150,6 +1206,33 @@ static void spa_hssr_render_hop(
         const float epsilon = 1.0e-8f;
 
         spa_hssr_update_object_slots(state, bands);
+        /* Everything below that depends only on the BAND is computed once per
+         * band instead of once per bin: 257 bins share 32 bands, so this used
+         * to repeat two divisions and three smoothsteps about eight times per
+         * value.  Pure hoisting, same arithmetic. */
+        for (band = 0; band < SPA_HSSR_BANDS; ++band) {
+            float average = bands[band].bins
+                ? bands[band].magnitude / (float)bands[band].bins
+                : 0.0f;
+            float transient = spa_hssr_dsp_smoothstep(
+                bands[band].flux / (bands[band].magnitude + epsilon),
+                0.015f, 0.30f);
+            float learned = spa_hssr_dsp_smoothstep(
+                state->band_mask[band], 0.015f, 0.24f);
+            float safety = state->band_universal_safety[band];
+            float percussion = 0.85f * transient * kHssrPercussionPresence[band];
+
+            if (percussion > safety) safety = percussion;
+            safety = 0.04f + 0.96f * safety;
+            band_inverse_average[band] = 1.0f / (average + epsilon);
+            band_transient[band] = transient;
+            band_content_floor[band] = (0.220f + 0.440f * learned) * safety;
+            band_motion_support[band] = 0.70f + 0.30f * transient;
+            band_ambience_scale[band] = 0.018f * state->band_mask[band] *
+                state->band_diffuse[band];
+            band_diffuse_scale[band] = kHssrBandEdgeHz[band + 1] <= 220
+                ? 0.0f : 0.35f * state->band_universal_safety[band];
+        }
         for (bin = 0; bin < SPA_HSSR_BINS; ++bin) {
             float left_re = state->fft_re[SPA_HSSR_LEFT][bin];
             float left_im = state->fft_im[SPA_HSSR_LEFT][bin];
@@ -1162,7 +1245,6 @@ static void spa_hssr_render_hop(
             float amplitude_r = sqrtf(pr + epsilon);
             float instant_pan = (amplitude_l - amplitude_r) /
                 (amplitude_l + amplitude_r + epsilon);
-            float average;
             float contrast;
             float ridge_gate;
             float best_score = 0.0f;
@@ -1176,30 +1258,27 @@ static void spa_hssr_render_hop(
             unsigned slot_index;
 
             band = state->bin_band[bin];
-            average = bands[band].bins
-                ? bands[band].magnitude / (float)bands[band].bins
-                : 0.0f;
-            contrast = magnitude / (average + epsilon);
+            contrast = magnitude * band_inverse_average[band];
             ridge_gate = spa_hssr_dsp_smoothstep(
                 contrast, 0.70f, 1.65f);
-            focus_presence = 0.0f;
-            focus_transient = 0.0f;
-            {
-                focus_presence = kHssrObjectFocusPresence[band];
-                focus_transient = spa_hssr_dsp_smoothstep(
-                    bands[band].flux /
-                        (bands[band].magnitude + epsilon),
-                    0.015f, 0.30f);
-            }
+            focus_presence = kHssrObjectFocusPresence[band];
+            focus_transient = band_transient[band];
 
             for (slot_index = 0; slot_index < SPA_HSSR_OBJECT_SLOTS;
                  ++slot_index) {
                 const struct spa_hssr_object_slot *slot =
                     &state->object_slot[slot_index];
-                float pan_match = 1.0f - spa_hssr_dsp_smoothstep(
-                    fabsf(instant_pan - slot->pan), 0.12f, 0.52f);
-                float score = slot->band_weight[band] * pan_match;
+                float weight = slot->band_weight[band];
+                float pan_match;
+                float score;
 
+                /* pan_match is in [0,1], so a slot whose band weight cannot
+                 * beat the incumbent cannot win: skipping it is exact and
+                 * removes the smoothstep for every idle slot. */
+                if (weight <= best_score) continue;
+                pan_match = 1.0f - spa_hssr_dsp_smoothstep(
+                    fabsf(instant_pan - slot->pan), 0.12f, 0.52f);
+                score = weight * pan_match;
                 if (score > best_score) {
                     best_score = score;
                     best_pan = slot->pan;
@@ -1231,9 +1310,9 @@ static void spa_hssr_render_hop(
                 state->bin_scene_cross_im[bin] += ema *
                     (left_im * right_re - left_re * right_im - state->bin_scene_cross_im[bin]);
                 coh = spa_hssr_dsp_bound(
-                    sqrtf(state->bin_scene_cross_re[bin] * state->bin_scene_cross_re[bin] +
-                          state->bin_scene_cross_im[bin] * state->bin_scene_cross_im[bin]) /
-                    sqrtf(state->bin_scene_pl[bin] * state->bin_scene_pr[bin] + 1.0e-12f),
+                    sqrtf((state->bin_scene_cross_re[bin] * state->bin_scene_cross_re[bin] +
+                           state->bin_scene_cross_im[bin] * state->bin_scene_cross_im[bin]) /
+                          (state->bin_scene_pl[bin] * state->bin_scene_pr[bin] + 1.0e-12f)),
                     0.0f, 1.0f);
                 state->bin_scene_coh[bin] = coh;
                 object_target *= 0.50f + 0.50f *
@@ -1251,8 +1330,7 @@ static void spa_hssr_render_hop(
             /* Keep only a quiet decorrelated safety bed when no coherent
              * object is accepted.  It preserves some envelopment without
              * competing with the explicit slot image. */
-            ambience_target = 0.018f * state->band_mask[band] *
-                state->band_diffuse[band] * (1.0f - best_score);
+            ambience_target = band_ambience_scale[band] * (1.0f - best_score);
             ambience_target = spa_hssr_dsp_bound(
                 ambience_target, 0.0f, 0.04f);
             alpha = ambience_target > state->bin_ambience_mask[bin]
@@ -1273,24 +1351,11 @@ static void spa_hssr_render_hop(
                 float object_absence = 0.40f + 0.60f *
                     (1.0f - spa_hssr_dsp_smoothstep(
                         best_score, 0.040f, 0.28f));
-                float learned = spa_hssr_dsp_smoothstep(
-                    state->band_mask[band], 0.015f, 0.24f);
-                float semantic_safety =
-                    state->band_universal_safety[band];
-                float percussion_safety = 0.85f * focus_transient *
-                    kHssrPercussionPresence[band];
-
-                if (percussion_safety > semantic_safety)
-                    semantic_safety = percussion_safety;
-                semantic_safety = 0.04f + 0.96f * semantic_safety;
-                float content_floor =
-                    (0.220f + 0.440f * learned) * semantic_safety;
                 float ridge_support = 0.45f + 0.55f * ridge_gate;
-                float motion_support = 0.70f +
-                    0.30f * focus_transient;
 
                 universal_target = object_absence * focus_presence *
-                    content_floor * ridge_support * motion_support;
+                    band_content_floor[band] * ridge_support *
+                    band_motion_support[band];
                 universal_target = spa_hssr_dsp_bound(
                     universal_target, 0.0f, 0.55f);
             }
@@ -1298,11 +1363,10 @@ static void spa_hssr_render_hop(
                 /* Diffuse layer: what is NOT coherent is room/reverb; it goes
                  * behind through the decorrelated bed, under the semantic
                  * veto, never below 220 Hz. */
-                float diffuse = 0.35f *
+                float diffuse = band_diffuse_scale[band] *
                     (1.0f - spa_hssr_dsp_smoothstep(state->bin_scene_coh[bin], 0.25f, 0.60f)) *
-                    state->band_universal_safety[band] * (1.0f - best_score);
+                    (1.0f - best_score);
 
-                if (kHssrBandEdgeHz[band + 1] <= 220) diffuse = 0.0f;
                 if (diffuse > universal_target) universal_target = diffuse;
             }
             alpha = universal_target > state->bin_universal_mask[bin]
@@ -1465,48 +1529,44 @@ static void spa_hssr_render_hop(
 
     if (split) spa_hssr_mix_bed(state);
 
-    for (channel = 0; channel < 2; ++channel) {
-        state->fft_im[channel][0] = 0.0f;
-        state->fft_im[channel][SPA_HSSR_FFT_SIZE / 2] = 0.0f;
-        for (bin = 1; bin < SPA_HSSR_FFT_SIZE / 2; ++bin) {
-            unsigned mirror = SPA_HSSR_FFT_SIZE - bin;
-            state->fft_re[channel][mirror] = state->fft_re[channel][bin];
-            state->fft_im[channel][mirror] = -state->fft_im[channel][bin];
-        }
-        spa_hssr_fft(state, channel, 1);
-    }
-
+    /* Both outputs are real, so Z = A + jB inverts to a + jb in ONE transform:
+     * the real part is the left channel and the imaginary part the right.
+     * Exact in real arithmetic; halves the synthesis transform count. */
+    spa_hssr_pack_hermitian(state, state->fft_re[SPA_HSSR_LEFT],
+                            state->fft_im[SPA_HSSR_LEFT],
+                            state->fft_re[SPA_HSSR_RIGHT],
+                            state->fft_im[SPA_HSSR_RIGHT], 1);
+    spa_hssr_fft(state, SPA_HSSR_LEFT, 1);
     for (sample = 0; sample < SPA_HSSR_FFT_SIZE; ++sample) {
         unsigned output = (state->input_position + sample) &
                           (SPA_HSSR_FFT_SIZE - 1);
+        float window = state->synthesis_window_scaled[sample];
 
-        for (channel = 0; channel < 2; ++channel) {
-            float addition = state->fft_re[channel][sample] *
-                             state->synthesis_window[sample];
-            state->ola[channel][output] = spa_hssr_dsp_finite(
-                state->ola[channel][output] + addition);
-        }
+        state->ola[SPA_HSSR_LEFT][output] = spa_hssr_dsp_finite(
+            state->ola[SPA_HSSR_LEFT][output] +
+            state->fft_re[SPA_HSSR_LEFT][sample] * window);
+        state->ola[SPA_HSSR_RIGHT][output] = spa_hssr_dsp_finite(
+            state->ola[SPA_HSSR_RIGHT][output] +
+            state->fft_im[SPA_HSSR_LEFT][sample] * window);
     }
-    {
-        for (channel = 0; channel < 2; ++channel) {
-            memcpy(state->fft_re[channel], state->source_fft_re[channel],
-                   SPA_HSSR_BINS * sizeof(float));
-            memcpy(state->fft_im[channel], state->source_fft_im[channel],
-                   SPA_HSSR_BINS * sizeof(float));
-            state->fft_im[channel][0] = 0.0f;
-            state->fft_im[channel][SPA_HSSR_FFT_SIZE / 2] = 0.0f;
-            for (bin = 1; bin < SPA_HSSR_FFT_SIZE / 2; ++bin) {
-                state->fft_re[channel][SPA_HSSR_FFT_SIZE-bin] = state->fft_re[channel][bin];
-                state->fft_im[channel][SPA_HSSR_FFT_SIZE-bin] = -state->fft_im[channel][bin];
-            }
-            spa_hssr_fft(state, channel, 1);
-            for (sample = 0; sample < SPA_HSSR_FFT_SIZE; ++sample) {
-                unsigned output = (state->input_position + sample) & (SPA_HSSR_FFT_SIZE-1);
-                state->source_ola[channel][output] = spa_hssr_dsp_finite(
-                    state->source_ola[channel][output] +
-                    state->fft_re[channel][sample] * state->synthesis_window[sample]);
-            }
-        }
+    /* Source image, same pairing.  Its spectra live in their own arrays, so the
+     * packing has no aliasing to respect. */
+    spa_hssr_pack_hermitian(state, state->source_fft_re[0],
+                            state->source_fft_im[0],
+                            state->source_fft_re[1],
+                            state->source_fft_im[1], 0);
+    spa_hssr_fft(state, SPA_HSSR_LEFT, 1);
+    for (sample = 0; sample < SPA_HSSR_FFT_SIZE; ++sample) {
+        unsigned output = (state->input_position + sample) &
+                          (SPA_HSSR_FFT_SIZE - 1);
+        float window = state->synthesis_window_scaled[sample];
+
+        state->source_ola[0][output] = spa_hssr_dsp_finite(
+            state->source_ola[0][output] +
+            state->fft_re[SPA_HSSR_LEFT][sample] * window);
+        state->source_ola[1][output] = spa_hssr_dsp_finite(
+            state->source_ola[1][output] +
+            state->fft_im[SPA_HSSR_LEFT][sample] * window);
     }
 }
 

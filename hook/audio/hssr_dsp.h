@@ -61,8 +61,14 @@ struct spa_hssr_object_slot {
 struct spa_hssr_dsp {
     float analysis_window[SPA_HSSR_FFT_SIZE];
     float synthesis_window[SPA_HSSR_FFT_SIZE];
+    /* synthesis_window * 1/N: the inverse transform no longer rescales. */
+    float synthesis_window_scaled[SPA_HSSR_FFT_SIZE];
     float twiddle_re[SPA_HSSR_FFT_SIZE / 2];
     float twiddle_im[SPA_HSSR_FFT_SIZE / 2];
+    /* Negated twiddles and a bit-reversal table: the inverse sign and the
+     * permutation leave the hot butterfly/reversal loops. */
+    float twiddle_im_inverse[SPA_HSSR_FFT_SIZE / 2];
+    uint16_t bit_reverse[SPA_HSSR_FFT_SIZE];
     float input[2][SPA_HSSR_FFT_SIZE];
     int16_t front_delay[2][SPA_HSSR_FFT_SIZE];
     float ola[2][SPA_HSSR_FFT_SIZE];
