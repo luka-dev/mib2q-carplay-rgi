@@ -9,18 +9,16 @@ as current blockers. This confirmation is the current acceptance source;
 individual historical fault-injection and NCM/SI A/B recipes below are not a
 newly recorded test run.
 
-Later September 17 report: an alarm coincided with another approximately
-one-second interruption. The owner confirmed that both the CarPlay picture and
-audio disappeared together, and clarified that a session teardown occurred.
-This specific scenario is open; the earlier acceptance does not establish alarm
-stability. The owner confirms restarting HU after the latest `b0653c6`
-deployment. HU is currently offline; the loaded build was not captured directly.
-The teardown initiator/reason and USB/process continuity remain unconfirmed.
+September 22: the owner no longer sees the alarm-associated interruption
+(CarPlay picture + audio loss with session teardown, reported September 17).
+Closed as not reproducing; the cause was never captured. If it returns, see the
+capture checklist in git history (`TODO.md` at `8814f22`).
 
-Exception clarified by the owner on September 17: keeping CarPlay visible
-beside OPS is fixed. After deploying `b0653c6` and restarting HU, a new photo
-shows the APS warning removed but the black MMI footer with clock/LTE still
-covering the bottom of CarPlay. Complete footer removal remains **open**.
+Keeping CarPlay visible beside OPS is fixed. On September 22 the owner's photo
+with r3 shows the APS warning and the clock/LTE footer gone, but a black block
+left centred at the bottom (the entertainment-drawer glass plate). Fix r4 is
+built, not yet on HU. Intended presentation (owner): with a partial popup beside
+CarPlay there are **no** bottom strips at all.
 
 Implemented and accepted feature set: maneuver graphics, lane guidance, HUD,
 altScreen projection and audio. Cover art, metadata and steering-wheel input
@@ -61,28 +59,15 @@ setup/teardown races. Commands: `scripts/test_supervisor_lifecycle.sh`,
 
 ### Remaining work / optional extensions
 
-- Alarm-associated session teardown: **confirmed by owner; cause unconfirmed**.
-  On the next reproduction, capture the exact alarm time, teardown scope,
-  `reason`, request stream list and preceding events; correlate USB/NCM and SI,
-  `dio_manager` PID, CarPlay connection state and audio-route transitions.
-  Determine who initiated teardown before attributing it to USB, the sender,
-  the HU audio path or the latest deployment. `b0653c6` was installed
-  without restarting HU/processes; the owner subsequently restarted HU.
-  Its native audio trace is disabled, so a
-  detailed audio reproduction needs a separately prepared trace build. The
-  initial local review found no direct audio-event restart in the renderer
-  monitor. The AirPlay wrapper preserves the original request for stock;
-  selective audio teardown does not request altScreen shutdown unless stream
-  111 is included. This local review does not establish the live teardown cause.
-- OPS lower strip: **APS text removed on HU; status-line follow-up ready for
-  validation**. Model 538 masking in deployed `b0653c6` removes warning content
-  6001/6002. The owner's new photo shows independent system popup **62** still
-  displaying the MMI clock/LTE and black background over CarPlay. Candidate
-  `b0653c6-ops-statusline-r3` hides it through the stock popup manager only for
-  the exact protected front CarPlay screen with pure OPS, including queue
-  replay. Other popups and stock behavior outside that guard remain intact.
-  Source/host checks cover the actual stock manager and a failing stock-first
-  control; Kanzi rendering and complete removal still require on-HU acceptance.
+- OPS lower strip: **r4 built, HU acceptance pending**. On HU, APS masking
+  (model 538) removed the warning and r3 removed status line 62; the remaining
+  black block is the entertainment drawer, which stock toggles together with 62
+  (parking choice 3915=1 -> TerminalMode `0x30D400` stub `renderStyle 0` ->
+  `showPopup(62)` + drawer visible). r4 hides the drawer under the same guard:
+  `PartialPopupManagerEvoHigh.hideFooter()` when OPS opens, and the patched
+  `StatusBarStubController` turns a guarded drawer-visible request into hidden.
+  Check on car: side OPS leaves nothing at the bottom; reverse still opens the
+  full-screen camera; HOME/camera show the stock footer.
   [Details](<docs/cluster-and-rgi/PDC_SMALL_STAGE.md>).
 - Upmix: ongoing work, separate from the completed base audio path.
 - CarPlay Video: receiver/player integration remains unimplemented; optional

@@ -18,6 +18,7 @@ import de.esolutions.hmi.widgets.audi.base.ScreenMainArea;
 import de.esolutions.hmi.widgets.audi.base.animation.AbstractAnimationController;
 import de.esolutions.hmi.widgets.audi.base.eal.EALManager;
 import de.esolutions.hmi.widgets.audi.evo.widgets.ContainerController;
+import de.esolutions.hmi.widgets.audi.evo.widgets.EntertainmentDrawerController;
 import de.esolutions.hmi.widgets.audi.evo.widgets.PartialPopupActivatorController;
 import java.util.List;
 import org.osgi.framework.BundleContext;
@@ -188,12 +189,24 @@ public class PartialPopupManagerEvoHigh extends AbstractPartialPopupManager impl
      * Preserve that presentation while pure OPS shares the CarPlay screen.
      * Use the stock hide path to clear animation/queue ownership as well.
      * Outside this guard, the next screen's normal show/hide request wins. */
-    private boolean keepCarPlayStatusLineHidden() {
+    public boolean keepCarPlayStatusLineHidden() {
         return this.terminal != null
             && this.terminal.getTerminalID() == PdcSmallStageGuard.MAIN_TERMINAL
             && this.currentConnectedScreen != null
             && this.currentConnectedScreen.getID() == PdcSmallStageGuard.TERMINAL_MODE_SCREEN_ID
             && PdcSmallStageGuard.shouldKeepCarPlayScreen(this.currentConnectedScreen);
+    }
+
+    /* 62 and the entertainment drawer are one footer: StatusBarStubController
+     * always toggles them together, and the drawer's glass plate sits in the
+     * 62 gap, so hiding only 62 leaves a black block over CarPlay. */
+    private void hideFooter() {
+        super.hidePopup(62);
+        IDrawerFocusManagerEvo focus = this.terminal.getDrawerFocusManager();
+        Object drawer = focus != null ? focus.getEntertainmentDrawer() : null;
+        if (drawer instanceof EntertainmentDrawerController) {
+            ((EntertainmentDrawerController)drawer).getOpenCloseController().onDrawerVisibiltyChange(false);
+        }
     }
 
     protected int doShowPopup(IPartialPopupControllerEvo popup, int style) {
@@ -202,7 +215,7 @@ public class PartialPopupManagerEvoHigh extends AbstractPartialPopupManager impl
         if ((popup.getID() == 62 || popup.getID() == PdcSmallStageGuard.PURE_OPS_POPUP_ID)
             && this.keepCarPlayStatusLineHidden()) {
             if (popup.getID() == 62) return 2;
-            super.hidePopup(62);
+            this.hideFooter();
         }
         return super.doShowPopup(popup, style);
     }
@@ -210,7 +223,7 @@ public class PartialPopupManagerEvoHigh extends AbstractPartialPopupManager impl
     public int showPopup(int i) {
         if ((i == 62 || i == PdcSmallStageGuard.PURE_OPS_POPUP_ID)
             && this.keepCarPlayStatusLineHidden()) {
-            super.hidePopup(62);
+            this.hideFooter();
             if (i == 62) return 2;
         }
         int j = 3;

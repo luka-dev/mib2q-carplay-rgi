@@ -83,7 +83,7 @@ Platform mechanics worth keeping **[car]**:
 - `carplay_monitor.sh` "never controls USB, OTG, dio_manager or the SI retry state machine" (`deploy/smartphone_integrator/carplay_monitor.sh:3`).
 - The shipping `smartphone_integrator` **is** the re-arm image: `deploy/smartphone_integrator/smartphone_integrator` hashes to `606236a8…` (re-verified 2026-09-22), equal to `PATCHED_SHA256` in `deploy/experimental/usb_replug_recovery/patch_si_rearm.py:15`; the release map installs it whole-file (`docs/build-and-deploy/DEPLOY_AND_RELEASE.md:27,49-51`, HU readback 2026-09-16).
 - The NCM generation fence is **not** in the release map (`docs/build-and-deploy/DEPLOY_AND_RELEASE.md:13-29`).
-- The owner confirmed connection and reconnection closed on the current car on 2026-09-17 (`TODO.md:5-10`). That is an acceptance report, not a recorded A/B of either component. A later 2026-09-17 report (an alarm coinciding with a ~1 s picture+audio loss and a session teardown) is open (`TODO.md:12-16`).
+- The owner confirmed connection and reconnection closed on the current car on 2026-09-17 (`TODO.md:5-10`). That is an acceptance report, not a recorded A/B of either component. A later 2026-09-17 report (an alarm coinciding with a ~1 s picture+audio loss and a session teardown) no longer reproduces per the owner on 2026-09-22; the cause was never captured.
 
 <details>
 <summary><strong>History — recovery attempts that were rolled back</strong></summary>
