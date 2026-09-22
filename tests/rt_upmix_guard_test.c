@@ -13,6 +13,9 @@
 #define OVER  (SPA_RT_UPMIX_BUDGET_NS + UINT64_C(1))
 #define UNDER (SPA_RT_UPMIX_BUDGET_NS - UINT64_C(1))
 
+/* One period every 16 ms, which is never a break. */
+#define STEADY_GAP UINT64_C(16000000)
+
 static unsigned run_periods(spa_rt_upmix_guard_t *guard, unsigned count,
                             uint64_t elapsed_ns)
 {
@@ -20,7 +23,7 @@ static unsigned run_periods(spa_rt_upmix_guard_t *guard, unsigned count,
     unsigned i;
 
     for (i = 0; i < count; ++i) {
-        spa_rt_upmix_guard_retry(guard);
+        assert(spa_rt_upmix_guard_gap(guard, STEADY_GAP) == 0);
         if (!guard->disabled) trips += (unsigned)spa_rt_upmix_guard_period(guard, elapsed_ns);
     }
     return trips;
@@ -58,41 +61,50 @@ static void test_four_consecutive_trip(void)
     }
     assert(run_periods(&guard, SPA_RT_UPMIX_SLOW_LIMIT, OVER) == 1);
     assert(guard.disabled && guard.disables == 1);
-    assert(guard.retryCountdown == SPA_RT_UPMIX_RETRY_PERIODS);
+    /* And it stays off while the stream keeps flowing. */
+    assert(run_periods(&guard, 1000u, UNDER) == 0);
+    assert(guard.disabled && guard.revivals == 0);
 }
 
-/* It comes back on its own, as a cold start, and the wait doubles with every
- * further failure until it caps. */
-static void test_backoff_returns_and_caps(void)
+/* It stays off through the rest of the track and comes back on the next break
+ * in the stream, as a cold start.  A failure right after the break simply waits
+ * for the following one. */
+static void test_revives_only_on_a_break(void)
 {
     spa_rt_upmix_guard_t guard;
-    uint32_t expected = SPA_RT_UPMIX_RETRY_PERIODS;
     unsigned attempt;
 
     spa_rt_upmix_guard_arm(&guard);
     guard.warmupLeft = 0;
-    for (attempt = 0; attempt < 8u; ++attempt) {
-        uint32_t wait = expected;
-        unsigned i;
-
+    for (attempt = 0; attempt < 4u; ++attempt) {
         assert(run_periods(&guard, SPA_RT_UPMIX_SLOW_LIMIT, OVER) == 1);
-        assert(guard.disabled && guard.retryCountdown == wait);
-        /* Still disabled one period before the backoff expires. */
-        for (i = 0; i + 1u < wait; ++i) {
-            assert(spa_rt_upmix_guard_retry(&guard) == 0);
-            assert(guard.disabled);
-        }
-        assert(spa_rt_upmix_guard_retry(&guard) == 1);
-        assert(!guard.disabled);
-        /* Back as a cold start: the excused periods cannot trip it again. */
+        assert(guard.disabled && guard.disables == attempt + 1u);
+        /* Minutes of playing do not bring it back. */
+        assert(run_periods(&guard, 60u * 1000u / 16u, UNDER) == 0);
+        assert(guard.disabled);
+        /* Just short of a break does not either. */
+        assert(spa_rt_upmix_guard_gap(&guard, SPA_RT_UPMIX_PAUSE_NS - 1u) == 0);
+        assert(guard.disabled);
+        /* The break does, as a cold start. */
+        assert(spa_rt_upmix_guard_gap(&guard, SPA_RT_UPMIX_PAUSE_NS) == 1);
+        assert(!guard.disabled && guard.revivals == attempt + 1u);
         assert(guard.warmupLeft == SPA_RT_UPMIX_WARMUP_PERIODS);
         assert(run_periods(&guard, SPA_RT_UPMIX_WARMUP_PERIODS, OVER) == 0);
         assert(!guard.disabled);
-        expected = expected > SPA_RT_UPMIX_RETRY_MAX_PERIODS / 2u
-            ? SPA_RT_UPMIX_RETRY_MAX_PERIODS : expected * 2u;
     }
-    assert(guard.retryPeriods == SPA_RT_UPMIX_RETRY_MAX_PERIODS);
-    assert(guard.disables == 8u);
+}
+
+/* A break while it is healthy costs nothing but the warmup grace. */
+static void test_break_while_healthy(void)
+{
+    spa_rt_upmix_guard_t guard;
+
+    spa_rt_upmix_guard_arm(&guard);
+    guard.warmupLeft = 0;
+    assert(run_periods(&guard, 100u, UNDER) == 0);
+    assert(spa_rt_upmix_guard_gap(&guard, 10u * SPA_RT_UPMIX_PAUSE_NS) == 0);
+    assert(!guard.disabled && guard.revivals == 0);
+    assert(guard.warmupLeft == SPA_RT_UPMIX_WARMUP_PERIODS);
 }
 
 /* A timeline reset excuses the next periods again without clearing the
@@ -121,8 +133,9 @@ int main(void)
 {
     test_warmup_is_excused();
     test_four_consecutive_trip();
-    test_backoff_returns_and_caps();
+    test_revives_only_on_a_break();
+    test_break_while_healthy();
     test_cold_reset_and_healthy_stream();
-    puts("rt_upmix_guard_test: OK (warmup grace, consecutive trip, backoff and return)");
+    puts("rt_upmix_guard_test: OK (warmup grace, consecutive trip, revival on a break)");
     return 0;
 }

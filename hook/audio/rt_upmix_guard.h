@@ -24,22 +24,21 @@
 #define SPA_RT_UPMIX_BUDGET_NS  UINT64_C(10000000)
 #define SPA_RT_UPMIX_SLOW_LIMIT 4u
 #define SPA_RT_UPMIX_WARMUP_PERIODS 16u
-/* Come back after ten seconds, then twenty, then every thirty.  A failed
- * attempt costs about 320 ms of periods at the limit (the excused warmup plus
- * the four consecutive overruns it takes to give up again), so even against a
- * unit that never keeps up the cap spends about one percent of the time
- * trying, and a transient loses the rears for ten seconds rather than for the
- * rest of the track.  Periods are 16 ms. */
-#define SPA_RT_UPMIX_RETRY_PERIODS     625u
-#define SPA_RT_UPMIX_RETRY_MAX_PERIODS 1875u
+/* Coming back in the middle of a track means the rears appear under the music,
+ * which is more noticeable than their absence, and a failed attempt costs about
+ * 320 ms of periods at the limit before it gives up again.  So the upmix waits
+ * for a real gap in the stream instead of a timer: playback paused, the track
+ * or the app changed, the phone stopped writing.  Realtime periods arrive every
+ * 16 ms, so anything beyond a few hundred milliseconds is a break, not jitter.
+ * If it fails again after the break it simply waits for the next one. */
+#define SPA_RT_UPMIX_PAUSE_NS UINT64_C(500000000)
 
 typedef struct {
     int disabled;            /* the DSP is skipped while this is set */
     uint32_t slowPeriods;    /* consecutive periods over the budget */
     uint32_t warmupLeft;     /* periods still excused from the guard */
-    uint32_t retryCountdown; /* periods left before trying again, 0 = not trying */
-    uint32_t retryPeriods;   /* wait after the next failure, doubles each time */
     uint32_t disables;       /* how many times the guard tripped this session */
+    uint32_t revivals;       /* how many times a break brought it back */
     uint64_t worstNs;        /* worst judged period */
     uint64_t coldWorstNs;    /* worst excused period, reported separately */
 } spa_rt_upmix_guard_t;
@@ -52,9 +51,8 @@ static inline void spa_rt_upmix_guard_arm(spa_rt_upmix_guard_t *guard)
     guard->disabled = 0;
     guard->slowPeriods = 0;
     guard->warmupLeft = SPA_RT_UPMIX_WARMUP_PERIODS;
-    guard->retryCountdown = 0;
-    guard->retryPeriods = SPA_RT_UPMIX_RETRY_PERIODS;
     guard->disables = 0;
+    guard->revivals = 0;
     guard->worstNs = 0;
     guard->coldWorstNs = 0;
 }
@@ -67,14 +65,17 @@ static inline void spa_rt_upmix_guard_cold(spa_rt_upmix_guard_t *guard)
     guard->slowPeriods = 0;
 }
 
-/* Once per realtime period, before deciding whether to upmix.  1 = the backoff
- * expired and the upmix may try again, as a cold start. */
-static inline int spa_rt_upmix_guard_retry(spa_rt_upmix_guard_t *guard)
+/* Once per realtime period, with the gap since the previous one.  A gap that
+ * long is a break in the stream, so the upmix may try again as a cold start.
+ * 1 = it just came back. */
+static inline int spa_rt_upmix_guard_gap(spa_rt_upmix_guard_t *guard,
+                                         uint64_t gap_ns)
 {
-    if (!guard->disabled || !guard->retryCountdown) return 0;
-    if (--guard->retryCountdown) return 0;
+    if (gap_ns < SPA_RT_UPMIX_PAUSE_NS) return 0;
+    spa_rt_upmix_guard_cold(guard);   /* the DSP is cold after any break */
+    if (!guard->disabled) return 0;
     guard->disabled = 0;
-    spa_rt_upmix_guard_cold(guard);
+    ++guard->revivals;
     return 1;
 }
 
@@ -95,11 +96,6 @@ static inline int spa_rt_upmix_guard_period(spa_rt_upmix_guard_t *guard,
     if (++guard->slowPeriods < SPA_RT_UPMIX_SLOW_LIMIT) return 0;
     guard->disabled = 1;
     ++guard->disables;
-    guard->retryCountdown = guard->retryPeriods;
-    guard->retryPeriods =
-        guard->retryPeriods > SPA_RT_UPMIX_RETRY_MAX_PERIODS / 2u
-        ? SPA_RT_UPMIX_RETRY_MAX_PERIODS
-        : guard->retryPeriods * 2u;
     return 1;
 }
 
