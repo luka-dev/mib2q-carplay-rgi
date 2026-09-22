@@ -166,8 +166,10 @@ so with the realtime transport refusing multichannel it can't help alone (**infe
 
 We reversed Dolby's **desktop** spatial component `DolbyAudioProcessing.dll` (PE32+
 AMD64, "Dolby Audio Processing for Microsoft Spatial Audio", from the DolbyAccess
-package) to learn its distribution math. Two evidence tiers (`docs/Dolby/README.md`,
-`docs/Dolby/SOURCES.md`, our RE writeups under `output/r2/dolby-surround/`):
+package) to learn its distribution math. **The Dolby binary, Dolby's own PDF, and our
+raw RE dumps have been removed from the repo** — Dolby-proprietary material is not
+kept here and this analysis is the only retained Dolby artifact. The work used two
+evidence tiers:
 
 - a cheap **string/PE-export scan** — proves feature *names* exist, nothing about
   behavior;
@@ -292,9 +294,9 @@ deliberate departure, and we have never demonstrated Dolby is the better rendere
   `docs/HANDOFF_SPATIAL_AUDIO.md`, `memory/audio_210_pcm_passthrough.md`,
   `memory/apap_no_format_index.md`, `memory/carplay_sad_header.md`; hook
   `hook/audio/audio_hook.{c,h}`, `hook/audio/spatial_downmix.h`, `hook/audio/aac_bridge.c`.
-- **Dolby DSP teardown:** `docs/Dolby/README.md`, `docs/Dolby/SOURCES.md`,
-  `docs/Dolby/evidence/` (string/PE scan), our kernel-emulation writeups under
-  `output/r2/dolby-surround/` (FINDINGS/SYNTHESIS). Proprietary Dolby files are **not**
-  part of this paper.
+- **Dolby DSP teardown:** the Dolby binary, Dolby's PDF and our raw RE dumps were
+  **removed** (Dolby-proprietary — not kept in the repo). This doc is the retained
+  analysis; the principles borrowed into HSSR are in
+  `docs/UPMIX_DOLBY_DISTRIBUTION_PLAN_2026-09-21.md`.
 - **What HSSR borrowed & how it diverges:** `docs/UPMIX_DOLBY_DISTRIBUTION_PLAN_2026-09-21.md`,
   `docs/research/HSSR_UPMIX_MODEL.md`.
