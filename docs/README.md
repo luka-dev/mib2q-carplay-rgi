@@ -1,6 +1,6 @@
-# MHI2 CarPlay documentation
+# MHI2Q CarPlay documentation
 
-_The MHI2 CarPlay knowledge base — every domain of the project, linked and diagrammed. Start here._
+_The MHI2Q CarPlay knowledge base — every domain of the project, linked and diagrammed. Start here._
 
 ---
 
@@ -28,7 +28,7 @@ _Mindmap of the docs: the six domains and every curated note in them._
 
 ```mermaid
 mindmap
-  root((MHI2 CarPlay))
+  root((MHI2Q CarPlay))
     Audio
       APAC Codec
       Buffered Audio Path
@@ -123,7 +123,7 @@ _High-level flow from the phone to the cluster and speakers; each block links to
 
 ```mermaid
 flowchart TB
-    accTitle: MHI2 CarPlay system overview
+    accTitle: MHI2Q CarPlay system overview
     accDescr: The iPhone connects over USB NCM, the CarPlay session drives three output domains — audio to the amp, route guidance to the cluster, and alternate-screen video — all built and deployed from the hook.
 
     phone["iPhone (CarPlay)"]

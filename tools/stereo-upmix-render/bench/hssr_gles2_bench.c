@@ -1,5 +1,5 @@
 /*
- * Offscreen GLES2 fragment-shader microbenchmark for the MHI2 QNX unit.
+ * Offscreen GLES2 fragment-shader microbenchmark for the MHI2Q QNX unit.
  *
  * The Qualcomm EGL loader on this BSP requires a QNX Screen context to exist
  * before eglGetDisplay().  We create only that context, then use a 16x16 EGL

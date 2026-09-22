@@ -9,7 +9,7 @@
 All of this is `[decompile]` of the AU491 FPK firmware (`KI_FPK_AU491`).
 
 ```text
-MHI2 HU (Java)
+MHI2Q HU (Java)
    | BAP over MOST (LSG 50)          | video over MOST (isochronous)
    v                                 v
 gssipc-kbd  (BAP -> dp gateway)      HW video decoder -> display layer

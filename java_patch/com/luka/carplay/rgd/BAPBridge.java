@@ -1449,7 +1449,7 @@ public class BAPBridge {
          * exactly what the smallscreen OK toggle used to do.  See
          * docs/cluster-and-rgi/KDK_GEOMETRY_AND_ANIMATION.md. */
         long timeVal = currentArrivalSeconds();
-        /* JVM default TZ is UTC on MHI2. AppConnectorNavi converts a type-1
+        /* JVM default TZ is UTC on MHI2Q. AppConnectorNavi converts a type-1
          * epoch with GregorianCalendar, so shift it to HU local time first. */
         if (timeVal >= 0L) {
             timeVal = convertUtcToLocalMs(timeVal * 1000L) / 1000L;
@@ -2323,7 +2323,7 @@ public class BAPBridge {
     /**
      * Returns local timezone offset in seconds for a given UTC epoch.
      *
-     * JVM default TZ on MHI2 is UTC, so TimeZone.getDefault() is useless.
+     * JVM default TZ on MHI2Q is UTC, so TimeZone.getDefault() is useless.
      * Instead: get HU raw offset (no DST) via fw, find a matching Java TZ
      * with DST support, and use its getOffset() for DST-aware result.
      * Fallback: HU raw offset (correct except during DST transitions).
