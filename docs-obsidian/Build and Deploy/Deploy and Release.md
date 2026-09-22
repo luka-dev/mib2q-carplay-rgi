@@ -1,104 +1,129 @@
 # Deploy and Release
 
-*The build scripts emit loose binaries; a release is assembled by hand from three folders, staged on an M.I.B. card or over SSH, and installed without ever rebooting the car unasked.*
+*The build scripts only produce loose binaries. You assemble a release by hand from three folders into `mod/carplay/root/` on an M.I.B. card, install it with `custom.sh`, and never reboot the car without asking.*
 
 ---
 
 ## 📦 Builds emit binaries, not releases
 
-There is no packaging script anymore. Each build script drops its outputs into `build/`, and a release is assembled **by hand** from three source folders:
+There is no packaging script; `package_mib.py`, `package_protected.sh` and `deploy_over_ssh.sh` have all been deleted. Each build script writes its outputs into `build/`, and you assemble a release **by hand** from three folders:
 
-- **`build/`** — the compiled outputs (`libcarplay_hook.so`, `libcarplay_apac.so`, `maneuver_render`, `altscreen_render`, `carplay_hook.jar`).
-- **`models/`** — the HSSR AI models (`hssr_model.bin`, `hssr_guard.bin`).
-- **`deploy/`** — startup scripts, the patched firmware (`smartphone_integrator`, `deva-ctrl-qc.so`), and the PF profiles.
+- `build/` holds the compiled outputs: `libcarplay_hook.so`, `libcarplay_apac.so`, `maneuver_render`, `altscreen_render` and `carplay_hook.jar`.
+- `models/` holds the HSSR models, `hssr_model.bin` and `hssr_guard.bin`.
+- `deploy/` holds the startup scripts, the patched firmware (`smartphone_integrator` and `deva-ctrl-qc.so`) and the SI child JSON.
 
-`custom.sh` installs a manually-staged tree; the source→on-unit map below is what the retired `package_mib.py` used to encode.
+`custom.sh` installs whatever it finds under `mod/carplay/root/`. It copies every file in that tree to the same path under `/` (`install_MoreIncredibleBash/mod/custom.sh:29-32`, `:118-133`). You put each file at its on-unit path yourself, using the map below.
 
 ```mermaid
 flowchart TB
   accTitle: Source folders to on-unit paths
-  accDescr: The build, models, and deploy folders are hand-assembled into a rootfs tree that custom.sh lays onto slash on the unit, with firmware and json patched in place.
-  build["build/ compiled outputs"]
-  models["models/ HSSR model + guard"]
-  deploy["deploy/ scripts + firmware + PF"]
-  stage["hand-staged carplay/root/ tree"]
-  hooks["/mnt/app/root/hooks/"]
-  jars["/mnt/app/eso/hmi/lsd/jars/"]
-  fw["firmware: whole-file replace"]
-  json["smartphone_integrator.json: in-place patch"]
-  pf["PF profiles: in-place edit"]
-  build --> stage
-  models --> stage
-  deploy --> stage
+  accDescr: The build, models and deploy folders are staged by hand into mod/carplay/root on the SD card. custom.sh copies that tree onto the unit's root, then patches the SI json and the PF profiles in place.
+
+  subgraph repo_side [Repo]
+    build_dir["build/ compiled outputs"]
+    models_dir["models/ HSSR model and guard"]
+    deploy_dir["deploy/ scripts, firmware, JSON"]
+  end
+
+  stage["SD mod/carplay/root/ tree"]
+
+  subgraph unit_side [Unit after custom.sh]
+    hooks["/mnt/app/root/hooks/"]
+    jars["/mnt/app/eso/hmi/lsd/jars/"]
+    fw["firmware whole-file replace"]
+    si_json["SI json child replaced"]
+    pf_rules["PF profiles edited in place"]
+  end
+
+  build_dir --> stage
+  models_dir --> stage
+  deploy_dir --> stage
   stage --> hooks
   stage --> jars
   stage --> fw
-  stage --> json
-  stage --> pf
-  class build,models,deploy primary
+  stage --> si_json
+  stage --> pf_rules
+
+  classDef primary fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
+  classDef success fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
+  classDef neutral fill:#f3f4f6,stroke:#6b7280,stroke-width:2px,color:#1f2937
+  class build_dir,models_dir,deploy_dir primary
   class stage success
-  class hooks,jars,fw,json,pf neutral
-  classDef primary fill:#dbeafe,stroke:#2563eb,color:#1e3a5f
-  classDef success fill:#dcfce7,stroke:#16a34a,color:#14532d
-  classDef neutral fill:#f3f4f6,stroke:#6b7280,color:#1f2937
+  class hooks,jars,fw,si_json,pf_rules neutral
 ```
 
 ## 🔗 The artifact map
 
-The on-unit column is the path under `/` (custom.sh copies `carplay/root/` onto `/`).
+The on-unit column is the path under `/`. On the card, that same file goes at `mod/carplay/root/<on-unit path>`.
 
 | File | Source in the repo | On-unit path |
 |---|---|---|
-| `libcarplay_hook.so` | `build/unprotected/` (or `build/protected_<VIN>/`, stamped) | `/mnt/app/root/hooks/` |
-| `libcarplay_apac.so` | `build/unprotected/` (or `build/protected_<VIN>/`); omitted for a `HOOK_AUDIO=0` build | `/mnt/app/root/hooks/` |
+| `libcarplay_hook.so` | `build/unprotected/`, or `build/protected_<VIN>/` for a stamped build | `/mnt/app/root/hooks/` |
+| `libcarplay_apac.so` | `build/unprotected/` or `build/protected_<VIN>/`; leave it out of a `HOOK_AUDIO=0` build | `/mnt/app/root/hooks/` |
 | `maneuver_render` | `build/` (`build_renderers.sh`) | `/mnt/app/root/hooks/` |
 | `altscreen_render` | `build/` (`build_renderers.sh`) | `/mnt/app/root/hooks/` |
 | `carplay_hook.jar` | `build/` (`build_java.sh`) | `/mnt/app/eso/hmi/lsd/jars/` |
-| `hssr_model.bin` | `models/hssr-q6d-moises-a/` (main control model) | `/mnt/app/root/hooks/` |
-| `hssr_guard.bin` | `models/hssr-selection-v11/` (V11 vocal guard) | `/mnt/app/root/hooks/` |
-| `flag_atlas.rgba` | `maneuver_render/resources/` | `/mnt/app/root/hooks/` |
-| `carplay_*.sh` (startup/monitor/processes/cleanup) | `deploy/smartphone_integrator/` | `/mnt/app/root/hooks/` |
-| `smartphone_integrator` | `deploy/smartphone_integrator/` | `/mnt/app/eso/bin/apps/` (whole-file replace) |
-| `deva-ctrl-qc.so` | `deploy/deva-ctrl-qc/deva-ctrl-qc.so.patched` (renamed) | `/mnt/app/armle/lib/dll/` (whole-file replace) |
-| `carplay_child.json` | `deploy/smartphone_integrator/` | installer resource; custom.sh splices only `children.carplay` into the SI JSON |
+| `hssr_model.bin` | `models/hssr-q6d-moises-a/`, the main control model | `/mnt/app/root/hooks/` |
+| `hssr_guard.bin` | `models/hssr-selection-v11/`, the V11 vocal guard, loaded from beside the main model (`hook/audio/audio_hook.c:1756`) | `/mnt/app/root/hooks/` |
+| `flag_atlas.rgba` | `maneuver_render/resources/` | `/mnt/app/root/hooks/` (`maneuver_render/main.c:45`) |
+| `carplay_{startup,monitor,processes,cleanup}.sh` | `deploy/smartphone_integrator/` | `/mnt/app/root/hooks/` |
+| `smartphone_integrator` | `deploy/smartphone_integrator/` | `/mnt/app/eso/bin/apps/` (replaces the whole file) |
+| `deva-ctrl-qc.so` | `deploy/deva-ctrl-qc/deva-ctrl-qc.so.patched`, renamed | `/mnt/app/armle/lib/dll/` (replaces the whole file) |
+| `carplay_child.json` | `deploy/smartphone_integrator/` | Not installed as a file: it goes in `mod/carplay/` next to `root/`, and `custom.sh` splices it in as `children.carplay` |
 
-The firmware whole-file replacements are gated on exact SHA-256 identities (final MU1316 images only); unknown versions stop before writing, and originals are backed up as `*.carplay-stock`. **PF firewall:** no patch file is installed — custom.sh makes its own scoped in-shell edit opening TCP `6030:6032` across all four stock profiles (`pf.conf`, `pf.ecm0.conf`, `pf.mlan0.conf`, `pf.ppp0.conf`), so it needs no `patch`/`sed`/Python on the HU. See [[Landmines]] for the per-interface PF trap.
+`custom.sh` backs up each replaced firmware file once, as `*.carplay-stock`, before an atomic rename on the same partition (`custom.sh:47`, `:51`, `:127-131`). It does **not** check SHA-256 identities, so staging the correct images is your job. The expected hashes are in `docs/RELEASE_ARTIFACTS.md`, and the staged files in the repo match them (`shasum -a 256`).
+
+**PF firewall:** no patch file is installed. `custom.sh` edits the `carplay0` inbound TCP rule in place, widening ` 6030,` (or ` 6030:6031,` / ` 6030:6033,`) to ` 6030:6032,` in each of `pf.conf`, `pf.ecm0.conf`, `pf.mlan0.conf` and `pf.ppp0.conf` (`custom.sh:35`, `:89-110`). Because it does this in the shell, it needs no `patch`, `sed` or Python on the HU. `deploy/pf/patched/` is a reference result, regenerated by `deploy/pf/patch_pf.sh`. See [[PF Firewall]] and [[Landmines]] for the trap where the PF profile is chosen per interface.
 
 ## 💾 The M.I.B. SD install
 
-Copy the contents of `install_MoreIncredibleBash/` over the M.I.B. SD root, then put the release artifacts in `/build/` on the card:
+Copy the contents of `install_MoreIncredibleBash/` over the root of the M.I.B. SD card, then stage the release inside `mod/carplay/`:
 
 ```text
 SD1/
   mod/custom.sh
-  build/            the files from the artifact map above
+  mod/carplay/carplay_child.json          from deploy/smartphone_integrator/
+  mod/carplay/root/mnt/app/root/hooks/     .so, renderers, models, atlas, carplay_*.sh
+  mod/carplay/root/mnt/app/eso/hmi/lsd/jars/carplay_hook.jar
+  mod/carplay/root/mnt/app/eso/bin/apps/smartphone_integrator
+  mod/carplay/root/mnt/app/armle/lib/dll/deva-ctrl-qc.so
 ```
 
-Install via **GEM → M.I.B. → Advanced Settings → Run Custom Script** (`mod/custom.sh`) with CarPlay disconnected. It remounts `/mnt/app` + `/mnt/system` rw, lays `carplay/root/` onto `/` (atomic rename per file), patches `smartphone_integrator.json` (replaces the `"carplay"` child) and the PF profiles, then `sync`. **Uninstall:** copy `uninstall_MoreIncredibleBash/` over the card instead — it restores every `*.carplay-stock` and removes the files we own; it needs no build files. Both leave the reboot to the owner.
+To install, run **GEM → M.I.B. → Advanced Settings → Run Custom Script** (`mod/custom.sh`) with CarPlay disconnected. If it is started on the RCC it hands itself to the MMX (`:25-27`). It then:
 
-`carplay_child.json` MUST sit in `mod/carplay/` next to `root/`, or the JSON patch is silently skipped and the hook never loads.
+1. remounts `/mnt/app` and `/mnt/system` read-write;
+2. copies each file under `root/` onto `/` through an atomic rename;
+3. patches `smartphone_integrator.json` by replacing the `"carplay"` child;
+4. widens the PF profiles;
+5. runs `sync` and prints `DONE (install). Reboot the HU to load.` (`:112-138`).
+
+It stops no processes and does not reboot.
+
+If `carplay_child.json` is missing from `mod/carplay/`, the JSON patch is skipped with a `WARN` (`:57`) and the hook never loads. If `mod/carplay/root/` is missing, the script exits with `no payload tree` (`:32`).
+
+To uninstall, copy `uninstall_MoreIncredibleBash/` over the card instead. That script needs no payload tree. It renames every `*.carplay-stock` it finds under `/mnt/app` and `/mnt/system` back to the original, which covers the firmware, the SI JSON and the PF profiles. It then deletes the files on its fixed owned list (`uninstall_MoreIncredibleBash/mod/custom.sh:22-53`). [open] That list does not include `/mnt/app/root/hooks/hssr_guard.bin`, so the standalone uninstaller leaves the guard model on the unit. Running `custom.sh uninstall` from the install folder with the payload tree still present does remove it, because that mode walks `root/` (`install_MoreIncredibleBash/mod/custom.sh:140-159`).
 
 ## 🌐 SSH deploy and its traps
 
-`scripts/deploy_over_ssh.sh [root@host] [install|check|uninstall]` selects the matching script and uploads only the necessary files. The unit (`root@10.173.189.1`, or `10.173.189.x` variants) has a bare QNX environment — the naive copy breaks four ways:
+No SSH deploy script remains in `scripts/`. A push over SSH is done by hand to the unit (`root@10.173.189.1`, or other `10.173.189.x` addresses). The unit has a bare QNX environment, and a naive copy fails in four ways:
 
 | Trap | Fix |
 |---|---|
-| No remote `scp` binary (QNX has none) | Push via `ssh host 'cat > /path/file.new' < local`, then `chmod` + `mv` + `sync`. `scripts/deploy_unit.sh` works because it uses SFTP-mode plain `scp`. |
-| sshd rate-limits repeated password auth | One multiplexed master (`ControlMaster=auto`, short `ControlPath` under 104 bytes), reuse it; first call via `sshpass`, the rest plain `ssh`. |
-| `ssh` inside `while read` eats the loop's stdin | Always `ssh -n` (or `< /dev/null`) when looping. |
+| The unit has no remote `scp` binary | Push with `ssh host 'cat > /path/file.new' < local`, then `chmod`, `mv` and `sync`. |
+| sshd rate-limits repeated password logins | Open one multiplexed master (`ControlMaster=auto`, with a `ControlPath` under 104 bytes) and reuse it. The first call goes through `sshpass`; the rest are plain `ssh`. |
+| `ssh` inside `while read` eats the loop's stdin | Always use `ssh -n` (or `< /dev/null`) in loops. |
 | zsh does not word-split unquoted `$OPTS` | Put deploy snippets in a `#!/bin/bash` script, not inline. |
 
-The login banner prints on STDOUT even for `ssh host cmd`, so binary read-back must emit a marker (`echo __BEGIN__; cat f`) and strip up to it. There is no `scp`/`tar`/`cksum`/`sha256sum`/`base64` on the unit — the only end-to-end check is reading a file back and `cmp`-ing it locally. `/mnt/app` is read-only until `mount -uw /mnt/app`; `/tmp` maps to `/dev/shmem`, which cannot hold directories.
+The login banner prints on STDOUT even for `ssh host cmd`, so a binary read-back has to print a marker first (`echo __BEGIN__; cat f`) and strip everything up to it. The unit has no `scp`, `tar`, `cksum`, `sha256sum` or `base64`, so the only end-to-end check is to read the file back and `cmp` it locally. `/mnt/app` stays read-only until `mount -uw /mnt/app`. `/tmp` maps to `/dev/shmem`, which cannot hold directories. Source: `memory/audi_ssh_transport_traps.md`.
 
 ## ⚠️ Never reboot the unit unasked
 
-This is a hard rule, not a preference — the user is usually sitting in the car.
+This is a hard rule, not a preference: the user is usually sitting in the car.
 
-- **Deploying files is fine; restarting is not.** Copy the artifacts, report what is staged, say plainly it needs a restart to take effect, then **stop and wait**. Approval to deploy is not approval to reboot, and approval once is not approval next time.
-- **The C hook** (`libcarplay_hook.so`) only needs `dio_manager` killed — per-fork, invisible to the user.
-- **The jar is different.** `carplay_hook.jar` lives on j9's `-Xbootclasspath`, so it does nothing until the JVM restarts. Killing j9 is treated as a critical-process death and **restarts the whole system** (~50 s): SSH drops, the screen goes black mid-drive. Always warn before killing j9. See [[Landmines]].
+- **Deploying files is fine; restarting is not.** Copy the artifacts, report what is staged, and say plainly that it needs a restart to take effect. Then **stop and wait**. Approval to deploy is not approval to reboot, and approval once is not approval the next time. See `memory/feedback_never_reboot_unit.md`.
+- **The C hook** (`libcarplay_hook.so`) is loaded per fork. `carplay_startup.sh` adds `LD_PRELOAD` only to its own `dio_manager` (`deploy/smartphone_integrator/carplay_startup.sh:50`), so a new `dio_manager` generation picks up a redeployed `.so`.
+- **The jar is different.** `carplay_hook.jar` is on j9's `-Xbootclasspath`, so it does nothing until the JVM restarts. Killing j9 counts as a critical-process death and **restarts the whole system** (about 50 s): SSH drops and the screen goes black mid-drive. Always warn before killing j9. See `memory/java_jar_deploy_reboots_unit.md` and [[Landmines]].
 
-Installs are atomic per file (same-partition rename), not a transaction across both flash partitions; a manual reboot activates the release. Deep detail: `install_MoreIncredibleBash/README_CARPLAY.md`.
+The install is atomic per file (a rename on the same partition), not a transaction across both flash partitions. A manual reboot activates the release.
 
-Provenance: `docs/RELEASE_ARTIFACTS.md`, `docs/DEPLOYMENT.md`, `deploy/smartphone_integrator/README.md`.
+Provenance: `install_MoreIncredibleBash/mod/custom.sh`, `uninstall_MoreIncredibleBash/mod/custom.sh`, `docs/RELEASE_ARTIFACTS.md`, `docs/DEPLOYMENT.md`, `deploy/smartphone_integrator/README.md`, `deploy/pf/README.md`.

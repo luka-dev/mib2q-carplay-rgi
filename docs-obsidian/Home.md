@@ -10,11 +10,12 @@ This is the whole project's documentation as a navigable Obsidian vault: the aud
 upmix and amplifier reverse-engineering, the instrument cluster and route guidance,
 the alternate-screen video, the USB/connect path, the build and deploy system, and a
 cross-cutting index of traps. Each domain has a **map-of-content (MOC)** note that
-links its topic notes; every note carries Mermaid diagrams and `[[wikilinks]]`.
+links its topic notes; every note carries Mermaid diagrams and Obsidian wikilinks.
 
-Truth levels are tagged throughout: **[car]** confirmed on the unit, **[model]** /
-**[decompile]** static reverse-engineering or offline modelling, **[open]** not yet
-verified.
+Truth levels are tagged throughout: **[code]** verified in the current source (cited
+`path:line`), **[car]** confirmed on the unit, **[model]** / **[decompile]** static
+reverse-engineering or offline modelling, **[open]** not yet verified. The current
+source code is the ground truth for what the system does.
 
 > 📌 **Before you touch a subsystem, read [[Landmines]]** — the traps that already cost days.
 
@@ -81,7 +82,7 @@ flowchart TB
     accTitle: MHI2 CarPlay system overview
     accDescr: The iPhone connects over USB NCM, the CarPlay session drives three output domains — audio to the amp, route guidance to the cluster, and alternate-screen video — all built and deployed from the hook.
 
-    phone["📱 iPhone (CarPlay)"]
+    phone["iPhone (CarPlay)"]
 
     subgraph connect ["🌐 Connect"]
         ncm["USB NCM / carplay0"]
@@ -90,13 +91,13 @@ flowchart TB
     end
 
     subgraph outputs ["⚙️ Output domains"]
-        audio["🔊 Audio upmix + amp"]
+        audio["Audio upmix to amp"]
         cluster["📊 Cluster + route guidance"]
         alt["🖥️ AltScreen cluster video"]
     end
 
     amp["J525 B&O amp -> 19 speakers"]
-    kombi["Instrument cluster (KOMO/LVDS + 111)"]
+    kombi["Cluster planes 98 and 99"]
 
     phone --> ncm
     session --> audio
@@ -106,8 +107,8 @@ flowchart TB
     cluster --> kombi
     alt --> kombi
 
-    classDef primary fill:#dbeafe,stroke:#2563eb,color:#1e3a5f
-    classDef neutral fill:#f3f4f6,stroke:#6b7280,color:#1f2937
+    classDef primary fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
+    classDef neutral fill:#f3f4f6,stroke:#6b7280,stroke-width:2px,color:#1f2937
     class phone primary
     class amp,kombi neutral
 ```
@@ -164,4 +165,6 @@ Every note in the vault, alphabetical:
 The deep source material lives in the repo: `docs/research/` (the audio white papers),
 `docs/` and `docs/reference/` (the detailed audits), `assets/` (the reverse-engineering
 working sets), and `memory/` (the distilled notes). This vault synthesizes and links
-them; those files remain the primary record.
+them. Every code-state claim was reconciled against the current source on 2026-09-22
+(the code is authoritative); training history, listening verdicts and on-car
+measurements keep the provenance of the doc that recorded them.

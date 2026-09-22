@@ -6,9 +6,9 @@
 
 ## 📋 What this is
 
-`c_hook_trace/` records a live CarPlay session on the head unit (LD_PRELOAD over stock libs) and replays it into from-source `dio_manager` on QEMU, driving the real session callbacks with **no phone attached**. Proven end-to-end 2026-07-16. It exists to validate the from-source libairplay/dio rebuild against stock without a car. The honest ceiling: **dynamic parity is proven only on the video path**; audio, Siri, HID and full RTSP are static-only. For the from-source rebuild itself see [[iOS CarPlay Spatial Wireformat]] (the audio path it does not exercise).
+The record/replay tooling (now in `logs/trace/`, formerly `c_hook_trace/`) records a live CarPlay session on the head unit (LD_PRELOAD over stock libs) and replays it into from-source `dio_manager` on QEMU, driving the real session callbacks with **no phone attached**. Proven end-to-end 2026-07-16. It exists to validate the from-source libairplay/dio rebuild against stock without a car. The honest ceiling: **dynamic parity is proven only on the video path**; audio, Siri, HID and full RTSP are static-only. Production does not use the from-source stack: it runs stock 210 binaries plus the LD_PRELOAD hook, and the from-source libairplay tree now sits under `Patches/dio_asm_to_c/_legacy_attempt/libairplay-mhi2q/`. For the audio path the replay does not exercise see [[iOS CarPlay Spatial Wireformat]].
 
-Provenance: `memory/carplay_record_replay.md`, `memory/libairplay_functional_parity.md`, `c_hook_trace/REPLAY.md`, `Patches/libairplay-mhi2q/FUNCTIONAL_PARITY.md`. Truth tags: **[car]** captured on the unit, **[qemu]** proven in emulation, **[open]** needs the unit.
+Provenance: `memory/carplay_record_replay.md`, `memory/libairplay_functional_parity.md`, `logs/trace/README.md`, `logs/trace/REPLAY.md`, `Patches/dio_asm_to_c/_legacy_attempt/libairplay-mhi2q/FUNCTIONAL_PARITY.md` (outside this repo, under the `AUDI_2` tree), QEMU harness `Tools/qnx-carplay-emu/carplay/` (same). Truth tags: **[car]** captured on the unit, **[qemu]** proven in emulation, **[code]** read in the current tree, **[open]** needs the unit or a missing artefact.
 
 ---
 
@@ -16,8 +16,8 @@ Provenance: `memory/carplay_record_replay.md`, `memory/libairplay_functional_par
 
 | Piece | Builds | Runs where | Job |
 |---|---|---|---|
-| `carplay_trace.c` | `libcarplay_trace.so` | On-unit, LD_PRELOAD | Capture the session to `/tmp/carplay_<pid>.jsonl` |
-| `replay.c` | `libcarplay_replay.so` | QEMU, LD_PRELOAD into from-source dio | Replay the jsonl callbacks in sequence with ts pacing |
+| `logs/trace/carplay_trace.c` | `libcarplay_trace.so` | On-unit, LD_PRELOAD | Capture the session to `/tmp/carplay_<pid>.jsonl` (`carplay_trace.c:573-575`) **[code]** |
+| `logs/trace/replay.c` | `libcarplay_replay.so` | QEMU, LD_PRELOAD into from-source dio | Replay the jsonl callbacks in sequence with ts pacing |
 
 Capture records three boundaries: **L1 wire** (sockets, ciphertext reference — default OFF), **L2 lifecycle** (server delegate callbacks: copyProperty / sessionCreated / sessionScreenCreated / audioType / teardown), and **L2-media** (decoded frames via exported interpose: `ScreenStreamProcessData` → `cb.screenFrame`). Replay interposes `AirPlayReceiverServerCreate` + `ServerSetDelegate` to grab dio's real server, context and delegate table, then a driver thread replays the callbacks. **[car]**
 
@@ -44,12 +44,12 @@ flowchart TB
   class unit,jsonl primary
   class verify success
   class dio,frames neutral
-  classDef primary fill:#dbeafe,stroke:#2563eb,color:#1e3a5f
-  classDef success fill:#dcfce7,stroke:#16a34a,color:#14532d
-  classDef neutral fill:#f3f4f6,stroke:#6b7280,color:#1f2937
+  classDef primary fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
+  classDef success fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
+  classDef neutral fill:#f3f4f6,stroke:#6b7280,stroke-width:2px,color:#1f2937
 ```
 
-The golden trace is `c_hook_trace/carplay_session_stable.jsonl` (25 MB, 800 frames = ~31 s live CarPlay @26 fps, clean teardown −6753, no crash). Incremental bring-up ran three configs, each 5/5 with identical observables: **stock dio + stock libairplay** → **stock dio + from-source libairplay** → **full from-source**. Result: 21/21 copyProperty byte-exact (incl bluetoothIDs), `ScreenStreamStart` EXECUTING, 391/391 frames through `OMX_EmptyThisBuffer`, 0 SIGSEGV. **[qemu]**
+The golden trace is `carplay_session_stable.jsonl` (25 MB, 800 frames = ~31 s live CarPlay @26 fps, clean teardown −6753, no crash; `logs/trace/REPLAY.md:11,435`). The file itself is not in this repo or anywhere under `AUDI_2` — [open] where it is archived. Incremental bring-up ran three configs, each 5/5 with identical observables: **stock dio + stock libairplay** → **stock dio + from-source libairplay** → **full from-source**. Result: 21/21 copyProperty byte-exact (incl bluetoothIDs), `ScreenStreamStart` EXECUTING, 391/391 frames through `OMX_EmptyThisBuffer`, 0 SIGSEGV. **[qemu]**
 
 ---
 
@@ -57,9 +57,9 @@ The golden trace is `c_hook_trace/carplay_session_stable.jsonl` (25 MB, 800 fram
 
 All three were real, found by iterative on-unit capture:
 
-1. **Only wrap delegate slots whose exact signature/return is known.** Wrapping the audio slots 8 (audioType) / 9 (waitAudioAvailableAck) with a guessed `void(int,void*)` trampoline corrupted audio negotiation → deterministic session death ~1 s in (the root −6722). Fix: pass slots 8/9 through unchanged; wrap only 3=copyProperty / 5=sessionCreated / 6=failed / 7=screenCreated. **[car]**
-2. **Keep capture off the hot threads.** Full-hex L1 wire capture on the network threads → black screen; `PROBE_WIRE` default OFF. An async writer drains a bounded drop-queue so `write()` + long locks never touch the real-time threads.
-3. **Headless video needs `NVSS_VIDEO_OUTPUT_DEVICE=1`.** `OmxVideoImpl::configure` returns −6736 if unset — this, not platformLayer, was the headless blocker.
+1. **Only wrap delegate slots whose exact signature/return is known.** Wrapping the audio slots 8 (audioType) / 9 (waitAudioAvailableAck) with a guessed `void(int,void*)` trampoline corrupted audio negotiation → deterministic session death ~1 s in (the root −6722). Fix: pass slots 8/9 through unchanged; wrap only 3=copyProperty / 5=sessionCreated / 6=failed / 7=screenCreated. **[car]** Still enforced: `logs/trace/carplay_trace.c:164-166,343-361` **[code]**.
+2. **Keep capture off the hot threads.** Full-hex L1 wire capture on the network threads → black screen; `PROBE_WIRE` default OFF (`logs/trace/carplay_trace.c:64,581`). An async writer drains a bounded drop-queue so `write()` + long locks never touch the real-time threads.
+3. **Headless video needs `NVSS_VIDEO_OUTPUT_DEVICE=1`.** `OmxVideoImpl::configure` returns −6736 if unset — this, not platformLayer, was the headless blocker (`logs/trace/REPLAY.md:391-399`).
 
 ---
 

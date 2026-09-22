@@ -1,71 +1,92 @@
 # AltScreen Cluster Video
 
-*The gate that makes CarPlay offer the instrument cluster, and the wiring that gets its video onto a MOST/LVDS panel.*
+*The gate that makes CarPlay offer the instrument cluster, and the wiring that puts its video on the MOST/LVDS cluster.*
 
 ---
 
 ## 🎯 What altScreen is
 
-altScreen is CarPlay's **second display** — the Audi Virtual Cockpit instrument cluster. On the AirPlay wire the cluster pixels ride **screen stream type 111** (the main touchscreen is type 110). The phone only offers 111 if the head unit advertises a cluster display in `/info`, so everything begins with the advertisement being *believed* by the phone. **[decompile]**
+altScreen is CarPlay's **second display**, the Audi Virtual Cockpit instrument cluster. On the AirPlay wire the cluster pixels ride **screen stream type 111**; the main touchscreen is type 110. The phone offers 111 only when the head unit advertises a cluster display and negotiates the feature. Everything therefore starts with an advert the phone *believes*. **[decompile]**
 
-The panel is **1440 × 542** visible — the Audi Kombi (LVDS2) resolution, from firmware `ifs2/ifs_display/proc/boot/qcdisplaycfg_MMX2.xml` (`uVisWidth='1440' uVisHeight='542'`). This is the geometry advertised in `/info` (so the phone encodes 111 at exactly this size) and the OMX decode window default. It is **not** 1920×720. **[car]**
+The panel is **1440 × 542** visible pixels, the Audi Kombi (LVDS2) resolution. The source is firmware `ifs2/ifs_display/proc/boot/qcdisplaycfg_MMX2.xml` (`uVisWidth='1440' uVisHeight='542'`). The hook advertises exactly this geometry (`CLUSTER_W`/`CLUSTER_H`, `hook/altscreen/altscreen_hook.c:229-230`), so the phone encodes 111 at this size. It is also the renderer's default decode window (`ALTSCREEN_W`/`ALTSCREEN_H`, `altscreen_render/sink_omx_qnx.c:818-819`). It is **not** 1920×720. **[car]**
 
 ## 🔐 The activation gate
 
-Verified against the iOS 26.1 sender decompile (`AirPlaySender.framework`, the phone is the AirPlay sender). The chain: **[decompile]**
+The chain below comes from the iOS 26.1 sender decompile (`AirPlaySender.framework`; the phone is the AirPlay sender). The hook side is verified in the current source. **[decompile]** / **[code]**
 
 ```mermaid
 sequenceDiagram
   accTitle: altScreen handshake and stream 111 setup
-  accDescr: Phone reads extendedFeatures and the displays array, fetches cluster URLs, sends altScreenURLs over control, the HU acks, then SETUP creates stream 111.
+  accDescr: The phone reads the info advert, negotiates altScreen in the control SETUP response, sets up stream 111, and the head unit then selects the cluster scene with showUI at the first IDR.
   participant P as iPhone (sender)
   participant H as Head unit (receiver)
   P->>H: GET /info
-  H-->>P: extendedFeatures ["altScreen"] + displays[main, cluster]
-  Note over P: derives +63, hasGaugeClusterScreen
+  H-->>P: extendedFeatures + displays[main, cluster]
+  P->>H: control SETUP (features proposal)
+  H-->>P: response enabledFeatures [altScreen, viewAreas]
+  Note over P: endpoint flag set, cluster display known
   P->>P: CRFetchInstrumentClusterURLs
-  Note over P: empty (no cluster app) -> fail -16721
-  P->>H: SetProperty altScreenURLs (control channel)
-  H-->>P: ACK return 0 (else -6740 teardown)
+  Note over P: empty (no cluster app) fails -16721
   P->>H: SETUP stream type 111
-  H->>H: accept 111, start receiver
   P->>H: H.264 access units on stream 111
+  H->>P: showUI {uuid, url} at first IDR
 ```
 
-Steps in words:
+In words:
 
-1. Phone reads car `/info` `"extendedFeatures"` — a CFArray of feature-key strings — and checks for `"altScreen"`. The `displays` array must also contain a display whose properties include `"Instrument Cluster"` → `hasGaugeClusterScreen`. `extendedFeatures` alone is insufficient; the second display is what actually sets the flag. **[decompile]**
-2. Present → `carEndpoint` derived storage **+63 = 1**. **[decompile]**
-3. `+63` → phone calls `APCarPlay_CRFetchInstrumentClusterURLs` (needs a cluster-capable app installed, e.g. Apple Maps). Empty → activation fails **-16721** (app-side, not HU-controllable — this is why Apple Maps works and Waze does not). **[decompile]**
-4. Non-empty → phone sends `SetProperty("altScreenURLs", [...])` over the **control** channel. This is a handshake/metadata exchange (which app's cluster scene supplies content), **not** an HTTP video URL. The HU must store and ACK it (~250 ms, else `-6740`). **[decompile]**
-5. Pixels then ride the type-111 **SETUP** stream — the same push transport as the main screen. Codec is H.264/AVC by default (HEVC only if the phone opts in); our OMX decoder is AVC, matching the default. **[decompile]**
+1. **`/info` advert.** The hook interposes stock `AirPlayCopyServerInfo` (`hook/framework/airplay_seams.c:98`). It adds `extendedFeatures = ["altScreen", "viewAreas"]` plus the `[main, cluster]` display tree, under both `displays` and `displayPanels`, to the dictionary stock returns. The cluster entry carries its own uuid (it must differ from main's), `type: 111` and `properties: ["Instrument Cluster"]` (`hook/altscreen/altscreen_hook.c:11-28`, `:406-441`, `:790-870`). The advert goes out only when every primitive of the 111 receiver resolves. A partial advert would restart the CarPlay session (`altscreen_hook.c:785-799`). **[code]**
+2. **Control-SETUP negotiation.** The hook appends `altScreen` and `viewAreas` to the control-SETUP *response* `enabledFeatures`, keeps the features stock already accepted, and never echoes the phone's proposal (`altscreen_hook.c:1822-1860`). **[code]** The code comment records an iOS 26.6 disassembly: the phone reads the negotiated set from the response, and `carEndpoint_Activate` sets `endpoint[+0x3E]` from it. `/info` `extendedFeatures` alone does **not** set that flag, and stock 210 writes no `enabledFeatures`. **[decompile]**
+3. **Cluster URLs (iOS side).** With the flag set, the phone calls `APCarPlay_CRFetchInstrumentClusterURLs`, which needs an installed app with a cluster scene (for example Apple Maps). An empty list fails activation with **-16721**. The failure is on the app side and the HU cannot fix it, which is why Apple Maps works and Waze does not. **[decompile]**
+4. **`altScreenURLs` (iOS 26.1 model).** A non-empty list makes the phone send `SetProperty("altScreenURLs", [...])` over the **control** channel. It is handshake metadata that says which app's cluster scene supplies content, **not** an HTTP video URL. The receiver must ACK it within about 250 ms or the phone tears down with `-6740`. The current hook has no `altScreenURLs` handler, so the ACK path is stock's. **[decompile]**, handler **[open]**
+5. **Stream 111.** Pixels ride a type-111 **SETUP** stream on the same push transport as the main screen. The hook owns the 111 receive/decrypt/AVCC→Annex-B path (`altscreen_hook.c:4-9`). The codec is H.264/AVC by default, with HEVC only if the phone opts in. The renderer's decoder is `OMX.qcom.video.decoder.avc` (`altscreen_render/sink_omx_qnx.c:46`). **[decompile]** / **[code]**
+6. **Scene selection (HU side).** Stock 210 has no policy layer for `suggestUI`, so the hook chooses the cluster scene. At the first IDR it sends `showUI {uuid, url}`, then night mode and the cached view area (`altscreen_hook.c:1416-1429`). The Maps URL depends on RGI state (`altscreen_hook.c:2551-2584`); [[Third-party Nav Apps]] has the URL model. **[code]**
 
-### Where extendedFeatures is declared
+> [!note] Open discrepancy between iOS 26.1 and 26.6 RE
+> The iOS 26.1 RE in this note said that `extendedFeatures` containing `"altScreen"` sets `carEndpoint` +63, and that the `"Instrument Cluster"` property sets `hasGaugeClusterScreen`. The hook's iOS 26.6 comments say something different on three points (`altscreen_hook.c:424-433`, `:1834-1836`):
+>
+> - `altScreen` sets `+0x3E` (62), and `+0x3F` (63) is `uiContext`.
+> - The 111 gate is the negotiated `enabledFeatures` flag, plus at least two raw displays, plus a cluster UUID different from display 0.
+> - `"Instrument Cluster"` maps to `supportsInstrumentClusterContent`, **not** `hasGaugeClusterScreen`.
+>
+> The hook implements both sides, so it works either way. Whether 26.1 and 26.6 really differ, or the earlier reading was wrong, is **[open]**.
 
-Stock libairplay 210 has **no** altScreen at all (too old). The decision was to declare `extendedFeatures ["altScreen"]` in the **dio_manager patch** via `AirPlayReceiverServerSetProperty`, not in libairplay — feature *policy* belongs to dio, and dio's config wins over the platform hook. See `memory/altscreen_ios26_gate_verified.md` and `Patches/dio_manager-mhi2q/`. **[decompile]**
+### Where the advert is declared
+
+Stock libairplay 210 contains **no** `extendedFeatures` support: the string occurs zero times in the binary. An earlier plan declared the key in a dio_manager patch through `AirPlayReceiverServerSetProperty`. On stock that path is a **no-op**; it works only on the 280/from-source lib (`altscreen_hook.c:11-18`, `:684-697`). Production therefore interposes the `/info` builder in the LD_PRELOAD hook with no dio binary patch, and adds the control-SETUP `enabledFeatures` injection. Two value-checked env gates control it, and the shipped startup script sets both to `1`: `ALTSCREEN_HANDLE_ALT` and `ALTSCREEN_ADVERT_DISPLAYS` (`altscreen_hook.c:704-712`, `:721`, `:792`; `deploy/smartphone_integrator/carplay_startup.sh:53-54`). The old from-source attempts now live in `Patches/dio_asm_to_c/_legacy_attempt/`. See `memory/altscreen_ios26_gate_verified.md`. **[code]**
 
 ## ⚠️ Error codes
 
 | Code | Layer | Meaning |
 |---|---|---|
-| `-16721` | app-side (phone) | Cluster URL list empty — no installed app has a cluster scene. Not HU-fixable. |
-| `-6740` | accessory-side (libairplay) | altScreen advertised but stream 111 rejected / URLs not ACKed in time → teardown loop (looks like a dio restart, not a crash). |
-| `-6735` | HU (our module) | `viewArea` ack sent before altScreen video is up; harmless, self-heals to status 0 after `VIDEO_ON`. |
+| `-16721` | app side (phone) | The cluster URL list is empty because no installed app has a cluster scene. The HU cannot fix this. |
+| `-6740` | accessory side (libairplay) | altScreen was advertised, but stream 111 was rejected or the URLs were not ACKed in time. The result is a teardown loop that looks like a dio restart, not a crash. |
+| `-6735` | HU (our hook) | The hook returns this when there is no committed altScreen session yet (`altscreen_hook.c:2115-2118`). It reaches Java as the `viewArea` ack status. It is harmless: the hook caches the zone mode and replays it at the first IDR (`altscreen_hook.c:1425`, `:2525-2528`). |
 
-## ❌ P0 — forceKeyFrame must use `uuid`, not `displayUUID`
+## ✅ forceKeyFrame targets the cluster by `uuid` (resolved)
 
-`alt_request_cluster_idr` (`altscreen_hook.c:1578`) built the IDR request with `alt_params_new(0)` + `set_str("displayUUID", ...)`. But iOS 26.6 reads `params["uuid"]` for this command — `displayUUID` is a **HID** key. So every cluster IDR-recovery request falls back to the **primary** screen. With show-UI gated behind the first cluster IDR, **the cluster goes permanently black.** **[decompile]**
+**History.** At audit `9295b04`, `alt_request_cluster_idr` built its IDR request with `alt_params_new(0)` + `set_str("displayUUID", ...)`. iOS 26.6 reads `params["uuid"]` for this command, and `displayUUID` is a **HID** key. Every cluster IDR-recovery request therefore fell back to the **primary** screen, and because the show-UI step waits for the first cluster IDR, the cluster could stay black for good. That was rated P0. See `memory/production_full_audit_9295b04.md`. **[decompile]**
 
-Fix (one line): `alt_params_new(1)` + delete the `displayUUID` line — every other command already keys on `uuid`. iOS 26.6 confirmed the other four command schemas correct (`showUI` / `updateViewArea` / `setNightMode{uuid}` / `changeMapZoomLevel{zoomDirection 0=in}`). See `memory/production_full_audit_9295b04.md` and [[Landmines]]. **Severity: P0 — cluster permanently black.**
+**Current code.** `alt_request_cluster_idr` builds `{type:"forceKeyFrame", params}` with `alt_params_new(1)`, which keys the cluster `uuid`. There is no `displayUUID` in it, and it logs `cluster forceKeyFrame uuid=...` (`hook/altscreen/altscreen_hook.c:2502-2523`). `alt_params_new(1)` presets `uuid` = the cluster display (`:2360-2368`). The other cluster commands use the same key: `showUI` (`:2581`), `setNightMode` (`:2407`), `changeMapZoomLevel {zoomDirection 0=in}` (`:2485-2486`), and `updateViewArea {uuid, viewAreaIndex}` (`:2277-2283`). See [[Landmines]]. **[code]**
 
 ## 🔧 The cluster delivery sink
 
-libairplay cannot render directly to the cluster: `screenstream.c` `_SelectDisplay` only reaches QNX-Screen-enumerated displays, and the cluster is MOST/LVDS. So altScreen reuses **`altscreen_render`** (and the `c_render` displaymanager machinery) as a new frame *source* for the same cluster sink that native route guidance uses. CarPlay cluster and native RG are mutually exclusive on the panel, so one renderer suffices via mode switch. See [[Video Pipeline]] and [[Cluster and RGI MOC]]. **[car]**
+libairplay cannot render straight to the cluster. `screenstream.c` `_SelectDisplay` reaches only displays that QNX Screen enumerates, and the cluster is MOST/LVDS. The cluster is instead fed by DisplayManager-managed windows. Both renderers open one through the shared `common/cluster_surface.c` primitive (`common/cluster_surface.h:7-19`):
+
+| Renderer | Displayable | Content |
+|---|---|---|
+| `altscreen_render` | `99` | CarPlay cluster video / PRISM loader (`altscreen_render/screen_egl_present.c:45`) |
+| `maneuver_render` | `98` | Maneuver popup overlay (`maneuver_render/platform_qnx.c:4`) |
+
+Java selects the context: `81 = {99}` when there is no navigation and `80 = {98, 101/102, 99}` when navigation is active (`java_patch/com/luka/carplay/core/AltScreenModule.java:41-46`). The two renderers are **layered in one context**, not a mode switch of one renderer. The old `c_render` name no longer exists in the tree. See [[Video Pipeline]], [[Cluster Contexts]] and [[Cluster and RGI MOC]]. **[code]**
 
 <details>
-<summary>Main-screen 110 black (fixed) — the fabricated-UUID trap</summary>
+<summary>Main-screen 110 black (fixed): the fabricated-UUID trap</summary>
 
-iOS fetches `/info` **once** at session start and builds all display/stream config from that snapshot — no re-fetch. Stock `AirPlayReceiverSessionScreen_CopyDisplayUUID` keys main-screen video on the **real** main display UUID. The hook's `main_disp_modernize` used to inject a **fabricated** main `uid` / `initialVideoStreams` UUID (`A0000000-…`), so iOS routed main video on the modern uid while the stock decoder waited on the real UUID → main 110 black. Cluster 111 worked because the hook owns both the descriptor and the receiver. Fix (on-unit verified): read the real main uuid via `cf_getval(mainDisp,"uuid")` and set `uid` + `initialVideoStreams` to it, no fabrication. See `memory/reconnect_flak_lifecycle_debounce.md`. **[car]**
+---
+
+iOS fetches `/info` **once** at session start and builds all display and stream config from that snapshot, with no re-fetch. Stock `AirPlayReceiverSessionScreen_CopyDisplayUUID` keys main-screen video on the **real** main display UUID. The hook's `main_disp_modernize` used to inject a **fabricated** main `uid` / `initialVideoStreams` UUID (`A0000000-…`). iOS then routed main video on the fabricated uid while the stock decoder waited on the real UUID, so main 110 stayed black. Cluster 111 worked because the hook owns both its descriptor and its receiver. **[car]**
+
+Current code reads the real main uuid with `cf_getval(mainDisp, "uuid")` and sets `uid` + `initialVideoStreams` to it. If the stock uuid is missing it **refuses the altScreen advert** instead of fabricating one (`hook/altscreen/altscreen_hook.c:547-581`). See `memory/reconnect_flak_lifecycle_debounce.md`. **[code]**
 
 </details>
 
@@ -73,4 +94,4 @@ iOS fetches `/info` **once** at session start and builds all display/stream conf
 
 ## 📌 Input path (zoom / knob)
 
-Cluster commands are semantic/BAP, not HID — the cluster advertises no `primaryInputDevice`. Map zoom went back and forth: `changeMapZoomLevel` is a *semantic* session command (focus-independent), while the knob is HID. Per the production audit, `CMD_ALT_ZOOM` is **live at `0x0110`** (corrects the older "dropped" note). See `memory/altscreen_zoom_vs_hid.md` and [[Cluster and RGI MOC]]. **[decompile]**
+Cluster commands are semantic, not HID. The cluster advertises no `primaryInputDevice` (`altscreen_hook.c:508-509`). Live testing showed that a virtual HID knob moves only the main UI, even with the cluster `displayUUID`. The zoom therefore uses the semantic `changeMapZoomLevel` command, keyed on `uuid` with `zoomDirection` `0` = in (`altscreen_hook.c:2452-2459`, `:2485-2486`). `CMD_ALT_ZOOM` is **live at `0x0110`** (`hook/framework/bus_protocol.h:92`, `java_patch/com/luka/carplay/bus/CarplayBus.java:54`), with handler `zoom_on_cmd` registered at `altscreen_hook.c:2635`. `ALTSCREEN_ZOOM_INVERT` flips the direction (`:2480`). See `memory/altscreen_zoom_vs_hid.md` and [[Cluster and RGI MOC]]. **[code]**

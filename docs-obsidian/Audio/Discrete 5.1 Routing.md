@@ -6,7 +6,7 @@
 
 ## 🎯 The discrete path in one line
 
-Native decoded APAC 5.1 (from the buffered type-103 path) is reordered byte-identically to `L R C LFE Ls Rs` and **bypasses the upmixer** — it does not touch [[HSSR Model|HSSR]]. Discrete 5.1 CarPlay works end to end in the vehicle **[car]** (2026-09-06). The last two faults were both declaration/control mismatches rather than PCM corruption: the SAD header announced two active channels over six populated slots, and the hook blanked `updateFeedback`, removing the sender's clock reference. Both are corrected and vehicle-confirmed.
+Native decoded APAC 5.1 (from the buffered type-103 path) is reordered byte-identically to `L R C LFE Ls Rs` and **bypasses the upmixer** — it does not touch [[HSSR Model|HSSR]]. Discrete 5.1 CarPlay works end to end in the vehicle `[car]` (2026-09-06). The last two faults were both declaration/control mismatches rather than PCM corruption: the SAD header announced two active channels over six populated slots, and the hook blanked `updateFeedback`, removing the sender's clock reference. Both are corrected and vehicle-confirmed.
 
 Provenance: `docs/AUDIO_5_1_STATE.md`, `docs/research/VIRTUAL_CABIN.md`. See [[Stereo to 5.1 Upmix]] for where discrete vs upmix splits, and [[Virtual Cabin and Amp RE]] for the amp side.
 
@@ -16,23 +16,23 @@ Provenance: `docs/AUDIO_5_1_STATE.md`, `docs/research/VIRTUAL_CABIN.md`. See [[S
 sequenceDiagram
   accTitle: Discrete 5.1 delivery path
   accDescr: Decoded APAC 5.1 is reordered and folded, written to deva which mirrors mpl1 caps and declares asad=0xfc, through CSD device 78 and LPASS TDM to the MOST ring and the amp.
-  participant DEC as APAC/AAC decoder
-  participant HOOK as hook (reorder + fold)
-  participant DEVA as deva-ctrl-qc
-  participant CSD as CSD dev 78 / LPASS
-  participant AMP as J525 amp
-  DEC->>HOOK: decoded PCM (cookie = codec authority)
-  HOOK->>HOOK: reorder to L R C LFE Ls Rs; 8->6 fold if 5.1.2
-  HOOK->>DEVA: PCM6 stream + asad=0xfc / 6ch / 24-bit
-  DEVA->>CSD: caps mirror mpl1 -> session built 6-channel at attach
-  CSD->>CSD: TDM: 6 x 24-bit slots @ offsets 2,5,8,11,14,17
-  CSD->>AMP: MOST150 BlockWidth 26 -> SinkNr 0x26
-  AMP->>AMP: matrix (bank 1) -> DSP chain -> 19 speakers
+  participant apac_decoder as APAC decoder
+  participant hook_render as hook reorder
+  participant deva_driver as deva-ctrl-qc
+  participant csd_lpass as CSD dev 78 LPASS
+  participant j525_amp as J525 amp
+  apac_decoder->>hook_render: decoded PCM, cookie chose codec
+  hook_render->>hook_render: reorder to L R C LFE Ls Rs
+  hook_render->>deva_driver: PCM6 with asad 0xfc 6ch 24-bit
+  deva_driver->>csd_lpass: mpl1 caps mirror, 6ch session
+  csd_lpass->>csd_lpass: TDM 6 x 24-bit slots
+  csd_lpass->>j525_amp: MOST150 BlockWidth 26 to sink 0x26
+  j525_amp->>j525_amp: matrix bank 1, DSP, 19 speakers
 ```
 
 ## 🔧 The two closing fixes
 
-Getting six channels to play took two months because the head unit silently collapsed to stereo through **two independent mechanisms**, each masquerading as a fault somewhere downstream. Both are **[car]**-confirmed.
+Getting six channels to play took two months because the head unit silently collapsed to stereo through **two independent mechanisms**, each masquerading as a fault somewhere downstream. Both are `[car]`-confirmed.
 
 ### The CSD width bug (Qualcomm side)
 
@@ -53,9 +53,9 @@ The fixed timer arithmetic (16 ms period) shows why only 6/`0x4800` is correct:
 
 ### The SAD header (libairplay side)
 
-Beside the PCM on MOST rides a **speaker-allocation (SAD) header**: six slots are always physically formed; the SAD says how many are *meaningful*. `asad=0xfc` = slots 1..6 (5.1); `asad=0xc0` = slots 1..2 (stereo). `dio::CQNXSoundIF::createMetadata` described AirPlay's *native* input (2ch/16-bit) and wrote `asad=0xc0` even after the PCM stream was widened to six channels — six sent, two declared, the amp kept L/R. **Fix:** interpose `createMetadata` to announce `asad=0xfc` / 6ch / 24-bit. **[car]** 2026-09-03: centre + surrounds reach the speakers.
+Beside the PCM on MOST rides a **speaker-allocation (SAD) header**: six slots are always physically formed; the SAD says how many are *meaningful*. `asad=0xfc` = slots 1..6 (5.1); `asad=0xc0` = slots 1..2 (stereo). `dio::CQNXSoundIF::createMetadata` described AirPlay's *native* input (2ch/16-bit) and wrote `asad=0xc0` even after the PCM stream was widened to six channels — six sent, two declared, the amp kept L/R. **Fix:** interpose `createMetadata` to announce `asad=0xfc` / 6ch / 24-bit (`hook/audio/audio_hook.c:5122-5175`; `AUDIO_SAD_CHANNELS` / `AUDIO_SAD_BITS` override, 0 disables). `[car]` 2026-09-03: centre + surrounds reach the speakers.
 
-A second independent control mismatch was also real: the hook's experimental `updateFeedback` rewrite replaced the stock stream list with an empty list, removing the clock/rate reference — delivery collapsed to ~one packet per second. The production behavior preserves the stock feedback; the vehicle reports `sr=48004.0625`, type 100, normal delivery.
+A second independent control mismatch was also real: the hook's experimental `updateFeedback` rewrite replaced the stock stream list with an empty list, removing the clock/rate reference — delivery collapsed to ~one packet per second. Production preserves the stock feedback, and when stock has none (type 100 torn down while type 103 plays, or a cold start) it publishes a `{type:100, sr}` clock from the detached QSA sink or the nominal 48 kHz (`hook/audio/audio_hook.c:8836-8894`). Blanking survives only as an A/B switch, `AUDIO_FEEDBACK_BLANK=1` (`audio_hook.c:8896-8903`). The vehicle reports `sr=48004.0625`, type 100, normal delivery.
 
 ### The two-day retraction
 
@@ -71,11 +71,13 @@ A second independent control mismatch was also real: the hook's experimental `up
 | `patch_deva_csd_live.sh` | live-channel read (now redundant) |
 | `patch_deva_mirror_mpl1.sh` | **the step that actually fixed the car** — makes the minima mirror `mpl1` |
 
-Ships as `deploy/deva-ctrl-qc/deva-ctrl-qc.so.patched` (needs a reboot to map). **Ceiling: 6 is the max a byte can reach** (`deva_csd_start_csd_session_playback` hardcodes 6; no 8-channel output node exists), so CarPlay's 5.1.2 = 8 channels needs a mandatory **8→6 fold** on the hook side. Channel order is Apple canonical `L R C LFE Ls Rs`, no reorder.
+Ships as `deploy/deva-ctrl-qc/deva-ctrl-qc.so.patched` (needs a reboot to map). **Ceiling: 6 is the max a byte can reach** (`deva_csd_start_csd_session_playback` hardcodes 6; no 8-channel output node exists), so CarPlay's 5.1.2 = 8 channels needs an 8→6 fold on the hook side. The deva output order is Apple canonical `L R C LFE Ls Rs` (`hook/audio/audio_hook.c:419-420`); the reorder happens before it, on the decoder side.
 
 ## 📊 The 8→6 fold and the amp sink table
 
-5.1.2 height is a hard ceiling — see [[Dolby Atmos]] and [[Virtual Cabin and Amp RE]]. The APAC decoder emits native order **C L R Ls Rs LFE**, permuted to CarPlay order **L R C LFE Ls Rs**. For index 66 (5.1.2), the fold: L/R/C unchanged, LFE −6 dB, each height folded into its matching surround at −6 dB.
+5.1.2 height is a hard ceiling — see [[Dolby Atmos]] and [[Virtual Cabin and Amp RE]]. The APAC decoder emits native order `C L R Ls Rs LFE`, permuted to CarPlay order `L R C LFE Ls Rs` (`hook/audio/spatial_downmix.h:15-35`). For index 66 (5.1.2), the fold: L/R/C unchanged, LFE −6 dB, each height folded into its matching surround at −6 dB (`hook/audio/spatial_downmix.c:71-97`).
+
+The fold runs only on the experimental `AUDIO_SPATIAL_ATMOS=1` path (`AUDIO_SPATIAL_ATMOS_MODE=downmix|drop|passthrough`, `hook/audio/audio_hook.c:3386-3394`). The shipped startup sets `AUDIO_SPATIAL_ATMOS=0` (`deploy/smartphone_integrator/carplay_startup.sh:61`), so index 66 is never advertised, and a decoded 5.1.2 stream outside a SETUP-66 session is rejected as `unsupported-layout` (`audio_hook.c:3227-3240`).
 
 Selectable MOST sinks on the amp `8W0035465`:
 
@@ -92,11 +94,11 @@ CarPlay uses sink `0x26`. Note the advertised sink profile is BlockWidth 14, but
 
 The codec authority on the buffered path is the **inline magic cookie**, not any APAP format index. iOS may alternate AAC-LC (index 23) ↔ APAC (index 65) *inside one session*; the receiver observes the change through the **new inline cookie**, tries the current decoder then its alternate, and the successful decoder plus decoded channels/rate/layout selects stereo upmix or APAC 5.1 reorder.
 
-- **AAC-LC (index 23)** — decoded in-hook via Cinemo `libNmeSDK.so`; APAP time scale `0x0000bb80`, a distinct 39-byte magic cookie, ASC `11 90`; needs no resampling. `dio_manager` does not import `CinemoCreateAudioCodec`, and the AAC plugin has no OMX imports, so one decoder can be owned by the existing APAP receiver thread — no new thread.
-- **APAC (index 65/66)** — decoded via `libcarplay_apac.so` (ABI v1).
+- **AAC-LC (index 23)** — decoded in-hook via Cinemo `libNmeSDK.so`, reached by `dlsym` (`hook/audio/aac_bridge.c:15-18`, `:122`); APAP time scale `0x0000bb80`, a distinct 39-byte magic cookie, ASC `11 90`; needs no resampling. `dio_manager` does not import `CinemoCreateAudioCodec`, and the AAC plugin has no OMX imports, so one decoder can be owned by the existing APAP receiver thread — no new thread.
+- **APAC (index 65/66)** — decoded via `libcarplay_apac.so` (ABI v1, `hook/audio/apac_bridge.h:52`; default path `/mnt/app/root/hooks/libcarplay_apac.so`, `hook/audio/apac_codec_loader.h:15`).
 - **The trap:** an early `[65,23]` run looked session-constant because the instrumentation read `spf` (=1024, APAP field 8) as an index; APAP field 2 is the active `APAudioFormatIndex`.
 
-This cookie-driven APAC ↔ AAC switching has played in **both directions** on the vehicle inside one type-103 session with no dropout **[car]**. The checked-in supervisor advertises `[65,23]` with `AUDIO_SPATIAL=1`; stereo DSP is reversible via `AUDIO_STEREO_UPMIX=off` (then a `dio_manager`/CarPlay restart). See [[Landmines]] for the E2P 0xFC gate that decides whether the 6-channel route exists at all.
+This cookie-driven APAC ↔ AAC switching has played in **both directions** on the vehicle inside one type-103 session with no dropout `[car]`. The checked-in startup advertises `[65,23]` with `AUDIO_SPATIAL=1` (`deploy/smartphone_integrator/carplay_startup.sh:60`, `:92`; `hook/audio/audio_hook.c:785-788`); stereo DSP is reversible via `AUDIO_STEREO_UPMIX=off` (then a `dio_manager`/CarPlay restart). See [[Landmines]] for the E2P 0xFC gate that decides whether the 6-channel route exists at all.
 
 ## ⚠️ What is confirmed and what stays open
 

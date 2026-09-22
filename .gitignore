@@ -75,3 +75,6 @@ install_MoreIncredibleBash/mod/carplay/PROTECTED.txt
 
 install_MoreIncredibleBash/mod/carplay/carplay_child.json
 *.i64
+
+# Obsidian per-user UI state (open panes, last file) — changes on every open
+docs-obsidian/.obsidian/workspace*.json
