@@ -120,11 +120,95 @@ flowchart TD
 
 Route end goes back to ctx 81, not to the stock cluster. Ctx 74 returns only when CarPlay stops owning the cluster (see [[Cluster Contexts]]). `[code]` (`RouteGuidance.java:553-560`, `java_patch/com/luka/carplay/core/AltScreenModule.java:356-378`)
 
+## 📍 Route text, ETA and the MFW OK key
+
+All CarPlay route text goes into FctID 19 (`CurrentPositionInfo`, one UTF-8 field of at most 96 bytes). FctID 20 (`TurnToInfo`) is sent as `("", "")` during RGI and stock writes to it stay gated. FctID 22 is always absolute arrival time (`timeInfoType = 1`), because the VC has no remaining-time widget (see [[VC FPK State Machine]]). `[code]` (`java_patch/com/luka/carplay/rgd/BAPBridge.java:1442-1457`, `:1273-1330`)
+
+| View | Phase 0 | Phase 1 (after OK) |
+|---|---|---|
+| Fullscreen | `‹exit/signpost›`, else `● next road or maneuver description`, else current road | `◌ 10:42 PM \| 37 min` (or `1 h 05 min`) |
+| Smallscreen | same as fullscreen | `◌ 37 min` |
+
+Rules: `[code]` (`BAPBridge.java:69-74`, `:1273-1308`)
+
+- Input priority: `mExitInfo → mAfterRoad → mName → currentRoad`, after whitespace normalisation. Exit text keeps its full input, including any colon prefix; `mAfterRoad` keeps the last-colon-part normalisation.
+- Prefixes: exit text in U+2039/U+203A angle quotes; next road or description after U+25CF BLACK CIRCLE + space (chosen 2026-09-13, 4 of the 96 bytes); time after U+25CC DOTTED CIRCLE + space (replaces a literal `ETA`; not a combining mark, not emoji). Current-road and pending fallbacks get no prefix.
+- The quotes reserve 6 bytes, leaving 90 for exit content. Multibyte characters and surrogate pairs are never split at the limit.
+- Unknown ETA falls back to route text. With neither text nor an estimate, active RGI publishes a neutral `…`. **Never publish `""`**: this VC then shows its native circle/`---` placeholder.
+- Every View transition resets to phase 0 and republishes cached state at once, without waiting for an iOS delta. A second click restores route text. Teardown clears the fields and releases stock ownership.
+- The 12/24-hour clock follows the HU setting and local-time conversion.
+- Overlong text is split into fragments by `CurrentPositionScroll` (96-byte limit, 1800 ms hold, 250 ms minimum step) and ticks write only FctID 19 (`java_patch/com/luka/carplay/rgd/CurrentPositionScroll.java:5-10`).
+
+Glyph coverage `[open]`: VC 0379's Arabic and JP/KR fonts contain U+25CC, but the five Audi faces do not, so the fallback is an on-unit test. The angle quotes are in all five Audi faces (see [[Sources/reference/VC_FONT_GLYPHS|VC_FONT_GLYPHS]]). Luka reported that this text does not appear on the HUD in the tested configuration, so the layout targets the VC only. `[car]`
+
+History: commit `3f1ef4a` (2026-09-09) moved text into FctID 20 and emptied FctID 19 on smallscreen clicks, removing the non-empty fallback from `2308e51` (2026-08-08). The VC then showed its placeholder, and the change was rolled back on 2026-09-10 to the all-FctID-19 layout with bracketed exit text and no synthetic arrow. An earlier smallscreen OK toggled FctID 22 between type 1 and type 0; that erased the clock on the car, so OK is not a time-type switch. `[car]`
+
+**The OK key.** It is the left steering-wheel roller press, raw `KEY_MFW_ROLLER_LEFT` (key 40), watched by a dedicated `DSIKeyPanel` listener in `SteeringWheelInputModule` before the stock stack collapses it and the console DDS (key 16) into `INC_MENU_ENTER` / `Key.DDS_SELECT`. The marked key-40 copy is removed at the CarPlay DSI controller on every tab, so it never becomes an iOS Select; unmarked key 16 stays normal CarPlay Select. It is not derived from FctID 45 (that carries map-scale steps). `[code]` (`java_patch/com/luka/carplay/core/SteeringWheelInputModule.java:10-13`, `:37`, `:147`, `:207-223`)
+
+- The action requires the VC map tab: `IMMICombiScreenChangeManager.getLastConfirmedDisplayStatus()` must report `MAIN_CONTEXT_NAVIGATION_MAP` (20). That manager has no implementation in MU1316, so it is optional: without it the gate is "CarPlay owns the cluster and nav is active" (`:76-91`, `:190-204`). `[code]`
+- Before that change the module required the manager, sat in the retry loop forever ("modules still pending after 10 s") and never hooked OK in either view. Both failure paths logged at `Log.d`, below production level, so the failure was silent. `[car]`
+- Stock `KbdListener` handles key 40 only for roller turns (`updateEncoderInternal`); nothing in MU1316 handles a key-40 press, so it is free for us. A bounded raw-key census (since removed) confirmed `board=4 code=40 state=1/0` for press and release, and also saw `board=4 code=35/99/100` and `board=1 code=78`. `[car]`
+
+## 🔍 Delivery and slot identity (Java audit 2026-09-13)
+
+An audit of `dda63e4` found four reproducible state bugs in the Java RGI path. All four were fixed in `9720844`. `[code]`, host tests only; no on-car check in that pass.
+
+| # | Bug | Fix in current code |
+|---|---|---|
+| P1 | The 32-entry renderer queue protected CLEAR, the last viewport and the last lane packet, but `CMD_MANEUVER` could be evicted by later `CMD_PROGRESS`. `updateRendererIfChanged` then marked it sent. Reproduced: 1 maneuver + 80 fills left 0 maneuvers queued, and a resend returned false. | Progress coalesces only within one maneuver; maneuvers and CLEAR are protected; a full queue refuses and triggers a full RGI resend without dropping the socket; new-maneuver progress never reaches the old arrow (`java_patch/com/luka/carplay/rgd/RendererServer.java:49`, `:665-705`) |
+| P1 | A BAP failure after start lost the update: `presentationConfirmed` stayed true, `clearDirty()` wiped the dirty bits, and retry ran only when unconfirmed. | Dirty bits survive until both outputs publish; the worker retries on a 500 ms tick even without new iOS data; an active context stays visible through a transient failure (`RouteGuidance.java:63`, `:565`, `:588`, `:695-745`) |
+| P1 | A new maneuver in a reused slot inherited missing fields (side roads, name, step length) from the old owner, because fields are deltas and `mN_ver` only bumped the version. Also, native `rgd_maneuver_map_reset` restarts versions, so a new route could repeat them. | A version change clears the slot before new fields apply (`RouteGuidance.java:1171-1178`); new C → Java key `route_generation` distinguishes native resets and clears route and lane data (`RouteGuidance.java:821-843`; `hook/routeguidance/rgd_hook.c:96`, `:224-230`, `:1007`) |
+| P2 | A cache replay treated `DIRTY_TIME_REMAINING` as a fresh sample, so without an absolute ETA the remaining time jumped back (600 s sampled 120 s ago: 480 → 600). | The sample time lives in `State.timeRemainingSampleSeconds` and survives replay (`RouteGuidance.java:154`, `:1077`; `BAPBridge.java:1412-1415`) |
+
+The exit angle was never inherited through the real producer: `rgd_tlv.c:618` always publishes 1000 for an indexed maneuver without an angle. The Java-only repro bypassed that. HUD icon choice did not regress: 7,890 cases matched `07e980d`, and 1,083 lane records matched. The bugs predate the lane-row work: slots since `42f2cbb0`, presentation confirm since `00a2f137`, time age since `f33c90b2`, queue eviction since at least `13801f27`. The new hook and JAR must deploy together, because an old hook sends no `route_generation`. `[code]`
+
+What each Java piece does:
+
+| Piece | Job |
+|---|---|
+| `CarplayBus → RouteGuidance` | delta parse, 32 maneuver slots, separate lane-event cache, start/stop, clears, dirty flags, replay when services are ready |
+| `ManeuverMapper` + `SideStreets` | CarPlay type/angle → BAP family and direction, road quantisation for the HUD, driving side, sentinels |
+| `BAPBridge` | `AppConnectorNavi` output, distance, prepare/action/blink, text, ETA, lane-event choice, renderer coordination (about 2,500 lines) |
+| `RendererMapper` | shared maneuver family plus raw CarPlay geometry; lanes do not pick the shape |
+| `RendererServer` | TCP, 48-byte commands, atomic lane snapshots, queue, READY / FRAME_READY / CLEAR ACK, reconnect, viewport |
+| `RgdModule` / `CarPlayApp` | start order, Navigation service lookup, start retry, OSGi rebind |
+| `GatedCombiService` / `AltScreenNavStatusGate` / `ClusterService` | BAP ownership during CarPlay, blocking competing stock writes, restore on stock NavigationJobs |
+| `AltScreenModule` / `ClusterLayerController` / DM / `CombiMapController` | ctx 80/81, displayable 98, viewport, stock layout, visibility |
+| `SteeringWheelInputModule` | OK key text/time toggle, only in the RGI context |
+
+The native renderer owns road geometry, materials, camera, motion between maneuvers, fill interpolation, shadows, the lane row and the mask.
+
+Our own presentation policies (not a copy of iOS `maneuver_state`): `[code]` (`BAPBridge.java:53-58`, `:952`, `:2495-2513`)
+
+- The real maneuver shows at any distance. Prepare threshold: city 1500 m, highway 3000 m; a step over 2000 m counts as highway.
+- Action zone: the step length capped at 15 % of the prepare threshold (225 / 450 m); unknown length uses the cap. Blink: the last 20 % of the action zone, 600 ms phase shared by HUD and renderer.
+- Ramps render as one slight turn; an off-ramp also draws the road continuing straight.
+- The renderer keeps the full roundabout ring and continuous sharp angles; a sign that contradicts the type does not win.
+- Lanes follow the active lane event and `lane_guidance_showing`, independent of prepare distance and of the maneuver descriptor.
+
+Keep, not workarounds: the `1000 / -1000` guards and presence flag for a real −1°, conflicting-angle rules, the full ring, ramp/slight, maneuver version, refresh-only updates, the shared blink phase, the EU/NAR ExitView toggle with id 0, the presentation gate, the OSGi rebind, and the `BAPDistanceFormatter` access workaround for builds against the reconstructed stock JAR. Lane packets keep the raw sentinel; the HUD converter returns `0xFF` for both.
+
+Small cleanup candidates still in the tree: `lastDistanceToDestinationM` is written but never read (`BAPBridge.java:95`, `:1418`); `hexBytes` is unused (`:2362`); the three-argument `mapRawLaneValueToDirectionCode` overload is only called with `false, 0` (`:1857-1861`); `keepLastColonPart` on `mAfterRoad` can cut a real name containing `:` (`:2421`); `CarplayBus.Data.intList` turns a bad token into `0`, which is "straight" for an angle and slot 0 for a list (`java_patch/com/luka/carplay/bus/CarplayBus.java:288`); the legacy `mN_lane_*` fallback remains for old producers. A split of `BAPBridge` into HUD, renderer, distance/blink and text/ETA parts is sensible only after delivery and identity are right. `[code]`
+
+Checks: `bash scripts/test_route_info.sh` (1,363 text checks, 1,088 maneuvers, 1,083 lane angle/status cases, delta, viewport, distance/blink, lane lifecycle), `bash scripts/test_java_transports.sh` (real sockets, CLEAR order, full queue, 30 restarts), `tests/test_rgd_native_contract.py` (real C parser + slot writer + Java + stock BAP sender, C part under ASan/UBSan), `python3 scripts/check_local_protocols.py` (38 Java/C constants, 107 classes at Java 1.4 / major 48). The audit's probe outputs under `output/java-rgi-audit-2026-09-13/` are not in the repo. `[code]`
+
 ## 🔗 Related
 
 - [[Cluster Contexts]]: `rgActive` here flips ctx 81↔80.
 - [[HUD Renderer]]: the maneuver arrow and the HUD.
 - [[Third-party Nav Apps]]: why `source_supports_rg` is 0 for Waze.
 - [[Hook to Java Bus]]: the `:19810` framing.
+- [[iAP2 Route Guidance TLVs]]: the wire fields, maneuver-type table and the `0x5200` injection.
+- [[NavSD FctID Matrix]]: every NavSD FctID and its owner.
+- [[Distance Bargraph]]: FctID 18 distance vs the bargraph.
+- [[Lane Guidance]]: FctID 24 lanes.
+- [[VC Layout and Fonts]]: how the FctID 19 / 22 text fits on the VC.
+- [[Cluster Video Encoder]]: the cluster video path beside BAP.
+- [[Archive and History]] · [[MHI2 MU1439 Port]]: earlier bridge designs and the MU1439 port.
 
-Provenance: `docs-obsidian/Sources/RGI_HUD_RENDERER_KNOWLEDGE.md`, `docs-obsidian/Sources/reference/DISTANCE_BARGRAPH_CHAIN.md`, `MEMORY.md` (BAP Bargraph, Slot Mapping, FSG Sync, BAP FunctionSync, visible_in_app), `memory/bapbridge_architecture.md` (its KOMO dual path is superseded); source `hook/routeguidance/rgd_hook.c`, `hook/routeguidance/rgd_tlv.h`, `java_patch/com/luka/carplay/rgd/{BAPBridge,RouteGuidance,RendererServer}.java`, `java_patch/de/audi/tghu/navi/app/cluster/ClusterService.java`.
+## 📚 Sources
+
+- [[Sources/reference/JAVA_RGI_AUDIT_2026_09_13|JAVA_RGI_AUDIT_2026_09_13]]: the four delivery and identity bugs, their fixes, the Java responsibility map and policies.
+- [[Sources/reference/NAVSD_FCTID_MATRIX|NAVSD_FCTID_MATRIX]]: route-info phases, OK key design, FctID 19 text rules and the 2026-09-10 rollback.
+- [[Sources/reference/CLUSTER_KDK_GEOMETRY|CLUSTER_KDK_GEOMETRY]]: the optional `IMMICombiScreenChangeManager`, the key-40 census and the FctID 22 toggle failure.
+- Earlier provenance: `docs-obsidian/Sources/RGI_HUD_RENDERER_KNOWLEDGE.md`, `docs-obsidian/Sources/reference/DISTANCE_BARGRAPH_CHAIN.md`, `MEMORY.md` (BAP Bargraph, Slot Mapping, FSG Sync, BAP FunctionSync, visible_in_app), `memory/bapbridge_architecture.md` (its KOMO dual path is superseded); source `hook/routeguidance/rgd_hook.c`, `hook/routeguidance/rgd_tlv.h`, `java_patch/com/luka/carplay/rgd/{BAPBridge,RouteGuidance,RendererServer}.java`, `java_patch/de/audi/tghu/navi/app/cluster/ClusterService.java`.

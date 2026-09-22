@@ -36,7 +36,7 @@ At that build, `lifecycleLoop` coalesced edges **only** when a newer edge landed
 
 ### Implemented fix: deactivate debounce
 
-The debounce is **implemented** in `lifecycleLoop` (`java_patch/com/luka/carplay/core/CarPlayApp.java:228-268`). **[code]**
+The debounce is **implemented** in `lifecycleLoop` (`java_patch/com/luka/carplay/core/CarPlayApp.java:228-273`). **[code]**
 
 - `DEACTIVATE_DEBOUNCE_MS = 400L` (`:230`). On `wantActive == false` the loop waits up to 400 ms on the lifecycle lock.
 - If a newer generation (the re-activation) arrives within that window, the stale inactive edge is marked applied and dropped. The loop then re-snapshots the newer edge (`:252-265`).
@@ -44,6 +44,31 @@ The debounce is **implemented** in `lifecycleLoop` (`java_patch/com/luka/carplay
 - `updateActiveDeviceState` also re-arms from `ACTIVE` when dio returns straight to `ACTIVE` without a second `ACTIVATING` (`TerminalModeBapCombi.java:114-125`). It deactivates only when the device is no longer a CarPlay device (`:127-142`).
 
 Java does not gate the `viewArea` send on `videoAvailable` (`java_patch/com/luka/carplay/core/AltScreenModule.java:204-215`). The hook covers that case instead: it caches the zone mode and replays it at the first IDR (`hook/altscreen/altscreen_hook.c:1425`). An early `viewArea ack status=-6735` therefore stays harmless. How well the debounce works on the unit under repeated fast replugs is **[open]**. See `memory/reconnect_flak_lifecycle_debounce.md`.
+
+## 🔍 How the lifecycle worker behaves now
+
+The 2026-09-14 review of `CarPlayApp` (baseline `630acd9`, byte-identical to the Friday 2026-09-11 baseline `59646e98`, SHA-256 `ba3536d8…ca19d`) checked the worker end to end. **[code]** unless marked.
+
+- **Hot callbacks only publish.** `onActivate`/`onDeactivate` store the desired edge, bump `lifecycleGeneration` and `notifyAll()`; a repeated ACTIVATING for the same `IContext` is ignored (`java_patch/com/luka/carplay/core/CarPlayApp.java:83-115`). The persistent daemon `carplay-lifecycle` thread does all module work.
+- **Module order is a dependency chain:** `AltScreenModule`, `RgdModule`, `SteeringWheelInputModule` (`:34-36`). A false `start()` breaks the pass, because RGI must not replay a snapshot before altScreen has reset `navActive` and owns ctx 81 (`:356-361`). Every new generation stops all modules in reverse order first (`:172-180`).
+- **Late services retry forever.** `carplay-retry` re-runs the start pass every 200 ms for 50 tries, then every 2 s with a one-time warning at 10 s (`:370-404`) — Navigation can appear long after TerminalMode on a cold boot, so no fixed timeout.
+- **`onDeactivateAndWait()`** (component teardown, not the hot callback) waits at most 3 s for the async cleanup before TerminalMode closes its trackers (`:120-137`).
+- **Lock order.** Module `start()`/`stop()` run under `lifecycleLock` but never under the smaller `lock`; holding both in the old order made cold boot an ABBA deadlock with `AltScreenNavStatusGate` (`:328-333`).
+
+**Publication race — found and fixed.** In `630acd9`, `applyLifecycle()` released `lifecycleLock` before `lifecycleLoop()` published `lifecycleAppliedGeneration`. A waiting `onNavigationServiceChanged()` could slip into that gap, see the old applied generation and return; the edge was not replayed, so RGD could keep a stale Navigation service until the next edge or reconnect. A controlled host reproducer (`build/carplayapp-audit/`, unchanged `CarPlayApp` plus stubs) showed no rebind in the gap and a rebind after publication. Frequency on the unit was never measured. Current code publishes the applied generation inside `lifecycleLock` in `applyLifecycle`'s `finally` (`:214-224`), and the rebind worker checks it under both locks (`:280-322`).
+
+**What the debounce does not do.** A deactivate/reactivate of the same `IContext` within 400 ms drops the inactive edge, but the new active generation still calls `stopModules()` and restarts all three modules — a 25 ms bounce produced one extra start of each. The grace coalesces teardown; it does not keep running modules alive. That is intended: `IContext` cannot distinguish a genuinely new phone/session, so blindly skipping the restart could keep old route state.
+
+| Commit | Date | Lifecycle change |
+|---|---|---|
+| before `65b44ec` | — | module start/stop ran synchronously on the stock callback under `lifecycleLock`; Navigation rebinding already had its own worker |
+| `65b44ec` | 2026-08-09 | module work moved to the persistent lifecycle worker with generation checks (introducing the publication gap) |
+| `349408f` | 2026-08-12 | 400 ms inactive-edge grace added; active generations still restart modules |
+| `7fce1c4` | 2026-09-14 | cursor lifecycle callbacks — since removed with the cursor module |
+
+These are source-history facts, not proof of which build ran on a given drive; the race also does not explain the native altScreen start/video lag seen around then.
+
+Sources: [[Sources/reference/CARPLAYAPP_LIFECYCLE_REVIEW_2026_09_14|CARPLAYAPP_LIFECYCLE_REVIEW_2026_09_14]]
 
 ## 🔧 Main-screen 110 black: the UUID fix
 
@@ -65,7 +90,7 @@ Recovery took about 3 s because SI (Smartphone Integrator) serialises stop → r
 | 2 | Renderer stop on dio exit | **Renderers are not stopped.** They are persistent: every ordinary `dio_manager` exit leaves both alive, and only a missing renderer is restarted, after a 5 s backoff (`deploy/smartphone_integrator/README.md:72-89`, `carplay_monitor.sh:74`, `:117-124`). `SIGTERM` → grace → `SIGKILL` applies only to an adopted `altscreen_render` that is known to be wedged (`deploy/smartphone_integrator/carplay_processes.sh:143-168`). There is no `cp_stop_renderer_snapshot`. **[code]** |
 | 3 | SI child timeouts | `carplay_child.json` sets `stopTimeout` **8000** and `restartDelay` **3000** (`deploy/smartphone_integrator/carplay_child.json:10`, `:20`). The stock reference is 3000 / 2000 (`carplay_child_stock.json:10`, `:20`). The earlier 2000 / 500 tuning is not in the tree. **[code]** |
 
-Physical USB replug recovery is kept out of these scripts on purpose. It lives in the NCM generation fence and the `deploy/experimental/usb_replug_recovery` candidate (`deploy/smartphone_integrator/README.md:95-97`). See [[USB Replug Recovery]].
+Physical USB replug recovery is kept out of these scripts on purpose (`deploy/smartphone_integrator/README.md:95-97`). The shipping SI image carries the re-arm patch; the NCM generation fence stays experimental. See [[USB Replug Recovery]] and [[SI Stack and Replug Race]]. The session-level (RTSP, port, advert, transport-generation) side of reconnects is in [[Session Lifecycle]]; why the cluster can appear before main 110 is in [[HMI Startup and Identity]].
 
 ---
 
@@ -76,4 +101,11 @@ Physical USB replug recovery is kept out of these scripts on purpose. It lives i
 - The unit's SSH target defaults to `root@10.173.189.1` (`scripts/carplay_state_trace.sh:5`). Pass ssh options inline, not through a shell variable, because macOS ssh breaks otherwise (operational note, **[open]**).
 - The live Java tree is `java_patch/`. Never reboot the unit without asking.
 
-Related notes: [[Cluster Loader]], [[Video Pipeline]], [[Deploy and Release]], and the section map in [[AltScreen and Video MOC]].
+**Related:** [[Production Audits]] (the lifecycle deadlock and later audit findings) · [[Architecture]] (the process map).
+
+## 📚 Sources
+
+- [[Sources/reference/CARPLAYAPP_LIFECYCLE_REVIEW_2026_09_14|CARPLAYAPP_LIFECYCLE_REVIEW_2026_09_14]] — publication race, debounce semantics, lifecycle commit history.
+- [[Sources/reference/CARPLAY_SESSION_LIFECYCLE_AUDIT|CARPLAY_SESSION_LIFECYCLE_AUDIT]] — Java activation cleared as a session killer; SI timing values (canonical: [[Session Lifecycle]]).
+
+Related notes: [[Cluster Loader]], [[Video Pipeline]], [[Deploy and Release]], [[Session Lifecycle]], and the section map in [[AltScreen and Video MOC]].

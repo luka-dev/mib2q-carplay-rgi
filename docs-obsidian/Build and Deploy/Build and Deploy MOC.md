@@ -45,6 +45,7 @@ flowchart TB
 | [[Deploy and Release]] | Builds emit binaries only; hand-staging `build/` + `models/` + `deploy/` into `mod/carplay/root/`; the source→on-unit map; M.I.B. SD install via `custom.sh` (no SHA gate); manual SSH push and its traps; never reboot the unit / jar deploy = full reboot. |
 | [[VIN Protection]] | The protector: VIN-lock via KDF + blind sentinel, compile-time gate (`#ifdef CARPLAY_PROT`, inert unstamped), the two-step protected build into `build/protected_<VIN>/`, per-build `PROT_SECRET`, fail-open honest ceiling. |
 | [[RE Artifacts]] | Where the reverse-engineering assets now live: `assets/soundamp` (SHARC/amp RE) and `assets/vc-fonts` (VC font extraction) — what each is and its provenance. |
+| [[Production Audits]] | Ten release-safety and readiness reviews (Aug–Sep 2026): findings, fixes, status in today's code. |
 
 ## 💡 The one thing to remember
 

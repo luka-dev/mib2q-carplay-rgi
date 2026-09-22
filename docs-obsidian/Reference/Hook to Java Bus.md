@@ -71,7 +71,34 @@ Payload defaults to text `key:type:value\n` lines; `BUS_FLAG_BINARY` (0x02) mark
 
 **Keep `write_bus_snapshot_from_cache`.** It builds one `EVT_RGD_UPDATE` carrying route state, the maneuver list and slot data, sent sticky, so Java sees a coherent full state atomically rather than a delta history (`hook/routeguidance/rgd_hook.c:146,464-483,1179`) **[code]**. The old PPS delta-drop problem doesn't exist on TCP; the snapshot exists for coherence and reconnect, not packet loss.
 
-**Cluster commands ride the same bus.** `CMD_ALT_ZOOM` is live at `0x0110` (`bus_protocol.h:92`, `CarplayBus.java:54`, handler `zoom_on_cmd` registered at `hook/altscreen/altscreen_hook.c:2635`); `CMD_ALT_ZONE 0x0111`, `CMD_ALT_ZONE_ACK 0x0112`, `CMD_ALT_APPEARANCE 0x0114`, `CMD_ALT_UICTX 0x0115`, `CMD_ALT_RGI 0x0116` follow. `CMD_ALT_HID` / `CMD_KNOB` do not exist (a stale comment in `bus.c:548` still names `CMD_KNOB`) — the cluster has no HID path; all cluster commands are BAP/semantic. **[code]**
+**Cluster commands ride the same bus.** `CMD_ALT_ZOOM` is live at `0x0110` (`bus_protocol.h:92`, `CarplayBus.java:54`, handler `zoom_on_cmd` registered at `hook/altscreen/altscreen_hook.c:2635`); `CMD_ALT_ZONE 0x0111`, `CMD_ALT_ZONE_ACK 0x0112`, `CMD_ALT_APPEARANCE 0x0114`, `CMD_ALT_UICTX 0x0115`, `CMD_ALT_RGI 0x0116` follow. `CMD_ALT_HID` / `CMD_KNOB` do not exist (the old stale `CMD_KNOB` comment in `bus.c` is gone too) — the cluster has no HID path; all cluster commands are BAP/semantic. The July 2026 plan had put `CMD_ALT_HID` at 0x0110; that slot is now `CMD_ALT_ZOOM`. `EVT_DEVICE_STATE 0x0030` is reserved and unused. **[code]**
+
+---
+
+## ⚙️ Hook side: threads, queue and failure handling
+
+`hook/framework/bus.c` runs three threads under one mutex (`bus.c:12-22`) **[code]**:
+
+| Thread | Job |
+|---|---|
+| connector | `connect()` to Java with backoff 100 ms doubling to a 2 s cap (`bus.c:630-641`); on success sends HELLO + the sticky snapshot, then waits for a writer-side disconnect and reconnects |
+| writer | drains the send queue to the current fd; on a write error it drops the fd and waits for the next connect |
+| timer | optional 1 Hz local tick for module debounce; sends no heartbeat to Java |
+
+- **Queue.** A fixed ring of 256 heap frames (`SEND_QUEUE_CAPACITY`, `bus.c:43`). When full, `bus_send` drops the **newest** frame and logs `send queue full, dropped type=…` (`bus.c:389-401`). Types index a direct table of `MAX_TYPES 0x0120` slots (`bus.c:47`, `:80`), so different types can never collide in the sticky cache.
+- **Per-type send policy is vestigial.** `bus.h:34-37` still defines `RELIABLE` / `LOSSY` / `DROP_OLD` and `bus_set_policy()` stores it, but nothing calls it and `bus_send` never reads it. The archive's claim that LOSSY and DROP_OLD are live is superseded. **[code]**
+- **Sticky cache safety.** If allocating the new sticky copy fails, the previous valid entry is kept and the send fails with `HOOK_ERR_MEMORY` (`bus.c:374-386`); earlier code could leave `has_last` set with a NULL payload and crash replay in `memcpy`. Replay deep-copies the cache under the lock, then sends outside it, with fresh sequence numbers so `SYNC_BEGIN < replay < SYNC_END` (`bus.c:405-455`); a failed send stops the replay at the first error instead of splicing headers into a half-written frame.
+- **fd ownership.** Every write re-checks the pair (fd, connection generation). Only the connector closes the fd, after the reader finishes, and `shutdown()` wakes a blocked `recv`; so a reused fd number can never reach a new connection or a file (`bus.c:140`, `:224-230`).
+- **Signals.** `send()` flags must be 0: QNX 6.5 io-pkt defines `MSG_NOSIGNAL` but returns `ENOSYS` for it, which once silently killed the whole bus (`bus.c:208-213`). Instead the bus installs a **reversible** SIGPIPE policy with `sigaction`, saving dio_manager's previous dispositions and restoring them on clean shutdown or partial-init failure; fatal-signal diagnostics are async-signal-safe and re-raise into the predecessor (`bus.c:789-842`). **[code]**
+- **Scope.** The bus only starts inside dio_manager (`hook_framework.c:540-545`).
+
+## 📦 Java side
+
+`java_patch/com/luka/carplay/bus/CarplayBus.java` is the long-lived `ServerSocket` on 19810 (`:34`), sets `TCP_NODELAY` on accept (`:393`), rejects payloads over 128 KiB (`:37`, `:442`) and types outside `0..0x011F` (`:38`, `:465`). Listeners are a per-type array. Text frames parse into `CarplayBus.Data` with a **1024-key** capacity and an explicit `text frame truncated` warning on overflow (`:253-260`, `:334`); the original 512-key parser silently dropped the tail of a full RGI snapshot (16 maneuvers plus 32 lane slots). A failed bind closes its `ServerSocket` instead of leaking one FD per retry. After registering its RGD listener, Java sends `CMD_SYNC_REQ` so a cold-boot snapshot published before Java was ready is replayed. **[code]**
+
+## 🔄 History: PPS to TCP
+
+Until early 2026 the hook wrote QNX PPS objects and Java subscribed in delta mode: `/ramdisk/pps/iap2/routeguidance` became `EVT_RGD_UPDATE`, `/ramdisk/pps/iap2/coverart_notify` became `EVT_COVERART`, and `PPS.java` plus the PPS writer were deleted. The text payload deliberately kept the PPS `key:type:value\n` format so consumers barely changed. The first TCP version had the **hook as server**; it was inverted to hook = client because Java lives from boot while dio_manager is spawned per phone connect, which removed the retry and sleep hacks the other direction needed (`bus.c:6-10`). See [[Archive and History]].
 
 ---
 
@@ -86,4 +113,17 @@ Payload defaults to text `key:type:value\n` lines; `BUS_FLAG_BINARY` (0x02) mark
 - [[RGI and BAP Bridge]] — what the route-guidance messages mean once Java has them.
 - [[AltScreen Cluster Video]] — the renderer channels and the video pipeline.
 - [[HUD Renderer]] — the maneuver renderer on :19800.
+- [[Architecture]] — where the bus sits among the processes.
+- [[iAP2 Route Guidance TLVs]] — the `route_generation` / `source_name` keys and the RGI wire fields the bus carries.
+- [[Cover Art Pipeline]] — the cover-art messages on the same bus.
 - [[Home]] · [[Landmines]].
+
+---
+
+## 📚 Sources
+
+- [[Sources/archive/MEMORY|MEMORY (archive)]]: the original bus design notes (wire format, sticky replay, send policies, replaced PPS paths).
+- [[Sources/ARCHITECTURE|ARCHITECTURE]]: the port table.
+- [[Sources/reference/CATPLAY_REVIEW_FIXES|CATPLAY_REVIEW_FIXES]]: the sticky-cache, replay and fd-generation fixes.
+- [[Sources/reference/HOOK_RELEASE_SAFETY_AUDIT|HOOK_RELEASE_SAFETY_AUDIT]]: the reversible signal policy.
+- [[Sources/archive/JAVA_PATCH_STOCK_AUDIT|JAVA_PATCH_STOCK_AUDIT]]: the 512-key truncation and cold-boot sync findings.

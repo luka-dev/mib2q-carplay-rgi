@@ -7,4 +7,4 @@
   flashable image.
 
 Exact source offsets, SHA-256 values, loader validation and the reproduction
-command are in [`docs-obsidian/Sources/SHARC_APPLICATION_EXTRACTION.md`](../../../docs/SHARC_APPLICATION_EXTRACTION.md).
+command are in [`docs-obsidian/Sources/SHARC_APPLICATION_EXTRACTION.md`](../../docs-obsidian/Sources/SHARC_APPLICATION_EXTRACTION.md).

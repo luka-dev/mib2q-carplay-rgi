@@ -3,8 +3,8 @@
 The shipped HSSR model learned six classes from MUSDB's four stems, with 'other' split
 by a coherence/flux heuristic; keys and backing vocals therefore had no identity of their
 own (keys read as 'vocal', backing = lead).  Same 6 output slots, same C ABI, new meaning:
-  0 lead_vocal | 1 bass | 2 drums + percussion + high_percussion | 3 guitar + other_plucked
-  4 backing_vocal + other_vocal + strings_winds + other_unknown (background) | 5 keys
+  0 all vocals | 1 bass | 2 drums + percussion + high_percussion | 3 guitar + other_plucked
+  4 strings_winds + other_unknown (background) | 5 keys   (v2/q6b mapping, see CLASS_OF)
 Rearability/lateral targets come from the rearable heads (everything but lead/bass/drums).
 Features are train_hssr.make_features on the mastered mixture, unchanged.
 

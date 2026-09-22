@@ -59,6 +59,16 @@ flowchart TB
 | [[HUD Renderer]] | The three renderers, the procedural arrow, the stock KOMO map pipeline (unused by CarPlay code), and the VC FPK state machine. |
 | [[Third-party Nav Apps]] | Why Waze and AMap send no usable RGI, `updateViewArea`, `CMD_ALT_ZOOM`, and the cluster scene URL. |
 | [[Phone Tab Gating]] | The removed cluster telephone-tab gate (HFP && !CarPlay), its traps, and what stays unproven. |
+| [[KDK Geometry and Animation]] | Where the maneuver box sits on the 1440×542 panel, View-button sync (FctID 44/54), the VC's 200 ms fade. |
+| [[VC FPK State Machine]] | The Virtual Cockpit's firmware layers, nav view tree, dp items, signal groups, why side menus can't be blocked. |
+| [[Smartphone Tab and Kombi DSI]] | `DSICarKombi`/`DSIKombiSync2`, HU display architecture, the unbuilt VC Smartphone-tab alternative. |
+| [[iAP2 Route Guidance TLVs]] | What iOS sends in 0x5201/0x5202, what the hook parses, angle sentinels, the `SendIAP2` injection fix. |
+| [[NavSD FctID Matrix]] | All 56 Navigation BAP functions and who owns each while CarPlay drives the cluster. |
+| [[Maneuver Mapping]] | The 54-type iAP2 → BAP icon → HUD selector → renderer arrow table and the HUD firmware chain. |
+| [[Distance Bargraph]] | Why the VC hides the distance while the bargraph is on, FctID 18 bytes, arrow fill instead of a column. |
+| [[Lane Guidance]] | Lanes as an independent event, the wire batch, the bottom panel, the QNX `fmin` hang, rejected approaches. |
+| [[VC Layout and Fonts]] | Extracted VC fonts and glyphs, the 359 px CurrentPosition budget, FctID 19 scrolling, Classic/Sport seam. |
+| [[PDC Small Stage]] | Why CarPlay vanished beside the parking popup and the narrow Java guard that keeps it visible. |
 
 ## 💡 Truth levels
 

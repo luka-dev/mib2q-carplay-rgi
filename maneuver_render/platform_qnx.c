@@ -142,7 +142,7 @@ static int create_window_and_egl_surface(void) {
     }
 
     /* Context routing is Java's job: DisplayManagerMIB2High.defineContexts() declares
-     * dc[80]={98,102,101} and DisplayManager.switchContext() points the cluster at it
+     * dc[80]={98,101,102,99} and DisplayManager.switchContext() points the cluster at it
      * → setActiveDisplayable(4, 98) → MOST encoder reads our window.  NO dmdt. */
     return 0;
 }

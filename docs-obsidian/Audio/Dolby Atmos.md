@@ -6,7 +6,7 @@
 
 ## 🎯 The two questions
 
-"Dolby Atmos on CarPlay" is **not a wire codec**. It is a *content tier*: the phone picks the Atmos rendition of a track and renders it on-device into an **AAC 5.1.2** transport (format bit 42), carried on a buffered media stream (type 103). Dolby EC3/DDPLUS never crosses the CarPlay link, and raw multichannel PCM is never offered on the realtime stream.
+"Dolby Atmos on CarPlay" is **not a wire codec**. It is a *content tier*: the phone picks the Atmos rendition of a track and renders it on-device into whatever buffered transport the car accepts. Statically, iOS 27's screen-receiver mask names **AAC-ELD 5.1.2** (bit 42) as the spatial format; **on this car the Atmos tier actually arrived as APAC** on the buffered type-103 stream — index 65 (5.1, UI badge "Dolby Atmos") or 66 (5.1.2, 8 channels) — and an AAC 5.1.2 offer (index 40) was never selected **[car]**. Dolby EC3/DDPLUS never crosses the CarPlay link, and raw multichannel PCM is never offered on the realtime stream.
 
 Two very different "Dolby" questions live here — keep them separate:
 
@@ -40,21 +40,35 @@ The realtime stream is PCM passthrough only — stock 210 libairplay never decod
 
 ## 🔍 What "Dolby Atmos" is on the transport
 
-It is a content tier the phone renders into AAC multichannel; the "Dolby" flag switches **content, not transport** (`[model]`, static RE of the iOS 27 shared cache, high confidence):
+It is a content tier the phone renders into a buffered multichannel transport; the "Dolby" flag switches **content, not transport** (`[model]`, static RE of the iOS 27 shared cache, high confidence):
 
 - The iOS 27 screen-receiver format mask is `0x1440800` (non-spatial) vs `0x40001440800` (spatial-allowed). The delta is **exactly one bit — 42**.
-- The 48 kHz multichannel bits are all **AAC/ALAC**: bit 39 = AAC-LC 5.1, bit 40 = AAC-LC 5.1.2, bit 41 = AAC-ELD 5.1, **bit 42 = AAC-ELD 5.1.2 (the spatial bit)**. The realtime selector's entire vocabulary is bits {21,22,23,39,40,41,42} — **no PCM bit and no EC3/DDPLUS bit can ever be selected.** Dolby DDPLUS (bit 50) is absent from the mask entirely.
-- The `DCXEnabled` accessory flag maps to `dolbyAtmosAudioSupported`; when set, the phone fetches the Atmos rendition of the track, renders that master on-device, and ships AAC 5.1.2 on the screen branch. So: **Dolby = the source tier; AAC 5.1.2 = the wire.**
+- The 48 kHz multichannel bits are all **AAC/ALAC**: bit 39 = AAC-LC 5.1, bit 40 = AAC-LC 5.1.2, bit 41 = AAC-ELD 5.1, **bit 42 = AAC-ELD 5.1.2 (the spatial bit)**. The transport selector `APAudioFormatSelectTransportFormatForAudioSourceInputFormat` — which, since its 44.1 kHz base mask cannot match our 48 kHz realtime advert, governs the **buffered** stream — has the entire vocabulary {21,22,23,39,40,41,42} — **no PCM bit and no EC3/DDPLUS bit can ever be selected.** Dolby DDPLUS (bit 50) is absent from the mask entirely.
+- The `DCXEnabled` accessory flag maps to `dolbyAtmosAudioSupported`; when set, the phone fetches the Atmos rendition of the track, renders that master on-device, and ships it in the negotiated buffered transport — statically AAC 5.1.2, on this car APAC. So: **Dolby = the source tier; the buffered codec = the wire.** Full bit/index table: [[iOS CarPlay Spatial Wireformat]].
 
-External corroboration: Volvo's CarPlay "Spatial Audio, powered by Dolby Atmos" ships as a *car-side* software update, consistent with a car-side buffered implementation rather than a bit flip.
+External corroboration: Volvo's CarPlay "Spatial Audio, powered by Dolby Atmos" (EX90/EX60/ES90, Bowers & Wilkins only, announced 2026-08-28) ships as a *car-side* software update, consistent with a car-side buffered implementation rather than a bit flip.
+
+### What the Atmos flag does on the phone
+
+Traced in iOS 27 `MediaToolbox` + `AirPlaySupport` **[decompile]** — it selects a different *asset*, never a different wire format:
+
+1. `FPSupport_GetAtmosSupport@0x196E415B8` reads Atmos support as a property of the current output device (the `ac3/ec3/atmosIsDecodable … atmosCanPassthrough` booleans).
+2. `itemfig_isAtmosSupported@0x1970D46DC` accepts an item if the route can pass Atmos through, **or** `itemfig_isSpatializationAllowed@0x1970D4BBC`, **or** a channel-count check that actually compares against `16` — a buffered-AirPlay sentinel (`FPSupport_GetMaxPhysicalOutputChannelCount@0x197315E4C` returns 16/2 for a buffered output, the real count for an ordinary route) — so a 6-channel CarPlay route alone does **not** unlock the tier.
+3. HLS alternate selection then fetches the Atmos rendition (`FigAlternateSelectionUtility_AlternateListHasATMOSAlternate@0x196E2F9A0`, `HighestAtmosBitrateFilter@0x196CFDB74`, preference `AutoSwitchAtmosVariants`), and the phone renders that master into the route's transport.
+
+The accessory's `DCXEnabled` Bool (wire key, inside `mainBufferedInfo`) sets CarKit `dolbyAtmosAudioSupported` (ivar `+0x16`); the hop from that ivar into the CoreAudio route property is inferred, not traced **[open]**. The hook keeps `DCXEnabled` **absent**: declaring Atmos while the transport stays stereo would only fetch the Atmos master and fold it back to stereo — more data, same result. The on-screen "Dolby Atmos / Dolby Audio / Apple Spatial Audio" badge is derived from the streamed codec and channel count (`APSBadgingFormatInfoCopyBadgeType@0x22663D760`), so the badge falling from "Dolby Atmos" to "Spatial Audio" during the early experiments marked the **loss of the type-103 stream**, not an in-place 5.1.2→5.1 conversion.
+
+### The head unit's own Dolby decoder — present, licensed, irrelevant
+
+The MU1316 image carries a real Dolby Digital Plus decoder on the **local-media** path, never wired into CarPlay: Cinemo wrapper `libNmeAudioDolby.so` (`NmeCreateCodecDDPRef@0x6f38`, licence check at `0xab04`) over the core `libNmeAudioDpcm.so` (exports `NmeGetDDPIUDCAPIVersion@0x4d84` → API `0x00010001`, `NmeCreateDDPIUDC@0x4fe0`, `NmeDDPIUDCVerify@0x51dc`, `NmeGetDDPIUDCChannelLimit@0x51c0`, …). The embedded signed licence decodes to project **1500**, `channel_limit` **6** (up to 5.1, not stereo-only), caps 2, API 1.1; it is signed, so the channel limit cannot be raised. `cinemo_classes.xml` registers `AC3;EC3;EAC3`. It decodes DD+, **not APAC** and not an object renderer. Probe indices 50 (`DDPLUS/48000/5.1`) and 53 (`DDPLUS/48000/9.1.6`) were once exposed as fail-closed type-103 options; the phone never selected them and the current code no longer accepts them (`hook/audio/audio_hook.c:794-826`, `:910-916`). **[decompile]** · **[code]**
 
 ## 📦 How Atmos content reaches us — the buffered path
 
-Since spatial rides the buffered stream and the stock stack never opens it, **our hook supplies the type-103 buffered stream itself**: APAP BE32 framing + ChaCha20-Poly1305 auth + TLV/cookie extraction, then decode via `libcarplay_apac.so` (APAC) or Cinemo `libNmeSDK.so` (AAC-LC index 23). The **inline magic cookie is the decoder authority** — not the APAP TLV index hint. Full path in [[Discrete 5.1 Routing]].
+Since spatial rides the buffered stream and the stock stack never opens it, **our hook supplies the type-103 buffered stream itself**: APAP BE32 framing + ChaCha20-Poly1305 auth + TLV/cookie extraction, then decode via `libcarplay_apac.so` (APAC) or Cinemo `libNmeSDK.so` (AAC-LC index 23). The **inline magic cookie is the decoder authority** — not the APAP TLV index hint. Full receiver in [[Buffered Audio Path]]; decoders in [[APAC Codec]] and [[Cinemo AAC Decoder]]; the PCM6 route to the amp in [[Discrete 5.1 Routing]].
 
-Channel handling: the APAC decoder emits native order `C L R Ls Rs LFE`, permuted to CarPlay order `L R C LFE Ls Rs` — exactly what `deva` wants (`hook/audio/spatial_downmix.h:15-35`). `[car]` for the 5.1 case end to end.
+Channel handling: the APAC decoder emits native order `C L R Ls Rs LFE`, permuted to CarPlay order `L R C LFE Ls Rs` — exactly what `deva` wants (`hook/audio/spatial_downmix.c:47-69`, measured three ways in [[APAC Codec]]). `[car]` for the 5.1 case end to end.
 
-For 5.1.2 (index 66) the hook has an 8→6 fold: L/R/C unchanged, LFE −6 dB, each height folded into its matching surround at −6 dB (`hook/audio/spatial_downmix.c:71-97`). It runs only on the experimental `AUDIO_SPATIAL_ATMOS=1` path; the shipped startup sets `AUDIO_SPATIAL_ATMOS=0` (`deploy/smartphone_integrator/carplay_startup.sh:61`), so the primary index is 65 (`hook/audio/audio_hook.c:785-788`), and a decoded 5.1.2 stream outside a SETUP-66 session is rejected as `unsupported-layout` (`hook/audio/audio_hook.c:3227-3240`). The index-66 native order is `[open]`.
+For 5.1.2 (index 66) the hook has an 8→6 fold: L/R/C unchanged, LFE −6 dB, each height folded into its matching surround at −6 dB (`hook/audio/spatial_downmix.c:71-98`). It runs only on the experimental `AUDIO_SPATIAL_ATMOS=1` path; the shipped startup sets `AUDIO_SPATIAL_ATMOS=0` (`deploy/smartphone_integrator/carplay_startup.sh:61`), so the primary index is 65 (`hook/audio/audio_hook.c:785-788`), and a decoded 5.1.2 stream outside a SETUP-66 session is rejected as `unsupported-layout` (`hook/audio/audio_hook.c:3226-3246`). The index-66 native order is `[open]`.
 
 ## ⚠️ Why phone-side spatial over the realtime stream is blocked
 
@@ -65,7 +79,7 @@ The cheap lever — "advertise a multichannel bit on the realtime stream" — is
 | 44 `PCM/48000/16/5.1` | `0x100000008010` | `0x8000` = **stereo** |
 | 42 `AAC-ELD/48000/5.1.2` (iOS's own spatial bit) | `0x40000008010` | `0x8000` = **stereo** |
 
-- **The hook first aimed at the wrong bit** — bit 44 (`PCM/48000/16/5.1`) is a buffered/HomePod-class format not present in the screen-receiver mask at all. The code still adds bit 44 to the type-100 offer as a harmless "PCM fallback" whenever `AUDIO_SPATIAL=1` (`hook/audio/audio_hook.h:42`, `hook/audio/audio_hook.c:456-461`); the phone keeps selecting stereo.
+- **The hook first aimed at the wrong bit** — bit 44 (`PCM/48000/16/5.1`) is a buffered/HomePod-class format not present in the screen-receiver mask at all. The code still adds bit 44 to the type-100 offer as a harmless "PCM fallback" whenever `AUDIO_SPATIAL=1` (`hook/audio/audio_hook.h:42`, `hook/audio/audio_hook.c:451-461`); the phone keeps selecting stereo.
 - **Both bits were offered live and refused.** Interposition provably reached negotiation; advertising is not sufficient.
 - **The named gate:** `APAudioFormatIsScreenSpatialAudioReceiver` returns 0 unless the phone-side feature flag `ScreenSpatialAudioReceiver` is enabled — an argument-less gate upstream of anything the accessory advertises, plus a device-model check. The handset was an iPhone 17 Pro Max on iOS 27 beta 6, so "device too old" is ruled out. Nothing in `/info` can flip that flag.
 
@@ -137,4 +151,19 @@ Plus a bonus fix: ungated retention kept each bright object's treble in the fron
 - Whether the Dolby chain is even active for ordinary stereo, and whether the DLL can emit plain multichannel PCM — only diagnostic string names exist.
 - **That Dolby is better than HSSR** — no listening comparison was done; superiority and gain magnitude are explicitly **not** established.
 
-**Bottom line.** On the wire, "Dolby Atmos on CarPlay" is Atmos-tier *content* the phone renders on-device into **AAC 5.1.2** (bit 42) over a **buffered type-103** stream — never EC3/DDPLUS, never realtime multichannel PCM — and phone-side realtime spatial is blocked by an accessory-invisible feature flag. As a *design source*, Dolby taught us residual distribution, decorrelation-by-delay, energy conservation and transient collapse; but HSSR's second-scene rear routing is a deliberate departure, and we have never demonstrated Dolby is the better renderer. Traps in [[Landmines]].
+**Bottom line.** On the wire, "Dolby Atmos on CarPlay" is Atmos-tier *content* the phone renders on-device into a **buffered type-103** transport — APAC 5.1/5.1.2 on this car, AAC 5.1.2 (bit 42) in the static screen-receiver mask — never EC3/DDPLUS, never realtime multichannel PCM — and phone-side realtime spatial is blocked by an accessory-invisible feature flag. As a *design source*, Dolby taught us residual distribution, decorrelation-by-delay, energy conservation and transient collapse; but HSSR's second-scene rear routing is a deliberate departure, and we have never demonstrated Dolby is the better renderer. Traps in [[Landmines]].
+
+**Related:** [[Upmix Literature]] (the separation and upmix papers around this teardown) · [[Virtual Cabin and Amp RE#The 8-channel sink is rear 7.1, not 5.1.2]] (why there is no height output) · [[CarPlay Feature Survey]] (which CarPlay features ride the same session).
+
+
+---
+
+## 📚 Sources
+
+- [[Sources/reference/AUDIO|AUDIO]] — §7 Dolby licence decode, §12–§18 the EC3-vs-AAC-vs-PCM transport debate, §17 the Atmos content switch, §25 live refusals.
+- [[Sources/reference/CARPLAY_SPATIAL_DOLBY_PLAN|CARPLAY_SPATIAL_DOLBY_PLAN]] — the superseded first plan (Atmos = `EC3/48000/7` via `libNmeAudioDolby`).
+- [[Sources/HANDOFF_SPATIAL_AUDIO|HANDOFF_SPATIAL_AUDIO]] — index 65/66 live results, badge behaviour, the target Dolby decoder exports.
+- [[Sources/reference/AUDIOTYPE_DOLBY_AND_PCM_UPMIX|AUDIOTYPE_DOLBY_AND_PCM_UPMIX]] — why `audioType=media` and type 103 are not Atmos indicators.
+- [[Sources/SAD_HEADER|SAD_HEADER]] — "does iOS upmix stereo into spatial? No" (badging only).
+- Research long-form: [[Research/DOLBY_ATMOS_TEARDOWN|DOLBY_ATMOS_TEARDOWN]] · [[Research/HSSR_UPMIX_MODEL|HSSR_UPMIX_MODEL]].
+

@@ -61,6 +61,48 @@ flowchart TB
 | [[Dolby Atmos]] | What Atmos is on CarPlay, why phone-side spatial is blocked, what HSSR borrowed and where it diverges. |
 | [[Discrete 5.1 Routing]] | The native 5.1 path: deva mirror driver, CSD min_voices fix, SAD `asad=0xfc`, magic-cookie codec authority. |
 
+### Upmix model and research
+
+| Note | What it covers |
+|---|---|
+| [[Upmix Training History]] | Iteration ledger V9→q6d (V16, G, H1, P1, R1/C1/C2, Q1–Q5): what each measured and why it stopped. |
+| [[Upmix Datasets and Teachers]] | MoisesDB, MUSDB18, FLOAT, AlbumDB, teacher networks, their defects and licences, the role-label contract. |
+| [[Upmix Compute Budget]] | Krait cost units and measurements, the arithmetic that admitted HSSR and blocked CUpGAN/H1/Q2, training machines. |
+| [[Upmix Literature]] | The papers and systems the work drew on, what each changed, and which paper files are failed downloads. |
+
+### Upmix runtime and release
+
+| Note | What it covers |
+|---|---|
+| [[Upmix Calibration and Tuning]] | How every shipped value was reached: bass complaint, corrected matrix, 60 s one-lever grid, scene bed, treble taper. |
+| [[Upmix Listening and Deploy Log]] | What ran in the car when, hashes, every listening verdict, the live readback (2026-09-17 → 09-22). |
+| [[Upmix Release and Acceptance]] | The frozen acceptance protocol, runtime audit, cabin constraints, and the candidates that never shipped. |
+
+### Amplifier
+
+| Note | What it covers |
+|---|---|
+| [[SHARC DSP Blocks]] | The J525 SHARC program: flash layout, 79-entry graph, kernels, level EQ, C4D17, the V850 control plane. |
+| [[SHARC B Processors]] | The spectral first B (amp's own spatial library) and the auxiliary second B: modes, maths, calibration banks. |
+| [[J525 Wiring and Speakers]] | 19 speakers, 16 T38 circuits, DSP slot → circuit candidates, the B9 workbook and its conflicts. |
+
+### Head-unit routing
+
+| Note | What it covers |
+|---|---|
+| [[QNX Audio Topology]] | deva, mixer router, CSD 78, ACDB, LPASS COPP, AFE/TDM slots, SAD, MOST blockwidth — frame to MOST bytes. |
+| [[Internal Amp Path]] | Non-B&O cars: RCC MIBRoot route decision, AudioProcess sinks, C674x DSP, the four-site patch plan. |
+| [[Call and Siri Routing]] | How type-103 media shares the main-audio route with telephony, Siri and realtime media. |
+
+### Codecs and the buffered stream
+
+| Note | What it covers |
+|---|---|
+| [[Buffered Audio Path]] | The hook-owned type-103 receiver: negotiation, SETUP/control/APAP contract, codec switching. |
+| [[Buffered Playback Lifecycle]] | The single QSA handle, lock/background ownership, rate/flush state machine, feedback clock, car failures. |
+| [[APAC Codec]] | Format indices, cookie grammar, `C L R Ls Rs LFE` order, the 5.1.2 fold, the ARMv7 port. |
+| [[Cinemo AAC Decoder]] | Index-23 AAC-LC through dio's Cinemo SDK: recovered ABI, header-ownership abort, plugin-dir error 23. |
+
 ## 💡 Truth levels
 
 Throughout these notes, claims are tagged: `[car]` confirmed on the unit, `[model]` static-RE or offline render, `[open]` unverified. The honest headline: discrete 5.1 is `[car]`; the amp DSP is `[model]` static RE; no blind listening or cabin SPL has ever been measured.

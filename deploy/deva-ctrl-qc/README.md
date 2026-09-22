@@ -9,7 +9,7 @@ Local patch of the stock Qualcomm QNX audio driver so the CarPlay entertainment 
 > stereo `min_voices/min_fragsize` into the active CSD session even though the
 > DMA timer is six-channel. The binary and `patch_deva.sh` were deliberately not
 > changed in that measurement pass. See
-> [`../../docs/ROUTER_INPUT_WIDTH_AUDIT.md`](../../docs-obsidian/Sources/ROUTER_INPUT_WIDTH_AUDIT.md).
+> [`../../docs-obsidian/Sources/ROUTER_INPUT_WIDTH_AUDIT.md`](../../docs-obsidian/Sources/ROUTER_INPUT_WIDTH_AUDIT.md).
 
 > **Historical timing status (2026-08-31):** the old caps-only patch retained
 > the stock 2ch S32 DMA fragment and played exactly 3x slow. The current

@@ -241,7 +241,7 @@ feature extraction).
 
 **Outputs (264)** — 32 bands × 8 (`0..5` six-class softmax logits, `6`
 rearability, `7` lateral/pan) + 8 global. The **6-class taxonomy** is the MoisesDB
-stem set: `0 vocals, 1 bass, 2 drums, 3 guitar, 4 keys, 5 other/background` — the
+stem set: `0 vocals, 1 bass, 2 drums, 3 guitar, 4 strings/unknown background, 5 keys` — the
 last two are the "safe rear" classes (`hssr_dsp.c`,
 `docs-obsidian/Sources/UPMIX_C2_SOURCE_SELECTION.md`). Rearability → sigmoid → `smoothstep(0.12,
 0.36)` (real positives cluster ~0.25, `hook/audio/hssr_dsp.c:645`); pan → tanh,

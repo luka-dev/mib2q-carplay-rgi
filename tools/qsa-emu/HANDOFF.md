@@ -3,7 +3,7 @@
 ## Latest result (CODEX_PROMPT_ROUTER_INPUT_WIDTH)
 
 Full audit:
-[`../../docs/ROUTER_INPUT_WIDTH_AUDIT.md`](../../docs-obsidian/Sources/ROUTER_INPUT_WIDTH_AUDIT.md).
+[`../../docs-obsidian/Sources/ROUTER_INPUT_WIDTH_AUDIT.md`](../../docs-obsidian/Sources/ROUTER_INPUT_WIDTH_AUDIT.md).
 
 The surviving width hypothesis is confirmed statically. The logical mixer
 router has no standalone width field; it resolves a DEVA timer and a shared CSD
@@ -48,7 +48,7 @@ attach.
 
 ## Latest result (CODEX_PROMPT_DEVICE_TOPOLOGY)
 
-Full audit: [`../../docs/DEVICE_TOPOLOGY_AUDIT.md`](../../docs-obsidian/Sources/DEVICE_TOPOLOGY_AUDIT.md).
+Full audit: [`../../docs-obsidian/Sources/DEVICE_TOPOLOGY_AUDIT.md`](../../docs-obsidian/Sources/DEVICE_TOPOLOGY_AUDIT.md).
 
 The per-virtual-channel CSD-**device-id** hypothesis is false. `mpl1_int_ent` (ENT
 router input 1) and `mpl5_dio_ent` (input 5) both route through output 128,

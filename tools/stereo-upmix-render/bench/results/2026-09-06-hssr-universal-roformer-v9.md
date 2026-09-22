@@ -98,7 +98,7 @@ fixture is excluded from that aggregate.
 This validates the known electrical topology, not perceived driver-seat SPL:
 OEM per-output gain/EQ/delay and measured cabin responses remain unavailable.
 Full per-track results and limitations are in
-[`../../../../docs/SOUNDAMP_9VS_DOCUMENTARY_HSSR_RESULTS.md`](../../../../docs-obsidian/Sources/SOUNDAMP_9VS_DOCUMENTARY_HSSR_RESULTS.md).
+[`../../../../docs-obsidian/Sources/SOUNDAMP_9VS_DOCUMENTARY_HSSR_RESULTS.md`](../../../../docs-obsidian/Sources/SOUNDAMP_9VS_DOCUMENTARY_HSSR_RESULTS.md).
 
 ## Expanded private stereo stress regression
 

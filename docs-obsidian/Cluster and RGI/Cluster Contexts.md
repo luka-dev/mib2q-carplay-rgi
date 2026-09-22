@@ -32,7 +32,7 @@ Two traps live here:
 
 `ClusterLayerController` owns the CarPlay plane geometry. The stock `CombiMapController` only forwards to it. `[code]`
 
-- **Geometry is not hardcoded.** It is read from the terminal's active stock `Layout` constants (slots 58-61 and 118-125). Classic and Sport on B9 use different in-tube anchors, and the skin switch changes the `Layout` at runtime (`ClusterLayerController.java:17-20`, `:37-43`, `:130-148`).
+- **Geometry is not hardcoded.** It is read from the terminal's active stock `Layout` constants (slots 58-61 and 118-125). Classic and Sport on B9 use different in-tube anchors, and the skin switch changes the `Layout` at runtime (`ClusterLayerController.java:17-20`, `:37-43`, `:130-148`). The resolved Classic and Sport values are tabled in [[KDK Geometry and Animation]].
 - **Fallback before the first Layout** (`:57-62`): in-tube crop `0,0,328,180` at `(984,139)`, popup crop `59,27,210,153` at `(1091,110)`.
 - **Stage** is taken from VC FctID 54 (`onVcPresentation`, `:220-236`). Before FctID 54 arrives, the stock hint bit `BITFIELD_KDK_POSITION_IN_TUBE` is used (`CombiMapController.java:187-189`).
 - **Visibility** is taken from VC FctID 44 (`onVcVisibility`, `:209-217`). The requested View mode never reveals a layer (`:12-13`).
@@ -95,11 +95,62 @@ Earlier notes said the altScreen advertisement must stay off. That is stale. The
 
 The old 80↔74 flapping came from two context writers, which the single writer and the DM block above now prevent. The env gates are value-checked (`env_on`); see `memory/hook_getenv_presence_check_trap.md` and [[Landmines]].
 
+## 🔍 What the stock DM holds, and how to look with `dmdt`
+
+A live `dmdt` dump of the stock A5 (MU1316) shows what really exists. `[car]` (`logs/dmtd.log`, `logs/dmtd_hook.log`)
+
+- `dmdt gd`: seven displayables only: 16 HMI 1024×480, 17 rear camera (Overlay), 19 map viewer 1024×436, 20 route guidance 328×181, 33 `KOMBI_MAP_VIEW` 1440×455, 101 328×180, 102 210×153. No 58, 59, 36 or 44.
+- `dmdt gs`: two displays. Main Display / LVDS1 / 1024×480 / ctx 10 (or 0) = {16, 19}, the central MMI screen. Cluster Display / LVDS2 / 1440×542 / ctx 74 = {20, 102, 101, 33}, the HU's feed to the cluster. The VC draws gauges and tabs itself; the HU sends only the map composition.
+- `dmdt gc`: stock declares 87 contexts when `kombiType != 4` and 158 when `== 4`, including `dc[72] = {33}`, `dc[74] = {20,102,101,33}`, `dc[76] = {58}`, `dc[78] = {16,59}`. Context 78 is dead on the A5 because nothing creates 59 (see [[Smartphone Tab and Kombi DSI]]).
+
+Our patched `DisplayManagerMIB2High` sizes the array at 82 on A5 (stock 0..78 plus 80/81) and 158 on G24 (`java_patch/de/audi/tghu/fwhmi/DisplayManagerMIB2High.java:39-40`, `:63-65`). The A5 is the FPK variant (`sysConst(541) == 2`, it has 101/102) and not `kombiType == 4`, so `createImageDisplayable` works and the positioning terminal is 1. `[code]`
+
+`dmdt` (`/eso/bin/apps/dmdt`, IDA session `mu1316_dmdt`) is a thin client for the DM debug IPC. It starts a comm agent `DMRCClient` on domain `local`, connects proxies to `asi.displaymanager.DebugTool` and `DebugToolReply`, sends one request, waits for the async reply, prints it, sleeps 50 ms and exits (main `0x106050`, proxies `0x103278`, reply wait `0x103C84`/`0x103C04`). `[decompile]`
+
+| CLI | id | Action |
+|---|---:|---|
+| `gd` | 1 | list displayables |
+| `dc <ctx> <displayable...>` | 2 | declare a context |
+| `sc <display_id> <ctx>` | 3 | switch context |
+| `dm <display_id> on` / `off` | 4 / 5 | debug mode |
+| `ts <display_id> <path>` | 6 | screenshot |
+| `sb <display_id>` | 7 | switch buffered context |
+| `gc` | 8 | list contexts |
+| `gs` | 9 | system info |
+| `gld on` / `off` | 10 / 11 | global debug labels |
+
+Argv parsing is at `0x105B98` (32-byte command struct), dispatch at `0x105F48`. `gs`/`gd`/`gc` send request id 123 (`0x103D3C`/`0x103D00`/`0x103CC4`); `sc` calls a virtual method with `(display_id, context_id, 123)` (`0x102DA4`); `dc` builds an Int32Array (`0x102E88`). The `gs` printer (`0x104914`) prints, per display, name, terminal, size, current context id, and each displayable of that context (names via `0x102980`, `--` when unnamed). `gs` has no numeric display id; `sc` needs one, and only display order, name and terminal (`LVDS1`/`LVDS2`) identify it. `[decompile]`
+
+```text
+	display: Cluster Display
+	terminal: LVDS2
+	size: 1440 x 542
+	context id: 74
+		20 (DISPLAYABLE_MAP_ROUTE_GUIDANCE)
+		102 (--)
+		101 (--)
+		33 (DISPLAYABLE_KOMBI_MAP_VIEW)
+```
+
+`maneuver_render` used to `popen("/eso/bin/apps/dmdt gs")` to learn cluster focus, and a hardened parser (match `terminal: LVDS2`, merge stderr, force `sc` on parse failure) was written after "dmdt focus unknown" logs. That is superseded: the renderer runs no `dmdt` now, and context routing is Java's job through `AltScreenModule`. `[code]` (`maneuver_render/platform_qnx.c:6`, `:146`, `:212`, `:395`)
+
 ## 🔗 Related
 
 - [[RGI and BAP Bridge]]: what sets `rgActive` and `navActive`.
 - [[HUD Renderer]]: what fills plane 98.
 - [[AltScreen Cluster Video]]: the CarPlay video on plane 99.
 - [[Reconnect and Lifecycle]]: `CarPlayApp` activation and the deactivate debounce.
+- [[KDK Geometry and Animation]]: the Layout table behind the plane geometry, and the View / FctID 44 / FctID 54 sequence.
+- [[Smartphone Tab and Kombi DSI]]: displayable owners and the MOST H.264 path to the VC.
+- [[HMI Startup and Identity]]: which stock chain asks for the main and cluster contexts first at connect.
+- [[VC Layout and Fonts]]: the VC text layout around the map.
+- [[PDC Small Stage]]: why the parking popup used to hide CarPlay, and the Java guard.
+- [[Partial 360 Camera Preflight]]: the camera/OPS split and its context contract.
 
-Provenance: `MEMORY.md` (Cluster CarPlay contexts), `memory/carplay_cluster_context_architecture.md`, `memory/cluster_carplay_viewmode_design.md` (its "rides the stock view-mode chain" claim is superseded by the direct switch); source `java_patch/com/luka/carplay/cluster/ClusterLayerController.java`, `java_patch/com/luka/carplay/core/AltScreenModule.java`, `java_patch/de/audi/tghu/fwhmi/DisplayManagerMIB2High.java`, `java_patch/de/esolutions/hmi/widgets/audi/evo/high/widgets/CombiMapController.java`.
+## 📚 Sources
+
+- [[Sources/reference/dmdt_mu1316_analysis|dmdt_mu1316_analysis]]: `dmdt` commands, `gs` output format, the old renderer parser.
+- [[Sources/reference/SMARTPHONE_CLUSTER_KNOWLEDGE|SMARTPHONE_CLUSTER_KNOWLEDGE]]: the live `dmdt gd/gs/gc` dump and the FPK / kombiType findings.
+- [[Sources/reference/CLUSTER_VIEW_STOCK_SYNC|CLUSTER_VIEW_STOCK_SYNC]]: stage from FctID 54 and visibility from FctID 44 (detail in [[KDK Geometry and Animation]]).
+
+Earlier provenance: `MEMORY.md` (Cluster CarPlay contexts), `memory/carplay_cluster_context_architecture.md`, `memory/cluster_carplay_viewmode_design.md` (its "rides the stock view-mode chain" claim is superseded by the direct switch); source `java_patch/com/luka/carplay/cluster/ClusterLayerController.java`, `java_patch/com/luka/carplay/core/AltScreenModule.java`, `java_patch/de/audi/tghu/fwhmi/DisplayManagerMIB2High.java`, `java_patch/de/esolutions/hmi/widgets/audi/evo/high/widgets/CombiMapController.java`.

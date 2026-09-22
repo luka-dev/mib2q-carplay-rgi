@@ -17,10 +17,8 @@
 
 #define SPA_STEREO_UPMIX_MAGIC UINT32_C(0x5355504d) /* "SUPM" */
 
-/* Cabin-Aware LFE V2 deliberately stays below the conservative 48-Hz
- * SoundAmp sub-band boundary.  This is one 48-kHz, Q=1/sqrt(2) Butterworth
- * section cascaded twice below for an LR4 (-24 dB/octave) low-pass. */
-/* Scene LFE corner 60 Hz: meets the front bass HP (62 Hz record) and stays
+/* One 48-kHz-rate, Q=1/sqrt(2) Butterworth section, cascaded twice below for
+ * an LR4 (-24 dB/octave) low-pass.  Scene LFE corner 60 Hz: meets the front bass HP (62 Hz record) and stays
  * under the LFE-bus LP (66 Hz record), closing the 48-62 Hz hole. */
 static const struct spa_upmix_biquad_coefficients kLfeLow = {
     1.5336008368362254e-05,

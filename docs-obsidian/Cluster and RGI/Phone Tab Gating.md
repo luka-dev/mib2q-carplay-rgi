@@ -88,6 +88,8 @@ Next step, if this is picked up again: find the real publisher of `BAP_Telephone
 
 - [[RGI and BAP Bridge]]: `CarPlayApp` activation and the Navi `GatedCombiService`.
 - [[Reconnect and Lifecycle]]: `CarPlayApp` activation edges.
+- [[Archive and History]]: the two rejected tab-gate jars in the project history.
 - [[Landmines]]: the DSI, NAD and telMode traps as one-liners.
+- [[Smartphone Tab and Kombi DSI]]: `DSIKombiSync2` reports the active VC tab (`mainContext` PHONE = 3) and `DCMainItems` has a telephone zone value; neither is wired in our code.
 
 Provenance: `docs-obsidian/Sources/archive/PHONE_TAB_GATING.md` (its `java_patch_new_replace/...` paths are historical and those trees no longer exist), `MEMORY.md` (Phone tab gating), `memory/phone_tab_gating_findings.md`; removal commit `63e7f35`; consolidation commit `d9c6d02`. The old source pool `Tools/jxe2jar/out/MU1316-combined-vf/` no longer exists; the nearest artifact is `../jxe2jar/out/MU1316-combined.jar` `[open]`. VC binary `hmi_app.elf`.

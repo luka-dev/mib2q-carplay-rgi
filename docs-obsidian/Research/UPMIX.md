@@ -217,7 +217,7 @@ flowchart LR
 | Outputs (264) | 32 bands × [6 class logits (softmax), rearability (σ→smoothstep), pan (tanh)] + 8 global (k=3..7 used) |
 
 451,464 params; the 6 classes are the MoisesDB stems (0 vocals, 1 bass, 2 drums,
-3 guitar, 4 keys, 5 other) — 4/5 are the "safe rear" classes. **Two models ride
+3 guitar, 4 strings/unknown background, 5 keys) — 4/5 are the "safe rear" classes. **Two models ride
 together:** primary **q6d** (real-stem trained, `models/hssr-q6d-moises-a/hssr_model.bin`)
 + a **V11 guard** (`models/hssr-selection-v11/hssr_guard.bin`) whose vocal posterior
 protects voices q6d mislabels as keys. Full lineage V9→…→q6d in the HSSR paper

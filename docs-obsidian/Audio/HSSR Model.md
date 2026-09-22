@@ -10,7 +10,7 @@ HSSR = High-Selectivity Semantic Rear-routing. It is a small, causal, quantized 
 
 The honest one-paragraph history: ~15 model generations tried to make a network *separate* music into 12 instrument classes on 240 songs, and it never worked — an independent audit found the trained model equalled "mute plus drums". Separation was abandoned for a genre-agnostic **second scene**: move the not-protected, spatially-wide part of the stereo image behind the listener, delayed so the front still anchors the sound. What ships is that DSP second scene gated by two GRUs: `q6d` (primary, real MoisesDB stems) with `V11` kept as a conservative vocal-protection guard.
 
-Provenance: `docs-obsidian/Research/HSSR_UPMIX_MODEL.md`, `hook/audio/hssr_dsp.{c,h}`, `hook/audio/hssr_neon.{c,h}`. See also [[Stereo to 5.1 Upmix]] and [[Dolby Atmos]].
+Provenance: [[Research/HSSR_UPMIX_MODEL|HSSR_UPMIX_MODEL]], `hook/audio/hssr_dsp.{c,h}`, `hook/audio/hssr_neon.{c,h}`. See also [[Stereo to 5.1 Upmix]] and [[Dolby Atmos]]. Companion notes: [[Upmix Training History]] (every experiment line), [[Upmix Datasets and Teachers]] (corpora, teachers, role labels), [[Upmix Compute Budget]] (Krait cost), [[Upmix Literature]] (prior art).
 
 ## 📚 Why the first approach failed
 
@@ -21,7 +21,9 @@ For roughly fifteen generations (V11…Q2) the model was asked to do supervised 
 - Only 2,352 of 111,132 parameters did per-bin separation; even *oracle* 32-band hints left backing NMSE 0.57–0.89 — the band-power interface structurally cannot separate lead/backing or keys/guitar.
 - A static per-bin 2×2 Wiener filter with zero trainable parameters beat the trained model on every family except drums.
 
-The conclusion was not "train longer" but "this problem is mis-posed": 12-class supervised separation on 240 songs cannot work; the rear loudspeaker needs **one mask, not twelve**.
+The conclusion was not "train longer" but "this problem is mis-posed": 12-class supervised separation on 240 songs cannot work; the rear loudspeaker needs **one mask, not twelve**. The full ledger (V16, G1–G17, H1, P1, C1/C2, Q1–Q5) with every number is in [[Upmix Training History]].
+
+Sources: [[Sources/UPMIX_INDEPENDENT_AUDIT_2026-09-17|UPMIX_INDEPENDENT_AUDIT_2026-09-17]], [[Sources/UPMIX_AGENT_HANDOFF_2026-09-17|UPMIX_AGENT_HANDOFF_2026-09-17]], [[Sources/UPMIX_RETROSPECTIVE_AND_STEREO71|UPMIX_RETROSPECTIVE_AND_STEREO71]].
 
 ## 🎯 The second-scene design
 
@@ -106,12 +108,37 @@ flowchart TB
 
 The 368 features are 32 bands × 9 + 64 shape + 16 global; they are standardized, clamped to ±6 and quantized at 127/6 (`hook/audio/hssr_neon.c:378`). The 264 outputs are 32 bands × [6 class logits, rearability, pan] + 8 globals.
 
-Runtime inference is not PyTorch: the C path quantizes matrix inputs and recurrent activations and uses rational sigmoid/tanh (bounded cost on old QNX libm), so loading the exported weights into PyTorch is not the shipped inference. The 6-class taxonomy is the MoisesDB stem set: `0 vocals, 1 bass, 2 drums, 3 guitar, 4 keys, 5 other/background` — the last two are the "safe rear" classes. Of the 8 global outputs only `k=3..7` are used: scene confidence, rear-activity target, scene stability, fx-present, global safety.
+Runtime inference is not PyTorch: the C path quantizes matrix inputs and recurrent activations and uses rational sigmoid/tanh (bounded cost on old QNX libm), so loading the exported weights into PyTorch is not the shipped inference. Measured on V11, C vs dequantized PyTorch differs by 0.0056 mean vocal probability and 0.0032 rear probability; resetting PyTorch state every 64 controls (0.68 s) moves rear probability by 0.012 — more than the C/float gap — so training must carry state, as the runtime does. Of the 8 global outputs only `k=3..7` are used: scene confidence, rear-activity target, scene stability, fx-present, global safety.
+
+**Class taxonomy [code].** q6d grouped the 12 MoisesDB identity heads into the same six output slots (`tools/stereo-upmix-render/q6_hssr_moises_cache.py:21-26`):
+
+| Slot | q6d meaning | MoisesDB heads |
+|---|---|---|
+| 0 | all vocals | lead, backing, other vocal |
+| 1 | bass | bass |
+| 2 | drums | drums, percussion, high percussion |
+| 3 | guitar | guitar, other plucked |
+| 4 | strings / background | strings & winds, other/unknown |
+| 5 | keys | keys |
+
+Slots 4 and 5 are the two "safe rear" classes (`hook/audio/hssr_dsp.c:628-631`). Superseded: the older wording "4 keys, 5 other" (and the same line in [[Research/UPMIX|UPMIX]] and [[Research/HSSR_UPMIX_MODEL|HSSR_UPMIX_MODEL]]) swaps them. V11 used MUSDB's four stems with `other` split three ways by a coherence/flux heuristic, so keys read as vocal and backing equalled lead.
+
+### Training objective
+
+`train_hssr.py` trains the float graph with profile `selection-v11` (`tools/stereo-upmix-render/train_hssr.py:781-857`) [code]:
+
+- Class loss: soft-target cross-entropy over the six class logits per band.
+- Rear loss: BCE on rearability weighted `1 + 4·rear + 5·vocal·(1−rear) + 2·bass·(1−rear)` — a vocal false positive costs far more than a missed rear object, and the positive weight stops the all-front solution.
+- Pan: MSE weighted by the rear target; globals: BCE; smoothness: mean |Δ rear| between controls.
+- Total `class + 2.4·rear + 0.5·pan + 0.5·global + 0.08·smooth`; AdamW (weight decay 1e-4) with cosine annealing (`train_hssr.py:1133-1140`).
+
+q6d's recipe from its manifest: warm start from V11 weights with V11's normalization kept, LR 5e-4, batch 16, sequence 64, 5 epochs, early-stop patience 2, best epoch 3 (validation 7.156 → 4.920), 181 train / 40 validation song caches, 2,889 s on 4 NAS CPU threads (`models/hssr-q6d-moises-a/manifest.json`). Both blobs are flagged `development_only` for MUSDB/MoisesDB licensing (`train_hssr.py:14-16`).
 
 ### Routing, vetoes and object slots
 
 Per band, rearability is multiplied by a chain of steep semantic vetoes, then smoothed asymmetrically (fast attack 0.35 / slow release 0.035) (`hook/audio/hssr_dsp.c:642-761`):
 
+- Two q6d calibrations come first (`hssr_dsp.c:635-645`): the vocal probability used by the vetoes is boosted ×2.5 below 0.4 and forced to 1.0 above it (q6d reads keys/guitar as vocal at ≤ 0.02/0.07 but processed leads can drop to 0.19), and the raw rearability sigmoid is remapped by `smoothstep(0.12, 0.36)` because real positives cluster near 0.25 over a 0.13 floor.
 - `bass_keep = 1 − 0.85·p[bass]`, applied to the 5th power.
 - `lead_keep = 1 − 0.92·vocal_risk`, applied to the 4th power (a leaked lead is far more audible than missed support); `vocal_risk = p[vocal]·(1 − 0.80·spatiality)` — a genuinely wide lead may survive, a centred lead cannot.
 - drums `×(1−0.35·p[drums])`, guitar `×(1−0.10·p[guitar])`, background/FX lift `×(1+0.85·(p[keys]+p[other]))`, then scene-focus and global-safety scaling, then makeup `×16.0` (`hssr_dsp.c:17`).
@@ -178,11 +205,16 @@ timeline
 | V13 | 2026-09-08 | bass fix + cabin renderer; routing-head-only pilot | renderer/data fixes kept; no new weights |
 | V14 | 2026-09-09 | 50-song corpus teacher build + review | no trainer launched; teacher filenames must not become truth |
 | V15 A/B/C | 2026-09-09→11 | rebuilt dataset in float; streaming distillation | all rejected; every candidate moved *more* vocal to the rear |
+| q6 → q6b | 2026-09-18 | MoisesDB real classes; q6 put backing vocals in slot 4, which let wide/doubled leads through (*Joy* lead −27 → −7 dB); q6b moved every vocal back to slot 0 | superseded |
 | q6d | 2026-09-18 | first trained on real dataset stems (MoisesDB 6-class); full network fine-tune from V11 | **SELECTED** as shipped primary; best epoch 3; SHA `96abe57d…`. Weakness: confuses vocals with keys → why the guard exists |
 
-Both shipped blobs are in the repo: `models/hssr-q6d-moises-a/hssr_model.bin` (SHA-256 `96abe57d…`) and `models/hssr-selection-v11/hssr_guard.bin` (`ab01463e…`).
+Between V15 and q6d sit the separator lines (V16 role heads, G1–G17, H1, P1, Q1–Q5) — none reused this graph and none shipped; see [[Upmix Training History]].
 
-**Datasets.** MoisesDB v0.1 (240 songs, 181 TRAIN / 40 DEV) for q6d's real 6-class targets; MUSDB18 (150 tracks) for V11; a 43-song private corpus for V11/V12/V13; a 50-song local corpus for V14/V15 teachers. Teacher networks (Demucs6, BS-RoFormer, karaoke, AST/CLAP) only ever labelled data — q6d used real stems, not pseudo-labels. Both shipped weights are flagged development-only / non-commercial.
+Both shipped blobs are in the repo: `models/hssr-q6d-moises-a/hssr_model.bin` (SHA-256 `96abe57d…`) and `models/hssr-selection-v11/hssr_guard.bin` (`ab01463e…`), re-hashed 2026-09-22 [code].
+
+**Datasets.** MoisesDB v0.1 (240 songs, 181 TRAIN / 40 DEV) for q6d's real 6-class targets; MUSDB18 (150 tracks) for V11; a 43-song private corpus for V11/V12/V13; a 50-song local corpus for V14/V15 teachers. Teacher networks (Demucs6, BS-RoFormer, karaoke, AST/CLAP) only ever labelled data — q6d used real stems, not pseudo-labels. Both shipped weights are flagged development-only / non-commercial. Sizes, splits, defects and licences: [[Upmix Datasets and Teachers]].
+
+Sources: [[Sources/UPMIX_TRAINING_DATA_AND_MODELS|UPMIX_TRAINING_DATA_AND_MODELS]], [[Sources/HSSR_DATASET_TRAINING_AUDIT|HSSR_DATASET_TRAINING_AUDIT]], [[Sources/UPMIX_V15_ROUTING_REFINEMENT|UPMIX_V15_ROUTING_REFINEMENT]], [[Sources/UPMIX_V15_STREAMING_TRAINING|UPMIX_V15_STREAMING_TRAINING]], [[Sources/UPMIX_FULL_FLOAT_DATASET_V15|UPMIX_FULL_FLOAT_DATASET_V15]].
 
 ## 📌 Calibration
 
@@ -203,10 +235,29 @@ Luka, 2026-09-21: *current calibration is OK for now — do not tune.* The scene
 - **TRUEPAN** (objects keep own pan) — rear L/R correlation jumped to 0.86–0.90 (rear went near-mono); wide steering *is* the second-scene width.
 - **Front echo pre-compensation** — injected an anti-phase 12 ms copy into the centre bus; worse than the echo it removed.
 - **Vocal-veto hysteresis / max-hold** — latched on transient false positives; in-mix rear fell 7–20 dB. Reverted.
-- **MPS training refusal** — the M3 Max was refused only because two runs differed by ≤3e-8; iteration scale, not rigor, was the limit.
+- **MPS training refusal** — the M3 Max was refused only because two runs differed by ≤3e-8; iteration scale, not rigor, was the limit ([[Upmix Compute Budget]]).
+- **CUpGAN-A** — Fraunhofer's ambience GAN has no public weights, and even its disclosed core needs ~99% of a Krait core ([[Upmix Compute Budget]]).
+- **Waveform separators as the product** (V16, G, H1, P1, Q2) — none kept the lead out of the rear while delivering useful backing; a zero-parameter per-bin Wiener filter beat trained Q2 ([[Upmix Training History]]).
 
 ## ⚠️ Where it stands
 
 **Deployed 2026-09-22:** single-path scene code, primary q6d + V11 guard, surround 0.40 / front bass −3 / LFE 0 / retention 0.5 with HF taper 1000:2500 / bed delays on / owner attack at 0.75, and the realtime type-100 upmix on (`carplay_startup.sh:63-86`). User verdict after the scene build: "звучать стало шикарно, отличные яркие объекты сзади".
 
 **Open items** — no on-car period-time distribution `[open]`; no Krait full-chain loaded trace, TARGET gate unverified `[open]`; no blind listening / cabin SPL `[open]`; known semantic misses (processed vocal intros, wide synth-bass) read as keys `[car]`. See [[Landmines]].
+
+**Related:** [[Upmix Calibration and Tuning]] (how the shipped knob values were reached) · [[Upmix Release and Acceptance]] (the acceptance protocol and the rejected candidates) · [[J525 Wiring and Speakers]] (the rear doors are mid-bass speakers).
+
+## 📚 Sources
+
+| Source | What it holds |
+|---|---|
+| [[Research/HSSR_UPMIX_MODEL\|HSSR_UPMIX_MODEL]] | Long-form model paper this note condenses |
+| [[Sources/UPMIX_INDEPENDENT_AUDIT_2026-09-17\|UPMIX_INDEPENDENT_AUDIT_2026-09-17]] | Why 12-class separation failed |
+| [[Sources/UPMIX_AGENT_HANDOFF_2026-09-17\|UPMIX_AGENT_HANDOFF_2026-09-17]] | Q2 state and acceptance at the turning point |
+| [[Sources/UPMIX_RETROSPECTIVE_AND_STEREO71\|UPMIX_RETROSPECTIVE_AND_STEREO71]] | V15–H1 retrospective |
+| [[Sources/UPMIX_TRAINING_DATA_AND_MODELS\|UPMIX_TRAINING_DATA_AND_MODELS]] | Provenance of the two shipped blobs |
+| [[Sources/HSSR_DATASET_TRAINING_AUDIT\|HSSR_DATASET_TRAINING_AUDIT]] | Graph, width ablation, C vs PyTorch mismatch |
+| [[Sources/UPMIX_V15_STREAMING_TRAINING\|UPMIX_V15_STREAMING_TRAINING]] | V15 routing-head recipe |
+| [[Sources/UPMIX_V15_ROUTING_REFINEMENT\|UPMIX_V15_ROUTING_REFINEMENT]] | V15 rejection evidence |
+| [[Sources/UPMIX_FULL_FLOAT_DATASET_V15\|UPMIX_FULL_FLOAT_DATASET_V15]] | FLOAT corpus behind V15 |
+| [[Sources/UPMIX_MASTER_PLAN\|UPMIX_MASTER_PLAN]] | Musical policy the model must respect |

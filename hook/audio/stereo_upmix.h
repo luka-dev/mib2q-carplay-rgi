@@ -113,7 +113,7 @@ struct spa_upmix_biquad_coefficients {
 };
 
 struct spa_stereo_upmix_runtime {
-    /* Shared 48-Hz LR4 filters; V2 adds phase recovery/dynamics. */
+    /* Shared 60-Hz LR4 filters (kLfeLow); V2 adds phase recovery/dynamics. */
     float _lfe_low48_state[2][2][2];
     float _lfe_power_l;
     float _lfe_power_r;

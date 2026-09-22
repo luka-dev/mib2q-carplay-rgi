@@ -44,6 +44,10 @@ flowchart TB
 | [[USB Replug Recovery]] | The replug-wedge: one fast replug kills `io-usb-dcd`, `carplay0` loses carrier, `TIMEOUT_STARTUP` loops. The old startup self-heal was **removed**; the shipping build carries the SI re-arm image, the NCM fence stays experimental. |
 | [[PF Firewall]] | Why patching `pf.conf` alone does nothing — the live ruleset is per-interface (`pf.ecm0.conf` on LTE). The installer widens all four in place; verify with `pfctl -sr`. |
 | [[iOS Version Gate]] | iOS 26 vs 27 BonjourHost behaviour — iOS 27 carkitd tolerates our advertisement; the HU advertisement is still the suspect side. |
+| [[SI Stack and Replug Race]] | Stock `smartphone_integrator` RE: the stack-restart rule and the two race windows behind `start_stack::none`. |
+| [[Session Lifecycle]] | One session from control SETUP to teardown: healthy timeline, the −6030 port collision, generation rules. |
+| [[HMI Startup and Identity]] | Context 78 / displayable 59 start chains and the "Apple CarPlay" main-menu identity. |
+| [[Now Playing Cold Start]] | The three start-up rails and the bounded cold-connect path for silent-and-blank connects. |
 
 ## 💡 Truth levels
 

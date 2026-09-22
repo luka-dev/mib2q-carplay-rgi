@@ -93,7 +93,7 @@ Each assert is there because breaking it makes the `.so` crash or fail to load o
 | No `libcarplay_apac` in `DT_NEEDED` (`:177`) | The codec must stay `dlopen`-only, never a hard dependency. |
 | QSA bridge exports: exactly 5 with audio, 0 without (`:179-184`) | `snd_pcm_{open_name,plugin_params,plugin_setup,plugin_write,close}` must match `HOOK_AUDIO`. |
 | Trace HID seams: 2 in trace builds, 0 in quiet builds (`:185-190`) | `HIDRemotePlaybackFillReport` and `HIDDevicePostReport` exist only with `AUDIO_STATE_TRACE=1`. |
-| Exact export allowlist (`:196-221`) | The `LD_PRELOAD` ABI is a fixed set of interposed symbols. Everything compiles hidden by default and goes through a version script, and the result is diffed against `hook/carplay_hook.exports.map`. That list is trimmed first for quiet builds and for `HOOK_AUDIO=0`. |
+| Exact export allowlist (`:196-221`) | The `LD_PRELOAD` ABI is a fixed set of interposed symbols. Everything compiles hidden by default and goes through a version script, and the result is diffed against `hook/carplay_hook.exports.map`. That list is trimmed first for quiet builds and for `HOOK_AUDIO=0`. The map has 28 entries, so a quiet audio build exports **26**, a trace build **28**, and a quiet `HOOK_AUDIO=0` build **9** (Setup, TearDown, CopyServerInfo, SetNightMode, `CinemoCreateIAP` and the four NME seams). Before hidden visibility the hook exported about 208 symbols (module defs, helpers, stb), all preemptible; the 2026-09-07 audit's "24 / 26" counts predate the current map. |
 | `.init_array` size `000004` and no `*_module_(init\|fini)` (`:228-231`) | Only the compiler's own entry is allowed. Eager module constructors used to call `pthread_create` while the QNX loader lock was held, so cold start depended on scheduler timing and could deadlock. |
 | APAC: emutls, exceptions/RTTI, STL, `libstdc++` and `.init_array` checks repeated, plus exactly one `spa_apac_codec_get_api` export (`:240-252`) | Loading the codec with `dlopen` must not bring back the hazards removed from the hook. This is skipped for `HOOK_AUDIO=0`. |
 | Marker strings (`:259-268`) | `AUDIO_STATE_TRACE=1` must contain `IAP_NOW_PLAYING_START`, and `ALTSCREEN_PACE_TRACE=1` must contain `111 pace gen=`. |
@@ -144,3 +144,22 @@ At runtime, `maneuver_render`'s EGL needs `GRAPHICS_ROOT=/proc/boot`. The genera
 `apac_flags.sh` is the only definition of how the APAC decoder is compiled. The shipping build and the benchmark both source it, because a drifted copy would let the benchmark report headroom for a binary nobody ships. `-fno-threadsafe-statics` avoids `__cxa_guard_acquire`, which this libstdc++ configuration lacks. `-D_NO_CPP_INLINES` stops the QNX headers from pulling in C++ inline definitions (`apac_flags.sh:12-20`). The flags also include `-Wall -Wextra -Werror`. The host-side upmix bench compiles with `-ffp-contract=off` because the ARMv7 target has no FMA, and a host build that fused multiply-adds would not match the unit's arithmetic (`tools/stereo-upmix-render/bench/build_host.sh:9-11`).
 
 Provenance: `scripts/build_hook.sh`, `scripts/build_hook_common.sh`, `scripts/build_java.sh`, `scripts/build_renderers.sh`, `scripts/apac_flags.sh`, `scripts/run_tests.sh`, `../../Tools/qnx-65-sdp-docker/README.md`.
+
+## 🔍 Checking a build beyond the asserts
+
+The asserts gate the hook `.so` only. The Java jar and the cross-process wire are checked by separate scripts, used by every production audit ([[Production Audits]]):
+
+- `scripts/audit_java_stock.sh` rebuilds the jar and checks every reference both ways against the real MU1316 J9 classes (`MU1316-final.jar`, `MU1316-combined.jar`, the firmware `jcl.jar`), never the JDK 8 `rt.jar`. This is what catches a 1.5 API that `-target 1.4` lets through.
+- `scripts/check_local_protocols.py` checks that the Java and C wire constants match (39–41 of them across audits) and that every shipped class is version 48.0.
+- After a Java build, `javap -verbose` on a class should show the real build ID; a literal `@BUILD_ID@` means the generated source was not used.
+
+History: before the Docker image the hook was built by `compile_c.sh` over SSH on a QNX 6.5 SDP VM, and the jar was described as "Java 1.2" but compiled with `-source 8 -target 8`; both are superseded ([[Archive and History]]). The 2026-09-14 baseline audit removed an unused `-lm` from the altScreen link; the later PRISM loader needs libm again, so both renderer links carry `-lm` today (`scripts/build_renderers.sh:74`, `:92`). **[code]**
+
+---
+
+## 📚 Sources
+
+- [[Sources/ARCHITECTURE|ARCHITECTURE]]: the list of supported build outputs.
+- [[Sources/reference/HOOK_RELEASE_SAFETY_AUDIT|HOOK_RELEASE_SAFETY_AUDIT]]: origin of the hidden-visibility export allowlist.
+- [[Sources/reference/FRIDAY_BASELINE_AUDIT_2026_09_14|FRIDAY_BASELINE_AUDIT_2026_09_14]]: the `-lm` removal.
+- [[Sources/archive/oldREADME|oldREADME]]: the pre-Docker build.

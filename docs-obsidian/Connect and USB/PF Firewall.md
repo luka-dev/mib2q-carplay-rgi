@@ -50,7 +50,32 @@ Stock `start_network()` in `startup.sh` literally runs `/armle/sbin/pfctl -ef /e
 | Reference result | `deploy/pf/patched/` | A/B only — the installer does **not** copy these (`deploy/pf/README.md:9-12`) |
 | Recipe | `deploy/pf/patch_pf.sh` | regenerates `patched/` from `stock/` with the same transform, asserting one rule per profile (`patch_pf.sh:23-28`) |
 
-The supervisor wrapper does no firewall work; it assumes the ports are open (`deploy/smartphone_integrator/README.md:58-66`).
+The supervisor wrapper does no firewall work; it assumes the ports are open (`deploy/smartphone_integrator/README.md:58-66`). A missing widening is a deploy defect with the same failure mode as a missing renderer binary — there is no runtime fallback.
+
+## 💾 Why the source file, not the live ruleset
+
+`startup.sh:move_etc_to_ramdisk()` does `cp -r /mnt/system/etc /ramdisk/etc ; ln -Ps /ramdisk/etc /etc`. `/etc` is a RAM copy rebuilt every boot, so any edit to the live `/etc/pf.conf` or the in-kernel ruleset is thrown away, and `start_network` reloads the stock file. **[decompile]**
+
+`/mnt/system` is a real flash partition, verified against `ifs2/ifs_startup/ifs_coreservices2/proc/boot/fstab`, not assumed:
+
+| Device | Mount | FS | Default |
+|---|---|---|---|
+| `/dev/mnand0t177` | `/mnt/app` | qnx6 | ro |
+| `/dev/fs0p1` | `/mnt/system` | qnx6 | ro |
+| `/dev/fs0p2` | `/mnt/persist` | qnx6 | rw |
+
+`pf.conf` exists in exactly one place in the image and `ifs2` carries no shadowing `etc`, so an edit after `mount -uw /mnt/system` persists across reboots — the same persistence model as the deployed `smartphone_integrator.json` in `/mnt/system/etc/eso/production/`. Only an OTA rewriting `fs0p1` reverts it; re-run the installer then.
+
+<details>
+<summary><strong>History — the runtime firewall dance that was deleted</strong></summary>
+
+Before the source edit, the wrapper fought a boot-time reload it did not own. `cp_enable_altscreen_firewall` generated `/tmp/pf.carplay_alt.conf` with `sed 's/ 6030,/ 6030:6031,/'` and loaded it with `pfctl -f`, never touching `/mnt/system/etc/pf.conf` (git history confirms). Any `pfctl -ef /etc/pf.conf` wiped it — `start_network` at boot, and `start_network` re-running mid-boot — so a 30 s monitor guard ran two `pfctl -sr` per tick (~5 s per tick of measured churn) to re-apply it, plus `cp_active_pf_source` / `cp_altscreen_firewall_ready` helpers. All of it (146 lines) was deleted once `install_persistent_pf.sh` (6030 → 6030:6031, `.stock` backup) edited the source; that script was later merged into `install_MoreIncredibleBash/mod/custom.sh`, which now widens to `6030:6032`. It also took latency off dio's startup path.
+
+The symptom that forced this: with stock PF (6030 allowed, then drop-all) the native stream-111 listener on TCP 6031 bound successfully but never received the iPhone's IPv6 connection (see [[Session Lifecycle]]). The later audit's claim that the wrapper validates and loads a once-per-boot runtime ruleset is **superseded** — no `pfctl` call exists in `deploy/smartphone_integrator/` today. **[code]**
+
+</details>
+
+---
 
 ## 🔍 How to verify
 
@@ -64,4 +89,11 @@ Patching `/mnt/system/etc` takes effect on the next boot (or an explicit `pfctl 
 
 > ⚠️ Reading the file instead of `pfctl -sr` is exactly the mistake that cost a reboot and a confusing "altScreen doesn't load" hunt. The file can say one thing while the live ruleset — a different profile entirely — still says `port = 6030`.
 
-Related: [[USB and NCM Connect]], [[Deploy and Release]], [[Landmines]].
+**Related:** [[Buffered Audio Path]] — the type-103 listener behind port 6032.
+
+## 📚 Sources
+
+- [[Sources/reference/NCM_AND_FIREWALL_IDEAL_START|NCM_AND_FIREWALL_IDEAL_START]] — why live edits roll back, fstab proof, the deleted runtime dance, moving PF out of CarPlay.
+- [[Sources/reference/CARPLAY_SESSION_LIFECYCLE_AUDIT|CARPLAY_SESSION_LIFECYCLE_AUDIT]] — the 6031 listener that bound but never received traffic.
+
+Related: [[USB and NCM Connect]], [[Session Lifecycle]], [[Deploy and Release]], [[Landmines]].

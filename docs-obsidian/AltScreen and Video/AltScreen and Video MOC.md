@@ -41,10 +41,17 @@ flowchart TB
 
 | Note | What it covers |
 |---|---|
-| [[AltScreen Cluster Video]] | The activation gate: the hook-injected `/info` advert plus control-SETUP `enabledFeatures`, then stream 111. Also the iOS URL model, error codes, the 1440×542 panel, and the forceKeyFrame `uuid` fix (resolved). |
-| [[Video Pipeline]] | The OMX decode chain (native 32m buffers → EGLImage → RGBA plane 99), the Nagle/`TCP_NODELAY` fix, the load-bearing `glFinish` and per-frame rebind, the presenter worker thread, and the 30 fps investigation. |
+| [[AltScreen Cluster Video]] | The activation gate — control-SETUP response `enabledFeatures` ∋ `altScreen` (the `/info` advert is also injected but does not set the flag) — then the hook's own stream-111 receiver. Also the iOS URL model, error codes, the 1440×542 panel, and the forceKeyFrame `uuid` fix (resolved). |
+| [[Video Pipeline]] | The OMX decode chain (native 32m buffers → EGLImage → RGBA plane 99), the Nagle/`TCP_NODELAY` fix, the load-bearing `glFinish` and per-frame rebind, the presenter worker thread, stream 110 and screen crypto for comparison. |
 | [[Cluster Loader]] | The PRISM waiting animation: an embedded glass-Apple material shader in `altscreen_render/loader/`, drawn until the first decoded picture takes over. |
 | [[Reconnect and Lifecycle]] | Lifecycle churn on a fast replug, now absorbed by a 400 ms deactivate debounce. Also covers the advert correction, the main-screen UUID fix, and renderer supervision. |
+| [[AltScreen Frame Rate]] | Why cluster video ran 20–27 fps: iOS sender policy, the stock 30 fps path, the age-filter regression, capture clock. |
+| [[AltScreen RE History]] | Every altScreen framing, gate theory, plan and verdict in order — what held and what was refuted. |
+| [[Cluster Video Encoder]] | DisplayManager, `videoencoderservice` and stock KOMO: how a cluster context becomes the VC's H.264. |
+| [[Cover Art Pipeline]] | Stock MH2P cover-art design vs our MHI2Q hook, and the size-only Setup regression. |
+| [[CarPlay Video Playback]] | iOS 27 "Video in Car" (stream 130, URL playback) and why it is not enabled here. |
+| [[CarPlay Feature Survey]] | Stock baseline, features we added, tiered list of addable ones, the LOD widgets / Live Activities chain. |
+| [[Partial 360 Camera Preflight]] | Deferred: CarPlay beside the top-view camera — contexts, crops, camera ownership, coordinator design. |
 
 ## 💡 Truth levels
 

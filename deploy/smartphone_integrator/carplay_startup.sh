@@ -66,12 +66,14 @@ export AUDIO_STEREO_SURROUND=0.40
 export AUDIO_STEREO_LFE=assist
 # Sub level, dB re the calibrated assist (-24..+12). 0 = 2026-09-07 calibration; the 18.09 build ran at +9.5 and boomed.
 export AUDIO_STEREO_LFE_GAIN=0
-# Front-only bass trim (dB, -12..0): our Bass knob for the 5.1 bank; sub and rear untouched.
+# Front-only bass trim (dB, -12..0): our Bass knob for the 5.1 bank; sub and rear PCM untouched
+# (in the amp model front bass still moves the sub by about +3 dB).
 export AUDIO_STEREO_FRONT_BASS_DB=-3
 # Scene-bed experiment 2026-09-21 (docs-obsidian/Sources/UPMIX_DOLBY_DISTRIBUTION_PLAN_2026-09-21.md), chosen by Luka
 # after the headphone A/B: keep half of each second-scene object in front, decorrelate the bed with
-# per-band delays, and gather hits toward the band owner (object -> rear, bed -> front). Any of the
-# three set to off/0 restores the legacy renderer bit-exactly.
+# per-band delays, and gather hits toward the band owner (object -> rear, bed -> front). All three off
+# plus retention 0 restores the legacy renderer bit-exactly (the HF retention taper rides on
+# AUDIO_HSSR_BED_ATTACK, so turning only that one off leaves retention un-tapered).
 export AUDIO_STEREO_FRONT_RETENTION=0.5
 export AUDIO_HSSR_BED_DELAYS=on
 export AUDIO_HSSR_BED_ATTACK=owner
