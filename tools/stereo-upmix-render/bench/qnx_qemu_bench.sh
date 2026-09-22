@@ -121,9 +121,14 @@ mkifs bench.build bench.ifs
 
 LOG="${QEMU_KEEP_LOG:-$WORK/qemu.log}"
 echo "booting QNX/ARMv7 with -icount shift=$SHIFT (not host wall time)"
+# BENCH_QEMU_PLUGIN=/path/to/libl1d.so[,size=...,ways=...,line=...] adds the
+# data-cache model.  -icount alone counts instructions and models no cache.
+PLUGIN_ARGS=()
+[[ -n "${BENCH_QEMU_PLUGIN:-}" ]] && PLUGIN_ARGS=(-plugin "$BENCH_QEMU_PLUGIN" -d plugin)
 timeout "${QEMU_TIMEOUT:-900}" qemu-system-arm \
     -M virt -m 512 -cpu cortex-a15 -accel tcg,thread=single \
     -icount "shift=$SHIFT" \
+    "${PLUGIN_ARGS[@]}" \
     -device loader,file="$WORK/bench.ifs",addr=0x40200000,force-raw=on \
     -device loader,addr=0x40200000,cpu-num=0 \
     -display none -serial stdio -monitor none \

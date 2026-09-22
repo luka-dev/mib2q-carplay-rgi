@@ -77,9 +77,24 @@ separate: they belong to the analysis loop, which would otherwise pull the whole
 The arithmetic is untouched, and the rendered output is **bit-identical** to the
 preceding build on three held-out cuts (`cmp`, not a tolerance). The instruction
 count improved 0.29% from cheaper addressing (one base pointer for ten fields).
-The intended win is cache behaviour on the APQ8064's 16 KB L1 data cache, which
-`-icount` does not model at all, so it can only be confirmed on the car from the
-`worst_us` figure the hook already logs. Total DSP state is 147 KB.
+Total DSP state is 147 KB.
+
+**The cache rationale for this change was measured and refuted.** A QEMU TCG
+plugin (`../qemu_l1d_plugin.c`) modelling the APQ8064 L1 data cache
+(16 KiB, 4-way, 64-byte lines, LRU) over the identical 8-block workload:
+
+| per-bin layout | accesses | misses | miss rate |
+|---|---:|---:|---:|
+| ten separate arrays | 29,124,963 | 467,834 | 1.606% |
+| one interleaved struct | 29,097,608 | 467,759 | 1.608% |
+
+75 misses out of 468,000, i.e. 0.016%: no difference. The expectation that ten
+1 KB streams would thrash a 16 KB L1 was wrong, because each stream is walked
+strictly sequentially and the whole per-bin working set is about 10 KB, so all
+ten live in the 256 available lines without eviction. The change is kept only
+for its 0.29% addressing gain, and it remains bit-identical; nothing about cache
+behaviour is claimed. This also removes the need for the car-side `worst_us`
+experiment that was proposed for it.
 
 ## Measured and rejected: cheaper steering norm
 

@@ -32,6 +32,29 @@ tools/stereo-upmix-render/bench/qnx_qemu_bench.sh \
 ```
 
 QEMU retired instructions are a deterministic regression metric, not Krait
-cycles or proof of the vehicle realtime margin.  The final measured results
+cycles or proof of the vehicle realtime margin.
+
+`-icount` counts instructions and models **no cache at all**.  For data-cache
+questions build the TCG plugin in [`qemu_l1d_plugin.c`](qemu_l1d_plugin.c) and
+point the bench at it; it models one L1 data cache (default 16 KiB, 4-way,
+64-byte lines, LRU: the APQ8064/Krait geometry) and reports accesses and misses.
+
+```sh
+read -ra GLIB <<< "$(pkg-config --cflags glib-2.0)"
+cc -shared -fPIC -O2 -I"$(brew --prefix qemu)/include" "${GLIB[@]}" \
+   -Wl,-undefined,dynamic_lookup \
+   -o /tmp/libl1d.so tools/stereo-upmix-render/bench/qemu_l1d_plugin.c
+
+BENCH_QEMU_PLUGIN=/tmp/libl1d.so,size=16384,ways=4,line=64 \
+QEMU_KEEP_LOG=/tmp/qemu.log \
+tools/stereo-upmix-render/bench/qnx_qemu_bench.sh \
+  --variant 8.5 --backend hssr-universal --model build/hssr_model.bin \
+  --blocks 8 --warmup 2 --async-controller
+grep metric=l1d_cache /tmp/qemu.log
+```
+
+Miss counts are a functional cache model over the whole guest run, not a timing
+model and not scoped to one function; use them to compare two builds on the same
+workload.  The final measured results
 are in
 [`results/2026-09-07-hssr-selection-v11.md`](results/2026-09-07-hssr-selection-v11.md).
