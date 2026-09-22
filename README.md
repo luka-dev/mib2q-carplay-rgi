@@ -60,8 +60,8 @@ Canonical outputs:
 
 ```text
 build/carplay_hook.jar
-build/libcarplay_hook.so
-build/libcarplay_apac.so
+build/unprotected/libcarplay_hook.so
+build/unprotected/libcarplay_apac.so
 models/hssr-selection-v11/hssr_guard.bin
 build/maneuver_render
 build/altscreen_render

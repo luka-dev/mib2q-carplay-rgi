@@ -51,13 +51,18 @@ Hybrid deploy model:
 The VIN is provided pre-build; stamping happens inside the build.
 
 ```sh
-./scripts/build_hook_protected.sh WAUZZZF45HA149423          # VIN-locked build
+./scripts/build_hook_protected.sh WAUZZZF45HA149423          # stamped binaries -> build/protected_<VIN>/
 HOOK_AUDIO=0 LOG=0 ./scripts/build_hook_protected.sh <VIN>   # beta: no audio, no logs
+./scripts/package_protected.sh WAUZZZF45HA149423             # lay out the install tree
 ```
 
-`build_hook_protected.sh` is a thin entrypoint over `build_hook.sh` (the build
-itself has one source of truth); the raw `PROT_VIN=<VIN> ./scripts/build_hook.sh`
-form still works.
+Builds produce binaries; packaging is a separate step. `build_hook_protected.sh`
+compiles and VIN-stamps the two `.so` into `build/protected_<VIN>/`;
+`package_protected.sh` folds those stamped binaries plus the runtime assets
+(model, firmware, renderers) into the M.I.B. rootfs. `build_hook_protected.sh`
+and `build_hook.sh` share one compile+verify core
+(`scripts/build_hook_common.sh`), so the protected `.so` can never drift from
+the shipping one. `build_hook.sh` itself is unprotected only.
 
 - `PROT_VIN` — the 17-char target VIN. Setting it makes the build protected.
 - `PROT_SECRET` — optional. When unset, a fresh random secret is generated per
@@ -81,14 +86,14 @@ carplay/carplay_child.json            installer resource for the json patch
 PROTECTED.txt                         neutral marker (VIN, date) - no mechanism
 ```
 
-QNX cross-build variant: `QNX_TOOLCHAIN_VARIANT=8.5 PROT_VIN=… PROT_SECRET=… ./scripts/build_hook.sh`.
+QNX cross-build variant: `QNX_TOOLCHAIN_VARIANT=8.5 ./scripts/build_hook_protected.sh <VIN>`.
 
 ### Build flags (all `env=value` before the command)
 
 | flag | default | effect |
 |---|---|---|
 | `PROT_VIN` | — | 17-char target VIN. Set it (+`PROT_SECRET`) to make a protected build. |
-| `PROT_SECRET` | — | build secret; keep out of the tree. Required with `PROT_VIN`. |
+| `PROT_SECRET` | — | optional build secret; keep out of the tree. Unset ⇒ random per-build. |
 | `HOOK_AUDIO` | `1` | `0` = **compile-time** removal of the type-103 audio path: no QSA/AirPlay audio interposers, no `probe103`/`mainBuffered`, and `libcarplay_apac.so` is not built or shipped (stock CarPlay audio). `AUDIO_SPATIAL=0` only disables 103 at runtime; `HOOK_AUDIO=0` takes it out of the binary. |
 | `LOG` | `1` | `1` = logging compiled in; `0` = pre-prod, logging + captures disabled. |
 | `AUDIO_STATE_TRACE` | `0` | `1` = compact lifecycle trace (needs the two trace HID seams). |
@@ -105,7 +110,7 @@ Worked example — the current fleet build (103 out, logs on, spatial off, locke
 # ensure carplay_startup.sh has AUDIO_SPATIAL=0 (runtime belt-and-braces)
 rm -f build/libcarplay_apac.so            # never ship a stale codec in a HOOK_AUDIO=0 build
 HOOK_AUDIO=0 LOG=1 \
-  PROT_VIN=WAUZZZF45HA149423 PROT_SECRET='<secret>' ./scripts/build_hook.sh
+  ./scripts/build_hook_protected.sh WAUZZZF45HA149423
 ```
 Result: `mod/carplay/root/` has 12 files (no `libcarplay_apac.so`); the hook has
 0 `spa_apac_codec_get_api` / `probe103` / QSA symbols.
@@ -189,8 +194,8 @@ PROT_SECRET="$SECRET" python3 protector/protect.py your.so \
     --vin WAUZZZF45HA149423 --mode blind --payload-file consts.bin
 ```
 
-`build_hook.sh` already does (c) and (d) for the two CarPlay `.so` when
-`PROT_VIN`/`PROT_SECRET` are set — this section is only for new artifacts.
+`build_hook_protected.sh` already does (c) and (d) for the two CarPlay `.so`
+— this section is only for new artifacts.
 
 Gotcha: the runtime finds the slot by scanning the file, so nothing references
 `PROT_SLOT` by symbol; a `-fdata-sections/--gc-sections` build will drop it

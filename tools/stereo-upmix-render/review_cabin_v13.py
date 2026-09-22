@@ -35,8 +35,8 @@ def main():
     if peak>10**(-1/20)+.00015:raise ValueError('linked -1dBFS margin not retained')
     result=dict(kind='V13-render-only-digital-safety',profile=a.profile,model_sha256=V11,
         renderer_sha256=digest(a.renderer),offline_screen_passed=True,
-        build_sha256=dict(hook=digest(ROOT/'build/libcarplay_hook.so'),
-            apac=digest(ROOT/'build/libcarplay_apac.so'),renderer=digest(a.renderer)),
+        build_sha256=dict(hook=digest(ROOT/'build/unprotected/libcarplay_hook.so'),
+            apac=digest(ROOT/'build/unprotected/libcarplay_apac.so'),renderer=digest(a.renderer)),
         report_sha256={str(a.report):digest(a.report)},new_trained_model_selected=False,
         vehicle_approved=False,separation_quality_approved=False,
         limitations=['Known matrix/sample peak only; no acoustic or speaker-safety guarantee.',
