@@ -143,7 +143,7 @@ def main():
     lock=(out/'training.lock').open('a');fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
     torch.set_num_threads(2);torch.manual_seed(15011)
     source=BASE/'v15-full-float-source/manifest.json';audit=BASE/'v15-complete-audit'
-    teacher=BASE/'v15-full-float-teacher';baseline=ROOT/'build/hssr-selection-v11/hssr_model.bin'
+    teacher=BASE/'v15-full-float-teacher';baseline=ROOT/'models/hssr-selection-v11/hssr_model.bin'
     rows=json.loads(source.read_text())['items'];byid={r['id']:r for r in rows}
     report=json.loads((audit/'dataset-report.json').read_text())
     if not report['technical_audit_complete'] or report['audited']!=len(rows):raise ValueError('incomplete audit')

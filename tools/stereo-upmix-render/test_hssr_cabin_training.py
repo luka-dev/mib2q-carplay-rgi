@@ -82,7 +82,7 @@ class CabinTrainingTest(unittest.TestCase):
             subprocess.run(['cc','-O2','-std=c99','-I'+str(ROOT/'hook/audio'),
                 str(ROOT/'tools/stereo-upmix-render/bench/hssr_validate.c'),
                 str(ROOT/'hook/audio/hssr_dsp.c'),str(ROOT/'hook/audio/hssr_neon.c'),'-lm','-o',str(exe)],check=True)
-            model_path=ROOT/'build/hssr-selection-v11/hssr_model.bin'
+            model_path=ROOT/'models/hssr-selection-v11/hssr_model.bin'
             m,mean,inv=import_model(model_path);m.runtime_aware=True
             # Real validation features cover large normalized dynamic ranges.
             cache=next((ROOT/'build/reference-audio/v12-separator-cache/validation').glob('*instrumental-positive.npz'))

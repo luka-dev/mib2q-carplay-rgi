@@ -62,7 +62,7 @@ Canonical outputs:
 build/carplay_hook.jar
 build/libcarplay_hook.so
 build/libcarplay_apac.so
-build/hssr-selection-v11/hssr_model.bin
+models/hssr-selection-v11/hssr_model.bin
 build/maneuver_render
 build/altscreen_render
 ```

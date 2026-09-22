@@ -166,7 +166,7 @@ sources and [APAC flags](../scripts/apac_flags.sh). The QEMU wrapper builds firs
 ```sh
 tools/stereo-upmix-render/bench/qnx_qemu_bench.sh \
   --variant 8.5 --backend hssr-universal \
-  --model build/hssr-selection-v11/hssr_model.bin \
+  --model models/hssr-selection-v11/hssr_model.bin \
   --cabin-render --warmup 32 --blocks 128 --realtime-pacing
 ```
 

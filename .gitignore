@@ -5,19 +5,19 @@
 *.o
 
 # Build output. Everything under build/ is produced by scripts/build_*.sh, so the
-# tree carries the directory and nothing else.
+# tree carries the empty directory and nothing else.
 /build/*
 !/build/.gitkeep
-# HSSR Universal cannot be reproduced on a clean checkout without its selected
-# runtime weights.  Keep only the shipping V11 binary; training checkpoints and
-# all other build output remain ignored.
-!/build/hssr-selection-v11/
-/build/hssr-selection-v11/*
-!/build/hssr-selection-v11/hssr_model.bin
-!/build/hssr-q6d-moises-a/
-/build/hssr-q6d-moises-a/*
-!/build/hssr-q6d-moises-a/hssr_model.bin
-!/build/hssr-q6d-moises-a/manifest.json
+# Trained runtime weights live in models/ (not build/): they cannot be
+# reproduced on a clean checkout.  Keep only the shipping binaries; any training
+# checkpoints dropped into these dirs stay ignored.
+!/models/hssr-selection-v11/
+/models/hssr-selection-v11/*
+!/models/hssr-selection-v11/hssr_model.bin
+!/models/hssr-q6d-moises-a/
+/models/hssr-q6d-moises-a/*
+!/models/hssr-q6d-moises-a/hssr_model.bin
+!/models/hssr-q6d-moises-a/manifest.json
 /local_logs/
 
 # Phone-side captures: sysdiagnose tarballs and log archives are hundreds of MB

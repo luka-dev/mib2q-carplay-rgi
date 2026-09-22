@@ -50,7 +50,7 @@ def main():
     if (header[:10] != (0x52535348, 0x314F454E, 1, 64, 368, 160, 264, 449280, 5104, 469696)
             or any(header[11:]) or header[10] != zlib.crc32(payload[64:])):
         raise RuntimeError("invalid model header/CRC")
-    rollback_model = ROOT / "build/hssr-selection-v11/hssr_model.bin"
+    rollback_model = ROOT / "models/hssr-selection-v11/hssr_model.bin"
     if digest(rollback_model) != V11_SHA:
         raise RuntimeError("V11 rollback hash mismatch")
     startup = ROOT / "deploy/smartphone_integrator/carplay_startup.sh"

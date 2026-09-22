@@ -137,7 +137,7 @@ Universal render in that corpus remained byte-for-byte identical to the
 pre-removal baseline.  The chosen model is:
 
 ```text
-build/hssr-selection-v11/hssr_model.bin
+models/hssr-selection-v11/hssr_model.bin
 SHA-256 ab01463e9359f013c4b40f311d630bd20af48d761ad361563cb5246f6bd686ae
 ```
 

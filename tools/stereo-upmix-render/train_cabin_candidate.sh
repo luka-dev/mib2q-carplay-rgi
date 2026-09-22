@@ -19,10 +19,10 @@ python3 "$HERE/prepare_hssr_separator_supervision.py" \
   --target-policy selection-v11 --include-vocal-negatives \
   --include-instrumental-positives --counterfactual-mixes --input-gains-db 0 -6 -12
 python3 "$HERE/train_hssr.py" --cache-only --extra-cache-root "$CACHE" \
-  --init-model build/hssr-selection-v11/hssr_model.bin --output "$OUT" \
+  --init-model models/hssr-selection-v11/hssr_model.bin --output "$OUT" \
   --routing-target universal-v5 --loss-profile "$PROFILE" \
   --epochs 6 --batch-size 32 --learning-rate "$RATE"
 python3 "$HERE/evaluate_hssr_level_validation.py" --cache-root "$CACHE" \
-  --models build/hssr-selection-v11/hssr_model.bin "$OUT/hssr_model.bin" \
+  --models models/hssr-selection-v11/hssr_model.bin "$OUT/hssr_model.bin" \
   --output "$OUT/level-validation.json"
 echo "Candidate trained; C-render/heldout/promotion review still required: $OUT"

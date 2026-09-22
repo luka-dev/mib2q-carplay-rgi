@@ -13,7 +13,7 @@ latency comparison.
 tools/stereo-upmix-render/bench/build_host.sh
 build/stereo-upmix-bench/host/stereo_upmix_bench \
   --backend hssr-universal \
-  --model build/hssr-selection-v11/hssr_model.bin \
+  --model models/hssr-selection-v11/hssr_model.bin \
   --async-controller
 ```
 
@@ -28,7 +28,7 @@ When QEMU assets are installed, the calibrated instruction-retirement run is:
 ```sh
 tools/stereo-upmix-render/bench/qnx_qemu_bench.sh \
   --variant 8.5 --backend hssr-universal \
-  --model build/hssr-selection-v11/hssr_model.bin
+  --model models/hssr-selection-v11/hssr_model.bin
 ```
 
 QEMU retired instructions are a deterministic regression metric, not Krait
