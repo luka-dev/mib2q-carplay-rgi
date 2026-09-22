@@ -87,13 +87,22 @@ fi
 
 . "$(dirname "$0")/apac_flags.sh"
 
-# Optional protected (VIN-locked) build. Set PROT_VIN (17-char) and PROT_SECRET
-# to bind both .so to one car: on any other VIN the hook stays inert (stock
-# CarPlay) and the APAC codec refuses (fail-closed). Default build is unchanged.
+# Optional protected (VIN-locked) build. Set PROT_VIN (17-char) to bind both .so
+# to one car: on any other VIN the hook stays inert (stock CarPlay) and the APAC
+# codec refuses (fail-closed). Default build (no PROT_VIN) is unchanged.
+#
+# The secret only has to be identical between the baked-in runtime value and the
+# stamp, which this script guarantees by threading one value into both. It never
+# needs to match a previous build (each deploy replaces both .so together), so
+# when PROT_SECRET is unset a fresh random one is generated per build and thrown
+# away. Set PROT_SECRET explicitly only if you want one stable fleet secret.
 PROT_BUILD=0
 if [ -n "${PROT_VIN:-}" ]; then
   [ ${#PROT_VIN} -eq 17 ] || { echo "PROT_VIN must be 17 chars"; exit 1; }
-  [ -n "${PROT_SECRET:-}" ] || { echo "PROT_SECRET must be set for a protected build"; exit 1; }
+  if [ -z "${PROT_SECRET:-}" ]; then
+    PROT_SECRET="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d '[:space:]')"
+    echo "PROT_SECRET not set: generated a random per-build secret (not stored)"
+  fi
   PROT_BUILD=1
   echo "Protected build: VIN-locked to $PROT_VIN"
 fi
