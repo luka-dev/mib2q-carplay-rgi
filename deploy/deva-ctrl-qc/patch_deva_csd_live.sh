@@ -2,7 +2,7 @@
 # Second deva patch: make the CSD route/session take its geometry from the LIVE PCM channel
 # instead of the capability minima.  Applies on top of patch_deva.sh's output.
 #
-# Why (docs-obsidian/Sources/ROUTER_INPUT_WIDTH_AUDIT.md): deva_update_session_info_from_list @0x54848, reached
+# Why (docs/Audio/QNX Audio Topology.md): deva_update_session_info_from_list @0x54848, reached
 # from session_csd_setup on route attach, copies record min_voices -> session +0x84 (active
 # channel count) and min_fragsize -> session +0x6c (active CSD buffer).  mpl1_int_ent has
 # min 6/0x4800 so it is right by accident; mpl5_dio_ent has min 2/0x1800, so a six-voice open

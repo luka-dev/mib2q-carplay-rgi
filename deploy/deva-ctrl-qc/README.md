@@ -9,7 +9,7 @@ Local patch of the stock Qualcomm QNX audio driver so the CarPlay entertainment 
 > stereo `min_voices/min_fragsize` into the active CSD session even though the
 > DMA timer is six-channel. The binary and `patch_deva.sh` were deliberately not
 > changed in that measurement pass. See
-> [`../../docs-obsidian/Sources/ROUTER_INPUT_WIDTH_AUDIT.md`](../../docs-obsidian/Sources/ROUTER_INPUT_WIDTH_AUDIT.md).
+> [`../../docs/Audio/QNX Audio Topology.md`](<../../docs/Audio/QNX Audio Topology.md>).
 
 > **Historical timing status (2026-08-31):** the old caps-only patch retained
 > the stock 2ch S32 DMA fragment and played exactly 3x slow. The current
@@ -18,7 +18,7 @@ Local patch of the stock Qualcomm QNX audio driver so the CarPlay entertainment 
 > [`RE_TIMING.md`](RE_TIMING.md).
 
 ## Why caps widening plus dynamic timing
-Traced statically (`docs-obsidian/Sources/reference/AUDIO.md` §11 and §26). The intended path is:
+Traced statically (`docs/Reference/iOS CarPlay Spatial Wireformat.md` §11 and §26). The intended path is:
 `mpl5_dio_ent (QSA PCM) → io-audio -d qc → mixer → six_channel_speakerp (6ch) → MOST → B&O amp`.
 The physical output, MOST sink, and amplifier are already 6-channel and
 **exercised today** by the internal-media device `mpl1_int_ent`. The mixer picks its channel layout from the voice count

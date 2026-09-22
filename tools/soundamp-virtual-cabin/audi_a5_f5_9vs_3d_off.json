@@ -50,7 +50,7 @@
       "image_region": "AD301A07 at V850 CodeFlash offset 0x100000",
       "matrix_offset": "0x101BB4",
       "sharc_parameter_range": "0xC022A..0xC0269",
-      "documentation": "docs-obsidian/Sources/SHARC_MATRIX_CONTROL_2026-09-20.md",
+      "documentation": "docs/Audio/Virtual Cabin and Amp RE.md",
       "orientation_proof": "A903C RAM[8*out+in] -> C022A[8*in+out]; SHARC126A02/126A07 consumes in*8+out"
     }
   },
@@ -125,7 +125,7 @@
     "crossover_frequency_values_hz": [336, 48, 48, 240, 240, 480, 336, 336, 336, 336, 336, 336, 336, 336, 576, 576, 384, 384, 96, 96, 192, 192, 144, 144, 288, 288, 288, 96, 144, 96, 144, 96, 96],
     "reconstructed_eq_biquad_count": 23,
     "per_channel_gain_selector_count": 16,
-    "documentation": "docs-obsidian/Sources/AMP_AUDIO_DSP_TUNING.md",
+    "documentation": "docs/Sources/AMP_AUDIO_DSP_TUNING.md",
     "application_rule": "Do not apply these values until their output-circuit assignments and filter roles are proven."
   },
   "layout_coordinate_system": {

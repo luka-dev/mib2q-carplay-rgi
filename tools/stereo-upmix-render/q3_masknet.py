@@ -1,7 +1,7 @@
 """Q3 mask-net: causal per-bin 13-way softmax mask (12 identity heads + residual).
 
 Research trainer for the Mac (MPS) over the NAS q3 cache. Not a sealed owner,
-not a native export. Design (see docs-obsidian/Sources/UPMIX_INDEPENDENT_AUDIT_2026-09-17.md §7):
+not a native export. Design (see docs/Audio/Upmix Training History.md §7):
   frontend  : frozen r1_refiner_audio analysis, FFT1024/hop256 periodic Hann (CPU)
   features  : per bin log|X_L|^2, log|X_R|^2, cos/sin IPD  (phase-invariant)
   net       : band-split (quadratic bands) -> per-band Linear -> [GRU over time (shared,

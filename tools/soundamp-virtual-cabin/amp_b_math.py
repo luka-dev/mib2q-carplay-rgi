@@ -83,7 +83,7 @@ def load_math_tables(loader=LOADER):
         'pow_integer_bounds':list(tables['pow_integer_bounds']),
         'code_ranges':[{'start':hex(a),'end_exclusive':hex(b),'sha256':h} for a,b,h in PROOFS],
         'instruction_pins':{hex(k):v for k,v in PINS.items()},
-        'instruction_reference':'local docs-obsidian/Sources/papers/sharc_programming_rev2.4.txt tables12-3/4; scaled FIX/FLOAT §11-37..39',
+        'instruction_reference':'local docs/Sources/papers/sharc_programming_rev2.4.txt tables12-3/4; scaled FIX/FLOAT §11-37..39',
         'address_units':'SHARC shortword code PCs;32-bit DM words'}
     return tables
 

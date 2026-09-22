@@ -1,7 +1,7 @@
 #!/bin/sh
 # Patch stock deva-ctrl-qc.so so mpl5_dio_ent (the CarPlay entertainment PCM device) can run 6 voices,
 # letting discrete multichannel PCM from libairplay reach six_channel_speakerp -> MOST -> B&O amp.
-# See docs-obsidian/Sources/reference/AUDIO.md sections 11 and 16. Idempotent + verifies. Does NOT touch the unit.
+# See docs/Reference/iOS CarPlay Spatial Wireformat.md sections 11 and 16. Idempotent + verifies. Does NOT touch the unit.
 #
 # Caps table (deva-ctrl-qc, platform mib2): VA 0xA7D44, .data VA->file = -0x1000 (file 0xA6D44).
 # Per-device record stride 48; device index i (1-based). mpl5_dio_ent = idx 4 -> record 0xA6E04.

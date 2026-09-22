@@ -5,7 +5,7 @@
  *   /mnt/efs-persist/FEC/FecContainer.fec           active FEC
  *   /mnt/efs-system/backup/FEC/FecContainer.fec     backup FEC
  * Agreement -> that VIN. Disagreement or none -> failure (caller degrades to
- * stock / inert). See docs-obsidian/Sources/HANDOFF_VIN_PROTECTION.md for the full picture. */
+ * stock / inert). See docs/Build and Deploy/VIN Protection.md for the full picture. */
 #ifndef PROT_VIN_H
 #define PROT_VIN_H
 

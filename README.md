@@ -8,7 +8,7 @@ Production implementation for Audi MHI2Q (MU1316, QNX 6.5 ARMv7):
 - one Java patch for cluster context, BAP/RGI, cover art and steering-wheel input.
 
 The shipped path always keeps stock `libairplay.so`. Historical alternative implementations under
-`docs-obsidian/Sources/research/` are not production dependencies or authorities for stock 210 behavior.
+`docs/Sources/research/` are not production dependencies or authorities for stock 210 behavior.
 
 ## Repository layout
 
@@ -23,11 +23,9 @@ The shipped path always keeps stock `libairplay.so`. Historical alternative impl
 | `scripts/` | Host build and deployment entry points |
 | `install_MoreIncredibleBash/`, `uninstall_MoreIncredibleBash/` | M.I.B. SD install/remove entry points |
 | `toolchain/qnx65-abi/` | QNX Screen/OpenMAX ABI headers used only for cross-compilation |
-| `docs-obsidian/Sources/` | Current architecture, deployment and audit documents |
-| `docs-obsidian/Sources/reference/` | Reverse-engineering reference notes |
-| `docs-obsidian/Sources/archive/` | Superseded plans retained for history |
-| `docs-obsidian/Sources/research/` | Historical experiments, disassembly notes and old reports |
-| `docs-obsidian/Sources/papers/` | Downloaded papers and reference PDFs (AlbumDB, CUpGAN, Bharitkar, DAFx upmix) |
+| `docs/` | The documentation: an Obsidian vault — start at `docs/Home.md` (domain notes, `Landmines.md`) |
+| `docs/Research/` | Long-form white papers (upmix, HSSR model, Virtual Cabin, Dolby teardown) |
+| `docs/Sources/` | Primary evidence kept verbatim: papers, manuals, wiring images, data files, raw tables, decompiled stock Java |
 | `logs/` | Ignored local evidence: vehicle captures (`captures/`), HU logs, iPhone sysdiagnose, state traces |
 | `assets/` | Screenshots and visual reference material |
 | `build/` | Canonical deployable artifacts |
@@ -79,7 +77,7 @@ It starts the two renderers around the lifetime of `dio_manager`, does not resta
 bounded cleanup when `dio_manager` exits.
 
 SD installation/removal scripts live in
-[`install_MoreIncredibleBash/`](install_MoreIncredibleBash/README_CARPLAY.md) and
+[`install_MoreIncredibleBash/`](install_MoreIncredibleBash/) (see [Deploy and Release](<docs/Build and Deploy/Deploy and Release.md>)) and
 [`uninstall_MoreIncredibleBash/`](uninstall_MoreIncredibleBash/README_CARPLAY.md).
 Compiled outputs and the copied runtime/firmware artifacts stay in `build/`.
 One `mod/custom.sh` verifies the package and firmware, refuses an active CarPlay
@@ -94,7 +92,7 @@ python3 scripts/package_mib.py
 
 Copy the selected folder’s contents over the M.I.B. SD1 card root, and place
 the release artifacts in `/build/` on the card. The removal script needs no
-build files. See [the artifact list](docs-obsidian/Sources/RELEASE_ARTIFACTS.md).
+build files. See [the artifact list](<docs/Build and Deploy/Deploy and Release.md>).
 
 Or upload the release allowlist and run the same installer over SSH:
 
@@ -133,31 +131,31 @@ Playing state-machine audit below for the exact event and decision tables.
 
 ## Current design documents
 
-- [`docs-obsidian/Sources/ARCHITECTURE.md`](docs-obsidian/Sources/ARCHITECTURE.md) — current process, Java and cluster architecture.
-- [`docs-obsidian/Sources/RGI_HUD_RENDERER_KNOWLEDGE.md`](docs-obsidian/Sources/RGI_HUD_RENDERER_KNOWLEDGE.md) — consolidated RGI/HUD/renderer handoff: accepted visuals, lane events, sentinels, synchronization, delivery recovery, tests and current deployment status.
-- [`docs-obsidian/Sources/DEPLOYMENT.md`](docs-obsidian/Sources/DEPLOYMENT.md) — renderer/runtime deployment.
-- [`docs-obsidian/Sources/USB_REPLUG_RECOVERY_RUNBOOK.md`](docs-obsidian/Sources/USB_REPLUG_RECOVERY_RUNBOOK.md) — full MU1316 rapid-replug diagnosis, independent NCM/SI fixes, live A/B gates and exact rollback.
-- [`docs-obsidian/Sources/archive/JAVA_PATCH_STOCK_AUDIT.md`](docs-obsidian/Sources/archive/JAVA_PATCH_STOCK_AUDIT.md) — patched-versus-stock audit (archived; superseded by JAVA_PRODUCTION_CLEANUP_AUDIT.md).
-- [`docs-obsidian/Sources/reference/ALTSCREEN_VC_NAV_STATUSBAR.md`](docs-obsidian/Sources/reference/ALTSCREEN_VC_NAV_STATUSBAR.md) — VC status-bar findings.
-- [`docs-obsidian/Sources/reference/CLUSTER_PRESENT_CADENCE.md`](docs-obsidian/Sources/reference/CLUSTER_PRESENT_CADENCE.md) — cluster swap-interval doctrine: why a nominally 30 fps chain judders, and the QNX/Screen platform traps behind it.
-- [`docs-obsidian/Sources/UPMIX_TRAINING_DATA_AND_MODELS.md`](docs-obsidian/Sources/UPMIX_TRAINING_DATA_AND_MODELS.md) — provenance of the shipped HSSR control models, the datasets (MoisesDB, MUSDB18, AlbumDB, Amvizo, HiRez, private corpus) and the teacher separators used for labelling.
-- [`docs-obsidian/Sources/HANDOFF_SPATIAL_AUDIO.md`](docs-obsidian/Sources/HANDOFF_SPATIAL_AUDIO.md) — CarPlay discrete 5.1 handoff; §10 has the type-103 five-second-teardown root cause.
-- [`docs-obsidian/Sources/AUDIO_5_1_STATE.md`](docs-obsidian/Sources/AUDIO_5_1_STATE.md) — current audio evidence and closed hypotheses.
-- [`docs-obsidian/Sources/AAC_BUFFERED_PATH_PLAN.md`](docs-obsidian/Sources/AAC_BUFFERED_PATH_PLAN.md) — measured index-23 framing/cookie, exact Cinemo ABI and the implemented ordinary-content AAC path.
-- [`docs-obsidian/Sources/CINEMO_AAC_THREAD_SAFETY_AUDIT.md`](docs-obsidian/Sources/CINEMO_AAC_THREAD_SAFETY_AUDIT.md) — MHI2Q codec-object, class-registry, callback and OMX coexistence proof; FDK-AAC is rollback only.
-- [`docs-obsidian/Sources/DYNAMIC_BUFFERED_CODEC_SWITCH.md`](docs-obsidian/Sources/DYNAMIC_BUFFERED_CODEC_SWITCH.md) — iOS in-session APAC/AAC selection, packet-boundary receiver state machine and decisive vehicle test.
-- [`docs-obsidian/Sources/BUFFERED_BACKGROUND_LIFECYCLE.md`](docs-obsidian/Sources/BUFFERED_BACKGROUND_LIFECYCLE.md) — measured phone-lock/app-background ownership loss, same-live-handle handoff, detached-QSA scheduler priority, and the mixed `[65,23]` buffer contract needed for in-session AAC/APAC changes.
-- [`docs-obsidian/Sources/reference/IOS_26_1_BUFFERED_AUDIO_LIFECYCLE_AUDIT.md`](docs-obsidian/Sources/reference/IOS_26_1_BUFFERED_AUDIO_LIFECYCLE_AUDIT.md) — exact iOS 26.1/Pioneer type-103 lifecycle contract and its implemented repair: stopped SETUP queue, lossless ordered `rate=0→1`, exact sequence/RTP FLUSH across compressed and PCM queues, concurrency hardening, tests and the remaining on-unit anchor gate.
-- [`docs-obsidian/Sources/reference/NOW_PLAYING_STARTUP_STATE_MACHINE_AUDIT.md`](docs-obsidian/Sources/reference/NOW_PLAYING_STARTUP_STATE_MACHINE_AUDIT.md) — exact Pioneer/iOS 27 Now Playing, XPC and AirPlay routing-context state machines for blank-on-connect and stale-metadata failures, plus the passive discriminator required before any retry/rebind change.
+- [`docs/Reference/Architecture.md`](docs/Reference/Architecture.md) — current process, Java and cluster architecture.
+- [`docs/Cluster and RGI/HUD Renderer.md`](<docs/Cluster and RGI/HUD Renderer.md>) — consolidated RGI/HUD/renderer handoff: accepted visuals, lane events, sentinels, synchronization, delivery recovery, tests and current deployment status.
+- [`docs/Build and Deploy/Deploy and Release.md`](<docs/Build and Deploy/Deploy and Release.md>) — renderer/runtime deployment.
+- [`docs/Sources/USB_REPLUG_RECOVERY_RUNBOOK.md`](docs/Sources/USB_REPLUG_RECOVERY_RUNBOOK.md) — full MU1316 rapid-replug diagnosis, independent NCM/SI fixes, live A/B gates and exact rollback.
+- [`docs/Build and Deploy/Production Audits.md`](<docs/Build and Deploy/Production Audits.md>) — patched-versus-stock audit (archived; superseded by JAVA_PRODUCTION_CLEANUP_AUDIT.md).
+- [`docs/AltScreen and Video/AltScreen Cluster Video.md`](<docs/AltScreen and Video/AltScreen Cluster Video.md>) — VC status-bar findings.
+- [`docs/AltScreen and Video/AltScreen Frame Rate.md`](<docs/AltScreen and Video/AltScreen Frame Rate.md>) — cluster swap-interval doctrine: why a nominally 30 fps chain judders, and the QNX/Screen platform traps behind it.
+- [`docs/Audio/HSSR Model.md`](<docs/Audio/HSSR Model.md>) — provenance of the shipped HSSR control models, the datasets (MoisesDB, MUSDB18, AlbumDB, Amvizo, HiRez, private corpus) and the teacher separators used for labelling.
+- [`docs/Audio/Buffered Audio Path.md`](<docs/Audio/Buffered Audio Path.md>) — CarPlay discrete 5.1 handoff; §10 has the type-103 five-second-teardown root cause.
+- [`docs/Audio/Discrete 5.1 Routing.md`](<docs/Audio/Discrete 5.1 Routing.md>) — current audio evidence and closed hypotheses.
+- [`docs/Audio/Cinemo AAC Decoder.md`](<docs/Audio/Cinemo AAC Decoder.md>) — measured index-23 framing/cookie, exact Cinemo ABI and the implemented ordinary-content AAC path.
+- [`docs/Audio/Cinemo AAC Decoder.md`](<docs/Audio/Cinemo AAC Decoder.md>) — MHI2Q codec-object, class-registry, callback and OMX coexistence proof; FDK-AAC is rollback only.
+- [`docs/Audio/Buffered Audio Path.md`](<docs/Audio/Buffered Audio Path.md>) — iOS in-session APAC/AAC selection, packet-boundary receiver state machine and decisive vehicle test.
+- [`docs/Audio/Buffered Playback Lifecycle.md`](<docs/Audio/Buffered Playback Lifecycle.md>) — measured phone-lock/app-background ownership loss, same-live-handle handoff, detached-QSA scheduler priority, and the mixed `[65,23]` buffer contract needed for in-session AAC/APAC changes.
+- [`docs/Audio/Buffered Playback Lifecycle.md`](<docs/Audio/Buffered Playback Lifecycle.md>) — exact iOS 26.1/Pioneer type-103 lifecycle contract and its implemented repair: stopped SETUP queue, lossless ordered `rate=0→1`, exact sequence/RTP FLUSH across compressed and PCM queues, concurrency hardening, tests and the remaining on-unit anchor gate.
+- [`docs/Connect and USB/Now Playing Cold Start.md`](<docs/Connect and USB/Now Playing Cold Start.md>) — exact Pioneer/iOS 27 Now Playing, XPC and AirPlay routing-context state machines for blank-on-connect and stale-metadata failures, plus the passive discriminator required before any retry/rebind change.
 - [`deploy/deva-ctrl-qc/BUILD_CHAIN.md`](deploy/deva-ctrl-qc/BUILD_CHAIN.md) — vehicle-confirmed deva fix and exact deployable build chain.
-- [`docs-obsidian/Sources/ROUTER_INPUT_WIDTH_AUDIT.md`](docs-obsidian/Sources/ROUTER_INPUT_WIDTH_AUDIT.md) — historical root cause of the now-fixed MPL5 render-width defect.
-- [`docs-obsidian/Sources/MC_SELECTION_AUDIT.md`](docs-obsidian/Sources/MC_SELECTION_AUDIT.md) — connection-162 MC selection and its `Sound_System` coding source.
-- [`docs-obsidian/Sources/SHARC_INPUT_OUTPUT_MATRIX.md`](docs-obsidian/Sources/SHARC_INPUT_OUTPUT_MATRIX.md) — recovered A07 8×8 SHARC input mixer, selection logic, coefficient addresses and the remaining physical-output boundary.
-- [`docs-obsidian/Sources/SHARC_APPLICATION_EXTRACTION.md`](docs-obsidian/Sources/SHARC_APPLICATION_EXTRACTION.md) — checked extraction of the embedded J525 ADSP-2148x SPI boot/application stream, hashes and loader-block validation.
-- [`docs-obsidian/Sources/STEREO_TO_5_1_UPMIX_DESIGN.md`](docs-obsidian/Sources/STEREO_TO_5_1_UPMIX_DESIGN.md) — amplifier-aware HSSR Universal design, fixed PCM6/LFE bounds, model policy and verification gates.
+- [`docs/Audio/QNX Audio Topology.md`](<docs/Audio/QNX Audio Topology.md>) — historical root cause of the now-fixed MPL5 render-width defect.
+- [`docs/Audio/Internal Amp Path.md`](<docs/Audio/Internal Amp Path.md>) — connection-162 MC selection and its `Sound_System` coding source.
+- [`docs/Audio/Virtual Cabin and Amp RE.md`](<docs/Audio/Virtual Cabin and Amp RE.md>) — recovered A07 8×8 SHARC input mixer, selection logic, coefficient addresses and the remaining physical-output boundary.
+- [`docs/Audio/SHARC DSP Blocks.md`](<docs/Audio/SHARC DSP Blocks.md>) — checked extraction of the embedded J525 ADSP-2148x SPI boot/application stream, hashes and loader-block validation.
+- [`docs/Audio/Stereo to 5.1 Upmix.md`](<docs/Audio/Stereo to 5.1 Upmix.md>) — amplifier-aware HSSR Universal design, fixed PCM6/LFE bounds, model policy and verification gates.
 - [`tools/stereo-upmix-render/`](tools/stereo-upmix-render/README.md) — host WAV renderer, authored/stereo-stress evaluation, teacher-stem routing checks and performance benchmarks for the exact shipping Universal DSP.
-- [`docs-obsidian/Sources/MOST_SOURCE_BLOCKWIDTH_AUDIT.md`](docs-obsidian/Sources/MOST_SOURCE_BLOCKWIDTH_AUDIT.md) — connection-162 source allocation and actual MOST Connect BlockWidth.
-- [`docs-obsidian/Sources/CONNECT_BLOCKWIDTH_VALIDATION_AUDIT.md`](docs-obsidian/Sources/CONNECT_BLOCKWIDTH_VALIDATION_AUDIT.md) — amplifier Connect validation and exact HU BlockWidth constant sites.
+- [`docs/Audio/QNX Audio Topology.md`](<docs/Audio/QNX Audio Topology.md>) — connection-162 source allocation and actual MOST Connect BlockWidth.
+- [`docs/Audio/QNX Audio Topology.md`](<docs/Audio/QNX Audio Topology.md>) — amplifier Connect validation and exact HU BlockWidth constant sites.
 
-Historical altScreen negotiation reports and from-source experiments are under `docs-obsidian/Sources/research/altscreen/`;
+Historical altScreen negotiation reports and from-source experiments are under `docs/Sources/research/altscreen/`;
 they are useful research records, not the definition of the shipping architecture.

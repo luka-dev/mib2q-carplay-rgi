@@ -5,7 +5,7 @@ failure paths. Nothing in this directory deploys to the head unit by itself.
 
 The complete Russian deployment, live A/B, diagnosis, acceptance, and rollback
 recipe is in
-[`../../../docs-obsidian/Sources/USB_REPLUG_RECOVERY_RUNBOOK.md`](../../../docs-obsidian/Sources/USB_REPLUG_RECOVERY_RUNBOOK.md).
+[`../../../docs/Sources/USB_REPLUG_RECOVERY_RUNBOOK.md`](../../../docs/Sources/USB_REPLUG_RECOVERY_RUNBOOK.md).
 
 A self-contained exact-version bundle with ready `payload/`, exact `stock/`, a
 SHA-256 manifest, guarded host installers and its own documentation is in

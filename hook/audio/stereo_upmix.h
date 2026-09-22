@@ -84,7 +84,7 @@ struct spa_stereo_upmix_config {
      * attenuation can affect all PCM channels. */
     int32_t front_bass_db10;
     /* Scene-bed distribution experiments, see
-     * docs-obsidian/Sources/UPMIX_DOLBY_DISTRIBUTION_PLAN_2026-09-21.md.  All zero keeps the
+     * docs/Audio/Upmix Calibration and Tuning.md.  All zero keeps the
      * legacy renderer bit-exact.  With bed_attack the front retention is
      * applied per band inside HSSR instead of the time-domain transfer. */
     uint32_t bed_delays;             /* 0/1: per-band delayed bed copies + cross term */
